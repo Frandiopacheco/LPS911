@@ -62,6 +62,19 @@ service cloud.firestore {
       allow read: if isMember();
       allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc);
     }
+    // Restricciones: editor/admin todo (regla general de abajo). El subcontratista crea las de actividades de su partida
+    // y edita o borra solo las que él registró, mientras estén pendientes (liberarlas es del ingeniero).
+    function scRestrOk(d) {
+      return d.get('sc', '') in scsOf() && d.get('by', '') == mid()
+        && d.get('status', 'pend') != 'lib' && d.get('freed', '') == ''
+        && d.get('actId', '') != ''
+        && get(/databases/$(database)/documents/acts/$(d.actId)).data.get('sc', '') == d.sc;
+    }
+    match /restr/{id} {
+      allow create: if isSC() && scRestrOk(request.resource.data);
+      allow update: if isSC() && scRestrOk(resource.data) && scRestrOk(request.resource.data);
+      allow delete: if isSC() && scRestrOk(resource.data);
+    }
     match /daily/{id} {
       allow read: if isMember();
       allow write: if canDaily();
