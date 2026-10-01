@@ -3,7 +3,7 @@
   "private": true,
   "description": "Tareas automáticas del servidor de LPS 911",
   "main": "index.js",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "scripts": { "test": "node --test test/*.test.js" },
   "dependencies": {
     "firebase-admin": "^12.7.0",

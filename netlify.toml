@@ -5,7 +5,7 @@
   command = "node scripts/build.mjs"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # sw.js e index.html nunca se guardan en caché del navegador: así el aviso de versión nueva llega siempre
 [[headers]]
