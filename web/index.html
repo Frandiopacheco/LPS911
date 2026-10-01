@@ -494,8 +494,17 @@ td.d.dsel{box-shadow:inset 1px 0 0 var(--accent),inset -1px 0 0 var(--accent);ba
 .mhint{position:absolute;left:84px;top:10px;z-index:20;max-width:calc(100% - 80px);background:var(--ink);color:var(--panel);padding:7px 11px;border-radius:8px;font-size:12.5px;line-height:1.35;box-shadow:0 2px 10px rgba(0,0,0,.2)}.mhint .lnkb{color:inherit;text-decoration:underline;margin-left:6px}
 .mstage.draw{cursor:crosshair}
 body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mnote{display:none}
+.mzc{position:fixed;z-index:60;width:340px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.28);padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.zch{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.zct{display:flex;gap:8px;align-items:flex-start;min-width:0}.zct b{display:block;font-size:15px;line-height:1.25}.zct span{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12.5px;margin-top:2px}
+.zcsc{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.zcst{border-left:4px solid var(--c);padding:6px 10px;border-radius:6px;background:var(--panel2);display:flex;flex-direction:column;gap:2px}.zcst b{color:var(--c)}.zcst span{color:var(--ink);font-size:13px}
+.zcn{margin:0;font-style:italic}.zcm{margin:0;color:var(--muted);font-size:12.5px}.zcm b{color:var(--ink)}
+.zchi{margin:0;padding-left:16px;color:var(--muted);font-size:12.5px}
+.zcph{display:flex;gap:6px;flex-wrap:wrap}.zcph img{width:84px;height:84px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:var(--panel2)}
+.zcb{display:flex;gap:6px;flex-wrap:wrap}.zcb .ib{min-height:34px}.zcb .ib.on{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:760px){.mzc{left:8px!important;right:8px;bottom:8px;top:auto!important;width:auto;max-height:70vh}.zcb .ib{min-height:40px}}
 .mmbar{position:absolute;left:0;right:0;top:0;z-index:25;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.08)}
-.mmd{font-size:14px;color:var(--ink2)}.mmd b{color:var(--ink)}.mmnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;justify-content:center}
+.mmd{font-size:14px;color:var(--ink2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}.mmd b{color:var(--ink)}.mmd select{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:600;padding:0 6px;max-width:220px}.mmday{display:inline-flex;gap:4px;align-items:center}.mmday b{white-space:nowrap;padding:0 2px}.mmnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;justify-content:center}
 .mmsc,.mmall{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:16px;height:32px;padding:0 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .mmsc i{width:11px;height:11px;border-radius:3px;background:var(--c)}.mmsc.on{background:var(--c);color:#fff;border-color:var(--c)}.mmsc.on i{background:#fff}.mmall.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .mmcx{color:#d32f2f;font-weight:700;font-size:13px}
@@ -516,7 +525,8 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 .mcleg{position:absolute;left:84px;bottom:12px;z-index:21;display:flex;gap:6px 14px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:12.5px;box-shadow:0 2px 10px rgba(0,0,0,.12);max-width:calc(100% - 110px)}
 .mcleg span{display:inline-flex;align-items:center;gap:5px}.mcleg i{width:12px;height:12px;border-radius:3px}.mapa.meeting .mcleg{left:12px}
 @media (max-width:700px){.mcleg{left:10px;bottom:70px;max-width:calc(100% - 20px)}}
-@media (max-width:900px){.mcard{left:10px;right:10px;width:auto;top:auto;max-height:42%}.mmd{display:none}}
+@media (max-width:900px){.mcard{left:10px;right:10px;width:auto;top:auto;max-height:42%}}
+.mcl li[data-mact]{cursor:pointer}.mcl li[data-mact]:hover{background:var(--panel2)}
 @media (max-width:760px){.mapa .mtools,.mapa #mmeetb,.mapa #malign,.mapa #malign2,.mapa #mup,.mapa #mmenu{display:none!important}}
 .mp-ph{font-size:12.5px;color:var(--muted);background:var(--panel2);border-radius:8px;padding:8px 10px;margin:0 0 8px}
 @media (max-width:700px){.mapa #mhi,.mapa #mup,.mapa #mmenu,.mapa #malign2{display:none}.mtools{flex-direction:row;top:auto;bottom:10px;left:6px;right:6px;overflow-x:auto;justify-content:flex-start}.mt{width:48px;height:44px;flex:none}.mtsep{width:1px;height:auto;margin:4px 2px}.mprops{left:10px;top:10px;max-width:calc(100% - 20px)}.mhint{left:10px;right:10px;max-width:none}.mapa .dnav b{min-width:0}}
@@ -927,7 +937,7 @@ td.d .dm.ok{color:var(--ok)}td.d .dm.pa{color:var(--warn)}td.d .dm.no{color:var(
     <button role="tab" data-tab="plan">Plan semanal</button>
     <button role="tab" data-tab="restr">Restricciones<span class="cnt" id="rcount" hidden></span></button>
     <button role="tab" data-tab="ind">Indicadores</button>
-    <button role="tab" data-tab="planos">Planos</button>
+    <button role="tab" data-tab="planos">Sectorización</button>
     <button role="tab" data-tab="cfg">Configuración</button>
     <button role="tab" data-tab="team" id="tabTeam" hidden>Equipo</button>
   </nav>
@@ -1314,6 +1324,7 @@ function render(){
   const main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
+  if(U.tab!=='mapa'&&typeof zcClose==='function')zcClose();
   const views={dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}

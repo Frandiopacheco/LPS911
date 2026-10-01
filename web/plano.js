@@ -112,7 +112,8 @@ function renderMapa(main){ensureLam();
   main.onchange=e=>{const t=e.target;if(t.id==='mpiso'){M.piso=t.value;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;requestRender()}if(t.id==='mscd'){M.scDraw=t.value;M.pend=null;M.selId=null;requestRender()}if(t.id==='munder'){M.under=t.checked;requestRender()}};
   main.oninput=e=>{if(e.target.id==='mop'){M.op=+e.target.value;requestRender()}};
   main.onmouseover=legHover;main.onmouseleave=()=>setHL(null);
-  main.addEventListener('change',e=>{if(e.target.id==='mmvis'){M.vista=e.target.value;M.sel=M.vista;requestRender();setTimeout(()=>meetGo(M.meetSc),200)}});
+  main.addEventListener('change',e=>{if(e.target.id==='mmpiso'){const v=e.target.value;if(U.piso){U.piso=v;saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.meetSc='';zcClose();requestRender();return}
+    if(e.target.id==='mmvis'){M.vista=e.target.value;M.sel=M.vista;requestRender();setTimeout(()=>meetGo(M.meetSc),200)}});
 }
 
 /* =====================================================================
@@ -204,7 +205,9 @@ function revertNova(id){const z=PD.get(id);if(!z)return;const o=remDoc(id);if(o)
     if(z.repTo&&typeof canWrite!=='undefined'&&canWrite&&(x.days||[]).includes(z.repTo)&&!recOf(z.repTo,x.id)){const nx={...x,days:(x.days||[]).filter(d=>d!==z.repTo)};if(nx.qty){nx.qty={...nx.qty};delete nx.qty[z.repTo]}apply([op('acts',x.id,nx)],'Reprogramación deshecha')}}
   requestRender();toast('Deshecho')}
 /* ---------- dibujo sobre el plano ---------- */
-function tapSelect(w,e){if(M.tool!=='pan'||M.meet)return;const els=document.elementsFromPoint(e.clientX,e.clientY);const z=els.map(el=>el.closest&&el.closest('[data-z]')).find(Boolean);M.selId=z&&z.dataset.z?z.dataset.z:null;requestRender()}
+function tapSelect(w,e){if(M.tool!=='pan')return;const els=document.elementsFromPoint(e.clientX,e.clientY);const z=els.map(el=>el.closest&&el.closest('[data-z]')).find(Boolean);const zid=z&&z.dataset.z?z.dataset.z:null;
+  if(M.meet||M.colorBy==='cu'){const zz=zid&&PD.get(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY);else zcClose();if(M.meet)return}
+  M.selId=zid;requestRender()}
 function hitIds(cx,cy,r){const out=new Set();const pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r]];for(const[dx,dy]of pts){for(const el of document.elementsFromPoint(cx+dx,cy+dy)){const z=el.closest&&el.closest('[data-z]');if(z&&z.dataset.z)out.add(z.dataset.z)}}return[...out]}
 const erasable=z=>own(z)&&(myRole()==='sc'||z.sc===M.scDraw)&&(M.eraseWhat==='all'||z.kind!=='zona');
 function installDraw(v){const host=v.host;let drag=null;
@@ -300,12 +303,42 @@ const STI={ok:'✓',partial:'½',no:'✗',none:'·'};const STT={ok:'Cumplido',pa
 function zRec(z){return z&&z.actId&&typeof recOf==='function'?recOf(M.date,z.actId):null}
 const zSt=z=>{const r=zRec(z);return r?r.status:'none'};
 function cumplSum(){const acts=dayActs(M.piso,M.date);const o={ok:0,partial:0,no:0,none:0,n:acts.length};acts.forEach(({x})=>{const r=typeof recOf==='function'?recOf(M.date,x.id):null;o[r?r.status:'none']++});return o}
-function setRec(z,status,cnc){if(typeof writeDaily!=='function')return;const x=S.act.get(z.actId);if(!x)return;const cur=zRec(z);const r=typeof baseRec==='function'?baseRec(M.date,x,cur):{};r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else if(cnc!=null){r.cnc=cnc;r.imp=null}
+function setRec(z,status,cnc){if(typeof writeDaily!=='function')return;const x=S.act.get(z.actId);if(!x)return;const cur=zRec(z);const r=typeof baseRec==='function'?baseRec(M.date,x,cur):{};
+  /* corrección de algo ya registrado: queda el rastro (qué decía antes y quién lo había registrado) */
+  if(cur&&cur.status&&!cur._prop&&(cur.status!==status||(cnc!=null&&(cur.cnc||'')!==cnc))){r.hist=[...(cur.hist||[]),{st:cur.status,cnc:cur.cnc||'',by:cur.by||'',n:cur.byName||cur.by||'',t:cur.ts||0}].slice(-10);r.corr={n:me.name||me.email,by:me.email,t:NOW(),via:M.meet?'reunión':'plano diario'}}
+  else if(cur&&cur.hist){r.hist=cur.hist;if(cur.corr)r.corr=cur.corr}
+  r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else if(cnc!=null){r.cnc=cnc;r.imp=null}
   if(status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;writeDaily(M.date,M.piso,{recs:{[x.id]:r}});requestRender();toast(`${STT[status]} registrado en Campo`)}
 function campoProps(z){if(!z||z.kind!=='zona'||!z.actId)return'';const r=zRec(z);const st=r?r.status:'none';const future=M.date>todayIso();
   let h=`<span class="cst" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${r&&r.cnc?' · '+esc(r.cnc):''}</span>${r&&r.note?`<span class="mu">“${esc(short(r.note,60))}”</span>`:''}${r?`<span class="mu">${esc(r.byName||r.by||'')}</span>`:''}`;
   if(typeof canDaily!=='undefined'&&canDaily&&!future)h+=`<span class="mseg">${['ok','partial','no'].map(k=>`<button data-rst="${k}" class="${st===k?'on':''}" title="Registrar: ${STT[k]}">${STI[k]} ${STT[k]}</button>`).join('')}</span>`;
   return h}
+/* ---------- ventana de detalle de cumplimiento (modo Cumplimiento y modo reunión) ---------- */
+let ZC=null;
+function zcClose(){const el=document.getElementById('mzc');if(el)el.remove();ZC=null}
+function zCard(aid,cx,cy){ZC={aid,cx:cx??(ZC&&ZC.cx),cy:cy??(ZC&&ZC.cy)};zcRender()}
+function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();return}const a=S.amb.get(x.ambId);const r=typeof recOf==='function'?recOf(M.date,x.id):null;const st=r?r.status:'none';
+  const future=M.date>todayIso();const can=typeof canDaily!=='undefined'&&canDaily&&!future;const N=nbMap();const lv=typeof liveOf==='function'?liveOf(M.date,x.id):null;
+  const phs=[...new Set([...(r&&r.photos||[]),...(lv&&lv.photos||[])])];phs.forEach(id=>typeof loadFoto==='function'&&loadFoto(id));
+  let h=`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
+    <div class="zcst" style="--c:${STC[st]}"><b>${STI[st]} ${STT[st]}</b>${r&&r.cnc?`<span>Causa: ${esc(r.cnc)}</span>`:''}${r&&r._prop?'<span>Cierre del capataz · por confirmar</span>':''}</div>
+    ${r&&r.note?`<p class="zcn">“${esc(r.note)}”</p>`:''}
+    ${r?`<p class="zcm">${r._prop?'Lo reportó':'Lo registró'} ${esc(r.byName||r.by||'—')}${r.ts?' · '+fmtD(ldt(r.ts))+' '+hhmm(r.ts):''}${r.corr?` · <b>corregido en ${esc(r.corr.via)}</b>`:''}</p>`:'<p class="zcm">Nadie registró el cumplimiento de este día.</p>'}
+    ${r&&(r.hist||[]).length?`<ul class="zchi">${r.hist.slice().reverse().map(o=>`<li>Antes: ${STI[o.st]||''} ${esc(STT[o.st]||o.st)}${o.cnc?' · '+esc(o.cnc):''} · ${esc(o.n||'')}${o.t?' · '+fmtD(ldt(o.t))+' '+hhmm(o.t):''}</li>`).join('')}</ul>`:''}
+    ${lv&&lv.mot?`<p class="zcm">Detención reportada: ${esc(lv.mot)}</p>`:''}
+    ${phs.length?`<div class="zcph">${phs.map(id=>`<img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto del registro"${FOTO.get(id)?'':' style="opacity:.3"'}>`).join('')}</div>`:''}
+    ${can?`<div class="zcb">${r&&r._prop?'<button class="ib pri" data-zcs="conf">✓ Confirmar lo reportado</button>':''}${['ok','partial','no'].map(k=>`<button class="ib zcb-${k}${st===k&&!(r&&r._prop)?' on':''}" data-zcs="${k}">${STI[k]} ${STT[k]}</button>`).join('')}</div>${r&&r.status&&!r._prop?'<p class="zcm">Si lo cambias, queda registrado quién lo corrigió y qué decía antes.</p>':''}`:future?'<p class="zcm">Día futuro: aún no se registra el cumplimiento.</p>':''}`;
+  let el=document.getElementById('mzc');if(!el){el=document.createElement('div');el.id='mzc';el.className='mzc';el.setAttribute('role','dialog');document.body.appendChild(el);el.onclick=zcClick}
+  if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}
+  const W=el.offsetWidth,H=el.offsetHeight;if(innerWidth<=760){el.style.left='';el.style.top='';return}
+  let lx=(ZC.cx||innerWidth/2)+14,ly=(ZC.cy||innerHeight/2)-20;if(lx+W>innerWidth-10)lx=Math.max(10,(ZC.cx||0)-W-14);if(ly+H>innerHeight-10)ly=Math.max(10,innerHeight-H-10);el.style.left=lx+'px';el.style.top=Math.max(10,ly)+'px'}
+function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}
+  const im=t.closest('img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')&&typeof lightbox==='function'){lightbox(im.src);return}
+  const b=t.closest('[data-zcs]');if(!b||!ZC)return;const k=b.dataset.zcs;const x=S.act.get(ZC.aid);if(!x)return;const z={actId:x.id};
+  if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Confirmado');setTimeout(zcRender,60)}return}
+  if(k==='ok'){setRec(z,'ok');setTimeout(zcRender,60);return}
+  const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>{setRec(z,k,c);setTimeout(zcRender,60)};return`<button data-do="c${i}">${esc(c)}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>{setRec(z,k,'');setTimeout(zcRender,60)}})}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ZC){e.stopImmediatePropagation();zcClose()}});
 function pip(p,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){if(((P[i].y>p.y)!==(P[j].y>p.y))&&(p.x<(P[j].x-P[i].x)*(p.y-P[i].y)/(P[j].y-P[i].y)+P[i].x))c=!c}return c}
 function overlapFrac(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);if(x1<=x0||y1<=y0)return 0;
   const n=14;let both=0;for(let i=0;i<n;i++)for(let j=0;j<n;j++){const p={x:x0+(i+.5)*(x1-x0)/n,y:y0+(j+.5)*(y1-y0)/n};if(pip(p,A)&&pip(p,B))both++}
@@ -324,7 +357,7 @@ function actRows(sc){const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc);co
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
   if(!M.meet){bar.hidden=true;card.hidden=true;const st=$('#mstage');if(st)st.style.top='';return}
   const scs=meetScs();if(M.meetSc&&!scs.includes(M.meetSc))M.meetSc='';const i=scs.indexOf(M.meetSc);
-  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><b>${esc(S.pis.get(M.piso)?.name||'')}</b> · ${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</span>
+  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><select id="mmpiso" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select><span class="mmday"><button class="ib" data-mdd="-1" title="Día anterior" aria-label="Día anterior">&#8249;</button><b>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" title="Día siguiente" aria-label="Día siguiente">&#8250;</button>${M.date!==todayIso()?'<button class="ib" data-mdd="0">Hoy</button>':''}</span></span>
     <span class="mmnav"><button class="ib" data-mm="-1" title="Anterior (←)">‹</button><button class="mmall${M.meetSc?'':' on'}" data-msc="">Todos</button>${scs.map(c=>`<button class="mmsc${c===M.meetSc?' on':''}" data-msc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}<button class="ib" data-mm="1" title="Siguiente (→)">›</button></span>
     ${CROSS.list.length?`<span class="mmcx">⚠ ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</span>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>`;
   if(bar.dataset.h!==bh){bar.innerHTML=bh;bar.dataset.h=bh}bar.hidden=false;
@@ -332,7 +365,7 @@ function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;docu
   if(M.meetSc){const sc=M.meetSc;const R=actRows(sc);const ok=R.filter(r=>r.zs.length).length,no=R.filter(r=>r.nv).length;const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
     const cx=CROSS.list.filter(c=>c.a.sc===sc||c.b.sc===sc);
     ch=`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${i+1} de ${scs.length} · ${ok} de ${R.length} ubicadas${no?` · ${no} no se hará hoy`:''}</span></div></div>
-      <ol class="mcl">${R.map(r=>`<li class="${r.nv?'nv':r.zs.length?'ok':'pe'}">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)}${(()=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;return rc?` <span class="cst sm" style="--c:${STC[rc.status]}">${STI[rc.status]} ${STT[rc.status]}${rc.cnc?' · '+esc(rc.cnc):''}</span>`:''})()}</b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No se hará hoy · ${esc(r.nv.motivo||'')}</em>`:r.zs.length?'':'<em class="pe">Sin ubicar en el plano</em>'}</div></li>`).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
+      <ol class="mcl">${R.map(r=>`<li class="${r.nv?'nv':r.zs.length?'ok':'pe'}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)}${(()=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;return rc?` <span class="cst sm" style="--c:${STC[rc.status]}">${STI[rc.status]} ${STT[rc.status]}${rc.cnc?' · '+esc(rc.cnc):''}</span>`:''})()}</b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No se hará hoy · ${esc(r.nv.motivo||'')}</em>`:r.zs.length?'':'<em class="pe">Sin ubicar en el plano</em>'}</div></li>`).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
       ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}
       ${cx.length?`<div class="mcs warn">⚠ Cruces</div>${cx.map(c=>{const o=c.a.sc===sc?c.b:c.a;const me_=c.a.sc===sc?c.a:c.b;return`<button class="mcx" data-cx="${me_.id}|${o.id}">${esc(zoneLabel(me_))} ↔ <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}</button>`}).join('')}`:''}`}
   else{const rows=scs.map(c=>{const R=actRows(c);return{c,n:R.length,ok:R.filter(r=>r.zs.length).length,no:R.filter(r=>r.nv).length}});const tot=rows.reduce((a,r)=>({n:a.n+r.n,ok:a.ok+r.ok,no:a.no+r.no}),{n:0,ok:0,no:0});
@@ -351,6 +384,7 @@ function meetClick(e){const t=e.target;let b;
   if(t.closest('#mmfs')){try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>toast('Tu navegador no permite pantalla completa aquí.'))}catch(err){toast('Tu navegador no permite pantalla completa aquí.')}return true}
   if((b=t.closest('[data-msc]'))){meetGo(b.dataset.msc);return true}
   if((b=t.closest('[data-mm]'))){meetStep(+b.dataset.mm);return true}
+  if((b=t.closest('[data-mact]'))){const rc=b.getBoundingClientRect();zCard(b.dataset.mact,rc.right,rc.top);return true}
   if((b=t.closest('[data-cx]'))){const ids=b.dataset.cx.split('|');const P=ids.flatMap(id=>{const z=PD.get(id);return z?unflat(z.pts):[]});zoomTo(P);return true}
   if(t.closest('#mexp,.mexp')){exportPNG(M.meetSc);return true}
   return false}
@@ -757,12 +791,12 @@ function renderPlan(main,cur,base){
   const pb=$('#mprops');if(pb.dataset.h!==props){pb.innerHTML=props;pb.dataset.h=props}pb.hidden=!props||!!M.meet;$('#mhint').style.top=props?'64px':'';
   $('#mstage').classList.toggle('draw',M.tool!=='pan');
   const hn=$('#mhint');if(hn.dataset.h!==hint){hn.innerHTML=hint;hn.dataset.h=hint}hn.hidden=!hint||!!M.meet;
-  renderMeet();drawOverlay();renderLeg()}
+  renderMeet();drawOverlay();renderLeg();if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'))zcClose();else zcRender()}}
 const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if(t.id==='mpan'||t.id==='mpx'){M.panel=!M.panel;requestRender();return true}
-  if((b=g('[data-mdd]'))){const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;ensurePlan();requestRender();return true}
+  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}
