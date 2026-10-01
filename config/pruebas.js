@@ -2,13 +2,13 @@
 // Estos datos NO son secretos (los ve cualquier navegador); la seguridad la dan las reglas.
 // Pega aquí el bloque firebaseConfig de Firebase › Configuración del proyecto › Tus apps.
 window.FIREBASE_CONFIG = {
-  apiKey: "PEGA_AQUI_TU_apiKey",
-  authDomain: "PEGA_AQUI.firebaseapp.com",
-  databaseURL: "PEGA_AQUI (dirección de Realtime Database)",
-  projectId: "PEGA_AQUI",
-  storageBucket: "PEGA_AQUI.appspot.com",
-  messagingSenderId: "PEGA_AQUI",
-  appId: "PEGA_AQUI"
+  apiKey: "AIzaSyDe7IH86wKJURd7Nvk3Qq7hjVyOlmwfPgE",
+  authDomain: "lps911-pruebas.firebaseapp.com",
+  projectId: "lps911-pruebas",
+  storageBucket: "lps911-pruebas.firebasestorage.app",
+  messagingSenderId: "220279766044",
+  appId: "1:220279766044:web:e746145c5efabfbffcb3d9"
+  // Sin Realtime Database en pruebas: la lista de "conectados" no se muestra aquí.
 };
 // Correo del administrador principal (el mismo que figura en firebase/firestore.rules).
 window.ADMIN_EMAIL = "frandiopacheco@gmail.com";
