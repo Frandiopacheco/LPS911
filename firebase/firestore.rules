@@ -47,10 +47,14 @@ service cloud.firestore {
       allow list, write: if isAdmin();
     }
     // Estado en vivo de cada actividad (iniciada / detenida / cierre propuesto)
+    // El subcontratista también inicia, detiene y reanuda las de su partida, pero no cierra el día (campo 'close').
     match /live/{id} {
       allow read: if isMember();
-      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf());
-      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf());
+      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf())
+        || (isSC() && request.resource.data.sc in scsOf() && !('close' in request.resource.data));
+      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf())
+        || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf()
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['close']));
       allow delete: if canDaily();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
@@ -64,7 +68,7 @@ service cloud.firestore {
     }
     match /fotos/{id} {
       allow read: if isMember();
-      allow create, update: if (canDaily() || isCap()) && request.resource.data.data.size() < 400000;
+      allow create, update: if (canDaily() || isCap() || isSC()) && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.
