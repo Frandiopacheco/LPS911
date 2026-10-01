@@ -713,6 +713,12 @@ section.card{scroll-margin-top:12px}
 .lnk{border:0;background:none;color:var(--accent);padding:2px 0;font-size:13px;text-decoration:underline;text-underline-offset:2px}
 .me{font-size:12px;color:var(--ink2);white-space:nowrap}
 .tin{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:0 8px}
+.tfilt{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:0}.tqry{flex:1 1 260px;min-width:0}
+.tchips{display:flex;gap:4px;flex-wrap:wrap}.tchips button{height:30px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:0 10px;font:600 12px var(--f-ui)}
+.tchips button b{font:600 11px var(--f-mono);color:var(--muted);margin-left:2px}.tchips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}.tchips button.on b{color:inherit}
+.t tr.tgrp th{position:static;text-align:left;background:var(--bg);color:var(--ink);text-transform:none;font:700 12px var(--f-ui);letter-spacing:.02em;padding:8px 10px;border-top:1px solid var(--line)}
+.tinfo summary{cursor:pointer;font-weight:600;color:var(--accent);padding:2px 0}
+@media (max-width:760px){.tchips button{height:40px}.tfilt .tin{height:40px}}
 #temail{min-width:230px}
 .plano .ptools{display:flex;gap:6px;align-items:center;padding:0 8px 8px}
 .plano .ptools select{height:28px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px;max-width:170px}
@@ -917,6 +923,7 @@ td.d .dm.ok{color:var(--ok)}td.d .dm.pa{color:var(--warn)}td.d .dm.no{color:var(
     <button role="tab" data-tab="look">Lookahead</button>
     <button role="tab" data-tab="campo">Campo</button>
     <button role="tab" data-tab="mapa">Plano diario</button>
+    <button role="tab" data-tab="cap" id="tabCap" hidden>En obra</button>
     <button role="tab" data-tab="plan">Plan semanal</button>
     <button role="tab" data-tab="restr">Restricciones<span class="cnt" id="rcount" hidden></span></button>
     <button role="tab" data-tab="ind">Indicadores</button>
@@ -1255,15 +1262,16 @@ const MOBQ=matchMedia('(max-width:760px)');const isMob=()=>MOBQ.matches;
 MOBQ.addEventListener('change',()=>{const m=$('#main');if(m){m.dataset.view='';m.dataset.built=''}const sh=$('#msheet');if(sh)sh.remove();if(ready)render()});
 const SVG=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),mapa:SVG('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
-  ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
-const BNT=[['campo','Campo'],['mapa','Plano'],['ind','Indicadores'],['restr','Restricc.']];
+  ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),cap:SVG('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
+const BNT0=[['campo','Campo'],['mapa','Plano'],['ind','Indicadores'],['restr','Restricc.']],BNTSC=[['cap','En obra'],['mapa','Plano'],['ind','Indicadores'],['restr','Restricc.']];
+const bnt=()=>SCK()?BNTSC:BNT0;
 const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.textContent.trim():t};
 function goTab(t){U.tab=t;saveUI();sendPresence();render()}
-function renderBnav(){const b=$('#bnav');if(!b)return;const pr=restrInScope().filter(r=>r.status!=='lib').length;const more=!BNT.some(x=>x[0]===U.tab);
+function renderBnav(){const b=$('#bnav');if(!b)return;const pr=restrInScope().filter(r=>r.status!=='lib').length;const BNT=bnt();const more=!BNT.some(x=>x[0]===U.tab);
   const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${U.tab===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(tabName(U.tab)):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
-  const items=[...(canDash()?['dash']:[]),'look','plan','planos','cfg',...($('#tabTeam').hidden?[]:['team'])];
+  const items=[...(canDash()?['dash']:[]),...(SCK()?['campo']:[]),'look','plan','planos','cfg',...($('#tabTeam').hidden?[]:['team'])];
   const sh=document.createElement('div');sh.className='msheet';sh.id='msheet';
   sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${U.tab===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
     <p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
@@ -1282,7 +1290,7 @@ function renderTop(){
   $('#fpiso').innerHTML='<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('');
   const pr=restrInScope().filter(r=>r.status!=='lib').length;const rc=$('#rcount');rc.hidden=!pr;rc.textContent=pr;
   $('#wtoday').disabled=U.week===curWeek();
-  {const td=$('#tabDash');if(td)td.hidden=!canDash()}
+  {const td=$('#tabDash');if(td)td.hidden=!canDash()}{const tc=$('#tabCap');if(tc)tc.hidden=!SCK()}
   brandSync();
   updUndo();setStatus();renderBnav();
 }
@@ -1303,7 +1311,7 @@ document.addEventListener('keydown',e=>{
 function render(){
   if(!ready)return;
   const main=$('#main');renderTop();
-  if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap')U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
+  if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   const views={dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
@@ -1765,11 +1773,21 @@ function actMenu(btn,aid){const x=S.act.get(aid);if(!x)return;
    clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),
    del:()=>apply([arc('acts',aid)],PM()?`Pedido de quitar “${x.name||'sin nombre'}” (queda en tu propuesta)`:`Actividad “${x.name||'sin nombre'}” eliminada (queda en la Papelera de Configuración)`)})}
 function ambMenu(btn,ambId){const a=S.amb.get(ambId);if(!a)return;
-  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
+  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
   {act:()=>addAct(ambId),new:()=>addAmbMenu(btn,a.sectorId,a),dup:()=>dupAmb(a),dup0:()=>dupAmb(a,true),
    hito:()=>{const v=$('#hdate').value;const l=($('#hlab').value||'Hito').trim().toUpperCase();if(!v){toast('Elige una fecha.');return}apply([op('ambientes',a.id,{...a,hito:v,hitoLabel:l})],`Hito ${l} de ${a.code}: ${fmtD(v)}`)},
-   hclr:()=>{const n={...a};delete n.hito;delete n.hitoLabel;apply([op('ambientes',a.id,n)],'Hito quitado')},up:()=>moveItem('ambientes','sectorId',a,-1),dn:()=>moveItem('ambientes','sectorId',a,1),
+   hclr:()=>{const n={...a};delete n.hito;delete n.hitoLabel;apply([op('ambientes',a.id,n)],'Hito quitado')},up:()=>moveItem('ambientes','sectorId',a,-1),dn:()=>moveItem('ambientes','sectorId',a,1),mv:()=>setTimeout(()=>moveAmbDialog(btn,a),0),
    del:()=>{const ops=siblings('acts','ambId',ambId).map(x=>arc('acts',x.id));ops.push(arc('ambientes',ambId));apply(ops,`Ambiente ${a.code} eliminado`)}})}
+/* mover un ambiente (con sus actividades, días y registros) a otro sector del mismo piso */
+function moveAmbDialog(btn,a){const pid=pisoOfAmb(a.id);const secs=[...S.sec.values()].filter(x=>x.id!==a.sectorId&&pisoOfSecObj(x)===pid).sort((x,y)=>(x.order||0)-(y.order||0));
+  if(!secs.length){toast('No hay otro sector en este piso. Crea primero el sector de destino.');return}
+  openPop(btn,`<div class="ph">Mover ${esc(a.code)} · ${esc(a.name)}</div><div class="ptx">Pasa el ambiente con todas sus actividades, días y registros a otro sector de este mismo piso. Va al final del sector elegido.</div>
+    <div class="qrow"><select id="mvsec" aria-label="Sector de destino">${secs.map(x=>`<option value="${x.id}">${esc(x.code)} · ${esc(x.name)}</option>`).join('')}</select><button data-do="go">Mover</button></div>
+    <label class="chk" style="padding:4px 10px"><input type="checkbox" id="mvcode" checked> Cambiar el ítem al código del nuevo sector</label>`,
+  {go:()=>{const sid=($('#mvsec')||{}).value;const sec=S.sec.get(sid);const cur=S.amb.get(a.id);if(!sec||!cur)return;const rn=!!($('#mvcode')||{}).checked;
+    const sib=siblings('ambientes','sectorId',sid);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const code=rn?nextCode(sid):cur.code;
+    if(U.collapsed.includes(sid)){U.collapsed=U.collapsed.filter(x=>x!==sid);saveUI()}
+    apply([op('ambientes',a.id,{...cur,sectorId:sid,order,code})],`Ambiente ${cur.code} movido a ${sec.code} · ${sec.name}${rn&&code!==cur.code?' (ahora '+code+')':''}`)}})}
 function nextCode(secId){const s=S.sec.get(secId);const n=siblings('ambientes','sectorId',secId).length+1;return(s?s.code:'S')+'-'+n}
 function addAmbMenu(btn,secId,after){const tpls=P().templates||[];
   openPop(btn,`<div class="ph">Nuevo ambiente</div><button data-do="blank">Vacío (una actividad)</button>${tpls.length?'<hr><div class="ph">Desde plantilla</div>':''}${tpls.map((t,i)=>`<button data-do="tpl" data-i="${i}">${esc(t.name)}<kbd>${t.acts.length} act.</kbd></button>`).join('')}`,
@@ -1992,8 +2010,8 @@ const ENG=()=>!!me&&me.role!=='capataz'&&!!canDaily;
 function capItems(d){const E=ENG();const vs=new Set(visPisos().map(p=>p.id));const my=new Set(E?[...S.con.keys()]:(me&&me.scs||[]));const API=window.__plano;const nv=API&&API.novaSet?API.novaSet(d):new Set();
   return[...S.act.values()].filter(x=>my.has(x.sc)&&schedOn(x,d)&&!nv.has(x.id)).map(x=>{const a=S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);return{x,a,s,pid:pisoOfAct(x.id)}})
     .filter(o=>o.a&&o.s&&o.pid&&(!E||vs.has(o.pid))).sort((p,q)=>(p.s.order||0)-(q.s.order||0)||(p.a.order||0)-(q.a.order||0)||(p.x.order||0)-(q.x.order||0))}
-function capPend(d){if(ENG())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
-function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG();const q=E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):d<todayIso()?'closef':s.conf?'':s.k==='none'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
+function capPend(d){if(ENG()||SCK())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
+function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG();const q=E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
   const ql={run:liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'▶ Continúa':'▶ Iniciar',res:'▶ Reanudar',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
   return`<article class="kc k-${s.k}${s.conf?' conf':''}" data-k="${aid}" data-d="${d}" style="--k:${KST[s.k].c}"><i class="kn">${n||'·'}</i><div class="kt"><b>${esc(o.x.name)}</b><span>${esc(o.a.code)} · ${esc(o.a.name)}${pend?' · '+fmtD(d):''}${E||(me.scs||[]).length>1?' · '+esc(conOf(o.x.sc).name):''}</span><em>${esc(kText(d,aid))}</em></div>${q?`<button class="kgo" data-kq="${q}">${ql}</button>`:s.conf?'<span class="kok">✓</span>':''}</article>`}
 function renderCap(main){const E=ENG();const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
@@ -2004,7 +2022,7 @@ function renderCap(main){const E=ENG();const d=E?campoDate():todayIso();ensureDa
   const cnt={none:0,run:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kState(d,o.x.id).k]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
   if(!main.dataset.built){main.innerHTML=`<div class="kap"><div class="khd" id="khd"></div><div class="kbody"><div class="kplanw" id="kplanw"><div class="kplan" id="kplan"></div></div><div id="klist"></div></div></div>`;main.dataset.built='1';main.onclick=capClick}
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
-  let hh=E?`<div class="khi"><div><b>Verificación en campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div><button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||'capataz')}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div><button class="ib" data-kmenu aria-label="Menú">⋯</button></div>`;
+  let hh=E?`<div class="khi"><div><b>Verificación en campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div><button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||(SCK()?'':'capataz'))}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div>${SCK()?'':'<button class="ib" data-kmenu aria-label="Menú">⋯</button>'}</div>`;
   if(my.length>1)hh+=`<div class="kchips"><button class="${!CP.sc?'on':''}" data-ksc="">Todas</button>${my.map(c=>`<button class="${CP.sc===c?'on':''}" data-ksc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}</div>`;
   if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${byP.get(p.id).length}</b></button>`).join('')}</div>`;
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
@@ -2016,7 +2034,7 @@ function renderCap(main){const E=ENG();const d=E?campoDate():todayIso();ensureDa
   if(pend.length)lh+=`<div class="ksec warn">Pendientes de cerrar (${pend.length})</div>${pend.map(l=>{const x=S.act.get(l.actId);const a=S.amb.get(x.ambId);return kCard(l.date,{x,a},null,true)}).join('')}`;
   if(!all.length)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
   else if(V==='plan'){const un=items.filter(o=>!zoned.has(o.x.id));
-    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div><p class="knote">Toca un número para ${E?'verificar':'reportar'}.</p>`;
+    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div><p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`;
     if(un.length)lh+=`<div class="ksec">Sin ubicar en el plano (${un.length})</div>${un.map(o=>kCard(d,o,nums.get(o.x.id))).join('')}`}
   else lh+=items.map(o=>kCard(d,o,nums.get(o.x.id))).join('');
   const kl=$('#klist',main);if(kl.dataset.h!==lh){kl.innerHTML=lh;kl.dataset.h=lh}
@@ -2054,6 +2072,13 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
     if(s.conf)h+=`<p class="knote">Verificado por ${esc(r&&r.byName||'')} · ${hhmm(r&&r.ts)}${r&&r.prop&&r.prop.status!==r.status?' · el capataz había marcado '+(r.prop.status==='ok'?'✓':'✗'):''}</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar verificación</button></div>`;
     else if(r&&r._prop)h+=`<p class="knote">Propuesto por <b>${esc(r.byName||'el capataz')}</b> · ${hhmm(r.ts)}</p><div class="kbtns"><button class="kbig pri" data-ka="confp">✓ Confirmar lo propuesto</button><button class="kbig ghost" data-ka="closef">Corregir…</button></div>`;
     else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='none'?'<button class="kbig run" data-ka="run">▶ Marcar iniciada</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button>':s.k==='run'?'<button class="kbig warn" data-ka="stopf">⏸ Marcar detenida…</button>':'<button class="kbig run" data-ka="res">▶ Marcar reanudada</button>'):''}</div>`}
+  else if(SCK()){if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
+    else if(past)h+=`<p class="knote">Solo puedes marcar el avance del día de hoy.</p>`;
+    else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">El día ya fue cerrado por el capataz o el ingeniero.</p>`;
+    else if(s.k==='none')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button></div>`;
+    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button></div>`;
+    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button></div>`;
+    h+=`<p class="knote">El cierre del día (cumplido / no cumplido) lo hace el capataz o el ingeniero de campo.</p>`}
   else{if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">Cerrar ${fmtD(d)}</button></div>`;
     else if(s.k==='none')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
@@ -2073,7 +2098,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
   if(!(b=t.closest('[data-ka]')))return;const k=b.dataset.ka;
   if(k==='back'){capSheet(aid,d,'main',true);return}
   if(k==='stopf'){KS.note='';capSheet(aid,d,'stop',true);return}
-  if(k==='closef'){capSheet(aid,d,'close');return}
+  if(k==='closef'){if(SCK())return;capSheet(aid,d,'close');return}
   if(k==='run'||k==='res'){kAct(aid,d,k);kClose();return}
   if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}
     const lv=liveOf(d,aid);let extra=null;
@@ -2082,7 +2107,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:(cur&&cur.photos)||[]}}});toast('Verificación guardada');kClose();return}
-  if(k==='closesave'){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
+  if(k==='closesave'){if(SCK())return;if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
     liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs});toast('Cierre enviado. El ingeniero lo confirmará.');kClose();return}}
 
 /* ---------- invitaciones de capataces (Equipo) ---------- */
@@ -2229,7 +2254,7 @@ function sendProp(){const now=NOW();let n=0;
   for(const sc of myScsI()){const its=propItems(sc).filter(o=>!o.it.sent);if(!its.length)continue;const up={};its.forEach(({id,it})=>{up[id]={...it,sent:true,sentAt:now};n++});
     const doc=PROP.get(sc)||{sc,items:{}};PROP.set(sc,{...doc,items:{...doc.items,...up},sentAt:now,sentBy:me.name||me.email});
     fcol('lhprop').doc(sc).set({sc,items:up,sentAt:now,sentBy:me.name||me.email},{merge:true}).catch(err=>toast('No se pudo enviar: '+(err.code||err.message)))}
-  toast(n?`${n} cambio${n>1?'s':''} enviado${n>1?'s':''} al ingeniero de producción`:'No hay cambios por enviar');requestRender()}
+  toast(n?`${n} cambio${n>1?'s':''} enviado${n>1?'s':''} al ingeniero responsable del piso`:'No hay cambios por enviar');requestRender()}
 /* textos */
 function rngTxt(ds){ds=[...(ds||[])].sort();if(!ds.length)return'sin días';const out=[];let a=ds[0],b=ds[0];
   const nx=d=>{let x=addD(d,1);let g=0;while(!isWork(x)&&g++<14)x=addD(x,1);return x};
@@ -2254,7 +2279,7 @@ function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it
 /* días hábiles (lun–sáb) */
 function wshift(d,n){let x=d;const st=n>0?1:-1;let k=Math.abs(n);let g=0;while(k>0&&g++<2000){x=addD(x,st);if(isWork(x))k--}return x}
 function wdist(a,b){if(a===b)return 0;let n=0,x=a;const st=b>a?1:-1;while(x!==b){x=addD(x,st);if(isWork(x))n+=st;if(Math.abs(n)>400)break}return n}
-function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return;const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
+function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return;if(!canDecide(id,it)){toast(propWho(id,it)+'.');return}const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
@@ -2281,10 +2306,10 @@ function renderPropBar(){const v=$('#main .view');if(!v)return;let pb=$('#ppbar'
   let h='';
   if(me&&me.role==='sc'&&!(U.ver&&U.verMode==='ver')){const its=myScsI().flatMap(sc=>propItems(sc));const un=its.filter(o=>!o.it.sent).length,se=its.length-un;
     const hist=myScsI().flatMap(sc=>Object.values((PROP.get(sc)||{}).hist||{})).sort((a,b)=>b.t-a.t);let seen=0;try{seen=+localStorage.getItem('lps.pseen')||0}catch(e){}const nw=hist.filter(x=>x.t>seen).length;
-    h=`<div class="ppb sc"><div><b>Modo propuesta</b> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero de producción los acepte.</div>
-      <div class="ppa">${un?`<span class="pill warn">${un} sin enviar</span>`:''}${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}<button class="ib pri" data-pp="send"${un?'':' disabled'}>Enviar al ingeniero${un?' ('+un+')':''}</button>${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
-  else if(canWrite&&!(U.ver&&U.verMode==='ver')){const by=new Map();for(const doc of PROP.values())for(const[,it]of Object.entries(doc.items||{}))if(it&&it.sent)by.set(doc.sc,(by.get(doc.sc)||0)+1);
-    if(by.size)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' ')}<span class="mu"> · en la grilla: días propuestos rayados, días que se quitarían tachados</span></div><div class="ppa"><button class="ib pri" data-pp="rev">Revisar propuestas</button></div></div>`;if(revOn())h=revBarHtml()}
+    h=`<div class="ppb sc"><div><b>Modo propuesta</b> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero responsable del piso los acepte.</div>
+      <div class="ppa">${un?`<span class="pill warn">${un} sin enviar</span>`:''}${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}<button class="ib pri" data-pp="send"${un?'':' disabled'}>Enviar al ingeniero responsable${un?' ('+un+')':''}</button>${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
+  else if(canWrite&&!(U.ver&&U.verMode==='ver')){const by=revCounts();let oth=0;for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&!canDecide(id,it))oth++;
+    if(by.size||oth)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${by.size?[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):'<span class="mu">ninguna en tus pisos</span>'}${oth?`<span class="mu"> · ${oth} de pisos a cargo de otros (solo las ves)</span>`:''}<span class="mu"> · en la grilla: días propuestos rayados, días que se quitarían tachados</span></div><div class="ppa">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}</div></div>`;if(revOn())h=revBarHtml()}
   if(propErr)h+=`<div class="callout">No se pudieron leer las propuestas (${esc(propErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   if(pb.dataset.h!==h){pb.innerHTML=h;pb.dataset.h=h}pb.hidden=!h}
 function propBarClick(e){const t=e.target;let r;
@@ -2300,15 +2325,15 @@ function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PM
   const card=(sc,id,it,ed)=>{const off=(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id);const x=it.after||off||it.base||{};const am=S.amb.get(x.ambId);const p=am?S.pis.get(pisoOfAmb(am.id)):null;const D=propDesc(id,it);const AL=ed?propAlerts(sc,id,it):[];
     return`<div class="ppi k-${D.kind}" data-sc="${sc}" data-id="${id}"><div class="ppt"><span class="ppk">${D.kind==='new'?'NUEVA':D.kind==='del'?'QUITAR':'CAMBIO'}</span><b>${esc(x.name||'(sin nombre)')}</b><small>${p?esc(p.code)+' · ':''}${am?esc(am.code+' · '+am.name):''}${ed?' · propuesto por '+esc(it.n||''):''}${!ed?(it.sent?' · <em>en revisión</em>':' · <em class="w">sin enviar</em>'):''}</small></div>
       <ul>${D.lines.map(l=>`<li>${l}</li>`).join('')}</ul>${AL.length?`<ul class="ppal">${AL.map(a=>`<li class="${a.t}">⚠ ${a.h}</li>`).join('')}</ul>`:''}
-      <div class="ppbt">${ed?`<button class="ib pri" data-pd="ok">✓ Aceptar</button>${it.after&&(it.after.days||[]).length?'<button class="ib" data-pd="shift">Aceptar desplazando…</button>':''}<button class="ib" data-pd="rej">Rechazar…</button>`:'<button class="ib" data-pd="drop">Descartar este cambio</button>'}</div></div>`};
+      <div class="ppbt">${ed?(canDecide(id,it)?`<button class="ib pri" data-pd="ok">✓ Aceptar</button>${it.after&&(it.after.days||[]).length?'<button class="ib" data-pd="shift">Aceptar desplazando…</button>':''}<button class="ib" data-pd="rej">Rechazar…</button>`:`<span class="mu">${esc(propWho(id,it))}</span>`):'<button class="ib" data-pd="drop">Descartar este cambio</button>'}</div></div>`};
   if(mode==='rev'){const scs=[...PROP.values()].filter(d=>Object.values(d.items||{}).some(it=>it&&it.sent)).sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name));
-    h=`<div class="pph"><b>Propuestas de los subcontratistas</b><button class="kx" data-px>×</button></div>`+(scs.length?scs.map(d=>{const L=Object.entries(d.items||{}).filter(([,it])=>it&&it.sent);return`<section><div class="ppsh" style="--c:${conOf(d.sc).color}"><i></i><b>${esc(conOf(d.sc).name)}</b><span>${L.length} cambio${L.length>1?'s':''}${d.sentAt?' · enviado '+fmtD(ldt((d.sentAt)))+' '+hhmm(d.sentAt):''}</span><button class="ib pri" data-pall="${d.sc}">✓ Aceptar todo</button></div>${L.map(([id,it])=>card(d.sc,id,it,true)).join('')}</section>`}).join(''):'<p class="mu" style="padding:16px">No hay propuestas pendientes.</p>')}
+    h=`<div class="pph"><b>Propuestas de los subcontratistas</b><button class="kx" data-px>×</button></div>`+(scs.length?scs.map(d=>{const L=Object.entries(d.items||{}).filter(([,it])=>it&&it.sent);const nd=L.filter(([id,it])=>canDecide(id,it)).length;return`<section><div class="ppsh" style="--c:${conOf(d.sc).color}"><i></i><b>${esc(conOf(d.sc).name)}</b><span>${L.length} cambio${L.length>1?'s':''}${d.sentAt?' · enviado '+fmtD(ldt((d.sentAt)))+' '+hhmm(d.sentAt):''}</span>${nd?`<button class="ib pri" data-pall="${d.sc}">✓ Aceptar ${nd===L.length?'todo':'los míos ('+nd+')'}</button>`:''}</div>${L.map(([id,it])=>card(d.sc,id,it,true)).join('')}</section>`}).join(''):'<p class="mu" style="padding:16px">No hay propuestas pendientes.</p>')}
   else if(mode==='mine'){const L=myScsI().flatMap(sc=>propItems(sc));h=`<div class="pph"><b>Mis cambios propuestos</b><button class="kx" data-px>×</button></div>${L.map(o=>card(o.sc,o.id,o.it,false)).join('')||'<p class="mu" style="padding:16px">No tienes cambios.</p>'}`}
   else{const hist=myScsI().flatMap(sc=>Object.values((PROP.get(sc)||{}).hist||{}).map(x=>({...x,sc}))).sort((a,b)=>b.t-a.t).slice(0,60);const ST_={ok:'✓ Aceptado',shift:'↔ Aceptado con otra fecha',rej:'✗ Rechazado'};
     h=`<div class="pph"><b>Respuestas del ingeniero</b><button class="kx" data-px>×</button></div>${hist.map(x=>`<div class="ppi r-${x.st}"><div class="ppt"><span class="ppk">${ST_[x.st]||x.st}</span><b>${esc(x.name)}</b><small>${esc(x.amb)} · ${fmtD(ldt((x.t)))} ${hhmm(x.t)} · ${esc(x.n)}</small></div><ul>${x.kind==='del'?'<li>Pedido de quitar la actividad</li>':`<li>${x.from?esc(x.from)+' → ':''}<b>${esc(x.to)}</b></li>`}${x.note?`<li>Comentario: “${esc(x.note)}”</li>`:''}</ul></div>`).join('')||'<p class="mu" style="padding:16px">Aún no hay respuestas.</p>'}`}
   const c=el.firstChild;if(c.dataset.h!==h){const st=c.scrollTop;c.innerHTML=h;c.dataset.h=h;c.scrollTop=st}}
 function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.closest('[data-px]')){el.remove();PMOD=null;return}let b;
-  if((b=t.closest('[data-pall]'))){const sc=b.dataset.pall;const L=Object.entries((PROP.get(sc)||{}).items||{}).filter(([,it])=>it&&it.sent);L.forEach(([id])=>decideProp(sc,id,'ok'));propModalRender();return}
+  if((b=t.closest('[data-pall]'))){const sc=b.dataset.pall;const L=Object.entries((PROP.get(sc)||{}).items||{}).filter(([id,it])=>it&&it.sent&&canDecide(id,it));L.forEach(([id])=>decideProp(sc,id,'ok'));propModalRender();return}
   if(!(b=t.closest('[data-pd]')))return;const card=b.closest('.ppi');const sc=card.dataset.sc,id=card.dataset.id;const k=b.dataset.pd;
   if(k==='drop'){savePropItem(sc,id,null);setTimeout(propModalRender,50);return}
   if(k==='ok'){decideProp(sc,id,'ok');propModalRender();return}
@@ -2322,8 +2347,8 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
    ===================================================================== */
 U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null,REVDRAG=null;
 const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!(U.ver&&U.verMode==='ver'));
-function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent)L.push({sc:doc.sc,id,it})}return L}
-function revCounts(){const m=new Map();for(const doc of PROP.values())for(const it of Object.values(doc.items||{}))if(it&&it.sent)m.set(doc.sc,(m.get(doc.sc)||0)+1);return m}
+function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
+function revCounts(){const m=new Map();for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))m.set(doc.sc,(m.get(doc.sc)||0)+1);return m}
 /* durante el render, la grilla muestra lo propuesto encima de lo vigente */
 function revSwap(){const off=S.act;const v=new Map(off);
   for(const{sc,id,it}of revItems()){const o=off.get(id)||null;
@@ -2556,6 +2581,23 @@ function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidd
 function cfxSum(secs,cons,nS){const s=CU.sec&&secs.find(o=>o.s.id===CU.sec);const c=CU.sc&&cons.find(o=>o.id===CU.sc);const sh={all:'Todas',pend:'Pendientes',reg:'Registradas',prop:'Por confirmar'}[CU.show]||'Todas';
   return`<span>${s?esc(s.s.code+' · '+s.s.name):'Todos los sectores'} · ${c?esc(c.name):'Todos los SC'} · ${sh}</span><b>${nS} prog.</b><i>${CU.fx?'▴':'▾'}</i>`}
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-cfx]');if(!t)return;CU.fx=!CU.fx;requestRender()});
+
+/* =====================================================================
+   ETAPA 35 · Responsables de piso (propuestas) y subcontratista en obra
+   ===================================================================== */
+/* editores responsables de cada piso: members/{correo}.pisos = [pisoId] (lo asigna el administrador en Equipo) */
+const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
+function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
+function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
+/* quién resuelve una propuesta: el administrador siempre; un editor solo en los pisos a su cargo; piso sin responsable: solo el administrador */
+function canDecide(id,it){if(!me||PM())return false;if(isAdmin)return true;if(me.role!=='editor')return false;const pid=propPiso(id,it);return respOf(pid).some(r=>r.em===me.email)}
+function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve el administrador'}
+function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest=pisos().filter(p=>!L.includes(p.id));
+  return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
+   ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}
+function pisosSinResp(){return pisos().filter(p=>!respOf(p.id).length)}
+/* el subcontratista también marca inicio, detención y reanudación en la pantalla "En obra" (no cierra el día) */
+function SCK(){return!!me&&me.role==='sc'}
 
 /* ================= PLAN SEMANAL ================= */
 function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
@@ -2930,21 +2972,38 @@ const confirmDel={};
 function scCell(em,m){const L=memScs(m);const all=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const rest=all.filter(c=>!L.includes(c.id));
   return`<div class="scchips">${L.map(i=>`<span class="scchip" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}<button data-scrm="${esc(em)}|${esc(i)}" aria-label="Quitar ${esc(conOf(i).name)}" title="Quitar">&times;</button></span>`).join('')}</div>
    <select class="ci" data-mem="${esc(em)}" data-f="scadd" aria-label="Agregar empresa o partida"${L.length?'':' style="border:1px solid var(--bad)"'}><option value="">${L.length?'+ Agregar otra empresa / partida…':'— elige la empresa —'}</option>${rest.map(c=>`<option value="${c.id}">${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select>`}
+/* buscador y filtros del equipo; borrador del formulario "Agregar" (sobrevive a las actualizaciones automáticas de la pantalla) */
+const TQ={q:'',role:'',sc:''};const TF={em:'',nm:'',rl:'editor',sc:''};
+const TROLES=['admin','editor','campo','sc','capataz','lector'];
+const TGRP={admin:'Administradores',editor:'Editores (ingenieros de producción)',campo:'Campo (ingenieros de campo)',sc:'Subcontratistas',capataz:'Capataces',lector:'Lectores'};
+const fold=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const roleOfM=(em,m)=>isOwnerEmail(em)?'admin':(m&&m.role)||'lector';
+function teamRows(list,online){const q=fold(TQ.q).trim();const words=q?q.split(/\s+/):[];
+  const hay=(em,m)=>fold([m.name,em.startsWith('u_')?'':em,ROLE[roleOfM(em,m)],...memScs(m).map(i=>conOf(i).name+' '+(conOf(i).partida||'')),...memPisos(m).map(id=>{const p=S.pis.get(id);return p?p.code+' '+p.name:''})].join(' '));
+  const L=list.filter(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&(!TQ.sc||memScs(m).includes(TQ.sc))&&(!words.length||words.every(w=>hay(em,m).includes(w))));
+  const scName=m=>memScs(m).map(i=>conOf(i).name).sort()[0]||'~';
+  const by=r=>L.filter(([em,m])=>roleOfM(em,m)===r).sort((a,b)=>(r==='sc'||r==='capataz'?scName(a[1]).localeCompare(scName(b[1])):0)||(a[1].name||a[0]).localeCompare(b[1].name||b[0]));
+  return{n:L.length,groups:TROLES.map(r=>({r,rows:by(r)})).filter(g=>g.rows.length)}}
 function renderTeam(main){
-  const list=[...MEM.entries()].sort((a,b)=>a[0].localeCompare(b[0]));const now=NOW();
+  const list=[...MEM.entries()];const now=NOW();
   const online=new Set([...PRES.values()].map(p=>p&&p.eh));
   const counts=Object.fromEntries(Object.keys(COLS).map(c=>[c,S[COLS[c]].size]));ensurePlanos();
   main.innerHTML=`<div class="scroll"><div class="wrap">
   <div class="card"><div class="hd">Equipo <span class="sub">${list.length} persona${list.length===1?'':'s'} con acceso</span></div>
-   <div class="pad"><p class="callout" style="margin:0">Solo los correos de esta lista pueden entrar. Para sumar a alguien: agrégalo aquí, envíale el enlace de esta página (<span class="mono">${esc(location.origin+location.pathname)}</span>) y pídele que pulse <b>“¿Primera vez? Crear mi cuenta”</b> con ese mismo correo y confirme el correo que le llegará.<br><b>Campo</b>: registra el avance diario (capataces), sin modificar el lookahead. <b>Editor</b>: edita el lookahead, el plan semanal y las restricciones. <b>Subcontratista</b>: dibuja el plan del día de su empresa en el Plano diario (elige su empresa en la columna Rol; si una empresa tiene varias partidas, agrégalas todas con “+ Agregar otra empresa / partida”). <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p></div>
-   ${isAdmin?`<form class="pad" id="tadd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:0"><input class="tin" id="temail" type="email" placeholder="correo@empresa.com" aria-label="Correo"><input class="tin" id="tname" placeholder="Nombre y apellido" aria-label="Nombre"><select class="tin" id="trole" aria-label="Rol"><option value="editor">Editor</option><option value="campo">Campo</option><option value="sc">Subcontratista</option><option value="capataz">Capataz</option><option value="lector">Lector</option><option value="admin">Administrador</option></select><select class="tin" id="tsc" aria-label="Empresa" hidden><option value="">— empresa —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><button class="ib pri" type="submit">Agregar al equipo</button></form>`:''}
+   <details class="pad tinfo"${(TQ.info??list.length<3)?' open':''}><summary>¿Cómo se suma a alguien y qué hace cada rol?</summary><p class="callout" style="margin:8px 0 0">Solo los correos de esta lista pueden entrar. Para sumar a alguien: agrégalo aquí, envíale el enlace de esta página (<span class="mono">${esc(location.origin+location.pathname)}</span>) y pídele que pulse <b>“¿Primera vez? Crear mi cuenta”</b> con ese mismo correo y confirme el correo que le llegará.<br><b>Campo</b>: registra el avance diario (capataces), sin modificar el lookahead. <b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; asígnale los <b>pisos a su cargo</b> para que resuelva las propuestas de los subcontratistas en esos pisos (un piso puede tener varios responsables; si no tiene ninguno, las propuestas las resuelve el administrador). <b>Subcontratista</b>: dibuja el plan del día de su empresa en el Plano diario (elige su empresa en la columna Rol; si una empresa tiene varias partidas, agrégalas todas con “+ Agregar otra empresa / partida”). <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p></details>
+   ${isAdmin?`<form class="pad" id="tadd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:0"><input class="tin" id="temail" type="text" inputmode="email" autocomplete="off" data-fk="tf:em" value="${esc(TF.em)}" placeholder="correo@empresa.com" aria-label="Correo"><input class="tin" id="tname" data-fk="tf:nm" value="${esc(TF.nm)}" placeholder="Nombre y apellido" aria-label="Nombre"><select class="tin" id="trole" aria-label="Rol">${[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['lector','Lector'],['admin','Administrador']].map(([k,v])=>`<option value="${k}"${TF.rl===k?' selected':''}>${v}</option>`).join('')}</select><select class="tin" id="tsc" aria-label="Empresa"${TF.rl==='sc'||TF.rl==='capataz'?'':' hidden'}><option value="">— empresa —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}"${TF.sc===c.id?' selected':''}>${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select><button class="ib pri" type="submit">Agregar al equipo</button></form>`:''}
+   ${(()=>{const cnt={};list.forEach(([em,m])=>{const r=roleOfM(em,m);cnt[r]=(cnt[r]||0)+1});const scs=[...new Set(list.filter(([em,m])=>!TQ.role||roleOfM(em,m)===TQ.role).flatMap(([,m])=>memScs(m)))].filter(i=>S.con.has(i)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
+     return`<div class="pad tfilt"><input class="tin tqry" id="tq" data-fk="tq" type="search" value="${esc(TQ.q)}" placeholder="Buscar por nombre, correo, empresa o piso…" aria-label="Buscar en el equipo">
+      <span class="tchips"><button type="button" class="${!TQ.role?'on':''}" data-trole="">Todos <b>${list.length}</b></button>${TROLES.filter(r=>cnt[r]).map(r=>`<button type="button" class="${TQ.role===r?'on':''}" data-trole="${r}">${ROLE[r]} <b>${cnt[r]}</b></button>`).join('')}</span>
+      ${scs.length?`<select class="tin" id="tqsc" aria-label="Filtrar por empresa"><option value="">Todas las empresas</option>${scs.map(i=>`<option value="${i}"${TQ.sc===i?' selected':''}>${esc(conOf(i).name)}</option>`).join('')}</select>`:''}</div>`})()}
    <div class="tscroll"><table class="t"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th title="Puede ver la pestaña Tablero">Tablero</th><th>Estado</th><th></th></tr></thead><tbody>
-   ${list.map(([em,m])=>{const self=me&&em===me.email;const cd=(confirmDel[em]||0)>NOW();return `<tr><td>${isAdmin?`<input class="ci" data-mem="${esc(em)}" data-f="name" data-fk="m:${esc(em)}" value="${esc(m.name||'')}" placeholder="Nombre">`:esc(m.name||'')}</td><td class="mono">${em.startsWith('u_')?'<span class="pill neu">Ingreso por enlace / QR</span>':esc(em)}${self?' <span class="pill neu">tú</span>':''}</td>
-     <td>${isAdmin&&!self&&!isOwnerEmail(em)?`<select class="ci" data-mem="${esc(em)}" data-f="role">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}"${m.role===k?' selected':''}>${v}</option>`).join('')}</select>${m.role==='sc'||m.role==='capataz'?scCell(em,m):''}`:esc(ROLE[m.role]||m.role)+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>esc(conOf(i).name)).join(', '):'')}</td>
+   ${(()=>{const TR=teamRows(list,online);if(!TR.n)return`<tr><td colspan="6" class="mu" style="padding:14px">Nadie coincide con la búsqueda.${TQ.q||TQ.role||TQ.sc?' <button type="button" class="ib" data-tclr style="height:26px;font-size:12px">Limpiar filtros</button>':''}</td></tr>`;
+     return TR.groups.map(g=>`<tr class="tgrp"><th colspan="6">${esc(TGRP[g.r])} <span class="mu">${g.rows.length}</span></th></tr>`+g.rows.map(([em,m])=>{const self=me&&em===me.email;const cd=(confirmDel[em]||0)>NOW();return `<tr><td>${isAdmin?`<input class="ci" data-mem="${esc(em)}" data-f="name" data-fk="m:${esc(em)}" value="${esc(m.name||'')}" placeholder="Nombre">`:esc(m.name||'')}</td><td class="mono">${em.startsWith('u_')?'<span class="pill neu">Ingreso por enlace / QR</span>':esc(em)}${self?' <span class="pill neu">tú</span>':''}</td>
+     <td>${isAdmin&&!self&&!isOwnerEmail(em)?`<select class="ci" data-mem="${esc(em)}" data-f="role">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}"${m.role===k?' selected':''}>${v}</option>`).join('')}</select>${m.role==='sc'||m.role==='capataz'?scCell(em,m):''}${m.role==='editor'?pisoCell(em,m):''}`:esc(ROLE[m.role]||m.role)+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>esc(conOf(i).name)).join(', '):'')+(m.role==='editor'&&memPisos(m).filter(id=>S.pis.has(id)).length?' · pisos a cargo: '+memPisos(m).filter(id=>S.pis.has(id)).map(id=>esc(S.pis.get(id).code)).join(', '):'')}</td>
      <td>${m.role==='admin'||isOwnerEmail(em)?'<span class="mu" title="El administrador siempre lo ve">✓ siempre</span>':m.role==='capataz'?'<span class="mu">—</span>':isAdmin?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="dash"${dashOn(m)?' checked':''}> Ve el tablero</label>`:(dashOn(m)?'✓':'')}</td>
      <td>${online.has(hashStr(em))?'<span class="pill ok">Conectado</span>':''}</td>
-     <td>${isAdmin&&!self&&!isOwnerEmail(em)?`<button class="ib${cd?' warn':''}" data-mdel="${esc(em)}" style="height:26px;font-size:12px">${cd?'Confirmar':'Quitar acceso'}</button>`:''}</td></tr>`}).join('')}
-   </tbody></table></div></div>
+     <td>${isAdmin&&!self&&!isOwnerEmail(em)?`<button class="ib${cd?' warn':''}" data-mdel="${esc(em)}" style="height:26px;font-size:12px">${cd?'Confirmar':'Quitar acceso'}</button>`:''}</td></tr>`}).join('')).join('')})()}
+   </tbody></table></div>${(()=>{const sr=pisosSinResp();return isAdmin&&sr.length&&S.pis.size?`<p class="note pad" style="margin:0">Pisos sin responsable: <b>${sr.map(p=>esc(p.code)).join(', ')}</b> · sus propuestas las resuelve solo el administrador.</p>`:''})()}</div>
    ${isAdmin?`<div class="card"><div class="hd">Datos del proyecto <span class="sub">${counts.pisos} pisos · ${counts.sectors} sectores · ${counts.ambientes} ambientes · ${counts.acts} actividades · ${counts.weeks} semanas congeladas · ${counts.restr} restricciones · ${planosLoaded?PLAN.size:'…'} planos</span></div>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px">
      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="ib" id="bbackup">Descargar respaldo de datos (JSON)</button><button class="ib" id="bbackup2" title="Incluye las láminas de planos y las fotos: el archivo puede pesar bastante">Respaldo completo con imágenes</button>${bkNote()}<span class="note">Guárdalo cada semana (y siempre antes de una carga o limpieza grande). Incluye todo: lookahead, registro diario, reportes de capataces, propuestas, versiones, planos del día, equipo e invitaciones.</span></div>
@@ -2954,19 +3013,31 @@ function renderTeam(main){
   ${isAdmin?cleanCard():''}
   </div></div>`;
   wireClean(main);
-  const f=$('#tadd',main);if(f){const rs=$('#trole',main),ss=$('#tsc',main);rs.onchange=()=>{ss.hidden=rs.value!=='sc'&&rs.value!=='capataz'}}
+  const f=$('#tadd',main);{const ti=$('.tinfo',main);if(ti)ti.ontoggle=()=>{TQ.info=ti.open}}
+  main.oninput=e=>{const t=e.target;
+    if(t.id==='tq'){TQ.q=t.value;render();return}
+    if(t.id==='temail'){TF.em=t.value;return}if(t.id==='tname'){TF.nm=t.value;return}
+    if(t.id==='trole'){TF.rl=t.value;const ss=$('#tsc',main);if(ss)ss.hidden=TF.rl!=='sc'&&TF.rl!=='capataz';return}
+    if(t.id==='tsc'){TF.sc=t.value;return}
+    if(t.id==='tqsc'){TQ.sc=t.value;render();return}};
   if(f)f.onsubmit=async e=>{e.preventDefault();const em=$('#temail').value.trim().toLowerCase(),nm=$('#tname').value.trim(),rl=$('#trole').value,scv=$('#tsc').value;if((rl==='sc'||rl==='capataz')&&!scv){toast('Elige la empresa / partida.');return}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Escribe un correo válido.');return}
     if(MEM.has(em)){toast('Ese correo ya está en el equipo.');return}
-    try{await fcol('members').doc(em).set({role:rl,name:nm,...(rl==='sc'||rl==='capataz'?{sc:scv,scs:[scv]}:{}),added:NOW(),addedBy:me.email});toast(`${nm||em} agregado como ${ROLE[rl]}. Envíale el enlace de la página.`)}catch(err){toast('No se pudo agregar: '+(err.code||err.message))}};
+    try{await fcol('members').doc(em).set({role:rl,name:nm,...(rl==='sc'||rl==='capataz'?{sc:scv,scs:[scv]}:{}),added:NOW(),addedBy:me.email});TF.em='';TF.nm='';toast(`${nm||em} agregado como ${ROLE[rl]}. Envíale el enlace de la página.`);render()}catch(err){toast('No se pudo agregar: '+(err.code||err.message))}};
   main.onchange=async e=>{const t=e.target;if(!t.dataset.mem||!isAdmin)return;t.dataset.o=t.value;
     if(t.dataset.f==='scadd'){if(!t.value)return;const m=MEM.get(t.dataset.mem)||{};const L=[...new Set([...memScs(m),t.value])];
       try{await fcol('members').doc(t.dataset.mem).update({scs:L,sc:L[0]});toast(`${conOf(t.value).name} agregada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
+    if(t.dataset.f==='pisoadd'){if(!t.value)return;const m=MEM.get(t.dataset.mem)||{};const L=[...new Set([...memPisos(m),t.value])];const p=S.pis.get(t.value);
+      try{await fcol('members').doc(t.dataset.mem).update({pisos:L});toast(`${p?p.name:'Piso'} a cargo de ${m.name||t.dataset.mem}`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
     try{await fcol('members').doc(t.dataset.mem).update({[t.dataset.f]:t.type==='checkbox'?t.checked:t.dataset.f==='name'?t.value.trim():t.value,...(t.dataset.f==='role'&&t.value!=='sc'?{}:{})})}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}
     if(t.id==='fimport'){}};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
-  main.onclick=async e=>{if(await invClick(e))return;const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
+  main.onclick=async e=>{let tb;if((tb=e.target.closest('[data-trole]'))){TQ.role=tb.dataset.trole;if(TQ.sc&&!list.some(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&memScs(m).includes(TQ.sc)))TQ.sc='';render();return}
+    if(e.target.closest('[data-tclr]')){TQ.q='';TQ.role='';TQ.sc='';render();return}
+    if(await invClick(e))return;const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
       try{await fcol('members').doc(em).update({scs:L,sc:L[0]||''});toast(`${conOf(id).name} quitada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
+    const pr=e.target.closest('[data-pirm]');if(pr&&isAdmin){const[em,id]=pr.dataset.pirm.split('|');const m=MEM.get(em)||{};const L=memPisos(m).filter(i=>i!==id);
+      try{await fcol('members').doc(em).update({pisos:L});toast(`${(S.pis.get(id)||{}).name||'Piso'} quitado`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
     const b=e.target.closest('[data-mdel]');if(b){const em=b.dataset.mdel;if((confirmDel[em]||0)>NOW()){confirmDel[em]=0;try{await fcol('members').doc(em).delete();toast('Acceso retirado a '+em)}catch(err){toast('No se pudo quitar: '+(err.code||err.message))}}else{confirmDel[em]=NOW()+4000;render();setTimeout(()=>{if(U.tab==='team')render()},4100)}return}
     if(e.target.id==='bbackup')backupJson(false);if(e.target.id==='bbackup2')backupJson(true)};
   const fi=$('#fimport',main);if(fi)fi.onchange=async()=>{const file=fi.files[0];fi.value='';if(file)await importJson(file)};
