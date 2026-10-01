@@ -2158,8 +2158,10 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   if(!DB_.tick)DB_.tick=setInterval(()=>{if(U.tab==='dash'&&ready)requestRender();else{clearInterval(DB_.tick);DB_.tick=null}},60000);
   const items=dashData(d);const act=items.filter(i=>!i.nova);const late=dashLate();const isLate=nowHM()>=late;
   const c={none:0,run:0,stop:0,ok:0,no:0};let prop=0,conf=0;act.forEach(i=>{c[i.st.k]++;if(i.st.k==='ok'||i.st.k==='no'){if(i.st.conf)conf++;else prop++}});
-  const closed=c.ok+c.no;const ppcD=closed?c.ok/closed:null;
-  const wd=weekDays(weekOf(d)).filter(x=>x<=d);const W=dayData(wd,new Set(visPisos().map(p=>p.id)));const ppcW=W.tot.ver?W.tot.ok/W.tot.ver:null;
+  const closed=c.ok+c.no;const vsP=new Set(visPisos().map(p=>p.id));
+  /* PPC de hoy = Indicadores › Diario (misma función); PPC de la semana = Indicadores › Semanal (compromisos congelados) */
+  const DD=dayData([d],vsP);const DT=DD.tot;const ppcD=DT.ver?DT.ok/DT.ver:null;const nProvD=DD.rows.filter(r=>r.rc&&r.rc._prop).length;
+  const PW=ppcWeekAgg(weekOf(d),vsP);
   /* por subcontratista */
   const bySc=new Map();act.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,run:0,stop:0,ok:0,no:0,n:0,who:new Set()};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
   for(const lv of LIVE.values())if(lv.date===d&&bySc.has(lv.sc))(lv.log||[]).forEach(e=>bySc.get(lv.sc).who.add(e.by));
@@ -2188,8 +2190,8 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${T('none',c.none,'Sin iniciar',isLate?`pasadas las ${late}`:`alerta desde las ${late}`,isLate&&c.none?'alert':'')}
     ${T('run',c.run,'En ejecución','')}${T('stop',c.stop,'Detenidas','',c.stop?'alert2':'')}
     ${T('ok',closed,'Cerradas',`${conf} confirmadas · ${prop} por confirmar`)}
-    ${T('',pc(ppcD),'PPC hoy',closed?`${c.ok} de ${closed} cerradas · provisional`:'aún sin cierres','dkppc')}
-    ${T('',pc(ppcW),'PPC semana '+cw,W.tot.ver?`${W.tot.ok} de ${W.tot.ver} verificadas`:'','dkppc')}</div>`;
+    ${T('',pc(ppcD),'PPC diario hoy',DT.ver?`${DT.ok} de ${DT.ver} verificadas${nProvD?` · ${nProvD} por confirmar`:''}`:'aún sin cierres','dkppc')}
+    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'aún sin evaluar en Plan semanal','dkppc')}</div>`;
   const bar=o=>`<span class="dbar">${['ok','no','run','stop','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
   let sc=`<div class="dcard"><div class="dch">Por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${bar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw" title="Personas que reportaron hoy">${o.who.size?`👷 ${o.who.size}`:'<em>sin reportes</em>'}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
     <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div></div>`;
@@ -2205,7 +2207,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const pls=visPisos().filter(p=>items.some(i=>i.pid===p.id));if(!pls.some(p=>p.id===DB_.pid))DB_.pid=(pls.find(p=>API&&[...API.zonedSet(p.id)].length)||pls[0]||{}).id||'';
   const rcol=(t,L)=>{const cm=L.filter(r=>grpOf(r)==='campo'),ar=L.filter(r=>grpOf(r)==='area');return`<div class="drc"><div class="drh">${t} <b>${L.length}</b></div><div class="drg"><span>Campo <b>${cm.length}</b></span><span>Otras áreas <b>${ar.length}</b></span></div><ul>${L.slice(0,5).map(r=>{const x=S.act.get(r.actId);return`<li><span class="dtag ${grpOf(r)}">${grpOf(r)==='area'?esc(r.area||'Otras áreas'):'Campo'}</span> ${esc(r.type||'Restricción')}${r.desc?': '+esc(shortT(r.desc,40)):''}<small>${x?esc(shortT(x.name,30))+' · '+esc(conOf(x.sc).name):''}${r.need?' · necesaria '+fmtD(r.need):''}</small></li>`}).join('')}${L.length>5?`<li class="mu">y ${L.length-5} más…</li>`:''}</ul></div>`};
   let rs=`<div class="dcard"><div class="dch">Restricciones pendientes <button class="lnkb" data-dtab="restr">ver todas</button></div><div class="drs">${rcol('Actividades de hoy',rToday)}${rcol('Vencidas',rLate)}${rcol('Próximos 7 días',rNext)}</div></div>`;
-  let tr=`<div class="dcard"><div class="dch">PPC diario por semana</div><div class="dsv chart">${trend.length?svgBarsV(trend,{h:190}):'<p class="mu">Aún no hay registros de cumplimiento.</p>'}</div></div>
+  let tr=`<div class="dcard"><div class="dch">PPC diario (alerta) por semana</div><div class="dsv chart">${trend.length?svgBarsV(trend,{h:190}):'<p class="mu">Aún no hay registros de cumplimiento.</p>'}</div></div>
     <div class="dcard"><div class="dch">Causas más frecuentes · 30 días</div><div class="dsv chart">${top.length?svgBarsH(top.map(([k,v])=>({label:k,v})),v=>String(v)):'<p class="mu">Sin incumplimientos ni detenciones registradas.</p>'}</div></div>`;
   if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div class="dgrid"><div class="dcol1"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><div class="dplanw"><div class="kplan" id="dplan"></div></div></div><div id="drs"></div></div><div class="dcol2"><div id="dal"></div><div id="dfd"></div><div id="dtr"></div></div></div></div>`;main.dataset.built='1';main.onclick=dashClick}
   const put=(id,html)=>{const el=$('#'+id,main);if(el&&el.dataset.h!==html){el.innerHTML=html;el.dataset.h=html}};
@@ -2610,6 +2612,8 @@ function SCK(){return!!me&&me.role==='sc'}
 function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
   for(const{p,secs}of tree()){if(pid&&p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts){const d=(x.days||[]).filter(z=>days.has(z)).sort();if(d.length){const it={sc:x.sc,sector:s.code,code:a.code,amb:a.name,act:x.name,days:d,ord:s.order*1e6+a.order*1e3+x.order};if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}o[x.id]=it}}}
   return o}
+/* PPC semanal oficial de la semana n en los pisos visibles (lo mismo que Indicadores › Semanal y el Tablero) */
+function ppcWeekAgg(n,vset){const o={n:0,ok:0,ev:0};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vset.has(w.pisoId))continue;const st=ppcOf(w);if(!st)continue;o.n+=st.n;o.ok+=st.ok;o.ev+=st.ev}return o.ev>0?{...o,ppc:o.ok/o.n}:null}
 function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||{});if(!ids.length)return null;const r=w.res||{};const ok=ids.filter(i=>r[i]&&r[i].ok===true).length;const ev=ids.filter(i=>r[i]&&(r[i].ok===true||r[i].ok===false)).length;return{ppc:ok/ids.length,ok,ev,n:ids.length}}
 const confirmUF={};
 function renderPlan(main){
@@ -2844,8 +2848,7 @@ function renderInd(main){
   ensureDaily(addD(weekStart(U.week-2),-1));
   const vp=visPisos();const vset=new Set(vp.map(p=>p.id));
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
-  const agg={};for(const w of docs){const st=ppcOf(w);if(!st)continue;const o=agg[w.n]=agg[w.n]||{n:0,ok:0,ev:0};o.n+=st.n;o.ok+=st.ok;o.ev+=st.ev}
-  const ppcs=Object.entries(agg).filter(([,o])=>o.ev>0).map(([n,o])=>({...o,wk:+n,ppc:o.ok/o.n})).sort((a,b)=>a.wk-b.wk);
+  const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
   const last=ppcs[ppcs.length-1];const avg=ppcs.length?ppcs.reduce((s,x)=>s+x.ppc,0)/ppcs.length:null;
   const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=r.cnc||'Sin causa registrada';cncC[k]=(cncC[k]||0)+1}}));
   const cncL=Object.entries(cncC).sort((a,b)=>b[1]-a[1]);
