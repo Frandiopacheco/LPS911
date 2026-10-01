@@ -2,6 +2,6 @@
   "projects": {
     "default": "lps911-pruebas-49641",
     "pruebas": "lps911-pruebas-49641",
-    "produccion": "PEGA_AQUI_ID_DEL_PROYECTO_REAL"
+    "produccion": "lps911"
   }
 }
