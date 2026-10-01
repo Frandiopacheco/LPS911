@@ -57,6 +57,13 @@ jobs:
         if: env.SA != ''
         with:
           credentials_json: ${{ env.SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: env.SA != ''
+      - name: Activar los servicios de Google Cloud que se necesitan
+        if: env.SA != ''
+        run: |
+          P=$(python3 -c "import json;print(json.load(open('.firebaserc'))['projects']['${{ github.ref_name == 'produccion' && 'produccion' || 'pruebas' }}'])")
+          gcloud services enable cloudbilling.googleapis.com cloudresourcemanager.googleapis.com firebaserules.googleapis.com firestore.googleapis.com cloudfunctions.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com eventarc.googleapis.com pubsub.googleapis.com cloudscheduler.googleapis.com --project "$P"
       - name: Instalar reglas y tareas del servidor
         if: env.SA != ''
         run: |
