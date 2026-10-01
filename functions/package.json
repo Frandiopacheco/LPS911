@@ -1,0 +1,12 @@
+{
+  "name": "lps911-functions",
+  "private": true,
+  "description": "Tareas automáticas del servidor de LPS 911",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

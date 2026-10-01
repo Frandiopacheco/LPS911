@@ -1,0 +1,99 @@
+rules_version = '2';
+// Reglas de seguridad — Last Planner 911
+// Solo los correos registrados en la colección "members" (pestaña Equipo)
+// y con el correo confirmado pueden leer. Administrador y Editor editan todo;
+// el rol Campo solo registra el avance diario (colecciones daily y fotos).
+// Si cambias el correo del administrador principal, cámbialo también en firebase-config.js.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function verified() { return request.auth != null && request.auth.token.get('email_verified', false) == true; }
+    // Capataces: ingresan con un enlace / QR (sesión anónima) y quedan registrados como members/u_<uid>
+    function anon() { return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function signedIn() { return verified() || anon(); }
+    function email() { return request.auth.token.email.lower(); }
+    function mid() { return anon() ? 'u_' + request.auth.uid : email(); }
+    function isOwner() { return verified() && email() == 'frandiopacheco@gmail.com'; }
+    function memberPath() { return /databases/$(database)/documents/members/$(mid()); }
+    function isMember() { return signedIn() && (isOwner() || exists(memberPath())); }
+    function role() { return isOwner() ? 'admin' : get(memberPath()).data.role; }
+    function canEdit() { return isMember() && role() in ['admin', 'editor']; }
+    function isAdmin() { return isMember() && role() == 'admin'; }
+    function canDaily() { return isMember() && role() in ['admin', 'editor', 'campo']; }
+    function scOf() { return get(memberPath()).data.get('sc', ''); }
+    // Una persona puede tener varias empresas/partidas (campo 'scs'); si no existe, se usa 'sc'.
+    function scsOf() { let d = get(memberPath()).data; return d.get('scs', [d.get('sc', '')]); }
+    function isSC() { return isMember() && !isOwner() && role() == 'sc'; }
+    function isCap() { return isMember() && !isOwner() && role() == 'capataz'; }
+    function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
+    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
+
+    match /members/{mail} {
+      // la lista completa (con correos) solo la ve el personal interno; cada uno siempre puede leer su propio registro
+      allow read: if canDaily() || (signedIn() && mail == mid());
+      allow write: if isAdmin() && (mail == mail.lower() || mail.matches('u_.*'));
+      // el capataz se registra solo con un enlace vigente, y solo para la partida del enlace
+      allow create: if anon() && mail == 'u_' + request.auth.uid
+        && request.resource.data.role == 'capataz'
+        && request.resource.data.keys().hasOnly(['role', 'name', 'scs', 'sc', 'inv', 'added'])
+        && invOk(request.resource.data.inv)
+        && request.resource.data.scs == get(/databases/$(database)/documents/inv/$(request.resource.data.inv)).data.scs;
+      // el capataz puede cambiar solo su nombre
+      allow update: if anon() && mail == 'u_' + request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+    }
+    // Enlaces de invitación de capataces: los crea el administrador; cualquiera con sesión puede leer uno por su código
+    match /inv/{code} {
+      allow get: if signedIn();
+      allow list, write: if isAdmin();
+    }
+    // Estado en vivo de cada actividad (iniciada / detenida / cierre propuesto)
+    match /live/{id} {
+      allow read: if isMember();
+      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf());
+      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf());
+      allow delete: if canDaily();
+    }
+    // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
+    match /lhprop/{sc} {
+      allow read: if isMember();
+      allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc);
+    }
+    match /daily/{id} {
+      allow read: if isMember();
+      allow write: if canDaily();
+    }
+    match /fotos/{id} {
+      allow read: if isMember();
+      allow create, update: if (canDaily() || isCap()) && request.resource.data.data.size() < 400000;
+      allow delete: if canDaily();
+    }
+    // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.
+    match /pdz/{id} {
+      allow read: if isMember();
+      allow create: if canEdit() || (isSC() && request.resource.data.sc in scsOf());
+      allow update: if canEdit() || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf());
+      allow delete: if canEdit() || (isSC() && resource.data.sc in scsOf());
+    }
+    // Última zona usada por cada actividad (para "Como antes")
+    match /pzon/{id} {
+      allow read: if isMember();
+      allow create: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf());
+      allow update: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()
+        && (!('sc' in resource.data) || resource.data.sc in scsOf()));
+      allow delete: if canEdit();
+    }
+    // Reloj: cada sesión escribe y lee su propio documento para conocer la hora del servidor
+    match /clock/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Índice de actividades terminadas (para no tener que leer todo el historial diario)
+    match /doneidx/{p} {
+      allow read: if isMember();
+      allow write: if canDaily();
+    }
+    match /{col}/{id} {
+      allow read: if isMember() && dataCol(col);
+      allow write: if canEdit() && dataCol(col);
+    }
+  }
+}

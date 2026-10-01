@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "lps911-pruebas",
+    "pruebas": "lps911-pruebas",
+    "produccion": "PEGA_AQUI_ID_DEL_PROYECTO_REAL"
+  }
+}

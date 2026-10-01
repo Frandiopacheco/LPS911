@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "presence": {
+      ".read": "auth != null && auth.token.email_verified == true",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid && auth.token.email_verified == true",
+        ".validate": "newData.hasChildren(['name', 'piso']) || !newData.exists()"
+      }
+    }
+  }
+}

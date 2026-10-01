@@ -1,0 +1,11 @@
+node_modules/
+web/firebase-config.js
+*.log
+.firebase/
+firebase-debug*.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+.DS_Store
+respaldos/
+*.json.bak

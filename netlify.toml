@@ -1,0 +1,26 @@
+# Netlify publica la carpeta web/ después de preparar la configuración.
+# Rama "produccion" → sitio real (obra).  Rama "main" → copia de prueba (main--<sitio>.netlify.app).
+[build]
+  publish = "web"
+  command = "node scripts/build.mjs"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# sw.js e index.html nunca se guardan en caché del navegador: así el aviso de versión nueva llega siempre
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/firebase-config.js"
+  [headers.values]
+    Cache-Control = "no-cache"
