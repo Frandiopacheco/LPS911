@@ -29,15 +29,20 @@ Repite esto en **cada** proyecto, empezando por el de pruebas:
    - En el valor pegas todo el contenido del archivo JSON.
 5. Borra el archivo JSON de tu computadora. Esa llave da acceso total al proyecto: no la compartas ni la subas al repositorio.
 
-## 3. Conectar Netlify al repositorio
+## 3. Netlify: GitHub publica la página
 
-En Netlify, abre tu sitio actual:
+En el plan gratuito, Netlify no arma por su cuenta repositorios privados con cambios de otras personas. Por eso es GitHub quien publica, después de revisar.
 
-1. **Site configuration › Build & deploy › Continuous deployment › Link repository** › GitHub › **LPS911**.
-2. **Branch to deploy (production)**: `produccion`. El comando y la carpeta se leen solos de `netlify.toml`.
-3. **Branch deploys**: elige "Let me add individual branches" y agrega `main`.
+1. **Detener las compilaciones propias de Netlify.** En el sitio **lps911-central**, entra a **Project configuration › Build & deploy › Continuous deployment**. En **Build settings**, pulsa **Configure**, elige **Stop builds** y guarda.
+2. **Crear el token.** Haz clic en tu ícono (abajo a la izquierda) › **User settings** › **Applications** › **Personal access tokens** › **New access token**.
+   - Nombre: `github-lps911`.
+   - Vencimiento: el más largo que ofrezca.
+   - Pulsa **Generate token** y **copia** el token. Solo se muestra una vez.
+3. **Guardarlo en GitHub.** Ve a **LPS911 › Settings › Secrets and variables › Actions › New repository secret**. En Name escribe `NETLIFY_AUTH_TOKEN`, en Secret pega el token y pulsa **Add secret**.
 
-Desde ahí ya no arrastras carpetas. Las versiones viejas siguen en **Deploys**, por si necesitas volver atrás.
+Resultado:
+- **main** se publica en `https://main--lps911-central.netlify.app`, la copia de prueba.
+- **produccion** se publica en `https://lps911-central.netlify.app`, la obra.
 
 ## 4. Datos en la copia de prueba
 

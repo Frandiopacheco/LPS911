@@ -81,3 +81,38 @@ jobs:
             [ -f firebase-debug.log ] && grep -iE "\"message\"|error" firebase-debug.log | tail -8 | while IFS= read -r l; do echo "::error::debug: ${l:0:400}"; done
           fi
           exit $rc
+
+  publicar-web:
+    name: Publicar la página en Netlify
+    needs: revisar
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE: lps911-central
+    steps:
+      - name: ¿Hay token de Netlify?
+        if: env.NETLIFY_AUTH_TOKEN == ''
+        run: echo "::warning::Falta el secreto NETLIFY_AUTH_TOKEN (ver INSTALACION.md, paso 3). No se publicó la página."
+      - uses: actions/checkout@v4
+        if: env.NETLIFY_AUTH_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.NETLIFY_AUTH_TOKEN != ''
+        with: { node-version: 20 }
+      - name: Preparar la página (configuración y versión)
+        if: env.NETLIFY_AUTH_TOKEN != ''
+        env:
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_REF: ${{ github.sha }}
+        run: node scripts/build.mjs
+      - name: Publicar
+        if: env.NETLIFY_AUTH_TOKEN != ''
+        run: |
+          npm install -g netlify-cli@17 --no-audit --no-fund
+          if [ "${{ github.ref_name }}" = "produccion" ]; then
+            netlify deploy --dir web --site "$NETLIFY_SITE" --prod --message "produccion ${GITHUB_SHA::7}"
+          else
+            netlify deploy --dir web --site "$NETLIFY_SITE" --alias main --message "main ${GITHUB_SHA::7}"
+            echo "::notice::Copia de prueba: https://main--$NETLIFY_SITE.netlify.app"
+          fi
