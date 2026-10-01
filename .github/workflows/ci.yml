@@ -65,4 +65,12 @@ jobs:
           TARGET=${{ github.ref_name == 'produccion' && 'produccion' || 'pruebas' }}
           ONLY="firestore:rules,firestore:indexes,functions"
           if [ "$TARGET" = "produccion" ]; then ONLY="$ONLY,database"; fi
-          firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force
+          set +e
+          firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force 2>&1 | tee deploy.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            # deja el motivo visible como anotación (se lee sin descargar el registro completo)
+            grep -iE "error|denied|permission|billing|enable|required|not found|failed" deploy.log | sed 's/\x1b\[[0-9;]*m//g' | tail -15 | while IFS= read -r l; do echo "::error::$l"; done
+            [ -f firebase-debug.log ] && grep -iE "\"message\"|error" firebase-debug.log | tail -8 | while IFS= read -r l; do echo "::error::debug: ${l:0:400}"; done
+          fi
+          exit $rc
