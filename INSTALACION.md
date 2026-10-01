@@ -2,7 +2,7 @@
 
 Son cinco pasos. Cuando termines, cada cambio se revisa y se publica solo.
 
-## 1. Preparar el proyecto de pruebas (`lps911-pruebas`)
+## 1. Preparar el proyecto de pruebas (`lps911-pruebas`, ID `lps911-pruebas-49641`)
 
 En [console.firebase.google.com](https://console.firebase.google.com), dentro de **lps911-pruebas**:
 
