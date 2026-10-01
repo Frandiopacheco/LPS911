@@ -70,7 +70,7 @@ jobs:
           npm install -g firebase-tools@13 --no-audit --no-fund
           (cd functions && npm install --no-audit --no-fund --omit=dev)
           TARGET=${{ github.ref_name == 'produccion' && 'produccion' || 'pruebas' }}
-          ONLY="firestore:rules,firestore:indexes,functions"
+          ONLY="firestore:rules,functions"
           if [ "$TARGET" = "produccion" ]; then ONLY="$ONLY,database"; fi
           set +e
           firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force 2>&1 | tee deploy.log
