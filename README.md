@@ -31,6 +31,8 @@ cambio en GitHub ──► rama main        ──► Netlify: copia de PRUEBAS 
 - **versionDominical**: los domingos a las 12:05 (Lima) guarda la versión automática del lookahead, aunque nadie tenga la página abierta.
 - **aceptarCierres**: cada día a las 23:30 (Lima) registra los cierres de capataces que nadie revisó en 2 días.
 
-## Configuración inicial (una sola vez)
+## Guías
 
-Ver `INSTALACION.md`.
+- `PUBLICAR.md`: cómo hacer un cambio pequeño, pasarlo a la obra (*pull request*) y volver atrás.
+- `CLAUDE.md`: cómo está armada la app, para cualquier asistente de IA que trabaje en el código.
+- `INSTALACION.md`: configuración inicial (ya hecha).
