@@ -28,6 +28,9 @@ test.beforeEach(async () => {
     await S('inv/abc', { active: true, exp: Date.now() + 864e5, scs: ['c-gabel'] });
     await S('inv/old', { active: true, exp: Date.now() - 1000, scs: ['c-gabel'] });
     await S('acts/x1', { name: 'Pintura', sc: 'c-gabel', ambId: 'a1' });
+    await S('acts/x9', { name: 'Drywall', sc: 'c-otro', ambId: 'a1' });
+    await S('restr/r-ed', { actId: 'x1', sc: 'c-gabel', by: 'editor@obra.pe', status: 'pend', freed: '' });
+    await S('restr/r-sc', { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '' });
     await S('pzon/x1', { pisoId: 'p1', sc: 'c-gabel', pts: [] });
     await S('pzon/x2', { pisoId: 'p1', sc: 'c-otro', pts: [] });
     await S('live/2026-10-01_x1', { date: '2026-10-01', actId: 'x1', sc: 'c-gabel' });
@@ -88,6 +91,24 @@ test('subcontratista: inicia y detiene sus actividades, pero no cierra el día',
   await assertFails(deleteDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1')));
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fsc'), { data: 'x'.repeat(1000) }));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x7'), { sc: 'c-gabel', st: 'run' }));
+});
+test('restricciones: el SC registra las de su partida y edita solo las suyas pendientes', async () => {
+  const sc = user('sc@obra.pe');
+  const base = { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '', desc: 'Falta andamio' };
+  await assertSucceeds(setDoc(doc(sc, 'restr/n1'), base));
+  await assertFails(setDoc(doc(sc, 'restr/n2'), { ...base, actId: 'x9', sc: 'c-otro' }));
+  await assertFails(setDoc(doc(sc, 'restr/n3'), { ...base, sc: 'c-otro' }));
+  await assertFails(setDoc(doc(sc, 'restr/n4'), { ...base, actId: 'x9' }));
+  await assertFails(setDoc(doc(sc, 'restr/n5'), { ...base, by: 'otro@obra.pe' }));
+  await assertFails(setDoc(doc(sc, 'restr/n6'), { ...base, status: 'lib' }));
+  await assertFails(setDoc(doc(sc, 'restr/n7'), { ...base, actId: '' }));
+  await assertSucceeds(updateDoc(doc(sc, 'restr/r-sc'), { desc: 'Falta andamio en fachada' }));
+  await assertFails(updateDoc(doc(sc, 'restr/r-sc'), { status: 'lib' }));
+  await assertFails(updateDoc(doc(sc, 'restr/r-ed'), { desc: 'x' }));
+  await assertFails(deleteDoc(doc(sc, 'restr/r-ed')));
+  await assertSucceeds(deleteDoc(doc(sc, 'restr/r-sc')));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'restr/n8'), { ...base, by: 'lector@obra.pe' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'restr/r-ed'), { status: 'lib', freed: '2026-10-01' }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
