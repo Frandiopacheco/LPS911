@@ -504,7 +504,7 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 .zcb{display:flex;gap:6px;flex-wrap:wrap}.zcb .ib{min-height:34px}.zcb .ib.on{outline:2px solid var(--accent);outline-offset:1px}
 @media (max-width:760px){.mzc{left:8px!important;right:8px;bottom:8px;top:auto!important;width:auto;max-height:70vh}.zcb .ib{min-height:40px}}
 .mmbar{position:absolute;left:0;right:0;top:0;z-index:25;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.08)}
-.mmd{font-size:14px;color:var(--ink2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}.mmd b{color:var(--ink)}.mmd select{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:600;padding:0 6px;max-width:220px}.mmday{display:inline-flex;gap:4px;align-items:center}.mmday b{white-space:nowrap;padding:0 2px}.mmnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;justify-content:center}
+.mmd{font-size:14px;color:var(--ink2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}.mmd b{color:var(--ink)}.mmd select{height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:600;padding:0 6px;max-width:220px}.mmday{display:inline-flex;gap:4px;align-items:center}.mmdraw{display:inline-flex;gap:6px;align-items:center;font-weight:600;background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:2px 4px 2px 10px}.mmday b{white-space:nowrap;padding:0 2px}.mmnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;justify-content:center}
 .mmsc,.mmall{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:16px;height:32px;padding:0 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .mmsc i{width:11px;height:11px;border-radius:3px;background:var(--c)}.mmsc.on{background:var(--c);color:#fff;border-color:var(--c)}.mmsc.on i{background:#fff}.mmall.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .mmcx{color:#d32f2f;font-weight:700;font-size:13px}
@@ -1324,7 +1324,7 @@ function render(){
   const main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
-  if(U.tab!=='mapa'&&typeof zcClose==='function')zcClose();
+  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();
   const views={dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
