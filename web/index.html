@@ -179,7 +179,7 @@ body.cap-mode .top .brand .code{display:none}
 @keyframes dpulse{0%,100%{opacity:1}50%{opacity:.3}}
 .dkpi{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
 .dk{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--k,var(--line));border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.dk.ppc{border-top-color:var(--accent)}
+.dk.dkppc{border-top-color:var(--accent)}
 .dkl{font:600 12px var(--f-ui);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .dk b{font:700 32px/1.1 var(--f-ui);color:var(--ink)}
 .dks{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -243,7 +243,7 @@ body.dash-tv main{height:100vh!important}
 body.dash-tv .dash{max-width:none;font-size:110%}
 body.dash-tv .dk b{font-size:40px}
 body.dash-tv .dplanw{height:52vh}
-@media (max-width:1100px){.dkpi{grid-template-columns:repeat(4,minmax(0,1fr))}.dgrid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1280px){.dkpi{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (max-width:1100px){.dgrid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:640px){.dkpi{grid-template-columns:repeat(2,minmax(0,1fr))}.dk b{font-size:26px}.dsr{grid-template-columns:96px minmax(0,1fr) 44px}.dsw{display:none}.drs{grid-template-columns:minmax(0,1fr)}.dplanw{height:340px}.dash{padding:10px 10px 90px}}
 
 /* etapa 29: propuestas del lookahead */
@@ -335,6 +335,28 @@ tr.rvrow.rvnew td.s4 input{font-weight:700}
 
 /* copia de prueba: cinta visible para no confundirla con la obra real */
 body.env-pruebas::after{content:"PRUEBAS";position:fixed;z-index:200;right:-34px;top:14px;transform:rotate(45deg);background:#c62828;color:#fff;font:800 11px/1 var(--f-ui);letter-spacing:.12em;padding:6px 40px;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+
+/* etapa 34: experiencia de uso */
+.bmore{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:8px;border-top:1px dashed var(--line)}
+.bmore[hidden]{display:none}
+#fmore.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.fmn{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/1 var(--f-ui);padding:0 5px;margin-left:2px}
+#fmore.on .fmn{background:var(--panel);color:var(--ink)}
+.legend{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:thin}
+.legend.legoff{display:none!important}
+.cfxt{display:none}
+.callout.hol{background:#fff7e8;border-color:#f5c98a}
+@media (max-width:760px){
+  .cfxt{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:6px 12px;font:600 14px var(--f-ui);color:var(--ink);text-align:left}
+  .cfxt span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cfxt b{font:600 12px var(--f-mono);color:var(--muted)}
+  .cfxt i{font-style:normal;color:var(--muted)}
+  .cfx[data-closed]{display:none}
+  .cfx{display:flex;flex-direction:column;gap:8px}
+  body .toast{bottom:calc(68px + env(safe-area-inset-bottom,0px))}
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .callout.hol{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.4)}}
+:root[data-theme="dark"] .callout.hol{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.4)}
 </style>
 <title>Last Planner 911</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -967,7 +989,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),loaded:{}};
 const U=Object.assign({tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,onlyWin:U.onlyWin,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp});
+const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,onlyWin:U.onlyWin,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -1198,7 +1220,7 @@ function stopSession(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
 function snapErr(err){const pd=err&&err.code==='permission-denied';lastErr=pd?'Sin acceso':'Conexión perdida';setStatus();toast(pd?'Tu cuenta no tiene acceso a estos datos. Pide acceso al administrador.':'Se perdió la conexión con la base de datos. Recarga la página.')}
 function onData(){
-  if(!ready){if(!Object.values(COLS).every(k=>S.loaded[k]))return;ready=true;clockSync();brandSync();if(U.week==null)U.week=curWeek();ensureVers();setTimeout(autoVersion,2500);setTimeout(didxMigrate,4000);bkRemind();swWarm();}
+  if(!ready){if(!Object.values(COLS).every(k=>S.loaded[k]))return;ready=true;clockSync();brandSync();if(U.week==null)U.week=curWeek();pickPiso();ensureVers();setTimeout(autoVersion,2500);setTimeout(didxMigrate,4000);bkRemind();swWarm();}
   requestRender();
 }
 /* ---------- login ---------- */
@@ -1264,7 +1286,7 @@ function renderTop(){
   brandSync();
   updUndo();setStatus();renderBnav();
 }
-$('#fpiso').onchange=e=>{U.piso=e.target.value;U.sector='';saveUI();sendPresence();render()};
+$('#fpiso').onchange=e=>{U.piso=e.target.value;U.pisoAll=!e.target.value;U.sector='';saveUI();sendPresence();render()};
 $('#wprev').onclick=()=>{U.week--;render()};
 $('#wnext').onclick=()=>{U.week++;render()};
 $('#wtoday').onclick=()=>{U.week=curWeek();render()};
@@ -1323,26 +1345,32 @@ function buildLookShell(main){
   <div class="bar">
     <input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar">
     <select id="fsec" aria-label="Sector"></select>
-    <button class="ib" id="fact" title="Elegir una o varias actividades específicas (p. ej. Gabel y Pintura de 2da mano)">Actividades</button>
     <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
     <span class="seg" id="fwin" aria-label="Semanas visibles"><button data-w="3">3 sem</button><button data-w="6">6 sem</button><button data-w="12">12 sem</button></span>
-    <label class="chk"><input type="checkbox" id="fonly"> Solo con días en la ventana</label>
-    <label class="chk"><input type="checkbox" id="frestr"> Con restricciones</label>
-    <label class="chk" id="lobs" hidden title="Actividades marcadas al importar el Excel para revisar el subcontratista"><input type="checkbox" id="fobs"> Con observaciones <b id="nobs"></b></label>
-    <label class="chk"><input type="checkbox" id="fchg"> Ver cambios</label>
+    <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <span id="fday"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
     <button class="ib" id="fvsave" hidden>Guardar versión…</button><button class="ib" id="fvdel" hidden>Eliminar versión</button>
-    <span class="sp"></span>
-    <button class="ib" id="fcoll">Plegar todo</button>
-    <button class="ib" id="fmeet">Modo reunión</button>
+    <div class="bmore" id="bmore" hidden>
+      <button class="ib" id="fact" title="Elegir una o varias actividades específicas (p. ej. Gabel y Pintura de 2da mano)">Actividades</button>
+      <label class="chk"><input type="checkbox" id="fonly"> Solo con días en la ventana</label>
+      <label class="chk"><input type="checkbox" id="frestr"> Con restricciones</label>
+      <label class="chk" id="lobs" hidden title="Actividades marcadas al importar el Excel para revisar el subcontratista"><input type="checkbox" id="fobs"> Con observaciones <b id="nobs"></b></label>
+      <label class="chk"><input type="checkbox" id="fchg"> Ver cambios</label>
+      <label class="chk"><input type="checkbox" id="fleg"> Mostrar subcontratistas</label>
+      <span class="sp"></span>
+      <button class="ib" id="fcoll">Plegar todo</button>
+      <button class="ib" id="fmeet">Modo reunión</button>
+    </div>
   </div>
   <div id="verban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
   $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};
+  $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
+  $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};
   $('#fmode').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.qmode=b.dataset.m;saveUI();closeQEditor(true);requestRender();if(U.qmode==='metrado')toast('Modo metrado: haz clic en un día para escribir la cantidad, o arrastra varios días para repartir el saldo.')};
@@ -1420,7 +1448,7 @@ function renderLookInner(main){
   const lg=cons.map(c=>`<button class="chip${U.sc===c.id?' on':''}${U.sc&&U.sc!==c.id?' dim':''}" data-id="${c.id}" style="--c:${c.color}" title="${esc(c.partida||'')}"><i></i>${esc(c.name)}${cnt[c.id]?` <b>${cnt[c.id]}</b>`:''}</button>`).join('');
   const lge=$('#legend');if(lge.dataset.h!==lg){lge.innerHTML=lg;lge.dataset.h=lg}
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
-  $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';
+  $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
   renderGrid($('#grid'),days,dset);
 }
 function renderGrid(tbl,days,dset){
@@ -1832,11 +1860,14 @@ function renderCampo(main){if(CU.view==='plan'&&canDaily){renderCap(main);return
   let h=`<div class="scroll" style="padding-top:0"><div class="campo">
    <div class="cbar">
     <div class="cdate"><button class="ib" data-cd="-1" aria-label="Día anterior">&#8249;</button><div class="d"><b>${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][dow]} ${fmtD(d)}</b><span>Semana ${weekOf(d)}${d===today?' · hoy':''}</span></div><button class="ib" data-cd="1" aria-label="Día siguiente">&#8250;</button>${d!==today?'<button class="ib" data-cd="0">Hoy</button>':''}</div>
+    <button class="cfxt" data-cfx aria-expanded="${CU.fx?'true':'false'}">${cfxSum(secs,consF,nS)}</button>
+    <div class="cfx"${CU.fx?'':' data-closed'}>
     <div class="cfil"><select id="csec" aria-label="Sector"><option value="">Todos los sectores</option>${secs.map(({p,s})=>`<option value="${s.id}"${CU.sec===s.id?' selected':''}>${U.piso?'':esc(p.code)+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select>
      <select id="csc" aria-label="Subcontratista"><option value="">Todos los subcontratistas</option>${consF.map(c=>`<option value="${c.id}"${CU.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div class="csum">${canDaily?'<span class="seg cview"><button class="on">Tarjetas</button><button data-cv="plan">Plano</button></span>':''}<span class="seg" id="cshow"><button data-v="all" class="${CU.show==='all'?'on':''}">Todas</button><button data-v="pend" class="${CU.show==='pend'?'on':''}">Pendientes</button><button data-v="reg" class="${CU.show==='reg'?'on':''}">Registradas</button><button data-v="prop" class="${CU.show==='prop'?'on':''}">Por confirmar${Object.values(nProp).reduce((a,b)=>a+b,0)?' <b class="bc">'+Object.values(nProp).reduce((a,b)=>a+b,0)+'</b>':''}</button></span>
      <span class="cstat"><span><b>${nS}</b> prog.</span><span style="color:var(--ok)"><b>${cnt.ok}</b> ✓</span>${cnt.partial?`<span style="color:var(--warn)"><b>${cnt.partial}</b> ½</span>`:''}<span style="color:var(--bad)"><b>${cnt.no}</b> ✗</span><span><b>${Math.max(0,nS-(cnt.ok+cnt.partial+cnt.no))}</b> pend.</span></span></div>
-   </div>`;
+   </div></div>`;
+  if(nwReason(d)&&(groups.length||extras.length))h+=`<div class="callout hol">📅 <b>${esc(nwReason(d))}</b> · día no laborable. Se muestran igual las actividades programadas.</div>`;
   if(!U.piso&&S.pis.size>1)h+=`<div class="callout">Consejo: elige tu piso arriba (selector de piso) para ver solo tus frentes. El filtro queda guardado en este celular.</div>`;
   {const tp=Object.values(nProp).reduce((a,b)=>a+b,0);if(tp&&canDaily)h+=`<div class="cprop"><div><b>${tp} cierre${tp>1?'s':''} propuesto${tp>1?'s':''} por capataces</b> sin confirmar. Revisa y confirma, o toca el estado correcto para corregir. Si nadie lo revisa, a los 2 días queda como lo marcó el capataz.</div><div class="cpb">${Object.entries(nProp).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="ib" data-cconfsc="${sc}">✓ Confirmar ${esc(conOf(sc).name)} (${n})</button>`).join('')}${Object.keys(nProp).length>1?`<button class="ib pri" data-cconfsc="">✓ Confirmar todos (${tp})</button>`:''}</div></div>`}
   if(dayErr)h+=`<div class="callout">No se pudieron leer los registros (${esc(dayErr)}). Si acabas de actualizar la página, falta publicar las reglas nuevas de Firestore.</div>`;
@@ -2131,8 +2162,8 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${T('none',c.none,'Sin iniciar',isLate?`pasadas las ${late}`:`alerta desde las ${late}`,isLate&&c.none?'alert':'')}
     ${T('run',c.run,'En ejecución','')}${T('stop',c.stop,'Detenidas','',c.stop?'alert2':'')}
     ${T('ok',closed,'Cerradas',`${conf} confirmadas · ${prop} por confirmar`)}
-    ${T('',pc(ppcD),'PPC hoy',closed?`${c.ok} de ${closed} cerradas · provisional`:'aún sin cierres','ppc')}
-    ${T('',pc(ppcW),'PPC semana '+cw,W.tot.ver?`${W.tot.ok} de ${W.tot.ver} verificadas`:'','ppc')}</div>`;
+    ${T('',pc(ppcD),'PPC hoy',closed?`${c.ok} de ${closed} cerradas · provisional`:'aún sin cierres','dkppc')}
+    ${T('',pc(ppcW),'PPC semana '+cw,W.tot.ver?`${W.tot.ok} de ${W.tot.ver} verificadas`:'','dkppc')}</div>`;
   const bar=o=>`<span class="dbar">${['ok','no','run','stop','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
   let sc=`<div class="dcard"><div class="dch">Por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${bar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw" title="Personas que reportaron hoy">${o.who.size?`👷 ${o.who.size}`:'<em>sin reportes</em>'}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
     <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div></div>`;
@@ -2410,7 +2441,7 @@ async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');c
 function bkAgo(){const b=P().lastBk;if(!b||!b.t)return null;return Math.floor((NOW()-b.t)/864e5)}
 function bkNote(){const d=bkAgo();if(d==null)return'<span class="pill warn">Aún no hay respaldo registrado</span>';const b=P().lastBk;
   return`<span class="${d>7?'pill warn':'note'}">Último respaldo: ${new Date(b.t).toLocaleDateString('es-PE')} (${d===0?'hoy':'hace '+d+' día'+(d>1?'s':'')})${b.img?' con imágenes':''}</span>`}
-function bkRemind(){if(!isAdmin)return;const d=bkAgo();if(d==null||d>7)setTimeout(()=>toast(d==null?'Aún no hay ningún respaldo descargado del proyecto.':`El último respaldo tiene ${d} días.`,'Ir a Equipo',()=>{U.tab='team';requestRender()}),4000)}
+function bkRemind(){if(!isAdmin)return;const d=bkAgo();const last=+store.get('bkr',0)||0;if(NOW()-last<7*864e5)return;if(d==null||d>7){store.set('bkr',NOW());setTimeout(()=>toast(d==null?'Aún no hay ningún respaldo descargado del proyecto.':`El último respaldo tiene ${d} días.`,'Ir a Equipo',()=>{U.tab='team';requestRender()}),4000)}}
 /* escritura por lotes que respeta el tamaño máximo de Firestore (imágenes grandes) */
 async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){const b=db.batch();let sz=0,k=0;
     while(i<writes.length&&k<400){const w=writes[i];const s=w[2]?JSON.stringify(w[2]).length:50;if(k>0&&sz+s>6e6)break;sz+=s;k++;i++;if(w[2])b.set(fcol(w[0]).doc(w[1]),w[2]);else b.delete(fcol(w[0]).doc(w[1]))}
@@ -2506,6 +2537,25 @@ addEventListener('online',()=>setTimeout(clockSync,1500));
 /* ---- nombre de la obra en la pestaña y en el ingreso ---- */
 function brandSync(){const p=P();const n=(p.name||'').trim();if(!n)return;document.title=(window.LPS_ENV==='pruebas'?'[PRUEBAS] ':'')+n+' · Last Planner';try{localStorage.setItem('lps.pname',n)}catch(e){}}
 (function(){try{const n=localStorage.getItem('lps.pname');if(n){document.title=n+' · Last Planner';document.querySelectorAll('.lbrand').forEach(el=>el.textContent=n+' · Last Planner System')}}catch(e){}})();
+
+
+/* =====================================================================
+   ETAPA 34 · Experiencia de uso (tanda A de la auditoría 2)
+   ===================================================================== */
+/* piso al abrir: el último elegido; si nunca eligió, el más útil para su rol */
+function pickPiso(){if(U.piso&&S.pis.has(U.piso))return;if(U.pisoAll||S.pis.size<2){if(U.piso&&!S.pis.has(U.piso))U.piso='';return}
+  const ps=pisos();const d=todayIso();const wk=new Set(weekDays(curWeek()));const mine=me&&(me.role==='sc'||me.role==='capataz')?new Set(me.scs&&me.scs.length?me.scs:[me.sc]):null;
+  const score=new Map();for(const x of S.act.values()){if(mine&&!mine.has(x.sc))continue;const ds=x.days||[];const w=ds.includes(d)?3:ds.some(z=>wk.has(z))?1:0;if(!w)continue;const pid=pisoOfAct(x.id);score.set(pid,(score.get(pid)||0)+w)}
+  let best=null,bs=0;for(const p of ps){const s=score.get(p.id)||0;if(s>bs){bs=s;best=p.id}}
+  U.piso=best||(ps[0]&&ps[0].id)||'';U.sector='';saveUI()}
+/* Lookahead: panel "Filtros y vista" */
+function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidden=!U.lbMore;b.setAttribute('aria-expanded',U.lbMore?'true':'false');b.classList.toggle('on',!!U.lbMore);
+  const n=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff)}
+/* Campo: resumen de filtros (celular) */
+function cfxSum(secs,cons,nS){const s=CU.sec&&secs.find(o=>o.s.id===CU.sec);const c=CU.sc&&cons.find(o=>o.id===CU.sc);const sh={all:'Todas',pend:'Pendientes',reg:'Registradas',prop:'Por confirmar'}[CU.show]||'Todas';
+  return`<span>${s?esc(s.s.code+' · '+s.s.name):'Todos los sectores'} · ${c?esc(c.name):'Todos los SC'} · ${sh}</span><b>${nS} prog.</b><i>${CU.fx?'▴':'▾'}</i>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-cfx]');if(!t)return;CU.fx=!CU.fx;requestRender()});
 
 /* ================= PLAN SEMANAL ================= */
 function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
