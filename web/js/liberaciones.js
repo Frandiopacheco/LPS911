@@ -118,7 +118,7 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
   if((own||cal)&&['sol','pro'].includes(l.st))B.push('<button class="ib" data-lq="anu">Anular solicitud</button>');
   if((own||cal)&&l.st==='pro')B.push(`<button class="ib" data-lq="zona">${l.zona?'Reubicar en el plano':'Ubicar en el plano'}</button>`);
   if(S.act.has(l.actId))B.push(`<button class="ib" data-lq="go">Ver en el lookahead ↗</button>`);
-  h+=`<div class="lqbtns wrap">${B.join('')}</div>`;
+  h+=`<div class="lqbtns lqbw">${B.join('')}</div>`;
   lqModal(h,e=>{const t=e.target;let b;
     if((b=t.closest('[data-lqfile]'))){libOpenFile(b.dataset.lqfile);return}
     if(!(b=t.closest('[data-lq]')))return;const k=b.dataset.lq;
@@ -217,7 +217,7 @@ function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V
   main.dataset.lqv=V;main.innerHTML=h+'</div></div>';wireLib(main)}
 function wireLib(main){
   main.onclick=async e=>{const t=e.target;let b;
-    if((b=t.closest('#lqv button'))){U.libV=b.dataset.v;saveUI();render();return}
+    if((b=t.closest('#lqv button'))){const ch=U.libV!==b.dataset.v;U.libV=b.dataset.v;saveUI();render();if(ch)viewIn(main);return}
     if(t.closest('[data-lqall]')){U.piso='';U.pisoAll=true;saveUI();render();return}
     if((b=t.closest('[data-lqin]'))){U.libIn=U.libIn===b.dataset.lqin?'':b.dataset.lqin;render();return}
     if((b=t.closest('[data-lqid]'))){libDetail(b.dataset.lqid);return}

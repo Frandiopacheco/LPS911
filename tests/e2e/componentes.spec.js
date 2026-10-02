@@ -1,0 +1,38 @@
+// Componentes comunes y transiciones: entrada suave, ventanas animadas y respeto a "menos movimiento".
+import { test, expect } from '@playwright/test';
+import { openApp, noErrors } from './helpers.js';
+
+test('al cambiar de pestaña el contenido entra con transición suave', async ({ page }) => {
+  const errors = await openApp(page);
+  await page.click('#tabs [data-tab="restr"]');
+  await expect(page.locator('#main')).toHaveClass(/\bvin\b/);
+  const anim = await page.locator('#main').evaluate(el => getComputedStyle(el).animationName);
+  expect(anim).toBe('lps-fade');
+  noErrors(errors, 'transición');
+});
+
+test('ventanas, menús y botones usan las mismas medidas', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'lib' });
+  await page.click('#tabs [data-tab="lib"]');
+  const all = page.locator('[data-lqall]'); if (await all.count()) await all.click();
+  await page.click('[data-lqid="Lpro"]');
+  const panel = page.locator('#lqm .lqc');
+  await expect(panel).toBeVisible();
+  const st = await panel.evaluate(el => { const s = getComputedStyle(el); return { r: s.borderTopLeftRadius, a: s.animationName }; });
+  expect(st).toEqual({ r: '14px', a: 'lps-pop' });
+  // los botones de acción quedan en filas, no apilados uno por línea
+  const tops = await page.locator('#lqm .lqbtns .ib').evaluateAll(bs => bs.map(b => Math.round(b.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBeLessThan(tops.length);
+  const radii = await page.locator('#main .ib, #main .tin').evaluateAll(bs => [...new Set(bs.map(b => getComputedStyle(b).borderTopLeftRadius))]);
+  expect(radii).toEqual(['8px']);
+  noErrors(errors, 'componentes');
+});
+
+test('con "reducir movimiento" no hay animaciones', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const errors = await openApp(page);
+  await page.click('#tabs [data-tab="restr"]');
+  const d = await page.locator('#main').evaluate(el => parseFloat(getComputedStyle(el).animationDuration));
+  expect(d).toBeLessThan(0.01);
+  noErrors(errors, 'movimiento reducido');
+});
