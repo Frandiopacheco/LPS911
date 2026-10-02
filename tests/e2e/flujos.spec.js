@@ -85,7 +85,8 @@ test('"Ver como" Calidad y vista celular', async ({ page }) => {
   await Promise.all([page.waitForEvent('load'), page.click('#pop [data-do="go"]')]);
   await expect(page.locator('#loading')).toHaveCount(0);
   await expect(page.locator('#vabar')).toBeVisible();
-  await expect(page.locator('#tabs [data-tab="lib"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#tabs [data-tab="lib"]')).toBeVisible();
+  await expect(page.locator('#tabs [data-tab="campo"]')).toBeHidden();
   await page.click('#vabar [data-va="phone"]');
   await expect(page.locator('#phprev')).toBeVisible();
   const frame = page.frameLocator('#phprev iframe');

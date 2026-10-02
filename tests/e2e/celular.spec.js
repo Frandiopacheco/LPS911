@@ -10,7 +10,7 @@ const sinScrollLateral = async page => {
 };
 
 test('Liberaciones: los filtros se pliegan y lo pendiente aparece antes', async ({ page }) => {
-  const errors = await openApp(page, { as: 'calidad' });
+  const errors = await openApp(page, { as: 'calidad', tab: 'lib' });
   await expect(page.locator('#lqsc')).toBeHidden();
   const top = await page.locator('.lqcols').evaluate(el => el.getBoundingClientRect().top);
   expect(top, 'la bandeja empieza en la primera pantalla').toBeLessThan(844);

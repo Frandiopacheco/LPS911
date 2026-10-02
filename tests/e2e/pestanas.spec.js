@@ -77,10 +77,9 @@ test.describe('pestañas por rol', () => {
     expect(b).not.toContain('cfg');
     expect(await visibleTabs(page)).not.toContain('team');
   });
-  test('Calidad tiene Liberaciones en la barra y entra ahí', async ({ page }) => {
+  test('Calidad tiene Liberaciones en la barra', async ({ page }) => {
     await openApp(page, { as: 'calidad' });
     expect(await barra(page)).toContain('lib');
-    await expect(page.locator('#main')).toHaveAttribute('data-view', 'lib');
   });
   test('lo poco usado va en "Más" y se abre desde ahí', async ({ page }) => {
     const errors = await openApp(page, { as: 'campo' });
@@ -91,7 +90,7 @@ test.describe('pestañas por rol', () => {
   });
   test('el orden sigue el ciclo Last Planner', async ({ page }) => {
     await openApp(page);
-    expect(await barra(page)).toEqual(['dash', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
+    expect(await barra(page)).toEqual(['hoy', 'dash', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
   });
 });
 

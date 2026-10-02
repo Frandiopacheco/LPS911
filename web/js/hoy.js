@@ -1,0 +1,55 @@
+"use strict";
+/* LPS 911 · Pantalla «Hoy»: lo que le toca a cada rol hoy, con acceso directo a cada cosa.
+   Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
+
+/** Actividades del lookahead programadas un día, en los pisos visibles (y de las partidas del SC si es subcontratista). */
+function hoyActs(d){const vs=new Set(visPisos().map(p=>p.id));const mine=SCK()?new Set(myScsI()):null;
+  return[...S.act.values()].filter(x=>(x.days||[]).includes(d)&&vs.has(pisoOfAct(x.id))&&(!mine||mine.has(x.sc)))}
+const hoyLoc=x=>{const a=S.amb.get(x.ambId);const p=S.pis.get(pisoOfAct(x.id));return[(p&&p.code)||'',a?a.code+' · '+a.name:''].filter(Boolean).join(' · ')};
+
+/* cada tarjeta: {k, title, n, sub, tone, items:[{t, s}], go, goLabel, empty} */
+function hoyCard(c){const ok=!c.n;
+  return`<section class="hoyc${ok?' ok':''}${c.tone&&!ok?' '+c.tone:''}" data-hoy="${c.k}">
+    <header><h3>${esc(c.title)}</h3><b class="hoyn">${ok?'✓':c.n}</b></header>
+    <p class="hoys">${ok?esc(c.empty||'Al día'):c.sub}</p>
+    ${!ok&&c.items.length?`<ul>${c.items.slice(0,5).map(i=>`<li><span>${esc(i.t)}</span>${i.s?`<small>${esc(i.s)}</small>`:''}</li>`).join('')}${c.items.length>5?`<li class="mu">y ${c.items.length-5} más…</li>`:''}</ul>`:''}
+    <button class="ib${ok?'':' pri'}" data-hgo="${c.go}">${esc(c.goLabel)}</button></section>`}
+
+function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out={};
+  /* propuestas de los subcontratistas que este usuario puede resolver */
+  if(canWrite&&r!=='sc'){const by=revCounts();const n=[...by.values()].reduce((a,b)=>a+b,0);
+    out.prop={k:'prop',title:'Propuestas por revisar',n,tone:'warn',sub:'Cambios que enviaron los subcontratistas en tus pisos',items:[...by.entries()].map(([sc,k])=>({t:conOf(sc).name,s:`${k} cambio${k>1?'s':''}`})),go:'look',goLabel:'Revisar en el Lookahead',empty:'No hay propuestas esperando tu respuesta'}}
+  /* registro de campo de hoy */
+  if(canDaily){const A=hoyActs(d);const pend=A.filter(x=>!recReal(d,x.id));const prop=pend.filter(x=>recOf(d,x.id));const sin=pend.filter(x=>!recOf(d,x.id));
+    out.campo={k:'campo',title:'Campo de hoy',n:pend.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${sin.length} sin registrar${prop.length?` · ${prop.length} por confirmar (las cerró el capataz)`:''}`,
+      items:[...prop,...sin].map(x=>({t:x.name,s:`${conOf(x.sc).name} · ${hoyLoc(x)}`})),go:'campo',goLabel:'Registrar en Campo',empty:A.length?'Todo lo de hoy ya está registrado':'No hay actividades programadas hoy'}}
+  /* subcontratista: su avance en obra */
+  if(SCK()){const A=hoyActs(d);const st=A.map(x=>({x,k:kState(d,x.id).k}));const no=st.filter(o=>o.k==='none');
+    out.obra={k:'obra',title:'Tu avance de hoy',n:no.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${st.filter(o=>o.k==='run').length} en ejecución · ${no.length} sin iniciar`,
+      items:no.map(o=>({t:o.x.name,s:hoyLoc(o.x)})),go:'cap',goLabel:'Ir a En obra',empty:A.length?'Todo lo de hoy ya empezó':'No tienes actividades programadas hoy'}}
+  /* restricciones: las de mi área (Calidad/OT), las de mi partida (SC) o todas */
+  {let R=restrInScope().filter(x=>x.status!=='lib');if(AREA()&&me.area)R=R.filter(myArea);if(SCK()){const m=new Set(myScsI());R=R.filter(x=>m.has(x.sc)||(x.actId&&m.has((S.act.get(x.actId)||{}).sc)))}
+    const lim=wshift(d,3);const late=R.filter(x=>x.need&&x.need<d),soon=R.filter(x=>x.need&&x.need>=d&&x.need<=lim);const L=[...late,...soon].sort((a,b)=>a.need.localeCompare(b.need));
+    out.restr={k:'restr',title:AREA()&&me.area?`Restricciones de ${me.area}`:SCK()?'Restricciones de tu partida':'Restricciones',n:L.length,tone:late.length?'bad':'warn',
+      sub:`${late.length} vencida${late.length===1?'':'s'} · ${soon.length} vence${soon.length===1?'':'n'} en 3 días · ${R.length} pendiente${R.length===1?'':'s'} en total`,
+      items:L.map(x=>({t:(x.desc||x.type||'Restricción'),s:`${x.need<d?'Vencida':'Para'} ${fmtD(x.need)}${x.actId&&S.act.has(x.actId)?' · '+S.act.get(x.actId).name:''}`})),go:'restr',goLabel:'Ver restricciones',empty:R.length?`Nada vence en los próximos 3 días (${R.length} pendiente${R.length===1?'':'s'})`:'No hay restricciones pendientes'}}
+  /* liberaciones de calidad */
+  if(typeof LIB!=='undefined'){const vs=new Set(visPisos().map(p=>p.id));const open=[...LIB.values()].filter(l=>l.st!=='anu'&&!libDone(l.st)&&(!l.pisoId||vs.has(l.pisoId)));
+    const lab=l=>`${l.nm||((S.act.get(l.actId)||{}).name)||'Liberación'}`;const loc=l=>{const x=S.act.get(l.actId);return x?hoyLoc(x):''};
+    if(cal){const toProg=open.filter(l=>l.st==='sol'||l.st==='lev'),insp=open.filter(l=>l.st==='pro'&&l.prog&&(l.prog.d===d||l.prog.d===tm)).sort((a,b)=>(a.prog.d+a.prog.h).localeCompare(b.prog.d+b.prog.h));
+      out.lib={k:'lib',title:'Liberaciones',n:toProg.length+insp.length,tone:'warn',sub:`${insp.filter(l=>l.prog.d===d).length} inspección(es) hoy · ${insp.filter(l=>l.prog.d===tm).length} mañana · ${toProg.length} por programar`,
+        items:[...insp.map(l=>({t:lab(l),s:`${l.prog.d===d?'Hoy':'Mañana'} ${l.prog.h||''} · ${l.prog.insp||'sin inspector'} · ${loc(l)}`})),...toProg.map(l=>({t:lab(l),s:`${l.st==='lev'?'Pide reinspección':'Por programar'} · ${loc(l)}`}))],go:'lib',goLabel:'Ir a Liberaciones',empty:'No hay inspecciones ni solicitudes pendientes'}}
+    else{const m=SCK()?new Set(myScsI()):null;const mine=open.filter(l=>!m||m.has(l.sc));const obs=mine.filter(l=>l.st==='obs'),prog=mine.filter(l=>l.st==='pro'&&l.prog&&(l.prog.d===d||l.prog.d===tm));
+      out.lib={k:'lib',title:'Liberaciones',n:obs.length+prog.length,tone:obs.length?'bad':'',sub:`${obs.length} observada${obs.length===1?'':'s'} por levantar · ${prog.length} inspección(es) hoy o mañana · ${mine.length} abierta${mine.length===1?'':'s'}`,
+        items:[...obs.map(l=>({t:lab(l),s:`Observada · ${loc(l)}`})),...prog.map(l=>({t:lab(l),s:`Inspección ${l.prog.d===d?'hoy':'mañana'} ${l.prog.h||''} · ${loc(l)}`}))],go:'lib',goLabel:'Ir a Liberaciones',empty:mine.length?`${mine.length} en curso, nada que hacer hoy`:'No hay liberaciones abiertas'}}}
+  /* plan semanal: pisos que faltan congelar esta semana */
+  if(canWrite&&r!=='sc'){const n=curWeek();const vp=visPisos().filter(p=>Object.keys(liveItems(n,p.id)).length);const nf=vp.filter(p=>!(S.wk.get(wkId(n,p.id))||{}).frozenAt);
+    out.plan={k:'plan',title:`Plan semanal · semana ${n}`,n:nf.length,tone:'',sub:`${nf.length} piso${nf.length===1?'':'s'} sin congelar de ${vp.length} con actividades`,items:nf.map(p=>({t:`${p.code} · ${p.name}`})),go:'plan',goLabel:'Ir al Plan semanal',empty:vp.length?'Todos los pisos están congelados':'No hay actividades esta semana'}}
+  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','restr','lib']:r==='area'?(isCalArea()?['lib','restr']:['restr','lib']):r==='lector'?['restr','lib']:['prop','campo','restr','lib','plan'];
+  return order.map(k=>out[k]).filter(Boolean)}
+
+function renderHoy(main){const d=todayIso();const C=hoyCards();const n=C.reduce((a,c)=>a+(c.n?1:0),0);
+  const hi=(()=>{const h=+hhmm(NOW()).slice(0,2);return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'})();
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead(`${hi}, ${(me.name||'').split(' ')[0]||''}`.replace(/, $/,''),`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · ${pisoLabel()} · ${n?`${n} cosa${n===1?'':'s'} por atender`:'todo al día'}`)}
+    <div class="hoyg">${C.map(hoyCard).join('')}</div></div></div>`;
+  main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(b)goTab(b.dataset.hgo)}}
