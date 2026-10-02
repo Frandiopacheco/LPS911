@@ -88,3 +88,6 @@ function helpBox(summary,html,open){return`<details class="hlp"${open?' open':''
 /* «Guardado» se marca un momento cuando termina de guardar (P16) */
 {let prevP=0,tS=0;const orig=setStatus;setStatus=function(){orig();const el=$('#status');if(!el)return;
   if(prevP>0&&pending===0&&!lastErr&&db){el.classList.add('saved');clearTimeout(tS);tS=setTimeout(()=>el.classList.remove('saved'),1600)}prevP=pending}}
+
+/* filtros que se pliegan en el celular (P10) */
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-ftog]');if(!b)return;e.stopPropagation();U.fOpen=!U.fOpen;render()},true);
