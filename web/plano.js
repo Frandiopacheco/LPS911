@@ -50,7 +50,7 @@ function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:
     let ln='';const lh=PL.map(l=>{const x=l.sx+l.dx+v.x,y=l.sy+l.dy+v.y;if(l.dx||l.dy){const x0=l.sx+v.x,y0=l.sy+v.y;ln+=`<line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/><line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" stroke="${l.c||'#333'}" stroke-width="2"/><circle cx="${x0}" cy="${y0}" r="4" fill="${l.c||'#333'}" stroke="#fff" stroke-width="1.5"/>`}
       if(l.nb)return`<span class="pvl nb${l.ring?' '+l.ring:''}${l.np?' np':''}${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}" title="${esc(l.tip||'')}" style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}">${esc(l.t)}</span>`;
       return`<span class="pvl${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}"${l.tip?` title="${esc(l.tip)}"`:''} style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}${l.ang!=null?`;--a:${l.ang}deg`:''}${l.fs?`;font-size:${l.fs}px`:''}">${esc(l.t)}${l.hs?'<b class="tph nw" data-th="1"></b><b class="tph ne" data-th="1"></b><b class="tph sw" data-th="1"></b><b class="tph se" data-th="1"></b>':''}</span>`}).join('');
-    LB.innerHTML=`<svg class="pvld" xmlns="http://www.w3.org/2000/svg">${ln}</svg>`+lh+v.handles.map((h,i)=>`<b class="pvh" data-h="${i}" style="left:${h.x*v.z+v.x}px;top:${h.y*v.z+v.y}px"></b>`).join('')};
+    LB.innerHTML=`<svg class="pvld" xmlns="http://www.w3.org/2000/svg">${ln}</svg>`+lh+v.handles.map((h,i)=>`<b class="pvh${h.cls?' '+h.cls:''}" data-h="${i}" style="left:${h.x*v.z+v.x}px;top:${h.y*v.z+v.y}px"></b>`).join('')};
   v.fit=()=>{const b=v.bounds;if(!b)return;const r=host.getBoundingClientRect();if(!r.width)return;const ins=v.inset?v.inset():0;const RW=Math.max(200,r.width-ins);const z=Math.min(RW/b.w,r.height/b.h)*.96;v.z=z;v.x=(RW-b.w*z)/2-b.x*z;v.y=(r.height-b.h*z)/2-b.y*z;v.apply()};
   v.zoomAt=(k,cx,cy)=>{const nz=Math.min(Math.max(v.z*k,.01),8);k=nz/v.z;v.x=cx-(cx-v.x)*k;v.y=cy-(cy-v.y)*k;v.z=nz;v.apply()};
   v.toWorld=(cx,cy)=>{const r=host.getBoundingClientRect();return{x:(cx-r.left-v.x)/v.z,y:(cy-r.top-v.y)/v.z}};
@@ -89,11 +89,11 @@ function renderMapa(main){ensureLam();
     <span class="sp" style="flex:1"></span>
  <span class="mseg" title="Colorear las zonas por subcontratista o por el cumplimiento registrado en Campo"><button data-cb="sc" class="${M.colorBy!=='cu'?'on':''}">Colores: SC</button><button data-cb="cu" class="${M.colorBy==='cu'?'on':''}">Cumplimiento</button></span>
     <button class="ib pri" id="mmeetb" title="Proyectar el plan del día en la reunión">Modo reunión</button><button class="ib" id="mview" title="Etiquetas, plano de fondo y leyenda">Vista ▾</button><button class="ib" id="mpdf" title="Plan de trabajo de obra (PDF / Excel), detalle del piso o imagen">Exportar…</button><button class="ib" id="mfit" title="Encuadrar todo el plano en la pantalla">Ver todo</button><button class="ib" id="mhi" title="Calidad de imagen">${useHi()?'Alta resolución':'Resolución liviana'}</button>
-    ${isAdmin&&cur&&!cur.base&&base?`<button class="ib" id="malign2">${cur.aligned?'Corregir alineación':'Alinear'}</button>`:''}${isAdmin?`<button class="ib pri" id="mup">Subir lámina…</button>${cur?`<button class="ib" id="mmenu" title="Cambiar nombre, alinear, reemplazar o eliminar la lámina seleccionada">&#8943; Editar lámina</button>`:''}`:''}`;
+    ${isAdmin&&cur&&!cur.base&&base?`<button class="ib" id="malign2">${cur.aligned?'Corregir alineación':'Alinear'}</button>`:''}${isAdmin?`<button class="ib pri" id="mup" title="Capas de especialidad sobre la lámina base. La lámina base del piso se sube en Sectorización.">Subir especialidad…</button>${cur?`<button class="ib" id="mmenu" title="Cambiar nombre, alinear, reemplazar o eliminar la lámina seleccionada">&#8943; Editar lámina</button>`:''}`:''}`;
   if(bar.dataset.h!==hb){bar.innerHTML=hb;bar.dataset.h=hb}
   const note=$('#mnote');const nh=lamErr?`<div class="callout">No se pudieron leer las láminas (${esc(lamErr)}). Si acabas de actualizar la página, falta publicar las reglas nuevas de Firestore (LEEME).</div>`:M.busy?`<div class="callout">${esc(M.busy)}</div>`:(cur&&!cur.base&&!cur.aligned&&base)?`<div class="callout warnc"><b>${esc(cur.esp)} aún no está alineada con la arquitectura</b>: por eso no coincide al superponerla. ${isAdmin?'<button class="ib pri" id="malign">Alinear ahora</button>':'Pide al administrador que la alinee.'}</div>`:'';
   if(note.dataset.h!==nh){note.innerHTML=nh;note.dataset.h=nh}
-  const empty=$('#mempty');const eh=!lamReady?'Cargando láminas…':!L.length?`<div class="empty">${isAdmin?'Sube la <b>arquitectura</b> de este piso como plano base (PDF de AutoCAD, PNG o JPG). Luego sube las demás especialidades y alinéalas con dos puntos.':'Aún no hay láminas para este piso.'}</div>`:'';
+  const empty=$('#mempty');const eh=!lamReady?'Cargando láminas…':!L.length?`<div class="empty">${isAdmin||(typeof canWrite!=='undefined'&&canWrite)?'Este piso aún no tiene lámina base. Se sube en <b>Sectorización</b>, donde además se ubican sus sectores y ambientes. <button class="ib pri" data-gosz="1">Ir a Sectorización</button>':'Aún no hay láminas para este piso.'}</div>`:'';
   empty.innerHTML=eh;empty.hidden=!eh;
   if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});
     /* clic derecho sobre un cruce: decidir (sin interferencia / prioridad) */
@@ -109,7 +109,8 @@ function renderMapa(main){ensureLam();
     const vb=t.closest('[data-vis]');if(vb){M.vista=vb.dataset.vis;M.sel=M.vista;M.selId=null;M.tmp=null;requestRender();return}
     if(meetClick(e))return;if(planClick(e))return;
     if(t.id==='mfit'){fitAll();return}if(t.id==='mhi'){M.hi=!useHi();requestRender();return}
-    if(t.id==='mup'){uploadDialog(t,null);return}if((t.id==='malign'||t.id==='malign2')&&cur){doAlign(cur);return}if(t.id==='mmenu'&&cur){lamMenu(t,cur);return}};
+    if(t.closest&&t.closest('[data-gosz]')){goTab('planos');return}
+    if(t.id==='mup'){if(!basesOf(M.piso).length){toast('Primero sube la lámina base del piso en Sectorización.');goTab('planos');return}uploadDialog(t,null,{mode:'spec'});return}if((t.id==='malign'||t.id==='malign2')&&cur){doAlign(cur);return}if(t.id==='mmenu'&&cur){lamMenu(t,cur);return}};
   main.ondblclick=e=>{const c=e.target.closest('[data-lsel]');if(c&&isAdmin){const l=LAM.get(c.dataset.lsel);if(l)renameDialog(c,l)}};
   main.onchange=e=>{const t=e.target;if(t.id==='mpiso'){M.piso=t.value;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;requestRender()}if(t.id==='mscd'){M.scDraw=t.value;M.pend=null;M.selId=null;requestRender()}if(t.id==='munder'){M.under=t.checked;requestRender()}};
   main.oninput=e=>{if(e.target.id==='mop'){M.op=+e.target.value;requestRender()}};
@@ -775,7 +776,7 @@ function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zo
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
 function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
-  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Plan diario › Subir lámina</b>.':'')}</div>`;host._v=null;host._fk='';return}
+  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Sectorización</b>.':'')}</div>`;host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;
     const zid=el?el.dataset.z:'';if(zid&&zid.startsWith('np:')){if(oo.onMark)oo.onMark(zid.slice(3));return}
@@ -815,14 +816,14 @@ function capDraw(host,cb){host._drawCb=cb||null;host.classList.toggle('drawing',
 const geoOf=(o,v)=>o&&o.geo&&o.geo[v]&&o.geo[v].length>=6?o.geo[v]:null;
 function ambMap(host,o){const bs=basesOf(o.pid);
   if(!lamReady){ensureLam();if(!host._v)host.innerHTML='<div class="kemp">Cargando láminas…</div>';return null}
-  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene lámina. ${o.canEdit?'Súbela en <b>Plan diario › Subir lámina</b> (la misma lámina sirve para todo).':''}</div>`;host._v=null;host._fk='';return null}
+  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene lámina base. ${o.canUp?'Súbela con <b>Subir lámina base</b>: la misma lámina se usa en el Plan diario, Campo y Liberaciones.':'La sube el administrador.'}</div>`;host._v=null;host._fk='';return null}
   const base=bs.find(b=>b.id===o.vista)||bs[0];
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const oo=host._o;if(!oo)return;
-      if(oo.draw==='poly'){if(oo.onPoly)oo.onPoly({x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10});return}if(oo.draw)return;
+      if(oo.draw)return;
       const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);
       let hit=el&&el.dataset.z||'';if(!hit){const L=oo.shapes.filter(z=>z.kind==='a').concat(oo.shapes.filter(z=>z.kind==='s'));const z=L.find(z=>pip(w,unflat(z.pts)));hit=z?z.id:''}
       if(oo.onPick)oo.onPick(hit||null,w)}});host._v=v}
-  host._o=o;host._base=base.id;
+  host._o=o;host._base=base.id;if(!host._szev){host._szev=1;ambMapEvents(host)}
   const q=useHi()?'f':'l';const url=IMG.get(base.id+'|'+base.rev+'|'+q)?.url||null;if(!url)imgURL(base,q).then(()=>{if(U.tab==='planos')requestRender()}).catch(()=>{});
   v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.85}]);
   const fk=o.pid+'|'+base.id;if(host._fk!==fk){host._fk=fk;v.bounds=boundsOf({...base,T:base.T||I});v.fitted=0;requestAnimationFrame(()=>{v.fit();v.fitted=1})}
@@ -832,11 +833,27 @@ function ambMap(host,o){const bs=basesOf(o.pid);
     svg+=`<polygon points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.16:.05}" stroke="${z.c}" stroke-width="${z.sel?4:2.5}" stroke-dasharray="10 6" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     const bb=bboxOf(P);labels.push({id:z.id,x:bb.x+bb.w/2,y:bb.y,t:z.label,c:z.c,f:'#fff',cls:'szs'+(z.sel?' sel':'')})}
   for(const z of o.shapes.filter(z=>z.kind==='a')){const P=unflat(z.pts);if(!P.length)continue;
-    svg+=`<polygon points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.45:z.dim?.08:.22}" stroke="${z.sel?'#111':z.c}" stroke-width="${z.sel?3:1.5}" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    svg+=`<polygon${o.edit&&z.sel?' data-edit="1"':''} points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.45:z.dim?.08:.22}" stroke="${z.sel?'#111':z.c}" stroke-width="${z.sel?3:1.5}" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     const ce=centroid(P),bb=bboxOf(P);labels.push({id:z.id,x:ce.x,y:ce.y,t:z.label,area:bb.w*bb.h,c:z.sel?'#111':z.c,f:'#fff',cls:'sza'+(z.sel?' sel':'')})}
   if(o.tmp&&o.tmp.length){svg+=`<polyline points="${ptsS(o.tmp)}" fill="rgba(31,95,122,.18)" stroke="#1F5F7A" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}
-  v.svg.innerHTML=svg;v.labels=labels;v.apply();return base}
+  v.svg.innerHTML=svg;v.labels=labels;v.handles=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts)):[];v.apply();return base}
+/* puntos para ajustar la forma: esquinas y, entre ellas, puntos para agregar una esquina */
+function ambHandles(P){const H=P.map(p=>({x:p.x,y:p.y}));P.forEach((p,i)=>{const q=P[(i+1)%P.length];H.push({x:(p.x+q.x)/2,y:(p.y+q.y)/2,mid:i,cls:'mid'})});return H}
+function ambMapEvents(host){let dn=null,drag=null;const R=v=>Math.round(v*10)/10;
+  const paint=P=>{const v=host._v;const el=v.svg.querySelector('[data-edit]');if(el)el.setAttribute('points',P.map(p=>p.x+','+p.y).join(' '));v.handles=ambHandles(P);v.apply()};
+  host.addEventListener('pointerdown',e=>{const oo=host._o;if(!oo||e.button>0)return;const h=e.target.closest&&e.target.closest('.pvh');
+    if(h&&oo.edit&&!oo.draw){e.stopPropagation();e.preventDefault();try{host.setPointerCapture(e.pointerId)}catch(_){}const P=unflat(oo.edit.pts);const hh=host._v.handles[+h.dataset.h];if(!hh)return;
+      if(hh.mid!=null){P.splice(hh.mid+1,0,{x:hh.x,y:hh.y});drag={i:hh.mid+1,P}}else drag={i:+h.dataset.h,P};return}
+    if(oo.draw==='poly')dn={x:e.clientX,y:e.clientY}},true);
+  host.addEventListener('pointermove',e=>{if(!drag)return;e.stopPropagation();const w=host._v.toWorld(e.clientX,e.clientY);drag.P[drag.i]={x:R(w.x),y:R(w.y)};paint(drag.P)},true);
+  const up=e=>{const oo=host._o;if(drag){e.stopPropagation();const P=drag.P;drag=null;if(e.type==='pointerup'&&oo&&oo.onEdit)oo.onEdit(flat(P));else if(oo)paint(unflat(oo.edit.pts));return}
+    if(dn&&oo&&oo.draw==='poly'&&e.type==='pointerup'){const d=Math.hypot(e.clientX-dn.x,e.clientY-dn.y);dn=null;if(d>14)return;const v=host._v;const w=v.toWorld(e.clientX,e.clientY);const T=oo.tmp||[];
+      /* tocar la primera esquina cierra el polígono */
+      if(T.length>=3){const r=host.getBoundingClientRect();const f={x:r.left+v.x+T[0].x*v.z,y:r.top+v.y+T[0].y*v.z};if(Math.hypot(e.clientX-f.x,e.clientY-f.y)<18){if(oo.onPolyClose)oo.onPolyClose();return}}
+      if(oo.onPoly)oo.onPoly({x:R(w.x),y:R(w.y)})}};
+  host.addEventListener('pointerup',up,true);host.addEventListener('pointercancel',up,true);
+  host.addEventListener('dblclick',e=>{const oo=host._o;if(oo&&oo.draw==='poly'&&oo.onPolyClose){e.preventDefault();oo.onPolyClose()}})}
 /** acerca el mapa a una forma (al elegirla en la lista) */
 function ambFocus(host,pts){const v=host&&host._v;if(!v||!pts)return;const P=unflat(pts);if(!P.length)return;const bb=bboxOf(P);const full=v.bounds;const pad=Math.max(bb.w,bb.h)*.9+40;
   v.bounds={x:bb.x-pad,y:bb.y-pad,w:bb.w+pad*2,h:bb.h+pad*2};v.fit();v.bounds=full}
@@ -992,9 +1009,9 @@ function renameDialog(btn,l){const box=document.createElement('div');box.classNa
 async function delChunks(l,rev){const b=db.batch();for(let i=0;i<(l.nf||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_f_${i}`));for(let i=0;i<(l.nl||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_l_${i}`));await b.commit()}
 
 /* ---------- subir / reemplazar ---------- */
-function uploadDialog(btn,repl){const ps=pisos();
+function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(p=>p.id===opt.pid):pisos();
   const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true">
-   <h3>${repl?'Reemplazar lámina: '+esc(lname(repl)):'Subir lámina'}</h3>
+   <h3>${repl?'Reemplazar lámina: '+esc(lname(repl)):opt.mode==='base'?'Subir lámina base del piso':opt.mode==='spec'?'Subir especialidad':'Subir lámina'}</h3>
    ${repl?'':`<label>Piso<select id="upiso">${ps.map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select></label>
    <label id="utw">Tipo<select id="utipo"><option value="spec">Especialidad sobre un plano base</option><option value="base">Plano base nuevo (otra vista: otra fachada, otra zona…)</option></select></label>
    <label id="ubw">Se superpone sobre<select id="ubase"></select></label>
@@ -1007,7 +1024,7 @@ function uploadDialog(btn,repl){const ps=pisos();
   document.body.appendChild(box);const close=()=>box.remove();
   const info=$('#uinfo',box);
   const sync=()=>{if(repl){info.innerHTML=(repl.base?'Es un plano base: después de procesarlo marcarás puntos para alinearlo con la revisión anterior, así lo ya dibujado sobre el plano no se mueve.':'Después de procesarlo marcarás puntos para alinearlo con su plano base.')+' Súbelo desde una PC con Chrome o Edge.';return}
-    const pid=$('#upiso',box).value;const B=basesOf(pid);const tsel=$('#utipo',box);if(!B.length)tsel.value='base';$('#utw',box).hidden=!B.length;
+    const pid=$('#upiso',box).value;const B=basesOf(pid);const tsel=$('#utipo',box);if(!B.length||opt.mode==='base')tsel.value='base';if(opt.mode==='spec')tsel.value='spec';$('#utw',box).hidden=!B.length||!!opt.mode;
     const bsel=$('#ubase',box);const cur=bsel.value||(pid===M.piso?M.vista:'');bsel.innerHTML=B.map(b=>`<option value="${b.id}"${b.id===cur?' selected':''}>${esc(lname(b))}</option>`).join('');
     const isB=tsel.value==='base';$('#ubw',box).hidden=isB||!B.length;const esp=$('#uesp',box);if(isB&&!esp.value)esp.value=B.length?'':'Arquitectura';
     info.innerHTML=(isB?(B.length?'Será <b>otro plano base</b> de este piso, con su propio plan del día (útil para cada fachada o una zona que no entra en la misma lámina). No se alinea con los demás.':'Será el <b>plano base</b> del piso (normalmente la arquitectura). Las demás especialidades se alinean sobre él.'):'Después de procesarla marcarás puntos para alinearla con el plano base elegido.')+' Súbelo desde una PC con Chrome o Edge.'};
@@ -1018,8 +1035,9 @@ function uploadDialog(btn,repl){const ps=pisos();
     if(!esp&&!name){toast('Escribe el nombre o la especialidad.');return}
     const B=basesOf(pid);const newBase=!repl&&(!B.length||$('#utipo',box).value==='base');const target=repl?baseOfL(repl):(newBase?null:LAM.get($('#ubase',box).value)||B[0]);
     const prog=$('#uprog',box);const say=t=>{prog.textContent=t};$('#ugo',box).disabled=true;
+    if(opt.mode==='spec'&&newBase){toast('La lámina base se sube en Sectorización.');return}
     try{const out=await processFile(f,say);close();
-      if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true},out);toast('Plano base guardado');M.piso=pid;requestRender();return}
+      if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true},out);toast(opt.mode==='base'?'Lámina base guardada. Ahora ubica sus sectores y ambientes.':'Plano base guardado');M.piso=pid;if(opt.onBase)opt.onBase(M.vista);requestRender();return}
       const ref=repl&&repl.base?repl:target;M.busy='Cargando la referencia para alinear…';requestRender();const refURL=await imgURL(ref,'f');M.busy='';requestRender();
       const nm=name||esp;
       alignDialog({ref,refURL,tgt:{w:out.w,h:out.h,url:out.fullURL},title:repl?`Alinear la nueva revisión de ${lname(repl)}`:`Alinear ${nm} con ${lname(ref)}`,allowSkip:!(repl&&repl.base),
@@ -1117,5 +1135,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
+window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,lamUpload:uploadDialog,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
 })();
