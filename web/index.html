@@ -494,6 +494,10 @@ td.d.dsel{box-shadow:inset 1px 0 0 var(--accent),inset -1px 0 0 var(--accent);ba
 .mhint{position:absolute;left:84px;top:10px;z-index:20;max-width:calc(100% - 80px);background:var(--ink);color:var(--panel);padding:7px 11px;border-radius:8px;font-size:12.5px;line-height:1.35;box-shadow:0 2px 10px rgba(0,0,0,.2)}.mhint .lnkb{color:inherit;text-decoration:underline;margin-left:6px}
 .mstage.draw{cursor:crosshair}
 body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mnote{display:none}
+.rloc{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35;max-width:320px}.rloc .lnkb{font-size:11.5px}
+#grid tr.rflash td{animation:rflash 2.4s ease-out}@keyframes rflash{0%,40%{box-shadow:inset 0 0 0 9999px var(--accent-soft)}100%{box-shadow:none}}
+.vabar{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;z-index:300;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--ink);color:var(--bg);border-radius:12px;padding:6px 8px 6px 14px;box-shadow:0 6px 20px rgba(0,0,0,.3);font-size:13px;max-width:calc(100vw - 20px)}.vabar .ib{height:30px}
+@media (max-width:760px){.vabar{bottom:66px}.vabar .ib{height:40px}}
 .mzc{position:fixed;z-index:60;width:340px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.28);padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
 .zch{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.zct{display:flex;gap:8px;align-items:flex-start;min-width:0}.zct b{display:block;font-size:15px;line-height:1.25}.zct span{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12.5px;margin-top:2px}
 .zcsc{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
@@ -1021,6 +1025,12 @@ const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratis
 let canDaily=false;
 const OWNER=()=>String(window.ADMIN_EMAIL||'').trim().toLowerCase();
 const isOwnerEmail=e=>!!OWNER()&&String(e||'').toLowerCase()===OWNER();
+/* "Ver como": el administrador prueba la app con otro rol (solo en la copia de prueba; lo que guarde se guarda con su usuario) */
+const VA_OK=()=>window.LPS_ENV==='pruebas';
+let VA=(()=>{try{return VA_OK()?JSON.parse(sessionStorage.getItem('lps.va')||'null'):null}catch(e){return null}})();
+const roleSig=m=>[m.role||'',m.sc||'',memScs(m).join(),m.area||''].join('|');
+function vaApply(md){if(!VA||!me||!(md.role==='admin'||isOwnerEmail(me.email)))return md;return{...md,role:VA.role,sc:VA.sc||'',scs:VA.sc?[VA.sc]:[],area:VA.area||''}}
+function vaSet(v){try{if(v)sessionStorage.setItem('lps.va',JSON.stringify(v));else sessionStorage.removeItem('lps.va')}catch(e){}location.reload()}
 const PALETTE=['#1f5f7a','#b5651d','#6a4c93','#2e7d4f','#c0392b','#00838f','#8d6e00','#ad1457'];
 const hashStr=s=>{let h=5381;for(const c of String(s))h=((h*33)^c.charCodeAt(0))>>>0;return h.toString(36)};
 const colorOf=s=>{let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length]};
@@ -1190,7 +1200,7 @@ async function startSession(u,fdb){
   try{m=await ref.get({source:'server'})}catch(e){try{m=await ref.get()}catch(e2){m=null}}
   if((!m||!m.exists)&&isOwnerEmail(me.email)){try{await ref.set({role:'admin',name:me.email.split('@')[0],added:NOW()});m=await ref.get()}catch(e){}}
   if(!m||!m.exists){const em=me.email;me=null;pendingMsg=`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
-  const md=m.data();me.role=md.role||'lector';me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';if(me.role==='area')U.tab='restr';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(me.role==='campo'||location.hash==='#campo')U.tab='campo';if(me.role==='sc'||location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
+  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=md.role||'lector';me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';if(me.role==='area')U.tab='restr';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(me.role==='campo'||location.hash==='#campo')U.tab='campo';if(me.role==='sc'||location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
   for(const[col,k]of Object.entries(COLS)){
@@ -1201,7 +1211,7 @@ async function startSession(u,fdb){
   unsubs.push(memQ.onSnapshot(snap=>{MEM.clear();(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
-    me.area=mine.area||'';if(mine.role!==me.role||(mine.sc||'')!==(me.sc||'')||memScs(mine).join()!==(me.scs||[]).join()){me.role=mine.role;me.sc=mine.sc||'';me.scs=memScs(mine);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);gridRows=null;toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
+    if(roleSig(mine)!==me.rsig){me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.role=v.role;me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
     renderWho();if(ready)requestRender()},()=>{}));
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
@@ -1325,7 +1335,7 @@ function render(){
   const main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
-  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();
+  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();
   const views={dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
@@ -2611,12 +2621,27 @@ const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
 function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
 /* quién resuelve una propuesta: el administrador siempre; un editor solo en los pisos a su cargo; piso sin responsable: solo el administrador */
-function canDecide(id,it){if(!me||PM())return false;if(isAdmin)return true;if(me.role!=='editor')return false;const pid=propPiso(id,it);return respOf(pid).some(r=>r.em===me.email)}
+function canDecide(id,it){if(!me||PM())return false;if(isAdmin)return true;if(me.role!=='editor')return false;const pid=propPiso(id,it);if(VA&&VA.role==='editor')return(VA.pisos||[]).includes(pid);return respOf(pid).some(r=>r.em===me.email)}
 function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve el administrador'}
 function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest=pisos().filter(p=>!L.includes(p.id));
   return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
    ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}
 function areaCell(em,m){const ar=restrAreasL();return`<select class="ci" data-mem="${esc(em)}" data-f="area" aria-label="Área"${m.area?'':' style="border:1px solid var(--bad)"'}><option value="">— elige el área —</option>${[...new Set([...ar,m.area].filter(Boolean))].map(a=>`<option${a===m.area?' selected':''}>${esc(a)}</option>`).join('')}</select>`}
+function vaBanner(){let b=$('#vabar');if(!VA||!me){if(b)b.remove();return}const lab=ROLE[VA.role]||VA.role;const det=VA.sc?conOf(VA.sc).name:VA.area?VA.area:VA.pisos&&VA.pisos.length?'pisos '+VA.pisos.map(id=>(S.pis.get(id)||{}).code||'').join(', '):'';
+  const h=`<span>👁 Viendo como <b>${esc(lab)}</b>${det?' · '+esc(det):''}</span><button type="button" class="ib" data-va="chg">Cambiar</button><button type="button" class="ib pri" data-va="out">Volver a administrador</button>`;
+  if(!b){b=document.createElement('div');b.id='vabar';b.className='vabar';document.body.appendChild(b);b.onclick=e=>{const t=e.target.closest('[data-va]');if(!t)return;if(t.dataset.va==='out')vaSet(null);else vaDialog(t)}}
+  if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
+function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
+  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['lector','Lector']];
+  openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
+    <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="qrow" id="vaar"><select id="vaa" aria-label="Área">${restrAreasL().map(a=>`<option${cur.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select></div>
+    <div id="vapi" style="padding:0 10px 6px;max-height:160px;overflow:auto"><div class="mu" style="font-size:12px">Pisos a su cargo (para revisar propuestas):</div>${pisos().map(p=>`<label class="chk" style="display:flex"><input type="checkbox" class="vapc" value="${p.id}"${(cur.pisos||[]).includes(p.id)?' checked':''}> ${esc(p.code)} · ${esc(p.name)}</label>`).join('')}</div>
+    <button data-do="go" class="pri">Ver como este rol</button>`,
+   {go:()=>{const role=($('#var')||{}).value;const v={role};if(role==='sc'||role==='capataz')v.sc=($('#vas')||{}).value||'';if(role==='area')v.area=($('#vaa')||{}).value||'';if(role==='editor')v.pisos=[...document.querySelectorAll('.vapc:checked')].map(i=>i.value);vaSet(v)}});
+  const sync=()=>{const r=($('#var')||{}).value;const a=$('#vasc'),b=$('#vaar'),c=$('#vapi');if(a)a.hidden=!(r==='sc'||r==='capataz');if(b)b.hidden=r!=='area';if(c)c.hidden=r!=='editor'};sync();const sel=$('#var');if(sel)sel.onchange=sync;
+  /* el popover no debe cerrarse al marcar casillas */}
 function pisosSinResp(){return pisos().filter(p=>!respOf(p.id).length)}
 /* el subcontratista también marca inicio, detención y reanudación en la pantalla "En obra" (no cierra el día) */
 function SCK(){return!!me&&me.role==='sc'}
@@ -2721,6 +2746,12 @@ function restrInScope(){return[...S.res.values()].filter(r=>{if(!U.piso)return t
 function actOptions(sel,only){let h=only?'':'<option value="">— Sin actividad —</option>';for(const{p,secs}of visTree())for(const{s,ambs}of secs)for(const{a,acts:all}of ambs){const acts=only?all.filter(x=>only.has(x.sc)):all;if(!acts.length)continue;h+=`<optgroup label="${esc((U.piso?'':p.code+' · ')+a.code+' · '+a.name)}">`+acts.map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'(sin nombre)')} — ${esc(conOf(x.sc).name)}</option>`).join('')+'</optgroup>'}
   if(sel&&S.act.has(sel)&&!h.includes(`value="${sel}"`)){const x=S.act.get(sel);h+=`<option value="${sel}" selected>${esc(x.name)} (otro piso)</option>`}return h}
 const rOpen=new Set();
+/* dónde está la actividad de una restricción (piso · sector · ambiente · SC) y cómo ir a ella en el lookahead */
+function actLoc(aid){const x=S.act.get(aid);if(!x)return'';const a=S.amb.get(x.ambId);const sc=a&&S.sec.get(a.sectorId);const p=S.pis.get(pisoOfAct(aid));
+  return[p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · ')+' · '+conOf(x.sc).name}
+function gotoAct(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}const a=S.amb.get(x.ambId);const pid=pisoOfAct(aid);
+  if(U.piso&&U.piso!==pid){U.piso=pid;U.pisoAll=false}if(a)U.collapsed=(U.collapsed||[]).filter(c=>c!==a.sectorId&&c!==pid);if(U.sector&&a&&U.sector!==a.sectorId)U.sector='';U.tab='look';saveUI();render();
+  let n=0;const find=()=>{const tr=$(`#grid tr[data-a="${CSS.escape(aid)}"]`);if(tr){tr.scrollIntoView({block:'center',behavior:'smooth'});tr.classList.add('rflash');setTimeout(()=>tr.classList.remove('rflash'),2600);return}if(++n<8)setTimeout(find,150);else toast('La actividad no se ve con los filtros actuales del lookahead (semanas o filtros).')};setTimeout(find,120)}
 function rthumbs(r){const ce=rCanEd(r);const L=(r.photos||[]).map(id=>{loadFoto(id);const src=FOTO.get(id)||'';return`<div class="th"><img data-ph="${id}" src="${src}" alt="Foto de la restricción"${src?'':' style="opacity:.3"'}>${ce?`<button data-rphdel="${r.id}|${id}" aria-label="Quitar foto">&times;</button>`:''}</div>`}).join('');
   return`<div class="rph">${L}${ce?`<label class="phb" title="Adjuntar foto de la restricción">📷 ${(r.photos||[]).length?'+':'Foto'}<input type="file" accept="image/*" data-rphoto="${r.id}" hidden></label>`:''}</div>`}
 function newRestr(actId){const x=actId&&S.act.get(actId);if(SCK()&&(!x||!myScsI().includes(x.sc))){toast('Elige una actividad de tu partida.');return}if(AREA()&&!me.area){toast('Pide al administrador que te asigne un área en Equipo.');return}const id=uid('res');rOpen.add(id);
@@ -2756,7 +2787,7 @@ function renderRestr(main){
   for(const r of list){const isLate=r.status!=='lib'&&r.need&&r.need<today;const w=aw(r.actId);const fk=f=>`data-r="${r.id}" data-f="${f}" data-fk="r:${r.id}:${f}"`;const ce=rCanEd(r);const ro=ce?'':' disabled';const roL=rCanLib(r)?'':' disabled';const own=ce&&SCm;const ao=own?(aOpts['sc:'+r.actId]||(aOpts['sc:'+r.actId]=actOptions(r.actId,SCm))):(aOpts[r.actId]||(aOpts[r.actId]=actOptions(r.actId)));
     if(mob){const x=S.act.get(r.actId);const am=x&&S.amb.get(x.ambId);const lib=r.status==='lib';const op_=rOpen.has(r.id);
       h+=`<article class="rcard${isLate?' late':''}"><div class="r1"><span class="pill ${lib?'ok':isLate?'bad':'warn'}">${lib?'Liberada':isLate?'Vencida':'Pendiente'}</span><span class="rgtag ${grpOf(r)}">${grpOf(r)==='area'?('Otras áreas'+(r.area?' · '+esc(r.area):'')):'Campo'}</span>${showP?`<span class="mono">${esc(S.pis.get(restrPiso(r))?.code||'')}</span>`:''}${w!=null?`<span>Inicia sem ${w}</span>`:''}${r.need?`<span>Requerida ${fmtD(r.need)}</span>`:''}${lib&&r.freed?`<span>Liberada ${fmtD(r.freed)}</span>`:''}</div>
-        <b>${x?esc(x.name):'<span class="mu">Sin actividad</span>'}</b>${am?`<span class="mu" style="font-size:12.5px">${esc(am.code+' · '+am.name)} · ${esc(conOf(x.sc).name)}</span>`:''}
+        <b>${x?esc(x.name):'<span class="mu">Sin actividad</span>'}</b>${x?`<span class="mu" style="font-size:12.5px">${esc(actLoc(x.id))} <button type="button" class="lnkb" data-rgo="${x.id}">Ver en el lookahead ↗</button></span>`:''}
         ${op_?`<div class="rf"><label>Actividad<select class="ci" ${fk('actId')}${ro}>${ao}</select></label>
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
@@ -2767,7 +2798,7 @@ function renderRestr(main){
         ${rthumbs(r)}${r.by&&r.byName&&SCK()?`<div class="mu" style="font-size:12px">Registrada por ${esc(r.byName)}</div>`:''}<div class="rbt">${rCanLib(r)?`<button class="ib${lib?'':' pri'}" data-rtog="${r.id}">${lib?'Reabrir':'Liberar hoy'}</button>`:''}${ce?`<button class="ib" data-ropen="${r.id}">${op_?'Listo':'Editar'}</button>${op_&&rCanDel(r)?`<button class="ib" data-rdel="${r.id}">Eliminar</button>`:''}`:''}</div></article>`;continue}
     h+=`<tr class="${isLate?'late':''}"><td><select class="ci" ${fk('status')}${roL}><option value="pend"${r.status!=='lib'?' selected':''}>Pendiente</option><option value="lib"${r.status==='lib'?' selected':''}>Liberada</option></select>${isLate?'<div><span class="pill bad">Vencida</span></div>':''}</td>
     ${showP?`<td class="mono">${esc(S.pis.get(restrPiso(r))?.code||'—')}</td>`:''}
-    <td><select class="ci" ${fk('actId')}${ro}>${ao}</select></td>
+    <td><select class="ci" ${fk('actId')}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}</td>
     <td class="mono" style="white-space:nowrap">${w!=null?'Sem '+w:'—'}</td>
     <td><select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></td>
     <td>${gsel(r,fk)}</td>
@@ -2789,6 +2820,7 @@ function renderRestr(main){
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada');if(db)fcol('fotos').doc(fid).delete().catch(()=>{})}return}
     const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;if(SCK()&&!confirm('¿Eliminar esta restricción?'))return;(r.photos||[]).forEach(fid=>db&&fcol('fotos').doc(fid).delete().catch(()=>{}));apply([op('restr',r.id,null)],'Restricción eliminada');return}
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso()})],lib?'Restricción reabierta':'Restricción liberada');return}
+    const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const ro_=e.target.closest('[data-ropen]');if(ro_){const id=ro_.dataset.ropen;rOpen.has(id)?rOpen.delete(id):rOpen.add(id);render()}};
   main.onchange=async e=>{const t=e.target;
     if(t.dataset.rphoto!=null&&t.files&&t.files[0]){const r=S.res.get(t.dataset.rphoto);const f=t.files[0];t.value='';if(!r||!rCanEd(r))return;
@@ -3029,7 +3061,7 @@ function renderTeam(main){
   const online=new Set([...PRES.values()].map(p=>p&&p.eh));
   const counts=Object.fromEntries(Object.keys(COLS).map(c=>[c,S[COLS[c]].size]));ensurePlanos();
   main.innerHTML=`<div class="scroll"><div class="wrap">
-  <div class="card"><div class="hd">Equipo <span class="sub">${list.length} persona${list.length===1?'':'s'} con acceso</span></div>
+  <div class="card"><div class="hd">Equipo <span class="sub">${list.length} persona${list.length===1?'':'s'} con acceso</span>${me&&me.realAdmin&&VA_OK()?'<span style="flex:1"></span><button class="ib" id="bva" title="Prueba la app con los permisos de otro rol">👁 Ver como…</button>':''}</div>
    <details class="pad tinfo"${(TQ.info??list.length<3)?' open':''}><summary>¿Cómo se suma a alguien y qué hace cada rol?</summary><p class="callout" style="margin:8px 0 0">Solo los correos de esta lista pueden entrar. Para sumar a alguien: agrégalo aquí, envíale el enlace de esta página (<span class="mono">${esc(location.origin+location.pathname)}</span>) y pídele que pulse <b>“¿Primera vez? Crear mi cuenta”</b> con ese mismo correo y confirme el correo que le llegará.<br><b>Campo</b>: registra el avance diario (capataces), sin modificar el lookahead. <b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; asígnale los <b>pisos a su cargo</b> para que resuelva las propuestas de los subcontratistas en esos pisos (un piso puede tener varios responsables; si no tiene ninguno, las propuestas las resuelve el administrador). <b>Subcontratista</b>: dibuja el plan del día de su empresa en el Plan diario (elige su empresa en la columna Rol; si una empresa tiene varias partidas, agrégalas todas con “+ Agregar otra empresa / partida”). <b>Área de apoyo</b> (Oficina Técnica, Calidad…): ve todo y registra, resuelve y libera las restricciones de su área; elige su área en la columna Rol. <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p></details>
    ${isAdmin?`<form class="pad" id="tadd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:0"><input class="tin" id="temail" type="text" inputmode="email" autocomplete="off" data-fk="tf:em" value="${esc(TF.em)}" placeholder="correo@empresa.com" aria-label="Correo"><input class="tin" id="tname" data-fk="tf:nm" value="${esc(TF.nm)}" placeholder="Nombre y apellido" aria-label="Nombre"><select class="tin" id="trole" aria-label="Rol">${[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['lector','Lector'],['admin','Administrador']].map(([k,v])=>`<option value="${k}"${TF.rl===k?' selected':''}>${v}</option>`).join('')}</select><select class="tin" id="tsc" aria-label="Empresa"${TF.rl==='sc'||TF.rl==='capataz'?'':' hidden'}><option value="">— empresa —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}"${TF.sc===c.id?' selected':''}>${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select><select class="tin" id="tar" aria-label="Área"${TF.rl==='area'?'':' hidden'}><option value="">— área —</option>${restrAreasL().map(a=>`<option${TF.ar===a?' selected':''}>${esc(a)}</option>`).join('')}</select><button class="ib pri" type="submit">Agregar al equipo</button></form>`:''}
    ${(()=>{const cnt={};list.forEach(([em,m])=>{const r=roleOfM(em,m);cnt[r]=(cnt[r]||0)+1});const scs=[...new Set(list.filter(([em,m])=>!TQ.role||roleOfM(em,m)===TQ.role).flatMap(([,m])=>memScs(m)))].filter(i=>S.con.has(i)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
@@ -3073,7 +3105,7 @@ function renderTeam(main){
     try{await fcol('members').doc(t.dataset.mem).update({[t.dataset.f]:t.type==='checkbox'?t.checked:t.dataset.f==='name'?t.value.trim():t.value,...(t.dataset.f==='role'&&t.value!=='sc'?{}:{})})}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}
     if(t.id==='fimport'){}};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
-  main.onclick=async e=>{let tb;if((tb=e.target.closest('[data-trole]'))){TQ.role=tb.dataset.trole;if(TQ.sc&&!list.some(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&memScs(m).includes(TQ.sc)))TQ.sc='';render();return}
+  main.onclick=async e=>{let tb;if(e.target.closest('#bva')){vaDialog(e.target.closest('#bva'));return}if((tb=e.target.closest('[data-trole]'))){TQ.role=tb.dataset.trole;if(TQ.sc&&!list.some(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&memScs(m).includes(TQ.sc)))TQ.sc='';render();return}
     if(e.target.closest('[data-tclr]')){TQ.q='';TQ.role='';TQ.sc='';render();return}
     if(await invClick(e))return;const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
       try{await fcol('members').doc(em).update({scs:L,sc:L[0]||''});toast(`${conOf(id).name} quitada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
