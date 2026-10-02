@@ -45,3 +45,34 @@ Object.assign(BNI,{
   look:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M14 10v4M11 16v4"/>'),
   plan:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
   dash:SVG('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/>')});
+
+/* ---------- un solo selector de fecha, arriba (P7) ----------
+   Pestañas por semana (Lookahead, Restricciones, Plan semanal, Liberaciones, Indicadores semanal) muestran la semana;
+   pestañas por día (Campo, Plan diario, En obra, Indicadores diario) muestran el día. El día elegido es el mismo en todas
+   y al elegir un día la semana lo sigue; «Hoy» vuelve las dos a hoy. */
+let DAY_SEL=null;
+const curDay=()=>DAY_SEL||todayIso();
+function daySet(d){DAY_SEL=d&&d!==todayIso()?d:null;U.week=DAY_SEL?weekOf(DAY_SEL):curWeek()}
+/* Campo y En obra guardaban su día en CU.date: ahora es el día común */
+Object.defineProperty(CU,'date',{get(){return DAY_SEL},set(v){daySet(v)},enumerable:false,configurable:true});
+function dateMode(){if(!me||me.role==='capataz')return'none';const t=U.tab;
+  if(['look','plan','restr','lib'].includes(t))return'week';if(t==='ind')return U.indMode==='sem'?'week':'day';
+  if(['campo','mapa','cap'].includes(t))return'day';return'none'}
+const DOW_L=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+function topDateApply(){const m=dateMode();document.body.dataset.dmode=m;document.body.classList.toggle('top-date',m!=='none');
+  const show=m!=='none';['#wprev','#wnext','#wtoday'].forEach(s=>{const e=$(s);if(e)e.hidden=!show});const lb=$('.wk .lbl');if(lb)lb.hidden=!show;if(!show)return;
+  const today=todayIso();
+  if(m==='week'){$('#wprev').setAttribute('aria-label','Semana anterior');$('#wnext').setAttribute('aria-label','Semana siguiente');$('#wnext').disabled=false;$('#wtoday').disabled=U.week===curWeek();return}
+  const d=curDay();$('#wnum').textContent=`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}`;$('#wdates').textContent=`Semana ${weekOf(d)}${d===today?' · hoy':''}`;
+  $('#wprev').setAttribute('aria-label','Día anterior');$('#wnext').setAttribute('aria-label','Día siguiente');
+  $('#wnext').disabled=U.tab==='ind'&&d>=today;$('#wtoday').disabled=d===today}
+function navDate(v){const m=dateMode();if(m==='week'){U.week+=v;render();return}if(m!=='day')return;
+  const d=shiftDay(curDay(),v);if(U.tab==='ind'&&d>todayIso())return;daySet(d);render()}
+function goToday(){DAY_SEL=null;U.week=curWeek();render()}
+$('#wprev').onclick=()=>navDate(-1);$('#wnext').onclick=()=>navDate(1);$('#wtoday').onclick=goToday;
+{const lb=$('.wk .lbl');if(lb){lb.title='Volver a hoy';lb.style.cursor='pointer';lb.onclick=goToday}}
+
+/* ---------- barra superior según la pestaña (P6) ---------- */
+const UNDO_TABS=['look','plan','restr','cfg','planos'];
+function topToolsApply(){const t=U.tab;const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
+  ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)})}

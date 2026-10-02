@@ -27,14 +27,14 @@ function cumplTable(entries,label){return`<div class="tscroll"><table class="t c
   return`<tr><td>${label(k)}</td><td class="r">${o.prog}</td><td class="r hm">${o.ver}</td><td class="r ok">${o.ok||''}</td><td class="r pa hm">${o.partial||''}</td><td class="r no hm">${o.no||''}</td><td class="r mu hm">${o.prog-o.ver||''}</td><td class="r mu hm">${o.nimp||''}</td><td>${v==null?'<span class="mu">sin verificar</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?(v==null?'':'<span class="mu">—</span>'):`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
 const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;padding:0;background:none"><i></i>${esc(conOf(sc).name)}</span>`;
 const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-function indDay(){let d=U.indDate||todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
+function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
 function indBar(){const d=indDay();const today=todayIso();const dia=U.indMode!=='sem';
   return`<div class="card"><div class="pad indbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
    ${dia?`<span class="dnav"><button class="ib" data-idd="-1" aria-label="Día anterior">&#8249;</button><b>${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}</b><button class="ib" data-idd="1" aria-label="Día siguiente"${d>=today?' disabled':''}>&#8250;</button>${d!==today?'<button class="ib" data-idd="0">Hoy</button>':''}</span>
    <span class="sp" style="flex:1"></span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label><button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`<span class="sub">Semana ${U.week} · cambia la semana con las flechas de arriba</span><span class="sp" style="flex:1"></span><button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`}
    <span class="sub">${U.piso?esc(S.pis.get(U.piso)?.name||''):'Todos los pisos'}</span></div></div>`}
 function wireInd(main){main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;saveUI();render();return}
-  const dn=t.closest('[data-idd]');if(dn){const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);U.indDate=nd&&nd<todayIso()?nd:null;render();return}
+  const dn=t.closest('[data-idd]');if(dn){const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);daySet(nd&&nd<todayIso()?nd:null);render();return}
   if(t.id==='bpdf'){reportPdf(indDay());return}
   if(t.id==='bxppc'){exportPpcXlsx();return}
   const g=t.closest('tr[data-goc]');if(g){const[aid,d]=g.dataset.goc.split('|');goCampo(aid,d)}};
