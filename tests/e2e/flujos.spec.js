@@ -99,3 +99,17 @@ test('"Ver como" Calidad y vista celular', async ({ page }) => {
   await expect(page.locator('#phprev')).toHaveCount(0);
   noErrors(errors, 'ver como');
 });
+
+test('el Lookahead no se vuelve a armar al regresar, pero muestra los cambios hechos mientras tanto', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  await page.evaluate(() => { document.getElementById('grid').dataset.marca = '1'; });
+  await openTab(page, 'restr');
+  await expect(page.locator('main')).toHaveCount(2);
+  await page.evaluate(() => window.firebase.firestore().collection('acts').doc('i0').update({ name: 'Redes cambiadas' }));
+  await page.waitForTimeout(300);
+  await openTab(page, 'look');
+  await expect(page.locator('main')).toHaveCount(1);
+  await expect(page.locator('#grid')).toHaveAttribute('data-marca', '1');
+  await expect(page.locator('input[data-a="i0"][data-f="name"]')).toHaveValue('Redes cambiadas');
+  noErrors(errors, 'lookahead guardado');
+});

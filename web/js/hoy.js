@@ -46,7 +46,8 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(canWrite&&r!=='sc'){const n=curWeek();const vp=visPisos().filter(p=>Object.keys(liveItems(n,p.id)).length);const nf=vp.filter(p=>!(S.wk.get(wkId(n,p.id))||{}).frozenAt);
     out.plan={k:'plan',title:`Plan semanal · semana ${n}`,n:nf.length,tone:'',sub:`${nf.length} piso${nf.length===1?'':'s'} sin congelar de ${vp.length} con actividades`,items:nf.map(p=>({t:`${p.code} · ${p.name}`})),go:'plan',goLabel:'Ir al Plan semanal',empty:vp.length?'Todos los pisos están congelados':'No hay actividades esta semana'}}
   const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','restr','lib']:r==='area'?(isCalArea()?['lib','restr']:['restr','lib']):r==='lector'?['restr','lib']:['prop','campo','restr','lib','plan'];
-  return order.map(k=>out[k]).filter(Boolean)}
+  /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
+  const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 
 function renderHoy(main){const d=todayIso();const C=hoyCards();const n=C.reduce((a,c)=>a+(c.n?1:0),0);
   const hi=(()=>{const h=+hhmm(NOW()).slice(0,2);return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'})();

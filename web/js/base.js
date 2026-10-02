@@ -340,17 +340,32 @@ document.addEventListener('keydown',e=>{
 /* ---------- render principal ---------- */
 /* transición suave al cambiar de pestaña (solo opacidad: no mueve nada ni afecta a lo que está fijo en pantalla) */
 function viewIn(el){el.classList.remove('vin');void el.offsetWidth;el.classList.add('vin')}
+/* El Lookahead armado (miles de filas) no se destruye al cambiar de pestaña: su <main> se aparta, oculto con
+   content-visibility:hidden (el navegador guarda su estilo y su diseño ya calculados), y otro <main> muestra la pestaña
+   nueva. Al volver, se intercambian: no hay que volver a armar ni a calcular miles de filas, solo las que cambiaron. */
+let LOOK_KEEP=null;
+function leaveView(main){
+  if(main.dataset.view==='look'&&main.dataset.built==='1'&&!isMob()){const r=main.getBoundingClientRect();
+    /* solo cambia su id y una clase sin nada heredable: tocar algo heredable obligaría a recalcular el estilo de miles de filas */
+    main.id='mainLook';main.classList.add('lkeep');main.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    const nm=document.createElement('main');nm.id='main';main.before(nm);LOOK_KEEP=main;return nm}
+  main.innerHTML='';return main}
+function enterView(main){
+  if(U.tab==='look'&&LOOK_KEEP){const k=LOOK_KEEP;LOOK_KEEP=null;
+    if(isMob()){k.remove()}else{main.remove();k.id='main';k.classList.remove('lkeep');k.style.cssText='';k.dataset.view='look';return k}}
+  /* la entrada suave solo en páginas livianas: en el Lookahead y el Plan diario costaría más de lo que aporta */
+  if(!['look','mapa','dash'].includes(U.tab))viewIn(main);return main}
 function render(){
   if(!ready)return;
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
-  const main=$('#main');renderTop();
+  let main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();
   const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
-  if(main.dataset.view!==U.tab){main.innerHTML='';main.dataset.view=U.tab;main.dataset.built='';viewIn(main)}
+  if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}
   try{views[U.tab](main)}catch(err){console.error(err);main.dataset.view='';main.dataset.built='';main.dataset.lqv='';
     main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout warnc"><b>No se pudo mostrar “${esc(tabName(U.tab))}”.</b> Vuelve a intentarlo o recarga la página; si se repite, envía este detalle al administrador: <span class="mono">${esc(String(err&&err.message||err).slice(0,200))}</span><div style="margin-top:8px"><button class="ib pri" onclick="location.reload()">Recargar la página</button></div></div></div></div>`}
   if(st!=null){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=st}

@@ -25,10 +25,11 @@ function tabHome(){return tabPrimary()[0]||'look'}
 /** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
   const btn=t=>nav.querySelector(`button[data-tab="${t}"]`);
-  TAB_ORDER.forEach(t=>{const b=btn(t);if(b){b.hidden=!prim.includes(t);nav.appendChild(b)}});
+  const sig=prim.join()+'|'+sec.join();const re=nav.dataset.sig!==sig;nav.dataset.sig=sig;
+  TAB_ORDER.forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
   let mb=$('#tabMore');if(!mb){mb=document.createElement('button');mb.id='tabMore';mb.type='button';mb.className='tmore';mb.setAttribute('aria-haspopup','menu');mb.onclick=()=>moreMenu(mb)}
-  nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
-  mb.innerHTML=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}
+  if(re||mb.parentNode!==nav)nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
+  const mh=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;if(mb.innerHTML!==mh)mb.innerHTML=mh;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}
 function moreMenu(anchor){const sec=tabSecondary();
   openPop(anchor,`<div class="ph">Más secciones</div>${sec.map(t=>`<button data-do="t_${t}"${U.tab===t?' class="on"':''}>${esc(tabName(t))}</button>`).join('')}`,
     Object.fromEntries(sec.map(t=>['t_'+t,()=>goTab(t)])))}
@@ -59,7 +60,7 @@ function dateMode(){if(!me||me.role==='capataz')return'none';const t=U.tab;
   if(['look','plan','restr','lib'].includes(t))return'week';if(t==='ind')return U.indMode==='sem'?'week':'day';
   if(['campo','mapa','cap'].includes(t))return'day';return'none'}
 const DOW_L=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-function topDateApply(){const m=dateMode();document.body.dataset.dmode=m;document.body.classList.toggle('top-date',m!=='none');
+function topDateApply(){const m=dateMode();if(document.body.dataset.dmode!==m)document.body.dataset.dmode=m;document.body.classList.toggle('top-date',m!=='none');
   const show=m!=='none';['#wprev','#wnext','#wtoday'].forEach(s=>{const e=$(s);if(e)e.hidden=!show});const lb=$('.wk .lbl');if(lb)lb.hidden=!show;if(!show)return;
   const today=todayIso();
   if(m==='week'){$('#wprev').setAttribute('aria-label','Semana anterior');$('#wnext').setAttribute('aria-label','Semana siguiente');$('#wnext').disabled=false;$('#wtoday').disabled=U.week===curWeek();return}

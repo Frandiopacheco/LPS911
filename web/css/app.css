@@ -1049,7 +1049,7 @@ tr.pmro td.s4 input,tr.pmro td.s3{opacity:.55}
 .tabs .tmore.on{color:var(--ink);border-bottom-color:var(--accent)}
 .pop button.on{background:var(--accent-soft);color:var(--ink);font-weight:600}
 /* un solo selector de fecha arriba: se ocultan los que tenía cada pestaña */
-body.top-date .cdate,body.top-date .khi [data-kd],body.top-date .indbar .dnav,body.top-date #mbar .dnav,body.top-date .lqbar:has(>[data-lqw]){display:none!important}
+body.top-date .cdate,body.top-date .khi [data-kd],body.top-date .indbar .dnav,body.top-date #mbar .dnav,body.top-date .lqwbar{display:none!important}
 body[data-dmode="day"] .wk .lbl b{font-size:15px}
 .wk [hidden]{display:none!important}
 /* contador del menú inferior sobre el ícono, para que el nombre entre completo */
@@ -1127,7 +1127,8 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 /* =====================================================================
    PANTALLA «HOY» (P2): lo pendiente de cada rol, una tarjeta por tema
    ===================================================================== */
-.hoyg{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
+.hoyg{columns:3 300px;column-gap:12px}
+.hoyg>.hoyc{break-inside:avoid;margin:0 0 12px}
 .hoyc{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:var(--r-card);box-shadow:var(--sh-1);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .hoyc.warn{border-top-color:var(--today)}
 .hoyc.bad{border-top-color:var(--bad)}
@@ -1142,4 +1143,8 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 .hoyc li{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
 .hoyc li small{font-size:12px;color:var(--muted)}
 .hoyc>.ib{align-self:flex-start;margin-top:2px}
-@media (max-width:760px){.hoyg{grid-template-columns:1fr}.hoyc>.ib{align-self:stretch;min-height:40px}}
+@media (max-width:760px){.hoyg{columns:1}.hoyc>.ib{align-self:stretch;min-height:40px}}
+
+/* Lookahead guardado mientras se ve otra pestaña (ver leaveView en base.js) */
+.lkeep{content-visibility:hidden;z-index:-1}
+/* ojo: nada heredable aquí (visibility, pointer-events, color…): obligaría a recalcular el estilo de miles de filas */
