@@ -29,10 +29,10 @@ const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;pad
 const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
 function indBar(){const d=indDay();const today=todayIso();const dia=U.indMode!=='sem';
-  return`<div class="card"><div class="pad indbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
-   ${dia?`<span class="dnav"><button class="ib" data-idd="-1" aria-label="Día anterior">&#8249;</button><b>${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}</b><button class="ib" data-idd="1" aria-label="Día siguiente"${d>=today?' disabled':''}>&#8250;</button>${d!==today?'<button class="ib" data-idd="0">Hoy</button>':''}</span>
-   <span class="sp" style="flex:1"></span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label><button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`<span class="sub">Semana ${U.week} · cambia la semana con las flechas de arriba</span><span class="sp" style="flex:1"></span><button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`}
-   <span class="sub">${U.piso?esc(S.pis.get(U.piso)?.name||''):'Todos los pisos'}</span></div></div>`}
+  return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`} · ${pisoLabel()}`,
+    dia?'<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>':`<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
+   +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
+   ${dia?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
 function wireInd(main){main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;saveUI();render();return}
   const dn=t.closest('[data-idd]');if(dn){const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);daySet(nd&&nd<todayIso()?nd:null);render();return}
   if(t.id==='bpdf'){reportPdf(indDay());return}
@@ -49,8 +49,8 @@ function renderIndDay(main){
     <div class="tile"><span class="k">Parcial / No cumplido</span><span class="v">${t.partial} / ${t.no}</span></div>
     <div class="tile"><span class="k">Sin verificar</span><span class="v">${t.prog-t.ver}</span></div>
     <div class="tile"><span class="k">No programados</span><span class="v">${D.extras.length}</span></div></div>
-   <div class="callout">El <b>PPC diario</b> es una <b>alerta temprana</b>: muestra si la programación del día se está cumpliendo. El indicador oficial es el <b>PPC semanal</b> (Indicadores → Semanal), donde lo que falló un día y se recuperó dentro de la semana cuenta como cumplido.</div>
-   <p class="note" style="margin:0">El % se calcula sobre lo <b>verificado</b> (Parcial cuenta como no cumplido). Lo que nadie registró aparece como “sin verificar” y no baja el indicador. El <b>PPC del SC</b> no cuenta los incumplimientos cuya causa no depende del subcontratista (se define en Configuración y se puede corregir en cada registro de Campo).</p>`;
+   ${helpBox('¿Qué mide el PPC diario y cómo se calcula?',`<p>El <b>PPC diario</b> es una <b>alerta temprana</b>: muestra si la programación del día se está cumpliendo. El indicador oficial es el <b>PPC semanal</b> (Indicadores → Semanal), donde lo que falló un día y se recuperó dentro de la semana cuenta como cumplido.</p>
+<p>El % se calcula sobre lo <b>verificado</b> (Parcial cuenta como no cumplido). Lo que nadie registró aparece como “sin verificar” y no baja el indicador. El <b>PPC del SC</b> no cuenta los incumplimientos cuya causa no depende del subcontratista (se define en Configuración y se puede corregir en cada registro de Campo).</p>`)}`;
   if(!t.prog&&!D.extras.length)h+=`<div class="empty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
   else{
     const scs=Object.entries(D.scA).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));

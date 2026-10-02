@@ -36,3 +36,23 @@ test('con "reducir movimiento" no hay animaciones', async ({ page }) => {
   expect(d).toBeLessThan(0.01);
   noErrors(errors, 'movimiento reducido');
 });
+
+test('todas las páginas tienen el mismo encabezado (título, contexto y acciones)', async ({ page }) => {
+  const errors = await openApp(page);
+  const T = { restr: 'Restricciones', plan: 'Plan semanal', campo: 'Campo', lib: 'Liberaciones', ind: 'Indicadores', planos: 'Sectorización', cfg: 'Configuración', team: 'Equipo' };
+  for (const [t, title] of Object.entries(T)) {
+    await openTab(page, t);
+    await expect(page.locator('#main .phd h2')).toHaveText(title);
+  }
+  noErrors(errors, 'encabezados');
+});
+
+test('las explicaciones largas quedan en una ayuda que se abre', async ({ page }) => {
+  const errors = await openApp(page);
+  await openTab(page, 'ind');
+  const h = page.locator('#main details.hlp');
+  await expect(h).not.toHaveAttribute('open', '');
+  await h.locator('summary').click();
+  await expect(h.locator('.hlpb')).toContainText('PPC diario');
+  noErrors(errors, 'ayuda');
+});

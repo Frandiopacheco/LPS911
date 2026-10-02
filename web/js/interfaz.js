@@ -76,3 +76,15 @@ $('#wprev').onclick=()=>navDate(-1);$('#wnext').onclick=()=>navDate(1);$('#wtoda
 const UNDO_TABS=['look','plan','restr','cfg','planos'];
 function topToolsApply(){const t=U.tab;const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
   ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)})}
+
+/* ---------- plantilla común de página (P5) ----------
+   Dos tipos de pantalla: «herramienta» a todo el ancho (Lookahead, Plan diario) y «página» centrada con este encabezado:
+   título · periodo/contexto · acciones a la derecha (la principal con .ib.pri). Debajo, la barra de filtros .fbar. */
+function pageHead(title,sub,actions){return`<header class="phd"><div class="pht"><h2>${esc(title)}</h2>${sub?`<span>${sub}</span>`:''}</div>${actions?`<div class="pha">${actions}</div>`:''}</header>`}
+const pisoLabel=()=>U.piso?esc(S.pis.get(U.piso)?.name||''):'Todos los pisos';
+/* ayuda que se abre con «?» en lugar de párrafos fijos (P13) */
+function helpBox(summary,html,open){return`<details class="hlp"${open?' open':''}><summary><i aria-hidden="true">?</i>${esc(summary)}</summary><div class="hlpb">${html}</div></details>`}
+
+/* «Guardado» se marca un momento cuando termina de guardar (P16) */
+{let prevP=0,tS=0;const orig=setStatus;setStatus=function(){orig();const el=$('#status');if(!el)return;
+  if(prevP>0&&pending===0&&!lastErr&&db){el.classList.add('saved');clearTimeout(tS);tS=setTimeout(()=>el.classList.remove('saved'),1600)}prevP=pending}}
