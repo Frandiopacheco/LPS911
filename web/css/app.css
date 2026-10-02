@@ -1166,7 +1166,7 @@ body.pres .top,body.pres #bnav,body.pres .view>.bar,body.pres #verban,body.pres 
 .presbar .pbt{display:flex;flex-direction:column;font-size:16px;line-height:1.15;margin-right:6px}
 .presbar .pbt small{font-size:12.5px;font-weight:400;color:var(--muted)}
 .presbar .pbg{display:inline-flex;gap:4px}
-.presbar .tin{height:var(--h-ctl);max-width:220px}
+.presbar .tin{height:var(--h-ctl);max-width:180px}
 .presbar .fsp{flex:1}
 body.pres #gw{zoom:var(--pz,1)}
 body.pres .legend{padding-top:6px}

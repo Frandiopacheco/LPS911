@@ -25,6 +25,9 @@ test.beforeEach(async () => {
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
     await S('members/ot@obra.pe', { role: 'area', name: 'Jefe OT', area: 'OT' });
+    await S('members/editor2@obra.pe', { role: 'editor', name: 'Editor designado', cli: true });
+    await S('members/campo2@obra.pe', { role: 'campo', name: 'Campo designado', cli: true });
+    await S('members/sc2@obra.pe', { role: 'sc', name: 'SC con marca', sc: 'c-gabel', scs: ['c-gabel'], cli: true });
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
     await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
     await S('lib/l-obs', { actId: 'x1', sc: 'c-gabel', st: 'obs', by: 'sc@obra.pe' });
@@ -162,20 +165,26 @@ test('matriz de liberaciones: la editan Calidad y el administrador', async () =>
   await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
 });
-test('versión cliente: solo administrador y editores la ven y la cambian', async () => {
+test('versión cliente: solo el administrador y quienes él designe', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'cli/buf'), { all: 1 }));
-  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cli/buf'), { all: 2, p: { p1: 1 } }));
-  await assertSucceeds(getDoc(doc(user('editor@obra.pe'), 'cli/buf')));
-  for (const who of ['sc@obra.pe', 'campo@obra.pe', 'lector@obra.pe', 'calidad@obra.pe', 'ot@obra.pe']) {
+  // designados por el administrador (members.cli): leen y cambian
+  for (const who of ['editor2@obra.pe', 'campo2@obra.pe']) {
+    await assertSucceeds(setDoc(doc(user(who), 'cli/buf'), { all: 2, p: { p1: 1 } }));
+    await assertSucceeds(getDoc(doc(user(who), 'cli/buf')));
+  }
+  // sin designar (aunque sea editor), y el SC aunque tenga la marca: nada
+  for (const who of ['editor@obra.pe', 'sc@obra.pe', 'sc2@obra.pe', 'campo@obra.pe', 'lector@obra.pe', 'calidad@obra.pe', 'ot@obra.pe']) {
     await assertFails(getDoc(doc(user(who), 'cli/buf')));
     await assertFails(setDoc(doc(user(who), 'cli/buf'), { all: 0 }));
     await assertFails(getDoc(doc(user(who), 'clidx/c1')));
     await assertFails(getDoc(doc(user(who), 'cliver/c1__p1')));
   }
   await assertFails(getDoc(doc(cap('cap1'), 'cli/buf')));
-  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'clidx/c1'), { label: 'Emitida sem 58', week: 58 }));
-  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
-  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'clidx/c1')));
+  // nadie se da acceso a sí mismo
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'members/editor@obra.pe'), { cli: true }));
+  await assertSucceeds(setDoc(doc(user('editor2@obra.pe'), 'clidx/c1'), { label: 'Emitida sem 58', week: 58 }));
+  await assertSucceeds(setDoc(doc(user('editor2@obra.pe'), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
+  await assertFails(deleteDoc(doc(user('editor2@obra.pe'), 'clidx/c1')));
   await assertSucceeds(deleteDoc(doc(user(OWNER), 'clidx/c1')));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
