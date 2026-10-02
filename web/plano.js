@@ -95,7 +95,9 @@ function renderMapa(main){ensureLam();
   if(note.dataset.h!==nh){note.innerHTML=nh;note.dataset.h=nh}
   const empty=$('#mempty');const eh=!lamReady?'Cargando láminas…':!L.length?`<div class="empty">${isAdmin?'Sube la <b>arquitectura</b> de este piso como plano base (PDF de AutoCAD, PNG o JPG). Luego sube las demás especialidades y alinéalas con dos puntos.':'Aún no hay láminas para este piso.'}</div>`:'';
   empty.innerHTML=eh;empty.hidden=!eh;
-  if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
+  if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});
+    /* clic derecho sobre un cruce: decidir (sin interferencia / prioridad) */
+    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const c=crossAt(M.view.toWorld(e.clientX,e.clientY));if(!c)return;e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c)});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
   const layers=[];const lay=(l,op,key)=>({key:key||l.id,l,w:l.w,h:l.h,T:l.T||I,op});
   if(cur){if(!cur.base&&base&&M.under){layers.push(lay(base,M.bop,'base'));layers.push({...lay(cur,M.op),blend:'multiply'})}else layers.push(lay(cur,cur.base?M.bop:1))}
   M.view.bounds=base?boundsOf({...base,T:base.T||I}):cur?boundsOf(cur):null;
@@ -112,7 +114,8 @@ function renderMapa(main){ensureLam();
   main.onchange=e=>{const t=e.target;if(t.id==='mpiso'){M.piso=t.value;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;requestRender()}if(t.id==='mscd'){M.scDraw=t.value;M.pend=null;M.selId=null;requestRender()}if(t.id==='munder'){M.under=t.checked;requestRender()}};
   main.oninput=e=>{if(e.target.id==='mop'){M.op=+e.target.value;requestRender()}};
   main.onmouseover=legHover;main.onmouseleave=()=>setHL(null);
-  main.addEventListener('change',e=>{if(e.target.id==='mmvis'){M.vista=e.target.value;M.sel=M.vista;requestRender();setTimeout(()=>meetGo(M.meetSc),200)}});
+  main.addEventListener('change',e=>{if(e.target.id==='mmpiso'){const v=e.target.value;if(U.piso){U.piso=v;saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.meetSc='';zcClose();requestRender();return}
+    if(e.target.id==='mmvis'){M.vista=e.target.value;M.sel=M.vista;requestRender();setTimeout(()=>meetGo(M.meetSc),200)}});
 }
 
 /* =====================================================================
@@ -164,12 +167,12 @@ const own=z=>!!z&&z.kind!=='nova'&&canPlan(z.sc);
 function rskMsg(aid){if(typeof restrPend!=='function')return'';const rs=restrPend(aid);if(!rs.length)return'';const x=S.act.get(aid);return`⚠ “${(x&&x.name)||'Actividad'}” tiene ${rs.length} restricción${rs.length>1?'es':''} pendiente${rs.length>1?'s':''}: ${rs.slice(0,2).map(rTxt).join(' | ')}${rs.length>2?' …':''}. Se programa igual, queda marcada con alerta.`}
 function rskWarn(aid,quiet){const m=rskMsg(aid);if(m&&!quiet)toast(m);return m?1:0}
 function zoneAlerts(zid,aid){const msgs=[];const rs=rskMsg(aid);if(rs)msgs.push(rs);try{computeCross()}catch(e){}
-  const c=CROSS.list.find(c=>c.a.id===zid||c.b.id===zid);if(c){const o=c.a.id===zid?c.b:c.a;msgs.push(`⚠ Superposición con ${conOf(o.sc).name}: ${zoneLabel(o)}. Revisa el área rayada en rojo.`)}
-  const s2=CROSS.seq.find(c=>c.a.id===zid||c.b.id===zid);if(s2){const o=s2.a.id===zid?s2.b:s2.a;msgs.push(`↔ Comparte zona con ${zoneLabel(o)} (mismo subcontratista: secuencia constructiva, no es interferencia).`)}
+  const ZL_=planNumbering(null).zl;const c=CROSS.list.find(c=>c.a.id===zid||c.b.id===zid);if(c){const o=c.a.id===zid?c.b:c.a;msgs.push(`⚠ Superposición con ${conOf(o.sc).name}: ${zNo(o,ZL_)}${zoneLabel(o)}. Revisa el área rayada en rojo.`)}
+  const s2=CROSS.seq.find(c=>c.a.id===zid||c.b.id===zid);if(s2){const o=s2.a.id===zid?s2.b:s2.a;msgs.push(`↔ Comparte zona con ${zNo(o,ZL_)}${zoneLabel(o)} (mismo subcontratista: secuencia constructiva, no es interferencia).`)}
   if(msgs.length)toast(msgs.join('  ·  '))}
 function newZone(pts,link,vista){const id=uid('pz');const x=link.actId?S.act.get(link.actId):null;
   const doc={date:M.date,pisoId:M.piso,vista:vista||M.vista,sc:x?x.sc:M.scDraw,kind:'zona',pts:flat(pts),actId:link.actId||null,ambId:x?x.ambId:(link.ambId||null),desc:link.desc||'',fuera:!link.actId,by:me.email,byName:me.name||me.email,ts:NOW()};
-  rec([addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=null;requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
+  rec([addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=null;if(M.meet){M.tool='pan';M.selId=null}requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
   toast(link.actId?`Zona de “${short(x.name,40)}” guardada`:'Trabajo no programado ubicado','Deshacer',undo)}
 function newNote(kind,pts,t){const id=uid('pz');const doc={date:M.date,pisoId:M.piso,vista:M.vista,sc:M.scDraw,kind,pts:flat(pts),t:t||'',actId:null,by:me.email,byName:me.name||me.email,ts:NOW()};
   if(kind==='texto')doc.fs=M.fs;else doc.w=M.lw;rec([addDoc(id,doc)]);M.selId=id;requestRender()}
@@ -187,14 +190,15 @@ function npDialog(anchor,pts,onPick){openPop(anchor,`<div class="ph">Trabajo no 
   setTimeout(()=>{const i=$('#npd');if(i){i.focus();i.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=ok]').click()}})}},0)}
 function textDialog(w,cx,cy,z){openPop(anchorAt(cx,cy),`<div class="ph">${z?'Editar texto':'Texto en el plano'}</div><div class="qrow" style="padding:0 10px 8px"><input id="ntx" placeholder="Escribe la nota" value="${z?esc(z.t||''):''}" style="width:240px;text-align:left" aria-label="Texto"></div><button data-do="ok">${z?'Guardar':'Poner texto'}</button>`,
   {ok:()=>{const t=($('#ntx')?.value||'').trim();if(!t)return;if(z){rec([updDoc(z.id,{t},{t:z.t})]);requestRender()}else newNote('texto',[w],t)}});setTimeout(()=>{const i=$('#ntx');if(i){i.focus();i.select();i.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=ok]').click()}})}},0)}
-function novaDialog(btn,x){const cnc=(P().cnc||[]);const t0=todayIso();let def=addD(M.date,1);if(pd(def).getUTCDay()===0)def=addD(def,1);const cw=typeof canWrite!=='undefined'&&canWrite;
-  function save(motivo,rdate){const id=uid('pz');const doc={date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo,repTo:rdate||'',by:me.email,byName:me.name||me.email,ts:NOW()};const g=[addDoc(id,doc)];
+function novaDialog(btn,x,opt){opt=opt||{};const cnc=(P().cnc||[]);const t0=todayIso();let def=addD(M.date,1);if(pd(def).getUTCDay()===0)def=addD(def,1);const cw=typeof canWrite!=='undefined'&&canWrite;
+  const sug=opt.motivo&&(cnc.find(k=>k===opt.motivo)||cnc.find(k=>/interfer|cruce|frente|otra partida/i.test(k)))||opt.motivo||'';const cncL=sug&&!cnc.includes(sug)?[sug,...cnc]:cnc;
+  function save(motivo,rdate){const id=uid('pz');const doc={date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo,repTo:rdate||'',...(opt.prio?{prio:opt.prio}:{}),by:me.email,byName:me.name||me.email,ts:NOW()};const g=[addDoc(id,doc)];
     shapesOf(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).forEach(z=>g.push(remDoc(z.id)));rec(g.filter(Boolean));
-    let regd=false;if(typeof canDaily!=='undefined'&&canDaily&&M.date<=t0){const cur=recOf(M.date,x.id);writeDaily(M.date,M.piso,{recs:{[x.id]:{...baseRec(M.date,x,cur),status:'no',cnc:motivo,imp:null,note:(cur&&cur.note)||'No se hará hoy (plano diario)',viaNova:true}}});regd=true}
+    let regd=false;if(typeof canDaily!=='undefined'&&canDaily&&M.date<=t0){const cur=recOf(M.date,x.id);writeDaily(M.date,M.piso,{recs:{[x.id]:{...baseRec(M.date,x,cur),status:'no',cnc:motivo,imp:null,note:(cur&&cur.note)||'No se hará hoy (plan diario)',viaNova:true}}});regd=true}
     if(rdate&&cw)reprogAct(x.id,rdate,M.date);
     requestRender();toast(`No se hará hoy${regd?' · registrada como no cumplida':''}${rdate&&cw?' · reprogramada para el '+fmtD(rdate):''}`,'Deshacer',()=>revertNova(id))}
-  openPop(btn,`<div class="ph">No se hará hoy</div><div class="ptx">Estaba programada para hoy pero no se va a ejecutar. ${M.date<=t0?'Queda registrada como <b>no cumplida</b> (cuenta en el PPC del día) con el motivo que elijas.':'Quedará anotada en el plan del día.'}</div>
-   <div class="qrow"><select id="nvm" aria-label="Motivo">${cnc.map(k=>`<option>${esc(k)}</option>`).join('')}</select></div>
+  openPop(btn,`<div class="ph">${opt.title?esc(opt.title):'No se hará hoy'}</div><div class="ptx">${opt.lead?opt.lead+' ':''}Estaba programada para hoy pero no se va a ejecutar. ${M.date<=t0?'Queda registrada como <b>no cumplida</b> (cuenta en el PPC del día) con el motivo que elijas.':'Quedará anotada en el plan del día.'}</div>
+   <div class="qrow"><select id="nvm" aria-label="Motivo">${cncL.map(k=>`<option${k===sug?' selected':''}>${esc(k)}</option>`).join('')}</select></div>
    ${cw?`<div class="qrow"><label class="mu">Reprogramar para <input type="date" id="nvd" min="${addD(M.date,1)}" value="${def}"></label></div>`:''}
    ${cw?'<button data-do="ok" class="pri">Confirmar y reprogramar</button><button data-do="nod">Confirmar, reprogramo después</button>':'<button data-do="nod" class="pri">Confirmar</button>'}<button data-do="no">Cancelar</button>`,
    {no:()=>{},nod:()=>save(($('#nvm')||{}).value||'',''),ok:()=>{const v=($('#nvd')||{}).value;if(!v){toast('Elige la fecha o usa “reprogramo después”.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}save(($('#nvm')||{}).value||'',v)}})}
@@ -204,7 +208,10 @@ function revertNova(id){const z=PD.get(id);if(!z)return;const o=remDoc(id);if(o)
     if(z.repTo&&typeof canWrite!=='undefined'&&canWrite&&(x.days||[]).includes(z.repTo)&&!recOf(z.repTo,x.id)){const nx={...x,days:(x.days||[]).filter(d=>d!==z.repTo)};if(nx.qty){nx.qty={...nx.qty};delete nx.qty[z.repTo]}apply([op('acts',x.id,nx)],'Reprogramación deshecha')}}
   requestRender();toast('Deshecho')}
 /* ---------- dibujo sobre el plano ---------- */
-function tapSelect(w,e){if(M.tool!=='pan'||M.meet)return;const els=document.elementsFromPoint(e.clientX,e.clientY);const z=els.map(el=>el.closest&&el.closest('[data-z]')).find(Boolean);M.selId=z&&z.dataset.z?z.dataset.z:null;requestRender()}
+function tapSelect(w,e){if(M.tool!=='pan')return;const els=document.elementsFromPoint(e.clientX,e.clientY);const z=els.map(el=>el.closest&&el.closest('[data-z]')).find(Boolean);const zid=z&&z.dataset.z?z.dataset.z:null;
+  if(M.meet&&typeof canWrite!=='undefined'&&canWrite){const c=crossAt(w);if(c){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
+  if(M.meet||M.colorBy==='cu'){const zz=zid&&PD.get(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY);else zcClose();if(M.meet)return}
+  M.selId=zid;requestRender()}
 function hitIds(cx,cy,r){const out=new Set();const pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r]];for(const[dx,dy]of pts){for(const el of document.elementsFromPoint(cx+dx,cy+dy)){const z=el.closest&&el.closest('[data-z]');if(z&&z.dataset.z)out.add(z.dataset.z)}}return[...out]}
 const erasable=z=>own(z)&&(myRole()==='sc'||z.sc===M.scDraw)&&(M.eraseWhat==='all'||z.kind!=='zona');
 function installDraw(v){const host=v.host;let drag=null;
@@ -300,21 +307,91 @@ const STI={ok:'✓',partial:'½',no:'✗',none:'·'};const STT={ok:'Cumplido',pa
 function zRec(z){return z&&z.actId&&typeof recOf==='function'?recOf(M.date,z.actId):null}
 const zSt=z=>{const r=zRec(z);return r?r.status:'none'};
 function cumplSum(){const acts=dayActs(M.piso,M.date);const o={ok:0,partial:0,no:0,none:0,n:acts.length};acts.forEach(({x})=>{const r=typeof recOf==='function'?recOf(M.date,x.id):null;o[r?r.status:'none']++});return o}
-function setRec(z,status,cnc){if(typeof writeDaily!=='function')return;const x=S.act.get(z.actId);if(!x)return;const cur=zRec(z);const r=typeof baseRec==='function'?baseRec(M.date,x,cur):{};r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else if(cnc!=null){r.cnc=cnc;r.imp=null}
+function setRec(z,status,cnc){if(typeof writeDaily!=='function')return;const x=S.act.get(z.actId);if(!x)return;const cur=zRec(z);const r=typeof baseRec==='function'?baseRec(M.date,x,cur):{};
+  /* corrección de algo ya registrado: queda el rastro (qué decía antes y quién lo había registrado) */
+  if(cur&&cur.status&&!cur._prop&&(cur.status!==status||(cnc!=null&&(cur.cnc||'')!==cnc))){r.hist=[...(cur.hist||[]),{st:cur.status,cnc:cur.cnc||'',by:cur.by||'',n:cur.byName||cur.by||'',t:cur.ts||0}].slice(-10);r.corr={n:me.name||me.email,by:me.email,t:NOW(),via:M.meet?'reunión':'plan diario'}}
+  else if(cur&&cur.hist){r.hist=cur.hist;if(cur.corr)r.corr=cur.corr}
+  r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else if(cnc!=null){r.cnc=cnc;r.imp=null}
   if(status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;writeDaily(M.date,M.piso,{recs:{[x.id]:r}});requestRender();toast(`${STT[status]} registrado en Campo`)}
 function campoProps(z){if(!z||z.kind!=='zona'||!z.actId)return'';const r=zRec(z);const st=r?r.status:'none';const future=M.date>todayIso();
   let h=`<span class="cst" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${r&&r.cnc?' · '+esc(r.cnc):''}</span>${r&&r.note?`<span class="mu">“${esc(short(r.note,60))}”</span>`:''}${r?`<span class="mu">${esc(r.byName||r.by||'')}</span>`:''}`;
   if(typeof canDaily!=='undefined'&&canDaily&&!future)h+=`<span class="mseg">${['ok','partial','no'].map(k=>`<button data-rst="${k}" class="${st===k?'on':''}" title="Registrar: ${STT[k]}">${STI[k]} ${STT[k]}</button>`).join('')}</span>`;
   return h}
+/* ---------- decisión sobre un cruce (reunión / plano diario) ---------- */
+function crossPop(anchor,c){if(!(typeof canWrite!=='undefined'&&canWrite)){toast('Las decisiones sobre los cruces las toma el ingeniero.');return}
+  const A=c.a,B=c.b;const ZL_=planNumbering(null).zl;const nm=z=>`${zNoH(z,ZL_)} <b>${esc(conOf(z.sc).name)}</b> ${esc(zoneLabel(z))}`;const xa=A.actId&&S.act.get(A.actId),xb=B.actId&&S.act.get(B.actId);
+  const lose=(win,los)=>{const xl=los.actId&&S.act.get(los.actId);if(xl)novaDialog(anchor,xl,{motivo:'Interferencia con otra partida',prio:{actId:win.actId||'',sc:win.sc,zona:win.id},title:`Prioridad a ${conOf(win.sc).name}`,lead:`${esc(conOf(los.sc).name)} no va hoy en esa zona.`});
+    else{const o=remDoc(los.id);if(o){rec([o]);requestRender();toast(`Prioridad a ${conOf(win.sc).name}: se quitó el trabajo no programado de ${conOf(los.sc).name}`,'Deshacer',undo)}}};
+  openPop(anchor,`<div class="ph">Cruce</div><div class="ptx">${nm(A)}<br>↔ ${nm(B)}</div>
+    <button data-do="ok">✓ Sin interferencia: pueden trabajar a la vez</button>
+    <button data-do="pa">Prioridad a ${esc(zNo(A,ZL_)+conOf(A.sc).name)} · ${esc(zNo(B,ZL_)+conOf(B.sc).name)} no va hoy…</button>
+    <button data-do="pb">Prioridad a ${esc(zNo(B,ZL_)+conOf(B.sc).name)} · ${esc(zNo(A,ZL_)+conOf(A.sc).name)} no va hoy…</button>`,
+   {ok:()=>{const z=PD.get(A.id);if(!z)return;const before={xok:z.xok||null};const xok={...(z.xok||{}),[B.id]:{n:me.name||me.email,by:me.email,t:NOW()}};const o=updDoc(A.id,{xok},before);if(o)rec([o]);CROSS.key='';requestRender();toast('Cruce marcado sin interferencia','Deshacer',undo)},
+    pa:()=>setTimeout(()=>lose(A,B),0),pb:()=>setTimeout(()=>lose(B,A),0)})}
+function crossAt(w){for(const c of CROSS.list){const r=c.r;if(r&&w.x>=r.x&&w.x<=r.x+r.w&&w.y>=r.y&&w.y<=r.y+r.h)return c}return null}
+/* ---------- acciones rápidas sobre una actividad del día (lista de la reunión) ---------- */
+function actQuick(anchor,aid){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const prev=ZN.get(aid);const t0=todayIso();
+  const cp=canPlan(x.sc),cd=typeof canDaily!=='undefined'&&canDaily&&M.date<=t0;const cr=typeof rCanAdd==='function'&&(typeof canWrite!=='undefined'&&canWrite||(typeof SCK==='function'&&SCK()&&myScs().includes(x.sc)));
+  const later=(x.days||[]).filter(y=>y>M.date).length;const h={};let html=`<div class="ph">${esc(x.name||'(sin nombre)')}</div><div class="ptx">${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')} · sin ubicar en el plano</div>`;
+  if(cp&&prev){html+=`<button data-do="prev">📍 Ubicar donde trabajó la última vez</button>`;h.prev=()=>{M.scDraw=x.sc;newZone(unflat(prev.pts),{actId:aid},prev.vista);toast('Ubicada como la última vez. Ajústala si cambia.')}}
+  if(cp&&!PHONE()){html+=`<button data-do="draw">✏️ Dibujar su zona en el plano</button>`;h.draw=()=>{M.scDraw=x.sc;M.pend={actId:aid};if(typeof rskWarn==='function')rskWarn(aid);M.tool='zona';M.selId=null;requestRender();toast('Dibuja la zona en el plano: toca las esquinas y cierra en la primera.')}}
+  if(cd){html+=`<button data-do="done">✓ Ya está terminada${later?` <kbd>libera ${later} día${later>1?'s':''}</kbd>`:''}</button>`;h.done=()=>{if(typeof markDone==='function'){markDone(aid,M.date);requestRender()}}}
+  if(cp||cd){html+=`<button data-do="nova">⏸ No se hará hoy…</button>`;h.nova=()=>setTimeout(()=>novaDialog(anchor,x),0)}
+  if(cr){html+=`<button data-do="rst">⚠ Tiene una restricción…</button>`;h.rst=()=>setTimeout(()=>restrQuick(anchor,x),0)}
+  if(!Object.keys(h).length)html+=`<div class="ptx">No tienes permiso para cambiarla.</div>`;
+  openPop(anchor,html,h)}
+/* registrar una restricción sin salir de la reunión (y, si se quiere, dejar la actividad fuera del día) */
+function restrQuick(anchor,x){const types=P().restrTypes||[];const need=M.date;
+  openPop(anchor,`<div class="ph">Restricción · ${esc(short(x.name||'',30))}</div>
+    <div class="qrow"><select id="rqt" aria-label="Tipo">${types.map(t=>`<option>${esc(t)}</option>`).join('')||'<option>Restricción</option>'}</select></div>
+    <div class="qrow"><input id="rqd" placeholder="¿Qué falta liberar?" style="width:240px;text-align:left" aria-label="Descripción"></div>
+    <div class="qrow"><label class="mu">Se necesita para <input type="date" id="rqn" value="${need}"></label></div>
+    <label class="chk" style="padding:2px 10px 6px"><input type="checkbox" id="rqno" checked> Además: no se hará hoy</label>
+    <button data-do="ok" class="pri">Registrar</button><button data-do="no">Cancelar</button>`,
+   {no:()=>{},ok:()=>{const desc=($('#rqd')||{}).value||'';if(!desc.trim()){toast('Describe qué falta liberar.');return}const id=uid('res');const nov=!!($('#rqno')||{}).checked;
+     apply([op('restr',id,{id,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#rqt')||{}).value||'',desc:desc.trim(),resp:conOf(x.sc).name,need:($('#rqn')||{}).value||'',freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción registrada');
+     if(nov)setTimeout(()=>novaDialog(anchor,x,{motivo:'Restricción',title:'Restricción · no se hará hoy'}),0)}});
+  setTimeout(()=>{const i=$('#rqd');if(i)i.focus()},30)}
+/* ---------- ventana de detalle de cumplimiento (modo Cumplimiento y modo reunión) ---------- */
+let ZC=null;
+function zcClose(){const el=document.getElementById('mzc');if(el)el.remove();ZC=null}
+function zCard(aid,cx,cy){ZC={aid,cx:cx??(ZC&&ZC.cx),cy:cy??(ZC&&ZC.cy)};zcRender()}
+function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();return}const a=S.amb.get(x.ambId);const r=typeof recOf==='function'?recOf(M.date,x.id):null;const st=r?r.status:'none';
+  const future=M.date>todayIso();const can=typeof canDaily!=='undefined'&&canDaily&&!future;const N=nbMap();const lv=typeof liveOf==='function'?liveOf(M.date,x.id):null;
+  const phs=[...new Set([...(r&&r.photos||[]),...(lv&&lv.photos||[])])];phs.forEach(id=>typeof loadFoto==='function'&&loadFoto(id));
+  let h=`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
+    <div class="zcst" style="--c:${STC[st]}"><b>${STI[st]} ${STT[st]}</b>${r&&r.cnc?`<span>Causa: ${esc(r.cnc)}</span>`:''}${r&&r._prop?'<span>Cierre del capataz · por confirmar</span>':''}</div>
+    ${r&&r.note?`<p class="zcn">“${esc(r.note)}”</p>`:''}
+    ${r?`<p class="zcm">${r._prop?'Lo reportó':'Lo registró'} ${esc(r.byName||r.by||'—')}${r.ts?' · '+fmtD(ldt(r.ts))+' '+hhmm(r.ts):''}${r.corr?` · <b>corregido en ${esc(r.corr.via)}</b>`:''}</p>`:'<p class="zcm">Nadie registró el cumplimiento de este día.</p>'}
+    ${r&&(r.hist||[]).length?`<ul class="zchi">${r.hist.slice().reverse().map(o=>`<li>Antes: ${STI[o.st]||''} ${esc(STT[o.st]||o.st)}${o.cnc?' · '+esc(o.cnc):''} · ${esc(o.n||'')}${o.t?' · '+fmtD(ldt(o.t))+' '+hhmm(o.t):''}</li>`).join('')}</ul>`:''}
+    ${lv&&lv.mot?`<p class="zcm">Detención reportada: ${esc(lv.mot)}</p>`:''}
+    ${phs.length?`<div class="zcph">${phs.map(id=>`<img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto del registro"${FOTO.get(id)?'':' style="opacity:.3"'}>`).join('')}</div>`:''}
+    ${can?`<div class="zcb">${r&&r._prop?'<button class="ib pri" data-zcs="conf">✓ Confirmar lo reportado</button>':''}${['ok','partial','no'].map(k=>`<button class="ib zcb-${k}${st===k&&!(r&&r._prop)?' on':''}" data-zcs="${k}">${STI[k]} ${STT[k]}</button>`).join('')}</div>${r&&r.status&&!r._prop?'<p class="zcm">Si lo cambias, queda registrado quién lo corrigió y qué decía antes.</p>':''}`:future?'<p class="zcm">Día futuro: aún no se registra el cumplimiento.</p>':''}`;
+  let el=document.getElementById('mzc');if(!el){el=document.createElement('div');el.id='mzc';el.className='mzc';el.setAttribute('role','dialog');document.body.appendChild(el);el.onclick=zcClick}
+  if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}
+  const W=el.offsetWidth,H=el.offsetHeight;if(innerWidth<=760){el.style.left='';el.style.top='';return}
+  let lx=(ZC.cx||innerWidth/2)+14,ly=(ZC.cy||innerHeight/2)-20;if(lx+W>innerWidth-10)lx=Math.max(10,(ZC.cx||0)-W-14);if(ly+H>innerHeight-10)ly=Math.max(10,innerHeight-H-10);el.style.left=lx+'px';el.style.top=Math.max(10,ly)+'px'}
+function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}
+  const im=t.closest('img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')&&typeof lightbox==='function'){lightbox(im.src);return}
+  const b=t.closest('[data-zcs]');if(!b||!ZC)return;const k=b.dataset.zcs;const x=S.act.get(ZC.aid);if(!x)return;const z={actId:x.id};
+  if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Confirmado');setTimeout(zcRender,60)}return}
+  if(k==='ok'){setRec(z,'ok');setTimeout(zcRender,60);return}
+  const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>{setRec(z,k,c);setTimeout(zcRender,60)};return`<button data-do="c${i}">${esc(c)}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>{setRec(z,k,'');setTimeout(zcRender,60)}})}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ZC){e.stopImmediatePropagation();zcClose()}});
 function pip(p,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){if(((P[i].y>p.y)!==(P[j].y>p.y))&&(p.x<(P[j].x-P[i].x)*(p.y-P[i].y)/(P[j].y-P[i].y)+P[i].x))c=!c}return c}
 function overlapFrac(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);if(x1<=x0||y1<=y0)return 0;
   const n=14;let both=0;for(let i=0;i<n;i++)for(let j=0;j<n;j++){const p={x:x0+(i+.5)*(x1-x0)/n,y:y0+(j+.5)*(y1-y0)/n};if(pip(p,A)&&pip(p,B))both++}
   const inter=both/(n*n)*(x1-x0)*(y1-y0);const area=P=>{let s=0;for(let i=0,j=P.length-1;i<P.length;j=i++)s+=(P[j].x+P[i].x)*(P[j].y-P[i].y);return Math.abs(s/2)};return inter/Math.max(1,Math.min(area(A),area(B)))}
 const CROSS={key:'',list:[],ids:new Set(),seq:[],seqIds:new Set()};
+/* decisión de la reunión: el par de zonas puede trabajar a la vez (se guarda en la zona: xok:{otraZona:{n,by,t}}) */
+/* N.º con que la zona aparece en el plano (número de la actividad o letra si no es programada) */
+const zNo=(z,zl)=>{const n=zl&&zl.get(z.id);return n?`N.º ${n} · `:''};
+const zNoH=(z,zl)=>{const n=zl&&zl.get(z.id);if(!n)return'';const c=conOf(z.sc).color;return`<i class="nbi${lum(c)>.55?' lt':''}" style="--c:${c}">${esc(n)}</i>`};
+const xDecided=(a,b)=>!!((a.xok&&a.xok[b.id])||(b.xok&&b.xok[a.id]));
 function interRect(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);return x1>x0&&y1>y0?{x:x0,y:y0,w:x1-x0,h:y1-y0}:null}
-function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');const key=M.piso+M.vista+M.date+zs.map(z=>z.id+(z.pts||[]).join(',')+z.sc+(z.actId||'')).join('|');if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
+function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');const key=M.piso+M.vista+M.date+zs.map(z=>z.id+(z.pts||[]).join(',')+z.sc+(z.actId||'')+(z.xok?Object.keys(z.xok).join(','):'')).join('|');if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
   for(let i=0;i<zs.length;i++)for(let j=i+1;j<zs.length;j++){const a=zs[i],b=zs[j];const A=unflat(a.pts),B=unflat(b.pts);const f=overlapFrac(A,B);if(f<=0.15)continue;const r=interRect(A,B);
-    if(a.sc!==b.sc){CROSS.list.push({a,b,f,r});CROSS.ids.add(a.id);CROSS.ids.add(b.id)}
+    if(a.sc!==b.sc){if(xDecided(a,b))continue;CROSS.list.push({a,b,f,r});CROSS.ids.add(a.id);CROSS.ids.add(b.id)}
     else if(a.actId&&b.actId&&a.actId!==b.actId){CROSS.seq.push({a,b,f,r});CROSS.seqIds.add(a.id);CROSS.seqIds.add(b.id)}}}
 function meetScs(){return scsOfDay()}
 function zoneBoxes(sc){return shapesV(M.piso).filter(z=>z.kind!=='nova'&&(!sc||z.sc===sc)).flatMap(z=>unflat(z.pts))}
@@ -324,21 +401,21 @@ function actRows(sc){const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc);co
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
   if(!M.meet){bar.hidden=true;card.hidden=true;const st=$('#mstage');if(st)st.style.top='';return}
   const scs=meetScs();if(M.meetSc&&!scs.includes(M.meetSc))M.meetSc='';const i=scs.indexOf(M.meetSc);
-  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><b>${esc(S.pis.get(M.piso)?.name||'')}</b> · ${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</span>
+  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><select id="mmpiso" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select><span class="mmday"><button class="ib" data-mdd="-1" title="Día anterior" aria-label="Día anterior">&#8249;</button><b>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" title="Día siguiente" aria-label="Día siguiente">&#8250;</button>${M.date!==todayIso()?'<button class="ib" data-mdd="0">Hoy</button>':''}</span></span>
     <span class="mmnav"><button class="ib" data-mm="-1" title="Anterior (←)">‹</button><button class="mmall${M.meetSc?'':' on'}" data-msc="">Todos</button>${scs.map(c=>`<button class="mmsc${c===M.meetSc?' on':''}" data-msc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}<button class="ib" data-mm="1" title="Siguiente (→)">›</button></span>
-    ${CROSS.list.length?`<span class="mmcx">⚠ ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</span>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>`;
+    ${CROSS.list.length?`<span class="mmcx">⚠ ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</span>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>${M.tool!=='pan'?`<span class="mmdraw">✏️ Dibuja la zona${M.pend&&M.pend.actId&&S.act.get(M.pend.actId)?' de «'+esc(short(S.act.get(M.pend.actId).name,28))+'»':''} <button class="ib" id="mcancel">Cancelar</button></span>`:''}`;
   if(bar.dataset.h!==bh){bar.innerHTML=bh;bar.dataset.h=bh}bar.hidden=false;
   let ch='';const NBM=nbMap();
   if(M.meetSc){const sc=M.meetSc;const R=actRows(sc);const ok=R.filter(r=>r.zs.length).length,no=R.filter(r=>r.nv).length;const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
     const cx=CROSS.list.filter(c=>c.a.sc===sc||c.b.sc===sc);
     ch=`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${i+1} de ${scs.length} · ${ok} de ${R.length} ubicadas${no?` · ${no} no se hará hoy`:''}</span></div></div>
-      <ol class="mcl">${R.map(r=>`<li class="${r.nv?'nv':r.zs.length?'ok':'pe'}">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)}${(()=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;return rc?` <span class="cst sm" style="--c:${STC[rc.status]}">${STI[rc.status]} ${STT[rc.status]}${rc.cnc?' · '+esc(rc.cnc):''}</span>`:''})()}</b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No se hará hoy · ${esc(r.nv.motivo||'')}</em>`:r.zs.length?'':'<em class="pe">Sin ubicar en el plano</em>'}</div></li>`).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
+      <ol class="mcl">${R.map(r=>`<li class="${r.nv?'nv':r.zs.length?'ok':'pe'}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)}${(()=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;return rc?` <span class="cst sm" style="--c:${STC[rc.status]}">${STI[rc.status]} ${STT[rc.status]}${rc.cnc?' · '+esc(rc.cnc):''}</span>`:''})()}</b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No se hará hoy · ${esc(r.nv.motivo||'')}</em>`:r.zs.length?'':'<em class="pe">Sin ubicar en el plano · toca para ver opciones</em>'}</div></li>`).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
       ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}
-      ${cx.length?`<div class="mcs warn">⚠ Cruces</div>${cx.map(c=>{const o=c.a.sc===sc?c.b:c.a;const me_=c.a.sc===sc?c.a:c.b;return`<button class="mcx" data-cx="${me_.id}|${o.id}">${esc(zoneLabel(me_))} ↔ <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}</button>`}).join('')}`:''}`}
+      ${cx.length?`<div class="mcs warn">⚠ Cruces</div>${cx.map(c=>{const o=c.a.sc===sc?c.b:c.a;const me_=c.a.sc===sc?c.a:c.b;const ZL_=NBZ();return`<button class="mcx" data-cx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} ${esc(zoneLabel(me_))} ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}</button>`}).join('')}`:''}`}
   else{const rows=scs.map(c=>{const R=actRows(c);return{c,n:R.length,ok:R.filter(r=>r.zs.length).length,no:R.filter(r=>r.nv).length}});const tot=rows.reduce((a,r)=>({n:a.n+r.n,ok:a.ok+r.ok,no:a.no+r.no}),{n:0,ok:0,no:0});
     ch=`<div class="mch all"><div><b>Plan del día</b><span>${scs.length} subcontratistas · ${tot.ok} de ${tot.n} actividades ubicadas${tot.no?` · ${tot.no} no van`:''}</span></div></div>
       <div class="mleg">${rows.map(r=>`<button data-msc="${r.c}" style="--c:${conOf(r.c).color}"><i></i><span>${esc(conOf(r.c).name)}</span><b>${r.ok}/${r.n}</b>${r.no?`<em>${r.no} no va</em>`:''}</button>`).join('')}</div>
-      ${CROSS.list.length?`<div class="mcs warn">⚠ Cruces (${CROSS.list.length})</div>${CROSS.list.map(c=>`<button class="mcx" data-cx="${c.a.id}|${c.b.id}"><b>${esc(conOf(c.a.sc).name)}</b> ${esc(zoneLabel(c.a))} ↔ <b>${esc(conOf(c.b.sc).name)}</b> ${esc(zoneLabel(c.b))}</button>`).join('')}`:'<div class="note" style="padding:6px 2px">Sin cruces entre subcontratistas.</div>'}
+      ${CROSS.list.length?`<div class="mcs warn">⚠ Cruces (${CROSS.list.length})</div>${(ZL_=>CROSS.list.map(c=>`<button class="mcx" data-cx="${c.a.id}|${c.b.id}">${zNoH(c.a,ZL_)} <b>${esc(conOf(c.a.sc).name)}</b> ${esc(zoneLabel(c.a))} ↔ ${zNoH(c.b,ZL_)} <b>${esc(conOf(c.b.sc).name)}</b> ${esc(zoneLabel(c.b))}</button>`).join(''))(NBZ())}`:'<div class="note" style="padding:6px 2px">Sin cruces entre subcontratistas.</div>'}
       <div class="note" style="padding:6px 2px">Usa ‹ › o las flechas del teclado para pasar de un subcontratista a otro.</div>`}
   if(card.dataset.h!==ch){card.innerHTML=ch;card.dataset.h=ch}card.hidden=false;
   const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
@@ -351,12 +428,13 @@ function meetClick(e){const t=e.target;let b;
   if(t.closest('#mmfs')){try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>toast('Tu navegador no permite pantalla completa aquí.'))}catch(err){toast('Tu navegador no permite pantalla completa aquí.')}return true}
   if((b=t.closest('[data-msc]'))){meetGo(b.dataset.msc);return true}
   if((b=t.closest('[data-mm]'))){meetStep(+b.dataset.mm);return true}
-  if((b=t.closest('[data-cx]'))){const ids=b.dataset.cx.split('|');const P=ids.flatMap(id=>{const z=PD.get(id);return z?unflat(z.pts):[]});zoomTo(P);return true}
+  if((b=t.closest('[data-mact]'))){const rc=b.getBoundingClientRect();if(b.classList.contains('pe')){zcClose();actQuick(b,b.dataset.mact)}else zCard(b.dataset.mact,rc.right,rc.top);return true}
+  if((b=t.closest('[data-cx]'))){const ids=b.dataset.cx.split('|');const P=ids.flatMap(id=>{const z=PD.get(id);return z?unflat(z.pts):[]});zoomTo(P);const c=CROSS.list.find(q=>(q.a.id===ids[0]&&q.b.id===ids[1])||(q.a.id===ids[1]&&q.b.id===ids[0]));if(c&&typeof canWrite!=='undefined'&&canWrite)setTimeout(()=>crossPop(b,c),250);return true}
   if(t.closest('#mexp,.mexp')){exportPNG(M.meetSc);return true}
   return false}
 function meetStep(d){const scs=meetScs();const all=['',...scs];let i=all.indexOf(M.meetSc);i=(i+d+all.length)%all.length;meetGo(all[i])}
 document.addEventListener('keydown',e=>{if(U.tab!=='mapa'||!M.meet||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||''))return;
-  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();meetStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();meetStep(-1)}else if(e.key==='Escape'&&!document.fullscreenElement){M.meet=false;M.meetSc='';requestRender()}});
+  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();meetStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();meetStep(-1)}else if(e.key==='Escape'&&M.tool!=='pan'){M.pend=null;M.tmp=null;M.tool='pan';requestRender()}else if(e.key==='Escape'&&!document.fullscreenElement){M.meet=false;M.meetSc='';requestRender()}});
 /* ---------- exportar el plan del día como imagen PNG ---------- */
 function loadImgEl(src){return new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('No se pudo leer la lámina'));i.src=src})}
 /* ---------- exportar el plan del día: imagen y PDF ---------- */
@@ -373,7 +451,7 @@ function planNumbering(vistaId,pid){ // un número por actividad ubicada (ordena
   return{items,np:npl,zl}}
 function crossPairs(zs){const list=[],seq=[];const Z=zs.filter(z=>z.kind==='zona');
   for(let i=0;i<Z.length;i++)for(let j=i+1;j<Z.length;j++){const a=Z[i],b=Z[j];const A=unflat(a.pts),B=unflat(b.pts);if(overlapFrac(A,B)<=.15)continue;const r=interRect(A,B);
-    if(a.sc!==b.sc)list.push({a,b,r});else if(a.actId&&b.actId&&a.actId!==b.actId)seq.push({a,b,r})}
+    if(a.sc!==b.sc){if(!xDecided(a,b))list.push({a,b,r})}else if(a.actId&&b.actId&&a.actId!==b.actId)seq.push({a,b,r})}
   return{list,seq}}
 /* dibuja el plano base tenue + zonas + números; devuelve el canvas */
 function cropBox(B0,zs){const P=zs.flatMap(z=>unflat(z.pts));if(!P.length)return B0;const bb=bboxOf(P);const pad=Math.max(Math.max(bb.w,bb.h)*.14,Math.max(B0.w,B0.h)*.04);
@@ -518,6 +596,7 @@ function placeLabels(L){const boxes=[],out=[],fixed=[],mov=[];L.forEach(l=>(l.nb
     if(hit(l.sx,l.sy,w,h)){let ok=false;for(let k=1;k<=10&&!ok;k++){const n=8+k*4;for(let i=0;i<n;i++){const a=i/n*2*Math.PI-Math.PI/2;const ex=Math.cos(a)*k*(w*.62+3),ey=Math.sin(a)*k*(h*.8+2);if(!hit(l.sx+ex,l.sy+ey,w,h)){dx=ex;dy=ey;ok=true;break}}}}
     boxes.push({x:l.sx+dx,y:l.sy+dy,w,h});out.push({...l,dx,dy})}
   return[...fixed.map(l=>({...l,dx:0,dy:0})),...out]}
+function NBZ(){return planNumbering(null).zl}
 function nbMap(){const N=planNumbering(null);return new Map(N.items.map(it=>[it.id,it.n]))}
 function nbHtml(m,id){if(!m.has(id))return'';const x=S.act.get(id);const c=conOf(x&&x.sc).color;return`<i class="nbi${lum(c)>.55?' lt':''}" style="--c:${c}" title="N.º en el plano">${m.get(id)}</i>`}
 function hlIds(zid){const z=PD.get(zid);if(!z)return[zid];if(z.actId)return shapesOf(z.pisoId).filter(q=>q.kind==='zona'&&q.actId===z.actId).map(q=>q.id);return[zid]}
@@ -680,8 +759,8 @@ function drSave(n){const keep={};Object.keys(n).forEach(k=>{if(k==='logo'||n[k]!
 function capInit(d){ensureLam();if(M.date!==d){M.date=d}ensurePlan()}
 function capNums(pid){const N=planNumbering(null,pid);return new Map(N.items.map(it=>[it.id,it.n]))}
 function novaSet(d){return new Set([...PD.values()].filter(z=>z.kind==='nova'&&z.date===d).map(z=>z.actId))}
-function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zona');const vs=[...new Set(zs.map(z=>zVista(z)))];
-  vs.forEach(v=>crossPairs(zs.filter(z=>zVista(z)===v)).list.forEach(c=>out.push({a:conOf(c.a.sc).name+': '+zoneLabel(c.a),b:conOf(c.b.sc).name+': '+zoneLabel(c.b)})));return out}
+function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zona');const vs=[...new Set(zs.map(z=>zVista(z)))];const ZL_=planNumbering(null,pid).zl;
+  vs.forEach(v=>crossPairs(zs.filter(z=>zVista(z)===v)).list.forEach(c=>out.push({a:zNo(c.a,ZL_)+conOf(c.a.sc).name+': '+zoneLabel(c.a),b:zNo(c.b,ZL_)+conOf(c.b.sc).name+': '+zoneLabel(c.b)})));return out}
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
 function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
@@ -723,8 +802,8 @@ function renderPlan(main,cur,base){
   if(sc){h+=`<div class="mp-prog"><span><b>${st.ok}</b> de ${st.n} ubicadas</span>${st.no?`<span class="no">${st.no} no se hará hoy</span>`:''}<label class="chk"><input type="checkbox" id="mscv"${M.scView===sc?' checked':''}> Resaltar solo ${esc(conOf(sc).name)}</label></div>`;
     try{computeCross()}catch(e){}
     {const cxs=CROSS.list.filter(c=>c.a.sc===sc||c.b.sc===sc),sq=CROSS.seq.filter(c=>c.a.sc===sc);
-      if(cxs.length)h+=`<div class="mp-sec" style="color:#b71c1c">⚠ Superposición con otros subcontratistas (${cxs.length})</div>${cxs.map(c=>{const me_=c.a.sc===sc?c.a:c.b,o=c.a.sc===sc?c.b:c.a;return`<button class="mp-cx" data-pcx="${me_.id}|${o.id}"><b>${esc(zoneLabel(me_))}</b> ↔ <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}<small>Toca para ir a la zona</small></button>`}).join('')}`;
-      if(sq.length)h+=`<div class="mp-sec">↔ Misma zona, mismo subcontratista (${sq.length})</div>${sq.map(c=>`<button class="mp-cx seq" data-pcx="${c.a.id}|${c.b.id}">${esc(zoneLabel(c.a))} + ${esc(zoneLabel(c.b))}<small>Secuencia constructiva: no es interferencia</small></button>`).join('')}`}
+      if(cxs.length)h+=`<div class="mp-sec" style="color:#b71c1c">⚠ Superposición con otros subcontratistas (${cxs.length})</div>${(ZL_=>cxs.map(c=>{const me_=c.a.sc===sc?c.a:c.b,o=c.a.sc===sc?c.b:c.a;return`<button class="mp-cx" data-pcx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} <b>${esc(zoneLabel(me_))}</b> ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}<small>Toca para ir a la zona · clic derecho sobre el cruce para decidir</small></button>`}).join(''))(NBZ())}`;
+      if(sq.length)h+=`<div class="mp-sec">↔ Misma zona, mismo subcontratista (${sq.length})</div>${(ZL_=>sq.map(c=>`<button class="mp-cx seq" data-pcx="${c.a.id}|${c.b.id}">${zNoH(c.a,ZL_)} ${esc(zoneLabel(c.a))} + ${zNoH(c.b,ZL_)} ${esc(zoneLabel(c.b))}<small>Secuencia constructiva: no es interferencia</small></button>`).join(''))(NBZ())}`}
     if(canD&&withPrev.length)h+=`<button class="ib mp-all" id="mprev">Usar zonas anteriores (${withPrev.length})</button>`;
     h+=`<div class="mp-list">${mine.map(({x,a})=>{const zs=zBy[x.id],nv=nBy[x.id];const cls=nv?'nv':zs?'ok':'';const prev=ZN.get(x.id);const sib=canD&&!zs&&!nv?mine.find(o=>o.x.id!==x.id&&o.x.ambId===x.ambId&&zBy[o.x.id]):null;
       return`<div class="mp-it ${cls}" data-act="${x.id}"><div class="t"><span class="mono">${esc(a.code)}</span> ${esc(x.name)}<small>${esc(a.name)}${hasQ(x)?` · ${fq((x.qty||{})[M.date])} ${esc(x.und||'')}`:''}</small>${(typeof restrPend==='function'?restrPend(x.id):[]).map(r=>`<div class="rsk" title="Puedes programarla igual; queda marcada">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}</div>
@@ -757,12 +836,12 @@ function renderPlan(main,cur,base){
   const pb=$('#mprops');if(pb.dataset.h!==props){pb.innerHTML=props;pb.dataset.h=props}pb.hidden=!props||!!M.meet;$('#mhint').style.top=props?'64px':'';
   $('#mstage').classList.toggle('draw',M.tool!=='pan');
   const hn=$('#mhint');if(hn.dataset.h!==hint){hn.innerHTML=hint;hn.dataset.h=hint}hn.hidden=!hint||!!M.meet;
-  renderMeet();drawOverlay();renderLeg()}
+  renderMeet();drawOverlay();renderLeg();if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'))zcClose();else zcRender()}}
 const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if(t.id==='mpan'||t.id==='mpx'){M.panel=!M.panel;requestRender();return true}
-  if((b=g('[data-mdd]'))){const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;ensurePlan();requestRender();return true}
+  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}
@@ -956,5 +1035,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,nums:capNums,novaSet,zonedSet,crossOf};
+window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
 })();

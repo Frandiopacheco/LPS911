@@ -24,6 +24,11 @@ test.beforeEach(async () => {
     await S('members/campo@obra.pe', { role: 'campo', name: 'Jefe de campo' });
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
+    await S('members/ot@obra.pe', { role: 'area', name: 'Jefe OT', area: 'OT' });
+    await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
+    await S('restr/r-ot', { actId: 'x1', grp: 'area', area: 'OT', by: 'editor@obra.pe', status: 'pend', freed: '', desc: 'Falta plano de detalle' });
+    await S('restr/r-cal', { actId: 'x1', grp: 'area', area: 'Calidad', by: 'editor@obra.pe', status: 'pend', freed: '' });
+    await S('restr/r-campo', { actId: 'x1', grp: 'campo', area: '', by: 'editor@obra.pe', status: 'pend', freed: '' });
     await S('members/u_cap1', { role: 'capataz', name: 'Juan', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('inv/abc', { active: true, exp: Date.now() + 864e5, scs: ['c-gabel'] });
     await S('inv/old', { active: true, exp: Date.now() - 1000, scs: ['c-gabel'] });
@@ -109,6 +114,23 @@ test('restricciones: el SC registra las de su partida y edita solo las suyas pen
   await assertSucceeds(deleteDoc(doc(sc, 'restr/r-sc')));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'restr/n8'), { ...base, by: 'lector@obra.pe' }));
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'restr/r-ed'), { status: 'lib', freed: '2026-10-01' }));
+});
+test('áreas de apoyo (OT, Calidad): ven todo y gestionan solo las restricciones de su área', async () => {
+  const ot = user('ot@obra.pe');
+  await assertSucceeds(getDoc(doc(ot, 'acts/x1')));
+  await assertSucceeds(getDoc(doc(ot, 'live/2026-10-01_x1')));
+  await assertFails(updateDoc(doc(ot, 'acts/x1'), { name: 'x' }));
+  await assertFails(setDoc(doc(ot, 'daily/2026-10-01_p1'), { recs: {} }));
+  await assertFails(getDocs(collection(ot, 'members')));
+  await assertSucceeds(updateDoc(doc(ot, 'restr/r-ot'), { status: 'lib', freed: '2026-10-01', desc: 'Plano entregado' }));
+  await assertFails(updateDoc(doc(ot, 'restr/r-cal'), { status: 'lib' }));
+  await assertFails(updateDoc(doc(ot, 'restr/r-campo'), { status: 'lib' }));
+  await assertFails(updateDoc(doc(ot, 'restr/r-ot'), { area: 'Calidad' }));
+  await assertSucceeds(setDoc(doc(ot, 'restr/n-ot'), { actId: 'x1', grp: 'area', area: 'OT', status: 'pend', desc: 'RFI pendiente' }));
+  await assertFails(setDoc(doc(ot, 'restr/n-ot2'), { actId: 'x1', grp: 'area', area: 'Calidad', status: 'pend' }));
+  await assertFails(deleteDoc(doc(ot, 'restr/r-ot')));
+  await assertSucceeds(updateDoc(doc(user('calidad@obra.pe'), 'restr/r-cal'), { status: 'lib', freed: '2026-10-01' }));
+  await assertSucceeds(setDoc(doc(ot, 'fotos/f-ot'), { data: 'x'.repeat(1000) }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
