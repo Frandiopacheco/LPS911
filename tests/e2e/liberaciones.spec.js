@@ -22,6 +22,12 @@ test('vistas y filtros (admin)', async ({ page }) => {
   await page.click('#lqv [data-v="cal"]'); await expect(page.locator(`${M} .lqcal`)).toBeVisible();
   await page.click('#lqv [data-v="ban"]'); await expect(page.locator(`${M} .lqcols`)).toBeVisible();
   await page.click('#lqv [data-v="map"]'); await expect(page.locator(`${M} #lqplan`)).toBeVisible();
+  // el plano muestra solo las inspecciones pendientes del día elegido arriba
+  await expect(page.locator('#wnum')).toHaveText('Jueves 01 oct');
+  await expect(page.locator('#lqside')).toContainText('Entubado empotrado');
+  await expect(page.locator('#lqside')).not.toContainText('Redes empotradas');
+  await page.click('#wnext');
+  await expect(page.locator('#lqside')).toContainText('Redes empotradas');
   await page.click('[data-lqza]'); await expect(page.locator(`${M} .lqdraw`)).toBeVisible();
   await page.click('[data-lqzcancel]'); await expect(page.locator(`${M} .lqdraw`)).toHaveCount(0);
   await page.selectOption('#fpiso', 'p2'); await expect(page.locator(`${M} #lqplan`)).toBeVisible();
@@ -122,4 +128,12 @@ test('Calidad ve la matriz y el subcontratista solo solicita', async ({ page, br
   await expect(p2.locator('#lqsc')).toHaveCount(0);
   noErrors(e2, 'sc');
   await p2.close();
+});
+
+test('el plano carga al entrar por primera vez, sin tocar un piso', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'lib' });
+  await page.click('#lqv [data-v="map"]');
+  await expect(page.locator('#lqplan')).not.toBeEmpty();
+  await expect(page.locator('#lqplan')).not.toContainText('Cargando');
+  noErrors(errors, 'plano lib');
 });
