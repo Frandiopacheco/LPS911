@@ -320,7 +320,7 @@ function renderTop(){
   const pr=restrInScope().filter(r=>r.status!=='lib').length;const rc=$('#rcount');rc.hidden=!pr;rc.textContent=pr;
   {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:new Set(libBlocks().filter(b=>vs.has(pisoOfAct(b.p.id))&&(!SCK()||myScsI().includes(b.p.sc))).map(b=>b.p.id)).size;lc.hidden=!n;lc.textContent=n}}
   $('#wtoday').disabled=U.week===curWeek();
-  navApply();
+  navApply();topDateApply();topToolsApply();
   brandSync();
   updUndo();setStatus();renderBnav();
 }
