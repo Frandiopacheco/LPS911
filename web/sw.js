@@ -4,7 +4,9 @@
    - No toca los datos: Firestore guarda y sincroniza por su cuenta. */
 const VER = 'lps911-33';
 const CDN_CACHE = 'lps911-cdn-1';
-const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'firebase-config.js'];
+// ASSETS lo completa scripts/build.mjs con los archivos de css/ y js/ (con su versión)
+const ASSETS = [];
+const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'firebase-config.js', ...ASSETS];
 const CDN_HOSTS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
@@ -43,7 +45,7 @@ self.addEventListener('fetch', e => {
       return;
     }
     if (url.pathname.endsWith('/sw.js')) return;
-    // archivos con versión (plano.js?v=NN): no cambian nunca, se guardan la primera vez
+    // archivos con versión (js/…?v=NN, css/…?v=NN, plano.js?v=NN): no cambian nunca, se guardan la primera vez
     if (url.search) { e.respondWith(cacheFirst(req, VER).catch(() => fetch(req))); return; }
     e.respondWith(networkFirst(req, req, 4000));
     return;

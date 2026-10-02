@@ -18,6 +18,8 @@ service cloud.firestore {
     function role() { return isOwner() ? 'admin' : get(memberPath()).data.role; }
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
     function isAdmin() { return isMember() && role() == 'admin'; }
+    // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
+    function canCli() { return isAdmin() || (isMember() && role() in ['editor', 'campo', 'area', 'lector'] && get(memberPath()).data.get('cli', false) == true); }
     function canDaily() { return isMember() && role() in ['admin', 'editor', 'campo']; }
     function scOf() { return get(memberPath()).data.get('sc', ''); }
     // Una persona puede tener varias empresas/partidas (campo 'scs'); si no existe, se usa 'sc'.
@@ -92,6 +94,19 @@ service cloud.firestore {
       allow update: if canEdit() || isCal()
         || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc == resource.data.sc
             && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
+      allow delete: if isAdmin();
+    }
+    // Versión para el cliente (holguras, versiones emitidas): el administrador y quienes él designe.
+    // Los demás trabajan con la versión interna y no la ven.
+    match /cli/{id} {
+      allow read, write: if canCli();
+    }
+    match /clidx/{id} {
+      allow read, create, update: if canCli();
+      allow delete: if isAdmin();
+    }
+    match /cliver/{id} {
+      allow read, create, update: if canCli();
       allow delete: if isAdmin();
     }
     // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador

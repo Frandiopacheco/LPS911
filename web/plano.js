@@ -78,7 +78,7 @@ function renderMapa(main){ensureLam();
   if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null}M.lpiso=M.piso}
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
-  if(!M.date)M.date=todayIso();ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));
+  {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null}}ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));
   if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
@@ -764,7 +764,7 @@ function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zo
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
 function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
-  if(!bs.length){host.innerHTML='<div class="kemp">Este piso todavía no tiene plano cargado. Usa la vista <b>Tarjetas</b>.</div>';host._v=null;host._fk='';return}
+  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Plan diario › Subir lámina</b>.':'')}</div>`;host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;const z=el&&(oo.zones?oo.zones.find(q=>q.id===el.dataset.z):PD.get(el.dataset.z));if(z&&z.actId&&oo.colors.has(z.actId))oo.onPick(z.actId,z)}});host._v=v}host._o=o;host._base=base.id;
   const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()}).catch(()=>{});
@@ -852,7 +852,7 @@ const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if(t.id==='mpan'||t.id==='mpx'){M.panel=!M.panel;requestRender();return true}
-  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;ensurePlan();requestRender();return true}
+  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}
