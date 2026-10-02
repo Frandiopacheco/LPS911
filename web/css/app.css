@@ -528,7 +528,7 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 .lq2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .lqmsg{margin:0;font-size:13px;color:var(--ink2)}.lqmsg.ok{color:var(--ok);font-weight:600}.lqmsg.bad{color:var(--bad);font-weight:600}
 .lqrow{display:flex;gap:8px;align-items:center}.lqfile{flex:1;min-height:38px;display:flex;align-items:center;border:1px dashed var(--line);border-radius:7px;padding:0 10px;color:var(--muted);font-weight:500}
-.lqbtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.lqbtns .ib{min-height:38px}.lqbtns.wrap{justify-content:flex-start}
+.lqbtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.lqbtns .ib{min-height:38px}.lqbtns.lqbw{justify-content:flex-start}
 .lqobs{display:flex;flex-direction:column;gap:5px}.lqobs label{flex-direction:row;font-weight:500;color:var(--ink);align-items:flex-start;gap:8px}
 .lqfiles{display:flex;gap:8px;flex-wrap:wrap}.lqfb{width:86px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:3px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:var(--ink)}.lqfb img,.lqfb span{width:78px;height:60px;object-fit:cover;border-radius:5px;display:grid;place-items:center;font-weight:700;background:var(--line2)}.lqfb small{font-size:11px;color:var(--muted)}
 .lqtl{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:12.5px}.lqtl li{display:flex;gap:7px;align-items:baseline}.lqtl i{flex:none;width:9px;height:9px;border-radius:50%;background:var(--c)}.lqtl span{color:var(--muted)}
@@ -952,4 +952,90 @@ td.d .dm.ok{color:var(--ok)}td.d .dm.pa{color:var(--warn)}td.d .dm.no{color:var(
 :root:not([data-theme="light"]) .obadge{background:rgba(245,166,35,.14);color:#ffc27a;border-color:rgba(245,166,35,.45)}
 :root:not([data-theme="light"]) .ppi{background:var(--panel)}
 :root:not([data-theme="light"]) .cc.prop{box-shadow:inset 0 0 0 2px rgba(245,166,35,.45)}
+}
+
+/* =====================================================================
+   SISTEMA DE COMPONENTES · medidas, sombras y movimiento comunes
+   Va al final para que mande sobre los estilos sueltos de arriba.
+   Botones (.ib, .seg, .chip, .kx), campos (select, input, .tin), tarjetas,
+   ventanas (.lqm, .mdlg, .ksheet, .msheet, .ppm), menús (.pop) y avisos (.toast)
+   comparten estas variables. Para algo nuevo, usa estas clases y variables.
+   ===================================================================== */
+:root{
+  --r-xs:4px;--r-ctl:8px;--r-card:10px;--r-dlg:14px;--r-sheet:18px;
+  --h-ctl:32px;
+  --sh-1:0 1px 2px rgba(20,30,25,.07);--sh-2:0 4px 14px rgba(20,30,25,.10);
+  --backdrop:rgba(14,19,17,.46);
+  --ease:cubic-bezier(.2,.7,.25,1);--t-fast:.12s;--t:.18s;--t-slow:.26s;
+  --ring:0 0 0 3px color-mix(in srgb,var(--accent) 24%,transparent);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--sh-1:0 1px 2px rgba(0,0,0,.35);--sh-2:0 6px 18px rgba(0,0,0,.45);--backdrop:rgba(0,0,0,.6)}}
+:root[data-theme="dark"]{--sh-1:0 1px 2px rgba(0,0,0,.35);--sh-2:0 6px 18px rgba(0,0,0,.45);--backdrop:rgba(0,0,0,.6)}
+
+/* --- botones --- */
+.ib,.seg,.tin,.chipb{border-radius:var(--r-ctl)}
+.ib{height:var(--h-ctl);min-width:var(--h-ctl);padding:0 11px;font-weight:500}
+.ib,.seg button,.chip,.chipb,.kx,.ab,.rb,.lnkb,.pop button,.msc button,.tabs button,.bnav button,.lqcard,.lqfb{
+  transition:background-color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),color var(--t-fast) var(--ease),box-shadow var(--t) var(--ease),transform var(--t-fast) var(--ease),filter var(--t-fast) var(--ease)}
+.ib:hover:not(:disabled){border-color:color-mix(in srgb,var(--ink2) 45%,var(--line))}
+.ib.pri,.ib.okb,.ib.warn{box-shadow:var(--sh-1)}
+.ib.pri:hover:not(:disabled),.ib.okb:hover:not(:disabled),.ib.warn:hover:not(:disabled){filter:brightness(1.08);border-color:transparent}
+.ib:active:not(:disabled),.seg button:active,.chip:active,.chipb:active,.kx:active,.bnav button:active,.msc button:active{transform:scale(.97)}
+.ib:disabled{cursor:not-allowed}
+.seg button{height:calc(var(--h-ctl) - 2px);padding:0 11px}
+.seg button:hover:not(.on){background:var(--panel2)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.on+button,.seg button+button.on{border-left-color:transparent}
+.kx{display:inline-grid;place-items:center;line-height:1}
+.kx:hover{background:var(--line2)}
+.chip{border-radius:999px}
+.chip:hover{border-color:var(--ink2)}
+
+/* --- campos --- */
+:where(select:not(.ci),input:not(.ci):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]),textarea:not(.ci)){
+  border:1px solid var(--line);border-radius:var(--r-ctl);background-color:var(--panel);color:var(--ink);
+  transition:border-color var(--t-fast) var(--ease),box-shadow var(--t) var(--ease)}
+:where(select:not(.ci),input:not(.ci):not([type=checkbox]):not([type=radio]):not([type=file]),textarea:not(.ci)):hover{border-color:color-mix(in srgb,var(--ink2) 45%,var(--line))}
+:where(select:not(.ci),input:not(.ci):not([type=checkbox]):not([type=radio]):not([type=file]),textarea:not(.ci)):focus{outline:none;border-color:var(--accent);box-shadow:var(--ring)}
+select:not(.ci),.tin,.bar input[type=search],.bar select,.cfil select,.cform input,.cform select,.lmf select,.phbar select,.mmd select,.mp-lab select,.tplc input,.tplc select,.mdlgc input,.mdlgc select{border-radius:var(--r-ctl)}
+.bar input[type=search],.bar select{height:var(--h-ctl)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+
+/* --- tarjetas --- */
+.card,.tile,.rcard,.dcard{border-radius:var(--r-card);box-shadow:var(--sh-1)}
+.lqcard{border-radius:var(--r-ctl);box-shadow:var(--sh-1)}
+.lqcard:hover{box-shadow:var(--sh-2);transform:translateY(-1px)}
+.callout{border-radius:var(--r-card)}
+.card textarea{box-sizing:border-box;max-width:100%}
+
+/* --- pestañas --- */
+.tabs button{border-radius:var(--r-ctl) var(--r-ctl) 0 0}
+.tabs button:hover:not([aria-selected="true"]){background:var(--panel2)}
+
+/* --- ventanas, hojas y menús: misma sombra, mismo fondo y entrada suave --- */
+.lqm,.mdlg,.ksheet,.ppm,.msheet{background:var(--backdrop);animation:lps-fade var(--t) var(--ease)}
+.lqc,.mdlgc{border-radius:var(--r-dlg);box-shadow:var(--shadow);animation:lps-pop var(--t-slow) var(--ease)}
+.ksc,.msc{border-radius:var(--r-sheet) var(--r-sheet) 0 0;animation:lps-up var(--t-slow) var(--ease)}
+.ppm>*{animation:lps-left var(--t-slow) var(--ease)}
+.pop:not([hidden]),.mzc{border-radius:var(--r-card);box-shadow:var(--shadow);animation:lps-pop-sm var(--t) var(--ease);transform-origin:top center}
+.pop button{border-radius:6px}
+.lb{animation:lps-fade var(--t) var(--ease)}
+.phprev{animation:lps-fade var(--t) var(--ease)}
+.toast:not([hidden]),.swupd,.vabar{animation:lps-rise var(--t-slow) var(--ease)}
+.toast{border-radius:var(--r-card);box-shadow:var(--shadow)}
+#main.vin{animation:lps-fade var(--t) var(--ease)}
+.loading b::before{content:"";display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:lps-spin .8s linear infinite}
+
+@keyframes lps-fade{from{opacity:0}to{opacity:1}}
+@keyframes lps-pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes lps-pop-sm{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes lps-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes lps-left{from{transform:translateX(100%)}to{transform:none}}
+@keyframes lps-rise{from{opacity:0;translate:0 10px}to{opacity:1;translate:0 0}}
+@keyframes lps-spin{to{transform:rotate(360deg)}}
+
+/* quien pidió menos movimiento en su equipo no ve animaciones */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .loading b::before{animation:none}
 }
