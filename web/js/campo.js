@@ -26,7 +26,7 @@ function renderCampo(main){if(CU.view==='plan'&&canDaily){renderCap(main);return
   const extras=[];for(const doc of DAY.values()){if(doc.date!==d||!vt.some(t=>t.p.id===doc.pisoId))continue;for(const[id,e]of Object.entries(doc.extra||{})){if(e.del)continue;if(CU.sc&&e.sc!==CU.sc)continue;const am=S.amb.get(e.ambId);if(CU.sec&&(!am||am.sectorId!==CU.sec))continue;extras.push({id,e,pid:doc.pisoId,am})}}
   const cnc=P().cnc||[];const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const cPres=new Set();vt.forEach(({secs:ss})=>ss.forEach(({ambs})=>ambs.forEach(({acts})=>acts.forEach(x=>cPres.add(x.sc)))));const consF=cons.filter(c=>cPres.has(c.id)||CU.sc===c.id);
-  let h=`<div class="scroll" style="padding-top:0"><div class="campo">
+  let h=`<div class="scroll" style="padding-top:0"><div class="campo">${pageHead('Campo',`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''} · ${pisoLabel()}`)}
    <div class="cbar">
     <div class="cdate"><button class="ib" data-cd="-1" aria-label="Día anterior">&#8249;</button><div class="d"><b>${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][dow]} ${fmtD(d)}</b><span>Semana ${weekOf(d)}${d===today?' · hoy':''}</span></div><button class="ib" data-cd="1" aria-label="Día siguiente">&#8250;</button>${d!==today?'<button class="ib" data-cd="0">Hoy</button>':''}</div>
     <button class="cfxt" data-cfx aria-expanded="${CU.fx?'true':'false'}">${cfxSum(secs,consF,nS)}</button>

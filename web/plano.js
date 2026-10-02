@@ -764,7 +764,7 @@ function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zo
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
 function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
-  if(!bs.length){host.innerHTML='<div class="kemp">Este piso todavía no tiene plano cargado. Usa la vista <b>Tarjetas</b>.</div>';host._v=null;host._fk='';return}
+  if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Plan diario › Subir lámina</b>.':'')}</div>`;host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;const z=el&&(oo.zones?oo.zones.find(q=>q.id===el.dataset.z):PD.get(el.dataset.z));if(z&&z.actId&&oo.colors.has(z.actId))oo.onPick(z.actId,z)}});host._v=v}host._o=o;host._base=base.id;
   const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()}).catch(()=>{});

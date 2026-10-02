@@ -1055,3 +1055,44 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 /* contador del menú inferior sobre el ícono, para que el nombre entre completo */
 .bnav button{position:relative}
 .bnav button .bc{position:absolute;top:5px;left:calc(50% + 5px);margin:0}
+
+/* =====================================================================
+   PLANTILLA DE PÁGINA (P5) · encabezado común, barra de filtros, ayudas
+   ===================================================================== */
+.phd{display:flex;align-items:flex-end;gap:10px 16px;flex-wrap:wrap}
+.pht{display:flex;flex-direction:column;gap:2px;min-width:0;margin-right:auto}
+.pht h2,.dhd>div>b{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.15;color:var(--ink)}
+.pht span,.dhd>div>span{font-size:13.5px;color:var(--muted)}
+.pht .bad{color:var(--bad)}
+.pha{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fbar .fsp{flex:1}
+.fbar .fgl{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.campo>.phd{padding-top:14px}
+.hlp{border:1px solid var(--line);border-radius:var(--r-card);background:var(--panel2)}
+.hlp>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--accent)}
+.hlp>summary::-webkit-details-marker{display:none}
+.hlp>summary i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 12px/1 var(--f-ui);font-style:normal}
+.hlp[open]>summary{border-bottom:1px solid var(--line2)}
+.hlpb{padding:8px 12px 10px;font-size:13px;color:var(--ink2)}
+.hlpb p{margin:0 0 6px}.hlpb p:last-child{margin:0}
+
+/* tarjetas de números (P8): un solo estilo; el color de arriba solo cuando significa algo (--c) */
+.tile,.lqtile{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--c,var(--line2));border-radius:var(--r-card);padding:10px 12px;box-shadow:var(--sh-1)}
+.dk{border-top-width:3px;border-radius:var(--r-card)}
+.tile .k,.lqtile>span,.dkl{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.tile .v,.lqtile>b{font:700 26px/1.15 var(--f-ui);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.tile .v small,.lqtile small{font:400 12.5px var(--f-ui);color:var(--muted)}
+.tile.hl{--c:var(--accent);border-color:var(--line);box-shadow:var(--sh-1)}
+.dks{white-space:normal}
+
+/* legibilidad (P14): nada por debajo de 12 px en tablas, etiquetas y leyendas; gris con contraste suficiente */
+:root{--muted:#646D67}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--muted:#8E9891}}
+:root[data-theme="dark"]{--muted:#8E9891}
+.t th{font-size:12px}
+
+/* avisos (P16): sobre el menú inferior, nunca debajo; «Guardado» se marca un momento al terminar de guardar */
+.status.saved{color:var(--ok);font-weight:600}
+.status.saved i{animation:lps-pop-sm var(--t-slow) var(--ease)}
+.rloc,.mp-it .t small,.mt small,.mlh span,.dfd small,.drc li small,.pop .ph,.lqst,.mcs,.pvl,.fsug,.lmd button small,.rcard .rf label,.wk .lbl span,table.rt td[data-l]::before{font-size:12px}

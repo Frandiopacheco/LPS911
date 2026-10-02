@@ -173,13 +173,13 @@ function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V
     ['Restringen ingreso',new Set(blocks.map(b=>b.p.id)).size,`${P0.length} sin solicitar`,'#B83A2E'],['Liberadas · semana',doneW.length,`${doneW.filter(o=>o.st==='libm').length} con obs. menores`,'#2E7D4F'],['Liberadas a la primera',doneW.length?Math.round(first.length/doneW.length*100)+'%':'—',doneW.length?`${first.length} de ${doneW.length}`:'','#46504A']];
   const scs=[...new Set([...L.map(o=>o.x.sc),...P0.map(o=>o.x.sc)])].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
   const lateN=open.filter(o=>o.st==='sol'&&o.l.late).length;
-  let h=`<div class="scroll"><div class="wrap lqwrap">
-   <div class="lqbar"><span class="seg" id="lqv">${[['ban','Bandeja'],['cal','Calendario'],['map','Plano'],['mat','Matriz']].map(([k,t])=>`<button data-v="${k}" class="${V===k?'on':''}">${t}</button>`).join('')}</span>
+  let h=`<div class="scroll"><div class="wrap lqwrap">${pageHead('Liberaciones',`${pisoLabel()} · ${({ban:'Bandeja',cal:'Calendario',map:'Plano',mat:'Matriz'})[V]||''}`,'<button class="ib" id="lqpdf">Programación de mañana (PDF)</button>'+(me&&(isCal()||canWrite&&!PM()||SCK())?'<button class="ib pri" id="lqnew">+ Solicitar liberación</button>':''))}
+   <div class="lqbar fbar"><span class="seg" id="lqv">${[['ban','Bandeja'],['cal','Calendario'],['map','Plano'],['mat','Matriz']].map(([k,t])=>`<button data-v="${k}" class="${V===k?'on':''}">${t}</button>`).join('')}</span>
     ${SCK()?'':`<select class="tin" id="lqsc" aria-label="Subcontratista"><option value="">Todos los SC</option>${scs.map(c=>`<option value="${c}"${U.libSc===c?' selected':''}>${esc(conOf(c).name)}</option>`).join('')}</select>`}
     ${(()=>{const I=[...new Set([...libInsp(),...[...LIB.values()].map(l=>l.prog&&l.prog.insp).filter(Boolean)])];if(!I.length)return'';const n=k=>[...LIB.values()].filter(l=>l.prog&&l.prog.insp===k&&(l.st==='pro'||l.st==='lev')).length;
       return`<select class="tin" id="lqin" aria-label="Inspector"><option value="">Todos los inspectores</option>${I.map(k=>`<option value="${esc(k)}"${U.libIn===k?' selected':''}>${esc(k)}${n(k)?' · '+n(k)+' por inspeccionar':''}</option>`).join('')}</select>`})()}
     <input class="tin" id="lqq" data-fk="lqq" type="search" placeholder="Buscar actividad, ambiente, SC…" value="${esc(U.libQ||'')}" aria-label="Buscar">
-    <span style="flex:1"></span><button class="ib" id="lqpdf">Programación de mañana (PDF)</button>${me&&(isCal()||canWrite&&!PM()||SCK())?'<button class="ib pri" id="lqnew">+ Solicitar liberación</button>':''}</div>`;
+    </div>`;
   if(U.piso&&V!=='mat'&&V!=='map'){const oth=[...LIB.values()].filter(l=>l.st!=='anu'&&!libDone(l.st)&&l.pisoId&&l.pisoId!==U.piso).length;if(oth)h+=`<div class="callout">Estás viendo solo <b>${esc((S.pis.get(U.piso)||{}).name||'')}</b> (selector de piso de arriba). Hay <b>${oth}</b> liberación(es) abierta(s) en otros pisos. <button class="ib" data-lqall>Ver todos los pisos</button></div>`}
   if(U.libIn)h+=`<div class="callout">Agenda de <b>${esc(U.libIn)}</b>: solo se ven sus inspecciones. <button class="ib" data-lqin="${esc(U.libIn)}">Quitar filtro</button></div>`;
   if(libErr)h+=`<div class="callout">No se pudieron leer las liberaciones (${esc(libErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
@@ -288,7 +288,7 @@ function libMatrixHtml(){const cat=libCatalog();const R=libRules();const C=libId
      <td><input class="ci" data-lm="proto" data-k="${k}" value="${esc(r.proto||'')}" placeholder="Opcional"${dis} aria-label="Protocolo"></td>
      <td><input class="ci" type="number" min="1" max="7" data-lm="ant" data-k="${k}" value="${r.ant||1}" style="width:56px"${dis} aria-label="Días de anticipación"></td></tr>`}
   h+=`</tbody></table></div>${rows.length?'':'<div class="empty">No hay actividades con ese filtro.</div>'}</div>
-   <p class="note">El catálogo sale de las actividades del lookahead (mismo subcontratista + mismo nombre, sin importar mayúsculas, tildes ni signos). Marca las que se liberan; si es <b>crítica</b>, elige qué actividad no puede entrar sin esa liberación. Una crítica no liberada aparece como <b>restricción</b> de esa actividad en el mismo ambiente.</p>`;
+   ${helpBox('¿Cómo se arma la matriz?',`<p>El catálogo sale de las actividades del lookahead (mismo subcontratista + mismo nombre, sin importar mayúsculas, tildes ni signos). Marca las que se liberan; si es <b>crítica</b>, elige qué actividad no puede entrar sin esa liberación. Una crítica no liberada aparece como <b>restricción</b> de esa actividad en el mismo ambiente.</p>`)}`;
   return h}
 function libMatrixChange(t){if(!canLibMatrix())return;const k=t.dataset.k;const f=t.dataset.lm;const cat=libCatalog();const e=cat.get(k);let R=libRules().map(r=>({...r}));
   let r=R.find(q=>Array.isArray(q.keys)&&q.keys.includes(k));
