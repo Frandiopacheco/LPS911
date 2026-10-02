@@ -29,7 +29,7 @@ function presBar(){if(!LKP)return;let b=$('#presbar');
     b.onchange=e=>{const t=e.target;if(t.id==='pbpiso'){U.piso=t.value;U.pisoAll=!t.value;U.sector='';saveUI();requestRender()}if(t.id==='pbsec'){U.sector=t.value;saveUI();requestRender()}
       if(t.id==='pbwk'){U.wkF=+t.value||0;U.day='';requestRender()}if(t.id==='pbday'){U.day=t.value;U.wkF=0;requestRender()}presBar()}}
   const wd0=weekDays(U.week)[0],wd1=weekDays(U.week+U.win-1)[5];
-  const ps=pisos();const secs=[...S.sec.values()].filter(s=>!U.piso||pisoOfSecObj(s)===U.piso).sort((a,b)=>pOrd(pisoOfSecObj(a))-pOrd(pisoOfSecObj(b))||byOrder(a,b));
+  const ps=pisos();const pOrd=id=>(S.pis.get(id)||{}).order||0;const secs=[...S.sec.values()].filter(s=>!U.piso||pisoOfSecObj(s)===U.piso).sort((a,b)=>pOrd(pisoOfSecObj(a))-pOrd(pisoOfSecObj(b))||byOrder(a,b));
   /* filtro por semana o por día (lo mismo que tocar el encabezado de la semana o del día en la tabla) */
   const wks=[];for(let w=U.week;w<U.week+U.win;w++)wks.push(w);if(U.wkF&&!wks.includes(U.wkF))U.wkF=0;
   const dys=wks.flatMap(w=>weekDays(w)).filter(d=>isWork(d));if(U.day&&!dys.includes(U.day))U.day='';

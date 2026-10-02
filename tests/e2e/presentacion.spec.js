@@ -15,6 +15,13 @@ test('presentar el lookahead en la reunión semanal', async ({ page }) => {
   await expect(page.locator('#presbar')).toContainText('semanas 59');
   await page.selectOption('#pbpiso', 'p2');
   await expect(page.locator('#grid tr[data-a="i0"]')).toHaveCount(0);
+  // con todos los pisos (varios sectores) la barra y los filtros siguen funcionando
+  await page.selectOption('#pbpiso', '');
+  await expect(page.locator('#pbsec option')).toHaveCount(3);
+  await page.selectOption('#pbwk', '60');
+  await expect(page.locator('#grid')).toBeVisible();
+  await expect(page.locator('#main')).not.toContainText('No se pudo mostrar');
+  await page.click('#presbar [data-pb="fx"]');
   // filtrar por semana o por día desde la barra de la presentación
   await page.selectOption('#pbpiso', 'p1');
   await page.click('#presbar [data-pb="wt"]');
