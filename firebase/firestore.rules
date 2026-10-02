@@ -24,6 +24,10 @@ service cloud.firestore {
     function scsOf() { let d = get(memberPath()).data; return d.get('scs', [d.get('sc', '')]); }
     function isSC() { return isMember() && !isOwner() && role() == 'sc'; }
     function isCap() { return isMember() && !isOwner() && role() == 'capataz'; }
+    // Área de apoyo (Oficina Técnica, Calidad…): ve todo y gestiona las restricciones de su área
+    function isArea() { return isMember() && !isOwner() && role() == 'area'; }
+    function areaOf() { return get(memberPath()).data.get('area', ''); }
+    function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
 
@@ -71,8 +75,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/acts/$(d.actId)).data.get('sc', '') == d.sc;
     }
     match /restr/{id} {
-      allow create: if isSC() && scRestrOk(request.resource.data);
-      allow update: if isSC() && scRestrOk(resource.data) && scRestrOk(request.resource.data);
+      allow create: if (isSC() && scRestrOk(request.resource.data))
+        || (isArea() && areaRestrOk(request.resource.data));
+      allow update: if (isSC() && scRestrOk(resource.data) && scRestrOk(request.resource.data))
+        || (isArea() && areaRestrOk(resource.data) && areaRestrOk(request.resource.data));
       allow delete: if isSC() && scRestrOk(resource.data);
     }
     match /daily/{id} {
@@ -81,7 +87,7 @@ service cloud.firestore {
     }
     match /fotos/{id} {
       allow read: if isMember();
-      allow create, update: if (canDaily() || isCap() || isSC()) && request.resource.data.data.size() < 400000;
+      allow create, update: if (canDaily() || isCap() || isSC() || isArea()) && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.
