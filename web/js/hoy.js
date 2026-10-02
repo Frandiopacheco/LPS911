@@ -45,7 +45,11 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   /* plan semanal: pisos que faltan congelar esta semana */
   if(canWrite&&r!=='sc'){const n=curWeek();const vp=visPisos().filter(p=>Object.keys(liveItems(n,p.id)).length);const nf=vp.filter(p=>!(S.wk.get(wkId(n,p.id))||{}).frozenAt);
     out.plan={k:'plan',title:`Plan semanal · semana ${n}`,n:nf.length,tone:'',sub:`${nf.length} piso${nf.length===1?'':'s'} sin congelar de ${vp.length} con actividades`,items:nf.map(p=>({t:`${p.code} · ${p.name}`})),go:'plan',goLabel:'Ir al Plan semanal',empty:vp.length?'Todos los pisos están congelados':'No hay actividades esta semana'}}
-  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','restr','lib']:r==='area'?(isCalArea()?['lib','restr']:['restr','lib']):r==='lector'?['restr','lib']:['prop','campo','restr','lib','plan'];
+  /* holgura del cliente consumida: la fecha interna ya pasa la que se le informó */
+  if(typeof canCli==='function'&&canCli()){ensureCli();const M=cliLate();if(CLX.size){const vs=new Set(visPisos().map(p=>p.id));const L=M?[...M.entries()].filter(([id])=>vs.has(pisoOfAct(id))&&S.act.has(id)).sort((a,b)=>a[1].cli.localeCompare(b[1].cli)):[];
+    out.cli={k:'cli',title:'Holgura del cliente',n:L.length,tone:'bad',sub:`${L.length} actividad${L.length===1?'':'es'} ya termina${L.length===1?'':'n'} después de la fecha emitida al cliente${cliLast()?' ('+esc(cliLast().label)+')':''}`,
+      items:L.map(([id,o])=>({t:S.act.get(id).name,s:`Cliente: ${fmtD(o.cli)} · interno: ${fmtD(o.end)} · ${hoyLoc(S.act.get(id))}`})),go:'look',goLabel:'Ver en el Lookahead (⚑)',empty:M?'Todo dentro de las fechas informadas al cliente':'Cargando la versión emitida…'}}}
+  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','restr','lib']:r==='area'?(isCalArea()?['lib','restr']:['restr','lib']):r==='lector'?['restr','lib']:['prop','campo','cli','restr','lib','plan'];
   /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
   const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 

@@ -162,6 +162,22 @@ test('matriz de liberaciones: la editan Calidad y el administrador', async () =>
   await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
 });
+test('versión cliente: solo administrador y editores la ven y la cambian', async () => {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'cli/buf'), { all: 1 }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cli/buf'), { all: 2, p: { p1: 1 } }));
+  await assertSucceeds(getDoc(doc(user('editor@obra.pe'), 'cli/buf')));
+  for (const who of ['sc@obra.pe', 'campo@obra.pe', 'lector@obra.pe', 'calidad@obra.pe', 'ot@obra.pe']) {
+    await assertFails(getDoc(doc(user(who), 'cli/buf')));
+    await assertFails(setDoc(doc(user(who), 'cli/buf'), { all: 0 }));
+    await assertFails(getDoc(doc(user(who), 'clidx/c1')));
+    await assertFails(getDoc(doc(user(who), 'cliver/c1__p1')));
+  }
+  await assertFails(getDoc(doc(cap('cap1'), 'cli/buf')));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'clidx/c1'), { label: 'Emitida sem 58', week: 58 }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'clidx/c1')));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+});
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
