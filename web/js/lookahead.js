@@ -34,6 +34,7 @@ function buildLookShell(main){
     <select id="fsec" aria-label="Sector"></select>
     <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
     <span class="seg" id="fwin" aria-label="Semanas visibles"><button data-w="3">3 sem</button><button data-w="6">6 sem</button><button data-w="12">12 sem</button></span>
+    <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <span id="fday"></span>
     <span class="sp" style="flex:1"></span>
@@ -55,7 +56,7 @@ function buildLookShell(main){
   <div id="verban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
-  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};
+  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
@@ -85,7 +86,7 @@ function renderLook(main){
   renderVerBar();
   const vd=U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;
   if(vd&&vd.ready){const un=swapVer(vd);const cw=canWrite;canWrite=false;try{renderLookInner(main)}finally{canWrite=cw;un()}return}
-  if(revOn()){const un=revSwap();try{renderLookInner(main)}finally{un()}}else renderLookInner(main);renderPropBar();revWire();
+  if(revOn()){const un=revSwap();try{renderLookInner(main)}finally{un()}}else renderLookInner(main);renderPropBar();revWire();selBar();presBar();presZoom();
   if(isMob()&&U.lookFull&&!main.querySelector('.lmback')){const bk=document.createElement('div');bk.className='lmback';bk.innerHTML='<span>Tabla completa del lookahead (mejor en PC)</span><button class="ib pri" id="lmlist">Vista de celular</button>';main.prepend(bk);bk.querySelector('#lmlist').onclick=()=>{U.lookFull=false;main.dataset.built='';render()}}}
 let lmKeep=true;
 function renderLookMob(main){ensureDaily(addD(weekStart(U.week),-7));
@@ -192,7 +193,7 @@ function renderGrid(tbl,days,dset){
           shown++;const c=conOf(x.sc);const st=actStats(x);const ds=new Set(x.days||[]);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
-          let h=`<tr class="ar${i===0?' first':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0">${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:''}</td>`;
+          let h=`<tr class="ar${i===0?' first':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0">${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:''}</td>`;
           if(i===0)h+=ambCells;
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
           h+=`<td class="s4 act${(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)===2?' hb2':x.obs||pr.get(x.id)||isNew?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof libBadge==='function'?libBadge(x):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${pr.get(x.id)} restricción(es) pendiente(s)">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}</td>`;
@@ -373,7 +374,7 @@ function wireGrid(tbl){
     const b=e.target.closest('button,[data-goto-restr],[data-obs]');if(!b)return;
     if(b.dataset.obs){obsMenu(b,b.dataset.obs);return}
     if(b.dataset.tg){const id=b.dataset.tg;U.collapsed=U.collapsed.includes(id)?U.collapsed.filter(x=>x!==id):[...U.collapsed,id];saveUI();requestRender()}
-    else if(b.dataset.actmenu)actMenu(b,b.dataset.actmenu);
+    else if(b.dataset.actmenu){if(e.ctrlKey||e.metaKey||e.shiftKey||SELA.size)selToggle(b.dataset.actmenu);else actMenu(b,b.dataset.actmenu)}
     else if(b.dataset.ambmenu)ambMenu(b,b.dataset.ambmenu);
     else if(b.dataset.addamb)addAmbMenu(b,b.dataset.addamb,null);
     else if(b.dataset.addact)addAct(b.dataset.addact);
@@ -489,13 +490,13 @@ function addAct(ambId){const sib=siblings('acts','ambId',ambId);const id=uid('ac
 function moveItem(col,field,x,dir){const sib=siblings(col,field,x[field]);const i=sib.findIndex(s=>s.id===x.id);const j=i+dir;if(j<0||j>=sib.length)return;const y=sib[j];
   let oa=y.order,ob=x.order;if(oa===ob){ob=oa+dir}apply([op(col,x.id,{...x,order:oa}),op(col,y.id,{...y,order:ob})])}
 function actMenu(btn,aid){const x=S.act.get(aid);if(!x)return;
-  openPop(btn,`<div class="ph">Actividad</div><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}${libRuleOf(x)?'':' <kbd>no está en la matriz</kbd>'}</button>`:''}${canLibMatrix()?'<button data-do="libx">◆ Excepción de liberación…</button>':''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
-  {reo:()=>reopenDone(aid),ins:()=>insertAct(aid),dup:()=>insertAct(aid,true),up:()=>moveItem('acts','ambId',x,-1),dn:()=>moveItem('acts','ambId',x,1),
+  openPop(btn,`<div class="ph">Actividad</div><button data-do="sel">Seleccionar para mover en bloque<kbd>Ctrl+clic</kbd></button><button data-do="mvb">Mover sus días…</button><hr><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}${libRuleOf(x)?'':' <kbd>no está en la matriz</kbd>'}</button>`:''}${canLibMatrix()?'<button data-do="libx">◆ Excepción de liberación…</button>':''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
+  {sel:()=>selToggle(aid),mvb:()=>setTimeout(()=>blockMoveDialog(btn,[aid],x.name||'la actividad'),0),reo:()=>reopenDone(aid),ins:()=>insertAct(aid),dup:()=>insertAct(aid,true),up:()=>moveItem('acts','ambId',x,-1),dn:()=>moveItem('acts','ambId',x,1),
    clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),lib:()=>setTimeout(()=>libAsk(aid),0),libx:()=>setTimeout(()=>libExMenu(btn,aid),0),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),
    del:()=>apply([arc('acts',aid)],PM()?`Pedido de quitar “${x.name||'sin nombre'}” (queda en tu propuesta)`:`Actividad “${x.name||'sin nombre'}” eliminada (queda en la Papelera de Configuración)`)})}
 function ambMenu(btn,ambId){const a=S.amb.get(ambId);if(!a)return;
-  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
-  {act:()=>addAct(ambId),new:()=>addAmbMenu(btn,a.sectorId,a),dup:()=>dupAmb(a),dup0:()=>dupAmb(a,true),
+  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="mvd">Mover todo el ambiente en días…</button><button data-do="selA">Seleccionar sus actividades</button><hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
+  {mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfAmb(ambId).map(x=>x.id),'el ambiente '+a.code),0),selA:()=>{actsOfAmb(ambId).forEach(x=>{if(canMoveAct(x))SELA.add(x.id)});selBar();requestRender()},act:()=>addAct(ambId),new:()=>addAmbMenu(btn,a.sectorId,a),dup:()=>dupAmb(a),dup0:()=>dupAmb(a,true),
    hito:()=>{const v=$('#hdate').value;const l=($('#hlab').value||'Hito').trim().toUpperCase();if(!v){toast('Elige una fecha.');return}apply([op('ambientes',a.id,{...a,hito:v,hitoLabel:l})],`Hito ${l} de ${a.code}: ${fmtD(v)}`)},
    hclr:()=>{const n={...a};delete n.hito;delete n.hitoLabel;apply([op('ambientes',a.id,n)],'Hito quitado')},up:()=>moveItem('ambientes','sectorId',a,-1),dn:()=>moveItem('ambientes','sectorId',a,1),mv:()=>setTimeout(()=>moveAmbDialog(btn,a),0),
    del:()=>{const ops=siblings('acts','ambId',ambId).map(x=>arc('acts',x.id));ops.push(arc('ambientes',ambId));apply(ops,`Ambiente ${a.code} eliminado`)}})}
@@ -552,8 +553,8 @@ function pisoMenu(btn,pid){const p=S.pis.get(pid);if(!p)return;const others=piso
   const cnt=o=>[...S.sec.values()].filter(s=>pisoOfSecObj(s)===o.id).length;
   openPop(btn,`<div class="ph">${esc(p.code)} · ${esc(p.name)}</div><button data-do="sec">+ Sector</button>
    ${others.length?'<hr><div class="ph">Copiar estructura desde…</div>'+others.map(o=>`<button data-do="copy" data-src="${o.id}">${esc(o.code)} · ${esc(o.name)}<kbd>${cnt(o)} sect.</kbd></button>`).join(''):''}
-   <hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
-  {sec:()=>addSector(pid),copy:d=>copyPisoStructure(d.src,pid),
+   <hr><button data-do="mvd">Mover todo el piso en días…</button><hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
+  {mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfPiso(pid).map(x=>x.id),'el piso '+p.code),0),sec:()=>addSector(pid),copy:d=>copyPisoStructure(d.src,pid),
    code:()=>{const inp=document.querySelector(`#grid .ci[data-piso="${pid}"]`);toast('Escribe el nuevo código en el nombre así: “P2 · Segundo piso” y pulsa Enter.');if(inp){inp.value=p.code+' · '+p.name;inp.focus();inp.dataset.codeedit='1'}},
    up:()=>movePiso(p,-1),dn:()=>movePiso(p,1),
    del:()=>{const ops=[];for(const s of [...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid)){for(const a of siblings('ambientes','sectorId',s.id)){for(const x of siblings('acts','ambId',a.id))ops.push(arc('acts',x.id));ops.push(arc('ambientes',a.id))}ops.push(arc('sectors',s.id))}ops.push(arc('pisos',pid));apply(ops,`Piso ${p.code} eliminado`)}})}
@@ -561,8 +562,8 @@ function movePiso(p,dir){const l=pisos();const i=l.findIndex(x=>x.id===p.id);con
 function secMenu(btn,sid){const s=S.sec.get(sid);if(!s)return;const pid=pisoOfSecObj(s);const others=pisos().filter(o=>o.id!==pid);
   openPop(btn,`<div class="ph">Sector ${esc(s.code)}</div><button data-do="amb">+ Ambiente…</button><button data-do="dup">Duplicar sector (sin días)</button>
    ${others.length?'<hr><div class="ph">Copiar este sector a…</div>'+others.map(o=>`<button data-do="to" data-dst="${o.id}">${esc(o.code)} · ${esc(o.name)}</button>`).join(''):''}
-   <hr><button data-do="code">Cambiar código</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar sector y su contenido</button>`,
-  {amb:()=>addAmbMenu(btn,sid,null),
+   <hr><button data-do="mvd">Mover todo el sector en días…</button><hr><button data-do="code">Cambiar código</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar sector y su contenido</button>`,
+  {mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfSec(sid).map(x=>x.id),'el sector '+s.code),0),amb:()=>addAmbMenu(btn,sid,null),
    dup:()=>{const sib=siblings('sectors','pisoId',pid);const ops=[];const r=copySectorOps(s,pid,orderAfter(sib,s),ops,false);ops[0].after.code=s.code+"'";apply(ops,`Sector duplicado: ${r.na} ambientes, ${r.nx} actividades`)},
    to:d=>{const dst=[...S.sec.values()].filter(x=>pisoOfSecObj(x)===d.dst);const ops=[];const r=copySectorOps(s,d.dst,dst.reduce((m,x)=>Math.max(m,x.order||0),0)+10,ops,false);apply(ops,`Sector copiado a ${S.pis.get(d.dst)?.code}: ${r.na} ambientes, ${r.nx} actividades`)},
    code:()=>{const inp=document.querySelector(`#grid .ci[data-sec="${sid}"]`);toast('Escribe “CÓDIGO · Nombre”, por ejemplo “S2 · Sector 2”, y pulsa Enter.');if(inp){inp.value=s.code+' · '+s.name;inp.focus();inp.dataset.codeedit='1'}},
