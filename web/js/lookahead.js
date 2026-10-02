@@ -219,9 +219,12 @@ function renderGrid(tbl,days,dset){
   if(canWrite&&!filt&&!U.sector&&!U.piso)rows.push({k:'addpiso',h:`<tr class="addrow"><td colspan="5" style="position:sticky;left:0"><div style="padding:0 8px"><button class="ib" data-addpiso="1">+ Nuevo piso</button></div></td><td colspan="${6+nd}"></td></tr>`});
   const keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
   const tb=tbl.tBodies[0];
-  if(tb&&gridHead===head&&gridRows&&gridRows.length===rows.length&&gridRows.every((r,i)=>r.k===rows[i].k)&&tb.rows.length===rows.length){
-    rows.forEach((r,i)=>{if(r.h!==gridRows[i].h){const t=document.createElement('tbody');t.innerHTML=r.h;tb.rows[i].replaceWith(t.firstElementChild)}});
-  }else tbl.innerHTML=head+'<tbody>'+rows.map(r=>r.h).join('')+'</tbody>';
+  /* si cambian pocas filas se reemplazan solo esas (en un solo armado); si cambian muchas, se redibuja la tabla de una vez:
+     reemplazar miles de filas una por una es mucho más lento que un solo innerHTML */
+  const same=tb&&gridHead===head&&gridRows&&gridRows.length===rows.length&&tb.rows.length===rows.length&&gridRows.every((r,i)=>r.k===rows[i].k);
+  const chg=same?rows.reduce((a,r,i)=>(r.h!==gridRows[i].h&&a.push(i),a),[]):null;
+  if(same&&chg.length<=Math.max(40,rows.length*0.15)){if(chg.length){const t=document.createElement('tbody');t.innerHTML=chg.map(i=>rows[i].h).join('');const nr=[...t.rows];chg.forEach((i,j)=>tb.rows[i].replaceWith(nr[j]))}}
+  else tbl.innerHTML=head+'<tbody>'+rows.map(r=>r.h).join('')+'</tbody>';
   gridHead=head;gridRows=rows;
   if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}
   markPeers();
