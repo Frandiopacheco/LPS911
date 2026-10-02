@@ -6,7 +6,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 
 **LPS 911**: app web del *Last Planner System* para una obra de construcción en Lima (Perú). Incluye lookahead, plan semanal, restricciones, registro de campo, capataces en celular, tablero en vivo, plan diario (sectorización en planos), liberaciones de calidad e indicadores (PPC).
 - Usuarios: ingenieros de producción y de campo, subcontratistas (SC), capataces, áreas de apoyo (Oficina Técnica, Calidad) y administrador.
-- Pestañas (`data-tab`): `dash` Tablero, `look` Lookahead, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` Plan semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización"); los ids no.
+- Pestañas (`data-tab`): `hoy` Hoy (inicio de cada rol), `dash` Tablero, `look` Lookahead, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` Plan semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización"); los ids no.
 - **Toda la interfaz y los mensajes van en español** (Perú), con trato de "tú".
 
 ## Reglas que no se rompen
@@ -23,7 +23,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 | --- | --- |
 | `web/index.html` | Solo el esqueleto HTML (~6 KB): carga `css/app.css` y luego los archivos de `js/` **en orden**. Sin framework ni empaquetador. |
 | `web/css/app.css` | Todos los estilos de la app. |
-| `web/js/*.js` | El código de la app, por temas (en el orden de carga): `base` (utilidades, estado, escritura, conexión, sesión, menús, `render`), `lookahead`, `campo`, `en-obra-tablero`, `propuestas`, `auditoria` (papelera, calendario, hora del servidor, responsables de piso…), `liberaciones`, `plan-restricciones`, `indicadores`, `config-equipo` (Sectorización, Configuración, Equipo), `exportes` (PDF/Excel) e `inicio` (arranque de Firebase; **siempre el último**). Son *scripts* clásicos, no módulos: comparten las mismas variables globales, como si fueran un solo archivo. Cada uno empieza con `"use strict";`. |
+| `web/js/*.js` | El código de la app, por temas (en el orden de carga): `base` (utilidades, estado, escritura, conexión, sesión, menús, `render`), `lookahead`, `campo`, `en-obra-tablero`, `propuestas`, `auditoria` (papelera, calendario, hora del servidor, responsables de piso…), `liberaciones`, `plan-restricciones`, `indicadores`, `config-equipo` (Sectorización, Configuración, Equipo), `exportes` (PDF/Excel), `hoy` (pantalla Hoy), `interfaz` (navegación por rol, barra superior, selector de fecha, `pageHead`/`helpBox`) e `inicio` (arranque de Firebase; **siempre el último**). Son *scripts* clásicos, no módulos: comparten las mismas variables globales, como si fueran un solo archivo. Cada uno empieza con `"use strict";`. |
 | `web/plano.js` | Módulo del plan diario (~190 KB, una IIFE): láminas, zonas, modo reunión (piso/día, cruces, tarjeta de cumplimiento), exportes PDF/Excel, plano del capataz. Se carga tarde (`PLANO_SRC`). Lo que usa el resto de la app se exporta en `window.__plano` (`capPlan`, `capDraw`, `zoneFor`, `nums`, `crossOf`, `zcClose`…): una función interna **no** es global, expórtala ahí. |
 | `web/sw.js` | Service worker: modo sin internet y aviso de "versión nueva". `VER` lo pone el build. |
 | `config/produccion.js`, `config/pruebas.js` | `window.FIREBASE_CONFIG` de cada proyecto (no son secretos). |
@@ -84,6 +84,15 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 
 **Ver como** (solo copia de prueba, `LPS_ENV==='pruebas'`): el admin simula otro rol; se guarda en `sessionStorage` `lps.va` y lo aplica `vaApply()`. Solo cambia la interfaz: las escrituras van con el usuario real y las reglas reales. **📱 Vista celular** (`phonePreview`) abre la app en un `iframe` con medidas de teléfono; dentro del marco `html.in-frame` oculta esos controles.
 
+## Interfaz: navegación, fecha y páginas (`js/interfaz.js`, `js/hoy.js`)
+
+- **Pestañas por rol:** `TAB_ORDER` (orden Last Planner), `tabAllowed(t)` (quién puede abrirla), `tabPrimary()` (las de la barra según el rol) y `tabSecondary()` (van en el menú **Más**). `navApply()` las ordena en cada dibujo. Una pestaña nueva: agrégala a `TAB_ORDER`, `TAB_SHORT`, `tabPrimary()` del rol que la usa a diario y a `views` en `render()`.
+- **Celular:** `bnavItems()` = 4 accesos por rol (+ «Más» con `bnavMore()`); íconos en `BNI`.
+- **Inicio:** todos (menos el capataz) entran a **Hoy** (`renderHoy`, tarjetas por tema con `hoyCards()`); `#<tab>` en la URL abre otra pestaña.
+- **Fecha única:** se elige arriba. `dateMode()` dice si la pestaña es por semana (`U.week`) o por día; el día común es `DAY_SEL` (`curDay()`, `daySet(d)`); `CU.date`, `indDay()` y `M.date` del plan diario lo usan. No agregues otro selector de fecha dentro de una pestaña.
+- **Barra superior:** `topToolsApply()` muestra Exportar Excel solo en el Lookahead y deshacer/rehacer solo en `UNDO_TABS`.
+- **Página:** las pestañas «página» empiezan con `pageHead(título, contexto, acciones)` (la acción principal con `.ib.pri`) y luego una barra de filtros `.fbar`; Lookahead y Plan diario son «herramientas» a todo el ancho. Las explicaciones largas van en `helpBox(resumen, html)`. En el celular los filtros secundarios van en `.fmore` con el botón `[data-ftog]`, y las tablas usan `table.rt` con `data-l` en cada celda para verse como tarjetas.
+
 ## Patrones del código (`web/js/`)
 
 - **Datos:**
@@ -103,7 +112,7 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
   - `P()`: configuración del proyecto, con valores por defecto.
 - **Dibujo:** `render()` → `views[U.tab](main)`. Usa `requestRender()` en vez de `render()` directo. Si una vista lanza un error, `render()` muestra "No se pudo mostrar…" con botón de recarga (no queda en blanco, pero el error sigue siendo un error: revísalo). Vistas con plano (Liberaciones › Plano) se arman **una vez** y luego solo actualizan sus partes; redibujarlas enteras descuadra el visor. El HTML se arma con template strings y `esc()` para todo texto del usuario.
 - **Calendario:** `isWork(d)`, `nwReason(d)` (domingo, feriado, sábado no laborable), `wshift` y `wdist` (días hábiles).
-- **Dónde va el código nuevo:** en el archivo de `js/` de su tema. Una funcionalidad grande nueva va en un archivo nuevo de `js/` (con `"use strict";` y su comentario de encabezado), agregado en `index.html` **antes de `js/plan-restricciones.js`**; `check.mjs` avisa si olvidas cargarlo.
+- **Dónde va el código nuevo:** en el archivo de `js/` de su tema. Una funcionalidad grande nueva va en un archivo nuevo de `js/` (con `"use strict";` y su comentario de encabezado), agregado en `index.html` **antes de `js/hoy.js`**; `check.mjs` avisa si olvidas cargarlo.
 - **Orden de carga:** el código suelto (fuera de funciones) de un archivo solo puede usar lo definido en archivos anteriores; dentro de funciones se puede usar todo. Por eso el arranque (`inicio.js`) va al final. Los nombres son globales y únicos entre todos los archivos.
 - **CSS** (`css/app.css`):
   - **Sistema de componentes** (al final del archivo): variables `--r-ctl` (8 px, botones y campos), `--r-card`, `--r-dlg`, `--r-sheet`, `--h-ctl`, `--sh-1`/`--sh-2`, `--backdrop`, `--ease`/`--t-fast`/`--t`/`--t-slow`, `--ring`. Para algo nuevo usa las clases que ya existen (`.ib`, `.ib.pri`, `.seg`, `.tin`, `.chip`, `.kx`, `.card`, `.tile`, `.callout`, `.pop`, `.lqm`+`.lqc`, `.ksheet`+`.ksc`) y estas variables; no inventes otra medida ni otra sombra.
@@ -135,6 +144,6 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 
 ## Pendientes conocidos (ver auditorías)
 
-- Tanda B: avisos al celular (FCM), pantalla "Hoy" por rol, Lookahead que dibuje solo las filas visibles.
+- Tanda B: avisos al celular (FCM), Lookahead que dibuje solo las filas visibles.
 - Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
 - Liberaciones: zonas como polígono (hoy rectángulo), restricción automática por liberación pendiente (apagada hasta decidir con Calidad).

@@ -38,7 +38,7 @@ export async function openApp(page, { as = 'admin', theme, va, tab, extra } = {}
     } catch (e) {}
   }, { user: USERS[as], va, tab, extra, HOY, MANANA });
   await page.addInitScript({ path: FAKE });
-  await page.goto('/');
+  await page.goto(tab ? '/#' + tab : '/');
   await expect(page.locator('#loading')).toHaveCount(0, { timeout: 15_000 });
   return errors;
 }
