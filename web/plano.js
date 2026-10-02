@@ -208,7 +208,13 @@ function revertNova(id){const z=PD.get(id);if(!z)return;const o=remDoc(id);if(o)
     if(z.repTo&&typeof canWrite!=='undefined'&&canWrite&&(x.days||[]).includes(z.repTo)&&!recOf(z.repTo,x.id)){const nx={...x,days:(x.days||[]).filter(d=>d!==z.repTo)};if(nx.qty){nx.qty={...nx.qty};delete nx.qty[z.repTo]}apply([op('acts',x.id,nx)],'Reprogramación deshecha')}}
   requestRender();toast('Deshecho')}
 /* ---------- dibujo sobre el plano ---------- */
+/* lista de lo visto en obra sin estar programado (para el panel y la reunión) */
+function npSeenHtml(kind){if(typeof npItems!=='function')return'';const L=npItems([M.date],new Set([M.piso])).filter(i=>i.src==='np');if(!L.length)return'';
+  return L.map(i=>{const c=conOf(i.e.sc).color;const am=i.a?i.a.code+' · '+i.a.name:'';
+    return kind==='mlr'?`<button class="mlr" data-npo="${esc(i.id)}"><i class="nbi np" style="--c:${c}">+</i><span><b>${esc(i.e.desc||'')}</b><small>${esc(conOf(i.e.sc).name)}${am?' · '+esc(am):''}${i.e.pt?'':' · sin ubicar'}</small></span></button>`
+      :`<div class="mp-it np"><div class="t">${esc(i.e.desc||'')}<small>${esc(conOf(i.e.sc).name)}${am?' · '+esc(am):''} · ${esc(i.e.byName||'')}${(i.e.photos||[]).length?' · 📷':''}</small></div><div class="s"><button class="lnkb" data-npo="${esc(i.id)}">Ver</button></div></div>`}).join('')}
 function tapSelect(w,e){if(M.tool!=='pan')return;const els=document.elementsFromPoint(e.clientX,e.clientY);const z=els.map(el=>el.closest&&el.closest('[data-z]')).find(Boolean);const zid=z&&z.dataset.z?z.dataset.z:null;
+  if(zid&&zid.startsWith('np:')){if(typeof npOpen==='function')npOpen(zid.slice(3));return}
   if(M.meet&&typeof canWrite!=='undefined'&&canWrite){const c=crossAt(w);if(c){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
   if(M.meet||M.colorBy==='cu'){const zz=zid&&PD.get(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY);else zcClose();if(M.meet)return}
   M.selId=zid;requestRender()}
@@ -289,6 +295,10 @@ function drawOverlay(){const v=M.view;if(!v)return;computeCross();const NUMS=pla
     if(t.kind==='zona'||t.kind==='poly'||t.kind==='erase')svg+=`<polygon points="${pts}" fill="${c}" fill-opacity="${t.kind==='erase'?.08:.22}" stroke="${c}" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`+(t.kind==='poly'?t.pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="${5*k}" fill="${c}"/>`).join(''):'');
     else if(t.kind==='flecha'){svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${c}" stroke-width="${LW[M.lw]}" vector-effect="non-scaling-stroke" stroke-linecap="round"/>`;labels.push({x:P[1].x,y:P[1].y,t:'',c,cls:'arw w'+M.lw,ang:Math.atan2(P[1].y-P[0].y,P[1].x-P[0].x)*180/Math.PI})}
     else if(t.kind==='trazo')svg+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${LW[M.lw]}" vector-effect="non-scaling-stroke" stroke-linecap="round"/>`}
+  /* trabajo no programado visto en obra (registrado en el recorrido de Campo): un «+» en el punto donde se vio */
+  if(typeof npMarks==='function'){if(typeof ensureNP==='function')ensureNP(M.date);
+    for(const m of npMarks(M.date,M.piso)){if((m.v||M.vista)!==M.vista||(fvv&&m.sc!==fvv))continue;svg+=`<circle cx="${m.x}" cy="${m.y}" r="5" fill="${m.c}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+      labels.push({id:'np:'+m.id,x:m.x,y:m.y,t:'+',nb:1,np:1,cls:'npo',area:1,c:m.c,f:m.c,tip:'Visto en obra sin estar programado · '+m.tip})}}
   v.svg.innerHTML=svg;v.labels=labels;
   const lg=$('#mcleg');if(lg){const on=cu;let h='';if(on){const o=cumplSum();h=`<b>Cumplimiento ${fmtD(M.date)}</b>${['ok','partial','no','none'].map(k=>`<span><i style="background:${STC[k]}"></i>${STT[k]} <b>${o[k]}</b></span>`).join('')}<span class="mu">${o.ok+o.partial+o.no?Math.round(o.ok/(o.ok+o.partial+o.no)*100)+' % de lo verificado':'Aún sin registros de Campo'}</span>`}if(lg.dataset.h!==h){lg.innerHTML=h;lg.dataset.h=h}lg.hidden=!on}
   v.handles=!M.meet&&own(sel)&&M.tool==='pan'&&(sel.kind==='zona'||sel.kind==='flecha')?unflat(sel.pts):[];v.apply()}
@@ -612,6 +622,7 @@ function renderLeg(){const el=$('#mleg');if(!el)return;const N=planNumbering(nul
       for(const it of items){const zs=it.zones.filter(inV);const c=cu?STC[zSt(zs[0])]:conOf(it.sc).color;const cx=zs.some(z=>CROSS.ids.has(z.id));const rs=!!RSK.get(it.id);
         if(it.sc!==last){h+=`<div class="mlsc" style="--c:${conOf(it.sc).color}"><i></i>${esc(conOf(it.sc).name)}</div>`;last=it.sc}
         h+=`<button class="mlr" data-lz="${zs.map(z=>z.id).join(',')}"><i class="nbi${lum(c)>.55?' lt':''}${cx?' rx':rs?' rr':''}" style="--c:${c}">${it.n}</i><span><b>${esc(it.x.name)}</b><small>${esc(it.a?it.a.code+' · '+it.a.name:'')}</small></span>${rs?'<em title="Restricción pendiente">⛔</em>':''}${cx?'<em title="Superposición con otro subcontratista">⚠</em>':''}</button>`}
+      {const sn=npSeenHtml('mlr');if(sn)h+=`<div class="mlsc">Visto en obra · no programado</div>${sn}`}
       if(np.length){h+=`<div class="mlsc">Trabajo no programado</div>`;for(const o of np){const c=conOf(o.z.sc).color;h+=`<button class="mlr" data-lz="${o.z.id}"><i class="nbi np" style="--c:${c}">${o.l}</i><span><b>${esc(o.z.desc||'Sin descripción')}</b><small>${esc(conOf(o.z.sc).name)}</small></span></button>`}}
       h+='</div>'}}
   if(el.dataset.h!==h){const sc=el.querySelector('.mll');const st=sc?sc.scrollTop:0;el.innerHTML=h;el.dataset.h=h;const sc2=el.querySelector('.mll');if(sc2)sc2.scrollTop=st}
@@ -843,6 +854,7 @@ function renderPlan(main,cur,base){
       return`<div class="mp-it rp"><div class="t"><span class="mono">${esc(a.code)}</span> ${esc(x.name)}<small>${f.r.status==='partial'?'½ Parcial':'✗ No cumplido'} el ${DOWN_[(pd(f.d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(f.d)}${f.r.cnc?' · '+esc(f.r.cnc):''}${sal!=null?` · saldo ${fq(sal)} ${esc(x.und||'')}`:''}</small></div>
        <div class="s">${canWrite?`<button class="ib pri" data-rep="${x.id}|${f.d}">Programar ${fmtD(M.date)}</button><button class="ib" data-repd="${x.id}|${f.d}">Otro día…</button><button class="ib" data-repe="${x.id}|${f.d}" title="Se hizo otro día aunque no estaba programada">✓ Ya se ejecutó…</button><button class="lnkb" data-repx="${x.id}|${f.d}" title="Ya no hace falta reprogramarla">Descartar</button>`:'<span class="mu">Pide al planificador que la reprograme</span>'}</div></div>`}).join('')}</div>`}
     h+=`<div class="mp-sec">Trabajo no programado</div>${np.map(z=>`<div class="mp-it np"><div class="t">${esc(z.desc||'')}</div><div class="s"><button class="lnkb" data-see="${z.id}">Ver</button>${canD?`<button class="lnkb" data-delz="${z.id}">Quitar</button>`:''}</div></div>`).join('')}${canD?'<button class="lnkb" id="mnp">+ Agregar trabajo no programado</button>':''}`;
+    {const sn=npSeenHtml('mp-it');if(sn)h+=`<div class="mp-sec">Visto en obra · no programado</div>${sn}`}
     if(notes.length)h+=`<div class="mp-sec">Notas y dibujos</div><div class="note">${notes.length} en el plano. Selecciónalos con ✋ para moverlos o borrarlos.</div>`}
   const others=[...new Set([...scs,...Object.keys(pendBy)])].filter(c=>c!==sc);
   if(others.length)h+=`<div class="mp-sec">Otros subcontratistas hoy</div>${others.map(c=>{const s2=stat(c);const pc=(pendBy[c]||[]).length;return`<button class="mp-oth${pc?' mp-rp':''}" data-osc="${c}" style="--c:${conOf(c).color}"><i></i><span>${esc(conOf(c).name)}</span><b>${s2.ok}/${s2.n}</b>${s2.no?`<em>${s2.no} no va</em>`:''}${pc?`<em title="No cumplidas sin reprogramar">↻ ${pc}</em>`:''}</button>`}).join('')}`;

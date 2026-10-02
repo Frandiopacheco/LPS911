@@ -25,7 +25,7 @@ function npItems(dates,vset){const ds=dates instanceof Set?dates:new Set(dates);
   for(const n of NPM.values()){if(n.del||!ds.has(n.date)||(vset&&!vset.has(n.pisoId)))continue;out.push({id:n.id,src:'np',e:n,d:n.date,pid:n.pisoId,p:S.pis.get(n.pisoId),a:S.amb.get(n.ambId)})}
   return out.sort((a,b)=>(a.e.ts||0)-(b.e.ts||0))}
 /** Puntos para el plano de Campo */
-function npMarks(d,pid){return npItems([d],new Set([pid])).filter(i=>i.src==='np'&&i.e.pt).map(i=>({id:i.id,x:i.e.pt.x,y:i.e.pt.y,v:i.e.pt.v,c:conOf(i.e.sc).color,t:'+',tip:`${conOf(i.e.sc).name}: ${i.e.desc||''}`}))}
+function npMarks(d,pid){return npItems([d],new Set([pid])).filter(i=>i.src==='np'&&i.e.pt).map(i=>({id:i.id,x:i.e.pt.x,y:i.e.pt.y,v:i.e.pt.v,sc:i.e.sc,c:conOf(i.e.sc).color,t:'+',tip:`${conOf(i.e.sc).name}: ${i.e.desc||''}`}))}
 
 /* ---------- ficha rápida (hoja inferior) ---------- */
 function npNew(o){if(!canNP())return;const d=o.d||campoDate();
@@ -113,3 +113,5 @@ document.addEventListener('click',e=>{const t=e.target;const art=t.closest&&t.cl
   if(t.closest('img[data-ph]'))return;
   if(art.dataset.src==='np'){e.stopPropagation();npOpen(art.dataset.np);return}
   if(t.closest('[data-npdx]')&&canDaily){e.stopPropagation();const doc=DAY.get(dayId(campoDate(),art.dataset.pid));const ex=doc&&doc.extra&&doc.extra[art.dataset.np];if(ex)writeDaily(campoDate(),art.dataset.pid,{extra:{[art.dataset.np]:{...ex,del:true}}});toast('Registro eliminado')}},true);
+/* en el Plan diario: abrir lo visto en obra desde la lista */
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-npo]');if(!b)return;e.stopPropagation();e.preventDefault();npOpen(b.dataset.npo)},true);
