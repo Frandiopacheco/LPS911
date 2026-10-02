@@ -75,7 +75,7 @@ $('#wprev').onclick=()=>navDate(-1);$('#wnext').onclick=()=>navDate(1);$('#wtoda
 
 /* ---------- barra superior según la pestaña (P6) ---------- */
 const UNDO_TABS=['look','plan','restr','cfg','planos'];
-function topToolsApply(){const t=U.tab;const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
+function topToolsApply(){const t=U.tab;if(t!=='look'&&$('#mvbar'))selBar();const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
   ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)})}
 
 /* ---------- plantilla común de página (P5) ----------
