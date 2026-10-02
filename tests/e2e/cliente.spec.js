@@ -103,8 +103,8 @@ test('emitir al cliente, alerta de holgura consumida y PPC del cliente', async (
   noErrors(errors, 'emitir');
 });
 
-for (const as of ['sc', 'campo', 'lector']) {
-  test(`${as} no ve la versión cliente`, async ({ page }) => {
+for (const as of ['editor', 'sc', 'campo', 'lector']) {
+  test(`${as} sin designar no ve la versión cliente`, async ({ page }) => {
     const errors = await openApp(page, { as, tab: 'look' });
     await expect(page.locator('#grid')).toBeVisible();
     await expect(page.locator('#fcli')).toBeHidden();
@@ -114,3 +114,24 @@ for (const as of ['sc', 'campo', 'lector']) {
     noErrors(errors, as);
   });
 }
+
+test('el administrador designa quién tiene acceso a la versión cliente', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'team' });
+  const chk = page.locator('input[data-mem="editor@obra.pe"][data-f="cli"]');
+  await chk.check();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'editor@obra.pe').cli)).toBe(true);
+  await expect(page.locator('input[data-mem="sc@obra.pe"][data-f="cli"]')).toHaveCount(0); // al subcontratista no se le puede dar
+  noErrors(errors, 'designar');
+});
+
+test('alguien designado (campo) ve la vista cliente y cambia la holgura', async ({ page }) => {
+  const errors = await openApp(page, { as: 'campo', tab: 'look', extra: [['members', 'campo@obra.pe', { role: 'campo', name: 'Carlos Campo', cli: true }]] });
+  await page.click('#fcli');
+  await expect(page.locator('#cliban')).toContainText('Vista cliente');
+  await holgura(page, '#cliban [data-cb="all"]', 1);
+  await expect.poll(async () => (await buf(page)).all).toBe(1);
+  await openTab(page, 'ind');
+  await page.click('#imode [data-m="sem"]');
+  await expect(page.locator('#main')).toContainText('PPC del cliente');
+  noErrors(errors, 'campo designado');
+});

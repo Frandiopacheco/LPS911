@@ -4,15 +4,20 @@
    fecha interna + holgura en días hábiles. La holgura se define para toda la obra, un piso, un sector, un ambiente o una
    actividad, y manda la más específica. Cada semana se «emite» una foto de la versión cliente: eso es lo que se envía y
    contra eso se mide el PPC del cliente. Si la interna pasa la fecha comunicada, se avisa (holgura consumida).
-   Solo la ven el administrador y los editores (reglas: cli, clidx, cliver).
+   Solo la ven el administrador y quienes él designe en Equipo (reglas: cli, clidx, cliver).
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 let CLIB=null,cliBufSub=null,cliIdxSub=null,cliErr=null,cliCache=null,CLI_INT=null,cliLateCache=null;
 const CLX=new Map();   // versiones emitidas (índice)
 const CLVD=new Map();  // versiones emitidas ya leídas: id → {ready,pis,sec,amb,act}
-const canCli=()=>!!me&&!!db&&(me.role==='admin'||me.role==='editor')&&!PM();
+/* Acceso: el administrador siempre; los demás solo si el administrador los designa en Equipo (members.cli).
+   El subcontratista y el capataz nunca (trabajan con la versión interna). Las reglas de Firestore dicen lo mismo. */
+const CLI_ROLES=['editor','campo','area','lector'];
+const canCli=()=>!!me&&!!db&&(me.role==='admin'||(me.cli===true&&CLI_ROLES.includes(me.role)));
 const BUF_LV={x:'la actividad',a:'el ambiente',s:'el sector',p:'el piso',all:'toda la obra'};
 
+/** Se deja de escuchar al perder el acceso (el administrador lo quitó en Equipo). */
+function cliStop(){if(cliBufSub)cliBufSub();if(cliIdxSub)cliIdxSub();cliBufSub=cliIdxSub=null;CLIB=null;CLX.clear();CLVD.clear();cliCache=cliLateCache=null;U.cliv=false;U.cliVer=''}
 function ensureCli(){if(!canCli()||cliBufSub)return;
   cliBufSub=fcol('cli').doc('buf').onSnapshot(d=>{CLIB=d.exists?d.data():{};cliErr=null;cliCache=null;if(ready)requestRender()},
     e=>{cliErr=e&&e.code||'error';CLIB={};if(ready)requestRender()});
@@ -122,7 +127,7 @@ function cliPpcCard(vset){if(!canCli())return'';ensureCli();if(!CLX.size)return`
   ensureDaily(cliPpcFrom());const{W,loading}=cliPpc(vset);const sel=W.find(o=>o.w===U.week);
   const scs={};if(sel)for(const i of sel.items){const o=scs[i.x.sc]=scs[i.x.sc]||{n:0,ok:0};o.n++;if(i.ok)o.ok++}
   const bar=v=>v==null?'<span class="mu">—</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`;
-  return`<div class="card"><h2>PPC del cliente <span class="sub">contra la versión emitida · lo que se le informa · solo administrador y editores</span></h2><div class="pad">
+  return`<div class="card"><h2>PPC del cliente <span class="sub">contra la versión emitida · lo que se le informa · solo quienes tienen acceso</span></h2><div class="pad">
     ${loading?'<p class="note">Cargando versiones emitidas…</p>':''}
     ${W.length?`<div class="tscroll"><table class="t ctab rt"><thead><tr><th>Semana</th><th>Versión emitida</th><th class="r">Compromisos</th><th class="r">Cumplidos</th><th>PPC cliente</th><th>PPC interno</th></tr></thead><tbody>
       ${W.map(o=>{const pi=ppcWeekAgg(o.w,vset);return`<tr${o.w===U.week?' class="on"':''}><td data-l="Semana"><b>S${o.w}</b>${o.cur?' <span class="mu">en curso</span>':''}</td><td class="wrapc mu" data-l="Versión">${esc(o.ver.label||'')}</td><td class="r" data-l="Compromisos">${o.n}</td><td class="r ok" data-l="Cumplidos">${o.ok}</td><td data-l="PPC cliente">${bar(o.ppc)}</td><td data-l="PPC interno">${bar(pi?pi.ppc:null)}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Ninguna semana de este periodo tiene una versión emitida vigente.</div>'}
