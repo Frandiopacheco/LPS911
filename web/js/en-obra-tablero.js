@@ -60,7 +60,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
   const khd=$('#khd',main);if(khd.dataset.h!==hh){khd.innerHTML=hh;khd.dataset.h=hh}
   const npOn=NPon&&E&&!!CP.pid&&d<=todayIso();const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);
-  if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:aid=>capSheet(aid,d,'main'),
+  if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:(aid,z,pt)=>{capSheet(aid,d,'main');if(KS)KS.pt=pt||null},
     marks:npOn?npMarks(d,CP.pid):null,onEmpty:npOn?pt=>npNew({d,pid:CP.pid,pt}):null,onMark:id=>npOpen(id)})}
   let lh='';
   if(liveErr)lh+=`<div class="callout">No se pudo leer el avance (${esc(liveErr)}). Avisa al administrador: faltan las reglas nuevas de Firestore.</div>`;
@@ -123,6 +123,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
     else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     else h+=`<div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`}
+  if(typeof canNP==='function'&&canNP()&&(ENG()||VEED())&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
   let sh=$('#ksheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='ksheet';sh.innerHTML='<div class="ksc"></div>';document.body.appendChild(sh);
     sh._open=NOW();sh.onclick=kSheetClick;sh.onchange=kSheetChange;sh.oninput=e=>{if(e.target.id==='knote'||e.target.id==='kmott')KS.note=e.target.value}}
   const sc=sh.firstChild;if(sc.dataset.h!==h){sc.innerHTML=h;sc.dataset.h=h}}
@@ -134,6 +135,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
   if((b=t.closest('[data-kcs]'))){KS.cs=b.dataset.kcs;if(KS.cs==='ok')KS.cnc='';capSheet(aid,d,'close',true);return}
   if((b=t.closest('[data-kcnc]'))){KS.cnc=b.dataset.kcnc;capSheet(aid,d,'close',true);return}
   if(!(b=t.closest('[data-ka]')))return;const k=b.dataset.ka;
+  if(k==='np'){const x=S.act.get(aid);const pt=KS.pt||null;kClose();if(x)npNew({d,pid:pisoOfAct(aid),ambId:x.ambId,pt});return}
   if(k==='back'){capSheet(aid,d,'main',true);return}
   if(k==='stopf'){KS.note='';capSheet(aid,d,'stop',true);return}
   if(k==='closef'){if(SCK())return;capSheet(aid,d,'close');return}
