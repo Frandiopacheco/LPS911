@@ -31,6 +31,10 @@ service cloud.firestore {
     function areaOf() { return get(memberPath()).data.get('area', ''); }
     // Calidad: un área de apoyo cuyo nombre contiene "calidad"
     function isCal() { return isArea() && areaOf().lower().matches('.*calidad.*'); }
+    // Veedor: recorre la obra y registra lo que se ejecuta sin estar programado (no cambia nada más)
+    function isVeedor() { return isMember() && !isOwner() && role() == 'veedor'; }
+    // Trabajo no programado visto en obra: campo, editores, administrador, Calidad y veedores
+    function canNP() { return canDaily() || isVeedor() || isCal(); }
     function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
@@ -118,9 +122,17 @@ service cloud.firestore {
       allow read: if isMember();
       allow write: if canDaily();
     }
+    // Trabajo no programado registrado en el recorrido (con punto en el plano y foto).
+    // Cada uno corrige o anula lo suyo; campo, editores y administrador, todo. Nadie lo borra de verdad (se anula con del).
+    match /nprog/{id} {
+      allow read: if isMember();
+      allow create: if canNP() && request.resource.data.by == mid();
+      allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid());
+      allow delete: if isAdmin();
+    }
     match /fotos/{id} {
       allow read: if isMember();
-      allow create, update: if (canDaily() || isCap() || isSC() || isArea()) && request.resource.data.data.size() < 400000;
+      allow create, update: if (canDaily() || isCap() || isSC() || isArea() || isVeedor()) && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.

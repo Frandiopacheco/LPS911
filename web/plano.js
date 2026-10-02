@@ -762,11 +762,15 @@ function novaSet(d){return new Set([...PD.values()].filter(z=>z.kind==='nova'&&z
 function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zona');const vs=[...new Set(zs.map(z=>zVista(z)))];const ZL_=planNumbering(null,pid).zl;
   vs.forEach(v=>crossPairs(zs.filter(z=>zVista(z)===v)).list.forEach(c=>out.push({a:zNo(c.a,ZL_)+conOf(c.a.sc).name+': '+zoneLabel(c.a),b:zNo(c.b,ZL_)+conOf(c.b.sc).name+': '+zoneLabel(c.b)})));return out}
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
-function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
+function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
   if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Plan diario › Subir lámina</b>.':'')}</div>`;host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
-  let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;const z=el&&(oo.zones?oo.zones.find(q=>q.id===el.dataset.z):PD.get(el.dataset.z));if(z&&z.actId&&oo.colors.has(z.actId))oo.onPick(z.actId,z)}});host._v=v}host._o=o;host._base=base.id;
+  let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;
+    const zid=el?el.dataset.z:'';if(zid&&zid.startsWith('np:')){if(oo.onMark)oo.onMark(zid.slice(3));return}
+    const z=el&&(oo.zones?oo.zones.find(q=>q.id===zid):PD.get(zid));if(z&&z.actId&&oo.colors.has(z.actId)){oo.onPick(z.actId,z);return}
+    /* toque en un lugar sin actividad programada: trabajo no programado */
+    if(oo.onEmpty)oo.onEmpty({x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''})}});host._v=v}host._o=o;host._base=base.id;
   const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()}).catch(()=>{});
   v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.5}]);
   const full=boundsOf({...base,T:base.T||I});const mv=mine.filter(z=>zVista(z)===base.id);
@@ -776,6 +780,9 @@ function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=o.zones||shapesOf(o
   mv.forEach(z=>{const P=unflat(z.pts);if(!P.length)return;const c=o.colors.get(z.actId);const pts=ptsS(P);
     svg+=`<polygon points="${pts}" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/><polygon data-z="${z.id}" points="${pts}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
     const ce=centroid(P),bb=bboxOf(P);const n=o.nums.get(z.actId);labels.push({id:z.id,x:ce.x,y:ce.y,t:String((o.lab&&o.lab(z))||n||'•'),nb:1,bs:o.bs||40,cls:o.bs&&o.bs<40?'sm':'',area:bb.w*bb.h,c,f:'#fff',tip:''})});
+  /* trabajo no programado visto en obra: un punto con «+» del color del subcontratista */
+  (o.marks||[]).filter(m=>(m.v||base.id)===base.id).forEach(m=>{svg+=`<circle cx="${m.x}" cy="${m.y}" r="5" fill="${m.c}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    labels.push({id:'np:'+m.id,x:m.x,y:m.y,t:m.t||'+',nb:1,np:1,bs:o.bs||40,cls:'npm'+(o.bs&&o.bs<40?' sm':''),area:1,c:m.c,f:m.c,tip:m.tip||''})});
   v.svg.innerHTML=svg;v.labels=labels;v.apply()}
 
 /* dibujar una zona rectangular sobre el visor de capPlan: cb(pts planos, vista) */
@@ -788,6 +795,17 @@ function capDraw(host,cb){host._drawCb=cb||null;host.classList.toggle('drawing',
     if(cb)cb(flat([{x:a.x,y:a.y},{x:p.x,y:a.y},{x:p.x,y:p.y},{x:a.x,y:p.y}]),host._base||'')};
   host.addEventListener('pointerup',end,true);host.addEventListener('pointercancel',end,true)}
 /* zona de una actividad en el plan diario (del día cargado o la última usada) */
+/* ambiente que corresponde a un punto del plano: la zona (del día o la última usada) que lo contiene, o la más cercana */
+/* últimas zonas (pzon) de otros pisos, para saber el ambiente de un punto fuera del Plan diario */
+const ZNP=new Map();
+function znLoad(pid){if(!pid||!db)return Promise.resolve();if(znKey===pid)return Promise.resolve();let e=ZNP.get(pid);if(e)return e.p;
+  e={m:new Map()};e.p=fcol('pzon').where('pisoId','==',pid).get().then(sn=>{sn.docs.forEach(d=>e.m.set(d.id,{...d.data(),id:d.id}))}).catch(()=>{ZNP.delete(pid)});ZNP.set(pid,e);return e.p}
+function ambAtP(pid,pt){return znLoad(pid).then(()=>ambAt(pid,pt))}
+function ambAt(pid,pt){if(!pt)return'';const cand=[];const ZM=znKey===pid?ZN:(ZNP.get(pid)||{m:new Map()}).m;
+  for(const z of PD.values())if(z.kind==='zona'&&z.pisoId===pid&&zVista(z)===pt.v){const am=z.ambId||(z.actId&&S.act.get(z.actId)||{}).ambId;if(am)cand.push({am,P:unflat(z.pts)})}
+  for(const[aid,n]of ZM)if(n.pisoId===pid&&(n.vista||(basesOf(pid)[0]||{}).id||'')===pt.v){const x=S.act.get(aid);if(x&&x.ambId)cand.push({am:x.ambId,P:unflat(n.pts)})}
+  let best='',bd=Infinity;for(const c of cand){if(!c.P.length)continue;if(pip(pt,c.P))return c.am;const ce=centroid(c.P),bb=bboxOf(c.P);const dd=Math.hypot(ce.x-pt.x,ce.y-pt.y);if(dd<Math.max(bb.w,bb.h)*1.2&&dd<bd){bd=dd;best=c.am}}
+  return best}
 function zoneFor(aid){const z=[...PD.values()].find(q=>q.kind==='zona'&&q.actId===aid);if(z)return{pts:z.pts,vista:zVista(z),pisoId:z.pisoId};const n=ZN.get(aid);return n?{pts:n.pts,vista:n.vista||'',pisoId:n.pisoId}:null}
 /* ---------- panel y barra de herramientas ---------- */
 const TOOLS=[['pan','✋','Mover','Mover el plano; clic en un dibujo para elegirlo y arrastrarlo (V)'],['zona','▭','Zona','Zona rectangular: arrastra (R)'],['poly','⬠','Polígono','Zona con forma libre: clic en cada esquina (P)'],['flecha','➚','Flecha','Flecha: arrastra del inicio a la punta (F)'],['texto','T','Texto','Texto: clic donde va (T)'],['trazo','✎','Lápiz','Dibujo a mano alzada (L)'],['borrar','⌫','Borrar','Borrador: toca o arrastra sobre lo que quieras borrar, o marca un área (E)']];
@@ -1046,5 +1064,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
+window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
 })();

@@ -13,6 +13,7 @@ export const USERS = {
   calidad: { uid: 'u-cal', email: 'calidad@obra.pe', emailVerified: true },
   ot: { uid: 'u-ot', email: 'ot@obra.pe', emailVerified: true },
   lector: { uid: 'u-le', email: 'lector@obra.pe', emailVerified: true },
+  veedor: { uid: 'u-ve', email: 'veedor@obra.pe', emailVerified: true },
   capataz: { uid: 'cap1', email: null, isAnonymous: true, emailVerified: false },
 };
 

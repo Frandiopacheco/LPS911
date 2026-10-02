@@ -26,6 +26,7 @@
     S('members', 'calidad@obra.pe', { role: 'area', name: 'Quique Calidad', area: 'Calidad' });
     S('members', 'ot@obra.pe', { role: 'area', name: 'Olga OT', area: 'Oficina Técnica' });
     S('members', 'lector@obra.pe', { role: 'lector', name: 'Luis Lector' });
+    S('members', 'veedor@obra.pe', { role: 'veedor', name: 'Vero Veedora' });
     S('members', 'u_cap1', { role: 'capataz', name: 'Pedro Capataz', sc: 'c1', scs: ['c1'] });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
     S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1 });
