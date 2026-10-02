@@ -36,7 +36,7 @@ const saveCP=()=>{try{localStorage.setItem('lps.cap',JSON.stringify(CP))}catch(e
 let KS=null;
 function loadPlanoMod(){if(window.__plano&&window.__plano.capPlan)return Promise.resolve();
   if(!planoP){planoP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=PLANO_SRC;s.onload=ok;s.onerror=()=>{planoP=null;ko()};document.head.appendChild(s)})}
-  return planoP.then(()=>{if(U.tab==='cap'||U.tab==='mapa'||U.tab==='dash'||U.tab==='campo'){const m=$('#main');if(U.tab==='mapa')m.dataset.built='';requestRender()}})}
+  return planoP.then(()=>{if(U.tab==='cap'||U.tab==='mapa'||U.tab==='dash'||U.tab==='campo'||U.tab==='planos'){const m=$('#main');if(U.tab==='mapa')m.dataset.built='';requestRender()}})}
 const ENG=()=>!!me&&me.role!=='capataz'&&!!canDaily;
 function capItems(d){const E=ENG()||VEED();const vs=new Set(visPisos().map(p=>p.id));const my=new Set(E?[...S.con.keys()]:(me&&me.scs||[]));const API=window.__plano;const nv=API&&API.novaSet?API.novaSet(d):new Set();
   return[...S.act.values()].filter(x=>my.has(x.sc)&&schedOn(x,d)&&!nv.has(x.id)).map(x=>{const a=S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);return{x,a,s,pid:pisoOfAct(x.id)}})
