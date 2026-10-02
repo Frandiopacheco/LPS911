@@ -70,7 +70,9 @@ test('en el recorrido, el ambiente sale de su forma en la lámina', async ({ pag
   const errors = await openApp(page, { as: 'campo', tab: 'campo', extra: [...LAMINA, A2] });
   await page.evaluate(() => { CU.view = 'plan'; render(); });
   await page.locator('[data-kp="p1"]').click();
+  // A-2 tiene actividades hoy: tocarlo abre su actividad, y desde ahí se registra otro trabajo en ese ambiente
   const p = await enPantalla(page, '#kplan', 600, 200); await page.mouse.click(p.x, p.y);
+  await page.locator('#ksheet [data-ka="np"]').click();
   await expect(page.locator('#npamb')).toHaveValue('a2');
   noErrors(errors, 'recorrido');
 });

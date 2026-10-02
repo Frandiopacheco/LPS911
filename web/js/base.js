@@ -129,7 +129,8 @@ function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0)
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
-function put(col,id,data){const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
+let DV=0; /* sube con cada cambio de datos (para cachés) */
+function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
   if(!db||(!canWrite&&!scR))return Promise.resolve();
@@ -358,6 +359,7 @@ function enterView(main){
 function render(){
   if(!ready)return;
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
+  if(typeof dayAuto==='function')dayAuto();
   let main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')presStop();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');

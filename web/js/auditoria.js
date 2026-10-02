@@ -79,7 +79,7 @@ async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){
    ===================================================================== */
 /* ---- papelera: eliminar = archivar (se puede recuperar; el historial no cambia) ---- */
 function getDoc(col,id){const k=COLS[col];if(!k)return null;return S[k].get(id)||(ARCH[k]&&ARCH[k].get(id))||null}
-function setColData(k,mp){if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}S[k]=mp}
+function setColData(k,mp){if(typeof DV!=='undefined')DV++;if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}S[k]=mp}
 let ARC_T=null;
 function arc(col,id){if(col==='acts'&&PM())return op(col,id,null);const cur=getDoc(col,id);if(!cur||cur.arch)return null;
   if(!ARC_T){ARC_T={t:NOW(),by:me?me.email:'',n:me?(me.name||''):''};setTimeout(()=>{ARC_T=null},0)}
