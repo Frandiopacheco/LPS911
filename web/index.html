@@ -2833,7 +2833,7 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
       libSave(id,{st:k,done:{t:NOW(),by:me.email,n:me.name||me.email},hist:libHist(l,k,note.trim()),...(note.trim()?{obs:[...(l.obs||[]),{t:note.trim(),ok:false,menor:true}]}:{})},k==='lib'?'Liberada':'Liberada con observaciones menores');setTimeout(()=>libDetail(id),80);return}
     if(k==='obs'){libObs(id);return}
     if(k==='lev'){const note=prompt('¿Qué se corrigió? (opcional)','')||'';libSave(id,{st:'lev',hist:libHist(l,'lev',note.trim()),obs:(l.obs||[]).map(o=>({...o,ok:true}))},'Calidad verá que pides reinspección');setTimeout(()=>libDetail(id),80);return}
-    if(k==='reab'){libSave(id,{st:'pro',hist:libHist(l,'pro','Reabierta')},'Liberación reabierta');setTimeout(()=>libDetail(id),80);return}
+    if(k==='reab'){const st=l.prog&&l.prog.d?'pro':'sol';libSave(id,{st,hist:libHist(l,st,'Reabierta')},'Liberación reabierta');setTimeout(()=>libDetail(id),80);return}
     if(k==='anu'){if(!confirm('¿Anular esta solicitud de liberación?'))return;libSave(id,{st:'anu',hist:libHist(l,'anu','')},'Solicitud anulada');lqClose();return}},
    async e=>{const t=e.target;
     if(t.dataset.lqo!=null){const i=+t.dataset.lqo;const obs=(l.obs||[]).map((o,j)=>j===i?{...o,ok:t.checked}:o);libSave(id,{obs});return}
@@ -2867,7 +2867,7 @@ function libItems(){const vs=new Set(visPisos().map(p=>p.id));const q=fold(U.lib
   const seen=new Set();const P0=[];for(const b of libBlocks()){if(b.l||seen.has(b.p.id))continue;seen.add(b.p.id);if(!U.libIn&&ok(b.p,pisoOfAct(b.p.id),b.p.sc))P0.push({x:b.p,st:'sin',b})}
   return{L,P0}}
 function lqCard(o){const x=o.x,l=o.l;const a=S.amb.get(x.ambId);const p=S.pis.get(l?l.pisoId:pisoOfAct(x.id));const r=l?{crit:l.crit,sup:l.sup,rest:l.rest}:libRuleOf(x)||{};const s=LST[o.st];
-  const when=o.st==='sin'?`El ${esc(o.b.y.name)} entra el ${fmtD(o.b.need)}`:o.st==='pro'?`Inspección ${fmtD(l.prog.d)}${l.prog.h?' · '+esc(l.prog.h):''}`:libDone(o.st)?`✓ ${(l.done&&l.done.t)?fmtD(ldt(l.done.t))+' '+hhmm(l.done.t):''}`:o.st==='obs'?`${(l.obs||[]).filter(q=>!q.ok).length} observación(es) por levantar`:`Lista para el ${fmtD(l.need)}${l.late?' · fuera de plazo':''}`;
+  const when=o.st==='sin'?`El ${esc(o.b.y.name)} entra el ${fmtD(o.b.need)}`:o.st==='pro'?(l.prog&&l.prog.d?`Inspección ${fmtD(l.prog.d)}${l.prog.h?' · '+esc(l.prog.h):''}`:'Falta fijar día de inspección'):libDone(o.st)?`✓ ${(l.done&&l.done.t)?fmtD(ldt(l.done.t))+' '+hhmm(l.done.t):''}`:o.st==='obs'?`${(l.obs||[]).filter(q=>!q.ok).length} observación(es) por levantar`:`Lista para el ${fmtD(l.need)}${l.late?' · fuera de plazo':''}`;
   return`<button type="button" class="lqcard" ${l?`data-lqid="${l.id}"`:`data-lqask="${x.id}"`} style="--c:${s.c}"><span class="lqtags">${r.crit?'<i class="lqt crit">CRÍTICA</i>':''}${r.sup?'<i class="lqt sup">SUPERVISIÓN</i>':''}${l&&l.late&&o.st==='sol'?'<i class="lqt crit">FUERA DE PLAZO</i>':''}</span>
    <b>${esc(x.name||'')}</b><span>${esc([p&&p.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · '))}</span><span class="lqsc"><i style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)}</span><span class="lqwhen">${when}</span>${l&&l.prog&&l.prog.insp?`<span class="lqins" data-lqin="${esc(l.prog.insp)}" title="Ver solo lo de este inspector">👷 ${esc(l.prog.insp)}</span>`:''}${r.crit&&libRestName(r)&&!libDone(o.st)?`<span class="lqrest">⛔ Restringe: ${esc(libRestName(r))}</span>`:''}</button>`}
 function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V=U.libV;const{L,P0}=libItems();const blocks=libBlocks();
@@ -2884,6 +2884,7 @@ function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V
       return`<select class="tin" id="lqin" aria-label="Inspector"><option value="">Todos los inspectores</option>${I.map(k=>`<option value="${esc(k)}"${U.libIn===k?' selected':''}>${esc(k)}${n(k)?' · '+n(k)+' por inspeccionar':''}</option>`).join('')}</select>`})()}
     <input class="tin" id="lqq" data-fk="lqq" type="search" placeholder="Buscar actividad, ambiente, SC…" value="${esc(U.libQ||'')}" aria-label="Buscar">
     <span style="flex:1"></span><button class="ib" id="lqpdf">Programación de mañana (PDF)</button>${me&&(isCal()||canWrite&&!PM()||SCK())?'<button class="ib pri" id="lqnew">+ Solicitar liberación</button>':''}</div>`;
+  if(U.piso&&V!=='mat'&&V!=='map'){const oth=[...LIB.values()].filter(l=>l.st!=='anu'&&!libDone(l.st)&&l.pisoId&&l.pisoId!==U.piso).length;if(oth)h+=`<div class="callout">Estás viendo solo <b>${esc((S.pis.get(U.piso)||{}).name||'')}</b> (selector de piso de arriba). Hay <b>${oth}</b> liberación(es) abierta(s) en otros pisos. <button class="ib" data-lqall>Ver todos los pisos</button></div>`}
   if(U.libIn)h+=`<div class="callout">Agenda de <b>${esc(U.libIn)}</b>: solo se ven sus inspecciones. <button class="ib" data-lqin="${esc(U.libIn)}">Quitar filtro</button></div>`;
   if(libErr)h+=`<div class="callout">No se pudieron leer las liberaciones (${esc(libErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   if(!libRules().length)h+=`<div class="callout">Aún no hay <b>matriz de liberaciones</b>. Cárgala en la vista <b>Matriz</b> (Excel): de ahí salen qué actividades se liberan, cuáles son críticas y qué restringen.</div>`;
@@ -2921,6 +2922,7 @@ function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V
 function wireLib(main){
   main.onclick=async e=>{const t=e.target;let b;
     if((b=t.closest('#lqv button'))){U.libV=b.dataset.v;saveUI();render();return}
+    if(t.closest('[data-lqall]')){U.piso='';U.pisoAll=true;saveUI();render();return}
     if((b=t.closest('[data-lqin]'))){U.libIn=U.libIn===b.dataset.lqin?'':b.dataset.lqin;render();return}
     if((b=t.closest('[data-lqid]'))){libDetail(b.dataset.lqid);return}
     if((b=t.closest('[data-lqask]'))){libAsk(b.dataset.lqask);return}
