@@ -50,9 +50,17 @@ export async function expectTabOk(page, name) {
   await expect(main, `la pestaña ${name} no debe quedar vacía`).not.toBeEmpty();
 }
 
-/** Pestañas visibles en la barra de escritorio. */
+/** Pestañas que el usuario puede abrir: las de la barra y las del menú "Más". */
 export async function visibleTabs(page) {
-  return page.locator('#tabs button[data-tab]:visible').evaluateAll(bs => bs.map(b => b.dataset.tab));
+  return page.evaluate(() => [...tabPrimary(), ...tabSecondary()]);
+}
+
+/** Abre una pestaña desde la barra o, si está en "Más", desde ese menú. */
+export async function openTab(page, t) {
+  const b = page.locator(`#tabs button[data-tab="${t}"]`);
+  if (await b.isVisible()) await b.click();
+  else { await page.click('#tabMore'); await page.click(`#pop [data-do="t_${t}"]`); }
+  await expect(page.locator('#main')).toHaveAttribute('data-view', t);
 }
 
 export const noErrors = (errors, ctx) => expect(errors, `errores en el navegador (${ctx})`).toEqual([]);

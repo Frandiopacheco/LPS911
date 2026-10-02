@@ -1,13 +1,13 @@
 // Flujos de uso diario: lookahead, restricciones, campo, equipo, "Ver como" y vista celular.
 import { test, expect } from '@playwright/test';
-import { openApp, expectTabOk, noErrors, HOY } from './helpers.js';
+import { openApp, expectTabOk, noErrors, HOY, openTab } from './helpers.js';
 
 const get = (page, c, id) => page.evaluate(([c, id]) => window.__dbGet(c, id), [c, id]);
 const all = (page, c) => page.evaluate(c => window.__dbAll(c), c);
 
 test('lookahead: renombrar, deshacer y buscar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look' });
-  await page.click('#tabs [data-tab="look"]');
+  await openTab(page, 'look');
   const name = page.locator('input[data-a="i0"][data-f="name"]');
   await expect(name).toHaveValue('Redes empotradas');
   await name.fill('Redes empotradas de agua');
@@ -29,7 +29,7 @@ test('lookahead: renombrar, deshacer y buscar', async ({ page }) => {
 
 test('restricciones: crear y editar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'restr' });
-  await page.click('#tabs [data-tab="restr"]');
+  await openTab(page, 'restr');
   const antes = Object.keys(await all(page, 'restr')).length;
   await page.click('#radd');
   await expect.poll(async () => Object.keys(await all(page, 'restr')).length).toBe(antes + 1);
@@ -45,7 +45,7 @@ test('restricciones: crear y editar', async ({ page }) => {
 
 test('campo: registrar cumplido', async ({ page }) => {
   const errors = await openApp(page, { as: 'campo', tab: 'campo' });
-  await page.click('#tabs [data-tab="campo"]');
+  await openTab(page, 'campo');
   await page.locator('#main [data-st="ok"]').first().click();
   await expect.poll(async () => {
     const d = await all(page, 'daily');
@@ -58,7 +58,7 @@ test('campo: registrar cumplido', async ({ page }) => {
 
 test('equipo: el formulario no se borra con la actualización y la búsqueda filtra', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
-  await page.click('#tabs [data-tab="team"]');
+  await openTab(page, 'team');
   await page.fill('#temail', 'nuevo@obra.pe');
   await page.fill('#tname', 'Nuevo Ingeniero');
   // otro usuario cambia algo en la obra → la app se vuelve a dibujar
@@ -78,7 +78,7 @@ test('equipo: el formulario no se borra con la actualización y la búsqueda fil
 
 test('"Ver como" Calidad y vista celular', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
-  await page.click('#tabs [data-tab="team"]');
+  await openTab(page, 'team');
   await page.click('#bva');
   await page.selectOption('#var', 'area');
   await page.selectOption('#vaa', { label: 'Calidad' });

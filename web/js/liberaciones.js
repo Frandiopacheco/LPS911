@@ -170,7 +170,7 @@ function renderLib(main){ensureLib();const t0=todayIso(),tm=wshift(t0,1);const V
   const open=L.filter(o=>!libDone(o.st));const wk=new Set(weekDays(curWeek()));const doneW=L.filter(o=>libDone(o.st)&&o.l.done&&wk.has(ldt(o.l.done.t)));const first=doneW.filter(o=>!(o.l.hist||[]).some(e=>e.st==='obs'));
   const tiles=[['Para mañana',open.filter(o=>(o.l.prog&&o.l.prog.d===tm)||(!o.l.prog&&o.l.need===tm)).length,`${open.filter(o=>o.st==='sol'&&o.l.need<=tm).length} sin programar`,'#E0A01B'],
     ['Programadas hoy',open.filter(o=>o.st==='pro'&&o.l.prog&&o.l.prog.d===t0).length,'','#1F5F7A'],['Observadas',open.filter(o=>o.st==='obs').length,'esperan levantamiento','#9A6A12'],
-    ['Restringen ingreso',new Set(blocks.map(b=>b.p.id)).size,`${P0.length} sin solicitar`,'#B83A2E'],['Liberadas · semana',doneW.length,`${doneW.filter(o=>o.st==='libm').length} con obs. menores`,'#2E7D4F'],['A la primera',doneW.length?Math.round(first.length/doneW.length*100)+'%':'—',doneW.length?`${first.length} de ${doneW.length}`:'','#46504A']];
+    ['Restringen ingreso',new Set(blocks.map(b=>b.p.id)).size,`${P0.length} sin solicitar`,'#B83A2E'],['Liberadas · semana',doneW.length,`${doneW.filter(o=>o.st==='libm').length} con obs. menores`,'#2E7D4F'],['Liberadas a la primera',doneW.length?Math.round(first.length/doneW.length*100)+'%':'—',doneW.length?`${first.length} de ${doneW.length}`:'','#46504A']];
   const scs=[...new Set([...L.map(o=>o.x.sc),...P0.map(o=>o.x.sc)])].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
   const lateN=open.filter(o=>o.st==='sol'&&o.l.late).length;
   let h=`<div class="scroll"><div class="wrap lqwrap">
@@ -272,7 +272,7 @@ function libMatrixHtml(){const cat=libCatalog();const R=libRules();const C=libId
     poss.slice(0,40).forEach(({r,e})=>{h+=`<div class="lqri">¿<b>“${esc(e.name)}”</b> (${e.n} act.) es la misma que <b>“${esc(r.act)}”</b>? ${ed?`<button class="ib pri" data-lmlink="${r.id}|${esc(e.key)}">Sí, vincular</button>`:''}${canWrite&&!PM()?`<button class="ib" data-lmren="${esc(e.key)}|${r.id}">Sí, y renombrar en el lookahead</button>`:''}${ed?`<button class="ib" data-lmign="${esc(e.key)}">No</button>`:''}</div>`});
     h+='</div></div>'}
   let lastSc=null;
-  h+=`<div class="card"><div class="tscroll"><table class="t lqmt"><thead><tr><th>Actividad del lookahead</th><th title="Requiere liberación de Calidad">Se libera</th><th title="Si no se libera, la partida siguiente no puede entrar">Crítica</th><th>Restringe el ingreso de</th><th>Supervisión</th><th>Protocolo</th><th>Anticip.</th></tr></thead><tbody>`;
+  h+=`<div class="card"><div class="tscroll"><table class="t lqmt"><thead><tr><th>Actividad del lookahead</th><th title="Requiere liberación de Calidad">Se libera</th><th title="Si no se libera, la partida siguiente no puede entrar">Crítica</th><th>Restringe el ingreso de</th><th>Supervisión</th><th>Protocolo</th><th title="Días de anticipación con que se pide">Anticipación</th></tr></thead><tbody>`;
   for(const e of rows){if(e.sc!==lastSc){lastSc=e.sc;h+=`<tr class="tgrp"><th colspan="7"><span class="lqsc"><i style="--c:${conOf(e.sc).color}"></i>${esc(conOf(e.sc).name)}</span>${conOf(e.sc).partida?' <span class="mu">· '+esc(conOf(e.sc).partida)+'</span>':''}</th></tr>`}
     const r=C.byKey.get(e.key);const prim=r&&r.keys[0]===e.key;const alias=r&&!prim;const k=esc(e.key);
     const nx=next.get(e.key);const sug=nx&&nx.c.size?[...nx.c.entries()].sort((a,b)=>b[1]-a[1])[0]:null;const cm=co.get(e.key)||new Map();

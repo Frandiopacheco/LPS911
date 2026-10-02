@@ -1,0 +1,47 @@
+"use strict";
+/* LPS 911 · Navegación por rol: qué pestañas ve cada uno, en qué orden, el menú "Más" y el menú inferior del celular.
+   Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
+
+/* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
+const TAB_ORDER=['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
+/* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo'};
+const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
+
+/** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
+function tabAllowed(t){if(!me||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
+  if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
+  if(t==='team')return !SCK()&&me.role!=='lector';return true}
+
+/** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
+function tabPrimary(){if(!me)return[];const r=me.role;
+  const M={admin:['dash','look','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','restr','plan','mapa','campo','lib','ind'],
+    campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],lector:['dash','look','restr','plan','lib','ind'],
+    area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
+  const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
+function tabSecondary(){const p=new Set(tabPrimary());return TAB_ORDER.filter(t=>!p.has(t)&&tabAllowed(t))}
+function tabHome(){return tabPrimary()[0]||'look'}
+
+/** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
+function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
+  const btn=t=>nav.querySelector(`button[data-tab="${t}"]`);
+  TAB_ORDER.forEach(t=>{const b=btn(t);if(b){b.hidden=!prim.includes(t);nav.appendChild(b)}});
+  let mb=$('#tabMore');if(!mb){mb=document.createElement('button');mb.id='tabMore';mb.type='button';mb.className='tmore';mb.setAttribute('aria-haspopup','menu');mb.onclick=()=>moreMenu(mb)}
+  nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
+  mb.innerHTML=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}
+function moreMenu(anchor){const sec=tabSecondary();
+  openPop(anchor,`<div class="ph">Más secciones</div>${sec.map(t=>`<button data-do="t_${t}"${U.tab===t?' class="on"':''}>${esc(tabName(t))}</button>`).join('')}`,
+    Object.fromEntries(sec.map(t=>['t_'+t,()=>goTab(t)])))}
+
+/* ---------- menú inferior del celular: 4 accesos según el rol + "Más" ---------- */
+function bnavItems(){if(!me)return[];const r=me.role;
+  const L=r==='sc'?['cap','mapa','restr','lib']:r==='campo'?['campo','mapa','restr','ind']:r==='area'?(isCalArea()?['lib','restr','mapa','ind']:['restr','lib','ind','look'])
+    :r==='lector'?['restr','lib','ind','look']:['campo','mapa','restr','lib'];
+  return ['hoy',...L].filter(tabAllowed).slice(0,4)}
+function bnavMore(){const b=new Set(bnavItems());return TAB_ORDER.filter(t=>!b.has(t)&&tabAllowed(t))}
+Object.assign(BNI,{
+  hoy:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8.5 14.5l2.2 2.2 4.8-4.7"/>'),
+  lib:SVG('<path d="M12 3l7 3v5.5c0 4.3-3 7.8-7 9.5-4-1.7-7-5.2-7-9.5V6z"/><path d="M8.8 12.2l2.3 2.3 4.4-4.5"/>'),
+  look:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M14 10v4M11 16v4"/>'),
+  plan:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  dash:SVG('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/>')});

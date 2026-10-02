@@ -1,6 +1,6 @@
 // Liberaciones de calidad: vistas, filtros, flujo completo, solicitud nueva, matriz e inspectores.
 import { test, expect } from '@playwright/test';
-import { openApp, expectTabOk, noErrors, MANANA } from './helpers.js';
+import { openApp, expectTabOk, noErrors, MANANA, openTab } from './helpers.js';
 
 const lib = (page, id) => page.evaluate(id => window.__dbGet('lib', id), id);
 const libm = page => page.evaluate(() => window.__dbGet('libm', 'main'));
@@ -8,7 +8,7 @@ const M = '#main';
 
 async function abrir(page, as = 'admin') {
   const errors = await openApp(page, { as, tab: 'lib' });
-  await page.click('#tabs [data-tab="lib"]');
+  await openTab(page, 'lib');
   const todos = page.locator('[data-lqall]');
   if (await todos.count()) await todos.click();
   await expect(page.locator(`${M} .lqcols`)).toBeVisible();
@@ -101,12 +101,12 @@ test('matriz amarrada al lookahead e inspectores', async ({ page }) => {
   await expect.poll(async () => (await libm(page)).autoRestr).toBe(true);
   await page.locator('#lmauto').uncheck();
   // Inspectores en Configuración
-  await page.click('#tabs [data-tab="cfg"]');
+  await openTab(page, 'cfg');
   await page.fill('#cfgInsp', 'Ing. Uno\nIng. Tres');
   await page.locator('#cfgInsp').blur();
   await expect.poll(async () => ((await libm(page)).insp || []).join()).toBe('Ing. Uno,Ing. Tres');
   expect(((await libm(page)).rules || []).length).toBeGreaterThanOrEqual(2);
-  await page.click('#tabs [data-tab="lib"]');
+  await openTab(page, 'lib');
   for (const v of ['ban', 'cal', 'map', 'mat', 'ban']) { await page.click(`#lqv [data-v="${v}"]`); await expectTabOk(page, 'lib ' + v); }
   noErrors(errors, 'matriz');
 });
