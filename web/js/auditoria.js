@@ -79,7 +79,7 @@ async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){
    ===================================================================== */
 /* ---- papelera: eliminar = archivar (se puede recuperar; el historial no cambia) ---- */
 function getDoc(col,id){const k=COLS[col];if(!k)return null;return S[k].get(id)||(ARCH[k]&&ARCH[k].get(id))||null}
-function setColData(k,mp){if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}S[k]=mp}
+function setColData(k,mp){if(typeof DV!=='undefined')DV++;if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}S[k]=mp}
 let ARC_T=null;
 function arc(col,id){if(col==='acts'&&PM())return op(col,id,null);const cur=getDoc(col,id);if(!cur||cur.arch)return null;
   if(!ARC_T){ARC_T={t:NOW(),by:me?me.email:'',n:me?(me.name||''):''};setTimeout(()=>{ARC_T=null},0)}
@@ -213,7 +213,7 @@ function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!de
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
-  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['lector','Lector']];
+  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
     <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
     <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>

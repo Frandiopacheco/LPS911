@@ -49,7 +49,11 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(typeof canCli==='function'&&canCli()){ensureCli();const M=cliLate();if(CLX.size){const vs=new Set(visPisos().map(p=>p.id));const L=M?[...M.entries()].filter(([id])=>vs.has(pisoOfAct(id))&&S.act.has(id)).sort((a,b)=>a[1].cli.localeCompare(b[1].cli)):[];
     out.cli={k:'cli',title:'Holgura del cliente',n:L.length,tone:'bad',sub:`${L.length} actividad${L.length===1?'':'es'} ya termina${L.length===1?'':'n'} después de la fecha emitida al cliente${cliLast()?' ('+esc(cliLast().label)+')':''}`,
       items:L.map(([id,o])=>({t:S.act.get(id).name,s:`Cliente: ${fmtD(o.cli)} · interno: ${fmtD(o.end)} · ${hoyLoc(S.act.get(id))}`})),go:'look',goLabel:'Ver en el Lookahead (⚑)',empty:M?'Todo dentro de las fechas informadas al cliente':'Cargando la versión emitida…'}}}
-  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','restr','lib']:r==='area'?(isCalArea()?['lib','restr']:['restr','lib']):r==='lector'?['restr','lib']:['prop','campo','cli','restr','lib','plan'];
+  /* trabajo no programado visto hoy en el recorrido (informativo: no es algo pendiente) */
+  if(canNP()){const L=npItems([d],new Set(visPisos().map(p=>p.id)));const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
+    out.np={k:'np',title:'Trabajo no programado hoy',n:0,tone:'',sub:'',items:[],go:'campo',goLabel:VEED()?'Ir al recorrido (Campo › Plano)':'Ver en Campo',
+      empty:L.length?`${L.length} registrado${L.length===1?'':'s'}: ${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,k])=>conOf(sc).name+' '+k).join(' · ')}`:'Nada registrado hoy. En el recorrido, toca en el plano donde veas una cuadrilla trabajando sin estar programada.'}}
+  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','campo','np','cli','restr','lib','plan'];
   /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
   const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 
@@ -57,4 +61,4 @@ function renderHoy(main){const d=todayIso();const C=hoyCards();const n=C.reduce(
   const hi=(()=>{const h=+hhmm(NOW()).slice(0,2);return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'})();
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead(`${hi}, ${(me.name||'').split(' ')[0]||''}`.replace(/, $/,''),`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · ${pisoLabel()} · ${n?`${n} cosa${n===1?'':'s'} por atender`:'todo al día'}`)}
     <div class="hoyg">${C.map(hoyCard).join('')}</div></div></div>`;
-  main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(b)goTab(b.dataset.hgo)}}
+  main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(!b)return;if(b.closest('[data-hoy="np"]')){CU.view='plan';saveCU()}goTab(b.dataset.hgo)}}

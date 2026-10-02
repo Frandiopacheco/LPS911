@@ -1,0 +1,69 @@
+// Plan diario: las actividades se ubican solas en su ambiente (Sectorización) y el plan se decide por excepción:
+// va / → mañana / terminada / restricción, y se pueden programar otras actividades del lookahead.
+import { test, expect } from '@playwright/test';
+import { openApp, noErrors, openTab, HOY, MANANA } from './helpers.js';
+import { LAMINA, enPantalla } from './lamina.js';
+
+const AMB = [
+  ['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }],
+  ['ambientes', 'a2', { sectorId: 's1', code: 'A-2', name: 'Dpto 102', order: 1, geo: { L1: [400, 100, 600, 100, 600, 300, 400, 300] } }],
+];
+const act = (page, id) => page.evaluate(id => window.__dbGet('acts', id), id);
+const row = (page, id) => page.locator(`#mpanel .mp-it[data-act="${id}"]`);
+
+test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepción', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await expect(page.locator('#mpanel .mp-h')).toContainText('02 oct'); // el día siguiente
+  await expect(row(page, 'e0')).toContainText('en su ambiente');
+  await expect(row(page, 'e1')).toContainText('en su ambiente');
+  await expect(page.locator('#mstage .pvl.nb')).toHaveCount(2); // numeradas sobre su ambiente
+  await expect(page.locator('#mpanel')).not.toContainText('sin ubicar');
+  // → Mañana: solo ese día pasa al siguiente día hábil
+  const sig = await page.evaluate(d => wshift(d, 1), MANANA);
+  await row(page, 'e0').locator('[data-dz^="man"]').click();
+  await page.click('#pop [data-do="one"]');
+  await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, sig]);
+  await expect(row(page, 'e0')).toHaveCount(0);
+  await expect(page.locator('#mpanel')).toContainText('Cambios de este plan');
+  // ⛔ Restricción: queda en Restricciones y no va
+  await row(page, 'e1').locator('[data-dz^="res"]').click();
+  await page.fill('#dzrd', 'Falta tubería de 1/2"');
+  await page.click('#pop [data-do="ok"]');
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e1').map(r => r.desc))).toEqual(['Falta tubería de 1/2"']);
+  await expect(row(page, 'e1')).toContainText('No va');
+  // vuelve a ir
+  await row(page, 'e1').locator('[data-undo]').click();
+  await expect(row(page, 'e1')).toContainText('en su ambiente');
+  // programar otra actividad del lookahead este día
+  await page.click('#dzadd');
+  await page.fill('#dzq', 'tarrajeo');
+  await page.locator('#pop .dzpl button:not([hidden])').first().click();
+  await expect.poll(async () => (await act(page, 't0')).days).toContain(MANANA);
+  await expect(row(page, 't0')).toBeVisible();
+  // al volver a Campo, el día vuelve a hoy
+  await openTab(page, 'campo');
+  await expect(page.locator('#main')).toContainText('hoy');
+  noErrors(errors, 'plan diario');
+});
+
+test('en Campo › Plano las actividades salen numeradas en su ambiente', async ({ page }) => {
+  const errors = await openApp(page, { as: 'campo', tab: 'campo', extra: [...LAMINA, ...AMB] });
+  await page.evaluate(() => { CU.view = 'plan'; render(); });
+  await page.locator('[data-kp="p1"]').click();
+  await expect(page.locator('#kplan .pvl.nb')).toHaveCount(4); // i0, e0 (A-1) e i1, e1 (A-2) hoy
+  await expect(page.locator('#klist')).not.toContainText('Sin ubicar');
+  noErrors(errors, 'campo');
+});
+
+test('reunión: «sin interferencia» quita el achurado del cruce', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday'); // hoy: en A-1 trabajan SANITARIAS (Redes) y ELÉCTRICAS (Entubado)
+  await expect(page.locator('#mpanel .mp-cx').first()).toBeVisible();
+  const n0 = await page.locator('#mpanel .mp-cx').count();
+  const p = await enPantalla(page, '#mstage', 200, 200);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.click('#pop [data-do="ok"]');
+  await expect(page.locator('#mpanel .mp-cx')).toHaveCount(n0 - 1);
+  expect(await page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(1);
+  noErrors(errors, 'cruce');
+});

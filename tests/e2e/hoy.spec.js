@@ -6,7 +6,7 @@ test('el administrador entra a Hoy: primero lo pendiente, lo que está al día a
   const errors = await openApp(page);
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'hoy');
   const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy));
-  expect(k).toEqual(['campo', 'restr', 'lib', 'plan', 'prop']);
+  expect(k).toEqual(['campo', 'restr', 'lib', 'plan', 'prop', 'np']);
   await expect(page.locator('[data-hoy="campo"]')).toContainText('sin registrar');
   await page.click('[data-hoy="campo"] [data-hgo]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'campo');

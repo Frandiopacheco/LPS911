@@ -41,7 +41,7 @@ const wkId=(n,p)=>n+'_'+p;
 let db=null,auth=null,rtdb=null,presRef=null,conRef=null,presAll=null,me=null,isAdmin=false,canWrite=false,ready=false,myAct=null,peerEdits=[],unsubs=[],lastPres='';
 const PRES=new Map(),MEM=new Map();
 const memScs=m=>Array.isArray(m&&m.scs)&&m.scs.length?m.scs:(m&&m.sc?[m.sc]:[]);
-const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',lector:'Lector'};
+const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',veedor:'Veedor',lector:'Lector'};
 let canDaily=false;
 const OWNER=()=>String(window.ADMIN_EMAIL||'').trim().toLowerCase();
 const isOwnerEmail=e=>!!OWNER()&&String(e||'').toLowerCase()===OWNER();
@@ -125,11 +125,12 @@ function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status
 let pending=0,lastErr=null;const chains={};
 function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0);el.classList.toggle('err',!!lastErr||!db);
   const off=navigator.onLine===false;el.classList.toggle('err',!!lastErr||!db||off);
-  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area'].includes(me.role))?'Guardado':'Solo lectura')}
+  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
-function put(col,id,data){const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
+let DV=0; /* sube con cada cambio de datos (para cachés) */
+function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
   if(!db||(!canWrite&&!scR))return Promise.resolve();
@@ -237,7 +238,7 @@ function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role===
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
 function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear()}
 let dayP=Promise.resolve();
-function ensureDaily(from){ensureLive(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
+function ensureDaily(from){ensureLive(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
   daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}));doneRebuild();dayErr=null;ok();if(ready)requestRender()},err=>{dayErr=err&&err.code;ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
 function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
@@ -358,6 +359,7 @@ function enterView(main){
 function render(){
   if(!ready)return;
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
+  if(typeof dayAuto==='function')dayAuto();
   let main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')presStop();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
