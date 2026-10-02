@@ -1,10 +1,10 @@
 // Componentes comunes y transiciones: entrada suave, ventanas animadas y respeto a "menos movimiento".
 import { test, expect } from '@playwright/test';
-import { openApp, noErrors } from './helpers.js';
+import { openApp, noErrors, openTab } from './helpers.js';
 
 test('al cambiar de pestaña el contenido entra con transición suave', async ({ page }) => {
   const errors = await openApp(page);
-  await page.click('#tabs [data-tab="restr"]');
+  await openTab(page, 'restr');
   await expect(page.locator('#main')).toHaveClass(/\bvin\b/);
   const anim = await page.locator('#main').evaluate(el => getComputedStyle(el).animationName);
   expect(anim).toBe('lps-fade');
@@ -13,7 +13,7 @@ test('al cambiar de pestaña el contenido entra con transición suave', async ({
 
 test('ventanas, menús y botones usan las mismas medidas', async ({ page }) => {
   const errors = await openApp(page, { tab: 'lib' });
-  await page.click('#tabs [data-tab="lib"]');
+  await openTab(page, 'lib');
   const all = page.locator('[data-lqall]'); if (await all.count()) await all.click();
   await page.click('[data-lqid="Lpro"]');
   const panel = page.locator('#lqm .lqc');
@@ -31,7 +31,7 @@ test('ventanas, menús y botones usan las mismas medidas', async ({ page }) => {
 test('con "reducir movimiento" no hay animaciones', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = await openApp(page);
-  await page.click('#tabs [data-tab="restr"]');
+  await openTab(page, 'restr');
   const d = await page.locator('#main').evaluate(el => parseFloat(getComputedStyle(el).animationDuration));
   expect(d).toBeLessThan(0.01);
   noErrors(errors, 'movimiento reducido');

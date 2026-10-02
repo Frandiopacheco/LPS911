@@ -1,6 +1,6 @@
 // Recorre todas las pestañas con cada rol (escritorio y celular) y revisa que ninguna falle.
 import { test, expect } from '@playwright/test';
-import { openApp, expectTabOk, visibleTabs, noErrors } from './helpers.js';
+import { openApp, expectTabOk, visibleTabs, noErrors, openTab } from './helpers.js';
 
 const ROLES = ['admin', 'editor', 'campo', 'sc', 'calidad', 'ot', 'lector'];
 
@@ -10,7 +10,7 @@ for (const as of ROLES) {
     const tabs = await visibleTabs(page);
     expect(tabs.length, 'debe haber pestañas visibles').toBeGreaterThan(4);
     for (const t of tabs) {
-      await page.click(`#tabs button[data-tab="${t}"]`);
+      await openTab(page, t);
       await expect(page.locator(`#tabs button[data-tab="${t}"]`)).toHaveAttribute('aria-selected', 'true');
       await page.waitForTimeout(150);
       await expectTabOk(page, `${t} (${as})`);
@@ -22,7 +22,7 @@ for (const as of ROLES) {
 test('escritorio · modo oscuro: todas las pestañas se dibujan', async ({ page }) => {
   const errors = await openApp(page, { theme: 'dark' });
   for (const t of await visibleTabs(page)) {
-    await page.click(`#tabs button[data-tab="${t}"]`);
+    await openTab(page, t);
     await page.waitForTimeout(120);
     await expectTabOk(page, t + ' (oscuro)');
   }
@@ -65,5 +65,46 @@ test.describe('celular', () => {
     await expect(page.locator('body')).toHaveClass(/cap-mode/);
     await expectTabOk(page, 'cap (capataz)');
     noErrors(errors, 'capataz');
+  });
+});
+
+test.describe('pestañas por rol', () => {
+  const barra = page => page.locator('#tabs button[data-tab]:visible').evaluateAll(bs => bs.map(b => b.dataset.tab));
+  test('el subcontratista ve lo suyo y no ve Equipo', async ({ page }) => {
+    await openApp(page, { as: 'sc' });
+    const b = await barra(page);
+    expect(b).toEqual(expect.arrayContaining(['look', 'cap', 'restr', 'lib']));
+    expect(b).not.toContain('cfg');
+    expect(await visibleTabs(page)).not.toContain('team');
+  });
+  test('Calidad tiene Liberaciones en la barra y entra ahí', async ({ page }) => {
+    await openApp(page, { as: 'calidad' });
+    expect(await barra(page)).toContain('lib');
+    await expect(page.locator('#main')).toHaveAttribute('data-view', 'lib');
+  });
+  test('lo poco usado va en "Más" y se abre desde ahí', async ({ page }) => {
+    const errors = await openApp(page, { as: 'campo' });
+    expect(await barra(page)).not.toContain('cfg');
+    await openTab(page, 'cfg');
+    await expect(page.locator('#tabMore')).toContainText('Configuración');
+    noErrors(errors, 'más');
+  });
+  test('el orden sigue el ciclo Last Planner', async ({ page }) => {
+    await openApp(page);
+    expect(await barra(page)).toEqual(['dash', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
+  });
+});
+
+test.describe('menú inferior por rol', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test('Calidad tiene Liberaciones a la mano', async ({ page }) => {
+    await openApp(page, { as: 'calidad' });
+    await expect(page.locator('#bnav [data-bt="lib"]')).toBeVisible();
+    await expect(page.locator('#bnav [data-bt="lib"]')).toContainText('Liberaciones');
+  });
+  test('los nombres no se abrevian', async ({ page }) => {
+    await openApp(page, { as: 'campo' });
+    await expect(page.locator('#bnav')).toContainText('Restricciones');
+    await expect(page.locator('#bnav')).toContainText('Plan diario');
   });
 });

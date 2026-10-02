@@ -45,7 +45,7 @@ function renderCfg(main){
   const tpls=(p.templates||[]).map(t=>({...t,acts:(t.acts||[]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a)}));
   const conSel=(sel,ti,ai)=>`<select data-tsc="${ti}:${ai}"${dis}>${cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
   main.innerHTML=`<div class="scroll"><div class="wrap">
-  ${canWrite?'':'<div class="callout">Tu rol es Lector: puedes ver la configuración pero no cambiarla.</div>'}
+  ${canWrite?'':`<div class="callout">Tu rol es ${esc(ROLE[me.role]||me.role)}: puedes ver la configuración pero no cambiarla.</div>`}
   <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th>Actividades</th><th></th></tr></thead><tbody>
    ${cons.map(c=>`<tr><td><input type="color" data-c="${c.id}" data-f="color" value="${esc(c.color)}"${dis} aria-label="Color de ${esc(c.name)}"></td><td><input class="ci" data-c="${c.id}" data-f="name" data-fk="c:${c.id}:n" value="${esc(c.name)}"${ro}></td><td><input class="ci" data-c="${c.id}" data-f="partida" data-fk="c:${c.id}:p" value="${esc(c.partida||'')}"${ro}></td><td class="mono">${use[c.id]||0}</td><td>${canWrite&&!use[c.id]?`<button class="ab" data-cdel="${c.id}" aria-label="Eliminar" title="Eliminar (no tiene actividades)">&times;</button>`:''}</td></tr>`).join('')}
   </tbody></table></div>${canWrite?'<div class="pad"><button class="ib" id="cadd">+ Subcontratista</button></div>':''}</div>

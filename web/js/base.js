@@ -125,7 +125,7 @@ function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status
 let pending=0,lastErr=null;const chains={};
 function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0);el.classList.toggle('err',!!lastErr||!db);
   const off=navigator.onLine===false;el.classList.toggle('err',!!lastErr||!db||off);
-  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(canWrite||canDaily||(me&&me.role==='capataz')?'Guardado':'Solo lectura')}
+  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
@@ -294,15 +294,13 @@ MOBQ.addEventListener('change',()=>{const m=$('#main');if(m){m.dataset.view='';m
 const SVG=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),mapa:SVG('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
   ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),cap:SVG('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
-const BNT0=[['campo','Campo'],['mapa','Plano'],['ind','Indicadores'],['restr','Restricc.']],BNTSC=[['cap','En obra'],['mapa','Plano'],['ind','Indicadores'],['restr','Restricc.']];
-const bnt=()=>SCK()?BNTSC:BNT0;
 const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.textContent.trim():t};
 function goTab(t){U.tab=t;saveUI();sendPresence();render()}
-function renderBnav(){const b=$('#bnav');if(!b)return;const pr=restrInScope().filter(r=>r.status!=='lib').length;const BNT=bnt();const more=!BNT.some(x=>x[0]===U.tab);
-  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${U.tab===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(tabName(U.tab)):'Más'}</span></button>`;
+function renderBnav(){const b=$('#bnav');if(!b)return;const pr=restrInScope().filter(r=>r.status!=='lib').length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===U.tab);
+  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${U.tab===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[U.tab]||tabName(U.tab)):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
-  const items=[...(canDash()?['dash']:[]),...(SCK()?['campo']:[]),'lib','look','plan','planos','cfg',...($('#tabTeam').hidden?[]:['team'])];
+  const items=bnavMore();
   const sh=document.createElement('div');sh.className='msheet';sh.id='msheet';
   sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${U.tab===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
     <p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
@@ -322,7 +320,7 @@ function renderTop(){
   const pr=restrInScope().filter(r=>r.status!=='lib').length;const rc=$('#rcount');rc.hidden=!pr;rc.textContent=pr;
   {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:new Set(libBlocks().filter(b=>vs.has(pisoOfAct(b.p.id))&&(!SCK()||myScsI().includes(b.p.sc))).map(b=>b.p.id)).size;lc.hidden=!n;lc.textContent=n}}
   $('#wtoday').disabled=U.week===curWeek();
-  {const td=$('#tabDash');if(td)td.hidden=!canDash()}{const tc=$('#tabCap');if(tc)tc.hidden=!SCK()}
+  navApply();
   brandSync();
   updUndo();setStatus();renderBnav();
 }
@@ -344,6 +342,7 @@ document.addEventListener('keydown',e=>{
 function viewIn(el){el.classList.remove('vin');void el.offsetWidth;el.classList.add('vin')}
 function render(){
   if(!ready)return;
+  if(me&&!tabAllowed(U.tab))U.tab=tabHome();
   const main=$('#main');renderTop();
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
