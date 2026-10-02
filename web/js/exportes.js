@@ -124,12 +124,15 @@ let xlsxP=null;
 function loadXlsx(){if(window.XLSX)return Promise.resolve();if(xlsxP)return xlsxP;xlsxP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';s.onload=ok;s.onerror=()=>{xlsxP=null;ko(new Error('No se pudo cargar el generador de Excel'))};document.head.appendChild(s)});return xlsxP}
 async function exportXlsx(){
   const btn=$('#bexport');btn.disabled=true;btn.textContent='Generando…';let unswap=null;
-  try{await loadXlsx();const vd0=U.tab==='look'&&U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;if(vd0&&vd0.ready)unswap=swapVer(vd0);const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
+  const CLV=U.tab==='look'&&U.cliv&&canCli();let cliLab='';
+  try{await loadXlsx();const vd0=!CLV&&U.tab==='look'&&U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;if(vd0&&vd0.ready)unswap=swapVer(vd0);
+    if(CLV){const cv=U.cliVer&&CLVD.get(U.cliVer);if(U.cliVer&&!(cv&&cv.ready))throw new Error('La versión emitida aún se está cargando. Intenta en un momento.');
+      if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Programa con holgura al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
     const bd={top:{style:'thin',color:{rgb:'BFBFBF'}},bottom:{style:'thin',color:{rgb:'BFBFBF'}},left:{style:'thin',color:{rgb:'BFBFBF'}},right:{style:'thin',color:{rgb:'BFBFBF'}}};
     const hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
     const ws={};const merges=[];const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||{border:bd,alignment:{vertical:'center'}}}};
     const D0=9;
-    [['PROYECTO',p.fullName],['PROPIETARIO',p.owner],['UBICACIÓN',p.location],['FECHA',fmtD(todayIso())+' '+todayIso().slice(0,4)+' · Lookahead semanas '+U.week+'–'+(U.week+U.win-1)]].forEach(([k,v],i)=>{set(1+i,3,k,{font:{bold:true}});set(1+i,4,v,{font:{bold:i===0}})});
+    [['PROYECTO',p.fullName],['PROPIETARIO',p.owner],['UBICACIÓN',p.location],['FECHA',fmtD(todayIso())+' '+todayIso().slice(0,4)+' · Lookahead semanas '+U.week+'–'+(U.week+U.win-1)+(CLV?' · '+cliLab:'')]].forEach(([k,v],i)=>{set(1+i,3,k,{font:{bold:true}});set(1+i,4,v,{font:{bold:i===0}})});
     const hr=6;set(hr,0,'SC',hs);set(hr,1,'ITEM',hs);set(hr,2,'DESCRIPCIÓN',hs);set(hr,3,'',hs);set(hr,4,'ACTIVIDAD',hs);set(hr,5,'UND',hs);set(hr,6,'METRADO',hs);set(hr,7,'DÍAS',hs);set(hr,8,'F. INICIO',hs);set(hr,9,'F. FIN',hs);
     for(let c=0;c<10;c++){set(hr+1,c,'',hs);set(hr+2,c,'',hs);if(c!==2&&c!==3)merges.push({s:{r:hr,c},e:{r:hr+2,c}})}merges.push({s:{r:hr,c:2},e:{r:hr+2,c:3}});
     for(let w=0;w<U.win;w++){set(hr,10+w*6,'SEM '+(U.week+w),hs);for(let k=1;k<6;k++)set(hr,10+w*6+k,'',hs);merges.push({s:{r:hr,c:10+w*6},e:{r:hr,c:10+w*6+5}})}
@@ -147,6 +150,11 @@ async function exportXlsx(){
     ws['!cols']=[{wch:13},{wch:8},{wch:22},{wch:6},{wch:30},{wch:6},{wch:9},{wch:6},{wch:8},{wch:8},...days.map(()=>({wch:3.2}))];
     ws['!freeze']={xSplit:10,ySplit:hr+3};ws['!views']=[{state:'frozen',xSplit:10,ySplit:hr+3}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lookahead');
+    if(CLV){/* al cliente solo va su programa y su PPC: nada del plan interno, restricciones ni avance diario */
+      const pc=cliPpcAoa();const wsP=X.utils.aoa_to_sheet(pc.sum);wsP['!cols']=pc.cols;pc.hdr.forEach(r0=>{for(let c=0;c<pc.sum[r0].length;c++){const k=X.utils.encode_cell({r:r0,c});if(wsP[k])wsP[k].s=hs}});X.utils.book_append_sheet(wb,wsP,'PPC');
+      const lg=[['SUBCONTRATISTA','PARTIDA']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'']));const ws4=X.utils.aoa_to_sheet(lg);ws4['!cols']=[{wch:18},{wch:26}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
+      const buf=X.write(wb,{type:'array',bookType:'xlsx'});
+      saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
     // plan semanal por piso
     const pl=[['PLAN SEMANAL · SEMANA '+U.week],[],['PISO','ESTADO','SUBCONTRATISTA','ÍTEM','AMBIENTE','ACTIVIDAD','DÍAS','METRADO SEM.','UND','EJECUTADO','CUMPLIDO','CAUSA NO CUMPLIMIENTO','COMENTARIO']];const ppcRows=[];
     for(const pp of visPisos()){const w=S.wk.get(wkId(U.week,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(U.week,pp.id);const res=fz&&w.res||{};

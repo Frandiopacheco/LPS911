@@ -1173,3 +1173,20 @@ body.pres .legend{padding-top:6px}
 body.pres-ptr #gw,body.pres-ptr .presbar{cursor:none}
 .presptr{position:fixed;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;background:rgba(229,35,35,.85);box-shadow:0 0 0 6px rgba(229,35,35,.22),0 0 18px rgba(229,35,35,.6);pointer-events:none;z-index:500}
 @media (max-width:760px){#fpres{display:none}}
+
+/* ---------- Versión cliente (js/cliente.js) ---------- */
+#fcli.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.cliban{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--line);background:var(--accent-soft);font-size:13px}
+.cliban .clit{display:flex;flex-direction:column;line-height:1.25;min-width:0}.cliban .clit b{font-weight:700;color:var(--accent)}.cliban .clit span{color:var(--muted);font-size:12px}
+.cliban .clig{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.cliban .ib{height:28px;font-size:12.5px}.cliban select.tin{height:28px;max-width:240px}
+.cliban .clil{font-weight:600;color:var(--bad);background:var(--bad-soft);border-radius:var(--r-ctl);padding:3px 8px}
+.cliban .bad{color:var(--bad)}
+td.d.cin::after{content:"";position:absolute;inset:9px 4px;border-radius:3px;border:1.5px dashed var(--muted);opacity:.6}
+.clb{font:600 10.5px var(--f-mono);min-width:26px;height:20px;padding:0 4px;border:1px dashed var(--line);border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;margin-left:4px;flex:none}
+.clb.own{border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent)}
+.clb:hover{border-color:var(--accent);color:var(--accent)}
+td.s0 .clb{margin:0;min-width:22px;padding:0 2px}
+.clate{position:absolute;right:2px;top:1px;font:700 10px/1 var(--f-ui,inherit);color:var(--bad);pointer-events:auto;cursor:help}
+.clih{font-size:13px;margin:14px 0 6px}
+@media (max-width:760px){.cliban{padding:7px 10px}.cliban .fsp{display:none}}

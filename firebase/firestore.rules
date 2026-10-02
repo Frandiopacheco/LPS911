@@ -94,6 +94,19 @@ service cloud.firestore {
             && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
       allow delete: if isAdmin();
     }
+    // Versión para el cliente (holguras, versiones emitidas): solo administrador y editores.
+    // El subcontratista, el capataz, campo y las áreas trabajan con la versión interna y no la ven.
+    match /cli/{id} {
+      allow read, write: if canEdit();
+    }
+    match /clidx/{id} {
+      allow read, create, update: if canEdit();
+      allow delete: if isAdmin();
+    }
+    match /cliver/{id} {
+      allow read, create, update: if canEdit();
+      allow delete: if isAdmin();
+    }
     // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador
     match /libm/{id} {
       allow read: if isMember();

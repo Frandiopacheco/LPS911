@@ -66,8 +66,11 @@ test('flujo completo de una liberación', async ({ page }) => {
   await expect.poll(async () => (await lib(page, 'Lsol')).st).toBe('pro');
   await page.click('#lqm [data-lq="libm"]');
   await expect.poll(async () => (await lib(page, 'Lsol')).st).toBe('libm');
-  await page.click('#lqm [data-lqx]');
-  await expect(page.locator('#lqm')).toHaveCount(0);
+  // la ventana se redibuja al llegar el dato guardado: si el clic cae justo en ese momento, se repite
+  await expect(async () => {
+    await page.click('#lqm [data-lqx]', { timeout: 1000 }).catch(() => {});
+    await expect(page.locator('#lqm')).toHaveCount(0, { timeout: 1000 });
+  }).toPass();
   await expectTabOk(page, 'lib');
   noErrors(errors, 'flujo');
 });
