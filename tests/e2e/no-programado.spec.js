@@ -101,6 +101,15 @@ test('el ingeniero lo ve en Campo e Indicadores y lo pasa al lookahead', async (
   noErrors(errors, 'ingeniero');
 });
 
+test('lo visto en obra aparece también en el Plan diario', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...PLANO, ['nprog', 'n3', { ...REG[2], pt: { x: 600, y: 300, v: 'L1' }, ambId: 'a1' }]] });
+  await expect(page.locator('#mstage .pvl[data-z="np:n3"]')).toBeVisible();
+  await expect(page.locator('#main')).toContainText('Visto en obra · no programado');
+  await page.locator('#main [data-npo="n3"]').first().click();
+  await expect(page.locator('#npdesc')).toHaveValue('Canaletas');
+  noErrors(errors, 'plan diario');
+});
+
 for (const as of ['sc', 'lector', 'ot']) {
   test(`${as} no registra trabajo no programado`, async ({ page }) => {
     const errors = await openApp(page, { as, tab: 'campo', extra: [REG] });
