@@ -94,6 +94,11 @@ service cloud.firestore {
             && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
       allow delete: if isAdmin();
     }
+    // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador
+    match /libm/{id} {
+      allow read: if isMember();
+      allow write: if isAdmin() || isCal();
+    }
     match /daily/{id} {
       allow read: if isMember();
       allow write: if canDaily();

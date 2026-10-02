@@ -154,6 +154,14 @@ test('liberaciones: el SC pide y levanta; Calidad programa y libera', async () =
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'lib/l-sol'), { st: 'lib' }));
   await assertFails(deleteDoc(doc(cal, 'lib/l-sol')));
 });
+test('matriz de liberaciones: la editan Calidad y el administrador', async () => {
+  await assertSucceeds(setDoc(doc(user('calidad@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'libm/main'), { rules: [{ id: 'r1' }] }));
+  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'libm/main')));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
+});
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
