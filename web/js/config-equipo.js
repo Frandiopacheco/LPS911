@@ -11,32 +11,31 @@ let planosErr=null;
 function shrinkImage(file){return new Promise((ok,ko)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(u);let W=img.naturalWidth,H=img.naturalHeight;let max=2000,q=.82,out='';
   for(let k=0;k<8;k++){const sc=Math.min(1,max/Math.max(W,H));const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round(H*sc);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);out=c.toDataURL('image/jpeg',q);if(out.length<900000)break;if(q>.6)q-=.1;else max=Math.round(max*.8)}
   out.length<1000000?ok(out):ko(new Error('La imagen es demasiado grande incluso comprimida.'))};img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('No se pudo leer la imagen. Usa JPG o PNG.'))};img.src=u})}
-function renderPlanos(main){
-  ensurePlanos();
-  const list=[...PLAN.values()].filter(p=>!U.piso||!p.pisoId||p.pisoId===U.piso).sort((a,b)=>(a.order||0)-(b.order||0));
+/* imágenes de sectorización antiguas (colección planos): se conservan en una sección plegada de Sectorización */
+function planosOldCard(){ensurePlanos();const list=[...PLAN.values()].filter(p=>!U.piso||!p.pisoId||p.pisoId===U.piso).sort((a,b)=>(a.order||0)-(b.order||0));
+  if(planosLoaded&&!list.length&&!canWrite)return'';
   const popt=sel=>'<option value="">Todos los pisos</option>'+pisos().map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('');
-  let h=`<div class="scroll"><div class="wrap">${pageHead('Sectorización',`${U.piso?esc(S.pis.get(U.piso)?.name||'')+' y planos generales':'Todos los pisos'} · toca un plano para ampliarlo`,`${canWrite?'<label class="ib pri">+ Subir planos<input type="file" id="pup" accept="image/*" multiple hidden></label>':''}`)}
-   ${canWrite?'<p class="note" id="pmsg">Sube capturas en JPG o PNG. Se comprimen automáticamente. Para un PDF, toma una captura de la hoja.</p>':''}`;
-  if(!planosLoaded)h+='<div class="empty">Cargando planos…</div>';
-  else if(planosErr)h+=`<div class="callout">No se pudieron leer los planos (${esc(planosErr)}). Si acabas de actualizar la página, falta publicar las reglas nuevas de Firestore (ver instrucciones de la actualización).</div>`;
-  else if(!list.length)h+=`<div class="empty">Aún no hay planos${U.piso?' para este piso':''}.${isAdmin?' Usa <b>+ Subir planos</b> para agregar las imágenes de sectorización.':''}</div>`;
-  else h+='<div class="planos">'+list.map(p=>{const cd=(confirmPlano[p.id]||0)>NOW();return`<figure class="plano"><img src="${p.data}" alt="${esc(p.title)}" data-pv="${p.id}" loading="lazy"><figcaption><input value="${esc(p.title)}" data-pt="${p.id}" data-fk="pt:${p.id}" aria-label="Título del plano"${canWrite?'':' readonly'}></figcaption>
+  let h=`<details class="card szold"${SZ.old?' open':''}><summary class="hd">Imágenes de sectorización anteriores <span class="sub">${list.length} · ya no se usan para ubicar; quedan como referencia</span></summary><div class="pad">
+   ${canWrite?'<label class="ib">+ Subir imagen<input type="file" id="pup" accept="image/*" multiple hidden></label> <span class="note" id="pmsg">Para ubicar ambientes usa la lámina del piso (arriba).</span>':''}`;
+  if(!planosLoaded)h+='<div class="empty">Cargando…</div>';
+  else if(planosErr)h+=`<div class="callout">No se pudieron leer (${esc(planosErr)}).</div>`;
+  else if(list.length)h+='<div class="planos">'+list.map(p=>{const cd=(confirmPlano[p.id]||0)>NOW();return`<figure class="plano"><img src="${p.data}" alt="${esc(p.title)}" data-pv="${p.id}" loading="lazy"><figcaption><input value="${esc(p.title)}" data-pt="${p.id}" data-fk="pt:${p.id}" aria-label="Título del plano"${canWrite?'':' readonly'}></figcaption>
     ${canWrite?`<div class="ptools"><select data-pp="${p.id}" aria-label="Piso del plano">${popt(p.pisoId||'')}</select><span style="flex:1"></span><button class="ib${cd?' warn':''}" data-pdel="${p.id}" style="height:28px;font-size:12px">${cd?'Confirmar':'Eliminar'}</button></div>`:(p.pisoId?`<div class="ptools note">${esc(S.pis.get(p.pisoId)?.name||'')}</div>`:'')}</figure>`}).join('')+'</div>';
-  main.innerHTML=h+'</div></div>';
-  main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.pt)e.target.dataset.o=e.target.value};
-  main.onclick=async e=>{const im=e.target.closest('img[data-pv]');if(im){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-z="1">Tamaño real</button><button class="ib" data-x="1">Cerrar</button></div><img src="${im.src}" alt="">`;
-      lb.onclick=ev=>{if(ev.target.dataset.z){const i=lb.querySelector('img');i.classList.toggle('full');ev.target.textContent=i.classList.contains('full')?'Ajustar a pantalla':'Tamaño real'}else if(ev.target.dataset.x||ev.target===lb)lb.remove()};
-      document.addEventListener('keydown',function k(ev){if(ev.key==='Escape'){lb.remove();document.removeEventListener('keydown',k)}});document.body.appendChild(lb);return}
-    const d=e.target.closest('[data-pdel]');if(d){const id=d.dataset.pdel;if((confirmPlano[id]||0)>NOW()){confirmPlano[id]=0;try{await fcol('planos').doc(id).delete();toast('Plano eliminado')}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}}else{confirmPlano[id]=NOW()+4000;render();setTimeout(()=>{if(U.tab==='planos')render()},4100)}}};
-  main.onchange=async e=>{const t=e.target;
-    if(t.dataset.pt){try{await fcol('planos').doc(t.dataset.pt).update({title:t.value.trim()});t.dataset.o=t.value}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
-    else if(t.dataset.pp){try{await fcol('planos').doc(t.dataset.pp).update({pisoId:t.value})}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
-    else if(t.id==='pup'&&t.files.length){const files=[...t.files];t.value='';const msg=$('#pmsg');let n=0;
-      for(const f of files){try{if(msg)msg.textContent=`Comprimiendo y subiendo ${f.name}…`;const data=await shrinkImage(f);const id=uid('plano');
-        await fcol('planos').doc(id).set({title:f.name.replace(/\.[^.]+$/,''),pisoId:U.piso||'',order:NOW(),data,by:me.email});n++}
-        catch(err){toast(`No se pudo subir ${f.name}: ${err.code||err.message}`)}}
-      if(n)toast(`${n} plano(s) subidos.`);const m2=$('#pmsg');if(m2)m2.textContent=n?`${n} plano(s) subidos.`:'No se subió ningún plano.'}};
-}
+  return h+'</div></details>'}
+async function planosOldClick(e){const im=e.target.closest('img[data-pv]');if(im){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-z="1">Tamaño real</button><button class="ib" data-x="1">Cerrar</button></div><img src="${im.src}" alt="">`;
+    lb.onclick=ev=>{if(ev.target.dataset.z){const i=lb.querySelector('img');i.classList.toggle('full');ev.target.textContent=i.classList.contains('full')?'Ajustar a pantalla':'Tamaño real'}else if(ev.target.dataset.x||ev.target===lb)lb.remove()};
+    document.addEventListener('keydown',function k(ev){if(ev.key==='Escape'){lb.remove();document.removeEventListener('keydown',k)}});document.body.appendChild(lb);return true}
+  const d=e.target.closest('[data-pdel]');if(d){const id=d.dataset.pdel;if((confirmPlano[id]||0)>NOW()){confirmPlano[id]=0;try{await fcol('planos').doc(id).delete();toast('Imagen eliminada')}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}}else{confirmPlano[id]=NOW()+4000;render();setTimeout(()=>{if(U.tab==='planos')render()},4100)}return true}
+  return false}
+async function planosOldChange(e){const t=e.target;
+  if(t.dataset.pt){try{await fcol('planos').doc(t.dataset.pt).update({title:t.value.trim()});t.dataset.o=t.value}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
+  if(t.dataset.pp){try{await fcol('planos').doc(t.dataset.pp).update({pisoId:t.value})}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
+  if(t.id==='pup'&&t.files.length){const files=[...t.files];t.value='';const msg=$('#pmsg');let n=0;
+    for(const f of files){try{if(msg)msg.textContent=`Comprimiendo y subiendo ${f.name}…`;const data=await shrinkImage(f);const id=uid('plano');
+      await fcol('planos').doc(id).set({title:f.name.replace(/\.[^.]+$/,''),pisoId:U.piso||'',order:NOW(),data,by:me.email});n++}
+      catch(err){toast(`No se pudo subir ${f.name}: ${err.code||err.message}`)}}
+    if(n)toast(`${n} imagen(es) subidas.`);return true}
+  return false}
 
 /* ================= CONFIGURACIÓN ================= */
 function renderCfg(main){
