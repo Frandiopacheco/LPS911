@@ -157,7 +157,7 @@ async function savePD(id,doc){try{await fcol('pdz').doc(id).set(doc)}catch(err){
 async function updPD(id,patch){try{await fcol('pdz').doc(id).update(patch)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
 async function delPD(id){try{await fcol('pdz').doc(id).delete()}catch(err){toast('No se pudo borrar: '+(err.code||err.message))}}
 function learn(z){if(z&&z.kind==='zona'&&z.actId&&z.pts)fcol('pzon').doc(z.actId).set({pisoId:z.pisoId,vista:zVista(z),pts:z.pts,sc:z.sc||'',ts:NOW(),by:me.email}).catch(()=>{})}
-const shapesV=pid=>shapesOf(pid).filter(z=>z.kind==='nova'||zVista(z)===M.vista);
+const shapesV=pid=>shapesOf(pid).filter(z=>z.kind!=='xok'&&(z.kind==='nova'||zVista(z)===M.vista));
 /* historial para deshacer / rehacer (solo lo hecho en esta sesión) */
 const HIST=[],REDO=[];
 function rec(g){if(g&&g.length){HIST.push(g);if(HIST.length>80)HIST.shift();REDO.length=0}}
@@ -172,7 +172,7 @@ function applyG(g,undo){for(const o of (undo?[...g].reverse():g)){
   if(M.selId&&!PD.has(M.selId))M.selId=null;requestRender()}
 function undo(){const g=HIST.pop();if(!g){toast('No hay nada que deshacer.');return}applyG(g,true);REDO.push(g)}
 function redo(){const g=REDO.pop();if(!g)return;applyG(g,false);HIST.push(g)}
-const own=z=>!!z&&!z.virt&&z.kind!=='nova'&&canPlan(z.sc);
+const own=z=>!!z&&!z.virt&&z.kind!=='nova'&&z.kind!=='xok'&&canPlan(z.sc);
 function rskMsg(aid){if(typeof restrPend!=='function')return'';const rs=restrPend(aid);if(!rs.length)return'';const x=S.act.get(aid);return`⚠ “${(x&&x.name)||'Actividad'}” tiene ${rs.length} restricción${rs.length>1?'es':''} pendiente${rs.length>1?'s':''}: ${rs.slice(0,2).map(rTxt).join(' | ')}${rs.length>2?' …':''}. Se programa igual, queda marcada con alerta.`}
 function rskWarn(aid,quiet){const m=rskMsg(aid);if(m&&!quiet)toast(m);return m?1:0}
 function zoneAlerts(zid,aid){const msgs=[];const rs=rskMsg(aid);if(rs)msgs.push(rs);try{computeCross()}catch(e){}
@@ -345,7 +345,9 @@ function crossPop(anchor,c){if(!(typeof canWrite!=='undefined'&&canWrite)){toast
     <button data-do="ok">✓ Sin interferencia: pueden trabajar a la vez</button>
     <button data-do="pa">Prioridad a ${esc(zNo(A,ZL_)+conOf(A.sc).name)} · ${esc(zNo(B,ZL_)+conOf(B.sc).name)} no va hoy…</button>
     <button data-do="pb">Prioridad a ${esc(zNo(B,ZL_)+conOf(B.sc).name)} · ${esc(zNo(A,ZL_)+conOf(A.sc).name)} no va hoy…</button>`,
-   {ok:()=>{const z=PD.get(A.id);if(!z)return;const before={xok:z.xok||null};const xok={...(z.xok||{}),[B.id]:{n:me.name||me.email,by:me.email,t:NOW()}};const o=updDoc(A.id,{xok},before);if(o)rec([o]);CROSS.key='';requestRender();toast('Cruce marcado sin interferencia','Deshacer',undo)},
+   {ok:()=>{/* se guarda como decisión del día para el par (sirve también para las zonas que salen del ambiente) */
+      const pair=[zKey(A),zKey(B)].sort();const id=uid('pz');rec([addDoc(id,{date:M.date,pisoId:M.piso,sc:A.sc,kind:'xok',pair,n:me.name||me.email,by:me.email,byName:me.name||me.email,ts:NOW()})]);
+      CROSS.key='';requestRender();toast('Cruce marcado sin interferencia: pueden trabajar a la vez','Deshacer',undo)},
     pa:()=>setTimeout(()=>lose(A,B),0),pb:()=>setTimeout(()=>lose(B,A),0)})}
 function crossAt(w){for(const c of CROSS.list){const r=c.r;if(r&&w.x>=r.x&&w.x<=r.x+r.w&&w.y>=r.y&&w.y<=r.y+r.h)return c}return null}
 /* ---------- acciones rápidas sobre una actividad del día (lista de la reunión) ---------- */
@@ -406,9 +408,11 @@ const CROSS={key:'',list:[],ids:new Set(),seq:[],seqIds:new Set()};
 /* N.º con que la zona aparece en el plano (número de la actividad o letra si no es programada) */
 const zNo=(z,zl)=>{const n=zl&&zl.get(z.id);return n?`N.º ${n} · `:''};
 const zNoH=(z,zl)=>{const n=zl&&zl.get(z.id);if(!n)return'';const c=conOf(z.sc).color;return`<i class="nbi${lum(c)>.55?' lt':''}" style="--c:${c}">${esc(n)}</i>`};
-const xDecided=(a,b)=>!!((a.xok&&a.xok[b.id])||(b.xok&&b.xok[a.id]));
+const zKey=z=>z.actId?'a:'+z.actId:'z:'+z.id;
+const xokDocs=()=>[...PD.values()].filter(z=>z.kind==='xok'&&z.pisoId===M.piso&&z.date===M.date);
+const xDecided=(a,b)=>{if((a.xok&&a.xok[b.id])||(b.xok&&b.xok[a.id]))return true;const p=[zKey(a),zKey(b)].sort().join('|');return xokDocs().some(d=>(d.pair||[]).join('|')===p)};
 function interRect(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);return x1>x0&&y1>y0?{x:x0,y:y0,w:x1-x0,h:y1-y0}:null}
-function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');const key=M.piso+M.vista+M.date+zs.map(z=>z.id+(z.pts||[]).join(',')+z.sc+(z.actId||'')+(z.xok?Object.keys(z.xok).join(','):'')).join('|');if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
+function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');const key=M.piso+M.vista+M.date+zs.map(z=>z.id+(z.pts||[]).join(',')+z.sc+(z.actId||'')+(z.xok?Object.keys(z.xok).join(','):'')).join('|')+'#'+xokDocs().map(d=>d.id).join(',');if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
   for(let i=0;i<zs.length;i++)for(let j=i+1;j<zs.length;j++){const a=zs[i],b=zs[j];const A=unflat(a.pts),B=unflat(b.pts);const f=overlapFrac(A,B);if(f<=0.15)continue;const r=interRect(A,B);
     if(a.sc!==b.sc){if(xDecided(a,b))continue;CROSS.list.push({a,b,f,r});CROSS.ids.add(a.id);CROSS.ids.add(b.id)}
     else if(a.actId&&b.actId&&a.actId!==b.actId){CROSS.seq.push({a,b,f,r});CROSS.seqIds.add(a.id);CROSS.seqIds.add(b.id)}}}

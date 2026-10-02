@@ -16,7 +16,8 @@ export const LAMINA = [
 export const ZONA_E0 = ['pzon', 'e0', { pisoId: 'p1', vista: 'L1', pts: [100, 100, 300, 100, 300, 300, 100, 300], sc: 'c2' }];
 /** coordenadas de pantalla de un punto de la lámina dentro del visor `sel` */
 export async function enPantalla(page, sel, x, y) {
-  await page.waitForFunction(s => { const h = document.querySelector(s); return h && h._v && h._v.fitted; }, sel);
+  const V = 'const h = document.querySelector(s); const v = s === "#mstage" ? window.__plano && window.__plano.M.view : h && h._v;';
+  await page.waitForFunction(new Function('s', V + 'return !!(h && v && v.fitted);'), sel);
   await page.waitForTimeout(250);
-  return page.evaluate(([s, x, y]) => { const h = document.querySelector(s); const v = h._v; const r = h.getBoundingClientRect(); return { x: r.left + v.x + x * v.z, y: r.top + v.y + y * v.z }; }, [sel, x, y]);
+  return page.evaluate(([s, x, y]) => { const h = document.querySelector(s); const v = s === '#mstage' ? window.__plano.M.view : h._v; const r = h.getBoundingClientRect(); return { x: r.left + v.x + x * v.z, y: r.top + v.y + y * v.z }; }, [sel, x, y]);
 }
