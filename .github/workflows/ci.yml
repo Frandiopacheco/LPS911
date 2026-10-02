@@ -36,9 +36,32 @@ jobs:
           (cd tests/rules && npm install --no-audit --no-fund)
           firebase emulators:exec --only firestore --project demo-lps "cd tests/rules && npm test"
 
+  interfaz:
+    name: Probar la interfaz (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Instalar Playwright y Chromium
+        working-directory: tests/e2e
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Recorrer la app con cada rol, en PC y celular
+        working-directory: tests/e2e
+        env: { CI: '1' }
+        run: npx playwright test
+      - name: Guardar el informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-interfaz
+          path: tests/e2e/playwright-report
+          retention-days: 7
+
   instalar:
     name: Instalar en Firebase
-    needs: revisar
+    needs: [revisar, interfaz]
     if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -84,7 +107,7 @@ jobs:
 
   publicar-web:
     name: Publicar la página en Netlify
-    needs: revisar
+    needs: [revisar, interfaz]
     if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 15
