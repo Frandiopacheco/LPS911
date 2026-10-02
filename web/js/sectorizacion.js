@@ -10,14 +10,6 @@ const SZ={vista:'',sel:null,draw:null,tmp:[],q:'',miss:false,cont:true,old:false
 const SZ_PAL=['#1F77B4','#D62728','#2CA02C','#9467BD','#FF7F0E','#17BECF','#8C564B','#E377C2','#7F7F7F','#BCBD22'];
 const szGeo=(o,v)=>o&&o.geo&&o.geo[v]&&o.geo[v].length>=6?o.geo[v]:null;
 const szCol=o=>o==='a'?'ambientes':'sectors';
-/** Contorno del sector: la envolvente de las formas de sus ambientes (con un pequeño margen) */
-function szHull(flats){const P=[];flats.forEach(f=>{for(let i=0;i+1<f.length;i+=2)P.push({x:f[i],y:f[i+1]})});if(P.length<3)return null;
-  P.sort((a,b)=>a.x-b.x||a.y-b.y);const cr=(o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);const lo=[],hi=[];
-  for(const p of P){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p)}
-  for(let i=P.length-1;i>=0;i--){const p=P[i];while(hi.length>=2&&cr(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p)}
-  const H=lo.slice(0,-1).concat(hi.slice(0,-1));if(H.length<3)return null;const c={x:H.reduce((s,p)=>s+p.x,0)/H.length,y:H.reduce((s,p)=>s+p.y,0)/H.length};
-  const xs=H.map(p=>p.x),ys=H.map(p=>p.y);const pad=Math.max(4,Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys))*.02);
-  return H.flatMap(p=>{const d=Math.hypot(p.x-c.x,p.y-c.y)||1;return[Math.round((p.x+(p.x-c.x)/d*pad)*10)/10,Math.round((p.y+(p.y-c.y)/d*pad)*10)/10]})}
 /** Sectores y ambientes del piso, en el orden del lookahead */
 function szTree(pid){const t=tree().find(x=>x.p.id===pid);return t?t.secs.map(({s,ambs})=>({s,ambs:ambs.map(({a,acts})=>({a,n:acts.length}))})):[]}
 function szStats(pid,vista){let n=0,k=0;for(const{ambs}of szTree(pid))for(const{a}of ambs){n++;if(vista?szGeo(a,vista):a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6))k++}return{n,k}}
@@ -28,7 +20,7 @@ function renderPlanos(main){if(!window.__plano||!window.__plano.ambMap)loadPlano
   if(!$('#szmap',main)){SZ.tmp=[];
     main.innerHTML=`<div class="scroll"><div class="wrap szwrap"><div id="szhead"></div><div id="szpis" class="szpis"></div>
       <div class="szbody" id="szbody"><aside class="szside"><div class="szf"><input type="search" class="tin" id="szq" placeholder="Buscar ambiente o sector" aria-label="Buscar"><label class="chk"><input type="checkbox" id="szmiss"> Solo sin ubicar</label></div><div class="szlist" id="szlist"></div></aside>
-      <section class="szmapw"><div class="sztool" id="sztool"></div><div class="szmap" id="szmap"></div></section></div><div id="szold"></div></div></div>`;
+      <section class="szmapw"><div class="sztool" id="sztool"></div><div class="szmapb"><div class="szmap" id="szmap"></div><div class="szleg" id="szleg"></div></div></section></div><div id="szold"></div></div></div>`;
     main.onclick=szClick;main.onchange=szChange;main.oninput=e=>{if(e.target.id==='szq'){SZ.q=e.target.value;szList()}}}
   const pid=U.piso;const bs=pid?szBase(pid):[];
   $('#szhead',main).innerHTML=pageHead('Sectorización',`${pid?esc(S.pis.get(pid)?.code+' · '+S.pis.get(pid)?.name):'Elige un nivel'} · ubicación de sectores y ambientes en la lámina`,
@@ -42,7 +34,7 @@ function renderPlanos(main){if(!window.__plano||!window.__plano.ambMap)loadPlano
   {const oh=planosOldCard();const oe=$('#szold',main);if(oe.dataset.h!==oh){oe.innerHTML=oh;oe.dataset.h=oh}}
   if(!pid)return;
   {const mq=$('#szmiss',main);if(mq)mq.checked=SZ.miss}
-  szList();szTool(bs);szMap()}
+  szList();szTool(bs);szMap();szLeg()}
 
 /* ---------- lista ordenada del lookahead ---------- */
 function szList(){const el=$('#szlist');if(!el)return;const pid=U.piso,v=SZ.vista;const ce=canWrite;const q=fold(SZ.q.trim());const T=szTree(pid);const sel=SZ.sel;
@@ -63,7 +55,7 @@ function szName(sel){if(!sel)return'';const o=sel.lv==='a'?S.amb.get(sel.id):S.s
 function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,SZ.vista);let h='';
   if(bs.length>1)h+=`<span class="seg">${bs.map(b=>`<button data-szv="${b.id}" class="${b.id===SZ.vista?'on':''}">${esc(b.name||b.esp||'Lámina')}</button>`).join('')}</span>`;
   if(SZ.draw&&SZ.sel){h+=`<span class="szdr"><b>${SZ.draw==='poly'?'Toca cada esquina de':'Arrastra un rectángulo sobre'} ${esc(szName(SZ.sel))}</b>${SZ.draw==='poly'?'<span class="mu">· para cerrar, toca la primera esquina, doble clic o Enter</span>':''}${SZ.draw==='poly'?`<button class="ib pri" data-sza="fin"${SZ.tmp.length<3?' disabled':''}>Terminar (${SZ.tmp.length})</button><button class="ib" data-sza="undo"${SZ.tmp.length?'':' disabled'}>Quitar último punto</button><button class="ib" data-sza="rect">▭ Rectángulo</button>`:'<button class="ib" data-sza="poly">⬠ Polígono</button>'}<button class="ib" data-sza="cancel">Cancelar</button></span>`}
-  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· su contorno sale de sus ambientes ubicados</span></span>`;
+  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· sus ambientes se resaltan en la lámina</span></span>`;
   else if(SZ.sel){const g=szGeo(S.amb.get(SZ.sel.id),SZ.vista);h+=`<span class="szdr"><b>${esc(szName(SZ.sel))}</b>${canWrite?(g?' <span class="mu">· arrastra las esquinas para ajustar; los puntos chicos agregan una esquina</span> <button class="ib" data-sza="rect">▭ Redibujar</button><button class="ib" data-sza="poly">⬠ Polígono</button>':` <button class="ib pri" data-sza="rect">▭ Ubicar con rectángulo</button><button class="ib" data-sza="poly">⬠ Polígono</button>`):''}</span>`}
   else h+=`<span class="mu">${canWrite?'Elige un ambiente de la lista y toca «Ubicar», o toca una forma de la lámina para seleccionarla.':'Toca una forma de la lámina para ver qué ambiente es.'}</span>`;
   h+=`<span class="fsp"></span>${canWrite?`<label class="chk" title="Al terminar un ambiente, la lista pasa al siguiente sin ubicar"><input type="checkbox" id="szcont"${SZ.cont?' checked':''}> pasar al siguiente</label>`:''}<span class="szpr"><b>${st.k}</b>/${st.n} ambientes ubicados</span>`;
@@ -71,8 +63,7 @@ function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,
 
 /* ---------- mapa ---------- */
 function szShapes(){const pid=U.piso,v=SZ.vista;const out=[];const sel=SZ.sel;
-  szTree(pid).forEach(({s,ambs},i)=>{const c=SZ_PAL[i%SZ_PAL.length];const sg=szHull(ambs.map(({a})=>szGeo(a,v)).filter(Boolean));
-    if(sg)out.push({id:'s:'+s.id,kind:'s',pts:sg,label:s.code+' · '+s.name,c,sel:!!(sel&&sel.lv==='s'&&sel.id===s.id)});
+  szTree(pid).forEach(({s,ambs},i)=>{const c=SZ_PAL[i%SZ_PAL.length];
     for(const{a}of ambs){const g=szGeo(a,v);if(g)out.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,c,sel:!!(sel&&sel.lv==='a'&&sel.id===a.id),dim:!!(sel&&sel.lv==='s'&&sel.id!==s.id)})}});
   return out}
 function szMap(){const host=$('#szmap');const API=window.__plano;if(!host)return;if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando láminas…</div>';return}
@@ -81,7 +72,11 @@ function szMap(){const host=$('#szmap');const API=window.__plano;if(!host)return
     onEdit:pts=>{const a=S.amb.get(SZ.sel.id);if(!a)return;apply([op('ambientes',a.id,{...a,geo:{...(a.geo||{}),[SZ.vista]:pts}})],`Ambiente ${a.code}: forma ajustada`)},
     onDrawn:(pts,vista)=>szSave(pts,vista||SZ.vista),onPoly:p=>{const L=SZ.tmp[SZ.tmp.length-1];if(L&&Math.hypot(L.x-p.x,L.y-p.y)<1)return;SZ.tmp.push(p);szTool(szBase(U.piso));szMap()},onPolyClose:szPolyClose,
     onPick:id=>{if(!id){SZ.sel=null}else{const[lv,x]=id.split(':');SZ.sel={lv,id:x}}szRefresh();const it=SZ.sel&&$(`#szlist [data-szi="${SZ.sel.lv}:${SZ.sel.id}"]`);if(it)it.scrollIntoView({block:'nearest'})}})}
-function szRefresh(){szList();szTool(szBase(U.piso));szMap()}
+function szRefresh(){szList();szTool(szBase(U.piso));szMap();szLeg()}
+/* leyenda: un color por sector (tocarla resalta sus ambientes) */
+function szLeg(){const el=$('#szleg');if(!el)return;const v=SZ.vista;const sel=SZ.sel;
+  const h=szTree(U.piso).map(({s,ambs},i)=>{const k=ambs.filter(({a})=>szGeo(a,v)).length;return`<button class="${sel&&sel.lv==='s'&&sel.id===s.id?'on':''}${k?'':' z'}" data-szi="s:${s.id}" style="--c:${SZ_PAL[i%SZ_PAL.length]}" title="${esc(s.name)} · ${k}/${ambs.length} ambientes ubicados"><i></i>${esc(s.code)}<span>${esc(s.name)}</span></button>`}).join('');
+  if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}el.hidden=!h}
 
 function szPolyClose(){if(SZ.draw!=='poly')return;const P=SZ.tmp.filter((p,i,a)=>!i||Math.hypot(p.x-a[i-1].x,p.y-a[i-1].y)>=1);if(P.length<3){toast('Marca al menos 3 esquinas.');return}SZ.tmp=[];szSave(P.flatMap(p=>[p.x,p.y]),SZ.vista)}
 /* ---------- guardar ---------- */

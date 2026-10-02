@@ -28,8 +28,10 @@ test('ubicar ambientes por nivel con rectángulo y polígono, y deshacer', async
   await expect.poll(async () => ((await geo(page, 'ambientes', 'a2')).L1 || []).length).toBe(8);
   await expect(page.locator('#sztool')).toContainText('2/2 ambientes ubicados');
   await expect(page.locator('#szmap .pvl.sza')).toHaveCount(2);
-  // el sector se contornea solo con sus ambientes
-  await expect(page.locator('#szmap .pvl.szs')).toContainText('S1');
+  // los sectores se distinguen por color: la leyenda resalta sus ambientes
+  await expect(page.locator('#szmap .pvl.szs')).toHaveCount(0);
+  await page.locator('#szleg [data-szi="s:s1"]').click();
+  await expect(page.locator('#szlist .szsec.on')).toContainText('Sector 1');
   // tocar una forma la selecciona; sus esquinas se arrastran para ajustarla
   const c = await enPantalla(page, '#szmap', 200, 200); await page.mouse.click(c.x, c.y);
   await expect(page.locator('#szlist .szamb.on')).toContainText('Dpto 101');

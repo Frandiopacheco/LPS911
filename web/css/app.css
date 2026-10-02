@@ -1238,3 +1238,10 @@ td.s0 .clb{margin:0;min-width:22px;padding:0 2px}
 .szold{margin-top:14px}.szold>summary{cursor:pointer;list-style:none}
 @media (max-width:760px){.szbody{grid-template-columns:1fr}.szside{height:auto;max-height:45vh;min-height:0}.szmap{height:60vh}}
 .pvh.mid{width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border-width:1.5px;opacity:.85;cursor:copy}
+.szmapb{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}
+.szleg{position:absolute;left:8px;bottom:8px;right:8px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.szleg button{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:20px;padding:4px 10px 4px 6px;font:700 12px var(--f-mono);cursor:pointer;box-shadow:var(--sh-1)}
+.szleg button i{width:14px;height:14px;border-radius:4px;background:var(--c)}
+.szleg button span{font:500 12px var(--f-ui);color:var(--muted)}
+.szleg button.on{border-color:var(--c);box-shadow:0 0 0 2px var(--c)}
+.szleg button.z{opacity:.55}
