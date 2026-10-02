@@ -1096,3 +1096,30 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 .status.saved{color:var(--ok);font-weight:600}
 .status.saved i{animation:lps-pop-sm var(--t-slow) var(--ease)}
 .rloc,.mp-it .t small,.mt small,.mlh span,.dfd small,.drc li small,.pop .ph,.lqst,.mcs,.pvl,.fsug,.lmd button small,.rcard .rf label,.wk .lbl span,table.rt td[data-l]::before{font-size:12px}
+
+/* =====================================================================
+   CELULAR (P10, P11, P12): primero lo pendiente, filtros plegables,
+   tarjetas de números en una fila deslizable, tablas como tarjetas
+   ===================================================================== */
+.ftog{display:none}
+.fmore{display:contents}
+@media (max-width:760px){
+  .ftog{display:inline-flex}
+  .fmore{display:none;width:100%;flex-direction:column;gap:8px}
+  .fmore.open{display:flex}
+  .fmore>*{width:100%!important;max-width:none!important}
+  .tiles,.lqtiles,.dkpi{display:flex!important;contain:inline-size;min-width:0;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding:0 10px;gap:8px;margin:0 -10px;padding:2px 10px 6px;scrollbar-width:none}
+  .tiles::-webkit-scrollbar,.lqtiles::-webkit-scrollbar,.dkpi::-webkit-scrollbar{display:none}
+  .tiles>*,.lqtiles>*,.dkpi>*{flex:0 0 auto;width:150px;scroll-snap-align:start}
+  .phd{align-items:flex-start}
+  .pht h2{font-size:20px}
+  .pha{width:100%}
+  .pha .ib{flex:1 1 auto;min-height:40px}
+  .fbar .fgl{display:none}
+  .tmem td.tst:empty,.lqmt td.lqnone{display:none!important}
+  .top .wk #fpiso{flex:1;min-width:0}
+  table.rt td .ci,table.rt td select,table.rt td input:not([type=checkbox]){box-sizing:border-box;max-width:100%}
+  table.rt tr.grp th{display:block;border:0;background:none;padding:0;font-size:13px}
+  table.rt td>.pill{align-self:flex-start}
+}
+.msc{max-height:calc(100% - 40px);overflow:auto;overscroll-behavior:contain}
