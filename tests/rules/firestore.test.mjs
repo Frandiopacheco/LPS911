@@ -26,6 +26,10 @@ test.beforeEach(async () => {
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
     await S('members/ot@obra.pe', { role: 'area', name: 'Jefe OT', area: 'OT' });
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
+    await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
+    await S('lib/l-obs', { actId: 'x1', sc: 'c-gabel', st: 'obs', by: 'sc@obra.pe' });
+    await S('lib/l-lib', { actId: 'x1', sc: 'c-gabel', st: 'lib', by: 'sc@obra.pe' });
+    await S('lib/l-otro', { actId: 'x9', sc: 'c-otro', st: 'sol', by: 'editor@obra.pe' });
     await S('restr/r-ot', { actId: 'x1', grp: 'area', area: 'OT', by: 'editor@obra.pe', status: 'pend', freed: '', desc: 'Falta plano de detalle' });
     await S('restr/r-cal', { actId: 'x1', grp: 'area', area: 'Calidad', by: 'editor@obra.pe', status: 'pend', freed: '' });
     await S('restr/r-campo', { actId: 'x1', grp: 'campo', area: '', by: 'editor@obra.pe', status: 'pend', freed: '' });
@@ -131,6 +135,32 @@ test('áreas de apoyo (OT, Calidad): ven todo y gestionan solo las restricciones
   await assertFails(deleteDoc(doc(ot, 'restr/r-ot')));
   await assertSucceeds(updateDoc(doc(user('calidad@obra.pe'), 'restr/r-cal'), { status: 'lib', freed: '2026-10-01' }));
   await assertSucceeds(setDoc(doc(ot, 'fotos/f-ot'), { data: 'x'.repeat(1000) }));
+});
+test('liberaciones: el SC pide y levanta; Calidad programa y libera', async () => {
+  const sc = user('sc@obra.pe'), cal = user('calidad@obra.pe'), ot = user('ot@obra.pe');
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'lib/l-sol')));
+  await assertSucceeds(setDoc(doc(sc, 'lib/n1'), { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' }));
+  await assertFails(setDoc(doc(sc, 'lib/n2'), { actId: 'x9', sc: 'c-otro', st: 'sol', by: 'sc@obra.pe' }));
+  await assertFails(setDoc(doc(sc, 'lib/n3'), { actId: 'x1', sc: 'c-gabel', st: 'lib', by: 'sc@obra.pe' }));
+  await assertSucceeds(updateDoc(doc(sc, 'lib/l-obs'), { st: 'lev' }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-sol'), { st: 'lib' }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-lib'), { st: 'lev' }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-otro'), { st: 'anu' }));
+  await assertSucceeds(updateDoc(doc(cal, 'lib/l-sol'), { st: 'pro', prog: { d: '2026-10-02', h: '09:00' } }));
+  await assertSucceeds(updateDoc(doc(cal, 'lib/l-otro'), { st: 'lib' }));
+  await assertSucceeds(setDoc(doc(cal, 'lib/n4'), { actId: 'x9', sc: 'c-otro', st: 'sol', by: 'calidad@obra.pe' }));
+  await assertFails(updateDoc(doc(ot, 'lib/l-sol'), { st: 'lib' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lib/l-sol'), { st: 'pro' }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'lib/l-sol'), { st: 'lib' }));
+  await assertFails(deleteDoc(doc(cal, 'lib/l-sol')));
+});
+test('matriz de liberaciones: la editan Calidad y el administrador', async () => {
+  await assertSucceeds(setDoc(doc(user('calidad@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'libm/main'), { rules: [{ id: 'r1' }] }));
+  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'libm/main')));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));

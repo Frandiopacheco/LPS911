@@ -15,8 +15,8 @@ const M={vista:'',piso:'',sel:'',under:true,op:0.7,hi:null,view:null,busy:'',dat
 
 /* ---------- datos ---------- */
 function ensureLam(){if(lamSub||!db)return;
-  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()},
-    err=>{lamErr=err&&err.code||'error';lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()});
+  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()},
+    err=>{lamErr=err&&err.code||'error';lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()});
   unsubs.push(()=>{if(lamSub)lamSub();lamSub=null;LAM.clear();lamReady=false;IMG.forEach(v=>{if(v.url)URL.revokeObjectURL(v.url)});IMG.clear();M.view=null})}
 const lamsOf=pid=>[...LAM.values()].filter(l=>l.pisoId===pid).sort((a,b)=>(b.base?1:0)-(a.base?1:0)||(a.order||0)-(b.order||0)||a.esp.localeCompare(b.esp));
 const basesOf=pid=>lamsOf(pid).filter(l=>l.base);
@@ -104,7 +104,7 @@ function renderMapa(main){ensureLam();
   const pk=M.piso+'|'+(base?base.id+base.rev:'');if(M.vpiso!==pk){M.vpiso=pk;M.view.fitted=0;requestAnimationFrame(()=>{if(M.view){M.view.fit();M.view.fitted=1}})}
   M.view.set(layers.map(x=>({key:x.key+'|'+x.l.rev,url:IMG.get(x.l.id+'|'+x.l.rev+'|'+(useHi()?'f':'l'))?.url||null,w:x.w,h:x.h,T:x.T,op:x.op,blend:x.blend})));M.view.apply();
   renderPlan(main,cur,base);
-  layers.forEach(x=>{const k=x.l.id+'|'+x.l.rev+'|'+(useHi()?'f':'l');if(!IMG.get(k)?.url)imgURL(x.l).then(()=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()}).catch(err=>toast('No se pudo cargar la lámina: '+(err.code||err.message)))});
+  layers.forEach(x=>{const k=x.l.id+'|'+x.l.rev+'|'+(useHi()?'f':'l');if(!IMG.get(k)?.url)imgURL(x.l).then(()=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()}).catch(err=>toast('No se pudo cargar la lámina: '+(err.code||err.message)))});
   main.onclick=e=>{const t=e.target;const c=t.closest('[data-lsel]');if(c){M.sel=c.dataset.lsel;requestRender();return}
     const vb=t.closest('[data-vis]');if(vb){M.vista=vb.dataset.vis;M.sel=M.vista;M.selId=null;M.tmp=null;requestRender();return}
     if(meetClick(e))return;if(planClick(e))return;
@@ -126,8 +126,8 @@ function renderMapa(main){ensureLam();
 const DOWN_=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const PD=new Map(),ZN=new Map();let pdSub=null,pdKey=null,znSub=null,znKey=null,planHook=false;M.pdErr=null;
 function ensurePlan(){if(!db)return;
-  if(pdKey!==M.date){if(pdSub)pdSub();pdKey=M.date;PD.clear();pdSub=fcol('pdz').where('date','==',M.date).onSnapshot(sn=>{PD.clear();sn.docs.forEach(d=>PD.set(d.id,{...d.data(),id:d.id}));M.pdErr=null;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()},err=>{M.pdErr=err&&err.code||'error';if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()})}
-  if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()},()=>{})}
+  if(pdKey!==M.date){if(pdSub)pdSub();pdKey=M.date;PD.clear();pdSub=fcol('pdz').where('date','==',M.date).onSnapshot(sn=>{PD.clear();sn.docs.forEach(d=>PD.set(d.id,{...d.data(),id:d.id}));M.pdErr=null;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()},err=>{M.pdErr=err&&err.code||'error';if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()})}
+  if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()},()=>{})}
   if(!planHook){planHook=true;unsubs.push(()=>{if(pdSub)pdSub();if(znSub)znSub();pdSub=znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
 const flat=a=>a.flatMap(p=>[Math.round(p.x*10)/10,Math.round(p.y*10)/10]);
 const unflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
@@ -762,12 +762,12 @@ function novaSet(d){return new Set([...PD.values()].filter(z=>z.kind==='nova'&&z
 function crossOf(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zona');const vs=[...new Set(zs.map(z=>zVista(z)))];const ZL_=planNumbering(null,pid).zl;
   vs.forEach(v=>crossPairs(zs.filter(z=>zVista(z)===v)).list.forEach(c=>out.push({a:zNo(c.a,ZL_)+conOf(c.a.sc).name+': '+zoneLabel(c.a),b:zNo(c.b,ZL_)+conOf(c.b.sc).name+': '+zoneLabel(c.b)})));return out}
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
-function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
+function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
   if(!bs.length){host.innerHTML='<div class="kemp">Este piso todavía no tiene plano cargado. Usa la vista <b>Tarjetas</b>.</div>';host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
-  let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const z=el&&PD.get(el.dataset.z);const oo=host._o||o;if(z&&z.actId&&oo.colors.has(z.actId))oo.onPick(z.actId)}});host._v=v}host._o=o;
-  const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo')requestRender()}).catch(()=>{});
+  let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;const z=el&&(oo.zones?oo.zones.find(q=>q.id===el.dataset.z):PD.get(el.dataset.z));if(z&&z.actId&&oo.colors.has(z.actId))oo.onPick(z.actId,z)}});host._v=v}host._o=o;host._base=base.id;
+  const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib')requestRender()}).catch(()=>{});
   v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.5}]);
   const full=boundsOf({...base,T:base.T||I});const mv=mine.filter(z=>zVista(z)===base.id);
   const fk=o.pid+'|'+base.id+'|'+mv.map(z=>z.id).join(',');if(host._fk!==fk){host._fk=fk;v.bounds=mv.length?cropBox(full,mv):full;v.fitted=0;requestAnimationFrame(()=>{v.fit();v.fitted=1})}
@@ -775,9 +775,20 @@ function capPlan(host,o){const bs=basesOf(o.pid);const zsAll=shapesOf(o.pid).fil
   zsAll.filter(z=>zVista(z)===base.id&&!(z.actId&&o.colors.has(z.actId))).forEach(z=>{const P=unflat(z.pts);if(P.length)svg+=`<polygon points="${ptsS(P)}" fill="#9aa3a8" fill-opacity=".10" stroke="#9aa3a8" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>`});
   mv.forEach(z=>{const P=unflat(z.pts);if(!P.length)return;const c=o.colors.get(z.actId);const pts=ptsS(P);
     svg+=`<polygon points="${pts}" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/><polygon data-z="${z.id}" points="${pts}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-    const ce=centroid(P),bb=bboxOf(P);const n=o.nums.get(z.actId);labels.push({id:z.id,x:ce.x,y:ce.y,t:String(n||'•'),nb:1,bs:o.bs||40,cls:o.bs&&o.bs<40?'sm':'',area:bb.w*bb.h,c,f:'#fff',tip:''})});
+    const ce=centroid(P),bb=bboxOf(P);const n=o.nums.get(z.actId);labels.push({id:z.id,x:ce.x,y:ce.y,t:String((o.lab&&o.lab(z))||n||'•'),nb:1,bs:o.bs||40,cls:o.bs&&o.bs<40?'sm':'',area:bb.w*bb.h,c,f:'#fff',tip:''})});
   v.svg.innerHTML=svg;v.labels=labels;v.apply()}
 
+/* dibujar una zona rectangular sobre el visor de capPlan: cb(pts planos, vista) */
+function capDraw(host,cb){host._drawCb=cb||null;host.classList.toggle('drawing',!!cb);if(host._dw)return;host._dw=1;let st=null,rect=null;
+  const W=e=>host._v.toWorld(e.clientX,e.clientY);
+  host.addEventListener('pointerdown',e=>{if(!host._drawCb||!host._v||e.button>0)return;e.stopPropagation();e.preventDefault();try{host.setPointerCapture(e.pointerId)}catch(er){}st=W(e);
+    rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('fill','rgba(31,95,122,.25)');rect.setAttribute('stroke','#1F5F7A');rect.setAttribute('stroke-width','3');rect.setAttribute('vector-effect','non-scaling-stroke');host._v.svg.appendChild(rect)},true);
+  host.addEventListener('pointermove',e=>{if(!st||!rect)return;e.stopPropagation();const p=W(e);rect.setAttribute('x',Math.min(st.x,p.x));rect.setAttribute('y',Math.min(st.y,p.y));rect.setAttribute('width',Math.abs(p.x-st.x));rect.setAttribute('height',Math.abs(p.y-st.y))},true);
+  const end=e=>{if(!st)return;e.stopPropagation();const p=W(e);const a=st;st=null;if(rect)rect.remove();rect=null;if(e.type!=='pointerup'||Math.abs(p.x-a.x)<3||Math.abs(p.y-a.y)<3)return;const cb=host._drawCb;
+    if(cb)cb(flat([{x:a.x,y:a.y},{x:p.x,y:a.y},{x:p.x,y:p.y},{x:a.x,y:p.y}]),host._base||'')};
+  host.addEventListener('pointerup',end,true);host.addEventListener('pointercancel',end,true)}
+/* zona de una actividad en el plan diario (del día cargado o la última usada) */
+function zoneFor(aid){const z=[...PD.values()].find(q=>q.kind==='zona'&&q.actId===aid);if(z)return{pts:z.pts,vista:zVista(z),pisoId:z.pisoId};const n=ZN.get(aid);return n?{pts:n.pts,vista:n.vista||'',pisoId:n.pisoId}:null}
 /* ---------- panel y barra de herramientas ---------- */
 const TOOLS=[['pan','✋','Mover','Mover el plano; clic en un dibujo para elegirlo y arrastrarlo (V)'],['zona','▭','Zona','Zona rectangular: arrastra (R)'],['poly','⬠','Polígono','Zona con forma libre: clic en cada esquina (P)'],['flecha','➚','Flecha','Flecha: arrastra del inicio a la punta (F)'],['texto','T','Texto','Texto: clic donde va (T)'],['trazo','✎','Lápiz','Dibujo a mano alzada (L)'],['borrar','⌫','Borrar','Borrador: toca o arrastra sobre lo que quieras borrar, o marca un área (E)']];
 const DN=x=>{if(typeof canDaily==='undefined'||!canDaily||M.date>todayIso())return'';const later=(x.days||[]).filter(y=>y>M.date).length;return later&&!(typeof doneOf==='function'&&doneOf(x))?`<button class="ib" data-done="${x.id}" title="Ya se completó: los ${later} día(s) que faltan dejan de contar">✓ Terminada</button>`:''};
@@ -1035,5 +1046,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
+window.__plano={fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
 })();

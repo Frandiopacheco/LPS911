@@ -27,6 +27,8 @@ service cloud.firestore {
     // Área de apoyo (Oficina Técnica, Calidad…): ve todo y gestiona las restricciones de su área
     function isArea() { return isMember() && !isOwner() && role() == 'area'; }
     function areaOf() { return get(memberPath()).data.get('area', ''); }
+    // Calidad: un área de apoyo cuyo nombre contiene "calidad"
+    function isCal() { return isArea() && areaOf().lower().matches('.*calidad.*'); }
     function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
@@ -80,6 +82,22 @@ service cloud.firestore {
       allow update: if (isSC() && scRestrOk(resource.data) && scRestrOk(request.resource.data))
         || (isArea() && areaRestrOk(resource.data) && areaRestrOk(request.resource.data));
       allow delete: if isSC() && scRestrOk(resource.data);
+    }
+    // Liberaciones de calidad: las solicita el SC (de su partida), el ingeniero de producción o Calidad;
+    // las programa y decide Calidad (o el editor / administrador). El SC solo pide, levanta observaciones o anula las suyas.
+    match /lib/{id} {
+      allow read: if isMember();
+      allow create: if canEdit() || isCal()
+        || (isSC() && request.resource.data.sc in scsOf() && request.resource.data.st == 'sol' && request.resource.data.by == mid());
+      allow update: if canEdit() || isCal()
+        || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc == resource.data.sc
+            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
+      allow delete: if isAdmin();
+    }
+    // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador
+    match /libm/{id} {
+      allow read: if isMember();
+      allow write: if isAdmin() || isCal();
     }
     match /daily/{id} {
       allow read: if isMember();
