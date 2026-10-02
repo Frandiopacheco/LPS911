@@ -55,7 +55,7 @@ function szName(sel){if(!sel)return'';const o=sel.lv==='a'?S.amb.get(sel.id):S.s
 function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,SZ.vista);let h='';
   if(bs.length>1)h+=`<span class="seg">${bs.map(b=>`<button data-szv="${b.id}" class="${b.id===SZ.vista?'on':''}">${esc(b.name||b.esp||'Lámina')}</button>`).join('')}</span>`;
   if(SZ.draw&&SZ.sel){h+=`<span class="szdr"><b>${SZ.draw==='poly'?'Toca cada esquina de':'Arrastra un rectángulo sobre'} ${esc(szName(SZ.sel))}</b>${SZ.draw==='poly'?'<span class="mu">· para cerrar, toca la primera esquina, doble clic o Enter</span>':''}${SZ.draw==='poly'?`<button class="ib pri" data-sza="fin"${SZ.tmp.length<3?' disabled':''}>Terminar (${SZ.tmp.length})</button><button class="ib" data-sza="undo"${SZ.tmp.length?'':' disabled'}>Quitar último punto</button><button class="ib" data-sza="rect">▭ Rectángulo</button>`:'<button class="ib" data-sza="poly">⬠ Polígono</button>'}<button class="ib" data-sza="cancel">Cancelar</button></span>`}
-  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· sus ambientes se resaltan en la lámina</span></span>`;
+  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· solo se muestra este sector</span> <button class="ib" data-szall>Ver todos</button></span>`;
   else if(SZ.sel){const g=szGeo(S.amb.get(SZ.sel.id),SZ.vista);h+=`<span class="szdr"><b>${esc(szName(SZ.sel))}</b>${canWrite?(g?' <span class="mu">· arrastra las esquinas para ajustar; los puntos chicos agregan una esquina</span> <button class="ib" data-sza="rect">▭ Redibujar</button><button class="ib" data-sza="poly">⬠ Polígono</button>':` <button class="ib pri" data-sza="rect">▭ Ubicar con rectángulo</button><button class="ib" data-sza="poly">⬠ Polígono</button>`):''}</span>`}
   else h+=`<span class="mu">${canWrite?'Elige un ambiente de la lista y toca «Ubicar», o toca una forma de la lámina para seleccionarla.':'Toca una forma de la lámina para ver qué ambiente es.'}</span>`;
   h+=`<span class="fsp"></span>${canWrite?`<label class="chk" title="Al terminar un ambiente, la lista pasa al siguiente sin ubicar"><input type="checkbox" id="szcont"${SZ.cont?' checked':''}> pasar al siguiente</label>`:''}<span class="szpr"><b>${st.k}</b>/${st.n} ambientes ubicados</span>`;
@@ -64,7 +64,7 @@ function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,
 /* ---------- mapa ---------- */
 function szShapes(){const pid=U.piso,v=SZ.vista;const out=[];const sel=SZ.sel;
   szTree(pid).forEach(({s,ambs},i)=>{const c=SZ_PAL[i%SZ_PAL.length];
-    for(const{a}of ambs){const g=szGeo(a,v);if(g)out.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,c,sel:!!(sel&&sel.lv==='a'&&sel.id===a.id),dim:!!(sel&&sel.lv==='s'&&sel.id!==s.id)})}});
+    if(sel&&sel.lv==='s'&&sel.id!==s.id)return;for(const{a}of ambs){const g=szGeo(a,v);if(g)out.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,c,sel:!!(sel&&sel.lv==='a'&&sel.id===a.id),dim:!!(sel&&sel.lv==='s'&&sel.id!==s.id)})}});
   return out}
 function szMap(){const host=$('#szmap');const API=window.__plano;if(!host)return;if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando láminas…</div>';return}
   const sa=SZ.sel&&SZ.sel.lv==='a'?S.amb.get(SZ.sel.id):null;const eg=canWrite&&!SZ.draw&&sa&&szGeo(sa,SZ.vista);
@@ -72,6 +72,8 @@ function szMap(){const host=$('#szmap');const API=window.__plano;if(!host)return
     onEdit:pts=>{const a=S.amb.get(SZ.sel.id);if(!a)return;apply([op('ambientes',a.id,{...a,geo:{...(a.geo||{}),[SZ.vista]:pts}})],`Ambiente ${a.code}: forma ajustada`)},
     onDrawn:(pts,vista)=>szSave(pts,vista||SZ.vista),onPoly:p=>{const L=SZ.tmp[SZ.tmp.length-1];if(L&&Math.hypot(L.x-p.x,L.y-p.y)<1)return;SZ.tmp.push(p);szTool(szBase(U.piso));szMap()},onPolyClose:szPolyClose,
     onPick:id=>{if(!id){SZ.sel=null}else{const[lv,x]=id.split(':');SZ.sel={lv,id:x}}szRefresh();const it=SZ.sel&&$(`#szlist [data-szi="${SZ.sel.lv}:${SZ.sel.id}"]`);if(it)it.scrollIntoView({block:'nearest'})}})}
+/** todas las esquinas de los ambientes ubicados de un sector (para acercar el plano al sector) */
+function szSecPts(sid){const t=szTree(U.piso).find(o=>o.s.id===sid);if(!t)return null;const f=t.ambs.flatMap(({a})=>szGeo(a,SZ.vista)||[]);return f.length>=6?f:null}
 function szRefresh(){szList();szTool(szBase(U.piso));szMap();szLeg()}
 /* leyenda: un color por sector (tocarla resalta sus ambientes) */
 function szLeg(){const el=$('#szleg');if(!el)return;const v=SZ.vista;const sel=SZ.sel;
@@ -119,14 +121,15 @@ function szClick(e){const t=e.target;let b;
   if(t.id==='szup'){const API=window.__plano;if(!API||!API.lamUpload){toast('Cargando el módulo de láminas…');return}API.lamUpload(t,null,{mode:'base',pid:U.piso,onBase:v=>{if(v)SZ.vista=v}});return}
   if(t.id==='szcopy'){szCopyMenu(t);return}
   if((b=t.closest('[data-szv]'))){SZ.vista=b.dataset.szv;SZ.draw=null;SZ.tmp=[];szRefresh();return}
+  if(t.closest('[data-szall]')){SZ.sel=null;szRefresh();const v=$('#szmap')._v;if(v&&v.bounds)v.fit();return}
   if((b=t.closest('[data-szx]'))){const[lv,id]=b.dataset.szx.split(':');szClear(lv,id);return}
   if((b=t.closest('[data-szd]'))){const[lv,id]=b.dataset.szd.split(':');SZ.sel={lv,id};SZ.draw='rect';SZ.tmp=[];szRefresh();return}
   if((b=t.closest('[data-sza]'))){const k=b.dataset.sza;
     if(k==='rect'||k==='poly'){SZ.draw=k;SZ.tmp=[]}else if(k==='cancel'){SZ.draw=null;SZ.tmp=[]}else if(k==='undo')SZ.tmp.pop();
     else if(k==='fin'){szPolyClose();return}
     szRefresh();return}
-  if((b=t.closest('[data-szi]'))){const[lv,id]=b.dataset.szi.split(':');SZ.sel={lv,id};if(SZ.draw&&!(SZ.sel.lv===lv&&SZ.sel.id===id))SZ.draw=null;szRefresh();
-    const o=lv==='a'?S.amb.get(id):S.sec.get(id);const g=szGeo(o,SZ.vista);if(g&&window.__plano)window.__plano.ambFocus($('#szmap'),g)}}
+  if((b=t.closest('[data-szi]'))){const[lv,id]=b.dataset.szi.split(':');if(lv==='s'&&SZ.sel&&SZ.sel.lv==='s'&&SZ.sel.id===id){SZ.sel=null;szRefresh();const v=$('#szmap')._v;if(v&&v.bounds){v.fit()}return}SZ.sel={lv,id};if(SZ.draw&&!(SZ.sel.lv===lv&&SZ.sel.id===id))SZ.draw=null;szRefresh();
+    const o=lv==='a'?S.amb.get(id):S.sec.get(id);const g=lv==='s'?szSecPts(id):szGeo(o,SZ.vista);if(g&&window.__plano)window.__plano.ambFocus($('#szmap'),g)}}
 function szChange(e){const t=e.target;if(t.closest('.szold')){planosOldChange(e);return}
   if(t.id==='szmiss'){SZ.miss=t.checked;szList();return}
   if(t.id==='szcont'){SZ.cont=t.checked;return}}
