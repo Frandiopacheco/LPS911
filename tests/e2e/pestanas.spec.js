@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, expectTabOk, visibleTabs, noErrors, openTab } from './helpers.js';
 
-const ROLES = ['admin', 'editor', 'campo', 'sc', 'calidad', 'ot', 'lector'];
+const ROLES = ['admin', 'editor', 'campo', 'sc', 'calidad', 'ot', 'veedor', 'lector'];
 
 for (const as of ROLES) {
   test(`escritorio · ${as}: todas las pestañas se dibujan`, async ({ page }) => {

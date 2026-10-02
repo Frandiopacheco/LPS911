@@ -11,12 +11,12 @@ const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
 function tabAllowed(t){if(!me||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
-  if(t==='team')return !SCK()&&me.role!=='lector';return true}
+  if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];const r=me.role;
   const M={admin:['dash','look','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','restr','plan','mapa','campo','lib','ind'],
-    campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],lector:['dash','look','restr','plan','lib','ind'],
+    campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return TAB_ORDER.filter(t=>!p.has(t)&&tabAllowed(t))}
@@ -37,7 +37,7 @@ function moreMenu(anchor){const sec=tabSecondary();
 /* ---------- menú inferior del celular: 4 accesos según el rol + "Más" ---------- */
 function bnavItems(){if(!me)return[];const r=me.role;
   const L=r==='sc'?['cap','mapa','restr','lib']:r==='campo'?['campo','mapa','restr','ind']:r==='area'?(isCalArea()?['lib','restr','mapa','ind']:['restr','lib','ind','look'])
-    :r==='lector'?['restr','lib','ind','look']:['campo','mapa','restr','lib'];
+    :r==='lector'?['restr','lib','ind','look']:r==='veedor'?['campo','mapa','ind','restr']:['campo','mapa','restr','lib'];
   return ['hoy',...L].filter(tabAllowed).slice(0,4)}
 function bnavMore(){const b=new Set(bnavItems());return TAB_ORDER.filter(t=>!b.has(t)&&tabAllowed(t))}
 Object.assign(BNI,{

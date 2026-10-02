@@ -38,42 +38,48 @@ function loadPlanoMod(){if(window.__plano&&window.__plano.capPlan)return Promise
   if(!planoP){planoP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=PLANO_SRC;s.onload=ok;s.onerror=()=>{planoP=null;ko()};document.head.appendChild(s)})}
   return planoP.then(()=>{if(U.tab==='cap'||U.tab==='mapa'||U.tab==='dash'||U.tab==='campo'){const m=$('#main');if(U.tab==='mapa')m.dataset.built='';requestRender()}})}
 const ENG=()=>!!me&&me.role!=='capataz'&&!!canDaily;
-function capItems(d){const E=ENG();const vs=new Set(visPisos().map(p=>p.id));const my=new Set(E?[...S.con.keys()]:(me&&me.scs||[]));const API=window.__plano;const nv=API&&API.novaSet?API.novaSet(d):new Set();
+function capItems(d){const E=ENG()||VEED();const vs=new Set(visPisos().map(p=>p.id));const my=new Set(E?[...S.con.keys()]:(me&&me.scs||[]));const API=window.__plano;const nv=API&&API.novaSet?API.novaSet(d):new Set();
   return[...S.act.values()].filter(x=>my.has(x.sc)&&schedOn(x,d)&&!nv.has(x.id)).map(x=>{const a=S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);return{x,a,s,pid:pisoOfAct(x.id)}})
     .filter(o=>o.a&&o.s&&o.pid&&(!E||vs.has(o.pid))).sort((p,q)=>(p.s.order||0)-(q.s.order||0)||(p.a.order||0)-(q.a.order||0)||(p.x.order||0)-(q.x.order||0))}
-function capPend(d){if(ENG()||SCK())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
-function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG();const q=E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
+function capPend(d){if(ENG()||VEED()||SCK())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
+function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG()||VEED();const q=VEED()?'':E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
   const ql={run:liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'▶ Continúa':'▶ Iniciar',res:'▶ Reanudar',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
   return`<article class="kc k-${s.k}${s.conf?' conf':''}" data-k="${aid}" data-d="${d}" style="--k:${KST[s.k].c}"><i class="kn">${n||'·'}</i><div class="kt"><b>${esc(o.x.name)}</b><span>${esc(o.a.code)} · ${esc(o.a.name)}${pend?' · '+fmtD(d):''}${E||(me.scs||[]).length>1?' · '+esc(conOf(o.x.sc).name):''}</span><em>${esc(kText(d,aid))}</em></div>${q?`<button class="kgo" data-kq="${q}">${ql}</button>`:s.conf?'<span class="kok">✓</span>':''}</article>`}
-function renderCap(main){const E=ENG();const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
+function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(CP.v!=='plan'&&CP.v!=='list')CP.v='plan';const V=E?'plan':CP.v;
   const all=capItems(d);const my=E?[...new Set(all.map(o=>o.x.sc))].sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name)):(me.scs||[]);if(CP.sc&&!my.includes(CP.sc))CP.sc='';const allF=all.filter(o=>!CP.sc||o.x.sc===CP.sc);const byP=new Map();allF.forEach(o=>{if(!byP.has(o.pid))byP.set(o.pid,[]);byP.get(o.pid).push(o)});
-  const ps=pisos().filter(p=>byP.has(p.id));if((!E&&CP.pud!==d)||!ps.some(p=>p.id===CP.pid)){const zp=API?ps.find(p=>{const z=API.zonedSet(p.id);return byP.get(p.id).some(o=>z.has(o.x.id))}):null;CP.pid=(zp||ps[0]||{}).id||''}
+  /* quien recorre la obra ve todos los pisos (también los que hoy no tienen nada programado: ahí se registra lo no programado) */
+  const ps=E&&NPon?visPisos():pisos().filter(p=>byP.has(p.id));if((!E&&CP.pud!==d)||!ps.some(p=>p.id===CP.pid)){const zp=API?ps.find(p=>{const z=API.zonedSet(p.id);return(byP.get(p.id)||[]).some(o=>z.has(o.x.id))}):null;CP.pid=((zp||ps.find(p=>byP.has(p.id))||ps[0])||{}).id||''}
   const items=byP.get(CP.pid)||[];const nums=API?API.nums(CP.pid):new Map();const zoned=API?API.zonedSet(CP.pid):new Set();
   const cnt={none:0,run:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kState(d,o.x.id).k]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
   if(!main.dataset.built){main.innerHTML=`<div class="kap"><div class="khd" id="khd"></div><div class="kbody"><div class="kplanw" id="kplanw"><div class="kplan" id="kplan"></div></div><div id="klist"></div></div></div>`;main.dataset.built='1';main.onclick=capClick}
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
   let hh=E?`<div class="khi"><div><b>Campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div><button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||(SCK()?'':'capataz'))}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div>${SCK()?'':'<button class="ib" data-kmenu aria-label="Menú">⋯</button>'}</div>`;
   if(my.length>1)hh+=`<div class="kchips"><button class="${!CP.sc?'on':''}" data-ksc="">Todas</button>${my.map(c=>`<button class="${CP.sc===c?'on':''}" data-ksc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}</div>`;
-  if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${byP.get(p.id).length}</b></button>`).join('')}</div>`;
+  if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${(byP.get(p.id)||[]).length}</b>${NPon&&npItems([d],new Set([p.id])).length?`<b class="knp" title="Trabajo no programado registrado">+${npItems([d],new Set([p.id])).length}</b>`:''}</button>`).join('')}</div>`;
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
   const khd=$('#khd',main);if(khd.dataset.h!==hh){khd.innerHTML=hh;khd.dataset.h=hh}
-  const pw=$('#kplanw',main);pw.hidden=V!=='plan'||!items.length;
-  if(V==='plan'&&items.length&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:aid=>capSheet(aid,d,'main')})}
+  const npOn=NPon&&E&&!!CP.pid&&d<=todayIso();const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);
+  if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:aid=>capSheet(aid,d,'main'),
+    marks:npOn?npMarks(d,CP.pid):null,onEmpty:npOn?pt=>npNew({d,pid:CP.pid,pt}):null,onMark:id=>npOpen(id)})}
   let lh='';
   if(liveErr)lh+=`<div class="callout">No se pudo leer el avance (${esc(liveErr)}). Avisa al administrador: faltan las reglas nuevas de Firestore.</div>`;
   if(pend.length)lh+=`<div class="ksec warn">Pendientes de cerrar (${pend.length})</div>${pend.map(l=>{const x=S.act.get(l.actId);const a=S.amb.get(x.ambId);return kCard(l.date,{x,a},null,true)}).join('')}`;
-  if(!all.length)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
+  if(npErr&&npOn)lh+=`<div class="callout">No se pudo leer el trabajo no programado (${esc(npErr)}). Faltan las reglas nuevas de Firestore.</div>`;
+  if(npOn)lh+=`<div class="knpbar"><button class="kbig ghost knpadd" data-knp>＋ No programado</button><span class="knote">${items.length?'Toca un número para '+(VEED()?'ver':'verificar')+' · toca un lugar vacío del plano para registrar lo que se ejecuta sin estar programado.':'Toca en el plano el lugar donde ves trabajando a una cuadrilla.'}</span></div>`;
+  if(!all.length&&!npOn)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
   else if(V==='plan'){const un=items.filter(o=>!zoned.has(o.x.id));
-    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div><p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`;
+    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`}`;
     if(un.length)lh+=`<div class="ksec">Sin ubicar en el plano (${un.length})</div>${un.map(o=>kCard(d,o,nums.get(o.x.id))).join('')}`}
   else lh+=items.map(o=>kCard(d,o,nums.get(o.x.id))).join('');
+  if(npOn)lh+=npListHtml(d,new Set([CP.pid]),i=>!CP.sc||i.e.sc===CP.sc);
   const kl=$('#klist',main);if(kl.dataset.h!==lh){kl.innerHTML=lh;kl.dataset.h=lh}
   if(KS&&$('#ksheet'))capSheet(KS.aid,KS.d,KS.mode,true)}
 function capClick(e){const t=e.target;let b;
   if((b=t.closest('[data-ksc]'))){CP.sc=b.dataset.ksc;saveCP();render();return}
   if((b=t.closest('[data-kp]'))){CP.pid=b.dataset.kp;CP.pud=todayIso();saveCP();render();return}
-  if(ENG()&&(b=t.closest('[data-kv]'))){if(b.dataset.kv==='list'){CU.view='list';saveCU();$('#main').dataset.built='';kClose();render()}return}
+  if((ENG()||VEED())&&(b=t.closest('[data-kv]'))){if(b.dataset.kv==='list'){CU.view='list';saveCU();$('#main').dataset.built='';kClose();render()}return}
+  if(t.closest('[data-knp]')){npNew({d:campoDate(),pid:CP.pid});return}
   if((b=t.closest('[data-kd]'))){const v=+b.dataset.kd;CU.date=v===0?null:shiftDay(campoDate(),v);if(CU.date===todayIso())CU.date=null;const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kv]'))){CP.v=b.dataset.kv;saveCP();const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
@@ -99,6 +105,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
       <div class="kbtns"><button class="kbig pri" data-ka="closesave"${KS.cs&&(KS.cs==='ok'||KS.cnc)?'':' disabled'}>${E?'Guardar verificación':'Enviar cierre'}</button><button class="kbig ghost" data-ka="back">Volver</button></div><p class="knote">${E?'Queda registrado como verificado por ti (cuenta para el PPC).':'El ingeniero de campo lo revisará y confirmará.'}</p>`}
+  else if(VEED()){const r=recOf(d,aid);h+=`<p class="knote">${r?`Verificado por ${esc(r.byName||'')} · ${hhmm(r.ts)}`:'El avance lo verifica el ingeniero de campo.'}</p><div class="kbtns"><button class="kbig ghost" data-kx>Cerrar</button></div>`}
   else if(E){const r=recOf(d,aid);const live=d===todayIso()&&!s.conf&&!(s.k==='ok'||s.k==='no');
     if(s.conf)h+=`<p class="knote">Verificado por ${esc(r&&r.byName||'')} · ${hhmm(r&&r.ts)}${r&&r.prop&&r.prop.status!==r.status?' · el capataz había marcado '+(r.prop.status==='ok'?'✓':'✗'):''}</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar verificación</button></div>`;
     else if(r&&r._prop)h+=`<p class="knote">Propuesto por <b>${esc(r.byName||'el capataz')}</b> · ${hhmm(r.ts)}</p><div class="kbtns"><button class="kbig pri" data-ka="confp">✓ Confirmar lo propuesto</button><button class="kbig ghost" data-ka="closef">Corregir…</button></div>`;

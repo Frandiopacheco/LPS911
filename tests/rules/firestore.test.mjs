@@ -25,6 +25,7 @@ test.beforeEach(async () => {
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
     await S('members/ot@obra.pe', { role: 'area', name: 'Jefe OT', area: 'OT' });
+    await S('members/veedor@obra.pe', { role: 'veedor', name: 'Veedor' });
     await S('members/editor2@obra.pe', { role: 'editor', name: 'Editor designado', cli: true });
     await S('members/campo2@obra.pe', { role: 'campo', name: 'Campo designado', cli: true });
     await S('members/sc2@obra.pe', { role: 'sc', name: 'SC con marca', sc: 'c-gabel', scs: ['c-gabel'], cli: true });
@@ -186,6 +187,26 @@ test('versión cliente: solo el administrador y quienes él designe', async () =
   await assertSucceeds(setDoc(doc(user('editor2@obra.pe'), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
   await assertFails(deleteDoc(doc(user('editor2@obra.pe'), 'clidx/c1')));
   await assertSucceeds(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+});
+test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno corrige lo suyo', async () => {
+  const np = (by, o = {}) => ({ date: '2026-10-01', pisoId: 'p1', ambId: 'a1', sc: 'c-gabel', desc: 'Tarrajeo', by, ...o });
+  for (const who of ['veedor@obra.pe', 'calidad@obra.pe', 'campo@obra.pe', 'editor@obra.pe']) {
+    await assertSucceeds(setDoc(doc(user(who), 'nprog/n-' + who), np(who)));
+  }
+  await assertSucceeds(setDoc(doc(user(OWNER), 'nprog/n-own'), np(OWNER)));
+  // no se registra a nombre de otro, ni lo hacen SC, capataz, OT o lector
+  await assertFails(setDoc(doc(user('veedor@obra.pe'), 'nprog/n-x'), np('campo@obra.pe')));
+  for (const who of ['sc@obra.pe', 'ot@obra.pe', 'lector@obra.pe']) await assertFails(setDoc(doc(user(who), 'nprog/n-y'), np(who)));
+  await assertFails(setDoc(doc(cap('cap1'), 'nprog/n-z'), np('u_cap1')));
+  // el veedor corrige lo suyo, no lo de otro; campo corrige todo
+  await assertSucceeds(updateDoc(doc(user('veedor@obra.pe'), 'nprog/n-veedor@obra.pe'), { desc: 'Tarrajeo de muros' }));
+  await assertFails(updateDoc(doc(user('veedor@obra.pe'), 'nprog/n-calidad@obra.pe'), { desc: 'x' }));
+  await assertSucceeds(updateDoc(doc(user('campo@obra.pe'), 'nprog/n-veedor@obra.pe'), { del: true }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'nprog/n-veedor@obra.pe')));
+  await assertFails(deleteDoc(doc(user('campo@obra.pe'), 'nprog/n-veedor@obra.pe')));
+  // el veedor sube fotos pero no escribe el registro diario
+  await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01' }));
+  await assertFails(setDoc(doc(user('veedor@obra.pe'), 'daily/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', recs: {} }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));

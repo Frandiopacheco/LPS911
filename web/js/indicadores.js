@@ -19,7 +19,7 @@ function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
 function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
   for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:x.sc})}}
   dayDataArch(dates,vset,rows);
-  for(const doc of DAY.values()){if(!ds.has(doc.date)||!vset.has(doc.pisoId))continue;for(const[id,e]of Object.entries(doc.extra||{})){if(!e.del)extras.push({id,e,d:doc.date,p:S.pis.get(doc.pisoId),a:S.amb.get(e.ambId)})}}
+  extras.push(...npItems(ds,vset));
   const z=()=>({prog:0,ver:0,ok:0,partial:0,no:0,nimp:0});const add=(o,r)=>{o.prog++;if(r.rc){o.ver++;o[r.rc.status]++;if(impOf(r.rc)===false)o.nimp++}};
   rows.forEach(r=>{add(scA[r.sc]=scA[r.sc]||z(),r);add(piA[r.p.id]=piA[r.p.id]||z(),r);add(tot,r);if(r.rc&&r.rc.status!=='ok'){const k=r.rc.cnc||'Sin causa registrada';cnc[k]=(cnc[k]||0)+1}});
   return{rows,extras,scA,piA,cnc,tot}}
@@ -49,7 +49,7 @@ function renderIndDay(main){
     <div class="tile"><span class="k">Verificado</span><span class="v">${t.prog?pct(t.ver/t.prog):'—'} <small>${t.ver} de ${t.prog}</small></span></div>
     <div class="tile"><span class="k">Parcial / No cumplido</span><span class="v">${t.partial} / ${t.no}</span></div>
     <div class="tile"><span class="k">Sin verificar</span><span class="v">${t.prog-t.ver}</span></div>
-    <div class="tile"><span class="k">No programados</span><span class="v">${D.extras.length}</span></div></div>
+    <div class="tile"><span class="k">No programados</span><span class="v">${D.extras.length}${D.extras.length&&(t.ok+t.partial)?` <small>${pct(D.extras.length/(D.extras.length+t.ok+t.partial))} de lo ejecutado</small>`:''}</span></div></div>
    ${helpBox('¿Qué mide el PPC diario y cómo se calcula?',`<p>El <b>PPC diario</b> es una <b>alerta temprana</b>: muestra si la programación del día se está cumpliendo. El indicador oficial es el <b>PPC semanal</b> (Indicadores → Semanal), donde lo que falló un día y se recuperó dentro de la semana cuenta como cumplido.</p>
 <p>El % se calcula sobre lo <b>verificado</b> (Parcial cuenta como no cumplido). Lo que nadie registró aparece como “sin verificar” y no baja el indicador. El <b>PPC del SC</b> no cuenta los incumplimientos cuya causa no depende del subcontratista (se define en Configuración y se puede corregir en cada registro de Campo).</p>`)}`;
   if(!t.prog&&!D.extras.length)h+=`<div class="empty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
@@ -57,6 +57,7 @@ function renderIndDay(main){
     const scs=Object.entries(D.scA).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
     h+=`<div class="card"><h2>Cumplimiento por subcontratista <span class="sub">${fmtD(d)}</span></h2><div class="pad">${cumplTable(scs,scLabel)}</div></div>`;
     if(!U.piso&&vp.length>1){const ps=vp.filter(p=>D.piA[p.id]).map(p=>[p.id,D.piA[p.id]]);h+=`<div class="card"><h2>Cumplimiento por piso <span class="sub">${fmtD(d)}</span></h2><div class="pad">${cumplTable(ps,id=>{const p=S.pis.get(id);return`<b>${esc(p.code)}</b> · ${esc(p.name)}`})}</div></div>`}
+    if(D.extras.length)h+=npIndCard(D.extras,d);
     const cl=Object.entries(D.cnc).sort((a,b)=>b[1]-a[1]);
     if(cl.length)h+=`<div class="card chart"><h2>Causas del día <span class="sub">Parcial y No cumplido</span></h2><div class="pad">${svgBarsH(cl.map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
     const inc=D.rows.filter(r=>r.rc&&r.rc.status!=='ok').sort((a,b)=>a.p.order-b.p.order||a.s.order-b.s.order||a.a.order-b.a.order||a.x.order-b.x.order);
@@ -86,11 +87,12 @@ function renderInd(main){
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
   const vActs=[...S.act.values()].filter(x=>vset.has(pisoOfAmb(x.ambId)));const dayRows=[];const dCnc={};let nExtra=0;
   for(const d of dd){let sch=0,okc=0,reg=0;for(const x of vActs){if(!(x.days||[]).includes(d))continue;sch++;const rc=recOf(d,x.id);if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc)dCnc[rc.cnc]=(dCnc[rc.cnc]||0)+1}}
-    for(const doc of DAY.values())if(doc.date===d&&vset.has(doc.pisoId))nExtra+=Object.values(doc.extra||{}).filter(e=>!e.del).length;
+    nExtra+=npItems([d],vset).length;
     if(reg)dayRows.push({label:DL[(pd(d).getUTCDay()+6)%7]+' '+d.slice(8),v:okc/reg,sub:`${okc} de ${reg} verificadas · ${sch} programadas`})}
   h+=`<div class="card chart"><h2>PPC diario (alerta · registros de campo) <span class="sub">% de lo verificado en campo marcado “Cumplido” · semanas ${U.week-2}–${U.week}${nExtra?` · ${nExtra} trabajos no programados`:''}</span></h2><div class="pad tscroll">${dayRows.length?svgBarsV(dayRows):'<div class="empty">Aún no hay registros de campo en estas semanas. Se llenan desde la pestaña <b>Campo</b>.</div>'}</div></div>`;
   {const wd=weekDays(U.week).filter(x=>x<=todayIso());const W=dayData(wd,vset);const e=Object.entries(W.scA).filter(([,o])=>o.ver).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
    h+=`<div class="card"><h2>Cumplimiento en campo por subcontratista <span class="sub">semana ${U.week} · registros diarios acumulados</span></h2><div class="pad">${e.length?cumplTable(e,scLabel):'<div class="empty">Sin registros de campo en esta semana.</div>'}</div></div>`}
+  {const nd=dd.map(d=>({d,n:npItems([d],vset).length})).filter(o=>o.n);if(nd.length)h+=`<div class="card chart"><h2>Trabajo no programado por día <span class="sub">frentes vistos en obra sin estar programados · semanas ${U.week-2}–${U.week}</span></h2><div class="pad">${svgBarsH(nd.map(o=>({label:DOWN[(pd(o.d).getUTCDay()+6)%7].slice(0,3)+' '+fmtD(o.d),v:o.n})),v=>v+'')}</div></div>`}
   if(Object.keys(dCnc).length)h+=`<div class="card chart"><h2>Causas registradas en campo <span class="sub">Parcial y No cumplido · mismas semanas</span></h2><div class="pad">${svgBarsH(Object.entries(dCnc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
   h+=`<div class="charts">
    <div class="card chart"><h2>PPC por semana <span class="sub">% de compromisos cumplidos</span></h2><div class="pad">${ppcs.length?svgBarsV(ppcs.map(x=>({label:'S'+x.wk,v:x.ppc,sub:x.ok+' de '+x.n}))):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
@@ -111,3 +113,10 @@ function renderInd(main){
   main.innerHTML=h;wireInd(main);
 }
 
+
+/** Tarjeta del día: trabajo no programado visto en obra, por subcontratista y en detalle. */
+function npIndCard(L,d){const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
+  return`<div class="card"><h2>Trabajo no programado <span class="sub">${L.length} frente${L.length===1?'':'s'} visto${L.length===1?'':'s'} en obra el ${fmtD(d)} sin estar programado${L.length===1?'':'s'} · no cambia el PPC</span></h2><div class="pad">
+    ${svgBarsH(Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,n])=>({label:conOf(sc).name,v:n,color:conOf(sc).color})),v=>v+'')}
+    <div class="tscroll"><table class="t ctab rt"><thead><tr><th>Ubicación</th><th>Qué se hacía</th><th>Subcontratista</th><th>Registró</th><th class="r">Fotos</th></tr></thead><tbody>
+    ${L.map(i=>`<tr><td class="mono" data-l="Ubicación">${i.p?esc(i.p.code)+' · ':''}${i.a?esc(i.a.code+' '+i.a.name):'—'}</td><td class="wrapc lead">${esc(i.e.desc||'')}${i.e.exec!=null?` <span class="mu">· ${fq(i.e.exec)} ${esc(i.e.und||'')}</span>`:''}</td><td data-l="Subcontratista">${scLabel(i.e.sc)}</td><td class="mu" data-l="Registró">${esc(i.e.byName||i.e.by||'')} · ${hhmm(i.e.ts)}</td><td class="r" data-l="Fotos">${(i.e.photos||[]).length||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
