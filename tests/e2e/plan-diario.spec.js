@@ -2,7 +2,7 @@
 // va / → mañana / terminada / restricción, y se pueden programar otras actividades del lookahead.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, openTab, HOY, MANANA } from './helpers.js';
-import { LAMINA } from './lamina.js';
+import { LAMINA, enPantalla } from './lamina.js';
 
 const AMB = [
   ['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }],
@@ -53,4 +53,17 @@ test('en Campo › Plano las actividades salen numeradas en su ambiente', async 
   await expect(page.locator('#kplan .pvl.nb')).toHaveCount(4); // i0, e0 (A-1) e i1, e1 (A-2) hoy
   await expect(page.locator('#klist')).not.toContainText('Sin ubicar');
   noErrors(errors, 'campo');
+});
+
+test('reunión: «sin interferencia» quita el achurado del cruce', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday'); // hoy: en A-1 trabajan SANITARIAS (Redes) y ELÉCTRICAS (Entubado)
+  await expect(page.locator('#mpanel .mp-cx').first()).toBeVisible();
+  const n0 = await page.locator('#mpanel .mp-cx').count();
+  const p = await enPantalla(page, '#mstage', 200, 200);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.click('#pop [data-do="ok"]');
+  await expect(page.locator('#mpanel .mp-cx')).toHaveCount(n0 - 1);
+  expect(await page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(1);
+  noErrors(errors, 'cruce');
 });
