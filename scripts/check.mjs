@@ -1,17 +1,40 @@
-// Revisión rápida: que index.html, plano.js y sw.js no tengan errores de sintaxis
+// Revisión rápida: que los archivos de web/ no tengan errores de sintaxis
 // y que las piezas que se referencian entre sí existan.
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
+/** Archivos de js/ y css/ que carga index.html, en orden. */
+export function appFiles(web) {
+  const html = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
+  const js = [...html.matchAll(/<script src="(js\/[\w-]+\.js)(?:\?v=[\w-]+)?"><\/script>/g)].map(m => m[1]);
+  const css = [...html.matchAll(/<link rel="stylesheet" href="(css\/[\w-]+\.css)(?:\?v=[\w-]+)?">/g)].map(m => m[1]);
+  return { html, js, css };
+}
+
 export function checkWeb(web) {
   const errs = [];
   const parse = (name, code) => { try { new vm.Script(code, { filename: name }); } catch (e) { errs.push(`✗ ${name}: ${e.message}`); } };
-  const html = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
+  const { html, js, css } = appFiles(web);
   [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].forEach((m, i) => parse(`index.html <script #${i}>`, m[1]));
+  if (!js.length) errs.push('✗ index.html no carga ningún archivo de js/');
+  for (const f of [...js, ...css]) if (!fs.existsSync(path.join(web, f))) errs.push(`✗ index.html carga web/${f}, que no existe`);
+  const present = fs.existsSync(path.join(web, 'js')) ? fs.readdirSync(path.join(web, 'js')).filter(f => f.endsWith('.js')).map(f => 'js/' + f) : [];
+  for (const f of present) if (!js.includes(f)) errs.push(`✗ web/${f} existe pero index.html no lo carga`);
+  for (const f of js) {
+    const p = path.join(web, f);
+    if (!fs.existsSync(p)) continue;
+    const code = fs.readFileSync(p, 'utf8');
+    if (!code.startsWith('"use strict";')) errs.push(`✗ ${f} debe empezar con "use strict"; (la app siempre corrió en modo estricto)`);
+    parse(f, code);
+  }
+  if (js.length && js[js.length - 1] !== 'js/inicio.js') errs.push('✗ js/inicio.js (el arranque) debe ser el último archivo que carga index.html');
+  // Todo el código junto debe poder leerse como un solo programa (evita nombres repetidos entre archivos)
+  if (!errs.length) parse('js/* (todos juntos)', js.map(f => fs.readFileSync(path.join(web, f), 'utf8')).join('\n;\n'));
   for (const f of ['plano.js', 'sw.js']) parse(f, fs.readFileSync(path.join(web, f), 'utf8'));
   for (const f of ['manifest.json', 'icon-192.png', 'icon-512.png']) if (!fs.existsSync(path.join(web, f))) errs.push(`✗ falta web/${f}`);
-  if (!/PLANO_SRC/.test(html)) errs.push('✗ index.html no define PLANO_SRC');
+  const all = js.map(f => fs.existsSync(path.join(web, f)) ? fs.readFileSync(path.join(web, f), 'utf8') : '').join('\n');
+  if (!/PLANO_SRC/.test(all)) errs.push('✗ ningún archivo de js/ define PLANO_SRC');
   return errs;
 }
 
@@ -19,5 +42,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const web = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'web');
   const errs = checkWeb(web);
   if (errs.length) { console.error(errs.join('\n')); process.exit(1); }
-  console.log('✓ web sin errores de sintaxis');
+  const { js, css } = appFiles(web);
+  console.log(`✓ web sin errores de sintaxis (${js.length} archivos de js/, ${css.length} de css/)`);
 }

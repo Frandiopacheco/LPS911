@@ -21,17 +21,20 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 
 | Ruta | Contenido |
 | --- | --- |
-| `web/index.html` | **Toda la app** (~520 KB): HTML + 2 bloques `<style>` + 1 `<script>` grande. Sin build ni framework. |
-| `web/plano.js` | Módulo del plan diario (~190 KB, una IIFE): láminas, zonas, modo reunión (piso/día, cruces, tarjeta de cumplimiento), exportes PDF/Excel, plano del capataz. Se carga tarde (`PLANO_SRC`). Lo que usa `index.html` se exporta en `window.__plano` (`capPlan`, `capDraw`, `zoneFor`, `nums`, `crossOf`, `zcClose`…): una función interna **no** es global, expórtala ahí. |
+| `web/index.html` | Solo el esqueleto HTML (~6 KB): carga `css/app.css` y luego los archivos de `js/` **en orden**. Sin framework ni empaquetador. |
+| `web/css/app.css` | Todos los estilos de la app. |
+| `web/js/*.js` | El código de la app, por temas (en el orden de carga): `base` (utilidades, estado, escritura, conexión, sesión, menús, `render`), `lookahead`, `campo`, `en-obra-tablero`, `propuestas`, `auditoria` (papelera, calendario, hora del servidor, responsables de piso…), `liberaciones`, `plan-restricciones`, `indicadores`, `config-equipo` (Sectorización, Configuración, Equipo), `exportes` (PDF/Excel) e `inicio` (arranque de Firebase; **siempre el último**). Son *scripts* clásicos, no módulos: comparten las mismas variables globales, como si fueran un solo archivo. Cada uno empieza con `"use strict";`. |
+| `web/plano.js` | Módulo del plan diario (~190 KB, una IIFE): láminas, zonas, modo reunión (piso/día, cruces, tarjeta de cumplimiento), exportes PDF/Excel, plano del capataz. Se carga tarde (`PLANO_SRC`). Lo que usa el resto de la app se exporta en `window.__plano` (`capPlan`, `capDraw`, `zoneFor`, `nums`, `crossOf`, `zcClose`…): una función interna **no** es global, expórtala ahí. |
 | `web/sw.js` | Service worker: modo sin internet y aviso de "versión nueva". `VER` lo pone el build. |
 | `config/produccion.js`, `config/pruebas.js` | `window.FIREBASE_CONFIG` de cada proyecto (no son secretos). |
 | `firebase/firestore.rules` | Reglas de seguridad (roles, ver abajo). |
 | `firebase/database.rules.json` | Realtime Database: solo `presence` ("conectados"). |
 | `functions/` | Cloud Functions (Node.js 22): `versionDominical` (dom 12:05 Lima) y `aceptarCierres` (23:30 Lima). La lógica pura está en `lib.js`, con pruebas en `test/`. |
 | `tests/rules/` | Pruebas de reglas con `@firebase/rules-unit-testing` (corren en GitHub con el emulador). |
-| `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión en `sw.js` y en `plano.js?v=`, y revisa la sintaxis. |
-| `scripts/check.mjs` | Revisión de sintaxis de `web/`: `node scripts/check.mjs`. |
-| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) → instala en Firebase → publica en Netlify. |
+| `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión en `sw.js` y en las URLs `?v=` de `css/`, `js/` y `plano.js`, y llena `ASSETS` del service worker para que funcione sin internet. |
+| `scripts/check.mjs` | Revisión de `web/`: sintaxis de cada archivo, que todo lo que carga `index.html` exista (y que no sobre nada en `js/`), `"use strict"` al inicio y `inicio.js` al final: `node scripts/check.mjs`. |
+| `tests/e2e/` | Pruebas de la interfaz con Playwright y un Firebase falso en memoria (ver "Cómo probar"). |
+| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright) → instala en Firebase → publica en Netlify. |
 
 ## Entornos
 
@@ -81,7 +84,7 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 
 **Ver como** (solo copia de prueba, `LPS_ENV==='pruebas'`): el admin simula otro rol; se guarda en `sessionStorage` `lps.va` y lo aplica `vaApply()`. Solo cambia la interfaz: las escrituras van con el usuario real y las reglas reales. **📱 Vista celular** (`phonePreview`) abre la app en un `iframe` con medidas de teléfono; dentro del marco `html.in-frame` oculta esos controles.
 
-## Patrones del código (`index.html`)
+## Patrones del código (`web/js/`)
 
 - **Datos:**
   - Todo acceso pasa por `fcol('coleccion')`. Se usará para separar obras/empresas; no uses `db.collection` directo.
@@ -100,9 +103,9 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
   - `P()`: configuración del proyecto, con valores por defecto.
 - **Dibujo:** `render()` → `views[U.tab](main)`. Usa `requestRender()` en vez de `render()` directo. Si una vista lanza un error, `render()` muestra "No se pudo mostrar…" con botón de recarga (no queda en blanco, pero el error sigue siendo un error: revísalo). Vistas con plano (Liberaciones › Plano) se arman **una vez** y luego solo actualizan sus partes; redibujarlas enteras descuadra el visor. El HTML se arma con template strings y `esc()` para todo texto del usuario.
 - **Calendario:** `isWork(d)`, `nwReason(d)` (domingo, feriado, sábado no laborable), `wshift` y `wdist` (días hábiles).
-- **Bloques por etapa:** las funcionalidades nuevas se agregan como bloque `/* ===== ETAPA NN · … ===== */` antes de `/* ================= PLAN SEMANAL ================= */`.
-- **CSS:**
-  - Hay 2 bloques `<style>`; el primero termina antes del HTML.
+- **Dónde va el código nuevo:** en el archivo de `js/` de su tema. Una funcionalidad grande nueva va en un archivo nuevo de `js/` (con `"use strict";` y su comentario de encabezado), agregado en `index.html` **antes de `js/plan-restricciones.js`**; `check.mjs` avisa si olvidas cargarlo.
+- **Orden de carga:** el código suelto (fuera de funciones) de un archivo solo puede usar lo definido en archivos anteriores; dentro de funciones se puede usar todo. Por eso el arranque (`inicio.js`) va al final. Los nombres son globales y únicos entre todos los archivos.
+- **CSS** (`css/app.css`):
   - **Revisa que un nombre de clase nuevo no exista ya**: `.ppc`, `.wrap`, `.mleg` y `.dsv` ya chocaron antes.
   - Cada color nuevo necesita su versión en modo oscuro (`@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) …}` y `:root[data-theme="dark"]`).
 - **Piso:** el selector principal `U.piso` filtra todas las pestañas; no agregues un selector de piso propio que compita con él.
@@ -111,6 +114,7 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 ## Cómo probar
 
 - **Sintaxis:** `node scripts/check.mjs`.
+- **Interfaz (Playwright):** `cd tests/e2e && npm install && npx playwright install chromium && npx playwright test`. Abre la app en Chromium con un Firebase falso en memoria (`fake-firebase.js`: obra de prueba con pisos, actividades, restricciones, liberaciones y un usuario por rol) y recorre todas las pestañas con cada rol, en PC, celular y modo oscuro, más los flujos principales. `window.__dbGet(col,id)` y `window.__dbAll(col)` leen la base falsa desde la prueba. Agrega una prueba cuando hagas una pestaña o flujo nuevo. Corre en GitHub antes de publicar.
 - **Tareas del servidor:** `cd functions && npm install && npm test`.
 - **Reglas:** se prueban en GitHub. En local:
 
@@ -119,7 +123,6 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
   ```
 
   Requiere Java.
-- **Interfaz sin navegador real:** se puede cargar `web/index.html` en jsdom con un Firebase falso en memoria (colecciones como `Map`, `onSnapshot` que avisa al escribir) para recorrer pestañas como admin, "Ver como" Calidad o SC y atrapar errores. Úsalo antes de dar por buena una pestaña nueva.
 - **De punta a punta:** sube a `main` y revisa la copia de prueba. Para probar con datos reales: en la obra, Equipo › Descargar respaldo de datos; en la copia de prueba, Equipo › Cargar datos desde archivo.
 
 ## Flujo de trabajo con GitHub
@@ -131,5 +134,5 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 ## Pendientes conocidos (ver auditorías)
 
 - Tanda B: avisos al celular (FCM), pantalla "Hoy" por rol, Lookahead que dibuje solo las filas visibles.
-- Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check, separar `index.html` en módulos.
+- Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
 - Liberaciones: zonas como polígono (hoy rectángulo), restricción automática por liberación pendiente (apagada hasta decidir con Calidad).
