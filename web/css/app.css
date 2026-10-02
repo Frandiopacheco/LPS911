@@ -1148,3 +1148,5 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 /* Lookahead guardado mientras se ve otra pestaña (ver leaveView en base.js) */
 .lkeep{content-visibility:hidden;z-index:-1}
 /* ojo: nada heredable aquí (visibility, pointer-events, color…): obligaría a recalcular el estilo de miles de filas */
+/* filas de relleno del Lookahead grande (lo que no se dibuja) */
+.g tr.vsp td{padding:0!important;border:0!important;background:none!important}

@@ -57,7 +57,7 @@ function daySet(d){DAY_SEL=d&&d!==todayIso()?d:null;U.week=DAY_SEL?weekOf(DAY_SE
 /* Campo y En obra guardaban su día en CU.date: ahora es el día común */
 Object.defineProperty(CU,'date',{get(){return DAY_SEL},set(v){daySet(v)},enumerable:false,configurable:true});
 function dateMode(){if(!me||me.role==='capataz')return'none';const t=U.tab;
-  if(['look','plan','restr','lib'].includes(t))return'week';if(t==='ind')return U.indMode==='sem'?'week':'day';
+  if(t==='lib')return U.libV==='map'?'day':'week';if(['look','plan','restr'].includes(t))return'week';if(t==='ind')return U.indMode==='sem'?'week':'day';
   if(['campo','mapa','cap'].includes(t))return'day';return'none'}
 const DOW_L=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function topDateApply(){const m=dateMode();if(document.body.dataset.dmode!==m)document.body.dataset.dmode=m;document.body.classList.toggle('top-date',m!=='none');

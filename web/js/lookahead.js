@@ -74,7 +74,7 @@ function buildLookShell(main){
   $('#fvdel').onclick=async()=>{const v=LHI.get(U.ver);if(!v||!isAdmin)return;if(!confirm(`¿Eliminar la versión “${v.label}”? No se puede recuperar.`))return;
     try{const b=db.batch();Object.keys(v.pisos||{}).forEach(pid=>b.delete(fcol('lhver').doc(U.ver+'__'+pid)));b.delete(fcol('lhidx').doc(U.ver));await b.commit();VERD.delete(U.ver);U.ver='';toast('Versión eliminada');requestRender()}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}};
   $('#legend').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;U.sc=U.sc===c.dataset.id?'':c.dataset.id;saveUI();requestRender()};
-  wireGrid($('#grid'));$('#gw').addEventListener('scroll',()=>closeQEditor(true),{passive:true});
+  wireGrid($('#grid'));$('#gw').addEventListener('scroll',()=>{closeQEditor(true);virtScroll()},{passive:true});
   main.dataset.built='1';
 }
 let gridRows=null,gridHead='';
@@ -194,7 +194,7 @@ function renderGrid(tbl,days,dset){
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
           let h=`<tr class="ar${i===0?' first':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0">${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:''}</td>`;
           if(i===0)h+=ambCells;
-          h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}>${conOpts.map(o=>`<option value="${o.id}"${o.id===x.sc?' selected':''}>${esc(o.name)}</option>`).join('')}</select></td>`;
+          h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
           h+=`<td class="s4 act${(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)===2?' hb2':x.obs||pr.get(x.id)||isNew?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof libBadge==='function'?libBadge(x):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${pr.get(x.id)} restricción(es) pendiente(s)">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=U.qmode==='metrado';
@@ -218,7 +218,8 @@ function renderGrid(tbl,days,dset){
   if(!S.pis.size)rows.push({k:'nopiso',h:`<tr><td colspan="${11+nd}"><div class="empty">Todavía no hay datos. ${isAdmin?'Carga <b>datos-iniciales.json</b> desde la pestaña <b>Equipo</b>, o crea un piso con el botón de abajo.':'Pide al administrador que cargue los datos del proyecto.'}</div></td></tr>`});
   if(canWrite&&!filt&&!U.sector&&!U.piso)rows.push({k:'addpiso',h:`<tr class="addrow"><td colspan="5" style="position:sticky;left:0"><div style="padding:0 8px"><button class="ib" data-addpiso="1">+ Nuevo piso</button></div></td><td colspan="${6+nd}"></td></tr>`});
   const keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
-  const tb=tbl.tBodies[0];
+  if(rows.length>=VIRT_MIN){GV={tbl,head,rows,blocks:gridBlocks(rows),r0:-1,r1:-1};virtPaint(true,keep);markPeers();return}
+  GV=null;const tb=tbl.tBodies[0];
   /* si cambian pocas filas se reemplazan solo esas (en un solo armado); si cambian muchas, se redibuja la tabla de una vez:
      reemplazar miles de filas una por una es mucho más lento que un solo innerHTML */
   const same=tb&&gridHead===head&&gridRows&&gridRows.length===rows.length&&tb.rows.length===rows.length&&gridRows.every((r,i)=>r.k===rows[i].k);
@@ -229,6 +230,39 @@ function renderGrid(tbl,days,dset){
   if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}
   markPeers();
 }
+/* ---------- Lookahead grande: solo se dibujan las filas que se ven (y un margen) ----------
+   Con cientos o miles de actividades, dibujar todas las filas hacía lenta la pestaña. Las filas se agrupan en bloques
+   que no cortan un ambiente (por su celda combinada); arriba y abajo van dos filas vacías con la altura de lo que no se
+   dibuja, así la barra de desplazamiento es la real. Al desplazarse se dibuja el tramo nuevo. */
+const VIRT_MIN=400;let GV=null,vRaf=0,RH=29;const BH=new Map();
+function gridBlocks(rows){const B=[];let cur=null;rows.forEach((r,i)=>{const k=r.k;const cont=cur&&k.startsWith('x:')&&k.split(':').length===2;if(!cont){cur={k,i0:i,n:0};B.push(cur)}cur.n++});return B}
+const blockH=b=>BH.get(b.k)??b.n*RH;
+const vsp=(h,nd)=>`<tr class="vsp" aria-hidden="true"><td colspan="${11+nd}" style="height:${Math.max(0,Math.round(h))}px"></td></tr>`;
+function virtPaint(force,keep){const g=GV;if(!g)return;const tbl=g.tbl;if(!tbl.isConnected)return;const gw=tbl.parentElement;
+  const th=tbl.tHead?tbl.tHead.offsetHeight:60;const vh=gw.clientHeight||800,buf=Math.max(700,vh);const top=Math.max(0,gw.scrollTop-th);
+  const off=[];let y=0;for(const b of g.blocks){off.push(y);y+=blockH(b)}const total=y;
+  let b0=0;while(b0<g.blocks.length-1&&off[b0]+blockH(g.blocks[b0])<top-buf)b0++;
+  let b1=b0;while(b1<g.blocks.length-1&&off[b1+1]<top+vh+buf)b1++;
+  const r0=g.blocks[b0].i0,r1=g.blocks[b1].i0+g.blocks[b1].n;
+  if(!force&&r0===g.r0&&r1===g.r1)return;
+  if(keep===undefined)keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
+  const win=g.rows.slice(r0,r1),nd=(g.head.match(/<col>/g)||[]).length,padT=off[b0],padB=total-off[b1]-blockH(g.blocks[b1]);
+  const tb=tbl.tBodies[0];
+  const same=tb&&gridHead===g.head&&g.r0===r0&&g.r1===r1&&gridRows&&gridRows.length===win.length&&tb.rows.length===win.length+2&&gridRows.every((r,i)=>r.k===win[i].k);
+  if(same){const chg=win.reduce((a,r,i)=>(r.h!==gridRows[i].h&&a.push(i),a),[]);if(chg.length){const t=document.createElement('tbody');t.innerHTML=chg.map(i=>win[i].h).join('');const nr=[...t.rows];chg.forEach((i,j)=>tb.rows[i+1].replaceWith(nr[j]))}
+    tb.rows[0].cells[0].style.height=Math.round(padT)+'px';tb.rows[tb.rows.length-1].cells[0].style.height=Math.max(0,Math.round(padB))+'px'}
+  else tbl.innerHTML=g.head+'<tbody>'+vsp(padT,nd)+win.map(r=>r.h).join('')+vsp(padB,nd)+'</tbody>';
+  gridHead=g.head;gridRows=win;g.r0=r0;g.r1=r1;
+  /* medir lo dibujado para que las alturas de lo que no se ve sean cada vez más exactas */
+  const tb2=tbl.tBodies[0];let ri=1,sa=0,na=0;
+  for(let bi=b0;bi<=b1;bi++){const b=g.blocks[bi];let h=0;for(let j=0;j<b.n;j++){const tr=tb2.rows[ri++];if(!tr)break;const oh=tr.offsetHeight;h+=oh;if(tr.dataset.a){sa+=oh;na++}}BH.set(b.k,h)}
+  if(na)RH=sa/na;
+  if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}}
+function virtScroll(){if(!GV||vRaf)return;vRaf=requestAnimationFrame(()=>{vRaf=0;if(paint||qed)return;virtPaint(false);markPeers()})}
+/** Lleva a la vista la fila de una actividad aunque todavía no esté dibujada (Lookahead grande). */
+function gridReveal(aid){const g=GV;if(!g||!g.tbl.isConnected)return;if(g.tbl.querySelector(`tr[data-a="${CSS.escape(aid)}"]`))return;
+  const i=g.rows.findIndex(r=>r.k==='x:'+aid||r.k.startsWith('x:'+aid+':'));if(i<0)return;let y=0;for(const b of g.blocks){if(i>=b.i0&&i<b.i0+b.n)break;y+=blockH(b)}
+  const gw=g.tbl.parentElement;gw.scrollTop=Math.max(0,y+(g.tbl.tHead?g.tbl.tHead.offsetHeight:60)-gw.clientHeight/2);virtPaint(true)}
 function focusKey(el){return{a:el.dataset.a,amb:el.dataset.amb,sec:el.dataset.sec,piso:el.dataset.piso,f:el.dataset.f,s:el.selectionStart,e:el.selectionEnd}}
 function restoreFocus(root,k){const sel=k.a?`[data-a="${k.a}"][data-f="${k.f}"]`:k.amb?`[data-amb="${k.amb}"][data-f="${k.f}"]`:k.piso?`[data-piso="${k.piso}"][data-f="${k.f}"]`:k.sec?`[data-sec="${k.sec}"][data-f="${k.f}"]`:null;
   const el=sel&&root.querySelector('.ci'+sel);if(el){el.focus({preventScroll:true});el.dataset.o=el.value;try{if(k.s!=null)el.setSelectionRange(k.s,k.e)}catch(e){}}}
@@ -315,7 +349,12 @@ function goCampo(aid,d){const x=S.act.get(aid);if(!x)return;const am=S.amb.get(x
 
 /* --- edición en grilla --- */
 let paint=null,tap=null;
+/* la lista de subcontratistas de cada fila se arma recién al abrirla: con miles de filas y decenas de empresas
+   eran decenas de miles de opciones en la página (lo más pesado del Lookahead) */
+function scFill(sel){if(!sel||!sel.dataset.lz)return;delete sel.dataset.lz;const v=sel.value;
+  sel.innerHTML=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('');sel.value=v}
 function wireGrid(tbl){
+  const lz=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.lz)scFill(t)};tbl.addEventListener('mousedown',lz,true);tbl.addEventListener('touchstart',lz,{capture:true,passive:true});tbl.addEventListener('focusin',lz,true);
   tbl.addEventListener('focusin',e=>{const t=e.target;if(t.classList.contains('ci'))t.dataset.o=t.value;const a=t.dataset&&t.dataset.a||null;if(a!==myAct){myAct=a;sendPresence()}});
   tbl.addEventListener('focusout',e=>{const t=e.target;if(t.classList.contains('ci')){commitField(t);delete t.dataset.o;setTimeout(()=>{if(!tbl.contains(document.activeElement)&&myAct){myAct=null;sendPresence()}flushDeferred()},0)}});
   tbl.addEventListener('change',e=>{const t=e.target;if(t.tagName==='SELECT')commitField(t)});

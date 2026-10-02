@@ -148,7 +148,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
     <button class="ib pri" data-rvall${tot?'':' disabled'}>✓ Aceptar todo lo visible (${tot})</button><button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
-  requestRender();setTimeout(()=>{const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
+  requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
 function revDecide(id,st,opt){const o=revItems().find(q=>q.id===id)||[...PROP.values()].flatMap(d=>Object.entries(d.items||{}).filter(([k,it])=>k===id&&it).map(([k,it])=>({sc:d.sc,id:k,it})))[0];if(!o)return;
   const L=revItems();const i=L.findIndex(q=>q.id===id);decideProp(o.sc,id,st,opt);const R=revItems();REVSEL=R.length?{sc:R[Math.min(Math.max(i,0),R.length-1)].sc,id:R[Math.min(Math.max(i,0),R.length-1)].id,k:0}:null}
 function revClick(e){if(!revOn())return;const t=e.target;let b;
