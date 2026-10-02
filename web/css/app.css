@@ -1237,3 +1237,4 @@ td.s0 .clb{margin:0;min-width:22px;padding:0 2px}
 .pvl.szs{font:700 12.5px/1.2 var(--f-mono);transform:translate(-50%,-115%)}
 .szold{margin-top:14px}.szold>summary{cursor:pointer;list-style:none}
 @media (max-width:760px){.szbody{grid-template-columns:1fr}.szside{height:auto;max-height:45vh;min-height:0}.szmap{height:60vh}}
+.pvh.mid{width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border-width:1.5px;opacity:.85;cursor:copy}

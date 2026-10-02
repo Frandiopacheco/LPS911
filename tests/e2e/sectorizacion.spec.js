@@ -16,25 +16,34 @@ test('ubicar ambientes por nivel con rectángulo y polígono, y deshacer', async
   const a = await enPantalla(page, '#szmap', 100, 100), b = await enPantalla(page, '#szmap', 300, 300);
   await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2); await page.mouse.move(b.x, b.y); await page.mouse.up();
   await expect.poll(async () => ((await geo(page, 'ambientes', 'a1')).L1 || []).length).toBe(8);
-  // pasa solo al siguiente sin ubicar (A-2); ahora con polígono
+  // pasa solo al siguiente sin ubicar (A-2); ahora con polígono: clics con algo de temblor y se cierra tocando la primera esquina
   await expect(page.locator('#sztool')).toContainText('A-2');
   await page.locator('[data-sza="poly"]').click();
-  for (const [x, y] of [[400, 100], [600, 100], [600, 300], [400, 300]]) { const p = await enPantalla(page, '#szmap', x, y); await page.mouse.click(p.x, p.y); }
-  await page.locator('[data-sza="fin"]').click();
+  for (const [x, y] of [[400, 100], [600, 100], [600, 300], [400, 300]]) {
+    const p = await enPantalla(page, '#szmap', x, y);
+    await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(p.x + 4, p.y + 3); await page.mouse.move(p.x + 7, p.y + 5); await page.mouse.up();
+  }
+  await expect(page.locator('#sztool')).toContainText('Terminar (4)');
+  const f = await enPantalla(page, '#szmap', 400, 100); await page.mouse.click(f.x, f.y);
   await expect.poll(async () => ((await geo(page, 'ambientes', 'a2')).L1 || []).length).toBe(8);
   await expect(page.locator('#sztool')).toContainText('2/2 ambientes ubicados');
   await expect(page.locator('#szmap .pvl.sza')).toHaveCount(2);
-  // tocar una forma la selecciona en la lista
+  // el sector se contornea solo con sus ambientes
+  await expect(page.locator('#szmap .pvl.szs')).toContainText('S1');
+  // tocar una forma la selecciona; sus esquinas se arrastran para ajustarla
   const c = await enPantalla(page, '#szmap', 200, 200); await page.mouse.click(c.x, c.y);
   await expect(page.locator('#szlist .szamb.on')).toContainText('Dpto 101');
-  // el sector también se puede ubicar
-  await page.locator('[data-szd="s:s1"]').click();
-  const s0 = await enPantalla(page, '#szmap', 80, 80), s1 = await enPantalla(page, '#szmap', 640, 320);
-  await page.mouse.move(s0.x, s0.y); await page.mouse.down(); await page.mouse.move(s1.x, s1.y); await page.mouse.up();
-  await expect.poll(async () => ((await geo(page, 'sectors', 's1')).L1 || []).length).toBe(8);
+  await expect(page.locator('#szmap .pvh')).toHaveCount(8); // 4 esquinas + 4 para agregar
+  const h = await enPantalla(page, '#szmap', 300, 300), h2 = await enPantalla(page, '#szmap', 340, 360);
+  await page.mouse.move(h.x, h.y); await page.mouse.down(); await page.mouse.move((h.x + h2.x) / 2, (h.y + h2.y) / 2); await page.mouse.move(h2.x, h2.y); await page.mouse.up();
+  await expect.poll(async () => (await geo(page, 'ambientes', 'a1')).L1.slice(4, 6).map(Math.round)).toEqual([340, 360]);
+  // agregar una esquina desde el punto medio de un lado
+  const m = await enPantalla(page, '#szmap', 200, 100), m2 = await enPantalla(page, '#szmap', 200, 60);
+  await page.mouse.move(m.x, m.y); await page.mouse.down(); await page.mouse.move(m2.x, m2.y); await page.mouse.up();
+  await expect.poll(async () => (await geo(page, 'ambientes', 'a1')).L1.length).toBe(10);
   // deshacer
   await page.click('#bundo');
-  await expect.poll(async () => !!(await geo(page, 'sectors', 's1')).L1).toBe(false);
+  await expect.poll(async () => (await geo(page, 'ambientes', 'a1')).L1.length).toBe(8);
   // solo sin ubicar
   await page.locator('#szmiss').check();
   await expect(page.locator('#szlist')).toContainText('Todos los ambientes de este nivel están ubicados');
@@ -62,6 +71,21 @@ test('en el recorrido, el ambiente sale de su forma en la lámina', async ({ pag
   const p = await enPantalla(page, '#kplan', 600, 200); await page.mouse.click(p.x, p.y);
   await expect(page.locator('#npamb')).toHaveValue('a2');
   noErrors(errors, 'recorrido');
+});
+
+test('la lámina base se sube en Sectorización; el Plan diario solo sube especialidades', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'planos' });
+  await page.locator('[data-szp="p1"]').click();
+  await expect(page.locator('#szmap')).toContainText('todavía no tiene lámina base');
+  await page.click('#szup');
+  await expect(page.locator('.mdlgc')).toContainText('Subir lámina base del piso');
+  await expect(page.locator('#utw')).toBeHidden();
+  await page.click('#ucancel');
+  await openTab(page, 'mapa');
+  await expect(page.locator('#main')).toContainText('Se sube en Sectorización');
+  await page.locator('[data-gosz]').click();
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'planos');
+  noErrors(errors, 'subir base');
 });
 
 test('quien no edita solo consulta el mapa', async ({ page }) => {
