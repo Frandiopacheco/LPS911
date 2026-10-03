@@ -25,13 +25,15 @@ if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_
 function swWarm(){if(!navigator.serviceWorker||!navigator.serviceWorker.controller)return;setTimeout(()=>{fetch(PLANO_SRC).catch(()=>{})},8000)}
 
 /* ---- índice de actividades terminadas (no depende de cuántos días se cargan) ---- */
-const DIDX=new Map();let didxSub=null;
+const DIDX=new Map(),REOP=new Map();let didxSub=null;
 function ensureDoneIdx(){if(!db||didxSub)return;
-  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();sn.docs.forEach(d=>{const m=(d.data()||{}).d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}});doneRebuild();if(ready)requestRender()},()=>{});
-  unsubs.push(()=>{if(didxSub)didxSub();didxSub=null;DIDX.clear()})}
-function didxWrite(pid,map){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
+  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();REOP.clear();sn.docs.forEach(d=>{const v=d.data()||{},m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
+    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
+    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();if(ready)requestRender()},()=>{});
+  unsubs.push(()=>{if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()})}
+function didxWrite(pid,map,f){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
   for(const[a,v]of Object.entries(map))d[a]=v==null?(FV&&FV.delete?FV.delete():null):v;
-  fcol('doneidx').doc(pid).set({d},{merge:true}).catch(()=>{})}
+  fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}).catch(()=>{})}
 function didxFromDaily(d,pid,recs){const m={};for(const[aid,r]of Object.entries(recs||{})){if(!r||!('done'in r))continue;const cur=DIDX.get(aid);
     if(r.done){if(!cur||d<cur){m[aid]=d;DIDX.set(aid,d)}}else if(cur===d){m[aid]=null;DIDX.delete(aid)}}
   if(Object.keys(m).length)didxWrite(pid,m)}

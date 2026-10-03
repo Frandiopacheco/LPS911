@@ -30,7 +30,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),loaded:{}};
 const U=Object.assign({tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,onlyWin:U.onlyWin,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV});
+const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -113,12 +113,21 @@ const libDay=(x,d)=>{const dn=DONE.get(x.id);return!!(dn&&d>dn&&(x.days||[]).inc
 const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 function markDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
   const left=(x.days||[]).filter(y=>y>d).length;
+  if(REOP.has(aid)){REOP.delete(aid);didxWrite(pisoOfAct(aid),{[aid]:null},'r')}
   writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur&&cur.status?cur:null),status:(cur&&cur.status)||'ok',done:true,note:(cur&&cur.note)||''}}});
   toast(`“${x.name}” terminada el ${fmtD(d)}${left?` · se liberan ${left} día${left>1?'s':''} programado${left>1?'s':''}`:''}`)}
-function reopenDone(aid){const x=S.act.get(aid);if(!x||!canDaily)return;
-  if(DIDX.has(aid)){DIDX.delete(aid);didxWrite(pisoOfAct(aid),{[aid]:null})}
+/** fechas en que alguna fuente (índice, registro diario o cierre del capataz) la marca terminada */
+function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)o.push(doc.date)}
+  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done)o.push(lv.date);return o}
+/** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
+ *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
+function reopenDone(aid,quiet){const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
+  const ds=doneDates(aid);const upto=ds.length?ds.reduce((m,d)=>d>m?d:m):dn;const pid=pisoOfAct(aid);
+  if(upto){REOP.set(aid,upto);didxWrite(pid,{[aid]:upto},'r')}
+  if(DIDX.has(aid)){DIDX.delete(aid);didxWrite(pid,{[aid]:null})}
   for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)writeDaily(doc.date,doc.pisoId,{recs:{[aid]:{...r,done:false}}})}
-  toast(`“${x.name}” reabierta: vuelven a contar sus días programados`)}
+  doneRebuild();requestRender();
+  if(!quiet)toast(`“${x.name}” reabierta: puedes seguir programándola`,dn?'Deshacer':'',dn?()=>markDone(aid,dn):null)}
 function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status!=='lib'&&r.actId){m.set(r.actId,(m.get(r.actId)||0)+1)}if(typeof libBlockMap==='function'&&libAuto())libBlockMap().forEach((n,k)=>m.set(k,(m.get(k)||0)+n));return m}
 
 /* ---------- escritura con cola por documento ---------- */
@@ -239,8 +248,9 @@ async function startSession(u,fdb){
   setStatus();updUndo();
 }
 const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=null,liveFrom=null,liveErr=null;
-function doneRebuild(){DONE.clear();for(const[a,dt]of DIDX)DONE.set(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done){const c=DONE.get(id);if(!c||doc.date<c)DONE.set(id,doc.date)}
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||recReal(lv.date,lv.actId))continue;const k=DONE.get(lv.actId);if(!k||lv.date<k)DONE.set(lv.actId,lv.date)}}let daySub=null,dayFrom=null,dayErr=null;
+function doneRebuild(){DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
+  for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
+  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||recReal(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();liveErr=null;autoAccept();if(ready)requestRender()},err=>{liveErr=err&&err.code||'error';if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
