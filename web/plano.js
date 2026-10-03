@@ -200,14 +200,14 @@ function npDialog(anchor,pts,onPick){openPop(anchor,`<div class="ph">Trabajo no 
 function textDialog(w,cx,cy,z){openPop(anchorAt(cx,cy),`<div class="ph">${z?'Editar texto':'Texto en el plano'}</div><div class="qrow" style="padding:0 10px 8px"><input id="ntx" placeholder="Escribe la nota" value="${z?esc(z.t||''):''}" style="width:240px;text-align:left" aria-label="Texto"></div><button data-do="ok">${z?'Guardar':'Poner texto'}</button>`,
   {ok:()=>{const t=($('#ntx')?.value||'').trim();if(!t)return;if(z){rec([updDoc(z.id,{t},{t:z.t})]);requestRender()}else newNote('texto',[w],t)}});setTimeout(()=>{const i=$('#ntx');if(i){i.focus();i.select();i.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=ok]').click()}})}},0)}
 function novaDialog(btn,x,opt){opt=opt||{};const cnc=(P().cnc||[]);const t0=todayIso();let def=addD(M.date,1);if(pd(def).getUTCDay()===0)def=addD(def,1);const cw=typeof canWrite!=='undefined'&&canWrite;
-  const sug=opt.motivo&&(cnc.find(k=>k===opt.motivo)||cnc.find(k=>/interfer|cruce|frente|otra partida/i.test(k)))||opt.motivo||'';const cncL=sug&&!cnc.includes(sug)?[sug,...cnc]:cnc;
+  const sug=opt.motivo&&(cnc.find(k=>k===opt.motivo)||cnc.find(k=>/interfer|cruce|frente|otra partida/i.test(k))||cnc.find(k=>cncCode(k)==='PROG'))||opt.motivo||'';const cncL=sug&&!cnc.includes(sug)?[sug,...cnc]:cnc;
   function save(motivo,rdate){const id=uid('pz');const doc={date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo,repTo:rdate||'',...(opt.prio?{prio:opt.prio}:{}),by:me.email,byName:me.name||me.email,ts:NOW()};const g=[addDoc(id,doc)];
     shapesOf(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).forEach(z=>g.push(remDoc(z.id)));rec(g.filter(Boolean));
     let regd=false;if(typeof canDaily!=='undefined'&&canDaily&&M.date<=t0){const cur=recOf(M.date,x.id);writeDaily(M.date,M.piso,{recs:{[x.id]:{...baseRec(M.date,x,cur),status:'no',cnc:motivo,imp:null,note:(cur&&cur.note)||'No se hará hoy (plan diario)',viaNova:true}}});regd=true}
     if(rdate&&cw)reprogAct(x.id,rdate,M.date);
     requestRender();toast(`No se hará hoy${regd?' · registrada como no cumplida':''}${rdate&&cw?' · reprogramada para el '+fmtD(rdate):''}`,'Deshacer',()=>revertNova(id))}
   openPop(btn,`<div class="ph">${opt.title?esc(opt.title):'No se hará hoy'}</div><div class="ptx">${opt.lead?opt.lead+' ':''}Estaba programada para hoy pero no se va a ejecutar. ${M.date<=t0?'Queda registrada como <b>no cumplida</b> (cuenta en el PPC del día) con el motivo que elijas.':'Quedará anotada en el plan del día.'}</div>
-   <div class="qrow"><select id="nvm" aria-label="Motivo">${cncL.map(k=>`<option${k===sug?' selected':''}>${esc(k)}</option>`).join('')}</select></div>
+   <div class="qrow"><select id="nvm" aria-label="Motivo">${cncL.map(k=>`<option value="${esc(k)}"${k===sug?' selected':''}>${esc(cncLabel(k))}</option>`).join('')}</select></div>
    ${cw?`<div class="qrow"><label class="mu">Reprogramar para <input type="date" id="nvd" min="${addD(M.date,1)}" value="${def}"></label></div>`:''}
    ${cw?'<button data-do="ok" class="pri">Confirmar y reprogramar</button><button data-do="nod">Confirmar, reprogramo después</button>':'<button data-do="nod" class="pri">Confirmar</button>'}<button data-do="no">Cancelar</button>`,
    {no:()=>{},nod:()=>save(($('#nvm')||{}).value||'',''),ok:()=>{const v=($('#nvd')||{}).value;if(!v){toast('Elige la fecha o usa “reprogramo después”.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}save(($('#nvm')||{}).value||'',v)}})}
@@ -397,7 +397,7 @@ function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();retur
   const b=t.closest('[data-zcs]');if(!b||!ZC)return;const k=b.dataset.zcs;const x=S.act.get(ZC.aid);if(!x)return;const z={actId:x.id};
   if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Confirmado');setTimeout(zcRender,60)}return}
   if(k==='ok'){setRec(z,'ok');setTimeout(zcRender,60);return}
-  const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>{setRec(z,k,c);setTimeout(zcRender,60)};return`<button data-do="c${i}">${esc(c)}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>{setRec(z,k,'');setTimeout(zcRender,60)}})}
+  const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>{setRec(z,k,c);setTimeout(zcRender,60)};return`<button data-do="c${i}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>{setRec(z,k,'');setTimeout(zcRender,60)}})}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ZC){e.stopImmediatePropagation();zcClose()}});
 function pip(p,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){if(((P[i].y>p.y)!==(P[j].y>p.y))&&(p.x<(P[j].x-P[i].x)*(p.y-P[i].y)/(P[j].y-P[i].y)+P[i].x))c=!c}return c}
 function overlapFrac(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);if(x1<=x0||y1<=y0)return 0;
@@ -1000,7 +1000,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}
   if((b=g('[data-cb]'))){M.colorBy=b.dataset.cb;requestRender();return true}
-  if((b=g('[data-rst]'))){const z=zget(M.selId);const k=b.dataset.rst;if(z){if(k==='ok')setRec(z,'ok');else{const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>setRec(z,k,c);return`<button data-do="c${i}">${esc(c)}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>setRec(z,k,'')})}}return true}if(t.closest('#mredo')){redo();return true}
+  if((b=g('[data-rst]'))){const z=zget(M.selId);const k=b.dataset.rst;if(z){if(k==='ok')setRec(z,'ok');else{const h={};const cnc=P().cnc||[];openPop(b,`<div class="ph">${STT[k]} · ¿causa?</div>${cnc.map((c,i)=>{h['c'+i]=()=>setRec(z,k,c);return`<button data-do="c${i}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`}).join('')}<hr><button data-do="sin">Registrar sin causa</button>`,{...h,sin:()=>setRec(z,k,'')})}}return true}if(t.closest('#mredo')){redo();return true}
   if((b=g('[data-fs]'))){const f=+b.dataset.fs;const z=M.selId&&zget(M.selId);if(M.tool==='pan'&&own(z)&&z.kind==='texto'){rec([updDoc(z.id,{fs:f},{fs:z.fs||18})])}else M.fs=f;requestRender();return true}
   if((b=g('[data-fsd]'))){const z=zget(M.selId);if(own(z)&&z.kind==='texto'){const f0=z.fs||18;const f=Math.max(8,Math.min(160,Math.round(f0*(+b.dataset.fsd>0?1.15:1/1.15))));rec([updDoc(z.id,{fs:f},{fs:f0})]);requestRender()}return true}
   if((b=g('[data-lw]'))){M.lw=+b.dataset.lw;requestRender();return true}

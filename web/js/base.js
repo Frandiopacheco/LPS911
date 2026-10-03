@@ -68,12 +68,33 @@ function renderWho(){
 function markPeers(){const g=$('#grid');if(!g)return;g.querySelectorAll('tr.peer').forEach(tr=>{tr.classList.remove('peer');tr.removeAttribute('title')});
   for(const e of peerEdits){const tr=g.querySelector(`tr[data-a="${CSS.escape(e.act)}"]`);if(tr){tr.classList.add('peer');tr.style.setProperty('--pc',e.color);tr.title=e.name+' está editando esta fila'}}}
 function saveBlob(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:[],restrTypes:[],templates:[]};let P_SRC=null,P_VAL=P_DEF;
+/* Cuadro de causas de no cumplimiento (formato de la empresa): código, nombre, qué incluye y si por defecto es imputable al SC */
+const CNC_STD=[
+  {c:'PROG',n:'Programación',d:['Error en la programación.'],i:false},
+  {c:'MAT',n:'Materiales',d:['Falta de materiales.'],i:true},
+  {c:'QA/QC',n:'Control de calidad',d:['Demoras en la liberación de calidad.','Procesos no previstos de gestión de calidad.'],i:false},
+  {c:'EXT',n:'Externo',d:['Factores externos a obra (meteorológico, social, sindical, etc.).'],i:false},
+  {c:'CLI',n:'Cliente - Supervisión',d:['Falta de información por parte del cliente.','Modificación de proyecto.','Demoras en respuesta a consultas (RFI).'],i:false},
+  {c:'EJEC',n:'Errores de ejecución',d:['Mala ejecución de trabajos.'],i:true},
+  {c:'SC',n:'Subcontratas',d:['Incumplimiento de subcontratista de proyecto.'],i:true},
+  {c:'EQ',n:'Equipos y herramientas',d:['Falta de equipos operativos.','Falta de herramientas en buen estado.'],i:true},
+  {c:'ADM',n:'Administrativos',d:['Demoras en la gestión documentaria para ingreso de personal.','Paralización por gestión de permisos.','Demora en pagos a subcontratistas.'],i:false},
+  {c:'DIS',n:'Diseño',d:['Omisiones en revisión de incompatibilidades de proyecto.','Demoras en envío/respuesta de RFI.'],i:false},
+  {c:'OT',n:'Otros',d:['No contempladas en los ítems anteriores.'],i:true}];
+const CNC_STD_V=1;
+/* código de una causa: la del cuadro por nombre; las antiguas, por parecido */
+const CNC_GUESS=[[/program|previa|interfer|frente|secuencia/i,'PROG'],[/material|insumo|log[ií]st/i,'MAT'],[/calidad|liberaci|qa|qc/i,'QA/QC'],[/clima|lluvia|extern|sindic|social|huelga/i,'EXT'],[/client|supervis|rfi|modificaci/i,'CLI'],[/ejecuci|retrabajo|rehacer/i,'EJEC'],[/subcontrat|mano de obra|personal|cuadrilla|\bsc\b/i,'SC'],[/equipo|herramient/i,'EQ'],[/admin|permis|pago|document/i,'ADM'],[/dise[nñ]o|plano|incompatib|ingenier/i,'DIS']];
+function cncStd(c){if(!c)return null;const k=String(c).trim().toLowerCase();return CNC_STD.find(o=>o.n.toLowerCase()===k||o.c.toLowerCase()===k)||null}
+function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC_GUESS.find(([re])=>re.test(c));return g?g[1]:'OT'}
+/** etiqueta para listas: «PROG · Programación» */
+const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
+const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[]};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */
 const IMP_NO=/previa|dise[nñ]o|informaci|clima|lluvia|client|supervis|programaci|permis|interferencia/i;
-function cncImp(c){const m=P().cncImp||{};if(c&&m[c]!=null)return!!m[c];if(!c)return true;return!IMP_NO.test(c)}
+function cncImp(c){const m=P().cncImp||{};if(c&&m[c]!=null)return!!m[c];if(!c)return true;const o=cncStd(c);if(o)return o.i;return!IMP_NO.test(c)}
 function impOf(rc){if(!rc||!rc.status||rc.status==='ok')return null;return rc.imp!=null?!!rc.imp:cncImp(rc.cnc)}
 const pscOf=o=>{const den=o.ver-(o.nimp||0);return den>0?o.ok/den:null};
 const weekStart=n=>addD(P().refDate,(n-P().refWeek)*7);

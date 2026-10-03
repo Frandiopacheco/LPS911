@@ -5,7 +5,7 @@
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
 const TAB_ORDER=['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo'};
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'PPC semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */

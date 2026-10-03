@@ -156,12 +156,12 @@ async function exportXlsx(){
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
     // plan semanal por piso
-    const pl=[['PLAN SEMANAL · SEMANA '+U.week],[],['PISO','ESTADO','SUBCONTRATISTA','ÍTEM','AMBIENTE','ACTIVIDAD','DÍAS','METRADO SEM.','UND','EJECUTADO','CUMPLIDO','CAUSA NO CUMPLIMIENTO','COMENTARIO']];const ppcRows=[];
+    const pl=[['PPC SEMANAL · SEMANA '+U.week],[],['PISO','ESTADO','SUBCONTRATISTA','CÓDIGO','AMBIENTE','ACTIVIDAD','DÍAS','METRADO SEM.','UND','EJECUTADO','CUMPLIDO','TIPO DE CAUSA','CAUSA (DETALLE)','MITIGACIÓN']];const ppcRows=[];
     for(const pp of visPisos()){const w=S.wk.get(wkId(U.week,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(U.week,pp.id);const res=fz&&w.res||{};
-      Object.entries(items).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0)).forEach(([id,it])=>{const rr=res[id]||{};pl.push([pp.code,fz?'Congelado':'Borrador',conOf(it.sc).name,it.code,it.amb,it.act,it.days.map(fmtS).join(' '),it.q??'',it.und||'',rr.exec??'',rr.ok===true?'SÍ':rr.ok===false?'NO':'',rr.cnc||'',rr.note||''])});
+      Object.entries(items).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0)).forEach(([id,it])=>{const rr=res[id]||{};pl.push([pp.code,fz?'Congelado':'Borrador',conOf(it.sc).name,it.code,it.amb,it.act,it.days.map(fmtS).join(' '),it.q??'',it.und||'',rr.exec??'',rr.ok===true?'SÍ':rr.ok===false?'NO':'',rr.cnc?cncLabel(rr.cnc):'',rr.note||'',rr.mit||''])});
       const st=ppcOf(w);ppcRows.push(['PPC '+pp.code,st?pct(st.ppc):'—'])}
-    pl.push([],...ppcRows);const ws2=X.utils.aoa_to_sheet(pl);ws2['!cols']=[{wch:6},{wch:10},{wch:16},{wch:8},{wch:28},{wch:32},{wch:26},{wch:12},{wch:6},{wch:11},{wch:10},{wch:24},{wch:30}];
-    for(let c=0;c<13;c++){const k=X.utils.encode_cell({r:2,c});if(ws2[k])ws2[k].s=hs}X.utils.book_append_sheet(wb,ws2,'Plan semanal');
+    pl.push([],...ppcRows);const ws2=X.utils.aoa_to_sheet(pl);ws2['!cols']=[{wch:6},{wch:10},{wch:16},{wch:8},{wch:28},{wch:32},{wch:26},{wch:12},{wch:6},{wch:11},{wch:10},{wch:24},{wch:30},{wch:30}];
+    for(let c=0;c<14;c++){const k=X.utils.encode_cell({r:2,c});if(ws2[k])ws2[k].s=hs}X.utils.book_append_sheet(wb,ws2,'PPC semanal');
     const rs=[['ESTADO','ÍTEM','AMBIENTE','ACTIVIDAD','TIPO','DESCRIPCIÓN','RESPONSABLE','REQUERIDA','LIBERADA']];
     for(const q of restrInScope()){const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);rs.push([q.status==='lib'?'Liberada':'Pendiente',a?a.code:'',a?a.name:'',x?x.name:'',q.type,q.desc,q.resp,q.need,q.freed])}
     const ws3=X.utils.aoa_to_sheet(rs);ws3['!cols']=[{wch:11},{wch:8},{wch:24},{wch:28},{wch:18},{wch:40},{wch:16},{wch:11},{wch:11}];for(let c=0;c<9;c++)ws3[X.utils.encode_cell({r:0,c})].s=hs;X.utils.book_append_sheet(wb,ws3,'Restricciones');
@@ -179,3 +179,66 @@ async function exportXlsx(){
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
   finally{if(unswap)unswap();btn.disabled=false;btn.textContent='Exportar Excel'}
 }
+
+/* ---------- PPC semanal en el formato de la empresa (GP-PR02-F-10) ----------
+   Actividad (ítem, código y ambiente, actividad, und, metrado) · Programación (dur., inicio, fin, días L–S)
+   · Cumplimiento (SI/NO) · Análisis de incumplimiento (tipo = código de causa, causas = detalle, mitigación). */
+async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
+  try{await loadXlsx();const X=window.XLSX;const p=P();const wd=weekDays(n);const vp=visPisos();
+    const B=c=>({style:'thin',color:{rgb:c||'7F7F7F'}});const bd={top:B(),bottom:B(),left:B(),right:B()};
+    const hs={font:{bold:true,sz:9},fill:{fgColor:{rgb:'D9E1F2'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
+    const hw={...hs,font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'31869B'}}};
+    const cs={border:bd,font:{sz:9},alignment:{vertical:'center',wrapText:true}},cc={...cs,alignment:{horizontal:'center',vertical:'center'}};
+    const ys={border:bd,font:{sz:9},fill:{fgColor:{rgb:'FFFF00'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}};
+    const fs={border:bd,font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'963634'}},alignment:{vertical:'center'}};
+    const ws={};const M=[];const set=(r,c,v,st)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:st||cs}};
+    const box=(r0,c0,r1,c1,v,st)=>{for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)set(r,c,r===r0&&c===c0?v:'',st);if(r1>r0||c1>c0)M.push({s:{r:r0,c:c0},e:{r:r1,c:c1}})};
+    /* encabezado del formato */
+    const lab={font:{bold:true,sz:9}},val={font:{sz:9}};
+    [['PROYECTO',p.fullName||p.name||''],['PROPIETARIO',p.owner||''],['UBICACIÓN',p.location||''],['FECHA',`${fmtD(todayIso())} ${todayIso().slice(0,4)} · Semana ${n} (${fmtD(wd[0])} al ${fmtD(wd[5])})`]].forEach(([k,v],i)=>{set(1+i,3,k,lab);set(1+i,4,': '+v,val)});
+    [['CÓDIGO',p.ppcCode||'GP-PR02-F-10'],['REVISIÓN','1.0'],['HECHO POR',me&&(me.name||me.email)||''],['REVISADO POR','']].forEach(([k,v],i)=>{set(1+i,20,k,lab);set(1+i,21,v?': '+v:'',val)});
+    set(0,1,'PPC SEMANAL · SEMANA '+n,{font:{bold:true,sz:12}});
+    const h=6;
+    box(h,1,h,4,'ACTIVIDAD',hs);box(h,5,h,6,'',hs);box(h,7,h,9,'PROGRAMACIÓN',hs);box(h,10,h,15,'SEMANA '+n,hw);box(h,16,h+1,17,'CUMPLI-MIENTO',hs);box(h,18,h+1,21,'ANÁLISIS DE INCUMPLIMIENTO',hs);
+    box(h+1,1,h+2,1,'ITEM',hs);box(h+1,2,h+2,3,'DESCRIPCIÓN',hs);box(h+1,4,h+2,4,'ACTIVIDAD',hs);box(h+1,5,h+2,5,'UND',hs);box(h+1,6,h+2,6,'METRADO',hs);
+    box(h+1,7,h+2,7,'DUR.',hs);box(h+1,8,h+2,8,'F. INICIO',hs);box(h+1,9,h+2,9,'F. FIN',hs);
+    wd.forEach((d,k)=>{set(h+1,10+k,DL[k],hw);set(h+2,10+k,d.slice(8),hw)});
+    set(h+2,16,'SI',hs);set(h+2,17,'NO',hs);set(h+2,18,'TIPO',hs);set(h+2,19,'CAUSAS',hs);box(h+2,20,h+2,21,'MITIGACIÓN',hs);
+    let r=h+3;let tOk=0,tNo=0,tN=0;const resumen=[];
+    for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
+      const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
+      set(r,1,pp.code||'',fs);box(r,2,r,21,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fs);r++;
+      let pOk=0,pNo=0;
+      for(let i=0;i<ids.length;){const it0=items[ids[i]];let j=i;while(j<ids.length&&items[ids[j]].code===it0.code&&items[ids[j]].amb===it0.amb)j++;
+        const r0=r;
+        for(let k=i;k<j;k++){const id=ids[k],it=items[id],rr=res[id]||{};const x=S.act.get(id);const ds=new Set(it.days||[]);const c=conOf(it.sc);
+          set(r,1,actNum(id)||'',cc);set(r,4,it.act||'',cs);set(r,5,it.und||(x&&x.und)||'',cc);set(r,6,it.q!=null?it.q:(x&&x.metrado!=null?x.metrado:''),cc);
+          const dd=(it.days||[]).slice().sort();set(r,7,dd.length||'',cc);set(r,8,dd[0]?fmtD(dd[0]):'',cc);set(r,9,dd.length?fmtD(dd[dd.length-1]):'',cc);
+          wd.forEach((d,q)=>{if(ds.has(d)){const hx=(c.color||'#999999').replace('#','').toUpperCase();const qv=it.qd&&it.qd[d];set(r,10+q,qv!=null?qv:'X',{border:bd,font:{bold:true,sz:9,color:{rgb:lum(c.color||'#999')>.55?'000000':'FFFFFF'}},fill:{fgColor:{rgb:hx}},alignment:{horizontal:'center',vertical:'center'}})}else set(r,10+q,'',cc)});
+          set(r,16,rr.ok===true?1:'',{...cc,font:{bold:true,sz:9,color:{rgb:'00B050'}}});set(r,17,rr.ok===false?1:'',{...cc,font:{bold:true,sz:9,color:{rgb:'FF0000'}}});
+          set(r,18,rr.ok===false&&rr.cnc?cncCode(rr.cnc):'',cc);set(r,19,rr.ok===false?(rr.note||rr.cnc||''):'',cs);box(r,20,r,21,rr.mit||'',cs);
+          if(rr.ok===true)pOk++;else if(rr.ok===false)pNo++;r++}
+        box(r0,2,r0,2,it0.code||'',ys);box(r0,3,r0,3,it0.amb||'',ys);for(let q=r0+1;q<r;q++){set(q,2,'',ys);set(q,3,'',ys)}
+        if(r-r0>1){M.push({s:{r:r0,c:2},e:{r:r-1,c:2}});M.push({s:{r:r0,c:3},e:{r:r-1,c:3}})}
+        i=j}
+      const np=ids.length;tOk+=pOk;tNo+=pNo;tN+=np;resumen.push([pp.code,np,pOk,pNo]);
+      const ts={border:bd,font:{bold:true,sz:9},fill:{fgColor:{rgb:'F2F2F2'}},alignment:{horizontal:'center',vertical:'center'}};
+      box(r,1,r,15,`PPC ${pp.code||''} = ${pOk} cumplidas de ${np} programadas`,{...ts,alignment:{horizontal:'right',vertical:'center'}});set(r,16,pOk,ts);set(r,17,pNo,ts);
+      set(r,18,np?pOk/np:'',{...ts,numFmt:'0%'});box(r,19,r,21,fz?'':'Semana sin congelar',ts);r++}
+    if(!tN)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
+    r++;const gs={border:bd,font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'31869B'}},alignment:{horizontal:'center',vertical:'center'}};
+    box(r,1,r,15,`PPC SEMANA ${n}${vp.length>1?' (todos los pisos)':''}`,{...gs,alignment:{horizontal:'right',vertical:'center'}});set(r,16,tOk,gs);set(r,17,tNo,gs);set(r,18,tOk/tN,{...gs,numFmt:'0%'});box(r,19,r,21,'',gs);r+=2;
+    /* resumen de causas, con el cuadro de la empresa */
+    const cnt={};for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));if(!w||!w.frozenAt)continue;for(const rr of Object.values(w.res||{}))if(rr&&rr.ok===false){const k=rr.cnc?cncCode(rr.cnc):'—';cnt[k]=(cnt[k]||0)+1}}
+    set(r,1,'CUADRO DE CAUSAS DE NO CUMPLIMIENTO',{font:{bold:true,sz:10}});r++;
+    set(r,1,'ÍTEM',hs);set(r,2,'CÓDIGO',hs);box(r,3,r,4,'CAUSA',hs);box(r,5,r,15,'DESCRIPCIÓN',hs);set(r,16,'N.º',hs);r++;
+    const RH=[];CNC_STD.forEach((o,i)=>{set(r,1,i+1,cc);set(r,2,o.c,cc);box(r,3,r,4,o.n.toUpperCase(),cs);box(r,5,r,15,o.d.map(z=>'* '+z).join('\n'),cs);set(r,16,cnt[o.c]||'',cc);RH[r]={hpt:13*o.d.length+2};r++});
+    if(cnt['—'])
+      {set(r,1,'',cc);set(r,2,'—',cc);box(r,3,r,4,'SIN CAUSA',cs);box(r,5,r,15,'No cumplidas sin tipo de causa elegido.',cs);set(r,16,cnt['—'],cc);r++}
+    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r,c:21}});ws['!merges']=M;ws['!rows']=RH;
+    ws['!cols']=[{wch:2},{wch:5},{wch:7},{wch:20},{wch:28},{wch:5},{wch:8},{wch:5},{wch:9},{wch:9},...wd.map(()=>({wch:4.5})),{wch:4},{wch:4},{wch:7},{wch:32},{wch:18},{wch:18}];
+    ws['!views']=[{state:'frozen',xSplit:0,ySplit:h+3}];
+    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');
+    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
+    saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
