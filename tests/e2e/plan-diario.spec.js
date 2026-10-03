@@ -58,12 +58,30 @@ test('en Campo › Plano las actividades salen numeradas en su ambiente', async 
 test('reunión: «sin interferencia» quita el achurado del cruce', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); // hoy: en A-1 trabajan SANITARIAS (Redes) y ELÉCTRICAS (Entubado)
-  await expect(page.locator('#mpanel .mp-cx').first()).toBeVisible();
-  const n0 = await page.locator('#mpanel .mp-cx').count();
+  // los cruces van en un recuadro a la derecha del plano, plegado; el panel izquierdo ya no los lista
+  await expect(page.locator('#mcxb .mcxh')).toContainText('Dos partidas en el mismo lugar');
+  await expect(page.locator('#mpanel .mp-cx')).toHaveCount(0);
+  await page.click('#mcxb .mcxh');
+  await expect(page.locator('#mcxb .mp-cx').first()).toBeVisible();
+  const n0 = await page.locator('#mcxb .mp-cx').count();
   const p = await enPantalla(page, '#mstage', 200, 200);
   await page.mouse.click(p.x, p.y, { button: 'right' });
   await page.click('#pop [data-do="ok"]');
-  await expect(page.locator('#mpanel .mp-cx')).toHaveCount(n0 - 1);
+  await expect(page.locator('#mcxb .mp-cx')).toHaveCount(n0 - 1);
   expect(await page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(1);
   noErrors(errors, 'cruce');
+});
+
+test('resaltar solo al subcontratista elegido viene marcado y se mantiene al cambiar', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday');
+  await page.locator('#mpanel [data-dzsc="c1"]').click();
+  await expect(page.locator('#mscv')).toBeChecked();
+  await page.locator('#mpanel [data-dzsc="c2"]').click();
+  await expect(page.locator('#mscv')).toBeChecked();
+  expect(await page.evaluate(() => window.__plano.M.scDraw)).toBe('c2');
+  await page.locator('#mscv').uncheck();
+  await page.locator('#mpanel [data-dzsc="c1"]').click();
+  await expect(page.locator('#mscv')).not.toBeChecked();
+  noErrors(errors, 'resaltar');
 });

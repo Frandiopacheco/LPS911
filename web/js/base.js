@@ -30,7 +30,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),loaded:{}};
 const U=Object.assign({tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV});
+const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -160,14 +160,19 @@ addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offl
 function strip(o){const c={...o};delete c.id;return c}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
 let DV=0; /* sube con cada cambio de datos (para cachés) */
+/* escrituras propias en cola que aún no salen (esperan la anterior del mismo documento): mientras tanto, lo que llega
+   de la base para ese documento es una versión vieja y no debe pisar la local (hacía parpadear las barras al mover) */
+const QK={};
+function keepQueued(col,mp){const k=COLS[col];const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
 function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
   if(!db||(!canWrite&&!scR))return Promise.resolve();
   const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body):null;
   if(args&&!args.length)return Promise.resolve();
-  pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);
-  const run=()=>!body?ref.delete():args?ref.update(...args).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
+  pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);QK[key]=(QK[key]||0)+1;
+  const run=()=>{QK[key]--;if(QK[key]<=0)delete QK[key];return run0()};
+  const run0=()=>!body?ref.delete():args?ref.update(...args).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
   const p=(chains[key]||Promise.resolve()).then(()=>dbCall(run))
     .then(()=>{lastErr=null},e=>{handleWriteErr(e)}).finally(()=>{pending--;setStatus()});
   chains[key]=p;return p;
@@ -252,7 +257,7 @@ async function startSession(u,fdb){
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
   for(const[col,k]of Object.entries(COLS)){
-    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,{...d.data(),id:d.id}));setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
+    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,{...d.data(),id:d.id}));keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
   }
   ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();
   const memQ=canDaily?fcol('members'):fcol('members').doc(me.email);

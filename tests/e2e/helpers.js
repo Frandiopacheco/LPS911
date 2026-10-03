@@ -18,7 +18,8 @@ export const USERS = {
 };
 
 /** Abre la app con el Firebase falso. `as`: clave de USERS; `theme`: 'dark' | 'light' (esquema de color del equipo). */
-export async function openApp(page, { as = 'admin', theme, va, tab, extra } = {}) {
+/* editar: el Lookahead se abre en modo consulta; las pruebas entran ya en edición salvo editar:false */
+export async function openApp(page, { as = 'admin', theme, va, tab, extra, editar = true } = {}) {
   const errors = [];
   if (theme) await page.emulateMedia({ colorScheme: theme });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
@@ -41,6 +42,7 @@ export async function openApp(page, { as = 'admin', theme, va, tab, extra } = {}
   await page.addInitScript({ path: FAKE });
   await page.goto(tab ? '/#' + tab : '/');
   await expect(page.locator('#loading')).toHaveCount(0, { timeout: 15_000 });
+  if (editar) await page.evaluate(() => { LKED = true; gridRows = null; render(); });
   return errors;
 }
 

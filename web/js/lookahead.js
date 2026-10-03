@@ -37,6 +37,7 @@ function buildLookShell(main){
     <select id="fsec" aria-label="Sector"></select>
     <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
     <span class="seg" id="fwin" aria-label="Semanas visibles"><button data-w="3">3 sem</button><button data-w="6">6 sem</button><button data-w="12">12 sem</button></span>
+    <button class="ib pri" id="fedit" hidden>✎ Editar</button>
     <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
     <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
@@ -61,7 +62,7 @@ function buildLookShell(main){
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
-  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#fcli').onclick=cliToggle;
+  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
@@ -98,7 +99,8 @@ function renderLook(main){
   if(U.cliv){cliRenderLook(main);selBar();presBar();presZoom();return}else cliBanner();
   const vd=U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;
   if(vd&&vd.ready){const un=swapVer(vd);const cw=canWrite;canWrite=false;try{renderLookInner(main)}finally{canWrite=cw;un()}return}
-  if(revOn()){const un=revSwap();try{renderLookInner(main)}finally{un()}}else renderLookInner(main);renderPropBar();revWire();selBar();presBar();presZoom();
+  LK_CAN=!!canWrite;lkEditSync();
+  if(revOn()){const un=revSwap();try{renderLookInner(main)}finally{un()}}else if(lkLockOn()){const cw=canWrite;canWrite=false;try{renderLookInner(main)}finally{canWrite=cw}}else renderLookInner(main);renderPropBar();revWire();selBar();presBar();presZoom();
   if(isMob()&&U.lookFull&&!main.querySelector('.lmback')){const bk=document.createElement('div');bk.className='lmback';bk.innerHTML='<span>Tabla completa del lookahead (mejor en PC)</span><button class="ib pri" id="lmlist">Vista de celular</button>';main.prepend(bk);bk.querySelector('#lmlist').onclick=()=>{U.lookFull=false;main.dataset.built='';render()}}}
 let lmKeep=true;
 function renderLookMob(main){ensureDaily(addD(weekStart(U.week),-7));
@@ -295,7 +297,16 @@ function renderMapaTab(main){if(window.renderMapaImpl){window.renderMapaImpl(mai
 
 /* --- versiones del lookahead --- */
 const LHI=new Map(),VERD=new Map();let lhiSub=null,lhiErr=null,autoTimer=null;U.ver='';U.verMode='ver';
-const verRO=()=>!!(U.tab==='look'&&((U.ver&&U.verMode==='ver')||U.cliv));
+const verRO=()=>!!(U.tab==='look'&&((U.ver&&U.verMode==='ver')||U.cliv||lkLockOn()));
+/* ---------- Lookahead en modo consulta: se abre sin poder editar; «Editar» habilita la edición ----------
+   Así nadie cambia algo por un clic sin querer. En consulta, arrastrar desplaza la tabla (manito). */
+let LKED=false,LK_CAN=false;
+const lkLocked=()=>U.tab==='look'&&!LKED&&!LKP&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&!(typeof revOn==='function'&&revOn());
+const lkLockOn=()=>LK_CAN&&lkLocked();
+function lkEdit(on){LKED=on;gridRows=null;closePop();if(!on&&typeof selClear==='function'&&SELA.size)selClear();requestRender();toast(on?'Edición activada: ya puedes cambiar el lookahead.':'Modo consulta: arrastra para desplazarte; nada se modifica.')}
+function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&!U.cliv&&!(U.ver&&U.verMode==='ver');if(b.hidden!==!show)b.hidden=!show;
+  b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Terminar edición':'✎ Editar';b.title=LKED?'Volver al modo consulta (solo ver y desplazarse)':'Habilitar la edición del lookahead';
+  const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn())}
 function ensureVers(){if(lhiSub||!db)return;
   lhiSub=fcol('lhidx').onSnapshot(sn=>{LHI.clear();sn.docs.forEach(d=>LHI.set(d.id,{...d.data(),id:d.id}));lhiErr=null;if(U.ver&&!LHI.has(U.ver))U.ver='';if(ready&&U.tab==='look')requestRender()},
     err=>{lhiErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
@@ -404,6 +415,14 @@ function wireGrid(tbl){
     else if(b.dataset.clearf){U.q='';U.sc='';U.acts=[];U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.day='';U.wkF=0;$('#fq').value='';saveUI();requestRender()}
     else if(b.dataset.gotoRestr){U.tab='restr';U.rfilter='pend';U.rAct=b.dataset.gotoRestr;render()}
   });
+  /* modo consulta: arrastrar con la manito desplaza la tabla */
+  {const gw=tbl.closest('#gw')||tbl.parentElement;if(gw&&!gw.dataset.pan){gw.dataset.pan='1';
+    gw.addEventListener('pointerdown',e=>{if(!lkLockOn()||e.button!==0||e.pointerType==='touch')return;const t=e.target;
+      if(t.closest('button,a,select,th,.dm,.obadge,.rbadge,.lqbadge,[data-obs],input:not([readonly]),textarea:not([readonly])'))return;
+      e.preventDefault();const x0=e.clientX,y0=e.clientY,sl=gw.scrollLeft,st=gw.scrollTop;gw.classList.add('panning');
+      const mv=ev=>{gw.scrollLeft=sl-(ev.clientX-x0);gw.scrollTop=st-(ev.clientY-y0)};
+      const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);removeEventListener('pointercancel',up);gw.classList.remove('panning')};
+      addEventListener('pointermove',mv);addEventListener('pointerup',up);addEventListener('pointercancel',up)},true)}}
   tbl.addEventListener('paste',e=>{
     const t=e.target;if(!canWrite||verRO()||!t.classList||!t.classList.contains('ci'))return;
     const txt=(e.clipboardData||window.clipboardData)?.getData('text')||'';if(!/\r?\n/.test(txt.trim()))return;
@@ -413,7 +432,7 @@ function wireGrid(tbl){
   });
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
-    const td=e.target.closest('td.d');if(!td||!canWrite)return;if(verRO()){if(!tap)toast(U.cliv?'La vista cliente es de solo lectura: edita en el programa interno y la holgura se suma sola.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    const td=e.target.closest('td.d');if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'La vista cliente es de solo lectura: edita en el programa interno y la holgura se suma sola.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
     if(U.qmode==='metrado'){const x=S.act.get(td.parentElement.dataset.a);if(x&&hasM(x)){closeQEditor(false);if(e.pointerType==='touch'){qtap={td,x:e.clientX,y:e.clientY};return}if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();qsel={a:x.id,start:td.dataset.d,cells:new Map([[td.dataset.d,td]])};td.classList.add('sel');return}}
     if(e.pointerType==='touch'){tap={td,x:e.clientX,y:e.clientY};return}
     if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
