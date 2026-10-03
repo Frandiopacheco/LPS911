@@ -33,17 +33,18 @@ function renderPlan(main){
       <div class="tile"><span class="k">No cumplidos</span><span class="v" style="color:var(--bad)">${frozen?nNo:'—'}</span></div>
       <div class="tile"><span class="k">Por evaluar</span><span class="v">${frozen?ids.length-nOk-nNo:ids.length}</span></div>
       <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div></div></div>
-     <div class="tscroll"><table class="t rt"><thead><tr><th>Ítem</th><th>Ambiente</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado sem.</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:190px">Causa de no cumplimiento</th><th style="min-width:160px">Comentario</th></tr></thead><tbody>`;
+     <div class="tscroll"><table class="t rt"><thead><tr><th>Ítem</th><th>Ambiente</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado sem.</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:190px">Causa de no cumplimiento</th><th style="min-width:160px">Comentario</th><th style="min-width:180px">Mitigación / acción</th></tr></thead><tbody>`;
     for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;
-      h+=`<tr class="grp"><td colspan="9"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}`:''}</span></td></tr>`;
+      h+=`<tr class="grp"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}`:''}</span></td></tr>`;
       for(const id of l){const it=items[id];const r=res[id]||{};const ds=new Set(it.days);
         h+=`<tr data-id="${id}"><td class="mono" style="white-space:nowrap" data-l="Ítem">${esc(it.code)}</td><td data-l="Ambiente">${esc(it.amb)}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&canWrite?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
         <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=fieldSug(id,it);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No'):''}</div>`})()}</td>
-        <td class="full" data-l="Causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&r.ok===false?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir causa…':'—'}</option>${cnc.map(k=>`<option${r.cnc===k?' selected':''}>${esc(k)}</option>`).join('')}</select></td>
-        <td class="full" data-l="Comentario"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen?'Detalle':''}"${frozen&&canWrite?'':' disabled'} aria-label="Comentario"></td></tr>`}}
+        <td class="full" data-l="Causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&(r.ok===false||r.cnc)?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir causa…':'—'}</option>${cncOpts(cnc,r.cnc)}</select></td>
+        <td class="full" data-l="Comentario"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen?'Detalle':''}"${frozen&&canWrite?'':' disabled'} aria-label="Comentario"></td>
+        <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&canWrite&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`}}
     h+=`</tbody></table></div>`;
     if(extra.length)h+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div><table class="t"><tbody>${extra.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table></div>`;
     body+=h+'</section>';
@@ -66,7 +67,8 @@ function renderPlan(main){
   main.onchange=e=>{const t=e.target;const tr=t.closest('tr[data-id]');const sec=t.closest('section[data-pid]');if(!tr||!sec)return;const pid=sec.dataset.pid,id=tr.dataset.id;const wk=S.wk.get(wkId(n,pid));if(!wk)return;const cur=(wk.res||{})[id]||{};
     if(t.hasAttribute('data-exec')){const it=(wk.items||{})[id]||{};const v=parseNum(t.value);if(Number.isNaN(v)||(v!=null&&v<0)){toast('El ejecutado debe ser un número positivo.');t.value=cur.exec??'';return}t.dataset.o=t.value;
       const nv={...cur,exec:v};if(v!=null&&it.q){nv.ok=v>=it.q-1e-9;if(nv.ok)nv.cnc='';else nv.cnc=cur.cnc||''}setRes(n,pid,id,nv);if(v!=null&&it.q)toast(nv.ok?'Cumplido: se ejecutó todo lo programado.':`No cumplido: ${fq(v)} de ${fq(it.q)} ${it.und||''}. Elige la causa.`);return}
-    if(t.hasAttribute('data-cnc'))setRes(n,pid,id,{...cur,cnc:t.value});if(t.hasAttribute('data-note')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,note:t.value})}};
+    if(t.hasAttribute('data-cnc'))setRes(n,pid,id,{...cur,cnc:t.value});if(t.hasAttribute('data-note')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,note:t.value})}
+    if(t.hasAttribute('data-mit')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,mit:t.value.trim()})}};
 }
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
   const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);if(!reg.length)return null;
@@ -77,6 +79,8 @@ function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.g
   else{if(okd>=it.days.length)ok=true;else if(over||(allC&&!pendF))ok=false}
   const cc={};reg.forEach(r=>{if(r.cnc)cc[r.cnc]=(cc[r.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
   return{ok,cnc,exec,n:reg.length,total:it.days.length,okd,rec}}
+/** opciones de causa: las configuradas y, si la guardada ya no está en la lista, también esa (para no perderla al editar) */
+const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<option${cur===k?' selected':''}>${esc(k)}</option>`).join('');
 function setRes(n,pid,id,val){const w=S.wk.get(wkId(n,pid));if(!w)return;patch('weeks',wkId(n,pid),{res:{[id]:val}},()=>{w.res={...(w.res||{}),[id]:val}});requestRender()}
 function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
   const code=S.pis.get(pid)?.code||'';
