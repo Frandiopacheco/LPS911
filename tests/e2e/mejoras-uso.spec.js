@@ -128,14 +128,20 @@ test('PPC semanal: el Excel sale en el formato de la empresa', async ({ page }) 
   expect(dl.suggestedFilename()).toBe('OP_PPC_P1_Sem58.xlsx');
   const ws = XLSX.read(readFileSync(await dl.path())).Sheets.PPC;
   const v = a => (ws[a] || {}).v;
-  expect(v('D2')).toBe('PROYECTO');expect(v('E2')).toContain('Central de emergencias');expect(v('V2')).toContain('GP-PR02-F-10');
-  expect(v('B8')).toBe('ITEM');expect(v('E8')).toBe('ACTIVIDAD');expect(v('S9')).toBe('TIPO');expect(v('T9')).toBe('CAUSAS');expect(v('U9')).toBe('MITIGACIÓN');
-  expect(v('K7')).toBe('SEMANA 58');
-  // piso, ambiente (amarillo, combinado) y actividades con su n.º del ambiente
-  expect(v('C10')).toContain('PRIMER PISO');
-  const rows = [];for (let r = 11; r < 20; r++) rows.push([v('B' + r), v('C' + r), v('E' + r), v('Q' + r), v('R' + r), v('S' + r), v('T' + r), v('U' + r)]);
-  expect(rows).toContainEqual([2, 'A-1', 'Entubado empotrado', '', 1, 'MAT', 'No llegó la tubería', 'Pedir con anticipación']);
-  expect(rows.some(r => r[2] === 'Redes empotradas' && r[3] === 1)).toBe(true);
+  expect(v('D2')).toBe('PROYECTO');expect(v('E2')).toContain('Central de emergencias');expect(v('I2')).toContain('PORCENTAJE DE PLAN CUMPLIDO');expect(v('T2')).toContain('GP-PR02-F-10');
+  expect(['I6', 'J6', 'S6'].map(v)).toEqual(['PROG', 'MAT', 'OT']);
+  expect(v('B7')).toBe('ACTIVIDADES PROGRAMADAS');expect(v('I7')).toBe('SEMANA 58');expect(v('O7')).toBe('CUMPLI-MIENTO');
+  expect(['B8', 'C8', 'F8', 'G8', 'H8'].map(v)).toEqual(['ITEM', 'DESCRIPCIÓN', 'U.', 'METR\nTOTAL', 'METR\nSEMANA']);
+  expect(['O9', 'P9', 'Q9', 'R9', 'S9'].map(v)).toEqual(['SI', 'NO', 'TIPO', 'CAUSAS', 'MITIGACIÓN']);
+  expect(v('I9')).toBe(28);
+  // proyecto, piso, ambiente como grupo y actividades con su n.º del ambiente
+  expect(v('B10')).toContain('CENTRAL DE EMERGENCIAS');expect(v('C11')).toContain('PRIMER PISO');expect([v('B12'), v('C12')]).toEqual(['A-1', 'DPTO 101']);
+  const rows = [];for (let r = 13; r < 16; r++) rows.push([v('B' + r), v('C' + r), v('F' + r), v('G' + r), v('L' + r), v('O' + r), v('P' + r), v('Q' + r), v('R' + r), v('S' + r)]);
+  expect(rows).toContainEqual([2, 'Entubado empotrado', 'ml', 40, 'S1', '', 1, 'MAT', 'MATERIALES: No llegó la tubería', 'Pedir con anticipación']);
+  expect(rows).toContainEqual([1, 'Redes empotradas', 'pto', 20, 'S1', 1, '', '', '', '']);
+  // pie: confiabilidad = días cumplidos / días programados
+  const pie = Object.keys(ws).find(k => ws[k].v === 'CONFIABILIDAD DE LA PROGRAMACIÓN');expect(pie).toBeTruthy();
+  const fr = pie.slice(1);expect([v('I' + fr), v('M' + fr), v('Q' + fr), v('S' + fr)]).toEqual([2, 1, 1, 0.5]);
   noErrors(errors, 'excel ppc');
 });
 
