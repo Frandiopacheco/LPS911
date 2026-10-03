@@ -2,21 +2,32 @@
 // vencidas ocultas y nombres de actividad homogéneos.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, openTab, HOY } from './helpers.js';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+const require = createRequire(import.meta.url);
+const XLSX = require('xlsx-js-style');
+const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
+const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
 
-const META = ['meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28', cnc: ['Materiales', 'Mano de obra'] }];
+const META = ['meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28', fullName: 'Central de emergencias', owner: 'PRONATEL' }];
 const SEMANA = ['weeks', '58_p1', { n: 58, pisoId: 'p1', frozenAt: 1, items: { e0: { sc: 'c2', code: 'A-1', amb: 'Dpto 101', act: 'Entubado empotrado', days: [HOY], ord: 1 }, i0: { sc: 'c1', code: 'A-1', amb: 'Dpto 101', act: 'Redes empotradas', days: [HOY], ord: 2 } },
   res: { e0: { ok: false, cnc: 'Materiales', note: '' }, i0: { ok: true } } }];
 const res = page => page.evaluate(() => window.__dbGet('weeks', '58_p1').res);
 
-test('Plan semanal: la mitigación se escribe junto a la causa', async ({ page }) => {
+test('PPC semanal: n.º de ítem, tipo de causa del cuadro y mitigación', async ({ page }) => {
   const errors = await openApp(page, { tab: 'plan', extra: [META, SEMANA] });
+  await expect(page.locator('#main .phd h2')).toHaveText('PPC semanal');
+  await expect(page.locator('[data-tab="plan"]').first()).toHaveText('PPC semanal');
   const tr = page.locator('section[data-pid="p1"] tr[data-id="e0"]');
+  await expect(tr.locator('td.inum')).toHaveText('2');
+  await expect(tr.locator('[data-cnc] option')).toContainText(['PROG · Programación', 'MAT · Materiales', 'OT · Otros']);
   await expect(tr.locator('[data-cnc]')).toBeEnabled();
+  await expect(tr.locator('[data-mit]')).toBeVisible();
   await tr.locator('[data-mit]').fill('Pedir tubería con 1 semana de anticipación');
   await tr.locator('[data-mit]').press('Tab');
   await expect.poll(async () => (await res(page)).e0.mit).toBe('Pedir tubería con 1 semana de anticipación');
-  await tr.locator('[data-cnc]').selectOption('Mano de obra');
-  await expect.poll(async () => (await res(page)).e0.cnc).toBe('Mano de obra');
+  await tr.locator('[data-cnc]').selectOption('Subcontratas');
+  await expect.poll(async () => (await res(page)).e0.cnc).toBe('Subcontratas');
   expect((await res(page)).e0.mit).toBe('Pedir tubería con 1 semana de anticipación');
   noErrors(errors, 'plan semanal');
 });
@@ -27,8 +38,8 @@ test('Indicadores › Semanal: los no cumplidos se corrigen ahí mismo', async (
   const card = page.locator('#nccard');
   await expect(card).toContainText('Entubado empotrado');
   await expect(card).not.toContainText('Redes empotradas'); // solo los no cumplidos
-  await card.locator('[data-ncf="cnc"]').selectOption('Mano de obra');
-  await expect.poll(async () => (await res(page)).e0.cnc).toBe('Mano de obra');
+  await card.locator('[data-ncf="cnc"]').selectOption('Equipos y herramientas');
+  await expect.poll(async () => (await res(page)).e0.cnc).toBe('Equipos y herramientas');
   await card.locator('[data-ncf="mit"]').fill('Reforzar cuadrilla');
   await card.locator('[data-ncf="mit"]').press('Tab');
   await expect.poll(async () => (await res(page)).e0.mit).toBe('Reforzar cuadrilla');
@@ -107,4 +118,33 @@ test('Lookahead: el nombre se homogeniza con el que ya se usa en otros ambientes
   await expect.poll(() => page.evaluate(() => window.__dbGet('acts', 't1').name)).toBe('Entubado empotrado');
   await expect(page.locator('#toast')).toContainText('como ya se llama en');
   noErrors(errors, 'nombres');
+});
+
+test('PPC semanal: el Excel sale en el formato de la empresa', async ({ page }) => {
+  const W = JSON.parse(JSON.stringify(SEMANA));W[2].res.e0 = { ok: false, cnc: 'Materiales', note: 'No llegó la tubería', mit: 'Pedir con anticipación' };
+  const errors = await openApp(page, { tab: 'plan', extra: [META, W] });
+  await conExcel(page);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bppcx')]);
+  expect(dl.suggestedFilename()).toBe('OP_PPC_P1_Sem58.xlsx');
+  const ws = XLSX.read(readFileSync(await dl.path())).Sheets.PPC;
+  const v = a => (ws[a] || {}).v;
+  expect(v('D2')).toBe('PROYECTO');expect(v('E2')).toContain('Central de emergencias');expect(v('V2')).toContain('GP-PR02-F-10');
+  expect(v('B8')).toBe('ITEM');expect(v('E8')).toBe('ACTIVIDAD');expect(v('S9')).toBe('TIPO');expect(v('T9')).toBe('CAUSAS');expect(v('U9')).toBe('MITIGACIÓN');
+  expect(v('K7')).toBe('SEMANA 58');
+  // piso, ambiente (amarillo, combinado) y actividades con su n.º del ambiente
+  expect(v('C10')).toContain('PRIMER PISO');
+  const rows = [];for (let r = 11; r < 20; r++) rows.push([v('B' + r), v('C' + r), v('E' + r), v('Q' + r), v('R' + r), v('S' + r), v('T' + r), v('U' + r)]);
+  expect(rows).toContainEqual([2, 'A-1', 'Entubado empotrado', '', 1, 'MAT', 'No llegó la tubería', 'Pedir con anticipación']);
+  expect(rows.some(r => r[2] === 'Redes empotradas' && r[3] === 1)).toBe(true);
+  noErrors(errors, 'excel ppc');
+});
+
+test('Causas: el cuadro de la empresa en Configuración y la lista antigua pasa al cuadro', async ({ page }) => {
+  const OLD = ['meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28', cnc: ['Materiales', 'Mano de obra', 'Clima'] }];
+  const errors = await openApp(page, { tab: 'cfg', extra: [OLD] });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').cnc), { timeout: 10000 }).toEqual(['Programación', 'Materiales', 'Control de calidad', 'Externo', 'Cliente - Supervisión', 'Errores de ejecución', 'Subcontratas', 'Equipos y herramientas', 'Administrativos', 'Diseño', 'Otros']);
+  expect(await page.evaluate(() => window.__dbGet('meta', 'project').cncOld)).toEqual(['Mano de obra', 'Clima']);
+  await expect(page.locator('#main .cimpr', { hasText: 'Cliente - Supervisión' })).toContainText('CLI');
+  expect(await page.evaluate(() => [cncCode('Clima'), cncCode('Mano de obra'), cncImp('Diseño'), cncImp('Subcontratas')])).toEqual(['EXT', 'SC', false, true]);
+  noErrors(errors, 'causas');
 });

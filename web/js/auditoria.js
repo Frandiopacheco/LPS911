@@ -38,7 +38,12 @@ function didxFromDaily(d,pid,recs){const m={};for(const[aid,r]of Object.entries(
     if(r.done){if(!cur||d<cur){m[aid]=d;DIDX.set(aid,d)}}else if(cur===d){m[aid]=null;DIDX.delete(aid)}}
   if(Object.keys(m).length)didxWrite(pid,m)}
 /* primera vez: arma el índice con todo el historial (lo hace una sola vez un administrador o editor) */
-async function didxMigrate(){if(!db||!canWrite||P().doneIdx)return;try{const sn=await fcol('daily').get();const by={};
+/* una vez por obra (la hace el administrador): la lista de causas pasa al cuadro de la empresa. Los registros antiguos
+   conservan su texto; las causas que ya no están en la lista se guardan en cncOld para consulta. */
+function cncMigrate(){if(!db||!isAdmin||(P().cncStd||0)>=CNC_STD_V||!S.meta.get('project'))return;const std=CNC_STD.map(o=>o.n);
+  const old=(P().cnc||[]).filter(k=>!cncStd(k));const ch={cnc:std,cncStd:CNC_STD_V};if(old.length)ch.cncOld=[...new Set([...(P().cncOld||[]),...old])];
+  patch('meta','project',ch,()=>{S.meta.set('project',{...S.meta.get('project'),...ch})});requestRender()}
+async function didxMigrate(){cncMigrate();if(!db||!canWrite||P().doneIdx)return;try{const sn=await fcol('daily').get();const by={};
     sn.docs.forEach(x=>{const v=x.data()||{};for(const[aid,r]of Object.entries(v.recs||{}))if(r&&r.done&&v.pisoId){const o=by[v.pisoId]=by[v.pisoId]||{};if(!o[aid]||v.date<o[aid])o[aid]=v.date}});
     for(const[pid,m]of Object.entries(by))await fcol('doneidx').doc(pid).set({d:m},{merge:true});
     await fcol('meta').doc('project').set({doneIdx:1},{merge:true})}catch(e){}}

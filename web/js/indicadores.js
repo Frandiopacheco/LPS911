@@ -97,7 +97,7 @@ function renderInd(main){
    <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${ppcs.length?` <small>${ppcs.length} sem</small>`:''}</span></div>
    <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${ppcs.length}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
-  if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>Plan semanal</b> y evalúas cada uno con Sí / No.</div>`;
+  if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>PPC semanal</b> y evalúas cada uno con Sí / No.</div>`;
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
   const vActs=[...S.act.values()].filter(x=>vset.has(pisoOfAmb(x.ambId)));const dayRows=[];const dCnc={};let nExtra=0;
   for(const d of dd){let sch=0,okc=0,reg=0;for(const x of vActs){if(!(x.days||[]).includes(d))continue;sch++;const rc=recOf(d,x.id);if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc)dCnc[rc.cnc]=(dCnc[rc.cnc]||0)+1}}
