@@ -180,64 +180,72 @@ async function exportXlsx(){
   finally{if(unswap)unswap();btn.disabled=false;btn.textContent='Exportar Excel'}
 }
 
-/* ---------- PPC semanal en el formato de la empresa (GP-PR02-F-10) ----------
-   Actividad (ítem, código y ambiente, actividad, und, metrado) · Programación (dur., inicio, fin, días L–S)
-   · Cumplimiento (SI/NO) · Análisis de incumplimiento (tipo = código de causa, causas = detalle, mitigación). */
+/* ---------- PPC semanal en el formato de la empresa (GP-PR02-F-10, rev. 2) ----------
+   Columnas: ITEM · DESCRIPCIÓN · U. · METR TOTAL · METR SEMANA · días L–S (código del sector, color del SC) · SI/NO (días)
+   · TIPO (código de causa) · CAUSAS · MITIGACIÓN. Pie: confiabilidad de la programación (días cumplidos / días programados). */
 async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   try{await loadXlsx();const X=window.XLSX;const p=P();const wd=weekDays(n);const vp=visPisos();
-    const B=c=>({style:'thin',color:{rgb:c||'7F7F7F'}});const bd={top:B(),bottom:B(),left:B(),right:B()};
-    const hs={font:{bold:true,sz:9},fill:{fgColor:{rgb:'D9E1F2'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
-    const hw={...hs,font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'31869B'}}};
-    const cs={border:bd,font:{sz:9},alignment:{vertical:'center',wrapText:true}},cc={...cs,alignment:{horizontal:'center',vertical:'center'}};
-    const ys={border:bd,font:{sz:9},fill:{fgColor:{rgb:'FFFF00'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}};
-    const fs={border:bd,font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'963634'}},alignment:{vertical:'center'}};
-    const ws={};const M=[];const set=(r,c,v,st)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:st||cs}};
-    const box=(r0,c0,r1,c1,v,st)=>{for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)set(r,c,r===r0&&c===c0?v:'',st);if(r1>r0||c1>c0)M.push({s:{r:r0,c:c0},e:{r:r1,c:c1}})};
-    /* encabezado del formato */
-    const lab={font:{bold:true,sz:9}},val={font:{sz:9}};
-    [['PROYECTO',p.fullName||p.name||''],['PROPIETARIO',p.owner||''],['UBICACIÓN',p.location||''],['FECHA',`${fmtD(todayIso())} ${todayIso().slice(0,4)} · Semana ${n} (${fmtD(wd[0])} al ${fmtD(wd[5])})`]].forEach(([k,v],i)=>{set(1+i,3,k,lab);set(1+i,4,': '+v,val)});
-    [['CÓDIGO',p.ppcCode||'GP-PR02-F-10'],['REVISIÓN','1.0'],['HECHO POR',me&&(me.name||me.email)||''],['REVISADO POR','']].forEach(([k,v],i)=>{set(1+i,20,k,lab);set(1+i,21,v?': '+v:'',val)});
-    set(0,1,'PPC SEMANAL · SEMANA '+n,{font:{bold:true,sz:12}});
-    const h=6;
-    box(h,1,h,4,'ACTIVIDAD',hs);box(h,5,h,6,'',hs);box(h,7,h,9,'PROGRAMACIÓN',hs);box(h,10,h,15,'SEMANA '+n,hw);box(h,16,h+1,17,'CUMPLI-MIENTO',hs);box(h,18,h+1,21,'ANÁLISIS DE INCUMPLIMIENTO',hs);
-    box(h+1,1,h+2,1,'ITEM',hs);box(h+1,2,h+2,3,'DESCRIPCIÓN',hs);box(h+1,4,h+2,4,'ACTIVIDAD',hs);box(h+1,5,h+2,5,'UND',hs);box(h+1,6,h+2,6,'METRADO',hs);
-    box(h+1,7,h+2,7,'DUR.',hs);box(h+1,8,h+2,8,'F. INICIO',hs);box(h+1,9,h+2,9,'F. FIN',hs);
-    wd.forEach((d,k)=>{set(h+1,10+k,DL[k],hw);set(h+2,10+k,d.slice(8),hw)});
-    set(h+2,16,'SI',hs);set(h+2,17,'NO',hs);set(h+2,18,'TIPO',hs);set(h+2,19,'CAUSAS',hs);box(h+2,20,h+2,21,'MITIGACIÓN',hs);
-    let r=h+3;let tOk=0,tNo=0,tN=0;const resumen=[];
+    const B={style:'thin',color:{rgb:'000000'}};const bd={top:B,bottom:B,left:B,right:B};
+    const F=(o={})=>({name:o.name||'Arial',sz:o.sz||9,bold:!!o.b,color:{rgb:o.c||'000000'}});
+    const st=(o={})=>{const r={border:o.nb?undefined:bd,font:F(o),alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.fmt)r.numFmt=o.fmt;return r};
+    const hd=st({b:true,h:'center',w:true}),hd9=st({b:true,h:'center',sz:9,w:true}),cc=st({h:'center'}),cl=st({w:true}),cl11=st({name:'Calibri',sz:11});
+    const ws={};const M=[];const set=(r,c,v,s)=>{const o={v:v??'',t:typeof v==='number'?'n':'s',s:s||cl};ws[X.utils.encode_cell({r,c})]=o;return o};
+    const box=(r0,c0,r1,c1,v,s)=>{for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)set(r,c,r===r0&&c===c0?v:'',s);if(r1>r0||c1>c0)M.push({s:{r:r0,c:c0},e:{r:r1,c:c1}})};
+    /* encabezado (filas 2–5): logos (vacío), datos del proyecto, título y código */
+    box(1,1,4,2,'',st({}));
+    const lab=st({b:true,sz:10,nb:true,name:'Arial Narrow'}),val=st({sz:9,nb:true,name:'Arial Narrow'});
+    [['PROYECTO',p.fullName||p.name||''],['PROPIETARIO',p.owner||''],['UBICACIÓN',p.location||''],['FECHA',`${fmtD(todayIso())} ${todayIso().slice(0,4)}`]].forEach(([k,v],i)=>{set(1+i,3,k,lab);set(1+i,4,': '+v,val)});
+    box(1,8,4,17,'PORCENTAJE DE PLAN CUMPLIDO  ( PPC )',st({b:true,sz:14,h:'center',name:'Euphemia'}));
+    [['CÓDIGO',p.ppcCode||'GP-PR02-F-10'],['REVISIÓN','1.0'],['HECHO POR',me&&(me.name||me.email)||''],['REVISADO POR','']].forEach(([k,v],i)=>{set(1+i,18,k,lab);set(1+i,19,v?': '+v:'',val)});
+    /* fila 6: leyenda de códigos de causa */
+    CNC_STD.forEach((o,i)=>set(5,8+i,o.c,st({sz:7,h:'center',nb:true,name:'Arial Narrow'})));
+    /* encabezado de la tabla (filas 7–9) */
+    box(6,1,6,7,'ACTIVIDADES PROGRAMADAS',st({b:true,sz:10,h:'center'}));box(6,8,6,13,'SEMANA '+n,st({b:true,sz:10,h:'center'}));
+    box(6,14,7,15,'CUMPLI-MIENTO',st({b:true,sz:10,h:'center',w:true}));box(6,16,7,19,'ANÁLISIS DE INCUMPLIMIENTO',st({b:true,sz:10,h:'center'}));
+    box(7,1,8,1,'ITEM',hd9);box(7,2,8,4,'DESCRIPCIÓN',hd9);box(7,5,8,5,'U.',hd9);box(7,6,8,6,'METR\nTOTAL',hd9);box(7,7,8,7,'METR\nSEMANA',hd9);
+    wd.forEach((d,k)=>{set(7,8+k,DOWN[k].slice(0,3),cc);set(8,8+k,+d.slice(8),cc)});
+    set(8,14,'SI',hd9);set(8,15,'NO',hd9);set(8,16,'TIPO',hd9);set(8,17,'CAUSAS',hd9);box(8,18,8,19,'MITIGACIÓN',hd9);
+    let r=9;const r1=r;
+    /* fila del proyecto */
+    {const pj=st({b:true,sz:12,c:'FFFFFF',fill:'000099'});set(r,1,(p.fullName||p.name||'').toUpperCase(),pj);for(let c=2;c<20;c++)set(r,c,'',pj)}r++;
+    const fl=st({b:true,sz:11,c:'FFFFFF',fill:'963634'}),flC=st({b:true,sz:10,c:'FFFFFF',fill:'963634'});
+    const gr=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB'}),grC=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB',h:'center'});
+    const SI=st({b:true,h:'center',c:'00B050'}),NO=st({b:true,h:'center',c:'FF0000'});
+    let tSi=0,tNo=0,tN=0,tOk=0;
     for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
       const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
-      set(r,1,pp.code||'',fs);box(r,2,r,21,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fs);r++;
-      let pOk=0,pNo=0;
+      set(r,1,pp.code||'',flC);set(r,2,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fl);for(let c=3;c<20;c++)set(r,c,'',fl);r++;
       for(let i=0;i<ids.length;){const it0=items[ids[i]];let j=i;while(j<ids.length&&items[ids[j]].code===it0.code&&items[ids[j]].amb===it0.amb)j++;
-        const r0=r;
-        for(let k=i;k<j;k++){const id=ids[k],it=items[id],rr=res[id]||{};const x=S.act.get(id);const ds=new Set(it.days||[]);const c=conOf(it.sc);
-          set(r,1,actNum(id)||'',cc);set(r,4,it.act||'',cs);set(r,5,it.und||(x&&x.und)||'',cc);set(r,6,it.q!=null?it.q:(x&&x.metrado!=null?x.metrado:''),cc);
-          const dd=(it.days||[]).slice().sort();set(r,7,dd.length||'',cc);set(r,8,dd[0]?fmtD(dd[0]):'',cc);set(r,9,dd.length?fmtD(dd[dd.length-1]):'',cc);
-          wd.forEach((d,q)=>{if(ds.has(d)){const hx=(c.color||'#999999').replace('#','').toUpperCase();const qv=it.qd&&it.qd[d];set(r,10+q,qv!=null?qv:'X',{border:bd,font:{bold:true,sz:9,color:{rgb:lum(c.color||'#999')>.55?'000000':'FFFFFF'}},fill:{fgColor:{rgb:hx}},alignment:{horizontal:'center',vertical:'center'}})}else set(r,10+q,'',cc)});
-          set(r,16,rr.ok===true?1:'',{...cc,font:{bold:true,sz:9,color:{rgb:'00B050'}}});set(r,17,rr.ok===false?1:'',{...cc,font:{bold:true,sz:9,color:{rgb:'FF0000'}}});
-          set(r,18,rr.ok===false&&rr.cnc?cncCode(rr.cnc):'',cc);set(r,19,rr.ok===false?(rr.note||rr.cnc||''):'',cs);box(r,20,r,21,rr.mit||'',cs);
-          if(rr.ok===true)pOk++;else if(rr.ok===false)pNo++;r++}
-        box(r0,2,r0,2,it0.code||'',ys);box(r0,3,r0,3,it0.amb||'',ys);for(let q=r0+1;q<r;q++){set(q,2,'',ys);set(q,3,'',ys)}
-        if(r-r0>1){M.push({s:{r:r0,c:2},e:{r:r-1,c:2}});M.push({s:{r:r0,c:3},e:{r:r-1,c:3}})}
-        i=j}
-      const np=ids.length;tOk+=pOk;tNo+=pNo;tN+=np;resumen.push([pp.code,np,pOk,pNo]);
-      const ts={border:bd,font:{bold:true,sz:9},fill:{fgColor:{rgb:'F2F2F2'}},alignment:{horizontal:'center',vertical:'center'}};
-      box(r,1,r,15,`PPC ${pp.code||''} = ${pOk} cumplidas de ${np} programadas`,{...ts,alignment:{horizontal:'right',vertical:'center'}});set(r,16,pOk,ts);set(r,17,pNo,ts);
-      set(r,18,np?pOk/np:'',{...ts,numFmt:'0%'});box(r,19,r,21,fz?'':'Semana sin congelar',ts);r++}
+        /* ambiente: fila de grupo */
+        set(r,1,it0.code||'',grC);box(r,2,r,4,(it0.amb||'').toUpperCase(),gr);for(let c=5;c<8;c++)set(r,c,'',gr);for(let c=8;c<20;c++)set(r,c,'',c>=18?cl:cc);if(true)M.push({s:{r,c:18},e:{r,c:19}});r++;
+        for(let k=i;k<j;k++){const id=ids[k],it=items[id],rr=res[id]||{};const x=S.act.get(id);const c=conOf(it.sc);const am=x&&S.amb.get(x.ambId);const sec=am&&S.sec.get(am.sectorId);
+          const dd=(it.days||[]).slice().sort();const ds=new Set(dd);
+          set(r,1,actNum(id)||'',st({b:true,h:'center'}));box(r,2,r,4,it.act||'',cl11);set(r,5,it.und||(x&&x.und)||'',cc);
+          set(r,6,x&&typeof x.metrado==='number'?x.metrado:'',cc);set(r,7,it.q!=null?it.q:'',cc);
+          const hx=(c.color||'#999999').replace('#','').toUpperCase();const ink=lum(c.color||'#999')>.55?'000000':'FFFFFF';
+          wd.forEach((d,q)=>{if(ds.has(d))set(r,8+q,(sec&&sec.code)||'X',st({h:'center',sz:10,fill:hx,c:ink}));else set(r,8+q,'',cc)});
+          /* SI / NO en días, como el formato: cumplido = todos sus días; no cumplido = días cumplidos según Campo y el resto */
+          let si='',no='';if(rr.ok===true){si=dd.length;no=0}else if(rr.ok===false){let ok=dd.filter(d=>{const rc=recOf(d,id);return rc&&rc.status==='ok'}).length;if(ok>=dd.length)ok=Math.max(0,dd.length-1);si=ok;no=dd.length-ok}
+          set(r,14,si||'',SI);set(r,15,no||'',NO);if(typeof si==='number'){tSi+=si;tNo+=no}
+          const bad=rr.ok===false;set(r,16,bad&&rr.cnc?cncCode(rr.cnc):'',st({h:'center',c:'FF0000'}));
+          set(r,17,bad?[(rr.cnc||'').toUpperCase(),rr.note||''].filter(Boolean).join(': '):'',st({b:true,c:'ED0000',w:true}));
+          box(r,18,r,19,bad||rr.mit?rr.mit||'':'',st({h:'center',w:true}));
+          if(rr.ok===true)tOk++;tN++;r++}
+        i=j}}
     if(!tN)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
-    r++;const gs={border:bd,font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'31869B'}},alignment:{horizontal:'center',vertical:'center'}};
-    box(r,1,r,15,`PPC SEMANA ${n}${vp.length>1?' (todos los pisos)':''}`,{...gs,alignment:{horizontal:'right',vertical:'center'}});set(r,16,tOk,gs);set(r,17,tNo,gs);set(r,18,tOk/tN,{...gs,numFmt:'0%'});box(r,19,r,21,'',gs);r+=2;
-    /* resumen de causas, con el cuadro de la empresa */
-    const cnt={};for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));if(!w||!w.frozenAt)continue;for(const rr of Object.values(w.res||{}))if(rr&&rr.ok===false){const k=rr.cnc?cncCode(rr.cnc):'—';cnt[k]=(cnt[k]||0)+1}}
-    set(r,1,'CUADRO DE CAUSAS DE NO CUMPLIMIENTO',{font:{bold:true,sz:10}});r++;
-    set(r,1,'ÍTEM',hs);set(r,2,'CÓDIGO',hs);box(r,3,r,4,'CAUSA',hs);box(r,5,r,15,'DESCRIPCIÓN',hs);set(r,16,'N.º',hs);r++;
-    const RH=[];CNC_STD.forEach((o,i)=>{set(r,1,i+1,cc);set(r,2,o.c,cc);box(r,3,r,4,o.n.toUpperCase(),cs);box(r,5,r,15,o.d.map(z=>'* '+z).join('\n'),cs);set(r,16,cnt[o.c]||'',cc);RH[r]={hpt:13*o.d.length+2};r++});
-    if(cnt['—'])
-      {set(r,1,'',cc);set(r,2,'—',cc);box(r,3,r,4,'SIN CAUSA',cs);box(r,5,r,15,'No cumplidas sin tipo de causa elegido.',cs);set(r,16,cnt['—'],cc);r++}
-    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r,c:21}});ws['!merges']=M;ws['!rows']=RH;
-    ws['!cols']=[{wch:2},{wch:5},{wch:7},{wch:20},{wch:28},{wch:5},{wch:8},{wch:5},{wch:9},{wch:9},...wd.map(()=>({wch:4.5})),{wch:4},{wch:4},{wch:7},{wch:32},{wch:18},{wch:18}];
-    ws['!views']=[{state:'frozen',xSplit:0,ySplit:h+3}];
+    /* pie: confiabilidad de la programación (como el formato) y PPC por compromisos */
+    const fb=st({b:true,sz:10,nb:true}),fbc=st({b:true,sz:10,h:'center',nb:true});const rl=r;
+    set(r,1,'CONFIABILIDAD DE LA PROGRAMACIÓN',fb);set(r,7,'Total de registros  :',st({b:true,sz:10,nb:true,h:'right'}));
+    const cell=(c,v,f,s)=>{const o=set(r,c,v,s);if(f)o.f=f};
+    const oc=X.utils.encode_col(14),pc=X.utils.encode_col(15);
+    cell(8,tSi+tNo,`M${rl+1}+Q${rl+1}`,fbc);set(r,10,'Cumplidos :',fb);cell(12,tSi,`SUM(${oc}${r1+1}:${oc}${rl})`,st({b:true,sz:10,h:'center',nb:true,c:'00B050'}));
+    set(r,13,'NO Cumplidos :',fb);cell(16,tNo,`SUM(${pc}${r1+1}:${pc}${rl})`,st({b:true,sz:10,h:'center',nb:true,c:'FF0000'}));
+    set(r,17,'Porcentaje de confiabilidad :',fb);{const o=set(r,18,tSi+tNo?tSi/(tSi+tNo):0,{...fbc,numFmt:'0%'});o.f=`IFERROR(M${rl+1}/I${rl+1},0)`}
+    r++;set(r,1,`PPC de la semana (compromisos cumplidos / programados): ${tOk} de ${tN}`,st({sz:9,nb:true,c:'555555'}));set(r,18,tN?tOk/tN:0,{...st({b:true,sz:10,h:'center',nb:true}),numFmt:'0%'});
+    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r,c:19}});ws['!merges']=M;
+    ws['!cols']=[{wch:2},{wch:7},{wch:34},{wch:13},{wch:9},{wch:5},{wch:8},{wch:8},...wd.map(()=>({wch:6})),{wch:4.5},{wch:4.5},{wch:7},{wch:30},{wch:16},{wch:16}];
+    ws['!rows']=[{hpt:12.75},{hpt:18},{hpt:18},{hpt:18},{hpt:18},{hpt:11.25},{hpt:17.25},{hpt:13.5},{hpt:13.5}];
+    ws['!views']=[{state:'frozen',xSplit:0,ySplit:9}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');
     const buf=X.write(wb,{type:'array',bookType:'xlsx'});
     saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
