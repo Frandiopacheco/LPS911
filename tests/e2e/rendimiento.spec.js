@@ -50,3 +50,22 @@ test('Lookahead grande: se dibuja lo que se ve y al bajar aparece lo demás', as
   expect(await sel.locator('option').count()).toBe(25);
   noErrors(errors, 'lookahead grande');
 });
+
+test('Restricciones con muchas restricciones y una obra grande abre rápido', async ({ page }) => {
+  test.setTimeout(120_000);
+  const ex = obraGrande(); const acts = ex.filter(e => e[0] === 'acts').map(e => e[1]);
+  for (let i = 0; i < 120; i++) ex.push(['restr', 'rr' + i, { actId: acts[i * 7], type: 'Materiales', desc: 'r' + i, resp: '', need: '2026-10-05', freed: '', status: 'pend', created: '2026-09-30' }]);
+  const errors = await openApp(page, { extra: ex });
+  await page.evaluate(() => { U.piso = ''; });
+  const t0 = Date.now();
+  await page.evaluate(() => { goTab('restr'); document.body.offsetHeight; return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
+  const ms = Date.now() - t0;
+  console.log('RESTRICCIONES ' + ms + ' ms');
+  expect(ms, 'abrir Restricciones').toBeLessThan(3000);
+  // el selector de actividad se llena al abrirlo
+  const sel = page.locator('#main select[data-f="actId"]').first();
+  expect(await sel.locator('option').count()).toBe(1);
+  await sel.dispatchEvent('mousedown');
+  expect(await sel.locator('option').count()).toBeGreaterThan(100);
+  noErrors(errors, 'restricciones grande');
+});

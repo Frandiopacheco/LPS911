@@ -118,6 +118,11 @@ function rthumbs(r){const ce=rCanEd(r);const L=(r.photos||[]).map(id=>{loadFoto(
 function newRestr(actId){const x=actId&&S.act.get(actId);if(SCK()&&(!x||!myScsI().includes(x.sc))){toast('Elige una actividad de tu partida.');return}if(AREA()&&!me.area){toast('Pide al administrador que te asigne un área en Equipo.');return}const id=uid('res');rOpen.add(id);
   apply([op('restr',id,{id,actId:actId||'',pisoId:actId?pisoOfAct(actId):(U.piso||''),type:(P().restrTypes||[])[0]||'',desc:'',resp:x?conOf(x.sc).name:'',need:x?actStats(x).ini:'',freed:'',status:'pend',created:todayIso(),...(x?{sc:x.sc}:{}),...(AREA()?{grp:'area',area:me.area,resp:me.area}:{}),by:me.email,byName:me.name||''})],'Restricción creada');
   U.tab='restr';U.rfilter='pend';U.rAct=null;render();focusLater(`.ci[data-r="${id}"][data-f="desc"]`)}
+/* el selector de actividad de cada restricción trae solo la elegida y se llena al abrirlo:
+   armar miles de opciones por fila era lo que hacía lenta la pestaña */
+function actOne(aid){const x=aid&&S.act.get(aid);if(!x)return aid?`<option value="${esc(aid)}" selected>(actividad eliminada)</option>`:'<option value="">— Sin actividad —</option>';
+  const a=S.amb.get(x.ambId);return`<option value="${x.id}" selected>${esc((a?a.code+' · ':'')+(x.name||'(sin nombre)'))} — ${esc(conOf(x.sc).name)}</option>`}
+function actFill(sel){if(!sel||sel.dataset.alzd)return;sel.dataset.alzd='1';const v=sel.value;sel.innerHTML=actOptions(v,sel.dataset.alz==='sc'?new Set(myScsI()):null);sel.value=v}
 function renderRestr(main){
   const today=todayIso();const all=restrInScope();const types=P().restrTypes||[];
   const aw=n=>{const x=S.act.get(n);return x&&actStats(x).ini?weekOf(actStats(x).ini):null};
@@ -148,11 +153,11 @@ function renderRestr(main){
   if(!list.length)h+=mob?emp:`<tr><td colspan="12">${emp}</td></tr>`;
   const SCm=SCK()?new Set(myScsI()):null;const aOpts={};
   const gsel=(r,fk)=>{const g=grpOf(r);const ar=restrAreasL();const ro=rCanEd(r)&&!AREA()?'':' disabled';return`<select class="ci" ${fk('grp')}${ro}><option value="campo"${g==='campo'?' selected':''}>Operativa de campo</option><option value="area"${g==='area'?' selected':''}>Otras áreas</option></select>${g==='area'?`<select class="ci" ${fk('area')}${ro}><option value="">— área —</option>${[...new Set([...ar,r.area].filter(Boolean))].map(t=>`<option${t===r.area?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`};
-  for(const r of list){const isLate=r.status!=='lib'&&r.need&&r.need<today;const w=aw(r.actId);const fk=f=>`data-r="${r.id}" data-f="${f}" data-fk="r:${r.id}:${f}"`;const ce=rCanEd(r);const ro=ce?'':' disabled';const roL=rCanLib(r)?'':' disabled';const own=ce&&SCm;const ao=own?(aOpts['sc:'+r.actId]||(aOpts['sc:'+r.actId]=actOptions(r.actId,SCm))):(aOpts[r.actId]||(aOpts[r.actId]=actOptions(r.actId)));
+  for(const r of list){const isLate=r.status!=='lib'&&r.need&&r.need<today;const w=aw(r.actId);const fk=f=>`data-r="${r.id}" data-f="${f}" data-fk="r:${r.id}:${f}"`;const ce=rCanEd(r);const ro=ce?'':' disabled';const roL=rCanLib(r)?'':' disabled';const own=ce&&SCm;const ao=actOne(r.actId);const alz=` data-alz="${own?'sc':'all'}"`;
     if(mob){const x=S.act.get(r.actId);const am=x&&S.amb.get(x.ambId);const lib=r.status==='lib';const op_=rOpen.has(r.id);
       h+=`<article class="rcard${isLate?' late':''}"><div class="r1"><span class="pill ${lib?'ok':isLate?'bad':'warn'}">${lib?'Liberada':isLate?'Vencida':'Pendiente'}</span><span class="rgtag ${grpOf(r)}">${grpOf(r)==='area'?('Otras áreas'+(r.area?' · '+esc(r.area):'')):'Campo'}</span>${showP?`<span class="mono">${esc(S.pis.get(restrPiso(r))?.code||'')}</span>`:''}${w!=null?`<span>Inicia sem ${w}</span>`:''}${r.need?`<span>Requerida ${fmtD(r.need)}</span>`:''}${lib&&r.freed?`<span>Liberada ${fmtD(r.freed)}</span>`:''}</div>
         <b>${x?esc(x.name):'<span class="mu">Sin actividad</span>'}</b>${x?`<span class="mu" style="font-size:12.5px">${esc(actLoc(x.id))} <button type="button" class="lnkb" data-rgo="${x.id}">Ver en el lookahead ↗</button></span>`:''}
-        ${op_?`<div class="rf"><label>Actividad<select class="ci" ${fk('actId')}${ro}>${ao}</select></label>
+        ${op_?`<div class="rf"><label>Actividad<select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select></label>
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
           <label>Descripción<input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></label>
@@ -162,7 +167,7 @@ function renderRestr(main){
         ${rthumbs(r)}${r.by&&r.byName&&SCK()?`<div class="mu" style="font-size:12px">Registrada por ${esc(r.byName)}</div>`:''}<div class="rbt">${rCanLib(r)?`<button class="ib${lib?'':' pri'}" data-rtog="${r.id}">${lib?'Reabrir':'Liberar hoy'}</button>`:''}${ce?`<button class="ib" data-ropen="${r.id}">${op_?'Listo':'Editar'}</button>${op_&&rCanDel(r)?`<button class="ib" data-rdel="${r.id}">Eliminar</button>`:''}`:''}</div></article>`;continue}
     h+=`<tr class="${isLate?'late':''}"><td><select class="ci" ${fk('status')}${roL}><option value="pend"${r.status!=='lib'?' selected':''}>Pendiente</option><option value="lib"${r.status==='lib'?' selected':''}>Liberada</option></select>${isLate?'<div><span class="pill bad">Vencida</span></div>':''}</td>
     ${showP?`<td class="mono">${esc(S.pis.get(restrPiso(r))?.code||'—')}</td>`:''}
-    <td><select class="ci" ${fk('actId')}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}</td>
+    <td><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}</td>
     <td class="mono" style="white-space:nowrap">${w!=null?'Sem '+w:'—'}</td>
     <td><select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></td>
     <td>${gsel(r,fk)}</td>
@@ -196,6 +201,8 @@ function renderRestr(main){
     if(SCK()&&f==='actId'){const x=S.act.get(t.value);if(!x||!myScsI().includes(x.sc)){toast('Elige una actividad de tu partida.');render();return}n.sc=x.sc}if(f==='grp'&&t.value==='campo')n.area='';
     if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';if(f==='actId'&&t.value)n.pisoId=pisoOfAct(t.value);
     t.dataset.o=t.value;apply([op('restr',r.id,n)])};
-  main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
+  main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.alz)actFill(e.target);if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
+  main.onmousedown=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
+  main.ontouchstart=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
 }
 

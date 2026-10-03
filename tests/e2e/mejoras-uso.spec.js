@@ -141,6 +141,10 @@ test('PPC semanal: el Excel sale en el formato de la empresa', async ({ page }) 
   expect(rows).toContainEqual([1, 'Redes empotradas', 'pto', 20, 'S1', 1, '', '', '', '']);
   // pie: confiabilidad = días cumplidos / días programados
   const pie = Object.keys(ws).find(k => ws[k].v === 'CONFIABILIDAD DE LA PROGRAMACIÓN');expect(pie).toBeTruthy();
+  // se puede filtrar: por piso, ambiente y subcontratista (columnas al costado del formato)
+  expect(ws['!autofilter'].ref).toMatch(/^B9:W\d+$/);
+  expect(['U9', 'V9', 'W9'].map(v)).toEqual(['PISO', 'AMBIENTE', 'SUBCONTRATISTA']);
+  expect(['W13', 'W14', 'W15'].map(v)).toContain('SC ELECTRICAS');
   const fr = pie.slice(1);expect([v('I' + fr), v('M' + fr), v('Q' + fr), v('S' + fr)]).toEqual([2, 1, 1, 0.5]);
   noErrors(errors, 'excel ppc');
 });
@@ -153,4 +157,59 @@ test('Causas: el cuadro de la empresa en Configuración y la lista antigua pasa 
   await expect(page.locator('#main .cimpr', { hasText: 'Cliente - Supervisión' })).toContainText('CLI');
   expect(await page.evaluate(() => [cncCode('Clima'), cncCode('Mano de obra'), cncImp('Diseño'), cncImp('Subcontratas')])).toEqual(['EXT', 'SC', false, true]);
   noErrors(errors, 'causas');
+});
+
+test('Lookahead: se abre en modo consulta; «Editar» habilita la edición', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', editar: false });
+  const name = page.locator('tr[data-a="e0"] input[data-f="name"]');
+  await expect(name).toHaveAttribute('readonly', '');
+  await expect(page.locator('#gw')).toHaveClass(/lkro/);
+  await expect(page.locator('tr[data-a="e0"] [data-actmenu]')).toHaveCount(0);
+  // tocar un día no programa nada
+  const d = await page.evaluate(() => wshift(todayIso(), 3));
+  await page.locator(`tr[data-a="e0"] td.d[data-d="${d}"]`).click();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(id => window.__dbGet('acts', id).days, 'e0')).not.toContain(d);
+  // arrastrar desplaza la tabla
+  await page.setViewportSize({ width: 900, height: 600 });
+  const box = await page.locator(`tr[data-a="e0"] td.d[data-d="${d}"]`).boundingBox();
+  const sl0 = await page.locator('#gw').evaluate(g => g.scrollLeft);
+  await page.mouse.move(box.x + 5, box.y + 5); await page.mouse.down(); await page.mouse.move(box.x - 200, box.y + 5, { steps: 5 }); await page.mouse.up();
+  expect(await page.locator('#gw').evaluate(g => g.scrollLeft)).toBeGreaterThan(sl0);
+  // Editar
+  await page.click('#fedit');
+  await expect(page.locator('#fedit')).toContainText('Terminar edición');
+  await expect(name).not.toHaveAttribute('readonly', '');
+  await page.locator('#gw').evaluate(g => { g.scrollLeft = 0; });
+  await page.locator(`tr[data-a="e0"] td.d[data-d="${d}"]`).click();
+  await expect.poll(() => page.evaluate(id => window.__dbGet('acts', id).days, 'e0')).toContain(d);
+  await page.click('#fedit');
+  await expect(name).toHaveAttribute('readonly', '');
+  noErrors(errors, 'modo consulta');
+});
+
+test('lo que llega de la base no pisa un cambio propio que aún no sale', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  const r = await page.evaluate(async () => {
+    const x = S.act.get('e0'); QK['acts/e0'] = 1; S.act.set('e0', { ...x, days: ['2026-10-20'] });
+    await window.firebase.firestore().collection('acts').doc('t0').update({ name: 'Otro cambio' });
+    await new Promise(r => setTimeout(r, 50));
+    const out = S.act.get('e0').days; delete QK['acts/e0']; return out;
+  });
+  expect(r).toEqual(['2026-10-20']);
+  noErrors(errors, 'cola');
+});
+
+test('Lookahead: el Excel se puede filtrar y repite el ambiente en cada fila', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  await conExcel(page);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bexport')]);
+  const wb = XLSX.read(readFileSync(await dl.path()));
+  const ws = wb.Sheets.Lookahead;const v = a => (ws[a] || {}).v;
+  expect(v('A1')).toBe('LOOKAHEAD');
+  expect(ws['!autofilter'].ref).toMatch(/^A9:J\d+$/);
+  const rows = [];for (let r = 10; r < 20; r++) rows.push([v('A' + r), v('B' + r), v('E' + r)]);
+  expect(rows).toContainEqual(['SC TARRAJEO', 'A-1', 'Tarrajeo de muros']);
+  for (const n of ['Restricciones', 'Avance diario', 'PPC semanal']) expect(wb.Sheets[n]['!autofilter'], n).toBeTruthy();
+  noErrors(errors, 'excel lookahead');
 });
