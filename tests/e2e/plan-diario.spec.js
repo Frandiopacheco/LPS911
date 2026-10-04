@@ -202,19 +202,28 @@ test('el subcontratista indica su fuerza laboral y arrastra sus cuadrillas al pl
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8] });
   await page.locator('#mpanel [data-fz="open"]').click();
   const m = page.locator('#lqm');
-  await expect(m).toContainText('Personal en obra');
+  await expect(m).toContainText('Personal de C1');
   await m.locator('[data-ff="esp"]').first().fill('Gasfitero');
-  await m.locator('[data-fn="0|1"]').click(); // 2 operarios
+  await m.locator('.lqc').evaluate(c => { c.__mark = 1; });
+  await m.locator('[data-fn="0|1"]').click(); // 2 operarios en C1
+  await expect(m.locator('[data-fnv="0"]')).toHaveText('2');
+  expect(await m.locator('.lqc').evaluate(c => c.__mark)).toBe(1); // no se volvió a armar la ventana (no parpadea)
+  await expect(m.locator('[data-fqn="0"]')).toHaveText('3 p.');
   await m.locator('[data-fh="e"]').click();
-  await m.locator('[data-fqadd]').click(); // C2
+  await m.locator('[data-fqadd]').click(); // C2, queda elegida
+  await expect(m).toContainText('Personal de C2');
+  await m.locator('[data-fqs="0"]').click(); // volver a C1: conserva lo editado
+  await expect(m.locator('[data-ff="esp"]').first()).toHaveValue('Gasfitero');
   await m.locator('[data-fok]').click();
-  await expect.poll(async () => (await fz(page) || {}).cuad?.map(q => q.id)).toEqual(['C1', 'C2']);
+  await expect.poll(async () => (await fz(page) || {}).cuad?.map(q => [q.id, q.n])).toEqual([['C1', 3], ['C2', 1]]);
   const f = await fz(page);
-  expect(f.items[0]).toMatchObject({ cat: 'Operario', esp: 'Gasfitero', n: 2 });
+  expect(f.items).toContainEqual({ cat: 'Operario', esp: 'Gasfitero', n: 2 });
   expect(f.hor.t).toBe('e');
-  expect(await page.evaluate(() => window.__dbGet('pdz', 'fzl_c1').items.length)).toBe(2); // se copia al día siguiente
+  expect(await page.evaluate(() => window.__dbGet('pdz', 'fzl_c1').cuad.length)).toBe(2); // se copia al día siguiente
   await expect(page.locator('#mcqb')).toBeVisible();
-  await expect(page.locator('#mpanel .fzc')).toContainText('3 personas');
+  await expect(page.locator('#mpanel .fzc')).toContainText('4 personas');
+  // mientras el SC reparte no se dibuja el achurado de cruces
+  expect(await page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBe(0);
   // arrastrar C1 a «Pruebas hidráulicas» y luego a «Pruebas de presión»
   await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s9"]');
   await expect.poll(async () => (await fz(page)).asg?.s9?.c).toBe('C1');
@@ -222,13 +231,19 @@ test('el subcontratista indica su fuerza laboral y arrastra sus cuadrillas al pl
   await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1·2');
   await expect(page.locator('#mstage [data-cqt="s9"]')).toHaveText('C1');
   await expect(page.locator('#mcqb')).toContainText('Todas con cuadrilla');
-  // la etiqueta se arrastra a la papelera para quitarla
-  await arrastrar(page, '#mstage [data-cqt="s8"]', '#cqtrash');
+  // la etiqueta soltada fuera de las actividades se quita
+  await arrastrar(page, '#mstage [data-cqt="s8"]', '#mcqb .cqh');
   await expect.poll(async () => Object.keys((await fz(page)).asg)).toEqual(['s9']);
   await expect(page.locator('#mcqb')).toContainText('1 sin cuadrilla');
   // Ctrl+Z deshace
   await page.keyboard.press('Control+z');
   await expect.poll(async () => Object.keys((await fz(page)).asg).sort()).toEqual(['s8', 's9']);
+  // «Limpiar todo» deja el reparto vacío
+  await page.locator('#mcqb [data-cqclr]').click();
+  await expect.poll(async () => Object.keys((await fz(page)).asg)).toEqual([]);
+  // en la PC, un clic en la cuadrilla no deja el plano «pegado»: solo muestra su recorrido
+  await page.locator('#mcqb [data-cqd="C1"]').click();
+  await expect(page.locator('#mcqb')).not.toContainText('Toca la actividad');
   noErrors(errors, 'cuadrillas');
 });
 
@@ -259,5 +274,15 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
   await expect(b).toContainText('Sin fuerza laboral indicada');
   await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1·2');
   await expect(page.locator('#mcqb')).toBeHidden(); // el ingeniero no reparte
+  // las flechas del recorrido se ven solo al elegir la cuadrilla
+  const flechas = () => page.locator('#mstage svg polyline[stroke-dasharray="9 7"]').count();
+  expect(await flechas()).toBe(0);
+  await b.locator('[data-cqf="c1|C1"]').click();
+  await expect.poll(flechas).toBe(1);
+  // el ingeniero puede ocultar el achurado de cruces
+  await page.locator('#mcxb [data-cxtog]').click();
+  expect(await page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBeGreaterThan(0);
+  await page.locator('#mcxb [data-cxv]').click();
+  await expect.poll(() => page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBe(0);
   noErrors(errors, 'equipos');
 });
