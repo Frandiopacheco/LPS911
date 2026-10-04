@@ -30,6 +30,9 @@ test.beforeEach(async () => {
     await S('members/campo2@obra.pe', { role: 'campo', name: 'Campo designado', cli: true });
     await S('members/sc2@obra.pe', { role: 'sc', name: 'SC con marca', sc: 'c-gabel', scs: ['c-gabel'], cli: true });
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
+    await S('members/planner@obra.pe', { role: 'planner', name: 'Planner' });
+    await S('mp/n1', { tipo: 'part', name: 'Tabiquería', ini: '2026-10-05', fin: '2026-11-20' });
+    await S('mpver/1', { n: 1, st: 'pend', by: 'planner@obra.pe', items: {} });
     await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
     await S('lib/l-obs', { actId: 'x1', sc: 'c-gabel', st: 'obs', by: 'sc@obra.pe' });
     await S('lib/l-lib', { actId: 'x1', sc: 'c-gabel', st: 'lib', by: 'sc@obra.pe' });
@@ -371,4 +374,38 @@ test('liberaciones: el SC pide (también fuera del lookahead) pero no marca crí
   await assertFails(updateDoc(doc(sc, 'lib/l-sol'), { sup: true, rest: 'Tarrajeo' }));
   await assertSucceeds(updateDoc(doc(sc, 'lib/l-free'), { note: 'lista desde las 8' }));
   await assertSucceeds(updateDoc(doc(cal, 'lib/l-free'), { st: 'pro', crit: true, rest: 'Tarrajeo', sup: true }));
+});
+test('plan maestro: solo el administrador y el planner lo leen y editan', async () => {
+  const pl = user('planner@obra.pe');
+  await assertSucceeds(getDoc(doc(pl, 'mp/n1')));
+  await assertSucceeds(setDoc(doc(pl, 'mp/n2'), { tipo: 'pp', name: 'Tabiquería', pisoId: 'p1', parent: 'n1' }));
+  await assertSucceeds(setDoc(doc(pl, 'mpav/2026-10-31'), { pct: { n2: 10 } }));
+  await assertSucceeds(setDoc(doc(pl, 'mpl/x1'), { mp: 'n2' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'mp/n3'), { tipo: 'hito', name: 'Fin de obra' }));
+  for (const em of ['editor@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'campo@obra.pe', 'ot@obra.pe', 'veedor@obra.pe']) {
+    await assertFails(getDoc(doc(user(em), 'mp/n1')));
+    await assertFails(getDocs(collection(user(em), 'mp')));
+    await assertFails(setDoc(doc(user(em), 'mp/n9'), { name: 'x' }));
+    await assertFails(getDoc(doc(user(em), 'mpver/1')));
+    await assertFails(setDoc(doc(user(em), 'mpl/x1'), { mp: 'n1' }));
+  }
+  await assertFails(getDoc(doc(cap('cap1'), 'mp/n1')));
+});
+test('plan maestro: el planner no toca el lookahead ni nada fuera del maestro', async () => {
+  const pl = user('planner@obra.pe');
+  await assertSucceeds(getDoc(doc(pl, 'acts/x1')));
+  await assertFails(updateDoc(doc(pl, 'acts/x1'), { name: 'otro' }));
+  await assertFails(setDoc(doc(pl, 'restr/r9'), { actId: 'x1', status: 'pend' }));
+  await assertFails(setDoc(doc(pl, 'daily/2026-10-01_p1'), { recs: {} }));
+  await assertFails(setDoc(doc(pl, 'members/otro@obra.pe'), { role: 'admin' }));
+  await assertFails(getDocs(collection(pl, 'members')));
+});
+test('plan maestro: el planner envía versiones a aprobación; solo el administrador aprueba', async () => {
+  const pl = user('planner@obra.pe');
+  await assertSucceeds(setDoc(doc(pl, 'mpver/2'), { n: 2, st: 'pend', items: {} }));
+  await assertFails(setDoc(doc(pl, 'mpver/3'), { n: 3, st: 'ok', items: {} }));
+  await assertFails(updateDoc(doc(pl, 'mpver/1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'mpver/1'), { st: 'ok' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'mpver/4'), { n: 4, st: 'ok', items: {} }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mpver/4')));
 });

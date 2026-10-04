@@ -5,8 +5,8 @@ import { openApp, noErrors } from './helpers.js';
 test('el administrador entra a Hoy: primero lo pendiente, lo que está al día al final', async ({ page }) => {
   const errors = await openApp(page);
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'hoy');
-  const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy));
-  expect(k).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'prop', 'np']);
+  // el plan maestro (solo administrador y planner) es informativo: va con lo que está al día
+  await expect.poll(() => page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy))).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'mp', 'prop', 'np']);
   await expect(page.locator('[data-hoy="campo"]')).toContainText('sin registrar');
   await page.click('[data-hoy="campo"] [data-hgo]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'campo');

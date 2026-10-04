@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, expectTabOk, visibleTabs, noErrors, openTab } from './helpers.js';
 
-const ROLES = ['admin', 'editor', 'campo', 'sc', 'calidad', 'ot', 'veedor', 'lector'];
+const ROLES = ['admin', 'editor', 'campo', 'sc', 'calidad', 'ot', 'veedor', 'lector', 'planner'];
 
 for (const as of ROLES) {
   test(`escritorio · ${as}: todas las pestañas se dibujan`, async ({ page }) => {
@@ -90,7 +90,7 @@ test.describe('pestañas por rol', () => {
   });
   test('el orden sigue el ciclo Last Planner', async ({ page }) => {
     await openApp(page);
-    expect(await barra(page)).toEqual(['hoy', 'dash', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
+    expect(await barra(page)).toEqual(['hoy', 'dash', 'maestro', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
   });
 });
 
