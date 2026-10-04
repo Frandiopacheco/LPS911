@@ -9,6 +9,48 @@ function svgBarsV(data,{h=220}={}){ // data [{label,v(0..1),sub}]
   data.forEach((d,i)=>{const cx=L+10+i*((W-L-10)/data.length)+((W-L-10)/data.length)/2;const bh=Math.max(d.v>0?2:0,ih*d.v);const y=T+ih-bh;
     s+=`<g><title>${esc(d.label)}: ${pct(d.v)}${d.sub?' · '+esc(d.sub):''}</title><path class="bar" d="M${cx-bw/2},${T+ih} V${y+Math.min(4,bh)} q0,-4 4,-4 h${bw-8} q4,0 4,4 V${T+ih} Z"/><text class="lab" x="${cx}" y="${y-5}" text-anchor="middle">${pct(d.v)}</text><text x="${cx}" y="${h-12}" text-anchor="middle">${esc(d.label)}</text></g>`});
   return s+'</svg>'}
+/* PPC semanal histórico: dos líneas (bruto y del SC) en una sola escala 0–100 %, promedio de las semanas completas y
+   una zona de toque por semana con el detalle. La línea del SC va punteada (no se distingue solo por color). */
+function svgLines(pts,{h=230}={}){ // pts [{label,a,b,sub,part}]
+  const n=pts.length;const L=40,R=78,T=16,B=30,W=Math.max(380,n*44+L+R),ih=h-T-B,iw=W-L-R;const X=i=>L+(n>1?i*iw/(n-1):iw/2),Y=v=>T+ih*(1-v);
+  let s=`<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="PPC semanal histórico: bruto y del SC">`;
+  [0,.25,.5,.75,1].forEach(g=>{const y=Y(g);s+=`<line class="gl" x1="${L}" x2="${W-R+6}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${g*100}%</text>`});
+  const full=pts.filter(p=>!p.part&&p.a!=null);if(full.length>1){const av=full.reduce((t,p)=>t+p.a,0)/full.length;const y=Y(av);s+=`<line class="avg" x1="${L}" x2="${W-R+6}" y1="${y}" y2="${y}"/><text class="avgl" x="${L+6}" y="${y-5}">prom. ${pct(av)}</text>`}
+  const line=(k,c)=>{const P=pts.map((p,i)=>p[k]==null?null:[X(i),Y(p[k])]);let d='',on=false;P.forEach(q=>{if(!q){on=false;return}d+=(on?'L':'M')+q[0].toFixed(1)+','+q[1].toFixed(1);on=true});
+    return`<path class="ln ${c}" d="${d}"/>`+P.map((q,i)=>q?`<circle class="pt ${c}${pts[i].part?' part':''}" cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="4"/>`:'').join('')};
+  s+=line('b','sc')+line('a','br');
+  /* rótulo directo al final de cada línea (se separan si quedan encima) */
+  const li=n-1;const la=pts[li].a,lb=pts[li].b;if(la!=null){let ya=Y(la)+4,yb=lb!=null?Y(lb)+4:null;if(yb!=null&&Math.abs(ya-yb)<13){if(ya<=yb){ya-=7;yb+=7}else{ya+=7;yb-=7}}
+    s+=`<text class="lbl" x="${X(li)+8}" y="${ya}">bruto ${pct(la)}</text>`;if(yb!=null)s+=`<text class="lbl" x="${X(li)+8}" y="${yb}">SC ${pct(lb)}</text>`}
+  pts.forEach((p,i)=>{const x0=n>1?X(i)-iw/(n-1)/2:L,w=n>1?iw/(n-1):iw;s+=`<g class="hit"><title>${esc(p.label)}${p.part?' (en evaluación)':''}: bruto ${pct(p.a)} · del SC ${pct(p.b)}${p.sub?' · '+esc(p.sub):''}</title><rect x="${Math.max(L,x0)}" y="${T}" width="${w}" height="${ih}" fill="transparent"/></g><text x="${X(i)}" y="${h-10}" text-anchor="middle">${esc(p.label)}</text>`});
+  return s+'</svg>'}
+const linesLegend=()=>`<div class="lnleg"><span><i class="br"></i>PPC bruto</span><span><i class="sc"></i>PPC del SC (sin lo no imputable)</span><span><i class="avg"></i>Promedio de semanas completas</span></div>`;
+/** puntos del histórico: la última semana a medio evaluar va marcada (hueca) y no entra al promedio */
+const ppcHistPts=ppcs=>ppcs.map(x=>({label:'S'+x.wk,a:x.ppc,b:x.ppcSc??x.ppc,part:x.ev<x.n,sub:`${x.ok} de ${x.n} compromisos${x.nimp?` · ${x.nimp} no imputables`:''}`}));
+/* reprogramaciones del plan diario de la semana n (marcas ↷ del lookahead): por causa, por SC y a quién afectó cada uno */
+const reproCause=v=>cncKey(v.cnc||(/personal/i.test(v.m||'')?'Subcontratas':''));
+function reproData(n,vset){const wd=new Set(weekDays(n));const L=[];
+  for(const x of[...S.act.values(),...(ARCH.act?ARCH.act.values():[])]){if(!x.rpl)continue;const pid=pisoOfAmb(x.ambId);if(!vset.has(pid))continue;for(const[d,v]of Object.entries(x.rpl))if(v&&wd.has(d))L.push({x,d,v,lead:!v.tr})}
+  const byC={},byS={};const g=sc=>byS[sc]=byS[sc]||{lead:0,tren:0,imp:0,afe:0};
+  for(const o of L){const so=g(o.x.sc);if(o.lead){so.lead++;byC[reproCause(o.v)]=(byC[reproCause(o.v)]||0)+1;if(o.v.imp!==false&&(!o.v.rsc||o.v.rsc===o.x.sc))so.imp++;if(o.v.rsc&&o.v.rsc!==o.x.sc)g(o.v.rsc).afe++}else so.tren++}
+  return{L,byC,byS,lead:L.filter(o=>o.lead).length,tren:L.filter(o=>!o.lead).length}}
+function reproCard(n,vset){const R=reproData(n,vset);if(!R.L.length)return`<div class="card"><h2>Reprogramaciones del plan diario <span class="sub">semana ${n}</span></h2><div class="pad"><div class="empty">No se reprogramó nada desde el plan diario esta semana.</div></div></div>`;
+  const prog=Object.entries(R.byC).filter(([k])=>/^PROG/.test(k)).reduce((t,[,v])=>t+v,0);
+  const rows=Object.entries(R.byS).sort((a,b)=>(b[1].lead+b[1].afe)-(a[1].lead+a[1].afe)||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  return`<div class="card chart"><h2>Reprogramaciones del plan diario <span class="sub">semana ${n} · cuánto se mueve y por qué</span></h2><div class="pad">
+    <div class="tiles"><div class="tile"><span class="k">Reprogramadas</span><span class="v">${R.lead}</span></div><div class="tile"><span class="k">Arrastradas en el tren</span><span class="v">${R.tren}</span></div><div class="tile" title="Lo reprogramado porque estaba mal programado: muestra cuánto falta sincerar el lookahead"><span class="k">Por programación</span><span class="v">${R.lead?pct(prog/R.lead):'—'}<small> ${prog}</small></span></div></div>
+    ${svgBarsH(Object.entries(R.byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}
+    <div class="tscroll"><table class="t rt"><thead><tr><th>Subcontratista</th><th class="r">Reprogramadas</th><th class="r">En el tren</th><th class="r" title="Reprogramadas por una causa que le corresponde (personal, la aceptó mal programada…)">Imputables a él</th><th class="r" title="Actividades de otras partidas que no fueron porque este SC no entregó el frente">Afectó a otras partidas</th></tr></thead><tbody>
+    ${rows.map(([sc,o])=>`<tr><td data-l="Subcontratista"><span class="chip" style="--c:${conOf(sc).color};border:0;background:none;padding-left:0"><i></i>${esc(conOf(sc).name)}</span></td><td class="r" data-l="Reprogramadas">${o.lead||''}</td><td class="r" data-l="En el tren">${o.tren||''}</td><td class="r" data-l="Imputables a él">${o.imp||''}</td><td class="r${o.afe?' no':''}" data-l="Afectó a otras">${o.afe||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
+/* restricciones registradas en la semana n: por causa (la del cuadro si viene del plan diario) y por SC */
+function restrCauseCard(n,vset){const wd=new Set(weekDays(n));const today=todayIso();const L=[...S.res.values()].filter(r=>r.created&&wd.has(r.created)&&vset.has(restrPiso(r)));
+  if(!L.length)return'';const cause=r=>r.cnc?cncKey(r.cnc):(r.type||'Sin causa registrada');const byC={},byS={};
+  for(const r of L){byC[cause(r)]=(byC[cause(r)]||0)+1;const sc=r.sc||((S.act.get(r.actId)||{}).sc)||'';const o=byS[sc]=byS[sc]||{n:0,lib:0,late:0,pend:0};o.n++;if(r.status==='lib'){o.lib++;if(r.need&&r.freed&&r.freed>r.need)o.late++}else{o.pend++;if(r.need&&r.need<today)o.late++}}
+  const rows=Object.entries(byS).sort((a,b)=>b[1].n-a[1].n);
+  return`<div class="card chart"><h2>Restricciones registradas <span class="sub">semana ${n} · por causa y por subcontratista</span></h2><div class="pad">
+    ${svgBarsH(Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}
+    <div class="tscroll"><table class="t rt"><thead><tr><th>Subcontratista</th><th class="r">Registradas</th><th class="r">Liberadas</th><th class="r">Pendientes</th><th class="r" title="Liberadas después de la fecha requerida o pendientes ya vencidas">Fuera de fecha</th></tr></thead><tbody>
+    ${rows.map(([sc,o])=>`<tr><td data-l="Subcontratista">${sc?`<span class="chip" style="--c:${conOf(sc).color};border:0;background:none;padding-left:0"><i></i>${esc(conOf(sc).name)}</span>`:'<span class="mu">Sin partida</span>'}</td><td class="r" data-l="Registradas">${o.n}</td><td class="r ok" data-l="Liberadas">${o.lib||''}</td><td class="r" data-l="Pendientes">${o.pend||''}</td><td class="r${o.late?' no':''}" data-l="Fuera de fecha">${o.late||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
 function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
   const rowH=26,W=380,L=122,R=44,h=data.length*rowH+8;const mx=Math.max(1,...data.map(d=>d.max??d.v));
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
@@ -125,11 +167,12 @@ function renderInd(main){
   {const nd=dd.map(d=>({d,n:npItems([d],vset).length})).filter(o=>o.n);if(nd.length)h+=`<div class="card chart"><h2>Trabajo no programado por día <span class="sub">frentes vistos en obra sin estar programados · semanas ${U.week-2}–${U.week}</span></h2><div class="pad">${svgBarsH(nd.map(o=>({label:DOWN[(pd(o.d).getUTCDay()+6)%7].slice(0,3)+' '+fmtD(o.d),v:o.n})),v=>v+'')}</div></div>`}
   if(Object.keys(dCnc).length)h+=`<div class="card chart"><h2>Causas registradas en campo <span class="sub">Parcial y No cumplido · mismas semanas</span></h2><div class="pad">${svgBarsH(Object.entries(dCnc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
   h+=`<div class="charts">
-   <div class="card chart"><h2>PPC por semana <span class="sub">% de compromisos cumplidos</span></h2><div class="pad">${ppcs.length?svgBarsV(ppcs.map(x=>({label:'S'+x.wk,v:x.ppc,sub:x.ok+' de '+x.n}))):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
+   <div class="card chart"><h2>PPC semanal histórico <span class="sub">todas las semanas congeladas</span></h2><div class="pad tscroll">${ppcs.length?linesLegend()+svgLines(ppcHistPts(ppcs)):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
    ${!U.piso&&vp.length>1?`<div class="card chart"><h2>PPC por piso <span class="sub">semana ${U.week}</span></h2><div class="pad">${pisoP.length?svgBarsH(pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,sub:x.st.ok+' de '+x.st.n})),pct):`<div class="empty">Ningún piso congeló la semana ${U.week}.</div>`}</div></div>`:''}
    <div class="card chart"><h2>Causas de no cumplimiento <span class="sub">acumulado</span></h2><div class="pad">${cncL.length?svgBarsH(cncL.map(([k,v])=>({label:k,v})),v=>v+''):'<div class="empty">Sin incumplimientos registrados.</div>'}</div></div>
    <div class="card chart"><h2>PPC por subcontratista <span class="sub">semana ${U.week}</span></h2><div class="pad">${Object.keys(scP).length?svgBarsH(Object.entries(scP).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n+(o.nimp||o.ext?` · PPC del SC ${pct(o.ppcSc)}${o.nimp?` (${o.nimp} no imput.)`:''}${o.ext?` · ${o.ext} de otras partidas`:''}`:'')})),pct):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>
   </div>`;
+  h+=reproCard(U.week,vset)+restrCauseCard(U.week,vset);
   h+=ncCard(wSel);
   if(canCli())h+=cliPpcCard(vset);
   const days=winDays();const load={};
