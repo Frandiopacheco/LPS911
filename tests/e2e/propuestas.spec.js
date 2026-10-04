@@ -212,3 +212,40 @@ test('15 · el SC con dos partidas no puede cambiar la partida de una actividad 
   expect(await page.evaluate(() => ((__dbGet('lhprop', 'c2') || {}).items || {}).i0 || null)).toBeNull();
   noErrors(errors, 'partida en propuesta');
 });
+
+/* ---- paquete C: varios usuarios a la vez y cruces entre propuestas ---- */
+test('4 · dos personas marcan días distintos de la misma actividad: quedan ambos con sus cantidades', async ({ page }) => {
+  const base = { ...QACT, days: ['2026-10-01'], qty: { '2026-10-01': 10 } };
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'q1', base]] });
+  /* otra persona ya guardó el 6 con 8 unidades; esta pantalla todavía no lo recibió */
+  await page.evaluate(() => { const d = __DB.acts.get('q1'); d.days = [...d.days, '2026-10-06']; d.qty = { ...d.qty, '2026-10-06': 8 }; });
+  await page.evaluate(() => { const x = S.act.get('q1'); apply([op('acts', 'q1', withQty(x, '2026-10-05', 5))]); });
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q1').qty['2026-10-05'])).toBe(5);
+  const x = await page.evaluate(() => __dbGet('acts', 'q1'));
+  expect([...x.days].sort()).toEqual(['2026-10-01', '2026-10-05', '2026-10-06']);
+  expect(x.qty).toEqual({ '2026-10-01': 10, '2026-10-05': 5, '2026-10-06': 8 });
+  /* al recibirlo, la pantalla lo ve ordenado */
+  await page.evaluate(() => { const d = __DB.acts.get('q1'); __DB.acts.set('q1', { ...d }); });
+  await page.evaluate(() => { const x = S.act.get('q1'); apply([op('acts', 'q1', { ...x, name: 'Redes empotradas 2' })]); });
+  await expect.poll(() => page.evaluate(() => S.act.get('q1').days)).toEqual(['2026-10-01', '2026-10-05', '2026-10-06']);
+  /* quitar un día solo quita ese */
+  await page.evaluate(() => { const d = __DB.acts.get('q1'); d.days = [...d.days, '2026-10-07']; });
+  await page.evaluate(() => { const x = S.act.get('q1'); apply([op('acts', 'q1', withQty(x, '2026-10-05', null))]); });
+  await expect.poll(() => page.evaluate(() => [...__dbGet('acts', 'q1').days].sort())).toEqual(['2026-10-01', '2026-10-06', '2026-10-07']);
+  noErrors(errors, 'días a la vez');
+});
+
+test('14 · la revisión muestra el cruce entre dos propuestas del mismo ambiente', async ({ page }) => {
+  const E0 = { ambId: 'a1', sc: 'c2', name: 'Entubado empotrado', und: 'ml', metrado: 40, days: ['2026-10-01', '2026-10-02'], order: 20 };
+  const errors = await openApp(page, { tab: 'look', extra: [
+    prop({ i0: item(moved(I0, ['2026-10-07']), I0) }),
+    ['lhprop', 'c2', { sc: 'c2', items: { e0: item(moved(E0, ['2026-10-07']), E0) }, sentAt: 1 }]] });
+  await revision(page);
+  const c = cell(page, 'i0', '2026-10-07');
+  await expect(c).toHaveClass(/rvc/);
+  expect(await c.getAttribute('title')).toContain('(propuesta)');
+  /* y en la lista de propuestas */
+  await page.click('#ppbar [data-pp="list"]');
+  await expect(page.locator('#ppm')).toContainText('Otra propuesta pendiente en el mismo ambiente');
+  noErrors(errors, 'cruces entre propuestas');
+});

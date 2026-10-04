@@ -54,7 +54,9 @@ function propDesc(id,it){const off=(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||n
 /* cruces con otras disciplinas para ayudar a decidir */
 function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it.after||off;if(!x)return A;const ds=new Set(days||x.days||[]);
   if(ds.size){const oth=new Map();for(const y of S.act.values()){if(y.id===id||y.ambId!==x.ambId||y.sc===x.sc)continue;const c=(y.days||[]).filter(d=>ds.has(d));if(c.length)oth.set(y.id,{y,c})}
-    oth.forEach(({y,c})=>A.push({t:'amb',h:`Mismo ambiente esos días: <b>${esc(conOf(y.sc).name)}</b> ${esc(y.name)} (${rngTxt(c)})`}))}
+    oth.forEach(({y,c})=>A.push({t:'amb',h:`Mismo ambiente esos días: <b>${esc(conOf(y.sc).name)}</b> ${esc(y.name)} (${rngTxt(c)})`}));
+    for(const d of PROP.values())for(const[oid,o]of Object.entries(d.items||{})){if(!o||!o.sent||!o.after||oid===id||d.sc===x.sc||o.after.ambId!==x.ambId)continue;const c=(o.after.days||[]).filter(dd=>ds.has(dd));
+      if(c.length)A.push({t:'amb',h:`Otra propuesta pendiente en el mismo ambiente: <b>${esc(conOf(d.sc).name)}</b> ${esc(o.after.name||'')} (${rngTxt(c)})`})}}
   const rs=off?restrPend(id):[];rs.forEach(r=>A.push({t:'res',h:'Restricción pendiente: '+esc(rTxt(r))}));
   const pid=pisoOfAmb(x.ambId);const ch=new Set();const od=new Set(off?off.days||[]:[]);(days||x.days||[]).forEach(d=>{if(!od.has(d))ch.add(d)});od.forEach(d=>{if(!ds.has(d))ch.add(d)});
   const wks=[...new Set([...ch].map(d=>weekOf(d)))].filter(w=>{const wk=S.wk.get(wkId(w,pid));return wk&&wk.frozenAt});wks.forEach(w=>A.push({t:'frz',h:`Afecta la semana ${w}, que ya está congelada en el plan semanal`}));
@@ -104,9 +106,9 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
     await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const aref=fcol('acts').doc(id);
       const ps=await tx.get(pref);const srv=ps.exists?((ps.data()||{}).items||{})[id]:null;
       if(!srv||!srv.sent||propVer(srv)!==propVer(it))throw new PropStop('El subcontratista cambió esta propuesta mientras la revisabas: revisa la versión nueva.','ver');
-      if(o){const as=await tx.get(aref);const cur=as.exists?as.data():null;
+      if(o){const as=await tx.get(aref);const cur=as.exists?actNorm(as.data()):null;
         if(canon(cur?strip(cur):null)!==canon(o.before?strip(o.before):null))throw new PropStop('La actividad cambió hace un momento (otro usuario o un cambio que aún se estaba guardando). Vuelve a intentarlo.','act');
-        const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body);if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
+        const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body,'acts');if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
       const FP=firebase.firestore.FieldPath;tx.update(pref,new FP('items',id),null,new FP('hist',key),h)})}
   catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
   PDBUSY.delete(key0);
@@ -199,7 +201,8 @@ function revSwap(){const off=S.act;const v=new Map(off);
   S.act=v;return()=>{S.act=off}}
 function revShift(x){const o=x._rv&&x._rv.off;if(!o||x._rv.del)return 0;const a=[...(o.days||[])].sort()[0],b=[...(x.days||[])].sort()[0];if(!a||!b)return 0;return wdist(a,b)}
 function revConflicts(x){const out=new Map();if(!x._rv||x._rv.del)return out;const ds=new Set(x.days||[]);
-  for(const y of S.act.values()){if(y.id===x.id||y.ambId!==x.ambId||y.sc===x.sc||y._rv)continue;(y.days||[]).forEach(d=>{if(ds.has(d)){const L=out.get(d)||[];L.push(conOf(y.sc).name+' · '+y.name);out.set(d,L)}})}return out}
+  /* también contra las otras propuestas pendientes (con los días que proponen), no solo contra lo vigente */
+  for(const y of S.act.values()){if(y.id===x.id||y.ambId!==x.ambId||y.sc===x.sc||(y._rv&&y._rv.del))continue;(y.days||[]).forEach(d=>{if(ds.has(d)){const L=out.get(d)||[];L.push(conOf(y.sc).name+' · '+y.name+(y._rv?' (propuesta)':''));out.set(d,L)}})}return out}
 function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.length;const idx=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;
   return`<div class="ppb rv"><div class="rvl"><b>Revisando propuestas</b>
     <span class="rvchips"><button class="${!U.revSc?'on':''}" data-rvsc="">Todos <b>${[...cnt.values()].reduce((a,b)=>a+b,0)}</b></button>${[...cnt.entries()].sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="${U.revSc===sc?'on':''}" data-rvsc="${sc}" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></button>`).join('')}</span>

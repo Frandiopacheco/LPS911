@@ -63,6 +63,8 @@
   const now = () => Date.now();
   function resolve(v) {
     if (v === TS) return now();
+    if (v && v.__au) return [...new Set(v.__au)];
+    if (v && v.__ar) return [];
     if (Array.isArray(v)) return v.map(resolve);
     if (v && typeof v === 'object' && !(v instanceof FP)) { const o = {}; for (const [k, x] of Object.entries(v)) if (x !== DEL) o[k] = resolve(x); return o; }
     return v;
@@ -71,6 +73,7 @@
     const out = { ...(a || {}) };
     for (const [k, v] of Object.entries(b)) {
       if (v === DEL) { delete out[k]; continue; }
+      if (v && (v.__au || v.__ar)) { out[k] = arrOp(out[k], v); continue; }
       if (v && typeof v === 'object' && !Array.isArray(v) && v !== TS) out[k] = deepMerge(out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]) ? out[k] : {}, v);
       else out[k] = resolve(v);
     }
@@ -80,9 +83,11 @@
     let cur = o;
     for (let i = 0; i < path.length - 1; i++) { if (!cur[path[i]] || typeof cur[path[i]] !== 'object') cur[path[i]] = {}; cur = cur[path[i]]; }
     const k = path[path.length - 1];
-    if (v === DEL) delete cur[k]; else cur[k] = resolve(v);
+    if (v === DEL) delete cur[k]; else if (v && (v.__au || v.__ar)) cur[k] = arrOp(cur[k], v); else cur[k] = resolve(v);
   }
   class FP { constructor(...p) { this.p = p; } }
+  /* arrayUnion / arrayRemove como en Firestore: agregan sin repetir al final, o quitan */
+  function arrOp(cur, v) { const a = Array.isArray(cur) ? cur : []; return v.__au ? [...a, ...v.__au.filter(x => !a.includes(x))] : a.filter(x => !v.__ar.includes(x)); }
 
   // --- suscripciones ---
   const subs = new Set();
@@ -146,7 +151,7 @@
   window.firebase = {
     initializeApp() {}, apps: [],
     auth: Object.assign(() => auth, { GoogleAuthProvider: class {} }),
-    firestore: Object.assign(() => fs, { FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v, increment: n => n }, FieldPath: FP }),
+    firestore: Object.assign(() => fs, { FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => ({ __au: v }), arrayRemove: (...v) => ({ __ar: v }), increment: n => n }, FieldPath: FP }),
     database: Object.assign(() => ({ ref: () => ({ on() {}, off() {}, set: async () => {}, remove: async () => {}, onDisconnect: () => ({ remove: async () => {} }) }) }), { ServerValue: { TIMESTAMP: 0 } }),
   };
 })();
