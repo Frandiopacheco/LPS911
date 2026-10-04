@@ -2,6 +2,9 @@
 /* LPS 911 · Lookahead (grilla, edición, versiones, plantillas).
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 /* ================= LOOKAHEAD ================= */
+/** ficha corta de las restricciones pendientes de una actividad (al pasar el mouse por la «R» del lookahead) */
+function restrTip(aid){const L=typeof restrPend==='function'?restrPend(aid):[];const t=todayIso();if(!L.length)return'Restricción pendiente';
+  return L.map((r,i)=>`${L.length>1?(i+1)+'. ':''}⛔ ${r.desc||r.type||'Restricción'}${r.cnc?' · causa '+(cncCode(r.cnc)||r.cnc):r.type?' · '+r.type:''}\n   La libera: ${r.resp||(grpOf(r)==='area'&&r.area?r.area:'—')}${r.need?` · requerida ${fmtD(r.need)}${r.need<t?' (VENCIDA)':''}`:''}${r.byName?' · registró '+r.byName:''}`).join('\n')+'\n\nToca para verlas en Restricciones'}
 function tree(){
   const secBy={},ambBy={},actBy={};
   for(const s of S.sec.values()){const p=pisoOfSecObj(s);(secBy[p]=secBy[p]||[]).push(s)}
@@ -45,6 +48,7 @@ function buildLookShell(main){
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
+    <button class="ib" id="fhist" title="Quién cambió qué y cuándo: cambios del lookahead y decisiones sobre propuestas, por fecha">🕑 Historial</button>
     <button class="ib" id="fvsave" hidden>Guardar versión…</button><button class="ib" id="fvdel" hidden>Eliminar versión</button>
     <div class="bmore" id="bmore" hidden>
       <button class="ib" id="fact" title="Elegir una o varias actividades específicas (p. ej. Gabel y Pintura de 2da mano)">Actividades</button>
@@ -80,6 +84,7 @@ function buildLookShell(main){
   $('#fver').onchange=e=>{U.ver=e.target.value;if(U.ver)U.cliv=false;if(U.ver&&!U.verMode)U.verMode='ver';if(U.ver)loadVer(U.ver);gridRows=null;closePop();requestRender()};
   $('#fvm').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.verMode=b.dataset.v;gridRows=null;requestRender()};
   $('#fvsave').onclick=e=>saveVerMenu(e.currentTarget);
+  $('#fhist').onclick=()=>histOpen();
   $('#fvdel').onclick=async()=>{const v=LHI.get(U.ver);if(!v||!isAdmin)return;if(!confirm(`¿Eliminar la versión “${v.label}”? No se puede recuperar.`))return;
     try{const b=db.batch();Object.keys(v.pisos||{}).forEach(pid=>b.delete(fcol('lhver').doc(U.ver+'__'+pid)));b.delete(fcol('lhidx').doc(U.ver));await b.commit();VERD.delete(U.ver);U.ver='';toast('Versión eliminada');requestRender()}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}};
   $('#legend').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const id=c.dataset.id;let L=scSel();
@@ -216,11 +221,12 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
           let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
           if(i===0)h+=ambCells;
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
-          h+=`<td class="s4 act${(()=>{const nb=(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)+(typeof libState==='function'&&libState(x)?1:0);return nb>=2?' hb2':nb?' hb':''})()}">${x._rv?revCellHtml(x,rvSel):''}<input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof libBadge==='function'?libBadge(x).replace('class="lqbadge"',(pr.get(x.id)||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${pr.get(x.id)} restricción(es) pendiente(s)">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
+          h+=`<td class="s4 act${(()=>{const nb=(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)+(typeof libState==='function'&&libState(x)?1:0);return nb>=2?' hb2':nb?' hb':''})()}">${x._rv?revCellHtml(x,rvSel):''}<input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof libBadge==='function'?libBadge(x).replace('class="lqbadge"',(pr.get(x.id)||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=U.qmode==='metrado';
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
           h+=`<td class="ro cN">${st.n||''}</td><td class="ro cI">${fmtS(st.ini)}</td><td class="ro cF">${fmtS(st.fin)}</td>`;
+          const ptip=(x._rv||pv||PM())?propRowTip(x,pv):'';const ptt=ptip?' · Propuesta: '+esc(ptip):'';
           for(let k=0;k<nd;k++){const x2=days[k];const on=ds.has(x2.d);let cl='d';if(!isWork(x2.d))cl+=' hol';
             if(on){cl+=' on';if(k===0||!ds.has(days[k-1].d))cl+=' rs';if(k===nd-1||!ds.has(days[k+1].d))cl+=' re'}
             if(sd){if(on&&!sd.has(x2.d)&&!isNew)cl+=' add';if(!on&&sd.has(x2.d))cl+=' rem'}
@@ -229,7 +235,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
             if(cis&&!on&&cis.has(x2.d))cl+=' cin';if(on&&libDay(x,x2.d))cl+=' lib';if(x2.i===0)cl+=' wk0';if(x2.d===today)cl+=' tdy';if(x2.d===U.day)cl+=' dsel';if(a.hito===x2.d)cl+=' hito';
             /* día que no fue por decisión del plan diario: ↷ con el motivo y a dónde pasó */
             const rp=!on&&x.rpl&&x.rpl[x2.d];if(rp)cl+=' rpl';
-            const rc=x2.d<=today?recOf(x2.d,x.id):null;const mk=(rc?`<i class="dm ${ST[rc.status].c}">${ST[rc.status].i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${ST[rc.status].t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
+            const rc=x2.d<=today?recOf(x2.d,x.id):null;const mk=(rc?`<i class="dm ${ST[rc.status].c}">${ST[rc.status].i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${ST[rc.status].t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
             if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}" data-d="${x2.d}" title="${fmtD(x2.d)}: ${v!=null?fq(v)+' '+esc(x.und||''):'sin metrado asignado'}${mt}"><span class="qv">${v!=null?fq(v):'•'}</span>${mk}</td>`}
             else h+=`<td class="${cl}" data-d="${x2.d}"${cl.includes(' lib')?` title="${fmtD(x2.d)} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${fmtD(x2.d)}${mt}"`:''}>${mk}</td>`}
           rows.push({k:'x:'+x.id+(i===0?':'+a.id+':'+rs:''),h:h+'</tr>'});

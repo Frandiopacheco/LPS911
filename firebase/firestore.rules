@@ -90,6 +90,12 @@ service cloud.firestore {
       allow update: if isAdmin() || (canEdit() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null));
       allow delete: if canEdit();
     }
+    // Historial de cambios del lookahead (uno por cambio): lo escribe quien edita; no se cambia ni se borra
+    match /lhlog/{id} {
+      allow read: if isMember();
+      allow create: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow update, delete: if false;
+    }
     // Constancia del congelado automático de cada semana (la escribe solo el servidor)
     match /frz/{id} {
       allow read: if isMember();

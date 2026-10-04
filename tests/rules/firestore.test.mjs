@@ -247,6 +247,15 @@ test('plan del día cerrado (dplan): publica el editor; reabrir es solo del admi
   await assertFails(deleteDoc(doc(sc, 'dplan/2026-10-02_p1')));
   await assertSucceeds(deleteDoc(doc(ed, 'dplan/2026-10-02_p1'))); // deshacer la publicación de un día futuro
 });
+test('historial del lookahead (lhlog): lo escribe quien edita, con su correo; no se cambia ni se borra', async () => {
+  const ed = user('editor@obra.pe');
+  await assertSucceeds(setDoc(doc(ed, 'lhlog/1_a'), { t: 1, by: 'editor@obra.pe', items: [] }));
+  await assertFails(setDoc(doc(ed, 'lhlog/1_b'), { t: 1, by: 'otro@obra.pe', items: [] }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhlog/1_c'), { t: 1, by: 'sc@obra.pe', items: [] }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'lhlog/1_a')));
+  await assertFails(updateDoc(doc(ed, 'lhlog/1_a'), { label: 'x' }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'lhlog/1_a')));
+});
 test('congelado automático (frz): todos lo leen y nadie lo escribe desde la app', async () => {
   await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'frz/60'), { n: 60, k: 2 }));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frz/60')));
