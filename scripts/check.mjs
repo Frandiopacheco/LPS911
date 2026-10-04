@@ -21,6 +21,16 @@ export function checkWeb(web) {
   for (const f of [...js, ...css]) if (!fs.existsSync(path.join(web, f))) errs.push(`✗ index.html carga web/${f}, que no existe`);
   const present = fs.existsSync(path.join(web, 'js')) ? fs.readdirSync(path.join(web, 'js')).filter(f => f.endsWith('.js')).map(f => 'js/' + f) : [];
   for (const f of present) if (!js.includes(f)) errs.push(`✗ web/${f} existe pero index.html no lo carga`);
+  /* CSS: llaves equilibradas (un @media sin cerrar se traga todo lo que viene después y solo vale en el celular) */
+  for (const f of css) {
+    const p = path.join(web, f);
+    if (!fs.existsSync(p)) continue;
+    const txt = fs.readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+    let d = 0, line = 1, bad = 0;
+    for (const ch of txt) { if (ch === '\n') line++; if (ch === '{') d++; else if (ch === '}' && --d < 0) { bad = line; d = 0; } }
+    if (bad) errs.push(`✗ ${f}: sobra una llave «}» en la línea ${bad}`);
+    else if (d) errs.push(`✗ ${f}: falta cerrar ${d} llave(s) «}» (¿un @media sin cerrar?)`);
+  }
   for (const f of js) {
     const p = path.join(web, f);
     if (!fs.existsSync(p)) continue;

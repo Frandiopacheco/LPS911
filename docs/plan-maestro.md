@@ -59,7 +59,7 @@ Tipos de nodo (`tipo`):
 - `hito` — hito. `grp`: `contractual` | `planificado` | `intermedio`. `hk`: `{modo:'fijo'|'amarrado', fecha?, nodos?:[ids], campo?:'fin'|'ini'}`.
   Amarrado: su fecha es la última (o primera, si `campo:'ini'`) de esos nodos. `ref` guarda código y fecha de Primavera.
 
-Fechas de un `wbs`/`part` sin fechas propias = mínimo inicio y máximo fin de sus hijos.
+Un nodo con hijos toma el mínimo inicio y el máximo fin de sus hijos (sin contar el detalle `det`, que es solo referencia: la partida por piso se edita directo).
 
 El hito del lookahead se compara siempre contra la **versión aprobada vigente** (`mpver` con `st:'ok'` de mayor `n`),
 nunca contra el borrador.
@@ -128,4 +128,5 @@ administrador crea en `ok` o pasa a `ok`/`dev`; nadie borra. El planner no escri
 ## Estado
 
 - [x] Paso 1: rol planner, colecciones y reglas, pestaña con árbol + Gantt, edición manual, hitos fijos y amarrados, archivar/recuperar, deshacer, tarjeta en Hoy.
-- [ ] Paso 2: importar el Excel del planner.
+- [x] Paso 2: importar el Excel del planner (hoja visible con ITEM, emparejar pisos recordado, avisos, volver a importar conservando ids y archivando lo que ya no está, deshacer). Además: mover y convertir nodos. El detalle no acumula fechas en su partida por piso.
+- [ ] Paso 3: versiones y aprobación.
