@@ -82,8 +82,8 @@ function capClick(e){const t=e.target;let b;
   if(t.closest('[data-knp]')){npNew({d:campoDate(),pid:CP.pid});return}
   if((b=t.closest('[data-kd]'))){const v=+b.dataset.kd;CU.date=v===0?null:shiftDay(campoDate(),v);if(CU.date===todayIso())CU.date=null;const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kv]'))){CP.v=b.dataset.kv;saveCP();const kp=$('#kplan');if(kp)kp._fk='';render();return}
-  if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
-    rl:()=>location.reload(),
+  if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><button data-do="help">? Ayuda</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
+    rl:()=>location.reload(),help:()=>ayOpen(),
     name:()=>{const v=prompt('Tu nombre y apellido',me.name||'');if(v&&v.trim()&&db)fcol('members').doc(me.email).update({name:v.trim().slice(0,60)}).then(()=>toast('Nombre actualizado')).catch(err=>toast('No se pudo: '+(err.code||err.message)))},
     out:()=>{if(confirm('Si sales, para volver a entrar necesitarás un enlace nuevo del ingeniero. ¿Salir?'))$('#blogout').click()}});return}
   const card=t.closest('article[data-k]');if(!card)return;const aid=card.dataset.k,d=card.dataset.d;

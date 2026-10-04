@@ -1519,3 +1519,51 @@ table.rtab .rc-x{width:30px}
 .hsi ul{margin:4px 0 0;padding-left:16px}.hsi li{font-size:13px;margin:2px 0}.hsi li small{display:block;color:var(--muted);font-size:12px}
 .logoc{display:flex;align-items:center;gap:8px}.logop{max-height:40px;max-width:140px;border:1px solid var(--line);border-radius:4px;background:#fff;padding:2px}
 .rcobs{margin-top:4px;font-size:12px}
+
+/* ---------- Ayuda: flujogramas por rol (js/ayuda.js) ---------- */
+.ayhb{display:inline-flex;align-items:center;gap:6px}
+.ayhb i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 12px/1 var(--f-ui);font-style:normal}
+.lqc.ayc{width:min(960px,100%);gap:12px}
+.lqc.ayc>*{flex:none}
+.ayrole{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;font-size:13px}
+.ayrole select{height:var(--h-ctl,34px);border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;padding:0 8px;margin-left:6px}
+.aytabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.aytabs button{flex:none;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--ink);font:600 13px var(--f-ui);padding:6px 12px;cursor:pointer;white-space:nowrap}
+.aytabs button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ayflow{border:1px solid var(--line2);border-radius:var(--r-card,10px);background:var(--panel2);padding:12px}
+.ayflow>header h3{margin:0;font-size:16px}
+.ayflow>header p{margin:2px 0 0;color:var(--ink2);font-size:13px}
+.ayleg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:8px 0 12px}
+.ayleg span{display:inline-flex;align-items:center;gap:5px}
+.ayleg i{display:inline-block;width:18px;height:11px;border:1.5px solid var(--ink2);background:var(--panel)}
+.ayleg i.lo{border-radius:6px;background:var(--accent);border-color:var(--accent)}
+.ayleg i.lq{border-color:var(--warn);background:var(--warn-soft);transform:skewX(-14deg)}
+.aycol{display:flex;flex-direction:column;align-items:center;min-width:0}
+.aymain{max-width:560px;margin:0 auto}
+.ayn{width:100%;max-width:420px;text-align:center;font:inherit;color:var(--ink);box-sizing:border-box}
+.ayo{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:8px 16px;font-weight:600;font-size:13.5px}
+.ayp{display:flex;flex-direction:column;gap:2px;align-items:center;background:var(--panel);border:1.5px solid var(--line);border-radius:8px;padding:8px 12px}
+.ayp b{font-size:14px}.ayp small{color:var(--ink2);font-size:12.5px;line-height:1.35}
+.ayp.go{cursor:pointer;border-color:var(--accent)}
+.ayp.go:hover{background:var(--accent-soft)}
+.ayp.go:focus-visible{outline:none;box-shadow:var(--ring,0 0 0 3px var(--accent-soft))}
+.aymeta{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:2px}
+.aymeta i{font-style:normal;font:600 11px var(--f-mono);color:var(--muted)}
+.aymeta em{font-style:normal;font-size:11.5px;font-weight:600;color:var(--accent)}
+.ayq{background:var(--warn-soft);border:1.5px solid var(--warn);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13.5px;position:relative}
+.ayq::before{content:"◆";color:var(--warn);margin-right:6px;font-size:11px}
+.aybr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;margin-top:0;position:relative;padding-top:14px}
+.aybr::before{content:"";position:absolute;top:0;left:25%;right:25%;height:12px;border:1.5px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0}
+.ayb{display:flex;flex-direction:column;align-items:center;min-width:0;border:1px dashed var(--line);border-radius:8px;padding:6px}
+.ayl{font-style:normal;font:700 11px var(--f-mono);padding:1px 8px;border-radius:9px;margin-bottom:6px;text-transform:uppercase}
+.ayb.y>.ayl{background:var(--ok-soft);color:var(--ok)}
+.ayb.n>.ayl{background:var(--bad-soft);color:var(--bad)}
+.ayr{font-size:12px;color:var(--muted);font-style:italic;padding:2px 6px}
+.aya{display:block;width:2px;height:18px;background:var(--line);position:relative;flex:none;margin-bottom:6px}
+.aya::after{content:"";position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);border:5px solid transparent;border-top:6px solid var(--line);border-bottom:0}
+@media (max-width:760px){
+  #bhelp{display:none}
+  .lqc.ayc{padding:12px}.ayflow{padding:10px 8px}
+  .aybr{gap:6px}.ayb{padding:4px}.ayp{padding:7px 8px}.ayp b{font-size:13px}.ayp small{font-size:12px}
+  .aytabs button{min-height:40px}
+}
