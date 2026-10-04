@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY, MANANA } from './helpers.js';
 import { LAMINA, png } from './lamina.js';
 import { createRequire } from 'node:module';
-import { readFileSync, copyFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const ExcelJS = require('exceljs');
 const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
@@ -23,7 +23,7 @@ test('Lookahead en Excel: logos, AR con compromiso del área y Sectorización co
     ['contractors', 'c2', { name: 'SC ELECTRICAS', partida: 'IIEE', esp: 'Instalaciones eléctricas', color: '#aa6633' }]] });
   await conExcel(page);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bexport')]);
-  const path = await dl.path();copyFileSync(path, '/tmp/claude-0/lookahead-empresa.xlsx');
+  const path = await dl.path();
   const wb = new ExcelJS.Workbook();await wb.xlsx.readFile(path);
   expect(wb.worksheets.map(w => w.name)).toEqual(['Lookahead', 'PPC semanal', 'AR', 'Sectorización']);
   for (const n of ['Lookahead', 'PPC semanal', 'AR']) expect(wb.getWorksheet(n).getImages().length, n).toBe(2); // logo de la empresa y del cliente
