@@ -91,7 +91,7 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 /** etiqueta para listas: «PROG · Programación» */
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[]};let P_SRC=null,P_VAL=P_DEF;
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */

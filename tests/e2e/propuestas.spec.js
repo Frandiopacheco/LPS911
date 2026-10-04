@@ -192,15 +192,16 @@ test('12 · deshacer una aceptación devuelve la propuesta a pendientes; rehacer
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
   let p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
   expect(p.items.i0.sent).toBe(true);
-  const h = Object.values(p.hist);
+  /* el historial ya no va dentro de lhprop: un documento por decisión en lhphist */
+  expect(p.hist).toBeUndefined();
+  const h = Object.values(await page.evaluate(() => __dbAll('lhphist')));
   expect(h).toHaveLength(1);
   expect(h[0].st).toBe('ok');
   expect(h[0].undone).toBeTruthy();
   await page.click('#bredo');
   await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0)).toBeNull();
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);
-  p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
-  expect(Object.values(p.hist)[0].undone).toBeUndefined();
+  expect(Object.values(await page.evaluate(() => __dbAll('lhphist')))[0].undone).toBeUndefined();
   noErrors(errors, 'deshacer aceptación');
 });
 

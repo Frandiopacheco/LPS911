@@ -82,6 +82,13 @@ service cloud.firestore {
       // el SC cambia sus borradores y envíos, pero no las «Respuestas del ingeniero» (hist): esas solo las escribe quien decide
       allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc && lhpHistOk());
     }
+    // Historial de decisiones sobre propuestas (un documento por decisión). Lo escribe solo quien decide; después solo
+    // se marca o desmarca «deshecho» (undone). No se borra: es la constancia de qué se autorizó, cuándo y por qué.
+    match /lhphist/{id} {
+      allow read: if isMember();
+      allow create: if canEdit();
+      allow update: if canEdit() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undone']);
+    }
     // Restricciones: editor/admin todo (regla general de abajo). El subcontratista crea las de actividades de su partida
     // y edita o borra solo las que él registró, mientras estén pendientes (liberarlas es del ingeniero).
     function scRestrOk(d) {
