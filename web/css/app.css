@@ -515,8 +515,6 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 .lqc.lqwide{width:min(1000px,100%)}
 .lqwz{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:8px}.lqwz table{width:100%}.lqwz select{max-width:340px;width:100%}.lqwz tr.late td{background:var(--bad-soft)}
 .lqrev{display:flex;flex-direction:column;gap:6px}.lqri{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13.5px;padding:6px 8px;border-radius:8px;background:var(--panel2)}.lqri.bad{background:var(--bad-soft)}
-.lqmt td{vertical-align:middle}.lqmt tr.lqon td:first-child{box-shadow:inset 4px 0 0 var(--accent)}.lqmt select{max-width:320px}.lqmt input[type=checkbox]{width:18px;height:18px}
-.tplib{display:inline-flex;align-items:center;min-width:0;font-size:12px;white-space:nowrap}.tplib .lnkb{font-size:12px;padding:0}
 .lqdraw{display:flex;gap:10px;align-items:center;background:var(--warn-soft);border-radius:8px;padding:6px 10px;font-size:14px}
 .kplan.drawing{cursor:crosshair}.lqli2{display:flex;gap:6px;align-items:center}.lqli2 .lqli{flex:1;min-width:0}.lqli2 .ib{flex:none}
 .lqins{font-size:12px;color:var(--accent)!important;text-decoration:underline;text-underline-offset:2px;cursor:pointer;align-self:flex-start}
@@ -1116,7 +1114,7 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
   .pha{width:100%}
   .pha .ib{flex:1 1 auto;min-height:40px}
   .fbar .fgl{display:none}
-  .tmem td.tst:empty,.lqmt td.lqnone{display:none!important}
+  .tmem td.tst:empty{display:none!important}
   .top .wk #fpiso{flex:1;min-width:0}
   table.rt td .ci,table.rt td select,table.rt td input:not([type=checkbox]){box-sizing:border-box;max-width:100%}
   table.rt tr.grp th{display:block;border:0;background:none;padding:0;font-size:13px}

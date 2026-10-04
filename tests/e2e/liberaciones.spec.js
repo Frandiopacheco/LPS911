@@ -1,4 +1,4 @@
-// Liberaciones de calidad: vistas, filtros, flujo completo, solicitud nueva, matriz e inspectores.
+// Liberaciones de calidad (sin matriz): vistas, filtros, flujo completo, solicitud desde el lookahead o fuera de él, marcas de Calidad e inspectores.
 import { test, expect } from '@playwright/test';
 import { openApp, expectTabOk, noErrors, MANANA, openTab } from './helpers.js';
 
@@ -32,7 +32,9 @@ test('vistas y filtros (admin)', async ({ page }) => {
   await page.click('[data-lqzcancel]'); await expect(page.locator(`${M} .lqdraw`)).toHaveCount(0);
   await page.selectOption('#fpiso', 'p2'); await expect(page.locator(`${M} #lqplan`)).toBeVisible();
   await page.selectOption('#fpiso', '');
-  await page.click('#lqv [data-v="mat"]'); await expect(page.locator(`${M} .lqmt`)).toBeVisible();
+  // ya no hay vista Matriz ni columna «Por solicitar»
+  await expect(page.locator('#lqv [data-v="mat"]')).toHaveCount(0);
+  await expect(page.locator(M)).not.toContainText('Por solicitar');
   await page.click('#lqv [data-v="ban"]');
   await page.selectOption('#lqin', 'Ing. Dos'); await expect(page.locator(`${M} .lqcard`)).toHaveCount(2);
   await page.locator('[data-lqin]').first().click();
@@ -90,47 +92,68 @@ test('solicitud nueva y anular', async ({ page }) => {
   noErrors(errors, 'solicitud');
 });
 
-test('matriz amarrada al lookahead e inspectores', async ({ page }) => {
+test('el lookahead solo sugiere: nada queda «por solicitar» y se puede pedir algo fuera del lookahead', async ({ page }) => {
   page.on('dialog', d => d.accept());
-  const errors = await abrir(page);
-  await page.click('#lqv [data-v="mat"]');
-  const k = '[data-k="c2|entubado empotrado"]';
-  await page.locator(`[data-lm="se"]${k}`).check();
-  await page.locator(`[data-lm="crit"]${k}`).check();
-  await page.selectOption(`[data-lm="rest"]${k}`, 'c3|tarrajeo de muros');
-  await expect.poll(async () => {
-    const r = ((await libm(page)).rules || []).find(r => r.keys[0] === 'c2|entubado empotrado');
-    return r && r.crit && r.rest[0];
-  }).toBe('c3|tarrajeo de muros');
-  await page.locator('[data-lmex]').first().click();
-  await page.locator('#lqm [data-exa]').first().uncheck();
-  await expect.poll(async () => Object.values((await libm(page)).ex || {})).toContain('no');
+  // «Redes empotradas» de Sanitarias sin solicitud: antes la matriz la marcaba «pendiente de solicitar»
+  const I9 = ['acts', 'i9', { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', und: 'pto', metrado: 20, days: [MANANA], order: 12 }];
+  const errors = await openApp(page, { as: 'sc', tab: 'lib', extra: [I9] });
+  await expect(page.locator(`${M} .lqcols`)).toBeVisible();
+  expect(await page.evaluate(() => libState(S.act.get('i9')))).toBe('');
+  await expect(page.locator(`${M} [data-lqask="i9"]`)).toHaveCount(0);
+  await page.click('#lqnew');
+  // sugerencias: sus actividades próximas (Sanitarias) y al final «Otra…»
+  const opts = await page.locator('#lqpk option').evaluateAll(o => o.map(x => x.value));
+  expect(opts[opts.length - 1]).toBe('__free');
+  expect(await page.evaluate(ids => ids.filter(v => v !== '__free').every(v => S.act.get(v).sc === 'c1'), opts)).toBe(true);
+  await page.selectOption('#lqpk', '__free');
+  await page.click('#pop [data-do="go"]');
+  await expect(page.locator('#lqm')).toContainText('¿Qué se libera?');
+  await page.click('#lqm [data-lq="send"]');
+  await expect(page.locator('#toast')).toContainText('Escribe qué se libera');
+  await page.fill('#lqt', 'Prueba hidráulica de montantes');
+  await page.selectOption('#lqa', 'a2');
+  const antes = await page.evaluate(() => Object.keys(window.__dbAll('lib')).length);
+  await page.click('#lqm [data-lq="send"]');
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('lib')).length)).toBe(antes + 1);
+  const n = await page.evaluate(() => Object.values(window.__dbAll('lib')).find(l => l.nm === 'Prueba hidráulica de montantes'));
+  expect(n).toMatchObject({ actId: '', ambId: 'a2', pisoId: 'p1', sc: 'c1', st: 'sol', crit: false, sup: false });
+  await expect(page.locator(`${M} .lqcard`, { hasText: 'Prueba hidráulica de montantes' })).toContainText('FUERA DEL LOOKAHEAD');
+  noErrors(errors, 'sin matriz');
+});
+
+test('Calidad marca crítica y supervisión al programar; inspectores en Configuración', async ({ page }) => {
+  page.on('dialog', d => d.accept());
+  const errors = await abrir(page, 'calidad');
+  await page.click('[data-lqid="Lsol"]');
+  await page.click('#lqm [data-lq="prog"]');
+  await page.selectOption('#lqpi', 'Ing. Uno');
+  await page.fill('#lqpd', MANANA);
+  await page.locator('#lqcr').check();
+  await page.fill('#lqrs', 'Tarrajeo de muros');
+  await page.locator('#lqsu').check();
+  await page.click('#lqm [data-lq="ok"]');
+  await expect.poll(async () => { const l = await lib(page, 'Lsol'); return [l.st, l.crit, l.sup, l.rest].join('|'); }).toBe('pro|true|true|Tarrajeo de muros');
+  await expect(page.locator('#lqm')).toContainText('CRÍTICA · restringe Tarrajeo de muros');
   await page.click('#lqm [data-lqx]');
-  await page.locator('#lmauto').check();
-  await expect.poll(async () => (await libm(page)).autoRestr).toBe(true);
-  await page.locator('#lmauto').uncheck();
-  // Inspectores en Configuración
+  await expect(page.locator(`${M} [data-lqid="Lsol"]`)).toContainText('⛔ Restringe: Tarrajeo de muros');
+  // Inspectores en Configuración (siguen en libm/main, sin tocar lo antiguo)
   await openTab(page, 'cfg');
   await page.fill('#cfgInsp', 'Ing. Uno\nIng. Tres');
   await page.locator('#cfgInsp').blur();
   await expect.poll(async () => ((await libm(page)).insp || []).join()).toBe('Ing. Uno,Ing. Tres');
-  expect(((await libm(page)).rules || []).length).toBeGreaterThanOrEqual(2);
+  expect(((await libm(page)).rules || []).length).toBe(1); // las reglas antiguas quedan guardadas, sin usarse
   await openTab(page, 'lib');
-  for (const v of ['ban', 'cal', 'map', 'mat', 'ban']) { await page.click(`#lqv [data-v="${v}"]`); await expectTabOk(page, 'lib ' + v); }
-  noErrors(errors, 'matriz');
+  for (const v of ['ban', 'cal', 'map', 'ban']) { await page.click(`#lqv [data-v="${v}"]`); await expectTabOk(page, 'lib ' + v); }
+  noErrors(errors, 'calidad marcas');
 });
 
-test('Calidad ve la matriz y el subcontratista solo solicita', async ({ page, browser }) => {
-  const errors = await abrir(page, 'calidad');
-  await page.click('#lqv [data-v="mat"]');
-  await expect(page.locator('#lmauto')).toBeEnabled();
-  noErrors(errors, 'calidad');
-  const p2 = await browser.newPage();
-  const e2 = await abrir(p2, 'sc');
-  await expect(p2.locator('#lqnew')).toBeVisible();
-  await expect(p2.locator('#lqsc')).toHaveCount(0);
-  noErrors(e2, 'sc');
-  await p2.close();
+test('el subcontratista solicita; una vista «Matriz» guardada abre la Bandeja', async ({ page, browser }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'lib' });
+  await page.evaluate(() => { U.libV = 'mat'; render(); });
+  await expect(page.locator(`${M} .lqcols`)).toBeVisible();
+  await expect(page.locator('#lqnew')).toBeVisible();
+  await expect(page.locator('#lqsc')).toHaveCount(0);
+  noErrors(errors, 'sc');
 });
 
 test('el plano carga al entrar por primera vez, sin tocar un piso', async ({ page }) => {

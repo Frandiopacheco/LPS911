@@ -65,8 +65,9 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS`, `FIREBASE_SA_PRODUCCION` y `NETLIFY_A
 - **Restricciones:** el selector de actividad de cada fila trae solo la elegida y se llena al abrirlo (`actOne`/`actFill`, `data-alz`): armar todas las opciones por fila tardaba ~17 s con obra grande. `restr`: `{actId, pisoId, type, desc, resp, need, freed, status, sc?, grp?, area?, by}`. `actId` la amarra a su fila del lookahead (se muestra la ubicación y "Ver en el lookahead").
 - **Filtros de Restricciones** (`U.rF`, `rFBar`/`rFOk`): Afecta a (`rAff`: `r.sc` o la partida de la actividad), Registró (`rReg`: la partida si fue un SC, si no el nombre), La libera (`rWho`: `libN` si está liberada, si no `resp`) y rangos de fecha de registro (`created`) y liberación (`freed`). Al liberar se guarda `libBy`/`libN`.
 - **Liberaciones de calidad:**
-  - `lib/{id}`: `{actId, ambId, pisoId, sc, rule, crit, sup, need, st, prog:{d,h,insp}, obs:[{t,ok}], photos, proto, zona:{pts,vista,pisoId}, hist, by}`. Estados `st`: `sol` solicitada → `pro` programada → `obs` observada → `lev` levantada → `lib` liberada (`libm` liberada con obs. menores, `anu` anulada; `LST` tiene los nombres y colores). **`prog` puede ser null**: protege siempre `l.prog&&l.prog.d`.
-  - `libm/main`: matriz `{rules:[{id, keys:[sc|nombre normalizado], sc, act, crit, rest:[keys], sup, proto, ant}], ex:{actId:'no'|ruleId}, autoRestr, insp:[nombres]}`. Las reglas se amarran al lookahead con `keyOf(x)=sc+'|'+nrm(name)` (no texto libre). `autoRestr` está apagado: lo pendiente de liberación **no** se vuelve restricción por ahora.
+  - **Sin matriz (decidido con el dueño, oct 2026):** Liberaciones solo sirve para que el SC (o producción / Calidad) **solicite**; el lookahead solo **sugiere** actividades (`libPick`: sus próximas actividades + «Otra (no está en el lookahead)…» → `libAsk('', {free:true})` con qué se libera, SC y ambiente). Nada queda «pendiente de solicitar», no hay columna «Por solicitar», bloqueos (`libBlocks`) ni restricciones automáticas. Crítica / supervisión / «restringe a» las marca **Calidad al programar** (`libProg`, campos de la propia liberación).
+  - `lib/{id}`: `{actId, ambId, pisoId, sc, nm, crit, sup, rest, need, st, prog:{d,h,insp}, obs:[{t,ok}], photos, proto, zona:{pts,vista,pisoId}, hist, by}`. `actId` vacío = fuera del lookahead (`nm` = qué se libera). Reglas: el SC no pone ni cambia `crit`/`sup`/`rest`. Las liberaciones antiguas conservan sus marcas (y `rule`). Estados `st`: `sol` solicitada → `pro` programada → `obs` observada → `lev` levantada → `lib` liberada (`libm` liberada con obs. menores, `anu` anulada; `LST` tiene los nombres y colores). **`prog` puede ser null**: protege siempre `l.prog&&l.prog.d`.
+  - `libm/main`: hoy solo se usa `insp` (inspectores, Configuración; `libmPut` guarda con `merge`). Sus `rules`, `ex` y `autoRestr` antiguos se conservan en la base pero ya no se leen. `canLibCfg()` = Calidad o administrador.
   - Solo se ubican en el plano las liberaciones **programadas**.
 - **Versión cliente** (el admin y quienes él designe con `members.cli:true`, solo roles editor/campo/área/lector; reglas `canCli()`):
   - `cli/buf`: holguras en días hábiles `{all, p:{pisoId:n}, s:{sectorId:n}, a:{ambId:n}, x:{actId:n}}`; manda la más específica.
@@ -86,7 +87,7 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS`, `FIREBASE_SA_PRODUCCION` y `NETLIFY_A
 - `campo`: ingeniero de campo; registro diario.
 - `sc`: subcontratista; propone en el lookahead, solo su partida. Inicia/detiene sus actividades en "En obra" (no cierra el día), crea restricciones de su partida y solicita liberaciones.
 - `capataz`: celular, solo su partida, reportes en vivo.
-- `area`: área de apoyo (OT, Calidad…): ve todo y resuelve las restricciones de su área. Si el área contiene "Calidad", además programa/libera y edita la matriz e inspectores (`isCal()`, `canLibMatrix()`).
+- `area`: área de apoyo (OT, Calidad…): ve todo y resuelve las restricciones de su área. Si el área contiene "Calidad", además programa/libera, marca crítica/supervisión y edita los inspectores (`isCal()`, `canLibCfg()`).
 - `veedor`: recorre la obra y registra el trabajo no programado (Campo › Plano); el resto solo lo consulta.
 - `lector`: solo lectura.
 
@@ -245,4 +246,4 @@ El dueño encarga auditorías por tema a otra IA y trae el informe. Así se trab
 
 - Tanda B: avisos al celular (FCM), Lookahead que dibuje solo las filas visibles.
 - Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
-- Liberaciones: zonas como polígono (hoy rectángulo), restricción automática por liberación pendiente (apagada hasta decidir con Calidad).
+- Liberaciones: zonas como polígono (hoy rectángulo).

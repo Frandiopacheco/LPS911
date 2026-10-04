@@ -22,12 +22,9 @@ test('Liberaciones: los filtros se pliegan y lo pendiente aparece antes', async 
   noErrors(errors, 'lib celular');
 });
 
-test('Equipo y Matriz se ven como tarjetas en el celular', async ({ page }) => {
+test('Equipo se ve como tarjetas en el celular', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
   await expect(page.locator('table.tmem thead')).toBeHidden();
-  await sinScrollLateral(page);
-  await page.evaluate(() => { U.tab = 'lib'; U.libV = 'mat'; render(); });
-  await expect(page.locator('table.lqmt thead')).toBeHidden();
   await sinScrollLateral(page);
   noErrors(errors, 'tablas celular');
 });

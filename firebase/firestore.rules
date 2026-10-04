@@ -151,11 +151,15 @@ service cloud.firestore {
     // las programa y decide Calidad (o el editor / administrador). El SC solo pide, levanta observaciones o anula las suyas.
     match /lib/{id} {
       allow read: if isMember();
+      // crítica, supervisión y «restringe a» las marca Calidad al programar (ya no hay matriz): el SC no las pone ni las cambia
       allow create: if canEdit() || isCal()
-        || (isSC() && request.resource.data.sc in scsOf() && request.resource.data.st == 'sol' && request.resource.data.by == mid());
+        || (isSC() && request.resource.data.sc in scsOf() && request.resource.data.st == 'sol' && request.resource.data.by == mid()
+            && request.resource.data.get('crit', false) == false && request.resource.data.get('sup', false) == false
+            && request.resource.data.get('rest', '') == '');
       allow update: if canEdit() || isCal()
         || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc == resource.data.sc
-            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
+            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['crit', 'sup', 'rest']));
       allow delete: if isAdmin();
     }
     // Versión para el cliente (holguras, versiones emitidas): el administrador y quienes él designe.

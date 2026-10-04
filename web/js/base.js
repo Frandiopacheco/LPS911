@@ -158,7 +158,7 @@ function reopenDone(aid,quiet){const x=S.act.get(aid);if(!x||!canDaily)return;co
   for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)writeDaily(doc.date,doc.pisoId,{recs:{[aid]:{...r,done:false}}})}
   doneRebuild();requestRender();
   if(!quiet)toast(`“${x.name}” reabierta: puedes seguir programándola`,dn?'Deshacer':'',dn?()=>{/* deshacer: vuelve la reapertura que había antes (o ninguna) */if(prevR){REOP.set(aid,prevR);didxWrite(pid,{[aid]:prevR},'r')}else{REOP.delete(aid);didxWrite(pid,{[aid]:null},'r')}markDone(aid,dn,true)}:null)}
-function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status!=='lib'&&r.actId){m.set(r.actId,(m.get(r.actId)||0)+1)}if(typeof libBlockMap==='function'&&libAuto())libBlockMap().forEach((n,k)=>m.set(k,(m.get(k)||0)+n));return m}
+function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status!=='lib'&&r.actId){m.set(r.actId,(m.get(r.actId)||0)+1)}return m}
 
 /* ---------- escritura con cola por documento ---------- */
 let pending=0,lastErr=null;const chains={};
@@ -428,7 +428,7 @@ function renderTop(){
   const ps=pisos();if(U.piso&&!S.pis.has(U.piso))U.piso='';
   $('#fpiso').innerHTML='<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('');
   const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;rc.textContent=pr;
-  {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:new Set(libBlocks().filter(b=>vs.has(pisoOfAct(b.p.id))&&(!SCK()||myScsI().includes(b.p.sc))).map(b=>b.p.id)).size;lc.hidden=!n;lc.textContent=n}}
+  {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));/* Calidad: lo que debe programar; el SC: sus observadas por levantar */const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:SCK()?[...LIB.values()].filter(l=>l.st==='obs'&&vs.has(l.pisoId)&&myScsI().includes(l.sc)).length:0;lc.hidden=!n;lc.textContent=n}}
   $('#wtoday').disabled=U.week===curWeek();
   navApply();topDateApply();topToolsApply();
   brandSync();
