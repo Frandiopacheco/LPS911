@@ -178,6 +178,17 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
 
+## Auditorías externas (ChatGPT u otra IA)
+
+El dueño encarga auditorías por tema a otra IA y trae el informe. Así se trabaja con ellos:
+
+1. **Una conversación nueva por informe.** Todo lo necesario está en este archivo; no hace falta el historial.
+2. **Comprobar la versión:** el informe dice qué commit auditó. Si no es el de `main`, revisa con `git diff <commit> main -- <archivos citados>` si las líneas siguen valiendo.
+3. **No repetir lo ya probado:** lo que el informe marca como **reproducido en Chromium** (con su evidencia) se da por confirmado y pasa directo a corregir. Lo que es solo lectura de código se contrasta leyendo **solo las líneas citadas** (si son muchas, con un subagente de modelo económico). Lo de gravedad baja lleva un veredicto de una línea.
+4. **Opinión antes de tocar nada:** tabla corta por n.º (confirmado / en parte / no, y si cambia la gravedad), puntos que repiten pendientes ya conocidos y decisiones que necesita el dueño. **Solo se implementa lo que él aprueba.**
+5. **Una sola rama y un solo *pull request* por informe** (salvo que algo sea riesgoso y convenga separarlo). Cada punto lleva su prueba de regresión, que debe fallar con el código anterior. La batería completa se corre **una vez** en local antes del *pull request*; GitHub la vuelve a correr.
+6. Al terminar: actualizar este archivo (patrones nuevos y pendientes) y entregar un resumen corto. `produccion` nunca se toca sin aprobación.
+
 ## Pendientes conocidos (ver auditorías)
 
 - Informe Lookahead/propuestas: **10** (que las reglas exijan ser responsable del piso para decidir una propuesta) quedó para después; hoy lo controla la interfaz (`canDecide`).
