@@ -21,6 +21,7 @@ function propPut(col,id,after){if(!PM())return false;
   if(col!=='acts'){toast('En modo propuesta solo cambias las actividades de tu partida. Ambientes, sectores y lo demás los edita el ingeniero de producción.');return true}
   const off=ACT_OFF&&ACT_OFF.get(id)||null;const cur=S.act.get(id)||null;const mine=myScsI();
   const sc=off?off.sc:(after&&after.sc)||(cur&&cur.sc);
+  if(off&&after&&after.sc!==off.sc){toast('La partida de una actividad no se cambia en la propuesta: si corresponde a otra partida, pídeselo al ingeniero de producción.');requestRender();return true}
   if(!mine.includes(sc)||(after&&!mine.includes(after.sc))){toast('Solo puedes proponer cambios en las actividades de '+mine.map(c=>conOf(c).name).join(', ')+'.');requestRender();return true}
   let item;
   if(after==null){item=off?{after:null,base:cleanAct(off)}:null}
@@ -28,11 +29,14 @@ function propPut(col,id,after){if(!PM())return false;
   savePropItem(sc,id,item);return true}
 function savePropItem(sc,id,item){const doc=PROP.get(sc)||{sc,items:{}};const v=item?{...item,ts:NOW(),by:me.email,n:me.name||'',sent:false}:null;
   PROP.set(sc,{...doc,items:{...(doc.items||{}),[id]:v}});pmSync();requestRender();
-  if(db)fcol('lhprop').doc(sc).set({sc,items:{[id]:v}},{merge:true}).catch(err=>toast('No se pudo guardar la propuesta: '+(err.code==='permission-denied'?'sin permiso (¿reglas nuevas publicadas?)':(err.code||err.message))))}
+  /* update por ruta reemplaza el elemento entero: con set+merge las cantidades de días quitados seguían guardadas */
+  if(db){const ref=fcol('lhprop').doc(sc);ref.update(new firebase.firestore.FieldPath('items',id),v).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:{[id]:v}},{merge:true});throw err})
+    .catch(err=>toast('No se pudo guardar la propuesta: '+(err.code==='permission-denied'?'sin permiso (¿reglas nuevas publicadas?)':(err.code||err.message))))}}
 function sendProp(){const now=NOW();let n=0;
   for(const sc of myScsI()){const its=propItems(sc).filter(o=>!o.it.sent);if(!its.length)continue;const up={};its.forEach(({id,it})=>{up[id]={...it,sent:true,sentAt:now};n++});
     const doc=PROP.get(sc)||{sc,items:{}};PROP.set(sc,{...doc,items:{...doc.items,...up},sentAt:now,sentBy:me.name||me.email});
-    fcol('lhprop').doc(sc).set({sc,items:up,sentAt:now,sentBy:me.name||me.email},{merge:true}).catch(err=>toast('No se pudo enviar: '+(err.code||err.message)))}
+    const FP=firebase.firestore.FieldPath;const args=[];Object.entries(up).forEach(([id,v])=>args.push(new FP('items',id),v));args.push('sentAt',now,'sentBy',me.name||me.email);
+    const ref=fcol('lhprop').doc(sc);ref.update(...args).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:up,sentAt:now,sentBy:me.name||me.email},{merge:true});throw err}).catch(err=>toast('No se pudo enviar: '+(err.code||err.message)))}
   toast(n?`${n} cambio${n>1?'s':''} enviado${n>1?'s':''} al ingeniero responsable del piso`:'No hay cambios por enviar');requestRender()}
 /* textos */
 function rngTxt(ds){ds=[...(ds||[])].sort();if(!ds.length)return'sin días';const out=[];let a=ds[0],b=ds[0];
@@ -58,7 +62,24 @@ function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it
 /* días hábiles (lun–sáb) */
 function wshift(d,n){let x=d;const st=n>0?1:-1;let k=Math.abs(n);let g=0;while(k>0&&g++<2000){x=addD(x,st);if(isWork(x))k--}return x}
 function wdist(a,b){if(a===b)return 0;let n=0,x=a;const st=b>a?1:-1;while(x!==b){x=addD(x,st);if(isWork(x))n+=st;if(Math.abs(n)>400)break}return n}
-function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return;if(!canDecide(id,it)){toast(propWho(id,it)+'.');return}const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
+/* ---- decidir una propuesta (aceptar, aceptar con otra fecha o rechazar) ----
+   Todo va en una sola transacción: se relee la propuesta y la actividad en la base y solo se escribe si siguen siendo
+   las que el ingeniero revisó. Así no se consume una versión nueva que el SC envió mientras tanto, no se pisa un cambio
+   oficial hecho por otro y el «Aceptada» solo aparece cuando de verdad quedó guardado. */
+const PFIELDS=['days','qty','metrado','und','name','order'];
+const PFLBL={days:'días',qty:'cantidades por día',metrado:'metrado',und:'unidad',name:'nombre',order:'orden'};
+const propVer=it=>`${it&&it.ts||0}|${it&&it.sentAt||0}`;
+let PDBUSY=new Set();
+class PropStop extends Error{constructor(m,k){super(m);this.lps=m;this.k=k||'stop'}}
+/** campos que la propuesta cambia y que el programa oficial también cambió desde que el SC la armó */
+function propConflicts(it,off,shift){const base=it.base;if(!it.after||!base||!off)return[];const L=[];
+  for(const f of PFIELDS){const pc=canon(it.after[f]??null)!==canon(base[f]??null)||(shift&&(f==='days'||f==='qty'));if(pc&&canon(off[f]??null)!==canon(base[f]??null))L.push(f)}return L}
+/** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
+async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return'gone';
+  if(!canDecide(id,it)){if(!opt.bulk)toast(propWho(id,it)+'.');return'perm'}
+  const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
+  const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
+  const say=m=>{if(!opt.bulk)toast(m)};
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
@@ -66,15 +87,50 @@ function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=do
         /* un día no laborable dentro del bloque cae en el mismo día hábil que el siguiente: se juntan sin perder cantidades */
         a.days=[...new Set(ds.map(mp))].sort();if(a.days.length<ds.length)opt.merged=ds.length-a.days.length;
         if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty)){const n=mp(d);q[n]=r2((q[n]||0)+(+v||0))}a.qty=q}}
-      if(!off){if(!S.amb.has(a.ambId)){toast('El ambiente de esa actividad ya no existe.');return}ops=[op('acts',id,{...a,id})]}
-      else{const nw={...off};for(const f of['days','qty','metrado','und','name','order'])if(canon(a[f]??null)!==canon(base?base[f]??null:null)||(st==='shift'&&(f==='days'||f==='qty')))nw[f]=a[f];ops=[op('acts',id,nw)]}
-      finalDays=a.days||[]}
-    if(ops.length)apply(ops)}
+      if(!off){const ar=getDoc('acts',id);
+        if(ar&&ar.arch){say(`“${ar.name||'La actividad'}” está en la Papelera. Restáurala primero (Configuración › Papelera) o rechaza la propuesta.`);return'arch'}
+        if(!S.amb.has(a.ambId)){say('El ambiente de esa actividad ya no existe.');return'amb'}
+        delete a.arch;ops=[op('acts',id,{...a,id})]}
+      else{const cf=propConflicts(it,off,st==='shift');
+        if(cf.length){if(opt.bulk)return'conf';
+          if(!confirm(`Desde que ${it.n||'el subcontratista'} armó esta propuesta, el programa oficial de “${off.name||'la actividad'}” cambió en: ${cf.map(f=>PFLBL[f]).join(', ')}.`+
+            (cf.includes('days')?`\n\nVigente: ${rngTxt(off.days)}\nPropuesto: ${rngTxt(a.days)}`:'')+`\n\nSi aceptas, esos campos quedan como en la propuesta. ¿Aceptar igual?`))return'conf'}
+        const nw={...off};for(const f of PFIELDS)if(canon(a[f]??null)!==canon(base?base[f]??null:null)||(st==='shift'&&(f==='days'||f==='qty')))nw[f]=a[f];ops=[op('acts',id,nw)]}
+      finalDays=a.days||[]}}
   const x=it.after||base||{};const am=S.amb.get(x.ambId);const key=id+'_'+NOW();
   const h={id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(finalDays||it.after.days):'',st,note:opt.note||'',t:NOW(),by:me.email,n:me.name||'',pn:it.n||''};
-  PROP.set(sc,{...doc,items:{...doc.items,[id]:null},hist:{...(doc.hist||{}),[key]:h}});
-  fcol('lhprop').doc(sc).set({items:{[id]:null},hist:{[key]:h}},{merge:true}).catch(err=>toast('No se pudo registrar la respuesta: '+(err.code||err.message)));
-  toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada');requestRender()}
+  const o=ops[0]||null;PDBUSY.add(key0);
+  try{if(!db)throw new PropStop('Sin conexión con la base.');
+    await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const aref=fcol('acts').doc(id);
+      const ps=await tx.get(pref);const srv=ps.exists?((ps.data()||{}).items||{})[id]:null;
+      if(!srv||!srv.sent||propVer(srv)!==propVer(it))throw new PropStop('El subcontratista cambió esta propuesta mientras la revisabas: revisa la versión nueva.','ver');
+      if(o){const as=await tx.get(aref);const cur=as.exists?as.data():null;
+        if(canon(cur?strip(cur):null)!==canon(o.before?strip(o.before):null))throw new PropStop('La actividad cambió hace un momento (otro usuario o un cambio que aún se estaba guardando). Vuelve a intentarlo.','act');
+        const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body);if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
+      const FP=firebase.firestore.FieldPath;tx.update(pref,new FP('items',id),null,new FP('hist',key),h)})}
+  catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
+  PDBUSY.delete(key0);
+  /* reflejar al momento (llega igual por la base) */
+  if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
+    const g=[o];g.prop={sc,id,it,key};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
+  const d2=PROP.get(sc)||doc;PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null},hist:{...(d2.hist||{}),[key]:h}});requestRender();
+  if(!opt.bulk)toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada',o?'Deshacer':null,o?undo:null);
+  return'ok'}
+/** deshacer (o rehacer) una aceptación también devuelve (o vuelve a quitar) la propuesta del SC; el historial la marca, no se borra */
+async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,id,it,key}=P_;const FP=firebase.firestore.FieldPath;
+  try{const r=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const d=ps.exists?ps.data()||{}:{};const cur=(d.items||{})[id];
+      if(back){if(cur)return'new';tx.update(pref,new FP('items',id),it,new FP('hist',key,'undone'),{t:NOW(),by:me.email,n:me.name||''});return'ok'}
+      if(!cur||propVer(cur)!==propVer(it))return'new';tx.update(pref,new FP('items',id),null,new FP('hist',key,'undone'),firebase.firestore.FieldValue.delete());return'ok'});
+    if(r!=='ok'){toast(back?'Se deshizo el cambio, pero la propuesta no vuelve a pendientes: el subcontratista ya envió otra para esa actividad.':'Se rehízo el cambio; la propuesta del subcontratista ya había cambiado y sigue pendiente.');return}
+    const d2=PROP.get(sc)||{sc,items:{}};const h=(d2.hist||{})[key];const nh=h?{...h}:null;if(nh){if(back)nh.undone={t:NOW(),by:me.email,n:me.name||''};else delete nh.undone}
+    PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:back?it:null},hist:{...(d2.hist||{}),...(nh?{[key]:nh}:{})}});requestRender();
+    if(back)toast('Cambio deshecho: la propuesta vuelve a quedar pendiente de revisión','Rehacer',redo)}
+  catch(e){toast('No se pudo devolver la propuesta a pendientes: '+(e&&(e.code||e.message)||'error'))}}
+/** aceptar varias seguidas (todo lo visible, todo un SC): un solo aviso al final */
+async function decideMany(L){let ok=0;const why={};for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
+  const W={conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+  const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
+  toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
 function propOverlay(){if(PM()||!canWrite)return null;const m=new Map();
   for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?it.after.days||[]:[]);
@@ -99,7 +155,7 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if(t.closest('[data-rvk0]')){if(REVSEL)REVSEL.k=0;requestRender();return}
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
-  if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;L.forEach(o=>decideProp(o.sc,o.id,'ok'));REVSEL=null;return}
+  if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;decideMany(L);return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
@@ -116,14 +172,14 @@ function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PM
     h=`<div class="pph"><b>Respuestas del ingeniero</b><button class="kx" data-px>×</button></div>${hist.map(x=>`<div class="ppi r-${x.st}"><div class="ppt"><span class="ppk">${ST_[x.st]||x.st}</span><b>${esc(x.name)}</b><small>${esc(x.amb)} · ${fmtD(ldt((x.t)))} ${hhmm(x.t)} · ${esc(x.n)}</small></div><ul>${x.kind==='del'?'<li>Pedido de quitar la actividad</li>':`<li>${x.from?esc(x.from)+' → ':''}<b>${esc(x.to)}</b></li>`}${x.note?`<li>Comentario: “${esc(x.note)}”</li>`:''}</ul></div>`).join('')||'<p class="mu" style="padding:16px">Aún no hay respuestas.</p>'}`}
   const c=el.firstChild;if(c.dataset.h!==h){const st=c.scrollTop;c.innerHTML=h;c.dataset.h=h;c.scrollTop=st}}
 function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.closest('[data-px]')){el.remove();PMOD=null;return}let b;
-  if((b=t.closest('[data-pall]'))){const sc=b.dataset.pall;const L=Object.entries((PROP.get(sc)||{}).items||{}).filter(([id,it])=>it&&it.sent&&canDecide(id,it));L.forEach(([id])=>decideProp(sc,id,'ok'));propModalRender();return}
+  if((b=t.closest('[data-pall]'))){const sc=b.dataset.pall;const L=Object.entries((PROP.get(sc)||{}).items||{}).filter(([id,it])=>it&&it.sent&&canDecide(id,it));decideMany(L.map(([id])=>({sc,id})));return}
   if(!(b=t.closest('[data-pd]')))return;const card=b.closest('.ppi');const sc=card.dataset.sc,id=card.dataset.id;const k=b.dataset.pd;
   if(k==='drop'){savePropItem(sc,id,null);setTimeout(propModalRender,50);return}
-  if(k==='ok'){decideProp(sc,id,'ok');propModalRender();return}
-  if(k==='rej'){openPop(b,`<div class="ph">Rechazar propuesta</div><div class="qrow"><input id="prn" placeholder="Motivo (opcional)" style="width:220px;text-align:left"><button data-do="go">Rechazar</button></div>`,{go:()=>{decideProp(sc,id,'rej',{note:($('#prn')||{}).value||''});propModalRender()}});setTimeout(()=>{const i=$('#prn');if(i)i.focus()},30);return}
+  if(k==='ok'){decideProp(sc,id,'ok').then(propModalRender);return}
+  if(k==='rej'){openPop(b,`<div class="ph">Rechazar propuesta</div><div class="qrow"><input id="prn" placeholder="Motivo (opcional)" style="width:220px;text-align:left"><button data-do="go">Rechazar</button></div>`,{go:()=>{decideProp(sc,id,'rej',{note:($('#prn')||{}).value||''}).then(propModalRender)}});setTimeout(()=>{const i=$('#prn');if(i)i.focus()},30);return}
   if(k==='shift'){const it=PROP.get(sc).items[id];const ds=[...(it.after.days||[])].sort();
     openPop(b,`<div class="ph">Aceptar desplazando</div><div class="ptx">Propuesto: ${esc(rngTxt(ds))}. Elige el nuevo día de inicio; se mueve todo el bloque (días hábiles, lunes a sábado).</div><div class="qrow"><input type="date" id="pst" value="${ds[0]}"><button data-do="go">Aceptar</button></div>`,
-      {go:()=>{const v=($('#pst')||{}).value;if(!v){toast('Elige una fecha.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}decideProp(sc,id,'shift',{start:v});propModalRender()}});return}}
+      {go:()=>{const v=($('#pst')||{}).value;if(!v){toast('Elige una fecha.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}decideProp(sc,id,'shift',{start:v}).then(propModalRender)}});return}}
 
 /* =====================================================================
    ETAPA 30 · Modo revisión de propuestas dentro de la grilla
@@ -155,7 +211,7 @@ function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIn
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
 function revDecide(id,st,opt){const o=revItems().find(q=>q.id===id)||[...PROP.values()].flatMap(d=>Object.entries(d.items||{}).filter(([k,it])=>k===id&&it).map(([k,it])=>({sc:d.sc,id:k,it})))[0];if(!o)return;
-  const L=revItems();const i=L.findIndex(q=>q.id===id);decideProp(o.sc,id,st,opt);const R=revItems();REVSEL=R.length?{sc:R[Math.min(Math.max(i,0),R.length-1)].sc,id:R[Math.min(Math.max(i,0),R.length-1)].id,k:0}:null}
+  const L=revItems();const i=L.findIndex(q=>q.id===id);return decideProp(o.sc,id,st,opt).then(r=>{const R=revItems().filter(q=>q.id!==id||r!=='ok');REVSEL=R.length?{sc:R[Math.min(Math.max(i,0),R.length-1)].sc,id:R[Math.min(Math.max(i,0),R.length-1)].id,k:0}:null;return r})}
 function revClick(e){if(!revOn())return;const t=e.target;let b;
   if((b=t.closest('[data-rva]'))){e.stopPropagation();e.preventDefault();const id=b.closest('tr').dataset.a;const k=b.dataset.rva;
     if(k==='l'||k==='r'){const it=revItems().find(q=>q.id===id);if(!it)return;if(!REVSEL||REVSEL.id!==id)REVSEL={sc:it.sc,id,k:0};REVSEL.k+=k==='r'?1:-1;requestRender();return}

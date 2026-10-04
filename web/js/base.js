@@ -206,8 +206,10 @@ function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;ops.forE
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
 function replay(g,from,to){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to])}return skipped}
 function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const sk=replay(g.slice().reverse(),'after','before');redoS.push(g);updUndo();requestRender();
-  toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const sk=replay(g,'before','after');undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`)}
+  toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
+  /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
+  if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const sk=replay(g,'before','after');undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
