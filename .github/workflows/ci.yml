@@ -38,7 +38,7 @@ jobs:
           firebase emulators:exec --only firestore --project demo-lps "cd tests/rules && npm test" 2>&1 | tee rules.log
           rc=${PIPESTATUS[0]}
           # deja visibles las pruebas que fallaron (se leen sin descargar el registro completo)
-          if [ $rc -ne 0 ]; then grep -E "^\s*not ok|AssertionError|FirebaseError|expected|Error:" rules.log | sed 's/\x1b\[[0-9;]*m//g' | head -20 | while IFS= read -r l; do echo "::error::$l"; done; fi
+          if [ $rc -ne 0 ]; then grep -A40 -E "^\s*not ok" rules.log | grep -E "not ok|firestore\.test\.mjs:[0-9]+|PERMISSION_DENIED|message:|Expected|evaluation error" | sed 's/^ *//'  | sed 's/\x1b\[[0-9;]*m//g' | head -40 | while IFS= read -r l; do echo "::error::$l"; done; fi
           exit $rc
 
   interfaz:
