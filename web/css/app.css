@@ -1377,3 +1377,12 @@ body.cqdragging,body.cqdragging *{cursor:grabbing!important;user-select:none}
 .cqtrash.on{border-color:var(--bad);background:var(--bad-soft)}
 .cqsin{font-size:12px;font-weight:600;color:var(--ok)}.cqsin.bad{color:var(--warn)}
 @media (max-width:899px){.mcqb{left:10px;right:10px;bottom:70px;max-width:none!important}.cqh{width:100%;text-align:center}}
+
+button.fzqc{cursor:pointer;font:600 13px var(--f-ui);color:var(--ink);min-height:40px;padding:4px 10px}
+button.fzqc span{font-size:12px;color:var(--muted)}
+button.fzqc.on{background:color-mix(in srgb,var(--q) 14%,var(--panel));box-shadow:0 0 0 2px var(--q)}
+.fzsh{display:flex;justify-content:space-between;align-items:center}.fzsh b{font-size:14px}
+.cqchip.fo{box-shadow:0 0 0 3px color-mix(in srgb,var(--q) 35%,transparent)}
+.mfzq{cursor:pointer;border-radius:6px;padding:1px 4px}.mfzq:hover,.mfzq.fo{background:color-mix(in srgb,var(--q) 14%,transparent)}
+body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
+.cxvt{display:block;margin:0 0 6px;font-size:12px}
