@@ -118,3 +118,97 @@ test('17 · el SC no registra restricciones de una actividad que solo propuso', 
   await expect.poll(() => page.evaluate(() => Object.keys(__dbAll('restr')).length)).toBe(n0 + 1);
   noErrors(errors, 'restricción de actividad propuesta');
 });
+
+/* ---- paquete B: aceptar una propuesta de forma segura ---- */
+const P_I0 = (after, base = I0) => prop({ i0: item(after, base) });
+
+test('2 · aceptar no consume una versión nueva que el SC envió mientras se revisaba', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [P_I0(moved(I0, ['2026-10-02']))] });
+  await revision(page);
+  /* en la base llega otra versión, pero esta pantalla todavía no la recibió */
+  await page.evaluate(() => { const d = __DB.lhprop.get('c1'); d.items.i0 = { ...d.items.i0, ts: 999, after: { ...d.items.i0.after, days: ['2026-10-05'] } }; });
+  const r = await page.evaluate(() => revDecide('i0', 'ok'));
+  expect(r).toBe('ver');
+  await expect(page.locator('#toast')).toContainText('cambió esta propuesta');
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
+  const p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
+  expect(p.items.i0.ts).toBe(999);
+  expect(Object.keys(p.hist || {})).toHaveLength(0);
+  noErrors(errors, 'versión nueva');
+});
+
+test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de pisarlo', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'i0', moved(I0, ['2026-10-05'])], P_I0(moved(I0, ['2026-10-02']))] });
+  await revision(page);
+  let msg = '';
+  page.once('dialog', d => { msg = d.message(); d.dismiss(); });
+  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('conf');
+  expect(msg).toContain('cambió en: días');
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-05']);
+  /* aceptar todo lo visible no la toma: queda pendiente para revisarla sola */
+  page.once('dialog', d => d.accept());
+  await page.click('#ppbar [data-rvall]');
+  await expect(page.locator('#toast')).toContainText('el programa oficial cambió');
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
+  /* aceptando la pregunta, se aplica */
+  page.once('dialog', d => d.accept());
+  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02']);
+  noErrors(errors, 'conflicto con lo oficial');
+});
+
+test('5 · una propuesta de una actividad en la Papelera no la restaura', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'i0', { ...I0, arch: { t: 1, by: 'x', n: 'X' } }], P_I0(moved(I0, ['2026-10-02']))] });
+  expect(await page.evaluate(() => decideProp('c1', 'i0', 'ok'))).toBe('arch');
+  await expect(page.locator('#toast')).toContainText('Papelera');
+  const x = await page.evaluate(() => __dbGet('acts', 'i0'));
+  expect(x.arch).toBeTruthy();
+  expect(x.days).toEqual(I0.days);
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
+  noErrors(errors, 'papelera');
+});
+
+test('6 · quitar un día del borrador también quita su cantidad guardada', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'look' });
+  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, metrado: 30, days: ['2026-10-05', '2026-10-06'], qty: { '2026-10-05': 10, '2026-10-06': 20 } })]); });
+  await expect.poll(() => page.evaluate(() => Object.keys(__dbGet('lhprop', 'c1').items.i0.after.qty || {}).length)).toBe(2);
+  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, days: ['2026-10-06'], qty: { '2026-10-06': 20 } })]); });
+  await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.after.days)).toEqual(['2026-10-06']);
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.after.qty).toEqual({ '2026-10-06': 20 });
+  /* enviar tampoco mezcla: el elemento queda igual, ahora enviado */
+  await page.evaluate(() => sendProp());
+  await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.sent)).toBe(true);
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.after.qty).toEqual({ '2026-10-06': 20 });
+  noErrors(errors, 'borrador sin restos');
+});
+
+test('12 · deshacer una aceptación devuelve la propuesta a pendientes; rehacer la vuelve a aceptar', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [P_I0(moved(I0, ['2026-10-02', '2026-10-03']))] });
+  await revision(page);
+  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);
+  await page.click('#bundo');
+  await expect(page.locator('#toast')).toContainText('vuelve a quedar pendiente');
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
+  let p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
+  expect(p.items.i0.sent).toBe(true);
+  const h = Object.values(p.hist);
+  expect(h).toHaveLength(1);
+  expect(h[0].st).toBe('ok');
+  expect(h[0].undone).toBeTruthy();
+  await page.click('#bredo');
+  await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0)).toBeNull();
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);
+  p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
+  expect(Object.values(p.hist)[0].undone).toBeUndefined();
+  noErrors(errors, 'deshacer aceptación');
+});
+
+test('15 · el SC con dos partidas no puede cambiar la partida de una actividad en su propuesta', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'look', extra: [['members', 'sc@obra.pe', { role: 'sc', name: 'Sandra Sanitarias', sc: 'c1', scs: ['c1', 'c2'] }]] });
+  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, sc: 'c2' })]); });
+  await expect(page.locator('#toast')).toContainText('La partida de una actividad no se cambia');
+  expect(await page.evaluate(() => ((__dbGet('lhprop', 'c1') || {}).items || {}).i0 || null)).toBeNull();
+  expect(await page.evaluate(() => ((__dbGet('lhprop', 'c2') || {}).items || {}).i0 || null)).toBeNull();
+  noErrors(errors, 'partida en propuesta');
+});
