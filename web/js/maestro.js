@@ -105,6 +105,19 @@ function mpRows(){const I=mpIdx();const q=fold(U.mpq||'').trim();const col=new S
     out.push({n,lv,kids:ks.length,open});if(ks.length&&open)ks.forEach(k=>walk(k,lv+1,qq))};
   (I.kids.get('')||[]).forEach(n=>walk(n,0,false));
   const hitos=I.hitos.filter(match);return{rows:out,hitos}}
+/** Vista «Por piso» (como el lookahead): cada piso con sus partidas, en el orden del maestro; al final las partidas sin pisos */
+function mpRowsPiso(){const I=mpIdx();const q=fold(U.mpq||'').trim();const col=new Set(U.mpCol||[]);const det=!!U.mpDet;const out=[];
+  const order=new Map();let k=0;const walk=n=>{order.set(n.id,k++);(I.kids.get(n.id)||[]).forEach(walk)};(I.kids.get('')||[]).forEach(walk);
+  const lab=n=>n.tipo==='pp'?((MPN.get(n.parent)||{}).name||n.name):n.name;
+  const match=n=>!q||fold(`${n.code||''} ${n.name||''} ${lab(n)} ${mpPath(n)}`).includes(q);const byO=(a,b)=>(order.get(a.id)??0)-(order.get(b.id)??0);
+  const add=(key,hdr,L)=>{if(!L.length)return;const open=!!q||!col.has(key);out.push({hdr,key,n:L.length,open});if(!open)return;
+    for(const n of L){const ks=det?(I.kids.get(n.id)||[]).filter(x=>x.tipo==='det'):[];const op=!!q||!col.has(n.id);
+      out.push({n,lv:0,kids:ks.length,open:op,lab:lab(n),sub:mpPath(n.tipo==='pp'?MPN.get(n.parent)||n:n)});if(ks.length&&op)ks.forEach(d=>out.push({n:d,lv:1,kids:0,open:false}))}};
+  const pps=[...MPN.values()].filter(n=>n.tipo==='pp'&&match(n));
+  for(const p of visPisos())add('piso:'+p.id,{code:p.code,name:p.name},pps.filter(n=>n.pisoId===p.id).sort(byO));
+  if(!U.piso){const sin=pps.filter(n=>!S.pis.has(n.pisoId)).sort(byO);add('piso:?',{code:'¿?',name:'Piso que ya no existe'},sin)}
+  add('piso:-',{code:'—',name:'Partidas sin pisos (valen para toda la obra)'},[...MPN.values()].filter(n=>n.tipo==='part'&&!(I.kids.get(n.id)||[]).some(x=>x.tipo==='pp')&&match(n)).sort(byO));
+  return{rows:out,hitos:I.hitos.filter(match)}}
 
 /* ---------- Gantt ---------- */
 function mpRange(){const I=mpIdx();let a='',b='';const t=todayIso();
@@ -115,28 +128,34 @@ function mpHeadGantt(G){let h='';let m=G.start.slice(0,8)+'01';
   while(m<=G.end){const nx=addD(m.slice(0,8)+'28',5).slice(0,8)+'01';const x0=Math.max(0,G.x(m)),x1=Math.min(G.W,G.x(nx));const w=x1-x0;
     if(w>0){const[y,mm]=m.split('-');h+=`<span class="maemo" style="left:${x0}px;width:${w}px">${w>34?MES[+mm-1]+(w>58?' '+y.slice(2):''):''}</span>`}m=nx}
   return`<div class="maegw" style="width:${G.W}px">${h}<i class="maetd" style="left:${G.x(todayIso())}px" title="Hoy"></i></div>`}
-function mpBar(n,s,G){if(!s.ini&&!s.fin)return'';const a=s.ini||s.fin,b=s.fin||s.ini;const x=G.x(a),w=Math.max(3,G.x(addD(b,1))-x);
-  const tip=`${n.name||''} · ${fmtY(a)} → ${fmtY(b)} · ${mpWd(a,b)} días hábiles`;
-  return`<div class="maebar${s.roll?' sum':''}${n.tipo==='pp'?' pp':''}${n.tipo==='det'?' det':''}" style="left:${x}px;width:${w}px" title="${esc(tip)}"></div>`}
+function mpBar(n,s,G,st){if(!s.ini&&!s.fin)return'';const a=s.ini||s.fin,b=s.fin||s.ini;const x=G.x(a),w=Math.max(3,G.x(addD(b,1))-x);
+  const tip=`${n.name||''} · ${fmtY(a)} → ${fmtY(b)} · ${mpWd(a,b)} días hábiles${st&&st.sc?' · '+conOf(st.sc).name:''}${st?' · '+mpStTip(st):''}`;
+  /* con actividades vinculadas, la barra toma el color de su subcontratista (como en el lookahead) */
+  const col=st&&st.sc&&!s.roll?`;background:${conOf(st.sc).color}`:'';
+  /* y una marca donde termina el lookahead, si se pasa del fin */
+  const lk=st&&st.end&&!st.ok?`<i class="maelk" style="left:${G.x(addD(st.end,1))}px" title="${esc(mpStTip(st))}"></i>`:'';
+  return`<div class="maebar${s.roll?' sum':''}${n.tipo==='pp'?' pp':''}${n.tipo==='det'?' det':''}" style="left:${x}px;width:${w}px${col}" title="${esc(tip)}"></div>${lk}`}
 
 /* ---------- pantalla ---------- */
 let MPED=false,MAE_SL=null,MAE_FOCUS=null;
-function renderMaestro(main){ensureMP();
+function renderMaestro(main){ensureMP();ensureMPL();if(U.mpVinc&&canMP()&&MP_OK&&!MP_ERR){mpVincView(main);return}
   if(!canMP()){main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout">El plan maestro solo lo ven el administrador y el planner.</div></div></div>`;return}
   if(!MP_OK){main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout">Cargando el plan maestro…</div></div></div>`;return}
   if(MP_ERR){main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout warnc"><b>No se pudo leer el plan maestro</b> (${esc(MP_ERR)}). ${MP_ERR==='permission-denied'?'Las reglas de seguridad de esta copia todavía no incluyen el plan maestro: se instalan al publicar.':'Revisa tu conexión y recarga la página.'}</div></div></div>`;return}
-  const I=mpIdx();const{rows,hitos}=mpRows();const G=mpRange();const ed=MPED;const tx=G.x(todayIso());
+  const I=mpIdx();const vp=U.mpVista!=='part';const{rows,hitos}=vp?mpRowsPiso():mpRows();const LM=mpLookMap();const G=mpRange();const ed=MPED;const tx=G.x(todayIso());
   const grid=U.mpZ==='mes'?'':`background-image:linear-gradient(to right,var(--line2) 1px,transparent 1px);background-size:${7*G.ppd}px 100%`;
   const gcell=inner=>`<td class="maegc"><div class="maeg0" style="width:${G.W}px;${grid}"><i class="maetd" style="left:${tx}px"></i>${inner}</div></td>`;
   const dt=(n,f,v,canEd)=>canEd?`<input type="date" class="ci maedt" data-mf="${f}" data-id="${n.id}" data-fk="mp:${n.id}:${f}" value="${esc(v||'')}" data-o="${esc(v||'')}" aria-label="${f==='ini'?'Inicio':'Fin'}">`:`<span class="${!v?'mu':''}">${v?fmtY(v):'—'}</span>`;
   const menu=id=>ed?`<button class="maeb" data-mn="${id}" aria-label="Opciones" title="Opciones">⋮</button>`:'';
-  const row=({n,lv,kids,open})=>{const s=I.span.get(n.id)||{};const leaf=!s.roll;
-    const nm=ed?`<input class="ci maein" data-mf="name" data-id="${n.id}" data-fk="mp:${n.id}:name" value="${esc(n.name||'')}" data-o="${esc(n.name||'')}" aria-label="Nombre">`:`<span title="${esc(n.name||'')}">${esc(n.name||'(sin nombre)')}</span>`;
+  const row=r=>{if(r.hdr)return`<tr class="maesec maepiso"><td colspan="8"><button class="maesecb" data-tg="${esc(r.key)}" aria-expanded="${r.open}">${r.open?'▾':'▸'} ${esc(r.hdr.code)} · ${esc(r.hdr.name)} <span class="mu">${r.n} partida${r.n===1?'':'s'}</span></button></td></tr>`;
+    const{n,lv,kids,open}=r;const s=I.span.get(n.id)||{};const leaf=!s.roll;const st=LM.node.get(n.id);
+    const dia=st&&st.end?`<i class="maest ${st.ok?'ok':'bad'}" title="${esc(mpStTip(st))}"></i>`:'';
+    const nm=r.lab?`<span class="maelb" title="${esc((r.sub?r.sub+' › ':'')+r.lab)}">${dia}<b>${esc(r.lab)}</b>${r.sub?`<small>${esc(r.sub)}</small>`:''}</span>`:ed?`<input class="ci maein" data-mf="name" data-id="${n.id}" data-fk="mp:${n.id}:name" value="${esc(n.name||'')}" data-o="${esc(n.name||'')}" aria-label="Nombre">`:`<span title="${esc(n.name||'')}">${dia}${esc(n.name||'(sin nombre)')}</span>`;
     const cd=ed?`<input class="ci maecin" data-mf="code" data-id="${n.id}" data-fk="mp:${n.id}:code" value="${esc(n.code||'')}" data-o="${esc(n.code||'')}" aria-label="Código" placeholder="—">`:esc(n.code||'');
     const ps=n.tipo==='pp'?(ed?`<select class="ci maeps" data-mf="pisoId" data-id="${n.id}" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===n.pisoId?' selected':''}>${esc(p.code)}</option>`).join('')}${n.pisoId&&!S.pis.has(n.pisoId)?'<option selected value="">¿?</option>':''}</select>`:esc(mpPisoTxt(n.pisoId))):n.tipo==='det'?`<span class="mu">${esc(mpPisoTxt(mpPiso(n)))}</span>`:'';
     return`<tr class="maer t-${n.tipo}" data-id="${n.id}"><td class="mk0"><span class="maei" style="--lv:${lv}">${kids?`<button class="maetg" data-tg="${n.id}" aria-expanded="${open}" aria-label="${open?'Plegar':'Desplegar'}">${open?'▾':'▸'}</button>`:'<i class="maesp"></i>'}${cd}</span></td>
       <td class="mk1" style="--lv:${lv}">${nm}</td><td class="mk2">${ps}</td><td class="mk3">${dt(n,'ini',leaf?n.ini:s.ini,ed&&leaf)}</td><td class="mk4">${dt(n,'fin',leaf?n.fin:s.fin,ed&&leaf)}</td>
-      <td class="mk5">${s.ini&&s.fin?mpWd(s.ini,s.fin):''}</td><td class="mk6">${menu(n.id)}</td>${gcell(mpBar(n,s,G))}</tr>`};
+      <td class="mk5">${s.ini&&s.fin?mpWd(s.ini,s.fin):''}</td><td class="mk6">${menu(n.id)}</td>${gcell(mpBar(n,s,G,st))}</tr>`};
   const hrow=h=>{const d=I.hd.get(h.id)||'';const k=h.hk||{};const how=k.modo==='amarrado'?`amarrado al ${k.campo==='ini'?'inicio':'fin'} de ${(k.nodos||[]).length} partida${(k.nodos||[]).length===1?'':'s'}`:'fecha fija';
     const x=d?G.x(d)+Math.round(G.ppd/2):0;const tip=`${h.name||''} · ${d?fmtY(d):'sin fecha'} · ${how}${h.ref&&h.ref.fin?` · Primavera: ${fmtY(h.ref.fin)}`:''}`;
     return`<tr class="maer t-hito" data-id="${h.id}"><td class="mk0"><span class="maei" style="--lv:0"><i class="maesp"></i><span class="mu">${esc((h.ref&&h.ref.code)||'')}</span></span></td>
@@ -146,11 +165,13 @@ function renderMaestro(main){ensureMP();
   const nArch=MPAR.size;const empty=!MPN.size;
   const bar=`<div class="bar maebar0">
     <input type="search" id="maeq" placeholder="Buscar partida, piso o código" aria-label="Buscar en el plan maestro" value="${esc(U.mpq||'')}" data-fk="maeq">
+    <span class="seg" aria-label="Vista"><button data-mvista="piso" class="${vp?'on':''}" title="Cada piso con sus partidas, como el lookahead">Por piso</button><button data-mvista="part" class="${vp?'':'on'}" title="Capítulos, especialidades y partidas, como el Excel del planner">Por partida</button></span>
     <span class="seg" aria-label="Escala"><button data-mz="sem" class="${U.mpZ!=='mes'?'on':''}">Semanas</button><button data-mz="mes" class="${U.mpZ==='mes'?'on':''}">Meses</button></span>
     <label class="chk" title="Muestra las actividades de detalle de cada partida por piso"><input type="checkbox" id="maedet"${U.mpDet?' checked':''}> Detalle</label>
     <button class="ib" data-mall="1" title="Desplegar todo">Desplegar todo</button><button class="ib" data-mall="0" title="Plegar todo">Plegar todo</button>
     <button class="ib" id="maetoday" title="Llevar el Gantt a hoy">Hoy</button>
     <span class="fsp" style="flex:1"></span>
+    ${empty?'':`<button class="ib" id="maevinc" title="Arrastra las actividades del lookahead a su partida del maestro">⇄ Vincular con el lookahead</button><button class="ib" id="maexls" title="Excel con lo que se ve (filtros y vista), en el orden del Excel del planner">Exportar Excel</button>`}
     ${ed?`<label class="ib" title="Carga el plan maestro desde el Excel del planner">⇪ Importar Excel<input type="file" id="maexl" accept=".xlsx,.xlsm,.xls" hidden></label><button class="ib" id="maeadd" aria-haspopup="menu">+ Agregar ▾</button>${nArch?`<button class="ib" id="maearc" title="Lo archivado se puede recuperar">Archivados (${nArch})</button>`:''}`:''}
     <button class="ib${ed?' on':' pri'}" id="maeed" title="${ed?'Volver al modo consulta':'Habilitar la edición del plan maestro'}">${ed?'✓ Terminar edición':'✎ Editar'}</button></div>`;
   const nP=[...MPN.values()].filter(n=>n.tipo==='pp').length,nPart=[...MPN.values()].filter(n=>n.tipo==='part').length;
@@ -158,7 +179,7 @@ function renderMaestro(main){ensureMP();
   const body=empty?`<div class="scroll"><div class="wrap"><div class="callout"><b>Todavía no hay plan maestro.</b> ${ed?'Créalo con «+ Agregar»: agrupadores (capítulos, especialidades), partidas, sus pisos e hitos.':'Pulsa «✎ Editar» y luego «+ Agregar» para crearlo a mano.'} También puedes cargarlo con «⇪ Importar Excel» (el Excel del planner); la importación desde Primavera viene en los siguientes pasos.</div></div></div>`
     :`<div class="scroll maesc"><table class="maet${ed?' ed':''}"><thead><tr><th class="mk0">Código</th><th class="mk1">Nombre</th><th class="mk2">Piso</th><th class="mk3">Inicio</th><th class="mk4">Fin</th><th class="mk5" title="Días hábiles">Días</th><th class="mk6"></th><th class="maegh">${mpHeadGantt(G)}</th></tr></thead><tbody>
       ${hitos.length||I.hitos.length?`<tr class="maesec"><td colspan="8"><button class="maesecb" data-hoff aria-expanded="${!U.mpHitOff}">${U.mpHitOff?'▸':'▾'} Hitos <span class="mu">${hitos.length}</span></button></td></tr>${U.mpHitOff?'':hitos.map(hrow).join('')}`:''}
-      <tr class="maesec"><td colspan="8"><span class="maesecb">Partidas <span class="mu">${rows.length} fila${rows.length===1?'':'s'}</span></span></td></tr>
+      ${vp?'':`<tr class="maesec"><td colspan="8"><span class="maesecb">Partidas <span class="mu">${rows.length} fila${rows.length===1?'':'s'}</span></span></td></tr>`}
       ${rows.map(row).join('')||`<tr><td colspan="8" class="mu" style="padding:12px">Nada coincide con la búsqueda${U.piso?' en este piso':''}.</td></tr>`}</tbody></table></div>`;
   main.innerHTML=`<div class="view mae">${bar}${empty?'':info}${body}</div>`;
   const sc=main.querySelector('.maesc');
@@ -181,7 +202,10 @@ function mpWire(main,G){
   main.onclick=e=>{const b=e.target.closest('button');if(!b)return;
     if(b.dataset.tg){const s=new Set(U.mpCol||[]);s.has(b.dataset.tg)?s.delete(b.dataset.tg):s.add(b.dataset.tg);U.mpCol=[...s];saveUI();render();return}
     if(b.dataset.mz){U.mpZ=b.dataset.mz;MAE_SL=null;saveUI();render();return}
-    if(b.dataset.mall!=null){U.mpCol=b.dataset.mall==='1'?[]:[...mpIdx().kids.keys()].filter(Boolean);saveUI();render();return}
+    if(b.dataset.mall!=null){U.mpCol=b.dataset.mall==='1'?[]:[...mpIdx().kids.keys()].filter(Boolean).concat(U.mpVista!=='part'?['piso:-','piso:?',...pisos().map(p=>'piso:'+p.id)]:[]);saveUI();render();return}
+    if(b.dataset.mvista){U.mpVista=b.dataset.mvista;saveUI();render();return}
+    if(b.id==='maevinc'){U.mpVinc=true;closePop();render();return}
+    if(b.id==='maexls'){mpExport();return}
     if(b.hasAttribute('data-hoff')){U.mpHitOff=!U.mpHitOff;saveUI();render();return}
     if(b.id==='maetoday'){const sc=main.querySelector('.maesc');if(sc){MAE_SL=Math.max(0,G.x(todayIso())-260);sc.scrollLeft=MAE_SL}return}
     if(b.id==='maeed'){MPED=!MPED;closePop();render();toast(MPED?'Edición activada: los cambios del plan maestro se guardan al momento (Ctrl+Z deshace).':'Modo consulta.');return}
@@ -196,7 +220,9 @@ function mpNew(tipo,parent,extra){const I=mpIdx();const sib=tipo==='hito'?I.hito
   const n={tipo,parent:tipo==='hito'?'':parent||'',ord,code:'',name:{wbs:'Nuevo agrupador',part:'Nueva partida',pp:'Nuevo piso',det:'Nueva actividad',hito:'Nuevo hito'}[tipo],src:'manual',...extra};
   if(tipo==='part'||tipo==='pp'||tipo==='det'){n.ini=n.ini||(ps&&ps.ini)||t;n.fin=n.fin||(ps&&ps.fin)||wshift(n.ini,10);if(n.fin<n.ini)n.fin=n.ini}
   return{id:uid('mp'),n}}
-function mpAdd(tipo,parent,extra,label){const{id,n}=mpNew(tipo,parent,extra);if(parent){const s=new Set(U.mpCol||[]);s.delete(parent);U.mpCol=[...s]}
+function mpAdd(tipo,parent,extra,label){const{id,n}=mpNew(tipo,parent,extra);
+  /* la estructura (nombres, agrupadores) se edita en la vista «Por partida» */
+  if(tipo!=='hito'&&U.mpVista!=='part'){U.mpVista='part';saveUI();setTimeout(()=>toast('Vista «Por partida»: aquí se edita la estructura del plan maestro.'),900)}if(parent){const s=new Set(U.mpCol||[]);s.delete(parent);U.mpCol=[...s]}
   MAE_FOCUS=tipo==='hito'?null:id;mpApply([mpOp(id,n)],label||MP_ADDED[tipo]);return id}
 const MP_ADDED={wbs:'Agrupador agregado',part:'Partida agregada',pp:'Piso agregado',det:'Actividad de detalle agregada',hito:'Hito agregado'};
 function mpAddMenu(btn){openPop(btn,`<div class="ph">Agregar al plan maestro</div><button data-do="wbs">Agrupador (capítulo, especialidad…)</button><button data-do="part">Partida</button><button data-do="hito">Hito</button>`,
@@ -271,3 +297,31 @@ function mpHitoDlg(id){const h=id?MPN.get(id):null;const k=(h&&h.hk)||{modo:'ama
 function mpHoyCard(){if(!canMP())return null;ensureMP();if(!MP_OK)return null;const I=mpIdx();const t=todayIso();const nx=I.hitos.filter(h=>(I.hd.get(h.id)||'')>=t).slice(0,3);
   return{k:'mp',title:'Plan maestro',n:0,tone:'',sub:'',items:[],go:'maestro',goLabel:'Abrir el plan maestro',
     empty:!MPN.size?'Todavía no hay plan maestro cargado.':nx.length?'Próximos hitos: '+nx.map(h=>`${h.name} (${fmtD(I.hd.get(h.id))})`).join(' · '):'No hay hitos por venir.'}}
+
+/* ---------- Excel del plan maestro: lo que se ve (vista, piso, búsqueda, detalle), todo desplegado ---------- */
+async function mpExport(){if(!canMP())return;try{await loadXlsx();const X=window.XLSX;const p=P();const I=mpIdx();const LM=mpLookMap();
+  const vp=U.mpVista!=='part';const keep=U.mpCol;U.mpCol=[];let R;try{R=vp?mpRowsPiso():mpRows()}finally{U.mpCol=keep}
+  /* fechas como fecha de Excel (local, para que la zona horaria no corra el día) */
+  const dX=s=>{if(!s)return'';const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+  const LET={wbs:'C',part:'E',pp:'F',det:'P'};
+  const head=['ITEM','DESCRIPCIÓN','PISO','UND','METRADO','INICIO','FIN','DÍAS HÁB.','ACT. VINCULADAS','SUBCONTRATISTA','FIN SEGÚN LOOKAHEAD','DESFASE (DÍAS HÁB.)'];
+  const aoa=[[p.fullName||p.name||'Proyecto'],[`PLAN MAESTRO · ${vp?'por piso':'por partida'} · ${fmtY(todayIso())}${U.piso?' · '+pisoLabel():''}${U.mpq?' · búsqueda: '+U.mpq:''}`],[],head];const meta=[];
+  const add=(row,m)=>{aoa.push(row);meta.push(m||{})};
+  for(const h of R.hitos){const d=I.hd.get(h.id)||'';add([(h.ref&&h.ref.code)||'H','◆ '+(h.name||''),'','','',d?dX(d):'',d?dX(d):'','','',MP_GRP[h.grp]||'','',''],{b:true})}
+  for(const r of R.rows){if(r.hdr){add(['',`${r.hdr.code} · ${r.hdr.name}`],{b:true,fill:'DCEAF0'});continue}
+    const n=r.n,s=I.span.get(n.id)||{},st=LM.node.get(n.id);const name=r.lab?(r.lab+(r.sub?` (${r.sub})`:'')):n.name||'';
+    add([n.code||LET[n.tipo]||'','   '.repeat(r.lv||0)+name,n.tipo==='pp'||n.tipo==='det'?mpPisoTxt(mpPiso(n)):'',n.und||'',n.metrado??'',s.ini?dX(s.ini):'',s.fin?dX(s.fin):'',s.ini&&s.fin?mpWd(s.ini,s.fin):'',
+      st?st.n:'',st&&st.sc?conOf(st.sc).name:'',st&&st.end?dX(st.end):'',st&&st.end&&st.fin?st.dd:''],{b:n.tipo==='wbs',lv:r.lv||0,bad:st&&!st.ok})}
+  const ws=X.utils.aoa_to_sheet(aoa,{cellDates:true,dateNF:'dd/mm/yyyy'});
+  const B='1F3A4D',hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:B}},alignment:{horizontal:'center',vertical:'center',wrapText:true}};
+  for(let c=0;c<head.length;c++){const k=X.utils.encode_cell({r:3,c});if(ws[k])ws[k].s=hs}
+  {const k=X.utils.encode_cell({r:0,c:0});if(ws[k])ws[k].s={font:{bold:true,sz:13}}}
+  meta.forEach((m,i)=>{const r=i+4;for(let c=0;c<head.length;c++){const k=X.utils.encode_cell({r,c});const cell=ws[k];if(!cell)continue;
+      const st={};if(m.b)st.font={bold:true};if(m.fill)st.fill={fgColor:{rgb:m.fill}};if(m.bad&&c>=10)st.font={bold:true,color:{rgb:'B83A2E'}};if(c===5||c===6||c===10)cell.z='dd/mm/yyyy';if(Object.keys(st).length)cell.s=st}});
+  ws['!cols']=[8,60,8,7,10,11,11,9,9,24,14,12].map(w=>({wch:w}));
+  ws['!rows']=[];meta.forEach((m,i)=>{if(m.lv)ws['!rows'][i+4]={level:Math.min(7,m.lv)}});
+  if(typeof autoF==='function')autoF(X,ws,3);
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Plan maestro');
+  const buf=X.write(wb,{type:'array',bookType:'xlsx'});saveBlob(`Plan maestro${p.code?' '+p.code:''} ${todayIso()}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  toast('Excel del plan maestro listo')}
+ catch(e){toast('No se pudo exportar: '+(e.message||e))}}

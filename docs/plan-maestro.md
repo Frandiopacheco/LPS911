@@ -102,8 +102,9 @@ Herramienta a todo el ancho; se abre en consulta con «✎ Editar».
 
 ## Vínculo y hito en el Lookahead (solo planner y administrador)
 
-- «Vincular al maestro…» en el menú ⋮ de la actividad, del ambiente o en la selección múltiple. Lista de partida × piso del
-  piso de la actividad, con buscador y sugerencia por nombre. No modifica `acts` (funciona en modo consulta).
+- Pantalla «⇄ Vincular con el lookahead» en el Plan maestro, partida en dos: a la izquierda las actividades del lookahead del
+  piso elegido (por sector y ambiente, «sin vincular» por defecto); a la derecha las partidas de ese piso. Se arrastra una o
+  varias (Ctrl+clic) a su partida; en el celular se toca la actividad y luego la partida. Sugerencia por nombre. No modifica `acts`.
 - ◆ en la celda de la fecha de fin de la base, en cada fila vinculada; fuera de la ventana: «◆→ 14/11» en el borde.
   Verde si el último día del conjunto de actividades vinculadas a esa partida × piso cae en o antes del fin base; rojo si
   se pasa. Título: «Fin maestro 14/11 · el lookahead termina 18/11 (+3 días hábiles)». Caché por `DV` + versión del maestro;
@@ -129,4 +130,5 @@ administrador crea en `ok` o pasa a `ok`/`dev`; nadie borra. El planner no escri
 
 - [x] Paso 1: rol planner, colecciones y reglas, pestaña con árbol + Gantt, edición manual, hitos fijos y amarrados, archivar/recuperar, deshacer, tarjeta en Hoy.
 - [x] Paso 2: importar el Excel del planner (hoja visible con ITEM, emparejar pisos recordado, avisos, volver a importar conservando ids y archivando lo que ya no está, deshacer). Además: mover y convertir nodos. El detalle no acumula fechas en su partida por piso.
-- [ ] Paso 3: versiones y aprobación.
+- [x] Paso 4 (adelantado, decidido con el dueño): vincular con el lookahead en una pantalla partida en dos (arrastrar actividades a su partida), ◆ en cada fila vinculada del lookahead, vista «Por piso» (como el lookahead) además de «Por partida», barras con el color del SC vinculado y Excel con los filtros de pantalla. El ◆ compara con el maestro vigente hasta que exista una versión aprobada (paso 3).
+- [ ] Paso 3: versiones y aprobación (el ◆ pasa a comparar con la versión aprobada).

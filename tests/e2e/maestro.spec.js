@@ -18,6 +18,7 @@ const MP = [
 
 test('planner: ve el plan maestro y el lookahead, pero no Equipo; solo lectura fuera del maestro', async ({ page }) => {
   const errors = await openApp(page, { as: 'planner', extra: MP });
+  await page.evaluate(() => { U.mpVista = 'part'; });
   const tabs = await visibleTabs(page);
   expect(tabs).toContain('maestro');
   expect(tabs).toContain('look');
@@ -94,6 +95,7 @@ test('planner: crea a mano una partida con sus pisos, cambia fechas, deshace y a
 
 test('hitos: amarrado a partidas se mueve con ellas; fijo guarda su fecha', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', tab: 'maestro', extra: MP.slice(0, 4) });
+  await page.evaluate(() => { U.mpVista = 'part'; render(); });
   await page.click('#maeed');
   await page.click('#maeadd');
   await page.click('#pop [data-do="hito"]');
@@ -143,6 +145,7 @@ test.describe('celular', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   test('planner: el plan maestro se ve en el celular', async ({ page }) => {
     const errors = await openApp(page, { as: 'planner', extra: MP });
+    await page.evaluate(() => { U.mpVista = 'part'; });
     await page.locator('#bnav [data-bt="maestro"]').click();
     await expectTabOk(page, 'maestro celular');
     await expect(page.locator('tr.maer[data-id="pa"]')).toBeVisible();
