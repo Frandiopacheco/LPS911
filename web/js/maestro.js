@@ -26,7 +26,8 @@ function stopMP(){if(mpSub)mpSub();mpSub=null;MPN.clear();MPAR.clear();MP_OK=fal
 const mpGet=id=>MPN.get(id)||MPAR.get(id)||null;
 
 /** Guarda un nodo (null = borrar; solo lo usa deshacer la creación). Envía solo los campos que cambian. */
-function mpPut(id,data){const prev=mpGet(id);MPV++;MPN.delete(id);MPAR.delete(id);if(data)(data.arch?MPAR:MPN).set(id,{...clone(data),id});
+function mpLocal(id,data){MPV++;MPN.delete(id);MPAR.delete(id);if(data)(data.arch?MPAR:MPN).set(id,{...clone(data),id})}
+function mpPut(id,data){const prev=mpGet(id);mpLocal(id,data);
   if(!db||!canMP())return Promise.resolve();
   const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body,'mp'):null;if(args&&!args.length)return Promise.resolve();
   const key='mp/'+id,ref=fcol('mp').doc(id);MPQ.set(id,(MPQ.get(id)||0)+1);pending++;setStatus();
@@ -34,13 +35,22 @@ function mpPut(id,data){const prev=mpGet(id);MPV++;MPN.delete(id);MPAR.delete(id
   const p=(chains[key]||Promise.resolve()).then(()=>dbCall(run)).then(()=>{lastErr=null},e=>mpErr(e))
     .finally(()=>{const n=(MPQ.get(id)||1)-1;if(n>0)MPQ.set(id,n);else MPQ.delete(id);pending--;setStatus()});
   chains[key]=p;return p}
-function mpErr(e){const c=e&&e.code;lastErr=c==='permission-denied'?'Sin permiso':'Error al guardar';
+/** Muchos nodos a la vez (importar, deshacer una importación): en lotes de Firestore de 400, documento completo */
+function mpWriteMany(L){for(const{id,data}of L){mpLocal(id,data);MPQ.set(id,(MPQ.get(id)||0)+1)}
+  const done=ids=>ids.forEach(id=>{const n=(MPQ.get(id)||1)-1;if(n>0)MPQ.set(id,n);else MPQ.delete(id)});
+  if(!db||!canMP()){done(L.map(o=>o.id));return Promise.resolve()}
+  const P=[];for(let i=0;i<L.length;i+=400){const part=L.slice(i,i+400);pending++;setStatus();
+    P.push(dbCall(()=>{const b=db.batch();for(const{id,data}of part){const ref=fcol('mp').doc(id);if(data)b.set(ref,strip(clone(data)));else b.delete(ref)}return b.commit()})
+      .then(()=>{lastErr=null},e=>mpErr(e)).finally(()=>{done(part.map(o=>o.id));pending--;setStatus()}))}
+  return Promise.all(P)}
+function mpErr(e){const c=e&&e.code;if(!c)console.warn('plan maestro: no se pudo guardar',e);lastErr=c==='permission-denied'?'Sin permiso':'Error al guardar';
   toast(c==='permission-denied'?'No se pudo guardar el plan maestro: solo lo editan el administrador y el planner.':`No se pudo guardar un cambio del plan maestro (${c||'error'}). Revisa tu conexión y vuelve a intentarlo.`);setStatus()}
 
 /* ---------- deshacer ---------- */
 const mpOp=(id,after)=>({id,before:clone(mpGet(id)),after:after?{...clone(after),id,by:me?me.email:'',t:NOW()}:null});
-function mpApply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;ops.forEach(o=>mpPut(o.id,o.after));MAEU.push(ops);if(MAEU.length>100)MAEU.shift();MAER.length=0;requestRender();if(label)toast(label,'Deshacer',mpUndo)}
-function mpReplay(g,from,to){let sk=0;for(const o of g){if(canon(mpGet(o.id))!==canon(o[from])){sk++;continue}mpPut(o.id,o[to])}return sk}
+function mpApply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(ops.length>25)mpWriteMany(ops.map(o=>({id:o.id,data:o.after})));else ops.forEach(o=>mpPut(o.id,o.after));MAEU.push(ops);if(MAEU.length>100)MAEU.shift();MAER.length=0;requestRender();if(label)toast(label,'Deshacer',mpUndo)}
+function mpReplay(g,from,to){let sk=0;const L=[];for(const o of g){if(canon(mpGet(o.id))!==canon(o[from])){sk++;continue}L.push({id:o.id,data:o[to]})}
+  if(L.length>25)mpWriteMany(L);else L.forEach(o=>mpPut(o.id,o.data));return sk}
 function mpUndo(){const g=MAEU.pop();if(!g){toast('No hay cambios del plan maestro para deshacer.');return}const sk=mpReplay(g.slice().reverse(),'after','before');MAER.push(g);requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',mpRedo)}
 function mpRedo(){const g=MAER.pop();if(!g)return;const sk=mpReplay(g,'before','after');MAEU.push(g);requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`)}
@@ -55,8 +65,9 @@ function mpIdx(){if(MPI&&MPI_K===MPV)return MPI;MPI_K=MPV;
   const kids=new Map(),hitos=[];
   for(const n of MPN.values()){if(n.tipo==='hito'){hitos.push(n);continue}const p=n.parent&&MPN.has(n.parent)&&n.parent!==n.id?n.parent:'';let L=kids.get(p);if(!L)kids.set(p,L=[]);L.push(n)}
   for(const L of kids.values())L.sort(mpOrd);
-  /* un agrupador o una partida con hijos toma el menor inicio y el mayor fin de ellos */
-  const span=new Map();const calc=(n,dep)=>{let s=span.get(n.id);if(s)return s;let ini=n.ini||'',fin=n.fin||'';const ks=kids.get(n.id)||[];
+  /* un agrupador o una partida con hijos toma el menor inicio y el mayor fin de ellos; el detalle no cuenta (la partida
+     por piso es lo que se controla y sus fechas se editan directo; el detalle es solo referencia) */
+  const span=new Map();const calc=(n,dep)=>{let s=span.get(n.id);if(s)return s;let ini=n.ini||'',fin=n.fin||'';const ks=(kids.get(n.id)||[]).filter(k=>k.tipo!=='det');
     if(ks.length&&dep<60){let a='',b='';for(const k of ks){const o=calc(k,dep+1);if(o.ini&&(!a||o.ini<a))a=o.ini;if(o.fin&&(!b||o.fin>b))b=o.fin}if(a)ini=a;if(b)fin=b}
     s={ini,fin,roll:ks.length>0};span.set(n.id,s);return s};
   for(const n of MPN.values())if(n.tipo!=='hito')calc(n,0);
@@ -140,11 +151,11 @@ function renderMaestro(main){ensureMP();
     <button class="ib" data-mall="1" title="Desplegar todo">Desplegar todo</button><button class="ib" data-mall="0" title="Plegar todo">Plegar todo</button>
     <button class="ib" id="maetoday" title="Llevar el Gantt a hoy">Hoy</button>
     <span class="fsp" style="flex:1"></span>
-    ${ed?`<button class="ib" id="maeadd" aria-haspopup="menu">+ Agregar ▾</button>${nArch?`<button class="ib" id="maearc" title="Lo archivado se puede recuperar">Archivados (${nArch})</button>`:''}`:''}
+    ${ed?`<label class="ib" title="Carga el plan maestro desde el Excel del planner">⇪ Importar Excel<input type="file" id="maexl" accept=".xlsx,.xlsm,.xls" hidden></label><button class="ib" id="maeadd" aria-haspopup="menu">+ Agregar ▾</button>${nArch?`<button class="ib" id="maearc" title="Lo archivado se puede recuperar">Archivados (${nArch})</button>`:''}`:''}
     <button class="ib${ed?' on':' pri'}" id="maeed" title="${ed?'Volver al modo consulta':'Habilitar la edición del plan maestro'}">${ed?'✓ Terminar edición':'✎ Editar'}</button></div>`;
   const nP=[...MPN.values()].filter(n=>n.tipo==='pp').length,nPart=[...MPN.values()].filter(n=>n.tipo==='part').length;
   const info=`<div class="maeinfo"><span><b>${nPart}</b> partida${nPart===1?'':'s'} · <b>${nP}</b> por piso · <b>${I.hitos.length}</b> hito${I.hitos.length===1?'':'s'}${U.piso?` · piso ${esc(pisoLabel())}`:''}</span><span class="mu">Solo lo ven el administrador y el planner. ${ed?'Las fechas de un agrupador o de una partida con pisos salen de sus hijos.':'Pulsa «✎ Editar» para cambiarlo.'}</span></div>`;
-  const body=empty?`<div class="scroll"><div class="wrap"><div class="callout"><b>Todavía no hay plan maestro.</b> ${ed?'Créalo con «+ Agregar»: agrupadores (capítulos, especialidades), partidas, sus pisos e hitos.':'Pulsa «✎ Editar» y luego «+ Agregar» para crearlo a mano.'} La importación desde el Excel del planner y desde Primavera viene en los siguientes pasos.</div></div></div>`
+  const body=empty?`<div class="scroll"><div class="wrap"><div class="callout"><b>Todavía no hay plan maestro.</b> ${ed?'Créalo con «+ Agregar»: agrupadores (capítulos, especialidades), partidas, sus pisos e hitos.':'Pulsa «✎ Editar» y luego «+ Agregar» para crearlo a mano.'} También puedes cargarlo con «⇪ Importar Excel» (el Excel del planner); la importación desde Primavera viene en los siguientes pasos.</div></div></div>`
     :`<div class="scroll maesc"><table class="maet${ed?' ed':''}"><thead><tr><th class="mk0">Código</th><th class="mk1">Nombre</th><th class="mk2">Piso</th><th class="mk3">Inicio</th><th class="mk4">Fin</th><th class="mk5" title="Días hábiles">Días</th><th class="mk6"></th><th class="maegh">${mpHeadGantt(G)}</th></tr></thead><tbody>
       ${hitos.length||I.hitos.length?`<tr class="maesec"><td colspan="8"><button class="maesecb" data-hoff aria-expanded="${!U.mpHitOff}">${U.mpHitOff?'▸':'▾'} Hitos <span class="mu">${hitos.length}</span></button></td></tr>${U.mpHitOff?'':hitos.map(hrow).join('')}`:''}
       <tr class="maesec"><td colspan="8"><span class="maesecb">Partidas <span class="mu">${rows.length} fila${rows.length===1?'':'s'}</span></span></td></tr>
@@ -159,6 +170,7 @@ function mpWire(main,G){
   main.oninput=e=>{const t=e.target;if(t.id==='maeq'){U.mpq=t.value;requestRender()}};
   main.onchange=e=>{const t=e.target;
     if(t.id==='maedet'){U.mpDet=t.checked;saveUI();render();return}
+    if(t.id==='maexl'){const f=t.files&&t.files[0];t.value='';if(f)mpxOpen(f);return}
     const f=t.dataset.mf,id=t.dataset.id;if(!f||!id)return;const n=MPN.get(id);if(!n)return;let v=t.value;
     if(f==='name'){v=v.trim();if(!v){toast('El nombre no puede quedar vacío.');t.value=n.name||'';return}}
     if(f==='code')v=v.trim();
@@ -206,6 +218,8 @@ function mpRowMenu(btn,id){const n=MPN.get(id);if(!n)return;const H={up:()=>mpMo
   if(n.tipo==='part'){it+='<button data-do="app">Agregar piso…</button><button data-do="adet">Agregar actividad de detalle</button>';H.app=()=>mpAddPisos(btn,id);H.adet=()=>mpAdd('det',id)}
   if(n.tipo==='pp'){it+='<button data-do="adet">Agregar actividad de detalle</button>';H.adet=()=>mpAdd('det',id)}
   if(n.tipo==='hito'){it+='<button data-do="ed">Editar hito…</button>';H.ed=()=>mpHitoDlg(id)}
+  else{it+='<button data-do="mv">Mover dentro de…</button>';H.mv=()=>mpMoveDlg(id);
+    for(const t of['wbs','part','det'])if(t!==n.tipo&&n.tipo!=='pp'){it+=`<button data-do="cv${t}">Convertir en ${MP_TIPO[t].toLowerCase()}</button>`;H['cv'+t]=()=>mpApply([mpOp(id,{...n,tipo:t})],`Ahora es ${MP_TIPO[t].toLowerCase()}`)}}
   openPop(btn,`<div class="ph">${esc(MP_TIPO[n.tipo]||'')}: ${esc(n.name||'')}</div>${it}<button data-do="up">Subir</button><button data-do="down">Bajar</button><button data-do="arc">Archivar${n.tipo!=='hito'&&mpDesc(id).length?' (con lo que tiene dentro)':''}</button>`,H)}
 function mpArchMenu(btn){/* se recupera lo archivado de primer nivel (su padre sigue vigente), junto con lo que se archivó con él */
   const top=[...MPAR.values()].filter(n=>!n.parent||!MPAR.has(n.parent)).sort((a,b)=>((b.arch&&b.arch.t)||0)-((a.arch&&a.arch.t)||0)).slice(0,40);
@@ -213,6 +227,17 @@ function mpArchMenu(btn){/* se recupera lo archivado de primer nivel (su padre s
     {r:d=>{const n=MPAR.get(d.id);if(!n)return;const t=n.arch&&n.arch.t;const ids=[n.id];const st=[n.id];
       while(st.length){const x=st.pop();for(const o of MPAR.values())if(o.parent===x&&o.arch&&o.arch.t===t){ids.push(o.id);st.push(o.id)}}
       mpApply(ids.map(x=>{const o={...MPAR.get(x)};delete o.arch;return mpOp(x,o)}),`“${n.name||''}” recuperado`)}})}
+
+/** Cambia el padre de un nodo (con todo lo que tiene dentro); va al final de su nuevo grupo */
+function mpMoveDlg(id){const n=MPN.get(id);if(!n)return;const I=mpIdx();const no=new Set([id,...mpDesc(id)]);const cand=[];
+  const walk=(x,lv)=>{if(no.has(x.id)||x.tipo==='det')return;cand.push({x,lv});(I.kids.get(x.id)||[]).forEach(k=>walk(k,lv+1))};(I.kids.get('')||[]).forEach(x=>walk(x,0));
+  lqModal(`<div class="lqh"><b>Mover «${esc(n.name||'')}»</b><span>Elige dónde va (con todo lo que tiene dentro). Hoy está en: ${esc(mpPath(n)||'el nivel superior')}</span></div>
+    <input type="search" id="mmq" placeholder="Buscar agrupador o partida…" aria-label="Buscar destino">
+    <div class="maehlst"><button type="button" class="maemv" data-mto="" style="--lv:0">⤒ Nivel superior</button>${cand.map(({x,lv})=>`<button type="button" class="maemv" data-mto="${x.id}" style="--lv:${lv}" data-q="${esc(fold(`${x.code||''} ${x.name||''}`))}"${x.id===n.parent?' disabled':''}>${esc(x.name||'')}${x.tipo==='pp'?` <small class="mu">${esc(mpPisoTxt(x.pisoId))}</small>`:''} <small class="mu">${esc(MP_TIPO[x.tipo])}</small></button>`).join('')}</div>
+    <div class="maedlgb"><span style="flex:1"></span><button class="ib" type="button" data-lqx>Cancelar</button></div>`,
+   e=>{const b=e.target.closest('[data-mto]');if(!b||b.disabled)return;const to=b.dataset.mto;const sib=I.kids.get(to)||[];const ord=sib.reduce((m,k)=>Math.max(m,k.ord??0),0)+1;
+    lqClose();if(to){const s=new Set(U.mpCol||[]);s.delete(to);U.mpCol=[...s]}mpApply([mpOp(id,{...n,parent:to,ord})],`Movido a ${to?'«'+(MPN.get(to)||{}).name+'»':'el nivel superior'}`)});
+  const q=$('#mmq');if(q)q.oninput=()=>{const v=fold(q.value).trim();$$('.maemv[data-q]').forEach(b=>{b.hidden=!!v&&!b.dataset.q.includes(v)})}}
 
 /* ---------- hitos: fecha fija o amarrados a partidas ---------- */
 function mpHitoDlg(id){const h=id?MPN.get(id):null;const k=(h&&h.hk)||{modo:'amarrado',campo:'fin',nodos:[]};let modo=k.modo||'fijo';const sel=new Set(k.nodos||[]);
