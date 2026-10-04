@@ -29,6 +29,12 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await expect(row(page, 'e0')).toContainText('No va');
   expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
   await expect(page.locator('#mpanel .pubb')).toContainText('se aplican al lookahead al publicar');
+  // programar otra actividad del lookahead este día (antes de publicar: después el plan queda cerrado)
+  await page.click('#dzadd');
+  await page.fill('#dzq', 'tarrajeo');
+  await page.locator('#pop .dzpl button:not([hidden])').first().click();
+  await expect.poll(async () => (await act(page, 't0')).days).toContain(MANANA);
+  await expect(row(page, 't0')).toBeVisible();
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, sig]);
   await expect(row(page, 'e0')).toHaveCount(0);
@@ -37,12 +43,10 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await expect(page.locator('#mpanel')).not.toContainText('Reprogramadas');
   await page.locator('#mchb [data-chtog]').click();
   await expect(page.locator('#mchb .mchi').first()).toContainText('Falta de personal');
-  // programar otra actividad del lookahead este día
-  await page.click('#dzadd');
-  await page.fill('#dzq', 'tarrajeo');
-  await page.locator('#pop .dzpl button:not([hidden])').first().click();
-  await expect.poll(async () => (await act(page, 't0')).days).toContain(MANANA);
-  await expect(row(page, 't0')).toBeVisible();
+  // publicado, el plan queda cerrado: ya no se programa otra ni se decide «no va»
+  await expect(page.locator('#dzadd')).toHaveCount(0);
+  await expect(row(page, 't0').locator('[data-dv]')).toHaveCount(0);
+  await expect(page.locator('#mpanel .pubb.ok')).toContainText('ya no se reprograma');
   // al volver a Campo, el día vuelve a hoy
   await openTab(page, 'campo');
   await expect(page.locator('#main')).toContainText('hoy');
@@ -194,9 +198,18 @@ test('«Cambios del plan» permite deshacer una reprogramación', async ({ page 
   await page.locator('#pop .nvok').click();
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
+  // publicado, el plan está cerrado: «Deshacer» de un cambio no corre; se deshace la publicación entera
   await page.locator('#mchb [data-chtog]').click();
   await page.locator('#mchb [data-chu]').click();
+  await page.waitForTimeout(300);
+  expect((await act(page, 'e0')).days).not.toContain(MANANA); // no se deshizo: el plan está cerrado
+  page.once('dialog', d => d.accept());
+  await page.locator('#mpanel [data-unpub]').click();
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  await expect.poll(() => page.evaluate(d => window.__dbGet('dplan', d + '_p1'), MANANA)).toBeFalsy();
+  // vuelve a borrador: ahí sí se deshace el cambio
+  await page.locator('#mchb [data-chu]').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
   await expect(row(page, 'e0')).toBeVisible();
   noErrors(errors, 'deshacer cambio');
 });
@@ -530,13 +543,11 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   await page.locator('#toast button', { hasText: 'Deshacer' }).click();
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, MANANA]);
   await expect(page.locator('#mpanel [data-pub]')).toBeVisible();
-  // ya publicado, un cambio nuevo se aplica al momento
+  // ya publicado, el plan queda cerrado: se guarda la foto de lo comprometido y no se reprograma
   await publicar(page);
-  await row(page, 'e1').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nk="per"]').click();
-  await page.locator('#pop [data-nv="nolib"]').click();
-  await page.locator('#pop .nvok').click();
-  await expect.poll(async () => (await act(page, 'e1')).days).not.toContain(MANANA);
+  await expect.poll(() => page.evaluate(d => Object.keys(window.__dbGet('dplan', d + '_p1')?.ids || {}).sort(), MANANA)).toEqual(['e1']); // e0 vuelve a salir: al deshacer, su reprogramación quedó como borrador y se publicó de nuevo
+  await expect(row(page, 'e1').locator('[data-dv]')).toHaveCount(0);
+  await expect(page.locator('#mpanel [data-unpub]')).toBeVisible();
   noErrors(errors, 'publicar');
 });
 

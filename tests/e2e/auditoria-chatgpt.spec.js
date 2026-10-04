@@ -18,6 +18,11 @@ test('2 y 9 · «Vuelve a ir» devuelve el registro, las fechas y las cantidades
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, E0, D] });
   await page.click('#wtoday');
   const r = page.locator('#mpanel .mp-it[data-act="e0"]');
+  // hoy el plan está cerrado: solo el administrador lo reabre (con motivo, queda registrado)
+  await expect(r.locator('[data-dv]')).toHaveCount(0);
+  page.once('dialog', d => d.accept('Corrección de prueba'));
+  await page.locator('#mpanel [data-lko]').click();
+  await expect(page.locator('#mpanel .pubb.reo')).toContainText('Corrección de prueba');
   await r.locator('[data-dv^="no"]').click();
   await page.locator('#pop [data-nk="per"]').click();
   await page.locator('#pop [data-nv="nolib"]').click();

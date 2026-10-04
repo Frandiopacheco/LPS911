@@ -12,6 +12,8 @@ const item = (after, base) => ({ after, base, ts: 1, by: 'sc@obra.pe', n: 'Sandr
 const I0 = { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', und: 'pto', metrado: 20, days: ['2026-09-30', '2026-10-01'], order: 10 };
 const I2 = { ...I0, ambId: 'a3', name: 'REDES EMPOTRADAS' };
 const moved = (x, days) => ({ ...x, days });
+/* hoy (01 oct) ya está cerrado: i0 no se hizo hoy y quedó registrado; así se puede aceptar moverla */
+const REC0 = ['daily', '2026-10-01_p1', { date: '2026-10-01', pisoId: 'p1', recs: { i0: { status: 'no', sc: 'c1', cnc: 'Programación' } } }];
 
 async function lookMetrado(page) {
   await page.evaluate(() => { U.qmode = 'metrado'; gridRows = null; render(); });
@@ -52,7 +54,7 @@ test('13 · poner cantidad después de la fecha de terminada reabre la actividad
 });
 
 test('7 · «Aceptar todo lo visible» solo acepta lo que muestra la grilla con los filtros', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [prop({
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, prop({
     i0: item(moved(I0, ['2026-10-02', '2026-10-03']), I0), i2: item(moved(I2, ['2026-10-02', '2026-10-03']), I2) })] });
   await page.evaluate(() => { U.piso = 'p1'; });
   await revision(page);
@@ -68,7 +70,7 @@ test('7 · «Aceptar todo lo visible» solo acepta lo que muestra la grilla con 
 });
 
 test('8 · revisando una propuesta, tocar un día vacío no cambia el programa oficial', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [prop({ i0: item(moved(I0, ['2026-10-02']), I0) })] });
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, prop({ i0: item(moved(I0, ['2026-10-02']), I0) })] });
   await revision(page);
   await cell(page, 'i0', '2026-10-05').click();
   await expect(page.locator('#toast')).toContainText('Estás revisando esta propuesta');
@@ -80,7 +82,7 @@ test('8 · revisando una propuesta, tocar un día vacío no cambia el programa o
 test('9 · aceptar desplazando sobre un feriado junta los días sin perder cantidades', async ({ page }) => {
   const base = { ...I0, metrado: 30, days: ['2026-10-05', '2026-10-06'], qty: { '2026-10-05': 15, '2026-10-06': 15 } };
   const after = { ...base, days: ['2026-10-07', '2026-10-08'], qty: { '2026-10-07': 10, '2026-10-08': 20 } };
-  const errors = await openApp(page, { tab: 'look', extra: [['meta', 'project', { ...PROJ, cal: { hol: [{ d: '2026-10-08', n: 'Prueba' }] } }],
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, ['meta', 'project', { ...PROJ, cal: { hol: [{ d: '2026-10-08', n: 'Prueba' }] } }],
     ['acts', 'i0', base], prop({ i0: item(after, base) })] });
   await revision(page);
   await page.evaluate(() => revDecide('i0', 'shift', { start: '2026-10-09' }));
@@ -123,7 +125,7 @@ test('17 · el SC no registra restricciones de una actividad que solo propuso', 
 const P_I0 = (after, base = I0) => prop({ i0: item(after, base) });
 
 test('2 · aceptar no consume una versión nueva que el SC envió mientras se revisaba', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [P_I0(moved(I0, ['2026-10-02']))] });
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, P_I0(moved(I0, ['2026-10-02']))] });
   await revision(page);
   /* en la base llega otra versión, pero esta pantalla todavía no la recibió */
   await page.evaluate(() => { const d = __DB.lhprop.get('c1'); d.items.i0 = { ...d.items.i0, ts: 999, after: { ...d.items.i0.after, days: ['2026-10-05'] } }; });
@@ -138,7 +140,7 @@ test('2 · aceptar no consume una versión nueva que el SC envió mientras se re
 });
 
 test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de pisarlo', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'i0', moved(I0, ['2026-10-05'])], P_I0(moved(I0, ['2026-10-02']))] });
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, ['acts', 'i0', moved(I0, ['2026-10-05'])], P_I0(moved(I0, ['2026-10-02']))] });
   await revision(page);
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
@@ -158,7 +160,7 @@ test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de 
 });
 
 test('5 · una propuesta de una actividad en la Papelera no la restaura', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'i0', { ...I0, arch: { t: 1, by: 'x', n: 'X' } }], P_I0(moved(I0, ['2026-10-02']))] });
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, ['acts', 'i0', { ...I0, arch: { t: 1, by: 'x', n: 'X' } }], P_I0(moved(I0, ['2026-10-02']))] });
   expect(await page.evaluate(() => decideProp('c1', 'i0', 'ok'))).toBe('arch');
   await expect(page.locator('#toast')).toContainText('Papelera');
   const x = await page.evaluate(() => __dbGet('acts', 'i0'));
@@ -183,7 +185,7 @@ test('6 · quitar un día del borrador también quita su cantidad guardada', asy
 });
 
 test('12 · deshacer una aceptación devuelve la propuesta a pendientes; rehacer la vuelve a aceptar', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [P_I0(moved(I0, ['2026-10-02', '2026-10-03']))] });
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, P_I0(moved(I0, ['2026-10-02', '2026-10-03']))] });
   await revision(page);
   expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);

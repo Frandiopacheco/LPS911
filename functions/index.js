@@ -4,12 +4,13 @@
 // - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días.
 // - congelarSemana: en el corte semanal (por defecto sábado 13:00 de Lima) congela la semana siguiente en los pisos que
 //   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
+// - cerrarPlan: a las 20:00 (Lima) cierra el plan del día hábil siguiente en los pisos donde nadie lo publicó.
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs } = require('./lib');
+const { buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -84,4 +85,22 @@ exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
     await fref.set({ at: new Date(now).toISOString(), n, k, pisos: L.filter(o => !skip.has(o.id)).map(o => o.doc.pisoId) });
     logger.info(`Semana ${n}: ${k} piso(s) congelado(s) automáticamente`);
   }
+});
+
+/* El plan de mañana se cierra en la reunión al publicarlo; si nadie lo publicó, se cierra solo a las 20:00 con lo que tenga
+   el lookahead (los borradores sin publicar no cambian el lookahead). La foto es el compromiso del día para el PPC diario. */
+exports.cerrarPlan = onSchedule({ schedule: '0 20 * * *', timeZone: 'America/Lima', retryCount: 2 }, async () => {
+  const project = (await db().collection('meta').doc('project').get()).data() || {};
+  const now = Date.now(); const today = limaToday(now); const d = nextWork(project, today);
+  const [pisos, sectors, ambientes, acts, didx, daily, lives] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+    db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get()]);
+  const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(x => x.data()), lives: lives.docs.map(x => x.data()) });
+  let k = 0;
+  for (const o of buildDayPlan({ pisos, sectors, ambientes, acts, done }, d)) {
+    const ref = db().collection('dplan').doc(o.id);
+    const wrote = await db().runTransaction(async tx => { const cur = await tx.get(ref); if (cur.exists && (cur.data().ids || cur.data().reo)) return false;
+      tx.set(ref, { ...(cur.exists ? cur.data() : {}), ...o.doc, at: now, by: 'servidor', byName: 'Cierre automático 20:00', auto: true }); return true; });
+    if (wrote) k++;
+  }
+  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente`);
 });
