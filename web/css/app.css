@@ -1386,3 +1386,11 @@ button.fzqc.on{background:color-mix(in srgb,var(--q) 14%,var(--panel));box-shado
 .mfzq{cursor:pointer;border-radius:6px;padding:1px 4px}.mfzq:hover,.mfzq.fo{background:color-mix(in srgb,var(--q) 14%,transparent)}
 body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 .cxvt{display:block;margin:0 0 6px;font-size:12px}
+
+/* modo reunión: Cumplimiento / Plan e interferencias, botones que se prenden (Sectorización, Achurado) y ficha del plan */
+.mmode button{height:32px;font-size:13px}
+.mtog{height:32px}.mtog.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.mcl li.cu-ok{border-left-color:var(--ok)}.mcl li.cu-partial{border-left-color:#f9a825}.mcl li.cu-no{border-left-color:var(--bad)}.mcl li.cu-none{border-left-color:var(--line)}
+.mzc.pl .zcpl{display:flex;flex-direction:column;gap:6px}.mzc.pl .dzseg{align-self:flex-start}.mzc.pl .rsk{font-size:12.5px;color:#ef6c00}
+@media (max-width:760px){.mzc.pl .dzv{min-height:40px}}
+.mmnav{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;justify-content:flex-start;order:9;flex:1 1 100%;min-width:0;overflow-x:auto;scrollbar-width:thin;padding:2px 0}.mmnav>*{flex:none}
