@@ -7,7 +7,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { buildVersion, closesToAccept, limaToday, addD } = require('./lib');
+const { buildVersion, closesToAccept, acceptCloses, limaToday, addD } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -43,15 +43,7 @@ exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'Americ
     (await db().getAll(...refs)).forEach(d => { if (d.exists) acts.set(d.id, d.data()); });
   }
   const L = closesToAccept(lives, daily, acts, today);
-  const didx = new Map();
-  for (const pid of new Set(L.filter(o => o.rec.done).map(o => o.pisoId))) { const d = await db().collection('doneidx').doc(pid).get(); didx.set(pid, (d.exists && d.data().d) || {}); }
-  for (let i = 0; i < L.length; i += 200) {
-    const b = db().batch();
-    for (const o of L.slice(i, i + 200)) {
-      b.set(db().collection('daily').doc(o.date + '_' + o.pisoId), { date: o.date, pisoId: o.pisoId, recs: { [o.actId]: o.rec } }, { merge: true });
-      if (o.rec.done && !(didx.get(o.pisoId)[o.actId] <= o.date)) b.set(db().collection('doneidx').doc(o.pisoId), { d: { [o.actId]: o.date } }, { merge: true });
-    }
-    await b.commit();
-  }
-  logger.info(`Cierres registrados automáticamente: ${L.length}`);
+  /* cada cierre se confirma releyendo su registro: lo que un ingeniero verificó mientras tanto no se pisa */
+  const { n, skip } = await acceptCloses(db(), L);
+  logger.info(`Cierres registrados automáticamente: ${n}${skip ? ` (${skip} ya revisados por un ingeniero, sin cambios)` : ''}`);
 });
