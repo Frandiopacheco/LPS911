@@ -6,7 +6,12 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx-js-style');
 const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
-const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+const EXCELJS = require.resolve('exceljs/dist/exceljs.min.js');
+/* los Excel se arman con librerías del CDN: en la prueba se sirven las copias locales */
+const conExcel = async page => {
+  await page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+  await page.route(/cdn\.jsdelivr\.net\/npm\/exceljs/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(EXCELJS, 'utf8') }));
+};
 
 
 const R = (id, o) => ['restr', id, { pisoId: 'p1', type: 'Materiales', desc: id, resp: '', need: HOY, freed: '', status: 'pend', created: HOY, ...o }];
@@ -66,7 +71,14 @@ test('exportar las restricciones a Excel con los filtros de la pantalla; la tabl
   await page.selectOption('select[data-rf="aff"]', 'SC ELECTRICAS');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#rxls')]);
   const wb = XLSX.read(readFileSync(await dl.path()));
-  const ws = wb.Sheets.Restricciones;
+  expect(wb.SheetNames).toEqual(['AR', 'Detalle']);
+  // AR en el formato de la empresa: una fila por restricción, con sus fórmulas de X / O por día
+  const ar = wb.Sheets.AR;
+  expect([ar.C13.v, ar.D13.v, ar.H13.v]).toEqual(['Entubado empotrado', 'Falta tubería', 'PRODUCCIÓN']);
+  expect(ar.L13.f).toContain('IF($J13=""');
+  expect(ar.L7.f).toContain('COUNTIF(L13:R13,"O")');
+  expect(ar.C14).toBeUndefined();
+  const ws = wb.Sheets.Detalle;
   expect(ws.A1.v).toBe('RESTRICCIONES');
   expect(ws.F6.v).toBe('Entubado empotrado'); // primera fila de datos: la filtrada
   expect(ws.G6.v).toBe('SC ELECTRICAS');

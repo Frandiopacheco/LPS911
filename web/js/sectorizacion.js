@@ -138,3 +138,21 @@ document.addEventListener('keydown',e=>{if(U.tab!=='planos'||!SZ.draw)return;if(
 
 /** Desde el lookahead: abrir Sectorización en ese ambiente, listo para ubicarlo */
 function szGoAmb(ambId){const a=S.amb.get(ambId);if(!a)return;const pid=pisoOfAmb(ambId);if(pid){U.piso=pid;U.pisoAll=false;saveUI()}SZ.sel={lv:'a',id:ambId};SZ.draw=canWrite&&!szGeo(a,SZ.vista)?'rect':null;SZ.tmp=[];goTab('planos')}
+
+/** imagen (JPEG) de la lámina base del piso con sus ambientes coloreados por sector y sus códigos: para el Excel del lookahead */
+async function szImage(pid,maxW=1600){if(!(window.__plano&&window.__plano.basesOf)&&typeof loadPlanoMod==='function')await loadPlanoMod().catch(()=>{});const P_=window.__plano;if(!P_||!P_.basesOf)return null;
+  /* recién cargado el módulo, las láminas llegan de la base en un momento */
+  if(P_.ensureLam)P_.ensureLam();for(let i=0;i<40&&!P_.basesOf(pid).length;i++)await new Promise(r=>setTimeout(r,100));const l=P_.basesOf(pid)[0];if(!l)return null;
+  const T=szTree(pid);const hasGeo=T.some(({ambs})=>ambs.some(({a})=>szGeo(a,l.id)));if(!hasGeo)return null;
+  const url=await P_.imgURL(l,'f');const im=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('lámina'));i.src=url});
+  const sc=Math.min(1,maxW/l.w);const W=Math.round(l.w*sc),H=Math.round(l.h*sc);const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,W,H);g.drawImage(im,0,0,W,H);const lab=[];
+  T.forEach(({s,ambs},i)=>{const c=SZ_PAL[i%SZ_PAL.length];for(const{a}of ambs){const pts=szGeo(a,l.id);if(!pts)continue;g.beginPath();for(let k=0;k<pts.length;k+=2){const x=pts[k]*sc,y=pts[k+1]*sc;k?g.lineTo(x,y):g.moveTo(x,y)}g.closePath();
+    g.globalAlpha=.28;g.fillStyle=c;g.fill();g.globalAlpha=1;g.lineWidth=2;g.strokeStyle=c;g.stroke();let cx=0,cy=0;const n=pts.length/2;for(let k=0;k<pts.length;k+=2){cx+=pts[k];cy+=pts[k+1]}lab.push([a.code,cx/n*sc,cy/n*sc,c])}});
+  const fs=Math.max(11,Math.round(W/90));g.font=`bold ${fs}px Arial`;g.textAlign='center';g.textBaseline='middle';
+  for(const[t,x,y]of lab){g.lineWidth=4;g.strokeStyle='#fff';g.strokeText(t,x,y);g.fillStyle='#111';g.fillText(t,x,y)}
+  /* leyenda de sectores */
+  const L=T.filter(({ambs})=>ambs.some(({a})=>szGeo(a,l.id)));const lh=fs+8;g.textAlign='left';g.font=`${fs}px Arial`;const lw=Math.min(W-16,Math.max(...L.map(({s})=>g.measureText(s.code+' · '+s.name).width))+lh+16);
+  g.globalAlpha=.9;g.fillStyle='#fff';g.fillRect(8,8,lw,L.length*lh+8);g.globalAlpha=1;g.strokeStyle='#999';g.lineWidth=1;g.strokeRect(8,8,lw,L.length*lh+8);
+  L.forEach(({s},j)=>{const i=T.findIndex(o=>o.s.id===s.id);const y=12+j*lh;g.fillStyle=SZ_PAL[i%SZ_PAL.length];g.fillRect(14,y+3,lh-8,lh-8);g.fillStyle='#111';g.fillText(s.code+' · '+s.name,14+lh,y+lh/2)});
+  return{data:cv.toDataURL('image/jpeg',.85),w:W,h:H}}

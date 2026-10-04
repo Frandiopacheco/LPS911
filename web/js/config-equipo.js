@@ -45,8 +45,8 @@ function renderCfg(main){
   const conSel=(sel,ti,ai)=>`<select data-tsc="${ti}:${ai}"${dis}>${cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración','Subcontratistas, plantillas, causas, tipos de restricción, calendario e inspectores')}
   ${canWrite?'':`<div class="callout">Tu rol es ${esc(ROLE[me.role]||me.role)}: puedes ver la configuración pero no cambiarla.</div>`}
-  <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th>Actividades</th><th></th></tr></thead><tbody>
-   ${cons.map(c=>`<tr><td><input type="color" data-c="${c.id}" data-f="color" value="${esc(c.color)}"${dis} aria-label="Color de ${esc(c.name)}"></td><td><input class="ci" data-c="${c.id}" data-f="name" data-fk="c:${c.id}:n" value="${esc(c.name)}"${ro}></td><td><input class="ci" data-c="${c.id}" data-f="partida" data-fk="c:${c.id}:p" value="${esc(c.partida||'')}"${ro}></td><td class="mono">${use[c.id]||0}</td><td>${canWrite&&!use[c.id]?`<button class="ab" data-cdel="${c.id}" aria-label="Eliminar" title="Eliminar (no tiene actividades)">&times;</button>`:''}</td></tr>`).join('')}
+  <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th title="Sale en el análisis de restricciones (AR)">Especialidad</th><th>Actividades</th><th></th></tr></thead><tbody>
+   ${cons.map(c=>`<tr><td><input type="color" data-c="${c.id}" data-f="color" value="${esc(c.color)}"${dis} aria-label="Color de ${esc(c.name)}"></td><td><input class="ci" data-c="${c.id}" data-f="name" data-fk="c:${c.id}:n" value="${esc(c.name)}"${ro}></td><td><input class="ci" data-c="${c.id}" data-f="partida" data-fk="c:${c.id}:p" value="${esc(c.partida||'')}"${ro}></td><td><input class="ci" data-c="${c.id}" data-f="esp" data-fk="c:${c.id}:e" value="${esc(c.esp||'')}" placeholder="p. ej. Instalaciones sanitarias"${ro}></td><td class="mono">${use[c.id]||0}</td><td>${canWrite&&!use[c.id]?`<button class="ab" data-cdel="${c.id}" aria-label="Eliminar" title="Eliminar (no tiene actividades)">&times;</button>`:''}</td></tr>`).join('')}
   </tbody></table></div>${canWrite?'<div class="pad"><button class="ib" id="cadd">+ Subcontratista</button></div>':''}</div>
   <div class="card"><h2>Plantillas de ambiente <span class="sub">Se usan en “+ Ambiente” para crear varias actividades de una vez</span></h2><div class="pad"><div class="tpls">
    ${tpls.map((t,ti)=>`<div class="tplc"><div class="row"><input class="tn" data-tname="${ti}" value="${esc(t.name)}" aria-label="Nombre de la plantilla"${ro}>${canWrite?`<button class="ab" data-tdel="${ti}" title="Eliminar plantilla" aria-label="Eliminar plantilla">&times;</button>`:''}</div>
@@ -76,6 +76,8 @@ function renderCfg(main){
    <label for="p_dl">Tablero: hora límite para iniciar</label><input id="p_dl" data-p="dashLate" type="time" value="${esc(p.dashLate||'09:00')}"${isAdmin?'':' readonly'}>
    <label for="p_pcd">Propuestas de SC: día de corte</label><select id="p_pcd" data-p="propCutDow"${isAdmin?'':' disabled'}>${(()=>{const c=propCutCfg();return[1,2,3,4,5,6,0].map(d=>`<option value="${d}"${c.dow===d?' selected':''}>${DOW_N[d][0].toUpperCase()+DOW_N[d].slice(1)} antes de la semana</option>`).join('')})()}</select>
    <label for="p_pch">Propuestas de SC: hora de corte</label><input id="p_pch" data-p="propCutHH" type="time" value="${esc(propCutCfg().hh)}"${isAdmin?'':' readonly'}>
+   <label>Logo de la empresa (Excel)</label><span class="logoc">${logoPrev('logoE')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoE" hidden>Subir…</label>':''}</span>
+   <label>Logo del cliente (Excel)</label><span class="logoc">${logoPrev('logoC')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoC" hidden>Subir…</label>':''}</span>
   </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}). Las propuestas que tocan una semana y se envían después de su corte (hora de Lima) se marcan «fuera de plazo»: llegan igual, y para aceptarlas se pide el motivo.</p></div>
   </div></div>`;
   calWire(main);
@@ -83,6 +85,7 @@ function renderCfg(main){
   const saveT=fn=>{const t=clone(tpls);fn(t);saveP({templates:t})};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onchange=e=>{const t=e.target;if(t.id==='cfgInsp'){if(canLibMatrix()){const L=[...new Set(t.value.split('\n').map(x=>x.trim()).filter(Boolean))];libmPut({insp:L},`${L.length} inspector(es) guardados`)}return}if(!canWrite)return;
+    if(t.dataset.logo&&t.files&&t.files[0]){logoUpload(t.dataset.logo,t.files[0]);return}
     if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='propCutDow')v=parseInt(v,10);if(t.dataset.p==='propCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=propCutCfg().hh;return}if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}saveP({[t.dataset.p]:v})}
     else if(t.dataset.c){const c=S.con.get(t.dataset.c);let v=t.value;if(t.dataset.f==='name'){v=v.trim().toUpperCase();if(!v){t.value=c.name;return}}apply([op('contractors',c.id,{...c,[t.dataset.f]:v})])}
     else if(t.dataset.l){saveP({[t.dataset.l]:t.value.split('\n').map(x=>x.trim()).filter(Boolean)})}
@@ -254,3 +257,12 @@ async function importJson(file){
     toast(`Datos cargados: ${writes.length} registros.`);IMPMSG=`Listo: ${writes.length} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
   catch(err){IMPMSG='';toast('La carga se detuvo: '+(err.code||err.message)+'. Puedes volver a intentarlo; no se duplican registros.')}
 }
+
+/* logos de los Excel (encabezado de la empresa): se guardan como foto (PNG reducido a 700 px de ancho, conserva la transparencia) */
+function logoPrev(k){const id=P()[k];if(!id)return'<span class="mu">Sin logo</span>';loadFoto(id);const src=FOTO.get(id);return src?`<img class="logop" src="${src}" alt="Logo">`:'<span class="mu">Cargando…</span>'}
+async function logoUpload(k,file){if(!isAdmin)return;try{const src=await new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=ko;r.readAsDataURL(file)});
+    const im=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('No es una imagen'));i.src=src});
+    const sc=Math.min(1,700/im.naturalWidth);const cv=document.createElement('canvas');cv.width=Math.round(im.naturalWidth*sc);cv.height=Math.round(im.naturalHeight*sc);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+    let data=cv.toDataURL('image/png');if(data.length>390000)data=cv.toDataURL('image/jpeg',.9);if(data.length>390000)throw new Error('La imagen es muy pesada: usa una más pequeña.');
+    const id='logo_'+k+'_'+NOW();FOTO.set(id,data);if(db)await fcol('fotos').doc(id).set({data,kind:'logo',by:me.email,ts:NOW()});saveP({[k]:id});toast('Logo guardado: saldrá en los Excel');requestRender()}
+  catch(e){toast('No se pudo guardar el logo: '+(e.message||e.code||e))}}

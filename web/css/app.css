@@ -1517,3 +1517,5 @@ table.rtab .rc-x{width:30px}
 .hsi{border:1px solid var(--line);border-radius:var(--r-ctl);padding:8px 10px;background:var(--panel)}.hsi.pr{border-left:3px solid var(--accent);border-radius:0 var(--r-ctl) var(--r-ctl) 0}
 .hsh{font-size:12.5px;color:var(--ink2)}.hsh b{font-family:var(--f-mono);color:var(--ink);margin-right:4px}
 .hsi ul{margin:4px 0 0;padding-left:16px}.hsi li{font-size:13px;margin:2px 0}.hsi li small{display:block;color:var(--muted);font-size:12px}
+.logoc{display:flex;align-items:center;gap:8px}.logop{max-height:40px;max-width:140px;border:1px solid var(--line);border-radius:4px;background:#fff;padding:2px}
+.rcobs{margin-top:4px;font-size:12px}
