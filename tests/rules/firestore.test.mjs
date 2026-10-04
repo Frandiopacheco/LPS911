@@ -162,7 +162,7 @@ test('liberaciones: el SC pide y levanta; Calidad programa y libera', async () =
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'lib/l-sol'), { st: 'lib' }));
   await assertFails(deleteDoc(doc(cal, 'lib/l-sol')));
 });
-test('matriz de liberaciones: la editan Calidad y el administrador', async () => {
+test('inspectores de liberaciones (libm): los editan Calidad y el administrador', async () => {
   await assertSucceeds(setDoc(doc(user('calidad@obra.pe'), 'libm/main'), { rules: [] }));
   await assertSucceeds(setDoc(doc(user(OWNER), 'libm/main'), { rules: [{ id: 'r1' }] }));
   await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'libm/main')));
@@ -358,4 +358,17 @@ test('auditoría N03: con el plan cerrado el editor no cambia lo comprometido ni
   // el administrador reabre con motivo; recién ahí el editor vuelve a publicar
   await assertSucceeds(updateDoc(doc(user(OWNER), 'dplan/2026-10-01_p1'), { reo: { by: OWNER, why: 'corrección' } }));
   await assertSucceeds(updateDoc(doc(ed, 'dplan/2026-10-01_p1'), { ids: { x1: 8 }, reo: null }));
+});
+
+// ── Liberaciones sin matriz ──
+test('liberaciones: el SC pide (también fuera del lookahead) pero no marca crítica ni supervisión; Calidad sí', async () => {
+  const sc = user('sc@obra.pe'), cal = user('calidad@obra.pe');
+  const base = { actId: '', ambId: 'a1', pisoId: 'p1', sc: 'c-gabel', nm: 'Prueba hidráulica de montantes', st: 'sol', by: 'sc@obra.pe', crit: false, sup: false, rest: '' };
+  await assertSucceeds(setDoc(doc(sc, 'lib/l-free'), base));
+  await assertFails(setDoc(doc(sc, 'lib/l-crit'), { ...base, crit: true }));
+  await assertFails(setDoc(doc(sc, 'lib/l-sup'), { ...base, sup: true }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-free'), { crit: true }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-sol'), { sup: true, rest: 'Tarrajeo' }));
+  await assertSucceeds(updateDoc(doc(sc, 'lib/l-free'), { note: 'lista desde las 8' }));
+  await assertSucceeds(updateDoc(doc(cal, 'lib/l-free'), { st: 'pro', crit: true, rest: 'Tarrajeo', sup: true }));
 });

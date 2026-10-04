@@ -117,19 +117,20 @@ const AY_FLOWS={
     {q:'¿El ingeniero verificó el cierre?',y:[{p:'Confirmado en Campo'}],n:[{p:'Se acepta solo a las 23:30'}]},
     {o:'Cuenta en el PPC'}]},
 
-  libSol:{t:'Solicitar una liberación de calidad',s:'Para actividades que la matriz de Calidad pide liberar.',n:[
+  libSol:{t:'Solicitar una liberación de calidad',s:'El SC la pide cuando la necesita; el lookahead solo sugiere actividades.',n:[
     {o:'Actividad lista para inspección'},
-    {p:'Liberaciones › Solicitar',d:'Fecha en que estará lista, hora sugerida, protocolo y comentario.',tab:'lib',w:'SC, producción o Calidad'},
+    {p:'Liberaciones › + Solicitar',d:'Elige una actividad sugerida del lookahead o «Otra…» (qué se libera y en qué ambiente).',tab:'lib',w:'SC, producción o Calidad'},
+    {p:'Datos de la solicitud',d:'Fecha en que estará lista, hora sugerida, protocolo y comentario.'},
     {q:'¿Se pidió un día antes (hasta las 18:00)?',y:[{p:'Dentro del plazo'}],n:[{p:'Fuera de plazo',d:'Calidad decide si la programa.'}]},
     {p:'Calidad programa la inspección',d:'Fecha, hora e inspector. Se ubica en el plano.'},
     {q:'¿Conforme?',y:[{p:'Liberada',d:'O liberada con observaciones menores.'}],n:[{p:'Observada',d:'Se corrige y se toca «Observaciones levantadas · pedir reinspección».'},{r:'Vuelve a la inspección'}]},
-    {o:'Si es crítica, libera la partida siguiente'}]},
+    {o:'Si Calidad la marcó crítica, libera la partida siguiente'}]},
 
-  libCal:{t:'Liberaciones: programar e inspeccionar',s:'Trabajo de Calidad con la matriz y las solicitudes.',n:[
-    {o:'Matriz de liberaciones'},
-    {p:'Mantener la matriz',d:'Por actividad: crítica (restringe la siguiente), supervisión, protocolo, anticipación. Inspectores.',tab:'lib'},
-    {p:'Llega una solicitud',d:'Del SC, producción o Calidad, un día antes.'},
+  libCal:{t:'Liberaciones: programar e inspeccionar',s:'Trabajo de Calidad con las solicitudes.',n:[
+    {o:'Llega una solicitud'},
+    {p:'Revisar la solicitud',d:'Del SC, producción o Calidad, un día antes; puede ser de algo fuera del lookahead.',tab:'lib'},
     {q:'¿Está en plazo?',y:[{p:'Programar inspección'}],n:[{q:'¿Se atiende igual?',y:[{p:'Programar inspección'}],n:[{p:'Anular solicitud'},{r:'Fin'}]}]},
+    {p:'Al programar: marcas',d:'Fecha, hora e inspector; si es crítica (y qué restringe) y si requiere supervisión.'},
     {p:'Inspección en obra',d:'Fecha, hora e inspector; ubicada en el plano.'},
     {q:'¿Conforme?',y:[{p:'«✓ Liberar»',d:'O «Liberar con obs. menores».'}],n:[{p:'«⚠ Observar…»',d:'El SC levanta y pide reinspección.'},{r:'Vuelve a la inspección'}]},
     {o:'Liberada: la partida siguiente puede avanzar'}]},
