@@ -62,7 +62,10 @@ function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=do
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
-      if(st==='shift'&&opt.start&&(a.days||[]).length){const ds=[...a.days].sort();const k=wdist(ds[0],opt.start);const m={};a.days=ds.map(d=>{const n=wshift(d,k);m[d]=n;return n});if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty))q[m[d]||wshift(d,k)]=v;a.qty=q}}
+      if(st==='shift'&&opt.start&&(a.days||[]).length){const ds=[...new Set(a.days)].sort();const k=wdist(ds[0],opt.start);const mp=d=>wshift(d,k);
+        /* un día no laborable dentro del bloque cae en el mismo día hábil que el siguiente: se juntan sin perder cantidades */
+        a.days=[...new Set(ds.map(mp))].sort();if(a.days.length<ds.length)opt.merged=ds.length-a.days.length;
+        if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty)){const n=mp(d);q[n]=r2((q[n]||0)+(+v||0))}a.qty=q}}
       if(!off){if(!S.amb.has(a.ambId)){toast('El ambiente de esa actividad ya no existe.');return}ops=[op('acts',id,{...a,id})]}
       else{const nw={...off};for(const f of['days','qty','metrado','und','name','order'])if(canon(a[f]??null)!==canon(base?base[f]??null:null)||(st==='shift'&&(f==='days'||f==='qty')))nw[f]=a[f];ops=[op('acts',id,nw)]}
       finalDays=a.days||[]}
@@ -71,7 +74,7 @@ function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=do
   const h={id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(finalDays||it.after.days):'',st,note:opt.note||'',t:NOW(),by:me.email,n:me.name||'',pn:it.n||''};
   PROP.set(sc,{...doc,items:{...doc.items,[id]:null},hist:{...(doc.hist||{}),[key]:h}});
   fcol('lhprop').doc(sc).set({items:{[id]:null},hist:{[key]:h}},{merge:true}).catch(err=>toast('No se pudo registrar la respuesta: '+(err.code||err.message)));
-  toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`:'Propuesta rechazada');requestRender()}
+  toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada');requestRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
 function propOverlay(){if(PM()||!canWrite)return null;const m=new Map();
   for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?it.after.days||[]:[]);
@@ -96,7 +99,7 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if(t.closest('[data-rvk0]')){if(REVSEL)REVSEL.k=0;requestRender();return}
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
-  if(t.closest('[data-rvall]')){const L=revItems();if(!L.length)return;if(!confirm(`¿Aceptar las ${L.length} propuestas visibles tal como vienen?`))return;L.forEach(o=>decideProp(o.sc,o.id,'ok'));REVSEL=null;return}
+  if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;L.forEach(o=>decideProp(o.sc,o.id,'ok'));REVSEL=null;return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
@@ -128,6 +131,8 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
 U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null,REVDRAG=null;
 const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!(U.ver&&U.verMode==='ver'));
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
+/* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
+function revVisItems(){const V=RVVIS;return V?revItems().filter(o=>V.has(o.id)):[]}
 function revCounts(){const m=new Map();for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))m.set(doc.sc,(m.get(doc.sc)||0)+1);return m}
 /* durante el render, la grilla muestra lo propuesto encima de lo vigente */
 function revSwap(){const off=S.act;const v=new Map(off);
@@ -145,7 +150,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
     <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>
     <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · <b>‹ ›</b> mueve lo propuesto un día hábil (o arrastra la barra) · <b>📅</b> otra fecha de inicio · ✓ acepta · ✗ rechaza</span>${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
     <div class="ppa"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button>
-    <button class="ib pri" data-rvall${tot?'':' disabled'}>✓ Aceptar todo lo visible (${tot})</button><button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
+    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta solo las propuestas que muestra la grilla con los filtros actuales">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
@@ -161,7 +166,8 @@ function revClick(e){if(!revOn())return;const t=e.target;let b;
     else openPop(b,`<div class="ph">Rechazar propuesta</div><div class="qrow"><input id="prn" placeholder="Motivo (opcional)" style="width:220px;text-align:left"><button data-do="go">Rechazar</button></div>`,{go:()=>revDecide(id,'rej',{note:($('#prn')||{}).value||''})}),setTimeout(()=>{const i=$('#prn');if(i)i.focus()},30);
     return}
   const tr=t.closest('tr.rvrow');if(tr&&!t.closest('input,select,button,textarea')){const it=revItems().find(q=>q.id===tr.dataset.a);if(it&&(!REVSEL||REVSEL.id!==it.id)){REVSEL={sc:it.sc,id:it.id,k:0};requestRender()}}}
-function revDown(e){if(!revOn()||e.button>0)return;const td=e.target.closest('td.d');const tr=td&&td.closest('tr.rvrow');if(!tr||!td.classList.contains('on')||tr.classList.contains('rvdel'))return;
+function revDown(e){if(!revOn()||e.button>0)return;const td=e.target.closest('td.d');const tr=td&&td.closest('tr.rvrow');if(!tr||e.target.closest('.dm'))return;
+  if(!td.classList.contains('on')||tr.classList.contains('rvdel')){e.stopPropagation();e.preventDefault();toast('Estás revisando esta propuesta: acéptala (✓), recházala (✗) o muévela con ‹ ›. Para editar el programa directamente, sal de la revisión.');return}
   e.stopPropagation();e.preventDefault();const id=tr.dataset.a;const it=revItems().find(q=>q.id===id);if(!it)return;
   const cells=[...tr.querySelectorAll('td.d[data-d]')];const x0=e.clientX;const i0=cells.indexOf(td);const base=REVSEL&&REVSEL.id===id?REVSEL.k:0;REVSEL={sc:it.sc,id,k:base};
   REVDRAG={id,cells,i0,base,moved:false};tr.classList.add('rvdragging');
