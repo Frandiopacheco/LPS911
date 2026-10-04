@@ -1402,3 +1402,28 @@ body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 /* reunión: arriba lo que cambió en el plan, luego por decidir, las interferencias y al final los equipos */
 .mapa.meeting .mrs .mchb{order:1}.mapa.meeting .mrs .mpdb{order:2}.mapa.meeting .mrs .mcxb{order:3}.mapa.meeting .mrs .mfzb{order:4}
 .mapa.meeting .mrs{overflow:auto}
+/* Restricciones: filtros por partida afectada, quién registró, quién libera y fechas */
+.rfb{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end;padding:4px 14px 10px}
+.rfl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600}
+.rfl select,.rfl input{height:var(--h-ctl,34px);border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);font:inherit;font-size:13px;font-weight:500;padding:0 8px;max-width:200px}
+.rfl span{display:flex;gap:4px;align-items:center}.rfl input[type=date]{width:140px}
+@media (max-width:760px){.rfl{flex:1 1 45%}.rfl select{max-width:none;width:100%}.rfl input[type=date]{width:auto;flex:1;min-width:0}}
+/* decidir un cruce: los dos números en fila, se arrastra uno delante del otro */
+.xbox{width:390px;max-width:calc(100vw - 24px)}
+.xrow{display:flex;align-items:center;gap:6px;padding:8px 10px 4px}
+.xo{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-left:4px solid var(--c);border-radius:var(--r-ctl);background:var(--panel);cursor:grab;touch-action:none;user-select:none;position:relative;transition:transform var(--t-fast) var(--ease)}
+.xo.drag{cursor:grabbing;transition:none;box-shadow:var(--sh-2);z-index:2}
+.xo .xn{flex:none;width:30px;height:30px;border-radius:50%;background:var(--c);display:grid;place-items:center;font:700 13px/1 var(--f-ui);font-style:normal;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.3)}
+.xo span{display:flex;flex-direction:column;min-width:0}.xo b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.xo small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xo em{position:absolute;top:-8px;right:6px;font:700 10px/1 var(--f-ui);font-style:normal;background:var(--ink);color:var(--panel);border-radius:6px;padding:2px 5px}
+.xsw{flex:none;width:40px;height:40px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink);font-size:16px;cursor:pointer}
+.xsw:hover{background:var(--panel2)}
+.xhint{font-size:11.5px;color:var(--muted);padding:2px 12px 6px}
+.nvgo.xgo{grid-template-columns:1fr}
+.zccx{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;padding:7px 9px;border:1px solid #f1b8b8;border-left:4px solid #d32f2f;border-radius:var(--r-ctl);background:#fdecec;color:#7f1d1d;font:inherit;font-size:12.5px;cursor:pointer}
+.zccx small{font-size:11.5px;color:#9b3a3a}.zccx small.go{color:#b71c1c;font-weight:600}
+.pop .zccx{margin:4px 0}
+.lcx{cursor:pointer;border-radius:4px;padding:0 2px}.lcx:hover{background:#fdecec}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .zccx{background:#3a1d1d;border-color:#6b2a2a;color:#f6c7c7}:root:not([data-theme="light"]) .zccx small{color:#e8a5a5}:root:not([data-theme="light"]) .zccx small.go{color:#ff8a80}:root:not([data-theme="light"]) .lcx:hover{background:#3a1d1d}}
+:root[data-theme="dark"] .zccx{background:#3a1d1d;border-color:#6b2a2a;color:#f6c7c7}:root[data-theme="dark"] .zccx small{color:#e8a5a5}:root[data-theme="dark"] .zccx small.go{color:#ff8a80}:root[data-theme="dark"] .lcx:hover{background:#3a1d1d}
+.pop .xsw{width:40px;height:40px;flex:none;padding:0;justify-content:center;border:1px solid var(--line);border-radius:50%}
