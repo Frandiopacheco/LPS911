@@ -27,17 +27,42 @@ function propPut(col,id,after){if(!PM())return false;
   if(after==null){item=off?{after:null,base:cleanAct(off)}:null}
   else{const a=cleanAct(after);if(off&&canon(a)===canon(cleanAct(off)))item=null;else item={after:a,base:off?cleanAct(off):null}}
   savePropItem(sc,id,item);return true}
-function savePropItem(sc,id,item){const doc=PROP.get(sc)||{sc,items:{}};const v=item?{...item,ts:NOW(),by:me.email,n:me.name||'',sent:false}:null;
+/* firma corta del contenido propuesto: al volver a enviar, si el contenido es el mismo que ya se había enviado, se conserva esa hora de envío */
+function propSig(a){const s=canon(a??null);let h=5381;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;return h.toString(36)+'.'+s.length}
+function savePropItem(sc,id,item){const doc=PROP.get(sc)||{sc,items:{}};const prev=(doc.items||{})[id]||null;const v=item?{...item,ts:NOW(),by:me.email,n:me.name||'',sent:false}:null;
+  /* editar algo ya enviado lo vuelve borrador, pero se recuerda el primer envío (sent0), el último (sentPrev) y qué contenido se envió (sig) */
+  if(v&&prev){const s0=prev.sent0||(prev.sent?prev.sentAt:null);const sp=prev.sent?prev.sentAt:prev.sentPrev;if(s0)v.sent0=s0;if(sp)v.sentPrev=sp;if(prev.sig)v.sig=prev.sig}
   PROP.set(sc,{...doc,items:{...(doc.items||{}),[id]:v}});pmSync();requestRender();
   /* update por ruta reemplaza el elemento entero: con set+merge las cantidades de días quitados seguían guardadas */
   if(db){const ref=fcol('lhprop').doc(sc);ref.update(new firebase.firestore.FieldPath('items',id),v).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:{[id]:v}},{merge:true});throw err})
     .catch(err=>toast('No se pudo guardar la propuesta: '+(err.code==='permission-denied'?'sin permiso (¿reglas nuevas publicadas?)':(err.code||err.message))))}}
-function sendProp(){const now=NOW();let n=0;
-  for(const sc of myScsI()){const its=propItems(sc).filter(o=>!o.it.sent);if(!its.length)continue;const up={};its.forEach(({id,it})=>{up[id]={...it,sent:true,sentAt:now};n++});
+function sendProp(){const now=NOW();let n=0,nl=0;
+  for(const sc of myScsI()){const its=propItems(sc).filter(o=>!o.it.sent);if(!its.length)continue;const up={};
+    its.forEach(({id,it})=>{const sig=propSig(it.after);const keep=it.sentPrev&&it.sig===sig;const sAt=keep?it.sentPrev:now;
+      const v={...it,sent:true,sentAt:sAt,sent0:it.sent0||sAt,sig};delete v.sentPrev;up[id]=v;n++;if(propLate(v,(ACT_OFF||S.act).get(id)))nl++});
     const doc=PROP.get(sc)||{sc,items:{}};PROP.set(sc,{...doc,items:{...doc.items,...up},sentAt:now,sentBy:me.name||me.email});
     const FP=firebase.firestore.FieldPath;const args=[];Object.entries(up).forEach(([id,v])=>args.push(new FP('items',id),v));args.push('sentAt',now,'sentBy',me.name||me.email);
     const ref=fcol('lhprop').doc(sc);ref.update(...args).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:up,sentAt:now,sentBy:me.name||me.email},{merge:true});throw err}).catch(err=>toast('No se pudo enviar: '+(err.code||err.message)))}
-  toast(n?`${n} cambio${n>1?'s':''} enviado${n>1?'s':''} al ingeniero responsable del piso`:'No hay cambios por enviar');requestRender()}
+  toast(n?`${n} cambio${n>1?'s':''} enviado${n>1?'s':''} al ingeniero responsable del piso`+(nl?` · ${nl} fuera de plazo (${propCutTxt()}): el ingeniero decide si los acepta`:''):'No hay cambios por enviar');requestRender()}
+/* ---- plazo de entrega de las propuestas (Configuración › Proyecto: día y hora; por defecto sábado 13:00, hora de Lima) ----
+   El corte de la semana n es el último <día> a la <hora> antes de su lunes. Una propuesta llega «fuera de plazo» si se envió
+   después del corte de alguna semana cuyos días toca (días o cantidades que agrega o quita; si cambia unidad, metrado o
+   nombre, todos sus días). Recibirla no la bloquea: el ingeniero decide y, si la acepta, deja el motivo (queda en lhphist). */
+const DOW_N=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
+const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
+/** hora (ms) del corte para entregar propuestas de la semana n */
+function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+/** días que una propuesta cambia respecto a b (la actividad antes) */
+function propTouch(b,a){if(!a)return b?[...(b.days||[])].sort():[];if(!b)return[...(a.days||[])].sort();
+  const bd=new Set(b.days||[]),ad=new Set(a.days||[]),T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});
+  const bq=b.qty||{},aq=a.qty||{};ad.forEach(d=>{if(bd.has(d)&&canon(bq[d]??null)!==canon(aq[d]??null))T.add(d)});
+  if((a.und||'')!==(b.und||'')||(a.metrado??null)!==(b.metrado??null)||(a.name||'')!==(b.name||''))ad.forEach(d=>T.add(d));return[...T].sort()}
+/** {w, cut} si se envió después del corte de alguna semana que toca (la primera); null si llegó a tiempo */
+function propLate(it,off){if(!it||!it.sent||!it.sentAt)return null;const ws=[...new Set(propTouch(it.base||off||null,it.after).map(weekOf))].sort((a,b)=>a-b);
+  for(const w of ws){const c=propCut(w);if(it.sentAt>c)return{w,cut:c}}return null}
+const fmtT=t=>t?`${DOW_N[pd(ldt(t)).getUTCDay()].slice(0,3)} ${fmtD(ldt(t))} ${hhmm(t)}`:'';
+const lateTxt=L=>`Fuera de plazo · semana ${L.w} (corte ${fmtT(L.cut)})`;
 /* textos */
 function rngTxt(ds){ds=[...(ds||[])].sort();if(!ds.length)return'sin días';const out=[];let a=ds[0],b=ds[0];
   const nx=d=>{let x=addD(d,1);let g=0;while(!isWork(x)&&g++<14)x=addD(x,1);return x};
@@ -58,9 +83,20 @@ function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it
     for(const d of PROP.values())for(const[oid,o]of Object.entries(d.items||{})){if(!o||!o.sent||!o.after||oid===id||d.sc===x.sc||o.after.ambId!==x.ambId)continue;const c=(o.after.days||[]).filter(dd=>ds.has(dd));
       if(c.length)A.push({t:'amb',h:`Otra propuesta pendiente en el mismo ambiente: <b>${esc(conOf(d.sc).name)}</b> ${esc(o.after.name||'')} (${rngTxt(c)})`})}}
   const rs=off?restrPend(id):[];rs.forEach(r=>A.push({t:'res',h:'Restricción pendiente: '+esc(rTxt(r))}));
-  const pid=pisoOfAmb(x.ambId);const ch=new Set();const od=new Set(off?off.days||[]:[]);(days||x.days||[]).forEach(d=>{if(!od.has(d))ch.add(d)});od.forEach(d=>{if(!ds.has(d))ch.add(d)});
-  const wks=[...new Set([...ch].map(d=>weekOf(d)))].filter(w=>{const wk=S.wk.get(wkId(w,pid));return wk&&wk.frozenAt});wks.forEach(w=>A.push({t:'frz',h:`Afecta la semana ${w}, que ya está congelada en el plan semanal`}));
+  /* semana congelada: no solo por fechas; también cantidades por día, unidad y el retiro de la actividad.
+     El compromiso congelado no cambia: se avisa qué seguirá midiendo el PPC. */
+  const pid=pisoOfAmb(x.ambId);const pa=it.after?{...(off?propMerge(it.after,it.base||off,off,!!days):it.after),...(days?{days}:{})}:null;
+  const wks=[...new Set(propTouch(off,pa).map(d=>weekOf(d)))].sort((a,b)=>a-b).filter(w=>{const wk=S.wk.get(wkId(w,pid));return wk&&wk.frozenAt});
+  wks.forEach(w=>{const ci=(S.wk.get(wkId(w,pid)).items||{})[id];
+    A.push({t:'frz',h:ci?`Afecta la semana ${w}, ya congelada: el PPC sigue midiendo lo comprometido (${esc(rngTxt(ci.days))}${ci.q!=null?` · ${ci.q} ${esc(ci.und||'')}`:''})`+(it.after?'; el lookahead quedará con lo que aceptes':'; retirarla no la quita del compromiso ni la da por cumplida')
+      :`Afecta la semana ${w}, ya congelada: no entra en su compromiso (saldrá como programada después de congelar)`})});
   return A}
+/** propuestas enviadas y sin decidir que tocan la semana n del piso pid (docs = documentos de lhprop). Al congelar
+    se avisa: una propuesta no es compromiso hasta aceptarla, así que quedan fuera (y se guarda cuáles, en weeks.propOut). */
+function propPendWeek(n,pid,docs){const wd=new Set(weekDays(n));const L=[];
+  for(const d of docs)for(const[id,it]of Object.entries(d.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id)||null;const x=it.after||off||it.base;if(!x||pisoOfAmb(x.ambId)!==pid)continue;
+    const pa=it.after&&off?propMerge(it.after,it.base||off,off,false):it.after;if(!propTouch(off,pa).some(z=>wd.has(z)))continue;
+    L.push({sc:d.sc||d.id,id,kind:!it.after?'del':!off?'new':'mod'})}return L}
 /* días hábiles (lun–sáb) */
 function wshift(d,n){let x=d;const st=n>0?1:-1;let k=Math.abs(n);let g=0;while(k>0&&g++<2000){x=addD(x,st);if(isWork(x))k--}return x}
 function wdist(a,b){if(a===b)return 0;let n=0,x=a;const st=b>a?1:-1;while(x!==b){x=addD(x,st);if(isWork(x))n+=st;if(Math.abs(n)>400)break}return n}
@@ -71,6 +107,31 @@ function wdist(a,b){if(a===b)return 0;let n=0,x=a;const st=b>a?1:-1;while(x!==b)
 const PFIELDS=['days','qty','metrado','und','name','order'];
 const PFLBL={days:'días',qty:'cantidades por día',metrado:'metrado',und:'unidad',name:'nombre',order:'orden'};
 const propVer=it=>`${it&&it.ts||0}|${it&&it.sentAt||0}`;
+/** lo que queda al aceptar: el programa vigente (off) con solo los campos que la propuesta cambió respecto a su base.
+    La vista previa de la revisión usa lo mismo, para que se vea lo que se va a guardar. */
+function propMerge(a,base,off,shift){const nw={...off};for(const f of PFIELDS)if(canon(a[f]??null)!==canon(base?base[f]??null:null)||(shift&&(f==='days'||f==='qty')))nw[f]=a[f];return nw}
+/* ---- historial de decisiones (colección lhphist, un documento por decisión) ----
+   Antes iba dentro de lhprop/{sc}.hist y ese documento crecía sin límite (Firestore: 1 MB). Cada registro guarda la hora de
+   envío, si llegó fuera de plazo y por qué se aceptó, lo que pidió el SC (prop) y lo que se aplicó (chg), campo por campo
+   [antes, después]. sk = sc|hora: el SC lee solo lo suyo de los últimos meses con un rango sobre un solo campo (sin índice compuesto). */
+const LHH=new Map();let lhhSub=[];
+const HFIELDS=['days','qty','metrado','und','name'];
+function propDiff(b,a){const o={};for(const f of HFIELDS){const x=b?b[f]??null:null,y=a?a[f]??null:null;if(canon(x)!==canon(y))o[f]=[x,y]}return o}
+const lhhSk=(sc,t)=>sc+'|'+String(Math.round(t)).padStart(15,'0');
+function ensureLhh(){if(lhhSub.length||!db||!me||me.role!=='sc')return;const since=NOW()-120*864e5;
+  for(const sc of myScsI())lhhSub.push(fcol('lhphist').where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~').onSnapshot(sn=>{
+    for(const k of[...LHH.keys()])if(LHH.get(k).sc===sc)LHH.delete(k);sn.docs.forEach(d=>LHH.set(d.id,{...d.data(),id:d.id}));if(ready&&U.tab==='look')requestRender()},()=>{}));
+  unsubs.push(()=>{lhhSub.forEach(f=>f());lhhSub=[];LHH.clear()})}
+/** detalle de un registro: lo aplicado (o, si se rechazó, lo que se pidió) en cantidades, metrado, unidad y nombre */
+function histChgHtml(x){const c=x.st==='rej'?x.prop:(x.chg||x.prop);if(!c)return'';const L=[];const v=z=>z==null||z===''?'—':esc(String(z));
+  if(c.qty){const[b,a]=c.qty;const B=b||{},A=a||{};const ds=[...new Set([...Object.keys(B),...Object.keys(A)])].sort().filter(d=>canon(B[d]??null)!==canon(A[d]??null));
+    if(ds.length)L.push(`Cantidades: ${ds.map(d=>`${fmtD(d)} ${v(B[d])} → <b>${v(A[d])}</b>`).join(' · ')}`)}
+  if(c.metrado)L.push(`Metrado: ${v(c.metrado[0])} → <b>${v(c.metrado[1])}</b>`);
+  if(c.und)L.push(`Unidad: ${v(c.und[0])} → <b>${v(c.und[1])}</b>`);
+  if(c.name)L.push(`Nombre: ${v(c.name[0])} → <b>${v(c.name[1])}</b>`);
+  return L.map(l=>`<li>${l}</li>`).join('')}
+/** respuestas para el SC: las antiguas (lhprop.hist) y las nuevas (lhphist) */
+const histOf=scs=>scs.flatMap(sc=>[...Object.values((PROP.get(sc)||{}).hist||{}).map(x=>({...x,sc})),...[...LHH.values()].filter(x=>x.sc===sc)]).sort((a,b)=>b.t-a.t);
 let PDBUSY=new Set();
 class PropStop extends Error{constructor(m,k){super(m);this.lps=m;this.k=k||'stop'}}
 /** campos que la propuesta cambia y que el programa oficial también cambió desde que el SC la armó */
@@ -82,6 +143,11 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
   const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   const say=m=>{if(!opt.bulk)toast(m)};
+  /* fuera de plazo: se puede aceptar, pero con motivo (queda en el historial con quién y cuándo) */
+  const late=propLate(it,off);
+  if(late&&st!=='rej'&&!opt.lateNote){if(opt.bulk)return'late';
+    const m=prompt(`«${(it.after||off||{}).name||'La propuesta'}» llegó fuera de plazo: se envió el ${fmtT(it.sentAt)}, después del corte de la semana ${late.w} (${fmtT(late.cut)}).\n\n¿Por qué se acepta? Queda registrado con tu nombre.`,'');
+    if(m==null)return'late';if(!m.trim()){say('Escribe el motivo para aceptar una propuesta fuera de plazo. No se cambió nada.');return'late'}opt.lateNote=m.trim()}
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
@@ -97,11 +163,14 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
         if(cf.length){if(opt.bulk)return'conf';
           if(!confirm(`Desde que ${it.n||'el subcontratista'} armó esta propuesta, el programa oficial de “${off.name||'la actividad'}” cambió en: ${cf.map(f=>PFLBL[f]).join(', ')}.`+
             (cf.includes('days')?`\n\nVigente: ${rngTxt(off.days)}\nPropuesto: ${rngTxt(a.days)}`:'')+`\n\nSi aceptas, esos campos quedan como en la propuesta. ¿Aceptar igual?`))return'conf'}
-        const nw={...off};for(const f of PFIELDS)if(canon(a[f]??null)!==canon(base?base[f]??null:null)||(st==='shift'&&(f==='days'||f==='qty')))nw[f]=a[f];ops=[op('acts',id,nw)]}
+        ops=[op('acts',id,propMerge(a,base,off,st==='shift'))]}
       finalDays=a.days||[]}}
-  const x=it.after||base||{};const am=S.amb.get(x.ambId);const key=id+'_'+NOW();
-  const h={id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(finalDays||it.after.days):'',st,note:opt.note||'',t:NOW(),by:me.email,n:me.name||'',pn:it.n||''};
-  const o=ops[0]||null;PDBUSY.add(key0);
+  const x=it.after||base||{};const am=S.amb.get(x.ambId);const t=NOW();const key=sc+'_'+id+'_'+t;
+  const o=ops[0]||null;
+  const h={id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(finalDays||it.after.days):'',st,note:opt.note||'',t,by:me.email,n:me.name||'',pn:it.n||'',
+    sc,actId:id,sk:lhhSk(sc,t),sentAt:it.sentAt||null,sent0:it.sent0||it.sentAt||null,late:late?{w:late.w,cut:late.cut}:null,lateNote:st!=='rej'&&late?opt.lateNote||'':'',
+    prop:propDiff(base,it.after),chg:o?(o.after.arch?{arch:[false,true]}:propDiff(o.before,o.after)):null};
+  PDBUSY.add(key0);
   try{if(!db)throw new PropStop('Sin conexión con la base.');
     await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const aref=fcol('acts').doc(id);
       const ps=await tx.get(pref);const srv=ps.exists?((ps.data()||{}).items||{})[id]:null;
@@ -109,33 +178,42 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
       if(o){const as=await tx.get(aref);const cur=as.exists?actNorm(as.data()):null;
         if(canon(cur?strip(cur):null)!==canon(o.before?strip(o.before):null))throw new PropStop('La actividad cambió hace un momento (otro usuario o un cambio que aún se estaba guardando). Vuelve a intentarlo.','act');
         const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body,'acts');if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
-      const FP=firebase.firestore.FieldPath;tx.update(pref,new FP('items',id),null,new FP('hist',key),h)})}
+      tx.update(pref,new firebase.firestore.FieldPath('items',id),null);tx.set(fcol('lhphist').doc(key),h)})}
   catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
   PDBUSY.delete(key0);
   /* reflejar al momento (llega igual por la base) */
   if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
-    const g=[o];g.prop={sc,id,it,key};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
-  const d2=PROP.get(sc)||doc;PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null},hist:{...(d2.hist||{}),[key]:h}});requestRender();
+    const g=[o];g.prop={sc,id,it,key,hk:1};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
+  LHH.set(key,{...h,id:key});const d2=PROP.get(sc)||doc;PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null}});requestRender();
   if(!opt.bulk)toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada',o?'Deshacer':null,o?undo:null);
   return'ok'}
 /** deshacer (o rehacer) una aceptación también devuelve (o vuelve a quitar) la propuesta del SC; el historial la marca, no se borra */
-async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,id,it,key}=P_;const FP=firebase.firestore.FieldPath;
-  try{const r=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const d=ps.exists?ps.data()||{}:{};const cur=(d.items||{})[id];
-      if(back){if(cur)return'new';tx.update(pref,new FP('items',id),it,new FP('hist',key,'undone'),{t:NOW(),by:me.email,n:me.name||''});return'ok'}
-      if(!cur||propVer(cur)!==propVer(it))return'new';tx.update(pref,new FP('items',id),null,new FP('hist',key,'undone'),firebase.firestore.FieldValue.delete());return'ok'});
+async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,id,it,key,hk}=P_;const FP=firebase.firestore.FieldPath;
+  const ud={t:NOW(),by:me.email,n:me.name||''};const DEL=firebase.firestore.FieldValue.delete();
+  try{const r=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const d=ps.exists?ps.data()||{}:{};const cur=(d.items||{})[id];const href=fcol('lhphist').doc(key);
+      /* registros nuevos: el «deshecho» va en su documento de lhphist; los antiguos siguen en lhprop.hist */
+      if(back){if(cur)return'new';if(hk){tx.update(pref,new FP('items',id),it);tx.update(href,{undone:ud})}else tx.update(pref,new FP('items',id),it,new FP('hist',key,'undone'),ud);return'ok'}
+      if(!cur||propVer(cur)!==propVer(it))return'new';if(hk){tx.update(pref,new FP('items',id),null);tx.update(href,{undone:DEL})}else tx.update(pref,new FP('items',id),null,new FP('hist',key,'undone'),DEL);return'ok'});
     if(r!=='ok'){toast(back?'Se deshizo el cambio, pero la propuesta no vuelve a pendientes: el subcontratista ya envió otra para esa actividad.':'Se rehízo el cambio; la propuesta del subcontratista ya había cambiado y sigue pendiente.');return}
-    const d2=PROP.get(sc)||{sc,items:{}};const h=(d2.hist||{})[key];const nh=h?{...h}:null;if(nh){if(back)nh.undone={t:NOW(),by:me.email,n:me.name||''};else delete nh.undone}
-    PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:back?it:null},hist:{...(d2.hist||{}),...(nh?{[key]:nh}:{})}});requestRender();
+    const mark=h=>{if(!h)return null;const nh={...h};if(back)nh.undone=ud;else delete nh.undone;return nh};
+    if(hk){const nh=mark(LHH.get(key));if(nh)LHH.set(key,nh)}
+    const d2=PROP.get(sc)||{sc,items:{}};const nh=hk?null:mark((d2.hist||{})[key]);
+    PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:back?it:null},...(nh?{hist:{...(d2.hist||{}),[key]:nh}}:{})});requestRender();
     if(back)toast('Cambio deshecho: la propuesta vuelve a quedar pendiente de revisión','Rehacer',redo)}
   catch(e){toast('No se pudo devolver la propuesta a pendientes: '+(e&&(e.code||e.message)||'error'))}}
 /** aceptar varias seguidas (todo lo visible, todo un SC): un solo aviso al final */
-async function decideMany(L){let ok=0;const why={};for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
-  const W={conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+async function decideMany(L){let ok=0;const why={};
+  /* las que llegaron fuera de plazo piden un solo motivo para todo el lote; sin motivo no se acepta ninguna */
+  const nl=L.filter(o=>propLate(((PROP.get(o.sc)||{}).items||{})[o.id],S.act.get(o.id))).length;let lateNote='';
+  if(nl){const m=prompt(`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} fuera de plazo (${propCutTxt()}).\n\n¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.`,'');
+    if(m==null||!m.trim()){toast(m==null?'No se aceptó ninguna.':'Escribe el motivo para aceptar las que llegaron fuera de plazo. No se aceptó ninguna.');return}lateNote=m.trim()}
+  for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true,lateNote});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
+  const W={late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
   toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
 function propOverlay(){if(PM()||!canWrite)return null;const m=new Map();
-  for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?it.after.days||[]:[]);
+  for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?propMerge(it.after,it.base||off,off,false).days||[]:[]);
     m.set(id,{add:new Set([...nd].filter(d=>!od.has(d))),del:new Set(it.after?[...od].filter(d=>!nd.has(d)):[...od]),sc:doc.sc,rm:!it.after})}
   return m}
 function pmBases(){if(!PM()||!ACT_OFF)return null;const has=myScsI().some(sc=>propItems(sc).length);if(!has)return null;const m=new Map();
@@ -145,7 +223,7 @@ function pmBases(){if(!PM()||!ACT_OFF)return null;const has=myScsI().some(sc=>pr
 function renderPropBar(){const v=$('#main .view');if(!v)return;let pb=$('#ppbar');if(!pb){const bar=v.querySelector('.bar');if(!bar)return;pb=document.createElement('div');pb.id='ppbar';bar.after(pb);pb.onclick=propBarClick;pb.onchange=e=>{if(e.target.id==='rvctx'){U.revCtx=e.target.checked;requestRender()}}}
   let h='';
   if(me&&me.role==='sc'&&!(U.ver&&U.verMode==='ver')){const its=myScsI().flatMap(sc=>propItems(sc));const un=its.filter(o=>!o.it.sent).length,se=its.length-un;
-    const hist=myScsI().flatMap(sc=>Object.values((PROP.get(sc)||{}).hist||{})).sort((a,b)=>b.t-a.t);let seen=0;try{seen=+localStorage.getItem('lps.pseen')||0}catch(e){}const nw=hist.filter(x=>x.t>seen).length;
+    ensureLhh();const hist=histOf(myScsI());let seen=0;try{seen=+localStorage.getItem('lps.pseen')||0}catch(e){}const nw=hist.filter(x=>x.t>seen).length;
     h=`<div class="ppb sc"><div><b>Modo propuesta</b> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero responsable del piso los acepte.</div>
       <div class="ppa">${un?`<span class="pill warn">${un} sin enviar</span>`:''}${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}<button class="ib pri" data-pp="send"${un?'':' disabled title="Todavía no cambiaste nada: edita días, metrados o actividades de tu partida y luego envía"'}>${un?'Enviar al ingeniero responsable ('+un+')':'Sin cambios por enviar'}</button>${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
   else if(canWrite&&!(U.ver&&U.verMode==='ver')){const by=revCounts();let oth=0;for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&!canDecide(id,it))oth++;
@@ -157,21 +235,27 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if(t.closest('[data-rvk0]')){if(REVSEL)REVSEL.k=0;requestRender();return}
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
-  if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;decideMany(L);return}
+  if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
+    /* una fila movida con ‹ › solo se acepta así con su ✓: el lote toma las propuestas como vienen */
+    const sh=REVSEL&&REVSEL.k&&L.some(o=>o.id===REVSEL.id)?S.act.get(REVSEL.id):null;
+    if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')
+      +(sh?`\n\nOjo: «${sh.name||'una actividad'}» la moviste ${Math.abs(REVSEL.k)} día${Math.abs(REVSEL.k)>1?'s':''} en la vista previa, pero aquí se acepta en las fechas que propuso el subcontratista. Para aceptarla movida, cancela y usa ✓ en su fila.`:'')))return;decideMany(L);return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
 function propModal(mode){PMOD={mode};let el=$('#ppm');if(!el){el=document.createElement('div');el.id='ppm';el.className='ppm';el.innerHTML='<div class="ppc"></div>';document.body.appendChild(el);el.onclick=propModalClick}propModalRender()}
 function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PMOD.mode;let h='';
-  const card=(sc,id,it,ed)=>{const off=(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id);const x=it.after||off||it.base||{};const am=S.amb.get(x.ambId);const p=am?S.pis.get(pisoOfAmb(am.id)):null;const D=propDesc(id,it);const AL=ed?propAlerts(sc,id,it):[];
-    return`<div class="ppi k-${D.kind}" data-sc="${sc}" data-id="${id}"><div class="ppt"><span class="ppk">${D.kind==='new'?'NUEVA':D.kind==='del'?'QUITAR':'CAMBIO'}</span><b>${esc(x.name||'(sin nombre)')}</b><small>${p?esc(p.code)+' · ':''}${am?esc(am.code+' · '+am.name):''}${ed?' · propuesto por '+esc(it.n||''):''}${!ed?(it.sent?' · <em>en revisión</em>':' · <em class="w">sin enviar</em>'):''}</small></div>
+  const card=(sc,id,it,ed)=>{const off=(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id);const x=it.after||off||it.base||{};const am=S.amb.get(x.ambId);const p=am?S.pis.get(pisoOfAmb(am.id)):null;const D=propDesc(id,it);const AL=ed?propAlerts(sc,id,it):[];const LT=propLate(it,off);
+    /* hora de envío de cada cambio (no la del último envío del grupo) y si llegó fuera de plazo */
+    const snt=it.sent&&it.sentAt?` · enviado ${fmtT(it.sentAt)}`+(it.sent0&&it.sent0!==it.sentAt?` (primer envío ${fmtT(it.sent0)})`:''):'';
+    return`<div class="ppi k-${D.kind}" data-sc="${sc}" data-id="${id}"><div class="ppt"><span class="ppk">${D.kind==='new'?'NUEVA':D.kind==='del'?'QUITAR':'CAMBIO'}</span>${LT?`<span class="ppk late" title="${esc(lateTxt(LT))}">FUERA DE PLAZO</span>`:''}<b>${esc(x.name||'(sin nombre)')}</b><small>${p?esc(p.code)+' · ':''}${am?esc(am.code+' · '+am.name):''}${ed?' · propuesto por '+esc(it.n||''):''}<span class="ppsent">${snt}</span>${!ed?(it.sent?' · <em>en revisión</em>':' · <em class="w">sin enviar</em>'):''}</small></div>${LT?`<p class="pplate">${esc(lateTxt(LT))}${ed?' · para aceptarla se pide el motivo':' · el ingeniero decide si la acepta'}</p>`:''}
       <ul>${D.lines.map(l=>`<li>${l}</li>`).join('')}</ul>${AL.length?`<ul class="ppal">${AL.map(a=>`<li class="${a.t}">⚠ ${a.h}</li>`).join('')}</ul>`:''}
       <div class="ppbt">${ed?(canDecide(id,it)?`<button class="ib pri" data-pd="ok">✓ Aceptar</button>${it.after&&(it.after.days||[]).length?'<button class="ib" data-pd="shift">Aceptar desplazando…</button>':''}<button class="ib" data-pd="rej">Rechazar…</button>`:`<span class="mu">${esc(propWho(id,it))}</span>`):'<button class="ib" data-pd="drop">Descartar este cambio</button>'}</div></div>`};
   if(mode==='rev'){const scs=[...PROP.values()].filter(d=>Object.values(d.items||{}).some(it=>it&&it.sent)).sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name));
-    h=`<div class="pph"><b>Propuestas de los subcontratistas</b><button class="kx" data-px>×</button></div>`+(scs.length?scs.map(d=>{const L=Object.entries(d.items||{}).filter(([,it])=>it&&it.sent);const nd=L.filter(([id,it])=>canDecide(id,it)).length;return`<section><div class="ppsh" style="--c:${conOf(d.sc).color}"><i></i><b>${esc(conOf(d.sc).name)}</b><span>${L.length} cambio${L.length>1?'s':''}${d.sentAt?' · enviado '+fmtD(ldt((d.sentAt)))+' '+hhmm(d.sentAt):''}</span>${nd?`<button class="ib pri" data-pall="${d.sc}">✓ Aceptar ${nd===L.length?'todo':'los míos ('+nd+')'}</button>`:''}</div>${L.map(([id,it])=>card(d.sc,id,it,true)).join('')}</section>`}).join(''):'<p class="mu" style="padding:16px">No hay propuestas pendientes.</p>')}
+    h=`<div class="pph"><b>Propuestas de los subcontratistas</b><button class="kx" data-px>×</button></div>`+(scs.length?scs.map(d=>{const L=Object.entries(d.items||{}).filter(([,it])=>it&&it.sent);const nd=L.filter(([id,it])=>canDecide(id,it)).length;return`<section><div class="ppsh" style="--c:${conOf(d.sc).color}"><i></i><b>${esc(conOf(d.sc).name)}</b><span>${L.length} cambio${L.length>1?'s':''}${d.sentAt?' · último envío '+fmtT(d.sentAt):''}${(()=>{const k=L.filter(([id,it])=>propLate(it,S.act.get(id))).length;return k?` · <b class="w">${k} fuera de plazo</b>`:''})()}</span>${nd?`<button class="ib pri" data-pall="${d.sc}">✓ Aceptar ${nd===L.length?'todo':'los míos ('+nd+')'}</button>`:''}</div>${L.map(([id,it])=>card(d.sc,id,it,true)).join('')}</section>`}).join(''):'<p class="mu" style="padding:16px">No hay propuestas pendientes.</p>')}
   else if(mode==='mine'){const L=myScsI().flatMap(sc=>propItems(sc));h=`<div class="pph"><b>Mis cambios propuestos</b><button class="kx" data-px>×</button></div>${L.map(o=>card(o.sc,o.id,o.it,false)).join('')||'<p class="mu" style="padding:16px">No tienes cambios.</p>'}`}
-  else{const hist=myScsI().flatMap(sc=>Object.values((PROP.get(sc)||{}).hist||{}).map(x=>({...x,sc}))).sort((a,b)=>b.t-a.t).slice(0,60);const ST_={ok:'✓ Aceptado',shift:'↔ Aceptado con otra fecha',rej:'✗ Rechazado'};
-    h=`<div class="pph"><b>Respuestas del ingeniero</b><button class="kx" data-px>×</button></div>${hist.map(x=>`<div class="ppi r-${x.st}"><div class="ppt"><span class="ppk">${ST_[x.st]||x.st}</span><b>${esc(x.name)}</b><small>${esc(x.amb)} · ${fmtD(ldt((x.t)))} ${hhmm(x.t)} · ${esc(x.n)}</small></div><ul>${x.kind==='del'?'<li>Pedido de quitar la actividad</li>':`<li>${x.from?esc(x.from)+' → ':''}<b>${esc(x.to)}</b></li>`}${x.note?`<li>Comentario: “${esc(x.note)}”</li>`:''}</ul></div>`).join('')||'<p class="mu" style="padding:16px">Aún no hay respuestas.</p>'}`}
+  else{const hist=histOf(myScsI()).slice(0,60);const ST_={ok:'✓ Aceptado',shift:'↔ Aceptado con otra fecha',rej:'✗ Rechazado'};
+    h=`<div class="pph"><b>Respuestas del ingeniero</b><button class="kx" data-px>×</button></div>${hist.map(x=>`<div class="ppi r-${x.st}"><div class="ppt"><span class="ppk">${ST_[x.st]||x.st}</span>${x.undone?'<span class="ppk">DESHECHO</span>':''}<b>${esc(x.name)}</b><small>${esc(x.amb)} · ${fmtD(ldt((x.t)))} ${hhmm(x.t)} · ${esc(x.n)}${x.sentAt?' · enviado '+fmtT(x.sentAt):''}</small></div><ul>${x.kind==='del'?'<li>Pedido de quitar la actividad</li>':`<li>${x.from?esc(x.from)+' → ':''}<b>${esc(x.to)}</b></li>`}${histChgHtml(x)}${x.late?`<li class="w">${esc(lateTxt(x.late))}${x.lateNote?` · aceptada por: “${esc(x.lateNote)}”`:''}</li>`:''}${x.note?`<li>Comentario: “${esc(x.note)}”</li>`:''}</ul></div>`).join('')||'<p class="mu" style="padding:16px">Aún no hay respuestas.</p>'}`}
   const c=el.firstChild;if(c.dataset.h!==h){const st=c.scrollTop;c.innerHTML=h;c.dataset.h=h;c.scrollTop=st}}
 function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.closest('[data-px]')){el.remove();PMOD=null;return}let b;
   if((b=t.closest('[data-pall]'))){const sc=b.dataset.pall;const L=Object.entries((PROP.get(sc)||{}).items||{}).filter(([id,it])=>it&&it.sent&&canDecide(id,it));decideMany(L.map(([id])=>({sc,id})));return}
@@ -195,9 +279,10 @@ function revCounts(){const m=new Map();for(const doc of PROP.values())for(const[
 /* durante el render, la grilla muestra lo propuesto encima de lo vigente */
 function revSwap(){const off=S.act;const v=new Map(off);
   for(const{sc,id,it}of revItems()){const o=off.get(id)||null;
-    if(!it.after){if(o)v.set(id,{...o,_rv:{off:o,sc,del:true,n:it.n}})}
-    else if(!o){if(S.amb.has(it.after.ambId))v.set(id,{...clone(it.after),id,_rv:{off:null,sc,isNew:true,n:it.n}})}
-    else v.set(id,{...clone(it.after),id,_rv:{off:o,sc,n:it.n}})}
+    if(!it.after){if(o)v.set(id,{...o,_rv:{off:o,sc,del:true,n:it.n,late:propLate(it,o)}})}
+    else if(!o){if(S.amb.has(it.after.ambId))v.set(id,{...clone(it.after),id,_rv:{off:null,sc,isNew:true,n:it.n,late:propLate(it,null)}})}
+    /* lo que se verá al aceptar: lo vigente + solo lo que la propuesta cambió (no todo el objeto que armó el SC) */
+    else v.set(id,{...propMerge(clone(it.after),it.base||o,o,false),id,_rv:{off:o,sc,n:it.n,late:propLate(it,o)}})}
   S.act=v;return()=>{S.act=off}}
 function revShift(x){const o=x._rv&&x._rv.off;if(!o||x._rv.del)return 0;const a=[...(o.days||[])].sort()[0],b=[...(x.days||[])].sort()[0];if(!a||!b)return 0;return wdist(a,b)}
 function revConflicts(x){const out=new Map();if(!x._rv||x._rv.del)return out;const ds=new Set(x.days||[]);
@@ -206,10 +291,10 @@ function revConflicts(x){const out=new Map();if(!x._rv||x._rv.del)return out;con
 function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.length;const idx=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;
   return`<div class="ppb rv"><div class="rvl"><b>Revisando propuestas</b>
     <span class="rvchips"><button class="${!U.revSc?'on':''}" data-rvsc="">Todos <b>${[...cnt.values()].reduce((a,b)=>a+b,0)}</b></button>${[...cnt.entries()].sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="${U.revSc===sc?'on':''}" data-rvsc="${sc}" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></button>`).join('')}</span>
-    <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>
+    <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${(()=>{const nl=L.filter(o=>propLate(o.it,S.act.get(o.id))).length;return nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}: para aceptarlas se pide el motivo">${nl} fuera de plazo</span>`:''})()}
     <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · <b>‹ ›</b> mueve lo propuesto un día hábil (o arrastra la barra) · <b>📅</b> otra fecha de inicio · ✓ acepta · ✗ rechaza</span>${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
     <div class="ppa"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button>
-    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta solo las propuestas que muestra la grilla con los filtros actuales">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
+    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
@@ -246,6 +331,7 @@ function revWire(){const g=$('#gw')||$('#grid');if(g&&!g._rvw){g._rvw=1;g.addEve
 function revCellHtml(x,sel){const r=x._rv;const k=revShift(x);let tag='';
   if(r.isNew)tag='<span class="rvtag new">NUEVA</span>';else if(r.del)tag='<span class="rvtag del">QUITAR</span>';
   else{const o=r.off;const t=[];if(k)t.push(`${k>0?'→ +':'← '}${k}d`);const dn=(x.days||[]).length-(o.days||[]).length;if(dn&&!k)t.push(`${dn>0?'+':''}${dn} día${Math.abs(dn)>1?'s':''}`);else if(dn)t.push(`${dn>0?'+':''}${dn}d`);if((o.metrado??null)!==(x.metrado??null))t.push('metrado');if(!t.length&&canon(o.days||[])!==canon(x.days||[]))t.push('días');if((o.name||'')!==(x.name||''))t.push('nombre');tag=t.length?`<span class="rvtag">${t.join(' · ')}</span>`:''}
+  if(r.late)tag+=`<span class="rvtag late" title="${esc(lateTxt(r.late))}">TARDÍA</span>`;
   const mv=!r.del&&(x.days||[]).length;const kk=sel&&REVSEL?REVSEL.k:0;
   return`<span class="rvb">${tag}<span class="rvk">${kk?`${kk>0?'→ +':'← '}${kk}d · ✓ para aceptar así`:''}</span>${mv?`<button class="rvm" data-rva="l" title="Mover lo propuesto un día hábil antes" aria-label="Un día antes">‹</button><button class="rvm" data-rva="r" title="Mover lo propuesto un día hábil después" aria-label="Un día después">›</button><button class="rvm" data-rva="date" title="Aceptar con otra fecha de inicio…" aria-label="Elegir fecha de inicio">📅</button><i class="rvsep"></i>`:''}<button data-rva="ok" title="Aceptar${kk?' con el desplazamiento':''} (Enter)">✓</button><button data-rva="rej" title="Rechazar">✗</button></span>`}
 

@@ -224,6 +224,17 @@ test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async ()
   await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // reemplazar el documento borra hist
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'items.x1': null, 'hist.k3': { ...h, st: 'ok' } }));
 });
+test('propuestas: historial de decisiones (lhphist) solo lo escribe quien decide y no se borra', async () => {
+  const h = { sc: 'c-gabel', actId: 'x1', st: 'ok', by: 'editor@obra.pe', n: 'Elena', t: 1, sk: 'c-gabel|000000000000001', late: { w: 59, cut: 0 }, lateNote: 'Acordado en la reunión' };
+  const ed = user('editor@obra.pe'), sc = user('sc@obra.pe');
+  await assertFails(setDoc(doc(sc, 'lhphist/c-gabel_x1_1'), h)); // el SC no se aprueba a sí mismo
+  await assertSucceeds(setDoc(doc(ed, 'lhphist/c-gabel_x1_1'), h));
+  await assertSucceeds(getDoc(doc(sc, 'lhphist/c-gabel_x1_1')));
+  await assertSucceeds(updateDoc(doc(ed, 'lhphist/c-gabel_x1_1'), { undone: { t: 2, by: 'editor@obra.pe', n: 'Elena' } })); // deshacer lo marca
+  await assertFails(updateDoc(doc(ed, 'lhphist/c-gabel_x1_1'), { lateNote: 'otro motivo' })); // lo registrado no se reescribe
+  await assertFails(updateDoc(doc(sc, 'lhphist/c-gabel_x1_1'), { undone: null }));
+  await assertFails(deleteDoc(doc(ed, 'lhphist/c-gabel_x1_1')));
+});
 test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'pzon/x1'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));

@@ -1477,3 +1477,7 @@ table.rtab .rc-x{width:30px}
 /* Lookahead: día que no fue por el plan diario (↷) */
 #grid td.d.rpl{background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(198,40,40,.12) 4px 6px)}
 #grid td.d .dm.rp{color:#c62828;font-weight:800}
+/* propuestas fuera de plazo (colores por variables: ya tienen su versión en modo oscuro) */
+.ppk.late{background:var(--bad-soft);color:var(--bad);margin-left:4px}
+.pplate{margin:4px 0 0;font-size:12px;color:var(--bad)}
+.rvtag.late{background:var(--bad)}

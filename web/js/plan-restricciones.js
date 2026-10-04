@@ -26,6 +26,7 @@ function renderPlan(main){
     const cf=(confirmUF[p.id]||0)>NOW();
     let h=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok">Congelado ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:'<span class="pill warn">Borrador en vivo</span>'}
+     ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=fieldSug(id,items[id]);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
      ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
@@ -105,6 +106,13 @@ function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
    se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
 async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
   const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},snap,frozenBy:me?me.email:''};
+  /* propuestas de SC enviadas y sin decidir para este piso y semana: se avisa antes de cerrar y se guarda cuáles quedaron fuera */
+  if(canWrite){let pend;try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
+    if(!pend)pend=propPendWeek(n,pid,[...PROP.values()]);
+    if(pend.length){const c={new:0,mod:0,del:0};pend.forEach(o=>c[o.kind]++);const pl=(k,s,p)=>k?`${k} ${k>1?p:s}`:'';
+      if(!confirm(`Hay ${pend.length} propuesta${pend.length>1?'s':''} de subcontratistas para ${code} en la semana ${n} sin decidir: `+[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean).join(', ')+'.'
+        +`\n\nSi congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).\n\n¿Congelar igual?`))return;
+      doc.propOut=pend.map(o=>o.sc+'/'+o.id)}}
   if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});requestRender();return}
   if(!canWrite)return;const ref=fcol('weeks').doc(id);
   let out;try{out=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(ex&&ex.frozenAt)return{ex};
@@ -118,7 +126,7 @@ async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};
 /* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones y foto del lookahead) se copia a
    su propio documento weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta
    en ningún PPC) y la semana vuelve a borrador. «Recuperar» la repone mientras nadie la haya vuelto a congelar. */
-const WK_VF=['frozenAt','items','res','snap','frozenBy'];
+const WK_VF=['frozenAt','items','res','snap','frozenBy','propOut'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);

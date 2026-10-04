@@ -63,7 +63,7 @@ function fsDiff(prev,next,col){const args=[];const FV=firebase.firestore.FieldVa
   return args}
 
 /* ---- respaldo completo ---- */
-const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv'];
+const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv'];
 const BK_IMG=['lamimg','fotos'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;

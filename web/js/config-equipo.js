@@ -74,14 +74,16 @@ function renderCfg(main){
    <label for="p_rw">Semana de referencia</label><input id="p_rw" data-p="refWeek" type="number" value="${p.refWeek}"${isAdmin?'':' readonly'}>
    <label for="p_rd">Lunes de esa semana</label><input id="p_rd" data-p="refDate" type="date" value="${p.refDate}"${isAdmin?'':' readonly'}>
    <label for="p_dl">Tablero: hora límite para iniciar</label><input id="p_dl" data-p="dashLate" type="time" value="${esc(p.dashLate||'09:00')}"${isAdmin?'':' readonly'}>
-  </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}).</p></div>
+   <label for="p_pcd">Propuestas de SC: día de corte</label><select id="p_pcd" data-p="propCutDow"${isAdmin?'':' disabled'}>${(()=>{const c=propCutCfg();return[1,2,3,4,5,6,0].map(d=>`<option value="${d}"${c.dow===d?' selected':''}>${DOW_N[d][0].toUpperCase()+DOW_N[d].slice(1)} antes de la semana</option>`).join('')})()}</select>
+   <label for="p_pch">Propuestas de SC: hora de corte</label><input id="p_pch" data-p="propCutHH" type="time" value="${esc(propCutCfg().hh)}"${isAdmin?'':' readonly'}>
+  </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}). Las propuestas que tocan una semana y se envían después de su corte (hora de Lima) se marcan «fuera de plazo»: llegan igual, y para aceptarlas se pide el motivo.</p></div>
   </div></div>`;
   calWire(main);
   const saveP=ch=>apply([op('meta','project',{...P(),...ch})]);
   const saveT=fn=>{const t=clone(tpls);fn(t);saveP({templates:t})};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onchange=e=>{const t=e.target;if(t.id==='cfgInsp'){if(canLibMatrix()){const L=[...new Set(t.value.split('\n').map(x=>x.trim()).filter(Boolean))];libmPut({insp:L},`${L.length} inspector(es) guardados`)}return}if(!canWrite)return;
-    if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}saveP({[t.dataset.p]:v})}
+    if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='propCutDow')v=parseInt(v,10);if(t.dataset.p==='propCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=propCutCfg().hh;return}if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}saveP({[t.dataset.p]:v})}
     else if(t.dataset.c){const c=S.con.get(t.dataset.c);let v=t.value;if(t.dataset.f==='name'){v=v.trim().toUpperCase();if(!v){t.value=c.name;return}}apply([op('contractors',c.id,{...c,[t.dataset.f]:v})])}
     else if(t.dataset.l){saveP({[t.dataset.l]:t.value.split('\n').map(x=>x.trim()).filter(Boolean)})}
     else if(t.dataset.tname!=null){saveT(a=>{a[+t.dataset.tname].name=t.value.trim()||'Plantilla'})}
