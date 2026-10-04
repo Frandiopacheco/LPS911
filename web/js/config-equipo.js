@@ -184,7 +184,7 @@ const CL={sel:null,seen:new Set(),weeks:true,daily:true,restr:true,planos:false,
 const isFach=p=>p&&(p.id==='piso-fach'||/fachad/i.test(p.name||'')||/fachad/i.test(p.code||''));
 function cleanPisoCounts(pid){const secs=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid);const ss=new Set(secs.map(s=>s.id));const ambs=[...S.amb.values()].filter(a=>ss.has(a.sectorId));const as=new Set(ambs.map(a=>a.id));const acts=[...S.act.values()].filter(x=>as.has(x.ambId));return{secs,ambs,acts}}
 function cleanCard(){
-  const ps=pisos();if(CL.sel===null){CL.sel=[];CL.seen=new Set()}for(const p of ps)if(!CL.seen.has(p.id)){CL.seen.add(p.id);if(!isFach(p)&&!/^r-/.test(p.id))CL.sel.push(p.id)}
+  const ps=pisos();if(CL.sel===null){CL.sel=[];CL.seen=new Set()}for(const p of ps)if(!CL.seen.has(p.id)){CL.seen.add(p.id)} /* ninguno marcado de entrada */
   CL.sel=CL.sel.filter(id=>S.pis.has(id));
   const rows=ps.map(p=>{const c=cleanPisoCounts(p.id);const f=isFach(p);return `<label class="${f?'prot':''}"><input type="checkbox" data-clp="${p.id}"${CL.sel.includes(p.id)?' checked':''}${CL.busy?' disabled':''}><span><b>${esc(p.code)} · ${esc(p.name)}</b> — ${c.secs.length} sectores, ${c.ambs.length} ambientes, ${c.acts.length} actividades${f?' <span class="pill ok">se conserva</span>':''}</span></label>`}).join('');
   const pl=CL.plan;
@@ -195,7 +195,7 @@ function cleanCard(){
    <hr style="border:0;border-top:1px solid var(--line);margin:6px 0">
    <label><input type="checkbox" data-clo="weeks"${CL.weeks?' checked':''}${CL.busy?' disabled':''}><span>Planes semanales congelados y evaluaciones PPC de esos pisos</span></label>
    <label><input type="checkbox" data-clo="daily"${CL.daily?' checked':''}${CL.busy?' disabled':''}><span>Avance diario (Campo) y sus fotos de esos pisos</span></label>
-   <label><input type="checkbox" data-clo="restr"${CL.restr?' checked':''}${CL.busy?' disabled':''}><span>Restricciones de las actividades borradas (y las que ya no tienen actividad)</span></label>
+   <label><input type="checkbox" data-clo="restr"${CL.restr?' checked':''}${CL.busy?' disabled':''}><span>Restricciones de esos pisos (de las actividades borradas y las que ya no tienen actividad)</span></label>
    <label><input type="checkbox" data-clo="planos"${CL.planos?' checked':''}${CL.busy?' disabled':''}><span>Planos asignados a esos pisos</span></label>
    <p class="note" style="margin:2px 0">El equipo, los subcontratistas, la configuración del proyecto y los demás pisos se conservan.</p>
    ${pl?`<div class="sum">Se borrarán <b>${pl.total}</b> registros: ${pl.parts.filter(x=>x[1]).map(([k,n])=>`${n} ${k}`).join(', ')||'nada'}.<br>${pl.fach?'<b style="color:var(--warn)">Atención: marcaste un piso de fachadas.</b><br>':''}Escribe <b>BORRAR</b> para confirmar: <input class="tin" id="clconf" autocomplete="off" style="width:110px;margin:6px 6px 0 0"><button class="ib warn" id="clgo"${CL.busy?' disabled':''}>Borrar definitivamente</button> <button class="ib" id="clcancel"${CL.busy?' disabled':''}>Cancelar</button></div>`:
@@ -207,7 +207,8 @@ async function cleanPlan(){
   for(const pid of sel){const c=cleanPisoCounts(pid);c.secs.forEach(x=>del.push(['sectors',x.id]));c.ambs.forEach(x=>del.push(['ambientes',x.id]));c.acts.forEach(x=>{del.push(['acts',x.id]);actIds.add(x.id)});del.push(['pisos',pid]);nS+=c.secs.length;nA+=c.ambs.length;nX+=c.acts.length}
   let nW=0,nD=0,nF=0,nR=0,nP=0;
   if(CL.weeks)for(const w of S.wk.values()){const pid=w.pisoId||String(w.id).split('_').slice(1).join('_');if(sel.has(pid)){del.push(['weeks',w.id]);nW++}}
-  if(CL.restr)for(const q of S.res.values()){if(actIds.has(q.actId)||!S.act.has(q.actId)){del.push(['restr',q.id]);nR++}}
+  /* solo las restricciones de los pisos elegidos (antes también borraba las de otros pisos sin actividad activa) */
+  if(CL.restr)for(const q of S.res.values()){if(actIds.has(q.actId)||(sel.has(restrPiso(q))&&!S.act.has(q.actId))){del.push(['restr',q.id]);nR++}}
   if(CL.daily){const sn=await fcol('daily').get();sn.docs.forEach(d=>{const v=d.data();const pid=v.pisoId||d.id.split('_').slice(1).join('_');if(!sel.has(pid))return;del.push(['daily',d.id]);nD++;
     const ph=new Set();Object.values(v.recs||{}).forEach(r=>(r&&r.photos||[]).forEach(f=>ph.add(f)));Object.values(v.extra||{}).forEach(r=>(r&&r.photos||[]).forEach(f=>ph.add(f)));ph.forEach(f=>{del.push(['fotos',f]);nF++})})}
   if(CL.planos){ensurePlanos();const sn=await fcol('planos').get();sn.docs.forEach(d=>{if(sel.has(d.data().pisoId)){del.push(['planos',d.id]);nP++}})}
@@ -239,6 +240,8 @@ async function importJson(file){
   if(data.tipo==='actualizacion'){const falta=((data.requiere||{}).pisos||[]).filter(id=>!S.pis.has(id));
     if(falta.length){IMPMSG='Esta actualización es para el lookahead ya cargado, pero en la página no están los pisos '+falta.join(', ')+'. Carga primero el lookahead completo.';const m=$('#impmsg');if(m)m.textContent=IMPMSG;toast('Falta cargar primero el lookahead completo.');return}
     if(!confirm(`${data.resumen?data.resumen+'\n\n':''}Se actualizarán ${writes.length} registros y se eliminarán ${dels.length}. Las demás actividades (y lo que hayas corregido en ellas) no se tocan.\n\n¿Continuar?`))return}
+  else{const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
+    if(!confirm(`Vas a cargar ${writes.length} registros (${Object.entries(by).map(([c,n])=>n+' '+c).join(', ')})${dels.length?` y eliminar ${dels.length}`:''}.\n\nLos registros con el mismo identificador se REEMPLAZAN por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.\n\n¿Continuar?`))return}
   const msg=$('#impmsg');let done=0;
   try{await batchWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
     await batchWrites(dels.map(([c,id])=>[c,id,null]));

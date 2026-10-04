@@ -178,25 +178,9 @@ async function exportXlsx(){
       const lg=[['SUBCONTRATISTA','PARTIDA']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'']));const ws4=X.utils.aoa_to_sheet(lg);ws4['!cols']=[{wch:18},{wch:26}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
-    // plan semanal por piso
-    const pl=[['PPC SEMANAL · SEMANA '+U.week],[],['PISO','ESTADO','SUBCONTRATISTA','CÓDIGO','AMBIENTE','ACTIVIDAD','DÍAS','METRADO SEM.','UND','EJECUTADO','CUMPLIDO','TIPO DE CAUSA','CAUSA (DETALLE)','MITIGACIÓN']];const ppcRows=[];
-    for(const pp of visPisos()){const w=S.wk.get(wkId(U.week,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(U.week,pp.id);const res=fz&&w.res||{};
-      Object.entries(items).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0)).forEach(([id,it])=>{const rr=res[id]||{};pl.push([pp.code,fz?'Congelado':'Borrador',conOf(it.sc).name,it.code,it.amb,it.act,it.days.map(fmtS).join(' '),it.q??'',it.und||'',rr.exec??'',rr.ok===true?'SÍ':rr.ok===false?'NO':'',rr.cnc?cncLabel(rr.cnc):'',rr.note||'',rr.mit||''])});
-      const st=ppcOf(w);ppcRows.push(['PPC '+pp.code,st?pct(st.ppc):'—'])}
-    pl.push([],...ppcRows);const ws2=X.utils.aoa_to_sheet(pl);ws2['!cols']=[{wch:6},{wch:10},{wch:16},{wch:8},{wch:28},{wch:32},{wch:26},{wch:12},{wch:6},{wch:11},{wch:10},{wch:24},{wch:30},{wch:30}];
-    for(let c=0;c<14;c++){const k=X.utils.encode_cell({r:2,c});if(ws2[k])ws2[k].s=hs}autoF(X,ws2,2);X.utils.book_append_sheet(wb,ws2,'PPC semanal');
-    const rs=[['ESTADO','ÍTEM','AMBIENTE','ACTIVIDAD','TIPO','DESCRIPCIÓN','RESPONSABLE','REQUERIDA','LIBERADA']];
-    for(const q of restrInScope()){const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);rs.push([q.status==='lib'?'Liberada':'Pendiente',a?a.code:'',a?a.name:'',x?x.name:'',q.type,q.desc,q.resp,q.need,q.freed])}
-    const ws3=X.utils.aoa_to_sheet(rs);ws3['!cols']=[{wch:11},{wch:8},{wch:24},{wch:28},{wch:18},{wch:40},{wch:16},{wch:11},{wch:11}];for(let c=0;c<9;c++)ws3[X.utils.encode_cell({r:0,c})].s=hs;autoF(X,ws3,0);X.utils.book_append_sheet(wb,ws3,'Restricciones');
-    const lg=[['SUBCONTRATISTA','PARTIDA','COLOR']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'','X']));const ws4=X.utils.aoa_to_sheet(lg);
-    [...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach((c,i)=>{ws4[X.utils.encode_cell({r:i+1,c:2})].s={fill:{fgColor:{rgb:c.color.replace('#','').toUpperCase()}},font:{bold:true,color:{rgb:lum(c.color)>.55?'000000':'FFFFFF'}},alignment:{horizontal:'center'}}});
-    for(let c=0;c<3;c++)ws4[X.utils.encode_cell({r:0,c})].s=hs;ws4['!cols']=[{wch:18},{wch:26},{wch:8}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
-    const ad=[['FECHA','PISO','ÍTEM','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','PROGRAMADO','UND','ESTADO','EJECUTADO','CAUSA','COMENTARIO','FOTOS','REGISTRADO POR']];const vps=new Set(visPisos().map(x=>x.id));
-    [...DAY.values()].filter(doc=>vps.has(doc.pisoId)&&doc.date>=days[0].d&&doc.date<=days[days.length-1].d).sort((a,b)=>a.date.localeCompare(b.date)).forEach(doc=>{
-      for(const[aid,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status)continue;const x=S.act.get(aid);const am=x&&S.amb.get(x.ambId);ad.push([doc.date,S.pis.get(doc.pisoId)?.code||'',am?am.code:'',am?am.name:'',x?x.name:'(eliminada)',x?conOf(x.sc).name:'',rc.prog??'',rc.und||'',ST[rc.status].t,rc.exec??'',rc.cnc||'',rc.note||'',(rc.photos||[]).length||'',rc.byName||rc.by||''])}
-      });
-    npItems(new Set(days.map(x=>x.d)),vps).forEach(({e,d:dd,p:pp,a:am})=>ad.push([dd,pp?.code||'',am?am.code:'',am?am.name:'',e.desc+' (no programado)',conOf(e.sc).name,'',e.und||'','No programado',e.exec??'','',e.note||'',(e.photos||[]).length||'',e.byName||e.by||'']));
-    const ws5=X.utils.aoa_to_sheet(ad);ws5['!cols']=[{wch:11},{wch:6},{wch:8},{wch:24},{wch:34},{wch:16},{wch:11},{wch:6},{wch:13},{wch:10},{wch:22},{wch:30},{wch:6},{wch:18}];for(let c=0;c<14;c++)ws5[X.utils.encode_cell({r:0,c})].s=hs;autoF(X,ws5,0);X.utils.book_append_sheet(wb,ws5,'Avance diario');
+    /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
+    {const wsP=ppcSemWs(X,U.week);if(wsP)X.utils.book_append_sheet(wb,wsP,'PPC semanal');}
+    {const L=restrInScope().filter(q=>!q.actId||S.act.has(q.actId)).sort((a,b)=>(a.status==='lib')-(b.status==='lib')||(a.need||'9').localeCompare(b.need||'9'));X.utils.book_append_sheet(wb,restrWs(X,L,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · al ${fmtD(today)}`),'Restricciones')}
     const buf=X.write(wb,{type:'array',bookType:'xlsx'});
     saveBlob(`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
@@ -207,7 +191,13 @@ async function exportXlsx(){
    Columnas: ITEM · DESCRIPCIÓN · U. · METR TOTAL · METR SEMANA · días L–S (código del sector, color del SC) · SI/NO (días)
    · TIPO (código de causa) · CAUSAS · MITIGACIÓN. Pie: confiabilidad de la programación (días cumplidos / días programados). */
 async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
-  try{await loadXlsx();const X=window.XLSX;const p=P();const wd=weekDays(n);const vp=visPisos();
+  try{await loadXlsx();const X=window.XLSX;const p=P();const ws=ppcSemWs(X,n);if(!ws)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
+    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');
+    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
+    saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
+/** hoja «PPC semanal» en el formato de la empresa (la usan el Excel del PPC y el del Lookahead); null si no hay compromisos */
+function ppcSemWs(X,n){{const p=P();const wd=weekDays(n);const vp=visPisos();
     const B={style:'thin',color:{rgb:'000000'}};const bd={top:B,bottom:B,left:B,right:B};
     const F=(o={})=>({name:o.name||'Arial',sz:o.sz||9,bold:!!o.b,color:{rgb:o.c||'000000'}});
     const st=(o={})=>{const r={border:o.nb?undefined:bd,font:F(o),alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.fmt)r.numFmt=o.fmt;return r};
@@ -257,7 +247,7 @@ async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:
           set(r,20,pp.code||'',fx);set(r,21,(it.code||'')+' '+(it.amb||''),fx);set(r,22,c.name||'',fx);RH[r]={hpt:16};
           if(rr.ok===true)tOk++;tN++;r++}
         i=j}}
-    if(!tN)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
+    if(!tN)return null;
     /* pie: confiabilidad de la programación (como el formato) y PPC por compromisos */
     const fb=st({b:true,sz:10,nb:true}),fbc=st({b:true,sz:10,h:'center',nb:true});const rl=r;
     set(r,1,'CONFIABILIDAD DE LA PROGRAMACIÓN',fb);set(r,7,'Total de registros  :',st({b:true,sz:10,nb:true,h:'right'}));
@@ -271,7 +261,30 @@ async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:
     ws['!cols']=[{wch:2},{wch:7},{wch:34},{wch:13},{wch:9},{wch:5},{wch:8},{wch:8},...wd.map(()=>({wch:6})),{wch:4.5},{wch:4.5},{wch:7},{wch:30},{wch:16},{wch:16},{wch:7},{wch:18},{wch:18}];
     [12.75,18,18,18,18,11.25,17.25,15,15].forEach((h,i)=>RH[i]={hpt:h});ws['!rows']=RH;
     ws['!views']=[{state:'frozen',xSplit:0,ySplit:9}];
-    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-    saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
+    return ws}}
+/** hoja «Restricciones» con formato (la usan el botón de Restricciones y el Excel del Lookahead) */
+function restrWs(X,list,sub){const p=P();const today=todayIso();
+  const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
+  const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};return r};
+  const ws={};const M=[];const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};
+  const H=['N.º','ESTADO','PISO','CÓDIGO','AMBIENTE','ACTIVIDAD','AFECTA A','TIPO','CLASE / ÁREA','DESCRIPCIÓN','RESPONSABLE','REGISTRÓ','F. REGISTRO','REQUERIDA','LIBERADA','LIBERÓ','DÍAS DE ATRASO'];const nc=H.length;
+  set(0,0,'RESTRICCIONES',st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,sub||'',st({nb:true,sz:10,c:'555555'}));
+  [['PROYECTO',p.fullName||p.name||''],['FECHA',fmtD(today)+' '+today.slice(0,4)]].forEach(([k,v],i)=>{set(i,6,k,st({nb:true,b:true,sz:9,c:'6B7785',h:'right'}));set(i,7,v,st({nb:true,sz:10,b:i===0}))});
+  const pend=list.filter(r=>r.status!=='lib'),late=pend.filter(r=>r.need&&r.need<today);
+  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.length-pend.length} liberadas`,st({nb:true,sz:10,b:true}));
+  const hr=4;const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});H.forEach((t,c)=>set(hr,c,t,hs));
+  let r=hr+1;list.forEach((q,i)=>{const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);const pp=S.pis.get(restrPiso(q));const lib=q.status==='lib';const vl=!lib&&q.need&&q.need<today;
+    const est=lib?'Liberada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':vl?'C62828':'7A5200';
+    const atr=vl?wdist(q.need,today):lib&&q.need&&q.freed&&q.freed>q.need?wdist(q.need,q.freed):'';
+    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name:(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
+    row.forEach((v,c)=>set(r,c,v,c===1?st({b:true,h:'center',fill:ef,c:ec}):c===0||c===2||c===3||c>=12?st({h:'center'}):c===9?st({w:true}):st()));r++});
+  if(!list.length){set(r,0,'Sin restricciones en este filtro.',st({nb:true,c:'777777'}));r++}
+  ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(r-1,hr),c:nc-1}});ws['!merges']=M;
+  ws['!autofilter']={ref:X.utils.encode_range({s:{r:hr,c:0},e:{r:Math.max(r-1,hr),c:nc-1}})};
+  ws['!cols']=[{wch:5},{wch:11},{wch:6},{wch:8},{wch:20},{wch:30},{wch:18},{wch:16},{wch:18},{wch:40},{wch:18},{wch:18},{wch:11},{wch:11},{wch:11},{wch:16},{wch:9}];
+  ws['!rows']=[{hpt:22}];ws['!views']=[{state:'frozen',xSplit:0,ySplit:hr+1}];return ws}
+/** botón de Restricciones: exporta la lista con los filtros que se ven en pantalla */
+async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
+  try{await loadXlsx();const X=window.XLSX;const p=P();const wb=X.utils.book_new();X.utils.book_append_sheet(wb,restrWs(X,list,sub),'Restricciones');
+    const buf=X.write(wb,{type:'array',bookType:'xlsx'});saveBlob(`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))}
+  catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}

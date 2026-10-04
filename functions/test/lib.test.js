@@ -48,3 +48,15 @@ test('cierres sin revisar: solo los de hace 2 días o más y sin registro', () =
   assert.strictEqual(L[0].rec.sc, 'c1');
   assert.strictEqual(L[0].rec.byName, 'Juan');
 });
+
+test('cierres sin revisar: un cumplido lleva lo ejecutado = programado; lo quitado por el ingeniero no vuelve', () => {
+  const lives = [
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', close: { status: 'ok' } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', close: { status: 'ok' } }
+  ];
+  const daily = new Map([['2026-09-27_p1', { recs: { x2: { status: null, clr: true } } }]]);
+  const acts = new Map([['x1', { sc: 'c1', metrado: 10, qty: { '2026-09-27': 4 } }], ['x2', { sc: 'c1' }]]);
+  const L = closesToAccept(lives, daily, acts, '2026-09-30');
+  assert.deepStrictEqual(L.map(o => o.actId), ['x1']);
+  assert.strictEqual(L[0].rec.exec, 4);
+});

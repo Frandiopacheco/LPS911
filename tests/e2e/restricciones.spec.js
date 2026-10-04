@@ -1,6 +1,13 @@
 // Restricciones: filtros por partida afectada, quién la registró, quién la libera y fechas.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const XLSX = require('xlsx-js-style');
+const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
+const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+
 
 const R = (id, o) => ['restr', id, { pisoId: 'p1', type: 'Materiales', desc: id, resp: '', need: HOY, freed: '', status: 'pend', created: HOY, ...o }];
 
@@ -48,4 +55,21 @@ test('«Ver en el lookahead» resalta la fila y «Ver en el plano» lleva a su z
   await expect.poll(() => page.evaluate(() => window.__plano && window.__plano.M.date)).toBe(t0);
   await expect.poll(() => page.evaluate(() => window.__plano.M.hl ? [...window.__plano.M.hl] : [])).toContain('v:t0');
   noErrors(errors, 'ver en plano');
+});
+
+test('exportar las restricciones a Excel con los filtros de la pantalla; la tabla entra sin desplazarse a los lados', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'restr', extra: [R('rA', { actId: 'e0', sc: 'c2', desc: 'Falta tubería', created: '2026-09-20' })] });
+  // la tabla cabe en el ancho de la pantalla
+  const sw = await page.evaluate(() => { const t = document.querySelector('#main .tscroll'); return t.scrollWidth - t.clientWidth; });
+  expect(sw).toBeLessThan(4);
+  await conExcel(page);
+  await page.selectOption('select[data-rf="aff"]', 'SC ELECTRICAS');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#rxls')]);
+  const wb = XLSX.read(readFileSync(await dl.path()));
+  const ws = wb.Sheets.Restricciones;
+  expect(ws.A1.v).toBe('RESTRICCIONES');
+  expect(ws.F6.v).toBe('Entubado empotrado'); // primera fila de datos: la filtrada
+  expect(ws.G6.v).toBe('SC ELECTRICAS');
+  expect(ws.A7).toBeUndefined();
+  noErrors(errors, 'restricciones excel');
 });

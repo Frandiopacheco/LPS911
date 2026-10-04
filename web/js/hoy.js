@@ -4,7 +4,9 @@
 
 /** Actividades del lookahead programadas un día, en los pisos visibles (y de las partidas del SC si es subcontratista). */
 function hoyActs(d){const vs=new Set(visPisos().map(p=>p.id));const mine=SCK()?new Set(myScsI()):null;
-  return[...S.act.values()].filter(x=>(x.days||[]).includes(d)&&vs.has(pisoOfAct(x.id))&&(!mine||mine.has(x.sc)))}
+  /* igual que Campo y En obra: sin lo ya terminado ni lo que el plan diario dice que no va */
+  const nv=window.__plano&&window.__plano.novaSet?window.__plano.novaSet(d):null;
+  return[...S.act.values()].filter(x=>schedOn(x,d)&&!(nv&&nv.has(x.id))&&vs.has(pisoOfAct(x.id))&&(!mine||mine.has(x.sc)))}
 const hoyLoc=x=>{const a=S.amb.get(x.ambId);const p=S.pis.get(pisoOfAct(x.id));return[(p&&p.code)||'',a?a.code+' · '+a.name:''].filter(Boolean).join(' · ')};
 
 /* cada tarjeta: {k, title, n, sub, tone, items:[{t, s}], go, goLabel, empty} */
@@ -28,7 +30,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
     out.obra={k:'obra',title:'Tu avance de hoy',n:no.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${st.filter(o=>o.k==='run').length} en ejecución · ${no.length} sin iniciar`,
       items:no.map(o=>({t:o.x.name,s:hoyLoc(o.x)})),go:'cap',goLabel:'Ir a En obra',empty:A.length?'Todo lo de hoy ya empezó':'No tienes actividades programadas hoy'}}
   /* restricciones: las de mi área (Calidad/OT), las de mi partida (SC) o todas */
-  {let R=restrInScope().filter(x=>x.status!=='lib');if(AREA()&&me.area)R=R.filter(myArea);if(SCK()){const m=new Set(myScsI());R=R.filter(x=>m.has(x.sc)||(x.actId&&m.has((S.act.get(x.actId)||{}).sc)))}
+  {let R=restrInScope().filter(rOpenC);if(AREA()&&me.area)R=R.filter(myArea);if(SCK()){const m=new Set(myScsI());R=R.filter(x=>m.has(x.sc)||(x.actId&&m.has((S.act.get(x.actId)||{}).sc)))}
     const lim=wshift(d,3);const late=R.filter(x=>x.need&&x.need<d),soon=R.filter(x=>x.need&&x.need>=d&&x.need<=lim);const L=[...late,...soon].sort((a,b)=>a.need.localeCompare(b.need));
     out.restr={k:'restr',title:AREA()&&me.area?`Restricciones de ${me.area}`:SCK()?'Restricciones de tu partida':'Restricciones',n:L.length,tone:late.length?'bad':'warn',
       sub:`${late.length} vencida${late.length===1?'':'s'} · ${soon.length} vence${soon.length===1?'':'n'} en 3 días · ${R.length} pendiente${R.length===1?'':'s'} en total`,
