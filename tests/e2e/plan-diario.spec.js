@@ -130,6 +130,8 @@ test('el subcontratista solo propone: queda en espera y no cambia el lookahead',
   await page.fill('#nvd', 'Material de otra partida en el ambiente');
   await page.locator('#pop [data-nv="prop"]').click();
   await expect(row(page, 's9')).toHaveClass(/wait/);
+  // en su plano ya no aparece (así reparte sus cuadrillas solo en lo que va)
+  await expect(page.locator('#mstage .pvl.nb[data-z="v:s9"]')).toHaveCount(0);
   await expect(row(page, 's9').locator('.dzp')).toContainText('lo decide el ingeniero');
   await expect(page.locator('#mpdb')).toContainText('Tus propuestas');
   const p = (await pdz(page)).filter(z => z.kind === 'dprop');
@@ -158,9 +160,12 @@ test('en la reunión el ingeniero acepta o rechaza lo propuesto', async ({ page 
   noErrors(errors, 'aceptar');
 });
 
-test('rechazar una propuesta: la actividad va', async ({ page }) => {
+test('revisar una propuesta y mantenerla: la actividad va', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, ['pdz', `dp_${MANANA}_s9`, { date: MANANA, pisoId: 'p1', sc: 'c1', kind: 'dprop', actId: 's9', ambId: 'a1', k: 'fin', desc: '', st: 'pend', by: 'sc@obra.pe', byName: 'Sandra', ts: 1 }]] });
-  await row(page, 's9').locator('[data-dpr]').click();
+  // un solo botón «Revisar»: ahí se decide si culminó o sigue
+  await expect(row(page, 's9').locator('[data-dpr]')).toHaveCount(0);
+  await row(page, 's9').locator('[data-dpa]').click();
+  await page.locator('#pop [data-do="no"]').click();
   await expect(row(page, 's9').locator('.dzp.rej')).toContainText('va según lo programado');
   expect((await pdz(page)).find(z => z.kind === 'dprop').st).toBe('rej');
   expect((await act(page, 's9')).days).toEqual([MANANA]);
@@ -336,7 +341,11 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
   let p = await enPantalla(page, '#mstage', 200, 200);
   await page.mouse.click(p.x, p.y);
-  await expect(page.locator('#mzc .zcb')).toBeVisible(); // ✓ ½ ✗ de lo registrado en Campo
+  await expect(page.locator('#mzc .zcb')).toBeVisible(); // ✓ / ✗ como en Campo (sin «parcial»)
+  await expect(page.locator('#mzc [data-zcs="partial"]')).toHaveCount(0);
+  await page.locator('#mzc [data-zcs="no"]').click();
+  await page.locator('#mzc .zcq [data-zcc="0"]').click(); // la causa se elige en la misma ficha
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('daily')).flatMap(d => Object.values(d.recs || {})).filter(r => r.status === 'no' && r.cnc).length)).toBeGreaterThan(0);
   await page.keyboard.press('Escape');
   // ver la sectorización: contornos y códigos de los ambientes sobre el plano
   await page.click('#mmbar [data-msz]');
@@ -373,4 +382,42 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   await expect(page.locator('#mmbar')).toBeHidden();
   expect(await page.evaluate(() => window.__plano.M.colorBy)).toBe('sc');
   noErrors(errors, 'reunión');
+});
+
+test('revisar «no va» del SC: «No, va igual» mantiene lo programado', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, ['pdz', `dp_${MANANA}_s9`, { date: MANANA, pisoId: 'p1', sc: 'c1', kind: 'dprop', actId: 's9', ambId: 'a1', k: 'res', desc: 'Falta andamio', st: 'pend', by: 'sc@obra.pe', byName: 'Sandra', ts: 1 }]] });
+  await page.locator('#mpdb [data-dpa]').click();
+  await expect(page.locator('#pop')).toContainText('Sandra propone que no va');
+  await page.locator('#pop [data-nv="keep"]').click();
+  await expect.poll(async () => (await pdz(page)).find(z => z.kind === 'dprop').st).toBe('rej');
+  expect((await act(page, 's9')).days).toEqual([MANANA]);
+  noErrors(errors, 'va igual');
+});
+
+test('una zona dibujada se puede redibujar (reemplaza) o volver a su ambiente', async ({ page }) => {
+  const Z = ['pdz', 'pzX', { date: MANANA, pisoId: 'p1', vista: 'L1', sc: 'c2', kind: 'zona', pts: [120, 120, 200, 120, 200, 200, 120, 200], actId: 'e0', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, Z] });
+  const zonas = async () => (await pdz(page)).filter(z => z.kind === 'zona' && z.actId === 'e0').length;
+  await expect(row(page, 'e0')).toContainText('zona dibujada');
+  await row(page, 'e0').locator('[data-redo]').click();
+  const a = await enPantalla(page, '#mstage', 150, 150), b = await enPantalla(page, '#mstage', 280, 280);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+  await expect.poll(zonas).toBe(1); // la anterior se reemplazó
+  expect((await pdz(page)).find(z => z.kind === 'zona' && z.actId === 'e0').pts).not.toEqual(Z[2].pts);
+  await row(page, 'e0').locator('[data-zamb]').click();
+  await expect.poll(zonas).toBe(0);
+  await expect(row(page, 'e0')).toContainText('en su ambiente');
+  await expect(row(page, 'e0').locator('[data-put]')).toBeVisible();
+  noErrors(errors, 'redibujar');
+});
+
+test('el subcontratista no ve el achurado de cruces salvo que lo prenda', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday');
+  await expect(page.locator('#mcxb .mcxh')).toBeVisible();
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
+  await expect(page.locator('#mstage .pvl.nb.rx')).toHaveCount(0); // tampoco el anillo rojo en los números
+  await page.locator('#mcxb [data-cxv]').click();
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
+  noErrors(errors, 'sc achurado');
 });
