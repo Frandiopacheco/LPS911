@@ -1394,3 +1394,11 @@ body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 .mzc.pl .zcpl{display:flex;flex-direction:column;gap:6px}.mzc.pl .dzseg{align-self:flex-start}.mzc.pl .rsk{font-size:12.5px;color:#ef6c00}
 @media (max-width:760px){.mzc.pl .dzv{min-height:40px}}
 .mmnav{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;justify-content:flex-start;order:9;flex:1 1 100%;min-width:0;overflow-x:auto;scrollbar-width:thin;padding:2px 0}.mmnav>*{flex:none}
+/* las ventanitas van sobre las fichas del plano (antes quedaban detrás de la ficha de cumplimiento) */
+.pop{z-index:155}
+.zcq{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel2)}.zcq b{flex:1 1 100%;font-size:12.5px}.zcq .chip{cursor:pointer;font:inherit;font-size:12.5px}
+.nvkeep{grid-template-columns:1fr}.pop .nvkeep button{border-color:var(--ok)}
+.cxvt{display:block;margin:6px 12px 0}
+/* reunión: arriba lo que cambió en el plan, luego por decidir, las interferencias y al final los equipos */
+.mapa.meeting .mrs .mchb{order:1}.mapa.meeting .mrs .mpdb{order:2}.mapa.meeting .mrs .mcxb{order:3}.mapa.meeting .mrs .mfzb{order:4}
+.mapa.meeting .mrs{overflow:auto}
