@@ -24,8 +24,14 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await page.locator('#pop [data-nv="per"]').click();
   await expect(page.locator('#pop [data-to].on')).toHaveCount(1);
   await page.locator('#pop .nvok').click();
+  // queda en el plan como borrador: el lookahead no cambia hasta publicar
+  await expect(row(page, 'e0')).toContainText('No va');
+  expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  await expect(page.locator('#mpanel .pubb')).toContainText('se aplican al lookahead al publicar');
+  await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, sig]);
   await expect(row(page, 'e0')).toHaveCount(0);
+  await expect(page.locator('#mpanel .pubb.ok')).toContainText('Plan publicado');
   // el cambio queda en el recuadro «Cambios del plan» (a la derecha), no en el panel
   await expect(page.locator('#mpanel')).not.toContainText('Reprogramadas');
   await page.locator('#mchb [data-chtog]').click();
@@ -84,6 +90,8 @@ test('resaltar solo al subcontratista elegido viene marcado y se mantiene al cam
 
 const T1 = ['acts', 's9', { ambId: 'a1', sc: 'c1', name: 'Pruebas hidráulicas', und: 'pto', days: [MANANA], order: 15 }];
 const pdz = page => page.evaluate(() => Object.values(window.__dbAll('pdz')));
+/** «Publicar plan»: lo decidido pasa al lookahead */
+async function publicar(page, sel = '#mpanel [data-pub]') { await page.locator(sel).first().click(); await page.locator('#pop [data-do="si"]').click(); }
 
 test('No va › restricción que no se libera: se registra y se mueve todo el tren del ambiente', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
@@ -97,6 +105,8 @@ test('No va › restricción que no se libera: se registra y se mueve todo el tr
   const to = await page.evaluate(d => wshift(d, 2), MANANA);
   await page.locator(`#pop [data-to="${to}"]`).click();
   await page.locator('#pop .nvok').click();
+  expect(await page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e1').length)).toBe(0); // aún borrador
+  await publicar(page);
   await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e1').map(r => [r.desc, r.status]))).toEqual([['Falta levantar el muro', 'pend']]);
   const e1 = await act(page, 'e1');
   expect(e1.days).toEqual([HOY, to]);
@@ -153,6 +163,7 @@ test('en la reunión el ingeniero acepta o rechaza lo propuesto', async ({ page 
   await page.locator('#mpdb [data-dpa]').click();
   await expect(page.locator('#pop')).toContainText('Sin personal');
   await page.locator('#pop .nvok').click();
+  await publicar(page);
   const sig = await page.evaluate(d => wshift(d, 1), MANANA);
   await expect.poll(async () => (await act(page, 's9')).days).toEqual([sig]);
   await expect.poll(async () => (await pdz(page)).find(z => z.kind === 'dprop').st).toBe('ok');
@@ -177,6 +188,7 @@ test('«Cambios del plan» permite deshacer una reprogramación', async ({ page 
   await row(page, 'e0').locator('[data-dv^="no"]').click();
   await page.locator('#pop [data-nv="per"]').click();
   await page.locator('#pop .nvok').click();
+  await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
   await page.locator('#mchb [data-chtog]').click();
   await page.locator('#mchb [data-chu]').click();
@@ -365,9 +377,12 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   await dv.click();
   await page.locator('#pop [data-nv="per"]').click();
   await page.locator('#pop .nvok').click();
-  await expect.poll(async () => (await act(page, aid)).days).not.toEqual(antes);
   await expect(page.locator('#mzc.pl')).toContainText('No va');
+  expect((await act(page, aid)).days).toEqual(antes); // borrador hasta publicar
   await page.keyboard.press('Escape');
+  await publicar(page, '#mmbar [data-pub]');
+  await expect.poll(async () => (await act(page, aid)).days).not.toEqual(antes);
+  await expect(page.locator('#mmbar .pubok')).toBeVisible();
   // en el plan de hoy hay un cruce: el achurado se prende y apaga desde la barra
   await page.click('#mmbar [data-mdd="-1"]');
   await expect(page.locator('#mmbar [data-cxv]')).toBeVisible();
@@ -471,4 +486,32 @@ test('reunión, plan: la ficha explica con quién comparte el lugar y permite de
   await page.locator('#mzc .zccx').first().click();
   await expect(page.locator('#pop [data-x="ok"]')).toBeVisible();
   noErrors(errors, 'ficha cruce');
+});
+
+test('publicar el plan: un borrador se descarta sin tocar el lookahead y publicar se puede deshacer', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  await page.locator('#mchb [data-chtog]').click();
+  await expect(page.locator('#mchb')).toContainText('se aplica al publicar');
+  await page.locator('#mchb [data-chu]').click(); // descartar el borrador
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
+  expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  // otra vez, publicar y deshacer la publicación
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  await publicar(page);
+  await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
+  await page.locator('#toast button', { hasText: 'Deshacer' }).click();
+  await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  await expect(page.locator('#mpanel [data-pub]')).toBeVisible();
+  // ya publicado, un cambio nuevo se aplica al momento
+  await publicar(page);
+  await row(page, 'e1').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  await expect.poll(async () => (await act(page, 'e1')).days).not.toContain(MANANA);
+  noErrors(errors, 'publicar');
 });
