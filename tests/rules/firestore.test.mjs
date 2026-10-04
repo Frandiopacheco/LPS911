@@ -374,7 +374,7 @@ test('liberaciones: el SC pide (también fuera del lookahead) pero no marca crí
   await assertFails(updateDoc(doc(sc, 'lib/l-sol'), { sup: true, rest: 'Tarrajeo' }));
   await assertSucceeds(updateDoc(doc(sc, 'lib/l-free'), { note: 'lista desde las 8' }));
   await assertSucceeds(updateDoc(doc(cal, 'lib/l-free'), { st: 'pro', crit: true, rest: 'Tarrajeo', sup: true }));
-})
+});
 test('plan maestro: solo el administrador y el planner lo leen y editan', async () => {
   const pl = user('planner@obra.pe');
   await assertSucceeds(getDoc(doc(pl, 'mp/n1')));
