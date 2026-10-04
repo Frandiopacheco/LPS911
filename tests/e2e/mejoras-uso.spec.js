@@ -7,7 +7,12 @@ import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx-js-style');
 const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
-const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+const EXCELJS = require.resolve('exceljs/dist/exceljs.min.js');
+/* los Excel se arman con librerías del CDN: en la prueba se sirven las copias locales */
+const conExcel = async page => {
+  await page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+  await page.route(/cdn\.jsdelivr\.net\/npm\/exceljs/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(EXCELJS, 'utf8') }));
+};
 
 const META = ['meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28', fullName: 'Central de emergencias', owner: 'PRONATEL' }];
 const SEMANA = ['weeks', '58_p1', { n: 58, pisoId: 'p1', frozenAt: 1, items: { e0: { sc: 'c2', code: 'A-1', amb: 'Dpto 101', act: 'Entubado empotrado', days: [HOY], ord: 1 }, i0: { sc: 'c1', code: 'A-1', amb: 'Dpto 101', act: 'Redes empotradas', days: [HOY], ord: 2 } },
@@ -128,7 +133,7 @@ test('PPC semanal: el Excel sale en el formato de la empresa', async ({ page }) 
   expect(dl.suggestedFilename()).toBe('OP_PPC_P1_Sem58.xlsx');
   const ws = XLSX.read(readFileSync(await dl.path())).Sheets.PPC;
   const v = a => (ws[a] || {}).v;
-  expect(v('D2')).toBe('PROYECTO');expect(v('E2')).toContain('Central de emergencias');expect(v('I2')).toContain('PORCENTAJE DE PLAN CUMPLIDO');expect(v('T2')).toContain('GP-PR02-F-10');
+  expect(v('D2')).toBe('PROYECTO');expect(v('E2')).toContain('Central de emergencias');expect(v('M2')).toContain('PORCENTAJE DE PLAN CUMPLIDO');expect(v('T2')).toContain('GP-PR02-F-10');
   expect(['I6', 'J6', 'S6'].map(v)).toEqual(['PROG', 'MAT', 'OT']);
   expect(v('B7')).toBe('ACTIVIDADES PROGRAMADAS');expect(v('I7')).toBe('SEMANA 58');expect(v('O7')).toBe('CUMPLI-MIENTO');
   expect(['B8', 'C8', 'F8', 'G8', 'H8'].map(v)).toEqual(['ITEM', 'DESCRIPCIÓN', 'U.', 'METR\nTOTAL', 'METR\nSEMANA']);
@@ -206,14 +211,17 @@ test('Lookahead: el Excel se puede filtrar y repite el ambiente en cada fila', a
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bexport')]);
   const wb = XLSX.read(readFileSync(await dl.path()));
   const ws = wb.Sheets.Lookahead;const v = a => (ws[a] || {}).v;
-  expect(v('A1')).toBe('LOOKAHEAD');
+  // encabezado de la empresa (tal cual el formato corregido)
+  expect([v('C2'), v('C3'), v('C4'), v('C5'), v('K2'), v('S2'), v('V2')]).toEqual(['PROYECTO', 'PROPIETARIO', 'UBICACIÓN', 'FECHA', '4W LOOKAHEAD', 'CÓDIGO', ': GP-PR02-F-10']);
+  expect(v('A1')).toBeUndefined();
   expect(ws['!autofilter'].ref).toMatch(/^A9:J\d+$/);
   const rows = [];for (let r = 10; r < 20; r++) rows.push([v('A' + r), v('B' + r), v('E' + r)]);
   expect(rows).toContainEqual(['SC TARRAJEO', 'A-1', 'Tarrajeo de muros']);
   // el mismo libro lleva el PPC semanal (formato de la empresa) y las restricciones; ya no lleva Leyenda ni Avance diario
-  expect(wb.SheetNames).toEqual(['Lookahead', 'PPC semanal', 'Restricciones']);
-  for (const n of ['Restricciones', 'PPC semanal']) expect(wb.Sheets[n]['!autofilter'], n).toBeTruthy();
-  expect(String((wb.Sheets['PPC semanal'].I2 || {}).v)).toContain('PORCENTAJE DE PLAN CUMPLIDO');
-  expect((wb.Sheets.Restricciones.A1 || {}).v).toBe('RESTRICCIONES');
+  expect(wb.SheetNames).toEqual(['Lookahead', 'PPC semanal', 'AR', 'Sectorización']);
+  expect(wb.Sheets['PPC semanal']['!autofilter']).toBeTruthy();
+  expect(String((wb.Sheets['PPC semanal'].M2 || {}).v)).toContain('PORCENTAJE DE PLAN CUMPLIDO');
+  expect((wb.Sheets.AR.E2 || {}).v).toBe('PROYECTO');
+  expect((wb.Sheets.AR.B10 || {}).v).toBe('Item');
   noErrors(errors, 'excel lookahead');
 });

@@ -8,7 +8,12 @@ const require = createRequire(import.meta.url);
 const XLSX = require('xlsx-js-style');
 const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
 /* el Excel se arma con la librería del CDN: en la prueba se sirve la copia local */
-const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+const EXCELJS = require.resolve('exceljs/dist/exceljs.min.js');
+/* los Excel se arman con librerías del CDN: en la prueba se sirven las copias locales */
+const conExcel = async page => {
+  await page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+  await page.route(/cdn\.jsdelivr\.net\/npm\/exceljs/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(EXCELJS, 'utf8') }));
+};
 async function bajar(page, sel) {
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click(sel)]);
   const wb = XLSX.read(readFileSync(await dl.path()));

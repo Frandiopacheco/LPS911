@@ -179,10 +179,13 @@ async function exportXlsx(){
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
     /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
-    {const wsP=ppcSemWs(X,U.week);if(wsP)X.utils.book_append_sheet(wb,wsP,'PPC semanal');const w2=ppcScWs(X,U.week);if(w2)X.utils.book_append_sheet(wb,w2,'PPC del SC')}
-    {const L=restrInScope().filter(q=>!q.actId||S.act.has(q.actId)).sort((a,b)=>(a.status==='lib')-(b.status==='lib')||(a.need||'9').localeCompare(b.need||'9'));X.utils.book_append_sheet(wb,restrWs(X,L,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · al ${fmtD(today)}`),'Restricciones')}
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-    saveBlob(`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    /* formato de la empresa (ExcelJS, con logos): Lookahead · PPC semanal · PPC del SC · AR (análisis de restricciones) · Sectorización */
+    await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
+    xHeader(xToJ(J,'Lookahead',ws,X,6),'look',LG);
+    {const wsP=ppcSemWs(X,U.week);if(wsP)xHeader(xToJ(J,'PPC semanal',wsP,X,5),'ppc',LG);const w2=ppcScWs(X,U.week);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
+    xAR(J,arList(),U.week,LG);
+    await xSector(J,visPisos().map(q=>q.id));
+    await xSave(J,`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`);
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
   finally{if(unswap)unswap();btn.disabled=false;btn.textContent='Exportar Excel'}
 }
@@ -192,9 +195,8 @@ async function exportXlsx(){
    · TIPO (código de causa) · CAUSAS · MITIGACIÓN. Pie: confiabilidad de la programación (días cumplidos / días programados). */
 async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   try{await loadXlsx();const X=window.XLSX;const p=P();const ws=ppcSemWs(X,n);if(!ws)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
-    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');{const w2=ppcScWs(X,n);if(w2)X.utils.book_append_sheet(wb,w2,'PPC del SC')}
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-    saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);xHeader(xToJ(J,'PPC',ws,X,5),'ppc',LG);{const w2=ppcScWs(X,n);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
+    await xSave(J,`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`);
   }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
 /** hoja «PPC semanal» en el formato de la empresa (la usan el Excel del PPC y el del Lookahead); null si no hay compromisos */
 function ppcSemWs(X,n){{const p=P();const wd=weekDays(n);const vp=visPisos();
@@ -304,6 +306,8 @@ function ppcScWs(X,n){const docs=visPisos().map(p=>S.wk.get(wkId(n,p.id))).filte
   ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:9}});ws['!cols']=[{wch:22},{wch:22},{wch:34},{wch:20},{wch:24},{wch:12},{wch:22},{wch:10},{wch:36},{wch:30}];ws['!rows']=[{hpt:22}];return ws}
 /** botón de Restricciones: exporta la lista con los filtros que se ven en pantalla */
 async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
-  try{await loadXlsx();const X=window.XLSX;const p=P();const wb=X.utils.book_new();X.utils.book_append_sheet(wb,restrWs(X,list,sub),'Restricciones');
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});saveBlob(`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))}
+  /* formato de la empresa (AR: análisis de restricciones, 4 semanas desde la semana elegida) y el detalle de la pantalla */
+  try{await loadXlsx();const X=window.XLSX;const p=P();await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
+    xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
+    await xSave(J,`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`)}
   catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
