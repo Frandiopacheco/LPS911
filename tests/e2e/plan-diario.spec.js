@@ -227,6 +227,8 @@ test('la ventanita sigue a su fila al desplazar el panel', async ({ page }) => {
 const S8 = ['acts', 's8', { ambId: 'a2', sc: 'c1', name: 'Pruebas de presión', und: 'pto', days: [MANANA], order: 15 }];
 const fz = page => page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA);
 async function arrastrar(page, from, to) {
+  /* el plano se vuelve a dibujar al llegar cada cambio: esperar a que ambos estén en pantalla antes de medirlos */
+  await expect(page.locator(from)).toBeVisible(); await expect(page.locator(to)).toBeVisible();
   const a = await page.locator(from).boundingBox(); const b = await page.locator(to).boundingBox();
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
   await page.mouse.move(a.x + 30, a.y - 30, { steps: 4 }); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }); await page.mouse.up();

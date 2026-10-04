@@ -188,11 +188,17 @@ service cloud.firestore {
       allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid());
       allow delete: if isAdmin();
     }
+    // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)
+    function fotoNewOk() {
+      let d = request.resource.data;
+      let r = isMember() ? role() : '';
+      return d.data.size() < 400000
+        && (r == 'admin' || (r in ['editor', 'campo', 'capataz', 'sc', 'area', 'veedor'] && d.get('by', '') == mid()));
+    }
     match /fotos/{id} {
       allow read: if isMember();
       // una foto queda a nombre de quien la sube (by); ya guardada, nadie la reemplaza (evidencia): solo el administrador
-      allow create: if request.resource.data.data.size() < 400000 && (isAdmin()
-        || ((canDaily() || isCap() || isSC() || isArea() || isVeedor()) && request.resource.data.get('by', '') == mid()));
+      allow create: if fotoNewOk();
       allow update: if isAdmin() && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
