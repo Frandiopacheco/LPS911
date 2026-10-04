@@ -46,14 +46,15 @@ test('Lookahead: tocar el n.º de ítem resalta la fila; otra vez la suelta', as
 test('al publicar, el lookahead mueve la actividad y marca el día que no fue (↷)', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.locator('#mpanel .mp-it[data-act="e0"] [data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await page.locator('#mpanel [data-pub]').click(); await page.locator('#pop [data-do="si"]').click();
-  await expect.poll(() => page.evaluate(d => (window.__dbGet('acts', 'e0').rpl || {})[d]?.m, MANANA)).toBe('Sin personal');
+  await expect.poll(() => page.evaluate(d => (window.__dbGet('acts', 'e0').rpl || {})[d]?.m, MANANA)).toBe('Falta de personal');
   await page.evaluate(() => goTab('look'));
   const cell = page.locator(`#grid tr[data-a="e0"] td.d[data-d="${MANANA}"]`);
   await expect(cell).toHaveClass(/rpl/);
-  await expect(cell).toHaveAttribute('title', /No fue \(plan diario\): Sin personal/);
+  await expect(cell).toHaveAttribute('title', /No fue \(plan diario\): Falta de personal/);
   noErrors(errors, 'marca');
 });
 

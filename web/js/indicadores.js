@@ -92,13 +92,13 @@ function renderInd(main){
   const last=full[full.length-1];const avg=full.length?full.reduce((s,x)=>s+x.ppc,0)/full.length:null;
   const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=cncKey(r.cnc);cncC[k]=(cncC[k]||0)+1}}));
   const cncL=Object.entries(cncC).sort((a,b)=>b[1]-a[1]);
-  const wSel=docs.filter(w=>w.n===U.week);const scP={};
-  for(const w of wSel)for(const[id,it]of Object.entries(w.items||{})){const o=scP[it.sc]=scP[it.sc]||{n:0,ok:0,nimp:0};o.n++;const rr=(w.res||{})[id];if(rr?.ok===true)o.ok++;else if(rr?.ok===false&&!(rr.imp!=null?rr.imp:cncImp(rr.cnc)))o.nimp++}
+  const wSel=docs.filter(w=>w.n===U.week);const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n)delete scP[k];
   const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
   const pend=restrInScope().filter(rOpenC).length;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
    <div class="tile hl"><span class="k">PPC semanal (oficial) · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span>${part?`<span class="mu" style="font-size:12px">Sem ${part.wk} en evaluación: ${part.ev} de ${part.n} evaluados</span>`:''}</div>
+   <div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista"><span class="k">PPC del SC · última</span><span class="v">${last&&last.ppcSc!=null?pct(last.ppcSc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span></div>
    <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${full.length?` <small>${full.length} sem</small>`:''}</span></div>
    <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${full.length}${part?' <small>+1 en curso</small>':''}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
@@ -118,7 +118,7 @@ function renderInd(main){
    <div class="card chart"><h2>PPC por semana <span class="sub">% de compromisos cumplidos</span></h2><div class="pad">${ppcs.length?svgBarsV(ppcs.map(x=>({label:'S'+x.wk,v:x.ppc,sub:x.ok+' de '+x.n}))):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
    ${!U.piso&&vp.length>1?`<div class="card chart"><h2>PPC por piso <span class="sub">semana ${U.week}</span></h2><div class="pad">${pisoP.length?svgBarsH(pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,sub:x.st.ok+' de '+x.st.n})),pct):`<div class="empty">Ningún piso congeló la semana ${U.week}.</div>`}</div></div>`:''}
    <div class="card chart"><h2>Causas de no cumplimiento <span class="sub">acumulado</span></h2><div class="pad">${cncL.length?svgBarsH(cncL.map(([k,v])=>({label:k,v})),v=>v+''):'<div class="empty">Sin incumplimientos registrados.</div>'}</div></div>
-   <div class="card chart"><h2>PPC por subcontratista <span class="sub">semana ${U.week}</span></h2><div class="pad">${Object.keys(scP).length?svgBarsH(Object.entries(scP).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n+(o.nimp?` · PPC del SC ${pct(o.ok/(o.n-o.nimp))} (${o.nimp} no imput.)`:'')})),pct):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>
+   <div class="card chart"><h2>PPC por subcontratista <span class="sub">semana ${U.week}</span></h2><div class="pad">${Object.keys(scP).length?svgBarsH(Object.entries(scP).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n+(o.nimp||o.ext?` · PPC del SC ${pct(o.ppcSc)}${o.nimp?` (${o.nimp} no imput.)`:''}${o.ext?` · ${o.ext} de otras partidas`:''}`:'')})),pct):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>
   </div>`;
   h+=ncCard(wSel);
   if(canCli())h+=cliPpcCard(vset);

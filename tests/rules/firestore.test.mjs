@@ -235,6 +235,13 @@ test('propuestas: historial de decisiones (lhphist) solo lo escribe quien decide
   await assertFails(updateDoc(doc(sc, 'lhphist/c-gabel_x1_1'), { undone: null }));
   await assertFails(deleteDoc(doc(ed, 'lhphist/c-gabel_x1_1')));
 });
+test('congelado automático (frz): todos lo leen y nadie lo escribe desde la app', async () => {
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'frz/60'), { n: 60, k: 2 }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frz/60')));
+  await assertFails(setDoc(doc(user(OWNER), 'frz/61'), { n: 61 }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'frz/60'), { n: 60, k: 0 }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'frz/60')));
+});
 test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'pzon/x1'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));
