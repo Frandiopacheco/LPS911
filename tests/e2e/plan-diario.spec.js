@@ -437,29 +437,45 @@ test('el subcontratista no ve el achurado de cruces salvo que lo prenda', async 
   noErrors(errors, 'sc achurado');
 });
 
-test('cruce: se arrastra un número delante del otro y se decide el orden; queda en «Cambios del plan»', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y queda en «Cambios del plan»', async ({ page }) => {
+  // una tercera partida en A-1 hoy: tres en el mismo lugar
+  const Z3 = ['pdz', 'pz3', { date: HOY, pisoId: 'p1', vista: 'L1', sc: 'c3', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: 't1', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, Z3] });
   await page.click('#wtoday');
   await page.click('#mcxb .mcxh');
   await page.locator('#mcxb .mp-cx').first().click(); // tocar en la lista abre la decisión
-  await expect(page.locator('#pop .xo')).toHaveCount(2);
-  const n1 = await page.locator('#pop .xo[data-xi="0"] .xn').textContent();
-  // arrastrar el 2.º delante del 1.º
-  const a = await page.locator('#pop .xo[data-xi="1"]').boundingBox(), b = await page.locator('#pop .xo[data-xi="0"]').boundingBox();
-  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
-  await page.mouse.move(b.x + 10, b.y + b.height / 2, { steps: 6 }); await page.mouse.up();
-  await expect(page.locator('#pop .xo[data-xi="1"] .xn')).toHaveText(n1);
-  await page.locator('#pop [data-x="sw"]').click(); // ⇄ lo devuelve
-  await expect(page.locator('#pop .xo[data-xi="0"] .xn')).toHaveText(n1);
-  await page.locator('#pop [data-x="seq"]').click();
+  await expect(page.locator('#pop .xo')).toHaveCount(3);
+  await expect(page.locator('#pop .ph')).toContainText('3 partidas');
+  await expect(page.locator('#pop [data-x="seq"]')).toHaveCount(0); // el orden se decide arrastrando
+  const ultimo = await page.locator('#pop .xo[data-xi="2"] .xn').textContent();
+  // arrastrar el 3.º al primer lugar: el orden se guarda solo
+  const a = await page.locator('#pop .xo[data-xi="2"]').boundingBox(), b = await page.locator('#pop .xo[data-xi="0"]').boundingBox();
+  await page.mouse.move(a.x + 60, a.y + a.height / 2); await page.mouse.down();
+  await page.mouse.move(a.x + 60, b.y + 4, { steps: 8 }); await page.mouse.up();
+  await expect(page.locator('#pop .xo[data-xi="0"] .xn')).toHaveText(ultimo);
   const xok = async () => (await pdz(page)).filter(z => z.kind === 'xok');
   await expect.poll(async () => (await xok()).length).toBe(1);
-  expect((await xok())[0].ord).toHaveLength(2);
+  expect((await xok())[0].ord).toHaveLength(3);
+  await expect(page.locator('#pop .xhint')).toContainText('Orden guardado');
+  await page.keyboard.press('Escape');
   await page.locator('#mchb [data-chtog]').click();
-  await expect(page.locator('#mchb')).toContainText('Primero');
+  await expect(page.locator('#mchb')).toContainText('3.º');
   await page.locator('#mchb [data-xun]').click();
   await expect.poll(async () => (await xok()).length).toBe(0);
   noErrors(errors, 'cruce orden');
+});
+
+test('cruce del plan de mañana: la ✗ abre la reprogramación con los días siguientes', async ({ page }) => {
+  const Z = ['pdz', 'pzM', { date: MANANA, pisoId: 'p1', vista: 'L1', sc: 'c1', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: 's9', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, Z] });
+  await page.click('#mcxb .mcxh');
+  await page.locator('#mcxb .mp-cx').first().click();
+  await page.locator('#pop .xo .xno').first().click();
+  await expect(page.locator('#pop .nvtag')).toContainText('Interferencia con');
+  await expect(page.locator('#pop [data-to]')).toHaveCount(3); // los días siguientes, como en el plan
+  await page.locator('#pop .nvok').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova' && z.k === 'int').length).toBe(1);
+  noErrors(errors, 'cruce no va');
 });
 
 test('una reprogramación antigua (sin el «antes» guardado) también se deshace', async ({ page }) => {
@@ -514,4 +530,40 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   await page.locator('#pop .nvok').click();
   await expect.poll(async () => (await act(page, 'e1')).days).not.toContain(MANANA);
   noErrors(errors, 'publicar');
+});
+
+test('varios usuarios: publicar salta lo que otro ya movió y el reparto de cuadrillas no se pisa', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  // mientras tanto otra persona movió «e0» en el lookahead (ya no va mañana)
+  const otro = await page.evaluate(d => wshift(d, 3), MANANA);
+  await page.evaluate(([h, o]) => window.firebase.firestore().collection('acts').doc('e0').update({ days: [h, o] }), [HOY, otro]);
+  await publicar(page);
+  await expect(page.locator('#toast')).toContainText('ya no estaba');
+  expect((await act(page, 'e0')).days).toEqual([HOY, otro]); // no se corrió dos veces
+  noErrors(errors, 'publicar concurrente');
+});
+
+test('un borrador que no se publicó a tiempo avisa y se puede descartar', async ({ page }) => {
+  const D = ['pdz', 'pzD', { date: HOY, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Sin personal', k: 'per', repTo: MANANA, tren: 0, draft: true, ids: ['e0'], shift: 1, by: 'admin', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, D] });
+  await page.click('#wtoday');
+  await expect(page.locator('#mpanel .pubb.late')).toContainText('Sin publicar');
+  await page.locator('#mpanel [data-pubx]').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
+  expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  noErrors(errors, 'borrador vencido');
+});
+
+test('el reparto de cuadrillas se guarda por actividad (otro equipo del mismo SC no lo pisa)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8,
+    ['pdz', `fz_${MANANA}_c1`, { date: MANANA, kind: 'fza', sc: 'c1', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2, items: [{ cat: 'Operario', esp: '', n: 2 }] }], hor: { t: 'n', fin: '17:00' }, asg: {} }]] });
+  // desde el celular asignan C1 a s8; en la PC, sin haberlo recibido aún, se asigna a s9
+  await page.evaluate(d => window.firebase.firestore().collection('pdz').doc('fz_' + d + '_c1').update({ 'asg.s8': { c: 'C1', o: 1 } }), MANANA);
+  await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
+  await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s9"]');
+  await expect.poll(async () => Object.keys((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).asg || {}).sort()).toEqual(['s8', 's9']);
+  noErrors(errors, 'reparto concurrente');
 });

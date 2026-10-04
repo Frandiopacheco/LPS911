@@ -1438,3 +1438,17 @@ body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 .pubok{font-weight:700;font-size:13px;color:var(--ok)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pubb{background:#3a2f12;color:#ffd580;border-color:#a37b16}:root:not([data-theme="light"]) .pubb.ok{background:#16301c;color:#8fd19e;border-color:#2e7d32}}
 :root[data-theme="dark"] .pubb{background:#3a2f12;color:#ffd580;border-color:#a37b16}:root[data-theme="dark"] .pubb.ok{background:#16301c;color:#8fd19e;border-color:#2e7d32}
+/* cruces v2: lista ordenada 1.º, 2.º, 3.º… (arrastrar arriba/abajo) y ✗ = no va */
+.xlist{display:flex;flex-direction:column;gap:6px;padding:8px 10px 4px}
+.xlist .xo{flex:none}
+.xo .xg{color:var(--muted);font-size:14px;line-height:1;cursor:grab}
+.xo em.xp{position:static;flex:none;min-width:30px;text-align:center;background:var(--ink);color:var(--panel);font:700 11px/1 var(--f-ui);font-style:normal;border-radius:6px;padding:4px 5px}
+.xo .xt{flex:1;min-width:0}
+.pop .xo .xno{flex:none;width:34px;height:34px;padding:0;justify-content:center;border:1px solid #f1b8b8;border-radius:50%;background:#fdecec;color:#c62828;font-weight:800;font-size:15px}
+.pop .xo .xno:hover{background:#c62828;color:#fff;border-color:#c62828}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pop .xo .xno{background:#3a1d1d;border-color:#6b2a2a;color:#ff8a80}}
+:root[data-theme="dark"] .pop .xo .xno{background:#3a1d1d;border-color:#6b2a2a;color:#ff8a80}
+@media (max-width:760px){.pop .xo .xno{width:40px;height:40px}}
+.pubb.late{border:1px solid var(--bad);background:var(--bad-soft,#fdecec);color:var(--bad)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pubb.late{background:#3a1d1d;color:#ff8a80}}
+:root[data-theme="dark"] .pubb.late{background:#3a1d1d;color:#ff8a80}

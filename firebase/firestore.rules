@@ -37,6 +37,9 @@ service cloud.firestore {
     function canNP() { return canDaily() || isVeedor() || isCal(); }
     function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
+    function scPdzOld(d) { return d.get('sc', '') in scsOf() && !(d.get('kind', '') in ['xok', 'aviso', 'pub'])
+      && !(d.get('kind', '') == 'nova' && (d.get('k', '') != '' || d.get('ids', null) != null || d.get('draft', false) == true)); }
+    function scPdzNew(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') == 'pend'; }
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
 
     match /members/{mail} {
@@ -136,11 +139,13 @@ service cloud.firestore {
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.
+    // Plan del día: el SC dibuja, propone (dprop pendiente) y reparte sus cuadrillas; las decisiones del ingeniero
+    // (cruces, avisos, publicación y reprogramaciones «no va» con k/ids/borrador) no las puede crear, cambiar ni borrar.
     match /pdz/{id} {
       allow read: if isMember();
-      allow create: if canEdit() || (isSC() && request.resource.data.sc in scsOf());
-      allow update: if canEdit() || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf());
-      allow delete: if canEdit() || (isSC() && resource.data.sc in scsOf());
+      allow create: if canEdit() || (isSC() && scPdzOld(request.resource.data) && scPdzNew(request.resource.data));
+      allow update: if canEdit() || (isSC() && scPdzOld(resource.data) && scPdzOld(request.resource.data) && scPdzNew(request.resource.data));
+      allow delete: if canEdit() || (isSC() && scPdzOld(resource.data));
     }
     // Última zona usada por cada actividad (para "Como antes")
     match /pzon/{id} {

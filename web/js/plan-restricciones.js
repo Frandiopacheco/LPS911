@@ -170,7 +170,10 @@ function renderRestr(main){
   if(!list.length)h+=mob?emp:`<tr><td colspan="12">${emp}</td></tr>`;
   const SCm=SCK()?new Set(myScsI()):null;const aOpts={};
   const gsel=(r,fk)=>{const g=grpOf(r);const ar=restrAreasL();const ro=rCanEd(r)&&!AREA()?'':' disabled';return`<select class="ci" ${fk('grp')}${ro}><option value="campo"${g==='campo'?' selected':''}>Operativa de campo</option><option value="area"${g==='area'?' selected':''}>Otras áreas</option></select>${g==='area'?`<select class="ci" ${fk('area')}${ro}><option value="">— área —</option>${[...new Set([...ar,r.area].filter(Boolean))].map(t=>`<option${t===r.area?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`};
-  for(const r of list){const isLate=r.status!=='lib'&&r.need&&r.need<today;const w=aw(r.actId);const fk=f=>`data-r="${r.id}" data-f="${f}" data-fk="r:${r.id}:${f}"`;const ce=rCanEd(r);const ro=ce?'':' disabled';const roL=rCanLib(r)?'':' disabled';const own=ce&&SCm;const ao=actOne(r.actId);const alz=` data-alz="${own?'sc':'all'}"`;
+  /* obra grande: se dibujan por tandas (cada fila tiene varios campos editables) */
+  const LIM=U.rLim||150;const rest=Math.max(0,list.length-LIM);
+  const vis=list.slice(0,LIM);for(const r of list.slice(LIM))if(rOpen.has(r.id))vis.push(r); /* la recién creada siempre se ve */
+  for(const r of vis){const isLate=r.status!=='lib'&&r.need&&r.need<today;const w=aw(r.actId);const fk=f=>`data-r="${r.id}" data-f="${f}" data-fk="r:${r.id}:${f}"`;const ce=rCanEd(r);const ro=ce?'':' disabled';const roL=rCanLib(r)?'':' disabled';const own=ce&&SCm;const ao=actOne(r.actId);const alz=` data-alz="${own?'sc':'all'}"`;
     if(mob){const x=S.act.get(r.actId);const am=x&&S.amb.get(x.ambId);const lib=r.status==='lib';const op_=rOpen.has(r.id);
       h+=`<article class="rcard${isLate?' late':''}"><div class="r1"><span class="pill ${lib?'ok':isLate?'bad':'warn'}">${lib?'Liberada':isLate?'Vencida':'Pendiente'}</span><span class="rgtag ${grpOf(r)}">${grpOf(r)==='area'?('Otras áreas'+(r.area?' · '+esc(r.area):'')):'Campo'}</span>${showP?`<span class="mono">${esc(S.pis.get(restrPiso(r))?.code||'')}</span>`:''}${w!=null?`<span>Inicia sem ${w}</span>`:''}${r.need?`<span>Requerida ${fmtD(r.need)}</span>`:''}${lib&&r.freed?`<span>Liberada ${fmtD(r.freed)}</span>`:''}</div>
         <b>${x?esc(x.name):'<span class="mu">Sin actividad</span>'}</b>${x?`<span class="mu" style="font-size:12.5px">${esc(actLoc(x.id))} <button type="button" class="lnkb" data-rgo="${x.id}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${x.id}">Ver en el plano ↗</button></span>`:''}
@@ -194,13 +197,15 @@ function renderRestr(main){
     <td><input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></td>
     <td><input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></td>
     <td>${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
-  h+=mob?'</div></div></div></div>':'</tbody></table></div></div></div></div>';
+  const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
+  h+=mob?'</div>'+more+'</div></div></div>':'</tbody></table></div>'+more+'</div></div></div>';
   main.innerHTML=h;
   $('#rg',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rgrp=b.dataset.g;saveUI();render()};
   {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
-  $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;saveUI();render()};
+  $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;U.rLim=0;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
-  {const fc=$('#rfclr',main);if(fc)fc.onclick=()=>{U.rF={};render()}}
+  {const fc=$('#rfclr',main);if(fc)fc.onclick=()=>{U.rF={};U.rLim=0;render()}}
+  {const mm=$('#rmore',main);if(mm)mm.onclick=()=>{U.rLim=(U.rLim||150)+300;render()}}
   const rc=$('#rclr',main);if(rc)rc.onclick=()=>{U.rAct=null;render()};
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
@@ -212,7 +217,7 @@ function renderRestr(main){
     {const q=e.target.closest('[data-lqid]');if(q){libDetail(q.dataset.lqid);return}const k=e.target.closest('[data-lqask]');if(k){libAsk(k.dataset.lqask);return}if(e.target.closest('[data-lqgo]')){U.tab='lib';saveUI();render();return}}
     const ro_=e.target.closest('[data-ropen]');if(ro_){const id=ro_.dataset.ropen;rOpen.has(id)?rOpen.delete(id):rOpen.add(id);render()}};
   main.onchange=async e=>{const t=e.target;
-    if(t.dataset.rf){U.rF={...(U.rF||{}),[t.dataset.rf]:t.value};render();return}
+    if(t.dataset.rf){U.rF={...(U.rF||{}),[t.dataset.rf]:t.value};U.rLim=0;render();return}
     if(t.dataset.rphoto!=null&&t.files&&t.files[0]){const r=S.res.get(t.dataset.rphoto);const f=t.files[0];t.value='';if(!r||!rCanEd(r))return;
       try{toast('Comprimiendo foto…');const data=await shrinkPhoto(f);const fid=uid('f');FOTO.set(fid,data);
         await fcol('fotos').doc(fid).set({data,restrId:r.id,pisoId:restrPiso(r)||'',by:me.email,ts:NOW()});
