@@ -62,7 +62,7 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
   const n0 = await page.locator('#mcxb .mp-cx').count();
   const p = await enPantalla(page, '#mstage', 200, 200);
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  await page.click('#pop [data-do="ok"]');
+  await page.click('#pop [data-x="ok"]');
   await expect(page.locator('#mcxb .mp-cx')).toHaveCount(n0 - 1);
   expect(await page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(1);
   noErrors(errors, 'cruce');
@@ -420,4 +420,55 @@ test('el subcontratista no ve el achurado de cruces salvo que lo prenda', async 
   await page.locator('#mcxb [data-cxv]').click();
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
   noErrors(errors, 'sc achurado');
+});
+
+test('cruce: se arrastra un número delante del otro y se decide el orden; queda en «Cambios del plan»', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday');
+  await page.click('#mcxb .mcxh');
+  await page.locator('#mcxb .mp-cx').first().click(); // tocar en la lista abre la decisión
+  await expect(page.locator('#pop .xo')).toHaveCount(2);
+  const n1 = await page.locator('#pop .xo[data-xi="0"] .xn').textContent();
+  // arrastrar el 2.º delante del 1.º
+  const a = await page.locator('#pop .xo[data-xi="1"]').boundingBox(), b = await page.locator('#pop .xo[data-xi="0"]').boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+  await page.mouse.move(b.x + 10, b.y + b.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect(page.locator('#pop .xo[data-xi="1"] .xn')).toHaveText(n1);
+  await page.locator('#pop [data-x="sw"]').click(); // ⇄ lo devuelve
+  await expect(page.locator('#pop .xo[data-xi="0"] .xn')).toHaveText(n1);
+  await page.locator('#pop [data-x="seq"]').click();
+  const xok = async () => (await pdz(page)).filter(z => z.kind === 'xok');
+  await expect.poll(async () => (await xok()).length).toBe(1);
+  expect((await xok())[0].ord).toHaveLength(2);
+  await page.locator('#mchb [data-chtog]').click();
+  await expect(page.locator('#mchb')).toContainText('Primero');
+  await page.locator('#mchb [data-xun]').click();
+  await expect.poll(async () => (await xok()).length).toBe(0);
+  noErrors(errors, 'cruce orden');
+});
+
+test('una reprogramación antigua (sin el «antes» guardado) también se deshace', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  const s2 = await page.evaluate(d => wshift(d, 1), MANANA);
+  const e0 = await act(page, 'e0');
+  // simular lo que dejó una versión anterior: la actividad ya movida un día y el registro sin «mv»
+  await page.evaluate(([d, s2]) => { const x = S.act.get('e0'); apply([op('acts', 'e0', { ...x, days: x.days.map(y => y >= d ? s2 : y) })], ''); }, [MANANA, s2]);
+  await page.evaluate(([d, s2]) => window.__plano && fcol('pdz').doc('pzOld').set({ date: d, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Sin personal', k: 'per', repTo: s2, tren: 0, by: 'admin', ts: 5 }), [MANANA, s2]);
+  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mchb [data-chu="pzOld"]').click();
+  await page.locator('#pop [data-do="si"]').click();
+  await expect.poll(async () => (await act(page, 'e0')).days).toEqual(e0.days);
+  noErrors(errors, 'deshacer antiguo');
+});
+
+test('reunión, plan: la ficha explica con quién comparte el lugar y permite decidir', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#mmeetb');
+  await page.click('#mmbar [data-mmode="plan"]');
+  await page.click('#mmbar [data-mdd="-1"]'); // hoy hay cruce en A-1
+  await page.locator('#mstage .pvl.nb').first().click(); // tocar el número abre su ficha (el achurado abre la decisión)
+  await expect(page.locator('#mzc .zccx').first()).toContainText('Comparte el lugar con');
+  await page.locator('#mzc .zccx').first().click();
+  await expect(page.locator('#pop [data-x="ok"]')).toBeVisible();
+  noErrors(errors, 'ficha cruce');
 });

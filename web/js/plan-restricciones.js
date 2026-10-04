@@ -123,11 +123,23 @@ function newRestr(actId){const x=actId&&S.act.get(actId);if(SCK()&&(!x||!myScsI(
 function actOne(aid){const x=aid&&S.act.get(aid);if(!x)return aid?`<option value="${esc(aid)}" selected>(actividad eliminada)</option>`:'<option value="">— Sin actividad —</option>';
   const a=S.amb.get(x.ambId);return`<option value="${x.id}" selected>${esc((a?a.code+' · ':'')+(x.name||'(sin nombre)'))} — ${esc(conOf(x.sc).name)}</option>`}
 function actFill(sel){if(!sel||sel.dataset.alzd)return;sel.dataset.alzd='1';const v=sel.value;sel.innerHTML=actOptions(v,sel.dataset.alz==='sc'?new Set(myScsI()):null);sel.value=v}
+/* filtros de la lista: a quién afecta, quién la registró, quién la libera y fechas */
+function rAff(r){const x=S.act.get(r.actId);const sc=r.sc||(x&&x.sc);return sc?conOf(sc).name:'—'}
+function rReg(r){const m=r.by&&MEM.get(r.by);if(m&&m.role==='sc'&&m.sc)return conOf(m.sc).name;return r.byName||(m&&m.name)||r.by||'—'}
+function rWho(r){return(r.status==='lib'?(r.libN||r.resp):r.resp)||'—'}
+function rFOk(r){const F=U.rF||{};return(!F.aff||rAff(r)===F.aff)&&(!F.reg||rReg(r)===F.reg)&&(!F.who||rWho(r)===F.who)
+  &&(!F.c1||(r.created||'')>=F.c1)&&(!F.c2||(r.created&&r.created<=F.c2))&&(!F.l1||(r.freed&&r.freed>=F.l1))&&(!F.l2||(r.freed&&r.freed<=F.l2))}
+function rFBar(all){const F=U.rF||{};const opts=(k,fn,lbl)=>{const v=[...new Set(all.map(fn))].filter(x=>x&&x!=='—').sort((a,b)=>a.localeCompare(b,'es'));return`<label class="rfl">${lbl}<select data-rf="${k}"><option value="">Todos</option>${[...new Set([...v,F[k]].filter(Boolean))].map(o=>`<option${o===F[k]?' selected':''}>${esc(o)}</option>`).join('')}</select></label>`};
+  const on=Object.values(F).some(Boolean);
+  return`<div class="fbar rfb">${opts('aff',rAff,'Afecta a')}${opts('reg',rReg,'Registró')}${opts('who',rWho,'La libera')}
+    <label class="rfl">Registrada<span><input type="date" data-rf="c1" value="${esc(F.c1||'')}" aria-label="Registrada desde"> – <input type="date" data-rf="c2" value="${esc(F.c2||'')}" aria-label="Registrada hasta"></span></label>
+    <label class="rfl">Liberada<span><input type="date" data-rf="l1" value="${esc(F.l1||'')}" aria-label="Liberada desde"> – <input type="date" data-rf="l2" value="${esc(F.l2||'')}" aria-label="Liberada hasta"></span></label>
+    ${on?'<button class="ib" id="rfclr">Quitar filtros</button>':''}</div>`}
 function renderRestr(main){
   const today=todayIso();const all=restrInScope();const types=P().restrTypes||[];
   const aw=n=>{const x=S.act.get(n);return x&&actStats(x).ini?weekOf(actStats(x).ini):null};
   let list=all.filter(r=>U.rfilter==='all'||(U.rfilter==='pend'?r.status!=='lib':r.status==='lib'));
-  if(U.rAct)list=list.filter(r=>r.actId===U.rAct);
+  if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);
   if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);if(AREA()&&U.rMine!==false&&me.area)list=list.filter(r=>myArea(r));
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
   const pend=all.filter(r=>r.status!=='lib');const late=pend.filter(r=>r.need&&r.need<today);
@@ -147,7 +159,7 @@ function renderRestr(main){
    <span class="seg" id="rg" title="Operativas de campo vs. las que dependen de otras áreas (OT, Ingeniería, etc.)"><button data-g="" class="${U.rgrp?'':'on'}">Todas</button><button data-g="campo" class="${U.rgrp==='campo'?'on':''}">Campo</button><button data-g="area" class="${U.rgrp==='area'?'on':''}">Otras áreas</button></span>
    ${AREA()&&me.area?`<span class="seg" id="rmine"><button data-m="1" class="${U.rMine!==false?'on':''}">De ${esc(me.area)}</button><button data-m="0" class="${U.rMine===false?'on':''}">Todas</button></span>`:''}
    ${U.rAct?`<span class="pill neu">Filtrado: ${esc(S.act.get(U.rAct)?.name||'actividad')} <button class="ab" id="rclr" aria-label="Quitar filtro">&times;</button></span>`:''}
-   </div>${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
+   </div>${rFBar(all)}${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
   ${mob?'<div class="rcards">':`<div class="tscroll"><table class="t"><thead><tr><th style="min-width:105px">Estado</th>${showP?'<th>Piso</th>':''}<th style="min-width:190px">Actividad</th><th style="min-width:70px">Sem.</th><th style="min-width:130px">Tipo</th><th style="min-width:140px">Clase / área</th><th style="min-width:160px">Descripción</th><th style="min-width:110px">Fotos</th><th style="min-width:100px">Responsable</th><th style="min-width:125px">Requerida</th><th style="min-width:125px">Liberada</th><th></th></tr></thead><tbody>`}`;
   const emp=`<div class="empty">${all.length?'No hay restricciones en este filtro.':'Todavía no hay restricciones. Regístralas aquí o desde el menú ⋮ de una actividad en el lookahead.'}</div>`;
   if(!list.length)h+=mob?emp:`<tr><td colspan="12">${emp}</td></tr>`;
@@ -164,10 +176,10 @@ function renderRestr(main){
           <label>Responsable<input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro}></label>
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label></div>`
         :`<div>${esc(r.type||'')}${r.desc?' · '+esc(r.desc):''}</div>${r.resp?`<div class="mu" style="font-size:12.5px">Responsable: ${esc(r.resp)}</div>`:''}`}
-        ${rthumbs(r)}${r.by&&r.byName&&SCK()?`<div class="mu" style="font-size:12px">Registrada por ${esc(r.byName)}</div>`:''}<div class="rbt">${rCanLib(r)?`<button class="ib${lib?'':' pri'}" data-rtog="${r.id}">${lib?'Reabrir':'Liberar hoy'}</button>`:''}${ce?`<button class="ib" data-ropen="${r.id}">${op_?'Listo':'Editar'}</button>${op_&&rCanDel(r)?`<button class="ib" data-rdel="${r.id}">Eliminar</button>`:''}`:''}</div></article>`;continue}
+        ${rthumbs(r)}<div class="mu" style="font-size:12px">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div><div class="rbt">${rCanLib(r)?`<button class="ib${lib?'':' pri'}" data-rtog="${r.id}">${lib?'Reabrir':'Liberar hoy'}</button>`:''}${ce?`<button class="ib" data-ropen="${r.id}">${op_?'Listo':'Editar'}</button>${op_&&rCanDel(r)?`<button class="ib" data-rdel="${r.id}">Eliminar</button>`:''}`:''}</div></article>`;continue}
     h+=`<tr class="${isLate?'late':''}"><td><select class="ci" ${fk('status')}${roL}><option value="pend"${r.status!=='lib'?' selected':''}>Pendiente</option><option value="lib"${r.status==='lib'?' selected':''}>Liberada</option></select>${isLate?'<div><span class="pill bad">Vencida</span></div>':''}</td>
     ${showP?`<td class="mono">${esc(S.pis.get(restrPiso(r))?.code||'—')}</td>`:''}
-    <td><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}</td>
+    <td><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
     <td class="mono" style="white-space:nowrap">${w!=null?'Sem '+w:'—'}</td>
     <td><select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></td>
     <td>${gsel(r,fk)}</td>
@@ -176,30 +188,33 @@ function renderRestr(main){
     <td><input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro}></td>
     <td><input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></td>
     <td><input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></td>
-    <td>${rCanDel(r)?`<button class="ab" data-rdel=""${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
+    <td>${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   h+=mob?'</div></div></div></div>':'</tbody></table></div></div></div></div>';
   main.innerHTML=h;
   $('#rg',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rgrp=b.dataset.g;saveUI();render()};
   {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
   $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
+  {const fc=$('#rfclr',main);if(fc)fc.onclick=()=>{U.rF={};render()}}
   const rc=$('#rclr',main);if(rc)rc.onclick=()=>{U.rAct=null;render()};
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada');if(db)fcol('fotos').doc(fid).delete().catch(()=>{})}return}
     const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;if(SCK()&&!confirm('¿Eliminar esta restricción?'))return;(r.photos||[]).forEach(fid=>db&&fcol('fotos').doc(fid).delete().catch(()=>{}));apply([op('restr',r.id,null)],'Restricción eliminada');return}
-    const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso()})],lib?'Restricción reabierta':'Restricción liberada');return}
+    const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     {const q=e.target.closest('[data-lqid]');if(q){libDetail(q.dataset.lqid);return}const k=e.target.closest('[data-lqask]');if(k){libAsk(k.dataset.lqask);return}if(e.target.closest('[data-lqgo]')){U.tab='lib';saveUI();render();return}}
     const ro_=e.target.closest('[data-ropen]');if(ro_){const id=ro_.dataset.ropen;rOpen.has(id)?rOpen.delete(id):rOpen.add(id);render()}};
   main.onchange=async e=>{const t=e.target;
+    if(t.dataset.rf){U.rF={...(U.rF||{}),[t.dataset.rf]:t.value};render();return}
     if(t.dataset.rphoto!=null&&t.files&&t.files[0]){const r=S.res.get(t.dataset.rphoto);const f=t.files[0];t.value='';if(!r||!rCanEd(r))return;
       try{toast('Comprimiendo foto…');const data=await shrinkPhoto(f);const fid=uid('f');FOTO.set(fid,data);
         await fcol('fotos').doc(fid).set({data,restrId:r.id,pisoId:restrPiso(r)||'',by:me.email,ts:NOW()});
         const r2=S.res.get(r.id)||r;apply([op('restr',r.id,{...r2,photos:[...(r2.photos||[]),fid]})]);toast(`Foto agregada (${Math.round(data.length*.75/1024)} KB)`)}catch(err){toast('No se pudo guardar la foto: '+(err.code||err.message))}return}
     if(!t.dataset.r)return;const r=S.res.get(t.dataset.r);if(!r||!rCanEd(r))return;const f=t.dataset.f;if(SCK()&&(f==='status'||f==='freed'))return;if(AREA()&&(f==='grp'||f==='area'))return;const n={...r,[f]:t.value};
     if(SCK()&&f==='actId'){const x=S.act.get(t.value);if(!x||!myScsI().includes(x.sc)){toast('Elige una actividad de tu partida.');render();return}n.sc=x.sc}if(f==='grp'&&t.value==='campo')n.area='';
-    if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';if(f==='actId'&&t.value)n.pisoId=pisoOfAct(t.value);
+    if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';
+    if(n.status==='lib'&&r.status!=='lib'){n.libBy=me.email;n.libN=me.name||me.email}if(n.status!=='lib'&&r.status==='lib'){n.libBy='';n.libN=''}if(f==='actId'&&t.value)n.pisoId=pisoOfAct(t.value);
     t.dataset.o=t.value;apply([op('restr',r.id,n)])};
   main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.alz)actFill(e.target);if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onmousedown=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
