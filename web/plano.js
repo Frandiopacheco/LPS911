@@ -231,8 +231,10 @@ function tapSelect(w,e){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;retur
   /* con un subcontratista elegido, las zonas atenuadas de otras partidas no responden al toque */
   const fvT=M.meet?M.meetSc:scVis();const z=els.map(el=>el.closest&&el.closest('[data-z]')).filter(Boolean).find(el=>{const id=el.dataset.z;if(!id||id.startsWith('np:'))return true;const zz=zget(id);return!zz||scIn(fvT,zz.sc)});const zid=z&&z.dataset.z?z.dataset.z:null;
   if(zid&&zid.startsWith('np:')){if(typeof npOpen==='function')npOpen(zid.slice(3));return}
-  if(M.meet&&typeof canWrite!=='undefined'&&canWrite){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
-  if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY);else zcClose();if(M.meet)return}
+  /* reunión: en «Plan» un toque abre Va · No va · Culminado (y los cruces); en «Cumplimiento», lo registrado en Campo */
+  const pl=M.meet&&M.mmode==='plan';
+  if(pl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
+  if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
   /* las zonas que salen de Sectorización (ambiente completo) no se seleccionan ni se mueven en el Plan diario */
   const zs_=zid&&zget(zid);M.selId=zs_&&zs_.virt?null:zid;requestRender()}
 function hitIds(cx,cy,r){const out=new Set();const pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r]];for(const[dx,dy]of pts){for(const el of document.elementsFromPoint(cx+dx,cy+dy)){const z=el.closest&&el.closest('[data-z]');if(z&&z.dataset.z)out.add(z.dataset.z)}}return[...out]}
@@ -292,8 +294,17 @@ function installDraw(v){const host=v.host;let drag=null;
 function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,M.pend);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
 function delSel(){const z=zget(M.selId);if(own(z))delIds([z.id])}
 const LW={1:2.5,2:4,3:7};
+/** «Ver sectorización»: contorno de cada ambiente (color de su sector, como en Sectorización) y el código; no responde a los toques */
+function szLayer(k){const T=typeof szTree==='function'?szTree(M.piso):[];const PAL=typeof SZ_PAL!=='undefined'?SZ_PAL:['#1F77B4'];let h='',t='';
+  T.forEach(({s,ambs},i)=>{const c=PAL[i%PAL.length];const sg=geoOf(s,M.vista);
+    if(sg){const P=unflat(sg);h+=`<polygon class="szl" points="${P.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="${c}" stroke-width="3.5" vector-effect="non-scaling-stroke" pointer-events="none"/>`}
+    for(const{a}of ambs){const g=geoOf(a,M.vista);if(!g)continue;const P=unflat(g);const bb=bboxOf(P);
+      h+=`<polygon class="szl" points="${P.map(p=>p.x+','+p.y).join(' ')}" fill="${c}" fill-opacity=".07" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+      t+=`<text class="szt" x="${bb.x+4*k}" y="${bb.y+4*k}" font-size="${11*k}" fill="${c}" stroke="#fff" stroke-width="${3*k}" paint-order="stroke" text-anchor="start" dominant-baseline="hanging" font-weight="700" pointer-events="none">${esc(a.code)}</text>`}});
+  return h+t}
 function drawOverlay(){const v=M.view;if(!v)return;computeCross();const NUMS=planNumbering(null);const HL=M.hl;const k=Math.max(1,1/v.z);const all=shapesV(M.piso).filter(z=>z.kind!=='nova');const sel=M.selId&&zget(M.selId);
   let svg=`<defs><pattern id="hxr" width="${10*k}" height="${10*k}" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="${4*k}" height="${10*k}" fill="#d32f2f"/></pattern><pattern id="hxs" width="${10*k}" height="${10*k}" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="${3*k}" height="${10*k}" fill="#546e7a"/></pattern></defs>`;const labels=[];const er=M.tool==='borrar';const inv=new Map();[...CROSS.ids,...CROSS.seqIds].forEach((id,n)=>inv.set(id,n));
+  if(M.szShow)svg+=szLayer(k);
   const cu=M.colorBy==='cu';const RSK=typeof pendRestr==='function'?pendRestr():new Map();
   for(const z of all){const c0=conOf(z.sc).color;const st=cu&&z.kind==='zona'?(z.actId?zSt(z):'np'):null;const c=st&&st!=='np'?STC[st]:c0;const P=unflat(z.pts);if(!P.length)continue;const fv=M.meet?M.meetSc:scVis();const dim=fv&&!scIn(fv,z.sc);const cx=CROSS.ids.has(z.id);const isSel=sel&&sel.id===z.id;const op=dim?0.14:1;const hi=!!(HL&&HL.has(z.id)),dH=!!(HL&&!hi&&z.kind==='zona');
     const pts=P.map(p=>p.x+','+p.y).join(' ');const lw=LW[z.w||2];const eo=er&&erasable(z)?' class="erz"':'';
@@ -329,7 +340,7 @@ function fitAll(){const v=M.view;if(!v||!v.bounds)return;if(!M.meet){v.fit();ret
 /* =====================================================================
    ETAPA 3 · Modo reunión, cruces entre subcontratistas y exportar imagen
    ===================================================================== */
-M.meet=false;M.meetSc='';M.colorBy='sc';
+M.meet=false;M.meetSc='';M.colorBy='sc';M.mmode='cu';M.szShow=false;
 /* ---------- ETAPA 4 · cumplimiento de Campo sobre el plano ---------- */
 const STC={ok:'#2E7D4F',partial:'#D08A00',no:'#C62828',none:'#8C959F'};
 const STI={ok:'✓',partial:'½',no:'✗',none:'·'};const STT={ok:'Cumplido',partial:'Parcial',no:'No cumplido',none:'Sin verificar'};
@@ -386,8 +397,8 @@ function restrQuick(anchor,x){const types=P().restrTypes||[];const need=M.date;
 /* ---------- ventana de detalle de cumplimiento (modo Cumplimiento y modo reunión) ---------- */
 let ZC=null;
 function zcClose(){const el=document.getElementById('mzc');if(el)el.remove();ZC=null}
-function zCard(aid,cx,cy){ZC={aid,cx:cx??(ZC&&ZC.cx),cy:cy??(ZC&&ZC.cy)};zcRender()}
-function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();return}const a=S.amb.get(x.ambId);const r=typeof recOf==='function'?recOf(M.date,x.id):null;const st=r?r.status:'none';
+function zCard(aid,cx,cy,pl){ZC={aid,cx:cx??(ZC&&ZC.cx),cy:cy??(ZC&&ZC.cy),pl:pl??(ZC&&ZC.pl)};zcRender()}
+function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();return}const a=S.amb.get(x.ambId);if(ZC.pl){zcShow(zcPlanHtml(x,a));return}const r=typeof recOf==='function'?recOf(M.date,x.id):null;const st=r?r.status:'none';
   const future=M.date>todayIso();const can=typeof canDaily!=='undefined'&&canDaily&&!future;const N=nbMap();const lv=typeof liveOf==='function'?liveOf(M.date,x.id):null;
   const phs=[...new Set([...(r&&r.photos||[]),...(lv&&lv.photos||[])])];phs.forEach(id=>typeof loadFoto==='function'&&loadFoto(id));
   let h=`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
@@ -398,11 +409,26 @@ function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();ret
     ${lv&&lv.mot?`<p class="zcm">Detención reportada: ${esc(lv.mot)}</p>`:''}
     ${phs.length?`<div class="zcph">${phs.map(id=>`<img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto del registro"${FOTO.get(id)?'':' style="opacity:.3"'}>`).join('')}</div>`:''}
     ${can?`<div class="zcb">${r&&r._prop?'<button class="ib pri" data-zcs="conf">✓ Confirmar lo reportado</button>':''}${['ok','partial','no'].map(k=>`<button class="ib zcb-${k}${st===k&&!(r&&r._prop)?' on':''}" data-zcs="${k}">${STI[k]} ${STT[k]}</button>`).join('')}</div>${r&&r.status&&!r._prop?'<p class="zcm">Si lo cambias, queda registrado quién lo corrigió y qué decía antes.</p>':''}`:future?'<p class="zcm">Día futuro: aún no se registra el cumplimiento.</p>':''}`;
-  let el=document.getElementById('mzc');if(!el){el=document.createElement('div');el.id='mzc';el.className='mzc';el.setAttribute('role','dialog');document.body.appendChild(el);el.onclick=zcClick}
-  if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}
+  zcShow(h)}
+function zcShow(h){let el=document.getElementById('mzc');if(!el){el=document.createElement('div');el.id='mzc';el.className='mzc';el.setAttribute('role','dialog');document.body.appendChild(el);el.onclick=zcClick}
+  el.classList.toggle('pl',!!ZC.pl);if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}
   const W=el.offsetWidth,H=el.offsetHeight;if(innerWidth<=760){el.style.left='';el.style.top='';return}
   let lx=(ZC.cx||innerWidth/2)+14,ly=(ZC.cy||innerHeight/2)-20;if(lx+W>innerWidth-10)lx=Math.max(10,(ZC.cx||0)-W-14);if(ly+H>innerHeight-10)ly=Math.max(10,innerHeight-H-10);el.style.left=lx+'px';el.style.top=Math.max(10,ly)+'px'}
+/** ficha del plan de mañana en la reunión: ¿va? (lo mismo que la fila del panel) */
+function zcPlanHtml(x,a){const N=nbMap();const nv=shapesOf(M.piso).find(z=>z.kind==='nova'&&z.actId===x.id);const can=dzCan(x);const CQ=cqTag(x.sc,x.id);
+  const rs=typeof restrPend==='function'?restrPend(x.id):[];
+  return`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
+    <p class="zcm">${dvLbl(M.date)}${hasQ(x)?` · ${fq((x.qty||{})[M.date])} ${esc(x.und||'')}`:''}${CQ?` · cuadrilla <b>${esc(CQ.t)}</b>`:''}</p>
+    ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
+    ${nv?`<div class="zcst" style="--c:#c62828"><b>✗ No va</b><span>${esc(nv.motivo||'')}${nv.repTo?' · → '+fmtD(nv.repTo):''}</span></div>${can?`<button class="lnkb" data-undo="${nv.id}">Vuelve a ir</button>`:''}`
+      :`<div class="zcpl">${dvHtml(x,can)||'<span class="mu">Solo el ingeniero o el subcontratista deciden si va.</span>'}</div>`}`}
 function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}
+  /* botones del plan (Va · No va · Culminado, aceptar/rechazar): la ventanita se ancla a un punto fijo para no perderse si la ficha se redibuja */
+  {const b=t.closest('[data-dv],[data-dpa]');if(b){const rc=b.getBoundingClientRect();const an=anchorAt(rc.left,rc.bottom-1);
+      if(b.dataset.dv){const[k,id]=b.dataset.dv.split('|');const x=S.act.get(id);if(x&&dzCan(x)&&!b.disabled)dvClick(an,x,k)}
+      else{const p=PD.get(b.dataset.dpa);const x=p&&S.act.get(p.actId);if(x&&dzEng())dpAccept(an,x,p)}
+      return}
+    if(t.closest('[data-dpr],[data-avx],[data-undo]')){planClick(e);return}}
   const im=t.closest('img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')&&typeof lightbox==='function'){lightbox(im.src);return}
   const b=t.closest('[data-zcs]');if(!b||!ZC)return;const k=b.dataset.zcs;const x=S.act.get(ZC.aid);if(!x)return;const z={actId:x.id};
   if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Confirmado');setTimeout(zcRender,60)}return}
@@ -427,47 +453,57 @@ function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');cons
     if(a.sc!==b.sc){if(xDecided(a,b))continue;CROSS.list.push({a,b,f,r});CROSS.ids.add(a.id);CROSS.ids.add(b.id)}
     else if(a.actId&&b.actId&&a.actId!==b.actId){CROSS.seq.push({a,b,f,r});CROSS.seqIds.add(a.id);CROSS.seqIds.add(b.id)}}}
 function meetScs(){return scsOfDay()}
-function zoneBoxes(sc){return shapesV(M.piso).filter(z=>z.kind!=='nova'&&(!sc||z.sc===sc)).flatMap(z=>unflat(z.pts))}
+function zoneBoxes(sc){return shapesV(M.piso).filter(z=>z.kind!=='nova'&&scIn(sc,z.sc)).flatMap(z=>unflat(z.pts))}
 function meetGo(sc){M.meetSc=sc;requestRender();requestAnimationFrame(()=>{const P=zoneBoxes(sc);if(sc&&P.length)zoomTo(P);else fitAll()})}
 function actRows(sc){const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc);const sh=shapesOf(M.piso);
   return acts.map(({x,a})=>{const zs=sh.filter(z=>z.kind==='zona'&&z.actId===x.id);const nv=sh.find(z=>z.kind==='nova'&&z.actId===x.id);return{x,a,zs,nv}})}
+/** cuántas actividades quedaron ✓ ½ ✗ o sin registro (lo que vieron en Campo) */
+function cuCount(R){const o={ok:0,partial:0,no:0,none:0};for(const r of R){if(r.nv)continue;const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;o[rc&&o[rc.status]!=null?rc.status:'none']++}return o}
+function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplidas${o.partial?` · ${o.partial} parcial${o.partial>1?'es':''}`:''}${o.no?` · ${o.no} no`:''}${o.none?` · ${o.none} sin registro`:''}${v?` · ${Math.round(o.ok/v*100)} %`:''}`}
+/** cambia lo que se revisa en la reunión: «cu» = cumplimiento del día · «plan» = el plan del día siguiente (va / no va, cruces) */
+function meetMode(m,keepDay){M.mmode=m;zcClose();M.colorBy=m==='cu'?'cu':'sc';M.cxOpen=m==='plan'?true:M.cxOpen;
+  if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
+  requestRender();setTimeout(()=>meetGo(M.meetSc),120)}
+function meetExit(){M.meet=false;M.meetSc='';zcClose();if(M.cb0!=null){M.colorBy=M.cb0;M.cb0=null}try{if(document.fullscreenElement)document.exitFullscreen()}catch(err){}requestRender()}
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
-  if(!M.meet){bar.hidden=true;card.hidden=true;const st=$('#mstage');if(st)st.style.top='';return}
-  const scs=meetScs();if(M.meetSc&&!scs.includes(M.meetSc))M.meetSc='';const i=scs.indexOf(M.meetSc);
-  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><select id="mmpiso" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select><span class="mmday"><button class="ib" data-mdd="-1" title="Día anterior" aria-label="Día anterior">&#8249;</button><b>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" title="Día siguiente" aria-label="Día siguiente">&#8250;</button>${M.date!==todayIso()?'<button class="ib" data-mdd="0">Hoy</button>':''}</span></span>
-    <span class="mmnav"><button class="ib" data-mm="-1" title="Anterior (←)">‹</button><button class="mmall${M.meetSc?'':' on'}" data-msc="">Todos</button>${scs.map(c=>`<button class="mmsc${c===M.meetSc?' on':''}" data-msc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}<button class="ib" data-mm="1" title="Siguiente (→)">›</button></span>
-    ${CROSS.list.length?`<span class="mmcx">⚠ ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</span>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>${M.tool!=='pan'?`<span class="mmdraw">✏️ Dibuja la zona${M.pend&&M.pend.actId&&S.act.get(M.pend.actId)?' de «'+esc(short(S.act.get(M.pend.actId).name,28))+'»':''} <button class="ib" id="mcancel">Cancelar</button></span>`:''}`;
+  if(!M.meet){bar.hidden=true;card.hidden=true;const st=$('#mstage');if(st)st.style.top='';const rs=$('#mrs');if(rs)rs.style.top='';return}
+  const scs=meetScs();if(M.meetSc){const k=M.meetSc.split(',').filter(c=>scs.includes(c)).join(',');if(k!==M.meetSc)M.meetSc=k}const SEL=M.meetSc?M.meetSc.split(','):[];const i=scs.indexOf(SEL[0]);const pl=M.mmode==='plan';
+  const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button><span class="mseg mmode" role="group" aria-label="Qué se revisa"><button data-mmode="cu" class="${pl?'':'on'}" title="Lo que se hizo: cumplimiento registrado en Campo (C)">✓ Cumplimiento</button><button data-mmode="plan" class="${pl?'on':''}" title="Lo que viene: va / no va, cruces entre partidas y equipos (P)">📋 Plan e interferencias</button></span>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><select id="mmpiso" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select><span class="mmday"><button class="ib" data-mdd="-1" title="Día anterior" aria-label="Día anterior">&#8249;</button><b>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" title="Día siguiente" aria-label="Día siguiente">&#8250;</button>${M.date!==todayIso()?'<button class="ib" data-mdd="0">Hoy</button>':''}</span></span>
+    <span class="mmnav"><button class="ib" data-mm="-1" title="Anterior (←)">‹</button><button class="mmall${M.meetSc?'':' on'}" data-msc="">Todos</button>${scs.map(c=>`<button class="mmsc${SEL.includes(c)?' on':''}" data-msc="${c}" title="Clic: solo esta partida · Ctrl+clic: sumar o quitar" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}<button class="ib" data-mm="1" title="Siguiente (→)">›</button></span>
+    <button class="ib mtog${M.szShow?' on':''}" data-msz aria-pressed="${!!M.szShow}" title="Ver los sectores y ambientes de Sectorización sobre el plano">▦ Sectorización</button>${pl&&myRole()!=='sc'&&CROSS.list.length?`<button class="ib mtog${M.cxHide?'':' on'}" data-cxv aria-pressed="${!M.cxHide}" title="Mostrar u ocultar el achurado de los cruces entre partidas">▨ Achurado · ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</button>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>${M.tool!=='pan'?`<span class="mmdraw">✏️ Dibuja la zona${M.pend&&M.pend.actId&&S.act.get(M.pend.actId)?' de «'+esc(short(S.act.get(M.pend.actId).name,28))+'»':''} <button class="ib" id="mcancel">Cancelar</button></span>`:''}`;
   if(bar.dataset.h!==bh){bar.innerHTML=bh;bar.dataset.h=bh}bar.hidden=false;
   let ch='';const NBM=nbMap();
-  if(M.meetSc){const sc=M.meetSc;const R=actRows(sc);const ok=R.filter(r=>r.zs.length).length,no=R.filter(r=>r.nv).length;const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
-    const cx=CROSS.list.filter(c=>c.a.sc===sc||c.b.sc===sc);
-    ch=`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${i+1} de ${scs.length} · ${ok} de ${R.length} ubicadas${no?` · ${no} no se hará hoy`:''}</span></div></div>
-      <ol class="mcl">${R.map(r=>`<li class="${r.nv?'nv':r.zs.length?'ok':'pe'}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)}${(()=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;return rc?` <span class="cst sm" style="--c:${STC[rc.status]}">${STI[rc.status]} ${STT[rc.status]}${rc.cnc?' · '+esc(rc.cnc):''}</span>`:''})()}</b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No se hará hoy · ${esc(r.nv.motivo||'')}</em>`:r.zs.length?'':'<em class="pe">Sin ubicar en el plano · toca para ver opciones</em>'}</div></li>`).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
-      ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}
-      ${cx.length?`<div class="mcs warn">⚠ Cruces</div>${cx.map(c=>{const o=c.a.sc===sc?c.b:c.a;const me_=c.a.sc===sc?c.a:c.b;const ZL_=NBZ();return`<button class="mcx" data-cx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} ${esc(zoneLabel(me_))} ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}</button>`}).join('')}`:''}`}
-  else{const rows=scs.map(c=>{const R=actRows(c);return{c,n:R.length,ok:R.filter(r=>r.zs.length).length,no:R.filter(r=>r.nv).length}});const tot=rows.reduce((a,r)=>({n:a.n+r.n,ok:a.ok+r.ok,no:a.no+r.no}),{n:0,ok:0,no:0});
-    ch=`<div class="mch all"><div><b>Plan del día</b><span>${scs.length} subcontratistas · ${tot.ok} de ${tot.n} actividades ubicadas${tot.no?` · ${tot.no} no van`:''}</span></div></div>
-      <div class="mleg">${rows.map(r=>`<button data-msc="${r.c}" style="--c:${conOf(r.c).color}"><i></i><span>${esc(conOf(r.c).name)}</span><b>${r.ok}/${r.n}</b>${r.no?`<em>${r.no} no va</em>`:''}</button>`).join('')}</div>
-      ${CROSS.list.length?`<div class="mcs warn">⚠ Cruces (${CROSS.list.length})</div>${(ZL_=>CROSS.list.map(c=>`<button class="mcx" data-cx="${c.a.id}|${c.b.id}">${zNoH(c.a,ZL_)} <b>${esc(conOf(c.a.sc).name)}</b> ${esc(zoneLabel(c.a))} ↔ ${zNoH(c.b,ZL_)} <b>${esc(conOf(c.b.sc).name)}</b> ${esc(zoneLabel(c.b))}</button>`).join(''))(NBZ())}`:'<div class="note" style="padding:6px 2px">Sin cruces entre subcontratistas.</div>'}
-      <div class="note" style="padding:6px 2px">Usa ‹ › o las flechas del teclado para pasar de un subcontratista a otro.</div>`}
-  if(card.dataset.h!==ch){card.innerHTML=ch;card.dataset.h=ch}card.hidden=false;
-  const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
+  /* «Cumplimiento»: lo que se hizo el día (registrado en Campo) · «Plan»: la ficha se oculta y a la derecha quedan Por decidir, Equipos, Cruces y Cambios */
+  if(pl){card.hidden=true;card.dataset.h=''}
+  else if(SEL.length){ch=SEL.map(sc=>{const R=actRows(sc);const cs=cuCount(R);const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
+    return`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${SEL.length>1?'':`${i+1} de ${scs.length} · `}${cuLine(cs,R.length)}</span></div></div>
+      <ol class="mcl">${R.map(r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;const st=rc?rc.status:'none';return`<li class="${r.nv?'nv':'cu-'+st}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)} <span class="cst sm" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${rc&&rc.cnc?' · '+esc(rc.cnc):''}</span></b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No iba este día · ${esc(r.nv.motivo||'')}</em>`:''}</div></li>`}).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
+      ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}`}).join('')}
+  else{const rows=scs.map(c=>{const R=actRows(c);return{c,n:R.length,cs:cuCount(R)}});const T=cuCount(scs.flatMap(c=>actRows(c)));const n=rows.reduce((a,r)=>a+r.n,0);
+    ch=`<div class="mch all"><div><b>Cumplimiento del día</b><span>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)} · ${cuLine(T,n)}</span></div></div>
+      <div class="mleg">${rows.map(r=>`<button data-msc="${r.c}" style="--c:${conOf(r.c).color}"><i></i><span>${esc(conOf(r.c).name)}</span><b>${r.cs.ok}/${r.n}</b>${r.cs.no+r.cs.partial?`<em>${r.cs.no+r.cs.partial} no cumple</em>`:r.cs.none?`<em class="mu">${r.cs.none} sin registro</em>`:''}</button>`).join('')}</div>
+      <div class="note" style="padding:6px 2px">Toca una zona para ver o corregir lo registrado. Luego pasa a <b>📋 Plan e interferencias</b> para revisar el día siguiente.</div>`}
+  if(!pl){if(card.dataset.h!==ch){card.innerHTML=ch;card.dataset.h=ch}card.hidden=false}
+  const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';const rs=$('#mrs');if(rs)rs.style.top=pl&&innerWidth>899?(bhh+10)+'px':'';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
 function meetClick(e){const t=e.target;let b;
-  if(t.closest('#mmeetb')){M.meet=true;M.meetSc='';M.selId=null;M.tmp=null;M.pend=null;M.tool='pan';requestRender();setTimeout(fitAll,80);return true}
+  if(t.closest('#mmeetb')){M.meet=true;M.meetSc='';M.selId=null;M.tmp=null;M.pend=null;M.tool='pan';M.cb0=M.colorBy;meetMode('cu');return true}
   if(legClick(e))return true;
   if(t.closest('#mpdf')){pdfDialog(t.closest('#mpdf'));return true}
   if(!M.meet){if(t.closest('#mexp')){exportPNG('');return true}return false}
-  if(t.closest('#mmx')){M.meet=false;M.meetSc='';try{if(document.fullscreenElement)document.exitFullscreen()}catch(err){}requestRender();return true}
+  if(t.closest('#mmx')){meetExit();return true}
+  if((b=t.closest('[data-mmode]'))){if(b.dataset.mmode!==M.mmode)meetMode(b.dataset.mmode);return true}
+  if(t.closest('[data-msz]')){M.szShow=!M.szShow;requestRender();return true}
   if(t.closest('#mmfs')){try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>toast('Tu navegador no permite pantalla completa aquí.'))}catch(err){toast('Tu navegador no permite pantalla completa aquí.')}return true}
-  if((b=t.closest('[data-msc]'))){meetGo(b.dataset.msc);return true}
+  if((b=t.closest('[data-msc]'))){const c=b.dataset.msc;if((e.ctrlKey||e.metaKey)&&c){const L=M.meetSc?M.meetSc.split(','):[];meetGo((L.includes(c)?L.filter(x=>x!==c):[...L,c]).join(','))}else meetGo(c);return true}
   if((b=t.closest('[data-mm]'))){meetStep(+b.dataset.mm);return true}
   if((b=t.closest('[data-mact]'))){const rc=b.getBoundingClientRect();if(b.classList.contains('pe')){zcClose();actQuick(b,b.dataset.mact)}else zCard(b.dataset.mact,rc.right,rc.top);return true}
   if((b=t.closest('[data-cx]'))){const ids=b.dataset.cx.split('|');const P=ids.flatMap(id=>{const z=PD.get(id);return z?unflat(z.pts):[]});zoomTo(P);const c=CROSS.list.find(q=>(q.a.id===ids[0]&&q.b.id===ids[1])||(q.a.id===ids[1]&&q.b.id===ids[0]));if(c&&typeof canWrite!=='undefined'&&canWrite)setTimeout(()=>crossPop(b,c),250);return true}
   if(t.closest('#mexp,.mexp')){exportPNG(M.meetSc);return true}
   return false}
-function meetStep(d){const scs=meetScs();const all=['',...scs];let i=all.indexOf(M.meetSc);i=(i+d+all.length)%all.length;meetGo(all[i])}
+function meetStep(d){const scs=meetScs();const all=['',...scs];let i=all.indexOf(M.meetSc.split(',')[0]);i=(i+d+all.length)%all.length;meetGo(all[i])}
 document.addEventListener('keydown',e=>{if(U.tab!=='mapa'||!M.meet||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||''))return;
-  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();meetStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();meetStep(-1)}else if(e.key==='Escape'&&M.tool!=='pan'){M.pend=null;M.tmp=null;M.tool='pan';requestRender()}else if(e.key==='Escape'&&!document.fullscreenElement){M.meet=false;M.meetSc='';requestRender()}});
+  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();meetStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();meetStep(-1)}else if(e.key==='Escape'&&M.tool!=='pan'){M.pend=null;M.tmp=null;M.tool='pan';requestRender()}else if(e.key==='Escape'&&!document.fullscreenElement&&!ZC&&pop.hidden){meetExit()}
+  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='c'||e.key==='C'||e.key==='p'||e.key==='P')){const m=/c/i.test(e.key)?'cu':'plan';if(m!==M.mmode)meetMode(m)}});
 /* ---------- exportar el plan del día como imagen PNG ---------- */
 function loadImgEl(src){return new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('No se pudo leer la lámina'));i.src=src})}
 /* ---------- exportar el plan del día: imagen y PDF ---------- */
@@ -918,12 +954,12 @@ function renderPlan(main,cur,base){
   /* filtro por subcontratista (el elegido es también con quién se dibuja «solo una parte») */
   {const opts=role==='sc'?myScs():scs;if(opts.length>1||!sc)h+=`<div class="dzf">${role==='sc'?'':`<button class="${!sc?'on':''}" data-dzsc="">Todos</button>`}${opts.map(c=>`<button class="${scSel_().includes(c)?'on':''}" data-dzsc="${c}" title="Clic: solo esta partida · Ctrl+clic: sumar o quitar varias" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}</div>`;
     else h+=`<div class="mp-sc" style="--c:${conOf(sc).color}"><i></i><b>${esc(conOf(sc).name)}</b></div>`}
-  const SF=scSel_();const inSF=c=>!SF.length||SF.includes(c);const L=acts.filter(o=>inSF(o.x.sc));const nNo=L.filter(o=>nBy[o.x.id]).length,nSin=L.filter(o=>!nBy[o.x.id]&&!zBy[o.x.id]).length;
+  const SF=M.meet?(M.meetSc?M.meetSc.split(','):[]):scSel_();const inSF=c=>!SF.length||SF.includes(c);const L=acts.filter(o=>inSF(o.x.sc));const nNo=L.filter(o=>nBy[o.x.id]).length,nSin=L.filter(o=>!nBy[o.x.id]&&!zBy[o.x.id]).length;
   h+=`<div class="mp-prog"><span><b>${L.length-nNo}</b> van${M.date>todayIso()?'':' hoy'}</span>${nNo?`<span class="no">${nNo} no van</span>`:''}${nSin?`<span class="no">${nSin} sin ubicar</span>`:''}${sc?`<label class="chk"><input type="checkbox" id="mscv"${U.pdHi!==false?' checked':''}> Resaltar solo ${esc(scSel_().map(c=>conOf(c).name).join(' + '))}</label>`:''}</div>`;
   try{computeCross()}catch(e){}
   {const cxs=CROSS.list.filter(c=>inSF(c.a.sc)||inSF(c.b.sc));let ch='';
     if(cxs.length)ch=`<button class="mcxh" data-cxtog="1" aria-expanded="${M.cxOpen?'true':'false'}">⚠ Dos partidas en el mismo lugar <b>${cxs.length}</b><span>${M.cxOpen?'▴':'▾'}</span></button>${M.cxOpen?`<div class="mcxl">${myRole()!=='sc'?`<button class="lnkb cxvt" data-cxv="1">${M.cxHide?'Mostrar el achurado en el plano':'Ocultar el achurado del plano'}</button>`:''}`+(ZL_=>cxs.map(c=>{const me_=sc&&c.b.sc===sc?c.b:c.a,o=me_===c.a?c.b:c.a;return`<button class="mp-cx" data-pcx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} <b>${esc(conOf(me_.sc).name)}</b>: ${esc(zoneLabel(me_))} ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}<small>Toca para ir · clic derecho sobre el cruce para decidir</small></button>`}).join(''))(NBZ())+'</div>':''}`;
-    const cb=$('#mcxb');if(cb){if(cb.dataset.h!==ch){cb.innerHTML=ch;cb.dataset.h=ch}cb.hidden=!ch||!!M.meet}}
+    const cb=$('#mcxb');if(cb){if(cb.dataset.h!==ch){cb.innerHTML=ch;cb.dataset.h=ch}cb.hidden=!ch||(!!M.meet&&M.mmode!=='plan')}}
   /* propuestas del día por decidir (todas las partidas: es lo que se ve en la reunión) */
   {const eng=dzEng();const mySc=role==='sc'?new Set(myScs()):null;const P_=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&(!mySc||mySc.has(z.sc))&&S.act.has(z.actId));
     let ph='';if(P_.length){const op_=M.pdOpen!==false;ph=`<button class="mpdh" data-pdtog="1" aria-expanded="${op_}">${eng?'Por decidir en la reunión':'Tus propuestas'} <b>${P_.length}</b><span>${op_?'▴':'▾'}</span></button>`;
@@ -931,7 +967,7 @@ function renderPlan(main,cur,base){
         return`<div class="mpdi" style="--c:${conOf(p.sc).color}"><button class="mpdt" data-see="${(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===y.id)||{}).id||''}"><span class="mono">${esc(ay?ay.code:'')}</span> ${esc(short(y.name,30))}<small>${esc(conOf(p.sc).name)} · ${esc(dpText(p))}</small></button>${eng?`<span class="dzpb"><button class="ib pri" data-dpa="${p.id}">Aceptar</button><button class="ib" data-dpr="${p.id}">Rechazar</button></span>`:''}</div>`}).join('')}</div>`}
     const pb=$('#mpdb');if(pb){if(pb.dataset.h!==ph){pb.innerHTML=ph;pb.dataset.h=ph}pb.hidden=!ph}}
   {const box=(id,h_)=>{const el=$('#'+id);if(!el)return;if(el.dataset.h!==h_){el.innerHTML=h_;el.dataset.h=h_}el.hidden=!h_};
-    box('mchb',chHtml(sc));box('mfzb',fzBoxHtml(role));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
+    box('mchb',chHtml(M.meet?M.meetSc:sc));box('mfzb',fzBoxHtml(role));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
   h+=fzCardHtml(role,sc);
   const dcan=dzCan;let lastS='';
   h+=`<div class="mp-list dzl">${L.map(({x,a,s})=>{const zs=zBy[x.id],nv=nBy[x.id];const can=dcan(x);const geoOk=a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6);
@@ -1054,7 +1090,7 @@ function dvResToday(btn,x,desc){const rid=uid('res');apply([op('restr',rid,{id:r
   setTimeout(()=>novaDialog(btn,x,{motivo:cncFor('res'),title:'No va hoy · '+desc}),0)}
 /* ---------- Cambios del plan (recuadro a la derecha) ---------- */
 function chHtml(sc){const K=M.date+'|'+M.piso;const E=[];
-  for(const z of PD.values()){if(z.pisoId!==M.piso||(sc&&z.sc!==sc))continue;const y=S.act.get(z.actId);const ay=y&&S.amb.get(y.ambId);const nm=`<span class="mono">${esc(ay?ay.code:'')}</span> ${esc(y?short(y.name,30):'(actividad eliminada)')}`;
+  for(const z of PD.values()){if(z.pisoId!==M.piso||!scIn(sc,z.sc))continue;const y=S.act.get(z.actId);const ay=y&&S.amb.get(y.ambId);const nm=`<span class="mono">${esc(ay?ay.code:'')}</span> ${esc(y?short(y.name,30):'(actividad eliminada)')}`;
     if(z.kind==='nova'&&z.k)E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>→ ${nm}<small>${esc(conOf(z.sc).name)} · ${esc(z.motivo||'')} · al ${dvLbl(z.repTo)}${z.tren?` · con ${z.tren} más del ambiente`:''}</small></div>${dzEng()&&z.mv?`<button class="lnkb" data-chu="${z.id}">Deshacer</button>`:''}</div>`});
     else if(z.kind==='nova')E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>✗ ${nm}<small>No va · ${esc(z.motivo||'')}${z.repTo?' · → '+fmtD(z.repTo):''}</small></div>${dzCan(y)?`<button class="lnkb" data-undo="${z.id}">Vuelve a ir</button>`:''}</div>`});
     else if(z.kind==='aviso')E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>⚠ ${nm}<small>Va · liberar a primera hora: ${esc(z.desc||'')}</small></div>${dzEng()?`<button class="lnkb" data-avx="${z.id}">Quitar aviso</button>`:''}</div>`});
@@ -1072,7 +1108,7 @@ function revertRep(z){const ops=[];let blocked=0;
    'fzl_<sc>' guarda lo último para copiarlo al día siguiente. Las cuadrillas se reparten arrastrándolas al plano (PC) o tocando (celular). */
 const FZ_CATS=['Capataz','Operario','Oficial','Peón'];
 /* achurado de «dos partidas en el mismo lugar»: no se dibuja mientras el SC arma su plan (lo ve el ingeniero) ni si el ingeniero lo oculta */
-const cxVis=()=>myRole()!=='sc'&&!M.cqOn&&!M.cxHide;
+const cxVis=()=>myRole()!=='sc'&&!M.cqOn&&!M.cxHide&&!(M.meet&&M.mmode!=='plan');
 const CQC=['#7B1FA2','#00897B','#EF6C00','#1565C0','#C2185B','#558B2F','#6D4C41','#00838F'];
 const fzId=(d,sc)=>'fz_'+d+'_'+sc;
 const fzOf=sc=>sc?PD.get(fzId(M.date,sc))||null:null;

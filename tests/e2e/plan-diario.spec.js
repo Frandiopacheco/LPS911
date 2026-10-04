@@ -324,3 +324,53 @@ test('arrastrar una etiqueta a otra actividad la suma como la siguiente; lo que 
   await expect(page.locator('#mpanel .fzc')).toContainText('1 actividad con cuadrilla');
   noErrors(errors, 'siguiente');
 });
+
+test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana con sus interferencias', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  const fecha = d => page.evaluate(d => fmtD(d), d);
+  await page.click('#mmeetb');
+  // empieza en «Cumplimiento» y en el día de hoy: la ficha resume lo registrado y no hay achurado
+  await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
+  await expect(page.locator('#mmbar .mmday')).toContainText(await fecha(HOY));
+  await expect(page.locator('#mcard')).toContainText('Cumplimiento del día');
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
+  let p = await enPantalla(page, '#mstage', 200, 200);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#mzc .zcb')).toBeVisible(); // ✓ ½ ✗ de lo registrado en Campo
+  await page.keyboard.press('Escape');
+  // ver la sectorización: contornos y códigos de los ambientes sobre el plano
+  await page.click('#mmbar [data-msz]');
+  await expect(page.locator('#mstage polygon.szl')).toHaveCount(2);
+  await expect(page.locator('#mstage text.szt').first()).toHaveText('A-1');
+  // «Plan e interferencias»: pasa al día siguiente, se ve lo de la derecha y un toque decide si va
+  await page.click('#mmbar [data-mmode="plan"]');
+  await expect(page.locator('#mmbar .mmday')).toContainText(await fecha(MANANA));
+  await expect(page.locator('#mcard')).toBeHidden();
+  await expect(page.locator('#mstage polygon.szl')).toHaveCount(2); // la sectorización sigue prendida
+  p = await enPantalla(page, '#mstage', 200, 200);
+  await page.mouse.click(p.x, p.y);
+  const dv = page.locator('#mzc.pl [data-dv^="no"]').first();
+  await expect(dv).toBeVisible();
+  const aid = (await dv.getAttribute('data-dv')).split('|')[1];
+  const antes = (await act(page, aid)).days;
+  await dv.click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  await expect.poll(async () => (await act(page, aid)).days).not.toEqual(antes);
+  await expect(page.locator('#mzc.pl')).toContainText('No va');
+  await page.keyboard.press('Escape');
+  // en el plan de hoy hay un cruce: el achurado se prende y apaga desde la barra
+  await page.click('#mmbar [data-mdd="-1"]');
+  await expect(page.locator('#mmbar [data-cxv]')).toBeVisible();
+  await expect(page.locator('#mcxb .mcxh')).toBeVisible();
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
+  await page.click('#mmbar [data-cxv]');
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
+  // la tecla C vuelve al cumplimiento; al salir, los colores vuelven a ser por subcontratista
+  await page.keyboard.press('c');
+  await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
+  await page.click('#mmx');
+  await expect(page.locator('#mmbar')).toBeHidden();
+  expect(await page.evaluate(() => window.__plano.M.colorBy)).toBe('sc');
+  noErrors(errors, 'reunión');
+});
