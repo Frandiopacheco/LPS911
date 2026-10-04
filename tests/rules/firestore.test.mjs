@@ -213,6 +213,17 @@ test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
 });
+test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async () => {
+  const h = { id: 'x1', st: 'rej', by: 'editor@obra.pe', n: 'Elena', t: 1 };
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x1: null }, hist: { k1: h } }); });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'items.x1': { after: { days: ['2026-10-05'] }, sent: false } })); // su borrador sí
+  await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x2: { sent: true } } }, { merge: true })); // y enviarlo
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'hist.k1.st': 'ok' }));
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'hist.k2': { ...h, st: 'ok' } }));
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // reemplazar el documento borra hist
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'items.x1': null, 'hist.k3': { ...h, st: 'ok' } }));
+});
 test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'pzon/x1'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));

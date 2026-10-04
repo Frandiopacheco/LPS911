@@ -163,6 +163,8 @@ function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0)
   el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
+/* los días de una actividad se guardan con arrayUnion/arrayRemove (fsDiff): al leerlos se dejan ordenados y sin repetir */
+function actNorm(o){const ds=o&&o.days;if(Array.isArray(ds))for(let i=1;i<ds.length;i++)if(!(ds[i-1]<ds[i])){o.days=[...new Set(ds)].sort();break}return o}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
 let DV=0; /* sube con cada cambio de datos (para cachés) */
 /* escrituras propias en cola que aún no salen (esperan la anterior del mismo documento): mientras tanto, lo que llega
@@ -173,7 +175,7 @@ function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
   if(!db||(!canWrite&&!scR))return Promise.resolve();
-  const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body):null;
+  const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body,col):null;
   if(args&&!args.length)return Promise.resolve();
   pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);QK[key]=(QK[key]||0)+1;
   const run=()=>{QK[key]--;if(QK[key]<=0)delete QK[key];return run0()};
@@ -268,7 +270,7 @@ async function startSession(u,fdb){
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
   for(const[col,k]of Object.entries(COLS)){
-    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,{...d.data(),id:d.id}));keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
+    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
   }
   ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();
   const memQ=canDaily?fcol('members'):fcol('members').doc(me.email);

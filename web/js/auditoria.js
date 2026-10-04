@@ -49,10 +49,14 @@ async function didxMigrate(){cncMigrate();if(!db||!canWrite||P().doneIdx)return;
     await fcol('meta').doc('project').set({doneIdx:1},{merge:true})}catch(e){}}
 
 /* ---- guardar solo lo que cambió ---- */
-function fsDiff(prev,next){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
+/* col='acts': los días que solo se agregan o solo se quitan van con arrayUnion/arrayRemove, así dos personas que marcan
+   días distintos de la misma actividad a la vez no se pisan (antes la lista entera de la última borraba el día de la otra) */
+function fsDiff(prev,next,col){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
   const keys=new Set([...Object.keys(prev||{}),...Object.keys(next||{})]);keys.delete('id');
   for(const k of keys){const a=prev[k],b=next[k];if(canon(a)===canon(b))continue;
     if(b===undefined){args.push(new FP(k),DEL);continue}
+    if(col==='acts'&&k==='days'&&Array.isArray(a)&&Array.isArray(b)&&FV&&FV.arrayUnion){const sa=new Set(a),sb=new Set(b);const add=[...sb].filter(d=>!sa.has(d)),rem=[...sa].filter(d=>!sb.has(d));
+      if(add.length&&!rem.length){args.push(new FP(k),FV.arrayUnion(...add));continue}if(rem.length&&!add.length){args.push(new FP(k),FV.arrayRemove(...rem));continue}}
     const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
     if(isObj(a)&&isObj(b)){const ks=new Set([...Object.keys(a),...Object.keys(b)]);if(ks.size<=80){for(const k2 of ks){if(canon(a[k2])===canon(b[k2]))continue;args.push(new FP(k,k2),b[k2]===undefined?DEL:b[k2])}continue}}
     args.push(new FP(k),b)}
