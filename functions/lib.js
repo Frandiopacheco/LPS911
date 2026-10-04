@@ -45,7 +45,9 @@ function buildVersion({ project, pisos, sectors, ambientes, acts }, now = Date.n
 }
 
 /* Cierres del capataz que nadie revisó en 2 días → registro diario (igual que autoAccept de la página) */
-function closesToAccept(lives, dailyById, acts, today) {
+/* dplanById (opcional): planes del día cerrados; si el día tiene foto, lo comprometido es su cantidad, no la vigente.
+   Un cierre cuya partida no es la de la actividad no se acepta (lo pudo escribir otra partida). */
+function closesToAccept(lives, dailyById, acts, today, dplanById) {
   const lim = addD(today, -2);
   const out = [];
   for (const lv of lives) {
@@ -56,12 +58,16 @@ function closesToAccept(lives, dailyById, acts, today) {
     if (r && (r.status || r.clr)) continue; // ya registrado, o el ingeniero lo quitó a propósito
     const x = acts.get(lv.actId);
     if (!x) continue;
+    if ((x.sc || '') !== (lv.sc || '')) continue;
     const hasM = typeof x.metrado === 'number' && x.metrado > 0;
+    const dp = dplanById && dplanById.get(lv.date + '_' + lv.pisoId);
+    const dq = dp && dp.ids && Object.prototype.hasOwnProperty.call(dp.ids, lv.actId) ? dp.ids[lv.actId] : undefined;
+    const q = hasM ? (typeof dq === 'number' ? dq : ((x.qty || {})[lv.date] ?? null)) : null;
     out.push({
       date: lv.date, pisoId: lv.pisoId, actId: lv.actId,
       rec: {
-        status: c.status, prog: hasM ? ((x.qty || {})[lv.date] ?? null) : null, und: x.und || '',
-        exec: c.status === 'ok' && hasM ? ((x.qty || {})[lv.date] ?? null) : null,
+        status: c.status, prog: q, und: x.und || '',
+        exec: c.status === 'ok' ? q : null,
         cnc: c.cnc || '', imp: null, note: c.note || '', late: false, done: !!c.done, photos: lv.photos || [],
         prop: { status: c.status, cnc: c.cnc || '', by: c.by || '', byName: c.n || '', ts: c.t || 0 },
         sc: x.sc || '', nm: x.name || '', ambId: x.ambId || '',

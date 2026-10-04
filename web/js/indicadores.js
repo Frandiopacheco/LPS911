@@ -110,7 +110,7 @@ function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e
   const g=t.closest('tr[data-goc]');if(g){const[aid,d]=g.dataset.goc.split('|');goCampo(aid,d)}};
   main.onchange=e=>{if(ncChange(e.target))return;if(e.target.id==='pdfph'){U.pdfPh=e.target.checked;saveUI()}if(e.target.id==='pdfskip'){U.pdfSkip=e.target.checked;saveUI()}}}
 function renderIndDay(main){
-  const d=indDay();ensureDaily(addD(d,-1));const vp=visPisos();const vset=new Set(vp.map(p=>p.id));const D=dayData([d],vset);const t=D.tot;
+  const d=indDay();ensureDaily(addD(d,-1));const vp=visPisos();const vset=histPisoSet();const D=dayData([d],vset);const t=D.tot;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
     <div class="tile hl"><span class="k">PPC diario · alerta</span><span class="v">${t.ver?pct(t.ok/t.ver):'—'}${t.ver?` <small>${t.ok} de ${t.ver}</small>`:''}</span></div>
@@ -136,7 +136,7 @@ function renderIndDay(main){
 function renderInd(main){
   if(U.indMode!=='sem'){renderIndDay(main);return}
   ensureDaily(addD(weekStart(U.week-2),-1));
-  const vp=visPisos();const vset=new Set(vp.map(p=>p.id));
+  const vp=visPisos();const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
   const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
   /* el promedio y la «última» solo con semanas evaluadas por completo; una a medias se muestra aparte como parcial */
@@ -145,7 +145,7 @@ function renderInd(main){
   const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=cncKey(r.cnc);cncC[k]=(cncC[k]||0)+1}}));
   const cncL=Object.entries(cncC).sort((a,b)=>b[1]-a[1]);
   const wSel=docs.filter(w=>w.n===U.week);const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n)delete scP[k];
-  const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
+  const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)||ARCH.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
   const pend=restrInScope().filter(rOpenC).length;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">

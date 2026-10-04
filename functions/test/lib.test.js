@@ -33,9 +33,9 @@ test('versión automática: por piso y sin lo archivado', () => {
 
 test('cierres sin revisar: solo los de hace 2 días o más y sin registro', () => {
   const lives = [
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', close: { status: 'ok', done: true, by: 'u_1', n: 'Juan', t: 5 } },
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', close: { status: 'no', cnc: 'Clima' } },
-    { date: '2026-09-29', pisoId: 'p1', actId: 'x1', close: { status: 'ok' } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok', done: true, by: 'u_1', n: 'Juan', t: 5 } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'no', cnc: 'Clima' } },
+    { date: '2026-09-29', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } },
     { date: '2026-09-27', pisoId: 'p1', actId: 'x3', st: 'run' }
   ];
   const daily = new Map([['2026-09-27_p1', { recs: { x2: { status: 'ok' } } }]]);
@@ -51,8 +51,8 @@ test('cierres sin revisar: solo los de hace 2 días o más y sin registro', () =
 
 test('cierres sin revisar: un cumplido lleva lo ejecutado = programado; lo quitado por el ingeniero no vuelve', () => {
   const lives = [
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', close: { status: 'ok' } },
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', close: { status: 'ok' } }
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'ok' } }
   ];
   const daily = new Map([['2026-09-27_p1', { recs: { x2: { status: null, clr: true } } }]]);
   const acts = new Map([['x1', { sc: 'c1', metrado: 10, qty: { '2026-09-27': 4 } }], ['x2', { sc: 'c1' }]]);
@@ -77,7 +77,7 @@ function memDb(init) {
 
 test('cierre automático: no pisa lo que un ingeniero verificó después de la lectura (informe 4)', async () => {
   const { acceptCloses } = require('../lib');
-  const lives = [{ id: '2026-09-28_x1', actId: 'x1', pisoId: 'p1', date: '2026-09-28', close: { status: 'ok', by: 'cap', n: 'Capataz', t: 1 } }];
+  const lives = [{ id: '2026-09-28_x1', actId: 'x1', pisoId: 'p1', date: '2026-09-28', sc: 'c1', close: { status: 'ok', by: 'cap', n: 'Capataz', t: 1 } }];
   const acts = M({ x1: { ambId: 'a1', sc: 'c1', name: 'Tarrajeo', und: 'm2', metrado: 10, qty: { '2026-09-28': 10 } } });
   /* lectura del inicio: sin registro → el cierre del capataz se acepta */
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
@@ -95,8 +95,8 @@ test('cierre automático: no pisa lo que un ingeniero verificó después de la l
 test('cierre automático: tampoco vuelve si el ingeniero quitó el registro; sí entra si sigue pendiente', async () => {
   const { acceptCloses } = require('../lib');
   const lives = [
-    { id: 'l1', actId: 'x1', pisoId: 'p1', date: '2026-09-28', close: { status: 'ok', done: true, t: 1 } },
-    { id: 'l2', actId: 'x2', pisoId: 'p1', date: '2026-09-28', close: { status: 'no', cnc: 'Materiales', t: 1 } }
+    { id: 'l1', actId: 'x1', pisoId: 'p1', date: '2026-09-28', sc: 'c1', close: { status: 'ok', done: true, t: 1 } },
+    { id: 'l2', actId: 'x2', pisoId: 'p1', date: '2026-09-28', sc: 'c1', close: { status: 'no', cnc: 'Materiales', t: 1 } }
   ];
   const acts = M({ x1: { ambId: 'a1', sc: 'c1', name: 'A' }, x2: { ambId: 'a1', sc: 'c1', name: 'B' } });
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
@@ -180,4 +180,26 @@ test('cierre de las 20:00: día hábil siguiente y foto del plan por piso', () =
     done: new Map([['x5', '2026-10-02']])
   }, '2026-10-05');
   assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null } } }]);
+});
+
+test('auditoría N01: no se acepta el cierre que declara otra partida que la de la actividad', () => {
+  const lives = [
+    { date: '2026-09-27', pisoId: 'p1', actId: 'xe', sc: 'c-san', close: { status: 'ok', done: true } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } }
+  ];
+  const acts = new Map([['xe', { sc: 'c-elec', name: 'Tablero' }], ['x1', { sc: 'c1', name: 'Pintura' }]]);
+  const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
+  assert.deepStrictEqual(L.map(o => o.actId), ['x1']);
+});
+
+test('auditoría N04: con plan del día cerrado, lo comprometido es la cantidad de la foto, no la vigente', () => {
+  const lives = [{ date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } }];
+  const acts = new Map([['x1', { sc: 'c1', metrado: 100, und: 'ml', qty: { '2026-09-27': 10 } }]]);
+  const dplans = new Map([['2026-09-27_p1', { ids: { x1: 20 } }]]);
+  const L = closesToAccept(lives, new Map(), acts, '2026-09-30', dplans);
+  assert.strictEqual(L[0].rec.prog, 20);
+  assert.strictEqual(L[0].rec.exec, 20);
+  // sin foto, como antes
+  const L2 = closesToAccept(lives, new Map(), acts, '2026-09-30', new Map());
+  assert.strictEqual(L2[0].rec.prog, 10);
 });

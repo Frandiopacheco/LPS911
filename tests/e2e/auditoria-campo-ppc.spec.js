@@ -111,7 +111,7 @@ test('8 · Cambiar la partida de una actividad no pasa su incumplimiento a la em
 });
 
 test('9 · «Confirmar» con un sector filtrado no confirma cierres de otros sectores', async ({ page }) => {
-  const lv = id => ['live', HOY + '_' + id, { date: HOY, actId: id, pisoId: 'p1', close: { status: 'ok', by: 'cap1', n: 'Pedro', t: 1 } }];
+  const lv = id => ['live', HOY + '_' + id, { date: HOY, actId: id, pisoId: 'p1', sc: 'c1', close: { status: 'ok', by: 'cap1', n: 'Pedro', t: 1 } }];
   const errors = await openApp(page, { tab: 'campo', extra: [
     ['sectors', 's9', { pisoId: 'p1', code: 'S9', name: 'Sector 9', order: 9 }], ['ambientes', 'a9', { sectorId: 's9', code: 'A-9', name: 'Dpto 109', order: 9 }],
     act('x1'), act('x9', { ambId: 'a9' }), lv('x1'), lv('x9')] });

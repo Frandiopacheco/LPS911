@@ -38,9 +38,26 @@ export function checkWeb(web) {
   return errs;
 }
 
+/** Publicación (.github/workflows/ci.yml): la página solo se publica si se instalaron bien reglas y tareas en Firebase
+    (auditoría 02e575c, n.º 13); sin llave de Firebase el flujo falla, no solo avisa. */
+export function checkCI(file) {
+  const errs = [];
+  if (!fs.existsSync(file)) return errs;
+  const y = fs.readFileSync(file, 'utf8');
+  const job = name => { const m = y.match(new RegExp('^  ' + name + ':\\n([\\s\\S]*?)(?=^  [\\w-]+:\\n|(?![\\s\\S]))', 'm')); return m ? m[1] : ''; };
+  const pub = job('publicar-web'), ins = job('instalar');
+  if (!pub || !ins) errs.push('✗ ci.yml: faltan los trabajos «instalar» o «publicar-web»');
+  else {
+    const needs = (pub.match(/^\s+needs:\s*\[([^\]]*)\]/m) || [])[1] || '';
+    if (!needs.split(',').map(s => s.trim()).includes('instalar')) errs.push('✗ ci.yml: «publicar-web» debe depender de «instalar» (needs)');
+    if (!/if: env\.SA == ''[\s\S]*?exit 1/.test(ins)) errs.push('✗ ci.yml: sin llave de Firebase («instalar») el flujo debe fallar (exit 1)');
+  }
+  return errs;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const web = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'web');
-  const errs = checkWeb(web);
+  const errs = [...checkWeb(web), ...checkCI(path.resolve(web, '..', '.github', 'workflows', 'ci.yml'))];
   if (errs.length) { console.error(errs.join('\n')); process.exit(1); }
   const { js, css } = appFiles(web);
   console.log(`✓ web sin errores de sintaxis (${js.length} archivos de js/, ${css.length} de css/)`);

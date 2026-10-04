@@ -39,6 +39,8 @@ const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))
 const pisoOfAmb=id=>{const a=S.amb.get(id)||ARCH.amb.get(id);return a?pisoOfSecObj(S.sec.get(a.sectorId)||ARCH.sec.get(a.sectorId)):''};
 const pisoOfAct=id=>{const x=S.act.get(id)||ARCH.act.get(id);return x?pisoOfAmb(x.ambId):''};
 const visPisos=()=>pisos().filter(p=>!U.piso||p.id===U.piso);
+/** pisos para los indicadores históricos: con «Todos los pisos» incluye los archivados (sus semanas evaluadas siguen contando) */
+const histPisoSet=()=>new Set(U.piso?[U.piso]:[...S.pis.keys(),...ARCH.pis.keys()]);
 const wkId=(n,p)=>n+'_'+p;
 let db=null,auth=null,rtdb=null,presRef=null,conRef=null,presAll=null,me=null,isAdmin=false,canWrite=false,ready=false,myAct=null,peerEdits=[],unsubs=[],lastPres='';
 const PRES=new Map(),MEM=new Map();
@@ -146,7 +148,7 @@ function markDone(aid,d,keepR){const x=S.act.get(aid);if(!x||!canDaily)return;co
   toast(`“${x.name}” terminada el ${fmtD(d)}${left?` · se liberan ${left} día${left>1?'s':''} programado${left>1?'s':''}`:''}`)}
 /** fechas en que alguna fuente (índice, registro diario o cierre del capataz) la marca terminada */
 function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)o.push(doc.date)}
-  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done)o.push(lv.date);return o}
+  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv))o.push(lv.date);return o}
 /** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
  *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
 function reopenDone(aid,quiet){const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
@@ -206,14 +208,16 @@ function handleWriteErr(e){const c=e&&e.code;
 /* ---------- deshacer / rehacer ---------- */
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
-function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));if(typeof lhLog==='function')lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
+function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
-function replay(g,from,to){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to])}return skipped}
-function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const sk=replay(g.slice().reverse(),'after','before');redoS.push(g);updUndo();requestRender();
+function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
+/* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
+function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
+function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const sk=replay(g,'before','after');undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
@@ -292,7 +296,9 @@ const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=nul
 let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
 function doneRebuild(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
   for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||recReal(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}let daySub=null,dayFrom=null,dayErr=null;
+  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||!liveOwn(lv)||recReal(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}
+/** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
+function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();liveErr=null;autoAccept();if(ready)requestRender()},err=>{liveErr=err&&err.code||'error';if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
@@ -340,7 +346,7 @@ function recReal(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&
 function recOf(d,aid){const r=recReal(d,aid);if(r)return r;
   /* «Quitar registro» deja una marca: el cierre del capataz ya no vuelve a contar */
   {const doc=DAY.get(dayId(d,pisoOfAct(aid)));const rr=doc&&doc.recs&&doc.recs[aid];if(rr&&rr.clr)return null}
-  const lv=LIVE.get(d+'_'+aid);const c=lv&&lv.close;if(!c||!c.status)return null;
+  const lv=LIVE.get(d+'_'+aid);const c=lv&&lv.close;if(!c||!c.status||!liveOwn(lv))return null;
   return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:!!c.done,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,prop:{status:c.status,cnc:c.cnc||'',by:c.by||'',byName:c.n||'',ts:c.t||0}}}
 const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},no:{t:'No cumplido',i:'✗',c:'no'}};
 /* solo se envían los campos que cambian de cada registro: si otro ingeniero cambió otro campo (foto, nota, estado),

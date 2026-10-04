@@ -1486,7 +1486,8 @@ function fzBoxHtml(role,sf){const mine=role==='sc'?new Set(myScs()):null;const s
     const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc&&!dpPend(o.x.id));const AD=asgDay(f);const sin=acts.filter(o=>!AD[o.x.id]).length;const ext=f.hor&&f.hor.t==='e';
     const rt=(f.cuad||[]).map(q=>{const R=cqRoute(f,q.id).map(a=>{const y=S.act.get(a);const ay=y&&S.amb.get(y.ambId);return ay?ay.code:'?'});return`<span class="mfzq${M.cqFocus===sc+'|'+q.id?' fo':''}" data-cqf="${sc}|${esc(q.id)}" role="button" title="Ver su recorrido en el plano" style="--q:${cqCol(f,q.id)}"><i>${esc(q.id)}</i>${R.length?esc(R.join(' → ')):'<em>sin actividad</em>'}${q.n?` · ${q.n} p.`:''}</span>`}).join('');
     return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>${fzTot(f)} personas · ${(f.cuad||[]).length} cuadrillas · <span class="${ext?'ext':''}">${horTxt(f)}</span>${sin?` · <span class="bad">${sin} sin cuadrilla</span>`:''}</small>${rt}</div>`});
-  const op_=M.fzOpen!==false;return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
+  /* en el celular, mientras se reparte una cuadrilla elegida, el recuadro va plegado para no tapar los números del plano */
+  const op_=M.fzOpen!==false&&!(M.cqSel&&innerWidth<900);return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
 /* asignar, mover y quitar cuadrillas */
 /** cambia solo las actividades tocadas del reparto (ch = {actId: {c,o,n?} | null}) */
 function fzAsg(sc,ch){const id=fzId(M.date,sc);const f=PD.get(id);if(!f)return;const old=f.asg||{};const patch={},before={};
@@ -1587,7 +1588,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-cqclr]'))){cqClear();return true}
   if((b=g('[data-cqf]'))){const k=b.dataset.cqf;M.cqFocus=M.cqFocus===k?'':k;requestRender();return true}
   if((b=g('[data-chtog]'))){M.chOpen=!M.chOpen;requestRender();return true}
-  if((b=g('[data-fztog]'))){M.fzOpen=M.fzOpen===false;requestRender();return true}
+  if((b=g('[data-fztog]'))){/* plegado por el reparto en el celular: abrirlo termina el reparto de esa cuadrilla */if(M.cqSel&&innerWidth<900){M.cqSel='';M.fzOpen=true}else M.fzOpen=M.fzOpen===false;requestRender();return true}
   if((b=g('[data-pub]'))){pubAsk(b);return true}
   if(g('[data-lko]')){lkReopen();return true}
   if(g('[data-lkc]')){lkClose();return true}
