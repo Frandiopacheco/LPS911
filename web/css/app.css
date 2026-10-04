@@ -1508,3 +1508,12 @@ table.rtab .rc-x{width:30px}
 .lnleg i{display:inline-block;width:18px;height:0;border-top:2px solid var(--accent);vertical-align:middle;margin-right:6px}
 .lnleg i.sc{border-top:2px dashed var(--ink2)}.lnleg i.avg{border-top:1px dotted var(--muted)}
 .ppch{margin:0 0 12px}.ppch>summary{cursor:pointer;font:600 13px var(--f-ui);color:var(--ink2);padding:4px 0}.ppch .chart svg{max-width:620px}
+
+/* Historial del lookahead */
+.hst{min-width:min(720px,calc(100vw - 32px))}
+.hstb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0 10px}.hstd{font:600 13px var(--f-ui);min-width:120px;text-align:center}
+.hstb input[type=date]{height:var(--h-ctl)}.hstb .tin{flex:1 1 180px}
+.hstl{max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.hsi{border:1px solid var(--line);border-radius:var(--r-ctl);padding:8px 10px;background:var(--panel)}.hsi.pr{border-left:3px solid var(--accent);border-radius:0 var(--r-ctl) var(--r-ctl) 0}
+.hsh{font-size:12.5px;color:var(--ink2)}.hsh b{font-family:var(--f-mono);color:var(--ink);margin-right:4px}
+.hsi ul{margin:4px 0 0;padding-left:16px}.hsi li{font-size:13px;margin:2px 0}.hsi li small{display:block;color:var(--muted);font-size:12px}

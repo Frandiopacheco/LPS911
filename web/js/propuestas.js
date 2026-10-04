@@ -76,6 +76,24 @@ function propDesc(id,it){const off=(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||n
   if((it.after.und||'')!==(base.und||''))L.push(`Unidad: ${esc(base.und||'—')} → <b>${esc(it.after.und||'—')}</b>`);
   if((it.after.name||'')!==(base.name||''))L.push(`Nombre: ${esc(base.name||'—')} → <b>${esc(it.after.name||'—')}</b>`);
   if(!L.length)L.push('Cambio de orden');return{kind:'mod',lines:L}}
+/** el cambio propuesto en palabras simples (para el título de las celdas): «Mueve todo 3 días hábiles más tarde y aumenta la duración de 4 a 6 días» */
+function propPlain(off,a){if(!a)return'Pide quitar esta actividad';const ad=[...(a.days||[])].sort();if(!off)return`Nueva actividad · ${ad.length} día${ad.length===1?'':'s'}${ad.length?' ('+rngTxt(ad)+')':''}`;
+  const od=[...(off.days||[])].sort();const P=[];const pl=(n,s,p)=>n===1?s:p;
+  if(canon(od)!==canon(ad)){const mv=od[0]&&ad[0]?wdist(od[0],ad[0]):0;const k=Math.abs(mv);const same=od.length===ad.length&&od.every((d,i)=>wshift(d,mv)===ad[i]);
+    if(!ad.length)P.push('quita todos sus días');
+    else if(same&&mv)P.push(`mueve todo ${k} ${pl(k,'día hábil','días hábiles')} ${mv>0?'más tarde':'antes'}`);
+    else{if(mv)P.push(`mueve el inicio ${k} ${pl(k,'día hábil','días hábiles')} ${mv>0?'más tarde':'antes'}`);
+      if(ad.length>od.length)P.push(`aumenta la duración de ${od.length} a ${ad.length} días`);else if(ad.length<od.length)P.push(`reduce la duración de ${od.length} a ${ad.length} ${pl(ad.length,'día','días')}`);
+      else if(!mv)P.push(`cambia los días (${rngTxt(ad)})`)}}
+  else if(canon(a.qty||{})!==canon(off.qty||{}))P.push('cambia el reparto del metrado por día');
+  if((a.metrado??null)!==(off.metrado??null))P.push(`metrado ${off.metrado??'—'} → ${a.metrado??'—'} ${a.und||''}`.trim());
+  if((a.und||'')!==(off.und||''))P.push(`unidad ${off.und||'—'} → ${a.und||'—'}`);
+  if((a.name||'')!==(off.name||''))P.push(`nombre «${off.name||'—'}» → «${a.name||'—'}»`);
+  if(!P.length)return'';const t=P.length>1?P.slice(0,-1).join(', ')+' y '+P[P.length-1]:P[0];return t[0].toUpperCase()+t.slice(1)}
+/** la explicación de una fila del lookahead: en revisión, con propuestas enviadas a la vista o en el modo propuesta del SC */
+function propRowTip(x,pv){try{if(x._rv)return propPlain(x._rv.off||null,x._rv.del?null:x);
+  if(pv){const it=((PROP.get(pv.sc)||{}).items||{})[x.id];const off=S.act.get(x.id);if(it&&off)return propPlain(off,it.after?propMerge(it.after,it.base||off,off,false):null)}
+  if(PM()&&ACT_OFF){const off=ACT_OFF.get(x.id)||null;const t=propPlain(off,x);return off&&canon([off.days,off.qty,off.metrado,off.und,off.name])===canon([x.days,x.qty,x.metrado,x.und,x.name])?'':t}}catch(e){}return''}
 /* cruces con otras disciplinas para ayudar a decidir */
 function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it.after||off;if(!x)return A;const ds=new Set(days||x.days||[]);
   if(ds.size){const oth=new Map();for(const y of S.act.values()){if(y.id===id||y.ambId!==x.ambId||y.sc===x.sc)continue;const c=(y.days||[]).filter(d=>ds.has(d));if(c.length)oth.set(y.id,{y,c})}

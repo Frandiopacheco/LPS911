@@ -206,7 +206,7 @@ function handleWriteErr(e){const c=e&&e.code;
 /* ---------- deshacer / rehacer ---------- */
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
-function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
+function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));if(typeof lhLog==='function')lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
 function replay(g,from,to){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to])}return skipped}
 function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const sk=replay(g.slice().reverse(),'after','before');redoS.push(g);updUndo();requestRender();
