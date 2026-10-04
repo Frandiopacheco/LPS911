@@ -114,7 +114,9 @@ function failInfo(x,upTo,back=10){const rt=recOf(upTo,x.id);if(rt&&rt.status==='
   if(!f||(x.days||[]).some(d=>d>f.d)||x.noRep===f.d)return null;const dn=DONE.get(x.id);if(dn&&dn>=f.d)return null;return f}
 function repSaldo(x,fd){if(!hasM(x))return null;const r=recOf(fd,x.id);const prog=r&&r.prog!=null?r.prog:(x.qty||{})[fd];if(prog==null)return null;const rem=r2(prog-(+(r&&r.exec)||0));return rem>0?rem:prog}
 function reprogAct(aid,d,fd){const x=S.act.get(aid);if(!x||!canWrite)return;let nx={...x,days:[...new Set([...(x.days||[]),d])].sort()};
-  const sal=repSaldo(x,fd);if(sal!=null){const r=recOf(fd,aid);const ex=r&&r.exec!=null?+r.exec||0:0;const q={...(nx.qty||{})};if(fd&&q[fd]!=null&&sal<+q[fd])q[fd]=r2(ex);q[d]=r2((+q[d]||0)+sal);nx={...nx,qty:q}}
+  /* el saldo pasa al día nuevo y el día fallido queda con lo ejecutado (0 si no se hizo nada): el metrado no se duplica.
+     El compromiso original sigue en el registro diario (prog) y en la semana congelada */
+  const sal=repSaldo(x,fd);if(sal!=null){const r=recOf(fd,aid);const ex=r&&r.exec!=null?+r.exec||0:0;const q={...(nx.qty||{})};if(fd&&q[fd]!=null)q[fd]=r2(Math.min(ex,+q[fd]));q[d]=r2((+q[d]||0)+sal);nx={...nx,qty:q}}
   apply([op('acts',aid,nx)],`Reprogramada para el ${DOWN[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}${sal!=null?` (${fq(sal)} ${x.und||''})`:''}`)}
 function markExec(aid,ed,fd){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=recOf(ed,aid);const late=!(x.days||[]).includes(ed);
   writeDaily(ed,pisoOfAct(aid),{recs:{[aid]:{...baseRec(ed,x,cur),status:'ok',late:late||!!(cur&&cur.late),cnc:'',imp:null,note:(cur&&cur.note)||(late?`Ejecutada sin estar programada${fd?' (no cumplida el '+fmtD(fd)+')':''}`:'')}}});
@@ -313,7 +315,9 @@ const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},n
    una copia local atrasada no lo pisa */
 function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(recs||{})){const c=(cur.recs||{})[aid];if(!r||!c||typeof r!=='object'){out[aid]=r;continue}
   const p={};for(const[k,v]of Object.entries(r))if(canon(v)!==canon(c[k]))p[k]=v;if(Object.keys(p).length)out[aid]=p}return out}
-function writeDaily(d,pid,obj){const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+/* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
+function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
+function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});

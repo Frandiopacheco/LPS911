@@ -16,8 +16,11 @@ function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
     s+=`<g><title>${esc(d.label)}: ${fmt(d.v)}${d.sub?' · '+esc(d.sub):''}</title>${d.color?`<rect x="0" y="${y+8}" width="12" height="12" rx="3" fill="${d.color}"/>`:''}<text class="nm" x="${d.color?18:0}" y="${y+18}">${esc(d.label.length>17?d.label.slice(0,16)+'…':d.label)}</text>
     <rect x="${L}" y="${y+6}" width="${W-L-R}" height="16" rx="4" fill="var(--panel2)"/><path class="bar" d="M${L},${y+6} h${Math.max(0,bw-4)} q4,0 4,4 v8 q0,4 -4,4 h-${Math.max(0,bw-4)} Z"/><text class="lab" x="${L+bw+6}" y="${y+18}">${fmt(d.v)}</text></g>`});
   return s+'</svg>'}
+/* el SC de un día ya registrado es el que guardó el registro (rc.sc): cambiar la partida de la actividad después no
+   pasa su historial a la empresa nueva; sin registro (o propuesta del capataz sin sc) manda la partida actual */
+const scAt=(rc,x)=>(rc&&rc.sc)||x.sc;
 function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
-  for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:x.sc})}}
+  for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:scAt(rc,x)})}}
   dayDataArch(dates,vset,rows);
   extras.push(...npItems(ds,vset));
   const z=()=>({prog:0,ver:0,ok:0,partial:0,no:0,nimp:0});const add=(o,r)=>{o.prog++;if(r.rc){o.ver++;o[r.rc.status]++;if(impOf(r.rc)===false)o.nimp++}};
@@ -101,8 +104,9 @@ function renderInd(main){
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
   if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>PPC semanal</b> y evalúas cada uno con Sí / No.</div>`;
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
-  const vActs=[...S.act.values()].filter(x=>vset.has(pisoOfAmb(x.ambId)));const dayRows=[];const dCnc={};let nExtra=0;
-  for(const d of dd){let sch=0,okc=0,reg=0;for(const x of vActs){if(!(x.days||[]).includes(d))continue;sch++;const rc=recOf(d,x.id);if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc){const k=cncKey(rc.cnc);dCnc[k]=(dCnc[k]||0)+1}}}
+  /* misma población que Indicadores › Diario (dayData): incluye lo archivado y los registros históricos */
+  const DD=dayData(dd,vset);const byD={};DD.rows.forEach(r=>(byD[r.d]=byD[r.d]||[]).push(r));const dayRows=[];const dCnc={};let nExtra=0;
+  for(const d of dd){let sch=0,okc=0,reg=0;for(const r of byD[d]||[]){if(r.sched)sch++;const rc=r.rc;if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc){const k=cncKey(rc.cnc);dCnc[k]=(dCnc[k]||0)+1}}}
     nExtra+=npItems([d],vset).length;
     if(reg)dayRows.push({label:DL[(pd(d).getUTCDay()+6)%7]+' '+d.slice(8),v:okc/reg,sub:`${okc} de ${reg} verificadas · ${sch} programadas`})}
   h+=`<div class="card chart"><h2>PPC diario (alerta · registros de campo) <span class="sub">% de lo verificado en campo marcado “Cumplido” · semanas ${U.week-2}–${U.week}${nExtra?` · ${nExtra} trabajos no programados`:''}</span></h2><div class="pad tscroll">${dayRows.length?svgBarsV(dayRows):'<div class="empty">Aún no hay registros de campo en estas semanas. Se llenan desde la pestaña <b>Campo</b>.</div>'}</div></div>`;

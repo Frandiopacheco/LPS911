@@ -103,7 +103,7 @@ const pisOf=id=>S.pis.get(id)||ARCH.pis.get(id)||null;
 function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
   const ctx=x=>{const a=ambOf(x.ambId);if(!a)return null;const s=secOf(a.sectorId);const pid=pisoOfAmb(x.ambId);const p=pisOf(pid);return p&&s?{p,s,a}:null};
   for(const x of ARCH.act.values()){const c=ctx(x);if(!c||!vset.has(c.p.id))continue;const ad=ldt(x.arch.t||0);
-    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:x.sc,arch:true});seen.add(x.id+'|'+d)}}}
+    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:scAt(rc,x),arch:true});seen.add(x.id+'|'+d)}}}
   const ds=new Set(dates);
   for(const doc of DAY.values()){if(!ds.has(doc.date)||!vset.has(doc.pisoId))continue;
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;

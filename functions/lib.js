@@ -72,4 +72,29 @@ function closesToAccept(lives, dailyById, acts, today) {
   return out;
 }
 
-module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept };
+/* Escribe los cierres de closesToAccept uno por uno, cada uno en una transacción que vuelve a leer el registro del día:
+   si mientras tanto un ingeniero lo verificó (o lo quitó a propósito), no se toca. Antes un lote escribía con la lectura
+   del inicio y podía cambiar un «No cumplido» recién verificado por «Cumplido» y borrar su comentario. */
+async function acceptCloses(db, L) {
+  let n = 0, skip = 0;
+  for (const o of L) {
+    const dref = db.collection('daily').doc(o.date + '_' + o.pisoId);
+    const iref = db.collection('doneidx').doc(o.pisoId);
+    const wrote = await db.runTransaction(async tx => {
+      const ds = await tx.get(dref);
+      const is = o.rec.done ? await tx.get(iref) : null;
+      const r = ds.exists ? ((ds.data() || {}).recs || {})[o.actId] : null;
+      if (r && (r.status || r.clr)) return false;
+      tx.set(dref, { date: o.date, pisoId: o.pisoId, recs: { [o.actId]: o.rec } }, { merge: true });
+      if (o.rec.done) {
+        const d = (is && is.exists && (is.data() || {}).d) || {};
+        if (!(d[o.actId] <= o.date)) tx.set(iref, { d: { [o.actId]: o.date } }, { merge: true });
+      }
+      return true;
+    });
+    if (wrote) n++; else skip++;
+  }
+  return { n, skip };
+}
+
+module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses };

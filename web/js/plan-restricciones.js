@@ -27,7 +27,9 @@ function renderPlan(main){
     let h=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok">Congelado ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:'<span class="pill warn">Borrador en vivo</span>'}
      ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=fieldSug(id,items[id]);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
-     ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar y borrar evaluación':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
+       return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${canWrite?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
      <div class="pad"><div class="tiles">
       <div class="tile"><span class="k">Cumplidos</span><span class="v" style="color:var(--ok)">${frozen?nOk:'—'}</span></div>
       <div class="tile"><span class="k">No cumplidos</span><span class="v" style="color:var(--bad)">${frozen?nNo:'—'}</span></div>
@@ -57,10 +59,13 @@ function renderPlan(main){
    ${body||'<div class="empty">No hay pisos creados.</div>'}</div></div>`;
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
-    if(e.target.closest('[data-applyfield]')){const wk=S.wk.get(wkId(n,pid));if(!wk)return;const upd={};for(const[id,it]of Object.entries(wk.items||{})){const r=(wk.res||{})[id]||{};const sg=fieldSug(id,it);if(!sg||sg.ok==null||r.ok!=null)continue;upd[id]={...r,ok:sg.ok,cnc:sg.ok?'':(sg.cnc||r.cnc||''),note:r.note||'',exec:it.q?sg.exec:(r.exec??null)}}
-      const k=Object.keys(upd).length;if(!k)return;patch('weeks',wkId(n,pid),{res:upd},()=>{wk.res={...(wk.res||{}),...upd}});requestRender();toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
+    if(e.target.closest('[data-applyfield]')){const wk=S.wk.get(wkId(n,pid));if(!wk)return;const upd={};for(const[id,it]of Object.entries(wk.items||{})){const r=(wk.res||{})[id]||{};const sg=fieldSug(id,it);if(!sg||sg.ok==null||r.ok!=null)continue;
+        /* también la imputabilidad decidida en Campo (la de la causa principal); null = la que trae la causa por defecto */
+        const cnc=sg.ok?'':(sg.cnc||r.cnc||'');upd[id]={...r,ok:sg.ok,cnc,imp:sg.ok||sg.imp==null||sg.imp===cncImp(cnc)?null:sg.imp,note:r.note||(sg.ok&&sg.exc?'Excepción en campo: '+sg.exc:''),exec:it.q?sg.exec:(r.exec??null)}}
+      const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
-    if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;apply([op('weeks',wkId(n,pid),null)],`${S.pis.get(pid)?.code||''} · semana ${n} descongelada`)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
+    if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;unfreezeWeek(n,pid)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
+    {const rb=e.target.closest('[data-wkrest]');if(rb){restoreWeek(n,pid,rb.dataset.wkrest);return}}
     const b=e.target.closest('[data-yn]');if(!b||b.disabled)return;const id=b.closest('tr').dataset.id;const ok=b.dataset.yn==='1';const wk=S.wk.get(wkId(n,pid));
     if(!wk||!wk.frozenAt){freezeWeek(n,pid,{[id]:{ok,cnc:'',note:''}});return}
     const cur=(wk.res||{})[id]||{};const nv=cur.ok===ok?null:ok;setRes(n,pid,id,{...cur,ok:nv,cnc:nv===false?(cur.cnc||''):'',note:cur.note||''})};
@@ -72,21 +77,69 @@ function renderPlan(main){
 }
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
   const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);if(!reg.length)return null;
-  const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
+  const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));
+  /* un «Cumplido» por excepción (motivo en exc) cuenta como lo programado de ese día para decidir el cumplimiento */
+  const execOk=r2(reg.reduce((s,r)=>{const e=r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0;return s+(r.status==='ok'&&r.exc&&r.prog!=null?Math.max(e,+r.prog):e)},0));const exc=(reg.find(r=>r.status==='ok'&&r.exc)||{}).exc||'';const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
   const x=S.act.get(id);const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
   const allC=it.days.every(d=>recOf(d,id));let ok=null;
-  if(it.q){if(exec>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
+  if(it.q){if(execOk>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
   else{if(okd>=it.days.length)ok=true;else if(over||(allC&&!pendF))ok=false}
   const cc={};reg.forEach(r=>{if(r.cnc)cc[r.cnc]=(cc[r.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
-  return{ok,cnc,exec,n:reg.length,total:it.days.length,okd,rec}}
+  /* imputabilidad: la de la causa principal en los días que la registraron; empate = imputable al SC */
+  let imp=null;{const L=reg.filter(r=>r.status!=='ok'&&(r.cnc||'')===cnc);if(L.length){const f=L.filter(r=>impOf(r)===false).length;imp=f>L.length-f?false:true}}
+  return{ok,cnc,imp,exec,exc,n:reg.length,total:it.days.length,okd,rec}}
 /** n.º de la actividad dentro de su ambiente (el mismo que muestra el lookahead) */
 function actNum(id){const x=S.act.get(id);if(!x)return 0;const i=siblings('acts','ambId',x.ambId).findIndex(y=>y.id===id);return i<0?0:i+1}
 /** opciones de causa: las configuradas y, si la guardada ya no está en la lista, también esa (para no perderla al editar) */
 const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<option value="${esc(k)}" title="${esc(cncTip(k))}"${cur===k?' selected':''}>${esc(cncLabel(k))}</option>`).join('');
-function setRes(n,pid,id,val){const w=S.wk.get(wkId(n,pid));if(!w)return;patch('weeks',wkId(n,pid),{res:{[id]:val}},()=>{w.res={...(w.res||{}),[id]:val}});requestRender()}
-function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
-  const code=S.pis.get(pid)?.code||'';
-  apply([op('weeks',wkId(n,pid),{n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},snap})],res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
+/* guarda solo los campos que cambian de cada evaluación (res.<actividad>.<campo>): si otra persona cambió otro campo
+   (causa, mitigación…) desde una copia atrasada, no se pisa. Cumplido y causa van juntos cuando cambian juntos. */
+function resPatch(n,pid,upd){const w=S.wk.get(wkId(n,pid));if(!w)return;const FP=firebase.firestore.FieldPath;const args=[];const nres={...(w.res||{})};
+  for(const[id,val]of Object.entries(upd)){const cur=(w.res||{})[id]||{};const nv={...cur};for(const[f,v]of Object.entries(val||{})){if(canon(v)===canon(cur[f]))continue;args.push(new FP('res',id,f),v===undefined?null:v);nv[f]=v}nres[id]=nv}
+  w.res=nres;requestRender();if(!args.length||!db||!canWrite)return;
+  pending++;setStatus();const key='weeks/'+wkId(n,pid);
+  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))
+    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
+function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
+/* Congelar corre en una transacción: si otra persona ya congeló este piso y semana (o lo hizo desde una copia atrasada),
+   se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
+async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
+  const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},snap,frozenBy:me?me.email:''};
+  if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});requestRender();return}
+  if(!canWrite)return;const ref=fcol('weeks').doc(id);
+  let out;try{out=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(ex&&ex.frozenAt)return{ex};
+      const nd={...doc};tx.set(ref,nd);return{nd}})}
+  catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para congelar la semana necesitas internet.':'No se pudo congelar: '+((e&&(e.code||e.message))||e));return}
+  if(out.ex){/* ya estaba congelada: se usa la vigente; la evaluación pedida solo entra si ese compromiso aún no tiene */
+    S.wk.set(id,{...out.ex,id});const[k,v]=Object.entries(res||{})[0]||[];
+    if(k&&(out.ex.items||{})[k]&&!((out.ex.res||{})[k]&&(out.ex.res[k].ok!=null)))setRes(n,pid,k,v);
+    toast(`${code} · semana ${n} ya estaba congelada por otra persona: se usa esa versión`);requestRender();return}
+  S.wk.set(id,{...out.nd,id});requestRender();toast(res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
+/* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones y foto del lookahead) se copia a
+   su propio documento weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta
+   en ningún PPC) y la semana vuelve a borrador. «Recuperar» la repone mientras nadie la haya vuelto a congelar. */
+const WK_VF=['frozenAt','items','res','snap','frozenBy'];
+const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
+async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
+  const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
+  const pack=o=>{const v={};WK_VF.forEach(k=>{if(o[k]!==undefined)v[k]=o[k]});return{histOf:id,n,pisoId:pid,v,unAt:at,unBy:me?me.email:'',unN:me?(me.name||me.email):''}};
+  const local=()=>{S.wk.set(hid,{...pack(w),id:hid});S.wk.set(id,{id,n,pisoId:pid});requestRender()};
+  if(!db){local();return}
+  const ref=fcol('weeks').doc(id),href=fcol('weeks').doc(hid);const DEL=firebase.firestore.FieldValue.delete();
+  try{const ok=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(!ex||!ex.frozenAt)return false;
+      tx.set(href,pack(ex));const upd={};WK_VF.forEach(k=>upd[k]=DEL);tx.update(ref,upd);return true});
+    if(!ok){toast('La semana ya no estaba congelada.');return}
+    local();toast(`${code} · semana ${n} descongelada: la evaluación quedó guardada y puedes recuperarla`)}
+  catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para descongelar necesitas internet.':'No se pudo descongelar: '+((e&&(e.code||e.message))||e))}}
+async function restoreWeek(n,pid,hid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);const h=S.wk.get(hid);if(!h||h.histOf!==id||(w&&w.frozenAt)||!canWrite)return;
+  const at=new Date(NOW()).toISOString();const local=v=>{S.wk.set(id,{...(w||{}),id,n,pisoId:pid,...v});S.wk.set(hid,{...h,restAt:at});requestRender()};
+  if(!db){local(h.v||{});return}
+  const ref=fcol('weeks').doc(id),href=fcol('weeks').doc(hid);
+  try{const v=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const hs=await tx.get(href);const ex=sn.exists?sn.data():null;const hd=hs.exists?hs.data():null;
+      if((ex&&ex.frozenAt)||!hd||hd.restAt)return null;tx.set(ref,{n,pisoId:pid,...(hd.v||{})},{merge:true});tx.update(href,{restAt:at,restBy:me?me.email:''});return hd.v||{}});
+    if(!v){toast('No se recuperó: alguien volvió a congelar esta semana o ya se recuperó.');return}
+    local(v);toast(`${code} · semana ${n}: versión congelada recuperada`)}
+  catch(e){toast('No se pudo recuperar: '+((e&&(e.code||e.message))||e))}}
 
 /* ================= RESTRICCIONES ================= */
 /* el subcontratista crea restricciones de sus actividades y edita las suyas mientras estén pendientes; liberarlas es del ingeniero */
