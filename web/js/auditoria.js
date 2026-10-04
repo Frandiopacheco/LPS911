@@ -202,9 +202,12 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
 function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
-/* quién resuelve una propuesta: el administrador siempre; un editor solo en los pisos a su cargo; piso sin responsable: solo el administrador */
-function canDecide(id,it){if(!me||PM())return false;if(isAdmin)return true;if(me.role!=='editor')return false;const pid=propPiso(id,it);if(VA&&VA.role==='editor')return(VA.pisos||[]).includes(pid);return respOf(pid).some(r=>r.em===me.email)}
-function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve el administrador'}
+/* quién decide en un piso (propuestas del lookahead y plan diario): el administrador siempre; un editor en los pisos a su
+   cargo; si el piso no tiene responsable, cualquier editor (así la reunión no se traba). «Ver como» editor usa sus pisos simulados. */
+function isPisoResp(pid){if(!me)return false;if(isAdmin)return true;if(me.role!=='editor')return false;const R=respOf(pid);if(!R.length)return true;
+  if(VA&&VA.role==='editor')return(VA.pisos||[]).includes(pid);return R.some(r=>r.em===me.email)}
+function canDecide(id,it){if(!me||PM())return false;return isPisoResp(propPiso(id,it))}
+function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve cualquier editor'}
 function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest=pisos().filter(p=>!L.includes(p.id));
   return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
    ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}

@@ -19,7 +19,8 @@ test('2 y 9 · «Vuelve a ir» devuelve el registro, las fechas y las cantidades
   await page.click('#wtoday');
   const r = page.locator('#mpanel .mp-it[data-act="e0"]');
   await r.locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.fill('#nvd', MANANA); // reprogramar al día que ya tenía cantidad
   await page.locator('#pop [data-do="ok"]').click();
   await expect.poll(async () => (await act(page, 'e0')).qty[MANANA]).toBeGreaterThan(20);

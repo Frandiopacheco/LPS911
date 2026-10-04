@@ -230,7 +230,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${T('run',c.run,'En ejecución','')}${T('stop',c.stop,'Detenidas','',c.stop?'alert2':'')}
     ${T('ok',closed,'Cerradas',`${conf} confirmadas · ${prop} por confirmar`)}
     ${T('',pc(ppcD),'PPC diario hoy',DT.ver?`${DT.ok} de ${DT.ver} verificadas${nProvD?` · ${nProvD} por confirmar`:''}`:'aún sin cierres','dkppc')}
-    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'aún sin evaluar en PPC semanal','dkppc')}</div>`;
+    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}${PW.nimp&&PW.ppcSc!=null?` · del SC ${pc(PW.ppcSc)}`:''}`:'aún sin evaluar en PPC semanal','dkppc')}</div>`;
   const bar=o=>`<span class="dbar">${['ok','no','run','stop','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
   let sc=`<div class="dcard"><div class="dch">Por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${bar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw" title="Personas que reportaron hoy">${o.who.size?`👷 ${o.who.size}`:'<em>sin reportes</em>'}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
     <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div></div>`;

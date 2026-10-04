@@ -21,7 +21,8 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   // No va › Personal: se reprograma solo esta al siguiente día hábil
   const sig = await page.evaluate(d => wshift(d, 1), MANANA);
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await expect(page.locator('#pop [data-to].on')).toHaveCount(1);
   await page.locator('#pop .nvok').click();
   // queda en el plan como borrador: el lookahead no cambia hasta publicar
@@ -35,7 +36,7 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   // el cambio queda en el recuadro «Cambios del plan» (a la derecha), no en el panel
   await expect(page.locator('#mpanel')).not.toContainText('Reprogramadas');
   await page.locator('#mchb [data-chtog]').click();
-  await expect(page.locator('#mchb .mchi').first()).toContainText('Sin personal');
+  await expect(page.locator('#mchb .mchi').first()).toContainText('Falta de personal');
   // programar otra actividad del lookahead este día
   await page.click('#dzadd');
   await page.fill('#dzq', 'tarrajeo');
@@ -97,7 +98,7 @@ test('No va › restricción que no se libera: se registra y se mueve todo el tr
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   const t1 = (await act(page, 't1')).days;
   await row(page, 'e1').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="res"]').click();
+  await page.locator('#pop [data-nk="mat"]').click();
   await page.fill('#nvd', 'Falta levantar el muro');
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop [data-tr="1"]').click(); // todo el tren: Entubado y Tarrajeo de A-2
@@ -122,20 +123,21 @@ test('No va › restricción que no se libera: se registra y se mueve todo el tr
 test('No va › restricción que se libera a primera hora: va con aviso en el plano', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="res"]').click();
+  await page.locator('#pop [data-nk="mat"]').click();
   await page.fill('#nvd', 'Retirar material apilado de drywall');
   await page.locator('#pop [data-nv="lib"]').click();
   await expect(row(page, 'e0').locator('.dzav')).toContainText('Retirar material apilado');
   expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
   expect((await pdz(page)).filter(z => z.kind === 'aviso').map(z => z.desc)).toEqual(['Retirar material apilado de drywall']);
-  expect(await page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e0').length)).toBe(0);
+  // la restricción queda registrada por liberar a primera hora (se mide igual); quitar el aviso la archiva
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e0' && !r.arch).map(r => [r.desc, r.status, r.ccode]))).toEqual([['Retirar material apilado de drywall', 'pend', 'MAT']]);
   noErrors(errors, 'aviso');
 });
 
 test('el subcontratista solo propone: queda en espera y no cambia el lookahead', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
   await row(page, 's9').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="res"]').click();
+  await page.locator('#pop [data-nk="mat"]').click();
   await expect(page.locator('#pop [data-nv="nolib"]')).toHaveCount(0); // eso lo decide el ingeniero
   await page.fill('#nvd', 'Material de otra partida en el ambiente');
   await page.locator('#pop [data-nv="prop"]').click();
@@ -145,7 +147,7 @@ test('el subcontratista solo propone: queda en espera y no cambia el lookahead',
   await expect(row(page, 's9').locator('.dzp')).toContainText('lo decide el ingeniero');
   await expect(page.locator('#mpdb')).toContainText('Tus propuestas');
   const p = (await pdz(page)).filter(z => z.kind === 'dprop');
-  expect(p.map(z => [z.actId, z.k, z.st, z.sc])).toEqual([['s9', 'res', 'pend', 'c1']]);
+  expect(p.map(z => [z.actId, z.k, z.st, z.sc])).toEqual([['s9', 'mat', 'pend', 'c1']]);
   expect((await act(page, 's9')).days).toEqual([MANANA]);
   // vuelve a «Va»: se retira la propuesta
   await row(page, 's9').locator('[data-dv^="va"]').click();
@@ -157,11 +159,12 @@ test('en la reunión el ingeniero acepta o rechaza lo propuesto', async ({ page 
   const prop = (k, desc) => ['pdz', `dp_${MANANA}_s9`, { date: MANANA, pisoId: 'p1', sc: 'c1', kind: 'dprop', actId: 's9', ambId: 'a1', k, desc, st: 'pend', by: 'sc@obra.pe', byName: 'Sandra Sanitarias', ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, prop('per', '')] });
   await expect(page.locator('#mpdb')).toContainText('Por decidir en la reunión');
-  await expect(page.locator('#mpdb .mpdi')).toContainText('Sin personal');
+  await expect(page.locator('#mpdb .mpdi')).toContainText('Falta de personal');
   await expect(row(page, 's9').locator('.dzp')).toContainText('SC SANITARIAS propone');
   // aceptar: pasa a reprogramar con el motivo ya elegido
   await page.locator('#mpdb [data-dpa]').click();
-  await expect(page.locator('#pop')).toContainText('Sin personal');
+  await expect(page.locator('#pop')).toContainText('Falta de personal');
+  await page.locator('#pop [data-nv="nolib"]').click(); // el ingeniero confirma la causa: no se resuelve a primera hora
   await page.locator('#pop .nvok').click();
   await publicar(page);
   const sig = await page.evaluate(d => wshift(d, 1), MANANA);
@@ -186,7 +189,8 @@ test('revisar una propuesta y mantenerla: la actividad va', async ({ page }) => 
 test('«Cambios del plan» permite deshacer una reprogramación', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
@@ -198,7 +202,7 @@ test('«Cambios del plan» permite deshacer una reprogramación', async ({ page 
 });
 
 test('la ventanita sigue a su fila al desplazar el panel', async ({ page }) => {
-  await page.setViewportSize({ width: 1300, height: 520 });
+  await page.setViewportSize({ width: 1300, height: 760 }); // la lista de causas es más alta: con menos alto la ventanita queda pegada arriba
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
   await row(page, 'e0').locator('[data-dv^="no"]').click();
   const y0 = await page.locator('#pop').evaluate(p => p.getBoundingClientRect().top);
@@ -375,7 +379,8 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   const aid = (await dv.getAttribute('data-dv')).split('|')[1];
   const antes = (await act(page, aid)).days;
   await dv.click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await expect(page.locator('#mzc.pl')).toContainText('No va');
   expect((await act(page, aid)).days).toEqual(antes); // borrador hasta publicar
@@ -507,7 +512,8 @@ test('reunión, plan: la ficha explica con quién comparte el lugar y permite de
 test('publicar el plan: un borrador se descarta sin tocar el lookahead y publicar se puede deshacer', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await page.locator('#mchb [data-chtog]').click();
   await expect(page.locator('#mchb')).toContainText('se aplica al publicar');
@@ -516,7 +522,8 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
   // otra vez, publicar y deshacer la publicación
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
@@ -526,7 +533,8 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   // ya publicado, un cambio nuevo se aplica al momento
   await publicar(page);
   await row(page, 'e1').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await expect.poll(async () => (await act(page, 'e1')).days).not.toContain(MANANA);
   noErrors(errors, 'publicar');
@@ -535,7 +543,8 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
 test('varios usuarios: publicar salta lo que otro ya movió y el reparto de cuadrillas no se pisa', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   // mientras tanto otra persona movió «e0» en el lookahead (ya no va mañana)
   const otro = await page.evaluate(d => wshift(d, 3), MANANA);

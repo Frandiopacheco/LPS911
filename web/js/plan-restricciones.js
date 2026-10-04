@@ -6,8 +6,18 @@ function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
   for(const{p,secs}of tree()){if(pid&&p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts){const d=(x.days||[]).filter(z=>days.has(z)&&!libDay(x,z)).sort(); /* lo ya terminado no es compromiso */if(d.length){const it={sc:x.sc,sector:s.code,code:a.code,amb:a.name,act:x.name,days:d,ord:s.order*1e6+a.order*1e3+x.order};if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}o[x.id]=it}}}
   return o}
 /* PPC semanal oficial de la semana n en los pisos visibles (lo mismo que Indicadores › Semanal y el Tablero) */
-function ppcWeekAgg(n,vset){const o={n:0,ok:0,ev:0};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vset.has(w.pisoId))continue;const st=ppcOf(w);if(!st)continue;o.n+=st.n;o.ok+=st.ok;o.ev+=st.ev}return o.ev>0?{...o,ppc:o.ok/o.n}:null}
-function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||{});if(!ids.length)return null;const r=w.res||{};const ok=ids.filter(i=>r[i]&&r[i].ok===true).length;const ev=ids.filter(i=>r[i]&&(r[i].ok===true||r[i].ok===false)).length;return{ppc:ok/ids.length,ok,ev,n:ids.length}}
+function ppcWeekAgg(n,vset){const o={n:0,ok:0,ev:0,nimp:0};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vset.has(w.pisoId))continue;const st=ppcOf(w);if(!st)continue;o.n+=st.n;o.ok+=st.ok;o.ev+=st.ev;o.nimp+=st.nimp}return o.ev>0?{...o,ppc:o.ok/o.n,ppcSc:ppcScOf(o.ok,o.n,o.nimp)}:null}
+/* no cumplido que no es imputable al SC de la actividad (causa no imputable, o respondió otra partida) */
+const resNimp=r=>!!r&&r.ok===false&&!(r.imp!=null?!!r.imp:cncImp(r.cnc));
+/* PPC del SC = cumplidos / (compromisos − no imputables al SC): lo que no dependía de él no le baja el indicador */
+const ppcScOf=(ok,n,nimp,ext)=>n-nimp+(ext||0)>0?ok/(n-nimp+(ext||0)):null;
+function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||{});if(!ids.length)return null;const r=w.res||{};const ok=ids.filter(i=>r[i]&&r[i].ok===true).length;const ev=ids.filter(i=>r[i]&&(r[i].ok===true||r[i].ok===false)).length;
+  /* en el total del piso, un «frente no entregado» que el ingeniero hizo contar al SC predecesor sí es imputable (a otra partida) */
+  const nimp=ids.filter(i=>resNimp(r[i])&&!(r[i].rsc&&r[i].pc)).length;return{ppc:ok/ids.length,ok,ev,n:ids.length,nimp,ppcSc:ppcScOf(ok,ids.length,nimp)}}
+/** por subcontratista en un conjunto de semanas congeladas: n, ok, no, nimp (no imputables a él) y ext (fallas de otras partidas que le cuentan) */
+function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp:0,ext:0,ev:0};
+  for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
+  for(const o of Object.values(m)){o.ppc=o.n?o.ok/o.n:null;o.ppcSc=ppcScOf(o.ok,o.n,o.nimp,o.ext)}return m}
 const confirmUF={};
 function renderPlan(main){
   ensureDaily(addD(weekStart(U.week),-7));
@@ -25,7 +35,7 @@ function renderPlan(main){
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
     const cf=(confirmUF[p.id]||0)>NOW();
     let h=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
-     ${frozen?`<span class="pill ok">Congelado ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:'<span class="pill warn">Borrador en vivo</span>'}
+     ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':''}>${w.auto?'Congelado automáticamente':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=fieldSug(id,items[id]);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
      ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
@@ -35,17 +45,18 @@ function renderPlan(main){
       <div class="tile"><span class="k">Cumplidos</span><span class="v" style="color:var(--ok)">${frozen?nOk:'—'}</span></div>
       <div class="tile"><span class="k">No cumplidos</span><span class="v" style="color:var(--bad)">${frozen?nNo:'—'}</span></div>
       <div class="tile"><span class="k">Por evaluar</span><span class="v">${frozen?ids.length-nOk-nNo:ids.length}</span></div>
-      <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div></div></div>
+      <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div><div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista (causa no imputable u otra partida que no entregó el frente)"><span class="k">PPC del SC</span><span class="v">${st&&st.ppcSc!=null?pct(st.ppcSc):'—'}${st&&st.nimp?` <small>${st.nimp} no imput.</small>`:''}</span></div></div></div>
      <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>Descripción</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead><tbody>`;
-    for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;
-      h+=`<tr class="grp"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}`:''}</span></td></tr>`;
+    const scSt=frozen?wkScStats([w]):{};
+    for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;const so=scSt[sc];
+      h+=`<tr class="grp"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`;
       for(const id of l){const it=items[id];const r=res[id]||{};const ds=new Set(it.days);
         h+=`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="Descripción"><span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div></td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&canWrite?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
-        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=fieldSug(id,it);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No'):''}</div>`})()}</td>
-        <td class="full" data-l="Tipo de causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&(r.ok===false||r.cnc)?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir tipo…':'—'}</option>${cncOpts(cnc,r.cnc)}</select></td>
+        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=fieldSug(id,it);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.mv?` · ${sg.mv} reprogramado${sg.mv>1?'s':''} en el plan diario: ${esc(sg.mvm)}`:''}${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}${sg.rsc?' · responde '+esc(conOf(sg.rsc).name):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.mv?` · ${sg.mv} reprog.`:''}${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No')+(sg.ok===false&&sg.cnc&&!r.cnc?' ('+esc(cncCode(sg.cnc)||sg.cnc)+')':''):''}</div>`})()}</td>
+        <td class="full" data-l="Tipo de causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&(r.ok===false||r.cnc)?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir tipo…':'—'}</option>${cncOpts(cnc,r.cnc)}</select>${r.ok===false?respSel(p.id,id,it,r,frozen&&canWrite):''}</td>
         <td class="full" data-l="Causa (detalle)"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen&&r.ok===false?'Qué pasó':''}"${frozen&&canWrite?'':' disabled'} aria-label="Causa (detalle)"></td>
         <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&canWrite&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`}}
     h+=`</tbody></table></div>`;
@@ -62,7 +73,7 @@ function renderPlan(main){
   main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
     if(e.target.closest('[data-applyfield]')){const wk=S.wk.get(wkId(n,pid));if(!wk)return;const upd={};for(const[id,it]of Object.entries(wk.items||{})){const r=(wk.res||{})[id]||{};const sg=fieldSug(id,it);if(!sg||sg.ok==null||r.ok!=null)continue;
         /* también la imputabilidad decidida en Campo (la de la causa principal); null = la que trae la causa por defecto */
-        const cnc=sg.ok?'':(sg.cnc||r.cnc||'');upd[id]={...r,ok:sg.ok,cnc,imp:sg.ok||sg.imp==null||sg.imp===cncImp(cnc)?null:sg.imp,note:r.note||(sg.ok&&sg.exc?'Excepción en campo: '+sg.exc:''),exec:it.q?sg.exec:(r.exec??null)}}
+        const cnc=sg.ok?'':(sg.cnc||r.cnc||'');upd[id]={...r,ok:sg.ok,cnc,imp:sg.ok||sg.imp==null||sg.imp===cncImp(cnc)?null:sg.imp,rsc:sg.ok?'':(sg.rsc||''),pc:!sg.ok&&!!sg.pc,note:r.note||(sg.ok&&sg.exc?'Excepción en campo: '+sg.exc:sg.ok===false&&sg.mvm?'Reprogramada en el plan diario: '+sg.mvm:''),exec:it.q?sg.exec:(r.exec??null)}}
       const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
     if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;unfreezeWeek(n,pid)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
@@ -73,22 +84,38 @@ function renderPlan(main){
   main.onchange=e=>{const t=e.target;const tr=t.closest('tr[data-id]');const sec=t.closest('section[data-pid]');if(!tr||!sec)return;const pid=sec.dataset.pid,id=tr.dataset.id;const wk=S.wk.get(wkId(n,pid));if(!wk)return;const cur=(wk.res||{})[id]||{};
     if(t.hasAttribute('data-exec')){const it=(wk.items||{})[id]||{};const v=parseNum(t.value);if(Number.isNaN(v)||(v!=null&&v<0)){toast('El ejecutado debe ser un número positivo.');t.value=cur.exec??'';return}t.dataset.o=t.value;
       const nv={...cur,exec:v};if(v!=null&&it.q){nv.ok=v>=it.q-1e-9;if(nv.ok)nv.cnc='';else nv.cnc=cur.cnc||''}setRes(n,pid,id,nv);if(v!=null&&it.q)toast(nv.ok?'Cumplido: se ejecutó todo lo programado.':`No cumplido: ${fq(v)} de ${fq(it.q)} ${it.und||''}. Elige la causa.`);return}
-    if(t.hasAttribute('data-cnc'))setRes(n,pid,id,{...cur,cnc:t.value});if(t.hasAttribute('data-note')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,note:t.value})}
+    if(t.hasAttribute('data-cnc'))setRes(n,pid,id,{...cur,cnc:t.value,...(cur.rsc?{}:{imp:null})});
+    if(t.hasAttribute('data-resp')){const v=t.value;setRes(n,pid,id,{...cur,...(v==='d'?{imp:null,rsc:'',pc:false}:v==='y'?{imp:true,rsc:'',pc:false}:v==='n'?{imp:false,rsc:'',pc:false}:{imp:false,rsc:v.slice(2),pc:!!cur.pc})});return}
+    if(t.hasAttribute('data-rpc')){setRes(n,pid,id,{...cur,pc:t.checked});return}if(t.hasAttribute('data-note')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,note:t.value})}
     if(t.hasAttribute('data-mit')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,mit:t.value.trim()})}};
 }
+/* marca ↷ que dejó el plan diario al reprogramar: la más reciente con fecha ≤ d (el tren la guarda en su primer día movido) */
+function rplFor(x,d){let best=null,bk='';for(const[k,v]of Object.entries((x&&x.rpl)||{}))if(v&&k<=d&&k>bk){bk=k;best=v}return best}
+/* sugerencia para evaluar un compromiso congelado con lo que se registró en la semana: los registros de campo y, para los días
+   que el plan diario reprogramó (ya no están en el lookahead y nadie los registró), la causa que se decidió en la reunión */
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
-  const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);if(!reg.length)return null;
+  const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);
+  const x=S.act.get(id);const xd=new Set((x&&x.days)||[]);
+  const mvd=it.days.filter(d=>!xd.has(d)&&!recOf(d,id)).map(d=>[d,rplFor(x,d)]).filter(([,v])=>v&&v.cnc);
+  if(!reg.length&&!mvd.length)return null;
   const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));
   /* un «Cumplido» por excepción (motivo en exc) cuenta como lo programado de ese día para decidir el cumplimiento */
   const execOk=r2(reg.reduce((s,r)=>{const e=r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0;return s+(r.status==='ok'&&r.exc&&r.prog!=null?Math.max(e,+r.prog):e)},0));const exc=(reg.find(r=>r.status==='ok'&&r.exc)||{}).exc||'';const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
-  const x=S.act.get(id);const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
-  const allC=it.days.every(d=>recOf(d,id));let ok=null;
+  const mset=new Set(mvd.map(([d])=>d));const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
+  const allC=it.days.every(d=>recOf(d,id)||mset.has(d));let ok=null;
   if(it.q){if(execOk>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
   else{if(okd>=it.days.length)ok=true;else if(over||(allC&&!pendF))ok=false}
-  const cc={};reg.forEach(r=>{if(r.cnc)cc[r.cnc]=(cc[r.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
+  /* causa principal: la más repetida entre los días registrados y los reprogramados */
+  const src=[...reg.filter(r=>r.status!=='ok'&&r.cnc).map(r=>({cnc:r.cnc,imp:impOf(r),rsc:r.rsc||'',pc:!!r.pc})),...mvd.map(([,v])=>({cnc:v.cnc,imp:v.imp!==false,rsc:v.rsc||'',pc:!!v.pc}))];
+  const cc={};src.forEach(o=>{cc[o.cnc]=(cc[o.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
   /* imputabilidad: la de la causa principal en los días que la registraron; empate = imputable al SC */
-  let imp=null;{const L=reg.filter(r=>r.status!=='ok'&&(r.cnc||'')===cnc);if(L.length){const f=L.filter(r=>impOf(r)===false).length;imp=f>L.length-f?false:true}}
-  return{ok,cnc,imp,exec,exc,n:reg.length,total:it.days.length,okd,rec}}
+  let imp=null,rsc='',pc=false;{const L=src.filter(o=>o.cnc===cnc);if(L.length){const f=L.filter(o=>o.imp===false).length;imp=f>L.length-f?false:true;const o=L.find(o=>o.rsc&&o.rsc!==(x||it0).sc);if(o&&!imp){rsc=o.rsc;pc=o.pc}}}
+  const mvm=mvd.length?(mvd[0][1].m||''):'';
+  return{ok,cnc,imp,rsc,pc,exec,exc,n:reg.length,total:it.days.length,okd,rec,mv:mvd.length,mvm}}
+/** «Responde»: según la causa, el SC de la actividad, nadie del lado SC, u otra partida (frente no entregado; el ingeniero decide si le cuenta) */
+function respSel(pid,id,it,r,ed){const v=r.rsc&&r.rsc!==it.sc?'p:'+r.rsc:r.imp==null?'d':r.imp?'y':'n';const di=cncImp(r.cnc);
+  const others=[...S.con.values()].filter(c=>c.id!==it.sc).sort((a,b)=>a.name.localeCompare(b.name));
+  return`<select class="ci rspsel" data-resp data-fk="rsp:${pid}:${id}"${ed?'':' disabled'} aria-label="Quién responde" title="Quién responde por este no cumplido"><option value="d"${v==='d'?' selected':''}>Según la causa: ${di?'imputable al SC':'no imputable'}</option><option value="y"${v==='y'?' selected':''}>Imputable al SC</option><option value="n"${v==='n'?' selected':''}>No imputable al SC</option>${others.map(c=>`<option value="p:${c.id}"${v==='p:'+c.id?' selected':''}>Responde ${esc(c.name)} (no entregó)</option>`).join('')}</select>${v.startsWith('p:')?`<label class="chk rspc"><input type="checkbox" data-rpc${r.pc?' checked':''}${ed?'':' disabled'}> le cuenta en su PPC</label>`:''}`}
 /** n.º de la actividad dentro de su ambiente (el mismo que muestra el lookahead) */
 function actNum(id){const x=S.act.get(id);if(!x)return 0;const i=siblings('acts','ambId',x.ambId).findIndex(y=>y.id===id);return i<0?0:i+1}
 /** opciones de causa: las configuradas y, si la guardada ya no está en la lista, también esa (para no perderla al editar) */
@@ -102,6 +129,9 @@ function resPatch(n,pid,upd){const w=S.wk.get(wkId(n,pid));if(!w)return;const FP
   chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))
     .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
 function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
+/* Corte semanal: la semana n se congela sola en el mismo corte de las propuestas de SC (Configuración › Proyecto; por
+   defecto el sábado 13:00 de Lima antes del lunes). Lo hace el servidor (tarea congelarSemana) si nadie la congeló antes. */
+function frzCutTxt(n){const t=propCut(n);const d=ldt(t);return`${DOW_N[pd(d).getUTCDay()]} ${fmtD(d)}, ${hhmm(t)}`}
 /* Congelar corre en una transacción: si otra persona ya congeló este piso y semana (o lo hizo desde una copia atrasada),
    se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
 async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
@@ -126,16 +156,16 @@ async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};
 /* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones y foto del lookahead) se copia a
    su propio documento weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta
    en ningún PPC) y la semana vuelve a borrador. «Recuperar» la repone mientras nadie la haya vuelto a congelar. */
-const WK_VF=['frozenAt','items','res','snap','frozenBy','propOut'];
+const WK_VF=['frozenAt','items','res','snap','frozenBy','propOut','auto'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
   const pack=o=>{const v={};WK_VF.forEach(k=>{if(o[k]!==undefined)v[k]=o[k]});return{histOf:id,n,pisoId:pid,v,unAt:at,unBy:me?me.email:'',unN:me?(me.name||me.email):''}};
-  const local=()=>{S.wk.set(hid,{...pack(w),id:hid});S.wk.set(id,{id,n,pisoId:pid});requestRender()};
+  const local=()=>{S.wk.set(hid,{...pack(w),id:hid});S.wk.set(id,{id,n,pisoId:pid,unfrozenAt:at});requestRender()};
   if(!db){local();return}
   const ref=fcol('weeks').doc(id),href=fcol('weeks').doc(hid);const DEL=firebase.firestore.FieldValue.delete();
   try{const ok=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(!ex||!ex.frozenAt)return false;
-      tx.set(href,pack(ex));const upd={};WK_VF.forEach(k=>upd[k]=DEL);tx.update(ref,upd);return true});
+      tx.set(href,pack(ex));const upd={};WK_VF.forEach(k=>upd[k]=DEL);upd.unfrozenAt=at;/* el congelado automático no vuelve a congelar lo que alguien descongeló a propósito */tx.update(ref,upd);return true});
     if(!ok){toast('La semana ya no estaba congelada.');return}
     local();toast(`${code} · semana ${n} descongelada: la evaluación quedó guardada y puedes recuperarla`)}
   catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para descongelar necesitas internet.':'No se pudo descongelar: '+((e&&(e.code||e.message))||e))}}

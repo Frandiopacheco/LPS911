@@ -97,4 +97,85 @@ async function acceptCloses(db, L) {
   return { n, skip };
 }
 
-module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses };
+/* ---------- Congelado automático de la semana (misma regla que «Congelar» en la página) ---------- */
+const weekStart = (p, n) => addD(p.refDate, (n - (p.refWeek || 0)) * 7);
+const weekDays = (p, n) => { const a = weekStart(p, n); return [0, 1, 2, 3, 4, 5].map(i => addD(a, i)); };
+const r2 = v => Math.round((+v || 0) * 100) / 100;
+const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.id).localeCompare(String(b.id));
+function canon(o) { if (o == null) return 'null'; if (Array.isArray(o)) return '[' + o.map(canon).join(',') + ']'; if (typeof o === 'object') return '{' + Object.keys(o).filter(k => k !== 'id').sort().map(k => JSON.stringify(k) + ':' + canon(o[k])).join(',') + '}'; return JSON.stringify(o); }
+
+/* Corte semanal (el mismo de las propuestas de SC, Configuración › Proyecto; por defecto sábado 13:00 de Lima antes del lunes) */
+function propCutTs(p, n) {
+  const dow = parseInt(p.propCutDow, 10); const d = dow >= 0 && dow <= 6 ? dow : 6;
+  const hh = /^\d\d:\d\d$/.test(p.propCutHH || '') ? p.propCutHH : '13:00';
+  const back = ((1 - d) + 7) % 7 || 7;
+  return Date.parse(addD(weekStart(p, n), -back) + 'T' + hh + ':00Z') + LIMA;
+}
+/* Semanas que el servidor debe congelar ahora: la que viene, desde su corte hasta su lunes (inclusive, por si la tarea se atrasó) */
+function weeksToFreeze(p, now = Date.now()) {
+  if (!p || !p.refDate) return [];
+  const today = limaToday(now); const w0 = weekOf(p, today);
+  return [w0, w0 + 1].filter(n => now >= propCutTs(p, n) && today <= weekStart(p, n));
+}
+/* Fecha de terminada por actividad (igual que la página: índice, registros con «terminada» y cierres del capataz; respeta reaperturas) */
+function doneMap({ doneidx = [], daily = [], lives = [] }) {
+  const R = new Map(), D = new Map(), real = new Set();
+  for (const d of doneidx) { for (const [a, v] of Object.entries(d.r || {})) if (v) R.set(a, v); }
+  const add = (id, d) => { const z = R.get(id); if (z && d <= z) return; const c = D.get(id); if (!c || d < c) D.set(id, d); };
+  for (const d of doneidx) for (const [a, v] of Object.entries(d.d || {})) if (v) add(a, v);
+  for (const doc of daily) for (const [id, r] of Object.entries(doc.recs || {})) { if (!r) continue; if (r.status) real.add(doc.date + '|' + id); if (r.done) add(id, doc.date); }
+  for (const lv of lives) { const c = lv.close; if (!c || !c.done || c.status !== 'ok' || real.has(lv.date + '|' + lv.actId)) continue; add(lv.actId, lv.date); }
+  return D;
+}
+const PFIELDS = ['days', 'qty', 'metrado', 'und', 'name', 'order'];
+function propMerge(a, base, off) { const nw = { ...off }; for (const f of PFIELDS) if (canon(a[f] ?? null) !== canon(base ? base[f] ?? null : null)) nw[f] = a[f]; return nw; }
+function propTouch(b, a) {
+  if (!a) return b ? [...(b.days || [])].sort() : []; if (!b) return [...(a.days || [])].sort();
+  const bd = new Set(b.days || []), ad = new Set(a.days || []), T = new Set(); ad.forEach(d => { if (!bd.has(d)) T.add(d); }); bd.forEach(d => { if (!ad.has(d)) T.add(d); });
+  const bq = b.qty || {}, aq = a.qty || {}; ad.forEach(d => { if (bd.has(d) && canon(bq[d] ?? null) !== canon(aq[d] ?? null)) T.add(d); });
+  if ((a.und || '') !== (b.und || '') || (a.metrado ?? null) !== (b.metrado ?? null) || (a.name || '') !== (b.name || '')) ad.forEach(d => T.add(d));
+  return [...T].sort();
+}
+/* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, snap, propOut } como «Congelar».
+   Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
+function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [] }, n, nowIso) {
+  const live = m => [...m.values()].filter(x => !x.arch);
+  const P = live(pisos).sort(byOrder); if (!P.length) return [];
+  const pids = new Set(P.map(p => p.id)); const first = P[0].id;
+  const pisoOfSec = s => (s && s.pisoId && pids.has(s.pisoId) ? s.pisoId : first);
+  const S = live(sectors).sort(byOrder), A = live(ambientes).sort(byOrder), X = live(acts).sort(byOrder);
+  const secById = new Map(S.map(s => [s.id, s])), ambById = new Map(A.map(a => [a.id, a])), actById = new Map(X.map(x => [x.id, x]));
+  const pisoOfAmb = id => { const a = ambById.get(id); return a ? pisoOfSec(secById.get(a.sectorId)) : ''; };
+  const days = new Set(weekDays(project, n));
+  const libDay = (x, d) => { const dn = done.get(x.id); return !!(dn && d > dn); };
+  const out = [];
+  for (const p of P) {
+    const items = {}, snap = {};
+    for (const s of S) {
+      if (pisoOfSec(s) !== p.id) continue;
+      for (const a of A) {
+        if (a.sectorId !== s.id) continue;
+        for (const x of X) {
+          if (x.ambId !== a.id) continue;
+          const d = (x.days || []).filter(z => days.has(z) && !libDay(x, z)).sort();
+          if (!d.length) continue;
+          const it = { sc: x.sc || '', sector: s.code || '', code: a.code || '', amb: a.name || '', act: x.name || '', days: d, ord: (s.order || 0) * 1e6 + (a.order || 0) * 1e3 + (x.order || 0) };
+          if (typeof x.metrado === 'number' && x.metrado > 0) { const qd = {}; let q = 0; d.forEach(z => { const v = (x.qty || {})[z]; if (v != null) { qd[z] = v; q += +v; } }); if (q > 0) { it.q = r2(q); it.qd = qd; it.und = x.und || ''; } }
+          items[x.id] = it;
+        }
+      }
+    }
+    if (!Object.keys(items).length) continue;
+    for (const x of X) if (pisoOfAmb(x.ambId) === p.id) snap[x.id] = (x.days || []).slice().sort();
+    const propOut = [];
+    for (const d of props) for (const [id, it] of Object.entries(d.items || {})) {
+      if (!it || !it.sent) continue; const off = actById.get(id) || null; const x = it.after || off || it.base; if (!x || pisoOfAmb(x.ambId) !== p.id) continue;
+      const pa = it.after && off ? propMerge(it.after, it.base || off, off) : it.after;
+      if (propTouch(off, pa).some(z => days.has(z))) propOut.push((d.sc || d.id) + '/' + id);
+    }
+    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, snap, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut } : {}) } });
+  }
+  return out;
+}
+
+module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays };

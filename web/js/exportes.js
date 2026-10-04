@@ -179,7 +179,7 @@ async function exportXlsx(){
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
     /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
-    {const wsP=ppcSemWs(X,U.week);if(wsP)X.utils.book_append_sheet(wb,wsP,'PPC semanal');}
+    {const wsP=ppcSemWs(X,U.week);if(wsP)X.utils.book_append_sheet(wb,wsP,'PPC semanal');const w2=ppcScWs(X,U.week);if(w2)X.utils.book_append_sheet(wb,w2,'PPC del SC')}
     {const L=restrInScope().filter(q=>!q.actId||S.act.has(q.actId)).sort((a,b)=>(a.status==='lib')-(b.status==='lib')||(a.need||'9').localeCompare(b.need||'9'));X.utils.book_append_sheet(wb,restrWs(X,L,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · al ${fmtD(today)}`),'Restricciones')}
     const buf=X.write(wb,{type:'array',bookType:'xlsx'});
     saveBlob(`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
@@ -192,7 +192,7 @@ async function exportXlsx(){
    · TIPO (código de causa) · CAUSAS · MITIGACIÓN. Pie: confiabilidad de la programación (días cumplidos / días programados). */
 async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   try{await loadXlsx();const X=window.XLSX;const p=P();const ws=ppcSemWs(X,n);if(!ws)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
-    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');
+    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'PPC');{const w2=ppcScWs(X,n);if(w2)X.utils.book_append_sheet(wb,w2,'PPC del SC')}
     const buf=X.write(wb,{type:'array',bookType:'xlsx'});
     saveBlob(`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
@@ -283,6 +283,25 @@ function restrWs(X,list,sub){const p=P();const today=todayIso();
   ws['!autofilter']={ref:X.utils.encode_range({s:{r:hr,c:0},e:{r:Math.max(r-1,hr),c:nc-1}})};
   ws['!cols']=[{wch:5},{wch:11},{wch:6},{wch:8},{wch:20},{wch:30},{wch:18},{wch:16},{wch:18},{wch:40},{wch:18},{wch:18},{wch:11},{wch:11},{wch:11},{wch:16},{wch:9}];
   ws['!rows']=[{hpt:22}];ws['!views']=[{state:'frozen',xSplit:0,ySplit:hr+1}];return ws}
+/** hoja «PPC del SC» (semana congelada n, pisos visibles): por subcontratista el PPC bruto y el PPC del SC (sin lo que no
+    dependía de él) y el detalle de cada no cumplido con su causa y quién responde. La hoja del formato de la empresa no cambia. */
+function ppcScWs(X,n){const docs=visPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();
+  const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
+  const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.z)r.numFmt=o.z;return r};
+  const ws={};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};
+  set(0,0,`PPC DEL SUBCONTRATISTA · SEMANA ${n}`,st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,`${p.fullName||p.name||''} · ${pisoLabel()} · ${fmtD(weekDays(n)[0])} – ${fmtD(weekDays(n)[5])}`,st({nb:true,sz:10,c:'555555'}));
+  set(2,0,'PPC del SC = cumplidos ÷ (compromisos − no imputables al SC + fallas de otras partidas que el ingeniero le hizo contar).',st({nb:true,sz:9,c:'6B7785'}));
+  const H=['SUBCONTRATISTA','COMPROMISOS','CUMPLIDOS','NO CUMPLIDOS','NO IMPUTABLES','DE OTRAS PARTIDAS','PPC BRUTO','PPC DEL SC'];const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});
+  let r=4;H.forEach((t,c)=>set(r,c,t,hs));r++;const M=wkScStats(docs);const pc=st({h:'center',z:'0%'});
+  for(const[sc,o]of Object.entries(M).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name))){if(!o.n&&!o.ext)continue;
+    [conOf(sc).name,o.n,o.ok,o.no,o.nimp,o.ext].forEach((v,c)=>set(r,c,v,c?st({h:'center'}):st({b:true})));set(r,6,o.n?o.ok/o.n:'—',pc);set(r,7,o.ppcSc??'—',st({h:'center',z:'0%',b:true}));r++}
+  r++;set(r,0,'NO CUMPLIDOS',st({nb:true,b:true,sz:12,c:'1F3A4D'}));r++;
+  const H2=['PISO','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','CAUSA','¿IMPUTABLE AL SC?','RESPONDE','¿LE CUENTA?','DETALLE','MITIGACIÓN'];const r0=r;H2.forEach((t,c)=>set(r,c,t,hs));r++;
+  for(const w of docs){const pp=S.pis.get(w.pisoId);for(const[id,it]of Object.entries(w.items||{}).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0))){const q=(w.res||{})[id];if(!q||q.ok!==false)continue;
+    const imp=!resNimp(q);const rs=q.rsc&&q.rsc!==it.sc?conOf(q.rsc).name:imp?conOf(it.sc).name:'Obra (no imputable)';
+    [pp?pp.code:'',(it.code||'')+' '+(it.amb||''),it.act||'',conOf(it.sc).name,q.cnc?cncLabel(q.cnc):'',imp?'Sí':'No',rs,q.rsc&&q.rsc!==it.sc?(q.pc?'Sí':'No'):'',q.note||'',q.mit||''].forEach((v,c)=>set(r,c,v,c>=8||c===2?st({w:true}):c===5||c===7?st({h:'center'}):st()));r++}}
+  if(r===r0+1){set(r,0,'Sin no cumplidos en esta semana.',st({nb:true,c:'777777'}));r++}
+  ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:9}});ws['!cols']=[{wch:22},{wch:22},{wch:34},{wch:20},{wch:24},{wch:12},{wch:22},{wch:10},{wch:36},{wch:30}];ws['!rows']=[{hpt:22}];return ws}
 /** botón de Restricciones: exporta la lista con los filtros que se ven en pantalla */
 async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   try{await loadXlsx();const X=window.XLSX;const p=P();const wb=X.utils.book_new();X.utils.book_append_sheet(wb,restrWs(X,list,sub),'Restricciones');
