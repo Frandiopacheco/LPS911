@@ -154,10 +154,10 @@ function renderLookInner(main){
   renderGrid($('#grid'),days,dset);
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
 }
-let LK_PAST=0;
+let LK_PAST=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
 function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
-  const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
+  const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
   const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
   const conOpts=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';
@@ -210,7 +210,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
         const ambCells=`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length){shown++;rows.push({k:'a:'+a.id,h:`<tr class="ar first"><td class="s0"></td>${ambCells}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`});continue}
         vis.forEach((x,i)=>{
-          shown++;const c=conOf(x.sc);const st=actStats(x);const ds=new Set(x.days||[]);const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
+          shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);const c=conOf(x.sc);const st=actStats(x);const ds=new Set(x.days||[]);const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
           let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
@@ -466,18 +466,20 @@ function endQSel(){const q=qsel;qsel=null;const cells=[...q.cells.values()];if(c
    <button data-do="dist"${avail>0?'':' disabled'}>Repartir el saldo (${fq(Math.max(0,avail))} ${und}) en partes iguales<kbd>${avail>0?fq(Math.floor(avail/ds.length*100)/100):'—'}/día</kbd></button>
    <div class="ph">Misma cantidad cada día</div><div class="qrow"><input id="qper" inputmode="decimal" placeholder="${und||'cant.'}" aria-label="Cantidad por día"><button data-do="per">Aplicar</button></div>
    <hr><button data-do="mark">Solo marcar días (sin cantidad)</button><button data-do="clr" class="danger">Borrar estos días</button>`,
-  {dist:()=>distribute(q.a,ds,null),per:()=>{const v=parseNum($('#qper').value);if(v==null||v<=0){toast('Escribe una cantidad mayor que cero.');requestRender();return}distribute(q.a,ds,v)},
-   mark:()=>{const y=S.act.get(q.a);const days=new Set(y.days||[]);ds.forEach(d=>days.add(d));apply([op('acts',y.id,{...y,days:[...days].sort()})])},
+  {dist:()=>distribute(q.a,ds,null),per:()=>{const v=parseNum($('#qper').value);if(v==null||!Number.isFinite(v)||v<=0){toast(Number.isNaN(v)?'Escribe solo números (por ejemplo 30 o 12.5). No se cambió nada.':'Escribe una cantidad mayor que cero.');requestRender();return}distribute(q.a,ds,v)},
+   mark:()=>{const y=S.act.get(q.a);const days=new Set(y.days||[]);ds.forEach(d=>days.add(d));apply([op('acts',y.id,{...y,days:[...days].sort()})]);reopenAfter(y.id,ds)},
    clr:()=>{let y=S.act.get(q.a);ds.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],'Días borrados')}});
   const qp=$('#qper');if(qp){qp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=per]').click()}});setTimeout(()=>qp.focus(),0)}
   requestRender()}
 function parseNum(t){t=String(t??'').trim().replace(/\s/g,'');if(t==='')return null;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t))t=t.replace(/\./g,'').replace(',','.');else t=t.replace(',','.');const v=Number(t);return isFinite(v)?v:NaN}
-function distribute(aid,ds,per){let x=S.act.get(aid);if(!x)return;const und=x.und||'';ds.forEach(d=>{x=withQty(x,d,null)});let avail=r2(x.metrado-progSum(x));
+/* programar días después de la fecha de terminada la reabre (igual que al marcar días con el mouse) */
+function reopenAfter(aid,ds){const dn=DONE.get(aid);if(dn&&canDaily&&(ds||[]).some(d=>d>dn))reopenDone(aid)}
+function distribute(aid,ds,per){if(per!=null&&!(Number.isFinite(per)&&per>0))return;let x=S.act.get(aid);if(!x)return;const und=x.und||'';ds.forEach(d=>{x=withQty(x,d,null)});let avail=r2(x.metrado-progSum(x));
   if(avail<=0){toast(`Ya está programado todo el metrado (${fq(S.act.get(aid).metrado)} ${und}).`);requestRender();return}
   let vals;if(per==null){const each=Math.floor(avail/ds.length*100)/100;vals=ds.map((d,i)=>i===ds.length-1?r2(avail-each*(ds.length-1)):each)}
   else{vals=[];let left=avail;for(const d of ds){const v=Math.min(per,left);vals.push(r2(v));left=r2(left-v)}}
   let cut=per!=null&&per*ds.length>avail+1e-9;ds.forEach((d,i)=>{x=withQty(x,d,vals[i]>0?vals[i]:null)});
-  apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`)}
+  apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`);reopenAfter(aid,ds.filter((d,i)=>vals[i]>0))}
 function openQEditor(td){if(!td||!canWrite)return;const aid=td.parentElement.dataset.a,d=td.dataset.d;const x=S.act.get(aid);if(!x||!hasM(x))return;
   closeQEditor(true);const cur=(x.qty||{})[d];const others=r2(progSum(x)-(+cur||0));const max=r2(x.metrado-others);
   const r=td.getBoundingClientRect();const box=document.createElement('div');box.className='qed';const w=Math.max(r.width+30,92);
@@ -501,7 +503,7 @@ function commitQ(aid,d,raw){const x=S.act.get(aid);if(!x)return;let v=parseNum(r
   const cur=+(x.qty||{})[d]||0;const max=r2(x.metrado-(progSum(x)-cur));
   if(v!=null&&v>max+1e-9){if(max<=0){toast(`Ya está programado todo el metrado (${fq(x.metrado)} ${und}). Aumenta el metrado total o reduce otro día.`);requestRender();return}
     toast(`Se ajustó a ${fq(max)} ${und}: es el saldo disponible de ${fq(x.metrado)} ${und}.`);v=max}
-  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}apply([op('acts',aid,nx)])}
+  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}apply([op('acts',aid,nx)]);if(v)reopenAfter(aid,[d])}
 function paintCell(td){const a=td.parentElement.dataset.a;if(!a)return;const k=a+'|'+td.dataset.d;if(paint.cells.has(k))return;paint.cells.set(k,{a,d:td.dataset.d});td.classList.toggle('on',paint.on);td.classList.add('rs','re')}
 function endPaint(){
   const p=paint;paint=null;const by={};for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);
@@ -509,7 +511,7 @@ function endPaint(){
     const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,nx))}}
   apply(ops);if(!ops.length)requestRender();deferred=false;
   /* si se programan días después de la fecha en que se marcó terminada, se reabre sola: seguir programándola no debe estar bloqueado */
-  if(p.on)for(const[a,ds]of Object.entries(by)){const dn=DONE.get(a);if(dn&&ds.some(d=>d>dn)&&canDaily)reopenDone(a)}
+  if(p.on)for(const[a,ds]of Object.entries(by))reopenAfter(a,ds)
 }
 /** Toque en un día «liberado» (la actividad está marcada terminada): reabrirla para que sus días vuelvan a contar */
 function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;
@@ -572,6 +574,8 @@ function actMenu(btn,aid){const x=S.act.get(aid);if(!x)return;
    clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),lib:()=>setTimeout(()=>libAsk(aid),0),libx:()=>setTimeout(()=>libExMenu(btn,aid),0),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),
    del:()=>apply([arc('acts',aid)],PM()?`Pedido de quitar “${x.name||'sin nombre'}” (queda en tu propuesta)`:`Actividad “${x.name||'sin nombre'}” eliminada (queda en la Papelera de Configuración)`)})}
 function ambMenu(btn,ambId){const a=S.amb.get(ambId);if(!a)return;
+  if(PM()){const mine=actsOfAmb(ambId).filter(x=>myScsI().includes(x.sc));openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button>${mine.length?'<button data-do="mvd">Mover mis actividades en días…</button>':''}<div class="ptx">Crear, duplicar o mover ambientes lo hace el ingeniero de producción.</div>`,
+    {act:()=>addAct(ambId),mvd:()=>setTimeout(()=>blockMoveDialog(btn,mine.map(x=>x.id),'tus actividades de '+a.code),0)});return}
   openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="mvd">Mover todo el ambiente en días…</button><button data-do="selA">Seleccionar sus actividades</button><button data-do="geo">Ubicar en la lámina (Sectorización)…<kbd>${a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6)?'ubicado':'sin ubicar'}</kbd></button>${canCli()?`<button data-do="buf">Holgura para el cliente…${bufKbd('a',ambId)}</button>`:''}<hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
   {geo:()=>szGoAmb(ambId),buf:()=>setTimeout(()=>bufDialog(btn,'a',ambId,'el ambiente '+a.code),0),mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfAmb(ambId).map(x=>x.id),'el ambiente '+a.code),0),selA:()=>{actsOfAmb(ambId).forEach(x=>{if(canMoveAct(x))SELA.add(x.id)});selBar();requestRender()},act:()=>addAct(ambId),new:()=>addAmbMenu(btn,a.sectorId,a),dup:()=>dupAmb(a),dup0:()=>dupAmb(a,true),
    hito:()=>{const v=$('#hdate').value;const l=($('#hlab').value||'Hito').trim().toUpperCase();if(!v){toast('Elige una fecha.');return}apply([op('ambientes',a.id,{...a,hito:v,hitoLabel:l})],`Hito ${l} de ${a.code}: ${fmtD(v)}`)},
@@ -591,15 +595,16 @@ function nextCode(secId){const s=S.sec.get(secId);const n=siblings('ambientes','
 function addAmbMenu(btn,secId,after){const tpls=P().templates||[];
   openPop(btn,`<div class="ph">Nuevo ambiente</div><button data-do="blank">Vacío (una actividad)</button>${tpls.length?'<hr><div class="ph">Desde plantilla</div>':''}${tpls.map((t,i)=>`<button data-do="tpl" data-i="${i}">${esc(t.name)}<kbd>${t.acts.length} act.</kbd></button>`).join('')}`,
   {blank:()=>createAmb(secId,after,null),tpl:d=>createAmb(secId,after,tpls[+d.i])})}
-function createAmb(secId,after,tpl){const sib=siblings('ambientes','sectorId',secId);const order=after?orderAfter(sib,after):(sib.length?sib[sib.length-1].order+10:10);
+const pmNoStruct=()=>{if(!PM())return false;toast('En modo propuesta solo cambias las actividades de tu partida. Ambientes, sectores y lo demás los edita el ingeniero de producción.');return true};
+function createAmb(secId,after,tpl){if(pmNoStruct())return;const sib=siblings('ambientes','sectorId',secId);const order=after?orderAfter(sib,after):(sib.length?sib[sib.length-1].order+10:10);
   const id=uid('amb');const ops=[op('ambientes',id,{id,sectorId:secId,code:nextCode(secId),name:tpl?tpl.name.toUpperCase():'NUEVO AMBIENTE',order})];
   const lines=(tpl?tpl.acts:[{sc:[...S.con.keys()][0]||'',name:''}]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a);let firstAct=null;
   lines.forEach(({sc,name},i)=>{const aid=uid('act')+i;if(!firstAct)firstAct=aid;ops.push(op('acts',aid,{id:aid,ambId:id,sc:S.con.has(sc)?sc:([...S.con.keys()][0]||''),name,und:'',metrado:null,days:[],order:(i+1)*10}))});
   if(U.collapsed.includes(secId)){U.collapsed=U.collapsed.filter(x=>x!==secId);saveUI()}
   apply(ops,tpl?`Ambiente creado con ${lines.length} actividades`:'Ambiente creado');focusLater(`#grid .ci[data-amb="${id}"][data-f="name"]`)}
-function dupAmb(a,noDays){const sib=siblings('ambientes','sectorId',a.sectorId);const id=uid('amb');const ops=[op('ambientes',id,{...clone(a),id,code:nextCode(a.sectorId),order:orderAfter(sib,a)})];
+function dupAmb(a,noDays){if(pmNoStruct())return;const sib=siblings('ambientes','sectorId',a.sectorId);const id=uid('amb');const ops=[op('ambientes',id,{...clone(a),id,code:nextCode(a.sectorId),order:orderAfter(sib,a)})];
   siblings('acts','ambId',a.id).forEach((x,i)=>{const aid=uid('act')+i;ops.push(op('acts',aid,noDays?{...clone(x),id:aid,ambId:id,days:[],qty:{}}:{...clone(x),id:aid,ambId:id}))});apply(ops,noDays?'Ambiente duplicado sin días':'Ambiente duplicado')}
-function addSector(pid){pid=pid||U.piso||firstPiso();if(!pid){toast('Primero crea un piso.');return}const secs=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid).sort(byOrder);const last=secs[secs.length-1];const id=uid('sec');const n=secs.length+1;
+function addSector(pid){if(pmNoStruct())return;pid=pid||U.piso||firstPiso();if(!pid){toast('Primero crea un piso.');return}const secs=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid).sort(byOrder);const last=secs[secs.length-1];const id=uid('sec');const n=secs.length+1;
   if(U.collapsed.includes(pid)){U.collapsed=U.collapsed.filter(x=>x!==pid);saveUI()}
   apply([op('sectors',id,{id,pisoId:pid,code:'S'+n,name:'Sector '+n,order:last?last.order+10:10})],'Sector creado');focusLater(`#grid .ci[data-sec="${id}"]`)}
 function conByName(n){n=String(n||'').trim().toUpperCase();if(!n)return null;for(const c of S.con.values())if(c.name.toUpperCase()===n)return c.id;return null}
