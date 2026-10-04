@@ -6,7 +6,7 @@ const CU=Object.assign({sec:'',sc:'',show:'all'},store.get('campo',{}));CU.date=
 const openCards=new Set();
 const saveCU=()=>store.set('campo',{sec:CU.sec,sc:CU.sc,show:CU.show,view:CU.view});
 const CAM='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
-const hhmm=t=>{if(!t)return'';const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+const hhmm=t=>{if(!t)return'';const d=new Date(t-LIMA_OFF);return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')};
 function campoDate(){return CU.date||todayIso()}
 function shiftDay(d,dir){let x=addD(d,dir);if(pd(x).getUTCDay()===0)x=addD(x,dir);return x}
 function shrinkPhoto(file){return new Promise((ok,ko)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(u);let W=img.naturalWidth,H=img.naturalHeight,max=1280,q=.62,out='';
@@ -94,7 +94,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
     const rpb=t.closest('[data-crep]');if(rpb&&cur&&canWrite){reprogAct(aid,rpb.dataset.crep,d);return}
     if(t.closest('[data-more]')){openCards.has(aid)?openCards.delete(aid):openCards.add(aid);render();return}
     if(t.closest('[data-cdone]')){const ae=document.activeElement;if(ae&&art.contains(ae)&&ae.blur)ae.blur();setTimeout(()=>{openCards.delete(aid);const c2=recOf(d,aid);if(c2&&c2.status!=='ok'&&!c2.cnc)toast('Guardado sin causa. Puedes agregarla luego con “Editar”.');else toast('Registro guardado');render()},60);return}
-    if(t.closest('[data-cclear]')&&cur){writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),status:null,exec:null,cnc:'',note:'',photos:[]}}});openCards.delete(aid);(cur.photos||[]).forEach(fid=>db&&fcol('fotos').doc(fid).delete().catch(()=>{}));toast('Registro quitado');return}
+    if(t.closest('[data-cclear]')&&cur){writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),status:null,exec:null,cnc:'',note:'',photos:[],clr:true}}});openCards.delete(aid);(cur.photos||[]).forEach(fid=>db&&fcol('fotos').doc(fid).delete().catch(()=>{}));toast('Registro quitado');return}
     const cb=t.closest('[data-ccnc]');if(cb&&cur&&canDaily){const v=cb.dataset.ccnc;writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),cnc:cur.cnc===v?'':v,imp:null}}});return}
     const ib=t.closest('[data-cimp]');if(ib&&cur&&canDaily){const v=ib.dataset.cimp==='1';const def=cncImp(cur.cnc);writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),imp:v===def?null:v}}});return}};
   main.onchange=async e=>{const t=e.target;if(!canDaily)return;

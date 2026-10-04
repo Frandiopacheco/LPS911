@@ -26,7 +26,7 @@ function liveWrite(d,aid,patch,ev,extra){const x=S.act.get(aid);if(!x||!db)retur
 /* lo que el capataz propuso y nadie confirmó en 2 días queda registrado tal cual */
 const autoDone=new Set();
 function autoAccept(){if(!canDaily||!db)return;const lim=addD(todayIso(),-2);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.status||lv.date>lim||autoDone.has(lv.id)||lv._pend)continue;autoDone.add(lv.id);if(recReal(lv.date,lv.actId))continue;const x=S.act.get(lv.actId);if(!x)continue;
+  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.status||lv.date>lim||autoDone.has(lv.id)||lv._pend)continue;autoDone.add(lv.id);if(recReal(lv.date,lv.actId))continue;{const doc=DAY.get(dayId(lv.date,lv.pisoId));const rr=doc&&doc.recs&&doc.recs[lv.actId];if(rr&&rr.clr)continue}const x=S.act.get(lv.actId);if(!x)continue;
     writeDaily(lv.date,lv.pisoId,{recs:{[lv.actId]:{...baseRec(lv.date,x,null),status:c.status,cnc:c.cnc||'',note:c.note||'',done:!!c.done,photos:lv.photos||[],prop:{status:c.status,cnc:c.cnc||'',by:c.by,byName:c.n,ts:c.t},auto:true,by:c.by||'',byName:c.n||'',ts:c.t||NOW()}}})}}
 function confirmProp(d,aid){const x=S.act.get(aid);const cur=recOf(d,aid);if(!x||!cur||!cur._prop)return;writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:cur.status}}})}
 
@@ -186,7 +186,7 @@ const dashOn=m=>!!m&&(m.role==='admin'||(m.role==='editor'?m.dash!==false:m.dash
 const canDash=()=>!!me&&(isAdmin||isOwnerEmail(me.email)||dashOn(MEM.get(me.email)||{role:me.role}));
 const DB_={pid:'',tv:false,tick:null};
 const dashLate=()=>{const v=String(P().dashLate||'09:00');return/^\d\d:\d\d$/.test(v)?v:'09:00'};
-const nowHM=()=>{const n=new Date(NOW());return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')};
+const nowHM=()=>{const n=new Date(NOW()-LIMA_OFF);return String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')};
 function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.__plano&&window.__plano.novaSet?window.__plano:null;const nv=API?API.novaSet(d):new Set();
   const items=[];for(const x of S.act.values()){if(!schedOn(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
   return items}
@@ -210,7 +210,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const zoned=API?new Set(visPisos().flatMap(p=>[...API.zonedSet(p.id)])):new Set();const unz=API?act.filter(i=>!zoned.has(i.x.id)):[];
   const cross=API&&API.crossOf?visPisos().flatMap(p=>API.crossOf(p.id).map(c2=>({...c2,p}))):[];
   /* restricciones */
-  const RS=restrInScope().filter(r=>r.status!=='lib');const d7=addD(d,7);
+  const RS=restrInScope().filter(rOpenC);const d7=addD(d,7);
   const rToday=RS.filter(r=>{const x=S.act.get(r.actId);return x&&schedOn(x,d)});
   const rLate=RS.filter(r=>r.need&&r.need<d);
   const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>d&&z<=d7)});

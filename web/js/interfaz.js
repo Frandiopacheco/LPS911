@@ -68,14 +68,14 @@ function topDateApply(){const m=dateMode();if(document.body.dataset.dmode!==m)do
   $('#wprev').setAttribute('aria-label','Día anterior');$('#wnext').setAttribute('aria-label','Día siguiente');
   $('#wnext').disabled=U.tab==='ind'&&d>=today;$('#wtoday').disabled=d===today}
 function navDate(v){const m=dateMode();if(m==='week'){U.week+=v;render();return}if(m!=='day')return;
-  const d=shiftDay(curDay(),v);if(U.tab==='ind'&&d>todayIso())return;daySet(d);render()}
+  const d=shiftDay(curDay(),v);if(U.tab==='ind'&&d>todayIso())return;if(U.tab==='mapa')AUTO_OFF=true; /* elegido a mano: no volver al día automático */daySet(d);render()}
 function goToday(){if(U.tab==='mapa')AUTO_OFF=true;DAY_SEL=null;U.week=curWeek();render()}
 /* El plan diario se arma el día anterior: al entrar abre en el siguiente día hábil (si no se eligió otro día).
    Al salir del Plan diario, si se quedó en ese día automático, las demás pestañas vuelven a hoy. «Hoy» lo desactiva. */
-let AUTO_D=null,AUTO_OFF=false;
+let AUTO_D=null,AUTO_OFF=false,AUTO_W=null;
 function dayAuto(){if(!me||me.role==='capataz')return;
-  if(U.tab==='mapa'){if(!DAY_SEL&&!AUTO_OFF){const n=wshift(todayIso(),1);DAY_SEL=n;U.week=weekOf(n);AUTO_D=n}}
-  else{AUTO_OFF=false;if(AUTO_D&&DAY_SEL===AUTO_D){DAY_SEL=null;U.week=curWeek()}AUTO_D=null}}
+  if(U.tab==='mapa'){if(!DAY_SEL&&!AUTO_OFF){const n=wshift(todayIso(),1);AUTO_W=U.week;DAY_SEL=n;U.week=weekOf(n);AUTO_D=n}}
+  else{AUTO_OFF=false;if(AUTO_D&&DAY_SEL===AUTO_D){DAY_SEL=null;U.week=AUTO_W!=null?AUTO_W:curWeek()}AUTO_D=null;AUTO_W=null}} /* al salir vuelve a la semana que se veía antes */
 $('#wprev').onclick=()=>navDate(-1);$('#wnext').onclick=()=>navDate(1);$('#wtoday').onclick=goToday;
 {const lb=$('.wk .lbl');if(lb){lb.title='Volver a hoy';lb.style.cursor='pointer';lb.onclick=goToday}}
 

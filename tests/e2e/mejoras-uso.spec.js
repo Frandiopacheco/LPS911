@@ -210,6 +210,10 @@ test('Lookahead: el Excel se puede filtrar y repite el ambiente en cada fila', a
   expect(ws['!autofilter'].ref).toMatch(/^A9:J\d+$/);
   const rows = [];for (let r = 10; r < 20; r++) rows.push([v('A' + r), v('B' + r), v('E' + r)]);
   expect(rows).toContainEqual(['SC TARRAJEO', 'A-1', 'Tarrajeo de muros']);
-  for (const n of ['Restricciones', 'Avance diario', 'PPC semanal']) expect(wb.Sheets[n]['!autofilter'], n).toBeTruthy();
+  // el mismo libro lleva el PPC semanal (formato de la empresa) y las restricciones; ya no lleva Leyenda ni Avance diario
+  expect(wb.SheetNames).toEqual(['Lookahead', 'PPC semanal', 'Restricciones']);
+  for (const n of ['Restricciones', 'PPC semanal']) expect(wb.Sheets[n]['!autofilter'], n).toBeTruthy();
+  expect(String((wb.Sheets['PPC semanal'].I2 || {}).v)).toContain('PORCENTAJE DE PLAN CUMPLIDO');
+  expect((wb.Sheets.Restricciones.A1 || {}).v).toBe('RESTRICCIONES');
   noErrors(errors, 'excel lookahead');
 });

@@ -1452,3 +1452,28 @@ body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 .pubb.late{border:1px solid var(--bad);background:var(--bad-soft,#fdecec);color:var(--bad)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pubb.late{background:#3a1d1d;color:#ff8a80}}
 :root[data-theme="dark"] .pubb.late{background:#3a1d1d;color:#ff8a80}
+/* Restricciones: columnas agrupadas para que la tabla entre sin desplazarse a los lados */
+table.rtab{width:100%;table-layout:auto}
+table.rtab td{vertical-align:top}
+table.rtab .ci{width:100%;min-width:0;box-sizing:border-box}
+table.rtab .rc-st{width:118px;min-width:110px}
+table.rtab .rc-act{min-width:220px;width:26%}
+table.rtab .rc-tp{min-width:140px;width:15%}table.rtab .rc-tp select+select{margin-top:4px}
+table.rtab .rc-ds{min-width:190px;width:24%}table.rtab .rc-ds .rph{margin-top:4px}
+table.rtab .rc-rp{min-width:110px;width:12%}
+table.rtab .rc-dt{width:150px;min-width:140px}
+table.rtab .rc-x{width:30px}
+.rdl{display:block;font-size:11px;color:var(--muted);font-weight:600}.rdl+.rdl{margin-top:4px}.rdl .ci{display:block;margin-top:1px}
+/* «Ver en el plano»: el ambiente parpadea unos segundos */
+.pvs .flz{animation:flz 1s ease-in-out infinite}
+@keyframes flz{0%,100%{stroke-opacity:1;fill-opacity:.28}50%{stroke-opacity:.25;fill-opacity:.05}}
+@media (prefers-reduced-motion:reduce){.pvs .flz{animation:none}}
+/* Lookahead: fila resaltada al tocar su n.º de ítem */
+#grid tr.rsel td:not(.on){box-shadow:inset 0 0 0 9999px rgba(255,193,7,.22)}
+#grid tr.rsel td.s0{box-shadow:inset 4px 0 0 #f9a825,inset 0 0 0 9999px rgba(255,193,7,.32)}
+#grid tr.rsel .anum{background:#f9a825;color:#1b1400;border-radius:6px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #grid tr.rsel td{box-shadow:inset 0 0 0 9999px rgba(255,193,7,.14)}}
+:root[data-theme="dark"] #grid tr.rsel td{box-shadow:inset 0 0 0 9999px rgba(255,193,7,.14)}
+/* Lookahead: día que no fue por el plan diario (↷) */
+#grid td.d.rpl{background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(198,40,40,.12) 4px 6px)}
+#grid td.d .dm.rp{color:#c62828;font-weight:800}

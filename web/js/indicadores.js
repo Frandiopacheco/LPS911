@@ -21,7 +21,7 @@ function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];con
   dayDataArch(dates,vset,rows);
   extras.push(...npItems(ds,vset));
   const z=()=>({prog:0,ver:0,ok:0,partial:0,no:0,nimp:0});const add=(o,r)=>{o.prog++;if(r.rc){o.ver++;o[r.rc.status]++;if(impOf(r.rc)===false)o.nimp++}};
-  rows.forEach(r=>{add(scA[r.sc]=scA[r.sc]||z(),r);add(piA[r.p.id]=piA[r.p.id]||z(),r);add(tot,r);if(r.rc&&r.rc.status!=='ok'){const k=r.rc.cnc||'Sin causa registrada';cnc[k]=(cnc[k]||0)+1}});
+  rows.forEach(r=>{add(scA[r.sc]=scA[r.sc]||z(),r);add(piA[r.p.id]=piA[r.p.id]||z(),r);add(tot,r);if(r.rc&&r.rc.status!=='ok'){const k=cncKey(r.rc.cnc);cnc[k]=(cnc[k]||0)+1}});
   return{rows,extras,scA,piA,cnc,tot}}
 function cumplTable(entries,label){return`<div class="tscroll"><table class="t ctab"><thead><tr><th></th><th class="r">Prog.</th><th class="r hm">Verif.</th><th class="r">✓</th><th class="r hm">½</th><th class="r hm">✗</th><th class="r hm">Sin verif.</th><th class="r hm" title="Parcial o No cumplido por causas que no dependen del subcontratista">No imputables</th><th>PPC bruto</th><th title="Sin contar los incumplimientos no imputables al subcontratista">PPC del SC</th></tr></thead><tbody>${entries.map(([k,o])=>{const v=o.ver?o.ok/o.ver:null;const vs=pscOf(o);
   return`<tr><td>${label(k)}</td><td class="r">${o.prog}</td><td class="r hm">${o.ver}</td><td class="r ok">${o.ok||''}</td><td class="r pa hm">${o.partial||''}</td><td class="r no hm">${o.no||''}</td><td class="r mu hm">${o.prog-o.ver||''}</td><td class="r mu hm">${o.nimp||''}</td><td>${v==null?'<span class="mu">sin verificar</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?(v==null?'':'<span class="mu">—</span>'):`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
@@ -84,23 +84,25 @@ function renderInd(main){
   const vp=visPisos();const vset=new Set(vp.map(p=>p.id));
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
   const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
-  const last=ppcs[ppcs.length-1];const avg=ppcs.length?ppcs.reduce((s,x)=>s+x.ppc,0)/ppcs.length:null;
-  const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=r.cnc||'Sin causa registrada';cncC[k]=(cncC[k]||0)+1}}));
+  /* el promedio y la «última» solo con semanas evaluadas por completo; una a medias se muestra aparte como parcial */
+  const full=ppcs.filter(x=>x.ev>=x.n);const part=ppcs.length&&ppcs[ppcs.length-1].ev<ppcs[ppcs.length-1].n?ppcs[ppcs.length-1]:null;
+  const last=full[full.length-1];const avg=full.length?full.reduce((s,x)=>s+x.ppc,0)/full.length:null;
+  const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=cncKey(r.cnc);cncC[k]=(cncC[k]||0)+1}}));
   const cncL=Object.entries(cncC).sort((a,b)=>b[1]-a[1]);
   const wSel=docs.filter(w=>w.n===U.week);const scP={};
   for(const w of wSel)for(const[id,it]of Object.entries(w.items||{})){const o=scP[it.sc]=scP[it.sc]||{n:0,ok:0,nimp:0};o.n++;const rr=(w.res||{})[id];if(rr?.ok===true)o.ok++;else if(rr?.ok===false&&!(rr.imp!=null?rr.imp:cncImp(rr.cnc)))o.nimp++}
   const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
-  const pend=restrInScope().filter(r=>r.status!=='lib').length;
+  const pend=restrInScope().filter(rOpenC).length;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
-   <div class="tile hl"><span class="k">PPC semanal (oficial) · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span></div>
-   <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${ppcs.length?` <small>${ppcs.length} sem</small>`:''}</span></div>
-   <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${ppcs.length}</span></div>
+   <div class="tile hl"><span class="k">PPC semanal (oficial) · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span>${part?`<span class="mu" style="font-size:12px">Sem ${part.wk} en evaluación: ${part.ev} de ${part.n} evaluados</span>`:''}</div>
+   <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${full.length?` <small>${full.length} sem</small>`:''}</span></div>
+   <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${full.length}${part?' <small>+1 en curso</small>':''}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
   if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>PPC semanal</b> y evalúas cada uno con Sí / No.</div>`;
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
   const vActs=[...S.act.values()].filter(x=>vset.has(pisoOfAmb(x.ambId)));const dayRows=[];const dCnc={};let nExtra=0;
-  for(const d of dd){let sch=0,okc=0,reg=0;for(const x of vActs){if(!(x.days||[]).includes(d))continue;sch++;const rc=recOf(d,x.id);if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc)dCnc[rc.cnc]=(dCnc[rc.cnc]||0)+1}}
+  for(const d of dd){let sch=0,okc=0,reg=0;for(const x of vActs){if(!(x.days||[]).includes(d))continue;sch++;const rc=recOf(d,x.id);if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc){const k=cncKey(rc.cnc);dCnc[k]=(dCnc[k]||0)+1}}}
     nExtra+=npItems([d],vset).length;
     if(reg)dayRows.push({label:DL[(pd(d).getUTCDay()+6)%7]+' '+d.slice(8),v:okc/reg,sub:`${okc} de ${reg} verificadas · ${sch} programadas`})}
   h+=`<div class="card chart"><h2>PPC diario (alerta · registros de campo) <span class="sub">% de lo verificado en campo marcado “Cumplido” · semanas ${U.week-2}–${U.week}${nExtra?` · ${nExtra} trabajos no programados`:''}</span></h2><div class="pad tscroll">${dayRows.length?svgBarsV(dayRows):'<div class="empty">Aún no hay registros de campo en estas semanas. Se llenan desde la pestaña <b>Campo</b>.</div>'}</div></div>`;
@@ -135,3 +137,5 @@ function npIndCard(L,d){const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
     ${svgBarsH(Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,n])=>({label:conOf(sc).name,v:n,color:conOf(sc).color})),v=>v+'')}
     <div class="tscroll"><table class="t ctab rt"><thead><tr><th>Ubicación</th><th>Qué se hacía</th><th>Subcontratista</th><th>Registró</th><th class="r">Fotos</th></tr></thead><tbody>
     ${L.map(i=>`<tr><td class="mono" data-l="Ubicación">${i.p?esc(i.p.code)+' · ':''}${i.a?esc(i.a.code+' '+i.a.name):'—'}</td><td class="wrapc lead">${esc(i.e.desc||'')}${i.e.exec!=null?` <span class="mu">· ${fq(i.e.exec)} ${esc(i.e.und||'')}</span>`:''}</td><td data-l="Subcontratista">${scLabel(i.e.sc)}</td><td class="mu" data-l="Registró">${esc(i.e.byName||i.e.by||'')} · ${hhmm(i.e.ts)}</td><td class="r" data-l="Fotos">${(i.e.photos||[]).length||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
+/* causas: una sola barra por causa del cuadro de la empresa (las antiguas con otro nombre se juntan por su código) */
+function cncKey(c){if(!c)return'Sin causa registrada';const o=cncStd(c);if(o)return o.c+' · '+o.n;const g=CNC_GUESS.find(([re])=>re.test(c));const so=g&&CNC_STD.find(x=>x.c===g[1]);return so?so.c+' · '+so.n:c}

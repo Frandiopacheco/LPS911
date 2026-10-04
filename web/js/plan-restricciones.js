@@ -3,7 +3,7 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 /* ================= PLAN SEMANAL ================= */
 function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
-  for(const{p,secs}of tree()){if(pid&&p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts){const d=(x.days||[]).filter(z=>days.has(z)).sort();if(d.length){const it={sc:x.sc,sector:s.code,code:a.code,amb:a.name,act:x.name,days:d,ord:s.order*1e6+a.order*1e3+x.order};if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}o[x.id]=it}}}
+  for(const{p,secs}of tree()){if(pid&&p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts){const d=(x.days||[]).filter(z=>days.has(z)&&!libDay(x,z)).sort(); /* lo ya terminado no es compromiso */if(d.length){const it={sc:x.sc,sector:s.code,code:a.code,amb:a.name,act:x.name,days:d,ord:s.order*1e6+a.order*1e3+x.order};if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}o[x.id]=it}}}
   return o}
 /* PPC semanal oficial de la semana n en los pisos visibles (lo mismo que Indicadores › Semanal y el Tablero) */
 function ppcWeekAgg(n,vset){const o={n:0,ok:0,ev:0};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vset.has(w.pisoId))continue;const st=ppcOf(w);if(!st)continue;o.n+=st.n;o.ok+=st.ok;o.ev+=st.ev}return o.ev>0?{...o,ppc:o.ok/o.n}:null}
@@ -72,7 +72,7 @@ function renderPlan(main){
 }
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
   const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);if(!reg.length)return null;
-  const exec=r2(reg.reduce((s,r)=>s+(+r.exec||0),0));const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
+  const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
   const x=S.act.get(id);const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
   const allC=it.days.every(d=>recOf(d,id));let ok=null;
   if(it.q){if(exec>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
@@ -94,7 +94,7 @@ function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(co
 function AREA(){return!!me&&me.role==='area'}
 const myArea=r=>AREA()&&!!me.area&&!!r&&r.area===me.area&&grpOf(r)==='area';
 const rCanAdd=()=>!!canWrite&&!PM()||SCK()||(AREA()&&!!me.area);
-function rCanEd(r){if(canWrite&&!PM())return true;if(myArea(r))return true;return SCK()&&!!r&&r.by===me.email&&myScsI().includes(r.sc)&&r.status!=='lib'}
+function rCanEd(r){if(canWrite&&!PM())return true;if(myArea(r))return true;return SCK()&&!!r&&r.by===me.email&&myScsI().includes(r.sc)&&r.status!=='lib'&&(!r.actId||(S.act.get(r.actId)||{}).sc===r.sc)}
 const rCanLib=r=>!!canWrite&&!PM()||myArea(r);
 const rCanDel=r=>!!canWrite&&!PM()||(SCK()&&rCanEd(r));
 function myActs(){const mine=new Set(myScsI());return[...S.act.values()].filter(x=>mine.has(x.sc))}
@@ -103,6 +103,9 @@ function scRestrPick(btn){const L=myActs();if(!L.length){toast('No tienes activi
   openPop(btn,`<div class="ph">Nueva restricción</div><div class="ptx">¿Qué actividad de tu partida está restringida?</div><div class="qrow"><select id="rpick" style="max-width:320px" aria-label="Actividad">${use.map(o=>`<option value="${o.x.id}">${esc((o.p?o.p.code+' · ':'')+o.a.code)} · ${esc(o.x.name||'(sin nombre)')}${o.ini!=='9'?' · '+fmtD(o.ini):''}</option>`).join('')}</select><button data-do="go">Crear</button></div>`,
   {go:()=>{const v=($('#rpick')||{}).value;if(v)newRestr(v)}})}
 function restrPiso(r){return r.actId&&S.act.has(r.actId)?pisoOfAct(r.actId):(r.pisoId||'')}
+/* restricción de una actividad que está en la papelera: no cuenta como pendiente (se ve marcada en la lista) */
+const rArch=r=>!!(r&&r.actId&&!S.act.has(r.actId)&&ARCH.act&&ARCH.act.has(r.actId));
+const rOpenC=r=>r.status!=='lib'&&!rArch(r);
 function restrInScope(){return[...S.res.values()].filter(r=>{if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
 function actOptions(sel,only){let h=only?'':'<option value="">— Sin actividad —</option>';for(const{p,secs}of visTree())for(const{s,ambs}of secs)for(const{a,acts:all}of ambs){const acts=only?all.filter(x=>only.has(x.sc)):all;if(!acts.length)continue;h+=`<optgroup label="${esc((U.piso?'':p.code+' · ')+a.code+' · '+a.name)}">`+acts.map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'(sin nombre)')} — ${esc(conOf(x.sc).name)}</option>`).join('')+'</optgroup>'}
   if(sel&&S.act.has(sel)&&!h.includes(`value="${sel}"`)){const x=S.act.get(sel);h+=`<option value="${sel}" selected>${esc(x.name)} (otro piso)</option>`}return h}
@@ -147,11 +150,11 @@ function renderRestr(main){
   if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);
   if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);if(AREA()&&U.rMine!==false&&me.area)list=list.filter(r=>myArea(r));
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
-  const pend=all.filter(r=>r.status!=='lib');const late=pend.filter(r=>r.need&&r.need<today);
+  const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
   const libW=all.filter(r=>r.status==='lib'&&r.freed&&weekOf(r.freed)===U.week).length;
   const showP=!U.piso&&S.pis.size>1;const mob=isMob();
-  let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':'')}<div class="tiles">
+  let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,'<button class="ib" id="rxls" title="Exportar a Excel la lista con los filtros de abajo">Exportar Excel</button>'+(rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':''))}<div class="tiles">
    <div class="tile"><span class="k">Pendientes</span><span class="v">${pend.length}<small> · ${pend.filter(r=>grpOf(r)==='campo').length} campo · ${pend.filter(r=>grpOf(r)==='area').length} otras áreas</small></span></div>
    <div class="tile"><span class="k">Vencidas</span><span class="v" style="color:${late.length?'var(--bad)':'inherit'}">${late.length}</span></div>
    <div class="tile"><span class="k">Afectan la ventana</span><span class="v">${inWin.length}<small> · sem ${U.week}–${U.week+U.win-1}</small></span></div>
@@ -165,9 +168,9 @@ function renderRestr(main){
    ${AREA()&&me.area?`<span class="seg" id="rmine"><button data-m="1" class="${U.rMine!==false?'on':''}">De ${esc(me.area)}</button><button data-m="0" class="${U.rMine===false?'on':''}">Todas</button></span>`:''}
    ${U.rAct?`<span class="pill neu">Filtrado: ${esc(S.act.get(U.rAct)?.name||'actividad')} <button class="ab" id="rclr" aria-label="Quitar filtro">&times;</button></span>`:''}
    </div>${rFBar(all)}${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
-  ${mob?'<div class="rcards">':`<div class="tscroll"><table class="t"><thead><tr><th style="min-width:105px">Estado</th>${showP?'<th>Piso</th>':''}<th style="min-width:190px">Actividad</th><th style="min-width:70px">Sem.</th><th style="min-width:130px">Tipo</th><th style="min-width:140px">Clase / área</th><th style="min-width:160px">Descripción</th><th style="min-width:110px">Fotos</th><th style="min-width:100px">Responsable</th><th style="min-width:125px">Requerida</th><th style="min-width:125px">Liberada</th><th></th></tr></thead><tbody>`}`;
+  ${mob?'<div class="rcards">':`<div class="tscroll"><table class="t rtab"><thead><tr><th class="rc-st">Estado</th><th class="rc-act">Actividad</th><th class="rc-tp">Tipo y clase</th><th class="rc-ds">Qué falta</th><th class="rc-rp">Responsable</th><th class="rc-dt">Fechas</th><th class="rc-x"></th></tr></thead><tbody>`}`;
   const emp=`<div class="empty">${all.length?'No hay restricciones en este filtro.':'Todavía no hay restricciones. Regístralas aquí o desde el menú ⋮ de una actividad en el lookahead.'}</div>`;
-  if(!list.length)h+=mob?emp:`<tr><td colspan="12">${emp}</td></tr>`;
+  if(!list.length)h+=mob?emp:`<tr><td colspan="7">${emp}</td></tr>`;
   const SCm=SCK()?new Set(myScsI()):null;const aOpts={};
   const gsel=(r,fk)=>{const g=grpOf(r);const ar=restrAreasL();const ro=rCanEd(r)&&!AREA()?'':' disabled';return`<select class="ci" ${fk('grp')}${ro}><option value="campo"${g==='campo'?' selected':''}>Operativa de campo</option><option value="area"${g==='area'?' selected':''}>Otras áreas</option></select>${g==='area'?`<select class="ci" ${fk('area')}${ro}><option value="">— área —</option>${[...new Set([...ar,r.area].filter(Boolean))].map(t=>`<option${t===r.area?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`};
   /* obra grande: se dibujan por tandas (cada fila tiene varios campos editables) */
@@ -185,18 +188,14 @@ function renderRestr(main){
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label></div>`
         :`<div>${esc(r.type||'')}${r.desc?' · '+esc(r.desc):''}</div>${r.resp?`<div class="mu" style="font-size:12.5px">Responsable: ${esc(r.resp)}</div>`:''}`}
         ${rthumbs(r)}<div class="mu" style="font-size:12px">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div><div class="rbt">${rCanLib(r)?`<button class="ib${lib?'':' pri'}" data-rtog="${r.id}">${lib?'Reabrir':'Liberar hoy'}</button>`:''}${ce?`<button class="ib" data-ropen="${r.id}">${op_?'Listo':'Editar'}</button>${op_&&rCanDel(r)?`<button class="ib" data-rdel="${r.id}">Eliminar</button>`:''}`:''}</div></article>`;continue}
-    h+=`<tr class="${isLate?'late':''}"><td><select class="ci" ${fk('status')}${roL}><option value="pend"${r.status!=='lib'?' selected':''}>Pendiente</option><option value="lib"${r.status==='lib'?' selected':''}>Liberada</option></select>${isLate?'<div><span class="pill bad">Vencida</span></div>':''}</td>
-    ${showP?`<td class="mono">${esc(S.pis.get(restrPiso(r))?.code||'—')}</td>`:''}
-    <td><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?'<div class="rloc">La actividad ya no está en el lookahead</div>':''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
-    <td class="mono" style="white-space:nowrap">${w!=null?'Sem '+w:'—'}</td>
-    <td><select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></td>
-    <td>${gsel(r,fk)}</td>
-    <td><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></td>
-    <td>${rthumbs(r)}</td>
-    <td><input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro}></td>
-    <td><input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></td>
-    <td><input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></td>
-    <td>${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
+    /* columnas agrupadas para que la tabla entre en la pantalla sin desplazarse a los lados */
+    h+=`<tr class="${isLate?'late':''}"><td class="rc-st"><select class="ci" ${fk('status')}${roL}><option value="pend"${r.status!=='lib'?' selected':''}>Pendiente</option><option value="lib"${r.status==='lib'?' selected':''}>Liberada</option></select>${isLate?'<div><span class="pill bad">Vencida</span></div>':''}<div class="rloc mono">${showP?esc(S.pis.get(restrPiso(r))?.code||'—')+' · ':''}${w!=null?'Sem '+w:''}</div></td>
+    <td class="rc-act"><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?`<div class="rloc">${rArch(r)?'<span class="pill neu">Actividad en la papelera · no cuenta como pendiente</span>':'La actividad ya no está en el lookahead'}</div>`:''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
+    <td class="rc-tp"><select class="ci" ${fk('type')}${ro} aria-label="Tipo">${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select>${gsel(r,fk)}</td>
+    <td class="rc-ds"><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro} aria-label="Descripción">${rthumbs(r)}</td>
+    <td class="rc-rp"><input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro} aria-label="Responsable"></td>
+    <td class="rc-dt"><label class="rdl">Requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label><label class="rdl">Liberada<input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></label></td>
+    <td class="rc-x">${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
   h+=mob?'</div>'+more+'</div></div></div>':'</tbody></table></div>'+more+'</div></div></div>';
   main.innerHTML=h;
@@ -204,13 +203,14 @@ function renderRestr(main){
   {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
   $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;U.rLim=0;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
+  {const xb=$('#rxls',main);if(xb)xb.onclick=()=>{const F=U.rF||{};const fs=[U.rfilter==='pend'?'Pendientes':U.rfilter==='lib'?'Liberadas':'Todas',F.aff&&'Afecta a '+F.aff,F.reg&&'Registró '+F.reg,F.who&&'La libera '+F.who,(F.c1||F.c2)&&`Registrada ${F.c1?fmtD(F.c1):'…'}–${F.c2?fmtD(F.c2):'…'}`,(F.l1||F.l2)&&`Liberada ${F.l1?fmtD(F.l1):'…'}–${F.l2?fmtD(F.l2):'…'}`].filter(Boolean).join(' · ');restrXlsx(list,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · ${fs}`)}}
   {const fc=$('#rfclr',main);if(fc)fc.onclick=()=>{U.rF={};U.rLim=0;render()}}
   {const mm=$('#rmore',main);if(mm)mm.onclick=()=>{U.rLim=(U.rLim||150)+300;render()}}
   const rc=$('#rclr',main);if(rc)rc.onclick=()=>{U.rAct=null;render()};
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
-    const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada');if(db)fcol('fotos').doc(fid).delete().catch(()=>{})}return}
-    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;if(SCK()&&!confirm('¿Eliminar esta restricción?'))return;(r.photos||[]).forEach(fid=>db&&fcol('fotos').doc(fid).delete().catch(()=>{}));apply([op('restr',r.id,null)],'Restricción eliminada');return}
+    const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada')}return} /* la foto queda guardada: deshacer la recupera */
+    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;if(SCK()&&!confirm('¿Eliminar esta restricción?'))return;apply([op('restr',r.id,null)],'Restricción eliminada');return} /* sus fotos se conservan: deshacer la devuelve completa */
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const rm=e.target.closest('[data-rmap]');if(rm){gotoPlano(rm.dataset.rmap);return}
@@ -224,7 +224,7 @@ function renderRestr(main){
         const r2=S.res.get(r.id)||r;apply([op('restr',r.id,{...r2,photos:[...(r2.photos||[]),fid]})]);toast(`Foto agregada (${Math.round(data.length*.75/1024)} KB)`)}catch(err){toast('No se pudo guardar la foto: '+(err.code||err.message))}return}
     if(!t.dataset.r)return;const r=S.res.get(t.dataset.r);if(!r||!rCanEd(r))return;const f=t.dataset.f;if(SCK()&&(f==='status'||f==='freed'))return;if(AREA()&&(f==='grp'||f==='area'))return;const n={...r,[f]:t.value};
     if(SCK()&&f==='actId'){const x=S.act.get(t.value);if(!x||!myScsI().includes(x.sc)){toast('Elige una actividad de tu partida.');render();return}n.sc=x.sc}if(f==='grp'&&t.value==='campo')n.area='';
-    if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';
+    if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';if(f==='freed'&&!t.value&&r.status==='lib')n.status='pend';if(f==='freed'&&t.value&&t.value>todayIso()){toast('La fecha de liberación no puede ser futura.');render();return}
     if(n.status==='lib'&&r.status!=='lib'){n.libBy=me.email;n.libN=me.name||me.email}if(n.status!=='lib'&&r.status==='lib'){n.libBy='';n.libN=''}if(f==='actId'&&t.value)n.pisoId=pisoOfAct(t.value);
     t.dataset.o=t.value;apply([op('restr',r.id,n)])};
   main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.alz)actFill(e.target);if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};

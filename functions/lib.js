@@ -53,14 +53,15 @@ function closesToAccept(lives, dailyById, acts, today) {
     if (!c || !c.status || !lv.date || lv.date > lim) continue;
     const doc = dailyById.get(lv.date + '_' + lv.pisoId);
     const r = doc && doc.recs && doc.recs[lv.actId];
-    if (r && r.status) continue;
+    if (r && (r.status || r.clr)) continue; // ya registrado, o el ingeniero lo quitó a propósito
     const x = acts.get(lv.actId);
     if (!x) continue;
     const hasM = typeof x.metrado === 'number' && x.metrado > 0;
     out.push({
       date: lv.date, pisoId: lv.pisoId, actId: lv.actId,
       rec: {
-        status: c.status, prog: hasM ? ((x.qty || {})[lv.date] ?? null) : null, und: x.und || '', exec: null,
+        status: c.status, prog: hasM ? ((x.qty || {})[lv.date] ?? null) : null, und: x.und || '',
+        exec: c.status === 'ok' && hasM ? ((x.qty || {})[lv.date] ?? null) : null,
         cnc: c.cnc || '', imp: null, note: c.note || '', late: false, done: !!c.done, photos: lv.photos || [],
         prop: { status: c.status, cnc: c.cnc || '', by: c.by || '', byName: c.n || '', ts: c.t || 0 },
         sc: x.sc || '', nm: x.name || '', ambId: x.ambId || '',
