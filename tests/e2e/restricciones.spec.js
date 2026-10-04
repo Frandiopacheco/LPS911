@@ -34,3 +34,18 @@ test('filtrar por a quién afecta, quién registró, quién libera y fechas', as
   await expect.poll(() => page.evaluate(() => window.__dbGet('restr', 'rA').libN)).toBeTruthy();
   noErrors(errors, 'restricciones filtros');
 });
+
+test('«Ver en el lookahead» resalta la fila y «Ver en el plano» lleva a su zona', async ({ page }) => {
+  const { LAMINA } = await import('./lamina.js');
+  const AMB = [['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }],
+    ['ambientes', 'a2', { sectorId: 's1', code: 'A-2', name: 'Dpto 102', order: 1, geo: { L1: [400, 100, 600, 100, 600, 300, 400, 300] } }]];
+  const errors = await openApp(page, { tab: 'restr', extra: [...LAMINA, ...AMB] });
+  await page.locator('[data-rgo="t0"]').first().click();
+  await expect(page.locator('#grid tr.rflash[data-a="t0"]')).toHaveCount(1);
+  await page.locator('.tab[data-tab="restr"], [data-tab="restr"]').first().click();
+  await page.locator('[data-rmap="t0"]').first().click();
+  const t0 = await page.evaluate(() => S.act.get('t0').days.slice().sort()[0]);
+  await expect.poll(() => page.evaluate(() => window.__plano && window.__plano.M.date)).toBe(t0);
+  await expect.poll(() => page.evaluate(() => window.__plano.M.hl ? [...window.__plano.M.hl] : [])).toContain('v:t0');
+  noErrors(errors, 'ver en plano');
+});
