@@ -79,10 +79,22 @@ function mpVincView(main){ensureMPL();const pid=U.piso;const P=pid?S.pis.get(pid
       <input type="search" id="mvq" placeholder="Buscar actividad, ambiente o SC" value="${esc(MVL.q)}" data-fk="mvq" aria-label="Buscar actividad">${MVL.sel.size?`<span class="mvsel">${MVL.sel.size} elegida${MVL.sel.size===1?'':'s'} <button class="lnkb" data-mvclr>Quitar selección</button></span>`:''}</header>
       <div class="mvlist" id="mvl">${left.join('')||`<p class="mu" style="padding:12px">${nAll?'No hay actividades sin vincular en este piso.':'Este piso no tiene actividades en el lookahead.'}</p>`}</div></section>
     <section class="mvcol"><header><b>Partidas del plan maestro</b><span class="mu">${cand.length} en este piso</span></header>
-      <div class="mvlist" id="mvr">${right||'<p class="mu" style="padding:12px">El plan maestro no tiene partidas para este piso.</p>'}</div></section></div></div>`;
+      <div class="mvlist" id="mvr">${right||mvWhy(pid)}</div></section></div></div>`;
   mvWire(main)}
+/** Por qué no hay partidas a la derecha: qué tiene el maestro y cómo arreglarlo */
+function mvWhy(pid){const P=S.pis.get(pid)||{};const all=[...MPN.values()];const pp=all.filter(n=>n.tipo==='pp');const parts=all.filter(n=>n.tipo==='part');
+  const nW=all.filter(n=>n.tipo==='wbs').length,nH=all.filter(n=>n.tipo==='hito').length;
+  const by=new Map();for(const n of pp){const k=S.pis.has(n.pisoId)?n.pisoId:'?';by.set(k,(by.get(k)||0)+1)}
+  const lst=[...by.entries()].map(([k,c])=>k==='?'?`un piso que ya no existe (${c})`:`${esc(S.pis.get(k).code)} (${c})`).join(', ');
+  const imp=`<label class="ib pri" style="margin-top:8px">⇪ Importar el Excel otra vez<input type="file" id="mvxl" accept=".xlsx,.xlsm,.xls" hidden></label>`;
+  let h;
+  if(!pp.length&&!parts.length)h=`<b>El plan maestro todavía no tiene partidas</b>${nW||nH?` (solo ${nW?nW+' agrupador'+(nW===1?'':'es'):''}${nW&&nH?' y ':''}${nH?nH+' hito'+(nH===1?'':'s'):''})`:''}. Cárgalo desde el Excel del planner y en «1. Pisos» empareja «PISO 01» con ${esc(P.code||'este piso')}.${imp}`;
+  else if(!pp.length)h=`<b>Ninguna partida del maestro está emparejada con un piso.</b> Al importar, los textos de piso del Excel («PISO 01», «SOTANO»…) quedaron como «No es piso». Vuelve a importar el mismo Excel y en «1. Pisos» empareja cada uno con su piso: las partidas se actualizan sin duplicarse.${imp}`;
+  else h=`<b>Ninguna partida del maestro es de ${esc(P.code||'')} · ${esc(P.name||'este piso')}.</b> Hay ${pp.length} partida${pp.length===1?'':'s'} por piso en: ${lst}. Si «PISO 01» del Excel corresponde a este piso, vuelve a importarlo y emparéjalo en «1. Pisos»; o elige otro piso arriba.${imp}`;
+  return`<div class="callout" style="margin:8px">${h}</div>`}
 function mvWire(main){
   main.oninput=e=>{if(e.target.id==='mvq'){MVL.q=e.target.value;requestRender()}};
+  main.onchange=e=>{if(e.target.id==='mvxl'){const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mpxOpen(f)}};
   main.onclick=e=>{const t=e.target;
     if(t.closest('#mvback')){U.mpVinc=false;MVL.sel.clear();render();return}
     const f=t.closest('[data-mvf]');if(f){MVL.f=f.dataset.mvf;render();return}

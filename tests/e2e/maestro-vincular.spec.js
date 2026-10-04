@@ -128,3 +128,15 @@ test('Excel del plan maestro: lo que se ve, con el estado frente al lookahead', 
   expect(rows.some(r => r[0] === 'C.3' && r[1] === 'ACABADOS')).toBe(true);
   noErrors(errors, 'excel');
 });
+
+test('vincular sin partidas del piso: explica por qué y ofrece importar de nuevo', async ({ page }) => {
+  // el maestro solo tiene partidas del piso 2 (al importar, «PISO 01» no se emparejó)
+  const errors = await openApp(page, { as: 'planner', tab: 'maestro', extra: [MP[0], MP[1], MP[3]] });
+  await page.selectOption('#fpiso', 'p1');
+  await page.click('#maevinc');
+  const r = page.locator('#mvr');
+  await expect(r).toContainText('Ninguna partida del maestro es de P1');
+  await expect(r).toContainText('P2 (1)');
+  await expect(r.locator('#mvxl')).toHaveCount(1);
+  noErrors(errors, 'vincular vacío');
+});
