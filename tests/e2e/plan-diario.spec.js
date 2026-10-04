@@ -286,3 +286,41 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
   await expect.poll(() => page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBe(0);
   noErrors(errors, 'equipos');
 });
+
+test('Ctrl+clic elige varias partidas; tocar el plano fuera de ellas no abre otras', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
+  await page.click('#wtoday'); // hoy: SANITARIAS y ELÉCTRICAS
+  await page.locator('#mpanel [data-dzsc="c2"]').click();
+  await expect(row(page, 'i0')).toHaveCount(0);
+  await page.locator('#mpanel [data-dzsc="c1"]').click({ modifiers: ['Control'] });
+  await expect(page.locator('#mpanel .dzf button.on')).toHaveCount(2);
+  await expect(row(page, 'i0')).toBeVisible();
+  await expect(row(page, 'e0')).toBeVisible();
+  await expect(page.locator('#mscv')).toBeChecked();
+  // un clic simple vuelve a una sola
+  await page.locator('#mpanel [data-dzsc="c2"]').click();
+  await expect(page.locator('#mpanel .dzf button.on')).toHaveCount(1);
+  // las zonas de Sectorización no se seleccionan (no se pueden mover)
+  const bx = await page.locator('#mstage polygon[data-z="v:e0"]').boundingBox();
+  await page.mouse.click(bx.x + 15, bx.y + 15);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__plano.M.selId)).toBeNull();
+  noErrors(errors, 'varias partidas');
+});
+
+test('arrastrar una etiqueta a otra actividad la suma como la siguiente; lo que no va sale del reparto', async ({ page }) => {
+  const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2, items: [{ cat: 'Operario', esp: '', n: 2 }] }], hor: { t: 'n', fin: '17:00' }, asg: { s9: { c: 'C1', o: 1 } }, sinDist: false, ts: 1 }];
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8, F] });
+  await page.waitForFunction(() => window.__plano && window.__plano.M);
+  await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
+  await expect(page.locator('#mstage [data-cqt="s9"]')).toBeVisible();
+  await arrastrar(page, '#mstage [data-cqt="s9"]', '#mstage .pvl[data-z="v:s8"]');
+  await expect.poll(async () => Object.keys((await fz(page)).asg).sort()).toEqual(['s8', 's9']);
+  await expect(page.locator('#mstage [data-cqt="s9"]')).toHaveText('C1');
+  await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1·2');
+  // si «Pruebas hidráulicas» deja de ir ese día, C1 empieza por la otra
+  await page.evaluate(d => { const x = S.act.get('s9'); apply([op('acts', 's9', { ...x, days: [] })]); }, MANANA);
+  await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1');
+  await expect(page.locator('#mpanel .fzc')).toContainText('1 actividad con cuadrilla');
+  noErrors(errors, 'siguiente');
+});
