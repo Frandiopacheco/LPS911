@@ -44,6 +44,7 @@ const FILAS = [
 async function abrir(page, as = 'planner') {
   const errors = await openApp(page, { as, tab: 'maestro' });
   await page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+  await page.evaluate(() => { U.mpVista = 'part'; render(); }); // estas pruebas revisan el árbol
   await page.selectOption('#fpiso', '');
   await page.click('#maeed');
   return errors;
