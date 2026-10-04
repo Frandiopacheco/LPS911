@@ -237,6 +237,10 @@ test('plan del día: el SC dibuja y propone, pero no toca las decisiones del ing
   await assertFails(setDoc(doc(sc, 'pdz/nv2'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'nova', actId: 'x1', k: 'per', ids: ['x9'] }));
   await assertFails(deleteDoc(doc(sc, 'pdz/xk1')));
   await assertFails(setDoc(doc(sc, 'pdz/pub_2026-10-02_p1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'pub' }));
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'pdz/nvh'), { date: '2026-10-01', pisoId: 'p1', sc: 'c-gabel', kind: 'nova', actId: 'x1', motivo: 'Clima', eng: true }); });
+  await assertFails(deleteDoc(doc(sc, 'pdz/nvh'))); // «no va hoy» que decidió el ingeniero
+  await assertSucceeds(setDoc(doc(sc, 'pdz/nvs'), { date: '2026-10-01', pisoId: 'p1', sc: 'c-gabel', kind: 'nova', actId: 'x1', motivo: 'Clima' }));
+  await assertSucceeds(deleteDoc(doc(sc, 'pdz/nvs'))); // el suyo sí
   await assertSucceeds(deleteDoc(doc(user('editor@obra.pe'), 'pdz/nv1')));
 });
 test('reloj e índice de terminadas', async () => {

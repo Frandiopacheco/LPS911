@@ -439,7 +439,7 @@ test('el subcontratista no ve el achurado de cruces salvo que lo prenda', async 
 
 test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y queda en «Cambios del plan»', async ({ page }) => {
   // una tercera partida en A-1 hoy: tres en el mismo lugar
-  const Z3 = ['pdz', 'pz3', { date: HOY, pisoId: 'p1', vista: 'L1', sc: 'c3', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: 't1', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
+  const Z3 = ['pdz', 'pz3', { date: HOY, pisoId: 'p1', vista: 'L1', sc: 'c3', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: null, desc: 'Resane de muro', fuera: true, ambId: 'a1', by: 'admin@obra.pe', ts: 1 }]; // trabajo no programado planificado
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, Z3] });
   await page.click('#wtoday');
   await page.click('#mcxb .mcxh');
