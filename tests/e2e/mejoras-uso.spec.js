@@ -177,9 +177,14 @@ test('Lookahead: se abre en modo consulta; «Editar» habilita la edición', asy
   expect(await page.evaluate(id => window.__dbGet('acts', id).days, 'e0')).not.toContain(d);
   // arrastrar desplaza la tabla
   await page.setViewportSize({ width: 900, height: 600 });
-  const box = await page.locator(`tr[data-a="e0"] td.d[data-d="${d}"]`).boundingBox();
+  // el arrastre empieza sobre una celda visible de la tabla (con la ventana angosta, la del día puede quedar fuera de la pantalla)
+  // con 900 px la celda del día queda fuera de la pantalla: se arrastra desde un punto visible de la fila (dentro de la tabla)
+  const row = await page.locator('tr[data-a="e0"]').boundingBox();
+  const gw = await page.locator('#gw').boundingBox();
+  const x0 = Math.round(Math.min(gw.x + gw.width, page.viewportSize().width) / 2), y0 = row.y + row.height / 2;
+  expect(await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return !!(el && el.closest('#gw tr[data-a="e0"]')); }, [x0, y0]), 'el arrastre empieza sobre la tabla').toBe(true);
   const sl0 = await page.locator('#gw').evaluate(g => g.scrollLeft);
-  await page.mouse.move(box.x + 5, box.y + 5); await page.mouse.down(); await page.mouse.move(box.x - 200, box.y + 5, { steps: 5 }); await page.mouse.up();
+  await page.mouse.move(x0, y0); await page.mouse.down(); await page.mouse.move(x0 - 200, y0, { steps: 5 }); await page.mouse.up();
   expect(await page.locator('#gw').evaluate(g => g.scrollLeft)).toBeGreaterThan(sl0);
   // Editar
   await page.click('#fedit');

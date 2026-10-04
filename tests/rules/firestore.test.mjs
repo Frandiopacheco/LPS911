@@ -142,7 +142,7 @@ test('áreas de apoyo (OT, Calidad): ven todo y gestionan solo las restricciones
   await assertFails(setDoc(doc(ot, 'restr/n-ot2'), { actId: 'x1', grp: 'area', area: 'Calidad', status: 'pend' }));
   await assertFails(deleteDoc(doc(ot, 'restr/r-ot')));
   await assertSucceeds(updateDoc(doc(user('calidad@obra.pe'), 'restr/r-cal'), { status: 'lib', freed: '2026-10-01' }));
-  await assertSucceeds(setDoc(doc(ot, 'fotos/f-ot'), { data: 'x'.repeat(1000) }));
+  await assertSucceeds(setDoc(doc(ot, 'fotos/f-ot'), { data: 'x'.repeat(1000), by: 'ot@obra.pe' }));
 });
 test('liberaciones: el SC pide y levanta; Calidad programa y libera', async () => {
   const sc = user('sc@obra.pe'), cal = user('calidad@obra.pe'), ot = user('ot@obra.pe');
@@ -209,7 +209,7 @@ test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno co
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'nprog/n-veedor@obra.pe')));
   await assertFails(deleteDoc(doc(user('campo@obra.pe'), 'nprog/n-veedor@obra.pe')));
   // el veedor sube fotos pero no escribe el registro diario
-  await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01' }));
+  await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01', by: 'veedor@obra.pe' }));
   await assertFails(setDoc(doc(user('veedor@obra.pe'), 'daily/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', recs: {} }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {

@@ -142,3 +142,25 @@ test('N10: un piso archivado sigue en el PPC histórico de «Todos los pisos»',
   await expect(page.locator('#main')).not.toContainText('Sin semanas evaluadas');
   noErrors(errors, 'N10');
 });
+
+test('N11: en el celular, al repartir una cuadrilla «Equipos del día» se pliega y no tapa los números', async ({ page }) => {
+  const { LAMINA } = await import('./lamina.js');
+  await page.setViewportSize({ width: 390, height: 844 });
+  const AMB = [['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }]];
+  const T1 = ['acts', 's9', { ambId: 'a1', sc: 'c1', name: 'Pruebas hidráulicas', und: 'pto', days: [MANANA], order: 15 }];
+  const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2 }], hor: { t: 'n', fin: '17:00' }, asg: {}, sinDist: false, ts: 1 }];
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, F] });
+  await page.waitForFunction(() => window.__plano && window.__plano.M);
+  await page.evaluate(() => { const M = window.__plano.M; M.cqOn = true; M.panel = false; requestRender(); });
+  await expect(page.locator('#mfzb .mpdl')).toHaveCount(1); // abierto antes de elegir
+  await page.locator('#mcqb [data-cqd="C1"]').click();
+  await expect(page.locator('#mfzb .mpdl')).toHaveCount(0); // plegado mientras se reparte
+  // el número de la actividad queda accesible: lo que hay bajo su centro es la etiqueta, no un recuadro
+  const lb = await page.locator('#mstage .pvl[data-z="v:s9"]').boundingBox();
+  expect(await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return !!(el && el.closest('#mstage .pvl')); }, [lb.x + lb.width / 2, lb.y + lb.height / 2])).toBe(true);
+  await page.locator('#mstage .pvl[data-z="v:s9"]').click();
+  await expect.poll(() => page.evaluate(d => (window.__dbGet('pdz', 'fz_' + d + '_c1').asg?.s9 || {}).c, MANANA)).toBe('C1');
+  await page.locator('#pop [data-do="no"]').click();
+  await expect(page.locator('#mfzb .mpdl')).toHaveCount(1); // al terminar vuelve a verse
+  noErrors(errors, 'N11');
+});
