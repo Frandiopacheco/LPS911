@@ -114,7 +114,8 @@ function cliPpc(vset){const F=cliPpcFrom();const today=todayIso();
   /* días cumplidos por actividad (registro del ingeniero; si no hay, el cierre del capataz) */
   const got=new Map();const add=(aid,d,st)=>{const v=st==='ok'?1:st==='partial'?.5:0;if(!v)return;let L=got.get(aid);if(!L)got.set(aid,L=[]);L.push([d,v])};
   const seen=new Set();for(const doc of DAY.values()){if(doc.date<F)continue;for(const[aid,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status)continue;seen.add(doc.date+'_'+aid);add(aid,doc.date,rc.status)}}
-  for(const[k,lv]of LIVE){const c=lv&&lv.close;if(!c||!c.status||seen.has(k))continue;const d=k.slice(0,10);if(d<F)continue;add(k.slice(11),d,c.status)}
+  /* el cierre del capataz cuenta como en Campo (recOf): no si el ingeniero lo quitó («Quitar registro») ni si es de otra partida */
+  for(const[k,lv]of LIVE){const c=lv&&lv.close;if(!c||!c.status||seen.has(k))continue;const d=k.slice(0,10),aid=k.slice(11);if(d<F)continue;const r=recOf(d,aid);if(r&&r._prop)add(aid,d,r.status)}
   const W=[];let loading=false;
   for(let w=U.week-CLI_PW+1;w<=U.week;w++){const wd=weekDays(w);if(wd[0]>today)continue;const L=cliVerFor(w);if(!L)continue;const v=CLVD.get(L.id);if(!v||!v.ready){cliLoad(L.id);loading=true;continue}
     const end=wd[5],cur=end>=today;const items=[];

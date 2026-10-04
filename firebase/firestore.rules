@@ -63,13 +63,27 @@ service cloud.firestore {
     }
     // Estado en vivo de cada actividad (iniciada / detenida / cierre propuesto)
     // El subcontratista también inicia, detiene y reanuda las de su partida, pero no cierra el día (campo 'close').
+    // Capataz y SC: el documento debe ser de una actividad real de su partida (id = fecha_actividad, la partida y el piso
+    // los de la actividad), no basta con la partida que declara el propio documento.
+    function liveActOk(id) {
+      let d = request.resource.data;
+      let ap = /databases/$(database)/documents/acts/$(d.get('actId', '-'));
+      return id == d.get('date', '') + '_' + d.get('actId', '') && exists(ap)
+        && get(ap).data.get('sc', '') == d.get('sc', '') && livePisoOk(get(ap).data.get('ambId', '-'), d.get('pisoId', ''));
+    }
+    // piso de la actividad: ambiente → sector → piso (si el sector no dice su piso, no se puede comprobar)
+    function livePisoOk(ambId, pid) {
+      let am = /databases/$(database)/documents/ambientes/$(ambId);
+      let sp = /databases/$(database)/documents/sectors/$(exists(am) ? get(am).data.get('sectorId', '-') : '-');
+      return !exists(sp) || get(sp).data.get('pisoId', '') == '' || get(sp).data.pisoId == pid;
+    }
     match /live/{id} {
       allow read: if isMember();
-      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf())
-        || (isSC() && request.resource.data.sc in scsOf() && !('close' in request.resource.data));
-      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf())
+      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf() && liveActOk(id))
+        || (isSC() && request.resource.data.sc in scsOf() && !('close' in request.resource.data) && liveActOk(id));
+      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id))
         || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf()
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['close']));
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['close']) && liveActOk(id));
       allow delete: if canDaily();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
@@ -84,11 +98,21 @@ service cloud.firestore {
     }
     // Plan del día cerrado (foto de lo comprometido; contra ella se mide el PPC diario). La escribe quien publica (editor/admin)
     // y el servidor a las 20:00. Reabrir (reo) es solo del administrador; un editor solo puede dejarlo cerrado (reo vacío).
+    // fecha YYYY-MM-DD posterior a hoy (hora de Lima, UTC-5)
+    function dplanFuture(d) {
+      return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) > request.time - duration.value(5, 'h');
+    }
     match /dplan/{id} {
       allow read: if isMember();
+      // Cerrado (con ids y sin reabrir), el editor no cambia lo comprometido ni el registro: solo el administrador (reabrir con motivo).
+      // El editor publica de nuevo un día reabierto o que aún no tenía foto. «Deshacer publicación»: el editor solo en días futuros.
       allow create: if isAdmin() || (canEdit() && request.resource.data.get('reo', null) == null);
-      allow update: if isAdmin() || (canEdit() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null));
-      allow delete: if canEdit();
+      allow update: if isAdmin() || (canEdit()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null)
+        && (resource.data.get('reo', null) != null || resource.data.get('ids', null) == null
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'log', 'date', 'pisoId'])));
+      allow delete: if isAdmin() || (canEdit() && dplanFuture(resource.data.get('date', '')));
     }
     // Historial de cambios del lookahead (uno por cambio): lo escribe quien edita; no se cambia ni se borra
     match /lhlog/{id} {
@@ -166,7 +190,10 @@ service cloud.firestore {
     }
     match /fotos/{id} {
       allow read: if isMember();
-      allow create, update: if (canDaily() || isCap() || isSC() || isArea() || isVeedor()) && request.resource.data.data.size() < 400000;
+      // una foto queda a nombre de quien la sube (by); ya guardada, nadie la reemplaza (evidencia): solo el administrador
+      allow create: if request.resource.data.data.size() < 400000 && (isAdmin()
+        || ((canDaily() || isCap() || isSC() || isArea() || isVeedor()) && request.resource.data.get('by', '') == mid()));
+      allow update: if isAdmin() && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.

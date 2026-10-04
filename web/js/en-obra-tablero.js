@@ -26,7 +26,7 @@ function liveWrite(d,aid,patch,ev,extra){const x=S.act.get(aid);if(!x||!db)retur
 /* lo que el capataz propuso y nadie confirmó en 2 días queda registrado tal cual */
 const autoDone=new Set();
 function autoAccept(){if(!canDaily||!db)return;const lim=addD(todayIso(),-2);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.status||lv.date>lim||autoDone.has(lv.id)||lv._pend)continue;autoDone.add(lv.id);if(recReal(lv.date,lv.actId))continue;{const doc=DAY.get(dayId(lv.date,lv.pisoId));const rr=doc&&doc.recs&&doc.recs[lv.actId];if(rr&&rr.clr)continue}const x=S.act.get(lv.actId);if(!x)continue;
+  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.status||lv.date>lim||autoDone.has(lv.id)||lv._pend||!liveOwn(lv))continue;autoDone.add(lv.id);if(recReal(lv.date,lv.actId))continue;{const doc=DAY.get(dayId(lv.date,lv.pisoId));const rr=doc&&doc.recs&&doc.recs[lv.actId];if(rr&&rr.clr)continue}const x=S.act.get(lv.actId);if(!x)continue;
     writeDaily(lv.date,lv.pisoId,{recs:{[lv.actId]:{...baseRec(lv.date,x,null),status:c.status,cnc:c.cnc||'',note:c.note||'',done:!!c.done,photos:lv.photos||[],prop:{status:c.status,cnc:c.cnc||'',by:c.by,byName:c.n,ts:c.t},auto:true,by:c.by||'',byName:c.n||'',ts:c.t||NOW()}}})}}
 function confirmProp(d,aid){const x=S.act.get(aid);const cur=recOf(d,aid);if(!x||!cur||!cur._prop)return;writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:cur.status}}})}
 

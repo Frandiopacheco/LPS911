@@ -42,6 +42,10 @@ test.beforeEach(async () => {
     await S('inv/old', { active: true, exp: Date.now() - 1000, scs: ['c-gabel'] });
     await S('acts/x1', { name: 'Pintura', sc: 'c-gabel', ambId: 'a1' });
     await S('acts/x9', { name: 'Drywall', sc: 'c-otro', ambId: 'a1' });
+    await S('acts/x4', { name: 'Empaste', sc: 'c-gabel', ambId: 'a1' });
+    await S('acts/xe', { name: 'Tablero eléctrico', sc: 'c-elec', ambId: 'a2' });
+    await S('ambientes/a2', { name: 'Cuarto eléctrico', sectorId: 's2' });
+    await S('sectors/s2', { name: 'Sector 2', pisoId: 'p2' });
     await S('restr/r-ed', { actId: 'x1', sc: 'c-gabel', by: 'editor@obra.pe', status: 'pend', freed: '' });
     await S('restr/r-sc', { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '' });
     await S('pzon/x1', { pisoId: 'p1', sc: 'c-gabel', pts: [] });
@@ -96,13 +100,13 @@ test('capataz: reporta en vivo solo su partida y no toca el lookahead ni el regi
 test('subcontratista: inicia y detiene sus actividades, pero no cierra el día', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { st: 'run', sc: 'c-gabel' }));
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { st: 'stop', mot: 'Falta material', sc: 'c-gabel' }));
-  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x4'), { sc: 'c-gabel', st: 'run' }));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x4'), { date: '2026-10-01', actId: 'x4', sc: 'c-gabel', st: 'run' }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x9'), { st: 'run' }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x5'), { sc: 'c-otro', st: 'run' }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { close: { status: 'ok' } }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x6'), { sc: 'c-gabel', close: { status: 'ok' } }));
   await assertFails(deleteDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1')));
-  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fsc'), { data: 'x'.repeat(1000) }));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fsc'), { data: 'x'.repeat(1000), by: 'sc@obra.pe' }));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x7'), { sc: 'c-gabel', st: 'run' }));
 });
 test('restricciones: el SC registra las de su partida y edita solo las suyas pendientes', async () => {
@@ -245,7 +249,11 @@ test('plan del día cerrado (dplan): publica el editor; reabrir es solo del admi
   await assertSucceeds(updateDoc(doc(ed, 'dplan/2026-10-02_p1'), { reo: null, ids: { x1: 3 } })); // al volver a publicar queda cerrado
   await assertFails(setDoc(doc(ed, 'dplan/2026-10-04_p1'), { date: '2026-10-04', pisoId: 'p1', reo: { why: 'x' } }));
   await assertFails(deleteDoc(doc(sc, 'dplan/2026-10-02_p1')));
-  await assertSucceeds(deleteDoc(doc(ed, 'dplan/2026-10-02_p1'))); // deshacer la publicación de un día futuro
+  await assertFails(deleteDoc(doc(ed, 'dplan/2026-10-02_p1'))); // día ya pasado: solo el administrador
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'dplan/2026-10-02_p1')));
+  const fut = new Date(Date.now() + 3 * 864e5 - 5 * 36e5).toISOString().slice(0, 10);
+  await assertSucceeds(setDoc(doc(ed, `dplan/${fut}_p1`), { date: fut, pisoId: 'p1', ids: { x1: 2 }, reo: null }));
+  await assertSucceeds(deleteDoc(doc(ed, `dplan/${fut}_p1`))); // deshacer la publicación de un día futuro
 });
 test('historial del lookahead (lhlog): lo escribe quien edita, con su correo; no se cambia ni se borra', async () => {
   const ed = user('editor@obra.pe');
@@ -306,7 +314,48 @@ test('invitaciones: se lee una por su código; solo el admin lista o crea', asyn
   await assertSucceeds(setDoc(doc(user(OWNER), 'inv/zz'), { active: true }));
 });
 test('fotos: límite de tamaño', async () => {
-  await assertSucceeds(setDoc(doc(cap('cap1'), 'fotos/f1'), { data: 'x'.repeat(1000) }));
-  await assertFails(setDoc(doc(cap('cap1'), 'fotos/f2'), { data: 'x'.repeat(400001) }));
+  await assertSucceeds(setDoc(doc(cap('cap1'), 'fotos/f1'), { data: 'x'.repeat(1000), by: 'u_cap1' }));
+  await assertFails(setDoc(doc(cap('cap1'), 'fotos/f2'), { data: 'x'.repeat(400001), by: 'u_cap1' }));
   await assertFails(deleteDoc(doc(cap('cap1'), 'fotos/f1')));
+});
+
+// ── Auditoría 02e575c ──
+test('auditoría N01: el SC o capataz no cierra ni reporta una actividad de otra partida declarando la suya', async () => {
+  const c = cap('cap1');
+  // la actividad xe es de Eléctricas: el documento dice c-gabel, pero la actividad no
+  await assertFails(setDoc(doc(c, 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
+  // id que no corresponde a la actividad declarada
+  await assertFails(setDoc(doc(c, 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'x1', sc: 'c-gabel', st: 'run' }));
+  // actividad que no existe
+  await assertFails(setDoc(doc(c, 'live/2026-10-01_zz'), { date: '2026-10-01', actId: 'zz', sc: 'c-gabel', st: 'run' }));
+  // la suya sí
+  await assertSucceeds(setDoc(doc(c, 'live/2026-10-02_x1'), { date: '2026-10-02', actId: 'x1', sc: 'c-gabel', close: { status: 'ok' } }));
+});
+test('auditoría N01: el piso del reporte debe ser el de la actividad (si su sector lo indica)', async () => {
+  await env.withSecurityRulesDisabled(async x => { await setDoc(doc(x.firestore(), 'acts/xg'), { name: 'Pintura 2', sc: 'c-gabel', ambId: 'a2' }); });
+  await assertFails(setDoc(doc(cap('cap1'), 'live/2026-10-01_xg'), { date: '2026-10-01', actId: 'xg', pisoId: 'p1', sc: 'c-gabel', st: 'run' }));
+  await assertSucceeds(setDoc(doc(cap('cap1'), 'live/2026-10-01_xg'), { date: '2026-10-01', actId: 'xg', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
+});
+test('auditoría N02: una foto guardada no la reemplaza otro usuario; queda a nombre de quien la sube', async () => {
+  await env.withSecurityRulesDisabled(async x => { await setDoc(doc(x.firestore(), 'fotos/fe'), { data: 'original', by: 'campo@obra.pe' }); });
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'fotos/fe'), { data: 'otra', by: 'sc@obra.pe' }));
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), 'fotos/fe'), { data: 'otra' }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'fotos/fe'), { data: 'otra' }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'fotos/fn'), { data: 'x', by: 'campo@obra.pe' })); // a nombre de otro
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'fotos/fn2'), { data: 'x' })); // sin autor
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fn3'), { data: 'x', by: 'sc@obra.pe' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'fotos/fr'), { data: 'x', by: 'campo@obra.pe' })); // cargar un respaldo
+});
+test('auditoría N03: con el plan cerrado el editor no cambia lo comprometido ni el registro', async () => {
+  const ed = user('editor@obra.pe');
+  await env.withSecurityRulesDisabled(async x => { await setDoc(doc(x.firestore(), 'dplan/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', ids: { x1: 10 }, reo: null, log: [] }); });
+  await assertFails(updateDoc(doc(ed, 'dplan/2026-10-01_p1'), { ids: { x1: 1 } }));
+  await assertFails(updateDoc(doc(ed, 'dplan/2026-10-01_p1'), { log: [] , ids: { x1: 1 }, at: 1 }));
+  await assertFails(setDoc(doc(ed, 'dplan/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', ids: {}, reo: null }));
+  await assertFails(deleteDoc(doc(ed, 'dplan/2026-10-01_p1')));
+  await assertSucceeds(updateDoc(doc(ed, 'dplan/2026-10-01_p1'), { at: 5 })); // republicar igual (mismos ids) no falla
+  // el administrador reabre con motivo; recién ahí el editor vuelve a publicar
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'dplan/2026-10-01_p1'), { reo: { by: OWNER, why: 'corrección' } }));
+  await assertSucceeds(updateDoc(doc(ed, 'dplan/2026-10-01_p1'), { ids: { x1: 8 }, reo: null }));
 });

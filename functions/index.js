@@ -45,7 +45,8 @@ exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'Americ
     const refs = need.slice(i, i + 100).map(id => db().collection('acts').doc(id));
     (await db().getAll(...refs)).forEach(d => { if (d.exists) acts.set(d.id, d.data()); });
   }
-  const L = closesToAccept(lives, daily, acts, today);
+  const dplans = new Map((await db().collection('dplan').where('date', '>=', from).get()).docs.map(d => [d.id, d.data()]));
+  const L = closesToAccept(lives, daily, acts, today, dplans);
   /* cada cierre se confirma releyendo su registro: lo que un ingeniero verificó mientras tanto no se pisa */
   const { n, skip } = await acceptCloses(db(), L);
   logger.info(`Cierres registrados automáticamente: ${n}${skip ? ` (${skip} ya revisados por un ingeniero, sin cambios)` : ''}`);
