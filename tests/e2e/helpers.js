@@ -14,6 +14,7 @@ export const USERS = {
   ot: { uid: 'u-ot', email: 'ot@obra.pe', emailVerified: true },
   lector: { uid: 'u-le', email: 'lector@obra.pe', emailVerified: true },
   veedor: { uid: 'u-ve', email: 'veedor@obra.pe', emailVerified: true },
+  planner: { uid: 'u-pl', email: 'planner@obra.pe', emailVerified: true },
   capataz: { uid: 'cap1', email: null, isAnonymous: true, emailVerified: false },
 };
 

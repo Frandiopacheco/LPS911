@@ -20,6 +20,8 @@ service cloud.firestore {
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
     function canCli() { return isAdmin() || (isMember() && role() in ['editor', 'campo', 'area', 'lector'] && get(memberPath()).data.get('cli', false) == true); }
+    // Plan maestro: solo el administrador y el planner (rol que solo modifica el maestro). Nadie más lo lee.
+    function canMP() { return isMember() && role() in ['admin', 'planner']; }
     function canDaily() { return isMember() && role() in ['admin', 'editor', 'campo']; }
     function scOf() { return get(memberPath()).data.get('sc', ''); }
     // Una persona puede tener varias empresas/partidas (campo 'scs'); si no existe, se usa 'sc'.
@@ -179,6 +181,26 @@ service cloud.firestore {
     match /libm/{id} {
       allow read: if isMember();
       allow write: if isAdmin() || isCal();
+    }
+    // Plan maestro (docs/plan-maestro.md): nodos (mp), avance por corte (mpav), vínculos con el lookahead (mpl) y configuración (mpcfg)
+    match /mp/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpav/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpl/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpcfg/{id} {
+      allow read, write: if canMP();
+    }
+    // Versiones de la línea base: el planner las envía a aprobación (pend); solo el administrador aprueba o devuelve. No se borran.
+    match /mpver/{id} {
+      allow read: if canMP();
+      allow create: if isAdmin() || (canMP() && request.resource.data.get('st', '') == 'pend');
+      allow update: if isAdmin();
+      allow delete: if false;
     }
     match /daily/{id} {
       allow read: if isMember();
