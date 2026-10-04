@@ -50,7 +50,7 @@ function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:
   v.apply=()=>{W.style.transform=`translate(${v.x}px,${v.y}px) scale(${v.z})`;MK.innerHTML=v.marks.map(m=>{const p={x:m.x*v.z+v.x,y:m.y*v.z+v.y};return`<i class="pvm${m.cls?' '+m.cls:''}" style="left:${p.x}px;top:${p.y}px">${esc(m.t||'')}</i>`}).join('');
     let PL;if(v._pl&&v._pl.L===v.labels&&v._pl.z===v.z)PL=v._pl.P;else{PL=placeLabels(v.labels.map(l=>({...l,sx:l.x*v.z,sy:l.y*v.z})));v._pl={L:v.labels,z:v.z,P:PL}}
     let ln='';const lh=PL.map(l=>{const x=l.sx+l.dx+v.x,y=l.sy+l.dy+v.y;if(l.dx||l.dy){const x0=l.sx+v.x,y0=l.sy+v.y;ln+=`<line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/><line x1="${x0}" y1="${y0}" x2="${x}" y2="${y}" stroke="${l.c||'#333'}" stroke-width="2"/><circle cx="${x0}" cy="${y0}" r="4" fill="${l.c||'#333'}" stroke="#fff" stroke-width="1.5"/>`}
-      if(l.nb)return`<span class="pvl nb${l.ring?' '+l.ring:''}${l.np?' np':''}${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}" title="${esc(l.tip||'')}" style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}">${esc(l.t)}</span>`;
+      if(l.nb)return`<span class="pvl nb${l.ring?' '+l.ring:''}${l.np?' np':''}${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}" title="${esc(l.tip||'')}" style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}">${esc(l.t)}${l.cq?`<i class="cqt" data-cqt="${esc(l.cqa||'')}" style="--q:${l.cqc}" title="Cuadrilla ${esc(l.cq)}">${esc(l.cq)}</i>`:''}</span>`;
       return`<span class="pvl${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}"${l.tip?` title="${esc(l.tip)}"`:''} style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}${l.ang!=null?`;--a:${l.ang}deg`:''}${l.fs?`;font-size:${l.fs}px`:''}">${esc(l.t)}${l.hs?'<b class="tph nw" data-th="1"></b><b class="tph ne" data-th="1"></b><b class="tph sw" data-th="1"></b><b class="tph se" data-th="1"></b>':''}</span>`}).join('');
     LB.innerHTML=`<svg class="pvld" xmlns="http://www.w3.org/2000/svg">${ln}</svg>`+lh+v.handles.map((h,i)=>`<b class="pvh${h.cls?' '+h.cls:''}" data-h="${i}" style="left:${h.x*v.z+v.x}px;top:${h.y*v.z+v.y}px"></b>`).join('')};
   v.fit=()=>{const b=v.bounds;if(!b)return;const r=host.getBoundingClientRect();if(!r.width)return;const ins=v.inset?v.inset():0;const RW=Math.max(200,r.width-ins);const z=Math.min(RW/b.w,r.height/b.h)*.96;v.z=z;v.x=(RW-b.w*z)/2-b.x*z;v.y=(r.height-b.h*z)/2-b.y*z;v.apply()};
@@ -81,7 +81,7 @@ function renderMapa(main){ensureLam();
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
   {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null}}ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));
-  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
+  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
   const hb=`<button class="ib${M.panel?' on':''}" id="mpan" title="Mostrar u ocultar el plan del día">Plan del día</button><span class="dnav"><button class="ib" data-mdd="-1" aria-label="Día anterior">&#8249;</button><b>${dw} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" aria-label="Día siguiente">&#8250;</button>${M.date!==today?'<button class="ib" data-mdd="0">Hoy</button>':''}</span>${U.piso?'':`<select id="mpiso" aria-label="Piso">${ps.map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`}
@@ -294,13 +294,15 @@ function drawOverlay(){const v=M.view;if(!v)return;computeCross();const NUMS=pla
     if(z.kind==='zona'){const sw=isSel||hi?4:2.5;svg+=`<polygon points="${pts}" fill="none" stroke="#fff" stroke-width="${sw+3}" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity="${dim||dH?.35:.9}" pointer-events="none"/><polygon data-z="${z.id}"${eo} points="${pts}" fill="${c}" fill-opacity="${dim?.06:dH?.07:hi?.55:.34}" stroke="${c}" stroke-width="${sw}" stroke-linejoin="round" vector-effect="non-scaling-stroke" ${z.fuera?'stroke-dasharray="7 5"':(inv.has(z.id)?`stroke-dasharray="12 12" stroke-dashoffset="${inv.get(z.id)%2?12:0}"`:'')} opacity="${op}"/> ${z.actId&&RSK.get(z.actId)&&!dim?`<polygon points="${pts}" fill="none" stroke="#ef6c00" stroke-width="4" stroke-dasharray="10 5" vector-effect="non-scaling-stroke" pointer-events="none"/>`:''}${cx&&!dim?`<polygon points="${pts}" fill="none" stroke="#d32f2f" stroke-width="3" stroke-dasharray="3 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`:''}${z.actId&&dpPend(z.actId)&&!dim?`<polygon points="${pts}" fill="url(#hxs)" fill-opacity=".45" stroke="#546e7a" stroke-width="2.5" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" pointer-events="none"/>`:''}${z.actId&&avOf(z.actId)&&!dim?`<polygon points="${pts}" fill="none" stroke="#ef6c00" stroke-width="3.5" stroke-dasharray="2 5" vector-effect="non-scaling-stroke" pointer-events="none"/>`:''}`;
       if(!dim){const ce=centroid(P);const bb=bboxOf(P);const xa=z.actId&&S.act.get(z.actId),aa=xa&&S.amb.get(xa.ambId);const rs=z.actId&&RSK.get(z.actId);
         const tip=`${NUMS.zl.get(z.id)||''} · ${conOf(z.sc).name} · ${xa?xa.name+(aa?' — '+aa.code+' '+aa.name:''):'No programado: '+(z.desc||'')}${st&&st!=='np'?' · '+STT[st]:''}${rs?' · ⛔ restricción pendiente':''}${cx?' · ⚠ superposición con otro subcontratista':''}${z.actId&&dpPend(z.actId)?' · ⏸ en espera: '+dpText(dpPend(z.actId)):''}${z.actId&&avOf(z.actId)?' · ⚠ liberar a primera hora: '+(avOf(z.actId).desc||''):''}`;
-        if(M.lbl!=='name'&&NUMS.zl.has(z.id))labels.push({id:z.id,x:ce.x,y:ce.y,t:NUMS.zl.get(z.id),nb:1,np:!z.actId,ring:cx?'rx':rs?'rr':'',area:bb.w*bb.h,tip,c,f:lum(c)>.55?'#1b1b1b':'#fff',cls:(isSel?'sel':'')+(hi?' hl':'')+(dH?' dm':'')});
-        else labels.push({id:z.id,x:ce.x,y:ce.y,t:(st&&st!=='np'?STI[st]+' ':'')+(z.actId&&dpPend(z.actId)?'⏸ ':'')+(z.actId&&avOf(z.actId)?'⚠ ':'')+(rs?'⛔ ':'')+(cx?'⚠ ':CROSS.seqIds.has(z.id)?'↔ ':'')+zoneLabel(z),area:bb.w*bb.h,tip,c,f:z.fuera?c:(lum(c)>.55?'#1b1b1b':'#fff'),cls:(z.fuera?'np':'')+(isSel?' sel':'')+(hi?' hl':'')+(dH?' dm':'')})}}
+        const CQ=z.actId?cqTag(z.sc,z.actId):null;
+        if(M.lbl!=='name'&&NUMS.zl.has(z.id))labels.push({id:z.id,x:ce.x,y:ce.y,t:NUMS.zl.get(z.id),nb:1,cq:CQ&&CQ.t,cqc:CQ&&CQ.col,cqa:z.actId,np:!z.actId,ring:cx?'rx':rs?'rr':'',area:bb.w*bb.h,tip,c,f:lum(c)>.55?'#1b1b1b':'#fff',cls:(isSel?'sel':'')+(hi?' hl':'')+(dH?' dm':'')});
+        else labels.push({id:z.id,x:ce.x,y:ce.y,t:(st&&st!=='np'?STI[st]+' ':'')+(z.actId&&dpPend(z.actId)?'⏸ ':'')+(z.actId&&avOf(z.actId)?'⚠ ':'')+(rs?'⛔ ':'')+(cx?'⚠ ':CROSS.seqIds.has(z.id)?'↔ ':'')+zoneLabel(z),area:bb.w*bb.h,tip,c,f:z.fuera?c:(lum(c)>.55?'#1b1b1b':'#fff'),cq:CQ&&CQ.t,cqc:CQ&&CQ.col,cqa:z.actId,cls:(z.fuera?'np':'')+(isSel?' sel':'')+(hi?' hl':'')+(dH?' dm':'')})}}
     else if(z.kind==='trazo')svg+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${isSel?lw+1.5:lw}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" opacity="${op}"/><polyline data-z="${z.id}"${eo} points="${pts}" fill="none" stroke="transparent" stroke-width="16" vector-effect="non-scaling-stroke" pointer-events="stroke"/>`;
     else if(z.kind==='flecha'){svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${c}" stroke-width="${isSel?lw+1.5:lw}" vector-effect="non-scaling-stroke" stroke-linecap="round" opacity="${op}"/><line data-z="${z.id}"${eo} x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="transparent" stroke-width="16" vector-effect="non-scaling-stroke" pointer-events="stroke"/>`;if(!dim)labels.push({id:z.id,x:P[1].x,y:P[1].y,t:'',c,cls:'arw w'+(z.w||2),ang:Math.atan2(P[1].y-P[0].y,P[1].x-P[0].x)*180/Math.PI})}
     else if(z.kind==='texto'){if(!dim)labels.push({id:z.id,x:P[0].x,y:P[0].y,t:z.t||'',c,f:c,fs:z.fs||18,cls:'txt'+(isSel?' sel':''),hs:isSel&&own(z)&&M.tool==='pan'})}}
   const fvv=M.meet?M.meetSc:scVis();
   for(const c of CROSS.list){if(!c.r||(fvv&&c.a.sc!==fvv&&c.b.sc!==fvv))continue;svg+=`<rect x="${c.r.x}" y="${c.r.y}" width="${c.r.w}" height="${c.r.h}" fill="url(#hxr)" fill-opacity=".75" stroke="#d32f2f" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`}
+  svg+=cqRoutes(all,fvv);
   for(const c of CROSS.seq){if(!c.r||(fvv&&c.a.sc!==fvv))continue;svg+=`<rect x="${c.r.x}" y="${c.r.y}" width="${c.r.w}" height="${c.r.h}" fill="url(#hxs)" fill-opacity=".55" stroke="#546e7a" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`}
   const t=M.tmp;if(t){const c=t.kind==='erase'?'#c62828':(conOf(M.scDraw).color||'#1565c0');let P=t.pts;if(t.kind==='poly'&&t.hover)P=[...P,t.hover];const pts=P.map(p=>p.x+','+p.y).join(' ');
     if(t.kind==='zona'||t.kind==='poly'||t.kind==='erase')svg+=`<polygon points="${pts}" fill="${c}" fill-opacity="${t.kind==='erase'?.08:.22}" stroke="${c}" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`+(t.kind==='poly'?t.pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="${5*k}" fill="${c}"/>`).join(''):'');
@@ -922,6 +924,9 @@ function renderPlan(main,cur,base){
       if(op_)ph+=`<div class="mpdl">${P_.sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)).map(p=>{const y=S.act.get(p.actId);const ay=S.amb.get(y.ambId);
         return`<div class="mpdi" style="--c:${conOf(p.sc).color}"><button class="mpdt" data-see="${(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===y.id)||{}).id||''}"><span class="mono">${esc(ay?ay.code:'')}</span> ${esc(short(y.name,30))}<small>${esc(conOf(p.sc).name)} · ${esc(dpText(p))}</small></button>${eng?`<span class="dzpb"><button class="ib pri" data-dpa="${p.id}">Aceptar</button><button class="ib" data-dpr="${p.id}">Rechazar</button></span>`:''}</div>`}).join('')}</div>`}
     const pb=$('#mpdb');if(pb){if(pb.dataset.h!==ph){pb.innerHTML=ph;pb.dataset.h=ph}pb.hidden=!ph}}
+  {const box=(id,h_)=>{const el=$('#'+id);if(!el)return;if(el.dataset.h!==h_){el.innerHTML=h_;el.dataset.h=h_}el.hidden=!h_};
+    box('mchb',chHtml(sc));box('mfzb',fzBoxHtml(role));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
+  h+=fzCardHtml(role,sc);
   const dcan=dzCan;let lastS='';
   h+=`<div class="mp-list dzl">${L.map(({x,a,s})=>{const zs=zBy[x.id],nv=nBy[x.id];const can=dcan(x);const geoOk=a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6);
       let hh='';if(s.id!==lastS){lastS=s.id;hh=`<div class="dzs">${esc(s.code)} · ${esc(s.name)}</div>`}
@@ -930,9 +935,6 @@ function renderPlan(main,cur,base){
         :`${nbHtml(NBM,x.id)}${dvHtml(x,can)}
           <span class="dzu">${zs?(zs[0].virt?`<button class="lnkb" data-see="${zs[0].id}">en su ambiente</button>`:`<span class="pill ok">zona dibujada</span><button class="lnkb" data-see="${zs[0].id}">Ver</button>`):geoOk?'':`<span class="mu">Ambiente sin ubicar</span>${canWrite?`<button class="lnkb" data-goszamb="${a.id}">Ubicarlo en Sectorización</button>`:''}`}${canPlan(x.sc)?`<button class="lnkb" data-put="${x.id}" title="Si solo ocupa una parte del ambiente o abarca varios">${zs&&!zs[0].virt?'Dibujar otra vez':'Solo una parte…'}</button>`:''}</span>`}</div></div>`}).join('')||`<div class="note" style="padding:8px 2px">${sc?esc(conOf(sc).name)+' no tiene':'No hay'} actividades programadas este día en este piso.</div>`}</div>`;
   if(canWrite||role==='sc')h+=`<button class="ib mp-all" id="dzadd" title="Agregar al día una actividad del lookahead que no estaba programada">+ Programar otra actividad este día</button>`;
-  {const inL=new Set(L.map(o=>o.x.id));const rp=[...PD.values()].filter(z=>z.kind==='nova'&&z.pisoId===M.piso&&z.repTo&&!inL.has(z.actId)&&(!sc||z.sc===sc));
-    if(rp.length)h+=`<div class="mp-sec">Reprogramadas en este plan (${rp.length})</div>${rp.map(z=>{const y=S.act.get(z.actId);const ay=y&&S.amb.get(y.ambId);return`<div class="mp-it rpg" style="--c:${conOf(z.sc).color}"><div class="t"><span class="mono">${esc(ay?ay.code:'')}</span> ${esc(y?y.name:'(actividad eliminada)')}<small>${esc(conOf(z.sc).name)} · ${esc(z.motivo||'')} · → ${DOWN_[(pd(z.repTo).getUTCDay()+6)%7].toLowerCase()} ${fmtD(z.repTo)}${z.tren?` · con ${z.tren} más del ambiente`:''}</small></div></div>`}).join('')}`}
-  if(M.dzlog&&M.dzlog.d===M.date+'|'+M.piso&&M.dzlog.L.length)h+=`<div class="mp-sec">Cambios de este plan</div>${M.dzlog.L.map(t=>`<div class="mp-it"><div class="t">${esc(t)}</div></div>`).join('')}`;
   {const pr=sc?(pendBy[sc]||[]):Object.values(pendBy).flat();
     if(pr.length){h+=`<div class="mp-sec">No cumplidas sin reprogramar (${pr.length})</div><div class="mp-list">${pr.sort((p,q)=>q.f.d.localeCompare(p.f.d)).map(({x,a,f})=>{const sal=repSaldo(x,f.d);
       return`<div class="mp-it rp"><div class="t"><span class="mono">${esc(a.code)}</span> ${esc(x.name)}<small>${esc(conOf(x.sc).name)} · ${f.r.status==='partial'?'½ Parcial':'✗ No cumplido'} el ${DOWN_[(pd(f.d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(f.d)}${f.r.cnc?' · '+esc(f.r.cnc):''}${sal!=null?` · saldo ${fq(sal)} ${esc(x.und||'')}`:''}</small></div>
@@ -995,10 +997,10 @@ function dvFin(x,prop){if(typeof canDaily==='undefined'||!canDaily){toast('Solo 
 /** propuesta del subcontratista para el día (una por actividad: la nueva reemplaza a la anterior) */
 function dpPropose(x,k,desc){const id=dpId(M.date,x.id);const g=[];if(PD.has(id))g.push(remDoc(id));
   g.push(addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'dprop',actId:x.id,ambId:x.ambId,k,desc:desc||'',st:'pend',by:me.email,byName:me.name||me.email,ts:NOW()}));rec(g.filter(Boolean));
-  dzLog(`⏸ ${x.name}: ${k==='fin'?'culminado':'no va · '+DPK[k]}${desc?' ('+desc+')':''}`);toast(`Propuesta: ${k==='fin'?'culminado':'no va'} · el ingeniero la decide en la reunión`);requestRender()}
+  toast(`Propuesta: ${k==='fin'?'culminado':'no va'} · el ingeniero la decide en la reunión`);requestRender()}
 function dpDone(p,txt){const z=PD.get(p.id);if(!z)return;updDoc(p.id,{st:'ok',dec:txt,decBy:me.email,decN:me.name||me.email,decT:NOW()})}
 function dpReopen(p){if(PD.get(p.id))updDoc(p.id,{st:'pend',dec:'',decBy:'',decN:'',decT:0})}
-function dpReject(p){updDoc(p.id,{st:'rej',decBy:me.email,decN:me.name||me.email,decT:NOW()});const x=S.act.get(p.actId);dzLog(`✗ Rechazada: ${x?x.name:''} va`);toast('Propuesta rechazada: la actividad va según lo programado','Deshacer',()=>dpReopen(p));requestRender()}
+function dpReject(p){updDoc(p.id,{st:'rej',decBy:me.email,decN:me.name||me.email,decT:NOW()});toast('Propuesta rechazada: la actividad va según lo programado','Deshacer',()=>dpReopen(p));requestRender()}
 function dpAccept(btn,x,p){if(p.k==='fin'){dvFin(x,p);return}noVa(btn,x,{k:p.k,desc:p.desc,prop:p})}
 /** «No va»: motivo → (restricción: ¿se libera mañana?) → reprogramar. El subcontratista solo propone. */
 function noVa(btn,x,o){const eng=dzEng();const today=M.date<=todayIso();const st={k:o.k||'',desc:o.desc||'',prop:o.prop||null,to:wshift(M.date,1),tren:false};
@@ -1027,16 +1029,16 @@ function noVa(btn,x,o){const eng=dzEng();const today=M.date<=todayIso();const st
     if(v==='lib'){if(!d){toast('Escribe qué hay que liberar.');return}closePop();
       const id=avId(M.date,x.id);const g=[];if(PD.has(id))g.push(remDoc(id));g.push(addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'aviso',actId:x.id,ambId:x.ambId,desc:d,by:me.email,byName:me.name||me.email,ts:NOW()}));
       if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Va: se libera a primera hora',decBy:me.email,decN:me.name||me.email,decT:NOW()}));rec(g.filter(Boolean));
-      dzLog(`✓ ${x.name}: va · liberar antes (${d})`);toast(`Va · aviso en el plano: ${d}`);requestRender();return}
+      toast(`Va · aviso en el plano: ${d}`);requestRender();return}
     if(v==='nolib'){if(!d){toast('Escribe qué falta.');return}st.desc=d;if(today){closePop();dvResToday(btn,x,d);return}step('rep');return}
     if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}doRep();return}}
   function doRep(){const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();
     const T=st.tren?trenOf(x):[];const ops=[shiftOp(x,n,M.date),...T.map(y=>shiftOp(y,n,M.date))];let rid=null;
     if(st.k==='res'){rid=uid('res');ops.unshift(op('restr',rid,{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:(P().restrTypes||[])[0]||'',desc:st.desc,resp:'',need:st.to,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario'}))}
     const mot=st.k==='res'?'Restricción: '+st.desc:'Sin personal';
-    apply(ops,'');const nid=uid('pz');const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,repTo:st.to,tren:T.length,by:me.email,byName:me.name||me.email,ts:NOW()})];
+    const mv={};ops.forEach(o_=>{if(o_.col!=='acts')return;const y=S.act.get(o_.id);if(y)mv[o_.id]={p:y.days||[],pq:y.qty||{},n:o_.after.days}});
+    apply(ops,'');const nid=uid('pz');const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,repTo:st.to,tren:T.length,mv,rid:rid||'',prop:st.prop?st.prop.id:'',by:me.email,byName:me.name||me.email,ts:NOW()})];
     if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Reprogramada al '+st.to,decBy:me.email,decN:me.name||me.email,decT:NOW()}));rec(g.filter(Boolean));
-    dzLog(`→ ${x.name}${T.length?` y ${T.length} más del ambiente`:''} al ${dvLbl(st.to)} · ${mot}`);
     toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)}${rid?' · restricción registrada':''}`,'Deshacer',()=>{window.undo();const o=remDoc(nid);if(o)rec([o]);if(st.prop)dpReopen(st.prop);requestRender()});requestRender()}
   if(st.k==='res')step('res');else if(st.k==='per'&&eng&&!today)step('rep');else step('mot')}
 /** causa de no cumplimiento para lo que no va hoy (cuenta en el PPC del día) */
@@ -1044,6 +1046,142 @@ function cncFor(k){const L=P().cnc||[];const want=k==='per'?'SC':'PROG';return L
 /** hoy (o un día pasado): la restricción se registra y sigue el flujo de «no se hará hoy» de siempre */
 function dvResToday(btn,x,desc){const rid=uid('res');apply([op('restr',rid,{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:(P().restrTypes||[])[0]||'',desc,resp:'',need:M.date,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción registrada');
   setTimeout(()=>novaDialog(btn,x,{motivo:cncFor('res'),title:'No va hoy · '+desc}),0)}
+/* ---------- Cambios del plan (recuadro a la derecha) ---------- */
+function chHtml(sc){const K=M.date+'|'+M.piso;const E=[];
+  for(const z of PD.values()){if(z.pisoId!==M.piso||(sc&&z.sc!==sc))continue;const y=S.act.get(z.actId);const ay=y&&S.amb.get(y.ambId);const nm=`<span class="mono">${esc(ay?ay.code:'')}</span> ${esc(y?short(y.name,30):'(actividad eliminada)')}`;
+    if(z.kind==='nova'&&z.k)E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>→ ${nm}<small>${esc(conOf(z.sc).name)} · ${esc(z.motivo||'')} · al ${dvLbl(z.repTo)}${z.tren?` · con ${z.tren} más del ambiente`:''}</small></div>${dzEng()&&z.mv?`<button class="lnkb" data-chu="${z.id}">Deshacer</button>`:''}</div>`});
+    else if(z.kind==='nova')E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>✗ ${nm}<small>No va · ${esc(z.motivo||'')}${z.repTo?' · → '+fmtD(z.repTo):''}</small></div>${dzCan(y)?`<button class="lnkb" data-undo="${z.id}">Vuelve a ir</button>`:''}</div>`});
+    else if(z.kind==='aviso')E.push({t:z.ts||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>⚠ ${nm}<small>Va · liberar a primera hora: ${esc(z.desc||'')}</small></div>${dzEng()?`<button class="lnkb" data-avx="${z.id}">Quitar aviso</button>`:''}</div>`});
+    else if(z.kind==='dprop'&&z.st==='rej')E.push({t:z.decT||0,h:`<div class="mchi" style="--c:${conOf(z.sc).color}"><div>✓ ${nm}<small>Propuesta rechazada: va según lo programado</small></div></div>`})}
+  E.sort((a,b)=>b.t-a.t);const L=(M.dzlog&&M.dzlog.d===K?M.dzlog.L:[]).map(t=>`<div class="mchi"><div>${esc(t)}</div></div>`);const n=E.length+L.length;if(!n)return'';const op_=!!M.chOpen;
+  return`<button class="mpdh mchh" data-chtog="1" aria-expanded="${op_}">Cambios del plan <b>${n}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${E.map(e=>e.h).join('')}${L.join('')}</div>`:''}`}
+function revertRep(z){const ops=[];let blocked=0;
+  for(const[id,o]of Object.entries(z.mv||{})){const y=S.act.get(id);if(!y)continue;if(canon(y.days||[])!==canon(o.n||[])){blocked++;continue}ops.push(op('acts',id,{...y,days:o.p||[],qty:o.pq||{}}))}
+  if(blocked){toast('Esas fechas ya se cambiaron después: corrígelas en el lookahead.');return}
+  if(z.rid){const r=S.res.get(z.rid);if(r&&r.status!=='lib'){const a=arc('restr',z.rid);if(a)ops.push(a)}}
+  apply(ops,'Reprogramación deshecha');const o=remDoc(z.id);if(o)rec([o]);if(z.prop){const p=PD.get(z.prop);if(p)dpReopen(p)}requestRender()}
+
+/* ---------- Fuerza laboral, horario y cuadrillas del subcontratista (opcional por ahora) ----------
+   Un registro por SC y día en pdz (kind 'fza', id fz_<fecha>_<sc>): {items:[{cat,esp,n}], cuad:[{id,n}], hor:{t:'n'|'e',fin}, asg:{actId:{c,o,n?}}, sinDist}.
+   'fzl_<sc>' guarda lo último para copiarlo al día siguiente. Las cuadrillas se reparten arrastrándolas al plano (PC) o tocando (celular). */
+const FZ_CATS=['Capataz','Operario','Oficial','Peón'];
+const CQC=['#7B1FA2','#00897B','#EF6C00','#1565C0','#C2185B','#558B2F','#6D4C41','#00838F'];
+const fzId=(d,sc)=>'fz_'+d+'_'+sc;
+const fzOf=sc=>sc?PD.get(fzId(M.date,sc))||null:null;
+const fzMine=()=>myRole()==='sc'&&M.scDraw&&myScs().includes(M.scDraw)?M.scDraw:'';
+const fzTot=f=>(f&&f.items||[]).reduce((a,i)=>a+(+i.n||0),0);
+const cqCol=(f,c)=>{const i=(f&&f.cuad||[]).findIndex(q=>q.id===c);return CQC[(i<0?0:i)%CQC.length]};
+const horTxt=f=>{const h=f&&f.hor||{t:'n'};return h.t==='e'?`extendido hasta ${hm12(h.fin||'19:00')}`:'hasta 5:00 p. m.'};
+function hm12(t){const[H,m]=String(t||'17:00').split(':').map(Number);const ap=H>=12?'p. m.':'a. m.';const h=((H+11)%12)+1;return`${h}:${String(m||0).padStart(2,'0')} ${ap}`}
+/** etiqueta de la cuadrilla de una actividad: «C1» o «C1·2» si es la segunda que hace en el día */
+function cqTag(sc,aid){const f=fzOf(sc);const a=f&&f.asg&&f.asg[aid];if(!a)return null;const L=Object.entries(f.asg).filter(([,v])=>v.c===a.c).sort((p,q)=>(p[1].o||0)-(q[1].o||0));const r=L.findIndex(([k])=>k===aid)+1;return{t:r>1?a.c+'·'+r:a.c,col:cqCol(f,a.c),c:a.c,r}}
+function cqRoute(f,c){return Object.entries(f.asg||{}).filter(([,v])=>v.c===c).sort((p,q)=>(p[1].o||0)-(q[1].o||0)).map(([k])=>k)}
+/** flechas punteadas con el recorrido de cada cuadrilla sobre el plano */
+function cqRoutes(all,fv){let o='';const byAct=new Map();all.forEach(z=>{if(z.kind==='zona'&&z.actId&&!byAct.has(z.actId))byAct.set(z.actId,z)});
+  for(const f of PD.values()){if(f.kind!=='fza'||!f.asg||(fv&&f.sc!==fv))continue;for(const q of f.cuad||[]){const P=cqRoute(f,q.id).map(a=>byAct.get(a)).filter(Boolean).map(z=>centroid(unflat(z.pts)));if(P.length<2)continue;const col=cqCol(f,q.id);
+    o+=`<polyline points="${P.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity=".85" pointer-events="none"/><polyline points="${P.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="${col}" stroke-width="3" stroke-dasharray="9 7" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i];const ang=Math.atan2(b.y-a.y,b.x-a.x);const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;const k=Math.max(1,1/(M.view?M.view.z:1))*9;
+      o+=`<polygon points="${mx+Math.cos(ang)*k},${my+Math.sin(ang)*k} ${mx+Math.cos(ang+2.5)*k},${my+Math.sin(ang+2.5)*k} ${mx+Math.cos(ang-2.5)*k},${my+Math.sin(ang-2.5)*k}" fill="${col}" pointer-events="none"/>`}}}return o}
+function fzBlank(sc){return{date:M.date,sc,kind:'fza',items:[],cuad:[],hor:{t:'n',fin:'17:00'},asg:{},sinDist:false}}
+function fzWrite(sc,patch,undoable){const id=fzId(M.date,sc);const cur=PD.get(id);
+  if(cur&&undoable){const before={};Object.keys(patch).forEach(k=>before[k]=cur[k]===undefined?null:JSON.parse(JSON.stringify(cur[k])));rec([updDoc(id,{...patch,ts:NOW()},{...before})]);requestRender();return}
+  const doc={...(cur?strip_(cur):fzBlank(sc)),...patch,by:me.email,byName:me.name||me.email,ts:NOW()};PD.set(id,{...doc,id});savePD(id,doc);
+  if(patch.items||patch.cuad||patch.hor)savePD('fzl_'+sc,{date:'_last',kind:'fzl',sc,items:doc.items||[],cuad:doc.cuad||[],hor:doc.hor||{t:'n',fin:'17:00'},ts:NOW()});requestRender()}
+/* tarjeta del equipo en el panel (subcontratista) */
+function fzCardHtml(role,sc){const mine=fzMine();if(!mine)return'';const f=fzOf(mine);
+  if(f&&f.sinDist)return`<div class="fzc off"><span>👷 Programas sin distribución de personal</span><button class="lnkb" data-fz="open">Añadir fuerza laboral</button></div>`;
+  if(!f||!(f.items||[]).length)return`<div class="fzc"><div><b>👷 Tu equipo para el ${dvLbl(M.date)}</b><small>Indica tu fuerza laboral, el horario y reparte tus cuadrillas en el plano.</small></div><div class="fzcb"><button class="ib pri" data-fz="open">Añadir fuerza laboral</button><button class="lnkb" data-fz="skip">Programar sin distribución</button></div></div>`;
+  const n=fzTot(f),nq=(f.cuad||[]).length,asg=Object.keys(f.asg||{}).length;
+  return`<div class="fzc ok"><div><b>👷 ${n} persona${n===1?'':'s'} · ${nq} cuadrilla${nq===1?'':'s'} · ${horTxt(f)}</b><small>${(f.items||[]).map(i=>`${i.n} ${esc(i.cat)}${i.esp?' '+esc(i.esp):''}`).join(' · ')}${nq?` · ${asg} actividad${asg===1?'':'es'} con cuadrilla`:''}</small></div><div class="fzcb"><button class="ib" data-fz="open">Editar</button>${nq?`<button class="ib${M.cqOn?' on':''}" data-fz="rep">${M.cqOn?'Ocultar reparto':'Repartir en el plano'}</button>`:''}</div></div>`}
+/* hoja de fuerza laboral, horario y cuadrillas */
+async function fzOpen(sc){let f=fzOf(sc);let F;
+  if(f&&(f.items||[]).length)F=JSON.parse(JSON.stringify({items:f.items,cuad:f.cuad||[],hor:f.hor||{t:'n',fin:'17:00'}}));
+  else{let last=null;try{const d=await fcol('pdz').doc('fzl_'+sc).get();if(d.exists)last=d.data()}catch(e){}
+    F=last?{items:last.items||[],cuad:last.cuad||[],hor:{t:'n',fin:(last.hor&&last.hor.fin)||'19:00'}}:{items:[{cat:'Operario',esp:'',n:1},{cat:'Peón',esp:'',n:1}],cuad:[{id:'C1',n:2}],hor:{t:'n',fin:'19:00'}};F.copied=!!last}
+  if(!F.hor.fin||F.hor.fin==='17:00')F.hor.fin=F.hor.t==='e'?F.hor.fin:'19:00';
+  const draw=()=>{const n=F.items.reduce((a,i)=>a+(+i.n||0),0),nq=F.cuad.reduce((a,q)=>a+(+q.n||0),0);
+    lqModal(`<div class="lqtop"><b>👷 ${esc(conOf(sc).name)} · ${dvLbl(M.date)}</b><button class="ab" data-lqx aria-label="Cerrar">&times;</button></div>
+      ${F.copied?'<p class="lqmsg">Copiado de tu último registro: corrige solo lo que cambió.</p>':''}
+      <div class="fzs"><b>Personal en obra</b><datalist id="fzcats">${FZ_CATS.map(c=>`<option value="${c}">`).join('')}</datalist>
+        ${F.items.map((i,k)=>`<div class="fzr"><input list="fzcats" data-fi="${k}" data-ff="cat" value="${esc(i.cat||'')}" placeholder="Categoría" aria-label="Categoría"><input data-fi="${k}" data-ff="esp" value="${esc(i.esp||'')}" placeholder="Especialidad (p. ej. pintor)" aria-label="Especialidad"><span class="fzn"><button data-fn="${k}|-1" aria-label="Menos">−</button><b>${+i.n||0}</b><button data-fn="${k}|1" aria-label="Más">+</button></span><button class="ab" data-fdel="${k}" aria-label="Quitar">&times;</button></div>`).join('')}
+        <div class="fzfoot"><button class="lnkb" data-fadd="1">+ Agregar categoría</button><span>Total: <b>${n}</b> persona${n===1?'':'s'}</span></div></div>
+      <div class="fzs"><b>Horario</b><div class="fzh"><button data-fh="n" class="${F.hor.t!=='e'?'on':''}">Normal · hasta 5:00 p. m.</button><button data-fh="e" class="${F.hor.t==='e'?'on':''}">Extendido hasta <input type="time" id="fzfin" value="${esc(F.hor.fin||'19:00')}" aria-label="Hora de salida"></button></div></div>
+      <div class="fzs"><b>Cuadrillas</b><div class="fzq">${F.cuad.map((q,k)=>`<span class="fzqc" style="--q:${CQC[k%CQC.length]}"><i>${esc(q.id)}</i><span class="fzn"><button data-fq="${k}|-1" aria-label="Menos">−</button><b>${+q.n||0}</b><button data-fq="${k}|1" aria-label="Más">+</button></span><button class="ab" data-fqdel="${k}" aria-label="Quitar cuadrilla">&times;</button></span>`).join('')}<button class="ib" data-fqadd="1">+ Cuadrilla</button></div>
+        <p class="lqmsg ${nq>n?'bad':''}">${nq>n?`Las cuadrillas suman ${nq} personas y en obra hay ${n}.`:`En cuadrillas: ${nq} de ${n} personas.`}</p></div>
+      <div class="fzbt"><button class="ib" data-fskip="1">Programar sin distribución</button><button class="ib pri" data-fok="1">${F.cuad.length?'Guardar y repartir en el plano':'Guardar'}</button></div>`,click,null);
+    const m=$('#lqm');if(m){m.oninput=e=>{const t=e.target;if(t.dataset.fi!=null){F.items[+t.dataset.fi][t.dataset.ff]=t.value}if(t.id==='fzfin'){F.hor.fin=t.value;F.hor.t='e';const b=m.querySelector('[data-fh="e"]');if(b){b.classList.add('on');m.querySelector('[data-fh="n"]').classList.remove('on')}}}}};
+  function click(e){const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+    if(d.fn){const[k,s_]=d.fn.split('|');F.items[+k].n=Math.max(0,(+F.items[+k].n||0)+(+s_));draw();return}
+    if(d.fdel!=null){F.items.splice(+d.fdel,1);draw();return}
+    if(d.fadd){F.items.push({cat:'',esp:'',n:1});draw();setTimeout(()=>{const L=$$('#lqm [data-ff="cat"]');if(L.length)L[L.length-1].focus()},60);return}
+    if(d.fh){if(e.target.tagName==='INPUT'){F.hor.t='e';b.classList.add('on');const o=b.parentElement.querySelector('[data-fh="n"]');if(o)o.classList.remove('on');return}F.hor.t=d.fh;draw();return}
+    if(d.fq){const[k,s_]=d.fq.split('|');F.cuad[+k].n=Math.max(0,(+F.cuad[+k].n||0)+(+s_));draw();return}
+    if(d.fqdel!=null){F.cuad.splice(+d.fqdel,1);draw();return}
+    if(d.fqadd){let i=1;const ids=new Set(F.cuad.map(q=>q.id));while(ids.has('C'+i))i++;F.cuad.push({id:'C'+i,n:2});draw();return}
+    if(d.fskip){lqClose();fzWrite(sc,{sinDist:true});M.cqOn=false;toast('Listo: programas sin distribución de personal.');return}
+    if(d.fok){const items=F.items.map(i=>({cat:String(i.cat||'').trim(),esp:String(i.esp||'').trim(),n:+i.n||0})).filter(i=>i.cat&&i.n>0);
+      if(!items.length){toast('Indica al menos una categoría con su cantidad.');return}
+      const ids=new Set(F.cuad.map(q=>q.id));const old=(fzOf(sc)||{}).asg||{};const asg={};for(const[k,v]of Object.entries(old))if(ids.has(v.c))asg[k]=v;
+      lqClose();fzWrite(sc,{items,cuad:F.cuad.map(q=>({id:q.id,n:+q.n||0})),hor:{t:F.hor.t==='e'?'e':'n',fin:F.hor.t==='e'?(F.hor.fin||'19:00'):'17:00'},asg,sinDist:false});
+      if(F.cuad.length){M.cqOn=true;M.cqSel=''}else toast('Fuerza laboral guardada.');return}}
+  draw()}
+/* barra flotante de cuadrillas sobre el plano */
+function cqBarHtml(role){const sc=fzMine();if(!sc||!M.cqOn)return'';const f=fzOf(sc);if(!f||!(f.cuad||[]).length)return'';
+  const used={};Object.values(f.asg||{}).forEach(a=>used[a.c]=(used[a.c]||0)+1);
+  const va=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc&&!dpPend(o.x.id));const sin=va.filter(o=>!(f.asg||{})[o.x.id]).length;const tap=PHONE()||innerWidth<900;
+  return`<span class="cqh">${tap?(M.cqSel?`Toca la actividad para <b>${esc(M.cqSel)}</b>`:'Toca una cuadrilla'):'Arrastra una cuadrilla a su actividad'}</span>${(f.cuad||[]).map(q=>`<button class="cqchip${M.cqSel===q.id?' on':''}" data-cqd="${esc(q.id)}" style="--q:${cqCol(f,q.id)}" title="${esc(q.id)} · ${q.n} persona${q.n===1?'':'s'}${used[q.id]?' · '+used[q.id]+' actividad'+(used[q.id]>1?'es':''):''}"><b>${esc(q.id)}</b><small>${q.n} p.${used[q.id]?' · '+used[q.id]:''}</small></button>`).join('')}
+    <span class="cqtrash" id="cqtrash" title="Suelta aquí una etiqueta para quitarla">🗑</span><span class="cqsin${sin?' bad':''}">${sin?`${sin} sin cuadrilla`:'✓ Todas con cuadrilla'}</span><button class="ib" data-fz="rep">Listo</button>`}
+/* lo que ve el ingeniero (y el SC lo suyo): equipos del día */
+function fzBoxHtml(role){const mine=role==='sc'?new Set(myScs()):null;const scs=[...new Set(dayActs(M.piso,M.date).map(o=>o.x.sc))].filter(c=>!mine||mine.has(c)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));if(!scs.length)return'';
+  const rows=scs.map(sc=>{const f=fzOf(sc);const c=conOf(sc);
+    if(!f||(!f.sinDist&&!(f.items||[]).length))return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>Sin fuerza laboral indicada</small></div>`;
+    if(f.sinDist)return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>Sin distribución</small></div>`;
+    const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc&&!dpPend(o.x.id));const sin=acts.filter(o=>!(f.asg||{})[o.x.id]).length;const ext=f.hor&&f.hor.t==='e';
+    const rt=(f.cuad||[]).map(q=>{const R=cqRoute(f,q.id).map(a=>{const y=S.act.get(a);const ay=y&&S.amb.get(y.ambId);return ay?ay.code:'?'});return`<span class="mfzq" style="--q:${cqCol(f,q.id)}"><i>${esc(q.id)}</i>${R.length?esc(R.join(' → ')):'<em>sin actividad</em>'}${q.n?` · ${q.n} p.`:''}</span>`}).join('');
+    return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>${fzTot(f)} personas · ${(f.cuad||[]).length} cuadrillas · <span class="${ext?'ext':''}">${horTxt(f)}</span>${sin?` · <span class="bad">${sin} sin cuadrilla</span>`:''}</small>${rt}</div>`});
+  const op_=M.fzOpen!==false;return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
+/* asignar, mover y quitar cuadrillas */
+function cqAssign(sc,aid,c,fromAid){const f=fzOf(sc);if(!f)return;const old=f.asg||{};const asg={...old};
+  if(fromAid&&fromAid!==aid){const v=asg[fromAid];delete asg[fromAid];if(v){asg[aid]={...v,c:v.c}}}
+  else{if(asg[aid]&&asg[aid].c===c)return;const o=Math.max(0,...Object.values(asg).filter(a=>a.c===c).map(a=>a.o||0))+1;asg[aid]={c,o}}
+  fzWrite(sc,{asg},true)}
+function cqRemove(sc,aid){const f=fzOf(sc);if(!f||!(f.asg||{})[aid])return;const asg={...f.asg};delete asg[aid];fzWrite(sc,{asg},true)}
+function cqZoneAt(x,y,sc){const el=document.elementFromPoint(x,y);const t=el&&el.closest&&el.closest('#mstage [data-z]');if(!t)return null;const z=zget(t.dataset.z);return z&&z.kind==='zona'&&z.actId&&z.sc===sc?z:null}
+function cqMenu(anchor,sc,aid){const f=fzOf(sc);const a=f&&f.asg&&f.asg[aid];if(!a)return;const y=S.act.get(aid);const q=(f.cuad||[]).find(q=>q.id===a.c)||{n:0};const n=a.n!=null?a.n:q.n;const tg=cqTag(sc,aid);
+  openPop(anchor,`<div class="ph">${esc(tg?tg.t:a.c)} · ${esc(short(y?y.name:'',34))}</div><div class="qrow"><span class="mu">Personas aquí</span><span class="fzn"><button data-do="m" aria-label="Menos">−</button><b>${n}</b><button data-do="p" aria-label="Más">+</button></span></div>
+    ${tg&&tg.r>1?'<button data-do="first">Ponerla primero</button>':''}<button data-do="rm">Quitar la cuadrilla</button>`,
+    {m:()=>{const asg={...f.asg,[aid]:{...a,n:Math.max(0,n-1)}};fzWrite(sc,{asg},true);setTimeout(()=>{const l=$(`#mstage [data-cqt="${CSS.escape(aid)}"]`);if(l)cqMenu(l,sc,aid)},60)},
+     p:()=>{const asg={...f.asg,[aid]:{...a,n:n+1}};fzWrite(sc,{asg},true);setTimeout(()=>{const l=$(`#mstage [data-cqt="${CSS.escape(aid)}"]`);if(l)cqMenu(l,sc,aid)},60)},
+     first:()=>{const mn=Math.min(...Object.values(f.asg).filter(v=>v.c===a.c).map(v=>v.o||0));fzWrite(sc,{asg:{...f.asg,[aid]:{...a,o:mn-1}}},true)},
+     rm:()=>cqRemove(sc,aid)})}
+let CQD=null;
+document.addEventListener('pointerdown',e=>{if(U.tab!=='mapa'||e.button!==0)return;const chip=e.target.closest&&e.target.closest('[data-cqd]');const tag=!chip&&e.target.closest&&e.target.closest('#mstage [data-cqt]');if(!chip&&!tag)return;
+  const sc=fzMine();if(!sc){if(tag){e.stopPropagation()}return}e.stopPropagation();e.preventDefault();
+  CQD={chip,tag,c:chip?chip.dataset.cqd:null,from:tag?tag.dataset.cqt:null,x0:e.clientX,y0:e.clientY,drag:false,ghost:null,hov:null,sc};
+  if(tag){const f=fzOf(sc);const a=f&&f.asg&&f.asg[CQD.from];if(!a){CQD=null;return}CQD.c=a.c}},true);
+addEventListener('pointermove',e=>{const D=CQD;if(!D)return;if(!D.drag&&Math.hypot(e.clientX-D.x0,e.clientY-D.y0)<6)return;
+  if(!D.drag){D.drag=true;try{PDOWN=true}catch(_){}const g=document.createElement('div');g.className='cqghost';const f=fzOf(D.sc);g.style.setProperty('--q',cqCol(f,D.c));g.textContent=D.c;document.body.appendChild(g);D.ghost=g;document.body.classList.add('cqdragging')}
+  D.ghost.style.left=e.clientX+'px';D.ghost.style.top=e.clientY+'px';
+  const z=cqZoneAt(e.clientX,e.clientY,D.sc);const id=z?z.id:null;if(id!==D.hov){if(D.hov){const o=$(`#mstage .pvl[data-z="${CSS.escape(D.hov)}"]`);if(o)o.classList.remove('cqhov')}D.hov=id;if(id){const n=$(`#mstage .pvl[data-z="${CSS.escape(id)}"]`);if(n)n.classList.add('cqhov')}}
+  const tr=$('#cqtrash');if(tr){const r=tr.getBoundingClientRect();tr.classList.toggle('on',!!D.from&&e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom)}},true);
+addEventListener('pointercancel',()=>{const D=CQD;if(!D)return;CQD=null;try{PDOWN=false}catch(_){}document.body.classList.remove('cqdragging');if(D.ghost)D.ghost.remove();if(D.hov){const o=$(`#mstage .pvl[data-z="${CSS.escape(D.hov)}"]`);if(o)o.classList.remove('cqhov')}},true);
+addEventListener('pointerup',e=>{const D=CQD;if(!D)return;CQD=null;try{PDOWN=false}catch(_){}document.body.classList.remove('cqdragging');if(D.ghost)D.ghost.remove();
+  if(D.hov){const o=$(`#mstage .pvl[data-z="${CSS.escape(D.hov)}"]`);if(o)o.classList.remove('cqhov')}
+  if(!D.drag){if(D.chip){M.cqSel=M.cqSel===D.c?'':D.c;requestRender()}else if(D.tag)cqMenu(D.tag,D.sc,D.from);return}
+  const z=cqZoneAt(e.clientX,e.clientY,D.sc);
+  if(z){cqAssign(D.sc,z.actId,D.c,D.from);if(!D.from&&(PHONE()||innerWidth<900))cqNext(z,D.c);return}
+  if(D.from){const st=$('#mstage');const r=st&&st.getBoundingClientRect();const out=!r||e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;const tr=$('#cqtrash');const tb=tr&&tr.getBoundingClientRect();
+    if(out||(tb&&e.clientX>=tb.left&&e.clientX<=tb.right&&e.clientY>=tb.top&&e.clientY<=tb.bottom))cqRemove(D.sc,D.from)}},true);
+/* celular (o al tocar): con una cuadrilla elegida, tocar una actividad la asigna */
+let CQT=null;
+document.addEventListener('pointerdown',e=>{CQT=null;if(U.tab!=='mapa'||!M.cqSel||!fzMine())return;if(e.target.closest&&e.target.closest('#mstage')&&!e.target.closest('[data-cqt]'))CQT={x:e.clientX,y:e.clientY}},true);
+addEventListener('pointerup',e=>{const T=CQT;CQT=null;if(!T||!M.cqSel||Math.hypot(e.clientX-T.x,e.clientY-T.y)>10)return;const sc=fzMine();if(!sc)return;
+  const el=document.elementFromPoint(e.clientX,e.clientY);const t=el&&el.closest&&el.closest('#mstage [data-z]');if(!t)return;const z=zget(t.dataset.z);
+  e.stopPropagation();if(!z||z.kind!=='zona'||!z.actId||z.sc!==sc){toast('Toca una actividad de tu partida.');return}
+  const c=M.cqSel;cqAssign(sc,z.actId,c);cqNext(z,c)},true);
+function cqNext(z,c){setTimeout(()=>{const l=$(`#mstage .pvl[data-z="${CSS.escape(z.id)}"]`)||$('#mcqb');if(!l)return;M.cqSel=c;
+  openPop(l,`<div class="ph">${esc(c)} asignada</div><div class="ptx">¿${esc(c)} hará otra actividad más?</div><button data-do="si" class="pri">Sí · toco la siguiente</button><button data-do="no">No · listo con ${esc(c)}</button>`,
+    {si:()=>{M.cqSel=c;requestRender()},no:()=>{M.cqSel='';requestRender()}})},80)}
 function dzLog(t){const k=M.date+'|'+M.piso;if(!M.dzlog||M.dzlog.d!==k)M.dzlog={d:k,L:[]};M.dzlog.L.unshift(t);M.dzlog.L=M.dzlog.L.slice(0,12)}
 /* el ingeniero cambia el lookahead; el subcontratista lo deja como propuesta (se envía desde el Lookahead) */
 function dzWrite(x,after,label){if(typeof canWrite!=='undefined'&&canWrite){apply([op('acts',x.id,after)],label);return true}
@@ -1086,6 +1224,10 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if((b=g('[data-dpa]'))){const p=PD.get(b.dataset.dpa);const x=p&&S.act.get(p.actId);if(x&&dzEng())dpAccept(b,x,p);return true}
   if((b=g('[data-dpr]'))){const p=PD.get(b.dataset.dpr);if(p&&dzEng())dpReject(p);return true}
   if((b=g('[data-avx]'))){const o=remDoc(b.dataset.avx);if(o)rec([o]);requestRender();return true}
+  if((b=g('[data-chtog]'))){M.chOpen=!M.chOpen;requestRender();return true}
+  if((b=g('[data-fztog]'))){M.fzOpen=M.fzOpen===false;requestRender();return true}
+  if((b=g('[data-chu]'))){const z=PD.get(b.dataset.chu);if(z&&dzEng())revertRep(z);return true}
+  if((b=g('[data-fz]'))){const sc=fzMine();if(!sc)return true;const k=b.dataset.fz;if(k==='open')fzOpen(sc);else if(k==='skip'){fzWrite(sc,{sinDist:true});toast('Listo: programas sin distribución de personal.')}else if(k==='rep'){M.cqOn=!M.cqOn;M.cqSel='';requestRender()}return true}
   if((b=g('[data-pdtog]'))){M.pdOpen=M.pdOpen===false;requestRender();return true}
   if((b=g('[data-dz]'))){const[k,id]=b.dataset.dz.split('|');const x=S.act.get(id);if(!x||!dzCan(x))return true;if(k==='man')dzMove(b,x);else if(k==='fin')dzFin(x);else if(k==='res')dzRes(b,x);return true}
   if(t.id==='dzadd'){dzAdd(t);return true}

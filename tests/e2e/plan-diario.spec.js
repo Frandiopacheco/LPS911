@@ -26,8 +26,10 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await page.locator('#pop .nvok').click();
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, sig]);
   await expect(row(page, 'e0')).toHaveCount(0);
-  await expect(page.locator('#mpanel')).toContainText('Reprogramadas en este plan');
-  await expect(page.locator('#mpanel .mp-it.rpg')).toContainText('Sin personal');
+  // el cambio queda en el recuadro «Cambios del plan» (a la derecha), no en el panel
+  await expect(page.locator('#mpanel')).not.toContainText('Reprogramadas');
+  await page.locator('#mchb [data-chtog]').click();
+  await expect(page.locator('#mchb .mchi').first()).toContainText('Sin personal');
   // programar otra actividad del lookahead este día
   await page.click('#dzadd');
   await page.fill('#dzq', 'tarrajeo');
@@ -163,4 +165,99 @@ test('rechazar una propuesta: la actividad va', async ({ page }) => {
   expect((await pdz(page)).find(z => z.kind === 'dprop').st).toBe('rej');
   expect((await act(page, 's9')).days).toEqual([MANANA]);
   noErrors(errors, 'rechazar');
+});
+
+test('«Cambios del plan» permite deshacer una reprogramación', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
+  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mchb [data-chu]').click();
+  await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  await expect(row(page, 'e0')).toBeVisible();
+  noErrors(errors, 'deshacer cambio');
+});
+
+test('la ventanita sigue a su fila al desplazar el panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1300, height: 520 });
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  const y0 = await page.locator('#pop').evaluate(p => p.getBoundingClientRect().top);
+  await page.locator('#mpanel').evaluate(p => { p.scrollTop += 60; });
+  await expect.poll(() => page.locator('#pop').evaluate(p => p.getBoundingClientRect().top)).toBeLessThan(y0 - 30);
+  noErrors(errors, 'ventanita');
+});
+
+const S8 = ['acts', 's8', { ambId: 'a2', sc: 'c1', name: 'Pruebas de presión', und: 'pto', days: [MANANA], order: 15 }];
+const fz = page => page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA);
+async function arrastrar(page, from, to) {
+  const a = await page.locator(from).boundingBox(); const b = await page.locator(to).boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+  await page.mouse.move(a.x + 30, a.y - 30, { steps: 4 }); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }); await page.mouse.up();
+}
+
+test('el subcontratista indica su fuerza laboral y arrastra sus cuadrillas al plano', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8] });
+  await page.locator('#mpanel [data-fz="open"]').click();
+  const m = page.locator('#lqm');
+  await expect(m).toContainText('Personal en obra');
+  await m.locator('[data-ff="esp"]').first().fill('Gasfitero');
+  await m.locator('[data-fn="0|1"]').click(); // 2 operarios
+  await m.locator('[data-fh="e"]').click();
+  await m.locator('[data-fqadd]').click(); // C2
+  await m.locator('[data-fok]').click();
+  await expect.poll(async () => (await fz(page) || {}).cuad?.map(q => q.id)).toEqual(['C1', 'C2']);
+  const f = await fz(page);
+  expect(f.items[0]).toMatchObject({ cat: 'Operario', esp: 'Gasfitero', n: 2 });
+  expect(f.hor.t).toBe('e');
+  expect(await page.evaluate(() => window.__dbGet('pdz', 'fzl_c1').items.length)).toBe(2); // se copia al día siguiente
+  await expect(page.locator('#mcqb')).toBeVisible();
+  await expect(page.locator('#mpanel .fzc')).toContainText('3 personas');
+  // arrastrar C1 a «Pruebas hidráulicas» y luego a «Pruebas de presión»
+  await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s9"]');
+  await expect.poll(async () => (await fz(page)).asg?.s9?.c).toBe('C1');
+  await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s8"]');
+  await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1·2');
+  await expect(page.locator('#mstage [data-cqt="s9"]')).toHaveText('C1');
+  await expect(page.locator('#mcqb')).toContainText('Todas con cuadrilla');
+  // la etiqueta se arrastra a la papelera para quitarla
+  await arrastrar(page, '#mstage [data-cqt="s8"]', '#cqtrash');
+  await expect.poll(async () => Object.keys((await fz(page)).asg)).toEqual(['s9']);
+  await expect(page.locator('#mcqb')).toContainText('1 sin cuadrilla');
+  // Ctrl+Z deshace
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => Object.keys((await fz(page)).asg).sort()).toEqual(['s8', 's9']);
+  noErrors(errors, 'cuadrillas');
+});
+
+test('en el celular: se toca la cuadrilla y luego la actividad', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2 }], hor: { t: 'n', fin: '17:00' }, asg: {}, sinDist: false, ts: 1 }];
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, F] });
+  await page.waitForFunction(() => window.__plano && window.__plano.M);
+  await page.evaluate(() => { const M = window.__plano.M; M.cqOn = true; M.panel = false; requestRender(); });
+  await page.locator('#mcqb [data-cqd="C1"]').click();
+  await expect(page.locator('#mcqb')).toContainText('Toca la actividad');
+  await page.locator('#mstage .pvl[data-z="v:s9"]').click();
+  await expect.poll(async () => (await fz(page)).asg?.s9?.c).toBe('C1');
+  await expect(page.locator('#pop')).toContainText('¿C1 hará otra actividad más?');
+  await page.locator('#pop [data-do="no"]').click();
+  noErrors(errors, 'cuadrillas celular');
+});
+
+test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', async ({ page }) => {
+  const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: 'Gasfitero', n: 3 }, { cat: 'Peón', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2 }, { id: 'C2', n: 3 }], hor: { t: 'e', fin: '19:00' }, asg: { s9: { c: 'C1', o: 1 }, s8: { c: 'C1', o: 2 } }, sinDist: false, ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8, F] });
+  const b = page.locator('#mfzb');
+  await expect(b).toContainText('SC SANITARIAS');
+  await expect(b).toContainText('5 personas · 2 cuadrillas');
+  await expect(b).toContainText('extendido hasta 7:00 p. m.');
+  await expect(b.locator('.mfzq').first()).toContainText('A-1 → A-2');
+  await expect(b).toContainText('SC ELECTRICAS');
+  await expect(b).toContainText('Sin fuerza laboral indicada');
+  await expect(page.locator('#mstage [data-cqt="s8"]')).toHaveText('C1·2');
+  await expect(page.locator('#mcqb')).toBeHidden(); // el ingeniero no reparte
+  noErrors(errors, 'equipos');
 });
