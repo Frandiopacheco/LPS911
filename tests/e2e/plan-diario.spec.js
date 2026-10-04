@@ -531,3 +531,39 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   await expect.poll(async () => (await act(page, 'e1')).days).not.toContain(MANANA);
   noErrors(errors, 'publicar');
 });
+
+test('varios usuarios: publicar salta lo que otro ya movió y el reparto de cuadrillas no se pisa', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nv="per"]').click();
+  await page.locator('#pop .nvok').click();
+  // mientras tanto otra persona movió «e0» en el lookahead (ya no va mañana)
+  const otro = await page.evaluate(d => wshift(d, 3), MANANA);
+  await page.evaluate(([h, o]) => window.firebase.firestore().collection('acts').doc('e0').update({ days: [h, o] }), [HOY, otro]);
+  await publicar(page);
+  await expect(page.locator('#toast')).toContainText('ya no estaba');
+  expect((await act(page, 'e0')).days).toEqual([HOY, otro]); // no se corrió dos veces
+  noErrors(errors, 'publicar concurrente');
+});
+
+test('un borrador que no se publicó a tiempo avisa y se puede descartar', async ({ page }) => {
+  const D = ['pdz', 'pzD', { date: HOY, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Sin personal', k: 'per', repTo: MANANA, tren: 0, draft: true, ids: ['e0'], shift: 1, by: 'admin', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, D] });
+  await page.click('#wtoday');
+  await expect(page.locator('#mpanel .pubb.late')).toContainText('Sin publicar');
+  await page.locator('#mpanel [data-pubx]').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
+  expect((await act(page, 'e0')).days).toEqual([HOY, MANANA]);
+  noErrors(errors, 'borrador vencido');
+});
+
+test('el reparto de cuadrillas se guarda por actividad (otro equipo del mismo SC no lo pisa)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8,
+    ['pdz', `fz_${MANANA}_c1`, { date: MANANA, kind: 'fza', sc: 'c1', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2, items: [{ cat: 'Operario', esp: '', n: 2 }] }], hor: { t: 'n', fin: '17:00' }, asg: {} }]] });
+  // desde el celular asignan C1 a s8; en la PC, sin haberlo recibido aún, se asigna a s9
+  await page.evaluate(d => window.firebase.firestore().collection('pdz').doc('fz_' + d + '_c1').update({ 'asg.s8': { c: 'C1', o: 1 } }), MANANA);
+  await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
+  await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s9"]');
+  await expect.poll(async () => Object.keys((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).asg || {}).sort()).toEqual(['s8', 's9']);
+  noErrors(errors, 'reparto concurrente');
+});

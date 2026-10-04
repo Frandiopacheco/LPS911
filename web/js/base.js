@@ -127,7 +127,9 @@ const restrAreasL=()=>{const a=P().restrAreas;return a&&a.length?a:['OT','Ingeni
 const typeGrp=t=>{const m=P().restrGrp||{};return t in m?m[t]:(GRP_AREA.test(t||'')?'area':'campo')};
 const grpOf=r=>r.grp||typeGrp(r.type);
 const GRPN={campo:'Operativa de campo',area:'Otras áreas'};
-const restrPend=aid=>[...S.res.values()].filter(r=>r.actId===aid&&r.status!=='lib');
+/* restricciones pendientes por actividad: índice que se rehace solo cuando cambian los datos (DV) */
+let RPK=-1,RPM=new Map();
+const restrPend=aid=>{if(RPK!==DV){RPK=DV;RPM=new Map();for(const r of S.res.values())if(r.actId&&r.status!=='lib'){const L=RPM.get(r.actId);if(L)L.push(r);else RPM.set(r.actId,[r])}}return RPM.get(aid)||[]};
 const rTxt=r=>`${GRPN[grpOf(r)]}${grpOf(r)==='area'&&r.area?' · '+r.area:''} — ${r.type||'Restricción'}${r.desc?': '+r.desc:''}${r.resp?' (resp. '+r.resp+')':''}`;
 const doneOf=x=>DONE.get(x.id)||null;
 const libDay=(x,d)=>{const dn=DONE.get(x.id);return!!(dn&&d>dn&&(x.days||[]).includes(d))};
@@ -278,7 +280,8 @@ async function startSession(u,fdb){
   setStatus();updUndo();
 }
 const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=null,liveFrom=null,liveErr=null;
-function doneRebuild(){DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
+let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
+function doneRebuild(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
   for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
   for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||recReal(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
@@ -296,11 +299,15 @@ function recReal(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&
 function recOf(d,aid){const r=recReal(d,aid);if(r)return r;const lv=LIVE.get(d+'_'+aid);const c=lv&&lv.close;if(!c||!c.status)return null;
   return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:!!c.done,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,prop:{status:c.status,cnc:c.cnc||'',by:c.by||'',byName:c.n||'',ts:c.t||0}}}
 const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},no:{t:'No cumplido',i:'✗',c:'no'}};
-function writeDaily(d,pid,obj){const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+/* solo se envían los campos que cambian de cada registro: si otro ingeniero cambió otro campo (foto, nota, estado),
+   una copia local atrasada no lo pisa */
+function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(recs||{})){const c=(cur.recs||{})[aid];if(!r||!c||typeof r!=='object'){out[aid]=r;continue}
+  const p={};for(const[k,v]of Object.entries(r))if(canon(v)!==canon(c[k]))p[k]=v;if(Object.keys(p).length)out[aid]=p}return out}
+function writeDaily(d,pid,obj){const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
   if(db&&canDaily&&obj.recs)didxFromDaily(d,pid,obj.recs);doneRebuild();requestRender();
   if(!db||!canDaily)return;pending++;setStatus();const key='daily/'+id;
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj},{merge:true})))
+  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})))
     .then(()=>{lastErr=null},e=>{if(e&&e.code==='permission-denied'){canDaily=false;lastErr='Sin permiso';toast('Tu rol no permite registrar avance. Pide el rol Campo o Editor.')}else handleWriteErr(e)}).finally(()=>{pending--;setStatus()})}
 function stopSession(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
   for(const k of Object.values(COLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;

@@ -219,6 +219,26 @@ test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x5'), { sc: 'c-otro', pts: [1] }));
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pzon/x6'), { sc: 'c-gabel', pts: [1] }));
 });
+test('plan del día: el SC dibuja y propone, pero no toca las decisiones del ingeniero', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pdz/nv1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'nova', actId: 'x1', k: 'per', repTo: '2026-10-03', draft: true, ids: ['x1'], shift: 1 });
+    await setDoc(doc(db, 'pdz/xk1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'xok', keys: ['a:x1', 'a:x9'] });
+    await setDoc(doc(db, 'pdz/dp1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'dprop', actId: 'x1', k: 'per', st: 'rej' });
+  });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(setDoc(doc(sc, 'pdz/z1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'zona', actId: 'x1', pts: [] }));
+  await assertSucceeds(setDoc(doc(sc, 'pdz/dp2'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'dprop', actId: 'x1', k: 'res', desc: 'falta', st: 'pend' }));
+  await assertFails(setDoc(doc(sc, 'pdz/dp3'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'dprop', actId: 'x1', k: 'res', st: 'ok' }));
+  await assertSucceeds(deleteDoc(doc(sc, 'pdz/dp1'))); // vuelve a proponer después de un rechazo
+  await assertFails(setDoc(doc(sc, 'pdz/z2'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-otro', kind: 'zona', pts: [] }));
+  await assertFails(deleteDoc(doc(sc, 'pdz/nv1')));
+  await assertFails(updateDoc(doc(sc, 'pdz/nv1'), { shift: 9 }));
+  await assertFails(setDoc(doc(sc, 'pdz/nv2'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'nova', actId: 'x1', k: 'per', ids: ['x9'] }));
+  await assertFails(deleteDoc(doc(sc, 'pdz/xk1')));
+  await assertFails(setDoc(doc(sc, 'pdz/pub_2026-10-02_p1'), { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'pub' }));
+  await assertSucceeds(deleteDoc(doc(user('editor@obra.pe'), 'pdz/nv1')));
+});
 test('reloj e índice de terminadas', async () => {
   await assertSucceeds(setDoc(doc(cap('cap1'), 'clock/cap1'), { t: 1 }));
   await assertFails(setDoc(doc(cap('cap1'), 'clock/otro'), { t: 1 }));
