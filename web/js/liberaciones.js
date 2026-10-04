@@ -59,35 +59,46 @@ function lqHead(x,l){const a=S.amb.get(x.ambId);const p=S.pis.get((l&&l.pisoId)|
   return`<div class="lqh"><b>${esc(x.name||'(sin nombre)')}</b><span>${esc([p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · '))} · ${esc(conOf(x.sc).name)}</span>
    <span class="lqtags">${l&&l.crit?`<i class="lqt crit">CRÍTICA${l.rest?' · restringe '+esc(l.rest):''}</i>`:''}${l&&l.sup?'<i class="lqt sup">REQUIERE SUPERVISIÓN</i>':''}${!x.id?'<i class="lqt">No está en el lookahead</i>':''}</span></div>`}
 /* solicitar */
-/* aid = actividad del lookahead (sugerencia) · opt.free = algo que no está en el lookahead: qué se libera, subcontratista y ambiente */
-function libAsk(aid,opt){opt=opt||{};const free=!!opt.free;const x0=free?null:S.act.get(aid);if(!free&&!x0)return;
+/* zona de la actividad tomada del plan diario (si está en su piso) */
+function libZoneOf(aid){const zf=aid&&window.__plano&&window.__plano.zoneFor?window.__plano.zoneFor(aid):null;return zf&&zf.pisoId===pisoOfAct(aid)?{pts:zf.pts,vista:zf.vista,pisoId:zf.pisoId}:null}
+/* ids = una actividad o varias del lookahead (sugerencias) · opt.free = algo que no está en el lookahead (opt.nm = texto ya escrito en el buscador) */
+function libAsk(ids,opt){opt=opt||{};const free=!!opt.free;const L0=free?[]:(Array.isArray(ids)?ids:[ids]).map(i=>S.act.get(i)).filter(Boolean);if(!free&&!L0.length)return;
+  const x0=L0.length===1?L0[0]:null;const multi=L0.length>1;
   const myS=SCK()?myScsI():null;const scOpts=free?(myS||[...S.con.keys()]).filter(Boolean):[];
-  if(x0&&!canLibAsk(x0)){toast('Solo el subcontratista de la partida, el ingeniero de producción o Calidad pueden solicitarla.');return}
+  if(L0.some(x=>!canLibAsk(x))){toast('Solo el subcontratista de la partida, el ingeniero de producción o Calidad pueden solicitarla.');return}
   if(free&&!(isCal()||(canWrite&&!PM())||(myS&&myS.length))){toast('Solo el subcontratista, el ingeniero de producción o Calidad pueden solicitarla.');return}
-  const cur=x0&&libOf(aid);if(cur&&!libDone(cur.st)){libDetail(cur.id);return}const t0=todayIso();const fut=x0?(x0.days||[]).filter(d=>d>=t0).sort():[];const def=fut.length?fut[fut.length-1]:wshift(t0,1);
-  const zf=x0&&window.__plano&&window.__plano.zoneFor?window.__plano.zoneFor(aid):null;const zd=zf&&zf.pisoId===pisoOfAct(aid)?{pts:zf.pts,vista:zf.vista,pisoId:zf.pisoId}:null;
-  const F={need:def<=t0?wshift(t0,1):def,slot:'am',note:'',proto:[],zona:opt.zona||zd||null,zsrc:opt.zona?'mano':zd?'plan':'',nm:'',sc:scOpts.length===1?scOpts[0]:(U.libSc&&scOpts.includes(U.libSc)?U.libSc:''),amb:''};
+  const cur=x0&&libOf(x0.id);if(cur&&!libDone(cur.st)){libDetail(cur.id);return}const t0=todayIso(),tm=wshift(t0,1),t2=wshift(t0,2);
+  const defOf=x=>{const fut=(x.days||[]).filter(d=>d>=t0).sort();const d=fut.length?fut[fut.length-1]:tm;return d<=t0?tm:d};
+  const def=L0.length?L0.map(defOf).sort()[0]:tm;
+  const zd=x0?libZoneOf(x0.id):null;
+  const F={need:def,slot:'am',note:'',proto:[],zona:opt.zona||zd||null,zsrc:opt.zona?'mano':zd?'plan':'',nm:opt.nm||'',sc:scOpts.length===1?scOpts[0]:(U.libSc&&scOpts.includes(U.libSc)?U.libSc:''),amb:''};
   /* ambientes de los pisos a la vista, por piso */
   const ambOpts=()=>{const out=[];for(const p of visPisos())for(const s_ of [...S.sec.values()].filter(q=>pisoOfSecObj(q)===p.id).sort(byOrder))for(const a of [...S.amb.values()].filter(q=>q.sectorId===s_.id).sort(byOrder))out.push({a,p});return out};
   const grab=()=>{F.note=($('#lqn')||{}).value??F.note;if(free){F.nm=($('#lqt')||{}).value??F.nm;F.sc=($('#lqsc2')||{}).value??F.sc;F.amb=($('#lqa')||{}).value??F.amb}};
-  const draw=()=>{const late=libLate(F.need);const x=x0||{id:'',name:F.nm||'Liberación fuera del lookahead',sc:F.sc,ambId:F.amb};
-    lqModal(`<div class="lqtop"><b>Solicitar liberación</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>${free?`
-    <label>¿Qué se libera?<input id="lqt" value="${esc(F.nm)}" placeholder="Ej.: prueba hidráulica de montantes" autocomplete="off"></label>
+  const head=()=>{if(multi)return`<div class="lqh"><b>${L0.length} actividades</b><ul class="lqfl">${L0.map(x=>{const a=S.amb.get(x.ambId)||{};const p=S.pis.get(pisoOfAct(x.id))||{};return`<li><i style="--c:${conOf(x.sc).color}"></i><b>${esc(x.name||'')}</b> <span>${esc([p.code,a.code].filter(Boolean).join(' · '))} · ${esc(conOf(x.sc).name)}</span></li>`}).join('')}</ul></div>`;
+    if(free)return`<label>¿Qué se libera?<input id="lqt" value="${esc(F.nm)}" placeholder="Ej.: prueba hidráulica de montantes" autocomplete="off"></label>
     <div class="lq2">${scOpts.length===1?'':`<label>Subcontratista<select id="lqsc2"><option value="">— elige —</option>${scOpts.map(c=>`<option value="${esc(c)}"${F.sc===c?' selected':''}>${esc(conOf(c).name)}</option>`).join('')}</select></label>`}
      <label>Ambiente<select id="lqa"><option value="">— elige —</option>${ambOpts().map(o=>`<option value="${o.a.id}"${F.amb===o.a.id?' selected':''}>${esc(o.p.code+' · '+o.a.code+' · '+(o.a.name||''))}</option>`).join('')}</select></label></div>
-    <p class="lqmsg">No está en el lookahead: Calidad la verá igual que las demás.</p>`:lqHead(x,null)}
-    <div class="lq2"><label>Fecha en que estará lista<input type="date" id="lqd" value="${F.need}" min="${t0}"></label><label>Hora sugerida<select id="lqs"><option value="am"${F.slot==='am'?' selected':''}>Mañana (08:00–12:00)</option><option value="pm"${F.slot==='pm'?' selected':''}>Tarde (13:00–17:00)</option></select></label></div>
+    <p class="lqmsg">No está en el lookahead: Calidad la verá igual que las demás.</p>`;return lqHead(x0,null)};
+  const draw=()=>{const late=libLate(F.need);const other=F.need!==tm&&F.need!==t2;
+    lqModal(`<div class="lqtop"><b>Solicitar liberación${multi?'es':''}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>${head()}
+    <div class="lq2"><div class="lqlab">¿Cuándo estará lista?<span class="lqchs"><button type="button" class="chip${F.need===tm?' on':''}" data-lqnd="${tm}">Mañana <small>${fmtD(tm)}</small></button><button type="button" class="chip${F.need===t2?' on':''}" data-lqnd="${t2}">Pasado <small>${fmtD(t2)}</small></button><input type="date" id="lqd" class="${other?'on':''}" value="${F.need}" min="${t0}" aria-label="Otra fecha"></span></div>
+     <div class="lqlab">Hora sugerida<span class="seg lqseg"><button type="button" data-lqsl="am" class="${F.slot==='am'?'on':''}">Mañana <small>08–12</small></button><button type="button" data-lqsl="pm" class="${F.slot==='pm'?'on':''}">Tarde <small>13–17</small></button></span></div></div>
     <p class="lqmsg ${late?'bad':'ok'}">${late?'Fuera de plazo: las liberaciones se piden un día antes (hasta las 18:00). Calidad decidirá si la programa.':'✓ Dentro del plazo.'}</p>
-    <p class="lqmsg ${F.zona?'ok':''}">${F.zsrc==='mano'?'✓ Zona marcada en el plano.':F.zsrc==='plan'?'✓ Zona tomada del plan diario (puedes cambiarla en la vista Plano).':'Sin zona en el plano: podrás ubicarla después en la vista Plano.'}</p>
+    ${multi?'<p class="lqmsg">Cada una toma su zona del plan diario, si la tiene.</p>':`<p class="lqmsg ${F.zona?'ok':''}">${F.zsrc==='mano'?'✓ Zona marcada en el plano.':F.zsrc==='plan'?'✓ Zona tomada del plan diario (puedes cambiarla en la vista Plano).':'Sin zona en el plano: podrás ubicarla después en la vista Plano.'}</p>`}
     <label>Protocolo (opcional, imagen o PDF)<span class="lqrow"><span class="lqfile">${F.proto.length?F.proto.length+' archivo(s) adjunto(s)':'Sin adjuntar'}</span><label class="ib">Adjuntar…<input type="file" accept="image/*,application/pdf" id="lqf" hidden></label></span></label>
     <label>Comentario para Calidad<textarea id="lqn" rows="3" placeholder="Ej.: prueba hidráulica a 100 psi lista desde las 8:00">${esc(F.note)}</textarea></label>
-    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" data-lq="send">Enviar solicitud</button></div>`,
-   e=>{if(!e.target.closest('[data-lq="send"]'))return;grab();
+    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" data-lq="send">${multi?`Enviar ${L0.length} solicitudes`:'Enviar solicitud'}</button></div>`,
+   e=>{let b;if((b=e.target.closest('[data-lqnd]'))){grab();F.need=b.dataset.lqnd;draw();return}if((b=e.target.closest('[data-lqsl]'))){grab();F.slot=b.dataset.lqsl;draw();return}
+      if(!e.target.closest('[data-lq="send"]'))return;grab();
       if(free){F.nm=(F.nm||'').trim();if(!F.nm){toast('Escribe qué se libera.');return}if(!F.sc){toast('Elige el subcontratista.');return}if(!F.amb||!S.amb.has(F.amb)){toast('Elige el ambiente.');return}
         if(!canLibAsk({sc:F.sc})){toast('Solo puedes pedirla para tu partida.');return}}
-      const id=uid('lib');const ambId=x0?x0.ambId:F.amb;
-      libSave(id,{actId:x0?x0.id:'',ambId,pisoId:x0?pisoOfAct(x0.id):pisoOfAmb(F.amb),sc:x0?x0.sc:F.sc,nm:x0?(x0.name||''):F.nm,crit:false,sup:false,rest:'',need:F.need,slot:F.slot,note:F.note.trim(),proto:F.proto,photos:[],obs:[],zona:F.zona||null,st:'sol',late:libLate(F.need),prog:null,hist:libHist(null,'sol',F.note.trim()),by:me.email,n:me.name||me.email,ts:NOW()},'Solicitud enviada a Calidad');lqClose()},
-   async e=>{const t=e.target;if(t.id==='lqd'){grab();F.need=t.value;draw()}if(t.id==='lqs')F.slot=t.value;if(t.id==='lqsc2')F.sc=t.value;if(t.id==='lqa')F.amb=t.value;if(t.id==='lqt')F.nm=t.value;
+      const note=F.note.trim(),late=libLate(F.need);
+      const base={crit:false,sup:false,rest:'',need:F.need,slot:F.slot,note,proto:F.proto,photos:[],obs:[],st:'sol',late,prog:null,hist:libHist(null,'sol',note),by:me.email,n:me.name||me.email,ts:NOW()};
+      if(free)libSave(uid('lib'),{...base,actId:'',ambId:F.amb,pisoId:pisoOfAmb(F.amb),sc:F.sc,nm:F.nm,zona:F.zona||null});
+      else L0.forEach(x=>libSave(uid('lib'),{...base,actId:x.id,ambId:x.ambId,pisoId:pisoOfAct(x.id),sc:x.sc,nm:x.name||'',zona:(x0&&F.zona)||libZoneOf(x.id)||null}));
+      toast(multi?`${L0.length} solicitudes enviadas a Calidad`:'Solicitud enviada a Calidad');lqClose()},
+   async e=>{const t=e.target;if(t.id==='lqd'){grab();if(t.value)F.need=t.value;draw()}if(t.id==='lqsc2')F.sc=t.value;if(t.id==='lqa')F.amb=t.value;if(t.id==='lqt')F.nm=t.value;
      if(t.id==='lqf'&&t.files[0]){grab();try{toast('Adjuntando…');const fid=await libAttach(t.files[0],'');F.proto.push(fid);draw()}catch(err){toast(err.message)}}})};draw()}
 /* detalle con acciones según el rol y el estado */
 function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act.get(l.actId)||{id:l.actId,name:l.nm||'(actividad eliminada)',sc:l.sc,ambId:l.ambId};const s=LST[l.st]||LST.sol;
@@ -99,8 +110,9 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
    ${files.length?`<div class="lqfiles">${files.map(o=>{const d=FOTO.get(o.f)||'';const pdf=d.startsWith('data:application/pdf');return`<button type="button" class="lqfb" data-lqfile="${o.f}" title="${o.k}">${pdf||!d?`<span>${pdf?'PDF':'…'}</span>`:`<img src="${d}" alt="${o.k}">`}<small>${o.k}</small></button>`}).join('')}</div>`:''}
    <ol class="lqtl">${(l.hist||[]).slice().reverse().map(e=>`<li><i style="--c:${(LST[e.st]||LST.sol).c}"></i><b>${esc((LST[e.st]||{t:e.st}).t)}</b> <span>${e.t?fmtD(ldt(e.t))+' '+hhmm(e.t):''} · ${esc(e.n||'')}${e.note?' · '+esc(e.note):''}</span></li>`).join('')}</ol>`;
   const B=[];
-  if(cal&&['sol','lev','pro'].includes(l.st))B.push(`<button class="ib${l.st==='pro'?'':' pri'}" data-lq="prog">${l.st==='pro'?'Reprogramar':'Programar inspección'}</button>`);
-  if(cal&&['pro','lev','sol'].includes(l.st)){B.push('<button class="ib okb" data-lq="lib">✓ Liberar</button>');B.push('<button class="ib" data-lq="libm">✓ Liberar con obs. menores</button>');B.push('<button class="ib" data-lq="obs">⚠ Observar…</button>')}
+  /* solo una inspección programada se libera u observa (así siempre queda día, hora e inspector) */
+  if(cal&&['sol','lev','pro'].includes(l.st))B.push(`<button class="ib${l.st==='pro'?'':' pri'}" data-lq="prog">${l.st==='pro'?'Reprogramar':'→ Programar inspección'}</button>`);
+  if(cal&&l.st==='pro'){B.push('<button class="ib okb" data-lq="lib">✓ Liberar</button>');B.push('<button class="ib" data-lq="libm">✓ Liberar con obs. menores…</button>');B.push('<button class="ib" data-lq="obs">⚠ Observar…</button>')}
   if(own&&l.st==='obs')B.push('<button class="ib pri" data-lq="lev">Observaciones levantadas · pedir reinspección</button>');
   if((ownE||cal)&&!libDone(l.st))B.push('<label class="ib">+ Foto / protocolo<input type="file" accept="image/*,application/pdf" id="lqadd" hidden></label>');
   if(cal&&libDone(l.st))B.push('<button class="ib" data-lq="reab">Reabrir</button>');
@@ -113,10 +125,10 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
     if(!(b=t.closest('[data-lq]')))return;const k=b.dataset.lq;
     if(k==='go'){lqClose();gotoAct(l.actId);return}
     if(k==='zona'){lqClose();LQDRAW={libId:id,actId:l.actId,pid:l.pisoId};U.tab='lib';U.libV='map';U.libP=l.pisoId;saveUI();render();return}
-    if(k==='prog'){libProg(id);return}
-    if(k==='lib'||k==='libm'){const note=k==='libm'?(prompt('¿Qué observación menor queda pendiente?','')||''):'';if(k==='libm'&&!note.trim()){toast('Escribe la observación menor.');return}
-      libSave(id,{st:k,done:{t:NOW(),by:me.email,n:me.name||me.email},hist:libHist(l,k,note.trim()),...(note.trim()?{obs:[...(l.obs||[]),{t:note.trim(),ok:false,menor:true}]}:{})},k==='lib'?'Liberada':'Liberada con observaciones menores');setTimeout(()=>libDetail(id),80);return}
-    if(k==='obs'){libObs(id);return}
+    if(k==='prog'){libProg([id],{back:true});return}
+    if(k==='lib'){if(libFree(id,''))setTimeout(()=>libDetail(id),80);return}
+    if(k==='libm'){libLibDlg(id,{menor:true,back:true});return}
+    if(k==='obs'){libObs(id,{back:true});return}
     if(k==='lev'){const note=prompt('¿Qué se corrigió? (opcional)','')||'';libSave(id,{st:'lev',hist:libHist(l,'lev',note.trim()),obs:(l.obs||[]).map(o=>({...o,ok:true}))},'Calidad verá que pides reinspección');setTimeout(()=>libDetail(id),80);return}
     if(k==='reab'){const st=l.prog&&l.prog.d?'pro':'sol';libSave(id,{st,hist:libHist(l,st,'Reabierta')},'Liberación reabierta');setTimeout(()=>libDetail(id),80);return}
     if(k==='anu'){if(!confirm('¿Anular esta solicitud de liberación?'))return;libSave(id,{st:'anu',hist:libHist(l,'anu','')},'Solicitud anulada');lqClose();return}},
@@ -124,25 +136,78 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
     if(t.dataset.lqo!=null){const i=+t.dataset.lqo;const obs=(l.obs||[]).map((o,j)=>j===i?{...o,ok:t.checked}:o);libSave(id,{obs});return}
     if(t.id==='lqadd'&&t.files[0]){try{toast('Adjuntando…');const fid=await libAttach(t.files[0],id);const pdf=(FOTO.get(fid)||'').startsWith('data:application/pdf');const cur=LIB.get(id)||l;
       libSave(id,pdf?{proto:[...(cur.proto||[]),fid]}:{photos:[...(cur.photos||[]),fid]},'Archivo adjunto');setTimeout(()=>libDetail(id),80)}catch(err){toast(err.message)}}})}
-function libProg(id){const l=LIB.get(id);if(!l)return;const p=l.prog||{};const d=p.d||(l.need>todayIso()?l.need:wshift(todayIso(),1));
-  lqModal(`<div class="lqtop"><b>Programar inspección</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div><p class="lqmsg">${esc(l.nm||'')} · lista para el ${fmtD(l.need)} (${l.slot==='pm'?'tarde':'mañana'})</p>
-    <div class="lq2"><label>Día<input type="date" id="lqpd" value="${d}"></label><label>Hora<input type="time" id="lqph" value="${esc(p.h||(l.slot==='pm'?'14:00':'09:00'))}"></label></div>
-    ${(()=>{const I=libInsp();const cur=p.insp||'';if(!I.length)return`<label>Inspector<input id="lqpi" value="${esc(cur||me.name||'')}" placeholder="Nombre del inspector"></label><p class="lqmsg">Tip: carga la lista de inspectores en <b>Configuración › Inspectores de calidad</b> para elegirlos aquí.</p>`;
-      const load=I.map(n=>{const c=[...LIB.values()].filter(q=>q.id!==id&&q.prog&&q.prog.insp===n&&q.st==='pro'&&q.prog.d===(l.prog&&l.prog.d||d)).length;return{n,c}});
-      return`<label>Inspector<select id="lqpi"><option value="">— elige —</option>${load.map(o=>`<option${o.n===cur?' selected':''} value="${esc(o.n)}">${esc(o.n)}${o.c?` · ${o.c} ese día`:''}</option>`).join('')}${cur&&!I.includes(cur)?`<option selected value="${esc(cur)}">${esc(cur)}</option>`:''}</select></label>`})()}
-    <div class="lqobs"><b>Marcas de Calidad</b><label><input type="checkbox" id="lqcr"${l.crit?' checked':''}> Crítica: restringe el ingreso de la partida siguiente</label><label>Restringe a (opcional)<input id="lqrs" value="${esc(l.rest||'')}" placeholder="Ej.: Tarrajeo de muros"></label><label><input type="checkbox" id="lqsu"${l.sup?' checked':''}> Requiere supervisión (coordínala para esa hora)</label></div>
-    <div class="lqbtns"><button class="ib" data-lq="back">Volver</button><button class="ib pri" data-lq="ok">Programar</button></div>`,
-   e=>{const b=e.target.closest('[data-lq]');if(!b)return;if(b.dataset.lq==='back'){libDetail(id);return}
-     const pd_=($('#lqpd')||{}).value;if(!pd_){toast('Elige el día.');return}if(!isWork(pd_)){toast(nwReason(pd_)+': elige un día laborable.');return}
-     const prog={d:pd_,h:($('#lqph')||{}).value||'',insp:(($('#lqpi')||{}).value||'').trim()};if(!prog.insp){toast('Elige el inspector.');return}const crit=!!($('#lqcr')||{}).checked;const rest=crit?((($('#lqrs')||{}).value||'').trim()):'';libSave(id,{st:'pro',prog,crit,sup:!!($('#lqsu')||{}).checked,rest,hist:libHist(l,'pro',fmtD(pd_)+' '+prog.h)},'Inspección programada');libDetail(id)})}
-function libObs(id){const l=LIB.get(id);if(!l)return;
+/* --- deshacer de la bandeja: devuelve los campos que tocó el paso --- */
+const LQK=['st','prog','crit','sup','rest','hist','obs','done'];
+function libSnap(ids){return ids.map(id=>{const l=LIB.get(id)||{};const o={};LQK.forEach(k=>{o[k]=l[k]===undefined?(k==='hist'||k==='obs'?[]:k==='rest'?'':k==='crit'||k==='sup'?false:null):l[k]});return[id,o]})}
+function libUndoToast(msg,snap){toast(msg,'Deshacer',()=>{snap.forEach(([id,o])=>libSave(id,o));toast('Deshecho')})}
+/* liberar (sin o con observaciones menores); devuelve false si no corresponde */
+function libFree(id,menor,silent){const l=LIB.get(id);if(!l||l.st!=='pro')return false;const snap=libSnap([id]);const m=(menor||'').trim();const k=m?'libm':'lib';
+  libSave(id,{st:k,done:{t:NOW(),by:me.email,n:me.name||me.email},hist:libHist(l,k,m),...(m?{obs:[...(l.obs||[]),{t:m,ok:false,menor:true}]}:{})});
+  if(!silent)libUndoToast(k==='lib'?'Liberada':'Liberada con observaciones menores',snap);return true}
+/* actividad siguiente de otra partida en el mismo ambiente: sugerencia para «restringe a» */
+function libNextAct(l){const x=S.act.get(l.actId)||{ambId:l.ambId,sc:l.sc};if(!x.ambId)return'';const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=x.id?L.findIndex(y=>y.id===x.id):-1;
+  for(let j=i+1;j<L.length;j++)if(L[j].sc&&L[j].sc!==x.sc)return L[j].name||'';return''}
+const lqHM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const lqMin=h=>{const[a,b]=String(h||'').split(':').map(Number);return(a||0)*60+(b||0)};
+/* programar una o varias inspecciones (al arrastrar a «Programadas» o desde el detalle): día, hora, inspector, crítica y supervisión */
+function libProg(ids,opt){opt=opt||{};ids=(Array.isArray(ids)?ids:[ids]).filter(i=>{const l=LIB.get(i);return l&&['sol','lev','pro'].includes(l.st)});if(!ids.length)return;
+  if(!isCal()){toast('Solo Calidad programa las inspecciones.');return}
+  const Ls=ids.map(i=>LIB.get(i));const l1=Ls[0];const multi=Ls.length>1;const t0=todayIso(),tm=wshift(t0,1),t2=wshift(t0,2);const p=l1.prog||{};
+  let d0=multi?Ls.map(l=>l.need>t0?l.need:tm).sort()[0]:(p.d||(l1.need>t0?l1.need:tm));if(!isWork(d0))d0=wshift(d0,1);
+  const F={d:d0,h:p.h||(l1.slot==='pm'?'14:00':'09:00'),step:60,insp:p.insp||'',crit:multi?Ls.every(l=>l.crit):!!l1.crit,sup:multi?Ls.every(l=>l.sup):!!l1.sup,rest:multi?'':(l1.rest||''),hs:{}};
+  const hours=()=>{const out={};let m=lqMin(F.h);Ls.forEach(l=>{out[l.id]=F.hs[l.id]||lqHM(Math.min(m,23*60+59));m+=F.step});return out};
+  const grab=()=>{const g=($('#lqpd')||{}).value;if(g)F.d=g;const h=($('#lqph')||{}).value;if(h)F.h=h;const i=$('#lqpi');if(i&&i.tagName==='INPUT')F.insp=i.value;
+    const c=$('#lqcr');if(c)F.crit=c.checked;const s_=$('#lqsu');if(s_)F.sup=s_.checked;const r=$('#lqrs');if(r)F.rest=r.value;$$('[data-lqph]').forEach(e=>{F.hs[e.dataset.lqph]=e.value})};
+  const I=libInsp();
+  const draw=()=>{const H=hours();const load=n=>[...LIB.values()].filter(q=>!ids.includes(q.id)&&q.prog&&q.prog.insp===n&&q.st==='pro'&&q.prog.d===F.d).length;
+    const other=F.d!==tm&&F.d!==t2&&F.d!==t0;const sug=multi?'':libNextAct(l1);
+    lqModal(`<div class="lqtop"><b>${multi?`Programar ${Ls.length} inspecciones`:'Programar inspección'}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+    ${multi?`<div class="lqh"><ul class="lqfl">${Ls.map(l=>{const a=S.amb.get(l.ambId)||{};return`<li><i style="--c:${conOf(l.sc).color}"></i><b>${esc(l.nm||'')}</b> <span>${esc(((S.pis.get(l.pisoId)||{}).code||'')+' · '+(a.code||''))} · lista ${fmtD(l.need)}${l.st==='lev'?' · reinspección':''}</span><input type="time" data-lqph="${l.id}" value="${H[l.id]}" aria-label="Hora"></li>`}).join('')}</ul></div>`
+      :`<p class="lqmsg"><b>${esc(l1.nm||'')}</b> · ${esc(((S.amb.get(l1.ambId)||{}).code)||'')} · ${esc(conOf(l1.sc).name)} · lista para el ${fmtD(l1.need)} (${l1.slot==='pm'?'tarde':'mañana'})${l1.st==='lev'?' · <b>reinspección</b>':''}</p>`}
+    <div class="lqlab">Día<span class="lqchs">${[[t0,'Hoy'],[tm,'Mañana'],[t2,'Pasado']].map(([d,t])=>`<button type="button" class="chip${F.d===d?' on':''}" data-lqpdd="${d}">${t} <small>${fmtD(d)}</small></button>`).join('')}<input type="date" id="lqpd" class="${other?'on':''}" value="${F.d}" aria-label="Otro día"></span></div>
+    <div class="lqlab">${multi?'Primera hora':'Hora'}<span class="lqchs">${['08:00','09:00','10:00','11:00','14:00','15:00','16:00'].map(h=>`<button type="button" class="chip${F.h===h?' on':''}" data-lqphh="${h}">${h}</button>`).join('')}<input type="time" id="lqph" value="${esc(F.h)}" aria-label="Otra hora"></span></div>
+    ${multi?`<div class="lqlab">Una tras otra<span class="seg lqseg">${[[0,'A la vez'],[30,'Cada 30 min'],[60,'Cada hora']].map(([v,t])=>`<button type="button" data-lqst="${v}" class="${F.step===v?'on':''}">${t}</button>`).join('')}</span></div>`:''}
+    <div class="lqlab">Inspector${I.length?`<span class="lqchs" role="radiogroup">${[...I,...(F.insp&&!I.includes(F.insp)?[F.insp]:[])].map(n=>{const c=load(n);return`<button type="button" role="radio" aria-checked="${F.insp===n}" class="chip${F.insp===n?' on':''}" data-lqpi="${esc(n)}">👷 ${esc(n)}${c?` <small>${c} ese día</small>`:''}</button>`}).join('')}</span>`:`<input id="lqpi" value="${esc(F.insp||me.name||'')}" placeholder="Nombre del inspector">`}</div>
+    ${I.length?'':'<p class="lqmsg">Tip: carga la lista de inspectores en <b>Configuración › Inspectores de calidad</b> para elegirlos con un toque.</p>'}
+    <div class="lqobs lqsw"><b>Marcas de Calidad</b>
+     <label class="lqtg"><input type="checkbox" id="lqcr"${F.crit?' checked':''}><span></span>Crítica: restringe el ingreso de la partida siguiente</label>
+     ${F.crit?`<label>Restringe a${multi?' (vacío = la partida siguiente de cada ambiente)':''}<input id="lqrs" value="${esc(F.rest||sug)}" placeholder="${esc(sug||'Ej.: Tarrajeo de muros')}"></label>`:''}
+     <label class="lqtg"><input type="checkbox" id="lqsu"${F.sup?' checked':''}><span></span>Requiere supervisión (coordínala para esa hora)</label></div>
+    <div class="lqbtns"><button class="ib" data-lq="back">${opt.back?'Volver':'Cancelar'}</button><button class="ib pri" data-lq="ok">${multi?`Programar ${Ls.length}`:'Programar'}</button></div>`,
+   e=>{let b;const t=e.target;
+     if((b=t.closest('[data-lqpdd]'))){grab();F.d=b.dataset.lqpdd;draw();return}
+     if((b=t.closest('[data-lqphh]'))){grab();F.h=b.dataset.lqphh;F.hs={};draw();return}
+     if((b=t.closest('[data-lqst]'))){grab();F.step=+b.dataset.lqst;F.hs={};draw();return}
+     if((b=t.closest('[data-lqpi]'))){grab();F.insp=b.dataset.lqpi;draw();return}
+     if(!(b=t.closest('[data-lq]')))return;if(b.dataset.lq==='back'){if(opt.back&&!multi)libDetail(ids[0]);else lqClose();return}
+     grab();if(!F.d){toast('Elige el día.');return}if(!isWork(F.d)){toast(nwReason(F.d)+': elige un día laborable.');return}
+     const insp=(F.insp||'').trim();if(!insp){toast('Elige el inspector.');return}
+     const H=hours();const snap=libSnap(ids);
+     Ls.forEach(l=>{const cur=LIB.get(l.id)||l;const h=multi?H[l.id]:F.h;const rest=F.crit?((F.rest||'').trim()||(multi?libNextAct(cur):'')):'';
+       libSave(l.id,{st:'pro',prog:{d:F.d,h,insp},crit:F.crit,sup:F.sup,rest,hist:libHist(cur,'pro',fmtD(F.d)+' '+h+' · '+insp)})});
+     if(opt.back&&!multi){toast('Inspección programada');libDetail(ids[0]);return}
+     lqClose();LQSEL.clear();libUndoToast(multi?`${Ls.length} inspecciones programadas`:'Inspección programada',snap)},
+   e=>{const t=e.target;if(t.id==='lqpd'&&t.value){grab();draw()}if(t.id==='lqph'){grab();F.hs={};draw()}if(t.id==='lqcr'){grab();draw()}})};draw()}
+/* liberar desde la bandeja: conforme o con observaciones menores */
+function libLibDlg(id,opt){opt=opt||{};const l=LIB.get(id);if(!l)return;if(l.st!=='pro'){toast('Primero programa la inspección.');return}const x=S.act.get(l.actId)||{id:'',name:l.nm,sc:l.sc,ambId:l.ambId};let menor=!!opt.menor;
+  const draw=()=>lqModal(`<div class="lqtop"><b>Liberar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>${lqHead(x,l)}
+    ${l.prog&&l.prog.d?`<p class="lqmsg">Inspección ${fmtD(l.prog.d)}${l.prog.h?' '+esc(l.prog.h):''}${l.prog.insp?' · '+esc(l.prog.insp):''}</p>`:''}
+    <span class="seg lqseg lqbig"><button type="button" data-lqm="0" class="${menor?'':'on'}">✓ Conforme</button><button type="button" data-lqm="1" class="${menor?'on':''}">Con observaciones menores</button></span>
+    ${menor?'<label>¿Qué observación menor queda pendiente?<textarea id="lqom" rows="3" placeholder="Ej.: falta rotular las válvulas"></textarea></label>':''}
+    <div class="lqbtns"><button class="ib" data-lq="back">${opt.back?'Volver':'Cancelar'}</button><button class="ib okb" data-lq="ok">✓ Liberar</button></div>`,
+   e=>{let b;if((b=e.target.closest('[data-lqm]'))){menor=b.dataset.lqm==='1';draw();return}if(!(b=e.target.closest('[data-lq]')))return;
+     if(b.dataset.lq==='back'){if(opt.back)libDetail(id);else lqClose();return}
+     const m=menor?(($('#lqom')||{}).value||'').trim():'';if(menor&&!m){toast('Escribe la observación menor.');return}
+     libFree(id,m);if(opt.back)setTimeout(()=>libDetail(id),80);else lqClose()});draw()}
+function libObs(id,opt){opt=opt||{};const l=LIB.get(id);if(!l)return;if(l.st!=='pro'){toast('Primero programa la inspección.');return}
   lqModal(`<div class="lqtop"><b>Observar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div><p class="lqmsg">${esc(l.nm||'')}</p>
     <label>Observaciones (una por línea)<textarea id="lqo" rows="5" placeholder="Ej.: fuga en unión de desagüe de 2&quot; bajo lavatorio"></textarea></label>
-    <p class="lqmsg">Luego puedes adjuntar fotos desde el detalle.</p>
-    <div class="lqbtns"><button class="ib" data-lq="back">Volver</button><button class="ib pri" data-lq="ok">Guardar como observada</button></div>`,
-   e=>{const b=e.target.closest('[data-lq]');if(!b)return;if(b.dataset.lq==='back'){libDetail(id);return}
+    <p class="lqmsg">Luego puedes adjuntar fotos desde el detalle. El SC las levanta y pide reinspección.</p>
+    <div class="lqbtns"><button class="ib" data-lq="back">${opt.back?'Volver':'Cancelar'}</button><button class="ib pri" data-lq="ok">Guardar como observada</button></div>`,
+   e=>{const b=e.target.closest('[data-lq]');if(!b)return;if(b.dataset.lq==='back'){if(opt.back)libDetail(id);else lqClose();return}
      const L=(($('#lqo')||{}).value||'').split('\n').map(s=>s.trim()).filter(Boolean);if(!L.length){toast('Escribe al menos una observación.');return}
-     libSave(id,{st:'obs',obs:L.map(t=>({t,ok:false})),hist:libHist(l,'obs',L.length+' observación(es)')},'Marcada como observada');libDetail(id)})}
+     const snap=libSnap([id]);libSave(id,{st:'obs',obs:L.map(t=>({t,ok:false})),hist:libHist(LIB.get(id)||l,'obs',L.length+' observación(es)')});
+     if(opt.back){toast('Marcada como observada');libDetail(id)}else{lqClose();libUndoToast('Marcada como observada',snap)}})}
 /* --- pestaña Liberaciones --- */
 U.libV=U.libV||'ban';U.libSc=U.libSc||'';U.libQ='';U.libIn='';let LQHOST=null,LQDRAW=null;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&LQDRAW&&U.tab==='lib'){LQDRAW=null;render()}});
@@ -150,10 +215,17 @@ function libItems(){const vs=new Set(visPisos().map(p=>p.id));const q=fold(U.lib
   const ok=(x,pid,sc,l)=>(!U.libIn||(l&&l.prog&&l.prog.insp===U.libIn))&&(!pid||vs.has(pid))&&(!U.libSc||sc===U.libSc)&&(!mineOnly||mineOnly.has(sc))&&(!q||fold((x&&x.name||'')+' '+conOf(sc).name+' '+((S.amb.get(x&&x.ambId)||{}).name||'')+' '+((S.amb.get(x&&x.ambId)||{}).code||'')).includes(q));
   const L=[...LIB.values()].filter(l=>l.st!=='anu').map(l=>({l,x:S.act.get(l.actId)||{id:l.actId,name:l.nm||'(actividad eliminada)',sc:l.sc,ambId:l.ambId},st:l.st})).filter(o=>ok(o.x,o.l.pisoId,o.l.sc,o.l));
   return{L}}
+/* tarjeta de la bandeja: Calidad arrastra las solicitadas a «Programadas» y las programadas a «Observadas» o «Liberadas» */
 function lqCard(o){const x=o.x,l=o.l;const a=S.amb.get(x.ambId);const p=S.pis.get(l.pisoId);const s=LST[o.st]||LST.sol;
   const when=o.st==='pro'?(l.prog&&l.prog.d?`Inspección ${fmtD(l.prog.d)}${l.prog.h?' · '+esc(l.prog.h):''}`:'Falta fijar día de inspección'):libDone(o.st)?`✓ ${(l.done&&l.done.t)?fmtD(ldt(l.done.t))+' '+hhmm(l.done.t):''}`:o.st==='obs'?`${(l.obs||[]).filter(q=>!q.ok).length} observación(es) por levantar`:`Lista para el ${fmtD(l.need)}${l.late?' · fuera de plazo':''}`;
-  return`<button type="button" class="lqcard" data-lqid="${l.id}" style="--c:${s.c}"><span class="lqtags">${l.crit?'<i class="lqt crit">CRÍTICA</i>':''}${l.sup?'<i class="lqt sup">SUPERVISIÓN</i>':''}${l.late&&o.st==='sol'?'<i class="lqt crit">FUERA DE PLAZO</i>':''}${!l.actId?'<i class="lqt">FUERA DEL LOOKAHEAD</i>':''}</span>
+  const dr=isCal()&&['sol','lev','pro'].includes(o.st);const sel=LQSEL.has(l.id);const ck=isCal()&&(o.st==='sol'||o.st==='lev');
+  return`<button type="button" class="lqcard${dr?' dr':''}${sel?' sel':''}" data-lqid="${l.id}" data-st="${o.st}"${dr?' draggable="true"':''} style="--c:${s.c}">${ck?`<span class="lqck" data-lqck="${l.id}" role="checkbox" aria-checked="${sel}" aria-label="Elegir" title="Elegir (o Ctrl+clic en la tarjeta)"></span>`:''}<span class="lqtags">${o.st==='lev'?'<i class="lqt sup">REINSPECCIÓN</i>':''}${l.crit?'<i class="lqt crit">CRÍTICA</i>':''}${l.sup?'<i class="lqt sup">SUPERVISIÓN</i>':''}${l.late&&o.st==='sol'?'<i class="lqt crit">FUERA DE PLAZO</i>':''}${!l.actId?'<i class="lqt">FUERA DEL LOOKAHEAD</i>':''}</span>
    <b>${esc(x.name||'')}</b><span>${esc([p&&p.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · '))}</span><span class="lqsc"><i style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)}</span><span class="lqwhen">${when}</span>${l.prog&&l.prog.insp?`<span class="lqins" data-lqin="${esc(l.prog.insp)}" title="Ver solo lo de este inspector">👷 ${esc(l.prog.insp)}</span>`:''}${l.crit&&l.rest&&!libDone(o.st)?`<span class="lqrest">⛔ Restringe: ${esc(l.rest)}</span>`:''}</button>`}
+/* columnas y pasos permitidos al arrastrar (solo Calidad): solicitada/levantada → programada → observada o liberada */
+const LQCOL={sol:['sol','lev'],pro:['pro'],obs:['obs'],lib:['lib','libm']};
+const LQOK={sol:['pro'],lev:['pro'],pro:['obs','lib']};
+const LQNO={sol:{obs:'Primero prográmala',lib:'Primero prográmala',sol:''},pro:{sol:'Ya está programada',pro:''}};
+const LQSEL=new Set();let LQDRAG=null;
 function renderLib(main){ensureLib();if(U.libV==='mat')U.libV='ban';const t0=todayIso(),tm=wshift(t0,1);const V=U.libV;const{L}=libItems();
   const open=L.filter(o=>!libDone(o.st));const wk=new Set(weekDays(curWeek()));const doneW=L.filter(o=>libDone(o.st)&&o.l.done&&wk.has(ldt(o.l.done.t)));const first=doneW.filter(o=>!(o.l.hist||[]).some(e=>e.st==='obs'));
   const tiles=[['Para mañana',open.filter(o=>(o.l.prog&&o.l.prog.d===tm)||(!o.l.prog&&o.l.need===tm)).length,`${open.filter(o=>o.st==='sol'&&o.l.need<=tm).length} sin programar`,'#E0A01B'],
@@ -174,10 +246,15 @@ function renderLib(main){ensureLib();if(U.libV==='mat')U.libV='ban';const t0=tod
   if(libErr)h+=`<div class="callout">No se pudieron leer las liberaciones (${esc(libErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   {h+=`<div class="lqtiles">${tiles.map(([k,v,s,c])=>`<div class="lqtile" style="--c:${c}"><span>${k}</span><b>${v}</b><small>${s}</small></div>`).join('')}</div>`;
     if(lateN)h+=`<div class="callout warnc">${lateN} solicitud${lateN>1?'es':''} llegaron fuera de plazo (se piden un día antes, hasta las 18:00). Calidad decide si las programa.</div>`}
-  if(V==='ban'){const col=(t,c,hint,arr)=>`<section class="lqcol"><div class="lqch"><i style="--c:${c}"></i><b>${t}</b><span>${arr.length}</span></div><small>${hint}</small>${arr.map(lqCard).join('')||'<p class="mu" style="font-size:13px;margin:4px 2px">—</p>'}</section>`;
-    const by=(a,b)=>((a.l&&(a.l.prog&&a.l.prog.d||a.l.need))||'').localeCompare((b.l&&(b.l.prog&&b.l.prog.d||b.l.need))||'');
+  if(V==='ban'){const cal=isCal();const opn=new Set(open.filter(o=>o.st==='sol'||o.st==='lev').map(o=>o.l.id));[...LQSEL].forEach(i=>{if(!opn.has(i))LQSEL.delete(i)});
+    const by=(a,b)=>((a.l&&(a.l.prog&&a.l.prog.d||a.l.need))||'').localeCompare((b.l&&(b.l.prog&&b.l.prog.d||b.l.need))||'')||((a.l.prog&&a.l.prog.h)||'').localeCompare((b.l.prog&&b.l.prog.h)||'');
+    const col=(k,t,c,hint,arr,body)=>`<section class="lqcol" data-lqdrop="${k}"><div class="lqch"><i style="--c:${c}"></i><b>${t}</b><span>${arr.length}</span></div><small>${hint}</small>${k==='sol'&&LQSEL.size?`<div class="lqselb"><b>${LQSEL.size} elegida${LQSEL.size>1?'s':''}</b><button type="button" class="ib pri" data-lqselp>→ Programar</button><button type="button" class="ib" data-lqselx>Quitar</button></div>`:''}${body||arr.map(lqCard).join('')||'<p class="mu lqempty">—</p>'}<p class="lqdz" aria-hidden="true"></p></section>`;
+    /* programadas agrupadas por día de inspección */
+    const pro=open.filter(o=>o.st==='pro').sort(by);const dlab=d=>!d?'Sin día':d<t0?'Vencidas':d===t0?'Hoy':d===tm?'Mañana':DOW_L[(pd(d).getUTCDay()+6)%7]+' '+fmtD(d);
+    const grp=[];pro.forEach(o=>{const d=o.l.prog&&o.l.prog.d||'';const k=dlab(d);let g=grp.find(q=>q.k===k);if(!g)grp.push(g={k,d,a:[]});g.a.push(o)});
+    const proH=grp.map(g=>`<div class="lqgh${g.k==='Hoy'?' hoy':g.k==='Vencidas'?' bad':''}">${esc(g.k)}${g.d&&g.k!=='Vencidas'&&g.k.indexOf(' ')<0?` <small>${fmtD(g.d)}</small>`:''}<span>${g.a.length}</span></div>${g.a.map(lqCard).join('')}`).join('');
     const d7=addD(t0,-7);
-    h+=`<div class="lqcols">${col('Solicitadas',LST.sol.c,'Calidad debe programarlas',open.filter(o=>o.st==='sol'||o.st==='lev').sort(by))}${col('Programadas',LST.pro.c,'Inspección con día y hora',open.filter(o=>o.st==='pro').sort(by))}${col('Observadas',LST.obs.c,'El SC levanta y pide reinspección',open.filter(o=>o.st==='obs').sort(by))}${col('Liberadas · 7 días',LST.lib.c,'Últimos 7 días',L.filter(o=>libDone(o.st)&&o.l.done&&ldt(o.l.done.t)>=d7).sort((a,b)=>(b.l.done.t||0)-(a.l.done.t||0)))}</div>`}
+    h+=`<div class="lqcols${cal?' lqdnd':''}">${col('sol','Solicitadas',LST.sol.c,cal?'Arrástralas a «Programadas» (Ctrl+clic para elegir varias)':'Calidad debe programarlas',open.filter(o=>o.st==='sol'||o.st==='lev').sort(by))}${col('pro','Programadas',LST.pro.c,cal?'Arrastra a «Observadas» o «Liberadas» tras inspeccionar':'Inspección con día y hora',pro,proH)}${col('obs','Observadas',LST.obs.c,'El SC levanta y pide reinspección',open.filter(o=>o.st==='obs').sort(by))}${col('lib','Liberadas · 7 días',LST.lib.c,'Últimos 7 días',L.filter(o=>libDone(o.st)&&o.l.done&&ldt(o.l.done.t)>=d7).sort((a,b)=>(b.l.done.t||0)-(a.l.done.t||0)))}</div>`}
   else if(V==='cal'){const days=weekDays(U.week);h+=`<div class="lqbar lqwbar"><button class="ib" data-lqw="-1" aria-label="Semana anterior">‹</button><b class="mono">Semana ${U.week}</b><button class="ib" data-lqw="1" aria-label="Semana siguiente">›</button>${U.week!==curWeek()?'<button class="ib" data-lqw="0">Esta semana</button>':''}</div>
     <div class="lqcal">${days.map(d=>{const ev=L.filter(o=>o.l.prog&&o.l.prog.d===d&&(o.st==='pro'||libDone(o.st)||o.st==='obs'||o.st==='lev')).sort((a,b)=>(a.l.prog.h||'').localeCompare(b.l.prog.h||''));const k=d===t0?'hoy':d===tm?'man':'';
       return`<section class="lqday ${k}"><div class="lqdh"><b>${DL[(pd(d).getUTCDay()+6)%7]}</b><span class="mono">${fmtD(d)}</span>${k?`<i>${k==='hoy'?'HOY':'MAÑANA'}</i>`:''}</div>${ev.map(o=>{const s=LST[o.st];return`<button type="button" class="lqev" data-lqid="${o.l.id}" style="--c:${s.c}"><span><b class="mono">${esc(o.l.prog.h||'—')}</b> ${esc(s.t)}</span><b>${esc(o.x.name)}</b><span>${esc((S.pis.get(o.l.pisoId)||{}).code||'')} · ${esc((S.amb.get(o.x.ambId)||{}).code||'')} · ${esc(conOf(o.x.sc).name)}</span>${o.l.prog.insp?`<span class="lqins" data-lqin="${esc(o.l.prog.insp)}" title="Ver solo lo de este inspector">👷 ${esc(o.l.prog.insp)}</span>`:''}</button>`}).join('')||'<p class="mu" style="font-size:12.5px;margin:6px 4px">Sin inspecciones</p>'}</section>`}).join('')}</div>`;
@@ -210,6 +287,10 @@ function wireLib(main){
     if((b=t.closest('#lqv button'))){const ch=U.libV!==b.dataset.v;U.libV=b.dataset.v;saveUI();render();if(ch)viewIn(main);return}
     if(t.closest('[data-lqall]')){U.piso='';U.pisoAll=true;saveUI();render();return}
     if((b=t.closest('[data-lqin]'))){U.libIn=U.libIn===b.dataset.lqin?'':b.dataset.lqin;render();return}
+    if(t.closest('[data-lqselp]')){libProg([...LQSEL]);return}
+    if(t.closest('[data-lqselx]')){LQSEL.clear();render();return}
+    /* elegir varias solicitadas: casilla o Ctrl/⌘+clic */
+    if((b=t.closest('[data-lqck]'))||((e.ctrlKey||e.metaKey)&&(b=t.closest('.lqcard[data-st="sol"],.lqcard[data-st="lev"]'))&&isCal())){const id=b.dataset.lqck||b.dataset.lqid;if(LQSEL.has(id))LQSEL.delete(id);else LQSEL.add(id);render();return}
     if((b=t.closest('[data-lqid]'))){libDetail(b.dataset.lqid);return}
     if((b=t.closest('[data-lqask]'))){libAsk(b.dataset.lqask);return}
     if((b=t.closest('[data-lqw]'))){const v=+b.dataset.lqw;U.week=v===0?curWeek():U.week+v;render();return}
@@ -218,16 +299,59 @@ function wireLib(main){
     if((b=t.closest('#lqv button'))&&b.dataset.v!=='map'){main.dataset.lqv=''}
     if((b=t.closest('[data-lqza]'))){LQDRAW={libId:b.dataset.lqz||'',actId:b.dataset.lqza,pid:U.libP};render();return}
     if(t.closest('[data-lqzcancel]')){LQDRAW=null;render();return}
-    if(t.id==='lqnew'){libPick(t);return}
+    if(t.id==='lqnew'){libPick();return}
     if(t.id==='lqpdf'){libReport(wshift(todayIso(),1));return}
     };
   main.oninput=e=>{if(e.target.id==='lqq'){U.libQ=e.target.value;render()}};
-  main.onchange=async e=>{const t=e.target;if(t.id==='lqsc'){U.libSc=t.value;render()}if(t.id==='lqin'){U.libIn=t.value;render()}}}
-/* «+ Solicitar liberación»: sugerencias del lookahead (próximas actividades que la persona puede pedir) u «Otra…» fuera del lookahead */
-function libPick(btn){const t0=todayIso(),lo=addD(t0,-7),hi=addD(t0,21);const mine=SCK()?new Set(myScsI()):null;
-  const L=[...S.act.values()].filter(x=>canLibAsk(x)&&(!mine||mine.has(x.sc))&&(!U.libSc||x.sc===U.libSc)&&!(libOf(x.id)&&!libDone(libOf(x.id).st))&&(x.days||[]).some(d=>d>=lo&&d<=hi))
-    .map(x=>({x,a:S.amb.get(x.ambId),p:S.pis.get(pisoOfAct(x.id)),d:((x.days||[]).filter(d=>d>=t0).sort()[0])||(x.days||[]).slice().sort().pop()||''})).filter(o=>o.a&&(!U.piso||pisoOfAct(o.x.id)===U.piso)).sort((a,b)=>a.d.localeCompare(b.d)).slice(0,300);
-  openPop(btn,`<div class="ph">Solicitar liberación</div><div class="ptx">${L.length?'Sugerencias del lookahead (próximas actividades). Si no está, elige «Otra…».':'No hay actividades próximas en el lookahead: escribe qué se libera.'}</div><div class="qrow"><select id="lqpk" style="max-width:360px" aria-label="Actividad">${L.map(o=>`<option value="${o.x.id}">${esc((o.p?o.p.code+' · ':'')+o.a.code)} · ${esc(o.x.name)} · ${esc(conOf(o.x.sc).name)}${o.d?' · '+fmtD(o.d):''}</option>`).join('')}<option value="__free">Otra (no está en el lookahead)…</option></select><button data-do="go">Siguiente</button></div>`,{go:()=>{const v=($('#lqpk')||{}).value;if(v==='__free')setTimeout(()=>libAsk('',{free:true}),0);else if(v)setTimeout(()=>libAsk(v),0)}})}
+  main.onchange=async e=>{const t=e.target;if(t.id==='lqsc'){U.libSc=t.value;render()}if(t.id==='lqin'){U.libIn=t.value;render()}};
+  /* arrastrar (nativo del navegador, sin redibujar mientras dura: los cambios de otros esperan) */
+  const cols=()=>$('.lqcols',main);
+  const clear=()=>{const c=cols();if(c){c.classList.remove('dragging');$$('[data-lqdrop]',c).forEach(s_=>{s_.classList.remove('ok','no','hov');const z=$('.lqdz',s_);if(z)z.textContent=''});$$('.lqcard.drg',c).forEach(q=>q.classList.remove('drg'))}};
+  main.ondragstart=e=>{const c=e.target.closest&&e.target.closest('.lqcard[draggable="true"]');if(!c||!isCal())return;const st=c.dataset.st;const id=c.dataset.lqid;
+    const ids=(st==='sol'||st==='lev')&&LQSEL.has(id)?[...LQSEL]:[id];LQDRAG={ids,st:st==='lev'?'sol':st};DRAGGING=true;
+    try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',ids.join(','))}catch(_){}
+    if(ids.length>1){const g=document.createElement('div');g.className='lqghost';g.textContent=ids.length+' liberaciones';document.body.appendChild(g);try{e.dataTransfer.setDragImage(g,20,16)}catch(_){}setTimeout(()=>g.remove(),0)}
+    const cc=cols();cc.classList.add('dragging');ids.forEach(i=>{const q=$(`.lqcard[data-lqid="${i}"]`,cc);if(q)q.classList.add('drg')});
+    $$('[data-lqdrop]',cc).forEach(s_=>{const k=s_.dataset.lqdrop;const ok=(LQOK[LQDRAG.st]||[]).includes(k);s_.classList.add(ok?'ok':'no');const z=$('.lqdz',s_);if(z)z.textContent=ok?(k==='pro'?'Suelta para programar':k==='obs'?'Suelta para observar':'Suelta para liberar'):((LQNO[LQDRAG.st]||{})[k]??'No se puede mover aquí')?'🚫 '+((LQNO[LQDRAG.st]||{})[k]??'No se puede mover aquí'):''})};
+  main.ondragover=e=>{if(!LQDRAG)return;const s_=e.target.closest&&e.target.closest('[data-lqdrop]');if(!s_)return;if(!(LQOK[LQDRAG.st]||[]).includes(s_.dataset.lqdrop)){e.dataTransfer.dropEffect='none';return}
+    e.preventDefault();e.dataTransfer.dropEffect='move';if(!s_.classList.contains('hov')){$$('[data-lqdrop].hov',main).forEach(q=>q.classList.remove('hov'));s_.classList.add('hov')}};
+  main.ondragleave=e=>{const s_=e.target.closest&&e.target.closest('[data-lqdrop]');if(s_&&!s_.contains(e.relatedTarget))s_.classList.remove('hov')};
+  main.ondrop=e=>{if(!LQDRAG)return;const s_=e.target.closest&&e.target.closest('[data-lqdrop]');const D=LQDRAG;LQDRAG=null;DRAGGING=false;clear();if(!s_)return;e.preventDefault();
+    const k=s_.dataset.lqdrop;if(!(LQOK[D.st]||[]).includes(k))return;
+    if(k==='pro')libProg(D.ids);else if(k==='obs')libObs(D.ids[0]);else if(k==='lib')libLibDlg(D.ids[0]);setTimeout(flushDeferred,0)};
+  main.ondragend=()=>{if(LQDRAG||DRAGGING){LQDRAG=null;DRAGGING=false;clear();setTimeout(flushDeferred,0)}}}
+/* «+ Solicitar liberación»: buscador sobre las actividades del lookahead (sugerencias); si no está, se pide lo escrito */
+function libHay(x,a,p){const s_=S.sec.get(a&&a.sectorId)||{};return fold([x.name,a&&a.code,a&&a.name,s_.code,s_.name,p&&p.code,p&&p.name,conOf(x.sc).name].join(' '))}
+function libPick(){const t0=todayIso(),tm=wshift(t0,1),lo=addD(t0,-14),hi=addD(t0,21),wkEnd=weekDays(curWeek()).slice(-1)[0];const mine=SCK()?new Set(myScsI()):null;
+  if(!(isCal()||(canWrite&&!PM())||(mine&&mine.size))){toast('Solo el subcontratista, el ingeniero de producción o Calidad pueden solicitarla.');return}
+  const C=[];for(const x of S.act.values()){if(!canLibAsk(x)||(mine&&!mine.has(x.sc))||(U.libSc&&x.sc!==U.libSc))continue;const ds=x.days||[];if(!ds.some(d=>d>=lo))continue;const a=S.amb.get(x.ambId);if(!a)continue;const pid=pisoOfAct(x.id);if(U.piso&&pid!==U.piso)continue;
+    const fut=ds.filter(d=>d>=t0).sort();const p=S.pis.get(pid);const l=libOf(x.id);C.push({x,a,p,d:fut[0]||ds.slice().sort().pop()||'',past:!fut.length,open:l&&!libDone(l.st)?l:null,hay:libHay(x,a,p)})}
+  C.sort((a,b)=>(a.past-b.past)||(a.past?b.d.localeCompare(a.d):a.d.localeCompare(b.d))||((a.p&&a.p.code)||'').localeCompare((b.p&&b.p.code)||'')||(a.a.code||'').localeCompare(b.a.code||''));
+  const SEL=new Set();let q='',ai=-1;
+  const grpOf=o=>o.past?'Terminadas hace poco':o.d<=tm?'Hoy y mañana':o.d<=wkEnd?'Esta semana':'Próximas semanas';
+  const list=()=>{const T=fold(q).trim().split(/\s+/).filter(Boolean);const R=C.filter(o=>T.length?T.every(t=>o.hay.includes(t)):(o.past||o.d<=hi));const show=R.slice(0,120);let g='',h='';
+    for(const o of show){const k=grpOf(o);if(k!==g){g=k;h+=`<div class="lqfg">${k}</div>`}const sc=conOf(o.x.sc);const sel=SEL.has(o.x.id);const s_=o.open&&LST[o.open.st];
+      h+=o.open?`<button type="button" class="lqfi dis" data-lqopen="${o.open.id}" title="Ya tiene una solicitud abierta: tócala para verla"><span class="lqfck"></span><span class="lqfm"><b>${esc(o.x.name||'')}</b><small>${esc([o.p&&o.p.code,o.a.code+' '+(o.a.name||'')].filter(Boolean).join(' · '))} · <i style="--c:${sc.color}"></i>${esc(sc.name)}</small></span><i class="lqst" style="--c:${s_.c}">${esc(s_.t.split(' ·')[0])}${o.open.prog&&o.open.prog.d?' '+fmtD(o.open.prog.d):''}</i></button>`
+        :`<button type="button" class="lqfi${sel?' on':''}" data-lqf="${o.x.id}" role="option" aria-selected="${sel}"><span class="lqfck"></span><span class="lqfm"><b>${esc(o.x.name||'')}</b><small>${esc([o.p&&o.p.code,o.a.code+' '+(o.a.name||'')].filter(Boolean).join(' · '))} · <i style="--c:${sc.color}"></i>${esc(sc.name)}</small></span><span class="lqfd">${o.d?fmtD(o.d):''}</span></button>`}
+    if(R.length>show.length)h+=`<p class="lqmsg">… y ${R.length-show.length} más: escribe algo más para acotar.</p>`;
+    if(!R.length)h+=`<p class="lqmsg">${T.length?'No está en el lookahead.':'No hay actividades próximas en el lookahead.'}</p>`;
+    h+=`<button type="button" class="lqfi free" data-lqfree><span class="lqfck">＋</span><span class="lqfm"><b>${q.trim()?`Solicitar «${esc(q.trim())}»`:'Otra (no está en el lookahead)…'}</b><small>Escribes qué se libera, el subcontratista y el ambiente</small></span></button>`;
+    const el=$('#lqfr');if(el){el.innerHTML=h;ai=-1}foot()};
+  const foot=()=>{const n=$('#lqfn');if(n)n.textContent=SEL.size?`${SEL.size} elegida${SEL.size>1?'s':''}`:'Toca una o varias';const g=$('#lqfgo');if(g){g.disabled=!SEL.size;g.textContent=SEL.size>1?`Solicitar ${SEL.size} →`:'Siguiente →'}};
+  const rows=()=>$$('#lqfr .lqfi');const mark=()=>{rows().forEach((r,i)=>r.classList.toggle('act',i===ai));const r=rows()[ai];if(r)r.scrollIntoView({block:'nearest'})};
+  const toggle=b=>{const id=b.dataset.lqf;if(SEL.has(id))SEL.delete(id);else SEL.add(id);b.classList.toggle('on',SEL.has(id));b.setAttribute('aria-selected',SEL.has(id));foot()};
+  const go=()=>{if(SEL.size)setTimeout(()=>libAsk([...SEL]),0)};const free=()=>{const nm=q.trim();setTimeout(()=>libAsk('',{free:true,nm}),0)};
+  lqModal(`<div class="lqtop"><b>Solicitar liberación</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+    <input id="lqfq" type="search" class="lqfq" placeholder="Busca actividad, ambiente, piso o subcontratista…" autocomplete="off" aria-label="Buscar en el lookahead">
+    <div class="lqfr" id="lqfr" role="listbox" aria-multiselectable="true"></div>
+    <div class="lqbtns"><span class="mu lqfn" id="lqfn"></span><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="lqfgo" data-lq="next" disabled>Siguiente →</button></div>`,
+   e=>{let b;const t=e.target;if((b=t.closest('[data-lqopen]'))){libDetail(b.dataset.lqopen);return}if(t.closest('[data-lqfree]')){free();return}if((b=t.closest('[data-lqf]'))){toggle(b);return}if(t.closest('[data-lq="next"]'))go()});
+  const box=$('#lqm .lqc');if(box)box.classList.add('lqpick');
+  const inp=$('#lqfq');inp.oninput=()=>{q=inp.value;list()};
+  inp.onkeydown=e=>{const R=rows();if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();ai=Math.max(0,Math.min(R.length-1,ai+(e.key==='ArrowDown'?1:-1)));mark();return}
+    if(e.key==='Enter'){e.preventDefault();const r=R[ai];if(r){if(r.dataset.lqf!=null)toggle(r);else r.click();return}if(SEL.size)go();else if(q.trim())free()}};
+  $('#lqfr').ondblclick=e=>{const b=e.target.closest('[data-lqf]');if(b){SEL.add(b.dataset.lqf);go()}};
+  list()}
 /* --- plantillas de ambiente: sugieren los nombres del catálogo del lookahead --- */
 function tplDatalists(tpls){const scs=new Set();tpls.forEach(t=>t.acts.forEach(a=>{if(a.sc)scs.add(a.sc)}));const cat=[...libCatalog().values()];
   return[...scs].map(sc=>`<datalist id="lqdl-${esc(sc)}">${cat.filter(e=>e.sc===sc).sort((a,b)=>b.n-a.n).slice(0,200).map(e=>`<option value="${esc(e.name)}"></option>`).join('')}</datalist>`).join('')}

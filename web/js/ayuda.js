@@ -119,20 +119,20 @@ const AY_FLOWS={
 
   libSol:{t:'Solicitar una liberación de calidad',s:'El SC la pide cuando la necesita; el lookahead solo sugiere actividades.',n:[
     {o:'Actividad lista para inspección'},
-    {p:'Liberaciones › + Solicitar',d:'Elige una actividad sugerida del lookahead o «Otra…» (qué se libera y en qué ambiente).',tab:'lib',w:'SC, producción o Calidad'},
+    {p:'Liberaciones › + Solicitar',d:'Busca en el lookahead y elige una o varias; si no está, «Solicitar lo escrito» (qué se libera y en qué ambiente).',tab:'lib',w:'SC, producción o Calidad'},
     {p:'Datos de la solicitud',d:'Fecha en que estará lista, hora sugerida, protocolo y comentario.'},
     {q:'¿Se pidió un día antes (hasta las 18:00)?',y:[{p:'Dentro del plazo'}],n:[{p:'Fuera de plazo',d:'Calidad decide si la programa.'}]},
-    {p:'Calidad programa la inspección',d:'Fecha, hora e inspector. Se ubica en el plano.'},
-    {q:'¿Conforme?',y:[{p:'Liberada',d:'O liberada con observaciones menores.'}],n:[{p:'Observada',d:'Se corrige y se toca «Observaciones levantadas · pedir reinspección».'},{r:'Vuelve a la inspección'}]},
+    {p:'Calidad programa la inspección',d:'La arrastra a «Programadas»: fecha, hora e inspector. Se ubica en el plano.'},
+    {q:'¿Conforme?',y:[{p:'Liberada',d:'O liberada con observaciones menores.'}],n:[{p:'Observada',d:'Se corrige y se toca «Observaciones levantadas · pedir reinspección».'},{r:'Vuelve a «Solicitadas» para programarla otra vez'}]},
     {o:'Si Calidad la marcó crítica, libera la partida siguiente'}]},
 
   libCal:{t:'Liberaciones: programar e inspeccionar',s:'Trabajo de Calidad con las solicitudes.',n:[
     {o:'Llega una solicitud'},
     {p:'Revisar la solicitud',d:'Del SC, producción o Calidad, un día antes; puede ser de algo fuera del lookahead.',tab:'lib'},
-    {q:'¿Está en plazo?',y:[{p:'Programar inspección'}],n:[{q:'¿Se atiende igual?',y:[{p:'Programar inspección'}],n:[{p:'Anular solicitud'},{r:'Fin'}]}]},
-    {p:'Al programar: marcas',d:'Fecha, hora e inspector; si es crítica (y qué restringe) y si requiere supervisión.'},
+    {q:'¿Está en plazo?',y:[{p:'Programar inspección',d:'Arrastra la tarjeta a «Programadas» (Ctrl+clic para varias a la vez).'}],n:[{q:'¿Se atiende igual?',y:[{p:'Programar inspección'}],n:[{p:'Anular solicitud'},{r:'Fin'}]}]},
+    {p:'Al programar: marcas',d:'Día, hora e inspector con un toque; si es crítica (sugiere qué restringe) y si requiere supervisión.'},
     {p:'Inspección en obra',d:'Fecha, hora e inspector; ubicada en el plano.'},
-    {q:'¿Conforme?',y:[{p:'«✓ Liberar»',d:'O «Liberar con obs. menores».'}],n:[{p:'«⚠ Observar…»',d:'El SC levanta y pide reinspección.'},{r:'Vuelve a la inspección'}]},
+    {q:'¿Conforme?',y:[{p:'Arrastrar a «Liberadas»',d:'Conforme o con observaciones menores. Solo desde «Programadas».'}],n:[{p:'Arrastrar a «Observadas»',d:'El SC levanta y pide reinspección.'},{r:'Vuelve a «Solicitadas»'}]},
     {o:'Liberada: la partida siguiente puede avanzar'}]},
 
   cap:{t:'Reportar desde el celular (capataz)',s:'Tu partida, día a día.',n:[
