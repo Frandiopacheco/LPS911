@@ -97,7 +97,8 @@ function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!confirm('¿Anular e
 /** El ingeniero lo pasa al lookahead: una actividad nueva en ese ambiente con ese día marcado. */
 function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.ambId){toast('Primero elige el ambiente.');return}
   const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
-  apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead');
+  /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
+  if(apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead')===false||!S.act.has(aid))return;
   const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
   toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code);npClose()}
 

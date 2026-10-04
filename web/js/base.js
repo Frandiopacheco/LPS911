@@ -39,6 +39,8 @@ const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))
 const pisoOfAmb=id=>{const a=S.amb.get(id)||ARCH.amb.get(id);return a?pisoOfSecObj(S.sec.get(a.sectorId)||ARCH.sec.get(a.sectorId)):''};
 const pisoOfAct=id=>{const x=S.act.get(id)||ARCH.act.get(id);return x?pisoOfAmb(x.ambId):''};
 const visPisos=()=>pisos().filter(p=>!U.piso||p.id===U.piso);
+/** pisos para los indicadores históricos: con «Todos los pisos» incluye los archivados (sus semanas evaluadas siguen contando) */
+const histPisoSet=()=>new Set(U.piso?[U.piso]:[...S.pis.keys(),...ARCH.pis.keys()]);
 const wkId=(n,p)=>n+'_'+p;
 let db=null,auth=null,rtdb=null,presRef=null,conRef=null,presAll=null,me=null,isAdmin=false,canWrite=false,ready=false,myAct=null,peerEdits=[],unsubs=[],lastPres='';
 const PRES=new Map(),MEM=new Map();
@@ -206,14 +208,16 @@ function handleWriteErr(e){const c=e&&e.code;
 /* ---------- deshacer / rehacer ---------- */
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
-function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));if(typeof lhLog==='function')lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
+function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
-function replay(g,from,to){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to])}return skipped}
-function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const sk=replay(g.slice().reverse(),'after','before');redoS.push(g);updUndo();requestRender();
+function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
+/* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
+function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
+function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const sk=replay(g,'before','after');undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */

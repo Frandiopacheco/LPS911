@@ -34,8 +34,8 @@ function bufAt(lv,id,x,skip){const B=CLIB||{};const has=(m,k)=>m&&k!=null&&Objec
 const bufOf=x=>bufAt('x',x.id,x);
 function cliShift(x){const n=bufOf(x).n;if(!n)return x;const days=[...new Set((x.days||[]).map(d=>wshift(d,n)))].sort();
   const qty={};for(const[d,v]of Object.entries(x.qty||{})){const k=wshift(d,n);qty[k]=(qty[k]||0)+(+v||0)}return{...x,days,qty}}
-/** Todas las actividades con sus fechas para el cliente (se recalcula solo si cambian las actividades o las holguras). */
-function cliActs(){if(cliCache&&cliCache.src===S.act&&cliCache.b===CLIB)return cliCache.m;const m=new Map();for(const[id,x]of S.act)m.set(id,cliShift(x));cliCache={src:S.act,b:CLIB,m};return m}
+/** Todas las actividades con sus fechas para el cliente (se recalcula si cambian las actividades, las holguras o el calendario). */
+function cliActs(){const cal=JSON.stringify(P().cal||{});if(cliCache&&cliCache.src===S.act&&cliCache.b===CLIB&&cliCache.cal===cal)return cliCache.m;const m=new Map();for(const[id,x]of S.act)m.set(id,cliShift(x));cliCache={src:S.act,b:CLIB,cal,m};return m}
 
 /* ---------- versiones emitidas ---------- */
 const cliLast=()=>[...CLX.values()].sort((a,b)=>b.ts-a.ts)[0]||null;
@@ -70,9 +70,11 @@ function bufDialog(btn,lv,id,label){if(!canCli())return;const B=CLIB||{};const o
     ${lv!=='all'&&own!=null?'<button data-do="clr">Usar la del nivel superior</button>':''}`,
     {ok:()=>{const n=Math.max(0,Math.min(20,parseInt(($('#bfn')||{}).value,10)||0));bufSave(lv,id,n,`Holgura de ${label}: +${n}`)},clr:()=>bufSave(lv,id,null,`Holgura de ${label}: la del nivel superior`)});
   setTimeout(()=>{const i=$('#bfn');if(i){i.focus();i.select();i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#pop [data-do="ok"]')?.click()}}}},0)}
+/* guarda solo la holgura tocada (set con merge): lo que otro usuario cambió en otra actividad o nivel no se pisa */
 function bufSave(lv,id,n,msg){const B=JSON.parse(JSON.stringify(CLIB||{}));if(lv==='all')B.all=n||0;else{B[lv]=B[lv]||{};if(n==null)delete B[lv][id];else B[lv][id]=n}
   B.by=me.email;B.ts=NOW();CLIB=B;cliCache=null;requestRender();
-  fcol('cli').doc('buf').set(B).then(()=>toast(msg)).catch(err=>toast('No se pudo guardar la holgura: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message))))}
+  const FV=firebase.firestore.FieldValue;const patch={by:me.email,ts:B.ts};if(lv==='all')patch.all=n||0;else patch[lv]={[id]:n==null?FV.delete():n};
+  fcol('cli').doc('buf').set(patch,{merge:true}).then(()=>toast(msg)).catch(err=>toast('No se pudo guardar la holgura: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message))))}
 /* botón con la holgura en las filas de la vista cliente (+n; resaltado si está definida en ese nivel) */
 function cliBufBtn(lv,id,x){const r=bufAt(lv,id,x);const own=r.lv===lv;const t={x:'esta actividad',a:'este ambiente',s:'este sector',p:'este piso'}[lv];
   return`<button class="clb${own?' own':''}" data-buf="${lv}" data-bid="${esc(id)}" title="Holgura de ${t}: +${r.n} día${r.n===1?'':'s'} hábil${r.n===1?'':'es'}${own?'':' (heredada de '+BUF_LV[r.lv]+')'}. Clic para cambiarla.">+${r.n}</button>`}

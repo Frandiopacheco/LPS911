@@ -6,19 +6,23 @@
 const HFLDS=['days','qty','metrado','und','name','sc','ambId'];
 const HMAX=150;
 /** registra un cambio del lookahead (lo llama apply) */
-function lhLog(ops,label){try{if(!db||!me||!canWrite||(typeof PM==='function'&&PM()))return;const items=[];
+function lhLog(ops,label,extra){try{if(!db||!me||!canWrite||(typeof PM==='function'&&PM()))return;const items=[];
   for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before,a=o.after;const k=!b?'new':!a?'del':a.arch&&!b.arch?'arch':!a.arch&&b.arch?'res':'mod';
     const pick=x=>{const r={};if(!x)return r;HFLDS.forEach(f=>{if(x[f]!==undefined&&x[f]!==null)r[f]=x[f]});return r};
     const B=pick(b),A=pick(a);if(k==='mod'&&canon(B)===canon(A))continue;const x=a||b;const am=S.amb.get(x.ambId)||(ARCH.amb&&ARCH.amb.get(x.ambId));
     const keep=f=>k==='mod'?canon(B[f]??null)!==canon(A[f]??null):k==='new'?f in A:false;const bb={},aa={};HFLDS.forEach(f=>{if(keep(f)){if(f in B)bb[f]=B[f];if(f in A)aa[f]=A[f]}});
     items.push({id:o.id,nm:x.name||'',amb:am?am.code:'',sc:x.sc||'',k,b:bb,a:aa})}
-  if(!items.length)return;const t=NOW();
-  fcol('lhlog').doc(t+'_'+Math.random().toString(36).slice(2,8)).set({t,d:todayIso(),by:(me.email||'').toLowerCase(),n:me.name||me.email,label:label||'',tab:U.tab||'',items:items.slice(0,HMAX),...(items.length>HMAX?{more:items.length-HMAX}:{})}).catch(()=>{})}catch(e){}}
+  if(!items.length)return;const t=NOW();const gid=t+'_'+Math.random().toString(36).slice(2,8);const np=Math.ceil(items.length/HMAX);
+  /* todo el detalle se guarda: en tandas de HMAX, documentos del mismo grupo (g, parte pt de np); la ventana los junta */
+  for(let i=0;i<np;i++)fcol('lhlog').doc(i?gid+'_'+i:gid).set({t,d:todayIso(),by:(me.email||'').toLowerCase(),n:me.name||me.email,label:label||'',tab:U.tab||'',items:items.slice(i*HMAX,(i+1)*HMAX),...(np>1?{g:gid,pt:i,np}:{}),...(extra||{})}).catch(()=>{});
+  return gid}catch(e){}}
+/** junta las partes de un mismo cambio (g) en una sola entrada */
+function histMerge(L){const out=[],by=new Map();for(const d of L.slice().sort((a,b)=>(a.pt||0)-(b.pt||0))){if(!d.g){out.push(d);continue}const c=by.get(d.g);if(c){c.items=[...c.items,...(d.items||[])];continue}const n={...d,items:[...(d.items||[])]};by.set(d.g,n);out.push(n)}return out}
 /* ---- ventana «Historial» (Lookahead): un día a la vez, lo más reciente arriba ---- */
 const HST={d:'',f:'all',q:'',L:null,P:null,busy:false};
 async function histLoad(){if(!db){HST.L=[];HST.P=[];return}HST.busy=true;histDraw();const t0=Date.parse(HST.d+'T00:00:00Z')+LIMA_OFF,t1=t0+864e5;
   try{const[a,b]=await Promise.all([fcol('lhlog').where('t','>=',t0).where('t','<',t1).get(),fcol('lhphist').where('t','>=',t0).where('t','<',t1).get()]);
-    HST.L=a.docs.map(d=>({...d.data(),id:d.id}));HST.P=b.docs.map(d=>({...d.data(),id:d.id}))}
+    HST.L=histMerge(a.docs.map(d=>({...d.data(),id:d.id})));HST.P=b.docs.map(d=>({...d.data(),id:d.id}))}
   catch(e){HST.L=[];HST.P=[];toast('No se pudo leer el historial: '+(e.code||e.message))}HST.busy=false;histDraw()}
 function histItem(it){const sc=conOf(it.sc).name;const head=`<span class="mono">${esc(it.amb||'')}</span> ${esc(it.nm||'(sin nombre)')} <span class="mu">· ${esc(sc)}</span>`;
   const txt=it.k==='new'?`Nueva actividad${(it.a.days||[]).length?' · '+rngTxt(it.a.days):''}`:it.k==='del'?'Eliminada':it.k==='arch'?'Enviada a la Papelera':it.k==='res'?'Recuperada de la Papelera':
@@ -27,7 +31,7 @@ function histItem(it){const sc=conOf(it.sc).name;const head=`<span class="mono">
   return`<li>${head}<small>${esc(txt)}</small></li>`}
 const HST_ST={ok:'✓ Aceptó',shift:'↔ Aceptó con otra fecha',rej:'✗ Rechazó'};
 function histDraw(){const el=$('#lqm');if(!el||!el.querySelector('.hst'))return;const q=fold(HST.q||'').trim();
-  const E=[];if(HST.f!=='prop')for(const g of HST.L||[]){const its=(g.items||[]).filter(it=>!q||fold(it.nm+' '+it.amb+' '+conOf(it.sc).name).includes(q));if(its.length)E.push({t:g.t,h:`<div class="hsi"><div class="hsh"><b>${hhmm(g.t)}</b> ${esc(g.n||'')}${g.label?` · ${esc(g.label)}`:g.tab==='mapa'?' · Plan diario':''}</div><ul>${its.map(histItem).join('')}${g.more?`<li class="mu">y ${g.more} más…</li>`:''}</ul></div>`})}
+  const E=[];if(HST.f!=='prop')for(const g of HST.L||[]){const its=(g.items||[]).filter(it=>!q||fold(it.nm+' '+it.amb+' '+conOf(it.sc).name).includes(q));if(its.length)E.push({t:g.t,h:`<div class="hsi"><div class="hsh"><b>${hhmm(g.t)}</b> ${esc(g.n||'')}${g.label?` · ${esc(g.label)}`:g.tab==='mapa'?' · Plan diario':''}</div><ul>${its.slice(0,HMAX).map(histItem).join('')}${its.length>HMAX?`<li><details><summary class="mu">y ${its.length-HMAX} más…</summary><ul>${its.slice(HMAX).map(histItem).join('')}</ul></details></li>`:''}${g.more?`<li class="mu">y ${g.more} más…</li>`:''}</ul></div>`})}
   if(HST.f!=='dir')for(const h of HST.P||[]){if(q&&!fold((h.name||'')+' '+(h.amb||'')+' '+conOf(h.sc).name).includes(q))continue;
     E.push({t:h.t,h:`<div class="hsi pr"><div class="hsh"><b>${hhmm(h.t)}</b> ${esc(h.n||'')} · ${HST_ST[h.st]||esc(h.st||'')} la propuesta de ${esc(conOf(h.sc).name)}${h.undone?' <span class="pill neu">deshecho</span>':''}</div><ul><li><span class="mono">${esc((h.amb||'').split(' ')[0])}</span> ${esc(h.name||'')}<small>${h.kind==='del'?'Pedía quitarla':h.kind==='new'?'Actividad nueva':''}${h.from||h.to?` ${esc(h.from||'—')} → ${esc(h.to||'—')}`:''}${h.late?' · fuera de plazo'+(h.lateNote?': '+esc(h.lateNote):''):''}${h.note?' · '+esc(h.note):''}</small></li></ul></div>`})}
   E.sort((a,b)=>b.t-a.t);
