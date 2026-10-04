@@ -82,6 +82,14 @@ service cloud.firestore {
       // el SC cambia sus borradores y envíos, pero no las «Respuestas del ingeniero» (hist): esas solo las escribe quien decide
       allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc && lhpHistOk());
     }
+    // Plan del día cerrado (foto de lo comprometido; contra ella se mide el PPC diario). La escribe quien publica (editor/admin)
+    // y el servidor a las 20:00. Reabrir (reo) es solo del administrador; un editor solo puede dejarlo cerrado (reo vacío).
+    match /dplan/{id} {
+      allow read: if isMember();
+      allow create: if isAdmin() || (canEdit() && request.resource.data.get('reo', null) == null);
+      allow update: if isAdmin() || (canEdit() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null));
+      allow delete: if canEdit();
+    }
     // Constancia del congelado automático de cada semana (la escribe solo el servidor)
     match /frz/{id} {
       allow read: if isMember();

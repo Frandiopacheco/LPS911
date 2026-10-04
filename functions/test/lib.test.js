@@ -166,3 +166,18 @@ test('congelado automático: compromisos de la semana por piso, como «Congelar�
   assert.deepStrictEqual(d.snap.x1, ['2026-10-09', '2026-10-12', '2026-10-13']);
   assert.deepStrictEqual(d.propOut, ['c2/x2']); // enviada y sin decidir; la no enviada no cuenta
 });
+
+const { nextWork, buildDayPlan } = require('../lib');
+test('cierre de las 20:00: día hábil siguiente y foto del plan por piso', () => {
+  const P = { cal: { hol: [{ d: '2026-10-08', n: 'Combate de Angamos' }], sat: true } };
+  assert.strictEqual(nextWork(P, '2026-10-02'), '2026-10-03'); // viernes → sábado (laborable)
+  assert.strictEqual(nextWork({ cal: { sat: false } }, '2026-10-02'), '2026-10-05'); // sábado no laborable → lunes
+  assert.strictEqual(nextWork(P, '2026-10-07'), '2026-10-09'); // salta el feriado
+  const L = buildDayPlan({
+    pisos: M({ p1: { order: 1 }, p2: { order: 2 } }), sectors: M({ s1: { pisoId: 'p1' }, s2: { pisoId: 'p2' } }),
+    ambientes: M({ a1: { sectorId: 's1' }, a2: { sectorId: 's2' } }),
+    acts: M({ x1: { ambId: 'a1', days: ['2026-10-05'], qty: { '2026-10-05': 12 } }, x2: { ambId: 'a1', days: ['2026-10-05'] }, x3: { ambId: 'a1', days: ['2026-10-05'], arch: { t: 1 } }, x4: { ambId: 'a2', days: ['2026-10-06'] }, x5: { ambId: 'a1', days: ['2026-10-02', '2026-10-05'] } }),
+    done: new Map([['x5', '2026-10-02']])
+  }, '2026-10-05');
+  assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null } } }]);
+});

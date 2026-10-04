@@ -1491,3 +1491,7 @@ table.rtab .rc-x{width:30px}
 /* PPC semanal: quién responde por un no cumplido */
 .rspsel{margin-top:4px;font-size:12px;max-width:100%}
 .rspc{display:flex;gap:5px;align-items:center;font-size:11.5px;margin-top:2px;color:var(--muted)}
+
+/* Plan diario: día cerrado y reabierto */
+.pubb.lk{border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+.pubb.reo{border-color:var(--warn,#b7791f);background:color-mix(in srgb,var(--warn,#b7791f) 10%,var(--panel))}

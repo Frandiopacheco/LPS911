@@ -14,12 +14,14 @@ const actsOfPiso=id=>[...S.act.values()].filter(x=>pisoOfAct(x.id)===id);
 /** Desplaza n días hábiles (n<0 adelanta) los días desde `from` de cada actividad; lo anterior a `from` no se toca. */
 function shiftActs(ids,n,from,label){if(!n)return 0;const ops=[];let moved=0,done=0,blocked=0;
   for(const id of ids){const x=S.act.get(id);if(!canMoveAct(x))continue;if(DONE.has(id)){done++;continue}
-    const days=x.days||[];if(!days.some(d=>d>=from))continue;const map=d=>d>=from?wshift(d,n):d;
+    /* lo pasado y los días con el plan cerrado (hoy, publicados) se quedan: se mueve desde el primer día abierto */
+    const f=typeof firstOpen==='function'?firstOpen(from,pisoOfAmb(x.ambId)):from;
+    const days=x.days||[];if(!days.some(d=>d>=f))continue;const map=d=>d>=f?wshift(d,n):d;
     /* adelantar no puede llevar días a antes de `from` (se juntarían con días pasados ya registrados) */
-    if(n<0&&days.some(d=>d>=from&&wshift(d,n)<from)){blocked++;continue}
+    if(n<0&&days.some(d=>d>=f&&wshift(d,n)<f)){blocked++;continue}
     const nd=[...new Set(days.map(map))].sort();const nq={};for(const[d,v]of Object.entries(x.qty||{})){const k=map(d);nq[k]=(nq[k]||0)+(+v||0)}
     ops.push(op('acts',id,{...x,days:nd,qty:nq}));moved++}
-  if(!ops.length){toast(blocked?'No se puede adelantar: su primer día ya es hoy (no se mueve hacia días pasados).':done?'Esas actividades ya están terminadas: no hay días que mover.':'No hay días que mover desde hoy.');return 0}
+  if(!ops.length){toast(blocked?'No se puede adelantar: no se mueve hacia hoy, días pasados ni días con el plan cerrado.':done?'Esas actividades ya están terminadas: no hay días que mover.':'No hay días que mover desde hoy.');return 0}
   const k=Math.abs(n);apply(ops,`${label}: ${moved} actividad${moved>1?'es':''} ${n>0?'atrasada':'adelantada'}${moved>1?'s':''} ${k} día${k>1?'s':''} hábil${k>1?'es':''}${done?` (${done} terminada${done>1?'s':''} no se movieron)`:''}${blocked?` (${blocked} ya empiezan hoy: no se adelantaron)`:''}`);return moved}
 
 /** Ventana para mover un grupo: cuántos días hábiles, hacia dónde y si se mueven también los días pasados. */

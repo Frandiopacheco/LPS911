@@ -141,6 +141,10 @@ function propConflicts(it,off,shift){const base=it.base;if(!it.after||!base||!of
 async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return'gone';
   if(!canDecide(id,it)){if(!opt.bulk)toast(propWho(id,it)+'.');return'perm'}
   const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
+  /* aceptar no puede cambiar días cuyo plan ya está cerrado (hoy, pasados o publicados); rechazar sí se puede */
+  if(st!=='rej'&&typeof dayLocked==='function'){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const L=propTouch(o0||it.base||null,it.after&&o0?propMerge(it.after,it.base||o0,o0,false):it.after).filter(d=>dayLocked(d,pid)&&!recReal(d,id));
+    if(L.length){if(isAdmin&&!opt.bulk&&confirm(`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Como administrador puedes aceptarla igual (queda registrado). ¿Aceptar?`)){L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
+      else{if(!opt.bulk)toast(`No se puede aceptar: cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Acéptala con otra fecha o recházala.`);return'closed'}}}
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   const say=m=>{if(!opt.bulk)toast(m)};
   /* fuera de plazo: se puede aceptar, pero con motivo (queda en el historial con quién y cuándo) */
@@ -208,7 +212,7 @@ async function decideMany(L){let ok=0;const why={};
   if(nl){const m=prompt(`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} fuera de plazo (${propCutTxt()}).\n\n¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.`,'');
     if(m==null||!m.trim()){toast(m==null?'No se aceptó ninguna.':'Escribe el motivo para aceptar las que llegaron fuera de plazo. No se aceptó ninguna.');return}lateNote=m.trim()}
   for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true,lateNote});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
-  const W={late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+  const W={closed:'cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
   toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */

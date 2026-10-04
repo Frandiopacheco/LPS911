@@ -178,4 +178,23 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
   return out;
 }
 
-module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays };
+/* ---------- Cierre automático del plan del día (20:00 del día anterior, si nadie lo publicó) ---------- */
+/* día hábil (como la página: domingo no; feriados y sábado según Configuración › Calendario) */
+function isWork(p, d) { const dw = pd(d).getUTCDay(); if (dw === 0) return false; const c = (p && p.cal) || {}; if ((c.hol || []).some(o => o && o.d === d)) return false; if (dw === 6 && c.sat === false) return false; return true; }
+function nextWork(p, d) { let x = addD(d, 1); for (let i = 0; i < 30 && !isWork(p, x); i++) x = addD(x, 1); return x; }
+/* foto del plan del día por piso: {actId: cantidad | null} de lo programado ese día y no terminado (sin lo archivado) */
+function buildDayPlan({ pisos, sectors, ambientes, acts, done = new Map() }, d) {
+  const live = m => [...m.values()].filter(x => !x.arch);
+  const P = live(pisos).sort(byOrder); if (!P.length) return [];
+  const pids = new Set(P.map(p => p.id)); const first = P[0].id;
+  const secById = new Map(live(sectors).map(s => [s.id, s])), ambById = new Map(live(ambientes).map(a => [a.id, a]));
+  const pisoOfAmb = id => { const a = ambById.get(id); const s = a && secById.get(a.sectorId); return a ? (s && s.pisoId && pids.has(s.pisoId) ? s.pisoId : first) : ''; };
+  const by = new Map(P.map(p => [p.id, {}]));
+  for (const x of live(acts)) {
+    if (!(x.days || []).includes(d)) continue; const dn = done.get(x.id); if (dn && d > dn) continue;
+    const pid = pisoOfAmb(x.ambId); if (!by.has(pid)) continue; const q = (x.qty || {})[d]; by.get(pid)[x.id] = q != null ? +q : null;
+  }
+  return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids } }));
+}
+
+module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan };

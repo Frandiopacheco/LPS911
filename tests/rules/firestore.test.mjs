@@ -235,6 +235,18 @@ test('propuestas: historial de decisiones (lhphist) solo lo escribe quien decide
   await assertFails(updateDoc(doc(sc, 'lhphist/c-gabel_x1_1'), { undone: null }));
   await assertFails(deleteDoc(doc(ed, 'lhphist/c-gabel_x1_1')));
 });
+test('plan del día cerrado (dplan): publica el editor; reabrir es solo del administrador', async () => {
+  const ed = user('editor@obra.pe'), sc = user('sc@obra.pe');
+  await assertSucceeds(setDoc(doc(ed, 'dplan/2026-10-02_p1'), { date: '2026-10-02', pisoId: 'p1', ids: { x1: null }, reo: null }));
+  await assertSucceeds(getDoc(doc(sc, 'dplan/2026-10-02_p1')));
+  await assertFails(setDoc(doc(sc, 'dplan/2026-10-03_p1'), { date: '2026-10-03', pisoId: 'p1', ids: {} }));
+  await assertFails(updateDoc(doc(ed, 'dplan/2026-10-02_p1'), { reo: { by: 'editor@obra.pe', why: 'quiero cambiarlo' } }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'dplan/2026-10-02_p1'), { reo: { by: OWNER, why: 'corrección' } }));
+  await assertSucceeds(updateDoc(doc(ed, 'dplan/2026-10-02_p1'), { reo: null, ids: { x1: 3 } })); // al volver a publicar queda cerrado
+  await assertFails(setDoc(doc(ed, 'dplan/2026-10-04_p1'), { date: '2026-10-04', pisoId: 'p1', reo: { why: 'x' } }));
+  await assertFails(deleteDoc(doc(sc, 'dplan/2026-10-02_p1')));
+  await assertSucceeds(deleteDoc(doc(ed, 'dplan/2026-10-02_p1'))); // deshacer la publicación de un día futuro
+});
 test('congelado automático (frz): todos lo leen y nadie lo escribe desde la app', async () => {
   await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'frz/60'), { n: 60, k: 2 }));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frz/60')));
