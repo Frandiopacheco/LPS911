@@ -34,7 +34,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 | `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión en `sw.js` y en las URLs `?v=` de `css/`, `js/` y `plano.js`, y llena `ASSETS` del service worker para que funcione sin internet. |
 | `scripts/check.mjs` | Revisión de `web/`: sintaxis de cada archivo, que todo lo que carga `index.html` exista (y que no sobre nada en `js/`), `"use strict"` al inicio y `inicio.js` al final: `node scripts/check.mjs`. |
 | `tests/e2e/` | Pruebas de la interfaz con Playwright y un Firebase falso en memoria (ver "Cómo probar"). `mundo-compartido.js` + `auditoria-ciclo.spec.js`: el ciclo diario con 16 usuarios a la vez sobre una misma base (corre aparte con `CICLO=1`). |
-| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright) → instala en Firebase → publica en Netlify. |
+| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright en 3 partes + ciclo diario, a la vez; no se repite al unir si el código ya pasó en el PR) → instala en Firebase → publica en Netlify. |
 
 ## Entornos
 
@@ -250,9 +250,22 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 
 ## Flujo de trabajo con GitHub
 
-- Rama nueva → *pull request* a `main` → esperar el check "Revisar" → unir (squash) → esperar "Instalar en Firebase" y "Publicar la página en Netlify".
+- Rama nueva → *pull request* a `main` → esperar los checks (Revisar, interfaz en 3 partes a la vez y Ciclo diario) → unir (squash) → esperar "Instalar en Firebase" y "Publicar la página en Netlify".
+- Al unir a `main` las pruebas de la interfaz **no se repiten** si el código es idéntico (mismo árbol de archivos) al que ya pasó en el PR: el trabajo `previo` busca la constancia `e2e-ok-<árbol>` que deja `aprobado`. Si `main` cambió entre medio (otra conversación unió algo), se corren de nuevo.
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
+
+## Modo rápido (por defecto, decidido con el dueño, oct 2026)
+
+El dueño prioriza ver los cambios pronto en la copia de prueba. Salvo que pida lo contrario o el cambio sea delicado:
+
+- **No correr la batería completa en local.** Solo `node scripts/check.mjs` y los archivos de prueba del tema tocado (`npx playwright test <archivo>.spec.js`). La batería completa la corre GitHub en el PR (en 3 partes a la vez, ~3 min).
+- **Pruebas nuevas solo para lógica delicada:** PPC, transacciones, permisos/reglas, cierre/publicación del plan, datos que se puedan perder. Ajustes de texto, estilo o diseño van sin prueba nueva. No hace falta demostrar que la prueba falla con el código anterior salvo en correcciones de auditoría.
+- **Juntar** los cambios pedidos en la misma conversación en **una rama y un PR**.
+- **No vigilar el CI paso a paso:** abrir el PR, esperar con un solo comando (`scripts/esperar-ci.sh <rama>`; `gh pr checks` no funciona aquí, usa GraphQL), unir y avisar. Si una prueba falla y es ajena al cambio (inestable), reintentar el trabajo una vez (`gh run rerun <id> --failed`) antes de investigar.
+- **A producción**, cuando el dueño lo apruebe: PR `main → produccion` y unir en cuanto pase «Revisar» (~4–5 min en total); no se repiten las pruebas de la interfaz.
+- **Conversaciones cortas:** una conversación por tema; todo lo necesario está en este archivo.
+- **Flujo completo** (batería entera en local, prueba que falla antes) solo para cambios grandes en reglas, servidor (`functions/`) o el ciclo diario/PPC.
 
 ## Auditorías externas (ChatGPT u otra IA)
 
@@ -262,7 +275,7 @@ El dueño encarga auditorías por tema a otra IA y trae el informe. Así se trab
 2. **Comprobar la versión:** el informe dice qué commit auditó. Si no es el de `main`, revisa con `git diff <commit> main -- <archivos citados>` si las líneas siguen valiendo.
 3. **No repetir lo ya probado:** lo que el informe marca como **reproducido en Chromium** (con su evidencia) se da por confirmado y pasa directo a corregir. Lo que es solo lectura de código se contrasta leyendo **solo las líneas citadas** (si son muchas, con un subagente de modelo económico). Lo de gravedad baja lleva un veredicto de una línea.
 4. **Opinión antes de tocar nada:** tabla corta por n.º (confirmado / en parte / no, y si cambia la gravedad), puntos que repiten pendientes ya conocidos y decisiones que necesita el dueño. **Solo se implementa lo que él aprueba.**
-5. **Una sola rama y un solo *pull request* por informe** (salvo que algo sea riesgoso y convenga separarlo). Cada punto lleva su prueba de regresión, que debe fallar con el código anterior. La batería completa se corre **una vez** en local antes del *pull request*; GitHub la vuelve a correr.
+5. **Una sola rama y un solo *pull request* por informe** (salvo que algo sea riesgoso y convenga separarlo). Cada punto de lógica delicada lleva su prueba de regresión. En local solo corren los archivos de prueba tocados; la batería completa la corre GitHub en el PR (ver «Modo rápido»).
 6. Al terminar: actualizar este archivo (patrones nuevos y pendientes) y entregar un resumen corto. `produccion` nunca se toca sin aprobación.
 
 ## Pendientes conocidos (ver auditorías)
