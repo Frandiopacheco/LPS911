@@ -13,3 +13,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Tanda B: avisos al celular (FCM), Lookahead que dibuje solo las filas visibles.
 - Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
 - Liberaciones: zonas como polígono (hoy rectángulo).
+
+## Para una próxima obra: módulo de casco (decidido con el dueño, oct 2026)
+
+- No se implementa en esta obra (ya está en acabados). Se retoma cuando haya casco que programar.
+- **Dos módulos independientes**, en pantallas distintas, cada uno con su propio lookahead, PPC, AR, etc.; no necesitan compartir la información: el actual (por ambiente, acabados) y uno **por partida/actividad** para casco.
+- Formato elegido para el de casco (lienzo «Lookahead por partida — 3 propuestas», opción C): una fila por partida (agrupadas p. ej. Verticales / Horizontales), una **barra por partida dividida en tramos por sector**, **color = sector** (el mismo en todas las filas, para ver el tren S1→S4), el SC como punto junto al nombre, y un interruptor «Solo sector / Sector + metrado» que muestra la cantidad de cada tramo.
+- Antes de construirlo, definir: qué comparte con el módulo actual (Equipo, Restricciones, Plan diario, Campo) y cómo se pasa de casco a acabados en una misma obra.
