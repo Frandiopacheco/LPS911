@@ -1529,6 +1529,8 @@ function fzCardHtml(role,sc){const mine=fzMine();if(!mine)return'';const f=fzOf(
    Los cambios se dibujan en su lugar (sin volver a armar la ventana), para que no parpadee. */
 const cqItems=q=>Array.isArray(q.items)?q.items:[];
 function fzAgg(cuad){const m=new Map();for(const q of cuad)for(const i of cqItems(q)){const cat=String(i.cat||'').trim(),esp=String(i.esp||'').trim();if(!cat||!(+i.n>0))continue;const k=cat.toLowerCase()+'|'+esp.toLowerCase();const o=m.get(k)||{cat,esp,n:0};o.n+=+i.n;m.set(k,o)}return[...m.values()]}
+/* en el celular «Equipos del día» empieza plegado: abierto tapaba el plano */
+function fzIsOpen(){return innerWidth<761?M.fzOpen===true:M.fzOpen!==false}
 async function fzOpen(sc,selC){const f=fzOf(sc);let src=f&&((f.cuad||[]).length||(f.items||[]).length)?f:null;let copied=false;
   if(!src){try{const d=await fcol('pdz').doc('fzl_'+sc).get();if(d.exists){src=d.data();copied=true}}catch(e){}}
   let cuad=src?JSON.parse(JSON.stringify(src.cuad||[])):[];
@@ -1584,7 +1586,7 @@ function fzBoxHtml(role,sf){const mine=role==='sc'?new Set(myScs()):null;const s
     const rt=(f.cuad||[]).map(q=>{const R=cqRoute(f,q.id).map(a=>{const y=S.act.get(a);const ay=y&&S.amb.get(y.ambId);return ay?ay.code:'?'});return`<span class="mfzq${M.cqFocus===sc+'|'+q.id?' fo':''}" data-cqf="${sc}|${esc(q.id)}" role="button" title="Ver su recorrido en el plano" style="--q:${cqCol(f,q.id)}"><i>${esc(q.id)}</i>${R.length?esc(R.join(' → ')):'<em>sin actividad</em>'}${q.n?` · ${q.n} p.`:''}</span>`}).join('');
     return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>${fzTot(f)} personas · ${(f.cuad||[]).length} cuadrillas · <span class="${ext?'ext':''}">${horTxt(f)}</span>${sin?` · <span class="bad">${sin} sin cuadrilla</span>`:''}</small>${rt}</div>`});
   /* en el celular, mientras se reparte una cuadrilla elegida, el recuadro va plegado para no tapar los números del plano */
-  const op_=M.fzOpen!==false&&!(M.cqSel&&innerWidth<900);return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
+  const op_=fzIsOpen()&&!(M.cqSel&&innerWidth<900);return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
 /* asignar, mover y quitar cuadrillas */
 /** cambia solo las actividades tocadas del reparto (ch = {actId: {c,o,n?} | null}) */
 function fzAsg(sc,ch){const id=fzId(M.date,sc);const f=PD.get(id);if(!f)return;const old=f.asg||{};const patch={},before={};
@@ -1690,7 +1692,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-cqclr]'))){cqClear();return true}
   if((b=g('[data-cqf]'))){const k=b.dataset.cqf;M.cqFocus=M.cqFocus===k?'':k;requestRender();return true}
   if((b=g('[data-chtog]'))){M.chOpen=!M.chOpen;requestRender();return true}
-  if((b=g('[data-fztog]'))){/* plegado por el reparto en el celular: abrirlo termina el reparto de esa cuadrilla */if(M.cqSel&&innerWidth<900){M.cqSel='';M.fzOpen=true}else M.fzOpen=M.fzOpen===false;requestRender();return true}
+  if((b=g('[data-fztog]'))){/* plegado por el reparto en el celular: abrirlo termina el reparto de esa cuadrilla */if(M.cqSel&&innerWidth<900){M.cqSel='';M.fzOpen=true}else M.fzOpen=!fzIsOpen();requestRender();return true}
   if((b=g('[data-pub]'))){pubAsk(b);return true}
   if(g('[data-lko]')){lkReopen();return true}
   if(g('[data-lkc]')){lkClose();return true}

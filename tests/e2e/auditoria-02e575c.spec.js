@@ -152,6 +152,8 @@ test('N11: en el celular, al repartir una cuadrilla «Equipos del día» se plie
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, F] });
   await page.waitForFunction(() => window.__plano && window.__plano.M);
   await page.evaluate(() => { const M = window.__plano.M; M.cqOn = true; M.panel = false; requestRender(); });
+  await expect(page.locator('#mfzb .mpdl')).toHaveCount(0); // en el celular empieza plegado (no tapa el plano)
+  await page.locator('#mfzb [data-fztog]').click();
   await expect(page.locator('#mfzb .mpdl')).toHaveCount(1); // abierto antes de elegir
   await page.locator('#mcqb [data-cqd="C1"]').click();
   await expect(page.locator('#mfzb .mpdl')).toHaveCount(0); // plegado mientras se reparte

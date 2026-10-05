@@ -1675,3 +1675,12 @@ table.rtab .rc-x{width:30px}
 }
 
 @media (min-width:761px){.rcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}
+/* plan diario en el celular: barra en una sola fila deslizable y paneles más bajos para que se vea el plano */
+@media (max-width:760px){
+  .mapa #mbar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-top:6px;padding-bottom:6px}
+  .mapa #mbar::-webkit-scrollbar{display:none}
+  .mapa #mbar>*{flex:none}
+  .mrs{max-height:34%}
+  .mlgd{max-height:30%}
+}
+
