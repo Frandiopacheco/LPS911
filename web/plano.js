@@ -965,10 +965,18 @@ function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);cons
   if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Sectorización</b>.':'')}</div>`;host._v=null;host._fk='';return}
   let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;
-    const zid=el?el.dataset.z:'';if(zid&&zid.startsWith('np:')){if(oo.onMark)oo.onMark(zid.slice(3));return}
-    const z=el&&(oo.zones?oo.zones.find(q=>q.id===zid):zget(zid));if(z&&z.actId&&oo.colors.has(z.actId)){oo.onPick(z.actId,z,{x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''});return}
-    /* toque en un lugar sin actividad programada: trabajo no programado */
-    if(oo.onEmpty)oo.onEmpty({x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''})}});host._v=v}host._o=o;host._base=base.id;
+    const pt={x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''};
+    /* doble toque rápido en cualquier lugar (también sobre una actividad de otro SC): trabajo no programado */
+    const t=performance.now(),L=host._lt;if(oo.onDbl&&L&&t-L.t<350&&Math.hypot(e.clientX-L.x,e.clientY-L.y)<30){clearTimeout(host._tt);host._lt=null;oo.onDbl(pt);return}
+    host._lt={t,x:e.clientX,y:e.clientY};
+    const run=()=>{const zid=el?el.dataset.z:'';if(zid&&zid.startsWith('np:')){if(oo.onMark)oo.onMark(zid.slice(3));return}
+      /* con «＋ No programado» armado, cualquier lugar (aunque tenga una actividad) registra el no programado */
+      if(oo.npAll&&oo.onEmpty){oo.onEmpty(pt);return}
+      const z=el&&(oo.zones?oo.zones.find(q=>q.id===zid):zget(zid));if(z&&z.actId&&oo.colors.has(z.actId)){oo.onPick(z.actId,z,pt);return}
+      /* toque en un lugar sin actividad programada: trabajo no programado */
+      if(oo.onEmpty)oo.onEmpty(pt)};
+    /* con doble toque activo, el toque simple espera un instante por si llega el segundo */
+    clearTimeout(host._tt);if(oo.onDbl)host._tt=setTimeout(run,300);else run()}});host._v=v}host._o=o;host._base=base.id;
   const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()}).catch(()=>{});
   v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.5}]);
   const full=boundsOf({...base,T:base.T||I});const mv=mine.filter(z=>zVista(z)===base.id);

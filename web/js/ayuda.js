@@ -79,7 +79,7 @@ const AY_FLOWS={
   np:{t:'Trabajo no programado',s:'Lo que se ve en obra y no está en el plan del día.',n:[
     {o:'Recorrido de obra'},
     {p:'Campo › Plano',d:'Lámina del piso con lo programado.',tab:'campo'},
-    {p:'«＋ No programado» y tocar el lugar',d:'Primero el botón (evita abrirlo sin querer al desplazarte); luego el lugar: ambiente según el punto, subcontratista, qué hacen y foto.'},
+    {p:'Dos toques rápidos en el lugar',d:'En cualquier ambiente, aunque tenga otra actividad (o «＋ No programado» y luego el lugar). Se abre la ficha: ambiente según el punto, subcontratista, qué hacen y foto.'},
     {p:'Guardar',d:'Se ve en el Plan diario («Visto en obra»), Hoy, Indicadores y reportes. No cambia el PPC.'},
     {q:'¿Debe quedar programado?',y:[{p:'«Pasarlo al lookahead»',d:'Lo hace el ingeniero.'}],n:[{p:'Queda como registro'}]},
     {o:'Fin'}]},

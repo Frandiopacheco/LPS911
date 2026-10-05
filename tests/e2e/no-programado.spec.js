@@ -30,6 +30,25 @@ async function tocar(page, x, y) {
   await page.mouse.click(p.x, p.y);
 }
 
+/* dos toques rápidos en un punto del plano */
+async function dobleToque(page, x, y) {
+  await tocar(page, x, y);
+  const p = await page.evaluate(([x, y]) => { const h = document.querySelector('#kplan'); const v = h._v; const r = h.getBoundingClientRect(); return { x: r.left + v.x + x * v.z, y: r.top + v.y + y * v.z }; }, [x, y]);
+  await page.mouse.click(p.x, p.y);
+}
+
+test('doble toque en cualquier lugar (también sobre una actividad programada) abre el trabajo no programado; un toque abre la actividad', async ({ page }) => {
+  const errors = await openApp(page, { as: 'campo', tab: 'campo', extra: PLANO });
+  await page.evaluate(() => { CU.view = 'plan'; render(); });
+  await page.locator('[data-kp="p1"]').click();
+  await dobleToque(page, 200, 200); // la zona e0 tiene una actividad programada
+  await expect(page.locator('#npsheet')).toContainText('Trabajo no programado');
+  await expect(page.locator('#npamb')).toHaveValue('a1');
+  await expect(page.locator('#ksheet')).toHaveCount(0);
+  await page.locator('#npsheet [data-npx]').first().click();
+  noErrors(errors, 'doble toque');
+});
+
 test('el veedor toca el plano y registra un trabajo no programado con foto', async ({ page }) => {
   const errors = await openApp(page, { as: 'veedor', tab: 'campo', extra: PLANO });
   await expect(page.locator('#kplan')).toBeVisible();
