@@ -31,6 +31,11 @@ window.__uiAskNative = true;
     S('members', 'veedor@obra.pe', { role: 'veedor', name: 'Vero Veedora' });
     S('members', 'planner@obra.pe', { role: 'planner', name: 'Pablo Planner' });
     S('members', 'u_cap1', { role: 'capataz', name: 'Pedro Capataz', sc: 'c1', scs: ['c1'] });
+    /* módulo Tareo (docs/ia/tareo.md): roles de solo tareo y un editor jefe de producción que publica el tareo */
+    S('members', 'tcap@obra.pe', { role: 'tcap', name: 'Teodoro Capataz' });
+    S('members', 'tasis@obra.pe', { role: 'tasis', name: 'Tania Asistente' });
+    S('members', 'tcos@obra.pe', { role: 'tcos', name: 'Cosme Costos' });
+    S('members', 'jefe@obra.pe', { role: 'editor', name: 'Jaime Jefe', tpub: true });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
     S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1, resp: ['editor@obra.pe'] });
     S('pisos', 'p2', { code: 'P2', name: 'Segundo piso', order: 2 });
