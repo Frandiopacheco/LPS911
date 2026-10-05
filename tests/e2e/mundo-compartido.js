@@ -1,6 +1,8 @@
 // Varias personas a la vez sobre UNA misma base falsa: cada página (con su propio contexto, o sea su propio
 // almacenamiento) usa el Firebase falso de siempre, pero cada escritura se reenvía por un "hub" en Node a las demás
-// páginas, que la repiten en su copia. Las transacciones se serializan con un candado en Node (como Firestore, que reintenta).
+// páginas, que la repiten en su copia. Las transacciones se serializan con un candado en Node (como Firestore, que reintenta);
+// el candado no se suelta hasta que las escrituras de la transacción llegaron a todas las páginas
+// (si no, en una máquina lenta la siguiente transacción leía datos viejos y, p. ej., duplicaba restricciones).
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect } from '@playwright/test';
@@ -12,16 +14,17 @@ const rep = (a, b) => { if (!src.includes(a)) throw new Error('parche del fake: 
 rep('function docRef(n, id) {', 'function docRef0(n, id) {');
 rep('function colRef(n, filters = [], lim = 0) {', `
   const HUB = window.__hubSend;
+  const PEND = new Set();   // escrituras aún en camino a las demás páginas
   function docRef(n, id) {
     const r = docRef0(n, id);
     if (!HUB) return r;
-    for (const m of ['set', 'update', 'delete']) { const f = r[m]; r[m] = async (...a) => { const res = await f(...a); await HUB(JSON.stringify({ c: n, id, op: m, a })); return res; }; }
+    for (const m of ['set', 'update', 'delete']) { const f = r[m]; r[m] = (...a) => { const pr = (async () => { const res = await f(...a); await HUB(JSON.stringify({ c: n, id, op: m, a })); return res; })(); PEND.add(pr); pr.finally(() => PEND.delete(pr)).catch(() => {}); return pr; }; }
     return r;
   }
   const rv = v => { if (Array.isArray(v)) return v.map(rv); if (v && typeof v === 'object') { const k = Object.keys(v); if (k.length === 1 && v.__del === true) return DEL; if (k.length === 1 && v.__ts === true) return TS; const o = {}; for (const x of k) o[x] = rv(v[x]); return o; } return v; };
   window.__hubRecv = s => { const m = JSON.parse(s); const r = docRef0(m.c, m.id); const a = rv(m.a); try { Promise.resolve(r[m.op](...a)).catch(() => {}); } catch (e) {} };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const txLock = async (fn, tx) => { if (!window.__hubLock) return fn(tx); await window.__hubLock(); try { await sleep(30); return await fn(tx); } finally { await sleep(30); await window.__hubUnlock(); } };
+  const txLock = async (fn, tx) => { if (!window.__hubLock) return fn(tx); await window.__hubLock(); try { await sleep(30); return await fn(tx); } finally { await sleep(30); await Promise.allSettled([...PEND]); await window.__hubUnlock(); } };
   function colRef(n, filters = [], lim = 0) {`);
 rep("add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); col(n).set(id, resolve(d)); changed(n); return docRef(n, id); }",
     "add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); await docRef(n, id).set(d); return docRef(n, id); }");
@@ -33,7 +36,7 @@ export class Hub {
   constructor() { this.pages = new Set(); this.locked = false; this.q = []; this.msgs = 0; }
   async attach(page) {
     this.pages.add(page);
-    await page.exposeFunction('__hubSend', async s => { this.msgs++; await Promise.all([...this.pages].filter(p => p !== page).map(p => p.evaluate(x => window.__hubRecv && window.__hubRecv(x), s).catch(() => {}))); });
+    await page.exposeFunction('__hubSend', async s => { this.msgs++; await new Promise(r => setTimeout(r, 80)); await Promise.all([...this.pages].filter(p => p !== page).map(p => p.evaluate(x => window.__hubRecv && window.__hubRecv(x), s).catch(() => {}))); });
     await page.exposeFunction('__hubLock', () => new Promise(res => { if (!this.locked) { this.locked = true; res(); } else this.q.push(res); }));
     await page.exposeFunction('__hubUnlock', () => { const n = this.q.shift(); if (n) n(); else this.locked = false; });
   }

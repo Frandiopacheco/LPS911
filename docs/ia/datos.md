@@ -1,0 +1,42 @@
+# Datos en Firestore: colecciones y campos
+
+Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este tema.
+
+## Datos (Firestore)
+
+- **Estructura:** `meta/project`, `pisos`, `sectors`, `ambientes`, `acts`, `weeks`, `restr`, `contractors`. Se cargan enteras al entrar (`COLS`). Sectores y ambientes pueden tener `geo:{vistaId:[x,y,…]}`: su forma en la lámina base del piso (Sectorización).
+- **Lookahead:**
+  - `acts`: `{ambId, sc, name, und, metrado, days:[YYYY-MM-DD], qty:{fecha:n}, order, arch?}`.
+  - `lhver` + `lhidx`: versiones guardadas.
+  - `lhprop/{sc}`: propuestas de subcontratistas. Cada elemento: `{after, base, ts, by, n, sent, sentAt, sent0?, sig?, sentPrev?}` (`sent0` = primer envío, `sig` = firma del contenido enviado, `sentPrev` = último envío mientras es borrador). Su `hist` es el historial **antiguo** (solo se lee).
+  - `lhphist/{sc}_{actId}_{t}`: una decisión por documento `{sc, actId, sk, st, kind, from, to, note, t, by, n, sentAt, sent0, late:{w,cut}|null, lateNote, prop:{campo:[antes,después]}, chg:{…}|null, undone?}` (`prop` = lo que pidió el SC, `chg` = lo que se aplicó; `sk` = `sc|t` con ceros para leer por rango sin índice compuesto). Reglas: crea quien decide (`canEdit`), después solo cambia `undone`, no se borra.
+- **Campo:**
+  - `daily/{fecha}_{pisoId}`: `{date, pisoId, recs:{actId:{status:'ok'|'no'|'partial', cnc, note, done, photos, prop, sc, nm, ambId, by, ts}}, extra:{}}`.
+  - `live/{fecha}_{actId}`: reportes en vivo del capataz (`st` run/stop, `close`, `log`, `sat` = hora del servidor).
+  - `doneidx/{pisoId}`: `{d:{actId:fecha}}`, índice de actividades terminadas.
+  - `nprog/{id}`: trabajo **no programado** visto en obra `{date, pisoId, ambId, sc, desc, und, exec, note, photos, pt:{x,y,v}|null, by, byName, ts, del?, actId?, ed?}` (`pt` = punto en la lámina `v`; `actId` si se pasó al lookahead). Los antiguos están en `daily.extra`: léelos siempre juntos con `npItems(fechas, pisos)`.
+  - `fotos`: imágenes base64 (se pasarán a Cloud Storage).
+- **Plano diario:** `planos` (imágenes antiguas de Sectorización, se conservan plegadas), `laminas`, `lamimg` (imágenes base64 en trozos), `pdz` (zonas del día) y `pzon` (última zona por actividad).
+- **Restricciones:** el selector de actividad de cada fila trae solo la elegida y se llena al abrirlo (`actOne`/`actFill`, `data-alz`): armar todas las opciones por fila tardaba ~17 s con obra grande. `restr`: `{actId, pisoId, type, desc, resp, need, freed, status, sc?, grp?, area?, by}`. `actId` la amarra a su fila del lookahead (se muestra la ubicación y "Ver en el lookahead").
+- **Filtros de Restricciones** (`U.rF`, `rFBar`/`rFOk`): Afecta a (`rAff`: `r.sc` o la partida de la actividad), Registró (`rReg`: la partida si fue un SC, si no el nombre), La libera (`rWho`: `libN` si está liberada, si no `resp`) y rangos de fecha de registro (`created`) y liberación (`freed`). Al liberar se guarda `libBy`/`libN`.
+- **Liberaciones de calidad:**
+  - **Sin matriz (decidido con el dueño, oct 2026):** Liberaciones solo sirve para que el SC (o producción / Calidad) **solicite**; el lookahead solo **sugiere** actividades (`libPick`: sus próximas actividades + «Otra (no está en el lookahead)…» → `libAsk('', {free:true})` con qué se libera, SC y ambiente). Nada queda «pendiente de solicitar», no hay columna «Por solicitar», bloqueos (`libBlocks`) ni restricciones automáticas. Crítica / supervisión / «restringe a» las marca **Calidad al programar** (`libProg`, campos de la propia liberación).
+  - `lib/{id}`: `{actId, ambId, pisoId, sc, nm, crit, sup, rest, need, st, prog:{d,h,insp}, obs:[{t,ok}], photos, proto, zona:{pts,vista,pisoId}, hist, by}`. `actId` vacío = fuera del lookahead (`nm` = qué se libera). Reglas: el SC no pone ni cambia `crit`/`sup`/`rest`. Las liberaciones antiguas conservan sus marcas (y `rule`). Estados `st`: `sol` solicitada → `pro` programada → `obs` observada → `lev` levantada → `lib` liberada (`libm` liberada con obs. menores, `anu` anulada; `LST` tiene los nombres y colores). **`prog` puede ser null**: protege siempre `l.prog&&l.prog.d`.
+  - `libm/main`: hoy solo se usa `insp` (inspectores, Configuración; `libmPut` guarda con `merge`). Sus `rules`, `ex` y `autoRestr` antiguos se conservan en la base pero ya no se leen. `canLibCfg()` = Calidad o administrador.
+  - Solo se ubican en el plano las liberaciones **programadas**.
+  - **Bandeja = tablero arrastrable (oct 2026):** solo Calidad (`isCal()`) arrastra (HTML5 nativo, `ondragstart`/`ondrop` en `wireLib`; mientras dura, `DRAGGING` en `base.js` hace esperar a `requestRender`). Pasos permitidos `LQOK`: Solicitadas (`sol` y `lev` = reinspección) → Programadas (`libProg(ids)`: día, hora e inspector con chips, crítica/supervisión con interruptores, «restringe a» sugerido con `libNextAct`) · Programadas → Observadas (`libObs`) o Liberadas (`libLibDlg`, `libFree`). **Liberar u observar solo desde `pro`**, también en los botones del detalle. Varias solicitadas: casilla `[data-lqck]` o Ctrl+clic (`LQSEL`), se programan juntas con horas «una tras otra». Programadas agrupadas por día (`.lqgh`). Cada paso desde la bandeja avisa con «Deshacer» (`libSnap`/`libUndoToast`, restaura `LQK`). En el celular no se arrastra: el detalle muestra los botones del paso siguiente.
+  - **Solicitar** (`libPick`): buscador (`#lqfq`, varias palabras sobre actividad, ambiente, sector, piso y SC; ↑↓ Enter), agrupado por fecha; las que ya tienen solicitud abierta salen atenuadas y abren su detalle; varias a la vez → `libAsk([ids])` crea una por actividad (zona de cada una con `libZoneOf`); la última fila «Solicitar «lo escrito»» abre `libAsk('',{free:true,nm})`.
+- **Versión cliente** (el admin y quienes él designe con `members.cli:true`, solo roles editor/campo/área/lector; reglas `canCli()`):
+  - `cli/buf`: holguras en días hábiles `{all, p:{pisoId:n}, s:{sectorId:n}, a:{ambId:n}, x:{actId:n}}`; manda la más específica.
+  - `clidx/{id}` + `cliver/{id}__{pisoId}`: versiones **emitidas** al cliente (como `lhidx`/`lhver`, con las fechas ya corridas).
+- **Equipo:**
+  - `pisos/{id}.resp`: correos (minúsculas) de los editores responsables del piso. Lo mantiene sola la página del administrador (`respSync`, auditoria.js) a partir de `members.pisos`; las reglas lo usan (`edPiso`) para que un editor solo escriba `pdz`/`dplan` de sus pisos (piso sin responsable: cualquier editor). El editor no puede escribir `resp`.
+  - `members/{correo}`: `{role, name, sc, scs, dash, cli?, pisos?, area?}`; `cli` = acceso a la versión cliente (lo marca el admin en Equipo); `pisos` = pisos a cargo de un editor (responsable de piso); `area` = nombre del área de apoyo; capataces con id `u_<uid>` (sesión anónima por QR).
+  - `inv`: invitaciones de capataces.
+  - `frz/<semana>`: constancia del congelado automático (solo el servidor).
+  - `lhlog/{t}_{rnd}`: historial de cambios del lookahead `{t, d, by, n, label, tab, items:[{id, nm, amb, sc, k, b, a}], g?, pt?, np?, undo?, redo?, more?}` (lo escribe `lhLog` desde `apply`, `undo` y `redo`; no se cambia ni se borra). Más de `HMAX` (150) actividades van en varias partes del mismo grupo (`g`, parte `pt` de `np`; ids `<g>_<pt>`) y `histMerge` las junta; `undo`/`redo` = id del cambio original (`ops.lid`). `more` solo en los antiguos.
+  - `dplan/<fecha>_<piso>`: plan del día cerrado `{date, pisoId, ids:{actId:cantidad|null}, at, by, pub?, auto?, reo?, log:[…]}` (foto de lo comprometido; `reo` = reabierto por el administrador).
+  - `clock/{uid}`: lo usa la sincronización de la hora.
+- **Plan maestro** (diseño y pasos en `docs/plan-maestro.md`; solo `canMP()` = admin o planner las lee o escribe):
+  - `mp/{id}`: nodo `{tipo:'wbs'|'part'|'pp'|'det'|'hito', parent, ord, code, name, pisoId?, ini, fin, ref?, grp?, hk?, src, arch?, by, t}` (`pp` = partida × piso, la unidad que se controla; `det` = detalle; hito: `hk:{modo:'fijo',fecha}` o `{modo:'amarrado',campo:'fin'|'ini',nodos:[ids]}`).
+  - `mpver/{n}` (versiones de la línea base: el planner crea `pend`, solo el admin aprueba), `mpav/{corte}` (avance %), `mpl/{actId}` (vínculo con el lookahead), `mpcfg/main`. `mpl` ya se usa (vincular); `mpver`, `mpav` y `mpcfg` (salvo `pisoMap`) llegan en los pasos siguientes.
