@@ -32,6 +32,8 @@ function confirmProp(d,aid){const x=S.act.get(aid);const cur=recOf(d,aid);if(!x|
 
 /* ---------- pantalla del capataz ---------- */
 const CP=(()=>{try{return JSON.parse(localStorage.getItem('lps.cap')||'{}')||{}}catch(e){return{}}})();
+/* «＋ No programado» arma el registro: solo entonces un toque en un lugar vacío del plano abre la ficha (evita abrirla sin querer al desplazarse) */
+let NPA=null;
 const saveCP=()=>{try{localStorage.setItem('lps.cap',JSON.stringify(CP))}catch(e){}};
 let KS=null;
 function loadPlanoMod(){if(window.__plano&&window.__plano.capPlan)return Promise.resolve();
@@ -59,14 +61,14 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${(byP.get(p.id)||[]).length}</b>${NPon&&npItems([d],new Set([p.id])).length?`<b class="knp" title="Trabajo no programado registrado">+${npItems([d],new Set([p.id])).length}</b>`:''}</button>`).join('')}</div>`;
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
   const khd=$('#khd',main);if(khd.dataset.h!==hh){khd.innerHTML=hh;khd.dataset.h=hh}
-  const npOn=NPon&&E&&!!CP.pid&&d<=todayIso();const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);
+  const npOn=NPon&&E&&!!CP.pid&&d<=todayIso();const npArm=npOn&&!!NPA&&NPA.pid===CP.pid&&NPA.d===d;if(!npArm)NPA=null;const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);pw.classList.toggle('knparm',npArm);
   if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:(aid,z,pt)=>{capSheet(aid,d,'main');if(KS)KS.pt=pt||null},
-    marks:npOn?npMarks(d,CP.pid):null,onEmpty:npOn?pt=>npNew({d,pid:CP.pid,pt}):null,onMark:id=>npOpen(id)})}
+    marks:npOn?npMarks(d,CP.pid):null,onEmpty:npArm?pt=>{NPA=null;npNew({d,pid:CP.pid,pt});requestRender()}:null,onMark:id=>npOpen(id)})}
   let lh='';
   if(liveErr)lh+=`<div class="callout">No se pudo leer el avance (${esc(liveErr)}). Avisa al administrador: faltan las reglas nuevas de Firestore.</div>`;
   if(pend.length)lh+=`<div class="ksec warn">Pendientes de cerrar (${pend.length})</div>${pend.map(l=>{const x=S.act.get(l.actId);const a=S.amb.get(x.ambId);return kCard(l.date,{x,a},null,true)}).join('')}`;
   if(npErr&&npOn)lh+=`<div class="callout">No se pudo leer el trabajo no programado (${esc(npErr)}). Faltan las reglas nuevas de Firestore.</div>`;
-  if(npOn)lh+=`<div class="knpbar"><button class="kbig ghost knpadd" data-knp>＋ No programado</button><span class="knote">${items.length?'Toca un número para '+(VEED()?'ver':'verificar')+' · toca un lugar vacío del plano para registrar lo que se ejecuta sin estar programado.':'Toca en el plano el lugar donde ves trabajando a una cuadrilla.'}</span></div>`;
+  if(npOn)lh+=npArm?`<div class="knpbar knpon"><div class="knparmt"><b>Toca en el plano</b> el lugar donde ves trabajando a la cuadrilla.</div><div class="knpbtns"><button class="ib" data-knpl>Elegir de la lista</button><button class="ib" data-knpx>Cancelar</button></div></div>`:`<div class="knpbar"><button class="kbig ghost knpadd" data-knp>＋ No programado</button><span class="knote">${items.length?'Toca un número para '+(VEED()?'ver':'verificar')+'. Para registrar lo que se ejecuta sin estar programado, primero toca <b>＋ No programado</b>.':'Toca <b>＋ No programado</b> y luego el lugar del plano donde ves trabajando a una cuadrilla.'}</span></div>`;
   if(!all.length&&!npOn)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
   else if(V==='plan'){const un=items.filter(o=>!zoned.has(o.x.id));
     lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`}`;
@@ -79,7 +81,9 @@ function capClick(e){const t=e.target;let b;
   if((b=t.closest('[data-ksc]'))){CP.sc=b.dataset.ksc;saveCP();render();return}
   if((b=t.closest('[data-kp]'))){CP.pid=b.dataset.kp;CP.pud=todayIso();saveCP();render();return}
   if((ENG()||VEED())&&(b=t.closest('[data-kv]'))){if(b.dataset.kv==='list'){CU.view='list';saveCU();$('#main').dataset.built='';kClose();render()}return}
-  if(t.closest('[data-knp]')){npNew({d:campoDate(),pid:CP.pid});return}
+  if(t.closest('[data-knp]')){const pw=$('#kplanw'),kp=$('#kplan');if(!pw||pw.hidden||!kp||!kp._v){npNew({d:campoDate(),pid:CP.pid});return}NPA={pid:CP.pid,d:campoDate()};render();pw.scrollIntoView({block:'nearest',behavior:'smooth'});return}
+  if(t.closest('[data-knpx]')){NPA=null;render();return}
+  if(t.closest('[data-knpl]')){NPA=null;npNew({d:campoDate(),pid:CP.pid});render();return}
   if((b=t.closest('[data-kd]'))){const v=+b.dataset.kd;CU.date=v===0?null:shiftDay(campoDate(),v);if(CU.date===todayIso())CU.date=null;const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kv]'))){CP.v=b.dataset.kv;saveCP();const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><button data-do="help">? Ayuda</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
