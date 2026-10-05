@@ -199,17 +199,21 @@ test('12 · aceptar una propuesta movida con ‹ › revisa el cierre con las fe
   noErrors(errors, 'propuesta desplazada');
 });
 
-test('13 · la restricción de un «No va» toma el tipo de su causa', async ({ page }) => {
+test('13 · la restricción de un «No va» toma el tipo elegido (las opciones son los tipos de Configuración)', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await otro(page, 'meta', 'project', { restrTypes: ['Diseño', 'Materiales'] });
   await expect.poll(() => page.evaluate(() => (P().restrTypes || []).length)).toBe(2);
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nk="mat"]').click();
+  // las opciones de «No va» son los tipos de restricción de Configuración
+  await expect(page.locator('#pop [data-nk]')).toHaveCount(2);
+  await page.locator('#pop [data-nk="rt:Materiales"]').click();
   await page.fill('#nvd', 'Falta cemento');
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await publicar(page);
   await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e0').map(r => r.type))).toEqual(['Materiales']);
+  // la reprogramación publicada queda en el Historial del lookahead
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('lhlog')).some(h => /publicado/.test(h.label || '') && (h.items || []).some(i => i.id === 'e0')))).toBe(true);
   noErrors(errors, 'tipo por causa');
 });
 

@@ -589,3 +589,15 @@ test('el reparto de cuadrillas se guarda por actividad (otro equipo del mismo SC
   await expect.poll(async () => Object.keys((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).asg || {}).sort()).toEqual(['s8', 's9']);
   noErrors(errors, 'reparto concurrente');
 });
+
+test('la etiqueta de la cuadrilla muestra su personal por especialidad y sumar cambia la fuerza laboral', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8,
+    ['pdz', `fz_${MANANA}_c1`, { date: MANANA, kind: 'fza', sc: 'c1', items: [{ cat: 'Operario', esp: 'Gasfitero', n: 2 }, { cat: 'Peón', esp: '', n: 1 }], cuad: [{ id: 'C1', n: 3, items: [{ cat: 'Operario', esp: 'Gasfitero', n: 2 }, { cat: 'Peón', esp: '', n: 1 }] }], hor: { t: 'n', fin: '17:00' }, asg: { s8: { c: 'C1', o: 1 } } }]] });
+  await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
+  await page.locator('#mstage [data-cqt="s8"]').click();
+  await expect(page.locator('#pop')).toContainText('Operario · Gasfitero');
+  await page.locator('#pop [data-do="p0"]').click();
+  await expect.poll(async () => (await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).items.find(i => i.esp === 'Gasfitero').n).toBe(3);
+  expect((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).cuad[0].n).toBe(4);
+  noErrors(errors, 'personal por especialidad');
+});
