@@ -31,9 +31,9 @@ const AY_TUT={
     tip:'Lo que nadie verifica se acepta solo a las 23:30 con lo que propuso el capataz.'},
 
   np:{t:'Registrar trabajo no programado',g:'Dejar constancia de lo que se ejecuta en obra sin estar en el plan del día (no cambia el PPC).',
-    s:[{x:'Abre Campo › Plano y elige el piso.',tab:'campo'},'Toca «＋ No programado»: el plano se marca con un borde punteado.','Toca en el plano el lugar donde ves a la cuadrilla (el ambiente sale solo).','Elige el subcontratista, qué hacen y toma una foto. Guarda.','Si debe quedar programado, el ingeniero toca «Pasarlo al lookahead».'],
+    s:[{x:'Abre Campo › Plano y elige el piso.',tab:'campo'},'Toca dos veces rápido el lugar del plano donde ves a la cuadrilla, en cualquier ambiente (aunque ahí haya otra actividad programada). El ambiente sale solo.','También puedes tocar «＋ No programado» y luego el lugar.','Elige el subcontratista, qué hacen y toma una foto. Guarda.','Si debe quedar programado, el ingeniero toca «Pasarlo al lookahead».'],
     e:'En el recorrido de las 10 am ves a SC Eléctricas cableando en el Dpto 203, que no estaba programado. Lo registras con foto: aparece en el Plan diario como «Visto en obra» y en Indicadores.',
-    tip:'Mientras no toques «＋ No programado», puedes moverte por el plano con el dedo sin abrir nada por error.'},
+    tip:'Un solo toque no registra nada: puedes moverte por el plano con el dedo sin abrir la ficha por error.'},
 
   seq:{t:'Tren de trabajo: «En secuencia»',g:'Cuando una cuadrilla hace un ambiente tras otro en el día, los que aún no le tocan no se ven como atrasados.',
     s:[{x:'En Campo (o En obra) toca la actividad del ambiente que todavía no empieza.',tab:'campo'},'Toca «⏭ Va en secuencia…» y elige después de qué ambiente llega la cuadrilla.','La actividad se pone morada: «En secuencia: sigue después de A-1 (en ejecución)».','Cuando la cuadrilla llegue, «▶ Iniciar» la pasa a En ejecución.'],
