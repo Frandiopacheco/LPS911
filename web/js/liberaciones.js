@@ -51,9 +51,11 @@ function libOpenFile(fid){const d=FOTO.get(fid);if(!d){loadFoto(fid);toast('Carg
 /* plazo: un día antes, hasta las 18:00 */
 function libLate(need){const t=todayIso();if(need<=t)return true;const tm=wshift(t,1);return need===tm&&nowHM()>='18:00'}
 /* --- ventana modal propia (formularios de liberación) --- */
-function lqModal(html,onClick,onChange){let el=$('#lqm');if(!el){el=document.createElement('div');el.id='lqm';el.className='lqm';document.body.appendChild(el)}
-  el.innerHTML=`<div class="lqc" role="dialog" aria-modal="true">${html}</div>`;el.onclick=e=>{if(e.target===el||e.target.closest('[data-lqx]')){lqClose();return}onClick&&onClick(e)};el.onchange=e=>onChange&&onChange(e);
-  setTimeout(()=>{const f=el.querySelector('input,select,textarea');if(f)f.focus()},40)}
+/* si la ventana ya está abierta solo se cambia su contenido (sin volver a animarla ni mover el desplazamiento): elegir un chip no parpadea */
+function lqModal(html,onClick,onChange){let el=$('#lqm');const c0=el&&el.querySelector('.lqc');if(!el){el=document.createElement('div');el.id='lqm';el.className='lqm';document.body.appendChild(el)}
+  if(c0){const st=c0.scrollTop,ae=document.activeElement,aid=ae&&c0.contains(ae)&&ae.id;c0.innerHTML=html;c0.scrollTop=st;if(aid){const f=document.getElementById(aid);if(f)f.focus()}}
+  else el.innerHTML=`<div class="lqc" role="dialog" aria-modal="true">${html}</div>`;el.onclick=e=>{if(e.target===el||e.target.closest('[data-lqx]')){lqClose();return}onClick&&onClick(e)};el.onchange=e=>onChange&&onChange(e);
+  if(!c0)setTimeout(()=>{const f=el.querySelector('input,select,textarea');if(f)f.focus()},40)}
 function lqClose(){const el=$('#lqm');if(el)el.remove()}
 function lqHead(x,l){const a=S.amb.get(x.ambId);const p=S.pis.get((l&&l.pisoId)||pisoOfAct(x.id)||pisoOfAmb(x.ambId));const sc=a&&S.sec.get(a.sectorId);
   return`<div class="lqh"><b>${esc(x.name||'(sin nombre)')}</b><span>${esc([p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · '))} · ${esc(conOf(x.sc).name)}</span>
@@ -72,6 +74,8 @@ function libAsk(ids,opt){opt=opt||{};const free=!!opt.free;const L0=free?[]:(Arr
   const def=L0.length?L0.map(defOf).sort()[0]:tm;
   const zd=x0?libZoneOf(x0.id):null;
   const F={need:def,slot:'am',note:'',proto:[],zona:opt.zona||zd||null,zsrc:opt.zona?'mano':zd?'plan':'',nm:opt.nm||'',sc:scOpts.length===1?scOpts[0]:(U.libSc&&scOpts.includes(U.libSc)?U.libSc:''),amb:''};
+  /* vuelve de marcar la zona en el plano: se recupera lo que ya había llenado */
+  if(opt.F){const o=opt.F;Object.assign(F,{need:o.need,slot:o.slot,note:o.note,proto:o.proto||[],nm:o.nm||F.nm,sc:o.sc||F.sc,amb:o.amb||''});if(!opt.zona&&o.zona){F.zona=o.zona;F.zsrc=o.zsrc}}
   /* ambientes de los pisos a la vista, por piso */
   const ambOpts=()=>{const out=[];for(const p of visPisos())for(const s_ of [...S.sec.values()].filter(q=>pisoOfSecObj(q)===p.id).sort(byOrder))for(const a of [...S.amb.values()].filter(q=>q.sectorId===s_.id).sort(byOrder))out.push({a,p});return out};
   const grab=()=>{F.note=($('#lqn')||{}).value??F.note;if(free){F.nm=($('#lqt')||{}).value??F.nm;F.sc=($('#lqsc2')||{}).value??F.sc;F.amb=($('#lqa')||{}).value??F.amb}};
@@ -85,11 +89,13 @@ function libAsk(ids,opt){opt=opt||{};const free=!!opt.free;const L0=free?[]:(Arr
     <div class="lq2"><div class="lqlab">¿Cuándo estará lista?<span class="lqchs"><button type="button" class="chip${F.need===tm?' on':''}" data-lqnd="${tm}">Mañana <small>${fmtD(tm)}</small></button><button type="button" class="chip${F.need===t2?' on':''}" data-lqnd="${t2}">Pasado <small>${fmtD(t2)}</small></button><input type="date" id="lqd" class="${other?'on':''}" value="${F.need}" min="${t0}" aria-label="Otra fecha"></span></div>
      <div class="lqlab">Hora sugerida<span class="seg lqseg"><button type="button" data-lqsl="am" class="${F.slot==='am'?'on':''}">Mañana <small>08–12</small></button><button type="button" data-lqsl="pm" class="${F.slot==='pm'?'on':''}">Tarde <small>13–17</small></button></span></div></div>
     <p class="lqmsg ${late?'bad':'ok'}">${late?'Fuera de plazo: las liberaciones se piden un día antes (hasta las 18:00). Calidad decidirá si la programa.':'✓ Dentro del plazo.'}</p>
-    ${multi?'<p class="lqmsg">Cada una toma su zona del plan diario, si la tiene.</p>':`<p class="lqmsg ${F.zona?'ok':''}">${F.zsrc==='mano'?'✓ Zona marcada en el plano.':F.zsrc==='plan'?'✓ Zona tomada del plan diario (puedes cambiarla en la vista Plano).':'Sin zona en el plano: podrás ubicarla después en la vista Plano.'}</p>`}
+    ${multi?'<p class="lqmsg">Cada una toma su zona del plan diario, si la tiene.</p>':`<p class="lqmsg lqzrow ${F.zona?'ok':''}"><span>${F.zsrc==='mano'?'✓ Zona marcada en el plano.':F.zsrc==='plan'?'✓ Zona tomada del plan diario.':'Sin zona en el plano (opcional): ayuda a Calidad a encontrarla.'}</span><button type="button" class="ib" data-lqzona>📍 ${F.zona?'Cambiar en el plano':'Ubicar en el plano'}</button></p>`}
     <label>Protocolo (opcional, imagen o PDF)<span class="lqrow"><span class="lqfile">${F.proto.length?F.proto.length+' archivo(s) adjunto(s)':'Sin adjuntar'}</span><label class="ib">Adjuntar…<input type="file" accept="image/*,application/pdf" id="lqf" hidden></label></span></label>
     <label>Comentario para Calidad<textarea id="lqn" rows="3" placeholder="Ej.: prueba hidráulica a 100 psi lista desde las 8:00">${esc(F.note)}</textarea></label>
     <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" data-lq="send">${multi?`Enviar ${L0.length} solicitudes`:'Enviar solicitud'}</button></div>`,
-   e=>{let b;if((b=e.target.closest('[data-lqnd]'))){grab();F.need=b.dataset.lqnd;draw();return}if((b=e.target.closest('[data-lqsl]'))){grab();F.slot=b.dataset.lqsl;draw();return}
+   e=>{let b;if((b=e.target.closest('[data-lqnd]'))){grab();F.need=b.dataset.lqnd;draw();return}
+      if(e.target.closest('[data-lqzona]')){grab();const pid=free?pisoOfAmb(F.amb):pisoOfAct(x0.id);if(!pid){toast('Elige primero el ambiente.');return}
+        LQDRAW={actId:x0?x0.id:'',pid,nm:free?(F.nm||'la liberación'):'',ask:{ids:x0?x0.id:'',opt:{free,nm:F.nm},F:{...F}}};lqClose();U.tab='lib';U.libV='map';U.libP=pid;saveUI();render();return}if((b=e.target.closest('[data-lqsl]'))){grab();F.slot=b.dataset.lqsl;draw();return}
       if(!e.target.closest('[data-lq="send"]'))return;grab();
       if(free){F.nm=(F.nm||'').trim();if(!F.nm){toast('Escribe qué se libera.');return}if(!F.sc){toast('Elige el subcontratista.');return}if(!F.amb||!S.amb.has(F.amb)){toast('Elige el ambiente.');return}
         if(!canLibAsk({sc:F.sc})){toast('Solo puedes pedirla para tu partida.');return}}
@@ -117,7 +123,7 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
   if((ownE||cal)&&!libDone(l.st))B.push('<label class="ib">+ Foto / protocolo<input type="file" accept="image/*,application/pdf" id="lqadd" hidden></label>');
   if(cal&&libDone(l.st))B.push('<button class="ib" data-lq="reab">Reabrir</button>');
   if((ownE||cal)&&['sol','pro'].includes(l.st)&&(cal||canWrite||l.st==='sol'))B.push('<button class="ib" data-lq="anu">Anular solicitud</button>');
-  if((cal||canWrite)&&l.st==='pro')B.push(`<button class="ib" data-lq="zona">${l.zona?'Reubicar en el plano':'Ubicar en el plano'}</button>`);
+  if(((cal||canWrite)&&!libDone(l.st)&&l.st!=='anu')||(own&&['sol','obs','lev'].includes(l.st)))B.push(`<button class="ib" data-lq="zona">${l.zona?'Reubicar en el plano':'Ubicar en el plano'}</button>`);
   if(S.act.has(l.actId))B.push(`<button class="ib" data-lq="go">Ver en el lookahead ↗</button>`);
   h+=`<div class="lqbtns lqbw">${B.join('')}</div>`;
   lqModal(h,e=>{const t=e.target;let b;
@@ -270,7 +276,7 @@ function renderLib(main){ensureLib();if(U.libV==='mat')U.libV='ban';const t0=tod
     const D=LQDRAW&&LQDRAW.pid===pid?LQDRAW:null;const dx=D&&S.act.get(D.actId);
     h+=`<div class="lqbar">${ps.length>1&&!U.piso?`<span class="lqchips">${ps.map(p=>`<button type="button" data-lqp="${p.id}" class="${p.id===pid?'on':''}">${esc(p.code)} · ${esc(p.name)}</button>`).join('')}</span>`:''}
      <span class="lqleg">${['pro','obs','lev'].map(k=>`<span><i style="--c:${LST[k].c}"></i>${LST[k].t.split(' ·')[0]}</span>`).join('')}</span></div>
-     ${D?`<div class="lqdraw">✏️ <b>Arrastra sobre el plano</b> para marcar la zona de “${esc(dx?dx.name:'')}” <button class="ib" data-lqzcancel>Cancelar</button></div>`:''}
+     ${D?`<div class="lqdraw">✏️ <b>Arrastra sobre el plano</b> para marcar la zona de “${esc(dx?dx.name:(D.nm||''))}” <button class="ib" data-lqzcancel>Cancelar</button></div>`:''}
 `;const note=`<p class="note" style="margin:6px 2px 0">Inspecciones del <b>${DOW_L[(pd(day).getUTCDay()+6)%7].toLowerCase()} ${fmtD(day)}</b> que aún no se liberan (cambia el día arriba). Toca una zona para abrir su liberación; las que no tienen zona se ubican con “Ubicar”.</p>`;const side=`${ORD.map(k=>{const A=here.filter(o=>o.st===k);return A.length?`<div class="lqsg"><b style="color:${LST[k].c}">${esc(LST[k].t)} · ${A.length}</b>${A.map(o=>{const n=num.get(o.l?o.l.id:'a:'+o.x.id);const hasZ=!!(o.l&&o.l.zona);const canZ=!!o.l&&o.st==='pro'&&(canWrite||isCal());
        return`<div class="lqli2"><button type="button" class="lqli" ${o.l?`data-lqid="${o.l.id}"`:`data-lqask="${o.x.id}"`}><i style="--c:${LST[k].c}">${n}</i><span><b>${esc(o.x.name)}</b><small>${esc((S.amb.get(o.x.ambId)||{}).code||'')} · ${esc(conOf(o.x.sc).name)}${hasZ?'':' · sin zona'}</small></span></button>${canZ?`<button type="button" class="ib" data-lqz="${o.l?o.l.id:''}" data-lqza="${o.x.id}">${hasZ?'Reubicar':'Ubicar'}</button>`:''}</div>`}).join('')}</div>`:''}).join('')||`<p class="mu">No hay inspecciones pendientes para el ${fmtD(day)} en este piso.</p>`}`;
     /* el visor se arma una sola vez y no se saca de la página (así no se descuadra ni desaparece) */
@@ -279,7 +285,7 @@ function renderLib(main){ensureLib();if(U.libV==='mat')U.libV='ban';const t0=tod
     LQHOST=$('#lqplan',main);
     if(API){const colors=new Map(here.filter(o=>o.l&&o.l.zona).map(o=>[o.x.id,LST[o.st].c]));
       API.capPlan(LQHOST,{pid,zones,colors,nums:new Map(),bs:34,lab:z=>num.get(z._lib),onPick:(aid,z)=>{if(D)return;if(z&&z._lib)libDetail(z._lib)}});
-      API.capDraw(LQHOST,D?(pts,vista)=>{const d=LQDRAW;LQDRAW=null;API.capDraw(LQHOST,null);const zona={pts,vista,pisoId:pid};if(d.libId)libSave(d.libId,{zona},'Zona de la liberación guardada');else libAsk(d.actId,{zona});render()}:null)}
+      API.capDraw(LQHOST,D?(pts,vista)=>{const d=LQDRAW;LQDRAW=null;API.capDraw(LQHOST,null);const zona={pts,vista,pisoId:pid};if(d.libId)libSave(d.libId,{zona},'Zona de la liberación guardada');else if(d.ask)libAsk(d.ask.ids,{...d.ask.opt,F:d.ask.F,zona});else libAsk(d.actId,{zona});render()}:null)}
     return}
   main.dataset.lqv=V;main.innerHTML=h+'</div></div>';wireLib(main)}
 function wireLib(main){
@@ -298,7 +304,7 @@ function wireLib(main){
     if((b=t.closest('[data-lqp]'))){U.libP=b.dataset.lqp;LQDRAW=null;if(LQHOST)LQHOST._fk='';render();return}
     if((b=t.closest('#lqv button'))&&b.dataset.v!=='map'){main.dataset.lqv=''}
     if((b=t.closest('[data-lqza]'))){LQDRAW={libId:b.dataset.lqz||'',actId:b.dataset.lqza,pid:U.libP};render();return}
-    if(t.closest('[data-lqzcancel]')){LQDRAW=null;render();return}
+    if(t.closest('[data-lqzcancel]')){const d=LQDRAW;LQDRAW=null;render();if(d&&d.ask)libAsk(d.ask.ids,{...d.ask.opt,F:d.ask.F});return}
     if(t.id==='lqnew'){libPick();return}
     if(t.id==='lqpdf'){libReport(wshift(todayIso(),1));return}
     };

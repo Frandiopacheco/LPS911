@@ -12,3 +12,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - Indicadores históricos con «Todos los pisos» usan `histPisoSet()` (incluye pisos archivados); el piso elegido sigue siendo solo ese.
   - Plan diario en el celular: con una cuadrilla elegida (`M.cqSel`, `innerWidth<900`) «Equipos del día» va plegado; tocar su encabezado termina el reparto y lo abre.
   - Publicación (`ci.yml`): `publicar-web` depende de `instalar`; sin llave de Firebase, `instalar` falla. `check.mjs` lo comprueba (`checkCI`). Los fallos de las pruebas de reglas salen como anotaciones (línea y motivo) en GitHub.
+- `live` y el veedor (oct 2026): solo puede crear/actualizar el campo `seq` («en secuencia») de una actividad real (`liveActOk`); no inicia, detiene ni cierra (prueba en `tests/rules`).

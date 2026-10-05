@@ -272,3 +272,33 @@ test('buscador: filtra por varias palabras, marca las ya solicitadas y pide vari
   await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('lib')).length)).toBe(antes + 2);
   noErrors(errors, 'buscador');
 });
+
+test('programar inspección: elegir un chip no vuelve a armar la ventana (no parpadea)', async ({ page }) => {
+  const errors = await abrir(page);
+  await page.click('[data-lqid="Lsol"]');
+  await page.click('#lqm [data-lq="prog"]');
+  await page.evaluate(() => { document.querySelector('#lqm .lqc').__marca = 1; });
+  await page.click('#lqm [data-lqpi="Ing. Dos"]');
+  await expect(page.locator('#lqm [data-lqpi="Ing. Dos"]')).toHaveClass(/on/);
+  expect(await page.evaluate(() => document.querySelector('#lqm .lqc').__marca)).toBe(1);
+  noErrors(errors, 'sin parpadeo');
+});
+
+test('el SC solicitante ubica su liberación en el plano (opcional) sin perder lo llenado', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'lib', extra: [['acts', 'z9', { ambId: 'a1', sc: 'c1', name: 'Prueba hidráulica', und: 'pto', metrado: 1, days: [MANANA], order: 99 }]] });
+  await page.evaluate(() => libAsk('z9'));
+  await expect(page.locator('#lqm [data-lqzona]')).toBeVisible();
+  await page.fill('#lqn', 'Lista desde las 8');
+  await page.click('#lqm [data-lqzona]');
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  await expect(page.locator('#main .lqdraw')).toBeVisible();
+  // cancelar vuelve a la solicitud con el comentario
+  await page.click('[data-lqzcancel]');
+  await expect(page.locator('#lqn')).toHaveValue('Lista desde las 8');
+  // si marcó la zona, la solicitud la lleva
+  await page.evaluate(() => { const F = { need: wshift(todayIso(), 1), slot: 'pm', note: 'Con zona', proto: [] }; libAsk('z9', { F, zona: { pts: [1, 1, 5, 1, 5, 5, 1, 5], vista: '', pisoId: pisoOfAct('z9') } }); });
+  await expect(page.locator('#lqm .lqzrow')).toContainText('Zona marcada en el plano');
+  await page.click('#lqm [data-lq="send"]');
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('lib')).filter(l => l.actId === 'z9' && l.st === 'sol' && l.zona && l.note === 'Con zona').length)).toBe(1);
+  noErrors(errors, 'zona del SC');
+});

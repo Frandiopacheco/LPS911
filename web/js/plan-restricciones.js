@@ -248,7 +248,7 @@ function renderRestr(main){
   const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
   const libW=all.filter(r=>r.status==='lib'&&r.freed&&weekOf(r.freed)===U.week).length;
-  const showP=!U.piso&&S.pis.size>1;const mob=isMob();
+  const showP=!U.piso&&S.pis.size>1;const mob=isNarrow();
   let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,'<button class="ib" id="rxls" title="Exportar a Excel la lista con los filtros de abajo">Exportar Excel</button>'+(rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':''))}<div class="tiles">
    <div class="tile"><span class="k">Pendientes</span><span class="v">${pend.length}<small> · ${pend.filter(r=>grpOf(r)==='campo').length} campo · ${pend.filter(r=>grpOf(r)==='area').length} otras áreas</small></span></div>
    <div class="tile"><span class="k">Vencidas</span><span class="v" style="color:${late.length?'var(--bad)':'inherit'}">${late.length}</span></div>

@@ -34,6 +34,11 @@ test('el veedor toca el plano y registra un trabajo no programado con foto', asy
   const errors = await openApp(page, { as: 'veedor', tab: 'campo', extra: PLANO });
   await expect(page.locator('#kplan')).toBeVisible();
   await page.locator('[data-kp="p1"]').click();
+  await tocar(page, 200, 200); // sin armar: un toque suelto (al desplazarse) no abre nada
+  await page.waitForTimeout(300);
+  await expect(page.locator('#npsheet')).toHaveCount(0);
+  await page.locator('[data-knp]').click(); // arma el registro
+  await expect(page.locator('#kplanw.knparm')).toHaveCount(1);
   await tocar(page, 200, 200);
   const sh = page.locator('#npsheet');
   await expect(sh).toContainText('Trabajo no programado');
@@ -127,6 +132,9 @@ test('captura celular (solo para revisar)', async ({ page }) => {
   await page.locator('[data-kp="p1"]').click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: process.env.SHOT + '/np1.png' });
+  await page.locator('[data-knp]').click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: process.env.SHOT + '/np0.png' });
   await tocar(page, 200, 200);
   await page.locator('#npsheet [data-npsc="c3"]').click();
   await page.waitForTimeout(300);

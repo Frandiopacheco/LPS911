@@ -21,6 +21,16 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   /* propuestas de los subcontratistas que este usuario puede resolver */
   if(canWrite&&r!=='sc'){const by=revCounts();const n=[...by.values()].reduce((a,b)=>a+b,0);
     out.prop={k:'prop',title:'Propuestas por revisar',n,tone:'warn',sub:'Cambios que enviaron los subcontratistas en tus pisos',items:[...by.entries()].map(([sc,k])=>({t:conOf(sc).name,s:`${k} cambio${k>1?'s':''}`})),go:'look',goLabel:'Revisar en el Lookahead',empty:'No hay propuestas esperando tu respuesta'}}
+  /* cambios del plan que te involucran: lo que la reunión (o el ingeniero) reprogramó para ayer, hoy o el próximo día hábil.
+     Sale de las marcas ↷ del lookahead (acts.rpl), que se ponen al publicar el plan o al reprogramar con el plan ya publicado. */
+  {const d0=wshift(d,-1);const mine=SCK()?new Set(myScsI()):null;const L=[];
+    for(const x of S.act.values()){if(x.arch||!x.rpl)continue;if(mine&&!mine.has(x.sc))continue;if(!mine&&r==='editor'&&!isPisoResp(pisoOfAct(x.id)))continue;
+      for(const[k,v]of Object.entries(x.rpl)){if(!v||v.tr||k<d0||k>tm)continue;const nT=[...S.act.values()].filter(y=>y.rpl&&Object.values(y.rpl).some(w=>w&&w.tr===x.id)).length;
+        L.push({k,x,v,nT})}}
+    if(L.length||['sc','campo','editor','admin'].includes(r)){L.sort((a,b)=>b.k.localeCompare(a.k));
+      out.cplan={k:'cplan',title:'Cambios del plan',n:L.length,tone:L.length?'warn':'',sub:'Lo que se reprogramó en la reunión o en el día (ayer, hoy y el próximo día hábil)',
+        items:L.slice(0,12).map(o=>({t:o.x.name,s:`${hoyLoc(o.x)}${mine?'':' · '+conOf(o.x.sc).name} · no fue el ${fmtD(o.k)} → ${o.v.to?fmtD(o.v.to):'sin fecha'}${o.v.m?' · '+o.v.m:''}${o.nT?` · con ${o.nT} más del ambiente`:''}`})),
+        go:'mapa',goLabel:'Ver en el Plan diario',empty:'Sin cambios del plan que te involucren'}}}
   /* registro de campo de hoy */
   if(canDaily){const A=hoyActs(d);const pend=A.filter(x=>!recReal(d,x.id));const prop=pend.filter(x=>recOf(d,x.id));const sin=pend.filter(x=>!recOf(d,x.id));
     out.campo={k:'campo',title:'Campo de hoy',n:pend.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${sin.length} sin registrar${prop.length?` · ${prop.length} por confirmar (las cerró el capataz)`:''}`,
@@ -60,7 +70,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(canNP()){const L=npItems([d],new Set(visPisos().map(p=>p.id)));const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
     out.np={k:'np',title:'Trabajo no programado hoy',n:0,tone:'',sub:'',items:[],go:'campo',goLabel:VEED()?'Ir al recorrido (Campo › Plano)':'Ver en Campo',
       empty:L.length?`${L.length} registrado${L.length===1?'':'s'}: ${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,k])=>conOf(sc).name+' '+k).join(' · ')}`:'Nada registrado hoy. En el recorrido, toca en el plano donde veas una cuadrilla trabajando sin estar programada.'}}
-  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','plan2','campo','np','cli','restr','lib','plan','resp'];
+  const order=r==='sc'?['cplan','obra','restr','lib']:r==='campo'?['cplan','campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','cplan','plan2','campo','np','cli','restr','lib','plan','resp'];
   /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
   const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 

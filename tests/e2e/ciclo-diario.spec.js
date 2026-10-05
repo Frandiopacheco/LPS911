@@ -199,17 +199,21 @@ test('12 · aceptar una propuesta movida con ‹ › revisa el cierre con las fe
   noErrors(errors, 'propuesta desplazada');
 });
 
-test('13 · la restricción de un «No va» toma el tipo de su causa', async ({ page }) => {
+test('13 · la restricción de un «No va» toma el tipo elegido (las opciones son los tipos de Configuración)', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await otro(page, 'meta', 'project', { restrTypes: ['Diseño', 'Materiales'] });
   await expect.poll(() => page.evaluate(() => (P().restrTypes || []).length)).toBe(2);
   await row(page, 'e0').locator('[data-dv^="no"]').click();
-  await page.locator('#pop [data-nk="mat"]').click();
+  // las opciones de «No va» son los tipos de restricción de Configuración
+  await expect(page.locator('#pop [data-nk]')).toHaveCount(2);
+  await page.locator('#pop [data-nk="rt:Materiales"]').click();
   await page.fill('#nvd', 'Falta cemento');
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
   await publicar(page);
   await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('restr')).filter(r => r.actId === 'e0').map(r => r.type))).toEqual(['Materiales']);
+  // la reprogramación publicada queda en el Historial del lookahead
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('lhlog')).some(h => /publicado/.test(h.label || '') && (h.items || []).some(i => i.id === 'e0')))).toBe(true);
   noErrors(errors, 'tipo por causa');
 });
 
@@ -242,6 +246,21 @@ test('16 · el SC propone el cierre del día; el ingeniero lo confirma', async (
   await page.locator('#ksheet [data-ka="closesave"]').click();
   await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).close?.status, HOY)).toBe('ok');
   noErrors(errors, 'sc cierra');
+});
+
+test('16b · tren de trabajo: el SC marca «en secuencia» (solo informativo) y al iniciar pasa a en ejecución', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'cap' });
+  await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
+  await page.locator('#ksheet [data-ka="seqf"]').click();
+  await page.locator('#ksheet [data-kseq=""]').click();
+  await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).seq?.on, HOY)).toBe(true);
+  expect(await page.evaluate(d => kState(d, 'i0').k, HOY)).toBe('seq');
+  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('En secuencia');
+  await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
+  await expect(page.locator('#ksheet [data-ka="unseq"]')).toBeVisible();
+  await page.locator('#ksheet [data-ka="run"]').click();
+  await expect.poll(() => page.evaluate(d => kState(d, 'i0').k, HOY)).toBe('run');
+  noErrors(errors, 'en secuencia');
 });
 
 test('17 · el administrador mantiene en cada piso la lista de sus responsables (la usan las reglas)', async ({ page }) => {

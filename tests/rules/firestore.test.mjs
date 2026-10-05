@@ -113,6 +113,17 @@ test('subcontratista: inicia y detiene sus actividades y propone el cierre del d
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fsc'), { data: 'x'.repeat(1000), by: 'sc@obra.pe' }));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x7'), { sc: 'c-gabel', st: 'run' }));
 });
+test('veedor: en vivo solo marca o quita «en secuencia»', async () => {
+  const v = user('veedor@obra.pe');
+  await assertSucceeds(updateDoc(doc(v, 'live/2026-10-01_x1'), { seq: { on: true, after: 'x4' } }));
+  await assertSucceeds(setDoc(doc(v, 'live/2026-10-01_x4'), { date: '2026-10-01', actId: 'x4', sc: 'c-gabel', seq: { on: true, after: '' } }));
+  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x1'), { st: 'run' }));
+  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x1'), { close: { status: 'ok' } }));
+  await assertFails(setDoc(doc(v, 'live/2026-10-01_x5'), { date: '2026-10-01', actId: 'x5', sc: 'c-gabel', st: 'run' }));
+  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x9'), { sc: 'c-gabel', seq: { on: true } })); // no cambia la partida
+  await assertFails(deleteDoc(doc(v, 'live/2026-10-01_x1')));
+  await assertFails(updateDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x1'), { seq: { on: true } }));
+});
 test('restricciones: el SC registra las de su partida y edita solo las suyas pendientes', async () => {
   const sc = user('sc@obra.pe');
   const base = { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '', desc: 'Falta andamio' };

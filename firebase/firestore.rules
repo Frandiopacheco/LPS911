@@ -105,8 +105,11 @@ service cloud.firestore {
     }
     match /live/{id} {
       allow read: if isMember();
-      allow create: if canDaily() || (crew() && request.resource.data.sc in scsOf() && liveActOk(id));
-      allow update: if canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id));
+      allow create: if canDaily() || (crew() && request.resource.data.sc in scsOf() && liveActOk(id))
+        || (isVeedor() && liveActOk(id) && request.resource.data.keys().hasOnly(['date', 'actId', 'pisoId', 'sc', 'seq', 'log', 'sat']));
+      // el veedor solo marca o quita «en secuencia» (tren de trabajo): no inicia, no detiene ni cierra
+      allow update: if canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id))
+        || (isVeedor() && liveActOk(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq', 'log', 'sat']));
       allow delete: if canDaily();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve

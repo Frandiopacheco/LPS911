@@ -286,7 +286,7 @@ function publishDrafts({ drafts = [], acts = new Map(), dplans = new Map(), cont
     let rid = '';
     if (zz.k && Object.keys(mv).length) {
       const x = acts.get(zz.actId); rid = 'res-' + zz.id; // mismo id que la página: el mismo cambio nunca crea dos restricciones
-      restrs.push({ id: rid, doc: { actId: zz.actId, pisoId, type: restrTypeFor(zz.c || '', project.restrTypes), desc: zz.rdesc || zz.motivo || '', resp: zz.rsc ? conName(zz.rsc) : '',
+      restrs.push({ id: rid, doc: { actId: zz.actId, pisoId, type: zz.rt || restrTypeFor(zz.c || '', project.restrTypes), desc: zz.rdesc || zz.motivo || '', resp: zz.rsc ? conName(zz.rsc) : '',
         need: zz.repTo || '', freed: '', status: 'pend', created: today, sc: x ? x.sc || '' : zz.sc || '', ...BY, via: 'plan diario',
         ...(zz.c ? { cnc: zz.cnc || '', ccode: zz.c, imp: zz.imp !== false, rsc: zz.rsc || '', pc: !!zz.pc } : {}) } });
     }
@@ -334,7 +334,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     /* límite de 500 escrituras por transacción: si no entra, no se publica (los borradores quedan para el ingeniero) */
     /* si no entra, no se publica ni se cierra el día (sin foto): mañana el ingeniero ve «⚠ Sin publicar» y lo publica él;
        las propuestas pendientes sí se rechazan (las que entren) */
-    if (nW + P.length + 1 > 480) {
+    if (nW + P.length + 2 > 480) {
       if (logger) logger.error(`Plan del ${d} piso ${pid}: ${nW + P.length + 1} escrituras pasan el límite; no se publica ni se cierra`);
       const P1 = P.slice(0, 480); for (const id of P1) tx.update(col('pdz').doc(id), DPROP_REJ(now));
       return { R: null, P: P1, ids: {}, overflow: true };
@@ -348,6 +348,10 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
       for (const o of R.novas) tx.update(col('pdz').doc(o.id), o.patch);
       if (R.pub) tx.set(pref, R.pub.doc);
+      /* queda en el Historial del lookahead como la publicación desde la página */
+      const items = Object.entries(R.acts).map(([id, u]) => { const b = A.get(id) || acts.get(id) || {};
+        return { id, nm: b.name || '', amb: '', sc: b.sc || '', k: 'mod', b: { days: b.days || [], qty: b.qty || {} }, a: { days: u.days || [], qty: u.qty || {} } }; }).slice(0, 150);
+      if (items.length) tx.set(col('lhlog').doc(now + '_srv' + pid), { t: now, d, by: 'servidor', n: 'Cierre automático', label: `Plan del ${d} publicado en el cierre automático`, tab: 'mapa', items });
     }
     const P2 = P;
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
