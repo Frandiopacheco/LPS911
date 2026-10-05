@@ -78,6 +78,8 @@ jobs:
             CH=$(git diff --name-only HEAD^ HEAD) && OKD=1
           fi
           FB=true; CI=true
+          # una corrida manual (workflow_dispatch) siempre reinstala Firebase: sirve para reponer reglas que no se instalaron
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then OKD=0; fi
           if [ "$OKD" = 1 ]; then
             echo "Cambió:"; echo "$CH" | head -40
             if [ "${{ github.ref_name }}" != "produccion" ]; then echo "$CH" | grep -qE '^(firebase/|functions/|firebase\.json|\.firebaserc|\.github/)' || FB=false; fi
