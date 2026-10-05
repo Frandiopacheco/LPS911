@@ -183,7 +183,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
         let nPast=0;
         const vis=acts.filter(x=>{
           if(RVF&&!x._rv)return false;
-          if(hidePast&&!x._rv&&!SELA.has(x.id)&&(x.days||[]).length&&!(x.days||[]).some(d=>d>=w0)){nPast++;return false}
+          if(hidePast&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&(x.days||[]).length&&!(x.days||[]).some(d=>d>=w0)){nPast++;return false}
           if(!scOk(x.sc))return false;
           if(U.onlyWin&&!(x.days||[]).some(d=>dset.has(d)))return false;
           if(U.onlyRestr&&!pr.get(x.id))return false;
@@ -289,6 +289,8 @@ function virtPaint(force,keep){const g=GV;if(!g)return;const tbl=g.tbl;if(!tbl.i
   if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}}
 function virtScroll(){if(!GV||vRaf)return;vRaf=requestAnimationFrame(()=>{vRaf=0;if(paint||qed)return;virtPaint(false);markPeers()})}
 /** Lleva a la vista la fila de una actividad aunque todavía no esté dibujada (Lookahead grande). */
+/* actividades que «Ver en el lookahead» pidió mostrar aunque estén vencidas (sus días ya pasaron) */
+const LK_SHOW=new Set();
 function gridReveal(aid){const g=GV;if(!g||!g.tbl.isConnected)return;if(g.tbl.querySelector(`tr[data-a="${CSS.escape(aid)}"]`))return;
   const i=g.rows.findIndex(r=>r.k==='x:'+aid||r.k.startsWith('x:'+aid+':'));if(i<0)return;let y=0;for(const b of g.blocks){if(i>=b.i0&&i<b.i0+b.n)break;y+=blockH(b)}
   const gw=g.tbl.parentElement;gw.scrollTop=Math.max(0,y+(g.tbl.tHead?g.tbl.tHead.offsetHeight:60)-gw.clientHeight/2);virtPaint(true)}
