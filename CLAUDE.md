@@ -262,7 +262,7 @@ El dueño prioriza ver los cambios pronto en la copia de prueba. Salvo que pida 
 - **No correr la batería completa en local.** Solo `node scripts/check.mjs` y los archivos de prueba del tema tocado (`npx playwright test <archivo>.spec.js`). La batería completa la corre GitHub en el PR (en 3 partes a la vez, ~3 min).
 - **Pruebas nuevas solo para lógica delicada:** PPC, transacciones, permisos/reglas, cierre/publicación del plan, datos que se puedan perder. Ajustes de texto, estilo o diseño van sin prueba nueva. No hace falta demostrar que la prueba falla con el código anterior salvo en correcciones de auditoría.
 - **Juntar** los cambios pedidos en la misma conversación en **una rama y un PR**.
-- **No vigilar el CI paso a paso:** abrir el PR, esperar con un solo comando (`gh pr checks N --watch --interval 30`), unir y avisar. Si una prueba falla y es ajena al cambio (inestable), reintentar el trabajo una vez (`gh run rerun <id> --failed`) antes de investigar.
+- **No vigilar el CI paso a paso:** abrir el PR, esperar con un solo comando (`scripts/esperar-ci.sh <rama>`; `gh pr checks` no funciona aquí, usa GraphQL), unir y avisar. Si una prueba falla y es ajena al cambio (inestable), reintentar el trabajo una vez (`gh run rerun <id> --failed`) antes de investigar.
 - **A producción**, cuando el dueño lo apruebe: PR `main → produccion` y unir en cuanto pase «Revisar» (~4–5 min en total); no se repiten las pruebas de la interfaz.
 - **Conversaciones cortas:** una conversación por tema; todo lo necesario está en este archivo.
 - **Flujo completo** (batería entera en local, prueba que falla antes) solo para cambios grandes en reglas, servidor (`functions/`) o el ciclo diario/PPC.
