@@ -55,6 +55,18 @@ test.beforeEach(async () => {
     await S('pzon/x2', { pisoId: 'p1', sc: 'c-otro', pts: [] });
     await S('live/2026-10-01_x1', { date: '2026-10-01', actId: 'x1', sc: 'c-gabel' });
     await S('live/2026-10-01_x9', { date: '2026-10-01', actId: 'x9', sc: 'c-otro' });
+    // Tareo
+    await S('members/tasis@obra.pe', { role: 'tasis', name: 'Asistente de tareo' });
+    await S('members/tcos@obra.pe', { role: 'tcos', name: 'Costos' });
+    await S('members/tcapm@obra.pe', { role: 'tcap', name: 'Capataz consorcio' });
+    await S('members/u_tcap1', { role: 'tcap', name: 'Pedro' });
+    await S('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
+    await S('tper/03684337', { dni: '03684337', ape: 'QUISPE MAMANI', nom: 'JUAN', pue: 'OPERARIO ALBAÑIL', cat: 'OP', cua: 'ALBAÑILES', cap: '', act: true });
+    await S('tpc/10.05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true });
+    await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
+    await S('meta/main', { name: 'Obra' });
+    await S('pisos/p1', { code: 'P1', name: 'Piso 1' });
+    await S('daily/2026-10-01_p1', { recs: {} });
   });
 });
 
@@ -509,4 +521,93 @@ test('ciclo diario: el SC propone el cierre del día solo de las actividades de 
   await assertSucceeds(setDoc(doc(sc, 'live/2026-10-02_x4'), { date: '2026-10-02', actId: 'x4', sc: 'c-gabel', close: { status: 'no', cnc: 'Materiales' } }));
   await assertFails(setDoc(doc(sc, 'live/2026-10-02_xe'), { date: '2026-10-02', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
   await assertFails(updateDoc(doc(sc, 'live/2026-10-01_x9'), { close: { status: 'ok' } }));
+});
+
+// ── Tareo (fase 0, docs/ia/tareo.md) ──
+const PER = (dni, x) => ({ dni, ape: 'PEREZ', nom: 'ANA', pue: 'PEON', cat: 'PE', cua: 'ALBAÑILES', cap: '', act: true, ...x });
+const PC = (cod, x) => ({ cod, grp: cod.split('.')[0], grpN: 'ESTRUCTURAS', nom: 'Partida ' + cod, und: 'm2', act: true, ...x });
+test('tareo: el asistente y el administrador editan el máster y las partidas; nadie las borra', async () => {
+  for (const db of [user('tasis@obra.pe'), user(OWNER)]) {
+    await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
+    await assertSucceeds(getDocs(collection(db, 'tper')));
+    await assertSucceeds(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertSucceeds(updateDoc(doc(db, 'tper/03684337'), { cap: 'u_tcap1', arch: { t: 1, by: 'x', n: 'x' } }));
+    await assertSucceeds(setDoc(doc(db, 'tper/CE0012345AB'), PER('CE0012345AB'))); // carné de extranjería
+    await assertSucceeds(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
+    await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { act: false }));
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+    await assertFails(deleteDoc(doc(db, 'tpc/10.05')));
+  }
+});
+test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom texto)', async () => {
+  const t = user('tasis@obra.pe');
+  await assertFails(setDoc(doc(t, 'tper/11111111'), PER('22222222'))); // id distinto del DNI
+  await assertFails(setDoc(doc(t, 'tper/3684337'), PER('3684337'))); // 7 caracteres (sin el cero)
+  await assertFails(setDoc(doc(t, 'tper/1234567890123'), PER('1234567890123'))); // más de 12
+  await assertFails(setDoc(doc(t, 'tper/43241048 II'), PER('43241048 II'))); // basura
+  await assertFails(setDoc(doc(t, 'tper/43241048'), PER(43241048))); // número, no texto
+  await assertFails(setDoc(doc(t, 'tper/43241049'), { ape: 'X', nom: 'Y' })); // sin DNI
+  await assertFails(updateDoc(doc(t, 'tper/03684337'), { dni: '03684338' })); // no cambia el DNI de la ficha
+  await assertFails(setDoc(doc(t, 'tpc/x1'), PC('10.06', { nom: null })));
+  await assertFails(setDoc(doc(t, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
+  await assertFails(setDoc(doc(t, 'tpc/x3'), { grp: '10', und: 'm2' }));
+});
+test('tareo: capataz, costos y jefe de producción leen; no editan', async () => {
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe')]) {
+    await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
+    await assertSucceeds(getDocs(collection(db, 'tpc')));
+    await assertSucceeds(getDoc(doc(db, 'tcfg/main')));
+    await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
+    await assertFails(setDoc(doc(db, 'tcfg/main'), { tolGar: 5 }));
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+  }
+});
+test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo', async () => {
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('campo@obra.pe'), user('veedor@obra.pe'), user('extrano@x.pe')]) {
+    await assertFails(getDoc(doc(db, 'tper/03684337')));
+    await assertFails(getDocs(collection(db, 'tper')));
+    await assertFails(getDoc(doc(db, 'tpc/10.05')));
+    await assertFails(getDoc(doc(db, 'tcfg/main')));
+    await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertFails(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
+  }
+});
+test('tareo: la configuración la cambia solo el administrador', async () => {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'tcfg/main'), { refIni: '12:30', limEnv: '18:00', tolGar: 10 }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
+});
+test('tareo: los roles de solo tareo no leen ni escriben nada de LPS', async () => {
+  const lps = ['acts/x1', 'meta/main', 'pisos/p1', 'daily/2026-10-01_p1', 'restr/r-ot', 'live/2026-10-01_x1', 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'mp/n1', 'cli/buf'];
+  for (const db of [user('tasis@obra.pe'), user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) {
+    for (const p of lps) await assertFails(getDoc(doc(db, p)));
+    for (const c of ['acts', 'restr', 'daily', 'live']) await assertFails(getDocs(collection(db, c)));
+    await assertFails(updateDoc(doc(db, 'acts/x1'), { name: 'x' }));
+    await assertFails(setDoc(doc(db, 'daily/2026-10-02_p1'), { recs: {} }));
+    await assertFails(updateDoc(doc(db, 'live/2026-10-01_x1'), { st: 'run' }));
+    await assertFails(setDoc(doc(db, 'restr/rt'), { actId: 'x1', status: 'pend' }));
+    await assertFails(setDoc(doc(db, 'fotos/ft'), { data: 'x', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'nprog/nt'), { date: '2026-10-01', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'lib/lt'), { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'members/otro@obra.pe'), { role: 'admin' }));
+  }
+  for (const db of [user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) await assertFails(getDoc(doc(db, 'members/editor@obra.pe')));
+  // cada uno lee su propio registro; la lista solo el asistente (y el administrador)
+  await assertSucceeds(getDoc(doc(user('tcos@obra.pe'), 'members/tcos@obra.pe')));
+  await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
+  await assertSucceeds(getDocs(collection(user('tasis@obra.pe'), 'members')));
+  await assertSucceeds(getDocs(collection(user(OWNER), 'members')));
+  await assertFails(getDocs(collection(user('tcos@obra.pe'), 'members')));
+  await assertFails(getDocs(collection(cap('tcap1'), 'members')));
+  await assertFails(getDocs(collection(user('tcapm@obra.pe'), 'members')));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'members/u_tcap1'), { role: 'tcap', name: 'Pedro', x: 1 })); // lee, no cambia
+});
+test('tareo: el jefe de producción (editor con tpub) sigue siendo editor en LPS', async () => {
+  const j = user('jefe@obra.pe');
+  await assertSucceeds(getDoc(doc(j, 'acts/x1')));
+  await assertSucceeds(updateDoc(doc(j, 'acts/x1'), { name: 'b' }));
+  await assertSucceeds(getDocs(collection(j, 'members')));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'acts/x1'))); // los demás roles no cambian
+  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'daily/2026-10-01_p1')));
 });

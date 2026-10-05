@@ -16,6 +16,10 @@ export const USERS = {
   veedor: { uid: 'u-ve', email: 'veedor@obra.pe', emailVerified: true },
   planner: { uid: 'u-pl', email: 'planner@obra.pe', emailVerified: true },
   capataz: { uid: 'cap1', email: null, isAnonymous: true, emailVerified: false },
+  tcap: { uid: 'u-tcap', email: 'tcap@obra.pe', emailVerified: true },
+  tasis: { uid: 'u-tasis', email: 'tasis@obra.pe', emailVerified: true },
+  tcos: { uid: 'u-tcos', email: 'tcos@obra.pe', emailVerified: true },
+  jefe: { uid: 'u-jefe', email: 'jefe@obra.pe', emailVerified: true },
 };
 
 /** Abre la app con el Firebase falso. `as`: clave de USERS; `theme`: 'dark' | 'light' (esquema de color del equipo). */

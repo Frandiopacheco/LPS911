@@ -69,7 +69,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clidx','cliver'];
+  'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg'];
 const BK_IMG=['lamimg','fotos'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
@@ -226,7 +226,7 @@ function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest
   return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
    ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}
 function areaCell(em,m){const ar=restrAreasL();return`<select class="ci" data-mem="${esc(em)}" data-f="area" aria-label="Área"${m.area?'':' style="border:1px solid var(--bad)"'}><option value="">— elige el área —</option>${[...new Set([...ar,m.area].filter(Boolean))].map(a=>`<option${a===m.area?' selected':''}>${esc(a)}</option>`).join('')}</select>`}
-function vaBanner(){let b=$('#vabar');if(!VA||!me){if(b)b.remove();return}const lab=ROLE[VA.role]||VA.role;const det=VA.sc?conOf(VA.sc).name:VA.area?VA.area:VA.pisos&&VA.pisos.length?'pisos '+VA.pisos.map(id=>(S.pis.get(id)||{}).code||'').join(', '):'';
+function vaBanner(){let b=$('#vabar');if(!VA||!me){if(b)b.remove();return}const lab=ROLE[VA.role]||VA.role;const det=VA.sc?conOf(VA.sc).name:VA.area?VA.area:VA.pisos&&VA.pisos.length?'pisos '+VA.pisos.map(id=>(S.pis.get(id)||{}).code||'').join(', '):VA.tpub?'publica tareo':'';
   if(IN_FRAME){if(b)b.remove();return}
   const h=`<span>👁 Viendo como <b>${esc(lab)}</b>${det?' · '+esc(det):''}</span><button type="button" class="ib" data-va="phone">📱 Celular</button><button type="button" class="ib" data-va="chg">Cambiar</button><button type="button" class="ib pri" data-va="out">Volver a administrador</button>`;
   if(!b){b=document.createElement('div');b.id='vabar';b.className='vabar';document.body.appendChild(b);b.onclick=e=>{const t=e.target.closest('[data-va]');if(!t)return;if(t.dataset.va==='out')vaSet(null);else if(t.dataset.va==='phone')phonePreview('iphone');else vaDialog(t)}}
@@ -241,16 +241,17 @@ function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!de
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
-  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
+  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector'],['tcap','Capataz (tareo)'],['tasis','Asistente de tareo'],['tcos','Costos (tareo)']];
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
     <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
     <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div class="qrow" id="vaar"><select id="vaa" aria-label="Área">${restrAreasL().map(a=>`<option${cur.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select></div>
     <div id="vapi" style="padding:0 10px 6px;max-height:160px;overflow:auto"><div class="mu" style="font-size:12px">Pisos a su cargo (para revisar propuestas):</div>${pisos().map(p=>`<label class="chk" style="display:flex"><input type="checkbox" class="vapc" value="${p.id}"${(cur.pisos||[]).includes(p.id)?' checked':''}> ${esc(p.code)} · ${esc(p.name)}</label>`).join('')}</div>
     <label class="chk" id="vacl" style="display:flex;padding:0 10px 6px"><input type="checkbox" id="vacli"${cur.cli?' checked':''}> Con acceso a la versión cliente</label>
+    <label class="chk" id="vatp" style="display:flex;padding:0 10px 6px"><input type="checkbox" id="vatpub"${cur.tpub?' checked':''}> Publica tareo (ve el módulo Tareo)</label>
     <button data-do="go" class="pri">Ver como este rol</button>`,
-   {go:()=>{const role=($('#var')||{}).value;const v={role};if(role==='sc'||role==='capataz')v.sc=($('#vas')||{}).value||'';if(role==='area')v.area=($('#vaa')||{}).value||'';if(role==='editor')v.pisos=[...document.querySelectorAll('.vapc:checked')].map(i=>i.value);if(CLI_ROLES.includes(role)&&($('#vacli')||{}).checked)v.cli=true;vaSet(v)}});
-  const sync=()=>{const r=($('#var')||{}).value;const a=$('#vasc'),b=$('#vaar'),c=$('#vapi');if(a)a.hidden=!(r==='sc'||r==='capataz');if(b)b.hidden=r!=='area';if(c)c.hidden=r!=='editor';const d=$('#vacl');if(d)d.hidden=!CLI_ROLES.includes(r)};sync();const sel=$('#var');if(sel)sel.onchange=sync;
+   {go:()=>{const role=($('#var')||{}).value;const v={role};if(role==='sc'||role==='capataz')v.sc=($('#vas')||{}).value||'';if(role==='area')v.area=($('#vaa')||{}).value||'';if(role==='editor')v.pisos=[...document.querySelectorAll('.vapc:checked')].map(i=>i.value);if(CLI_ROLES.includes(role)&&($('#vacli')||{}).checked)v.cli=true;if(role==='editor'&&($('#vatpub')||{}).checked)v.tpub=true;vaSet(v)}});
+  const sync=()=>{const r=($('#var')||{}).value;const a=$('#vasc'),b=$('#vaar'),c=$('#vapi');if(a)a.hidden=!(r==='sc'||r==='capataz');if(b)b.hidden=r!=='area';if(c)c.hidden=r!=='editor';const d=$('#vacl');if(d)d.hidden=!CLI_ROLES.includes(r);const f=$('#vatp');if(f)f.hidden=r!=='editor'};sync();const sel=$('#var');if(sel)sel.onchange=sync;
   /* el popover no debe cerrarse al marcar casillas */}
 function pisosSinResp(){return pisos().filter(p=>!respOf(p.id).length)}
 /* el subcontratista también marca inicio, detención y reanudación en la pantalla "En obra" (no cierra el día) */
