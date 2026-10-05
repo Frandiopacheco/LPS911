@@ -86,7 +86,7 @@ test('publicar borradores: líder y tren, marca ↷, acumulación y salto de la 
   assert.strictEqual(R.restrs.length, 2);
   const r1 = R.restrs.find(r => r.doc.actId === 'x1').doc;
   assert.deepStrictEqual(r1, { actId: 'x1', pisoId: 'p1', type: 'Subcontratista / mano de obra', desc: 'falta tarrajeo', resp: 'Civil SAC', need: '2026-10-07', freed: '', status: 'pend',
-    created: '2026-10-05', sc: 'c1', by: 'servidor', byName: 'Publicación automática 20:00', via: 'plan diario', cnc: 'Subcontratista', ccode: 'SC', imp: false, rsc: 'c0', pc: true });
+    created: '2026-10-05', sc: 'c1', by: 'servidor', byName: 'Publicación automática', via: 'plan diario', cnc: 'Subcontratista', ccode: 'SC', imp: false, rsc: 'c0', pc: true });
   assert.ok(R.restrs.every(r => /^res-/.test(r.id)));
   // cada borrador pasa a publicado (también el que no movió nada, como en la página)
   assert.deepStrictEqual(R.novas.map(o => o.id), ['nv1', 'nv2', 'nv3']);
@@ -207,4 +207,17 @@ test('terminadas: «Quitar registro» anula el cierre del capataz y solo cuenta 
     acts
   });
   assert.deepStrictEqual([...D2.keys()], ['c']);
+});
+
+test('hora de la publicación automática: por defecto 21:00, editable (máx. 23:30) y en hora de Lima', () => {
+  const { planCutHH, planCutDue } = require('../lib');
+  assert.equal(planCutHH({}), '21:00');
+  assert.equal(planCutHH({ planCutHH: '19:30' }), '19:30');
+  assert.equal(planCutHH({ planCutHH: '23:45' }), '21:00');
+  assert.equal(planCutHH({ planCutHH: 'x' }), '21:00');
+  const at = h => Date.parse(`2026-10-05T${h}:00-05:00`);
+  assert.equal(planCutDue({}, at('20:59')), false);
+  assert.equal(planCutDue({}, at('21:00')), true);
+  assert.equal(planCutDue({ planCutHH: '19:30' }, at('19:45')), true);
+  assert.equal(planCutDue({ planCutHH: '19:30' }, at('08:00')), false);
 });
