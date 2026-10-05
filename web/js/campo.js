@@ -36,7 +36,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
   const vt=visTree();const secs=[];vt.forEach(({p,secs:ss})=>ss.forEach(({s})=>secs.push({p,s})));if(CU.sec&&!secs.some(x=>x.s.id===CU.sec))CU.sec='';
   const groups=[];let nS=0,nR=0;const cnt={ok:0,partial:0,no:0};const nProp={};const propIds={};const fut=d>today;
   for(const{p,secs:ss}of vt)for(const{s,ambs}of ss){if(CU.sec&&CU.sec!==s.id)continue;for(const{a,acts}of ambs){
-    const items=acts.filter(x=>(schedOn(x,d)||recOf(d,x.id))&&(!CU.sc||x.sc===CU.sc)).map(x=>({x,rc:recOf(d,x.id),sched:schedOn(x,d)}));
+    const items=acts.filter(x=>(schedOrSnap(x,d)||recOf(d,x.id))&&(!CU.sc||x.sc===CU.sc)).map(x=>({x,rc:recOf(d,x.id),sched:schedOrSnap(x,d)}));
     items.forEach(i=>{if(i.sched)nS++;if(i.rc){nR++;cnt[i.rc.status]++}});
     items.forEach(i=>{if(i.rc&&i.rc._prop){nProp[i.x.sc]=(nProp[i.x.sc]||0)+1;(propIds[i.x.sc]=propIds[i.x.sc]||[]).push(i.x.id)}});const shown=items.filter(i=>CU.show==='all'||(CU.show==='prop'?!!(i.rc&&i.rc._prop):CU.show==='pend'?!i.rc:!!i.rc));if(shown.length)groups.push({p,s,a,items:shown})}}
   const npf=i=>(!CU.sc||i.e.sc===CU.sc)&&(!CU.sec||(i.a&&i.a.sectorId===CU.sec));const extras=npItems([d],new Set(vt.map(t=>t.p.id))).filter(npf);
@@ -105,7 +105,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
       return}
     const art=t.closest('article[data-a]');if(!art)return;const aid=art.dataset.a;const x=S.act.get(aid);if(!x)return;const pid=pisoOfAct(aid);const cur=recOf(d,aid);
     const stb=t.closest('[data-st]');if(stb&&canDaily){const nst=stb.dataset.st;const r=baseRec(d,x,cur);r.status=nst;if(nst==='ok'){r.cnc='';r.imp=null;if(r.exec==null&&r.prog!=null)r.exec=r.prog;openCards.delete(aid)}else{r.exc='';openCards.add(aid);if(cur&&cur.status==='ok'&&cur.exec!=null&&cur.exec===r.prog)r.exec=null}
-      if(!(x.days||[]).includes(d)&&!cur){toast('Esta actividad no está programada este día.');return}
+      if(!(x.days||[]).includes(d)&&!cur&&!inSnap(x,d)){toast('Esta actividad no está programada este día.');return}
       /* «Cumplido» con menos de lo programado: se pregunta (todo se ejecutó, o excepción con motivo) */
       if(nst==='ok'&&shortOf(r)&&!(cur&&cur.status==='ok')){excAsk(stb,r,{all:true},rr=>writeDaily(d,pid,{recs:{[aid]:rr}}));return}
       writeDaily(d,pid,{recs:{[aid]:r}});if(nst!=='ok'&&!r.cnc)toast('Elige la causa y, si quieres, agrega una foto.');return}
@@ -118,7 +118,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
     if(t.closest('[data-more]')){openCards.has(aid)?openCards.delete(aid):openCards.add(aid);render();return}
     if(t.closest('[data-clisto]')){const ae=document.activeElement;if(ae&&art.contains(ae)&&ae.blur)ae.blur();setTimeout(()=>{openCards.delete(aid);const c2=recOf(d,aid);if(c2&&c2.status!=='ok'&&!c2.cnc)toast('Guardado sin causa. Puedes agregarla luego con “Editar”.');else toast('Registro guardado');render()},60);return}
     if(t.closest('[data-cclear]')&&cur){/* las fotos no se borran: pasan a «phQ» (el cierre del capataz puede seguir usándolas) */
-      writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),status:null,exec:null,cnc:'',note:'',exc:'',photos:[],phQ:[...new Set([...(cur.phQ||[]),...(cur.photos||[])])],clr:true}}});openCards.delete(aid);toast('Registro quitado');return}
+      writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),status:null,exec:null,cnc:'',note:'',exc:'',done:false,photos:[],phQ:[...new Set([...(cur.phQ||[]),...(cur.photos||[])])],clr:true}}});openCards.delete(aid);toast('Registro quitado');return}
     const cb=t.closest('[data-ccnc]');if(cb&&cur&&canDaily){const v=cb.dataset.ccnc;writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),cnc:cur.cnc===v?'':v,imp:null}}});return}
     const ib=t.closest('[data-cimp]');if(ib&&cur&&canDaily){const v=ib.dataset.cimp==='1';const def=cncImp(cur.cnc);writeDaily(d,pid,{recs:{[aid]:{...baseRec(d,x,cur),imp:v===def?null:v}}});return}};
   main.onchange=async e=>{const t=e.target;if(!canDaily)return;

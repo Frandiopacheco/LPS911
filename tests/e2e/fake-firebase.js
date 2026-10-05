@@ -30,7 +30,7 @@
     S('members', 'planner@obra.pe', { role: 'planner', name: 'Pablo Planner' });
     S('members', 'u_cap1', { role: 'capataz', name: 'Pedro Capataz', sc: 'c1', scs: ['c1'] });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
-    S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1 });
+    S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1, resp: ['editor@obra.pe'] });
     S('pisos', 'p2', { code: 'P2', name: 'Segundo piso', order: 2 });
     S('sectors', 's1', { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 });
     S('sectors', 's2', { pisoId: 'p2', code: 'S2', name: 'Sector 2', order: 1 });
