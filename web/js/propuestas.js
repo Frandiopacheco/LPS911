@@ -228,6 +228,27 @@ async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,
     PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:back?it:null},...(nh?{hist:{...(d2.hist||{}),[key]:nh}}:{})});requestRender();
     if(back)toast('Cambio deshecho: la propuesta vuelve a quedar pendiente de revisión','Rehacer',redo)}
   catch(e){toast('No se pudo devolver la propuesta a pendientes: '+(e&&(e.code||e.message)||'error'))}}
+/** rechazar varias seguidas (todo lo visible): un solo aviso al final; no pide motivo (como rechazar una) */
+/* rechazar varias de una vez: una transacción por subcontratista (no una por propuesta). Rechazar no toca el lookahead:
+   relee lhprop/{sc}, quita las que siguen iguales (las que el SC cambió mientras tanto quedan pendientes) y deja
+   una decisión por propuesta en lhphist, como rechazar una sola. */
+async function rejectMany(L){let ok=0;const why={};const add=(k,n=1)=>{why[k]=(why[k]||0)+n};const FP=firebase.firestore.FieldPath;
+  const by=new Map();for(const o of L){const doc=PROP.get(o.sc);const it=doc&&doc.items&&doc.items[o.id];if(!it){add('gone');continue}if(!canDecide(o.id,it)){add('perm');continue}
+    if(!by.has(o.sc))by.set(o.sc,[]);by.get(o.sc).push({id:o.id,it})}
+  if(!db){toast('Sin conexión con la base.');return}
+  await Promise.all([...by.entries()].map(async([sc,items])=>{for(let i=0;i<items.length;i+=400){const part=items.slice(i,i+400);
+    try{const n=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const srvI=(ps.exists?(ps.data()||{}).items:null)||{};
+      const go=part.filter(({id,it})=>{const srv=srvI[id];return srv&&srv.sent&&propVer(srv)===propVer(it)});if(!go.length)return{n:0,skip:part.length};
+      const args=[];const t0=NOW();
+      go.forEach(({id,it},j)=>{args.push(new FP('items',id),null);const off=S.act.get(id)||null;const base=it.base||off;const x=it.after||base||{};const am=S.amb.get(x.ambId);const t=t0+j;const late=propLate(it,off);
+        tx.set(fcol('lhphist').doc(sc+'_'+id+'_'+t),{id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(it.after.days):'',st:'rej',note:'',t,by:me.email,n:me.name||'',pn:it.n||'',
+          sc,actId:id,sk:lhhSk(sc,t),sentAt:it.sentAt||null,sent0:it.sent0||it.sentAt||null,late:late?{w:late.w,cut:late.cut}:null,lateNote:'',prop:propDiff(base,it.after),chg:null})});
+      tx.update(pref,...args);return{n:go.length,skip:part.length-go.length}});
+      ok+=n.n;if(n.skip)add('ver',n.skip)}
+    catch(e){add('err',part.length);console.warn('rechazar',e)}}}));
+  const W={ver:'el SC las cambió mientras tanto',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+  const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
+  toast(`${ok} propuesta${ok===1?'':'s'} rechazada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /** aceptar varias seguidas (todo lo visible, todo un SC): un solo aviso al final */
 async function decideMany(L){let ok=0;const why={};
   /* las que llegaron fuera de plazo piden un solo motivo para todo el lote; sin motivo no se acepta ninguna */
@@ -262,6 +283,9 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if(t.closest('[data-rvk0]')){if(REVSEL)REVSEL.k=0;requestRender();return}
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
+  if(t.closest('[data-rvrej]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
+    if(!confirm(`¿Rechazar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla? El lookahead no cambia y cada subcontratista lo ve en «Respuestas».`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;
+    rejectMany(L);return}
   if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
     /* una fila movida con ‹ › solo se acepta así con su ✓: el lote toma las propuestas como vienen */
     const sh=REVSEL&&REVSEL.k&&L.some(o=>o.id===REVSEL.id)?S.act.get(REVSEL.id):null;
@@ -321,7 +345,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
     <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${(()=>{const nl=L.filter(o=>propLate(o.it,S.act.get(o.id))).length;return nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}: para aceptarlas se pide el motivo">${nl} fuera de plazo</span>`:''})()}
     <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · <b>‹ ›</b> mueve lo propuesto un día hábil (o arrastra la barra) · <b>📅</b> otra fecha de inicio · ✓ acepta · ✗ rechaza</span>${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
     <div class="ppa"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button>
-    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
+    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button><button class="ib" data-rvrej${nv?'':' disabled'} title="Rechaza las propuestas que muestra la grilla con los filtros actuales: el lookahead no cambia">✗ Rechazar todo lo visible (${nv})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}

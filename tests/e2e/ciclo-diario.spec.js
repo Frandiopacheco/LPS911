@@ -97,7 +97,7 @@ test('5 · mismo universo del día: la reunión y Campo incluyen lo publicado qu
   await page.evaluate(d => { daySet(d); U.tab = 'mapa'; requestRender(); }, HOY);
   await page.waitForFunction(() => window.__plano && window.__plano.cuRows);
   await page.evaluate(d => { window.__plano.M.date = d; }, HOY);
-  expect(await page.evaluate(() => window.__plano.cuRows('c1').map(r => r.x.id))).toContain('i0');
+  await expect.poll(() => page.evaluate(d => { window.__plano.M.date = d; return window.__plano.cuRows('c1').map(r => r.x.id); }, HOY)).toContain('i0');
   noErrors(errors, 'universo');
 });
 
@@ -288,4 +288,45 @@ test('19 · aceptar una propuesta que mueve días se guarda (Firestore no admite
   const h = await page.evaluate(() => Object.values(window.__dbAll('lhphist')).find(x => x.actId === 't0'));
   expect(h.prop.days).toEqual(['2026-10-13,2026-10-14', '2026-10-23,2026-10-26']);
   noErrors(errors, 'propuesta con días');
+});
+
+test('20 · revisión de propuestas: «Rechazar todo lo visible»', async ({ page }) => {
+  const T0 = { ambId: 'a1', sc: 'c3', name: 'Tarrajeo de muros', und: 'm2', metrado: 60, days: ['2026-10-13', '2026-10-14'], order: 30 };
+  const P = ['lhprop', 'c3', { sc: 'c3', items: { t0: { after: { ...T0, days: ['2026-10-23', '2026-10-26'] }, base: T0, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 } } }];
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 't0', T0], P] });
+  await page.evaluate(() => { U.rev = true; requestRender(); });
+  page.on('dialog', d => d.accept());
+  await page.locator('[data-rvrej]').click();
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('lhphist')).filter(x => x.actId === 't0').map(x => x.st))).toEqual(['rej']);
+  expect((await act(page, 't0')).days).toEqual(T0.days);
+  noErrors(errors, 'rechazar todo');
+});
+
+test('21 · Configuración: subir el logo de la empresa lo guarda', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'cfg' });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('input[data-logo="logoE"]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#toast')).toContainText('Logo guardado');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').logoE || '')).toMatch(/^logo_logoE_/);
+  noErrors(errors, 'logo');
+});
+
+test('20b · rechazar muchas a la vez es rápido (una transacción por SC) y respeta las que el SC cambió', async ({ page }) => {
+  const acts = [], items = {};
+  for (let i = 0; i < 60; i++) { const a = { ambId: 'a1', sc: 'c3', name: 'Act ' + i, und: 'm2', metrado: 1, days: ['2026-10-13'], order: 100 + i }; acts.push(['acts', 'q' + i, a]); items['q' + i] = { after: { ...a, days: ['2026-10-14'] }, base: a, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 }; }
+  const errors = await openApp(page, { tab: 'look', extra: [...acts, ['lhprop', 'c3', { sc: 'c3', items }]] });
+  await page.evaluate(() => { U.rev = true; requestRender(); });
+  await expect(page.locator('[data-rvrej]')).toBeEnabled();
+  // el SC cambia una mientras tanto (esta página aún no lo ve)
+  await page.evaluate(() => { const m = window.__DB.lhprop; const c = m.get('c3'); m.set('c3', { ...c, items: { ...c.items, q0: { ...c.items.q0, ts: 9 } } }); });
+  page.on('dialog', d => d.accept());
+  const t0 = Date.now();
+  await page.locator('[data-rvrej]').click();
+  await expect(page.locator('#toast')).toContainText('59 propuestas rechazadas');
+  expect(Date.now() - t0).toBeLessThan(4000);
+  await expect(page.locator('#toast')).toContainText('1 porque el SC las cambió');
+  const lh = await page.evaluate(() => window.__dbGet('lhprop', 'c3').items);
+  expect(Object.keys(lh).filter(k => lh[k])).toEqual(['q0']);
+  expect(await page.evaluate(() => Object.values(window.__dbAll('lhphist')).filter(x => x.st === 'rej').length)).toBe(59);
+  noErrors(errors, 'rechazo rápido');
 });

@@ -41,24 +41,97 @@ jobs:
           if [ $rc -ne 0 ]; then grep -A40 -E "^\s*not ok" rules.log | grep -E "not ok|firestore\.test\.mjs:[0-9]+|PERMISSION_DENIED|message:|Expected|evaluation error" | sed 's/^ *//'  | sed 's/\x1b\[[0-9;]*m//g' | head -40 | while IFS= read -r l; do echo "::error::$l"; done; fi
           exit $rc
 
+  previo:
+    name: ¿Ya se probó este mismo código?
+    # al unir un pull request a main, el código suele ser idéntico (mismo árbol) al que ya pasó las pruebas en el PR:
+    # en ese caso no se repiten. También decide si hace falta la prueba de 16 usuarios y reinstalar Firebase.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { actions: read, contents: read }
+    outputs:
+      tree: ${{ steps.t.outputs.tree }}
+      ok: ${{ steps.t.outputs.ok }}
+      fb: ${{ steps.f.outputs.fb }}
+      ciclo: ${{ steps.f.outputs.ciclo }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - id: t
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          T=$(git rev-parse HEAD^{tree})
+          echo "tree=$T" >> "$GITHUB_OUTPUT"
+          OK=0
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            OK=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=e2e-ok-$T" --jq '[.artifacts[]|select(.expired==false)]|length' 2>/dev/null || echo 0)
+          fi
+          if [ "$OK" != "0" ] && [ -n "$OK" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; echo "::notice::Este código ya pasó las pruebas de la interfaz en su pull request: no se repiten."; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+      - id: f
+        name: ¿Qué cambió? (Firebase y ciclo diario)
+        # Firebase: en main, si el cambio solo toca la página, no se reinstala (~1,5 min menos); en produccion siempre se instala.
+        # Ciclo de 16 usuarios: solo si el cambio toca el plan diario, propuestas, campo/en obra, la base del código, servidor, reglas o sus pruebas.
+        run: |
+          B="${{ github.event.before }}"; CH=""; OKD=0
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$B" ] && [ "$B" != "0000000000000000000000000000000000000000" ] && git fetch -q --depth=1 origin "$B"; then
+            CH=$(git diff --name-only "$B" HEAD) && OKD=1
+          elif git rev-parse -q --verify HEAD^ >/dev/null; then
+            CH=$(git diff --name-only HEAD^ HEAD) && OKD=1
+          fi
+          FB=true; CI=true
+          if [ "$OKD" = 1 ]; then
+            echo "Cambió:"; echo "$CH" | head -40
+            if [ "${{ github.ref_name }}" != "produccion" ]; then echo "$CH" | grep -qE '^(firebase/|functions/|firebase\.json|\.firebaserc|\.github/)' || FB=false; fi
+            echo "$CH" | grep -qE '^(web/plano\.js|web/js/(base|propuestas|campo|en-obra-tablero|auditoria|lookahead|plan-restricciones)\.js|functions/|firebase/|\.github/|tests/e2e/(mundo-compartido|auditoria-ciclo\.spec|fake-firebase|helpers|server)\.)' || CI=false
+          fi
+          echo "fb=$FB" >> "$GITHUB_OUTPUT"; echo "ciclo=$CI" >> "$GITHUB_OUTPUT"
+          [ "$FB" = "false" ] && echo "::notice::Solo cambió la página: no se reinstala Firebase."
+          [ "$CI" = "false" ] && echo "::notice::El cambio no toca el ciclo diario: se salta la prueba de 16 usuarios."
+          true
+
   interfaz:
-    name: Probar la interfaz (Playwright)
+    name: Probar la interfaz (Playwright ${{ matrix.shard }}/3)
     # en produccion solo llega lo que ya pasó estas pruebas en main: no se repiten (la obra se actualiza en ~5 min en vez de ~12)
-    if: github.ref_name != 'produccion' && github.base_ref != 'produccion'
+    # se reparten en 3 máquinas a la vez (antes una sola tardaba 4–6 min)
+    needs: [previo]
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
+      - name: Instalar Playwright y Chromium
+        working-directory: tests/e2e
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Recorrer la app con cada rol, en PC y celular
+        working-directory: tests/e2e
+        env: { CI: '1' }
+        run: npx playwright test --shard=${{ matrix.shard }}/3
+      - name: Guardar el informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-interfaz-${{ matrix.shard }}
+          path: tests/e2e/playwright-report
+          retention-days: 7
+
+  ciclo:
+    name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
+    needs: [previo]
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true' && needs.previo.outputs.ciclo != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
       - name: Instalar Playwright y Chromium
         working-directory: tests/e2e
-        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
-      - name: Recorrer la app con cada rol, en PC y celular
-        working-directory: tests/e2e
-        env: { CI: '1' }
-        run: npx playwright test
-      - name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Ciclo diario
         working-directory: tests/e2e
         env: { CI: '1', CICLO: '1' }
         run: npx playwright test auditoria-ciclo
@@ -66,41 +139,58 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: informe-interfaz
+          name: informe-ciclo
           path: tests/e2e/playwright-report
           retention-days: 7
 
+  aprobado:
+    name: Marcar código probado
+    # deja constancia (por árbol de archivos) de que este código pasó todas las pruebas de la interfaz; «previo» la busca al unir a main
+    needs: [previo, interfaz, ciclo]
+    if: always() && needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "${{ github.sha }}" > ok.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ok-${{ needs.previo.outputs.tree }}
+          path: ok.txt
+          retention-days: 3
+          overwrite: true
+
   instalar:
     name: Instalar en Firebase
-    needs: [revisar, interfaz]
-    if: always() && needs.revisar.result == 'success' && (needs.interfaz.result == 'success' || (needs.interfaz.result == 'skipped' && github.ref_name == 'produccion')) && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    needs: [revisar, previo, interfaz, ciclo]
+    if: always() && needs.revisar.result == 'success' && ((needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))) || (needs.interfaz.result == 'skipped' && needs.ciclo.result == 'skipped' && (github.ref_name == 'produccion' || needs.previo.outputs.ok == 'true'))) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       SA: ${{ github.ref_name == 'produccion' && secrets.FIREBASE_SA_PRODUCCION || secrets.FIREBASE_SA_PRUEBAS }}
+      FB: ${{ needs.previo.outputs.fb }}
     steps:
       - name: ¿Hay llave de Firebase?
         if: env.SA == ''
         # sin llave no se instala nada en Firebase: falla, para que tampoco se publique una página que necesite reglas o tareas nuevas
         run: echo "::error::Falta el secreto FIREBASE_SA_${{ github.ref_name == 'produccion' && 'PRODUCCION' || 'PRUEBAS' }} (ver INSTALACION.md, paso 2). No se instaló nada en Firebase y la página no se publica." && exit 1
       - uses: actions/checkout@v4
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
       - uses: actions/setup-node@v4
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
         with: { node-version: 22 }
       - uses: google-github-actions/auth@v2
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
         with:
           credentials_json: ${{ env.SA }}
       - uses: google-github-actions/setup-gcloud@v2
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
       - name: Activar los servicios de Google Cloud que se necesitan
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
         run: |
           P=$(python3 -c "import json;print(json.load(open('.firebaserc'))['projects']['${{ github.ref_name == 'produccion' && 'produccion' || 'pruebas' }}'])")
           gcloud services enable cloudbilling.googleapis.com cloudresourcemanager.googleapis.com firebaserules.googleapis.com firestore.googleapis.com cloudfunctions.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com eventarc.googleapis.com pubsub.googleapis.com cloudscheduler.googleapis.com --project "$P"
       - name: Instalar reglas y tareas del servidor
-        if: env.SA != ''
+        if: env.SA != '' && env.FB != 'false'
         run: |
           npm install -g firebase-tools@13 --no-audit --no-fund
           (cd functions && npm install --no-audit --no-fund --omit=dev)
@@ -120,8 +210,8 @@ jobs:
   publicar-web:
     name: Publicar la página en Netlify
     # la página va después de sus reglas y tareas del servidor: si la instalación en Firebase falla, no se publica
-    needs: [revisar, interfaz, instalar]
-    if: always() && needs.instalar.result == 'success' && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    needs: [revisar, previo, interfaz, ciclo, instalar]
+    if: always() && needs.instalar.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -152,3 +242,24 @@ jobs:
             netlify deploy --dir web --site "$NETLIFY_SITE" --alias main --message "main ${GITHUB_SHA::7}"
             echo "::notice::Copia de prueba: https://main--$NETLIFY_SITE.netlify.app"
           fi
+
+  unir:
+    name: Unir solo a main (etiqueta auto-unir)
+    # si el pull request a main tiene la etiqueta «auto-unir» y pasó todo, se une (squash) sin esperar a nadie.
+    # Lo que une GitHub con su token no dispara «push»: por eso después se lanza este mismo flujo en main (instala y publica).
+    needs: [revisar, previo, interfaz, ciclo, aprobado]
+    if: always() && github.event_name == 'pull_request' && github.base_ref == 'main' && needs.revisar.result == 'success' && needs.aprobado.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: write, pull-requests: write, actions: write }
+    env: { GH_TOKEN: '${{ github.token }}', N: '${{ github.event.pull_request.number }}', R: '${{ github.repository }}' }
+    steps:
+      - name: Unir y publicar en la copia de prueba
+        run: |
+          if ! gh api "repos/$R/issues/$N/labels" --jq '.[].name' | grep -qx auto-unir; then echo "Sin etiqueta auto-unir: se une a mano."; exit 0; fi
+          T=$(gh api "repos/$R/pulls/$N" --jq .title)
+          # solo si la punta del PR sigue siendo la que se probó
+          gh api -X PUT "repos/$R/pulls/$N/merge" -f merge_method=squash -f sha="${{ github.event.pull_request.head.sha }}" -f commit_title="$T (#$N)"
+          gh workflow run ci.yml --ref main -R "$R"
+          echo "::notice::Unido a main; la copia de prueba se publica en el flujo lanzado en main."
+

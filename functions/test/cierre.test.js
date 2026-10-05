@@ -87,7 +87,9 @@ test('publicar borradores: líder y tren, marca ↷, acumulación y salto de la 
   const r1 = R.restrs.find(r => r.doc.actId === 'x1').doc;
   assert.deepStrictEqual(r1, { actId: 'x1', pisoId: 'p1', type: 'Subcontratista / mano de obra', desc: 'falta tarrajeo', resp: 'Civil SAC', need: '2026-10-07', freed: '', status: 'pend',
     created: '2026-10-05', sc: 'c1', by: 'servidor', byName: 'Publicación automática', via: 'plan diario', cnc: 'Subcontratista', ccode: 'SC', imp: false, rsc: 'c0', pc: true });
-  assert.ok(R.restrs.every(r => /^res-/.test(r.id)));
+  assert.ok(R.restrs.every(r => /^res-/.test(r.id)))
+  // id fijo por borrador (el mismo que usa la página): publicar dos veces no duplica la restricción
+  assert.ok(R.restrs.every(r => r.id === 'res-' + R.novas.find(n => n.patch.rid === r.id).id));
   // cada borrador pasa a publicado (también el que no movió nada, como en la página)
   assert.deepStrictEqual(R.novas.map(o => o.id), ['nv1', 'nv2', 'nv3']);
   const n1 = R.novas[0].patch;

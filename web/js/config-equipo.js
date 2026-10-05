@@ -265,5 +265,5 @@ async function logoUpload(k,file){if(!isAdmin)return;try{const src=await new Pro
     const im=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('No es una imagen'));i.src=src});
     const sc=Math.min(1,700/im.naturalWidth);const cv=document.createElement('canvas');cv.width=Math.round(im.naturalWidth*sc);cv.height=Math.round(im.naturalHeight*sc);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
     let data=cv.toDataURL('image/png');if(data.length>390000)data=cv.toDataURL('image/jpeg',.9);if(data.length>390000)throw new Error('La imagen es muy pesada: usa una más pequeña.');
-    const id='logo_'+k+'_'+NOW();FOTO.set(id,data);if(db)await fcol('fotos').doc(id).set({data,kind:'logo',by:me.email,ts:NOW()});saveP({[k]:id});toast('Logo guardado: saldrá en los Excel');requestRender()}
+    const id='logo_'+k+'_'+NOW();FOTO.set(id,data);if(db)await fcol('fotos').doc(id).set({data,kind:'logo',by:me.email,ts:NOW()});apply([op('meta','project',{...P(),[k]:id})]);toast('Logo guardado: saldrá en los Excel');requestRender()}
   catch(e){toast('No se pudo guardar el logo: '+(e.message||e.code||e))}}
