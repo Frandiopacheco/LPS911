@@ -6,7 +6,7 @@ test('el administrador entra a Hoy: primero lo pendiente, lo que está al día a
   const errors = await openApp(page);
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'hoy');
   // lo que está al día va al final
-  await expect.poll(() => page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy))).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'prop', 'np']);
+  await expect.poll(() => page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan'))).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'prop', 'np']);
   await expect(page.locator('[data-hoy="campo"]')).toContainText('sin registrar');
   await page.click('[data-hoy="campo"] [data-hgo]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'campo');
@@ -24,7 +24,7 @@ test('Calidad ve primero sus inspecciones y lo que falta programar', async ({ pa
 
 test('el subcontratista ve su avance de hoy y sus restricciones', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc' });
-  const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy));
+  const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan'));
   expect(k).toEqual(['obra', 'lib', 'restr']);
   await expect(page.locator('[data-hoy="obra"]')).toContainText('sin iniciar');
   noErrors(errors, 'hoy sc');
@@ -38,4 +38,13 @@ test.describe('celular', () => {
     await expect(page.locator('#bnav [data-bt="hoy"]')).toHaveClass(/on/);
     noErrors(errors, 'hoy celular');
   });
+});
+
+test('Hoy muestra los cambios del plan que involucran al SC (reprogramaciones de la reunión)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'hoy' });
+  await page.evaluate(() => { const x = S.act.get('i0'); const d = wshift(todayIso(), 1); S.act.set('i0', { ...x, rpl: { [d]: { to: wshift(d, 1), m: 'Materiales: falta tubería' } } }); DV++; requestRender(); });
+  const c = page.locator('.hoyc[data-hoy="cplan"]');
+  await expect(c).toContainText('Cambios del plan');
+  await expect(c).toContainText('Materiales: falta tubería');
+  noErrors(errors, 'cambios del plan');
 });

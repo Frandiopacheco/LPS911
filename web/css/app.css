@@ -1638,3 +1638,8 @@ table.rtab .rc-x{width:30px}
 .uab .ib:disabled{opacity:.5;cursor:not-allowed}
 @media (max-width:760px){.uask{place-items:end center;padding:0}.uac{width:100%;border-radius:var(--r-sheet,16px) var(--r-sheet,16px) 0 0;animation:lps-up var(--t,.18s) var(--ease,ease)}.uab .ib{flex:1;min-height:44px}}
 .lqmsg.lqzrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.lqzrow .ib{font-weight:600}
+.mchact{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
+/* Equipo: grupos plegables */
+.tgb{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;padding:0}
+.tgb:disabled{cursor:default}.tgb .tgc{width:14px;color:var(--muted)}
+.tgb:not(:disabled):hover{color:var(--accent)}

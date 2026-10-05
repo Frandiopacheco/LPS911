@@ -122,6 +122,9 @@ for (const as of ['editor', 'sc', 'campo', 'lector']) {
 
 test('el administrador designa quién tiene acceso a la versión cliente', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
+  // los grupos del equipo vienen plegados: se abre el de editores
+  await expect(page.locator('input[data-mem="editor@obra.pe"]')).toHaveCount(0);
+  await page.click('[data-tgrp="editor"]');
   const chk = page.locator('input[data-mem="editor@obra.pe"][data-f="cli"]');
   await chk.check();
   await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'editor@obra.pe').cli)).toBe(true);
