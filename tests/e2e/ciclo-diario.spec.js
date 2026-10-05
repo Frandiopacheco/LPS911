@@ -310,3 +310,23 @@ test('21 · Configuración: subir el logo de la empresa lo guarda', async ({ pag
   await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').logoE || '')).toMatch(/^logo_logoE_/);
   noErrors(errors, 'logo');
 });
+
+test('20b · rechazar muchas a la vez es rápido (una transacción por SC) y respeta las que el SC cambió', async ({ page }) => {
+  const acts = [], items = {};
+  for (let i = 0; i < 60; i++) { const a = { ambId: 'a1', sc: 'c3', name: 'Act ' + i, und: 'm2', metrado: 1, days: ['2026-10-13'], order: 100 + i }; acts.push(['acts', 'q' + i, a]); items['q' + i] = { after: { ...a, days: ['2026-10-14'] }, base: a, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 }; }
+  const errors = await openApp(page, { tab: 'look', extra: [...acts, ['lhprop', 'c3', { sc: 'c3', items }]] });
+  await page.evaluate(() => { U.rev = true; requestRender(); });
+  await expect(page.locator('[data-rvrej]')).toBeEnabled();
+  // el SC cambia una mientras tanto (esta página aún no lo ve)
+  await page.evaluate(() => { const m = window.__DB.lhprop; const c = m.get('c3'); m.set('c3', { ...c, items: { ...c.items, q0: { ...c.items.q0, ts: 9 } } }); });
+  page.on('dialog', d => d.accept());
+  const t0 = Date.now();
+  await page.locator('[data-rvrej]').click();
+  await expect(page.locator('#toast')).toContainText('59 propuestas rechazadas');
+  expect(Date.now() - t0).toBeLessThan(4000);
+  await expect(page.locator('#toast')).toContainText('1 porque el SC las cambió');
+  const lh = await page.evaluate(() => window.__dbGet('lhprop', 'c3').items);
+  expect(Object.keys(lh).filter(k => lh[k])).toEqual(['q0']);
+  expect(await page.evaluate(() => Object.values(window.__dbAll('lhphist')).filter(x => x.st === 'rej').length)).toBe(59);
+  noErrors(errors, 'rechazo rápido');
+});
