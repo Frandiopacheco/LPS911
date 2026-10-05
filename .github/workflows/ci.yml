@@ -43,6 +43,8 @@ jobs:
 
   interfaz:
     name: Probar la interfaz (Playwright)
+    # en produccion solo llega lo que ya pasó estas pruebas en main: no se repiten (la obra se actualiza en ~5 min en vez de ~12)
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -71,7 +73,7 @@ jobs:
   instalar:
     name: Instalar en Firebase
     needs: [revisar, interfaz]
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    if: always() && needs.revisar.result == 'success' && (needs.interfaz.result == 'success' || (needs.interfaz.result == 'skipped' && github.ref_name == 'produccion')) && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -119,7 +121,7 @@ jobs:
     name: Publicar la página en Netlify
     # la página va después de sus reglas y tareas del servidor: si la instalación en Firebase falla, no se publica
     needs: [revisar, interfaz, instalar]
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    if: always() && needs.instalar.result == 'success' && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
