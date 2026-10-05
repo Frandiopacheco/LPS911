@@ -208,7 +208,13 @@ function actLoc(aid){const x=S.act.get(aid);if(!x)return'';const a=S.amb.get(x.a
   return[p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · ')+' · '+conOf(x.sc).name}
 function gotoAct(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}const a=S.amb.get(x.ambId);const pid=pisoOfAct(aid);
   if(U.piso&&U.piso!==pid){U.piso=pid;U.pisoAll=false}if(a)U.collapsed=(U.collapsed||[]).filter(c=>c!==a.sectorId&&c!==pid);if(U.sector&&a&&U.sector!==a.sectorId)U.sector='';U.tab='look';saveUI();render();
-  let n=0;const find=()=>{if(typeof gridReveal==='function')gridReveal(aid);const tr=$(`#grid tr[data-a="${CSS.escape(aid)}"]`);if(tr){tr.scrollIntoView({block:'center',behavior:'smooth'});tr.classList.add('rflash');setTimeout(()=>tr.classList.remove('rflash'),3800);return}if(++n<8)setTimeout(find,150);else toast('La actividad no se ve con los filtros actuales del lookahead (semanas o filtros).')};setTimeout(find,120)}
+  /* una actividad vencida (sus días ya pasaron, p. ej. la de la semana pasada que no se ejecutó) se muestra igual, solo esa */
+  const past=(x.days||[]).length&&!(x.days||[]).some(d=>d>=todayIso());LK_SHOW.clear();LK_SHOW.add(aid);
+  let n=0,relaxed=false;const find=()=>{if(typeof gridReveal==='function')gridReveal(aid);const tr=$(`#grid tr[data-a="${CSS.escape(aid)}"]`);
+    if(tr){tr.scrollIntoView({block:'center',behavior:'smooth'});tr.classList.add('rflash');setTimeout(()=>tr.classList.remove('rflash'),3800);
+      const msg=[past?'Es una actividad vencida: sus días ya pasaron sin cerrarse. Reprográmala o levanta la restricción.':'',relaxed?'Se quitaron los filtros del lookahead para mostrarla.':''].filter(Boolean).join(' ');if(msg)toast(msg);return}
+    if(++n===5&&!relaxed){/* la tapaba un filtro: se quitan los filtros y se vuelve a buscar */relaxed=true;U.q='';U.acts=[];if(U.sc&&!scOk(x.sc))U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.day='';U.wkF=0;saveUI();render()}
+    if(n<12)setTimeout(find,150);else toast('No se encontró la actividad en el lookahead.')};setTimeout(find,120)}
 /** «Ver en el plano»: abre el Plan diario en el piso y el día en que la actividad va (el próximo desde hoy) y la resalta */
 function gotoPlano(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}const pid=pisoOfAct(aid);const t=todayIso();
   const D=(x.days||[]).slice().sort();const d=D.find(y=>y>=t)||D[D.length-1]||t;

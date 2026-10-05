@@ -47,6 +47,16 @@ test('filtrar por a quién afecta, quién registró, quién libera y fechas', as
   noErrors(errors, 'restricciones filtros');
 });
 
+test('«Ver en el lookahead» muestra una actividad vencida (de la semana pasada, no ejecutada) aunque el lookahead oculte las vencidas y tenga filtros', async ({ page }) => {
+  const V = ['acts', 'vx', { ambId: 'a1', sc: 'c1', name: 'Tablero de cuarzo', und: 'und', days: ['2026-09-21', '2026-09-22'], order: 50 }];
+  const errors = await openApp(page, { tab: 'restr', extra: [V, R('rv', { actId: 'vx', sc: 'c1', need: '2026-09-21' })] });
+  await page.evaluate(() => { U.showPast = false; U.q = 'nada que coincida'; saveUI(); });
+  await page.locator('[data-rgo="vx"]').first().click();
+  await expect(page.locator('#grid tr.rflash[data-a="vx"]')).toHaveCount(1);
+  await expect(page.locator('#toast')).toContainText('vencida');
+  noErrors(errors, 'ver vencida');
+});
+
 test('«Ver en el lookahead» resalta la fila y «Ver en el plano» lleva a su zona', async ({ page }) => {
   const { LAMINA } = await import('./lamina.js');
   const AMB = [['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }],
