@@ -268,3 +268,13 @@ test('7b · si la actividad principal tocaría otro día ya publicado, no se pub
   expect(await page.evaluate(d => window.__dbGet('dplan', d + '_p1'), MANANA)).toBeFalsy();
   noErrors(errors, 'principal en día cerrado');
 });
+
+test('18 · la hora de la publicación automática se edita en Configuración (por defecto 21:00)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'cfg' });
+  await expect(page.locator('#p_plc')).toHaveValue('21:00');
+  await page.locator('#p_plc').fill('19:30');
+  await page.locator('#p_plc').dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').planCutHH)).toBe('19:30');
+  expect(await page.evaluate(() => planCutHH())).toBe('19:30');
+  noErrors(errors, 'hora de cierre');
+});

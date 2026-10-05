@@ -88,6 +88,8 @@ const CNC_STD=[
 const CNC_STD_V=1;
 /* tipo de restricción según la causa (código del cuadro): el de la lista del proyecto que le corresponde, o vacío.
    Misma tabla que el servidor (functions/lib.js RT_RX). */
+/* hora de la publicación automática del plan del día siguiente (Configuración › Proyecto; como el servidor: por defecto 21:00, máx. 23:30) */
+function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v<='23:30'?v:'21:00'}
 const RT_RX=[['PROG',/program/i],['MAT',/materi/i],['QA/QC',/calidad|qa|qc/i],['EXT',/extern|clim/i],['CLI',/client|supervis/i],['EQ',/equipo|herramient/i],['DIS',/dise[ñn]o|ingenier/i],['SC',/subcontrat|personal|mano de obra/i],['ADM',/administr|permis/i],['EJEC',/ejecuci/i],['OT',/otro/i]];
 function restrTypeFor(code,types){const rx=(RT_RX.find(([c])=>c===code)||[])[1];if(!rx)return'';return(types||(typeof P==='function'?P().restrTypes:[])||[]).find(t=>typeof t==='string'&&rx.test(t))||''}
 /* código de una causa: la del cuadro por nombre; las antiguas, por parecido */
@@ -97,7 +99,7 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 /** etiqueta para listas: «PROG · Programación» */
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00'};let P_SRC=null,P_VAL=P_DEF;
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */
@@ -319,7 +321,7 @@ function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP
 function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
 const dayId=(d,pid)=>d+'_'+pid;
 /* ---------- Plan del día cerrado (dplan/<fecha>_<piso>) ----------
-   El plan de un día se cierra al publicarlo en la reunión del día anterior (o solo a las 20:00 si nadie lo publicó: tarea
+   El plan de un día se cierra al publicarlo en la reunión del día anterior (o solo a la hora de cierre, por defecto 21:00, si nadie lo publicó: tarea
    cerrarPlan del servidor). La foto {ids:{actId:cantidad|null}} es el compromiso del día: contra ella se mide el PPC diario.
    Hoy y los días pasados siempre están cerrados. Un día cerrado no se reprograma (lookahead ni plan diario), salvo lo que ya
    tiene registro de campo (cerrar el día: saldo, terminada). El administrador puede reabrirlo con un motivo (reo; queda en log). */
@@ -336,7 +338,7 @@ function planLocked(d,pid){if(!d||!pid)return false;const o=dplanOf(d,pid);if(o&
 /* primer día desde `from` que no está cerrado en ese piso (mover en bloque no toca lo cerrado) */
 function firstOpen(from,pid){let f=from;for(let i=0;i<40&&dayLocked(f,pid);i++)f=addD(f,1);return f}
 /** razón legible de por qué un día está cerrado */
-function lockWhy(d,pid){const o=dplanOf(d,pid);if(d<todayIso())return'ya pasó';if(d===todayIso())return'es hoy: solo se registra el cumplimiento';return o&&o.auto?'se cerró solo a las 20:00':'ya se publicó'}
+function lockWhy(d,pid){const o=dplanOf(d,pid);if(d<todayIso())return'ya pasó';if(d===todayIso())return'es hoy: solo se registra el cumplimiento';return o&&o.auto?`se publicó solo a las ${planCutHH()}`:'ya se publicó'}
 /* lo que toca un cambio del lookahead en días cerrados (días o cantidades), sin contar los días que ya tienen registro de campo */
 function lockHits(ops){const H=[];for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before||{},a=o.after||{};const pid=pisoOfAmb(a.ambId||b.ambId);if(!pid)continue;
     const bd=new Set(b.days||[]),ad=new Set(a.days||[]);const T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});

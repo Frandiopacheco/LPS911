@@ -19,7 +19,7 @@ const AY_FLOWS={
     {p:'Reunión semanal (viernes)',d:'Se acuerda el compromiso de la semana siguiente.',tab:'plan',w:'Producción y SC'},
     {q:'¿Se congeló la semana a mano?',y:[{p:'Semana congelada',d:'El compromiso queda fijo para medir el PPC semanal.'}],n:[{p:'Congelado automático',d:'El servidor la congela en el corte (sábado 13:00 por defecto).'}]},
     {p:'Reunión diaria: plan del día siguiente',d:'Va / No va, cruces entre partidas y cuadrillas.',tab:'mapa',w:'Producción y SC'},
-    {q:'¿Se publicó el plan al terminar la reunión?',y:[{p:'Plan publicado y cerrado'}],n:[{p:'Publicación automática a las 20:00',d:'Se aplican los cambios de la reunión; las propuestas del SC sin revisar se rechazan (va lo programado).'}]},
+    {q:'¿Se publicó el plan al terminar la reunión?',y:[{p:'Plan publicado y cerrado'}],n:[{p:'Publicación automática (por defecto 21:00)',d:'Se aplican los cambios de la reunión; las propuestas del SC sin revisar se rechazan (va lo programado).'}]},
     {p:'Ejecución en obra',d:'El SC y sus capataces inician y detienen; al final del día (≈ 4 pm) proponen el cierre.',tab:'cap',w:'SC y capataces'},
     {p:'Registro de cumplimiento',d:'El ingeniero confirma lo propuesto o, si nadie lo propuso, registra Cumplido / No cumplido con su causa.',tab:'campo',w:'Campo'},
     {p:'PPC diario y semanal',d:'Se mide contra lo comprometido; los no cumplidos llevan causa e imputabilidad.',tab:'ind',w:'Producción'},
@@ -51,7 +51,7 @@ const AY_FLOWS={
       {p:'No va: elegir la causa',d:'Personal, frente no entregado, programación, materiales, calidad, equipos…'},
       {q:'¿Se libera a primera hora?',y:[{p:'Aviso en el plano + restricción por liberar'}],n:[{p:'Restricción + reprogramar',d:'«Solo esta» o «todo el tren» del ambiente.'}]}]},
     {p:'Al terminar la reunión: «📣 Publicar plan»',d:'Aplica las reprogramaciones al lookahead y cierra el día. Se puede deshacer desde el aviso (todo o nada).'},
-    {q:'¿Nadie publicó?',y:[{p:'Se publica solo a las 20:00',d:'Con los cambios de la reunión; las propuestas sin revisar se rechazan.'}],n:[{p:'Plan cerrado'}]},
+    {q:'¿Nadie publicó?',y:[{p:'Se publica solo (por defecto 21:00)',d:'Con los cambios de la reunión; las propuestas sin revisar se rechazan.'}],n:[{p:'Plan cerrado'}]},
     {o:'Durante el día solo se registra el cumplimiento y se reparten cuadrillas'}]},
 
   sem:{t:'Semana: congelar y medir el PPC',s:'Del compromiso del viernes al PPC semanal.',n:[
@@ -106,7 +106,7 @@ const AY_FLOWS={
     {p:'Día hábil siguiente',d:'Tus actividades programadas en el plano.',tab:'mapa'},
     {q:'¿Cada actividad va?',yl:'Va',nl:'No va / Culminado',y:[{p:'Va'}],n:[{p:'Proponer con la causa',d:'Queda «en espera» (gris); el lookahead no cambia hasta que el ingeniero decida.'}]},
     {p:'Equipo del día',d:'Personal por cuadrilla y horario. Arrastra cada cuadrilla al número de la actividad (en celular: tocar ficha y luego actividad).'},
-    {p:'Reunión diaria',d:'El ingeniero revisa tus propuestas y los cruces y publica el plan al terminar. Lo que nadie revisó hasta las 20:00 va según lo programado.'},
+    {p:'Reunión diaria',d:'El ingeniero revisa tus propuestas y los cruces y publica el plan al terminar. Lo que nadie revisó hasta la hora de cierre (por defecto 21:00) va según lo programado.'},
     {o:'El plan publicado es el compromiso del día'}]},
 
   obraSc:{t:'En obra: el día de tu partida',s:'Seguimiento de lo programado hoy.',n:[
