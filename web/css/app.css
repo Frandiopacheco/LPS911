@@ -1683,6 +1683,25 @@ table.rtab .rc-x{width:30px}
   .mrs{max-height:34%}
   .mlgd{max-height:30%}
 }
+/* Ayuda › Tutorial: lecciones plegables con pasos y un ejemplo de obra */
+.aymode{align-self:flex-start}
+.aytut{display:flex;flex-direction:column;gap:8px}
+.aytl{border:1px solid var(--line);border-radius:var(--r-card,10px);background:var(--panel);overflow:hidden}
+.aytl.open{border-color:var(--accent)}
+.aytlh{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;color:var(--ink);text-align:left;padding:10px 14px;cursor:pointer;font:inherit;min-height:48px}
+.aytlh i{flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:700 13px/1 var(--f-ui);font-style:normal}
+.aytl.open .aytlh i{background:var(--accent);color:var(--accent-ink)}
+.aytlh span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.aytlh b{font-size:14.5px}.aytlh small{color:var(--muted);font-size:12.5px;line-height:1.35}
+.aytlh em{font-style:normal;color:var(--muted)}
+.aytlb{padding:0 14px 14px 52px;display:flex;flex-direction:column;gap:10px}
+.aytlb ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.45}
+.aytlb .lnkb{font-size:12.5px}
+.ayej{border-left:3px solid var(--ok);background:var(--panel2);border-radius:0 8px 8px 0;padding:8px 12px}
+.ayej b{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ok)}
+.ayej p{margin:4px 0 0;font-size:13.5px;line-height:1.45}
+.aytip{margin:0;font-size:13px;color:var(--ink2)}
+@media (max-width:760px){.aytlb{padding-left:14px}}
 
 
 /* ---------- Módulo Tareo: selector de módulo (docs/ia/tareo.md) ---------- */

@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors } from './helpers.js';
 
-const flujos = page => page.locator('#lqm [data-ayf]').evaluateAll(bs => bs.map(b => b.dataset.ayf));
+/* la ayuda abre en «Tutorial»: para los flujogramas se toca su pestaña */
+const flujos = async page => { const b = page.locator('#lqm [data-aym="flow"]'); if (await b.count() && !(await b.getAttribute('class') || '').includes('on')) await b.click(); return page.locator('#lqm [data-ayf]').evaluateAll(bs => bs.map(b => b.dataset.ayf)); };
 
 test('el administrador ve todos sus flujos, puede ver los de otro rol e ir a una sección', async ({ page }) => {
   const errors = await openApp(page);
@@ -71,8 +72,31 @@ test.describe('celular', () => {
     errors = await openApp(page, { as: 'capataz' });
     await page.click('[data-kmenu]');
     await page.click('#pop [data-do="help"]');
+    await expect(page.locator('.aytl.open .aytlh b')).toHaveText('Reportar desde el celular (capataz)');
+    await page.click('#lqm [data-aym="flow"]');
     await expect(page.locator('.ayflow h3')).toHaveText('Reportar desde el celular (capataz)');
     await expect(page.locator('.ayrole')).toContainText('Capataz');
     noErrors(errors, 'ayuda capataz');
   });
+});
+
+test('tutorial por rol: lecciones con pasos y ejemplo; cada rol ve las suyas', async ({ page }) => {
+  let errors = await openApp(page, { as: 'sc' });
+  await page.click('#bhelp');
+  await expect(page.locator('#lqm [data-aym="tut"].on')).toHaveCount(1);
+  expect(await page.locator('#lqm [data-ayt]').evaluateAll(bs => bs.map(b => b.dataset.ayt))).toEqual(['hoy', 'pdSc', 'obraSc', 'propSc', 'restr', 'libSol']);
+  await expect(page.locator('.aytl.open .ayej')).toContainText('Ejemplo en obra');
+  await page.click('[data-ayt="obraSc"]');
+  await expect(page.locator('.aytl.open .aytlh b')).toHaveText('En obra: iniciar, detener y cerrar (SC)');
+  await page.locator('.aytl.open [data-aygo="cap"]').click();
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  noErrors(errors, 'tutorial sc');
+  errors = await openApp(page);
+  await page.click('#bhelp');
+  for (const r of ['admin', 'editor', 'campo', 'sc', 'capataz', 'cal', 'area', 'veedor', 'lector']) {
+    await page.selectOption('#ayr', r);
+    await expect(page.locator('.aytl').first()).toBeVisible();
+    for (const k of await page.locator('#lqm [data-ayt]').evaluateAll(bs => bs.map(b => b.dataset.ayt))) { if ((await page.getAttribute(`[data-ayt="${k}"]`, 'aria-expanded')) !== 'true') await page.click(`[data-ayt="${k}"]`); await expect(page.locator('.aytl.open ol li').first()).toBeVisible(); }
+  }
+  noErrors(errors, 'tutorial todos');
 });

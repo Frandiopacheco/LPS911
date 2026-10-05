@@ -1,5 +1,5 @@
 "use strict";
-/* LPS 911 · Ayuda: flujogramas de cómo funciona el sistema, según el rol de quien la abre.
+/* LPS 911 · Ayuda: tutorial por rol (lecciones con ejemplos, contenido en tutorial.js) y flujogramas de cómo funciona el sistema, según el rol de quien la abre.
    Se abre con el botón «? Ayuda» de la barra superior, el menú «Más» del celular y el menú del capataz.
    No pesa en el arranque: los flujogramas se arman solo al abrir la ventana.
    El administrador puede ver los flujos de cualquier rol (para capacitar); los demás, solo los suyos.
@@ -79,7 +79,7 @@ const AY_FLOWS={
   np:{t:'Trabajo no programado',s:'Lo que se ve en obra y no está en el plan del día.',n:[
     {o:'Recorrido de obra'},
     {p:'Campo › Plano',d:'Lámina del piso con lo programado.',tab:'campo'},
-    {p:'Tocar el lugar sin actividad',d:'Se abre la ficha: ambiente según el punto, subcontratista, qué hacen y foto.'},
+    {p:'«＋ No programado» y tocar el lugar',d:'Primero el botón (evita abrirlo sin querer al desplazarte); luego el lugar: ambiente según el punto, subcontratista, qué hacen y foto.'},
     {p:'Guardar',d:'Se ve en el Plan diario («Visto en obra»), Hoy, Indicadores y reportes. No cambia el PPC.'},
     {q:'¿Debe quedar programado?',y:[{p:'«Pasarlo al lookahead»',d:'Lo hace el ingeniero.'}],n:[{p:'Queda como registro'}]},
     {o:'Fin'}]},
@@ -190,7 +190,7 @@ const AY_ROLE={
   lector:['ciclo','consulta']};
 const AY_RN={...ROLE,cal:'Área de apoyo · Calidad'};
 
-const AY={r:null,f:null};
+const AY={r:null,f:null,m:'tut',o:null};
 /** rol para la ayuda: el de la sesión (o el simulado con «Ver como»); Calidad tiene sus propios flujos */
 function ayRoleOf(){if(!me)return'lector';if(me.role==='area'&&isCalArea())return'cal';return AY_ROLE[me.role]?me.role:'lector'}
 
@@ -205,21 +205,28 @@ function ayList(ns){return ns.map(ayNode).join('<i class="aya" aria-hidden="true
 
 function ayHtml(){const rk=AY.r,keys=AY_ROLE[rk]||AY_ROLE.lector;if(!keys.includes(AY.f))AY.f=keys[0];const F=AY_FLOWS[AY.f];const adm=!!(me&&me.realAdmin);
   return`<div class="lqtop"><b>Ayuda · Cómo funciona LPS 911</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+  <div class="seg aymode" role="tablist"><button type="button" data-aym="tut" class="${AY.m==='tut'?'on':''}">Tutorial</button><button type="button" data-aym="flow" class="${AY.m==='flow'?'on':''}">Flujogramas</button></div>
   <div class="ayrole">${adm?`<label>Flujos del rol <select id="ayr">${Object.keys(AY_ROLE).map(k=>`<option value="${k}"${k===rk?' selected':''}>${esc(AY_RN[k]||k)}</option>`).join('')}</select></label>`:`<span>Tu rol: <b>${esc(AY_RN[rk]||rk)}</b></span>`}
-   <span class="mu">Toca un paso con ↗ para ir a esa sección.</span></div>
-  ${keys.length>1?`<div class="aytabs" role="tablist">${keys.map(k=>`<button type="button" role="tab" data-ayf="${k}" aria-selected="${k===AY.f}" class="${k===AY.f?'on':''}">${esc(AY_FLOWS[k].t)}</button>`).join('')}</div>`:''}
+   <span class="mu">${AY.m==='tut'?'Lecciones cortas con un ejemplo de obra. Toca ↗ para ir a la sección.':'Toca un paso con ↗ para ir a esa sección.'}</span></div>
+  ${AY.m==='tut'?ayTutHtml(rk):`${keys.length>1?`<div class="aytabs" role="tablist">${keys.map(k=>`<button type="button" role="tab" data-ayf="${k}" aria-selected="${k===AY.f}" class="${k===AY.f?'on':''}">${esc(AY_FLOWS[k].t)}</button>`).join('')}</div>`:''}
   <section class="ayflow" aria-label="${esc(F.t)}"><header><h3>${esc(F.t)}</h3><p>${esc(F.s)}</p></header>
    <div class="ayleg"><span><i class="lo"></i>Inicio / fin</span><span><i class="lp"></i>Paso</span><span><i class="lq"></i>Decisión</span></div>
-   <div class="aycol aymain">${ayList(F.n)}</div></section>`}
+   <div class="aycol aymain">${ayList(F.n)}</div></section>`}`}
+/** Tutorial del rol: lecciones con pasos y un ejemplo (contenido en tutorial.js). La primera viene abierta. */
+function ayTutHtml(rk){const L=(AY_TROLE[rk]||AY_TROLE.lector).filter(k=>AY_TUT[k]);if(AY.o==null)AY.o=L[0];
+  const st=x=>{const o=typeof x==='string'?{x}:x;const go=o.tab&&tabAllowed(o.tab);return`<li>${esc(o.x)}${go?` <button type="button" class="lnkb" data-aygo="${o.tab}">${esc(tabName(o.tab))} ↗</button>`:''}</li>`};
+  return`<div class="aytut">${L.map((k,i)=>{const T=AY_TUT[k];const op=AY.o===k;return`<section class="aytl${op?' open':''}"><button type="button" class="aytlh" data-ayt="${k}" aria-expanded="${op}"><i>${i+1}</i><span><b>${esc(T.t)}</b><small>${esc(T.g)}</small></span><em aria-hidden="true">${op?'▴':'▾'}</em></button>${op?`<div class="aytlb"><ol>${T.s.map(st).join('')}</ol><div class="ayej"><b>Ejemplo en obra</b><p>${esc(T.e)}</p></div>${T.tip?`<p class="aytip">💡 ${esc(T.tip)}</p>`:''}</div>`:''}</section>`}).join('')}</div>`}
 
 function ayDraw(){const c=$('#lqm .lqc');if(!c)return;c.innerHTML=ayHtml();c.scrollTop=0}
 
 /** Abre la ayuda. rol (opcional) solo lo usa el administrador para ver la de otro rol. */
-function ayOpen(rol){AY.r=rol&&me&&me.realAdmin&&AY_ROLE[rol]?rol:ayRoleOf();AY.f=null;
+function ayOpen(rol){AY.r=rol&&me&&me.realAdmin&&AY_ROLE[rol]?rol:ayRoleOf();AY.f=null;AY.o=null;
   lqModal(ayHtml(),e=>{const t=e.target;let b;
     if((b=t.closest('[data-ayf]'))){AY.f=b.dataset.ayf;ayDraw();return}
+    if((b=t.closest('[data-aym]'))){AY.m=b.dataset.aym;ayDraw();return}
+    if((b=t.closest('[data-ayt]'))){const k=b.dataset.ayt;AY.o=AY.o===k?'':k;const c=$('#lqm .lqc');const y=c?c.scrollTop:0;ayDraw();if(c)c.scrollTop=y;return}
     if((b=t.closest('[data-aygo]'))){const tab=b.dataset.aygo;lqClose();if(tabAllowed(tab)&&U.tab!==tab)goTab(tab);return}},
-   e=>{if(e.target.id==='ayr'){AY.r=e.target.value;AY.f=null;ayDraw()}});
+   e=>{if(e.target.id==='ayr'){AY.r=e.target.value;AY.f=null;AY.o=null;ayDraw()}});
   const c=$('#lqm .lqc');if(c){c.classList.add('ayc');c.setAttribute('aria-label','Ayuda')}}
 
 {const b=$('#bhelp');if(b)b.onclick=()=>ayOpen()}
