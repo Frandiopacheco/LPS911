@@ -1193,6 +1193,10 @@ td.s0 .clb{margin:0;min-width:22px;padding:0 2px}
 .kn.npk{--k:var(--accent);font-size:24px}
 .knpbar{display:flex;flex-direction:column;gap:6px}
 .knpadd{min-height:48px;font-size:16px;border-style:dashed}
+.knpon{padding:10px 12px;border:2px solid var(--accent,#1565C0);border-radius:var(--r-card,12px);background:var(--accent-soft)}
+.knparmt{font-size:14px}
+.knpbtns{display:flex;gap:8px;flex-wrap:wrap}.knpbtns .ib{min-height:40px}
+.kplanw.knparm{outline:3px dashed var(--accent,#1565C0);outline-offset:-3px;border-radius:var(--r-card,12px)}
 .kchips button b.knp{background:var(--accent-soft);color:var(--accent)}
 .kleg .knpl i{background:var(--panel);box-shadow:inset 0 0 0 2px var(--ink2);color:var(--ink2);width:14px;height:14px;display:grid;place-items:center;font:700 11px/1 var(--f-ui);font-style:normal}
 .kplan .pvl.nb.np{background:#fff;color:var(--c)!important;font-size:22px!important;box-shadow:inset 0 0 0 3px var(--c),0 0 0 3px #fff,0 2px 6px rgba(0,0,0,.45)}
