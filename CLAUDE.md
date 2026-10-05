@@ -132,6 +132,7 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
 
 - Rama nueva → *pull request* a `main` → esperar los checks (Revisar, interfaz en 3 partes a la vez y Ciclo diario) → unir (squash) → esperar "Instalar en Firebase" y "Publicar la página en Netlify".
 - Al unir a `main` las pruebas de la interfaz **no se repiten** si el código es idéntico (mismo árbol de archivos) al que ya pasó en el PR: el trabajo `previo` busca la constancia `e2e-ok-<árbol>` que deja `aprobado`. Si `main` cambió entre medio (otra conversación unió algo), se corren de nuevo.
+- Al unir a `main`, si el cambio no toca `firebase/`, `functions/`, `firebase.json`, `.firebaserc` ni `.github/`, no se reinstala Firebase (el trabajo «Instalar» pasa en segundos); en `produccion` siempre se instala.
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
 
