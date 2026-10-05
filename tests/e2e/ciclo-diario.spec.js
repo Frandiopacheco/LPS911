@@ -301,3 +301,12 @@ test('20 · revisión de propuestas: «Rechazar todo lo visible»', async ({ pag
   expect((await act(page, 't0')).days).toEqual(T0.days);
   noErrors(errors, 'rechazar todo');
 });
+
+test('21 · Configuración: subir el logo de la empresa lo guarda', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'cfg' });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('input[data-logo="logoE"]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#toast')).toContainText('Logo guardado');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').logoE || '')).toMatch(/^logo_logoE_/);
+  noErrors(errors, 'logo');
+});
