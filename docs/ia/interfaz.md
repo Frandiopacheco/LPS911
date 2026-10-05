@@ -16,3 +16,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Hoy › Cambios del plan** (`cplan`, hoy.js): reprogramaciones de ayer, hoy y el próximo día hábil según las marcas `acts.rpl` (sin `tr`): el SC ve las de su partida, el editor las de sus pisos, campo y admin todas.
 - **Equipo:** los grupos por rol son plegables (`[data-tgrp]`, `U.teamOpen` guardado); con búsqueda o filtro se abren todos.
 - **Ver como / Vista celular** también arriba a la derecha (`#bvat`, `#bpht` en index.html, `topToolsApply`): solo administrador real en la copia de prueba, ocultos en el celular.
+
+## Celular y tablet (oct 2026)
+- Celular (≤ 760 px): las tarjetas de números (`.tiles`, `.lqtiles`, `.dkpi`) van en **2 columnas** (ya no en una fila deslizable que se veía cortada). Configuración › Subcontratistas usa `table.rt` (tarjetas). El aviso (`.toast`) usa `width:max-content` para no quedar angosto.
+- Tablet (761–1100 px): la barra de pestañas **se parte en dos líneas** (antes se cortaba y «Más» quedaba fuera de la pantalla).
+- Tablet vertical (761–900 px): `table.rt` (PPC semanal, Equipo…) pasa a tarjetas de 3 columnas, y Restricciones usa sus tarjetas (`isNarrow()`, `TABQ` en base.js) en 2 columnas.
