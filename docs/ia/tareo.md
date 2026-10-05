@@ -95,6 +95,17 @@ Colecciones nuevas, todas por `fcol()`:
 - Confirma la jornada asumida: 8,5 h de lunes a viernes y 5,5 h el sábado. Semana de lunes a domingo.
 - Implica para F1: el capataz marca por obrero si tuvo **trabajo en altura** (bono), además de faltas y horas por partida.
 
+## Decisiones tomadas al implementar F0
+
+- `TAR_ROLES`, `TAR_TABS` están en `base.js` (los usa el arranque antes de cargar `tareo.js`); no redefinirlos.
+- Equipo sigue solo en Last Planner: el admin cambia de módulo para gestionar usuarios.
+- Celular: el selector de módulo va en la hoja «Más»; en modo tareo se ocultan Exportar y Ayuda (aún sin ayuda del tareo).
+- `body.mod-tar` oculta los controles de LPS de la barra; Ctrl+Z no hace nada en el tareo.
+- Si cambia el rol de forma que cambia lo que se carga (solo tareo, acceso al tareo, lista de miembros del asistente), la app avisa y recarga.
+- `tHoras`: descuenta el refrigerio (`ref` min) si el rango cruza `refIni`; **sábado** (`ref` 0) si se queda pasada la jornada se descuenta el refrigerio normal de la semana (60 min); domingo/feriado todo es extra. **Por confirmar con el dueño.**
+- Importar el máster nunca toca `cap`, nunca archiva; solo informa a quienes no están en el archivo. Una categoría editada a mano se respeta salvo que cambie el puesto.
+- Ids de partidas: `p10_05` (`tPcId`).
+
 ## Pendientes
 
 - F1: colección `tareo/{fecha}_{capId}` y pantallas del celular.
