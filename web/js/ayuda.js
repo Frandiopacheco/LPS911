@@ -207,7 +207,7 @@ function ayHtml(){const rk=AY.r,keys=AY_ROLE[rk]||AY_ROLE.lector;if(!keys.includ
   return`<div class="lqtop"><b>Ayuda · Cómo funciona LPS 911</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
   <div class="seg aymode" role="tablist"><button type="button" data-aym="tut" class="${AY.m==='tut'?'on':''}">Tutorial</button><button type="button" data-aym="flow" class="${AY.m==='flow'?'on':''}">Flujogramas</button></div>
   <div class="ayrole">${adm?`<label>Flujos del rol <select id="ayr">${Object.keys(AY_ROLE).map(k=>`<option value="${k}"${k===rk?' selected':''}>${esc(AY_RN[k]||k)}</option>`).join('')}</select></label>`:`<span>Tu rol: <b>${esc(AY_RN[rk]||rk)}</b></span>`}
-   <span class="mu">${AY.m==='tut'?'Lecciones cortas con un ejemplo de obra. Toca ↗ para ir a la sección.':'Toca un paso con ↗ para ir a esa sección.'}</span></div>
+   <button type="button" class="ib" id="aypdf" title="Descargar en PDF el tutorial y los flujogramas de este rol">⬇ PDF</button><span class="mu">${AY.m==='tut'?'Lecciones cortas con un ejemplo de obra. Toca ↗ para ir a la sección.':'Toca un paso con ↗ para ir a esa sección.'}</span></div>
   ${AY.m==='tut'?ayTutHtml(rk):`${keys.length>1?`<div class="aytabs" role="tablist">${keys.map(k=>`<button type="button" role="tab" data-ayf="${k}" aria-selected="${k===AY.f}" class="${k===AY.f?'on':''}">${esc(AY_FLOWS[k].t)}</button>`).join('')}</div>`:''}
   <section class="ayflow" aria-label="${esc(F.t)}"><header><h3>${esc(F.t)}</h3><p>${esc(F.s)}</p></header>
    <div class="ayleg"><span><i class="lo"></i>Inicio / fin</span><span><i class="lp"></i>Paso</span><span><i class="lq"></i>Decisión</span></div>
@@ -223,11 +223,50 @@ function ayDraw(){const c=$('#lqm .lqc');if(!c)return;c.innerHTML=ayHtml();c.scr
 function ayOpen(rol){AY.r=rol&&me&&me.realAdmin&&AY_ROLE[rol]?rol:ayRoleOf();AY.f=null;AY.o=null;
   lqModal(ayHtml(),e=>{const t=e.target;let b;
     if((b=t.closest('[data-ayf]'))){AY.f=b.dataset.ayf;ayDraw();return}
+    if(t.closest('#aypdf')){ayPdf(t.closest('#aypdf'));return}
     if((b=t.closest('[data-aym]'))){AY.m=b.dataset.aym;ayDraw();return}
     if((b=t.closest('[data-ayt]'))){const k=b.dataset.ayt;AY.o=AY.o===k?'':k;const c=$('#lqm .lqc');const y=c?c.scrollTop:0;ayDraw();if(c)c.scrollTop=y;return}
     if((b=t.closest('[data-aygo]'))){const tab=b.dataset.aygo;lqClose();if(tabAllowed(tab)&&U.tab!==tab)goTab(tab);return}},
    e=>{if(e.target.id==='ayr'){AY.r=e.target.value;AY.f=null;AY.o=null;ayDraw()}});
   const c=$('#lqm .lqc');if(c){c.classList.add('ayc');c.setAttribute('aria-label','Ayuda')}}
+
+/* ---------- PDF: tutorial (texto) y flujogramas (imagen) del rol elegido ---------- */
+const H2C='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';let h2cP=null;
+function loadH2C(){if(window.html2canvas)return Promise.resolve();if(h2cP)return h2cP;
+  h2cP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=H2C;s.onload=ok;s.onerror=()=>{h2cP=null;ko(new Error('No se pudo cargar el generador de PDF. Revisa tu conexión.'))};document.head.appendChild(s)});return h2cP}
+/* las fuentes del PDF no tienen emojis ni flechas: se quitan */
+const ayTx=x=>String(x==null?'':x).replace(/＋/g,'+').replace(/[✓✎]/g,'').replace(/[^\x20-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2022\u2026\n]/g,'').replace(/ {2,}/g,' ').trim();
+async function ayPdf(btn){if(btn.disabled)return;const bt=btn.textContent;btn.disabled=true;btn.textContent='Generando…';
+  const rk=AY.r||ayRoleOf();const html=document.documentElement;const th=html.getAttribute('data-theme');let box=null;
+  try{await Promise.all([loadPdf(),loadH2C()]);const{jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
+    const W=210,H=297,M=15,CW=W-2*M;let y=M;const rol=AY_RN[rk]||rk;const obra=(P().name||'').trim();
+    const foot=()=>{const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(130);doc.text(ayTx(`LPS 911 · Guía de uso · ${rol}`),M,H-8);doc.text(`${i} / ${n}`,W-M,H-8,{align:'right'})}};
+    const need=h=>{if(y+h>H-16){doc.addPage();y=M}};
+    const para=(t,o)=>{o=o||{};doc.setFont('helvetica',o.b?'bold':o.i?'italic':'normal');doc.setFontSize(o.s||10.5);doc.setTextColor(...(o.c||[30,30,30]));const L=doc.splitTextToSize(ayTx(t),(o.w||CW));const lh=(o.s||10.5)*.43;need(L.length*lh);doc.text(L,M+(o.x||0),y+lh*.8);y+=L.length*lh+(o.g==null?2:o.g)};
+    /* portada */
+    doc.setFillColor(31,95,122);doc.rect(0,0,W,58,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(24);doc.text('LPS 911 · Guía de uso',M,28);
+    doc.setFontSize(13);doc.setFont('helvetica','normal');doc.text(ayTx(`Rol: ${rol}${obra?' · '+obra:''}`),M,40);doc.setFontSize(10);doc.text(ayTx(`Generado el ${fmtD(todayIso())}`),M,48);y=72;
+    const L=(AY_TROLE[rk]||AY_TROLE.lector).filter(k=>AY_TUT[k]);const F=(AY_ROLE[rk]||AY_ROLE.lector).filter(k=>AY_FLOWS[k]);
+    para('Contenido',{b:true,s:14,g:3});
+    para('1. Tutorial: '+L.map(k=>AY_TUT[k].t).join(' · '),{g:2});para('2. Flujogramas: '+F.map(k=>AY_FLOWS[k].t).join(' · '),{g:6});
+    /* tutorial */
+    doc.addPage();y=M;para('Tutorial',{b:true,s:18,c:[31,95,122],g:4});
+    L.forEach((k,i)=>{const T=AY_TUT[k];need(30);para(`${i+1}. ${T.t}`,{b:true,s:13,g:1});para(T.g,{i:true,c:[90,90,90],g:3});
+      T.s.forEach((x,j)=>para(`${j+1}. ${typeof x==='string'?x:x.x}`,{x:4,w:CW-4,g:1.5}));
+      y+=1.5;doc.setFont('helvetica','normal');doc.setFontSize(10);const E=doc.splitTextToSize(ayTx(T.e),CW-10);const eh=E.length*4.3+10;need(eh);
+      doc.setFillColor(238,244,239);doc.rect(M,y,CW,eh,'F');doc.setFillColor(46,125,79);doc.rect(M,y,1.2,eh,'F');doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(46,125,79);doc.text('EJEMPLO EN OBRA',M+5,y+5);
+      doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30);doc.text(E,M+5,y+10);y+=eh+3;
+      if(T.tip)para('Consejo: '+T.tip,{s:9.5,c:[80,80,80],g:2});y+=5});
+    /* flujogramas: cada uno como imagen en su página (siempre en tema claro) */
+    html.setAttribute('data-theme','light');box=document.createElement('div');box.style.cssText='position:fixed;left:-12000px;top:0;width:860px;background:#fff;padding:12px';document.body.appendChild(box);
+    for(const k of F){const FL=AY_FLOWS[k];box.innerHTML=`<section class="ayflow" style="background:#fff;border:0"><div class="ayleg"><span><i class="lo"></i>Inicio / fin</span><span><i class="lp"></i>Paso</span><span><i class="lq"></i>Decisión</span></div><div class="aycol aymain">${ayList(FL.n)}</div></section>`;
+      await new Promise(r=>requestAnimationFrame(()=>r()));const cv=await window.html2canvas(box,{scale:2,backgroundColor:'#ffffff',logging:false});
+      doc.addPage();y=M;para(FL.t,{b:true,s:16,c:[31,95,122],g:1});para(FL.s,{i:true,c:[90,90,90],g:4});
+      let iw=CW,ih=cv.height*iw/cv.width;const room=H-16-y;if(ih>room){ih=room;iw=cv.width*ih/cv.height}
+      doc.addImage(cv.toDataURL('image/jpeg',.9),'JPEG',M+(CW-iw)/2,y,iw,ih)}
+    foot();doc.save(`LPS911-guia-${rk}.pdf`);toast('PDF descargado')}
+  catch(err){toast(err.message||'No se pudo generar el PDF')}
+  finally{if(box)box.remove();if(th==null)html.removeAttribute('data-theme');else html.setAttribute('data-theme',th);btn.disabled=false;btn.textContent=bt}}
 
 {const b=$('#bhelp');if(b)b.onclick=()=>ayOpen()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#lqm .ayc'))lqClose()});
