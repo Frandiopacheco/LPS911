@@ -27,9 +27,10 @@
     S('members', 'ot@obra.pe', { role: 'area', name: 'Olga OT', area: 'Oficina Técnica' });
     S('members', 'lector@obra.pe', { role: 'lector', name: 'Luis Lector' });
     S('members', 'veedor@obra.pe', { role: 'veedor', name: 'Vero Veedora' });
+    S('members', 'planner@obra.pe', { role: 'planner', name: 'Pablo Planner' });
     S('members', 'u_cap1', { role: 'capataz', name: 'Pedro Capataz', sc: 'c1', scs: ['c1'] });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
-    S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1 });
+    S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1, resp: ['editor@obra.pe'] });
     S('pisos', 'p2', { code: 'P2', name: 'Segundo piso', order: 2 });
     S('sectors', 's1', { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 });
     S('sectors', 's2', { pisoId: 'p2', code: 'S2', name: 'Sector 2', order: 1 });
@@ -63,6 +64,8 @@
   const now = () => Date.now();
   function resolve(v) {
     if (v === TS) return now();
+    if (v && v.__au) return [...new Set(v.__au)];
+    if (v && v.__ar) return [];
     if (Array.isArray(v)) return v.map(resolve);
     if (v && typeof v === 'object' && !(v instanceof FP)) { const o = {}; for (const [k, x] of Object.entries(v)) if (x !== DEL) o[k] = resolve(x); return o; }
     return v;
@@ -71,6 +74,7 @@
     const out = { ...(a || {}) };
     for (const [k, v] of Object.entries(b)) {
       if (v === DEL) { delete out[k]; continue; }
+      if (v && (v.__au || v.__ar)) { out[k] = arrOp(out[k], v); continue; }
       if (v && typeof v === 'object' && !Array.isArray(v) && v !== TS) out[k] = deepMerge(out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]) ? out[k] : {}, v);
       else out[k] = resolve(v);
     }
@@ -80,13 +84,17 @@
     let cur = o;
     for (let i = 0; i < path.length - 1; i++) { if (!cur[path[i]] || typeof cur[path[i]] !== 'object') cur[path[i]] = {}; cur = cur[path[i]]; }
     const k = path[path.length - 1];
-    if (v === DEL) delete cur[k]; else cur[k] = resolve(v);
+    if (v === DEL) delete cur[k]; else if (v && (v.__au || v.__ar)) cur[k] = arrOp(cur[k], v); else cur[k] = resolve(v);
   }
   class FP { constructor(...p) { this.p = p; } }
+  /* arrayUnion / arrayRemove como en Firestore: agregan sin repetir al final, o quitan */
+  function arrOp(cur, v) { const a = Array.isArray(cur) ? cur : []; return v.__au ? [...a, ...v.__au.filter(x => !a.includes(x))] : a.filter(x => !v.__ar.includes(x)); }
 
   // --- suscripciones ---
   const subs = new Set();
-  const changed = n => { persist(); for (const s of [...subs]) if (s.n === n) setTimeout(s.fire, 0); };
+  /* un lote (batch) avisa una sola vez al terminar, como Firestore */
+  let hold = null, holdN = 0;
+  const changed = n => { if (hold) { hold.add(n); return; } persist(); for (const s of [...subs]) if (s.n === n) setTimeout(s.fire, 0); };
   const docSnap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) }; };
   const ops = { '==': (a, b) => a === b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '<': (a, b) => a < b, '!=': (a, b) => a !== b,
     in: (a, b) => (b || []).includes(a), 'array-contains': (a, b) => Array.isArray(a) && a.includes(b) };
@@ -127,7 +135,7 @@
   }
   function batch() {
     const L = [];
-    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { for (const f of L) await f(); } };
+    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { hold = hold || new Set(); holdN++; try { for (const f of L) await f(); } finally { if (--holdN === 0) { const h = hold; hold = null; h.forEach(n => changed(n)); } } } };
   }
   const fs = { collection: n => colRef(n), doc: p => { const [c, id] = p.split('/'); return docRef(c, id); }, batch, enablePersistence: async () => {}, useEmulator() {},
     runTransaction: async fn => fn({ get: r => r.get(), set: (r, d, o) => r.set(d, o), update: (r, ...a) => r.update(...a), delete: r => r.delete() }) };
@@ -146,7 +154,7 @@
   window.firebase = {
     initializeApp() {}, apps: [],
     auth: Object.assign(() => auth, { GoogleAuthProvider: class {} }),
-    firestore: Object.assign(() => fs, { FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v, increment: n => n }, FieldPath: FP }),
+    firestore: Object.assign(() => fs, { FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => ({ __au: v }), arrayRemove: (...v) => ({ __ar: v }), increment: n => n }, FieldPath: FP }),
     database: Object.assign(() => ({ ref: () => ({ on() {}, off() {}, set: async () => {}, remove: async () => {}, onDisconnect: () => ({ remove: async () => {} }) }) }), { ServerValue: { TIMESTAMP: 0 } }),
   };
 })();

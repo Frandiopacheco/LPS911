@@ -24,3 +24,19 @@ test('programar un día después de la fecha de terminada la reabre sola', async
   await expect(page.locator('tr[data-a="e0"] td.d.lib')).toHaveCount(0);
   noErrors(errors, 'reabrir pintando');
 });
+
+test('reabrir también vale si la terminó el capataz y se puede deshacer', async ({ page }) => {
+  const LV = ['live', AYER + '_e0', { date: AYER, actId: 'e0', pisoId: 'p1', sc: 'c2', st: 'stop', close: { done: true, status: 'ok', by: 'u_cap', ts: 1 }, log: [] }];
+  const errors = await openApp(page, { tab: 'look', extra: [LV] });
+  const lib = page.locator('tr[data-a="e0"] td.d.lib');
+  await expect(lib.first()).toBeVisible();
+  await lib.first().click(); // sin preguntar: se reabre y avisa con «Deshacer»
+  await expect(lib).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('doneidx', 'p1') || {}).r)).toEqual({ e0: AYER });
+  // el cierre del capataz ya no la vuelve a terminar aunque se recalcule
+  expect(await page.evaluate(() => { doneRebuild(); return DONE.has('e0'); })).toBe(false);
+  await page.locator('#toast button', { hasText: 'Deshacer' }).click();
+  await expect(lib.first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('doneidx', 'p1') || {}).r || {})).toEqual({});
+  noErrors(errors, 'reabrir capataz');
+});

@@ -25,39 +25,57 @@ if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_
 function swWarm(){if(!navigator.serviceWorker||!navigator.serviceWorker.controller)return;setTimeout(()=>{fetch(PLANO_SRC).catch(()=>{})},8000)}
 
 /* ---- índice de actividades terminadas (no depende de cuántos días se cargan) ---- */
-const DIDX=new Map();let didxSub=null;
+const DIDX=new Map(),REOP=new Map();let didxSub=null;
 function ensureDoneIdx(){if(!db||didxSub)return;
-  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();sn.docs.forEach(d=>{const m=(d.data()||{}).d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}});doneRebuild();if(ready)requestRender()},()=>{});
-  unsubs.push(()=>{if(didxSub)didxSub();didxSub=null;DIDX.clear()})}
-function didxWrite(pid,map){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
+  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();REOP.clear();sn.docs.forEach(d=>{const v=d.data()||{},m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
+    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
+    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();if(ready)requestRender()},()=>{});
+  unsubs.push(()=>{if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()})}
+function didxWrite(pid,map,f){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
   for(const[a,v]of Object.entries(map))d[a]=v==null?(FV&&FV.delete?FV.delete():null):v;
-  fcol('doneidx').doc(pid).set({d},{merge:true}).catch(()=>{})}
+  fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}).catch(()=>{})}
 function didxFromDaily(d,pid,recs){const m={};for(const[aid,r]of Object.entries(recs||{})){if(!r||!('done'in r))continue;const cur=DIDX.get(aid);
     if(r.done){if(!cur||d<cur){m[aid]=d;DIDX.set(aid,d)}}else if(cur===d){m[aid]=null;DIDX.delete(aid)}}
   if(Object.keys(m).length)didxWrite(pid,m)}
 /* primera vez: arma el índice con todo el historial (lo hace una sola vez un administrador o editor) */
-async function didxMigrate(){if(!db||!canWrite||P().doneIdx)return;try{const sn=await fcol('daily').get();const by={};
+/* una vez por obra (la hace el administrador): la lista de causas pasa al cuadro de la empresa. Los registros antiguos
+   conservan su texto; las causas que ya no están en la lista se guardan en cncOld para consulta. */
+function cncMigrate(){if(!db||!isAdmin||(P().cncStd||0)>=CNC_STD_V||!S.meta.get('project'))return;const std=CNC_STD.map(o=>o.n);
+  const old=(P().cnc||[]).filter(k=>!cncStd(k));const ch={cnc:std,cncStd:CNC_STD_V};if(old.length)ch.cncOld=[...new Set([...(P().cncOld||[]),...old])];
+  patch('meta','project',ch,()=>{S.meta.set('project',{...S.meta.get('project'),...ch})});requestRender()}
+async function didxMigrate(){cncMigrate();if(!db||!canWrite||P().doneIdx)return;try{const sn=await fcol('daily').get();const by={};
     sn.docs.forEach(x=>{const v=x.data()||{};for(const[aid,r]of Object.entries(v.recs||{}))if(r&&r.done&&v.pisoId){const o=by[v.pisoId]=by[v.pisoId]||{};if(!o[aid]||v.date<o[aid])o[aid]=v.date}});
     for(const[pid,m]of Object.entries(by))await fcol('doneidx').doc(pid).set({d:m},{merge:true});
     await fcol('meta').doc('project').set({doneIdx:1},{merge:true})}catch(e){}}
 
 /* ---- guardar solo lo que cambió ---- */
-function fsDiff(prev,next){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
+/* col='acts': los días que solo se agregan o solo se quitan van con arrayUnion/arrayRemove, así dos personas que marcan
+   días distintos de la misma actividad a la vez no se pisan (antes la lista entera de la última borraba el día de la otra) */
+function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
   const keys=new Set([...Object.keys(prev||{}),...Object.keys(next||{})]);keys.delete('id');
   for(const k of keys){const a=prev[k],b=next[k];if(canon(a)===canon(b))continue;
     if(b===undefined){args.push(new FP(k),DEL);continue}
+    if(col==='acts'&&k==='days'&&Array.isArray(a)&&Array.isArray(b)&&FV&&FV.arrayUnion){const sa=new Set(a),sb=new Set(b);const add=[...sb].filter(d=>!sa.has(d)),rem=[...sa].filter(d=>!sb.has(d));
+      if(add.length&&!rem.length){args.push(new FP(k),FV.arrayUnion(...add));continue}if(rem.length&&!add.length){args.push(new FP(k),FV.arrayRemove(...rem));continue}
+      /* mover (quitar unos días y poner otros): se quita y luego se agrega (args.then), sin reemplazar la lista entera:
+         un día que otra persona agregó mientras tanto no se pierde */
+      if(add.length&&rem.length&&!inTx){args.push(new FP(k),FV.arrayRemove(...rem));args.then=[new FP(k),FV.arrayUnion(...add)];continue}}
     const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
     if(isObj(a)&&isObj(b)){const ks=new Set([...Object.keys(a),...Object.keys(b)]);if(ks.size<=80){for(const k2 of ks){if(canon(a[k2])===canon(b[k2]))continue;args.push(new FP(k,k2),b[k2]===undefined?DEL:b[k2])}continue}}
     args.push(new FP(k),b)}
   return args}
 
 /* ---- respaldo completo ---- */
-const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv'];
+/* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
+   del lookahead, el plan maestro y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
+const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
+  'dplan','nprog','lhlog','mp','mpver','mpav','mpl','mpcfg','cli','clidx','cliver'];
 const BK_IMG=['lamimg','fotos'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
-  const cols=withImg?BK_ALL:BK_DATA;
+  /* el plan maestro y la versión cliente solo los lee quien tiene acceso: los demás no los piden (no es un error) */
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^mp/.test(c)||(typeof canMP==='function'&&canMP())).filter(c=>!/^cli/.test(c)||(typeof canCli==='function'&&canCli()));
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;
@@ -92,7 +110,7 @@ const pisOf=id=>S.pis.get(id)||ARCH.pis.get(id)||null;
 function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
   const ctx=x=>{const a=ambOf(x.ambId);if(!a)return null;const s=secOf(a.sectorId);const pid=pisoOfAmb(x.ambId);const p=pisOf(pid);return p&&s?{p,s,a}:null};
   for(const x of ARCH.act.values()){const c=ctx(x);if(!c||!vset.has(c.p.id))continue;const ad=ldt(x.arch.t||0);
-    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:x.sc,arch:true});seen.add(x.id+'|'+d)}}}
+    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:scAt(rc,x),arch:true});seen.add(x.id+'|'+d)}}}
   const ds=new Set(dates);
   for(const doc of DAY.values()){if(!ds.has(doc.date)||!vset.has(doc.pisoId))continue;
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
@@ -189,11 +207,21 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
    ===================================================================== */
 /* editores responsables de cada piso: members/{correo}.pisos = [pisoId] (lo asigna el administrador en Equipo) */
 const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
+/* las reglas de Firestore no pueden buscar en members: el administrador mantiene en cada piso la lista de sus responsables
+   (pisos/{id}.resp = correos en minúsculas). Con ella las reglas solo dejan publicar o cambiar el plan diario de un piso
+   a su responsable (piso sin responsable: cualquier editor). Se recalcula sola al cambiar el equipo o los pisos. */
+let RESP_T=null;const RESP_W=new Set();
+function respSync(){if(!db||typeof isAdmin==='undefined'||!isAdmin||!MEM.size||!S.loaded||!S.loaded.pis)return;clearTimeout(RESP_T);RESP_T=setTimeout(()=>{
+  for(const p of S.pis.values()){const L=respOf(p.id).map(o=>String(o.em).toLowerCase()).sort();const cur=Array.isArray(p.resp)?[...p.resp].sort():[];
+    if(canon(L)===canon(cur)||RESP_W.has(p.id))continue;RESP_W.add(p.id);fcol('pisos').doc(p.id).update({resp:L}).catch(()=>{}).finally(()=>RESP_W.delete(p.id))}},1500)}
 function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
-/* quién resuelve una propuesta: el administrador siempre; un editor solo en los pisos a su cargo; piso sin responsable: solo el administrador */
-function canDecide(id,it){if(!me||PM())return false;if(isAdmin)return true;if(me.role!=='editor')return false;const pid=propPiso(id,it);if(VA&&VA.role==='editor')return(VA.pisos||[]).includes(pid);return respOf(pid).some(r=>r.em===me.email)}
-function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve el administrador'}
+/* quién decide en un piso (propuestas del lookahead y plan diario): el administrador siempre; un editor en los pisos a su
+   cargo; si el piso no tiene responsable, cualquier editor (así la reunión no se traba). «Ver como» editor usa sus pisos simulados. */
+function isPisoResp(pid){if(!me)return false;if(isAdmin)return true;if(me.role!=='editor')return false;const R=respOf(pid);if(!R.length)return true;
+  if(VA&&VA.role==='editor')return(VA.pisos||[]).includes(pid);return R.some(r=>r.em===me.email)}
+function canDecide(id,it){if(!me||PM())return false;return isPisoResp(propPiso(id,it))}
+function propWho(id,it){const R=respOf(propPiso(id,it));return R.length?'La resuelve '+R.map(r=>r.name).join(' o ')+' (responsable del piso)':'Piso sin responsable: la resuelve cualquier editor'}
 function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest=pisos().filter(p=>!L.includes(p.id));
   return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
    ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}
@@ -213,7 +241,7 @@ function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!de
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
-  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
+  const roles=[['editor','Editor'],['planner','Planner (plan maestro)'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
     <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
     <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>

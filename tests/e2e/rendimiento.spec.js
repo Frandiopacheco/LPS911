@@ -50,3 +50,59 @@ test('Lookahead grande: se dibuja lo que se ve y al bajar aparece lo demás', as
   expect(await sel.locator('option').count()).toBe(25);
   noErrors(errors, 'lookahead grande');
 });
+
+test('Restricciones con muchas restricciones y una obra grande abre rápido', async ({ page }) => {
+  test.setTimeout(120_000);
+  const ex = obraGrande(); const acts = ex.filter(e => e[0] === 'acts').map(e => e[1]);
+  for (let i = 0; i < 1500; i++) ex.push(['restr', 'rr' + i, { actId: acts[(i * 7) % acts.length], type: 'Materiales', desc: 'r' + i, resp: '', need: '2026-10-05', freed: '', status: 'pend', created: '2026-09-30' }]);
+  const errors = await openApp(page, { extra: ex });
+  await page.evaluate(() => { U.piso = ''; });
+  const t0 = Date.now();
+  await page.evaluate(() => { goTab('restr'); document.body.offsetHeight; return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
+  const ms = Date.now() - t0;
+  console.log('RESTRICCIONES ' + ms + ' ms');
+  expect(ms, 'abrir Restricciones').toBeLessThan(3000);
+  // se dibujan por tandas: 150 filas y «Mostrar más»
+  expect(await page.locator('#main table.t tbody tr').count()).toBeLessThanOrEqual(151);
+  await page.click('#rmore');
+  expect(await page.locator('#main table.t tbody tr').count()).toBeGreaterThan(400);
+  // el selector de actividad se llena al abrirlo
+  const sel = page.locator('#main select[data-f="actId"]').first();
+  expect(await sel.locator('option').count()).toBe(1);
+  await sel.dispatchEvent('mousedown');
+  expect(await sel.locator('option').count()).toBeGreaterThan(100);
+  noErrors(errors, 'restricciones grande');
+});
+
+test('Plan diario con una obra grande: abrir, recibir cambios de otros y desplazar el plano', async ({ page }) => {
+  test.setTimeout(150_000);
+  const { LAMINA } = await import('./lamina.js');
+  const ex = obraGrande();
+  // cada ambiente con su forma en la lámina (rejilla 12 × 10): ~160 actividades por día y muchos cruces
+  for (const e of ex) if (e[0] === 'ambientes') { const a = +e[1].slice(2); const cx = (a % 12) * 82 + 10, cy = Math.floor(a / 12) * 58 + 10; e[2].geo = { L1: [cx, cy, cx + 78, cy, cx + 78, cy + 54, cx, cy + 54] }; }
+  const errors = await openApp(page, { extra: [...LAMINA, ...ex] });
+  const cdp = await page.context().newCDPSession(page); await cdp.send('Performance.enable');
+  const M = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
+  const res = {};
+  let a = await M(); let t0 = Date.now();
+  await page.evaluate(() => { goTab('mapa'); return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
+  await page.waitForFunction(() => window.__plano && window.__plano.M.view && window.__plano.M.view.fitted && document.querySelectorAll('#mstage .pvl.nb').length > 50, null, { timeout: 60000 });
+  let b = await M(); res.abrir = { ms: Date.now() - t0, codigo: Math.round((b.ScriptDuration - a.ScriptDuration) * 1000) };
+  res.zonas = await page.locator('#mstage .pvl.nb').count();
+  // otro usuario cambia algo del plan del día (llega por la base y se redibuja)
+  a = await M(); t0 = Date.now();
+  await page.evaluate(d => window.firebase.firestore().collection('pdz').doc('rem1').set({ date: d, pisoId: 'p1', sc: 'c2', kind: 'texto', pts: [50, 50], t: 'Nota', by: 'otro' }).then(() => new Promise(r => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(r)), 30))), await page.evaluate(() => window.__plano.M.date));
+  b = await M(); res.cambio = { ms: Date.now() - t0, codigo: Math.round((b.ScriptDuration - a.ScriptDuration) * 1000) };
+  // desplazar el plano (30 movimientos)
+  const box = await page.locator('#mstage').boundingBox();
+  a = await M(); t0 = Date.now();
+  await page.mouse.move(box.x + 300, box.y + 300); await page.mouse.down();
+  for (let i = 0; i < 30; i++) await page.mouse.move(box.x + 300 + i * 4, box.y + 300 + i * 2);
+  await page.mouse.up();
+  b = await M(); res.desplazar = { ms: Date.now() - t0, codigo: Math.round((b.ScriptDuration - a.ScriptDuration) * 1000) };
+  console.log('PLAN DIARIO ' + JSON.stringify(res));
+  expect(res.abrir.ms, 'abrir el Plan diario').toBeLessThan(10000);
+  expect(res.cambio.ms, 'redibujar tras un cambio de otro usuario').toBeLessThan(2500);
+  expect(res.desplazar.codigo, 'desplazar no vuelve a armar las etiquetas').toBeLessThan(1500);
+  noErrors(errors, 'plan diario grande');
+});

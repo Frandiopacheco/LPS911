@@ -20,12 +20,16 @@ service cloud.firestore {
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
     function canCli() { return isAdmin() || (isMember() && role() in ['editor', 'campo', 'area', 'lector'] && get(memberPath()).data.get('cli', false) == true); }
+    // Plan maestro: solo el administrador y el planner (rol que solo modifica el maestro). Nadie más lo lee.
+    function canMP() { return isMember() && role() in ['admin', 'planner']; }
     function canDaily() { return isMember() && role() in ['admin', 'editor', 'campo']; }
     function scOf() { return get(memberPath()).data.get('sc', ''); }
     // Una persona puede tener varias empresas/partidas (campo 'scs'); si no existe, se usa 'sc'.
     function scsOf() { let d = get(memberPath()).data; return d.get('scs', [d.get('sc', '')]); }
     function isSC() { return isMember() && !isOwner() && role() == 'sc'; }
     function isCap() { return isMember() && !isOwner() && role() == 'capataz'; }
+    // capataz o subcontratista (reportes en vivo de su partida)
+    function crew() { return isMember() && !isOwner() && role() in ['capataz', 'sc']; }
     // Área de apoyo (Oficina Técnica, Calidad…): ve todo y gestiona las restricciones de su área
     function isArea() { return isMember() && !isOwner() && role() == 'area'; }
     function areaOf() { return get(memberPath()).data.get('area', ''); }
@@ -37,6 +41,30 @@ service cloud.firestore {
     function canNP() { return canDaily() || isVeedor() || isCal(); }
     function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
+    function scPdzOld(d) { return d.get('sc', '') in scsOf() && !(d.get('kind', '') in ['xok', 'aviso', 'pub'])
+      && !(d.get('kind', '') == 'nova' && (d.get('k', '') != '' || d.get('ids', null) != null || d.get('draft', false) == true || d.get('eng', false) == true)); }
+    function scPdzNew(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') == 'pend'; }
+    // actividad de una partida del SC
+    function actMine(aid) { let ap = /databases/$(database)/documents/acts/$(aid == '' ? '-' : aid); return exists(ap) && get(ap).data.get('sc', '') in scsOf(); }
+    // forma de lo que escribe el SC: propuesta con id dp_<fecha>_<actividad> de su partida; equipo fz_<fecha>_<sc> / fzl_<sc>;
+    // «no se hará hoy» (nova sin reprogramar) solo de hoy o días pasados y de una actividad de su partida
+    function scPdzShape(id, d) {
+      let k = d.get('kind', '');
+      return (k != 'dprop' || (id == 'dp_' + d.get('date', '') + '_' + d.get('actId', '') && actMine(d.get('actId', ''))))
+        && (k != 'fza' || id == 'fz_' + d.get('date', '') + '_' + d.get('sc', ''))
+        && (k != 'fzl' || id == 'fzl_' + d.get('sc', ''))
+        && (k != 'nova' || (!dplanFuture(d.get('date', '')) && actMine(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])));
+    }
+    // una propuesta ya aceptada (ok) no la cambia ni la borra el SC; una rechazada solo vuelve a pendiente
+    function scDpropFrom(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') in ['pend', 'rej']; }
+    // Responsable de piso: un editor escribe el plan diario (pdz) y su foto (dplan) solo en los pisos a su cargo
+    // (pisos/{id}.resp = lista de correos); piso sin responsable: cualquier editor. El administrador siempre.
+    function respOk(pid) {
+      let pp = /databases/$(database)/documents/pisos/$(pid == '' ? '-' : pid);
+      return !exists(pp) || noResp(get(pp).data) || email() in get(pp).data.resp;
+    }
+    function noResp(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
+    function edPiso(d) { return isAdmin() || (canEdit() && respOk(d.get('pisoId', ''))); }
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
 
     match /members/{mail} {
@@ -59,20 +87,74 @@ service cloud.firestore {
       allow list, write: if isAdmin();
     }
     // Estado en vivo de cada actividad (iniciada / detenida / cierre propuesto)
-    // El subcontratista también inicia, detiene y reanuda las de su partida, pero no cierra el día (campo 'close').
+    // El subcontratista también inicia, detiene y reanuda las de su partida y, como el capataz, propone el cierre del día
+    // (campo 'close'); lo confirma el ingeniero en Campo (o el servidor a los 2 días). El SC no escribe el registro diario.
+    // Capataz y SC: el documento debe ser de una actividad real de su partida (id = fecha_actividad, la partida y el piso
+    // los de la actividad), no basta con la partida que declara el propio documento.
+    function liveActOk(id) {
+      let d = request.resource.data;
+      let ap = /databases/$(database)/documents/acts/$(d.get('actId', '-'));
+      return id == d.get('date', '') + '_' + d.get('actId', '') && exists(ap)
+        && get(ap).data.get('sc', '') == d.get('sc', '') && livePisoOk(get(ap).data.get('ambId', '-'), d.get('pisoId', ''));
+    }
+    // piso de la actividad: ambiente → sector → piso (si el sector no dice su piso, no se puede comprobar)
+    function livePisoOk(ambId, pid) {
+      let am = /databases/$(database)/documents/ambientes/$(ambId);
+      let sp = /databases/$(database)/documents/sectors/$(exists(am) ? get(am).data.get('sectorId', '-') : '-');
+      return !exists(sp) || get(sp).data.get('pisoId', '') == '' || get(sp).data.pisoId == pid;
+    }
     match /live/{id} {
       allow read: if isMember();
-      allow create: if canDaily() || (isCap() && request.resource.data.sc in scsOf())
-        || (isSC() && request.resource.data.sc in scsOf() && !('close' in request.resource.data));
-      allow update: if canDaily() || (isCap() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf())
-        || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf()
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['close']));
+      allow create: if canDaily() || (crew() && request.resource.data.sc in scsOf() && liveActOk(id));
+      allow update: if canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id));
       allow delete: if canDaily();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
+    function lhpHistOk() {
+      return (resource == null && !('hist' in request.resource.data))
+        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {}));
+    }
     match /lhprop/{sc} {
       allow read: if isMember();
-      allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc);
+      // el SC cambia sus borradores y envíos, pero no las «Respuestas del ingeniero» (hist): esas solo las escribe quien decide
+      allow write: if canEdit() || (isSC() && sc in scsOf() && request.resource.data.get('sc', sc) == sc && lhpHistOk());
+    }
+    // Plan del día cerrado (foto de lo comprometido; contra ella se mide el PPC diario). La escribe quien publica (editor/admin)
+    // y el servidor a las 20:00. Reabrir (reo) es solo del administrador; un editor solo puede dejarlo cerrado (reo vacío).
+    // fecha YYYY-MM-DD posterior a hoy (hora de Lima, UTC-5)
+    function dplanFuture(d) {
+      return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) > request.time - duration.value(5, 'h');
+    }
+    match /dplan/{id} {
+      allow read: if isMember();
+      // Cerrado (con ids y sin reabrir), el editor no cambia lo comprometido ni el registro: solo el administrador (reabrir con motivo).
+      // El editor publica de nuevo un día reabierto o que aún no tenía foto. «Deshacer publicación»: el editor solo en días futuros.
+      // además, el editor solo en los pisos a su cargo (respOk)
+      allow create: if isAdmin() || (edPiso(request.resource.data) && request.resource.data.get('reo', null) == null);
+      allow update: if isAdmin() || (edPiso(resource.data) && edPiso(request.resource.data)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null)
+        && (resource.data.get('reo', null) != null || resource.data.get('ids', null) == null
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'log', 'date', 'pisoId'])));
+      allow delete: if isAdmin() || (edPiso(resource.data) && dplanFuture(resource.data.get('date', '')));
+    }
+    // Historial de cambios del lookahead (uno por cambio): lo escribe quien edita; no se cambia ni se borra
+    match /lhlog/{id} {
+      allow read: if isMember();
+      allow create: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow update, delete: if false;
+    }
+    // Constancia del congelado automático de cada semana (la escribe solo el servidor)
+    match /frz/{id} {
+      allow read: if isMember();
+      allow write: if false;
+    }
+    // Historial de decisiones sobre propuestas (un documento por decisión). Lo escribe solo quien decide; después solo
+    // se marca o desmarca «deshecho» (undone). No se borra: es la constancia de qué se autorizó, cuándo y por qué.
+    match /lhphist/{id} {
+      allow read: if isMember();
+      allow create: if canEdit();
+      allow update: if canEdit() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undone']);
     }
     // Restricciones: editor/admin todo (regla general de abajo). El subcontratista crea las de actividades de su partida
     // y edita o borra solo las que él registró, mientras estén pendientes (liberarlas es del ingeniero).
@@ -93,11 +175,15 @@ service cloud.firestore {
     // las programa y decide Calidad (o el editor / administrador). El SC solo pide, levanta observaciones o anula las suyas.
     match /lib/{id} {
       allow read: if isMember();
+      // crítica, supervisión y «restringe a» las marca Calidad al programar (ya no hay matriz): el SC no las pone ni las cambia
       allow create: if canEdit() || isCal()
-        || (isSC() && request.resource.data.sc in scsOf() && request.resource.data.st == 'sol' && request.resource.data.by == mid());
+        || (isSC() && request.resource.data.sc in scsOf() && request.resource.data.st == 'sol' && request.resource.data.by == mid()
+            && request.resource.data.get('crit', false) == false && request.resource.data.get('sup', false) == false
+            && request.resource.data.get('rest', '') == '');
       allow update: if canEdit() || isCal()
         || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc == resource.data.sc
-            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']);
+            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['crit', 'sup', 'rest']));
       allow delete: if isAdmin();
     }
     // Versión para el cliente (holguras, versiones emitidas): el administrador y quienes él designe.
@@ -118,6 +204,26 @@ service cloud.firestore {
       allow read: if isMember();
       allow write: if isAdmin() || isCal();
     }
+    // Plan maestro (docs/plan-maestro.md): nodos (mp), avance por corte (mpav), vínculos con el lookahead (mpl) y configuración (mpcfg)
+    match /mp/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpav/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpl/{id} {
+      allow read, write: if canMP();
+    }
+    match /mpcfg/{id} {
+      allow read, write: if canMP();
+    }
+    // Versiones de la línea base: el planner las envía a aprobación (pend); solo el administrador aprueba o devuelve. No se borran.
+    match /mpver/{id} {
+      allow read: if canMP();
+      allow create: if isAdmin() || (canMP() && request.resource.data.get('st', '') == 'pend');
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
     match /daily/{id} {
       allow read: if isMember();
       allow write: if canDaily();
@@ -130,17 +236,34 @@ service cloud.firestore {
       allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid());
       allow delete: if isAdmin();
     }
+    // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)
+    function fotoNewOk() {
+      let d = request.resource.data;
+      let r = isMember() ? role() : '';
+      return d.data.size() < 400000
+        && (r == 'admin' || (r in ['editor', 'campo', 'capataz', 'sc', 'area', 'veedor'] && d.get('by', '') == mid()));
+    }
     match /fotos/{id} {
       allow read: if isMember();
-      allow create, update: if (canDaily() || isCap() || isSC() || isArea() || isVeedor()) && request.resource.data.data.size() < 400000;
+      // una foto queda a nombre de quien la sube (by); ya guardada, nadie la reemplaza (evidencia): solo el administrador
+      allow create: if fotoNewOk();
+      allow update: if isAdmin() && request.resource.data.data.size() < 400000;
       allow delete: if canDaily();
     }
     // Plano diario: zonas y notas del día. Editor/Admin todo; Subcontratista solo lo de su empresa.
+    // Plan del día: el SC dibuja, propone (dprop pendiente) y reparte sus cuadrillas; las decisiones del ingeniero
+    // (cruces, avisos, publicación y reprogramaciones «no va» con k/ids/borrador) no las puede crear, cambiar ni borrar.
+    // El editor, solo en los pisos a su cargo (edPiso). El SC: propuestas con id fijo y de sus actividades, sin escribir la decisión
+    // (dec*): al volver a proponer sobre una rechazada reemplaza el documento entero y la decisión anterior se quita.
     match /pdz/{id} {
       allow read: if isMember();
-      allow create: if canEdit() || (isSC() && request.resource.data.sc in scsOf());
-      allow update: if canEdit() || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf());
-      allow delete: if canEdit() || (isSC() && resource.data.sc in scsOf());
+      allow create: if edPiso(request.resource.data)
+        || (isSC() && scPdzOld(request.resource.data) && scPdzNew(request.resource.data) && scPdzShape(id, request.resource.data)
+            && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
+      allow update: if (edPiso(resource.data) && edPiso(request.resource.data))
+        || (isSC() && scPdzOld(resource.data) && scDpropFrom(resource.data) && scPdzOld(request.resource.data) && scPdzNew(request.resource.data)
+            && scPdzShape(id, request.resource.data) && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
+      allow delete: if edPiso(resource.data) || (isSC() && scPdzOld(resource.data) && scDpropFrom(resource.data));
     }
     // Última zona usada por cada actividad (para "Como antes")
     match /pzon/{id} {
@@ -159,9 +282,16 @@ service cloud.firestore {
       allow read: if isMember();
       allow write: if canDaily();
     }
+    // Pisos: el editor los edita, pero los responsables (resp, lista de correos) los pone solo el administrador (Equipo)
+    match /pisos/{id} {
+      allow read: if isMember();
+      allow create: if isAdmin() || (canEdit() && noResp(request.resource.data));
+      allow update: if isAdmin() || (canEdit() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['resp']));
+      allow delete: if isAdmin() || (canEdit() && noResp(resource.data));
+    }
     match /{col}/{id} {
       allow read: if isMember() && dataCol(col);
-      allow write: if canEdit() && dataCol(col);
+      allow write: if canEdit() && dataCol(col) && col != 'pisos';
     }
   }
 }

@@ -2,12 +2,16 @@
 // - versionDominical: cada domingo 12:00 (Lima) guarda la versión automática del lookahead,
 //   aunque nadie tenga la página abierta.
 // - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días.
+// - congelarSemana: en el corte semanal (por defecto sábado 13:00 de Lima) congela la semana siguiente en los pisos que
+//   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
+// - cerrarPlan: a las 20:00 (Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
+//   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { buildVersion, closesToAccept, limaToday, addD } = require('./lib');
+const { buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -42,16 +46,74 @@ exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'Americ
     const refs = need.slice(i, i + 100).map(id => db().collection('acts').doc(id));
     (await db().getAll(...refs)).forEach(d => { if (d.exists) acts.set(d.id, d.data()); });
   }
-  const L = closesToAccept(lives, daily, acts, today);
-  const didx = new Map();
-  for (const pid of new Set(L.filter(o => o.rec.done).map(o => o.pisoId))) { const d = await db().collection('doneidx').doc(pid).get(); didx.set(pid, (d.exists && d.data().d) || {}); }
-  for (let i = 0; i < L.length; i += 200) {
-    const b = db().batch();
-    for (const o of L.slice(i, i + 200)) {
-      b.set(db().collection('daily').doc(o.date + '_' + o.pisoId), { date: o.date, pisoId: o.pisoId, recs: { [o.actId]: o.rec } }, { merge: true });
-      if (o.rec.done && !(didx.get(o.pisoId)[o.actId] <= o.date)) b.set(db().collection('doneidx').doc(o.pisoId), { d: { [o.actId]: o.date } }, { merge: true });
+  const dplans = new Map((await db().collection('dplan').where('date', '>=', from).get()).docs.map(d => [d.id, d.data()]));
+  const L = closesToAccept(lives, daily, acts, today, dplans);
+  /* cada cierre se confirma releyendo su registro: lo que un ingeniero verificó mientras tanto no se pisa */
+  const { n, skip } = await acceptCloses(db(), L);
+  logger.info(`Cierres registrados automáticamente: ${n}${skip ? ` (${skip} ya revisados por un ingeniero, sin cambios)` : ''}`);
+});
+
+/* Cada 15 minutos mira si ya pasó el corte de la semana que viene; fuera de esa ventana solo lee meta/project. */
+exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+  const project = (await db().collection('meta').doc('project').get()).data() || {};
+  const now = Date.now();
+  const W = weeksToFreeze(project, now);
+  if (!W.length) return;
+  const pisos = await all('pisos');
+  const vivos = [...pisos.values()].filter(p => !p.arch);
+  for (const n of W) {
+    /* ya se hizo esta semana (frz/<n>): no se vuelve a leer todo cada 15 minutos */
+    const fref = db().collection('frz').doc(String(n));
+    if ((await fref.get()).exists) continue;
+    const refs = vivos.map(p => db().collection('weeks').doc(n + '_' + p.id));
+    const snaps = refs.length ? await db().getAll(...refs) : [];
+    /* descongelada a propósito después del corte (unfrozenAt) = alguien la está corrigiendo: no se vuelve a congelar sola */
+    const cut = propCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
+    const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
+    if (vivos.length && skip.size === snaps.length) { await fref.set({ at: new Date(now).toISOString(), n, k: 0, nota: 'todos los pisos ya estaban congelados' }); continue; }
+    const today = limaToday(now);
+    const [sectors, ambientes, acts, didx, daily, lives, props] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+      db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop')]);
+    const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(d => d.data()), lives: lives.docs.map(d => d.data()), acts });
+    const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()] }, n, new Date(now).toISOString());
+    let k = 0;
+    for (const o of L) {
+      if (skip.has(o.id)) continue;
+      const ref = db().collection('weeks').doc(o.id);
+      /* como «Congelar» de la página: si alguien ya lo congeló (o lo hizo mientras corría), se respeta su versión */
+      const wrote = await db().runTransaction(async tx => { const d = await tx.get(ref); if (d.exists && held(d.data())) return false; tx.set(ref, o.doc); return true; });
+      if (wrote) k++;
     }
-    await b.commit();
+    await fref.set({ at: new Date(now).toISOString(), n, k, pisos: L.filter(o => !skip.has(o.id)).map(o => o.doc.pisoId) });
+    logger.info(`Semana ${n}: ${k} piso(s) congelado(s) automáticamente`);
   }
-  logger.info(`Cierres registrados automáticamente: ${L.length}`);
+});
+
+/* El plan de mañana se cierra en la reunión al publicarlo. Si nadie lo publicó, a las 20:00 el servidor, por piso:
+   publica los borradores de la reunión («no va → reprogramar»: corre las fechas, deja la marca ↷ y registra la restricción),
+   rechaza las propuestas del SC sin revisar («va lo programado») y cierra el plan con el lookahead ya actualizado.
+   Un piso cuyo plan ya tiene foto (ids) o fue reabierto no se toca. La foto es el compromiso del día para el PPC diario. */
+exports.cerrarPlan = onSchedule({ schedule: '0 20 * * *', timeZone: 'America/Lima', retryCount: 2 }, async () => {
+  const project = (await db().collection('meta').doc('project').get()).data() || {};
+  const now = Date.now(); const today = limaToday(now); const d = nextWork(project, today);
+  const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+    db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('contractors'),
+    db().collection('pdz').where('date', '==', d).get()]);
+  const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(x => x.data()), lives: lives.docs.map(x => x.data()), acts });
+  const zs = pdzDay.docs.map(x => ({ ...x.data(), id: x.id }));
+  const vivos = [...pisos.values()].filter(p => !p.arch);
+  let k = 0, np = 0, nr = 0;
+  for (const p of vivos) {
+    const pid = p.id;
+    const drafts = zs.filter(z => z.kind === 'nova' && z.draft && z.pisoId === pid);
+    const props = pendProps(zs, d, pid);
+    let res;
+    try { res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, piso: p, logger }, d, now); }
+    catch (e) { logger.error(`Plan del ${d} piso ${pid}: no se pudo cerrar`, e); continue; }
+    if (res.skip) continue;
+    if (Object.keys(res.ids).length) k++;
+    if (res.R) { np += res.R.novas.length; if (res.R.log.length) logger.warn(`Plan del ${d} piso ${pid}: ${res.R.log.join(' · ')}`); if (res.R.skipped.length) logger.info(`Plan del ${d} piso ${pid}: ya no estaban ese día: ${res.R.skipped.join(', ')}`); }
+    nr += res.P.length;
+  }
+  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)`);
 });

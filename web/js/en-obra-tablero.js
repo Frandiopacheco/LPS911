@@ -21,13 +21,13 @@ function liveLine(d,aid){const lv=liveOf(d,aid);if(!lv||!(lv.log||[]).length)ret
 function liveWrite(d,aid,patch,ev,extra){const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
   const e={...ev,t:NOW(),by:me.email,n:me.name||''};
   const doc={date:d,actId:aid,pisoId:pisoOfAct(aid),sc:x.sc,...patch,log:[...(cur.log||[]),e].slice(-40),...(extra||{})};
-  LIVE.set(id,{...cur,...doc,id,_pend:true});const FVs=firebase.firestore.FieldValue;if(FVs&&FVs.serverTimestamp)doc.sat=FVs.serverTimestamp();doneRebuild();requestRender();
-  fcol('live').doc(id).set(doc,{merge:true}).catch(err=>toast('No se pudo guardar: '+(err&&err.code==='permission-denied'?'sin permiso (¿se publicaron las reglas nuevas?)':(err&&(err.code||err.message)))))}
-/* lo que el capataz propuso y nadie confirmó en 2 días queda registrado tal cual */
-const autoDone=new Set();
-function autoAccept(){if(!canDaily||!db)return;const lim=addD(todayIso(),-2);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.status||lv.date>lim||autoDone.has(lv.id)||lv._pend)continue;autoDone.add(lv.id);if(recReal(lv.date,lv.actId))continue;const x=S.act.get(lv.actId);if(!x)continue;
-    writeDaily(lv.date,lv.pisoId,{recs:{[lv.actId]:{...baseRec(lv.date,x,null),status:c.status,cnc:c.cnc||'',note:c.note||'',done:!!c.done,photos:lv.photos||[],prop:{status:c.status,cnc:c.cnc||'',by:c.by,byName:c.n,ts:c.t},auto:true,by:c.by||'',byName:c.n||'',ts:c.t||NOW()}}})}}
+  LIVE.set(id,{...cur,...doc,id,_pend:true});const FVs=firebase.firestore.FieldValue;
+  /* el historial y las fotos se agregan (arrayUnion), no se reemplazan: si el capataz sin señal y el ingeniero escriben a la vez, no se pierde nada */
+  const send={...doc};if(FVs&&FVs.arrayUnion){send.log=FVs.arrayUnion(e);if(Array.isArray(doc.photos)){const add=doc.photos.filter(f=>!(cur.photos||[]).includes(f));if(add.length&&(cur.photos||[]).every(f=>doc.photos.includes(f)))send.photos=FVs.arrayUnion(...add)}}
+  if(FVs&&FVs.serverTimestamp)send.sat=FVs.serverTimestamp();doneRebuild();requestRender();
+  fcol('live').doc(id).set(send,{merge:true}).catch(err=>toast('No se pudo guardar: '+(err&&err.code==='permission-denied'?'sin permiso (¿se publicaron las reglas nuevas?)':(err&&(err.code||err.message)))))}
+/* lo que el capataz (o el SC) propuso y nadie confirmó en 2 días lo registra el servidor (aceptarCierres, 23:30, en una transacción
+   que relee el registro): la página ya no lo hace, porque con su copia local podía pisar lo que un ingeniero corrigió. */
 function confirmProp(d,aid){const x=S.act.get(aid);const cur=recOf(d,aid);if(!x||!cur||!cur._prop)return;writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:cur.status}}})}
 
 /* ---------- pantalla del capataz ---------- */
@@ -39,7 +39,7 @@ function loadPlanoMod(){if(window.__plano&&window.__plano.capPlan)return Promise
   return planoP.then(()=>{if(U.tab==='cap'||U.tab==='mapa'||U.tab==='dash'||U.tab==='campo'||U.tab==='planos'){const m=$('#main');if(U.tab==='mapa')m.dataset.built='';requestRender()}})}
 const ENG=()=>!!me&&me.role!=='capataz'&&!!canDaily;
 function capItems(d){const E=ENG()||VEED();const vs=new Set(visPisos().map(p=>p.id));const my=new Set(E?[...S.con.keys()]:(me&&me.scs||[]));const API=window.__plano;const nv=API&&API.novaSet?API.novaSet(d):new Set();
-  return[...S.act.values()].filter(x=>my.has(x.sc)&&schedOn(x,d)&&!nv.has(x.id)).map(x=>{const a=S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);return{x,a,s,pid:pisoOfAct(x.id)}})
+  return[...S.act.values()].filter(x=>my.has(x.sc)&&schedOrSnap(x,d)&&!nv.has(x.id)).map(x=>{const a=S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);return{x,a,s,pid:pisoOfAct(x.id)}})
     .filter(o=>o.a&&o.s&&o.pid&&(!E||vs.has(o.pid))).sort((p,q)=>(p.s.order||0)-(q.s.order||0)||(p.a.order||0)-(q.a.order||0)||(p.x.order||0)-(q.x.order||0))}
 function capPend(d){if(ENG()||VEED()||SCK())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
 function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG()||VEED();const q=VEED()?'':E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
@@ -82,8 +82,8 @@ function capClick(e){const t=e.target;let b;
   if(t.closest('[data-knp]')){npNew({d:campoDate(),pid:CP.pid});return}
   if((b=t.closest('[data-kd]'))){const v=+b.dataset.kd;CU.date=v===0?null:shiftDay(campoDate(),v);if(CU.date===todayIso())CU.date=null;const kp=$('#kplan');if(kp)kp._fk='';render();return}
   if((b=t.closest('[data-kv]'))){CP.v=b.dataset.kv;saveCP();const kp=$('#kplan');if(kp)kp._fk='';render();return}
-  if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
-    rl:()=>location.reload(),
+  if((b=t.closest('[data-kmenu]'))){openPop(b,`<div class="ph">${esc(me.name||'')}</div><div class="ptx">Capataz · ${esc((me.scs||[]).map(c=>conOf(c).name).join(', '))}</div><button data-do="name">Cambiar mi nombre…</button><button data-do="rl">Actualizar</button><button data-do="help">? Ayuda</button><hr><button data-do="out" class="danger">Salir de este celular…</button>`,{
+    rl:()=>location.reload(),help:()=>ayOpen(),
     name:()=>{const v=prompt('Tu nombre y apellido',me.name||'');if(v&&v.trim()&&db)fcol('members').doc(me.email).update({name:v.trim().slice(0,60)}).then(()=>toast('Nombre actualizado')).catch(err=>toast('No se pudo: '+(err.code||err.message)))},
     out:()=>{if(confirm('Si sales, para volver a entrar necesitarás un enlace nuevo del ingeniero. ¿Salir?'))$('#blogout').click()}});return}
   const card=t.closest('article[data-k]');if(!card)return;const aid=card.dataset.k,d=card.dataset.d;
@@ -97,11 +97,11 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
   const cnc=P().cnc||[];const later=(x.days||[]).filter(y=>y>d).length;
   let h=`<div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${n||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}${past?' · <b>'+fmtD(d)+'</b>':''}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}`;
-  if(mode==='stop'){h+=`<div class="ksl">¿Por qué se detuvo?</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.mot===c?'on':''}" data-kmot="${esc(c)}">${esc(c)}</button>`).join('')}${cnc.some(c=>/^otro/i.test(c))?'':`<button class="${KS.mot==='Otro'?'on':''}" data-kmot="Otro">Otro</button>`}</div>
+  if(mode==='stop'){h+=`<div class="ksl">¿Por qué se detuvo?</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.mot===c?'on':''}" data-kmot="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}${cnc.some(c=>/^otro/i.test(c))?'':`<button class="${KS.mot==='Otro'?'on':''}" data-kmot="Otro">Otro</button>`}</div>
       <input class="kin" id="kmott" placeholder="Detalle (opcional)" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
       <div class="kbtns"><button class="kbig warn" data-ka="stopsave">⏸ Guardar detención</button><button class="kbig ghost" data-ka="back">Volver</button></div>`}
   else if(mode==='close'){h+=`<div class="ksl">¿Se cumplió lo programado para ${past?'ese día':'hoy'}?</div><div class="kbtns two"><button class="kbig ok${KS.cs==='ok'?' on':''}" data-kcs="ok">✓ Cumplido</button><button class="kbig no${KS.cs==='no'?' on':''}" data-kcs="no">✗ No cumplido</button></div>
-      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}
+      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>`:''}
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
       <div class="kbtns"><button class="kbig pri" data-ka="closesave"${KS.cs&&(KS.cs==='ok'||KS.cnc)?'':' disabled'}>${E?'Guardar verificación':'Enviar cierre'}</button><button class="kbig ghost" data-ka="back">Volver</button></div><p class="knote">${E?'Queda registrado como verificado por ti (cuenta para el PPC).':'El ingeniero de campo lo revisará y confirmará.'}</p>`}
@@ -112,11 +112,11 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
     else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='none'?'<button class="kbig run" data-ka="run">▶ Marcar iniciada</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button>':s.k==='run'?'<button class="kbig warn" data-ka="stopf">⏸ Marcar detenida…</button>':'<button class="kbig run" data-ka="res">▶ Marcar reanudada</button>'):''}</div>`}
   else if(SCK()){if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<p class="knote">Solo puedes marcar el avance del día de hoy.</p>`;
-    else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">El día ya fue cerrado por el capataz o el ingeniero.</p>`;
-    else if(s.k==='none')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button></div>`;
-    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button></div>`;
-    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button></div>`;
-    h+=`<p class="knote">El cierre del día (cumplido / no cumplido) lo hace el capataz o el ingeniero de campo.</p>`}
+    else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">Cierre enviado: el ingeniero lo confirma.</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
+    else if(s.k==='none')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    h+=`<p class="knote">Al final del día (≈ 4 pm) propón el cierre: cumplido o no cumplido. El ingeniero lo confirma; si no lo propones, él lo registra igual.</p>`}
   else{if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">Cerrar ${fmtD(d)}</button></div>`;
     else if(s.k==='none')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button><button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
@@ -138,7 +138,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
   if(k==='np'){const x=S.act.get(aid);const pt=KS.pt||null;kClose();if(x)npNew({d,pid:pisoOfAct(aid),ambId:x.ambId,pt});return}
   if(k==='back'){capSheet(aid,d,'main',true);return}
   if(k==='stopf'){KS.note='';capSheet(aid,d,'stop',true);return}
-  if(k==='closef'){if(SCK())return;capSheet(aid,d,'close');return}
+  if(k==='closef'){capSheet(aid,d,'close');return}
   if(k==='run'||k==='res'){kAct(aid,d,k);kClose();return}
   if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}
     const lv=liveOf(d,aid);let extra=null;
@@ -147,7 +147,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:(cur&&cur.photos)||[]}}});toast('Verificación guardada');kClose();return}
-  if(k==='closesave'){if(SCK())return;if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
+  if(k==='closesave'){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
     liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs});toast('Cierre enviado. El ingeniero lo confirmará.');kClose();return}}
 
 /* ---------- invitaciones de capataces (Equipo) ---------- */
@@ -186,9 +186,9 @@ const dashOn=m=>!!m&&(m.role==='admin'||(m.role==='editor'?m.dash!==false:m.dash
 const canDash=()=>!!me&&(isAdmin||isOwnerEmail(me.email)||dashOn(MEM.get(me.email)||{role:me.role}));
 const DB_={pid:'',tv:false,tick:null};
 const dashLate=()=>{const v=String(P().dashLate||'09:00');return/^\d\d:\d\d$/.test(v)?v:'09:00'};
-const nowHM=()=>{const n=new Date(NOW());return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')};
+const nowHM=()=>{const n=new Date(NOW()-LIMA_OFF);return String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')};
 function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.__plano&&window.__plano.novaSet?window.__plano:null;const nv=API?API.novaSet(d):new Set();
-  const items=[];for(const x of S.act.values()){if(!schedOn(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
+  const items=[];for(const x of S.act.values()){if(!schedOrSnap(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
   return items}
 function dashFeed(d){const vs=new Set(visPisos().map(p=>p.id));const ev=[];for(const lv of LIVE.values()){if(lv.date!==d||!vs.has(lv.pisoId))continue;for(const e of lv.log||[])ev.push({...e,lv})}
   return ev.sort((a,b)=>b.t-a.t)}
@@ -210,7 +210,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const zoned=API?new Set(visPisos().flatMap(p=>[...API.zonedSet(p.id)])):new Set();const unz=API?act.filter(i=>!zoned.has(i.x.id)):[];
   const cross=API&&API.crossOf?visPisos().flatMap(p=>API.crossOf(p.id).map(c2=>({...c2,p}))):[];
   /* restricciones */
-  const RS=restrInScope().filter(r=>r.status!=='lib');const d7=addD(d,7);
+  const RS=restrInScope().filter(rOpenC);const d7=addD(d,7);
   const rToday=RS.filter(r=>{const x=S.act.get(r.actId);return x&&schedOn(x,d)});
   const rLate=RS.filter(r=>r.need&&r.need<d);
   const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>d&&z<=d7)});
@@ -230,7 +230,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${T('run',c.run,'En ejecución','')}${T('stop',c.stop,'Detenidas','',c.stop?'alert2':'')}
     ${T('ok',closed,'Cerradas',`${conf} confirmadas · ${prop} por confirmar`)}
     ${T('',pc(ppcD),'PPC diario hoy',DT.ver?`${DT.ok} de ${DT.ver} verificadas${nProvD?` · ${nProvD} por confirmar`:''}`:'aún sin cierres','dkppc')}
-    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'aún sin evaluar en Plan semanal','dkppc')}</div>`;
+    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}${PW.nimp&&PW.ppcSc!=null?` · del SC ${pc(PW.ppcSc)}`:''}`:'aún sin evaluar en PPC semanal','dkppc')}</div>`;
   const bar=o=>`<span class="dbar">${['ok','no','run','stop','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
   let sc=`<div class="dcard"><div class="dch">Por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${bar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw" title="Personas que reportaron hoy">${o.who.size?`👷 ${o.who.size}`:'<em>sin reportes</em>'}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
     <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div></div>`;

@@ -122,6 +122,12 @@ async function exportPpcXlsx(){const btn=$('#bxppc');const bt=btn?btn.textConten
 /* ================= EXPORTAR EXCEL ================= */
 let xlsxP=null;
 function loadXlsx(){if(window.XLSX)return Promise.resolve();if(xlsxP)return xlsxP;xlsxP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';s.onload=ok;s.onerror=()=>{xlsxP=null;ko(new Error('No se pudo cargar el generador de Excel'))};document.head.appendChild(s)});return xlsxP}
+/** filtro de Excel sobre la tabla que empieza en la fila hr (0 = primera) y fija esa fila */
+function autoF(X,ws,hr){if(!ws['!ref'])return;const R=X.utils.decode_range(ws['!ref']);let last=R.e.r;
+  while(last>hr&&!Object.keys(ws).some(k=>k[0]!=='!'&&X.utils.decode_cell(k).r===last&&ws[k].v!==''&&ws[k].v!=null))last--;
+  /* la tabla termina en la primera fila vacía después del encabezado */
+  for(let r=hr+1;r<=last;r++){let any=false;for(let c=R.s.c;c<=R.e.c;c++){const v=ws[X.utils.encode_cell({r,c})];if(v&&v.v!==''&&v.v!=null){any=true;break}}if(!any){last=r-1;break}}
+  ws['!autofilter']={ref:X.utils.encode_range({s:{r:hr,c:R.s.c},e:{r:Math.max(last,hr),c:R.e.c}})};ws['!views']=[{state:'frozen',ySplit:hr+1}]}
 async function exportXlsx(){
   const btn=$('#bexport');btn.disabled=true;btn.textContent='Generando…';let unswap=null;
   const CLV=U.tab==='look'&&U.cliv&&canCli();let cliLab='';
@@ -130,24 +136,41 @@ async function exportXlsx(){
       if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Programa con holgura al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
     const bd={top:{style:'thin',color:{rgb:'BFBFBF'}},bottom:{style:'thin',color:{rgb:'BFBFBF'}},left:{style:'thin',color:{rgb:'BFBFBF'}},right:{style:'thin',color:{rgb:'BFBFBF'}}};
     const hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
-    const ws={};const merges=[];const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||{border:bd,alignment:{vertical:'center'}}}};
-    const D0=9;
-    [['PROYECTO',p.fullName],['PROPIETARIO',p.owner],['UBICACIÓN',p.location],['FECHA',fmtD(todayIso())+' '+todayIso().slice(0,4)+' · Lookahead semanas '+U.week+'–'+(U.week+U.win-1)+(CLV?' · '+cliLab:'')]].forEach(([k,v],i)=>{set(1+i,3,k,{font:{bold:true}});set(1+i,4,v,{font:{bold:i===0}})});
-    const hr=6;set(hr,0,'SC',hs);set(hr,1,'ITEM',hs);set(hr,2,'DESCRIPCIÓN',hs);set(hr,3,'',hs);set(hr,4,'ACTIVIDAD',hs);set(hr,5,'UND',hs);set(hr,6,'METRADO',hs);set(hr,7,'DÍAS',hs);set(hr,8,'F. INICIO',hs);set(hr,9,'F. FIN',hs);
-    for(let c=0;c<10;c++){set(hr+1,c,'',hs);set(hr+2,c,'',hs);if(c!==2&&c!==3)merges.push({s:{r:hr,c},e:{r:hr+2,c}})}merges.push({s:{r:hr,c:2},e:{r:hr+2,c:3}});
-    for(let w=0;w<U.win;w++){set(hr,10+w*6,'SEM '+(U.week+w),hs);for(let k=1;k<6;k++)set(hr,10+w*6+k,'',hs);merges.push({s:{r:hr,c:10+w*6},e:{r:hr,c:10+w*6+5}})}
-    days.forEach((x,k)=>{set(hr+1,10+k,DL[x.i],hs);set(hr+2,10+k,fmtS(x.d),{...hs,font:{bold:false,color:{rgb:'FFFFFF'},sz:8}})});
-    let r=hr+3;
-    for(const{p:pp,secs}of visTree()){const pf={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F5F7A'}},border:bd};set(r,0,'',pf);set(r,1,pp.code,pf);set(r,2,pp.name.toUpperCase(),pf);for(let c=3;c<10+nd;c++)set(r,c,'',pf);r++;
-    for(const{s,ambs}of secs){set(r,0,'',{fill:{fgColor:{rgb:'D9D9D9'}},border:bd});set(r,1,s.code,{font:{bold:true},fill:{fgColor:{rgb:'D9D9D9'}},border:bd});set(r,2,s.name.toUpperCase(),{font:{bold:true},fill:{fgColor:{rgb:'D9D9D9'}},border:bd});for(let c=3;c<10+nd;c++)set(r,c,'',{fill:{fgColor:{rgb:'D9D9D9'}},border:bd});r++;
+    const ws={};const merges=[];const F9={name:'Calibri',sz:10};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||{border:bd,font:F9,alignment:{vertical:'center'}}}};
+    const today=todayIso();const L1='D9DEE4';const thin=c=>({style:'thin',color:{rgb:c}});
+    /* título y datos del proyecto */
+    set(0,0,'LOOKAHEAD',{font:{name:'Calibri',sz:16,bold:true,color:{rgb:'1F3A4D'}}});
+    set(1,0,`Semanas ${U.week}–${U.week+U.win-1} · ${fmtD(days[0].d)} al ${fmtD(days[nd-1].d)} · ${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'}${CLV?' · '+cliLab:''}`,{font:{name:'Calibri',sz:10,color:{rgb:'555555'}}});
+    [['PROYECTO',p.fullName],['PROPIETARIO',p.owner],['UBICACIÓN',p.location],['FECHA',fmtD(today)+' '+today.slice(0,4)]].forEach(([k,v],i)=>{set(1+i,2,k,{font:{name:'Calibri',sz:9,bold:true,color:{rgb:'6B7785'}},alignment:{horizontal:'right'}});set(1+i,4,v||'',{font:{name:'Calibri',sz:10,bold:i===0}})});
+    const hr=6;const H=['SC','ITEM','DESCRIPCIÓN','','ACTIVIDAD','UND','METRADO','DÍAS','F. INICIO','F. FIN'];
+    H.forEach((t,c)=>{set(hr,c,t,hs);set(hr+1,c,'',hs);set(hr+2,c,'',hs)});
+    for(let c=0;c<10;c++){if(c!==2&&c!==3)merges.push({s:{r:hr,c},e:{r:hr+2,c}})}merges.push({s:{r:hr,c:2},e:{r:hr+2,c:3}});
+    const wkF=['1F3A4D','2C5068'];
+    for(let w=0;w<U.win;w++){const f={...hs,fill:{fgColor:{rgb:wkF[w%2]}}};set(hr,10+w*6,'SEM '+(U.week+w)+'  ·  '+fmtD(weekDays(U.week+w)[0]),f);for(let k=1;k<6;k++)set(hr,10+w*6+k,'',f);merges.push({s:{r:hr,c:10+w*6},e:{r:hr,c:10+w*6+5}})}
+    days.forEach((x,k)=>{const td=x.d===today,hol=!isWork(x.d);const f={...hs,fill:{fgColor:{rgb:td?'E0A01B':hol?'7F8C99':wkF[Math.floor(k/6)%2]}},font:{bold:true,sz:9,color:{rgb:td?'1B1400':'FFFFFF'}}};
+      set(hr+1,10+k,DL[x.i],f);set(hr+2,10+k,fmtS(x.d),{...f,font:{bold:false,sz:8,color:{rgb:td?'1B1400':'FFFFFF'}}})});
+    let r=hr+3;const r0d=r;
+    for(const{p:pp,secs}of visTree()){const pf={font:{name:'Calibri',sz:11,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F5F7A'}},border:bd,alignment:{vertical:'center'}};set(r,0,'',pf);set(r,1,pp.code,pf);set(r,2,pp.name.toUpperCase(),pf);for(let c=3;c<10+nd;c++)set(r,c,'',pf);r++;
+    for(const{s,ambs}of secs){const sf={font:{name:'Calibri',sz:10,bold:true},fill:{fgColor:{rgb:L1}},border:bd,alignment:{vertical:'center'}};set(r,0,'',sf);set(r,1,s.code,sf);set(r,2,s.name.toUpperCase(),sf);for(let c=3;c<10+nd;c++)set(r,c,'',sf);r++;
       for(const{a,acts}of ambs){const r0=r;const L=acts.length?acts:[null];
-        L.forEach(x=>{const c=x?conOf(x.sc):null;const st=x?actStats(x):{};const ds=new Set(x?x.days||[]:[]);
-          set(r,0,c?c.name:'');set(r,1,r===r0?a.code:'',{border:bd,alignment:{horizontal:'center',vertical:'center'},font:{bold:true}});set(r,2,r===r0?a.name:'',{border:bd,alignment:{vertical:'center',wrapText:true},font:{bold:true}});set(r,3,'');
-          set(r,4,x?x.name:'');set(r,5,x?x.und||'':'');set(r,6,x&&x.metrado!=null?x.metrado:'');set(r,7,st.n||'',{border:bd,alignment:{horizontal:'center'}});set(r,8,st.ini?fmtS(st.ini):'',{border:bd,alignment:{horizontal:'center'}});set(r,9,st.fin?fmtS(st.fin):'',{border:bd,alignment:{horizontal:'center'}});
-          days.forEach((d,k)=>{if(ds.has(d.d)){const hx=c.color.replace('#','').toUpperCase();const qv=x&&(x.qty||{})[d.d];set(r,10+k,qv!=null?qv:'X',{fill:{fgColor:{rgb:hx}},font:{bold:true,color:{rgb:lum(c.color)>.55?'000000':'FFFFFF'}},alignment:{horizontal:'center'},border:bd})}else if(r===r0&&a.hito===d.d)set(r,10+k,a.hitoLabel||'HITO',{fill:{fgColor:{rgb:'FF0000'}},font:{bold:true,color:{rgb:'FFFFFF'}},alignment:{horizontal:'center'},border:bd});else set(r,10+k,'')});r++});
-        if(r-r0>1){merges.push({s:{r:r0,c:1},e:{r:r-1,c:1}});merges.push({s:{r:r0,c:2},e:{r:r-1,c:3}})}else merges.push({s:{r:r0,c:2},e:{r:r0,c:3}})}}}
-    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r,c:9+nd}});ws['!merges']=merges;
-    ws['!cols']=[{wch:13},{wch:8},{wch:22},{wch:6},{wch:30},{wch:6},{wch:9},{wch:6},{wch:8},{wch:8},...days.map(()=>({wch:3.2}))];
+        L.forEach(x=>{const c=x?conOf(x.sc):null;const st=x?actStats(x):{};const ds=new Set(x?x.days||[]:[]);const first=r===r0;
+          /* bordes: una línea más marcada separa cada ambiente; el código y el nombre se repiten en cada fila (en gris) para poder filtrar */
+          const b=first?{...bd,top:{style:'medium',color:{rgb:'7F8C99'}}}:bd;const base=(o={})=>({border:b,font:{...F9,...(o.font||{})},alignment:{vertical:'center',...(o.al||{})},...(o.fill?{fill:o.fill}:{})});
+          set(r,0,c?c.name:'',base(c?{fill:{fgColor:{rgb:c.color.replace('#','').toUpperCase()}},font:{bold:true,color:{rgb:lum(c.color)>.55?'000000':'FFFFFF'}}}:{}));
+          set(r,1,a.code,base({font:{bold:first,color:{rgb:first?'000000':'A6A6A6'}},al:{horizontal:'center'}}));
+          set(r,2,a.name,base({font:{bold:first,color:{rgb:first?'000000':'A6A6A6'}},al:{wrapText:first}}));set(r,3,'',base());
+          set(r,4,x?x.name:'',base());set(r,5,x?x.und||'':'',base({al:{horizontal:'center'}}));
+          {const o={...base({al:{horizontal:'right'}}),numFmt:'#,##0.##'};set(r,6,x&&x.metrado!=null?x.metrado:'',o)}
+          set(r,7,st.n||'',base({al:{horizontal:'center'}}));set(r,8,st.ini?fmtS(st.ini):'',base({al:{horizontal:'center'}}));set(r,9,st.fin?fmtS(st.fin):'',base({al:{horizontal:'center'}}));
+          days.forEach((d,k)=>{const dc=10+k;const wk0=d.i===0;const bb=wk0?{...b,left:{style:'thin',color:{rgb:'7F8C99'}}}:b;
+            if(ds.has(d.d)){const hx=c.color.replace('#','').toUpperCase();const qv=x&&(x.qty||{})[d.d];set(r,dc,qv!=null?qv:'X',{fill:{fgColor:{rgb:hx}},font:{name:'Calibri',sz:9,bold:true,color:{rgb:lum(c.color)>.55?'000000':'FFFFFF'}},alignment:{horizontal:'center',vertical:'center'},border:bb})}
+            else if(first&&a.hito===d.d)set(r,dc,a.hitoLabel||'HITO',{fill:{fgColor:{rgb:'C00000'}},font:{name:'Calibri',sz:8,bold:true,color:{rgb:'FFFFFF'}},alignment:{horizontal:'center'},border:bb});
+            else set(r,dc,'',{border:bb,...(d.d===today?{fill:{fgColor:{rgb:'FFF4D6'}}}:!isWork(d.d)?{fill:{fgColor:{rgb:'EEF0F2'}}}:{})})});r++});
+        }}}
+    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(r-1,hr+2),c:9+nd}});ws['!merges']=merges;
+    ws['!autofilter']={ref:X.utils.encode_range({s:{r:hr+2,c:0},e:{r:Math.max(r-1,hr+2),c:9}})};
+    ws['!cols']=[{wch:16},{wch:8},{wch:22},{wch:2},{wch:34},{wch:6},{wch:9},{wch:6},{wch:8},{wch:8},...days.map(()=>({wch:3.6}))];
+    ws['!rows']=[{hpt:22},{hpt:15}];
     ws['!freeze']={xSplit:10,ySplit:hr+3};ws['!views']=[{state:'frozen',xSplit:10,ySplit:hr+3}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lookahead');
     if(CLV){/* al cliente solo va su programa y su PPC: nada del plan interno, restricciones ni avance diario */
@@ -155,27 +178,136 @@ async function exportXlsx(){
       const lg=[['SUBCONTRATISTA','PARTIDA']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'']));const ws4=X.utils.aoa_to_sheet(lg);ws4['!cols']=[{wch:18},{wch:26}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
-    // plan semanal por piso
-    const pl=[['PLAN SEMANAL · SEMANA '+U.week],[],['PISO','ESTADO','SUBCONTRATISTA','ÍTEM','AMBIENTE','ACTIVIDAD','DÍAS','METRADO SEM.','UND','EJECUTADO','CUMPLIDO','CAUSA NO CUMPLIMIENTO','COMENTARIO']];const ppcRows=[];
-    for(const pp of visPisos()){const w=S.wk.get(wkId(U.week,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(U.week,pp.id);const res=fz&&w.res||{};
-      Object.entries(items).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0)).forEach(([id,it])=>{const rr=res[id]||{};pl.push([pp.code,fz?'Congelado':'Borrador',conOf(it.sc).name,it.code,it.amb,it.act,it.days.map(fmtS).join(' '),it.q??'',it.und||'',rr.exec??'',rr.ok===true?'SÍ':rr.ok===false?'NO':'',rr.cnc||'',rr.note||''])});
-      const st=ppcOf(w);ppcRows.push(['PPC '+pp.code,st?pct(st.ppc):'—'])}
-    pl.push([],...ppcRows);const ws2=X.utils.aoa_to_sheet(pl);ws2['!cols']=[{wch:6},{wch:10},{wch:16},{wch:8},{wch:28},{wch:32},{wch:26},{wch:12},{wch:6},{wch:11},{wch:10},{wch:24},{wch:30}];
-    for(let c=0;c<13;c++){const k=X.utils.encode_cell({r:2,c});if(ws2[k])ws2[k].s=hs}X.utils.book_append_sheet(wb,ws2,'Plan semanal');
-    const rs=[['ESTADO','ÍTEM','AMBIENTE','ACTIVIDAD','TIPO','DESCRIPCIÓN','RESPONSABLE','REQUERIDA','LIBERADA']];
-    for(const q of restrInScope()){const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);rs.push([q.status==='lib'?'Liberada':'Pendiente',a?a.code:'',a?a.name:'',x?x.name:'',q.type,q.desc,q.resp,q.need,q.freed])}
-    const ws3=X.utils.aoa_to_sheet(rs);ws3['!cols']=[{wch:11},{wch:8},{wch:24},{wch:28},{wch:18},{wch:40},{wch:16},{wch:11},{wch:11}];for(let c=0;c<9;c++)ws3[X.utils.encode_cell({r:0,c})].s=hs;X.utils.book_append_sheet(wb,ws3,'Restricciones');
-    const lg=[['SUBCONTRATISTA','PARTIDA','COLOR']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'','X']));const ws4=X.utils.aoa_to_sheet(lg);
-    [...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach((c,i)=>{ws4[X.utils.encode_cell({r:i+1,c:2})].s={fill:{fgColor:{rgb:c.color.replace('#','').toUpperCase()}},font:{bold:true,color:{rgb:lum(c.color)>.55?'000000':'FFFFFF'}},alignment:{horizontal:'center'}}});
-    for(let c=0;c<3;c++)ws4[X.utils.encode_cell({r:0,c})].s=hs;ws4['!cols']=[{wch:18},{wch:26},{wch:8}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
-    const ad=[['FECHA','PISO','ÍTEM','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','PROGRAMADO','UND','ESTADO','EJECUTADO','CAUSA','COMENTARIO','FOTOS','REGISTRADO POR']];const vps=new Set(visPisos().map(x=>x.id));
-    [...DAY.values()].filter(doc=>vps.has(doc.pisoId)&&doc.date>=days[0].d&&doc.date<=days[days.length-1].d).sort((a,b)=>a.date.localeCompare(b.date)).forEach(doc=>{
-      for(const[aid,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status)continue;const x=S.act.get(aid);const am=x&&S.amb.get(x.ambId);ad.push([doc.date,S.pis.get(doc.pisoId)?.code||'',am?am.code:'',am?am.name:'',x?x.name:'(eliminada)',x?conOf(x.sc).name:'',rc.prog??'',rc.und||'',ST[rc.status].t,rc.exec??'',rc.cnc||'',rc.note||'',(rc.photos||[]).length||'',rc.byName||rc.by||''])}
-      });
-    npItems(new Set(days.map(x=>x.d)),vps).forEach(({e,d:dd,p:pp,a:am})=>ad.push([dd,pp?.code||'',am?am.code:'',am?am.name:'',e.desc+' (no programado)',conOf(e.sc).name,'',e.und||'','No programado',e.exec??'','',e.note||'',(e.photos||[]).length||'',e.byName||e.by||'']));
-    const ws5=X.utils.aoa_to_sheet(ad);ws5['!cols']=[{wch:11},{wch:6},{wch:8},{wch:24},{wch:34},{wch:16},{wch:11},{wch:6},{wch:13},{wch:10},{wch:22},{wch:30},{wch:6},{wch:18}];for(let c=0;c<14;c++)ws5[X.utils.encode_cell({r:0,c})].s=hs;X.utils.book_append_sheet(wb,ws5,'Avance diario');
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-    saveBlob(`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
+    /* formato de la empresa (ExcelJS, con logos): Lookahead · PPC semanal · PPC del SC · AR (análisis de restricciones) · Sectorización */
+    await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
+    xHeader(xToJ(J,'Lookahead',ws,X,6),'look',LG);
+    {const wsP=ppcSemWs(X,U.week);if(wsP)xHeader(xToJ(J,'PPC semanal',wsP,X,5),'ppc',LG);const w2=ppcScWs(X,U.week);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
+    xAR(J,arList(),U.week,LG);
+    await xSector(J,visPisos().map(q=>q.id));
+    await xSave(J,`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`);
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
   finally{if(unswap)unswap();btn.disabled=false;btn.textContent='Exportar Excel'}
 }
+
+/* ---------- PPC semanal en el formato de la empresa (GP-PR02-F-10, rev. 2) ----------
+   Columnas: ITEM · DESCRIPCIÓN · U. · METR TOTAL · METR SEMANA · días L–S (código del sector, color del SC) · SI/NO (días)
+   · TIPO (código de causa) · CAUSAS · MITIGACIÓN. Pie: confiabilidad de la programación (días cumplidos / días programados). */
+async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
+  try{await loadXlsx();const X=window.XLSX;const p=P();const ws=ppcSemWs(X,n);if(!ws)throw new Error(`No hay compromisos en la semana ${n}${U.piso?' de este piso':''}.`);
+    await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);xHeader(xToJ(J,'PPC',ws,X,5),'ppc',LG);{const w2=ppcScWs(X,n);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
+    await xSave(J,`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`);
+  }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
+/** hoja «PPC semanal» en el formato de la empresa (la usan el Excel del PPC y el del Lookahead); null si no hay compromisos */
+function ppcSemWs(X,n){{const p=P();const wd=weekDays(n);const vp=visPisos();
+    const B={style:'thin',color:{rgb:'000000'}};const bd={top:B,bottom:B,left:B,right:B};
+    const F=(o={})=>({name:o.name||'Arial',sz:o.sz||9,bold:!!o.b,color:{rgb:o.c||'000000'}});
+    const st=(o={})=>{const r={border:o.nb?undefined:bd,font:F(o),alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.fmt)r.numFmt=o.fmt;return r};
+    const HF='DCE6F1';const hd=st({b:true,h:'center',w:true,fill:HF}),hd9=st({b:true,h:'center',sz:9,w:true,fill:HF}),cc=st({h:'center'}),cl=st({w:true}),cl11=st({name:'Calibri',sz:11});
+    const ws={};const M=[];const set=(r,c,v,s)=>{const o={v:v??'',t:typeof v==='number'?'n':'s',s:s||cl};ws[X.utils.encode_cell({r,c})]=o;return o};
+    const box=(r0,c0,r1,c1,v,s)=>{for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)set(r,c,r===r0&&c===c0?v:'',s);if(r1>r0||c1>c0)M.push({s:{r:r0,c:c0},e:{r:r1,c:c1}})};
+    /* encabezado (filas 2–5): logos (vacío), datos del proyecto, título y código */
+    box(1,1,4,2,'',st({}));
+    const lab=st({b:true,sz:10,nb:true,name:'Arial Narrow'}),val=st({sz:9,nb:true,name:'Arial Narrow'});
+    [['PROYECTO',p.fullName||p.name||''],['PROPIETARIO',p.owner||''],['UBICACIÓN',p.location||''],['FECHA',`${fmtD(todayIso())} ${todayIso().slice(0,4)}`]].forEach(([k,v],i)=>{set(1+i,3,k,lab);set(1+i,4,': '+v,val)});
+    box(1,8,4,17,'PORCENTAJE DE PLAN CUMPLIDO  ( PPC )',st({b:true,sz:14,h:'center',name:'Euphemia'}));
+    [['CÓDIGO',p.ppcCode||'GP-PR02-F-10'],['REVISIÓN','1.0'],['HECHO POR',me&&(me.name||me.email)||''],['REVISADO POR','']].forEach(([k,v],i)=>{set(1+i,18,k,lab);set(1+i,19,v?': '+v:'',val)});
+    /* fila 6: leyenda de códigos de causa */
+    CNC_STD.forEach((o,i)=>set(5,8+i,o.c,st({sz:7,h:'center',nb:true,name:'Arial Narrow'})));
+    /* encabezado de la tabla (filas 7–9) */
+    box(6,1,6,7,'ACTIVIDADES PROGRAMADAS',st({b:true,sz:10,h:'center',fill:HF}));box(6,8,6,13,'SEMANA '+n,st({b:true,sz:10,h:'center',c:'FFFFFF',fill:'1F3A4D'}));
+    box(6,14,7,15,'CUMPLI-MIENTO',st({b:true,sz:10,h:'center',w:true,fill:HF}));box(6,16,7,19,'ANÁLISIS DE INCUMPLIMIENTO',st({b:true,sz:10,h:'center',fill:HF}));
+    box(6,20,7,22,'PARA FILTRAR',st({b:true,sz:9,h:'center',c:'6B7785',fill:'F2F2F2'}));['PISO','AMBIENTE','SUBCONTRATISTA'].forEach((t,i)=>set(8,20+i,t,st({b:true,sz:9,h:'center',c:'6B7785',fill:'F2F2F2'})));
+    box(7,1,8,1,'ITEM',hd9);box(7,2,8,4,'DESCRIPCIÓN',hd9);box(7,5,8,5,'U.',hd9);box(7,6,8,6,'METR\nTOTAL',hd9);box(7,7,8,7,'METR\nSEMANA',hd9);
+    wd.forEach((d,k)=>{const td=d===todayIso();set(7,8+k,DOWN[k].slice(0,3),st({b:true,h:'center',c:td?'1B1400':'FFFFFF',fill:td?'E0A01B':'2C5068'}));set(8,8+k,+d.slice(8),st({h:'center',c:td?'1B1400':'FFFFFF',fill:td?'E0A01B':'2C5068'}))});
+    set(8,14,'SI',hd9);set(8,15,'NO',hd9);set(8,16,'TIPO',hd9);set(8,17,'CAUSAS',hd9);box(8,18,8,19,'MITIGACIÓN',hd9);
+    let r=9;const r1=r;const fx=st({sz:8,c:'808080'});const RH=[];
+    /* fila del proyecto */
+    {const pj=st({b:true,sz:12,c:'FFFFFF',fill:'000099'});set(r,1,(p.fullName||p.name||'').toUpperCase(),pj);for(let c=2;c<20;c++)set(r,c,'',pj);for(let c=20;c<23;c++)set(r,c,'',fx)}r++;
+    const fl=st({b:true,sz:11,c:'FFFFFF',fill:'963634'}),flC=st({b:true,sz:10,c:'FFFFFF',fill:'963634'});
+    const gr=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB'}),grC=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB',h:'center'});
+    const SI=st({b:true,h:'center',c:'00B050'}),NO=st({b:true,h:'center',c:'FF0000'});
+    let tSi=0,tNo=0,tN=0,tOk=0;
+    for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
+      const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
+      set(r,1,pp.code||'',flC);set(r,2,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fl);for(let c=3;c<20;c++)set(r,c,'',fl);set(r,20,pp.code||'',fx);set(r,21,'',fx);set(r,22,'',fx);r++;
+      for(let i=0;i<ids.length;){const it0=items[ids[i]];let j=i;while(j<ids.length&&items[ids[j]].code===it0.code&&items[ids[j]].amb===it0.amb)j++;
+        /* ambiente: fila de grupo */
+        set(r,1,it0.code||'',grC);box(r,2,r,4,(it0.amb||'').toUpperCase(),gr);for(let c=5;c<8;c++)set(r,c,'',gr);for(let c=8;c<20;c++)set(r,c,'',c>=18?cl:cc);M.push({s:{r,c:18},e:{r,c:19}});set(r,20,pp.code||'',fx);set(r,21,(it0.code||'')+' '+(it0.amb||''),fx);set(r,22,'',fx);r++;
+        for(let k=i;k<j;k++){const id=ids[k],it=items[id],rr=res[id]||{};const x=S.act.get(id);const c=conOf(it.sc);const am=x&&S.amb.get(x.ambId);const sec=am&&S.sec.get(am.sectorId);
+          const dd=(it.days||[]).slice().sort();const ds=new Set(dd);
+          set(r,1,actNum(id)||'',st({b:true,h:'center'}));box(r,2,r,4,it.act||'',cl11);set(r,5,it.und||(x&&x.und)||'',cc);
+          set(r,6,x&&typeof x.metrado==='number'?x.metrado:'',cc);set(r,7,it.q!=null?it.q:'',cc);
+          const hx=(c.color||'#999999').replace('#','').toUpperCase();const ink=lum(c.color||'#999')>.55?'000000':'FFFFFF';
+          wd.forEach((d,q)=>{if(ds.has(d))set(r,8+q,(sec&&sec.code)||'X',st({h:'center',sz:10,fill:hx,c:ink}));else set(r,8+q,'',cc)});
+          /* SI / NO en días, como el formato: cumplido = todos sus días; no cumplido = días cumplidos según Campo y el resto */
+          let si='',no='';if(rr.ok===true){si=dd.length;no=0}else if(rr.ok===false){let ok=dd.filter(d=>{const rc=recOf(d,id);return rc&&rc.status==='ok'}).length;if(ok>=dd.length)ok=Math.max(0,dd.length-1);si=ok;no=dd.length-ok}
+          set(r,14,si||'',SI);set(r,15,no||'',NO);if(typeof si==='number'){tSi+=si;tNo+=no}
+          const bad=rr.ok===false;set(r,16,bad&&rr.cnc?cncCode(rr.cnc):'',st({h:'center',c:'FF0000'}));
+          set(r,17,bad?[(rr.cnc||'').toUpperCase(),rr.note||''].filter(Boolean).join(': '):'',st({b:true,c:'ED0000',w:true}));
+          box(r,18,r,19,bad||rr.mit?rr.mit||'':'',st({h:'center',w:true}));
+          set(r,20,pp.code||'',fx);set(r,21,(it.code||'')+' '+(it.amb||''),fx);set(r,22,c.name||'',fx);RH[r]={hpt:16};
+          if(rr.ok===true)tOk++;tN++;r++}
+        i=j}}
+    if(!tN)return null;
+    /* pie: confiabilidad de la programación (como el formato) y PPC por compromisos */
+    const fb=st({b:true,sz:10,nb:true}),fbc=st({b:true,sz:10,h:'center',nb:true});const rl=r;
+    set(r,1,'CONFIABILIDAD DE LA PROGRAMACIÓN',fb);set(r,7,'Total de registros  :',st({b:true,sz:10,nb:true,h:'right'}));
+    const cell=(c,v,f,s)=>{const o=set(r,c,v,s);if(f)o.f=f};
+    const oc=X.utils.encode_col(14),pc=X.utils.encode_col(15);
+    cell(8,tSi+tNo,`M${rl+1}+Q${rl+1}`,fbc);set(r,10,'Cumplidos :',fb);cell(12,tSi,`SUM(${oc}${r1+1}:${oc}${rl})`,st({b:true,sz:10,h:'center',nb:true,c:'00B050'}));
+    set(r,13,'NO Cumplidos :',fb);cell(16,tNo,`SUM(${pc}${r1+1}:${pc}${rl})`,st({b:true,sz:10,h:'center',nb:true,c:'FF0000'}));
+    set(r,17,'Porcentaje de confiabilidad :',fb);{const o=set(r,18,tSi+tNo?tSi/(tSi+tNo):0,{...fbc,numFmt:'0%'});o.f=`IFERROR(M${rl+1}/I${rl+1},0)`}
+    r++;set(r,1,`PPC de la semana (compromisos cumplidos / programados): ${tOk} de ${tN}`,st({sz:9,nb:true,c:'555555'}));set(r,18,tN?tOk/tN:0,{...st({b:true,sz:10,h:'center',nb:true}),numFmt:'0%'});
+    ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r,c:22}});ws['!merges']=M;ws['!autofilter']={ref:X.utils.encode_range({s:{r:8,c:1},e:{r:rl-1,c:22}})};
+    ws['!cols']=[{wch:2},{wch:7},{wch:34},{wch:13},{wch:9},{wch:5},{wch:8},{wch:8},...wd.map(()=>({wch:6})),{wch:4.5},{wch:4.5},{wch:7},{wch:30},{wch:16},{wch:16},{wch:7},{wch:18},{wch:18}];
+    [12.75,18,18,18,18,11.25,17.25,15,15].forEach((h,i)=>RH[i]={hpt:h});ws['!rows']=RH;
+    ws['!views']=[{state:'frozen',xSplit:0,ySplit:9}];
+    return ws}}
+/** hoja «Restricciones» con formato (la usan el botón de Restricciones y el Excel del Lookahead) */
+function restrWs(X,list,sub){const p=P();const today=todayIso();
+  const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
+  const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};return r};
+  const ws={};const M=[];const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};
+  const H=['N.º','ESTADO','PISO','CÓDIGO','AMBIENTE','ACTIVIDAD','AFECTA A','TIPO','CLASE / ÁREA','DESCRIPCIÓN','RESPONSABLE','REGISTRÓ','F. REGISTRO','REQUERIDA','LIBERADA','LIBERÓ','DÍAS DE ATRASO'];const nc=H.length;
+  set(0,0,'RESTRICCIONES',st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,sub||'',st({nb:true,sz:10,c:'555555'}));
+  [['PROYECTO',p.fullName||p.name||''],['FECHA',fmtD(today)+' '+today.slice(0,4)]].forEach(([k,v],i)=>{set(i,6,k,st({nb:true,b:true,sz:9,c:'6B7785',h:'right'}));set(i,7,v,st({nb:true,sz:10,b:i===0}))});
+  const pend=list.filter(r=>r.status!=='lib'),late=pend.filter(r=>r.need&&r.need<today);
+  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.length-pend.length} liberadas`,st({nb:true,sz:10,b:true}));
+  const hr=4;const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});H.forEach((t,c)=>set(hr,c,t,hs));
+  let r=hr+1;list.forEach((q,i)=>{const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);const pp=S.pis.get(restrPiso(q));const lib=q.status==='lib';const vl=!lib&&q.need&&q.need<today;
+    const est=lib?'Liberada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':vl?'C62828':'7A5200';
+    const atr=vl?wdist(q.need,today):lib&&q.need&&q.freed&&q.freed>q.need?wdist(q.need,q.freed):'';
+    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name:(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
+    row.forEach((v,c)=>set(r,c,v,c===1?st({b:true,h:'center',fill:ef,c:ec}):c===0||c===2||c===3||c>=12?st({h:'center'}):c===9?st({w:true}):st()));r++});
+  if(!list.length){set(r,0,'Sin restricciones en este filtro.',st({nb:true,c:'777777'}));r++}
+  ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(r-1,hr),c:nc-1}});ws['!merges']=M;
+  ws['!autofilter']={ref:X.utils.encode_range({s:{r:hr,c:0},e:{r:Math.max(r-1,hr),c:nc-1}})};
+  ws['!cols']=[{wch:5},{wch:11},{wch:6},{wch:8},{wch:20},{wch:30},{wch:18},{wch:16},{wch:18},{wch:40},{wch:18},{wch:18},{wch:11},{wch:11},{wch:11},{wch:16},{wch:9}];
+  ws['!rows']=[{hpt:22}];ws['!views']=[{state:'frozen',xSplit:0,ySplit:hr+1}];return ws}
+/** hoja «PPC del SC» (semana congelada n, pisos visibles): por subcontratista el PPC bruto y el PPC del SC (sin lo que no
+    dependía de él) y el detalle de cada no cumplido con su causa y quién responde. La hoja del formato de la empresa no cambia. */
+function ppcScWs(X,n){const docs=visPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();
+  const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
+  const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.z)r.numFmt=o.z;return r};
+  const ws={};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};
+  set(0,0,`PPC DEL SUBCONTRATISTA · SEMANA ${n}`,st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,`${p.fullName||p.name||''} · ${pisoLabel()} · ${fmtD(weekDays(n)[0])} – ${fmtD(weekDays(n)[5])}`,st({nb:true,sz:10,c:'555555'}));
+  set(2,0,'PPC del SC = cumplidos ÷ (compromisos − no imputables al SC + fallas de otras partidas que el ingeniero le hizo contar).',st({nb:true,sz:9,c:'6B7785'}));
+  const H=['SUBCONTRATISTA','COMPROMISOS','CUMPLIDOS','NO CUMPLIDOS','NO IMPUTABLES','DE OTRAS PARTIDAS','PPC BRUTO','PPC DEL SC'];const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});
+  let r=4;H.forEach((t,c)=>set(r,c,t,hs));r++;const M=wkScStats(docs);const pc=st({h:'center',z:'0%'});
+  for(const[sc,o]of Object.entries(M).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name))){if(!o.n&&!o.ext)continue;
+    [conOf(sc).name,o.n,o.ok,o.no,o.nimp,o.ext].forEach((v,c)=>set(r,c,v,c?st({h:'center'}):st({b:true})));set(r,6,o.n?o.ok/o.n:'—',pc);set(r,7,o.ppcSc??'—',st({h:'center',z:'0%',b:true}));r++}
+  r++;set(r,0,'NO CUMPLIDOS',st({nb:true,b:true,sz:12,c:'1F3A4D'}));r++;
+  const H2=['PISO','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','CAUSA','¿IMPUTABLE AL SC?','RESPONDE','¿LE CUENTA?','DETALLE','MITIGACIÓN'];const r0=r;H2.forEach((t,c)=>set(r,c,t,hs));r++;
+  for(const w of docs){const pp=S.pis.get(w.pisoId);for(const[id,it]of Object.entries(w.items||{}).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0))){const q=(w.res||{})[id];if(!q||q.ok!==false)continue;
+    const imp=!resNimp(q);const rs=q.rsc&&q.rsc!==it.sc?conOf(q.rsc).name:imp?conOf(it.sc).name:'Obra (no imputable)';
+    [pp?pp.code:'',(it.code||'')+' '+(it.amb||''),it.act||'',conOf(it.sc).name,q.cnc?cncLabel(q.cnc):'',imp?'Sí':'No',rs,q.rsc&&q.rsc!==it.sc?(q.pc?'Sí':'No'):'',q.note||'',q.mit||''].forEach((v,c)=>set(r,c,v,c>=8||c===2?st({w:true}):c===5||c===7?st({h:'center'}):st()));r++}}
+  if(r===r0+1){set(r,0,'Sin no cumplidos en esta semana.',st({nb:true,c:'777777'}));r++}
+  ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:9}});ws['!cols']=[{wch:22},{wch:22},{wch:34},{wch:20},{wch:24},{wch:12},{wch:22},{wch:10},{wch:36},{wch:30}];ws['!rows']=[{hpt:22}];return ws}
+/** botón de Restricciones: exporta la lista con los filtros que se ven en pantalla */
+async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
+  /* formato de la empresa (AR: análisis de restricciones, 4 semanas desde la semana elegida) y el detalle de la pantalla */
+  try{await loadXlsx();const X=window.XLSX;const p=P();await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
+    xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
+    await xSave(J,`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`)}
+  catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
