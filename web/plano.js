@@ -1184,7 +1184,7 @@ function pubBarHtml(){const p=pubOf();const D=draftsOf();const eng=dzEng();const
   const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const np=dpPendAll().length;
   return`<div class="pubb">Plan propuesto<small>${D.length?`${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) se aplican al lookahead al publicar`:'Revísalo en la reunión (cumplimiento, cruces y «no va») y publícalo al terminar'}${np?` · <b class="bad">${np} propuesta${np>1?'s':''} del SC por revisar</b>`:''} · si nadie lo publica, a las ${planCutHH()} se publica solo con estos cambios y las propuestas sin revisar se rechazan</small><button class="ib pri" data-pub="1">📣 Publicar plan</button>${D.length?'<button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button>':''}</div>`}
 /* reabrir / volver a cerrar (solo el administrador; queda en el registro del día) */
-function lkReopen(){if(!isAdmin)return;const why=(prompt(`Reabrir el plan del ${dvLbl(M.date)}: ¿por qué? (queda registrado)`)||'').trim();if(!why)return;const e={t:NOW(),by:me.email,n:me.name||me.email,why};
+async function lkReopen(){if(!isAdmin)return;const why=((await uiAsk({title:`Reabrir el plan del ${dvLbl(M.date)}`,input:{label:'¿Por qué se reabre? Queda registrado.',required:true},ok:'Reabrir',tone:'warn'}))||'').trim();if(!why)return;const e={t:NOW(),by:me.email,n:me.name||me.email,why};
   const k=M.date+'_'+M.piso;const cur=dplanOf(M.date,M.piso)||{};DPL.set(k,{...cur,id:k,date:M.date,pisoId:M.piso,reo:e});DV++;requestRender();
   fcol('dplan').doc(k).set({date:M.date,pisoId:M.piso,reo:e,log:firebase.firestore.FieldValue.arrayUnion({...e,what:'reabierto'})},{merge:true}).catch(err=>toast('No se pudo reabrir: '+(err.code||err.message)));
   toast(`Plan del ${dvLbl(M.date)} reabierto: ya se puede cambiar`)}
@@ -1192,7 +1192,7 @@ function lkClose(){if(!isAdmin)return;const k=M.date+'_'+M.piso;const cur=dplanO
   fcol('dplan').doc(k).set({reo:null,log:firebase.firestore.FieldValue.arrayUnion({t:NOW(),by:me.email,n:me.name||me.email,what:'cerrado de nuevo'})},{merge:true}).catch(()=>{});toast('Plan cerrado de nuevo')}
 /* «Deshacer publicación» desde la barra (también después de recargar): arma lo publicado desde las reprogramaciones del día */
 function unpubBar(){const PID=pubId(M.date,M.piso);const out=[...PD.values()].filter(z=>z.kind==='nova'&&z.pub===PID&&!z.draft).map(z=>({id:z.id,mv:z.mv,rid:z.rid,date:z.date,aid:z.actId,k:z.k||''}));
-  if(!confirm(`¿Deshacer la publicación del ${dvLbl(M.date)}? El plan vuelve a borrador${out.length?` y ${out.length} reprogramación${out.length>1?'es':''} vuelve${out.length>1?'n':''} a borrador (las fechas regresan si nadie las cambió)`:''}.`))return;unpubPlan(PID,{out,was:null})}
+  uiAsk({title:`¿Deshacer la publicación del ${dvLbl(M.date)}?`,text:'El plan vuelve a borrador.',note:out.length?`${out.length} reprogramación${out.length>1?'es':''} vuelve${out.length>1?'n':''} a borrador: las fechas regresan si nadie las cambió.`:'',ok:'Deshacer publicación',tone:'warn'}).then(ok=>{if(ok)unpubPlan(PID,{out,was:null})})}
 function pubDiscard(){const D=draftsOf();const g=[];for(const z of D){const o=remDoc(z.id);if(o)g.push(o);if(z.prop){const p=PD.get(z.prop);if(p&&p.st==='ok')g.push(updDoc(p.id,{st:'pend',dec:null,decBy:null,decN:null,decT:null},{st:'ok'}))}}rec(g.filter(Boolean));toast(`${D.length} cambio${D.length>1?'s':''} sin publicar descartado${D.length>1?'s':''}`,'Deshacer',undo);requestRender()}
 /** propuestas del SC sin decidir del día y piso que se ven */
 const dpPendAll=()=>[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&z.date===M.date);
@@ -1208,7 +1208,7 @@ function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso
     borrador al día hábil siguiente (solo esa actividad, con la causa que puso el SC); una culminada se da por culminada. */
 let DPALL=false;
 async function dpAll(acc){if(DPALL||typeof isAdmin==='undefined'||!isAdmin)return;const L=dpPendAll();if(!L.length)return;
-  if(!confirm(`¿${acc?'Aceptar':'Rechazar'} las ${L.length} propuestas del SC del ${dvLbl(M.date)}?`))return;DPALL=true;let ok=0,no=0;
+  if(!await uiAsk({title:`¿${acc?'Aceptar':'Rechazar'} las ${L.length} propuestas del SC?`,text:`Plan del ${dvLbl(M.date)}.`,ok:`${acc?'Aceptar':'Rechazar'} ${L.length}`,tone:acc?'ok':'danger'}))return;DPALL=true;let ok=0,no=0;
   try{for(const p of L){const x=S.act.get(p.actId);if(!x){no++;continue}
     if(!acc){if(await dpReject(p,true))ok++;else no++;continue}
     if(p.k==='fin'){if(await dvFin(x,p,true))ok++;else no++;continue}
@@ -1636,7 +1636,7 @@ function dzMove(btn,x){const from=M.date;const to=wshift(from,1);
     {one:()=>{if(dzWrite(x,dzShift(x,from,false),`“${short(x.name,40)}” pasa al ${fmtD(to)}`))dzLog(`→ ${x.name} pasa al ${fmtD(to)}`)},
      all:()=>{if(dzWrite(x,dzShift(x,from,true),`“${short(x.name,40)}” y lo que sigue, un día hábil después`))dzLog(`→ ${x.name} y lo que sigue, un día después`)}})}
 function dzFin(x){if(typeof canDaily==='undefined'||!canDaily)return;const d=M.date>todayIso()?todayIso():M.date;
-  if(!confirm(`¿“${x.name}” ya está terminada${d===todayIso()?' hoy':' el '+fmtD(d)}? Se liberan los días que le quedan en el lookahead.`))return;markDone(x.id,d);dzLog(`✔ ${x.name} terminada`)}
+  uiAsk({title:`¿“${x.name}” ya está terminada${d===todayIso()?' hoy':' el '+fmtD(d)}?`,text:'Se liberan los días que le quedan en el lookahead.',ok:'Sí, terminada',tone:'ok'}).then(ok=>{if(!ok)return;markDone(x.id,d);dzLog(`✔ ${x.name} terminada`)})}
 function dzRes(btn,x){const types=P().restrTypes||[];
   openPop(btn,`<div class="ph">Restricción · ${esc(short(x.name,40))}</div><div class="ptx">No va el ${fmtD(M.date)}. La restricción queda en <b>Restricciones</b>, amarrada a esta actividad.</div>
     <div class="qrow"><select id="dzrt" aria-label="Tipo">${types.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div>

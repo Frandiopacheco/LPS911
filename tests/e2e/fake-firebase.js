@@ -3,6 +3,8 @@
    la versión "compat": auth, firestore (colecciones, documentos, where, onSnapshot, set/update/delete).
    Los datos de la obra de prueba están en SEED; la sesión se elige con window.__E2E = {user}.
    La base se guarda en sessionStorage para sobrevivir a una recarga (por ejemplo, "Ver como"). */
+/* la app usa ventanas propias (uiAsk); en las pruebas pasan por confirm/prompt del navegador para contestarlas con page.on('dialog') (ver uiask.spec.js para la ventana real) */
+window.__uiAskNative = true;
 (function () {
   const E = window.__E2E || {};
   const T = E.today || '2026-10-01', TM = E.tomorrow || '2026-10-02';

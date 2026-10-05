@@ -21,6 +21,9 @@ export function checkWeb(web) {
   for (const f of [...js, ...css]) if (!fs.existsSync(path.join(web, f))) errs.push(`✗ index.html carga web/${f}, que no existe`);
   const present = fs.existsSync(path.join(web, 'js')) ? fs.readdirSync(path.join(web, 'js')).filter(f => f.endsWith('.js')).map(f => 'js/' + f) : [];
   for (const f of present) if (!js.includes(f)) errs.push(`✗ web/${f} existe pero index.html no lo carga`);
+  /* ventanas del navegador: se usa uiAsk (base.js), que se ve como la app y funciona bien en el celular */
+  for (const f of [...js.filter(f => f !== 'js/base.js'), 'plano.js']) { const p = path.join(web, f); if (!fs.existsSync(p)) continue;
+    const m = fs.readFileSync(p, 'utf8').match(/(?<![.\w])(confirm|prompt|alert)\(/); if (m) errs.push(`✗ web/${f}: usa ${m[1]}() del navegador; usa uiAsk({...}) (base.js)`); }
   /* CSS: llaves equilibradas (un @media sin cerrar se traga todo lo que viene después y solo vale en el celular) */
   for (const f of css) {
     const p = path.join(web, f);

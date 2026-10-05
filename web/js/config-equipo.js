@@ -245,9 +245,9 @@ async function importJson(file){
   if(!writes.length&&!dels.length){toast('El archivo no contiene registros.');return}
   if(data.tipo==='actualizacion'){const falta=((data.requiere||{}).pisos||[]).filter(id=>!S.pis.has(id));
     if(falta.length){IMPMSG='Esta actualización es para el lookahead ya cargado, pero en la página no están los pisos '+falta.join(', ')+'. Carga primero el lookahead completo.';const m=$('#impmsg');if(m)m.textContent=IMPMSG;toast('Falta cargar primero el lookahead completo.');return}
-    if(!confirm(`${data.resumen?data.resumen+'\n\n':''}Se actualizarán ${writes.length} registros y se eliminarán ${dels.length}. Las demás actividades (y lo que hayas corregido en ellas) no se tocan.\n\n¿Continuar?`))return}
+    if(!await uiAsk({title:'¿Aplicar la actualización?',text:data.resumen||'',list:[`${writes.length} registros se actualizan`,`${dels.length} se eliminan`],note:'Las demás actividades (y lo que hayas corregido en ellas) no se tocan.',ok:'Continuar',tone:dels.length?'warn':'info'}))return}
   else{const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
-    if(!confirm(`Vas a cargar ${writes.length} registros (${Object.entries(by).map(([c,n])=>n+' '+c).join(', ')})${dels.length?` y eliminar ${dels.length}`:''}.\n\nLos registros con el mismo identificador se REEMPLAZAN por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.\n\n¿Continuar?`))return}
+    if(!await uiAsk({title:`¿Cargar ${writes.length} registros?`,list:[...Object.entries(by).map(([c,n])=>`${n} en ${c}`),...(dels.length?[`${dels.length} se eliminan`]:[])],note:'Los registros con el mismo identificador se reemplazan por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.',ok:'Cargar',tone:'danger'}))return}
   const msg=$('#impmsg');let done=0;
   try{await batchWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
     await batchWrites(dels.map(([c,id])=>[c,id,null]));

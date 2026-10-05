@@ -215,22 +215,47 @@ function handleWriteErr(e){const c=e&&e.code;
 /* ---------- deshacer / rehacer ---------- */
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
-function apply(ops,label){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo)}
+/* after: se llama cuando el cambio se aplica de verdad (al momento, o después si el administrador confirma un día cerrado) */
+function apply(ops,label,after){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops,()=>apply(ops,label,after)))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo);if(after)after()}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
 function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
 /* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
 function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
 function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;
   /* deshacer tampoco cambia un día ya cerrado (publicado) sin aviso: pasa por el mismo control que cualquier cambio */
-  if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})))){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
+  if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})),()=>undo())){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g)){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
 let tT;
+/* Ventana de confirmación propia (reemplaza confirm/prompt del navegador). Devuelve una promesa:
+   true/false, o el texto escrito si lleva `input` (null si cancela).
+   uiAsk({title, text, html, list:[...], note, ok:'Aceptar', cancel:'Cancelar', tone:'info'|'warn'|'danger'|'ok', input:{label, value, placeholder, required}}) */
+let UASK=null;
+function uiAsk(o){o=typeof o==='string'?{text:o}:o||{};
+  /* pruebas automáticas (window.__uiAskNative, lo pone el Firebase falso): se usa el diálogo del navegador para que Playwright lo conteste */
+  if(window.__uiAskNative&&!window.__uiAskReal){const msg=[o.title,o.text,o.html&&o.html.replace(/<[^>]+>/g,''),(o.list||[]).filter(Boolean).map(x=>'· '+x).join('\n'),o.note,o.input&&o.input.label].filter(Boolean).join('\n\n');
+    if(o.input){const v=prompt(msg,o.input.value||'');return Promise.resolve(v==null?null:v.trim())}return Promise.resolve(confirm(msg))}
+  if(UASK)UASK.done(o.input?null:false);
+  return new Promise(res=>{const el=document.createElement('div');el.className='uask';el.id='uask';
+    const tone=o.tone||'info';const ico={info:'i',warn:'!',danger:'!',ok:'✓'}[tone]||'i';
+    const inp=o.input?`<label class="uain"><span>${esc(o.input.label||'')}</span><textarea rows="3" placeholder="${esc(o.input.placeholder||'')}">${esc(o.input.value||'')}</textarea></label>`:'';
+    el.innerHTML=`<div class="uac t-${tone}" role="alertdialog" aria-modal="true" aria-labelledby="uat"><div class="uah"><i aria-hidden="true">${ico}</i><b id="uat">${esc(o.title||'¿Confirmas?')}</b></div>
+      ${o.text?`<div class="uat">${esc(o.text).replace(/\n/g,'<br>')}</div>`:''}${o.html?`<div class="uat">${o.html}</div>`:''}
+      ${o.list&&o.list.length?`<ul class="ual">${o.list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}${o.note?`<div class="uan">${esc(o.note)}</div>`:''}${inp}
+      <div class="uab">${o.cancel===false?'':`<button class="ib" data-ua="no">${esc(o.cancel||'Cancelar')}</button>`}<button class="ib pri${tone==='danger'?' bad':''}" data-ua="si">${esc(o.ok||'Aceptar')}</button></div></div>`;
+    document.body.appendChild(el);const ta=el.querySelector('textarea');const okB=el.querySelector('[data-ua="si"]');
+    const val=()=>ta?ta.value.trim():true;const can=()=>!(o.input&&o.input.required&&!val());
+    const sync=()=>{okB.disabled=!can()};sync();if(ta)ta.oninput=sync;
+    const done=v=>{if(!UASK||UASK.el!==el)return;UASK=null;document.removeEventListener('keydown',key,true);el.remove();res(v)};
+    const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();done(o.input?null:false)}else if(e.key==='Enter'&&!e.shiftKey&&can()){e.preventDefault();e.stopPropagation();done(val())}};
+    document.addEventListener('keydown',key,true);
+    el.onclick=e=>{const b=e.target.closest('[data-ua]');if(b){if(b.dataset.ua==='si'){if(can())done(val())}else done(o.input?null:false)}else if(e.target===el)done(o.input?null:false)};
+    UASK={el,done};setTimeout(()=>(ta||okB).focus(),30)})}
 function toast(msg,btn,fn){const t=$('#toast');t.innerHTML='<span>'+esc(msg)+'</span>'+(btn?'<button type="button">'+esc(btn)+'</button>':'');t.hidden=false;if(btn)t.querySelector('button').onclick=()=>{t.hidden=true;fn()};clearTimeout(tT);tT=setTimeout(()=>t.hidden=true,btn?6500:3200)}
 const pop=$('#pop');let popFor=null;
 function popPlace(){const anchor=popFor;if(!anchor||pop.hidden)return;const r=anchor.getBoundingClientRect();const w=pop.offsetWidth,h=pop.offsetHeight;
@@ -345,8 +370,9 @@ function lockHits(ops){const H=[];for(const o of ops){if(!o||o.col!=='acts')cont
     const bq=b.qty||{},aq=a.qty||{};new Set([...Object.keys(bq),...Object.keys(aq)]).forEach(d=>{if(canon(bq[d]??null)!==canon(aq[d]??null))T.add(d)});
     for(const d of T)if(dayLocked(d,pid)&&!recReal(d,o.id))H.push({d,pid,id:o.id})}return H}
 /* se llama desde apply: false = no se aplica. El administrador puede seguir (queda registrado en el día). */
-function lockGuard(ops){if(!me)return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
-  if(isAdmin){if(!confirm(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}).\n\nComo administrador puedes cambiarlo igual: quedará registrado. El PPC del día se sigue midiendo contra lo que se publicó.\n\n¿Cambiarlo igual?`))return false;
+let LKOK=false;
+function lockGuard(ops,retry){if(!me)return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
+  if(isAdmin){if(!LKOK){uiAsk({title:`El plan del ${lab} ya está cerrado`,text:`${lockWhy(ds[0],H[0].pid)}.`,note:'Como administrador puedes cambiarlo igual: quedará registrado en el día. El PPC del día se sigue midiendo contra lo que se publicó.',ok:'Cambiarlo igual',tone:'warn'}).then(ok=>{if(ok&&retry){LKOK=true;try{retry()}finally{LKOK=false}}});return false}
     for(const k of new Set(H.map(h=>h.d+'_'+h.pid))){const[d,pid]=[k.slice(0,10),k.slice(11)];dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'cambio en el lookahead'})}return true}
   toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
 function dplanLog(d,pid,e){if(!db)return;const ref=fcol('dplan').doc(d+'_'+pid);ref.set({date:d,pisoId:pid,log:firebase.firestore.FieldValue.arrayUnion(e)},{merge:true}).catch(()=>{})}
