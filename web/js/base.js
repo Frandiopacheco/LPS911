@@ -447,6 +447,8 @@ function setupLogin(){
 /* ---------- celular: menú inferior ---------- */
 const MOBQ=matchMedia('(max-width:760px)');const isMob=()=>MOBQ.matches;
 MOBQ.addEventListener('change',()=>{const m=$('#main');if(m){m.dataset.view='';m.dataset.built=''}const sh=$('#msheet');if(sh)sh.remove();if(ready)render()});
+/* tablet vertical (≤ 900 px): las listas anchas (Restricciones) se muestran como tarjetas */
+const TABQ=matchMedia('(max-width:900px)');const isNarrow=()=>TABQ.matches;TABQ.addEventListener('change',()=>{if(ready&&U.tab==='restr')render()});
 const SVG=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),mapa:SVG('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
   ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),cap:SVG('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
