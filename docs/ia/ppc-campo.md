@@ -23,3 +23,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - PPC semanal: `setRes`/`resPatch` guardan **por campo** (`res.<act>.<campo>`). Congelar (`freezeWeek`) corre en `db.runTransaction` y respeta una congelación vigente (necesita internet). **Descongelar no borra**: la versión pasa a `weeks/<sem>_<piso>__h<hora>` `{histOf, n, pisoId, v:{frozenAt, items, res, snap}, unAt, unBy, unN, restAt?}` (sin `frozenAt`, no cuenta en ningún PPC; `wkHist(id)`) y «Recuperar» (`restoreWeek`) la repone. Cualquier código que recorra `S.wk` debe filtrar por `frozenAt`. «Aplicar registros de campo» trae también la imputabilidad (`fieldSug().imp`: la de la causa principal; empate = imputable).
   - Indicadores: el SC de un día registrado es `rc.sc` (`scAt`), no la partida actual. El gráfico «PPC diario» de la vista Semanal usa `dayData` (misma población que el Diario, con lo archivado).
   - Servidor: `aceptarCierres` escribe con `acceptCloses` (lib.js): una transacción por registro que lo relee; si un ingeniero lo verificó o quitó mientras tanto, no lo toca.
+
+## «En secuencia» (tren de trabajo, oct 2026)
+- Estado en vivo `seq` (`KST.seq`, morado): la cuadrilla llega a ese ambiente después de otro. Se guarda en `live.<fecha_act>.seq = {on, after}` (`after` = actividad anterior o vacío) con eventos `seq`/`unseq` en el `log`.
+- `kState` lo devuelve solo si no hay `st` ni cierre: al iniciar pasa a «En ejecución». `seqText` dice el estado del anterior («ya terminó: le toca»).
+- Lo marcan SC, capataz, ingeniero (campo/editor/admin) y veedor desde la ficha (`data-ka="seqf"` → elegir el anterior entre las del mismo SC y piso; `unseq` lo quita). Solo hoy y sin cierre confirmado.
+- **Solo informativo**: no cambia el PPC, los cierres ni la alerta de «sin iniciar» del Tablero (que ya no cuenta los que están en secuencia; tienen su propia tarjeta).
