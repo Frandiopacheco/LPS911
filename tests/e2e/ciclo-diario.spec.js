@@ -97,7 +97,7 @@ test('5 · mismo universo del día: la reunión y Campo incluyen lo publicado qu
   await page.evaluate(d => { daySet(d); U.tab = 'mapa'; requestRender(); }, HOY);
   await page.waitForFunction(() => window.__plano && window.__plano.cuRows);
   await page.evaluate(d => { window.__plano.M.date = d; }, HOY);
-  expect(await page.evaluate(() => window.__plano.cuRows('c1').map(r => r.x.id))).toContain('i0');
+  await expect.poll(() => page.evaluate(d => { window.__plano.M.date = d; return window.__plano.cuRows('c1').map(r => r.x.id); }, HOY)).toContain('i0');
   noErrors(errors, 'universo');
 });
 
