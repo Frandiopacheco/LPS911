@@ -1137,7 +1137,7 @@ const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 /* ---------- decidir el plan del día: va / mañana / terminada / restricción ---------- */
 const dzCan=x=>!!x&&!PHONE()&&!dayLk()&&((typeof canWrite!=='undefined'&&canWrite)||(myRole()==='sc'&&myScs().includes(x.sc)));
-/* día cerrado (publicado, cerrado a las 20:00, hoy o pasado): no se decide ni se reprograma; las cuadrillas sí */
+/* día cerrado (publicado, cerrado solo a la hora de cierre, hoy o pasado): no se decide ni se reprograma; las cuadrillas sí */
 const dayLk=()=>typeof planLocked==='function'&&planLocked(M.date,M.piso);
 const LOCKSEL='[data-dv],[data-dpa],[data-undo],[data-chu],[data-avx],[data-dpr],#dzadd';
 function lockStop(t){if(!dayLk()||!t.closest(LOCKSEL))return false;{const c=t.closest('[data-chu]');const z=c&&PD.get(c.dataset.chu);if(z&&z.draft)return false}toast(`El plan del ${dvLbl(M.date)} ya está cerrado (${lockWhy(M.date,M.piso)}): no se cambia. ${M.date>todayIso()?'Para corregirlo, deshaz la publicación.':'Registra el cumplimiento; lo que no se haga se reprograma desde mañana.'}`);return true}
@@ -1177,12 +1177,12 @@ function pubBarHtml(){const p=pubOf();const D=draftsOf();const eng=dzEng();const
   if(!fut){if(D.length&&eng){const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);
       return`<div class="pubb late">⚠ Sin publicar<small>${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) no se aplicaron: este día ya llegó y siguen en el lookahead</small><button class="ib pri" data-pub="1">📣 Publicar ahora</button><button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button></div>`}
     return`<div class="pubb lk">🔒 Plan ${M.date===today?'de hoy':'del día'} cerrado<small>${M.date===today?'Hoy solo se registra el cumplimiento (✓ ½ ✗ con su causa); lo que no se haga se reprograma desde mañana. Las cuadrillas sí se pueden repartir.':'Este día ya pasó.'}</small>${reoBtn}</div>`}
-  /* día futuro publicado o cerrado solo a las 20:00 */
-  if(p||(sn&&sn.ids)){const who=p?`${esc(p.byName||'')} · ${fmtD(ldt(p.ts))} ${hhmm(p.ts)}`:`cerrado automáticamente a las 20:00`;
+  /* día futuro publicado o cerrado solo a la hora de cierre */
+  if(p||(sn&&sn.ids)){const who=p?`${esc(p.byName||'')} · ${fmtD(ldt(p.ts))} ${hhmm(p.ts)}`:`cerrado automáticamente a las ${planCutHH()}`;
     return`<div class="pubb ok">🔒 Plan ${p?'publicado':'cerrado'}<small>${who} · ya no se reprograma; las cuadrillas sí se pueden repartir</small>${p&&eng?'<button class="ib" data-unpub="1" title="Vuelve a borrador: las fechas del lookahead regresan (si nadie las cambió) y se puede volver a planificar">↶ Deshacer publicación</button>':''}${reoBtn}</div>`}
-  if(!eng)return`<div class="pubb">Plan propuesto<small>Se revisa en la reunión; el ingeniero lo publica al terminar (si nadie lo publica, se publica solo a las 20:00).</small></div>`;
+  if(!eng)return`<div class="pubb">Plan propuesto<small>Se revisa en la reunión; el ingeniero lo publica al terminar (si nadie lo publica, se publica solo a las ${planCutHH()}).</small></div>`;
   const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const np=dpPendAll().length;
-  return`<div class="pubb">Plan propuesto<small>${D.length?`${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) se aplican al lookahead al publicar`:'Revísalo en la reunión (cumplimiento, cruces y «no va») y publícalo al terminar'}${np?` · <b class="bad">${np} propuesta${np>1?'s':''} del SC por revisar</b>`:''} · si nadie lo publica, a las 20:00 se publica solo con estos cambios y las propuestas sin revisar se rechazan</small><button class="ib pri" data-pub="1">📣 Publicar plan</button>${D.length?'<button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button>':''}</div>`}
+  return`<div class="pubb">Plan propuesto<small>${D.length?`${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) se aplican al lookahead al publicar`:'Revísalo en la reunión (cumplimiento, cruces y «no va») y publícalo al terminar'}${np?` · <b class="bad">${np} propuesta${np>1?'s':''} del SC por revisar</b>`:''} · si nadie lo publica, a las ${planCutHH()} se publica solo con estos cambios y las propuestas sin revisar se rechazan</small><button class="ib pri" data-pub="1">📣 Publicar plan</button>${D.length?'<button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button>':''}</div>`}
 /* reabrir / volver a cerrar (solo el administrador; queda en el registro del día) */
 function lkReopen(){if(!isAdmin)return;const why=(prompt(`Reabrir el plan del ${dvLbl(M.date)}: ¿por qué? (queda registrado)`)||'').trim();if(!why)return;const e={t:NOW(),by:me.email,n:me.name||me.email,why};
   const k=M.date+'_'+M.piso;const cur=dplanOf(M.date,M.piso)||{};DPL.set(k,{...cur,id:k,date:M.date,pisoId:M.piso,reo:e});DV++;requestRender();

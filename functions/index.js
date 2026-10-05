@@ -4,14 +4,14 @@
 // - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días.
 // - congelarSemana: en el corte semanal (por defecto sábado 13:00 de Lima) congela la semana siguiente en los pisos que
 //   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
-// - cerrarPlan: a las 20:00 (Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
+// - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
 //   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -89,13 +89,18 @@ exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
   }
 });
 
-/* El plan de mañana se cierra en la reunión al publicarlo. Si nadie lo publicó, a las 20:00 el servidor, por piso:
+/* El plan de mañana se cierra en la reunión al publicarlo. Si nadie lo publicó, a la hora de cierre (Configuración, por defecto 21:00) el servidor, por piso:
    publica los borradores de la reunión («no va → reprogramar»: corre las fechas, deja la marca ↷ y registra la restricción),
    rechaza las propuestas del SC sin revisar («va lo programado») y cierra el plan con el lookahead ya actualizado.
    Un piso cuyo plan ya tiene foto (ids) o fue reabierto no se toca. La foto es el compromiso del día para el PPC diario. */
-exports.cerrarPlan = onSchedule({ schedule: '0 20 * * *', timeZone: 'America/Lima', retryCount: 2 }, async () => {
+/* Corre cada 15 minutos: antes de la hora de Configuración (planCutHH, por defecto 21:00) solo lee meta/project; pasada la hora,
+   lo hace una vez por día y deja constancia en pcl/<fecha> (solo el servidor). */
+exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
   const project = (await db().collection('meta').doc('project').get()).data() || {};
-  const now = Date.now(); const today = limaToday(now); const d = nextWork(project, today);
+  const now = Date.now(); if (!planCutDue(project, now)) return;
+  const today = limaToday(now); const cref = db().collection('pcl').doc(today);
+  if ((await cref.get()).exists) return;
+  const d = nextWork(project, today);
   const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
     db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('contractors'),
     db().collection('pdz').where('date', '==', d).get()]);
@@ -115,5 +120,6 @@ exports.cerrarPlan = onSchedule({ schedule: '0 20 * * *', timeZone: 'America/Lim
     if (res.R) { np += res.R.novas.length; if (res.R.log.length) logger.warn(`Plan del ${d} piso ${pid}: ${res.R.log.join(' · ')}`); if (res.R.skipped.length) logger.info(`Plan del ${d} piso ${pid}: ya no estaban ese día: ${res.R.skipped.join(', ')}`); }
     nr += res.P.length;
   }
+  await cref.set({ at: new Date(now).toISOString(), d, hh: planCutHH(project), k, np, nr });
   logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)`);
 });

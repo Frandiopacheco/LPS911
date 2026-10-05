@@ -191,7 +191,11 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
   return out;
 }
 
-/* ---------- Cierre automático del plan del día (20:00 del día anterior, si nadie lo publicó) ---------- */
+/* ---------- Cierre automático del plan del día (a la hora de Configuración, por defecto 21:00 del día anterior) ---------- */
+/* hora de la publicación automática (Configuración › Proyecto, planCutHH; por defecto 21:00; como mucho 23:30: la tarea corre cada 15 min) */
+function planCutHH(p) { const v = p && p.planCutHH; return typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= '00:00' && v <= '23:30' ? v : '21:00'; }
+/* ¿ya pasó hoy (hora de Lima) la hora de la publicación automática? */
+function planCutDue(p, now = Date.now()) { const t = new Date(now - LIMA).toISOString().slice(11, 16); return t >= planCutHH(p); }
 /* día hábil (como la página: domingo no; feriados y sábado según Configuración › Calendario) */
 function isWork(p, d) { const dw = pd(d).getUTCDay(); if (dw === 0) return false; const c = (p && p.cal) || {}; if ((c.hol || []).some(o => o && o.d === d)) return false; if (dw === 6 && c.sat === false) return false; return true; }
 function nextWork(p, d) { let x = addD(d, 1); for (let i = 0; i < 30 && !isWork(p, x); i++) x = addD(x, 1); return x; }
@@ -210,7 +214,7 @@ function buildDayPlan({ pisos, sectors, ambientes, acts, done = new Map() }, d) 
   return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids } }));
 }
 
-/* ---------- Publicación automática de los borradores del plan (20:00) ---------- */
+/* ---------- Publicación automática de los borradores del plan (a la hora de cierre) ---------- */
 /* días hábiles: correr n (como wshift de la página) y distancia (como wdist) */
 function wshift(p, d, n) { let x = d; const st = n > 0 ? 1 : -1; let k = Math.abs(n); let g = 0; while (k > 0 && g++ < 2000) { x = addD(x, st); if (isWork(p, x)) k--; } return x; }
 function wdist(p, a, b) { if (a === b) return 0; let n = 0, x = a; const st = b > a ? 1 : -1; while (x !== b) { x = addD(x, st); if (isWork(p, x)) n += st; if (Math.abs(n) > 400) break; } return n; }
@@ -246,7 +250,7 @@ function changedDays(a, b) {
    y skipped (ya no tenían ese día), blocked (tocarían un día cerrado), log (texto). No escribe nada. */
 function publishDrafts({ drafts = [], acts = new Map(), dplans = new Map(), contractors = new Map(), project = {}, pub = null }, date, pisoId, now = Date.now(), opt = {}) {
   const PID = 'pub_' + date + '_' + pisoId;
-  const BY = { by: 'servidor', byName: 'Publicación automática 20:00' };
+  const BY = { by: 'servidor', byName: 'Publicación automática' };
   const mkId = opt.uid || (pfx => pfx + '-' + now.toString(36) + Math.random().toString(36).slice(2, 6));
   const today = limaToday(now);
   const conName = id => { const c = contractors instanceof Map ? contractors.get(id) : contractors[id]; return (c && c.name) || ''; };
@@ -302,11 +306,11 @@ function draftDates(drafts, acts, project, date) {
   }
   S.delete(date); return [...S].sort();
 }
-/* Propuestas del SC (pdz kind:'dprop') sin revisar del día y piso: a las 20:00 se rechazan («va lo programado») */
-const DPROP_REJ = now => ({ st: 'rej', dec: 'Cierre automático 20:00: va según lo programado', decBy: 'servidor', decN: 'Cierre automático', decT: now });
+/* Propuestas del SC (pdz kind:'dprop') sin revisar del día y piso: a la hora de cierre se rechazan («va lo programado») */
+const DPROP_REJ = now => ({ st: 'rej', dec: 'Cierre automático: va según lo programado', decBy: 'servidor', decN: 'Cierre automático', decT: now });
 const pendProps = (docs, date, pisoId) => docs.filter(z => z && z.kind === 'dprop' && z.st === 'pend' && z.date === date && z.pisoId === pisoId);
 
-/* Cierre de las 20:00 de un piso, en una transacción (db = Firestore de admin): si el plan del día ya tiene foto (ids) o fue
+/* Cierre automático de un piso, en una transacción (db = Firestore de admin): si el plan del día ya tiene foto (ids) o fue
    reabierto, no hace nada. Si no: relee el aviso de publicado, cada borrador, sus actividades y los planes cerrados de las fechas
    que tocarían; publica los borradores (publishDrafts), rechaza las propuestas del SC aún pendientes y guarda la foto del plan
    (buildDayPlan con las actividades ya corridas). ctx.drafts / ctx.props: los docs pdz del día y piso (leídos antes). */
@@ -348,10 +352,10 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P2 = P;
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
     const pub = !!(R && R.pub);
-    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, at: now, by: 'servidor', byName: 'Cierre automático 20:00', auto: true, ...(pub ? { pub: PID } : {}) });
+    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
     return { R, P: P2, ids };
   });
 }
 
-module.exports = { pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+module.exports = { planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso };
