@@ -44,7 +44,7 @@ jobs:
   previo:
     name: ¿Ya se probó este mismo código?
     # al unir un pull request a main, el código suele ser idéntico (mismo árbol) al que ya pasó las pruebas en el PR:
-    # en ese caso no se repiten (la copia de prueba se actualiza en ~4 min en vez de ~12)
+    # en ese caso no se repiten. También decide si hace falta la prueba de 16 usuarios y reinstalar Firebase.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { actions: read, contents: read }
@@ -52,28 +52,41 @@ jobs:
       tree: ${{ steps.t.outputs.tree }}
       ok: ${{ steps.t.outputs.ok }}
       fb: ${{ steps.f.outputs.fb }}
+      ciclo: ${{ steps.f.outputs.ciclo }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
       - id: t
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           T=$(git rev-parse HEAD^{tree})
           echo "tree=$T" >> "$GITHUB_OUTPUT"
           OK=0
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
             OK=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=e2e-ok-$T" --jq '[.artifacts[]|select(.expired==false)]|length' 2>/dev/null || echo 0)
           fi
           if [ "$OK" != "0" ] && [ -n "$OK" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; echo "::notice::Este código ya pasó las pruebas de la interfaz en su pull request: no se repiten."; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
       - id: f
-        name: ¿Cambió algo de Firebase (reglas o tareas del servidor)?
-        # en main, si el cambio solo toca la página, no se reinstala Firebase (~1,5 min menos); en produccion siempre se instala
+        name: ¿Qué cambió? (Firebase y ciclo diario)
+        # Firebase: en main, si el cambio solo toca la página, no se reinstala (~1,5 min menos); en produccion siempre se instala.
+        # Ciclo de 16 usuarios: solo si el cambio toca el plan diario, propuestas, campo/en obra, la base del código, servidor, reglas o sus pruebas.
         run: |
-          B="${{ github.event.before }}"; FB=true
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ] && [ -n "$B" ] && [ "$B" != "0000000000000000000000000000000000000000" ] && git fetch -q --depth=1 origin "$B"; then
-            CH=$(git diff --name-only "$B" HEAD) && { echo "$CH" | grep -qE '^(firebase/|functions/|firebase\.json|\.firebaserc|\.github/)' || FB=false; }
+          B="${{ github.event.before }}"; CH=""; OKD=0
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$B" ] && [ "$B" != "0000000000000000000000000000000000000000" ] && git fetch -q --depth=1 origin "$B"; then
+            CH=$(git diff --name-only "$B" HEAD) && OKD=1
+          elif git rev-parse -q --verify HEAD^ >/dev/null; then
+            CH=$(git diff --name-only HEAD^ HEAD) && OKD=1
           fi
-          echo "fb=$FB" >> "$GITHUB_OUTPUT"
-          [ "$FB" = "false" ] && echo "::notice::Solo cambió la página: no se reinstala Firebase." || true
+          FB=true; CI=true
+          if [ "$OKD" = 1 ]; then
+            echo "Cambió:"; echo "$CH" | head -40
+            if [ "${{ github.ref_name }}" != "produccion" ]; then echo "$CH" | grep -qE '^(firebase/|functions/|firebase\.json|\.firebaserc|\.github/)' || FB=false; fi
+            echo "$CH" | grep -qE '^(web/plano\.js|web/js/(base|propuestas|campo|en-obra-tablero|auditoria|lookahead|plan-restricciones)\.js|functions/|firebase/|\.github/|tests/e2e/(mundo-compartido|auditoria-ciclo\.spec|fake-firebase|helpers|server)\.)' || CI=false
+          fi
+          echo "fb=$FB" >> "$GITHUB_OUTPUT"; echo "ciclo=$CI" >> "$GITHUB_OUTPUT"
+          [ "$FB" = "false" ] && echo "::notice::Solo cambió la página: no se reinstala Firebase."
+          [ "$CI" = "false" ] && echo "::notice::El cambio no toca el ciclo diario: se salta la prueba de 16 usuarios."
+          true
 
   interfaz:
     name: Probar la interfaz (Playwright ${{ matrix.shard }}/3)
@@ -108,7 +121,7 @@ jobs:
   ciclo:
     name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
     needs: [previo]
-    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true'
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true' && needs.previo.outputs.ciclo != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -134,7 +147,7 @@ jobs:
     name: Marcar código probado
     # deja constancia (por árbol de archivos) de que este código pasó todas las pruebas de la interfaz; «previo» la busca al unir a main
     needs: [previo, interfaz, ciclo]
-    if: needs.interfaz.result == 'success' && needs.ciclo.result == 'success'
+    if: always() && needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -149,7 +162,7 @@ jobs:
   instalar:
     name: Instalar en Firebase
     needs: [revisar, previo, interfaz, ciclo]
-    if: always() && needs.revisar.result == 'success' && ((needs.interfaz.result == 'success' && needs.ciclo.result == 'success') || (needs.interfaz.result == 'skipped' && needs.ciclo.result == 'skipped' && (github.ref_name == 'produccion' || needs.previo.outputs.ok == 'true'))) && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    if: always() && needs.revisar.result == 'success' && ((needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))) || (needs.interfaz.result == 'skipped' && needs.ciclo.result == 'skipped' && (github.ref_name == 'produccion' || needs.previo.outputs.ok == 'true'))) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -198,7 +211,7 @@ jobs:
     name: Publicar la página en Netlify
     # la página va después de sus reglas y tareas del servidor: si la instalación en Firebase falla, no se publica
     needs: [revisar, previo, interfaz, ciclo, instalar]
-    if: always() && needs.instalar.result == 'success' && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    if: always() && needs.instalar.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -229,3 +242,24 @@ jobs:
             netlify deploy --dir web --site "$NETLIFY_SITE" --alias main --message "main ${GITHUB_SHA::7}"
             echo "::notice::Copia de prueba: https://main--$NETLIFY_SITE.netlify.app"
           fi
+
+  unir:
+    name: Unir solo a main (etiqueta auto-unir)
+    # si el pull request a main tiene la etiqueta «auto-unir» y pasó todo, se une (squash) sin esperar a nadie.
+    # Lo que une GitHub con su token no dispara «push»: por eso después se lanza este mismo flujo en main (instala y publica).
+    needs: [revisar, previo, interfaz, ciclo, aprobado]
+    if: always() && github.event_name == 'pull_request' && github.base_ref == 'main' && needs.revisar.result == 'success' && needs.aprobado.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: write, pull-requests: write, actions: write }
+    env: { GH_TOKEN: '${{ github.token }}', N: '${{ github.event.pull_request.number }}', R: '${{ github.repository }}' }
+    steps:
+      - name: Unir y publicar en la copia de prueba
+        run: |
+          if ! gh api "repos/$R/issues/$N/labels" --jq '.[].name' | grep -qx auto-unir; then echo "Sin etiqueta auto-unir: se une a mano."; exit 0; fi
+          T=$(gh api "repos/$R/pulls/$N" --jq .title)
+          # solo si la punta del PR sigue siendo la que se probó
+          gh api -X PUT "repos/$R/pulls/$N/merge" -f merge_method=squash -f sha="${{ github.event.pull_request.head.sha }}" -f commit_title="$T (#$N)"
+          gh workflow run ci.yml --ref main -R "$R"
+          echo "::notice::Unido a main; la copia de prueba se publica en el flujo lanzado en main."
+

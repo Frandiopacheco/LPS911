@@ -130,7 +130,7 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
 
 ## Flujo de trabajo con GitHub
 
-- Rama nueva → *pull request* a `main` → esperar los checks (Revisar, interfaz en 3 partes a la vez y Ciclo diario) → unir (squash) → esperar "Instalar en Firebase" y "Publicar la página en Netlify".
+- Rama nueva → *pull request* a `main` con etiqueta `auto-unir` → GitHub prueba (Revisar, interfaz en 3 partes a la vez y, si el cambio toca el ciclo diario, la de 16 usuarios), une (squash) y publica la copia de prueba solo. La prueba de 16 usuarios corre solo si cambian `plano.js`, `base`/`propuestas`/`campo`/`en-obra-tablero`/`auditoria`/`lookahead`/`plan-restricciones.js`, `functions/`, `firebase/`, `.github/` o sus pruebas (`previo` → `ciclo`).
 - Al unir a `main` las pruebas de la interfaz **no se repiten** si el código es idéntico (mismo árbol de archivos) al que ya pasó en el PR: el trabajo `previo` busca la constancia `e2e-ok-<árbol>` que deja `aprobado`. Si `main` cambió entre medio (otra conversación unió algo), se corren de nuevo.
 - Al unir a `main`, si el cambio no toca `firebase/`, `functions/`, `firebase.json`, `.firebaserc` ni `.github/`, no se reinstala Firebase (el trabajo «Instalar» pasa en segundos); en `produccion` siempre se instala.
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
@@ -143,7 +143,7 @@ El dueño prioriza ver los cambios pronto en la copia de prueba. Salvo que pida 
 - **No correr la batería completa en local.** Solo `node scripts/check.mjs` y los archivos de prueba del tema tocado (`npx playwright test <archivo>.spec.js`). La batería completa la corre GitHub en el PR (en 3 partes a la vez, ~3 min).
 - **Pruebas nuevas solo para lógica delicada:** PPC, transacciones, permisos/reglas, cierre/publicación del plan, datos que se puedan perder. Ajustes de texto, estilo o diseño van sin prueba nueva. No hace falta demostrar que la prueba falla con el código anterior salvo en correcciones de auditoría.
 - **Juntar** los cambios pedidos en la misma conversación en **una rama y un PR**.
-- **No vigilar el CI paso a paso:** abrir el PR, esperar con un solo comando (`scripts/esperar-ci.sh <rama>`; `gh pr checks` no funciona aquí, usa GraphQL), unir y avisar. Si una prueba falla y es ajena al cambio (inestable), reintentar el trabajo una vez (`gh run rerun <id> --failed`) antes de investigar.
+- **No esperar a GitHub (unir solo):** crear el PR a `main` con la etiqueta **`auto-unir`** (`gh api repos/Frandiopacheco/LPS911/issues/N/labels -X POST -f 'labels[]=auto-unir'`) y **responder al dueño en ese momento**: si todo pasa, GitHub lo une (trabajo `unir`) y lanza el flujo en `main` que publica la copia de prueba (~5–8 min en total). Si el dueño avisa que no apareció, revisar con `scripts/esperar-ci.sh <rama>`; si una prueba falló y es ajena al cambio, `gh run rerun <id> --failed`. Sin etiqueta: unir a mano como antes.
 - **A producción**, cuando el dueño lo apruebe: PR `main → produccion` y unir en cuanto pase «Revisar» (~4–5 min en total); no se repiten las pruebas de la interfaz.
 - **Conversaciones cortas:** una conversación por tema; todo lo necesario está en este archivo y en `docs/ia/` (lee solo el tema que tocas).
 - **Flujo completo** (batería entera en local, prueba que falla antes) solo para cambios grandes en reglas, servidor (`functions/`) o el ciclo diario/PPC.
