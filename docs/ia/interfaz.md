@@ -22,3 +22,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Tablet (761–1100 px): la barra de pestañas **se parte en dos líneas** (antes se cortaba y «Más» quedaba fuera de la pantalla).
 - Tablet vertical (761–900 px): `table.rt` (PPC semanal, Equipo…) pasa a tarjetas de 3 columnas, y Restricciones usa sus tarjetas (`isNarrow()`, `TABQ` en base.js) en 2 columnas.
 - **Ayuda › Tutorial** (`js/tutorial.js`: `AY_TUT` lecciones, `AY_TROLE` por rol): la ayuda abre en «Tutorial» (`AY.m`), lecciones plegables (`AY.o`) con pasos (`tab` → enlace ↗), «Ejemplo en obra» y consejo. «Flujogramas» sigue igual. Al cambiar una pantalla, revisa que su lección siga siendo cierta.
+- **Ayuda › ⬇ PDF** (`ayPdf`): guía del rol elegido (portada, tutorial en texto y cada flujograma como imagen con `html2canvas` del CDN, siempre en tema claro: pone `data-theme="light"` mientras captura y lo restaura). Las fuentes del PDF no tienen emojis: `ayTx` los quita.
