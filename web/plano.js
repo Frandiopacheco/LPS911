@@ -1074,8 +1074,10 @@ function renderPlan(main,cur,base){
   const NBM=nbMap();const sc=M.scDraw;const mine=acts.filter(o=>o.x.sc===sc);const np=sh.filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);const notes=sh.filter(z=>['trazo','flecha','texto'].includes(z.kind)&&z.sc===sc);
   const canD=canPlan(sc);const withPrev=mine.filter(o=>!zBy[o.x.id]&&!nBy[o.x.id]&&ZN.get(o.x.id));
   const st=sc?stat(sc):null;
-  /* no cumplidas en días anteriores y aún sin reprogramar (solo al planificar hoy o días futuros) */
-  const pendBy={};if(M.date>=todayIso()&&typeof failInfo==='function')for(const x of S.act.values()){const a=S.amb.get(x.ambId);const s_=a&&S.sec.get(a.sectorId);if(!s_||s_.pisoId!==M.piso)continue;const f=failInfo(x,M.date);if(f)(pendBy[x.sc]=pendBy[x.sc]||[]).push({x,a,f})}
+  /* no cumplidas en días anteriores y aún sin reprogramar (solo al planificar hoy o días futuros).
+     Solo las de la semana en curso: lo de semanas anteriores ya se reprogramó en la reunión semanal. Ocultarlas no toca los registros (el PPC no cambia). */
+  const w0_=weekDays(weekOf(todayIso()))[0];
+  const pendBy={};if(M.date>=todayIso()&&typeof failInfo==='function')for(const x of S.act.values()){const a=S.amb.get(x.ambId);const s_=a&&S.sec.get(a.sectorId);if(!s_||s_.pisoId!==M.piso)continue;const f=failInfo(x,M.date);if(f&&f.d>=w0_)(pendBy[x.sc]=pendBy[x.sc]||[]).push({x,a,f})}
   let h=`<div class="mp-h"><b>Plan del día</b><span>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)} · ${esc(S.pis.get(M.piso)?.code||'')}</span><button class="ab" id="mpx" aria-label="Cerrar panel">&times;</button></div>`;
   if(PHONE()){if(M.tool!=='pan')M.tool='pan';h+=`<p class="mp-ph">En el celular el plano es de consulta: toca una zona para ver su estado${typeof canDaily!=='undefined'&&canDaily?' o marcar ✓ ½ ✗':''}. Para dibujar el plan usa una PC o tablet.</p>`}
   h+=pubBarHtml();

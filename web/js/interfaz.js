@@ -81,7 +81,10 @@ $('#wprev').onclick=()=>navDate(-1);$('#wnext').onclick=()=>navDate(1);$('#wtoda
 
 /* ---------- barra superior según la pestaña (P6) ---------- */
 const UNDO_TABS=['look','plan','restr','cfg','planos'];
-function topToolsApply(){const t=U.tab;if(t!=='look'&&$('#mvbar'))selBar();const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
+function topToolsApply(){const t=U.tab;
+  /* Ver como / Vista celular arriba a la derecha (solo el administrador real en la copia de prueba) */
+  {const ok=!!(me&&me.realAdmin&&typeof VA_OK==='function'&&VA_OK()&&!IN_FRAME);const a=$('#bvat'),b=$('#bpht');
+    if(a){a.hidden=!ok||innerWidth<=760;if(ok&&!a.onclick)a.onclick=()=>vaDialog(a)}if(b){b.hidden=!ok||innerWidth<=760;if(ok&&!b.onclick)b.onclick=()=>phonePreview('iphone')}}if(t!=='look'&&$('#mvbar'))selBar();const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
   ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)})}
 
 /* ---------- plantilla común de página (P5) ----------
