@@ -283,7 +283,10 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if(t.closest('[data-rvk0]')){if(REVSEL)REVSEL.k=0;requestRender();return}
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
-  if(t.closest('[data-rvrej]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
+  if(t.closest('[data-rvrej]')){let L=revVisItems();if(!L.length){const A=revItems();if(!A.length){toast('No hay propuestas pendientes.');return}
+      /* ninguna se ve en la grilla: se explica por qué y se pueden rechazar igual (rechazar no cambia el lookahead) */
+      if(!confirm(`Ninguna de las ${A.length} propuesta${A.length>1?'s':''} pendiente${A.length>1?'s':''}${U.revSc?' de '+conOf(U.revSc).name:''} se ve en la grilla:\n· ${revHiddenWhy(A).join('\n· ')}\n\n¿Rechazarlas todas igual? El lookahead no cambia y cada subcontratista lo ve en «Respuestas».`))return;
+      rejectMany(A);return}const oc=revItems().length-L.length;
     if(!confirm(`¿Rechazar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla? El lookahead no cambia y cada subcontratista lo ve en «Respuestas».`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;
     rejectMany(L);return}
   if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
@@ -326,6 +329,18 @@ const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!(U.ver&&U.verMode===
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
 /* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
 function revVisItems(){const V=RVVIS;return V?revItems().filter(o=>V.has(o.id)):[]}
+/* por qué no se ven en la grilla las propuestas pendientes (para explicarlo y poder rechazarlas igual) */
+function revHiddenWhy(L){const V=RVVIS||new Set();const why={};const add=k=>{why[k]=(why[k]||0)+1};const P_=new Set(pisos().map(p=>p.id));
+  for(const{id,it}of L){if(V.has(id))continue;const o=S.act.get(id)||null;const x=it.after?{...(o||{}),...it.after}:o;
+    if(!x){add('su actividad ya no existe');continue}
+    const a=S.amb.get(x.ambId);if(!a){add('su ambiente fue eliminado o archivado');continue}
+    const sc=S.sec.get(a.sectorId);if(!sc||!P_.has(pisoOfAmb(x.ambId))){add('su sector o piso fue eliminado o archivado');continue}
+    if(U.piso&&pisoOfAmb(x.ambId)!==U.piso){add('están en otro piso');continue}
+    if(U.sector&&a.sectorId!==U.sector){add('están en otro sector');continue}
+    if(!scOk(x.sc)){add('el filtro de subcontratista las oculta');continue}
+    if(U.q.trim()||U.acts.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF){add('otros filtros de la vista las ocultan');continue}
+    add('su sector o ambiente está plegado')}
+  return Object.entries(why).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${n} porque ${k}`)}
 function revCounts(){const m=new Map();for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))m.set(doc.sc,(m.get(doc.sc)||0)+1);return m}
 /* durante el render, la grilla muestra lo propuesto encima de lo vigente */
 function revSwap(){const off=S.act;const v=new Map(off);
@@ -345,7 +360,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
     <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${(()=>{const nl=L.filter(o=>propLate(o.it,S.act.get(o.id))).length;return nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}: para aceptarlas se pide el motivo">${nl} fuera de plazo</span>`:''})()}
     <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · <b>‹ ›</b> mueve lo propuesto un día hábil (o arrastra la barra) · <b>📅</b> otra fecha de inicio · ✓ acepta · ✗ rechaza</span>${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
     <div class="ppa"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button>
-    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button><button class="ib" data-rvrej${nv?'':' disabled'} title="Rechaza las propuestas que muestra la grilla con los filtros actuales: el lookahead no cambia">✗ Rechazar todo lo visible (${nv})</button>`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
+    ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>${nv||!tot?`<button class="ib" data-rvrej${nv?'':' disabled'} title="Rechaza las propuestas que muestra la grilla con los filtros actuales: el lookahead no cambia">✗ Rechazar todo lo visible (${nv})</button>`:`<button class="ib" data-rvrej title="Ninguna se ve en la grilla (${esc(revHiddenWhy(L).join('; '))}). Rechazarlas no cambia el lookahead">✗ Rechazar las ${tot} (no se ven)</button>`}`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
