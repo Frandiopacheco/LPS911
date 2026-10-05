@@ -134,7 +134,8 @@ function propMerge(a,base,off,shift){const nw={...off};for(const f of PFIELDS)if
    [antes, después]. sk = sc|hora: el SC lee solo lo suyo de los últimos meses con un rango sobre un solo campo (sin índice compuesto). */
 const LHH=new Map();let lhhSub=[];
 const HFIELDS=['days','qty','metrado','und','name'];
-function propDiff(b,a){const o={};for(const f of HFIELDS){const x=b?b[f]??null:null,y=a?a[f]??null:null;if(canon(x)!==canon(y))o[f]=[x,y]}return o}
+/* Firestore no admite una lista dentro de otra: los días (lista) se guardan como texto «fecha,fecha,…» en [antes, después] */
+function propDiff(b,a){const o={};const fl=v=>Array.isArray(v)?v.join(','):v;for(const f of HFIELDS){const x=b?b[f]??null:null,y=a?a[f]??null:null;if(canon(x)!==canon(y))o[f]=[fl(x),fl(y)]}return o}
 const lhhSk=(sc,t)=>sc+'|'+String(Math.round(t)).padStart(15,'0');
 function ensureLhh(){if(lhhSub.length||!db||!me||me.role!=='sc')return;const since=NOW()-120*864e5;
   for(const sc of myScsI())lhhSub.push(fcol('lhphist').where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~').onSnapshot(sn=>{

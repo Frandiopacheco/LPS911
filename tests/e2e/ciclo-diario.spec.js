@@ -278,3 +278,14 @@ test('18 · la hora de la publicación automática se edita en Configuración (p
   expect(await page.evaluate(() => planCutHH())).toBe('19:30');
   noErrors(errors, 'hora de cierre');
 });
+
+test('19 · aceptar una propuesta que mueve días se guarda (Firestore no admite listas dentro de listas)', async ({ page }) => {
+  const T0 = { ambId: 'a1', sc: 'c3', name: 'Tarrajeo de muros', und: 'm2', metrado: 60, days: ['2026-10-13', '2026-10-14'], order: 30 };
+  const P = ['lhprop', 'c3', { sc: 'c3', items: { t0: { after: { ...T0, days: ['2026-10-23', '2026-10-26'] }, base: T0, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 } } }];
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 't0', T0], P] });
+  expect(await page.evaluate(() => decideProp('c3', 't0', 'ok', { bulk: true, lateNote: 'x' }))).toBe('ok');
+  await expect.poll(async () => sorted((await act(page, 't0')).days)).toEqual(['2026-10-23', '2026-10-26']);
+  const h = await page.evaluate(() => Object.values(window.__dbAll('lhphist')).find(x => x.actId === 't0'));
+  expect(h.prop.days).toEqual(['2026-10-13,2026-10-14', '2026-10-23,2026-10-26']);
+  noErrors(errors, 'propuesta con días');
+});
