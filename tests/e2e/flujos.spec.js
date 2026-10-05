@@ -113,3 +113,18 @@ test('el Lookahead no se vuelve a armar al regresar, pero muestra los cambios he
   await expect(page.locator('input[data-a="i0"][data-f="name"]')).toHaveValue('Redes cambiadas');
   noErrors(errors, 'lookahead guardado');
 });
+
+test('«Ver como» y «Vista celular» están arriba a la derecha desde cualquier pestaña (copia de prueba)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  await expect(page.locator('#bvat')).toBeVisible();
+  await expect(page.locator('#bpht')).toBeVisible();
+  await page.click('#bvat');
+  await expect(page.locator('#var')).toBeVisible();
+  noErrors(errors, 'ver como arriba');
+});
+
+test('el editor no ve «Ver como» arriba', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'look' });
+  await expect(page.locator('#bvat')).toBeHidden();
+  noErrors(errors, 'editor sin ver como');
+});

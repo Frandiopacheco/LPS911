@@ -15,3 +15,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **`lqModal`** (liberaciones.js, también Ayuda, Historial y plano.js): si la ventana ya está abierta solo cambia el contenido de `.lqc` (sin animarla otra vez, conserva desplazamiento y foco); redibujar con cada chip ya no parpadea.
 - **Hoy › Cambios del plan** (`cplan`, hoy.js): reprogramaciones de ayer, hoy y el próximo día hábil según las marcas `acts.rpl` (sin `tr`): el SC ve las de su partida, el editor las de sus pisos, campo y admin todas.
 - **Equipo:** los grupos por rol son plegables (`[data-tgrp]`, `U.teamOpen` guardado); con búsqueda o filtro se abren todos.
+- **Ver como / Vista celular** también arriba a la derecha (`#bvat`, `#bpht` en index.html, `topToolsApply`): solo administrador real en la copia de prueba, ocultos en el celular.
