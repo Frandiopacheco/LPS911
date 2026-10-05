@@ -60,8 +60,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(canNP()){const L=npItems([d],new Set(visPisos().map(p=>p.id)));const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
     out.np={k:'np',title:'Trabajo no programado hoy',n:0,tone:'',sub:'',items:[],go:'campo',goLabel:VEED()?'Ir al recorrido (Campo › Plano)':'Ver en Campo',
       empty:L.length?`${L.length} registrado${L.length===1?'':'s'}: ${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,k])=>conOf(sc).name+' '+k).join(' · ')}`:'Nada registrado hoy. En el recorrido, toca en el plano donde veas una cuadrilla trabajando sin estar programada.'}}
-  if(typeof mpHoyCard==='function'){const c=mpHoyCard();if(c)out.mp=c}
-  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:r==='planner'?['mp','restr','lib']:['mp','prop','plan2','campo','np','cli','restr','lib','plan','resp'];
+  const order=r==='sc'?['obra','restr','lib']:r==='campo'?['campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','plan2','campo','np','cli','restr','lib','plan','resp'];
   /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
   const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 

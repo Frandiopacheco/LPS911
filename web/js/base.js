@@ -32,7 +32,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),loaded:{}};
 const U=Object.assign({tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,mpCol:U.mpCol,mpZ:U.mpZ,mpDet:!!U.mpDet,mpHitOff:!!U.mpHitOff,mpVista:U.mpVista,mpHid:!!U.mpHid});
+const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -170,7 +170,7 @@ function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status
 let pending=0,lastErr=null;const chains={};
 function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0);el.classList.toggle('err',!!lastErr||!db);
   const off=navigator.onLine===false;el.classList.toggle('err',!!lastErr||!db||off);
-  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor'].includes(me.role))||(me&&me.role==='planner'&&U.tab==='maestro')?'Guardado':'Solo lectura')}
+  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 /* los días de una actividad se guardan con arrayUnion/arrayRemove (fsDiff): al leerlos se dejan ordenados y sin repetir */
@@ -306,7 +306,7 @@ async function startSession(u,fdb){
   try{m=await ref.get({source:'server'})}catch(e){try{m=await ref.get()}catch(e2){m=null}}
   if((!m||!m.exists)&&isOwnerEmail(me.email)){try{await ref.set({role:'admin',name:me.email.split('@')[0],added:NOW()});m=await ref.get()}catch(e){}}
   if(!m||!m.exists){const em=me.email;me=null;pendingMsg=`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
-  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=md.role||'lector';me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','maestro','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'].includes(ht))U.tab=ht}isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
+  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'].includes(ht))U.tab=ht}isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
   for(const[col,k]of Object.entries(COLS)){
@@ -519,7 +519,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')presStop();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();
-  const views={hoy:renderHoy,dash:renderDash,maestro:renderMaestro,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}

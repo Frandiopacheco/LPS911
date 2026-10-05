@@ -67,15 +67,15 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 
 /* ---- respaldo completo ---- */
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
-   del lookahead, el plan maestro y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
+   del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','mp','mpver','mpav','mpl','mpcfg','cli','clidx','cliver'];
+  'dplan','nprog','lhlog','cli','clidx','cliver'];
 const BK_IMG=['lamimg','fotos'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
-  /* el plan maestro y la versión cliente solo los lee quien tiene acceso: los demás no los piden (no es un error) */
-  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^mp/.test(c)||(typeof canMP==='function'&&canMP())).filter(c=>!/^cli/.test(c)||(typeof canCli==='function'&&canCli()));
+  /* la versión cliente solo la lee quien tiene acceso: los demás no los piden (no es un error) */
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||(typeof canCli==='function'&&canCli()));
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;
@@ -241,7 +241,7 @@ function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!de
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
-  const roles=[['editor','Editor'],['planner','Planner (plan maestro)'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
+  const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector']];
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
     <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
     <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>

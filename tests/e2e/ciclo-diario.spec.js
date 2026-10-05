@@ -184,7 +184,7 @@ test('10 · mover días no pisa un día que otro agregó mientras tanto', async 
 test('11 · el respaldo incluye el plan del día cerrado y lo demás de la obra', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
   const L = await page.evaluate(() => BK_DATA);
-  for (const c of ['dplan', 'nprog', 'lhlog', 'mp', 'mpl', 'cliver']) expect(L).toContain(c);
+  for (const c of ['dplan', 'nprog', 'lhlog', 'cliver']) expect(L).toContain(c);
   noErrors(errors, 'respaldo');
 });
 

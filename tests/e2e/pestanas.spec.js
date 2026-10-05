@@ -90,7 +90,7 @@ test.describe('pestañas por rol', () => {
   });
   test('el orden sigue el ciclo Last Planner', async ({ page }) => {
     await openApp(page);
-    expect(await barra(page)).toEqual(['hoy', 'dash', 'maestro', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
+    expect(await barra(page)).toEqual(['hoy', 'dash', 'look', 'restr', 'plan', 'mapa', 'campo', 'lib', 'ind']);
   });
 });
 
