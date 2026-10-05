@@ -62,6 +62,9 @@
 
   // --- valores especiales y escritura ---
   const now = () => Date.now();
+  /* como Firestore: una lista dentro de otra no se puede guardar (invalid-argument) */
+  function nestedArr(v, inArr) { if (Array.isArray(v)) { if (inArr) return true; return v.some(x => nestedArr(x, true)); } if (v && typeof v === 'object' && !(v instanceof FP) && !v.__au && !v.__ar) return Object.values(v).some(x => nestedArr(x, false)); return false; }
+  function chkData(d) { if (nestedArr(d, false)) { const e = new Error('Nested arrays are not supported'); e.code = 'invalid-argument'; throw e; } }
   function resolve(v) {
     if (v === TS) return now();
     if (v && v.__au) return [...new Set(v.__au)];
@@ -109,9 +112,10 @@
       id, path: n + '/' + id,
       collection: sub => colRef(n + '/' + id + '/' + sub),
       get: async () => docSnap(n, id),
-      set: async (d, o) => { col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); },
+      set: async (d, o) => { chkData(d); col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); },
       update: async (...a) => {
         if (!col(n).has(id)) { const e = new Error('No document to update'); e.code = 'not-found'; throw e; }
+        if (a.length === 1) chkData(a[0]); else for (let i = 1; i < a.length; i += 2) chkData({ v: a[i] });
         const cur = clone(col(n).get(id)) || {};
         if (a.length === 1) for (const [k, v] of Object.entries(a[0])) setPath(cur, k.split('.'), v);
         else for (let i = 0; i < a.length; i += 2) setPath(cur, a[i] instanceof FP ? a[i].p : String(a[i]).split('.'), a[i + 1]);
