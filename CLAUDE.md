@@ -251,7 +251,7 @@ En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontra
 ## Flujo de trabajo con GitHub
 
 - Rama nueva → *pull request* a `main` → esperar el check "Revisar" → unir (squash) → esperar "Instalar en Firebase" y "Publicar la página en Netlify".
-- Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash).
+- Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
 
 ## Auditorías externas (ChatGPT u otra IA)
