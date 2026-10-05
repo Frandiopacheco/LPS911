@@ -1637,3 +1637,4 @@ table.rtab .rc-x{width:30px}
 .uab .ib.pri.bad{background:var(--bad);border-color:var(--bad);color:#fff}
 .uab .ib:disabled{opacity:.5;cursor:not-allowed}
 @media (max-width:760px){.uask{place-items:end center;padding:0}.uac{width:100%;border-radius:var(--r-sheet,16px) var(--r-sheet,16px) 0 0;animation:lps-up var(--t,.18s) var(--ease,ease)}.uab .ib{flex:1;min-height:44px}}
+.lqmsg.lqzrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.lqzrow .ib{font-weight:600}
