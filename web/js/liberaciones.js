@@ -129,9 +129,9 @@ function libDetail(id){const l=LIB.get(id);if(!l){lqClose();return}const x=S.act
     if(k==='lib'){if(libFree(id,''))setTimeout(()=>libDetail(id),80);return}
     if(k==='libm'){libLibDlg(id,{menor:true,back:true});return}
     if(k==='obs'){libObs(id,{back:true});return}
-    if(k==='lev'){const note=prompt('¿Qué se corrigió? (opcional)','')||'';libSave(id,{st:'lev',hist:libHist(l,'lev',note.trim()),obs:(l.obs||[]).map(o=>({...o,ok:true}))},'Calidad verá que pides reinspección');setTimeout(()=>libDetail(id),80);return}
+    if(k==='lev'){(async()=>{const note=await uiAsk({title:'Pedir reinspección',input:{label:'¿Qué se corrigió? (opcional)',placeholder:'Ej.: se resanaron las fisuras del eje 3'},ok:'Pedir reinspección'});if(note==null)return;libSave(id,{st:'lev',hist:libHist(l,'lev',note.trim()),obs:(l.obs||[]).map(o=>({...o,ok:true}))},'Calidad verá que pides reinspección');setTimeout(()=>libDetail(id),80);})();return}
     if(k==='reab'){const st=l.prog&&l.prog.d?'pro':'sol';libSave(id,{st,hist:libHist(l,st,'Reabierta')},'Liberación reabierta');setTimeout(()=>libDetail(id),80);return}
-    if(k==='anu'){if(!confirm('¿Anular esta solicitud de liberación?'))return;libSave(id,{st:'anu',hist:libHist(l,'anu','')},'Solicitud anulada');lqClose();return}},
+    if(k==='anu'){(async()=>{if(!await uiAsk({title:'¿Anular esta solicitud de liberación?',text:'Queda en el historial como anulada.',ok:'Anular',tone:'danger'}))return;libSave(id,{st:'anu',hist:libHist(l,'anu','')},'Solicitud anulada');lqClose();})();return}},
    async e=>{const t=e.target;
     if(t.dataset.lqo!=null){const i=+t.dataset.lqo;const obs=(l.obs||[]).map((o,j)=>j===i?{...o,ok:t.checked}:o);libSave(id,{obs});return}
     if(t.id==='lqadd'&&t.files[0]){try{toast('Adjuntando…');const fid=await libAttach(t.files[0],id);const pdf=(FOTO.get(fid)||'').startsWith('data:application/pdf');const cur=LIB.get(id)||l;

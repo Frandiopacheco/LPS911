@@ -142,8 +142,8 @@ async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};
   if(canWrite){let pend;try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
     if(!pend)pend=propPendWeek(n,pid,[...PROP.values()]);
     if(pend.length){const c={new:0,mod:0,del:0};pend.forEach(o=>c[o.kind]++);const pl=(k,s,p)=>k?`${k} ${k>1?p:s}`:'';
-      if(!confirm(`Hay ${pend.length} propuesta${pend.length>1?'s':''} de subcontratistas para ${code} en la semana ${n} sin decidir: `+[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean).join(', ')+'.'
-        +`\n\nSi congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).\n\n¿Congelar igual?`))return;
+      if(!await uiAsk({title:`${pend.length} propuesta${pend.length>1?'s':''} sin decidir`,text:`Para ${code}, semana ${n}:`,list:[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean),
+        note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return;
       doc.propOut=pend.map(o=>o.sc+'/'+o.id)}}
   if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});requestRender();return}
   if(!canWrite)return;const ref=fcol('weeks').doc(id);
@@ -304,7 +304,7 @@ function renderRestr(main){
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada')}return} /* la foto queda guardada: deshacer la recupera */
-    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;if(SCK()&&!confirm('¿Eliminar esta restricción?'))return;apply([op('restr',r.id,null)],'Restricción eliminada');return} /* sus fotos se conservan: deshacer la devuelve completa */
+    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(SCK()&&!await uiAsk({title:'¿Eliminar esta restricción?',ok:'Eliminar',tone:'danger'}))return;apply([op('restr',r.id,null)],'Restricción eliminada')})();return} /* sus fotos se conservan: deshacer la devuelve completa */
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const rm=e.target.closest('[data-rmap]');if(rm){gotoPlano(rm.dataset.rmap);return}

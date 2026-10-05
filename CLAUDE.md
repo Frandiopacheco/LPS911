@@ -6,7 +6,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 
 **LPS 911**: app web del *Last Planner System* para una obra de construcción en Lima (Perú). Incluye lookahead, plan semanal, restricciones, registro de campo, capataces en celular, tablero en vivo, plan diario (sectorización en planos), liberaciones de calidad e indicadores (PPC).
 - Usuarios: ingenieros de producción y de campo, subcontratistas (SC), capataces, áreas de apoyo (Oficina Técnica, Calidad) y administrador.
-- Pestañas (`data-tab`): `hoy` Hoy (inicio de cada rol), `dash` Tablero, `maestro` Plan maestro (solo administrador y planner), `look` Lookahead, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` PPC semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización", "Plan semanal" → "PPC semanal"); los ids no.
+- Pestañas (`data-tab`): `hoy` Hoy (inicio de cada rol), `dash` Tablero, `look` Lookahead, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` PPC semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización", "Plan semanal" → "PPC semanal"); los ids no.
 - **Toda la interfaz y los mensajes van en español** (Perú), con trato de "tú".
 
 ## Reglas que no se rompen
@@ -23,7 +23,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 | --- | --- |
 | `web/index.html` | Solo el esqueleto HTML (~6 KB): carga `css/app.css` y luego los archivos de `js/` **en orden**. Sin framework ni empaquetador. |
 | `web/css/app.css` | Todos los estilos de la app. |
-| `web/js/*.js` | El código de la app, por temas (en el orden de carga): `base` (utilidades, estado, escritura, conexión, sesión, menús, `render`), `lookahead`, `campo`, `en-obra-tablero`, `propuestas`, `auditoria` (papelera, calendario, hora del servidor, responsables de piso…), `liberaciones`, `mover` (mover en bloque), `presentacion` (modo presentación), `cliente` (versión cliente), `no-programado` (trabajo no programado visto en obra), `sectorizacion` (mapa de ambientes y sectores), `historial`, `excel`, `ayuda` (flujogramas por rol), `maestro`, `maestro-importar`, `maestro-vincular` (plan maestro), `hoy` (pantalla Hoy), `interfaz` (navegación por rol, barra superior, selector de fecha, `pageHead`/`helpBox`), `plan-restricciones`, `indicadores`, `config-equipo` (Sectorización, Configuración, Equipo), `exportes` (PDF/Excel) e `inicio` (arranque de Firebase; **siempre el último**). Son *scripts* clásicos, no módulos: comparten las mismas variables globales, como si fueran un solo archivo. Cada uno empieza con `"use strict";`. |
+| `web/js/*.js` | El código de la app, por temas (en el orden de carga): `base` (utilidades, estado, escritura, conexión, sesión, menús, `render`), `lookahead`, `campo`, `en-obra-tablero`, `propuestas`, `auditoria` (papelera, calendario, hora del servidor, responsables de piso…), `liberaciones`, `mover` (mover en bloque), `presentacion` (modo presentación), `cliente` (versión cliente), `no-programado` (trabajo no programado visto en obra), `sectorizacion` (mapa de ambientes y sectores), `historial`, `excel`, `ayuda` (flujogramas por rol), `hoy` (pantalla Hoy), `interfaz` (navegación por rol, barra superior, selector de fecha, `pageHead`/`helpBox`), `plan-restricciones`, `indicadores`, `config-equipo` (Sectorización, Configuración, Equipo), `exportes` (PDF/Excel) e `inicio` (arranque de Firebase; **siempre el último**). Son *scripts* clásicos, no módulos: comparten las mismas variables globales, como si fueran un solo archivo. Cada uno empieza con `"use strict";`. |
 | `web/plano.js` | Módulo del plan diario (~190 KB, una IIFE): láminas, zonas, modo reunión (piso/día, cruces, tarjeta de cumplimiento), exportes PDF/Excel, plano del capataz. Se carga tarde (`PLANO_SRC`). Lo que usa el resto de la app se exporta en `window.__plano` (`capPlan`, `capDraw`, `zoneFor`, `nums`, `crossOf`, `zcClose`…): una función interna **no** es global, expórtala ahí. |
 | `web/sw.js` | Service worker: modo sin internet y aviso de "versión nueva". `VER` lo pone el build. |
 | `config/produccion.js`, `config/pruebas.js` | `window.FIREBASE_CONFIG` de cada proyecto (no son secretos). |
@@ -56,7 +56,7 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS`, `FIREBASE_SA_PRODUCCION` y `NETLIFY_A
 - `capataz`: celular, solo su partida, reportes en vivo.
 - `area`: área de apoyo (OT, Calidad…): ve todo y resuelve las restricciones de su área. Si el área contiene "Calidad", además programa/libera, marca crítica/supervisión y edita los inspectores (`isCal()`, `canLibCfg()`).
 - `veedor`: recorre la obra y registra el trabajo no programado (Campo › Plano); el resto solo lo consulta.
-- `planner`: solo modifica el plan maestro (pestaña `maestro`); el resto lo ve como lector (`canWrite`/`canDaily` falsos). No ve Equipo.
+- `planner`: rol del plan maestro, **retirado (oct 2026)**: quien lo tenga entra como `lector`.
 - `lector`: solo lectura.
 
 En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontratista en modo propuesta), `ENG()` (ingeniero en Campo), `SCK()` (subcontratista), `AREA()` (área de apoyo), `isCal()`, `canNP()` (registra no programado: campo/editor/admin, Calidad y veedor) y `VEED()` (lo registra pero no verifica el avance).
@@ -77,7 +77,6 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/ppc-campo.md` | Campo, PPC semanal y diario, causas, «No va», congelado, plan cerrado, Indicadores. |
 | `docs/ia/restricciones.md` | Pantalla de Restricciones. |
 | `docs/ia/cliente-excel.md` | Versión cliente y exportes a Excel con el formato de la empresa. |
-| `docs/ia/maestro.md` | Plan maestro (también `docs/plan-maestro.md`). |
 | `docs/ia/seguridad.md` | Reglas de `live`, `fotos`, `dplan` (auditoría 02e575c). |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |
 
@@ -111,6 +110,7 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
   - **Transiciones:** ventanas, hojas, menús y avisos entran con `lps-fade`/`lps-pop`/`lps-up`/`lps-rise`; al cambiar de pestaña, `viewIn(main)` agrega `.vin` (solo opacidad, para no mover lo fijo). No animes contenido que se redibuja con cada dato que llega (se vería parpadear). Con "reducir movimiento" en el equipo, todo se apaga.
   - **Revisa que un nombre de clase nuevo no exista ya**: `.ppc`, `.wrap`, `.mleg` y `.dsv` ya chocaron antes.
   - Cada color nuevo necesita su versión en modo oscuro (`@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) …}` y `:root[data-theme="dark"]`).
+- **Confirmaciones y motivos:** nunca `confirm()`/`prompt()`/`alert()` del navegador (`check.mjs` lo rechaza): usa `await uiAsk({title, text|html, list, note, ok, cancel, tone:'info'|'warn'|'danger'|'ok', input:{label, required}})` (base.js) → `true/false` o el texto. En las pruebas pasa por `confirm`/`prompt` (`window.__uiAskNative` del Firebase falso), así que `page.on('dialog')` sigue sirviendo; la ventana real se prueba en `uiask.spec.js` con `window.__uiAskReal=true`. `apply(ops, label, after)`: `after` corre cuando el cambio se aplica de verdad (también si el admin confirma un día cerrado después).
 - **Piso:** el selector principal `U.piso` filtra todas las pestañas; no agregues un selector de piso propio que compita con él.
 - **Celular:** el diseño cambia a `max-width:760px` (barra inferior `#bnav`). Los botones táctiles deben medir ≥ 40 px.
 

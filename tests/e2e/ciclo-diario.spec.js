@@ -184,7 +184,7 @@ test('10 · mover días no pisa un día que otro agregó mientras tanto', async 
 test('11 · el respaldo incluye el plan del día cerrado y lo demás de la obra', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
   const L = await page.evaluate(() => BK_DATA);
-  for (const c of ['dplan', 'nprog', 'lhlog', 'mp', 'mpl', 'cliver']) expect(L).toContain(c);
+  for (const c of ['dplan', 'nprog', 'lhlog', 'cliver']) expect(L).toContain(c);
   noErrors(errors, 'respaldo');
 });
 
@@ -329,4 +329,26 @@ test('20b · rechazar muchas a la vez es rápido (una transacción por SC) y res
   expect(Object.keys(lh).filter(k => lh[k])).toEqual(['q0']);
   expect(await page.evaluate(() => Object.values(window.__dbAll('lhphist')).filter(x => x.st === 'rej').length)).toBe(59);
   noErrors(errors, 'rechazo rápido');
+});
+
+test('20c · si ninguna propuesta se ve en la grilla, explica por qué y se pueden rechazar todas igual', async ({ page }) => {
+  const acts = [], items = {};
+  for (let i = 0; i < 5; i++) { const a = { ambId: 'a1', sc: 'c3', name: 'Oc ' + i, und: 'm2', metrado: 1, days: ['2026-10-13'], order: 300 + i }; acts.push(['acts', 'h' + i, a]); items['h' + i] = { after: { ...a, days: ['2026-10-14'] }, base: a, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 }; }
+  // una nueva en un ambiente que ya no existe
+  items.hx = { after: { ambId: 'no-existe', sc: 'c3', name: 'Huérfana', und: 'm2', metrado: 1, days: ['2026-10-14'] }, ts: 5, by: 'sc@obra.pe', n: 'Tito', sent: true, sentAt: 1 };
+  const errors = await openApp(page, { tab: 'look', extra: [...acts, ['lhprop', 'c3', { sc: 'c3', items }]] });
+  // el filtro de subcontratista apunta a otra partida: ninguna propuesta de c3 se ve
+  await page.evaluate(() => { U.rev = true; U.revSc = 'c3'; U.sc = 'c1'; requestRender(); });
+  const b = page.locator('[data-rvrej]');
+  await expect(b).toBeEnabled();
+  await expect(b).toContainText('Rechazar las 6');
+  let msg = '';
+  page.on('dialog', d => { msg = d.message(); d.accept(); });
+  await b.click();
+  await expect(page.locator('#toast')).toContainText('6 propuestas rechazadas');
+  expect(msg).toContain('el filtro de subcontratista');
+  expect(msg).toContain('ambiente fue eliminado');
+  const lh = await page.evaluate(() => window.__dbGet('lhprop', 'c3').items);
+  expect(Object.keys(lh).filter(k => lh[k])).toEqual([]);
+  noErrors(errors, 'rechazar ocultas');
 });

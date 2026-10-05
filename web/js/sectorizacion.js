@@ -96,7 +96,7 @@ function szClear(lv,id){const o=lv==='a'?S.amb.get(id):S.sec.get(id);if(!o||!o.g
 async function szSuggest(){const API=window.__plano;if(!API||!canWrite)return;const v=SZ.vista;toast('Buscando zonas del Plan diario…');
   const M_=await API.ambSuggest(U.piso,v);const ops=[];for(const[am,pts]of M_){const a=S.amb.get(am);if(!a||szGeo(a,v))continue;const sc=S.sec.get(a.sectorId);if(!sc||pisoOfSecObj(sc)!==U.piso)continue;ops.push(op('ambientes',a.id,{...a,geo:{...(a.geo||{}),[v]:pts}}))}
   if(!ops.length){toast('No hay zonas del Plan diario que sirvan para los ambientes que faltan.');return}
-  if(!confirm(`Se proponen ${ops.length} ambiente(s) con el rectángulo que cubre las zonas que ya se dibujaron para sus actividades. Revísalos y corrige los que no calcen. ¿Aplicar?`))return;
+  if(!await uiAsk({title:`¿Ubicar ${ops.length} ambiente${ops.length>1?'s':''}?`,text:'Cada uno toma el rectángulo que cubre las zonas que ya se dibujaron para sus actividades en el Plan diario.',note:'Revísalos después y corrige los que no calcen (Ctrl+Z deshace).',ok:'Aplicar'}))return;
   apply(ops,`${ops.length} ambiente(s) ubicados desde el Plan diario`);SZ.sel={lv:'a',id:ops[0].id};SZ.draw=null;
   toast('Revisa cada ambiente propuesto: arrastra sus esquinas para ajustarlo a su forma real.');requestRender()}
 /* pisos típicos: copiar formas de otro piso por código de ambiente y de sector */
