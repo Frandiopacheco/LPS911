@@ -1247,7 +1247,7 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.
         if(rk)nx.rpl={...(y.rpl||{}),[rk]:{to:j===0?zz.repTo:wshift(rk,n),m:zz.motivo||'',...ca,...(j?{tr:zz.actId}:{})}};W.set(id,nx)}
       if(hold)return{held,blocked:true};
       /* toda reprogramación queda registrada en Restricciones con su causa (el tipo sale de la causa, no del primero de la lista) */
-      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid=uid('res');restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
+      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid='res-'+zz.id;/* id fijo por borrador: dos publicaciones del mismo cambio nunca crean dos restricciones */restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
       out.push({id:zz.id,mv,rid,date:zz.date,aid:zz.actId,k:zz.k||''})}
     for(const[id,y]of W)tx.update(fcol('acts').doc(id),{days:y.days,qty:y.qty||{},...(y.rpl?{rpl:y.rpl}:{})});
     for(const r of restrs){const{id,...b}=r;tx.set(fcol('restr').doc(id),b)}

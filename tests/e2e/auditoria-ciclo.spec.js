@@ -297,7 +297,7 @@ test('6. verificación en base y pantalla de lo decidido en la reunión', async 
   // restricciones: cada «No va» aceptado con «no se libera» (material o personal) registra su restricción; el rechazado no
   const restr = Object.values(await p.evaluate(() => window.__dbAll('restr'))).filter(r => r.actId && /^x\d+$/.test(r.actId) && !r.arch);
   const espR = Array.from({ length: SC.length }, (_, i) => i + 1).filter(k => k % 3 === 1).map(k => 'x' + k);
-  await chk(6, 'Restricciones: una por cada «No va» aceptado (ninguna por los rechazados)', espR.sort(), restr.map(r => r.actId).sort(), p, JSON.stringify(restr.map(r => [r.actId, r.desc, r.status])));
+  await chk(6, 'Restricciones: una por cada «No va» aceptado (ninguna por los rechazados)', espR.sort(), restr.map(r => r.actId).sort(), p, JSON.stringify(Object.entries(await p.evaluate(() => window.__dbAll('restr'))).filter(([, r]) => r.actId && /^x\d+$/.test(r.actId) && !r.arch).map(([id, r]) => [id, r.actId, r.via || '', r.by || '', r.status])));
   // dplan.ids del día
   const dpl = await p.evaluate(d => window.__dbGet('dplan', d + '_p1'), MANANA);
   const acts = await piso1(p);
@@ -454,6 +454,6 @@ test('7b+8b. sábado 03 oct: iniciar y cerrar (lo reprogramado llegó a hoy)', a
 
 /* ---------- resumen: todas las comprobaciones de los pasos deben salir bien (si no, el detalle queda en auditoria-ciclo.json) ---------- */
 test('9. ninguna comprobación del ciclo falló', async () => {
-  const F = R.filter(r => r.ok === false).map(r => `paso ${r.paso} · ${r.caso}: esperado ${JSON.stringify(r.esperado)} obtenido ${JSON.stringify(r.obtenido)}`);
+  const F = R.filter(r => r.ok === false).map(r => `paso ${r.paso} · ${r.caso}: esperado ${JSON.stringify(r.esperado)} obtenido ${JSON.stringify(r.obtenido)}${r.nota ? ' | ' + String(r.nota).slice(0, 600) : ''}`);
   expect(F).toEqual([]);
 });

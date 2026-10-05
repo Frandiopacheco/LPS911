@@ -285,7 +285,7 @@ function publishDrafts({ drafts = [], acts = new Map(), dplans = new Map(), cont
     if (held) continue;
     let rid = '';
     if (zz.k && Object.keys(mv).length) {
-      const x = acts.get(zz.actId); rid = mkId('res');
+      const x = acts.get(zz.actId); rid = 'res-' + zz.id; // mismo id que la página: el mismo cambio nunca crea dos restricciones
       restrs.push({ id: rid, doc: { actId: zz.actId, pisoId, type: restrTypeFor(zz.c || '', project.restrTypes), desc: zz.rdesc || zz.motivo || '', resp: zz.rsc ? conName(zz.rsc) : '',
         need: zz.repTo || '', freed: '', status: 'pend', created: today, sc: x ? x.sc || '' : zz.sc || '', ...BY, via: 'plan diario',
         ...(zz.c ? { cnc: zz.cnc || '', ccode: zz.c, imp: zz.imp !== false, rsc: zz.rsc || '', pc: !!zz.pc } : {}) } });
