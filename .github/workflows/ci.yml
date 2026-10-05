@@ -41,24 +41,73 @@ jobs:
           if [ $rc -ne 0 ]; then grep -A40 -E "^\s*not ok" rules.log | grep -E "not ok|firestore\.test\.mjs:[0-9]+|PERMISSION_DENIED|message:|Expected|evaluation error" | sed 's/^ *//'  | sed 's/\x1b\[[0-9;]*m//g' | head -40 | while IFS= read -r l; do echo "::error::$l"; done; fi
           exit $rc
 
+  previo:
+    name: ¿Ya se probó este mismo código?
+    # al unir un pull request a main, el código suele ser idéntico (mismo árbol) al que ya pasó las pruebas en el PR:
+    # en ese caso no se repiten (la copia de prueba se actualiza en ~4 min en vez de ~12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { actions: read, contents: read }
+    outputs:
+      tree: ${{ steps.t.outputs.tree }}
+      ok: ${{ steps.t.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: t
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          T=$(git rev-parse HEAD^{tree})
+          echo "tree=$T" >> "$GITHUB_OUTPUT"
+          OK=0
+          if [ "${{ github.event_name }}" = "push" ]; then
+            OK=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=e2e-ok-$T" --jq '[.artifacts[]|select(.expired==false)]|length' 2>/dev/null || echo 0)
+          fi
+          if [ "$OK" != "0" ] && [ -n "$OK" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; echo "::notice::Este código ya pasó las pruebas de la interfaz en su pull request: no se repiten."; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
   interfaz:
-    name: Probar la interfaz (Playwright)
+    name: Probar la interfaz (Playwright ${{ matrix.shard }}/3)
     # en produccion solo llega lo que ya pasó estas pruebas en main: no se repiten (la obra se actualiza en ~5 min en vez de ~12)
-    if: github.ref_name != 'produccion' && github.base_ref != 'produccion'
+    # se reparten en 3 máquinas a la vez (antes una sola tardaba 4–6 min)
+    needs: [previo]
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
+      - name: Instalar Playwright y Chromium
+        working-directory: tests/e2e
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Recorrer la app con cada rol, en PC y celular
+        working-directory: tests/e2e
+        env: { CI: '1' }
+        run: npx playwright test --shard=${{ matrix.shard }}/3
+      - name: Guardar el informe si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-interfaz-${{ matrix.shard }}
+          path: tests/e2e/playwright-report
+          retention-days: 7
+
+  ciclo:
+    name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
+    needs: [previo]
+    if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
       - name: Instalar Playwright y Chromium
         working-directory: tests/e2e
-        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
-      - name: Recorrer la app con cada rol, en PC y celular
-        working-directory: tests/e2e
-        env: { CI: '1' }
-        run: npx playwright test
-      - name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Ciclo diario
         working-directory: tests/e2e
         env: { CI: '1', CICLO: '1' }
         run: npx playwright test auditoria-ciclo
@@ -66,14 +115,30 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: informe-interfaz
+          name: informe-ciclo
           path: tests/e2e/playwright-report
           retention-days: 7
 
+  aprobado:
+    name: Marcar código probado
+    # deja constancia (por árbol de archivos) de que este código pasó todas las pruebas de la interfaz; «previo» la busca al unir a main
+    needs: [previo, interfaz, ciclo]
+    if: needs.interfaz.result == 'success' && needs.ciclo.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "${{ github.sha }}" > ok.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ok-${{ needs.previo.outputs.tree }}
+          path: ok.txt
+          retention-days: 3
+          overwrite: true
+
   instalar:
     name: Instalar en Firebase
-    needs: [revisar, interfaz]
-    if: always() && needs.revisar.result == 'success' && (needs.interfaz.result == 'success' || (needs.interfaz.result == 'skipped' && github.ref_name == 'produccion')) && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
+    needs: [revisar, previo, interfaz, ciclo]
+    if: always() && needs.revisar.result == 'success' && ((needs.interfaz.result == 'success' && needs.ciclo.result == 'success') || (needs.interfaz.result == 'skipped' && needs.ciclo.result == 'skipped' && (github.ref_name == 'produccion' || needs.previo.outputs.ok == 'true'))) && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -120,7 +185,7 @@ jobs:
   publicar-web:
     name: Publicar la página en Netlify
     # la página va después de sus reglas y tareas del servidor: si la instalación en Firebase falla, no se publica
-    needs: [revisar, interfaz, instalar]
+    needs: [revisar, previo, interfaz, ciclo, instalar]
     if: always() && needs.instalar.result == 'success' && github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'produccion')
     runs-on: ubuntu-latest
     timeout-minutes: 15
