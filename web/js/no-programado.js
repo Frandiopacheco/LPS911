@@ -91,16 +91,16 @@ function npSave(){if(!NS||!db)return;const desc=NS.desc.trim();
   NPM.set(id,{...doc,id});fcol('nprog').doc(id).set(doc).catch(err=>{toast('No se pudo guardar: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message)))});
   gone.forEach(f=>{if(canDaily)fcol('fotos').doc(f).delete().catch(()=>{})});
   toast(old?'Cambios guardados':`No programado registrado${fids.length?' con foto':''}`);npClose();requestRender()}
-function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!confirm('¿Anular este registro de trabajo no programado?'))return;
+async function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!await uiAsk({title:'¿Anular este registro?',text:'El trabajo no programado queda anulado (no se borra).',ok:'Anular',tone:'danger'}))return;
   const doc={...n,del:true,ed:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
   fcol('nprog').doc(n.id).set(doc).catch(err=>toast('No se pudo anular: '+(err.code||err.message)));toast('Registro anulado');npClose();requestRender()}
 /** El ingeniero lo pasa al lookahead: una actividad nueva en ese ambiente con ese día marcado. */
 function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.ambId){toast('Primero elige el ambiente.');return}
   const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
   /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
-  if(apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead')===false||!S.act.has(aid))return;
+  apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead',()=>{if(!S.act.has(aid))return;
   const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
-  toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code);npClose()}
+  toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code);npClose()})}
 
 /* ---------- lista del día (Campo › Tarjetas y debajo del plano) ---------- */
 function npCard(i){const e=i.e;const c=conOf(e.sc);const am=i.a;const legacy=i.src==='dx';

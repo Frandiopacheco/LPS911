@@ -87,7 +87,7 @@ function buildLookShell(main){
   $('#fvm').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.verMode=b.dataset.v;gridRows=null;requestRender()};
   $('#fvsave').onclick=e=>saveVerMenu(e.currentTarget);
   $('#fhist').onclick=()=>histOpen();
-  $('#fvdel').onclick=async()=>{const v=LHI.get(U.ver);if(!v||!isAdmin)return;if(!confirm(`¿Eliminar la versión “${v.label}”? No se puede recuperar.`))return;
+  $('#fvdel').onclick=async()=>{const v=LHI.get(U.ver);if(!v||!isAdmin)return;if(!await uiAsk({title:'¿Eliminar esta versión?',html:`<b>${esc(v.label)}</b>`,note:'No se puede recuperar.',ok:'Eliminar',tone:'danger'}))return;
     try{const b=db.batch();Object.keys(v.pisos||{}).forEach(pid=>b.delete(fcol('lhver').doc(U.ver+'__'+pid)));b.delete(fcol('lhidx').doc(U.ver));await b.commit();VERD.delete(U.ver);U.ver='';toast('Versión eliminada');requestRender()}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}};
   $('#legend').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const id=c.dataset.id;let L=scSel();
     if(e.ctrlKey||e.metaKey||e.shiftKey)L=L.includes(id)?L.filter(z=>z!==id):[...L,id];else L=L.length===1&&L[0]===id?[]:[id];

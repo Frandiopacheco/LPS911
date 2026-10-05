@@ -46,7 +46,7 @@ async function cliLoad(id){if(CLVD.has(id)||!db)return;const v=CLX.get(id);if(!v
   cliLateCache=null;gridRows=null;if(ready)requestRender()}
 async function cliEmit(){if(!canCli())return;const pis=pisos();if(!pis.length)return;
   const lab=`Emitida · sem ${curWeek()} · ${fmtD(todayIso())}`;
-  if(!confirm(`Se guardará la versión para el cliente tal como se ve ahora («${lab}»). Contra ella se medirá el PPC del cliente desde la próxima semana. ¿Emitir?`))return;
+  if(!await uiAsk({title:'¿Emitir la versión al cliente?',html:`Se guarda tal como se ve ahora: <b>${esc(lab)}</b>.`,note:'Contra esta versión se medirá el PPC del cliente desde la próxima semana.',ok:'Emitir'}))return;
   const id='c-'+NOW().toString(36);const M=cliActs();const idx={label:lab,ts:NOW(),date:todayIso(),week:curWeek(),by:me.email,byName:me.name||me.email,buf:CLIB||{},pisos:{}};const docs=[];
   for(const p of pis){const sn=snapPiso(p.id);for(const k of Object.keys(sn.acts)){const c=M.get(k);if(c){sn.acts[k].days=c.days||[];sn.acts[k].qty=c.qty||{}}}
     idx.pisos[p.id]={code:p.code,name:p.name,order:p.order||0,acts:Object.keys(sn.acts).length};docs.push([id+'__'+p.id,{verId:id,pisoId:p.id,piso:strip(p),json:JSON.stringify(sn)}])}

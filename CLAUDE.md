@@ -111,6 +111,7 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
   - **Transiciones:** ventanas, hojas, menús y avisos entran con `lps-fade`/`lps-pop`/`lps-up`/`lps-rise`; al cambiar de pestaña, `viewIn(main)` agrega `.vin` (solo opacidad, para no mover lo fijo). No animes contenido que se redibuja con cada dato que llega (se vería parpadear). Con "reducir movimiento" en el equipo, todo se apaga.
   - **Revisa que un nombre de clase nuevo no exista ya**: `.ppc`, `.wrap`, `.mleg` y `.dsv` ya chocaron antes.
   - Cada color nuevo necesita su versión en modo oscuro (`@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) …}` y `:root[data-theme="dark"]`).
+- **Confirmaciones y motivos:** nunca `confirm()`/`prompt()`/`alert()` del navegador (`check.mjs` lo rechaza): usa `await uiAsk({title, text|html, list, note, ok, cancel, tone:'info'|'warn'|'danger'|'ok', input:{label, required}})` (base.js) → `true/false` o el texto. En las pruebas pasa por `confirm`/`prompt` (`window.__uiAskNative` del Firebase falso), así que `page.on('dialog')` sigue sirviendo; la ventana real se prueba en `uiask.spec.js` con `window.__uiAskReal=true`. `apply(ops, label, after)`: `after` corre cuando el cambio se aplica de verdad (también si el admin confirma un día cerrado después).
 - **Piso:** el selector principal `U.piso` filtra todas las pestañas; no agregues un selector de piso propio que compita con él.
 - **Celular:** el diseño cambia a `max-width:760px` (barra inferior `#bnav`). Los botones táctiles deben medir ≥ 40 px.
 

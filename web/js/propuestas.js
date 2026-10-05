@@ -36,7 +36,15 @@ function savePropItem(sc,id,item){const doc=PROP.get(sc)||{sc,items:{}};const pr
   /* update por ruta reemplaza el elemento entero: con set+merge las cantidades de días quitados seguían guardadas */
   if(db){const ref=fcol('lhprop').doc(sc);ref.update(new firebase.firestore.FieldPath('items',id),v).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:{[id]:v}},{merge:true});throw err})
     .catch(err=>toast('No se pudo guardar la propuesta: '+(err.code==='permission-denied'?'sin permiso (¿reglas nuevas publicadas?)':(err.code||err.message))))}}
-function sendProp(){const now=NOW();let n=0,nl=0;
+/* antes de enviar: avisa si hay actividades nuevas sin ningún día (el ingeniero no las ve en la grilla y suelen ser un error) */
+async function sendProp(){const off=ACT_OFF||S.act;const E=[];
+  for(const sc of myScsI())for(const{id,it}of propItems(sc))if(!it.sent&&it.after&&!off.get(id)&&!(it.after.days||[]).length)E.push(it.after.name||'(sin nombre)');
+  if(E.length){const c={};E.forEach(n=>c[n]=(c[n]||0)+1);
+    if(!await uiAsk({title:`${E.length} actividad${E.length>1?'es':''} nueva${E.length>1?'s':''} sin días`,text:'No tienen ningún día programado, así que el ingeniero no las verá en la grilla al revisar.',
+      list:Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([n,k])=>k>1?`${n} × ${k}`:n).concat(Object.keys(c).length>12?[`… y ${Object.keys(c).length-12} más`]:[]),
+      note:'Si son para programar más adelante, puedes enviarlas igual. Si no, vuelve y pon sus días o quítalas.',ok:'Enviar igual',cancel:'Volver a revisar',tone:'warn'}))return}
+  sendPropNow()}
+function sendPropNow(){const now=NOW();let n=0,nl=0;
   for(const sc of myScsI()){const its=propItems(sc).filter(o=>!o.it.sent);if(!its.length)continue;const up={};
     its.forEach(({id,it})=>{const sig=propSig(it.after);const keep=it.sentPrev&&it.sig===sig;const sAt=keep?it.sentPrev:now;
       const v={...it,sent:true,sentAt:sAt,sent0:it.sent0||sAt,sig};delete v.sentPrev;up[id]=v;n++;if(propLate(v,(ACT_OFF||S.act).get(id)))nl++});
@@ -169,14 +177,14 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
   /* se revisa con las fechas que de verdad se guardarán (si se movió con ‹ ›, las movidas) */
   if(st!=='rej'&&typeof dayLocked==='function'){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const sh=st==='shift'&&opt.start&&it.after;const aft=sh?propShiftTo(it.after,opt.start).a:it.after;
     const L=propTouch(o0||it.base||null,aft&&o0?propMerge(aft,it.base||o0,o0,!!sh):aft).filter(d=>dayLocked(d,pid)&&!recReal(d,id));
-    if(L.length){if(isAdmin&&!opt.bulk&&confirm(`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Como administrador puedes aceptarla igual (queda registrado). ¿Aceptar?`)){L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
+    if(L.length){if(isAdmin&&!opt.bulk&&await uiAsk({title:'Toca un día con el plan cerrado',text:`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado.`,note:'Como administrador puedes aceptarla igual: queda registrado en el día.',ok:'Aceptar igual',tone:'warn'})){L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
       else{if(!opt.bulk)toast(`No se puede aceptar: cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Acéptala con otra fecha o recházala.`);return'closed'}}}
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   const say=m=>{if(!opt.bulk)toast(m)};
   /* fuera de plazo: se puede aceptar, pero con motivo (queda en el historial con quién y cuándo) */
   const late=propLate(it,off);
   if(late&&st!=='rej'&&!opt.lateNote){if(opt.bulk)return'late';
-    const m=prompt(`«${(it.after||off||{}).name||'La propuesta'}» llegó fuera de plazo: se envió el ${fmtT(it.sentAt)}, después del corte de la semana ${late.w} (${fmtT(late.cut)}).\n\n¿Por qué se acepta? Queda registrado con tu nombre.`,'');
+    const m=await uiAsk({title:'Propuesta fuera de plazo',html:`<b>${esc((it.after||off||{}).name||'La propuesta')}</b> se envió el ${esc(fmtT(it.sentAt))}, después del corte de la semana ${late.w} (${esc(fmtT(late.cut))}).`,input:{label:'¿Por qué se acepta? Queda registrado con tu nombre.',placeholder:'Ej.: se coordinó en obra con el residente',required:true},ok:'Aceptar con este motivo',tone:'warn'});
     if(m==null)return'late';if(!m.trim()){say('Escribe el motivo para aceptar una propuesta fuera de plazo. No se cambió nada.');return'late'}opt.lateNote=m.trim()}
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
@@ -188,8 +196,8 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
         delete a.arch;ops=[op('acts',id,{...a,id})]}
       else{const cf=propConflicts(it,off,st==='shift');
         if(cf.length){if(opt.bulk)return'conf';
-          if(!confirm(`Desde que ${it.n||'el subcontratista'} armó esta propuesta, el programa oficial de “${off.name||'la actividad'}” cambió en: ${cf.map(f=>PFLBL[f]).join(', ')}.`+
-            (cf.includes('days')?`\n\nVigente: ${rngTxt(off.days)}\nPropuesto: ${rngTxt(a.days)}`:'')+`\n\nSi aceptas, esos campos quedan como en la propuesta. ¿Aceptar igual?`))return'conf'}
+          if(!await uiAsk({title:'El programa cambió desde la propuesta',html:`Desde que ${esc(it.n||'el subcontratista')} armó esta propuesta, el programa oficial de <b>${esc(off.name||'la actividad')}</b> cambió en: ${esc(cf.map(f=>PFLBL[f]).join(', '))}.`,
+            list:cf.includes('days')?[`Vigente: ${rngTxt(off.days)}`,`Propuesto: ${rngTxt(a.days)}`]:null,note:'Si aceptas, esos campos quedan como en la propuesta.',ok:'Aceptar igual',tone:'warn'}))return'conf'}
         ops=[op('acts',id,propMerge(a,base,off,st==='shift'))]}
       finalDays=a.days||[]}}
   const x=it.after||base||{};const am=S.amb.get(x.ambId);const t=NOW();const key=sc+'_'+id+'_'+t;
@@ -253,7 +261,7 @@ async function rejectMany(L){let ok=0;const why={};const add=(k,n=1)=>{why[k]=(w
 async function decideMany(L){let ok=0;const why={};
   /* las que llegaron fuera de plazo piden un solo motivo para todo el lote; sin motivo no se acepta ninguna */
   const nl=L.filter(o=>propLate(((PROP.get(o.sc)||{}).items||{})[o.id],S.act.get(o.id))).length;let lateNote='';
-  if(nl){const m=prompt(`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} fuera de plazo (${propCutTxt()}).\n\n¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.`,'');
+  if(nl){const m=await uiAsk({title:`${nl} propuesta${nl>1?'s':''} fuera de plazo`,text:`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} después del corte (${propCutTxt()}).`,input:{label:'¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.',required:true},ok:'Aceptar con este motivo',tone:'warn'});
     if(m==null||!m.trim()){toast(m==null?'No se aceptó ninguna.':'Escribe el motivo para aceptar las que llegaron fuera de plazo. No se aceptó ninguna.');return}lateNote=m.trim()}
   for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true,lateNote});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
   const W={closed:'cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
@@ -285,15 +293,12 @@ function propBarClick(e){const t=e.target;let r;
   if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
   if(t.closest('[data-rvrej]')){let L=revVisItems();if(!L.length){const A=revItems();if(!A.length){toast('No hay propuestas pendientes.');return}
       /* ninguna se ve en la grilla: se explica por qué y se pueden rechazar igual (rechazar no cambia el lookahead) */
-      if(!confirm(`Ninguna de las ${A.length} propuesta${A.length>1?'s':''} pendiente${A.length>1?'s':''}${U.revSc?' de '+conOf(U.revSc).name:''} se ve en la grilla:\n· ${revHiddenWhy(A).join('\n· ')}\n\n¿Rechazarlas todas igual? El lookahead no cambia y cada subcontratista lo ve en «Respuestas».`))return;
-      rejectMany(A);return}const oc=revItems().length-L.length;
-    if(!confirm(`¿Rechazar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla? El lookahead no cambia y cada subcontratista lo ve en «Respuestas».`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')))return;
-    rejectMany(L);return}
+      uiAsk({title:`¿Rechazar las ${A.length} propuestas${U.revSc?' de '+conOf(U.revSc).name:''}?`,text:'Ninguna se ve en la grilla:',list:revHiddenWhy(A),note:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',ok:`Rechazar las ${A.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(A)});return}const oc=revItems().length-L.length;
+    uiAsk({title:`¿Rechazar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',note:oc?`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'',ok:`Rechazar ${L.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(L)});return}
   if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
     /* una fila movida con ‹ › solo se acepta así con su ✓: el lote toma las propuestas como vienen */
     const sh=REVSEL&&REVSEL.k&&L.some(o=>o.id===REVSEL.id)?S.act.get(REVSEL.id):null;
-    if(!confirm(`¿Aceptar las ${L.length} propuesta${L.length>1?'s':''} que muestra la grilla, tal como vienen?`+(oc?`\n\nLas otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'')
-      +(sh?`\n\nOjo: «${sh.name||'una actividad'}» la moviste ${Math.abs(REVSEL.k)} día${Math.abs(REVSEL.k)>1?'s':''} en la vista previa, pero aquí se acepta en las fechas que propuso el subcontratista. Para aceptarla movida, cancela y usa ✓ en su fila.`:'')))return;decideMany(L);return}
+    uiAsk({title:`¿Aceptar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'Se aceptan tal como las envió el subcontratista.',list:[...(oc?[`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`]:[]),...(sh?[`«${sh.name||'una actividad'}» la moviste ${Math.abs(REVSEL.k)} día${Math.abs(REVSEL.k)>1?'s':''} en la vista previa, pero aquí se acepta en las fechas que propuso el SC. Para aceptarla movida, cancela y usa ✓ en su fila.`]:[])],ok:`Aceptar ${L.length}`,tone:sh?'warn':'ok'}).then(ok=>{if(ok)decideMany(L)});return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
