@@ -28,6 +28,7 @@
     <button class="ib" id="wtoday">Hoy</button>
   </div>
   <div class="tools">
+    <span class="seg modseg" id="modsel" role="group" aria-label="Módulo" hidden><button type="button" data-mod="lps" class="on">Last Planner</button><button type="button" data-mod="tar">Tareo</button></span>
     <div class="who" id="who" aria-label="Conectados ahora"></div>
     <span class="status" id="status"><i></i><span>Conectando</span></span>
     <button class="ib" id="bundo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer">&#8630;</button>
@@ -53,6 +54,10 @@
     <button role="tab" data-tab="planos">Sectorización</button>
     <button role="tab" data-tab="cfg">Configuración</button>
     <button role="tab" data-tab="team" id="tabTeam" hidden>Equipo</button>
+    <button role="tab" data-tab="tdia" hidden>Tareos del día</button>
+    <button role="tab" data-tab="tper" hidden>Personal</button>
+    <button role="tab" data-tab="tpc" hidden>Partidas de control</button>
+    <button role="tab" data-tab="tcfg" hidden>Configuración</button>
   </nav>
 </div>
 <main id="main"><div class="loading" id="loading"><b>Conectando…</b><span>El lookahead se carga en unos segundos.</span></div></main>
@@ -103,6 +108,7 @@
 <script src="js/historial.js?v=33"></script>
 <script src="js/excel.js?v=33"></script>
 <script src="js/ayuda.js?v=33"></script>
+<script src="js/tareo.js?v=33"></script>
 <script src="js/hoy.js?v=33"></script>
 <script src="js/interfaz.js?v=33"></script>
 <script src="js/plan-restricciones.js?v=33"></script>

@@ -5,28 +5,33 @@
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
 const TAB_ORDER=['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'PPC semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo'};
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'PPC semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
+  tdia:'Tareos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
+/* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
+const tabOrder=()=>U.mod==='tar'?TAR_TABS:TAB_ORDER;
 
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
-function tabAllowed(t){if(!me||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
+function tabAllowed(t){if(!me)return false;
+  if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;return t!=='tcfg'||me.role==='admin'}
+  if(U.mod==='tar'||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
-function tabPrimary(){if(!me)return[];const r=me.role;
+function tabPrimary(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed);const r=me.role;
   const M={admin:['dash','look','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','restr','plan','mapa','campo','lib','ind'],
     campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
-function tabSecondary(){const p=new Set(tabPrimary());return TAB_ORDER.filter(t=>!p.has(t)&&tabAllowed(t))}
-function tabHome(){return tabPrimary()[0]||'look'}
+function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}
+function tabHome(){return tabPrimary()[0]||(U.mod==='tar'?'tdia':'look')}
 
 /** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
   const btn=t=>nav.querySelector(`button[data-tab="${t}"]`);
   const sig=prim.join()+'|'+sec.join();const re=nav.dataset.sig!==sig;nav.dataset.sig=sig;
-  TAB_ORDER.forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
+  [...TAB_ORDER,...TAR_TABS].forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
   let mb=$('#tabMore');if(!mb){mb=document.createElement('button');mb.id='tabMore';mb.type='button';mb.className='tmore';mb.setAttribute('aria-haspopup','menu');mb.onclick=()=>moreMenu(mb)}
   if(re||mb.parentNode!==nav)nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
   const mh=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;if(mb.innerHTML!==mh)mb.innerHTML=mh;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}
@@ -35,17 +40,22 @@ function moreMenu(anchor){const sec=tabSecondary();
     Object.fromEntries(sec.map(t=>['t_'+t,()=>goTab(t)])))}
 
 /* ---------- menú inferior del celular: 4 accesos según el rol + "Más" ---------- */
-function bnavItems(){if(!me)return[];const r=me.role;
+function bnavItems(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed).slice(0,4);const r=me.role;
   const L=r==='sc'?['cap','mapa','restr','lib']:r==='campo'?['campo','mapa','restr','ind']:r==='area'?(isCalArea()?['lib','restr','mapa','ind']:['restr','lib','ind','look'])
     :r==='lector'?['restr','lib','ind','look']:r==='veedor'?['campo','mapa','ind','restr']:['campo','mapa','restr','lib'];
   return ['hoy',...L].filter(tabAllowed).slice(0,4)}
-function bnavMore(){const b=new Set(bnavItems());return TAB_ORDER.filter(t=>!b.has(t)&&tabAllowed(t))}
+function bnavMore(){const b=new Set(bnavItems());return tabOrder().filter(t=>!b.has(t)&&tabAllowed(t))}
 Object.assign(BNI,{
   hoy:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8.5 14.5l2.2 2.2 4.8-4.7"/>'),
   lib:SVG('<path d="M12 3l7 3v5.5c0 4.3-3 7.8-7 9.5-4-1.7-7-5.2-7-9.5V6z"/><path d="M8.8 12.2l2.3 2.3 4.4-4.5"/>'),
   look:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M14 10v4M11 16v4"/>'),
   plan:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
-  dash:SVG('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/>')});
+  dash:SVG('<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/>'),
+  /* Tareo */
+  tdia:SVG('<rect x="5" y="3.5" width="14" height="17.5" rx="2"/><path d="M9 3.5h6v3H9zM8.5 11h7M8.5 14.5h7M8.5 18h4"/>'),
+  tper:SVG('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 14.4c1.8.8 3 2.6 3 4.6"/>'),
+  tpc:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M8 10v4M8 16v4"/>'),
+  tcfg:SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8"/>')});
 
 /* ---------- un solo selector de fecha, arriba (P7) ----------
    Pestañas por semana (Lookahead, Restricciones, Plan semanal, Liberaciones, Indicadores semanal) muestran la semana;

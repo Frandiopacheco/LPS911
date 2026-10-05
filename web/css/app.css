@@ -1684,3 +1684,16 @@ table.rtab .rc-x{width:30px}
   .mlgd{max-height:30%}
 }
 
+
+/* ---------- Módulo Tareo: selector de módulo (docs/ia/tareo.md) ---------- */
+.modseg button{font-weight:600}
+#modsel[hidden]{display:none}
+/* en modo Tareo no se ven los controles de Last Planner de la barra (piso, semana, deshacer, exportar, ayuda) */
+body.mod-tar #fpiso,body.mod-tar .wk .lbl,body.mod-tar #wprev,body.mod-tar #wnext,body.mod-tar #wtoday,body.mod-tar #bundo,body.mod-tar #bredo,body.mod-tar #bexport,body.mod-tar #bhelp{display:none!important}
+/* «Más» del celular: selector de módulo a todo el ancho */
+.msc .msmod{display:flex;align-items:center;gap:10px;padding:6px 8px}
+.msc .msmod>span:first-child{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.msc .msmod .seg{flex:1}
+.msc .msmod .seg button{flex:1;text-align:center;height:40px;padding:0 10px;font-size:14px;border-radius:0}
+.msc .msmod .seg button.on{background:var(--accent);color:var(--accent-ink)}
+@media (max-width:760px){#modsel{display:none!important}body.mod-tar .top .wk{display:none}}
