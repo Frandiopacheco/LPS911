@@ -155,12 +155,19 @@ class PropStop extends Error{constructor(m,k){super(m);this.lps=m;this.k=k||'sto
 /** campos que la propuesta cambia y que el programa oficial también cambió desde que el SC la armó */
 function propConflicts(it,off,shift){const base=it.base;if(!it.after||!base||!off)return[];const L=[];
   for(const f of PFIELDS){const pc=canon(it.after[f]??null)!==canon(base[f]??null)||(shift&&(f==='days'||f==='qty'));if(pc&&canon(off[f]??null)!==canon(base[f]??null))L.push(f)}return L}
+/** la propuesta movida con ‹ › para que empiece en «start»: un día no laborable dentro del bloque cae en el mismo día hábil
+    que el siguiente (se juntan sin perder cantidades). Devuelve {a, merged}. */
+function propShiftTo(after,start){const a=clone(after);if(!(a.days||[]).length)return{a,merged:0};const ds=[...new Set(a.days)].sort();const k=wdist(ds[0],start);const mp=d=>wshift(d,k);
+  a.days=[...new Set(ds.map(mp))].sort();const merged=ds.length-a.days.length;
+  if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty)){const n=mp(d);q[n]=r2((q[n]||0)+(+v||0))}a.qty=q}return{a,merged}}
 /** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
 async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return'gone';
   if(!canDecide(id,it)){if(!opt.bulk)toast(propWho(id,it)+'.');return'perm'}
   const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
   /* aceptar no puede cambiar días cuyo plan ya está cerrado (hoy, pasados o publicados); rechazar sí se puede */
-  if(st!=='rej'&&typeof dayLocked==='function'){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const L=propTouch(o0||it.base||null,it.after&&o0?propMerge(it.after,it.base||o0,o0,false):it.after).filter(d=>dayLocked(d,pid)&&!recReal(d,id));
+  /* se revisa con las fechas que de verdad se guardarán (si se movió con ‹ ›, las movidas) */
+  if(st!=='rej'&&typeof dayLocked==='function'){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const sh=st==='shift'&&opt.start&&it.after;const aft=sh?propShiftTo(it.after,opt.start).a:it.after;
+    const L=propTouch(o0||it.base||null,aft&&o0?propMerge(aft,it.base||o0,o0,!!sh):aft).filter(d=>dayLocked(d,pid)&&!recReal(d,id));
     if(L.length){if(isAdmin&&!opt.bulk&&confirm(`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Como administrador puedes aceptarla igual (queda registrado). ¿Aceptar?`)){L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
       else{if(!opt.bulk)toast(`No se puede aceptar: cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Acéptala con otra fecha o recházala.`);return'closed'}}}
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
@@ -173,10 +180,7 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
-      if(st==='shift'&&opt.start&&(a.days||[]).length){const ds=[...new Set(a.days)].sort();const k=wdist(ds[0],opt.start);const mp=d=>wshift(d,k);
-        /* un día no laborable dentro del bloque cae en el mismo día hábil que el siguiente: se juntan sin perder cantidades */
-        a.days=[...new Set(ds.map(mp))].sort();if(a.days.length<ds.length)opt.merged=ds.length-a.days.length;
-        if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty)){const n=mp(d);q[n]=r2((q[n]||0)+(+v||0))}a.qty=q}}
+      if(st==='shift'&&opt.start&&(a.days||[]).length){const r_=propShiftTo(a,opt.start);a=r_.a;if(r_.merged)opt.merged=r_.merged}
       if(!off){const ar=getDoc('acts',id);
         if(ar&&ar.arch){say(`“${ar.name||'La actividad'}” está en la Papelera. Restáurala primero (Configuración › Papelera) o rechaza la propuesta.`);return'arch'}
         if(!S.amb.has(a.ambId)){say('El ambiente de esa actividad ya no existe.');return'amb'}
@@ -199,7 +203,7 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
       if(!srv||!srv.sent||propVer(srv)!==propVer(it))throw new PropStop('El subcontratista cambió esta propuesta mientras la revisabas: revisa la versión nueva.','ver');
       if(o){const as=await tx.get(aref);const cur=as.exists?actNorm(as.data()):null;
         if(canon(cur?strip(cur):null)!==canon(o.before?strip(o.before):null))throw new PropStop('La actividad cambió hace un momento (otro usuario o un cambio que aún se estaba guardando). Vuelve a intentarlo.','act');
-        const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body,'acts');if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
+        const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body,'acts',true);if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
       tx.update(pref,new firebase.firestore.FieldPath('items',id),null);tx.set(fcol('lhphist').doc(key),h)})}
   catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
   PDBUSY.delete(key0);

@@ -147,7 +147,7 @@ const unflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y
 const myRole=()=>me&&me.role;
 const PHONE=()=>matchMedia('(max-width:760px)').matches;
 const myScs=()=>(me&&me.scs&&me.scs.length?me.scs:(me&&me.sc?[me.sc]:[]));
-const canPlan=sc=>!!sc&&!PHONE()&&(canWrite||(myRole()==='sc'&&myScs().includes(sc)));
+const canPlan=sc=>!!sc&&!PHONE()&&((canWrite&&(typeof isPisoResp!=='function'||isPisoResp(M.piso)))||(myRole()==='sc'&&myScs().includes(sc)));
 const DAC=new Map();
 /** actividades programadas de un piso en un día (memo: cambia con los datos o con lo terminado) */
 function dayActs(pid,d){const k=pid+'|'+d+'|'+DV+'|'+(typeof DONEV!=='undefined'?DONEV:0);const c=DAC.get(k);if(c)return c;if(DAC.size>30)DAC.clear();const L=dayActs_(pid,d);DAC.set(k,L);return L}
@@ -556,6 +556,13 @@ function zoneBoxes(sc){return shapesV(M.piso).filter(z=>z.kind!=='nova'&&scIn(sc
 function meetGo(sc){M.meetSc=sc;requestRender();requestAnimationFrame(()=>{const P=zoneBoxes(sc);if(sc&&P.length)zoomTo(P);else fitAll()})}
 function actRows(sc){const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc);const sh=shapesOf(M.piso);
   return acts.map(({x,a})=>{const zs=sh.filter(z=>z.kind==='zona'&&z.actId===x.id);const nv=sh.find(z=>z.kind==='nova'&&z.actId===x.id);return{x,a,zs,nv}})}
+/** filas del cumplimiento en la reunión: con plan publicado (foto), lo comprometido es la foto, igual que el PPC diario de
+    Indicadores (lo agregado después no cuenta; lo que salió del día sin registro sigue contando; lo terminado antes, no) */
+function cuRows(sc){const R=actRows(sc);const sn=typeof dplanOf==='function'?dplanOf(M.date,M.piso):null;if(!sn||!sn.ids)return R;
+  const out=R.filter(r=>r.x.id in sn.ids);const seen=new Set(out.map(r=>r.x.id));
+  for(const id of Object.keys(sn.ids)){if(seen.has(id))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;const rc=recOf(M.date,id);
+    if(((rc&&rc.sc)||x.sc)!==sc)continue;if(doneBefore(id,M.date)&&!rc)continue;out.push({x,a:S.amb.get(x.ambId),zs:[],nv:null,out:true})}
+  return out}
 /** cuántas actividades quedaron ✓ ½ ✗ o sin registro (lo que vieron en Campo) */
 function cuCount(R){const o={ok:0,partial:0,no:0,none:0};for(const r of R){const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;if(r.nv&&!rc)continue; /* «no va hoy» con registro cuenta, como en Campo e Indicadores */o[rc&&o[rc.status]!=null?rc.status:'none']++}return o}
 function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplidas${o.partial?` · ${o.partial} parcial${o.partial>1?'es':''}`:''}${o.no?` · ${o.no} no`:''}${o.none?` · ${o.none} sin registro`:''}${v?` · ${Math.round(o.ok/v*100)} %`:''}`}
@@ -574,11 +581,11 @@ function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;docu
   let ch='';const NBM=nbMap();
   /* «Cumplimiento»: lo que se hizo el día (registrado en Campo) · «Plan»: la ficha se oculta y a la derecha quedan Por decidir, Equipos, Cruces y Cambios */
   if(pl){card.hidden=true;card.dataset.h=''}
-  else if(SEL.length){ch=SEL.map(sc=>{const R=actRows(sc);const cs=cuCount(R);const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
+  else if(SEL.length){ch=SEL.map(sc=>{const R=cuRows(sc);const cs=cuCount(R);const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
     return`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${SEL.length>1?'':`${i+1} de ${scs.length} · `}${cuLine(cs,R.length)}</span></div></div>
       <ol class="mcl">${R.map(r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;const st=rc?rc.status:'none';return`<li class="${r.nv?'nv':'cu-'+st}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)} <span class="cst sm" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${rc&&rc.cnc?' · '+esc(rc.cnc):''}</span></b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No iba este día · ${esc(r.nv.motivo||'')}</em>`:''}</div></li>`}).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
       ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}`}).join('')}
-  else{const rows=scs.map(c=>{const R=actRows(c);return{c,n:R.length,cs:cuCount(R)}});const T=cuCount(scs.flatMap(c=>actRows(c)));const n=rows.reduce((a,r)=>a+r.n,0);
+  else{const rows=scs.map(c=>{const R=cuRows(c);return{c,n:R.length,cs:cuCount(R)}});const T=cuCount(scs.flatMap(c=>cuRows(c)));const n=rows.reduce((a,r)=>a+r.n,0);
     ch=`<div class="mch all"><div><b>Cumplimiento del día</b><span>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)} · ${cuLine(T,n)}</span></div></div>
       <div class="mleg">${rows.map(r=>`<button data-msc="${r.c}" style="--c:${conOf(r.c).color}"><i></i><span>${esc(conOf(r.c).name)}</span><b>${r.cs.ok}/${r.n}</b>${r.cs.no+r.cs.partial?`<em>${r.cs.no+r.cs.partial} no cumple</em>`:r.cs.none?`<em class="mu">${r.cs.none} sin registro</em>`:''}</button>`).join('')}</div>
       <div class="note" style="padding:6px 2px">Toca una zona para ver o corregir lo registrado. Luego pasa a <b>📋 Plan e interferencias</b> para revisar el día siguiente.</div>`}
@@ -1133,7 +1140,7 @@ const dzCan=x=>!!x&&!PHONE()&&!dayLk()&&((typeof canWrite!=='undefined'&&canWrit
 /* día cerrado (publicado, cerrado a las 20:00, hoy o pasado): no se decide ni se reprograma; las cuadrillas sí */
 const dayLk=()=>typeof planLocked==='function'&&planLocked(M.date,M.piso);
 const LOCKSEL='[data-dv],[data-dpa],[data-undo],[data-chu],[data-avx],[data-dpr],#dzadd';
-function lockStop(t){if(!dayLk()||!t.closest(LOCKSEL))return false;toast(`El plan del ${dvLbl(M.date)} ya está cerrado (${lockWhy(M.date,M.piso)}): no se cambia. ${M.date>todayIso()?'Para corregirlo, deshaz la publicación.':'Registra el cumplimiento; lo que no se haga se reprograma desde mañana.'}`);return true}
+function lockStop(t){if(!dayLk()||!t.closest(LOCKSEL))return false;{const c=t.closest('[data-chu]');const z=c&&PD.get(c.dataset.chu);if(z&&z.draft)return false}toast(`El plan del ${dvLbl(M.date)} ya está cerrado (${lockWhy(M.date,M.piso)}): no se cambia. ${M.date>todayIso()?'Para corregirlo, deshaz la publicación.':'Registra el cumplimiento; lo que no se haga se reprograma desde mañana.'}`);return true}
 /* ---------- Plan del día: Va · No va · Culminado ----------
    El subcontratista propone (queda «en espera» en el plano); el ingeniero decide en la reunión. «No va» pide el motivo:
    restricción (¿se libera mañana a primera hora? sí: va con aviso · no: se registra y se reprograma) o personal (se
@@ -1173,9 +1180,9 @@ function pubBarHtml(){const p=pubOf();const D=draftsOf();const eng=dzEng();const
   /* día futuro publicado o cerrado solo a las 20:00 */
   if(p||(sn&&sn.ids)){const who=p?`${esc(p.byName||'')} · ${fmtD(ldt(p.ts))} ${hhmm(p.ts)}`:`cerrado automáticamente a las 20:00`;
     return`<div class="pubb ok">🔒 Plan ${p?'publicado':'cerrado'}<small>${who} · ya no se reprograma; las cuadrillas sí se pueden repartir</small>${p&&eng?'<button class="ib" data-unpub="1" title="Vuelve a borrador: las fechas del lookahead regresan (si nadie las cambió) y se puede volver a planificar">↶ Deshacer publicación</button>':''}${reoBtn}</div>`}
-  if(!eng)return`<div class="pubb">Borrador<small>El ingeniero aún no publica el plan de este día.</small></div>`;
-  const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);
-  return`<div class="pubb">Borrador<small>${D.length?`${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) se aplican al lookahead al publicar`:'Aún no se publica: al publicar, el plan vale para todos'} · al publicar se cierra (si nadie lo publica, se cierra solo a las 20:00 del día anterior)</small><button class="ib pri" data-pub="1">📣 Publicar plan</button>${D.length?'<button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button>':''}</div>`}
+  if(!eng)return`<div class="pubb">Plan propuesto<small>Se revisa en la reunión; el ingeniero lo publica al terminar (si nadie lo publica, se publica solo a las 20:00).</small></div>`;
+  const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const np=dpPendAll().length;
+  return`<div class="pubb">Plan propuesto<small>${D.length?`${D.length} reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''}) se aplican al lookahead al publicar`:'Revísalo en la reunión (cumplimiento, cruces y «no va») y publícalo al terminar'}${np?` · <b class="bad">${np} propuesta${np>1?'s':''} del SC por revisar</b>`:''} · si nadie lo publica, a las 20:00 se publica solo con estos cambios y las propuestas sin revisar se rechazan</small><button class="ib pri" data-pub="1">📣 Publicar plan</button>${D.length?'<button class="ib" data-pubx="1" title="Quitar los cambios sin publicar (el lookahead no cambia)">Descartar</button>':''}</div>`}
 /* reabrir / volver a cerrar (solo el administrador; queda en el registro del día) */
 function lkReopen(){if(!isAdmin)return;const why=(prompt(`Reabrir el plan del ${dvLbl(M.date)}: ¿por qué? (queda registrado)`)||'').trim();if(!why)return;const e={t:NOW(),by:me.email,n:me.name||me.email,why};
   const k=M.date+'_'+M.piso;const cur=dplanOf(M.date,M.piso)||{};DPL.set(k,{...cur,id:k,date:M.date,pisoId:M.piso,reo:e});DV++;requestRender();
@@ -1187,62 +1194,123 @@ function lkClose(){if(!isAdmin)return;const k=M.date+'_'+M.piso;const cur=dplanO
 function unpubBar(){const PID=pubId(M.date,M.piso);const out=[...PD.values()].filter(z=>z.kind==='nova'&&z.pub===PID&&!z.draft).map(z=>({id:z.id,mv:z.mv,rid:z.rid,date:z.date,aid:z.actId,k:z.k||''}));
   if(!confirm(`¿Deshacer la publicación del ${dvLbl(M.date)}? El plan vuelve a borrador${out.length?` y ${out.length} reprogramación${out.length>1?'es':''} vuelve${out.length>1?'n':''} a borrador (las fechas regresan si nadie las cambió)`:''}.`))return;unpubPlan(PID,{out,was:null})}
 function pubDiscard(){const D=draftsOf();const g=[];for(const z of D){const o=remDoc(z.id);if(o)g.push(o);if(z.prop){const p=PD.get(z.prop);if(p&&p.st==='ok')g.push(updDoc(p.id,{st:'pend',dec:null,decBy:null,decN:null,decT:null},{st:'ok'}))}}rec(g.filter(Boolean));toast(`${D.length} cambio${D.length>1?'s':''} sin publicar descartado${D.length>1?'s':''}`,'Deshacer',undo);requestRender()}
-function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso (o el administrador).');return}const D=draftsOf();const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const nr=D.filter(z=>z.k==='res').length;
-  const pend=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso).length;try{computeCross()}catch(e){}const cx=CROSS.list.length;
-  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} La semana congelada del PPC semanal no cambia.${pend?`<br><b class="bad">Quedan ${pend} propuesta${pend>1?'s':''} por decidir</b> (siguen como van).`:''}${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:pubPlan,no:()=>{}})}
+/** propuestas del SC sin decidir del día y piso que se ven */
+const dpPendAll=()=>[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&z.date===M.date);
+function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso (o el administrador).');return}const D=draftsOf();const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const nr=D.filter(z=>z.k).length;
+  const pend=dpPendAll();try{computeCross()}catch(e){}const cx=CROSS.list.length;const adm=typeof isAdmin!=='undefined'&&isAdmin;
+  /* para publicar hay que revisar todas las propuestas del SC; solo el administrador puede aceptarlas o rechazarlas todas de una vez */
+  if(pend.length){const nf=pend.filter(p=>p.k==='fin').length;
+    openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pend.length} propuesta${pend.length>1?'s':''} del SC por revisar.</b> Para publicar el plan hay que revisarlas todas (Revisar en «Por decidir»).${adm?`<br>Como administrador puedes decidirlas todas de una vez: aceptar = ${pend.length-nf?`los «no va» pasan al día hábil siguiente (solo esa actividad)`:''}${pend.length-nf&&nf?' y ':''}${nf?'las culminadas se dan por culminadas':''}; rechazar = van según lo programado.`:''}</div>
+      <button data-do="ver" class="pri">Ir a revisar</button>${adm?`<button data-do="acc">✓ Aceptar todas (${pend.length})</button><button data-do="rej">✗ Rechazar todas (${pend.length})</button>`:''}<button data-do="no">Cerrar</button>`,
+      {ver:()=>{M.pdOpen=true;requestRender()},acc:()=>dpAll(true),rej:()=>dpAll(false),no:()=>{}});return}
+  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} Al publicar se cierra el plan de ese día. La semana congelada del PPC semanal no cambia.${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:pubPlan,no:()=>{}})}
+/** solo el administrador: aceptar o rechazar todas las propuestas pendientes del día y piso. Aceptar un «no va» lo deja como
+    borrador al día hábil siguiente (solo esa actividad, con la causa que puso el SC); una culminada se da por culminada. */
+let DPALL=false;
+async function dpAll(acc){if(DPALL||typeof isAdmin==='undefined'||!isAdmin)return;const L=dpPendAll();if(!L.length)return;
+  if(!confirm(`¿${acc?'Aceptar':'Rechazar'} las ${L.length} propuestas del SC del ${dvLbl(M.date)}?`))return;DPALL=true;let ok=0,no=0;
+  try{for(const p of L){const x=S.act.get(p.actId);if(!x){no++;continue}
+    if(!acc){if(await dpReject(p,true))ok++;else no++;continue}
+    if(p.k==='fin'){if(await dvFin(x,p,true))ok++;else no++;continue}
+    if(!pubDraft()){no++;continue}
+    const st={k:p.k==='res'?'ot':(p.k||'ot'),desc:p.desc||'',prop:p,to:wshift(M.date,1),tren:false,pred:p.pred||predOf(x),pc:false,who:''};
+    if(!await dpTake(p,dpDec('ok','Reprogramada al '+st.to))){no++;continue}nvDraftAdd(x,st,[],1);ok++}}
+  finally{DPALL=false}
+  toast(`${ok} propuesta${ok!==1?'s':''} ${acc?'aceptada':'rechazada'}${ok!==1?'s':''}${no?` · ${no} no se pudo (cambió o ya estaba decidida): revísala${no>1?'s':''}`:''}`);requestRender()}
 /* Publicar va en una transacción: relee del servidor el aviso de publicado, cada borrador y cada actividad, así dos
    ingenieros que publican a la vez no corren dos veces las mismas fechas. Se saltan las actividades que ya no tienen ese día. */
 let PUBBUSY=false;
 async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.date,pid=M.piso,PID=pubId(date,pid);const pref=fcol('pdz').doc(PID);
   const ids=[...new Set(D.flatMap(z=>z.ids||[z.actId]))];PUBBUSY=true;let R_;
+  /* la foto del plan se arma con lo que tiene el servidor: primero terminan de enviarse las escrituras propias */
+  try{if(db.waitForPendingWrites)await Promise.race([db.waitForPendingWrites(),new Promise(r=>setTimeout(r,4000))])}catch(e){}
+  /* candidatas a la foto: lo que esta página ve ese día en el piso, lo de la foto anterior y lo que se mueve (se releen en la transacción) */
+  const cand=new Set(ids);for(const x of S.act.values())if((x.days||[]).includes(date)&&pisoOfAmb(x.ambId)===pid)cand.add(x.id);
+  {const s0=typeof dplanOf==='function'?dplanOf(date,pid):null;if(s0&&s0.ids)Object.keys(s0.ids).forEach(i=>cand.add(i))}
   try{R_=await db.runTransaction(async tx=>{
     const ps=await tx.get(pref);const pubD=ps.exists?ps.data():null;const dref=fcol('dplan').doc(date+'_'+pid);const dsn=await tx.get(dref);const sn0=dsn.exists?dsn.data():null;
-    const ds=[];for(const z of D)ds.push(await tx.get(fcol('pdz').doc(z.id)));
-    const A=new Map();for(const id of ids){const d=await tx.get(fcol('acts').doc(id));if(d.exists)A.set(id,{...d.data(),id})}
-    const W=new Map(),out=[],skipped=[],restrs=[];
-    ds.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:D[i].id};if(!zz.draft)return;const n=zz.shift||wdist(zz.date,zz.repTo);const mv={};
-      (zz.ids||[zz.actId]).forEach((id,j)=>{const y=W.get(id)||A.get(id);if(!y||y.arch)return;
-        const ok=j===0?(y.days||[]).includes(zz.date):(y.days||[]).some(dd=>dd>=zz.date);if(!ok){skipped.push(y.name||id);return}
-        const o=shiftOp(y,n,zz.date);mv[id]={p:y.days||[],pq:y.qty||{},n:o.after.days,nq:o.after.qty||{}};const nx={...y,days:o.after.days,qty:o.after.qty||{}};
+    /* lecturas en paralelo (un piso puede tener cientos de actividades ese día) */
+    const ds=await Promise.all(D.map(z=>tx.get(fcol('pdz').doc(z.id))));
+    const A=new Map();(await Promise.all([...cand].map(id=>tx.get(fcol('acts').doc(id))))).forEach(d=>{if(d.exists)A.set(d.id,actNorm({...d.data(),id:d.id}))});
+    const Dz=[];ds.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:D[i].id};if(zz.draft)Dz.push(zz)});Dz.sort((a,b)=>(a.ts||0)-(b.ts||0)||String(a.id).localeCompare(String(b.id)));
+    /* planes ya cerrados de otras fechas que se tocarían: esa actividad no se mueve (si es la principal, el cambio queda sin publicar) */
+    const closed=new Map();const DD=pubDates(Dz,A,date);(await Promise.all(DD.map(dd=>tx.get(fcol('dplan').doc(dd+'_'+pid))))).forEach((s_,i)=>{const v=s_.exists?s_.data():null;if(v&&v.ids&&!v.reo)closed.set(DD[i],new Set(Object.keys(v.ids)))});
+    const lockedOn=(id,a,b)=>chgDays(a,b).filter(d=>d!==date&&closed.has(d)&&closed.get(d).has(id));
+    const W=new Map(),out=[],skipped=[],held=[],restrs=[];
+    for(const zz of Dz){const n=zz.shift||wdist(zz.date,zz.repTo);const mv={};const L=zz.ids||[zz.actId];let hold=false;
+      for(let j=0;j<L.length;j++){const id=L[j];const y=W.get(id)||A.get(id);if(!y||y.arch)continue;
+        const ok=j===0?(y.days||[]).includes(zz.date):(y.days||[]).some(dd=>dd>=zz.date);if(!ok){skipped.push(y.name||id);continue}
+        const o=shiftOp(y,n,zz.date);const lk=lockedOn(id,y,o.after);if(lk.length){held.push(`${short(y.name||id,30)} (${lk.map(fmtD).join(', ')})`);if(j===0){hold=true;break}continue}
+        mv[id]={p:y.days||[],pq:y.qty||{},n:o.after.days,nq:o.after.qty||{}};const nx={...y,days:o.after.days,qty:o.after.qty||{}};
         /* el día que no fue queda marcado en el lookahead (↷ con el motivo, la nueva fecha y la causa); en el tren, su primer día movido */
         const ca=zz.c?{c:zz.c,cnc:zz.cnc||'',imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{};const rk=j===0?zz.date:rplDay(y,zz.date);
-        if(rk)nx.rpl={...(y.rpl||{}),[rk]:{to:j===0?zz.repTo:wshift(rk,n),m:zz.motivo||'',...ca,...(j?{tr:zz.actId}:{})}};W.set(id,nx)});
-      /* toda reprogramación queda registrada en Restricciones con su causa (antes solo las de tipo «restricción») */
-      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid=uid('res');restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:(P().restrTypes||[])[0]||'',desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
-      out.push({id:zz.id,mv,rid,date:zz.date,aid:zz.actId,k:zz.k||''})});
+        if(rk)nx.rpl={...(y.rpl||{}),[rk]:{to:j===0?zz.repTo:wshift(rk,n),m:zz.motivo||'',...ca,...(j?{tr:zz.actId}:{})}};W.set(id,nx)}
+      if(hold)return{held,blocked:true};
+      /* toda reprogramación queda registrada en Restricciones con su causa (el tipo sale de la causa, no del primero de la lista) */
+      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid=uid('res');restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
+      out.push({id:zz.id,mv,rid,date:zz.date,aid:zz.actId,k:zz.k||''})}
     for(const[id,y]of W)tx.update(fcol('acts').doc(id),{days:y.days,qty:y.qty||{},...(y.rpl?{rpl:y.rpl}:{})});
     for(const r of restrs){const{id,...b}=r;tx.set(fcol('restr').doc(id),b)}
     for(const o of out)tx.update(fcol('pdz').doc(o.id),{draft:false,mv:o.mv,rid:o.rid,pub:PID});
     const doc={date,pisoId:pid,sc:'',kind:'pub',n:(pubD&&pubD.n||0)+out.length,by:me.email,byName:me.name||me.email,ts:NOW()};tx.set(pref,doc);
-    /* foto del plan comprometido (contra ella se mide el PPC diario); un día que ya llegó conserva la que tenía (o la de antes de publicar) */
-    if(date>todayIso()||!sn0){const Acts=new Map(S.act);if(date>todayIso())for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});
-      tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:dplanIds(date,pid,Acts),at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
-    return{out,skipped,W,restrs,doc,was:pubD}})}
+    /* foto del plan comprometido (contra ella se mide el PPC diario), con las actividades releídas del servidor;
+       un día que ya llegó conserva la que tenía (o la de antes de publicar) */
+    let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso())for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});
+      snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
+    return{out,skipped,held,W,restrs,doc,was:pubD,snapIds}})}
   catch(e){PUBBUSY=false;toast('No se pudo publicar: '+(e&&(e.code||e.message)||'error'));return}
   PUBBUSY=false;
+  if(R_.blocked){toast(`No se publicó: ${R_.held.join(' · ')} tocaría un día ya publicado. Quita o cambia ese «no va» (Cambios del plan) o pide al administrador reabrir ese día.`);requestRender();return}
   /* reflejar al momento (llegará igual por la base) */
   for(const[id,y]of R_.W){const c=S.act.get(id);if(c)S.act.set(id,{...c,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})})}for(const r of R_.restrs)S.res.set(r.id,r);
-  for(const o of R_.out){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,mv:o.mv,rid:o.rid,pub:PID})}PD.set(PID,{...R_.doc,id:PID});if(date>todayIso()){const Acts=S.act;DPL.set(date+'_'+pid,{...(DPL.get(date+'_'+pid)||{}),id:date+'_'+pid,date,pisoId:pid,ids:dplanIds(date,pid,Acts),pub:PID,auto:false,reo:null})}DV++;PDV++;
+  for(const o of R_.out){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,mv:o.mv,rid:o.rid,pub:PID})}PD.set(PID,{...R_.doc,id:PID});if(R_.snapIds){DPL.set(date+'_'+pid,{...(DPL.get(date+'_'+pid)||{}),id:date+'_'+pid,date,pisoId:pid,ids:R_.snapIds,pub:PID,auto:false,reo:null})}DV++;PDV++;
   /* publicado tarde (el día ya llegó): lo que no fue queda como no cumplido ese día, igual que un «No va hoy» */
   if(typeof canDaily!=='undefined'&&canDaily)for(const o of R_.out){if(o.date>todayIso()||!Object.keys(o.mv||{}).length)continue;const x=S.act.get(o.aid);if(!x||(recReal(o.date,o.aid)||{}).status)continue;
     const zz=PD.get(o.id)||{};const cn=zz.cnc||cncFor(o.k==='per'?'per':o.k);writeDaily(o.date,pid,{recs:{[o.aid]:{...baseRec(o.date,x,null),status:'no',cnc:cn,imp:zz.c&&zz.imp!==cncImp(cn)?!!zz.imp:null,...(zz.rsc?{rsc:zz.rsc,pc:!!zz.pc}:{}),note:'No fue: plan publicado ese mismo día',viaNova:true}}});o.lr=true}
   const n=R_.out.length;
-  toast(`Plan del ${dvLbl(date)} publicado${n?` · ${n} reprogramación${n>1?'es':''} aplicada${n>1?'s':''} al lookahead`:''}${R_.skipped.length?` · ${R_.skipped.length} ya no estaba${R_.skipped.length>1?'n':''} ese día (sin cambio)`:''}${R_.was&&!n?' · ya estaba publicado':''}`,'Deshacer',()=>unpubPlan(PID,R_));requestRender()}
+  toast(`Plan del ${dvLbl(date)} publicado${n?` · ${n} reprogramación${n>1?'es':''} aplicada${n>1?'s':''} al lookahead`:''}${R_.skipped.length?` · ${R_.skipped.length} ya no estaba${R_.skipped.length>1?'n':''} ese día (sin cambio)`:''}${R_.was&&!n?' · ya estaba publicado':''}`,'Deshacer',()=>unpubPlan(PID,R_));
+  if(R_.held.length)setTimeout(()=>toast(`No se movió (toca un día ya publicado): ${R_.held.join(' · ')}. Corrígelo en ese día o pide al administrador reabrirlo.`),1500);requestRender()}
+/** días (y cantidades) que cambian entre antes y después (igual que el servidor: functions/lib.js changedDays) */
+function chgDays(a,b){const A=new Set(a.days||[]),B=new Set(b.days||[]),T=new Set();A.forEach(d=>{if(!B.has(d))T.add(d)});B.forEach(d=>{if(!A.has(d))T.add(d)});
+  const qa=a.qty||{},qb=b.qty||{};new Set([...Object.keys(qa),...Object.keys(qb)]).forEach(d=>{if((+qa[d]||0)!==(+qb[d]||0))T.add(d)});return[...T].sort()}
+/** fechas cuyos planes cerrados hay que releer antes de publicar: los días ≥ fecha de lo que se mueve y adónde irían */
+function pubDates(Dz,A,date){const S_=new Set();for(const z of Dz){const n=z.shift||wdist(z.date,z.repTo);for(const id of z.ids||[z.actId]){const y=A.get(id);if(!y)continue;for(const d of y.days||[])if(d>=date){S_.add(d);S_.add(wshift(d,n))}}}S_.delete(date);return[...S_].sort()}
 /** deshacer la publicación: vuelven las fechas (solo las que nadie cambió después), las restricciones creadas se archivan y los cambios vuelven a borrador */
 /** quita la marca «no fue» de un día (al deshacer) */
 /** clave de la marca ↷ que dejó en una actividad del tren la reprogramación de lead (desde la fecha del plan) */
 function rplKey(y,lead,from){for(const[k,v]of Object.entries(y.rpl||{}))if(v&&v.tr===lead&&k>=from)return k;return''}
 function rplOff(y,d){if(!d||!y.rpl||!y.rpl[d])return y;const r={...y.rpl};delete r[d];return{...y,rpl:r}}
-function unpubPlan(PID,R_){const W=new Map();const ops=[];let blocked=0;const back=[];
-  {const z0=R_.out[0]||{};const d0=PID.slice(4,14),p0=PID.slice(15);if(d0>todayIso()){const k=d0+'_'+p0;if(DPL.has(k)){DPL.delete(k);DV++}if(db)fcol('dplan').doc(k).delete().catch(()=>{})}}
-  for(const o of [...R_.out].reverse()){let ok=true;const loc=[];
-    for(const[id,m]of Object.entries(o.mv||{})){const y=W.get(id)||S.act.get(id);if(!y){continue}if(canon(y.days||[])!==canon(m.n||[])||(m.nq&&canon(y.qty||{})!==canon(m.nq))){ok=false;break}loc.push([id,rplOff({...y,days:m.p||[],qty:m.pq||{}},id===o.aid?o.date:rplKey(y,o.aid,o.date))])}
-    if(!ok){blocked++;continue}loc.forEach(([id,y])=>W.set(id,y));back.push(o)}
-  for(const[id,y]of W)ops.push(op('acts',id,y));for(const o of back)if(o.rid&&S.res.get(o.rid)){const a=arc('restr',o.rid);if(a)ops.push(a)}
-  if(ops.length)apply(ops,'');const g=back.map(o=>updDoc(o.id,{draft:true,mv:null,rid:'',pub:null},{draft:false,mv:o.mv,rid:o.rid,pub:PID}));
-  for(const o of back)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova)writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
-  if(!blocked&&!R_.was){const r=remDoc(PID);if(r)g.push(r)}rec(g.filter(Boolean));
-  toast(blocked?`Se deshizo en parte: ${blocked} reprogramación${blocked>1?'es':''} ya se cambiaron después`:'Publicación deshecha: los cambios vuelven a borrador');requestRender()}
+/* Deshacer la publicación, todo o nada y en una transacción: relee las actividades; si alguna ya se cambió después de publicar,
+   no se toca nada (ni la foto ni el aviso de publicado) y se avisa. Si todo calza: vuelven las fechas, se archivan las
+   restricciones creadas, los cambios vuelven a borrador y se quitan la foto del plan y el aviso de publicado. */
+let UNPUBBUSY=false;
+async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,14),p0=PID.slice(15);const dk=d0+'_'+p0;
+  /* la foto se quita solo si fue una publicación nueva (no una republicación) y si este usuario puede quitarla (el editor: días futuros) */
+  const dropSnap=!R_.was&&(d0>todayIso()||(typeof isAdmin!=='undefined'&&isAdmin));const ids=[...new Set(R_.out.flatMap(o=>Object.keys(o.mv||{})))];
+  UNPUBBUSY=true;let T;
+  try{T=await db.runTransaction(async tx=>{const A=new Map();for(const id of ids){const d=await tx.get(fcol('acts').doc(id));if(d.exists)A.set(id,actNorm({...d.data(),id}))}
+    const RS=new Map();for(const o of R_.out)if(o.rid){const d=await tx.get(fcol('restr').doc(o.rid));if(d.exists)RS.set(o.rid,d.data())}
+    const W=new Map(),bad=[];
+    for(const o of [...R_.out].reverse())for(const[id,m]of Object.entries(o.mv||{})){const y=W.get(id)||A.get(id);if(!y)continue;
+      if(canon(y.days||[])!==canon(m.n||[])||(m.nq&&canon(y.qty||{})!==canon(m.nq))){bad.push(y.name||id);continue}
+      W.set(id,rplOff({...y,days:m.p||[],qty:m.pq||{}},id===o.aid?o.date:rplKey(y,o.aid,o.date)))}
+    if(bad.length)return{bad};
+    const arch={t:NOW(),by:me.email,n:me.name||''};
+    for(const[id,y]of W)tx.update(fcol('acts').doc(id),{days:y.days,qty:y.qty||{},rpl:y.rpl||{}});
+    for(const o of R_.out){const r=o.rid&&RS.get(o.rid);if(r&&!r.arch&&r.status!=='lib')tx.update(fcol('restr').doc(o.rid),{arch})}
+    for(const o of R_.out)tx.update(fcol('pdz').doc(o.id),{draft:true,mv:null,rid:'',pub:null});
+    if(!R_.was){tx.delete(fcol('pdz').doc(PID));if(dropSnap)tx.delete(fcol('dplan').doc(dk))}
+    return{W,arch}})}
+  catch(e){UNPUBBUSY=false;toast('No se pudo deshacer la publicación: '+(e&&(e.code||e.message)||'error'));return}
+  UNPUBBUSY=false;
+  if(T.bad){toast(`No se deshizo nada: ${T.bad.length>1?'estas actividades ya se cambiaron':'esta actividad ya se cambió'} después de publicar (${T.bad.slice(0,3).map(n=>short(n,28)).join(' · ')}${T.bad.length>3?'…':''}). El plan sigue publicado; corrígelo en el lookahead o pide al administrador reabrir el día.`);return}
+  /* reflejar al momento (llegará igual por la base) y dejarlo en el historial del lookahead */
+  const ops=[];for(const[id,y]of T.W){const c=S.act.get(id);if(c){ops.push(op('acts',id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}}));S.act.set(id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}})}}
+  if(typeof lhLog==='function'&&ops.length)lhLog(ops,'Publicación deshecha');
+  for(const o of R_.out){const r=o.rid&&S.res.get(o.rid);if(r&&!r.arch&&r.status!=='lib')S.res.set(o.rid,{...r,arch:T.arch});const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,mv:null,rid:'',pub:null})}
+  if(!R_.was){PD.delete(PID);if(dropSnap&&DPL.has(dk))DPL.delete(dk)}DV++;PDV++;
+  for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova)writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
+  toast('Publicación deshecha: los cambios vuelven a borrador');requestRender()}
 /** las actividades que siguen a x en su ambiente (el «tren») y tienen días desde la fecha del plan */
 function trenOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);
   return L.slice(i+1).filter(y=>!(typeof DONE!=='undefined'&&DONE.has(y.id))&&(y.days||[]).some(d=>d>=M.date))}
@@ -1252,15 +1320,26 @@ function dvClick(btn,x,k){const eng=dzEng();const p=dpOf(x.id);
   if(k==='fin'){if(eng){if(p&&p.st==='pend'){dpAccept(btn,x,{...p,k:'fin'});return}dvFin(x);return}
     dpPropose(x,'fin','');return}
   if(k==='no'){if(eng&&p&&p.st==='pend'&&p.k!=='fin'){dpAccept(btn,x,p);return}noVa(btn,x,{})}}
-function dvFin(x,prop){if(typeof canDaily==='undefined'||!canDaily){toast('Solo el ingeniero puede darla por culminada.');return}const d=M.date>todayIso()?todayIso():M.date;
-  markDone(x.id,d);if(prop)dpDone(prop,'Culminada');dzLog(`✔ ${x.name}: culminada`);toast(`“${short(x.name,40)}” culminada: se liberan sus días siguientes`,'Deshacer',()=>{reopenDone(x.id,true);if(prop)dpReopen(prop)});requestRender()}
+async function dvFin(x,prop,quiet){if(typeof canDaily==='undefined'||!canDaily){toast('Solo el ingeniero puede darla por culminada.');return false}const d=M.date>todayIso()?todayIso():M.date;
+  if(prop&&!await dpTake(prop,dpDec('ok','Culminada')))return false;
+  markDone(x.id,d);if(prop)dpDone(prop,'Culminada');dzLog(`✔ ${x.name}: culminada`);if(!quiet)toast(`“${short(x.name,40)}” culminada: se liberan sus días siguientes`,'Deshacer',()=>{reopenDone(x.id,true);if(prop)dpReopen(prop)});requestRender();return true}
 /** propuesta del subcontratista para el día (una por actividad: la nueva reemplaza a la anterior) */
-function dpPropose(x,k,desc,ex){const id=dpId(M.date,x.id);const g=[];if(PD.has(id))g.push(remDoc(id));
+function dpPropose(x,k,desc,ex){const id=dpId(M.date,x.id);const g=[];const was=PD.get(id);if(was&&was.st==='ok'){toast('El ingeniero ya decidió esta actividad: habla con él para cambiarlo.');return}
   g.push(addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'dprop',actId:x.id,ambId:x.ambId,k,desc:desc||'',...(ex||{}),st:'pend',by:me.email,byName:me.name||me.email,ts:NOW()}));rec(g.filter(Boolean));
   toast(`Propuesta: ${k==='fin'?'culminado':'no va'} · el ingeniero la decide en la reunión`);requestRender()}
 function dpDone(p,txt){const z=PD.get(p.id);if(!z)return;updDoc(p.id,{st:'ok',dec:txt,decBy:me.email,decN:me.name||me.email,decT:NOW()})}
+/** decidir una propuesta del SC: en una transacción, solo si sigue pendiente y es la misma que se revisó. Si el SC la cambió
+    mientras tanto (otra hora o motivo), o si otro ingeniero ya la decidió, no se escribe nada y se avisa. */
+async function dpTake(p,patch){if(!p)return false;if(!db)return true;let r;
+  try{r=await db.runTransaction(async tx=>{const ref=fcol('pdz').doc(p.id);const d=await tx.get(ref);if(!d.exists)return'gone';const c=d.data();
+    if(c.st!=='pend')return'decided';if((c.ts||0)!==(p.ts||0)||(c.k||'')!==(p.k||'')||(c.desc||'')!==(p.desc||''))return'changed';tx.update(ref,patch);return true})}
+  catch(e){toast('No se pudo decidir: '+(e&&(e.code||e.message)||'error'));return false}
+  if(r===true){const z=PD.get(p.id);if(z){pdPatch(z,patch);PDV++}return true}
+  toast(r==='changed'?'El subcontratista cambió su propuesta mientras la revisabas: revísala de nuevo.':r==='decided'?'Otra persona ya decidió esta propuesta.':'El subcontratista retiró su propuesta.');requestRender();return false}
+const dpDec=(st,dec)=>({st,...(dec!=null?{dec}:{}),decBy:me.email,decN:me.name||me.email,decT:NOW()});
 function dpReopen(p){if(PD.get(p.id))updDoc(p.id,{st:'pend',dec:'',decBy:'',decN:'',decT:0})}
-function dpReject(p){updDoc(p.id,{st:'rej',decBy:me.email,decN:me.name||me.email,decT:NOW()});toast('Se mantiene: va según lo programado','Deshacer',()=>dpReopen(p));requestRender()}
+async function dpReject(p,quiet){const pt=dpDec('rej');if(!await dpTake(p,pt))return false;rec([{op:'upd',id:p.id,before:{st:'pend',decBy:null,decN:null,decT:null},after:pt}]);
+  if(!quiet)toast('Se mantiene: va según lo programado','Deshacer',()=>dpReopen(p));requestRender();return true}
 function dpAccept(btn,x,p){if(p.k==='fin'){openPop(btn,`<div class="ph">Revisar · ${esc(short(x.name,38))}</div><div class="ptx">${esc(p.byName||conOf(x.sc).name)} propone que ya culminó.</div><button data-do="si">✔ Sí, culminó<small> · se liberan los días que le quedan</small></button><button data-do="no">✓ No, sigue · va según lo programado</button>`,{si:()=>dvFin(x,p),no:()=>dpReject(p)});return}
   noVa(btn,x,{k:p.k,desc:p.desc,prop:p})}
 /* ---------- «No va»: siempre una restricción, con su causa (cuadro de la empresa) ----------
@@ -1291,7 +1370,7 @@ function nvMot(st){const d=(st.desc||'').trim();const l=nvLbl(st.k);const pr=st.
 function predOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);for(let j=i-1;j>=0;j--)if(L[j].sc&&L[j].sc!==x.sc)return L[j].sc;return''}
 /** registro en Restricciones de lo que no va (toda reprogramación queda registrada) */
 function nvRestr(x,st,need){const rid=uid('res');const A=nvAttr(x,st);const resp=A.rsc?conOf(A.rsc).name:'';
-  return{rid,doc:{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:(P().restrTypes||[])[0]||'',desc:(st.desc||'').trim()||nvMot(st),resp,need,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario',cnc:A.cnc,ccode:A.c,imp:A.imp,rsc:A.rsc,pc:A.pc}}}
+  return{rid,doc:{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:restrTypeFor(A.c),desc:(st.desc||'').trim()||nvMot(st),resp,need,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario',cnc:A.cnc,ccode:A.c,imp:A.imp,rsc:A.rsc,pc:A.pc}}}
 /** por defecto en «Programación»: si el SC había propuesto cambiar esa actividad y se le rechazó (o sigue sin decidir), es de obra */
 async function nvProgDef(x){try{const P_=typeof PROP!=='undefined'?PROP.get(x.sc):null;const leg=Object.values((P_&&P_.hist)||{}).some(h=>h&&h.id===x.id&&h.st==='rej'&&!h.undone);
     const pend=!!(P_&&P_.items&&P_.items[x.id]&&P_.items[x.id].sent);if(leg||pend)return'obra';if(!db)return'sc';
@@ -1334,20 +1413,20 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
     if(v==='keep'){closePop();dpReject(st.prop);return}
     if(v==='chg'){step('mot');return}
     if(v==='prop'){if(!ok())return;closePop();dpPropose(x,st.k,st.desc,st.k==='fre'?{pred:st.pred}:null);return}
-    if(v==='lib'){if(!ok())return;closePop();
+    if(v==='lib'){if(!ok())return;closePop();if(st.prop){dpTake(st.prop,dpDec('ok','Va: se libera a primera hora')).then(r=>{if(r)libGo()});return}libGo();return}
+    if(v==='nolib'){if(!ok())return;if(today){closePop();dvResToday(btn,x,st,st.prop);return}step('rep');return}
+    if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();
+      if(st.prop){dpTake(st.prop,dpDec('ok','Reprogramada al '+st.to)).then(r=>{if(r)doRep()});return}doRep();return}}
+  function libGo(){
       /* va con aviso: la restricción queda registrada por liberar ese día a primera hora (se mide igual) */
       const R=nvRestr(x,st,M.date);apply([op('restr',R.rid,R.doc)],'');
       const id=avId(M.date,x.id);const g=[];if(PD.has(id))g.push(remDoc(id));g.push(addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'aviso',actId:x.id,ambId:x.ambId,desc:st.desc||nvMot(st),k:st.k,rid:R.rid,by:me.email,byName:me.name||me.email,ts:NOW()}));
       if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Va: se libera a primera hora',decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));
-      toast(`Va · aviso en el plano y restricción por liberar: ${nvMot(st)}`);requestRender();return}
-    if(v==='nolib'){if(!ok())return;if(today){closePop();dvResToday(btn,x,st,st.prop);return}step('rep');return}
-    if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}doRep();return}}
-  function doRep(){const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();
+      toast(`Va · aviso en el plano y restricción por liberar: ${nvMot(st)}`);requestRender()}
+  function doRep(){const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}
     const T=st.tren?trenOf(x):[];const A=nvAttr(x,st);const mot=nvMot(st);const ca={c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,pc:A.pc};
     /* plan aún sin publicar: la decisión queda en el plan y se aplica al lookahead al «Publicar plan» */
-    if(pubDraft()){const nid=uid('pz');
-      const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,...ca,repTo:st.to,tren:T.length,draft:true,ids:[x.id,...T.map(y=>y.id)],shift:n,rdesc:st.desc||mot,pred:st.k==='fre'?st.pred:'',prop:st.prop?st.prop.id:'',by:me.email,byName:me.name||me.email,ts:NOW()})];
-      if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Reprogramada al '+st.to,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));
+    if(pubDraft()){const nid=nvDraftAdd(x,st,T,n);
       toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)} · se aplica al publicar el plan`,'Deshacer',()=>{const o=remDoc(nid);if(o)rec([o]);if(st.prop)dpReopen(st.prop);requestRender()});requestRender();return}
     const ops=[shiftOp(x,n,M.date),...T.map(y=>shiftOp(y,n,M.date))];
     ops.forEach((o_,i)=>{const y=i===0?x:T[i-1];const k=i===0?M.date:rplDay(y,M.date);if(k)o_.after.rpl={...(y.rpl||{}),[k]:{to:i===0?st.to:wshift(k,n),m:mot,...ca,...(i?{tr:x.id}:{})}}});
@@ -1358,6 +1437,10 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
     toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)} · restricción registrada`,'Deshacer',()=>{const z=PD.get(nid);if(z)revertRep(z)});requestRender()}
   if(st.k==='int'&&today){novaDialog(btn,x,{motivo:'Interferencia con otra partida',prio:o.prio||null,prop:st.prop,title:'No va por interferencia',lead:esc(st.desc||'')});return}
   if(st.k==='int'&&eng)step('rep');else if(st.k)step('det');else step('mot');progDef()}
+/** «No va → reprogramar» en un plan sin publicar: queda como borrador (el lookahead no cambia hasta publicar). Devuelve el id. */
+function nvDraftAdd(x,st,T,n){const A=nvAttr(x,st);const mot=nvMot(st);const ca={c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,pc:A.pc};const nid=uid('pz');
+  const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,...ca,repTo:st.to,tren:T.length,draft:true,ids:[x.id,...T.map(y=>y.id)],shift:n,rdesc:st.desc||mot,pred:st.k==='fre'?st.pred:'',prop:st.prop?st.prop.id:'',by:me.email,byName:me.name||me.email,ts:NOW()})];
+  if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Reprogramada al '+st.to,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));return nid}
 /** primer día (desde la fecha del plan) que una actividad del tren deja de hacer: ahí queda su marca ↷ */
 function rplDay(y,from){return(y.days||[]).filter(d=>d>=from).sort()[0]||''}
 /** causa de no cumplimiento para lo que no va hoy (cuenta en el PPC del día) */
@@ -1801,5 +1884,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={imgURL,ensureLam,focusAct,fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,lamUpload:uploadDialog,nums:capNums,novaSet,zonedSet,crossOf,zcClose};
+window.__plano={imgURL,ensureLam,focusAct,fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,lamUpload:uploadDialog,nums:capNums,novaSet,zonedSet,crossOf,zcClose,cuRows,dpPendAll,draftsOf};
 })();

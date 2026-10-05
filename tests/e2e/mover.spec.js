@@ -2,7 +2,8 @@
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
 
-const dias = (page, id) => page.evaluate(id => window.__dbGet('acts', id).days, id);
+// el orden de los días en la base no importa (mover quita y agrega por separado; la página los ordena con actNorm)
+const dias = (page, id) => page.evaluate(id => [...window.__dbGet('acts', id).days].sort(), id);
 // lo pasado y hoy (plan del día cerrado) se quedan; se mueve desde mañana
 const esperado = (page, ds, n) => page.evaluate(([ds, n, hoy]) => [...new Set(ds.map(d => d > hoy ? wshift(d, n) : d))].sort(), [ds, n, HOY]);
 

@@ -56,6 +56,10 @@ jobs:
         working-directory: tests/e2e
         env: { CI: '1' }
         run: npx playwright test
+      - name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
+        working-directory: tests/e2e
+        env: { CI: '1', CICLO: '1' }
+        run: npx playwright test auditoria-ciclo
       - name: Guardar el informe si algo falla
         if: failure()
         uses: actions/upload-artifact@v4

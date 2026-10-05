@@ -51,24 +51,31 @@ async function didxMigrate(){cncMigrate();if(!db||!canWrite||P().doneIdx)return;
 /* ---- guardar solo lo que cambió ---- */
 /* col='acts': los días que solo se agregan o solo se quitan van con arrayUnion/arrayRemove, así dos personas que marcan
    días distintos de la misma actividad a la vez no se pisan (antes la lista entera de la última borraba el día de la otra) */
-function fsDiff(prev,next,col){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
+function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.FieldValue;const DEL=FV&&FV.delete?FV.delete():null;const FP=firebase.firestore.FieldPath;
   const keys=new Set([...Object.keys(prev||{}),...Object.keys(next||{})]);keys.delete('id');
   for(const k of keys){const a=prev[k],b=next[k];if(canon(a)===canon(b))continue;
     if(b===undefined){args.push(new FP(k),DEL);continue}
     if(col==='acts'&&k==='days'&&Array.isArray(a)&&Array.isArray(b)&&FV&&FV.arrayUnion){const sa=new Set(a),sb=new Set(b);const add=[...sb].filter(d=>!sa.has(d)),rem=[...sa].filter(d=>!sb.has(d));
-      if(add.length&&!rem.length){args.push(new FP(k),FV.arrayUnion(...add));continue}if(rem.length&&!add.length){args.push(new FP(k),FV.arrayRemove(...rem));continue}}
+      if(add.length&&!rem.length){args.push(new FP(k),FV.arrayUnion(...add));continue}if(rem.length&&!add.length){args.push(new FP(k),FV.arrayRemove(...rem));continue}
+      /* mover (quitar unos días y poner otros): se quita y luego se agrega (args.then), sin reemplazar la lista entera:
+         un día que otra persona agregó mientras tanto no se pierde */
+      if(add.length&&rem.length&&!inTx){args.push(new FP(k),FV.arrayRemove(...rem));args.then=[new FP(k),FV.arrayUnion(...add)];continue}}
     const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
     if(isObj(a)&&isObj(b)){const ks=new Set([...Object.keys(a),...Object.keys(b)]);if(ks.size<=80){for(const k2 of ks){if(canon(a[k2])===canon(b[k2]))continue;args.push(new FP(k,k2),b[k2]===undefined?DEL:b[k2])}continue}}
     args.push(new FP(k),b)}
   return args}
 
 /* ---- respaldo completo ---- */
-const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv'];
+/* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
+   del lookahead, el plan maestro y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
+const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
+  'dplan','nprog','lhlog','mp','mpver','mpav','mpl','mpcfg','cli','clidx','cliver'];
 const BK_IMG=['lamimg','fotos'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
-  const cols=withImg?BK_ALL:BK_DATA;
+  /* el plan maestro y la versión cliente solo los lee quien tiene acceso: los demás no los piden (no es un error) */
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^mp/.test(c)||(typeof canMP==='function'&&canMP())).filter(c=>!/^cli/.test(c)||(typeof canCli==='function'&&canCli()));
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;
@@ -200,6 +207,13 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
    ===================================================================== */
 /* editores responsables de cada piso: members/{correo}.pisos = [pisoId] (lo asigna el administrador en Equipo) */
 const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
+/* las reglas de Firestore no pueden buscar en members: el administrador mantiene en cada piso la lista de sus responsables
+   (pisos/{id}.resp = correos en minúsculas). Con ella las reglas solo dejan publicar o cambiar el plan diario de un piso
+   a su responsable (piso sin responsable: cualquier editor). Se recalcula sola al cambiar el equipo o los pisos. */
+let RESP_T=null;const RESP_W=new Set();
+function respSync(){if(!db||typeof isAdmin==='undefined'||!isAdmin||!MEM.size||!S.loaded||!S.loaded.pis)return;clearTimeout(RESP_T);RESP_T=setTimeout(()=>{
+  for(const p of S.pis.values()){const L=respOf(p.id).map(o=>String(o.em).toLowerCase()).sort();const cur=Array.isArray(p.resp)?[...p.resp].sort():[];
+    if(canon(L)===canon(cur)||RESP_W.has(p.id))continue;RESP_W.add(p.id);fcol('pisos').doc(p.id).update({resp:L}).catch(()=>{}).finally(()=>RESP_W.delete(p.id))}},1500)}
 function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
 /* quién decide en un piso (propuestas del lookahead y plan diario): el administrador siempre; un editor en los pisos a su

@@ -66,7 +66,7 @@ const scAt=(rc,x)=>(rc&&rc.sc)||x.sc;
 function dayDataSnap(dates,vset,rows){const adds=[];const today=todayIso();const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));const PROGN=(P().cnc||[]).find(c=>cncCode(c)==='PROG')||'Programación';
   for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true}else{adds.push(r);rows.splice(i,1)}}
   for(const d of dates)for(const pid of vset){const sn=dplanOf(d,pid);if(!sn||!sn.ids)continue;
-    for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
+    for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;if(doneBefore(id,d)&&!recOf(d,id))continue; /* terminada antes: no se le pide ese día */const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
       const rc=recOf(d,id)||(d<today?{status:'no',cnc:PROGN,imp:false,_out:true,note:'Salió del plan del día sin registro'}:null);
       rows.push({p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)});seen.add(id+'|'+d)}}
   return adds}

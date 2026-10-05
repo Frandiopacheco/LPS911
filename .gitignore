@@ -9,3 +9,4 @@ ui-debug.log
 .DS_Store
 respaldos/
 *.json.bak
+tests/e2e/fake-compartido.generado.js

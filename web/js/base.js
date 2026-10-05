@@ -86,6 +86,10 @@ const CNC_STD=[
   {c:'DIS',n:'Diseño',d:['Omisiones en revisión de incompatibilidades de proyecto.','Demoras en envío/respuesta de RFI.'],i:false},
   {c:'OT',n:'Otros',d:['No contempladas en los ítems anteriores.'],i:true}];
 const CNC_STD_V=1;
+/* tipo de restricción según la causa (código del cuadro): el de la lista del proyecto que le corresponde, o vacío.
+   Misma tabla que el servidor (functions/lib.js RT_RX). */
+const RT_RX=[['PROG',/program/i],['MAT',/materi/i],['QA/QC',/calidad|qa|qc/i],['EXT',/extern|clim/i],['CLI',/client|supervis/i],['EQ',/equipo|herramient/i],['DIS',/dise[ñn]o|ingenier/i],['SC',/subcontrat|personal|mano de obra/i],['ADM',/administr|permis/i],['EJEC',/ejecuci/i],['OT',/otro/i]];
+function restrTypeFor(code,types){const rx=(RT_RX.find(([c])=>c===code)||[])[1];if(!rx)return'';return(types||(typeof P==='function'?P().restrTypes:[])||[]).find(t=>typeof t==='string'&&rx.test(t))||''}
 /* código de una causa: la del cuadro por nombre; las antiguas, por parecido */
 const CNC_GUESS=[[/program|previa|interfer|frente|secuencia/i,'PROG'],[/material|insumo|log[ií]st/i,'MAT'],[/calidad|liberaci|qa|qc/i,'QA/QC'],[/clima|lluvia|extern|sindic|social|huelga/i,'EXT'],[/client|supervis|rfi|modificaci/i,'CLI'],[/ejecuci|retrabajo|rehacer/i,'EJEC'],[/subcontrat|mano de obra|personal|cuadrilla|\bsc\b/i,'SC'],[/equipo|herramient/i,'EQ'],[/admin|permis|pago|document/i,'ADM'],[/dise[nñ]o|plano|incompatib|ingenier/i,'DIS']];
 function cncStd(c){if(!c)return null;const k=String(c).trim().toLowerCase();return CNC_STD.find(o=>o.n.toLowerCase()===k||o.c.toLowerCase()===k)||null}
@@ -148,7 +152,7 @@ function markDone(aid,d,keepR){const x=S.act.get(aid);if(!x||!canDaily)return;co
   toast(`“${x.name}” terminada el ${fmtD(d)}${left?` · se liberan ${left} día${left>1?'s':''} programado${left>1?'s':''}`:''}`)}
 /** fechas en que alguna fuente (índice, registro diario o cierre del capataz) la marca terminada */
 function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)o.push(doc.date)}
-  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv))o.push(lv.date);return o}
+  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv)&&!recClr(lv.date,aid))o.push(lv.date);return o}
 /** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
  *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
 function reopenDone(aid,quiet){const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
@@ -183,7 +187,8 @@ function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&
   if(args&&!args.length)return Promise.resolve();
   pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);QK[key]=(QK[key]||0)+1;
   const run=()=>{QK[key]--;if(QK[key]<=0)delete QK[key];return run0()};
-  const run0=()=>!body?ref.delete():args?ref.update(...args).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
+  /* mover días (args.then): quitar y agregar se encolan en el mismo instante, así sin señal quedan los dos en la cola local */
+  const run0=()=>!body?ref.delete():args?Promise.all([ref.update(...args),args.then?ref.update(...args.then):null]).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
   const p=(chains[key]||Promise.resolve()).then(()=>dbCall(run))
     .then(()=>{lastErr=null},e=>{handleWriteErr(e)}).finally(()=>{pending--;setStatus()});
   chains[key]=p;return p;
@@ -213,11 +218,13 @@ function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(ca
 function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
 /* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
 function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
-function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
+function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;
+  /* deshacer tampoco cambia un día ya cerrado (publicado) sin aviso: pasa por el mismo control que cualquier cambio */
+  if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})))){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g)){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
@@ -285,7 +292,7 @@ async function startSession(u,fdb){
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
     if(roleSig(mine)!==me.rsig){me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.role=v.role;me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
-    renderWho();if(ready)requestRender()},()=>{}));
+    renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()},()=>{}));
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
   if(rtdb){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
     conRef.on('value',s=>{if(s.val()===true&&presRef)presRef.onDisconnect().remove().then(()=>sendPresence(true)).catch(()=>{})});
@@ -296,11 +303,13 @@ const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=nul
 let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
 function doneRebuild(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
   for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||!liveOwn(lv)||recReal(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}
+  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||!liveOwn(lv)||recReal(lv.date,lv.actId)||recClr(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}
+/** el ingeniero quitó el registro de ese día («Quitar registro»): el cierre del capataz o del SC ya no cuenta, tampoco como terminada */
+function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return!!(r&&r.clr)}
 /** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
 function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
-  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();liveErr=null;autoAccept();if(ready)requestRender()},err=>{liveErr=err&&err.code||'error';if(ready)requestRender()});
+  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();liveErr=null;if(ready)requestRender()},err=>{liveErr=err&&err.code||'error';if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
 function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear()}
 let dayP=Promise.resolve();
@@ -340,6 +349,11 @@ function lockGuard(ops){if(!me)return true;/* en modo propuesta el SC solo arma 
   toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
 function dplanLog(d,pid,e){if(!db)return;const ref=fcol('dplan').doc(d+'_'+pid);ref.set({date:d,pisoId:pid,log:firebase.firestore.FieldValue.arrayUnion(e)},{merge:true}).catch(()=>{})}
 /** foto de lo programado un día en un piso (lo que el plan diario deja comprometido): {actId: cantidad del día | null} */
+/** terminada antes de ese día (no por un cierre de ese mismo día): ya no se le pide nada ese día */
+function doneBefore(aid,d){const t=typeof DONE!=='undefined'&&DONE.get(aid);return!!t&&t<d}
+/** estaba en el plan publicado (foto) de ese día, aunque después haya salido del lookahead: se puede registrar y cuenta en el PPC */
+function inSnap(x,d){if(!x)return false;const sn=dplanOf(d,pisoOfAct(x.id));return!!(sn&&sn.ids&&x.id in sn.ids)&&!doneBefore(x.id,d)}
+const schedOrSnap=(x,d)=>schedOn(x,d)||inSnap(x,d);
 function dplanIds(d,pid,acts){const o={};for(const x of(acts||S.act).values()){if(!(x.days||[]).includes(d)||libDay(x,d)||pisoOfAmb(x.ambId)!==pid)continue;const q=(x.qty||{})[d];o[x.id]=q!=null?+q:null}return o}
 function recReal(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return r&&r.status?r:null}
 /* registro del día: el del ingeniero; si no hay, el cierre propuesto por el capataz (cuenta mientras nadie lo corrija) */
@@ -352,7 +366,11 @@ const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},n
 /* solo se envían los campos que cambian de cada registro: si otro ingeniero cambió otro campo (foto, nota, estado),
    una copia local atrasada no lo pisa */
 function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(recs||{})){const c=(cur.recs||{})[aid];if(!r||!c||typeof r!=='object'){out[aid]=r;continue}
-  const p={};for(const[k,v]of Object.entries(r))if(canon(v)!==canon(c[k]))p[k]=v;if(Object.keys(p).length)out[aid]=p}return out}
+  const p={};for(const[k,v]of Object.entries(r))if(canon(v)!==canon(c[k]))p[k]=v;
+  /* fotos que solo se agregan: arrayUnion (otro usuario pudo agregar la suya al mismo tiempo) */
+  const FVd=typeof firebase!=='undefined'&&firebase.firestore&&firebase.firestore.FieldValue;
+  if(p.photos&&Array.isArray(p.photos)&&Array.isArray(c.photos)&&FVd&&FVd.arrayUnion&&c.photos.every(f=>p.photos.includes(f))){const add=p.photos.filter(f=>!c.photos.includes(f));if(add.length)p.photos=FVd.arrayUnion(...add);else delete p.photos}
+  if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
 function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
@@ -369,7 +387,7 @@ function stopSession(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(
 function snapErr(err){const pd=err&&err.code==='permission-denied';lastErr=pd?'Sin acceso':'Conexión perdida';setStatus();toast(pd?'Tu cuenta no tiene acceso a estos datos. Pide acceso al administrador.':'Se perdió la conexión con la base de datos. Recarga la página.')}
 function onData(){
   if(!ready){if(!Object.values(COLS).every(k=>S.loaded[k]))return;ready=true;clockSync();brandSync();if(U.week==null)U.week=curWeek();pickPiso();ensureVers();setTimeout(autoVersion,2500);setTimeout(didxMigrate,4000);bkRemind();swWarm();}
-  requestRender();
+  if(typeof respSync==='function')respSync();requestRender();
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
