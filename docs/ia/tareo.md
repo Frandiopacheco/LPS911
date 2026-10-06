@@ -20,7 +20,7 @@ Fases: F0 base (selector de módulo, roles, máster, partidas de control, jornad
 
 | Rol | Etiqueta (`ROLE`) | Módulos | Notas |
 | --- | --- | --- | --- |
-| `tcap` | Capataz (tareo) | solo Tareo, celular | Distinto de `capataz` (que es de un SC). Puede entrar con correo o con enlace de invitación anónimo (`u_<uid>`) como el capataz de SC. |
+| `tcap` | Capataz (tareo) | solo Tareo, celular | Distinto de `capataz` (que es de un SC). Entra con DNI y contraseña (cuenta `<dni>@tareo.lps911.pe`, ver «Cuentas de capataz»), con correo o con enlace de invitación anónimo (`u_<uid>`) como el capataz de SC. |
 | `tasis` | Asistente de tareo | solo Tareo | Edita máster y partidas de control. |
 | `tcos` | Costos | solo Tareo, lectura | En F3 verá solo días publicados. |
 | `admin` | — | ambos | Edita también la configuración del tareo. |
@@ -231,3 +231,33 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - Reglas `tareo`: el `tcap` puede hacer `get` de su día aunque no exista (id `<fecha>_<mi id>`); sus consultas deben filtrar `where('cap','==',mid)`. Fecha válida: entre hoy−4 y hoy+1 en hora de Lima (tolerancia de un día por reloj/zona; la app ofrece hoy, ayer y anteayer). El `tcap` no crea con `st:'reab'`, no toca `reab` ni `pub`, y desde `reab` solo queda en `reab` o pasa a `env`. `tfot`: id empieza con `<fecha>_<mi id>`, `d` texto < 1 000 000 caracteres.
 - Invitación del tareo: `inv/{code}` `{role:'tcap', active, exp, by, ts}` (sin `scs`). El enlace lleva `&m=tar` (`localStorage` `lps.invm`) para que la pantalla de registro hable del tareo antes de iniciar sesión. En Equipo › Capataces se elige «Capataz del tareo (consorcio)» en el mismo selector de partida (`__tcap`); el código está en `en-obra-tablero.js` (`newInvite(scs,tcap)`, `invWho`, filas `tr[data-invtar]`). La variante `capataz` de `members` exige que la invitación no sea `tcap`.
 - Fake de pruebas: `signInAnonymously` crea un usuario anónimo (`E.anonUid` o `anon1`); prueba en `tareo-inv.spec.js`.
+
+## Cuentas de capataz (oct 2026)
+
+Problema: con el enlace/QR el capataz del tareo entra con una sesión **anónima** guardada solo en ese navegador; si pierde el celular o borra los datos, pierde su usuario `u_<uid>` (al que están ligados su cuadrilla y sus tareos). Ahora la oficina le da **usuario (DNI) y contraseña**.
+
+### Cómo funciona
+
+- **Cuenta = DNI + contraseña.** Por debajo es una cuenta de correo y contraseña de Firebase Auth con correo **sintético** `<dni en minúsculas>@tareo.lps911.pe` (no existe; nunca se envía nada) y `emailVerified: true`, así que pasa por el mismo `startSession` que cualquier correo: `members/<correo>` con `role:'tcap'`, `mid()` = el correo. DNI como en el máster (`ctaDni`/`tCtaDni`: 8 dígitos, 7 → con cero a la izquierda; carné de extranjería de 8 a 12 alfanuméricos).
+- **Función `cuentaCapataz`** (`functions/index.js`, v2 `onCall`, us-central1, Admin SDK). Solo el dueño, `admin` o `tasis` con correo confirmado y sin `off` (`ctaPuede`). Valida con `ctaPedido` (lógica pura en `functions/lib.js`, pruebas en `functions/test/cuentas.test.js`). Acciones (`{accion, dni, clave?, de?}`):
+  - `crear`: exige ficha en `tper/<dni>` no archivada; crea el usuario de Auth (displayName = `ctaNombre(ficha)`, «Juan Carlos Quispe Mamani») o, si ya existe (cuenta desactivada), lo **reactiva** con la contraseña nueva; `members/<correo>` `{role:'tcap', name, dni, added, by}` (merge, borra `off/offAt/offBy`; si ya existía con otro rol, error); `tper/<dni>.cta = <correo>`. Con `de` también migra (abajo).
+  - `clave`: cambia la contraseña.
+  - `desactivar`: Auth `disabled:true` + `revokeRefreshTokens` y `members.off:true, offAt, offBy`. **No** cambia el rol ni borra nada; sus obreros siguen con `cap` = su correo (la oficina los reasigna en Personal).
+  - `migrar` (`de` = `u_<uid>` de un `tcap` con enlace): `tper.cap` de sus obreros pasa al correo nuevo (por lotes) y `members/u_…` queda `off:true, movTo:<correo>`. **Los tareos antiguos se quedan con el id viejo** (`tareo/<fecha>_u_…`, `cap:'u_…'`): siguen visibles para la oficina; el capataz ya no los ve en su celular. Conviene migrar después de que envíe el tareo del día.
+  - Contraseña: mínimo 6 caracteres sin espacios al borde; la ventana propone 6 dígitos al azar (editable).
+- **Ventana `tCapCuenta(dni)`** (`web/js/tareo-cuentas.js`, global; la abre «Hacer capataz» en Tareo › Personal): estado según `MEM` (`SIN CUENTA` / `CUENTA ACTIVA` / `DESACTIVADA`), crear/reactivar con contraseña propuesta, «Pasar sus datos de» (capataces `tcap` con `u_…` sin `off`, con su número de obreros), cambiar contraseña, pasar obreros, desactivar (con `uiAsk`). Al crear o cambiar la clave muestra el texto para copiar o enviar por WhatsApp: `Usuario: 12345678 · Contraseña: 123456 · Entra a <URL de la app>` (la contraseña no se guarda en ninguna parte: no se vuelve a mostrar). Llama con `firebase.functions().httpsCallable('cuentaCapataz')` (`firebase-functions-compat.js` en `index.html`); `tCtaErr` traduce los errores.
+- **Ingreso «Soy capataz»** (`index.html` `#lcap`, `base.js` `setupLogin`/`showLogin`): botón en la pantalla de ingreso y enlace en la de registro por enlace; DNI (`inputmode=numeric`) + contraseña → `signInWithEmailAndPassword(tCtaMail(dni), clave)`. Errores: «DNI o contraseña incorrectos. Pide a la oficina que te la cambie.» / «Tu cuenta está desactivada. Habla con la oficina.». Se recuerda en el equipo (`localStorage` `lps.lcap`): al cerrar sesión vuelve a esa pantalla. La sesión de Firebase Auth persiste (local): si cierra la página entra sin pedir nada; en otro celular entra con DNI y contraseña.
+- **`members.off`** (general, no solo tareo): `isMember()` de las reglas exige `off != true`, y `startSession` / el listener de `members` cierran la sesión con aviso (`memOffMsg`: si tiene `movTo`, «Tu usuario de este celular se pasó a una cuenta con DNI y contraseña…» y abre «Soy capataz»). Cada uno sigue pudiendo leer su propio registro.
+- **Reglas:** `members` con id `*@tareo.lps911.pe` no se crean desde el cliente (ni el admin; solo la función con el Admin SDK); el admin sí los actualiza o quita en Equipo. Pruebas: «cuentas de capataz» en `tests/rules/firestore.test.mjs`.
+- **Equipo:** la tarjeta de invitaciones (en-obra-tablero.js, `[data-tctanote]`) recomienda la cuenta con usuario y contraseña. Las invitaciones anónimas `tcap` siguen funcionando.
+- **Pruebas de la interfaz:** `tests/e2e/tareo-cuentas.spec.js`. El Firebase falso simula `firebase.functions().httpsCallable('cuentaCapataz')` contra la base falsa (misma lógica que la función; llamadas en `window.__fnCalls`) y `signInWithEmailAndPassword` con usuarios de `E.authUsers` `{correo:{uid, pass, disabled}}` más los que crea el stub (`window.__authUsers()`).
+
+### Configuración en Firebase (una vez por proyecto)
+
+- Authentication › Sign-in method: **Correo electrónico/contraseña** activado (ya lo usa la oficina).
+- La función usa la cuenta de servicio por defecto de Cloud Functions v2 (`<n.º proyecto>-compute@developer.gserviceaccount.com`); necesita crear usuarios de Auth: rol **Firebase Authentication Admin** (`roles/firebaseauth.admin`) o Editor (que suele tener por defecto).
+- La publicación (`firebase deploy --only functions`, desde GitHub) deja la función invocable por cualquiera (`allUsers` en Cloud Run; la función revisa el usuario). La cuenta de servicio de GitHub (`FIREBASE_SA_*`) necesita poder cambiar el IAM del servicio (Cloud Functions Admin o Cloud Run Admin). Si la organización de Google Cloud prohíbe `allUsers`, la página dirá «El servidor no respondió…».
+
+### Pendiente
+
+- `tCaps()` (tareo.js) lista también capataces con `off`: filtrarlos al asignar obreros.
