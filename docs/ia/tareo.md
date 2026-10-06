@@ -465,3 +465,35 @@ Solo `web/js/tareo-foto.js` (cargado justo antes de `js/tareo-cap.js`), el CSS `
 - **Filtros** (`tfFilter`): «Documento» (por omisión): fondo = hoja reducida a ~96 px, máximo 5×5 (borra la tinta) y promedio 5×5, ampliada con suavizado; cada canal ÷ fondo (luz pareja y blanco neutro), curva que lleva ≥ 90 % a blanco y oscurece el resto **sin umbral duro** (las firmas tenues no desaparecen) y saturación ×1,25 (la tinta azul sigue azul). «Color»: solo contraste leve. «Original»: solo el recorte. «Girar 90°» (`tfRot`) se aplica al final.
 - **Rendimiento:** la vista previa trabaja sobre la copia de 1200 px (salida ≤ 900 px); la resolución final solo al pulsar «Listo»: la foto se reduce a ≤ 3000 px antes de muestrear y el enderezado y el filtro van por franjas con pausas (`setTimeout`) para que se vea «Procesando…» (`#tfBusy`) sin congelar. Medido en la prueba (Chromium con CPU ×4): foto de 12 MP → abrir y detectar ~0,8 s (detección ~0,25 s), vista previa ~1 s, «Listo» ~0,2–0,5 s; salida 2000×1414, ~130 KB. `TFE.detMs` y `window.__tfMs` guardan los tiempos.
 - **Teclado:** Esc en «Resultado» vuelve a las esquinas (en las esquinas no hace nada: no se pierde la foto por accidente); Tab no sale de la capa; al cerrar, el foco vuelve a quien la abrió.
+
+## Contrato de F3: publicación del día y entrega a costos (oct 2026)
+
+Principios (auditorías externas, aprobadas por el dueño): la publicación la hace **el servidor**, sobre los datos vigentes del día; cada publicación es una **versión inmutable**; costos solo ve publicaciones; el Excel sale de la publicación; una rectificación crea una versión nueva con motivo y conserva la anterior.
+
+### Función `publicarTareo` (Cloud Function invocable, `functions/index.js`; lógica pura en `functions/lib.js` con pruebas)
+
+- Quién: admin, o `editor` con `tpub == true` (y no `off`). Nadie más.
+- Acciones:
+  - `previa {fecha}` → devuelve el resumen y los bloqueos SIN escribir nada (para la pantalla del jefe).
+  - `publicar {fecha, excepciones?: {<dni>: motivo}, motivo?}` → valida y publica (motivo obligatorio si ya existe una versión: rectificación).
+  - `rectificar {fecha, motivo}` → abre el día publicado para corregir: pasa sus tareos de `pub` a `rev` (la oficina corrige; corregir devuelve a `env` y hay que volver a revisar) y marca `tpubidx/{fecha}.abierto = {t, by, motivo}`. La versión vigente sigue visible para costos hasta que se publique la nueva.
+- Validaciones de `publicar` (todas en el servidor, leyendo Firestore en el momento; si falla alguna, no escribe nada y devuelve la lista):
+  1. Todo tareo del día con obreros está en `rev` (o `pub` en rectificación). Borradores, enviados o reabiertos bloquean.
+  2. **Un DNI en un solo tareo del día** (presente, ausente o sin marcar) — cierra el hallazgo A6.
+  3. Nadie «sin marcar»; presentes con horas > 0; nadie con más de 16 h.
+  4. Cada tareo tiene `cfg` (jornada congelada) y cotejo vigente (`cot` con `cotFot` igual a `foto`; todos los presentes con `fir` definido).
+  5. Partidas con horas existen en `tpc`.
+  6. **Cobertura:** obreros activos del máster en esa fecha (periodos `per`) que no figuran en ningún tareo → bloquean salvo que vengan en `excepciones` con motivo (p. ej. «Vacaciones», «Destacado a otra obra»).
+- Cálculo en el servidor (mismo criterio que `tCalc`): `modo:'hrs'` → trab = suma de `h`, ext = max(0, trab − horas de la jornada en `cfg`; no laborable → todo extra); tareos antiguos con `blq` → se usan `rows[*].h/trab/ext` guardados. Las horas extra se calculan **por obrero sobre su total del día**.
+- Escritura (en una transacción o lote atómico):
+  - `tpub/{fecha}_v{n}` — **inmutable**: `{fecha, v, at, by, byN, motivo, ant: n-1|null, fuentes: [{id, cap, capN, envN, revBy, revAt}], pcs: {<pcId>: {cod, nom, und, grp, grpN, ua}}, rows: [{dni, ape, nom, cat, cua, cap, capN, as, mot, alt, h: {<pcId>: horas}, trab, ext}], exc: {<dni>: {motivo, ape, nom}}, tot: {obreros, pres, aus, porMot, hh, he, alt}, dif: <resumen de cambios vs. versión anterior o null>}`.
+  - `tpubidx/{fecha}` — `{fecha, v: <vigente>, vers: [{v, at, by, motivo}], abierto: null|{t,by,motivo}}`.
+  - Tareos fuente: `st:'pub'`, `pubV: n`, `hist` con `a:'pub'`.
+- Reglas: `tpub` y `tpubidx` los lee `isTar()` (incluido `tcos`); nadie los escribe desde la app (solo la función con Admin SDK). `tcos` sigue sin leer `tareo` ni `tfot`.
+
+### Pantallas
+
+- Pestaña nueva **`tpub` «Publicación»** (admin y editor con `tpub`): elegir fecha → previa del servidor: obreros únicos, presentes, ausentes por motivo, sin tareo, HH, HE, altura, tareos por estado, bloqueos (con enlace al tareo o a la revisión) y casillas de excepción con motivo para los «sin tareo». Botón «Publicar día» (o «Publicar rectificación (v2)» con motivo). Historial de versiones del día con quién/cuándo/motivo y diferencias. Botón «Rectificar» (motivo).
+- Pestaña nueva **`tcos` «Costos»** (tcos, admin, editor con tpub; reemplaza el aviso actual de `tdia` para tcos): calendario/lista de días publicados (vigente y versiones anteriores marcadas «sustituida»), detalle de una publicación (tabla obreros × partidas), y **descargas Excel** desde las publicaciones: un día, una semana (lunes–domingo) o un rango.
+- **Excel de costos** (formato del archivo `semana_02.10.26.xlsx`, ver «Lo que dice el Excel que hoy recibe costos»): una hoja por día (`dd.mm`) con N°, obrero, cuadrilla, DNI, categoría, columnas de partidas agrupadas por grupo con su código (todas las partidas del catálogo congelado en la publicación, en orden numérico), Horas totales, Horas extras, Bonos `(A)`; hoja «Resumen HH» (HH y HE por obrero y día, totales HN/HE) y hoja «Tareo Semana» (asistencia A / I / DM… por día, horas extra, horas de descanso médico: DM = jornada del día). Encabezado con proyecto, fecha, versión publicada y quién publicó. Sin fórmulas rotas: valores.
+- `TAR_TABS` agrega `tpub` y `tcos`; `tabAllowed` según rol.
