@@ -189,3 +189,49 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:30', '13:30'))).toEqual({ trab: 6, ext: 0 });
   noErrors(errors, 'partidas y jornada');
 });
+
+test('Mejoras de oficina: Personal numerado con contador y «Hacer capataz»; partidas en orden numérico; bloquear', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: [...EXTRA,
+    ['tper', '02345678', { dni: '02345678', ape: 'CESADO DOS', nom: 'X', pue: 'PEON', cat: 'PE', cua: 'ALBAÑILES', cap: '', ing: '2026-01-05', ces: '2026-02-01', mot: 'Renuncia', per: [], act: false }],
+    ['tper', '03456789', { dni: '03456789', ape: 'JEFE TRES', nom: 'X', pue: 'CAPATAZ', cat: 'CA', cua: 'ALBAÑILES', cap: '', ing: '2026-01-05', ces: '', mot: '', per: [], act: true, cta: 'tcap1@obra.pe' }],
+    ...[['p10_10', '10.10'], ['p2_01', '2.01'], ['p10_02', '10.02'], ['p1_01', '1.01'], ['p13_01', '13.01']].map(([id, cod]) => ['tpc', id, { cod, grp: cod.split('.')[0], grpN: 'G' + cod.split('.')[0], nom: 'Partida ' + cod, und: 'm2', met: 10, hhp: 25, ua: 'CD-' + cod, act: true }]),
+  ] });
+  await page.evaluate(() => { window.__cta = []; window.tCapCuenta = dni => window.__cta.push(dni); });
+  await tab(page, 'tper');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 2 de 3 · 2 activos');
+  await expect(page.locator('#tperBody tr').first().locator('[data-l="N°"]')).toHaveText('1');
+  await page.click('#tperEst [data-test="all"]');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 3 de 3 · 2 activos');
+  const jefe = page.locator('tr[data-tp="03456789"]');
+  await expect(jefe).toContainText('Capataz');
+  await expect(jefe.locator('[data-tcta]')).toHaveText('Cuenta de capataz…');
+  await jefe.locator('[data-tcta]').click();
+  await expect(page.locator('tr[data-tp="01234567"] [data-tcta]')).toHaveText('Hacer capataz');
+  await page.locator('tr[data-tp="01234567"] [data-tcta]').click();
+  expect(await page.evaluate(() => window.__cta)).toEqual(['03456789', '01234567']);
+  // partidas: grupos 1, 2, 10, 13 (no 1, 10, 13, 2) y 10.02 antes de 10.10; una sola tabla con encabezado por grupo y ratio HH/und
+  await tab(page, 'tpc');
+  expect(await page.locator('.tpc-gh').evaluateAll(L => L.map(x => x.dataset.tpg))).toEqual(['1', '2', '10', '13']);
+  expect(await page.locator('tr.tpc-r').evaluateAll(L => L.map(x => x.dataset.tpc))).toEqual(['p1_01', 'p2_01', 'p10_02', 'p10_10', 'p13_01']);
+  await expect(page.locator('table.tpc-tbl')).toHaveCount(1);
+  await expect(page.locator('tr[data-tpc="p10_02"] [data-l="HH/und"]')).toHaveText('2.5');
+  // el asistente bloquea: queda con candado
+  page.once('dialog', d => d.accept());
+  await page.click('[data-tpb="p10_02"]');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_02'))).toMatchObject({ bloq: true, bloqBy: 'tasis@obra.pe' });
+  await expect(page.locator('tr[data-tpc="p10_02"]')).toContainText('BLOQUEADA');
+  noErrors(errors, 'mejoras de oficina');
+});
+
+test('Partidas: costos (tcos) solo bloquea o desbloquea para la carga', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tcos', editar: false, extra: [['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado', und: 'm2', act: true, bloq: true, bloqBy: 'x@obra.pe', bloqAt: 1 }]] });
+  await tab(page, 'tpc');
+  await expect(page.locator('#tpcAdd')).toHaveCount(0);
+  await expect(page.locator('[data-tpe]')).toHaveCount(0);
+  await expect(page.locator('tr[data-tpc="p10_05"] .tpc-lock')).toHaveCount(1);
+  page.once('dialog', d => d.accept());
+  await page.click('[data-tpb="p10_05"]');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_05'))).toMatchObject({ bloq: false, bloqBy: 'tcos@obra.pe' });
+  await expect(page.locator('[data-tpb="p10_05"]')).toHaveText('Bloquear para carga');
+  noErrors(errors, 'costos bloquea');
+});

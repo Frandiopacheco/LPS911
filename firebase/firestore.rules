@@ -15,6 +15,9 @@ service cloud.firestore {
     function isOwner() { return verified() && email() == 'frandiopacheco@gmail.com'; }
     function memberPath() { return /databases/$(database)/documents/members/$(mid()); }
     function isMember() { return signedIn() && (isOwner() || exists(memberPath())); }
+    // members.off == true: cuenta del tareo desactivada (o enlace anónimo pasado a cuenta con DNI): ya no entra al tareo.
+    // Se revisa solo en isTar()/tarEd() (no en isMember(): sumaba lecturas a reglas de LPS que ya están al límite).
+    function notOff() { return isOwner() || get(memberPath()).data.get('off', false) != true; }
     function role() { return isOwner() ? 'admin' : get(memberPath()).data.role; }
     // Roles de solo Tareo (docs/ia/tareo.md): no leen ni escriben nada de LPS. Se lee con get('role') para no fallar
     // si un registro no tiene rol (antes isMember() bastaba para leer).
@@ -23,11 +26,11 @@ service cloud.firestore {
     function lpsMember() { return isMember() && !tarOnly(); }
     // Tareo: ven el módulo los roles de tareo, el administrador y el editor marcado «Publica tareo» (members.tpub)
     function isTar() {
-      return isMember() && (role() in ['tcap', 'tasis', 'tcos', 'admin']
+      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'admin']
         || (role() == 'editor' && get(memberPath()).data.get('tpub', false) == true));
     }
     // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo
-    function tarEd() { return isMember() && role() in ['admin', 'tasis']; }
+    function tarEd() { return isMember() && notOff() && role() in ['admin', 'tasis']; }
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
@@ -84,7 +87,10 @@ service cloud.firestore {
       // la lista completa (con correos) solo la ve el personal interno; cada uno siempre puede leer su propio registro
       // el asistente de tareo también lee la lista (para asignar obreros a capataces); no la cambia
       allow read: if canDaily() || (signedIn() && mail == mid()) || (isMember() && role() == 'tasis');
-      allow write: if isAdmin() && (mail == mail.lower() || mail.matches('u_.*'));
+      // las cuentas de capataz con DNI (<dni>@tareo.lps911.pe) solo las crea la función cuentaCapataz (Admin SDK);
+      // el administrador sí puede cambiarlas o quitarlas desde Equipo
+      allow create: if isAdmin() && (mail == mail.lower() || mail.matches('u_.*')) && !mail.matches('.*@tareo[.]lps911[.]pe');
+      allow update, delete: if isAdmin() && (mail == mail.lower() || mail.matches('u_.*'));
       // el capataz se registra solo con un enlace vigente, y solo para la partida del enlace
       // (una invitación del tareo, role:'tcap', no sirve para entrar como capataz de un SC ni al revés)
       allow create: if anon() && mail == 'u_' + request.auth.uid
@@ -329,9 +335,17 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.get('cod', null) is string && d.get('nom', null) is string;
     }
+    // Costos (tcos) solo bloquea o desbloquea una partida para la carga: cambia bloq/bloqBy/bloqAt y nada más
+    function tpcBloqOk() {
+      let d = request.resource.data;
+      return isMember() && role() == 'tcos'
+        && d.diff(resource.data).affectedKeys().hasOnly(['bloq', 'bloqBy', 'bloqAt'])
+        && d.get('bloq', false) is bool && d.get('bloqBy', '') == email();
+    }
     match /tpc/{id} {
       allow read: if isTar();
-      allow create, update: if tarEd() && tpcOk();
+      allow create: if tarEd() && tpcOk();
+      allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
     match /tcfg/{id} {

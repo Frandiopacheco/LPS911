@@ -36,11 +36,18 @@ test('cálculo: horas por bloque, extra, cruces y validaciones', async ({ page }
     const aus = doc('2026-09-28', { d1: R(), d2: R({ as: false }) }, [B('p1', '07:30', '17:00', ['d1'])]);
     const dom = doc('2026-10-04', { d1: R() }, [B('p1', '07:30', '12:00', ['d1'])]);
     const malo = doc('2026-09-28', { d1: R() }, [B('p1', '12:00', '08:00', ['d1'])]);
+    // no vino pero sigue en el bloque: no es error (0 h) · sin marcar (as null/undefined): error y sin horas · partida bloqueada por costos
+    const enBlq = doc('2026-09-28', { d1: R(), d2: R({ as: false, mot: 'DM' }) }, [B('p1', '07:30', '17:00', ['d1', 'd2'])]);
+    const sinMarca = doc('2026-09-28', { d1: R(), d2: R({ as: null, ape: 'SINMARCA' }), d3: R({ as: undefined, ape: 'OTRO' }) }, [B('p1', '07:30', '17:00', ['d1', 'd2'])]);
+    S.tpc.set('pbq', { id: 'pbq', cod: '10.07', nom: 'x', bloq: true });
+    const bloq = doc('2026-09-28', { d1: R() }, [B('pbq', '07:30', '12:00', ['d1']), B('pbq', '13:00', '17:00', ['d1'])]);
+    const out = { vEnBlq: tValida(enBlq), cEnBlq: tCalc(enBlq).rows.d2, vSin: tValida(sinMarca), cSin: tCalc(sinMarca).rows.d2, vBloq: tValida(bloq) };
+    S.tpc.delete('pbq');
     return {
       blq: [tBlqH('2026-09-28', '07:30', '17:00'), tBlqH('2026-10-03', '07:30', '13:00'), tBlqH('2026-09-28', '13:00', '19:00')],
       lv: tCalc(lv).rows.d1, sa: tCalc(sa).rows.d1, dos: tCalc(dos).rows.d1, dom: tCalc(dom).rows.d1, aus: tCalc(aus).rows.d2,
       vOk: tValida(dos), vCruce: tValida(cruce), vAus: tValida(aus), vFoto: tValida({ ...dos, foto: [] }), vMalo: tValida(malo), vVacio: tValida(doc('2026-09-28', {}, [])),
-      noMuta: !('h' in lv.rows.d1),
+      noMuta: !('h' in lv.rows.d1), ...out,
     };
   });
   expect(r.blq).toEqual([8.5, 5.5, 6]);
@@ -56,6 +63,12 @@ test('cálculo: horas por bloque, extra, cruces y validaciones', async ({ page }
   expect(r.vFoto.map(x => [x.dni, x.k])).toEqual([[null, 'foto']]);
   expect(r.vMalo.map(x => x.k)).toEqual(['hora', 'sinh']);
   expect(r.vVacio.map(x => x.k)).toEqual(['vacio']);
+  expect(r.vEnBlq).toEqual([]);
+  expect(r.cEnBlq).toMatchObject({ h: {}, trab: 0, ext: 0 });
+  expect(r.vSin.map(x => [x.dni, x.k])).toEqual([['d2', 'marca'], ['d3', 'marca']]);
+  expect(r.vSin[0].msg).toBe('Falta marcar si vino: SINMARCA');
+  expect(r.cSin).toMatchObject({ h: {}, trab: 0, ext: 0 });
+  expect(r.vBloq.map(x => [x.k, x.msg])).toEqual([['bloq', 'La partida 10.07 está bloqueada por costos.']]);
   noErrors(errors, 'cálculo');
 });
 

@@ -563,6 +563,20 @@ test('tareo: capataz, costos y jefe de producción leen; no editan', async () =>
     await assertFails(deleteDoc(doc(db, 'tper/03684337')));
   }
 });
+test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el resto de lectores no', async () => {
+  const c = user('tcos@obra.pe');
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 }));
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: false, bloqBy: 'tcos@obra.pe', bloqAt: 2 }));
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 3, act: false })); // otro campo
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'otro@obra.pe', bloqAt: 3 })); // a nombre de otro
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: 'si', bloqBy: 'tcos@obra.pe', bloqAt: 3 })); // no booleano
+  await assertFails(setDoc(doc(c, 'tpc/20.02'), { ...PC('20.02'), bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 })); // no crea
+  await assertFails(deleteDoc(doc(c, 'tpc/10.05')));
+  for (const db of [user('tasis@obra.pe'), user(OWNER)]) await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 4 }));
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
+  }
+});
 test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo', async () => {
   for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('campo@obra.pe'), user('veedor@obra.pe'), user('extrano@x.pe')]) {
     await assertFails(getDoc(doc(db, 'tper/03684337')));
@@ -739,4 +753,31 @@ test('invitación del tareo: registra tcap sin partida; no se cruza con la de ca
   // el tcap recién registrado puede cambiar solo su nombre
   await assertSucceeds(updateDoc(doc(cap('nt1'), 'members/u_nt1'), { name: 'Luis P.' }));
   await assertFails(updateDoc(doc(cap('nt1'), 'members/u_nt1'), { role: 'tasis' }));
+});
+
+// ── Cuentas de capataz del tareo (DNI + contraseña, docs/ia/tareo.md) ──
+test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta entra como tcap; desactivada (off) ya no entra al tareo', async () => {
+  const M = '12345678@tareo.lps911.pe';
+  // ni el administrador crea a mano un usuario con el dominio sintético (lo hace la función con el Admin SDK)
+  await assertFails(setDoc(doc(user(OWNER), `members/${M}`), { role: 'tcap', name: 'Juan' }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), `members/${M}`), { role: 'tcap', name: 'Juan' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'members/nuevo@obra.pe'), { role: 'lector', name: 'Nuevo' }));
+  // creada por la función: entra con su correo confirmado y es tcap (escribe su tareo, no lee LPS)
+  await tSeed(`members/${M}`, { role: 'tcap', name: 'Juan Quispe', dni: '12345678', added: 1, by: OWNER });
+  const c = user(M);
+  const h = limaDay(0);
+  await assertSucceeds(getDoc(doc(c, `members/${M}`)));
+  await assertSucceeds(setDoc(doc(c, `tareo/${h}_${M}`), { date: h, cap: M, st: 'bor' }));
+  await assertFails(getDoc(doc(c, 'acts/x1')));
+  // el administrador puede cambiarla o quitarla desde Equipo
+  await assertSucceeds(updateDoc(doc(user(OWNER), `members/${M}`), { name: 'Juan Q.' }));
+  // desactivada: lee su propio registro (para el aviso) pero ya no lee ni escribe el tareo
+  await tSeed(`members/${M}`, { role: 'tcap', name: 'Juan Quispe', dni: '12345678', off: true });
+  await assertSucceeds(getDoc(doc(c, `members/${M}`)));
+  await assertFails(getDoc(doc(c, `tareo/${h}_${M}`)));
+  await assertFails(setDoc(doc(c, `tareo/${h}_${M}`), { date: h, cap: M, st: 'bor' }));
+  // el enlace anónimo pasado a la cuenta (off + movTo) tampoco
+  await tSeed('members/u_tcap1', { role: 'tcap', name: 'Pedro', off: true, movTo: M });
+  await assertFails(getDoc(doc(cap('tcap1'), `tareo/${h}_u_tcap1`)));
+  await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
 });

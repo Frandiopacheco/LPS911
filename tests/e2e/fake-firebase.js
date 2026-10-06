@@ -152,13 +152,24 @@ window.__uiAskNative = true;
     runTransaction: async fn => fn({ get: r => r.get(), set: (r, d, o) => r.set(d, o), update: (r, ...a) => r.update(...a), delete: r => r.delete() }) };
 
   // --- sesión ---
+  const AKEY = 'e2e.auth';
+  const AUTHU = (() => { try { const o = JSON.parse(sessionStorage.getItem(AKEY) || 'null'); if (o) return o; } catch (e) {} return { ...(E.authUsers || {}) }; })();
+  const aPersist = () => { try { sessionStorage.setItem(AKEY, JSON.stringify(AUTHU)); } catch (e) {} };
+  window.__authUsers = () => clone(AUTHU);
   const U = E.user === null ? null : (E.user || { uid: 'u-admin', email: 'frandiopacheco@gmail.com', emailVerified: true });
   const authCbs = [];
   const auth = {
     currentUser: U ? { ...U, delete: async () => {}, getIdToken: async () => 'x', reload: async () => {} } : null,
     onAuthStateChanged(cb) { authCbs.push(cb); setTimeout(() => cb(auth.currentUser), 5); return () => {}; },
     signOut: async () => { auth.currentUser = null; authCbs.forEach(cb => cb(null)); },
-    signInWithEmailAndPassword: async () => { throw Object.assign(new Error('prueba'), { code: 'auth/wrong-password' }); },
+    /* cuentas con contraseña: las de E.authUsers {correo: {uid, pass, disabled}} y las que crea el stub de cuentaCapataz (abajo) */
+    signInWithEmailAndPassword: async (email, pass) => {
+      const a = AUTHU[String(email || '').toLowerCase()];
+      if (!a || a.pass !== pass) throw Object.assign(new Error('prueba'), { code: a ? 'auth/wrong-password' : 'auth/invalid-credential' });
+      if (a.disabled) throw Object.assign(new Error('prueba'), { code: 'auth/user-disabled' });
+      auth.currentUser = { uid: a.uid, email: String(email).toLowerCase(), emailVerified: true, delete: async () => {}, getIdToken: async () => 'x', reload: async () => {} };
+      authCbs.forEach(cb => cb(auth.currentUser)); return { user: auth.currentUser };
+    },
     createUserWithEmailAndPassword: async () => { throw Object.assign(new Error('prueba'), { code: 'auth/operation-not-allowed' }); },
     sendPasswordResetEmail: async () => {}, useEmulator() {},
     /* ingreso con enlace de invitación (capataz): usuario anónimo nuevo (uid de E.anonUid o 'anon1') */
@@ -167,7 +178,41 @@ window.__uiAskNative = true;
       authCbs.forEach(cb => cb(auth.currentUser)); return { user: auth.currentUser };
     },
   };
+  /* Cloud Functions invocables (compat: firebase.functions().httpsCallable(name)). Solo cuentaCapataz, simulada contra la base falsa
+     con la misma lógica que functions/index.js (lo comprueba functions/test con la lógica pura). Llamadas en window.__fnCalls. */
+  const fnErr = (code, message) => Object.assign(new Error(message), { code: 'functions/' + code });
+  const FN = {
+    async cuentaCapataz(d) {
+      const me = auth.currentUser; const em = String(me && me.email || '').toLowerCase(); const cm = col('members').get(em);
+      if (!(em === 'frandiopacheco@gmail.com' || (cm && !cm.off && ['admin', 'tasis'].includes(cm.role)))) throw fnErr('permission-denied', 'Solo el administrador o el asistente de tareo pueden crear cuentas de capataz.');
+      let dni = String(d.dni || '').trim().toUpperCase(); if (/^\d{7}$/.test(dni)) dni = '0' + dni;
+      if (!/^[A-Z0-9]{8,12}$/.test(dni)) throw fnErr('invalid-argument', 'El DNI no es válido.');
+      const mail = dni.toLowerCase() + '@tareo.lps911.pe'; const f = col('tper').get(dni);
+      if (!f) throw fnErr('not-found', `No hay una ficha con el DNI ${dni} en el máster de personal.`);
+      if (['crear', 'clave'].includes(d.accion) && !(typeof d.clave === 'string' && d.clave.length >= 6)) throw fnErr('invalid-argument', 'La contraseña debe tener al menos 6 caracteres.');
+      const res = { mail, dni, n: 0 }; const now = Date.now();
+      const migrar = de => { const o = col('members').get(de); if (!o || o.role !== 'tcap') throw fnErr('failed-precondition', 'El capataz anterior no existe.');
+        for (const [id, p] of col('tper')) if (p.cap === de) { col('tper').set(id, { ...p, cap: mail, by: em, ts: now }); res.n++; }
+        col('members').set(de, { ...o, off: true, offAt: now, offBy: em, movTo: mail }); res.de = de; };
+      if (d.accion === 'crear') {
+        const t = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+        const name = [t(f.nom), t(f.ape)].filter(Boolean).join(' ') || 'Capataz'; const m0 = col('members').get(mail);
+        AUTHU[mail] = { uid: (AUTHU[mail] && AUTHU[mail].uid) || 'ct_' + dni, pass: d.clave, disabled: false }; aPersist();
+        const m1 = { ...(m0 || {}), role: 'tcap', name: (m0 && m0.name) || name, dni, added: (m0 && m0.added) || now, by: em }; delete m1.off; delete m1.offAt; delete m1.offBy;
+        col('members').set(mail, m1); col('tper').set(dni, { ...f, cta: mail });
+        if (d.de) migrar(d.de);
+      } else if (d.accion === 'clave') { if (!AUTHU[mail]) throw fnErr('not-found', 'Ese capataz todavía no tiene cuenta.'); AUTHU[mail].pass = d.clave; aPersist(); }
+      else if (d.accion === 'desactivar') { if (AUTHU[mail]) { AUTHU[mail].disabled = true; aPersist(); } const m = col('members').get(mail); if (m) col('members').set(mail, { ...m, off: true, offAt: now, offBy: em }); }
+      else if (d.accion === 'migrar') migrar(d.de);
+      else throw fnErr('invalid-argument', 'Acción no válida.');
+      changed('members'); changed('tper');
+      return res;
+    },
+  };
+  window.__fnCalls = [];
+  const functions = () => ({ httpsCallable: name => async data => { window.__fnCalls.push({ name, data: clone(data) }); if (!FN[name]) throw fnErr('not-found', 'NOT_FOUND'); return { data: await FN[name](clone(data) || {}) }; } });
   window.firebase = {
+    functions,
     initializeApp() {}, apps: [],
     auth: Object.assign(() => auth, { GoogleAuthProvider: class {} }),
     firestore: Object.assign(() => fs, { FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => ({ __au: v }), arrayRemove: (...v) => ({ __ar: v }), increment: n => n }, FieldPath: FP }),

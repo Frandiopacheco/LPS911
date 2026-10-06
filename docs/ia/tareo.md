@@ -20,7 +20,7 @@ Fases: F0 base (selector de módulo, roles, máster, partidas de control, jornad
 
 | Rol | Etiqueta (`ROLE`) | Módulos | Notas |
 | --- | --- | --- | --- |
-| `tcap` | Capataz (tareo) | solo Tareo, celular | Distinto de `capataz` (que es de un SC). Puede entrar con correo o con enlace de invitación anónimo (`u_<uid>`) como el capataz de SC. |
+| `tcap` | Capataz (tareo) | solo Tareo, celular | Distinto de `capataz` (que es de un SC). Entra con DNI y contraseña (cuenta `<dni>@tareo.lps911.pe`, ver «Cuentas de capataz»), con correo o con enlace de invitación anónimo (`u_<uid>`) como el capataz de SC. |
 | `tasis` | Asistente de tareo | solo Tareo | Edita máster y partidas de control. |
 | `tcos` | Costos | solo Tareo, lectura | En F3 verá solo días publicados. |
 | `admin` | — | ambos | Edita también la configuración del tareo. |
@@ -117,6 +117,19 @@ Colecciones nuevas, todas por `fcol()`:
 - **Personal de oficina** (`tasis`, `admin`, editor con `tpub`) en `tdia` (`renderTDia`, PC y celular): selector de fecha; lista de capataces con tareo (o que tienen obreros asignados y no han enviado): estado (sin empezar / borrador / enviado / reabierto), obreros, faltas, HH, HE, observaciones de `tValida`. Abrir uno: detalle (obreros × partidas, fotos ampliables) y, para `tasis`/`admin`, «Reabrir al capataz» (motivo obligatorio con `uiAsk` input). Bandeja completa, corrección directa y cotejo de firmas: ver «Contrato de F2».
 - **Equipo** (config-equipo.js): crear enlace/QR de invitación para capataces del tareo (como el de capataces de SC, pero con `role:'tcap'`); `capJoin` (base.js) registra `role:'tcap'` sin `scs` cuando la invitación es `tcap`.
 
+### Mejoras del capataz (oct 2026)
+
+Solo `tareo-cap.js` y el bloque CSS `/* tareo: capataz */`. Reemplaza lo dicho arriba para los pasos 1 y 2.
+
+- **Asistencia explícita:** al crear el día nadie está marcado (`rows[dni].as: null`); cada obrero (lista numerada) tiene «Vino» / «No vino» (con motivo obligatorio en chips). «Todos vinieron» marca a los que faltan; contador «Marcados a de b». No se pasa al paso 2 (ni con las pestañas) si falta marcar a alguien o falta un motivo: lleva al primero y los resalta (`.tc-ob.need`). El agregado a mano entra con `as:true`. Sin obreros asignados: «No tienes obreros asignados. Pide a la oficina que te los asigne en Personal».
+- **No vino ↔ vino no pierde horas:** marcar «No vino» ya **no** saca al obrero de los bloques (`tCalc` le da 0 h); en las tarjetas y chips del bloque sale tachado «no vino». Al volver a «vino» recupera sus horas. Por eso `tcErrs` ignora el `k:'falto'` de `tValida`.
+- **Validación propia** (`tcErrs(D)` = `tValida(tCalc(D))` menos `falto` y menos `mot` de los sin marcar, más `k:'asis'` sin marcar y `k:'bloq'` partida bloqueada con `bid`). `tcFix(E)` lleva al primer problema (paso 1 → cruce → bloque/obrero del paso 2 → foto).
+- **Cruces:** `tcCruces(D)` → `[{dni,a,b}]` entre bloques de los que vinieron. En el editor, el obrero que se cruza sale en rojo «se cruza con 10.05 7:30–12:00» y un recuadro ofrece: quitarlo de este trabajo, ajustar este (empieza al fin del otro o termina a su inicio) o ajustar el otro (si quedaría vacío, se le quita al obrero). «Guardar trabajo» no guarda con cruces. «Revisar y enviar» y el botón de enviar llevan al primer cruce y abren sus opciones (`TCS.cx`).
+- **Línea de tiempo** por obrero (pasos 2 y 3), 6:00–20:00: bloques coloreados por partida (`TC_HUE`, luz en `--tc-sl`/`--tc-ss` con modo oscuro), refrigerio rayado, cruces en rojo tocables (`.tc-cxb`) y un botón «Se cruzan … · Resolver» (`.tc-cxl`) con: quitarlo de uno u otro, que el segundo empiece al fin del primero o que el primero termine al inicio del segundo.
+- **Atajos de horario** (`tcAtajos`): Mañana, Tarde, +1 h, +2 h, +3 h (desde el fin del último bloque de los obreros elegidos o el inicio de la jornada; si cae en el refrigerio empieza al terminarlo y se alarga hasta sumar N horas reales con `tBlqH`), Extendido (fin de jornada → 19:00) y Todo el día. Un trabajo nuevo empieza por defecto donde terminó el último (hasta el fin de la jornada).
+- **Partidas bloqueadas** (`tpc.bloq === true`, las pone costos): no salen en el buscador ni se copian del día anterior; un bloque que ya la tiene sale en rojo «Partida bloqueada por costos: cámbiala» y no deja enviar; «Cambiar partida» abre el editor con la partida vacía.
+- Pruebas: `tests/e2e/tareo-cap.spec.js`.
+
 ## Contrato de F2: bandeja del asistente de tareo
 
 Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigue en `tareo.js` y llama a sus secciones. Globales con prefijo `tr`/`TR` (CSS `.tr-`, bloque `/* tareo: revisión */` al final de `app.css`).
@@ -142,7 +155,7 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - Un solo detalle para la oficina; `tasis`/`admin` editan, el editor con `tpub` lo ve en solo lectura.
 - Arriba: foto del formato (visor con acercar/alejar, rotar, pantalla completa y miniaturas) al lado de la lista de presentes (PC dos columnas, celular una debajo de otra). Por obrero: «Firmó» Sí/No y hora de garita. «Todos firmaron». El cotejo se edita en local (`TR.fir`/`TR.gar`, `TR.dirty`) y se guarda con «Guardar cotejo» o junto con «Marcar revisado».
 - El cotejo solo se edita con `st:'env'`. En `rev` queda de solo lectura (primero «Quitar revisado»).
-- **Corregir** (`env` o `rev`; no cambia el estado): tabla de bloques (partida con `select`, desde/hasta, quiénes con chips, quitar/agregar) y de obreros (vino, motivo si faltó, altura). Al guardar: si `tValida` deja problemas pide confirmar, luego motivo (`uiAsk` input requerido); recalcula con `tCalc` y guarda `rows`, `blq` y `hist` `cor`. Marcar a alguien como falta lo saca de los bloques. No se agregan obreros desde aquí.
+- **Corregir** (`env` o `rev`; no cambia el estado): tabla de bloques (partida con `select`, desde/hasta, quiénes con chips, quitar/agregar) y de obreros (vino, motivo si faltó, altura). Al guardar: si `tValida` deja problemas pide confirmar, luego motivo (`uiAsk` input requerido); recalcula con `tCalc` y guarda `rows`, `blq` y `hist` `cor`. Marcar a alguien como falta **no** lo saca de los bloques (0 h; si vuelve a «vino» recupera sus horas; ver «Mejoras de oficina»). No se agregan obreros desde aquí.
 - **Marcar revisado** (`env` → `rev`): deshabilitado si hay observaciones que bloquean (`tValida` o firmas sin cotejar). Si alguien no firmó, pide confirmación y queda en `hist.cam`.
 - **Quitar revisado** (`rev` → `env`) y **Reabrir al capataz** (`env` o `rev`), ambos con motivo.
 - Si llegan datos con el detalle abierto, `trSync()` lo redibuja sin perder el cotejo o la corrección en curso.
@@ -192,13 +205,21 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - `tBlqH`, `tCalc`, `tValida` están en `tareo.js` (puros; `tareo-cap.js` los usa, no los redefine). Horas redondeadas a 2 decimales (`tR2`), sin redondeo a media hora.
   - Un bloque cuenta solo si tiene partida y horario válido (05:00–23:59, salida > entrada); si no, `tValida` lo marca.
   - `tCalc`: `ext` = max(0, trab − `tJorH` del día); domingo/feriado (`tNoLab`) todo es extra. Ausentes: `h:{}`, `ini/fin:''`, `trab/ext:0`.
-  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `falto` (obrero marcado falta dentro de un bloque), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
+  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `bloq` (partida bloqueada por costos), `marca` (sin marcar si vino), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
 - `renderTDia` (oficina): globales con prefijo `to`/`TO_` (`TD` estado, `toSub`/`toUnsub`, `toList`, `toStats`, `toDetalle`, `toReabrir`, `TO_MOT` motivos de falta, `TO_ST` estados). CSS al final de `app.css` con prefijo `.to-`.
   - Suscripción temporal `fcol('tareo').where('date','==',fecha)` (`TD.sub`): cambia al cambiar de fecha; al salir de la pestaña se suelta en la siguiente llegada de datos (no hay gancho de salida de vista) y al cerrar sesión (`unsubs`).
   - Lista: tareos del día + capataces `tcap` con obreros activos asignados sin tareo («Sin empezar»). Orden: enviado, reabierto, borrador, sin empezar, revisado, publicado. «Enviados» del resumen = `env`/`rev`/`pub`.
   - Fecha: flechas y selector; no pasa de hoy. `tcos` ve el aviso de F3 (no se suscribe).
   - Reabrir (solo `admin`/`tasis`, solo `st:'env'`): `update({st:'reab', reab:{t,by,mot}, hist: arrayUnion({t,by,mot,a:'reab'}), by, ts})`.
   - Fotos: lee `tfot/{id}` al abrir el detalle (caché `TD.fotos`), miniatura y ampliar (`.to-zoom`).
+
+## Mejoras de oficina (oct 2026)
+
+- **Personal:** columna N° (posición en la lista filtrada) y contador `#tperN` «Mostrando N de M · K activos» (N y K respetan los filtros; M = fichas no archivadas). Para `admin`/`tasis`, si existe la global `tCapCuenta(dni)` (en `tareo-cuentas.js`), cada fila lleva «Hacer capataz» (`[data-tcta]`); si la ficha tiene `tper.cta` (correo de su cuenta de capataz) muestra el chip «Capataz» y la acción «Cuenta de capataz…» (misma función). Los capataces del filtro y de «Asignar capataz» siguen siendo los `members` con rol `tcap` (`tCaps()`).
+- **Partidas de control:** una sola tabla (`.tpc-tbl`, `table-layout:fixed` con `colgroup`) para que las columnas queden alineadas entre grupos; antes había una tabla por grupo y cada una medía distinto. Fila de encabezado por grupo (`tr.tpc-gh[data-tpg]`: número, nombre, n.º de partidas y HH ppto). Columnas: código, descripción, und, metrado, HH ppto, HH/und (`tRatio` = hhp/met, como la columna «Ratio» del Excel), cuenta UA, estado, acciones. Orden: `tCmpCod` compara por partes enteras (grupos 1, 2 … 13; 10.02 antes de 10.10). Buscador y filtro Todas/Activas/Bloqueadas/Inactivas (`TPU`). En celular cada partida es un bloque compacto.
+- **Bloquear para carga** (`tpc.bloq: true|false`, `bloqBy` correo en minúsculas, `bloqAt` ms): lo hacen `tcos`, `tasis` y `admin` (`tBloqOk()`, `tPcBloq`). Bloqueada: candado y chip «BLOQUEADA»; no aparece en el celular del capataz (`tareo-cap.js`). `tValida`: `k:'bloq'` «La partida X está bloqueada por costos.» (una vez por partida). Reglas: `tcos` actualiza `tpc` solo con `affectedKeys().hasOnly(['bloq','bloqBy','bloqAt'])`, `bloq` booleano y `bloqBy == email()`; no crea ni borra.
+- **tValida / tCalc:** ya no existe el error `falto`: un obrero que no vino puede seguir en sus bloques (tCalc le da 0 h y conserva `blq`, así recupera sus horas si vuelve a «vino»). Nuevo `k:'marca'` «Falta marcar si vino: APELLIDO» si `as` no es `true` ni `false`; `tCalc` trata `as` null/undefined como no presente sin horas.
+- **Revisión (corregir):** desmarcar «vino» ya no saca al obrero de los bloques (antes, al volver a marcarlo, perdía sus horas). `trAs` conserva `as` null («Sin marcar»). «Todos/Ninguno» de un bloque no toca a los ausentes que siguen en él.
 
 ## Pendientes
 
@@ -210,3 +231,33 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - Reglas `tareo`: el `tcap` puede hacer `get` de su día aunque no exista (id `<fecha>_<mi id>`); sus consultas deben filtrar `where('cap','==',mid)`. Fecha válida: entre hoy−4 y hoy+1 en hora de Lima (tolerancia de un día por reloj/zona; la app ofrece hoy, ayer y anteayer). El `tcap` no crea con `st:'reab'`, no toca `reab` ni `pub`, y desde `reab` solo queda en `reab` o pasa a `env`. `tfot`: id empieza con `<fecha>_<mi id>`, `d` texto < 1 000 000 caracteres.
 - Invitación del tareo: `inv/{code}` `{role:'tcap', active, exp, by, ts}` (sin `scs`). El enlace lleva `&m=tar` (`localStorage` `lps.invm`) para que la pantalla de registro hable del tareo antes de iniciar sesión. En Equipo › Capataces se elige «Capataz del tareo (consorcio)» en el mismo selector de partida (`__tcap`); el código está en `en-obra-tablero.js` (`newInvite(scs,tcap)`, `invWho`, filas `tr[data-invtar]`). La variante `capataz` de `members` exige que la invitación no sea `tcap`.
 - Fake de pruebas: `signInAnonymously` crea un usuario anónimo (`E.anonUid` o `anon1`); prueba en `tareo-inv.spec.js`.
+
+## Cuentas de capataz (oct 2026)
+
+Problema: con el enlace/QR el capataz del tareo entra con una sesión **anónima** guardada solo en ese navegador; si pierde el celular o borra los datos, pierde su usuario `u_<uid>` (al que están ligados su cuadrilla y sus tareos). Ahora la oficina le da **usuario (DNI) y contraseña**.
+
+### Cómo funciona
+
+- **Cuenta = DNI + contraseña.** Por debajo es una cuenta de correo y contraseña de Firebase Auth con correo **sintético** `<dni en minúsculas>@tareo.lps911.pe` (no existe; nunca se envía nada) y `emailVerified: true`, así que pasa por el mismo `startSession` que cualquier correo: `members/<correo>` con `role:'tcap'`, `mid()` = el correo. DNI como en el máster (`ctaDni`/`tCtaDni`: 8 dígitos, 7 → con cero a la izquierda; carné de extranjería de 8 a 12 alfanuméricos).
+- **Función `cuentaCapataz`** (`functions/index.js`, v2 `onCall`, us-central1, Admin SDK). Solo el dueño, `admin` o `tasis` con correo confirmado y sin `off` (`ctaPuede`). Valida con `ctaPedido` (lógica pura en `functions/lib.js`, pruebas en `functions/test/cuentas.test.js`). Acciones (`{accion, dni, clave?, de?}`):
+  - `crear`: exige ficha en `tper/<dni>` no archivada; crea el usuario de Auth (displayName = `ctaNombre(ficha)`, «Juan Carlos Quispe Mamani») o, si ya existe (cuenta desactivada), lo **reactiva** con la contraseña nueva; `members/<correo>` `{role:'tcap', name, dni, added, by}` (merge, borra `off/offAt/offBy`; si ya existía con otro rol, error); `tper/<dni>.cta = <correo>`. Con `de` también migra (abajo).
+  - `clave`: cambia la contraseña.
+  - `desactivar`: Auth `disabled:true` + `revokeRefreshTokens` y `members.off:true, offAt, offBy`. **No** cambia el rol ni borra nada; sus obreros siguen con `cap` = su correo (la oficina los reasigna en Personal).
+  - `migrar` (`de` = `u_<uid>` de un `tcap` con enlace): `tper.cap` de sus obreros pasa al correo nuevo (por lotes) y `members/u_…` queda `off:true, movTo:<correo>`. **Los tareos antiguos se quedan con el id viejo** (`tareo/<fecha>_u_…`, `cap:'u_…'`): siguen visibles para la oficina; el capataz ya no los ve en su celular. Conviene migrar después de que envíe el tareo del día.
+  - Contraseña: mínimo 6 caracteres sin espacios al borde; la ventana propone 6 dígitos al azar (editable).
+- **Ventana `tCapCuenta(dni)`** (`web/js/tareo-cuentas.js`, global; la abre «Hacer capataz» en Tareo › Personal): estado según `MEM` (`SIN CUENTA` / `CUENTA ACTIVA` / `DESACTIVADA`), crear/reactivar con contraseña propuesta, «Pasar sus datos de» (capataces `tcap` con `u_…` sin `off`, con su número de obreros), cambiar contraseña, pasar obreros, desactivar (con `uiAsk`). Al crear o cambiar la clave muestra el texto para copiar o enviar por WhatsApp: `Usuario: 12345678 · Contraseña: 123456 · Entra a <URL de la app>` (la contraseña no se guarda en ninguna parte: no se vuelve a mostrar). Llama con `firebase.functions().httpsCallable('cuentaCapataz')` (`firebase-functions-compat.js` en `index.html`); `tCtaErr` traduce los errores.
+- **Ingreso «Soy capataz»** (`index.html` `#lcap`, `base.js` `setupLogin`/`showLogin`): botón en la pantalla de ingreso y enlace en la de registro por enlace; DNI (`inputmode=numeric`) + contraseña → `signInWithEmailAndPassword(tCtaMail(dni), clave)`. Errores: «DNI o contraseña incorrectos. Pide a la oficina que te la cambie.» / «Tu cuenta está desactivada. Habla con la oficina.». Se recuerda en el equipo (`localStorage` `lps.lcap`): al cerrar sesión vuelve a esa pantalla. La sesión de Firebase Auth persiste (local): si cierra la página entra sin pedir nada; en otro celular entra con DNI y contraseña.
+- **`members.off`**: en las reglas se revisa con `notOff()` dentro de `isTar()` y `tarEd()` (no en `isMember()`: sumar esa lectura hizo fallar reglas de LPS que ya están al límite de lecturas, p. ej. `dplan`). En la app, `startSession` / el listener de `members` cierran la sesión con aviso (`memOffMsg`: si tiene `movTo`, «Tu usuario de este celular se pasó a una cuenta con DNI y contraseña…» y abre «Soy capataz»). Cada uno sigue pudiendo leer su propio registro.
+- **Reglas:** `members` con id `*@tareo.lps911.pe` no se crean desde el cliente (ni el admin; solo la función con el Admin SDK); el admin sí los actualiza o quita en Equipo. Pruebas: «cuentas de capataz» en `tests/rules/firestore.test.mjs`.
+- **Equipo:** la tarjeta de invitaciones (en-obra-tablero.js, `[data-tctanote]`) recomienda la cuenta con usuario y contraseña. Las invitaciones anónimas `tcap` siguen funcionando.
+- **Pruebas de la interfaz:** `tests/e2e/tareo-cuentas.spec.js`. El Firebase falso simula `firebase.functions().httpsCallable('cuentaCapataz')` contra la base falsa (misma lógica que la función; llamadas en `window.__fnCalls`) y `signInWithEmailAndPassword` con usuarios de `E.authUsers` `{correo:{uid, pass, disabled}}` más los que crea el stub (`window.__authUsers()`).
+
+### Configuración en Firebase (una vez por proyecto)
+
+- Authentication › Sign-in method: **Correo electrónico/contraseña** activado (ya lo usa la oficina).
+- La función usa la cuenta de servicio por defecto de Cloud Functions v2 (`<n.º proyecto>-compute@developer.gserviceaccount.com`); necesita crear usuarios de Auth: rol **Firebase Authentication Admin** (`roles/firebaseauth.admin`) o Editor (que suele tener por defecto).
+- La publicación (`firebase deploy --only functions`, desde GitHub) deja la función invocable por cualquiera (`allUsers` en Cloud Run; la función revisa el usuario). La cuenta de servicio de GitHub (`FIREBASE_SA_*`) necesita poder cambiar el IAM del servicio (Cloud Functions Admin o Cloud Run Admin). Si la organización de Google Cloud prohíbe `allUsers`, la página dirá «El servidor no respondió…».
+
+### Pendiente
+
+- `tCaps()` (tareo.js) lista también capataces con `off`: filtrarlos al asignar obreros.

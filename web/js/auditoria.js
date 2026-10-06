@@ -226,18 +226,45 @@ function pisoCell(em,m){const L=memPisos(m).filter(id=>S.pis.has(id));const rest
   return`<div class="scchips">${L.map(id=>{const p=S.pis.get(id);return`<span class="scchip" style="--c:var(--accent)"><i></i>${esc(p.code+' · '+p.name)}<button data-pirm="${esc(em)}|${esc(id)}" aria-label="Quitar ${esc(p.name)}" title="Quitar">&times;</button></span>`}).join('')}</div>
    ${rest.length?`<select class="ci" data-mem="${esc(em)}" data-f="pisoadd" aria-label="Agregar piso a cargo"><option value="">${L.length?'+ Agregar otro piso a cargo…':'+ Piso a cargo (revisa sus propuestas)…'}</option>${rest.map(p=>`<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`:''}`}
 function areaCell(em,m){const ar=restrAreasL();return`<select class="ci" data-mem="${esc(em)}" data-f="area" aria-label="Área"${m.area?'':' style="border:1px solid var(--bad)"'}><option value="">— elige el área —</option>${[...new Set([...ar,m.area].filter(Boolean))].map(a=>`<option${a===m.area?' selected':''}>${esc(a)}</option>`).join('')}</select>`}
+/* barra «Ver como»: plegable (pastilla) y movible a cualquier esquina (se arrastra y se acomoda en la más cercana).
+   Estado por pestaña del navegador en sessionStorage 'lps.vab' {min, pos:'br'|'bl'|'tr'|'tl'}; en el celular empieza plegada.
+   Nunca tapa la barra inferior (#bnav) ni el botón fijo del capataz (.tc-foot): vabPlace() mide lo que hay abajo y arriba. */
+const VAB=(()=>{let v=null;try{v=JSON.parse(sessionStorage.getItem('lps.vab')||'null')}catch(e){}
+  return{min:v&&typeof v.min==='boolean'?v.min:innerWidth<=760,pos:v&&/^[tb][lr]$/.test(v.pos)?v.pos:'br'}})();
+let VAB_DRAG=null,VAB_MOVED=0;
+function vabSave(){try{sessionStorage.setItem('lps.vab',JSON.stringify({min:VAB.min,pos:VAB.pos}))}catch(e){}}
+const VAB_BOTTOM='#bnav,.tc-foot';
+function vabPlace(){const b=$('#vabar');if(!b)return;let bot=0,top=0;
+  document.querySelectorAll(VAB_BOTTOM).forEach(e=>{if(!e.offsetParent&&getComputedStyle(e).position!=='fixed')return;const r=e.getBoundingClientRect();if(r.height&&r.top<innerHeight&&r.top>innerHeight*.6)bot=Math.max(bot,innerHeight-r.top)});
+  const t=$('.top');if(t&&t.offsetParent){const r=t.getBoundingClientRect();if(r.bottom>0)top=r.bottom}
+  b.style.setProperty('--vab-b',Math.round(bot+10)+'px');b.style.setProperty('--vab-t',Math.round(top+8)+'px')}
 function vaBanner(){let b=$('#vabar');if(!VA||!me){if(b)b.remove();return}const lab=ROLE[VA.role]||VA.role;const det=VA.sc?conOf(VA.sc).name:VA.area?VA.area:VA.pisos&&VA.pisos.length?'pisos '+VA.pisos.map(id=>(S.pis.get(id)||{}).code||'').join(', '):VA.tpub?'publica tareo':'';
   if(IN_FRAME){if(b)b.remove();return}
-  const h=`<span>👁 Viendo como <b>${esc(lab)}</b>${det?' · '+esc(det):''}</span><button type="button" class="ib" data-va="phone">📱 Celular</button><button type="button" class="ib" data-va="chg">Cambiar</button><button type="button" class="ib pri" data-va="out">Volver a administrador</button>`;
-  if(!b){b=document.createElement('div');b.id='vabar';b.className='vabar';document.body.appendChild(b);b.onclick=e=>{const t=e.target.closest('[data-va]');if(!t)return;if(t.dataset.va==='out')vaSet(null);else if(t.dataset.va==='phone')phonePreview('iphone');else vaDialog(t)}}
-  if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
+  const h=VAB.min?`<button type="button" class="vapill" data-va="max" title="Viendo como ${esc(lab)}${det?' · '+esc(det):''}. Toca para ver las opciones; arrástrala a otra esquina." aria-label="Viendo como ${esc(lab)}: mostrar la barra">👁 <b>${esc(lab)}</b></button>`
+    :`<span class="vagrip" title="Arrastra para llevarla a otra esquina" aria-hidden="true">⠿</span><span class="vatx">👁 Viendo como <b>${esc(lab)}</b>${det?' · '+esc(det):''}</span><button type="button" class="ib vaph" data-va="phone">📱 Celular</button><button type="button" class="ib" data-va="chg">Cambiar</button><button type="button" class="ib pri" data-va="out">Volver a administrador</button><button type="button" class="ib vamin" data-va="min" title="Plegar (queda una pastilla en la esquina)" aria-label="Plegar la barra">–</button>`;
+  if(!b){b=document.createElement('div');b.id='vabar';document.body.appendChild(b);
+    b.onclick=e=>{const t=e.target.closest('[data-va]');if(!t)return;if(VAB_MOVED&&Date.now()-VAB_MOVED<400)return;const a=t.dataset.va;
+      if(a==='out')vaSet(null);else if(a==='phone')phonePreview('iphone');else if(a==='min'||a==='max'){VAB.min=a==='min';vabSave();vaBanner();const f=$('#vabar [data-va]');if(f)f.focus()}else vaDialog(t)};
+    /* arrastre: se escucha en la ventana (el puntero sale de la barra al moverla); al soltar se acomoda en la esquina más cercana */
+    const mv=e=>{const d=VAB_DRAG;if(!d||d.id!==e.pointerId)return;if(!d.on){if(Math.hypot(e.clientX-d.x,e.clientY-d.y)<6)return;d.on=true;b.classList.add('drag')}
+      const w=b.offsetWidth,hh=b.offsetHeight;b.style.left=Math.max(4,Math.min(innerWidth-w-4,e.clientX-d.dx))+'px';b.style.top=Math.max(4,Math.min(innerHeight-hh-4,e.clientY-d.dy))+'px';e.preventDefault()};
+    const up=e=>{const d=VAB_DRAG;if(!d||d.id!==e.pointerId)return;VAB_DRAG=null;removeEventListener('pointermove',mv);removeEventListener('pointerup',up);removeEventListener('pointercancel',up);if(!d.on)return;
+      const r=b.getBoundingClientRect();VAB.pos=(r.top+r.height/2<innerHeight/2?'t':'b')+(r.left+r.width/2<innerWidth/2?'l':'r');VAB_MOVED=Date.now();vabSave();b.classList.remove('drag');b.style.left=b.style.top='';vaBanner()};
+    b.onpointerdown=e=>{if(e.button||!e.target.closest('.vagrip,.vapill,.vatx'))return;const r=b.getBoundingClientRect();VAB_DRAG={x:e.clientX,y:e.clientY,dx:e.clientX-r.left,dy:e.clientY-r.top,on:false,id:e.pointerId};
+      addEventListener('pointermove',mv,{passive:false});addEventListener('pointerup',up);addEventListener('pointercancel',up)};
+    /* el botón fijo del capataz y otras barras aparecen después (vistas que se dibujan solas): se vuelve a medir, a lo más una vez por cuadro */
+    let q=0;const re=()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;vabPlace()})};addEventListener('resize',re);
+    try{new MutationObserver(re).observe(document.body,{childList:true,subtree:true})}catch(e){}}
+  const cl='vabar p-'+VAB.pos+(VAB.min?' min':'');if(b.className.replace(/\s*drag/,'')!==cl)b.className=cl;
+  if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}
+  vabPlace();requestAnimationFrame(vabPlace)}
 /* vista celular: la app dentro de un marco del tamaño de un teléfono (mismo usuario y mismo "Ver como") */
 const IN_FRAME=window.top!==window;if(IN_FRAME)document.documentElement.classList.add('in-frame');
 const PHONES=[['iphone','iPhone (390 × 844)',390,844],['android','Android (360 × 780)',360,780],['chico','Celular chico (320 × 640)',320,640],['tablet','Tablet (768 × 1024)',768,1024]];
 function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!dev){el0.remove();return}const d=PHONES.find(q=>q[0]===dev)||PHONES[0];
   let el=el0;if(!el){el=document.createElement('div');el.id='phprev';el.className='phprev';document.body.appendChild(el)}
   el.innerHTML=`<div class="phbar"><b>📱 Vista celular</b><select id="phdev" aria-label="Equipo">${PHONES.map(q=>`<option value="${q[0]}"${q[0]===d[0]?' selected':''}>${q[1]}</option>`).join('')}</select><button class="ib" id="phrel">Recargar</button><span class="mu">${VA?'Viendo como '+esc(ROLE[VA.role]||VA.role):'Con tu usuario'} · lo que guardes se guarda de verdad</span><span style="flex:1"></span><button class="ib pri" id="phx">Cerrar</button></div>
-   <div class="phwrap"><div class="phone" style="width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))"><iframe title="La app en tamaño celular" src="${location.pathname}?vista=celular"></iframe></div></div>`;
+   <div class="phwrap"><div class="phone" style="width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))"><iframe title="La app en tamaño celular" src="${location.pathname}?vista=celular${me&&U.tab?'#'+U.tab:''}"></iframe></div></div>`;
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
@@ -245,13 +272,14 @@ function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible 
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>
     <div class="qrow"><select id="var" aria-label="Rol">${roles.map(([k,v])=>`<option value="${k}"${cur.role===k?' selected':''}>${v}</option>`).join('')}</select></div>
     <div class="qrow" id="vasc"><select id="vas" aria-label="Empresa">${cons.map(c=>`<option value="${c.id}"${cur.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="qrow" id="vacp"><select id="vac" aria-label="Capataz">${(()=>{const cs=[...MEM.entries()].filter(([,m])=>m&&m.role==='tcap'&&!m.off).sort((x,y)=>String(x[1].name||x[0]).localeCompare(String(y[1].name||y[0])));return cs.length?cs.map(([id,m])=>`<option value="${esc(id)}"${cur.cap===id?' selected':''}>${esc(m.name||id)}</option>`).join(''):'<option value="">(no hay capataces del tareo: verás tu propio usuario)</option>'})()}</select></div>
     <div class="qrow" id="vaar"><select id="vaa" aria-label="Área">${restrAreasL().map(a=>`<option${cur.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select></div>
     <div id="vapi" style="padding:0 10px 6px;max-height:160px;overflow:auto"><div class="mu" style="font-size:12px">Pisos a su cargo (para revisar propuestas):</div>${pisos().map(p=>`<label class="chk" style="display:flex"><input type="checkbox" class="vapc" value="${p.id}"${(cur.pisos||[]).includes(p.id)?' checked':''}> ${esc(p.code)} · ${esc(p.name)}</label>`).join('')}</div>
     <label class="chk" id="vacl" style="display:flex;padding:0 10px 6px"><input type="checkbox" id="vacli"${cur.cli?' checked':''}> Con acceso a la versión cliente</label>
     <label class="chk" id="vatp" style="display:flex;padding:0 10px 6px"><input type="checkbox" id="vatpub"${cur.tpub?' checked':''}> Publica tareo (ve el módulo Tareo)</label>
     <button data-do="go" class="pri">Ver como este rol</button>`,
-   {go:()=>{const role=($('#var')||{}).value;const v={role};if(role==='sc'||role==='capataz')v.sc=($('#vas')||{}).value||'';if(role==='area')v.area=($('#vaa')||{}).value||'';if(role==='editor')v.pisos=[...document.querySelectorAll('.vapc:checked')].map(i=>i.value);if(CLI_ROLES.includes(role)&&($('#vacli')||{}).checked)v.cli=true;if(role==='editor'&&($('#vatpub')||{}).checked)v.tpub=true;vaSet(v)}});
-  const sync=()=>{const r=($('#var')||{}).value;const a=$('#vasc'),b=$('#vaar'),c=$('#vapi');if(a)a.hidden=!(r==='sc'||r==='capataz');if(b)b.hidden=r!=='area';if(c)c.hidden=r!=='editor';const d=$('#vacl');if(d)d.hidden=!CLI_ROLES.includes(r);const f=$('#vatp');if(f)f.hidden=r!=='editor'};sync();const sel=$('#var');if(sel)sel.onchange=sync;
+   {go:()=>{const role=($('#var')||{}).value;const v={role};if(role==='sc'||role==='capataz')v.sc=($('#vas')||{}).value||'';if(role==='area')v.area=($('#vaa')||{}).value||'';if(role==='tcap'&&($('#vac')||{}).value)v.cap=$('#vac').value;if(role==='editor')v.pisos=[...document.querySelectorAll('.vapc:checked')].map(i=>i.value);if(CLI_ROLES.includes(role)&&($('#vacli')||{}).checked)v.cli=true;if(role==='editor'&&($('#vatpub')||{}).checked)v.tpub=true;vaSet(v)}});
+  const sync=()=>{const r=($('#var')||{}).value;const a=$('#vasc'),b=$('#vaar'),c=$('#vapi');if(a)a.hidden=!(r==='sc'||r==='capataz');if(b)b.hidden=r!=='area';if(c)c.hidden=r!=='editor';const d=$('#vacl');if(d)d.hidden=!CLI_ROLES.includes(r);const f=$('#vatp');if(f)f.hidden=r!=='editor';const g=$('#vacp');if(g)g.hidden=r!=='tcap'};sync();const sel=$('#var');if(sel)sel.onchange=sync;
   /* el popover no debe cerrarse al marcar casillas */}
 function pisosSinResp(){return pisos().filter(p=>!respOf(p.id).length)}
 /* el subcontratista también marca inicio, detención y reanudación en la pantalla "En obra" (no cierra el día) */

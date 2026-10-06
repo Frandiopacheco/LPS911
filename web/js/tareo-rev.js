@@ -136,7 +136,7 @@ function trClick(e,id){const v=e.target.closest('[data-trv]');if(v){const t=TD.d
   if(a==='qrev')return trQuitarRev(id);
   if(a==='reab')return toReabrir(id);
   if(a==='cor'){const t=TD.docs.get(id);TR.ed={blq:JSON.parse(JSON.stringify(Array.isArray(t.blq)?t.blq:[])).map(x=>({id:x.id||trBid(),pc:x.pc||'',ini:x.ini||'',fin:x.fin||'',dnis:Array.isArray(x.dnis)?x.dnis:[]})),
-    rows:Object.fromEntries(Object.entries(t.rows||{}).map(([d,r])=>[d,{as:!!r.as,mot:r.mot||'',alt:!!r.alt}]))};trDraw();return}
+    rows:Object.fromEntries(Object.entries(t.rows||{}).map(([d,r])=>[d,{as:trAs(r.as),mot:r.mot||'',alt:!!r.alt}]))};trDraw();return}
   if(TR.ed)return trEdClick(a,b,id)}
 function trChange(e,id){const g=e.target.closest('[data-trg]');if(g){const v=/^\d{2}:\d{2}/.test(g.value)?g.value.slice(0,5):'';if(v)TR.gar[g.dataset.trg]=v;else delete TR.gar[g.dataset.trg];TR.dirty=true;trDraw();return}
   if(TR.ed)trEdChange(e)}
@@ -177,8 +177,11 @@ async function toReabrir(id){const t=TD.docs.get(id);if(!t||!['env','rev'].inclu
 
 /* ---------- corrección directa (editor para PC) ---------- */
 const trBid=()=>'b'+Math.random().toString(36).slice(2,9);
-function trEdDoc(t,e=TR.ed){const rows={};for(const[d,r]of Object.entries(t.rows||{})){const x=e.rows[d]||{};rows[d]={...r,as:!!x.as,mot:x.as?'':(x.mot||''),alt:x.as?!!x.alt:false}}
-  return{...t,rows:trRows(rows),blq:e.blq.map(b=>({id:b.id,pc:b.pc,ini:b.ini,fin:b.fin,dnis:b.dnis.filter(d=>rows[d]&&rows[d].as)}))}}
+/* vino: true · no vino: false · sin marcar: null (tValida lo pide) */
+const trAs=v=>v===true?true:v===false?false:null;
+/* el que no vino conserva sus bloques (tCalc le da 0 h): si vuelve a «vino», recupera sus horas */
+function trEdDoc(t,e=TR.ed){const rows={};for(const[d,r]of Object.entries(t.rows||{})){const x=e.rows[d]||{};const as=trAs(x.as);rows[d]={...r,as,mot:as===false?(x.mot||''):'',alt:as===true?!!x.alt:false}}
+  return{...t,rows:trRows(rows),blq:e.blq.map(b=>({id:b.id,pc:b.pc,ini:b.ini,fin:b.fin,dnis:b.dnis.slice()}))}}
 function trEdHtml(t){const e=TR.ed;const nd=trEdDoc(t);const c=tCalc(nd);const E=tValida(nd);
   const R=Object.entries(t.rows||{}).sort((a,b)=>(a[1].ape||'').localeCompare(b[1].ape||'')||a[0].localeCompare(b[0]));
   const pres=R.filter(([d])=>e.rows[d]&&e.rows[d].as);
@@ -192,7 +195,7 @@ function trEdHtml(t){const e=TR.ed;const nd=trEdDoc(t);const c=tCalc(nd);const E
    ${e.blq.map((b,i)=>{const on=new Set(b.dnis);return`<tr data-tri="${i}"><td><select class="tin tr-pc" id="tre_pc_${i}" data-tre="pc" aria-label="Partida">${pcOpt(b.pc)}</select></td>
      <td><input class="tin" type="time" step="300" id="tre_ini_${i}" data-tre="ini" value="${esc(b.ini)}" aria-label="Desde"></td><td><input class="tin" type="time" step="300" id="tre_fin_${i}" data-tre="fin" value="${esc(b.fin)}" aria-label="Hasta"></td>
      <td class="mono t-r">${tBlqOk(b)?toH(tBlqH(t.date,b.ini,b.fin)):''}</td>
-     <td><div class="tr-chips">${pres.map(([d])=>`<button class="chip${on.has(d)?' on':''}" data-tra="who" data-v="${esc(d)}" aria-pressed="${on.has(d)}">${esc(short(d))}</button>`).join('')}<button class="chip tr-cha" data-tra="wall">${on.size===pres.length?'Ninguno':'Todos'}</button></div></td>
+     <td><div class="tr-chips">${pres.map(([d])=>`<button class="chip${on.has(d)?' on':''}" data-tra="who" data-v="${esc(d)}" aria-pressed="${on.has(d)}">${esc(short(d))}</button>`).join('')}<button class="chip tr-cha" data-tra="wall">${pres.every(([d])=>on.has(d))&&pres.length?'Ninguno':'Todos'}</button></div></td>
      <td><button class="ib" data-tra="bdel" aria-label="Quitar bloque">Quitar</button></td></tr>`}).join('')||'<tr><td colspan="6" class="note">Sin bloques.</td></tr>'}
    </tbody></table></div>
    <div><button class="ib" data-tra="badd" id="trBadd">+ Agregar bloque</button></div>
@@ -200,7 +203,7 @@ function trEdHtml(t){const e=TR.ed;const nd=trEdDoc(t);const c=tCalc(nd);const E
    <div class="tscroll"><table class="t tr-eo"><thead><tr><th>Obrero</th><th>Vino</th><th>Motivo si faltó</th><th>Altura</th><th class="t-r">Horas</th><th class="t-r">HE</th></tr></thead><tbody>
    ${R.map(([d,r])=>{const x=e.rows[d]||{};const cr=c.rows[d]||{};return`<tr data-tro="${esc(d)}"><td><b>${esc(r.ape||d)}</b> <small class="note">${esc(r.nom||'')} · ${esc(d)}</small></td>
      <td><input type="checkbox" id="tre_as_${esc(d)}" data-tre="as"${x.as?' checked':''} aria-label="Vino"></td>
-     <td>${x.as?'':`<select class="tin" id="tre_mot_${esc(d)}" data-tre="mot" aria-label="Motivo"><option value="">Elige</option>${Object.entries(TO_MOT).map(([k,l])=>`<option value="${k}"${x.mot===k?' selected':''}>${k} · ${esc(l)}</option>`).join('')}</select>`}</td>
+     <td>${x.as===true?'':x.as!==false?'<span class="note">Sin marcar</span>':`<select class="tin" id="tre_mot_${esc(d)}" data-tre="mot" aria-label="Motivo"><option value="">Elige</option>${Object.entries(TO_MOT).map(([k,l])=>`<option value="${k}"${x.mot===k?' selected':''}>${k} · ${esc(l)}</option>`).join('')}</select>`}</td>
      <td>${x.as?`<input type="checkbox" id="tre_alt_${esc(d)}" data-tre="alt"${x.alt?' checked':''} aria-label="Altura">`:''}</td>
      <td class="mono t-r">${x.as?toH(cr.trab):''}</td><td class="mono t-r">${x.as&&cr.ext?toH(cr.ext):''}</td></tr>`}).join('')}
    </tbody></table></div>
@@ -212,13 +215,13 @@ function trEdClick(a,b,id){const e=TR.ed;const t=TD.docs.get(id);const i=+((b.cl
     e.blq.push({id:trBid(),pc:'',ini:j.ini,fin:j.fin,dnis:Object.keys(e.rows).filter(d=>e.rows[d].as)});trDraw();return}
   if(a==='bdel'&&e.blq[i]){e.blq.splice(i,1);trDraw();return}
   if(a==='who'&&e.blq[i]){const d=b.dataset.v;const L=e.blq[i].dnis;e.blq[i].dnis=L.includes(d)?L.filter(x=>x!==d):[...L,d];trDraw();return}
-  if(a==='wall'&&e.blq[i]){const p=Object.keys(e.rows).filter(d=>e.rows[d].as);e.blq[i].dnis=e.blq[i].dnis.filter(d=>p.includes(d)).length===p.length?[]:p;trDraw();return}
+  if(a==='wall'&&e.blq[i]){const p=Object.keys(e.rows).filter(d=>e.rows[d].as);const L=e.blq[i].dnis;const fu=L.filter(d=>!p.includes(d));e.blq[i].dnis=(L.filter(d=>p.includes(d)).length===p.length?[]:p).concat(fu);trDraw();return}
   if(a==='edok')return trEdSave(id)}
 function trEdChange(ev){const el=ev.target.closest('[data-tre]');if(!el)return;const e=TR.ed;const k=el.dataset.tre;
   const bi=el.closest('[data-tri]'),ro=el.closest('[data-tro]');
   if(bi){const b=e.blq[+bi.dataset.tri];if(!b)return;if(k==='pc')b.pc=el.value;else if(k==='ini'||k==='fin')b[k]=el.value?el.value.slice(0,5):''}
   else if(ro){const d=ro.dataset.tro;const x=e.rows[d];if(!x)return;
-    if(k==='as'){x.as=el.checked;if(x.as)x.mot='';else{x.alt=false;for(const b of e.blq)b.dnis=b.dnis.filter(z=>z!==d)}}
+    if(k==='as'){x.as=el.checked;if(x.as)x.mot='';else x.alt=false}
     else if(k==='mot')x.mot=el.value;else if(k==='alt')x.alt=el.checked}
   trDraw()}
 async function trEdSave(id){const t=TD.docs.get(id);if(!t||!TR.ed||!['env','rev'].includes(t.st)||!trEdOk()||TR.busy)return;

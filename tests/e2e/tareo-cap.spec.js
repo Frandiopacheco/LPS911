@@ -1,4 +1,5 @@
-// Tareo del capataz en el celular (fase 1, docs/ia/tareo.md «Contrato de F1»): asistencia, trabajos por bloques, foto y envío.
+// Tareo del capataz en el celular (docs/ia/tareo.md «Contrato de F1» y «Mejoras del capataz (oct 2026)»):
+// asistencia explícita, trabajos por bloques con atajos, cruces, partidas bloqueadas, foto y envío.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
 
@@ -14,11 +15,13 @@ const EXTRA = [
   ['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true, ord: 1 }],
   ['tpc', 'p10_06', { cod: '10.06', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Vaciado de concreto', und: 'm3', act: true, ord: 2 }],
   ['tpc', 'p20_01', { cod: '20.01', grp: '20', grpN: 'ARQUITECTURA', nom: 'Tarrajeo de muros', und: 'm2', act: true, ord: 3 }],
+  ['tpc', 'p30_01', { cod: '30.01', grp: '30', grpN: 'VARIOS', nom: 'Andamios', und: 'glb', act: true, ord: 4, bloq: true }],
 ];
+const dbDoc = (page, id = ID) => page.evaluate(i => window.__dbGet('tareo', i) || {}, id);
 /* foto de prueba: PNG pequeño dibujado en el navegador */
 const png = async page => Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 40; c.height = 30; const g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 40, 30); return c.toDataURL('image/png').split(',')[1]; }), 'base64');
 
-test('capataz: asistencia, dos trabajos, foto obligatoria, envío y reapertura', async ({ page }) => {
+test('capataz: asistencia explícita, no vino ↔ vino conserva horas, foto, envío y reapertura', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   page.on('dialog', d => d.accept());
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: EXTRA });
@@ -26,25 +29,40 @@ test('capataz: asistencia, dos trabajos, foto obligatoria, envío y reapertura',
   const root = page.locator('#tcRoot');
   await expect(root).toBeVisible();
 
-  // paso 1: su cuadrilla precargada (solo los suyos), todos «vino»
+  // paso 1: su cuadrilla (solo los suyos), numerada y nadie marcado
   const rows = root.locator('.tc-ob');
   await expect(rows).toHaveCount(4);
   await expect(root).not.toContainText('ZEGARRA');
   await expect(root.locator('.tc-date.on')).toContainText('Hoy');
+  await expect(root.locator('.tc-ob.sin')).toHaveCount(4);
+  await expect(root.locator('.tc-n').first()).toHaveText('1');
+  await expect(root.locator('#tcCnt')).toHaveText('Marcados 0 de 4');
   // botones grandes para el dedo
-  expect((await root.locator('.tc-as').first().boundingBox()).height).toBeGreaterThanOrEqual(44);
-  // Daniel faltó por descanso médico
+  expect((await root.locator('.tc-v').first().boundingBox()).height).toBeGreaterThanOrEqual(44);
+  // sin marcar no pasa al paso 2: señala a quién falta
+  await expect(root.locator('.tc-foot [data-tcs="2"]')).toContainText('Falta marcar a 4');
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('¿Quién vino?');
+  await expect(root.locator('.tc-ob.need')).toHaveCount(4);
+  // Daniel no vino por descanso médico
   const dan = root.locator('.tc-ob[data-dni="40000004"]');
-  await dan.locator('[data-tca="as"]').click();
+  await dan.locator('[data-tca="novino"]').click();
   await expect(dan).toHaveClass(/off/);
   await expect(dan).toContainText('Elige el motivo');
   await dan.locator('[data-tca="mot"][data-v="DM"]').click();
   await expect(dan.locator('.tc-mot.on')).toContainText('DM');
+  await expect(root.locator('#tcCnt')).toHaveText('Marcados 1 de 4');
+  // «Todos vinieron» marca a los que faltan, sin tocar a Daniel
+  await root.locator('[data-tca="todos"]').click();
+  await expect(root.locator('#tcCnt')).toHaveText('Marcados 4 de 4');
+  await expect(root.locator('.tc-ob.si')).toHaveCount(3);
+  await expect(dan).toHaveClass(/off/);
+  await expect(root.locator('[data-tca="todos"]')).toHaveCount(0);
   // Ana trabajó en altura
   await root.locator('.tc-ob[data-dni="40000001"] input[data-tca="alt"]').check();
 
   // se guarda solo como borrador
-  await expect.poll(() => page.evaluate(id => (window.__dbGet('tareo', id) || {}).st, ID)).toBe('bor');
+  await expect.poll(async () => (await dbDoc(page)).st).toBe('bor');
   await expect(root.locator('#tcSt')).toHaveText('Guardado');
 
   // paso 2: mañana a todos (encofrado)
@@ -58,11 +76,14 @@ test('capataz: asistencia, dos trabajos, foto obligatoria, envío y reapertura',
   await expect(root.locator('.tc-pp.on')).toHaveCount(3); // los 3 que vinieron
   await root.locator('[data-tca="edOk"]').click();
   await expect(root.locator('.tc-blq')).toHaveCount(1);
-  // a todos les faltan horas: barras en rojo
+  // a todos les faltan horas: en rojo, con su línea de tiempo
   await expect(root.locator('.tc-bar.bad')).toHaveCount(3);
+  await expect(root.locator('.tc-bar[data-dni="40000001"] .tc-seg')).toHaveCount(1);
 
-  // tarde: tarrajeo, sin Carlos
+  // tarde: tarrajeo, sin Carlos (el nuevo trabajo ya empieza después del refrigerio)
   await root.locator('[data-tca="new"]').click();
+  await expect(root.locator('#tcIni')).toHaveValue('13:00');
+  await expect(root.locator('#tcFin')).toHaveValue('17:00');
   await root.locator('#tcPcQ').fill('20.01');
   await root.locator('[data-tca="pc"][data-v="p20_01"]').click();
   await root.locator('[data-tca="sc"][data-v="tar"]').click();
@@ -73,24 +94,43 @@ test('capataz: asistencia, dos trabajos, foto obligatoria, envío y reapertura',
   await expect(root.locator('.tc-bar.ok')).toHaveCount(2);
   await expect(root.locator('.tc-bar[data-dni="40000003"]')).toHaveClass(/bad/);
 
+  // Ana «no vino»: sigue en sus trabajos (tachada) con 0 h; al volver a «vino» recupera sus horas
+  await root.locator('.tc-foot [data-tcs="1"]').click();
+  const ana = root.locator('.tc-ob[data-dni="40000001"]');
+  await ana.locator('[data-tca="novino"]').click();
+  await ana.locator('[data-tca="mot"][data-v="FA"]').click();
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await expect(root.locator('.tc-bar[data-dni="40000001"]')).toHaveCount(0);
+  await expect(root.locator('.tc-blq').first()).toContainText('no vino');
+  await root.locator('.tc-blq').first().locator('[data-tca="edit"]').click();
+  await expect(root.locator('.tc-pp.nv')).toContainText('no vino');
+  await root.locator('[data-tca="edCancel"]').click();
+  await expect.poll(async () => { const d = await dbDoc(page); const a = (d.rows || {})['40000001'] || {}; return [a.as, a.trab, ((d.blq || [])[0] || {}).dnis?.includes('40000001')]; }).toEqual([false, 0, true]);
+  await root.locator('.tc-foot [data-tcs="1"]').click();
+  await ana.locator('[data-tca="vino"]').click();
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await expect(root.locator('.tc-bar[data-dni="40000001"]')).toHaveClass(/ok/);
+  await expect(root.locator('.tc-bar[data-dni="40000001"]')).toContainText(/8[.,]5 h/);
+
   // paso 3: sin foto no se puede enviar
   await root.locator('.tc-foot [data-tcs="3"]').click();
   const send = root.locator('#tcSend');
   await expect(send).toBeDisabled();
   await expect(root).toContainText('Toma una foto del formato');
+  await expect(root.locator('.tc-sum .tc-tl')).toHaveCount(3);
   await root.locator('#tcFile').setInputFiles({ name: 'formato.png', mimeType: 'image/png', buffer: await png(page) });
   await expect(root.locator('.tc-th')).toHaveCount(1);
   await expect(send).toBeEnabled();
   await expect(send).toHaveText('Enviar tareo');
   await send.click();
 
-  await expect.poll(() => page.evaluate(id => (window.__dbGet('tareo', id) || {}).st, ID)).toBe('env');
-  const doc = await page.evaluate(id => window.__dbGet('tareo', id), ID);
+  await expect.poll(async () => (await dbDoc(page)).st).toBe('env');
+  const doc = await dbDoc(page);
   expect(doc).toMatchObject({ date: HOY, cap: CAP, envBy: CAP });
   expect(doc.hist.map(h => h.a)).toEqual(['env']);
   expect(doc.blq).toHaveLength(2);
   const r = doc.rows;
-  expect(r['40000001']).toMatchObject({ as: true, alt: true, ini: '07:30', fin: '17:00', trab: 8.5, ext: 0, h: { p10_05: 4.5, p20_01: 4 } });
+  expect(r['40000001']).toMatchObject({ as: true, mot: '', ini: '07:30', fin: '17:00', trab: 8.5, ext: 0, h: { p10_05: 4.5, p20_01: 4 } });
   expect(r['40000002']).toMatchObject({ as: true, alt: false, trab: 8.5, h: { p10_05: 4.5, p20_01: 4 } });
   expect(r['40000003']).toMatchObject({ as: true, ini: '07:30', fin: '12:00', trab: 4.5, ext: 0, h: { p10_05: 4.5 } });
   expect(r['40000004']).toMatchObject({ as: false, mot: 'DM', trab: 0 });
@@ -111,8 +151,112 @@ test('capataz: asistencia, dos trabajos, foto obligatoria, envío y reapertura',
   await expect(root.locator('.tc-steps')).toBeVisible();
   await expect(root.locator('.tc-foot')).toBeVisible();
   await root.locator('[data-tcs="1"]').first().click();
-  await expect(root.locator('.tc-ob [data-tca="as"]').first()).toBeEnabled();
+  await expect(root.locator('.tc-ob [data-tca="vino"]').first()).toBeEnabled();
   noErrors(errors, 'tareo del capataz');
+});
+
+test('capataz: atajos +2 h / +3 h / Extendido, cruce al crear resuelto con «Ajustar» y partida bloqueada oculta', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  page.on('dialog', d => d.accept());
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: EXTRA });
+  const root = page.locator('#tcRoot');
+  await root.locator('[data-tca="todos"]').click();
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+
+  // partida bloqueada por costos: no aparece en el buscador
+  await root.locator('[data-tca="new"]').click();
+  await root.locator('#tcPcQ').fill('andam');
+  await expect(root.locator('#tcPcL')).toContainText('Ninguna partida');
+  await root.locator('#tcPcQ').fill('30.01');
+  await expect(root.locator('[data-tca="pc"]')).toHaveCount(0);
+  await root.locator('#tcPcQ').fill('encof');
+  await root.locator('[data-tca="pc"][data-v="p10_05"]').click();
+  // +2 h desde el inicio de la jornada
+  await root.locator('[data-tca="sc"][data-v="p2"]').click();
+  await expect(root.locator('#tcIni')).toHaveValue('07:30');
+  await expect(root.locator('#tcFin')).toHaveValue('09:30');
+  await root.locator('[data-tca="edOk"]').click();
+
+  // un trabajo que se cruza: chips en rojo con el otro horario, y «Ajustar este» lo arregla en un toque
+  await root.locator('[data-tca="new"]').click();
+  await root.locator('#tcPcQ').fill('10.06');
+  await root.locator('[data-tca="pc"][data-v="p10_06"]').click();
+  await root.locator('#tcIni').fill('08:00');
+  await root.locator('#tcFin').fill('12:00');
+  await expect(root.locator('.tc-pp.cx')).toHaveCount(4);
+  await expect(root.locator('.tc-pp.cx').first()).toContainText('se cruza con 10.05 7:30–9:30');
+  await root.locator('[data-tca="edOk"]').click();
+  await expect(root.locator('.tc-errb')).toContainText('se cruzan');
+  await root.locator('[data-tca="cxEste"]').click();
+  await expect(root.locator('#tcIni')).toHaveValue('09:30');
+  await expect(root.locator('.tc-pp.cx')).toHaveCount(0);
+  await root.locator('[data-tca="edOk"]').click();
+  await expect(root.locator('.tc-blq')).toHaveCount(2);
+
+  // +3 h empieza donde terminó el último (12:00) y salta el refrigerio
+  await root.locator('[data-tca="new"]').click();
+  await expect(root.locator('[data-tca="sc"][data-v="p3"]')).toContainText('13:00–16:00');
+  // Extendido: desde el fin de la jornada hasta las 19:00 (editable)
+  await root.locator('#tcPcQ').fill('20.01');
+  await root.locator('[data-tca="pc"][data-v="p20_01"]').click();
+  await root.locator('[data-tca="sc"][data-v="ext"]').click();
+  await expect(root.locator('#tcIni')).toHaveValue('17:00');
+  await expect(root.locator('#tcFin')).toHaveValue('19:00');
+  await root.locator('#tcFin').fill('18:30');
+  await root.locator('[data-tca="edOk"]').click();
+  await expect.poll(async () => ((await dbDoc(page)).blq || []).map(b => `${b.pc} ${b.ini}-${b.fin}`)).toEqual(['p10_05 07:30-09:30', 'p10_06 09:30-12:00', 'p20_01 17:00-18:30']);
+  noErrors(errors, 'atajos y cruces');
+});
+
+test('capataz: cruce en la línea de tiempo, «Revisar y enviar» lleva al cruce y la partida bloqueada no deja enviar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  page.on('dialog', d => d.accept());
+  const row = (ape, nom) => ({ ape, nom, cat: 'OP', cua: '', as: true, mot: '', alt: false, ini: '', fin: '', h: {}, trab: 0, ext: 0 });
+  const extra = [...EXTRA.filter(x => x[0] !== 'tper'), ob('40000001', 'ALVA ROJAS', 'ANA', CAP), ob('40000002', 'BRAVO DIAZ', 'BETO', CAP),
+    ['tareo', ID, { date: HOY, cap: CAP, st: 'bor', foto: [], hist: [], rows: { '40000001': row('ALVA ROJAS', 'ANA'), '40000002': row('BRAVO DIAZ', 'BETO') },
+      blq: [{ id: 'a', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['40000001', '40000002'] },
+        { id: 'b', pc: 'p10_06', ini: '11:00', fin: '17:00', dnis: ['40000001'] },
+        { id: 'c', pc: 'p30_01', ini: '13:00', fin: '17:00', dnis: ['40000002'] }] }]];
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  // la partida bloqueada se ve en rojo
+  await expect(root.locator('.tc-blq[data-bid="c"]')).toHaveClass(/bad/);
+  await expect(root.locator('.tc-blq[data-bid="c"]')).toContainText('Partida bloqueada por costos: cámbiala');
+  // cruce marcado en la línea de tiempo de Ana
+  const ana = root.locator('.tc-bar[data-dni="40000001"]');
+  await expect(ana.locator('.tc-cxb')).toHaveCount(1);
+  await expect(ana.locator('.tc-cxl')).toContainText('Se cruzan 10.05 7:30–12:00 y 10.06 11:00–17:00');
+  // «Revisar y enviar» no avanza: abre las opciones del primer cruce
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('¿En qué trabajaron?');
+  await expect(ana.locator('.tc-cxp')).toBeVisible();
+  await ana.locator('[data-tca="tlIni"]').click();
+  await expect(ana.locator('.tc-cxb')).toHaveCount(0);
+  await expect.poll(async () => (await dbDoc(page)).blq.find(b => b.id === 'b').ini).toBe('12:00');
+  // ahora lleva a la partida bloqueada; se cambia y recién pasa al paso 3
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('¿En qué trabajaron?');
+  await root.locator('.tc-blq[data-bid="c"] [data-tca="edit"]').click();
+  await expect(root.locator('#tcPcQ')).toBeVisible(); // la partida bloqueada se quita: hay que elegir otra
+  await root.locator('#tcPcQ').fill('20.01');
+  await root.locator('[data-tca="pc"][data-v="p20_01"]').click();
+  await root.locator('[data-tca="edOk"]').click();
+  await expect(root.locator('.tc-blq.bad')).toHaveCount(0);
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('Revisar y enviar');
+  await expect(root.locator('#tcSend')).toHaveText('Falta la foto');
+  noErrors(errors, 'cruce en la línea de tiempo');
+});
+
+test('capataz sin obreros asignados: mensaje claro', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: EXTRA.filter(x => x[0] !== 'tper' || x[2].cap !== CAP) });
+  const root = page.locator('#tcRoot');
+  await expect(root.locator('.tc-none')).toContainText('No tienes obreros asignados');
+  await expect(root.locator('.tc-none')).toContainText('Pide a la oficina que te los asigne en Personal');
+  await expect(root.locator('[data-tca="addOn"]')).toBeVisible();
+  noErrors(errors, 'sin obreros');
 });
 
 test('capataz: copia los trabajos de ayer y agrega un obrero de otro capataz', async ({ page }) => {
@@ -120,7 +264,8 @@ test('capataz: copia los trabajos de ayer y agrega un obrero de otro capataz', a
   page.on('dialog', d => d.accept());
   const AYER = '2026-09-30';
   const extra = [...EXTRA, ['tareo', `${AYER}_${CAP}`, { date: AYER, cap: CAP, st: 'env', rows: {}, foto: [], hist: [],
-    blq: [{ id: 'x1', pc: 'p10_06', ini: '07:30', fin: '17:00', dnis: ['40000001', '40000002', '40000003', '40000004'] }] }]];
+    blq: [{ id: 'x1', pc: 'p10_06', ini: '07:30', fin: '17:00', dnis: ['40000001', '40000002', '40000003', '40000004'] },
+      { id: 'x2', pc: 'p30_01', ini: '17:00', fin: '18:00', dnis: ['40000001'] }] }]];
   const errors = await openApp(page, { as: 'tcap', editar: false, extra });
   const root = page.locator('#tcRoot');
   // ayer ya se envió: no se puede elegir
@@ -129,12 +274,14 @@ test('capataz: copia los trabajos de ayer y agrega un obrero de otro capataz', a
   await root.locator('#tcAddQ').fill('zega');
   await root.locator('[data-tca="add"][data-v="40000009"]').click();
   await expect(root.locator('.tc-ob')).toHaveCount(5);
+  await expect(root.locator('.tc-ob[data-dni="40000009"]')).toHaveClass(/si/); // agregado = vino
+  await root.locator('[data-tca="todos"]').click();
   await root.locator('.tc-foot [data-tcs="2"]').click();
   await root.locator('[data-tca="copy"]').click();
-  await expect(root.locator('.tc-blq')).toHaveCount(1);
+  await expect(root.locator('.tc-blq')).toHaveCount(1); // la de andamios (bloqueada) no se copia
   await expect(root.locator('.tc-bar.ok')).toHaveCount(4);
   await expect(root.locator('.tc-bar[data-dni="40000009"]')).toHaveClass(/bad/);
-  await expect.poll(() => page.evaluate(id => ((window.__dbGet('tareo', id) || {}).blq || []).length, ID)).toBe(1);
+  await expect.poll(async () => ((await dbDoc(page)).blq || []).length).toBe(1);
   // en PC (ver como capataz) se ve centrado, como celular
   await page.setViewportSize({ width: 1280, height: 800 });
   const w = (await root.boundingBox()).width;
