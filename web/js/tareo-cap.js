@@ -1,7 +1,8 @@
 "use strict";
 /* LPS 911 · Módulo Tareo: pantalla del capataz del tareo (rol `tcap`) en el celular.
    Contrato en docs/ia/tareo.md («Contrato "horas por cantidad"» e «Implementación de la grilla — capataz»). Cuatro pasos, como el
-   formato físico: ¿quién vino? · trabajos del día (partidas) · horas (grilla: obreros en columnas, partidas en filas) · revisar y enviar.
+   formato físico: ¿quién vino? · trabajos del día (partidas) · horas (grilla: obreros en filas, partidas en columnas) · revisar y
+   enviar (la misma grilla en solo lectura). Ver también «Grilla como el formato — capataz».
    Los tareos nuevos son modo:'hrs' (rows[dni].h = {pcId: horas}). Un tareo antiguo con bloques (blq, sin modo) se ve en solo lectura
    y, si aún se puede editar (borrador o reabierto), se pasa a horas por partida con un botón (conserva las horas de cada obrero).
    Guarda el borrador solo (≈1 s después del último cambio) en tareo/{fecha}_{capId}; con la persistencia de Firestore funciona sin señal.
@@ -180,6 +181,8 @@ function renderTCap(main){let want=TCS.date&&TCS.unsub?TCS.date:todayIso(),st=0;
 /** ¿se está en la grilla de horas (paso 3, editable)? Con el celular echado ocupa toda la pantalla (CSS #tcRoot.g3). */
 const tcG3=()=>TCS.step===3&&!!TCS.doc&&!tcRO()&&!tcLegacy(TCS.doc);
 function tcDraw(){const root=$('#tcRoot');if(!root)return;root.classList.toggle('g3',tcG3());
+  /* con la grilla de solo lectura (paso 4, enviado o antiguo), echado usa todo el ancho (CSS #tcRoot.g4) */
+  root.classList.toggle('g4',!!TCS.doc&&(TCS.step===4||tcRO()||tcLegacy(TCS.doc)));
   /* sin cambios no se redibuja: así un toque no se pierde cuando llega la confirmación de la base */
   const html=tcHtml();if(root.__tch===html&&root.firstChild){tcStatus();tcFocusNow();return}
   const ae=document.activeElement;const fk=ae&&root.contains(ae)&&ae.dataset?ae.dataset.fk:null;const ss=fk?ae.selectionStart:null,se=fk?ae.selectionEnd:null;
@@ -309,34 +312,43 @@ function tcPcList(){const q=tFold(TCS.pcQ);const use=tcUse();const have=new Set(
   if(q&&!L.length)return`<p class="tc-hint">Ninguna partida con «${esc(TCS.pcQ)}».</p>`;
   return hint+L.slice(0,q?20:8).map(x=>`<button type="button" class="tc-opt" data-tca="pc" data-v="${esc(x.id)}"><b>${esc(x.cod)}</b><span>${esc(x.nom)}${x.grpN?` <em>· ${esc(x.grpN)}</em>`:''}</span></button>`).join('')}
 
-/* paso 3: grilla de horas — obreros (los que vinieron) en columnas, partidas en filas, total por obrero abajo */
+/* paso 3: grilla de horas como el formato físico — obreros (los que vinieron) en filas, partidas en columnas, total por obrero a la
+   derecha y total por partida abajo (docs/ia/tareo.md «Grilla como el formato — capataz») */
 function tcRotX(){if(TCS.rotX==null){try{TCS.rotX=localStorage.getItem('lps.tcrot')==='1'}catch(e){TCS.rotX=false}}return TCS.rotX}
 /** «Copiar horas de ayer»: solo si el tareo anterior es de horas, tiene todas las partidas de hoy y todos los que vinieron hoy
     también vinieron ese día (con horas). Se copian solo las horas de las partidas de hoy. */
 function tcPrevH(D){const pv=TCS.prev;if(!pv||!pv.hrs)return null;const P=D.pcs||[];const pres=tcPres();
   if(!pres.length||!P.length||P.some(pc=>!pv.pcs.includes(pc)))return null;
   if(!pres.every(([d])=>pv.rows[d]&&pv.rows[d].as===true&&tHrsTot(pv.rows[d])>0))return null;return pv}
+/** N° de cada obrero: su lugar en la lista completa (el mismo del paso 1) */
+const tcNum=()=>new Map(tcRows().map(([d],i)=>[d,i+1]));
+/** color y texto del total de un obrero: verde = jornada exacta · ámbar = menos («faltan 4,5») o más («+2 HE») · rojo = 0 h o > 16 */
+function tcTotKS(t,J){return[!t||t>T_HMAX?'bad':J.nl?'warn':Math.abs(t-J.h)<0.001?'ok':'warn',
+  !t?'sin horas':t>T_HMAX?'revisa':J.nl?'todo extra':t<J.h?`faltan ${tHtxt(J.h-t)}`:t>J.h?`+${tHtxt(t-J.h)} HE`:'completo']}
+/** encabezado de una partida: código y nombre abreviado (tocándolo se ve el nombre completo) */
+const tcPcTh=pc=>`<div class="tc-gpt" role="button" tabindex="0" data-tcpc="${esc(pc)}" title="${esc(tcPcName(pc))}"><b>${esc(tcPcCod(pc))}</b><span>${esc(tcPcNom(pc))}</span></div>`;
 function tcStep3(D,E){const P=D.pcs||[];const pres=tcPres();const J=tcJor(TCS.date);
   const hd=`<div class="tc-h tc-gh"><h2>Horas</h2><span id="tcJorH">${J.nl?'Día no laborable: todas las horas son extra':`Jornada del día: ${esc(tcH(J.h))}`}</span></div>`;
   if(!pres.length)return hd+`<p class="tc-empty">Nadie vino: no hay horas que poner.</p>`;
   if(!P.length)return hd+`<div class="callout warnc">Primero agrega los trabajos del día.</div><button type="button" class="ib pri tc-big tc-w" data-tcs="2">Ir a trabajos del día</button>`;
-  const bad=new Set(E.filter(e=>e.dni&&TC_K3.includes(e.k)).map(e=>e.dni));
+  const bad=new Set(E.filter(e=>e.dni&&TC_K3.includes(e.k)).map(e=>e.dni));const N=tcNum();
   const empty=pres.every(([,r])=>!tHrsTot(r));const pv=empty?tcPrevH(D):null;
-  const rot=!tcRotX()&&pres.length>2?`<div class="tc-rot" id="tcRot" role="note"><span>📱↻ Gira el celular para ver más columnas.</span><button type="button" class="kx" data-tca="rotX" aria-label="Cerrar aviso">&times;</button></div>`:'';
+  const rot=!tcRotX()&&P.length>3?`<div class="tc-rot" id="tcRot" role="note"><span>📱↻ Gira el celular para ver más partidas.</span><button type="button" class="kx" data-tca="rotX" aria-label="Cerrar aviso">&times;</button></div>`:'';
   const cur=TCS.cell||{};
-  const th=pres.map(([d])=>`<th class="tc-gn${bad.has(d)?' bad':''}${cur.dni===d?' sel':''}" scope="col" data-dni="${esc(d)}">${tcNmT(d)}</th>`).join('');
-  const rows=P.map(pc=>{const bq=tcBloq(pc);
-    return`<tr data-pc="${esc(pc)}"${bq?' class="bq"':''}><th class="tc-gp${cur.pc===pc?' sel':''}" scope="row"><div class="tc-gpi"><div class="tc-gpt"><b>${esc(tcPcCod(pc))}</b><span>${esc(tcPcNom(pc))}</span></div>
-      ${bq?`<em>Bloqueada</em>`:`<button type="button" class="tc-gall" data-tca="rowAll" title="Llena a cada uno lo que le falta para su jornada">Toda la jornada</button>`}</div></th>
-      ${pres.map(([d,r])=>{const v=tcHv(r,pc);const s=cur.dni===d&&cur.pc===pc;
-        return`<td><button type="button" class="tc-gcell${v?' v':''}${s?' sel':''}" data-tca="cell" data-dni="${esc(d)}" data-pc="${esc(pc)}"${bq&&!v?' disabled':''} aria-label="${esc(tcSN(d))}, ${esc(tcPcCod(pc))}: ${v?esc(tHtxt(v))+' horas':'sin horas'}">${v?esc(tHtxt(v)):''}</button></td>`}).join('')}</tr>`}).join('');
-  const tot=pres.map(([d,r])=>{const t=tHrsTot(r);const k=!t||t>T_HMAX?'bad':J.nl?'warn':Math.abs(t-J.h)<0.001?'ok':'warn';
-    const sub=!t?'sin horas':t>T_HMAX?'revisa':J.nl?'todo extra':t<J.h?`faltan ${tHtxt(J.h-t)}`:t>J.h?`+${tHtxt(t-J.h)} HE`:'completo';
-    return`<td class="tc-gt ${k}" data-dni="${esc(d)}"><b>${esc(tHtxt(t))}</b><small>${esc(sub)}</small></td>`}).join('');
+  const th=P.map(pc=>{const bq=tcBloq(pc);
+    return`<th class="tc-gp${cur.pc===pc?' sel':''}${bq?' bq':''}" scope="col" data-pc="${esc(pc)}">${tcPcTh(pc)}
+      ${bq?`<em>Bloqueada</em>`:`<button type="button" class="tc-gall" data-tca="pcAll" title="Llena a cada uno lo que le falta para su jornada" aria-label="Toda la jornada en ${esc(tcPcCod(pc))}">Toda la jornada</button>`}</th>`}).join('');
+  const rows=pres.map(([d,r])=>{const t=tHrsTot(r);const[k,sub]=tcTotKS(t,J);
+    return`<tr data-dni="${esc(d)}"><th class="tc-gn${bad.has(d)?' bad':''}${cur.dni===d?' sel':''}" scope="row" data-dni="${esc(d)}"><span class="tc-gnn">${N.get(d)||''}</span>${tcNmT(d)}</th>
+      ${P.map(pc=>{const v=tcHv(r,pc);const s=cur.dni===d&&cur.pc===pc;
+        return`<td><button type="button" class="tc-gcell${v?' v':''}${s?' sel':''}" data-tca="cell" data-dni="${esc(d)}" data-pc="${esc(pc)}"${tcBloq(pc)&&!v?' disabled':''} aria-label="${esc(tcSN(d))}, ${esc(tcPcCod(pc))}: ${v?esc(tHtxt(v))+' horas':'sin horas'}">${v?esc(tHtxt(v)):''}</button></td>`}).join('')}
+      <td class="tc-gt ${k}" data-dni="${esc(d)}"><b>${esc(tHtxt(t))}</b><small>${esc(sub)}</small></td></tr>`}).join('');
+  const all=tR2(pres.reduce((s,[,r])=>s+tHrsTot(r),0));
+  const foot=P.map(pc=>{const h=tR2(pres.reduce((s,[,r])=>s+tcHv(r,pc),0));return`<td class="tc-gs" data-pc="${esc(pc)}">${h?esc(tHtxt(h)):'—'}</td>`}).join('');
   return hd+rot+(pv?`<button type="button" class="ib tc-big tc-w" data-tca="copyH">Copiar horas del ${esc(TC_DN[pd(pv.date).getUTCDay()].toLowerCase())} ${esc(fmtD(pv.date))}</button>`:'')
-   +`<div class="tc-gw" id="tcGrid"><table class="tc-g"><thead><tr><th class="tc-gc" scope="col">Partida</th>${th}</tr></thead><tbody>${rows}</tbody>
-     <tfoot><tr><th class="tc-gp tc-gtl" scope="row">Total</th>${tot}</tr></tfoot></table></div>
-   <p class="tc-hint tc-ghint">Toca una casilla para poner las horas. Verde: jornada completa · ámbar: menos o con horas extra.</p>`}
+   +`<div class="tc-gw" id="tcGrid"><table class="tc-g"><thead><tr><th class="tc-gc" scope="col">N° · Obrero</th>${th}<th class="tc-gtc" scope="col">Total</th></tr></thead><tbody>${rows}</tbody>
+     <tfoot><tr><th class="tc-gtl" scope="row">Total partida</th>${foot}<td class="tc-gs tc-gss">${esc(tHtxt(all))}</td></tr></tfoot></table></div>
+   <p class="tc-hint tc-ghint">Toca una casilla para poner las horas. Total: verde = jornada completa · ámbar = menos o con horas extra.</p>`}
 /** editor rápido de una celda (hoja abajo): −/+ ½ hora, horas rápidas, «Resto de su jornada», borrar y listo */
 function tcCellSheet(D){const c=TCS.cell;const r=(D.rows||{})[c.dni];if(!r||!tcVino(r)||!(D.pcs||[]).includes(c.pc)){TCS.cell=null;return''}
   const v=tcHv(r,c.pc);const t=tHrsTot(r);const J=tcJor(TCS.date);const resto=tR2(Math.max(0,J.full-t));const bq=tcBloq(c.pc);
@@ -347,22 +359,18 @@ function tcCellSheet(D){const c=TCS.cell;const r=(D.rows||{})[c.dni];if(!r||!tcV
    <div class="tc-csq">${TC_QH.map(n=>`<button type="button" class="tc-qh${v===n?' on':''}" data-tca="cellSet" data-v="${n}">${esc(tHtxt(n))}</button>`).join('')}</div>`}
    <div class="tc-csa">${!bq&&resto>0?`<button type="button" class="ib pri tc-big" data-tca="cellSet" data-v="${tR2(v+resto)}">Resto de su jornada → ${esc(tcH(v+resto))}</button>`:''}${v?`<button type="button" class="ib tc-big" data-tca="cellSet" data-v="0">Borrar</button>`:''}<button type="button" class="ib tc-big" data-tca="cellX">Listo</button></div></div>`}
 
-/* paso 4: revisar y enviar (y vista de solo lectura, también de los tareos antiguos) */
-function tcStep4(D,E,ro){const C=tcCalc(D);const R=C.rows||{};const rows=tcRows();const bad=new Set(E.filter(e=>e.dni).map(e=>e.dni));const old=!tEsHrs(D);
+/* paso 4: revisar y enviar (y vista de solo lectura, también de los tareos antiguos). La misma grilla que el paso 3, en solo lectura:
+   los que vinieron arriba con sus horas, los que no vinieron (o sin marcar) al final atenuados con su motivo. Editable: tocar una
+   celda lleva al paso 3 en esa celda. */
+function tcStep4(D,E,ro){const C=tcCalc(D);const R=C.rows||{};const rows=tcRows();const bad=new Set(E.filter(e=>e.dni).map(e=>e.dni));
   const tot=rows.reduce((a,[d])=>{const r=R[d]||{};if(tcVino(r)){a.v++;a.h+=+r.trab||0;a.e+=+r.ext||0}else if(tcFalto(r))a.f++;else a.s++;return a},{v:0,f:0,s:0,h:0,e:0});
-  const list=rows.map(([dni,r0])=>{const r=R[dni]||r0;const v=tcVino(r),f=tcFalto(r);
-    const when=old?`<span class="mono">${esc(tcT(r.ini)||'—')}–${esc(tcT(r.fin)||'—')}</span> · `:r.sal?`salió ${esc(tcT(r.sal))} · `:'';
-    return`<div class="tc-sum${bad.has(dni)?' bad':''}${v?'':' off'}" data-dni="${esc(dni)}"><div class="tc-wn"><b>${esc(tcFN(dni))}</b>
-     <span>${v?`${when}${esc(tcH(r.trab))}${r.ext?` · <em class="tc-ext">${esc(tcH(r.ext))} extra</em>`:''}${r.alt?' · <em class="tc-altm">altura</em>':''}`
-      :f?`No vino${r.mot?' · '+esc((TC_MOT.find(m=>m[0]===r.mot)||['',''])[1]||r.mot):''}`:'Sin marcar si vino'}</span>
-     ${v&&r.h&&Object.keys(r.h).length?`<span class="tc-pcs">${Object.entries(r.h).map(([pc,h])=>`${esc(tcPcCod(pc))}: ${esc(tcH(h))}`).join(' · ')}</span>`:''}</div></div>`}).join('');
   const fotos=Array.isArray(D.foto)?D.foto:[];const FP=ro?[]:Object.entries(TCS.fp).filter(([id])=>!fotos.includes(id));
   const ef=E.filter(e=>e.k!=='foto'&&e.k!=='fotp');
   const errs=ef.length?`<div class="callout tc-errs"><b>Antes de enviar, corrige:</b><ul>${ef.map(e=>`<li>${esc(tcErrMsg(e))}</li>`).join('')}</ul></div>`:'';
   const W=ro?[]:tcWarns(D);
   const warns=W.length?`<div class="callout tc-warns" id="tcWarns"><b>Avisos (puedes enviar igual):</b><ul>${W.map(e=>`<li>${esc(tcErrMsg(e))}</li>`).join('')}</ul></div>`:'';
   const FPL={up:'Subiendo…',pend:'Pendiente de subir',err:'No se subió'};
-  /* la foto va arriba, antes de la lista (auditoría 2, UX4): «Falta la foto» lleva aquí y abre la cámara */
+  /* la foto va arriba, antes de la grilla (auditoría 2, UX4): «Falta la foto» lleva aquí y abre la cámara */
   return`${ro?'':`<div class="tc-h"><h2>Revisar y enviar</h2><span id="tcTot3">${tot.v} vinieron · ${tot.f} no vinieron${tot.s?` · ${tot.s} sin marcar`:''} · ${esc(tcH(tot.h))}${tot.e?' · '+esc(tcH(tot.e))+' extra':''}</span></div>`}
    ${errs}${warns}
    <div class="tc-card${TCS.fotoHi&&!ro?' tc-hi':''}" id="tcFotoC"><div class="tc-lab">Foto del formato firmado${ro?'':' <span>obligatoria</span>'}</div>
@@ -373,7 +381,33 @@ function tcStep4(D,E,ro){const C=tcCalc(D);const R=C.rows||{};const rows=tcRows(
     ${FP.some(([,P])=>P.st==='pend')?`<div class="tc-note" id="tcFpNote">Sin señal: la foto ${FP.some(([,P])=>P.mem)?'está solo en la memoria de la app; si la cierras, tendrás que tomarla de nuevo':'quedó guardada en el celular'}. Se subirá sola al volver la señal; recién entonces podrás enviar.</div>`:''}
     ${FP.some(([,P])=>P.st==='err')?`<div class="tc-err">${esc((FP.find(([,P])=>P.st==='err')[1].msg)||'La foto no se pudo subir.')} Toca «Reintentar» o tómala de nuevo.</div>`:''}
     ${!ro&&!fotos.length&&!FP.length?`<div class="tc-err">Toma una foto del formato con las firmas de todos.</div>`:''}</div>
-   <div class="tc-list">${list}</div>`}
+   ${tcGridRO(D,C,bad,ro)}`}
+/** grilla de solo lectura (paso 4 y tareos enviados o antiguos): obreros en filas, partidas en columnas, total y HE por obrero,
+    total por partida; (A) = altura. Si se puede editar, cada celda de un presente es un botón que lleva a esa celda del paso 3. */
+function tcGridRO(D,C,bad,ro){const R=C.rows||{};const old=!tEsHrs(D);const J=tcJor(TCS.date);const N=tcNum();const edit=!ro&&!old;
+  /* partidas: las del día en su orden (antiguo: las de sus bloques) y, por si acaso, las que tengan horas sin estar en la lista */
+  const P=[...(old?(Array.isArray(D.blq)?D.blq:[]).map(k=>k&&k.pc):(D.pcs||[]))].filter(Boolean);
+  for(const r of Object.values(R))if(tcVino(r))for(const pc of Object.keys(r.h||{}))if(tcHv(r,pc))P.push(pc);
+  const pcs=[...new Set(P)];const all=tcRows().map(([d,r0])=>[d,R[d]||r0]);
+  /* los que vinieron primero; al final los que no vinieron y los sin marcar (en el orden de la lista) */
+  const L=[...all.filter(([,r])=>tcVino(r)),...all.filter(([,r])=>!tcVino(r))];
+  if(!L.length)return'';
+  const ml=r=>r.mot?((TC_MOT.find(m=>m[0]===r.mot)||['',r.mot])[1]||r.mot):'';
+  const body=L.map(([d,r])=>{const v=tcVino(r);
+    const sub=v?(old?`${tcT(r.ini)||'—'}–${tcT(r.fin)||'—'}`:r.sal?`salió ${tcT(r.sal)}`:''):'';
+    const nm=`<th class="tc-gn${bad.has(d)?' bad':''}" scope="row" data-dni="${esc(d)}"><span class="tc-gnn">${N.get(d)||''}</span>${tcNmT(d)}${v&&r.alt?' <abbr class="tc-alt-a" title="Trabajo en altura">(A)</abbr>':''}${sub?`<small class="tc-gsub">${esc(sub)}</small>`:''}</th>`;
+    if(!v)return`<tr class="tc-rr off" data-dni="${esc(d)}">${nm}<td class="tc-rmot" colspan="${pcs.length+1}"><span>${tcFalto(r)?`No vino${ml(r)?' · '+esc(ml(r)):''}`:'Sin marcar si vino'}</span></td></tr>`;
+    const t=+r.trab||0,x=+r.ext||0;const k=!t||t>T_HMAX?'bad':J.nl||x>0||t<J.h-0.001?'warn':'ok';
+    const s=!t?'sin horas':t>T_HMAX?'revisa':J.nl?'todo extra':x>0?`+${tHtxt(x)} HE`:t<J.h-0.001?`faltan ${tHtxt(J.h-t)}`:'completo';
+    return`<tr class="tc-rr" data-dni="${esc(d)}">${nm}${pcs.map(pc=>{const h=tcHv(r,pc);const tx=h?esc(tHtxt(h)):'';
+      return`<td>${edit&&(h||!tcBloq(pc))?`<button type="button" class="tc-rc${h?' v':''}" data-tca="go3" data-dni="${esc(d)}" data-pc="${esc(pc)}" aria-label="Editar ${esc(tcSN(d))}, ${esc(tcPcCod(pc))}: ${h?tx+' horas':'sin horas'}">${tx}</button>`:`<span class="tc-rc${h?' v':''}">${tx}</span>`}</td>`}).join('')}
+      <td class="tc-gt ${k}" data-dni="${esc(d)}"><b>${esc(tHtxt(t))}</b><small>${esc(s)}</small></td></tr>`}).join('');
+  const pres=L.filter(([,r])=>tcVino(r));
+  const foot=pcs.map(pc=>{const h=tR2(pres.reduce((s,[,r])=>s+tcHv(r,pc),0));return`<td class="tc-gs" data-pc="${esc(pc)}">${h?esc(tHtxt(h)):'—'}</td>`}).join('');
+  const th=tR2(pres.reduce((s,[,r])=>s+(+r.trab||0),0)),te=tR2(pres.reduce((s,[,r])=>s+(+r.ext||0),0));
+  return`<div class="tc-gw tc-gwr" id="tcGridR"><table class="tc-g tc-gro"><thead><tr><th class="tc-gc" scope="col">N° · Obrero</th>${pcs.map(pc=>`<th class="tc-gp${tcBloq(pc)?' bq':''}" scope="col" data-pc="${esc(pc)}">${tcPcTh(pc)}</th>`).join('')}<th class="tc-gtc" scope="col">Total</th></tr></thead>
+    <tbody>${body}</tbody><tfoot><tr><th class="tc-gtl" scope="row">Total partida</th>${foot}<td class="tc-gs tc-gss"><b>${esc(tHtxt(th))}</b>${te?`<small>${esc(tHtxt(te))} HE</small>`:''}</td></tr></tfoot></table></div>
+   ${edit?`<p class="tc-hint tc-ghint">Toca una casilla para corregir sus horas.</p>`:''}`}
 function tcErrMsg(e){const r=e.dni&&TCS.doc&&TCS.doc.rows&&TCS.doc.rows[e.dni];const m=String(e.msg||'');if(!r||!r.ape||m.includes(r.ape))return m;return tcNm(r)+': '+m}
 
 /* ---------- miniaturas de las fotos ---------- */
@@ -440,6 +474,7 @@ function tcReabSub(){const cap=tcMe();if(TCS.rsub&&TCS.rcap===cap)return;if(TCS.
 /* ---------- acciones ---------- */
 function tcBind(root){
   root.addEventListener('click',e=>{const nmt=e.target.closest('[data-tcnm]');if(nmt&&!e.target.closest('[data-tca="cell"]')){tcNmToast(nmt.dataset.tcnm);return}
+    const tpc=e.target.closest('[data-tcpc]');if(tpc){toast(tcPcName(tpc.dataset.tcpc));return}
     const f1=e.target.closest('[data-tcf1]');if(f1){TCS.f1=f1.dataset.tcf1;tcDraw();return}
     const d=e.target.closest('[data-tcd]');if(d&&!d.disabled){if(d.dataset.tcd!==TCS.date)tcOpen(d.dataset.tcd),tcDraw();return}
     const s=e.target.closest('[data-tcs]');if(s){tcGo(+s.dataset.tcs,!!s.closest('.tc-foot'));return}
@@ -453,6 +488,7 @@ function tcBind(root){
     else if(t.id==='tcQ1'){TCS.q1=t.value;tcDraw()}});
   root.addEventListener('keydown',e=>{if(e.key==='Escape'&&TCS.cell){e.preventDefault();TCS.cell=null;tcDraw();return}
     if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcnm){e.preventDefault();tcNmToast(e.target.dataset.tcnm);return}
+    if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcpc){e.preventDefault();toast(tcPcName(e.target.dataset.tcpc));return}
     if(e.key==='Enter'&&e.target.id==='tcPcQ'){const f=$('#tcPcL [data-tca="pc"]');if(f){e.preventDefault();f.click()}}})}
 /** lleva al primer problema: asistencia (paso 1), trabajos (paso 2), horas de un obrero (paso 3, su columna), foto (paso 4). true si llevó a alguno. */
 function tcFix(E){const D=TCS.doc;if(!D)return false;E=E||tcErrs(D);TCS.cell=null;
@@ -525,8 +561,11 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
   if(a==='cellAdj'||a==='cellSet'){const c=TCS.cell;const r=c&&R[c.dni];if(!r||!tcVino(r))return;
     if(tcBloq(c.pc)&&!(a==='cellSet'&&+b.dataset.v===0))return;
     tcSetH(r,c.pc,a==='cellAdj'?tcHv(r,c.pc)+(+b.dataset.v||0):+b.dataset.v);if(a==='cellSet')TCS.cell=null;tcChg();return}
-  /* «Toda la jornada» de una fila: a cada uno que vino le suma lo que le falta para su jornada */
-  if(a==='rowAll'){const pc=pcOf();if(!pc||tcBloq(pc))return;const J=tcJor(TCS.date);let n=0;
+  /* paso 4: tocar una celda lleva al paso 3 con esa celda abierta */
+  if(a==='go3'){const dni=b.dataset.dni,pc=b.dataset.pc;if(!dni||!pc)return;TCS.step=3;TCS.cell=tcVino(R[dni])&&(D.pcs||[]).includes(pc)?{dni,pc}:null;
+    TCS.foc=`.tc-gcell[data-dni="${CSS.escape(dni)}"][data-pc="${CSS.escape(pc)}"]`;tcDraw();return}
+  /* «Toda la jornada» de una partida (encabezado de su columna): a cada uno que vino le suma lo que le falta para su jornada */
+  if(a==='pcAll'){const pc=pcOf();if(!pc||tcBloq(pc))return;const J=tcJor(TCS.date);let n=0;
     for(const[,r]of tcPres()){const f=tR2(J.full-tHrsTot(r));if(f>0){tcSetH(r,pc,tcHv(r,pc)+f);n++}}
     if(n){tcChg();toast(`${tcPcCod(pc)}: se completó la jornada de ${n} ${n===1?'obrero':'obreros'}.`)}else toast('Todos ya tienen su jornada completa.');return}
   if(a==='copyH'){const pv=tcPrevH(D);if(!pv)return;const P=D.pcs||[];

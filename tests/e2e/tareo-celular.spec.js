@@ -150,7 +150,7 @@ test.describe('PC 1440 × 900: «📱» y «👁 Ver como» en el Tareo', () => 
     const f = await marco(page);
     await expect.poll(() => f.evaluate(() => !!document.querySelector('#tcRoot'))).toBe(true);
     // su tareo de hoy (enviado, con su obrero ALFA)
-    await expect.poll(() => f.evaluate(() => document.querySelector('#tcRoot').textContent)).toMatch(/Enviado[\s\S]*ALFA/);
+    await expect.poll(() => f.evaluate(() => document.querySelector('#tcRoot').textContent)).toMatch(/Enviado[\s\S]*ALFA/i);
     await expect(page.locator('#phmsg')).toBeHidden();
     noErrors(errors, 'marco tcap');
   });

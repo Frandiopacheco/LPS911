@@ -573,3 +573,20 @@ Código en `web/js/tareo-pub.js` (después de `tareo-cuentas.js`), CSS en el blo
 
 - **Revisión del jefe de producción** (admin y editor con `tpub`) antes de publicar, en la misma grilla de horas: NO coteja firmas; revisa que las horas estén bien asignadas a las partidas y puede editar (mover horas de una partida a otra, agregar o quitar partida del día). Si cambia las **HH totales** de un obrero, aparece un aviso claro (y confirmación al guardar) y queda en el historial. Es opcional (no bloquea publicar); queda marcado `prod: {t, by, byN}` = «Revisado por producción» y la pantalla de Publicación muestra cuántos tareos lo tienen. Su edición NO devuelve el tareo a «Enviado» (las firmas no cambian); el estado se conserva.
 - **Celular del capataz:** la grilla de horas va como el formato físico: **obreros en FILAS, partidas en COLUMNAS** (nombres fijos a la izquierda, códigos de partida fijos arriba). «Revisar y enviar» muestra la misma grilla (solo lectura) con totales, en vez de una lista.
+
+## Grilla como el formato — capataz (06-10-2026)
+
+Implementa la parte del celular del pedido anterior. **Reemplaza** en «Implementación de la grilla — capataz» lo dicho del paso 3 (orientación de la grilla, `rowAll`) y del paso 4 (lista `.tc-sum`). `tareo-cap.js`, CSS `/* tareo: capataz */` (bloque «grilla como el formato físico») y pruebas `tareo-cap.spec.js` / `tareo-cap-ux.spec.js`.
+
+- **Paso 3 (`tcStep3`, `#tcGrid`):** `table.tc-g` con **obreros en filas** (`tr[data-dni]`; solo los que vinieron) y **partidas en columnas** (en el orden de `pcs`).
+  - Columna fija a la izquierda `th.tc-gn[data-dni]`: N° (`.tc-gnn`, su lugar en la lista completa del paso 1, `tcNum`) + nombre corto identificable (`tcNmT`, tocándolo: nombre completo y DNI). En rojo (`.bad`) si tiene un error de horas; `tcFix` sigue llevando ahí.
+  - Encabezado fijo arriba `th.tc-gp[data-pc]`: código + nombre abreviado en 2 líneas (`.tc-gpt[data-tcpc]`, tocándolo sale el nombre completo en un aviso) y **«Toda la jornada»** de esa partida (`data-tca="pcAll"`, antes `rowAll` por fila): a cada uno que vino le suma lo que le falta para su jornada. Bloqueada: «Bloqueada» y borde rojo arriba.
+  - Última columna fija a la derecha `td.tc-gt[data-dni]` (total del obrero; `tcTotKS`: verde = jornada, ámbar = «faltan X» / «+2 HE» / «todo extra», rojo = 0 h o > 16). Última fila fija abajo «Total partida» (`td.tc-gs[data-pc]` y `td.tc-gss` con el total del día).
+  - Medidas (celdas `box-sizing:border-box`): en vertical nombres 98 px, partidas 70 px, total 58 px → con 390 px caben **3 partidas enteras** y se desplaza de lado con nombres y totales fijos. Echado (`#tcRoot.g3`, pantalla completa como antes): nombres 150, partidas 100, total 76 → 6 partidas en 844 px.
+  - `#tcRot` («Gira el celular para ver más partidas») ahora sale con **más de 3 partidas** (antes: más de 2 obreros).
+  - Editor de celda (hoja `#tcCell`) sin cambios.
+- **Paso 4 (`tcStep4` → `tcGridRO`, `#tcGridR`):** la foto y los avisos arriba; debajo la **misma grilla en solo lectura**: filas `tr.tc-rr[data-dni]`, primero los que vinieron (con «(A)» si altura y, debajo del nombre, «salió hh:mm» o, en un tareo antiguo, su horario `ini–fin`), al final los que no vinieron o sin marcar (`.tc-rr.off`, atenuados, una celda `td.tc-rmot` con «No vino · motivo»); total por obrero con HE, total por partida y total del día con HE.
+  - Si se puede editar, cada celda de un presente es `button.tc-rc[data-tca="go3"][data-dni][data-pc]`: lleva al paso 3 con esa celda abierta (`TCS.cell`) y la desplaza a la vista.
+  - Es también la vista de solo lectura (enviado/revisado/publicado) y la de un tareo antiguo (`blq`: partidas de sus bloques).
+  - Echado (`#tcRoot.g4`, paso 4 o solo lectura) usa todo el ancho (no oculta el encabezado).
+- Pruebas: «grilla como el formato (12 obreros × 6 partidas)» en `tareo-cap.spec.js` (≥ 3 partidas a la vista en 390×844 y ≥ 5 echado, nombres/totales fijos, el que no vino al final con su motivo, (A), HE, tocar una celda del paso 4 abre su editor). Capturas: `TC_SHOTS=<carpeta> npx playwright test tareo-cap` (8–11).
