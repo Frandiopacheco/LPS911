@@ -176,9 +176,8 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect(page.locator('tr[data-tpc="p2_01"]')).toHaveClass(/t-off/);
   // Tareos del día
   await tab(page, 'tdia');
-  await expect(page.locator('#main')).toContainText('Llega en la fase 1');
-  await expect(page.locator('#tdAct')).toHaveText('1');
-  await expect(page.locator('#main')).toContainText('Tito Capataz');
+  await expect(page.locator('tr[data-tcap="tcap1@obra.pe"]')).toContainText('Tito Capataz'); // con obreros y sin tareo (detalle en tareo-dia.spec.js)
+  await expect(page.locator('tr[data-tcap="tcap1@obra.pe"]')).toContainText('Sin empezar');
   // jornada: sábado hasta las 13:30 y guardar
   await tab(page, 'tcfg');
   await expect(page.locator('#tjTot')).toHaveText('48.0');
