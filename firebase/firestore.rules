@@ -379,6 +379,7 @@ service cloud.firestore {
       let n = request.resource.data.get('hist', []);
       return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
         && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect'])
+          && n[n.size() - 1].get('a', '') != 'prod'
           && n[n.size() - 1].get('by', '') == mid()));
     }
     // historial al CREAR (segunda auditoría, A4): vacío o solo su «Enviado» (a:'env', by = su id); nada de la oficina
@@ -425,6 +426,7 @@ service cloud.firestore {
         && tHistNew());
       // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
       // revisión de producción: regla aparte (no se mezcla con la del capataz)
+      allow update: if tProdOk();
       allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
@@ -432,6 +434,7 @@ service cloud.firestore {
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
         // cot/cotFot: cotejo de firmas y garita del asistente (auditoría F2): el capataz no lo crea ni lo cambia (su guardado lo copia igual)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && !('prod' in request.resource.data.diff(resource.data).affectedKeys())
         && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
