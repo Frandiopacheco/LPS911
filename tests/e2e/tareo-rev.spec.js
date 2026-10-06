@@ -37,8 +37,8 @@ test('revisión: cotejo de firmas, garita distinta, marcar y quitar revisado', a
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: SOLO });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  const m = page.locator('#lqm');
-  await expect(m).toContainText('Cotejo de firmas');
+  const m = page.locator('#trWs');
+  await expect(m).toContainText('Obreros y horas por partida');
   await expect(m.locator('#trCotN')).toHaveText('0 de 2 cotejados');
   // sin cotejar no se puede marcar revisado
   await expect(m.locator('#trRev')).toBeDisabled();
@@ -99,7 +99,7 @@ test('revisión: conflicto (un obrero en dos tareos), corrección con motivo y �
   await expect(cf.locator('[data-trqt]')).toHaveText([/Teodoro Capataz · vino/, /Bruno Segundo · vino/]);
   expect(await page.evaluate(() => tConflictosDia([...TD.docs.values()]).map(x => [x.dni, x.ts.length]))).toEqual([['22222222', 2]]);
   await page.locator(`tr[data-to="${T2}"] button[data-to]`).click();
-  const m = page.locator('#lqm');
+  const m = page.locator('#trWs');
   // bloquea marcar revisado y nombra al otro capataz
   await expect(m.locator('#trObs li.tr-obl[data-k="dup"]')).toContainText('también figura en el tareo de Teodoro Capataz');
   await m.locator('#trAll').click();
@@ -128,7 +128,9 @@ test('revisión: conflicto (un obrero en dos tareos), corrección con motivo y �
   await expect(m.locator('#trHist')).toContainText('Corregido');
   // presente en uno y con falta en otro sigue siendo conflicto
   await expect(cf.locator(`[data-trqt="${T2}"]`)).toContainText('falta FA');
-  await page.locator('#lqm [data-lqx]').first().click();
+  page.once('dialog', dg => dg.accept()); // «Todos firmaron» quedó sin guardar: confirma salir
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trWs')).toHaveCount(0);
   page.once('dialog', dg => dg.accept('Trabajó con Teodoro'));
   await cf.locator(`[data-trq="${T2}"]`).click();
   await expect.poll(async () => !!(await dbT(page, T2)).rows['22222222']).toBe(false);
@@ -146,7 +148,7 @@ test('auditoría F2: corregir un revisado lo devuelve a «Enviado»; concurrenci
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conT1({ st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV, cot, cotFot: ['f1'] }) });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  const m = page.locator('#lqm');
+  const m = page.locator('#trWs');
   await m.locator('#trCor').click();
   await expect(m).toContainText('vuelve a «Enviado»');
   // otro usuario cambia el tareo mientras está abierto el editor: no se guarda
@@ -193,7 +195,7 @@ test('auditoría F2: reabrir borra las firmas y conserva la garita; fotos nuevas
   await tab(page, 'tdia');
   await expect(page.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('1 sin firma');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  const m = page.locator('#lqm');
+  const m = page.locator('#trWs');
   await expect(m.locator('#trCotN')).toHaveText('2 de 2 cotejados');
   // el capataz mandó otra foto: las firmas no valen (la garita sí)
   await page.evaluate(id => fcol('tareo').doc(id).update({ foto: ['f1', 'f2'] }), T1);
@@ -235,7 +237,7 @@ test('corrección: quitar y volver a marcar «vino» no le quita las horas al ob
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  const m = page.locator('#lqm');
+  const m = page.locator('#trWs');
   await m.locator('#trCor').click();
   const alfa = m.locator('tr[data-tro="11111111"]');
   await expect(alfa).toContainText(/8[.,]5/);
@@ -297,9 +299,10 @@ test('revisión: el jefe de producción ve el cotejo en solo lectura; el capataz
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  await expect(page.locator('#lqm')).toContainText('Cotejo de firmas');
+  await expect(page.locator('#trCotN')).toHaveText('0 de 2 cotejados');
   await expect(page.locator('#trAll')).toHaveCount(0);
   await expect(page.locator('#trCor')).toHaveCount(0);
+  await expect(page.locator('[data-tra="pas"]')).toHaveCount(0);
   await expect(page.locator('#trSin [data-trfal]')).toHaveCount(0);
   noErrors(errors, 'jefe');
   const rev = EXTRA.map(x => x[0] === 'tareo' && x[1] === T1 ? ['tareo', T1, { ...x[2], st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV }] : x);
@@ -309,4 +312,101 @@ test('revisión: el jefe de producción ve el cotejo en solo lectura; el capataz
   await expect(p2.locator('#tcRoot')).toContainText('Revisado por la oficina');
   await expect(p2.locator('[data-tca="send"]')).toHaveCount(0);
   noErrors(e2, 'capataz');
+});
+
+test('revisión en laptop: espacio a pantalla completa, foto a la izquierda, anterior/siguiente con teclado y redibujo sin perder el cotejo', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: SOLO });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const ws = page.locator('#trWs');
+  await expect(ws).toContainText('Tareo de Teodoro Capataz');
+  // ocupa toda la pantalla; la foto a la izquierda (~45 %) y la tabla a la derecha
+  const W = await ws.boundingBox(), F = await page.locator('#trFoto').boundingBox(), R = await page.locator('#trRight').boundingBox();
+  expect(W.width).toBe(1440);
+  expect(W.height).toBe(900);
+  expect(F.x).toBeLessThan(R.x);
+  expect(F.width).toBeGreaterThan(1440 * 0.38);
+  expect(F.width).toBeLessThan(1440 * 0.5);
+  expect(F.height).toBeGreaterThan(600);
+  expect(await page.evaluate(() => sessionStorage.getItem('lps.trws'))).toContain(T1);
+  // la lista va por estado y nombre: Bruno, Teodoro
+  await expect(page.locator('#trPos')).toHaveText('2 de 2');
+  await expect(page.locator('#trNext')).toBeDisabled();
+  // cotejo sin guardar + llega un cambio de otro usuario y se redibuja la app: la revisión sigue abierta y no pierde el cotejo
+  await page.locator('#trAll').click();
+  await expect(page.locator('#trCotN')).toHaveText('2 de 2 cotejados');
+  await page.evaluate(id => fcol('tareo').doc(id).update({ ts: 99 }), T1);
+  await page.evaluate(() => render());
+  await expect(ws).toBeVisible();
+  await expect(page.locator('#trCotN')).toHaveText('2 de 2 cotejados');
+  await expect(page.locator('#trSave')).toBeVisible();
+  // ← al anterior: pregunta por el cotejo sin guardar
+  let asked = '';
+  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  await page.keyboard.press('ArrowLeft');
+  await expect(ws).toContainText('Tareo de Bruno Segundo');
+  expect(asked).toContain('cotejo');
+  await expect(page.locator('#trPos')).toHaveText('1 de 2');
+  await expect(page.locator('#trPrev')).toBeDisabled();
+  await page.keyboard.press('ArrowRight');
+  await expect(ws).toContainText('Tareo de Teodoro Capataz');
+  await expect(page.locator('#trCotN')).toHaveText('0 de 2 cotejados');
+  // corregir dentro del mismo espacio: la foto sigue a la izquierda
+  await page.locator('#trCor').click();
+  await expect(page.locator('#trRight')).toContainText('Corregir el tareo');
+  await expect(page.locator('#trFoto #trImg')).toHaveCount(1);
+  await expect(page.locator('#trEdOk')).toBeVisible();
+  await page.locator('#trEdX').click();
+  // Esc vuelve a la lista
+  await page.keyboard.press('Escape');
+  await expect(ws).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('lps.trws'))).toBeNull();
+  noErrors(errors, 'espacio de revisión');
+});
+
+test('revisión: pasar un obrero al tareo de otro capataz (con sus bloques, motivo e historial en los dos)', async ({ page }) => {
+  const T3 = HOY + '_tcap3@obra.pe';
+  const cot = { 11111111: { fir: true, by: 'tasis@obra.pe', t: 1 }, 22222222: { fir: true, by: 'tasis@obra.pe', t: 1 } };
+  const extra = conT1({ cot, cotFot: ['f1'] }).map(x => x[0] === 'tareo' && x[1] === T2 ? ['tareo', T2, { ...x[2], st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV }] : x)
+    .concat([['tareo', T3, { date: HOY, cap: 'tcap3@obra.pe', capN: 'Zoila Sinempezar', st: 'bor', rows: { 55555555: row('EPSILON') }, blq: [], hist: [], by: 'tcap3@obra.pe', ts: 1 }]]);
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  await page.locator('tr[data-trd="22222222"] [data-tra="pas"]').click();
+  const dl = page.locator('#lqm');
+  await expect(dl).toContainText('Pasar a otro capataz');
+  // solo a un tareo enviado o revisado; Zoila lo está llenando
+  await expect(dl.locator(`input[value="${T2}"]`)).toBeEnabled();
+  await expect(dl.locator(`input[value="${T2}"]`)).toBeChecked();
+  await expect(dl.locator('input[data-cap="tcap3@obra.pe"]')).toBeDisabled();
+  await expect(dl).toContainText('lo está llenando');
+  await page.locator('#trPok').click();
+  await expect(page.locator('#toast')).toContainText('Escribe el motivo');
+  await page.locator('#trPm').fill('Trabajó con Bruno');
+  await page.locator('#trPok').click();
+  await expect.poll(async () => !!(await dbT(page, T2)).rows['22222222']).toBe(true);
+  const a = await dbT(page, T1), b = await dbT(page, T2);
+  // origen: sin su fila, fuera de los bloques y sin su cotejo
+  expect(a.rows['22222222']).toBeUndefined();
+  expect(a.blq.map(x => x.dnis)).toEqual([['11111111'], ['11111111']]);
+  expect(Object.keys(a.cot)).toEqual(['11111111']);
+  expect(a.hist[a.hist.length - 1]).toMatchObject({ a: 'cor', mot: 'Trabajó con Bruno', by: 'tasis@obra.pe' });
+  expect(a.hist[a.hist.length - 1].cam).toContain('Pasado al tareo de Bruno Segundo');
+  expect(a.hist[a.hist.length - 1].det).toEqual(expect.arrayContaining([{ dni: '22222222', campo: 'fila', antes: true, despues: false }]));
+  // destino: con sus mismas horas en bloques equivalentes; el revisado vuelve a «Enviado»
+  expect(b.st).toBe('env');
+  expect(b.revBy).toBeUndefined();
+  expect(b.rows['22222222']).toMatchObject({ ape: 'BETA', as: true, trab: 8.5 });
+  expect(b.rows['22222222'].fir).toBeUndefined();
+  expect(b.blq[0]).toMatchObject({ id: 'c1', dnis: ['44444444'] });
+  expect(b.blq.slice(1).map(x => [x.pc, x.ini, x.fin, x.dnis])).toEqual([['p10_05', '07:30', '12:00', ['22222222']], ['p10_10', '13:00', '17:00', ['22222222']]]);
+  expect(b.hist[b.hist.length - 1]).toMatchObject({ a: 'cor', mot: 'Trabajó con Bruno' });
+  expect(b.hist[b.hist.length - 1].cam).toContain('Recibido del tareo de Teodoro Capataz');
+  // la revisión abierta se actualiza
+  await expect(page.locator('#trWs tr[data-trd="22222222"]')).toHaveCount(0);
+  await expect(page.locator('#trCotN')).toHaveText('1 de 1 cotejados');
+  // el tareo en borrador del capataz no se toca
+  expect((await dbT(page, T3)).rows).toEqual({ 55555555: row('EPSILON') });
+  noErrors(errors, 'pasar obrero');
 });

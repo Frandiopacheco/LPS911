@@ -4,6 +4,8 @@
    corrección directa con motivo, marcar/quitar revisado, reabrir) y, en «Tareos del día», sin tareo, conflictos (un obrero en
    dos tareos) y no enviados. Correcciones de la auditoría F2: ver docs/ia/tareo.md («Correcciones de la auditoría F2 — revisión»).
    El jefe de producción (editor con tpub) ve el mismo detalle en solo lectura.
+   La revisión es un espacio de trabajo a pantalla completa (#trWs) y permite pasar un obrero al tareo de otro capataz:
+   ver docs/ia/tareo.md («Revisión en laptop (oct 2026)»).
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* ---------- funciones puras ---------- */
@@ -97,11 +99,12 @@ function trSig(d,cc){d=d||{};const R={};for(const[k,r]of Object.entries(d.rows||
   const o={st:d.st||'bor',rows:R,blq:(Array.isArray(d.blq)?d.blq:[]).map(b=>b?[b.id||'',b.pc||'',b.ini||'',b.fin||'',Array.isArray(b.dnis)?b.dnis:[]]:null),foto:Array.isArray(d.foto)?d.foto:[]};
   if(cc)o.cot=tCotDe(d);return trStr(o)}
 
-/* ---------- estado del detalle abierto ---------- */
+/* ---------- estado de la revisión abierta ---------- */
 /* id: tareo abierto · fir/gar: cotejo en edición (empieza con el vigente, tCotDe) · b: el cotejo tal como se abrió (para escribir
    solo lo que cambió) · sig: versión del tareo que se ve (trSig con cotejo) · dirty: hay cotejo sin guardar ·
-   ed: corrección en curso (edSig: versión al abrir el editor) · visor de la foto */
-const TR={id:'',fir:{},gar:{},b:{fir:{},gar:{}},sig:'',dirty:false,ed:null,edSig:'',fi:0,z:1,rot:0,busy:false};
+   ed: corrección en curso (edSig: versión al abrir el editor) · visor de la foto (fi foto, z zoom, rot giro, fsig fotos dibujadas) ·
+   ord: orden de la lista al abrir (para «anterior · siguiente») · op: bloques/historial abiertos · want: tareo a reabrir tras recargar */
+const TR={id:'',fir:{},gar:{},b:{fir:{},gar:{}},sig:'',dirty:false,ed:null,edSig:'',fi:0,z:1,rot:0,busy:false,fsig:'',ord:[],op:{blq:true,hist:false},want:'',ro:null};
 const trEdOk=()=>toReabOk();
 const TR_CHG='Otro usuario cambió este tareo, vuelve a abrirlo.';
 function trInit(t){const C=tCotDe(t);TR.fir={};TR.gar={};for(const[d,x]of Object.entries(C)){if(trHas(x,'fir'))TR.fir[d]=x.fir;if(x.gar)TR.gar[d]=x.gar}
@@ -140,71 +143,150 @@ function trCorExtra(cur){const o={};const FV=firebase.firestore.FieldValue;
   if(!cur.cfg&&typeof tCfgDia==='function'){const c=tCfgDia(cur.date);if(c)o.cfg=c}
   return o}
 
-/* ---------- detalle / revisión de un tareo ---------- */
-function toDetalle(id){const t=TD.docs.get(id);if(!t)return;if(TR.id!==id){Object.assign(TR,{id,ed:null,fi:0,z:1,rot:0,busy:false});trInit(t)}trDraw();
-  const lc=$('#lqm .lqc');if(lc)lc.classList.add('lqwide');toFotos(id,t.foto||[])}
-/* al llegar datos con el detalle abierto: refresca (sin pisar el cotejo o la corrección en curso) */
-function trSync(){if(!TR.id||!$('#lqm .tr-root'))return;const t=TD.docs.get(TR.id);if(!t)return;if(!TR.dirty&&!TR.ed)trInit(t);trDraw()}
-function trDraw(){const id=TR.id;const t=TD.docs.get(id);if(!t)return;
-  lqModal(trHtml(t),e=>trClick(e,id),e=>trChange(e,id));const lc=$('#lqm .lqc');if(lc)lc.classList.add('lqwide','tr-lqc');trView()}
-function trHtml(t){const ed=trEdOk();const cot=ed&&t.st==='env'&&!TR.ed;const dv={...t,rows:trRows(t.rows)};const c=tCalc(dv);const s=toStats(t);
+/* ---------- espacio de revisión (pantalla completa, «Revisión en laptop», docs/ia/tareo.md) ---------- */
+/* #trWs: capa fija sobre toda la app, fuera de <main> (el render() de la app no la toca). Se dibuja por partes: el encabezado
+   (#trHead) y el panel derecho (#trRight) con cada cambio; el visor de la foto (#trFoto) solo cuando cambian las fotos o la
+   foto elegida (no se pierden el zoom ni la posición). TR.id = tareo abierto; sessionStorage 'lps.trws' {id, f} lo vuelve a
+   abrir si se recarga la página. */
+const TR_SS='lps.trws';
+function trSsSet(v){try{if(v)sessionStorage.setItem(TR_SS,JSON.stringify(v));else sessionStorage.removeItem(TR_SS)}catch(e){}}
+try{const s=JSON.parse(sessionStorage.getItem(TR_SS)||'null');if(s&&typeof s.id==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s.f||'')){TD.f=s.f;TR.want=s.id}}catch(e){}
+/* el mismo filtro que la lista de «Tareos del día» (renderTDia) */
+const trFltOk=x=>!!x.t&&(TD.flt==='all'||!['rev','obs','ok'].includes(TD.flt)||(TD.flt==='rev'?x.t.st==='env':TD.flt==='obs'?x.s.obs.length>0:['rev','pub'].includes(x.t.st)));
+const trOrdNow=()=>toList(TD.f).filter(trFltOk).map(x=>x.id);
+/** vecino en el orden de la lista tal como estaba al abrir (dir −1 / +1); '' si no hay */
+function trNb(dir){const L=TR.ord.filter(x=>x===TR.id||TD.docs.has(x));const i=L.indexOf(TR.id);if(i<0)return'';const j=i+dir;return j>=0&&j<L.length?L[j]:''}
+const trCapOf=id=>{const x=TD.docs.get(id);return x?(x.capN||tCapName(x.cap)||x.cap||''):''};
+/** abre la revisión (desde la lista: toma el orden de la lista; nav: viene de «anterior · siguiente») */
+function toDetalle(id,nav){const t=TD.docs.get(id);if(!t)return;
+  if(!nav||!TR.ord.length)TR.ord=trOrdNow();if(!TR.ord.includes(id))TR.ord.push(id);
+  if(TR.id!==id){Object.assign(TR,{id,ed:null,fi:0,z:1,rot:0,busy:false,fsig:''});trInit(t)}
+  trSsSet({id,f:t.date||TD.f});trDraw();toFotos(id,t.foto||[])}
+/* al llegar datos: reabre la revisión tras recargar (TR.want) o refresca la abierta (sin pisar el cotejo o la corrección en curso) */
+function trSync(){if(!TR.id){if(TR.want&&TD.ok){const w=TR.want;TR.want='';if(TD.docs.has(w)&&toAct())toDetalle(w);else trSsSet(null)}return}
+  if(!$('#trWs'))return;const t=TD.docs.get(TR.id);if(!t){trClose();toast('Ese tareo ya no está en la lista del día.');return}
+  if(!TR.dirty&&!TR.ed)trInit(t);trDraw()}
+/* salir o cambiar de tareo con cambios sin guardar: pregunta */
+async function trLeave(fn){if(TR.ed||TR.dirty){const ok=await uiAsk({title:'¿Salir sin guardar?',text:TR.ed?'Tienes una corrección sin guardar.':'Tienes cotejo de firmas sin guardar.',ok:'Salir sin guardar',cancel:'Seguir aquí',tone:'warn'});if(!ok)return}fn()}
+function trClose(){const id=TR.id;const ws=$('#trWs');if(ws)ws.remove();document.body.classList.remove('tr-on');if(TR.ro){TR.ro.disconnect();TR.ro=null}
+  Object.assign(TR,{id:'',ed:null,dirty:false,fsig:''});trSsSet(null);if(toAct())requestRender();
+  setTimeout(()=>{const b=id&&document.querySelector(`#toBody button[data-to="${CSS.escape(id)}"]`);if(b)b.focus()},60)}
+function trGo(dir){const n=trNb(dir);if(n)trLeave(()=>toDetalle(n,true))}
+/* reemplaza el HTML de una parte sin perder el desplazamiento ni el campo con el foco */
+function trPut(el,html){if(!el||el.__h===html)return;const st=el.scrollTop,ae=document.activeElement,aid=ae&&el.contains(ae)&&ae.id;el.innerHTML=html;el.__h=html;el.scrollTop=st;
+  if(aid){const f=document.getElementById(aid);if(f)f.focus()}}
+function trDraw(){const id=TR.id;const t=TD.docs.get(id);if(!t)return;let ws=$('#trWs');
+  if(!ws){ws=document.createElement('div');ws.id='trWs';ws.className='tr-ws';ws.setAttribute('role','dialog');ws.setAttribute('aria-modal','true');ws.setAttribute('aria-label','Revisión del tareo');
+    ws.innerHTML='<header class="tr-wh" id="trHead"></header><div class="tr-wb" id="trBody"><section class="tr-wf" id="trFoto" aria-label="Formato firmado"></section><div class="tr-wr" id="trRight"></div></div>';
+    document.body.appendChild(ws);document.body.classList.add('tr-on');
+    ws.addEventListener('click',e=>trClick(e,TR.id));ws.addEventListener('change',e=>trChange(e,TR.id));
+    ws.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.trop)TR.op[d.dataset.trop]=d.open},true);
+    ws.addEventListener('load',e=>{if(e.target&&e.target.id==='trImg')trView()},true);
+    trPanInit(ws);if(window.ResizeObserver){TR.ro=new ResizeObserver(()=>trView());TR.ro.observe($('#trFoto'))}}
+  const M=trModel(t);
+  trPut($('#trHead'),trHeadHtml(t,M));
+  const fs=(t.foto||[]).join('|')+'#'+TR.fi;
+  if(TR.fsig!==fs||ws.dataset.id!==id){$('#trFoto').innerHTML=trFotoHtml(t);TR.fsig=fs;ws.dataset.id=id;const v=$('#trView');if(v){v.scrollTop=0;v.scrollLeft=0}}
+  trPut($('#trRight'),TR.ed?trEdHtml(t):trRightHtml(t,M));
+  trView()}
+/* todo lo que muestran el encabezado y la tabla (con el cotejo en edición aplicado) */
+function trModel(t){const ed=trEdOk();const cot=ed&&t.st==='env'&&!TR.ed;const dv={...t,rows:trRows(t.rows)};const c=tCalc(dv);const s=toStats(t);
   const ob=tObsRev(dv,c);const vis=ob.filter(o=>o.k!=='firp');const pend=ob.filter(o=>o.k==='firp').length;
   const R=Object.entries(c.rows).map(([dni,r])=>({...r,dni})).sort((a,b)=>(a.ape||'').localeCompare(b.ape||'')||a.dni.localeCompare(b.dni));
-  const P=R.filter(r=>r.as);const nm=r=>trNm(r)||r.dni;const oDni=new Map();for(const o of ob)if(o.dni&&o.k!=='firp'){oDni.set(o.dni,(oDni.get(o.dni)||[]).concat(o.k))}
-  const fotos=t.foto||[];const fi=Math.min(TR.fi,Math.max(0,fotos.length-1));
-  const head=`<div class="lqtop tr-root"><b>Tareo de ${esc(t.capN||tCapName(t.cap))}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-   <div class="lqh"><span>${esc(toDia(t.date))}</span>${toChip(t)}<span>${s.pres} vinieron · ${s.fal} ${s.fal===1?'falta':'faltas'} · ${toH(s.hh)} HH · ${toH(s.he)} HE${s.alt?` · ${s.alt} en altura`:''}</span></div>
-   ${t.st==='reab'&&t.reab?`<div class="callout t-warn">Reabierto por ${esc(toWho(t.reab.by))} a las ${esc(tHm(t.reab.t))}: ${esc(t.reab.mot||'')}</div>`:''}
-   ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}`;
-  if(TR.ed)return head+trEdHtml(t);
-  const obs=(tCotVieja(t)?`<div class="callout t-warn" id="trCotV">El capataz cambió las fotos después del cotejo: vuelve a cotejar las firmas con el formato nuevo.</div>`:'')
-    +(vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:'');
-  /* visor de la foto + cotejo */
-  const viewer=`<section class="tr-foto"><div class="tr-vbar"><b>Formato firmado</b><span class="tr-vbtn">
-     ${fotos.length>1?`<button class="ib" data-trv="prev" aria-label="Foto anterior">‹</button><span class="note">${fi+1} de ${fotos.length}</span><button class="ib" data-trv="next" aria-label="Foto siguiente">›</button>`:''}
-     <button class="ib" data-trv="zo" aria-label="Alejar">−</button><button class="ib" data-trv="zi" aria-label="Acercar">+</button><button class="ib" data-trv="rot" aria-label="Rotar" title="Rotar">⟳</button>${fotos.length?`<button class="ib" data-trv="full" aria-label="Pantalla completa" title="Pantalla completa">⛶</button>`:''}</span></div>
-    <div class="tr-view" id="trView">${fotos.length?`<img id="trImg" alt="Formato firmado"${TD.fotos.has(fotos[fi])?` src="${esc(TD.fotos.get(fotos[fi]))}"`:''}>`:'<span class="note">Sin foto.</span>'}</div>
-    <div class="to-fotos tr-thumbs" id="toFotos">${fotos.map(fid=>`<button class="to-ft" data-tft="${esc(fid)}" aria-label="Ampliar foto">${TD.fotos.has(fid)?`<img src="${esc(TD.fotos.get(fid))}" alt="Formato firmado">`:'<span class="note">Cargando…</span>'}</button>`).join('')}</div></section>`;
+  const oDni=new Map();for(const o of vis)if(o.dni)oDni.set(o.dni,(oDni.get(o.dni)||[]).concat(o));
+  return{ed,cot,c,s,ob,vis,pend,R,P:R.filter(r=>r.as),F:R.filter(r=>!r.as),oDni,blk:ob.filter(o=>o.bl),nofir:ob.filter(o=>o.k==='nofir'),pas:ed&&!TR.ed&&['env','rev'].includes(t.st)}}
+/* etiqueta corta de cada observación en su fila (el texto completo va en el title y arriba en la lista) */
+const TR_TAG={nofir:'No firmó',gar:'Garita',dup:'En otro tareo',marca:'Sin marcar',mot:'Sin motivo',sinh:'Sin horas',cruce:'Cruce',parcial:'Parcial',quien:'Sin bloque'};
+function trHeadHtml(t,M){const s=M.s;const prev=trNb(-1),next=trNb(1);const L=TR.ord.filter(x=>x===t.id||TD.docs.has(x));const pos=L.indexOf(t.id);
+  const kp=(v,l,c='')=>`<span class="tr-k${c}"><b>${v}</b> ${l}</span>`;const nObs=M.vis.length;
+  const btn=[];if(M.ed){
+    if(TR.ed)btn.push(`<button class="ib" data-tra="edx" id="trEdX">Cancelar</button>`,`<button class="ib pri" data-tra="edok" id="trEdOk">Guardar corrección</button>`);
+    else if(t.st==='env'){if(TR.dirty)btn.push(`<button class="ib tr-sv" data-tra="save" id="trSave">Guardar cotejo</button>`);
+      btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,
+        `<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:''}>Marcar revisado${M.nofir.length?' (con observación)':''}</button>`)}
+    else if(t.st==='rev')btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" data-tra="qrev" id="trQrev">Quitar revisado</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`)}
+  return`<div class="tr-wh1"><button class="ib tr-back" data-trw="close" id="trBack" title="Volver a la lista (Esc)" aria-label="Volver a la lista">←<span class="tr-hl"> Tareos del día</span></button>
+    <div class="tr-wt"><b class="tr-wn">Tareo de ${esc(t.capN||tCapName(t.cap))}</b><span class="note">${esc(toDia(t.date))}</span>${toChip(t)}${TR.ed?'<span class="tr-edt">Corrigiendo</span>':''}</div>
+    <nav class="tr-nav" aria-label="Otros tareos del día"><button class="ib" data-trw="prev" id="trPrev"${prev?` title="Anterior: ${esc(trCapOf(prev))} (←)"`:' disabled'}>◀<span class="tr-hl"> Anterior</span></button><span class="note mono" id="trPos">${pos>=0&&L.length>1?`${pos+1} de ${L.length}`:''}</span><button class="ib" data-trw="next" id="trNext"${next?` title="Siguiente: ${esc(trCapOf(next))} (→)"`:' disabled'}><span class="tr-hl">Siguiente </span>▶</button></nav></div>
+   <div class="tr-wh2"><div class="tr-kpis" id="trKpi">${kp(s.pres,s.pres===1?'presente':'presentes')}${kp(s.fal,s.fal===1?'falta':'faltas',s.fal?' tr-kb':'')}${kp(toH(s.hh),'HH')}${kp(toH(s.he),'HE',s.he?' tr-kw':'')}${s.alt?kp(s.alt,'en altura'):''}${kp(nObs,nObs===1?'observación':'observaciones',nObs?' tr-kw':' tr-kok')}</div>
+   ${btn.length?`<div class="tr-acts">${btn.join('')}</div>`:''}</div>`}
+/* visor: foto grande con zoom (botones, rueda), rotar y arrastrar */
+function trFotoHtml(t){const fotos=t.foto||[];const fi=Math.min(TR.fi,Math.max(0,fotos.length-1));
+  return`<div class="tr-vbar"><b>Formato firmado</b>${fotos.length>1?`<span class="tr-vbtn"><button class="ib" data-trv="prev" aria-label="Foto anterior">‹</button><span class="note">${fi+1} de ${fotos.length}</span><button class="ib" data-trv="next" aria-label="Foto siguiente">›</button></span>`:''}
+    ${fotos.length?`<span class="tr-vbtn"><button class="ib" data-trv="zo" aria-label="Alejar" title="Alejar">−</button><span class="note mono tr-zl" id="trZl">100%</span><button class="ib" data-trv="zi" aria-label="Acercar" title="Acercar">+</button><button class="ib" data-trv="fitw" title="Ajustar al ancho">Ancho</button><button class="ib" data-trv="fit" title="Ver la hoja entera">Entera</button><button class="ib" data-trv="rot" aria-label="Rotar" title="Rotar 90°">⟳</button><button class="ib" data-trv="full" aria-label="Pantalla completa" title="Pantalla completa">⛶</button></span>`:''}</div>
+   <div class="tr-view" id="trView">${fotos.length?`<div class="tr-pz" id="trPz"><img id="trImg" alt="Formato firmado" draggable="false"></div>`:'<span class="note tr-nof">Sin foto del formato.</span>'}</div>
+   <div class="to-fotos tr-thumbs" id="toFotos"${fotos.length>1?'':' hidden'}>${fotos.map((fid,i)=>`<button class="to-ft${i===fi?' on':''}" data-tft="${esc(fid)}" data-i="${i}" aria-label="Ver foto ${i+1}">${TD.fotos.has(fid)?`<img src="${esc(TD.fotos.get(fid))}" alt="Formato firmado">`:'<span class="note">Cargando…</span>'}</button>`).join('')}</div>
+   ${fotos.length?'<p class="note tr-vh">Arrastra para mover · rueda del mouse para acercar</p>':''}`}
+/* tamaño del visor: con z = 1 la hoja ocupa el ancho del visor; girada 90° se mide su caja girada (así se desplaza bien) */
+function trView(){const im=$('#trImg');if(!im)return;const t=TD.docs.get(TR.id);const fs=(t&&t.foto)||[];const fid=fs[Math.min(TR.fi,fs.length-1)];
+  if(fid&&TD.fotos.has(fid)&&im.getAttribute('src')!==TD.fotos.get(fid))im.src=TD.fotos.get(fid);
+  im.dataset.z=String(Math.round(TR.z*100)/100);im.dataset.rot=String(TR.rot);const zl=$('#trZl');if(zl)zl.textContent=Math.round(TR.z*100)+'%';
+  const v=$('#trView'),pz=$('#trPz');const nw=im.naturalWidth,nh=im.naturalHeight;if(!v||!pz)return;
+  if(!nw||!nh){pz.style.width='100%';pz.style.height='';im.style.cssText='position:static;width:100%';return}
+  const side=TR.rot%180!==0,ar=nw/nh;const W=Math.max(40,v.clientWidth*TR.z);const H=side?W*ar:W/ar;
+  pz.style.width=W+'px';pz.style.height=H+'px';im.style.cssText=`width:${side?H:W}px;transform:translate(-50%,-50%)${TR.rot?` rotate(${TR.rot}deg)`:''}`}
+/* zoom manteniendo fijo el punto (cx, cy) del visor (por omisión, el centro) */
+function trZoomTo(nz,cx,cy){nz=Math.max(0.25,Math.min(5,nz));const v=$('#trView'),pz=$('#trPz');if(!v||!pz){TR.z=nz;trView();return}
+  if(cx==null){cx=v.clientWidth/2;cy=v.clientHeight/2}const px=v.scrollLeft+cx-pz.offsetLeft,py=v.scrollTop+cy-pz.offsetTop;const k=nz/TR.z;TR.z=nz;trView();
+  v.scrollLeft=px*k+pz.offsetLeft-cx;v.scrollTop=py*k+pz.offsetTop-cy}
+function trFitZ(){const v=$('#trView'),im=$('#trImg');if(!v||!im||!im.naturalWidth)return 1;const ar=im.naturalWidth/im.naturalHeight;const H1=TR.rot%180?v.clientWidth*ar:v.clientWidth/ar;return Math.max(0.25,Math.min(1,v.clientHeight/H1))}
+/* arrastrar con el mouse (el dedo usa el desplazamiento propio del navegador) y rueda = zoom */
+function trPanInit(ws){let P=null;
+  ws.addEventListener('pointerdown',e=>{const v=e.target.closest&&e.target.closest('#trView');if(!v||e.pointerType!=='mouse'||e.button!==0||!$('#trImg'))return;
+    P={x:e.clientX,y:e.clientY,l:v.scrollLeft,t:v.scrollTop,v};try{v.setPointerCapture(e.pointerId)}catch(err){}v.classList.add('drag');e.preventDefault()});
+  ws.addEventListener('pointermove',e=>{if(!P)return;P.v.scrollLeft=P.l-(e.clientX-P.x);P.v.scrollTop=P.t-(e.clientY-P.y)});
+  const end=()=>{if(P){P.v.classList.remove('drag');P=null}};ws.addEventListener('pointerup',end);ws.addEventListener('pointercancel',end);
+  ws.addEventListener('wheel',e=>{const v=e.target.closest&&e.target.closest('#trView');if(!v||!$('#trImg'))return;e.preventDefault();const r=v.getBoundingClientRect();
+    trZoomTo(TR.z*Math.pow(1.0015,-e.deltaY),e.clientX-r.left,e.clientY-r.top)},{passive:false})}
+/* atajos: ← → otro tareo del día, Esc volver a la lista (no mientras se escribe en un campo o hay una ventana encima) */
+document.addEventListener('keydown',e=>{if(!TR.id||!$('#trWs')||e.altKey||e.ctrlKey||e.metaKey)return;
+  const z=$('.to-zoom');if(z){if(e.key==='Escape')z.remove();return}if($('.uask')||$('#lqm'))return;
+  const tg=e.target;if(tg&&(/^(INPUT|SELECT|TEXTAREA)$/.test(tg.tagName)||tg.isContentEditable)){if(e.key==='Escape')tg.blur();return}
+  if(e.key==='ArrowLeft'){e.preventDefault();trGo(-1)}else if(e.key==='ArrowRight'){e.preventDefault();trGo(1)}else if(e.key==='Escape'){e.preventDefault();trLeave(trClose)}});
+
+/* panel derecho: avisos, tabla obreros × partidas con el cotejo y, plegables, bloques e historial */
+function trRightHtml(t,M){const{c,cot,P,F,oDni,pend,vis}=M;const s=M.s;
+  const pcL=pc=>{const p=S.tpc.get(pc);return p?{cod:p.cod,nom:p.nom}:{cod:pc,nom:'(partida no encontrada)'}};
+  const pcs=[...new Set([...(t.blq||[]).map(b=>b&&b.pc),...Object.values(c.rows).flatMap(r=>Object.keys(r.h||{}))].filter(Boolean))].sort((a,b)=>tCmpCod(pcL(a).cod,pcL(b).cod));
+  const tot={};for(const r of P)for(const[pc,v]of Object.entries(r.h||{}))tot[pc]=tR2((tot[pc]||0)+v);
+  const rn=dni=>{const r=c.rows[dni];return r?(r.ape||dni):dni};
+  const hist=(Array.isArray(t.hist)?t.hist:[]).slice().sort((a,b)=>(a.t||0)-(b.t||0));
   const nCot=P.filter(r=>r.fir===true||r.fir===false).length;
   const firCell=r=>{if(cot)return`<span class="seg tr-fir"><button data-tra="fir" data-v="1" class="${r.fir===true?'on':''}" aria-pressed="${r.fir===true}">Sí</button><button data-tra="fir" data-v="0" class="${r.fir===false?'on':''}" aria-pressed="${r.fir===false}">No</button></span>`;
     return r.fir===true?'<span class="tr-si">Sí</span>':r.fir===false?'<span class="tr-no">No firmó</span>':'<span class="note">—</span>'};
   const garCell=r=>cot?`<input class="tin tr-gar" type="time" step="60" id="trg_${esc(r.dni)}" data-trg="${esc(r.dni)}" value="${esc(r.gar||'')}" aria-label="Salida en garita">`:`<span class="mono">${esc(r.gar||'')}</span>`;
-  const cotejo=`<section class="tr-cot"><div class="tr-vbar"><b>Cotejo de firmas</b><span class="note" id="trCotN">${nCot} de ${P.length} cotejados</span>${cot&&P.length?`<button class="ib" data-tra="all" id="trAll">Todos firmaron</button>`:''}</div>
-    <div class="tscroll"><table class="t tr-ct"><thead><tr><th>Obrero</th><th>Horario</th><th>Firmó</th><th title="Hora de salida en garita (opcional)">Garita</th></tr></thead>
-    <tbody>${P.map(r=>{const k=oDni.get(r.dni)||[];return`<tr data-trd="${esc(r.dni)}" class="${k.includes('nofir')?'tr-bad':''}${k.includes('gar')?' tr-wgar':''}"><td><b>${esc(r.ape||r.dni)}</b> <small class="note">${esc(r.nom||'')} · ${esc(r.dni)}</small></td><td class="mono">${r.ini?esc(r.ini)+'–'+esc(r.fin):''} <small class="note">${toH(r.trab)} h</small></td><td>${firCell(r)}</td><td>${garCell(r)}</td></tr>`}).join('')||'<tr><td colspan="4" class="note">Nadie marcado como presente.</td></tr>'}</tbody></table></div>
-    ${cot&&pend?`<p class="note tr-pend">Falta cotejar ${pend} ${pend===1?'firma':'firmas'}.</p>`:''}</section>`;
-  /* matriz, faltas, bloques e historial (como en F1) */
-  const pcL=pc=>{const p=S.tpc.get(pc);return p?{cod:p.cod,nom:p.nom}:{cod:pc,nom:'(partida no encontrada)'}};
-  const pcs=[...new Set([...(t.blq||[]).map(b=>b&&b.pc),...Object.values(c.rows).flatMap(r=>Object.keys(r.h||{}))].filter(Boolean))].sort((a,b)=>tCmpCod(pcL(a).cod,pcL(b).cod));
-  const F=R.filter(r=>!r.as);const tot={};for(const r of P)for(const[pc,v]of Object.entries(r.h||{}))tot[pc]=tR2((tot[pc]||0)+v);
-  const rn=dni=>{const r=c.rows[dni];return r?(r.ape||dni):dni};
-  const hist=(Array.isArray(t.hist)?t.hist:[]).slice().sort((a,b)=>(a.t||0)-(b.t||0));
-  const blk=ob.filter(o=>o.bl);const nofir=ob.filter(o=>o.k==='nofir');
-  const btn=[];if(ed){
-    if(t.st==='env'){if(TR.dirty)btn.push(`<button class="ib" data-tra="save" id="trSave">Guardar cotejo</button>`);
-      btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,
-        `<button class="ib pri" data-tra="rev" id="trRev"${blk.length?` disabled title="${esc(blk.map(o=>o.msg).join('\n'))}"`:''}>Marcar revisado${nofir.length?' (con observación)':''}</button>`)}
-    else if(t.st==='rev')btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" data-tra="qrev" id="trQrev">Quitar revisado</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`)}
-  return head+obs+`<div class="tr-grid">${viewer}${cotejo}</div>
-   <b class="t-h3">Horas por partida</b>
-   <div class="tscroll to-mx"><table class="t to-mxt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r">Total</th><th class="t-r">HE</th><th>Horario</th><th title="Trabajo en altura (bono)">A</th></tr></thead>
-    <tbody>${P.map(r=>`<tr data-dni="${esc(r.dni)}"><td><span class="to-nm">${esc(nm(r))}</span> <small class="mono note">${esc(r.dni)}</small></td><td>${esc(r.cat||'')}</td>${pcs.map(pc=>`<td class="mono t-r">${r.h&&r.h[pc]?toH(r.h[pc]):''}</td>`).join('')}<td class="mono t-r"><b>${toH(r.trab)}</b></td><td class="mono t-r">${r.ext?toH(r.ext):''}</td><td class="mono">${r.ini?esc(r.ini)+'–'+esc(r.fin):''}</td><td>${r.alt?'(A)':''}</td></tr>`).join('')||`<tr><td colspan="${pcs.length+6}" class="note">Nadie marcado como presente.</td></tr>`}</tbody>
-    <tfoot><tr><td colspan="2"><b>Total</b></td>${pcs.map(pc=>`<td class="mono t-r"><b>${toH(tot[pc])}</b></td>`).join('')}<td class="mono t-r"><b>${toH(s.hh)}</b></td><td class="mono t-r"><b>${toH(s.he)}</b></td><td colspan="2"></td></tr></tfoot></table></div>
-   ${F.length?`<b class="t-h3">Faltas</b><ul class="t-list to-fal">${F.map(r=>`<li>${esc(nm(r))} <span class="mono note">${esc(r.dni)}</span> · <b>${esc(r.mot||'sin motivo')}</b>${r.mot&&TO_MOT[r.mot]?' '+esc(TO_MOT[r.mot]):''}</li>`).join('')}</ul>`:''}
-   <b class="t-h3">Bloques</b>${(t.blq||[]).length?`<ul class="t-list to-blq">${t.blq.map(b=>{b=b||{};const p=b.pc?pcL(b.pc):null;const n=Array.isArray(b.dnis)?b.dnis:[];
-     return`<li><span class="mono">${esc(b.ini||'?')}–${esc(b.fin||'?')}</span> · ${p?`<b class="mono">${esc(p.cod)}</b> ${esc(p.nom)}`:'<i>sin partida</i>'} · ${n.length} ${n.length===1?'obrero':'obreros'}${tBlqOk(b)?` · ${toH(tBlqH(t.date,b.ini,b.fin,t.cfg||undefined))} h`:''}<div class="t-chg">${n.map(d=>esc(rn(d))).join(', ')}</div></li>`}).join('')}</ul>`:'<p class="note">Sin bloques.</p>'}
-   ${hist.length?`<b class="t-h3">Historial</b><ul class="t-list to-hist" id="trHist">${hist.map(x=>`<li data-a="${esc(x.a||'')}"><span class="mono">${esc(fmtD(ldt(x.t||0)))} ${esc(tHm(x.t))}</span> · <b>${esc(TO_HA[x.a]||x.a||'')}</b> · ${esc(toWho(x.by))}${x.mot?': '+esc(x.mot):''}${x.cam?`<div class="t-chg">${esc(x.cam)}</div>`:''}</li>`).join('')}</ul>`:''}
-   ${btn.length?`<div class="lqbtns tr-btns">${btn.join('')}</div>`:''}`}
-/* visor: aplica zoom y giro a la imagen sin redibujar */
-function trView(){const im=$('#trImg');if(!im)return;const t=TD.docs.get(TR.id);const fid=t&&(t.foto||[])[Math.min(TR.fi,(t.foto||[]).length-1)];
-  if(fid&&TD.fotos.has(fid)&&im.getAttribute('src')!==TD.fotos.get(fid))im.src=TD.fotos.get(fid);
-  im.style.width=(TR.z*100)+'%';im.style.transform=TR.rot?`rotate(${TR.rot}deg)`:'';im.dataset.rot=String(TR.rot);im.dataset.z=String(TR.z)}
+  const tags=d=>(oDni.get(d)||[]).map(o=>`<span class="tr-tg${o.bl?' tr-tgb':''}" data-k="${esc(o.k)}" title="${esc(o.msg)}">${esc(TR_TAG[o.k]||'Revisar')}</span>`).join('');
+  const pas=d=>M.pas?`<button class="ib tr-pas" data-tra="pas" data-v="${esc(d)}" title="Pasar a otro capataz…" aria-label="Pasar a otro capataz">⇄</button>`:'';
+  const obc=d=>`<td class="tr-tgs"><div class="tr-oc"><span>${tags(d)}</span>${pas(d)}</div></td>`;
+  const who=r=>`<td class="tr-nmc"><b>${esc(r.ape||r.dni)}</b> <small class="note">${esc(r.nom||'')} · <span class="mono">${esc(r.dni)}</span></small></td><td>${esc(r.cat||'')}</td>`;
+  const ncol=pcs.length+8;
+  const body=P.map(r=>{const k=(oDni.get(r.dni)||[]).map(o=>o.k);return`<tr data-trd="${esc(r.dni)}" data-dni="${esc(r.dni)}" class="${k.includes('nofir')?'tr-bad':''}${k.includes('gar')?' tr-wgar':''}">${who(r)}
+      ${pcs.map(pc=>`<td class="mono t-r">${r.h&&r.h[pc]?toH(r.h[pc]):''}</td>`).join('')}<td class="mono t-r tr-tot"><b>${toH(r.trab)}</b>${r.ini?`<small>${esc(r.ini)}–${esc(r.fin)}</small>`:''}</td><td class="mono t-r">${r.ext?toH(r.ext):''}</td><td>${r.alt?'(A)':''}</td>
+      <td>${firCell(r)}</td><td class="tr-gc">${garCell(r)}</td>${obc(r.dni)}</tr>`}).join('')
+    +F.map(r=>`<tr class="tr-frow" data-dni="${esc(r.dni)}">${who(r)}<td colspan="${pcs.length+3}" class="tr-fx">${r.as===false?`Faltó · <b>${esc(r.mot||'sin motivo')}</b>${r.mot&&TO_MOT[r.mot]?' '+esc(TO_MOT[r.mot]):''}`:'<i>Sin marcar si vino</i>'}</td><td></td><td></td>${obc(r.dni)}</tr>`).join('')
+    ||`<tr><td colspan="${ncol}" class="note">No hay obreros en este tareo.</td></tr>`;
+  const blq=t.blq||[];
+  return`${t.st==='reab'&&t.reab?`<div class="callout t-warn">Reabierto por ${esc(toWho(t.reab.by))} a las ${esc(tHm(t.reab.t))}: ${esc(t.reab.mot||'')}</div>`:''}
+   ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
+   ${tCotVieja(t)?`<div class="callout t-warn" id="trCotV">El capataz cambió las fotos después del cotejo: vuelve a cotejar las firmas con el formato nuevo.</div>`:''}
+   ${vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
+   <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b><span class="note" id="trCotN">${nCot} de ${P.length} cotejados</span>${cot&&pend?`<span class="note tr-pend">Falta cotejar ${pend} ${pend===1?'firma':'firmas'}.</span>`:''}${cot&&P.length?`<button class="ib" data-tra="all" id="trAll">Todos firmaron</button>`:''}</div>
+    <div class="tr-mtw"><table class="t tr-mt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r" title="Horas trabajadas y horario">Total</th><th class="t-r" title="Horas extra">HE</th><th title="Trabajo en altura (bono)">A</th><th>Firmó</th><th title="Hora de salida en garita (opcional)">Garita</th><th title="Observaciones${M.pas?' · ⇄ pasar a otro capataz':''}">Obs.</th></tr></thead>
+     <tbody>${body}</tbody>
+     ${P.length?`<tfoot><tr><td colspan="2"><b>Total</b></td>${pcs.map(pc=>`<td class="mono t-r"><b>${toH(tot[pc])}</b></td>`).join('')}<td class="mono t-r"><b>${toH(s.hh)}</b></td><td class="mono t-r"><b>${toH(s.he)}</b></td><td colspan="4"></td></tr></tfoot>`:''}</table></div></section>
+   <details class="card tr-dt" id="trBlqD" data-trop="blq"${TR.op.blq?' open':''}><summary><b>Bloques</b> <span class="note">${blq.length}</span></summary>
+    ${blq.length?`<ul class="t-list to-blq">${blq.map(b=>{b=b||{};const p=b.pc?pcL(b.pc):null;const n=Array.isArray(b.dnis)?b.dnis:[];
+     return`<li><span class="mono">${esc(b.ini||'?')}–${esc(b.fin||'?')}</span> · ${p?`<b class="mono">${esc(p.cod)}</b> ${esc(p.nom)}`:'<i>sin partida</i>'} · ${n.length} ${n.length===1?'obrero':'obreros'}${tBlqOk(b)?` · ${toH(tBlqH(t.date,b.ini,b.fin,t.cfg||undefined))} h`:''}<div class="t-chg">${n.map(d=>esc(rn(d))).join(', ')}</div></li>`}).join('')}</ul>`:'<p class="note">Sin bloques.</p>'}</details>
+   <details class="card tr-dt" id="trHistD" data-trop="hist"${TR.op.hist?' open':''}><summary><b>Historial</b> <span class="note">${hist.length}</span></summary>
+    ${hist.length?`<ul class="t-list to-hist" id="trHist">${hist.map(x=>`<li data-a="${esc(x.a||'')}"><span class="mono">${esc(fmtD(ldt(x.t||0)))} ${esc(tHm(x.t))}</span> · <b>${esc(TO_HA[x.a]||x.a||'')}</b> · ${esc(toWho(x.by))}${x.mot?': '+esc(x.mot):''}${x.cam?`<div class="t-chg">${esc(x.cam)}</div>`:''}</li>`).join('')}</ul>`:'<p class="note">Sin movimientos.</p>'}</details>`}
 
-function trClick(e,id){const v=e.target.closest('[data-trv]');if(v){const t=TD.docs.get(id);const n=(t&&t.foto||[]).length;const a=v.dataset.trv;
-    if(a==='zi')TR.z=Math.min(4,TR.z+0.5);else if(a==='zo')TR.z=Math.max(1,TR.z-0.5);else if(a==='rot')TR.rot=(TR.rot+90)%360;
-    else if(a==='full'){const fid=n&&t.foto[Math.min(TR.fi,n-1)];if(fid)toZoom(fid);return}
-    else if(n){TR.fi=(TR.fi+(a==='next'?1:-1)+n)%n;TR.z=1;TR.rot=0;trDraw();return}trView();return}
-  const f=e.target.closest('[data-tft]');if(f){toZoom(f.dataset.tft);return}
+function trClick(e,id){const w=e.target.closest('[data-trw]');if(w&&!w.disabled){const a=w.dataset.trw;if(a==='close')trLeave(trClose);else trGo(a==='next'?1:-1);return}
+  const v=e.target.closest('[data-trv]');if(v){const t=TD.docs.get(id);const n=(t&&t.foto||[]).length;const a=v.dataset.trv;
+    if(a==='zi')trZoomTo(TR.z+0.5);else if(a==='zo')trZoomTo(TR.z-0.5);else if(a==='fitw')trZoomTo(1);else if(a==='fit')trZoomTo(trFitZ());
+    else if(a==='rot'){TR.rot=(TR.rot+90)%360;trView()}
+    else if(a==='full'){const fid=n&&t.foto[Math.min(TR.fi,n-1)];if(fid)toZoom(fid)}
+    else if(n){TR.fi=(TR.fi+(a==='next'?1:-1)+n)%n;TR.z=1;TR.rot=0;trDraw()}return}
+  const f=e.target.closest('[data-tft]');if(f){const i=+f.dataset.i||0;if(i!==TR.fi){TR.fi=i;TR.z=1;TR.rot=0;trDraw()}return}
   const b=e.target.closest('[data-tra]');if(!b||b.disabled)return;const a=b.dataset.tra;
   if(a==='fir'){const tr=b.closest('[data-trd]');if(!tr)return;const d=tr.dataset.trd;const val=b.dataset.v==='1';
     if(TR.fir[d]===val)delete TR.fir[d];else TR.fir[d]=val;trDirty();trDraw();return}
@@ -213,6 +295,7 @@ function trClick(e,id){const v=e.target.closest('[data-trv]');if(v){const t=TD.d
   if(a==='rev')return trRevisar(id);
   if(a==='qrev')return trQuitarRev(id);
   if(a==='reab')return toReabrir(id);
+  if(a==='pas')return trPasarDlg(id,b.dataset.v);
   if(a==='cor'){const t=TD.docs.get(id);TR.edSig=trSig(t,false);TR.ed={blq:JSON.parse(JSON.stringify(Array.isArray(t.blq)?t.blq:[])).map(x=>({id:x.id||trBid(),pc:x.pc||'',ini:x.ini||'',fin:x.fin||'',dnis:Array.isArray(x.dnis)?x.dnis:[]})),
     rows:Object.fromEntries(Object.entries(t.rows||{}).map(([d,r])=>[d,{as:trAs(r.as),mot:r.mot||'',alt:!!r.alt}]))};trDraw();return}
   if(TR.ed)return trEdClick(a,b,id)}
@@ -264,8 +347,8 @@ async function toReabrir(id){const t=TD.docs.get(id);if(!t||!['env','rev'].inclu
       if(cur.revAt!=null)up.revAt=FV.delete();if(cur.revBy!=null)up.revBy=FV.delete();
       const R=cur.rows||{};if(Object.values(R).some(x=>x&&('fir'in x||'gar'in x)))up.rows=Object.fromEntries(Object.entries(R).map(([d,x])=>{const y={...x};delete y.fir;delete y.gar;return[d,y]}));
       return up});
-    lqClose();TR.id='';toast(`Tareo reabierto: ${name} ya puede corregirlo.`)}
-  catch(err){trErr('No se pudo reabrir: ',err)}}
+    toast(`Tareo reabierto: ${name} ya puede corregirlo.`)}
+  catch(err){trErr('No se pudo reabrir: ',err)}finally{trSync()}}
 
 /* ---------- corrección directa (editor para PC) ---------- */
 const trBid=()=>'b'+Math.random().toString(36).slice(2,9);
@@ -282,7 +365,7 @@ function trEdHtml(t){const e=TR.ed;const nd=trEdDoc(t);const c=tCalc(nd);const E
   const pcOpt=cur=>{const L=pcs.slice();if(cur&&!L.some(x=>x.id===cur)){const x=S.tpc.get(cur);L.unshift({id:cur,cod:x?x.cod:cur,nom:x?x.nom+' (inactiva)':'(partida no encontrada)'})}
     return`<option value=""${cur?'':' selected'}>Elige la partida</option>`+L.map(x=>`<option value="${esc(x.id)}"${x.id===cur?' selected':''}>${esc(x.cod)} · ${esc(x.nom)}</option>`).join('')};
   const short=d=>{const r=t.rows[d]||{};return(r.ape||d).split(' ')[0]};
-  return`<div class="callout tr-edc"><b>Corregir el tareo</b><span>Cambia lo necesario. Al guardar se recalculan las horas, se pide el motivo y queda en el historial.${t.st==='rev'?' El tareo vuelve a «Enviado» para revisarlo de nuevo.':''}</span></div>
+  return`<div class="callout tr-edc"><b>Corregir el tareo</b><span>Cambia lo necesario mirando la foto. «Guardar corrección» (arriba) recalcula las horas, pide el motivo y lo deja en el historial.${t.st==='rev'?' El tareo vuelve a «Enviado» para revisarlo de nuevo.':''}</span></div>
    <b class="t-h3">Bloques</b>
    <div class="tscroll"><table class="t tr-et"><thead><tr><th>Partida</th><th>Desde</th><th>Hasta</th><th class="t-r">Horas</th><th>Quiénes</th><th></th></tr></thead><tbody>
    ${e.blq.map((b,i)=>{const on=new Set(b.dnis);return`<tr data-tri="${i}"><td><select class="tin tr-pc" id="tre_pc_${i}" data-tre="pc" aria-label="Partida">${pcOpt(b.pc)}</select></td>
@@ -301,8 +384,7 @@ function trEdHtml(t){const e=TR.ed;const nd=trEdDoc(t);const c=tCalc(nd);const E
      <td class="mono t-r">${x.as?toH(cr.trab):''}</td><td class="mono t-r">${x.as&&cr.ext?toH(cr.ext):''}</td></tr>`}).join('')}
    </tbody></table></div>
    ${E.length?`<div class="callout t-warn to-obs" id="trEdObs"><b>${E.length} ${E.length===1?'problema':'problemas'}</b><ul>${E.map(o=>`<li class="tr-obl">${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
-   ${W.length?`<div class="callout t-warn to-obs" id="trEdWarn"><b>${W.length} ${W.length===1?'aviso':'avisos'}</b> <span class="note">(no impiden revisar)</span><ul>${W.map(o=>`<li>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
-   <div class="lqbtns"><button class="ib" data-tra="edx">Cancelar</button><button class="ib pri" data-tra="edok" id="trEdOk">Guardar corrección</button></div>`}
+   ${W.length?`<div class="callout t-warn to-obs" id="trEdWarn"><b>${W.length} ${W.length===1?'aviso':'avisos'}</b> <span class="note">(no impiden revisar)</span><ul>${W.map(o=>`<li>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}`}
 function trEdClick(a,b,id){const e=TR.ed;const t=TD.docs.get(id);const i=+((b.closest('[data-tri]')||{}).dataset||{}).tri;
   if(a==='edx'){TR.ed=null;if(!TR.dirty)trInit(t);trDraw();return}
   if(a==='badd'){const j=TC().jor[String(pd(t.date).getUTCDay())]||TC().jor['1']||{ini:'07:30',fin:'17:00'};
@@ -389,3 +471,53 @@ async function trQuitar(tid,dni){const t=TD.docs.get(tid);if(!t||!toReabOk()||![
     toast(`${nm} ya no figura en ese tareo.`)}
   catch(err){trErr('No se pudo quitar: ',err)}}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('#trConf [data-trq]');if(b&&!b.disabled)trQuitar(b.dataset.trq,b.dataset.dni)});
+
+/* ---------- pasar un obrero al tareo de otro capataz (tasis/admin, desde la revisión) ---------- */
+/* Solo entre tareos «Enviado» o «Revisado» del mismo día (la oficina es dueña de los dos documentos). No se escribe en un
+   tareo en borrador o reabierto ni se crea uno a nombre del capataz: su celular guarda con update de rows/blq enteros (o set si
+   aún no existe) y borraría al obrero pasado. Ver docs/ia/tareo.md («Revisión en laptop (oct 2026)»). */
+/** pasa la fila de un obrero del tareo A al B (pura; no escribe). En A: sin su fila y fuera de los bloques (un bloque que queda
+    vacío se quita). En B: su fila sin cotejo y sus mismos bloques: si B ya tiene uno con la misma partida y horario, se suma a
+    él; si no, se crea uno igual solo con él. Sus horas se recalculan con tCalc en B. → {a, b, row} | null */
+function trPasa(A,B,dni){const r0=(A&&A.rows||{})[dni];if(!r0)return null;const blA=[],mine=[];
+  for(const b of Array.isArray(A.blq)?A.blq:[]){if(!b)continue;const n=Array.isArray(b.dnis)?b.dnis:[];if(n.includes(dni)){mine.push(b);const m={...b,dnis:n.filter(x=>x!==dni)};if(m.dnis.length)blA.push(m)}else blA.push(b)}
+  const blB=(Array.isArray(B.blq)?B.blq:[]).filter(Boolean).map(b=>({...b,dnis:Array.isArray(b.dnis)?b.dnis.slice():[]}));
+  for(const b of mine){const y=blB.find(x=>x.pc===b.pc&&x.ini===b.ini&&x.fin===b.fin);if(y){if(!y.dnis.includes(dni))y.dnis.push(dni)}
+    else blB.push({id:trBid(),pc:b.pc||'',ini:b.ini||'',fin:b.fin||'',dnis:[dni]})}
+  const row={...r0};delete row.fir;delete row.gar;const rA={...(A.rows||{})};delete rA[dni];
+  const b={...B,rows:{...(B.rows||{}),[dni]:row},blq:blB};const c=tCalc(b);const row2=c.rows[dni]||row;
+  return{a:{...A,rows:rA,blq:blA},b:{...b,rows:{...b.rows,[dni]:row2}},row:row2}}
+/** capataces a los que se puede pasar (why = por qué no): los tcap activos y los que tienen tareo ese día, menos el del tareo */
+function trDestinos(t,dni){const by=new Map();for(const x of TD.docs.values())if(x&&!x.arch&&x.date===t.date&&x.id!==t.id&&x.cap!==t.cap)by.set(x.cap,x);
+  const L=tCaps().filter(c=>c.id!==t.cap).map(c=>({cap:c.id,name:c.name}));for(const[cap,x]of by)if(!L.some(y=>y.cap===cap))L.push({cap,name:x.capN||tCapName(cap)||cap});
+  return L.map(y=>{const d=by.get(y.cap)||null;const st=d?d.st||'bor':'sin';
+    const why=!d?'aún no tiene tareo este día':st==='reab'?'reabierto: lo está corrigiendo':!['env','rev'].includes(st)?'lo está llenando: que lo agregue él':(d.rows||{})[dni]?'ya figura en ese tareo':'';
+    return{...y,name:(d&&d.capN)||y.name,id:d?d.id:'',st,why}}).sort((a,b)=>(!!a.why)-(!!b.why)||a.name.localeCompare(b.name))}
+function trPasarDlg(id,dni){const t=TD.docs.get(id);if(!t||!toReabOk()||!['env','rev'].includes(t.st)||!(t.rows||{})[dni])return;
+  if(TR.dirty){toast('Primero guarda el cotejo antes de pasar a un obrero.');return}
+  const r=t.rows[dni];const nm=trNm(r)||dni;const L=trDestinos(t,dni);const ok=L.filter(x=>!x.why);
+  lqModal(`<div class="lqtop"><b>Pasar a otro capataz</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
+   <p class="lqmsg"><b>${esc(nm)}</b> <span class="mono note">${esc(dni)}</span> sale del tareo de <b>${esc(t.capN||tCapName(t.cap))}</b> y entra al del capataz que elijas, ${r.as===false?`con su falta (${esc(r.mot||'sin motivo')})`:'con sus mismas horas y partidas'}.</p>
+   <div class="tr-dst" id="trPd" role="radiogroup" aria-label="Capataz destino">${L.map(x=>`<label class="tr-dso${x.why?' off':''}"><input type="radio" name="trPd" value="${esc(x.id)}" data-cap="${esc(x.cap)}"${x.why?' disabled':''}${ok.length===1&&x===ok[0]?' checked':''}><span><b>${esc(x.name)}</b> <span class="note">${esc((TO_ST[x.st]||[x.st])[0])}${x.why?' · '+esc(x.why):''}</span></span></label>`).join('')||'<p class="note">No hay otros capataces.</p>'}</div>
+   <p class="note">Solo a un tareo «Enviado» o «Revisado»: si el capataz aún lo está llenando, su celular guardaría encima. La firma se coteja de nuevo en el tareo de destino; un tareo revisado vuelve a «Enviado».</p>
+   <label>Motivo (queda en el historial de los dos tareos)<input id="trPm" type="text" maxlength="200" placeholder="Ej. trabajó toda la jornada con otra cuadrilla"></label>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="trPok"${ok.length?'':' disabled'}>Pasar</button></div>`,
+   e=>{if(!e.target.closest('#trPok'))return;const sel=$('#lqm input[name="trPd"]:checked');const m=($('#trPm').value||'').trim();
+     if(!sel){toast('Elige el capataz.');return}if(!m){toast('Escribe el motivo.');$('#trPm').focus();return}
+     lqClose();trPasar(id,dni,sel.value,m)})}
+/* en una transacción con los dos tareos: vuelve a comprobar estados y filas; hist `cor` con motivo y detalle en ambos */
+async function trPasar(oid,dni,did,m){if(!toReabOk()||TR.busy||!did)return;TR.busy=true;const FV=firebase.firestore.FieldValue;let msg='';
+  try{const rA=fcol('tareo').doc(oid),rB=fcol('tareo').doc(did);
+    await(db||FDB).runTransaction(async tx=>{const sA=await tx.get(rA),sB=await tx.get(rB);if(!sA.exists||!sB.exists)throw new Error('El tareo ya no existe.');
+      const A={...sA.data(),id:oid},B={...sB.data(),id:did};const nA=A.capN||tCapName(A.cap),nB=B.capN||tCapName(B.cap);
+      if(!['env','rev'].includes(A.st))throw new Error('Este tareo cambió de estado.');
+      if(!['env','rev'].includes(B.st))throw new Error(`El tareo de ${nB} ya no está enviado (el capataz lo está llenando).`);
+      if(A.date!==B.date||A.arch||B.arch)throw new Error('El tareo de destino no es del mismo día.');
+      const r=(A.rows||{})[dni];if(!r)throw new Error('Ya no figura en este tareo.');if((B.rows||{})[dni])throw new Error(`Ya figura en el tareo de ${nB}.`);
+      const x=trPasa(A,B,dni);const ape=r.ape||dni;const t2=NOW(),by=me.email||'';
+      const upA={[`rows.${dni}`]:FV.delete(),blq:x.a.blq,...trCorExtra(A),hist:FV.arrayUnion(trHist('cor',{mot:m,cam:`${A.st==='rev'?'Quita revisado. ':''}Pasado al tareo de ${nB}: ${ape} (${trAsTx(r)})`,det:tDet(A,x.a)})),by,ts:t2};
+      if(A.cot&&typeof A.cot==='object'&&A.cot[dni])upA[`cot.${dni}`]=FV.delete();
+      const upB={[`rows.${dni}`]:trClean({[dni]:x.row})[dni],blq:x.b.blq,...trCorExtra(B),hist:FV.arrayUnion(trHist('cor',{mot:m,cam:`${B.st==='rev'?'Quita revisado. ':''}Recibido del tareo de ${nA}: ${ape} (${trAsTx(r)}); su firma se coteja en este tareo`,det:tDet(B,x.b)})),by,ts:t2};
+      tx.update(rA,upA);tx.update(rB,upB);msg=`${ape} pasó al tareo de ${nB}.`});
+    toast(msg)}
+  catch(err){trErr('No se pudo pasar: ',err)}finally{TR.busy=false;trSync()}}
