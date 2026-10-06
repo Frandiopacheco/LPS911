@@ -568,3 +568,8 @@ Código en `web/js/tareo-pub.js` (después de `tareo-cuentas.js`), CSS en el blo
 - La publicación guarda además `cfg` (jornada congelada del día, tomada del primer tareo fuente con `cfg`), `jor` (horas de jornada) y `nl` (no laborable): el Excel usa `jor` para la asistencia A/I y las horas de descanso médico, así que un cambio posterior de jornada no altera Excels anteriores.
 - La pantalla de Publicación envía la `firma` de la previa; si el servidor responde `ok:false` (bloqueos), los muestra sin publicar.
 - El historial del tareo etiqueta `rect` como «Abierto para rectificar».
+
+## Pedido del dueño (06-10-2026): revisión de producción y grilla como el formato
+
+- **Revisión del jefe de producción** (admin y editor con `tpub`) antes de publicar, en la misma grilla de horas: NO coteja firmas; revisa que las horas estén bien asignadas a las partidas y puede editar (mover horas de una partida a otra, agregar o quitar partida del día). Si cambia las **HH totales** de un obrero, aparece un aviso claro (y confirmación al guardar) y queda en el historial. Es opcional (no bloquea publicar); queda marcado `prod: {t, by, byN}` = «Revisado por producción» y la pantalla de Publicación muestra cuántos tareos lo tienen. Su edición NO devuelve el tareo a «Enviado» (las firmas no cambian); el estado se conserva.
+- **Celular del capataz:** la grilla de horas va como el formato físico: **obreros en FILAS, partidas en COLUMNAS** (nombres fijos a la izquierda, códigos de partida fijos arriba). «Revisar y enviar» muestra la misma grilla (solo lectura) con totales, en vez de una lista.
