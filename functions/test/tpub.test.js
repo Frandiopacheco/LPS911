@@ -35,6 +35,16 @@ test('día correcto: sin bloqueos y resumen', () => {
   assert.strictEqual(r.resumen.tareos.length, 2);
 });
 
+test('revisión de producción: prod por tareo y conteo (informativo, no bloquea)', () => {
+  const T = base(); T[0].prod = { t: 9, by: 'jefe@obra.pe', byN: 'Jefe' };
+  const r = V(T);
+  assert.deepStrictEqual(r.bloqueos, []);
+  assert.strictEqual(r.resumen.prod, 1);
+  assert.deepStrictEqual(r.resumen.tareos.map(t => [t.id, t.prod]), [[F + '_c1', true], [F + '_c2', false]]);
+  const T2 = base(); T2[1].prod = null;
+  assert.strictEqual(V(T2).resumen.prod, 0);
+});
+
 test('estados: borrador, enviado y reabierto bloquean; pub solo en rectificación; vacíos y archivados no cuentan', () => {
   for (const st of ['bor', 'env', 'reab', 'pub']) {
     const T = base(); T[1].st = st;

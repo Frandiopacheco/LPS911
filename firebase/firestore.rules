@@ -378,7 +378,7 @@ service cloud.firestore {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
       return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
-        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect'])
+        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect', 'prod'])
           && n[n.size() - 1].get('by', '') == mid()));
     }
     // historial al CREAR (segunda auditoría, A4): vacío o solo su «Enviado» (a:'env', by = su id); nada de la oficina
@@ -396,6 +396,23 @@ service cloud.firestore {
       return resource.data.get('st', 'bor') != 'pub' && request.resource.data.get('st', 'bor') != 'pub'
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pubV']);
     }
+    // Revisión de producción (pedido del dueño, 06-10-2026): el jefe de producción (editor con «Publica tareo») revisa y corrige
+    // las horas por partida de un tareo «Enviado» o «Revisado» y lo marca «prod». No cambia el estado, ni el cotejo (cot, cotFot),
+    // ni la revisión de la oficina (revAt, revBy), ni nada de la publicación. Su entrada de historial es una sola, al final, a:'prod'.
+    function tpubEd() { return isMember() && notOff() && role() == 'editor' && get(memberPath()).data.get('tpub', false) == true; }
+    function tProdHist() {
+      let o = resource.data.get('hist', []);
+      let n = request.resource.data.get('hist', []);
+      return o is list && n is list && n.size() == o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
+        && n[o.size()] is map && n[o.size()].get('a', '') == 'prod' && n[o.size()].get('by', '') == mid();
+    }
+    function tProdOk() {
+      return tpubEd() && resource.data.get('st', 'bor') in ['env', 'rev']
+        && request.resource.data.get('st', 'bor') == resource.data.get('st', 'bor')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rows', 'pcs', 'hist', 'prod', 'ts', 'by'])
+        && request.resource.data.get('prod', null) is map && request.resource.data.prod.get('by', '') == mid()
+        && tProdHist();
+    }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
         || (tarRole() == 'tcap' && (resource == null ? idMine(id) : resource.data.get('cap', '') == mid())));
@@ -404,16 +421,16 @@ service cloud.firestore {
         && request.resource.data.get('st', 'bor') in ['bor', 'env']
         // nada de la oficina al crear: ni cotejo, ni revisado, ni reapertura, ni publicación, ni historial ajeno (A4).
         // rows.*.fir/gar (formato antiguo) no se valida aquí (mapas anidados): la app ya no los lee (solo cot + cotFot).
-        && !request.resource.data.keys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && !request.resource.data.keys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot', 'prod'])
         && tHistNew());
       // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
-      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
+      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || tProdOk() || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
         // cot/cotFot: cotejo de firmas y garita del asistente (auditoría F2): el capataz no lo crea ni lo cambia (su guardado lo copia igual)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot', 'prod'])
         && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
