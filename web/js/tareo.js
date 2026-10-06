@@ -137,7 +137,7 @@ const tBlqDe=(blq,dni)=>(Array.isArray(blq)?blq:[]).filter(b=>b&&Array.isArray(b
 /** copia del tareo con `rows` recalculados desde `blq`: por obrero presente, horas por partida, primera entrada/última salida,
     trab = suma de sus bloques (cada uno sin su intersección con el refrigerio), ext = max(0, trab − jornada del día) (domingo o feriado: todo extra).
     Usa `doc.cfg` (configuración congelada del día) si existe; si no, la actual. Ausentes: sin horas. */
-function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};const D=tDia(f,d.cfg);
+function tCalc(doc){const d=doc||{};if(tEsHrs(d))return tCalcHrs(d);const f=d.date||todayIso();const rows={};const D=tDia(f,d.cfg);
   for(const[dni,r0]of Object.entries(d.rows||{})){const r={...r0};
     if(r.as!==true){Object.assign(r,{h:{},ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}/* no vino o sin marcar: sin horas (conserva sus bloques) */
     const hm={};let a=null,z=null,t=0;
@@ -151,7 +151,7 @@ function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};con
     El motivo de «no vino» es opcional (ya no hay k:'mot').
     Un obrero que no vino puede seguir en sus bloques (no es error: tCalc le da 0 h y los recupera si vuelve a «vino»). */
 const tHtxt=v=>String(tR2(+v||0)).replace('.',',');
-function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
+function tValida(doc){const d=doc||{};if(tEsHrs(d))return tValidaHrs(d);const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
   const nm=dni=>{const r=rows[dni];return r&&(r.ape||r.nom)?[r.ape,r.nom].filter(Boolean).join(', '):dni};
   const pcC=pc=>{const p=pc&&S.tpc.get(pc);return p?p.cod:pc||'sin partida'};const bloqs=new Set();
   if(!Object.keys(rows).length)out.push({dni:null,k:'vacio',msg:'No hay obreros en el tareo: agrega a tu cuadrilla.'});
@@ -169,6 +169,55 @@ function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso
     let m=L[0],cx=false;for(let i=1;i<L.length;i++){if(L[i][0]<m[1]){cx=true;out.push({dni,k:'cruce',msg:`${nm(dni)}: dos bloques se cruzan (${m[2].ini}–${m[2].fin} y ${L[i][2].ini}–${L[i][2].fin}).`});break}if(L[i][1]>m[1])m=L[i]}
     if(!cx&&!D.nl&&D.jh>0){const h=tR2(L.reduce((s,x)=>s+tBlqMin(x[0],x[1],D.rw),0)/60);
       if(h<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(h)} h de ${tHtxt(D.jh)}`})}}
+  if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});
+  return out}
+
+/* ---------- «Horas por cantidad» (modo:'hrs'; contrato en docs/ia/tareo.md) ----------
+   El capataz escribe rows[dni].h = {pcId: horas} directamente (grilla como el formato físico); pcs = partidas del día en su orden.
+   Los tareos antiguos con bloques (sin modo) se siguen calculando como antes. Helpers globales para la oficina: tEsHrs, tHrsTot, tJorDia. */
+/** ¿el tareo es de horas por cantidad? */
+function tEsHrs(doc){return!!doc&&doc.modo==='hrs'}
+/** horas válidas de una celda (número finito > 0) o 0 */
+const tHv=v=>{const n=+v;return Number.isFinite(n)&&n>0?n:0};
+/** total de horas de una fila (suma de h; ignora 0, vacíos y valores no válidos) */
+function tHrsTot(row){let t=0;for(const v of Object.values((row&&row.h)||{}))t+=tHv(v);return tR2(t)}
+/** horas de la jornada ordinaria del día del tareo (doc.cfg si lo tiene; feriado o día sin jornada → 0: todo es extra) */
+function tJorDia(doc){const d=doc||{};return tDia(d.date||todayIso(),d.cfg).jh}
+/* inicio de la jornada (informativo): la del día; en un día sin jornada (domingo), la de la configuración congelada o la del lunes */
+function tHrsIni(d,D){const j=D.j||(d.cfg&&d.cfg.v===1&&d.cfg.jor&&d.cfg.jor.ini?d.cfg.jor:null)||TC().jor['1'];return j&&j.ini||''}
+/** salida estimada: inicio + horas trabajadas, saltando la ventana de refrigerio del día si el tramo la cruza (solo para cotejar con garita) */
+function tHrsFin(ini,trab,rw){const s=tMin(ini);if(s==null||!(trab>0))return'';let e=s+Math.round(trab*60);
+  if(rw){if(s<rw[0]&&e>rw[0])e+=rw[1]-rw[0];else if(s>=rw[0]&&s<rw[1])e+=rw[1]-s}
+  e=Math.min(e,1439);return String(Math.floor(e/60)).padStart(2,'0')+':'+String(e%60).padStart(2,'0')}
+/** tCalc de modo:'hrs': presente → trab = suma de h, ext = max(0, trab − jornada) (no laborable: todo extra), ini = inicio de la
+    jornada, fin = sal o la estimada. No vino / sin marcar: 0 h, pero conserva h (si vuelve a «vino» recupera sus horas). */
+function tCalcHrs(d){const f=d.date||todayIso();const D=tDia(f,d.cfg);const rows={};const ini=tHrsIni(d,D);
+  for(const[dni,r0]of Object.entries(d.rows||{})){const r={...r0};const h={};
+    for(const[k,v]of Object.entries(r.h||{})){const n=tHv(v);if(n)h[k]=tR2(n)}
+    r.h=h;
+    if(r.as!==true){Object.assign(r,{ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}
+    const trab=tHrsTot(r);const sal=/^\d{1,2}:\d{2}$/.test(r.sal||'')?r.sal:'';
+    Object.assign(r,{ini:trab?ini:'',fin:trab?(sal||tHrsFin(ini,trab,D.rw)):'',trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))});rows[dni]=r}
+  return{...d,rows}}
+/** tValida de modo:'hrs' → [{dni|null, k, msg, warn?}]. k: vacio · pcs (presentes sin trabajos del día) · marca · sinh (vino con 0 h) ·
+    hval (valor no válido) · hmax (> 16 h: error de digitación) · bloq (partida bloqueada con horas) · foto; parcial (warn, no bloquea). */
+const T_HMAX=16;
+function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const pcs=Array.isArray(d.pcs)?d.pcs:[];
+  const nm=dni=>{const r=rows[dni];return r&&(r.ape||r.nom)?[r.ape,r.nom].filter(Boolean).join(', '):dni};
+  if(!Object.keys(rows).length)out.push({dni:null,k:'vacio',msg:'No hay obreros en el tareo: agrega a tu cuadrilla.'});
+  const pres=Object.entries(rows).filter(([,r])=>r&&r.as===true);
+  if(pres.length&&!pcs.length)out.push({dni:null,k:'pcs',msg:'Agrega los trabajos del día (partidas).'});
+  const bloqs=new Set();
+  for(const[dni,r]of Object.entries(rows)){
+    if(r.as!==true&&r.as!==false){out.push({dni,k:'marca',msg:`Falta marcar si vino: ${(r&&r.ape)||nm(dni)}`});continue}
+    if(!r.as)continue;/* no vino: el motivo es opcional; sus horas se conservan pero no cuentan */
+    const H=r.h||{};const mal=Object.values(H).filter(v=>v!==''&&v!=null&&!(Number.isFinite(+v)&&+v>=0));
+    if(mal.length)out.push({dni,k:'hval',msg:`${nm(dni)}: hay horas no válidas.`});
+    for(const[pc,v]of Object.entries(H)){if(!tHv(v)||bloqs.has(pc))continue;const p=S.tpc.get(pc);if(p&&p.bloq===true){bloqs.add(pc);out.push({dni:null,k:'bloq',pc,msg:`La partida ${p.cod} está bloqueada por costos.`})}}
+    const t=tHrsTot(r);
+    if(!t){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponle sus horas o márcalo como que no vino.`});continue}
+    if(t>T_HMAX){out.push({dni,k:'hmax',msg:`${nm(dni)}: ${tHtxt(t)} h en el día. Revisa las horas (máximo ${T_HMAX}).`});continue}
+    if(!D.nl&&D.jh>0&&t<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(t)} h de ${tHtxt(D.jh)}`})}
   if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});
   return out}
 

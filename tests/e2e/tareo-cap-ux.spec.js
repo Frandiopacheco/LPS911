@@ -1,6 +1,7 @@
 // Segunda auditoría externa del tareo (ChatGPT, 06-10-2026), parte del capataz (docs/ia/tareo.md
 // «Correcciones de la segunda auditoría — capataz»). Los casos de ChatGPT reproducían el defecto; aquí se verifica que YA NO ocurre:
 // A5 feriado/jornada congelada · envN · UX1 contadores · UX2 nombres iguales · UX3 buscador y filtros · UX4 foto · UX6 días enviados.
+// Adaptado a la grilla «horas por cantidad» (los tareos de prueba son modo:'hrs').
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
 
@@ -20,31 +21,28 @@ const NAMES = [['QUISPE MAMANI', 'JUAN CARLOS'], ['QUISPE HUAMANI', 'JUAN JOSE']
 const crew = (n = 20) => NAMES.slice(0, n).map(([ape, nom], i) => per(String(41000000 + i), ape, nom));
 const dbDoc = (page, id = ID) => page.evaluate(i => window.__dbGet('tareo', i) || {}, id);
 /* un tareo listo para enviar (con foto ya subida) */
-const ready = (date, x = {}) => ({ date, cap: CAP, capN: 'Teodoro', st: 'bor', foto: ['f1'], hist: [], rows: { '41000000': row('QUISPE MAMANI', 'JUAN CARLOS') },
-  blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '17:00', dnis: ['41000000'] }], ...x });
+const ready = (date, x = {}) => ({ date, cap: CAP, capN: 'Teodoro', st: 'bor', modo: 'hrs', pcs: ['p10_05'], foto: ['f1'], hist: [], rows: { '41000000': row('QUISPE MAMANI', 'JUAN CARLOS', true, { h: { p10_05: 8.5 } }) }, ...x });
 const base = (extra = []) => [...crew(1), ...PC, ['tfot', 'f1', { date: HOY, cap: CAP, n: 1, d: PNG }], ...extra];
 
 test('A5: en feriado la pantalla del capataz dice «Día no laborable» y no presenta la jornada ordinaria', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  // jueves 01-10 marcado como feriado en el calendario del tareo; un bloque de 7:30 a 17:00
+  // jueves 01-10 marcado como feriado en el calendario del tareo; 8,5 h de encofrado
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: base([['tcfg', 'main', { fer: [HOY], ferN: { [HOY]: 'Prueba' } }], ['tareo', ID, ready(HOY)]]) });
   const root = page.locator('#tcRoot');
   await expect(root.locator('#tcNoLab')).toContainText('Día no laborable: todas las horas cuentan como extra');
   await expect(root.locator('#tcNoLab')).toContainText('Feriado: Prueba.');
-  await root.locator('.tc-steps [data-tcs="2"]').click();
-  await expect(root.locator('#tcNoLab')).toBeVisible();
+  await root.locator('.tc-steps [data-tcs="3"]').click();
   // antes decía «Jornada de hoy: 8.5 h»
-  await expect(root).not.toContainText('Jornada de hoy');
+  await expect(root).not.toContainText('Jornada del día');
   await expect(root.locator('#tcJorH')).toHaveText('Día no laborable: todas las horas son extra');
-  await expect(root.locator('.tc-bar[data-dni="41000000"]')).toContainText('todo extra');
-  const c = await page.evaluate(() => ({ ui: tcJor(TCS.date), real: tCalc(TCS.doc).rows['41000000'] }));
+  await expect(root.locator('.tc-gt[data-dni="41000000"]')).toContainText('todo extra');
+  await expect(root.locator('.tc-gt[data-dni="41000000"]')).toHaveClass(/warn/);
+  const c = await page.evaluate(() => ({ ui: tcJor(TCS.date), real: tCalc(TCS.doc).rows['41000000'], jd: tJorDia(TCS.doc) }));
   expect(c.ui.h).toBe(0);
   expect(c.ui.nl).toBe(true);
+  expect(c.ui.full).toBe(8.5); // «Toda la jornada» usa la jornada de ese día de semana como referencia
+  expect(c.jd).toBe(0);
   expect(c.real.ext).toBe(8.5);
-  // el editor ofrece los atajos como horario sugerido, etiquetado
-  await root.locator('[data-tca="new"]').click();
-  await expect(root.locator('.tc-sug')).toContainText('día no laborable');
-  await expect(root.locator('[data-tca="sc"][data-v="man"]')).toBeVisible();
   noErrors(errors, 'A5 feriado');
 });
 
@@ -56,17 +54,17 @@ test('A5: un reabierto con jornada congelada (doc.cfg) se muestra con esa jornad
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: base([['tareo', ID, ready(HOY, { st: 'reab', cfg: cfgFer, envN: 1, reab: { mot: 'revisar', t: 1, by: 'tasis@obra.pe' } })]]) });
   const root = page.locator('#tcRoot');
   await expect(root.locator('#tcNoLab')).toBeVisible();
-  await root.locator('.tc-steps [data-tcs="2"]').click();
+  await root.locator('.tc-steps [data-tcs="3"]').click();
   await expect(root.locator('#tcJorH')).toContainText('Día no laborable');
   // y al revés: congelado laborable con otra jornada mientras la configuración actual lo marca feriado
   await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: { ini: '08:00', fin: '16:00', ref: 30, refIni: '12:30' }, fer: false, rnl: { ref: 60, refIni: '12:00' } }; S.tcfg.set('main', { fer: [TCS.date] }); tcDraw(); });
+  await expect(root.locator('#tcJorH')).toHaveText('Jornada del día: 7,5 h');
+  await expect(root.locator('.tc-gt[data-dni="41000000"]')).toContainText('+1 HE');
+  await root.locator('.tc-steps [data-tcs="1"]').click();
   await expect(root.locator('#tcNoLab')).toHaveCount(0);
-  await expect(root.locator('#tcJorH')).toHaveText(/Jornada del día: 7[.,]5 h/);
   const c = await page.evaluate(() => ({ ui: tcJor(TCS.date), real: tCalc(TCS.doc).rows['41000000'] }));
   expect(c.ui.h).toBe(7.5);
-  expect(c.ui.S.man).toEqual(['08:00', '12:30']);
-  expect(c.ui.S.tar).toEqual(['13:00', '16:00']);
-  expect(c.real.ext).toBe(+(c.real.trab - 7.5).toFixed(2));
+  expect(c.real).toMatchObject({ trab: 8.5, ext: 1, ini: '08:00', fin: '17:00' });
   noErrors(errors, 'A5 congelada');
 });
 
@@ -75,14 +73,14 @@ test('envN: cada envío suma 1 (primer envío y reenvío de un reabierto)', asyn
   page.on('dialog', d => d.accept());
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: base([['tareo', ID, ready(HOY)]]) });
   const root = page.locator('#tcRoot');
-  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await root.locator('.tc-steps [data-tcs="4"]').click();
   await root.locator('#tcSend[data-tca="send"]').click();
   await expect.poll(async () => (await dbDoc(page)).st).toBe('env');
   expect((await dbDoc(page)).envN).toBe(1);
   // la oficina lo reabre; el capataz lo reenvía
   await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'reab', reab: { t: 2, by: 'tasis@obra.pe', mot: 'falta uno' } }), ID);
   await expect(root.locator('.tc-reab')).toBeVisible();
-  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await root.locator('.tc-steps [data-tcs="4"]').click();
   await root.locator('#tcSend[data-tca="send"]').click();
   await expect.poll(async () => (await dbDoc(page)).envN).toBe(2);
   expect((await dbDoc(page)).st).toBe('env');
@@ -91,7 +89,7 @@ test('envN: cada envío suma 1 (primer envío y reenvío de un reabierto)', asyn
 
 test('UX1: contadores Vinieron / No vinieron / Sin marcar (sin marcar no cuenta como falta)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const D = { date: HOY, cap: CAP, st: 'bor', foto: [], hist: [], blq: [], rows: {
+  const D = { date: HOY, cap: CAP, st: 'bor', modo: 'hrs', pcs: [], foto: [], hist: [], rows: {
     '41000000': row('QUISPE MAMANI', 'JUAN CARLOS', true), '41000001': row('QUISPE HUAMANI', 'JUAN JOSE', false), '41000002': row('ALVA ROJAS', 'ANA MARIA', null) } };
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(3), ...PC, ['tareo', ID, D]] });
   const k = page.locator('#tcK3');
@@ -105,7 +103,7 @@ test('UX1: contadores Vinieron / No vinieron / Sin marcar (sin marcar no cuenta 
   noErrors(errors, 'UX1');
 });
 
-test('UX2: dos «Juan Quispe» se distinguen en asistencia, trabajos, línea de tiempo y resumen; el nombre completo se ve tocando', async ({ page }) => {
+test('UX2: dos «Juan Quispe» se distinguen en asistencia, columnas de la grilla, editor y resumen; el nombre completo se ve tocando', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   // un tercero con nombre y apellidos idénticos a otro: se distingue por DNI
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(2), per('41000099', 'QUISPE MAMANI', 'JUAN CARLOS'), ...PC] });
@@ -113,29 +111,31 @@ test('UX2: dos «Juan Quispe» se distinguen en asistencia, trabajos, línea de 
   await expect(root.locator('.tc-ob[data-dni="41000000"]')).toContainText('DNI 41000000');
   await root.locator('[data-tca="todos"]').click();
   await root.locator('.tc-foot [data-tcs="2"]').click();
-  await root.locator('[data-tca="new"]').click();
   await root.locator('#tcPcQ').fill('encof');
   await root.locator('[data-tca="pc"][data-v="p10_05"]').click();
-  const names = await root.locator('.tc-who [data-tca="who"] .tc-ppn').allTextContents();
-  // antes: dos botones «✓ Juan Quispe»
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  const names = await root.locator('.tc-gn .tc-nmt').allTextContents();
+  // antes: dos «Juan Quispe»
   expect(new Set(names).size).toBe(3);
   expect(names).toContain('Juan Quispe Huamani');
   expect(names).toContain('Juan Quispe Mamani ·DNI 000');
   expect(names).toContain('Juan Quispe Mamani ·DNI 099');
-  // el nombre completo va escrito en el botón (no solo en un title)
-  await expect(root.locator('.tc-who [data-v="41000001"] .tc-ppfn')).toHaveText('QUISPE HUAMANI, JUAN JOSE');
-  await root.locator('[data-tca="edOk"]').click();
-  // línea de tiempo: el nombre es tocable y muestra el nombre completo con DNI
-  await root.locator('.tc-bar[data-dni="41000099"] [data-tcnm]').click();
+  // la columna: tocar el nombre muestra el nombre completo con DNI
+  await root.locator('.tc-gn[data-dni="41000099"] [data-tcnm]').click();
   await expect(page.locator('#toast')).toContainText('QUISPE MAMANI, JUAN CARLOS · DNI 41000099');
+  // el editor de la celda lleva el nombre completo (con DNI si se repite)
+  await root.locator('.tc-gcell[data-dni="41000000"][data-pc="p10_05"]').click();
+  await expect(root.locator('#tcCell .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 000');
+  await root.locator('#tcCell [data-tca="cellX"]').last().click();
+  await root.locator('tr[data-pc="p10_05"] [data-tca="rowAll"]').click();
   // resumen
-  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await root.locator('.tc-foot [data-tcs="4"]').click();
   const sum = await root.locator('.tc-sum .tc-wn > b').allTextContents();
   expect(new Set(sum).size).toBe(3);
   noErrors(errors, 'UX2');
 });
 
-test('UX3: buscador y filtros en la cuadrilla y en «¿Quiénes?»; filtrar no cambia la asistencia ni la selección', async ({ page }) => {
+test('UX3: buscador y filtros en la cuadrilla; filtrar no cambia la asistencia', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(20), ...PC] });
   const root = page.locator('#tcRoot');
@@ -169,48 +169,15 @@ test('UX3: buscador y filtros en la cuadrilla y en «¿Quiénes?»; filtrar no c
   expect(box.y).toBeGreaterThanOrEqual(body.y - 1);
   expect(box.y).toBeLessThan(body.y + 150);
   await expect(root.locator('#tcK3')).toContainText('18 sin marcar');
-  // editor de trabajo: buscador y filtros Libres / Seleccionados / Todos
-  await root.locator('[data-tca="todos"]').click();
-  await root.locator('.tc-foot [data-tcs="2"]').click();
-  await root.locator('[data-tca="new"]').click();
-  await root.locator('#tcPcQ').fill('encof');
-  await root.locator('[data-tca="pc"][data-v="p10_05"]').click();
-  await root.locator('[data-tca="sc"][data-v="man"]').click();
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveCount(19);
-  await root.locator('.tc-who [data-v="41000002"]').click(); // quita a Ana
-  await root.locator('#tcQ2').fill('rojas');
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveCount(2); // ALVA ROJAS y ROJAS ESPINOZA
-  await root.locator('#tcQ2').fill('');
-  await root.locator('[data-tcf2="sel"]').click();
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveCount(18);
-  await root.locator('[data-tcf2="all"]').click();
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveCount(19);
-  const sel = await page.evaluate(() => TCS.ed.dnis.filter(d => TCS.doc.rows[d].as === true).length);
-  expect(sel).toBe(18);
-  await root.locator('[data-tca="edOk"]').click();
-  // con un trabajo de mañana, «Libres» para la tarde muestra a todos; para la mañana a Ana (no está en el primero)
-  await root.locator('[data-tca="new"]').click();
-  await root.locator('#tcPcQ').fill('tarra');
-  await root.locator('[data-tca="pc"][data-v="p20_01"]').click();
-  await root.locator('[data-tca="sc"][data-v="man"]').click();
-  await root.locator('[data-tcf2="lib"]').click();
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveCount(1);
-  await expect(root.locator('.tc-who [data-tca="who"]')).toHaveAttribute('data-v', '41000002');
   noErrors(errors, 'UX3');
 });
 
-test('UX4: en el paso 3 la foto va arriba; «Falta la foto» abre la cámara y al recargar vuelve al mismo día y paso', async ({ page }) => {
+test('UX4: en el paso 4 la foto va arriba; «Falta la foto» abre la cámara y al recargar vuelve al mismo día y paso', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(20), ...PC] });
+  const rows = Object.fromEntries(NAMES.map(([a, n], i) => [String(41000000 + i), row(a, n, true, { h: { p10_05: 8.5 } })]));
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(20), ...PC, ['tareo', ID, { date: HOY, cap: CAP, st: 'bor', modo: 'hrs', pcs: ['p10_05'], foto: [], hist: [], rows }]] });
   const root = page.locator('#tcRoot');
-  await root.locator('[data-tca="todos"]').click();
-  await root.locator('.tc-foot [data-tcs="2"]').click();
-  await root.locator('[data-tca="new"]').click();
-  await root.locator('#tcPcQ').fill('encof');
-  await root.locator('[data-tca="pc"][data-v="p10_05"]').click();
-  await root.locator('[data-tca="sc"][data-v="todo"]').click();
-  await root.locator('[data-tca="edOk"]').click();
-  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await root.locator('.tc-steps [data-tcs="4"]').click();
   // la tarjeta de la foto está antes de la lista de obreros y a la vista sin desplazar
   const foto = await root.locator('#tcFotoC').boundingBox();
   const first = await root.locator('.tc-sum').first().boundingBox();
@@ -227,7 +194,7 @@ test('UX4: en el paso 3 la foto va arriba; «Falta la foto» abre la cámara y a
   await expect(root.locator('#tcSend')).toHaveText('Enviar tareo');
   // si el celular recarga la página al volver de la cámara: mismo día y mismo paso
   await page.reload();
-  await expect(page.locator('#tcRoot .tc-step.on')).toContainText('Revisar y enviar');
+  await expect(page.locator('#tcRoot .tc-step.on')).toContainText('Enviar');
   await expect(page.locator('#tcRoot .tc-date.on')).toContainText('Hoy');
   noErrors(errors, 'UX4');
 });
