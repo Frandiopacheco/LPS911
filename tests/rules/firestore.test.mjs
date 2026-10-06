@@ -756,7 +756,7 @@ test('invitación del tareo: registra tcap sin partida; no se cruza con la de ca
 });
 
 // ── Cuentas de capataz del tareo (DNI + contraseña, docs/ia/tareo.md) ──
-test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta entra como tcap; desactivada (off) ya no es miembro', async () => {
+test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta entra como tcap; desactivada (off) ya no entra al tareo', async () => {
   const M = '12345678@tareo.lps911.pe';
   // ni el administrador crea a mano un usuario con el dominio sintético (lo hace la función con el Admin SDK)
   await assertFails(setDoc(doc(user(OWNER), `members/${M}`), { role: 'tcap', name: 'Juan' }));
@@ -780,7 +780,4 @@ test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta
   await tSeed('members/u_tcap1', { role: 'tcap', name: 'Pedro', off: true, movTo: M });
   await assertFails(getDoc(doc(cap('tcap1'), `tareo/${h}_u_tcap1`)));
   await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
-  // cualquier miembro con off deja de serlo (un admin desactivado ya no edita)
-  await tSeed('members/adm2@obra.pe', { role: 'admin', name: 'Admin 2', off: true });
-  await assertFails(getDoc(doc(user('adm2@obra.pe'), 'acts/x1')));
 });

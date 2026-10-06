@@ -14,8 +14,10 @@ service cloud.firestore {
     function mid() { return anon() ? 'u_' + request.auth.uid : email(); }
     function isOwner() { return verified() && email() == 'frandiopacheco@gmail.com'; }
     function memberPath() { return /databases/$(database)/documents/members/$(mid()); }
-    // members.off == true: cuenta desactivada (capataz del tareo desactivado o enlace pasado a cuenta con DNI): ya no es miembro
-    function isMember() { return signedIn() && (isOwner() || (exists(memberPath()) && get(memberPath()).data.get('off', false) != true)); }
+    function isMember() { return signedIn() && (isOwner() || exists(memberPath())); }
+    // members.off == true: cuenta del tareo desactivada (o enlace anónimo pasado a cuenta con DNI): ya no entra al tareo.
+    // Se revisa solo en isTar()/tarEd() (no en isMember(): sumaba lecturas a reglas de LPS que ya están al límite).
+    function notOff() { return isOwner() || get(memberPath()).data.get('off', false) != true; }
     function role() { return isOwner() ? 'admin' : get(memberPath()).data.role; }
     // Roles de solo Tareo (docs/ia/tareo.md): no leen ni escriben nada de LPS. Se lee con get('role') para no fallar
     // si un registro no tiene rol (antes isMember() bastaba para leer).
@@ -24,11 +26,11 @@ service cloud.firestore {
     function lpsMember() { return isMember() && !tarOnly(); }
     // Tareo: ven el módulo los roles de tareo, el administrador y el editor marcado «Publica tareo» (members.tpub)
     function isTar() {
-      return isMember() && (role() in ['tcap', 'tasis', 'tcos', 'admin']
+      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'admin']
         || (role() == 'editor' && get(memberPath()).data.get('tpub', false) == true));
     }
     // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo
-    function tarEd() { return isMember() && role() in ['admin', 'tasis']; }
+    function tarEd() { return isMember() && notOff() && role() in ['admin', 'tasis']; }
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
