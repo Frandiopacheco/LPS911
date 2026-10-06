@@ -367,10 +367,12 @@ service cloud.firestore {
       return d.get('cap', '') == mid() && d.get('date', null) is string && id == d.date + '_' + mid() && tDateOk(d.date);
     }
     // historial del tareo: el capataz solo agrega al final (una entrada por escritura: su «Enviado»); no cambia ni quita las de la oficina
+    // ni agrega una con acción de la oficina (cotejo, revisado, corrección, reapertura, publicación)
     function tHistOk() {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
-      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o);
+      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
+        && (n.size() == o.size() || !(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub']));
     }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
@@ -378,12 +380,13 @@ service cloud.firestore {
       allow list: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
       allow create: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && request.resource.data.get('st', 'bor') in ['bor', 'env']
-        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy']));
+        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot']));
       allow update: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'revAt', 'revBy'])
+        // cot/cotFot: cotejo de firmas y garita del asistente (auditoría F2): el capataz no lo crea ni lo cambia (su guardado lo copia igual)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot'])
         && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
@@ -394,6 +397,8 @@ service cloud.firestore {
           && request.resource.data.get('date', null) is string && tDateOk(request.resource.data.date)
           && id.size() > (request.resource.data.date + '_' + mid()).size()
           && id[0:(request.resource.data.date + '_' + mid()).size()] == request.resource.data.date + '_' + mid()));
+      // restaurar un respaldo con imágenes (Equipo › Cargar datos) vuelve a escribir la misma foto: solo si queda idéntica
+      allow update: if tarEd() && request.resource.data == resource.data;
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
