@@ -18,7 +18,8 @@ const tcBH=(f,a,b)=>tBlqH(f,a,b);
 
 /* ---------- utilidades ---------- */
 /** id del capataz en members: correo, o 'u_<uid>' si entró con enlace (base.js arma me.email así) */
-const tcMe=()=>typeof myMid==='function'?myMid():((me&&me.email)||'');
+/* «Ver como» Capataz (tareo) con un capataz elegido (solo copia de prueba): se ve su cuadrilla y su tareo; se guarda con el usuario real (admin) */
+const tcMe=()=>(typeof VA!=='undefined'&&VA&&VA.role==='tcap'&&VA.cap)?VA.cap:(typeof myMid==='function'?myMid():((me&&me.email)||''));
 const tcId=(d,c)=>d+'_'+c;
 const tcHM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 /** hora para leer: '07:30' → '7:30' */

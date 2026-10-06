@@ -113,7 +113,7 @@ async function tSheetOf(wb,want){const names=wb.SheetNames||[];const hit=names.f
 async function tBatch(writes){/* writes: [[ref,data,opts]] en lotes de 400 */for(let i=0;i<writes.length;i+=400){const b=(db||FDB).batch();for(const[r,d,o]of writes.slice(i,i+400))o?b.set(r,d,o):b.set(r,d);await b.commit()}}
 const tStamp=()=>({by:me&&me.email||'',ts:NOW()});
 const tEdit=()=>typeof tarEdit==='function'&&tarEdit();
-const tCaps=()=>[...MEM.entries()].filter(([,m])=>m&&m.role==='tcap').map(([id,m])=>({id,name:m.name||id})).sort((a,b)=>a.name.localeCompare(b.name));
+const tCaps=()=>[...MEM.entries()].filter(([,m])=>m&&m.role==='tcap'&&!m.off).map(([id,m])=>({id,name:m.name||id})).sort((a,b)=>a.name.localeCompare(b.name));
 const tCapName=id=>{if(!id)return'';const m=MEM.get(id);return m?(m.name||id):'(capataz retirado)'};
 const tName=p=>[p.ape,p.nom].filter(Boolean).join(', ');
 const tLive=()=>[...S.tper.values()].filter(p=>!p.arch);
