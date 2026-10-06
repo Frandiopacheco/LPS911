@@ -115,7 +115,9 @@ test('capataz: asistencia explícita, no vino ↔ vino conserva horas, foto, env
   // paso 3: sin foto no se puede enviar
   await root.locator('.tc-foot [data-tcs="3"]').click();
   const send = root.locator('#tcSend');
-  await expect(send).toBeDisabled();
+  // sin foto el botón lleva a la tarjeta de la foto (segunda auditoría, UX4)
+  await expect(send).toHaveAttribute('data-tca', 'foto');
+  await expect(send).toContainText('Falta la foto');
   await expect(root).toContainText('Toma una foto del formato');
   await expect(root.locator('.tc-sum .tc-tl')).toHaveCount(3);
   await root.locator('#tcFile').setInputFiles({ name: 'formato.png', mimeType: 'image/png', buffer: await png(page) });
@@ -245,7 +247,7 @@ test('capataz: cruce en la línea de tiempo, «Revisar y enviar» lleva al cruce
   await expect(root.locator('.tc-blq.bad')).toHaveCount(0);
   await root.locator('.tc-foot [data-tcs="3"]').click();
   await expect(root.locator('.tc-step.on')).toContainText('Revisar y enviar');
-  await expect(root.locator('#tcSend')).toHaveText('Falta la foto');
+  await expect(root.locator('#tcSend')).toContainText('Falta la foto');
   noErrors(errors, 'cruce en la línea de tiempo');
 });
 
@@ -268,8 +270,9 @@ test('capataz: copia los trabajos de ayer y agrega un obrero de otro capataz', a
       { id: 'x2', pc: 'p30_01', ini: '17:00', fin: '18:00', dnis: ['40000001'] }] }]];
   const errors = await openApp(page, { as: 'tcap', editar: false, extra });
   const root = page.locator('#tcRoot');
-  // ayer ya se envió: no se puede elegir
-  await expect(root.locator(`[data-tcd="${AYER}"]`)).toBeDisabled();
+  // ayer ya se envió: se puede abrir, pero solo para consultar (segunda auditoría, UX6)
+  await expect(root.locator(`[data-tcd="${AYER}"]`)).toBeEnabled();
+  await expect(root.locator(`[data-tcd="${AYER}"]`)).toContainText('Enviado ✓');
   await root.locator('[data-tca="addOn"]').click();
   await root.locator('#tcAddQ').fill('zega');
   await root.locator('[data-tca="add"][data-v="40000009"]').click();
