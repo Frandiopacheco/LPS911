@@ -411,6 +411,11 @@ function ctaPedido(data) {
 /* obreros (ids del máster) asignados al capataz `de` que pasan a la cuenta nueva */
 const ctaMigrables = (fichas, de) => (fichas || []).filter(f => f && de && f.cap === de).map(f => f.id || f.dni);
 
-module.exports = { CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
+/* ---------- Publicación del tareo (F3) ----------
+   La lógica pura vive en tpub.js (sin require: el Firebase falso de las pruebas de la interfaz lo carga en el navegador)
+   y se exporta también desde aquí. Ver docs/ia/tareo.md, «Implementación de F3 — servidor». */
+const TPUB = require('./tpub');
+
+module.exports = { ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso };

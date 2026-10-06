@@ -134,8 +134,10 @@ test('Tareos del día: el jefe de producción ve el detalle sin reabrir', async 
   noErrors(errors, 'jefe');
 });
 
-test('Tareos del día: costos ve el aviso de la fase 3', async ({ page }) => {
+test('Tareos del día: costos no entra (su inicio es «Costos», F3)', async ({ page }) => {
   const errors = await openApp(page, { as: 'tcos', editar: false, extra: EXTRA });
-  await expect(page.locator('#main')).toContainText('cuando el jefe de producción los publique');
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'tcos');
+  await page.evaluate(() => goTab('tdia'));
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'tcos');
   noErrors(errors, 'costos');
 });

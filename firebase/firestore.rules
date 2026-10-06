@@ -378,7 +378,7 @@ service cloud.firestore {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
       return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
-        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub'])
+        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect'])
           && n[n.size() - 1].get('by', '') == mid()));
     }
     // historial al CREAR (segunda auditoría, A4): vacío o solo su «Enviado» (a:'env', by = su id); nada de la oficina
@@ -387,23 +387,33 @@ service cloud.firestore {
       return n is list && (n.size() == 0
         || (n.size() == 1 && n[0] is map && n[0].get('a', '') == 'env' && n[0].get('by', '') == mid()));
     }
+    // F3: «Publicado» (st 'pub' y pubV) solo lo pone la función publicarTareo (Admin SDK). La oficina no crea ni deja un tareo en
+    // 'pub', no cambia pubV y no toca un tareo publicado (para corregirlo: «Rectificar» en Publicación, que lo devuelve a 'rev').
+    function tOfiNew() {
+      return request.resource.data.get('st', 'bor') != 'pub' && !request.resource.data.keys().hasAny(['pubV']);
+    }
+    function tOfiUpd() {
+      return resource.data.get('st', 'bor') != 'pub' && request.resource.data.get('st', 'bor') != 'pub'
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pubV']);
+    }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
         || (tarRole() == 'tcap' && (resource == null ? idMine(id) : resource.data.get('cap', '') == mid())));
       allow list: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
-      allow create: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
+      allow create: if (tarEd() && tOfiNew()) || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && request.resource.data.get('st', 'bor') in ['bor', 'env']
         // nada de la oficina al crear: ni cotejo, ni revisado, ni reapertura, ni publicación, ni historial ajeno (A4).
         // rows.*.fir/gar (formato antiguo) no se valida aquí (mapas anidados): la app ya no los lee (solo cot + cotFot).
-        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && !request.resource.data.keys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
         && tHistNew());
-      allow update: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
+      // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
+      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
         // cot/cotFot: cotejo de firmas y garita del asistente (auditoría F2): el capataz no lo crea ni lo cambia (su guardado lo copia igual)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
         && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
@@ -417,6 +427,16 @@ service cloud.firestore {
           && id[0:(request.resource.data.date + '_' + mid()).size()] == request.resource.data.date + '_' + mid()));
       // restaurar un respaldo con imágenes (Equipo › Cargar datos) vuelve a escribir la misma foto: solo si queda idéntica
       allow update: if tarEd() && request.resource.data == resource.data;
+    }
+    // Publicación del tareo (F3): tpub/{fecha}_v{n} (versión inmutable) y tpubidx/{fecha} (índice del día). Los lee todo el módulo
+    // Tareo (también costos, tcos); solo los escribe la función publicarTareo con el Admin SDK.
+    match /tpub/{id} {
+      allow read: if isTar();
+      allow write: if false;
+    }
+    match /tpubidx/{id} {
+      allow read: if isTar();
+      allow write: if false;
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);

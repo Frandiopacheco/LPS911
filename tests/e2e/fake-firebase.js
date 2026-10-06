@@ -178,8 +178,9 @@ window.__uiAskNative = true;
       authCbs.forEach(cb => cb(auth.currentUser)); return { user: auth.currentUser };
     },
   };
-  /* Cloud Functions invocables (compat: firebase.functions().httpsCallable(name)). Solo cuentaCapataz, simulada contra la base falsa
-     con la misma lógica que functions/index.js (lo comprueba functions/test con la lógica pura). Llamadas en window.__fnCalls. */
+  /* Cloud Functions invocables (compat: firebase.functions().httpsCallable(name)), simuladas contra la base falsa. Llamadas en window.__fnCalls.
+     cuentaCapataz: copia de la lógica de functions/index.js (lo comprueba functions/test con la lógica pura).
+     publicarTareo: la lógica real de functions/tpub.js (window.TPUB). */
   const fnErr = (code, message) => Object.assign(new Error(message), { code: 'functions/' + code });
   const FN = {
     async cuentaCapataz(d) {
@@ -207,6 +208,32 @@ window.__uiAskNative = true;
       else throw fnErr('invalid-argument', 'Acción no válida.');
       changed('members'); changed('tper');
       return res;
+    },
+    /* publicarTareo (F3): usa la MISMA lógica que el servidor, functions/tpub.js, que helpers.js carga antes de este archivo
+       (window.TPUB). Aquí solo se lee la base falsa y se aplican las escrituras que devuelve tpEjecutar, todas juntas y sin
+       esperas (equivale a la transacción del servidor). Ver docs/ia/tareo.md, «Implementación de F3 — servidor». */
+    async publicarTareo(d) {
+      const TP = window.TPUB;
+      if (!TP) throw fnErr('unavailable', 'publicarTareo: la prueba no cargó functions/tpub.js (usa openApp de helpers.js).');
+      const me = auth.currentUser; const em = String(me && me.email || '').toLowerCase(); const cm = col('members').get(em);
+      if (!TP.tpPuede(em, !!(me && me.emailVerified), cm || null)) throw fnErr('permission-denied', 'Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
+      const P = TP.tpPedido(d, new Date(Date.now() - 5 * 36e5).toISOString().slice(0, 10));
+      if (P.error) throw fnErr('invalid-argument', P.error);
+      const withId = n => [...col(n).entries()].map(([id, x]) => ({ ...clone(x), id }));
+      const idx = clone(col('tpubidx').get(P.fecha)) || null;
+      const vigente = idx && +idx.v > 0 ? clone(col('tpub').get(P.fecha + '_v' + idx.v)) || null : null;
+      const R = TP.tpEjecutar({ P, tareos: withId('tareo').filter(t => t.date === P.fecha), personal: withId('tper'), partidas: withId('tpc'),
+        tcfg: clone(col('tcfg').get('main')) || {}, idx, vigente, by: em, byN: (cm && cm.name) || em, now: Date.now() });
+      if (R.err) throw fnErr(R.err.code, R.err.msg);
+      if (R.escr.some(w => w.tipo === 'crear' && col(w.col).has(w.id))) throw fnErr('aborted', 'Otra persona publicó ese día al mismo tiempo: vuelve a abrir la previa.');
+      const ch = new Set();
+      for (const w of R.escr) {
+        let v = clone(w.datos);
+        if (w.tipo === 'cambiar') { v = { ...(clone(col(w.col).get(w.id)) || {}), ...v }; if (w.hist) v.hist = [...(Array.isArray(v.hist) ? v.hist : []), clone(w.hist)]; }
+        col(w.col).set(w.id, v); ch.add(w.col);
+      }
+      ch.forEach(n => changed(n));
+      return clone(R.res);
     },
   };
   window.__fnCalls = [];
