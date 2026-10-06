@@ -293,7 +293,7 @@ const TR_SS='lps.trws';
 function trSsSet(v){try{if(v)sessionStorage.setItem(TR_SS,JSON.stringify(v));else sessionStorage.removeItem(TR_SS)}catch(e){}}
 try{const s=JSON.parse(sessionStorage.getItem(TR_SS)||'null');if(s&&typeof s.id==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s.f||'')){TD.f=s.f;TR.want=s.id}}catch(e){}
 /* el mismo filtro que la lista de «Tareos del día» (renderTDia) */
-const trFltOk=x=>!!x.t&&(TD.flt==='all'||!['rev','obs','ok'].includes(TD.flt)||(TD.flt==='rev'?x.t.st==='env':TD.flt==='obs'?x.s.obs.length>0:['rev','pub'].includes(x.t.st)));
+const trFltOk=x=>!!x.t&&toFltOk(x);/* mismo filtro y búsqueda que el tablero (tareo.js) */
 const trOrdNow=()=>toList(TD.f).filter(trFltOk).map(x=>x.id);
 /** vecino en el orden de la lista tal como estaba al abrir (dir −1 / +1); '' si no hay */
 function trNb(dir){const L=TR.ord.filter(x=>x===TR.id||TD.docs.has(x));const i=L.indexOf(TR.id);if(i<0)return'';const j=i+dir;return j>=0&&j<L.length?L[j]:''}
@@ -748,28 +748,7 @@ function trFalta(dni){const p=S.tper.get(dni);const f=TD.f;if(!p||!trFaltaOk(f,p
          return{[`rows.${dni}`]:row,...x,hist:trAU(trHist('cor',{mot:txt,cam:`${cur.st==='rev'?'Quita revisado. ':''}Falta registrada desde «Sin tareo»: ${p.ape||dni} (${mot})`,det:[{dni,campo:'fila',antes:false,despues:true},{dni,campo:'as',antes:null,despues:false},{dni,campo:'mot',antes:null,despues:mot}]})),by:me.email||'',ts:NOW()}});
        toast('Falta registrada.')}
      catch(err){trErr('No se pudo registrar: ',err)}})}
-function trSinTxt(f,G){return`Obreros sin tareo · ${fmtD(f)}\n`+G.map(g=>`${g.name}\n`+g.L.map(p=>`  ${tName(p)} — DNI ${p.dni||p.id}${p.cua?' — '+p.cua:''}`).join('\n')).join('\n')}
-function trCopy(txt){(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Lista copiada.')).catch(()=>{
-  lqModal(`<div class="lqtop"><b>Copia la lista</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><textarea class="tr-copy" rows="12" readonly>${esc(txt)}</textarea>`);const ta=$('#lqm textarea');if(ta)ta.select()})}
-
-/* ---------- secciones de «Tareos del día» (oficina) ---------- */
-function trSecciones(f,L){const docs=[...TD.docs.values()];const ed=toReabOk();let h='';
-  const cf=tConflictosDia(docs);
-  if(cf.length)h+=`<div class="callout tr-conf" id="trConf"><b>${cf.length} ${cf.length===1?'obrero figura':'obreros figuran'} en dos tareos del día</b><span>Un obrero va en un solo tareo por día: quítalo del que no corresponde. Hasta resolverlo no se pueden marcar revisados.</span>
-    <ul>${cf.map(x=>`<li data-dni="${esc(x.dni)}"><b>${esc(x.nom)}</b> <span class="mono note">${esc(x.dni)}</span><ul>${x.ts.map(y=>{const can=ed&&['env','rev'].includes(y.st);
-      return`<li data-trqt="${esc(y.id)}">${esc(y.name)} · ${esc(trAsTx(y))} · <span class="note">${esc((TO_ST[y.st]||[y.st])[0])}</span>${can?` <button class="ib tr-fbtn" data-trq="${esc(y.id)}" data-dni="${esc(x.dni)}">Quitar de este tareo</button>`:ed?' <span class="note">(lo quita el capataz: aún no lo envía)</span>':''}</li>`}).join('')}</ul></li>`).join('')}</ul></div>`;
-  if(tLate(f)){const late=L.filter(x=>!x.t||['bor','reab'].includes(x.t.st));
-    if(late.length)h+=`<div class="callout t-warn tr-late" id="trLate"><b>${late.length} ${late.length===1?'capataz no envió':'capataces no enviaron'} su tareo a las ${esc(TC().limEnv)}</b><span>${late.map(x=>esc(x.name)).join(' · ')}</span></div>`}
-  if(!tNoLab(f)){const G=tSinTareo(f,docs);const n=G.reduce((s,g)=>s+g.L.length,0);
-    if(n){TD.sinTxt=trSinTxt(f,G);
-      const op=(k,d)=>{const v=(TD.dOpen||{})[k];return(v==null?d:v)?' open':''};
-      h+=`<details class="card tr-sin" id="trSin" data-tk="sin"${op('sin',true)}><summary><b>Sin tareo</b> <span class="to-obsn">${n}</span> <span class="note">Activos del máster que no figuran en ningún tareo del día (ni presentes ni con falta)</span></summary>
-       <div class="pad"><div class="tr-sbar"><button class="ib" id="trCopy">Copiar lista</button>${ed?'<span class="note">«Registrar falta» lo agrega como ausente al tareo enviado de su capataz. Si el capataz aún no envía, avísale.</span>':''}</div>
-       ${G.map(g=>{const t=g.cap&&TD.docs.get(f+'_'+g.cap);const st=t?(TO_ST[t.st||'bor']||[t.st])[0]:(g.cap?'Sin tareo':'');const can=ed&&trFaltaOk(f,g.cap);
-         return`<details class="tr-sg" data-cap="${esc(g.cap)}" data-tk="g:${esc(g.cap)}"${op('g:'+g.cap,!!(t||!g.cap))}><summary><b>${esc(g.name)}</b> <span class="note">${g.L.length} ${g.L.length===1?'obrero':'obreros'}${st?' · tareo: '+esc(st):''}</span></summary>
-          <ul class="t-list tr-sl">${g.L.map(p=>`<li data-tsn="${esc(p.dni||p.id)}"><span>${esc(tName(p))} <span class="mono note">${esc(p.dni||p.id)}</span>${p.cua?` <span class="note">· ${esc(p.cua)}</span>`:''}</span>${can?`<button class="ib tr-fbtn" data-trfal="${esc(p.dni||p.id)}">Registrar falta</button>`:''}</li>`).join('')}</ul></details>`}).join('')}</div></details>`}}
-  return h}
-
+/* «Tareos del día» (avisos, tablero y «Sin tareo»): en tareo.js (rediseño oct 2026: toAvisos, toSinHtml) */
 /* ---------- conflicto: un obrero en dos tareos del día → «Quitar de este tareo» (tasis/admin, con motivo) ---------- */
 /* Solo en tareos «Enviado» o «Revisado» (la oficina es dueña del documento; en borrador o reabierto lo quita el capataz).
    Quita su fila, lo saca de los bloques (un bloque que queda sin nadie se quita), borra su cotejo y, si estaba revisado,

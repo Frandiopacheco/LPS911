@@ -128,7 +128,8 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
 test('Tareos del día: el jefe de producción ve el detalle sin reabrir', async ({ page }) => {
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
-  await page.locator(`tr[data-to="${HOY}_tcap@obra.pe"] button`).click();
+  await expect(page.locator(`tr[data-to="${HOY}_tcap@obra.pe"] [data-toa]`)).toHaveText('Revisar horas');
+  await page.locator(`tr[data-to="${HOY}_tcap@obra.pe"] button[data-to]`).click();
   await expect(page.locator('#trWs')).toContainText('Teodoro Capataz');
   await expect(page.locator('#toReab')).toHaveCount(0);
   noErrors(errors, 'jefe');
@@ -140,4 +141,157 @@ test('Tareos del día: costos no entra (su inicio es «Costos», F3)', async ({ 
   await page.evaluate(() => goTab('tdia'));
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tcos');
   noErrors(errors, 'costos');
+});
+
+/* ---------- Rediseño de «Tareos del día» (oct 2026): barra del día, tablero de capataces y «Personal activo sin tareo» ---------- */
+/* Obra de prueba: 12 capataces en varios estados y 40 obreros activos sin tareo (14 sin capataz). Capturas para mirar a ojo:
+   TD_SHOTS=<carpeta> npx playwright test tareo-dia */
+const CAPS = [['c01', 'Abel Quispe', 'env'], ['c02', 'Beto Huamán', 'env'], ['c03', 'Carlos Ramos', 'env'], ['c04', 'Dante Flores', 'rev'], ['c05', 'Edwin Torres', 'rev'],
+  ['c06', 'Félix Rojas', 'pub'], ['c07', 'Gerardo Chávez', 'bor'], ['c08', 'Hugo Vargas', 'bor'], ['c09', 'Iván Castillo', 'reab'], ['c10', 'Jorge Mendoza', ''], ['c11', 'Kevin Paredes', ''], ['c12', 'Luis Salazar', '']];
+const CUAS = ['ALBAÑILES', 'CARPINTEROS', 'FIERREROS', 'ANDAMIEROS', 'ELECTRICISTAS', 'GASFITEROS'];
+const APE = ['ACOSTA', 'BRAVO', 'CÁCERES', 'DÍAZ', 'ESPINOZA', 'FUENTES', 'GÓMEZ', 'HERRERA', 'ÍÑIGO', 'JIMÉNEZ', 'LEÓN', 'MEDINA', 'NÚÑEZ', 'ORTIZ', 'PALACIOS', 'QUISPE', 'RÍOS', 'SÁNCHEZ', 'TAPIA', 'URIBE'];
+function obra() {
+  const X = [['tcfg', 'main', { limEnv: '09:00', tolGar: 15 }], ['tfot', 'f1', { date: HOY, cap: 'x', n: 1, d: FOTO, by: 'x', ts: 1 }],
+    ['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de pedestales', act: true }], ['tpc', 'p10_10', { cod: '10.10', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de escaleras', act: true }]];
+  let n = 10000000;
+  const persona = (cap, cua) => { const dni = String(n++); const ape = `${APE[n % 20]} ${APE[(n * 7) % 20]}`; X.push(['tper', dni, { dni, ape, nom: 'JUAN', pue: 'OPERARIO', cat: 'OP', cua, cap, ing: '2026-01-05', ces: '', mot: '', per: [], act: true }]); return { dni, ape, cua }; };
+  CAPS.forEach(([id, name, st], i) => {
+    const cap = id + '@obra.pe'; X.push(['members', cap, { role: 'tcap', name }]);
+    const cua = [CUAS[i % 6], CUAS[(i + 2) % 6]]; const P = Array.from({ length: st ? 9 + (i % 4) : [5, 5, 6][i - 9] }, (_, k) => persona(cap, cua[k % 2]));
+    if (st) {
+      const rows = {}; P.forEach((p, k) => {
+        const as = k === 0 && i % 3 === 0 ? false : k === 1 && st === 'bor' ? null : true;
+        rows[p.dni] = { ape: p.ape, nom: 'JUAN', cat: 'OP', cua: p.cua, as, mot: as === false ? (i % 2 ? 'DM' : 'FA') : '', alt: k === 2, h: as ? (k === 3 && i === 1 ? { p10_05: 4 } : { p10_05: 4.5, p10_10: k % 3 ? 4 : 6 }) : {} };
+      });
+      const cot = st === 'rev' || st === 'pub' ? Object.fromEntries(P.map(p => [p.dni, { fir: true, by: 'tasis@obra.pe', t: 1 }])) : undefined;
+      X.push(['tareo', `${HOY}_${cap}`, { date: HOY, cap, capN: name, st, modo: 'hrs', pcs: ['p10_05', 'p10_10'], foto: st === 'bor' ? [] : ['f1'], rows,
+        ...(st === 'bor' ? {} : { envAt: Date.parse(`${HOY}T08:${10 + i}:00-05:00`), envN: 1 }), ...(cot ? { cot, cotFot: ['f1'], revBy: 'tasis@obra.pe', revAt: 1 } : {}),
+        ...(id === 'c02' || id === 'c04' ? { prod: { t: Date.parse(`${HOY}T09:05:00-05:00`), by: 'jefe@obra.pe', byN: 'Jefe' } } : {}),
+        ...(st === 'reab' ? { reab: { t: 1, by: 'tasis@obra.pe', mot: 'Falta una firma' } } : {}), hist: [], by: cap, ts: 1 }]);
+    }
+  });
+  // sin tareo: los 16 de los capataces sin empezar, 10 que no figuran en los borradores y 14 sin capataz → 40
+  for (const [id, m] of [['c07', 4], ['c08', 3], ['c09', 3]]) for (let k = 0; k < m; k++) persona(id + '@obra.pe', CUAS[k % 6]);
+  for (let k = 0; k < 14; k++) persona('', CUAS[k % 6]);
+  return X;
+}
+const shot = async (page, n) => { if (!process.env.TD_SHOTS) return; await page.waitForTimeout(400); await page.screenshot({ path: `${process.env.TD_SHOTS}/${n}.png` }); };
+const clip = page => page.evaluate(() => { window.__clip = []; Object.defineProperty(navigator, 'clipboard', { value: { writeText: t => { window.__clip.push(t); return Promise.resolve(); } }, configurable: true }); });
+const lastClip = page => page.evaluate(() => window.__clip.at(-1) || '');
+
+test('Tareos del día (rediseño): barra del día que filtra, tablero por prioridad, búsqueda, observaciones y recordar', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: obra() });
+  await clip(page);
+  await tab(page, 'tdia');
+  const fl = page.locator('#trFlt');
+  await expect(page.locator('#toEnv')).toContainText('6 de 12');
+  await expect(fl.locator('[data-trflt="all"]')).toContainText('12');
+  await expect(fl.locator('[data-trflt="sin"]')).toContainText('3');
+  await expect(fl.locator('[data-trflt="bor"]')).toContainText('3'); // borrador + reabierto
+  await expect(fl.locator('[data-trflt="rev"]')).toContainText('3');
+  await expect(fl.locator('[data-trflt="ok"]')).toContainText('2');
+  await expect(fl.locator('[data-trflt="pub"]')).toContainText('1');
+  await expect(fl.locator('[data-trflt="prod"]')).toContainText('2 de 6');
+  // orden: por revisar primero; los enviados llevan «Revisar»
+  const stg = await page.locator('#toBody tr.td-r').evaluateAll(L => L.map(x => x.dataset.stg));
+  expect(stg.slice(0, 3)).toEqual(['rev', 'rev', 'rev']);
+  expect(stg.at(-1)).toBe('pub');
+  await expect(page.locator(`tr[data-to="${HOY}_c01@obra.pe"] [data-toa]`)).toHaveText('Revisar');
+  await expect(page.locator(`tr[data-to="${HOY}_c04@obra.pe"] [data-toa]`)).toHaveText('Abrir');
+  await expect(page.locator(`tr[data-to="${HOY}_c04@obra.pe"] .tr-prodc`)).toHaveText('Producción ✓');
+  await expect(page.locator(`tr[data-to="${HOY}_c01@obra.pe"] .td-cua`)).toContainText('ALBAÑILES');
+  await shot(page, '1-pc');
+  // filtrar con la barra y volver a «Todos» tocando el mismo
+  await fl.locator('[data-trflt="sin"]').click();
+  await expect(page.locator('#toBody tr.td-r')).toHaveCount(3);
+  await expect(page.locator('#toBody tr[data-tcap]')).toHaveCount(3);
+  await fl.locator('[data-trflt="sin"]').click();
+  await expect(page.locator('#toBody tr.td-r')).toHaveCount(12);
+  // búsqueda por capataz o cuadrilla, sin perder el foco al escribir
+  await page.locator('#toQ').fill('quispe');
+  await expect(page.locator('#toBody tr.td-r')).toHaveCount(1);
+  await page.locator('#toQ').press('End');
+  await page.keyboard.type('x');
+  await expect(page.locator('#toQ')).toBeFocused();
+  await expect(page.locator('#toQ')).toHaveValue('quispex');
+  await expect(page.locator('#toBody')).toContainText('Ningún tareo con este filtro');
+  await page.locator('#toQ').fill('');
+  // observaciones: el número despliega el detalle debajo de la fila, sin abrir la revisión
+  await page.locator(`tr[data-to="${HOY}_c02@obra.pe"] .td-obs`).click();
+  await expect(page.locator(`tr[data-tox-of="${HOY}_c02@obra.pe"]`)).toBeVisible();
+  await expect(page.locator('#trWs')).toHaveCount(0);
+  await shot(page, '2-obs');
+  // recordar al que no envió (no abre nada: copia el mensaje)
+  await page.locator(`tr[data-to="${HOY}_c07@obra.pe"] [data-toa="rec"]`).click();
+  await expect.poll(() => lastClip(page)).toContain('Gerardo Chávez: falta enviar tu tareo');
+  // aviso de no enviados: «Ver cuáles» filtra y «Copiar recordatorio» junta a todos
+  const late = page.locator('#trLate');
+  await expect(late).toContainText('6 capataces no enviaron su tareo a las 09:00');
+  await late.locator('[data-toal="ver"]').click();
+  await expect(page.locator('#toBody tr.td-r')).toHaveCount(6);
+  await late.locator('[data-toal="rec"]').click();
+  await expect.poll(() => lastClip(page)).toContain('• Luis Salazar (sin empezar)');
+  await late.locator('[data-toal="ver"]').click();
+  await expect(page.locator('#toBody tr.td-r')).toHaveCount(12);
+  // clic en la fila abre el espacio de revisión
+  await page.locator(`tr[data-to="${HOY}_c01@obra.pe"] .td-as`).click();
+  await expect(page.locator('#trWs')).toContainText('Abel Quispe');
+  noErrors(errors, 'tablero');
+});
+
+test('Tareos del día (rediseño): «Personal activo sin tareo» en columna lateral, por capataz, asignar capataz en lote y copiar lista', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: obra() });
+  await clip(page);
+  await tab(page, 'tdia');
+  const sin = page.locator('#trSin');
+  await expect(sin.locator('summary').first()).toContainText('Personal activo sin tareo hoy');
+  await expect(sin.locator('.td-sint .td-cnt')).toHaveText('40');
+  await expect(sin).toContainText('asígnalos a un capataz o regístrales una falta');
+  // columna lateral: no empuja el tablero hacia abajo
+  const B = await page.locator('.td-board').boundingBox(), A = await sin.boundingBox();
+  expect(A.x).toBeGreaterThan(B.x + B.width - 1);
+  expect(A.y).toBeLessThan(B.y);
+  // grupos por capataz (40 > 15: plegados) y «Sin capataz asignado» al final
+  const G = sin.locator('details.td-sg');
+  await expect(G).toHaveCount(7);
+  await expect(G.last()).toHaveAttribute('data-cap', '');
+  await expect(G.last()).not.toHaveAttribute('open', '');
+  // copiar la lista de un grupo desde su menú (el menú no abre el grupo)
+  await sin.locator('[data-tom="c10@obra.pe"]').click();
+  await page.locator('#pop [data-do="cp"]').click();
+  await expect.poll(() => lastClip(page)).toContain('Obreros sin tareo');
+  await expect(sin.locator('details[data-cap="c10@obra.pe"]')).not.toHaveAttribute('open', '');
+  // asignar capataz a dos sin capataz
+  await G.last().locator('summary').click();
+  const ck = () => sin.locator('details.td-sg[data-cap=""] [data-tosel]');
+  const d1 = await ck().nth(0).getAttribute('data-tosel'), d2 = await ck().nth(1).getAttribute('data-tosel');
+  await ck().nth(0).check();
+  await ck().nth(1).check();
+  await expect(sin.locator('[data-tosc]')).toHaveText('Asignar capataz a 2…');
+  await shot(page, '3-sin');
+  await sin.locator('[data-tosc]').click();
+  await page.locator('#toAcSel').selectOption('c10@obra.pe');
+  await page.locator('#toAcOk').click();
+  await expect.poll(() => page.evaluate(([a, b]) => [window.__dbGet('tper', a).cap, window.__dbGet('tper', b).cap], [d1, d2])).toEqual(['c10@obra.pe', 'c10@obra.pe']);
+  await expect(sin.locator('details.td-sg[data-cap=""] .td-cnt')).toHaveText('12');
+  await expect(sin.locator('details.td-sg[data-cap="c10@obra.pe"] .td-cnt')).toHaveText('7');
+  noErrors(errors, 'sin tareo');
+});
+
+test('Tareos del día (rediseño): celular en una columna, tablero primero y «sin tareo» plegado; modo oscuro', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: obra(), theme: 'dark' });
+  await tab(page, 'tdia');
+  const sin = page.locator('#trSin');
+  await expect(sin).not.toHaveAttribute('open', '');
+  const B = await page.locator('.td-board').boundingBox(), A = await sin.boundingBox();
+  expect(A.y).toBeGreaterThan(B.y);
+  expect(await page.evaluate(() => [...document.querySelectorAll('.td-tbl tr.td-r')].every(r => r.getBoundingClientRect().right <= innerWidth + 1))).toBe(true);
+  expect((await page.locator(`tr[data-to="${HOY}_c01@obra.pe"] [data-toa]`).boundingBox()).height).toBeGreaterThanOrEqual(40);
+  await shot(page, '4-cel');
+  await page.locator('.td-board').evaluate(e => e.scrollIntoView());
+  await shot(page, '5-cel-tablero');
+  noErrors(errors, 'celular');
 });

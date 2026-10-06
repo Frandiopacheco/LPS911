@@ -228,7 +228,7 @@ const TO_ORD={env:0,reab:1,bor:2,sin:3,rev:4,pub:5};
 const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
-const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',sinTxt:''};
+const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
 const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos';
 const toReabOk=()=>!!me&&(isAdmin||me.role==='tasis');
 const toH=v=>(+v||0).toLocaleString('es-PE',{maximumFractionDigits:2});
@@ -256,41 +256,134 @@ function toList(f){const L=[],seen=new Set();
   for(const c of tCaps())if(!seen.has(c.id)&&asg.get(c.id))L.push({id:'',cap:c.id,name:c.name,t:null,n:asg.get(c.id)});
   return L.sort((a,b)=>(TO_ORD[a.t?a.t.st||'bor':'sin']??9)-(TO_ORD[b.t?b.t.st||'bor':'sin']??9)||a.name.localeCompare(b.name))}
 
+/* ---------- Tareos del día (oficina): rediseño oct 2026, ver docs/ia/tareo.md «Rediseño de Tareos del día» ----------
+   Arriba la barra del día (etapas con conteos que filtran), avisos compactos (duplicados, no enviados) y el tablero de
+   capataces (tabla en PC, tarjetas en celular). «Personal activo sin tareo» va en columna lateral (PC) o plegado debajo. */
+/* etapa de una fila del tablero: sin empezar · borrador (también reabierto) · por revisar (enviado) · revisado · publicado */
+const TO_STG=[['sin','Sin empezar'],['bor','Borrador'],['rev','Por revisar'],['ok','Revisado'],['pub','Publicado']];
+const toStg=x=>!x.t?'sin':({bor:'bor',reab:'bor',env:'rev',rev:'ok',pub:'pub'})[x.t.st||'bor']||'bor';
+const toLate=(x,f)=>tLate(f)&&(!x.t||['bor','reab'].includes(x.t.st));
+const toProd=x=>!!(x.t&&x.t.prod&&x.t.prod.t);
+/* cuadrillas del capataz: las de su tareo (o, sin tareo, las de sus obreros activos del máster) */
+function toCuas(x,f){const s=new Set();if(x.t)for(const r of Object.values(x.t.rows||{}))r&&r.cua&&s.add(r.cua);
+  else for(const p of tLive())if(p.cap===x.cap&&p.cua&&tActivo(p,f))s.add(p.cua);return[...s].sort()}
+/* ¿la fila pasa el filtro (TD.flt) y la búsqueda (TD.q)? También lo usa la revisión para «anterior · siguiente» (trFltOk) */
+function toFltOk(x){const k=TD.flt||'all';const q=tFold(TD.q||'');
+  if(q&&!tFold(x.name+' '+(x.cuas||[]).join(' ')).includes(q))return false;
+  if(k==='all')return true;if(k==='obs')return!!(x.t&&x.s.obs.length);if(k==='prod')return toProd(x);if(k==='late')return toLate(x,TD.f);
+  return toStg(x)===k}
+/* copia al portapapeles; si no se puede, muestra el texto para copiarlo a mano */
+function toCopy(txt,ok){(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast(ok||'Copiado.')).catch(()=>{
+  lqModal(`<div class="lqtop"><b>Copia el texto</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><textarea class="tr-copy" rows="12" readonly>${esc(txt)}</textarea>`);const ta=$('#lqm textarea');if(ta)ta.select()})}
+const toRecTxt=(L,f)=>L.length===1?`Hola ${L[0].name}: falta enviar tu tareo del ${fmtD(f)}${L[0].t?' (está en '+(L[0].t.st==='reab'?'reabierto':'borrador')+')':''}. Envíalo con la foto del formato firmado, por favor.`
+  :`Tareo del ${fmtD(f)}: faltan enviar\n`+L.map(x=>`• ${x.name}${x.t?' ('+(x.t.st==='reab'?'reabierto':'borrador')+')':' (sin empezar)'}`).join('\n');
+const toSinTxt=(f,g)=>`Obreros sin tareo · ${fmtD(f)} · ${g.name}\n`+g.L.map(p=>`  ${tName(p)} — DNI ${p.dni||p.id}${p.cua?' — '+p.cua:''}`).join('\n');
+
+/* acción principal de la fila según rol y estado → [clave, texto, ¿primaria?] */
+function toAccion(x){const ofi=toReabOk(),pr=!ofi&&typeof trProdOk==='function'&&trProdOk();const st=x.t?x.t.st||'bor':'sin';
+  if(['sin','bor','reab'].includes(st))return['rec','Recordar',false];
+  if(st==='env'&&ofi)return['open','Revisar',true];
+  if(['env','rev'].includes(st)&&pr&&!toProd(x))return['open','Revisar horas',true];
+  return['open','Abrir',false]}
+
+function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]=toAccion(x);
+  const lateT=late?`<span class="tr-tag">No enviado a las ${esc(TC().limEnv)}</span>`:'';
+  const cua=x.cuas.length?`<small class="td-cua" title="${esc(x.cuas.join(', '))}">${esc(x.cuas.slice(0,2).join(' · '))}${x.cuas.length>2?` +${x.cuas.length-2}`:''}</small>`:'';
+  const act=`<td class="td-act"><button class="ib${ap?' pri':''}" data-toa="${ak}" data-id="${esc(x.id)}" data-cap="${esc(x.cap)}">${esc(al)}</button></td>`;
+  if(!x.t)return`<tr class="td-r t-off${late?' td-late':''}" data-tcap="${esc(x.cap)}" data-stg="sin"><td class="td-cap" data-l="Capataz"><span class="td-nm">${esc(x.name)}</span>${cua}</td>
+    <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="5"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
+  const s=x.s;const tot=s.pres+s.fal+s.sm||1;const env=['env','rev','pub'].includes(x.t.st);
+  const bar=`<span class="td-ab" aria-hidden="true"><i class="ok" style="flex:${s.pres}"></i><i class="bad" style="flex:${s.fal}"></i><i class="sm" style="flex:${s.sm}"></i>${s.pres+s.fal+s.sm?'':'<i class="nil" style="flex:1"></i>'}</span>`;
+  const asis=`${bar}<span class="td-an"><span class="td-ok"><b data-l="Vinieron">${s.pres}</b> ${s.pres===1?'vino':'vinieron'}</span>${s.fal?`<span class="td-bad" title="${esc(Object.entries(s.mot).map(([k,n])=>`${TO_MOT[k]||k}: ${n}`).join('\n'))}"><b data-l="No vinieron">${s.fal}</b> no ${s.fal===1?'vino':'vinieron'}</span>`:''}${s.sm?`<span class="td-sm" title="El capataz aún no marca si vinieron"><b data-l="Sin marcar">${s.sm}</b> sin marcar</span>`:''}</span>`;
+  const fir=!env?'<span class="note">—</span>':s.nof?`<span class="tr-no">${s.nof} sin firma</span>`:s.cot>=s.pres?'<span class="tr-si" title="Todas las firmas cotejadas">✓</span>':`<span class="note">${s.cot} de ${s.pres}</span>`;
+  const obs=s.obs.length?`<button class="td-obs${TD.ox&&TD.ox.has(x.id)?' on':''}" data-tox="${esc(x.id)}" aria-expanded="${TD.ox&&TD.ox.has(x.id)?'true':'false'}" title="${esc(s.obs.map(o=>o.msg).join('\n'))}">${s.obs.length}</button>`:'';
+  const hr=x.t.st==='env'&&x.t.envAt?'':x.t.envAt&&env?`<small class="td-hr">enviado ${esc(tHm(x.t.envAt))}</small>`:'';
+  const row=`<tr class="td-r${late?' td-late':''}" data-to="${esc(x.id)}" data-stg="${st}"><td class="td-cap" data-l="Capataz"><button class="t-lnk td-nm" data-to="${esc(x.id)}">${esc(x.name)}</button>${cua}</td>
+    <td class="td-st" data-l="Estado">${toChip(x.t)}${lateT}${hr}${typeof trProdChip==='function'?trProdChip(x.t):''}</td>
+    <td class="td-as" data-l="Asistencia">${asis}</td><td class="mono t-r td-hh" data-l="HH">${toH(s.hh)}</td><td class="mono t-r td-he" data-l="HE">${s.he?toH(s.he):''}</td>
+    <td class="t-r td-fi" data-l="Firmas">${fir}</td><td class="t-r td-ob" data-l="Observ.">${obs}</td>${act}</tr>`;
+  return row+(s.obs.length&&TD.ox&&TD.ox.has(x.id)?`<tr class="td-ox" data-tox-of="${esc(x.id)}"><td colspan="8"><ul>${s.obs.map(o=>`<li class="${o.bl?'bl':''}">${esc(o.msg)}</li>`).join('')}</ul></td></tr>`:'')}
+
+/* avisos compactos arriba del tablero: obreros en dos tareos (bloquea revisar) y no enviados a la hora límite */
+function toAvisos(f,L){const docs=[...TD.docs.values()];const ed=toReabOk();let h='';
+  const cf=typeof tConflictosDia==='function'?tConflictosDia(docs):[];
+  if(cf.length)h+=`<div class="callout td-al td-al-bad" id="trConf" role="alert"><div class="td-alh"><b>${cf.length} ${cf.length===1?'obrero figura':'obreros figuran'} en dos tareos del día</b><span class="note">Un obrero va en un solo tareo por día. Hasta resolverlo no se pueden marcar revisados.</span></div>
+    <ul class="td-dup">${cf.map(x=>`<li data-dni="${esc(x.dni)}"><span class="td-dn"><b>${esc(x.nom)}</b> <span class="mono note">${esc(x.dni)}</span></span>${x.ts.map(y=>{const can=ed&&['env','rev'].includes(y.st);
+      return`<span class="td-dt" data-trqt="${esc(y.id)}">${esc(y.name)} · ${esc(trAsTx(y))} · <span class="note">${esc((TO_ST[y.st]||[y.st])[0])}</span>${can?` <button class="ib" data-trq="${esc(y.id)}" data-dni="${esc(x.dni)}">Quitar de este tareo</button>`:ed?' <span class="note">(lo quita el capataz)</span>':''}</span>`}).join('')}</li>`).join('')}</ul></div>`;
+  const late=L.filter(x=>toLate(x,f));
+  if(late.length)h+=`<div class="callout td-al td-al-warn" id="trLate"><div class="td-alh"><b>${late.length} ${late.length===1?'capataz no envió':'capataces no enviaron'} su tareo a las ${esc(TC().limEnv)}</b><span class="note td-ln">${late.map(x=>esc(x.name)).join(', ')}</span></div>
+    <span class="td-alb"><button class="ib" data-toal="ver">${TD.flt==='late'?'Ver todos':'Ver cuáles'}</button><button class="ib" data-toal="rec">Copiar recordatorio</button></span></div>`;
+  return h}
+
+/* «Personal activo sin tareo»: obreros activos del máster que no figuran en ningún tareo del día, por capataz asignado */
+function toSinHtml(f,G,n){const ed=toReabOk(),ped=tEdit();const dOp=TD.dOpen||{};const phone=matchMedia('(max-width:760px)').matches;
+  const op=(k,d)=>(dOp[k]==null?d:dOp[k])?' open':'';const many=n>15;const hoy=f===todayIso();
+  const grp=g=>{const t=g.cap&&TD.docs.get(f+'_'+g.cap);const st=t?t.st||'bor':'';const can=ed&&trFaltaOk(f,g.cap);
+    const hint=!g.cap?'Asígnalos a un capataz para que los registre en su tareo.':['env','rev'].includes(st)?(ed?'Su tareo ya está enviado: regístrales la falta o pásalos desde la revisión.':'Su tareo ya está enviado.'):st==='pub'?'El día ya está publicado.':t?'Aún no envía su tareo: avísale para que los agregue.':'Aún no empieza su tareo: avísale.';
+    const sel=!g.cap&&ped;const nSel=sel?g.L.filter(p=>TD.sel&&TD.sel.has(p.dni||p.id)).length:0;
+    return`<details class="td-sg" data-cap="${esc(g.cap)}" data-tk="g:${esc(g.cap)}"${op('g:'+g.cap,!many)}><summary><span class="td-sgn"><b>${esc(g.name)}</b><small>${t?esc((TO_ST[st]||[st])[0]):g.cap?'Sin tareo':'Sin capataz asignado'}</small></span><span class="td-cnt">${g.L.length}</span>
+      <button class="ib td-more" data-tom="${esc(g.cap)}" aria-label="Acciones del grupo ${esc(g.name)}" title="Acciones">⋯</button></summary>
+      <p class="td-hint">${esc(hint)}</p>${sel?`<div class="td-sbar"><button class="ib pri" data-tosc="1">${nSel?`Asignar capataz a ${nSel}…`:'Asignar capataz…'}</button><span class="note">${nSel?'':'Marca a quiénes, o asigna a todo el grupo.'}</span></div>`:''}
+      <ul class="td-sl">${g.L.map(p=>{const d=p.dni||p.id;return`<li data-tsn="${esc(d)}">${sel?`<input type="checkbox" class="td-ck" data-tosel="${esc(d)}" aria-label="Elegir a ${esc(tName(p))}"${TD.sel&&TD.sel.has(d)?' checked':''}>`:''}<span class="td-pn"><span>${esc(tName(p))}</span><small><span class="mono">${esc(d)}</span>${p.cua?' · '+esc(p.cua):''}</small></span>${can?`<button class="ib" data-trfal="${esc(d)}">Registrar falta</button>`:''}</li>`}).join('')}</ul></details>`};
+  return`<details class="card td-sin" id="trSin" data-tk="sin"${op('sin',!phone)}><summary><span class="td-sint"><b>Personal activo sin tareo ${hoy?'hoy':'el '+esc(fmtD(f))}</b> <span class="td-cnt">${n}</span></span></summary>
+    <p class="td-why">Obreros del máster que ningún capataz ha registrado: asígnalos a un capataz o regístrales una falta o excepción antes de publicar.</p>
+    <div class="td-sgs">${G.map(grp).join('')}</div></details>`}
+
+/* asignar capataz (en lote) a los obreros sin capataz: escribe tper.cap */
+function toAsignar(dnis){const ids=dnis.filter(id=>S.tper.has(id));if(!ids.length||!tEdit())return;const caps=tCaps();
+  if(!caps.length){toast('No hay capataces de tareo en el equipo: agrégalos en Equipo con el rol «Capataz (tareo)».');return}
+  lqModal(`<div class="lqtop"><b>Asignar capataz</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><p class="lqmsg">${ids.length} ${ids.length===1?'obrero':'obreros'}: ${esc(ids.slice(0,4).map(id=>tName(S.tper.get(id))).join('; '))}${ids.length>4?'…':''}</p>
+   <label class="lqlab">Capataz<select class="tin" id="toAcSel">${caps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>
+   <p class="note">Queda en su ficha del máster. El capataz los verá en su lista para tarearlos.</p>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="toAcOk">Asignar</button></div>`,
+   async e=>{if(!e.target.closest('#toAcOk'))return;const cap=$('#toAcSel').value;if(!cap)return;const st=tStamp();
+     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{cap,...st},{merge:true}]));lqClose();for(const id of ids)TD.sel&&TD.sel.delete(id);
+       toast(`${ids.length} ${ids.length===1?'obrero asignado':'obreros asignados'} a ${tCapName(cap)}.`);requestRender()}
+     catch(err){toast('No se pudo asignar: '+(err.code||err.message))}})}
+
 function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(main)}
-  const hoy=todayIso();if(!TD.f)TD.f=hoy;const f=TD.f;toSub(f);
-  const L=toList(f);let env=0,hh=0,he=0,fal=0,sm=0;const mot={};
-  for(const x of L){if(!x.t)continue;if(['env','rev','pub'].includes(x.t.st))env++;hh+=x.s.hh;he+=x.s.he;fal+=x.s.fal;sm+=x.s.sm;for(const[k,n]of Object.entries(x.s.mot))mot[k]=(mot[k]||0)+n}
-  const num=(v,l)=>`<td class="mono t-r" data-l="${l}">${v}</td>`;
-  const late=tLate(f);const isLate=x=>late&&(!x.t||['bor','reab'].includes(x.t.st));
-  const cotC=x=>{const t=x.t;if(!['env','rev','pub'].includes(t.st))return'';if(x.s.nof)return`<span class="tr-no">${x.s.nof} sin firma</span>`;
-    return x.s.cot>=x.s.pres?'<span class="tr-si">✓</span>':`<span class="note">${x.s.cot} de ${x.s.pres}</span>`};
-  const lateT=x=>isLate(x)?` <span class="tr-tag">No enviado a las ${esc(TC().limEnv)}</span>`:'';
-  const row=x=>x.t?`<tr class="to-row${isLate(x)?' tr-lrow':''}" data-to="${esc(x.id)}"><td data-l="Capataz"><button class="t-lnk" data-to="${esc(x.id)}">${esc(x.name)}</button></td><td data-l="Estado">${toChip(x.t)}${typeof trProdChip==='function'?trProdChip(x.t):''}${lateT(x)}</td>
-      ${num(x.s.pres,'Vinieron')}${num(x.s.fal||'','No vinieron')}<td class="t-r" data-l="Sin marcar">${x.s.sm?`<span class="tr-sm" title="El capataz aún no marca si vinieron">${x.s.sm}</span>`:''}</td>${num(toH(x.s.hh),'HH')}${num(x.s.he?toH(x.s.he):'','HE')}<td class="t-r" data-l="Observ.">${x.s.obs.length?`<span class="to-obsn" title="${esc(x.s.obs.map(o=>o.msg).join('\n'))}">${x.s.obs.length}</span>`:''}</td><td class="t-r" data-l="Firmas">${cotC(x)}</td></tr>`
-    :`<tr class="t-off to-row${isLate(x)?' tr-lrow':''}" data-tcap="${esc(x.cap)}"><td data-l="Capataz">${esc(x.name)}</td><td data-l="Estado">${toChip(null)}${lateT(x)}</td><td class="mono t-r" data-l="Asignados" colspan="7"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}</span></td></tr>`;
-  const T=L.filter(x=>x.t);const FL={all:['Todos',L.length],rev:['Por revisar',T.filter(x=>x.t.st==='env').length],obs:['Con observaciones',T.filter(x=>x.s.obs.length).length],ok:['Revisados',T.filter(x=>['rev','pub'].includes(x.t.st)).length]};
-  if(!FL[TD.flt])TD.flt='all';
-  const vis=L.filter(x=>TD.flt==='all'||(x.t&&(TD.flt==='rev'?x.t.st==='env':TD.flt==='obs'?x.s.obs.length>0:['rev','pub'].includes(x.t.st))));
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Tareos del día',esc(toDia(f)),`<span class="to-date"><button class="ib" id="toPrev" aria-label="Día anterior">‹</button><input class="tin" type="date" id="toDate" value="${esc(f)}" max="${esc(hoy)}" aria-label="Fecha"><button class="ib" id="toNext" aria-label="Día siguiente"${f>=hoy?' disabled':''}>›</button>${f!==hoy?'<button class="ib" id="toHoy">Hoy</button>':''}</span>`)}
+  const hoy=todayIso();if(!TD.f)TD.f=hoy;const f=TD.f;toSub(f);if(!TD.ox)TD.ox=new Set();if(!TD.sel)TD.sel=new Set();
+  const L=toList(f);for(const x of L)x.cuas=toCuas(x,f);
+  let env=0,pres=0,hh=0,he=0,fal=0,sm=0;const mot={};const C={sin:0,bor:0,rev:0,ok:0,pub:0};
+  for(const x of L){C[toStg(x)]++;if(!x.t)continue;if(['env','rev','pub'].includes(x.t.st))env++;pres+=x.s.pres;hh+=x.s.hh;he+=x.s.he;fal+=x.s.fal;sm+=x.s.sm;for(const[k,n]of Object.entries(x.s.mot))mot[k]=(mot[k]||0)+n}
+  const nObs=L.filter(x=>x.t&&x.s.obs.length).length,nProd=L.filter(toProd).length,nPr=L.filter(x=>x.t&&['env','rev','pub'].includes(x.t.st)).length,nLate=L.filter(x=>toLate(x,f)).length;
+  if(!['all','obs','prod','late',...TO_STG.map(s=>s[0])].includes(TD.flt))TD.flt='all';
+  const vis=L.filter(toFltOk);
+  const nl=tNoLab(f);const docs=[...TD.docs.values()];const G=TD.ok&&!nl?tSinTareo(f,docs):[];const nSin=G.reduce((s,g)=>s+g.L.length,0);
+  const fb=(k,l,n,cls)=>`<button data-trflt="${k}" class="td-f${cls?' '+cls:''}${TD.flt===k?' on':''}" aria-pressed="${TD.flt===k}">${l} <b>${n}</b></button>`;
+  const motT=Object.entries(mot).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${TO_MOT[k]||k}: ${n}`).join('\n');
+  const ae=document.activeElement;const qFoc=ae&&ae.id==='toQ'?[ae.selectionStart,ae.selectionEnd]:null;
+  main.innerHTML=`<div class="scroll"><div class="wrap td-wrap">${pageHead('Tareos del día',esc(toDia(f)),`<span class="to-date"><button class="ib" id="toPrev" aria-label="Día anterior">◀</button><input class="tin" type="date" id="toDate" value="${esc(f)}" max="${esc(hoy)}" aria-label="Fecha"><button class="ib" id="toNext" aria-label="Día siguiente"${f>=hoy?' disabled':''}>▶</button><button class="ib" id="toHoy"${f===hoy?' disabled':''}>Hoy</button></span>`)}
    ${TD.err?`<div class="callout t-warn">No se pudieron leer los tareos de este día (${esc(TD.err)}).</div>`:''}
-   <div class="lqtiles to-tiles"><div class="lqtile" style="--c:var(--ok)"><span>Enviados</span><b id="toEnv">${env}<small> de ${L.length}</small></b></div>
-    <div class="lqtile" style="--c:var(--accent)"><span>HH del día</span><b id="toHH">${toH(hh)}</b></div>
-    <div class="lqtile" style="--c:var(--warn)"><span>Horas extra</span><b id="toHE">${toH(he)}</b></div>
-    <div class="lqtile" style="--c:var(--bad)"><span>No vinieron</span><b id="toFal">${fal}</b>${fal?`<small>${Object.entries(mot).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<span title="${esc(TO_MOT[k]||k)}">${esc(k)} ${n}</span>`).join(' · ')}</small>`:''}</div>
-    ${sm?`<div class="lqtile tr-smt" style="--c:var(--warn)"><span>Sin marcar</span><b id="toSm">${sm}</b><small>El capataz aún no marca si vinieron</small></div>`:''}</div>
-   ${TD.ok?trSecciones(f,L):''}
-   <div class="tr-flt"><span class="seg" id="trFlt" role="group" aria-label="Filtrar por estado">${Object.entries(FL).map(([k,[l,n]])=>`<button data-trflt="${k}" class="${TD.flt===k?'on':''}">${l}${k==='all'?'':` <b>${n}</b>`}</button>`).join('')}</span></div>
-   <div class="card"><div class="tscroll"><table class="t t-tbl to-list"><thead><tr><th>Capataz</th><th>Estado</th><th class="t-r">Vinieron</th><th class="t-r">No vinieron</th><th class="t-r" title="El capataz aún no marca si vinieron">Sin marcar</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r">Observ.</th><th class="t-r">Firmas</th></tr></thead>
-    <tbody id="toBody">${vis.map(row).join('')||`<tr><td colspan="9" class="note">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></div>
+   <div class="td-grid${nSin?'':' td-solo'}"><div class="td-main">
+    <section class="card td-day" aria-label="Avance del día">
+     <div class="td-dh"><div class="td-big"><b id="toEnv">${env}<small> de ${L.length}</small></b><span>${L.length===1?'tareo enviado':'tareos enviados'}</span></div>
+      <dl class="td-kp"><div><dt>Vinieron</dt><dd id="toPres">${pres}</dd></div><div title="${esc(motT)}"><dt>No vinieron</dt><dd id="toFal" class="${fal?'bad':''}">${fal}</dd></div>${sm?`<div title="El capataz aún no marca si vinieron"><dt>Sin marcar</dt><dd id="toSm" class="warn">${sm}</dd></div>`:''}<div><dt>HH</dt><dd id="toHH">${toH(hh)}</dd></div><div><dt>HE</dt><dd id="toHE">${toH(he)}</dd></div></dl></div>
+     <div class="td-bar" aria-hidden="true">${TO_STG.map(([k])=>C[k]?`<i class="s-${k}" style="flex:${C[k]}"></i>`:'').join('')||'<i class="s-nil"></i>'}</div>
+     <div class="td-fl" id="trFlt" role="group" aria-label="Filtrar por estado">${fb('all','Todos',L.length)}${TO_STG.map(([k,l])=>fb(k,l,C[k],'s-'+k)).join('')}<span class="td-fsep" aria-hidden="true"></span>${fb('prod','Producción ✓',`${nProd}<small> de ${nPr}</small>`,'s-prod')}${fb('obs','Con observaciones',nObs,'s-obs')}${TD.flt==='late'?fb('late','No enviados a la hora',nLate,'s-late'):''}</div>
+    </section>
+    ${TD.ok?toAvisos(f,L):''}
+    <section class="card td-board"><div class="td-bh"><input class="tin td-q" id="toQ" type="search" placeholder="Buscar capataz o cuadrilla" value="${esc(TD.q||'')}" aria-label="Buscar capataz o cuadrilla"><span class="note">${vis.length===L.length?`${L.length} ${L.length===1?'capataz':'capataces'}`:`${vis.length} de ${L.length} capataces`} · por revisar primero</span></div>
+     <div class="tscroll"><table class="t t-tbl td-tbl"><thead><tr><th>Capataz</th><th>Estado</th><th>Asistencia</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r">Firmas</th><th class="t-r" title="Observaciones">Obs.</th><th aria-label="Acción"></th></tr></thead>
+     <tbody id="toBody">${vis.map(x=>toRowHtml(x,f)).join('')||`<tr><td colspan="8" class="note td-empty">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></section>
+   </div>${nSin?`<aside class="td-side">${toSinHtml(f,G,nSin)}</aside>`:''}</div>
   </div></div>`;
-  const go=d=>{TD.f=d>hoy?hoy:d;requestRender()};
-  $('#toPrev').onclick=()=>go(addD(f,-1));$('#toNext').onclick=()=>go(addD(f,1));const h=$('#toHoy');if(h)h.onclick=()=>go(hoy);
+  const go=d=>{TD.f=d>hoy?hoy:d;TD.sel.clear();requestRender()};
+  $('#toPrev').onclick=()=>go(addD(f,-1));$('#toNext').onclick=()=>go(addD(f,1));$('#toHoy').onclick=()=>go(hoy);
   $('#toDate').onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value))go(e.target.value)};
-  $('#toBody').onclick=e=>{const b=e.target.closest('[data-to]');if(b)toDetalle(b.dataset.to)};
-  $('#trFlt').onclick=e=>{const b=e.target.closest('[data-trflt]');if(b){TD.flt=b.dataset.trflt;requestRender()}};
-  const cp=$('#trCopy');if(cp)cp.onclick=()=>trCopy(TD.sinTxt);
+  const q=$('#toQ');q.oninput=()=>{TD.q=q.value;requestRender()};if(qFoc){q.focus();try{q.setSelectionRange(qFoc[0],qFoc[1])}catch(e){}}
+  $('#toBody').onclick=e=>{const ox=e.target.closest('[data-tox]');if(ox){const id=ox.dataset.tox;TD.ox.has(id)?TD.ox.delete(id):TD.ox.add(id);requestRender();return}
+    const a=e.target.closest('[data-toa]');if(a){if(a.dataset.toa==='rec'){const x=L.find(y=>(a.dataset.id&&y.id===a.dataset.id)||(!a.dataset.id&&!y.t&&y.cap===a.dataset.cap));if(x)toCopy(toRecTxt([x],f),'Recordatorio copiado: pégalo en WhatsApp.')}else toDetalle(a.dataset.id);return}
+    if(e.target.closest('.td-ox'))return;const r=e.target.closest('tr[data-to]');if(r)toDetalle(r.dataset.to)};
+  $('#trFlt').onclick=e=>{const b=e.target.closest('[data-trflt]');if(b){const k=b.dataset.trflt;TD.flt=TD.flt===k&&k!=='all'?'all':k;requestRender()}};
+  main.querySelectorAll('.td-al [data-toal]').forEach(b=>b.onclick=()=>{if(b.dataset.toal==='ver'){TD.flt=TD.flt==='late'?'all':'late';requestRender()}else toCopy(toRecTxt(L.filter(x=>toLate(x,f)),f),'Recordatorio copiado: pégalo en WhatsApp.')});
   main.querySelectorAll('details[data-tk]').forEach(d=>d.ontoggle=()=>{(TD.dOpen=TD.dOpen||{})[d.dataset.tk]=d.open});
-  const sn=$('#trSin');if(sn)sn.onclick=e=>{const b=e.target.closest('[data-trfal]');if(b)trFalta(b.dataset.trfal)}}
+  const sn=$('#trSin');if(sn){sn.onclick=e=>{const fa=e.target.closest('[data-trfal]');if(fa){trFalta(fa.dataset.trfal);return}
+      const m=e.target.closest('[data-tom]');if(m){e.preventDefault();e.stopPropagation();const g=G.find(y=>y.cap===m.dataset.tom);if(!g)return;const ped=tEdit();
+        openPop(m,`<div class="ph">${esc(g.name)} · ${g.L.length} sin tareo</div>${ped?`<button data-do="asg">${g.cap?'Cambiar de capataz…':'Asignar capataz…'}</button>`:''}<button data-do="cp">Copiar lista (para WhatsApp)</button>`,
+          {cp:()=>toCopy(toSinTxt(f,g),'Lista copiada.'),asg:()=>{const all=g.L.map(p=>p.dni||p.id),s=all.filter(d=>TD.sel.has(d));toAsignar(!g.cap&&s.length?s:all)}});return}
+      if(e.target.closest('[data-tosc]')){const g=G.find(y=>!y.cap);if(!g)return;const s=g.L.map(p=>p.dni||p.id).filter(d=>TD.sel.has(d));toAsignar(s.length?s:g.L.map(p=>p.dni||p.id))}};
+    sn.onchange=e=>{const c=e.target.closest('[data-tosel]');if(c){c.checked?TD.sel.add(c.dataset.tosel):TD.sel.delete(c.dataset.tosel);requestRender()}}}}
 
 /* detalle y revisión de un tareo: toDetalle, toReabrir y el resto de la bandeja del asistente están en tareo-rev.js (F2) */
 /* lee las fotos (tfot) que falten; con error queda en TD.fErr (la revisión muestra «Reintentar»). Avisa a la revisión abierta
