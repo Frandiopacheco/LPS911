@@ -603,3 +603,10 @@ Implementa la parte del celular del pedido anterior. **Reemplaza** en «Implemen
 - **Tareos antiguos por bloques:** en producción solo se ven (detalle normal, aviso `#trPrOld`) y se pueden marcar «Conforme sin cambios».
 - **Publicación:** `tpValidarDia` agrega `prod` (bool: `t.prod.t`) a cada `resumen.tareos[]` y `resumen.prod` (conteo); no bloquea. La previa muestra `#tpbProd` «X de Y tareos revisados por producción» (`#tpbProdN`) con cada tareo, su estado y «Revisar horas» (`[data-tpbr]`, solo `env`/`rev`) → `tpbAbrir(id, 'prod')`. «Abrir tareo» de los bloqueos abre en modo oficina (`'ofi'`; para el jefe da igual).
 - **Reglas:** `tProdOk()` = `tpubEd()` (editor con `tpub`, sin `off`) y anterior `env`/`rev`, mismo `st`, `affectedKeys().hasOnly(['rows','pcs','hist','prod','ts','by'])`, `prod` mapa con `by == mid()` y `tProdHist()`: exactamente una entrada nueva al final (`n[0:o.size()] == o` solo si `o` no está vacío), `a:'prod'` y `by == mid()`. El admin ya escribe como oficina (`tarEd`). El capataz no crea ni cambia `prod` y su entrada de `hist` no puede ser `a:'prod'`. `rows.*.as/mot/alt` no se validan en reglas (mapas anidados): la app del jefe no los toca.
+
+## Pedido del dueño (06-10-2026, tarde): jefe con edición completa y rediseños
+
+- **El jefe de producción (editor con `tpub`) tiene edición completa** del tareo desde su vista de revisión: todo lo que pueden el capataz y el asistente (vino/no vino/motivo/salida/altura, agregar o quitar obreros, horas, partidas, mover horas, pasar a otro capataz, cotejo de firmas, marcar revisado, reabrir), salvo publicar desde ahí (eso es Publicación). Sigue el aviso cuando cambian las HH totales de un obrero.
+- La vista donde el jefe revisa y edita debe ser **tipo Excel** con filtros interactivos (no básica).
+- **Publicación:** sin el paso previo «Ver estado del día»: al elegir la fecha se carga solo; rediseño completo de la vista.
+- **Tareos del día:** rediseño; lo principal es el estado de cada capataz; «Sin tareo / sin capataz» y «Copiar lista» no deben dominar la pantalla.
