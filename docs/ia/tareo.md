@@ -117,6 +117,19 @@ Colecciones nuevas, todas por `fcol()`:
 - **Personal de oficina** (`tasis`, `admin`, editor con `tpub`) en `tdia` (`renderTDia`, PC y celular): selector de fecha; lista de capataces con tareo (o que tienen obreros asignados y no han enviado): estado (sin empezar / borrador / enviado / reabierto), obreros, faltas, HH, HE, observaciones de `tValida`. Abrir uno: detalle (obreros × partidas, fotos ampliables) y, para `tasis`/`admin`, «Reabrir al capataz» (motivo obligatorio con `uiAsk` input). Bandeja completa, corrección directa y cotejo de firmas: ver «Contrato de F2».
 - **Equipo** (config-equipo.js): crear enlace/QR de invitación para capataces del tareo (como el de capataces de SC, pero con `role:'tcap'`); `capJoin` (base.js) registra `role:'tcap'` sin `scs` cuando la invitación es `tcap`.
 
+### Mejoras del capataz (oct 2026)
+
+Solo `tareo-cap.js` y el bloque CSS `/* tareo: capataz */`. Reemplaza lo dicho arriba para los pasos 1 y 2.
+
+- **Asistencia explícita:** al crear el día nadie está marcado (`rows[dni].as: null`); cada obrero (lista numerada) tiene «Vino» / «No vino» (con motivo obligatorio en chips). «Todos vinieron» marca a los que faltan; contador «Marcados a de b». No se pasa al paso 2 (ni con las pestañas) si falta marcar a alguien o falta un motivo: lleva al primero y los resalta (`.tc-ob.need`). El agregado a mano entra con `as:true`. Sin obreros asignados: «No tienes obreros asignados. Pide a la oficina que te los asigne en Personal».
+- **No vino ↔ vino no pierde horas:** marcar «No vino» ya **no** saca al obrero de los bloques (`tCalc` le da 0 h); en las tarjetas y chips del bloque sale tachado «no vino». Al volver a «vino» recupera sus horas. Por eso `tcErrs` ignora el `k:'falto'` de `tValida`.
+- **Validación propia** (`tcErrs(D)` = `tValida(tCalc(D))` menos `falto` y menos `mot` de los sin marcar, más `k:'asis'` sin marcar y `k:'bloq'` partida bloqueada con `bid`). `tcFix(E)` lleva al primer problema (paso 1 → cruce → bloque/obrero del paso 2 → foto).
+- **Cruces:** `tcCruces(D)` → `[{dni,a,b}]` entre bloques de los que vinieron. En el editor, el obrero que se cruza sale en rojo «se cruza con 10.05 7:30–12:00» y un recuadro ofrece: quitarlo de este trabajo, ajustar este (empieza al fin del otro o termina a su inicio) o ajustar el otro (si quedaría vacío, se le quita al obrero). «Guardar trabajo» no guarda con cruces. «Revisar y enviar» y el botón de enviar llevan al primer cruce y abren sus opciones (`TCS.cx`).
+- **Línea de tiempo** por obrero (pasos 2 y 3), 6:00–20:00: bloques coloreados por partida (`TC_HUE`, luz en `--tc-sl`/`--tc-ss` con modo oscuro), refrigerio rayado, cruces en rojo tocables (`.tc-cxb`) y un botón «Se cruzan … · Resolver» (`.tc-cxl`) con: quitarlo de uno u otro, que el segundo empiece al fin del primero o que el primero termine al inicio del segundo.
+- **Atajos de horario** (`tcAtajos`): Mañana, Tarde, +1 h, +2 h, +3 h (desde el fin del último bloque de los obreros elegidos o el inicio de la jornada; si cae en el refrigerio empieza al terminarlo y se alarga hasta sumar N horas reales con `tBlqH`), Extendido (fin de jornada → 19:00) y Todo el día. Un trabajo nuevo empieza por defecto donde terminó el último (hasta el fin de la jornada).
+- **Partidas bloqueadas** (`tpc.bloq === true`, las pone costos): no salen en el buscador ni se copian del día anterior; un bloque que ya la tiene sale en rojo «Partida bloqueada por costos: cámbiala» y no deja enviar; «Cambiar partida» abre el editor con la partida vacía.
+- Pruebas: `tests/e2e/tareo-cap.spec.js`.
+
 ## Contrato de F2: bandeja del asistente de tareo
 
 Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigue en `tareo.js` y llama a sus secciones. Globales con prefijo `tr`/`TR` (CSS `.tr-`, bloque `/* tareo: revisión */` al final de `app.css`).
