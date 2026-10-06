@@ -2213,6 +2213,34 @@ body.tr-on .toast{z-index:160}
 .tr-grid tr.tr-gno td:nth-child(2) b{color:var(--muted);text-decoration:line-through}
 .tr-grid tr.tr-gsm td:nth-child(2) b{color:var(--warn)}
 .tr-gk{margin:0;font-size:11.5px}
+/* revisión de producción (jefe de producción): grilla a todo el ancho, foto plegable; totales cambiados en ámbar */
+.tr-mode button{height:32px;padding:0 10px;font-size:12.5px}
+.tr-pmt{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.tr-prodc{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;color:var(--ok);background:var(--ok-soft);border:1px solid var(--ok)}
+.tr-ws.tr-prod .tr-wb{grid-template-columns:minmax(0,1fr)}
+.tr-ws.tr-prod:not(.tr-pfo) #trFoto{display:none}
+.tr-ws.tr-prod.tr-pfo .tr-wb{grid-template-columns:minmax(0,36fr) minmax(0,64fr)}
+.tr-ws.tr-pch .tr-wh{box-shadow:inset 0 -3px 0 var(--accent),var(--sh-1)}
+.tr-prc{border-left:3px solid var(--accent)}
+.tr-prc #trProdV{display:block;margin-top:2px}
+.tr-ptot{margin:0}
+.tr-ptot span{display:block;font-size:12.5px;margin-top:2px}
+.tr-mvb{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:34px;font-size:12.5px}
+.tr-mvb .ib{height:30px}
+.tr-pgrid tr.tr-tch td{background:var(--warn-soft)}
+.tr-pgrid tr.tr-tch td:nth-child(-n+2){background:var(--warn-soft)}
+.tr-pgrid .tr-p0{color:var(--muted)}
+.tr-pnote{font-size:11.5px;font-weight:700;color:var(--warn);white-space:nowrap}
+/* la última columna (nota) se queda con el ancho sobrante: obreros, partidas y totales quedan juntos */
+.tr-pgrid .tr-pnote{width:100%}
+.tr-pgrid .tr-p0,.tr-pgrid .tr-ht{min-width:56px}
+.tr-pgrid td.tr-hsel{box-shadow:inset 0 0 0 2px var(--accent)}
+.tr-mvo{display:flex;flex-direction:column;gap:4px}
+.tp-prod>summary{cursor:pointer;padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tp-pl{list-style:none;margin:0;padding:0 14px 10px}
+.tp-pl li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line2)}
+@media (max-width:1099px){.tr-ws.tr-prod.tr-pfo .tr-wb{display:flex}}
+@media (max-width:760px){.tr-mode button,.tr-mvb .ib{min-height:40px}}
 /* pantallas medianas: foto arriba y tabla abajo, todo en una sola columna con desplazamiento */
 @media (max-width:1099px){
   .tr-wb{display:flex;flex-direction:column;overflow:auto;gap:10px}

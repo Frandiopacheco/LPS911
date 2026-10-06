@@ -225,7 +225,7 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
 const TO_MOT={DM:'Descanso médico',DA:'Descanso por accidente',SU:'Suspensión',SM:'Subsidio por maternidad',SE:'Subsidio por enfermedad',VA:'Vacaciones',FA:'Falta',LS:'Licencia sin goce',L:'Liquidado'};
 const TO_ST={sin:['Sin empezar','to-sin'],bor:['Borrador','to-bor'],env:['Enviado','to-env'],reab:['Reabierto','to-reab'],rev:['Revisado','to-rev'],pub:['Publicado','to-pub']};
 const TO_ORD={env:0,reab:1,bor:2,sin:3,rev:4,pub:5};
-const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar'};
+const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',sinTxt:''};
@@ -265,7 +265,7 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
   const cotC=x=>{const t=x.t;if(!['env','rev','pub'].includes(t.st))return'';if(x.s.nof)return`<span class="tr-no">${x.s.nof} sin firma</span>`;
     return x.s.cot>=x.s.pres?'<span class="tr-si">✓</span>':`<span class="note">${x.s.cot} de ${x.s.pres}</span>`};
   const lateT=x=>isLate(x)?` <span class="tr-tag">No enviado a las ${esc(TC().limEnv)}</span>`:'';
-  const row=x=>x.t?`<tr class="to-row${isLate(x)?' tr-lrow':''}" data-to="${esc(x.id)}"><td data-l="Capataz"><button class="t-lnk" data-to="${esc(x.id)}">${esc(x.name)}</button></td><td data-l="Estado">${toChip(x.t)}${lateT(x)}</td>
+  const row=x=>x.t?`<tr class="to-row${isLate(x)?' tr-lrow':''}" data-to="${esc(x.id)}"><td data-l="Capataz"><button class="t-lnk" data-to="${esc(x.id)}">${esc(x.name)}</button></td><td data-l="Estado">${toChip(x.t)}${typeof trProdChip==='function'?trProdChip(x.t):''}${lateT(x)}</td>
       ${num(x.s.pres,'Vinieron')}${num(x.s.fal||'','No vinieron')}<td class="t-r" data-l="Sin marcar">${x.s.sm?`<span class="tr-sm" title="El capataz aún no marca si vinieron">${x.s.sm}</span>`:''}</td>${num(toH(x.s.hh),'HH')}${num(x.s.he?toH(x.s.he):'','HE')}<td class="t-r" data-l="Observ.">${x.s.obs.length?`<span class="to-obsn" title="${esc(x.s.obs.map(o=>o.msg).join('\n'))}">${x.s.obs.length}</span>`:''}</td><td class="t-r" data-l="Firmas">${cotC(x)}</td></tr>`
     :`<tr class="t-off to-row${isLate(x)?' tr-lrow':''}" data-tcap="${esc(x.cap)}"><td data-l="Capataz">${esc(x.name)}</td><td data-l="Estado">${toChip(null)}${lateT(x)}</td><td class="mono t-r" data-l="Asignados" colspan="7"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}</span></td></tr>`;
   const T=L.filter(x=>x.t);const FL={all:['Todos',L.length],rev:['Por revisar',T.filter(x=>x.t.st==='env').length],obs:['Con observaciones',T.filter(x=>x.s.obs.length).length],ok:['Revisados',T.filter(x=>['rev','pub'].includes(x.t.st)).length]};
