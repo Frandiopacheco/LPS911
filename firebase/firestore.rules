@@ -329,9 +329,17 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.get('cod', null) is string && d.get('nom', null) is string;
     }
+    // Costos (tcos) solo bloquea o desbloquea una partida para la carga: cambia bloq/bloqBy/bloqAt y nada más
+    function tpcBloqOk() {
+      let d = request.resource.data;
+      return isMember() && role() == 'tcos'
+        && d.diff(resource.data).affectedKeys().hasOnly(['bloq', 'bloqBy', 'bloqAt'])
+        && d.get('bloq', false) is bool && d.get('bloqBy', '') == email();
+    }
     match /tpc/{id} {
       allow read: if isTar();
-      allow create, update: if tarEd() && tpcOk();
+      allow create: if tarEd() && tpcOk();
+      allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
     match /tcfg/{id} {

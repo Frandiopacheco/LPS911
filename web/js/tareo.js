@@ -93,7 +93,9 @@ function tParsePartidas(rows){rows=rows||[];let C=2,UA=7;
     const grp=cod.split('.')[0];const gN=cur&&cur.grp===grp?cur.grpN:((grupos.find(x=>x.grp===grp)||{}).grpN||'');
     partidas.push({id:tPcId(cod),cod,grp,grpN:gN,nom:t,und,met:tNum(r[C+2]),hhp:tNum(r[C+3]),ua,ord:partidas.length+1})});
   return{partidas,grupos,errores}}
-const tCmpCod=(a,b)=>{const[x1,x2]=String(a).split('.').map(Number),[y1,y2]=String(b).split('.').map(Number);return(x1-y1)||((x2||0)-(y2||0))};
+/** orden de códigos por partes enteras: 2 antes de 10; 10.02 antes de 10.10 (no como texto) */
+const tCmpCod=(a,b)=>{const A=String(a??'').split('.'),B=String(b??'').split('.');for(let i=0;i<Math.max(A.length,B.length);i++){const x=parseInt(A[i],10),y=parseInt(B[i],10);
+    const d=(Number.isFinite(x)?x:-1)-(Number.isFinite(y)?y:-1);if(d)return d}return String(a??'').localeCompare(String(b??''))};
 
 /* ---------- lectura de Excel (librería diferida de exportes.js) ---------- */
 function tPickFile(accept){return new Promise(res=>{const i=document.createElement('input');i.type='file';i.accept=accept||'.xlsx,.xls,.csv';i.style.display='none';i.id='tfile';
@@ -127,24 +129,26 @@ const tBlqDe=(blq,dni)=>(Array.isArray(blq)?blq:[]).filter(b=>b&&Array.isArray(b
 function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};
   const nl=tNoLab(f);const jh=tJorH(TC().jor[String(pd(f).getUTCDay())]);
   for(const[dni,r0]of Object.entries(d.rows||{})){const r={...r0};
-    if(!r.as){Object.assign(r,{h:{},ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}
+    if(r.as!==true){Object.assign(r,{h:{},ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}/* no vino o sin marcar: sin horas (conserva sus bloques) */
     const h={};let a=null,z=null,t=0;
     for(const b of tBlqDe(d.blq,dni)){if(!tBlqOk(b))continue;const x=tBlqH(f,b.ini,b.fin);h[b.pc]=tR2((h[b.pc]||0)+x);t+=x;
       const bi=tMin(b.ini),bf=tMin(b.fin);if(a==null||bi<a[0])a=[bi,b.ini];if(z==null||bf>z[0])z=[bf,b.fin]}
     const trab=tR2(t);Object.assign(r,{h,ini:a?a[1]:'',fin:z?z[1]:'',trab,ext:nl?trab:tR2(Math.max(0,trab-jh))});rows[dni]=r}
   return{...d,rows}}
-/** problemas que impiden enviar el tareo: [{dni|null, k, msg}] (mensajes para el capataz). Vacío = se puede enviar. */
+/** problemas que impiden enviar el tareo: [{dni|null, k, msg}] (mensajes para el capataz). Vacío = se puede enviar.
+    Un obrero que no vino puede seguir en sus bloques (no es error: tCalc le da 0 h y los recupera si vuelve a «vino»). */
 function tValida(doc){const d=doc||{};const out=[];const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
   const nm=dni=>{const r=rows[dni];return r&&(r.ape||r.nom)?[r.ape,r.nom].filter(Boolean).join(', '):dni};
-  const pcC=pc=>{const p=pc&&S.tpc.get(pc);return p?p.cod:pc||'sin partida'};
+  const pcC=pc=>{const p=pc&&S.tpc.get(pc);return p?p.cod:pc||'sin partida'};const bloqs=new Set();
   if(!Object.keys(rows).length)out.push({dni:null,k:'vacio',msg:'No hay obreros en el tareo: agrega a tu cuadrilla.'});
   blq.forEach((b,i)=>{b=b||{};const lb=`Bloque ${i+1} (${pcC(b.pc)}, ${b.ini||'?'}–${b.fin||'?'})`;const a=tMin(b.ini),z=tMin(b.fin);
     if(!b.pc)out.push({dni:null,k:'pc',msg:`${lb}: elige la partida.`});
+    else{const p=S.tpc.get(b.pc);if(p&&p.bloq===true&&!bloqs.has(b.pc)){bloqs.add(b.pc);out.push({dni:null,k:'bloq',msg:`La partida ${p.cod} está bloqueada por costos.`})}}
     if(a==null||z==null||z<=a)out.push({dni:null,k:'hora',msg:`${lb}: la hora de salida debe ser después de la de entrada.`});
     else if(a<300||z>1439)out.push({dni:null,k:'hora',msg:`${lb}: el horario debe estar entre 05:00 y 23:59.`});
-    if(!Array.isArray(b.dnis)||!b.dnis.length)out.push({dni:null,k:'quien',msg:`${lb}: marca quiénes trabajaron.`});
-    else for(const x of b.dnis)if(rows[x]&&!rows[x].as)out.push({dni:x,k:'falto',msg:`${nm(x)} está marcado como falta pero figura en el ${lb.toLowerCase()}.`})});
+    if(!Array.isArray(b.dnis)||!b.dnis.length)out.push({dni:null,k:'quien',msg:`${lb}: marca quiénes trabajaron.`})});
   for(const[dni,r]of Object.entries(rows)){
+    if(r.as!==true&&r.as!==false){out.push({dni,k:'marca',msg:`Falta marcar si vino: ${(r&&r.ape)||nm(dni)}`});continue}
     if(!r.as){if(!r.mot)out.push({dni,k:'mot',msg:`${nm(dni)}: elige el motivo de la falta.`});continue}
     const L=tBlqDe(blq,dni).filter(tBlqOk).map(b=>[tMin(b.ini),tMin(b.fin),b]).sort((x,y)=>x[0]-y[0]);
     if(!L.length){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponlo en un bloque o márcalo como falta.`});continue}
@@ -237,13 +241,15 @@ function tPerList(){const hoy=todayIso();const q=tFold(TU.q);
     if(TU.cua&&(p.cua||'')!==TU.cua)return false;if(TU.cat&&(p.cat||'OT')!==TU.cat)return false;if(TU.cap&&(TU.cap==='-'?!!p.cap:p.cap!==TU.cap))return false;
     if(q&&!(p.dni||'').includes(q)&&!tFold(p.ape).includes(q)&&!tFold(p.nom).includes(q))return false;return true})
    .sort((a,b)=>(a.ape||'').localeCompare(b.ape||'')||(a.dni||'').localeCompare(b.dni||''))}
-function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;
-  return L.slice(0,max).map(p=>{const a=tActivo(p,hoy);return`<tr class="${a?'':'t-off'}" data-tp="${esc(p.id)}">${ed?`<td class="t-ck"><input type="checkbox" data-tsel="${esc(p.id)}"${TU.sel.has(p.id)?' checked':''} aria-label="Elegir"></td>`:''}
-   <td class="mono" data-l="DNI">${esc(p.dni||p.id)}</td><td data-l="Nombre"><button class="t-lnk" data-tfi="${esc(p.id)}">${esc(p.ape||'')}<span>${esc(p.nom||'')}</span></button></td>
+/* «Hacer capataz»: la cuenta (usuario y contraseña) la crea tareo-cuentas.js con tCapCuenta(dni); aquí solo el botón y el chip */
+const tCtaFn=()=>typeof tCapCuenta==='function';
+function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&tCtaFn();
+  return L.slice(0,max).map((p,i)=>{const a=tActivo(p,hoy);const dni=p.dni||p.id;return`<tr class="${a?'':'t-off'}" data-tp="${esc(p.id)}">${ed?`<td class="t-ck"><input type="checkbox" data-tsel="${esc(p.id)}"${TU.sel.has(p.id)?' checked':''} aria-label="Elegir"></td>`:''}
+   <td class="mono t-r t-num" data-l="N°">${i+1}</td><td class="mono" data-l="DNI">${esc(dni)}</td><td data-l="Nombre"><button class="t-lnk" data-tfi="${esc(p.id)}">${esc(p.ape||'')}<span>${esc(p.nom||'')}${p.cta?' <i class="lqt t-capc">Capataz</i>':''}</span></button></td>
    <td data-l="Puesto">${esc(p.pue||'')} <i class="t-cat">${esc(p.cat||'OT')}</i></td><td data-l="Cuadrilla">${esc(p.cua||'')}</td><td data-l="Capataz">${esc(tCapName(p.cap))||'<span class="note">—</span>'}</td>
-   <td class="mono" data-l="Ingreso">${esc(tFmt(p.ing))}</td><td class="mono" data-l="Cese">${esc(tFmt(p.ces))}${p.ces&&a?' <span class="note">(próximo)</span>':''}</td><td data-l="Motivo">${esc(p.mot||'')}</td></tr>`}).join('')
-   +(L.length>max?`<tr><td colspan="9" class="note">Se muestran ${max} de ${L.length}: usa el buscador o los filtros.</td></tr>`:'')}
-function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);const n=$('#tperN');if(n)n.textContent=L.length+' '+(L.length===1?'persona':'personas');
+   <td class="mono" data-l="Ingreso">${esc(tFmt(p.ing))}</td><td class="mono" data-l="Cese">${esc(tFmt(p.ces))}${p.ces&&a?' <span class="note">(próximo)</span>':''}</td><td data-l="Motivo">${esc(p.mot||'')}</td>${cf?`<td class="t-acts"><button class="ib" data-tcta="${esc(dni)}">${p.cta?'Cuenta de capataz…':'Hacer capataz'}</button></td>`:''}</tr>`}).join('')
+   +(L.length>max?`<tr><td colspan="12" class="note">Se muestran ${max} de ${L.length}: usa el buscador o los filtros.</td></tr>`:'')}
+function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);const n=$('#tperN');if(n){const hoy=todayIso();n.textContent=`Mostrando ${L.length} de ${tLive().length} · ${L.filter(p=>tActivo(p,hoy)).length} activos`}
   const s=$('#tselBar');if(s){s.hidden=!TU.sel.size;const c=$('#tselN');if(c)c.textContent=TU.sel.size}}
 function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
   const cuas=[...new Set(all.map(p=>p.cua).filter(Boolean))].sort();const caps=tCaps();
@@ -261,14 +267,14 @@ function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso(
     <select class="tin" id="tperCap" aria-label="Capataz">${opt('','Todos los capataces',TU.cap)}${opt('-','Sin capataz',TU.cap)}${caps.map(c=>opt(c.id,c.name,TU.cap)).join('')}</select>
     <span class="note" id="tperN"></span></div>
     ${ed?`<div class="pad t-selbar" id="tselBar" hidden><b><span id="tselN">0</span> elegidos</b><button class="ib pri" id="tselCap">Asignar capataz</button><button class="ib" id="tselNone">Quitar selección</button></div>`:''}
-    <div class="tscroll"><table class="t t-tbl"><thead><tr>${ed?'<th class="t-ck"><input type="checkbox" id="tselAll" aria-label="Elegir todos los visibles"></th>':''}<th>DNI</th><th>Apellidos y nombres</th><th>Puesto</th><th>Cuadrilla</th><th>Capataz</th><th>Ingreso</th><th>Cese</th><th>Motivo</th></tr></thead><tbody id="tperBody"></tbody></table></div></div>
+    <div class="tscroll"><table class="t t-tbl"><thead><tr>${ed?'<th class="t-ck"><input type="checkbox" id="tselAll" aria-label="Elegir todos los visibles"></th>':''}<th class="t-r t-num">N°</th><th>DNI</th><th>Apellidos y nombres</th><th>Puesto</th><th>Cuadrilla</th><th>Capataz</th><th>Ingreso</th><th>Cese</th><th>Motivo</th>${ed&&tCtaFn()?'<th></th>':''}</tr></thead><tbody id="tperBody"></tbody></table></div></div>
   </div></div>`;
   tPerDraw();
   const q=$('#tperQ');q.oninput=()=>{TU.q=q.value;tPerDraw()};
   $('#tperEst').onclick=e=>{const b=e.target.closest('[data-test]');if(!b)return;TU.est=b.dataset.test;$$('#tperEst button').forEach(x=>x.classList.toggle('on',x===b));tPerDraw()};
   $('#tperCua').onchange=e=>{TU.cua=e.target.value;tPerDraw()};$('#tperCat').onchange=e=>{TU.cat=e.target.value;tPerDraw()};$('#tperCap').onchange=e=>{TU.cap=e.target.value;tPerDraw()};
   $('#tperXls').onclick=tPerExport;
-  const body=$('#tperBody');body.onclick=e=>{const b=e.target.closest('[data-tfi]');if(b)tFicha(b.dataset.tfi)};
+  const body=$('#tperBody');body.onclick=e=>{const c=e.target.closest('[data-tcta]');if(c){if(tEdit()&&tCtaFn())tCapCuenta(c.dataset.tcta);return}const b=e.target.closest('[data-tfi]');if(b)tFicha(b.dataset.tfi)};
   if(!ed)return;
   body.onchange=e=>{const c=e.target.closest('[data-tsel]');if(!c)return;if(c.checked)TU.sel.add(c.dataset.tsel);else TU.sel.delete(c.dataset.tsel);tPerDraw()};
   $('#tselAll').onchange=e=>{const L=tPerList().slice(0,600);if(e.target.checked)L.forEach(p=>TU.sel.add(p.id));else L.forEach(p=>TU.sel.delete(p.id));tPerDraw()};
@@ -384,21 +390,49 @@ function tImportMasterRows(rows,sh,cols){const R=tParseMaster(rows,cols);const D
    e=>{const s=e.target.closest('[data-tmap]');if(!s)return;const nc={...c};$$('[data-tmap]').forEach(x=>{nc[x.dataset.tmap]=x.value===''?null:+x.value});tImportMasterRows(rows,sh,nc)})}
 
 /* ---------- Partidas de control ---------- */
-function renderTPc(main){const ed=tEdit();const L=[...S.tpc.values()].filter(x=>!x.arch).sort((a,b)=>tCmpCod(a.cod,b.cod));
-  const G=new Map();for(const x of L){const k=x.grp||String(x.cod||'').split('.')[0];if(!G.has(k))G.set(k,{n:x.grpN||'',L:[]});const g=G.get(k);if(!g.n&&x.grpN)g.n=x.grpN;g.L.push(x)}
-  const nA=L.filter(x=>x.act!==false).length;const f2=v=>v==null||v===''?'':Number(v).toLocaleString('es-PE',{maximumFractionDigits:2});
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Partidas de control',`${nA} activas · ${G.size} grupos`,ed?`<button class="ib" id="tpcImp">Importar Excel de costos</button><button class="ib pri" id="tpcAdd">+ Partida</button>`:'')}
-   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Importa la hoja «Lista de partidas» del Excel que hoy recibe costos para cargarlas o actualizarlas. Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan).</p>`)}
-   ${ed?'':`<div class="callout">Solo lectura: las partidas las mantiene el asistente de tareo.</div>`}
-   ${L.length?'':`<div class="callout">Aún no hay partidas de control.${ed?' Impórtalas del Excel de costos o agrégalas una por una.':''}</div>`}
-   ${[...G].sort((a,b)=>(+a[0]||0)-(+b[0]||0)).map(([k,g])=>`<div class="card t-grp"><h2><span class="mono">${esc(k)}</span> ${esc(g.n||'(sin grupo)')} <span class="sub">${g.L.filter(x=>x.act!==false).length} de ${g.L.length}</span></h2>
-    <div class="tscroll"><table class="t t-tbl"><thead><tr><th>Código</th><th>Partida</th><th>Und</th><th class="t-r">Metrado</th><th class="t-r">HH presup.</th><th>Cuenta UA</th><th>Estado</th>${ed?'<th></th>':''}</tr></thead><tbody>
-    ${g.L.map(x=>`<tr class="${x.act===false?'t-off':''}" data-tpc="${esc(x.id)}"><td class="mono" data-l="Código">${esc(x.cod)}</td><td data-l="Partida">${esc(x.nom)}</td><td data-l="Und">${esc(x.und||'')}</td><td class="mono t-r" data-l="Metrado">${f2(x.met)}</td><td class="mono t-r" data-l="HH">${f2(x.hhp)}</td><td class="mono" data-l="UA">${esc(x.ua||'')}</td>
-     <td data-l="Estado">${x.act===false?'<i class="lqt">INACTIVA</i>':'<i class="lqt t-ok">ACTIVA</i>'}</td>${ed?`<td class="t-acts"><button class="ib" data-tpe="${esc(x.id)}">Editar</button><button class="ib" data-tpt="${esc(x.id)}">${x.act===false?'Activar':'Desactivar'}</button></td>`:''}</tr>`).join('')}
-    </tbody></table></div></div>`).join('')}
+/* una sola tabla (columnas alineadas entre grupos) con fila de encabezado por grupo, como la hoja «Lista de partidas» */
+const TPU={q:'',est:'all'};
+const tBloqOk=()=>!!me&&(!!isAdmin||me.role==='tasis'||me.role==='tcos');
+const tF2=v=>v==null||v===''?'':Number(v).toLocaleString('es-PE',{maximumFractionDigits:2});
+/* ratio HH/und (columna «Ratio» del Excel): HH presupuestadas entre metrado */
+const tRatio=x=>{const m=+x.met,h=+x.hhp;return m>0&&h>0?(h/m).toLocaleString('es-PE',{maximumFractionDigits:4}):''};
+function tPcGroups(L){const G=new Map();for(const x of L){const k=String(x.grp||String(x.cod||'').split('.')[0]||'');if(!G.has(k))G.set(k,{k,n:'',L:[]});const g=G.get(k);if(!g.n&&x.grpN)g.n=x.grpN;g.L.push(x)}
+  for(const g of G.values())g.L.sort((a,b)=>tCmpCod(a.cod,b.cod));return[...G.values()].sort((a,b)=>tCmpCod(a.k,b.k))}
+function tPcVis(){const q=tFold(TPU.q);return[...S.tpc.values()].filter(x=>{if(!x||x.arch)return false;
+  if(TPU.est==='act'&&x.act===false)return false;if(TPU.est==='bloq'&&x.bloq!==true)return false;if(TPU.est==='ina'&&x.act!==false)return false;
+  return!q||String(x.cod||'').includes(q)||tFold(x.nom).includes(q)||tFold(x.ua).includes(q)||tFold(x.grpN).includes(q)})}
+function tPcDraw(){const b=$('#tpcBody');if(!b)return;const ed=tEdit(),bq=tBloqOk();const G=tPcGroups(tPcVis());const nc=8+(ed||bq?1:0);
+  b.innerHTML=G.map(g=>{const hh=g.L.reduce((s,x)=>s+(+x.hhp||0),0);
+    return`<tr class="tpc-gh" data-tpg="${esc(g.k)}"><th colspan="${nc}"><span class="mono">${esc(g.k)}</span> ${esc(g.n||'(sin grupo)')}<span class="sub">${g.L.length} ${g.L.length===1?'partida':'partidas'}${hh?` · ${tF2(hh)} HH ppto`:''}</span></th></tr>`+
+    g.L.map(x=>{const off=x.act===false,lk=x.bloq===true;
+      return`<tr class="tpc-r${off?' t-off':''}${lk?' tpc-lk':''}" data-tpc="${esc(x.id)}"><td class="mono" data-l="Código">${esc(x.cod)}</td><td class="tpc-nom" data-l="Descripción">${lk?'<span class="tpc-lock" title="Bloqueada por costos" aria-label="Bloqueada">🔒</span> ':''}${esc(x.nom)}</td>
+       <td data-l="Und">${esc(x.und||'')}</td><td class="mono t-r" data-l="Metrado">${tF2(x.met)}</td><td class="mono t-r" data-l="HH ppto">${tF2(x.hhp)}</td><td class="mono t-r" data-l="HH/und">${tRatio(x)}</td><td class="mono" data-l="Cuenta UA">${esc(x.ua||'')}</td>
+       <td data-l="Estado"><span class="tpc-st">${off?'<i class="lqt">INACTIVA</i>':'<i class="lqt t-ok">ACTIVA</i>'}${lk?`<i class="lqt tpc-bq" title="${esc(x.bloqBy?'Por '+x.bloqBy:'')}">BLOQUEADA</i>`:''}</span></td>
+       ${ed||bq?`<td class="t-acts">${bq?`<button class="ib" data-tpb="${esc(x.id)}">${lk?'Desbloquear':'Bloquear para carga'}</button>`:''}${ed?`<button class="ib" data-tpe="${esc(x.id)}">Editar</button><button class="ib" data-tpt="${esc(x.id)}">${off?'Activar':'Desactivar'}</button>`:''}</td>`:''}</tr>`}).join('')}).join('')
+   ||`<tr><td colspan="${nc}" class="note">${S.tpc.size?'Ninguna partida con este filtro.':'Aún no hay partidas de control.'}</td></tr>`;
+  const n=$('#tpcN');if(n){const L=G.reduce((s,g)=>s+g.L.length,0);n.textContent=`${L} ${L===1?'partida':'partidas'} en ${G.length} ${G.length===1?'grupo':'grupos'}`}}
+async function tPcBloq(id){const x=S.tpc.get(id);if(!x||!tBloqOk())return;const on=x.bloq!==true;
+  if(!await uiAsk({title:on?`¿Bloquear la partida ${x.cod}?`:`¿Desbloquear la partida ${x.cod}?`,text:on?`«${x.nom}» deja de aparecer en el celular de los capataces y un tareo que la use no se podrá enviar hasta cambiarla.`:`«${x.nom}» vuelve a estar disponible para cargar horas.`,ok:on?'Bloquear':'Desbloquear',tone:on?'warn':'info'}))return;
+  try{await fcol(TCOLS.tpc).doc(id).update({bloq:on,bloqBy:(me.email||'').toLowerCase(),bloqAt:NOW()});toast(`Partida ${x.cod} ${on?'bloqueada para carga':'desbloqueada'}.`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
+function renderTPc(main){const ed=tEdit(),bq=tBloqOk();const all=[...S.tpc.values()].filter(x=>x&&!x.arch);
+  const nA=all.filter(x=>x.act!==false).length,nB=all.filter(x=>x.bloq===true).length,nG=tPcGroups(all).length;
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Partidas de control',`${nA} activas · ${nG} grupos${nB?` · ${nB} bloqueadas`:''}`,ed?`<button class="ib" id="tpcImp">Importar Excel de costos</button><button class="ib pri" id="tpcAdd">+ Partida</button>`:'')}
+   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Importa la hoja «Lista de partidas» del Excel que hoy recibe costos para cargarlas o actualizarlas. Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan).</p><p><b>Bloquear para carga</b> (costos, asistente o administrador): la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar.</p>`)}
+   ${ed?'':bq?`<div class="callout">Puedes bloquear o desbloquear partidas para la carga; el resto lo mantiene el asistente de tareo.</div>`:`<div class="callout">Solo lectura: las partidas las mantiene el asistente de tareo.</div>`}
+   ${all.length?'':`<div class="callout">Aún no hay partidas de control.${ed?' Impórtalas del Excel de costos o agrégalas una por una.':''}</div>`}
+   <div class="card"><div class="pad t-bar"><input class="tin t-q" id="tpcQ" data-fk="tpcQ" type="search" placeholder="Buscar código, partida o cuenta" value="${esc(TPU.q)}" aria-label="Buscar partida">
+    <span class="seg" id="tpcEst">${[['all','Todas'],['act','Activas'],['bloq','Bloqueadas'],['ina','Inactivas']].map(([k,l])=>`<button data-tpest="${k}" class="${TPU.est===k?'on':''}">${l}</button>`).join('')}</span><span class="note" id="tpcN"></span></div>
+    <div class="tscroll"><table class="t t-tbl tpc-tbl${ed||bq?' tpc-ed':''}"><colgroup><col class="tpc-c-cod"><col><col class="tpc-c-und"><col class="tpc-c-num"><col class="tpc-c-num"><col class="tpc-c-rat"><col class="tpc-c-ua"><col class="tpc-c-st">${ed||bq?`<col class="tpc-c-acts${ed&&bq?' w2':''}">`:''}</colgroup>
+     <thead><tr><th>Código</th><th>Descripción</th><th>Und</th><th class="t-r">Metrado</th><th class="t-r">HH ppto</th><th class="t-r">HH/und</th><th>Cuenta UA</th><th>Estado</th>${ed||bq?'<th></th>':''}</tr></thead>
+     <tbody id="tpcBody"></tbody></table></div></div>
   </div></div>`;
-  if(!ed)return;$('#tpcAdd').onclick=()=>tPcForm(null);$('#tpcImp').onclick=tImportPc;
-  main.querySelector('.wrap').onclick=async e=>{let b;if((b=e.target.closest('[data-tpe]')))tPcForm(b.dataset.tpe);
+  tPcDraw();
+  const q=$('#tpcQ');q.oninput=()=>{TPU.q=q.value;tPcDraw()};
+  $('#tpcEst').onclick=e=>{const b=e.target.closest('[data-tpest]');if(!b)return;TPU.est=b.dataset.tpest;$$('#tpcEst button').forEach(x=>x.classList.toggle('on',x===b));tPcDraw()};
+  if(ed){$('#tpcAdd').onclick=()=>tPcForm(null);$('#tpcImp').onclick=tImportPc}
+  if(!ed&&!bq)return;
+  $('#tpcBody').onclick=async e=>{let b;if((b=e.target.closest('[data-tpb]')))return tPcBloq(b.dataset.tpb);if(!ed)return;
+    if((b=e.target.closest('[data-tpe]')))tPcForm(b.dataset.tpe);
     else if((b=e.target.closest('[data-tpt]'))){const x=S.tpc.get(b.dataset.tpt);if(!x)return;const on=x.act===false;
       try{await fcol(TCOLS.tpc).doc(x.id).set({act:on,...tStamp()},{merge:true});toast(`Partida ${x.cod} ${on?'activada':'desactivada'}.`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}}
 function tPcForm(id){const x=id?S.tpc.get(id):null;const v=x||{cod:'',grpN:'',nom:'',und:'',met:'',hhp:'',ua:''};

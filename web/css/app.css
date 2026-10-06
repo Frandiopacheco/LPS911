@@ -1754,6 +1754,35 @@ body.mod-tar #fpiso,body.mod-tar .wk .lbl,body.mod-tar #wprev,body.mod-tar #wnex
 .t-map .tin{width:100%}
 .t-imptiles{grid-template-columns:repeat(4,minmax(0,1fr))}
 .t-grp h2 .mono{color:var(--muted);margin-right:4px}
+.t-num{width:44px;color:var(--muted)}
+.t-lnk .lqt.t-capc{background:var(--accent-soft);color:var(--accent);margin-left:4px;vertical-align:1px}
+/* partidas de control: una tabla con columnas fijas y fila de encabezado por grupo (como la hoja «Lista de partidas») */
+.tpc-tbl{table-layout:fixed;min-width:980px}
+.tpc-tbl .tpc-c-cod{width:70px}.tpc-tbl .tpc-c-und{width:56px}.tpc-tbl .tpc-c-num{width:96px}.tpc-tbl .tpc-c-rat{width:80px}
+.tpc-tbl .tpc-c-ua{width:122px}.tpc-tbl .tpc-c-st{width:118px}.tpc-tbl .tpc-c-acts{width:160px}.tpc-tbl .tpc-c-acts.w2{width:300px}
+.tpc-tbl td{overflow-wrap:anywhere}
+.tpc-gh th{background:var(--panel2,var(--line2));color:var(--ink);font-size:13px;font-weight:700;text-transform:none;letter-spacing:0;padding:10px 8px;border-top:1px solid var(--line)}
+.tpc-gh .mono{display:inline-block;min-width:26px;color:var(--muted)}
+.tpc-gh .sub{margin-left:10px;font-weight:400;font-size:12px;color:var(--muted)}
+.tpc-st{display:inline-flex;flex-wrap:wrap;gap:4px}
+.lqt.tpc-bq{background:var(--warn-soft);color:var(--warn)}
+.tpc-lk .tpc-nom{color:var(--ink2)}
+.tpc-lock{font-size:12px}
+@media (max-width:760px){
+  .tpc-tbl{min-width:0;table-layout:auto}
+  .tpc-tbl colgroup,.tpc-tbl thead{display:none}
+  .tpc-tbl tbody,.tpc-tbl .tpc-gh,.tpc-tbl .tpc-gh th{display:block}
+  .tpc-tbl .tpc-r{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 12px;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .tpc-tbl .tpc-r td{padding:0;border:0;text-align:left}
+  .tpc-tbl .tpc-r td[data-l="Código"]{font-weight:700}
+  .tpc-tbl .tpc-r td[data-l="Descripción"]{flex:1 1 calc(100% - 70px)}
+  .tpc-tbl .tpc-r td[data-l="Descripción"]{font-weight:600}
+  .tpc-tbl .tpc-r td:nth-child(n+3):not(.t-acts){font-size:12px;color:var(--ink2)}
+  .tpc-tbl .tpc-r td:nth-child(n+3):not(.t-acts):not([data-l="Estado"]):empty{display:none}
+  .tpc-tbl .tpc-r td:nth-child(n+3):not(.t-acts)::before{content:attr(data-l) ": ";color:var(--muted)}
+  .tpc-tbl .tpc-r .t-acts{flex-basis:100%;text-align:left;white-space:normal;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .tpc-tbl .tpc-r .t-acts .ib{margin-left:0}
+}
 .t-jor .tin{height:32px}
 .t-jor input[type=checkbox]{width:18px;height:18px}
 @media (max-width:760px){

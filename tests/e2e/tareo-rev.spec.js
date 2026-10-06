@@ -106,7 +106,7 @@ test('revisión: duplicado y corrección directa con motivo (horas recalculadas,
   expect(d.st).toBe('env');
   expect(d.rows['44444444']).toMatchObject({ fin: '12:00', ext: 0 });
   expect(d.rows['22222222']).toMatchObject({ as: false, mot: 'FA', trab: 0 });
-  expect(d.blq[0].dnis).toEqual(['44444444']);
+  expect(d.blq[0].dnis).toEqual(['44444444', '22222222']); // BETA conserva su bloque (0 h): si vuelve a «vino» recupera sus horas
   const h = d.hist[d.hist.length - 1];
   expect(h).toMatchObject({ a: 'cor', mot: 'Salieron al mediodía', by: 'tasis@obra.pe' });
   expect(h.cam).toContain('07:30–17:00 → 07:30–12:00');
@@ -114,6 +114,31 @@ test('revisión: duplicado y corrección directa con motivo (horas recalculadas,
   await expect(m.locator('#trHist')).toContainText('Corregido');
   await expect(page.locator('#trDup')).toHaveCount(0);
   noErrors(errors, 'corrección');
+});
+
+test('corrección: quitar y volver a marcar «vino» no le quita las horas al obrero (regresión)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: EXTRA });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#lqm');
+  await m.locator('#trCor').click();
+  const alfa = m.locator('tr[data-tro="11111111"]');
+  await expect(alfa).toContainText(/8[.,]5/);
+  await m.locator('#tre_as_11111111').uncheck();
+  await expect(alfa).not.toContainText(/8[.,]5/);
+  await expect(m.locator('#trEdObs')).not.toContainText('figura en el');
+  await m.locator('#tre_as_11111111').check();
+  await expect(alfa).toContainText(/8[.,]5/);
+  // guardar con ALFA como falta: conserva sus bloques con 0 h
+  await m.locator('#tre_as_11111111').uncheck();
+  await m.locator('#tre_mot_11111111').selectOption('FA');
+  page.once('dialog', dg => dg.accept('Faltó'));
+  await m.locator('#trEdOk').click();
+  await expect.poll(async () => (await dbT(page, T1)).rows['11111111'].as).toBe(false);
+  const d = await dbT(page, T1);
+  expect(d.rows['11111111']).toMatchObject({ trab: 0, h: {} });
+  expect(d.blq.map(b => b.dnis)).toEqual([['11111111', '22222222'], ['11111111', '22222222']]);
+  noErrors(errors, 'vino/no vino');
 });
 
 test('Tareos del día: sin tareo (registrar falta), no enviados a la hora límite y filtros', async ({ page }) => {

@@ -142,7 +142,7 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - Un solo detalle para la oficina; `tasis`/`admin` editan, el editor con `tpub` lo ve en solo lectura.
 - Arriba: foto del formato (visor con acercar/alejar, rotar, pantalla completa y miniaturas) al lado de la lista de presentes (PC dos columnas, celular una debajo de otra). Por obrero: «Firmó» Sí/No y hora de garita. «Todos firmaron». El cotejo se edita en local (`TR.fir`/`TR.gar`, `TR.dirty`) y se guarda con «Guardar cotejo» o junto con «Marcar revisado».
 - El cotejo solo se edita con `st:'env'`. En `rev` queda de solo lectura (primero «Quitar revisado»).
-- **Corregir** (`env` o `rev`; no cambia el estado): tabla de bloques (partida con `select`, desde/hasta, quiénes con chips, quitar/agregar) y de obreros (vino, motivo si faltó, altura). Al guardar: si `tValida` deja problemas pide confirmar, luego motivo (`uiAsk` input requerido); recalcula con `tCalc` y guarda `rows`, `blq` y `hist` `cor`. Marcar a alguien como falta lo saca de los bloques. No se agregan obreros desde aquí.
+- **Corregir** (`env` o `rev`; no cambia el estado): tabla de bloques (partida con `select`, desde/hasta, quiénes con chips, quitar/agregar) y de obreros (vino, motivo si faltó, altura). Al guardar: si `tValida` deja problemas pide confirmar, luego motivo (`uiAsk` input requerido); recalcula con `tCalc` y guarda `rows`, `blq` y `hist` `cor`. Marcar a alguien como falta **no** lo saca de los bloques (0 h; si vuelve a «vino» recupera sus horas; ver «Mejoras de oficina»). No se agregan obreros desde aquí.
 - **Marcar revisado** (`env` → `rev`): deshabilitado si hay observaciones que bloquean (`tValida` o firmas sin cotejar). Si alguien no firmó, pide confirmación y queda en `hist.cam`.
 - **Quitar revisado** (`rev` → `env`) y **Reabrir al capataz** (`env` o `rev`), ambos con motivo.
 - Si llegan datos con el detalle abierto, `trSync()` lo redibuja sin perder el cotejo o la corrección en curso.
@@ -192,13 +192,21 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - `tBlqH`, `tCalc`, `tValida` están en `tareo.js` (puros; `tareo-cap.js` los usa, no los redefine). Horas redondeadas a 2 decimales (`tR2`), sin redondeo a media hora.
   - Un bloque cuenta solo si tiene partida y horario válido (05:00–23:59, salida > entrada); si no, `tValida` lo marca.
   - `tCalc`: `ext` = max(0, trab − `tJorH` del día); domingo/feriado (`tNoLab`) todo es extra. Ausentes: `h:{}`, `ini/fin:''`, `trab/ext:0`.
-  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `falto` (obrero marcado falta dentro de un bloque), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
+  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `bloq` (partida bloqueada por costos), `marca` (sin marcar si vino), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
 - `renderTDia` (oficina): globales con prefijo `to`/`TO_` (`TD` estado, `toSub`/`toUnsub`, `toList`, `toStats`, `toDetalle`, `toReabrir`, `TO_MOT` motivos de falta, `TO_ST` estados). CSS al final de `app.css` con prefijo `.to-`.
   - Suscripción temporal `fcol('tareo').where('date','==',fecha)` (`TD.sub`): cambia al cambiar de fecha; al salir de la pestaña se suelta en la siguiente llegada de datos (no hay gancho de salida de vista) y al cerrar sesión (`unsubs`).
   - Lista: tareos del día + capataces `tcap` con obreros activos asignados sin tareo («Sin empezar»). Orden: enviado, reabierto, borrador, sin empezar, revisado, publicado. «Enviados» del resumen = `env`/`rev`/`pub`.
   - Fecha: flechas y selector; no pasa de hoy. `tcos` ve el aviso de F3 (no se suscribe).
   - Reabrir (solo `admin`/`tasis`, solo `st:'env'`): `update({st:'reab', reab:{t,by,mot}, hist: arrayUnion({t,by,mot,a:'reab'}), by, ts})`.
   - Fotos: lee `tfot/{id}` al abrir el detalle (caché `TD.fotos`), miniatura y ampliar (`.to-zoom`).
+
+## Mejoras de oficina (oct 2026)
+
+- **Personal:** columna N° (posición en la lista filtrada) y contador `#tperN` «Mostrando N de M · K activos» (N y K respetan los filtros; M = fichas no archivadas). Para `admin`/`tasis`, si existe la global `tCapCuenta(dni)` (en `tareo-cuentas.js`), cada fila lleva «Hacer capataz» (`[data-tcta]`); si la ficha tiene `tper.cta` (correo de su cuenta de capataz) muestra el chip «Capataz» y la acción «Cuenta de capataz…» (misma función). Los capataces del filtro y de «Asignar capataz» siguen siendo los `members` con rol `tcap` (`tCaps()`).
+- **Partidas de control:** una sola tabla (`.tpc-tbl`, `table-layout:fixed` con `colgroup`) para que las columnas queden alineadas entre grupos; antes había una tabla por grupo y cada una medía distinto. Fila de encabezado por grupo (`tr.tpc-gh[data-tpg]`: número, nombre, n.º de partidas y HH ppto). Columnas: código, descripción, und, metrado, HH ppto, HH/und (`tRatio` = hhp/met, como la columna «Ratio» del Excel), cuenta UA, estado, acciones. Orden: `tCmpCod` compara por partes enteras (grupos 1, 2 … 13; 10.02 antes de 10.10). Buscador y filtro Todas/Activas/Bloqueadas/Inactivas (`TPU`). En celular cada partida es un bloque compacto.
+- **Bloquear para carga** (`tpc.bloq: true|false`, `bloqBy` correo en minúsculas, `bloqAt` ms): lo hacen `tcos`, `tasis` y `admin` (`tBloqOk()`, `tPcBloq`). Bloqueada: candado y chip «BLOQUEADA»; no aparece en el celular del capataz (`tareo-cap.js`). `tValida`: `k:'bloq'` «La partida X está bloqueada por costos.» (una vez por partida). Reglas: `tcos` actualiza `tpc` solo con `affectedKeys().hasOnly(['bloq','bloqBy','bloqAt'])`, `bloq` booleano y `bloqBy == email()`; no crea ni borra.
+- **tValida / tCalc:** ya no existe el error `falto`: un obrero que no vino puede seguir en sus bloques (tCalc le da 0 h y conserva `blq`, así recupera sus horas si vuelve a «vino»). Nuevo `k:'marca'` «Falta marcar si vino: APELLIDO» si `as` no es `true` ni `false`; `tCalc` trata `as` null/undefined como no presente sin horas.
+- **Revisión (corregir):** desmarcar «vino» ya no saca al obrero de los bloques (antes, al volver a marcarlo, perdía sus horas). `trAs` conserva `as` null («Sin marcar»). «Todos/Ninguno» de un bloque no toca a los ausentes que siguen en él.
 
 ## Pendientes
 
