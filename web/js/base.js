@@ -301,10 +301,11 @@ async function capJoin(fdb,u){const ref=fcol('members').doc('u_'+u.uid);let m=nu
   if(m&&m.exists){clearInv();return true}
   if(!invCode){me=null;pendingMsg='Tu acceso como capataz ya no está activo en este celular. Pide un enlace nuevo al ingeniero.';await auth.signOut();return false}
   let iv=null;try{iv=await fcol('inv').doc(invCode).get()}catch(e){}const d=iv&&iv.exists?iv.data():null;
-  if(!d||!d.active||!(d.exp>NOW())||!(d.scs||[]).length){clearInv();me=null;pendingMsg='Este enlace ya venció o fue desactivado. Pide uno nuevo al ingeniero.';try{await u.delete()}catch(e){await auth.signOut()}return false}
+  const tcap=!!d&&d.role==='tcap';/* invitación del tareo (consorcio): capataz sin partida (docs/ia/tareo.md) */
+  if(!d||!d.active||!(d.exp>NOW())||(!tcap&&!(d.scs||[]).length)){clearInv();me=null;pendingMsg='Este enlace ya venció o fue desactivado. Pide uno nuevo al ingeniero.';try{await u.delete()}catch(e){await auth.signOut()}return false}
   let name='';try{name=joinName||localStorage.getItem('lps.jname')||''}catch(e){name=joinName}name=(name||'Capataz').slice(0,60);
-  try{await ref.set({role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
-  clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+'! Ya puedes reportar el avance de tu partida.'),1500);return true}
+  try{await ref.set(tcap?{role:'tcap',name,inv:invCode,added:NOW()}:{role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
+  clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+(tcap?'! Ya puedes llenar el tareo de tu cuadrilla.':'! Ya puedes reportar el avance de tu partida.')),1500);return true}
 async function startSession(u,fdb){
   stopSession();
   const anon=!!u.isAnonymous;
@@ -440,10 +441,13 @@ function onData(){
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
-let invCode=(()=>{try{const q=new URLSearchParams(location.search).get('inv');if(q){localStorage.setItem('lps.inv',q);history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
+let invCode=(()=>{try{const sp=new URLSearchParams(location.search),q=sp.get('inv');if(q){localStorage.setItem('lps.inv',q);localStorage.setItem('lps.invm',sp.get('m')||'');history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
+/* el enlace de un capataz del tareo lleva &m=tar: antes de entrar no se puede leer la invitación, así que el texto sale del enlace */
+const invTar=()=>{try{return!!invCode&&localStorage.getItem('lps.invm')==='tar'}catch(e){return false}};
 let joinName='';
-function clearInv(){invCode='';try{localStorage.removeItem('lps.inv')}catch(e){}}
-function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;$('#lform').hidden=jn;$('#ljoin').hidden=!jn;if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;return}$('#lmsg').textContent=msg||'';$('#lverify').hidden=!verify;$('#lresend').hidden=!verify;setLMode(lmode)}
+function clearInv(){invCode='';try{localStorage.removeItem('lps.inv');localStorage.removeItem('lps.invm')}catch(e){}}
+function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;$('#lform').hidden=jn;$('#ljoin').hidden=!jn;if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;const t=invTar(),h=$('#ljoin .lhint'),b=$('#ljoin .lbrand');
+    if(h){h.dataset.def=h.dataset.def||h.textContent;h.textContent=t?'Te invitaron a llenar el tareo diario de tu cuadrilla desde este celular. Solo escribe tu nombre.':h.dataset.def}if(b){b.dataset.def=b.dataset.def||b.textContent;b.textContent=t?'Tareo de personal obrero':b.dataset.def}return}$('#lmsg').textContent=msg||'';$('#lverify').hidden=!verify;$('#lresend').hidden=!verify;setLMode(lmode)}
 function hideLogin(){$('#login').hidden=true}
 function setLMode(m){lmode=m;$('#ltitle').textContent=m==='up'?'Crear mi cuenta':'Ingresar';$('#lsubmit').textContent=m==='up'?'Crear cuenta':'Ingresar';$('#lmode').textContent=m==='up'?'Ya tengo cuenta: ingresar':'¿Primera vez? Crear mi cuenta';$('#lpass').autocomplete=m==='up'?'new-password':'current-password';$('#lhint').hidden=m!=='up'}
 function authMsg(e){const c=e&&e.code||'';return({'auth/invalid-email':'El correo no es válido.','auth/missing-email':'Escribe tu correo.','auth/missing-password':'Escribe tu contraseña.','auth/user-not-found':'No existe una cuenta con ese correo. Usa “¿Primera vez? Crear mi cuenta”.','auth/wrong-password':'Contraseña incorrecta.','auth/invalid-credential':'Correo o contraseña incorrectos.','auth/invalid-login-credentials':'Correo o contraseña incorrectos.','auth/email-already-in-use':'Ese correo ya tiene cuenta. Usa “Ingresar”.','auth/weak-password':'La contraseña debe tener al menos 6 caracteres.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos y vuelve a intentar.','auth/network-request-failed':'Sin conexión a internet.','auth/operation-not-allowed':'El ingreso con correo no está activado en Firebase (paso 3 de la guía).','auth/unauthorized-domain':'Este dominio no está autorizado en Firebase (paso 7 de la guía).'})[c]||('No se pudo completar ('+(c||'error')+').')}
