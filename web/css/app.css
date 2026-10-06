@@ -2250,3 +2250,37 @@ body.tr-on .toast{z-index:160}
 .tcta-off{border-top:1px solid var(--line);padding-top:10px}
 @media (max-width:760px){.tcta .ib,.tcta-pw .tin{min-height:44px}}
 .tcta-ok a.ib{text-decoration:none;display:inline-flex;align-items:center}
+/* tareo: foto (editor de mejora de la foto del formato, tareo-foto.js). Solo variables existentes: el modo oscuro sale de ellas.
+   Capa a pantalla completa sobre todo menos .uask (170). La zona de la foto usa --ink como fondo (oscuro en claro, claro en oscuro no:
+   se mezcla con negro para que siempre sea oscura y la hoja blanca resalte). */
+body.tf-on{overflow:hidden}
+.tf-ws{position:fixed;inset:0;z-index:165;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;animation:lps-fade var(--t-fast) var(--ease)}
+.tf-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.tf-tt{flex:1;min-width:180px;display:flex;flex-direction:column;gap:2px}
+.tf-tt b{font-size:16px}
+.tf-sub{font-size:12.5px;color:var(--muted)}
+.tf-ta{display:flex;gap:6px;flex-wrap:wrap}
+.tf-stage{flex:1;min-height:0;position:relative;display:grid;place-items:center;background:color-mix(in srgb,var(--ink) 18%,#000);overflow:hidden}
+.tf-box{position:relative;touch-action:none;user-select:none;-webkit-user-select:none}
+.tf-cv{display:block;width:100%;height:100%;box-shadow:var(--sh-2)}
+.tf-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.tf-svg polygon{fill:rgba(46,140,255,.16);stroke:#2e8cff;stroke-width:2.5px;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.tf-h{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;padding:0;border:0;background:none;cursor:grab;touch-action:none;display:grid;place-items:center;border-radius:50%}
+.tf-h i{width:24px;height:24px;border-radius:50%;background:#2e8cff;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.55);transition:transform var(--t-fast) var(--ease)}
+.tf-h.on,.tf-h:active{cursor:grabbing}.tf-h.on i{transform:scale(1.25)}
+.tf-h:focus-visible{outline:none}.tf-h:focus-visible i{box-shadow:0 0 0 4px var(--ring,#2e8cff)}
+.tf-lupa{position:absolute;top:10px;width:132px;height:132px;border-radius:50%;border:3px solid #fff;box-shadow:var(--sh-2);pointer-events:none;z-index:2}
+.tf-busy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(0,0,0,.45);color:#fff;font:600 16px var(--f-ui);z-index:3}
+.tf-spin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;animation:tf-spin .8s linear infinite}
+@keyframes tf-spin{to{transform:rotate(360deg)}}
+.tf-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--panel)}
+.tf-sp{flex:1}
+.tf-ws .ib{min-height:40px;padding:0 14px}
+.tf-seg button{height:40px;padding:0 12px}
+@media (max-width:760px){
+  .tf-top{padding:8px 10px}.tf-tt{min-width:0;flex-basis:100%}.tf-ta{width:100%}.tf-ta .ib{flex:1}
+  .tf-ws .ib{min-height:44px}.tf-bar{padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
+  .tf-bar .tf-sp{display:none}.tf-bar>.ib{flex:1}.tf-seg{order:-1;width:100%;display:grid;grid-template-columns:repeat(3,1fr)}.tf-seg button{height:44px}
+  .tf-lupa{width:112px;height:112px}
+}
+@media (prefers-reduced-motion:reduce){.tf-spin{animation:none}}
