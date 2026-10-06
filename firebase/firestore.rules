@@ -352,18 +352,25 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.get('cap', '') == mid() && d.get('date', null) is string && id == d.date + '_' + mid() && tDateOk(d.date);
     }
+    // historial del tareo: el capataz solo agrega al final (una entrada por escritura: su «Enviado»); no cambia ni quita las de la oficina
+    function tHistOk() {
+      let o = resource.data.get('hist', []);
+      let n = request.resource.data.get('hist', []);
+      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && n[0:o.size()] == o;
+    }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
         || (tarRole() == 'tcap' && (resource == null ? idMine(id) : resource.data.get('cap', '') == mid())));
       allow list: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
       allow create: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && request.resource.data.get('st', 'bor') in ['bor', 'env']
-        && !request.resource.data.keys().hasAny(['reab', 'pub']));
+        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy']));
       allow update: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub']));
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'revAt', 'revBy'])
+        && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
     match /tfot/{id} {

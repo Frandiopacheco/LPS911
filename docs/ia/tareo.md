@@ -114,8 +114,59 @@ Colecciones nuevas, todas por `fcol()`:
   3. **Revisar y enviar:** por obrero horario, horas, extra, altura; foto del formato firmado (cámara: `<input type=file accept=image/* capture=environment>`), obligatoria; «Enviar tareo» con `uiAsk`. Tras enviar: solo lectura con estado «Enviado ✓ · hora». Si el asistente lo reabre: aviso arriba con el motivo y vuelve a editable.
   - Guarda borrador automáticamente (debounce ~1 s) en `tareo`; funciona sin señal (persistencia de Firestore ya activa: `enablePersistence`), mostrando «Guardado en el celular · se enviará al tener señal» cuando la escritura no se confirmó.
   - Botones ≥ 44 px, texto grande, nada de tablas anchas.
-- **Personal de oficina** (`tasis`, `admin`, editor con `tpub`) en `tdia` (`renderTDia`, PC y celular): selector de fecha; lista de capataces con tareo (o que tienen obreros asignados y no han enviado): estado (sin empezar / borrador / enviado / reabierto), obreros, faltas, HH, HE, observaciones de `tValida`. Abrir uno: detalle de solo lectura (obreros × partidas, fotos ampliables) y, para `tasis`/`admin`, «Reabrir al capataz» (motivo obligatorio con `uiAsk` input). Bandeja completa, corrección directa y cotejo de firmas son F2.
+- **Personal de oficina** (`tasis`, `admin`, editor con `tpub`) en `tdia` (`renderTDia`, PC y celular): selector de fecha; lista de capataces con tareo (o que tienen obreros asignados y no han enviado): estado (sin empezar / borrador / enviado / reabierto), obreros, faltas, HH, HE, observaciones de `tValida`. Abrir uno: detalle (obreros × partidas, fotos ampliables) y, para `tasis`/`admin`, «Reabrir al capataz» (motivo obligatorio con `uiAsk` input). Bandeja completa, corrección directa y cotejo de firmas: ver «Contrato de F2».
 - **Equipo** (config-equipo.js): crear enlace/QR de invitación para capataces del tareo (como el de capataces de SC, pero con `role:'tcap'`); `capJoin` (base.js) registra `role:'tcap'` sin `scs` cuando la invitación es `tcap`.
+
+## Contrato de F2: bandeja del asistente de tareo
+
+Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigue en `tareo.js` y llama a sus secciones. Globales con prefijo `tr`/`TR` (CSS `.tr-`, bloque `/* tareo: revisión */` al final de `app.css`).
+
+### Datos nuevos en `tareo/{fecha}_{capId}`
+
+- `st:'rev'` revisado (lo pone `tasis`/`admin`). `revAt` (ms), `revBy` (correo); se borran al «Quitar revisado».
+- `rows[dni].fir`: `true` firmó · `false` vino y no firmó · ausente = sin cotejar. Solo cuenta para presentes.
+- `rows[dni].gar`: `'HH:MM'` salida en garita (manual, opcional, regla 8).
+- `hist[]` entradas nuevas `{t, by, a, mot?, cam?}`: `a:'fir'` cotejo guardado · `'cor'` corrección (`mot` obligatorio, `cam` resumen corto de lo cambiado; también «Registrar falta» desde «Sin tareo») · `'rev'` revisado (`cam` con las observaciones si alguien no firmó o la garita difiere) · `'qrev'` quitó revisado (`mot`) · `'reab'` (ya existía; ahora también desde `rev`). Siempre con `FieldValue.arrayUnion`.
+- Todas las escrituras de la oficina van en transacción (`trTx`) que vuelve a comprobar el estado.
+
+### Funciones (puras, en `tareo-rev.js`)
+
+- `tObsRev(doc, calc?)` → `tValida` (con `bl:true`) + `k:'firp'` firma sin cotejar (`bl:true`) + `k:'nofir'` vino y no firmó + `k:'gar'` |gar − fin| > `TC().tolGar` min («Salida en garita distinta»). «Observaciones» en la lista y el filtro = todo menos `firp`.
+- `tDups(docs)` → presentes en dos o más tareos del día `[{dni, nom, caps}]`.
+- `tSinTareo(f, docs)` → activos (`tActivo`) que no figuran en ningún tareo del día (ni presentes ni con falta), agrupados por `cap` (`''` = «Sin capataz»).
+- `tLate(f)` → pasó `TC().limEnv` (días anteriores sí; no laborable no).
+- `tCam(antes, después)` → resumen de la corrección (bloques +/−/cambiados, vino/faltó, motivo, altura), ≤ 400 caracteres.
+
+### Revisión (`toDetalle` → `trDraw`)
+
+- Un solo detalle para la oficina; `tasis`/`admin` editan, el editor con `tpub` lo ve en solo lectura.
+- Arriba: foto del formato (visor con acercar/alejar, rotar, pantalla completa y miniaturas) al lado de la lista de presentes (PC dos columnas, celular una debajo de otra). Por obrero: «Firmó» Sí/No y hora de garita. «Todos firmaron». El cotejo se edita en local (`TR.fir`/`TR.gar`, `TR.dirty`) y se guarda con «Guardar cotejo» o junto con «Marcar revisado».
+- El cotejo solo se edita con `st:'env'`. En `rev` queda de solo lectura (primero «Quitar revisado»).
+- **Corregir** (`env` o `rev`; no cambia el estado): tabla de bloques (partida con `select`, desde/hasta, quiénes con chips, quitar/agregar) y de obreros (vino, motivo si faltó, altura). Al guardar: si `tValida` deja problemas pide confirmar, luego motivo (`uiAsk` input requerido); recalcula con `tCalc` y guarda `rows`, `blq` y `hist` `cor`. Marcar a alguien como falta lo saca de los bloques. No se agregan obreros desde aquí.
+- **Marcar revisado** (`env` → `rev`): deshabilitado si hay observaciones que bloquean (`tValida` o firmas sin cotejar). Si alguien no firmó, pide confirmación y queda en `hist.cam`.
+- **Quitar revisado** (`rev` → `env`) y **Reabrir al capataz** (`env` o `rev`), ambos con motivo.
+- Si llegan datos con el detalle abierto, `trSync()` lo redibuja sin perder el cotejo o la corrección en curso.
+
+### Tareos del día (oficina)
+
+- Avisos: **duplicados** (`#trDup`), **no enviados a la hora límite** (`#trLate`; filas con «No enviado a las HH:MM»: sin tareo, borrador o reabierto), **Sin tareo** (`#trSin`, `<details>` por capataz; se recuerda abierto/cerrado en `TD.dOpen`). Los ve toda la oficina; las acciones solo `tasis`/`admin`.
+- Filtros (`TD.flt`): todos · por revisar (`env`) · con observaciones · revisados (`rev`/`pub`), con contador. Columna nueva «Firmas»: «a de b», «✓» o «n sin firma».
+
+### Reglas
+
+- `tareo` update del `tcap`: además de lo de F1, no toca `revAt`/`revBy` y el `hist` solo crece al final, de a una entrada, sin cambiar las anteriores (`tHistOk`). Con `st` `env`/`rev` el `tcap` ya no escribe (F1). `tasis`/`admin` escriben todo; nadie borra.
+- Pruebas: `tests/rules/firestore.test.mjs` «tareo F2»; interfaz: `tests/e2e/tareo-rev.spec.js`.
+
+### Pantalla del capataz
+
+- Un tareo `rev` se ve como enviado (solo lectura) con «Revisado por la oficina».
+
+## Decisiones tomadas al implementar F2
+
+- **«Registrar falta» desde «Sin tareo» solo escribe en el tareo de su capataz si está `env` o `rev`** (la oficina es dueña de ese documento): lo agrega como ausente con motivo (código) y comentario obligatorio, `hist` `cor`. **No crea tareos** a nombre del capataz ni escribe en uno `bor`/`reab`: el celular del capataz guarda el documento entero (`set` sin merge) y pisaría la falta, y con la regla de `hist` su guardado sería rechazado. Para esos casos (y «Sin capataz») está «Copiar lista» para avisarle.
+- Corregir no cambia el estado aunque esté `rev` (pedido). El cotejo hecho antes de reabrir se conserva en `rows` (el celular no toca `fir`/`gar`); al reenviar, la oficina lo revisa de nuevo.
+- Contador «Por revisar» en la pestaña: **no** se hizo (pediría una suscripción permanente a los tareos); el contador está en el filtro de la vista.
+- Las reglas no impiden que el `tcap` escriba `fir`/`gar` en su borrador (revisar mapas anidados en reglas es caro); la app del capataz no los toca y la oficina los ve y corrige en el cotejo.
 
 ## Lo que dice el Excel que hoy recibe costos (semana 28.09–04.10)
 
