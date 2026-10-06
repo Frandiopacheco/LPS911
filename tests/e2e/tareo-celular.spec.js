@@ -14,6 +14,14 @@ const EXTRA = [
 ];
 const TAR = ['tdia', 'tper', 'tpc', 'tcfg'];
 
+/* el marco de «📱 Vista celular» ya con la app dibujada */
+const marco = async page => {
+  await expect(page.frameLocator('#phprev iframe').locator('#loading')).toHaveCount(0, { timeout: 15_000 });
+  const f = page.frames().find(x => x !== page.mainFrame());
+  await expect.poll(() => f.evaluate(() => !!document.querySelector('#main')?.dataset.view)).toBe(true);
+  return f;
+};
+
 /* revisa la pantalla actual de `fr` (página o marco): sin desborde horizontal y con las pestañas del tareo a mano */
 async function revisa(fr, ctx) {
   const st = await fr.evaluate(() => ({ view: document.querySelector('#main')?.dataset.view, mod: U.mod, sw: document.documentElement.scrollWidth, iw: innerWidth,
@@ -83,12 +91,6 @@ test.describe('celular (390 px)', () => {
 });
 
 test.describe('«📱 Vista celular» del administrador', () => {
-  const marco = async page => {
-    await expect(page.frameLocator('#phprev iframe').locator('#loading')).toHaveCount(0, { timeout: 15_000 });
-    const f = page.frames().find(x => x !== page.mainFrame());
-    await expect.poll(() => f.evaluate(() => !!document.querySelector('#main')?.dataset.view)).toBe(true);
-    return f;
-  };
 
   test('admin en el Tareo: el marco abre en la misma pestaña del Tareo', async ({ page }) => {
     const errors = await openApp(page, { as: 'admin', editar: false, extra: EXTRA });
@@ -115,6 +117,54 @@ test.describe('«📱 Vista celular» del administrador', () => {
       noErrors(errors, 'marco ' + role);
     });
   }
+});
+
+test.describe('PC 1440 × 900: «📱» y «👁 Ver como» en el Tareo', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  /* el botón está a la vista y nada lo tapa (lo que hay en su centro es el mismo botón) */
+  const libre = (page, s) => page.evaluate(s => { const e = document.querySelector(s); const b = e.getBoundingClientRect();
+    return !e.hidden && b.width > 0 && e.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)) }, s);
+
+  test('admin: botones arriba en cada pestaña del Tareo y el marco abre la app (sin aviso)', async ({ page }) => {
+    const errors = await openApp(page, { as: 'admin', editar: false, extra: EXTRA });
+    await page.click('#modsel [data-mod="tar"]');
+    for (const t of TAR) {
+      await page.click(`#tabs [data-tab="${t}"]`);
+      expect(await libre(page, '#bvat'), `Ver como en ${t}`).toBe(true);
+      expect(await libre(page, '#bpht'), `📱 en ${t}`).toBe(true);
+    }
+    await page.click('#bpht');
+    const f = await marco(page);
+    await expect.poll(() => f.evaluate(() => document.querySelector('#main').dataset.view)).toBe('tcfg');
+    await expect(page.locator('#phmsg')).toBeHidden();
+    await expect(page.locator('#phwin')).toBeVisible();
+    noErrors(errors, 'pc tareo');
+  });
+
+  test('«Ver como» capataz del tareo con un capataz elegido: el marco muestra su tareo', async ({ page }) => {
+    const errors = await openApp(page, { as: 'admin', editar: false, va: { role: 'tcap', cap: 'tcap@obra.pe' },
+      extra: [['members', 'tcap@obra.pe', { role: 'tcap', name: 'Teodoro Capataz' }], ...EXTRA] });
+    expect(await libre(page, '#bpht')).toBe(true);
+    await page.click('#bpht');
+    const f = await marco(page);
+    await expect.poll(() => f.evaluate(() => !!document.querySelector('#tcRoot'))).toBe(true);
+    // su tareo de hoy (enviado, con su obrero ALFA)
+    await expect.poll(() => f.evaluate(() => document.querySelector('#tcRoot').textContent)).toMatch(/Enviado[\s\S]*ALFA/);
+    await expect(page.locator('#phmsg')).toBeHidden();
+    noErrors(errors, 'marco tcap');
+  });
+
+  test('si el sitio no deja enmarcar la app, el marco lo avisa en vez de quedar en blanco', async ({ page }) => {
+    const errors = await openApp(page, { as: 'admin', editar: false });
+    await page.route(/\?vista=celular/, r => r.fulfill({ status: 200, contentType: 'text/html', headers: { 'X-Frame-Options': 'DENY' }, body: '<!doctype html><p>app</p>' }));
+    await page.click('#bpht');
+    await expect(page.locator('#phmsg')).toContainText('no pudo abrir la app', { timeout: 15_000 });
+    // «Abrir aparte» abre una ventana del tamaño del celular
+    const [pop] = await Promise.all([page.waitForEvent('popup'), page.click('#phwin')]);
+    expect(pop.url()).toContain('vista=celular');
+    await pop.close();
+    noErrors(errors.filter(e => !/X-Frame-Options|Refused to display|ERR_BLOCKED/i.test(e)), 'marco bloqueado');
+  });
 });
 
 test('barra «Ver como»: se pliega a una pastilla, se mueve de esquina y lo recuerda', async ({ page }) => {

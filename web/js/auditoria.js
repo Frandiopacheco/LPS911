@@ -264,10 +264,26 @@ const IN_FRAME=window.top!==window;if(IN_FRAME)document.documentElement.classLis
 const PHONES=[['iphone','iPhone (390 × 844)',390,844],['android','Android (360 × 780)',360,780],['chico','Celular chico (320 × 640)',320,640],['tablet','Tablet (768 × 1024)',768,1024]];
 function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!dev){el0.remove();return}const d=PHONES.find(q=>q[0]===dev)||PHONES[0];
   let el=el0;if(!el){el=document.createElement('div');el.id='phprev';el.className='phprev';document.body.appendChild(el)}
-  el.innerHTML=`<div class="phbar"><b>📱 Vista celular</b><select id="phdev" aria-label="Equipo">${PHONES.map(q=>`<option value="${q[0]}"${q[0]===d[0]?' selected':''}>${q[1]}</option>`).join('')}</select><button class="ib" id="phrel">Recargar</button><span class="mu">${VA?'Viendo como '+esc(ROLE[VA.role]||VA.role):'Con tu usuario'} · lo que guardes se guarda de verdad</span><span style="flex:1"></span><button class="ib pri" id="phx">Cerrar</button></div>
-   <div class="phwrap"><div class="phone" style="width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))"><iframe title="La app en tamaño celular" src="${location.pathname}?vista=celular${me&&U.tab?'#'+U.tab:''}"></iframe></div></div>`;
-  el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f)f.src=f.src}};
-  el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)}}
+  const src=`${location.pathname}?vista=celular${me&&U.tab?'#'+U.tab:''}`;
+  el.innerHTML=`<div class="phbar"><b>📱 Vista celular</b><select id="phdev" aria-label="Equipo">${PHONES.map(q=>`<option value="${q[0]}"${q[0]===d[0]?' selected':''}>${q[1]}</option>`).join('')}</select><button class="ib" id="phrel">Recargar</button><button class="ib" id="phwin" title="Abre la app en una ventana aparte del tamaño del celular (si el marco no carga)">Abrir aparte ↗</button><span class="mu">${VA?'Viendo como '+esc(ROLE[VA.role]||VA.role):'Con tu usuario'} · lo que guardes se guarda de verdad</span><span style="flex:1"></span><button class="ib pri" id="phx">Cerrar</button></div>
+   <div class="phmsg" id="phmsg" role="status" hidden></div>
+   <div class="phwrap"><div class="phone" style="width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))"><iframe title="La app en tamaño celular" src="${src}"></iframe></div></div>`;
+  el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f){phMsg('');f.src=f.src}}
+    if(e.target.id==='phwin')window.open(src,'lpsphone',`popup,width=${d[2]},height=${d[3]}`)};
+  el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)};phWatch(el.querySelector('iframe'))}
+/* si el marco no muestra la app (encabezados que impiden enmarcarla, un error al arrancar o se queda «cargando»), lo dice en la barra
+   en vez de quedar en blanco, con «Abrir aparte» como salida */
+function phMsg(t){const m=$('#phmsg');if(!m)return;m.hidden=!t;m.innerHTML=t}
+function phWatch(fr){if(!fr)return;let err='',t0=0;
+  const doc=()=>{try{return fr.contentDocument}catch(e){return null}};
+  const check=final=>{if(!fr.isConnected)return;const D=doc();
+    if(!D||!D.querySelector('#tabs')){if(final||D==null)phMsg('El marco no pudo abrir la app (el navegador o el sitio no la deja mostrar dentro de otra página). Usa <b>Abrir aparte ↗</b>.');return}
+    const v=D.querySelector('#main')&&D.querySelector('#main').dataset.view,lg=D.querySelector('#login:not([hidden])'),ld=D.querySelector('#loading');
+    if(v){phMsg(err?'La app abrió, pero hubo un error dentro del marco: '+esc(err):'');return}
+    if(final)phMsg(err?'No se pudo mostrar la app dentro del marco: '+esc(err)+'. Prueba <b>Recargar</b> o <b>Abrir aparte ↗</b>.':lg?'Dentro del marco pide iniciar sesión: ingresa ahí o usa <b>Abrir aparte ↗</b>.':ld?'La app no termina de cargar dentro del marco. Prueba <b>Recargar</b> o <b>Abrir aparte ↗</b>.':'')};
+  fr.addEventListener('load',()=>{err='';t0=Date.now();const w=(()=>{try{return fr.contentWindow}catch(e){return null}})();
+    try{if(w){w.addEventListener('error',e=>{if(!err)err=String(e.message||e.error||'error')});w.addEventListener('unhandledrejection',e=>{if(!err)err=String((e.reason&&e.reason.message)||e.reason||'error')})}}catch(e){}
+    check(false);const tm=setInterval(()=>{if(!fr.isConnected){clearInterval(tm);return}const fin=Date.now()-t0>12000;check(fin);const D=doc();if(fin||(D&&D.querySelector('#main[data-view]')))clearInterval(tm)},1000)})}
 function vaDialog(btn){if(!VA_OK()){toast('“Ver como” solo está disponible en la copia de prueba.');return}const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const cur=VA||{};
   const roles=[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector'],['tcap','Capataz (tareo)'],['tasis','Asistente de tareo'],['tcos','Costos (tareo)']];
   openPop(btn,`<div class="ph">Ver como…</div><div class="ptx">Prueba la app con los permisos de otro rol. Lo que guardes se guarda de verdad en la copia de prueba, con tu usuario.</div>

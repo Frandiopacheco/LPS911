@@ -148,6 +148,7 @@ function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};con
   return{...d,rows}}
 /** problemas del tareo: [{dni|null, k, msg, warn?}] (mensajes para el capataz). Los que traen `warn:true` son observaciones que NO
     bloquean (k:'parcial' jornada parcial): para bloquear el envío o «Marcar revisado» filtra `!o.warn`. Sin bloqueantes = se puede enviar.
+    El motivo de «no vino» es opcional (ya no hay k:'mot').
     Un obrero que no vino puede seguir en sus bloques (no es error: tCalc le da 0 h y los recupera si vuelve a «vino»). */
 const tHtxt=v=>String(tR2(+v||0)).replace('.',',');
 function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
@@ -162,7 +163,7 @@ function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso
     if(!Array.isArray(b.dnis)||!b.dnis.length)out.push({dni:null,k:'quien',msg:`${lb}: marca quiénes trabajaron.`})});
   for(const[dni,r]of Object.entries(rows)){
     if(r.as!==true&&r.as!==false){out.push({dni,k:'marca',msg:`Falta marcar si vino: ${(r&&r.ape)||nm(dni)}`});continue}
-    if(!r.as){if(!r.mot)out.push({dni,k:'mot',msg:`${nm(dni)}: elige el motivo de la falta.`});continue}
+    if(!r.as)continue;/* no vino: el motivo es opcional (observaciones del dueño, oct 2026) */
     const L=tBlqDe(blq,dni).filter(tBlqOk).map(b=>[tMin(b.ini),tMin(b.fin),b]).sort((x,y)=>x[0]-y[0]);
     if(!L.length){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponlo en un bloque o márcalo como falta.`});continue}
     let m=L[0],cx=false;for(let i=1;i<L.length;i++){if(L[i][0]<m[1]){cx=true;out.push({dni,k:'cruce',msg:`${nm(dni)}: dos bloques se cruzan (${m[2].ini}–${m[2].fin} y ${L[i][2].ini}–${L[i][2].fin}).`});break}if(L[i][1]>m[1])m=L[i]}
@@ -251,11 +252,41 @@ function toZoom(fid){const u=TD.fotos.get(fid);if(!u)return;const el=document.cr
 
 /* ---------- Personal (máster) ---------- */
 const TU={q:'',est:'act',cua:'',cat:'',cap:'',sel:new Set()};
+/* filtros encadenados: cada filtro (estado, cuadrilla, categoría, capataz) ofrece solo los valores que quedan con los OTROS
+   filtros y la búsqueda, con su conteo; tPerOk(p,…,sin) revisa todos menos `sin`. */
+const tPerCat=p=>p.cat&&TCAT[p.cat]?p.cat:'OT';
+const TPF_EST=[['act','Activos'],['ces','Cesados'],['all','Todos'],['arch','Archivados']];
+function tPerOk(p,hoy,q,sin){
+  if(sin!=='est'){if(TU.est==='arch'){if(!p.arch)return false}else{if(p.arch)return false;const a=tActivo(p,hoy);if(TU.est==='act'&&!a)return false;if(TU.est==='ces'&&a)return false}}
+  if(sin!=='cua'&&TU.cua&&(p.cua||'')!==TU.cua)return false;if(sin!=='cat'&&TU.cat&&tPerCat(p)!==TU.cat)return false;
+  if(sin!=='cap'&&TU.cap&&(TU.cap==='-'?!!p.cap:p.cap!==TU.cap))return false;
+  if(q&&!(p.dni||'').includes(q)&&!tFold(p.ape).includes(q)&&!tFold(p.nom).includes(q))return false;return true}
 function tPerList(){const hoy=todayIso();const q=tFold(TU.q);
-  return[...S.tper.values()].filter(p=>{if(TU.est==='arch'){if(!p.arch)return false}else{if(p.arch)return false;const a=tActivo(p,hoy);if(TU.est==='act'&&!a)return false;if(TU.est==='ces'&&a)return false}
-    if(TU.cua&&(p.cua||'')!==TU.cua)return false;if(TU.cat&&(p.cat||'OT')!==TU.cat)return false;if(TU.cap&&(TU.cap==='-'?!!p.cap:p.cap!==TU.cap))return false;
-    if(q&&!(p.dni||'').includes(q)&&!tFold(p.ape).includes(q)&&!tFold(p.nom).includes(q))return false;return true})
+  return[...S.tper.values()].filter(p=>tPerOk(p,hoy,q,''))
    .sort((a,b)=>(a.ape||'').localeCompare(b.ape||'')||(a.dni||'').localeCompare(b.dni||''))}
+/** conteos de cada filtro con los demás aplicados: {est:{act,ces,all,arch}, cua:Map, cat:Map, cap:Map} */
+function tPerFacets(){const hoy=todayIso();const q=tFold(TU.q);const P=[...S.tper.values()];const add=(m,k)=>m.set(k,(m.get(k)||0)+1);
+  const est={act:0,ces:0,all:0,arch:0},cua=new Map(),cat=new Map(),cap=new Map();
+  for(const p of P){
+    if(tPerOk(p,hoy,q,'est')){if(p.arch)est.arch++;else{est.all++;if(tActivo(p,hoy))est.act++;else est.ces++}}
+    if(p.cua&&tPerOk(p,hoy,q,'cua'))add(cua,p.cua);
+    if(tPerOk(p,hoy,q,'cat'))add(cat,tPerCat(p));
+    if(tPerOk(p,hoy,q,'cap'))add(cap,p.cap||'-')}
+  return{est,cua,cat,cap}}
+const tPerFiltOn=()=>!!(TU.q.trim()||TU.cua||TU.cat||TU.cap||TU.est!=='act');
+/* opciones de las listas (se rehacen en cada dibujo; el valor elegido sigue a la vista con (0) para poder quitarlo) */
+function tPerSelects(){const F=tPerFacets();const n=x=>` (${x})`;const tot=m=>[...m.values()].reduce((a,b)=>a+b,0);
+  const opt=(v,l,cur,c)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}${c==null?'':n(c)}</option>`;
+  const set=(id,h)=>{const el=$(id);if(el&&el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}};
+  const cuas=[...F.cua.keys()];if(TU.cua&&!F.cua.has(TU.cua))cuas.push(TU.cua);cuas.sort((a,b)=>a.localeCompare(b));
+  set('#tperCua',opt('','Todas las cuadrillas',TU.cua,tot(F.cua))+cuas.map(c=>opt(c,c,TU.cua,F.cua.get(c)||0)).join(''));
+  const cats=Object.keys(TCAT).filter(k=>F.cat.has(k)||k===TU.cat);
+  set('#tperCat',opt('','Todas las categorías',TU.cat,tot(F.cat))+cats.map(k=>opt(k,TCAT[k],TU.cat,F.cat.get(k)||0)).join(''));
+  const caps=[...F.cap.keys()].filter(k=>k!=='-');if(TU.cap&&TU.cap!=='-'&&!F.cap.has(TU.cap))caps.push(TU.cap);
+  const cn=new Map(caps.map(id=>[id,tCapName(id)]));caps.sort((a,b)=>cn.get(a).localeCompare(cn.get(b)));
+  set('#tperCap',opt('','Todos los capataces',TU.cap,tot(F.cap))+(F.cap.has('-')||TU.cap==='-'?opt('-','Sin capataz',TU.cap,F.cap.get('-')||0):'')+caps.map(id=>opt(id,cn.get(id),TU.cap,F.cap.get(id)||0)).join(''));
+  const es=$('#tperEst');if(es)es.querySelectorAll('[data-test]').forEach(b=>{const k=b.dataset.test;b.classList.toggle('on',TU.est===k);const c=b.querySelector('.t-fn');if(c)c.textContent=F.est[k]});
+  const cl=$('#tperClr');if(cl)cl.disabled=!tPerFiltOn()}
 /* «Hacer capataz»: la cuenta (usuario y contraseña) la crea tareo-cuentas.js con tCapCuenta(dni); aquí solo el botón y el chip */
 const tCtaFn=()=>typeof tCapCuenta==='function';
 function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&tCtaFn();
@@ -264,29 +295,30 @@ function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&
    <td data-l="Puesto">${esc(p.pue||'')} <i class="t-cat">${esc(p.cat||'OT')}</i></td><td data-l="Cuadrilla">${esc(p.cua||'')}</td><td data-l="Capataz">${esc(tCapName(p.cap))||'<span class="note">—</span>'}</td>
    <td class="mono" data-l="Ingreso">${esc(tFmt(p.ing))}</td><td class="mono" data-l="Cese">${esc(tFmt(p.ces))}${p.ces&&a?' <span class="note">(próximo)</span>':''}</td><td data-l="Motivo">${esc(p.mot||'')}</td>${cf?`<td class="t-acts"><button class="ib" data-tcta="${esc(dni)}">${p.cta?'Cuenta de capataz…':'Hacer capataz'}</button></td>`:''}</tr>`}).join('')
    +(L.length>max?`<tr><td colspan="12" class="note">Se muestran ${max} de ${L.length}: usa el buscador o los filtros.</td></tr>`:'')}
-function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);const n=$('#tperN');if(n){const hoy=todayIso();n.textContent=`Mostrando ${L.length} de ${tLive().length} · ${L.filter(p=>tActivo(p,hoy)).length} activos`}
+function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);tPerSelects();const n=$('#tperN');if(n){const hoy=todayIso();n.textContent=`Mostrando ${L.length} de ${tLive().length} · ${L.filter(p=>tActivo(p,hoy)).length} activos`}
   const s=$('#tselBar');if(s){s.hidden=!TU.sel.size;const c=$('#tselN');if(c)c.textContent=TU.sel.size}}
 function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
-  const cuas=[...new Set(all.map(p=>p.cua).filter(Boolean))].sort();const caps=tCaps();
+  const caps=tCaps();
   for(const id of[...TU.sel])if(!S.tper.has(id))TU.sel.delete(id);
-  const opt=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Personal',`${nAct} activos · ${all.length} en el máster`,`<button class="ib" id="tperXls">Exportar Excel</button>${ed?`<button class="ib" id="tperImp">Importar Excel de RR.HH.</button><button class="ib pri" id="tperAdd">+ Obrero</button>`:''}`)}
    ${helpBox('¿Cómo se mantiene el máster?',`<p>Importa el Excel de RR.HH. (hoja «Datos del personal»): verás qué personas son nuevas, cuáles cambian y cuáles siguen igual antes de confirmar. La importación <b>no</b> borra a nadie ni cambia el capataz asignado.</p><p>Un reingreso agrega un periodo nuevo a la misma ficha (por DNI). «Archivar» la oculta sin borrarla.</p>`)}
    ${ed?'':`<div class="callout">Solo lectura: el máster lo mantiene el asistente de tareo.</div>`}
    ${ed&&!caps.length?`<div class="callout t-warn">No hay capataces de tareo en el equipo (rol «Capataz (tareo)»)${MEM.size<2?' o tu rol no puede ver la lista del equipo':''}: agrégalos en Equipo para poder asignarles obreros.</div>`:''}
    <div class="card"><div class="pad t-bar">
     <input class="tin t-q" id="tperQ" data-fk="tperQ" type="search" placeholder="Buscar DNI o apellido" value="${esc(TU.q)}" aria-label="Buscar">
-    <span class="seg" id="tperEst">${[['act','Activos'],['ces','Cesados'],['all','Todos'],['arch','Archivados']].map(([k,l])=>`<button data-test="${k}" class="${TU.est===k?'on':''}">${l}</button>`).join('')}</span>
-    <select class="tin" id="tperCua" aria-label="Cuadrilla">${opt('','Todas las cuadrillas',TU.cua)}${cuas.map(c=>opt(c,c,TU.cua)).join('')}</select>
-    <select class="tin" id="tperCat" aria-label="Categoría">${opt('','Todas las categorías',TU.cat)}${Object.entries(TCAT).map(([k,l])=>opt(k,l,TU.cat)).join('')}</select>
-    <select class="tin" id="tperCap" aria-label="Capataz">${opt('','Todos los capataces',TU.cap)}${opt('-','Sin capataz',TU.cap)}${caps.map(c=>opt(c.id,c.name,TU.cap)).join('')}</select>
+    <span class="seg" id="tperEst">${TPF_EST.map(([k,l])=>`<button data-test="${k}" class="${TU.est===k?'on':''}">${l} <span class="t-fn"></span></button>`).join('')}</span>
+    <select class="tin" id="tperCua" aria-label="Cuadrilla"></select>
+    <select class="tin" id="tperCat" aria-label="Categoría"></select>
+    <select class="tin" id="tperCap" aria-label="Capataz"></select>
+    <button class="ib" id="tperClr" title="Quitar la búsqueda y los filtros (vuelve a «Activos»)">Limpiar filtros</button>
     <span class="note" id="tperN"></span></div>
     ${ed?`<div class="pad t-selbar" id="tselBar" hidden><b><span id="tselN">0</span> elegidos</b><button class="ib pri" id="tselCap">Asignar capataz</button><button class="ib" id="tselNone">Quitar selección</button></div>`:''}
     <div class="tscroll"><table class="t t-tbl"><thead><tr>${ed?'<th class="t-ck"><input type="checkbox" id="tselAll" aria-label="Elegir todos los visibles"></th>':''}<th class="t-r t-num">N°</th><th>DNI</th><th>Apellidos y nombres</th><th>Puesto</th><th>Cuadrilla</th><th>Capataz</th><th>Ingreso</th><th>Cese</th><th>Motivo</th>${ed&&tCtaFn()?'<th></th>':''}</tr></thead><tbody id="tperBody"></tbody></table></div></div>
   </div></div>`;
   tPerDraw();
   const q=$('#tperQ');q.oninput=()=>{TU.q=q.value;tPerDraw()};
-  $('#tperEst').onclick=e=>{const b=e.target.closest('[data-test]');if(!b)return;TU.est=b.dataset.test;$$('#tperEst button').forEach(x=>x.classList.toggle('on',x===b));tPerDraw()};
+  $('#tperEst').onclick=e=>{const b=e.target.closest('[data-test]');if(!b)return;TU.est=b.dataset.test;tPerDraw()};
+  $('#tperClr').onclick=()=>{Object.assign(TU,{q:'',est:'act',cua:'',cat:'',cap:''});q.value='';tPerDraw()};
   $('#tperCua').onchange=e=>{TU.cua=e.target.value;tPerDraw()};$('#tperCat').onchange=e=>{TU.cat=e.target.value;tPerDraw()};$('#tperCap').onchange=e=>{TU.cap=e.target.value;tPerDraw()};
   $('#tperXls').onclick=tPerExport;
   const body=$('#tperBody');body.onclick=e=>{const c=e.target.closest('[data-tcta]');if(c){if(tEdit()&&tCtaFn())tCapCuenta(c.dataset.tcta);return}const b=e.target.closest('[data-tfi]');if(b)tFicha(b.dataset.tfi)};

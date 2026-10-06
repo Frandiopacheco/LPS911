@@ -59,7 +59,7 @@ test('cálculo: horas por bloque, extra, cruces y validaciones', async ({ page }
   expect(r.noMuta).toBe(true);
   expect(r.vOk).toEqual([]);
   expect(r.vCruce.map(x => [x.dni, x.k])).toEqual([['d1', 'cruce']]);
-  expect(r.vAus.map(x => [x.dni, x.k])).toEqual([['d2', 'mot']]);
+  expect(r.vAus).toEqual([]); // el motivo de «no vino» es opcional (observaciones del dueño, oct 2026)
   expect(r.vFoto.map(x => [x.dni, x.k])).toEqual([[null, 'foto']]);
   expect(r.vMalo.map(x => x.k)).toEqual(['hora', 'sinh']);
   expect(r.vVacio.map(x => x.k)).toEqual(['vacio']);
@@ -91,15 +91,15 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
   await expect(page.locator('#toFal')).toHaveText('1');
   // detalle
   await env.locator('button[data-to]').click();
-  const m = page.locator('#lqm');
+  const m = page.locator('#trWs');
   await expect(m).toContainText('Tareo de Teodoro Capataz');
   await expect(m.locator('th[title="Encofrado de pedestales"]')).toHaveText('10.05');
   await expect(m.locator('tr[data-dni="11111111"]')).toContainText('(A)');
   await expect(m.locator('tr[data-dni="11111111"]')).toContainText('07:30–19:00');
-  await expect(m.locator('.to-fal')).toContainText('DM');
+  await expect(m.locator('tr.tr-frow')).toContainText('DM');
   await expect(m.locator('.to-blq li')).toHaveCount(3);
   await expect(m.locator('#toFotos img')).toHaveCount(1);
-  await m.locator('[data-tft="f1"]').click();
+  await m.locator('[data-trv="full"]').click();
   await expect(page.locator('.to-zoom img')).toBeVisible();
   await page.locator('.to-zoom').click();
   await expect(page.locator('.to-zoom')).toHaveCount(0);
@@ -110,11 +110,13 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
   const h = await page.evaluate(id => window.__dbGet('tareo', id).hist, HOY + '_tcap@obra.pe');
   expect(h.map(x => x.a)).toEqual(['env', 'reab']);
   await expect(env).toContainText('Reabierto');
+  await page.keyboard.press('Escape');
+  await expect(m).toHaveCount(0);
   // el borrador no se puede reabrir
   await bor.locator('button[data-to]').click();
-  await expect(page.locator('#lqm')).toContainText('Bruno Borrador');
+  await expect(m).toContainText('Bruno Borrador');
   await expect(page.locator('#toReab')).toHaveCount(0);
-  await page.click('#lqm [data-lqx]');
+  await page.click('#trBack');
   // día anterior: sin tareos, los tres capataces con obreros «sin empezar»
   await page.click('#toPrev');
   await expect(page.locator('#toDate')).toHaveValue('2026-09-30');
@@ -127,7 +129,7 @@ test('Tareos del día: el jefe de producción ve el detalle sin reabrir', async 
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${HOY}_tcap@obra.pe"] button`).click();
-  await expect(page.locator('#lqm')).toContainText('Teodoro Capataz');
+  await expect(page.locator('#trWs')).toContainText('Teodoro Capataz');
   await expect(page.locator('#toReab')).toHaveCount(0);
   noErrors(errors, 'jefe');
 });

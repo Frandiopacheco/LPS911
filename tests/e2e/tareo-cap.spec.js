@@ -48,7 +48,7 @@ test('capataz: asistencia explícita, no vino ↔ vino conserva horas, foto, env
   const dan = root.locator('.tc-ob[data-dni="40000004"]');
   await dan.locator('[data-tca="novino"]').click();
   await expect(dan).toHaveClass(/off/);
-  await expect(dan).toContainText('Elige el motivo');
+  await expect(dan).toContainText('Motivo (opcional)');
   await dan.locator('[data-tca="mot"][data-v="DM"]').click();
   await expect(dan.locator('.tc-mot.on')).toContainText('DM');
   await expect(root.locator('#tcCnt')).toHaveText('Marcados 1 de 4');
@@ -434,4 +434,111 @@ test('F2 capataz: «Por corregir» lista los reabiertos de cualquier fecha; se c
   expect(d.hist.map(h => h.a)).toEqual(['env', 'reab', 'env']);
   await expect(root.locator('#tcPorCor')).toHaveCount(0);
   noErrors(errors, 'por corregir');
+});
+
+// ── Observaciones del dueño — capataz (oct 2026) ──
+test('capataz: borrar un trabajo funciona al primer intento aunque se guarde mientras la confirmación está abierta', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await expect(root.locator('.tc-blq')).toHaveCount(2);
+  // un cambio recién hecho (se guarda ≈1 s después) y enseguida «Borrar» con la ventana real de confirmación
+  await root.locator('.tc-blq[data-bid="a"] [data-tca="edit"]').click();
+  await root.locator('#tcFin').fill('11:30');
+  await root.locator('[data-tca="edOk"]').click();
+  await page.evaluate(() => { window.__uiAskReal = true; });
+  await root.locator('.tc-blq[data-bid="b"] [data-tca="del"]').click();
+  await expect(page.locator('#uask')).toBeVisible();
+  await page.waitForTimeout(1600); // el guardado automático y la confirmación de la base llegan con la ventana abierta
+  await page.locator('#uask [data-ua="si"]').click();
+  await expect(root.locator('.tc-blq')).toHaveCount(1);
+  await expect.poll(async () => ((await dbDoc(page)).blq || []).map(b => `${b.id} ${b.ini}-${b.fin}`)).toEqual(['a 07:30-11:30']);
+  noErrors(errors, 'borrar trabajo');
+});
+
+test('capataz: «no vino» sin motivo deja seguir; obrero de otra cuadrilla con aviso, etiqueta y ajeno/capOrig', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const msgs = [];
+  page.on('dialog', d => { msgs.push(d.message()); d.accept(); });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...EXTRA, ob('40000010', 'SOLIS VEGA', 'SAUL', '')] });
+  const root = page.locator('#tcRoot');
+  const dan = root.locator('.tc-ob[data-dni="40000004"]');
+  await dan.locator('[data-tca="novino"]').click();
+  await expect(dan).toContainText('Motivo (opcional)');
+  await expect(dan.locator('.tc-err')).toHaveCount(0);
+  // tocar el motivo elegido lo quita
+  await dan.locator('[data-tca="mot"][data-v="VA"]').click();
+  await expect(dan.locator('.tc-mot.on')).toHaveCount(1);
+  await dan.locator('[data-tca="mot"][data-v="VA"]').click();
+  await expect(dan.locator('.tc-mot.on')).toHaveCount(0);
+  // de otro capataz: confirmación clara y etiqueta ámbar
+  await root.locator('[data-tca="addOn"]').click();
+  await root.locator('#tcAddQ').fill('zega');
+  await expect(root.locator('#tcAddL')).toContainText('de ');
+  await root.locator('[data-tca="add"][data-v="40000009"]').click();
+  expect(msgs.pop()).toMatch(/ZEGARRA LUNA, ZOE no es de tu cuadrilla \(es de .+\)\. ¿Lo tareas igual\?/);
+  await expect(root.locator('.tc-ob[data-dni="40000009"] .tc-aj')).toHaveText('No es de tu cuadrilla');
+  // sin capataz
+  await root.locator('[data-tca="addOn"]').click();
+  await root.locator('#tcAddQ').fill('solis');
+  await expect(root.locator('#tcAddL')).toContainText('sin capataz');
+  await root.locator('[data-tca="add"][data-v="40000010"]').click();
+  expect(msgs.pop()).toContain('no es de tu cuadrilla (es sin capataz)');
+  await expect(root.locator('.tc-aj')).toHaveCount(2);
+  // pasa al paso 2 aunque Daniel no tenga motivo
+  await root.locator('[data-tca="todos"]').click();
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('¿En qué trabajaron?');
+  await expect.poll(async () => { const r = (await dbDoc(page)).rows || {}; return [r['40000009']?.ajeno, r['40000009']?.capOrig, r['40000010']?.ajeno, r['40000010']?.capOrig, r['40000004']?.as, r['40000004']?.mot, r['40000001']?.ajeno]; })
+    .toEqual([true, 'otro@obra.pe', true, '', false, '', undefined]);
+  // la regla común (tValida) ya no pide el motivo
+  expect(await page.evaluate(() => tValida({ date: '2026-09-28', rows: { d: { ape: 'X', as: false, mot: '' } }, blq: [], foto: ['f'] }))).toEqual([]);
+  noErrors(errors, 'motivo opcional y ajeno');
+});
+
+test('capataz: al agregar un trabajo se ve lo que cada obrero ya tiene; por defecto solo los libres; cruces al cambiar el horario', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  page.on('dialog', d => d.accept());
+  const extra = [...EXTRA.filter(x => x[0] !== 'tper'), ob('40000001', 'ALVA ROJAS', 'ANA', CAP), ob('40000002', 'BRAVO DIAZ', 'BETO', CAP), ob('40000003', 'CASTRO PAZ', 'CARLOS', CAP),
+    ['tareo', ID, { date: HOY, cap: CAP, st: 'bor', foto: [], hist: [], rows: { '40000001': fullRow('ALVA ROJAS', 'ANA'), '40000002': fullRow('BRAVO DIAZ', 'BETO'), '40000003': fullRow('CASTRO PAZ', 'CARLOS') },
+      blq: [{ id: 'a', pc: 'p10_05', ini: '07:30', fin: '17:00', dnis: ['40000001'] }, { id: 'b', pc: 'p20_01', ini: '07:30', fin: '12:00', dnis: ['40000002'] }] }]];
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await root.locator('[data-tca="new"]').click();
+  const who = d => root.locator(`.tc-pp[data-v="${d}"]`);
+  // Ana completó la jornada: atenuada y sin marcar; Beto tiene 4,5 h; Carlos nada
+  await expect(who('40000001')).toHaveClass(/full/);
+  await expect(who('40000001')).not.toHaveClass(/\bon\b/);
+  await expect(who('40000001')).toContainText('Jornada completa');
+  await expect(who('40000002')).toContainText('4,5 h · 20.01 7:30–12:00');
+  await expect(who('40000003')).toContainText('Sin otros trabajos');
+  // el horario por defecto empieza donde terminó el último (17:00): Beto y Carlos libres, marcados
+  await expect(root.locator('#tcIni')).toHaveValue('17:00');
+  await expect(root.locator('.tc-pp.on')).toHaveCount(2);
+  // la mañana: Beto se cruzaría (rojo, está marcado); Ana sigue «Jornada completa»
+  await root.locator('[data-tca="sc"][data-v="man"]').click();
+  await expect(who('40000002')).toHaveClass(/cx/);
+  await expect(who('40000002')).toContainText('se cruza con 20.01 7:30–12:00');
+  await expect(who('40000001')).toContainText('Jornada completa');
+  await expect(who('40000003')).not.toHaveClass(/cx|oc/);
+  // «Todos los libres» deja solo a Carlos; «Ninguno» a nadie
+  await root.locator('[data-tca="libres"]').click();
+  await expect(root.locator('.tc-pp.on')).toHaveCount(1);
+  await expect(who('40000003')).toHaveClass(/\bon\b/);
+  await root.locator('[data-tca="none"]').click();
+  await expect(root.locator('.tc-pp.on')).toHaveCount(0);
+  await expect(who('40000002')).toHaveClass(/\boc\b/);
+  await expect(who('40000002')).toContainText('ocupado: 20.01 7:30–12:00');
+  // la tarde: Beto vuelve a estar libre
+  await root.locator('[data-tca="sc"][data-v="tar"]').click();
+  await root.locator('[data-tca="libres"]').click();
+  await expect(root.locator('.tc-pp.on')).toHaveCount(2);
+  await expect(root.locator('.tc-pp.cx')).toHaveCount(0);
+  await root.locator('#tcPcQ').fill('10.06');
+  await root.locator('[data-tca="pc"][data-v="p10_06"]').click();
+  await root.locator('[data-tca="edOk"]').click();
+  await expect.poll(async () => ((await dbDoc(page)).blq || []).map(b => `${b.pc} ${b.ini}-${b.fin} ${b.dnis.join(',')}`)[2]).toBe('p10_06 13:00-17:00 40000002,40000003');
+  noErrors(errors, 'quiénes con ocupación');
 });
