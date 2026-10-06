@@ -235,3 +235,49 @@ test('Partidas: costos (tcos) solo bloquea o desbloquea para la carga', async ({
   await expect(page.locator('[data-tpb="p10_05"]')).toHaveText('Bloquear para carga');
   noErrors(errors, 'costos bloquea');
 });
+
+test('Personal: filtros encadenados (cada lista ofrece solo lo que queda con los otros filtros, con su conteo) y «Limpiar filtros»', async ({ page }) => {
+  const P = (dni, cua, cat, cap, ces = '') => ['tper', dni, { dni, ape: 'APE ' + dni, nom: 'X', pue: 'P', cat, cua, cap, ing: '2026-01-05', ces, mot: ces ? 'Renuncia' : '', per: [], act: !ces }];
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: [...EXTRA,
+    P('10000001', 'ALBAÑILES', 'OP', 'tcap1@obra.pe'), P('10000002', 'ALBAÑILES', 'PE', ''),
+    P('10000003', 'CARPINTEROS', 'OF', 'tcap1@obra.pe'),
+    P('10000004', 'FIERREROS', 'OP', '', '2026-03-01'), P('10000005', 'CARPINTEROS', 'PE', '', '2026-03-01'),
+  ] });
+  await tab(page, 'tper');
+  const opts = s => page.locator(s + ' option').allTextContents();
+  // Activos (4: 01234567 + 3): FIERREROS solo tiene cesados, no aparece
+  expect(await opts('#tperCua')).toEqual(['Todas las cuadrillas (4)', 'ALBAÑILES (3)', 'CARPINTEROS (1)']);
+  expect(await opts('#tperCat')).toEqual(['Todas las categorías (4)', 'Operario (2)', 'Oficial (1)', 'Peón (1)']);
+  expect(await opts('#tperCap')).toEqual(['Todos los capataces (4)', 'Sin capataz (1)', 'Tito Capataz (3)']);
+  await expect(page.locator('#tperEst [data-test="act"]')).toHaveText('Activos 4');
+  await expect(page.locator('#tperEst [data-test="ces"]')).toHaveText('Cesados 2');
+  await expect(page.locator('#tperClr')).toBeDisabled();
+  // cuadrilla ALBAÑILES: las otras listas se acotan a ella
+  await page.selectOption('#tperCua', 'ALBAÑILES');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 3 de 6 · 3 activos');
+  expect(await opts('#tperCat')).toEqual(['Todas las categorías (3)', 'Operario (2)', 'Peón (1)']);
+  expect(await opts('#tperCap')).toEqual(['Todos los capataces (3)', 'Sin capataz (1)', 'Tito Capataz (2)']);
+  await expect(page.locator('#tperEst [data-test="ces"]')).toHaveText('Cesados 0');
+  await expect(page.locator('#tperClr')).toBeEnabled();
+  // la búsqueda también acota las listas
+  await page.fill('#tperQ', '10000002');
+  expect(await opts('#tperCat')).toEqual(['Todas las categorías (1)', 'Peón (1)']);
+  await page.fill('#tperQ', '');
+  // Cesados: ALBAÑILES ya no tiene a nadie, pero sigue en la lista con (0) para poder quitarla
+  await page.click('#tperEst [data-test="ces"]');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 0 de 6 · 0 activos');
+  expect(await opts('#tperCua')).toEqual(['Todas las cuadrillas (2)', 'ALBAÑILES (0)', 'CARPINTEROS (1)', 'FIERREROS (1)']);
+  await expect(page.locator('#tperCua')).toHaveValue('ALBAÑILES');
+  await page.selectOption('#tperCua', '');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 2 de 6 · 0 activos');
+  // «Limpiar filtros»: vuelve a Activos sin búsqueda ni listas
+  await page.selectOption('#tperCat', 'PE');
+  await page.fill('#tperQ', 'APE');
+  await page.click('#tperClr');
+  await expect(page.locator('#tperN')).toHaveText('Mostrando 4 de 6 · 4 activos');
+  await expect(page.locator('#tperQ')).toHaveValue('');
+  await expect(page.locator('#tperEst [data-test="act"]')).toHaveClass(/on/);
+  await expect(page.locator('#tperCat')).toHaveValue('');
+  await expect(page.locator('#tperClr')).toBeDisabled();
+  noErrors(errors, 'filtros encadenados');
+});
