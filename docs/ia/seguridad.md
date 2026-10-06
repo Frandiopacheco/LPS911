@@ -13,3 +13,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - Plan diario en el celular: con una cuadrilla elegida (`M.cqSel`, `innerWidth<900`) «Equipos del día» va plegado; tocar su encabezado termina el reparto y lo abre.
   - Publicación (`ci.yml`): `publicar-web` depende de `instalar`; sin llave de Firebase, `instalar` falla. `check.mjs` lo comprueba (`checkCI`). Los fallos de las pruebas de reglas salen como anotaciones (línea y motivo) en GitHub.
 - `live` y el veedor (oct 2026): solo puede crear/actualizar el campo `seq` («en secuencia») de una actividad real (`liveActOk`); no inicia, detiene ni cierra (prueba en `tests/rules`).
+
+## Límite de accesos en las reglas del tareo (oct 2026)
+
+En `match /tareo/{id}` el guardado del capataz quedaba rechazado (PERMISSION_DENIED) al sumar otra rama que lee `members` (revisión de producción, `tOfiEd`), aunque esa rama fuera falsa: el pedido llegaba al límite de lecturas/evaluación. Regla práctica: **cada rama de un `allow` empieza por una condición que no lee documentos y que distingue a quién va dirigida** (p. ej. `resource.data.cap == mid()` para el capataz y `!= mid()` para la oficina), y solo después llama a funciones que leen `members`. Las pruebas de reglas no corren en el entorno de las IA (el emulador no descarga): se ven en GitHub.

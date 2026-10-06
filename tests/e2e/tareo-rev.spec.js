@@ -298,15 +298,15 @@ test('Tareos del día: sin tareo (registrar falta), no enviados a la hora límit
   noErrors(errors, 'sin tareo');
 });
 
-test('revisión: el jefe de producción ve el cotejo en solo lectura; el capataz ve «Revisado por la oficina»', async ({ page }) => {
+test('revisión: el jefe de producción coteja y corrige como la oficina (06-10-2026); el capataz ve «Revisado por la oficina»', async ({ page }) => {
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   await expect(page.locator('#trCotN')).toHaveText('0 de 2 cotejados');
-  await expect(page.locator('#trAll')).toHaveCount(0);
-  await expect(page.locator('#trCor')).toHaveCount(0);
-  await expect(page.locator('[data-tra="pas"]')).toHaveCount(0);
-  await expect(page.locator('#trSin [data-trfal]')).toHaveCount(0);
+  await expect(page.locator('#trAll')).toBeVisible();
+  await expect(page.locator('#trCor')).toBeVisible();
+  await expect(page.locator('[data-tra="pas"]')).toHaveCount(3);
+  await expect(page.locator('.tr-mode')).toHaveCount(0);
   noErrors(errors, 'jefe');
   const rev = EXTRA.map(x => x[0] === 'tareo' && x[1] === T1 ? ['tareo', T1, { ...x[2], st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV }] : x);
   const p2 = await page.context().newPage();
@@ -484,109 +484,129 @@ const HRS = { modo: 'hrs', pcs: ['p10_10', 'p10_05'],
   rows: { 11111111: row('ALFA', { h: { p10_10: 4, p10_05: 4.5 } }), 22222222: row('BETA', { h: { p10_05: 8.5 } }), 33333333: row('GAMMA', { as: false, mot: 'DM', h: {} }) } };
 const conH = () => conT1({ ...HRS, envN: 1 }).concat([HPC]).map(x => { if (x[0] !== 'tareo' || x[1] !== T1) return x; const { blq, ...o } = x[2]; return ['tareo', T1, o]; });
 const cell = (m, d, pc) => m.locator(`#trh_${d}_${pc}`);
+/* celda de una columna que no es de partida (Vino, Salida, Firmó…): por la posición de su encabezado */
+const celk = async (m, d, k) => m.locator(`tr[data-dni="${d}"] > td`).nth(await m.locator(`th[data-k="${k}"]`).evaluate(th => th.cellIndex));
 
-test('corrección en grilla (modo horas): celdas con teclado, totales, agregar/quitar partida, vino/no vino, salida, historial y detalle', async ({ page }) => {
+test('corrección en la hoja (modo horas, asistente): teclado como Excel, totales, agregar/quitar partida, vino/no vino, salida, historial', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   const m = page.locator('#trWs');
-  // detalle de solo lectura: grilla de horas en el orden del capataz y sin la sección de bloques
-  await expect(m.locator('.tr-mt thead th[title]').nth(0)).toHaveText('10.10');
-  await expect(m.locator('.tr-mt thead th[title]').nth(1)).toHaveText('10.05');
+  // la hoja está siempre en edición (sin «Corregir»), con las partidas en el orden del capataz y sin la sección de bloques
+  await expect(m.locator('#txW')).toBeVisible();
+  await expect(m.locator('#trCor')).toHaveCount(0);
   await expect(m.locator('#trBlqD')).toHaveCount(0);
-  await expect(m.locator('tr[data-trd="11111111"] .tr-tot b')).toHaveText('8.5');
-  await m.locator('#trCor').click();
-  await expect(m.locator('#trGw')).toBeVisible();
-  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('4');
-  await expect(cell(m, '33333333', 'p10_10')).toBeDisabled(); // no vino
+  await expect(m.locator('th.tx-hp').nth(0)).toContainText('10.10');
+  await expect(m.locator('th.tx-hp').nth(1)).toContainText('10.05');
+  await expect(m.locator('#trht_11111111')).toHaveText('8.5');
+  // GAMMA no vino: su celda de horas no se escribe
+  await cell(m, '33333333', 'p10_10').click();
+  await page.keyboard.type('3');
+  await expect(m.locator('#txIn')).toHaveCount(0);
   // ALFA 10.10: 3 y Enter baja a BETA
   await cell(m, '11111111', 'p10_10').click();
   await page.keyboard.type('3');
-  await expect(m.locator('#trht_11111111')).toHaveText('7.5');
-  await expect(m.locator('#trht_11111111')).toHaveClass(/tr-hwn/);
   await page.keyboard.press('Enter');
-  await expect(cell(m, '22222222', 'p10_10')).toBeFocused();
-  // BETA 10.10: 4.3 se redondea a 4,5; Tab pasa a 10.05 (todo seleccionado: se reemplaza)
+  await expect(cell(m, '11111111', 'p10_10')).toHaveText('3');
+  await expect(m.locator('#trht_11111111')).toHaveText('7.5');
+  await expect(m.locator('#trht_11111111')).toHaveClass(/tx-wn/);
+  await expect(m.locator('#txAdr')).toHaveText('BETA · 10.10');
+  // BETA 10.10: 4.3 se redondea a 4,5; Tab pasa a 10.05
   await page.keyboard.type('4.3');
   await page.keyboard.press('Tab');
-  await expect(cell(m, '22222222', 'p10_10')).toHaveValue('4.5');
+  await expect(cell(m, '22222222', 'p10_10')).toHaveText('4.5');
   await expect(page.locator('#toast')).toContainText('media en media');
-  await expect(cell(m, '22222222', 'p10_05')).toBeFocused();
+  await expect(m.locator('#txAdr')).toHaveText('BETA · 10.05');
   await page.keyboard.type('4');
   await page.keyboard.press('ArrowUp');
-  await expect(cell(m, '11111111', 'p10_05')).toBeFocused();
+  await expect(m.locator('#txAdr')).toHaveText('ALFA · 10.05');
   await expect(m.locator('#trht_22222222')).toHaveText('8.5');
-  await expect(m.locator('#trht_22222222')).toHaveClass(/tr-hok/);
+  await expect(m.locator('#trht_22222222')).toHaveClass(/tx-ok/);
   await expect(m.locator('#trhc_p10_10')).toHaveText('7.5');
   await expect(m.locator('#trEdN')).toHaveText('3 cambios sin guardar');
-  // agregar una partida del día: la columna aparece y el foco va a su primera celda
+  // agregar una partida del día: la columna aparece y queda elegida su primera celda
   await m.locator('#trPcAdd').selectOption('p10_20');
-  await expect(cell(m, '11111111', 'p10_20')).toBeFocused();
+  await expect(m.locator('#txAdr')).toHaveText('ALFA · 10.20');
   await page.keyboard.type('1');
   await page.keyboard.press('Enter');
-  // quitar 10.05 (tiene horas: pide confirmar)
-  let asked = '';
-  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  // quitar 10.05 (tiene horas): mover o borrar → borrarlas
   await m.locator('th[data-pc="p10_05"] [data-tra="pcdel"]').click();
+  await expect(page.locator('#lqm')).toContainText('de 2 obreros');
+  await page.locator('#lqm input[name="trPdP"][value="__del"]').check();
+  await page.locator('#trPdOk').click();
   await expect(cell(m, '11111111', 'p10_05')).toHaveCount(0);
-  expect(asked).toContain('2 obreros');
   await expect(m.locator('#trht_22222222')).toHaveText('4.5');
-  // GAMMA sí vino: sin horas es un problema; con 8,5 se resuelve
-  await m.locator('#trv_33333333_1').click();
-  await expect(m.locator('#trEdObs')).toContainText('GAMMA, X: vino pero no tiene horas');
-  await cell(m, '33333333', 'p10_10').fill('8,5');
-  await cell(m, '33333333', 'p10_10').press('Enter');
-  await expect(m.locator('#trEdObs')).toHaveCount(0);
+  // GAMMA sí vino («s» en Vino): sin horas es un problema; con 8,5 se resuelve
+  await (await celk(m, '33333333', 'as')).click();
+  await page.keyboard.type('s');
+  await page.keyboard.press('Enter');
+  await expect(m.locator('#trObs')).toContainText('GAMMA, X: vino pero no tiene horas');
+  await cell(m, '33333333', 'p10_10').click();
+  await page.keyboard.type('8,5');
+  await page.keyboard.press('Enter');
+  await expect(m.locator('#trObs')).not.toContainText('GAMMA, X: vino pero no tiene horas');
   // BETA salió a las 15:00 (opcional)
-  await m.locator('#trs_22222222').fill('15:00');
-  page.once('dialog', dg => dg.accept('Ajuste de horas según el formato'));
+  await (await celk(m, '22222222', 'sal')).click();
+  await page.keyboard.type('1500');
+  await page.keyboard.press('Enter');
+  await expect(await celk(m, '22222222', 'sal')).toHaveText('15:00');
+  // guardar: aviso de HH totales cambiadas y motivo
+  const asked = [];
+  page.on('dialog', dg => { asked.push(dg.message()); dg.type() === 'prompt' ? dg.accept('Ajuste de horas según el formato') : dg.accept(); });
   await m.locator('#trEdOk').click();
   await expect.poll(async () => (await dbT(page, T1)).pcs).toEqual(['p10_10', 'p10_20']);
+  expect(asked[0]).toContain('Cambiaste las HH totales de 3 obreros'); // ALFA, BETA y GAMMA (0 → 8,5)
   const d = await dbT(page, T1);
   expect(d.modo).toBe('hrs');
   expect(d.blq).toBeUndefined();
   expect(d.rows['11111111']).toMatchObject({ h: { p10_10: 3, p10_20: 1 }, trab: 4 });
   expect(d.rows['22222222']).toMatchObject({ h: { p10_10: 4.5 }, sal: '15:00', trab: 4.5, fin: '15:00' });
   expect(d.rows['33333333']).toMatchObject({ as: true, mot: '', h: { p10_10: 8.5 }, trab: 8.5, ext: 0 });
+  expect(d.prod).toBeUndefined(); // el asistente no deja la marca de producción
   const h = d.hist[d.hist.length - 1];
-  expect(h).toMatchObject({ a: 'cor', mot: 'Ajuste de horas según el formato' });
+  expect(h).toMatchObject({ a: 'cor', mot: 'Ajuste de horas según el formato', tot: true });
   expect(h.cam).toContain('− partida 10.05');
   expect(h.cam).toContain('ALFA 10.10: 4 → 3 h');
   expect(h.det).toEqual(expect.arrayContaining([{ pc: 'p10_20', campo: 'pcs', antes: false, despues: true }, { pc: 'p10_05', campo: 'pcs', antes: true, despues: false },
     { dni: '11111111', pc: 'p10_10', campo: 'h', antes: 4, despues: 3 }, { dni: '22222222', campo: 'sal', antes: null, despues: '15:00' }, { dni: '33333333', campo: 'as', antes: false, despues: true }]));
-  // el detalle muestra lo guardado al momento
-  await expect(m.locator('tr[data-trd="33333333"] .tr-tot b')).toHaveText('8.5');
-  await expect(m.locator('.tr-mt thead th[title]').nth(1)).toHaveText('10.20');
-  noErrors(errors, 'grilla');
+  // la hoja muestra lo guardado al momento, sin cambios pendientes
+  await expect(m.locator('#trht_33333333')).toHaveText('8.5');
+  await expect(m.locator('th.tx-hp').nth(1)).toContainText('10.20');
+  await expect(m.locator('#trEdN')).toHaveCount(0);
+  noErrors(errors, 'hoja');
 });
 
-test('corrección en grilla: si otro usuario cambia el tareo, avisa y «Recargar versión actual» conserva lo corregido; Esc en una celda no sale', async ({ page }) => {
+test('corrección en la hoja: si otro usuario cambia el tareo, avisa y «Recargar versión actual» conserva lo corregido; Esc en una celda no sale', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   const m = page.locator('#trWs');
-  await m.locator('#trCor').click();
-  await cell(m, '11111111', 'p10_10').fill('3');
+  await cell(m, '11111111', 'p10_10').click();
+  await page.keyboard.type('3');
+  await page.keyboard.press('Enter');
   // otro usuario cambia las horas de BETA mientras se corrige: el aviso sale de inmediato
   await page.evaluate(id => fcol('tareo').doc(id).update({ 'rows.22222222.h': { p10_05: 8 } }), T1);
   await expect(m.locator('#trConfl')).toBeVisible();
-  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('3');
+  await expect(cell(m, '11111111', 'p10_10')).toHaveText('3');
   await m.locator('#trReload').click();
   await expect(page.locator('#toast')).toContainText('Se mantienen tus 1 cambio');
-  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('3');
-  await expect(cell(m, '22222222', 'p10_05')).toHaveValue('8');
-  // Esc dentro de una celda solo suelta la celda; el segundo Esc pregunta
+  await expect(cell(m, '11111111', 'p10_10')).toHaveText('3');
+  await expect(cell(m, '22222222', 'p10_05')).toHaveText('8');
+  // Esc mientras se edita una celda solo cancela esa edición; el segundo Esc pregunta
   await cell(m, '11111111', 'p10_05').click();
+  await page.keyboard.press('F2');
+  await expect(m.locator('#txIn')).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(m.locator('#txIn')).toHaveCount(0);
   await expect(page.locator('#trAsk3')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.locator('#trAsk3')).toBeVisible();
-  page.once('dialog', dg => dg.accept('Hora de ALFA'));
+  page.on('dialog', dg => dg.type() === 'prompt' ? dg.accept('Hora de ALFA') : dg.accept());
   await page.locator('#trAsk3 [data-l3="save"]').click();
   await expect(m).toHaveCount(0);
   const d = await dbT(page, T1);
   expect(d.rows['11111111'].h).toEqual({ p10_10: 3, p10_05: 4.5 });
   expect(d.rows['22222222'].h).toEqual({ p10_05: 8 });
-  noErrors(errors, 'grilla conflicto');
+  noErrors(errors, 'hoja conflicto');
 });

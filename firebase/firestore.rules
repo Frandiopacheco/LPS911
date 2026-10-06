@@ -396,24 +396,11 @@ service cloud.firestore {
       return resource.data.get('st', 'bor') != 'pub' && request.resource.data.get('st', 'bor') != 'pub'
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pubV']);
     }
-    // Revisión de producción (pedido del dueño, 06-10-2026): el jefe de producción (editor con «Publica tareo») revisa y corrige
-    // las horas por partida de un tareo «Enviado» o «Revisado» y lo marca «prod». No cambia el estado, ni el cotejo (cot, cotFot),
-    // ni la revisión de la oficina (revAt, revBy), ni nada de la publicación. Su entrada de historial es una sola, al final, a:'prod'.
+    // Jefe de producción (editor con «Publica tareo»): desde el pedido del dueño del 06-10-2026 (tarde) edita los tareos como la
+    // oficina (coteja, corrige, marca o quita revisado, reabre, pasa obreros, marca «prod»). No crea tareos ni fotos, no toca el
+    // máster ni las partidas, y como toda la oficina no publica (tOfiUpd: 'pub' y pubV solo los pone la función publicarTareo).
     function tpubEd() { return isMember() && notOff() && role() == 'editor' && get(memberPath()).data.get('tpub', false) == true; }
-    function tProdHist() {
-      let o = resource.data.get('hist', []);
-      let n = request.resource.data.get('hist', []);
-      return o is list && n is list && n.size() == o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
-        && n[o.size()] is map && n[o.size()].get('a', '') == 'prod' && n[o.size()].get('by', '') == mid();
-    }
-    // primero lo que no lee documentos (para no sumar lecturas a los guardados del capataz: el límite de accesos por pedido)
-    function tProdOk() {
-      return request.resource.data.get('prod', null) is map && resource.data.get('st', 'bor') in ['env', 'rev'] && tpubEd()
-        && request.resource.data.get('st', 'bor') == resource.data.get('st', 'bor')
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rows', 'pcs', 'hist', 'prod', 'ts', 'by'])
-        && request.resource.data.get('prod', null) is map && request.resource.data.prod.get('by', '') == mid()
-        && tProdHist();
-    }
+    function tOfiEd() { return tarEd() || tpubEd(); }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
         || (tarRole() == 'tcap' && (resource == null ? idMine(id) : resource.data.get('cap', '') == mid())));
@@ -425,9 +412,12 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot', 'prod'])
         && tHistNew());
       // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
-      // revisión de producción: regla aparte (no se mezcla con la del capataz)
-      allow update: if tProdOk();
-      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
+      // oficina (asistente, administrador y jefe de producción): primero lo que no lee documentos (tOfiUpd), luego quién es
+      // (el registro de members es el mismo documento para tarEd/tpubEd/isTar: no suma accesos al guardado del capataz)
+      // OJO límite de accesos por pedido: cada rama empieza por una condición que no lee documentos y que la otra no cumple
+      // (el capataz solo guarda su propio tareo: cap == su id; la oficina nunca es el capataz del tareo).
+      allow update: if (resource.data.get('cap', '') != mid() && (tOfiUpd() || request.resource.data == resource.data) && tOfiEd())
+        || (resource.data.get('cap', '') == mid() && isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
