@@ -11,7 +11,7 @@ test('admin: ve el selector y cambia de módulo (pestañas y barra cambian)', as
   expect(await tabsVisibles(page)).toContain('look');
   await page.click('#modsel [data-mod="tar"]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  expect(await tabsVisibles(page)).toEqual(['tdia', 'tper', 'tpc', 'tcfg']);
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg']);
   for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
   await expect(page.locator('#pname')).toHaveText('Tareo de personal obrero');
   await page.click('#tabs [data-tab="tper"]');
@@ -38,15 +38,17 @@ test('el enlace #tper abre el Tareo', async ({ page }) => {
 for (const as of ['tcap', 'tasis', 'tcos']) {
   test(`${as}: entra directo al Tareo, sin selector ni Last Planner`, async ({ page }) => {
     const errors = await openApp(page, { as, editar: false });
-    await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
+    /* costos entra a «Costos» (F3: ya no ve Tareos del día) */
+    const home = as === 'tcos' ? 'tcos' : 'tdia';
+    await expect(page.locator('#main')).toHaveAttribute('data-view', home);
     await expect(page.locator('#modsel')).toBeHidden();
-    expect(await tabsVisibles(page)).toEqual(['tdia', 'tper', 'tpc']);
+    expect(await tabsVisibles(page)).toEqual([home, 'tper', 'tpc']);
     for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
     const st = await page.evaluate(() => ({ mod: U.mod, act: S.act.size, lps: S.loaded.act, only: TAR_ONLY(), ed: tarEdit(), ok: tabAllowed('look') }));
     expect(st).toEqual({ mod: 'tar', act: 0, lps: undefined, only: true, ed: as === 'tasis', ok: false });
     // un enlace a una pestaña de Last Planner no lo saca del Tareo
     await page.evaluate(() => { U.tab = 'look'; render(); });
-    await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
+    await expect(page.locator('#main')).toHaveAttribute('data-view', home);
     noErrors(errors, as);
   });
 }
@@ -70,7 +72,7 @@ test('admin en el celular: cambia de módulo desde «Más»', async ({ page }) =
   expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(40);
   await b.click();
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(x => x.dataset.bt))).toEqual(['tdia', 'tper', 'tpc', 'tcfg', 'more']);
+  expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(x => x.dataset.bt))).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'more']);
   noErrors(errors, 'admin celular');
 });
 
@@ -90,7 +92,7 @@ test('editor con «Publica tareo» ve el selector y el Tareo (sin Configuración
   const errors = await openApp(page, { as: 'jefe', editar: false });
   await expect(page.locator('#modsel')).toBeVisible();
   await page.click('#modsel [data-mod="tar"]');
-  expect(await tabsVisibles(page)).toEqual(['tdia', 'tper', 'tpc']);
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc']);
   noErrors(errors, 'jefe');
 });
 
