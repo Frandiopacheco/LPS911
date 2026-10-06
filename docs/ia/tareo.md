@@ -497,3 +497,51 @@ Principios (auditorías externas, aprobadas por el dueño): la publicación la h
 - Pestaña nueva **`tcos` «Costos»** (tcos, admin, editor con tpub; reemplaza el aviso actual de `tdia` para tcos): calendario/lista de días publicados (vigente y versiones anteriores marcadas «sustituida»), detalle de una publicación (tabla obreros × partidas), y **descargas Excel** desde las publicaciones: un día, una semana (lunes–domingo) o un rango.
 - **Excel de costos** (formato del archivo `semana_02.10.26.xlsx`, ver «Lo que dice el Excel que hoy recibe costos»): una hoja por día (`dd.mm`) con N°, obrero, cuadrilla, DNI, categoría, columnas de partidas agrupadas por grupo con su código (todas las partidas del catálogo congelado en la publicación, en orden numérico), Horas totales, Horas extras, Bonos `(A)`; hoja «Resumen HH» (HH y HE por obrero y día, totales HN/HE) y hoja «Tareo Semana» (asistencia A / I / DM… por día, horas extra, horas de descanso médico: DM = jornada del día). Encabezado con proyecto, fecha, versión publicada y quién publicó. Sin fórmulas rotas: valores.
 - `TAR_TABS` agrega `tpub` y `tcos`; `tabAllowed` según rol.
+
+## Implementación de F3 — servidor (oct 2026)
+
+`functions/tpub.js` (lógica pura), `functions/index.js` (`publicarTareo`), `functions/lib.js` (reexporta), `functions/test/tpub.test.js`, reglas `tareo`/`tpub`/`tpubidx` («tareo F3» en `tests/rules/firestore.test.mjs`) y el Firebase falso (`tests/e2e/fake-firebase.js`, prueba `tests/e2e/tareo-pub-fn.spec.js`).
+
+### Dónde está la lógica
+
+- **`functions/tpub.js`**: todo lo puro, **sin `require`** (UMD: en Node `module.exports`, en el navegador `window.TPUB`). `lib.js` lo reexporta (`require('../lib')` trae `tpCalcRow`, `tpValidarDia`, `tpArmarPublicacion`, `tpDif`, `tpPuede`, `tpPedido`, `tpFirma`, `tpEjecutar`, `tpCfgDia`, `tpActivo`, `tpCotVig`, `tpDia`).
+- **`tpEjecutar(ctx)`** es la función entera sin Firebase: recibe lo leído `{P, tareos, personal, partidas, tcfg, idx, vigente, by, byN, now}` y devuelve `{err:{code,msg}}` o `{res, escr:[{col, id, tipo:'crear'|'poner'|'cambiar', datos, hist?}]}` (`cambiar` + `hist` = `update(datos + hist: arrayUnion(hist))`). `index.js` solo lee (en la transacción) y aplica `escr`; el falso hace lo mismo sobre la base en memoria.
+- **`tpCalcRow(row, cfg, modo)`**: `modo:'hrs'` → `trab` = suma de `h` (> 0), `ext` = max(0, trab − jornada de `cfg`) sobre el total del día; feriado o día sin jornada → todo extra; sábado sin refrigerio porque la jornada congelada ya trae `ref: 0`. Tareo antiguo (bloques, sin modo) → `rows[*].h/trab/ext` **guardados**. No vino / sin marcar → `{h:{}, trab:0, ext:0}`. Solo usa la jornada **congelada** (`cfg`); `tpCfgDia(tcfg, fecha)` (copia de `TC()`+`tCfgDia`) solo sirve para mostrar horas en la previa de un tareo sin `cfg` (eso igual bloquea).
+
+### `publicarTareo` (onCall, us-central1, 120 s)
+
+- **Quién** (`tpPuede`): el dueño, `admin`, o `editor` con `tpub === true`; correo confirmado y sin `off`. Si no: `permission-denied` «Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.».
+- **Pedido** (`tpPedido(data, hoyLima)`): `{accion:'previa'|'publicar'|'rectificar', fecha:'YYYY-MM-DD' (no futura), excepciones?: {dni: motivo}, motivo?, firma?}`. Excepciones con motivo vacío se descartan (≤ 200 caracteres); motivo ≤ 500; `rectificar` exige motivo. Error → `invalid-argument` con el mensaje.
+- **Lecturas:** `tper`, `tpc`, `tcfg/main` fuera de la transacción; `tpubidx/{fecha}`, `tareo where date == fecha` y la versión vigente `tpub/{fecha}_v{idx.v}` **dentro** (en `previa`, lecturas simples).
+- **`previa`** (no escribe) → respuesta:
+  ```
+  { fecha, ok, bloqueos:[{k, msg, tareo?, tareos?, dni?, pc?}], resumen, sinTareo:[{dni, ape, nom, cua, cat, cap, exc}],
+    firma, rect, v, motivoReq, vigente: {v, at, by, byN, motivo} | null, abierto: {t, by, motivo} | null, dif: <tpDif> | null }
+  ```
+  - `resumen = {fecha, tareos:[{id, cap, capN, st, n, pres, aus, sm, hh, he, bloq}], porEstado:{st:n}, obreros (DNI únicos en tareos), pres, aus, sm, porMot:{mot|'_':n}, sinTareo, exc, hh, he, alt, porPc:{pcId:horas}}` (`'_'` = falta sin motivo: Firestore no admite claves vacías).
+  - `v` = la versión que se publicaría; `rect`/`motivoReq` = ya hay versión (publicar exige motivo); `dif` = diferencias contra la vigente (solo sin bloqueos). `sinTareo[].exc` = motivo recibido (para mantener las casillas).
+  - `firma` = hash de **todos** los tareos del día (`tpFirma`): pásala a `publicar`.
+- **`publicar`** → en una transacción vuelve a leer y validar. Errores: firma distinta → `aborted` «Un tareo del día cambió desde que abriste la previa: vuelve a revisar.»; hay versión y no hay motivo → `invalid-argument`; otra publicación a la vez (`tpub` ya existe) → `aborted`. **Con bloqueos no lanza error**: devuelve lo mismo que la previa con `ok:false` y no escribe. Si publica:
+  ```
+  { ...lo de la previa, ok: true, id: '<fecha>_v<n>', v, tot, dif, n (tareos fuente) }
+  ```
+  Escribe `tpub/{fecha}_v{n}` (`create`, forma del contrato: `{fecha, v, at, by, byN, motivo, ant, fuentes, pcs, rows, exc, tot, dif}`; `tot = {obreros, pres, aus, porMot, hh, he, alt, exc, porPc}`), `tpubidx/{fecha}` = `{fecha, v, vers:[…, {v, at, by, byN, motivo}], abierto:null}` y cada tareo fuente `{st:'pub', pubV:n, by, ts}` + `hist` `{t, by, a:'pub', v, mot?}`.
+  - `rows` ordenadas por apellidos y nombres; `ape/nom/cat/cua` de la ficha del máster (si no, la foto de la fila); el ausente va con `h:{}` y su `mot`; `alt` solo para presentes.
+  - `pcs` = **catálogo congelado**: todas las partidas activas (`act !== false`) más cualquiera con horas, en orden numérico de código (`{cod, nom, und, grp, grpN, ua}`).
+  - `exc` solo de activos sin tareo (las de DNI que sí están en un tareo o no activos se ignoran).
+- **`rectificar {fecha, motivo}`** → `{ok:true, fecha, v (vigente), abierto:{t, by, motivo}, n (tareos que vuelven a rev)}`. Exige versión publicada y que no esté ya abierto (`failed-precondition`). Tareos `pub` → `{st:'rev', by, ts}` + `hist` `{a:'rect', mot, v}`; `tpubidx.abierto`. La versión vigente sigue para costos. En la rectificación los tareos que siguen `pub` (no se tocaron) no bloquean; corregir uno lo devuelve a `env` y hay que revisarlo.
+- **Bloqueos** (`k`): `nada` (no hay tareos con obreros ni activos), `estado` (no `rev`; `pub` solo si ya hay versión), `cfg` (sin jornada congelada), `cot` (sin foto o `cotFot` ≠ `foto`), `marca`, `hval`, `sinh`, `hmax` (> 16 h), `pc` (partida con horas que no está en `tpc`; una vez por partida), `firp` (presente sin `fir` true/false en el cotejo vigente; «no firmó» no bloquea), `dup` (DNI en dos o más tareos no archivados del día, presente/ausente/sin marcar; `tareos:[ids]`), `cob` (activo del máster en la fecha, con periodos `per`, sin tareo ni excepción con motivo). Tareos archivados o sin filas no cuentan (ni bloquean).
+- `tpDif(anterior, nueva)` → `{agregados:[{dni, nom, capN}], quitados, cambios:[{dni, nom, campo:'as'|'mot'|'alt'|'cap'|'h'|'ext', pc?, antes, despues}], excAgregadas:[dni], excQuitadas, tot:{obreros|pres|aus|hh|he|alt:{antes, despues}}, n, mas}` (listas hasta 300; `mas` = lo que quedó fuera).
+- Todo lo escrito pasa por `limpio()` (sin `undefined`).
+
+### Reglas
+
+- `tpub`, `tpubidx`: `read: isTar()` (incluye `tcos`, `tcap` y el editor con `tpub`; no `off`); `write: false` (solo la función).
+- `tareo`, oficina (`tarEd`): al crear no trae `st:'pub'` ni `pubV` (`tOfiNew`); al actualizar, ni el anterior ni el nuevo están en `pub` y no cambia `pubV` (`tOfiUpd`), **salvo** que el documento quede idéntico (restaurar un respaldo sobre la misma obra). Un tareo publicado solo se corrige tras «Rectificar» (la función lo devuelve a `rev`; conserva `pubV`).
+- `tareo`, capataz: `pubV` se suma a las claves que no crea ni cambia; `tHistOk` también prohíbe `a:'rect'`.
+- Pendiente: restaurar un respaldo **en otra obra** (copia de prueba vacía) con tareos `pub` falla por la regla (y `tpub`/`tpubidx` no están en el respaldo); hoy no hay datos del tareo en producción.
+
+### Firebase falso (pruebas de la interfaz)
+
+- `helpers.js` (`openApp`) carga **`functions/tpub.js` antes del falso** (`TPUB_JS`); `mundo-compartido.js` lo antepone al falso generado. `firebase.functions().httpsCallable('publicarTareo')` usa `window.TPUB`: mismas validaciones, cálculo, respuesta y escrituras que el servidor (lee la base en memoria, `tpEjecutar`, aplica `escr` de una sola vez). Errores con `code: 'functions/<código>'` y el mismo mensaje. Las otras pruebas que cargan el falso a mano (`tareo-cuentas`, `tareo-inv`) no lo necesitan; si falta, la llamada da `functions/unavailable`.
+- Llamadas en `window.__fnCalls`; datos con `window.__dbGet('tpub', '<fecha>_v1')`, `__dbGet('tpubidx', fecha)`. Ejemplo y contrato de respuestas: `tests/e2e/tareo-pub-fn.spec.js`.

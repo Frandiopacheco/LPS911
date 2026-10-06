@@ -866,3 +866,70 @@ test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta
   await assertFails(getDoc(doc(cap('tcap1'), `tareo/${h}_u_tcap1`)));
   await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
 });
+
+// ── Tareo F3: publicación (tpub, tpubidx) solo la escribe la función publicarTareo; nadie deja un tareo «pub» desde la app ──
+test('tareo F3: tpub y tpubidx los lee el módulo Tareo (también costos) y nadie los escribe desde la app', async () => {
+  const f = limaDay(-1);
+  await tSeed(`tpub/${f}_v1`, { fecha: f, v: 1, rows: [], tot: { hh: 0 } });
+  await tSeed(`tpubidx/${f}`, { fecha: f, v: 1, vers: [{ v: 1, at: 1, by: OWNER, motivo: '' }], abierto: null });
+  for (const db of [user('tcos@obra.pe'), user('tasis@obra.pe'), user('jefe@obra.pe'), user(OWNER), user('tcapm@obra.pe')]) {
+    await assertSucceeds(getDoc(doc(db, `tpub/${f}_v1`)));
+    await assertSucceeds(getDoc(doc(db, `tpubidx/${f}`)));
+    await assertSucceeds(getDocs(collection(db, 'tpubidx')));
+  }
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('campo@obra.pe'), cap('cap1'), user('extrano@x.pe')]) {
+    await assertFails(getDoc(doc(db, `tpub/${f}_v1`)));
+    await assertFails(getDoc(doc(db, `tpubidx/${f}`)));
+  }
+  for (const db of [user(OWNER), user('jefe@obra.pe'), user('tasis@obra.pe'), user('tcos@obra.pe')]) {
+    await assertFails(setDoc(doc(db, `tpub/${f}_v2`), { fecha: f, v: 2 }));
+    await assertFails(updateDoc(doc(db, `tpub/${f}_v1`), { v: 5 }));
+    await assertFails(deleteDoc(doc(db, `tpub/${f}_v1`)));
+    await assertFails(setDoc(doc(db, `tpubidx/${f}`), { fecha: f, v: 2 }));
+    await assertFails(updateDoc(doc(db, `tpubidx/${f}`), { abierto: { t: 1 } }));
+  }
+  // un editor con tpub desactivado (off) ya no lee
+  await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
+  await assertFails(getDoc(doc(user('jefe@obra.pe'), `tpub/${f}_v1`)));
+});
+test('tareo F3: la oficina no publica (st pub / pubV) ni cambia un tareo publicado; el capataz tampoco', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1'), a = user('tasis@obra.pe'), o = user(OWNER);
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'rev', rows: { '11111111': { as: true } }, hist: [] });
+  // revisado → publicado: solo la función
+  for (const db of [a, o]) {
+    await assertFails(updateDoc(doc(db, id), { st: 'pub' }));
+    await assertFails(updateDoc(doc(db, id), { st: 'pub', pubV: 1 }));
+    await assertFails(updateDoc(doc(db, id), { pubV: 1 }));
+    await assertFails(setDoc(doc(db, `tareo/${h}_x`), { date: h, cap: 'x', st: 'pub' }));
+    await assertFails(setDoc(doc(db, `tareo/${h}_y`), { date: h, cap: 'y', st: 'rev', pubV: 1 }));
+  }
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env' })); // lo demás sigue igual
+  // publicado (lo dejó la función): la oficina no lo toca, ni para reabrir ni para devolverlo a revisado
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'pub', pubV: 1, rows: { '11111111': { as: true } }, hist: [{ t: 1, by: OWNER, a: 'pub', v: 1 }] });
+  for (const db of [a, o]) {
+    await assertFails(updateDoc(doc(db, id), { st: 'rev' }));
+    await assertFails(updateDoc(doc(db, id), { st: 'reab', reab: { t: 1, by: 'x', mot: 'm' } }));
+    await assertFails(updateDoc(doc(db, id), { 'rows.11111111.as': false }));
+    await assertFails(updateDoc(doc(db, id), { hist: arrayUnion({ t: 2, by: 'x', a: 'cor' }) }));
+    await assertFails(deleteDoc(doc(db, id)));
+  }
+  // restaurar el mismo dato (respaldo sobre la misma obra) sí
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data(); });
+  await assertSucceeds(setDoc(doc(o, id), cur));
+  await assertFails(updateDoc(doc(p, id), { st: 'env' }));
+  // rectificado por la función (pub → rev, conserva pubV): la oficina vuelve a corregir, sin tocar pubV
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'rev', pubV: 1, rows: { '11111111': { as: true } }, hist: [] });
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env', 'rows.11111111.as': false }));
+  await assertFails(updateDoc(doc(a, id), { pubV: 2 }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 3, by: 'tasis@obra.pe', mot: 'm' } }));
+  // el capataz corrige su reabierto sin tocar pubV ni ponerse 'pub' ni entradas «rect» en el historial
+  await assertFails(updateDoc(doc(p, id), { pubV: 3 }));
+  await assertFails(updateDoc(doc(p, id), { st: 'pub' }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 4, by: 'u_tcap1', a: 'rect' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 4, by: 'u_tcap1', a: 'env' }] }));
+  // al crear, el capataz no trae pubV
+  const h0 = limaDay(0);
+  await assertFails(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor', pubV: 1 }));
+  await assertSucceeds(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor' }));
+});

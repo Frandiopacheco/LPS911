@@ -7,13 +7,14 @@
 // - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
 //   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
 // - cuentaCapataz (la llama la página): crea y administra las cuentas DNI + contraseña de los capataces del tareo.
+// - publicarTareo (la llama la página): previa, publicación y rectificación del tareo del día (F3).
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, ctaPedido, ctaPuede, ctaNombre, ctaMigrables } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -185,5 +186,53 @@ exports.cuentaCapataz = onCall({ timeoutSeconds: 60 }, async req => {
     await migrar(P.de);
   }
   logger.info(`cuentaCapataz ${accion} ${mail} por ${email}${res.n ? ` · ${res.n} obrero(s) de ${res.de}` : ''}`);
+  return res;
+});
+
+/* Publicación del tareo del día (docs/ia/tareo.md, «Contrato de F3» e «Implementación de F3 — servidor»).
+   Solo el dueño, un admin o un editor con «Publica tareo» (members.tpub), con correo confirmado y sin off.
+   Acciones: previa {fecha} (no escribe) · publicar {fecha, excepciones?, motivo?, firma?} · rectificar {fecha, motivo}.
+   Toda la lógica está en tpub.js (tpEjecutar): aquí solo se lee y se escribe. publicar y rectificar corren en una transacción
+   que lee tpubidx/{fecha}, los tareos del día y la versión vigente: si un tareo cambió desde la previa (firma), se rechaza. */
+exports.publicarTareo = onCall({ timeoutSeconds: 120 }, async req => {
+  const tk = (req.auth && req.auth.token) || {};
+  const email = String(tk.email || '').toLowerCase();
+  const caller = email ? await db().collection('members').doc(email).get() : null;
+  const mem = caller && caller.exists ? caller.data() : null;
+  if (!tpPuede(email, tk.email_verified === true, mem)) throw new HttpsError('permission-denied', 'Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
+  const P = tpPedido(req.data, limaToday());
+  if (P.error) throw new HttpsError('invalid-argument', P.error);
+  const byN = (mem && mem.name) || email;
+  /* máster, partidas y configuración: fuera de la transacción (no son lo que se publica; se leen en el momento) */
+  const [personal, partidas, cs] = await Promise.all([all('tper'), all('tpc'), db().collection('tcfg').doc('main').get()]);
+  const tcfg = cs.exists ? cs.data() : {};
+  const idxRef = db().collection('tpubidx').doc(P.fecha);
+  const q = db().collection('tareo').where('date', '==', P.fecha);
+  const FV = admin.firestore.FieldValue;
+  const corre = async tx => {
+    const get = r => (tx ? tx.get(r) : r.get());
+    const is = await get(idxRef); const idx = is.exists ? is.data() : null;
+    const tareos = (await get(q)).docs.map(d => ({ ...d.data(), id: d.id }));
+    let vigente = null;
+    if (idx && +idx.v > 0) { const vs = await get(db().collection('tpub').doc(P.fecha + '_v' + idx.v)); vigente = vs.exists ? vs.data() : null; }
+    const R = tpEjecutar({ P, tareos, personal, partidas, tcfg, idx, vigente, by: email, byN, now: Date.now() });
+    if (R.err) throw new HttpsError(R.err.code, R.err.msg);
+    if (tx) for (const w of R.escr) {
+      const ref = db().collection(w.col).doc(w.id);
+      if (w.tipo === 'crear') tx.create(ref, w.datos);
+      else if (w.tipo === 'poner') tx.set(ref, w.datos);
+      else tx.update(ref, w.hist ? { ...w.datos, hist: FV.arrayUnion(w.hist) } : w.datos);
+    }
+    return R.res;
+  };
+  let res;
+  try { res = P.accion === 'previa' ? await corre(null) : await db().runTransaction(corre); }
+  catch (e) {
+    if (e instanceof HttpsError) throw e;
+    logger.error(`publicarTareo ${P.accion} ${P.fecha}`, e);
+    if (e && (e.code === 6 || /already exists/i.test(e.message || ''))) throw new HttpsError('aborted', 'Otra persona publicó ese día al mismo tiempo: vuelve a abrir la previa.');
+    throw new HttpsError('internal', 'No se pudo completar en el servidor: ' + ((e && e.message) || e));
+  }
+  logger.info(`publicarTareo ${P.accion} ${P.fecha} por ${email}${res.bloqueos && res.bloqueos.length ? ` · ${res.bloqueos.length} bloqueo(s)` : P.accion === 'publicar' ? ` · publicada v${res.v}` : ` · v${res.v}`}`);
   return res;
 });
