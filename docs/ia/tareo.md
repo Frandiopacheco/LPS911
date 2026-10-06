@@ -261,3 +261,10 @@ Problema: con el enlace/QR el capataz del tareo entra con una sesión **anónima
 ### Pendiente
 
 - `tCaps()` (tareo.js) lista también capataces con `off`: filtrarlos al asignar obreros.
+
+## Auditoría externa F2 (ChatGPT, 05-10-2026): decisiones del dueño
+
+- **Refrigerio:** de lunes a viernes siempre se descuenta 1 h, como **intersección** de cada bloque con la ventana de refrigerio del día (12:00–13:00 por defecto): partir los bloques no cambia el total. **Sábado: no se descuenta** refrigerio, ni siquiera pasadas las 13:00 (son horas extra). Todo configurable por día en `tcfg` (inicio y minutos de refrigerio por día de semana). Se elimina la regla anterior «sábado pasado de la jornada descuenta 60 min».
+- **Corregir un tareo revisado lo devuelve a «Enviado»** (hay que volver a revisarlo).
+- **Feriados propios del tareo** en `tcfg.fer` (lista de fechas `YYYY-MM-DD`), con botón para copiarlos del calendario de Last Planner; todos los roles calculan igual.
+- **Un obrero no puede estar en dos tareos el mismo día** (ni presente en uno y con falta en otro): es un conflicto que bloquea marcar revisado (y publicar en F3) hasta resolverlo.
