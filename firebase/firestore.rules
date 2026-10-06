@@ -356,7 +356,7 @@ service cloud.firestore {
     function tHistOk() {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
-      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && n[0:o.size()] == o;
+      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o);
     }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
