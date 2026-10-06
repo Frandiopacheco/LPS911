@@ -15,7 +15,6 @@ test.before(async () => {
   env = await initializeTestEnvironment({ projectId: 'demo-lps', firestore: { rules: fs.readFileSync('../../firebase/firestore.rules', 'utf8') } });
 });
 test.after(async () => { await env.cleanup(); });
-const dbg=(i,pr)=>pr.catch(e=>{throw new Error('PASO '+i+': '+(e&&e.message))});
 test.beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async c => {
@@ -632,30 +631,30 @@ const limaDay = off => new Date(Date.now() - 5 * 36e5 + off * 864e5).toISOString
 const tSeed = async (path, data) => env.withSecurityRulesDisabled(async c => setDoc(doc(c.firestore(), path), data));
 test('tareo: el capataz del tareo crea, guarda y envía solo el suyo', async () => {
   const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1';
-  await dbg(1, assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`)))); // abre su día aunque aún no exista
-  await dbg(2, assertFails(getDoc(doc(p, `tareo/${h}_u_otro`))));
-  await dbg(3, assertSucceeds(setDoc(doc(p, `tareo/${h}_${me}`), { date: h, cap: me, capN: 'Pedro', st: 'bor', rows: {}, blq: [] })));
-  await dbg(4, assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { blq: [{ id: 'b1', pc: '10.05', ini: '07:30', fin: '12:00', dnis: [] }] })));
-  await dbg(5, assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'env', envAt: 1 })));
-  await dbg(6, assertFails(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'bor' }))); // ya enviado: no lo cambia
-  await dbg(7, assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`))));
+  await assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`))); // abre su día aunque aún no exista
+  await assertFails(getDoc(doc(p, `tareo/${h}_u_otro`)));
+  await assertSucceeds(setDoc(doc(p, `tareo/${h}_${me}`), { date: h, cap: me, capN: 'Pedro', st: 'bor', rows: {}, blq: [] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { blq: [{ id: 'b1', pc: '10.05', ini: '07:30', fin: '12:00', dnis: [] }] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'env', envAt: 1 }));
+  await assertFails(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'bor' })); // ya enviado: no lo cambia
+  await assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`)));
   // ajeno: ni crearlo a nombre de otro, ni con id que no corresponde, ni cambiar la fecha
-  await dbg(8, assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: 'u_otro', st: 'bor' })));
-  await dbg(9, assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: me, st: 'bor' })));
-  await dbg(10, assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: h, cap: me, st: 'bor' })));
+  await assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: 'u_otro', st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: h, cap: me, st: 'bor' }));
   // estados que no le tocan al crear
-  await dbg(11, assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'reab' })));
-  await dbg(12, assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'rev' })));
-  await dbg(13, assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'bor', reab: { t: 1 } })));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'reab' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'rev' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'bor', reab: { t: 1 } }));
   // fechas: hasta 3 días atrás sí; más atrás o en el futuro no
-  await dbg(14, assertSucceeds(setDoc(doc(p, `tareo/${limaDay(-3)}_${me}`), { date: limaDay(-3), cap: me, st: 'bor' })));
-  await dbg(15, assertFails(setDoc(doc(p, `tareo/${limaDay(-6)}_${me}`), { date: limaDay(-6), cap: me, st: 'bor' })));
-  await dbg(16, assertFails(setDoc(doc(p, `tareo/${limaDay(3)}_${me}`), { date: limaDay(3), cap: me, st: 'bor' })));
+  await assertSucceeds(setDoc(doc(p, `tareo/${limaDay(-3)}_${me}`), { date: limaDay(-3), cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-6)}_${me}`), { date: limaDay(-6), cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(3)}_${me}`), { date: limaDay(3), cap: me, st: 'bor' }));
   // otro capataz del tareo (con correo) no lo ve ni lo cambia
   const o = user('tcapm@obra.pe');
-  await dbg(17, assertFails(getDoc(doc(o, `tareo/${h}_${me}`))));
-  await dbg(18, assertFails(updateDoc(doc(o, `tareo/${h}_${me}`), { st: 'bor' })));
-  await dbg(19, assertSucceeds(setDoc(doc(o, `tareo/${h}_tcapm@obra.pe`), { date: h, cap: 'tcapm@obra.pe', st: 'bor' })));
+  await assertFails(getDoc(doc(o, `tareo/${h}_${me}`)));
+  await assertFails(updateDoc(doc(o, `tareo/${h}_${me}`), { st: 'bor' }));
+  await assertSucceeds(setDoc(doc(o, `tareo/${h}_tcapm@obra.pe`), { date: h, cap: 'tcapm@obra.pe', st: 'bor' }));
 });
 test('tareo: consultas; el tcap solo filtra los suyos, tcos nada, la oficina todo', async () => {
   const h = limaDay(0);
