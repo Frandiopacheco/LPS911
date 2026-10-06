@@ -288,3 +288,150 @@ test('capataz: copia los trabajos de ayer y agrega un obrero de otro capataz', a
   expect(w).toBeLessThanOrEqual(482);
   noErrors(errors, 'copiar trabajos');
 });
+
+// ── Auditoría F2 (docs/ia/tareo.md «Correcciones de la auditoría F2 — capataz») ──
+const fullRow = (ape, nom) => ({ ape, nom, cat: 'OP', cua: '', as: true, mot: '', alt: false, ini: '', fin: '', h: {}, trab: 0, ext: 0 });
+const readyDoc = (date, extra = {}) => ({ date, cap: CAP, st: 'bor', foto: [], hist: [], rows: { '40000001': fullRow('ALVA ROJAS', 'ANA') },
+  blq: [{ id: 'a', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['40000001'] }, { id: 'b', pc: 'p20_01', ini: '13:00', fin: '17:00', dnis: ['40000001'] }], ...extra });
+const oneCrew = () => [...EXTRA.filter(x => x[0] !== 'tper'), ob('40000001', 'ALVA ROJAS', 'ANA', CAP)];
+/* intercepta las escrituras de una colección en la base falsa: 'deny' (rechazo del servidor) o 'hang' (sin señal: espera a window.__rel()) */
+const patchCol = (page, col, method, mode) => page.evaluate(({ col, method, mode }) => {
+  const F = (typeof db !== 'undefined' && db) || FDB; if (!window.__origCol) window.__origCol = F.collection;
+  const o = window.__origCol; window.__rel = null;
+  F.collection = n => { const c = o.call(F, n); if (n !== col) return c; const d0 = c.doc;
+    c.doc = id => { const r = d0(id); const real = r[method];
+      r[method] = (...a) => mode === 'deny' ? Promise.reject(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }))
+        : new Promise((res, rej) => { window.__rel = () => real(...a).then(res, rej); });
+      return r; };
+    return c; };
+}, { col, method, mode });
+const unpatch = page => page.evaluate(() => { const F = (typeof db !== 'undefined' && db) || FDB; if (window.__origCol) F.collection = window.__origCol; });
+
+test('F2 capataz: la foto solo cuenta confirmada (rechazo → reintentar; sin señal → pendiente) y el envío muestra su estado real', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  page.on('dialog', d => d.accept());
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('Revisar y enviar');
+  // 1) el servidor rechaza la foto: no se agrega al tareo y no deja enviar
+  await patchCol(page, 'tfot', 'set', 'deny');
+  await root.locator('#tcFile').setInputFiles({ name: 'f.png', mimeType: 'image/png', buffer: await png(page) });
+  const fp = root.locator('.tc-fp');
+  await expect(fp).toHaveClass(/err/);
+  await expect(fp).toContainText('No se subió');
+  await expect(root.locator('#tcSend')).toBeDisabled();
+  await expect(root.locator('#tcSend')).toHaveText('Foto sin subir');
+  await page.waitForTimeout(1300);
+  expect((await dbDoc(page)).foto || []).toEqual([]);
+  expect(await page.evaluate(id => window.__dbGet('tfot', id), `${ID}_1`)).toBeFalsy();
+  // reintentar con el servidor bien: se sube, se agrega y ya se puede enviar
+  await unpatch(page);
+  await fp.locator('[data-tca="fpRe"]').click();
+  await expect(root.locator('.tc-fp')).toHaveCount(0);
+  await expect(root.locator('.tc-th')).toHaveCount(1);
+  await expect.poll(async () => (await dbDoc(page)).foto).toEqual([`${ID}_1`]);
+  await expect(root.locator('#tcSend')).toHaveText('Enviar tareo');
+  // 2) sin señal: «Pendiente de subir», guardada en el celular, no deja enviar; al volver la señal se sube sola
+  await patchCol(page, 'tfot', 'set', 'hang');
+  await page.context().setOffline(true);
+  await root.locator('#tcFile').setInputFiles({ name: 'g.png', mimeType: 'image/png', buffer: await png(page) });
+  await expect(root.locator('.tc-fp')).toHaveClass(/pend/);
+  await expect(root.locator('.tc-fp')).toContainText('Pendiente de subir');
+  await expect(root.locator('#tcFpNote')).toContainText('quedó guardada en el celular');
+  await expect(root.locator('#tcSend')).toBeDisabled();
+  expect(Object.keys(await page.evaluate(k => JSON.parse(localStorage.getItem(k) || '{}'), `lps.tcfp.${ID}`))).toEqual([`${ID}_2`]);
+  await page.context().setOffline(false);
+  await page.evaluate(() => window.__rel());
+  await expect(root.locator('.tc-fp')).toHaveCount(0);
+  await expect.poll(async () => (await dbDoc(page)).foto).toEqual([`${ID}_1`, `${ID}_2`]);
+  expect(await page.evaluate(k => localStorage.getItem(k), `lps.tcfp.${ID}`)).toBeNull();
+  expect(await page.evaluate(id => window.__dbGet('tfot', id).d.length, `${ID}_2`)).toBeLessThanOrEqual(950000);
+  await unpatch(page);
+  // 3) envío sin confirmar: «Enviando…» → «Se enviará al tener señal» (ámbar) → «Enviado ✓» al confirmarse
+  await patchCol(page, 'tareo', 'update', 'hang');
+  await root.locator('#tcSend').click();
+  await expect(root.locator('#tcSentB')).toContainText('Enviando…');
+  await expect(root.locator('#tcSentB')).toHaveClass(/tc-queued/, { timeout: 6000 });
+  await expect(root.locator('#tcSentB')).toContainText('Se enviará al tener señal');
+  await expect(root.locator('#tcSt')).toHaveText('Se enviará al tener señal');
+  expect((await dbDoc(page)).st).toBe('bor');
+  await unpatch(page);
+  await page.evaluate(() => window.__rel());
+  await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
+  await expect(root.locator('#tcSentB')).not.toHaveClass(/tc-queued|tc-sending/);
+  expect((await dbDoc(page)).st).toBe('env');
+  noErrors(errors, 'foto y envío confirmados');
+});
+
+test('F2 capataz: si el servidor rechaza el envío vuelve a borrador con el error; avisos «warn» no bloquean; guarda la jornada del día', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  page.on('dialog', d => d.accept());
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY, { foto: [`${ID}_1`] })], ['tfot', `${ID}_1`, { date: HOY, cap: CAP, n: 1, d: 'data:image/png;base64,iVBORw0KGgo=' }]] });
+  const root = page.locator('#tcRoot');
+  await expect(root.locator('.tc-steps')).toBeVisible();
+  await page.evaluate(() => {
+    const o = tValida; window.tValida = d => [...o(d), { dni: '40000001', k: 'parc', warn: true, msg: 'Jornada parcial: ALVA ROJAS (4,5 h de 8,5 h).' }];
+    if (typeof tCfgDia !== 'function') window.tCfgDia = f => ({ f, prueba: true });
+  });
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await expect(root.locator('#tcWarns')).toContainText('Jornada parcial: ALVA ROJAS');
+  await expect(root.locator('#tcSend')).toHaveText('Enviar tareo');
+  await expect(root.locator('#tcSend')).toBeEnabled();
+  // rechazo del servidor: vuelve a editable con el error
+  await patchCol(page, 'tareo', 'update', 'deny');
+  await root.locator('#tcSend').click();
+  await expect(root.locator('#tcSt')).toContainText('No se pudo enviar el tareo');
+  await expect(root.locator('.tc-foot')).toBeVisible();
+  await expect(root.locator('#tcSentB')).toHaveCount(0);
+  expect((await dbDoc(page)).st).toBe('bor');
+  // con el servidor bien: enviado con la jornada congelada
+  await unpatch(page);
+  await root.locator('#tcSend').click();
+  await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
+  const d = await dbDoc(page);
+  expect(d.st).toBe('env');
+  expect(d.cfg).toBeTruthy();
+  expect(d.hist.map(h => h.a)).toEqual(['env']);
+  noErrors(errors, 'rechazo del envío');
+});
+
+test('F2 capataz: «Por corregir» lista los reabiertos de cualquier fecha; se corrige sin tocar el cotejo de la oficina', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  page.on('dialog', d => d.accept());
+  const V = '2026-09-23', VID = `${V}_${CAP}`;
+  const cot = { '40000001': { fir: true, by: 'tasis@obra.pe', t: 5 } };
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(),
+    ['tareo', VID, readyDoc(V, { st: 'reab', foto: [`${VID}_1`], reab: { t: 9, by: 'tasis@obra.pe', mot: 'La tarde fue en 10.06' }, hist: [{ t: 8, by: CAP, a: 'env' }, { t: 9, by: 'tasis@obra.pe', a: 'reab' }], cot, cotFot: [`${VID}_1`] })],
+    ['tfot', `${VID}_1`, { date: V, cap: CAP, n: 1, d: 'data:image/png;base64,iVBORw0KGgo=' }],
+    ['tareo', '2026-09-20_otro@obra.pe', { date: '2026-09-20', cap: 'otro@obra.pe', st: 'reab', rows: {}, blq: [] }]] });
+  const root = page.locator('#tcRoot');
+  const pc = root.locator('#tcPorCor');
+  await expect(pc).toContainText('Por corregir (1)');
+  await expect(pc).toContainText('La tarde fue en 10.06');
+  await pc.locator(`[data-tcd="${V}"]`).click();
+  await expect(root.locator(`.tc-date.on[data-tcd="${V}"]`)).toBeVisible();
+  await expect(root.locator('.tc-reab')).toContainText('La tarde fue en 10.06');
+  // corrige: la tarde pasa a 10.06
+  await root.locator('.tc-foot [data-tcs="2"]').click();
+  await root.locator('.tc-blq[data-bid="b"] [data-tca="edit"]').click();
+  await root.locator('[data-tca="pcX"]').click();
+  await root.locator('#tcPcQ').fill('10.06');
+  await root.locator('[data-tca="pc"][data-v="p10_06"]').click();
+  await root.locator('[data-tca="edOk"]').click();
+  await expect.poll(async () => ((await dbDoc(page, VID)).blq || []).find(b => b.id === 'b')?.pc).toBe('p10_06');
+  let d = await dbDoc(page, VID);
+  expect(d.cot).toEqual(cot);
+  expect(d.cotFot).toEqual([`${VID}_1`]);
+  await root.locator('.tc-foot [data-tcs="3"]').click();
+  await root.locator('#tcSend').click();
+  await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
+  d = await dbDoc(page, VID);
+  expect(d.st).toBe('env');
+  expect(d.cot).toEqual(cot);
+  expect(d.hist.map(h => h.a)).toEqual(['env', 'reab', 'env']);
+  await expect(root.locator('#tcPorCor')).toHaveCount(0);
+  noErrors(errors, 'por corregir');
+});
