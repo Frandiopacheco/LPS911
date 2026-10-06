@@ -156,7 +156,7 @@ test('snapshot de la publicación: forma, catálogo congelado, excepciones y fue
   const T = base(); T[0].rows['22222222'] = row('BETA', { as: false, mot: 'DM', alt: true }); T[0].rows['11111111'].alt = true;
   const per = [...PER, ficha('44444444', 'DELTA')];
   const s = tpArmarPublicacion({ fecha: F, tareos: T, personal: per, partidas: PCS, excepciones: { 44444444: 'Vacaciones', 11111111: 'no aplica' }, v: 2, at: 99, by: 'j@o.pe', byN: 'Jefe', motivo: 'Corrige', anterior: null });
-  assert.deepStrictEqual(Object.keys(s).sort(), ['ant', 'at', 'by', 'byN', 'dif', 'exc', 'fecha', 'fuentes', 'motivo', 'pcs', 'rows', 'tot', 'v'].sort());
+  assert.deepStrictEqual(Object.keys(s).sort(), ['ant', 'at', 'by', 'byN', 'dif', 'exc', 'fecha', 'fuentes', 'motivo', 'pcs', 'rows', 'tot', 'v', 'cfg', 'jor', 'nl'].sort());
   assert.strictEqual(s.ant, 1);
   assert.deepStrictEqual(Object.keys(s.pcs), ['p2_01', 'p10_05', 'p10_10']); // orden numérico; sin la inactiva sin horas
   assert.deepStrictEqual(s.pcs.p10_05, { cod: '10.05', nom: 'Encofrado', und: 'm2', grp: '10', grpN: 'ESTRUCTURAS', ua: 'CD1' });

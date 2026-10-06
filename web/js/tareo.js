@@ -225,7 +225,7 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
 const TO_MOT={DM:'Descanso médico',DA:'Descanso por accidente',SU:'Suspensión',SM:'Subsidio por maternidad',SE:'Subsidio por enfermedad',VA:'Vacaciones',FA:'Falta',LS:'Licencia sin goce',L:'Liquidado'};
 const TO_ST={sin:['Sin empezar','to-sin'],bor:['Borrador','to-bor'],env:['Enviado','to-env'],reab:['Reabierto','to-reab'],rev:['Revisado','to-rev'],pub:['Publicado','to-pub']};
 const TO_ORD={env:0,reab:1,bor:2,sin:3,rev:4,pub:5};
-const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado'};
+const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar'};
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',sinTxt:''};

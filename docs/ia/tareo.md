@@ -562,3 +562,9 @@ Código en `web/js/tareo-pub.js` (después de `tareo-cuentas.js`), CSS en el blo
   - Jornada del día: `pub.jor` si la publicación la trae (número), si no `tJorDia({date, cfg: pub.cfg})` (configuración actual si no hay `cfg`).
 - **Supuestos sobre la función** (si el servidor cambia la forma, ajustar `tpbCalc`/`tpkDias`): `previa` → `{resumen:{obreros,pres,aus,porMot,sinTareo:[{dni,ape,nom,cap,capN?}],hh,he,alt,porEstado}, bloqueos:[{k,msg,tareo?,dni?}], vigente, abierto}`; `publicar` → `{v,id}`; error con `details.bloqueos` opcional. La pantalla no usa `vigente`/`abierto` de la previa: usa `tpubidx` (en vivo).
 - **Pruebas** (`tareo-pub.spec.js`): la función se simula en la prueba (envoltorio de `firebase.functions` con respuestas en `window.__tpResp` y errores en `window.__tpErr`; llamadas en `window.__tpCalls`), así no depende del stub del Firebase falso. Cubre: lista por mes, sustituida, detalle y versión; Excel del día, de una versión y de la semana (hojas, encabezados, fusión de grupos, horas, extra, `(A)`, motivo, pie, Resumen HH y asistencia A/I/DM/VA, horas de DM); bloqueos deshabilitan, excepción con motivo, parámetros de `publicar`, errores, enlace a la revisión; rectificar y rectificación con motivo obligatorio; quién ve las pestañas.
+
+### Integración F3 (pantallas + servidor)
+
+- La publicación guarda además `cfg` (jornada congelada del día, tomada del primer tareo fuente con `cfg`), `jor` (horas de jornada) y `nl` (no laborable): el Excel usa `jor` para la asistencia A/I y las horas de descanso médico, así que un cambio posterior de jornada no altera Excels anteriores.
+- La pantalla de Publicación envía la `firma` de la previa; si el servidor responde `ok:false` (bloqueos), los muestra sin publicar.
+- El historial del tareo etiqueta `rect` como «Abierto para rectificar».

@@ -164,7 +164,9 @@
     for (const [dni, m] of Object.entries(E)) { if (dentro.has(dni)) continue; const f = F.get(dni); if (!f || !tpActivo(f, fecha)) continue; exc[dni] = { motivo: m, ape: String(f.ape || ''), nom: String(f.nom || '') }; }
     tot.exc = Object.keys(exc).length;
     const fuentes = T.map(t => ({ id: t.id || '', cap: t.cap || '', capN: t.capN || '', envN: Number.isFinite(+t.envN) ? +t.envN : 0, revBy: t.revBy || '', revAt: Number.isFinite(+t.revAt) ? +t.revAt : 0 }));
-    const snap = { fecha, v, at, by: by || '', byN: byN || '', motivo: motivo || '', ant: v > 1 ? v - 1 : null, fuentes, pcs, rows, exc, tot, dif: null };
+    /* jornada del día congelada en la publicación (para el Excel: asistencia A/I y horas de descanso médico) */
+    const cfgP = (T.find(x => cfgOk(x.cfg)) || {}).cfg || null; const dP = tpDia(cfgP);
+    const snap = { fecha, v, at, by: by || '', byN: byN || '', motivo: motivo || '', ant: v > 1 ? v - 1 : null, fuentes, pcs, rows, exc, tot, dif: null, cfg: cfgP, jor: dP.jh, nl: dP.nl };
     snap.dif = anterior ? tpDif(anterior, snap) : null;
     return snap;
   }

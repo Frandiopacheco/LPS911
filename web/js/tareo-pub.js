@@ -164,7 +164,9 @@ async function tpbPublicar(){const st=tpbCalc();if(!st.ok)return;const f=TPB.f,R
     ok:rect?'Publicar rectificación':'Publicar',input:rect?{label:'Motivo de la rectificación',required:true}:undefined});
   if(r===false||r==null)return;const motivo=rect?String(r).trim():'';if(rect&&!motivo){toast('Escribe el motivo de la rectificación.');return}
   if(TPB.f!==f||TPB.busy)return;TPB.busy='pub';TPB.err='';requestRender();
-  try{const d=await tpCall({accion:'publicar',fecha:f,excepciones:exc,...(rect?{motivo}:{})});toast(`Tareo del ${fmtD(f)} publicado${d&&d.v?' · versión '+d.v:''}`);
+  try{const d=await tpCall({accion:'publicar',fecha:f,excepciones:exc,firma:(TPB.prev&&TPB.prev.firma)||undefined,...(rect?{motivo}:{})});
+    if(d&&d.ok===false){TPB.prev=d;TPB.pf=f;TPB.at=NOW();toast('No se publicó: hay bloqueos. Revísalos abajo.');requestRender();return}
+    toast(`Tareo del ${fmtD(f)} publicado${d&&d.v?' · versión '+d.v:''}`);
     TPB.busy='';TPB.prev=null;TPB.pf='';TPB.exc={};tpbPrevia()}
   catch(e){TPB.err=tpErr(e);const det=e&&e.details;if(det&&Array.isArray(det.bloqueos)&&TPB.prev&&TPB.pf===f)TPB.prev={...TPB.prev,bloqueos:det.bloqueos}}
   finally{if(TPB.busy==='pub')TPB.busy='';requestRender()}}
