@@ -184,7 +184,7 @@ function toList(f){const L=[],seen=new Set();
   for(const c of tCaps())if(!seen.has(c.id)&&asg.get(c.id))L.push({id:'',cap:c.id,name:c.name,t:null,n:asg.get(c.id)});
   return L.sort((a,b)=>(TO_ORD[a.t?a.t.st||'bor':'sin']??9)-(TO_ORD[b.t?b.t.st||'bor':'sin']??9)||a.name.localeCompare(b.name))}
 
-function renderTDia(main){
+function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(main)}
   if(me&&me.role==='tcos'){toUnsub();main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Tareos del día','')}<div class="callout t-soon">Los tareos aparecen aquí cuando el jefe de producción los publique (fase 3).</div></div></div>`;return}
   const hoy=todayIso();if(!TD.f)TD.f=hoy;const f=TD.f;toSub(f);
   const L=toList(f);let env=0,hh=0,he=0,fal=0;const mot={};
