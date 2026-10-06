@@ -128,7 +128,7 @@ function tcHtml(){const D=TCS.doc,hoy=todayIso();
   const bar=ro?'':`<div class="tc-steps" role="tablist">${steps.map(([n,l,ok])=>`<button type="button" role="tab" class="tc-step${TCS.step===n?' on':''}${ok&&TCS.step!==n?' ok':''}" data-tcs="${n}" aria-selected="${TCS.step===n}"><i>${ok&&TCS.step!==n?'✓':n}</i><span>${l}</span></button>`).join('')}</div>`;
   const nl=tcJor(TCS.date).h===0?`<div class="tc-note">Día no laborable: todas las horas cuentan como extra.</div>`:'';
   const ban=D.st==='reab'?`<div class="callout tc-reab"><b>Te reabrieron este tareo</b>${D.reab&&D.reab.mot?`<span>Motivo: ${esc(D.reab.mot)}</span>`:''}<span>Corrige y vuelve a enviarlo.</span></div>`
-    :ro?`<div class="callout tc-sent"><b>Enviado ✓${D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})):''}</b><span>${D.st==='env'?'Ya no se puede cambiar. Si hay un error, pide al asistente de tareo que lo reabra.':D.st==='rev'?'Revisado por el asistente de tareo.':'Publicado.'}</span></div>`:'';
+    :ro?`<div class="callout tc-sent${D.st==='rev'?' tc-rev':''}"><b>Enviado ✓${D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})):''}</b><span>${D.st==='env'?'Ya no se puede cambiar. Si hay un error, pide al asistente de tareo que lo reabra.':D.st==='rev'?'Revisado por la oficina.':'Publicado.'}</span></div>`:'';
   let body='';
   if(ro)body=tcStep3(D,[],true);else if(TCS.step===1)body=tcStep1(D);else if(TCS.step===2)body=tcStep2(D);else body=tcStep3(D,E,false);
   let foot='';

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion } from 'firebase/firestore';
 
 const OWNER = 'frandiopacheco@gmail.com';
 let env;
@@ -670,6 +670,39 @@ test('tareo: el asistente reabre; el capataz corrige y reenvía; nadie borra; je
   await assertFails(setDoc(doc(user('jefe@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
   await assertFails(setDoc(doc(user('tcos@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
   await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
+});
+// ── Tareo F2: revisión del asistente (cotejo de firmas, garita, corrección, revisado) ──
+test('tareo F2: el asistente revisa; el capataz no pasa a revisado, no edita un revisado ni reescribe el historial', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1'), a = user('tasis@obra.pe');
+  const H0 = [{ t: 1, by: 'u_tcap1', a: 'env' }];
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'env', rows: { '11111111': { as: true } }, hist: H0 });
+  // el capataz no marca revisado ni toca un enviado (cotejo, garita, historial)
+  await assertFails(updateDoc(doc(p, id), { st: 'rev' }));
+  await assertFails(updateDoc(doc(p, id), { 'rows.11111111.fir': true }));
+  // el asistente coteja firmas y garita, corrige y marca revisado
+  await assertSucceeds(updateDoc(doc(a, id), { 'rows.11111111.fir': true, 'rows.11111111.gar': '17:05', hist: arrayUnion({ t: 2, by: 'tasis@obra.pe', a: 'fir' }) }));
+  await assertSucceeds(updateDoc(doc(a, id), { blq: [], hist: arrayUnion({ t: 3, by: 'tasis@obra.pe', a: 'cor', mot: 'Hora mal', cam: 'x' }) }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'rev', revAt: 4, revBy: 'tasis@obra.pe', hist: arrayUnion({ t: 4, by: 'tasis@obra.pe', a: 'rev' }) }));
+  // revisado: el capataz no lo cambia (ni lo vuelve a enviar)
+  await assertFails(updateDoc(doc(p, id), { st: 'env' }));
+  await assertFails(updateDoc(doc(p, id), { blq: [{ id: 'b1' }] }));
+  await assertFails(updateDoc(doc(p, id), { st: 'rev', blq: [] }));
+  // el jefe con tpub solo lee
+  await assertFails(updateDoc(doc(user('jefe@obra.pe'), id), { st: 'env' }));
+  // quitar revisado (rev → env) y reabrir desde revisado: el asistente sí
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env', hist: arrayUnion({ t: 5, by: 'tasis@obra.pe', a: 'qrev', mot: 'm' }) }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), id), { st: 'rev' }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 6, by: 'tasis@obra.pe', mot: 'm' }, hist: arrayUnion({ t: 6, by: 'tasis@obra.pe', a: 'reab' }) }));
+  await assertFails(deleteDoc(doc(a, id)));
+  // reabierto: el capataz solo agrega al final del historial (no borra ni cambia lo de la oficina)
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data().hist; });
+  await assertFails(updateDoc(doc(p, id), { hist: [] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...cur.slice(0, -1), { ...cur[cur.length - 1], mot: 'otro' }] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...cur, { t: 7, a: 'env' }, { t: 8, a: 'rev' }] }));
+  await assertFails(updateDoc(doc(p, id), { revBy: 'u_tcap1' }));
+  await assertFails(updateDoc(doc(p, id), { st: 'rev' }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur, { t: 7, by: 'u_tcap1', a: 'env' }] }));
 });
 test('tfot: el capataz sube las fotos de su tareo; nadie las cambia ni borra', async () => {
   const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1', id = `tfot/${h}_${me}_1`;
