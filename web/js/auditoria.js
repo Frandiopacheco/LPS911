@@ -262,14 +262,18 @@ function vaBanner(){let b=$('#vabar');if(!VA||!me){if(b)b.remove();return}const 
 /* vista celular: la app dentro de un marco del tamaño de un teléfono (mismo usuario y mismo "Ver como") */
 const IN_FRAME=window.top!==window;if(IN_FRAME)document.documentElement.classList.add('in-frame');
 const PHONES=[['iphone','iPhone (390 × 844)',390,844],['android','Android (360 × 780)',360,780],['chico','Celular chico (320 × 640)',320,640],['tablet','Tablet (768 × 1024)',768,1024]];
+/* «Girar»: celular echado (ancho y alto intercambiados; la app de adentro ve orientación horizontal) */
+let PH_ROT=false;
+const phDims=d=>PH_ROT?`width:min(${d[3]}px,calc(100vw - 40px));height:min(${d[2]}px,calc(100vh - 110px))`:`width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))`;
 function phonePreview(dev){if(IN_FRAME)return;const el0=$('#phprev');if(el0&&!dev){el0.remove();return}const d=PHONES.find(q=>q[0]===dev)||PHONES[0];
   let el=el0;if(!el){el=document.createElement('div');el.id='phprev';el.className='phprev';document.body.appendChild(el)}
   const src=`${location.pathname}?vista=celular${me&&U.tab?'#'+U.tab:''}`;
-  el.innerHTML=`<div class="phbar"><b>📱 Vista celular</b><select id="phdev" aria-label="Equipo">${PHONES.map(q=>`<option value="${q[0]}"${q[0]===d[0]?' selected':''}>${q[1]}</option>`).join('')}</select><button class="ib" id="phrel">Recargar</button><button class="ib" id="phwin" title="Abre la app en una ventana aparte del tamaño del celular (si el marco no carga)">Abrir aparte ↗</button><span class="mu">${VA?'Viendo como '+esc(ROLE[VA.role]||VA.role):'Con tu usuario'} · lo que guardes se guarda de verdad</span><span style="flex:1"></span><button class="ib pri" id="phx">Cerrar</button></div>
+  el.innerHTML=`<div class="phbar"><b>📱 Vista celular</b><select id="phdev" aria-label="Equipo">${PHONES.map(q=>`<option value="${q[0]}"${q[0]===d[0]?' selected':''}>${q[1]}</option>`).join('')}</select><button class="ib" id="phrot" title="Ver el celular echado (horizontal) o parado" aria-pressed="${PH_ROT}">⟲ Girar</button><button class="ib" id="phrel">Recargar</button><button class="ib" id="phwin" title="Abre la app en una ventana aparte del tamaño del celular (si el marco no carga)">Abrir aparte ↗</button><span class="mu">${VA?'Viendo como '+esc(ROLE[VA.role]||VA.role):'Con tu usuario'} · lo que guardes se guarda de verdad</span><span style="flex:1"></span><button class="ib pri" id="phx">Cerrar</button></div>
    <div class="phmsg" id="phmsg" role="status" hidden></div>
-   <div class="phwrap"><div class="phone" style="width:${d[2]}px;height:min(${d[3]}px,calc(100vh - 110px))"><iframe title="La app en tamaño celular" src="${src}"></iframe></div></div>`;
+   <div class="phwrap"><div class="phone" style="${phDims(d)}"><iframe title="La app en tamaño celular" src="${src}"></iframe></div></div>`;
   el.onclick=e=>{if(e.target.id==='phx'||e.target===el)el.remove();if(e.target.id==='phrel'){const f=el.querySelector('iframe');if(f){phMsg('');f.src=f.src}}
-    if(e.target.id==='phwin')window.open(src,'lpsphone',`popup,width=${d[2]},height=${d[3]}`)};
+    if(e.target.id==='phwin')window.open(src,'lpsphone',PH_ROT?`popup,width=${d[3]},height=${d[2]}`:`popup,width=${d[2]},height=${d[3]}`);
+    if(e.target.id==='phrot'){PH_ROT=!PH_ROT;const ph=el.querySelector('.phone');if(ph)ph.style.cssText=phDims(d);e.target.setAttribute('aria-pressed',String(PH_ROT))}};
   el.onchange=e=>{if(e.target.id==='phdev')phonePreview(e.target.value)};phWatch(el.querySelector('iframe'))}
 /* si el marco no muestra la app (encabezados que impiden enmarcarla, un error al arrancar o se queda «cargando»), lo dice en la barra
    en vez de quedar en blanco, con «Abrir aparte» como salida */

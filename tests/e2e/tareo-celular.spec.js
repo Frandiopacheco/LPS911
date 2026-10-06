@@ -93,6 +93,19 @@ test.describe('celular (390 px)', () => {
 
 test.describe('«📱 Vista celular» del administrador', () => {
 
+  test('«⟲ Girar» echa el celular: la app de adentro queda en horizontal y vuelve a vertical', async ({ page }) => {
+    await openApp(page, { as: 'admin', editar: false, extra: EXTRA });
+    await page.click('#modsel [data-mod="tar"]');
+    await page.click('#bpht');
+    const f = await marco(page);
+    const ori = () => f.evaluate(() => matchMedia('(orientation: landscape)').matches);
+    expect(await ori()).toBe(false);
+    await page.click('#phrot');
+    await expect.poll(ori).toBe(true);
+    await page.click('#phrot');
+    await expect.poll(ori).toBe(false);
+  });
+
   test('admin en el Tareo: el marco abre en la misma pestaña del Tareo', async ({ page }) => {
     const errors = await openApp(page, { as: 'admin', editar: false, extra: EXTRA });
     await page.click('#modsel [data-mod="tar"]');
