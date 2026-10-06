@@ -24,7 +24,7 @@ const TCS={date:'',cap:'',unsub:null,doc:null,loaded:false,exists:false,step:1,d
 const TC_FMAX=950000;
 
 const tcCalc=d=>tCalc(d);
-const tcBH=(f,a,b)=>tBlqH(f,a,b);
+const tcBH=(f,a,b)=>tBlqH(f,a,b,(TCS.doc&&TCS.doc.cfg)||undefined);
 
 /* ---------- utilidades ---------- */
 /** id del capataz en members: correo, o 'u_<uid>' si entró con enlace (base.js arma me.email así) */
@@ -49,8 +49,8 @@ const tcIv=k=>{const a=tMin(k&&k.ini),b=tMin(k&&k.fin);return a!=null&&b!=null&&
 const tcOv=(p,q)=>!!(p&&q&&p[0]<q[1]&&q[0]<p[1]);
 /** jornada del día y atajos de la jornada */
 function tcJor(date){const c=TC();const dw=String(pd(date).getUTCDay());const j0=c.jor[dw];const j=j0||c.jor['1']||{ini:'07:30',fin:'17:00',ref:60};
-  const ri=tMin(c.refIni),a=tMin(j.ini),b=tMin(j.fin);const S={todo:[j.ini,j.fin]};
-  if(ri!=null&&ri>a&&ri<b){S.man=[j.ini,c.refIni];const t=ri+(+j.ref||0);if(t<b)S.tar=[tcHM(t),j.fin]}
+  const rI=j.refIni||c.refIni;const ri=tMin(rI),a=tMin(j.ini),b=tMin(j.fin);const S={todo:[j.ini,j.fin]};
+  if(ri!=null&&ri>a&&ri<b){S.man=[j.ini,rI];const t=ri+(+j.ref||0);if(t<b)S.tar=[tcHM(t),j.fin]}
   return{j,h:j0?tJorH(j0):0,S,ri,ref:+j.ref||0}}
 /** cuadrilla: activos del máster con cap == mi id */
 function tcCrew(date){const cap=TCS.cap;return[...S.tper.values()].filter(p=>p&&!p.arch&&p.cap===cap&&tActivo(p,date))}
