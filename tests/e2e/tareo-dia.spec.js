@@ -125,12 +125,12 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
   noErrors(errors, 'tareos del día');
 });
 
-test('Tareos del día: el jefe de producción ve el detalle sin reabrir', async ({ page }) => {
+test('Tareos del día: el jefe de producción abre el detalle y puede reabrir (edición completa, 06-10-2026)', async ({ page }) => {
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${HOY}_tcap@obra.pe"] button`).click();
   await expect(page.locator('#trWs')).toContainText('Teodoro Capataz');
-  await expect(page.locator('#toReab')).toHaveCount(0);
+  await expect(page.locator('#toReab')).toBeVisible();
   noErrors(errors, 'jefe');
 });
 

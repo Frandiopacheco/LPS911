@@ -230,7 +230,8 @@ const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firma
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',sinTxt:''};
 const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos';
-const toReabOk=()=>!!me&&(isAdmin||me.role==='tasis');
+/* edita la oficina (coteja, corrige, revisa, reabre, pasa obreros): asistente, administrador y jefe de producción (editor con tpub) */
+const toReabOk=()=>!!me&&(isAdmin||me.role==='tasis'||(me.role==='editor'&&me.tpub===true));
 const toH=v=>(+v||0).toLocaleString('es-PE',{maximumFractionDigits:2});
 const toWho=e=>{const m=e&&MEM.get(e);return m&&m.name||e||''};
 const tHm=t=>t?new Date(t-LIMA_OFF).toISOString().slice(11,16):'';
