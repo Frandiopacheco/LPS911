@@ -535,6 +535,7 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 @media (max-width:760px){.lqcols,.lqcal{grid-template-columns:1fr}.lqtiles{grid-template-columns:repeat(2,minmax(0,1fr))}.lq2{grid-template-columns:1fr}.lqbar .ib,.lqchips button{min-height:40px}.lqbadge{width:22px;height:22px}}
 .phprev{position:fixed;inset:0;z-index:350;background:rgba(15,20,18,.6);display:flex;flex-direction:column}
 .phbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);color:var(--ink);padding:8px 14px;border-bottom:1px solid var(--line)}.phbar select{height:34px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);padding:0 8px}
+.phmsg{background:var(--warn-soft);color:var(--ink);border-bottom:1px solid var(--warn);padding:8px 14px;font-size:13px}.phmsg[hidden]{display:none}
 .phwrap{flex:1;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto}
 .phone{background:#111;border-radius:34px;padding:14px 10px;box-shadow:0 20px 60px rgba(0,0,0,.45);flex:none;max-width:100%}.phone iframe{width:100%;height:100%;border:0;border-radius:22px;background:#fff;display:block}
 html.in-frame .vabar,html.in-frame #bva,html.in-frame #bph{display:none!important}
@@ -1733,6 +1734,10 @@ body.mod-tar #fpiso,body.mod-tar .wk .lbl,body.mod-tar #wprev,body.mod-tar #wnex
 .t-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .t-bar .tin{height:var(--h-ctl,34px)}
 .t-q{flex:1 1 220px;min-width:0;max-width:320px}
+/* Personal: conteo de cada estado con los demás filtros (tPerSelects) */
+.t-fn{font:500 11px var(--f-mono);opacity:.75}
+#tperClr:disabled{opacity:.45;cursor:default}
+@media (max-width:760px){.t-q{max-width:none;flex-basis:100%}#tperEst{display:flex;flex:1 1 100%}#tperEst button{flex:1 1 auto;padding:0 4px;font-size:13px;white-space:nowrap}.t-bar select.tin{flex:1 1 150px;min-width:0}#tperClr{flex:1 1 100%;min-height:40px}}
 .t-selbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid var(--line);background:var(--accent-soft)}
 .t-selbar[hidden]{display:none}
 .t-tbl td{vertical-align:middle}
