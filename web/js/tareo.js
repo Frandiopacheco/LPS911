@@ -148,6 +148,7 @@ function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};con
   return{...d,rows}}
 /** problemas del tareo: [{dni|null, k, msg, warn?}] (mensajes para el capataz). Los que traen `warn:true` son observaciones que NO
     bloquean (k:'parcial' jornada parcial): para bloquear el envío o «Marcar revisado» filtra `!o.warn`. Sin bloqueantes = se puede enviar.
+    El motivo de «no vino» es opcional (ya no hay k:'mot').
     Un obrero que no vino puede seguir en sus bloques (no es error: tCalc le da 0 h y los recupera si vuelve a «vino»). */
 const tHtxt=v=>String(tR2(+v||0)).replace('.',',');
 function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
@@ -162,7 +163,7 @@ function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso
     if(!Array.isArray(b.dnis)||!b.dnis.length)out.push({dni:null,k:'quien',msg:`${lb}: marca quiénes trabajaron.`})});
   for(const[dni,r]of Object.entries(rows)){
     if(r.as!==true&&r.as!==false){out.push({dni,k:'marca',msg:`Falta marcar si vino: ${(r&&r.ape)||nm(dni)}`});continue}
-    if(!r.as){if(!r.mot)out.push({dni,k:'mot',msg:`${nm(dni)}: elige el motivo de la falta.`});continue}
+    if(!r.as)continue;/* no vino: el motivo es opcional (observaciones del dueño, oct 2026) */
     const L=tBlqDe(blq,dni).filter(tBlqOk).map(b=>[tMin(b.ini),tMin(b.fin),b]).sort((x,y)=>x[0]-y[0]);
     if(!L.length){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponlo en un bloque o márcalo como falta.`});continue}
     let m=L[0],cx=false;for(let i=1;i<L.length;i++){if(L[i][0]<m[1]){cx=true;out.push({dni,k:'cruce',msg:`${nm(dni)}: dos bloques se cruzan (${m[2].ini}–${m[2].fin} y ${L[i][2].ini}–${L[i][2].fin}).`});break}if(L[i][1]>m[1])m=L[i]}

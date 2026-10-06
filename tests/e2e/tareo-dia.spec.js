@@ -59,7 +59,7 @@ test('cálculo: horas por bloque, extra, cruces y validaciones', async ({ page }
   expect(r.noMuta).toBe(true);
   expect(r.vOk).toEqual([]);
   expect(r.vCruce.map(x => [x.dni, x.k])).toEqual([['d1', 'cruce']]);
-  expect(r.vAus.map(x => [x.dni, x.k])).toEqual([['d2', 'mot']]);
+  expect(r.vAus).toEqual([]); // el motivo de «no vino» es opcional (observaciones del dueño, oct 2026)
   expect(r.vFoto.map(x => [x.dni, x.k])).toEqual([[null, 'foto']]);
   expect(r.vMalo.map(x => x.k)).toEqual(['hora', 'sinh']);
   expect(r.vVacio.map(x => x.k)).toEqual(['vacio']);

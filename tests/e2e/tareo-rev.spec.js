@@ -241,7 +241,7 @@ test('corrección: quitar y volver a marcar «vino» no le quita las horas al ob
   await expect(alfa).toContainText(/8[.,]5/);
   await m.locator('#tre_as_11111111').uncheck();
   await expect(alfa).not.toContainText(/8[.,]5/);
-  await expect(m.locator('#trEdObs')).not.toContainText('figura en el');
+  await expect(m.getByText('figura en el')).toHaveCount(0); // sin motivo ya no hay observaciones (#trEdObs puede no estar)
   await m.locator('#tre_as_11111111').check();
   await expect(alfa).toContainText(/8[.,]5/);
   // guardar con ALFA como falta: conserva sus bloques con 0 h

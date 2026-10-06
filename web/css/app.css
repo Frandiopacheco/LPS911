@@ -1995,6 +1995,28 @@ label.tc-lab{flex-direction:column;align-items:stretch;gap:6px}
 .tc-pcl{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .tc-pcb{min-height:44px;height:auto;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 12px;text-align:left}.tc-pcb span{font-size:12.5px;font-weight:400;color:var(--muted)}
 .tc-pcb.on{border-color:var(--warn)}
+/* observaciones del dueño (oct 2026): motivo opcional, obrero de otra cuadrilla, quiénes con su ocupación en otros trabajos */
+.tc-mlab{font-size:13.5px;font-weight:600;color:var(--ink2);margin-bottom:-2px}.tc-mlab span{font-weight:400;color:var(--muted)}
+.tc-aj{align-self:flex-start;margin-top:2px;font-style:normal;font-size:12.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:1px 8px}
+.tc-whb{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tc-whb .ib{height:44px;font-size:14.5px}
+.tc-who{flex-direction:column;flex-wrap:nowrap}
+.tc-who .tc-pp{width:100%;flex-direction:row;align-items:flex-start;gap:10px;border-radius:var(--r-ctl);padding:8px 10px;text-align:left;background:var(--panel);color:var(--ink)}
+.tc-who .tc-pp .tc-ppn{text-decoration:none;font-weight:700;font-size:15px}
+.tc-ppk{flex:none;width:24px;height:24px;margin-top:1px;border:2px solid var(--line2);border-radius:6px;display:grid;place-items:center;font:700 15px var(--f-ui)!important;color:var(--accent-ink)!important;background:var(--panel)}
+.tc-ppd{flex:1;min-width:0;display:flex!important;flex-direction:column;gap:2px;font:inherit!important;color:inherit!important}
+.tc-who .tc-pp small{font:12.5px var(--f-mono);color:var(--ink2);overflow-wrap:anywhere}
+.tc-who .tc-pp small.tc-ppf{font-family:var(--f-ui);color:var(--muted);font-weight:600}
+.tc-ppb{position:relative;display:block;height:6px;margin-top:3px;border-radius:3px;background:var(--line2);overflow:hidden}
+.tc-ppb>i{position:absolute;left:0;top:0;bottom:0;background:var(--muted)}.tc-ppb>i.tc-ppe{background:var(--accent)}
+.tc-who .tc-pp.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.tc-who .tc-pp.on .tc-ppk{background:var(--accent);border-color:var(--accent)}
+.tc-who .tc-pp.full:not(.on){opacity:.55}
+.tc-who .tc-pp.full .tc-ppb>i:first-child{background:var(--ok)}
+.tc-who .tc-pp.cx{background:var(--bad-soft);border-color:var(--bad)}.tc-who .tc-pp.cx .tc-ppk{background:var(--bad);border-color:var(--bad)}
+.tc-who .tc-pp.cx .tc-ppe{background:var(--bad)}
+.tc-who .tc-pp small.tc-ppx{font-family:var(--f-ui);color:var(--bad);font-weight:600}
+.tc-who .tc-pp.oc small.tc-ppx{color:var(--muted);font-weight:500}
+.tc-who .tc-pp.nv{flex-direction:row;align-items:center;justify-content:space-between}
 @media (min-width:761px){.tc{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 /* tareo: revisión (F2, tareo-rev.js). Solo variables existentes: el modo oscuro sale de ellas */
 .tr-lqc>*{flex-shrink:0}
