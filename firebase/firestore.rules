@@ -414,7 +414,10 @@ service cloud.firestore {
       // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
       // oficina (asistente, administrador y jefe de producción): primero lo que no lee documentos (tOfiUpd), luego quién es
       // (el registro de members es el mismo documento para tarEd/tpubEd/isTar: no suma accesos al guardado del capataz)
-      allow update: if ((tOfiUpd() || request.resource.data == resource.data) && tOfiEd()) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
+      // OJO límite de accesos por pedido: cada rama empieza por una condición que no lee documentos y que la otra no cumple
+      // (el capataz solo guarda su propio tareo: cap == su id; la oficina nunca es el capataz del tareo).
+      allow update: if (resource.data.get('cap', '') != mid() && (tOfiUpd() || request.resource.data == resource.data) && tOfiEd())
+        || (resource.data.get('cap', '') == mid() && isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
