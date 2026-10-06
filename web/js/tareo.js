@@ -117,7 +117,8 @@ const tName=p=>[p.ape,p.nom].filter(Boolean).join(', ');
 const tLive=()=>[...S.tper.values()].filter(p=>!p.arch);
 
 /* ---------- Tareos del día (F0: resumen) ---------- */
-function renderTDia(main){const hoy=todayIso();const act=tLive().filter(p=>tActivo(p,hoy));
+function renderTDia(main){if(me&&me.role==='tcap')return renderTCap(main);
+  const hoy=todayIso();const act=tLive().filter(p=>tActivo(p,hoy));
   const byCua=new Map(),byCap=new Map();let sinCap=0;for(const p of act){const k=p.cua||'(sin cuadrilla)';byCua.set(k,(byCua.get(k)||0)+1);if(p.cap)byCap.set(p.cap,(byCap.get(p.cap)||0)+1);else sinCap++}
   const pcs=[...S.tpc.values()].filter(x=>x.act!==false&&!x.arch);const grp=new Set(pcs.map(x=>x.grp));
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Tareos del día',esc(fmtD(hoy)))}
