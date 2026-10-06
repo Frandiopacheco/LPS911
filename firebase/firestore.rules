@@ -52,6 +52,7 @@ service cloud.firestore {
     // Trabajo no programado visto en obra: campo, editores, administrador, Calidad y veedores
     function canNP() { return canDaily() || isVeedor() || isCal(); }
     function areaRestrOk(d) { return areaOf() != '' && d.get('area', '') == areaOf() && d.get('grp', 'area') == 'area'; }
+    function invDoc(c) { return get(/databases/$(database)/documents/inv/$(c)).data; }
     function invOk(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
     function scPdzOld(d) { return d.get('sc', '') in scsOf() && !(d.get('kind', '') in ['xok', 'aviso', 'pub'])
       && !(d.get('kind', '') == 'nova' && (d.get('k', '') != '' || d.get('ids', null) != null || d.get('draft', false) == true || d.get('eng', false) == true)); }
@@ -85,11 +86,19 @@ service cloud.firestore {
       allow read: if canDaily() || (signedIn() && mail == mid()) || (isMember() && role() == 'tasis');
       allow write: if isAdmin() && (mail == mail.lower() || mail.matches('u_.*'));
       // el capataz se registra solo con un enlace vigente, y solo para la partida del enlace
+      // (una invitación del tareo, role:'tcap', no sirve para entrar como capataz de un SC ni al revés)
       allow create: if anon() && mail == 'u_' + request.auth.uid
         && request.resource.data.role == 'capataz'
         && request.resource.data.keys().hasOnly(['role', 'name', 'scs', 'sc', 'inv', 'added'])
         && invOk(request.resource.data.inv)
-        && request.resource.data.scs == get(/databases/$(database)/documents/inv/$(request.resource.data.inv)).data.scs;
+        && invDoc(request.resource.data.inv).get('role', 'capataz') == 'capataz'
+        && request.resource.data.scs == invDoc(request.resource.data.inv).scs;
+      // capataz del tareo (consorcio): con una invitación role:'tcap', sin partida
+      allow create: if anon() && mail == 'u_' + request.auth.uid
+        && request.resource.data.role == 'tcap'
+        && request.resource.data.keys().hasOnly(['role', 'name', 'inv', 'added'])
+        && invOk(request.resource.data.inv)
+        && invDoc(request.resource.data.inv).get('role', 'capataz') == 'tcap';
       // el capataz puede cambiar solo su nombre
       allow update: if anon() && mail == 'u_' + request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
@@ -328,6 +337,42 @@ service cloud.firestore {
     match /tcfg/{id} {
       allow read: if isTar();
       allow write: if isAdmin();
+    }
+    // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
+    function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
+    // fecha YYYY-MM-DD entre hace 3 días y hoy (hora de Lima, UTC-5; tolera un día por el reloj y la zona)
+    function tDateOk(d) {
+      return d is string && d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) <= request.time - duration.value(5, 'h') + duration.value(1, 'd')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) >= request.time - duration.value(5, 'h') - duration.value(4, 'd');
+    }
+    // el id termina en _<mi id> (para abrir su día aunque aún no exista)
+    function idMine(id) { return id.size() > 11 && id[11:id.size()] == mid() && id[10:11] == '_'; }
+    function tcapNew(id) {
+      let d = request.resource.data;
+      return d.get('cap', '') == mid() && d.get('date', null) is string && id == d.date + '_' + mid() && tDateOk(d.date);
+    }
+    match /tareo/{id} {
+      allow get: if isTar() && (tarRole() == 'ofi'
+        || (tarRole() == 'tcap' && (resource == null ? idMine(id) : resource.data.get('cap', '') == mid())));
+      allow list: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
+      allow create: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
+        && request.resource.data.get('st', 'bor') in ['bor', 'env']
+        && !request.resource.data.keys().hasAny(['reab', 'pub']));
+      allow update: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
+        && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
+        && resource.data.get('st', 'bor') in ['bor', 'reab']
+        && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub']));
+    }
+    // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
+    match /tfot/{id} {
+      allow read: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
+      allow create: if request.resource.data.get('d', null) is string && request.resource.data.d.size() < 1000000
+        && (tarEd() || (isTar() && tarRole() == 'tcap' && request.resource.data.get('cap', '') == mid()
+          && request.resource.data.get('date', null) is string && tDateOk(request.resource.data.date)
+          && id.size() > (request.resource.data.date + '_' + mid()).size()
+          && id[0:(request.resource.data.date + '_' + mid()).size()] == request.resource.data.date + '_' + mid()));
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);

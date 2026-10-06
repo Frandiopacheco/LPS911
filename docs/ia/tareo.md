@@ -87,6 +87,36 @@ Colecciones nuevas, todas por `fcol()`:
 - Los roles de solo tareo (`tcap`, `tasis`, `tcos`) **no** leen las colecciones de LPS ni escriben en ellas (las funciones de lectura existentes que usan `isMember()` deben excluirlos).
 - `members`: `tasis` puede leer la lista (para asignar obreros a capataces); el `tcap` con enlace de invitación se registra como `capataz` hoy: en F1 se agrega la variante `tcap`.
 
+## Contrato de F1: tareo del capataz en el celular
+
+### Datos
+
+- `tareo/{fecha}_{capId}` — un tareo por capataz y día (`capId` = id de `members` del capataz; si tiene `/` no aplica: los ids de members son correo o `u_<uid>`). Campos:
+  - `date` (`YYYY-MM-DD`), `cap` (capId), `capN` (nombre del capataz), `st`: `'bor'` borrador · `'env'` enviado · `'reab'` reabierto por el asistente · `'rev'` revisado (F2) · `'pub'` publicado (F3).
+  - `rows`: `{ <dni>: {ape, nom, cat, cua, as, mot, alt, ini, fin, h, trab, ext} }` — foto de la ficha (`ape, nom, cat, cua`) al agregarlo; `as` true = vino; `mot` motivo si no vino (`DM` descanso médico, `DA` descanso por accidente, `SU` suspensión, `SM` subsidio por maternidad, `SE` subsidio por enfermedad, `VA` vacaciones, `FA` falta, `LS` licencia sin goce, `L` liquidado); `alt` = trabajo en altura (bono (A)); `ini`/`fin` = primera entrada y última salida (de sus bloques); `h` = `{<pcId>: horas}`; `trab`/`ext` = horas trabajadas/extra (de `tCalcRow`).
+  - `blq`: `[{id, pc, ini, fin, dnis:[...]}]` — lo que llena el capataz: partida + horario + quiénes. `rows[*].h/ini/fin/trab/ext` se **recalculan** de `blq` con `tCalc(doc)` antes de guardar (no se editan a mano en F1).
+  - `foto`: `[fotoId,…]` — fotos del formato físico firmado en `tfot/{fotoId}` `{date, cap, n, d:<dataURL jpeg>, by, ts}` (JPEG reducido a ~1600 px de lado mayor, calidad 0.7; < 900 KB por documento; si es más, en trozos `d0,d1…` NO: reducir más).
+  - `envAt`, `envBy`, `reab: {t, by, mot}`, `hist: [{t, by, a, mot}]` (`a`: `'env'|'reab'|'cor'|…`), `by`, `ts`.
+- **Cálculo** (en `tareo.js`, funciones puras globales):
+  - `tBlqH(fecha, ini, fin)` → horas del bloque descontando el refrigerio si lo cruza (misma regla que `tHoras`, sin extra).
+  - `tCalc(doc)` → doc con `rows` recalculados: por obrero presente, `h[pc]` = suma de sus bloques; `ini`/`fin` = mín/máx; `trab`/`ext` con `tHoras(fecha, ini, fin)` ajustado a la suma real de horas (si hay huecos entre bloques, `trab` = suma de bloques y `ext` = max(0, trab − jornada del día)).
+  - `tValida(doc)` → `[{dni|null, k, msg}]`: presente sin horas; ausente sin motivo; dos bloques del mismo obrero que se cruzan; bloque con fin ≤ ini o fuera de 05:00–23:59; sin foto (`k:'foto'`); sin obreros. `tValida(doc).length===0` es requisito para enviar.
+- Reglas (`firestore.rules`):
+  - `tareo`: lee `isTar()` salvo `tcap` (solo los suyos: `resource.data.cap == mid()`) y `tcos` (nada hasta F3). Crea/actualiza el `tcap` solo si `cap == mid()`, el id es `date + '_' + mid()`, y el estado anterior es `bor`/`reab` (o no existe) y el nuevo `bor`/`reab`/`env`; no puede cambiar `cap`/`date`; `date` no más de 3 días atrás ni en el futuro. `tasis`/`admin` actualizan cualquiera (reabrir = `st:'reab'`). Nadie borra.
+  - `tfot`: crea el `tcap` con `cap == mid()`; leen `isTar()` (el tcap solo las suyas); nadie actualiza ni borra.
+  - `inv`: variante de invitación para capataces del tareo: `inv/{code}` con `role:'tcap'` (sin `scs`); `members` create anónimo con `role:'tcap'` y `keys().hasOnly(['role','name','inv','added'])` si `invOk` y la invitación es `tcap`.
+
+### Pantallas
+
+- **`tcap`** (solo celular, `web/js/tareo-cap.js`): al entrar va directo a su tareo de hoy (`tdia` muestra `renderTCap` si `me.role==='tcap'`). Fecha arriba (hoy; puede elegir ayer o anteayer si no lo envió). Tres pasos con barra de progreso:
+  1. **¿Quién vino?** Lista de su cuadrilla (`tper` activos con `cap == mi id`, más los que agregó ese día), todos marcados «vino» por defecto; tocar = «faltó» → chips de motivo (obligatorio). «+ Agregar obrero» busca por DNI o apellido en todos los activos (avisa si es de otro capataz). Casilla «altura» por obrero (o en el paso 2 por bloque, que marca a sus obreros).
+  2. **¿En qué trabajaron?** Bloques: partida (buscador con las más usadas por este capataz arriba, por código o nombre), horario (inicio/fin con atajos de la jornada: «mañana» 7:30–12:00, «tarde» 13:00–17:00, «todo el día»), quiénes (por defecto todos los que vinieron; tocar para quitar). Barra por obrero: horas asignadas vs jornada; aviso si a alguien le faltan horas. Editar/duplicar/borrar bloque.
+  3. **Revisar y enviar:** por obrero horario, horas, extra, altura; foto del formato firmado (cámara: `<input type=file accept=image/* capture=environment>`), obligatoria; «Enviar tareo» con `uiAsk`. Tras enviar: solo lectura con estado «Enviado ✓ · hora». Si el asistente lo reabre: aviso arriba con el motivo y vuelve a editable.
+  - Guarda borrador automáticamente (debounce ~1 s) en `tareo`; funciona sin señal (persistencia de Firestore ya activa: `enablePersistence`), mostrando «Guardado en el celular · se enviará al tener señal» cuando la escritura no se confirmó.
+  - Botones ≥ 44 px, texto grande, nada de tablas anchas.
+- **Personal de oficina** (`tasis`, `admin`, editor con `tpub`) en `tdia` (`renderTDia`, PC y celular): selector de fecha; lista de capataces con tareo (o que tienen obreros asignados y no han enviado): estado (sin empezar / borrador / enviado / reabierto), obreros, faltas, HH, HE, observaciones de `tValida`. Abrir uno: detalle de solo lectura (obreros × partidas, fotos ampliables) y, para `tasis`/`admin`, «Reabrir al capataz» (motivo obligatorio con `uiAsk` input). Bandeja completa, corrección directa y cotejo de firmas son F2.
+- **Equipo** (config-equipo.js): crear enlace/QR de invitación para capataces del tareo (como el de capataces de SC, pero con `role:'tcap'`); `capJoin` (base.js) registra `role:'tcap'` sin `scs` cuando la invitación es `tcap`.
+
 ## Lo que dice el Excel que hoy recibe costos (semana 28.09–04.10)
 
 - Una hoja por día (`'02.10'`): filas = obreros (N°, nombre, cuadrilla, DNI, categoría), columnas = partidas de control agrupadas (Obras provisionales, M. Tierras, Estructura, Arquitectura, Instalaciones, Varios), valor = horas; al final «Horas totales», «Horas extras» (= total − 8,5) y «Bonos» con `(A)` = **bono por trabajo en altura**. Leyenda: DM = descanso médico.
@@ -106,8 +136,26 @@ Colecciones nuevas, todas por `fcol()`:
 - Importar el máster nunca toca `cap`, nunca archiva; solo informa a quienes no están en el archivo. Una categoría editada a mano se respeta salvo que cambie el puesto.
 - Ids de partidas: `p10_05` (`tPcId`).
 
+## Decisiones tomadas al implementar F1 (oficina y cálculo)
+
+- `tBlqH`, `tCalc`, `tValida` están en `tareo.js` (puros; `tareo-cap.js` los usa, no los redefine). Horas redondeadas a 2 decimales (`tR2`), sin redondeo a media hora.
+  - Un bloque cuenta solo si tiene partida y horario válido (05:00–23:59, salida > entrada); si no, `tValida` lo marca.
+  - `tCalc`: `ext` = max(0, trab − `tJorH` del día); domingo/feriado (`tNoLab`) todo es extra. Ausentes: `h:{}`, `ini/fin:''`, `trab/ext:0`.
+  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `falto` (obrero marcado falta dentro de un bloque), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
+- `renderTDia` (oficina): globales con prefijo `to`/`TO_` (`TD` estado, `toSub`/`toUnsub`, `toList`, `toStats`, `toDetalle`, `toReabrir`, `TO_MOT` motivos de falta, `TO_ST` estados). CSS al final de `app.css` con prefijo `.to-`.
+  - Suscripción temporal `fcol('tareo').where('date','==',fecha)` (`TD.sub`): cambia al cambiar de fecha; al salir de la pestaña se suelta en la siguiente llegada de datos (no hay gancho de salida de vista) y al cerrar sesión (`unsubs`).
+  - Lista: tareos del día + capataces `tcap` con obreros activos asignados sin tareo («Sin empezar»). Orden: enviado, reabierto, borrador, sin empezar, revisado, publicado. «Enviados» del resumen = `env`/`rev`/`pub`.
+  - Fecha: flechas y selector; no pasa de hoy. `tcos` ve el aviso de F3 (no se suscribe).
+  - Reabrir (solo `admin`/`tasis`, solo `st:'env'`): `update({st:'reab', reab:{t,by,mot}, hist: arrayUnion({t,by,mot,a:'reab'}), by, ts})`.
+  - Fotos: lee `tfot/{id}` al abrir el detalle (caché `TD.fotos`), miniatura y ampliar (`.to-zoom`).
+
 ## Pendientes
 
-- F1: colección `tareo/{fecha}_{capId}` y pantallas del celular.
 - Formato del Excel de costos (lo enviará el dueño) — F3.
 - Jornada oficial (asumida arriba, editable en `tcfg`).
+
+## Decisiones tomadas al implementar F1 (reglas e invitación)
+
+- Reglas `tareo`: el `tcap` puede hacer `get` de su día aunque no exista (id `<fecha>_<mi id>`); sus consultas deben filtrar `where('cap','==',mid)`. Fecha válida: entre hoy−4 y hoy+1 en hora de Lima (tolerancia de un día por reloj/zona; la app ofrece hoy, ayer y anteayer). El `tcap` no crea con `st:'reab'`, no toca `reab` ni `pub`, y desde `reab` solo queda en `reab` o pasa a `env`. `tfot`: id empieza con `<fecha>_<mi id>`, `d` texto < 1 000 000 caracteres.
+- Invitación del tareo: `inv/{code}` `{role:'tcap', active, exp, by, ts}` (sin `scs`). El enlace lleva `&m=tar` (`localStorage` `lps.invm`) para que la pantalla de registro hable del tareo antes de iniciar sesión. En Equipo › Capataces se elige «Capataz del tareo (consorcio)» en el mismo selector de partida (`__tcap`); el código está en `en-obra-tablero.js` (`newInvite(scs,tcap)`, `invWho`, filas `tr[data-invtar]`). La variante `capataz` de `members` exige que la invitación no sea `tcap`.
+- Fake de pruebas: `signInAnonymously` crea un usuario anónimo (`E.anonUid` o `anon1`); prueba en `tareo-inv.spec.js`.

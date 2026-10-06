@@ -160,7 +160,12 @@ window.__uiAskNative = true;
     signOut: async () => { auth.currentUser = null; authCbs.forEach(cb => cb(null)); },
     signInWithEmailAndPassword: async () => { throw Object.assign(new Error('prueba'), { code: 'auth/wrong-password' }); },
     createUserWithEmailAndPassword: async () => { throw Object.assign(new Error('prueba'), { code: 'auth/operation-not-allowed' }); },
-    sendPasswordResetEmail: async () => {}, signInAnonymously: async () => {}, useEmulator() {},
+    sendPasswordResetEmail: async () => {}, useEmulator() {},
+    /* ingreso con enlace de invitación (capataz): usuario anónimo nuevo (uid de E.anonUid o 'anon1') */
+    signInAnonymously: async () => {
+      auth.currentUser = { uid: E.anonUid || 'anon1', email: null, isAnonymous: true, emailVerified: false, delete: async () => {}, getIdToken: async () => 'x', reload: async () => {} };
+      authCbs.forEach(cb => cb(auth.currentUser)); return { user: auth.currentUser };
+    },
   };
   window.firebase = {
     initializeApp() {}, apps: [],
