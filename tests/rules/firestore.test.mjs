@@ -752,6 +752,31 @@ test('tfot: restaurar un respaldo (misma foto, mismo id) lo puede hacer la ofici
   await assertFails(setDoc(doc(user(OWNER), id), { ...D, d: 'otra' }));
   await assertFails(setDoc(doc(cap('tcap1'), id), D));
   await assertFails(setDoc(doc(user('jefe@obra.pe'), id), D));
+
+test('tareo F2 (auditoría, hallazgo 9): un reabierto de cualquier fecha lo corrige y reenvía su capataz; la ventana corta sigue para crear y para borradores', async () => {
+  const v = limaDay(-8), id = `tareo/${v}_u_tcap1`, p = cap('tcap1'), me = 'u_tcap1';
+  await tSeed(id, { date: v, cap: me, st: 'reab', rows: {}, hist: [{ t: 1, by: 'tasis@obra.pe', a: 'reab' }], reab: { t: 1, by: 'tasis@obra.pe', mot: 'Foto' } });
+  // lo lista con su consulta (cap + st) y lo corrige
+  await assertSucceeds(getDocs(query(collection(p, 'tareo'), where('cap', '==', me), where('st', '==', 'reab'))));
+  await assertFails(getDocs(query(collection(p, 'tareo'), where('st', '==', 'reab'))));
+  await assertSucceeds(updateDoc(doc(p, id), { rows: { '11111111': { as: true } } }));
+  await assertFails(updateDoc(doc(p, id), { date: limaDay(0) }));
+  await assertFails(updateDoc(doc(p, id), { st: 'bor' }));
+  // foto nueva para ese reabierto
+  await assertSucceeds(setDoc(doc(p, `tfot/${v}_${me}_1`), { date: v, cap: me, n: 1, d: 'x' }));
+  // otro capataz no
+  await assertFails(updateDoc(doc(user('tcapm@obra.pe'), id), { rows: {} }));
+  await assertFails(setDoc(doc(user('tcapm@obra.pe'), `tfot/${v}_tcapm@obra.pe_1`), { date: v, cap: 'tcapm@obra.pe', n: 1, d: 'x' }));
+  // reenvía; ya enviado (fuera de la ventana) no lo cambia ni sube fotos
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 1, by: 'tasis@obra.pe', a: 'reab' }, { t: 2, by: me, a: 'env' }] }));
+  await assertFails(updateDoc(doc(p, id), { rows: {} }));
+  await assertFails(setDoc(doc(p, `tfot/${v}_${me}_2`), { date: v, cap: me, n: 2, d: 'x' }));
+  // borrador viejo: ni lo crea ni lo actualiza
+  const b = limaDay(-7);
+  await assertFails(setDoc(doc(p, `tareo/${b}_${me}`), { date: b, cap: me, st: 'bor' }));
+  await tSeed(`tareo/${b}_${me}`, { date: b, cap: me, st: 'bor' });
+  await assertFails(updateDoc(doc(p, `tareo/${b}_${me}`), { rows: {} }));
+  await assertFails(setDoc(doc(p, `tfot/${b}_${me}_1`), { date: b, cap: me, n: 1, d: 'x' }));
 });
 test('tfot: el capataz sube las fotos de su tareo; nadie las cambia ni borra', async () => {
   const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1', id = `tfot/${h}_${me}_1`;

@@ -1982,6 +1982,19 @@ label.tc-lab{flex-direction:column;align-items:stretch;gap:6px}
 .tc-reab,.tc-sent{display:flex;flex-direction:column;gap:3px;font-size:14.5px;color:var(--ink)}
 .tc-reab{border-color:var(--warn);background:var(--warn-soft)}.tc-reab b{color:var(--warn)}
 .tc-sent{border-color:var(--ok);background:var(--ok-soft)}.tc-sent b{color:var(--ok);font-size:16px}
+/* auditoría F2: envío sin confirmar, sin señal, fotos sin subir, avisos y «Por corregir» */
+.tc-sent.tc-sending{border-color:var(--line);background:var(--panel2)}.tc-sent.tc-sending b{color:var(--ink)}
+.tc-sent.tc-queued{border:2px solid var(--warn);background:var(--warn-soft)}.tc-sent.tc-queued b{color:var(--warn);font-size:17px}
+.tc-warns{border-color:var(--warn);background:var(--warn-soft);color:var(--ink);font-size:14px}.tc-warns b{color:var(--warn)}
+.tc-warns ul{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.tc-fp img{opacity:.55}
+.tc-fps{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:stretch;gap:2px;padding:3px;font-size:11px;font-weight:700;text-align:center;color:#fff;background:rgba(0,0,0,.62)}
+.tc-fp.pend{border:2px solid var(--warn)}.tc-fp.err{border:2px solid var(--bad)}
+.tc-fpr{min-height:30px;border:0;border-radius:var(--r-ctl);background:var(--bad);color:#fff;font-weight:700;font-size:12px}
+.tc-pc{display:flex;flex-direction:column;gap:4px;margin-top:8px;border-color:var(--warn);background:var(--warn-soft);font-size:14px;color:var(--ink)}.tc-pc>b{color:var(--warn)}
+.tc-pcl{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.tc-pcb{min-height:44px;height:auto;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 12px;text-align:left}.tc-pcb span{font-size:12.5px;font-weight:400;color:var(--muted)}
+.tc-pcb.on{border-color:var(--warn)}
 @media (min-width:761px){.tc{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 /* tareo: revisión (F2, tareo-rev.js). Solo variables existentes: el modo oscuro sale de ellas */
 .tr-lqc>*{flex-shrink:0}
