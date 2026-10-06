@@ -1798,11 +1798,19 @@ body.mod-tar #fpiso,body.mod-tar .wk .lbl,body.mod-tar #wprev,body.mod-tar #wnex
 }
 .t-jor .tin{height:32px}
 .t-jor input[type=checkbox]{width:18px;height:18px}
+.t-cfgn{margin:0;padding-top:0}
+.t-ferAdd #tferNm{flex:1 1 200px;max-width:320px}
+.t-ferl{list-style:none;margin:0;padding:0 16px 14px;display:grid;gap:4px}
+.t-ferl li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.t-ferl li:last-child{border-bottom:0}
+.t-ferl li .ib{margin-left:auto}
+.t-ferl li.t-off{opacity:.6}
 @media (max-width:760px){
   .t-form,.t-maps{grid-template-columns:1fr}
   .t-imptiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .t-q{max-width:none;flex-basis:100%}
   .t-ck input,.t-jor input[type=checkbox]{width:24px;height:24px}
+  .t-ferl .ib,.t-ferAdd .ib{height:40px}
   .t-acts .ib{height:40px}
 }
 

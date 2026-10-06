@@ -6,18 +6,23 @@
 /* ---------- datos y utilidades puras ---------- */
 const TCOLS={tper:'tper',tpc:'tpc',tcfg:'tcfg'};
 for(const k of Object.keys(TCOLS))if(!(S[k] instanceof Map))S[k]=new Map();
-const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60},'2':{ini:'07:30',fin:'17:00',ref:60},'3':{ini:'07:30',fin:'17:00',ref:60},'4':{ini:'07:30',fin:'17:00',ref:60},'5':{ini:'07:30',fin:'17:00',ref:60},'6':{ini:'07:30',fin:'13:00',ref:0},'0':null},refIni:'12:00',limEnv:'18:00',tolGar:15};
+/* jornada por día de semana: {ini, fin, ref (min de refrigerio), refIni (inicio del refrigerio; si falta, el global refIni)}; null = no laborable.
+   refNoLab: refrigerio en domingo o feriado (todo es extra, pero se descuenta la intersección con esa ventana). fer: feriados del tareo ('YYYY-MM-DD'). */
+const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'2':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'3':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'4':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'5':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'6':{ini:'07:30',fin:'13:00',ref:0,refIni:'12:00'},'0':null},
+  refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},fer:[],limEnv:'18:00',tolGar:15};
 const TCAT={OP:'Operario',OF:'Oficial',PE:'Peón',CA:'Capataz',OT:'Otro'};
 const TDOW=[['1','Lunes'],['2','Martes'],['3','Miércoles'],['4','Jueves'],['5','Viernes'],['6','Sábado'],['0','Domingo']];
-/** configuración del tareo con sus valores por defecto (como P()) */
-function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};
-  for(const[k]of TDOW){const v=c.jor&&Object.prototype.hasOwnProperty.call(c.jor,k)?c.jor[k]:TCFG_DEF.jor[k];jor[k]=v&&v.ini&&v.fin?{ini:v.ini,fin:v.fin,ref:+v.ref||0}:null}
-  return{jor,refIni:c.refIni||TCFG_DEF.refIni,limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar}}
+/** configuración del tareo con sus valores por defecto (como P()). jor[k].refIni siempre viene resuelto. */
+function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};const gri=/^\d{1,2}:\d{2}$/.test(c.refIni||'')?c.refIni:TCFG_DEF.refIni;
+  for(const[k]of TDOW){const v=c.jor&&Object.prototype.hasOwnProperty.call(c.jor,k)?c.jor[k]:TCFG_DEF.jor[k];jor[k]=v&&v.ini&&v.fin?{ini:v.ini,fin:v.fin,ref:Math.max(0,+v.ref||0),refIni:v.refIni||gri}:null}
+  const rn=c.refNoLab;const refNoLab=typeof rn==='number'?{ref:Math.max(0,rn),refIni:gri}:rn&&typeof rn==='object'?{ref:rn.ref!=null&&rn.ref!==''?Math.max(0,+rn.ref||0):TCFG_DEF.refNoLab.ref,refIni:rn.refIni||gri}:{...TCFG_DEF.refNoLab};
+  const fer=[...new Set((Array.isArray(c.fer)?c.fer:[]).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar}}
 const tMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(s||''));return m?+m[1]*60+ +m[2]:null};
 const tR2=v=>Math.round(v*100)/100;
 const tFold=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
-/** horas de la jornada de un día (objeto {ini,fin,ref} o null) */
-const tJorH=j=>{if(!j)return 0;const a=tMin(j.ini),b=tMin(j.fin);return a==null||b==null||b<=a?0:tR2((b-a-(+j.ref||0))/60)};
+/** horas de la jornada de un día (objeto {ini,fin,ref} o null): fin − inicio − refrigerio */
+const tJorH=j=>{if(!j)return 0;const a=tMin(j.ini),b=tMin(j.fin);return a==null||b==null||b<=a?0:tR2(Math.max(0,b-a-(+j.ref||0))/60)};
 /** DNI normalizado: 8 dígitos con ceros a la izquierda; carné de extranjería 9–12 alfanuméricos. '' si no es válido (no adivina). */
 function tDni(v){if(v==null)return'';
   if(typeof v==='number'){if(!Number.isFinite(v)||v<=0||!Number.isInteger(v))return'';const s=String(v);return s.length<=8?s.padStart(8,'0'):s.length<=12?s:''}
@@ -28,21 +33,26 @@ function tDni(v){if(v==null)return'';
   return''}
 /** categoría derivada del título del puesto */
 function tCatDe(p){const s=tFold(p);if(s.startsWith('OPERARIO'))return'OP';if(s.startsWith('OFICIAL'))return'OF';if(s.startsWith('PEON')||s.startsWith('AYUDANTE'))return'PE';if(s.startsWith('CAPATAZ'))return'CA';return'OT'}
-/** ¿activo en la fecha? (último periodo sin cese, o cese posterior; ingreso no posterior; no archivado) */
-function tActivo(p,fecha){if(!p||p.arch)return false;fecha=fecha||todayIso();if(p.ing&&p.ing>fecha)return false;return!p.ces||p.ces>fecha}
-/** ¿el día es no laborable para el tareo? (domingo según la jornada o feriado del calendario de la obra) */
-function tNoLab(fecha){const dw=String(pd(fecha).getUTCDay());if(!TC().jor[dw])return true;
-  if(typeof nwReason==='function'){try{return/^Feriado/.test(nwReason(fecha)||'')}catch(e){}}return false}
-/** Horas de un obrero en el día: {trab, ext}. trab = horas trabajadas (sin refrigerio); ext = lo que pasa de la jornada del día.
-    Refrigerio: se descuenta si el rango cruza refIni (hasta `ref` minutos). El sábado (ref 0) la jornada acaba al mediodía:
-    si se queda pasada la hora de salida, se descuenta el refrigerio normal de la semana (el mayor). Domingo o feriado: todo es extra. */
-function tHoras(fecha,ini,fin){const c=TC();const a=tMin(ini),b=tMin(fin);if(a==null||b==null||b<=a)return{trab:0,ext:0};
-  const dw=String(pd(fecha).getUTCDay());const j=c.jor[dw];const nl=tNoLab(fecha);
-  const refStd=Math.max(0,...Object.values(c.jor).filter(Boolean).map(x=>+x.ref||0));
-  const jf=j?tMin(j.fin):null;const ref=!nl&&j&&j.ref>0?j.ref:(nl||(jf!=null&&b>jf)?refStd:0);
-  const ri=tMin(c.refIni);let d=0;if(ri!=null&&a<ri&&b>ri)d=Math.min(ref,b-ri);
-  const trab=tR2(Math.max(0,b-a-d)/60);if(nl)return{trab,ext:trab};
-  return{trab,ext:tR2(Math.max(0,trab-tJorH(j)))}}
+/** ¿activo en la fecha? Algún periodo de `per` contiene la fecha (ingreso ≤ fecha ≤ cese; el día del cese CUENTA como trabajado);
+    sin `per`, usa ing/ces de la ficha. Archivado: nunca. */
+function tActivo(p,fecha){if(!p||p.arch)return false;fecha=fecha||todayIso();
+  const en=x=>(!x.ing||x.ing<=fecha)&&(!x.ces||fecha<=x.ces);
+  const per=Array.isArray(p.per)?p.per.filter(x=>x&&(x.ing||x.ces)):[];return per.length?per.some(en):en(p)}
+/** configuración congelada del día para guardar en el tareo (`doc.cfg`): jornada del día, si es feriado y el refrigerio de no laborables.
+    El capataz la guarda al pasar a «env» y la oficina al corregir (si el doc no la tiene); tCalc la usa en vez de la actual. */
+function tCfgDia(fecha){const c=TC();const j=c.jor[String(pd(fecha).getUTCDay())];return{v:1,jor:j?{...j}:null,fer:c.fer.includes(fecha),rnl:{...c.refNoLab}}}
+/** reglas del día: {nl no laborable, j jornada, rw ventana de refrigerio [ini,fin] en minutos o null, jh horas de jornada}. cfg = doc.cfg (si v:1) o la actual. */
+function tDia(fecha,cfg){const c=cfg&&cfg.v===1?cfg:tCfgDia(fecha||todayIso());const j=c.jor&&c.jor.ini&&c.jor.fin?c.jor:null;const nl=!!c.fer||!j;
+  const w=nl?(c.rnl||TC().refNoLab):j;const ri=tMin(w.refIni||TC().refIni),rf=+w.ref||0;
+  return{nl,j,rw:ri!=null&&rf>0?[ri,ri+rf]:null,jh:nl?0:tJorH(j)}}
+/** ¿el día es no laborable para el tareo? Solo la configuración del tareo: jornada nula ese día de semana o feriado en tcfg.fer (no el calendario de LPS). */
+function tNoLab(fecha,cfg){return tDia(fecha,cfg).nl}
+/* minutos de un bloque menos su intersección con la ventana de refrigerio (partir un bloque no cambia el total) */
+const tBlqMin=(a,b,rw)=>a==null||b==null||b<=a?0:Math.max(0,b-a-(rw?Math.max(0,Math.min(b,rw[1])-Math.max(a,rw[0])):0));
+/** Horas de un rango en el día: {trab, ext}. trab = duración − intersección con el refrigerio del día (L–V 12:00–13:00; sábado 0;
+    domingo/feriado `refNoLab`); ext = max(0, trab − jornada del día); domingo o feriado: todo es extra. cfg opcional (doc.cfg). */
+function tHoras(fecha,ini,fin,cfg){const D=tDia(fecha,cfg);const trab=tR2(tBlqMin(tMin(ini),tMin(fin),D.rw)/60);
+  return{trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))}}
 
 /* fechas de Excel: número de serie, Date, 'dd/mm/aaaa' o 'aaaa-mm-dd' → 'aaaa-mm-dd' ('' si no es fecha) */
 function tFecha(v){if(v==null||v==='')return'';
@@ -119,25 +129,28 @@ const tName=p=>[p.ape,p.nom].filter(Boolean).join(', ');
 const tLive=()=>[...S.tper.values()].filter(p=>!p.arch);
 
 /* ---------- Cálculo del tareo (F1; contrato en docs/ia/tareo.md) ---------- */
-/** horas de un bloque: descuenta el refrigerio si lo cruza (misma regla que tHoras, sin extra) */
-function tBlqH(fecha,ini,fin){return tHoras(fecha,ini,fin).trab}
+/** horas de un bloque: duración menos su intersección con el refrigerio del día. cfg opcional (doc.cfg congelado). */
+function tBlqH(fecha,ini,fin,cfg){return tR2(tBlqMin(tMin(ini),tMin(fin),tDia(fecha,cfg).rw)/60)}
 /* bloque con partida y horario válido (05:00–23:59, salida después de la entrada) */
 const tBlqOk=b=>{if(!b||!b.pc)return false;const a=tMin(b.ini),z=tMin(b.fin);return a!=null&&z!=null&&z>a&&a>=300&&z<=1439};
 const tBlqDe=(blq,dni)=>(Array.isArray(blq)?blq:[]).filter(b=>b&&Array.isArray(b.dnis)&&b.dnis.includes(dni));
 /** copia del tareo con `rows` recalculados desde `blq`: por obrero presente, horas por partida, primera entrada/última salida,
-    trab = suma de sus bloques, ext = lo que pasa de la jornada del día (domingo o feriado: todo extra). Ausentes: sin horas. */
-function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};
-  const nl=tNoLab(f);const jh=tJorH(TC().jor[String(pd(f).getUTCDay())]);
+    trab = suma de sus bloques (cada uno sin su intersección con el refrigerio), ext = max(0, trab − jornada del día) (domingo o feriado: todo extra).
+    Usa `doc.cfg` (configuración congelada del día) si existe; si no, la actual. Ausentes: sin horas. */
+function tCalc(doc){const d=doc||{};const f=d.date||todayIso();const rows={};const D=tDia(f,d.cfg);
   for(const[dni,r0]of Object.entries(d.rows||{})){const r={...r0};
     if(r.as!==true){Object.assign(r,{h:{},ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}/* no vino o sin marcar: sin horas (conserva sus bloques) */
-    const h={};let a=null,z=null,t=0;
-    for(const b of tBlqDe(d.blq,dni)){if(!tBlqOk(b))continue;const x=tBlqH(f,b.ini,b.fin);h[b.pc]=tR2((h[b.pc]||0)+x);t+=x;
-      const bi=tMin(b.ini),bf=tMin(b.fin);if(a==null||bi<a[0])a=[bi,b.ini];if(z==null||bf>z[0])z=[bf,b.fin]}
-    const trab=tR2(t);Object.assign(r,{h,ini:a?a[1]:'',fin:z?z[1]:'',trab,ext:nl?trab:tR2(Math.max(0,trab-jh))});rows[dni]=r}
+    const hm={};let a=null,z=null,t=0;
+    for(const b of tBlqDe(d.blq,dni)){if(!tBlqOk(b))continue;const bi=tMin(b.ini),bf=tMin(b.fin);const x=tBlqMin(bi,bf,D.rw);hm[b.pc]=(hm[b.pc]||0)+x;t+=x;
+      if(a==null||bi<a[0])a=[bi,b.ini];if(z==null||bf>z[0])z=[bf,b.fin]}
+    const h={};for(const[k,v]of Object.entries(hm))h[k]=tR2(v/60);
+    const trab=tR2(t/60);Object.assign(r,{h,ini:a?a[1]:'',fin:z?z[1]:'',trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))});rows[dni]=r}
   return{...d,rows}}
-/** problemas que impiden enviar el tareo: [{dni|null, k, msg}] (mensajes para el capataz). Vacío = se puede enviar.
+/** problemas del tareo: [{dni|null, k, msg, warn?}] (mensajes para el capataz). Los que traen `warn:true` son observaciones que NO
+    bloquean (k:'parcial' jornada parcial): para bloquear el envío o «Marcar revisado» filtra `!o.warn`. Sin bloqueantes = se puede enviar.
     Un obrero que no vino puede seguir en sus bloques (no es error: tCalc le da 0 h y los recupera si vuelve a «vino»). */
-function tValida(doc){const d=doc||{};const out=[];const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
+const tHtxt=v=>String(tR2(+v||0)).replace('.',',');
+function tValida(doc){const d=doc||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const blq=Array.isArray(d.blq)?d.blq:[];
   const nm=dni=>{const r=rows[dni];return r&&(r.ape||r.nom)?[r.ape,r.nom].filter(Boolean).join(', '):dni};
   const pcC=pc=>{const p=pc&&S.tpc.get(pc);return p?p.cod:pc||'sin partida'};const bloqs=new Set();
   if(!Object.keys(rows).length)out.push({dni:null,k:'vacio',msg:'No hay obreros en el tareo: agrega a tu cuadrilla.'});
@@ -152,7 +165,9 @@ function tValida(doc){const d=doc||{};const out=[];const rows=d.rows||{};const b
     if(!r.as){if(!r.mot)out.push({dni,k:'mot',msg:`${nm(dni)}: elige el motivo de la falta.`});continue}
     const L=tBlqDe(blq,dni).filter(tBlqOk).map(b=>[tMin(b.ini),tMin(b.fin),b]).sort((x,y)=>x[0]-y[0]);
     if(!L.length){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponlo en un bloque o márcalo como falta.`});continue}
-    let m=L[0];for(let i=1;i<L.length;i++){if(L[i][0]<m[1]){out.push({dni,k:'cruce',msg:`${nm(dni)}: dos bloques se cruzan (${m[2].ini}–${m[2].fin} y ${L[i][2].ini}–${L[i][2].fin}).`});break}if(L[i][1]>m[1])m=L[i]}}
+    let m=L[0],cx=false;for(let i=1;i<L.length;i++){if(L[i][0]<m[1]){cx=true;out.push({dni,k:'cruce',msg:`${nm(dni)}: dos bloques se cruzan (${m[2].ini}–${m[2].fin} y ${L[i][2].ini}–${L[i][2].fin}).`});break}if(L[i][1]>m[1])m=L[i]}
+    if(!cx&&!D.nl&&D.jh>0){const h=tR2(L.reduce((s,x)=>s+tBlqMin(x[0],x[1],D.rw),0)/60);
+      if(h<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(h)} h de ${tHtxt(D.jh)}`})}}
   if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});
   return out}
 
@@ -471,27 +486,46 @@ async function tImportPc(){const f=await tPickFile();if(!f)return;let wb;try{wb=
      try{await tBatch(W);lqClose();toast(`Partidas importadas: ${nuevas.length} nuevas, ${cambios.length} actualizadas.`)}catch(err){b.disabled=false;toast('No se pudo importar: '+(err.code||err.message))}})}
 
 /* ---------- Configuración del tareo (admin) ---------- */
-function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disabled';
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración del tareo','Jornada, refrigerio, hora límite de envío y tolerancia de garita')}
+/* feriados del calendario de Last Planner (S.meta project cal.hol: [{d,n}]); solo los tiene quien carga los datos de LPS */
+const tLpsHol=()=>{const p=S.meta&&S.meta.get('project');const h=p&&p.cal&&Array.isArray(p.cal.hol)?p.cal.hol:[];return h.filter(o=>o&&/^\d{4}-\d{2}-\d{2}$/.test(o.d||''))};
+async function tFerSave(fer,ferN,txt){try{await fcol(TCOLS.tcfg).doc('main').set({fer:[...new Set(fer)].sort(),ferN,...tStamp()},{merge:true});toast(txt)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
+function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disabled';const hoy=todayIso();
+  const lps=ed?tLpsHol():[];const fal=lps.filter(o=>!c.fer.includes(o.d)).length;
+  const dow=f=>{const w=TDOW.find(([k])=>k===String(pd(f).getUTCDay()));return w?w[1]:''};
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración del tareo','Jornada, refrigerio, feriados, hora límite de envío y tolerancia de garita')}
    ${ed?'':`<div class="callout">Solo el administrador cambia la configuración del tareo.</div>`}
-   <div class="card"><h2>Jornada por día <span class="sub">Lo que pase de la jornada del día cuenta como horas extra</span></h2>
-    <div class="tscroll"><table class="t t-tbl t-jor"><thead><tr><th>Día</th><th>Laborable</th><th>Inicio</th><th>Fin</th><th>Refrigerio (min)</th><th class="t-r">Horas</th></tr></thead><tbody>
-    ${TDOW.map(([k,l])=>{const j=c.jor[k];const d=j||{ini:'07:30',fin:'17:00',ref:0};return`<tr data-tjd="${k}"><td data-l="Día"><b>${l}</b></td><td data-l="Laborable"><input type="checkbox" data-tj="on"${j?' checked':''}${dis} aria-label="${l} laborable"></td>
-     <td data-l="Inicio"><input class="tin" type="time" data-tj="ini" value="${esc(d.ini)}"${j?'':' disabled'}${dis}></td><td data-l="Fin"><input class="tin" type="time" data-tj="fin" value="${esc(d.fin)}"${j?'':' disabled'}${dis}></td>
-     <td data-l="Refrigerio"><input class="tin t-n" type="number" min="0" max="180" step="5" data-tj="ref" value="${+d.ref||0}"${j?'':' disabled'}${dis}></td><td class="mono t-r" data-l="Horas" data-tjh="${k}">${j?tJorH(j).toFixed(1):'No laborable'}</td></tr>`}).join('')}
-    </tbody><tfoot><tr><td colspan="5"><b>Total semanal</b></td><td class="mono t-r"><b id="tjTot">${TDOW.reduce((s,[k])=>s+tJorH(c.jor[k]),0).toFixed(1)}</b></td></tr></tfoot></table></div></div>
+   <div class="card"><h2>Jornada por día <span class="sub">Lo que pase de la jornada del día cuenta como horas extra. De cada bloque se descuenta solo la parte que cae dentro del refrigerio.</span></h2>
+    <div class="tscroll"><table class="t t-tbl t-jor"><thead><tr><th>Día</th><th>Laborable</th><th>Inicio</th><th>Fin</th><th>Refrigerio desde</th><th>Refrigerio (min)</th><th class="t-r">Horas</th></tr></thead><tbody>
+    ${TDOW.map(([k,l])=>{const j=c.jor[k];const d=j||{ini:'07:30',fin:'17:00',ref:0,refIni:c.refIni};const off=j?'':' disabled';return`<tr data-tjd="${k}"><td data-l="Día"><b>${l}</b></td><td data-l="Laborable"><input type="checkbox" data-tj="on"${j?' checked':''}${dis} aria-label="${l} laborable"></td>
+     <td data-l="Inicio"><input class="tin" type="time" data-tj="ini" value="${esc(d.ini)}"${off}${dis} aria-label="${l}: inicio"></td><td data-l="Fin"><input class="tin" type="time" data-tj="fin" value="${esc(d.fin)}"${off}${dis} aria-label="${l}: fin"></td>
+     <td data-l="Refrigerio desde"><input class="tin" type="time" data-tj="ri" value="${esc(d.refIni||c.refIni)}"${off}${dis} aria-label="${l}: inicio del refrigerio"></td>
+     <td data-l="Refrigerio (min)"><input class="tin t-n" type="number" min="0" max="180" step="5" data-tj="ref" value="${+d.ref||0}"${off}${dis} aria-label="${l}: minutos de refrigerio"></td><td class="mono t-r" data-l="Horas" data-tjh="${k}">${j?tJorH(j).toFixed(1):'No laborable'}</td></tr>`}).join('')}
+    </tbody><tfoot><tr><td colspan="6"><b>Total semanal</b></td><td class="mono t-r"><b id="tjTot">${TDOW.reduce((s,[k])=>s+tJorH(c.jor[k]),0).toFixed(1)}</b></td></tr></tfoot></table></div>
+    <div class="pad t-form"><label class="lqlab">Refrigerio en domingo o feriado: desde<input class="tin" type="time" id="tjNlIni" value="${esc(c.refNoLab.refIni)}"${dis}></label>
+     <label class="lqlab">Refrigerio en domingo o feriado (min)<input class="tin t-n" type="number" min="0" max="180" step="5" id="tjNlRef" value="${c.refNoLab.ref}"${dis}></label></div>
+    <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
    <div class="card"><div class="pad t-form">
-    <label class="lqlab">Inicio del refrigerio<input class="tin" type="time" id="tjRefIni" value="${esc(c.refIni)}"${dis}></label>
     <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label>
     <label class="lqlab">Tolerancia de garita (min)<input class="tin t-n" type="number" min="0" max="120" id="tjTol" value="${c.tolGar}"${dis}></label></div>
     ${ed?`<div class="pad"><button class="ib pri" id="tjSave">Guardar configuración</button></div>`:''}</div>
+   <div class="card" id="tferCard"><h2>Feriados del tareo <span class="sub">Días no laborables para el tareo (todas las horas son extra). Son propios del tareo: todos los roles calculan igual.</span></h2>
+    ${ed?`<div class="pad t-bar t-ferAdd"><input class="tin" type="date" id="tferD" aria-label="Fecha del feriado"><input class="tin" id="tferNm" placeholder="Nombre (opcional)" aria-label="Nombre del feriado" maxlength="60"><button class="ib pri" id="tferAdd">Agregar</button>${lps.length?`<button class="ib" id="tferLps" title="${lps.length} feriados en el calendario de Last Planner">Copiar feriados de Last Planner${fal?` (${fal})`:''}</button>`:''}</div>`:''}
+    <ul class="t-ferl" id="tferL">${c.fer.map(f=>`<li data-tfer="${esc(f)}"${f<hoy?' class="t-off"':''}><span class="mono">${esc(tFmt(f))}</span> <span class="note">${esc(dow(f))}</span> ${esc(c.ferN[f]||'')}${ed?`<button class="ib" data-tferx="${esc(f)}" aria-label="Quitar ${esc(tFmt(f))}">Quitar</button>`:''}</li>`).join('')||'<li class="note">No hay feriados registrados.</li>'}</ul></div>
   </div></div>`;
   if(!ed)return;
-  const read=()=>{const jor={};$$('[data-tjd]').forEach(r=>{const k=r.dataset.tjd;const on=r.querySelector('[data-tj="on"]').checked;
-    jor[k]=on?{ini:r.querySelector('[data-tj="ini"]').value,fin:r.querySelector('[data-tj="fin"]').value,ref:Math.max(0,Math.round(+r.querySelector('[data-tj="ref"]').value||0))}:null});return jor};
+  const read=()=>{const jor={};$$('[data-tjd]').forEach(r=>{const k=r.dataset.tjd;const on=r.querySelector('[data-tj="on"]').checked;const g=n=>r.querySelector(`[data-tj="${n}"]`).value;
+    jor[k]=on?{ini:g('ini'),fin:g('fin'),ref:Math.max(0,Math.round(+g('ref')||0)),refIni:g('ri')||c.refIni}:null});return jor};
   const upd=()=>{const jor=read();let t=0;for(const[k,j]of Object.entries(jor)){const h=tJorH(j);t+=h;const cell=main.querySelector(`[data-tjh="${k}"]`);if(cell)cell.textContent=j?h.toFixed(1):'No laborable';
       const r=main.querySelector(`[data-tjd="${k}"]`);r.querySelectorAll('[data-tj]:not([data-tj="on"])').forEach(x=>x.disabled=!j)}$('#tjTot').textContent=t.toFixed(1)};
   main.querySelector('.t-jor').oninput=upd;main.querySelector('.t-jor').onchange=upd;
   $('#tjSave').onclick=async()=>{const jor=read();for(const[k,j]of Object.entries(jor))if(j&&!(tJorH(j)>0)){toast(`Revisa la jornada del ${TDOW.find(x=>x[0]===k)[1].toLowerCase()}: el fin debe ser posterior al inicio.`);return}
-    const d={jor,refIni:$('#tjRefIni').value||TCFG_DEF.refIni,limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:Math.max(0,Math.round(+$('#tjTol').value||0)),...tStamp()};
-    try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}
+    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:Math.max(0,Math.round(+$('#tjTol').value||0)),...tStamp()};
+    try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
+  $('#tferAdd').onclick=()=>{const f=$('#tferD').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Elige la fecha del feriado.');return}const n=$('#tferNm').value.trim().replace(/\s+/g,' ');
+    const C=TC();if(C.fer.includes(f)&&(C.ferN[f]||'')===n){toast('Ese feriado ya está.');return}
+    tFerSave([...C.fer,f],{...C.ferN,[f]:n||C.ferN[f]||''},`Feriado ${tFmt(f)} agregado.`)};
+  $('#tferL').onclick=async e=>{const b=e.target.closest('[data-tferx]');if(!b)return;const f=b.dataset.tferx;const C=TC();
+    if(!await uiAsk({title:`¿Quitar el feriado ${tFmt(f)}?`,text:'Ese día vuelve a calcularse con la jornada normal (los tareos ya enviados conservan su configuración).',ok:'Quitar',tone:'warn'}))return;
+    tFerSave(C.fer.filter(x=>x!==f),C.ferN,`Feriado ${tFmt(f)} quitado.`)};
+  const cp=$('#tferLps');if(cp)cp.onclick=()=>{const C=TC();const L=tLpsHol().filter(o=>!C.fer.includes(o.d));if(!L.length){toast('Ya están todos los feriados de Last Planner.');return}
+    const ferN={...C.ferN};for(const o of L)ferN[o.d]=o.n||'Feriado';tFerSave([...C.fer,...L.map(o=>o.d)],ferN,`${L.length} ${L.length===1?'feriado copiado':'feriados copiados'} de Last Planner.`)}}

@@ -98,9 +98,9 @@ Colecciones nuevas, todas por `fcol()`:
   - `foto`: `[fotoId,…]` — fotos del formato físico firmado en `tfot/{fotoId}` `{date, cap, n, d:<dataURL jpeg>, by, ts}` (JPEG reducido a ~1600 px de lado mayor, calidad 0.7; < 900 KB por documento; si es más, en trozos `d0,d1…` NO: reducir más).
   - `envAt`, `envBy`, `reab: {t, by, mot}`, `hist: [{t, by, a, mot}]` (`a`: `'env'|'reab'|'cor'|…`), `by`, `ts`.
 - **Cálculo** (en `tareo.js`, funciones puras globales):
-  - `tBlqH(fecha, ini, fin)` → horas del bloque descontando el refrigerio si lo cruza (misma regla que `tHoras`, sin extra).
-  - `tCalc(doc)` → doc con `rows` recalculados: por obrero presente, `h[pc]` = suma de sus bloques; `ini`/`fin` = mín/máx; `trab`/`ext` con `tHoras(fecha, ini, fin)` ajustado a la suma real de horas (si hay huecos entre bloques, `trab` = suma de bloques y `ext` = max(0, trab − jornada del día)).
-  - `tValida(doc)` → `[{dni|null, k, msg}]`: presente sin horas; ausente sin motivo; dos bloques del mismo obrero que se cruzan; bloque con fin ≤ ini o fuera de 05:00–23:59; sin foto (`k:'foto'`); sin obreros. `tValida(doc).length===0` es requisito para enviar.
+  - `tBlqH(fecha, ini, fin, cfg?)` → horas del bloque menos su **intersección** con la ventana de refrigerio del día (ver «Correcciones de la auditoría F2 — cálculo»).
+  - `tCalc(doc)` → doc con `rows` recalculados: por obrero presente, `h[pc]` = suma de sus bloques; `ini`/`fin` = mín/máx; `trab` = suma de sus bloques (cada uno sin su parte de refrigerio) y `ext` = max(0, trab − jornada del día). Usa `doc.cfg` si existe.
+  - `tValida(doc)` → `[{dni|null, k, msg, warn?}]`: presente sin horas; ausente sin motivo; dos bloques del mismo obrero que se cruzan; bloque con fin ≤ ini o fuera de 05:00–23:59; sin foto (`k:'foto'`); sin obreros; jornada parcial (`k:'parcial'`, `warn:true`, **no bloquea**). Requisito para enviar: ninguna sin `warn` (`tValida(doc).filter(o=>!o.warn).length===0`).
 - Reglas (`firestore.rules`):
   - `tareo`: lee `isTar()` salvo `tcap` (solo los suyos: `resource.data.cap == mid()`) y `tcos` (nada hasta F3). Crea/actualiza el `tcap` solo si `cap == mid()`, el id es `date + '_' + mid()`, y el estado anterior es `bor`/`reab` (o no existe) y el nuevo `bor`/`reab`/`env`; no puede cambiar `cap`/`date`; `date` no más de 3 días atrás ni en el futuro. `tasis`/`admin` actualizan cualquiera (reabrir = `st:'reab'`). Nadie borra.
   - `tfot`: crea el `tcap` con `cap == mid()`; leen `isTar()` (el tcap solo las suyas); nadie actualiza ni borra.
@@ -196,7 +196,7 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - Celular: el selector de módulo va en la hoja «Más»; en modo tareo se ocultan Exportar y Ayuda (aún sin ayuda del tareo).
 - `body.mod-tar` oculta los controles de LPS de la barra; Ctrl+Z no hace nada en el tareo.
 - Si cambia el rol de forma que cambia lo que se carga (solo tareo, acceso al tareo, lista de miembros del asistente), la app avisa y recarga.
-- `tHoras`: descuenta el refrigerio (`ref` min) si el rango cruza `refIni`; **sábado** (`ref` 0) si se queda pasada la jornada se descuenta el refrigerio normal de la semana (60 min); domingo/feriado todo es extra. **Por confirmar con el dueño.**
+- `tHoras`: ~~sábado pasado de la jornada descuenta 60 min~~ (eliminado en la auditoría F2: refrigerio por intersección, ver «Correcciones de la auditoría F2 — cálculo»).
 - Importar el máster nunca toca `cap`, nunca archiva; solo informa a quienes no están en el archivo. Una categoría editada a mano se respeta salvo que cambie el puesto.
 - Ids de partidas: `p10_05` (`tPcId`).
 
@@ -204,8 +204,8 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 
 - `tBlqH`, `tCalc`, `tValida` están en `tareo.js` (puros; `tareo-cap.js` los usa, no los redefine). Horas redondeadas a 2 decimales (`tR2`), sin redondeo a media hora.
   - Un bloque cuenta solo si tiene partida y horario válido (05:00–23:59, salida > entrada); si no, `tValida` lo marca.
-  - `tCalc`: `ext` = max(0, trab − `tJorH` del día); domingo/feriado (`tNoLab`) todo es extra. Ausentes: `h:{}`, `ini/fin:''`, `trab/ext:0`.
-  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `bloq` (partida bloqueada por costos), `marca` (sin marcar si vino), `mot`, `sinh`, `cruce` (uno por obrero), `foto`.
+  - `tCalc`: `ext` = max(0, trab − `tJorH` del día); domingo/feriado (`tNoLab`, solo `tcfg`) todo es extra. Ausentes: `h:{}`, `ini/fin:''`, `trab/ext:0`.
+  - `tValida` `k`: `vacio`, `pc`, `hora`, `quien` (bloque sin obreros), `bloq` (partida bloqueada por costos), `marca` (sin marcar si vino), `mot`, `sinh`, `cruce` (uno por obrero), `foto`; y `parcial` (`warn:true`, no bloquea).
 - `renderTDia` (oficina): globales con prefijo `to`/`TO_` (`TD` estado, `toSub`/`toUnsub`, `toList`, `toStats`, `toDetalle`, `toReabrir`, `TO_MOT` motivos de falta, `TO_ST` estados). CSS al final de `app.css` con prefijo `.to-`.
   - Suscripción temporal `fcol('tareo').where('date','==',fecha)` (`TD.sub`): cambia al cambiar de fecha; al salir de la pestaña se suelta en la siguiente llegada de datos (no hay gancho de salida de vista) y al cerrar sesión (`unsubs`).
   - Lista: tareos del día + capataces `tcap` con obreros activos asignados sin tareo («Sin empezar»). Orden: enviado, reabierto, borrador, sin empezar, revisado, publicado. «Enviados» del resumen = `env`/`rev`/`pub`.
@@ -268,3 +268,19 @@ Problema: con el enlace/QR el capataz del tareo entra con una sesión **anónima
 - **Corregir un tareo revisado lo devuelve a «Enviado»** (hay que volver a revisarlo).
 - **Feriados propios del tareo** en `tcfg.fer` (lista de fechas `YYYY-MM-DD`), con botón para copiarlos del calendario de Last Planner; todos los roles calculan igual.
 - **Un obrero no puede estar en dos tareos el mismo día** (ni presente en uno y con falta en otro): es un conflicto que bloquea marcar revisado (y publicar en F3) hasta resolverlo.
+
+## Correcciones de la auditoría F2 — cálculo
+
+Hallazgos 1, 2, 3, 11 y 13 del informe (`tareo.js`; pruebas en `tests/e2e/tareo-calc.spec.js`).
+
+- **Refrigerio por intersección (1).** `tcfg.jor[<día 0–6>] = {ini, fin, ref (min), refIni ('HH:MM', opcional: si falta, el `tcfg.refIni` global)}` o `null` (no laborable). `TC().jor[k].refIni` siempre viene resuelto. Por defecto L–V 07:30–17:00 con 60 min desde 12:00 (8,5 h) y sábado 07:30–13:00 sin refrigerio (5,5 h); domingo `null`.
+  - Horas de un bloque = duración − intersección del bloque con `[refIni, refIni + ref]` (`tBlqMin`). **Partir un bloque en cualquier minuto no cambia el total** (12:15–12:45 en L–V = 0 h).
+  - `trab` = suma de los bloques del obrero (se suma en minutos y se redondea al final); `ext` = max(0, trab − horas de jornada del día) con horas de jornada = fin − ini − ref (`tJorH`).
+  - Sábado (`ref` 0): **no se descuenta nada**, ni pasadas las 13:00: 07:30–17:00 = 9,5 h trabajadas y 4 extra. Se eliminó la regla anterior.
+  - Domingo o feriado: sin jornada, todo es extra; refrigerio de no laborables configurable en `tcfg.refNoLab = {ref, refIni}` (por defecto 60 min desde 12:00; un número se toma como minutos desde `refIni`; `ref` 0 = no se descuenta).
+  - `tDia(fecha, cfg?)` → `{nl, j, rw:[ini,fin] en minutos | null, jh}`: la regla del día para `tHoras`, `tBlqH`, `tCalc`, `tValida`, `tNoLab`. Firmas compatibles: `tBlqH(fecha, ini, fin, cfg?)`, `tHoras(fecha, ini, fin, cfg?)`, `tNoLab(fecha, cfg?)` (el `cfg` es opcional).
+- **Feriados propios (2).** `tcfg.fer` = lista de fechas `YYYY-MM-DD`; `tcfg.ferN = {fecha: nombre}` (opcional; al quitar un feriado su nombre se queda en `ferN`, sin efecto). `tNoLab` usa **solo** eso + jornada nula del día de semana; ya **no** usa `nwReason` ni el calendario de Last Planner (los roles del tareo no cargan `meta/project`). Configuración › «Feriados del tareo»: agregar (fecha + nombre), quitar (con `uiAsk`) y «Copiar feriados de Last Planner» (solo si el admin tiene `S.meta project.cal.hol`; agrega los que faltan con su nombre). Se guardan al momento (`set merge` de `fer`/`ferN`); la jornada se guarda con «Guardar configuración».
+- **Configuración congelada (3).** `tCfgDia(fecha)` → `{v:1, jor: <jornada del día con refIni> | null, fer: bool, rnl: {ref, refIni}}`. `tCalc`/`tValida` usan `doc.cfg` si `doc.cfg.v===1`; sin `cfg`, la configuración actual. **Pendiente para `tareo-cap.js` y `tareo-rev.js`: al pasar a `env` o al corregir, guardar `cfg: tCfgDia(date)` si el doc no lo tiene** (y pasar `t.cfg` como 4.º argumento a `tBlqH` donde muestren horas de un bloque). Los atajos del celular (`tcJor`) deben usar el inicio de refrigerio del día (`j.refIni`), no `TC().refIni`.
+- **Periodos (11).** `tActivo(p, fecha)`: activo si algún periodo de `p.per` (`{ing, ces}`) cumple `ing ≤ fecha` y (sin `ces` o `fecha ≤ ces`); sin `per` (o vacío), usa `ing`/`ces` de la ficha. **El día del cese cuenta como trabajado** (antes no). Archivado: nunca.
+- **Jornada parcial (13).** `tValida` agrega `{dni, k:'parcial', warn:true, msg:'Jornada parcial: APELLIDO 4 h de 8,5'}` cuando un presente sin cruces tiene menos horas que la jornada del día (no en domingo/feriado). **No bloquea**: quien use `tValida` para bloquear (enviar, «Marcar revisado», confirmar al corregir) debe filtrar `!o.warn`.
+- Configuración visible: por día laborable, inicio, fin, «Refrigerio desde», minutos y horas; total semanal; refrigerio de domingo/feriado; hora límite y tolerancia de garita; feriados.
