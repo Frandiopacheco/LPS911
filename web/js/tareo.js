@@ -193,7 +193,7 @@ function toSub(f){if(TD.sub&&TD.d===f)return;toUnsub();TD.d=f;TD.docs=new Map();
     err=>{if(TD.sub!==un)return;TD.err=err&&err.code||'error';TD.ok=true;if(ready&&toAct())requestRender()});
   TD.sub=un;unsubs.push(()=>{if(TD.sub===un)toUnsub();else try{un()}catch(e){}})}
 function toChip(t){const k=t?t.st||'bor':'sin';const[l,c]=TO_ST[k]||[k,''];return`<span class="to-st ${c}" data-st="${esc(k)}">${esc(l)}${k==='env'&&t.envAt?' '+esc(tHm(t.envAt)):''}</span>`}
-function toStats(t){const c=tCalc(t);let pres=0,fal=0,hh=0,he=0,alt=0;const mot={};
+function toStats(t){if(typeof tConCot==='function')t=tConCot(t);/* cotejo vigente (cot/cotFot, tareo-rev.js) */const c=tCalc(t);let pres=0,fal=0,hh=0,he=0,alt=0;const mot={};
   for(const r of Object.values(c.rows)){if(r.as){pres++;hh+=r.trab||0;he+=r.ext||0;if(r.alt)alt++}else{fal++;const m=r.mot||'?';mot[m]=(mot[m]||0)+1}}
   const ob=tObsRev(t,c);let cot=0,nof=0;for(const r of Object.values(c.rows))if(r.as){if(r.fir===true||r.fir===false)cot++;if(r.fir===false)nof++}
   return{c,pres,fal,hh:tR2(hh),he:tR2(he),alt,mot,obs:ob.filter(o=>o.k!=='firp'),cot,nof}}

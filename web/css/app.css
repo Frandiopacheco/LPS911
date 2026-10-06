@@ -2017,7 +2017,11 @@ label.tc-lab{flex-direction:column;align-items:stretch;gap:6px}
 .tr-tag{display:inline-block;margin-left:4px;font:600 10.5px var(--f-ui);color:var(--bad);background:var(--bad-soft);border-radius:var(--r-xs,4px);padding:1px 6px;white-space:nowrap}
 .to-row.tr-lrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .tr-late{display:flex;flex-direction:column;gap:2px}
-.tr-dup ul{margin:4px 0 0;padding-left:18px;font-size:13px}
+.tr-conf{border-color:var(--bad);background:var(--bad-soft);display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.tr-conf>b{color:var(--bad)}
+.tr-conf ul{margin:4px 0 0;padding-left:18px;font-size:13px}
+.tr-conf li li{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:1px 0}
+.to-obs li.tr-obl{color:var(--bad)}
 .tr-sin{margin-bottom:12px}
 .tr-sin>summary{cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .tr-sbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}

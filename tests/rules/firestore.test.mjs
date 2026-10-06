@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField } from 'firebase/firestore';
 
 const OWNER = 'frandiopacheco@gmail.com';
 let env;
@@ -717,6 +717,41 @@ test('tareo F2: el asistente revisa; el capataz no pasa a revisado, no edita un 
   await assertFails(updateDoc(doc(p, id), { revBy: 'u_tcap1' }));
   await assertFails(updateDoc(doc(p, id), { st: 'rev' }));
   await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur, { t: 7, by: 'u_tcap1', a: 'env' }] }));
+});
+// ── Auditoría F2 (hallazgos 10 y 12): el cotejo (cot, cotFot) es del asistente; el capataz no se lo atribuye ──
+test('tareo F2 auditoría: el capataz no crea ni cambia cot/cotFot ni agrega entradas de la oficina al historial', async () => {
+  const h = limaDay(0), me = 'u_tcap1', id = `tareo/${h}_${me}`, p = cap('tcap1'), a = user('tasis@obra.pe');
+  // al crear
+  await assertFails(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: {}, cot: { '11111111': { fir: true } } }));
+  await assertFails(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: {}, cotFot: ['f1'] }));
+  await assertSucceeds(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: { '11111111': { as: true } }, foto: ['f1'], hist: [] }));
+  // en borrador: no escribe el cotejo ni se pone entradas de la oficina en el historial
+  await assertFails(updateDoc(doc(p, id), { 'cot.11111111.fir': true }));
+  await assertFails(updateDoc(doc(p, id), { cotFot: ['f1'] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 1, by: 'tasis@obra.pe', a: 'fir' }] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 1, by: 'tasis@obra.pe', a: 'rev' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 1, by: me, a: 'env' }] }));
+  // el asistente coteja por rutas (solo lo que cambió) y luego reabre conservando la garita
+  await assertSucceeds(updateDoc(doc(a, id), { 'cot.11111111.fir': true, 'cot.11111111.gar': '17:05', 'cot.11111111.by': 'tasis@obra.pe', 'cot.11111111.t': 2, cotFot: ['f1'] }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 3, by: 'tasis@obra.pe', mot: 'm' }, cot: { '11111111': { gar: '17:05' } }, cotFot: deleteField(), hist: arrayUnion({ t: 3, by: 'tasis@obra.pe', a: 'reab' }) }));
+  // reabierto: su guardado completo copia cot igual (sí); cambiarlo o quitarlo (no)
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data(); });
+  await assertSucceeds(setDoc(doc(p, id), { ...cur, blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['11111111'] }] }));
+  await assertFails(setDoc(doc(p, id), { ...cur, cot: { '11111111': { gar: '17:05', fir: true } } }));
+  const { cot, ...sinCot } = cur;
+  await assertFails(setDoc(doc(p, id), sinCot));
+  await assertFails(updateDoc(doc(p, id), { cotFot: ['f1'] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur.hist, { t: 4, by: me, a: 'env' }] }));
+});
+test('tfot: restaurar un respaldo (misma foto, mismo id) lo puede hacer la oficina; cambiarla no', async () => {
+  const h = limaDay(0), id = `tfot/${h}_u_tcap1_9`, D = { date: h, cap: 'u_tcap1', n: 1, d: 'data:image/jpeg;base64,xx', by: 'u_tcap1', ts: 1 };
+  await tSeed(id, D);
+  await assertSucceeds(setDoc(doc(user(OWNER), id), D));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), id), D));
+  await assertFails(setDoc(doc(user(OWNER), id), { ...D, d: 'otra' }));
+  await assertFails(setDoc(doc(cap('tcap1'), id), D));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), id), D));
 });
 test('tfot: el capataz sube las fotos de su tareo; nadie las cambia ni borra', async () => {
   const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1', id = `tfot/${h}_${me}_1`;
