@@ -73,7 +73,6 @@ function renderCfg(main){
    <label for="p_ppc">Código del formato PPC</label><input id="p_ppc" data-p="ppcCode" value="${esc(p.ppcCode||'GP-PR02-F-10')}"${isAdmin?'':' readonly'}>
    <label for="p_rw">Semana de referencia</label><input id="p_rw" data-p="refWeek" type="number" value="${p.refWeek}"${isAdmin?'':' readonly'}>
    <label for="p_rd">Lunes de esa semana</label><input id="p_rd" data-p="refDate" type="date" value="${p.refDate}"${isAdmin?'':' readonly'}>
-   <label for="p_dl">Tablero: hora límite para iniciar</label><input id="p_dl" data-p="dashLate" type="time" value="${esc(p.dashLate||'09:00')}"${isAdmin?'':' readonly'}>
    <label for="p_pcd">Propuestas de SC: día de corte</label><select id="p_pcd" data-p="propCutDow"${isAdmin?'':' disabled'}>${(()=>{const c=propCutCfg();return[1,2,3,4,5,6,0].map(d=>`<option value="${d}"${c.dow===d?' selected':''}>${DOW_N[d][0].toUpperCase()+DOW_N[d].slice(1)} antes de la semana</option>`).join('')})()}</select>
    <label for="p_pch">Propuestas de SC: hora de corte</label><input id="p_pch" data-p="propCutHH" type="time" value="${esc(propCutCfg().hh)}"${isAdmin?'':' readonly'}>
    <label for="p_plc">Plan diario: publicación automática (si nadie publicó)</label><input id="p_plc" data-p="planCutHH" type="time" max="23:30" step="900" value="${esc(planCutHH())}"${isAdmin?'':' readonly'} title="El plan del día hábil siguiente se publica solo a esta hora (hasta las 23:30): se aplican los cambios de la reunión y las propuestas sin revisar se rechazan">

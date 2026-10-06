@@ -244,6 +244,16 @@ test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
 });
+test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingeniero habilite', async () => {
+  const sc = user('sc@obra.pe');
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'meta/propwin'), { closeAt: Date.now() - 60_000 }); });
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // el ingeniero sí revisa
+  await assertFails(setDoc(doc(sc, 'meta/propwin'), { closeAt: Date.now() + 864e5 })); // el SC no se habilita solo
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
+  await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
+  await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/propwin')); });
+});
 test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async () => {
   const h = { id: 'x1', st: 'rej', by: 'editor@obra.pe', n: 'Elena', t: 1 };
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x1: null }, hist: { k1: h } }); });
@@ -667,10 +677,9 @@ test('tareo: consultas; el tcap solo filtra los suyos, tcos nada, la oficina tod
   await assertFails(getDoc(doc(user('tcos@obra.pe'), `tareo/${h}_u_tcap1`)));
   for (const db of [user('editor@obra.pe'), user('campo@obra.pe'), user('lector@obra.pe'), cap('cap1')]) await assertFails(getDoc(doc(db, `tareo/${h}_u_tcap1`)));
 });
-test('tareo: el asistente reabre; el capataz corrige y reenvía; nadie borra; jefe con tpub solo lee', async () => {
+test('tareo: el asistente reabre; el capataz corrige y reenvía; nadie borra; el jefe con tpub no crea tareos', async () => {
   const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1');
   await tSeed(id, { date: h, cap: 'u_tcap1', st: 'env', rows: {} });
-  await assertFails(updateDoc(doc(user('jefe@obra.pe'), id), { st: 'reab' }));
   await assertFails(updateDoc(doc(p, id), { st: 'reab' })); // no se reabre solo
   await assertSucceeds(updateDoc(doc(user('tasis@obra.pe'), id), { st: 'reab', reab: { t: 1, by: 'tasis@obra.pe', mot: 'Falta foto' } }));
   await assertSucceeds(updateDoc(doc(p, id), { rows: { '03684337': { as: true } } })); // sigue 'reab'
@@ -701,8 +710,6 @@ test('tareo F2: el asistente revisa; el capataz no pasa a revisado, no edita un 
   await assertFails(updateDoc(doc(p, id), { st: 'env' }));
   await assertFails(updateDoc(doc(p, id), { blq: [{ id: 'b1' }] }));
   await assertFails(updateDoc(doc(p, id), { st: 'rev', blq: [] }));
-  // el jefe con tpub solo lee
-  await assertFails(updateDoc(doc(user('jefe@obra.pe'), id), { st: 'env' }));
   // quitar revisado (rev → env) y reabrir desde revisado: el asistente sí
   await assertSucceeds(updateDoc(doc(a, id), { st: 'env', hist: arrayUnion({ t: 5, by: 'tasis@obra.pe', a: 'qrev', mot: 'm' }) }));
   await assertSucceeds(updateDoc(doc(user(OWNER), id), { st: 'rev' }));
@@ -933,60 +940,42 @@ test('tareo F3: la oficina no publica (st pub / pubV) ni cambia un tareo publica
   await assertFails(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor', pubV: 1 }));
   await assertSucceeds(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor' }));
 });
-// ── Revisión de producción (06-10-2026): el jefe con tpub corrige horas/partidas de un env/rev y marca «prod»; nada más ──
-test('tareo producción: el jefe con tpub corrige horas y partidas de un enviado o revisado sin cambiar estado, cotejo ni revisión', async () => {
-  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, j = user('jefe@obra.pe'), p = cap('tcap1');
-  const J = 'jefe@obra.pe', R0 = { '11111111': { as: true, h: { p10_05: 8.5 } } }, R1 = { '11111111': { as: true, h: { p10_05: 4.5, p10_10: 4 } } };
+// ── Jefe con edición completa (06-10-2026, tarde): el jefe con tpub edita los tareos como la oficina; no publica, no crea ──
+test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, reabre y marca «prod»; no publica ni toca un publicado', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, j = user('jefe@obra.pe'), p = cap('tcap1'), J = 'jefe@obra.pe';
+  const R0 = { '11111111': { as: true, h: { p10_05: 8.5 } } }, R1 = { '11111111': { as: true, h: { p10_05: 4.5, p10_10: 4 } }, '22222222': { as: true, h: { p10_05: 8.5 }, ajeno: true, capOrig: '' } };
   const H0 = [{ t: 1, by: 'u_tcap1', a: 'env' }];
-  const PH = (t, x) => ({ t, by: J, a: 'prod', ...x });
-  const prod = t => ({ t, by: J, byN: 'Jefe de producción' });
-  const seed = (st, x) => tSeed(id, { date: h, cap: 'u_tcap1', st, modo: 'hrs', pcs: ['p10_05'], rows: R0, cot: { '11111111': { fir: true } }, cotFot: ['f1'], foto: ['f1'], revAt: 3, revBy: 'tasis@obra.pe', hist: H0, ...x });
-  for (const st of ['env', 'rev']) {
-    await seed(st);
-    // mover horas y agregar partida, con historial a:'prod' al final
-    await assertSucceeds(updateDoc(doc(j, id), { rows: R1, pcs: ['p10_05', 'p10_10'], prod: prod(2), hist: [...H0, PH(2, { det: [], tot: false })], by: J, ts: 2 }));
-    // «Conforme sin cambios»: solo prod + historial (arrayUnion también vale)
-    await seed(st);
-    await assertSucceeds(updateDoc(doc(j, id), { prod: prod(3), hist: arrayUnion(PH(3, { cam: 'Conforme sin cambios' })), by: J, ts: 3 }));
-  }
+  const seed = (st, x) => tSeed(id, { date: h, cap: 'u_tcap1', st, modo: 'hrs', pcs: ['p10_05'], rows: R0, foto: ['f1'], hist: H0, ...x });
   await seed('env');
-  // no cambia el estado, ni el cotejo, ni la revisión, ni la publicación
-  await assertFails(updateDoc(doc(j, id), { st: 'rev', prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { cot: {}, prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { cotFot: [], prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { revAt: 9, prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { revBy: J, prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { pubV: 1, prod: prod(4), hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { blq: [], prod: prod(4), hist: [...H0, PH(4)] }));
-  // historial: exactamente una entrada nueva al final, a:'prod' y a su nombre; no reescribe las anteriores
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4) }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, PH(4, { a: 'cor' })] }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, { ...PH(4), by: 'tasis@obra.pe' }] }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, PH(4), PH(5)] }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [{ ...H0[0], mot: 'x' }, PH(4)] }));
-  // prod a su nombre y obligatorio
-  await assertFails(updateDoc(doc(j, id), { rows: R1, hist: [...H0, PH(4)] }));
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: { t: 4, by: 'otro@obra.pe' }, hist: [...H0, PH(4)] }));
-  // historial vacío al empezar: una sola entrada
-  await seed('env', { hist: [] });
-  await assertSucceeds(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [PH(4)] }));
-  // borrador, reabierto o publicado: no
-  for (const st of ['bor', 'reab', 'pub']) {
-    await seed(st);
-    await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(5), hist: [...H0, PH(5)] }));
-  }
-  // un editor sin tpub, o con tpub desactivado, no
+  // cotejo de firmas y garita, corrección (agrega un obrero y mueve horas), revisado, quitar revisado, reabrir
+  await assertSucceeds(updateDoc(doc(j, id), { cot: { '11111111': { fir: true, by: J, t: 2 } }, cotFot: ['f1'], hist: arrayUnion({ t: 2, by: J, a: 'fir' }) }));
+  await assertSucceeds(updateDoc(doc(j, id), { rows: R1, pcs: ['p10_05', 'p10_10'], prod: { t: 3, by: J }, hist: arrayUnion({ t: 3, by: J, a: 'cor', mot: 'm' }) }));
+  await assertSucceeds(updateDoc(doc(j, id), { st: 'rev', revAt: 4, revBy: J, hist: arrayUnion({ t: 4, by: J, a: 'rev' }) }));
+  await assertSucceeds(updateDoc(doc(j, id), { rows: R0, prod: { t: 5, by: J }, hist: arrayUnion({ t: 5, by: J, a: 'prod', tot: true }) })); // producción: el estado no cambia
+  await assertSucceeds(updateDoc(doc(j, id), { st: 'env', revAt: deleteField(), revBy: deleteField(), hist: arrayUnion({ t: 6, by: J, a: 'qrev', mot: 'm' }) }));
+  await assertSucceeds(updateDoc(doc(j, id), { st: 'reab', reab: { t: 7, by: J, mot: 'm' }, prod: deleteField(), cot: deleteField(), cotFot: deleteField(), hist: arrayUnion({ t: 7, by: J, a: 'reab' }) }));
+  // no publica: ni 'pub' ni pubV; un publicado no lo toca (para corregirlo: «Rectificar» en Publicación)
+  await seed('rev');
+  await assertFails(updateDoc(doc(j, id), { st: 'pub' }));
+  await assertFails(updateDoc(doc(j, id), { st: 'pub', pubV: 1 }));
+  await assertFails(updateDoc(doc(j, id), { pubV: 1 }));
+  await seed('pub', { pubV: 1 });
+  await assertFails(updateDoc(doc(j, id), { st: 'rev' }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1 }));
+  // no crea tareos ni borra; no edita el máster, las partidas ni las fotos
+  await assertFails(setDoc(doc(j, `tareo/${h}_u_otro`), { date: h, cap: 'u_otro', st: 'env' }));
+  await assertFails(deleteDoc(doc(j, id)));
+  await assertFails(setDoc(doc(j, 'tper/12345678'), PER('12345678')));
+  await assertFails(updateDoc(doc(j, 'tpc/10.05'), { nom: 'x' }));
+  // un editor sin tpub, o con tpub desactivado, no edita
   await seed('env');
-  await assertFails(updateDoc(doc(user('editor@obra.pe'), id), { rows: R1, prod: { t: 6, by: 'editor@obra.pe' }, hist: [...H0, { t: 6, by: 'editor@obra.pe', a: 'prod' }] }));
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), id), { rows: R1 }));
   await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
-  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(6), hist: [...H0, PH(6)] }));
-  // el capataz no se pone «prod» ni entradas de producción (en su reabierto)
+  await assertFails(updateDoc(doc(j, id), { rows: R1 }));
+  await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
+  // el capataz sigue sin poder ponerse «prod» ni entradas de producción (en su reabierto)
   await seed('reab');
-  await assertFails(updateDoc(doc(p, id), { prod: { t: 7, by: 'u_tcap1' } }));
-  await assertFails(updateDoc(doc(p, id), { hist: [...H0, { t: 7, by: 'u_tcap1', a: 'prod' }] }));
-  await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 7, by: 'u_tcap1', a: 'env' }], st: 'env' }));
-  // el administrador sigue pudiendo todo (como oficina)
-  await seed('env');
-  await assertSucceeds(updateDoc(doc(user(OWNER), id), { rows: R1, prod: { t: 8, by: OWNER }, hist: arrayUnion({ t: 8, by: OWNER, a: 'prod' }) }));
+  await assertFails(updateDoc(doc(p, id), { prod: { t: 8, by: 'u_tcap1' } }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'prod' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
 });

@@ -24,8 +24,14 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - Indicadores: el SC de un día registrado es `rc.sc` (`scAt`), no la partida actual. El gráfico «PPC diario» de la vista Semanal usa `dayData` (misma población que el Diario, con lo archivado).
   - Servidor: `aceptarCierres` escribe con `acceptCloses` (lib.js): una transacción por registro que lo relee; si un ingeniero lo verificó o quitó mientras tanto, no lo toca.
 
-## «En secuencia» (tren de trabajo, oct 2026)
-- Estado en vivo `seq` (`KST.seq`, morado): la cuadrilla llega a ese ambiente después de otro. Se guarda en `live.<fecha_act>.seq = {on, after}` (`after` = actividad anterior o vacío) con eventos `seq`/`unseq` en el `log`.
-- `kState` lo devuelve solo si no hay `st` ni cierre: al iniciar pasa a «En ejecución». `seqText` dice el estado del anterior («ya terminó: le toca»).
-- Lo marcan SC, capataz, ingeniero (campo/editor/admin) y veedor desde la ficha (`data-ka="seqf"` → elegir el anterior entre las del mismo SC y piso; `unseq` lo quita). Solo hoy y sin cierre confirmado.
-- **Solo informativo**: no cambia el PPC, los cierres ni la alerta de «sin iniciar» del Tablero (que ya no cuenta los que están en secuencia; tienen su propia tarjeta).
+## «Iniciado» / «Detenido» (oct 2026; reemplaza «En secuencia»)
+- La ficha de una actividad sin iniciar muestra dos botones: **▶ Iniciado** y **⏸ Detenido…**. El motivo de «Detenido» sale de `STOP_MOT`: Inicia después, Actividad predecesora, Seguridad, Materiales, Calidad, Otros («Otros» pide detalle). Se guarda en `live.mot` como siempre (`st:'stop'`, evento `stop` con `m` = motivo).
+- «Inicia después» (`STOP_INFO`) es el tren de trabajo: informativo, el Tablero no lo cuenta como detención ni como causa.
+- Si estaba detenido sin haber iniciado (`t0` vacío), el botón dice «▶ Iniciado» (evento `run`); si ya había iniciado, «▶ Reanudado» (`res`).
+- El estado antiguo `seq` (datos previos) se sigue leyendo (`kState`, `seqText`) pero ya no se puede marcar; iniciar o detener lo apaga (`seq.on=false`).
+
+## Tablero gerencial (`dash`, oct 2026)
+- Solo informa: no registra nada. Sin alertas ni «Actividad reciente». La ficha de un ambiente del plano en vivo (`dashPop`) es de solo lectura (estado, días de la semana, metrado, liberación, restricciones y lo demás programado hoy en ese ambiente).
+- Filtros propios (no se guardan): subcontratistas (`DB_.sc`, varios) y tipo de actividad (`DB_.ty` = nombre normalizado con `an()`); `dashOk(sc,nombre)` se aplica a todo. El piso sigue siendo el selector principal.
+- Indicadores: programadas hoy, estado de hoy (barra), PPC diario hoy (`dayData` filtrado), PPC de la semana y promedio de 4 semanas completas (`dashWeek`: semanas congeladas, compromisos `it.sc`/`it.act`), restricciones abiertas. Gráficos: PPC semanal 8 semanas (`svgLines`), PPC por SC 4 semanas, avance de hoy por SC con motivos de detención, causas de no cumplimiento 30 días y restricciones abiertas por responsable.
+- Se quitó «Tablero: hora límite para iniciar» de Configuración (`dashLate` ya no se usa).

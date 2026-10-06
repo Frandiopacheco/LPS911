@@ -57,3 +57,31 @@ test('publicarTareo (falso): solo admin o editor con tpub', async ({ page }) => 
   const r = await call(page, { accion: 'previa', fecha: HOY });
   expect(r.code).toBe('functions/permission-denied');
 });
+
+test('Publicación con la función (falso): carga sola, se actualiza cuando cambia un tareo, motivo y publicar', async ({ page }) => {
+  await openApp(page, { as: 'jefe', extra, editar: false });
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => { U.mod = 'tar'; goTab('tpub'); });
+  const st = page.locator('#tpbSt');
+  await expect(st).toContainText('Falta 1 cosa');                                     // GAMA sin tareo
+  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bok\b/);
+  await expect(page.locator('#tpbProd tr[data-tpbp]')).toHaveCount(1);
+  await expect(page.locator('#tpbRes')).toContainText('18.5');
+  // la oficina reabre el tareo (vuelve a «Enviado»): la lista se actualiza sola
+  const id = HOY + '_tcap@obra.pe';
+  await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'env', ts: 5 }), id);
+  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bno\b/, { timeout: 6000 });
+  await expect(st).toContainText('Faltan 2 cosas');
+  await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'rev', ts: 6 }), id);
+  await expect(st).toContainText('Falta 1 cosa', { timeout: 6000 });
+  // motivo para GAMA y publicar
+  await page.check('#tpbSin [data-tpbx="33333333"]');
+  await page.click('#tpbSin [data-tpbm="Vacaciones"]');
+  await expect(st).toContainText('Listo para publicar');
+  await page.click('#tpbPub');
+  await expect(st).toContainText('Publicado v1');
+  await expect(page.locator('#tpbRect')).toBeVisible();
+  await expect(page.locator(`#tpbDays [data-tpbf="${HOY}"]`)).toContainText('✓ v1');
+  await expect(page.locator('#tpbHist li[data-tpbv="1"]')).toContainText('v1 · vigente');
+  expect((await page.evaluate(f => window.__dbGet('tpub', f + '_v1'), HOY)).exc).toEqual({ 33333333: { motivo: 'Vacaciones', ape: 'GAMA', nom: 'JUAN' } });
+});

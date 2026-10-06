@@ -252,3 +252,21 @@ test('14 · la revisión muestra el cruce entre dos propuestas del mismo ambient
   await expect(page.locator('#ppm')).toContainText('Otra propuesta pendiente en el mismo ambiente');
   noErrors(errors, 'cruces entre propuestas');
 });
+
+test('ventana de propuestas: pasado el corte el SC solo ve; el ingeniero la habilita hasta el próximo corte', async ({ page }) => {
+  const W = ['meta', 'propwin', { closeAt: Date.parse('2026-09-26T13:00:00-05:00') }];
+  let errors = await openApp(page, { as: 'sc', tab: 'look', extra: [W] });
+  await expect(page.locator('#ppbar')).toContainText('Propuestas cerradas');
+  await expect(page.locator('#ppbar [data-pp="send"]')).toHaveCount(0);
+  expect(await page.evaluate(() => propPut('acts', 'i0', { ...S.act.get('i0'), days: ['2026-10-05'] }))).toBe(true); // no guarda nada
+  expect(await page.evaluate(() => __dbGet('lhprop', 'c1'))).toBeFalsy();
+  noErrors(errors, 'sc cerrado');
+  await page.context().clearCookies();
+  const p2 = await page.context().newPage();
+  errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W] });
+  p2.on('dialog', d => d.accept());
+  await p2.locator('#ppbar [data-pp="open"]').click();
+  await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(Date.parse('2026-10-03T13:00:00-05:00'));
+  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  noErrors(errors, 'editor habilita');
+});

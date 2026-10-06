@@ -248,19 +248,25 @@ test('16 · el SC propone el cierre del día; el ingeniero lo confirma', async (
   noErrors(errors, 'sc cierra');
 });
 
-test('16b · tren de trabajo: el SC marca «en secuencia» (solo informativo) y al iniciar pasa a en ejecución', async ({ page }) => {
+test('16b · «Detenido · Inicia después» (tren de trabajo) y luego «Iniciado» pasa a en ejecución', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'cap' });
   await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
-  await page.locator('#ksheet [data-ka="seqf"]').click();
-  await page.locator('#ksheet [data-kseq=""]').click();
-  await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).seq?.on, HOY)).toBe(true);
-  expect(await page.evaluate(d => kState(d, 'i0').k, HOY)).toBe('seq');
-  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('En secuencia');
+  await expect(page.locator('#ksheet [data-ka="seqf"]')).toHaveCount(0);
+  await page.locator('#ksheet [data-ka="stopf"]').click();
+  await expect(page.locator('#ksheet [data-kmot]')).toHaveText(['Inicia después', 'Actividad predecesora', 'Seguridad', 'Materiales', 'Calidad', 'Otros']);
+  await page.locator('#ksheet [data-kmot="Otros"]').click();
+  await page.locator('#ksheet [data-ka="stopsave"]').click(); // «Otros» pide detalle
+  await expect(page.locator('#ksheet')).toHaveCount(1);
+  await page.locator('#ksheet [data-kmot="Inicia después"]').click();
+  await page.locator('#ksheet [data-ka="stopsave"]').click();
+  await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).mot, HOY)).toBe('Inicia después');
+  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('Detenido: Inicia después');
   await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
-  await expect(page.locator('#ksheet [data-ka="unseq"]')).toBeVisible();
-  await page.locator('#ksheet [data-ka="run"]').click();
+  await expect(page.locator('#ksheet [data-ka="res"]')).toHaveText('▶ Iniciado'); // nunca había iniciado
+  await page.locator('#ksheet [data-ka="res"]').click();
   await expect.poll(() => page.evaluate(d => kState(d, 'i0').k, HOY)).toBe('run');
-  noErrors(errors, 'en secuencia');
+  expect(await page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).log.at(-1).s, HOY)).toBe('run');
+  noErrors(errors, 'detenido');
 });
 
 test('17 · el administrador mantiene en cada piso la lista de sus responsables (la usan las reglas)', async ({ page }) => {
