@@ -4,7 +4,10 @@
 /* =====================================================================
    ETAPA 26 · Capataces: estado en vivo (iniciar / detener / cerrar) y confirmación
    ===================================================================== */
-const KST={none:{t:'Sin iniciar',c:'#8C959F'},seq:{t:'En secuencia',c:'#7E57C2'},run:{t:'En ejecución',c:'#1565C0'},stop:{t:'Detenida',c:'#EF6C00'},ok:{t:'Cumplido',c:'#2E7D4F'},no:{t:'No cumplido',c:'#C62828'}};
+const KST={none:{t:'Sin iniciar',c:'#8C959F'},seq:{t:'En secuencia',c:'#7E57C2'},run:{t:'En ejecución',c:'#1565C0'},stop:{t:'Detenido',c:'#EF6C00'},ok:{t:'Cumplido',c:'#2E7D4F'},no:{t:'No cumplido',c:'#C62828'}};
+/* motivos de «Detenido» (oct 2026, reemplaza «En secuencia»): «Inicia después» es el tren de trabajo (solo informativo) */
+const STOP_MOT=['Inicia después','Actividad predecesora','Seguridad','Materiales','Calidad','Otros'];
+const STOP_INFO='Inicia después';
 const liveOf=(d,aid)=>LIVE.get(d+'_'+aid)||null;
 function kState(d,aid){const r=recReal(d,aid);if(r)return{k:r.status==='ok'?'ok':'no',conf:true,r};const lv=liveOf(d,aid);
   if(lv&&lv.close&&lv.close.status)return{k:lv.close.status,conf:false,lv};if(lv&&lv.st)return{k:lv.st,lv};if(lv&&lv.seq&&lv.seq.on)return{k:'seq',lv};return{k:'none',lv}}
@@ -15,12 +18,12 @@ function kText(d,aid){const s=kState(d,aid);const lv=s.lv||liveOf(d,aid);let t='
   if(s.conf)t=`${s.k==='ok'?'✓ Cumplido':'✗ No cumplido'}${s.r.cnc?' · '+s.r.cnc:''} · confirmado`;
   else if(s.k==='ok'||s.k==='no')t=`${s.k==='ok'?'✓ Cumplido':'✗ No cumplido'}${lv.close.cnc?' · '+lv.close.cnc:''} · por confirmar`;
   else if(s.k==='run')t=`▶ En ejecución desde ${hhmm(lv.t0||lv.log?.[0]?.t)}`;
-  else if(s.k==='stop')t=`⏸ Detenida${lv.mot?': '+lv.mot:''}`;
+  else if(s.k==='stop')t=`⏸ Detenido${lv.mot?': '+lv.mot:''}`;
   else if(s.k==='seq')t=seqText(d,lv);
   else t='Sin iniciar';
   return t+(lv&&lv._pend?' · ⏳ sin enviar':'')}
 function liveLine(d,aid){const lv=liveOf(d,aid);if(!lv||!(lv.log||[]).length)return'';const L=lv.log.slice(-3);
-  const w={run:'▶ Inició',res:'▶ Reanudó',stop:'⏸ Detuvo',close:'Cerró',seq:'⏭ En secuencia',unseq:'Quitó la secuencia'};
+  const w={run:'▶ Inició',res:'▶ Reanudó',stop:'⏸ Detenido',close:'Cerró',seq:'⏭ En secuencia',unseq:'Quitó la secuencia'};
   return`<div class="clive">${L.map(e=>`<span>${hhmm(e.t)} ${w[e.s]||e.s}${e.s==='stop'&&e.m?' ('+esc(e.m)+')':''}${e.s==='seq'&&e.m?' tras '+esc(e.m):''}${e.s==='close'?' '+(e.m==='ok'?'✓':'✗'):''} · ${esc((e.n||'').split(' ')[0])}</span>`).join('')}${lv._pend?'<span>⏳ sin enviar</span>':''}</div>`}
 function liveWrite(d,aid,patch,ev,extra){const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
   const e={...ev,t:NOW(),by:me.email,n:me.name||''};
@@ -49,7 +52,7 @@ function capItems(d){const E=ENG()||VEED();const vs=new Set(visPisos().map(p=>p.
     .filter(o=>o.a&&o.s&&o.pid&&(!E||vs.has(o.pid))).sort((p,q)=>(p.s.order||0)-(q.s.order||0)||(p.a.order||0)-(q.a.order||0)||(p.x.order||0)-(q.x.order||0))}
 function capPend(d){if(ENG()||VEED()||SCK())return[];const my=me&&me.scs||[];return[...LIVE.values()].filter(l=>l.date<d&&l.date>=addD(d,-7)&&my.includes(l.sc)&&l.st&&!(l.close&&l.close.status)&&!recReal(l.date,l.actId)&&S.act.has(l.actId)).sort((a,b)=>a.date.localeCompare(b.date))}
 function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG()||VEED();const q=VEED()?'':E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'||s.k==='seq'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'||s.k==='seq'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
-  const ql={run:liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'▶ Continúa':'▶ Iniciar',res:'▶ Reanudar',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
+  const ql={run:liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'▶ Continúa':'▶ Iniciado',res:liveOf(d,aid)&&liveOf(d,aid).t0?'▶ Reanudado':'▶ Iniciado',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
   return`<article class="kc k-${s.k}${s.conf?' conf':''}" data-k="${aid}" data-d="${d}" style="--k:${KST[s.k].c}"><i class="kn">${n||'·'}</i><div class="kt"><b>${esc(o.x.name)}</b><span>${esc(o.a.code)} · ${esc(o.a.name)}${pend?' · '+fmtD(d):''}${E||(me.scs||[]).length>1?' · '+esc(conOf(o.x.sc).name):''}</span><em>${esc(kText(d,aid))}</em></div>${q?`<button class="kgo" data-kq="${q}">${ql}</button>`:s.conf?'<span class="kok">✓</span>':''}</article>`}
 function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(CP.v!=='plan'&&CP.v!=='list')CP.v='plan';const V=E?'plan':CP.v;
@@ -75,7 +78,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   if(npOn)lh+=npArm?`<div class="knpbar knpon"><div class="knparmt"><b>Toca en el plano</b> el lugar donde ves trabajando a la cuadrilla.</div><div class="knpbtns"><button class="ib" data-knpl>Elegir de la lista</button><button class="ib" data-knpx>Cancelar</button></div></div>`:`<div class="knpbar"><button class="kbig ghost knpadd" data-knp>＋ No programado</button><span class="knote">${items.length?'Toca un número para '+(VEED()?'ver':'verificar')+'. Trabajo no programado: <b>dos toques rápidos</b> en cualquier lugar del plano, o <b>＋ No programado</b> y luego el lugar.':'Dos toques rápidos en el lugar del plano donde ves trabajando a una cuadrilla, o <b>＋ No programado</b> y luego el lugar.'}</span></div>`;
   if(!all.length&&!npOn)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
   else if(V==='plan'){const un=items.filter(o=>!zoned.has(o.x.id));
-    lh+=`<div class="kleg">${['none','seq','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`}`;
+    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':SCK()?'iniciar o detener':'reportar'}.</p>`}`;
     if(un.length)lh+=`<div class="ksec">Sin ubicar en el plano (${un.length})</div>${un.map(o=>kCard(d,o,nums.get(o.x.id))).join('')}`}
   else lh+=items.map(o=>kCard(d,o,nums.get(o.x.id))).join('');
   if(npOn)lh+=npListHtml(d,new Set([CP.pid]),i=>!CP.sc||i.e.sc===CP.sc);
@@ -97,7 +100,7 @@ function capClick(e){const t=e.target;let b;
   const card=t.closest('article[data-k]');if(!card)return;const aid=card.dataset.k,d=card.dataset.d;
   const q=t.closest('[data-kq]');if(q){const k=q.dataset.kq;if(k==='run'||k==='res'){kAct(aid,d,k)}else if(k==='conf'){confirmProp(d,aid);toast('Confirmado')}else capSheet(aid,d,'close');return}
   capSheet(aid,d,'main')}
-function kAct(aid,d,k){const lv=liveOf(d,aid);if(k==='run'||k==='res'){liveWrite(d,aid,{st:'run',t0:lv&&lv.t0||NOW(),mot:''},{s:lv&&lv.st==='stop'?'res':'run'});toast(lv&&lv.st==='stop'?'Reanudada':'Iniciada')}}
+function kAct(aid,d,k){const lv=liveOf(d,aid);const re=!!(lv&&lv.st==='stop'&&lv.t0);if(k==='run'||k==='res'){liveWrite(d,aid,{st:'run',t0:lv&&lv.t0||NOW(),mot:'',seq:{on:false,after:''}},{s:re?'res':'run'});toast(re?'Marcada reanudada':'Marcada iniciada')}}
 function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);
   if(!keep||!KS||KS.aid!==aid||KS.d!==d)KS={aid,d,mode,cs:'',cnc:'',mot:'',note:'',done:false};KS.mode=mode;
   const s=kState(d,aid);const lv=liveOf(d,aid);const nums=window.__plano&&window.__plano.nums?window.__plano.nums(pisoOfAct(aid)):new Map();const n=nums.get(aid);const past=d<todayIso();
@@ -105,34 +108,32 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
   const cnc=P().cnc||[];const later=(x.days||[]).filter(y=>y>d).length;
   let h=`<div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${n||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}${past?' · <b>'+fmtD(d)+'</b>':''}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}`;
-  const sqOn=d===todayIso()&&!s.conf&&(s.k==='none'||s.k==='seq');const SQB=!sqOn?'':s.k==='seq'?'<button class="kbig ghost" data-ka="unseq">Quitar «en secuencia»</button>':'<button class="kbig ghost" data-ka="seqf">⏭ Va en secuencia…</button>';
-  if(mode==='seq'){const sib=capItems(d).filter(o=>o.x.sc===x.sc&&o.pid===pisoOfAct(aid)&&o.x.id!==aid);
-    h+=`<div class="ksl">¿Después de qué ambiente llega la cuadrilla?</div><p class="knote">Es un tren de trabajo: aquí todavía no empieza porque primero termina el anterior. Es solo informativo; al cierre del día se marca cumplido o no cumplido como siempre.</p><div class="kchips kw">${sib.map(o=>`<button data-kseq="${o.x.id}">${esc(o.a.code)} · ${esc(o.x.name)}</button>`).join('')}<button data-kseq="">Sin indicar</button></div><div class="kbtns"><button class="kbig ghost" data-ka="back">Volver</button></div>`}
-  else if(mode==='stop'){h+=`<div class="ksl">¿Por qué se detuvo?</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.mot===c?'on':''}" data-kmot="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}${cnc.some(c=>/^otro/i.test(c))?'':`<button class="${KS.mot==='Otro'?'on':''}" data-kmot="Otro">Otro</button>`}</div>
-      <input class="kin" id="kmott" placeholder="Detalle (opcional)" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
-      <div class="kbtns"><button class="kbig warn" data-ka="stopsave">⏸ Guardar detención</button><button class="kbig ghost" data-ka="back">Volver</button></div>`}
+  if(mode==='stop'){h+=`<div class="ksl">${s.k==='run'?'¿Por qué se detuvo?':'¿Por qué no inicia?'}</div><div class="kchips kw">${STOP_MOT.map(c=>`<button class="${KS.mot===c?'on':''}" data-kmot="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+      ${KS.mot===STOP_INFO?'<p class="knote">Tren de trabajo: la cuadrilla llega más tarde a este ambiente. Es informativo; al cierre se marca cumplido o no cumplido como siempre.</p>':''}
+      <input class="kin" id="kmott" placeholder="${KS.mot==='Otros'?'Detalle (obligatorio)':'Detalle (opcional)'}" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
+      <div class="kbtns"><button class="kbig warn" data-ka="stopsave">⏸ Guardar «Detenido»</button><button class="kbig ghost" data-ka="back">Volver</button></div>`}
   else if(mode==='close'){h+=`<div class="ksl">¿Se cumplió lo programado para ${past?'ese día':'hoy'}?</div><div class="kbtns two"><button class="kbig ok${KS.cs==='ok'?' on':''}" data-kcs="ok">✓ Cumplido</button><button class="kbig no${KS.cs==='no'?' on':''}" data-kcs="no">✗ No cumplido</button></div>
       ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>`:''}
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
       <div class="kbtns"><button class="kbig pri" data-ka="closesave"${KS.cs&&(KS.cs==='ok'||KS.cnc)?'':' disabled'}>${E?'Guardar verificación':'Enviar cierre'}</button><button class="kbig ghost" data-ka="back">Volver</button></div><p class="knote">${E?'Queda registrado como verificado por ti (cuenta para el PPC).':'El ingeniero de campo lo revisará y confirmará.'}</p>`}
-  else if(VEED()){const r=recOf(d,aid);h+=`<p class="knote">${r?`Verificado por ${esc(r.byName||'')} · ${hhmm(r.ts)}`:'El avance lo verifica el ingeniero de campo.'}</p><div class="kbtns">${SQB}<button class="kbig ghost" data-kx>Cerrar</button></div>`}
+  else if(VEED()){const r=recOf(d,aid);h+=`<p class="knote">${r?`Verificado por ${esc(r.byName||'')} · ${hhmm(r.ts)}`:'El avance lo verifica el ingeniero de campo.'}</p><div class="kbtns"><button class="kbig ghost" data-kx>Cerrar</button></div>`}
   else if(E){const r=recOf(d,aid);const live=d===todayIso()&&!s.conf&&!(s.k==='ok'||s.k==='no');
     if(s.conf)h+=`<p class="knote">Verificado por ${esc(r&&r.byName||'')} · ${hhmm(r&&r.ts)}${r&&r.prop&&r.prop.status!==r.status?' · el capataz había marcado '+(r.prop.status==='ok'?'✓':'✗'):''}</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar verificación</button></div>`;
     else if(r&&r._prop)h+=`<p class="knote">Propuesto por <b>${esc(r.byName||'el capataz')}</b> · ${hhmm(r.ts)}</p><div class="kbtns"><button class="kbig pri" data-ka="confp">✓ Confirmar lo propuesto</button><button class="kbig ghost" data-ka="closef">Corregir…</button></div>`;
-    else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='none'||s.k==='seq'?'<button class="kbig run" data-ka="run">▶ Marcar iniciada</button>'+SQB+'<button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button>':s.k==='run'?'<button class="kbig warn" data-ka="stopf">⏸ Marcar detenida…</button>':'<button class="kbig run" data-ka="res">▶ Marcar reanudada</button>'):''}</div>`}
+    else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='none'||s.k==='seq'?'<div class="kbtns two"><button class="kbig run" data-ka="run">▶ Iniciado</button><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button></div>':s.k==='run'?'<button class="kbig warn" data-ka="stopf">⏸ Detenido…</button>':`<div class="kbtns two"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Iniciado'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button></div>`):''}</div>`}
   else if(SCK()){if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<p class="knote">Solo puedes marcar el avance del día de hoy.</p>`;
     else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">Cierre enviado: el ingeniero lo confirma.</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
-    else if(s.k==='none'||s.k==='seq')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button>${SQB}<button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
-    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
-    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='none'||s.k==='seq')h+=`<div class="kbtns"><div class="kbtns two"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciado'}</button><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button></div><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Iniciado'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     h+=`<p class="knote">Al final del día (≈ 4 pm) propón el cierre: cumplido o no cumplido. El ingeniero lo confirma; si no lo propones, él lo registra igual.</p>`}
   else{if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">Cerrar ${fmtD(d)}</button></div>`;
-    else if(s.k==='none'||s.k==='seq')h+=`<div class="kbtns"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciar'}</button>${SQB}<button class="kbig warn" data-ka="stopf">⏸ No se pudo iniciar…</button><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
-    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detener…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
-    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">▶ Reanudar</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='none'||s.k==='seq')h+=`<div class="kbtns"><div class="kbtns two"><button class="kbig run" data-ka="run">▶ ${liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'Continúa hoy':'Iniciado'}</button><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button></div><button class="kbig ghost" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
+    else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Iniciado'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     else h+=`<div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`}
   if(typeof canNP==='function'&&canNP()&&(ENG()||VEED())&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
   let sh=$('#ksheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='ksheet';sh.innerHTML='<div class="ksc"></div>';document.body.appendChild(sh);
@@ -144,20 +145,17 @@ async function kSheetChange(e){const t=e.target;if(t.id==='kdone'){KS.done=t.che
 function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-kx]')){kClose();return}if(!KS)return;const{aid,d}=KS;let b;
   if((b=t.closest('[data-kmot]'))){KS.mot=b.dataset.kmot;capSheet(aid,d,'stop',true);return}
   if((b=t.closest('[data-kcs]'))){KS.cs=b.dataset.kcs;if(KS.cs==='ok')KS.cnc='';capSheet(aid,d,'close',true);return}
-  if((b=t.closest('[data-kseq]'))){const pa=b.dataset.kseq;const pn=pa&&S.act.get(pa);liveWrite(d,aid,{seq:{on:true,after:pa||''}},{s:'seq',m:pn?(S.amb.get(pn.ambId)?.code||pn.name):''});toast('Marcada en secuencia');kClose();return}
   if((b=t.closest('[data-kcnc]'))){KS.cnc=b.dataset.kcnc;capSheet(aid,d,'close',true);return}
   if(!(b=t.closest('[data-ka]')))return;const k=b.dataset.ka;
   if(k==='np'){const x=S.act.get(aid);const pt=KS.pt||null;kClose();if(x)npNew({d,pid:pisoOfAct(aid),ambId:x.ambId,pt});return}
   if(k==='back'){capSheet(aid,d,'main',true);return}
-  if(k==='seqf'){capSheet(aid,d,'seq',true);return}
-  if(k==='unseq'){liveWrite(d,aid,{seq:{on:false,after:''}},{s:'unseq'});toast('Quitada la secuencia');kClose();return}
-  if(k==='stopf'){KS.note='';capSheet(aid,d,'stop',true);return}
+  if(k==='stopf'){KS.note='';KS.mot='';capSheet(aid,d,'stop',true);return}
   if(k==='closef'){capSheet(aid,d,'close');return}
   if(k==='run'||k==='res'){kAct(aid,d,k);kClose();return}
-  if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}
+  if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}if(mot==='Otros'&&!KS.note.trim()){toast('Escribe el detalle del motivo.');$('#kmott')&&$('#kmott').focus();return}
     const lv=liveOf(d,aid);let extra=null;
     if(KS.photo&&db){const fid=uid('f');FOTO.set(fid,KS.photo);fcol('fotos').doc(fid).set({data:KS.photo,date:d,pisoId:pisoOfAct(aid),actId:aid,by:me.email,ts:NOW(),live:true}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));extra={photos:[...(lv&&lv.photos||[]),fid]}}
-    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null},{s:'stop',m:mot},extra);toast('Detención registrada');kClose();return}
+    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot},extra);toast('Marcada «Detenido»');kClose();return}
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:(cur&&cur.photos)||[]}}});toast('Verificación guardada');kClose();return}
@@ -202,84 +200,96 @@ async function invClick(e){const t=e.target;let b;
 const shortT=(t,n)=>{t=String(t||'');return t.length>n?t.slice(0,n-1)+'…':t};
 const dashOn=m=>!!m&&(m.role==='admin'||(m.role==='editor'?m.dash!==false:m.dash===true));
 const canDash=()=>!!me&&(isAdmin||isOwnerEmail(me.email)||dashOn(MEM.get(me.email)||{role:me.role}));
-const DB_={pid:'',tv:false,tick:null};
-const dashLate=()=>{const v=String(P().dashLate||'09:00');return/^\d\d:\d\d$/.test(v)?v:'09:00'};
+const DB_={pid:'',tv:false,tick:null,sc:new Set(),ty:''};
 const nowHM=()=>{const n=new Date(NOW()-LIMA_OFF);return String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')};
+/* Tablero gerencial (oct 2026): solo informa (no registra nada). Filtros por subcontratista (varios) y tipo de actividad
+   (el nombre de la actividad, normalizado con an()); todo lo que muestra respeta los filtros y el piso elegido arriba. */
+const dashOk=(sc,name)=>(!DB_.sc.size||DB_.sc.has(sc))&&(!DB_.ty||an(name)===DB_.ty);
 function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.__plano&&window.__plano.novaSet?window.__plano:null;const nv=API?API.novaSet(d):new Set();
-  const items=[];for(const x of S.act.values()){if(!schedOrSnap(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
+  const items=[];for(const x of S.act.values()){if(!schedOrSnap(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;if(!dashOk(x.sc,x.name))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
   return items}
-function dashFeed(d){const vs=new Set(visPisos().map(p=>p.id));const ev=[];for(const lv of LIVE.values()){if(lv.date!==d||!vs.has(lv.pisoId))continue;for(const e of lv.log||[])ev.push({...e,lv})}
-  return ev.sort((a,b)=>b.t-a.t)}
+/* PPC semanal oficial (semanas congeladas) con los filtros: compromisos de la foto de la semana (it.sc, it.act) */
+function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,sc:{}};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
+    for(const[id,it]of Object.entries(w.items||{})){if(!dashOk(it.sc,it.act))continue;const q=r[id];const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
+      if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q))o.nimp++}}}
+  o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp):null;return o}
+/* tipos de actividad para el filtro: nombres de lo programado en las últimas 6 semanas y las 2 siguientes */
+function dashTypes(d){const a=addD(d,-42),b=addD(d,14);const m=new Map();for(const x of S.act.values()){if(!(x.days||[]).some(z=>z>=a&&z<=b))continue;if(DB_.sc.size&&!DB_.sc.has(x.sc))continue;const k=an(x.name);if(!k)continue;const o=m.get(k);if(o)o.n++;else m.set(k,{k,t:String(x.name).trim(),n:1})}
+  return[...m.values()].sort((p,q)=>p.t.localeCompare(q.t))}
 function renderDash(main){if(!canDash()){U.tab='look';render();return}
-  const d=todayIso();ensureDaily(addD(d,-49));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
+  const d=todayIso();ensureDaily(addD(d,-31));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(!DB_.tick)DB_.tick=setInterval(()=>{if(U.tab==='dash'&&ready)requestRender();else{clearInterval(DB_.tick);DB_.tick=null}},60000);
-  const items=dashData(d);const act=items.filter(i=>!i.nova);const late=dashLate();const isLate=nowHM()>=late;
-  const c={none:0,seq:0,run:0,stop:0,ok:0,no:0};let prop=0,conf=0;act.forEach(i=>{c[i.st.k]++;if(i.st.k==='ok'||i.st.k==='no'){if(i.st.conf)conf++;else prop++}});
-  const closed=c.ok+c.no;const vsP=new Set(visPisos().map(p=>p.id));
-  /* PPC de hoy = Indicadores › Diario (misma función); PPC de la semana = Indicadores › Semanal (compromisos congelados) */
-  const DD=dayData([d],vsP);const DT=DD.tot;const ppcD=DT.ver?DT.ok/DT.ver:null;const nProvD=DD.rows.filter(r=>r.rc&&r.rc._prop).length;
-  const PW=ppcWeekAgg(weekOf(d),vsP);
-  /* por subcontratista */
-  const bySc=new Map();act.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,seq:0,run:0,stop:0,ok:0,no:0,n:0,who:new Set()};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
-  for(const lv of LIVE.values())if(lv.date===d&&bySc.has(lv.sc))(lv.log||[]).forEach(e=>bySc.get(lv.sc).who.add(e.by));
+  const vsP=new Set(visPisos().map(p=>p.id));const items=dashData(d);const act=items.filter(i=>!i.nova);
+  const c={none:0,seq:0,run:0,stop:0,ok:0,no:0};act.forEach(i=>c[i.st.k]++);const closed=c.ok+c.no;
+  const stopL=act.filter(i=>i.st.k==='stop');const stopMot={};let later=0;stopL.forEach(i=>{const m=String(i.st.lv&&i.st.lv.mot||'Sin motivo').split(' — ')[0];if(m===STOP_INFO){later++;return}stopMot[m]=(stopMot[m]||0)+1});
+  /* PPC diario de hoy con los filtros (misma base que Indicadores › Diario) */
+  const dRows=dayData([d],vsP).rows.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
+  const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)W.push({w,...o})}
+  const PW=W.find(o=>o.w===cw)||null;const full=W.filter(o=>o.w<cw&&o.ppc!=null&&o.ev>=o.n).slice(-4);const avg4=full.length?full.reduce((t,o)=>t+o.ok,0)/Math.max(1,full.reduce((t,o)=>t+o.n,0)):null;
+  /* PPC por subcontratista: últimas 4 semanas congeladas */
+  const scAgg={};W.slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev}));
+  const scRows=Object.entries(scAgg).filter(([,v])=>v.ev).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
+  /* causas de no cumplimiento · 30 días (registros verificados, con los filtros) */
+  const cn={};dayData(Array.from({length:30},(_,k)=>addD(d,-29+k)),vsP).rows.forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
+  const top=Object.entries(cn).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  /* restricciones abiertas (afectan a actividades que pasan los filtros) */
+  const RS=restrInScope().filter(rOpenC).filter(r=>{const x=r.actId&&S.act.get(r.actId);if(!DB_.sc.size&&!DB_.ty)return true;if(!x)return!DB_.ty&&(!r.sc||!DB_.sc.size||DB_.sc.has(r.sc));return dashOk(x.sc,x.name)});
+  const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
+  const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d)o.late++});
+  const rRows=Object.entries(rBy).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>({label:k,v:o.n,sub:o.late?o.late+' vencidas':''}));
+  /* por subcontratista, hoy */
+  const bySc=new Map();act.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,seq:0,run:0,stop:0,ok:0,no:0,n:0};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
   const scs=[...bySc.entries()].sort((a,b)=>b[1].n-a[1].n||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
-  /* alertas */
-  const stopped=act.filter(i=>i.st.k==='stop');const lateL=isLate?act.filter(i=>i.st.k==='none'):[];
-  const zoned=API?new Set(visPisos().flatMap(p=>[...API.zonedSet(p.id)])):new Set();const unz=API?act.filter(i=>!zoned.has(i.x.id)):[];
-  const cross=API&&API.crossOf?visPisos().flatMap(p=>API.crossOf(p.id).map(c2=>({...c2,p}))):[];
-  /* restricciones */
-  const RS=restrInScope().filter(rOpenC);const d7=addD(d,7);
-  const rToday=RS.filter(r=>{const x=S.act.get(r.actId);return x&&schedOn(x,d)});
-  const rLate=RS.filter(r=>r.need&&r.need<d);
-  const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>d&&z<=d7)});
-  /* tendencias */
-  const cw=weekOf(d);const trend=[];for(let w=cw-5;w<=cw;w++){const ds=weekDays(w).filter(x=>x<=d);if(!ds.length)continue;const D=dayData(ds,new Set(visPisos().map(p=>p.id)));if(D.tot.ver)trend.push({label:'S'+w,v:D.tot.ver?D.tot.ok/D.tot.ver:0,sub:`${D.tot.ok} de ${D.tot.ver} verificadas`})}
-  const cn={};
-  const D30=dayData(Array.from({length:31},(_,k)=>addD(d,-30+k)),new Set(visPisos().map(p=>p.id)));Object.entries(D30.cnc).forEach(([k,v])=>cn[k]=(cn[k]||0)+v);
-  for(const lv of LIVE.values())if(lv.date>=addD(d,-30))(lv.log||[]).forEach(e=>{if(e.s==='stop'&&e.m){cn[e.m]=(cn[e.m]||0)+1}});
-  const top=Object.entries(cn).filter(([k])=>k!=='Sin causa registrada').sort((a,b)=>b[1]-a[1]).slice(0,5);
   /* --- html --- */
-  const T=(k,v,lab,sub,cls)=>`<div class="dk${cls?' '+cls:''}"${k?` style="--k:${KST[k]?KST[k].c:k}"`:''}><span class="dkl">${lab}</span><b>${v}</b>${sub?`<span class="dks">${sub}</span>`:''}</div>`;
   const pc=v=>v==null?'—':Math.round(v*100)+'%';
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
-  let hh=`<div class="dhd"><div><b>Tablero en vivo</b><span>${dw} ${fmtD(d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></div><span class="dlive"><i></i>En vivo</span><button class="ib" id="dtv">${DB_.tv?'Salir de pantalla completa':'⤢ Pantalla completa'}</button></div>
-   <div class="dkpi">${T('',act.length,'Programadas hoy',items.length-act.length?`+ ${items.length-act.length} “no se hará hoy”`:'')}
-    ${T('none',c.none,'Sin iniciar',isLate?`pasadas las ${late}`:`alerta desde las ${late}`,isLate&&c.none?'alert':'')}
-    ${c.seq?T('seq',c.seq,'En secuencia','van más tarde (tren)'):''}${T('run',c.run,'En ejecución','')}${T('stop',c.stop,'Detenidas','',c.stop?'alert2':'')}
-    ${T('ok',closed,'Cerradas',`${conf} confirmadas · ${prop} por confirmar`)}
-    ${T('',pc(ppcD),'PPC diario hoy',DT.ver?`${DT.ok} de ${DT.ver} verificadas${nProvD?` · ${nProvD} por confirmar`:''}`:'aún sin cierres','dkppc')}
-    ${T('',pc(PW&&PW.ppc),'PPC semanal '+cw+' (oficial)',PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}${PW.nimp&&PW.ppcSc!=null?` · del SC ${pc(PW.ppcSc)}`:''}`:'aún sin evaluar en PPC semanal','dkppc')}</div>`;
-  const bar=o=>`<span class="dbar">${['ok','no','run','stop','seq','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
-  let sc=`<div class="dcard"><div class="dch">Por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${bar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw" title="Personas que reportaron hoy">${o.who.size?`👷 ${o.who.size}`:'<em>sin reportes</em>'}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
-    <div class="dleg">${['none','seq','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div></div>`;
-  const AL=[];
-  stopped.forEach(i=>AL.push(`<li class="a-stop" data-dgo="${i.x.id}"><b>⏸ ${esc(conOf(i.x.sc).name)}</b> · ${esc(i.x.name)} <span>${esc(i.a.code)} · ${esc(i.st.lv&&i.st.lv.mot||'sin motivo')}${i.st.lv&&i.st.lv.log?.length?' · '+hhmm(i.st.lv.log[i.st.lv.log.length-1].t):''}</span></li>`));
-  if(lateL.length){const g={};lateL.forEach(i=>(g[i.x.sc]=g[i.x.sc]||[]).push(i));Object.entries(g).sort((a,b)=>b[1].length-a[1].length).forEach(([s,L])=>AL.push(`<li class="a-late"><b>⏰ ${esc(conOf(s).name)}</b> · ${L.length} sin iniciar <span>${esc(L.slice(0,3).map(i=>i.x.name).join(', '))}${L.length>3?'…':''}</span></li>`))}
-  cross.forEach(c2=>AL.push(`<li class="a-cross"><b>⚠ Superposición · ${esc(c2.p.code)}</b> · ${esc(c2.a)} ↔ ${esc(c2.b)}</li>`));
-  if(prop)AL.push(`<li class="a-prop" data-dtab="campo"><b>✓ ${prop} cierre${prop>1?'s':''} por confirmar</b> <span>Ir a Campo → “Por confirmar”</span></li>`);
-  if(unz.length)AL.push(`<li class="a-unz" data-dtab="mapa"><b>📍 ${unz.length} actividad${unz.length>1?'es':''} sin ubicar</b> en el plan diario <span>los capataces no las verán en su plano</span></li>`);
-  let al=`<div class="dcard"><div class="dch">Alertas <span>${AL.length}</span></div><ul class="dal">${AL.join('')||'<li class="a-ok">Todo en orden por ahora.</li>'}</ul></div>`;
-  const FD=dashFeed(d).slice(0,14);const w={run:'inició',res:'reanudó',stop:'detuvo',close:'cerró',seq:'marcó en secuencia',unseq:'quitó la secuencia de'};
-  let fd=`<div class="dcard"><div class="dch">Actividad reciente</div><ul class="dfd">${FD.map(e=>{const x=S.act.get(e.lv.actId);const a=x&&S.amb.get(x.ambId);return`<li data-dgo="${e.lv.actId}"><time>${hhmm(e.t)}</time><span><b>${esc(conOf(e.lv.sc).name)}</b> ${w[e.s]||e.s}${e.s==='close'?(e.m==='ok'?' ✓':' ✗'):''} <em>${esc(x?x.name:'')}</em>${e.s==='stop'&&e.m?` · ${esc(e.m)}`:''}<small>${esc(S.pis.get(e.lv.pisoId)?.code||'')} · ${esc(a?a.code+' '+a.name:'')} · ${esc((e.n||'').split(' ')[0])}</small></span></li>`}).join('')||'<li class="mu">Aún no hay reportes de los capataces hoy.</li>'}</ul></div>`;
+  const allSc=[...new Set([...S.act.values()].filter(x=>{const pid=pisoOfAct(x.id);return pid&&vsP.has(pid)&&(x.days||[]).some(z=>z>=addD(d,-42)&&z<=addD(d,14))}).map(x=>x.sc))].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
+  const tys=dashTypes(d);if(DB_.ty&&!tys.some(t=>t.k===DB_.ty))DB_.ty='';
+  const fil=DB_.sc.size||DB_.ty;
+  const hh=`<div class="dhd"><div><b>Tablero</b><span>${dw} ${fmtD(d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></div><span class="dlive"><i></i>En vivo</span><button class="ib" id="dtv">${DB_.tv?'Salir de pantalla completa':'⤢ Pantalla completa'}</button></div>
+   <div class="dflt"><div class="dfsc" role="group" aria-label="Subcontratistas"><button class="dfc${DB_.sc.size?'':' on'}" data-dsc="">Todos los SC</button>${allSc.map(sc=>`<button class="dfc${DB_.sc.has(sc)?' on':''}" data-dsc="${sc}" style="--c:${conOf(sc).color}" aria-pressed="${DB_.sc.has(sc)}"><i></i>${esc(conOf(sc).name)}</button>`).join('')}</div>
+    <label class="dfty"><span>Tipo de actividad</span><select class="tin" id="dty"><option value="">Todas</option>${tys.map(t=>`<option value="${esc(t.k)}"${DB_.ty===t.k?' selected':''}>${esc(t.t)}</option>`).join('')}</select></label>${fil?'<button class="lnkb" data-dclr>Quitar filtros</button>':''}</div>`;
+  const K=(lab,v,sub,cls,k)=>`<div class="dk${cls?' '+cls:''}"${k?` style="--k:${k}"`:''}><span class="dkl">${lab}</span><b>${v}</b>${sub?`<span class="dks">${sub}</span>`:''}</div>`;
+  const sbar=o=>`<span class="dbar">${['ok','no','run','stop','seq','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
+  const kp=`<div class="dkpi">${K('Programadas hoy',act.length,`${closed} cerradas · ${c.run} en ejecución`,'','#8C959F')}
+    <div class="dk dkst" style="--k:${KST.run.c}"><span class="dkl">Estado de hoy</span>${act.length?sbar(c):'<b>—</b>'}<span class="dks">${['ok','no','run','stop','none'].filter(k=>c[k]).map(k=>`${KST[k].t.toLowerCase()} ${c[k]}`).join(' · ')||'sin actividades'}</span></div>
+    ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
+    ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
+    ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].w}–${full[full.length-1].w}`:'sin semanas cerradas','dkppc')}
+    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}</div>`;
+  const trend=W.length?`${linesLegend()}<div class="dsv chart">${svgLines(W.map(o=>({label:'S'+o.w,a:o.ppc,b:o.ppcSc??o.ppc,part:o.ev<o.n,sub:`${o.ok} de ${o.n} compromisos`})),{h:220})}</div>`:'<p class="mu">Aún no hay semanas congeladas.</p>';
+  const g1=`<div class="dcard"><div class="dch">PPC semanal · últimas 8 semanas</div>${trend}</div>
+    <div class="dcard"><div class="dch">PPC por subcontratista · 4 semanas</div>${scRows.length?`<div class="dsv chart">${svgBarsH(scRows,v=>pc(v))}</div><p class="dnote">De menor a mayor: arriba los que más incumplen.</p>`:'<p class="mu">Sin compromisos evaluados.</p>'}</div>`;
+  const sc=`<div class="dcard"><div class="dch">Avance de hoy por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${sbar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw">${o.stop?`⏸ ${o.stop}`:''}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
+    <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div>
+    ${Object.keys(stopMot).length||later?`<div class="dmot"><b>Detenidas hoy:</b> ${Object.entries(stopMot).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}${later?`<span class="chip mu">Inicia después (tren) <b>${later}</b></span>`:''}</div>`:''}</div>`;
+  const g3=`<div class="dcard"><div class="dch">Causas de no cumplimiento · 30 días</div>${top.length?`<div class="dsv chart">${svgBarsH(top.map(([k,v])=>({label:k,v})),v=>String(v))}</div>`:'<p class="mu">Sin incumplimientos registrados.</p>'}</div>
+    <div class="dcard"><div class="dch">Restricciones abiertas por responsable <span>${RS.length}</span></div>${rRows.length?`<div class="dsv chart">${svgBarsH(rRows,v=>String(v))}</div>`:'<p class="mu">No hay restricciones abiertas.</p>'}</div>`;
   const pls=visPisos().filter(p=>items.some(i=>i.pid===p.id));if(!pls.some(p=>p.id===DB_.pid))DB_.pid=(pls.find(p=>API&&[...API.zonedSet(p.id)].length)||pls[0]||{}).id||'';
-  const rcol=(t,L)=>{const cm=L.filter(r=>grpOf(r)==='campo'),ar=L.filter(r=>grpOf(r)==='area');return`<div class="drc"><div class="drh">${t} <b>${L.length}</b></div><div class="drg"><span>Campo <b>${cm.length}</b></span><span>Otras áreas <b>${ar.length}</b></span></div><ul>${L.slice(0,5).map(r=>{const x=S.act.get(r.actId);return`<li><span class="dtag ${grpOf(r)}">${grpOf(r)==='area'?esc(r.area||'Otras áreas'):'Campo'}</span> ${esc(r.type||'Restricción')}${r.desc?': '+esc(shortT(r.desc,40)):''}<small>${x?esc(shortT(x.name,30))+' · '+esc(conOf(x.sc).name):''}${r.need?' · necesaria '+fmtD(r.need):''}</small></li>`}).join('')}${L.length>5?`<li class="mu">y ${L.length-5} más…</li>`:''}</ul></div>`};
-  let rs=`<div class="dcard"><div class="dch">Restricciones pendientes <button class="lnkb" data-dtab="restr">ver todas</button></div><div class="drs">${rcol('Actividades de hoy',rToday)}${rcol('Vencidas',rLate)}${rcol('Próximos 7 días',rNext)}</div></div>`;
-  let tr=`<div class="dcard"><div class="dch">PPC diario (alerta) por semana</div><div class="dsv chart">${trend.length?svgBarsV(trend,{h:190}):'<p class="mu">Aún no hay registros de cumplimiento.</p>'}</div></div>
-    <div class="dcard"><div class="dch">Causas más frecuentes · 30 días</div><div class="dsv chart">${top.length?svgBarsH(top.map(([k,v])=>({label:k,v})),v=>String(v)):'<p class="mu">Sin incumplimientos ni detenciones registradas.</p>'}</div></div>`;
-  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div class="dgrid"><div class="dcol1"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><div class="dplanw"><div class="kplan" id="dplan"></div></div></div><div id="drs"></div></div><div class="dcol2"><div id="dal"></div><div id="dfd"></div><div id="dtr"></div></div></div></div>`;main.dataset.built='1';main.onclick=dashClick}
+  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div id="dkp"></div><div class="dgrid2" id="dg1"></div><div class="dgrid2"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><p class="dnote">Toca un ambiente para ver su información.</p><div class="dplanw"><div class="kplan" id="dplan"></div></div></div></div><div class="dgrid2" id="dg3"></div></div>`;main.dataset.built='1';main.onclick=dashClick;main.onchange=e=>{if(e.target.id==='dty'){DB_.ty=e.target.value;dashRe()}}}
   const put=(id,html)=>{const el=$('#'+id,main);if(el&&el.dataset.h!==html){el.innerHTML=html;el.dataset.h=html}};
-  put('dtop',hh);put('dsc',sc);put('dal',al);put('dfd',fd);put('drs',rs);put('dtr',tr);
+  put('dtop',hh);put('dkp',kp);put('dg1',g1);put('dsc',sc);put('dg3',g3);
   put('dpch',pls.map(p=>`<button class="${DB_.pid===p.id?'on':''}" data-dp="${p.id}">${esc(p.code)}</button>`).join(''));
   if(API&&DB_.pid){const its=items.filter(i=>i.pid===DB_.pid&&!i.nova);const colors=new Map(its.map(i=>[i.x.id,KST[i.st.k].c]));API.capPlan($('#dplan',main),{pid:DB_.pid,colors,nums:API.nums(DB_.pid),bs:28,fitAll:true,onPick:aid=>dashPop(aid,d)})}
   document.body.classList.toggle('dash-tv',DB_.tv)}
-function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);
-  const lb=document.createElement('div');lb.className='ksheet';lb.innerHTML=`<div class="ksc"><div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${(window.__plano?.nums(pisoOfAct(aid)).get(aid))||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}</span></div><button class="kx" data-kx>×</button></div><div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}<div class="kbtns"><button class="kbig ghost" data-goc>Abrir en Campo</button></div></div>`;
-  lb.onclick=e=>{if(e.target===lb||e.target.closest('[data-kx]'))lb.remove();else if(e.target.closest('[data-goc]')){lb.remove();goCampo(aid,d)}};document.body.appendChild(lb)}
+function dashRe(){const h=$('#dplan');if(h)h._fk='';render()}
+/* ficha del ambiente en el Tablero: solo información (nada se registra desde aquí) */
+function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
+  const wk=weekDays(weekOf(d));const dd=(x.days||[]).filter(z=>wk.includes(z)).sort();const rc=recOf(d,aid);const lib=typeof libOf==='function'?libOf(aid):null;
+  const others=[...S.act.values()].filter(y=>y.ambId===x.ambId&&y.id!==aid&&schedOrSnap(y,d));
+  const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
+  const h=`<div class="ksc"><div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${(window.__plano?.nums(pisoOfAct(aid)).get(aid))||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
+    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}
+    <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
+    ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
+    ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}</div>`;
+  const lb=document.createElement('div');lb.className='ksheet';lb.innerHTML=h;
+  lb.onclick=e=>{if(e.target===lb||e.target.closest('[data-kx]'))lb.remove()};document.body.appendChild(lb)}
 function dashClick(e){const t=e.target;let b;
   if(t.closest('#dtv')){DB_.tv=!DB_.tv;try{if(DB_.tv)document.documentElement.requestFullscreen().catch(()=>{});else if(document.fullscreenElement)document.exitFullscreen()}catch(err){}const m=$('#main');m.dataset.built='';render();return}
   if((b=t.closest('[data-dp]'))){DB_.pid=b.dataset.dp;const h=$('#dplan');if(h)h._fk='';render();return}
-  if((b=t.closest('[data-dtab]'))){if(b.dataset.dtab==='campo'){CU.show='prop';CU.date=null;saveCU()}goTab(b.dataset.dtab);return}
-  if((b=t.closest('[data-dgo]'))){dashPop(b.dataset.dgo,todayIso());return}}
+  if((b=t.closest('[data-dsc]'))){const v=b.dataset.dsc;if(!v)DB_.sc.clear();else if(DB_.sc.has(v))DB_.sc.delete(v);else DB_.sc.add(v);dashRe();return}
+  if(t.closest('[data-dclr]')){DB_.sc.clear();DB_.ty='';dashRe();return}}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-lqact]');if(!b)return;e.stopPropagation();const l=libOf(b.dataset.lqact);if(l)libDetail(l.id);else libAsk(b.dataset.lqact)},true);
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&DB_.tv&&U.tab==='dash'){DB_.tv=false;const m=$('#main');m.dataset.built='';render()}});
 

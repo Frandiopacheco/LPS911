@@ -165,7 +165,7 @@ body.cap-mode .top .brand .code{display:none}
 .dlive{display:inline-flex;align-items:center;gap:6px;font:700 12px var(--f-ui)!important;color:var(--ok)!important;text-transform:uppercase;letter-spacing:.06em}
 .dlive i{width:9px;height:9px;border-radius:50%;background:var(--ok);animation:dpulse 1.6s infinite}
 @keyframes dpulse{0%,100%{opacity:1}50%{opacity:.3}}
-.dkpi{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.dkpi{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
 .dk{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--k,var(--line));border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .dk.dkppc{border-top-color:var(--accent)}
 .dkl{font:600 12px var(--f-ui);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -2763,3 +2763,25 @@ div.tp-dif{padding-left:0}
   .tp-sc{min-height:40px}
   .tp-ct th,.tp-ct td{padding:6px 6px}
 }
+
+/* Tablero gerencial (oct 2026): filtros, dos columnas de tarjetas y ficha de solo información */
+.dflt{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.dfsc{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.dfc{display:inline-flex;align-items:center;gap:6px;min-height:32px;border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:4px 12px;font:600 12.5px var(--f-ui);cursor:pointer;color:var(--ink);transition:background var(--t-fast) var(--ease)}
+.dfc i{width:10px;height:10px;border-radius:3px;background:var(--c,var(--muted))}
+.dfc.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.dfty{display:inline-flex;align-items:center;gap:8px;font:600 12px var(--f-ui);color:var(--muted)}.dfty select{max-width:260px}
+.dgrid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;align-items:start}
+.dgrid2 .dsv.chart svg{max-width:560px}
+.dnote{margin:-4px 0 0;font-size:12px;color:var(--muted)}
+.dmot{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--ink2)}
+.dkst .dbar{margin:8px 0 4px;height:22px}
+.dpinfo{display:flex;flex-direction:column;gap:2px;margin:6px 0}
+.dpr{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}.dpr span{color:var(--muted)}.dpr b{text-align:right;font-weight:600}
+.dpo{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:13.5px}.dpo i{width:10px;height:10px;border-radius:50%;background:var(--k);flex:none}
+@media (max-width:1280px){.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1100px){.dgrid2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.dfty{width:100%}.dfty select{flex:1;max-width:none}}
+/* iPhone agranda la página al tocar un campo con letra menor a 16 px y no vuelve a su tamaño:
+   en celular los campos van a 16 px (eso hacía que el plano y la ficha «se salieran» al registrar un no programado) */
+@media (max-width:760px){input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea,.kin,.tin{font-size:16px!important}}
