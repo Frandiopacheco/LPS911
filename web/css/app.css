@@ -2170,12 +2170,56 @@ body.tr-on .toast{z-index:160}
 .tr-fbtn{height:28px;font-size:12.5px}
 .tr-copy{width:100%;font:500 12.5px var(--f-mono)}
 .tc-sent.tc-rev{border-color:var(--accent);background:var(--accent-soft)}.tc-sent.tc-rev b{color:var(--accent)}
+/* salir y corregir (bug «No cambiaste nada», oct 2026): «Volver a la lista» y «✕ Cerrar» siempre a la vista; barra de corrección */
+.tr-x{margin-left:auto}
+.tr-ws.tr-editing .tr-wh{box-shadow:inset 0 -3px 0 var(--warn),var(--sh-1)}
+.tr-edn{font-size:12.5px;color:var(--muted);padding:0 4px;white-space:nowrap;align-self:center}
+.tr-edn.on{color:var(--warn);font-weight:700}
+.tr-acts .tr-edok{min-width:170px;font-weight:700}
+.tr-a3 .tr-a3d{color:var(--bad);border-color:var(--bad)}
+/* grilla de horas del editor (modo:'hrs'): obreros en filas, partidas en columnas */
+.tr-gcard{display:flex;flex-direction:column;gap:6px;padding:8px 10px}
+/* corrigiendo, la grilla necesita más ancho: la foto baja a ~36 % (sigue a la vista) */
+.tr-ws.tr-editing .tr-wb{grid-template-columns:minmax(0,36fr) minmax(0,64fr)}
+.tr-gadd{display:inline-flex;align-items:center;gap:6px;margin:0}
+.tr-gadd select{height:32px;max-width:260px}
+.tr-gw{overflow:auto;max-height:64vh;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.tr-grid{font-size:12.5px;border-collapse:separate;border-spacing:0}
+.tr-grid td,.tr-grid th{padding:3px 5px;vertical-align:middle;border-bottom:1px solid var(--line2)}
+.tr-grid thead th{position:sticky;top:0;z-index:1;background:var(--panel2);white-space:nowrap}
+.tr-grid tfoot td{position:sticky;bottom:0;background:var(--panel2);border-top:2px solid var(--line)}
+.tr-grid td:nth-child(1),.tr-grid th:nth-child(1){position:sticky;left:0;width:30px;min-width:30px;background:var(--panel);z-index:1}
+.tr-grid td:nth-child(2),.tr-grid th:nth-child(2){position:sticky;left:30px;background:var(--panel);z-index:1;box-shadow:inset -1px 0 0 var(--line)}
+.tr-grid thead th:nth-child(-n+2),.tr-grid tfoot td:nth-child(-n+2){z-index:3;background:var(--panel2)}
+.tr-grid .tr-nmc{min-width:130px;max-width:180px;line-height:1.25}
+.tr-grid .tr-nmc small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-gh{width:62px;min-width:62px;max-width:70px;text-align:center}
+.tr-gh small{display:block;font-weight:400;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66px;margin:0 auto}
+.tr-ghc{display:inline-flex;align-items:center;gap:2px}
+.tr-ghx{border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px;border-radius:var(--r-xs,4px)}
+.tr-ghx:hover,.tr-ghx:focus-visible{color:var(--bad);background:var(--bad-soft)}
+.tr-ghb b{color:var(--bad)}
+.tr-hcc{text-align:center}
+.tr-hc{box-sizing:border-box;width:54px;height:30px;padding:0 6px;text-align:right;font-family:var(--f-mono)}
+.tr-hc:focus{box-shadow:var(--ring)}
+.tr-hc:disabled{background:transparent;color:var(--muted);text-decoration:line-through;border-style:dashed}
+.tr-hc.tr-hbad{border-color:var(--bad);background:var(--bad-soft)}
+.tr-ht.tr-hok{color:var(--ok);font-weight:700}
+.tr-ht.tr-hwn{color:var(--warn);font-weight:700}
+.tr-gas{white-space:nowrap}
+.tr-as button{height:30px;padding:0 7px}
+.tr-gmot{height:30px;width:104px;margin-top:3px;display:block}
+.tr-sal{box-sizing:border-box;width:96px;height:30px;padding:0 4px}
+.tr-grid tr.tr-gno td:nth-child(2) b{color:var(--muted);text-decoration:line-through}
+.tr-grid tr.tr-gsm td:nth-child(2) b{color:var(--warn)}
+.tr-gk{margin:0;font-size:11.5px}
 /* pantallas medianas: foto arriba y tabla abajo, todo en una sola columna con desplazamiento */
 @media (max-width:1099px){
   .tr-wb{display:flex;flex-direction:column;overflow:auto;gap:10px}
   .tr-wf{flex:none;height:58vh}
   .tr-wr{flex:none;overflow:visible;padding-right:0}
   .tr-mtw{max-height:none}
+  .tr-gw{max-height:70vh}
 }
 @media (max-width:760px){
   .tr-wh{padding:6px 10px}
@@ -2188,6 +2232,9 @@ body.tr-on .toast{z-index:160}
   .tr-gar{height:40px}
   .tr-vh{display:none}
   .tr-mt .tr-nmc{min-width:130px}
+  .tr-hc,.tr-as button,.tr-sal,.tr-gmot{height:40px}
+  .tr-ghx{min-width:32px;min-height:32px}
+  .tr-edn{width:100%}
 }
 
 /* tareo: cuentas (tareo-cuentas.js y «Soy capataz» del ingreso). Solo variables existentes: el modo oscuro sale de ellas */

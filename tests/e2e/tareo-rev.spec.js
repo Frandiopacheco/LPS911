@@ -128,8 +128,10 @@ test('revisión: conflicto (un obrero en dos tareos), corrección con motivo y �
   await expect(m.locator('#trHist')).toContainText('Corregido');
   // presente en uno y con falta en otro sigue siendo conflicto
   await expect(cf.locator(`[data-trqt="${T2}"]`)).toContainText('falta FA');
-  page.once('dialog', dg => dg.accept()); // «Todos firmaron» quedó sin guardar: confirma salir
+  // «Todos firmaron» quedó sin guardar: Esc ofrece guardar, descartar o seguir; se descarta
   await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toContainText('cotejo de firmas sin guardar');
+  await page.locator('#trAsk3 [data-l3="discard"]').click();
   await expect(page.locator('#trWs')).toHaveCount(0);
   page.once('dialog', dg => dg.accept('Trabajó con Teodoro'));
   await cf.locator(`[data-trq="${T2}"]`).click();
@@ -157,6 +159,7 @@ test('auditoría F2: corregir un revisado lo devuelve a «Enviado»; concurrenci
   await m.locator('#trEdOk').click();
   await expect(page.locator('#toast')).toContainText('Otro usuario cambió este tareo');
   expect((await dbT(page, T1)).blq.length).toBe(1);
+  page.once('dialog', dg => dg.accept()); // «Cancelar corrección» con un cambio: confirma descartarlo
   await m.locator('[data-tra="edx"]').click();
   // vuelve a abrir el editor (con los datos nuevos) y corrige: revisado → enviado
   await m.locator('#trCor').click();
@@ -341,12 +344,11 @@ test('revisión en laptop: espacio a pantalla completa, foto a la izquierda, ant
   await expect(ws).toBeVisible();
   await expect(page.locator('#trCotN')).toHaveText('2 de 2 cotejados');
   await expect(page.locator('#trSave')).toBeVisible();
-  // ← al anterior: pregunta por el cotejo sin guardar
-  let asked = '';
-  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  // ← al anterior: pregunta por el cotejo sin guardar (guardar, descartar o seguir editando)
   await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#trAsk3')).toContainText('cotejo');
+  await page.locator('#trAsk3 [data-l3="discard"]').click();
   await expect(ws).toContainText('Tareo de Bruno Segundo');
-  expect(asked).toContain('cotejo');
   await expect(page.locator('#trPos')).toHaveText('1 de 2');
   await expect(page.locator('#trPrev')).toBeDisabled();
   await page.keyboard.press('ArrowRight');
@@ -409,4 +411,182 @@ test('revisión: pasar un obrero al tareo de otro capataz (con sus bloques, moti
   // el tareo en borrador del capataz no se toca
   expect((await dbT(page, T3)).rows).toEqual({ 55555555: row('EPSILON') });
   noErrors(errors, 'pasar obrero');
+});
+
+// ---------- bug «No cambiaste nada» (oct 2026) y corrección en grilla para modo:'hrs' (docs/ia/tareo.md «Implementación de la grilla — oficina») ----------
+test('corrección (bug «No cambiaste nada»): dos correcciones seguidas sin esperar la base, hora tecleada, «sin marcar → no vino» y salir con Esc', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: conT1({ envN: 1, rows: { 11111111: row('ALFA'), 22222222: row('BETA'), 33333333: row('GAMMA', { as: false, mot: 'DM' }), 66666666: row('ZETA', { as: null }) } }) });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  // ZETA sin marcar deja un problema: cada guardado pide «Guardar igual» (confirm) y el motivo (prompt)
+  let motivo = '';
+  page.on('dialog', dg => dg.accept(dg.type() === 'prompt' ? motivo : undefined));
+  // siempre hay cómo salir
+  await expect(m.locator('#trBack')).toContainText('Volver a la lista');
+  await expect(m.locator('#trX')).toBeVisible();
+  await m.locator('#trCor').click();
+  await expect(m.locator('#trEdX')).toHaveText('Cancelar corrección');
+  await expect(m.locator('#trEdN')).toHaveText('Sin cambios todavía');
+  // hora tecleada (Chrome avisa «change» en cada parte de la hora: antes el redibujo cambiaba lo escrito, p. ej. 13:00 → 18:00)
+  await m.locator('#tre_fin_1').click({ position: { x: 12, y: 10 } });
+  await page.keyboard.type('1600');
+  await expect(m.locator('#tre_fin_1')).toHaveValue('16:00');
+  await expect(m.locator('#tre_fin_1')).toBeFocused();
+  await expect(m.locator('#trEdN')).toHaveText('1 cambio sin guardar');
+  // guardar y abrir «Corregir» enseguida, antes de que llegue la foto de la base (en Firestore llega después de la transacción)
+  motivo = 'Salieron antes';
+  const vista = await page.evaluate(async id => { const ok = await trEdSave(id); const v = TD.docs.get(id).blq[1].fin; document.querySelector('#trCor').click(); return [ok, v, TR.ed.base.blq[1].fin]; }, T1);
+  expect(vista).toEqual([true, '16:00', '16:00']); // la vista y el editor ya parten de lo guardado
+  await expect.poll(async () => (await dbT(page, T1)).blq[1].fin).toBe('16:00');
+  await expect(m.locator('#tre_fin_1')).toHaveValue('16:00');
+  // segunda corrección: ZETA estaba «sin marcar» y no vino (sin motivo): también es un cambio
+  await m.locator('#tre_as_66666666').check();
+  await m.locator('#tre_as_66666666').uncheck();
+  await expect(m.locator('#trEdN')).toHaveText('1 cambio sin guardar');
+  motivo = 'No vino';
+  await m.locator('#trEdOk').click();
+  await expect.poll(async () => (await dbT(page, T1)).rows['66666666'].as).toBe(false);
+  let d = await dbT(page, T1);
+  expect(d.hist.filter(x => x.a === 'cor').length).toBe(2);
+  expect(d.hist[d.hist.length - 1].cam).toContain('ZETA: faltó (sin motivo)');
+  expect(d.hist[d.hist.length - 1].det).toEqual([{ dni: '66666666', campo: 'as', antes: null, despues: false }]);
+  await expect(page.locator('#toast')).not.toContainText('Otro usuario');
+  // sin cambios: «Guardar corrección» lo dice y Esc sale sin preguntar
+  await m.locator('#trCor').click();
+  await m.locator('#trEdOk').click();
+  await expect(page.locator('#toast')).toContainText('Aún no cambiaste nada');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
+  await expect(m).toHaveCount(0);
+  // con cambios: Esc ofrece guardar, descartar o seguir editando; «Guardar corrección» guarda y sale
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  await m.locator('#trCor').click();
+  await m.locator('#tre_alt_11111111').check();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toContainText('1 cambio');
+  await page.locator('#trAsk3 [data-l3="stay"]').click();
+  await expect(m.locator('#trEdN')).toHaveText('1 cambio sin guardar');
+  await page.keyboard.press('Escape');
+  motivo = 'Trabajó en altura';
+  await page.locator('#trAsk3 [data-l3="save"]').click();
+  await expect(m).toHaveCount(0);
+  d = await dbT(page, T1);
+  expect(d.rows['11111111'].alt).toBe(true);
+  expect(d.hist[d.hist.length - 1]).toMatchObject({ a: 'cor', mot: 'Trabajó en altura' });
+  // funciones: «sin marcar → no vino» cuenta en el resumen y en el detalle
+  expect(await page.evaluate(() => [tCam({ rows: { 1: { ape: 'A', as: null } } }, { rows: { 1: { ape: 'A', as: false, mot: '' } } }), tDetAll({ rows: { 1: { as: null } } }, { rows: { 1: { as: false } } }).length])).toEqual(['A: faltó (sin motivo)', 1]);
+  noErrors(errors, 'no cambiaste nada');
+});
+
+const HPC = ['tpc', 'p10_20', { cod: '10.20', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Acero de vigas', act: true }];
+const HRS = { modo: 'hrs', pcs: ['p10_10', 'p10_05'],
+  rows: { 11111111: row('ALFA', { h: { p10_10: 4, p10_05: 4.5 } }), 22222222: row('BETA', { h: { p10_05: 8.5 } }), 33333333: row('GAMMA', { as: false, mot: 'DM', h: {} }) } };
+const conH = () => conT1({ ...HRS, envN: 1 }).concat([HPC]).map(x => { if (x[0] !== 'tareo' || x[1] !== T1) return x; const { blq, ...o } = x[2]; return ['tareo', T1, o]; });
+const cell = (m, d, pc) => m.locator(`#trh_${d}_${pc}`);
+
+test('corrección en grilla (modo horas): celdas con teclado, totales, agregar/quitar partida, vino/no vino, salida, historial y detalle', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  // detalle de solo lectura: grilla de horas en el orden del capataz y sin la sección de bloques
+  await expect(m.locator('.tr-mt thead th[title]').nth(0)).toHaveText('10.10');
+  await expect(m.locator('.tr-mt thead th[title]').nth(1)).toHaveText('10.05');
+  await expect(m.locator('#trBlqD')).toHaveCount(0);
+  await expect(m.locator('tr[data-trd="11111111"] .tr-tot b')).toHaveText('8.5');
+  await m.locator('#trCor').click();
+  await expect(m.locator('#trGw')).toBeVisible();
+  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('4');
+  await expect(cell(m, '33333333', 'p10_10')).toBeDisabled(); // no vino
+  // ALFA 10.10: 3 y Enter baja a BETA
+  await cell(m, '11111111', 'p10_10').click();
+  await page.keyboard.type('3');
+  await expect(m.locator('#trht_11111111')).toHaveText('7.5');
+  await expect(m.locator('#trht_11111111')).toHaveClass(/tr-hwn/);
+  await page.keyboard.press('Enter');
+  await expect(cell(m, '22222222', 'p10_10')).toBeFocused();
+  // BETA 10.10: 4.3 se redondea a 4,5; Tab pasa a 10.05 (todo seleccionado: se reemplaza)
+  await page.keyboard.type('4.3');
+  await page.keyboard.press('Tab');
+  await expect(cell(m, '22222222', 'p10_10')).toHaveValue('4.5');
+  await expect(page.locator('#toast')).toContainText('media en media');
+  await expect(cell(m, '22222222', 'p10_05')).toBeFocused();
+  await page.keyboard.type('4');
+  await page.keyboard.press('ArrowUp');
+  await expect(cell(m, '11111111', 'p10_05')).toBeFocused();
+  await expect(m.locator('#trht_22222222')).toHaveText('8.5');
+  await expect(m.locator('#trht_22222222')).toHaveClass(/tr-hok/);
+  await expect(m.locator('#trhc_p10_10')).toHaveText('7.5');
+  await expect(m.locator('#trEdN')).toHaveText('3 cambios sin guardar');
+  // agregar una partida del día: la columna aparece y el foco va a su primera celda
+  await m.locator('#trPcAdd').selectOption('p10_20');
+  await expect(cell(m, '11111111', 'p10_20')).toBeFocused();
+  await page.keyboard.type('1');
+  await page.keyboard.press('Enter');
+  // quitar 10.05 (tiene horas: pide confirmar)
+  let asked = '';
+  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  await m.locator('th[data-pc="p10_05"] [data-tra="pcdel"]').click();
+  await expect(cell(m, '11111111', 'p10_05')).toHaveCount(0);
+  expect(asked).toContain('2 obreros');
+  await expect(m.locator('#trht_22222222')).toHaveText('4.5');
+  // GAMMA sí vino: sin horas es un problema; con 8,5 se resuelve
+  await m.locator('#trv_33333333_1').click();
+  await expect(m.locator('#trEdObs')).toContainText('GAMMA, X: vino pero no tiene horas');
+  await cell(m, '33333333', 'p10_10').fill('8,5');
+  await cell(m, '33333333', 'p10_10').press('Enter');
+  await expect(m.locator('#trEdObs')).toHaveCount(0);
+  // BETA salió a las 15:00 (opcional)
+  await m.locator('#trs_22222222').fill('15:00');
+  page.once('dialog', dg => dg.accept('Ajuste de horas según el formato'));
+  await m.locator('#trEdOk').click();
+  await expect.poll(async () => (await dbT(page, T1)).pcs).toEqual(['p10_10', 'p10_20']);
+  const d = await dbT(page, T1);
+  expect(d.modo).toBe('hrs');
+  expect(d.blq).toBeUndefined();
+  expect(d.rows['11111111']).toMatchObject({ h: { p10_10: 3, p10_20: 1 }, trab: 4 });
+  expect(d.rows['22222222']).toMatchObject({ h: { p10_10: 4.5 }, sal: '15:00', trab: 4.5, fin: '15:00' });
+  expect(d.rows['33333333']).toMatchObject({ as: true, mot: '', h: { p10_10: 8.5 }, trab: 8.5, ext: 0 });
+  const h = d.hist[d.hist.length - 1];
+  expect(h).toMatchObject({ a: 'cor', mot: 'Ajuste de horas según el formato' });
+  expect(h.cam).toContain('− partida 10.05');
+  expect(h.cam).toContain('ALFA 10.10: 4 → 3 h');
+  expect(h.det).toEqual(expect.arrayContaining([{ pc: 'p10_20', campo: 'pcs', antes: false, despues: true }, { pc: 'p10_05', campo: 'pcs', antes: true, despues: false },
+    { dni: '11111111', pc: 'p10_10', campo: 'h', antes: 4, despues: 3 }, { dni: '22222222', campo: 'sal', antes: null, despues: '15:00' }, { dni: '33333333', campo: 'as', antes: false, despues: true }]));
+  // el detalle muestra lo guardado al momento
+  await expect(m.locator('tr[data-trd="33333333"] .tr-tot b')).toHaveText('8.5');
+  await expect(m.locator('.tr-mt thead th[title]').nth(1)).toHaveText('10.20');
+  noErrors(errors, 'grilla');
+});
+
+test('corrección en grilla: si otro usuario cambia el tareo, avisa y «Recargar versión actual» conserva lo corregido; Esc en una celda no sale', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  await m.locator('#trCor').click();
+  await cell(m, '11111111', 'p10_10').fill('3');
+  // otro usuario cambia las horas de BETA mientras se corrige: el aviso sale de inmediato
+  await page.evaluate(id => fcol('tareo').doc(id).update({ 'rows.22222222.h': { p10_05: 8 } }), T1);
+  await expect(m.locator('#trConfl')).toBeVisible();
+  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('3');
+  await m.locator('#trReload').click();
+  await expect(page.locator('#toast')).toContainText('Se mantienen tus 1 cambio');
+  await expect(cell(m, '11111111', 'p10_10')).toHaveValue('3');
+  await expect(cell(m, '22222222', 'p10_05')).toHaveValue('8');
+  // Esc dentro de una celda solo suelta la celda; el segundo Esc pregunta
+  await cell(m, '11111111', 'p10_05').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toBeVisible();
+  page.once('dialog', dg => dg.accept('Hora de ALFA'));
+  await page.locator('#trAsk3 [data-l3="save"]').click();
+  await expect(m).toHaveCount(0);
+  const d = await dbT(page, T1);
+  expect(d.rows['11111111'].h).toEqual({ p10_10: 3, p10_05: 4.5 });
+  expect(d.rows['22222222'].h).toEqual({ p10_05: 8 });
+  noErrors(errors, 'grilla conflicto');
 });
