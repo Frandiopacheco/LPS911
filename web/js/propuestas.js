@@ -18,6 +18,7 @@ function pmSync(){if(PM()){if(!S.act._pm)ACT_OFF=S.act;const v=new Map(ACT_OFF);
 const cleanAct=a=>{const c={...a};delete c._del;delete c.id;return c};
 /* escritura del SC: va al borrador, no al lookahead oficial */
 function propPut(col,id,after){if(!PM())return false;
+  if(propClosed()){toast('Las propuestas están cerradas desde el corte: el ingeniero está revisando el lookahead. Podrás proponer cuando lo habilite.');requestRender();return true}
   if(col!=='acts'){toast('En modo propuesta solo cambias las actividades de tu partida. Ambientes, sectores y lo demás los edita el ingeniero de producción.');return true}
   const off=ACT_OFF&&ACT_OFF.get(id)||null;const cur=S.act.get(id)||null;const mine=myScsI();
   const sc=off?off.sc:(after&&after.sc)||(cur&&cur.sc);
@@ -37,7 +38,7 @@ function savePropItem(sc,id,item){const doc=PROP.get(sc)||{sc,items:{}};const pr
   if(db){const ref=fcol('lhprop').doc(sc);ref.update(new firebase.firestore.FieldPath('items',id),v).catch(err=>{if(err&&err.code==='not-found')return ref.set({sc,items:{[id]:v}},{merge:true});throw err})
     .catch(err=>toast('No se pudo guardar la propuesta: '+(err.code==='permission-denied'?'sin permiso (¿reglas nuevas publicadas?)':(err.code||err.message))))}}
 /* antes de enviar: avisa si hay actividades nuevas sin ningún día (el ingeniero no las ve en la grilla y suelen ser un error) */
-async function sendProp(){const off=ACT_OFF||S.act;const E=[];
+async function sendProp(){if(propClosed()){toast('Las propuestas están cerradas: espera a que el ingeniero las habilite.');return}const off=ACT_OFF||S.act;const E=[];
   for(const sc of myScsI())for(const{id,it}of propItems(sc))if(!it.sent&&it.after&&!off.get(id)&&!(it.after.days||[]).length)E.push(it.after.name||'(sin nombre)');
   if(E.length){const c={};E.forEach(n=>c[n]=(c[n]||0)+1);
     if(!await uiAsk({title:`${E.length} actividad${E.length>1?'es':''} nueva${E.length>1?'s':''} sin días`,text:'No tienen ningún día programado, así que el ingeniero no las verá en la grilla al revisar.',
@@ -61,6 +62,19 @@ function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d
 const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
 /** hora (ms) del corte para entregar propuestas de la semana n */
 function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+/* ---- ventana de propuestas (oct 2026): pasado el corte, el SC queda en solo lectura hasta que un ingeniero (admin/editor) la habilite
+   de nuevo, después de revisar y ajustar el lookahead. meta/propwin.closeAt = hora (ms) del próximo corte; sin documento, el primer
+   corte después del 6 oct 2026. Las reglas (propOpen) bloquean la escritura del SC en lhprop con la misma hora. */
+function propCloseAt(){const pw=S.meta&&S.meta.get('propwin');if(pw&&+pw.closeAt>0)return+pw.closeAt;return propCut(weekOf('2026-10-06')+1)}
+const propClosed=()=>NOW()>=propCloseAt();
+/** próximo corte después de ahora (la ventana que se abre al habilitar) */
+function propNextCut(){const cw=weekOf(todayIso());let c=propCut(cw+1);if(c<=NOW())c=propCut(cw+2);return c}
+const fmtCut=t=>{const d=new Date(t-LIMA_OFF);const iso=d.toISOString().slice(0,10);return`${DOW_N[d.getUTCDay()]} ${fmtD(iso)} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`};
+async function propOpenWin(){if(!canWrite||!db)return;let pend=0;for(const doc of PROP.values())for(const it of Object.values(doc.items||{}))if(it&&it.sent)pend++;
+  const nx=propNextCut();
+  if(!await uiAsk({title:'¿Habilitar las propuestas de los subcontratistas?',text:`Los SC podrán volver a proponer cambios en el lookahead hasta el próximo corte (${fmtCut(nx)}).`,
+    list:pend?[`Todavía hay ${pend} propuesta${pend>1?'s':''} enviada${pend>1?'s':''} sin decidir: siguen pendientes y los SC podrán cambiarlas.`]:[],note:'Hazlo cuando ya revisaste y ajustaste el lookahead de la semana.',ok:'Habilitar',tone:pend?'warn':'ok'}))return;
+  fcol('meta').doc('propwin').set({closeAt:nx,openAt:NOW(),by:me.email,n:me.name||''}).then(()=>toast('Propuestas habilitadas hasta el '+fmtCut(nx))).catch(err=>toast('No se pudo: '+(err.code||err.message)))}
 /** días que una propuesta cambia respecto a b (la actividad antes) */
 function propTouch(b,a){if(!a)return b?[...(b.days||[])].sort():[];if(!b)return[...(a.days||[])].sort();
   const bd=new Set(b.days||[]),ad=new Set(a.days||[]),T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});
@@ -280,10 +294,14 @@ function renderPropBar(){const v=$('#main .view');if(!v)return;let pb=$('#ppbar'
   let h='';
   if(me&&me.role==='sc'&&!(U.ver&&U.verMode==='ver')){const its=myScsI().flatMap(sc=>propItems(sc));const un=its.filter(o=>!o.it.sent).length,se=its.length-un;
     ensureLhh();const hist=histOf(myScsI());let seen=0;try{seen=+localStorage.getItem('lps.pseen')||0}catch(e){}const nw=hist.filter(x=>x.t>seen).length;
-    h=`<div class="ppb sc"><div><b>Modo propuesta</b> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero responsable del piso los acepte.</div>
+    if(propClosed()){h=`<div class="ppb sc ppclosed"><div><b>🔒 Propuestas cerradas</b> · pasó el corte (${esc(fmtCut(propCloseAt()))}). El ingeniero está revisando y ajustando el lookahead: por ahora es <b>solo lectura</b>. Podrás proponer cambios para la siguiente semana cuando él lo habilite.</div>
+      <div class="ppa">${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
+    else h=`<div class="ppb sc"><div><b>Modo propuesta</b> · <span class="mu">abierto hasta el ${esc(fmtCut(propCloseAt()))}</span> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero responsable del piso los acepte.</div>
       <div class="ppa">${un?`<span class="pill warn">${un} sin enviar</span>`:''}${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}<button class="ib pri" data-pp="send"${un?'':' disabled title="Todavía no cambiaste nada: edita días, metrados o actividades de tu partida y luego envía"'}>${un?'Enviar al ingeniero responsable ('+un+')':'Sin cambios por enviar'}</button>${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
   else if(canWrite&&!(U.ver&&U.verMode==='ver')){const by=revCounts();let oth=0;for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&!canDecide(id,it))oth++;
-    if(by.size||oth)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${by.size?[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):'<span class="mu">ninguna en tus pisos</span>'}${oth?`<span class="mu"> · ${oth} de pisos a cargo de otros (solo las ves)</span>`:''}<span class="mu"> · en la grilla: días propuestos rayados, días que se quitarían tachados</span></div><div class="ppa">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}</div></div>`;if(revOn())h=revBarHtml()}
+    const cl=propClosed();const WB=cl?`<button class="ib pri" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>`:'';
+    if(cl)h=`<div class="ppb ed ppclosed"><div><b>🔒 Propuestas de los SC cerradas</b> desde el corte (${esc(fmtCut(propCloseAt()))}): los subcontratistas solo ven. Revisa y ajusta el lookahead; luego habilítalas para la siguiente semana.${by.size?' · '+[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):''}</div><div class="ppa">${by.size?'<button class="ib" data-pp="rev">Revisar propuestas</button>':''}${WB}</div></div>`;
+    else if(by.size||oth)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${by.size?[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):'<span class="mu">ninguna en tus pisos</span>'}${oth?`<span class="mu"> · ${oth} de pisos a cargo de otros (solo las ves)</span>`:''}<span class="mu"> · en la grilla: días propuestos rayados, días que se quitarían tachados</span></div><div class="ppa">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}</div></div>`;if(revOn())h=revBarHtml()}
   if(propErr)h+=`<div class="callout">No se pudieron leer las propuestas (${esc(propErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   if(pb.dataset.h!==h){pb.innerHTML=h;pb.dataset.h=h}pb.hidden=!h}
 function propBarClick(e){const t=e.target;let r;
@@ -300,6 +318,7 @@ function propBarClick(e){const t=e.target;let r;
     const sh=REVSEL&&REVSEL.k&&L.some(o=>o.id===REVSEL.id)?S.act.get(REVSEL.id):null;
     uiAsk({title:`¿Aceptar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'Se aceptan tal como las envió el subcontratista.',list:[...(oc?[`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`]:[]),...(sh?[`«${sh.name||'una actividad'}» la moviste ${Math.abs(REVSEL.k)} día${Math.abs(REVSEL.k)>1?'s':''} en la vista previa, pero aquí se acepta en las fechas que propuso el SC. Para aceptarla movida, cancela y usa ✓ en su fila.`]:[])],ok:`Aceptar ${L.length}`,tone:sh?'warn':'ok'}).then(ok=>{if(ok)decideMany(L)});return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
+  if(k==='open'){propOpenWin();return}
   if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
 function propModal(mode){PMOD={mode};let el=$('#ppm');if(!el){el=document.createElement('div');el.id='ppm';el.className='ppm';el.innerHTML='<div class="ppc"></div>';document.body.appendChild(el);el.onclick=propModalClick}propModalRender()}

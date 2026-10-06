@@ -244,6 +244,16 @@ test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
 });
+test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingeniero habilite', async () => {
+  const sc = user('sc@obra.pe');
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'meta/propwin'), { closeAt: Date.now() - 60_000 }); });
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // el ingeniero sí revisa
+  await assertFails(setDoc(doc(sc, 'meta/propwin'), { closeAt: Date.now() + 864e5 })); // el SC no se habilita solo
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
+  await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
+  await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/propwin')); });
+});
 test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async () => {
   const h = { id: 'x1', st: 'rej', by: 'editor@obra.pe', n: 'Elena', t: 1 };
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x1: null }, hist: { k1: h } }); });

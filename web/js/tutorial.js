@@ -35,10 +35,10 @@ const AY_TUT={
     e:'En el recorrido de las 10 am ves a SC Eléctricas cableando en el Dpto 203, que no estaba programado. Lo registras con foto: aparece en el Plan diario como «Visto en obra» y en Indicadores.',
     tip:'Un solo toque no registra nada: puedes moverte por el plano con el dedo sin abrir la ficha por error.'},
 
-  seq:{t:'Tren de trabajo: «En secuencia»',g:'Cuando una cuadrilla hace un ambiente tras otro en el día, los que aún no le tocan no se ven como atrasados.',
-    s:[{x:'En Campo (o En obra) toca la actividad del ambiente que todavía no empieza.',tab:'campo'},'Toca «⏭ Va en secuencia…» y elige después de qué ambiente llega la cuadrilla.','La actividad se pone morada: «En secuencia: sigue después de A-1 (en ejecución)».','Cuando la cuadrilla llegue, «▶ Iniciar» la pasa a En ejecución.'],
-    e:'SC Pinturas tiene hoy Dpto 101, 102 y 103. A las 9 am solo está en el 101: marcas el 102 en secuencia tras el 101 y el 103 tras el 102. En el Tablero ya no salen como «sin iniciar».',
-    tip:'Es solo informativo: al cierre del día se marca cumplido o no cumplido como siempre.'},
+  seq:{t:'Tren de trabajo: «Detenido · Inicia después»',g:'Cuando una cuadrilla hace un ambiente tras otro en el día, los que aún no le tocan se marcan como detenidos con el motivo «Inicia después».',
+    s:[{x:'En Campo (o En obra) toca la actividad del ambiente que todavía no empieza.',tab:'campo'},'Toca «⏸ Detenido…» y elige el motivo «Inicia después».','Cuando la cuadrilla llegue, «▶ Iniciado» la pasa a En ejecución.'],
+    e:'SC Pinturas tiene hoy Dpto 101, 102 y 103. A las 9 am solo está en el 101: marcas el 102 y el 103 «Detenido · Inicia después».',
+    tip:'Otros motivos: actividad predecesora, seguridad, materiales, calidad u otros (con detalle).'},
 
   restr:{t:'Restricciones',g:'Registrar lo que impide trabajar y seguirlo hasta liberarlo.',
     s:[{x:'Abre Restricciones y toca «+ Nueva restricción».',tab:'restr'},'Amárrala a su actividad del lookahead, elige el tipo y escribe qué falta.','Pon el responsable y la fecha requerida (cuándo debe estar resuelta).','Cuando se resuelva, márcala Liberada («Liberar hoy» en el celular). Mientras siga pendiente, la actividad lleva una «R» en el lookahead.','Si la actividad ya pasó sin ejecutarse, sale «Actividad no ejecutada»: reprográmala o libera la restricción.'],
@@ -53,7 +53,7 @@ const AY_TUT={
     e:'Mañana no llega el yeso: marcas «No va» en el empaste del Dpto 104 con causa «Materiales». En la reunión el ingeniero decide si se reprograma o se libera temprano.'},
 
   obraSc:{t:'En obra: iniciar, detener y cerrar (SC)',g:'Avisar en vivo cómo va tu partida durante el día.',
-    s:[{x:'Abre En obra: tus actividades de hoy, por piso.',tab:'cap'},'«▶ Iniciar» cuando la cuadrilla empieza; «⏸ Detener…» con el motivo si para.','Si un ambiente va más tarde (tren de trabajo), «⏭ Va en secuencia…».','A las 4 pm propón el cierre: Cumplido o No cumplido con causa.'],
+    s:[{x:'Abre En obra: tus actividades de hoy, por piso.',tab:'cap'},'«▶ Iniciado» cuando la cuadrilla empieza; «⏸ Detenido…» con el motivo si no empieza o para.','Si un ambiente va más tarde (tren de trabajo), «⏸ Detenido» con el motivo «Inicia después».','A las 4 pm propón el cierre: Cumplido o No cumplido con causa.'],
     e:'A las 11 am se corta el agua y la cuadrilla de sanitarias para: tocas «Detener…» y eliges el motivo. A las 2 pm vuelve y tocas «Reanudar».'},
 
   cap:{t:'Reportar desde el celular (capataz)',g:'Contar en vivo el avance de tu cuadrilla.',
