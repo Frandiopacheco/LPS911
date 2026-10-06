@@ -12,7 +12,7 @@ const EXTRA = [
     rows: { '02000001': { ape: 'ALFA', nom: 'X', cat: 'OP', cua: 'ALBAÑILES', as: true, mot: '', alt: false } },
     blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['02000001'] }], hist: [], by: 'tcap@obra.pe', ts: 1 }],
 ];
-const TAR = ['tdia', 'tper', 'tpc', 'tcfg'];
+const TAR = ['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg'];
 
 /* el marco de «📱 Vista celular» ya con la app dibujada */
 const marco = async page => {
@@ -43,9 +43,10 @@ test.describe('celular (390 px)', () => {
     await page.click('#bnav [data-bt="more"]');
     await page.click('#msheet [data-mod="tar"]');
     await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-    expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(b => b.dataset.bt))).toEqual([...TAR, 'more']);
+    expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(b => b.dataset.bt))).toEqual([...TAR.slice(0, 4), 'more']);
     for (const t of TAR) {
-      await page.click(`#bnav [data-bt="${t}"]`);
+      if (TAR.indexOf(t) < 4) await page.click(`#bnav [data-bt="${t}"]`);
+      else await page.evaluate(t => goTab(t), t);
       await expect(page.locator('#main')).toHaveAttribute('data-view', t);
       await revisa(page, 'admin ' + t);
     }
@@ -58,7 +59,7 @@ test.describe('celular (390 px)', () => {
   for (const role of ['tcap', 'tasis', 'tcos']) {
     test(`admin «ver como» ${role}: pantallas sin desborde y la barra no tapa nada`, async ({ page }) => {
       const errors = await openApp(page, { as: 'admin', va: { role }, editar: false, extra: EXTRA });
-      await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
+      await expect(page.locator('#main')).toHaveAttribute('data-view', role === 'tcos' ? 'tcos' : 'tdia');
       for (const t of await page.evaluate(() => TAR_TABS.filter(tabAllowed))) {
         await page.evaluate(t => goTab(t), t);
         await expect(page.locator('#main')).toHaveAttribute('data-view', t);

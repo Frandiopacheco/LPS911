@@ -257,7 +257,6 @@ function toList(f){const L=[],seen=new Set();
   return L.sort((a,b)=>(TO_ORD[a.t?a.t.st||'bor':'sin']??9)-(TO_ORD[b.t?b.t.st||'bor':'sin']??9)||a.name.localeCompare(b.name))}
 
 function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(main)}
-  if(me&&me.role==='tcos'){toUnsub();main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Tareos del día','')}<div class="callout t-soon">Los tareos aparecen aquí cuando el jefe de producción los publique (fase 3).</div></div></div>`;return}
   const hoy=todayIso();if(!TD.f)TD.f=hoy;const f=TD.f;toSub(f);
   const L=toList(f);let env=0,hh=0,he=0,fal=0,sm=0;const mot={};
   for(const x of L){if(!x.t)continue;if(['env','rev','pub'].includes(x.t.st))env++;hh+=x.s.hh;he+=x.s.he;fal+=x.s.fal;sm+=x.s.sm;for(const[k,n]of Object.entries(x.s.mot))mot[k]=(mot[k]||0)+n}
