@@ -55,116 +55,205 @@ function tpDif(d){if(d==null||d==='')return'';if(typeof d==='string')return`<div
 const tpVChip=(v,vig)=>`<span class="tp-v${v===vig?' on':''}">v${esc(String(v))}${v===vig?' · vigente':' · sustituida'}</span>`;
 
 /* ======================================================================
-   Publicación (tpub): previa del servidor, bloqueos, excepciones, publicar, rectificar e historial
+   Publicación (tpub): «lista de verificación para publicar». Sin paso previo: al entrar o elegir la fecha se pide la previa
+   al servidor y se vuelve a pedir sola (≈ 2 s después) cuando cambia algún tareo del día (suscripción a tareo where date==fecha).
+   Franja de días con su estado (tpubidx de la ventana), barra pegajosa con el estado general y «Publicar día», y debajo:
+   requisitos (checklist), capataces del día, sin tareo (excepción a varios a la vez), resumen e historial de versiones.
    ====================================================================== */
-/* f: fecha · prev/pf: respuesta de «previa» y su fecha · at: cuándo se consultó · exc: {dni:{on,m}} · idx: tpubidx del día · vers: tpub del día */
-const TPB={f:'',prev:null,pf:'',at:0,busy:'',err:'',exc:{},idx:null,idxOk:false,vers:new Map()};
+/* f: fecha · prev/pf: respuesta de «previa» y su fecha · at: cuándo llegó · exc: {dni:{on,m}} · sel: DNIs elegidos en «Sin tareo»
+   idx: tpubidx del día · vers: tpub del día · wk/wkOk: tpubidx de la franja · tsig: firma de los tareos del día (para refrescar)
+   tried: fecha cuya primera previa ya se pidió · again: llegó un cambio mientras se consultaba · sinOpen: lista plegable abierta (null = sola) */
+const TPB={f:'',prev:null,pf:'',at:0,busy:'',err:'',exc:{},sel:new Set(),idx:null,idxOk:false,vers:new Map(),wk:new Map(),wkOk:false,
+  tsig:'',tarOk:false,tried:'',again:false,deb:0,tick:0,sinOpen:null,otro:false,otroTxt:'',dOpen:new Set()};
 const TPB_EXC=['Vacaciones','Descanso médico','Destacado a otra obra','Licencia','Otro'];
-const TPB_K={estado:'Tareos que aún no están revisados',st:'Tareos que aún no están revisados',dup:'Obrero en dos tareos del día',duplicado:'Obrero en dos tareos del día',
-  marca:'Falta marcar si vino',sinh:'Presentes sin horas',max:'Más de 16 horas',horas:'Horas fuera de rango',cfg:'Tareo sin jornada congelada',cot:'Cotejo de firmas pendiente',
-  fir:'Cotejo de firmas pendiente',pc:'Partidas que no existen',cob:'Sin tareo (sin excepción)',cobertura:'Sin tareo (sin excepción)',sin:'Sin tareo (sin excepción)'};
+/* requisitos de la lista: k → bloqueos del servidor que caen en cada uno (estado se reparte entre «enviados» y «revisados») */
+const TPB_REQ={dup:['dup','duplicado'],cot:['cfg','cot','fir','firp'],hrs:['marca','sinh','hval','hmax','max','horas','pc'],sin:['cob','cobertura','sin']};
+const TPB_DOW=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const tpbAct=()=>U.mod==='tar'&&U.tab==='tpub'&&tpPubOk();
-function tpbSub(f){
+/* franja de 7 días: termina 3 días después de la fecha elegida (sin pasar de hoy) */
+function tpbWin(f,hoy){const e=addD(f,3)>hoy?hoy:addD(f,3);return{a:addD(e,-6),b:e}}
+function tpbSub(f,hoy){const w=tpbWin(f,hoy);
   tpSub('bidx',f,fcol('tpubidx').doc(f),(sn,err)=>{if(err){TPB.idx=null;TPB.idxOk=true;return}TPB.idx=sn&&sn.exists?{...sn.data(),id:sn.id}:null;TPB.idxOk=true},tpbAct);
-  tpSub('bver',f,fcol('tpub').where('fecha','==',f),(sn,err)=>{if(err)return;const m=new Map();sn.docs.forEach(x=>{const d={...x.data(),id:x.id};m.set(x.id,d);TPUB.set(x.id,d)});TPB.vers=m},tpbAct)}
-function tpbSetF(f){if(f===TPB.f)return;TPB.f=f;TPB.prev=null;TPB.pf='';TPB.err='';TPB.exc={};TPB.idx=null;TPB.idxOk=false;TPB.vers=new Map()}
-const tpbM=dni=>{const x=TPB.exc[dni];return x&&x.on?String(x.m||'').trim():''};
+  tpSub('bver',f,fcol('tpub').where('fecha','==',f),(sn,err)=>{if(err)return;const m=new Map();sn.docs.forEach(x=>{const d={...x.data(),id:x.id};m.set(x.id,d);TPUB.set(x.id,d)});TPB.vers=m},tpbAct);
+  tpSub('bwk',w.a+'|'+w.b,fcol('tpubidx').where('fecha','>=',w.a).where('fecha','<=',w.b),(sn,err)=>{TPB.wkOk=true;if(err)return;const M=new Map();sn.docs.forEach(x=>M.set(x.id,{...x.data(),id:x.id}));TPB.wk=M},tpbAct);
+  /* los tareos del día: si cambia alguno (estado, horas, revisión), se vuelve a pedir la previa */
+  tpSub('btar',f,fcol('tareo').where('date','==',f),(sn,err)=>{if(err){TPB.tarOk=true;return}
+    const sig=sn.docs.map(d=>{const x=d.data()||{};return[d.id,x.st||'',tpMs(x.ts)||String(x.ts||''),Array.isArray(x.hist)?x.hist.length:0,x.prod&&tpMs(x.prod.t)||'',x.arch?1:0].join(':')}).sort().join('|');
+    if(TPB.tarOk&&sig!==TPB.tsig&&TPB.f===f)tpbSoon();TPB.tsig=sig;TPB.tarOk=true},tpbAct)}
+function tpbSetF(f){if(f===TPB.f)return;TPB.f=f;TPB.prev=null;TPB.pf='';TPB.err='';TPB.exc={};TPB.sel=new Set();TPB.idx=null;TPB.idxOk=false;TPB.vers=new Map();
+  TPB.tsig='';TPB.tarOk=false;TPB.tried='';TPB.again=false;TPB.sinOpen=null;TPB.otro=false;TPB.otroTxt='';TPB.dOpen=new Set();if(TPB.deb){clearTimeout(TPB.deb);TPB.deb=0}}
+function tpbSoon(){if(TPB.deb)clearTimeout(TPB.deb);TPB.deb=setTimeout(()=>{TPB.deb=0;if(tpbAct())tpbPrevia()},2000)}
+/* motivo de excepción de un obrero sin tareo: el elegido aquí o, si no se tocó, el de la versión vigente (al rectificar se conservan) */
+const tpbVigExc=()=>{const v=TPB.idx&&+TPB.idx.v;const d=v?TPB.vers.get(tpId(TPB.f,v)):null;return(d&&d.exc)||{}};
+const tpbM=dni=>{const x=TPB.exc[dni];if(x)return x.on?String(x.m||'').trim():'';const e=tpbVigExc()[dni];return String(e&&e.motivo||'').trim()};
+const tpbAgo=()=>{if(!TPB.at)return'';const s=Math.max(0,Math.round((NOW()-TPB.at)/1000));return s<5?'Actualizado recién':s<60?`Actualizado hace ${s} s`:s<3600?`Actualizado hace ${Math.floor(s/60)} min`:`Actualizado a las ${tpAt(TPB.at).slice(-5)}`};
+/* «Actualizado hace X s» se mueve solo mientras la pestaña está a la vista */
+function tpbTick(){if(TPB.tick)return;TPB.tick=setInterval(()=>{if(!tpbAct()){clearInterval(TPB.tick);TPB.tick=0;return}const e=document.getElementById('tpbAt');if(e&&TPB.busy!=='prev')e.textContent=tpbAgo()},5000)}
 /* estado del botón publicar: qué falta */
 function tpbCalc(){const P=TPB.pf===TPB.f?TPB.prev:null,I=TPB.idx;const vig=I&&+I.v||null,ab=!!(I&&I.abierto);
   const sin=P&&Array.isArray(P.resumen&&P.resumen.sinTareo)?P.resumen.sinTareo:P&&Array.isArray(P.sinTareo)?P.sinTareo:[];
   const sinSet=new Set(sin.map(o=>o&&o.dni));const B=P&&Array.isArray(P.bloqueos)?P.bloqueos:[];
-  const Bot=B.filter(b=>!(b&&b.dni&&sinSet.has(b.dni)));const pend=sin.filter(o=>o&&!tpbM(o.dni));
-  let why='';if(vig&&!ab)why=`El día ya está publicado (v${vig}). Para cambiarlo, usa «Rectificar».`;else if(!P)why='Primero consulta «Ver estado del día».';
-  else if(Bot.length)why=`Resuelve ${Bot.length===1?'el bloqueo':'los '+Bot.length+' bloqueos'} antes de publicar.`;
-  else if(pend.length)why=`Falta el motivo de ${pend.length===1?'1 obrero':pend.length+' obreros'} sin tareo.`;
-  return{P,I,vig,ab,sin,Bot,pend,ok:!!P&&!why&&!TPB.busy,why}}
+  const Bot=B.filter(b=>!(b&&b.dni&&sinSet.has(b.dni)));const pend=sin.filter(o=>o&&!tpbM(o.dni));const nf=Bot.length+pend.length;
+  let why='';if(vig&&!ab)why=`El día ya está publicado (v${vig}). Para cambiarlo, usa «Rectificar».`;
+  else if(!P)why=TPB.err?'No se pudo revisar el día. Usa ↻ para intentarlo de nuevo.':'Revisando los tareos del día…';
+  else if(Bot.length&&pend.length)why=`Resuelve lo marcado en rojo y pon el motivo de ${pend.length===1?'1 obrero':pend.length+' obreros'} sin tareo.`;
+  else if(Bot.length)why=`Resuelve ${Bot.length===1?'lo marcado':'los '+Bot.length+' casos marcados'} en rojo en «Antes de publicar».`;
+  else if(pend.length)why=`Pon el motivo de ${pend.length===1?'1 obrero':pend.length+' obreros'} sin tareo (vacaciones, descanso médico…).`;
+  else if(TPB.busy==='prev')why='Actualizando el estado…';
+  else if(TPB.busy)why='Espera un momento…';
+  return{P,I,vig,ab,sin,Bot,pend,nf,ok:!!P&&!why&&!TPB.busy,why}}
 function tpbExcObj(sin){const o={};for(const x of sin){const m=tpbM(x.dni);if(m)o[x.dni]=m}return o}
-function tpbSync(){const st=tpbCalc();const b=$('#tpbPub');if(b)b.disabled=!st.ok;const w=$('#tpbWhy');if(w)w.textContent=st.why}
+
+/* nombre del capataz de un tareo del resumen */
+const tpbCapN=x=>x?(x.capN||tCapName(x.cap)||x.cap||x.id):'';
+const tpbStC=s=>{const[l,c]=TO_ST[s]||[s||'—',''];return`<span class="to-st ${c}">${esc(l)}</span>`};
+/* requisitos de la lista de verificación: {k, t, info?, ok, n, cases(html), act(html)} */
+function tpbSteps(st){const P=st.P,R=(P&&P.resumen)||{};const T=Array.isArray(R.tareos)?R.tareos.filter(x=>x&&x.id):[];const TM=new Map(T.map(x=>[x.id,x]));
+  const pe=R.porEstado||P.porEstado||{};const nT=T.length||Object.values(pe).reduce((s,n)=>s+tpNum(n),0);
+  const cnt=L=>L.reduce((s,k)=>s+tpNum(pe[k]),0);const nEnv=T.length?T.filter(x=>['env','rev','pub'].includes(x.st)).length:cnt(['env','rev','pub']);
+  const nRev=T.length?T.filter(x=>['rev','pub'].includes(x.st)).length:cnt(['rev','pub']);
+  const used=new Set();const take=ks=>st.Bot.filter(b=>{if(used.has(b)||!ks.includes(b&&b.k))return false;used.add(b);return true});
+  const est=take(['estado','st','nada']);const e1=est.filter(b=>b.k==='nada'||['bor','reab','sin'].includes((TM.get(b.tareo)||{}).st)),e2=est.filter(b=>!e1.includes(b));
+  const open=(id,lbl)=>`<button class="ib tp-op" data-tpbt="${esc(id)}">${esc(lbl||'Abrir')}</button>`;
+  const li=b=>{const t=b.tareo?TM.get(b.tareo):null;const ts=Array.isArray(b.tareos)?b.tareos:[];
+    return`<li>${t&&!ts.length?`<b>${esc(tpbCapN(t))}</b> `:''}<span>${esc(b.msg||b.k||'')}</span>${b.tareo&&!ts.length?open(b.tareo):''}${ts.map(id=>open(id,'Abrir '+(tpbCapN(TM.get(id))||'tareo'))).join('')}</li>`};
+  const cases=L=>L.length?`<ul class="tp-cl">${L.slice(0,40).map(li).join('')}${L.length>40?`<li class="note">… y ${L.length-40} más</li>`:''}</ul>`:'';
+  const nc=L=>L.length===1?'1 caso':`${L.length} casos`;
+  const S=[];
+  S.push({k:'env',t:'Tareos enviados por los capataces',ok:!e1.length,n:nT?`${nEnv} de ${nT}`:'Sin tareos',cases:cases(e1)});
+  S.push({k:'rev',t:'Revisados por la oficina',ok:!e2.length,n:nT?`${nRev} de ${nT}`:'—',cases:cases(e2)});
+  const np=R.prod!=null?tpNum(R.prod):T.filter(x=>x.prod).length;
+  S.push({k:'prod',t:'Revisados por producción',info:true,ok:!!nT&&np>=nT,n:`${np} de ${nT}`,note:'Informativo: no impide publicar.',act:T.length?'<button class="t-lnk" data-tpbgo="caps">Ver capataces</button>':''});
+  const dup=take(TPB_REQ.dup);S.push({k:'dup',t:'Cada obrero en un solo tareo',ok:!dup.length,n:dup.length?nc(dup):'Sin DNI repetidos',cases:cases(dup)});
+  const cob=take(TPB_REQ.sin);const ns=st.sin.length;
+  S.push({k:'sin',t:'Obreros sin tareo con motivo',ok:!st.pend.length&&!cob.length,n:ns?`${ns-st.pend.length} de ${ns}`:'Todos tienen tareo',cases:cases(cob),
+    act:st.pend.length?`<button class="ib" data-tpbgo="sin">Poner motivo a ${st.pend.length===1?'1 obrero':st.pend.length+' obreros'}</button>`:''});
+  const cot=take(TPB_REQ.cot);S.push({k:'cot',t:'Cotejo de firmas y jornada',ok:!cot.length,n:cot.length?nc(cot):'Completo',cases:cases(cot)});
+  const hrs=take(TPB_REQ.hrs);S.push({k:'hrs',t:'Asistencia y horas completas',ok:!hrs.length,n:hrs.length?nc(hrs):'Completo',cases:cases(hrs)});
+  const otr=st.Bot.filter(b=>!used.has(b));if(otr.length)S.push({k:'otr',t:'Otras observaciones del servidor',ok:false,n:nc(otr),cases:cases(otr)});
+  return S}
 
 function renderTPub(main){if(!tpPubOk()){main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Publicación','')}<div class="callout">Solo el administrador o el jefe de producción publican el tareo.</div></div></div>`;return}
-  const hoy=todayIso();if(!TPB.f)TPB.f=hoy;const f=TPB.f;tpbSub(f);
-  const st=tpbCalc(),P=st.P,R=(P&&P.resumen)||{},I=st.I,vig=st.vig;
-  const busy=TPB.busy;
-  /* estado del día (índice) */
-  const ab=I&&I.abierto;const vd=vig?TPB.vers.get(tpId(f,vig)):null;
-  const est=!TPB.idxOk?'<span class="note">Cargando…</span>':!vig?'<span class="tp-v">Sin publicar</span>'
-    :`<span class="tp-v on">Publicado v${esc(String(vig))}</span> <span class="note">${vd?esc(tpAt(vd.at))+' · '+esc(tpWho(vd.by,vd.byN)):''}</span>`;
-  const abH=ab?`<div class="callout t-warn tp-ab" id="tpbAb"><b>Abierto para rectificar</b> desde ${esc(tpAt(ab.t))}${ab.by?' por '+esc(toWho(ab.by)):''}${ab.motivo?` · «${esc(ab.motivo)}»`:''}. Costos sigue viendo la v${esc(String(vig))} hasta que publiques la nueva versión. Corrige y revisa los tareos en «Tareos del día» y vuelve a publicar.</div>`:'';
-  /* previa */
-  let body='';
-  if(P){const pe=R.porEstado||P.porEstado||{};const peH=Object.entries(pe).filter(([,n])=>+n).map(([k,n])=>{const[l,c]=TO_ST[k]||[k,''];return`<span class="to-st ${c}">${esc(l)} ${+n}</span>`}).join(' ');
-    const sin=st.sin,nx=sin.length-st.pend.length;
-    body+=`<div class="lqtiles tp-tiles" id="tpbRes">
-      <div class="lqtile"><span>Obreros</span><b>${tpNum(R.obreros)}</b></div>
-      <div class="lqtile" style="--c:var(--ok)"><span>Vinieron</span><b>${tpNum(R.pres)}</b></div>
-      <div class="lqtile" style="--c:var(--bad)"><span>No vinieron</span><b>${tpNum(R.aus)}</b>${R.porMot?`<small>${tpPorMot(R.porMot)}</small>`:''}</div>
-      <div class="lqtile" style="--c:var(--warn)"><span>Sin tareo</span><b>${sin.length}</b>${sin.length?`<small>${nx} con motivo</small>`:''}</div>
-      <div class="lqtile" style="--c:var(--accent)"><span>HH</span><b>${toH(R.hh)}</b></div>
-      <div class="lqtile" style="--c:var(--warn)"><span>Horas extra</span><b>${toH(R.he)}</b></div>
-      <div class="lqtile"><span>En altura</span><b>${tpNum(R.alt)}</b></div></div>
-     ${peH?`<div class="tp-est" id="tpbEst"><span class="note">Tareos:</span> ${peH}</div>`:''}`;
-    /* revisión de producción (informativa, no bloquea): cuántos tareos la tienen y acceso a revisarlos */
-    const TT=Array.isArray(R.tareos)?R.tareos.filter(x=>x&&x.id):[];
-    if(TT.length){const np=R.prod!=null?tpNum(R.prod):TT.filter(x=>x.prod).length;const L=[...TT].sort((a,b)=>(!!a.prod)-(!!b.prod)||String(a.capN||a.cap||'').localeCompare(String(b.capN||b.cap||'')));
-      body+=`<details class="card tp-prod" id="tpbProd"${np<TT.length?' open':''}><summary><b id="tpbProdN">${np} de ${TT.length} ${TT.length===1?'tareo revisado':'tareos revisados'} por producción</b> <span class="note">Informativo: no impide publicar.</span></summary>
-        <ul class="tp-pl">${L.map(x=>{const[l,c]=TO_ST[x.st]||[x.st,''];const ok=['env','rev'].includes(x.st);
-          return`<li data-tpbp="${esc(x.id)}"><b>${esc(x.capN||tCapName(x.cap)||x.cap||x.id)}</b> <span class="to-st ${c}">${esc(l)}</span> ${x.prod?'<span class="tr-prodc">Producción ✓</span>':'<span class="note">Sin revisión de producción</span>'} <span class="note">${tpNum(x.pres)} vinieron · ${toH(x.hh)} HH</span>${ok?` <button class="t-lnk" data-tpbr="${esc(x.id)}">${x.prod?'Ver / revisar otra vez':'Revisar horas'}</button>`:''}</li>`}).join('')}</ul></details>`}
-    /* bloqueos agrupados */
-    if(st.Bot.length){const G=new Map();for(const b of st.Bot){const k=b&&b.k||'otro';if(!G.has(k))G.set(k,[]);G.get(k).push(b)}
-      body+=`<div class="card tp-blq" id="tpbBlq"><div class="tp-bh"><b>${st.Bot.length===1?'1 bloqueo':st.Bot.length+' bloqueos'}</b><span class="note">No se puede publicar hasta resolverlos. Corrígelos en la revisión del tareo y vuelve a consultar el estado.</span></div>
-        ${[...G].map(([k,L])=>`<div class="tp-bg" data-tpbk="${esc(k)}"><h4>${esc(TPB_K[k]||k)} <span class="tp-n">${L.length}</span></h4><ul>${L.map(b=>`<li><span>${esc(b.msg||b.k||'')}</span>${b.tareo?` <button class="t-lnk" data-tpbt="${esc(b.tareo)}">Abrir tareo</button>`:''}</li>`).join('')}</ul></div>`).join('')}</div>`}
-    else body+=`<div class="callout tp-okc" id="tpbOkB">${st.pend.length?'Sin bloqueos en los tareos. Falta el motivo de los obreros sin tareo.':'Sin bloqueos: el día se puede publicar.'}</div>`;
-    /* sin tareo con excepción */
-    if(st.sin.length){const L=[...st.sin].sort((a,b)=>String(a.ape||'').localeCompare(String(b.ape||'')));
-      body+=`<div class="card tp-sin" id="tpbSin"><div class="tp-bh"><b>Sin tareo · ${L.length}</b><span class="note">Activos en el máster que no figuran en ningún tareo del día. Para publicar, marca a cada uno con el motivo (vacaciones, destacado a otra obra…) o pide que lo agreguen a un tareo.</span></div>
-        <div class="tp-all"><span class="note">Marcar a todos con:</span>${TPB_EXC.filter(x=>x!=='Otro').map(m=>`<button class="tp-ch" data-tpba="${esc(m)}">${esc(m)}</button>`).join('')}</div>
-        <ul class="tp-sl">${L.map((o,i)=>{const x=TPB.exc[o.dni]||{};const on=!!x.on;const m=x.m||'';
-          return`<li class="tp-si${on?' on':''}${on&&!m.trim()?' need':''}" data-tpbd="${esc(o.dni)}"><label class="tp-sc"><input type="checkbox" data-tpbx="${esc(o.dni)}"${on?' checked':''}><span class="tp-n2">${i+1}</span><b>${esc([o.ape,o.nom].filter(Boolean).join(', ')||o.dni)}</b><span class="note mono">${esc(o.dni)}</span><span class="note">${esc(o.capN||tCapName(o.cap)||'Sin capataz')}</span></label>
-            ${on?`<div class="tp-mo">${TPB_EXC.map(c=>`<button class="tp-ch${(c==='Otro'?m&&!TPB_EXC.includes(m):m===c)?' on':''}" data-tpbm="${esc(c)}">${esc(c)}</button>`).join('')}<input class="tin" data-tpbi="${esc(o.dni)}" data-fk="tpbi:${esc(o.dni)}" value="${esc(m)}" placeholder="Motivo" aria-label="Motivo de ${esc(o.ape||o.dni)}" maxlength="120"></div>`:''}</li>`}).join('')}</ul></div>`}}
-  else if(busy==='prev')body='<div class="callout">Consultando el estado del día en el servidor…</div>';
-  else body=`<div class="callout t-soon" id="tpbHint">Consulta el estado del día: el servidor revisa los tareos (revisados, cotejo, duplicados, obreros sin tareo) sin publicar nada.</div>`;
-  /* historial de versiones: tpubidx.vers y, si falta, los tpub leídos */
+  const hoy=todayIso();if(!TPB.f)TPB.f=hoy;const f=TPB.f;tpbSub(f,hoy);tpbTick();
+  /* sin paso previo: la primera previa de la fecha se pide sola */
+  if(TPB.pf!==f&&!TPB.busy&&TPB.tried!==f){TPB.tried=f;setTimeout(()=>{if(TPB.f===f&&tpbAct())tpbPrevia()},0)}
+  const st=tpbCalc(),P=st.P,R=(P&&P.resumen)||{},I=st.I,vig=st.vig,busy=TPB.busy;
+  const ab=I&&I.abierto;const vd=vig?TPB.vers.get(tpId(f,vig)):null;const rect=!!(vig&&st.ab);const pubC=!!(vig&&!st.ab);
+  const load=!P&&!TPB.err;
+  /* franja de días */
+  const w=tpbWin(f,hoy);const days=tpDates(w.a,w.b).map(d=>{const x=d===f&&TPB.idxOk?I:TPB.wk.get(d);const v=x&&+x.v||0;const nl=tNoLab(d);
+    const s=v&&x.abierto?['ab','En rectificación']:v?['pub',`Publicado v${v}`]:nl?['nl','No laborable']:['pen','Pendiente'];
+    return`<button class="tp-dpill s-${s[0]}${d===f?' on':''}" data-tpbf="${esc(d)}" aria-pressed="${d===f}" title="${esc(toDia(d)+' · '+s[1])}"><span class="tp-dw">${TPB_DOW[pd(d).getUTCDay()]}${d===hoy?'<span class="tp-hoy"> · hoy</span>':''}</span><b>${+d.slice(8,10)}</b><span class="tp-dsi" aria-hidden="true">${s[0]==='pub'?'✓':s[0]==='ab'?'●':s[0]==='nl'?'—':'○'}</span><span class="tp-ds">${s[0]==='pub'?'✓ v'+v:s[0]==='ab'?'Abierto':s[0]==='nl'?'—':TPB.wkOk?'Pendiente':''}</span></button>`}).join('');
+  /* estado general */
+  let tone,big,sub='';
+  if(pubC){tone='pub';big=`Publicado v${vig}`;sub=vd?`${tpAt(vd.at)} · ${tpWho(vd.by,vd.byN)}`:'Costos ya ve este día.'}
+  else if(!P&&TPB.err){tone='bad';big='No se pudo revisar el día'}
+  else if(!P){tone='load';big='Revisando el día…'}
+  else if(st.nf){tone='warn';big=st.nf===1?'Falta 1 cosa':`Faltan ${st.nf} cosas`}
+  else{tone='ok';big=rect?`Listo para publicar la rectificación v${vig+1}`:'Listo para publicar'}
+  const S=P?tpbSteps(st):[];const req=S.filter(x=>!x.info);
+  const meter=P&&!pubC?`<div class="tp-meter" role="img" aria-label="${req.filter(x=>x.ok).length} de ${req.length} requisitos cumplidos">${req.map(x=>`<i class="${x.ok?'ok':'no'}" title="${esc(x.t)}"></i>`).join('')}</div>`:'';
+  const btn=pubC?`<button class="ib pri tp-go" id="tpbRect"${busy?' disabled':''}>Rectificar…</button>`
+    :`<button class="ib pri tp-go" id="tpbPub"${st.ok?'':' disabled'}${st.ok?'':` aria-describedby="tpbWhy"`}>${busy==='pub'?'Publicando…':rect?`Publicar rectificación v${vig+1}`:'Publicar día'}</button>`;
+  const bar=`<section class="tp-pbar t-${tone}" id="tpbBar" aria-live="polite">
+    <div class="tp-pst" id="tpbSt"><b class="tp-big">${esc(big)}</b>${sub?`<span class="tp-sub">${esc(sub)}</span>`:''}${meter}</div>
+    <div class="tp-pact"><span class="tp-ref"><span id="tpbAt">${busy==='prev'?'Actualizando…':esc(tpbAgo())}</span><button class="ib tp-rf" id="tpbVer" title="Volver a revisar ahora" aria-label="Volver a revisar ahora"${busy==='prev'?' disabled':''}>↻</button></span>${btn}</div>
+    <div class="tp-why" id="tpbWhy">${esc(st.why)}</div></section>`;
+  const abH=ab?`<div class="callout t-warn tp-ab" id="tpbAb"><b>Abierto para rectificar</b> desde ${esc(tpAt(ab.t))}${ab.by?' por '+esc(toWho(ab.by)):''}${ab.motivo?` · «${esc(ab.motivo)}»`:''}. Costos sigue viendo la v${esc(String(vig))} hasta que publiques la nueva versión. Corrige y revisa los tareos en «Tareos del día»: esta lista se actualiza sola.</div>`:'';
+  const errH=TPB.err?`<div class="callout warnc" id="tpbErr" role="alert">${esc(TPB.err)}</div>`:'';
+  const sk=n=>`<div class="tp-sk" aria-hidden="true">${'<i></i>'.repeat(n)}</div>`;
+  /* (a) requisitos */
+  const stepsH=`<section class="card tp-chk" id="tpbChk"><header class="tp-ch2"><b>Antes de publicar</b>${P?`<span class="note">${req.filter(x=>x.ok).length} de ${req.length} listos</span>`:''}</header>
+    ${P?`<ol class="tp-steps">${S.map(x=>`<li class="tp-step ${x.info?'i':x.ok?'ok':'no'}" data-tpbs="${x.k}"><span class="tp-ic" aria-hidden="true">${x.ok?'✓':x.info?'i':'!'}</span>
+      <div class="tp-sb"><div class="tp-sh"><b>${esc(x.t)}</b><span class="tp-sn${x.k==='prod'?'" id="tpbProdS':''}">${esc(x.n)}</span></div>${x.note?`<div class="note">${esc(x.note)}</div>`:''}${x.ok&&!x.info?'':x.cases||''}${x.act?`<div class="tp-sa">${x.act}</div>`:''}</div></li>`).join('')}</ol>`:sk(6)}</section>`;
+  /* (b) capataces del día */
+  const T=Array.isArray(R.tareos)?R.tareos.filter(x=>x&&x.id):[];const np=R.prod!=null?tpNum(R.prod):T.filter(x=>x.prod).length;
+  const pe=R.porEstado||(P&&P.porEstado)||{};
+  const capsH=`<section class="card tp-caps" id="tpbCaps"><header class="tp-ch2"><b>Capataces del día</b>${T.length?`<span class="note" id="tpbProdN">${np} de ${T.length} ${T.length===1?'tareo revisado':'tareos revisados'} por producción</span>`:''}</header>
+    ${!P?sk(3):T.length?`<div class="tscroll"><table class="t tp-ct" id="tpbProd"><thead><tr><th>Capataz</th><th>Estado</th><th class="t-r">Obreros</th><th class="t-r">HH</th><th class="t-r">HE</th><th>Producción</th><th></th></tr></thead><tbody>
+      ${[...T].sort((a,b)=>tpbCapN(a).localeCompare(tpbCapN(b))).map(x=>{const ok=['env','rev'].includes(x.st);const bq=tpNum(x.bloq);
+        return`<tr data-tpbp="${esc(x.id)}"><td><button class="t-lnk tp-cn" data-tpbt="${esc(x.id)}" title="Abrir el tareo">${esc(tpbCapN(x))}</button>${bq?` <span class="tp-bq" title="Observaciones que impiden publicar">${bq}</span>`:''}</td>
+          <td>${tpbStC(x.st)}</td><td class="mono t-r" title="${tpNum(x.pres)} vinieron · ${tpNum(x.aus)} no vinieron">${tpNum(x.n)}</td><td class="mono t-r">${toH(x.hh)}</td><td class="mono t-r">${tpNum(x.he)?toH(x.he):'—'}</td>
+          <td>${x.prod?'<span class="tr-prodc">Producción ✓</span>':'<span class="note">—</span>'}</td><td class="t-r">${ok?`<button class="ib" data-tpbr="${esc(x.id)}">${x.prod?'Revisar otra vez':'Revisar horas'}</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`
+    :Object.values(pe).some(n=>+n)?`<div class="tp-pad tp-est" id="tpbEst">${Object.entries(pe).filter(([,n])=>+n).map(([k,n])=>{const[l,c]=TO_ST[k]||[k,''];return`<span class="to-st ${c}">${esc(l)} ${+n}</span>`}).join(' ')}</div>`
+    :'<div class="tp-pad note">Ningún capataz tiene tareo con obreros este día.</div>'}</section>`;
+  /* (c) sin tareo: agrupado por cuadrilla, selección múltiple y motivo para todos los elegidos */
+  let sinH='';
+  if(P&&st.sin.length){const L=[...st.sin].sort((a,b)=>String(a.ape||'').localeCompare(String(b.ape||'')));const G=new Map();
+    for(const o of L){const k=String(o.cua||'').trim()||'Sin cuadrilla';if(!G.has(k))G.set(k,[]);G.get(k).push(o)}
+    const nsel=[...TPB.sel].filter(d=>L.some(o=>o.dni===d)).length;const opn=TPB.sinOpen!=null?TPB.sinOpen:st.pend.length>0;
+    const allOn=nsel===L.length;
+    sinH=`<details class="card tp-sin" id="tpbSin"${opn?' open':''}><summary><b>Sin tareo</b> <span class="tp-n">${L.length}</span> <span class="note">${L.length-st.pend.length} con motivo${st.pend.length?` · <span class="tp-pend">${st.pend.length} sin motivo</span>`:''}</span></summary>
+      <div class="tp-sbar"${pubC?' hidden':''}><label class="tp-sc"><input type="checkbox" data-tpbsa${allOn?' checked':''} aria-label="Elegir a todos"> <span>${nsel?`${nsel} ${nsel===1?'elegido':'elegidos'}`:'Elegir a todos'}</span></label>
+        <span class="tp-mos" role="group" aria-label="Motivo para los elegidos">${TPB_EXC.map(c=>`<button class="tp-ch" data-tpbm="${esc(c)}"${nsel?'':' disabled'}>${esc(c)}</button>`).join('')}${nsel?'<button class="t-lnk" data-tpbm="">Quitar motivo</button>':''}</span>
+        ${TPB.otro&&nsel?`<span class="tp-otro"><input class="tin" id="tpbOtro" data-fk="tpb:otro" value="${esc(TPB.otroTxt)}" placeholder="Escribe el motivo" maxlength="120" aria-label="Otro motivo"><button class="ib pri" id="tpbOtroOk">Aplicar</button></span>`:''}</div>
+      <div class="tp-sgs">${[...G].sort((a,b)=>a[0].localeCompare(b[0])).map(([k,M])=>{const on=M.every(o=>TPB.sel.has(o.dni));return`<div class="tp-sg"><label class="tp-sgh"><input type="checkbox" data-tpbgx="${esc(k)}"${on?' checked':''}> <b>${esc(k)}</b> <span class="tp-n">${M.length}</span></label>
+        <ul class="tp-sl">${M.map(o=>{const m=tpbM(o.dni);return`<li class="tp-si${TPB.sel.has(o.dni)?' on':''}${m?'':' need'}" data-tpbd="${esc(o.dni)}"><label class="tp-sc"><input type="checkbox" data-tpbx="${esc(o.dni)}"${TPB.sel.has(o.dni)?' checked':''}>
+          <b>${esc([o.ape,o.nom].filter(Boolean).join(', ')||o.dni)}</b><span class="note mono">${esc(o.dni)}</span><span class="note">${esc(o.capN||tCapName(o.cap)||'Sin capataz')}</span></label>
+          <span class="tp-m${m?' on':''}" data-tpbmv="${esc(o.dni)}">${m?esc(m):'Sin motivo'}</span></li>`}).join('')}</ul></div>`}).join('')}</div></details>`}
+  else if(P)sinH=`<section class="card tp-sin0" id="tpbSin0"><div class="tp-pad"><b>Sin tareo</b> <span class="note">Todos los obreros activos del máster figuran en un tareo del día.</span></div></section>`;
+  /* (d) resumen y versiones */
+  const resH=`<section class="card tp-res" id="tpbRes"><header class="tp-ch2"><b>Resumen del día</b></header>${P?`<dl class="tp-dl">
+      <div><dt>Obreros</dt><dd>${tpNum(R.obreros)}</dd></div><div><dt>Vinieron</dt><dd>${tpNum(R.pres)}</dd></div>
+      <div><dt>No vinieron</dt><dd>${tpNum(R.aus)}</dd>${R.porMot&&Object.keys(R.porMot).length?`<small>${tpPorMot(R.porMot)}</small>`:''}</div><div><dt>Sin tareo</dt><dd>${st.sin.length}</dd></div>
+      <div><dt>HH</dt><dd>${toH(R.hh)}</dd></div><div><dt>Horas extra</dt><dd>${toH(R.he)}</dd></div><div><dt>En altura</dt><dd>${tpNum(R.alt)}</dd></div></dl>`:sk(2)}</section>`;
   const vers=(Array.isArray(I&&I.vers)&&I.vers.length?I.vers.map(x=>({...x})):[...TPB.vers.values()].map(d=>({v:d.v,at:d.at,by:d.by,motivo:d.motivo}))).filter(x=>x&&x.v!=null).sort((a,b)=>b.v-a.v);
-  const hist=vers.length?`<div class="card tp-hist" id="tpbHist"><div class="tp-bh"><b>Versiones del día</b></div><ol class="tp-hl">${vers.map(x=>{const d=TPB.vers.get(tpId(f,x.v));const t=d?tpTot(d):null;
-      return`<li data-tpbv="${esc(String(x.v))}">${tpVChip(x.v,vig)} <span>${esc(tpAt(x.at||(d&&d.at)))} · ${esc(tpWho(x.by||(d&&d.by),x.byN||(d&&d.byN)))}</span>${x.motivo||(d&&d.motivo)?` <span class="tp-mot">«${esc(x.motivo||d.motivo)}»</span>`:''}${t?` <span class="note">${t.obreros} obreros · ${toH(t.hh)} HH · ${toH(t.he)} HE</span>`:''}
-        ${d&&d.dif!=null?`<details class="tp-dd"><summary>Diferencias con la v${esc(String(d.ant??x.v-1))}</summary>${tpDif(d.dif)}</details>`:''}
-        ${d?` <button class="t-lnk" data-tpbc="${esc(d.id)}">Ver en Costos</button>`:''}</li>`}).join('')}</ol></div>`:'';
-  const rect=!!(vig&&st.ab);
-  main.innerHTML=`<div class="scroll"><div class="wrap tp">${pageHead('Publicación del tareo',esc(toDia(f)),`<span class="to-date"><button class="ib" id="tpbPrev" aria-label="Día anterior">‹</button><input class="tin" type="date" id="tpbDate" value="${esc(f)}" max="${esc(hoy)}" aria-label="Fecha"><button class="ib" id="tpbNext" aria-label="Día siguiente"${f>=hoy?' disabled':''}>›</button>${f!==hoy?'<button class="ib" id="tpbHoy">Hoy</button>':''}</span>`)}
-    <div class="tp-bar"><div class="tp-st" id="tpbSt">${est}</div><div class="tp-acts">
-      <button class="ib" id="tpbVer"${busy?' disabled':''}>${busy==='prev'?'Consultando…':P?'Actualizar estado':'Ver estado del día'}</button>
-      ${vig&&!st.ab?`<button class="ib" id="tpbRect"${busy?' disabled':''}>Rectificar…</button>`:''}
-      ${vig&&!st.ab?'':`<button class="ib pri" id="tpbPub"${st.ok?'':' disabled'}>${busy==='pub'?'Publicando…':rect?`Publicar rectificación v${vig+1}`:'Publicar día'}</button>`}</div></div>
-    <div class="tp-why note" id="tpbWhy">${esc(st.why)}</div>
-    ${P&&TPB.at?`<div class="note tp-at">Estado consultado a las ${esc(tpAt(TPB.at).slice(-5))}. Si alguien cambia un tareo, vuelve a consultarlo: al publicar, el servidor revisa todo de nuevo.</div>`:''}
-    ${TPB.err?`<div class="callout warnc" id="tpbErr" role="alert">${esc(TPB.err)}</div>`:''}
-    ${abH}${body}${hist}</div></div>`;
+  const nxt=rect&&P&&!st.nf?`<li class="tp-tn" data-tpbv="nueva"><span class="tp-v">v${vig+1} · por publicar</span>${P.dif!=null?`<details class="tp-dd" data-tpbdo="nueva"${TPB.dOpen.has('nueva')?' open':''}><summary>Cambios respecto a la v${vig}</summary>${tpDif(P.dif)}</details>`:''}</li>`:'';
+  const abL=ab?`<li class="tp-tab"><span class="tp-v warn">Abierto para rectificar</span> <span class="note">${esc(tpAt(ab.t))}${ab.by?' · '+esc(toWho(ab.by)):''}</span>${ab.motivo?` <span class="tp-mot">«${esc(ab.motivo)}»</span>`:''}</li>`:'';
+  const histH=`<section class="card tp-hist" id="tpbHist"><header class="tp-ch2"><b>Versiones del día</b></header>${vers.length?`<ol class="tp-tl">${nxt}${abL}${vers.map(x=>{const d=TPB.vers.get(tpId(f,x.v));const t=d?tpTot(d):null;
+      return`<li class="${x.v===vig?'vig':'old'}" data-tpbv="${esc(String(x.v))}">${tpVChip(x.v,vig)} <span class="tp-tw">${esc(tpAt(x.at||(d&&d.at)))} · ${esc(tpWho(x.by||(d&&d.by),x.byN||(d&&d.byN)))}</span>${x.motivo||(d&&d.motivo)?`<div class="tp-mot">«${esc(x.motivo||d.motivo)}»</div>`:''}${t?`<div class="note">${t.obreros} obreros · ${toH(t.hh)} HH · ${toH(t.he)} HE</div>`:''}
+        ${d&&d.dif!=null?`<details class="tp-dd" data-tpbdo="${esc(String(x.v))}"${TPB.dOpen.has(String(x.v))?' open':''}><summary>Diferencias con la v${esc(String(d.ant??x.v-1))}</summary>${tpDif(d.dif)}</details>`:''}
+        <div class="tp-ta">${d?`<button class="t-lnk" data-tpbc="${esc(d.id)}">Ver en Costos</button>`:''}${x.v===vig&&!st.ab?' <button class="t-lnk" data-tpbrect>Rectificar…</button>':''}</div></li>`}).join('')}</ol>`
+    :`<div class="tp-pad note">${TPB.idxOk?'Aún no se publica este día. Al publicar, cada versión queda aquí y costos la ve.':'Cargando…'}</div>`}</section>`;
+  main.innerHTML=`<div class="scroll"><div class="wrap tp tpb" id="tpbRoot">${pageHead('Publicación del tareo',esc(toDia(f)))}
+    <nav class="tp-days" id="tpbDays" aria-label="Días"><button class="ib" id="tpbPrev" aria-label="Día anterior">◀</button><div class="tp-dl7">${days}</div><button class="ib" id="tpbNext" aria-label="Día siguiente"${f>=hoy?' disabled':''}>▶</button>
+      <span class="tp-dpk"><input class="tin" type="date" id="tpbDate" value="${esc(f)}" max="${esc(hoy)}" aria-label="Elegir fecha">${f!==hoy?'<button class="ib" id="tpbHoy">Hoy</button>':''}</span></nav>
+    ${bar}${errH}${abH}
+    <div class="tp-cols${load?' ld':''}"><div class="tp-col">${stepsH}${sinH}</div><div class="tp-col">${capsH}${resH}${histH}</div></div></div></div>`;
   const go=d=>{tpbSetF(d>hoy?hoy:d);requestRender()};
   $('#tpbPrev').onclick=()=>go(addD(f,-1));$('#tpbNext').onclick=()=>go(addD(f,1));const h=$('#tpbHoy');if(h)h.onclick=()=>go(hoy);
   $('#tpbDate').onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value))go(e.target.value)};
   $('#tpbVer').onclick=()=>tpbPrevia();
   const pb=$('#tpbPub');if(pb)pb.onclick=()=>tpbPublicar();
   const rb=$('#tpbRect');if(rb)rb.onclick=()=>tpbRectificar();
-  const bl=$('#tpbBlq');if(bl)bl.onclick=e=>{const b=e.target.closest('[data-tpbt]');if(b)tpbAbrir(b.dataset.tpbt,'ofi')};
-  const pp=$('#tpbProd');if(pp)pp.onclick=e=>{const b=e.target.closest('[data-tpbr]');if(b)tpbAbrir(b.dataset.tpbr,'prod')};
-  const hs=$('#tpbHist');if(hs)hs.onclick=e=>{const b=e.target.closest('[data-tpbc]');if(b){TPK.det=b.dataset.tpbc;TPK.mes=f.slice(0,7);goTab('tcos')}};
-  const sn=$('#tpbSin');if(sn){
-    sn.onchange=e=>{const c=e.target.closest('[data-tpbx]');if(!c)return;const d=c.dataset.tpbx;TPB.exc[d]={...(TPB.exc[d]||{}),on:c.checked};requestRender()};
-    sn.oninput=e=>{const i=e.target.closest('[data-tpbi]');if(!i)return;const d=i.dataset.tpbi;TPB.exc[d]={on:true,m:i.value};const li=i.closest('.tp-si');if(li)li.classList.toggle('need',!i.value.trim());tpbSync()};
-    sn.onclick=e=>{const a=e.target.closest('[data-tpba]');if(a){for(const o of st.sin)if(!tpbM(o.dni))TPB.exc[o.dni]={on:true,m:a.dataset.tpba};requestRender();return}
-      const b=e.target.closest('[data-tpbm]');if(!b)return;const li=b.closest('[data-tpbd]');const d=li.dataset.tpbd;const c=b.dataset.tpbm;
-      TPB.exc[d]={on:true,m:c==='Otro'?'':c};requestRender();if(c==='Otro')setTimeout(()=>{const i=document.querySelector(`[data-tpbi="${CSS.escape(d)}"]`);if(i)i.focus()},0)}}}
+  const root=$('#tpbRoot');
+  root.querySelectorAll('details[data-tpbdo]').forEach(d=>d.addEventListener('toggle',()=>{const k=d.dataset.tpbdo;d.open?TPB.dOpen.add(k):TPB.dOpen.delete(k)}));
+  const sn=$('#tpbSin');
+  if(sn)sn.addEventListener('toggle',e=>{if(e.target===sn)TPB.sinOpen=sn.open});
+  root.onclick=e=>{let b;
+    if((b=e.target.closest('[data-tpbf]')))return go(b.dataset.tpbf);
+    if((b=e.target.closest('[data-tpbr]')))return tpbAbrir(b.dataset.tpbr,'prod');
+    if((b=e.target.closest('[data-tpbt]')))return tpbAbrir(b.dataset.tpbt,'ofi');
+    if((b=e.target.closest('[data-tpbc]'))){TPK.det=b.dataset.tpbc;TPK.mes=f.slice(0,7);goTab('tcos');return}
+    if(e.target.closest('[data-tpbrect]'))return tpbRectificar();
+    if((b=e.target.closest('[data-tpbgo]'))){const k=b.dataset.tpbgo;if(k==='sin')TPB.sinOpen=true;requestRender();
+      setTimeout(()=>{const el=document.getElementById(k==='sin'?'tpbSin':'tpbCaps');if(el)el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})},0);return}
+    if((b=e.target.closest('[data-tpbm]'))){const c=b.dataset.tpbm;const L=[...TPB.sel].filter(d=>st.sin.some(o=>o.dni===d));if(!L.length){toast('Marca primero a los obreros.');return}
+      if(c==='Otro'){TPB.otro=true;requestRender();setTimeout(()=>{const i=document.getElementById('tpbOtro');if(i)i.focus()},0);return}
+      tpbExcSet(L,c);return}
+    if(e.target.closest('#tpbOtroOk')){const m=TPB.otroTxt.trim();if(!m){toast('Escribe el motivo.');return}tpbExcSet([...TPB.sel],m)}};
+  if(sn){sn.onchange=e=>{const c=e.target;
+      if(c.matches('[data-tpbx]')){c.checked?TPB.sel.add(c.dataset.tpbx):TPB.sel.delete(c.dataset.tpbx);requestRender();return}
+      if(c.matches('[data-tpbsa]')){TPB.sel=c.checked?new Set(st.sin.map(o=>o.dni)):new Set();requestRender();return}
+      if(c.matches('[data-tpbgx]')){const k=c.dataset.tpbgx;for(const o of st.sin)if((String(o.cua||'').trim()||'Sin cuadrilla')===k)c.checked?TPB.sel.add(o.dni):TPB.sel.delete(o.dni);requestRender()}};
+    sn.oninput=e=>{if(e.target.id==='tpbOtro')TPB.otroTxt=e.target.value};
+    sn.onkeydown=e=>{if(e.target.id==='tpbOtro'&&e.key==='Enter'){e.preventDefault();const m=TPB.otroTxt.trim();if(m)tpbExcSet([...TPB.sel],m)}}}}
+/* motivo de excepción para varios obreros a la vez ('' = quitar) */
+function tpbExcSet(L,m){for(const d of L)TPB.exc[d]=m?{on:true,m}:{on:false,m:''};TPB.sel=new Set();TPB.otro=false;TPB.otroTxt='';
+  toast(m?`Motivo «${m}» para ${L.length===1?'1 obrero':L.length+' obreros'}`:`Se quitó el motivo de ${L.length===1?'1 obrero':L.length+' obreros'}`);requestRender()}
 
 /* abre el tareo del bloqueo en la revisión (tareo-rev.js): misma fecha en «Tareos del día» */
 /* mode 'prod': abre la revisión de producción (el admin, que puede ambas; el jefe con tpub siempre entra en producción) */
 function tpbAbrir(id,mode){const f=TPB.f;if(typeof TD==='undefined'){goTab('tdia');return}
   if(TD.f===f&&TD.d===f&&TD.ok&&TD.docs.has(id)){goTab('tdia');if(typeof toDetalle==='function')toDetalle(id,false,mode||'');return}
   TD.f=f;if(typeof TR!=='undefined'){TR.want=id;TR.want2=mode||''}goTab('tdia')}
-async function tpbPrevia(){const f=TPB.f;if(TPB.busy)return;TPB.busy='prev';TPB.err='';requestRender();
-  try{const d=await tpCall({accion:'previa',fecha:f});if(TPB.f!==f)return;TPB.prev=d||{};TPB.pf=f;TPB.at=NOW();
-    /* las excepciones marcadas siguen si el obrero sigue sin tareo */
-    const sin=new Set(tpbCalc().sin.map(o=>o.dni));for(const k of Object.keys(TPB.exc))if(!sin.has(k))delete TPB.exc[k]}
-  catch(e){if(TPB.f===f)TPB.err=tpErr(e)}finally{TPB.busy='';requestRender()}}
+/* previa del servidor (no escribe). Si ya hay una en curso, se repite al terminar (llegó un cambio mientras tanto) */
+async function tpbPrevia(){const f=TPB.f;if(TPB.busy){if(TPB.busy==='prev')TPB.again=true;return}TPB.busy='prev';TPB.tried=f;requestRender();
+  try{const d=await tpCall({accion:'previa',fecha:f});if(TPB.f!==f)return;TPB.prev=d||{};TPB.pf=f;TPB.at=NOW();TPB.err='';
+    /* las excepciones y la selección siguen si el obrero sigue sin tareo */
+    const sin=new Set(tpbCalc().sin.map(o=>o.dni));for(const k of Object.keys(TPB.exc))if(!sin.has(k))delete TPB.exc[k];for(const k of[...TPB.sel])if(!sin.has(k))TPB.sel.delete(k)}
+  catch(e){if(TPB.f===f)TPB.err=tpErr(e)}
+  finally{TPB.busy='';const a=TPB.again&&TPB.f===f;TPB.again=false;requestRender();if(a)tpbPrevia()}}
 async function tpbPublicar(){const st=tpbCalc();if(!st.ok)return;const f=TPB.f,R=(st.P&&st.P.resumen)||{};const rect=!!st.vig;const exc=tpbExcObj(st.sin);const ne=Object.keys(exc).length;
   const r=await uiAsk({title:rect?`Publicar rectificación v${st.vig+1} · ${fmtD(f)}`:`Publicar el tareo del ${fmtD(f)}`,tone:'ok',
     text:rect?`Se crea la versión ${st.vig+1}. La v${st.vig} queda guardada como «sustituida» y costos verá la nueva.`:'Costos verá este día y podrá descargar su Excel. La publicación no se borra: un cambio posterior se hace con una rectificación.',
@@ -173,9 +262,9 @@ async function tpbPublicar(){const st=tpbCalc();if(!st.ok)return;const f=TPB.f,R
   if(r===false||r==null)return;const motivo=rect?String(r).trim():'';if(rect&&!motivo){toast('Escribe el motivo de la rectificación.');return}
   if(TPB.f!==f||TPB.busy)return;TPB.busy='pub';TPB.err='';requestRender();
   try{const d=await tpCall({accion:'publicar',fecha:f,excepciones:exc,firma:(TPB.prev&&TPB.prev.firma)||undefined,...(rect?{motivo}:{})});
-    if(d&&d.ok===false){TPB.prev=d;TPB.pf=f;TPB.at=NOW();toast('No se publicó: hay bloqueos. Revísalos abajo.');requestRender();return}
+    if(d&&d.ok===false){TPB.prev=d;TPB.pf=f;TPB.at=NOW();toast('No se publicó: algo cambió. Revisa la lista «Antes de publicar».');requestRender();return}
     toast(`Tareo del ${fmtD(f)} publicado${d&&d.v?' · versión '+d.v:''}`);
-    TPB.busy='';TPB.prev=null;TPB.pf='';TPB.exc={};tpbPrevia()}
+    TPB.busy='';TPB.exc={};TPB.sel=new Set();tpbPrevia()}
   catch(e){TPB.err=tpErr(e);const det=e&&e.details;if(det&&Array.isArray(det.bloqueos)&&TPB.prev&&TPB.pf===f)TPB.prev={...TPB.prev,bloqueos:det.bloqueos}}
   finally{if(TPB.busy==='pub')TPB.busy='';requestRender()}}
 async function tpbRectificar(){const f=TPB.f;const I=TPB.idx;if(!I||!I.v||TPB.busy)return;
@@ -183,8 +272,9 @@ async function tpbRectificar(){const f=TPB.f;const I=TPB.idx;if(!I||!I.v||TPB.bu
     ok:'Abrir para rectificar',input:{label:'Motivo',required:true}});
   if(m==null||m===false)return;const motivo=String(m).trim();if(!motivo){toast('Escribe el motivo.');return}
   TPB.busy='rect';TPB.err='';requestRender();
-  try{await tpCall({accion:'rectificar',fecha:f,motivo});toast(`Día abierto para rectificar (v${I.v} sigue vigente)`);TPB.prev=null;TPB.pf=''}
-  catch(e){TPB.err=tpErr(e)}finally{TPB.busy='';requestRender()}}
+  try{await tpCall({accion:'rectificar',fecha:f,motivo});toast(`Día abierto para rectificar (v${I.v} sigue vigente)`)}
+  catch(e){TPB.err=tpErr(e)}finally{TPB.busy='';requestRender()}
+  if(!TPB.err)tpbPrevia()}
 
 /* ======================================================================
    Costos (tcos): días publicados por mes, detalle de una versión y descargas Excel
