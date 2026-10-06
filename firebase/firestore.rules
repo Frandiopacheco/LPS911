@@ -424,7 +424,9 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot', 'prod'])
         && tHistNew());
       // restaurar un respaldo sobre la misma obra (datos idénticos) sigue permitido aunque esté publicado
-      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || tProdOk() || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
+      // revisión de producción: regla aparte (no se mezcla con la del capataz)
+      allow update: if tProdOk();
+      allow update: if (tarEd() && (tOfiUpd() || request.resource.data == resource.data)) || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date
         && resource.data.get('st', 'bor') in ['bor', 'reab']
