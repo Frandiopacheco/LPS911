@@ -82,7 +82,7 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
   await expect(sin).toContainText('1 obrero asignado');
   // fila del enviado: 2 vinieron, 1 falta, HH 10,5 + 8,5 = 19, HE 2, sin observaciones
   await expect(env.locator('[data-l="Vinieron"]')).toHaveText('2');
-  await expect(env.locator('[data-l="Faltas"]')).toHaveText('1');
+  await expect(env.locator('[data-l="No vinieron"]')).toHaveText('1');
   await expect(env.locator('[data-l="HH"]')).toHaveText('19');
   await expect(env.locator('[data-l="HE"]')).toHaveText('2');
   await expect(env.locator('[data-l="Observ."]')).toHaveText('');

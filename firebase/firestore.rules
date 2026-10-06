@@ -378,7 +378,14 @@ service cloud.firestore {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
       return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
-        && (n.size() == o.size() || !(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub']));
+        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub'])
+          && n[n.size() - 1].get('by', '') == mid()));
+    }
+    // historial al CREAR (segunda auditoría, A4): vacío o solo su «Enviado» (a:'env', by = su id); nada de la oficina
+    function tHistNew() {
+      let n = request.resource.data.get('hist', []);
+      return n is list && (n.size() == 0
+        || (n.size() == 1 && n[0] is map && n[0].get('a', '') == 'env' && n[0].get('by', '') == mid()));
     }
     match /tareo/{id} {
       allow get: if isTar() && (tarRole() == 'ofi'
@@ -386,7 +393,10 @@ service cloud.firestore {
       allow list: if isTar() && (tarRole() == 'ofi' || (tarRole() == 'tcap' && resource.data.get('cap', '') == mid()));
       allow create: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapNew(id)
         && request.resource.data.get('st', 'bor') in ['bor', 'env']
-        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot']));
+        // nada de la oficina al crear: ni cotejo, ni revisado, ni reapertura, ni publicación, ni historial ajeno (A4).
+        // rows.*.fir/gar (formato antiguo) no se valida aquí (mapas anidados): la app ya no los lee (solo cot + cotFot).
+        && !request.resource.data.keys().hasAny(['reab', 'pub', 'revAt', 'revBy', 'cot', 'cotFot'])
+        && tHistNew());
       allow update: if tarEd() || (isTar() && tarRole() == 'tcap' && tcapOwn(id)
         && (tDateOk(request.resource.data.date) || resource.data.get('st', 'bor') == 'reab')
         && resource.data.get('cap', '') == mid() && resource.data.get('date', '') == request.resource.data.date

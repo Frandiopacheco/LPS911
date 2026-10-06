@@ -212,12 +212,12 @@ test('auditoría F2: reabrir borra las firmas y conserva la garita; fotos nuevas
   expect(d.cot).toEqual({ 11111111: { gar: '17:10', by: 'tasis@obra.pe', t: 1 } });
   expect(d.cotFot).toBeUndefined();
   noErrors(errors, 'reabrir');
-  // tareo antiguo (cotejo en rows, revisado): se lee igual; un fir en rows sin intervención de la oficina no cuenta
+  // formato antiguo (cotejo en rows, aunque esté revisado): ya no se lee (segunda auditoría, A4): pide cotejar
   const leg = conT1({ st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV, rows: { 11111111: row('ALFA', { fir: true, gar: '17:00' }), 22222222: row('BETA', { fir: true }), 33333333: row('GAMMA', { as: false, mot: 'DM' }) } });
   const p2 = await page.context().newPage();
   const e2 = await openApp(p2, { as: 'tasis', editar: false, extra: leg });
   await tab(p2, 'tdia');
-  await expect(p2.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('✓');
+  await expect(p2.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('0 de 2');
   noErrors(e2, 'antiguo');
   const forj = conT1({ rows: { 11111111: row('ALFA', { fir: true }), 22222222: row('BETA', { fir: true }) } });
   const p3 = await page.context().newPage();

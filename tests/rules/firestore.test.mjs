@@ -744,6 +744,31 @@ test('tareo F2 auditoría: el capataz no crea ni cambia cot/cotFot ni agrega ent
   await assertFails(updateDoc(doc(p, id), { cotFot: ['f1'] }));
   await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur.hist, { t: 4, by: me, a: 'env' }] }));
 });
+// ── Segunda auditoría (A4): al CREAR, el capataz no trae nada de la oficina (historial ajeno, cotejo, revisado, reapertura) ──
+test('tareo segunda auditoría A4: crear manipulado (borrador o enviado) falla; su «Enviado» propio sí', async () => {
+  const h = limaDay(0), me = 'u_tcap1', id = `tareo/${h}_${me}`, p = cap('tcap1');
+  const base = { date: h, cap: me, rows: { '11111111': { as: true } }, foto: ['f1'] };
+  for (const st of ['bor', 'env']) {
+    // historial con acciones de la oficina (aunque diga «by» de la oficina o el suyo)
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'fir', by: 'tasis@obra.pe', t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'rev', by: me, t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'cor', by: me, t: 1 }] }));
+    // un «Enviado» a nombre de otro, o más de una entrada
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'env', by: 'tasis@obra.pe', t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'env', by: me, t: 1 }, { a: 'env', by: me, t: 2 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: 'x' }));
+    // campos de la oficina
+    for (const k of ['cot', 'cotFot', 'revAt', 'revBy', 'reab', 'pub']) await assertFails(setDoc(doc(p, id), { ...base, st, hist: [], [k]: k === 'cotFot' ? ['f1'] : k === 'cot' ? { '11111111': { fir: true } } : 1 }));
+  }
+  // lo normal: borrador sin historial, o enviado directo (sin señal) con su propio «Enviado» y envN
+  await assertSucceeds(setDoc(doc(p, id), { ...base, st: 'bor', hist: [] }));
+  const id2 = `tareo/${limaDay(-1)}_${me}`;
+  await assertSucceeds(setDoc(doc(p, id2), { ...base, date: limaDay(-1), st: 'env', envN: 1, envAt: 1, hist: [{ a: 'env', by: me, t: 1 }] }));
+  // al actualizar, su entrada nueva del historial debe ser suya
+  await tSeed(`tareo/${limaDay(-2)}_${me}`, { ...base, date: limaDay(-2), st: 'reab', hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }] });
+  await assertFails(updateDoc(doc(p, `tareo/${limaDay(-2)}_${me}`), { st: 'env', hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }, { a: 'env', by: 'tasis@obra.pe', t: 2 }] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${limaDay(-2)}_${me}`), { st: 'env', envN: 2, hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }, { a: 'env', by: me, t: 2 }] }));
+});
 test('tfot: restaurar un respaldo (misma foto, mismo id) lo puede hacer la oficina; cambiarla no', async () => {
   const h = limaDay(0), id = `tfot/${h}_u_tcap1_9`, D = { date: h, cap: 'u_tcap1', n: 1, d: 'data:image/jpeg;base64,xx', by: 'u_tcap1', ts: 1 };
   await tSeed(id, D);
