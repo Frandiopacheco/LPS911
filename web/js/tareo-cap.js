@@ -4,6 +4,8 @@
    trabajaron? · revisar y enviar. Asistencia explícita (Vino / No vino, nadie marcado al empezar), atajos de horario, cruces
    con opciones de un toque y línea de tiempo por obrero. Guarda el borrador solo (≈1 s después del último cambio) en
    tareo/{fecha}_{capId}; con la persistencia de Firestore funciona sin señal. Los cálculos (tBlqH, tCalc, tValida) son de tareo.js.
+   Auditoría F2 («Correcciones de la auditoría F2 — capataz»): la foto cuenta solo cuando el servidor confirmó su escritura
+   (TCS.fp: subiendo / pendiente / falló), «Enviado ✓» solo confirmado, aviso «Por corregir» con los reabiertos de cualquier fecha.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* motivos de ausencia (el más común primero) */
@@ -11,10 +13,18 @@ const TC_MOT=[['FA','Falta'],['DM','Descanso médico'],['VA','Vacaciones'],['DA'
 const TC_RO=['env','rev','pub'];
 /* estado de la pantalla (no va en U: es del día que se está llenando) */
 const TCS={date:'',cap:'',unsub:null,doc:null,loaded:false,exists:false,step:1,dirty:false,saveT:0,inflight:0,pend:false,err:'',slowT:0,
-  ed:null,edMsg:'',pcQ:'',addOn:false,addQ:'',past:{},prev:null,img:{},imgReq:{},busy:false,need:false,cx:null,foc:''};
+  ed:null,edMsg:'',pcQ:'',addOn:false,addQ:'',past:{},prev:null,img:{},imgReq:{},busy:false,need:false,cx:null,foc:'',
+  /* fotos aún no confirmadas por el servidor: {id: {n, st:'up'|'pend'|'err', msg, mem}} (no están en doc.foto hasta confirmarse) */
+  fp:{},
+  /* envío: '' · 'sending' (esperando al servidor) · 'queued' (sin señal: se enviará solo) · 'ok'; srvPend = la última foto de la base tiene escrituras pendientes */
+  sendSt:'',sendT:0,srvPend:false,
+  /* tareos propios reabiertos (cualquier fecha): [{date, mot}] */
+  reabL:[],rsub:null,rcap:''};
+/* el servidor rechaza fotos de más de 1 000 000 de caracteres (firestore.rules); se mide igual, con margen */
+const TC_FMAX=950000;
 
 const tcCalc=d=>tCalc(d);
-const tcBH=(f,a,b)=>tBlqH(f,a,b);
+const tcBH=(f,a,b)=>tBlqH(f,a,b,(TCS.doc&&TCS.doc.cfg)||undefined);
 
 /* ---------- utilidades ---------- */
 /** id del capataz en members: correo, o 'u_<uid>' si entró con enlace (base.js arma me.email así) */
@@ -39,8 +49,8 @@ const tcIv=k=>{const a=tMin(k&&k.ini),b=tMin(k&&k.fin);return a!=null&&b!=null&&
 const tcOv=(p,q)=>!!(p&&q&&p[0]<q[1]&&q[0]<p[1]);
 /** jornada del día y atajos de la jornada */
 function tcJor(date){const c=TC();const dw=String(pd(date).getUTCDay());const j0=c.jor[dw];const j=j0||c.jor['1']||{ini:'07:30',fin:'17:00',ref:60};
-  const ri=tMin(c.refIni),a=tMin(j.ini),b=tMin(j.fin);const S={todo:[j.ini,j.fin]};
-  if(ri!=null&&ri>a&&ri<b){S.man=[j.ini,c.refIni];const t=ri+(+j.ref||0);if(t<b)S.tar=[tcHM(t),j.fin]}
+  const rI=j.refIni||c.refIni;const ri=tMin(rI),a=tMin(j.ini),b=tMin(j.fin);const S={todo:[j.ini,j.fin]};
+  if(ri!=null&&ri>a&&ri<b){S.man=[j.ini,rI];const t=ri+(+j.ref||0);if(t<b)S.tar=[tcHM(t),j.fin]}
   return{j,h:j0?tJorH(j0):0,S,ri,ref:+j.ref||0}}
 /** cuadrilla: activos del máster con cap == mi id */
 function tcCrew(date){const cap=TCS.cap;return[...S.tper.values()].filter(p=>p&&!p.arch&&p.cap===cap&&tActivo(p,date))}
@@ -70,26 +80,35 @@ function tcCruces(D){const out=[];const B=(D.blq||[]).filter(k=>tcIv(k));
   return out}
 /** problemas para enviar: tValida (sin «falto»: un ausente puede seguir en sus bloques con 0 h) + sin marcar + partida bloqueada */
 function tcErrs(D){const R=D.rows||{};
-  const E=tValida(tcCalc(D)).filter(e=>e.k!=='falto'&&!(e.k==='mot'&&e.dni&&tcSinM(R[e.dni])));
+  const E=tValida(tcCalc(D)).filter(e=>!e.warn&&e.k!=='falto'&&!(e.k==='mot'&&e.dni&&tcSinM(R[e.dni])));
+  const np=Object.keys(TCS.fp).length;if(np)E.push({dni:null,k:'fotp',msg:np===1?'Hay una foto sin subir: espera a que suba o reintenta.':`Hay ${np} fotos sin subir: espera a que suban o reintenta.`});
   const pre=tcRows().filter(([,r])=>tcSinM(r)).map(([dni,r])=>({dni,k:'asis',msg:`${tcNm(r)||dni}: marca si vino o no vino.`}));
   (D.blq||[]).forEach((k,i)=>{if(tcBloq(k.pc))E.push({dni:null,k:'bloq',bid:k.id,msg:`Trabajo ${i+1} (${tcPcCod(k.pc)}): partida bloqueada por costos: cámbiala.`})});
   return[...pre,...E]}
 const TC_K1=['asis','mot','vacio'],TC_K2=['pc','hora','quien','bloq','cruce','sinh'];
+/** avisos de tValida que no impiden enviar (warn: jornada parcial…) */
+const tcWarns=D=>tValida(tcCalc(D)).filter(e=>e.warn);
 
 /* ---------- datos: suscripción y guardado ---------- */
-function tcOpen(date){tcClose();clearTimeout(TCS.slowT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',ed:null,edMsg:'',pcQ:'',addOn:false,addQ:'',prev:null,need:false,cx:null,foc:''});
-  const id=tcId(date,TCS.cap);
-  TCS.unsub=fcol('tareo').doc(id).onSnapshot(s=>{if(!$('#tcRoot')){tcClose();return}tcSnap(s)},err=>{TCS.err=err&&err.code==='permission-denied'?'Tu cuenta no puede abrir este tareo.':'Sin conexión con la base de datos.';TCS.loaded=true;tcDraw()});
+function tcOpen(date){tcClose();clearTimeout(TCS.slowT);clearTimeout(TCS.sendT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',ed:null,edMsg:'',pcQ:'',addOn:false,addQ:'',prev:null,need:false,cx:null,foc:'',fp:{},sendSt:'',srvPend:false});
+  const id=tcId(date,TCS.cap);TCS.fpL=false;
+  /* includeMetadataChanges: avisa también cuando una escritura pendiente (sin señal) queda confirmada por el servidor */
+  TCS.unsub=fcol('tareo').doc(id).onSnapshot({includeMetadataChanges:true},s=>{if(!$('#tcRoot')){tcClose();return}tcSnap(s)},err=>{TCS.err=err&&err.code==='permission-denied'?'Tu cuenta no puede abrir este tareo.':'Sin conexión con la base de datos.';TCS.loaded=true;tcDraw()});
   /* estado de ayer y anteayer (para no dejar elegirlos si ya se enviaron) y el tareo anterior (para copiar sus trabajos) */
   if(date===todayIso())for(const n of[1,2]){const d=tcDay(date,-n);fcol('tareo').doc(tcId(d,TCS.cap)).get().then(s=>{TCS.past[d]=s.exists?(s.data().st||'bor'):'';if($('#tcRoot'))tcDraw()}).catch(()=>{})}
   (async()=>{for(let n=1;n<=3;n++){const d=tcDay(date,-n);try{const s=await fcol('tareo').doc(tcId(d,TCS.cap)).get();if(s.exists&&(s.data().blq||[]).length){if(TCS.date===date){TCS.prev={date:d,blq:s.data().blq};if($('#tcRoot'))tcDraw()}return}}catch(e){return}}})()}
-function tcClose(){if(TCS.unsub){try{TCS.unsub()}catch(e){}TCS.unsub=null}if(TCS.saveT){clearTimeout(TCS.saveT);TCS.saveT=0;if(TCS.dirty)tcSaveNow().catch(()=>{})}}
-function tcSnap(s){const pend=!!(s.metadata&&s.metadata.hasPendingWrites);TCS.loaded=true;
-  if(pend){tcStatus();return}/* eco de la escritura propia; si tarda en confirmarse, slowT avisa que quedó en el celular */
+function tcClose(){if(TCS.unsub){try{TCS.unsub()}catch(e){}TCS.unsub=null}if(TCS.rsub&&!$('#tcRoot')){try{TCS.rsub()}catch(e){}TCS.rsub=null;TCS.rcap=''}if(TCS.saveT){clearTimeout(TCS.saveT);TCS.saveT=0;if(TCS.dirty)tcSaveNow().catch(()=>{})}}
+function tcSnap(s){const pend=!!(s.metadata&&s.metadata.hasPendingWrites);TCS.loaded=true;TCS.srvPend=pend;
+  /* eco de la escritura propia; si tarda en confirmarse, slowT avisa que quedó en el celular. Si aún no hay nada en pantalla
+     (se abrió la app sin señal con cambios guardados en el celular), se muestra lo del celular. */
+  if(pend&&TCS.doc){tcStatus();if(tcRO())tcDraw();return}
+  if(!pend&&TCS.sendSt==='queued'&&!TCS.inflight)TCS.sendSt='ok';
   if(!TCS.inflight)TCS.pend=false;
   if(TCS.dirty||TCS.inflight){tcStatus();return}/* lo local manda mientras hay cambios por guardar */
   TCS.exists=s.exists;TCS.doc=s.exists?s.data():tcNewDoc(TCS.date);
   if(!tcRO())tcSyncCrew();
+  /* fotos que quedaron sin confirmar en el celular: se suben de nuevo (una vez por día abierto, ya con el tareo cargado) */
+  if(!TCS.fpL){TCS.fpL=true;tcFpLoad()}
   tcDraw()}
 /** agrega a la lista a quien entró a la cuadrilla después (sin marcar) */
 function tcSyncCrew(){const R=TCS.doc.rows=TCS.doc.rows||{};for(const p of tcCrew(TCS.date)){const k=p.dni||p.id;if(!R[k])R[k]=tcRowOf(p)}}
@@ -98,14 +117,21 @@ function tcChg(redraw=true){if(tcRO())return;TCS.dirty=true;if(TCS.saveT)clearTi
 function tcSaveNow(){if(TCS.saveT){clearTimeout(TCS.saveT);TCS.saveT=0}if(!TCS.doc)return Promise.resolve();
   const d=tcCalc({...TCS.doc,date:TCS.date,cap:TCS.cap,capN:TCS.doc.capN||(MEM.get(TCS.cap)||{}).name||''});d.by=me.email;d.ts=NOW();
   if(!Array.isArray(d.foto))d.foto=[];if(!Array.isArray(d.hist))d.hist=[];if(!Array.isArray(d.blq))d.blq=[];
-  TCS.doc=d;TCS.dirty=false;TCS.inflight++;TCS.err='';TCS.exists=true;
+  TCS.doc=d;TCS.dirty=false;TCS.inflight++;TCS.err='';
   clearTimeout(TCS.slowT);TCS.slowT=setTimeout(()=>{if(TCS.inflight){TCS.pend=true;tcStatus()}},2500);tcStatus();
-  const date=TCS.date;
-  return fcol('tareo').doc(tcId(date,TCS.cap)).set(d,{merge:false}).then(()=>{if(TCS.date!==date)return;TCS.inflight=Math.max(0,TCS.inflight-1);if(!TCS.inflight){TCS.pend=false;clearTimeout(TCS.slowT)}tcStatus()},
-    err=>{if(TCS.date!==date)return;TCS.inflight=Math.max(0,TCS.inflight-1);TCS.dirty=true;TCS.err='No se pudo guardar: '+(err.code||err.message||err);tcStatus();throw err})}
-function tcStatusTxt(){if(TCS.err)return['bad',TCS.err];if(tcRO())return['',''];
+  const date=TCS.date;const ref=fcol('tareo').doc(tcId(date,TCS.cap));
+  /* el cotejo de la oficina (cot, cotFot) no es del capataz: nunca se reescribe. Si el documento ya existe se actualizan solo
+     los campos del capataz (cada campo se reemplaza entero: rows, blq…); si no, se crea. */
+  const w={...d};delete w.cot;delete w.cotFot;
+  const was=TCS.exists;TCS.exists=true;
+  return(was?ref.update(w):ref.set(w)).then(()=>{if(TCS.date!==date)return;TCS.inflight=Math.max(0,TCS.inflight-1);if(!TCS.inflight){TCS.pend=false;clearTimeout(TCS.slowT)}tcStatus()},
+    err=>{if(TCS.date!==date)throw err;TCS.inflight=Math.max(0,TCS.inflight-1);TCS.dirty=true;if(!was||(err&&err.code==='not-found'))TCS.exists=false;TCS.err='No se pudo guardar: '+(err.code||err.message||err);tcStatus();throw err})}
+function tcStatusTxt(){if(TCS.err)return['bad',TCS.err];
+  if(tcRO()){const q=tcSendQ();return q==='sending'?['','Enviando…']:q==='queued'?['warn','Se enviará al tener señal']:['','']}
   if(TCS.pend&&TCS.inflight)return['warn','Guardado en el celular · se enviará con señal'];
   if(TCS.dirty||TCS.inflight)return['','Guardando…'];if(TCS.exists)return['ok','Guardado'];return['','']}
+/** estado del envío para la pantalla: 'sending' · 'queued' (sin señal) · '' (confirmado o no aplica) */
+function tcSendQ(){const D=TCS.doc;if(!D||D.st!=='env')return'';if(TCS.sendSt==='sending'||TCS.sendSt==='queued')return TCS.sendSt;return TCS.srvPend?'queued':''}
 function tcStatus(){const el=$('#tcSt');if(!el)return;const[k,t]=tcStatusTxt();el.className='tc-st'+(k?' '+k:'');el.textContent=t}
 
 /* ---------- vista ---------- */
@@ -113,6 +139,7 @@ function renderTCap(main){const want=TCS.date&&TCS.unsub?TCS.date:todayIso();
   if(!$('#tcRoot',main)){main.innerHTML=`<div class="tc" id="tcRoot"></div>`;tcBind($('#tcRoot',main))}
   if(!TCS.unsub||TCS.date!==want||TCS.cap!==tcMe())tcOpen(want);
   else if(TCS.doc&&!tcRO()&&!TCS.dirty)tcSyncCrew();
+  tcReabSub();
   tcDraw()}
 function tcDraw(){const root=$('#tcRoot');if(!root)return;
   /* sin cambios no se redibuja: así un toque no se pierde cuando llega la confirmación de la base */
@@ -127,9 +154,13 @@ function tcDraw(){const root=$('#tcRoot');if(!root)return;
 function tcFocusNow(){if(!TCS.foc)return;const sel=TCS.foc;TCS.foc='';const el=$('#tcRoot '+sel);if(el&&el.scrollIntoView)el.scrollIntoView({block:'center'})}
 function tcHtml(){const D=TCS.doc,hoy=todayIso();
   const dates=[hoy,tcDay(hoy,-1),tcDay(hoy,-2)];
-  const dl=(d,i)=>{const st=i?TCS.past[d]:'';const off=i&&TC_RO.includes(st);
-    return`<button type="button" class="tc-date${d===TCS.date?' on':''}" data-tcd="${d}"${off?' disabled':''}><b>${i===0?'Hoy':i===1?'Ayer':'Anteayer'}</b><span>${esc(TC_DN[pd(d).getUTCDay()].slice(0,3))} ${esc(fmtD(d))}${off?' · enviado':''}</span></button>`};
-  const head=`<div class="tc-head"><div class="tc-dates" role="group" aria-label="Día del tareo">${dates.map(dl).join('')}</div>`;
+  /* un reabierto de otra fecha abierto desde «Por corregir» tiene su propio botón */
+  if(TCS.date&&!dates.includes(TCS.date))dates.push(TCS.date);
+  const dl=(d,i)=>{const st=i?TCS.past[d]:'';const off=i&&i<3&&TC_RO.includes(st);
+    return`<button type="button" class="tc-date${d===TCS.date?' on':''}" data-tcd="${d}"${off?' disabled':''}><b>${i===0?'Hoy':i===1?'Ayer':i===2?'Anteayer':'Otro día'}</b><span>${esc(TC_DN[pd(d).getUTCDay()].slice(0,3))} ${esc(fmtD(d))}${off?' · enviado':''}</span></button>`};
+  const rb=TCS.reabL.length?`<div class="callout tc-pc" id="tcPorCor"><b>Por corregir (${TCS.reabL.length})</b><span>La oficina te reabrió ${TCS.reabL.length===1?'este tareo':'estos tareos'}: corrígelos y vuelve a enviarlos.</span>
+     <div class="tc-pcl">${TCS.reabL.map(x=>`<button type="button" class="ib tc-pcb${x.date===TCS.date?' on':''}" data-tcd="${esc(x.date)}"><b>${esc(TC_DN[pd(x.date).getUTCDay()])} ${esc(fmtD(x.date))}${x.date===TCS.date?' · abierto':''}</b>${x.mot?`<span>${esc(x.mot)}</span>`:''}</button>`).join('')}</div></div>`:'';
+  const head=`<div class="tc-head"><div class="tc-dates" role="group" aria-label="Día del tareo">${dates.map(dl).join('')}</div>`+rb;
   if(!TCS.loaded)return head+`</div><div class="tc-body" id="tcBody"><p class="tc-empty">Cargando tu tareo…</p></div>`;
   if(!D)return head+`</div><div class="tc-body" id="tcBody"><div class="callout warnc">${esc(TCS.err||'No se pudo abrir el tareo.')}</div></div>`;
   const ro=tcRO();const E=ro?[]:tcErrs(D);
@@ -138,7 +169,7 @@ function tcHtml(){const D=TCS.doc,hoy=todayIso();
   const bar=ro?'':`<div class="tc-steps" role="tablist">${steps.map(([n,l,ok])=>`<button type="button" role="tab" class="tc-step${TCS.step===n?' on':''}${ok&&TCS.step!==n?' ok':''}" data-tcs="${n}" aria-selected="${TCS.step===n}"><i>${ok&&TCS.step!==n?'✓':n}</i><span>${l}</span></button>`).join('')}</div>`;
   const nl=tcJor(TCS.date).h===0?`<div class="tc-note">Día no laborable: todas las horas cuentan como extra.</div>`:'';
   const ban=D.st==='reab'?`<div class="callout tc-reab"><b>Te reabrieron este tareo</b>${D.reab&&D.reab.mot?`<span>Motivo: ${esc(D.reab.mot)}</span>`:''}<span>Corrige y vuelve a enviarlo.</span></div>`
-    :ro?`<div class="callout tc-sent${D.st==='rev'?' tc-rev':''}"><b>Enviado ✓${D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})):''}</b><span>${D.st==='env'?'Ya no se puede cambiar. Si hay un error, pide al asistente de tareo que lo reabra.':D.st==='rev'?'Revisado por la oficina.':'Publicado.'}</span></div>`:'';
+    :ro?tcSentBan(D):'';
   let body='';
   if(ro)body=tcStep3(D,[],true);else if(TCS.step===1)body=tcStep1(D);else if(TCS.step===2)body=tcStep2(D);else body=tcStep3(D,E,false);
   let foot='';
@@ -146,12 +177,18 @@ function tcHtml(){const D=TCS.doc,hoy=todayIso();
     else if(TCS.step===1){const n=tcRows().filter(([,r])=>tcSinM(r)).length;
       foot=`<button type="button" class="ib pri tc-big tc-w" data-tcs="2">${n?`Falta marcar a ${n} →`:'Siguiente: ¿en qué trabajaron? →'}</button>`}
     else if(TCS.step===2)foot=`<button type="button" class="ib tc-big" data-tcs="1">← Atrás</button><button type="button" class="ib pri tc-big" data-tcs="3">Revisar y enviar →</button>`;
-    else{const nf=E.filter(e=>e.k!=='foto');
+    else{const nf=E.filter(e=>e.k!=='foto'&&e.k!=='fotp');const fp=E.some(e=>e.k==='fotp');
       foot=`<button type="button" class="ib tc-big" data-tcs="2">← Atrás</button>`+(nf.length?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="fix">Faltan ${nf.length} ${nf.length===1?'dato':'datos'}: ver →</button>`
-        :`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="send"${E.length||TCS.busy?' disabled':''}>${E.length?'Falta la foto':'Enviar tareo'}</button>`)}}
+        :`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="send"${E.length||TCS.busy?' disabled':''}>${fp?'Foto sin subir':E.length?'Falta la foto':'Enviar tareo'}</button>`)}}
   return head+bar+`<div class="tc-st" id="tcSt" aria-live="polite"></div></div><div class="tc-body" id="tcBody">${ban}${nl}${body}</div>${foot?`<div class="tc-foot">${foot}</div>`:''}`}
 
 /* paso 1: asistencia explícita */
+/** aviso del enviado: «Enviando…», «Se enviará al tener señal» (ámbar) o «Enviado ✓ hh:mm» (solo confirmado por el servidor) */
+function tcSentBan(D){const q=tcSendQ();
+  if(q==='sending')return`<div class="callout tc-sent tc-sending" id="tcSentB"><b>Enviando…</b><span>Esperando la confirmación del servidor.</span></div>`;
+  if(q==='queued')return`<div class="callout tc-sent tc-queued" id="tcSentB" role="status"><b>⚠ Se enviará al tener señal</b><span>Está guardado en este celular. No cierres sesión ni borres los datos de la app; se enviará solo cuando vuelva la señal.</span></div>`;
+  const t=D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})):'';
+  return`<div class="callout tc-sent${D.st==='rev'?' tc-rev':''}" id="tcSentB"><b>Enviado ✓${t}</b><span>${D.st==='env'?'Ya no se puede cambiar. Si hay un error, pide al asistente de tareo que lo reabra.':D.st==='rev'?'Revisado por la oficina.':'Publicado.'}</span></div>`}
 function tcStep1(D){const R=tcRows();const crew=new Set(tcCrew(TCS.date).map(p=>p.dni||p.id));
   const nV=R.filter(([,r])=>tcVino(r)).length,nF=R.filter(([,r])=>tcFalto(r)).length,sin=R.length-nV-nF;
   const list=R.map(([dni,r],i)=>{const v=tcVino(r),f=tcFalto(r),u=!v&&!f;const nm=esc(tcNm(r)||dni);
@@ -283,34 +320,75 @@ function tcStep3(D,E,ro){const R=tcCalc(D).rows||{};const rows=tcRows();const ba
       :f?`No vino · ${esc((TC_MOT.find(m=>m[0]===r.mot)||[r.mot||'sin motivo',''])[1]||r.mot||'sin motivo')}`:'Sin marcar si vino'}</span>
      ${v&&r.h&&Object.keys(r.h).length?`<span class="tc-pcs">${Object.entries(r.h).map(([pc,h])=>`${esc(tcPcCod(pc))}: ${tcH(h)}`).join(' · ')}</span>`:''}</div>
      ${v?tcTl(D,dni,C)+tcCxRow(D,dni,C):''}</div>`}).join('');
-  const fotos=Array.isArray(D.foto)?D.foto:[];
-  const ef=E.filter(e=>e.k!=='foto');
+  const fotos=Array.isArray(D.foto)?D.foto:[];const FP=ro?[]:Object.entries(TCS.fp).filter(([id])=>!fotos.includes(id));
+  const ef=E.filter(e=>e.k!=='foto'&&e.k!=='fotp');
   const errs=ef.length?`<div class="callout tc-errs"><b>Antes de enviar, corrige:</b><ul>${ef.map(e=>`<li>${esc(tcErrMsg(e))}</li>`).join('')}</ul></div>`:'';
+  const W=ro?[]:tcWarns(D);
+  const warns=W.length?`<div class="callout tc-warns" id="tcWarns"><b>Avisos (puedes enviar igual):</b><ul>${W.map(e=>`<li>${esc(tcErrMsg(e))}</li>`).join('')}</ul></div>`:'';
+  const FPL={up:'Subiendo…',pend:'Pendiente de subir',err:'No se subió'};
   return`${ro?'':`<div class="tc-h"><h2>Revisar y enviar</h2><span>${tot.v} vinieron · ${tot.f} no vinieron · ${tcH(tot.h)}${tot.e?' · '+tcH(tot.e)+' extra':''}</span></div>`}
-   ${errs}${tcScale()}<div class="tc-list">${list}</div>
+   ${errs}${warns}${tcScale()}<div class="tc-list">${list}</div>
    <div class="tc-card" id="tcFotoC"><div class="tc-lab">Foto del formato firmado${ro?'':' <span>obligatoria</span>'}</div>
     <div class="tc-fotos">${fotos.map(id=>`<div class="tc-th" data-fid="${esc(id)}"><img alt="Foto del formato" data-img="${esc(id)}">${ro?'':`<button type="button" data-tca="fx" aria-label="Quitar foto">✕</button>`}</div>`).join('')}
+     ${FP.map(([id,P])=>`<div class="tc-th tc-fp ${P.st}" data-fpid="${esc(id)}"><img alt="Foto sin subir" data-img="${esc(id)}"><button type="button" data-tca="fpX" aria-label="Descartar foto">✕</button>
+       <span class="tc-fps">${FPL[P.st]||''}${P.st==='err'?`<button type="button" class="tc-fpr" data-tca="fpRe">Reintentar</button>`:''}</span></div>`).join('')}
      ${ro?'':`<label class="tc-cam${TCS.busy?' busy':''}"><input type="file" id="tcFile" accept="image/*" capture="environment"><span>${TCS.busy?'Procesando…':fotos.length?'+ Otra foto':'📷 Tomar foto'}</span></label>`}</div>
-    ${!ro&&!fotos.length?`<div class="tc-err">Toma una foto del formato con las firmas de todos.</div>`:''}</div>`}
+    ${FP.some(([,P])=>P.st==='pend')?`<div class="tc-note" id="tcFpNote">Sin señal: la foto ${FP.some(([,P])=>P.mem)?'está solo en la memoria de la app; si la cierras, tendrás que tomarla de nuevo':'quedó guardada en el celular'}. Se subirá sola al volver la señal; recién entonces podrás enviar.</div>`:''}
+    ${FP.some(([,P])=>P.st==='err')?`<div class="tc-err">${esc((FP.find(([,P])=>P.st==='err')[1].msg)||'La foto no se pudo subir.')} Toca «Reintentar» o tómala de nuevo.</div>`:''}
+    ${!ro&&!fotos.length&&!FP.length?`<div class="tc-err">Toma una foto del formato con las firmas de todos.</div>`:''}</div>`}
 function tcErrMsg(e){const r=e.dni&&TCS.doc&&TCS.doc.rows&&TCS.doc.rows[e.dni];const m=String(e.msg||'');if(!r||!r.ape||m.includes(r.ape))return m;return tcNm(r)+': '+m}
 
 /* ---------- miniaturas de las fotos ---------- */
 function tcThumbs(){for(const img of $$('#tcRoot img[data-img]')){const id=img.dataset.img;if(TCS.img[id]){img.src=TCS.img[id];continue}
   if(TCS.imgReq[id])continue;TCS.imgReq[id]=1;fcol('tfot').doc(id).get().then(s=>{const d=s.exists&&s.data().d;if(d){TCS.img[id]=d;const el=$(`#tcRoot img[data-img="${CSS.escape(id)}"]`);if(el)el.src=d}}).catch(()=>{delete TCS.imgReq[id]})}}
-/** reduce la foto: lado mayor ~1600 px, JPEG 0.7; si pasa de ~900 KB, 1200 px / 0.6 (y si aún pasa, 1000 px / 0.5) */
+/** reduce la foto hasta que su dataURL mida ≤ TC_FMAX caracteres (la misma medida que usa el servidor): 1600 px / 0.7 y bajando */
 async function tcShrink(file){const url=URL.createObjectURL(file);try{
   const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('No se pudo leer la imagen.'));i.src=url});
   const out=(mx,q)=>{const k=Math.min(1,mx/Math.max(img.naturalWidth||1,img.naturalHeight||1));const c=document.createElement('canvas');c.width=Math.max(1,Math.round((img.naturalWidth||1)*k));c.height=Math.max(1,Math.round((img.naturalHeight||1)*k));
     const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q)};
-  const sz=d=>d.length*0.75;let d=out(1600,0.7);if(sz(d)>900e3)d=out(1200,0.6);if(sz(d)>900e3)d=out(1000,0.5);if(sz(d)>950e3)throw new Error('La foto es demasiado grande.');return d}finally{URL.revokeObjectURL(url)}}
+  for(const[mx,q]of[[1600,0.7],[1400,0.65],[1200,0.6],[1000,0.55],[900,0.5],[800,0.45],[640,0.4]]){const d=out(mx,q);if(d.length<=TC_FMAX)return d}
+  throw new Error('La foto es demasiado grande. Tómala de nuevo, más de cerca.')}finally{URL.revokeObjectURL(url)}}
+/* fotos sin confirmar guardadas en el celular (por si se cierra la app sin señal): localStorage lps.tcfp.<tareo> = {id: {n, d}} */
+const tcFpK=()=>'lps.tcfp.'+tcId(TCS.date,TCS.cap);
+function tcFpLS(){try{return JSON.parse(localStorage.getItem(tcFpK())||'{}')||{}}catch(e){return{}}}
+/** guarda (d) o quita (d null) una foto pendiente del celular; false si no cupo */
+function tcFpPut(id,n,d){try{const o=tcFpLS();if(d)o[id]={n,d};else delete o[id];
+  if(Object.keys(o).length)localStorage.setItem(tcFpK(),JSON.stringify(o));else localStorage.removeItem(tcFpK());return true}catch(e){return false}}
+/** al abrir un día: las fotos que quedaron sin confirmar se vuelven a subir */
+function tcFpLoad(){const o=tcFpLS();const have=(TCS.doc&&TCS.doc.foto)||[];
+  for(const[id,x]of Object.entries(o)){if(!x||!x.d||have.includes(id)){tcFpPut(id,0,null);continue}if(tcRO())continue;TCS.img[id]=x.d;TCS.fp[id]={n:x.n,st:'pend',msg:''};tcFotUp(id)}}
+const tcOff=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
+/** sube una foto a tfot y solo cuando el servidor la confirma la agrega al tareo (doc.foto). Sin señal queda «Pendiente de subir». */
+async function tcFotUp(id){const P=TCS.fp[id];const d=TCS.img[id];if(!P||!d||P.busy)return;
+  const date=TCS.date,cap=TCS.cap;const ref=fcol('tfot').doc(id);const mine=()=>TCS.date===date&&TCS.cap===cap&&TCS.fp[id]===P;
+  P.busy=true;P.st=tcOff()?'pend':'up';P.msg='';tcDraw();
+  const slow=setTimeout(()=>{if(mine()&&P.busy&&P.st==='up'){P.st='pend';tcDraw()}},6000);
+  let ok=false,err=null;
+  try{await ref.set({date,cap,n:P.n,d,by:me.email,ts:NOW()});ok=true}
+  catch(e){err=e;
+    /* ¿ya estaba subida? (reintento después de cerrar la app: la primera escritura llegó y la segunda es rechazada) */
+    try{const s=await ref.get({source:'server'});const x=s.exists&&s.data();if(x&&x.cap===cap&&x.d===d)ok=true}catch(e2){}}
+  clearTimeout(slow);P.busy=false;
+  if(ok){tcFpPut(id,0,null);if(!mine())return;delete TCS.fp[id];
+    const D=TCS.doc;if(D&&!tcRO()){if(!(D.foto||[]).includes(id))D.foto=[...(D.foto||[]),id];tcChg();toast('Foto subida ✓')}else tcDraw();return}
+  if(!mine())return;
+  if(tcOff()||(err&&err.code==='unavailable')){P.st='pend';tcDraw();return}
+  P.st='err';P.msg='No se pudo subir la foto'+(err&&err.code==='permission-denied'?' (el servidor la rechazó).':err&&(err.code||err.message)?' ('+(err.code||err.message)+').':'.');tcDraw()}
 async function tcAddFoto(file){if(!file||tcRO())return;TCS.busy=true;tcDraw();
   try{const d=await tcShrink(file);const D=TCS.doc;const base=tcId(TCS.date,TCS.cap)+'_';
-    let n=Math.max(0,...(D.foto||[]).map(x=>+String(x).slice(base.length)||0))+1;
+    let n=Math.max(0,...[...(D.foto||[]),...Object.keys(TCS.fp)].map(x=>+String(x).slice(base.length)||0))+1;
     for(let i=0;i<30;i++){let ex=false;try{ex=(await fcol('tfot').doc(base+n).get()).exists}catch(e){}if(!ex)break;n++}
-    const id=base+n;TCS.img[id]=d;
-    fcol('tfot').doc(id).set({date:TCS.date,cap:TCS.cap,n,d,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));
-    D.foto=[...(D.foto||[]),id];TCS.busy=false;tcChg();toast('Foto agregada.')}
+    const id=base+n;TCS.img[id]=d;TCS.fp[id]={n,st:'up',msg:'',mem:!tcFpPut(id,n,d)};TCS.busy=false;
+    tcFotUp(id)}
   catch(err){TCS.busy=false;tcDraw();toast(err.message||'No se pudo procesar la foto.')}}
+/* al volver la señal se reintentan las fotos pendientes */
+if(typeof window!=='undefined')window.addEventListener('online',()=>{for(const[id,P]of Object.entries(TCS.fp))if(P.st!=='up'&&!P.busy)tcFotUp(id)});
+
+/* ---------- reabiertos de cualquier fecha («Por corregir») ---------- */
+function tcReabSub(){const cap=tcMe();if(TCS.rsub&&TCS.rcap===cap)return;if(TCS.rsub){try{TCS.rsub()}catch(e){}}
+  TCS.rcap=cap;TCS.reabL=[];
+  TCS.rsub=fcol('tareo').where('cap','==',cap).where('st','==','reab').onSnapshot(q=>{if(!$('#tcRoot')){try{TCS.rsub()}catch(e){}TCS.rsub=null;TCS.rcap='';return}
+    TCS.reabL=q.docs.map(x=>{const v=x.data()||{};return{date:v.date,mot:(v.reab&&v.reab.mot)||''}}).filter(x=>x.date).sort((a,b)=>a.date<b.date?-1:1);tcDraw()},()=>{});}
 
 /* ---------- acciones ---------- */
 function tcBind(root){
@@ -370,6 +448,8 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
   if(a==='copy'&&TCS.prev){const act=new Set(tcPcs().map(x=>x.id));
     D.blq=TCS.prev.blq.filter(k=>act.has(k.pc)).map(k=>({id:tcBid(),pc:k.pc,ini:k.ini,fin:k.fin,dnis:(k.dnis||[]).filter(d=>R[d])}));tcChg();toast(`Se copiaron ${D.blq.length} trabajos: revisa quiénes y los horarios.`);return}
   if(a==='send')return tcSend();
+  if(a==='fpX'){const w=b.closest('[data-fpid]');if(!w)return;const id=w.dataset.fpid;delete TCS.fp[id];tcFpPut(id,0,null);tcDraw();return}
+  if(a==='fpRe'){const w=b.closest('[data-fpid]');if(w)tcFotUp(w.dataset.fpid);return}
   if(a==='fx'){const w=b.closest('[data-fid]');if(!w)return;D.foto=(D.foto||[]).filter(x=>x!==w.dataset.fid);tcChg();return}
   if(a==='fix'){tcFix();return}
   /* cruces desde la línea de tiempo */
@@ -406,8 +486,14 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
 async function tcSend(){const D=TCS.doc;if(!D||tcRO())return;const E=tcErrs(D);if(E.length){if(!tcFix(E))toast(tcErrMsg(E[0]));return}
   const C=tcCalc(D);const rows=Object.values(C.rows||{});const v=rows.filter(tcVino);const hh=tR2(v.reduce((s,r)=>s+(+r.trab||0),0)),he=tR2(v.reduce((s,r)=>s+(+r.ext||0),0));
   if(!await uiAsk({title:'¿Enviar el tareo?',text:`${fmtD(TCS.date)}: ${v.length} vinieron, ${rows.length-v.length} no vinieron · ${tcH(hh)}${he?` (${tcH(he)} extra)`:''}.`,note:'Después de enviarlo ya no podrás cambiarlo; si hay un error, el asistente de tareo te lo reabre.',ok:'Enviar tareo',tone:'ok'}))return;
-  const prev={st:D.st,envAt:D.envAt,envBy:D.envBy,hist:D.hist};const t=NOW();
+  const prev={st:D.st,envAt:D.envAt,envBy:D.envBy,hist:D.hist,cfg:D.cfg};const t=NOW();
   D.st='env';D.envAt=t;D.envBy=me.email;D.hist=[...(Array.isArray(D.hist)?D.hist:[]),{t,by:me.email,a:'env'}];
-  const date=TCS.date;const p=tcSaveNow();tcDraw();toast('Tareo enviado ✓');
-  /* sin señal queda en el celular y se envía al volver; si la base lo rechaza, vuelve a borrador para corregir */
-  p.catch(()=>{if(TCS.date!==date||!TCS.doc)return;for(const[k,v]of Object.entries(prev)){if(v===undefined)delete TCS.doc[k];else TCS.doc[k]=v}TCS.dirty=false;tcDraw();toast('No se pudo enviar el tareo. Inténtalo de nuevo.')})}
+  /* jornada del día congelada en el tareo (si ya la tiene, p. ej. un reabierto, se conserva) */
+  if(!D.cfg&&typeof tCfgDia==='function'){try{const c=tCfgDia(TCS.date);if(c)D.cfg=c}catch(e){}}
+  const date=TCS.date;clearTimeout(TCS.sendT);TCS.sendSt=tcOff()?'queued':'sending';TCS.err='';const p=tcSaveNow();tcDraw();
+  /* «Enviado ✓» solo cuando el servidor lo confirma; si tarda (sin señal) queda «Se enviará al tener señal» */
+  TCS.sendT=setTimeout(()=>{if(TCS.date===date&&TCS.sendSt==='sending'){TCS.sendSt='queued';tcDraw()}},2500);
+  p.then(()=>{if(TCS.date!==date)return;clearTimeout(TCS.sendT);TCS.sendSt='ok';TCS.srvPend=false;tcDraw();toast('Tareo enviado ✓')},
+  /* si la base lo rechaza, vuelve a borrador (o reabierto) con el error */
+    err=>{if(TCS.date!==date||!TCS.doc)return;clearTimeout(TCS.sendT);TCS.sendSt='';for(const[k,v]of Object.entries(prev)){if(v===undefined)delete TCS.doc[k];else TCS.doc[k]=v}TCS.dirty=false;
+      TCS.err='No se pudo enviar el tareo: '+(err&&err.code==='permission-denied'?'el servidor lo rechazó.':(err&&(err.code||err.message))||'error')+' Revisa y vuelve a intentarlo.';tcDraw();toast('No se pudo enviar el tareo.')})}

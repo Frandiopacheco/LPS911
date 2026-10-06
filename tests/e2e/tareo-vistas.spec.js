@@ -57,7 +57,7 @@ test('utilidades: horas, DNI, categoría y parsers', async ({ page }) => {
   expect(r.lv).toEqual({ trab: 8.5, ext: 0 });
   expect(r.lvx).toEqual({ trab: 10.5, ext: 2 });
   expect(r.sa).toEqual({ trab: 5.5, ext: 0 });
-  expect(r.sax).toEqual({ trab: 8.5, ext: 3 });
+  expect(r.sax).toEqual({ trab: 9.5, ext: 4 }); // sábado: sin refrigerio aunque pase de la jornada (auditoría F2)
   expect(r.corto.trab).toBe(4);
   expect(r.dom).toEqual({ trab: 4.5, ext: 4.5 });
   expect(r.dni).toEqual(['03684337', '03684337', '', '', '', '12345678', '001234567']);
@@ -118,7 +118,7 @@ test('Personal: alta manual, DNI duplicado, cese, asignar capataz e importar el 
   await page.fill('#tcF', '2026-10-01');
   await page.fill('#tcM', 'Renuncia');
   await page.click('#tcOk');
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ ces: '2026-10-01', mot: 'Renuncia', act: false });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ ces: '2026-10-01', mot: 'Renuncia', act: true }); // el día del cese cuenta como trabajado (auditoría F2)
   // importar
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tperImp')]);
   await fc.setFiles({ name: 'maestra.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: xlsxBuf('Datos del personal', MASTER) });
@@ -126,7 +126,7 @@ test('Personal: alta manual, DNI duplicado, cese, asignar capataz e importar el 
   await expect(page.locator('#timpChg')).toHaveText('0');
   await expect(page.locator('#timpEq')).toHaveText('1');
   await expect(page.locator('#timpErr')).toHaveText('1');
-  await expect(page.locator('#timpAct')).toHaveText('2'); // Ana y Beto (Carla cesó; la ficha manual cesada no está en el archivo)
+  await expect(page.locator('#timpAct')).toHaveText('3'); // Ana, Beto y la ficha manual (cesa hoy: el día del cese cuenta); Carla cesó
   await expect(page.locator('#timpLF')).toContainText('NUEVO MANUAL');
   await page.click('#timpOk');
   await expect(page.locator('#lqm')).toHaveCount(0);
