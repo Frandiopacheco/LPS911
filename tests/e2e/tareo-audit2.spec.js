@@ -96,12 +96,11 @@ test('A3: tras un conflicto, «Recargar versión actual» trae los datos nuevos 
   await page.locator('#trEdOk').click();
   await expect(page.locator('#toast')).toContainText('Otro usuario cambió este tareo');
   await expect(page.locator('#trReload')).toBeVisible();
-  // recargar: avisa que se pierde la corrección sin guardar
-  let asked = '';
-  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  // recargar: trae la versión nueva y vuelve a aplicar encima la corrección sin guardar (ya no se pierde)
   await page.locator('#trReload').click();
-  await expect(page.locator('[data-tre="fin"]')).toHaveValue('15:00');
-  expect(asked).toContain('corrección');
+  await expect(page.locator('#toast')).toContainText('Se mantienen tus 1 cambio');
+  await expect(page.locator('[data-tre="fin"]')).toHaveValue('16:00');
+  expect(await page.evaluate(() => TR.ed.base.blq[0].fin)).toBe('15:00');
   await expect(page.locator('#trReload')).toHaveCount(0);
   await page.locator('[data-tre="fin"]').fill('14:00');
   page.once('dialog', dg => dg.accept('Salió temprano'));
@@ -113,8 +112,9 @@ test('A3: tras un conflicto, «Recargar versión actual» trae los datos nuevos 
   await page.evaluate(id => fcol('tareo').doc(id).update({ blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '15:30', dnis: ['11111111'] }] }), ID);
   await page.locator('#trEdOk').click();
   await expect(page.locator('#trReload')).toBeVisible();
-  page.once('dialog', dg => dg.accept());
   await page.locator('#trBack').click();
+  await expect(page.locator('#trAsk3')).toContainText('corrección sin guardar');
+  await page.locator('#trAsk3 [data-l3="discard"]').click();
   await expect(page.locator('#trWs')).toHaveCount(0);
   await open(page);
   await expect(page.locator('#trEdOk')).toHaveCount(0);
@@ -206,14 +206,22 @@ test('UX5: con Tab el foco no sale de la revisión ni de su ventana; Esc respeta
   await expect(page.locator('#lqm')).toHaveCount(0);
   await expect(page.locator('#trWs')).toBeVisible();
   expect(await page.evaluate(() => !!document.activeElement.closest('#trWs'))).toBe(true);
-  // cotejo sin guardar: Esc pregunta; «Seguir aquí» no cierra
+  // cotejo sin guardar: Esc pregunta (guardar, descartar o seguir editando); «Seguir editando» (o Esc) no cierra
   await page.locator('#trAll').click();
-  page.once('dialog', dg => dg.dismiss());
   await page.locator('#trBack').focus();
   await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toBeVisible();
+  await page.locator('#trAsk3 [data-l3="stay"]').click();
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
   await expect(page.locator('#trWs')).toBeVisible();
-  page.once('dialog', dg => dg.accept());
+  await expect(page.locator('#trBack')).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(page.locator('#trAsk3')).toBeVisible();
+  await page.keyboard.press('Escape'); // Esc en la ventana = seguir editando
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
+  await expect(page.locator('#trWs')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.locator('#trAsk3 [data-l3="discard"]').click();
   await expect(page.locator('#trWs')).toHaveCount(0);
   await expect(page.locator(`tr[data-to="${ID}"] button[data-to]`)).toBeFocused();
   noErrors(errors, 'UX5');

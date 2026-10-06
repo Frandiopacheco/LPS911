@@ -131,3 +131,70 @@ test('Configuración en celular (sin desborde) con feriados', async ({ page }) =
   expect(alto).toBeGreaterThanOrEqual(40);
   noErrors(errors, 'configuración (celular)');
 });
+
+// ── «Horas por cantidad» (modo:'hrs'; docs/ia/tareo.md «Contrato "horas por cantidad"») ──
+test('horas por cantidad: extra, feriado, ausente, salida, errores y avisos; los tareos con bloques siguen igual', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(([LUN, SAB, DOM, FER]) => {
+    const R = (h, o = {}) => ({ ape: 'APE', nom: 'NOM', as: true, mot: '', h, ...o });
+    const H = (date, rows, x = {}) => ({ date, modo: 'hrs', pcs: ['p1', 'p2'], rows, foto: ['f'], ...x });
+    const c = (date, h, x) => tCalc(H(date, { d: R(h) }, x)).rows.d;
+    const pick = o => ({ trab: o.trab, ext: o.ext, ini: o.ini, fin: o.fin });
+    const cfgFer = { v: 1, jor: TC().jor['4'], fer: true, rnl: { ref: 60, refIni: '12:00' } };
+    S.tpc.set('pbq', { id: 'pbq', cod: '30.01', nom: 'x', bloq: true });
+    const out = {
+      lv: pick(c(LUN, { p1: 4.5, p2: 4 })),
+      lv105: pick(c(LUN, { p1: 8.5, p2: 2 })),
+      sab8: pick(c(SAB, { p1: 8 })),
+      fer: pick(c(FER, { p1: 8.5 }, { cfg: cfgFer })),
+      dom: pick(c(DOM, { p1: 6 })),
+      sal: c(LUN, { p1: 6 }).fin, sal2: tCalc(H(LUN, { d: R({ p1: 6 }, { sal: '16:00' }) })).rows.d.fin,
+      aus: tCalc(H(LUN, { d: R({ p1: 8, p2: 0 }, { as: false, mot: 'DM' }) })).rows.d,
+      limpia: c(LUN, { p1: '4', p2: 0, p3: '' }).h,
+      tot: [tHrsTot({ h: { a: 4.5, b: '4', c: 0, d: -1, e: 'x' } }), tHrsTot({}), tHrsTot(null)],
+      jor: [tJorDia({ date: LUN }), tJorDia({ date: SAB }), tJorDia({ date: DOM }), tJorDia({ date: LUN, cfg: cfgFer }), tEsHrs({ modo: 'hrs' }), tEsHrs({ blq: [] })],
+      vOk: tValida(H(LUN, { d: R({ p1: 4.5, p2: 4 }) })),
+      v0: tValida(H(LUN, { d: R({}) })).map(o => [o.dni, o.k]),
+      v16: tValida(H(LUN, { d: R({ p1: 10, p2: 6.5 }) })).map(o => [o.dni, o.k]),
+      vParc: tValida(H(LUN, { d: R({ p1: 4 }) })),
+      vParcFer: tValida(H(FER, { d: R({ p1: 4 }) }, { cfg: cfgFer })),
+      vAus: tValida(H(LUN, { d: R({ p1: 8 }, { as: false }) })),
+      vSinM: tValida(H(LUN, { d: R({ p1: 8 }, { as: null }) })).map(o => o.k),
+      vPcs: tValida(H(LUN, { d: R({ p1: 8.5 }) }, { pcs: [] })).map(o => o.k),
+      vBloq: tValida(H(LUN, { d: R({ pbq: 8.5 }) }, { pcs: ['pbq'] })).map(o => [o.k, o.msg]),
+      vBloq0: tValida(H(LUN, { d: R({ p1: 8.5, pbq: 0 }) }, { pcs: ['p1', 'pbq'] })).map(o => o.k),
+      vMal: tValida(H(LUN, { d: R({ p1: 8.5, p2: -2 }) })).map(o => o.k),
+      vFoto: tValida(H(LUN, { d: R({ p1: 8.5 }) }, { foto: [] })).map(o => o.k),
+      // compatibilidad: sin modo se calcula con los bloques, como antes
+      blq: pick(tCalc({ date: LUN, rows: { d: R({ p9: 3 }) }, blq: [{ id: 'b', pc: 'p1', ini: '07:30', fin: '17:00', dnis: ['d'] }] }).rows.d),
+      blqH: tCalc({ date: LUN, rows: { d: R({ p9: 3 }) }, blq: [{ id: 'b', pc: 'p1', ini: '07:30', fin: '17:00', dnis: ['d'] }] }).rows.d.h,
+    };
+    S.tpc.delete('pbq');
+    return out;
+  }, [LUN, SAB, DOM, FER]);
+  expect(r.lv).toEqual({ trab: 8.5, ext: 0, ini: '07:30', fin: '17:00' }); // L–V 8,5 h: sin extra; la salida estimada salta el refrigerio
+  expect(r.lv105).toEqual({ trab: 10.5, ext: 2, ini: '07:30', fin: '19:00' });
+  expect(r.sab8).toEqual({ trab: 8, ext: 2.5, ini: '07:30', fin: '15:30' }); // sábado: jornada 5,5 h, sin refrigerio
+  expect(r.fer).toMatchObject({ trab: 8.5, ext: 8.5 }); // feriado: todo extra
+  expect(r.dom).toMatchObject({ trab: 6, ext: 6, ini: '07:30' }); // domingo: todo extra; inicio de referencia (lunes)
+  expect([r.sal, r.sal2]).toEqual(['14:30', '16:00']); // estimada (7:30 + 6 h + refrigerio) o la que puso el capataz
+  expect(r.aus).toMatchObject({ trab: 0, ext: 0, ini: '', fin: '', h: { p1: 8 } }); // no vino: 0 h pero conserva h
+  expect(r.limpia).toEqual({ p1: 4 });
+  expect(r.tot).toEqual([8.5, 0, 0]);
+  expect(r.jor).toEqual([8.5, 5.5, 0, 0, true, false]);
+  expect(r.vOk).toEqual([]);
+  expect(r.v0).toEqual([['d', 'sinh']]); // vino con 0 h: error
+  expect(r.v16).toEqual([['d', 'hmax']]); // más de 16 h: error de digitación
+  expect(r.vParc).toEqual([{ dni: 'd', k: 'parcial', warn: true, msg: 'Jornada parcial: APE 4 h de 8,5' }]); // aviso, no bloquea
+  expect(r.vParcFer).toEqual([]);
+  expect(r.vAus).toEqual([]);
+  expect(r.vSinM).toEqual(['marca']);
+  expect(r.vPcs).toEqual(['pcs']);
+  expect(r.vBloq).toEqual([['bloq', 'La partida 30.01 está bloqueada por costos.']]);
+  expect(r.vBloq0).toEqual([]); // bloqueada sin horas: no es error del cálculo (el celular pide quitarla)
+  expect(r.vMal).toEqual(['hval']);
+  expect(r.vFoto).toEqual(['foto']);
+  expect(r.blq).toEqual({ trab: 8.5, ext: 0, ini: '07:30', fin: '17:00' });
+  expect(r.blqH).toEqual({ p1: 8.5 });
+  noErrors(errors, 'horas por cantidad');
+});

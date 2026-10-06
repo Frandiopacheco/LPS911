@@ -75,7 +75,7 @@ test.describe('celular (390 px)', () => {
         const fb = await page.locator('.tc-foot').boundingBox();
         expect(pb.y + pb.height, 'la pastilla queda sobre el botón del capataz').toBeLessThanOrEqual(fb.y);
         await page.locator('.tc-foot [data-tcs="2"]').click();
-        await expect(page.locator('#tcRoot')).toContainText('¿En qué trabajaron?');
+        await expect(page.locator('#tcRoot .tc-ob.need').first()).toBeVisible(); // el toque llegó al botón: sin marcar, señala a quién falta
       }
       noErrors(errors, 'ver como ' + role);
     });
