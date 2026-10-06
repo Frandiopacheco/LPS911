@@ -378,8 +378,7 @@ service cloud.firestore {
       let o = resource.data.get('hist', []);
       let n = request.resource.data.get('hist', []);
       return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
-        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect'])
-          && n[n.size() - 1].get('a', '') != 'prod'
+        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect', 'prod'])
           && n[n.size() - 1].get('by', '') == mid()));
     }
     // historial al CREAR (segunda auditoría, A4): vacío o solo su «Enviado» (a:'env', by = su id); nada de la oficina
@@ -407,8 +406,9 @@ service cloud.firestore {
       return o is list && n is list && n.size() == o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
         && n[o.size()] is map && n[o.size()].get('a', '') == 'prod' && n[o.size()].get('by', '') == mid();
     }
+    // primero lo que no lee documentos (para no sumar lecturas a los guardados del capataz: el límite de accesos por pedido)
     function tProdOk() {
-      return tpubEd() && resource.data.get('st', 'bor') in ['env', 'rev']
+      return request.resource.data.get('prod', null) is map && resource.data.get('st', 'bor') in ['env', 'rev'] && tpubEd()
         && request.resource.data.get('st', 'bor') == resource.data.get('st', 'bor')
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rows', 'pcs', 'hist', 'prod', 'ts', 'by'])
         && request.resource.data.get('prod', null) is map && request.resource.data.prod.get('by', '') == mid()
@@ -433,8 +433,7 @@ service cloud.firestore {
         && resource.data.get('st', 'bor') in ['bor', 'reab']
         && request.resource.data.get('st', 'bor') in [resource.data.get('st', 'bor'), 'env']
         // cot/cotFot: cotejo de firmas y garita del asistente (auditoría F2): el capataz no lo crea ni lo cambia (su guardado lo copia igual)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot'])
-        && !('prod' in request.resource.data.diff(resource.data).affectedKeys())
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reab', 'pub', 'pubV', 'revAt', 'revBy', 'cot', 'cotFot', 'prod'])
         && tHistOk());
     }
     // Fotos del formato físico firmado: tfot/{fecha}_{capId}_… ; nadie las cambia ni las borra
