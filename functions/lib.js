@@ -361,5 +361,61 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
   });
 }
 
-module.exports = { planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+/* ---------- Cuentas de capataz del tareo (docs/ia/tareo.md, «Cuentas de capataz») ----------
+   El capataz entra con su DNI y una contraseña. Por debajo es una cuenta de correo y contraseña de Firebase Auth con un correo
+   sintético <dni>@tareo.lps911.pe (no existe: nunca se le envía nada) que crea la función cuentaCapataz con el Admin SDK. */
+const CTA_DOM = 'tareo.lps911.pe';
+const OWNER = 'frandiopacheco@gmail.com';
+/* DNI como en el máster: 8 dígitos con ceros a la izquierda (7 dígitos → se completa); carné de extranjería 8–12 alfanuméricos */
+function ctaDni(v) {
+  let d = String(v == null ? '' : v).trim().toUpperCase();
+  if (/^\d{7}$/.test(d)) d = '0' + d;
+  return /^[A-Z0-9]{8,12}$/.test(d) ? d : '';
+}
+const ctaMail = dni => { const d = ctaDni(dni); return d ? d.toLowerCase() + '@' + CTA_DOM : ''; };
+const ctaEsMail = m => typeof m === 'string' && m.toLowerCase().endsWith('@' + CTA_DOM);
+const ctaClaveOk = c => typeof c === 'string' && c.length >= 6 && c.length <= 64 && c.trim() === c;
+/* contraseña propuesta: 6 dígitos al azar (rnd devuelve [0,1)) */
+const ctaClave = (rnd = Math.random) => Array.from({ length: 6 }, () => Math.floor(rnd() * 10) % 10).join('');
+/* quién puede administrar cuentas de capataz: el dueño, un admin o el asistente de tareo, con correo confirmado y sin cuenta desactivada */
+function ctaPuede(email, verified, member) {
+  if (!verified || !email) return false;
+  if (String(email).toLowerCase() === OWNER) return true;
+  return !!member && member.off !== true && ['admin', 'tasis'].includes(member.role);
+}
+/* nombre visible del capataz desde su ficha del máster: «Juan Carlos Quispe Mamani» */
+function ctaNombre(f) {
+  const t = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  return [t(f && f.nom), t(f && f.ape)].filter(Boolean).join(' ').slice(0, 60) || 'Capataz';
+}
+/* valida lo que pide la página → {ok, accion, dni, mail, clave, de} o {error} (mensajes en español para mostrar tal cual) */
+function ctaPedido(data) {
+  const o = data || {};
+  const accion = o.accion;
+  if (!['crear', 'clave', 'desactivar', 'migrar'].includes(accion)) return { error: 'Acción no válida.' };
+  const dni = ctaDni(o.dni);
+  if (!dni) return { error: 'El DNI no es válido (8 dígitos, o carné de extranjería de 8 a 12 caracteres).' };
+  const r = { ok: true, accion, dni, mail: ctaMail(dni) };
+  if (accion === 'crear' || accion === 'clave') {
+    if (!ctaClaveOk(o.clave)) return { error: 'La contraseña debe tener al menos 6 caracteres (sin espacios al inicio ni al final).' };
+    r.clave = o.clave;
+  }
+  if (accion === 'crear' || accion === 'migrar') {
+    const de = o.de == null ? '' : String(o.de);
+    if (de && !/^u_[A-Za-z0-9]{6,128}$/.test(de)) return { error: 'El capataz anterior no es válido (debe ser un usuario de enlace, u_…).' };
+    if (accion === 'migrar' && !de) return { error: 'Elige de qué capataz con enlace se pasan los obreros.' };
+    r.de = de;
+  }
+  return r;
+}
+/* obreros (ids del máster) asignados al capataz `de` que pasan a la cuenta nueva */
+const ctaMigrables = (fichas, de) => (fichas || []).filter(f => f && de && f.cap === de).map(f => f.id || f.dni);
+
+/* ---------- Publicación del tareo (F3) ----------
+   La lógica pura vive en tpub.js (sin require: el Firebase falso de las pruebas de la interfaz lo carga en el navegador)
+   y se exporta también desde aquí. Ver docs/ia/tareo.md, «Implementación de F3 — servidor». */
+const TPUB = require('./tpub');
+
+module.exports = { ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso };

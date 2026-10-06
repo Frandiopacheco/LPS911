@@ -29,10 +29,10 @@ const fcol=n=>(db||FDB).collection(n);
 const PLANO_SRC='plano.js?v=33';
 const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
-const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),loaded:{}};
-const U=Object.assign({tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
+const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
+const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -45,15 +45,25 @@ const wkId=(n,p)=>n+'_'+p;
 let db=null,auth=null,rtdb=null,presRef=null,conRef=null,presAll=null,me=null,isAdmin=false,canWrite=false,ready=false,myAct=null,peerEdits=[],unsubs=[],lastPres='';
 const PRES=new Map(),MEM=new Map();
 const memScs=m=>Array.isArray(m&&m.scs)&&m.scs.length?m.scs:(m&&m.sc?[m.sc]:[]);
-const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',veedor:'Veedor',planner:'Planner',lector:'Lector'};
+const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',veedor:'Veedor',planner:'Planner',lector:'Lector',tcap:'Capataz (tareo)',tasis:'Asistente de tareo',tcos:'Costos'};
+/* Módulo Tareo (docs/ia/tareo.md): roles que solo usan el Tareo (no cargan nada de Last Planner), quién ve el módulo y quién lo edita */
+const TAR_ROLES=['tcap','tasis','tcos'];
+const TAR_TABS=['tdia','tpub','tcos','tper','tpc','tcfg'];
+const TAR_ONLY=()=>!!me&&TAR_ROLES.includes(me.role);
+const canTar=()=>!!me&&(TAR_ONLY()||me.role==='admin'||(me.role==='editor'&&me.tpub===true));
+const canLps=()=>!!me&&!TAR_ONLY();
+const tarEdit=()=>!!me&&(me.role==='admin'||me.role==='tasis');
+/** cambia de módulo (selector de la barra o «Más» del celular): lleva a la pestaña inicial del módulo */
+function goMod(m){if(m==='tar'?!canTar():!canLps())return;closePop();const sh=$('#msheet');if(sh)sh.remove();
+  if(U.mod===m&&(m==='tar')===TAR_TABS.includes(U.tab))return;U.mod=m;U.tab=m==='tar'?'tdia':'hoy';U.tab=tabAllowed(U.tab)?U.tab:tabHome();saveUI();sendPresence();render()}
 let canDaily=false;
 const OWNER=()=>String(window.ADMIN_EMAIL||'').trim().toLowerCase();
 const isOwnerEmail=e=>!!OWNER()&&String(e||'').toLowerCase()===OWNER();
 /* "Ver como": el administrador prueba la app con otro rol (solo en la copia de prueba; lo que guarde se guarda con su usuario) */
 const VA_OK=()=>window.LPS_ENV==='pruebas';
 let VA=(()=>{try{return VA_OK()?JSON.parse(sessionStorage.getItem('lps.va')||'null'):null}catch(e){return null}})();
-const roleSig=m=>[m.role||'',m.sc||'',memScs(m).join(),m.area||'',m.cli===true?'c':''].join('|');
-function vaApply(md){if(!VA||!me||!(md.role==='admin'||isOwnerEmail(me.email)))return md;return{...md,role:VA.role,sc:VA.sc||'',scs:VA.sc?[VA.sc]:[],area:VA.area||'',cli:!!VA.cli}}
+const roleSig=m=>[m.role||'',m.sc||'',memScs(m).join(),m.area||'',m.cli===true?'c':'',m.tpub===true?'t':''].join('|');
+function vaApply(md){if(!VA||!me||!(md.role==='admin'||isOwnerEmail(me.email)))return md;return{...md,role:VA.role,sc:VA.sc||'',scs:VA.sc?[VA.sc]:[],area:VA.area||'',cli:!!VA.cli,tpub:!!VA.tpub}}
 function vaSet(v){try{if(v)sessionStorage.setItem('lps.va',JSON.stringify(v));else sessionStorage.removeItem('lps.va')}catch(e){}location.reload()}
 const PALETTE=['#1f5f7a','#b5651d','#6a4c93','#2e7d4f','#c0392b','#00838f','#8d6e00','#ad1457'];
 const hashStr=s=>{let h=5381;for(const c of String(s))h=((h*33)^c.charCodeAt(0))>>>0;return h.toString(36)};
@@ -170,7 +180,7 @@ function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status
 let pending=0,lastErr=null;const chains={};
 function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0);el.classList.toggle('err',!!lastErr||!db);
   const off=navigator.onLine===false;el.classList.toggle('err',!!lastErr||!db||off);
-  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor'].includes(me.role))?'Guardado':'Solo lectura')}
+  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor','tcap','tasis'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 /* los días de una actividad se guardan con arrayUnion/arrayRemove (fsDiff): al leerlos se dejan ordenados y sin repetir */
@@ -180,7 +190,7 @@ let DV=0; /* sube con cada cambio de datos (para cachés) */
 /* escrituras propias en cola que aún no salen (esperan la anterior del mismo documento): mientras tanto, lo que llega
    de la base para ese documento es una versión vieja y no debe pisar la local (hacía parpadear las barras al mover) */
 const QK={};
-function keepQueued(col,mp){const k=COLS[col];const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
 function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
@@ -291,10 +301,12 @@ async function capJoin(fdb,u){const ref=fcol('members').doc('u_'+u.uid);let m=nu
   if(m&&m.exists){clearInv();return true}
   if(!invCode){me=null;pendingMsg='Tu acceso como capataz ya no está activo en este celular. Pide un enlace nuevo al ingeniero.';await auth.signOut();return false}
   let iv=null;try{iv=await fcol('inv').doc(invCode).get()}catch(e){}const d=iv&&iv.exists?iv.data():null;
-  if(!d||!d.active||!(d.exp>NOW())||!(d.scs||[]).length){clearInv();me=null;pendingMsg='Este enlace ya venció o fue desactivado. Pide uno nuevo al ingeniero.';try{await u.delete()}catch(e){await auth.signOut()}return false}
+  const tcap=!!d&&d.role==='tcap';/* invitación del tareo (consorcio): capataz sin partida (docs/ia/tareo.md) */
+  if(!d||!d.active||!(d.exp>NOW())||(!tcap&&!(d.scs||[]).length)){clearInv();me=null;pendingMsg='Este enlace ya venció o fue desactivado. Pide uno nuevo al ingeniero.';try{await u.delete()}catch(e){await auth.signOut()}return false}
   let name='';try{name=joinName||localStorage.getItem('lps.jname')||''}catch(e){name=joinName}name=(name||'Capataz').slice(0,60);
-  try{await ref.set({role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
-  clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+'! Ya puedes reportar el avance de tu partida.'),1500);return true}
+  try{await ref.set(tcap?{role:'tcap',name,inv:invCode,added:NOW()}:{role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
+  clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+(tcap?'! Ya puedes llenar el tareo de tu cuadrilla.':'! Ya puedes reportar el avance de tu partida.')),1500);return true}
+const memOffMsg=d=>d&&d.movTo?'Tu usuario de este celular se pasó a una cuenta con DNI y contraseña: entra con tu DNI y la contraseña que te dio la oficina.':'Tu cuenta está desactivada. Habla con la oficina.';
 async function startSession(u,fdb){
   stopSession();
   const anon=!!u.isAnonymous;
@@ -305,23 +317,35 @@ async function startSession(u,fdb){
   const ref=fcol('members').doc(me.email);let m=null;
   try{m=await ref.get({source:'server'})}catch(e){try{m=await ref.get()}catch(e2){m=null}}
   if((!m||!m.exists)&&isOwnerEmail(me.email)){try{await ref.set({role:'admin',name:me.email.split('@')[0],added:NOW()});m=await ref.get()}catch(e){}}
-  if(!m||!m.exists){const em=me.email;me=null;pendingMsg=`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
-  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'].includes(ht))U.tab=ht}isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
+  if(!m||!m.exists){const em=me.email;me=null;pendingMsg=tCtaEs(em)?`Tu usuario ${em.split('@')[0]} ya no tiene acceso. Habla con la oficina.`:`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
+  /* cuenta desactivada (members.off) o enlace de capataz pasado a una cuenta con DNI (movTo): docs/ia/tareo.md */
+  if(m.data().off===true&&!isOwnerEmail(me.email)){const d=m.data();me=null;pendingMsg=memOffMsg(d);if(d.movTo)lcapSet(true);await auth.signOut();return}
+  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
+  /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
+  if(TAR_ONLY())U.mod='tar';else if(U.mod!=='tar'||!canTar())U.mod='lps';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
-  for(const[col,k]of Object.entries(COLS)){
+  /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
+  if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS)){
     unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
   }
-  ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();
-  const memQ=canDaily?fcol('members'):fcol('members').doc(me.email);
+  ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();}
+  if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS)){
+    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,{...d.data(),id:d.id}));setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
+  }
+  /* el asistente de tareo necesita la lista del equipo (asignar obreros a capataces) */
+  const memQ=canDaily||me.role==='tasis'?fcol('members'):fcol('members').doc(me.email);
   unsubs.push(memQ.onSnapshot(snap=>{MEM.clear();(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
-    if(roleSig(mine)!==me.rsig){me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.role=v.role;me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
+    if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
+    /* si cambia lo que hay que cargar (solo tareo, ve el Tareo, lista del equipo), se vuelve a abrir con las suscripciones correctas */
+    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
+    if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
     renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()},()=>{}));
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
-  if(rtdb){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
+  if(rtdb&&!TAR_ONLY()){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
     conRef.on('value',s=>{if(s.val()===true&&presRef)presRef.onDisconnect().remove().then(()=>sendPresence(true)).catch(()=>{})});
     presAll=rtdb.ref('presence');presAll.on('value',s=>{PRES.clear();const v=s.val()||{};for(const[k,d]of Object.entries(v))PRES.set(k,d);renderWho();if(U.tab==='team'&&ready&&!isDirtyFocus())requestRender()},()=>{});}
   setStatus();updUndo();
@@ -410,24 +434,42 @@ function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar av
   chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})))
     .then(()=>{lastErr=null},e=>{if(e&&e.code==='permission-denied'){canDaily=false;lastErr='Sin permiso';toast('Tu rol no permite registrar avance. Pide el rol Campo o Editor.')}else handleWriteErr(e)}).finally(()=>{pending--;setStatus()})}
 function stopSession(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
-  for(const k of Object.values(COLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
+  for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
 function snapErr(err){const pd=err&&err.code==='permission-denied';lastErr=pd?'Sin acceso':'Conexión perdida';setStatus();toast(pd?'Tu cuenta no tiene acceso a estos datos. Pide acceso al administrador.':'Se perdió la conexión con la base de datos. Recarga la página.')}
 function onData(){
+  if(!ready&&TAR_ONLY()){/* solo tareo: listo cuando cargan sus colecciones (nada de Last Planner) */
+    if(typeof TCOLS==='undefined'||!Object.values(TCOLS).every(k=>S.loaded[k]))return;ready=true;clockSync();swWarm()}
   if(!ready){if(!Object.values(COLS).every(k=>S.loaded[k]))return;ready=true;clockSync();brandSync();if(U.week==null)U.week=curWeek();pickPiso();ensureVers();setTimeout(autoVersion,2500);setTimeout(didxMigrate,4000);bkRemind();swWarm();}
   if(typeof respSync==='function')respSync();requestRender();
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
-let invCode=(()=>{try{const q=new URLSearchParams(location.search).get('inv');if(q){localStorage.setItem('lps.inv',q);history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
+let invCode=(()=>{try{const sp=new URLSearchParams(location.search),q=sp.get('inv');if(q){localStorage.setItem('lps.inv',q);localStorage.setItem('lps.invm',sp.get('m')||'');history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
+/* el enlace de un capataz del tareo lleva &m=tar: antes de entrar no se puede leer la invitación, así que el texto sale del enlace */
+const invTar=()=>{try{return!!invCode&&localStorage.getItem('lps.invm')==='tar'}catch(e){return false}};
 let joinName='';
-function clearInv(){invCode='';try{localStorage.removeItem('lps.inv')}catch(e){}}
-function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;$('#lform').hidden=jn;$('#ljoin').hidden=!jn;if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;return}$('#lmsg').textContent=msg||'';$('#lverify').hidden=!verify;$('#lresend').hidden=!verify;setLMode(lmode)}
+function clearInv(){invCode='';try{localStorage.removeItem('lps.inv');localStorage.removeItem('lps.invm')}catch(e){}}
+/* «Soy capataz» (cuenta DNI + contraseña del tareo, docs/ia/tareo.md): se recuerda en el equipo para volver a esa pantalla */
+const lcapOn=()=>{try{return localStorage.getItem('lps.lcap')==='1'}catch(e){return false}};
+function lcapSet(v){try{if(v)localStorage.setItem('lps.lcap','1');else localStorage.removeItem('lps.lcap')}catch(e){}}
+function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;const cp=!jn&&!verify&&lcapOn();$('#lform').hidden=jn||cp;$('#ljoin').hidden=!jn;$('#lcap').hidden=!cp;
+  if(cp){$('#cmsg').textContent=msg||'';$('#csubmit').disabled=false;return}if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;const t=invTar(),h=$('#ljoin .lhint'),b=$('#ljoin .lbrand');
+    if(h){h.dataset.def=h.dataset.def||h.textContent;h.textContent=t?'Te invitaron a llenar el tareo diario de tu cuadrilla desde este celular. Solo escribe tu nombre.':h.dataset.def}if(b){b.dataset.def=b.dataset.def||b.textContent;b.textContent=t?'Tareo de personal obrero':b.dataset.def}return}$('#lmsg').textContent=msg||'';$('#lverify').hidden=!verify;$('#lresend').hidden=!verify;setLMode(lmode)}
 function hideLogin(){$('#login').hidden=true}
 function setLMode(m){lmode=m;$('#ltitle').textContent=m==='up'?'Crear mi cuenta':'Ingresar';$('#lsubmit').textContent=m==='up'?'Crear cuenta':'Ingresar';$('#lmode').textContent=m==='up'?'Ya tengo cuenta: ingresar':'¿Primera vez? Crear mi cuenta';$('#lpass').autocomplete=m==='up'?'new-password':'current-password';$('#lhint').hidden=m!=='up'}
 function authMsg(e){const c=e&&e.code||'';return({'auth/invalid-email':'El correo no es válido.','auth/missing-email':'Escribe tu correo.','auth/missing-password':'Escribe tu contraseña.','auth/user-not-found':'No existe una cuenta con ese correo. Usa “¿Primera vez? Crear mi cuenta”.','auth/wrong-password':'Contraseña incorrecta.','auth/invalid-credential':'Correo o contraseña incorrectos.','auth/invalid-login-credentials':'Correo o contraseña incorrectos.','auth/email-already-in-use':'Ese correo ya tiene cuenta. Usa “Ingresar”.','auth/weak-password':'La contraseña debe tener al menos 6 caracteres.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos y vuelve a intentar.','auth/network-request-failed':'Sin conexión a internet.','auth/operation-not-allowed':'El ingreso con correo no está activado en Firebase (paso 3 de la guía).','auth/unauthorized-domain':'Este dominio no está autorizado en Firebase (paso 7 de la guía).'})[c]||('No se pudo completar ('+(c||'error')+').')}
 function setupLogin(){
-  $('#jcancel').onclick=()=>{clearInv();showLogin('')};
+  $('#jcancel').onclick=()=>{clearInv();lcapSet(false);showLogin('')};
+  $('#jcap').onclick=()=>{clearInv();lcapSet(true);showLogin('')};
+  $('#lcapgo').onclick=()=>{lcapSet(true);showLogin('');setTimeout(()=>$('#cdni').focus(),30)};
+  $('#cback').onclick=()=>{lcapSet(false);showLogin('')};
+  $('#lcap').onsubmit=async ev=>{ev.preventDefault();const d=tCtaDni($('#cdni').value),p=$('#cpass').value;
+    if(!d){$('#cmsg').textContent='Escribe tu DNI (8 dígitos).';return}if(!p){$('#cmsg').textContent='Escribe tu contraseña.';return}
+    $('#csubmit').disabled=true;$('#cmsg').textContent='Entrando…';
+    try{await auth.signInWithEmailAndPassword(tCtaMail(d),p);lcapSet(true)}
+    catch(err){const c=err&&err.code||'';$('#cmsg').textContent=['auth/invalid-credential','auth/invalid-login-credentials','auth/wrong-password','auth/user-not-found','auth/invalid-email'].includes(c)?'DNI o contraseña incorrectos. Pide a la oficina que te la cambie.':c==='auth/user-disabled'?'Tu cuenta está desactivada. Habla con la oficina.':authMsg(err)}
+    finally{$('#csubmit').disabled=false}};
   $('#ljoin').onsubmit=async ev=>{ev.preventDefault();const n=$('#jname').value.trim();if(n.length<3){$('#jmsg').textContent='Escribe tu nombre y apellido.';return}
     joinName=n;try{localStorage.setItem('lps.jname',n)}catch(e){}$('#jsubmit').disabled=true;$('#jmsg').textContent='Entrando…';
     try{await auth.signInAnonymously()}catch(err){$('#jsubmit').disabled=false;$('#jmsg').textContent=err&&err.code==='auth/operation-not-allowed'?'El administrador debe activar el ingreso “Anónimo” en Firebase (Authentication → Sign-in method).':authMsg(err)}};
@@ -454,21 +496,33 @@ const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6
   ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),cap:SVG('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
 const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.textContent.trim():t};
 function goTab(t){U.tab=t;saveUI();sendPresence();render()}
-function renderBnav(){const b=$('#bnav');if(!b)return;const pr=restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===U.tab);
+function renderBnav(){const b=$('#bnav');if(!b)return;const pr=U.mod==='tar'?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===U.tab);
   const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${U.tab===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[U.tab]||tabName(U.tab)):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
   const items=bnavMore();
   const sh=document.createElement('div');sh.className='msheet';sh.id='msheet';
   sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${U.tab===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
-    <p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
-    <button data-act="xls">Exportar Excel del lookahead</button><button data-act="help">? Ayuda: cómo funciona</button><div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
-  sh.onclick=e=>{if(e.target===sh){sh.remove();return}const b=e.target.closest('button');if(!b)return;sh.remove();if(b.dataset.bt)goTab(b.dataset.bt);else if(b.dataset.act==='xls'){if(ready)exportXlsx()}else if(b.dataset.act==='help')ayOpen();else if(b.dataset.act==='out')$('#blogout').click()};
+    ${canLps()&&canTar()?`<div class="msmod"><span>Módulo</span>${modSegHtml()}</div>`:''}
+    ${U.mod==='tar'?'<hr>':`<p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
+    <button data-act="xls">Exportar Excel del lookahead</button><button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
+  sh.onclick=e=>{if(e.target===sh){sh.remove();return}const b=e.target.closest('button');if(!b)return;if(b.dataset.mod){goMod(b.dataset.mod);return}sh.remove();if(b.dataset.bt)goTab(b.dataset.bt);else if(b.dataset.act==='xls'){if(ready)exportXlsx()}else if(b.dataset.act==='help')ayOpen();else if(b.dataset.act==='out')$('#blogout').click()};
   document.body.appendChild(sh)}
 $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.dataset.bt==='more'){moreSheet();return}const sh=$('#msheet');if(sh)sh.remove();goTab(b.dataset.bt)};
 
 /* ---------- barra superior ---------- */
+/** selector de módulo (barra superior y «Más» del celular): solo para quien usa los dos */
+const modSegHtml=()=>`<span class="seg modseg" role="group" aria-label="Módulo"><button type="button" data-mod="lps" class="${U.mod!=='tar'?'on':''}" aria-pressed="${U.mod!=='tar'}">Last Planner</button><button type="button" data-mod="tar" class="${U.mod==='tar'?'on':''}" aria-pressed="${U.mod==='tar'}">Tareo</button></span>`;
+function modselApply(){const el=$('#modsel');document.body.classList.toggle('mod-tar',U.mod==='tar');if(!el)return;const show=canLps()&&canTar();if(el.hidden!==!show)el.hidden=!show;
+  if(show)el.querySelectorAll('[data-mod]').forEach(b=>{const on=(b.dataset.mod==='tar')===(U.mod==='tar');b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
+$('#modsel').onclick=e=>{const b=e.target.closest('[data-mod]');if(b)goMod(b.dataset.mod)};
 function renderTop(){
+  modselApply();
+  if(U.mod==='tar'){/* Tareo: sin piso, semana, deshacer ni exportes de Last Planner (los oculta también el CSS con body.mod-tar) */
+    let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}
+    $('#pname').textContent='Tareo de personal obrero';$('#pname').title='';$('#pcode').textContent=(pn?pn+' · ':'')+'Tareo';
+    $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===U.tab));
+    navApply();topDateApply();topToolsApply();updUndo();setStatus();renderBnav();return}
   const p=P();$('#pname').textContent=p.name||'Proyecto';$('#pname').title=p.fullName||'';
   $('#pcode').textContent=(p.code||'')+' · Last Planner System';
   const wd=weekDays(U.week);$('#wnum').textContent='Semana '+U.week;$('#wdates').textContent=fmtD(wd[0])+' – '+fmtD(wd[5]);
@@ -490,6 +544,7 @@ $('#tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(!b)return
 $('#bundo').onclick=undo;$('#bredo').onclick=redo;
 $('#bexport').onclick=()=>{if(ready)exportXlsx()};
 document.addEventListener('keydown',e=>{
+  if(U.mod==='tar')return;/* deshacer/rehacer es del lookahead: en el Tareo no debe tocar nada */
   const inField=e.target.closest&&e.target.closest('input,textarea,select');
   if((e.ctrlKey||e.metaKey)&&!inField&&e.key.toLowerCase()==='z'&&!e.shiftKey){e.preventDefault();undo()}
   else if((e.ctrlKey||e.metaKey)&&!inField&&(e.key.toLowerCase()==='y'||(e.key.toLowerCase()==='z'&&e.shiftKey))){e.preventDefault();redo()}
@@ -515,13 +570,17 @@ function enterView(main){
   if(!['look','mapa','dash'].includes(U.tab))viewIn(main);return main}
 function render(){
   if(!ready)return;
+  if(me&&TAR_ONLY())U.mod='tar';else if(U.mod==='tar'&&!canTar())U.mod='lps';
+  /* cada módulo tiene sus pestañas: una del otro módulo lleva a la inicial del actual */
+  if(me&&(U.mod==='tar')!==TAR_TABS.includes(U.tab))U.tab=U.mod==='tar'?'tdia':'hoy';
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
   if(typeof dayAuto==='function')dayAuto();
   let main=$('#main');renderTop();
+  if(U.mod==='tar'){document.body.classList.remove('cap-mode','v-dash','dash-tv');if(LKP)presStop();vaBanner()}else{
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')presStop();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
-  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab='look';
+  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();}
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos};document.body.classList.toggle('v-campo',U.tab==='campo');document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='tar'?'tdia':'look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField } from 'firebase/firestore';
 
 const OWNER = 'frandiopacheco@gmail.com';
 let env;
@@ -55,6 +55,18 @@ test.beforeEach(async () => {
     await S('pzon/x2', { pisoId: 'p1', sc: 'c-otro', pts: [] });
     await S('live/2026-10-01_x1', { date: '2026-10-01', actId: 'x1', sc: 'c-gabel' });
     await S('live/2026-10-01_x9', { date: '2026-10-01', actId: 'x9', sc: 'c-otro' });
+    // Tareo
+    await S('members/tasis@obra.pe', { role: 'tasis', name: 'Asistente de tareo' });
+    await S('members/tcos@obra.pe', { role: 'tcos', name: 'Costos' });
+    await S('members/tcapm@obra.pe', { role: 'tcap', name: 'Capataz consorcio' });
+    await S('members/u_tcap1', { role: 'tcap', name: 'Pedro' });
+    await S('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
+    await S('tper/03684337', { dni: '03684337', ape: 'QUISPE MAMANI', nom: 'JUAN', pue: 'OPERARIO ALBAÑIL', cat: 'OP', cua: 'ALBAÑILES', cap: '', act: true });
+    await S('tpc/10.05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true });
+    await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
+    await S('meta/main', { name: 'Obra' });
+    await S('pisos/p1', { code: 'P1', name: 'Piso 1' });
+    await S('daily/2026-10-01_p1', { recs: {} });
   });
 });
 
@@ -509,4 +521,472 @@ test('ciclo diario: el SC propone el cierre del día solo de las actividades de 
   await assertSucceeds(setDoc(doc(sc, 'live/2026-10-02_x4'), { date: '2026-10-02', actId: 'x4', sc: 'c-gabel', close: { status: 'no', cnc: 'Materiales' } }));
   await assertFails(setDoc(doc(sc, 'live/2026-10-02_xe'), { date: '2026-10-02', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
   await assertFails(updateDoc(doc(sc, 'live/2026-10-01_x9'), { close: { status: 'ok' } }));
+});
+
+// ── Tareo (fase 0, docs/ia/tareo.md) ──
+const PER = (dni, x) => ({ dni, ape: 'PEREZ', nom: 'ANA', pue: 'PEON', cat: 'PE', cua: 'ALBAÑILES', cap: '', act: true, ...x });
+const PC = (cod, x) => ({ cod, grp: cod.split('.')[0], grpN: 'ESTRUCTURAS', nom: 'Partida ' + cod, und: 'm2', act: true, ...x });
+test('tareo: el asistente y el administrador editan el máster y las partidas; nadie las borra', async () => {
+  for (const db of [user('tasis@obra.pe'), user(OWNER)]) {
+    await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
+    await assertSucceeds(getDocs(collection(db, 'tper')));
+    await assertSucceeds(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertSucceeds(updateDoc(doc(db, 'tper/03684337'), { cap: 'u_tcap1', arch: { t: 1, by: 'x', n: 'x' } }));
+    await assertSucceeds(setDoc(doc(db, 'tper/CE0012345AB'), PER('CE0012345AB'))); // carné de extranjería
+    await assertSucceeds(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
+    await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { act: false }));
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+    await assertFails(deleteDoc(doc(db, 'tpc/10.05')));
+  }
+});
+test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom texto)', async () => {
+  const t = user('tasis@obra.pe');
+  await assertFails(setDoc(doc(t, 'tper/11111111'), PER('22222222'))); // id distinto del DNI
+  await assertFails(setDoc(doc(t, 'tper/3684337'), PER('3684337'))); // 7 caracteres (sin el cero)
+  await assertFails(setDoc(doc(t, 'tper/1234567890123'), PER('1234567890123'))); // más de 12
+  await assertFails(setDoc(doc(t, 'tper/43241048 II'), PER('43241048 II'))); // basura
+  await assertFails(setDoc(doc(t, 'tper/43241048'), PER(43241048))); // número, no texto
+  await assertFails(setDoc(doc(t, 'tper/43241049'), { ape: 'X', nom: 'Y' })); // sin DNI
+  await assertFails(updateDoc(doc(t, 'tper/03684337'), { dni: '03684338' })); // no cambia el DNI de la ficha
+  await assertFails(setDoc(doc(t, 'tpc/x1'), PC('10.06', { nom: null })));
+  await assertFails(setDoc(doc(t, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
+  await assertFails(setDoc(doc(t, 'tpc/x3'), { grp: '10', und: 'm2' }));
+});
+test('tareo: capataz, costos y jefe de producción leen; no editan', async () => {
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe')]) {
+    await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
+    await assertSucceeds(getDocs(collection(db, 'tpc')));
+    await assertSucceeds(getDoc(doc(db, 'tcfg/main')));
+    await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
+    await assertFails(setDoc(doc(db, 'tcfg/main'), { tolGar: 5 }));
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+  }
+});
+test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el resto de lectores no', async () => {
+  const c = user('tcos@obra.pe');
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 }));
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: false, bloqBy: 'tcos@obra.pe', bloqAt: 2 }));
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 3, act: false })); // otro campo
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'otro@obra.pe', bloqAt: 3 })); // a nombre de otro
+  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: 'si', bloqBy: 'tcos@obra.pe', bloqAt: 3 })); // no booleano
+  await assertFails(setDoc(doc(c, 'tpc/20.02'), { ...PC('20.02'), bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 })); // no crea
+  await assertFails(deleteDoc(doc(c, 'tpc/10.05')));
+  for (const db of [user('tasis@obra.pe'), user(OWNER)]) await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 4 }));
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
+  }
+});
+test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo', async () => {
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('campo@obra.pe'), user('veedor@obra.pe'), user('extrano@x.pe')]) {
+    await assertFails(getDoc(doc(db, 'tper/03684337')));
+    await assertFails(getDocs(collection(db, 'tper')));
+    await assertFails(getDoc(doc(db, 'tpc/10.05')));
+    await assertFails(getDoc(doc(db, 'tcfg/main')));
+    await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
+    await assertFails(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
+  }
+});
+test('tareo: la configuración la cambia solo el administrador', async () => {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'tcfg/main'), { refIni: '12:30', limEnv: '18:00', tolGar: 10 }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
+});
+test('tareo: los roles de solo tareo no leen ni escriben nada de LPS', async () => {
+  const lps = ['acts/x1', 'meta/main', 'pisos/p1', 'daily/2026-10-01_p1', 'restr/r-ot', 'live/2026-10-01_x1', 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'mp/n1', 'cli/buf'];
+  for (const db of [user('tasis@obra.pe'), user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) {
+    for (const p of lps) await assertFails(getDoc(doc(db, p)));
+    for (const c of ['acts', 'restr', 'daily', 'live']) await assertFails(getDocs(collection(db, c)));
+    await assertFails(updateDoc(doc(db, 'acts/x1'), { name: 'x' }));
+    await assertFails(setDoc(doc(db, 'daily/2026-10-02_p1'), { recs: {} }));
+    await assertFails(updateDoc(doc(db, 'live/2026-10-01_x1'), { st: 'run' }));
+    await assertFails(setDoc(doc(db, 'restr/rt'), { actId: 'x1', status: 'pend' }));
+    await assertFails(setDoc(doc(db, 'fotos/ft'), { data: 'x', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'nprog/nt'), { date: '2026-10-01', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'lib/lt'), { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'tasis@obra.pe' }));
+    await assertFails(setDoc(doc(db, 'members/otro@obra.pe'), { role: 'admin' }));
+  }
+  for (const db of [user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) await assertFails(getDoc(doc(db, 'members/editor@obra.pe')));
+  // cada uno lee su propio registro; la lista solo el asistente (y el administrador)
+  await assertSucceeds(getDoc(doc(user('tcos@obra.pe'), 'members/tcos@obra.pe')));
+  await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
+  await assertSucceeds(getDocs(collection(user('tasis@obra.pe'), 'members')));
+  await assertSucceeds(getDocs(collection(user(OWNER), 'members')));
+  await assertFails(getDocs(collection(user('tcos@obra.pe'), 'members')));
+  await assertFails(getDocs(collection(cap('tcap1'), 'members')));
+  await assertFails(getDocs(collection(user('tcapm@obra.pe'), 'members')));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'members/u_tcap1'), { role: 'tcap', name: 'Pedro', x: 1 })); // lee, no cambia
+});
+test('tareo: el jefe de producción (editor con tpub) sigue siendo editor en LPS', async () => {
+  const j = user('jefe@obra.pe');
+  await assertSucceeds(getDoc(doc(j, 'acts/x1')));
+  await assertSucceeds(updateDoc(doc(j, 'acts/x1'), { name: 'b' }));
+  await assertSucceeds(getDocs(collection(j, 'members')));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'acts/x1'))); // los demás roles no cambian
+  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'daily/2026-10-01_p1')));
+});
+
+// ── Tareo F1: tareo del capataz (tcap) e invitaciones del tareo ──
+const limaDay = off => new Date(Date.now() - 5 * 36e5 + off * 864e5).toISOString().slice(0, 10);
+const tSeed = async (path, data) => env.withSecurityRulesDisabled(async c => setDoc(doc(c.firestore(), path), data));
+test('tareo: el capataz del tareo crea, guarda y envía solo el suyo', async () => {
+  const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1';
+  await assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`))); // abre su día aunque aún no exista
+  await assertFails(getDoc(doc(p, `tareo/${h}_u_otro`)));
+  await assertSucceeds(setDoc(doc(p, `tareo/${h}_${me}`), { date: h, cap: me, capN: 'Pedro', st: 'bor', rows: {}, blq: [] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { blq: [{ id: 'b1', pc: '10.05', ini: '07:30', fin: '12:00', dnis: [] }] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'env', envAt: 1 }));
+  await assertFails(updateDoc(doc(p, `tareo/${h}_${me}`), { st: 'bor' })); // ya enviado: no lo cambia
+  await assertSucceeds(getDoc(doc(p, `tareo/${h}_${me}`)));
+  // ajeno: ni crearlo a nombre de otro, ni con id que no corresponde, ni cambiar la fecha
+  await assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: 'u_otro', st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${h}_u_otro`), { date: h, cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: h, cap: me, st: 'bor' }));
+  // estados que no le tocan al crear
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'reab' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'rev' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-1)}_${me}`), { date: limaDay(-1), cap: me, st: 'bor', reab: { t: 1 } }));
+  // fechas: hasta 3 días atrás sí; más atrás o en el futuro no
+  await assertSucceeds(setDoc(doc(p, `tareo/${limaDay(-3)}_${me}`), { date: limaDay(-3), cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(-6)}_${me}`), { date: limaDay(-6), cap: me, st: 'bor' }));
+  await assertFails(setDoc(doc(p, `tareo/${limaDay(3)}_${me}`), { date: limaDay(3), cap: me, st: 'bor' }));
+  // otro capataz del tareo (con correo) no lo ve ni lo cambia
+  const o = user('tcapm@obra.pe');
+  await assertFails(getDoc(doc(o, `tareo/${h}_${me}`)));
+  await assertFails(updateDoc(doc(o, `tareo/${h}_${me}`), { st: 'bor' }));
+  await assertSucceeds(setDoc(doc(o, `tareo/${h}_tcapm@obra.pe`), { date: h, cap: 'tcapm@obra.pe', st: 'bor' }));
+});
+test('tareo: consultas; el tcap solo filtra los suyos, tcos nada, la oficina todo', async () => {
+  const h = limaDay(0);
+  await tSeed(`tareo/${h}_u_tcap1`, { date: h, cap: 'u_tcap1', st: 'bor' });
+  await tSeed(`tareo/${h}_tcapm@obra.pe`, { date: h, cap: 'tcapm@obra.pe', st: 'env' });
+  await assertSucceeds(getDocs(query(collection(cap('tcap1'), 'tareo'), where('cap', '==', 'u_tcap1'))));
+  await assertFails(getDocs(collection(cap('tcap1'), 'tareo')));
+  for (const db of [user('tasis@obra.pe'), user(OWNER), user('jefe@obra.pe')]) await assertSucceeds(getDocs(collection(db, 'tareo')));
+  await assertFails(getDocs(collection(user('tcos@obra.pe'), 'tareo')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), `tareo/${h}_u_tcap1`)));
+  for (const db of [user('editor@obra.pe'), user('campo@obra.pe'), user('lector@obra.pe'), cap('cap1')]) await assertFails(getDoc(doc(db, `tareo/${h}_u_tcap1`)));
+});
+test('tareo: el asistente reabre; el capataz corrige y reenvía; nadie borra; jefe con tpub solo lee', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1');
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'env', rows: {} });
+  await assertFails(updateDoc(doc(user('jefe@obra.pe'), id), { st: 'reab' }));
+  await assertFails(updateDoc(doc(p, id), { st: 'reab' })); // no se reabre solo
+  await assertSucceeds(updateDoc(doc(user('tasis@obra.pe'), id), { st: 'reab', reab: { t: 1, by: 'tasis@obra.pe', mot: 'Falta foto' } }));
+  await assertSucceeds(updateDoc(doc(p, id), { rows: { '03684337': { as: true } } })); // sigue 'reab'
+  await assertFails(updateDoc(doc(p, id), { reab: null })); // no toca el motivo
+  await assertFails(updateDoc(doc(p, id), { st: 'bor' }));
+  await assertFails(updateDoc(doc(p, id), { pub: true }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env' }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), id), { st: 'rev' }));
+  await assertFails(updateDoc(doc(p, id), { st: 'env' }));
+  for (const db of [p, user('tasis@obra.pe'), user(OWNER)]) await assertFails(deleteDoc(doc(db, id)));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
+  await assertFails(setDoc(doc(user('tcos@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), `tareo/${h}_x`), { date: h, cap: 'x', st: 'bor' }));
+});
+// ── Tareo F2: revisión del asistente (cotejo de firmas, garita, corrección, revisado) ──
+test('tareo F2: el asistente revisa; el capataz no pasa a revisado, no edita un revisado ni reescribe el historial', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1'), a = user('tasis@obra.pe');
+  const H0 = [{ t: 1, by: 'u_tcap1', a: 'env' }];
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'env', rows: { '11111111': { as: true } }, hist: H0 });
+  // el capataz no marca revisado ni toca un enviado (cotejo, garita, historial)
+  await assertFails(updateDoc(doc(p, id), { st: 'rev' }));
+  await assertFails(updateDoc(doc(p, id), { 'rows.11111111.fir': true }));
+  // el asistente coteja firmas y garita, corrige y marca revisado
+  await assertSucceeds(updateDoc(doc(a, id), { 'rows.11111111.fir': true, 'rows.11111111.gar': '17:05', hist: arrayUnion({ t: 2, by: 'tasis@obra.pe', a: 'fir' }) }));
+  await assertSucceeds(updateDoc(doc(a, id), { blq: [], hist: arrayUnion({ t: 3, by: 'tasis@obra.pe', a: 'cor', mot: 'Hora mal', cam: 'x' }) }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'rev', revAt: 4, revBy: 'tasis@obra.pe', hist: arrayUnion({ t: 4, by: 'tasis@obra.pe', a: 'rev' }) }));
+  // revisado: el capataz no lo cambia (ni lo vuelve a enviar)
+  await assertFails(updateDoc(doc(p, id), { st: 'env' }));
+  await assertFails(updateDoc(doc(p, id), { blq: [{ id: 'b1' }] }));
+  await assertFails(updateDoc(doc(p, id), { st: 'rev', blq: [] }));
+  // el jefe con tpub solo lee
+  await assertFails(updateDoc(doc(user('jefe@obra.pe'), id), { st: 'env' }));
+  // quitar revisado (rev → env) y reabrir desde revisado: el asistente sí
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env', hist: arrayUnion({ t: 5, by: 'tasis@obra.pe', a: 'qrev', mot: 'm' }) }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), id), { st: 'rev' }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 6, by: 'tasis@obra.pe', mot: 'm' }, hist: arrayUnion({ t: 6, by: 'tasis@obra.pe', a: 'reab' }) }));
+  await assertFails(deleteDoc(doc(a, id)));
+  // reabierto: el capataz solo agrega al final del historial (no borra ni cambia lo de la oficina)
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data().hist; });
+  await assertFails(updateDoc(doc(p, id), { hist: [] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...cur.slice(0, -1), { ...cur[cur.length - 1], mot: 'otro' }] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...cur, { t: 7, a: 'env' }, { t: 8, a: 'rev' }] }));
+  await assertFails(updateDoc(doc(p, id), { revBy: 'u_tcap1' }));
+  await assertFails(updateDoc(doc(p, id), { st: 'rev' }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur, { t: 7, by: 'u_tcap1', a: 'env' }] }));
+});
+// ── Auditoría F2 (hallazgos 10 y 12): el cotejo (cot, cotFot) es del asistente; el capataz no se lo atribuye ──
+test('tareo F2 auditoría: el capataz no crea ni cambia cot/cotFot ni agrega entradas de la oficina al historial', async () => {
+  const h = limaDay(0), me = 'u_tcap1', id = `tareo/${h}_${me}`, p = cap('tcap1'), a = user('tasis@obra.pe');
+  // al crear
+  await assertFails(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: {}, cot: { '11111111': { fir: true } } }));
+  await assertFails(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: {}, cotFot: ['f1'] }));
+  await assertSucceeds(setDoc(doc(p, id), { date: h, cap: me, st: 'bor', rows: { '11111111': { as: true } }, foto: ['f1'], hist: [] }));
+  // en borrador: no escribe el cotejo ni se pone entradas de la oficina en el historial
+  await assertFails(updateDoc(doc(p, id), { 'cot.11111111.fir': true }));
+  await assertFails(updateDoc(doc(p, id), { cotFot: ['f1'] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 1, by: 'tasis@obra.pe', a: 'fir' }] }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 1, by: 'tasis@obra.pe', a: 'rev' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 1, by: me, a: 'env' }] }));
+  // el asistente coteja por rutas (solo lo que cambió) y luego reabre conservando la garita
+  await assertSucceeds(updateDoc(doc(a, id), { 'cot.11111111.fir': true, 'cot.11111111.gar': '17:05', 'cot.11111111.by': 'tasis@obra.pe', 'cot.11111111.t': 2, cotFot: ['f1'] }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 3, by: 'tasis@obra.pe', mot: 'm' }, cot: { '11111111': { gar: '17:05' } }, cotFot: deleteField(), hist: arrayUnion({ t: 3, by: 'tasis@obra.pe', a: 'reab' }) }));
+  // reabierto: su guardado completo copia cot igual (sí); cambiarlo o quitarlo (no)
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data(); });
+  await assertSucceeds(setDoc(doc(p, id), { ...cur, blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['11111111'] }] }));
+  await assertFails(setDoc(doc(p, id), { ...cur, cot: { '11111111': { gar: '17:05', fir: true } } }));
+  const { cot, ...sinCot } = cur;
+  await assertFails(setDoc(doc(p, id), sinCot));
+  await assertFails(updateDoc(doc(p, id), { cotFot: ['f1'] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [...cur.hist, { t: 4, by: me, a: 'env' }] }));
+});
+// ── Segunda auditoría (A4): al CREAR, el capataz no trae nada de la oficina (historial ajeno, cotejo, revisado, reapertura) ──
+test('tareo segunda auditoría A4: crear manipulado (borrador o enviado) falla; su «Enviado» propio sí', async () => {
+  const h = limaDay(0), me = 'u_tcap1', id = `tareo/${h}_${me}`, p = cap('tcap1');
+  const base = { date: h, cap: me, rows: { '11111111': { as: true } }, foto: ['f1'] };
+  for (const st of ['bor', 'env']) {
+    // historial con acciones de la oficina (aunque diga «by» de la oficina o el suyo)
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'fir', by: 'tasis@obra.pe', t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'rev', by: me, t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'cor', by: me, t: 1 }] }));
+    // un «Enviado» a nombre de otro, o más de una entrada
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'env', by: 'tasis@obra.pe', t: 1 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: [{ a: 'env', by: me, t: 1 }, { a: 'env', by: me, t: 2 }] }));
+    await assertFails(setDoc(doc(p, id), { ...base, st, hist: 'x' }));
+    // campos de la oficina
+    for (const k of ['cot', 'cotFot', 'revAt', 'revBy', 'reab', 'pub']) await assertFails(setDoc(doc(p, id), { ...base, st, hist: [], [k]: k === 'cotFot' ? ['f1'] : k === 'cot' ? { '11111111': { fir: true } } : 1 }));
+  }
+  // lo normal: borrador sin historial, o enviado directo (sin señal) con su propio «Enviado» y envN
+  await assertSucceeds(setDoc(doc(p, id), { ...base, st: 'bor', hist: [] }));
+  const id2 = `tareo/${limaDay(-1)}_${me}`;
+  await assertSucceeds(setDoc(doc(p, id2), { ...base, date: limaDay(-1), st: 'env', envN: 1, envAt: 1, hist: [{ a: 'env', by: me, t: 1 }] }));
+  // al actualizar, su entrada nueva del historial debe ser suya
+  await tSeed(`tareo/${limaDay(-2)}_${me}`, { ...base, date: limaDay(-2), st: 'reab', hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }] });
+  await assertFails(updateDoc(doc(p, `tareo/${limaDay(-2)}_${me}`), { st: 'env', hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }, { a: 'env', by: 'tasis@obra.pe', t: 2 }] }));
+  await assertSucceeds(updateDoc(doc(p, `tareo/${limaDay(-2)}_${me}`), { st: 'env', envN: 2, hist: [{ a: 'reab', by: 'tasis@obra.pe', t: 1 }, { a: 'env', by: me, t: 2 }] }));
+});
+test('tfot: restaurar un respaldo (misma foto, mismo id) lo puede hacer la oficina; cambiarla no', async () => {
+  const h = limaDay(0), id = `tfot/${h}_u_tcap1_9`, D = { date: h, cap: 'u_tcap1', n: 1, d: 'data:image/jpeg;base64,xx', by: 'u_tcap1', ts: 1 };
+  await tSeed(id, D);
+  await assertSucceeds(setDoc(doc(user(OWNER), id), D));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), id), D));
+  await assertFails(setDoc(doc(user(OWNER), id), { ...D, d: 'otra' }));
+  await assertFails(setDoc(doc(cap('tcap1'), id), D));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), id), D));
+});
+test('tareo F2 (auditoría, hallazgo 9): un reabierto de cualquier fecha lo corrige y reenvía su capataz; la ventana corta sigue para crear y para borradores', async () => {
+  const v = limaDay(-8), id = `tareo/${v}_u_tcap1`, p = cap('tcap1'), me = 'u_tcap1';
+  await tSeed(id, { date: v, cap: me, st: 'reab', rows: {}, hist: [{ t: 1, by: 'tasis@obra.pe', a: 'reab' }], reab: { t: 1, by: 'tasis@obra.pe', mot: 'Foto' } });
+  // lo lista con su consulta (cap + st) y lo corrige
+  await assertSucceeds(getDocs(query(collection(p, 'tareo'), where('cap', '==', me), where('st', '==', 'reab'))));
+  await assertFails(getDocs(query(collection(p, 'tareo'), where('st', '==', 'reab'))));
+  await assertSucceeds(updateDoc(doc(p, id), { rows: { '11111111': { as: true } } }));
+  await assertFails(updateDoc(doc(p, id), { date: limaDay(0) }));
+  await assertFails(updateDoc(doc(p, id), { st: 'bor' }));
+  // foto nueva para ese reabierto
+  await assertSucceeds(setDoc(doc(p, `tfot/${v}_${me}_1`), { date: v, cap: me, n: 1, d: 'x' }));
+  // otro capataz no
+  await assertFails(updateDoc(doc(user('tcapm@obra.pe'), id), { rows: {} }));
+  await assertFails(setDoc(doc(user('tcapm@obra.pe'), `tfot/${v}_tcapm@obra.pe_1`), { date: v, cap: 'tcapm@obra.pe', n: 1, d: 'x' }));
+  // reenvía; ya enviado (fuera de la ventana) no lo cambia ni sube fotos
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 1, by: 'tasis@obra.pe', a: 'reab' }, { t: 2, by: me, a: 'env' }] }));
+  await assertFails(updateDoc(doc(p, id), { rows: {} }));
+  await assertFails(setDoc(doc(p, `tfot/${v}_${me}_2`), { date: v, cap: me, n: 2, d: 'x' }));
+  // borrador viejo: ni lo crea ni lo actualiza
+  const b = limaDay(-7);
+  await assertFails(setDoc(doc(p, `tareo/${b}_${me}`), { date: b, cap: me, st: 'bor' }));
+  await tSeed(`tareo/${b}_${me}`, { date: b, cap: me, st: 'bor' });
+  await assertFails(updateDoc(doc(p, `tareo/${b}_${me}`), { rows: {} }));
+  await assertFails(setDoc(doc(p, `tfot/${b}_${me}_1`), { date: b, cap: me, n: 1, d: 'x' }));
+});
+test('tfot: el capataz sube las fotos de su tareo; nadie las cambia ni borra', async () => {
+  const h = limaDay(0), p = cap('tcap1'), me = 'u_tcap1', id = `tfot/${h}_${me}_1`;
+  await assertSucceeds(setDoc(doc(p, id), { date: h, cap: me, n: 1, d: 'data:image/jpeg;base64,xx', by: me, ts: 1 }));
+  await assertSucceeds(getDoc(doc(p, id)));
+  await assertFails(updateDoc(doc(p, id), { d: 'y' }));
+  await assertFails(deleteDoc(doc(p, id)));
+  await assertFails(setDoc(doc(p, `tfot/${h}_u_otro_1`), { date: h, cap: me, n: 1, d: 'x' }));
+  await assertFails(setDoc(doc(p, `tfot/${h}_${me}_2`), { date: h, cap: 'u_otro', n: 1, d: 'x' }));
+  await assertFails(setDoc(doc(p, `tfot/${h}_${me}_3`), { date: h, cap: me, n: 1, d: 'x'.repeat(1000001) }));
+  await assertFails(setDoc(doc(p, `tfot/${h}_${me}_4`), { date: h, cap: me, n: 1 }));
+  await assertFails(getDoc(doc(user('tcapm@obra.pe'), id)));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), id)));
+  await assertFails(getDoc(doc(user('editor@obra.pe'), id)));
+  for (const db of [user('tasis@obra.pe'), user(OWNER), user('jefe@obra.pe')]) await assertSucceeds(getDoc(doc(db, id)));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), `tfot/${h}_x_1`), { date: h, cap: 'x', n: 1, d: 'x' }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), `tfot/${h}_x_2`), { date: h, cap: 'x', n: 1, d: 'x' }));
+  await assertFails(updateDoc(doc(user(OWNER), id), { d: 'z' }));
+});
+test('invitación del tareo: registra tcap sin partida; no se cruza con la de capataz de SC', async () => {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'inv/tc1'), { active: true, exp: Date.now() + 864e5, role: 'tcap', by: OWNER }));
+  await tSeed('inv/tcold', { active: true, exp: Date.now() - 1000, role: 'tcap' });
+  await assertSucceeds(setDoc(doc(cap('nt1'), 'members/u_nt1'), { role: 'tcap', name: 'Luis', inv: 'tc1', added: 1 }));
+  await assertSucceeds(getDoc(doc(cap('nt1'), 'members/u_nt1')));
+  await assertFails(setDoc(doc(cap('nt2'), 'members/u_nt2'), { role: 'tcap', name: 'Luis', inv: 'tcold', added: 1 }));
+  await assertFails(setDoc(doc(cap('nt3'), 'members/u_nt3'), { role: 'tcap', name: 'Luis', inv: 'tc1', added: 1, scs: ['c-gabel'] }));
+  await assertFails(setDoc(doc(cap('nt4'), 'members/u_nt4'), { role: 'tasis', name: 'Luis', inv: 'tc1', added: 1 }));
+  // la invitación del tareo no sirve para entrar como capataz de un SC (aunque traiga scs) ni al revés
+  await tSeed('inv/tc2', { active: true, exp: Date.now() + 864e5, role: 'tcap', scs: ['c-gabel'] });
+  await assertFails(setDoc(doc(cap('nt5'), 'members/u_nt5'), { role: 'capataz', name: 'Ana', scs: ['c-gabel'], sc: 'c-gabel', inv: 'tc2', added: 1 }));
+  await assertFails(setDoc(doc(cap('nt6'), 'members/u_nt6'), { role: 'tcap', name: 'Ana', inv: 'abc', added: 1 }));
+  await tSeed('inv/cx', { active: true, exp: Date.now() + 864e5, role: 'capataz', scs: ['c-gabel'] });
+  await assertSucceeds(setDoc(doc(cap('nt7'), 'members/u_nt7'), { role: 'capataz', name: 'Ana', scs: ['c-gabel'], sc: 'c-gabel', inv: 'cx', added: 1 }));
+  // el tcap recién registrado puede cambiar solo su nombre
+  await assertSucceeds(updateDoc(doc(cap('nt1'), 'members/u_nt1'), { name: 'Luis P.' }));
+  await assertFails(updateDoc(doc(cap('nt1'), 'members/u_nt1'), { role: 'tasis' }));
+});
+
+// ── Cuentas de capataz del tareo (DNI + contraseña, docs/ia/tareo.md) ──
+test('cuentas de capataz: solo la función crea <dni>@tareo.lps911.pe; la cuenta entra como tcap; desactivada (off) ya no entra al tareo', async () => {
+  const M = '12345678@tareo.lps911.pe';
+  // ni el administrador crea a mano un usuario con el dominio sintético (lo hace la función con el Admin SDK)
+  await assertFails(setDoc(doc(user(OWNER), `members/${M}`), { role: 'tcap', name: 'Juan' }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), `members/${M}`), { role: 'tcap', name: 'Juan' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'members/nuevo@obra.pe'), { role: 'lector', name: 'Nuevo' }));
+  // creada por la función: entra con su correo confirmado y es tcap (escribe su tareo, no lee LPS)
+  await tSeed(`members/${M}`, { role: 'tcap', name: 'Juan Quispe', dni: '12345678', added: 1, by: OWNER });
+  const c = user(M);
+  const h = limaDay(0);
+  await assertSucceeds(getDoc(doc(c, `members/${M}`)));
+  await assertSucceeds(setDoc(doc(c, `tareo/${h}_${M}`), { date: h, cap: M, st: 'bor' }));
+  await assertFails(getDoc(doc(c, 'acts/x1')));
+  // el administrador puede cambiarla o quitarla desde Equipo
+  await assertSucceeds(updateDoc(doc(user(OWNER), `members/${M}`), { name: 'Juan Q.' }));
+  // desactivada: lee su propio registro (para el aviso) pero ya no lee ni escribe el tareo
+  await tSeed(`members/${M}`, { role: 'tcap', name: 'Juan Quispe', dni: '12345678', off: true });
+  await assertSucceeds(getDoc(doc(c, `members/${M}`)));
+  await assertFails(getDoc(doc(c, `tareo/${h}_${M}`)));
+  await assertFails(setDoc(doc(c, `tareo/${h}_${M}`), { date: h, cap: M, st: 'bor' }));
+  // el enlace anónimo pasado a la cuenta (off + movTo) tampoco
+  await tSeed('members/u_tcap1', { role: 'tcap', name: 'Pedro', off: true, movTo: M });
+  await assertFails(getDoc(doc(cap('tcap1'), `tareo/${h}_u_tcap1`)));
+  await assertSucceeds(getDoc(doc(cap('tcap1'), 'members/u_tcap1')));
+});
+
+// ── Tareo F3: publicación (tpub, tpubidx) solo la escribe la función publicarTareo; nadie deja un tareo «pub» desde la app ──
+test('tareo F3: tpub y tpubidx los lee el módulo Tareo (también costos) y nadie los escribe desde la app', async () => {
+  const f = limaDay(-1);
+  await tSeed(`tpub/${f}_v1`, { fecha: f, v: 1, rows: [], tot: { hh: 0 } });
+  await tSeed(`tpubidx/${f}`, { fecha: f, v: 1, vers: [{ v: 1, at: 1, by: OWNER, motivo: '' }], abierto: null });
+  for (const db of [user('tcos@obra.pe'), user('tasis@obra.pe'), user('jefe@obra.pe'), user(OWNER), user('tcapm@obra.pe')]) {
+    await assertSucceeds(getDoc(doc(db, `tpub/${f}_v1`)));
+    await assertSucceeds(getDoc(doc(db, `tpubidx/${f}`)));
+    await assertSucceeds(getDocs(collection(db, 'tpubidx')));
+  }
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('campo@obra.pe'), cap('cap1'), user('extrano@x.pe')]) {
+    await assertFails(getDoc(doc(db, `tpub/${f}_v1`)));
+    await assertFails(getDoc(doc(db, `tpubidx/${f}`)));
+  }
+  for (const db of [user(OWNER), user('jefe@obra.pe'), user('tasis@obra.pe'), user('tcos@obra.pe')]) {
+    await assertFails(setDoc(doc(db, `tpub/${f}_v2`), { fecha: f, v: 2 }));
+    await assertFails(updateDoc(doc(db, `tpub/${f}_v1`), { v: 5 }));
+    await assertFails(deleteDoc(doc(db, `tpub/${f}_v1`)));
+    await assertFails(setDoc(doc(db, `tpubidx/${f}`), { fecha: f, v: 2 }));
+    await assertFails(updateDoc(doc(db, `tpubidx/${f}`), { abierto: { t: 1 } }));
+  }
+  // un editor con tpub desactivado (off) ya no lee
+  await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
+  await assertFails(getDoc(doc(user('jefe@obra.pe'), `tpub/${f}_v1`)));
+});
+test('tareo F3: la oficina no publica (st pub / pubV) ni cambia un tareo publicado; el capataz tampoco', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1'), a = user('tasis@obra.pe'), o = user(OWNER);
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'rev', rows: { '11111111': { as: true } }, hist: [] });
+  // revisado → publicado: solo la función
+  for (const db of [a, o]) {
+    await assertFails(updateDoc(doc(db, id), { st: 'pub' }));
+    await assertFails(updateDoc(doc(db, id), { st: 'pub', pubV: 1 }));
+    await assertFails(updateDoc(doc(db, id), { pubV: 1 }));
+    await assertFails(setDoc(doc(db, `tareo/${h}_x`), { date: h, cap: 'x', st: 'pub' }));
+    await assertFails(setDoc(doc(db, `tareo/${h}_y`), { date: h, cap: 'y', st: 'rev', pubV: 1 }));
+  }
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env' })); // lo demás sigue igual
+  // publicado (lo dejó la función): la oficina no lo toca, ni para reabrir ni para devolverlo a revisado
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'pub', pubV: 1, rows: { '11111111': { as: true } }, hist: [{ t: 1, by: OWNER, a: 'pub', v: 1 }] });
+  for (const db of [a, o]) {
+    await assertFails(updateDoc(doc(db, id), { st: 'rev' }));
+    await assertFails(updateDoc(doc(db, id), { st: 'reab', reab: { t: 1, by: 'x', mot: 'm' } }));
+    await assertFails(updateDoc(doc(db, id), { 'rows.11111111.as': false }));
+    await assertFails(updateDoc(doc(db, id), { hist: arrayUnion({ t: 2, by: 'x', a: 'cor' }) }));
+    await assertFails(deleteDoc(doc(db, id)));
+  }
+  // restaurar el mismo dato (respaldo sobre la misma obra) sí
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data(); });
+  await assertSucceeds(setDoc(doc(o, id), cur));
+  await assertFails(updateDoc(doc(p, id), { st: 'env' }));
+  // rectificado por la función (pub → rev, conserva pubV): la oficina vuelve a corregir, sin tocar pubV
+  await tSeed(id, { date: h, cap: 'u_tcap1', st: 'rev', pubV: 1, rows: { '11111111': { as: true } }, hist: [] });
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'env', 'rows.11111111.as': false }));
+  await assertFails(updateDoc(doc(a, id), { pubV: 2 }));
+  await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 3, by: 'tasis@obra.pe', mot: 'm' } }));
+  // el capataz corrige su reabierto sin tocar pubV ni ponerse 'pub' ni entradas «rect» en el historial
+  await assertFails(updateDoc(doc(p, id), { pubV: 3 }));
+  await assertFails(updateDoc(doc(p, id), { st: 'pub' }));
+  await assertFails(updateDoc(doc(p, id), { hist: [{ t: 4, by: 'u_tcap1', a: 'rect' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { st: 'env', hist: [{ t: 4, by: 'u_tcap1', a: 'env' }] }));
+  // al crear, el capataz no trae pubV
+  const h0 = limaDay(0);
+  await assertFails(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor', pubV: 1 }));
+  await assertSucceeds(setDoc(doc(p, `tareo/${h0}_u_tcap1`), { date: h0, cap: 'u_tcap1', st: 'bor' }));
+});
+// ── Revisión de producción (06-10-2026): el jefe con tpub corrige horas/partidas de un env/rev y marca «prod»; nada más ──
+test('tareo producción: el jefe con tpub corrige horas y partidas de un enviado o revisado sin cambiar estado, cotejo ni revisión', async () => {
+  const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, j = user('jefe@obra.pe'), p = cap('tcap1');
+  const J = 'jefe@obra.pe', R0 = { '11111111': { as: true, h: { p10_05: 8.5 } } }, R1 = { '11111111': { as: true, h: { p10_05: 4.5, p10_10: 4 } } };
+  const H0 = [{ t: 1, by: 'u_tcap1', a: 'env' }];
+  const PH = (t, x) => ({ t, by: J, a: 'prod', ...x });
+  const prod = t => ({ t, by: J, byN: 'Jefe de producción' });
+  const seed = (st, x) => tSeed(id, { date: h, cap: 'u_tcap1', st, modo: 'hrs', pcs: ['p10_05'], rows: R0, cot: { '11111111': { fir: true } }, cotFot: ['f1'], foto: ['f1'], revAt: 3, revBy: 'tasis@obra.pe', hist: H0, ...x });
+  for (const st of ['env', 'rev']) {
+    await seed(st);
+    // mover horas y agregar partida, con historial a:'prod' al final
+    await assertSucceeds(updateDoc(doc(j, id), { rows: R1, pcs: ['p10_05', 'p10_10'], prod: prod(2), hist: [...H0, PH(2, { det: [], tot: false })], by: J, ts: 2 }));
+    // «Conforme sin cambios»: solo prod + historial (arrayUnion también vale)
+    await seed(st);
+    await assertSucceeds(updateDoc(doc(j, id), { prod: prod(3), hist: arrayUnion(PH(3, { cam: 'Conforme sin cambios' })), by: J, ts: 3 }));
+  }
+  await seed('env');
+  // no cambia el estado, ni el cotejo, ni la revisión, ni la publicación
+  await assertFails(updateDoc(doc(j, id), { st: 'rev', prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { cot: {}, prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { cotFot: [], prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { revAt: 9, prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { revBy: J, prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { pubV: 1, prod: prod(4), hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { blq: [], prod: prod(4), hist: [...H0, PH(4)] }));
+  // historial: exactamente una entrada nueva al final, a:'prod' y a su nombre; no reescribe las anteriores
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4) }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, PH(4, { a: 'cor' })] }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, { ...PH(4), by: 'tasis@obra.pe' }] }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [...H0, PH(4), PH(5)] }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [{ ...H0[0], mot: 'x' }, PH(4)] }));
+  // prod a su nombre y obligatorio
+  await assertFails(updateDoc(doc(j, id), { rows: R1, hist: [...H0, PH(4)] }));
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: { t: 4, by: 'otro@obra.pe' }, hist: [...H0, PH(4)] }));
+  // historial vacío al empezar: una sola entrada
+  await seed('env', { hist: [] });
+  await assertSucceeds(updateDoc(doc(j, id), { rows: R1, prod: prod(4), hist: [PH(4)] }));
+  // borrador, reabierto o publicado: no
+  for (const st of ['bor', 'reab', 'pub']) {
+    await seed(st);
+    await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(5), hist: [...H0, PH(5)] }));
+  }
+  // un editor sin tpub, o con tpub desactivado, no
+  await seed('env');
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), id), { rows: R1, prod: { t: 6, by: 'editor@obra.pe' }, hist: [...H0, { t: 6, by: 'editor@obra.pe', a: 'prod' }] }));
+  await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
+  await assertFails(updateDoc(doc(j, id), { rows: R1, prod: prod(6), hist: [...H0, PH(6)] }));
+  // el capataz no se pone «prod» ni entradas de producción (en su reabierto)
+  await seed('reab');
+  await assertFails(updateDoc(doc(p, id), { prod: { t: 7, by: 'u_tcap1' } }));
+  await assertFails(updateDoc(doc(p, id), { hist: [...H0, { t: 7, by: 'u_tcap1', a: 'prod' }] }));
+  await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 7, by: 'u_tcap1', a: 'env' }], st: 'env' }));
+  // el administrador sigue pudiendo todo (como oficina)
+  await seed('env');
+  await assertSucceeds(updateDoc(doc(user(OWNER), id), { rows: R1, prod: { t: 8, by: OWNER }, hist: arrayUnion({ t: 8, by: OWNER, a: 'prod' }) }));
 });

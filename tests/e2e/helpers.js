@@ -3,6 +3,8 @@ import { expect } from '@playwright/test';
 import path from 'node:path';
 
 const FAKE = path.join(path.dirname(new URL(import.meta.url).pathname), 'fake-firebase.js');
+/* lógica real de la función publicarTareo (functions/tpub.js): el Firebase falso la usa para simularla (window.TPUB) */
+export const TPUB_JS = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'functions', 'tpub.js');
 export const HOY = '2026-10-01', MANANA = '2026-10-02';
 
 export const USERS = {
@@ -16,6 +18,10 @@ export const USERS = {
   veedor: { uid: 'u-ve', email: 'veedor@obra.pe', emailVerified: true },
   planner: { uid: 'u-pl', email: 'planner@obra.pe', emailVerified: true },
   capataz: { uid: 'cap1', email: null, isAnonymous: true, emailVerified: false },
+  tcap: { uid: 'u-tcap', email: 'tcap@obra.pe', emailVerified: true },
+  tasis: { uid: 'u-tasis', email: 'tasis@obra.pe', emailVerified: true },
+  tcos: { uid: 'u-tcos', email: 'tcos@obra.pe', emailVerified: true },
+  jefe: { uid: 'u-jefe', email: 'jefe@obra.pe', emailVerified: true },
 };
 
 /** Abre la app con el Firebase falso. `as`: clave de USERS; `theme`: 'dark' | 'light' (esquema de color del equipo). */
@@ -40,6 +46,7 @@ export async function openApp(page, { as = 'admin', theme, va, tab, extra, edita
       if (tab && !sessionStorage.getItem('e2e.tab')) { const k = 'lps911.ui'; const u = JSON.parse(localStorage.getItem(k) || '{}'); u.tab = tab; localStorage.setItem(k, JSON.stringify(u)); sessionStorage.setItem('e2e.tab', '1'); }
     } catch (e) {}
   }, { user: USERS[as], va, tab, extra, HOY, MANANA });
+  await page.addInitScript({ path: TPUB_JS });
   await page.addInitScript({ path: FAKE });
   await page.goto(tab ? '/#' + tab : '/');
   await expect(page.locator('#loading')).toHaveCount(0, { timeout: 15_000 });

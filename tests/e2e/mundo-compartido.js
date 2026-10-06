@@ -29,7 +29,8 @@ rep('function colRef(n, filters = [], lim = 0) {', `
 rep("add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); col(n).set(id, resolve(d)); changed(n); return docRef(n, id); }",
     "add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); await docRef(n, id).set(d); return docRef(n, id); }");
 rep('runTransaction: async fn => fn({', 'runTransaction: async fn => txLock(fn, {');
-fs.writeFileSync(path.join(DIR, 'fake-compartido.generado.js'), src);
+/* con la lógica de publicarTareo (functions/tpub.js) delante, como en helpers.js */
+fs.writeFileSync(path.join(DIR, 'fake-compartido.generado.js'), fs.readFileSync(path.join(DIR, '..', '..', 'functions', 'tpub.js'), 'utf8') + '\n' + src);
 const FAKE = path.join(DIR, 'fake-compartido.generado.js');
 
 export class Hub {

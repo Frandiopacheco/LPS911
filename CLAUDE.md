@@ -78,6 +78,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/restricciones.md` | Pantalla de Restricciones. |
 | `docs/ia/cliente-excel.md` | Versión cliente y exportes a Excel con el formato de la empresa. |
 | `docs/ia/seguridad.md` | Reglas de `live`, `fotos`, `dplan` (auditoría 02e575c). |
+| `docs/ia/tareo.md` | Módulo Tareo (personal obrero): selector de módulo, roles `tcap`/`tasis`/`tcos`, máster, partidas de control, jornada. |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |
 
 Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que cambie algo general.
