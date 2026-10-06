@@ -695,7 +695,8 @@ test('tareo F2: el asistente revisa; el capataz no pasa a revisado, no edita un 
   await assertSucceeds(updateDoc(doc(a, id), { st: 'reab', reab: { t: 6, by: 'tasis@obra.pe', mot: 'm' }, hist: arrayUnion({ t: 6, by: 'tasis@obra.pe', a: 'reab' }) }));
   await assertFails(deleteDoc(doc(a, id)));
   // reabierto: el capataz solo agrega al final del historial (no borra ni cambia lo de la oficina)
-  const cur = (await env.withSecurityRulesDisabled(async c => (await getDoc(doc(c.firestore(), id))).data())).hist;
+  let cur = null;
+  await env.withSecurityRulesDisabled(async c => { cur = (await getDoc(doc(c.firestore(), id))).data().hist; });
   await assertFails(updateDoc(doc(p, id), { hist: [] }));
   await assertFails(updateDoc(doc(p, id), { hist: [...cur.slice(0, -1), { ...cur[cur.length - 1], mot: 'otro' }] }));
   await assertFails(updateDoc(doc(p, id), { hist: [...cur, { t: 7, a: 'env' }, { t: 8, a: 'rev' }] }));
