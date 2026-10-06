@@ -306,6 +306,7 @@ async function capJoin(fdb,u){const ref=fcol('members').doc('u_'+u.uid);let m=nu
   let name='';try{name=joinName||localStorage.getItem('lps.jname')||''}catch(e){name=joinName}name=(name||'Capataz').slice(0,60);
   try{await ref.set(tcap?{role:'tcap',name,inv:invCode,added:NOW()}:{role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
   clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+(tcap?'! Ya puedes llenar el tareo de tu cuadrilla.':'! Ya puedes reportar el avance de tu partida.')),1500);return true}
+const memOffMsg=d=>d&&d.movTo?'Tu usuario de este celular se pasó a una cuenta con DNI y contraseña: entra con tu DNI y la contraseña que te dio la oficina.':'Tu cuenta está desactivada. Habla con la oficina.';
 async function startSession(u,fdb){
   stopSession();
   const anon=!!u.isAnonymous;
@@ -316,7 +317,9 @@ async function startSession(u,fdb){
   const ref=fcol('members').doc(me.email);let m=null;
   try{m=await ref.get({source:'server'})}catch(e){try{m=await ref.get()}catch(e2){m=null}}
   if((!m||!m.exists)&&isOwnerEmail(me.email)){try{await ref.set({role:'admin',name:me.email.split('@')[0],added:NOW()});m=await ref.get()}catch(e){}}
-  if(!m||!m.exists){const em=me.email;me=null;pendingMsg=`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
+  if(!m||!m.exists){const em=me.email;me=null;pendingMsg=tCtaEs(em)?`Tu usuario ${em.split('@')[0]} ya no tiene acceso. Habla con la oficina.`:`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
+  /* cuenta desactivada (members.off) o enlace de capataz pasado a una cuenta con DNI (movTo): docs/ia/tareo.md */
+  if(m.data().off===true&&!isOwnerEmail(me.email)){const d=m.data();me=null;pendingMsg=memOffMsg(d);if(d.movTo)lcapSet(true);await auth.signOut();return}
   me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
   /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
   if(TAR_ONLY())U.mod='tar';else if(U.mod!=='tar'||!canTar())U.mod='lps';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
@@ -339,6 +342,7 @@ async function startSession(u,fdb){
     /* si cambia lo que hay que cargar (solo tareo, ve el Tareo, lista del equipo), se vuelve a abrir con las suscripciones correctas */
     if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
+    if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
     renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()},()=>{}));
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
   if(rtdb&&!TAR_ONLY()){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
@@ -446,13 +450,26 @@ let invCode=(()=>{try{const sp=new URLSearchParams(location.search),q=sp.get('in
 const invTar=()=>{try{return!!invCode&&localStorage.getItem('lps.invm')==='tar'}catch(e){return false}};
 let joinName='';
 function clearInv(){invCode='';try{localStorage.removeItem('lps.inv');localStorage.removeItem('lps.invm')}catch(e){}}
-function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;$('#lform').hidden=jn;$('#ljoin').hidden=!jn;if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;const t=invTar(),h=$('#ljoin .lhint'),b=$('#ljoin .lbrand');
+/* «Soy capataz» (cuenta DNI + contraseña del tareo, docs/ia/tareo.md): se recuerda en el equipo para volver a esa pantalla */
+const lcapOn=()=>{try{return localStorage.getItem('lps.lcap')==='1'}catch(e){return false}};
+function lcapSet(v){try{if(v)localStorage.setItem('lps.lcap','1');else localStorage.removeItem('lps.lcap')}catch(e){}}
+function showLogin(msg,verify){$('#login').hidden=false;const jn=!!invCode&&!verify;const cp=!jn&&!verify&&lcapOn();$('#lform').hidden=jn||cp;$('#ljoin').hidden=!jn;$('#lcap').hidden=!cp;
+  if(cp){$('#cmsg').textContent=msg||'';$('#csubmit').disabled=false;return}if(jn){$('#jmsg').textContent=msg||'';$('#jsubmit').disabled=false;const t=invTar(),h=$('#ljoin .lhint'),b=$('#ljoin .lbrand');
     if(h){h.dataset.def=h.dataset.def||h.textContent;h.textContent=t?'Te invitaron a llenar el tareo diario de tu cuadrilla desde este celular. Solo escribe tu nombre.':h.dataset.def}if(b){b.dataset.def=b.dataset.def||b.textContent;b.textContent=t?'Tareo de personal obrero':b.dataset.def}return}$('#lmsg').textContent=msg||'';$('#lverify').hidden=!verify;$('#lresend').hidden=!verify;setLMode(lmode)}
 function hideLogin(){$('#login').hidden=true}
 function setLMode(m){lmode=m;$('#ltitle').textContent=m==='up'?'Crear mi cuenta':'Ingresar';$('#lsubmit').textContent=m==='up'?'Crear cuenta':'Ingresar';$('#lmode').textContent=m==='up'?'Ya tengo cuenta: ingresar':'¿Primera vez? Crear mi cuenta';$('#lpass').autocomplete=m==='up'?'new-password':'current-password';$('#lhint').hidden=m!=='up'}
 function authMsg(e){const c=e&&e.code||'';return({'auth/invalid-email':'El correo no es válido.','auth/missing-email':'Escribe tu correo.','auth/missing-password':'Escribe tu contraseña.','auth/user-not-found':'No existe una cuenta con ese correo. Usa “¿Primera vez? Crear mi cuenta”.','auth/wrong-password':'Contraseña incorrecta.','auth/invalid-credential':'Correo o contraseña incorrectos.','auth/invalid-login-credentials':'Correo o contraseña incorrectos.','auth/email-already-in-use':'Ese correo ya tiene cuenta. Usa “Ingresar”.','auth/weak-password':'La contraseña debe tener al menos 6 caracteres.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos y vuelve a intentar.','auth/network-request-failed':'Sin conexión a internet.','auth/operation-not-allowed':'El ingreso con correo no está activado en Firebase (paso 3 de la guía).','auth/unauthorized-domain':'Este dominio no está autorizado en Firebase (paso 7 de la guía).'})[c]||('No se pudo completar ('+(c||'error')+').')}
 function setupLogin(){
-  $('#jcancel').onclick=()=>{clearInv();showLogin('')};
+  $('#jcancel').onclick=()=>{clearInv();lcapSet(false);showLogin('')};
+  $('#jcap').onclick=()=>{clearInv();lcapSet(true);showLogin('')};
+  $('#lcapgo').onclick=()=>{lcapSet(true);showLogin('');setTimeout(()=>$('#cdni').focus(),30)};
+  $('#cback').onclick=()=>{lcapSet(false);showLogin('')};
+  $('#lcap').onsubmit=async ev=>{ev.preventDefault();const d=tCtaDni($('#cdni').value),p=$('#cpass').value;
+    if(!d){$('#cmsg').textContent='Escribe tu DNI (8 dígitos).';return}if(!p){$('#cmsg').textContent='Escribe tu contraseña.';return}
+    $('#csubmit').disabled=true;$('#cmsg').textContent='Entrando…';
+    try{await auth.signInWithEmailAndPassword(tCtaMail(d),p);lcapSet(true)}
+    catch(err){const c=err&&err.code||'';$('#cmsg').textContent=['auth/invalid-credential','auth/invalid-login-credentials','auth/wrong-password','auth/user-not-found','auth/invalid-email'].includes(c)?'DNI o contraseña incorrectos. Pide a la oficina que te la cambie.':c==='auth/user-disabled'?'Tu cuenta está desactivada. Habla con la oficina.':authMsg(err)}
+    finally{$('#csubmit').disabled=false}};
   $('#ljoin').onsubmit=async ev=>{ev.preventDefault();const n=$('#jname').value.trim();if(n.length<3){$('#jmsg').textContent='Escribe tu nombre y apellido.';return}
     joinName=n;try{localStorage.setItem('lps.jname',n)}catch(e){}$('#jsubmit').disabled=true;$('#jmsg').textContent='Entrando…';
     try{await auth.signInAnonymously()}catch(err){$('#jsubmit').disabled=false;$('#jmsg').textContent=err&&err.code==='auth/operation-not-allowed'?'El administrador debe activar el ingreso “Anónimo” en Firebase (Authentication → Sign-in method).':authMsg(err)}};

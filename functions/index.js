@@ -6,12 +6,14 @@
 //   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
 // - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
 //   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
+// - cuentaCapataz (la llama la página): crea y administra las cuentas DNI + contraseña de los capataces del tareo.
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, ctaPedido, ctaPuede, ctaNombre, ctaMigrables } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -122,4 +124,66 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   }
   await cref.set({ at: new Date(now).toISOString(), d, hh: planCutHH(project), k, np, nr });
   logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)`);
+});
+
+/* Cuentas de capataz del tareo (docs/ia/tareo.md, «Cuentas de capataz»): usuario = DNI, contraseña; por debajo, correo sintético
+   <dni>@tareo.lps911.pe con el correo ya confirmado. Solo el administrador (o el dueño) y el asistente de tareo.
+   Acciones: crear (también reactiva una desactivada y cambia su contraseña), clave, desactivar, migrar (pasa los obreros
+   de un capataz con enlace u_… a la cuenta). Nunca borra nada: desactivar = Auth disabled + members.off. */
+exports.cuentaCapataz = onCall({ timeoutSeconds: 60 }, async req => {
+  const tk = (req.auth && req.auth.token) || {};
+  const email = String(tk.email || '').toLowerCase();
+  const caller = email ? await db().collection('members').doc(email).get() : null;
+  if (!ctaPuede(email, tk.email_verified === true, caller && caller.exists ? caller.data() : null)) throw new HttpsError('permission-denied', 'Solo el administrador o el asistente de tareo pueden crear cuentas de capataz.');
+  const P = ctaPedido(req.data);
+  if (P.error) throw new HttpsError('invalid-argument', P.error);
+  const { accion, dni, mail } = P;
+  const fref = db().collection('tper').doc(dni), mref = db().collection('members').doc(mail);
+  const [fs, ms] = await Promise.all([fref.get(), mref.get()]);
+  if (!fs.exists) throw new HttpsError('not-found', `No hay una ficha con el DNI ${dni} en el máster de personal.`);
+  const ficha = fs.data();
+  let au = null;
+  try { au = await admin.auth().getUserByEmail(mail); } catch (e) { if (e.code !== 'auth/user-not-found') throw new HttpsError('internal', 'No se pudo leer la cuenta: ' + (e.message || e.code)); }
+  const FV = admin.firestore.FieldValue;
+  const now = Date.now();
+  const res = { mail, dni, n: 0 };
+  /* los obreros del capataz con enlace pasan a la cuenta; el enlace viejo queda desactivado (sus tareos antiguos no cambian) */
+  const migrar = async de => {
+    const ds = await db().collection('members').doc(de).get();
+    if (!ds.exists || ds.data().role !== 'tcap') throw new HttpsError('failed-precondition', 'El capataz anterior no existe o no es capataz del tareo.');
+    const q = await db().collection('tper').where('cap', '==', de).get();
+    const ids = ctaMigrables(q.docs.map(d => ({ ...d.data(), id: d.id })), de);
+    for (let i = 0; i < ids.length; i += 400) {
+      const b = db().batch();
+      ids.slice(i, i + 400).forEach(id => b.update(db().collection('tper').doc(id), { cap: mail, by: email, ts: now }));
+      await b.commit();
+    }
+    await db().collection('members').doc(de).update({ off: true, offAt: now, offBy: email, movTo: mail });
+    res.n = ids.length; res.de = de;
+  };
+  if (accion === 'crear') {
+    if (ficha.arch) throw new HttpsError('failed-precondition', 'La ficha está archivada: restáurala antes de crearle una cuenta.');
+    const m0 = ms.exists ? ms.data() : null;
+    if (m0 && m0.role && m0.role !== 'tcap') throw new HttpsError('failed-precondition', `Ese usuario ya existe con otro rol (${m0.role}).`);
+    const name = ctaNombre(ficha);
+    try {
+      if (au) await admin.auth().updateUser(au.uid, { password: P.clave, disabled: false, emailVerified: true, displayName: name });
+      else au = await admin.auth().createUser({ email: mail, password: P.clave, emailVerified: true, displayName: name });
+    } catch (e) { throw new HttpsError('internal', 'No se pudo crear la cuenta en Firebase: ' + (e.message || e.code)); }
+    await mref.set({ role: 'tcap', name: (m0 && m0.name) || name, dni, added: (m0 && m0.added) || now, by: email, off: FV.delete(), offAt: FV.delete(), offBy: FV.delete() }, { merge: true });
+    await fref.update({ cta: mail });
+    if (P.de) await migrar(P.de);
+    res.re = !!m0;
+  } else if (accion === 'clave') {
+    if (!au) throw new HttpsError('not-found', 'Ese capataz todavía no tiene cuenta.');
+    await admin.auth().updateUser(au.uid, { password: P.clave });
+  } else if (accion === 'desactivar') {
+    if (au) { await admin.auth().updateUser(au.uid, { disabled: true }); await admin.auth().revokeRefreshTokens(au.uid); }
+    if (ms.exists) await mref.update({ off: true, offAt: now, offBy: email });
+  } else if (accion === 'migrar') {
+    if (!ms.exists || ms.data().off) throw new HttpsError('failed-precondition', 'Primero crea (o reactiva) la cuenta del capataz.');
+    await migrar(P.de);
+  }
+  logger.info(`cuentaCapataz ${accion} ${mail} por ${email}${res.n ? ` · ${res.n} obrero(s) de ${res.de}` : ''}`);
+  return res;
 });
