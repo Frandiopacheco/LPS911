@@ -81,10 +81,11 @@
     const PC = new Map(vals(partidas).filter(Boolean).map(p => [p.id, p]));
     const per = vals(personal).filter(Boolean);
     const pcMal = new Set(); const porDni = new Map();
-    const R = { fecha, tareos: [], porEstado: {}, obreros: 0, pres: 0, aus: 0, sm: 0, porMot: {}, sinTareo: 0, exc: 0, hh: 0, he: 0, alt: 0, porPc: {} };
+    const R = { fecha, tareos: [], porEstado: {}, obreros: 0, pres: 0, aus: 0, sm: 0, porMot: {}, sinTareo: 0, exc: 0, hh: 0, he: 0, alt: 0, porPc: {}, prod: 0 };
     for (const t of T) {
       const st = t.st || 'bor'; const cap = capDe(t); const cfg = cfgOk(t.cfg) ? t.cfg : cfgAct; const vig = tpCotVig(t); const hrs = t.modo === 'hrs';
-      const tr = { id: t.id || '', cap: t.cap || '', capN: t.capN || '', st, n: 0, pres: 0, aus: 0, sm: 0, hh: 0, he: 0, bloq: 0 }; const nb = B.length;
+      const tr = { id: t.id || '', cap: t.cap || '', capN: t.capN || '', st, n: 0, pres: 0, aus: 0, sm: 0, hh: 0, he: 0, bloq: 0, prod: !!(t.prod && typeof t.prod === 'object' && t.prod.t) }; const nb = B.length;
+      if (tr.prod) R.prod++; /* revisado por el jefe de producción (informativo, no bloquea) */
       R.porEstado[st] = (R.porEstado[st] || 0) + 1;
       if (!(st === 'rev' || (rect && st === 'pub'))) B.push({ k: 'estado', tareo: tr.id, msg: `El tareo de ${cap} está ${ST[st] || st}: debe estar revisado para publicar.` });
       if (!cfgOk(t.cfg)) B.push({ k: 'cfg', tareo: tr.id, msg: `El tareo de ${cap} no tiene guardada la jornada del día: quítale el revisado y vuelve a marcarlo revisado.` });

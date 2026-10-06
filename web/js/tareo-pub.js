@@ -103,6 +103,12 @@ function renderTPub(main){if(!tpPubOk()){main.innerHTML=`<div class="scroll"><di
       <div class="lqtile" style="--c:var(--warn)"><span>Horas extra</span><b>${toH(R.he)}</b></div>
       <div class="lqtile"><span>En altura</span><b>${tpNum(R.alt)}</b></div></div>
      ${peH?`<div class="tp-est" id="tpbEst"><span class="note">Tareos:</span> ${peH}</div>`:''}`;
+    /* revisión de producción (informativa, no bloquea): cuántos tareos la tienen y acceso a revisarlos */
+    const TT=Array.isArray(R.tareos)?R.tareos.filter(x=>x&&x.id):[];
+    if(TT.length){const np=R.prod!=null?tpNum(R.prod):TT.filter(x=>x.prod).length;const L=[...TT].sort((a,b)=>(!!a.prod)-(!!b.prod)||String(a.capN||a.cap||'').localeCompare(String(b.capN||b.cap||'')));
+      body+=`<details class="card tp-prod" id="tpbProd"${np<TT.length?' open':''}><summary><b id="tpbProdN">${np} de ${TT.length} ${TT.length===1?'tareo revisado':'tareos revisados'} por producción</b> <span class="note">Informativo: no impide publicar.</span></summary>
+        <ul class="tp-pl">${L.map(x=>{const[l,c]=TO_ST[x.st]||[x.st,''];const ok=['env','rev'].includes(x.st);
+          return`<li data-tpbp="${esc(x.id)}"><b>${esc(x.capN||tCapName(x.cap)||x.cap||x.id)}</b> <span class="to-st ${c}">${esc(l)}</span> ${x.prod?'<span class="tr-prodc">Producción ✓</span>':'<span class="note">Sin revisión de producción</span>'} <span class="note">${tpNum(x.pres)} vinieron · ${toH(x.hh)} HH</span>${ok?` <button class="t-lnk" data-tpbr="${esc(x.id)}">${x.prod?'Ver / revisar otra vez':'Revisar horas'}</button>`:''}</li>`}).join('')}</ul></details>`}
     /* bloqueos agrupados */
     if(st.Bot.length){const G=new Map();for(const b of st.Bot){const k=b&&b.k||'otro';if(!G.has(k))G.set(k,[]);G.get(k).push(b)}
       body+=`<div class="card tp-blq" id="tpbBlq"><div class="tp-bh"><b>${st.Bot.length===1?'1 bloqueo':st.Bot.length+' bloqueos'}</b><span class="note">No se puede publicar hasta resolverlos. Corrígelos en la revisión del tareo y vuelve a consultar el estado.</span></div>
@@ -139,7 +145,8 @@ function renderTPub(main){if(!tpPubOk()){main.innerHTML=`<div class="scroll"><di
   $('#tpbVer').onclick=()=>tpbPrevia();
   const pb=$('#tpbPub');if(pb)pb.onclick=()=>tpbPublicar();
   const rb=$('#tpbRect');if(rb)rb.onclick=()=>tpbRectificar();
-  const bl=$('#tpbBlq');if(bl)bl.onclick=e=>{const b=e.target.closest('[data-tpbt]');if(b)tpbAbrir(b.dataset.tpbt)};
+  const bl=$('#tpbBlq');if(bl)bl.onclick=e=>{const b=e.target.closest('[data-tpbt]');if(b)tpbAbrir(b.dataset.tpbt,'ofi')};
+  const pp=$('#tpbProd');if(pp)pp.onclick=e=>{const b=e.target.closest('[data-tpbr]');if(b)tpbAbrir(b.dataset.tpbr,'prod')};
   const hs=$('#tpbHist');if(hs)hs.onclick=e=>{const b=e.target.closest('[data-tpbc]');if(b){TPK.det=b.dataset.tpbc;TPK.mes=f.slice(0,7);goTab('tcos')}};
   const sn=$('#tpbSin');if(sn){
     sn.onchange=e=>{const c=e.target.closest('[data-tpbx]');if(!c)return;const d=c.dataset.tpbx;TPB.exc[d]={...(TPB.exc[d]||{}),on:c.checked};requestRender()};
@@ -149,9 +156,10 @@ function renderTPub(main){if(!tpPubOk()){main.innerHTML=`<div class="scroll"><di
       TPB.exc[d]={on:true,m:c==='Otro'?'':c};requestRender();if(c==='Otro')setTimeout(()=>{const i=document.querySelector(`[data-tpbi="${CSS.escape(d)}"]`);if(i)i.focus()},0)}}}
 
 /* abre el tareo del bloqueo en la revisión (tareo-rev.js): misma fecha en «Tareos del día» */
-function tpbAbrir(id){const f=TPB.f;if(typeof TD==='undefined'){goTab('tdia');return}
-  if(TD.f===f&&TD.d===f&&TD.ok&&TD.docs.has(id)){goTab('tdia');if(typeof toDetalle==='function')toDetalle(id);return}
-  TD.f=f;if(typeof TR!=='undefined')TR.want=id;goTab('tdia')}
+/* mode 'prod': abre la revisión de producción (el admin, que puede ambas; el jefe con tpub siempre entra en producción) */
+function tpbAbrir(id,mode){const f=TPB.f;if(typeof TD==='undefined'){goTab('tdia');return}
+  if(TD.f===f&&TD.d===f&&TD.ok&&TD.docs.has(id)){goTab('tdia');if(typeof toDetalle==='function')toDetalle(id,false,mode||'');return}
+  TD.f=f;if(typeof TR!=='undefined'){TR.want=id;TR.want2=mode||''}goTab('tdia')}
 async function tpbPrevia(){const f=TPB.f;if(TPB.busy)return;TPB.busy='prev';TPB.err='';requestRender();
   try{const d=await tpCall({accion:'previa',fecha:f});if(TPB.f!==f)return;TPB.prev=d||{};TPB.pf=f;TPB.at=NOW();
     /* las excepciones marcadas siguen si el obrero sigue sin tareo */

@@ -1,5 +1,5 @@
 // Tareo del capataz en el celular, «horas por cantidad» (docs/ia/tareo.md «Contrato "horas por cantidad"» e «Implementación de
-// la grilla — capataz»): asistencia (motivo y salida plegables), trabajos del día, grilla de horas (obreros en columnas), foto y envío.
+// la grilla — capataz»): asistencia (motivo y salida plegables), trabajos del día, grilla de horas (obreros en filas, partidas en columnas, como el formato), foto y envío.
 // También: compatibilidad con los tareos antiguos por horarios (blq) y las correcciones de las auditorías F2.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
@@ -95,15 +95,17 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect.poll(async () => (await dbDoc(page)).pcs).toEqual(['p20_01', 'p10_05']);
   await shot(page, '2-trabajos');
 
-  // paso 3: grilla con los que vinieron en columnas y las partidas en filas
+  // paso 3: grilla como el formato: los que vinieron en filas y las partidas en columnas (en el orden de los trabajos)
   await root.locator('.tc-foot [data-tcs="3"]').click();
   await expect(root.locator('#tcGrid')).toBeVisible();
   await expect(root.locator('.tc-gn')).toHaveCount(3);
   await expect(root.locator('.tc-gn[data-dni="40000004"]')).toHaveCount(0);
-  await expect(root.locator('.tc-g tbody tr')).toHaveCount(2);
+  await expect(root.locator('.tc-g tbody tr')).toHaveCount(3);
+  expect(await root.locator('.tc-g thead .tc-gp').evaluateAll(t => t.map(x => x.dataset.pc))).toEqual(['p20_01', 'p10_05']);
   await expect(root.locator('#tcJorH')).toHaveText('Jornada del día: 8,5 h');
-  // «Toda la jornada» en encofrado: a cada uno lo que le falta → todos en verde
-  await root.locator('tr[data-pc="p10_05"] [data-tca="rowAll"]').click();
+  // «Toda la jornada» en el encabezado de encofrado: a cada uno lo que le falta → todos en verde; total de la partida abajo
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await expect(root.locator('.tc-gs[data-pc="p10_05"]')).toHaveText('25,5');
   await expect(cell(root, '40000001', 'p10_05')).toHaveText('8,5');
   await expect(root.locator('.tc-gt.ok')).toHaveCount(3);
   // Beto hizo 2 h más en tarrajeo: total ámbar con «+2 HE»
@@ -132,19 +134,9 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect(root.locator('#tcCv')).toHaveText('8,5 h');
   await shot(page, '3-celda');
   await root.locator('#tcCell [data-tca="cellX"]').last().click();
-  // columna de partidas y fila de nombres fijas al desplazar la grilla
-  const g = root.locator('#tcGrid');
-  await g.evaluate(el => { el.scrollLeft = 400; el.scrollTop = 400; });
-  const gb = await g.boundingBox(), pb = await root.locator('tr[data-pc="p10_05"] .tc-gp').boundingBox(), nb = await root.locator('.tc-gn').first().boundingBox();
-  expect(Math.abs(pb.x - gb.x)).toBeLessThan(3);
-  expect(Math.abs(nb.y - gb.y)).toBeLessThan(3);
-  await g.evaluate(el => { el.scrollLeft = 0; el.scrollTop = 0; });
   await shot(page, '4-grilla-vertical');
-  // en vertical, el aviso «Gira el celular» (descartable y recordado)
-  await expect(root.locator('#tcRot')).toBeVisible();
-  await root.locator('[data-tca="rotX"]').click();
+  // con 2 partidas caben todas: no se pide girar el celular
   await expect(root.locator('#tcRot')).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem('lps.tcrot'))).toBe('1');
 
   // paso 4: foto y envío
   await root.locator('.tc-foot [data-tcs="4"]').click();
@@ -202,7 +194,7 @@ test('capataz (844×390, echado): la grilla ocupa toda la pantalla, nombres y pa
   await expect(root.locator('.tc-foot')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
   // llenar: «Toda la jornada» en encofrado y 2 h de tarrajeo a Hugo
-  await root.locator('tr[data-pc="p10_05"] [data-tca="rowAll"]').click();
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
   await expect(root.locator('.tc-gt.ok')).toHaveCount(10);
   await shot(page, '6-grilla-echado');
   await cell(root, '40000108', 'p20_01').click();
@@ -213,20 +205,103 @@ test('capataz (844×390, echado): la grilla ocupa toda la pantalla, nombres y pa
   await shot(page, '7-celda-echado');
   await root.locator('#tcCell [data-tca="cellSet"][data-v="2"]').click();
   await expect(total(root, '40000108')).toContainText('+2 HE');
-  // al desplazar a la derecha la columna de partidas sigue a la vista
-  await root.locator('#tcGrid').evaluate(el => { el.scrollLeft = el.scrollWidth; });
-  const pb = await root.locator('tr[data-pc="p20_01"] .tc-gp').boundingBox();
-  expect(Math.abs(pb.x - gb.x)).toBeLessThan(3);
+  // al desplazar hacia abajo los nombres y la fila de partidas siguen a la vista
+  await root.locator('#tcGrid').evaluate(el => { el.scrollTop = el.scrollHeight; });
+  const nb = await root.locator('.tc-gn[data-dni="40000110"]').boundingBox(), hb = await root.locator('th.tc-gp[data-pc="p20_01"]').boundingBox();
+  expect(Math.abs(nb.x - gb.x)).toBeLessThan(3);
+  expect(Math.abs(hb.y - gb.y)).toBeLessThan(3);
   await expect.poll(async () => (await dbDoc(page)).rows['40000108'].h).toEqual({ p10_05: 8.5, p20_01: 2 });
-  // al volver a vertical reaparecen la barra y el encabezado, y el aviso de girar
+  // al volver a vertical reaparecen la barra y el encabezado
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(root.locator('.tc-head')).toBeVisible();
-  await expect(root.locator('#tcRot')).toBeVisible();
   // fuera de la grilla (paso 4), echado no oculta nada
   await root.locator('.tc-foot [data-tcs="4"]').click();
   await page.setViewportSize({ width: 844, height: 390 });
   await expect(root.locator('.tc-head')).toBeVisible();
   noErrors(errors, 'grilla echada');
+});
+
+/* «Grilla como el formato — capataz» (pedido del dueño, 06-10-2026): 12 obreros × 6 partidas */
+const PCS6 = [...PCS.filter(x => x[1] !== 'p30_01'),
+  ['tpc', 'p10_07', { cod: '10.07', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Acero de refuerzo', und: 'kg', act: true, ord: 5 }],
+  ['tpc', 'p20_02', { cod: '20.02', grp: '20', grpN: 'ARQUITECTURA', nom: 'Asentado de ladrillo', und: 'm2', act: true, ord: 6 }],
+  ['tpc', 'p40_01', { cod: '40.01', grp: '40', grpN: 'VARIOS', nom: 'Limpieza de obra', und: 'glb', act: true, ord: 7 }]];
+const N12 = [['ALVA ROJAS', 'ANA'], ['BRAVO DIAZ', 'BETO'], ['CASTRO PAZ', 'CARLOS'], ['DAVILA SOTO', 'DANIEL'], ['ESPINOZA TORRES', 'EDU'], ['FLORES RAMOS', 'FRANCO'],
+  ['GARCIA LOPEZ', 'GABO'], ['HUAMAN ORTIZ', 'HUGO'], ['INCA PEREZ', 'IVAN'], ['JARA CARRASCO', 'JORGE'], ['QUISPE HUAMANI', 'JUAN'], ['QUISPE MAMANI', 'JUAN']];
+const P6 = ['p10_05', 'p10_06', 'p10_07', 'p20_01', 'p20_02', 'p40_01'];
+/** partidas enteras a la vista entre la columna de nombres y la de totales */
+const visCols = root => root.locator('#tcGrid, #tcGridR').first().evaluate(g => {
+  const l = g.querySelector('thead .tc-gc').getBoundingClientRect().right, r = g.querySelector('thead .tc-gtc').getBoundingClientRect().left;
+  return [...g.querySelectorAll('thead .tc-gp')].filter(t => { const b = t.getBoundingClientRect(); return b.left >= l - 1 && b.right <= r + 1; }).length; });
+
+test('grilla como el formato (12 obreros × 6 partidas): obreros en filas, partidas en columnas; revisar en la misma grilla y tocar una celda lleva a editarla', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const crew = N12.map(([a, n], i) => ob(String(40000201 + i), a, n, CAP));
+  const rows = Object.fromEntries(N12.map(([a, n], i) => { const d = String(40000201 + i);
+    if (i === 11) return [d, fullRow(a, n, { p10_05: 4 }, { as: false, mot: 'DM' })];
+    const h = { [P6[i % 6]]: 4.5, [P6[(i + 2) % 6]]: i === 3 ? 6 : 4 };
+    return [d, fullRow(a, n, h, { alt: i === 1 })]; }));
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew, ...PCS6, ['tareo', ID, { date: HOY, cap: CAP, st: 'bor', modo: 'hrs', pcs: P6, foto: [], hist: [], rows }]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; });
+  const root = page.locator('#tcRoot');
+  // paso 3 en vertical: 11 filas (los que vinieron), 6 columnas, al menos 3 partidas enteras a la vista
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await expect(root.locator('.tc-g tbody tr')).toHaveCount(11);
+  await expect(root.locator('.tc-g thead .tc-gp')).toHaveCount(6);
+  await expect(root.locator('.tc-gn').first()).toContainText('1');
+  expect(await visCols(root)).toBeGreaterThanOrEqual(3);
+  await expect(total(root, '40000204')).toContainText('+2 HE');
+  await expect(root.locator('#tcRot')).toBeVisible();
+  await shot(page, '8-grilla-12x6-vertical');
+  // al desplazar de lado: nombres fijos a la izquierda, totales fijos a la derecha, sin desbordar la página
+  const g = root.locator('#tcGrid');
+  await g.evaluate(el => { el.scrollLeft = el.scrollWidth; });
+  const gb = await g.boundingBox(), nb = await root.locator('.tc-gn[data-dni="40000201"]').boundingBox(), tb = await total(root, '40000201').boundingBox();
+  expect(Math.abs(nb.x - gb.x)).toBeLessThan(3);
+  expect(Math.abs((tb.x + tb.width) - (gb.x + gb.width))).toBeLessThan(4);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await root.locator('[data-tca="rotX"]').click();
+  await expect(root.locator('#tcRot')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('lps.tcrot'))).toBe('1');
+  // tocar el código de una partida muestra su nombre completo
+  await root.locator('th.tc-gp[data-pc="p20_02"] [data-tcpc]').click();
+  await expect(page.locator('#toast')).toContainText('20.02 · Asentado de ladrillo');
+
+  // paso 4: la misma grilla en solo lectura; el que no vino al final, atenuado y con su motivo; altura (A); totales
+  await root.locator('.tc-steps [data-tcs="4"]').click();
+  await expect(root.locator('#tcGridR .tc-rr')).toHaveCount(12);
+  const last = root.locator('#tcGridR .tc-rr').last();
+  await expect(last).toHaveClass(/off/);
+  await expect(last).toHaveAttribute('data-dni', '40000212');
+  await expect(last).toContainText('No vino · Descanso médico');
+  await expect(root.locator('.tc-rr[data-dni="40000202"] .tc-gn')).toContainText('(A)');
+  await expect(root.locator('.tc-rr[data-dni="40000204"] .tc-gt')).toContainText('+2 HE');
+  await expect(root.locator('#tcGridR .tc-gss')).toContainText('95,5');
+  const foto = await root.locator('#tcFotoC').boundingBox(), gr = await root.locator('#tcGridR').boundingBox();
+  expect(foto.y).toBeLessThan(gr.y);
+  await shot(page, '9-revisar-vertical');
+  await root.locator('#tcBody').evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await shot(page, '9b-revisar-vertical-final');
+  // tocar una celda lleva al paso 3 con esa celda abierta
+  await root.locator('#tcGridR .tc-rc[data-dni="40000205"][data-pc="p20_02"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('Horas');
+  await expect(root.locator('#tcCell')).toContainText('ESPINOZA TORRES, EDU');
+  await expect(root.locator('#tcCell')).toContainText('20.02');
+  await root.locator('#tcCell [data-tca="cellSet"][data-v="4"]').click();
+  await expect(cell(root, '40000205', 'p20_02')).toHaveText('4');
+  await expect(total(root, '40000205')).toContainText('faltan 0,5');
+
+  // echado: la grilla a pantalla completa con más partidas a la vista; revisar también se lee
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(root.locator('.tc-head')).toBeHidden();
+  expect(await visCols(root)).toBeGreaterThanOrEqual(5);
+  await shot(page, '10-grilla-12x6-echado');
+  await root.locator('.tc-foot [data-tcs="4"]').click();
+  await expect(root.locator('#tcGridR')).toBeVisible();
+  expect(await visCols(root)).toBeGreaterThanOrEqual(5);
+  await root.locator('#tcGridR').scrollIntoViewIfNeeded();
+  await shot(page, '11-revisar-echado');
+  noErrors(errors, 'grilla como el formato');
 });
 
 test('compatibilidad: un tareo antiguo por horarios se ve en solo lectura y se pasa a horas conservando las horas; enviado: solo lectura', async ({ page }) => {
@@ -242,8 +317,8 @@ test('compatibilidad: un tareo antiguo por horarios se ve en solo lectura y se p
   await expect(root.locator('#tcOld')).toContainText('formato anterior');
   await expect(root.locator('.tc-steps')).toHaveCount(0);
   await expect(root.locator('.tc-foot')).toHaveCount(0);
-  await expect(root.locator('.tc-sum[data-dni="40000001"]')).toContainText('7:30–18:00');
-  await expect(root.locator('.tc-sum[data-dni="40000001"]')).toContainText('9,5 h');
+  await expect(root.locator('.tc-rr[data-dni="40000001"]')).toContainText('7:30–18:00');
+  await expect(root.locator('.tc-rr[data-dni="40000001"] .tc-gt')).toContainText('9,5');
   // tocar algo no cambia el documento
   await page.evaluate(() => { tcChg(); });
   await page.waitForTimeout(1200);
@@ -259,7 +334,7 @@ test('compatibilidad: un tareo antiguo por horarios se ve en solo lectura y se p
   await root.locator(`[data-tcd="${AYER}"]`).click();
   await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
   await expect(root.locator('#tcOld')).toHaveCount(0);
-  await expect(root.locator('.tc-sum[data-dni="40000001"]')).toContainText('7:30–18:00');
+  await expect(root.locator('.tc-rr[data-dni="40000001"]')).toContainText('7:30–18:00');
   noErrors(errors, 'compatibilidad');
 });
 

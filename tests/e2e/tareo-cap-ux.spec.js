@@ -132,10 +132,10 @@ test('UX2: dos «Juan Quispe» se distinguen en asistencia, columnas de la grill
   await root.locator('.tc-gcell[data-dni="41000000"][data-pc="p10_05"]').click();
   await expect(root.locator('#tcCell .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 000');
   await root.locator('#tcCell [data-tca="cellX"]').last().click();
-  await root.locator('tr[data-pc="p10_05"] [data-tca="rowAll"]').click();
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
   // resumen
   await root.locator('.tc-foot [data-tcs="4"]').click();
-  const sum = await root.locator('.tc-sum .tc-wn > b').allTextContents();
+  const sum = await root.locator('.tc-rr .tc-gn .tc-nmt').allTextContents();
   expect(new Set(sum).size).toBe(3);
   noErrors(errors, 'UX2');
 });
@@ -187,7 +187,7 @@ test('UX4: en el paso 4 la foto va arriba; «Falta la foto» abre la cámara y a
   await root.locator('.tc-steps [data-tcs="4"]').click();
   // la tarjeta de la foto está antes de la lista de obreros y a la vista sin desplazar
   const foto = await root.locator('#tcFotoC').boundingBox();
-  const first = await root.locator('.tc-sum').first().boundingBox();
+  const first = await root.locator('#tcGridR').boundingBox();
   expect(foto.y).toBeLessThan(first.y);
   expect(foto.y + 40).toBeLessThan(844);
   // el botón de abajo lleva a la foto y abre la cámara (selector de archivo)
@@ -220,7 +220,7 @@ test('UX6: ayer y anteayer enviados/revisados se abren en solo lectura', async (
   await expect(an).toContainText('Revisado');
   await ay.click();
   await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
-  await expect(root.locator('.tc-sum')).toHaveCount(1);
+  await expect(root.locator('.tc-rr')).toHaveCount(1);
   await expect(root.locator('.tc-steps')).toHaveCount(0);
   await expect(root.locator('#tcFile')).toHaveCount(0);
   await expect(root.locator('[data-tca="fx"]')).toHaveCount(0);
