@@ -538,8 +538,21 @@ body.pl-meet .top,body.pl-meet .demo-note,.mapa.meeting #mbar,.mapa.meeting #mno
 .phwrap{flex:1;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto}
 .phone{background:#111;border-radius:34px;padding:14px 10px;box-shadow:0 20px 60px rgba(0,0,0,.45);flex:none;max-width:100%}.phone iframe{width:100%;height:100%;border:0;border-radius:22px;background:#fff;display:block}
 html.in-frame .vabar,html.in-frame #bva,html.in-frame #bph{display:none!important}
-.vabar{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;z-index:300;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--ink);color:var(--bg);border-radius:12px;padding:6px 8px 6px 14px;box-shadow:0 6px 20px rgba(0,0,0,.3);font-size:13px;max-width:calc(100vw - 20px)}.vabar .ib{height:30px}
-@media (max-width:760px){.vabar{bottom:66px}.vabar .ib{height:40px}}
+/* barra «Ver como» (auditoria.js vaBanner): en una esquina (p-br/p-bl/p-tr/p-tl), plegable a pastilla (.min) y movible.
+   --vab-b / --vab-t los pone vabPlace() para no tapar #bnav, el botón fijo del capataz (.tc-foot) ni la barra superior.
+   z-index 45: por debajo de menús (.pop), hojas y ventanas, que la tapan mientras están abiertas */
+.vabar{position:fixed;z-index:45;display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end;background:var(--ink);color:var(--bg);border-radius:12px;padding:6px 8px;box-shadow:0 6px 20px rgba(0,0,0,.3);font-size:13px;max-width:calc(100vw - 20px);touch-action:none}
+.vabar.p-br{right:10px;bottom:var(--vab-b,12px)}.vabar.p-bl{left:10px;bottom:var(--vab-b,12px)}.vabar.p-tr{right:10px;top:var(--vab-t,10px)}.vabar.p-tl{left:10px;top:var(--vab-t,10px)}
+.vabar.drag{right:auto!important;bottom:auto!important;opacity:.9;cursor:grabbing;animation:none}
+.vabar .ib{height:30px;flex:none;white-space:nowrap}.vabar .ib:not(.pri){background:color-mix(in srgb,currentColor 12%,transparent);color:inherit;border-color:color-mix(in srgb,currentColor 30%,transparent)}
+.vabar .vatx{cursor:grab;flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vabar .vagrip{cursor:grab;opacity:.6;font-size:16px;padding:0 2px;user-select:none}
+.vabar .vamin{width:30px;padding:0;justify-content:center;font-weight:700}
+.vabar.min{padding:0;border-radius:999px;background:var(--ink)}
+.vapill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:13px;cursor:grab;white-space:nowrap;max-width:60vw;overflow:hidden;text-overflow:ellipsis}
+.vapill:focus-visible{outline:none;box-shadow:var(--ring)}
+@media (max-width:760px){.vabar{flex-wrap:wrap}.vabar .vatx{flex:1 1 160px;white-space:normal}.vabar .ib{height:40px}.vabar .vamin{width:40px}.vabar .vaph{display:none}.vapill{height:40px}
+  /* Tareos del día en el celular: los filtros en 2×2 (en una fila se cortaban «Por revisar 0»…) */
+  .tr-flt .seg{display:grid;grid-template-columns:1fr 1fr;width:100%}.tr-flt .seg button{height:auto;min-height:40px;padding:4px 8px}}
 .mzc{position:fixed;z-index:60;width:340px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.28);padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
 .zch{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.zct{display:flex;gap:8px;align-items:flex-start;min-width:0}.zct b{display:block;font-size:15px;line-height:1.25}.zct span{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12.5px;margin-top:2px}
 .zcsc{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
