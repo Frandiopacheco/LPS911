@@ -2042,6 +2042,12 @@ body.tr-on .toast{z-index:160}
 .tr-k b{font:700 14px var(--f-mono);color:var(--ink)}
 .tr-k.tr-kb{border-color:var(--bad);background:var(--bad-soft)}.tr-k.tr-kb b{color:var(--bad)}
 .tr-k.tr-kw{border-color:var(--warn);background:var(--warn-soft)}.tr-k.tr-kw b{color:var(--warn)}
+/* segunda auditoría: «Sin marcar» (ámbar, no es falta), foto que no cargó, conflicto con «Recargar versión actual» */
+.tr-k.tr-ksm{border-color:var(--warn);background:var(--warn-soft)}.tr-k.tr-ksm b{color:var(--warn)}
+.tr-sm{display:inline-block;white-space:nowrap;font:600 11px var(--f-ui);color:var(--warn);background:var(--warn-soft);border-radius:var(--r-xs,4px);padding:1px 7px}
+.tr-smrow .tr-fx{color:var(--warn)}
+.tr-ferr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:160px;padding:24px;text-align:center;color:var(--bad)}
+.tr-confl{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .tr-k.tr-kok b{color:var(--ok)}
 .tr-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .tr-acts .tr-sv{border-color:var(--accent);color:var(--accent);font-weight:600}
