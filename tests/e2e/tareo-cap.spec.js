@@ -37,6 +37,7 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await page.setViewportSize({ width: 390, height: 844 });
   page.on('dialog', d => d.accept());
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: EXTRA });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
   const root = page.locator('#tcRoot');
   await expect(root).toBeVisible();
@@ -186,6 +187,7 @@ test('capataz (844×390, echado): la grilla ocupa toda la pantalla, nombres y pa
   const crew = names.map(([a, n], i) => ob(String(40000101 + i), a, n, CAP));
   const rows = Object.fromEntries(names.map(([a, n], i) => [String(40000101 + i), fullRow(a, n)]));
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew, ...PCS, ['tareo', ID, { date: HOY, cap: CAP, st: 'bor', modo: 'hrs', pcs: ['p10_05', 'p10_06', 'p20_01'], foto: [], hist: [], rows }]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await root.locator('.tc-steps [data-tcs="3"]').click();
   await expect(root.locator('#tcGrid')).toBeVisible();
@@ -264,6 +266,7 @@ test('compatibilidad: un tareo antiguo por horarios se ve en solo lectura y se p
 test('capataz sin obreros asignados: mensaje claro', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: EXTRA.filter(x => x[0] !== 'tper' || x[2].cap !== CAP) });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await expect(root.locator('.tc-none')).toContainText('No tienes obreros asignados');
   await expect(root.locator('.tc-none')).toContainText('Pide a la oficina que te los asigne en Personal');
@@ -279,6 +282,7 @@ test('capataz: copia los trabajos y las horas de ayer (sin la bloqueada) y agreg
   const extra = [...EXTRA, ['tareo', `${AYER}_${CAP}`, { date: AYER, cap: CAP, st: 'env', modo: 'hrs', pcs: ['p10_06', 'p20_01', 'p30_01'], foto: [], hist: [],
     rows: Object.fromEntries(['40000001', '40000002', '40000003', '40000004'].map(d => [d, fullRow('X', 'Y', h)])) }]];
   const errors = await openApp(page, { as: 'tcap', editar: false, extra });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await expect(root.locator(`[data-tcd="${AYER}"]`)).toContainText('Enviado ✓');
   await root.locator('[data-tca="todos"]').click();
@@ -321,6 +325,7 @@ test('F2 capataz: la foto solo cuenta confirmada (rechazo → reintentar; sin se
   await page.setViewportSize({ width: 390, height: 800 });
   page.on('dialog', d => d.accept());
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await root.locator('.tc-steps [data-tcs="4"]').click();
   await expect(root.locator('.tc-step.on')).toContainText('Enviar');
@@ -377,6 +382,7 @@ test('F2 capataz: la foto solo cuenta confirmada (rechazo → reintentar; sin se
 test('foto: si existe el editor de mejora (tFotoEditor) se usa lo que devuelve; cancelar no agrega nada', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await page.evaluate(() => {
     window.__fe = [];
@@ -408,6 +414,7 @@ test('F2 capataz: si el servidor rechaza el envío vuelve a borrador con el erro
   page.on('dialog', d => d.accept());
   // Ana con 6 h: jornada parcial (aviso que no bloquea)
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY, { foto: [`${ID}_1`], rows: { '40000001': fullRow('ALVA ROJAS', 'ANA', { p10_05: 6 }) } })], ['tfot', `${ID}_1`, { date: HOY, cap: CAP, n: 1, d: 'data:image/png;base64,iVBORw0KGgo=' }]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   await expect(root.locator('.tc-steps')).toBeVisible();
   await root.locator('.tc-steps [data-tcs="4"]').click();
@@ -476,6 +483,7 @@ test('F2 capataz: «Por corregir» lista los reabiertos de cualquier fecha; se c
 test('capataz: quitar una partida con horas pide confirmar y borra sus horas al primer intento aunque se guarde con la ventana abierta', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   // un cambio recién hecho en la grilla (se guarda ≈1 s después) y enseguida quitar la partida con la ventana real de confirmación
   await root.locator('.tc-steps [data-tcs="3"]').click();
@@ -498,6 +506,7 @@ test('capataz: «no vino» sin motivo deja seguir; obrero de otra cuadrilla con 
   const msgs = [];
   page.on('dialog', d => { msgs.push(d.message()); d.accept(); });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...EXTRA, ob('40000010', 'SOLIS VEGA', 'SAUL', '')] });
+  await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   const dan = root.locator('.tc-ob[data-dni="40000004"]');
   await dan.locator('[data-tca="novino"]').click();
