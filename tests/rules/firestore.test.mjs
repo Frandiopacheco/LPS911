@@ -752,7 +752,7 @@ test('tfot: restaurar un respaldo (misma foto, mismo id) lo puede hacer la ofici
   await assertFails(setDoc(doc(user(OWNER), id), { ...D, d: 'otra' }));
   await assertFails(setDoc(doc(cap('tcap1'), id), D));
   await assertFails(setDoc(doc(user('jefe@obra.pe'), id), D));
-
+});
 test('tareo F2 (auditoría, hallazgo 9): un reabierto de cualquier fecha lo corrige y reenvía su capataz; la ventana corta sigue para crear y para borradores', async () => {
   const v = limaDay(-8), id = `tareo/${v}_u_tcap1`, p = cap('tcap1'), me = 'u_tcap1';
   await tSeed(id, { date: v, cap: me, st: 'reab', rows: {}, hist: [{ t: 1, by: 'tasis@obra.pe', a: 'reab' }], reab: { t: 1, by: 'tasis@obra.pe', mot: 'Foto' } });
