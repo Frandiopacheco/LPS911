@@ -340,7 +340,7 @@ const pendProps = (docs, date, pisoId) => docs.filter(z => z && (z.kind === 'dpr
    reabierto, no hace nada. Si no: relee el aviso de publicado, cada borrador, sus actividades y los planes cerrados de las fechas
    que tocarían; publica los borradores (publishDrafts), rechaza las propuestas del SC aún pendientes y guarda la foto del plan
    (buildDayPlan con las actividades ya corridas). ctx.drafts / ctx.props: los docs pdz del día y piso (leídos antes). */
-async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts, done = new Map(), contractors = new Map(), drafts = [], props = [], piso, logger = null }, d, now = Date.now()) {
+async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts, done = new Map(), contractors = new Map(), drafts = [], props = [], zones = [], piso, logger = null }, d, now = Date.now()) {
   const pid = piso.id; const col = c => db.collection(c);
   const dref = col('dplan').doc(d + '_' + pid); const PID = 'pub_' + d + '_' + pid; const pref = col('pdz').doc(PID);
   return db.runTransaction(async tx => {
@@ -356,7 +356,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P = [];
     for (const z of props) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists && (s.data() || {}).st === 'pend') P.push(z.id); }
     let R = D.length ? publishDrafts({ drafts: D, acts: A, dplans: DP, contractors, project, pub: ps.exists ? ps.data() : null }, d, pid, now) : null;
-    const nW = R ? Object.keys(R.acts).length + R.restrs.length + R.novas.length + (R.padds || []).length + (R.newActs || []).length + (R.pub ? 1 : 0) : 0;
+    const nW = R ? Object.keys(R.acts).length + R.restrs.length + R.novas.length + (R.padds || []).length + (R.newActs || []).length + zones.length + (R.pub ? 1 : 0) : 0;
     /* límite de 500 escrituras por transacción: si no entra, no se publica (los borradores quedan para el ingeniero) */
     /* si no entra, no se publica ni se cierra el día (sin foto): mañana el ingeniero ve «⚠ Sin publicar» y lo publica él;
        las propuestas pendientes sí se rechazan (las que entren) */
@@ -375,7 +375,12 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
       for (const o of R.novas) tx.update(col('pdz').doc(o.id), o.patch);
       for (const na of R.newActs || []) tx.set(col('acts').doc(na.id), na.doc);
-      for (const o of R.padds || []) tx.update(col('pdz').doc(o.id), o.patch);
+      for (const o of R.padds || []) {
+        tx.update(col('pdz').doc(o.id), o.patch);
+        /* áreas dibujadas para lo agregado (zona con paId): pasan a ser de la actividad */
+        const aid = o.patch.actId || Object.keys(o.patch.mv || {})[0];
+        for (const z of zones) if (z.paId === o.id && aid) tx.update(col('pdz').doc(z.id), { actId: aid, fuera: false });
+      }
       if (R.pub) tx.set(pref, R.pub.doc);
       /* queda en el Historial del lookahead como la publicación desde la página */
       const items = Object.entries(R.acts).map(([id, u]) => { const b = A.get(id) || acts.get(id) || {};

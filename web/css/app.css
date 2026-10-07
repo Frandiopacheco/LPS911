@@ -2924,3 +2924,4 @@ a.kbig{display:flex;align-items:center;justify-content:center;text-decoration:no
 .pop .pal button i.zcsc{display:block}
 /* hojas inferiores: el encabezado con la × queda siempre a la vista al desplazarse (en el celular la lista larga lo escondía) */
 .ksc>.ksh{position:sticky;top:-14px;z-index:3;background:var(--panel);margin:-14px -16px 0;padding:14px 16px 10px;border-bottom:1px solid var(--line2)}
+.pop .paz{display:flex;margin:6px 0 2px;font-size:12.5px}

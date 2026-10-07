@@ -650,13 +650,24 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   await page.selectOption('#pasc', 'c2');
   await page.fill('#panm', 'Resane de muro');
   await page.fill('#paq', '4');
+  await page.check('#pazona'); // solo una parte del ambiente: dibuja dos áreas
   await page.locator('#pop [data-do="ok"]').click();
   await expect(page.locator('#mpanel')).toContainText('Se agrega al publicar (2)');
+  const rect = async (x0, y0, x1, y1) => { const a = await enPantalla(page, '#mstage', x0, y0), b = await enPantalla(page, '#mstage', x1, y1); await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up(); };
+  const areas = () => page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'zona' && z.paId));
+  await rect(410, 110, 480, 180);
+  await expect.poll(async () => (await areas()).length).toBe(1);
+  await page.locator('#mpanel [data-padraw]').last().click();
+  await rect(520, 210, 590, 290);
+  await expect.poll(async () => (await areas()).length).toBe(2);
+  await page.locator('#mtools [data-tool="pan"]').click().catch(() => {});
   // el lookahead no cambia hasta publicar
   expect((await act(page, 'f9')).days).toEqual(['2026-10-06']);
   await publicar(page);
   const M_ = await page.evaluate(() => window.__plano.M.date);
   await expect.poll(async () => (await act(page, 'f9')).days).toEqual([M_]);
   await expect.poll(() => page.evaluate(d => Object.values(window.__dbAll('acts')).filter(a => a.name === 'Resane de muro' && (a.days || []).includes(d)).length, M_)).toBe(1);
+  const nid = await page.evaluate(() => Object.entries(window.__dbAll('acts')).find(([, a]) => a.name === 'Resane de muro')[0]);
+  await expect.poll(async () => (await areas()).map(z => z.actId)).toEqual([nid, nid]);
   noErrors(errors, 'agregar al plan');
 });
