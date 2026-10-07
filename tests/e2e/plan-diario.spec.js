@@ -622,3 +622,11 @@ test('la etiqueta de la cuadrilla muestra su personal por especialidad y sumar c
   expect((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).cuad[0].n).toBe(4);
   noErrors(errors, 'personal por especialidad');
 });
+
+test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', async ({ page }) => {
+  await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday'); await page.waitForTimeout(600);
+  const p = await enPantalla(page, '#mstage', 280, 280);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#pop .xbox')).toBeVisible();
+});

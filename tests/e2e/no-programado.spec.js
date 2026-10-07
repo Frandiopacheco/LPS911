@@ -3,6 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, openTab, HOY } from './helpers.js';
 import zlib from 'node:zlib';
+import { LAMINA } from './lamina.js';
 
 /* una imagen PNG de color liso, para la lámina y la foto */
 function png(w, h) {
@@ -158,4 +159,17 @@ test('captura celular (solo para revisar)', async ({ page }) => {
   await page.locator('#npsheet [data-npsc="c3"]').click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: process.env.SHOT + '/np2.png' });
+});
+
+const AMB2 = [
+  ['ambientes', 'a1', { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0, geo: { L1: [100, 100, 300, 100, 300, 300, 100, 300] } }],
+  ['ambientes', 'a2', { sectorId: 's1', code: 'A-2', name: 'Dpto 102', order: 1, geo: { L1: [400, 100, 600, 100, 600, 300, 400, 300] } }],
+];
+test('con mouse, doble clic sobre una actividad abre la actividad (no el no programado)', async ({ page }) => {
+  await openApp(page, { as: 'campo', tab: 'campo', extra: [...LAMINA, ...AMB2] });
+  await page.evaluate(() => { CU.view = 'plan'; render(); }); await page.waitForTimeout(800);
+  await page.locator('#kplan .pvl.nb').first().dblclick();
+  await page.waitForTimeout(700);
+  expect(await page.locator('#npsheet').count()).toBe(0);
+  expect(await page.locator('#ksheet').count()).toBe(1);
 });
