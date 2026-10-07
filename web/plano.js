@@ -1136,7 +1136,7 @@ const TOOLS=[['pan','✋','Mover','Mover el plano; clic en un dibujo para elegir
 const DN=x=>{if(typeof canDaily==='undefined'||!canDaily||M.date>todayIso())return'';const later=(x.days||[]).filter(y=>y>M.date).length;return later&&!(typeof doneOf==='function'&&doneOf(x))?`<button class="ib" data-done="${x.id}" title="Ya se completó: los ${later} día(s) que faltan dejan de contar">✓ Terminada</button>`:''};
 function renderPlan(main,cur,base){
   const scs=scsOfDay();const role=myRole();
-  if(role==='sc'){const ms=myScs();if(!ms.includes(M.scDraw))M.scDraw=ms[0]||''}else if(M.scDraw&&!canPlan(M.scDraw))M.scDraw='';
+  if(role==='sc'){const ms=myScs();if(!ms.includes(M.scDraw))M.scDraw=ms[0]||''}/* el SC elegido también es el filtro: se mantiene aunque no se pueda dibujar (celular, lector); dibujar lo controla canPlan al empezar */else if(M.scDraw&&!S.con.has(M.scDraw))M.scDraw='';
   const acts=dayActs(M.piso,M.date);const sh=shapesOf(M.piso);
   const zBy={},nBy={};sh.forEach(z=>{if(z.kind==='zona'&&z.actId)(zBy[z.actId]=zBy[z.actId]||[]).push(z);if(z.kind==='nova')nBy[z.actId]=z});
   const stat=sc=>{const L=acts.filter(o=>o.x.sc===sc);return{n:L.length,ok:L.filter(o=>zBy[o.x.id]).length,no:L.filter(o=>nBy[o.x.id]).length}};
