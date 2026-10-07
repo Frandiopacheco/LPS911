@@ -2912,3 +2912,4 @@ div.tp-dif{padding-left:0}
 a.kbig{display:flex;align-items:center;justify-content:center;text-decoration:none}
 @media (max-width:760px){.khi [data-sini] span{display:none}}
 .mrvh{margin:8px 10px 6px;font-size:12.5px;color:var(--ink2)}.mrs.dock .mrvgo{margin:0 10px 8px;width:calc(100% - 20px)}
+.kphs{display:flex;gap:6px;flex-wrap:wrap}.kphs img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:var(--panel2)}

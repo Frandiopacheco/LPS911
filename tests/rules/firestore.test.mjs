@@ -239,6 +239,15 @@ test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno co
   await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01', by: 'veedor@obra.pe' }));
   await assertFails(setDoc(doc(user('veedor@obra.pe'), 'daily/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', recs: {} }));
 });
+test('no programado: el SC registra lo de su partida, por verificar; no se verifica solo', async () => {
+  const sc = user('sc@obra.pe');
+  const base = { date: '2026-10-01', pisoId: 'p1', sc: 'c-gabel', desc: 'Resane', by: 'sc@obra.pe', scProp: true };
+  await assertSucceeds(setDoc(doc(sc, 'nprog/n-sc1'), base));
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc2'), { ...base, sc: 'c-otro' })); // otra partida
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc3'), { ...base, scProp: false })); // tiene que quedar por verificar
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc1'), { ...base, ver: { by: 'sc@obra.pe' } })); // no se verifica solo
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'nprog/n-sc1'), { ...base, ver: { by: 'campo@obra.pe' } }));
+});
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
