@@ -2785,3 +2785,6 @@ div.tp-dif{padding-left:0}
 /* iPhone agranda la página al tocar un campo con letra menor a 16 px y no vuelve a su tamaño:
    en celular los campos van a 16 px (eso hacía que el plano y la ficha «se salieran» al registrar un no programado) */
 @media (max-width:760px){input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea,.kin,.tin{font-size:16px!important}}
+.kseg{display:flex;border-radius:10px}.kseg button{flex:1;height:44px;font-size:15px}
+/* la hoja es flex en columna con desplazamiento: sin esto los campos se aplastaban cuando el contenido no cabía */
+.ksc>*{flex-shrink:0}

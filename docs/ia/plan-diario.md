@@ -34,3 +34,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Cambios del plan:** cada reprogramación / «No va» tiene «Lookahead ↗» (`data-golk` → `gotoAct`). Publicar el plan (página `pubPlan` y servidor `closePlanPiso`) deja un registro en `lhlog` (Historial del lookahead).
 - **No cumplidas sin reprogramar** (panel del plan diario): solo las fallas de la **semana en curso** (`f.d >= lunes`); las de semanas anteriores ya se reprogramaron en la reunión semanal. Es solo la vista: los registros y el PPC no cambian.
 - **Celular (≤ 760 px):** «Equipos del día» empieza plegado (`fzIsOpen()`; abierto tapaba el plano), la barra `#mbar` va en una sola fila deslizable y los paneles `.mrs`/`.mlgd` son más bajos (34 % / 30 %).
+- **Varias áreas por actividad (oct 2026):** con una zona dibujada, la fila ofrece «＋ Otra área» (`data-put`, `rep:false`: suma otra zona) además de «Redibujar» (`data-redo`, reemplaza todas).
