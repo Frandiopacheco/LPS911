@@ -72,6 +72,7 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
   await expect(page.locator('#mcxb .mp-cx').first()).toBeVisible();
   const n0 = await page.locator('#mcxb .mp-cx').count();
   const p = await enPantalla(page, '#mstage', 200, 200);
+  await page.click('#mbar [data-pm="cx"]'); // modo Interferencias
   await page.mouse.click(p.x, p.y, { button: 'right' });
   await page.click('#pop [data-x="ok"]');
   await expect(page.locator('#mcxb .mp-cx')).toHaveCount(n0 - 1);
@@ -336,7 +337,8 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
   expect(await flechas()).toBe(0);
   await b.locator('[data-cqf="c1|C1"]').click();
   await expect.poll(flechas).toBe(1);
-  // el ingeniero puede ocultar el achurado de cruces
+  // el achurado de cruces se ve en el modo Interferencias y se puede ocultar
+  await page.click('#mbar [data-pm="cx"]');
   await page.locator('#mrst [data-rtab="mcxb"]').click();
   expect(await page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBeGreaterThan(0);
   await page.locator('#mcxb [data-cxv]').click();
@@ -436,7 +438,8 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
   await page.click('#mmx');
   await expect(page.locator('#mmbar')).toBeHidden();
-  expect(await page.evaluate(() => window.__plano.M.colorBy)).toBe('sc');
+  // al salir, los colores vuelven a los del modo elegido fuera de la reunión
+  expect(await page.evaluate(() => window.__plano.M.colorBy)).toBe(await page.evaluate(() => window.__plano.M.pmK && window.__plano.M.pmK[window.__plano.M.date > todayIso() ? 'f' : 'p'] === 'cu' ? 'cu' : 'sc'));
   noErrors(errors, 'reunión');
 });
 
@@ -626,6 +629,11 @@ test('la etiqueta de la cuadrilla muestra su personal por especialidad y sumar c
 test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', async ({ page }) => {
   await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); await page.waitForTimeout(600);
+  // hoy entra en Cumplimiento: sin achurado; en Interferencias aparece
+  await expect(page.locator('#mbar [data-pm="cu"]')).toHaveClass(/on/);
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
+  await page.click('#mbar [data-pm="cx"]');
+  await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
   const p = await enPantalla(page, '#mstage', 280, 280);
   // con mouse el clic izquierdo solo navega: el menú sale con clic derecho
   await page.mouse.click(p.x, p.y);
@@ -633,6 +641,20 @@ test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', as
   await expect(page.locator('#pop .xbox')).toHaveCount(0);
   await page.mouse.click(p.x, p.y, { button: 'right' });
   await expect(page.locator('#pop .xbox')).toBeVisible();
+});
+
+test('modo Cumplimiento: clic derecho muestra lo registrado, sin botones para registrar', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday'); await page.waitForTimeout(600);
+  await expect(page.locator('#mbar [data-pm="cu"]')).toHaveClass(/on/);
+  const p = await enPantalla(page, '#mstage', 500, 280);
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(400);
+  await expect(page.locator('#mzc')).toHaveCount(0);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await expect(page.locator('#mzc')).toContainText('se registra en Campo');
+  await expect(page.locator('#mzc [data-zcs]')).toHaveCount(0);
+  noErrors(errors, 'modo cumplimiento');
 });
 
 test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica al lookahead al publicar', async ({ page }) => {
