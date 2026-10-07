@@ -132,3 +132,13 @@ test('PPC diario: lo comprometido que salió con «No va» cuenta como no cumpli
   expect(r).toEqual({ st: 'no', cnc: 'Materiales', imp: true });
   noErrors(errors, 'no va en el PPC diario');
 });
+
+test('PPC diario: «No va» decidido la víspera sale del diario; decidido el mismo día cuenta como no cumplido', async ({ page }) => {
+  const A = (id) => ({ ambId: 'a1', sc: 'c1', name: 'Act ' + id, und: 'und', metrado: 1, days: [HOY], order: 20 });
+  const antes = Date.parse(HOY + 'T20:00:00-05:00') - 864e5, mismo = Date.parse(HOY + 'T08:00:00-05:00');
+  const nova = (actId, ts) => ({ date: HOY, pisoId: 'p1', sc: 'c1', kind: 'nova', actId, ambId: 'a1', motivo: 'Materiales', c: 'MAT', cnc: 'Materiales', imp: true, repTo: '', ts });
+  const errors = await openApp(page, { tab: 'ind', extra: [['acts', 'v1', A('v1')], ['acts', 'v2', A('v2')], ['pdz', 'n1', nova('v1', antes)], ['pdz', 'n2', nova('v2', mismo)],
+    ['dplan', `${HOY}_p1`, { date: HOY, pisoId: 'p1', ids: { v1: null, v2: null }, at: 1, by: 'x' }]] });
+  await expect.poll(() => page.evaluate(d => { const D = dayData([d], new Set(['p1'])); const g = id => D.rows.find(o => o.x.id === id); return [!!g('v1'), g('v2') && g('v2').rc && g('v2').rc.status]; }, HOY)).toEqual([false, 'no']);
+  noErrors(errors, 'no va víspera / mismo día');
+});
