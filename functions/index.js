@@ -113,7 +113,7 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   let k = 0, np = 0, nr = 0;
   for (const p of vivos) {
     const pid = p.id;
-    const drafts = zs.filter(z => z.kind === 'nova' && z.draft && z.pisoId === pid);
+    const drafts = zs.filter(z => ((z.kind === 'nova' && z.draft) || (z.kind === 'padd' && z.draft && z.st === 'ok')) && z.pisoId === pid);
     const props = pendProps(zs, d, pid);
     let res;
     try { res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, piso: p, logger }, d, now); }

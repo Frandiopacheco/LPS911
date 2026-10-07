@@ -170,7 +170,7 @@ function noGoSet(){const k=M.date+'|'+PDV+'|'+DV+'|'+(typeof DONEV!=='undefined'
 const SHC=new Map();
 const shapesOf=pid=>{const k=pid+'|'+M.date+'|'+PDV+'|'+DV+'|'+(typeof DONEV!=='undefined'?DONEV:0)+'|'+LAM.size;const c=SHC.get(pid);if(c&&c.k===k)return c.L;
   const ng=noGoSet();const off=z=>{const y=S.act.get(z.actId);return!!y&&!schedOn(y,M.date)&&!(typeof recReal==='function'&&recReal(M.date,z.actId))};
-  const real=[...PD.values()].filter(z=>z.pisoId===pid&&z.kind!=='dprop'&&z.kind!=='aviso'&&z.kind!=='pub'&&!(z.kind==='zona'&&z.actId&&(ng.has(z.actId)||off(z))));
+  const real=[...PD.values()].filter(z=>z.pisoId===pid&&z.kind!=='dprop'&&z.kind!=='aviso'&&z.kind!=='pub'&&z.kind!=='padd'&&!(z.kind==='zona'&&z.actId&&(ng.has(z.actId)||off(z))));
   const has=new Set(real.filter(z=>z.actId&&(z.kind==='zona'||z.kind==='nova')).map(z=>z.actId));ng.forEach(id=>has.add(id));
   const L=real.concat(virtZones(pid).filter(z=>!has.has(z.actId)));if(SHC.size>25)SHC.clear();SHC.set(pid,{k,L});return L};
 function scsOfDay(){const set=new Set(dayActs(M.piso,M.date).map(o=>o.x.sc));shapesOf(M.piso).forEach(z=>set.add(z.sc));return[...set].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))}
@@ -295,6 +295,10 @@ function tapSelect(w,e){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;retur
   const onLbl=els.some(el=>el.closest&&el.closest('.pvl[data-z]'));
   /* tocar el achurado de un cruce abre su decisión: en la reunión («Plan») y también fuera de ella (revisión previa, en el orden que el ingeniero quiera) */
   if((pl||(!M.meet&&M.colorBy!=='cu'))&&!onLbl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
+  /* fuera de la reunión: tocar una actividad abre Va · No va (y agregar trabajo no programado en su ambiente); tocar un ambiente vacío, el «＋» */
+  if(!M.meet&&M.colorBy!=='cu'){const zz=zid&&zget(zid);
+    if(zz&&zz.kind==='zona'&&zz.actId&&S.act.get(zz.actId)&&(dzEng()||canPlan(zz.sc))){M.selId=zz.virt?null:zid;zCard(zz.actId,e.clientX,e.clientY,true);requestRender();return}
+    if(!zid&&paddCan()&&pubDraft()){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am);return}}}
   if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
   /* las zonas que salen de Sectorización (ambiente completo) no se seleccionan ni se mueven en el Plan diario */
   const zs_=zid&&zget(zid);M.selId=zs_&&zs_.virt?null:zid;requestRender()}
@@ -540,8 +544,9 @@ function zcPlanHtml(x,a){const N=nbMap();const nv=shapesOf(M.piso).find(z=>z.kin
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${(()=>{try{computeCross()}catch(e){}const ids=shapesV(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).map(z=>z.id);return cxInfoHtml(cxOfIds(ids),'data-zcx2')})()}
     ${nv?`<div class="zcst" style="--c:#c62828"><b>✗ No va</b><span>${esc(nv.motivo||'')}${nv.repTo?' · → '+fmtD(nv.repTo):''}</span></div>${(nv.k||nv.eng?dzEng():can)?`<button class="lnkb" data-undo="${nv.id}">Vuelve a ir</button>`:''}`
-      :`<div class="zcpl">${dvHtml(x,can)||'<span class="mu">Solo el ingeniero o el subcontratista deciden si va.</span>'}</div>`}`}
-function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}if(lockStop(t))return;
+      :`<div class="zcpl">${dvHtml(x,can)||'<span class="mu">Solo el ingeniero o el subcontratista deciden si va.</span>'}</div>`}
+    ${paddCan()&&pubDraft()&&a?`<button class="ib zcpa" data-zpa="${a.id}">＋ Trabajo no programado en ${esc(a.code)}</button>`:''}`}
+function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}{const pb=t.closest('[data-zpa]');if(pb){const r=pb.getBoundingClientRect();const an=anchorAt(r.left,r.bottom-1);const am=pb.dataset.zpa;zcClose();setTimeout(()=>paddDialog(an,am),0);return}}if(lockStop(t))return;
   /* botones del plan (Va · No va · Culminado, aceptar/rechazar): la ventanita se ancla a un punto fijo para no perderse si la ficha se redibuja */
   {const b=t.closest('[data-dv],[data-dpa]');if(b){const rc=b.getBoundingClientRect();const an=anchorAt(rc.left,rc.bottom-1);
       if(b.dataset.dv){const[k,id]=b.dataset.dv.split('|');const x=S.act.get(id);if(x&&dzCan(x)&&!b.disabled)dvClick(an,x,k)}
@@ -1178,6 +1183,7 @@ function renderPlan(main,cur,base){
         :`${nbHtml(NBM,x.id)}${dvHtml(x,can)}
           <span class="dzu">${zs?(zs[0].virt?`<button class="lnkb" data-see="${zs[0].id}">en su ambiente</button>`:`<span class="pill ok">${zs.length>1?zs.length+' áreas dibujadas':'zona dibujada'}</span><button class="lnkb" data-see="${zs[0].id}">Ver</button>`):geoOk?'':`<span class="mu">Ambiente sin ubicar</span>${canWrite?`<button class="lnkb" data-goszamb="${a.id}">Ubicarlo en Sectorización</button>`:''}`}${canPlan(x.sc)?(zs&&!zs[0].virt?`<button class="lnkb" data-put="${x.id}" title="Agregar otra área del mismo ambiente (o de otro) para esta actividad">＋ Otra área</button><button class="lnkb" data-redo="${x.id}" title="Dibujar la zona de nuevo: reemplaza ${zs.length>1?'las '+zs.length+' áreas anteriores':'la anterior'}">Redibujar</button>${geoOk?`<button class="lnkb" data-zamb="${x.id}" title="Quitar la zona dibujada: vuelve a ocupar todo su ambiente">Volver a su ambiente</button>`:''}`:`<button class="lnkb" data-put="${x.id}" title="Si solo ocupa una parte del ambiente o abarca varios">Solo una parte…</button>`):''}</span>`}</div></div>`}).join('')||`<div class="note" style="padding:8px 2px">${sc?esc(conOf(sc).name)+' no tiene':'No hay'} actividades programadas este día en este piso.</div>`}</div>`;
   if((canWrite||role==='sc')&&!dayLk())h+=`<button class="ib mp-all" id="dzadd" title="Agregar al día una actividad del lookahead que no estaba programada">+ Programar otra actividad este día</button>`;
+  h+=paddHtml();
   {const pr=Object.entries(pendBy).filter(([k])=>inSF(k)).flatMap(([,v])=>v);
     if(pr.length){h+=`<div class="mp-sec">No cumplidas sin reprogramar (${pr.length})</div><div class="mp-list">${pr.sort((p,q)=>q.f.d.localeCompare(p.f.d)).map(({x,a,f})=>{const sal=repSaldo(x,f.d);
       return`<div class="mp-it rp"><div class="t"><span class="mono">${esc(a.code)}</span> ${esc(x.name)}<small>${esc(a.name)} · ${esc(conOf(x.sc).name)} · ${f.r.status==='partial'?'½ Parcial':'✗ No cumplido'} el ${DOWN_[(pd(f.d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(f.d)}${f.r.cnc?' · '+esc(f.r.cnc):''}${sal!=null?` · saldo ${fq(sal)} ${esc(x.und||'')}`:''}</small></div>
@@ -1204,7 +1210,7 @@ function renderPlan(main,cur,base){
   const pb=$('#mprops');if(pb.dataset.h!==props){pb.innerHTML=props;pb.dataset.h=props}pb.hidden=!props||!!M.meet;$('#mhint').style.top=props?'64px':'';
   $('#mstage').classList.toggle('draw',M.tool!=='pan');
   const hn=$('#mhint');if(hn.dataset.h!==hint){hn.innerHTML=hint;hn.dataset.h=hint}hn.hidden=!hint||!!M.meet;
-  renderMeet();drawOverlay();renderLeg();dockRender();requestAnimationFrame(mrsFit);if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'))zcClose();else zcRender()}}
+  renderMeet();drawOverlay();renderLeg();dockRender();requestAnimationFrame(mrsFit);if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'&&!ZC.pl))zcClose();else zcRender()}}
 const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 /* ---------- decidir el plan del día: va / mañana / terminada / restricción ---------- */
@@ -1240,6 +1246,49 @@ const pubId=(d,p)=>`pub_${d}_${p}`;
 const pubOf=()=>PD.get(pubId(M.date,M.piso));
 const pubDraft=()=>M.date>todayIso()&&!pubOf();
 const draftsOf=()=>[...PD.values()].filter(z=>z.kind==='nova'&&z.draft&&z.pisoId===M.piso&&z.date===M.date);
+/* ---------- Agregar al plan del día (oct 2026): trabajo no programado desde el ambiente ----------
+   pdz kind:'padd' {date, pisoId, ambId, sc, t:'rep'|'adel'|'new', actId?, from?, q?, name?, und?, newId?, st:'ok'|'pend'|'rej', draft, by, byName, ts}
+   rep = reprogramar a este día una actividad no ejecutada · adel = adelantar a este día el próximo día de una actividad ·
+   new = actividad nueva (no prevista en el lookahead). El ingeniero lo deja aceptado (ok); el SC lo propone (pend) y el ingeniero
+   decide. Se aplica al lookahead al publicar el plan (página: pubPlan · servidor: publishDrafts). */
+const paddsOf=st=>[...PD.values()].filter(z=>z.kind==='padd'&&z.draft&&z.pisoId===M.piso&&z.date===M.date&&(!st||z.st===st));
+function paddApply(y,zz,date){let days=[...(y.days||[])],qty={...(y.qty||{})};
+  if(zz.t==='adel'){if(!days.includes(zz.from))return null;days=days.filter(d=>d!==zz.from);if(qty[zz.from]!=null){qty[date]=qty[zz.from];delete qty[zz.from]}}
+  if(!days.includes(date))days.push(date);days.sort();if(zz.t==='rep'&&zz.q!=null&&zz.q!=='')qty[date]=+zz.q;return{days,qty}}
+const paddCan=()=>(dzEng()||myRole()==='sc')&&!PHONE();
+function paddAmbActs(ambId){return[...S.act.values()].filter(x=>x.ambId===ambId&&!x.arch&&(myRole()!=='sc'||myScs().includes(x.sc)))}
+function paddDialog(anchor,ambId){const a=S.amb.get(ambId);if(!a)return;if(!paddCan()){toast('Lo agrega el ingeniero del piso o el subcontratista.');return}
+  if(!pubDraft()){toast(pubOf()?'El plan de este día ya se publicó: no se agrega nada.':'Solo se agrega al plan de un día que aún no se publica (mañana en adelante).');return}
+  const d=M.date;const taken=new Set(paddsOf().filter(z=>z.st!=='rej').map(z=>z.actId).filter(Boolean));
+  const L=paddAmbActs(ambId).filter(x=>!(x.days||[]).includes(d)&&!taken.has(x.id)&&!(typeof doneOf==='function'&&doneOf(x)));
+  const rep=L.map(x=>({x,f:typeof failInfo==='function'?failInfo(x,d):null})).filter(o=>o.f);
+  const adel=L.map(x=>({x,nx:(x.days||[]).filter(z=>z>d).sort()[0]})).filter(o=>o.nx);
+  const H=`<div class="ph">＋ Trabajo no programado · ${esc(a.code)} ${esc(a.name)}</div><div class="ptx">${dvLbl(d)}. Se aplica al lookahead al publicar el plan.${myRole()==='sc'?' Queda como propuesta: la decide el ingeniero.':''}</div>
+    <div class="pab"><button data-do="rep"${rep.length?'':' disabled'}><b>↻ Reprogramar actividad no ejecutada</b><small>${rep.length?rep.length+' pendiente'+(rep.length>1?'s':'')+' en este ambiente':'Ninguna pendiente en este ambiente'}</small></button>
+    <button data-do="adel"${adel.length?'':' disabled'}><b>⇤ Adelantar actividad programada</b><small>${adel.length?adel.length+' con días más adelante':'Nada programado más adelante aquí'}</small></button>
+    <button data-do="new"><b>＋ Nueva actividad (no prevista en el LH)</b><small>Se crea en el lookahead con este día</small></button></div>`;
+  openPop(anchor,H,{rep:()=>paddPick(anchor,ambId,'rep',rep.map(o=>({x:o.x,sub:`no se cumplió el ${fmtD(o.f.d)}`+(typeof repSaldo==='function'&&repSaldo(o.x,o.f.d)!=null?` · saldo ${fq(repSaldo(o.x,o.f.d))} ${o.x.und||''}`:''),from:o.f.d,q:typeof repSaldo==='function'?repSaldo(o.x,o.f.d):null}))),
+    adel:()=>paddPick(anchor,ambId,'adel',adel.map(o=>({x:o.x,sub:`programada el ${fmtD(o.nx)}${(o.x.qty||{})[o.nx]!=null?' · '+fq(o.x.qty[o.nx])+' '+(o.x.und||''):''}`,from:o.nx}))),
+    new:()=>paddNew(anchor,ambId)})}
+function paddPick(anchor,ambId,t,L){const H=`<div class="ph">${t==='rep'?'↻ Reprogramar a este día':'⇤ Adelantar a este día'}</div><div class="pal">${L.map((o,i)=>`<button data-do="p${i}"><i class="zcsc" style="--c:${conOf(o.x.sc).color}"></i><b>${esc(o.x.name)}</b><small>${esc(conOf(o.x.sc).name)} · ${esc(o.sub)}</small></button>`).join('')}</div>`;
+  const hs={};L.forEach((o,i)=>hs['p'+i]=()=>paddSave({t,ambId,sc:o.x.sc,actId:o.x.id,from:o.from,q:o.q??null,name:o.x.name}));setTimeout(()=>openPop(anchor,H,hs),0)}
+function paddNew(anchor,ambId){const scs=myRole()==='sc'?myScs():[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>c.id);
+  const H=`<div class="ph">＋ Nueva actividad · no prevista</div><label class="ptx">Subcontratista</label><select id="pasc" class="tin">${scs.length>1?'<option value="">— elige —</option>':''}${scs.map(c=>`<option value="${c}">${esc(conOf(c).name)}</option>`).join('')}</select>
+    <label class="ptx">Actividad</label><input id="panm" class="tin" placeholder="Qué se hará" autocomplete="off"><div class="pa2"><input id="paq" class="tin" inputmode="decimal" placeholder="Cantidad (opcional)"><input id="paund" class="tin" placeholder="Und"></div>
+    <div class="pab"><button class="pri" data-do="ok"><b>Agregar al plan</b></button></div>`;
+  setTimeout(()=>{openPop(anchor,H,{ok:()=>{const sc=($('#pasc')||{}).value||'',nm=(($('#panm')||{}).value||'').trim(),q=(($('#paq')||{}).value||'').trim(),u=(($('#paund')||{}).value||'').trim();
+    if(!sc){toast('Elige el subcontratista.');setTimeout(()=>paddNew(anchor,ambId),0);return}if(!nm){toast('Escribe la actividad.');setTimeout(()=>paddNew(anchor,ambId),0);return}
+    const qn=q?parseNum(q):null;if(q&&Number.isNaN(qn)){toast('La cantidad debe ser un número.');return}paddSave({t:'new',ambId,sc,name:nm,und:u.toUpperCase(),q:qn,newId:uid('act')})}});setTimeout(()=>{const i=$('#panm');if(i)i.focus()},40)},0)}
+function paddSave(o){if(!pubDraft())return;const id=uid('pa');const eng=dzEng();
+  const doc={date:M.date,pisoId:M.piso,sc:o.sc,kind:'padd',t:o.t,ambId:o.ambId,...(o.actId?{actId:o.actId}:{}),...(o.from?{from:o.from}:{}),...(o.q!=null&&o.q!==''?{q:+o.q}:{}),name:o.name||'',...(o.und?{und:o.und}:{}),...(o.newId?{newId:o.newId,order:[...S.act.values()].filter(y=>y.ambId===o.ambId).reduce((m,y)=>Math.max(m,+y.order||0),0)+10}:{}),
+    st:eng?'ok':'pend',draft:true,by:me.email,byName:me.name||me.email,ts:NOW()};
+  rec([addDoc(id,doc)]);dzLog(`＋ ${o.t==='rep'?'Reprogramada':o.t==='adel'?'Adelantada':'Nueva'}: ${o.name||''}`);requestRender();
+  toast(eng?'Agregado al plan: se aplica al lookahead al publicar':'Propuesta enviada: la decide el ingeniero','Deshacer',undo)}
+function paddHtml(){const L=paddsOf().filter(z=>z.st!=='rej');if(!L.length)return'';const eng=dzEng();
+  return`<div class="mp-sec">Se agrega al publicar (${L.length})</div><div class="mp-list">${L.sort((a,b)=>(a.ts||0)-(b.ts||0)).map(z=>{const a=S.amb.get(z.ambId);const ic=z.t==='rep'?'↻':z.t==='adel'?'⇤':'＋';const tl=z.t==='rep'?'Reprogramada'+(z.from?' (no se hizo el '+fmtD(z.from)+')':''):z.t==='adel'?'Adelantada'+(z.from?' (era el '+fmtD(z.from)+')':''):'Nueva, no prevista';
+    return`<div class="mp-it pa" style="--c:${conOf(z.sc).color}"><div class="t"><span class="mono">${esc(a?a.code:'')}</span> ${ic} ${esc(z.name||'')}<small>${esc(a?a.name+' · ':'')}${esc(conOf(z.sc).name)} · ${tl}${z.q!=null?' · '+fq(z.q)+' '+esc(z.und||(S.act.get(z.actId)||{}).und||''):''}${z.st==='pend'?' · <b class="bad">propuesta del SC</b>':''}</small></div>
+      <div class="s">${z.st==='pend'&&eng?`<button class="ib pri" data-paok="${z.id}">Aceptar</button><button class="ib" data-parej="${z.id}">Rechazar</button>`:''}${eng||z.by===(me&&me.email)?`<button class="lnkb" data-padel="${z.id}">Quitar</button>`:''}</div></div>`}).join('')}</div>`}
+
 function pubBarHtml(){const p=pubOf();const D=draftsOf();const eng=dzEng();const today=todayIso();const fut=M.date>today;
   const sn=typeof dplanOf==='function'?dplanOf(M.date,M.piso):null;const adm=typeof isAdmin!=='undefined'&&isAdmin;const lk=dayLk();
   const reoBtn=adm&&lk?'<button class="ib" data-lko="1" title="Solo el administrador: permite cambiar el plan de este día (queda registrado)">🔓 Reabrir</button>':'';
@@ -1269,6 +1318,7 @@ function pubDiscard(){const D=draftsOf();const g=[];for(const z of D){const o=re
 /** propuestas del SC sin decidir del día y piso que se ven */
 const dpPendAll=()=>[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&z.date===M.date);
 function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso (o el administrador).');return}const D=draftsOf();const n=D.reduce((a,z)=>a+(z.ids||[z.actId]).length,0);const nr=D.filter(z=>z.k).length;
+  {const pp=paddsOf('pend');if(pp.length){openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pp.length} trabajo${pp.length>1?'s':''} no programado${pp.length>1?'s':''} propuesto${pp.length>1?'s':''} por el SC.</b> Acéptalos o recházalos en «Se agrega al publicar» (panel del plan).</div>`,{});return}}
   const pend=dpPendAll();try{computeCross()}catch(e){}const cx=CROSS.list.length;const adm=typeof isAdmin!=='undefined'&&isAdmin;
   /* para publicar hay que revisar todas las propuestas del SC; solo el administrador puede aceptarlas o rechazarlas todas de una vez */
   if(pend.length){const nf=pend.filter(p=>p.k==='fin').length;
@@ -1292,8 +1342,8 @@ async function dpAll(acc){if(DPALL||typeof isAdmin==='undefined'||!isAdmin)retur
 /* Publicar va en una transacción: relee del servidor el aviso de publicado, cada borrador y cada actividad, así dos
    ingenieros que publican a la vez no corren dos veces las mismas fechas. Se saltan las actividades que ya no tienen ese día. */
 let PUBBUSY=false;
-async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.date,pid=M.piso,PID=pubId(date,pid);const pref=fcol('pdz').doc(PID);
-  const ids=[...new Set(D.flatMap(z=>z.ids||[z.actId]))];PUBBUSY=true;let R_;
+async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=paddsOf('ok');const date=M.date,pid=M.piso,PID=pubId(date,pid);const pref=fcol('pdz').doc(PID);
+  const ids=[...new Set([...D.flatMap(z=>z.ids||[z.actId]),...PA.map(z=>z.actId).filter(Boolean)])];PUBBUSY=true;let R_;
   /* la foto del plan se arma con lo que tiene el servidor: primero terminan de enviarse las escrituras propias */
   try{if(db.waitForPendingWrites)await Promise.race([db.waitForPendingWrites(),new Promise(r=>setTimeout(r,4000))])}catch(e){}
   /* candidatas a la foto: lo que esta página ve ese día en el piso, lo de la foto anterior y lo que se mueve (se releen en la transacción) */
@@ -1302,11 +1352,12 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.
   try{R_=await db.runTransaction(async tx=>{
     const ps=await tx.get(pref);const pubD=ps.exists?ps.data():null;const dref=fcol('dplan').doc(date+'_'+pid);const dsn=await tx.get(dref);const sn0=dsn.exists?dsn.data():null;
     /* lecturas en paralelo (un piso puede tener cientos de actividades ese día) */
-    const ds=await Promise.all(D.map(z=>tx.get(fcol('pdz').doc(z.id))));
+    const ds=await Promise.all(D.map(z=>tx.get(fcol('pdz').doc(z.id))));const pas=await Promise.all(PA.map(z=>tx.get(fcol('pdz').doc(z.id))));
+    const Pz=[];pas.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:PA[i].id};if(zz.draft&&zz.st==='ok')Pz.push(zz)});Pz.sort((a,b)=>(a.ts||0)-(b.ts||0));
     const A=new Map();(await Promise.all([...cand].map(id=>tx.get(fcol('acts').doc(id))))).forEach(d=>{if(d.exists)A.set(d.id,actNorm({...d.data(),id:d.id}))});
     const Dz=[];ds.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:D[i].id};if(zz.draft)Dz.push(zz)});Dz.sort((a,b)=>(a.ts||0)-(b.ts||0)||String(a.id).localeCompare(String(b.id)));
     /* planes ya cerrados de otras fechas que se tocarían: esa actividad no se mueve (si es la principal, el cambio queda sin publicar) */
-    const closed=new Map();const DD=pubDates(Dz,A,date);(await Promise.all(DD.map(dd=>tx.get(fcol('dplan').doc(dd+'_'+pid))))).forEach((s_,i)=>{const v=s_.exists?s_.data():null;if(v&&v.ids&&!v.reo)closed.set(DD[i],new Set(Object.keys(v.ids)))});
+    const closed=new Map();const DD=[...new Set([...pubDates(Dz,A,date),...Pz.filter(z=>z.t==='adel'&&z.from).map(z=>z.from)])].filter(d=>d!==date);(await Promise.all(DD.map(dd=>tx.get(fcol('dplan').doc(dd+'_'+pid))))).forEach((s_,i)=>{const v=s_.exists?s_.data():null;if(v&&v.ids&&!v.reo)closed.set(DD[i],new Set(Object.keys(v.ids)))});
     const lockedOn=(id,a,b)=>chgDays(a,b).filter(d=>d!==date&&closed.has(d)&&closed.get(d).has(id));
     const W=new Map(),out=[],skipped=[],held=[],restrs=[];
     for(const zz of Dz){const n=zz.shift||wdist(zz.date,zz.repTo);const mv={};const L=zz.ids||[zz.actId];let hold=false;
@@ -1321,15 +1372,24 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.
       /* toda reprogramación queda registrada en Restricciones con su causa (el tipo sale de la causa, no del primero de la lista) */
       let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid='res-'+zz.id;/* id fijo por borrador: dos publicaciones del mismo cambio nunca crean dos restricciones */restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:zz.rt||restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
       out.push({id:zz.id,mv,rid,date:zz.date,aid:zz.actId,k:zz.k||''})}
+    /* lo agregado al plan (padd): reprogramar / adelantar a este día o actividad nueva */
+    const paOut=[],newActs=[];for(const zz of Pz){
+      if(zz.t==='new'){const nid=zz.newId||uid('act');const ord=zz.order||([...S.act.values()].filter(y=>y.ambId===zz.ambId).reduce((m,y)=>Math.max(m,+y.order||0),0)+10);
+        newActs.push({id:nid,doc:{ambId:zz.ambId,sc:zz.sc,name:zz.name||'',und:zz.und||'',metrado:zz.q!=null?+zz.q:null,days:[date],qty:zz.q!=null?{[date]:+zz.q}:{},order:ord}});paOut.push({id:zz.id,actId:nid,nw:true});continue}
+      const id=zz.actId;const y=W.get(id)||A.get(id);if(!y||y.arch){skipped.push(zz.name||id);continue}
+      if(zz.t==='adel'&&closed.has(zz.from)&&closed.get(zz.from).has(id)){held.push(`${short(y.name||id,30)} (${fmtD(zz.from)})`);continue}
+      const o=paddApply(y,zz,date);if(!o){skipped.push(y.name||id);continue}W.set(id,{...y,...o});paOut.push({id:zz.id,mv:{[id]:{p:y.days||[],pq:y.qty||{},n:o.days,nq:o.qty}}})}
     for(const[id,y]of W)tx.update(fcol('acts').doc(id),{days:y.days,qty:y.qty||{},...(y.rpl?{rpl:y.rpl}:{})});
+    for(const na of newActs)tx.set(fcol('acts').doc(na.id),na.doc);
+    for(const o of paOut)tx.update(fcol('pdz').doc(o.id),{draft:false,pub:PID,...(o.actId?{actId:o.actId}:{})});
     for(const r of restrs){const{id,...b}=r;tx.set(fcol('restr').doc(id),b)}
     for(const o of out)tx.update(fcol('pdz').doc(o.id),{draft:false,mv:o.mv,rid:o.rid,pub:PID});
-    const doc={date,pisoId:pid,sc:'',kind:'pub',n:(pubD&&pubD.n||0)+out.length,by:me.email,byName:me.name||me.email,ts:NOW()};tx.set(pref,doc);
+    const doc={date,pisoId:pid,sc:'',kind:'pub',n:(pubD&&pubD.n||0)+out.length+paOut.length,by:me.email,byName:me.name||me.email,ts:NOW()};tx.set(pref,doc);
     /* foto del plan comprometido (contra ella se mide el PPC diario), con las actividades releídas del servidor;
        un día que ya llegó conserva la que tenía (o la de antes de publicar) */
-    let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso())for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});
+    let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso()){for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});for(const na of newActs)Acts.set(na.id,{...na.doc,id:na.id})}
       snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
-    return{out,skipped,held,W,restrs,doc,was:pubD,snapIds}})}
+    return{out,skipped,held,W,restrs,doc,was:pubD,snapIds,paOut,newActs}})}
   catch(e){PUBBUSY=false;toast('No se pudo publicar: '+(e&&(e.code||e.message)||'error'));return}
   PUBBUSY=false;
   if(R_.blocked){toast(`No se publicó: ${R_.held.join(' · ')} tocaría un día ya publicado. Quita o cambia ese «no va» (Cambios del plan) o pide al administrador reabrir ese día.`);requestRender();return}
@@ -1337,12 +1397,13 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const date=M.
   if(R_.W.size&&typeof lhLog==='function'){const ops=[...R_.W].map(([id,y])=>{const b=S.act.get(id);return b?{col:'acts',id,before:b,after:{...b,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})}}:null}).filter(Boolean);
     const n_=R_.out.filter(o=>Object.keys(o.mv||{}).length).length;lhLog(ops,`Plan del ${dvLbl(date)} publicado: ${n_} «No va» reprogramado${n_>1?'s':''} en la reunión`)}
   /* reflejar al momento (llegará igual por la base) */
-  for(const[id,y]of R_.W){const c=S.act.get(id);if(c)S.act.set(id,{...c,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})})}for(const r of R_.restrs)S.res.set(r.id,r);
+  for(const[id,y]of R_.W){const c=S.act.get(id);if(c)S.act.set(id,{...c,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})})}
+  for(const na of R_.newActs||[])if(!S.act.has(na.id))S.act.set(na.id,{...na.doc,id:na.id});for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,pub:PID,...(o.actId?{actId:o.actId}:{})})}for(const r of R_.restrs)S.res.set(r.id,r);
   for(const o of R_.out){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,mv:o.mv,rid:o.rid,pub:PID})}PD.set(PID,{...R_.doc,id:PID});if(R_.snapIds){DPL.set(date+'_'+pid,{...(DPL.get(date+'_'+pid)||{}),id:date+'_'+pid,date,pisoId:pid,ids:R_.snapIds,pub:PID,auto:false,reo:null})}DV++;PDV++;
   /* publicado tarde (el día ya llegó): lo que no fue queda como no cumplido ese día, igual que un «No va hoy» */
   if(typeof canDaily!=='undefined'&&canDaily)for(const o of R_.out){if(o.date>todayIso()||!Object.keys(o.mv||{}).length)continue;const x=S.act.get(o.aid);if(!x||(recReal(o.date,o.aid)||{}).status)continue;
     const zz=PD.get(o.id)||{};const cn=zz.cnc||cncFor(o.k==='per'?'per':o.k);writeDaily(o.date,pid,{recs:{[o.aid]:{...baseRec(o.date,x,null),status:'no',cnc:cn,imp:zz.c&&zz.imp!==cncImp(cn)?!!zz.imp:null,...(zz.rsc?{rsc:zz.rsc,pc:!!zz.pc}:{}),note:'No fue: plan publicado ese mismo día',viaNova:true}}});o.lr=true}
-  const n=R_.out.length;
+  const n=R_.out.length+(R_.paOut||[]).length;
   toast(`Plan del ${dvLbl(date)} publicado${n?` · ${n} reprogramación${n>1?'es':''} aplicada${n>1?'s':''} al lookahead`:''}${R_.skipped.length?` · ${R_.skipped.length} ya no estaba${R_.skipped.length>1?'n':''} ese día (sin cambio)`:''}${R_.was&&!n?' · ya estaba publicado':''}`,'Deshacer',()=>unpubPlan(PID,R_));
   if(R_.held.length)setTimeout(()=>toast(`No se movió (toca un día ya publicado): ${R_.held.join(' · ')}. Corrígelo en ese día o pide al administrador reabrirlo.`),1500);requestRender()}
 /** días (y cantidades) que cambian entre antes y después (igual que el servidor: functions/lib.js changedDays) */
@@ -1361,7 +1422,7 @@ function rplOff(y,d){if(!d||!y.rpl||!y.rpl[d])return y;const r={...y.rpl};delete
 let UNPUBBUSY=false;
 async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,14),p0=PID.slice(15);const dk=d0+'_'+p0;
   /* la foto se quita solo si fue una publicación nueva (no una republicación) y si este usuario puede quitarla (el editor: días futuros) */
-  const dropSnap=!R_.was&&(d0>todayIso()||(typeof isAdmin!=='undefined'&&isAdmin));const ids=[...new Set(R_.out.flatMap(o=>Object.keys(o.mv||{})))];
+  const dropSnap=!R_.was&&(d0>todayIso()||(typeof isAdmin!=='undefined'&&isAdmin));const PO=R_.paOut||[];const ids=[...new Set([...R_.out.flatMap(o=>Object.keys(o.mv||{})),...PO.flatMap(o=>Object.keys(o.mv||{}))])];
   UNPUBBUSY=true;let T;
   try{T=await db.runTransaction(async tx=>{const A=new Map();for(const id of ids){const d=await tx.get(fcol('acts').doc(id));if(d.exists)A.set(id,actNorm({...d.data(),id}))}
     const RS=new Map();for(const o of R_.out)if(o.rid){const d=await tx.get(fcol('restr').doc(o.rid));if(d.exists)RS.set(o.rid,d.data())}
@@ -1369,8 +1430,11 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
     for(const o of [...R_.out].reverse())for(const[id,m]of Object.entries(o.mv||{})){const y=W.get(id)||A.get(id);if(!y)continue;
       if(canon(y.days||[])!==canon(m.n||[])||(m.nq&&canon(y.qty||{})!==canon(m.nq))){bad.push(y.name||id);continue}
       W.set(id,rplOff({...y,days:m.p||[],qty:m.pq||{}},id===o.aid?o.date:rplKey(y,o.aid,o.date)))}
+    for(const o of [...PO].reverse())for(const[id,m]of Object.entries(o.mv||{})){const y=W.get(id)||A.get(id);if(!y)continue;
+      if(canon(y.days||[])!==canon(m.n||[])){bad.push(y.name||id);continue}W.set(id,{...y,days:m.p||[],qty:m.pq||{}})}
     if(bad.length)return{bad};
     const arch={t:NOW(),by:me.email,n:me.name||''};
+    for(const o of PO){if(o.nw&&o.actId)tx.update(fcol('acts').doc(o.actId),{arch});tx.update(fcol('pdz').doc(o.id),{draft:true,pub:null})}
     for(const[id,y]of W)tx.update(fcol('acts').doc(id),{days:y.days,qty:y.qty||{},rpl:y.rpl||{}});
     for(const o of R_.out){const r=o.rid&&RS.get(o.rid);if(r&&!r.arch&&r.status!=='lib')tx.update(fcol('restr').doc(o.rid),{arch})}
     for(const o of R_.out)tx.update(fcol('pdz').doc(o.id),{draft:true,mv:null,rid:'',pub:null});
@@ -1383,6 +1447,7 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
   const ops=[];for(const[id,y]of T.W){const c=S.act.get(id);if(c){ops.push(op('acts',id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}}));S.act.set(id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}})}}
   if(typeof lhLog==='function'&&ops.length)lhLog(ops,'Publicación deshecha');
   for(const o of R_.out){const r=o.rid&&S.res.get(o.rid);if(r&&!r.arch&&r.status!=='lib')S.res.set(o.rid,{...r,arch:T.arch});const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,mv:null,rid:'',pub:null})}
+  for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,pub:null});if(o.nw&&o.actId)S.act.delete(o.actId)}
   if(!R_.was){PD.delete(PID);if(dropSnap&&DPL.has(dk))DPL.delete(dk)}DV++;PDV++;
   for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova)writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
   toast('Publicación deshecha: los cambios vuelven a borrador');requestRender()}
@@ -1809,6 +1874,9 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-rep]'))){const[id,fd]=b.dataset.rep.split('|');reprogAct(id,M.date,fd);return true}
   if((b=g('[data-cxtog]'))){M.cxOpen=!M.cxOpen;requestRender();return true}
   if((b=g('[data-rdyp]'))){const v=b.dataset.rdyp;if(v!==M.piso){if(typeof U!=='undefined'&&U.piso){U.piso=v;if(typeof saveUI==='function')saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;requestRender()}return true}
+  if((b=g('[data-paok]'))){if(!dzEng())return true;const o=updDoc(b.dataset.paok,{st:'ok',decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend'});if(o){rec([o]);requestRender();toast('Aceptado: se aplica al publicar')}return true}
+  if((b=g('[data-parej]'))){if(!dzEng())return true;const o=updDoc(b.dataset.parej,{st:'rej',draft:false,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',draft:true});if(o){rec([o]);requestRender();toast('Propuesta rechazada')}return true}
+  if((b=g('[data-padel]'))){const z=PD.get(b.dataset.padel);if(!z||!(dzEng()||z.by===(me&&me.email)))return true;const o=remDoc(z.id);if(o){rec([o]);requestRender();toast('Quitado del plan','Deshacer',undo)}return true}
   if((b=g('[data-rtab]'))){const id=b.dataset.rtab;if(innerWidth<900){if(M.rst===id&&M.rsPh)M.rsPh=false;else M.rsPh=true}else M.rsHide=false;M.rst=id;M.rstMan=true;requestRender();return true}
   if((b=g('[data-rsx]'))){if(innerWidth<900)M.rsPh=!M.rsPh;else M.rsHide=!M.rsHide;requestRender();return true}
   if((b=g('[data-cxrtog]'))){M.cxrOpen=!M.cxrOpen;requestRender();return true}
