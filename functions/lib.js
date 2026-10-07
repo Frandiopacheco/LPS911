@@ -248,6 +248,14 @@ function changedDays(a, b) {
    días ya cerrados de otras fechas), contractors (Map id → {name}), project, pub (doc pub_<fecha>_<piso> vigente o null).
    Devuelve las escrituras: acts {id: {days, qty, rpl?}}, restrs [{id, doc}], novas [{id, patch}], pub {id, doc} | null,
    y skipped (ya no tenían ese día), blocked (tocarían un día cerrado), log (texto). No escribe nada. */
+/** días y cantidades de una actividad al agregarla al plan del día (padd): rep/new = suma el día; adel = mueve su día «from» */
+function paddApply(y, zz, date) {
+  let days = [...(y.days || [])]; const qty = { ...(y.qty || {}) };
+  if (zz.t === 'adel') { if (!days.includes(zz.from)) return null; days = days.filter(d => d !== zz.from); if (qty[zz.from] != null) { qty[date] = qty[zz.from]; delete qty[zz.from]; } }
+  if (!days.includes(date)) days.push(date); days.sort();
+  if (zz.t === 'rep' && zz.q != null && zz.q !== '') qty[date] = +zz.q;
+  return { days, qty };
+}
 function publishDrafts({ drafts = [], acts = new Map(), dplans = new Map(), contractors = new Map(), project = {}, pub = null }, date, pisoId, now = Date.now(), opt = {}) {
   const PID = 'pub_' + date + '_' + pisoId;
   const BY = { by: 'servidor', byName: 'Publicación automática' };
@@ -292,15 +300,33 @@ function publishDrafts({ drafts = [], acts = new Map(), dplans = new Map(), cont
     }
     novas.push({ id: zz.id, patch: { draft: false, mv, rid, pub: PID } });
   }
+  /* agregado al plan (padd, aceptado): reprogramar / adelantar a este día o actividad nueva (igual que la página: pubPlan/paddApply) */
+  const padds = [], newActs = [];
+  const PA = drafts.filter(z => z && z.kind === 'padd' && z.draft && z.st === 'ok' && z.date === date && z.pisoId === pisoId)
+    .sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(a.id).localeCompare(String(b.id)));
+  for (const zz of PA) {
+    if (zz.t === 'new') {
+      const nid = zz.newId || mkId('act');
+      newActs.push({ id: nid, doc: { ambId: zz.ambId, sc: zz.sc || '', name: zz.name || '', und: zz.und || '', metrado: zz.q != null ? +zz.q : null, days: [date], qty: zz.q != null ? { [date]: +zz.q } : {}, order: zz.order || 99990 } });
+      padds.push({ id: zz.id, patch: { draft: false, pub: PID, actId: nid } }); continue;
+    }
+    const id = zz.actId; const y = W.get(id) || acts.get(id); if (!y || y.arch) { skipped.push(zz.name || id); continue; }
+    if (zz.t === 'adel' && closed.has(zz.from) && closed.get(zz.from).has(id)) { blocked.push(y.name || id); log.push(`${y.name || id}: no se adelanta, cambiaría el plan ya cerrado del ${zz.from}`); continue; }
+    const o = paddApply(y, zz, date); if (!o) { skipped.push(y.name || id); continue; }
+    W.set(id, { ...y, ...o });
+    padds.push({ id: zz.id, patch: { draft: false, pub: PID, mv: { [id]: { p: y.days || [], pq: y.qty || {}, n: o.days, nq: o.qty } } } });
+  }
   const out = {};
   for (const [id, y] of W) out[id] = { days: y.days, qty: y.qty || {}, ...(y.rpl ? { rpl: y.rpl } : {}) };
-  const pubW = novas.length ? { id: PID, doc: { date, pisoId, sc: '', kind: 'pub', n: ((pub && pub.n) || 0) + novas.length, ...BY, ts: now, auto: true } } : null;
-  return { acts: out, restrs, novas, pub: pubW, skipped, blocked, log };
+  const nPub = novas.length + padds.length;
+  const pubW = nPub ? { id: PID, doc: { date, pisoId, sc: '', kind: 'pub', n: ((pub && pub.n) || 0) + nPub, ...BY, ts: now, auto: true } } : null;
+  return { acts: out, restrs, novas, padds, newActs, pub: pubW, skipped, blocked, log };
 }
 /* Fechas cuyos planes cerrados (dplan) hay que releer antes de publicar: los días ≥ fecha de las actividades y adónde irían */
 function draftDates(drafts, acts, project, date) {
   const S = new Set();
   for (const z of drafts) {
+    if (z.kind === 'padd') { if (z.t === 'adel' && z.from && z.from !== date) S.add(z.from); continue; }
     const n = z.shift || wdist(project, z.date, z.repTo);
     for (const id of z.ids || [z.actId]) { const y = acts.get(id); if (!y) continue; for (const d of y.days || []) if (d >= date) { S.add(d); S.add(wshift(project, d, n)); } }
   }
@@ -308,7 +334,7 @@ function draftDates(drafts, acts, project, date) {
 }
 /* Propuestas del SC (pdz kind:'dprop') sin revisar del día y piso: a la hora de cierre se rechazan («va lo programado») */
 const DPROP_REJ = now => ({ st: 'rej', dec: 'Cierre automático: va según lo programado', decBy: 'servidor', decN: 'Cierre automático', decT: now });
-const pendProps = (docs, date, pisoId) => docs.filter(z => z && z.kind === 'dprop' && z.st === 'pend' && z.date === date && z.pisoId === pisoId);
+const pendProps = (docs, date, pisoId) => docs.filter(z => z && (z.kind === 'dprop' || (z.kind === 'padd' && z.draft)) && z.st === 'pend' && z.date === date && z.pisoId === pisoId);
 
 /* Cierre automático de un piso, en una transacción (db = Firestore de admin): si el plan del día ya tiene foto (ids) o fue
    reabierto, no hace nada. Si no: relee el aviso de publicado, cada borrador, sus actividades y los planes cerrados de las fechas
@@ -324,13 +350,13 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const D = [];
     for (const z of drafts) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists) D.push({ ...s.data(), id: z.id }); }
     const A = new Map();
-    for (const id of new Set(D.flatMap(z => z.ids || [z.actId]))) { const s = await tx.get(col('acts').doc(id)); if (s.exists) A.set(id, { ...s.data(), id }); }
+    for (const id of new Set(D.flatMap(z => z.ids || [z.actId]).filter(Boolean))) { const s = await tx.get(col('acts').doc(id)); if (s.exists) A.set(id, { ...s.data(), id }); }
     const DP = new Map();
     for (const dd of draftDates(D, A, project, d)) { const s = await tx.get(col('dplan').doc(dd + '_' + pid)); if (s.exists) DP.set(dd + '_' + pid, s.data()); }
     const P = [];
     for (const z of props) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists && (s.data() || {}).st === 'pend') P.push(z.id); }
     let R = D.length ? publishDrafts({ drafts: D, acts: A, dplans: DP, contractors, project, pub: ps.exists ? ps.data() : null }, d, pid, now) : null;
-    const nW = R ? Object.keys(R.acts).length + R.restrs.length + R.novas.length + (R.pub ? 1 : 0) : 0;
+    const nW = R ? Object.keys(R.acts).length + R.restrs.length + R.novas.length + (R.padds || []).length + (R.newActs || []).length + (R.pub ? 1 : 0) : 0;
     /* límite de 500 escrituras por transacción: si no entra, no se publica (los borradores quedan para el ingeniero) */
     /* si no entra, no se publica ni se cierra el día (sin foto): mañana el ingeniero ve «⚠ Sin publicar» y lo publica él;
        las propuestas pendientes sí se rechazan (las que entren) */
@@ -341,12 +367,15 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     }
     const Acts = new Map(acts);
     if (R) for (const [id, u] of Object.entries(R.acts)) Acts.set(id, { ...(Acts.get(id) || {}), ...(A.get(id) || {}), ...u, id });
+    if (R) for (const na of R.newActs || []) Acts.set(na.id, { ...na.doc, id: na.id });
     const pl = buildDayPlan({ pisos, sectors, ambientes, acts: Acts, done }, d).find(o => o.doc.pisoId === pid);
     const ids = pl ? pl.doc.ids : {};
     if (R) {
       for (const [id, u] of Object.entries(R.acts)) tx.update(col('acts').doc(id), u);
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
       for (const o of R.novas) tx.update(col('pdz').doc(o.id), o.patch);
+      for (const na of R.newActs || []) tx.set(col('acts').doc(na.id), na.doc);
+      for (const o of R.padds || []) tx.update(col('pdz').doc(o.id), o.patch);
       if (R.pub) tx.set(pref, R.pub.doc);
       /* queda en el Historial del lookahead como la publicación desde la página */
       const items = Object.entries(R.acts).map(([id, u]) => { const b = A.get(id) || acts.get(id) || {};

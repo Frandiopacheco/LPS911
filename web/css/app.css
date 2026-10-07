@@ -2913,3 +2913,12 @@ a.kbig{display:flex;align-items:center;justify-content:center;text-decoration:no
 @media (max-width:760px){.khi [data-sini] span{display:none}}
 .mrvh{margin:8px 10px 6px;font-size:12.5px;color:var(--ink2)}.mrs.dock .mrvgo{margin:0 10px 8px;width:calc(100% - 20px)}
 .kphs{display:flex;gap:6px;flex-wrap:wrap}.kphs img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:var(--panel2)}
+/* Plan diario: agregar trabajo no programado desde el ambiente */
+.pop .pab{display:flex;flex-direction:column;gap:6px;margin-top:8px}.pop .pab button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);min-height:44px;cursor:pointer}
+.pop .pab button small{font-size:11.5px;color:var(--muted)}.pop .pab button:disabled{opacity:.5;cursor:default}.pop .pab button.pri{background:var(--accent);color:var(--accent-ink);align-items:center;border-color:var(--accent)}
+.pop .pal{display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow:auto;margin-top:6px}.pop .pal button{display:grid;grid-template-columns:12px 1fr;column-gap:8px;text-align:left;padding:7px 10px;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--panel);cursor:pointer}
+.pop .pal button i{grid-row:1/3;align-self:center}.pop .pal button small{grid-column:2;font-size:11.5px;color:var(--muted)}
+.pop .pa2{display:flex;gap:6px}.pop .pa2 input:first-child{flex:1}.pop .pa2 input:last-child{width:80px}
+.mp-it.pa{border-left:3px solid var(--c)}
+.zcpa{margin-top:8px;width:100%}
+.pop .pal button i.zcsc{display:block}

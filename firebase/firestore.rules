@@ -69,7 +69,10 @@ service cloud.firestore {
       return (k != 'dprop' || (id == 'dp_' + d.get('date', '') + '_' + d.get('actId', '') && actMine(d.get('actId', ''))))
         && (k != 'fza' || id == 'fz_' + d.get('date', '') + '_' + d.get('sc', ''))
         && (k != 'fzl' || id == 'fzl_' + d.get('sc', ''))
-        && (k != 'nova' || (!dplanFuture(d.get('date', '')) && actMine(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])));
+        && (k != 'nova' || (!dplanFuture(d.get('date', '')) && actMine(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])))
+        // agregar al plan (reprogramar / adelantar / nueva): el SC solo lo propone (pend), de su partida, y no lo publica
+        && (k != 'padd' || (d.get('st', '') == 'pend' && d.get('draft', false) == true && !d.keys().hasAny(['pub', 'decBy'])
+             && (d.get('t', '') == 'new' || actMine(d.get('actId', '')))));
     }
     // una propuesta ya aceptada (ok) no la cambia ni la borra el SC; una rechazada solo vuelve a pendiente
     function scDpropFrom(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') in ['pend', 'rej']; }

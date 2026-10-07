@@ -323,6 +323,16 @@ test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x5'), { sc: 'c-otro', pts: [1] }));
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pzon/x6'), { sc: 'c-gabel', pts: [1] }));
 });
+test('agregar al plan (padd): el SC solo propone, de su partida', async () => {
+  const sc = user('sc@obra.pe');
+  const B = { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'padd', draft: true, by: 'sc@obra.pe' };
+  await assertSucceeds(setDoc(doc(sc, 'pdz/pa1'), { ...B, t: 'new', name: 'Resane', st: 'pend' }));
+  await assertSucceeds(setDoc(doc(sc, 'pdz/pa2'), { ...B, t: 'rep', actId: 'x1', st: 'pend' }));
+  await assertFails(setDoc(doc(sc, 'pdz/pa3'), { ...B, t: 'new', name: 'Resane', st: 'ok' })); // no se acepta solo
+  await assertFails(setDoc(doc(sc, 'pdz/pa4'), { ...B, sc: 'c-otro', t: 'new', st: 'pend' }));
+  await assertFails(updateDoc(doc(sc, 'pdz/pa1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'pdz/pa1'), { st: 'ok', decBy: 'editor@obra.pe' }));
+});
 test('plan del día: el SC dibuja y propone, pero no toca las decisiones del ingeniero', async () => {
   await env.withSecurityRulesDisabled(async c => {
     const db = c.firestore();
