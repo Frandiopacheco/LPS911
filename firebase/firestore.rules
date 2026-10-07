@@ -69,7 +69,10 @@ service cloud.firestore {
       return (k != 'dprop' || (id == 'dp_' + d.get('date', '') + '_' + d.get('actId', '') && actMine(d.get('actId', ''))))
         && (k != 'fza' || id == 'fz_' + d.get('date', '') + '_' + d.get('sc', ''))
         && (k != 'fzl' || id == 'fzl_' + d.get('sc', ''))
-        && (k != 'nova' || (!dplanFuture(d.get('date', '')) && actMine(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])));
+        && (k != 'nova' || (!dplanFuture(d.get('date', '')) && actMine(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])))
+        // agregar al plan (reprogramar / adelantar / nueva): el SC solo lo propone (pend), de su partida, y no lo publica
+        && (k != 'padd' || (d.get('st', '') == 'pend' && d.get('draft', false) == true && !d.keys().hasAny(['pub', 'decBy'])
+             && (d.get('t', '') == 'new' || actMine(d.get('actId', '')))));
     }
     // una propuesta ya aceptada (ok) no la cambia ni la borra el SC; una rechazada solo vuelve a pendiente
     function scDpropFrom(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') in ['pend', 'rej']; }
@@ -268,10 +271,13 @@ service cloud.firestore {
     }
     // Trabajo no programado registrado en el recorrido (con punto en el plano y foto).
     // Cada uno corrige o anula lo suyo; campo, editores y administrador, todo. Nadie lo borra de verdad (se anula con del).
+    // el SC registra lo no programado de su partida; queda por verificar (scProp) y no se verifica a sí mismo (ver)
+    function scNpOk(d) { return isSC() && d.by == mid() && d.sc in scsOf() && d.get('scProp', false) == true && !('ver' in d); }
     match /nprog/{id} {
       allow read: if lpsMember();
-      allow create: if canNP() && request.resource.data.by == mid();
-      allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid());
+      allow create: if (canNP() && request.resource.data.by == mid()) || scNpOk(request.resource.data);
+      allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid())
+        || (resource.data.by == mid() && scNpOk(request.resource.data));
       allow delete: if isAdmin();
     }
     // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)

@@ -173,3 +173,21 @@ test('con mouse, doble clic sobre una actividad abre la actividad (no el no prog
   expect(await page.locator('#npsheet').count()).toBe(0);
   expect(await page.locator('#ksheet').count()).toBe(1);
 });
+
+test('el SC registra un trabajo no programado de su partida en «En obra» y el ingeniero lo verifica', async ({ page }) => {
+  let errors = await openApp(page, { as: 'sc', tab: 'cap', extra: PLANO });
+  await page.evaluate(() => { CP.v = 'plan'; render(); });
+  await page.locator('[data-knp]').click();
+  await tocar(page, 200, 200);
+  const sh = page.locator('#npsheet');
+  await expect(sh).toContainText('Trabajo no programado');
+  await expect(sh.locator('[data-npsc]')).toHaveCount(1); // solo su partida
+  await sh.locator('[data-npsc]').click();
+  await page.fill('#npdesc', 'Resane de muro');
+  await sh.locator('[data-npa="save"]').click();
+  await expect.poll(async () => (await npAll(page)).length).toBe(1);
+  const n = (await npAll(page))[0];
+  expect(n).toMatchObject({ sc: 'c1', desc: 'Resane de muro', scProp: true, by: 'sc@obra.pe' });
+  expect(n.ver).toBeUndefined();
+  noErrors(errors, 'sc registra');
+});

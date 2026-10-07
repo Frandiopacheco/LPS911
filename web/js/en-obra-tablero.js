@@ -25,6 +25,9 @@ function kText(d,aid){const s=kState(d,aid);const lv=s.lv||liveOf(d,aid);let t='
 function liveLine(d,aid){const lv=liveOf(d,aid);if(!lv||!(lv.log||[]).length)return'';const L=lv.log.slice(-3);
   const w={run:'▶ Inició',res:'▶ Reanudó',stop:'⏸ Detenido',close:'Cerró',seq:'⏭ En secuencia',unseq:'Quitó la secuencia'};
   return`<div class="clive">${L.map(e=>`<span>${hhmm(e.t)} ${w[e.s]||e.s}${e.s==='stop'&&e.m?' ('+esc(e.m)+')':''}${e.s==='seq'&&e.m?' tras '+esc(e.m):''}${e.s==='close'?' '+(e.m==='ok'?'✓':'✗'):''} · ${esc((e.n||'').split(' ')[0])}</span>`).join('')}${lv._pend?'<span>⏳ sin enviar</span>':''}</div>`}
+/* fotos de la actividad ese día (detención, cierre del capataz/SC o registro del ingeniero): se ven en la ficha y se amplían al tocarlas */
+function actPhotos(d,aid){const lv=liveOf(d,aid);const r=recOf(d,aid);const ids=[...new Set([...((lv&&lv.photos)||[]),...((r&&r.photos)||[])])];if(!ids.length)return'';
+  return`<div class="kphs">${ids.map(id=>{if(typeof loadFoto==='function')loadFoto(id);const src=FOTO.get(id)||'';return`<img data-ph="${id}" src="${src}" alt="Foto"${src?'':' style="opacity:.3"'}>`}).join('')}</div>`}
 function liveWrite(d,aid,patch,ev,extra){const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
   const e={...ev,t:NOW(),by:me.email,n:me.name||''};
   const doc={date:d,actId:aid,pisoId:pisoOfAct(aid),sc:x.sc,...patch,log:[...(cur.log||[]),e].slice(-40),...(extra||{})};
@@ -54,11 +57,11 @@ function capPend(d){if(ENG()||VEED()||SCK())return[];const my=me&&me.scs||[];ret
 function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG()||VEED();const q=VEED()?'':E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):SCK()?(d<todayIso()||s.conf?'':s.k==='none'||s.k==='seq'?'run':s.k==='stop'?'res':''):d<todayIso()?'closef':s.conf?'':s.k==='none'||s.k==='seq'?'run':s.k==='run'?'closef':s.k==='stop'?'res':'';
   const ql={run:liveOf(addD(d,-1),aid)&&!(liveOf(addD(d,-1),aid).close?.done)?'▶ Continúa':'▶ Iniciado',res:liveOf(d,aid)&&liveOf(d,aid).t0?'▶ Reanudado':'▶ Iniciado',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
   return`<article class="kc k-${s.k}${s.conf?' conf':''}" data-k="${aid}" data-d="${d}" style="--k:${KST[s.k].c}"><i class="kn">${n||'·'}</i><div class="kt"><b>${esc(o.x.name)}</b><span>${esc(o.a.code)} · ${esc(o.a.name)}${pend?' · '+fmtD(d):''}${E||(me.scs||[]).length>1?' · '+esc(conOf(o.x.sc).name):''}</span><em>${esc(kText(d,aid))}</em></div>${q?`<button class="kgo" data-kq="${q}">${ql}</button>`:s.conf?'<span class="kok">✓</span>':''}</article>`}
-function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
+function renderCap(main){const E=ENG()||VEED();const NPon=canNP()||(SCK()&&npSC());const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(CP.v!=='plan'&&CP.v!=='list')CP.v='plan';const V=E?'plan':CP.v;
   const all=capItems(d);const my=E?[...new Set(all.map(o=>o.x.sc))].sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name)):(me.scs||[]);if(CP.sc&&!my.includes(CP.sc))CP.sc='';const allF=all.filter(o=>!CP.sc||o.x.sc===CP.sc);const byP=new Map();allF.forEach(o=>{if(!byP.has(o.pid))byP.set(o.pid,[]);byP.get(o.pid).push(o)});
   /* quien recorre la obra ve todos los pisos (también los que hoy no tienen nada programado: ahí se registra lo no programado) */
-  const ps=E&&NPon?visPisos():pisos().filter(p=>byP.has(p.id));if((!E&&CP.pud!==d)||!ps.some(p=>p.id===CP.pid)){const zp=API?ps.find(p=>{const z=API.zonedSet(p.id);return(byP.get(p.id)||[]).some(o=>z.has(o.x.id))}):null;CP.pid=((zp||ps.find(p=>byP.has(p.id))||ps[0])||{}).id||''}
+  const ps=(E||SCK())&&NPon?visPisos():pisos().filter(p=>byP.has(p.id));if((!E&&CP.pud!==d)||!ps.some(p=>p.id===CP.pid)){const zp=API?ps.find(p=>{const z=API.zonedSet(p.id);return(byP.get(p.id)||[]).some(o=>z.has(o.x.id))}):null;CP.pid=((zp||ps.find(p=>byP.has(p.id))||ps[0])||{}).id||''}
   const items=byP.get(CP.pid)||[];const nums=API?API.nums(CP.pid):new Map();const zoned=API?API.zonedSet(CP.pid):new Set();
   const cnt={none:0,seq:0,run:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kState(d,o.x.id).k]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
   if(!main.dataset.built){main.innerHTML=`<div class="kap"><div class="khd" id="khd"></div><div class="kbody"><div class="kplanw" id="kplanw"><div class="kplan" id="kplan"></div></div><div id="klist"></div></div></div>`;main.dataset.built='1';main.onclick=capClick}
@@ -68,7 +71,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${(byP.get(p.id)||[]).length}</b>${NPon&&npItems([d],new Set([p.id])).length?`<b class="knp" title="Trabajo no programado registrado">+${npItems([d],new Set([p.id])).length}</b>`:''}</button>`).join('')}</div>`;
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','seq','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
   const khd=$('#khd',main);if(khd.dataset.h!==hh){khd.innerHTML=hh;khd.dataset.h=hh}
-  const npOn=NPon&&E&&!!CP.pid&&d<=todayIso();const npArm=npOn&&!!NPA&&NPA.pid===CP.pid&&NPA.d===d;if(!npArm)NPA=null;const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);pw.classList.toggle('knparm',npArm);
+  const npOn=NPon&&(E||SCK())&&!!CP.pid&&d<=todayIso();const npArm=npOn&&!!NPA&&NPA.pid===CP.pid&&NPA.d===d;if(!npArm)NPA=null;const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);pw.classList.toggle('knparm',npArm);
   if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:(aid,z,pt)=>{capSheet(aid,d,'main');if(KS)KS.pt=pt||null},
     marks:npOn?npMarks(d,CP.pid):null,onEmpty:npArm?pt=>{NPA=null;npNew({d,pid:CP.pid,pt});requestRender()}:null,npAll:npArm,onDbl:npOn?pt=>{NPA=null;kClose();npNew({d,pid:CP.pid,pt});requestRender()}:null,onMark:id=>npOpen(id)})}
   let lh='';
@@ -107,7 +110,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
   const E=ENG();if(mode==='close'&&!keep){if(E){const r=recOf(d,aid);if(r){KS.cs=r.status==='partial'?'no':r.status;KS.cnc=r.cnc||'';KS.note=r.note||'';KS.done=!!r.done;KS.imp=r.imp??null}}else if(lv&&lv.close){KS.cs=lv.close.status||'';KS.cnc=lv.close.cnc||'';KS.note=lv.close.note||'';KS.done=!!lv.close.done}}
   const cnc=P().cnc||[];const later=(x.days||[]).filter(y=>y>d).length;
   let h=`<div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${n||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}${past?' · <b>'+fmtD(d)+'</b>':''}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
-    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}`;
+    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}`;
   if(mode==='stop'){h+=`<div class="ksl">${s.k==='run'?'¿Por qué se detuvo?':'¿Por qué no inicia?'}</div><div class="kchips kw">${STOP_MOT.map(c=>`<button class="${KS.mot===c?'on':''}" data-kmot="${esc(c)}">${esc(c)}</button>`).join('')}</div>
       ${KS.mot===STOP_INFO?'<p class="knote">Tren de trabajo: la cuadrilla llega más tarde a este ambiente. Es informativo; al cierre se marca cumplido o no cumplido como siempre.</p>':''}
       <input class="kin" id="kmott" placeholder="${KS.mot==='Otros'?'Detalle (obligatorio)':'Detalle (opcional)'}" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
@@ -137,7 +140,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
     else if(s.k==='run')h+=`<div class="kbtns"><button class="kbig warn" data-ka="stopf">⏸ Detenido…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     else if(s.k==='stop')h+=`<div class="kbtns"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Iniciado'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button><button class="kbig pri" data-ka="closef">Cerrar el día…</button></div>`;
     else h+=`<div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`}
-  if(typeof canNP==='function'&&canNP()&&(ENG()||VEED())&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
+  if(typeof canNP==='function'&&((canNP()&&(ENG()||VEED()))||(SCK()&&npSC()))&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
   let sh=$('#ksheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='ksheet';sh.innerHTML='<div class="ksc"></div>';document.body.appendChild(sh);
     sh._open=NOW();sh.onclick=kSheetClick;sh.onchange=kSheetChange;sh.oninput=e=>{if(e.target.id==='knote'||e.target.id==='kmott')KS.note=e.target.value}}
   const sc=sh.firstChild;if(sc.dataset.h!==h){sc.innerHTML=h;sc.dataset.h=h}}
@@ -146,7 +149,7 @@ function kPhotoSave(d,aid,live){if(!KS||!KS.photo||!db)return null;const fid=uid
 function kClose(){const sh=$('#ksheet');if(sh)sh.remove();KS=null}
 async function kSheetChange(e){const t=e.target;if(t.id==='kdone'){KS.done=t.checked;return}
   if(t.id==='kphoto'&&t.files[0]){const f=t.files[0];t.value='';try{$('#kphn').textContent='Comprimiendo foto…';KS.photo=await shrinkPhoto(f);$('#kphn').textContent=`Foto lista (${Math.round(KS.photo.length*.75/1024)} KB)`;if(KS.mode==='close')capSheet(KS.aid,KS.d,'close',true)}catch(err){toast(err.message)}}}
-function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-kx]')){kClose();return}if(!KS)return;const{aid,d}=KS;let b;
+function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.closest('.kphs img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:')&&typeof lightbox==='function')lightbox(im.src);return}}if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-kx]')){kClose();return}if(!KS)return;const{aid,d}=KS;let b;
   if((b=t.closest('[data-kmot]'))){KS.mot=b.dataset.kmot;capSheet(aid,d,'stop',true);return}
   if((b=t.closest('[data-kcs]'))){KS.cs=b.dataset.kcs;if(KS.cs==='ok'){KS.cnc='';KS.imp=null}capSheet(aid,d,'close',true);return}
   if((b=t.closest('[data-kcnc]'))){KS.cnc=b.dataset.kcnc;KS.imp=null;capSheet(aid,d,'close',true);return}
@@ -311,14 +314,14 @@ function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.
   const others=[...S.act.values()].filter(y=>y.ambId===x.ambId&&y.id!==aid&&schedOrSnap(y,d));
   const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
   const h=`<div class="ksc"><div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${(window.__plano?.nums(pisoOfAct(aid)).get(aid))||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
-    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}
+    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}
     <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}</div>`;
   /* una sola ficha: un toque puede llegar dos veces (toque + clic) y quedaban dos fichas encimadas que había que cerrar dos veces */
   document.querySelectorAll('#dpsheet').forEach(o=>o.remove());
   const lb=document.createElement('div');lb.className='ksheet';lb.id='dpsheet';lb.innerHTML=h;const t0=NOW();
-  lb.onclick=e=>{if(e.target===lb&&NOW()-t0<400)return;if(e.target===lb||e.target.closest('[data-kx]'))lb.remove()};document.body.appendChild(lb)}
+  lb.onclick=e=>{{const im=e.target.closest('.kphs img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:')&&typeof lightbox==='function')lightbox(im.src);return}}if(e.target===lb&&NOW()-t0<400)return;if(e.target===lb||e.target.closest('[data-kx]'))lb.remove()};document.body.appendChild(lb)}
 function dashClick(e){const t=e.target;let b;
   if(t.closest('#dtv')){DB_.tv=!DB_.tv;try{if(DB_.tv)document.documentElement.requestFullscreen().catch(()=>{});else if(document.fullscreenElement)document.exitFullscreen()}catch(err){}const m=$('#main');m.dataset.built='';render();return}
   if((b=t.closest('[data-dp]'))){DB_.pid=b.dataset.dp;const h=$('#dplan');if(h)h._fk='';render();return}

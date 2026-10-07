@@ -239,6 +239,15 @@ test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno co
   await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01', by: 'veedor@obra.pe' }));
   await assertFails(setDoc(doc(user('veedor@obra.pe'), 'daily/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', recs: {} }));
 });
+test('no programado: el SC registra lo de su partida, por verificar; no se verifica solo', async () => {
+  const sc = user('sc@obra.pe');
+  const base = { date: '2026-10-01', pisoId: 'p1', sc: 'c-gabel', desc: 'Resane', by: 'sc@obra.pe', scProp: true };
+  await assertSucceeds(setDoc(doc(sc, 'nprog/n-sc1'), base));
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc2'), { ...base, sc: 'c-otro' })); // otra partida
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc3'), { ...base, scProp: false })); // tiene que quedar por verificar
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc1'), { ...base, ver: { by: 'sc@obra.pe' } })); // no se verifica solo
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'nprog/n-sc1'), { ...base, ver: { by: 'campo@obra.pe' } }));
+});
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-otro'), { sc: 'c-otro', items: {} }));
@@ -313,6 +322,16 @@ test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x5'), { sc: 'c-otro', pts: [1] }));
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pzon/x6'), { sc: 'c-gabel', pts: [1] }));
+});
+test('agregar al plan (padd): el SC solo propone, de su partida', async () => {
+  const sc = user('sc@obra.pe');
+  const B = { date: '2026-10-02', pisoId: 'p1', sc: 'c-gabel', kind: 'padd', draft: true, by: 'sc@obra.pe' };
+  await assertSucceeds(setDoc(doc(sc, 'pdz/pa1'), { ...B, t: 'new', name: 'Resane', st: 'pend' }));
+  await assertSucceeds(setDoc(doc(sc, 'pdz/pa2'), { ...B, t: 'rep', actId: 'x1', st: 'pend' }));
+  await assertFails(setDoc(doc(sc, 'pdz/pa3'), { ...B, t: 'new', name: 'Resane', st: 'ok' })); // no se acepta solo
+  await assertFails(setDoc(doc(sc, 'pdz/pa4'), { ...B, sc: 'c-otro', t: 'new', st: 'pend' }));
+  await assertFails(updateDoc(doc(sc, 'pdz/pa1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'pdz/pa1'), { st: 'ok', decBy: 'editor@obra.pe' }));
 });
 test('plan del día: el SC dibuja y propone, pero no toca las decisiones del ingeniero', async () => {
   await env.withSecurityRulesDisabled(async c => {

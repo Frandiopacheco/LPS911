@@ -630,3 +630,33 @@ test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', as
   await page.mouse.click(p.x, p.y);
   await expect(page.locator('#pop .xbox')).toBeVisible();
 });
+
+test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica al lookahead al publicar', async ({ page }) => {
+  const FUT = ['acts', 'f9', { ambId: 'a2', sc: 'c1', name: 'Pruebas de presión', und: 'pto', days: ['2026-10-06'], order: 50 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, FUT] });
+  await page.waitForFunction(() => window.__plano && window.__plano.M && window.__plano.M.date > todayIso());
+  // tocar el ambiente A-2 abre su ficha (Va · No va) con «＋ Trabajo no programado en A-2»
+  const p = await enPantalla(page, '#mstage', 500, 280);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#mzc')).toContainText('No va');
+  await page.locator('#mzc [data-zpa]').click();
+  await expect(page.locator('#pop')).toContainText('Trabajo no programado · A-2');
+  await page.locator('#pop [data-do="adel"]').click();
+  await page.locator('#pop .pal button', { hasText: 'Pruebas de presión' }).click();
+  await expect(page.locator('#mpanel')).toContainText('Se agrega al publicar (1)');
+  await page.mouse.click(p.x, p.y);
+  await page.locator('#mzc [data-zpa]').click();
+  await page.locator('#pop [data-do="new"]').click();
+  await page.selectOption('#pasc', 'c2');
+  await page.fill('#panm', 'Resane de muro');
+  await page.fill('#paq', '4');
+  await page.locator('#pop [data-do="ok"]').click();
+  await expect(page.locator('#mpanel')).toContainText('Se agrega al publicar (2)');
+  // el lookahead no cambia hasta publicar
+  expect((await act(page, 'f9')).days).toEqual(['2026-10-06']);
+  await publicar(page);
+  const M_ = await page.evaluate(() => window.__plano.M.date);
+  await expect.poll(async () => (await act(page, 'f9')).days).toEqual([M_]);
+  await expect.poll(() => page.evaluate(d => Object.values(window.__dbAll('acts')).filter(a => a.name === 'Resane de muro' && (a.days || []).includes(d)).length, M_)).toBe(1);
+  noErrors(errors, 'agregar al plan');
+});

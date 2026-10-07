@@ -138,7 +138,9 @@ function reprogAct(aid,d,fd){const x=S.act.get(aid);if(!x||!canWrite)return;let 
   /* el saldo pasa al día nuevo y el día fallido queda con lo ejecutado (0 si no se hizo nada): el metrado no se duplica.
      El compromiso original sigue en el registro diario (prog) y en la semana congelada */
   const sal=repSaldo(x,fd);if(sal!=null){const r=recOf(fd,aid);const ex=r&&r.exec!=null?+r.exec||0:0;const q={...(nx.qty||{})};if(fd&&q[fd]!=null)q[fd]=r2(Math.min(ex,+q[fd]));q[d]=r2((+q[d]||0)+sal);nx={...nx,qty:q}}
-  apply([op('acts',aid,nx)],`Reprogramada para el ${DOWN[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}${sal!=null?` (${fq(sal)} ${x.und||''})`:''}`)}
+  /* si estaba marcada terminada antes del día nuevo, se reabre: si no, el día reprogramado saldría «liberado» (rayado) y no contaría */
+  const dn=DONE.get(aid);const reo=!!(dn&&d>dn&&canDaily);if(reo)reopenDone(aid,true);
+  apply([op('acts',aid,nx)],`Reprogramada para el ${DOWN[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}${sal!=null?` (${fq(sal)} ${x.und||''})`:''}${reo?` · estaba terminada el ${fmtD(dn)}: se reabrió`:''}`)}
 function markExec(aid,ed,fd){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=recOf(ed,aid);const late=!(x.days||[]).includes(ed);
   writeDaily(ed,pisoOfAct(aid),{recs:{[aid]:{...baseRec(ed,x,cur),status:'ok',late:late||!!(cur&&cur.late),cnc:'',imp:null,note:(cur&&cur.note)||(late?`Ejecutada sin estar programada${fd?' (no cumplida el '+fmtD(fd)+')':''}`:'')}}});
   toast(`“${x.name}” registrada como ejecutada el ${fmtD(ed)}`)}

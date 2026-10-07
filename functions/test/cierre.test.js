@@ -223,3 +223,27 @@ test('hora de la publicación automática: por defecto 21:00, editable (máx. 23
   assert.equal(planCutDue({ planCutHH: '19:30' }, at('19:45')), true);
   assert.equal(planCutDue({ planCutHH: '19:30' }, at('08:00')), false);
 });
+
+test('agregar al plan (padd): reprogramar, adelantar y actividad nueva; las propuestas del SC no se aplican', () => {
+  const PA = [
+    { id: 'pa1', kind: 'padd', draft: true, st: 'ok', date: '2026-10-08', pisoId: 'p1', t: 'rep', actId: 'x4', q: 2, ts: 1 },
+    { id: 'pa2', kind: 'padd', draft: true, st: 'ok', date: '2026-10-08', pisoId: 'p1', t: 'adel', actId: 'x3', from: '2026-10-09', ts: 2 },
+    { id: 'pa3', kind: 'padd', draft: true, st: 'ok', date: '2026-10-08', pisoId: 'p1', t: 'new', ambId: 'a2', sc: 'c2', name: 'Resane', und: 'M2', q: 4, newId: 'nx1', order: 30, ts: 3 },
+    { id: 'pa4', kind: 'padd', draft: true, st: 'pend', date: '2026-10-08', pisoId: 'p1', t: 'rep', actId: 'x5', ts: 4 }
+  ];
+  const R = publishDrafts({ drafts: PA, acts: ACTS(), dplans: new Map(), contractors: CON, project: PROJ }, '2026-10-08', 'p1', 1000, { uid });
+  assert.deepStrictEqual(R.acts.x4.days, [D, '2026-10-08']);
+  assert.deepStrictEqual(R.acts.x4.qty, { '2026-10-08': 2 });
+  assert.deepStrictEqual(R.acts.x3.days, ['2026-10-08']);
+  assert.ok(!R.acts.x5, 'la propuesta pendiente del SC no se aplica');
+  assert.deepStrictEqual(R.newActs, [{ id: 'nx1', doc: { ambId: 'a2', sc: 'c2', name: 'Resane', und: 'M2', metrado: 4, days: ['2026-10-08'], qty: { '2026-10-08': 4 }, order: 30 } }]);
+  assert.deepStrictEqual(R.padds.map(o => o.id), ['pa1', 'pa2', 'pa3']);
+  assert.strictEqual(R.pub.doc.n, 3);
+});
+
+test('agregar al plan: no adelanta un día ya cerrado', () => {
+  const PA = [{ id: 'pa2', kind: 'padd', draft: true, st: 'ok', date: '2026-10-08', pisoId: 'p1', t: 'adel', actId: 'x3', from: '2026-10-09', ts: 2 }];
+  const R = publishDrafts({ drafts: PA, acts: ACTS(), dplans: new Map([['2026-10-09_p1', { date: '2026-10-09', ids: { x3: null } }]]), contractors: CON, project: PROJ }, '2026-10-08', 'p1', 1000, { uid });
+  assert.ok(!R.acts.x3);
+  assert.deepStrictEqual(R.blocked, ['Ya movida']);
+});
