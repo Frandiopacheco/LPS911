@@ -110,7 +110,9 @@ function renderMapa(main){ensureLam();
   empty.innerHTML=eh;empty.hidden=!eh;
   if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});
     /* clic derecho sobre un cruce: decidir (sin interferencia / prioridad) */
-    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const c=crossAt(M.view.toWorld(e.clientX,e.clientY));if(!c)return;e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c)});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');if(l&&l.closest('.mrs.dock'))return 0;return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
+    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const w=M.view.toWorld(e.clientX,e.clientY);const c=crossAt(w);if(c){e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}
+    /* clic derecho en un ambiente: agregar trabajo no programado al plan del día */
+    if(!M.meet&&M.colorBy!=='cu'&&paddCan()){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){e.preventDefault();zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am)}}});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');if(l&&l.closest('.mrs.dock'))return 0;return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
   const layers=[];const lay=(l,op,key)=>({key:key||l.id,l,w:l.w,h:l.h,T:l.T||I,op});
   if(cur){if(!cur.base&&base&&M.under){layers.push(lay(base,M.bop,'base'));layers.push({...lay(cur,M.op),blend:'multiply'})}else layers.push(lay(cur,cur.base?M.bop:1))}
   M.view.bounds=base?boundsOf({...base,T:base.T||I}):cur?boundsOf(cur):null;
@@ -162,6 +164,11 @@ function virtZones(pid){const d=M.date;const k=d+'|'+pid;let c=VZC.get(k);const 
     const z={id:'v:'+x.id,kind:'zona',virt:true,date:d,pisoId:pid,vista:v,sc:x.sc,actId:x.id,ambId:x.ambId,pts:g[v],desc:'',by:'',byName:'',ts:0};L.push(z);VZ.set(z.id,z)}
   VZC.set(k,{dv,L});if(VZC.size>40)VZC.delete(VZC.keys().next().value);return L}
 const zget=id=>PD.get(id)||VZ.get(id);
+/* lo agregado al plan desde el ambiente (padd, aún sin publicar) se resalta en su ambiente mientras no tenga áreas dibujadas */
+function paVirt(pid,real){const drawn=new Set(real.filter(z=>z.kind==='zona'&&z.paId).map(z=>z.paId));const B=basesOf(pid);const L=[];
+  for(const p of PD.values()){if(p.kind!=='padd'||!p.draft||p.st==='rej'||p.pisoId!==pid||p.date!==M.date||drawn.has(p.id))continue;const a=S.amb.get(p.ambId);const g=(a&&a.geo)||{};const v=(B.find(b=>g[b.id]&&g[b.id].length>=6)||{}).id;if(!v)continue;
+    const z={id:'v:pa:'+p.id,kind:'zona',virt:true,date:M.date,pisoId:pid,vista:v,sc:p.sc,actId:null,paId:p.id,ambId:p.ambId,pts:g[v],desc:'＋ '+(p.name||''),fuera:false,by:'',byName:'',ts:0};L.push(z);VZ.set(z.id,z)}
+  return L}
 /** actividades que no van ese día: «nova» (real o borrador) y, en un borrador, el tren que también sale de ese día */
 const NGC={k:'',S:null};
 function noGoSet(){const k=M.date+'|'+PDV+'|'+DV+'|'+(typeof DONEV!=='undefined'?DONEV:0);if(NGC.k===k)return NGC.S;const S_=new Set();
@@ -172,7 +179,7 @@ const shapesOf=pid=>{const k=pid+'|'+M.date+'|'+PDV+'|'+DV+'|'+(typeof DONEV!=='
   const ng=noGoSet();const off=z=>{const y=S.act.get(z.actId);return!!y&&!schedOn(y,M.date)&&!(typeof recReal==='function'&&recReal(M.date,z.actId))};
   const real=[...PD.values()].filter(z=>z.pisoId===pid&&z.kind!=='dprop'&&z.kind!=='aviso'&&z.kind!=='pub'&&z.kind!=='padd'&&!(z.kind==='zona'&&z.actId&&(ng.has(z.actId)||off(z))));
   const has=new Set(real.filter(z=>z.actId&&(z.kind==='zona'||z.kind==='nova')).map(z=>z.actId));ng.forEach(id=>has.add(id));
-  const L=real.concat(virtZones(pid).filter(z=>!has.has(z.actId)));if(SHC.size>25)SHC.clear();SHC.set(pid,{k,L});return L};
+  const L=real.concat(virtZones(pid).filter(z=>!has.has(z.actId)),paVirt(pid,real));if(SHC.size>25)SHC.clear();SHC.set(pid,{k,L});return L};
 function scsOfDay(){const set=new Set(dayActs(M.piso,M.date).map(o=>o.x.sc));shapesOf(M.piso).forEach(z=>set.add(z.sc));return[...set].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))}
 function centroid(P){let x=0,y=0;P.forEach(p=>{x+=p.x;y+=p.y});return{x:x/P.length,y:y/P.length}}
 function bboxOf(P){const xs=P.map(p=>p.x),ys=P.map(p=>p.y);return{x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)}}
@@ -215,12 +222,15 @@ function zoneAlerts(zid,aid){const msgs=[];const rs=rskMsg(aid);if(rs)msgs.push(
   if(msgs.length)toast(msgs.join('  ·  '))}
 /** zonas dibujadas a mano (no las de su ambiente) de una actividad en el día del plan */
 function drawnOf(aid){return[...PD.values()].filter(z=>z.kind==='zona'&&z.actId===aid&&z.date===M.date&&z.pisoId===M.piso&&own(z))}
-function newZone(pts,link,vista){const id=uid('pz');const x=link.actId?S.act.get(link.actId):null;
+function newZone(pts,link,vista,cx,cy){const id=uid('pz');const x=link.actId?S.act.get(link.actId):null;
   const doc={date:M.date,pisoId:M.piso,vista:vista||M.vista,sc:x?x.sc:M.scDraw,kind:'zona',pts:flat(pts),actId:link.actId||null,ambId:x?x.ambId:(link.ambId||null),desc:link.desc||'',fuera:!link.actId&&!link.paId,...(link.paId?{paId:link.paId}:{}),by:me.email,byName:me.name||me.email,ts:NOW()};
   /* «Redibujar»: la zona nueva reemplaza a las que ya tenía la actividad ese día (se deshace junto) */
   const old=link.rep&&link.actId?drawnOf(link.actId).map(z=>remDoc(z.id)).filter(Boolean):[];
-  rec([...old,addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=null;if(M.meet){M.tool='pan';M.selId=null}requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
-  toast(link.actId?`Zona de “${short(x.name,40)}” guardada`:link.paId?'Área guardada: toca «＋ Otra área» si trabaja en otro sector del ambiente':'Trabajo no programado ubicado','Deshacer',undo)}
+  rec([...old,addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=link.paId?link:null;if(M.meet){M.tool='pan';M.selId=null}requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
+  /* lo agregado desde el ambiente puede ir en varias áreas: se sigue dibujando hasta «Listo» */
+  if(link.paId){M.selId=null;const n=paZones(link.paId).length;if(cx!=null)setTimeout(()=>openPop(anchorAt(cx,cy),`<div class="ph">Área ${n} guardada</div><div class="ptx">${esc(short(link.desc||'',50))}${n>1?` · ${n} áreas`:''}</div><button data-do="ok" class="pri">✓ Listo</button><button data-do="otra">＋ Dibujar otra área</button><button data-do="und">↶ Deshacer esta área</button>`,{ok:paddDone,otra:()=>{},und:()=>undo()}),0);return}
+  toast(link.actId?`Zona de “${short(x.name,40)}” guardada`:'Trabajo no programado ubicado','Deshacer',undo)}
+function paddDone(){const p=M.pend&&PD.get(M.pend.paId);M.pend=null;M.tmp=null;M.tool='pan';requestRender();if(p)toast(p.st==='pend'?'Propuesta enviada: la decide el ingeniero':`Agregado al plan con ${paZones(p.id).length} área${paZones(p.id).length>1?'s':''}: se aplica al lookahead al publicar`)}
 function newNote(kind,pts,t){const id=uid('pz');const doc={date:M.date,pisoId:M.piso,vista:M.vista,sc:M.scDraw,kind,pts:flat(pts),t:t||'',actId:null,by:me.email,byName:me.name||me.email,ts:NOW()};
   if(kind==='texto')doc.fs=M.fs;else doc.w=M.lw;rec([addDoc(id,doc)]);M.selId=id;requestRender()}
 function delIds(ids,msg){const g=ids.map(remDoc).filter(Boolean);if(!g.length)return 0;rec(g);M.selId=null;requestRender();toast(msg||(g.length===1?'Eliminado':`${g.length} dibujos eliminados`),'Deshacer',undo);return g.length}
@@ -298,7 +308,9 @@ function tapSelect(w,e){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;retur
   /* fuera de la reunión: tocar una actividad abre Va · No va (y agregar trabajo no programado en su ambiente); tocar un ambiente vacío, el «＋» */
   if(!M.meet&&M.colorBy!=='cu'){const zz=zid&&zget(zid);
     if(zz&&zz.kind==='zona'&&zz.actId&&S.act.get(zz.actId)&&(dzEng()||canPlan(zz.sc))){M.selId=zz.virt?null:zid;zCard(zz.actId,e.clientX,e.clientY,true);requestRender();return}
-    if(!zid&&paddCan()&&pubDraft()){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am);return}}}
+    /* con mouse el clic izquierdo solo mueve el plano: se agrega con clic derecho (en tablet, con un toque) */
+    if(!zid&&paddCan()&&pubDraft()&&e.pointerType==='mouse'&&!M.rcTip&&ambAt(M.piso,{x:w.x,y:w.y,v:M.vista})){M.rcTip=1;toast('Para agregar trabajo no programado en un ambiente, haz clic derecho sobre él.')}
+    if(!zid&&paddCan()&&pubDraft()&&e.pointerType!=='mouse'){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am);return}}}
   if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
   /* las zonas que salen de Sectorización (ambiente completo) no se seleccionan ni se mueven en el Plan diario */
   const zs_=zid&&zget(zid);M.selId=zs_&&zs_.virt?null:zid;requestRender()}
@@ -342,7 +354,7 @@ function installDraw(v){const host=v.host;let drag=null;
     if(d.mode==='vert'||d.mode==='move'){if(d.cur&&(d.mode==='vert'||d.moved>3)){const z=PD.get(d.id);rec([updDoc(d.id,{pts:flat(d.cur)},{pts:d.before})]);learn(z)}else if(d.mode==='move'){PD.get(d.id).pts=d.before}requestRender();return}
     const t=M.tmp;M.tmp=null;if(!t){drawOverlay();return}const bb=bboxOf(t.pts);const big=Math.max(bb.w,bb.h)*v.z>8;
     if(!big&&t.kind!=='trazo'){drawOverlay();return}
-    if(t.kind==='zona'){if(M.pend){newZone(t.pts,M.pend);return}M.tmp=t;drawOverlay();linkChooser(t.pts,e.clientX,e.clientY);return}
+    if(t.kind==='zona'){if(M.pend){newZone(t.pts,M.pend,null,e.clientX,e.clientY);return}M.tmp=t;drawOverlay();linkChooser(t.pts,e.clientX,e.clientY);return}
     if(t.kind==='flecha')newNote('flecha',t.pts);else if(t.kind==='trazo'&&t.pts.length>1)newNote('trazo',t.pts);drawOverlay()};
   host.addEventListener('pointerup',upH,true);host.addEventListener('pointercancel',e=>{if(drag){if(drag.g&&drag.g.length)rec(drag.g);drag=null;M.tmp=null;requestRender()}},true);
   host.addEventListener('dblclick',e=>{if(M.tool==='poly'&&M.tmp){stop(e);finishPoly(e.clientX,e.clientY);return}
@@ -356,7 +368,7 @@ function installDraw(v){const host=v.host;let drag=null;
     if(e.key==='Enter'&&M.tool==='poly'&&M.tmp){const r=host.getBoundingClientRect();finishPoly(r.left+r.width/2,r.top+r.height/2);return}
     if((e.key==='Delete'||e.key==='Backspace')&&M.selId){const z=zget(M.selId);if(own(z)){e.preventDefault();delIds([z.id])}return}
     if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&KEYS[k]){M.tool=KEYS[k];M.tmp=null;requestRender()}})}
-function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,M.pend);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
+function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,M.pend,null,cx,cy);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
 function delSel(){const z=zget(M.selId);if(own(z))delIds([z.id])}
 const LW={1:2.5,2:4,3:7};
 /** «Ver sectorización»: contorno de cada ambiente (color de su sector, como en Sectorización) y el código; no responde a los toques */
@@ -579,7 +591,7 @@ const XDC={k:-1,P:null,G:null};
 function xdIdx(){if(XDC.k===PDV+'|'+M.date+'|'+M.piso)return XDC;const P=new Set(),G=[];for(const d of xokDocs()){if(d.pair)P.add(d.pair.join('|'));if(d.keys)G.push(new Set(d.keys))}XDC.k=PDV+'|'+M.date+'|'+M.piso;XDC.P=P;XDC.G=G;return XDC}
 const xDecided=(a,b)=>{if((a.xok&&a.xok[b.id])||(b.xok&&b.xok[a.id]))return true;const ka=zKey(a),kb=zKey(b);const X=xdIdx();if(X.P.has([ka,kb].sort().join('|')))return true;return X.G.some(g=>g.has(ka)&&g.has(kb))};
 function interRect(A,B){const a=bboxOf(A),b=bboxOf(B);const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h);return x1>x0&&y1>y0?{x:x0,y:y0,w:x1-x0,h:y1-y0}:null}
-function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona');shapesOf(M.piso);const key=M.piso+'|'+M.vista+'|'+M.date+'|'+(SHC.get(M.piso)||{}).k+'|'+PDV;if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
+function computeCross(){const zs=shapesV(M.piso).filter(z=>z.kind==='zona'&&!(z.virt&&z.paId));shapesOf(M.piso);const key=M.piso+'|'+M.vista+'|'+M.date+'|'+(SHC.get(M.piso)||{}).k+'|'+PDV;if(key===CROSS.key)return;CROSS.key=key;CROSS.list=[];CROSS.ids=new Set();CROSS.seq=[];CROSS.seqIds=new Set();
   for(let i=0;i<zs.length;i++)for(let j=i+1;j<zs.length;j++){const a=zs[i],b=zs[j];const A=unflat(a.pts),B=unflat(b.pts);const f=overlapFrac(A,B);if(f<=0.15)continue;const r=interRect(A,B);
     if(a.sc!==b.sc){if(xDecided(a,b))continue;CROSS.list.push({a,b,f,r});CROSS.ids.add(a.id);CROSS.ids.add(b.id)}
     else if(a.actId&&b.actId&&a.actId!==b.actId){CROSS.seq.push({a,b,f,r});CROSS.seqIds.add(a.id);CROSS.seqIds.add(b.id)}}}
@@ -1195,7 +1207,7 @@ function renderPlan(main,cur,base){
   const tb=$('#mtools');const aligned=curAligned(cur,base);const sel=M.selId&&zget(M.selId);
   const th=`${TOOLS.map(([k,i,n,t])=>`<button class="mt${M.tool===k?' on':''}${k==='borrar'?' er':''}" data-tool="${k}" title="${t}" aria-label="${t}"${k!=='pan'&&(!canD||(!aligned&&k!=='borrar'))?' disabled':''}><span>${i}</span><small>${n}</small></button>`).join('')}<span class="mtsep"></span><button class="mt" id="mundo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${HIST.length?'':' disabled'}><span>↶</span><small>Deshacer</small></button><button class="mt" id="mredo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${REDO.length?'':' disabled'}><span>↷</span><small>Rehacer</small></button>`;
   if(tb.dataset.h!==th){tb.innerHTML=th;tb.dataset.h=th}tb.hidden=!base||!!M.meet;
-  const hint=M.pend?(M.pend.actId?`Dibuja la zona de <b>${esc(short(S.act.get(M.pend.actId)?.name||'',40))}</b>: arrastra un rectángulo, o elige ⬠ para un polígono. <button class="lnkb" id="mcancel">Cancelar</button>`:`Dibuja dónde irá el trabajo no programado. <button class="lnkb" id="mcancel">Cancelar</button>`)
+  const hint=M.pend?(M.pend.paId?(()=>{const n=paZones(M.pend.paId).length;return`Dibuja ${n?'otra área':'el área'} de <b>${esc(short(M.pend.desc||'',40))}</b>${n?` (${n} dibujada${n>1?'s':''})`:''}: arrastra un rectángulo, o elige ⬠ para un polígono. ${n?'<button class="ib pri" id="mpadone">✓ Listo</button>':''}<button class="lnkb" id="mcancel">${n?'Terminar':'Cancelar'}</button>`})():M.pend.actId?`Dibuja la zona de <b>${esc(short(S.act.get(M.pend.actId)?.name||'',40))}</b>: arrastra un rectángulo, o elige ⬠ para un polígono. <button class="lnkb" id="mcancel">Cancelar</button>`:`Dibuja dónde irá el trabajo no programado. <button class="lnkb" id="mcancel">Cancelar</button>`)
     :M.tool==='poly'?'Clic en cada esquina · clic en el primer punto, doble clic o Enter para cerrar · Esc cancela':M.tool==='zona'?'Arrastra para dibujar la zona; luego eliges la actividad':''
   ;const sz=(cur)=>`<span class="mseg">${FS.map(f=>`<button data-fs="${f}" class="${cur===f?'on':''}" style="font-size:${Math.min(f,20)}px">A</button>`).join('')}</span>`;
   const gw=(cur,attr)=>`<span class="mseg">${[[1,'Fino'],[2,'Medio'],[3,'Grueso']].map(([k,n])=>`<button data-${attr}="${k}" class="${cur===k?'on':''}"><i class="gl g${k}"></i>${n}</button>`).join('')}</span>`;
@@ -1866,6 +1878,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if(t.id==='merall'){const r=t.getBoundingClientRect();const mineAll=shapesOf(M.piso).filter(z=>own(z)&&(myRole()==='sc'||z.sc===M.scDraw));const notas=mineAll.filter(z=>z.kind!=='zona');
     openPop(t,`<div class="ph">Borrar lo de ${esc(conOf(M.scDraw).name)} del ${fmtD(M.date)}</div><button data-do="n"${notas.length?'':' disabled'}>Solo notas y dibujos (${notas.length})</button><button data-do="a" class="danger"${mineAll.length?'':' disabled'}>Todo: zonas, notas y dibujos (${mineAll.length})</button><div class="ptx">Las marcas de “No se hará hoy” se conservan. Puedes deshacerlo con Ctrl+Z.</div>`,
       {n:()=>delIds(notas.map(z=>z.id)),a:()=>delIds(mineAll.map(z=>z.id))});return true}
+  if(t.id==='mpadone'){paddDone();return true}
   if(t.id==='mcancel'){M.pend=null;M.tmp=null;M.tool='pan';requestRender();return true}
   if(t.id==='mscv'){U.pdHi=t.checked;M.scView='';saveUI();requestRender();return true}
   if((b=g('[data-zamb]'))){const L=drawnOf(b.dataset.zamb).map(z=>z.id);if(L.length)delIds(L,'Vuelve a su ambiente');return true}

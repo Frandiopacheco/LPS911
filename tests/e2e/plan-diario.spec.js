@@ -644,8 +644,11 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   await page.locator('#pop [data-do="adel"]').click();
   await page.locator('#pop .pal button', { hasText: 'Pruebas de presión' }).click();
   await expect(page.locator('#mpanel')).toContainText('Se agrega al publicar (1)');
-  await page.mouse.click(p.x, p.y);
-  await page.locator('#mzc [data-zpa]').click();
+  // sin área dibujada, lo agregado se resalta en todo su ambiente
+  await expect(page.locator('#mstage polygon[data-z^="v:pa:"]')).toHaveCount(1);
+  // con mouse se agrega con clic derecho sobre el ambiente
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await expect(page.locator('#pop')).toContainText('Trabajo no programado · A-2');
   await page.locator('#pop [data-do="new"]').click();
   await page.selectOption('#pasc', 'c2');
   await page.fill('#panm', 'Resane de muro');
@@ -657,10 +660,14 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   const areas = () => page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'zona' && z.paId));
   await rect(410, 110, 480, 180);
   await expect.poll(async () => (await areas()).length).toBe(1);
-  await page.locator('#mpanel [data-padraw]').last().click();
+  // tras cada área: «Listo» o dibujar otra
+  await expect(page.locator('#pop')).toContainText('Área 1 guardada');
+  await page.locator('#pop [data-do="otra"]').click();
   await rect(520, 210, 590, 290);
   await expect.poll(async () => (await areas()).length).toBe(2);
-  await page.locator('#mtools [data-tool="pan"]').click().catch(() => {});
+  await expect(page.locator('#pop')).toContainText('Área 2 guardada');
+  await page.locator('#pop [data-do="ok"]').click();
+  await expect.poll(() => page.evaluate(() => window.__plano.M.tool)).toBe('pan');
   // el lookahead no cambia hasta publicar
   expect((await act(page, 'f9')).days).toEqual(['2026-10-06']);
   await publicar(page);
