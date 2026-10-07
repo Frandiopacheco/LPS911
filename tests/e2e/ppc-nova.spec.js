@@ -123,3 +123,12 @@ test('Hoy avisa que la semana siguiente se congela sola y PPC semanal lo muestra
   await expect(page.locator('#main .pill.warn').first()).toContainText('se congela solo el sábado 03 oct, 13:00');
   noErrors(errors, 'aviso de congelado');
 });
+
+test('PPC diario: lo comprometido que salió con «No va» cuenta como no cumplido con su causa, no «sin verificar»', async ({ page }) => {
+  const X = { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', und: 'pto', metrado: 20, days: [MANANA], order: 10,
+    rpl: { [HOY]: { to: MANANA, m: 'Materiales: no llegó la tubería', c: 'MAT', cnc: 'Materiales', imp: true } } };
+  const errors = await openApp(page, { tab: 'ind', extra: [['acts', 'nv1', X], ['dplan', `${HOY}_p1`, { date: HOY, pisoId: 'p1', ids: { nv1: null }, at: 1, by: 'x' }]] });
+  const r = await page.evaluate(d => { const D = dayData([d], new Set(['p1'])); const row = D.rows.find(o => o.x.id === 'nv1'); return row && { st: row.rc && row.rc.status, cnc: row.rc && row.rc.cnc, imp: impOf(row.rc) }; }, HOY);
+  expect(r).toEqual({ st: 'no', cnc: 'Materiales', imp: true });
+  noErrors(errors, 'no va en el PPC diario');
+});
