@@ -63,7 +63,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   const cnt={none:0,seq:0,run:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kState(d,o.x.id).k]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
   if(!main.dataset.built){main.innerHTML=`<div class="kap"><div class="khd" id="khd"></div><div class="kbody"><div class="kplanw" id="kplanw"><div class="kplan" id="kplan"></div></div><div id="klist"></div></div></div>`;main.dataset.built='1';main.onclick=capClick}
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
-  let hh=E?`<div class="khi"><div><b>Campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div><button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||(SCK()?'':'capataz'))}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div>${SCK()?'':'<button class="ib" data-kmenu aria-label="Menú">⋯</button>'}</div>`;
+  let hh=E?`<div class="khi"><div><b>Campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div>${d===todayIso()&&!VEED()?`<button class="ib" data-sini title="Reporte para WhatsApp: lo que aún no marca su inicio" aria-label="Reporte sin iniciar">📲<span> Sin iniciar</span></button>`:''}<button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||(SCK()?'':'capataz'))}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div>${SCK()?'':'<button class="ib" data-kmenu aria-label="Menú">⋯</button>'}</div>`;
   if(my.length>1)hh+=`<div class="kchips"><button class="${!CP.sc?'on':''}" data-ksc="">Todas</button>${my.map(c=>`<button class="${CP.sc===c?'on':''}" data-ksc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}</div>`;
   if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${(byP.get(p.id)||[]).length}</b>${NPon&&npItems([d],new Set([p.id])).length?`<b class="knp" title="Trabajo no programado registrado">+${npItems([d],new Set([p.id])).length}</b>`:''}</button>`).join('')}</div>`;
   hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','seq','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
@@ -84,7 +84,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP();const d=E?camp
   if(npOn)lh+=npListHtml(d,new Set([CP.pid]),i=>!CP.sc||i.e.sc===CP.sc);
   const kl=$('#klist',main);if(kl.dataset.h!==lh){kl.innerHTML=lh;kl.dataset.h=lh}
   if(KS&&$('#ksheet'))capSheet(KS.aid,KS.d,KS.mode,true)}
-function capClick(e){const t=e.target;let b;
+function capClick(e){const t=e.target;let b;if(t.closest('[data-sini]')){sinIniOpen();return}
   if((b=t.closest('[data-ksc]'))){CP.sc=b.dataset.ksc;saveCP();render();return}
   if((b=t.closest('[data-kp]'))){CP.pid=b.dataset.kp;CP.pud=todayIso();saveCP();render();return}
   if((ENG()||VEED())&&(b=t.closest('[data-kv]'))){if(b.dataset.kv==='list'){CU.view='list';saveCU();$('#main').dataset.built='';kClose();render()}return}
@@ -166,6 +166,33 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');if(t===sh&&NOW()-
     const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});toast('Verificación guardada');kClose();return}
   if(k==='closesave'){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
     const lv0=liveOf(d,aid);const fid=kPhotoSave(d,aid,true);liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs},fid?{photos:[...(lv0&&lv0.photos||[]),fid]}:null);toast('Cierre enviado. El ingeniero lo confirmará.');kClose();return}}
+
+/* ---------- Reporte «sin inicio marcado» para WhatsApp (oct 2026) ----------
+   Lo programado hoy (sin «No va») que a esta hora nadie marcó: ni iniciado, ni detenido, ni cerrado. Consolidado y por SC. */
+function sinIniData(){const d=todayIso();const vs=new Set(visPisos().map(p=>p.id));const API=window.__plano&&window.__plano.novaSet?window.__plano:null;const nv=API?API.novaSet(d):new Set();
+  const by=new Map();let tot=0;
+  for(const x of S.act.values()){if(!schedOrSnap(x,d)||nv.has(x.id))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;const a=S.amb.get(x.ambId);if(!a)continue;
+    const o=by.get(x.sc)||{n:0,L:[]};o.n++;by.set(x.sc,o);tot++;if(kState(d,x.id).k==='none')o.L.push({x,a,p:S.pis.get(pid)})}
+  const rows=[...by.entries()].filter(([,o])=>o.L.length).map(([sc,o])=>({sc,n:o.n,L:o.L.sort((p,q)=>(p.p.order||0)-(q.p.order||0)||String(p.a.code).localeCompare(String(q.a.code),'es',{numeric:true}))})).sort((a,b)=>b.L.length-a.L.length||conOf(a.sc).name.localeCompare(conOf(b.sc).name));
+  return{d,rows,tot,nSin:rows.reduce((t,r)=>t+r.L.length,0)}}
+function sinIniTxt(R,sc){const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(R.d).getUTCDay()];const hm=nowHM();const obra=P().name||'la obra';
+  const lst=r=>{let t='',lp='';for(const o of r.L){if(o.p.id!==lp&&new Set(r.L.map(q=>q.p.id)).size>1){t+=`_${o.p.code} · ${o.p.name}_\n`;lp=o.p.id}t+=`• ${o.a.code} ${o.a.name} · ${o.x.name}\n`}return t};
+  if(sc){const r=R.rows.find(q=>q.sc===sc);if(!r)return'';return`Hola, *${conOf(sc).name}*.\nA las ${hm} de hoy ${dw.toLowerCase()} ${fmtD(R.d)} aún no marcan el inicio de ${r.L.length} de sus ${r.n} actividades programadas (${obra}):\n\n${lst(r)}\nPor favor márquenlas en LPS 911: *▶ Iniciado*, o *⏸ Detenido* con el motivo. Gracias.`}
+  return`*Sin inicio marcado · ${dw} ${fmtD(R.d)} · ${hm}*\n${obra}\n${R.nSin} actividades de ${R.rows.length} subcontratista${R.rows.length===1?'':'s'}\n\n`+R.rows.map(r=>`*${conOf(r.sc).name}* · ${r.L.length} de ${r.n}\n${lst(r)}`).join('\n')}
+let SIR=null;
+function sinIniOpen(){SIR={sel:''};sinIniDraw()}
+function sinIniDraw(){if(!SIR)return;const R=sinIniData();if(SIR.sel&&!R.rows.some(r=>r.sc===SIR.sel))SIR.sel='';const txt=R.rows.length?sinIniTxt(R,SIR.sel):'';
+  let h=`<div class="ksh"><i class="kn" style="--k:${KST.none.c}">⏰</i><div><b>Sin inicio marcado</b><span>Hoy ${fmtD(R.d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span><span>${R.nSin} actividad${R.nSin===1?'':'es'} de ${R.rows.length} SC</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>`;
+  if(!R.rows.length)h+=`<p class="knote">✓ Todos los subcontratistas ya marcaron el inicio (o el motivo) de lo programado hoy.</p>`;
+  else{h+=`<div class="kchips kw"><button class="${SIR.sel?'':'on'}" data-sis="">Consolidado <b>${R.nSin}</b></button>${R.rows.map(r=>`<button class="${SIR.sel===r.sc?'on':''}" data-sis="${r.sc}" style="--c:${conOf(r.sc).color}"><i></i>${esc(conOf(r.sc).name)} <b>${r.L.length}</b></button>`).join('')}</div>
+    <textarea class="kin sitx" id="sitx" readonly rows="12">${esc(txt)}</textarea>
+    <div class="kbtns two"><button class="kbig ghost" data-sic>📋 Copiar</button><a class="kbig pri" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(txt)}">WhatsApp</a></div>
+    <p class="knote">${SIR.sel?'Mensaje para enviar a este subcontratista.':'Resumen de todos, para el grupo de la obra. Elige un SC para su mensaje individual.'} WhatsApp abre el chat para que elijas a quién enviarlo.</p>`}
+  let sh=$('#sisheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='sisheet';sh.innerHTML='<div class="ksc"></div>';document.body.appendChild(sh);const t0=NOW();
+    sh.onclick=e=>{const t=e.target;if((t===sh&&NOW()-t0>400)||t.closest('[data-kx]')){sh.remove();SIR=null;return}let b;
+      if((b=t.closest('[data-sis]'))){SIR.sel=b.dataset.sis;sinIniDraw();return}
+      if(t.closest('[data-sic]')){const v=($('#sitx')||{}).value||'';(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('Copiado: pégalo en WhatsApp')).catch(()=>{const ta=$('#sitx');if(ta){ta.removeAttribute('readonly');ta.select();toast('Copia el texto seleccionado')}})}}}
+  const sc=sh.firstChild;if(sc.dataset.h!==h){sc.innerHTML=h;sc.dataset.h=h}}
 
 /* ---------- invitaciones de capataces (Equipo) ---------- */
 const INV=new Map();let invSub=null;
@@ -251,7 +278,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const allSc=[...new Set([...S.act.values()].filter(x=>{const pid=pisoOfAct(x.id);return pid&&vsP.has(pid)&&(x.days||[]).some(z=>z>=addD(d,-42)&&z<=addD(d,14))}).map(x=>x.sc))].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
   const tys=dashTypes(d);if(DB_.ty&&!tys.some(t=>t.k===DB_.ty))DB_.ty='';
   const fil=DB_.sc.size||DB_.ty;
-  const hh=`<div class="dhd"><div><b>Tablero</b><span>${dw} ${fmtD(d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></div><span class="dlive"><i></i>En vivo</span><button class="ib" id="dtv">${DB_.tv?'Salir de pantalla completa':'⤢ Pantalla completa'}</button></div>
+  const hh=`<div class="dhd"><div><b>Tablero</b><span>${dw} ${fmtD(d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></div><span class="dlive"><i></i>En vivo</span><button class="ib" data-sini title="Lo programado hoy que aún nadie marcó como iniciado o detenido: consolidado y por SC, para enviar por WhatsApp">📲 Sin iniciar · ${c.none}</button><button class="ib" id="dtv">${DB_.tv?'Salir de pantalla completa':'⤢ Pantalla completa'}</button></div>
    <div class="dflt"><div class="dfsc" role="group" aria-label="Subcontratistas"><button class="dfc${DB_.sc.size?'':' on'}" data-dsc="">Todos los SC</button>${allSc.map(sc=>`<button class="dfc${DB_.sc.has(sc)?' on':''}" data-dsc="${sc}" style="--c:${conOf(sc).color}" aria-pressed="${DB_.sc.has(sc)}"><i></i>${esc(conOf(sc).name)}</button>`).join('')}</div>
     <label class="dfty"><span>Tipo de actividad</span><select class="tin" id="dty"><option value="">Todas</option>${tys.map(t=>`<option value="${esc(t.k)}"${DB_.ty===t.k?' selected':''}>${esc(t.t)}</option>`).join('')}</select></label>${fil?'<button class="lnkb" data-dclr>Quitar filtros</button>':''}</div>`;
   const K=(lab,v,sub,cls,k)=>`<div class="dk${cls?' '+cls:''}"${k?` style="--k:${k}"`:''}><span class="dkl">${lab}</span><b>${v}</b>${sub?`<span class="dks">${sub}</span>`:''}</div>`;
@@ -296,6 +323,7 @@ function dashClick(e){const t=e.target;let b;
   if(t.closest('#dtv')){DB_.tv=!DB_.tv;try{if(DB_.tv)document.documentElement.requestFullscreen().catch(()=>{});else if(document.fullscreenElement)document.exitFullscreen()}catch(err){}const m=$('#main');m.dataset.built='';render();return}
   if((b=t.closest('[data-dp]'))){DB_.pid=b.dataset.dp;const h=$('#dplan');if(h)h._fk='';render();return}
   if((b=t.closest('[data-dsc]'))){const v=b.dataset.dsc;if(!v)DB_.sc.clear();else if(DB_.sc.has(v))DB_.sc.delete(v);else DB_.sc.add(v);dashRe();return}
+  if(t.closest('[data-sini]')){sinIniOpen();return}
   if(t.closest('[data-dclr]')){DB_.sc.clear();DB_.ty='';dashRe();return}}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-lqact]');if(!b)return;e.stopPropagation();const l=libOf(b.dataset.lqact);if(l)libDetail(l.id);else libAsk(b.dataset.lqact)},true);
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&DB_.tv&&U.tab==='dash'){DB_.tv=false;const m=$('#main');m.dataset.built='';render()}});

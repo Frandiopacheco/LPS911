@@ -292,7 +292,8 @@ function tapSelect(w,e){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;retur
   /* reunión: en «Plan» un toque abre Va · No va · Culminado (y los cruces); en «Cumplimiento», lo registrado en Campo */
   const pl=M.meet&&M.mmode==='plan';
   const onLbl=els.some(el=>el.closest&&el.closest('.pvl[data-z]'));
-  if(pl&&!onLbl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
+  /* tocar el achurado de un cruce abre su decisión: en la reunión («Plan») y también fuera de ella (revisión previa, en el orden que el ingeniero quiera) */
+  if((pl||(!M.meet&&M.colorBy!=='cu'))&&!onLbl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
   if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
   /* las zonas que salen de Sectorización (ambiente completo) no se seleccionan ni se mueven en el Plan diario */
   const zs_=zid&&zget(zid);M.selId=zs_&&zs_.virt?null:zid;requestRender()}
@@ -1019,7 +1020,9 @@ function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);cons
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;
     const pt={x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''};
     /* doble toque rápido en cualquier lugar (también sobre una actividad de otro SC): trabajo no programado */
-    const t=performance.now(),L=host._lt;if(oo.onDbl&&L&&t-L.t<350&&Math.hypot(e.clientX-L.x,e.clientY-L.y)<30){clearTimeout(host._tt);host._lt=null;oo.onDbl(pt);return}
+    /* con mouse (laptop) el doble clic sobre una actividad abre la actividad, no el no programado: en la PC es costumbre hacer doble clic */
+    const mouse=e&&e.pointerType==='mouse';const onAct=(()=>{const zid=el?el.dataset.z:'';if(!zid||zid.startsWith('np:'))return false;const z=(oo.zones?oo.zones.find(q=>q.id===zid):zget(zid));return!!(z&&z.actId&&oo.colors.has(z.actId))})();
+    const t=performance.now(),L=host._lt;if(oo.onDbl&&L&&t-L.t<350&&Math.hypot(e.clientX-L.x,e.clientY-L.y)<30&&!(mouse&&onAct)){clearTimeout(host._tt);host._lt=null;oo.onDbl(pt);return}
     host._lt={t,x:e.clientX,y:e.clientY};
     const run=()=>{const zid=el?el.dataset.z:'';if(zid&&zid.startsWith('np:')){if(oo.onMark)oo.onMark(zid.slice(3));return}
       /* con «＋ No programado» armado, cualquier lugar (aunque tenga una actividad) registra el no programado */
@@ -1028,7 +1031,7 @@ function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);cons
       /* toque en un lugar sin actividad programada: trabajo no programado */
       if(oo.onEmpty)oo.onEmpty(pt)};
     /* con doble toque activo, el toque simple espera un instante por si llega el segundo */
-    clearTimeout(host._tt);if(oo.onDbl)host._tt=setTimeout(run,300);else run()}});host._v=v}host._o=o;host._base=base.id;
+    clearTimeout(host._tt);if(oo.onDbl&&!(mouse&&onAct))host._tt=setTimeout(run,300);else if(!(mouse&&onAct&&L&&t-L.t<350&&$('#ksheet')))run()}});host._v=v}host._o=o;host._base=base.id;
   const url=IMG.get(base.id+'|'+base.rev+'|l')?.url||null;if(!url)imgURL(base,'l').then(()=>{if(U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()}).catch(()=>{});
   v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.5}]);
   const full=boundsOf({...base,T:base.T||I});const mv=mine.filter(z=>zVista(z)===base.id);
@@ -1152,7 +1155,7 @@ function renderPlan(main,cur,base){
     if(cxs.length)ch=`<button class="mcxh" data-cxtog="1" aria-expanded="${M.cxOpen?'true':'false'}">⚠ Dos partidas en el mismo lugar <b>${cxs.length}</b><span>${M.cxOpen?'▴':'▾'}</span></button><button class="lnkb cxvt" data-cxv="1">${cxHid()?'▨ Mostrar el achurado en el plano':'▨ Ocultar el achurado del plano'}</button>${M.cxOpen?`<div class="mcxl">`+(ZL_=>cxs.map(c=>{const me_=sc&&c.b.sc===sc?c.b:c.a,o=me_===c.a?c.b:c.a;return`<button class="mp-cx" data-pcx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} <b>${esc(conOf(me_.sc).name)}</b>: ${esc(zoneLabel(me_))} ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}<small>${typeof canWrite!=='undefined'&&canWrite?'Toca para revisar y decidir':'Toca para verlo en el plano'}</small></button>`}).join(''))(NBZ())+'</div>':''}`;
     const eng=dzEng()&&!PHONE();
     if(M.rvx)ch=`<div class="mrvx"><b>🔍 Revisando cruces</b><span>${cxs.length?`quedan ${CROSS.list.length}`:'todos revisados'}</span><button class="ib" data-rvx="go">Abrir el actual</button><button class="ib" data-rvx="stop">Terminar</button></div>`+ch;
-    else if(eng&&CROSS.list.length&&!M.meet)ch=`<button class="ib pri mrvgo" data-rvx="start" title="Recorre los cruces uno por uno y decide: a la vez, quién va primero o no va">🔍 Revisar interferencias (${CROSS.list.length})</button>`+ch;
+    else if(eng&&CROSS.list.length&&!M.meet)ch=`<p class="mrvh">Toca el <b>achurado rojo</b> en el plano o un cruce de la lista para decidirlo, en el orden que quieras.</p><button class="ib mrvgo" data-rvx="start" title="Recorre los cruces uno por uno y decide: a la vez, quién va primero o no va">▶ Recorrer uno por uno (${CROSS.list.length})</button>`+ch;
     /* lo ya revisado (antes o durante la reunión): se ve plegado; el ingeniero lo puede reabrir */
     const XR=xokOf(M.piso,M.date);if(XR.length){const nmK=k=>{if(k.startsWith('a:')){const x=S.act.get(k.slice(2));return x?conOf(x.sc).name+' · '+short(x.name,26):'(actividad)'}const z=zget(k.slice(2));return z?conOf(z.sc).name+' · '+short(z.desc||'no programado',26):'(zona)'};
       ch+=`<button class="mcxh2" data-cxrtog="1" aria-expanded="${M.cxrOpen?'true':'false'}">✓ Cruces revisados <b>${XR.length}</b><span>${M.cxrOpen?'▴':'▾'}</span></button>${M.cxrOpen?`<div class="mcxl">${XR.sort((a,b)=>(a.ts||0)-(b.ts||0)).map(d=>`<div class="mp-cxr"><div>${(d.ord||d.keys||[]).map(nmK).map(esc).join(d.ord?' → ':' ↔ ')}</div><small>${d.ord?'Orden decidido':'Pueden trabajar a la vez'} · ${esc(d.byName||d.n||'')} ${hhmm(d.ts)}</small>${eng?`<button class="lnkb" data-xreo="${d.id}" title="Vuelve a quedar como cruce pendiente">Reabrir</button>`:''}</div>`).join('')}</div>`:''}`}

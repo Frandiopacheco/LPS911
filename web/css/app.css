@@ -2907,3 +2907,8 @@ div.tp-dif{padding-left:0}
   .mrs.dock.shut .mrst{border:0}
 }
 @media (min-width:1000px){.khd{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px}.khd>.khi{flex:1 1 100%}.khd>.ktog{margin-left:auto}}
+/* reporte «Sin inicio marcado» para WhatsApp */
+.sitx{height:auto;min-height:220px;padding:10px 12px;font:13px/1.45 var(--f-ui);resize:vertical;white-space:pre-wrap}
+a.kbig{display:flex;align-items:center;justify-content:center;text-decoration:none}
+@media (max-width:760px){.khi [data-sini] span{display:none}}
+.mrvh{margin:8px 10px 6px;font-size:12.5px;color:var(--ink2)}.mrs.dock .mrvgo{margin:0 10px 8px;width:calc(100% - 20px)}
