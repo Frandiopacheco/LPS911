@@ -247,3 +247,16 @@ test('agregar al plan: no adelanta un día ya cerrado', () => {
   assert.ok(!R.acts.x3);
   assert.deepStrictEqual(R.blocked, ['Ya movida']);
 });
+
+test('cierre: lo agregado al plan se aplica y sus áreas dibujadas pasan a la actividad', async () => {
+  const PA = { kind: 'padd', draft: true, st: 'ok', date: D, pisoId: 'p1', t: 'new', ambId: 'a1', sc: 'c2', name: 'Resane', newId: 'nx1', order: 30, ts: 9 };
+  const Z = { kind: 'zona', date: D, pisoId: 'p1', sc: 'c2', paId: 'pa1', actId: null, pts: [0, 0, 1, 0, 1, 1] };
+  const { db, ctx } = world({ 'pdz/pa1': PA, 'pdz/zpa': Z });
+  ctx.drafts = [...ctx.drafts, { ...PA, id: 'pa1' }]; ctx.zones = [{ ...Z, id: 'zpa' }];
+  await closePlanPiso(db, ctx, D, Date.UTC(2026, 9, 6, 1));
+  const g = p => db.st.get(p);
+  assert.deepStrictEqual(g('acts/nx1').days, [D]);
+  assert.strictEqual(g('pdz/pa1').draft, false);
+  assert.strictEqual(g('pdz/zpa').actId, 'nx1');
+  assert.ok('nx1' in (g('dplan/' + D + '_p1').ids || {}), 'entra en la foto del plan');
+});

@@ -116,7 +116,8 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
     const drafts = zs.filter(z => ((z.kind === 'nova' && z.draft) || (z.kind === 'padd' && z.draft && z.st === 'ok')) && z.pisoId === pid);
     const props = pendProps(zs, d, pid);
     let res;
-    try { res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, piso: p, logger }, d, now); }
+    const zones = zs.filter(z => z.kind === 'zona' && z.paId && z.pisoId === pid);
+    try { res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, zones, piso: p, logger }, d, now); }
     catch (e) { logger.error(`Plan del ${d} piso ${pid}: no se pudo cerrar`, e); continue; }
     if (res.skip) continue;
     if (Object.keys(res.ids).length) k++;
