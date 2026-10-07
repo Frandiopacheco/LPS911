@@ -78,7 +78,7 @@ function topDateApply(){const m=dateMode();if(document.body.dataset.dmode!==m)do
   const show=m!=='none';['#wprev','#wnext','#wtoday'].forEach(s=>{const e=$(s);if(e)e.hidden=!show});const lb=$('.wk .lbl');if(lb)lb.hidden=!show;if(!show)return;
   const today=todayIso();
   if(m==='week'){$('#wprev').setAttribute('aria-label','Semana anterior');$('#wnext').setAttribute('aria-label','Semana siguiente');$('#wnext').disabled=false;$('#wtoday').disabled=U.week===curWeek();return}
-  const d=curDay();$('#wnum').textContent=`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}`;$('#wdates').textContent=`Semana ${weekOf(d)}${d===today?' · hoy':''}`;
+  const d=curDay();stx('#wnum',`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}`);stx('#wdates',`Semana ${weekOf(d)}${d===today?' · hoy':''}`);
   $('#wprev').setAttribute('aria-label','Día anterior');$('#wnext').setAttribute('aria-label','Día siguiente');
   $('#wnext').disabled=U.tab==='ind'&&d>=today;$('#wtoday').disabled=d===today}
 function navDate(v){const m=dateMode();if(m==='week'){U.week+=v;render();return}if(m!=='day')return;

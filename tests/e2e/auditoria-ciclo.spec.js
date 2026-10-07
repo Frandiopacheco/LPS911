@@ -447,6 +447,9 @@ test('7b+8b. sábado 03 oct: iniciar y cerrar (lo reprogramado llegó a hoy)', a
   const mias = await Promise.all(SC.map((p, i) => ED.ed1.evaluate(([d, sc]) => Object.entries(window.__dbAll('acts')).filter(([, a]) => !a.arch && a.sc === sc && (a.days || []).includes(d) && !((window.__dbGet('doneidx', 'p1') || {}).d || {})[a.id || '']).map(([id]) => id)[0], [SAT, 'c' + (i + 1)])));
   log('sábado, actividad por SC:', JSON.stringify(mias));
   await Promise.all(SC.map(async (p, i) => { const id = mias[i]; if (!id) return; await tiempo('SC inicia (sábado)', async () => { await p.locator(`article[data-k="${id}"] [data-kq="run"]`).click({ timeout: 10_000 }); await expect(p.locator(`article[data-k="${id}"]`)).toHaveClass(/k-run/, { timeout: 10_000 }); }); }));
+  /* lo escrito por cada SC tarda en llegar al ingeniero (base compartida): esperar a que lleguen todos antes de comparar */
+  const nEsp = mias.filter(Boolean).length;
+  await expect.poll(async () => Object.keys(await ED.ed1.evaluate(() => window.__dbAll('live'))).filter(k => k.startsWith(SAT)).length, { timeout: 15_000 }).toBeGreaterThanOrEqual(nEsp).catch(() => {});
   const live = Object.entries(await ED.ed1.evaluate(() => window.__dbAll('live'))).filter(([k, v]) => k.startsWith(SAT)).map(([k, v]) => v.st);
   await chk(7, 'sábado: cada SC con actividad inició la suya', mias.filter(Boolean).map(() => 'run'), live, SC[0]);
   await cierre(SAT, 'sábado', SAT + 'T16:00:00-05:00');

@@ -1,4 +1,7 @@
 "use strict";
+/* escribir solo si cambió: reescribir lo mismo en cada dibujo hace parpadear la barra en la tablet */
+const stx=(el,v)=>{if(typeof el==='string')el=document.querySelector(el);if(el&&el.textContent!==v)el.textContent=v};
+const shx=(el,h)=>{if(typeof el==='string')el=document.querySelector(el);if(el&&el._h!==h){el.innerHTML=h;el._h=h}};
 /* LPS 911 · Utilidades, estado, escritura con deshacer, conexión, inicio de sesión, menús y dibujo principal.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 /* ---------- utilidades ---------- */
@@ -520,17 +523,17 @@ function renderTop(){
   modselApply();
   if(U.mod==='tar'){/* Tareo: sin piso, semana, deshacer ni exportes de Last Planner (los oculta también el CSS con body.mod-tar) */
     let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}
-    $('#pname').textContent='Tareo de personal obrero';$('#pname').title='';$('#pcode').textContent=(pn?pn+' · ':'')+'Tareo';
+    stx('#pname','Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+'Tareo');
     $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===U.tab));
     navApply();topDateApply();topToolsApply();updUndo();setStatus();renderBnav();return}
-  const p=P();$('#pname').textContent=p.name||'Proyecto';$('#pname').title=p.fullName||'';
-  $('#pcode').textContent=(p.code||'')+' · Last Planner System';
-  const wd=weekDays(U.week);$('#wnum').textContent='Semana '+U.week;$('#wdates').textContent=fmtD(wd[0])+' – '+fmtD(wd[5]);
+  const p=P();stx('#pname',p.name||'Proyecto');$('#pname').title=p.fullName||'';
+  stx('#pcode',(p.code||'')+' · Last Planner System');
+  const wd=weekDays(U.week);if(typeof dateMode!=='function'||dateMode()==='week'){stx('#wnum','Semana '+U.week);stx('#wdates',fmtD(wd[0])+' – '+fmtD(wd[5]))}
   $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===U.tab));
   const ps=pisos();if(U.piso&&!S.pis.has(U.piso))U.piso='';
-  $('#fpiso').innerHTML='<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('');
-  const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;rc.textContent=pr;
-  {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));/* Calidad: lo que debe programar; el SC: sus observadas por levantar */const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:SCK()?[...LIB.values()].filter(l=>l.st==='obs'&&vs.has(l.pisoId)&&myScsI().includes(l.sc)).length:0;lc.hidden=!n;lc.textContent=n}}
+  shx('#fpiso','<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join(''));
+  const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;stx(rc,String(pr));
+  {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));/* Calidad: lo que debe programar; el SC: sus observadas por levantar */const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:SCK()?[...LIB.values()].filter(l=>l.st==='obs'&&vs.has(l.pisoId)&&myScsI().includes(l.sc)).length:0;lc.hidden=!n;stx(lc,String(n))}}
   $('#wtoday').disabled=U.week===curWeek();
   navApply();topDateApply();topToolsApply();
   brandSync();
