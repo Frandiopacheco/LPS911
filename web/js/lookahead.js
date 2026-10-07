@@ -44,6 +44,7 @@ function buildLookShell(main){
     <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
     <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
+    <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
     <span id="fday"></span><span id="fpast"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
@@ -68,6 +69,7 @@ function buildLookShell(main){
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
   $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
+  $('#fclr').onclick=()=>{U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};

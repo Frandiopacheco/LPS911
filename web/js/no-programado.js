@@ -11,6 +11,9 @@ const canNP=()=>!!me&&(canDaily||me.role==='veedor'||isCalArea());
 /** Registra no programado pero no verifica el avance (veedor, Calidad). */
 const VEED=()=>!!me&&!canDaily&&canNP();
 const npMine=n=>!!me&&!!n&&(canDaily||n.by===me.email);
+/* el SC también registra lo no programado de su partida en «En obra»; queda «por verificar» hasta que el ingeniero de campo lo confirme (oct 2026) */
+const npSC=()=>!!me&&me.role==='sc';
+const canNPx=()=>canNP()||npSC();
 
 function ensureNP(from){if(!db||(npFrom&&from>=npFrom))return;if(npSub)npSub();npFrom=from;
   npSub=fcol('nprog').where('date','>=',from).onSnapshot(sn=>{NPM.clear();sn.docs.forEach(d=>NPM.set(d.id,{...d.data(),id:d.id}));npErr=null;if(ready)requestRender();if(NS&&$('#npsheet'))npDraw()},
@@ -28,10 +31,10 @@ function npItems(dates,vset){const ds=dates instanceof Set?dates:new Set(dates);
 function npMarks(d,pid){return npItems([d],new Set([pid])).filter(i=>i.src==='np'&&i.e.pt).map(i=>({id:i.id,x:i.e.pt.x,y:i.e.pt.y,v:i.e.pt.v,sc:i.e.sc,c:conOf(i.e.sc).color,t:'+',tip:`${conOf(i.e.sc).name}: ${i.e.desc||''}`}))}
 
 /* ---------- ficha rápida (hoja inferior) ---------- */
-function npNew(o){if(!canNP())return;const d=o.d||campoDate();
+function npNew(o){if(!canNPx())return;const d=o.d||campoDate();
   if(d>todayIso()){toast('Solo se registra lo que se ve hoy o días pasados.');return}
   const API=window.__plano;const ambId=o.ambId||(o.pt&&API&&API.ambAt?API.ambAt(o.pid,o.pt):'')||'';
-  NS={mode:'new',id:'',d,pid:o.pid||(ambId?pisoOfAmb(ambId):(visPisos()[0]||{}).id||''),pt:o.pt||null,ambId,auto:!!ambId,sc:'',desc:'',exec:'',und:'',note:'',photos:[],newPh:[],more:false};npDraw();
+  NS={mode:'new',id:'',d,pid:o.pid||(ambId?pisoOfAmb(ambId):(visPisos()[0]||{}).id||''),pt:o.pt||null,ambId,auto:!!ambId,sc:npSC()&&(me.scs||[]).length===1?me.scs[0]:'',desc:'',exec:'',und:'',note:'',photos:[],newPh:[],more:false};npDraw();
   if(!ambId&&o.pt&&API&&API.ambAtP){const ns=NS;API.ambAtP(ns.pid,o.pt).then(a=>{if(NS===ns&&!NS.ambId&&a){NS.ambId=a;NS.auto=true;npDraw()}})}}
 function npOpen(id){const n=NPM.get(id);if(!n)return;
   NS={mode:'edit',id,d:n.date,pid:n.pisoId,pt:n.pt||null,ambId:n.ambId||'',auto:false,sc:n.sc||'',desc:n.desc||'',exec:n.exec??'',und:n.und||'',note:n.note||'',photos:[...(n.photos||[])],newPh:[],more:!!(n.exec!=null||n.note),ro:!npMine(n)};npDraw()}
@@ -43,7 +46,7 @@ function npActNames(sc,ambId,pid){const seen=new Map();const add=(x,w)=>{const k
   for(const x of S.act.values()){if(x.sc!==sc)continue;if(x.ambId===ambId)add(x,0);else if(pisoOfAct(x.id)===pid)add(x,1);else add(x,2)}
   return[...seen.values()].sort((a,b)=>a.w-b.w||a.name.localeCompare(b.name)).slice(0,8).map(o=>o.name)}
 function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;const ro=!!NS.ro;const p=S.pis.get(NS.pid);const am=S.amb.get(NS.ambId);
-  const ambs=npAmbOpts(NS.pid);const scs=npScs(NS.pid,NS.ambId);const names=NS.sc?npActNames(NS.sc,NS.ambId,NS.pid):[];const linked=n&&n.actId&&S.act.get(n.actId);
+  const ambs=npAmbOpts(NS.pid);const scs=npScs(NS.pid,NS.ambId).filter(c=>!npSC()||(me.scs||[]).includes(c.id));const names=NS.sc?npActNames(NS.sc,NS.ambId,NS.pid):[];const linked=n&&n.actId&&S.act.get(n.actId);
   let h=`<div class="ksh"><i class="kn npk" aria-hidden="true">+</i><div><b>Trabajo no programado</b><span>${esc(p?p.code+' · '+p.name:'')} · ${DOWN[(pd(NS.d).getUTCDay()+6)%7]} ${fmtD(NS.d)}${NS.pt?' · punto marcado en el plano':''}</span>${n?`<span>Registrado por ${esc(n.byName||n.by||'')} · ${hhmm(n.ts)}</span>`:''}</div><button class="kx" data-npx aria-label="Cerrar">×</button></div>`;
   h+=`<div class="ksl">Ambiente${NS.auto?' <span class="mu">· según el punto que tocaste</span>':''}</div>
     <select class="kin" id="npamb"${ro?' disabled':''} aria-label="Ambiente"><option value="">— elige el ambiente —</option>${ambs.map(({s,a})=>`<option value="${a.id}"${a.id===NS.ambId?' selected':''}>${esc(s.code)} · ${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`;
@@ -57,6 +60,7 @@ function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;con
     <input class="kin" id="npnote" value="${esc(NS.note)}" placeholder="Comentario (opcional)" aria-label="Comentario"${ro?' readonly':''}>`;
   else h+=`<button class="lnkb npmore" data-npmore>+ Cantidad y comentario</button>`;
   if(linked)h+=`<p class="knote">Ya está en el lookahead: <b>${esc(linked.name)}</b>.</p>`;
+  if(n&&n.scProp)h+=n.ver?`<p class="knote">✓ Verificado por ${esc(n.ver.n||'')} · ${hhmm(n.ver.t)}</p>`:`<p class="knote"><b>Por verificar:</b> lo registró el subcontratista.</p>${canDaily?'<div class="kbtns"><button class="kbig ok" data-npa="ver">✓ Verificar (lo vi en obra)</button></div>':''}`;
   if(ro)h+=`<p class="knote">Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
   else h+=`<div class="kbtns"><button class="kbig pri" data-npa="save"${NS.busy?' disabled':''}>${NS.mode==='edit'?'Guardar cambios':'Guardar'}</button>
     ${n&&canWrite&&!linked?'<button class="kbig ghost" data-npa="look">Pasarlo al lookahead (este día)</button>':''}
@@ -71,13 +75,13 @@ async function npChange(e){const t=e.target;if(!NS)return;
   if(t.id==='npfoto'&&t.files[0]){const f=t.files[0];t.value='';try{toast('Comprimiendo foto…');NS.newPh.push(await shrinkPhoto(f));npDraw()}catch(err){toast(err.message)}}}
 function npClick(e){const t=e.target;const sh=$('#npsheet');if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-npx]')){npClose();return}if(!NS)return;let b;
   const ph=t.closest('img[data-ph],.npph img');if(ph&&ph.src){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-x="1">Cerrar</button></div><img src="${ph.src}" alt="">`;lb.onclick=ev=>{if(ev.target.dataset.x||ev.target===lb)lb.remove()};document.body.appendChild(lb);return}
-  if(NS.ro)return;
+  if(NS.ro&&!t.closest('[data-npa="ver"]'))return;
   if((b=t.closest('[data-npsc]'))){NS.sc=b.dataset.npsc;npDraw();return}
   if((b=t.closest('[data-npd]'))){NS.desc=b.dataset.npd;npDraw();return}
   if(t.closest('[data-npmore]')){NS.more=true;npDraw();setTimeout(()=>{const i=$('#npexec');if(i)i.focus()},30);return}
   if((b=t.closest('[data-npphx]'))){NS.photos=NS.photos.filter(i=>i!==b.dataset.npphx);npDraw();return}
   if((b=t.closest('[data-npphn]'))){NS.newPh.splice(+b.dataset.npphn,1);npDraw();return}
-  if((b=t.closest('[data-npa]'))){const k=b.dataset.npa;if(k==='save')npSave();else if(k==='del')npDel();else if(k==='look')npToLook()}}
+  if((b=t.closest('[data-npa]'))){const k=b.dataset.npa;if(k==='save')npSave();else if(k==='ver')npVer();else if(k==='del')npDel();else if(k==='look')npToLook()}}
 
 function npSave(){if(!NS||!db)return;const desc=NS.desc.trim();
   if(!NS.sc){toast('Elige quién está trabajando.');return}if(!desc){toast('Escribe o elige qué están haciendo.');return}
@@ -87,10 +91,13 @@ function npSave(){if(!NS||!db)return;const desc=NS.desc.trim();
   const fids=NS.newPh.map(data=>{const fid=uid('f');FOTO.set(fid,data);fcol('fotos').doc(fid).set({data,date:NS.d,pisoId:pid,npId:id,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));return fid});
   const gone=old?(old.photos||[]).filter(f=>!NS.photos.includes(f)):[];
   const doc={...(old||{}),date:NS.d,pisoId:pid,ambId:NS.ambId||'',sc:NS.sc,desc,exec:ex,und:NS.und.trim().toUpperCase(),note:NS.note.trim(),photos:[...NS.photos,...fids],pt:NS.pt||null,
-    by:old?old.by:me.email,byName:old?old.byName:(me.name||me.email),ts:old?old.ts:NOW(),...(old?{ed:{by:me.email,n:me.name||me.email,t:NOW()}}:{})};delete doc.id;
+    by:old?old.by:me.email,byName:old?old.byName:(me.name||me.email),ts:old?old.ts:NOW(),...(!old&&npSC()?{scProp:true}:{}),...(old?{ed:{by:me.email,n:me.name||me.email,t:NOW()}}:{})};delete doc.id;
   NPM.set(id,{...doc,id});fcol('nprog').doc(id).set(doc).catch(err=>{toast('No se pudo guardar: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message)))});
   gone.forEach(f=>{if(canDaily)fcol('fotos').doc(f).delete().catch(()=>{})});
   toast(old?'Cambios guardados':`No programado registrado${fids.length?' con foto':''}`);npClose();requestRender()}
+/** el ingeniero de campo confirma lo que registró el SC */
+function npVer(){const n=NS&&NPM.get(NS.id);if(!n||!canDaily)return;const doc={...n,ver:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
+  fcol('nprog').doc(n.id).set(doc).catch(err=>toast('No se pudo verificar: '+(err.code||err.message)));toast('Verificado');npClose();requestRender()}
 async function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!await uiAsk({title:'¿Anular este registro?',text:'El trabajo no programado queda anulado (no se borra).',ok:'Anular',tone:'danger'}))return;
   const doc={...n,del:true,ed:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
   fcol('nprog').doc(n.id).set(doc).catch(err=>toast('No se pudo anular: '+(err.code||err.message)));toast('Registro anulado');npClose();requestRender()}
@@ -104,7 +111,7 @@ function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.amb
 
 /* ---------- lista del día (Campo › Tarjetas y debajo del plano) ---------- */
 function npCard(i){const e=i.e;const c=conOf(e.sc);const am=i.a;const legacy=i.src==='dx';
-  return`<article class="cc st-np npc" data-np="${esc(i.id)}" data-src="${i.src}" data-pid="${esc(i.pid)}" style="--c:${c.color}"><div class="cct"><b>${esc(e.desc||'')}</b><span>${am?esc(am.code+' · '+am.name):'sin ambiente'} · ${esc(c.name)}${e.exec!=null?` · ${fq(e.exec)} ${esc(e.und||'')}`:''}${e.actId&&S.act.get(e.actId)?' · <em>ya en el lookahead</em>':''}</span></div>${e.note?`<div class="note">${esc(e.note)}</div>`:''}
+  return`<article class="cc st-np npc" data-np="${esc(i.id)}" data-src="${i.src}" data-pid="${esc(i.pid)}" style="--c:${c.color}"><div class="cct"><b>${esc(e.desc||'')}</b><span>${am?esc(am.code+' · '+am.name):'sin ambiente'} · ${esc(c.name)}${e.exec!=null?` · ${fq(e.exec)} ${esc(e.und||'')}`:''}${e.actId&&S.act.get(e.actId)?' · <em>ya en el lookahead</em>':''}${e.scProp&&!e.ver?' · <em class="miss">por verificar (lo registró el SC)</em>':''}</span></div>${e.note?`<div class="note">${esc(e.note)}</div>`:''}
     ${(e.photos||[]).length?`<div class="cph">${(e.photos||[]).map(id=>{loadFoto(id);return`<div class="th"><img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto"></div>`}).join('')}</div>`:''}
     <div class="cby"><span>${esc(e.byName||e.by||'')} · ${hhmm(e.ts)}${e.pt?' · 📍 en el plano':''}</span>${legacy?(canDaily?'<button class="lnkb" data-npdx>Eliminar</button>':''):`<button class="lnkb" data-npo>${npMine(e)?'Editar':'Ver'}</button>`}</div></article>`}
 function npListHtml(d,vset,f){const L=npItems([d],vset).filter(i=>!f||f(i));if(!L.length)return'';

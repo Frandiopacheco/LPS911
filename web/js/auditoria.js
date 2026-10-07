@@ -197,6 +197,7 @@ function pickPiso(){if(U.piso&&S.pis.has(U.piso))return;if(U.pisoAll||S.pis.size
 /* Lookahead: panel "Filtros y vista" */
 function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidden=!U.lbMore;b.setAttribute('aria-expanded',U.lbMore?'true':'false');b.classList.toggle('on',!!U.lbMore);
   const n=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  {const c=$('#fclr');if(c)c.hidden=!(n||U.q||U.sector||U.sc)}
   const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff)}
 /* Campo: resumen de filtros (celular) */
 function cfxSum(secs,cons,nS){const s=CU.sec&&secs.find(o=>o.s.id===CU.sec);const c=CU.sc&&cons.find(o=>o.id===CU.sc);const sh={all:'Todas',pend:'Pendientes',reg:'Registradas',prop:'Por confirmar'}[CU.show]||'Todas';
