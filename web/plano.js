@@ -109,7 +109,7 @@ function renderMapa(main){ensureLam();
   empty.innerHTML=eh;empty.hidden=!eh;
   if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});
     /* clic derecho sobre un cruce: decidir (sin interferencia / prioridad) */
-    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const c=crossAt(M.view.toWorld(e.clientX,e.clientY));if(!c)return;e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c)});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
+    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const c=crossAt(M.view.toWorld(e.clientX,e.clientY));if(!c)return;e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c)});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');if(l&&l.closest('.mrs.dock'))return 0;return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
   const layers=[];const lay=(l,op,key)=>({key:key||l.id,l,w:l.w,h:l.h,T:l.T||I,op});
   if(cur){if(!cur.base&&base&&M.under){layers.push(lay(base,M.bop,'base'));layers.push({...lay(cur,M.op),blend:'multiply'})}else layers.push(lay(cur,cur.base?M.bop:1))}
   M.view.bounds=base?boundsOf({...base,T:base.T||I}):cur?boundsOf(cur):null;
@@ -826,8 +826,27 @@ function focusAct(aid,tries){const x=S.act.get(aid);if(!x)return;tries=tries||0;
 function setHL(ids){const k=ids?ids.join(','):'';if(k===M.hlk)return;M.hlk=k;M.hl=ids&&ids.length?new Set(ids):null;if(!M.tmp)drawOverlay();
   $$('#mleg [data-lz]').forEach(b=>b.classList.toggle('on',!!M.hl&&b.dataset.lz.split(',').some(id=>M.hl.has(id))))}
 /** los recuadros de la derecha no deben quedar debajo de la leyenda: se limitan al alto libre y se desplazan */
-function mrsFit(){const rs=$('#mrs'),lg=$('#mleg'),w=rs&&rs.parentElement;if(!rs||!w)return;if(innerWidth<900){rs.style.maxHeight='';return}
+function mrsFit(){const rs=$('#mrs'),lg=$('#mleg'),w=rs&&rs.parentElement;if(!rs||!w)return;if(rs.classList.contains('dock')){rs.style.maxHeight='';return}if(innerWidth<900){rs.style.maxHeight='';return}
   const lh=lg&&!lg.hidden?lg.offsetHeight+16:0;const top=rs.offsetTop||10;const mh=Math.max(140,w.clientHeight-top-lh-10);rs.style.maxHeight=mh+'px';rs.style.overflowY='auto'}
+/* ---------- panel lateral con pestañas (oct 2026): Por decidir, Cruces, Equipos, Cambios y Leyenda en un solo panel
+   acoplado a la derecha (PC y tablet: el plano se achica, nada flota encima) o como hoja inferior en el celular ---------- */
+M.cxOpen=true;M.pdOpen=true;M.chOpen=true;
+const DOCK=[['mpdb','Por decidir'],['mcxb','Cruces'],['mfzb','Equipos'],['mchb','Cambios'],['mleg','Leyenda']];
+function dockRender(){const rs=$('#mrs'),wrap=rs&&rs.parentElement;if(!rs)return;const lg=$('#mleg');if(lg&&lg.parentElement!==rs)rs.appendChild(lg);
+  let tb=$('#mrst');if(!tb){tb=document.createElement('div');tb.id='mrst';tb.className='mrst';rs.prepend(tb)}
+  rs.classList.add('dock');const ph=innerWidth<900;
+  const av=DOCK.filter(([id])=>{const el=$('#'+id);return el&&!el.hidden});
+  const cnt=id=>{const b=$('#'+id+' .mpdh b, #'+id+' .mcxh b, #'+id+' .mlh span');return b?b.textContent.trim():''};
+  /* sin elección a mano: primero lo que hay que decidir (propuestas, cruces), luego lo demás */
+  if(!M.rstMan||!av.some(([id])=>id===M.rst))M.rst=(av.find(([id])=>id==='mpdb')||av.find(([id])=>id==='mcxb'&&cnt(id)&&cnt(id)!=='0')||av.find(([id])=>id==='mfzb')||av[0]||[''])[0];
+  /* en el celular empieza plegado (solo las pestañas); también mientras se reparte una cuadrilla */
+  const shut=!!M.rsHide||(ph&&(M.rsPh!==true||(M.cqSel&&true)));
+  const rdy=(typeof canWrite!=='undefined'&&canWrite&&!PHONE()&&!M.meet)?readyHtml():'';
+  const h=av.length?`${rdy}<div class="mrstb" role="tablist">${av.map(([id,t])=>{const n=cnt(id);return`<button role="tab" data-rtab="${id}" class="${id===M.rst&&!shut?'on':''}${id==='mcxb'&&n&&n!=='0'?' bad':''}" aria-selected="${id===M.rst&&!shut}">${t}${n?` <b>${esc(n)}</b>`:''}</button>`}).join('')}<button class="mrsx" data-rsx="1" title="${shut?'Mostrar el panel':'Ocultar el panel (más plano a la vista)'}" aria-label="${shut?'Mostrar el panel':'Ocultar el panel'}">${shut?(ph?'▴':'‹'):(ph?'▾':'›')}</button></div>`:'';
+  if(tb.dataset.h!==h){tb.innerHTML=h;tb.dataset.h=h}
+  DOCK.forEach(([id])=>{const el=$('#'+id);if(el)el.classList.toggle('on',id===M.rst&&!shut)});
+  rs.classList.toggle('shut',shut);rs.hidden=!av.length;
+  const mp=rs.closest('.mapa');if(mp){mp.classList.toggle('docked',!!av.length&&!shut&&!ph&&!(M.meet&&M.mmode!=='plan'));mp.classList.toggle('dockmin',!!av.length&&shut&&!ph)}}
 function renderLeg(){const el=$('#mleg');if(!el)return;const N=planNumbering(null);const fv=M.meet?M.meetSc:scVis();const cu=M.colorBy==='cu';
   const inV=z=>zVista(z)===M.vista;const items=N.items.filter(it=>it.zones.some(inV)&&scIn(fv,it.sc));const np=N.np.filter(o=>inV(o.z)&&(!fv||o.z.sc===fv));
   const n=items.length+np.length;const show=M.lbl==='num'&&n>0&&!!M.view&&!(M.meet&&M.meetSc);
@@ -1137,7 +1156,6 @@ function renderPlan(main,cur,base){
     /* lo ya revisado (antes o durante la reunión): se ve plegado; el ingeniero lo puede reabrir */
     const XR=xokOf(M.piso,M.date);if(XR.length){const nmK=k=>{if(k.startsWith('a:')){const x=S.act.get(k.slice(2));return x?conOf(x.sc).name+' · '+short(x.name,26):'(actividad)'}const z=zget(k.slice(2));return z?conOf(z.sc).name+' · '+short(z.desc||'no programado',26):'(zona)'};
       ch+=`<button class="mcxh2" data-cxrtog="1" aria-expanded="${M.cxrOpen?'true':'false'}">✓ Cruces revisados <b>${XR.length}</b><span>${M.cxrOpen?'▴':'▾'}</span></button>${M.cxrOpen?`<div class="mcxl">${XR.sort((a,b)=>(a.ts||0)-(b.ts||0)).map(d=>`<div class="mp-cxr"><div>${(d.ord||d.keys||[]).map(nmK).map(esc).join(d.ord?' → ':' ↔ ')}</div><small>${d.ord?'Orden decidido':'Pueden trabajar a la vez'} · ${esc(d.byName||d.n||'')} ${hhmm(d.ts)}</small>${eng?`<button class="lnkb" data-xreo="${d.id}" title="Vuelve a quedar como cruce pendiente">Reabrir</button>`:''}</div>`).join('')}</div>`:''}`}
-    if(typeof canWrite!=='undefined'&&canWrite&&!PHONE()&&!M.meet)ch=readyHtml()+ch;
     const cb=$('#mcxb');if(cb){if(cb.dataset.h!==ch){cb.innerHTML=ch;cb.dataset.h=ch}cb.hidden=!ch||(!!M.meet&&M.mmode!=='plan')}}
   /* propuestas del día por decidir (todas las partidas: es lo que se ve en la reunión) */
   {const eng=dzEng();const mySc=role==='sc'?new Set(myScs()):null;const P_=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&(!mySc||mySc.has(z.sc))&&(!M.meet||scIn(M.meetSc,z.sc))&&S.act.has(z.actId));
@@ -1182,7 +1200,7 @@ function renderPlan(main,cur,base){
   const pb=$('#mprops');if(pb.dataset.h!==props){pb.innerHTML=props;pb.dataset.h=props}pb.hidden=!props||!!M.meet;$('#mhint').style.top=props?'64px':'';
   $('#mstage').classList.toggle('draw',M.tool!=='pan');
   const hn=$('#mhint');if(hn.dataset.h!==hint){hn.innerHTML=hint;hn.dataset.h=hint}hn.hidden=!hint||!!M.meet;
-  renderMeet();drawOverlay();renderLeg();requestAnimationFrame(mrsFit);if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'))zcClose();else zcRender()}}
+  renderMeet();drawOverlay();renderLeg();dockRender();requestAnimationFrame(mrsFit);if(ZC){if(U.tab!=='mapa'||(!M.meet&&M.colorBy!=='cu'))zcClose();else zcRender()}}
 const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 /* ---------- decidir el plan del día: va / mañana / terminada / restricción ---------- */
@@ -1578,7 +1596,7 @@ function fzCardHtml(role,sc){const mine=fzMine();if(!mine)return'';const f=fzOf(
 const cqItems=q=>Array.isArray(q.items)?q.items:[];
 function fzAgg(cuad){const m=new Map();for(const q of cuad)for(const i of cqItems(q)){const cat=String(i.cat||'').trim(),esp=String(i.esp||'').trim();if(!cat||!(+i.n>0))continue;const k=cat.toLowerCase()+'|'+esp.toLowerCase();const o=m.get(k)||{cat,esp,n:0};o.n+=+i.n;m.set(k,o)}return[...m.values()]}
 /* en el celular «Equipos del día» empieza plegado: abierto tapaba el plano */
-function fzIsOpen(){return innerWidth<761?M.fzOpen===true:M.fzOpen!==false}
+function fzIsOpen(){/* en el panel con pestañas siempre se arma (se ve al elegir su pestaña) */return true}
 async function fzOpen(sc,selC){const f=fzOf(sc);let src=f&&((f.cuad||[]).length||(f.items||[]).length)?f:null;let copied=false;
   if(!src){try{const d=await fcol('pdz').doc('fzl_'+sc).get();if(d.exists){src=d.data();copied=true}}catch(e){}}
   let cuad=src?JSON.parse(JSON.stringify(src.cuad||[])):[];
@@ -1787,6 +1805,8 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-rep]'))){const[id,fd]=b.dataset.rep.split('|');reprogAct(id,M.date,fd);return true}
   if((b=g('[data-cxtog]'))){M.cxOpen=!M.cxOpen;requestRender();return true}
   if((b=g('[data-rdyp]'))){const v=b.dataset.rdyp;if(v!==M.piso){if(typeof U!=='undefined'&&U.piso){U.piso=v;if(typeof saveUI==='function')saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;requestRender()}return true}
+  if((b=g('[data-rtab]'))){const id=b.dataset.rtab;if(innerWidth<900){if(M.rst===id&&M.rsPh)M.rsPh=false;else M.rsPh=true}else M.rsHide=false;M.rst=id;M.rstMan=true;requestRender();return true}
+  if((b=g('[data-rsx]'))){if(innerWidth<900)M.rsPh=!M.rsPh;else M.rsHide=!M.rsHide;requestRender();return true}
   if((b=g('[data-cxrtog]'))){M.cxrOpen=!M.cxrOpen;requestRender();return true}
   if((b=g('[data-rvx]'))){const k=b.dataset.rvx;if(k==='stop')rvxStop();else if(k==='go')rvxNext(0);else rvxGo(0);return true}
   if((b=g('[data-xreo]'))){if(!dzEng())return true;const o=remDoc(b.dataset.xreo);if(o){rec([o]);CROSS.key='';requestRender();toast('El cruce vuelve a quedar pendiente','Deshacer',undo)}return true}

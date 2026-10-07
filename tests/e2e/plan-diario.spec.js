@@ -41,7 +41,7 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await expect(page.locator('#mpanel .pubb.ok')).toContainText('Plan publicado');
   // el cambio queda en el recuadro «Cambios del plan» (a la derecha), no en el panel
   await expect(page.locator('#mpanel')).not.toContainText('Reprogramadas');
-  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mrst [data-rtab="mchb"]').click();
   await expect(page.locator('#mchb .mchi').first()).toContainText('Falta de personal');
   // publicado, el plan queda cerrado: ya no se programa otra ni se decide «no va»
   await expect(page.locator('#dzadd')).toHaveCount(0);
@@ -66,9 +66,9 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); // hoy: en A-1 trabajan SANITARIAS (Redes) y ELÉCTRICAS (Entubado)
   // los cruces van en un recuadro a la derecha del plano, plegado; el panel izquierdo ya no los lista
-  await expect(page.locator('#mcxb .mcxh')).toContainText('Dos partidas en el mismo lugar');
+  await expect(page.locator('#mrst [data-rtab="mcxb"]')).toContainText('Cruces');
   await expect(page.locator('#mpanel .mp-cx')).toHaveCount(0);
-  await page.click('#mcxb .mcxh');
+  await page.click('#mrst [data-rtab="mcxb"]');
   await expect(page.locator('#mcxb .mp-cx').first()).toBeVisible();
   const n0 = await page.locator('#mcxb .mp-cx').count();
   const p = await enPantalla(page, '#mstage', 200, 200);
@@ -82,9 +82,10 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
 test('revisión previa: «🔍 Revisar interferencias» recorre los cruces y lo revisado queda plegado y se puede reabrir', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday');
-  await expect(page.locator('#mcxb .mrdy')).toContainText('Listo para la reunión');
+  await expect(page.locator('#mrst .mrdy')).toContainText('Listo para la reunión');
   const n0 = await page.evaluate(() => { window.__plano; return document.querySelectorAll('#mcxb .mcxh').length ? +document.querySelector('#mcxb .mcxh b').textContent : 0; });
   expect(n0).toBeGreaterThan(0);
+  await page.locator('#mrst [data-rtab="mcxb"]').click();
   await page.locator('#mcxb [data-rvx="start"]').click();
   await expect(page.locator('#pop .xrvn')).toContainText(`Cruce 1 de ${n0}`);
   await page.click('#pop [data-x="ok"]');
@@ -218,7 +219,7 @@ test('«Cambios del plan» permite deshacer una reprogramación', async ({ page 
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
   // publicado, el plan está cerrado: «Deshacer» de un cambio no corre; se deshace la publicación entera
-  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mrst [data-rtab="mchb"]').click();
   await page.locator('#mchb [data-chu]').click();
   await page.waitForTimeout(300);
   expect((await act(page, 'e0')).days).not.toContain(MANANA); // no se deshizo: el plan está cerrado
@@ -320,6 +321,7 @@ test('en el celular: se toca la cuadrilla y luego la actividad', async ({ page }
 test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', async ({ page }) => {
   const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: 'Gasfitero', n: 3 }, { cat: 'Peón', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2 }, { id: 'C2', n: 3 }], hor: { t: 'e', fin: '19:00' }, asg: { s9: { c: 'C1', o: 1 }, s8: { c: 'C1', o: 2 } }, sinDist: false, ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8, F] });
+  await page.locator('#mrst [data-rtab="mfzb"]').click();
   const b = page.locator('#mfzb');
   await expect(b).toContainText('SC SANITARIAS');
   await expect(b).toContainText('5 personas · 2 cuadrillas');
@@ -335,7 +337,7 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
   await b.locator('[data-cqf="c1|C1"]').click();
   await expect.poll(flechas).toBe(1);
   // el ingeniero puede ocultar el achurado de cruces
-  await page.locator('#mcxb [data-cxtog]').click();
+  await page.locator('#mrst [data-rtab="mcxb"]').click();
   expect(await page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBeGreaterThan(0);
   await page.locator('#mcxb [data-cxv]').click();
   await expect.poll(() => page.locator('#mstage svg rect[fill="url(#hxr)"]').count()).toBe(0);
@@ -425,7 +427,7 @@ test('modo reunión: primero el cumplimiento de hoy, luego el plan de mañana co
   // en el plan de hoy hay un cruce: el achurado se prende y apaga desde la barra
   await page.click('#mmbar [data-mdd="-1"]');
   await expect(page.locator('#mmbar [data-cxv]')).toBeVisible();
-  await expect(page.locator('#mcxb .mcxh')).toBeVisible();
+  await expect(page.locator('#mrst [data-rtab="mcxb"]')).toBeVisible();
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
   await page.click('#mmbar [data-cxv]');
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
@@ -468,7 +470,7 @@ test('una zona dibujada se puede redibujar (reemplaza) o volver a su ambiente', 
 test('el subcontratista no ve el achurado de cruces salvo que lo prenda', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday');
-  await expect(page.locator('#mcxb .mcxh')).toBeVisible();
+  await expect(page.locator('#mrst [data-rtab="mcxb"]')).toBeVisible();
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
   await expect(page.locator('#mstage .pvl.nb.rx')).toHaveCount(0); // tampoco el anillo rojo en los números
   await page.locator('#mcxb [data-cxv]').click();
@@ -481,7 +483,7 @@ test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y q
   const Z3 = ['pdz', 'pz3', { date: HOY, pisoId: 'p1', vista: 'L1', sc: 'c3', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: null, desc: 'Resane de muro', fuera: true, ambId: 'a1', by: 'admin@obra.pe', ts: 1 }]; // trabajo no programado planificado
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, Z3] });
   await page.click('#wtoday');
-  await page.click('#mcxb .mcxh');
+  await page.click('#mrst [data-rtab="mcxb"]');
   await page.locator('#mcxb .mp-cx').first().click(); // tocar en la lista abre la decisión
   await expect(page.locator('#pop .xo')).toHaveCount(3);
   await expect(page.locator('#pop .ph')).toContainText('3 partidas');
@@ -497,7 +499,7 @@ test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y q
   expect((await xok())[0].ord).toHaveLength(3);
   await expect(page.locator('#pop .xhint')).toContainText('Orden guardado');
   await page.keyboard.press('Escape');
-  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mrst [data-rtab="mchb"]').click();
   await expect(page.locator('#mchb')).toContainText('3.º');
   await page.locator('#mchb [data-xun]').click();
   await expect.poll(async () => (await xok()).length).toBe(0);
@@ -507,7 +509,7 @@ test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y q
 test('cruce del plan de mañana: la ✗ abre la reprogramación con los días siguientes', async ({ page }) => {
   const Z = ['pdz', 'pzM', { date: MANANA, pisoId: 'p1', vista: 'L1', sc: 'c1', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: 's9', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, Z] });
-  await page.click('#mcxb .mcxh');
+  await page.click('#mrst [data-rtab="mcxb"]');
   await page.locator('#mcxb .mp-cx').first().click();
   await page.locator('#pop .xo .xno').first().click();
   await expect(page.locator('#pop .nvtag')).toContainText('Interferencia con');
@@ -524,7 +526,7 @@ test('una reprogramación antigua (sin el «antes» guardado) también se deshac
   // simular lo que dejó una versión anterior: la actividad ya movida un día y el registro sin «mv»
   await page.evaluate(([d, s2]) => { const x = S.act.get('e0'); apply([op('acts', 'e0', { ...x, days: x.days.map(y => y >= d ? s2 : y) })], ''); }, [MANANA, s2]);
   await page.evaluate(([d, s2]) => window.__plano && fcol('pdz').doc('pzOld').set({ date: d, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Sin personal', k: 'per', repTo: s2, tren: 0, by: 'admin', ts: 5 }), [MANANA, s2]);
-  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mrst [data-rtab="mchb"]').click();
   await page.locator('#mchb [data-chu="pzOld"]').click();
   await page.locator('#pop [data-do="si"]').click();
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual(e0.days);
@@ -549,7 +551,7 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   await page.locator('#pop [data-nk="per"]').click();
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
-  await page.locator('#mchb [data-chtog]').click();
+  await page.locator('#mrst [data-rtab="mchb"]').click();
   await expect(page.locator('#mchb')).toContainText('se aplica al publicar');
   await page.locator('#mchb [data-chu]').click(); // descartar el borrador
   await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);

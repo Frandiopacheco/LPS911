@@ -216,7 +216,7 @@ test('5. plan e interferencias: cruce entre dos SC + reprogramar un No va (ed1 y
   const nCx = await p.locator('#mcxb .mp-cx').count().catch(() => 0);
   log('cruces visibles antes de abrir:', nCx, (await p.locator('#mcxb').innerText().catch(() => '')).replace(/\n+/g, ' | ').slice(0, 300));
   const cruce = async () => {
-    if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) await p.locator('#mcxb .mcxh').click();
+    if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) await p.locator('#mrst [data-rtab="mcxb"]').click();
     await enPop(p, p.locator('#mcxb .mp-cx').first(), '#pop .xo', async () => {
       const n = await p.locator('#pop .xo').count();
       const quien = p.locator('#pop .xo', { hasText: 'Cruce · SC2' });
@@ -238,7 +238,7 @@ test('5. plan e interferencias: cruce entre dos SC + reprogramar un No va (ed1 y
   const porAct = Object.fromEntries(nova.map(z => [z.actId, z.k]));
   await chk(5, 'borrador por interferencia (z2) y por personal (e0) junto con los aceptados', true, porAct.z2 === 'int' && porAct.e0 === 'per' && !!porAct.x1, p, JSON.stringify(porAct));
   // el cruce restante (z1 con e1) → «pueden trabajar a la vez»
-  if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) await p.locator('#mcxb .mcxh').click().catch(() => {});
+  if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) await p.locator('#mrst [data-rtab="mcxb"]').click().catch(() => {});
   if (await p.locator('#mcxb .mp-cx').count()) {
     await enPop(p, p.locator('#mcxb .mp-cx').first(), '#pop [data-x="ok"]', () => p.locator('#pop [data-x="ok"]').click({ timeout: 4000 }));
     await expect.poll(async () => (await pdz(p)).filter(z => z.kind === 'xok').length, { timeout: 8000 }).toBe(1);

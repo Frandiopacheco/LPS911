@@ -2868,11 +2868,42 @@ div.tp-dif{padding-left:0}
   #ppbar .ppa{flex-wrap:nowrap}
   .legend{padding:5px 12px}
 }
-/* Campo › Plano en horizontal: el plano a la izquierda con todo el alto, la lista a la derecha */
+/* Campo › Plano en horizontal: el plano con todo el ancho y casi todo el alto; «＋ No programado» y la leyenda en una franja corta debajo */
 @media (min-width:1000px){
-  .kap{max-width:none;padding:8px 14px 20px}
-  .kbody{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start}
-  .kbody>.kplanw{height:calc(100dvh - 230px);min-height:420px;position:sticky;top:0}
-  .kbody>.kplanw[hidden]+#klist{grid-column:1/-1}
-  #klist{min-width:0}
+  .kap{max-width:none;padding:6px 14px 20px;gap:6px}
+  .kbody>.kplanw{height:calc(100dvh - 255px);min-height:400px}
+  #klist .knpbar{flex-direction:row;align-items:center;gap:10px}
+  #klist .knpbar .knpadd{width:auto;flex:none;min-height:40px;padding:0 16px}
+  #klist .knpbar .knote{display:none}
+  #klist .kleg{margin:0}
 }
+/* ---------- Plan diario: panel lateral con pestañas (oct 2026) ----------
+   Por decidir · Cruces · Equipos · Cambios · Leyenda en un solo panel: acoplado a la derecha en PC y tablet (el plano se
+   achica, nada flota encima) y como hoja inferior en el celular (plegada: solo las pestañas). */
+.mrs.dock{pointer-events:auto;gap:0;background:var(--panel);display:flex;flex-direction:column;overflow:hidden;z-index:22}
+.mrs.dock>.mcxb,.mrs.dock>.mpdb,.mrs.dock>.mfzb,.mrs.dock>.mchb,.mrs.dock>.mlgd{display:none;position:static;width:auto;max-height:none;flex:1 1 auto;min-height:0;border:0;border-radius:0;box-shadow:none;overflow:auto;background:none}
+.mrs.dock>.on:not([hidden]){display:flex}
+.mrs.dock .mpdh,.mrs.dock .mcxh,.mrs.dock .mlh{display:none}
+.mrs.dock .mcxl,.mrs.dock .mpdl,.mrs.dock .mll{max-height:none;overflow:visible}
+.mrst{flex:none;border-bottom:1px solid var(--line)}
+.mrst .mrdy{border:0;border-bottom:1px solid var(--line2);border-radius:0}
+.mrstb{display:flex;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none;padding:6px}
+.mrstb button{flex:none;border:0;background:none;padding:6px 10px;border-radius:var(--r-ctl);font:600 12.5px var(--f-ui);color:var(--ink2);min-height:36px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.mrstb button:hover{background:var(--panel2)}
+.mrstb button.on{background:var(--accent-soft);color:var(--accent)}
+.mrstb button b{background:var(--panel2);color:var(--ink);border-radius:9px;padding:0 6px;font-size:11px;line-height:17px}
+.mrstb button.bad b{background:var(--bad);color:#fff}
+.mrstb .mrsx{margin-left:auto;font-size:15px;min-width:36px;justify-content:center;color:var(--muted)}
+@media (min-width:900px){
+  .mrs.dock{top:0;right:0;bottom:0;width:340px;max-height:none!important;border-left:1px solid var(--line);border-radius:0}
+  .mrs.dock.shut{bottom:auto;width:auto;max-width:calc(100% - 20px);top:8px;right:8px;border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--sh-2)}
+  .mrs.dock.shut .mrst{border:0}
+  .mapa.docked .mwrap>.mstage{right:340px}
+  .mapa.docked .mcqb{right:350px}
+}
+@media (min-width:900px) and (max-width:1279px){.mrs.dock{width:300px}.mapa.docked .mwrap>.mstage{right:300px}.mapa.docked .mcqb{right:310px}}
+@media (max-width:899px){
+  .mrs.dock{left:0!important;right:0!important;top:auto!important;bottom:0!important;width:auto!important;max-height:58%!important;border-top:1px solid var(--line);border-radius:var(--r-sheet,16px) var(--r-sheet,16px) 0 0;box-shadow:0 -6px 22px rgba(0,0,0,.18)}
+  .mrs.dock.shut .mrst{border:0}
+}
+@media (min-width:1000px){.khd{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px}.khd>.khi{flex:1 1 100%}.khd>.ktog{margin-left:auto}}
