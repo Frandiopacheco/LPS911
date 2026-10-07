@@ -79,6 +79,25 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
   noErrors(errors, 'cruce');
 });
 
+test('revisión previa: «🔍 Revisar interferencias» recorre los cruces y lo revisado queda plegado y se puede reabrir', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday');
+  await expect(page.locator('#mcxb .mrdy')).toContainText('Listo para la reunión');
+  const n0 = await page.evaluate(() => { window.__plano; return document.querySelectorAll('#mcxb .mcxh').length ? +document.querySelector('#mcxb .mcxh b').textContent : 0; });
+  expect(n0).toBeGreaterThan(0);
+  await page.locator('#mcxb [data-rvx="start"]').click();
+  await expect(page.locator('#pop .xrvn')).toContainText(`Cruce 1 de ${n0}`);
+  await page.click('#pop [data-x="ok"]');
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(1);
+  await expect(page.locator('#mcxb .mcxh2')).toContainText('Cruces revisados');
+  if (n0 === 1) await expect(page.locator('#mcxb .mrvx, #mcxb [data-rvx="start"]')).toHaveCount(0);
+  await page.locator('#mcxb [data-rvx="stop"]').click().catch(() => {});
+  await page.locator('#mcxb .mcxh2').click();
+  await page.locator('#mcxb [data-xreo]').first().click();
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('pdz')).filter(z => z.kind === 'xok').length)).toBe(0);
+  noErrors(errors, 'revisión previa');
+});
+
 test('resaltar solo al subcontratista elegido viene marcado y se mantiene al cambiar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday');
