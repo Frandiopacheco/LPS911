@@ -1158,7 +1158,7 @@ body[data-dmode="day"] .wk .lbl b{font-size:15px}
 .hoyc li{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
 .hoyc li small{font-size:12px;color:var(--muted)}
 .hoyc>.ib{align-self:flex-start;margin-top:2px}
-@media (max-width:760px){.hoyg{columns:1}.hoyc>.ib{align-self:stretch;min-height:40px}}
+@media (max-width:599px){.hoyg{columns:1}}@media (max-width:760px){.hoyc>.ib{align-self:stretch;min-height:40px}}
 
 /* Lookahead guardado mientras se ve otra pestaña (ver leaveView en base.js) */
 .lkeep{content-visibility:hidden;z-index:-1}
@@ -2788,3 +2788,69 @@ div.tp-dif{padding-left:0}
 .kseg{display:flex;border-radius:10px}.kseg button{flex:1;height:44px;font-size:15px}
 /* la hoja es flex en columna con desplazamiento: sin esto los campos se aplastaban cuando el contenido no cabía */
 .ksc>*{flex-shrink:0}
+/* Plan diario: «Listo para la reunión», revisión previa de cruces y reunión por excepción (oct 2026) */
+.mrdy{border-bottom:1px solid var(--line);background:var(--panel);font-size:12.5px}
+.mrdy>summary{cursor:pointer;padding:8px 10px;font-weight:600;list-style:none}.mrdy>summary::-webkit-details-marker{display:none}
+.mrdy table{width:100%;border-collapse:collapse}.mrdy th{font:600 10.5px var(--f-ui);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;padding:4px}.mrdy th:first-child,.mrdy td:first-child{text-align:left;padding-left:10px}
+.mrdy td{text-align:center;padding:4px;border-top:1px solid var(--line2)}
+.rdn{display:inline-block;min-width:22px;border-radius:10px;padding:0 6px;background:var(--warn-soft);color:var(--ink);font-weight:700}
+.rdk{color:var(--ok);font-weight:700}
+.mrvgo{width:100%;margin:0 0 6px;min-height:40px}
+.mrvx{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 10px;background:var(--accent-soft,var(--panel2));border-bottom:1px solid var(--line)}.mrvx span{color:var(--muted);font-size:12px;margin-right:auto}
+.xrvn{display:flex;align-items:center;justify-content:space-between;gap:8px;white-space:nowrap;margin-top:10px;padding-top:8px;border-top:1px solid var(--line2);font-size:12.5px;color:var(--muted)}
+.xrvn button{border:1px solid var(--line);background:var(--panel);border-radius:var(--r-ctl);min-height:36px;padding:0 12px;font:600 13px var(--f-ui);cursor:pointer;color:var(--ink)}
+.mcxb .mcxh2{display:flex;align-items:center;gap:6px;width:100%;border:0;border-top:1px solid var(--line2);background:var(--ok-soft);color:var(--ok);font:600 12.5px var(--f-ui);padding:8px 12px;cursor:pointer;text-align:left;min-height:40px}.mcxb .mcxh2 b{background:var(--ok);color:#fff;border-radius:10px;padding:0 7px;font-size:11.5px}.mcxb .mcxh2 span{margin-left:auto}
+.mp-cxr{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border:1px solid var(--line2);border-radius:7px;margin-bottom:5px;font-size:12.5px}.mp-cxr small{color:var(--muted)}.mp-cxr .lnkb{align-self:flex-start}
+.mcex{margin:0 0 6px}
+.mcg{font:600 12.5px var(--f-ui);margin:8px 0 4px;color:var(--ink2)}.mcg b{background:var(--panel2);border-radius:9px;padding:0 6px;margin-left:4px}
+.mcs.ok{color:var(--ok)}.mcl li.pe.ok{border-left-color:var(--ok)}
+/* Tablet (761–1279 px, vertical u horizontal; oct 2026): la barra superior ocupaba 3–4 filas. Se compacta: sin la línea de código del
+   formato ni el nombre del usuario, «Ayuda» y el estado solo con su ícono, y las pestañas en una sola fila que se desliza. */
+@media (min-width:761px) and (max-width:1366px){
+  .top{padding:6px 12px 0;gap:4px 10px}
+  .brand{flex:1 1 140px}.brand .code{display:none}.brand h1{font-size:16px}
+  .me{display:none}
+  #bhelp>span{display:none}
+  .top .status{min-width:0}.top .status>span{display:none}
+  .wk .lbl{min-width:104px}.wk .lbl b{font-size:15px}
+  .tools{flex-wrap:nowrap;gap:5px}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;margin-top:0}
+  .tabs button{padding:7px 10px 8px}
+  .tabs .tmore{position:sticky;right:0;background:var(--panel);box-shadow:-8px 0 8px -4px var(--panel)}
+}
+/* Plan diario en tablet: panel y recuadros más angostos y barra de botones en una fila (más plano a la vista) */
+@media (min-width:900px) and (max-width:1279px){
+  .mpanel{width:286px;padding:8px 10px 14px}
+  .mrs{width:280px}
+  .mapa .bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;gap:6px}.mapa .bar>*,.mapa .bar .ib,.mapa .bar .seg button{white-space:nowrap;flex:none}
+}
+/* tablet vertical: los recuadros (equipos, cruces, leyenda) a un costado y más bajos, no tapando el centro del plano */
+@media (min-width:761px) and (max-width:899px){
+  .mapa .bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;gap:6px}.mapa .bar>*,.mapa .bar .ib,.mapa .bar .seg button{white-space:nowrap;flex:none}
+  .mrs{left:auto;right:10px;width:300px;bottom:auto;top:10px;max-height:46%}
+}
+
+/* ---------- Tablet (oct 2026): aprovechar la pantalla en vertical y horizontal ---------- */
+/* tablet chica en vertical (600–760 px, diseño de celular): Hoy en dos columnas */
+@media (min-width:600px) and (max-width:760px){.hoyg{columns:2 280px}.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+/* barra superior compacta: botones solo con ícono para que entre en una fila con el piso y la semana */
+@media (min-width:761px) and (max-width:1366px){
+  #bvat{font-size:0;padding:0 10px}#bvat::before{content:'👁';font-size:16px}
+  .brand{min-width:0}.brand h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wk .lbl span{font-size:11px}
+}
+/* Campo en tablet horizontal: tarjetas en dos columnas (una por actividad, el ambiente arriba de ambas) */
+@media (min-width:1000px){
+  .campo{max-width:1240px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;align-items:start}
+  .campo>*:not(.cc){grid-column:1/-1}
+}
+/* pantallas táctiles (tablet): botones y pestañas más fáciles de tocar */
+@media (pointer:coarse) and (min-width:761px){
+  .ib{min-height:38px}.seg button{min-height:36px}.tabs button{min-height:42px}
+  .chipb{min-height:34px}
+  .kbig{min-height:46px}
+}
+/* tablet vertical: sin el nombre de la obra en la barra (ya se ve en la pestaña), así piso, semana y botones entran en una sola fila */
+@media (min-width:761px) and (max-width:899px){.top .brand{display:none}.wk{margin-right:auto}}
+/* lookahead en tablet vertical: columnas de ambiente y subcontratista más angostas para ver más días */
+@media (min-width:761px) and (max-width:899px){.s2{width:120px;min-width:120px;max-width:120px}.s3{width:96px;min-width:96px;max-width:96px}}

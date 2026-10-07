@@ -87,11 +87,11 @@ function boundsOf(l){const c=[{x:0,y:0},{x:l.w,y:0},{x:0,y:l.h},{x:l.w,y:l.h}].m
 /* ---------- vista principal ---------- */
 function renderMapa(main){ensureLam();
   const ps=pisos();if(U.piso)M.piso=U.piso;if(!M.piso||!S.pis.has(M.piso)){const withL=ps.find(p=>lamsOf(p.id).length);M.piso=(withL||ps[0]||{}).id||''}
-  if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null}M.lpiso=M.piso}
+  if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.rvx=false}M.lpiso=M.piso}
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
   {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null}}ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));
-  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
+  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';main.addEventListener('toggle',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('mrdy'))M.rdyOpen=t.open},true);M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
   const hb=`<button class="ib${M.panel?' on':''}" id="mpan" title="Mostrar u ocultar el plan del día">Plan del día</button><span class="dnav"><button class="ib" data-mdd="-1" aria-label="Día anterior">&#8249;</button><b>${dw} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" aria-label="Día siguiente">&#8250;</button>${M.date!==today?'<button class="ib" data-mdd="0">Hoy</button>':''}</span>${U.piso?'':`<select id="mpiso" aria-label="Piso">${ps.map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`}
@@ -127,7 +127,7 @@ function renderMapa(main){ensureLam();
   main.onchange=e=>{const t=e.target;if(t.id==='mpiso'){M.piso=t.value;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;requestRender()}if(t.id==='mscd'){M.scDraw=t.value;M.pend=null;M.selId=null;requestRender()}if(t.id==='munder'){M.under=t.checked;requestRender()}};
   main.oninput=e=>{if(e.target.id==='mop'){M.op=+e.target.value;requestRender()}};
   main.onmouseover=legHover;main.onmouseleave=()=>setHL(null);
-  main.addEventListener('change',e=>{if(e.target.id==='mmpiso'){const v=e.target.value;if(U.piso){U.piso=v;saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.meetSc='';zcClose();requestRender();return}
+  main.addEventListener('change',e=>{if(e.target.id==='mcuex'){M.cuEx=e.target.checked;requestRender();return}if(e.target.id==='mmpiso'){const v=e.target.value;if(U.piso){U.piso=v;saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.meetSc='';zcClose();requestRender();return}
     if(e.target.id==='mmvis'){M.vista=e.target.value;M.sel=M.vista;requestRender();setTimeout(()=>meetGo(M.meetSc),200)}});
 }
 
@@ -439,14 +439,16 @@ function crossPop(anchor,c){/* con el día cerrado se puede decidir el orden o �
   const html=()=>`<div class="xbox"><div class="ph">${ord.length} partidas en el mismo lugar</div><div class="ptx">${esc(zoneLabel(c.a))}</div>
     <div class="xlist">${ord.map(chip).join('')}</div>
     <div class="xhint">${saved?'✓ Orden guardado. ':''}Arrastra para decidir quién va primero; la ✗ dice que no va y se reprograma.</div>
-    <div class="nvgo xgo"><button data-x="ok" class="pri"><b>✓ ${ord.length>2?'Todas pueden':'Pueden'} trabajar a la vez</b><small>no hay interferencia</small></button></div></div>`;
+    <div class="nvgo xgo"><button data-x="ok" class="pri"><b>✓ ${ord.length>2?'Todas pueden':'Pueden'} trabajar a la vez</b><small>no hay interferencia</small></button></div>
+    ${M.rvx?`<div class="xrvn"><button data-x="prev">‹ Anterior</button><span>Cruce ${M.rvi+1} de ${CROSS.list.length}</span><button data-x="next">${saved?'Siguiente ›':'Saltar ›'}</button></div>`:''}</div>`;
   const no=(i,btn)=>{const los=ord[i];const win=ord.find(z=>z!==los);const xl=los.actId&&S.act.get(los.actId);const r=btn.getBoundingClientRect();const an=anchorAt(r.left,r.bottom-1);closePop();
     if(xl)setTimeout(()=>noVa(an,xl,{k:'int',desc:`Interferencia con ${conOf(win.sc).name}`,prio:{actId:win.actId||'',sc:win.sc,zona:win.id}}),0);
     else{const o=remDoc(los.id);if(o){rec([o]);requestRender();toast(`Se quitó el trabajo no programado de ${conOf(los.sc).name}`,'Deshacer',undo)}}};
   const show=()=>{openPop(anchor,html(),{});
     pop.onclick=e=>{const nb=e.target.closest('[data-xno]');if(nb){no(+nb.dataset.xno,nb);return}const b=e.target.closest('[data-x]');if(!b)return;
+      if(b.dataset.x==='next'){rvxNext(1);return}if(b.dataset.x==='prev'){rvxNext(-1);return}
       if(b.dataset.x==='ok'){closePop();if(PD.has(did)){rec([updDoc(did,{ord:null},{ord:(PD.get(did)||{}).ord||null})].filter(Boolean))}else{rec([addDoc(did,{date:M.date,pisoId:M.piso,sc:ord[0].sc,kind:'xok',keys:keys(),pair:[keys()[0],keys()[1]].sort(),n:me.name||me.email,by:me.email,byName:me.name||me.email,ts:NOW()})])}
-        CROSS.key='';requestRender();toast(ord.length>2?'Todas pueden trabajar a la vez':'Pueden trabajar a la vez','Deshacer',undo)}};
+        CROSS.key='';requestRender();toast(ord.length>2?'Todas pueden trabajar a la vez':'Pueden trabajar a la vez','Deshacer',undo);if(M.rvx)setTimeout(()=>rvxNext(1),250)}};
     let dr=null;
     pop.onpointerdown=e=>{if(e.target.closest('[data-xno]'))return;const el=e.target.closest('.xo');if(!el)return;e.preventDefault();const L=[...pop.querySelectorAll('.xo')];
       dr={el,y0:e.clientY,i:+el.dataset.xi,mid:L.map(q=>{const r=q.getBoundingClientRect();return r.top+r.height/2})};el.setPointerCapture(e.pointerId);el.classList.add('drag')};
@@ -455,6 +457,29 @@ function crossPop(anchor,c){/* con el día cerrado se puede decidir el orden o �
       const y=e.clientY;let j=d.mid.filter(m=>m<y).length;if(j>d.i)j--;j=Math.max(0,Math.min(ord.length-1,j));if(j===d.i)return;
       const z=ord.splice(d.i,1)[0];ord.splice(j,0,z);saveOrd();show()}};
   show()}
+/* ---------- «Listo para la reunión» (oct 2026): por piso, lo que el ingeniero debe dejar resuelto antes de la reunión ----------
+   cierres de hoy por verificar (Campo), cruces del plan del día elegido sin revisar y propuestas del SC sin decidir */
+const RDY={k:'',h:''};
+function readyHtml(){const t=todayIso();const k=(M.rdyOpen?'o':'c')+Math.floor(NOW()/30000)+'|'+DV+'|'+PDV+'|'+M.date+'|'+(typeof U!=='undefined'?U.piso:'')+'|'+(typeof DONEV!=='undefined'?DONEV:'');if(RDY.k===k)return RDY.h;
+  const rows=[];for(const p of(typeof visPisos==='function'?visPisos():pisos())){const acts=dayActs(p.id,M.date).length;
+    let ver=0;try{ver=dayData([t],new Set([p.id])).rows.filter(r=>!r.rc||r.rc._prop).length}catch(e){}
+    let cx=0;try{cx=crossOf(p.id).length}catch(e){}const pr=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===p.id&&z.date===M.date).length;
+    if(!acts&&!ver)continue;rows.push({p,ver,cx,pr,ok:!ver&&!cx&&!pr})}
+  const c=(n,l)=>n?`<span class="rdn" title="${l}">${n}</span>`:'<span class="rdk">✓</span>';
+  const h=rows.length?`<details class="mrdy"${M.rdyOpen?' open':''}><summary>${rows.every(r=>r.ok)?'🟢':'🟡'} Listo para la reunión <span class="mu">${rows.filter(r=>r.ok).length} de ${rows.length} pisos${rows.some(r=>!r.ok)?' · '+[['ver','cierres'],['cx','cruces'],['pr','propuestas']].map(([k,l])=>{const n=rows.reduce((t,r)=>t+r[k],0);return n?n+' '+l:''}).filter(Boolean).join(' · '):''}</span></summary>
+    <table><thead><tr><th>Piso</th><th title="Cierres de hoy sin verificar en Campo">Cierres hoy</th><th title="Cruces del plan del ${fmtD(M.date)} sin revisar">Cruces</th><th title="Propuestas del SC sin decidir">Propuestas</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.ok?'ok':''}"><td><button class="lnkb" data-rdyp="${r.p.id}">${esc(r.p.code)}</button></td><td>${c(r.ver,'por verificar')}</td><td>${c(r.cx,'sin revisar')}</td><td>${c(r.pr,'sin decidir')}</td></tr>`).join('')}</tbody></table></details>`:'';
+  RDY.k=k;RDY.h=h;return h}
+/* ---------- revisión previa de cruces (oct 2026): el ingeniero del piso (o el admin) los recorre uno por uno antes de la reunión ---------- */
+const xokOf=(pid,d)=>[...PD.values()].filter(z=>z.kind==='xok'&&z.pisoId===pid&&z.date===d);
+function rvxGo(i){try{computeCross()}catch(e){}const L=CROSS.list;closePop();
+  if(!L.length){M.rvx=false;M.rvc=null;requestRender();toast('✓ No quedan cruces por revisar en este piso.');return}
+  M.rvx=true;M.rvi=Math.max(0,Math.min(L.length-1,i||0));const c=L[M.rvi];M.rvc=c.a.id+'|'+c.b.id;M.cxOpen=true;requestRender();
+  zoomTo([...unflat(c.a.pts),...unflat(c.b.pts)]);
+  setTimeout(()=>{if(!M.rvx)return;const st=$('#mstage');const r=st?st.getBoundingClientRect():{left:innerWidth/2,top:innerHeight/2,width:0,height:0};crossPop(anchorAt(r.left+r.width/2,r.top+r.height/2),c)},380)}
+/** siguiente cruce: si el actual ya se decidió salió de la lista (el mismo índice es el siguiente); si no, avanza */
+function rvxNext(d){try{computeCross()}catch(e){}const[a,b]=(M.rvc||'|').split('|');const k=CROSS.list.findIndex(q=>q.a.id===a&&q.b.id===b);
+  const n=CROSS.list.length;if(!n){rvxGo(0);return}const j=k<0?(d<0?M.rvi-1:M.rvi):k+d;rvxGo(((j%n)+n)%n)}
+function rvxStop(){M.rvx=false;M.rvc=null;closePop();requestRender()}
 function crossAt(w){for(const c of CROSS.list){const r=c.r;if(r&&w.x>=r.x&&w.x<=r.x+r.w&&w.y>=r.y&&w.y<=r.y+r.h)return c}return null}
 /* ---------- acciones rápidas sobre una actividad del día (lista de la reunión) ---------- */
 function actQuick(anchor,aid){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const prev=ZN.get(aid);const t0=todayIso();
@@ -563,6 +588,10 @@ function cuRows(sc){const R=actRows(sc);const sn=typeof dplanOf==='function'?dpl
   for(const id of Object.keys(sn.ids)){if(seen.has(id))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;const rc=recOf(M.date,id);
     if(((rc&&rc.sc)||x.sc)!==sc)continue;if(doneBefore(id,M.date)&&!rc)continue;out.push({x,a:S.amb.get(x.ambId),zs:[],nv:null,out:true})}
   return out}
+/* reunión por excepción (oct 2026): con «Solo incumplimientos» (por defecto) la ficha muestra solo lo no cumplido, parcial o sin
+   registro; lo cumplido queda contado pero no se recorre, y ‹ › salta las partidas que cumplieron todo */
+const cuEx=()=>M.cuEx!==false;
+const cuBad=r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;if(r.nv&&!rc)return false;return!rc||rc.status!=='ok'};
 /** cuántas actividades quedaron ✓ ½ ✗ o sin registro (lo que vieron en Campo) */
 function cuCount(R){const o={ok:0,partial:0,no:0,none:0};for(const r of R){const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;if(r.nv&&!rc)continue; /* «no va hoy» con registro cuenta, como en Campo e Indicadores */o[rc&&o[rc.status]!=null?rc.status:'none']++}return o}
 function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplidas${o.partial?` · ${o.partial} parcial${o.partial>1?'es':''}`:''}${o.no?` · ${o.no} no`:''}${o.none?` · ${o.none} sin registro`:''}${v?` · ${Math.round(o.ok/v*100)} %`:''}`}
@@ -581,14 +610,17 @@ function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;docu
   let ch='';const NBM=nbMap();
   /* «Cumplimiento»: lo que se hizo el día (registrado en Campo) · «Plan»: la ficha se oculta y a la derecha quedan Por decidir, Equipos, Cruces y Cambios */
   if(pl){card.hidden=true;card.dataset.h=''}
-  else if(SEL.length){ch=SEL.map(sc=>{const R=cuRows(sc);const cs=cuCount(R);const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
-    return`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${SEL.length>1?'':`${i+1} de ${scs.length} · `}${cuLine(cs,R.length)}</span></div></div>
-      <ol class="mcl">${R.map(r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;const st=rc?rc.status:'none';return`<li class="${r.nv?'nv':'cu-'+st}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)} <span class="cst sm" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${rc&&rc.cnc?' · '+esc(rc.cnc):''}</span></b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No iba este día · ${esc(r.nv.motivo||'')}</em>`:''}</div></li>`}).join('')||'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>'}</ol>
+  else if(SEL.length){ch=`<div class="mcex"><label class="chk"><input type="checkbox" id="mcuex"${cuEx()?' checked':''}> Solo incumplimientos</label></div>`+SEL.map(sc=>{const R0=cuRows(sc);const cs=cuCount(R0);const R=cuEx()?R0.filter(cuBad):R0;const nOk=R0.length-R.length;const np=shapesOf(M.piso).filter(z=>z.kind==='zona'&&!z.actId&&z.sc===sc);
+    return`<div class="mch" style="--c:${conOf(sc).color}"><i></i><div><b>${esc(conOf(sc).name)}</b><span>${SEL.length>1?'':`${i+1} de ${scs.length} · `}${cuLine(cs,R0.length)}</span></div></div>
+      <ol class="mcl">${R.map(r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;const st=rc?rc.status:'none';return`<li class="${r.nv?'nv':'cu-'+st}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a.code)}</span><div><b>${esc(r.x.name)} <span class="cst sm" style="--c:${STC[st]}">${STI[st]} ${STT[st]}${rc&&rc.cnc?' · '+esc(rc.cnc):''}</span></b><small>${esc(r.a.name)}${hasQ(r.x)?` · ${fq((r.x.qty||{})[M.date])} ${esc(r.x.und||'')}`:''}</small>${r.nv?`<em>No iba este día · ${esc(r.nv.motivo||'')}</em>`:''}</div></li>`}).join('')||(R0.length?'<li class="pe ok"><div>✓ Cumplió todo lo programado.</div></li>':'<li class="pe"><div>Sin actividades programadas en este piso.</div></li>')}</ol>${cuEx()&&nOk&&R.length?`<div class="mcs mu">✓ ${nOk} cumplida${nOk>1?'s':''} (no se muestra${nOk>1?'n':''})</div>`:''}
       ${np.length?`<div class="mcs">No programado</div><ol class="mcl">${np.map(z=>`<li class="np"><span class="mono">NP</span><div><b>${esc(z.desc||'')}</b></div></li>`).join('')}</ol>`:''}`}).join('')}
   else{const rows=scs.map(c=>{const R=cuRows(c);return{c,n:R.length,cs:cuCount(R)}});const T=cuCount(scs.flatMap(c=>cuRows(c)));const n=rows.reduce((a,r)=>a+r.n,0);
     ch=`<div class="mch all"><div><b>Cumplimiento del día</b><span>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)} · ${cuLine(T,n)}</span></div></div>
       <div class="mleg">${rows.map(r=>`<button data-msc="${r.c}" style="--c:${conOf(r.c).color}"><i></i><span>${esc(conOf(r.c).name)}</span><b>${r.cs.ok}/${r.n}</b>${r.cs.no+r.cs.partial?`<em>${r.cs.no+r.cs.partial} no cumple</em>`:r.cs.none?`<em class="mu">${r.cs.none} sin registro</em>`:''}</button>`).join('')}</div>
-      <div class="note" style="padding:6px 2px">Toca una zona para ver o corregir lo registrado. Luego pasa a <b>📋 Plan e interferencias</b> para revisar el día siguiente.</div>`}
+      ${(()=>{const B=scs.flatMap(c=>cuRows(c).filter(cuBad));if(!B.length)return n?'<div class="mcs ok">✓ Todo lo programado se cumplió.</div>':'';const G=new Map();
+        B.forEach(r=>{const rc=typeof recOf==='function'?recOf(M.date,r.x.id):null;const k=!rc?'Sin registro':(typeof cncKey==='function'?cncKey(rc.cnc):(rc.cnc||'Sin causa registrada'));if(!G.has(k))G.set(k,[]);G.get(k).push({r,rc})});
+        return`<div class="mcs">Incumplimientos (${B.length}) · por causa</div>`+[...G.entries()].sort((a,b)=>a[0]==='Sin registro'?1:b[0]==='Sin registro'?-1:b[1].length-a[1].length).map(([k,L])=>`<div class="mcg">${esc(k)} <b>${L.length}</b></div><ol class="mcl">${L.map(({r,rc})=>`<li class="cu-${rc?rc.status:'none'}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a?r.a.code:'')}</span><div><b>${esc(r.x.name)}</b><small>${esc(conOf(r.x.sc).name)}${rc&&impOf(rc)===false?' · no imputable':''}${rc&&rc.note?' · “'+esc(short(rc.note,50))+'”':''}</small></div></li>`).join('')}</ol>`).join('')})()}
+      <div class="note" style="padding:6px 2px">Solo se revisan los incumplimientos. Toca uno para ver o corregir lo registrado. Luego pasa a <b>📋 Plan e interferencias</b>.</div>`}
   if(!pl){if(card.dataset.h!==ch){card.innerHTML=ch;card.dataset.h=ch}card.hidden=false}
   const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';const rs=$('#mrs');if(rs)rs.style.top=pl&&innerWidth>899?(bhh+10)+'px':'';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
 function meetClick(e){const t=e.target;let b;
@@ -606,7 +638,7 @@ function meetClick(e){const t=e.target;let b;
   if((b=t.closest('[data-cx]'))){const ids=b.dataset.cx.split('|');const P=ids.flatMap(id=>{const z=PD.get(id);return z?unflat(z.pts):[]});zoomTo(P);const c=CROSS.list.find(q=>(q.a.id===ids[0]&&q.b.id===ids[1])||(q.a.id===ids[1]&&q.b.id===ids[0]));if(c&&typeof canWrite!=='undefined'&&canWrite)setTimeout(()=>crossPop(b,c),250);return true}
   if(t.closest('#mexp,.mexp')){exportPNG(M.meetSc);return true}
   return false}
-function meetStep(d){const scs=meetScs();const all=['',...scs];let i=all.indexOf(M.meetSc.split(',')[0]);i=(i+d+all.length)%all.length;meetGo(all[i])}
+function meetStep(d){let scs=meetScs();if(M.mmode!=='plan'&&cuEx()){const f=scs.filter(c=>cuRows(c).some(cuBad));if(f.length||!M.meetSc)scs=f}const all=['',...scs];let i=all.indexOf(M.meetSc.split(',')[0]);if(i<0&&M.meetSc){const o=meetScs();const p=o.indexOf(M.meetSc.split(',')[0]);i=all.findIndex(c=>c&&o.indexOf(c)>p);i=i<0?(d>0?0:all.length):i-(d>0?1:0)}i=(i+d+all.length)%all.length;meetGo(all[i])}
 document.addEventListener('keydown',e=>{if(U.tab!=='mapa'||!M.meet||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||''))return;
   if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();meetStep(1)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();meetStep(-1)}else if(e.key==='Escape'&&M.tool!=='pan'){M.pend=null;M.tmp=null;M.tool='pan';requestRender()}else if(e.key==='Escape'&&!document.fullscreenElement&&!ZC&&pop.hidden){meetExit()}
   else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='c'||e.key==='C'||e.key==='p'||e.key==='P')){const m=/c/i.test(e.key)?'cu':'plan';if(m!==M.mmode)meetMode(m)}});
@@ -1099,6 +1131,13 @@ function renderPlan(main,cur,base){
   try{computeCross()}catch(e){}
   {const cxs=CROSS.list.filter(c=>inSF(c.a.sc)||inSF(c.b.sc));let ch='';
     if(cxs.length)ch=`<button class="mcxh" data-cxtog="1" aria-expanded="${M.cxOpen?'true':'false'}">⚠ Dos partidas en el mismo lugar <b>${cxs.length}</b><span>${M.cxOpen?'▴':'▾'}</span></button><button class="lnkb cxvt" data-cxv="1">${cxHid()?'▨ Mostrar el achurado en el plano':'▨ Ocultar el achurado del plano'}</button>${M.cxOpen?`<div class="mcxl">`+(ZL_=>cxs.map(c=>{const me_=sc&&c.b.sc===sc?c.b:c.a,o=me_===c.a?c.b:c.a;return`<button class="mp-cx" data-pcx="${me_.id}|${o.id}">${zNoH(me_,ZL_)} <b>${esc(conOf(me_.sc).name)}</b>: ${esc(zoneLabel(me_))} ↔ ${zNoH(o,ZL_)} <b>${esc(conOf(o.sc).name)}</b>: ${esc(zoneLabel(o))}<small>${typeof canWrite!=='undefined'&&canWrite?'Toca para revisar y decidir':'Toca para verlo en el plano'}</small></button>`}).join(''))(NBZ())+'</div>':''}`;
+    const eng=dzEng()&&!PHONE();
+    if(M.rvx)ch=`<div class="mrvx"><b>🔍 Revisando cruces</b><span>${cxs.length?`quedan ${CROSS.list.length}`:'todos revisados'}</span><button class="ib" data-rvx="go">Abrir el actual</button><button class="ib" data-rvx="stop">Terminar</button></div>`+ch;
+    else if(eng&&CROSS.list.length&&!M.meet)ch=`<button class="ib pri mrvgo" data-rvx="start" title="Recorre los cruces uno por uno y decide: a la vez, quién va primero o no va">🔍 Revisar interferencias (${CROSS.list.length})</button>`+ch;
+    /* lo ya revisado (antes o durante la reunión): se ve plegado; el ingeniero lo puede reabrir */
+    const XR=xokOf(M.piso,M.date);if(XR.length){const nmK=k=>{if(k.startsWith('a:')){const x=S.act.get(k.slice(2));return x?conOf(x.sc).name+' · '+short(x.name,26):'(actividad)'}const z=zget(k.slice(2));return z?conOf(z.sc).name+' · '+short(z.desc||'no programado',26):'(zona)'};
+      ch+=`<button class="mcxh2" data-cxrtog="1" aria-expanded="${M.cxrOpen?'true':'false'}">✓ Cruces revisados <b>${XR.length}</b><span>${M.cxrOpen?'▴':'▾'}</span></button>${M.cxrOpen?`<div class="mcxl">${XR.sort((a,b)=>(a.ts||0)-(b.ts||0)).map(d=>`<div class="mp-cxr"><div>${(d.ord||d.keys||[]).map(nmK).map(esc).join(d.ord?' → ':' ↔ ')}</div><small>${d.ord?'Orden decidido':'Pueden trabajar a la vez'} · ${esc(d.byName||d.n||'')} ${hhmm(d.ts)}</small>${eng?`<button class="lnkb" data-xreo="${d.id}" title="Vuelve a quedar como cruce pendiente">Reabrir</button>`:''}</div>`).join('')}</div>`:''}`}
+    if(typeof canWrite!=='undefined'&&canWrite&&!PHONE()&&!M.meet)ch=readyHtml()+ch;
     const cb=$('#mcxb');if(cb){if(cb.dataset.h!==ch){cb.innerHTML=ch;cb.dataset.h=ch}cb.hidden=!ch||(!!M.meet&&M.mmode!=='plan')}}
   /* propuestas del día por decidir (todas las partidas: es lo que se ve en la reunión) */
   {const eng=dzEng();const mySc=role==='sc'?new Set(myScs()):null;const P_=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===M.piso&&(!mySc||mySc.has(z.sc))&&(!M.meet||scIn(M.meetSc,z.sc))&&S.act.has(z.actId));
@@ -1747,6 +1786,10 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if(t.id==='mnp'){npDialog(t,null);return true}
   if((b=g('[data-rep]'))){const[id,fd]=b.dataset.rep.split('|');reprogAct(id,M.date,fd);return true}
   if((b=g('[data-cxtog]'))){M.cxOpen=!M.cxOpen;requestRender();return true}
+  if((b=g('[data-rdyp]'))){const v=b.dataset.rdyp;if(v!==M.piso){if(typeof U!=='undefined'&&U.piso){U.piso=v;if(typeof saveUI==='function')saveUI()}M.piso=v;M.sel='';M.vista='';M.selId=null;requestRender()}return true}
+  if((b=g('[data-cxrtog]'))){M.cxrOpen=!M.cxrOpen;requestRender();return true}
+  if((b=g('[data-rvx]'))){const k=b.dataset.rvx;if(k==='stop')rvxStop();else if(k==='go')rvxNext(0);else rvxGo(0);return true}
+  if((b=g('[data-xreo]'))){if(!dzEng())return true;const o=remDoc(b.dataset.xreo);if(o){rec([o]);CROSS.key='';requestRender();toast('El cruce vuelve a quedar pendiente','Deshacer',undo)}return true}
   if((b=g('[data-pcx]'))){const ids=b.dataset.pcx.split('|');const P=ids.flatMap(id=>{const z=zget(id);return z?unflat(z.pts):[]});if(P.length)zoomTo(P);const c=CROSS.list.find(q=>(q.a.id===ids[0]&&q.b.id===ids[1])||(q.a.id===ids[1]&&q.b.id===ids[0]));if(c&&typeof canWrite!=='undefined'&&canWrite){const r=b.getBoundingClientRect();const an=anchorAt(r.left,r.bottom-1);setTimeout(()=>crossPop(an,c),260)}return true}
   if((b=g('[data-same]'))){const[aid,zid]=b.dataset.same.split('|');const z=zget(zid),x=S.act.get(aid);if(z&&x){M.scDraw=x.sc;newZone(unflat(z.pts),{actId:aid},zVista(z))}return true}
   if((b=g('[data-done]'))){markDone(b.dataset.done,M.date);return true}
