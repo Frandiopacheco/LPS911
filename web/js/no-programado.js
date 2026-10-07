@@ -41,7 +41,7 @@ function npOpen(id){const n=NPM.get(id);if(!n)return;
 function npClose(){const sh=$('#npsheet');if(sh)sh.remove();NS=null}
 function npAmbOpts(pid){const out=[];for(const{p,secs}of tree()){if(p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a}of ambs)out.push({s,a})}return out}
 function npScs(pid,ambId){const inA=new Set(),inP=new Set();for(const x of S.act.values()){if(x.ambId===ambId)inA.add(x.sc);else if(pisoOfAct(x.id)===pid)inP.add(x.sc)}
-  const rk=c=>inA.has(c.id)?0:inP.has(c.id)?1:2;return[...S.con.values()].sort((a,b)=>rk(a)-rk(b)||a.name.localeCompare(b.name))}
+  const rk=c=>inA.has(c.id)?0:inP.has(c.id)?1:2;return[...S.con.values()].sort((a,b)=>rk(a)-rk(b)||a.name.localeCompare(b.name)).map(c=>({...c,rk:rk(c)}))}
 function npActNames(sc,ambId,pid){const seen=new Map();const add=(x,w)=>{const k=an(x.name);if(!x.name||!k)return;const o=seen.get(k);if(!o||o.w>w)seen.set(k,{name:x.name,w})};
   for(const x of S.act.values()){if(x.sc!==sc)continue;if(x.ambId===ambId)add(x,0);else if(pisoOfAct(x.id)===pid)add(x,1);else add(x,2)}
   return[...seen.values()].sort((a,b)=>a.w-b.w||a.name.localeCompare(b.name)).slice(0,8).map(o=>o.name)}
@@ -50,7 +50,9 @@ function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;con
   let h=`<div class="ksh"><i class="kn npk" aria-hidden="true">+</i><div><b>Trabajo no programado</b><span>${esc(p?p.code+' · '+p.name:'')} · ${DOWN[(pd(NS.d).getUTCDay()+6)%7]} ${fmtD(NS.d)}${NS.pt?' · punto marcado en el plano':''}</span>${n?`<span>Registrado por ${esc(n.byName||n.by||'')} · ${hhmm(n.ts)}</span>`:''}</div><button class="kx" data-npx aria-label="Cerrar">×</button></div>`;
   h+=`<div class="ksl">Ambiente${NS.auto?' <span class="mu">· según el punto que tocaste</span>':''}</div>
     <select class="kin" id="npamb"${ro?' disabled':''} aria-label="Ambiente"><option value="">— elige el ambiente —</option>${ambs.map(({s,a})=>`<option value="${a.id}"${a.id===NS.ambId?' selected':''}>${esc(s.code)} · ${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`;
-  h+=`<div class="ksl">¿Quién trabaja?</div><div class="kchips kw">${scs.map(c=>`<button class="${NS.sc===c.id?'on':''}" data-npsc="${c.id}" style="--c:${c.color}"${ro?' disabled':''}><i></i>${esc(c.name)}</button>`).join('')}</div>`;
+  /* primero las partidas de ese ambiente y piso; el resto, al tocar «Otra partida…» (la lista completa no entraba en el celular) */
+  const near=scs.filter(c=>c.rk<2||c.id===NS.sc);const scsV=NS.allSc||near.length<2?scs:near;
+  h+=`<div class="ksl">¿Quién trabaja?</div><div class="kchips kw">${scsV.map(c=>`<button class="${NS.sc===c.id?'on':''}" data-npsc="${c.id}" style="--c:${c.color}"${ro?' disabled':''}><i></i>${esc(c.name)}</button>`).join('')}${scsV.length<scs.length&&!ro?`<button data-npall>Otra partida… (${scs.length-scsV.length})</button>`:''}</div>`;
   h+=`<div class="ksl">¿Qué están haciendo?</div>${names.length&&!ro?`<div class="kchips kw">${names.map(t=>`<button class="${NS.desc===t?'on':''}" data-npd="${esc(t)}">${esc(t)}</button>`).join('')}</div>`:''}
     <input class="kin" id="npdesc" value="${esc(NS.desc)}" placeholder="${NS.sc?'Elige arriba o escribe':'Primero elige el subcontratista'}" aria-label="Qué están haciendo"${ro?' readonly':''}>`;
   const ph=[...NS.photos.map(id=>{loadFoto(id);return`<div class="th"><img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto">${ro?'':`<button data-npphx="${id}" aria-label="Quitar foto">&times;</button>`}</div>`}),
@@ -62,7 +64,7 @@ function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;con
   if(linked)h+=`<p class="knote">Ya está en el lookahead: <b>${esc(linked.name)}</b>.</p>`;
   if(n&&n.scProp)h+=n.ver?`<p class="knote">✓ Verificado por ${esc(n.ver.n||'')} · ${hhmm(n.ver.t)}</p>`:`<p class="knote"><b>Por verificar:</b> lo registró el subcontratista.</p>${canDaily?'<div class="kbtns"><button class="kbig ok" data-npa="ver">✓ Verificar (lo vi en obra)</button></div>':''}`;
   if(ro)h+=`<p class="knote">Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
-  else h+=`<div class="kbtns"><button class="kbig pri" data-npa="save"${NS.busy?' disabled':''}>${NS.mode==='edit'?'Guardar cambios':'Guardar'}</button>
+  else h+=`<div class="kbtns"><button class="kbig pri" data-npa="save"${NS.busy?' disabled':''}>${NS.mode==='edit'?'Guardar cambios':'Guardar'}</button><button class="kbig ghost" data-npx>Cancelar</button>
     ${n&&canWrite&&!linked?'<button class="kbig ghost" data-npa="look">Pasarlo al lookahead (este día)</button>':''}
     ${n?'<button class="kbig ghost npdel" data-npa="del">Anular este registro</button>':''}</div>
     <p class="knote">Queda como trabajo <b>no programado</b> del día: se cuenta en Campo e Indicadores, no cambia el PPC.</p>`;
@@ -77,6 +79,7 @@ function npClick(e){const t=e.target;const sh=$('#npsheet');if(t===sh&&NOW()-(sh
   const ph=t.closest('img[data-ph],.npph img');if(ph&&ph.src){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-x="1">Cerrar</button></div><img src="${ph.src}" alt="">`;lb.onclick=ev=>{if(ev.target.dataset.x||ev.target===lb)lb.remove()};document.body.appendChild(lb);return}
   if(NS.ro&&!t.closest('[data-npa="ver"]'))return;
   if((b=t.closest('[data-npsc]'))){NS.sc=b.dataset.npsc;npDraw();return}
+  if(t.closest('[data-npall]')){NS.allSc=true;npDraw();return}
   if((b=t.closest('[data-npd]'))){NS.desc=b.dataset.npd;npDraw();return}
   if(t.closest('[data-npmore]')){NS.more=true;npDraw();setTimeout(()=>{const i=$('#npexec');if(i)i.focus()},30);return}
   if((b=t.closest('[data-npphx]'))){NS.photos=NS.photos.filter(i=>i!==b.dataset.npphx);npDraw();return}
