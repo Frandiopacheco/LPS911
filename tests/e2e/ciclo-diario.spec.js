@@ -377,3 +377,17 @@ test('20c · si ninguna propuesta se ve en la grilla, explica por qué y se pued
   expect(Object.keys(lh).filter(k => lh[k])).toEqual([]);
   noErrors(errors, 'rechazar ocultas');
 });
+
+test('reporte «sin inicio marcado» para WhatsApp: consolidado y por SC', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'dash' });
+  await page.locator('[data-sini]').click();
+  const tx = page.locator('#sisheet #sitx');
+  await expect(tx).toHaveValue(/Sin inicio marcado/);
+  await expect(page.locator('#sisheet [data-sis]').nth(1)).toBeVisible();
+  const n = await page.locator('#sisheet [data-sis]').count();
+  expect(n).toBeGreaterThan(1);
+  await page.locator('#sisheet [data-sis]').nth(1).click();
+  await expect(tx).toHaveValue(/Hola, \*/);
+  expect(await page.locator('#sisheet a[href^="https://wa.me/?text="]').getAttribute('href')).toContain('Iniciado');
+  noErrors(errors, 'sin iniciar');
+});
