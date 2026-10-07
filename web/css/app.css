@@ -2854,3 +2854,25 @@ div.tp-dif{padding-left:0}
 @media (min-width:761px) and (max-width:899px){.top .brand{display:none}.wk{margin-right:auto}}
 /* lookahead en tablet vertical: columnas de ambiente y subcontratista más angostas para ver más días */
 @media (min-width:761px) and (max-width:899px){.s2{width:120px;min-width:120px;max-width:120px}.s3{width:96px;min-width:96px;max-width:96px}}
+/* ---------- Tablet horizontal (fotos de la obra, oct 2026) ---------- */
+@media (min-width:761px) and (max-width:1366px){
+  /* conectados: solo los dos primeros (el resto ocupa una fila entera) */
+  .who{flex-wrap:nowrap}.who .who-c:nth-child(n+3){display:none}
+  /* Lookahead: la barra de botones en una sola fila que se desliza, para que la grilla empiece más arriba */
+  .view>.bar:not(:has(.bmore:not([hidden]))){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:6px 12px;gap:6px}
+  .view>.bar:not(:has(.bmore:not([hidden])))>*{flex:none}
+  .view>.bar input[type=search]{width:170px}
+  /* propuestas de los SC: una línea */
+  #ppbar .ppb{flex-wrap:nowrap;margin:4px 0;padding:5px 10px;gap:8px}
+  #ppbar .ppb>div:first-child{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #ppbar .ppa{flex-wrap:nowrap}
+  .legend{padding:5px 12px}
+}
+/* Campo › Plano en horizontal: el plano a la izquierda con todo el alto, la lista a la derecha */
+@media (min-width:1000px){
+  .kap{max-width:none;padding:8px 14px 20px}
+  .kbody{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start}
+  .kbody>.kplanw{height:calc(100dvh - 230px);min-height:420px;position:sticky;top:0}
+  .kbody>.kplanw[hidden]+#klist{grid-column:1/-1}
+  #klist{min-width:0}
+}
