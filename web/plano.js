@@ -110,9 +110,7 @@ function renderMapa(main){ensureLam();
   empty.innerHTML=eh;empty.hidden=!eh;
   if(!M.view){M.view=Viewer($('#mstage'),{onTap:tapSelect});
     /* clic derecho sobre un cruce: decidir (sin interferencia / prioridad) */
-    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;const w=M.view.toWorld(e.clientX,e.clientY);const c=crossAt(w);if(c){e.preventDefault();zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}
-    /* clic derecho en un ambiente: agregar trabajo no programado al plan del día */
-    if(!M.meet&&M.colorBy!=='cu'&&paddCan()){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){e.preventDefault();zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am)}}});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');if(l&&l.closest('.mrs.dock'))return 0;return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
+    $('#mstage').addEventListener('contextmenu',e=>{if(!M.view||M.tool!=='pan')return;e.preventDefault();const w=M.view.toWorld(e.clientX,e.clientY);const c=crossAt(w);if(c){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}tapSelect(w,e,true)});installDraw(M.view);M.view.inset=()=>{const l=$('#mleg');if(l&&l.closest('.mrs.dock'))return 0;return l&&!l.hidden&&!l.classList.contains('col')&&innerWidth>=900?l.offsetWidth+16:0}}
   const layers=[];const lay=(l,op,key)=>({key:key||l.id,l,w:l.w,h:l.h,T:l.T||I,op});
   if(cur){if(!cur.base&&base&&M.under){layers.push(lay(base,M.bop,'base'));layers.push({...lay(cur,M.op),blend:'multiply'})}else layers.push(lay(cur,cur.base?M.bop:1))}
   M.view.bounds=base?boundsOf({...base,T:base.T||I}):cur?boundsOf(cur):null;
@@ -226,7 +224,7 @@ function newZone(pts,link,vista,cx,cy){const id=uid('pz');const x=link.actId?S.a
   const doc={date:M.date,pisoId:M.piso,vista:vista||M.vista,sc:x?x.sc:M.scDraw,kind:'zona',pts:flat(pts),actId:link.actId||null,ambId:x?x.ambId:(link.ambId||null),desc:link.desc||'',fuera:!link.actId&&!link.paId,...(link.paId?{paId:link.paId}:{}),by:me.email,byName:me.name||me.email,ts:NOW()};
   /* «Redibujar»: la zona nueva reemplaza a las que ya tenía la actividad ese día (se deshace junto) */
   const old=link.rep&&link.actId?drawnOf(link.actId).map(z=>remDoc(z.id)).filter(Boolean):[];
-  rec([...old,addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=link.paId?link:null;if(M.meet){M.tool='pan';M.selId=null}requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
+  rec([...old,addDoc(id,doc)]);learn(doc);M.selId=id;M.pend=link.paId?link:null;if(M.meet||link.fromPend&&!link.paId){M.tool='pan';M.selId=null}requestRender();if(!M.batch)setTimeout(()=>zoneAlerts(id,link.actId),500);
   /* lo agregado desde el ambiente puede ir en varias áreas: se sigue dibujando hasta «Listo» */
   if(link.paId){M.selId=null;const n=paZones(link.paId).length;if(cx!=null)setTimeout(()=>openPop(anchorAt(cx,cy),`<div class="ph">Área ${n} guardada</div><div class="ptx">${esc(short(link.desc||'',50))}${n>1?` · ${n} áreas`:''}</div><button data-do="ok" class="pri">✓ Listo</button><button data-do="otra">＋ Dibujar otra área</button><button data-do="und">↶ Deshacer esta área</button>`,{ok:paddDone,otra:()=>{},und:()=>undo()}),0);return}
   toast(link.actId?`Zona de “${short(x.name,40)}” guardada`:'Trabajo no programado ubicado','Deshacer',undo)}
@@ -296,22 +294,22 @@ function npSeenHtml(kind){if(typeof npItems!=='function')return'';const L=npItem
   return L.map(i=>{const c=conOf(i.e.sc).color;const am=i.a?i.a.code+' · '+i.a.name:'';
     return kind==='mlr'?`<button class="mlr" data-npo="${esc(i.id)}"><i class="nbi np" style="--c:${c}">+</i><span><b>${esc(i.e.desc||'')}</b><small>${esc(conOf(i.e.sc).name)}${am?' · '+esc(am):''}${i.e.pt?'':' · sin ubicar'}</small></span></button>`
       :`<div class="mp-it np"><div class="t">${esc(i.e.desc||'')}<small>${esc(conOf(i.e.sc).name)}${am?' · '+esc(am):''} · ${esc(i.e.byName||'')}${(i.e.photos||[]).length?' · 📷':''}</small></div><div class="s"><button class="lnkb" data-npo="${esc(i.id)}">Ver</button></div></div>`}).join('')}
-function tapSelect(w,e){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;return}const els=document.elementsFromPoint(e.clientX,e.clientY);
+function tapSelect(w,e,rc){if(M.tool!=='pan')return;if(CQ_SKIP){CQ_SKIP=false;return}const els=document.elementsFromPoint(e.clientX,e.clientY);
+  /* con mouse, fuera de la reunión, el clic izquierdo solo navega: los menús se abren con clic derecho (rc). En tablet, con un toque */
+  const mg=!M.meet&&!rc&&e.pointerType==='mouse';const rcTip=()=>{if(!M.rcTip){M.rcTip=1;toast('Haz clic derecho sobre la actividad o el ambiente para abrir su menú. El clic izquierdo solo mueve el plano.')}};
   /* con un subcontratista elegido, las zonas atenuadas de otras partidas no responden al toque */
   const fvT=M.meet?M.meetSc:scVis();const z=els.map(el=>el.closest&&el.closest('[data-z]')).filter(Boolean).find(el=>{const id=el.dataset.z;if(!id||id.startsWith('np:'))return true;const zz=zget(id);return!zz||scIn(fvT,zz.sc)});const zid=z&&z.dataset.z?z.dataset.z:null;
-  if(zid&&zid.startsWith('np:')){if(typeof npOpen==='function')npOpen(zid.slice(3));return}
+  if(zid&&zid.startsWith('np:')){if(mg){rcTip();return}if(typeof npOpen==='function')npOpen(zid.slice(3));return}
   /* reunión: en «Plan» un toque abre Va · No va · Culminado (y los cruces); en «Cumplimiento», lo registrado en Campo */
   const pl=M.meet&&M.mmode==='plan';
   const onLbl=els.some(el=>el.closest&&el.closest('.pvl[data-z]'));
   /* tocar el achurado de un cruce abre su decisión: en la reunión («Plan») y también fuera de ella (revisión previa, en el orden que el ingeniero quiera) */
-  if((pl||(!M.meet&&M.colorBy!=='cu'))&&!onLbl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
+  if((pl||(!M.meet&&M.colorBy!=='cu'))&&!onLbl&&typeof canWrite!=='undefined'&&canWrite&&cxVis()){const c=crossAt(w);if(c&&(scIn(fvT,c.a.sc)||scIn(fvT,c.b.sc))){if(mg){rcTip();return}zcClose();crossPop(anchorAt(e.clientX,e.clientY),c);return}}
   /* fuera de la reunión: tocar una actividad abre Va · No va (y agregar trabajo no programado en su ambiente); tocar un ambiente vacío, el «＋» */
   if(!M.meet&&M.colorBy!=='cu'){const zz=zid&&zget(zid);
-    if(zz&&zz.kind==='zona'&&zz.actId&&S.act.get(zz.actId)&&(dzEng()||canPlan(zz.sc))){M.selId=zz.virt?null:zid;zCard(zz.actId,e.clientX,e.clientY,true);requestRender();return}
-    /* con mouse el clic izquierdo solo mueve el plano: se agrega con clic derecho (en tablet, con un toque) */
-    if(!zid&&paddCan()&&pubDraft()&&e.pointerType==='mouse'&&!M.rcTip&&ambAt(M.piso,{x:w.x,y:w.y,v:M.vista})){M.rcTip=1;toast('Para agregar trabajo no programado en un ambiente, haz clic derecho sobre él.')}
-    if(!zid&&paddCan()&&pubDraft()&&e.pointerType!=='mouse'){const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am);return}}}
-  if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
+    if(zz&&zz.kind==='zona'&&zz.actId&&S.act.get(zz.actId)&&(dzEng()||canPlan(zz.sc))){if(mg){zcClose();M.selId=zz.virt?null:zid;requestRender();rcTip();return}M.selId=zz.virt?null:zid;zCard(zz.actId,e.clientX,e.clientY,true);requestRender();return}
+    if((!zid||rc)&&paddCan()&&pubDraft()){if(mg){zcClose();if(ambAt(M.piso,{x:w.x,y:w.y,v:M.vista}))rcTip();return}const am=ambAt(M.piso,{x:w.x,y:w.y,v:M.vista});if(am){zcClose();paddDialog(anchorAt(e.clientX,e.clientY),am);return}}}
+  if(M.meet||M.colorBy==='cu'){const zz=zid&&zget(zid);if(zz&&zz.kind==='zona'&&zz.actId&&mg){zcClose();rcTip();return}if(zz&&zz.kind==='zona'&&zz.actId)zCard(zz.actId,e.clientX,e.clientY,pl);else zcClose();if(M.meet)return}
   /* las zonas que salen de Sectorización (ambiente completo) no se seleccionan ni se mueven en el Plan diario */
   const zs_=zid&&zget(zid);M.selId=zs_&&zs_.virt?null:zid;requestRender()}
 function hitIds(cx,cy,r){const out=new Set();const pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r]];for(const[dx,dy]of pts){for(const el of document.elementsFromPoint(cx+dx,cy+dy)){const z=el.closest&&el.closest('[data-z]');if(z&&z.dataset.z)out.add(z.dataset.z)}}return[...out]}
@@ -354,7 +352,7 @@ function installDraw(v){const host=v.host;let drag=null;
     if(d.mode==='vert'||d.mode==='move'){if(d.cur&&(d.mode==='vert'||d.moved>3)){const z=PD.get(d.id);rec([updDoc(d.id,{pts:flat(d.cur)},{pts:d.before})]);learn(z)}else if(d.mode==='move'){PD.get(d.id).pts=d.before}requestRender();return}
     const t=M.tmp;M.tmp=null;if(!t){drawOverlay();return}const bb=bboxOf(t.pts);const big=Math.max(bb.w,bb.h)*v.z>8;
     if(!big&&t.kind!=='trazo'){drawOverlay();return}
-    if(t.kind==='zona'){if(M.pend){newZone(t.pts,M.pend,null,e.clientX,e.clientY);return}M.tmp=t;drawOverlay();linkChooser(t.pts,e.clientX,e.clientY);return}
+    if(t.kind==='zona'){if(M.pend){newZone(t.pts,{...M.pend,fromPend:1},null,e.clientX,e.clientY);return}M.tmp=t;drawOverlay();linkChooser(t.pts,e.clientX,e.clientY);return}
     if(t.kind==='flecha')newNote('flecha',t.pts);else if(t.kind==='trazo'&&t.pts.length>1)newNote('trazo',t.pts);drawOverlay()};
   host.addEventListener('pointerup',upH,true);host.addEventListener('pointercancel',e=>{if(drag){if(drag.g&&drag.g.length)rec(drag.g);drag=null;M.tmp=null;requestRender()}},true);
   host.addEventListener('dblclick',e=>{if(M.tool==='poly'&&M.tmp){stop(e);finishPoly(e.clientX,e.clientY);return}
@@ -368,7 +366,7 @@ function installDraw(v){const host=v.host;let drag=null;
     if(e.key==='Enter'&&M.tool==='poly'&&M.tmp){const r=host.getBoundingClientRect();finishPoly(r.left+r.width/2,r.top+r.height/2);return}
     if((e.key==='Delete'||e.key==='Backspace')&&M.selId){const z=zget(M.selId);if(own(z)){e.preventDefault();delIds([z.id])}return}
     if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&KEYS[k]){M.tool=KEYS[k];M.tmp=null;requestRender()}})}
-function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,M.pend,null,cx,cy);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
+function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,{...M.pend,fromPend:1},null,cx,cy);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
 function delSel(){const z=zget(M.selId);if(own(z))delIds([z.id])}
 const LW={1:2.5,2:4,3:7};
 /** «Ver sectorización»: contorno de cada ambiente (color de su sector, como en Sectorización) y el código; no responde a los toques */

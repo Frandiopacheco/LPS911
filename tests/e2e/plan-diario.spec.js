@@ -627,7 +627,11 @@ test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', as
   await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); await page.waitForTimeout(600);
   const p = await enPantalla(page, '#mstage', 280, 280);
+  // con mouse el clic izquierdo solo navega: el menú sale con clic derecho
   await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(400);
+  await expect(page.locator('#pop .xbox')).toHaveCount(0);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
   await expect(page.locator('#pop .xbox')).toBeVisible();
 });
 
@@ -637,7 +641,10 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   await page.waitForFunction(() => window.__plano && window.__plano.M && window.__plano.M.date > todayIso());
   // tocar el ambiente A-2 abre su ficha (Va · No va) con «＋ Trabajo no programado en A-2»
   const p = await enPantalla(page, '#mstage', 500, 280);
-  await page.mouse.click(p.x, p.y);
+  await page.mouse.click(p.x, p.y); // clic izquierdo: solo navega
+  await page.waitForTimeout(400);
+  await expect(page.locator('#mzc')).toHaveCount(0);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
   await expect(page.locator('#mzc')).toContainText('No va');
   await page.locator('#mzc [data-zpa]').click();
   await expect(page.locator('#pop')).toContainText('Trabajo no programado · A-2');
