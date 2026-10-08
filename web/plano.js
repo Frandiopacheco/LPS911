@@ -72,14 +72,15 @@ function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:
     layers.forEach((l,i)=>{let im=W.querySelector(`img[data-k="${CSS.escape(l.key)}"]`);if(!im){im=document.createElement('img');im.dataset.k=l.key;im.draggable=false;im.alt='';W.insertBefore(im,v.svg)}
       if(l.url&&im.getAttribute('src')!==l.url)im.src=l.url;im.style.width=l.w+'px';im.style.height=l.h+'px';im.style.transform=cssM(l.T||I);im.style.opacity=l.op??1;im.style.zIndex=i;im.style.mixBlendMode=l.blend||'normal'})};
   const pts=new Map();let moved=0,start=null,pinch=null;
-  /* capa de GPU solo mientras se mueve (oct 2026): fija, con láminas grandes, agotaba la memoria de la tablet y Android
-     dejaba partes de la pantalla en negro o en blanco */
+  /* capa de GPU solo mientras se arrastra o pellizca de verdad (oct 2026): fija, con láminas grandes, agotaba la memoria de la tablet
+     y Android dejaba partes de la pantalla en negro o en blanco. Un toque (elegir un ambiente) no la crea: crearla y quitarla
+     redibujaba el plano entero y se veía parpadear. */
   let mvT=0;const mvOn=()=>{clearTimeout(mvT);host.classList.add('pvmv')},mvOff=ms=>{clearTimeout(mvT);mvT=setTimeout(()=>host.classList.remove('pvmv'),ms)};
-  host.addEventListener('pointerdown',e=>{if(e.button>0)return;mvOn();host.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;start={x:e.clientX,y:e.clientY};
+  host.addEventListener('pointerdown',e=>{if(e.button>0)return;clearTimeout(mvT);host.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;start={x:e.clientX,y:e.clientY};
     if(pts.size===2){const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:v.z}}});
   host.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const p=pts.get(e.pointerId);const dx=e.clientX-p.x,dy=e.clientY-p.y;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);v.x+=dx;v.y+=dy;v.applySoon()}
-    else if(pts.size===2&&pinch){const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const r=host.getBoundingClientRect();moved=99;v.zoomAt((pinch.z*d/pinch.d)/v.z,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);if(pts.get(e.pointerId)===p){} }});
+    if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(moved>=6&&!host.classList.contains('pvmv'))mvOn();v.x+=dx;v.y+=dy;v.applySoon()}
+    else if(pts.size===2&&pinch){if(!host.classList.contains('pvmv'))mvOn();const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const r=host.getBoundingClientRect();moved=99;v.zoomAt((pinch.z*d/pinch.d)/v.z,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);if(pts.get(e.pointerId)===p){} }});
   const up=e=>{if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);if(pts.size<2)pinch=null;if(!pts.size)mvOff(250);
     if(!pts.size&&moved<6&&v.onTap&&start&&e.type==='pointerup'){const w=v.toWorld(e.clientX,e.clientY);v.onTap(w,e)}};
   host.addEventListener('pointerup',up);host.addEventListener('pointercancel',up);
