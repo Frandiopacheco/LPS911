@@ -211,12 +211,20 @@ function actVenc(aid){const x=aid&&S.act.get(aid);if(!x||!(x.days||[]).length||(
 const AVTIP='Sus días ya pasaron y no se ejecutó: reprograma la actividad en el lookahead o levanta la restricción.';
 function actLoc(aid){const x=S.act.get(aid);if(!x)return'';const a=S.amb.get(x.ambId);const sc=a&&S.sec.get(a.sectorId);const p=S.pis.get(pisoOfAct(aid));
   return[p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · ')+' · '+conOf(x.sc).name}
+/* resaltado de toda la fila en el Lookahead (oct 2026, pedido del dueño: ~3 s). Es un estado (LK_HL), no solo una clase en el
+   DOM: la grilla redibuja filas al desplazarse y con cada dato que llega, y la clase se perdía. markPeers (después de cada dibujo)
+   llama a lkHlPaint para volver a ponerla mientras dure. */
+const LK_HL={id:'',until:0,t:0};
+function lkHlPaint(){const g=$('#grid');const on=!!LK_HL.id&&performance.now()<LK_HL.until;
+  if(g)g.querySelectorAll('tr.rhl').forEach(t=>{if(!on||t.dataset.a!==LK_HL.id)t.classList.remove('rhl')});
+  if(!on){LK_HL.id='';return}const tr=g&&g.querySelector(`tr[data-a="${CSS.escape(LK_HL.id)}"]`);if(tr)tr.classList.add('rhl')}
+function lkHighlight(aid,ms){ms=ms||3000;LK_HL.id=aid;LK_HL.until=performance.now()+ms;lkHlPaint();clearTimeout(LK_HL.t);LK_HL.t=setTimeout(lkHlPaint,ms+30)}
 function gotoAct(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}const a=S.amb.get(x.ambId);const pid=pisoOfAct(aid);
   if(U.piso&&U.piso!==pid){U.piso=pid;U.pisoAll=false}if(a)U.collapsed=(U.collapsed||[]).filter(c=>c!==a.sectorId&&c!==pid);if(U.sector&&a&&U.sector!==a.sectorId)U.sector='';U.tab='look';saveUI();render();
   /* una actividad vencida (sus días ya pasaron, p. ej. la de la semana pasada que no se ejecutó) se muestra igual, solo esa */
   const past=(x.days||[]).length&&!(x.days||[]).some(d=>d>=todayIso());LK_SHOW.clear();LK_SHOW.add(aid);
   let n=0,relaxed=false;const find=()=>{if(typeof gridReveal==='function')gridReveal(aid);const tr=$(`#grid tr[data-a="${CSS.escape(aid)}"]`);
-    if(tr){tr.scrollIntoView({block:'center',behavior:'smooth'});tr.classList.add('rflash');setTimeout(()=>tr.classList.remove('rflash'),3800);
+    if(tr){tr.scrollIntoView({block:'center',behavior:'smooth'});lkHighlight(aid,3000);
       const msg=[past?'Actividad no ejecutada: sus días ya pasaron. Reprográmala o libera la restricción.':'',relaxed?'Se quitaron los filtros del lookahead para mostrarla.':''].filter(Boolean).join(' ');if(msg)toast(msg);return}
     if(++n===5&&!relaxed){/* la tapaba un filtro: se quitan los filtros y se vuelve a buscar */relaxed=true;U.q='';U.acts=[];if(U.sc&&!scOk(x.sc))U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.day='';U.wkF=0;saveUI();render()}
     if(n<12)setTimeout(find,150);else toast('No se encontró la actividad en el lookahead.')};setTimeout(find,120)}

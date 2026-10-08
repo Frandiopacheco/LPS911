@@ -19,3 +19,5 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - **Cambiar de ambiente** (oct 2026, `ambMoveDialog`/`ambMoveTo` en mover.js): solo admin/editor fuera de modo propuesta (`canAmbMove`). Desde ⋮ de la actividad o la barra de selección. Solo dentro del mismo piso (los registros `daily` van por piso); conserva días, cantidades y registros; quedan al final del ambiente destino. Ctrl+Z lo deshace.
 - **Filtros por SC con chips** (Lookahead, Tablero, Matriz): clic = solo ese SC (clic de nuevo = todos); Ctrl/Shift+clic suma o quita.
+
+- **Resaltar una fila** (oct 2026, pedido del dueño): `lkHighlight(aid, ms=3000)` (plan-restricciones.js) resalta **toda la fila** ~3 s (clase `tr.rhl`, fondo y bordes con `--today`; las barras de los días quedan encima). Es un estado (`LK_HL`), no solo una clase: `markPeers` (después de cada dibujo, también el virtual al desplazarse) llama a `lkHlPaint` para volver a ponerla. Lo usa «Ver en el lookahead» de Restricciones (`gotoAct`). Antes `rflash` se perdía al redibujar.
