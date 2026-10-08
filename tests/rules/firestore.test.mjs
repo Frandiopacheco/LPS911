@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField, writeBatch } from 'firebase/firestore';
 
 const OWNER = 'frandiopacheco@gmail.com';
 let env;
@@ -1048,7 +1048,7 @@ test('catálogo: el SC agrega actividades de su partida marcadas «por revisar»
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'mcat/k50'), { name: 'Pruebas de presión', revOk: { by: 'editor@obra.pe' } }));
 });
 
-test('matriz: el SC cambia una celda de su partida por vez (con k) y deja constancia; no toca otras partidas', async () => {
+test('matriz: el SC cambia una celda de su partida por vez (con k) junto con su constancia; no toca otras partidas', async () => {
   const sc = user('sc@obra.pe'), ed = user('editor@obra.pe');
   await env.withSecurityRulesDisabled(async c => {
     const db = c.firestore();
@@ -1057,21 +1057,50 @@ test('matriz: el SC cambia una celda de su partida por vez (con k) y deja consta
     await setDoc(doc(db, 'mamb/a1'), { tipo: 'tp1', c: { ko: 'p' }, by: 'editor@obra.pe', t: 1 });
   });
   const meta = { by: 'sc@obra.pe', n: 'SC', t: 2 };
-  await assertSucceeds(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 't' }, m: { kg: { ...meta, sc: true } }, k: 'kg', ...meta }, { merge: true }));
+  const cm = { ...meta, sc: true };
+  const log = (amb, cat, to, x = {}) => ({ amb, cat, sc: 'c-gabel', from: null, to, st: 'pend', ...meta, ...x });
+  // celda + constancia en el mismo lote
+  const ok = writeBatch(sc);
+  ok.set(doc(sc, 'mamb/a1'), { c: { kg: 't' }, m: { kg: cm }, k: 'kg', l: 'l1', ...meta }, { merge: true });
+  ok.set(doc(sc, 'mlog/l1'), log('a1', 'kg', 't'));
+  await assertSucceeds(ok.commit());
+  // auditoría 08/10 (M06): sin constancia, con una constancia vieja, de otro valor o firmando como ingeniero: no
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'c' }, m: { kg: cm }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'c' }, m: { kg: cm }, k: 'kg', l: 'l1', ...meta }, { merge: true }));
+  const otroVal = writeBatch(sc);
+  otroVal.set(doc(sc, 'mamb/a1'), { c: { kg: 'c' }, m: { kg: cm }, k: 'kg', l: 'l2', ...meta }, { merge: true });
+  otroVal.set(doc(sc, 'mlog/l2'), log('a1', 'kg', 'p'));
+  await assertFails(otroVal.commit());
+  const firma = writeBatch(sc);
+  firma.set(doc(sc, 'mamb/a1'), { c: { kg: 'c' }, m: { kg: { by: 'editor@obra.pe', n: 'Elena', t: 2 } }, k: 'kg', l: 'l3', ...meta }, { merge: true });
+  firma.set(doc(sc, 'mlog/l3'), log('a1', 'kg', 'c'));
+  await assertFails(firma.commit());
+  const autoVisto = writeBatch(sc);
+  autoVisto.set(doc(sc, 'mamb/a1'), { c: { kg: 'c' }, m: { kg: { ...cm, ok: { by: 'sc@obra.pe' } } }, k: 'kg', l: 'l4', ...meta }, { merge: true });
+  autoVisto.set(doc(sc, 'mlog/l4'), log('a1', 'kg', 'c'));
+  await assertFails(autoVisto.commit());
   // otra partida, dos celdas a la vez, valor raro o tocar el tipo: no
-  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { ko: 't' }, m: { ko: meta }, k: 'ko', ...meta }, { merge: true }));
-  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p', ko: 't' }, k: 'kg', ...meta }, { merge: true }));
-  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'x' }, k: 'kg', ...meta }, { merge: true }));
-  await assertFails(setDoc(doc(sc, 'mamb/a1'), { tipo: 'tp2', c: { kg: 'p' }, k: 'kg', ...meta }, { merge: true }));
-  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p' }, k: 'kg', ...meta, by: 'otro@obra.pe' }, { merge: true }));
+  const lote = (d, lid, to, cat = 'kg') => { const b = writeBatch(sc); b.set(doc(sc, 'mamb/a1'), { ...d, l: lid, ...meta }, { merge: true }); b.set(doc(sc, 'mlog/' + lid), log('a1', cat, to)); return b.commit(); };
+  await assertFails(lote({ c: { ko: 't' }, m: { ko: cm }, k: 'ko' }, 'l5', 't', 'ko'));
+  await assertFails(lote({ c: { kg: 'p', ko: 't' }, m: { kg: cm }, k: 'kg' }, 'l6', 'p'));
+  await assertFails(lote({ c: { kg: 'x' }, m: { kg: cm }, k: 'kg' }, 'l7', 'x'));
+  await assertFails(lote({ tipo: 'tp2', c: { kg: 'p' }, m: { kg: cm }, k: 'kg' }, 'l8', 'p'));
+  // Deshacer: la celda vuelve y su constancia pasa a undo en el mismo lote (bk solo aquí)
+  const un = writeBatch(sc);
+  un.set(doc(sc, 'mamb/a1'), { c: { kg: deleteField() }, m: { kg: { ...cm, bk: true } }, k: 'kg', l: 'l1', ...meta }, { merge: true });
+  un.update(doc(sc, 'mlog/l1'), { st: 'undo' });
+  await assertSucceeds(un.commit());
   // ambiente nuevo
-  await assertSucceeds(setDoc(doc(sc, 'mamb/a9'), { c: { kg: 'p' }, m: { kg: meta }, k: 'kg', ...meta }));
+  const nuevo = writeBatch(sc);
+  nuevo.set(doc(sc, 'mamb/a9'), { c: { kg: 'p' }, m: { kg: cm }, k: 'kg', l: 'l9', ...meta });
+  nuevo.set(doc(sc, 'mlog/l9'), log('a9', 'kg', 'p'));
+  await assertSucceeds(nuevo.commit());
   // constancia
-  await assertSucceeds(setDoc(doc(sc, 'mlog/l1'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'pend', ...meta }));
-  await assertFails(setDoc(doc(sc, 'mlog/l2'), { amb: 'a1', cat: 'ko', sc: 'c-otro', to: 't', st: 'pend', ...meta }));
-  await assertFails(setDoc(doc(sc, 'mlog/l3'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'ok', ...meta }));
-  await assertSucceeds(updateDoc(doc(sc, 'mlog/l1'), { st: 'undo' }));
-  await assertFails(updateDoc(doc(sc, 'mlog/l1'), { st: 'ok' }));
-  await assertSucceeds(updateDoc(doc(ed, 'mlog/l1'), { st: 'rev', rev: { by: 'editor@obra.pe' } }));
-  await assertFails(deleteDoc(doc(user(OWNER), 'mlog/l1')));
+  await assertFails(setDoc(doc(sc, 'mlog/m2'), { amb: 'a1', cat: 'ko', sc: 'c-otro', to: 't', st: 'pend', ...meta }));
+  await assertFails(setDoc(doc(sc, 'mlog/m3'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'ok', ...meta }));
+  await assertFails(updateDoc(doc(sc, 'mlog/l9'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mlog/l9'), { st: 'ok', ok: { by: 'editor@obra.pe' } }));
+  // el «Visto» del ingeniero queda en la celda
+  await assertSucceeds(setDoc(doc(ed, 'mamb/a9'), { m: { kg: { ok: { by: 'editor@obra.pe' } } }, by: 'editor@obra.pe', t: 3 }, { merge: true }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mlog/l9')));
 });
