@@ -192,8 +192,9 @@ function propConflicts(it,off,shift){const base=it.base;if(!it.after||!base||!of
 function propShiftTo(after,start){const a=clone(after);if(!(a.days||[]).length)return{a,merged:0};const ds=[...new Set(a.days)].sort();const k=wdist(ds[0],start);const mp=d=>wshift(d,k);
   a.days=[...new Set(ds.map(mp))].sort();const merged=ds.length-a.days.length;
   if(a.qty){const q={};for(const[d,v]of Object.entries(a.qty)){const n=mp(d);q[n]=r2((q[n]||0)+(+v||0))}a.qty=q}return{a,merged}}
-/** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
-async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return'gone';
+/** prepara la decisión (revisiones, preguntas, cambio y registro del historial) sin guardar nada:
+    devuelve el motivo por el que no se aplica (texto) o {sc,id,st,it,o,h,key,key0,opt}. opt.bulk: sin preguntas ni avisos sueltos */
+async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const it=doc&&doc.items&&doc.items[id];if(!it)return'gone';
   if(!canDecide(id,it)){if(!opt.bulk)toast(propWho(id,it)+'.');return'perm'}
   const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
   /* aceptar no puede cambiar días cuyo plan ya está cerrado (hoy, pasados o publicados); rechazar sí se puede */
@@ -228,6 +229,17 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
   const h={id,name:x.name||'',amb:am?am.code+' '+am.name:'',kind:!it.after?'del':!base?'new':'mod',from:base?rngTxt(base.days):'',to:it.after?rngTxt(finalDays||it.after.days):'',st,note:opt.note||'',t,by:me.email,n:me.name||'',pn:it.n||'',
     sc,actId:id,sk:lhhSk(sc,t),sentAt:it.sentAt||null,sent0:it.sent0||it.sentAt||null,late:late?{w:late.w,cut:late.cut}:null,lateNote:st!=='rej'&&late?opt.lateNote||'':'',
     prop:propDiff(base,it.after),chg:o?(o.after.arch?{arch:[false,true]}:propDiff(o.before,o.after)):null};
+  return{sc,id,st,it,o,h,key,key0,opt}}
+/** después de guardar: reflejar al momento (llega igual por la base), Deshacer y aviso */
+function propLocal(P_){const{sc,id,st,it,o,h,key,opt}=P_;const doc=PROP.get(sc);
+  if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
+    const g=[o];g.prop={sc,id,it,key,hk:1};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
+  LHH.set(key,{...h,id:key});const d2=PROP.get(sc)||doc||{sc,items:{}};PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null}});requestRender();
+  if(!opt.bulk)toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada',o?'Deshacer':null,o?undo:null);
+  return'ok'}
+/** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
+async function decideProp(sc,id,st,opt){const P_=await propPrep(sc,id,st,opt);if(typeof P_==='string')return P_;const{it,o,h,key,key0}=P_;opt=P_.opt;
+  const say=m=>{if(!opt.bulk)toast(m)};
   PDBUSY.add(key0);
   try{if(!db)throw new PropStop('Sin conexión con la base.');
     await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const aref=fcol('acts').doc(id);
@@ -239,12 +251,7 @@ async function decideProp(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const
       tx.update(pref,new firebase.firestore.FieldPath('items',id),null);tx.set(fcol('lhphist').doc(key),h)})}
   catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
   PDBUSY.delete(key0);
-  /* reflejar al momento (llega igual por la base) */
-  if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
-    const g=[o];g.prop={sc,id,it,key,hk:1};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
-  LHH.set(key,{...h,id:key});const d2=PROP.get(sc)||doc;PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null}});requestRender();
-  if(!opt.bulk)toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada',o?'Deshacer':null,o?undo:null);
-  return'ok'}
+  return propLocal(P_)}
 /** deshacer (o rehacer) una aceptación también devuelve (o vuelve a quitar) la propuesta del SC; el historial la marca, no se borra */
 async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,id,it,key,hk}=P_;const FP=firebase.firestore.FieldPath;
   const ud={t:NOW(),by:me.email,n:me.name||''};const DEL=firebase.firestore.FieldValue.delete();
@@ -286,7 +293,27 @@ async function decideMany(L){let ok=0;const why={};
   const nl=L.filter(o=>propLate(((PROP.get(o.sc)||{}).items||{})[o.id],S.act.get(o.id))).length;let lateNote='';
   if(nl){const m=await uiAsk({title:`${nl} propuesta${nl>1?'s':''} fuera de plazo`,text:`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} después del corte (${propCutTxt()}).`,input:{label:'¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.',required:true},ok:'Aceptar con este motivo',tone:'warn'});
     if(m==null||!m.trim()){toast(m==null?'No se aceptó ninguna.':'Escribe el motivo para aceptar las que llegaron fuera de plazo. No se aceptó ninguna.');return}lateNote=m.trim()}
-  for(const o of L){const r=await decideProp(o.sc,o.id,'ok',{bulk:true,lateNote});if(r==='ok')ok++;else why[r]=(why[r]||0)+1}
+  /* rápido (oct 2026): antes era una transacción por propuesta, una tras otra y todas sobre el mismo documento lhprop/{sc}
+     (≈ medio segundo cada una). Ahora se preparan todas y se guarda UNA transacción por subcontratista (en partes de 120):
+     relee lhprop/{sc} y las actividades; las que el SC o alguien cambió mientras tanto se saltan (quedan pendientes). */
+  const add=(k,n=1)=>{why[k]=(why[k]||0)+n};const by=new Map();
+  for(const o of L){const P_=await propPrep(o.sc,o.id,'ok',{bulk:true,lateNote});if(typeof P_==='string'){add(P_);continue}
+    if(PDBUSY.has(P_.key0)){add('busy');continue}if(!by.has(o.sc))by.set(o.sc,[]);by.get(o.sc).push(P_)}
+  if(by.size&&!db){toast('Sin conexión con la base.');return}
+  const FP=firebase.firestore.FieldPath;
+  await Promise.all([...by.entries()].map(async([sc,items])=>{for(let i=0;i<items.length;i+=120){const part=items.slice(i,i+120);part.forEach(P_=>PDBUSY.add(P_.key0));
+    try{const done=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const srvI=(ps.exists?(ps.data()||{}).items:null)||{};
+        const cur=await Promise.all(part.map(P_=>P_.o?tx.get(fcol('acts').doc(P_.id)):null));const go=[];const skip={};
+        part.forEach((P_,j)=>{const srv=srvI[P_.id];if(!srv||!srv.sent||propVer(srv)!==propVer(P_.it)){skip.ver=(skip.ver||0)+1;return}
+          if(P_.o){const as=cur[j];const c=as.exists?actNorm(as.data()):null;if(canon(c?strip(c):null)!==canon(P_.o.before?strip(P_.o.before):null)){skip.act=(skip.act||0)+1;return}P_.cur=c}
+          go.push(P_)});
+        const args=[];for(const P_ of go){const aref=fcol('acts').doc(P_.id);
+          if(P_.o){const body=strip(clone(P_.o.after));if(P_.cur){const d=fsDiff(strip(P_.cur),body,'acts',true);if(d.length)tx.update(aref,...d)}else tx.set(aref,body)}
+          args.push(new FP('items',P_.id),null);tx.set(fcol('lhphist').doc(P_.key),P_.h)}
+        if(args.length)tx.update(pref,...args);return{go,skip}});
+      done.go.forEach(P_=>{PDBUSY.delete(P_.key0);propLocal(P_);ok++});part.forEach(P_=>PDBUSY.delete(P_.key0));
+      for(const[k,n]of Object.entries(done.skip))add(k,n)}
+    catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));add('err',part.length);console.warn('aceptar',e)}}}));
   const W={closed:'cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
   toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}

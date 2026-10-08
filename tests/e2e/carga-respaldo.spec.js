@@ -4,6 +4,7 @@ import { openApp, noErrors } from './helpers.js';
 
 test('un rechazo de permisos en un historial no detiene la carga del respaldo', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
+  await page.click('[data-teamv="dat"]');
   page.on('dialog', d => d.accept());
   await page.evaluate(async () => {
     /* imita las reglas: lhlog solo lo escribe su autor */

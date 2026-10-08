@@ -67,12 +67,17 @@ test('equipo: el formulario no se borra con la actualización y la búsqueda fil
   await expect(page.locator('#temail')).toHaveValue('nuevo@obra.pe');
   await expect(page.locator('#tname')).toHaveValue('Nuevo Ingeniero');
   await page.fill('#tq', 'calidad');
-  await expect(page.locator('input[data-mem="calidad@obra.pe"][data-f="name"]')).toBeVisible();
-  await expect(page.locator('input[data-mem="editor@obra.pe"][data-f="name"]')).toHaveCount(0);
+  await expect(page.locator('tr[data-tm="calidad@obra.pe"]')).toBeVisible();
+  await expect(page.locator('tr[data-tm="editor@obra.pe"]')).toHaveCount(0);
   await page.fill('#tq', '');
-  await page.click('[data-trole="sc"]');
-  await expect(page.locator('input[data-mem="sc@obra.pe"][data-f="name"]')).toBeVisible();
-  await expect(page.locator('input[data-mem="campo@obra.pe"][data-f="name"]')).toHaveCount(0);
+  await page.selectOption('#tqrole', 'sc');
+  await expect(page.locator('tr[data-tm="sc@obra.pe"]')).toBeVisible();
+  await expect(page.locator('tr[data-tm="campo@obra.pe"]')).toHaveCount(0);
+  // la ficha (clic en la fila) cambia el nombre
+  await page.click('tr[data-tm="sc@obra.pe"]');
+  await page.fill('#lqm input[data-f="name"]', 'Sandra S.');
+  await page.locator('#lqm input[data-f="name"]').press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'sc@obra.pe').name)).toBe('Sandra S.');
   noErrors(errors, 'equipo');
 });
 

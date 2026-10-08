@@ -7,6 +7,7 @@ const FAKE = path.join(path.dirname(new URL(import.meta.url).pathname), 'fake-fi
 
 test('admin: crea una invitación del tareo (sin partida) y se distingue en la lista', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', tab: 'team', editar: false });
+  await page.click('[data-teamv="cap"]');
   await page.selectOption('#invsc', '__tcap');
   await page.click('#invgo');
   await expect(page.locator('.qrlb')).toContainText('Capataz del tareo');

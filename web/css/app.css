@@ -3197,3 +3197,26 @@ g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
 .dfec{margin-left:auto;font:500 12px var(--f-ui);text-transform:none;letter-spacing:0;color:var(--ink2)}
 @media (max-width:1100px){.dfr{grid-template-columns:130px minmax(0,1fr) 42px 100px}.dfr .dfc2,.dfr .dfc3{display:none}}
 @media (max-width:640px){.dfr{grid-template-columns:minmax(0,1fr) 44px;row-gap:4px}.dfr .dsn{grid-column:1/-1}.dfr .dsw{display:none}}
+
+/* Equipo reorganizado (oct 2026): secciones, una línea por persona y ficha de edición */
+.tseg{margin:0 0 12px;flex-wrap:wrap}.tseg button{height:32px;padding:0 14px}
+.tadd{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+.tadd .tin{flex:1 1 160px;min-width:0}.tadd .fgl{font:600 12px var(--f-ui);color:var(--muted)}
+.tfilt .tin{flex:0 1 auto}.tfilt .tqry{flex:1 1 240px}
+.tmem td{vertical-align:middle}
+.tmem td.tnm b{display:block;font-weight:600}.tmem td.tnm small{display:block;font-size:11.5px;color:var(--muted);margin-top:1px;overflow-wrap:anywhere}
+.tmem td.tsc,.tmem td.tpm{line-height:1.9}.tmem td.ted{text-align:right;white-space:nowrap}.tmem td.ted .ib{height:28px;font-size:12px}
+.scchip.ro{padding:2px 9px 2px 8px}
+.tedf{display:flex;flex-direction:column;gap:12px;margin:4px 0 12px}
+.tedf label{display:flex;flex-direction:column;gap:4px}.tedf .fgl{font:600 12px var(--f-ui);color:var(--muted)}
+.tedf .tin,.tedf select.ci{width:100%;box-sizing:border-box}
+.tedp{display:flex;flex-direction:column;gap:6px}.tedp label.chk{flex-direction:row;align-items:center;gap:8px}
+.tdat{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.tdat .note{margin:4px 0 8px}
+.tbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width:760px){.tseg{display:flex;overflow-x:auto;flex-wrap:nowrap}.tseg button{height:40px;flex:0 0 auto}
+  .tfilt .tin{flex:1 1 100%}.tmem td.ted{align-items:flex-start}.tmem td.ted .ib{height:40px}}
+.tmem tr.tgrp th{padding:2px 10px}.tmem .tgb{min-height:30px}
+.tmem tr.tclk{cursor:pointer}.tmem tr.tclk:hover td{background:var(--hover,rgba(127,127,127,.06))}
+.taddb{display:none}
+@media (max-width:760px){.taddb{display:flex;margin:12px 12px 0;width:calc(100% - 24px);justify-content:center;min-height:40px}
+  .tadd:not(.open){display:none}.tmem td.ted{display:none!important}}
