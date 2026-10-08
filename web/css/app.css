@@ -3078,3 +3078,9 @@ table.mx td.mxhlx{outline:3px solid var(--today);outline-offset:-3px;z-index:1}
 .mxrfoot{position:sticky;bottom:0;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-top:1px solid var(--line);box-shadow:var(--sh-2);z-index:5}
 .mxrfoot .ib{min-height:44px}
 @media (max-width:760px){.mxrbt button.mc{min-width:0;flex:1}.mxrbt{width:100%}.mxrfoot{bottom:calc(56px + env(safe-area-inset-bottom))}}
+/* cambios de los SC en la matriz (js/matriz-sc.js) */
+td.mc.scp::after{content:"";position:absolute;bottom:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#7a4fd0}
+.mxlr{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--line2)}
+.mxlr>span:first-child{display:flex;flex-direction:column;gap:2px;flex:1;min-width:220px}.mxlr small{color:var(--muted)}
+.mxlr.conf{background:var(--bad-soft)}.mxlr.conf small{color:var(--bad)}
+.mxlb{display:flex;gap:6px}.mxlb .ib{min-height:36px}

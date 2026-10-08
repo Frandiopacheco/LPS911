@@ -1047,3 +1047,31 @@ test('catálogo: el SC agrega actividades de su partida marcadas «por revisar»
   await assertFails(updateDoc(doc(sc, 'mcat/k50'), { name: 'Cambiada' }));
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'mcat/k50'), { name: 'Pruebas de presión', revOk: { by: 'editor@obra.pe' } }));
 });
+
+test('matriz: el SC cambia una celda de su partida por vez (con k) y deja constancia; no toca otras partidas', async () => {
+  const sc = user('sc@obra.pe'), ed = user('editor@obra.pe');
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'mcat/kg'), { name: 'Pintura', sc: 'c-gabel', cl: 't' });
+    await setDoc(doc(db, 'mcat/ko'), { name: 'Otra', sc: 'c-otro', cl: 't' });
+    await setDoc(doc(db, 'mamb/a1'), { tipo: 'tp1', c: { ko: 'p' }, by: 'editor@obra.pe', t: 1 });
+  });
+  const meta = { by: 'sc@obra.pe', n: 'SC', t: 2 };
+  await assertSucceeds(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 't' }, m: { kg: { ...meta, sc: true } }, k: 'kg', ...meta }, { merge: true }));
+  // otra partida, dos celdas a la vez, valor raro o tocar el tipo: no
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { ko: 't' }, m: { ko: meta }, k: 'ko', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p', ko: 't' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'x' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { tipo: 'tp2', c: { kg: 'p' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p' }, k: 'kg', ...meta, by: 'otro@obra.pe' }, { merge: true }));
+  // ambiente nuevo
+  await assertSucceeds(setDoc(doc(sc, 'mamb/a9'), { c: { kg: 'p' }, m: { kg: meta }, k: 'kg', ...meta }));
+  // constancia
+  await assertSucceeds(setDoc(doc(sc, 'mlog/l1'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'pend', ...meta }));
+  await assertFails(setDoc(doc(sc, 'mlog/l2'), { amb: 'a1', cat: 'ko', sc: 'c-otro', to: 't', st: 'pend', ...meta }));
+  await assertFails(setDoc(doc(sc, 'mlog/l3'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'ok', ...meta }));
+  await assertSucceeds(updateDoc(doc(sc, 'mlog/l1'), { st: 'undo' }));
+  await assertFails(updateDoc(doc(sc, 'mlog/l1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mlog/l1'), { st: 'rev', rev: { by: 'editor@obra.pe' } }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mlog/l1')));
+});

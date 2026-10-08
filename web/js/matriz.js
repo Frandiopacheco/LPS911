@@ -5,7 +5,7 @@
    mamb/{ambId} (tipo del ambiente y estados confirmados) y mver (fotos semanales). Detalle en docs/ia/matriz.md.
    Fase 1: editan administrador y editores; el resto solo la ve. */
 
-const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
+const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
   sel:new Set(),anchor:null,drag:null,moved:false,cmp:'',ali:null,aliV:-1,mc:null,mcK:''};
 const MXS={p:'Pendiente',c:'En curso',t:'Terminado',n:'No aplica'};
 const MXI={p:'',c:'◐',t:'✓',n:'–'};
@@ -34,10 +34,10 @@ let mverSub=null;
 function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&U.tab==='mat')requestRender()},()=>{});
   unsubs.push(()=>{if(mverSub)mverSub();mverSub=null;MX.ver.clear()})}
 function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
-  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'))requestRender()},
+  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'))requestRender()},
     err=>{MX.err=err&&err.code||'error';if(k in MX.ld)MX.ld[k]=true;if(ready&&U.tab==='mat')requestRender()}));
-  on('mcatp','prop');on('mtipo','tipo');
-  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
+  on('mcatp','prop');on('mtipo','tipo');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'));
+  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 
 /* alias → actividad del catálogo */
@@ -109,6 +109,7 @@ function renderMat(main){ensureMx();ensureMver();
     <div class="tile"><span class="k">Sin validar</span><span class="v">${tot.sug} <small>propuestas del sistema</small></span></div>
     ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
    </div>
+   ${ed&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
    ${ed&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&ed?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
@@ -120,6 +121,7 @@ function renderMat(main){ensureMx();ensureMver();
    </div>`;
   if(!cols.length){h+=`<p class="note">No hay actividades del catálogo en ${U.piso?'este piso':'los pisos'} con este filtro.</p></div></div>`;main.innerHTML=h;mxWire(main);return}
   /* grupos de columnas por subcontratista */
+  const PSC=typeof mxLogKeys==='function'?mxLogKeys():null;
   const grp=[];cols.forEach(c=>{const g=grp[grp.length-1];if(g&&g.sc===c.sc)g.n++;else grp.push({sc:c.sc,n:1})});
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const multi=visPisos().length>1;const NC=cols.length+3;
@@ -136,7 +138,7 @@ function renderMat(main){ensureMx();ensureMver();
        <td class="mxpc">${p==null?'':Math.round(100*p)+'%'}</td>`;
       cols.forEach((c,ci)=>{const o=C[c.id];const k=a.id+'|'+c.id;const sel=MX.sel.has(k)?' sl':'';
         if(!o){h+=`<td class="mc x${sel}" data-k="${ci}"></td>`;return}
-        let cl=`mc s-${o.s}${o.sug?' sug':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'');
+        let cl=`mc s-${o.s}${o.sug?' sug':''}${PSC&&PSC.has(k)?' scp':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'');
         if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){cl+=' chg';tt+=` · antes: ${b?MXS[b]:'no estaba'}`}}
         h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
@@ -171,6 +173,7 @@ function mxWire(main){mxWireV(main);
   const imp=$('#mximp');if(imp)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)};
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
+  const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
@@ -196,14 +199,16 @@ document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEd())
   const m={'1':'p','2':'c','3':'t','0':'n',Enter:'ok'}[e.key];if(m){e.preventDefault();closePop();mxApply(m);return}if(e.key==='Escape'){MX.sel.clear();mxPaintSel()}});
 
 /* ficha de una celda: de dónde sale, qué hay en el lookahead y (si edita) cambiar su estado */
-function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!cat||!a)return;const o=(mxCells().get(c.amb)||{})[c.cat];const ed=mxEd();
+function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!cat||!a)return;const o=(mxCells().get(c.amb)||{})[c.cat];const ed=mxEd();const scE=!ed&&typeof mxScCan==='function'&&mxScCan(cat);
   const m=MX.amb.get(c.amb)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
   const src=!o?'No está en este ambiente.':o.src==='tipo'?`Del tipo de ambiente «${esc(tp?tp.name:'')}».`:o.src==='look'?'Del lookahead.':'Agregada a mano.';
   const L=(o&&o.acts||[]).map(id=>S.act.get(id)).filter(Boolean).map(x=>{const d=x.days||[];const dn=DONE.get(x.id);return`<div class="ptx">${esc(x.name)} · ${d.length?esc(fmtD(d[0]))+(d.length>1?'–'+esc(fmtD(d[d.length-1])):''):'sin días'}${dn?` · <b>terminada ${esc(fmtD(dn))}</b>`:''}</div>`}).join('');
   openPop(td,`<div class="ph">${esc(cat.name)}</div><div class="ptx">${esc(a.code)} ${esc(a.name)} · ${esc(conOf(cat.sc).name)}</div>
    <div class="ptx">${o?`<b>${MXS[o.s]}</b>${o.sug?' · propuesta del sistema, sin validar':''}`:''} ${src}</div>${L?'<hr><div class="ph">En el lookahead</div>'+L:''}
+   ${typeof mxWhoHtml==='function'?mxWhoHtml(c.amb,c.cat):''}
+   ${scE?`<hr>${['p','c','t','n'].map(s=>`<button data-do="scs" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}`:''}
    ${ed?`<hr>${['p','c','t','n'].map(s=>`<button data-do="s" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}${o&&o.sug?'<button data-do="s" data-s="ok">✓ Validar como está</button>':''}${o&&o.src==='man'?'<button data-do="rm" class="danger">Quitar de este ambiente</button>':''}`:''}`,
-   {s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat)})}
+   {s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat),scs:d=>mxScSet(c.amb,c.cat,d.s)})}
 /* quita los días desde mañana (hoy ya está comprometido) de las filas del lookahead; pasa por apply: Deshacer, historial y días cerrados */
 async function mxUnprogram(ids,name){if(!mxEd())return;const T=todayIso();const ops=[];let nd=0;
   for(const id of ids){const x=S.act.get(id);if(!x)continue;const keep=(x.days||[]).filter(d=>d<=T);const drop=(x.days||[]).filter(d=>d>T);if(!drop.length)continue;nd+=drop.length;
@@ -213,8 +218,11 @@ async function mxUnprogram(ids,name){if(!mxEd())return;const T=todayIso();const 
   apply(ops,`«${name}»: días desde mañana quitados (la matriz dice que ya no va)`)}
 
 /* guarda estados: un documento por ambiente (set con merge, así dos personas pueden marcar celdas distintas del mismo ambiente a la vez) */
+/* m.<cat> = quién cambió la celda por última vez ({by,n,t,sc?}); sirve para saber qué confirmó el ingeniero y qué cambió un SC */
+function mxMeta(c,sc){const DEL=firebase.firestore.FieldValue.delete();const meta={by:me.email,n:me.name||'',t:NOW()};if(sc)meta.sc=true;const m={};
+  for(const[k,v]of Object.entries(c))m[k]=v&&typeof v==='object'&&!Array.isArray(v)&&!MXS[v]?DEL:meta;return m}
 async function mxWrite(byAmb,label,undo){const ps=[];const meta={by:me.email,n:me.name||'',t:NOW()};
-  for(const[amb,c]of byAmb)ps.push(fcol('mamb').doc(amb).set({c,...meta},{merge:true}));
+  for(const[amb,c]of byAmb)ps.push(fcol('mamb').doc(amb).set({c,m:mxMeta(c),...meta},{merge:true}));
   try{await Promise.all(ps);if(undo)toast(label,'Deshacer',()=>mxWrite(undo,'Deshecho',null));else toast(label)}catch(e){toast('No se pudo guardar: '+(e&&e.code||e))}}
 function mxApply(s){if(!mxEd()||!MX.sel.size)return;const cells=mxCells();const DEL=firebase.firestore.FieldValue.delete();const by=new Map(),un=new Map();let n=0;
   for(const k of MX.sel){const[amb,cat]=k.split('|');const o=(cells.get(amb)||{})[cat];if(s==='ok'&&!o)continue;const v=s==='ok'?o.s:s;

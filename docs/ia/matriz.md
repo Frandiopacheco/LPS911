@@ -61,6 +61,15 @@ Vista `U.mxV='rec'` («Recorrido»). Decidido con el dueño: entrar por **lista*
 - **Confirmar y seguir**: guarda lo propuesto tal cual (`c`) y `mamb.rv={d,t,by,n}` y pasa al siguiente ambiente de la lista. «Siguiente sin confirmar» no guarda.
 - Prueba: `tests/e2e/matriz-rec.spec.js`.
 
+## Los SC llenan su partida (`js/matriz-sc.js`, oct 2026)
+
+Decidido con el dueño: el SC cambia **directo** (sin propuesta) el estado de las actividades de **su partida** en cualquier ambiente —también lo que el ingeniero ya confirmó, que queda destacado— o las agrega a un ambiente. Cualquier editor revisa.
+- `mxScCan(cat)`: SC, actividad de su partida (`myScsI()`), no archivada. En la Matriz (ficha de la celda: botones `data-do="scs"`; las de otras partidas solo se ven) y en el Recorrido (sus filas habilitadas y sus sugerencias; sin «Confirmar», no marca `rv`).
+- `mxScSet`: un lote con `mamb` (una celda, `k` = actividad, `m.<cat>={by,n,t,sc:true}`) y la constancia `mlog/{id}` `{amb, cat, sc, from, sugFrom, to, conf, confN, st:'pend', by, n, t}` (`conf` = antes la había confirmado un ingeniero). «Deshacer» del aviso: vuelve la celda y marca la constancia `st:'undo'`.
+- **Metadatos por celda** `mamb.m.<cat>`: quién la cambió por última vez (también los ingenieros: `mxMeta` en `mxWrite` y en el Recorrido). La ficha lo muestra (`mxWhoHtml`).
+- **Revisión** (editores; `MX.log` = `mlog` con `st=='pend'`): tarjeta en Hoy «Cambios de los SC en la matriz» (roja si alguno contradice lo confirmado), aviso en la Matriz y punto morado en la celda (`.scp`). `mxLogDlg`: por SC, «✓ Visto» (`st:'ok'`), «✓ Todo visto» y «↶ Revertir» (`mxLogRevert`: vuelve la celda a `from`; si cambió después, pregunta).
+- Reglas: el SC escribe `mamb` solo con `k` de una actividad de su partida (`mcat/k.sc in scsOf()`), una celda por vez (`c` y `m` cambian solo en `k`), valores válidos, sin tocar `tipo`/`rv`; `mlog` lo crea quien cambia (`st:'pend'`), lo actualiza un editor, el SC solo a `undo` la suya; no se borra. Pruebas en `tests/rules` y `tests/e2e/matriz-sc.spec.js`.
+
 ## Catálogo ↔ Lookahead (`js/matriz-look.js`, oct 2026)
 
 Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el vínculo sigue siendo **por nombre** (alias `al` + nombre del catálogo, `mxAli`), no se agrega ningún campo a `acts`.

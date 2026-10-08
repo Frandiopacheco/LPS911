@@ -25,6 +25,10 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(canWrite&&r!=='sc'&&typeof mxRevList==='function'){ensureMcat();const L=mxRevList();
     if(L.length)out.mcat={k:'mcat',title:'Actividades nuevas en el catálogo',n:L.length,tone:'warn',sub:'Las agregaron los subcontratistas desde el lookahead: revisa nombre, clase y tipo',
       items:L.map(c=>({t:c.name,s:`${conOf(c.sc).name} · ${c.rev.n||c.rev.by||''} · ${fmtD(ldt(c.rev.t||0))}`})),go:'mat',goLabel:'Revisar en el Catálogo',empty:''}}
+  /* cambios que hicieron los SC en la matriz (su partida) y ningún editor revisó */
+  if(canWrite&&r!=='sc'&&typeof mxLogPend==='function'){ensureMx();const L=mxLogPend();
+    if(L.length)out.mlog={k:'mlog',title:'Cambios de los SC en la matriz',n:L.length,tone:L.some(l=>l.conf)?'bad':'warn',sub:'Ya aplicados: revisa si están bien o reviértelos',
+      items:L.slice(0,12).map(l=>({t:`${(MX.cat.get(l.cat)||{}).name||''} → ${MXS[l.to]||l.to}`,s:`${conOf(l.sc).name} · ${(S.amb.get(l.amb)||{}).code||''}${l.conf?' · ⚠ cambió lo confirmado':''}`})),go:'mat',goLabel:'Revisar',empty:''}}
   /* cambios del plan que te involucran: lo que la reunión (o el ingeniero) reprogramó para ayer, hoy o el próximo día hábil.
      Sale de las marcas ↷ del lookahead (acts.rpl), que se ponen al publicar el plan o al reprogramar con el plan ya publicado. */
   {const d0=wshift(d,-1);const mine=SCK()?new Set(myScsI()):null;const L=[];
@@ -74,7 +78,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   if(canNP()){const L=npItems([d],new Set(visPisos().map(p=>p.id)));const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
     out.np={k:'np',title:'Trabajo no programado hoy',n:0,tone:'',sub:'',items:[],go:'campo',goLabel:VEED()?'Ir al recorrido (Campo › Plano)':'Ver en Campo',
       empty:L.length?`${L.length} registrado${L.length===1?'':'s'}: ${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([sc,k])=>conOf(sc).name+' '+k).join(' · ')}`:'Nada registrado hoy. En el recorrido, toca en el plano donde veas una cuadrilla trabajando sin estar programada.'}}
-  const order=r==='sc'?['cplan','obra','restr','lib']:r==='campo'?['cplan','campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','mcat','cplan','plan2','campo','np','cli','restr','lib','plan','resp'];
+  const order=r==='sc'?['cplan','obra','restr','lib']:r==='campo'?['cplan','campo','np','restr','lib']:r==='area'?(isCalArea()?['lib','np','restr']:['restr','lib']):r==='lector'?['restr','lib']:r==='veedor'?['np','restr','lib']:['prop','mcat','mlog','cplan','plan2','campo','np','cli','restr','lib','plan','resp'];
   /* primero lo que tiene pendientes (en el orden del rol); lo que está al día, al final */
   const L=order.map(k=>out[k]).filter(Boolean);return[...L.filter(c=>c.n),...L.filter(c=>!c.n)]}
 
@@ -82,4 +86,4 @@ function renderHoy(main){const d=todayIso();const C=hoyCards();const n=C.reduce(
   const hi=(()=>{const h=+hhmm(NOW()).slice(0,2);return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'})();
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead(`${hi}, ${(me.name||'').split(' ')[0]||''}`.replace(/, $/,''),`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · ${pisoLabel()} · ${n?`${n} cosa${n===1?'':'s'} por atender`:'todo al día'}`)}
     <div class="hoyg">${C.map(hoyCard).join('')}</div></div></div>`;
-  main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(!b)return;if(b.closest('[data-hoy="np"]')){CU.view='plan';saveCU()}if(b.closest('[data-hoy="mcat"]'))U.mxV='cat';goTab(b.dataset.hgo)}}
+  main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(!b)return;if(b.closest('[data-hoy="np"]')){CU.view='plan';saveCU()}if(b.closest('[data-hoy="mcat"]'))U.mxV='cat';if(b.closest('[data-hoy="mlog"]')){U.mxV='mat';setTimeout(()=>{if(typeof mxLogDlg==='function')mxLogDlg()},50)}goTab(b.dataset.hgo)}}

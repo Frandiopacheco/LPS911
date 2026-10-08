@@ -85,14 +85,16 @@ test('foto semanal y comparar: marca lo que cambió desde la foto', async ({ pag
   noErrors(errors, 'foto semanal');
 });
 
-test('subcontratista: ve la matriz y la ficha, pero no cambia nada', async ({ page }) => {
+test('subcontratista: ve la matriz; en su partida solo tiene los botones de SC', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await expect(page.locator('#mxt')).toBeVisible();
   await expect(page.locator('select[data-mxtipo]')).toHaveCount(0);
   await expect(page.locator('#mxfoto')).toHaveCount(0);
   await cell(page, 'a1', 0).click();
   await expect(page.locator('#pop')).toContainText('Redes empotradas');
-  await expect(page.locator('#pop button[data-s]')).toHaveCount(0);
+  // su partida (c1): solo los botones de SC (cambio directo con constancia), no los del ingeniero
+  await expect(page.locator('#pop button[data-do="s"]')).toHaveCount(0);
+  await expect(page.locator('#pop button[data-do="scs"]')).toHaveCount(4);
   noErrors(errors, 'matriz SC');
 });
 

@@ -50,18 +50,19 @@ function mxRecSug(amb,cells){const m=MX.amb.get(amb)||{};const tp=m.tipo&&MX.tip
 
 function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(id);const m=MX.amb.get(id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
   const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c).sort((x,y)=>mxSeqCmp(x.c,y.c));
-  const open=items.filter(r=>r.o.s!=='t'&&r.o.s!=='n'),done=items.filter(r=>r.o.s==='t'||r.o.s==='n');const sug=mxRecSug(id,cells);
+  const open=items.filter(r=>r.o.s!=='t'&&r.o.s!=='n'),done=items.filter(r=>r.o.s==='t'||r.o.s==='n');let sug=mxRecSug(id,cells);
   const L=mxRecAmbs();const ix=L.findIndex(o=>o.a.id===id);const nx=L[ix+1];const w0=mxWk0();const rvOk=m.rv&&m.rv.d>=w0;const nSug=items.filter(r=>r.o.sug).length;
   const T=todayIso();
   const info=r=>{const xs=r.o.acts.map(i=>S.act.get(i)).filter(Boolean);const nd=xs.flatMap(x=>(x.days||[]).filter(d=>d>=T)).sort()[0];const dn=xs.map(x=>DONE.get(x.id)).filter(Boolean).sort().pop();
     return[dn?`terminada en Campo ${fmtD(dn)}`:'',nd?`programada ${fmtD(nd)}`:'',r.o.sug?'propuesta del sistema':''].filter(Boolean).join(' · ')};
+  const canR=r=>ed||mxScCan(r.c);
   const row=r=>`<div class="mxri${r.o.sug?' sug':''}" data-mxrc="${esc(r.c.id)}"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span><span><b>${esc(r.c.name)}</b><small>${esc(conOf(r.c.sc).name)}${info(r)?' · '+esc(info(r)):''}</small></span></div>
-    <div class="mxrbt" role="group" aria-label="Estado de ${esc(r.c.name)}">${['p','c','t','n'].map(s=>`<button class="mc s-${s}${r.o.s===s?' on':''}${r.o.s===s&&r.o.sug?' sug':''}" data-mxrs="${s}"${ed?'':' disabled'} aria-pressed="${r.o.s===s}"><i>${MXI[s]||'○'}</i>${MXS[s]}</button>`).join('')}</div></div>`;
+    <div class="mxrbt" role="group" aria-label="Estado de ${esc(r.c.name)}">${['p','c','t','n'].map(s=>`<button class="mc s-${s}${r.o.s===s?' on':''}${r.o.s===s&&r.o.sug?' sug':''}" data-mxrs="${s}"${canR(r)?'':' disabled'} aria-pressed="${r.o.s===s}"><i>${MXI[s]||'○'}</i>${MXS[s]}</button>`).join('')}</div></div>`;
   let h=`<div class="scroll"><div class="wrap mxwrap mxrw">${head}${mxViewSeg()}
    <div class="mxrhd"><button class="ib" id="mxrback">← Lista</button><div><h3>${esc(a.code)} · ${esc(a.name)}</h3><span class="note">${esc((secOf(a.sectorId)||{}).name||'')}${tp?' · '+esc(tp.name):''} · ${rvOk?'✓ revisado '+esc(mxRvTxt(m.rv)):m.rv?'última revisión '+esc(mxRvTxt(m.rv)):'sin revisar'}</span></div></div>
    ${open.length?`<div class="mxrl">${open.map(row).join('')}</div>`:'<p class="callout">Todo lo de este ambiente está terminado o no aplica.</p>'}
    ${done.length?`<details class="mxrdone"${MXR.showDone?' open':''}><summary>Terminadas o que no aplican (${done.length})</summary><div class="mxrl">${done.map(row).join('')}</div></details>`:''}
-   ${sug.length&&ed?`<details class="mxrsug"><summary>¿Falta algo? ${sug.length} ${sug.length===1?'sugerencia':'sugerencias'}</summary>${sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join('')}</details>`:''}
+   ${(sug=sug.filter(x=>ed||mxScCan(x.c))).length?`<details class="mxrsug"><summary>¿Falta algo? ${sug.length} ${sug.length===1?'sugerencia':'sugerencias'}</summary>${sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join('')}</details>`:''}
    </div></div>
    <div class="mxrfoot">${ed?`<button class="ib pri" id="mxrok">✓ Confirmar${nSug?` (${nSug} sin validar quedan como están)`:''}${nx?' y seguir →':''}</button>`:''}${nx?`<button class="ib" id="mxrnext">Siguiente sin confirmar →</button>`:''}</div>`;
   main.innerHTML=h;mxWireV(main);
@@ -70,9 +71,9 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
   const nb=$('#mxrnext');if(nb)nb.onclick=()=>go(nx);
   const ok=$('#mxrok');if(ok)ok.onclick=async()=>{const c={};for(const r of items)if(r.o.sug)c[r.c.id]=r.o.s;
     const rv={d:todayIso(),t:NOW(),by:me.email,n:me.name||''};ok.disabled=true;
-    try{await fcol('mamb').doc(id).set({...(Object.keys(c).length?{c}:{}),rv,by:me.email,n:me.name||'',t:NOW()},{merge:true});toast(`${a.code} revisado`);go(nx)}catch(e){ok.disabled=false;toast('No se pudo guardar: '+(e&&e.code||e))}};
+    try{await fcol('mamb').doc(id).set({...(Object.keys(c).length?{c,m:mxMeta(c)}:{}),rv,by:me.email,n:me.name||'',t:NOW()},{merge:true});toast(`${a.code} revisado`);go(nx)}catch(e){ok.disabled=false;toast('No se pudo guardar: '+(e&&e.code||e))}};
   const dt=main.querySelector('.mxrdone');if(dt)dt.ontoggle=()=>{MXR.showDone=dt.open};
-  main.querySelectorAll('[data-mxrs]').forEach(b=>b.onclick=()=>{if(!ed)return;const cid=b.closest('[data-mxrc]').dataset.mxrc;const s=b.dataset.mxrs;const prev=((MX.amb.get(id)||{}).c||{})[cid];if(prev===s)return;
+  main.querySelectorAll('[data-mxrs]').forEach(b=>b.onclick=()=>{const cid=b.closest('[data-mxrc]').dataset.mxrc;const s=b.dataset.mxrs;if(!ed){if(mxScCan(MX.cat.get(cid)))mxScSet(id,cid,s);return}const prev=((MX.amb.get(id)||{}).c||{})[cid];if(prev===s)return;
     const DEL=firebase.firestore.FieldValue.delete();mxWrite(new Map([[id,{[cid]:s}]]),`${MX.cat.get(cid).name}: ${MXS[s]}`,new Map([[id,{[cid]:prev===undefined?DEL:prev}]]))});
-  main.querySelectorAll('[data-mxradd]').forEach(b=>b.onclick=()=>{const cid=b.dataset.mxradd;const DEL=firebase.firestore.FieldValue.delete();
+  main.querySelectorAll('[data-mxradd]').forEach(b=>b.onclick=()=>{const cid=b.dataset.mxradd;if(!ed){mxScSet(id,cid,'p');return}const DEL=firebase.firestore.FieldValue.delete();
     mxWrite(new Map([[id,{[cid]:'p'}]]),`Agregada: ${MX.cat.get(cid).name} (pendiente)`,new Map([[id,{[cid]:DEL}]]))})}
