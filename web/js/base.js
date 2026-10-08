@@ -82,7 +82,7 @@ function renderWho(){
   peerEdits=list.filter(p=>!p.isMe&&typeof p.act==='string'&&p.act).map(p=>({act:p.act,name:String(p.name||'Alguien'),color:colorOf(p.uid)}));
   markPeers();
 }
-function markPeers(){const g=$('#grid');if(!g)return;g.querySelectorAll('tr.peer').forEach(tr=>{tr.classList.remove('peer');tr.removeAttribute('title')});
+function markPeers(){const g=$('#grid');if(!g)return;if(typeof lkHlPaint==='function')lkHlPaint();g.querySelectorAll('tr.peer').forEach(tr=>{tr.classList.remove('peer');tr.removeAttribute('title')});
   for(const e of peerEdits){const tr=g.querySelector(`tr[data-a="${CSS.escape(e.act)}"]`);if(tr){tr.classList.add('peer');tr.style.setProperty('--pc',e.color);tr.title=e.name+' está editando esta fila'}}}
 function saveBlob(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
 /* Cuadro de causas de no cumplimiento (formato de la empresa): código, nombre, qué incluye y si por defecto es imputable al SC */

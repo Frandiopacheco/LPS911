@@ -55,7 +55,7 @@ test('«Ver en el lookahead» muestra una actividad vencida (de la semana pasada
   await expect(page.locator('[data-rgo]')).toHaveCount(1);
   await page.evaluate(() => { U.showPast = false; U.q = 'nada que coincida'; saveUI(); });
   await page.locator('[data-rgo="vx"]').first().click();
-  await expect(page.locator('#grid tr.rflash[data-a="vx"]')).toHaveCount(1);
+  await expect(page.locator('#grid tr.rhl[data-a="vx"]')).toHaveCount(1);
   await expect(page.locator('#toast')).toContainText('no ejecutada');
   noErrors(errors, 'ver vencida');
 });
@@ -66,7 +66,12 @@ test('«Ver en el lookahead» resalta la fila y «Ver en el plano» lleva a su z
     ['ambientes', 'a2', { sectorId: 's1', code: 'A-2', name: 'Dpto 102', order: 1, geo: { L1: [400, 100, 600, 100, 600, 300, 400, 300] } }]];
   const errors = await openApp(page, { tab: 'restr', extra: [...LAMINA, ...AMB] });
   await page.locator('[data-rgo="t0"]').first().click();
-  await expect(page.locator('#grid tr.rflash[data-a="t0"]')).toHaveCount(1);
+  await expect(page.locator('#grid tr.rhl[data-a="t0"]')).toHaveCount(1);
+  // sigue resaltada aunque la grilla se redibuje (llega un dato, se desplaza) y se apaga sola a los ~3 s
+  await page.evaluate(() => render());
+  await expect(page.locator('#grid tr.rhl[data-a="t0"]')).toHaveCount(1);
+  expect(await page.locator('#grid tr.rhl').count()).toBe(1);
+  await expect(page.locator('#grid tr.rhl')).toHaveCount(0, { timeout: 5000 });
   await page.locator('.tab[data-tab="restr"], [data-tab="restr"]').first().click();
   await page.locator('[data-rmap="t0"]').first().click();
   const t0 = await page.evaluate(() => S.act.get('t0').days.slice().sort()[0]);
@@ -97,4 +102,21 @@ test('exportar las restricciones a Excel con los filtros de la pantalla; la tabl
   expect(ws.G6.v).toBe('SC ELECTRICAS');
   expect(ws.A7).toBeUndefined();
   noErrors(errors, 'restricciones excel');
+});
+
+test('el responsable se elige del equipo (personas, empresas o áreas); un nombre antiguo queda marcado', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'restr', extra: [['restr', 'rz', { actId: 't0', pisoId: 'p1', type: 'Materiales', desc: 'Prueba', resp: 'Juanito Pérez', need: '2026-10-05', freed: '', status: 'pend', created: '2026-10-01', sc: 'c3', by: 'frandiopacheco@gmail.com' }]] });
+  const sel = page.locator('select[data-r="rz"][data-f="resp"]').first();
+  await expect(sel).toHaveClass(/rbad/);
+  const opts = await sel.locator('option').allTextContents();
+  expect(opts.some(o => o.startsWith('Elena Editora'))).toBe(true); // persona del equipo
+  expect(opts).toContain('SC TARRAJEO'); // empresa
+  expect(opts).toContain('Calidad'); // área
+  expect(opts).toContain('Juanito Pérez (no está en el equipo)');
+  await sel.selectOption('Elena Editora');
+  await expect.poll(() => page.evaluate(() => __dbGet('restr', 'rz').resp)).toBe('Elena Editora');
+  await expect(page.locator('select[data-r="rz"][data-f="resp"]').first()).not.toHaveClass(/rbad/);
+  // no se puede escribir cualquier nombre
+  expect(await page.locator('input[data-r="rz"][data-f="resp"]').count()).toBe(0);
+  noErrors(errors, 'responsable del equipo');
 });

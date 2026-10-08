@@ -3223,3 +3223,11 @@ g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
 /* fila del lookahead fuera del catálogo (∉) o de otro SC */
 .mxbadge.mxcb{background:var(--warn-soft,#fff3d6);color:var(--warn,#9a6a12);border-color:var(--warn,#9a6a12)}
 .mxscs{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+/* «Ver en el lookahead»: toda la fila resaltada ~3 s (lkHighlight); las barras de los días (::after) quedan encima */
+#grid tr.rhl>td{background-color:color-mix(in srgb,var(--today) 34%,transparent)!important;box-shadow:inset 0 2px 0 var(--today),inset 0 -2px 0 var(--today)}
+#grid tr.rhl>td:first-child{box-shadow:inset 4px 0 0 var(--today),inset 0 2px 0 var(--today),inset 0 -2px 0 var(--today)}
+#grid tr.rhl .ci,#grid tr.rhl .anv{background:transparent!important;font-weight:700}
+#grid tr.rhl>td{animation:rhlin .5s ease-out}@keyframes rhlin{from{background-color:var(--today)}}
+@media (prefers-reduced-motion:reduce){#grid tr.rhl>td{animation:none}}
+/* responsable de restricción: elegido del equipo; un nombre antiguo fuera del equipo se marca */
+select.rresp{max-width:100%}select.rresp.rbad{border:1px solid var(--bad)!important;color:var(--bad)}

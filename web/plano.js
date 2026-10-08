@@ -1834,7 +1834,7 @@ function dzRes(btn,x){const types=P().restrTypes||[];
   openPop(btn,`<div class="ph">Restricción · ${esc(short(x.name,40))}</div><div class="ptx">No va el ${fmtD(M.date)}. La restricción queda en <b>Restricciones</b>, amarrada a esta actividad.</div>
     <div class="qrow"><select id="dzrt" aria-label="Tipo">${types.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div>
     <div class="qrow"><input id="dzrd" placeholder="¿Qué falta?" style="width:240px;text-align:left" aria-label="Descripción"></div>
-    <div class="qrow"><input id="dzrr" value="${esc(conOf(x.sc).name)}" placeholder="Responsable" style="width:150px;text-align:left" aria-label="Responsable"><input type="date" id="dzrn" value="${M.date}" aria-label="Para cuándo"></div>
+    <div class="qrow"><select id="dzrr" style="width:170px" aria-label="Responsable">${typeof respOpts==='function'?respOpts(conOf(x.sc).name):''}</select><input type="date" id="dzrn" value="${M.date}" aria-label="Para cuándo"></div>
     <button data-do="ok" class="pri">Guardar · no va</button>`,
     {ok:()=>{const desc=($('#dzrd')||{}).value?.trim()||'';if(!desc){toast('Escribe qué falta.');return}const rid=uid('res');
       apply([op('restr',rid,{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#dzrt')||{}).value||'',desc,resp:($('#dzrr')||{}).value||'',need:($('#dzrn')||{}).value||M.date,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción creada');
