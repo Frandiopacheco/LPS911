@@ -3,6 +3,8 @@ import { test, expect } from '@playwright/test';
 /* filtro de SC de la matriz: menú «Subcontratistas ▾» (clic = solo ese, Ctrl+clic = sumar) */
 const pickSc = async (page, id, add) => { if (!(await page.locator('#pop:not([hidden]) [data-mxsk]').count())) await page.click('#mxscdd'); await page.click(`#pop [data-mxsk="${id}"]`, add ? { modifiers: ['Control'] } : {}); };
 import { openApp, noErrors } from './helpers.js';
+/* estas pruebas ubican las celdas por posición: columnas en orden alfabético (el orden por programación se prueba aparte) */
+test.beforeEach(async ({ page }) => { await page.addInitScript(() => { try { const k = 'lps911.ui'; const u = JSON.parse(localStorage.getItem(k) || '{}'); if (!u.mxOrd) { u.mxOrd = 'az'; localStorage.setItem(k, JSON.stringify(u)); } } catch (e) {} }); });
 
 /* catálogo de prueba: «Redes empotradas» (SC c1) y «Tarrajeo de muros» (SC c3); el tipo «Dpto» trae las dos */
 const CAT = [
@@ -142,4 +144,21 @@ test('vista de escritorio: cabecera compacta, tamaño de celda y ayuda en un bot
   await expect(page.locator('#pop')).toContainText('Cómo se usa la matriz');
   await expect(page.locator('#mxt th[data-mxgo]').first()).toBeVisible();
   noErrors(errors, 'vista escritorio');
+});
+
+test('orden por programación: primero el SC con más días programados de hoy a 3 semanas; sin programar al final', async ({ page }) => {
+  const X = [['mcat', 'k1', { name: 'Redes empotradas', sc: 'c1', cl: 't', al: ['redes empotradas'], ord: 10 }],
+    ['mcat', 'k2', { name: 'Tarrajeo de muros', sc: 'c3', cl: 't', al: ['tarrajeo de muros'], ord: 20 }],
+    ['mcat', 'k3', { name: 'Pintura', sc: 'c2', cl: 't', al: ['pintura'], ord: 5 }],
+    ['mtipo', 'tp1', { name: 'Dpto', acts: ['k3'], order: 10 }], ['mamb', 'a1', { tipo: 'tp1', by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'mat', extra: X });
+  const ids = () => page.evaluate(() => MX.view.cols.map(c => c.id));
+  await page.selectOption('#mxord', 'prog');
+  // tarrajeo (c3): 2 días × 2 ambientes; redes (c1): solo hoy × 2; pintura (c2): pendiente sin programar → al final
+  await expect.poll(ids).toEqual(['k2', 'k1', 'k3']);
+  await expect(page.locator('#mxt th.mxc.mxpg')).toHaveCount(2);
+  await page.selectOption('#mxord', 'az');
+  const az = await page.evaluate(() => [...MX.view.cols].sort((a, b) => conOf(a.sc).name.localeCompare(conOf(b.sc).name)).map(c => c.id));
+  expect(await ids()).toEqual(az);
+  noErrors(errors, 'orden por programación');
 });
