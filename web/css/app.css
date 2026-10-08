@@ -3096,3 +3096,10 @@ body.lkfs .top,body.lkfs #bnav,body.lkfs #verban{display:none!important}
 @media (min-width:761px) and (max-width:1366px){#ppbar .ppx{display:none}}
 .mxbadge.mxdn{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
 td.mc.dsc{position:relative}td.mc.dsc::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--today)}
+/* Recorrido: «¿Falta algo?» siempre a la vista y buscador del catálogo */
+.mxrsq{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0}.mxrsq b{color:var(--ink2)}
+.mxpkl{display:flex;flex-direction:column;gap:4px;max-height:min(420px,60vh);overflow:auto;margin-top:8px}
+.mxpk{display:flex;align-items:center;gap:10px;text-align:left;min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);font:inherit;cursor:pointer}
+.mxpk:hover{background:var(--accent-soft)}.mxpk span:last-child{display:flex;flex-direction:column}.mxpk small{color:var(--muted)}
+/* Matriz en modo edición: arrastrar sobre las celdas selecciona (en tablet no desplaza); en consulta se desplaza normal */
+table.mx.ed td.mc{touch-action:none}

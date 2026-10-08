@@ -12,6 +12,7 @@ const cell = async (page, amb, cat) => { const i = await page.evaluate(c => MX.v
 test('SC: cambia directo su partida (queda constancia), no la de otros; si contradice al ingeniero queda destacado', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; render(); });
+  await page.click('#mxedit');
   await (await cell(page, 'a1', 'k1')).click();
   await page.click('#pop button[data-s="t"][data-do="scs"]');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c)).toEqual({ k1: 't' });

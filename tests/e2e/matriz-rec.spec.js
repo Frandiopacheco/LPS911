@@ -24,10 +24,13 @@ test('recorrido: checklist en secuencia, sugerencia del tipo, confirmar marca re
   // terminada: pasa a «Terminadas o que no aplican»
   await expect(page.locator('.mxrdone')).toContainText('(1)');
   // ¿Falta algo?: los otros 2 Dpto tienen Pintura
-  await page.click('.mxrsug summary');
   await expect(page.locator('.mxrsug')).toContainText('2 de 2 Dpto la tienen');
   await page.click('[data-mxradd="k3"]');
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k3)).toBe('p');
+  // «+ Otra actividad»: busca en el catálogo lo que este ambiente no tiene
+  await page.click('#mxrpick');
+  await expect(page.locator('#mxpkl [data-mxpk="k3"]')).toHaveCount(0);
+  await page.click('#lqm .lqbtns [data-lqx]');
   // confirmar: lo propuesto (tarrajeo) queda confirmado, ambiente revisado y pasa al siguiente
   await page.click('#mxrok');
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').rv?.by)).toBe('frandiopacheco@gmail.com');

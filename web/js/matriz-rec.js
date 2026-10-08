@@ -43,10 +43,22 @@ function renderMxRec(main,head){const cells=mxCells();const ed=mxEd();
 /* sugerencias: actividades que la mayoría de los ambientes del mismo tipo tienen (o, sin tipo, los del mismo nombre) y este no */
 function mxRecSug(amb,cells){const m=MX.amb.get(amb)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);const a=S.amb.get(amb);if(!a)return[];
   const base=s=>mnk(s).replace(/\d+/g,'').replace(/\s+/g,' ').trim();
-  const peers=[...S.amb.values()].filter(x=>x.id!==amb&&(tp?(MX.amb.get(x.id)||{}).tipo===tp.id:base(x.name)===base(a.name)));if(peers.length<2)return[];
+  const peers=[...S.amb.values()].filter(x=>x.id!==amb&&(tp?(MX.amb.get(x.id)||{}).tipo===tp.id:base(x.name)===base(a.name)));if(!peers.length)return[];
   const have=cells.get(amb)||{};const cnt=new Map();for(const p of peers)for(const[c,o]of Object.entries(cells.get(p.id)||{}))if(o.s!=='n')cnt.set(c,(cnt.get(c)||0)+1);
-  return[...cnt].filter(([c,n])=>!have[c]&&n/peers.length>=0.5&&MX.cat.has(c)&&!MX.cat.get(c).arch).sort((x,y)=>y[1]-x[1]).slice(0,5)
+  /* hasta 5: las que más tienen los ambientes parecidos (al menos 1 de cada 4) */
+  return[...cnt].filter(([c,n])=>!have[c]&&n/peers.length>=0.25&&MX.cat.has(c)&&!MX.cat.get(c).arch).sort((x,y)=>y[1]-x[1]).slice(0,5)
     .map(([c,n])=>({c:MX.cat.get(c),n,of:peers.length,lbl:tp?tp.name:base(a.name)}))}
+
+/* «+ Otra actividad»: buscar en el catálogo y agregarla a este ambiente como pendiente (el SC, solo su partida) */
+function mxRecPick(amb,ed,add){const have=(mxCells().get(amb)||{});const L=[...MX.cat.values()].filter(c=>!c.arch&&!have[c.id]&&(ed||mxScCan(c)))
+    .sort((x,y)=>conOf(x.sc).name.localeCompare(conOf(y.sc).name)||x.name.localeCompare(y.name));
+  const a=S.amb.get(amb);const li=q=>{const k=mnk(q||'');const F=L.filter(c=>!k||mnk(c.name+' '+conOf(c.sc).name).includes(k)).slice(0,80);
+    return F.length?F.map(c=>`<button class="mxpk" data-mxpk="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span><span><b>${esc(c.name)}</b><small>${esc(conOf(c.sc).name)}</small></span></button>`).join(''):'<p class="note">Nada con ese nombre en el catálogo. Si falta, agrégala en Catálogo o desde el lookahead.</p>'};
+  lqModal(`<div class="lqtop"><b>Agregar actividad a ${esc(a?a.code+' · '+a.name:'')}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+    <input class="tin" id="mxpq" type="search" placeholder="Buscar actividad o subcontratista" aria-label="Buscar en el catálogo" style="width:100%;box-sizing:border-box">
+    <div class="mxpkl" id="mxpkl">${li('')}</div><div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
+    e=>{const b=e.target.closest('[data-mxpk]');if(b){lqClose();add(b.dataset.mxpk)}});
+  const q=$('#mxpq');if(q){q.oninput=()=>{$('#mxpkl').innerHTML=li(q.value)};setTimeout(()=>q.focus(),50)}}
 
 function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(id);const m=MX.amb.get(id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
   const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c).sort((x,y)=>mxSeqCmp(x.c,y.c));
@@ -62,7 +74,7 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
    <div class="mxrhd"><button class="ib" id="mxrback">← Lista</button><div><h3>${esc(a.code)} · ${esc(a.name)}</h3><span class="note">${esc((secOf(a.sectorId)||{}).name||'')}${tp?' · '+esc(tp.name):''} · ${rvOk?'✓ revisado '+esc(mxRvTxt(m.rv)):m.rv?'última revisión '+esc(mxRvTxt(m.rv)):'sin revisar'}</span></div></div>
    ${open.length?`<div class="mxrl">${open.map(row).join('')}</div>`:'<p class="callout">Todo lo de este ambiente está terminado o no aplica.</p>'}
    ${done.length?`<details class="mxrdone"${MXR.showDone?' open':''}><summary>Terminadas o que no aplican (${done.length})</summary><div class="mxrl">${done.map(row).join('')}</div></details>`:''}
-   ${(sug=sug.filter(x=>ed||mxScCan(x.c))).length?`<details class="mxrsug"><summary>¿Falta algo? ${sug.length} ${sug.length===1?'sugerencia':'sugerencias'}</summary>${sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join('')}</details>`:''}
+   ${(sug=sug.filter(x=>ed||mxScCan(x.c))),(ed||SCK())?`<div class="mxrsug"><div class="mxrsq"><b>¿Falta algo?</b><button class="ib" id="mxrpick">+ Otra actividad</button></div>${sug.length?sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join(''):'<p class="note">Sin sugerencias: los ambientes parecidos no tienen otras actividades. Usa «+ Otra actividad» para buscar en el catálogo.</p>'}</div>`:''}
    </div></div>
    <div class="mxrfoot">${ed?`<button class="ib pri" id="mxrok">✓ Confirmar${nSug?` (${nSug} sin validar quedan como están)`:''}${nx?' y seguir →':''}</button>`:''}${nx?`<button class="ib" id="mxrnext">Siguiente sin confirmar →</button>`:''}</div>`;
   main.innerHTML=h;mxWireV(main);
@@ -75,5 +87,7 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
   const dt=main.querySelector('.mxrdone');if(dt)dt.ontoggle=()=>{MXR.showDone=dt.open};
   main.querySelectorAll('[data-mxrs]').forEach(b=>b.onclick=()=>{const cid=b.closest('[data-mxrc]').dataset.mxrc;const s=b.dataset.mxrs;if(!ed){if(mxScCan(MX.cat.get(cid)))mxScSet(id,cid,s);return}const prev=((MX.amb.get(id)||{}).c||{})[cid];if(prev===s)return;
     const DEL=firebase.firestore.FieldValue.delete();mxWrite(new Map([[id,{[cid]:s}]]),`${MX.cat.get(cid).name}: ${MXS[s]}`,new Map([[id,{[cid]:prev===undefined?DEL:prev}]]))});
-  main.querySelectorAll('[data-mxradd]').forEach(b=>b.onclick=()=>{const cid=b.dataset.mxradd;if(!ed){mxScSet(id,cid,'p');return}const DEL=firebase.firestore.FieldValue.delete();
-    mxWrite(new Map([[id,{[cid]:'p'}]]),`Agregada: ${MX.cat.get(cid).name} (pendiente)`,new Map([[id,{[cid]:DEL}]]))})}
+  const addC=cid=>{if(!ed){mxScSet(id,cid,'p');return}const DEL=firebase.firestore.FieldValue.delete();
+    mxWrite(new Map([[id,{[cid]:'p'}]]),`Agregada: ${MX.cat.get(cid).name} (pendiente)`,new Map([[id,{[cid]:DEL}]]))};
+  main.querySelectorAll('[data-mxradd]').forEach(b=>b.onclick=()=>addC(b.dataset.mxradd));
+  const pk=$('#mxrpick');if(pk)pk.onclick=()=>mxRecPick(id,ed,addC)}
