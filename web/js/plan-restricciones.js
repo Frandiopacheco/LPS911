@@ -268,7 +268,7 @@ function respOpts(cur){const C=respChoices();cur=String(cur||'').trim();const ba
    +(C.per.length?`<optgroup label="Personas del equipo">${C.per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
    +(C.emp.length?`<optgroup label="Empresas (subcontratistas)">${C.emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
    +(C.ar.length?`<optgroup label="Áreas">${C.ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
-function respSel(attrs,cur,ro){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur)}</select>`}
+function rRespSel(attrs,cur,ro){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur)}</select>`}
 function rWho(r){return(r.status==='lib'?(r.libN||r.resp):r.resp)||'—'}
 function rFOk(r){const F=U.rF||{};return(!F.aff||rAff(r)===F.aff)&&(!F.reg||rReg(r)===F.reg)&&(!F.who||rWho(r)===F.who)
   &&(!F.c1||(r.created||'')>=F.c1)&&(!F.c2||(r.created&&r.created<=F.c2))&&(!F.l1||(r.freed&&r.freed>=F.l1))&&(!F.l2||(r.freed&&r.freed<=F.l2))}
@@ -318,7 +318,7 @@ function renderRestr(main){
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
           <label>Descripción<input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></label>
-          <label>Responsable${respSel(fk('resp'),r.resp,ro)}</label>
+          <label>Responsable${rRespSel(fk('resp'),r.resp,ro)}</label>
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label>
           <label>Compromiso del área (AS)<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label>
           <label>Observaciones del área (AS)<input class="ci" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Impedimento para levantarla, comentarios…"${ro}></label></div>`
@@ -329,7 +329,7 @@ function renderRestr(main){
     <td class="rc-act"><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?`<div class="rloc">${rArch(r)?'<span class="pill neu">Actividad en la papelera · no cuenta como pendiente</span>':'La actividad ya no está en el lookahead'}</div>`:''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
     <td class="rc-tp"><select class="ci" ${fk('type')}${ro} aria-label="Tipo">${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select>${gsel(r,fk)}</td>
     <td class="rc-ds"><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro} aria-label="Descripción"><input class="ci rcobs" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Obs. del área (AS): impedimento, comentarios…"${ro} aria-label="Observaciones del área de soporte">${rthumbs(r)}</td>
-    <td class="rc-rp">${respSel(fk('resp')+' aria-label="Responsable"',r.resp,ro)}</td>
+    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro)}</td>
     <td class="rc-dt"><label class="rdl">Requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label><label class="rdl" title="Fecha en que el área de soporte se compromete a levantarla">Compromiso AS<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label><label class="rdl">Liberada<input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></label></td>
     <td class="rc-x">${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
