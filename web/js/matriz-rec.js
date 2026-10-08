@@ -23,7 +23,7 @@ function renderMxRec(main,head){const cells=mxCells();const ed=mxEd();
   if(MXR.amb){renderMxRecAmb(main,head,cells,ed);return}
   const L=mxRecAmbs();const w0=mxWk0();const rv=a=>{const m=MX.amb.get(a.id);return m&&m.rv&&m.rv.d>=w0?m.rv:null};
   const nRv=L.filter(o=>rv(o.a)).length;const vis=MXR.only?L.filter(o=>!rv(o.a)):L;
-  let h=`<div class="scroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
+  let h=`<div class="scroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg())}
    <div class="mxrbar"><div class="mxrprog"><b>${nRv} de ${L.length}</b> ambientes revisados esta semana<span class="mxrpb"><i style="width:${L.length?Math.round(100*nRv/L.length):0}%"></i></span></div>
     <label class="chk"><input type="checkbox" id="mxronly"${MXR.only?' checked':''}> Solo los que faltan</label></div>`;
   let lastS='',lastP='';const multi=visPisos().length>1;
@@ -94,7 +94,7 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
   const canR=r=>ed||mxScCan(r.c);
   const row=r=>`<div class="mxri${r.o.sug?' sug':''}" data-mxrc="${esc(r.c.id)}"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span><span><b>${esc(r.c.name)}</b><small>${esc(conOf(r.c.sc).name)}${info(r)?' · '+esc(info(r)):''}</small></span></div>
     <div class="mxrbt" role="group" aria-label="Estado de ${esc(r.c.name)}">${['p','c','t','n'].map(s=>`<button class="mc s-${s}${r.o.s===s?' on':''}${r.o.s===s&&r.o.sug?' sug':''}" data-mxrs="${s}"${canR(r)?'':' disabled'} aria-pressed="${r.o.s===s}"><i>${MXI[s]||'○'}</i>${MXS[s]}</button>`).join('')}</div></div>`;
-  let h=`<div class="scroll"><div class="wrap mxwrap mxrw">${head}${mxViewSeg()}
+  let h=`<div class="scroll"><div class="wrap mxwrap mxrw">${mxHd(head,mxViewSeg())}
    <div class="mxrhd"><button class="ib" id="mxrback">← Lista</button><div><h3>${esc(a.code)} · ${esc(a.name)}</h3><span class="note">${esc((secOf(a.sectorId)||{}).name||'')}${tp?' · '+esc(tp.name):''} · ${rvOk?'✓ revisado '+esc(mxRvTxt(m.rv)):m.rv?'última revisión '+esc(mxRvTxt(m.rv)):'sin revisar'}</span></div></div>
    ${open.length?`<div class="mxrl">${open.map(row).join('')}</div>`:'<p class="callout">Todo lo de este ambiente está terminado o no aplica.</p>'}
    ${done.length?`<details class="mxrdone"${MXR.showDone?' open':''}><summary>Terminadas o que no aplican (${done.length})</summary><div class="mxrl">${done.map(row).join('')}</div></details>`:''}

@@ -12,6 +12,8 @@ const mxErr=e=>toast('No se pudo guardar: '+(e&&e.code||e));
 /** pestañas internas de la matriz */
 function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente']]
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
+/* cabecera en una fila (oct 2026): vistas (y en la Matriz, los indicadores) entre el título y los botones */
+function mxHd(head,mid){const m=`<div class="phm">${mid}</div>`;return head.includes('<div class="pha">')?head.replace('<div class="pha">',m+'<div class="pha">'):head.replace('</header>',m+'</header>')}
 function mxWireV(main){main.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=()=>{U.mxV=b.dataset.mxv;saveUI();MX.sel.clear();render()})}
 
 /* uso de cada actividad: ambientes donde aparece y celdas con estado confirmado */
@@ -39,7 +41,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
     .sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name));
   const nArch=all.filter(c=>c.arch).length;
   const scList=[...new Set(all.filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
-  let h=`<div class="scroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
+  let h=`<div class="scroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg())}
    ${helpBox('Cómo se edita el catálogo',`<p>Cambiar el nombre, el subcontratista, la clase o la especialidad <b>no afecta</b> lo marcado en la matriz: los estados están ligados a la actividad, no a su nombre.</p>
     <p><b>Fusionar</b> (⋮): cuando dos actividades son la misma. Los estados marcados pasan a la otra (si las dos tienen estado en un ambiente, se conserva el de la que queda), sus nombres del lookahead también, y en los tipos de ambiente se reemplaza. La fusionada queda archivada y se puede <b>restaurar</b> deshaciendo todo.</p>
     <p><b>Archivar</b>: deja de salir en la matriz, pero sus estados se guardan y vuelven al restaurarla. Nada se borra.</p>`)}
@@ -163,7 +165,7 @@ function renderMxTipo(main,head){const ed=mxEd();const tipos=[...MX.tipo.values(
   const sinTipo=[...S.amb.keys()].filter(id=>{const m=MX.amb.get(id);return!m||!m.tipo||!MX.tipo.has(m.tipo)||MX.tipo.get(m.tipo).arch}).length;
   const cats=[...MX.cat.values()].filter(c=>!c.arch).sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||a.name.localeCompare(b.name));
   const arch=[...MX.tipo.values()].filter(t=>t.arch);
-  let h=`<div class="scroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
+  let h=`<div class="scroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg())}
    ${helpBox('Qué es un tipo de ambiente',`<p>Un tipo (SS.HH., Oficina, Dormitorio…) dice qué actividades tiene un ambiente aunque todavía no estén en el lookahead. Al agregar o quitar una actividad del tipo, cambia en todos los ambientes de ese tipo; lo ya marcado en cada ambiente se conserva.</p><p>El tipo de cada ambiente se elige en la Matriz (columna «Tipo»).</p>`)}
    <div class="fbar"><span class="note">${tipos.length} tipos · ${sinTipo} ambientes sin tipo</span><span class="fsp"></span>${ed?'<button class="ib pri" id="mxtnew">+ Tipo</button>':''}</div>
    <div class="mxtg">${tipos.map(t=>{const acts=(t.acts||[]).map(id=>MX.cat.get(id)).filter(c=>c&&!c.arch);
