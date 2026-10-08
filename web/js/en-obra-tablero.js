@@ -296,7 +296,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const tys=dashTypes(d);if(DB_.ty&&!tys.some(t=>t.k===DB_.ty))DB_.ty='';
   const fil=DB_.sc.size||DB_.ty;
   const hh=`<div class="dhd"><div><b>Tablero</b><span>${dw} ${fmtD(d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></div><span class="dlive"><i></i>En vivo</span><button class="ib" data-sini title="Lo programado hoy que aún nadie marcó como iniciado o detenido: consolidado y por SC, para enviar por WhatsApp">📲 Sin iniciar · ${c.none}</button><button class="ib" id="dtv">${DB_.tv?'Salir de pantalla completa':'⤢ Pantalla completa'}</button></div>
-   <div class="dflt"><div class="dfsc" role="group" aria-label="Subcontratistas"><button class="dfc${DB_.sc.size?'':' on'}" data-dsc="">Todos los SC</button>${allSc.map(sc=>`<button class="dfc${DB_.sc.has(sc)?' on':''}" data-dsc="${sc}" style="--c:${conOf(sc).color}" aria-pressed="${DB_.sc.has(sc)}"><i></i>${esc(conOf(sc).name)}</button>`).join('')}</div>
+   <div class="dflt"><div class="dfsc" role="group" aria-label="Subcontratistas"><button class="dfc${DB_.sc.size?'':' on'}" data-dsc="">Todos los SC</button>${allSc.map(sc=>`<button class="dfc${DB_.sc.has(sc)?' on':''}" data-dsc="${sc}" style="--c:${conOf(sc).color}" title="Clic: solo este SC · Ctrl+clic: sumar o quitar" aria-pressed="${DB_.sc.has(sc)}"><i></i>${esc(conOf(sc).name)}</button>`).join('')}</div>
     <label class="dfty"><span>Tipo de actividad</span><select class="tin" id="dty"><option value="">Todas</option>${tys.map(t=>`<option value="${esc(t.k)}"${DB_.ty===t.k?' selected':''}>${esc(t.t)}</option>`).join('')}</select></label>${fil?'<button class="lnkb" data-dclr>Quitar filtros</button>':''}</div>`;
   const K=(lab,v,sub,cls,k)=>`<div class="dk${cls?' '+cls:''}"${k?` style="--k:${k}"`:''}><span class="dkl">${lab}</span><b>${v}</b>${sub?`<span class="dks">${sub}</span>`:''}</div>`;
   const sbar=o=>`<span class="dbar">${['ok','no','run','stop','seq','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
@@ -343,7 +343,7 @@ function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.
 function dashClick(e){const t=e.target;let b;
   if(t.closest('#dtv')){DB_.tv=!DB_.tv;try{if(DB_.tv)document.documentElement.requestFullscreen().catch(()=>{});else if(document.fullscreenElement)document.exitFullscreen()}catch(err){}const m=$('#main');m.dataset.built='';render();return}
   if((b=t.closest('[data-dp]'))){DB_.pid=b.dataset.dp;const h=$('#dplan');if(h)h._fk='';render();return}
-  if((b=t.closest('[data-dsc]'))){const v=b.dataset.dsc;if(!v)DB_.sc.clear();else if(DB_.sc.has(v))DB_.sc.delete(v);else DB_.sc.add(v);dashRe();return}
+  if((b=t.closest('[data-dsc]'))){const v=b.dataset.dsc;if(!v)DB_.sc.clear();else if(e.ctrlKey||e.metaKey||e.shiftKey){if(DB_.sc.has(v))DB_.sc.delete(v);else DB_.sc.add(v)}else if(DB_.sc.size===1&&DB_.sc.has(v))DB_.sc.clear();else DB_.sc=new Set([v]);dashRe();return}
   if(t.closest('[data-sini]')){sinIniOpen();return}
   if(t.closest('[data-dclr]')){DB_.sc.clear();DB_.ty='';dashRe();return}}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-lqact]');if(!b)return;e.stopPropagation();const l=libOf(b.dataset.lqact);if(l)libDetail(l.id);else libAsk(b.dataset.lqact)},true);
