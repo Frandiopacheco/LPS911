@@ -108,7 +108,6 @@ function renderCfg(main){
 }
 
 /* ================= EQUIPO ================= */
-const confirmDel={};
 function scCell(em,m){const L=memScs(m);const all=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const rest=all.filter(c=>!L.includes(c.id));
   return`<div class="scchips">${L.map(i=>`<span class="scchip" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}<button data-scrm="${esc(em)}|${esc(i)}" aria-label="Quitar ${esc(conOf(i).name)}" title="Quitar">&times;</button></span>`).join('')}</div>
    <select class="ci" data-mem="${esc(em)}" data-f="scadd" aria-label="Agregar empresa o partida"${L.length?'':' style="border:1px solid var(--bad)"'}><option value="">${L.length?'+ Agregar otra empresa / partida…':'— elige la empresa —'}</option>${rest.map(c=>`<option value="${c.id}">${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select>`}
@@ -126,67 +125,127 @@ function teamRows(list,online){const q=fold(TQ.q).trim();const words=q?q.split(/
   const scName=m=>memScs(m).map(i=>conOf(i).name).sort()[0]||'~';
   const by=r=>L.filter(([em,m])=>roleOfM(em,m)===r).sort((a,b)=>(r==='sc'||r==='capataz'?scName(a[1]).localeCompare(scName(b[1])):0)||(a[1].name||a[0]).localeCompare(b[1].name||b[0]));
   return{n:L.length,groups:TROLES.map(r=>({r,rows:by(r)})).filter(g=>g.rows.length)}}
+/* Equipo reorganizado (oct 2026, pedido del dueño: «muy largo, desordenado, listas largas»):
+   secciones (U.teamV): Personas · Capataces (enlaces/QR) · Datos y respaldo · Limpieza (las tres últimas, solo administrador).
+   Personas: una línea por persona (nombre y correo, alcance en chips, permisos en píldoras); todo lo editable va en la ficha
+   «✎ Editar» (teamEdit, ventana lqModal) con los mismos campos data-mem/data-f de antes. */
+const TEAMV=[['per','Personas'],['cap','Capataces (enlaces)'],['dat','Datos y respaldo'],['cln','Limpieza']];
+const teamV=()=>isAdmin&&TEAMV.some(([k])=>k===U.teamV)?U.teamV:'per';
+let TEDIT=null;
+const TEAM_HELP=`<p><b>Para sumar a alguien:</b> agrégalo con su correo, envíale el enlace de esta página y pídele que pulse <b>«¿Primera vez? Crear mi cuenta»</b> con ese mismo correo y confirme el correo que le llegará. Solo los correos de la lista pueden entrar.</p>
+ <p><b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; con <b>pisos a cargo</b> resuelve las propuestas de los SC de esos pisos (piso sin responsable: cualquier editor). <b>Campo</b>: registra el avance diario, sin modificar el lookahead. <b>Subcontratista</b>: propone y dibuja el plan del día de su empresa (si tiene varias partidas, agrégalas todas). <b>Área de apoyo</b> (Oficina Técnica, Calidad…): ve todo y resuelve las restricciones de su área. <b>Veedor</b>: registra en Campo › Plano el trabajo no programado. <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p>
+ <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> mantiene el personal y las partidas, <b>Costos</b> consulta; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
+/* chips de alcance y píldoras de permisos de una persona (solo lectura; se cambian en la ficha) */
+function teamScope(em,m){const r=roleOfM(em,m);const L=[];
+  if(r==='sc'||r==='capataz'){const S_=memScs(m).filter(i=>S.con.has(i));S_.forEach(i=>L.push(`<span class="scchip ro" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}</span>`));if(!S_.length)L.push('<span class="pill bad">Falta la empresa</span>')}
+  if(r==='editor'){const P_=memPisos(m).filter(id=>S.pis.has(id));P_.forEach(id=>L.push(`<span class="pill neu" title="${esc(S.pis.get(id).name)}">${esc(S.pis.get(id).code)}</span>`));if(!P_.length)L.push('<span class="mu">sin pisos a cargo</span>')}
+  if(r==='area')L.push(m.area?`<span class="pill neu">${esc(m.area)}</span>`:'<span class="pill bad">Falta el área</span>');
+  return L.join(' ')}
+function teamPerms(em,m){const r=roleOfM(em,m);if(r==='admin')return'<span class="mu">todo</span>';const L=[];
+  if(r!=='capataz'&&!TAR_ROLES.includes(r)&&dashOn(m))L.push('<span class="pill neu">Tablero</span>');
+  if(CLI_ROLES.includes(r)&&m.cli===true)L.push('<span class="pill neu">Versión cliente</span>');
+  if(r==='editor'&&m.tpub===true)L.push('<span class="pill neu">Publica tareo</span>');
+  return L.join(' ')}
+/* ficha de una persona: todo lo editable (mismos data-mem/data-f que antes, así sirven los mismos manejadores) */
+function teamEdit(em){const m=MEM.get(em);if(!m||!isAdmin){TEDIT=null;lqClose();return}TEDIT=em;const self=me&&em===me.email;const own=isOwnerEmail(em);const lock=self||own;const r=roleOfM(em,m);
+  lqModal(`<div class="lqtop"><b>${esc(m.name||em)}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   <div class="tedf">
+    <label><span class="fgl">Nombre</span><input class="tin" id="ted-name" data-mem="${esc(em)}" data-f="name" value="${esc(m.name||'')}" placeholder="Nombre y apellido"></label>
+    <div class="note mono">${em.startsWith('u_')?'Ingreso por enlace / QR':esc(em)}${self?' · tú':''}</div>
+    <label><span class="fgl">Rol</span>${lock?`<b>${esc(ROLE[r]||r)}</b>${own&&!self?' <span class="mu">(dueño: siempre administrador)</span>':''}`:`<select class="tin" data-mem="${esc(em)}" data-f="role">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}"${m.role===k?' selected':''}>${v}</option>`).join('')}</select>`}</label>
+    ${!lock&&(m.role==='sc'||m.role==='capataz')?`<div><span class="fgl">Empresa / partida</span>${scCell(em,m)}</div>`:''}
+    ${!lock&&m.role==='editor'?`<div><span class="fgl">Pisos a cargo</span>${pisoCell(em,m)}</div>`:''}
+    ${!lock&&m.role==='area'?`<label><span class="fgl">Área</span>${areaCell(em,m)}</label>`:''}
+    ${r==='admin'?'':`<div class="tedp"><span class="fgl">Permisos</span>
+      ${m.role==='capataz'||TAR_ROLES.includes(m.role)?'':`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="dash"${dashOn(m)?' checked':''}> Ve el Tablero</label>`}
+      ${CLI_ROLES.includes(m.role)?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="cli"${m.cli===true?' checked':''}> Versión cliente <small class="mu">(holguras, versiones emitidas, PPC del cliente)</small></label>`:''}
+      ${m.role==='editor'?tpubCell(em,m):''}</div>`}
+   </div>
+   <div class="lqbtns">${lock?'':`<button class="ib danger" data-mdel="${esc(em)}">Quitar acceso</button>`}<span class="fsp"></span><button class="ib pri" data-lqx>Listo</button></div>`,
+   e=>teamClick(e),e=>teamChange(e))}
+/* cambios de la ficha (y del formulario): guardan al momento en members */
+async function teamChange(e){const t=e.target;if(!t.dataset.mem||!isAdmin)return;const em=t.dataset.mem;
+  const fail=err=>toast('No se pudo guardar: '+(err.code||err.message));
+  if(t.dataset.f==='scadd'){if(!t.value)return;const m=MEM.get(em)||{};const L=[...new Set([...memScs(m),t.value])];
+    try{await fcol('members').doc(em).update({scs:L,sc:L[0]});toast(`${conOf(t.value).name} agregada`)}catch(err){fail(err)}return}
+  if(t.dataset.f==='pisoadd'){if(!t.value)return;const m=MEM.get(em)||{};const L=[...new Set([...memPisos(m),t.value])];const p=S.pis.get(t.value);
+    try{await fcol('members').doc(em).update({pisos:L});toast(`${p?p.name:'Piso'} a cargo de ${m.name||em}`)}catch(err){fail(err)}return}
+  try{await fcol('members').doc(em).update({[t.dataset.f]:t.type==='checkbox'?t.checked:t.dataset.f==='name'?t.value.trim():t.value})}catch(err){fail(err)}}
+async function teamClick(e){const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
+    try{await fcol('members').doc(em).update({scs:L,sc:L[0]||''});toast(`${conOf(id).name} quitada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
+  const pr=e.target.closest('[data-pirm]');if(pr&&isAdmin){const[em,id]=pr.dataset.pirm.split('|');const m=MEM.get(em)||{};const L=memPisos(m).filter(i=>i!==id);
+    try{await fcol('members').doc(em).update({pisos:L});toast(`${(S.pis.get(id)||{}).name||'Piso'} quitado`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
+  const b=e.target.closest('[data-mdel]');if(b&&isAdmin){const em=b.dataset.mdel;const m=MEM.get(em)||{};
+    if(!await uiAsk({title:'Quitar acceso',text:`${m.name||em} ya no podrá entrar a LPS 911. Lo que registró se conserva.`,ok:'Quitar acceso',tone:'danger'}))return true;
+    try{await fcol('members').doc(em).delete();TEDIT=null;lqClose();toast('Acceso retirado a '+(m.name||em))}catch(err){toast('No se pudo quitar: '+(err.code||err.message))}return true}
+  return false}
+function teamSeg(){if(!isAdmin)return'';const v=teamV();return`<span class="seg tseg" role="tablist" aria-label="Secciones de Equipo">${TEAMV.map(([k,l])=>`<button type="button" role="tab" data-teamv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${l}</button>`).join('')}</span>`}
 function renderTeam(main){
-  const list=[...MEM.entries()];const now=NOW();
+  const list=[...MEM.entries()];const v=teamV();
   const online=new Set([...PRES.values()].map(p=>p&&p.eh));
   const counts=Object.fromEntries(Object.keys(COLS).map(c=>[c,S[COLS[c]].size]));ensurePlanos();
+  const acts=(me&&me.realAdmin&&VA_OK()&&!IN_FRAME?'<button class="ib" id="bva" title="Prueba la app con los permisos de otro rol">👁 Ver como…</button><button class="ib" id="bph" title="Abre la app en el tamaño de un celular">📱 Vista celular</button>':'')+'<button class="ib" id="thelp" title="Cómo se suma a alguien y qué hace cada rol" aria-label="Ayuda">ⓘ</button>';
+  let body='';
+  if(v==='per'){const cnt={};list.forEach(([em,m])=>{const r=roleOfM(em,m);cnt[r]=(cnt[r]||0)+1});
+    const scs=[...new Set(list.filter(([em,m])=>!TQ.role||roleOfM(em,m)===TQ.role).flatMap(([,m])=>memScs(m)))].filter(i=>S.con.has(i)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
+    const TR=teamRows(list,online);const allOpen=!!(TQ.q||TQ.role||TQ.sc)||TR.groups.length===1;const OP=new Set(U.teamOpen||[]);
+    const row=([em,m])=>{const self=me&&em===me.email;const on=online.has(hashStr(em));return`<tr data-tm="${esc(em)}"${isAdmin?` data-tedit="${esc(em)}" class="tclk"`:''}><td class="lead tnm"><b>${esc(m.name||'(sin nombre)')}</b>${self?' <span class="pill neu">tú</span>':''}<small class="mono">${em.startsWith('u_')?'Ingreso por enlace / QR':esc(em)}</small></td>
+      <td data-l="Alcance" class="tsc">${teamScope(em,m)}</td><td data-l="Permisos" class="tpm">${teamPerms(em,m)}</td>
+      <td class="tst">${on?'<span class="pill ok">Conectado</span>':''}</td>
+      <td class="ted">${isAdmin?`<button class="ib" data-tedit="${esc(em)}" aria-label="Editar a ${esc(m.name||em)}">✎ Editar</button>`:''}</td></tr>`};
+    body=`<div class="card">
+     ${isAdmin?`<button type="button" class="ib pri taddb" id="taddb" aria-expanded="${!!TF.open}">${TF.open?'× Cerrar':'＋ Agregar persona'}</button><form class="pad tadd${TF.open?' open':''}" id="tadd"><span class="fgl">Agregar</span><input class="tin" id="temail" type="text" inputmode="email" autocomplete="off" data-fk="tf:em" value="${esc(TF.em)}" placeholder="correo@empresa.com" aria-label="Correo"><input class="tin" id="tname" data-fk="tf:nm" value="${esc(TF.nm)}" placeholder="Nombre y apellido" aria-label="Nombre"><select class="tin" id="trole" aria-label="Rol">${[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector'],['admin','Administrador'],['tcap','Capataz (tareo)'],['tasis','Asistente de tareo'],['tcos','Costos (tareo)']].map(([k,l])=>`<option value="${k}"${TF.rl===k?' selected':''}>${l}</option>`).join('')}</select><select class="tin" id="tsc" aria-label="Empresa"${TF.rl==='sc'||TF.rl==='capataz'?'':' hidden'}><option value="">— empresa —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}"${TF.sc===c.id?' selected':''}>${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select><select class="tin" id="tar" aria-label="Área"${TF.rl==='area'?'':' hidden'}><option value="">— área —</option>${restrAreasL().map(a=>`<option${TF.ar===a?' selected':''}>${esc(a)}</option>`).join('')}</select><button class="ib pri" type="submit">Agregar al equipo</button></form>`:''}
+     <div class="pad tfilt"><input class="tin tqry" id="tq" data-fk="tq" type="search" value="${esc(TQ.q)}" placeholder="Buscar por nombre, correo, empresa o piso…" aria-label="Buscar en el equipo">
+      <select class="tin" id="tqrole" aria-label="Filtrar por rol"><option value="">Todos los roles (${list.length})</option>${TROLES.filter(r=>cnt[r]).map(r=>`<option value="${r}"${TQ.role===r?' selected':''}>${esc(ROLE[r])} (${cnt[r]})</option>`).join('')}</select>
+      ${scs.length?`<select class="tin" id="tqsc" aria-label="Filtrar por empresa"><option value="">Todas las empresas</option>${scs.map(i=>`<option value="${i}"${TQ.sc===i?' selected':''}>${esc(conOf(i).name)}</option>`).join('')}</select>`:''}
+      ${TQ.q||TQ.role||TQ.sc?'<button type="button" class="ib" data-tclr>Limpiar</button>':''}
+      ${allOpen?'':`<button type="button" class="lnkb" data-tall="${TR.groups.every(g=>OP.has(g.r))?0:1}">${TR.groups.every(g=>OP.has(g.r))?'Plegar todo':'Desplegar todo'}</button>`}</div>
+     <div class="tscroll"><table class="t rt tmem"><thead><tr><th>Nombre</th><th>Alcance</th><th>Permisos</th><th>Estado</th><th></th></tr></thead><tbody>
+     ${!TR.n?`<tr><td colspan="5" class="mu" style="padding:14px">Nadie coincide con la búsqueda.</td></tr>`:TR.groups.map(g=>{const op=allOpen||OP.has(g.r);
+       const sub=g.r==='sc'||g.r==='capataz'?' · '+[...new Set(g.rows.flatMap(([,m])=>memScs(m)))].filter(i=>S.con.has(i)).length+' empresas':'';
+       const conn=g.rows.filter(([em])=>online.has(hashStr(em))).length;
+       return`<tr class="tgrp grp"><th colspan="5"><button type="button" class="tgb" data-tgrp="${g.r}" aria-expanded="${op}"${allOpen?' disabled':''}><span class="tgc">${op?'▾':'▸'}</span>${esc(TGRP[g.r])} <span class="mu">${g.rows.length}${sub}${conn?` · ${conn} conectado${conn>1?'s':''}`:''}</span></button></th></tr>`+(op?g.rows.map(row).join(''):'')}).join('')}
+     </tbody></table></div>${(()=>{const sr=pisosSinResp();return isAdmin&&sr.length&&S.pis.size?`<p class="note pad" style="margin:0">Pisos sin responsable: <b>${sr.map(p=>esc(p.code)).join(', ')}</b> · sus propuestas y el plan diario los decide cualquier editor. Asígnalo en la ficha de un editor (✎ Editar › Pisos a cargo).</p>`:''})()}</div>`}
+  else if(v==='cap')body=invCard();
+  else if(v==='dat')body=`<div class="card"><div class="hd">Datos del proyecto <span class="sub">${counts.pisos} pisos · ${counts.sectors} sectores · ${counts.ambientes} ambientes · ${counts.acts} actividades · ${counts.weeks} semanas congeladas · ${counts.restr} restricciones · ${planosLoaded?PLAN.size:'…'} planos</span></div>
+    <div class="pad tdat">
+     <div><b>Respaldo</b><p class="note">Guárdalo cada semana (y siempre antes de una carga o limpieza grande). Incluye todo: lookahead, registro diario, reportes de capataces, propuestas, versiones, planos del día, equipo e invitaciones.</p>
+      <div class="tbtns"><button class="ib pri" id="bbackup">Descargar respaldo de datos (JSON)</button><button class="ib" id="bbackup2" title="Incluye las láminas de planos y las fotos: el archivo puede pesar bastante">Respaldo completo con imágenes</button>${bkNote()}</div></div>
+     <div><b>Cargar datos</b><p class="note" id="impmsg">${IMPMSG?esc(IMPMSG):'Usa el archivo de datos que te enviaron (por ejemplo <b>lookahead-real.json</b>) o un respaldo. Los registros con el mismo código se reemplazan; los demás no se tocan.'}</p>
+      <div class="tbtns"><label class="ib">Cargar datos desde archivo…<input type="file" id="fimport" accept=".json,application/json" hidden></label></div></div>
+    </div></div>`;
+  else if(v==='cln')body=cleanCard();
   main.innerHTML=`<div class="scroll"><div class="wrap">
-  ${pageHead('Equipo',`${list.length} persona${list.length===1?'':'s'} con acceso`,me&&me.realAdmin&&VA_OK()&&!IN_FRAME?'<button class="ib" id="bva" title="Prueba la app con los permisos de otro rol">👁 Ver como…</button><button class="ib" id="bph" title="Abre la app en el tamaño de un celular">📱 Vista celular</button>':'')}
-  <div class="card">
-   <details class="pad tinfo"${(TQ.info??list.length<3)?' open':''}><summary>¿Cómo se suma a alguien y qué hace cada rol?</summary><p class="callout" style="margin:8px 0 0">Solo los correos de esta lista pueden entrar. Para sumar a alguien: agrégalo aquí, envíale el enlace de esta página (<span class="mono">${esc(location.origin+location.pathname)}</span>) y pídele que pulse <b>“¿Primera vez? Crear mi cuenta”</b> con ese mismo correo y confirme el correo que le llegará.<br><b>Campo</b>: registra el avance diario (capataces), sin modificar el lookahead. <b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; asígnale los <b>pisos a su cargo</b> para que resuelva las propuestas de los subcontratistas en esos pisos (un piso puede tener varios responsables; si no tiene ninguno, las propuestas y el plan diario los decide cualquier editor). <b>Subcontratista</b>: dibuja el plan del día de su empresa en el Plan diario (elige su empresa en la columna Rol; si una empresa tiene varias partidas, agrégalas todas con “+ Agregar otra empresa / partida”). <b>Área de apoyo</b> (Oficina Técnica, Calidad…): ve todo y registra, resuelve y libera las restricciones de su área; elige su área en la columna Rol. <b>Veedor</b>: recorre la obra con el celular y registra en Campo › Plano el trabajo que se ejecuta sin estar programado (con foto); el resto solo lo consulta. <b>Lector</b>: solo consulta. <b>Tareo</b> (módulo aparte, no ven Last Planner): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla en el celular, <b>Asistente de tareo</b> mantiene el personal y las partidas de control, <b>Costos</b> solo consulta; al editor jefe de producción márcale <b>Publica tareo</b> para que vea el Tareo. <b>Administrador</b>: además gestiona el equipo y los datos.</p></details>
-   ${isAdmin?`<form class="pad" id="tadd" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:0"><input class="tin" id="temail" type="text" inputmode="email" autocomplete="off" data-fk="tf:em" value="${esc(TF.em)}" placeholder="correo@empresa.com" aria-label="Correo"><input class="tin" id="tname" data-fk="tf:nm" value="${esc(TF.nm)}" placeholder="Nombre y apellido" aria-label="Nombre"><select class="tin" id="trole" aria-label="Rol">${[['editor','Editor'],['campo','Campo'],['sc','Subcontratista'],['capataz','Capataz'],['area','Área de apoyo (OT, Calidad…)'],['veedor','Veedor'],['lector','Lector'],['admin','Administrador'],['tcap','Capataz (tareo)'],['tasis','Asistente de tareo'],['tcos','Costos (tareo)']].map(([k,v])=>`<option value="${k}"${TF.rl===k?' selected':''}>${v}</option>`).join('')}</select><select class="tin" id="tsc" aria-label="Empresa"${TF.rl==='sc'||TF.rl==='capataz'?'':' hidden'}><option value="">— empresa —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}"${TF.sc===c.id?' selected':''}>${esc(c.name)}${c.partida?' · '+esc(c.partida):''}</option>`).join('')}</select><select class="tin" id="tar" aria-label="Área"${TF.rl==='area'?'':' hidden'}><option value="">— área —</option>${restrAreasL().map(a=>`<option${TF.ar===a?' selected':''}>${esc(a)}</option>`).join('')}</select><button class="ib pri" type="submit">Agregar al equipo</button></form>`:''}
-   ${(()=>{const cnt={};list.forEach(([em,m])=>{const r=roleOfM(em,m);cnt[r]=(cnt[r]||0)+1});const scs=[...new Set(list.filter(([em,m])=>!TQ.role||roleOfM(em,m)===TQ.role).flatMap(([,m])=>memScs(m)))].filter(i=>S.con.has(i)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
-     return`<div class="pad tfilt"><input class="tin tqry" id="tq" data-fk="tq" type="search" value="${esc(TQ.q)}" placeholder="Buscar por nombre, correo, empresa o piso…" aria-label="Buscar en el equipo">
-      <span class="tchips"><button type="button" class="${!TQ.role?'on':''}" data-trole="">Todos <b>${list.length}</b></button>${TROLES.filter(r=>cnt[r]).map(r=>`<button type="button" class="${TQ.role===r?'on':''}" data-trole="${r}">${ROLE[r]} <b>${cnt[r]}</b></button>`).join('')}</span>
-      ${scs.length?`<select class="tin" id="tqsc" aria-label="Filtrar por empresa"><option value="">Todas las empresas</option>${scs.map(i=>`<option value="${i}"${TQ.sc===i?' selected':''}>${esc(conOf(i).name)}</option>`).join('')}</select>`:''}</div>`})()}
-   <div class="tscroll"><table class="t rt tmem"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th title="Puede ver la pestaña Tablero">Tablero</th><th title="Holguras, vista y versiones emitidas al cliente, PPC del cliente">Versión cliente</th><th>Estado</th><th></th></tr></thead><tbody>
-   ${(()=>{const TR=teamRows(list,online);if(!TR.n)return`<tr><td colspan="7" class="mu" style="padding:14px">Nadie coincide con la búsqueda.${TQ.q||TQ.role||TQ.sc?' <button type="button" class="ib" data-tclr style="height:26px;font-size:12px">Limpiar filtros</button>':''}</td></tr>`;
-     /* grupos plegables: abiertos solo los que el administrador abrió; con búsqueda, filtro o un solo grupo, todos abiertos */
-     const allOpen=!!(TQ.q||TQ.role||TQ.sc)||TR.groups.length===1;const OP=new Set(U.teamOpen||[]);
-     return TR.groups.map(g=>{const op=allOpen||OP.has(g.r);return`<tr class="tgrp grp"><th colspan="7"><button type="button" class="tgb" data-tgrp="${g.r}" aria-expanded="${op}"${allOpen?' disabled':''}><span class="tgc">${op?'▾':'▸'}</span>${esc(TGRP[g.r])} <span class="mu">${g.rows.length}</span></button></th></tr>`+(op?g.rows:[]).map(([em,m])=>{const self=me&&em===me.email;const cd=(confirmDel[em]||0)>NOW();return `<tr><td class="lead">${isAdmin?`<input class="ci" data-mem="${esc(em)}" data-f="name" data-fk="m:${esc(em)}" value="${esc(m.name||'')}" placeholder="Nombre">`:esc(m.name||'')}</td><td class="mono full" data-l="Correo">${em.startsWith('u_')?'<span class="pill neu">Ingreso por enlace / QR</span>':esc(em)}${self?' <span class="pill neu">tú</span>':''}</td>
-     <td class="full" data-l="Rol">${isAdmin&&!self&&!isOwnerEmail(em)?`<select class="ci" data-mem="${esc(em)}" data-f="role">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}"${m.role===k?' selected':''}>${v}</option>`).join('')}</select>${m.role==='sc'||m.role==='capataz'?scCell(em,m):''}${m.role==='editor'?pisoCell(em,m)+tpubCell(em,m):''}${m.role==='area'?areaCell(em,m):''}`:esc(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+esc(m.area):'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>esc(conOf(i).name)).join(', '):'')+(m.role==='editor'&&memPisos(m).filter(id=>S.pis.has(id)).length?' · pisos a cargo: '+memPisos(m).filter(id=>S.pis.has(id)).map(id=>esc(S.pis.get(id).code)).join(', '):'')+(m.role==='editor'&&m.tpub===true?' · publica tareo':'')}</td>
-     <td data-l="Tablero">${m.role==='admin'||isOwnerEmail(em)?'<span class="mu" title="El administrador siempre lo ve">✓ siempre</span>':m.role==='capataz'||TAR_ROLES.includes(m.role)?'<span class="mu">—</span>':isAdmin?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="dash"${dashOn(m)?' checked':''}> Ve el tablero</label>`:(dashOn(m)?'✓':'')}</td>
-     <td data-l="Versión cliente">${m.role==='admin'||isOwnerEmail(em)?'<span class="mu" title="El administrador siempre la ve">✓ siempre</span>':!CLI_ROLES.includes(m.role)?'<span class="mu">—</span>':isAdmin?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="cli"${m.cli===true?' checked':''}> Tiene acceso</label>`:(m.cli===true?'✓':'')}</td>
-     <td class="tst">${online.has(hashStr(em))?'<span class="pill ok">Conectado</span>':''}</td>
-     <td>${isAdmin&&!self&&!isOwnerEmail(em)?`<button class="ib${cd?' warn':''}" data-mdel="${esc(em)}" style="height:26px;font-size:12px">${cd?'Confirmar':'Quitar acceso'}</button>`:''}</td></tr>`}).join('')}).join('')})()}
-   </tbody></table></div>${(()=>{const sr=pisosSinResp();return isAdmin&&sr.length&&S.pis.size?`<p class="note pad" style="margin:0">Pisos sin responsable: <b>${sr.map(p=>esc(p.code)).join(', ')}</b> · sus propuestas y el plan diario los decide cualquier editor. Asigna un responsable para que solo él decida.</p>`:''})()}</div>
-   ${isAdmin?`<div class="card"><div class="hd">Datos del proyecto <span class="sub">${counts.pisos} pisos · ${counts.sectors} sectores · ${counts.ambientes} ambientes · ${counts.acts} actividades · ${counts.weeks} semanas congeladas · ${counts.restr} restricciones · ${planosLoaded?PLAN.size:'…'} planos</span></div>
-    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
-     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="ib" id="bbackup">Descargar respaldo de datos (JSON)</button><button class="ib" id="bbackup2" title="Incluye las láminas de planos y las fotos: el archivo puede pesar bastante">Respaldo completo con imágenes</button>${bkNote()}<span class="note">Guárdalo cada semana (y siempre antes de una carga o limpieza grande). Incluye todo: lookahead, registro diario, reportes de capataces, propuestas, versiones, planos del día, equipo e invitaciones.</span></div>
-     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label class="ib pri">Cargar datos desde archivo…<input type="file" id="fimport" accept=".json,application/json" hidden></label><span class="note" id="impmsg">${IMPMSG?esc(IMPMSG):'Usa el archivo de datos que te enviaron (por ejemplo <b>lookahead-real.json</b>) o un respaldo. Los registros con el mismo código se reemplazan; los demás no se tocan.'}</span></div>
-    </div></div>`:''}
-  ${invCard()}
-  ${isAdmin?cleanCard():''}
+  ${pageHead('Equipo',`${list.length} persona${list.length===1?'':'s'} con acceso`,acts)}
+  ${teamSeg()}
+  ${body}
   </div></div>`;
-  wireClean(main);
-  const f=$('#tadd',main);{const ti=$('.tinfo',main);if(ti)ti.ontoggle=()=>{TQ.info=ti.open}}
+  if(v==='cln')wireClean(main);
+  /* la ficha abierta se actualiza con los cambios (salvo mientras se escribe el nombre) */
+  if(TEDIT&&$('#lqm')&&document.activeElement&&document.activeElement.id!=='ted-name')teamEdit(TEDIT);else if(TEDIT&&!$('#lqm'))TEDIT=null;
+  const f=$('#tadd',main);
   main.oninput=e=>{const t=e.target;
     if(t.id==='tq'){TQ.q=t.value;render();return}
     if(t.id==='temail'){TF.em=t.value;return}if(t.id==='tname'){TF.nm=t.value;return}
     if(t.id==='trole'){TF.rl=t.value;const ss=$('#tsc',main);if(ss)ss.hidden=TF.rl!=='sc'&&TF.rl!=='capataz';const sa=$('#tar',main);if(sa)sa.hidden=TF.rl!=='area';return}
     if(t.id==='tar'){TF.ar=t.value;return}
     if(t.id==='tsc'){TF.sc=t.value;return}
-    if(t.id==='tqsc'){TQ.sc=t.value;render();return}};
+    if(t.id==='tqsc'){TQ.sc=t.value;render();return}
+    if(t.id==='tqrole'){TQ.role=t.value;if(TQ.sc&&!list.some(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&memScs(m).includes(TQ.sc)))TQ.sc='';render();return}};
   if(f)f.onsubmit=async e=>{e.preventDefault();const em=$('#temail').value.trim().toLowerCase(),nm=$('#tname').value.trim(),rl=$('#trole').value,scv=$('#tsc').value,arv=($('#tar')||{}).value||'';if((rl==='sc'||rl==='capataz')&&!scv){toast('Elige la empresa / partida.');return}if(rl==='area'&&!arv){toast('Elige el área (Oficina Técnica, Calidad…).');return}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Escribe un correo válido.');return}
     if(MEM.has(em)){toast('Ese correo ya está en el equipo.');return}
     try{await fcol('members').doc(em).set({role:rl,name:nm,...(rl==='sc'||rl==='capataz'?{sc:scv,scs:[scv]}:{}),...(rl==='area'?{area:arv}:{}),added:NOW(),addedBy:me.email});TF.em='';TF.nm='';toast(`${nm||em} agregado como ${ROLE[rl]}. Envíale el enlace de la página.`);render()}catch(err){toast('No se pudo agregar: '+(err.code||err.message))}};
-  main.onchange=async e=>{const t=e.target;if(!t.dataset.mem||!isAdmin)return;t.dataset.o=t.value;
-    if(t.dataset.f==='scadd'){if(!t.value)return;const m=MEM.get(t.dataset.mem)||{};const L=[...new Set([...memScs(m),t.value])];
-      try{await fcol('members').doc(t.dataset.mem).update({scs:L,sc:L[0]});toast(`${conOf(t.value).name} agregada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
-    if(t.dataset.f==='pisoadd'){if(!t.value)return;const m=MEM.get(t.dataset.mem)||{};const L=[...new Set([...memPisos(m),t.value])];const p=S.pis.get(t.value);
-      try{await fcol('members').doc(t.dataset.mem).update({pisos:L});toast(`${p?p.name:'Piso'} a cargo de ${m.name||t.dataset.mem}`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
-    try{await fcol('members').doc(t.dataset.mem).update({[t.dataset.f]:t.type==='checkbox'?t.checked:t.dataset.f==='name'?t.value.trim():t.value,...(t.dataset.f==='role'&&t.value!=='sc'?{}:{})})}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}
-    if(t.id==='fimport'){}};
-  main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
-  main.onclick=async e=>{let tb;if(e.target.closest('#bva')){vaDialog(e.target.closest('#bva'));return}if(e.target.closest('#bph')){phonePreview('iphone');return}if((tb=e.target.closest('[data-trole]'))){TQ.role=tb.dataset.trole;if(TQ.sc&&!list.some(([em,m])=>(!TQ.role||roleOfM(em,m)===TQ.role)&&memScs(m).includes(TQ.sc)))TQ.sc='';render();return}
+  main.onchange=e=>{if(e.target.dataset.mem)teamChange(e)};
+  main.onclick=async e=>{let tb;if(e.target.closest('#bva')){vaDialog(e.target.closest('#bva'));return}if(e.target.closest('#bph')){phonePreview('iphone');return}
+    if((tb=e.target.closest('#thelp'))){openPop(tb,`<div class="ph">Equipo: cómo se suma a alguien y qué hace cada rol</div><div class="mxhlp">${TEAM_HELP}<p class="note">Enlace para enviar: <span class="mono">${esc(location.origin+location.pathname)}</span></p></div>`,{});return}
+    if(e.target.closest('#taddb')){TF.open=!TF.open;render();if(TF.open)setTimeout(()=>{const i=$('#temail');if(i)i.focus()},30);return}
+    if((tb=e.target.closest('[data-teamv]'))){U.teamV=tb.dataset.teamv;saveUI();render();return}
+    if((tb=e.target.closest('[data-tedit]'))){teamEdit(tb.dataset.tedit);return}
     if((tb=e.target.closest('[data-tgrp]'))){const r=tb.dataset.tgrp;const O=new Set(U.teamOpen||[]);O.has(r)?O.delete(r):O.add(r);U.teamOpen=[...O];saveUI();render();return}
+    if((tb=e.target.closest('[data-tall]'))){U.teamOpen=tb.dataset.tall==='1'?[...TROLES]:[];saveUI();render();return}
     if(e.target.closest('[data-tclr]')){TQ.q='';TQ.role='';TQ.sc='';render();return}
-    if(await invClick(e))return;const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
-      try{await fcol('members').doc(em).update({scs:L,sc:L[0]||''});toast(`${conOf(id).name} quitada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
-    const pr=e.target.closest('[data-pirm]');if(pr&&isAdmin){const[em,id]=pr.dataset.pirm.split('|');const m=MEM.get(em)||{};const L=memPisos(m).filter(i=>i!==id);
-      try{await fcol('members').doc(em).update({pisos:L});toast(`${(S.pis.get(id)||{}).name||'Piso'} quitado`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return}
-    const b=e.target.closest('[data-mdel]');if(b){const em=b.dataset.mdel;if((confirmDel[em]||0)>NOW()){confirmDel[em]=0;try{await fcol('members').doc(em).delete();toast('Acceso retirado a '+em)}catch(err){toast('No se pudo quitar: '+(err.code||err.message))}}else{confirmDel[em]=NOW()+4000;render();setTimeout(()=>{if(U.tab==='team')render()},4100)}return}
+    if(await invClick(e))return;if(await teamClick(e))return;
     if(e.target.id==='bbackup')backupJson(false);if(e.target.id==='bbackup2')backupJson(true)};
   const fi=$('#fimport',main);if(fi)fi.onchange=async()=>{const file=fi.files[0];fi.value='';if(file)await importJson(file)};
 }

@@ -105,7 +105,8 @@ test('Equipo: el admin asigna los roles del tareo y marca «Publica tareo»', as
   await page.click('#tadd button[type="submit"]');
   await expect.poll(() => page.evaluate(() => (window.__dbGet('members', 'nuevo@obra.pe') || {}).role)).toBe('tcap');
   await page.click('[data-tgrp="editor"]');
-  const cb = page.locator('input[data-mem="editor@obra.pe"][data-f="tpub"]');
+  await page.click('button[data-tedit="editor@obra.pe"]');
+  const cb = page.locator('#lqm input[data-mem="editor@obra.pe"][data-f="tpub"]');
   await cb.check();
   await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'editor@obra.pe').tpub)).toBe(true);
   noErrors(errors, 'equipo');
