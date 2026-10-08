@@ -16,7 +16,7 @@ function mxSeqCmp(a,b){const S2=mxSeq();const x=S2.get(a.id),y=S2.get(b.id);if(x
 const mxWk0=()=>weekStart(weekOf(todayIso()));
 const mxRvTxt=rv=>rv?`${rv.d===todayIso()?'hoy':fmtD(rv.d)}${rv.n?' · '+rv.n:''}`:'';
 /* ambientes del recorrido (pisos a la vista), en el orden piso → sector → ambiente */
-function mxRecAmbs(){const L=[];for(const r of mxRows())for(const a of r.ambs)L.push({a,p:r.p,s:r.s});return L}
+function mxRecAmbs(){const L=[];const sc=SCK();const cells=sc?mxCells():null;for(const r of mxRows())for(const a of r.ambs){if(sc&&!Object.keys(cells.get(a.id)||{}).some(c=>mxMine(MX.cat.get(c))))continue;L.push({a,p:r.p,s:r.s})}return L}
 
 function renderMxRec(main,head){const cells=mxCells();const ed=mxEd();
   if(MXR.amb&&!S.amb.has(MXR.amb))MXR.amb=null;
@@ -29,7 +29,7 @@ function renderMxRec(main,head){const cells=mxCells();const ed=mxEd();
   let lastS='',lastP='';const multi=visPisos().length>1;
   for(const o of vis){if(multi&&o.p.id!==lastP){h+=`${lastS?'</div>':''}<h3 class="mxrph">${esc(o.p.code)} · ${esc(o.p.name)}</h3>`;lastP=o.p.id;lastS=''}
     if(o.s.id!==lastS){h+=`${lastS?'</div>':''}<div class="mxrsh">${esc(o.s.code)} · ${esc(o.s.name)}</div><div class="mxrgrid">`;lastS=o.s.id}
-    const C=Object.values(cells.get(o.a.id)||{});const ap=C.filter(c=>c.s!=='n');const t=ap.filter(c=>c.s==='t').length;const pend=ap.filter(c=>c.s!=='t').length;const sug=C.filter(c=>c.sug).length;
+    const C=Object.entries(cells.get(o.a.id)||{}).filter(([c])=>mxMine(MX.cat.get(c))).map(([,v])=>v);const ap=C.filter(c=>c.s!=='n');const t=ap.filter(c=>c.s==='t').length;const pend=ap.filter(c=>c.s!=='t').length;const sug=C.filter(c=>c.sug).length;
     const r=rv(o.a);const m=MX.amb.get(o.a.id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
     h+=`<button class="mxrc${r?' ok':''}" data-mxra="${esc(o.a.id)}"><span class="mxrct"><b>${esc(o.a.code)}</b> ${esc(o.a.name)}</span>
       <span class="mxrcs">${tp?esc(tp.name)+' · ':''}${ap.length?`${Math.round(100*t/ap.length)}% · ${pend} por hacer`:'sin actividades'}${sug?` · ${sug} sin validar`:''}</span>
@@ -85,7 +85,7 @@ async function mxRecNew(amb,ed,v,add){const tp=await mxAmbTipo(amb);const sc0=ed
      if(e.target.id==='mxrnesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
 
 function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(id);const m=MX.amb.get(id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
-  const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c).sort((x,y)=>mxSeqCmp(x.c,y.c));
+  const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c&&mxMine(r.c)).sort((x,y)=>mxSeqCmp(x.c,y.c));
   const open=items.filter(r=>r.o.s!=='t'&&r.o.s!=='n'),done=items.filter(r=>r.o.s==='t'||r.o.s==='n');let sug=mxRecSug(id,cells);
   const L=mxRecAmbs();const ix=L.findIndex(o=>o.a.id===id);const nx=L[ix+1];const w0=mxWk0();const rvOk=m.rv&&m.rv.d>=w0;const nSug=items.filter(r=>r.o.sug).length;
   const T=todayIso();

@@ -3155,3 +3155,8 @@ table.mx .mxc.mxpg{background-image:radial-gradient(circle at 50% 7px,var(--c) 3
 table.mx .mxc.mxpg span{padding-top:12px}
 table.mx .mxg th.mxdim{opacity:.55}
 .mxord{display:inline-flex;align-items:center;gap:6px}
+/* historial de fotos de la matriz */
+.mxfhl{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin:8px 0}
+.mxfh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line2);border-radius:var(--r-ctl)}
+.mxfh.nw{border-color:var(--ok);background:var(--ok-soft)}
+.mxfhb{display:flex;gap:6px;flex:none}

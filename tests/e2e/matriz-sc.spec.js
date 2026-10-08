@@ -9,7 +9,7 @@ const CAT = [
 ];
 const cell = async (page, amb, cat) => { const i = await page.evaluate(c => MX.view.cols.findIndex(x => x.id === c), cat); return page.locator(`#mxt tr[data-amb="${amb}"] td[data-k="${i}"]`); };
 
-test('SC: cambia directo su partida (queda constancia), no la de otros; si contradice al ingeniero queda destacado', async ({ page }) => {
+test('SC: ve solo su partida y la cambia directo (queda constancia); si contradice al ingeniero queda destacado', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; render(); });
   await page.click('#mxedit');
@@ -20,11 +20,9 @@ test('SC: cambia directo su partida (queda constancia), no la de otros; si contr
   expect(m.k).toBe('k1'); expect(m.m.k1.sc).toBe(true);
   const l1 = await page.evaluate(() => Object.values(__dbAll('mlog')).find(l => l.amb === 'a1'));
   expect(l1).toMatchObject({ cat: 'k1', sc: 'c1', from: null, to: 't', conf: false, st: 'pend', by: 'sc@obra.pe' });
-  // la de otro SC: solo la ficha
-  await (await cell(page, 'a1', 'k2')).click();
-  await expect(page.locator('#pop')).toContainText('Tarrajeo');
-  await expect(page.locator('#pop [data-do="scs"]')).toHaveCount(0);
-  await page.keyboard.press('Escape');
+  // solo ve su partida: la actividad de otro SC no aparece ni hay filtro de SC
+  expect(await page.evaluate(() => MX.view.cols.map(c => c.id))).toEqual(['k1']);
+  await expect(page.locator('#mxscdd')).toHaveCount(0);
   // lo que confirmó el ingeniero (a2): se cambia igual, con conf
   await (await cell(page, 'a2', 'k1')).click();
   await page.click('#pop button[data-s="c"][data-do="scs"]');
@@ -55,14 +53,28 @@ test('ingeniero: ve los cambios del SC en Hoy, revierte uno y da por visto otro'
   noErrors(errors, 'revisar cambios del SC');
 });
 
-test('recorrido del SC: solo su partida se puede tocar y no marca el ambiente revisado', async ({ page }) => {
+test('recorrido del SC: solo ve su partida y no marca el ambiente revisado', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; U.mxV = 'rec'; render(); });
   await page.click('[data-mxra="a1"]');
   await expect(page.locator('[data-mxrc="k1"] [data-mxrs="t"]')).toBeEnabled();
-  await expect(page.locator('[data-mxrc="k2"] [data-mxrs="t"]')).toBeDisabled();
+  await expect(page.locator('[data-mxrc="k2"]')).toHaveCount(0); // lo de otra partida no se muestra
   await expect(page.locator('#mxrok')).toHaveCount(0);
   await page.click('[data-mxrc="k1"] [data-mxrs="c"]');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c?.k1)).toBe('c');
   noErrors(errors, 'recorrido SC');
+});
+
+test('catálogo del SC: solo su partida, sin Tipos de ambiente; agrega una actividad que queda por revisar', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
+  await page.evaluate(() => { U.mxV = 'cat'; render(); });
+  await expect(page.locator('[data-mxv="tipo"]')).toHaveCount(0);
+  await expect(page.locator('tr[data-mcid="k1"]')).toHaveCount(1);
+  await expect(page.locator('tr[data-mcid="k2"]')).toHaveCount(0);
+  await page.click('#mxcnew');
+  await page.fill('#mxnn', 'Instalación de rejillas');
+  await expect(page.locator('#mxnsc option')).toHaveCount(1);
+  await page.click('#mxnok');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).find(c => c.name === 'Instalación de rejillas'))).toMatchObject({ sc: 'c1', rev: { by: 'sc@obra.pe' } });
+  noErrors(errors, 'catálogo del SC');
 });

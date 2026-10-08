@@ -114,3 +114,11 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Tamaño de celda − / + (`U.mxZ` 0/1/2 → clase `mxz0..2`, vars `--cw/--nh`). Clic en el nombre del SC del grupo (`th[data-mxgo]`) salta a sus columnas (`mxGoCol`).
 
 - **Orden de columnas** (`U.mxOrd`, select `#mxord`; por defecto «Por programación»): en `mxCols`, primero los SC con días programados en los ambientes a la vista de hoy a 3 semanas (más días primero), luego los que tienen Pendiente/En curso sin programar, al final los demás (encabezado `.mxdim`); dentro de cada SC, primero lo programado (`.mxpg`, punto con su color). `MX.ci` guarda días y nivel por actividad. «Alfabético» = orden anterior.
+
+## El SC ve solo su partida (oct 2026, decidido con el dueño)
+- `mxSel()` devuelve `myScsI()` para el SC: Matriz (columnas y ambientes donde tiene algo), Catálogo y Recorrido (`mxMine`) muestran solo su partida; sin selector de SC ni «Tipos de ambiente».
+- Catálogo: el SC tiene «+ Actividad» (`mxCatNew`), solo para su partida, con `rev` (queda «Nueva · por revisar» para el ingeniero; mismas reglas que desde el lookahead).
+
+## Fotos semanales: historial y restablecer (oct 2026)
+- Formato `mver.a[amb] = 'cat:estado[?],…'` (`?` = sin validar) con `v:2`; las anteriores (sin `v`) no distinguen lo sin validar.
+- Al guardar (`mxFoto`) se agrega al instante a `MX.ver`, se compara con ella y se abre el historial (`mxFotoHist`). Botón «🕘 Fotos (n)» (`#mxfhist`): Comparar (todos) y **Restablecer** (solo administrador, `mxFotoRestore`): primero guarda una foto `nota:'antes de restablecer'`, luego deja las celdas confirmadas como en la foto (lo sin validar de la foto deja de estar confirmado) con `mxWrite` y Deshacer.

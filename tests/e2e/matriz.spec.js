@@ -89,6 +89,9 @@ test('foto semanal y comparar: marca lo que cambió desde la foto', async ({ pag
   await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('mver')).length)).toBe(1);
   const f = await page.evaluate(() => Object.values(window.__dbAll('mver'))[0]);
   expect(f.a.a1).toContain('k1:p');
+  // al guardar se ve el historial con la foto recién guardada
+  await expect(page.locator('#lqm .mxfh.nw')).toContainText('recién guardada');
+  await page.click('#lqm [data-lqx].pri');
   await expect(page.locator('#mxcmp')).not.toHaveValue('');
   await cell(page, 'a1', 0).click();
   await page.click('#pop button[data-s="t"]');
@@ -161,4 +164,27 @@ test('orden por programación: primero el SC con más días programados de hoy a
   const az = await page.evaluate(() => [...MX.view.cols].sort((a, b) => conOf(a.sc).name.localeCompare(conOf(b.sc).name)).map(c => c.id));
   expect(await ids()).toEqual(az);
   noErrors(errors, 'orden por programación');
+});
+
+test('fotos: el administrador restablece una foto (antes guarda una de respaldo); el editor solo compara', async ({ page }) => {
+  const F = ['mver', 'f1', { t: Date.parse('2026-09-24T10:00:00-05:00'), d: '2026-09-24', w: 58, by: 'x', n: 'Elena', v: 2, a: { a1: 'k1:t,k2:p?' } }];
+  const X = [...CAT, F, ['mamb', 'a1', { c: { k1: 'c', k2: 'n' }, by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'mat', extra: X });
+  page.on('dialog', d => d.accept());
+  await page.click('#mxfhist');
+  await expect(page.locator('#lqm .mxfh')).toHaveCount(1);
+  await page.click('#lqm [data-mxfr="f1"]');
+  // k1 vuelve a Terminado; k2 estaba sin validar en la foto → deja de estar confirmado
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c)).toEqual({ k1: 't' });
+  expect(await page.evaluate(() => Object.values(__dbAll('mver')).filter(f => f.nota === 'antes de restablecer').length)).toBe(1);
+  noErrors(errors, 'restablecer foto');
+});
+
+test('fotos: el editor ve el historial pero no puede restablecer', async ({ page }) => {
+  const F = ['mver', 'f1', { t: 1, d: '2026-09-24', w: 58, by: 'x', n: 'Elena', v: 2, a: { a1: 'k1:t' } }];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...CAT, F] });
+  await page.click('#mxfhist');
+  await expect(page.locator('#lqm [data-mxfc="f1"]')).toBeVisible();
+  await expect(page.locator('#lqm [data-mxfr]')).toHaveCount(0);
+  noErrors(errors, 'historial editor');
 });
