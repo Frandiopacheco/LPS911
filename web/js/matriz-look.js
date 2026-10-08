@@ -152,7 +152,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(
   const v=mxRowWarn(x);if(!v)return;const cid=mxCatOf(x);const cells=mxCells().get(x.ambId)||{};const o=cells[cid];const m=MX.amb.get(x.ambId)||{};
   openPop(b,`<div class="ph">⚠ ${esc(x.name)}</div><div class="ptx">La matriz dice <b>${MXS[v]}</b> en este ambiente${m.n?` (lo registró ${esc(m.n)})`:''}, pero sigue programada de hoy en adelante.</div>
    ${mxEd()&&o&&o.fut.length?'<button data-do="unp" class="danger">Quitar los días desde mañana…</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
-   {unp:()=>mxUnprogram(o.fut,x.name),mat:()=>{const p=pisoOfAmb(x.ambId);if(p&&U.piso&&U.piso!==p)U.piso=p;U.mxV='mat';saveUI();goTab('mat')}})},true);
+   {unp:()=>mxUnprogram(o.fut,x.name),mat:()=>mxGoCell(x.ambId,cid)})},true);
 
 /* ---------- Pendientes sin programar (aviso en la barra del Lookahead) ----------
    Celdas de la matriz «Pendiente» (confirmadas o propuestas por el tipo) sin ningún día de hoy en adelante en el lookahead,
@@ -174,3 +174,8 @@ function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||
        const id=uid('act');ops.push(op('acts',id,{id,ambId:r.a.id,sc:r.c.sc,name:r.c.name,und:'',metrado:null,days:[],order:o}))}
      lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`)},
    e=>{if(e.target.id==='mxpall')document.querySelectorAll('[data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'})}
+
+/* llevar a la celda de la Matriz (ambiente × actividad) y resaltar su fila y su columna 3 s. Si un filtro la esconde, se abre */
+function mxGoCell(amb,cat){const p=pisoOfAmb(amb);if(p&&U.piso&&U.piso!==p)U.piso=p;const c=MX.cat.get(cat);
+  if(c&&mxSel().length&&!mxSel().includes(c.sc))U.mxSc=[];if(c&&c.cl==='e')U.mxAll=true;
+  U.mxV='mat';MX.sel.clear();MX.focus={amb,cat,until:performance.now()+3000,scrolled:false};saveUI();goTab('mat')}

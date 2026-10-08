@@ -144,6 +144,7 @@ function renderMat(main){ensureMx();ensureMver();
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
+  mxFocusPaint()
   mxWire(main)}
 
 /* barra de la selección (abajo) */
@@ -254,3 +255,11 @@ async function mxImport(file){if(!isAdmin)return;let d;try{d=JSON.parse(await fi
   if(!plan.length){toast('No hay nada nuevo que cargar: todo ya existe.');return}
   const ok=await uiAsk({title:'Cargar catálogo de la matriz',html:`<p>${esc(d.fuente||'')}</p><ul><li>${cnt.mcat} actividades del catálogo</li><li>${cnt.mtipo} tipos de ambiente</li><li>${cnt.mamb} ambientes con su tipo</li></ul>${cnt.skip?`<p>${cnt.skip} ya existen y no se tocan.</p>`:''}${cnt.noAmb?`<p>${cnt.noAmb} ambientes del archivo no existen en esta obra (se omiten).</p>`:''}<p>Solo crea datos nuevos de la matriz. No cambia el lookahead ni nada de lo que ya está.</p>`,ok:'Cargar',tone:'info'});if(!ok)return;
   try{for(let i=0;i<plan.length;i+=400){const b=db.batch();plan.slice(i,i+400).forEach(([c,id,v])=>b.set(fcol(c).doc(id),v,{merge:true}));await b.commit()}toast('Catálogo cargado')}catch(e){toast('No se pudo cargar: '+(e&&e.code||e))}}
+
+/* resaltado temporal de una celda (fila + columna) al llegar desde el Lookahead (MX.focus, mxGoCell). Sobrevive a los redibujos
+   de esos 3 s; al vencer se quita solo */
+function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-performance.now();if(left<=0){MX.focus=null;return}
+  const t=$('#mxt');if(!t||!MX.view)return;const ci=MX.view.cols.findIndex(c=>c.id===f.cat);const tr=t.querySelector(`tr[data-amb="${CSS.escape(f.amb)}"]`);
+  if(tr){tr.classList.add('mxhl');}if(ci>=0){const h=t.querySelector(`th[data-mxcol="${ci}"]`);if(h)h.classList.add('mxhl');t.querySelectorAll(`td[data-k="${ci}"]`).forEach(td=>td.classList.add('mxhlc'))}
+  const cell=tr&&ci>=0?tr.querySelector(`td[data-k="${ci}"]`):null;if(cell){cell.classList.add('mxhlx');if(!f.scrolled){f.scrolled=true;const b=$('#mxbox');if(b){const br=b.getBoundingClientRect(),cr=cell.getBoundingClientRect();b.scrollTop+=cr.top-br.top-b.clientHeight/2+cr.height/2;b.scrollLeft+=cr.left-br.left-b.clientWidth/2+cr.width/2}}}
+  clearTimeout(MX.focusT);MX.focusT=setTimeout(()=>{MX.focus=null;document.querySelectorAll('#mxt .mxhl,#mxt .mxhlc,#mxt .mxhlx').forEach(e=>e.classList.remove('mxhl','mxhlc','mxhlx'))},left)}
