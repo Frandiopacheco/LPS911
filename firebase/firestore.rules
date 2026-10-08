@@ -176,7 +176,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (edPiso(resource.data) && edPiso(request.resource.data)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null)
         && (resource.data.get('reo', null) != null || resource.data.get('ids', null) == null
-            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'log', 'date', 'pisoId'])));
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'who', 'log', 'date', 'pisoId'])));
       allow delete: if isAdmin() || (edPiso(resource.data) && dplanFuture(resource.data.get('date', '')));
     }
     // Historial de cambios del lookahead (uno por cambio): lo escribe quien edita; no se cambia ni se borra
