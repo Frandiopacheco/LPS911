@@ -95,10 +95,10 @@ function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o
 
 function renderMat(main){ensureMx();ensureMver();
   const loaded=MX.ld.cat&&MX.ld.tipo&&MX.ld.amb;
-  const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆ Cargar catálogo<input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
-  if(mxCanEd()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓ Terminar edición':'✎ Editar'}</button>`);
-  if(MX.ver.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib" id="mxfhist" title="Fotos guardadas: comparar${isAdmin?' o restablecer':''}">🕘 Fotos (${MX.ver.size})</button>`);
-  if(mxEd()&&MX.cat.size)acts.push(`<button class="ib" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸 Guardar foto semanal</button>`);
+  const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆<span class="mxlbl"> Cargar catálogo</span><input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
+  if(mxCanEd()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓<span class="mxlbl"> Terminar edición</span>':'✎<span class="mxlbl"> Editar</span>'}</button>`);
+  if(MX.ver.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib" id="mxfhist" title="Fotos guardadas: comparar${isAdmin?' o restablecer':''}">🕘<span class="mxlbl"> Fotos</span> (${MX.ver.size})</button>`);
+  if(mxEd()&&MX.cat.size)acts.push(`<button class="ib" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸<span class="mxlbl"> Guardar foto semanal</span></button>`);
   const head=pageHead('Matriz de ambientes',`${U.piso?esc((S.pis.get(U.piso)||{}).name||''):'Todos los pisos'} · estado actual de cada actividad por ambiente`,acts.join(''));
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
@@ -122,7 +122,7 @@ function renderMat(main){ensureMx();ensureMver();
     <p>Las celdas con borde punteado las propone el sistema (del tipo de ambiente y del lookahead, terminadas según Campo) y nadie las ha confirmado. En el levantamiento semanal, selecciónalas y marca su estado real o pulsa <b>Validar</b>.</p>
     ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente.</p>':''}
     <p><b>Foto semanal:</b> guarda el estado de la obra. Elige una foto en «Comparar con» para ver qué avanzó desde entonces.</p>`;
-  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg()+`<div class="mxstat"><span class="mxst t"><i style="width:${apl?Math.round(100*tot.t/apl):0}%"></i></span><b>Terminado ${pc(tot.t)}</b> <small>${tot.t} de ${apl}</small><span class="mxdot">·</span>En curso <b>${pc(tot.c)}</b><span class="mxdot">·</span>Pendiente <b>${pc(tot.p)}</b><span class="mxdot">·</span>Sin validar <b>${tot.sug}</b>${cmp?`<span class="mxdot">·</span>Cambios desde la foto <b>${tot.chg}</b> <small>${tot.chgT} terminados</small>`:''}</div>`)}
+  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg()+`<div class="mxstat"><span class="mxst t"><i style="width:${apl?Math.round(100*tot.t/apl):0}%"></i></span><b>Terminado ${pc(tot.t)}</b> <small>${tot.t} de ${apl}</small><span class="mxsx"><span class="mxdot">·</span>En curso <b>${pc(tot.c)}</b><span class="mxdot">·</span>Pendiente <b>${pc(tot.p)}</b></span><span class="mxdot">·</span>Sin validar <b>${tot.sug}</b><span class="mxsx">${cmp?`<span class="mxdot">·</span>Cambios desde la foto <b>${tot.chg}</b> <small>${tot.chgT} terminados</small>`:''}</span></div>`)}
    ${mxEd()&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
    ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
@@ -133,6 +133,7 @@ function renderMat(main){ensureMx();ensureMver();
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
     <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
+    <button class="ib${document.body.classList.contains('mxfs')?' on':''}" id="mxfs" title="Pantalla completa: oculta la barra superior y las pestañas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
     <button class="ib" id="mxxls" title="Exportar a Excel lo que está a la vista (piso, filtros y orden)">⬇ Excel</button>
     <button class="ib" id="mxhelp" title="Cómo se usa la matriz" aria-label="Ayuda">ⓘ</button>
     <span class="mxleg">${['p','c','t','n'].map(s=>`<span><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</span>`).join('')}<span><i class="mc s-p sug"></i>Sin validar</span>${cmp?'<span><i class="mc s-t chg">✓</i>Cambió</span>':''}</span>
@@ -191,6 +192,11 @@ function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.tar
 const mxZ=()=>{const z=+U.mxZ;return z>=0&&z<=2?z:1};
 function mxFit(){const b=$('#mxbox');if(!b||!b.isConnected)return;const top=b.getBoundingClientRect().top;b.style.maxHeight=Math.max(240,innerHeight-top-14)+'px'}
 addEventListener('resize',()=>{if(U.tab==='mat')mxFit()});
+/* pantalla completa de la matriz (como el Lookahead): sin barra superior ni pestañas y, si se puede, sin la barra del navegador */
+function mxFsSet(on){on=!!on&&U.tab==='mat';document.body.classList.toggle('mxfs',on);const b=$('#mxfs');if(b)b.classList.toggle('on',on);
+  try{if(on&&!document.fullscreenElement&&document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});else if(!on&&document.fullscreenElement)document.exitFullscreen().catch(()=>{})}catch(e){}
+  setTimeout(mxFit,60)}
+document.addEventListener('fullscreenchange',()=>{if(document.body.classList.contains('mxfs')&&!document.fullscreenElement)mxFsSet(false);else setTimeout(mxFit,60)});
 function mxGoCol(i){const b=$('#mxbox'),t=$('#mxt');if(!b||!t)return;const th=t.querySelector(`th[data-mxcol="${i}"]`);if(!th)return;
   const fix=[...t.querySelectorAll('thead .mxh0,thead th.mxtp,thead th.mxpc')].reduce((w,e)=>w+(e.offsetParent?e.offsetWidth:0),0);b.scrollTo({left:Math.max(0,th.offsetLeft-fix),behavior:'smooth'})}
 function mxScMenu(btn){const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));const L=mxSel();
@@ -206,7 +212,8 @@ function mxWire(main){mxWireV(main);
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
   const xb=$('#mxxls');if(xb)xb.onclick=mxExport;
-  const hb=$('#mxhelp');if(hb)hb.onclick=()=>openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${MX.helpH||''}</div>`,{});
+  const hb=$('#mxhelp');if(hb)hb.onclick=()=>{const lg=$('.mxleg');const st=$('.mxstat');openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${st?'<p>'+st.innerHTML+'</p>':''}${lg?'<div class="mxleg mxlegp">'+lg.innerHTML+'</div>':''}${MX.helpH||''}</div>`,{})};
+  const fsb=$('#mxfs');if(fsb)fsb.onclick=()=>mxFsSet(!document.body.classList.contains('mxfs'));
   main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();const t=$('#mxt');if(t){t.classList.remove('mxz0','mxz1','mxz2');t.classList.add('mxz'+mxZ())}});
   mxFit();
   const eb=$('#mxedit');if(eb)eb.onclick=()=>{MX.edit=!MX.edit;MX.sel.clear();closePop();render()};

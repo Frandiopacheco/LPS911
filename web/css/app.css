@@ -3160,3 +3160,27 @@ table.mx .mxg th.mxdim{opacity:.55}
 .mxfh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line2);border-radius:var(--r-ctl)}
 .mxfh.nw{border-color:var(--ok);background:var(--ok-soft)}
 .mxfhb{display:flex;gap:6px;flex:none}
+/* Matriz: pantalla completa (⛶) y tablet (oct 2026) */
+body.mxfs .top,body.mxfs #bnav,body.mxfs #verban{display:none!important}
+#mxfs.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.mxlegp{margin:4px 0 8px}
+@media (min-width:761px) and (max-width:1366px) and (pointer:coarse){
+  .mxwrap .phd .pht>span{display:none}
+  .mxwrap .phd{gap:6px 10px;margin-bottom:4px}
+  .mxwrap .phd .pha{flex-wrap:nowrap}
+  .mxwrap .mxlbl{display:none}
+  .mxwrap .mxsx{display:none}
+  .mxwrap .mxst{width:56px}
+  .mxwrap .mxleg{display:none}
+  .mxwrap .mxbar0 .fgl{display:none}
+  .mxwrap .mxbar0{gap:6px;flex-wrap:nowrap;overflow-x:auto}
+  table.mx{--aw:170px;--tw:0px}
+  table.mx .mxtp{display:none}
+  table.mx.mxz0{--nh:110px}table.mx.mxz1{--nh:150px}table.mx.mxz2{--nh:180px}
+  table.mx .mxc span{font-size:12px}
+}
+@media (min-width:761px) and (max-width:1366px) and (pointer:coarse){
+  .mxwrap .phd .pha .ib{min-width:0;padding:0 12px}
+  .mxwrap .callout.mxun{padding:4px 10px;margin:2px 0}
+  .mxwrap .fbar.mxbar0{margin:4px 0}
+}
