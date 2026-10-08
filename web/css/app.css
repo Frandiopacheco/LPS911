@@ -3033,3 +3033,12 @@ table.mxct tr.mxarch td{color:var(--muted)}
 .mxur:last-child{border-bottom:0}
 .mxur span{display:flex;flex-direction:column;gap:2px}.mxur s{color:var(--muted)}.mxur small{color:var(--muted)}
 .mxur input{margin-top:3px}
+/* alertas Matriz ↔ Lookahead */
+.mxbadge{position:absolute;right:calc(4px + 22px * var(--k,0));top:50%;transform:translateY(-50%);font:700 10px var(--f-ui);background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad);border-radius:4px;padding:0 3px;line-height:14px;cursor:pointer}
+td.act.hb3 .ci{padding-right:68px!important}td.act.hb3 .anv{padding-right:68px}
+td.mc.warn{box-shadow:inset 0 0 0 2px var(--bad)}
+td.mc.warn::before{content:"!";position:absolute;top:0;left:2px;font:700 9px var(--f-ui);color:var(--bad)}
+td.mc.dim{opacity:.28}
+td.mc.spx{box-shadow:inset 0 0 0 2px var(--warn)}
+.tile.mxtw{border-color:var(--bad)}.tile.mxtw .v{color:var(--bad)}
+.callout.mxwc{margin:6px 0;font-size:12.5px}

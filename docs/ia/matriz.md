@@ -65,6 +65,13 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Con el respaldo del 07/10: 654 filas cambiarían de nombre (160 variantes), 1352 ya usan el nombre del catálogo, 8 sin catálogo.
 - Prueba: `tests/e2e/matriz-look.spec.js`.
 
+## Alertas Matriz ↔ Lookahead (oct 2026)
+
+- `mamb` se carga también en el Lookahead (`ensureMamb()` en `renderLook`; su snapshot sube `DV` y redibuja).
+- En cada celda (`mxCells`): `fut` = filas del lookahead con días ≥ hoy; `warn` = estado **confirmado** «Terminado» o «No aplica» y `fut` no vacío; `sp` = pendiente / en curso sin días ≥ hoy («sin programar»).
+- **Matriz:** tiles «Terminado y aún programado» y «Pendiente sin programar»; filtro «Ver: Todo / ⚠ Alertas / Sin programar» (`U.mxF`, en `saveUI`; solo ambientes con alguna y atenúa el resto); celdas `warn` con borde rojo. En la ficha: «Quitar del lookahead los días desde mañana…» (`mxUnprogram`: hoy y lo pasado no se tocan; `apply` → Deshacer, historial y control de días cerrados).
+- **Lookahead:** marca ⚠ en la fila (`mxRowBadge`, `mxRowWarn`; clic → Matriz con «Alertas» y el piso de la fila) y aviso al agregar un día ≥ hoy a una fila en alerta (`mxApplyWarn`, llamado desde `apply` en base.js), con Deshacer. No bloquea.
+
 ## Cambiar el catálogo después de cargarlo
 
 - La carga inicial **solo crea**: volver a cargar el mismo archivo completa lo que falte (p. ej. el tipo de ambientes que no existían la primera vez) y no toca lo demás.

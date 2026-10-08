@@ -136,3 +136,16 @@ async function mxUnifyDlg(){if(!isAdmin)return;
      const n=ops.filter(o=>o.col==='acts').length;apply(ops,`Nombres unificados: ${n} ${n===1?'fila':'filas'}`)},
    e=>{if(e.target.id==='mxuall')document.querySelectorAll('[data-mxu]:not(:disabled)').forEach(c=>c.checked=e.target.checked);
      const n=[...document.querySelectorAll('[data-mxu]:checked')].reduce((s,c)=>s+L[+c.dataset.mxu].ids.length,0);const el=$('#mxucnt');if(el)el.textContent=n+' filas'})}
+
+/* ---------- alertas Matriz ↔ Lookahead ----------
+   La matriz dice «Terminado» o «No aplica» (confirmado por una persona) y la fila del lookahead sigue con días de hoy en adelante.
+   Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
+function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
+  const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>=T)?v:null}
+function mxRowBadge(x,k){const v=mxRowWarn(x);return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
+function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
+  for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
+    const v=mxRowWarn({...o.after,id:o.id});if(!v)continue;const a=S.amb.get(o.after.ambId);
+    setTimeout(()=>toast(`⚠ «${o.after.name}»${a?' en '+a.code:''}: la matriz dice «${MXS[v]}». ¿De verdad va?`,'Deshacer',undo),60);return}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.mxw);const p=x&&pisoOfAmb(x.ambId);
+  if(p&&U.piso&&U.piso!==p)U.piso=p;U.mxV='mat';U.mxF='warn';saveUI();goTab('mat')},true);
