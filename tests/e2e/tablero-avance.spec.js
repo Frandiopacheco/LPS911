@@ -20,3 +20,17 @@ test('Tablero: avance semanal contra lo congelado, con extra aparte', async ({ p
   await expect(page.locator('#dav .dave')).not.toHaveCount(0);
   noErrors(errors, 'avance semanal');
 });
+
+test('Tablero: menú «Subcontratista ▾» filtra, el filtro activo se quita con × y los demás SC quedan atenuados', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'dash', editar: false });
+  await expect(page.locator('#dsc [data-dsc]').first()).toBeVisible();
+  const a = await page.locator('#dsc [data-dsc]').first().getAttribute('data-dsc');
+  await page.click('#dscdd');
+  await page.click(`#pop [data-dsk="${a}"]`);
+  expect(await page.evaluate(() => [...DB_.sc])).toEqual([a]);
+  await expect(page.locator(`#dsc [data-dsc]:not([data-dsc="${a}"])`).first()).toHaveClass(/ddim/);
+  await page.click(`.dfon[data-dscx="${a}"]`);
+  expect(await page.evaluate(() => DB_.sc.size)).toBe(0);
+  await expect(page.locator('#dfisw')).toHaveCount(0);
+  noErrors(errors, 'menú de SC');
+});
