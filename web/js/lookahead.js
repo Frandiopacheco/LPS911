@@ -42,6 +42,7 @@ function buildLookShell(main){
     <span class="seg" id="fwin" aria-label="Semanas visibles"><button data-w="3">3 sem</button><button data-w="6">6 sem</button><button data-w="12">12 sem</button></span>
     <button class="ib pri" id="fedit" hidden>✎ Editar</button>
     <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
+    <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
     <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
@@ -67,7 +68,7 @@ function buildLookShell(main){
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
-  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
+  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
   $('#fclr').onclick=()=>{U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
@@ -672,3 +673,11 @@ function addPiso(){const ps=pisos();const last=ps[ps.length-1];const n=ps.length
 /* tocar el n.º de ítem resalta la fila (para seguirla con la vista al recorrer las semanas); otra vez la suelta */
 let LKROW=null;
 function lkRowSel(id){LKROW=LKROW===id?null:id;document.querySelectorAll('#grid tr.rsel').forEach(t=>t.classList.remove('rsel'));if(LKROW){const tr=document.querySelector(`#grid tr[data-a="${CSS.escape(LKROW)}"]`);if(tr)tr.classList.add('rsel')}}
+
+/* Lookahead a pantalla completa (tablet, oct 2026): oculta la barra superior y las pestañas, y pide al navegador pantalla
+   completa (sin la barra de direcciones). Se puede seguir editando. Sale con ⛶, con «atrás» o al cambiar de pestaña. */
+let LKFS=false;
+function lkFs(on){LKFS=!!on&&U.tab==='look';document.body.classList.toggle('lkfs',LKFS);const b=$('#ffs');if(b){b.classList.toggle('on',LKFS);b.textContent=LKFS?'Salir ⛶':'⛶'}
+  try{if(LKFS&&!document.fullscreenElement&&document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+    else if(!LKFS&&document.fullscreenElement&&!LKP)document.exitFullscreen().catch(()=>{})}catch(e){}}
+document.addEventListener('fullscreenchange',()=>{if(LKFS&&!document.fullscreenElement)lkFs(false)});
