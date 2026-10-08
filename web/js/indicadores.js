@@ -55,7 +55,7 @@ function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
   const rowH=26,W=380,L=122,R=44,h=data.length*rowH+8;const mx=Math.max(1,...data.map(d=>d.max??d.v));
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
   data.forEach((d,i)=>{const y=4+i*rowH;const bw=Math.max(d.v>0?3:0,(W-L-R)*(d.v/mx));
-    s+=`<g><title>${esc(d.label)}: ${fmt(d.v)}${d.sub?' · '+esc(d.sub):''}</title>${d.color?`<rect x="0" y="${y+8}" width="12" height="12" rx="3" fill="${d.color}"/>`:''}<text class="nm" x="${d.color?18:0}" y="${y+18}">${esc(d.label.length>17?d.label.slice(0,16)+'…':d.label)}</text>
+    s+=`<g${d.dsc?` data-dsc="${esc(d.dsc)}" class="dsgo${DB_.sc.size?(DB_.sc.has(d.dsc)?' dsel':' ddim'):''}"`:''}><title>${esc(d.label)}: ${fmt(d.v)}${d.sub?' · '+esc(d.sub):''}${d.dsc?' · clic: filtrar el tablero por este SC':''}</title>${d.color?`<rect x="0" y="${y+8}" width="12" height="12" rx="3" fill="${d.color}"/>`:''}<text class="nm" x="${d.color?18:0}" y="${y+18}">${esc(d.label.length>17?d.label.slice(0,16)+'…':d.label)}</text>
     <rect x="${L}" y="${y+6}" width="${W-L-R}" height="16" rx="4" fill="var(--panel2)"/><path class="bar" d="M${L},${y+6} h${Math.max(0,bw-4)} q4,0 4,4 v8 q0,4 -4,4 h-${Math.max(0,bw-4)} Z"/><text class="lab" x="${L+bw+6}" y="${y+18}">${fmt(d.v)}</text></g>`});
   return s+'</svg>'}
 /* el SC de un día ya registrado es el que guardó el registro (rc.sc): cambiar la partida de la actividad después no
