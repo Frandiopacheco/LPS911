@@ -3150,3 +3150,8 @@ table.mx .mxg th.mxgo{overflow:visible}
 /* nombres de actividad (2.º ajuste, oct 2026): sin negrita, más grandes y con la letra del sistema (Segoe UI en Windows), más nítida en vertical */
 table.mx .mxc span{font-family:system-ui,"Segoe UI",Roboto,Arial,sans-serif;font-weight:400;font-size:13px;letter-spacing:0;-webkit-font-smoothing:auto;color:var(--ink)}
 table.mx.mxz0 .mxc span{font-size:12px}table.mx.mxz2 .mxc span{font-size:14px}
+/* matriz ordenada por programación: punto en las actividades programadas de hoy a 3 semanas; SC sin nada que hacer, tenue */
+table.mx .mxc.mxpg{background-image:radial-gradient(circle at 50% 7px,var(--c) 3px,transparent 3.5px)}
+table.mx .mxc.mxpg span{padding-top:12px}
+table.mx .mxg th.mxdim{opacity:.55}
+.mxord{display:inline-flex;align-items:center;gap:6px}

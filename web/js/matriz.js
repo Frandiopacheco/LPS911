@@ -73,8 +73,20 @@ function mxRows(){const R=[];for(const p of visPisos()){const secs=[...S.sec.val
 const mxSel=()=>Array.isArray(U.mxSc)?U.mxSc.filter(id=>S.con.has(id)||[...MX.cat.values()].some(c=>c.sc===id)):[];
 /* columnas: actividades del catálogo que aparecen en los ambientes a la vista (por subcontratista y orden del catálogo) */
 function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(a=>Object.keys(cells.get(a.id)||{}).forEach(c=>used.add(c))));
-  const scs=mxSel();return[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||scs.includes(c.sc))&&(U.mxAll||c.cl!=='e'))
-    .sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name))}
+  const scs=mxSel();const L=[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||scs.includes(c.sc))&&(U.mxAll||c.cl!=='e'));
+  const az=(a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name);
+  /* orden por programación (oct 2026, decidido con el dueño): primero los SC con días programados en los ambientes a la vista de hoy a
+     3 semanas (más días primero), luego los que tienen pendientes sin programar y al final los que ya no tienen nada que hacer ahí.
+     Dentro de cada SC, primero sus actividades programadas. MX.ci: {catId:{pg:días, tier}} para marcar los encabezados. */
+  const T0=todayIso(),T1=addD(T0,21);const ci={};const ids=new Set(L.map(c=>c.id));
+  for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};for(const[c,o]of Object.entries(C)){if(!ids.has(c))continue;const k=ci[c]=ci[c]||{pg:0,pend:0};
+    if(o.s==='p'||o.s==='c')k.pend++;for(const id of o.acts||[]){const x=S.act.get(id);if(x)k.pg+=(x.days||[]).filter(d=>d>=T0&&d<=T1).length}}}
+  const sc={};for(const c of L){const k=ci[c.id]||{pg:0,pend:0};const o=sc[c.sc]=sc[c.sc]||{pg:0,pend:0};o.pg+=k.pg;o.pend+=k.pend}
+  for(const c of L){const o=sc[c.sc];(ci[c.id]=ci[c.id]||{pg:0,pend:0}).tier=o.pg>0?0:o.pend>0?1:2}
+  MX.ci=ci;
+  if(U.mxOrd==='az')return L.sort(az);
+  return L.sort((a,b)=>{const A=sc[a.sc],B=sc[b.sc];return ci[a.id].tier-ci[b.id].tier||B.pg-A.pg||conOf(a.sc).name.localeCompare(conOf(b.sc).name)||a.sc.localeCompare(b.sc)
+    ||((ci[b.id].pg>0)-(ci[a.id].pg>0))||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name)})}
 
 /* foto semanal elegida para comparar: {ambId:{catId:estado}} */
 function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o={};for(const[a,s]of Object.entries(f.a||{})){const m={};String(s).split(',').forEach(p=>{const[c,v]=p.split(':');if(c&&v)m[c]=v});o[a]=m}return o}
@@ -114,6 +126,7 @@ function renderMat(main){ensureMx();ensureMver();
    <div class="fbar mxbar0">
     <button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
+    <label class="mxord" title="Por programación: primero los SC con trabajo programado en estos ambientes de hoy a 3 semanas"><span class="fgl">Orden</span><select id="mxord" aria-label="Orden de las columnas"><option value="prog"${U.mxOrd==='az'?'':' selected'}>Por programación</option><option value="az"${U.mxOrd==='az'?' selected':''}>Alfabético</option></select></label>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
     <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
@@ -127,8 +140,8 @@ function renderMat(main){ensureMx();ensureMver();
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const multi=visPisos().length>1;const NC=cols.length+3;
   h+=`<div class="mxbox" id="mxbox"><table class="mx mxz${mxZ()}${ed?' ed':''}" id="mxt"><thead>
-   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${esc(c.name)}</span></th>`}).join('')})()}</tr>
-   <tr class="mxn">${cols.map((c,i)=>`<th class="mxc${c.cl==='d'?' dsg':''}" data-mxcol="${i}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(c.name)} · ${esc(conOf(c.sc).name)} · ${MXCL[c.cl]||''}${ed?' (clic: seleccionar la columna)':''}"><span>${esc(c.name)}</span></th>`).join('')}</tr></thead><tbody>`;
+   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo${MX.ci&&cols[i0]&&MX.ci[cols[i0].id]&&MX.ci[cols[i0].id].tier===2?' mxdim':''}" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${esc(c.name)}</span></th>`}).join('')})()}</tr>
+   <tr class="mxn">${cols.map((c,i)=>`<th class="mxc${c.cl==='d'?' dsg':''}${MX.ci&&MX.ci[c.id]&&MX.ci[c.id].pg?' mxpg':''}" data-mxcol="${i}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(c.name)} · ${esc(conOf(c.sc).name)} · ${MXCL[c.cl]||''}${ed?' (clic: seleccionar la columna)':''}"><span>${esc(c.name)}</span></th>`).join('')}</tr></thead><tbody>`;
   let ri=0;let lastP='';
   for(const r of rows){
     if(multi&&r.p.id!==lastP){h+=`<tr class="mxp"><th colspan="${NC}"><span class="mxsl">${esc(r.p.code)} · ${esc(r.p.name)}</span></th></tr>`;lastP=r.p.id}
@@ -193,6 +206,7 @@ function mxWire(main){mxWireV(main);
   const eb=$('#mxedit');if(eb)eb.onclick=()=>{MX.edit=!MX.edit;MX.sel.clear();closePop();render()};
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
+  const mo=$('#mxord');if(mo)mo.onchange=e=>{U.mxOrd=e.target.value;saveUI();MX.sel.clear();render()};
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
   mxWireBar();

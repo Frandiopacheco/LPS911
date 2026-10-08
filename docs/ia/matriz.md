@@ -112,3 +112,5 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Cabecera compacta: indicadores en una línea (`.mxstat`), «Cómo se usa» en el botón ⓘ (`#mxhelp`, texto en `MX.helpH`), SC en el menú «Subcontratistas ▾» (`#mxscdd` → `mxScMenu`, botones `data-mxsk`: clic = solo ese, Ctrl+clic = sumar/quitar).
 - Tabla: alto de la pantalla (`mxFit`, también al cambiar el tamaño de la ventana), columnas fijas Ambiente/Tipo/% (vars `--aw/--tw/--pw`), nombre del SC del grupo y del sector siguen a la vista al desplazar.
 - Tamaño de celda − / + (`U.mxZ` 0/1/2 → clase `mxz0..2`, vars `--cw/--nh`). Clic en el nombre del SC del grupo (`th[data-mxgo]`) salta a sus columnas (`mxGoCol`).
+
+- **Orden de columnas** (`U.mxOrd`, select `#mxord`; por defecto «Por programación»): en `mxCols`, primero los SC con días programados en los ambientes a la vista de hoy a 3 semanas (más días primero), luego los que tienen Pendiente/En curso sin programar, al final los demás (encabezado `.mxdim`); dentro de cada SC, primero lo programado (`.mxpg`, punto con su color). `MX.ci` guarda días y nivel por actividad. «Alfabético» = orden anterior.
