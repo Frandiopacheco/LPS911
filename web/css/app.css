@@ -3137,3 +3137,7 @@ table.mx.mxz2 td.mc{font-size:14px}table.mx.mxz0 td.mc{font-size:10px}
 /* el nombre del SC del grupo sigue a la vista al desplazarse a la derecha */
 table.mx .mxg th.mxgo span{position:sticky;left:calc(var(--aw) + var(--tw) + var(--pw) + 6px);display:inline-block;max-width:100%}
 table.mx .mxsl{position:sticky;left:8px;display:inline-block}
+/* nombres de actividad de la matriz nítidos (oct 2026): el giro de 180° con transform los dejaba borrosos (sobre todo en
+   Windows con zoom). Donde se puede se escriben de lado sin girar (sideways-lr); el texto, más oscuro y en peso 600. */
+table.mx .mxc span{color:var(--ink);font-weight:600;font-size:11.5px;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+@supports (writing-mode:sideways-lr){table.mx .mxc span{writing-mode:sideways-lr;transform:none}}
