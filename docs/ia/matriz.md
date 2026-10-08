@@ -125,3 +125,7 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 
 ## Exportar (oct 2026)
 - «⬇ Excel» (`#mxxls`, `mxExport`): lo que está a la vista (`MX.view`: piso, filtros, orden). Hojas **Matriz** (encabezado por SC con su color, nombres en vertical, símbolos ✓ ◐ ○ – con color; sin validar en cursiva gris; % por ambiente y por columna; paneles fijos), **Lista** (una fila por celda, con autofiltro) y **Leyenda**. Prueba: `tests/e2e/matriz-excel.spec.js`.
+
+## Tablet y pantalla completa (oct 2026)
+- ⛶ (`#mxfs`, `mxFsSet`): oculta barra superior y pestañas (`body.mxfs`) y pide pantalla completa al navegador; se apaga al salir de la pestaña.
+- Tablet (`min-width:761px and max-width:1366px and pointer:coarse`): botones de la cabecera solo con ícono (`.mxlbl` oculto), sin subtítulo, indicadores resumidos (`.mxsx` oculto; el detalle y la leyenda van en ⓘ), Ambiente 170 px sin Tipo, encabezado de actividades a 150 px.
