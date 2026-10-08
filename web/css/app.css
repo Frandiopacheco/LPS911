@@ -250,8 +250,8 @@ body.dash-tv .dplanw{height:52vh}
 td.d.pa{background-image:repeating-linear-gradient(135deg,var(--c) 0 3px,transparent 3px 7px)!important;background-color:transparent;opacity:.85;box-shadow:inset 0 0 0 2px var(--c)}
 td.d.pr{opacity:.45;background-image:linear-gradient(to top right,transparent calc(50% - 1.5px),#c62828 calc(50% - 1.5px),#c62828 calc(50% + 1.5px),transparent calc(50% + 1.5px))!important}
 tr.prow td.s4{box-shadow:inset 3px 0 0 #ef6c00}
-tr.pdel td.s4 input,tr.pdel td.d.on{text-decoration:line-through;opacity:.4}
-tr.pmro td.s4 input,tr.pmro td.s3{opacity:.65}
+tr.pdel td.s4 input,tr.pdel td.s4 .anv,tr.pdel td.d.on{text-decoration:line-through;opacity:.4}
+tr.pmro td.s4 input,tr.pmro td.s4 .anv,tr.pmro td.s3{opacity:.65}
 .ppm{position:fixed;inset:0;z-index:48;background:rgba(10,15,12,.45);display:flex;justify-content:flex-end}
 .ppc{background:var(--panel);width:min(560px,100vw);height:100%;overflow:auto;padding:0 0 30px;box-shadow:-8px 0 30px rgba(0,0,0,.2)}
 .pph{position:sticky;top:0;z-index:2;background:var(--panel);display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
@@ -295,8 +295,8 @@ td.d.rvp{box-shadow:inset 0 0 0 2px var(--ink);background:rgba(0,0,0,.06)}
 tr.rvrow td.d.on{cursor:grab}
 tr.rvdragging td.d.on{cursor:grabbing}
 tr.rvrow.rvdel td.d.on::after{opacity:.35;background-image:linear-gradient(to top right,transparent calc(50% - 1.5px),#c62828 calc(50% - 1.5px),#c62828 calc(50% + 1.5px),transparent calc(50% + 1.5px))}
-tr.rvrow.rvdel td.s4 input{text-decoration:line-through;color:#b71c1c}
-tr.rvrow.rvnew td.s4 input{font-weight:700}
+tr.rvrow.rvdel td.s4 input,tr.rvrow.rvdel td.s4 .anv{text-decoration:line-through;color:#b71c1c}
+tr.rvrow.rvnew td.s4 input,tr.rvrow.rvnew td.s4 .anv{font-weight:700}
 .rvb{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:3px;z-index:4;pointer-events:auto}
 .rvb button{width:22px;height:22px;border-radius:50%;border:0;font:700 12px/1 var(--f-ui);cursor:pointer;color:#fff;padding:0;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .rvb button[data-rva=ok]{background:#2e7d4f}.rvb button[data-rva=rej]{background:#c62828}.rvb button.rvm{background:var(--accent);color:var(--accent-ink);font-size:14px}.rvb button.rvm[data-rva=date]{font-size:11px}.rvb .rvsep{width:4px}
@@ -633,6 +633,13 @@ td.act .ci{padding-right:22px;box-sizing:border-box;text-overflow:ellipsis}
 .obadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);font:700 10px var(--f-mono);background:#fff4d6;color:#8a5a00;border:1px solid #d99a00;border-radius:4px;padding:0 4px;cursor:pointer;line-height:14px}
 .obadge.sh{right:26px}
 td.act.hb .ci{padding-right:24px!important}td.act.hb2 .ci{padding-right:46px!important}
+/* nombre de la actividad completo: el texto se ve en varias líneas (.anv, alto de la fila) y el campo queda encima;
+   al editar se ve el campo y el texto se oculta (mismo alto) */
+td.act .anv{display:block;box-sizing:border-box;min-height:calc(var(--rh) - 1px);padding:6px 22px 6px 6px;white-space:normal;overflow-wrap:anywhere;line-height:1.25;pointer-events:none}
+td.act.hb .anv{padding-right:24px}td.act.hb2 .anv{padding-right:46px}
+td.act .ci[data-f="name"]{position:absolute;inset:0;height:100%;color:transparent;caret-color:var(--ink)}
+td.act .ci[data-f="name"]:focus{color:var(--ink)}
+td.act:focus-within .anv{visibility:hidden}
 .pop .ptx{max-width:300px;padding:4px 10px 8px;font-size:12.5px;line-height:1.45;white-space:normal;color:var(--ink)}
 .ctab th.r,.ctab td.r{text-align:right}.ctab td.ok{color:var(--ok);font-weight:600}.ctab td.pa{color:var(--warn);font-weight:600}.ctab td.no{color:var(--bad);font-weight:600}.mu{color:var(--muted)}
 .ctab td{white-space:nowrap}.ctab td.wrapc{white-space:normal;min-width:160px}
@@ -1055,7 +1062,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
 /* modo propuesta del subcontratista: lo suyo se marca, lo ajeno queda atenuado */
 tr.pmown>td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 tr.pmro{color:var(--muted)}
-tr.pmro td.s4 input,tr.pmro td.s3{opacity:.55}
+tr.pmro td.s4 input,tr.pmro td.s4 .anv,tr.pmro td.s3{opacity:.55}
 /* pestaña "Más" (secciones que el rol usa poco) */
 .tabs .tmore{margin-left:auto}
 .tabs .tmore.on{color:var(--ink);border-bottom-color:var(--accent)}
