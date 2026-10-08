@@ -288,3 +288,24 @@ test('ventana de propuestas: si el ingeniero nunca la habilitó, está cerrada (
   await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita la primera vez');
 });
+
+test('ventana de propuestas: el ingeniero puede bloquearlas a mano antes del corte y volver a habilitarlas', async ({ page }) => {
+  let errors = await openApp(page, { as: 'editor', tab: 'look' }); // el Firebase falso la siembra abierta hasta 2027
+  page.on('dialog', d => d.accept());
+  await expect(page.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  await page.locator('#ppbar [data-pp="close"]').click();
+  await expect.poll(() => page.evaluate(() => { const w = __dbGet('meta', 'propwin') || {}; return w.man === true && w.closeAt <= NOW(); })).toBe(true);
+  await expect(page.locator('#ppbar')).toContainText('las bloqueaste');
+  await expect(page.locator('#ppbar [data-pp="close"]')).toHaveCount(0);
+  await page.locator('#ppbar [data-pp="open"]').click();
+  const nx = await page.evaluate(() => propNextCut());
+  await expect.poll(() => page.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
+  await expect.poll(() => page.evaluate(() => !!(__dbGet('meta', 'propwin') || {}).man)).toBe(false);
+  noErrors(errors, 'editor bloquea y rehabilita');
+  const p2 = await page.context().newPage();
+  errors = await openApp(p2, { as: 'sc', tab: 'look', extra: [['meta', 'propwin', { closeAt: Date.parse('2026-09-26T13:00:00-05:00'), man: true }]] });
+  await expect(p2.locator('#ppbar')).toContainText('el ingeniero las bloqueó');
+  expect(await p2.evaluate(() => propPut('acts', 'i0', { ...S.act.get('i0'), days: ['2026-10-05'] }))).toBe(true);
+  expect(await p2.evaluate(() => __dbGet('lhprop', 'c1'))).toBeFalsy();
+  noErrors(errors, 'sc bloqueado a mano');
+});

@@ -262,6 +262,9 @@ test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingen
   await assertFails(setDoc(doc(sc, 'meta/propwin'), { closeAt: Date.now() + 864e5 })); // el SC no se habilita solo
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
   await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
+  // bloquear a mano antes del corte: el ingeniero pone closeAt = ahora y el SC queda en solo lectura
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() - 1000, man: true }));
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x7: { sent: false } } }, { merge: true }));
   await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/propwin')); });
   await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x8: { sent: false } } }, { merge: true })); // nunca habilitada: cerrada
 });
