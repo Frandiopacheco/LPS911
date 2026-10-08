@@ -51,7 +51,7 @@ test('propuestas: no se acepta una que cambia hoy sin registro; rechazar sí', a
   noErrors(errors, 'propuesta cerrada');
 });
 
-test('PPC diario: se mide contra la foto del plan; lo agregado no cuenta y lo que salió sin registro es no cumplido', async ({ page }) => {
+test('PPC diario: se mide contra la foto del plan; lo agregado no cuenta y lo que salió sin registro queda sin verificar', async ({ page }) => {
   const AYER = '2026-09-30';
   // la foto del 30 set en P1 tenía i0 y e0; e0 ya no está ese día en el lookahead y nadie la registró; i1 se agregó después
   const SNAP = ['dplan', `${AYER}_p1`, { date: AYER, pisoId: 'p1', ids: { i0: null, e0: 10 }, pub: 'pub_x' }];
@@ -59,9 +59,10 @@ test('PPC diario: se mide contra la foto del plan; lo agregado no cuenta y lo qu
   const errors = await openApp(page, { tab: 'ind', extra: [SNAP, D] });
   await page.evaluate(d => ensureDaily(d), AYER);
   await expect.poll(() => page.evaluate(d => !!dplanOf(d, 'p1'), AYER)).toBe(true);
-  const r = await page.evaluate(d => { const o = dayData([d], new Set(['p1'])); return { tot: o.tot, adds: o.adds.map(x => x.x.id).sort(), out: o.rows.filter(x => x.rc && x.rc._out).map(x => [x.x.id, x.rc.cnc, x.rc.imp]) }; }, AYER);
-  expect(r.tot).toEqual({ prog: 2, ver: 2, ok: 1, partial: 0, no: 1, nimp: 1 });
+  const r = await page.evaluate(d => { const o = dayData([d], new Set(['p1'])); return { tot: o.tot, adds: o.adds.map(x => x.x.id).sort(), e0: o.rows.filter(x => x.x.id === 'e0').map(x => x.rc || null) }; }, AYER);
+  // e0 salió del día sin registro: sigue comprometida, sin verificar y sin causa inventada (misma regla que si siguiera en el Lookahead)
+  expect(r.tot).toEqual({ prog: 2, ver: 1, ok: 1, partial: 0, no: 0, nimp: 0 });
   expect(r.adds).toContain('i1');
-  expect(r.out).toEqual([['e0', 'Programación', false]]);
+  expect(r.e0).toEqual([null]);
   noErrors(errors, 'ppc diario foto');
 });

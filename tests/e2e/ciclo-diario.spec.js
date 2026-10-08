@@ -107,7 +107,7 @@ test('5b · PPC diario: lo terminado antes del día no cuenta como «salió del 
   const errors = await openApp(page, { tab: 'ind', extra: [SNAP, DI] });
   await page.evaluate(d => ensureDaily(d), AYER);
   await expect.poll(() => page.evaluate(d => !!dplanOf(d, 'p1') && DONE.has('e0'), AYER)).toBe(true);
-  const r = await page.evaluate(d => { const o = dayData([d], new Set(['p1'])); return { prog: o.tot.prog, out: o.rows.filter(x => x.rc && x.rc._out).map(x => x.x.id) }; }, AYER);
+  const r = await page.evaluate(d => { const o = dayData([d], new Set(['p1'])); return { prog: o.tot.prog, out: o.rows.filter(x => x.x.id === 'e0').map(x => x.x.id) }; }, AYER);
   expect(r.out).toEqual([]);
   expect(r.prog).toBe(1);
   noErrors(errors, 'terminada antes');
