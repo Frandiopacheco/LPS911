@@ -463,9 +463,13 @@ service cloud.firestore {
     }
     // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
     // La lee todo LPS; en la fase 1 editan administrador y editores. No se borra (lo que sobra se archiva o queda «no aplica»).
+    // El SC también agrega actividades desde el lookahead (oct 2026): de su partida, con su correo y marcadas «por revisar» (rev).
     match /mcat/{id} {
       allow read: if lpsMember();
-      allow create, update: if canEdit();
+      allow create: if canEdit() || (isSC() && request.resource.data.get('by', '') == mid()
+        && request.resource.data.get('sc', '') in scsOf() && request.resource.data.get('rev', null) is map
+        && request.resource.data.rev.get('by', '') == mid() && !request.resource.data.keys().hasAny(['arch', 'revOk']));
+      allow update: if canEdit();
       allow delete: if false;
     }
     match /mtipo/{id} {

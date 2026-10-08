@@ -50,11 +50,13 @@ test('exigir catálogo: el nombre del catálogo se impone y lo que no está se a
   await nameIn(page, 'e1').press('Enter');
   await expect(page.locator('#lqm')).toContainText('no está en el catálogo');
   expect((await get(page, 'acts', 'e1')).name).toBe('Entubado empotrado');
-  // el ambiente (a2) es de tipo «Dpto»: se ofrece agregarla también al tipo (marcado por defecto)
-  await expect(page.locator('#mxatp')).toBeChecked();
+  // el ambiente (a2) es de tipo «Dpto»: por defecto solo este ambiente; se puede marcar «todos los del tipo»
+  await expect(page.locator('#mxatp')).not.toBeChecked();
+  await page.check('#mxatp');
   await page.selectOption('#mxacl', 'e');
   await expect(page.locator('#mxatp')).not.toBeChecked();
   await page.selectOption('#mxacl', 't');
+  await page.check('#mxatp');
   await page.click('#mxaok');
   await expect.poll(async () => (await get(page, 'acts', 'e1')).name).toBe('Instalación de espejos');
   const nid = await page.evaluate(() => Object.entries(__dbAll('mcat')).find(([, c]) => c.name === 'Instalación de espejos' && c.sc === 'c2')[0]);
@@ -62,20 +64,57 @@ test('exigir catálogo: el nombre del catálogo se impone y lo que no está se a
   noErrors(errors, 'exigir catálogo');
 });
 
-test('SC con catálogo exigido: propone la actividad nueva y el ingeniero la aprueba', async ({ page }) => {
+test('SC con catálogo exigido: agrega la actividad directo (por revisar) y sigue con su propuesta', async ({ page }) => {
   const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }]];
   const errors = await openApp(page, { as: 'sc', tab: 'look', extra });
   await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
   await nameIn(page, 'i0').fill('Pruebas de presión');
   await nameIn(page, 'i0').press('Enter');
-  await expect(page.locator('#lqm')).toContainText('propónla');
-  await expect(page.locator('#mxaok')).toHaveCount(0);
-  await page.click('#mxapr');
-  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcatp')).length)).toBe(1);
-  const p = await page.evaluate(() => Object.values(__dbAll('mcatp'))[0]);
-  expect(p).toMatchObject({ name: 'Pruebas de presión', sc: 'c1', st: 'pend', by: 'sc@obra.pe', actId: 'i0' });
+  await expect(page.locator('#lqm')).toContainText('Se agrega solo a este ambiente');
+  await page.click('#mxaok');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => c.name === 'Pruebas de presión').length)).toBe(1);
+  const c = await page.evaluate(() => Object.values(__dbAll('mcat')).find(c => c.name === 'Pruebas de presión'));
+  expect(c).toMatchObject({ sc: 'c1', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', amb: 'a1', tipo: null } });
+  // su programación sigue como propuesta (no cambia el lookahead directo)
+  await expect.poll(() => page.evaluate(() => (((__dbGet('lhprop', 'c1') || {}).items || {}).i0 || {}).after?.name)).toBe('Pruebas de presión');
   expect((await get(page, 'acts', 'i0')).name).toBe('Redes empotradas');
-  noErrors(errors, 'SC propone');
+  noErrors(errors, 'SC agrega');
+});
+
+test('el ingeniero ve lo que agregó el SC, lo corrige (el lookahead se actualiza) y lo marca revisado', async ({ page }) => {
+  const extra = [...CAT, ['mtipo', 'tp1', { name: 'Dpto', acts: ['k1'], order: 10 }],
+    ['mcat', 'k7', { name: 'Pruebas presion', sc: 'c1', cl: 't', al: ['pruebas presion'], ord: 70, by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', n: 'Sandra', t: 1, amb: 'a1', tipo: 'tp1' } }],
+    ['acts', 'z7', { ambId: 'a1', sc: 'c1', name: 'Pruebas presion', days: ['2026-10-06'], order: 50 }]];
+  const errors = await openApp(page, { tab: 'hoy', extra });
+  await expect(page.locator('[data-hoy="mcat"]')).toContainText('Pruebas presion');
+  await page.click('[data-hoy="mcat"] [data-hgo]');
+  await expect(page.locator('.mxrev')).toContainText('Pruebas presion');
+  // corrige el nombre en la tabla → la fila del lookahead cambia
+  await page.locator('tr[data-mcid="k7"] [data-mcf="name"]').fill('Pruebas de presión');
+  await page.locator('tr[data-mcid="k7"] [data-mcf="name"]').press('Enter');
+  await expect.poll(async () => (await get(page, 'acts', 'z7')).name).toBe('Pruebas de presión');
+  expect((await get(page, 'mcat', 'k7')).al).toEqual(['pruebas presion', 'pruebas de presion']);
+  // el SC pidió el tipo: el ingeniero lo confirma
+  await page.click('[data-mxrtp="k7"]');
+  await expect.poll(async () => (await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1', 'k7']);
+  await page.click('[data-mxrok="k7"]');
+  await expect.poll(async () => (await get(page, 'mcat', 'k7')).rev).toBeUndefined();
+  await expect(page.locator('.mxrev')).toHaveCount(0);
+  noErrors(errors, 'revisar lo agregado');
+});
+
+test('renombrar en el catálogo actualiza el lookahead y Deshacer lo devuelve; fusionar también', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  await page.click('[data-mxv="cat"]');
+  await page.locator('tr[data-mcid="k2"] [data-mcf="name"]').fill('Tarrajeo');
+  await page.locator('tr[data-mcid="k2"] [data-mcf="name"]').press('Enter');
+  await expect.poll(async () => (await get(page, 'acts', 't0')).name).toBe('Tarrajeo');
+  expect((await get(page, 'acts', 't2')).name).toBe('Tarrajeo');
+  await expect(page.locator('#toast')).toContainText('3 filas del lookahead');
+  await page.click('#toast button');
+  await expect.poll(async () => (await get(page, 'acts', 't0')).name).toBe('Tarrajeo de muros');
+  await expect.poll(async () => (await get(page, 'mcat', 'k2')).name).toBe('Tarrajeo de muros');
+  noErrors(errors, 'renombrar');
 });
 
 test('el ingeniero aprueba una propuesta del SC y queda en el catálogo', async ({ page }) => {
@@ -96,8 +135,9 @@ test('desde el Lookahead sin abrir la Matriz: también ofrece agregar al tipo de
   await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
   await nameIn(page, 'e0').fill('Cielo raso');
   await nameIn(page, 'e0').press('Enter');
-  await expect(page.locator('#mxatp')).toBeChecked();
+  await expect(page.locator('#mxatp')).not.toBeChecked();
   await expect(page.locator('#lqm')).toContainText('tipo «Dpto»');
+  await page.check('#mxatp');
   await page.click('#mxaok');
   await expect.poll(async () => (await get(page, 'mtipo', 'tp1')).acts.length).toBe(2);
   noErrors(errors, 'tipo desde el lookahead');

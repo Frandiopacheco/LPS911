@@ -20,7 +20,7 @@ const mnk=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
 /* el catálogo también lo usa el lookahead (nombres de actividad): se carga aparte y antes que el resto de la matriz */
 let mcatSub=null;
 function ensureMcat(){if(mcatSub||!db)return;
-  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&U.tab==='mat')requestRender()},
+  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'))requestRender()},
     err=>{MX.err=err&&err.code||'error';MX.ld.cat=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mcatSub)mcatSub();mcatSub=null;MX.cat.clear();MX.ld.cat=false;MX.v++})}
 function ensureMx(){ensureMcat();if(mxSubs||!db)return;const u=[];
@@ -95,6 +95,7 @@ function renderMat(main){ensureMx();
     <div class="tile"><span class="k">Sin validar</span><span class="v">${tot.sug} <small>propuestas del sistema</small></span></div>
     ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
    </div>
+   ${ed&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&ed?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar mxbar0">

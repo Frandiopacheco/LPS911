@@ -28,7 +28,7 @@ test('catálogo: renombrar y cambiar clase no toca lo marcado; Deshacer', async 
 });
 
 test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  const errors = await openApp(page, { tab: 'mat', extra: [...CAT, ['acts', 'd9', { ambId: 'a1', sc: 'c1', name: 'Redes dup', days: [], order: 60 }]] });
   await page.click('[data-mxv="cat"]');
   await row(page, 'k9').locator('[data-mcm]').click();
   await page.click('#pop [data-do="fus"]');
@@ -42,6 +42,8 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   expect((await get(page, 'mcat', 'k1')).al).toEqual(['redes empotradas', 'redes dup', 'redes duplicada']);
   expect((await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1']);
   expect((await get(page, 'mcat', 'k9')).arch.fus).toBe('k1');
+  // la fila del lookahead que usaba «Redes (duplicada)» pasa a llamarse como la que queda
+  await expect.poll(async () => (await get(page, 'acts', 'd9')).name).toBe('Redes empotradas');
   await expect(row(page, 'k9')).toHaveCount(0);
   // restaurar desde Archivadas
   await page.click('[data-mxarch="1"]');
@@ -51,6 +53,7 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   expect((await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
   expect((await get(page, 'mcat', 'k1')).al).toEqual(['redes empotradas']);
   expect((await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1', 'k9']);
+  await expect.poll(async () => (await get(page, 'acts', 'd9')).name).toBe('Redes dup');
   noErrors(errors, 'fusionar');
 });
 
@@ -97,4 +100,26 @@ test('lector: ve el catálogo y los tipos sin poder editar', async ({ page }) =>
   await page.click('[data-mxv="tipo"]');
   await expect(page.locator('[data-mtadd]')).toHaveCount(0);
   noErrors(errors, 'lector');
+});
+
+test('especialidad: se elige de la lista (o se agrega una nueva sin duplicar) y la actividad nueva toma la del SC', async ({ page }) => {
+  const extra = [...CAT.map(c => c[0] === 'mcat' && c[1] === 'k1' ? ['mcat', 'k1', { ...c[2], esp: 'Instalaciones sanitarias' }] : c)];
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.click('[data-mxv="cat"]');
+  const sel = row(page, 'k2').locator('select[data-mcf="esp"]');
+  await expect(sel.locator('option')).toContainText(['—', 'Instalaciones sanitarias', '＋ Nueva especialidad…']);
+  await sel.selectOption('Instalaciones sanitarias');
+  await expect.poll(async () => (await get(page, 'mcat', 'k2')).esp).toBe('Instalaciones sanitarias');
+  // nueva: si ya existe con otra escritura, usa la existente
+  page.once('dialog', d => d.accept('instalaciones  SANITARIAS'));
+  await row(page, 'k9').locator('select[data-mcf="esp"]').selectOption('__new');
+  await expect.poll(async () => (await get(page, 'mcat', 'k9')).esp).toBe('Instalaciones sanitarias');
+  page.once('dialog', d => d.accept('Acabados'));
+  await row(page, 'k1').locator('select[data-mcf="esp"]').selectOption('__new');
+  await expect.poll(async () => (await get(page, 'mcat', 'k1')).esp).toBe('Acabados');
+  // actividad nueva del SC c3: propone la especialidad que ya usa ese SC
+  await page.click('#mxcnew');
+  await page.selectOption('#mxnsc', 'c3');
+  await expect(page.locator('#mxnesp')).toHaveValue('Instalaciones sanitarias');
+  noErrors(errors, 'especialidad');
 });
