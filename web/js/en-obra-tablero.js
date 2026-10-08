@@ -265,27 +265,10 @@ function dashAvance(n,vs,d){const wd=weekDays(n).filter(z=>z<=d);const o={meta:0
    tocar una fila filtra todo el tablero (clic = solo ese, Ctrl+clic = sumar, otra vez = todos) */
 function noSc(fn){const k=DB_.sc;DB_.sc=new Set();try{return fn()}finally{DB_.sc=k}}
 const scCls=sc=>DB_.sc.size?(DB_.sc.has(sc)?' dsel':' ddim'):'';
-/* Avance físico por SC desde la Matriz (oct 2026, decidido con el dueño): celdas que aplican (sin «No aplica») de los pisos a la vista;
-   Terminado = 1, En curso = 0,5 (U.dashEc, se puede apagar). Confiabilidad = celdas confirmadas y al día (terminada / no aplica, o
-   cambiada en las últimas 2 semanas, o ambiente revisado en el Recorrido en 2 semanas); < 70 % se muestra «por validar».
-   Ritmo y proyección: con 3 o más fotos semanales (mver), celdas terminadas por semana entre la primera y la última de las 4 últimas. */
-function dashFis(vs){if(typeof mxCells!=='function'||!MX.ld||!MX.ld.cat||!MX.ld.amb)return null;const ec=U.dashEc!==false?.5:0;const lim=NOW()-14*864e5;const w0=addD(todayIso(),-14);
-  const sc={};const g=k=>sc[k]=sc[k]||{a:0,t:0,c:0,ok:0};const okAmb=a=>vs.has(pisoOfAmb(a));
-  for(const[amb,C]of mxCells()){if(!okAmb(amb))continue;const m=MX.amb.get(amb)||{};const rv=m.rv&&m.rv.d>=w0;
-    for(const[cid,o]of Object.entries(C)){if(o.s==='n')continue;const c=MX.cat.get(cid);if(!c||!dashOk(c.sc,c.name))continue;const r=g(c.sc);r.a++;if(o.s==='t')r.t++;else if(o.s==='c')r.c++;
-      const mt=((m.m||{})[cid]||{}).t||0;if(!o.sug&&(o.s==='t'||rv||mt>=lim))r.ok++}}
-  const fotos=[...MX.ver.values()].filter(f=>f&&f.a).sort((a,b)=>(a.t||0)-(b.t||0)).slice(-4);const hist={};
-  for(const f of fotos)for(const[amb,str]of Object.entries(f.a)){if(!okAmb(amb))continue;for(const p of String(str).split(',')){const[cid,v0]=p.split(':');if(!cid||!v0)continue;const c=MX.cat.get(cid);if(!c||!dashOk(c.sc,c.name))continue;
-    if(v0.replace('?','')==='t'){const h=hist[c.sc]=hist[c.sc]||{};h[f.id]=(h[f.id]||0)+1}}}
-  for(const[k,r]of Object.entries(sc)){r.v=r.a?(r.t+ec*r.c)/r.a:null;r.conf=r.a?r.ok/r.a:null;
-    if(fotos.length>=3){const f0=fotos[0],f1=fotos[fotos.length-1];const wk=Math.max(1,((f1.t||0)-(f0.t||0))/(7*864e5));const h=hist[k]||{};const rate=((h[f1.id]||0)-(h[f0.id]||0))/wk;r.rate=rate;
-      const rest=r.a-r.t;r.fin=rest<=0?todayIso():rate>0?addD(todayIso(),Math.ceil(rest/rate*7)):null}}
-  return{sc,nf:fotos.length}}
 /* tipos de actividad para el filtro: nombres de lo programado en las últimas 6 semanas y las 2 siguientes */
 function dashTypes(d){const a=addD(d,-42),b=addD(d,14);const m=new Map();for(const x of S.act.values()){if(!(x.days||[]).some(z=>z>=a&&z<=b))continue;if(DB_.sc.size&&!DB_.sc.has(x.sc))continue;const k=an(x.name);if(!k)continue;const o=m.get(k);if(o)o.n++;else m.set(k,{k,t:String(x.name).trim(),n:1})}
   return[...m.values()].sort((p,q)=>p.t.localeCompare(q.t))}
 function renderDash(main){if(!canDash()){U.tab='look';render();return}
-  if(typeof ensureMx==='function'){ensureMx();if(typeof ensureMver==='function')ensureMver()}
   const d=todayIso();ensureDaily(addD(d,-31));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(!DB_.tick)DB_.tick=setInterval(()=>{if(U.tab==='dash'&&ready)requestRender();else{clearInterval(DB_.tick);DB_.tick=null}},60000);
   const vsP=new Set(visPisos().map(p=>p.id));const items=dashData(d);const act=items.filter(i=>!i.nova);
@@ -308,7 +291,6 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d)o.late++});
   const rRows=Object.entries(rBy).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>({label:k,v:o.n,sub:o.late?o.late+' vencidas':''}));
   const AV=dashAvance(cw,vsP,d);const AVall=DB_.sc.size?noSc(()=>dashAvance(cw,vsP,d)):AV;
-  const FIS=typeof dashFis==='function'?noSc(()=>dashFis(vsP)):null;
   /* por subcontratista, hoy */
   const actAll=DB_.sc.size?noSc(()=>dashData(d)).filter(i=>!i.nova):act;
   const bySc=new Map();actAll.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,seq:0,run:0,stop:0,ok:0,no:0,n:0};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
@@ -340,23 +322,12 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const avSc=Object.entries(AVall.sc).filter(([,v])=>v.meta).sort((a,b)=>a[1].real/a[1].meta-b[1].real/b[1].meta||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
   const gav=`<div class="dcard"><div class="dch">Avance de la semana ${cw} contra lo congelado</div>${AV.meta?`<p class="dnote">Días-actividad con «Cumplido» de todos los comprometidos en la semana congelada (Parcial y No cuentan 0; vale si se cumplió otro día de la semana). La franja clara marca dónde debería estar a hoy. De menor a mayor avance.</p>
     <div class="dav">${avRow('<b>Total</b>',AV)}${avSc.map(([sc,v])=>avRow(esc(conOf(sc).name),v,conOf(sc).color,sc)).join('')}</div>${AV.extra?`<p class="dnote">Además, ${AV.extra} cumplido${AV.extra>1?'s':''} fuera de lo congelado (no suman al avance).</p>`:''}`:`<p class="mu">${AV.pis?'Sin compromisos congelados con estos filtros.':'La semana '+cw+' aún no está congelada en estos pisos.'}</p>`}</div>`;
-  const fin=P().finObra||'';
-  const fisL=FIS?Object.entries(FIS.sc).filter(([,v])=>v.a).sort((a,b)=>(a[1].v||0)-(b[1].v||0)||conOf(a[0]).name.localeCompare(conOf(b[0]).name)):[];
-  const fisT=fisL.filter(([k])=>!DB_.sc.size||DB_.sc.has(k)).reduce((o,[,v])=>{o.a+=v.a;o.t+=v.t;o.c+=v.c;o.ok+=v.ok;if(v.rate!=null){o.rate=(o.rate||0)+v.rate}return o},{a:0,t:0,c:0,ok:0});if(fisT.rate!=null){const rest=fisT.a-fisT.t;fisT.fin=rest<=0?todayIso():fisT.rate>0?addD(todayIso(),Math.ceil(rest/fisT.rate*7)):null}const ecF=U.dashEc!==false?.5:0;
-  const fisRow=(lab,v,k)=>{const conf=v.a?v.ok/v.a:null;const low=conf!=null&&conf<.7;const pv=v.a?(v.t+ecF*v.c)/v.a:0;const late=fin&&v.fin&&v.fin>fin;
-    return`<div class="dfr${k?' dsgo'+scCls(k):''}${low?' dlow':''}"${k?` data-dsc="${k}" title="Clic: filtrar el tablero por este SC"`:''}><span class="dsn"${k?` style="--c:${conOf(k).color}"`:''}>${k?'<i></i>':''}${lab}</span>
-      <span class="davb"><i class="davr" style="width:${Math.round(pv*100)}%"></i></span><span class="dsval">${Math.round(pv*100)}%</span><span class="dsw">${v.t}/${v.a}${v.c?` · ${v.c} en curso`:''}</span>
-      <span class="dfc2"><span class="pill${low?' warn':' ok'}" title="Celdas confirmadas y al día en la Matriz">${low?'por validar · ':''}${v.a?Math.round(100*v.ok/v.a):0}% validado</span></span>
-      <span class="dfc3${late?' bad':''}">${v.rate!=null?`${v.rate.toFixed(1)}/sem · ${v.fin?(v.t>=v.a?'terminado':'fin '+fmtD(v.fin)):'sin avance'}`:'—'}</span></div>`};
-  const gfis=`<div class="dcard"><div class="dch">Avance físico por subcontratista · Matriz <label class="chk dfec" title="En curso cuenta la mitad"><input type="checkbox" id="dfec"${U.dashEc!==false?' checked':''}> En curso = 50 %</label></div>
-    ${!FIS?'<p class="mu">Cargando la matriz…</p>':!fisL.length?'<p class="mu">La Matriz aún no tiene actividades en estos pisos.</p>':`<p class="dnote">Celdas Terminado de las que aplican en la Matriz (pisos a la vista). Si menos del 70 % está validado al día, el número está «por validar». Ritmo y fecha de fin: con las fotos semanales${FIS.nf<3?` (faltan ${3-FIS.nf} foto${3-FIS.nf>1?'s':''} para calcularlos)`:''}${fin?` · fin de obra ${fmtD(fin)} (en rojo, quien no llega)`:''}.</p>
-    <div class="dav dfis">${fisRow('<b>Total</b>',fisT)}${fisL.map(([k,v])=>fisRow(esc(conOf(k).name),v,k)).join('')}</div>`}</div>`;
   const g3=`<div class="dcard"><div class="dch">Causas de no cumplimiento · 30 días</div>${top.length?`<div class="dsv chart">${svgBarsH(top.map(([k,v])=>({label:k,v})),v=>String(v))}</div>`:'<p class="mu">Sin incumplimientos registrados.</p>'}</div>
     <div class="dcard"><div class="dch">Restricciones abiertas por responsable <span>${RS.length}</span></div>${rRows.length?`<div class="dsv chart">${svgBarsH(rRows,v=>String(v))}</div>`:'<p class="mu">No hay restricciones abiertas.</p>'}</div>`;
   const pls=visPisos().filter(p=>items.some(i=>i.pid===p.id));if(!pls.some(p=>p.id===DB_.pid))DB_.pid=(pls.find(p=>API&&[...API.zonedSet(p.id)].length)||pls[0]||{}).id||'';
-  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div id="dkp"></div><div class="dgrid2" id="dg1"></div><div id="dav"></div><div id="dfisw"></div><div class="dgrid2"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><p class="dnote">Toca un ambiente para ver su información.</p><div class="dplanw"><div class="kplan" id="dplan"></div></div></div></div><div class="dgrid2" id="dg3"></div></div>`;main.dataset.built='1';main.onclick=dashClick;main.onchange=e=>{if(e.target.id==='dty'){DB_.ty=e.target.value;dashRe()}if(e.target.id==='dfec'){U.dashEc=e.target.checked;saveUI();render()}}}
+  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div id="dkp"></div><div class="dgrid2" id="dg1"></div><div id="dav"></div><div class="dgrid2"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><p class="dnote">Toca un ambiente para ver su información.</p><div class="dplanw"><div class="kplan" id="dplan"></div></div></div></div><div class="dgrid2" id="dg3"></div></div>`;main.dataset.built='1';main.onclick=dashClick;main.onchange=e=>{if(e.target.id==='dty'){DB_.ty=e.target.value;dashRe()}}}
   const put=(id,html)=>{const el=$('#'+id,main);if(el&&el.dataset.h!==html){el.innerHTML=html;el.dataset.h=html}};
-  put('dtop',hh);put('dkp',kp);put('dg1',g1);put('dav',gav);put('dfisw',gfis);put('dsc',sc);put('dg3',g3);
+  put('dtop',hh);put('dkp',kp);put('dg1',g1);put('dav',gav);put('dsc',sc);put('dg3',g3);
   put('dpch',pls.map(p=>`<button class="${DB_.pid===p.id?'on':''}" data-dp="${p.id}">${esc(p.code)}</button>`).join(''));
   if(API&&DB_.pid){const its=items.filter(i=>i.pid===DB_.pid&&!i.nova);const colors=new Map(its.map(i=>[i.x.id,KST[i.st.k].c]));API.capPlan($('#dplan',main),{pid:DB_.pid,colors,nums:API.nums(DB_.pid),bs:28,fitAll:true,onPick:aid=>dashPop(aid,d)})}
   document.body.classList.toggle('dash-tv',DB_.tv)}
