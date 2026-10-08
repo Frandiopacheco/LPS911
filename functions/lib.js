@@ -211,12 +211,14 @@ function buildDayPlan({ pisos, sectors, ambientes, acts, done = new Map() }, d) 
   const pids = new Set(P.map(p => p.id)); const first = P[0].id;
   const secById = new Map(live(sectors).map(s => [s.id, s])), ambById = new Map(live(ambientes).map(a => [a.id, a]));
   const pisoOfAmb = id => { const a = ambById.get(id); const s = a && secById.get(a.sectorId); return a ? (s && s.pisoId && pids.has(s.pisoId) ? s.pisoId : first) : ''; };
-  const by = new Map(P.map(p => [p.id, {}]));
+  const by = new Map(P.map(p => [p.id, {}])); const wh = new Map(P.map(p => [p.id, {}]));
   for (const x of live(acts)) {
     if (!(x.days || []).includes(d)) continue; const dn = done.get(x.id); if (dn && d > dn) continue;
     const pid = pisoOfAmb(x.ambId); if (!by.has(pid)) continue; const q = (x.qty || {})[d]; by.get(pid)[x.id] = q != null ? +q : null;
+    /* who: SC y ambiente de cada compromiso al publicar (auditoría PPC diario, hallazgo 6): cambiar la partida o el ambiente después no reasigna el historial */
+    wh.get(pid)[x.id] = { sc: x.sc || '', amb: x.ambId || '' };
   }
-  return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids } }));
+  return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids, who: wh.get(pisoId) } }));
 }
 
 /* ---------- Publicación automática de los borradores del plan (a la hora de cierre) ---------- */
@@ -374,7 +376,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     if (R) for (const [id, u] of Object.entries(R.acts)) Acts.set(id, { ...(Acts.get(id) || {}), ...(A.get(id) || {}), ...u, id });
     if (R) for (const na of R.newActs || []) Acts.set(na.id, { ...na.doc, id: na.id });
     const pl = buildDayPlan({ pisos, sectors, ambientes, acts: Acts, done }, d).find(o => o.doc.pisoId === pid);
-    const ids = pl ? pl.doc.ids : {};
+    const ids = pl ? pl.doc.ids : {}; const who = pl ? pl.doc.who : {};
     if (R) {
       for (const [id, u] of Object.entries(R.acts)) tx.update(col('acts').doc(id), u);
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
@@ -395,7 +397,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P2 = P;
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
     const pub = !!(R && R.pub);
-    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
+    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, who, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
     return { R, P: P2, ids };
   });
 }

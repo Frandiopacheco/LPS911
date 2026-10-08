@@ -187,7 +187,7 @@ test('cierre de las 20:00: día hábil siguiente y foto del plan por piso', () =
     acts: M({ x1: { ambId: 'a1', days: ['2026-10-05'], qty: { '2026-10-05': 12 } }, x2: { ambId: 'a1', days: ['2026-10-05'] }, x3: { ambId: 'a1', days: ['2026-10-05'], arch: { t: 1 } }, x4: { ambId: 'a2', days: ['2026-10-06'] }, x5: { ambId: 'a1', days: ['2026-10-02', '2026-10-05'] } }),
     done: new Map([['x5', '2026-10-02']])
   }, '2026-10-05');
-  assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null } } }]);
+  assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null }, who: { x1: { sc: '', amb: 'a1' }, x2: { sc: '', amb: 'a1' } } } }]);
 });
 
 test('auditoría N01: no se acepta el cierre que declara otra partida que la de la actividad', () => {

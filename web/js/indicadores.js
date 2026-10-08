@@ -80,13 +80,17 @@ function nvRec(x,d){if(d>todayIso())return null;ensureNova();const z=NOVA.get(d+
   if(z&&+z.ts>0&&+z.ts<dayStartMs(d))return'out';const o=v||z;if(!o)return null;
   const PROGN=(P().cnc||[]).find(c=>cncCode(c)==='PROG')||'Programación';const cnc=o.cnc||PROGN;
   return{status:'no',cnc,imp:o.imp!=null?!!o.imp:(o.cnc?null:false),rsc:o.rsc||'',pc:!!o.pc,note:'No va: '+(o.m||o.motivo||'reprogramada en el plan diario'),_nova:true,sc:x.sc}}
+/* hallazgo 6: con la foto que guarda SC y ambiente (dplan.who), la fila usa los de la publicación; sin registro con sc,
+   el SC es el de la foto. Fotos antiguas (sin who): como antes, la actividad vigente. */
+function whoFix(r,sn){const w=sn&&sn.who&&sn.who[r.x.id];if(!w)return;if(!(r.rc&&r.rc.sc)&&w.sc)r.sc=w.sc;
+  if(w.amb&&w.amb!==r.a.id){const a=ambOf(w.amb);const s=a&&secOf(a.sectorId);if(a&&s){r.a=a;r.s=s}}}
 function dayDataSnap(dates,vset,rows){const adds=[];const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
-  for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true}else{adds.push(r);rows.splice(i,1)}}
+  for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true;whoFix(r,sn)}else{adds.push(r);rows.splice(i,1)}}
   for(const d of dates)for(const pid of vset){const sn=dplanOf(d,pid);if(!sn||!sn.ids)continue;
     for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;if(doneBefore(id,d)&&!recOf(d,id))continue; /* terminada antes: no se le pide ese día */const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
       const nv=recOf(d,id)?null:nvRec(x,d);if(nv==='out')continue;
       const rc=recOf(d,id)||nv||null;
-      rows.push({p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)});seen.add(id+'|'+d)}}
+      const r={p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)};whoFix(r,sn);rows.push(r);seen.add(id+'|'+d)}}
   return adds}
 function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
   for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:scAt(rc,x)})}}

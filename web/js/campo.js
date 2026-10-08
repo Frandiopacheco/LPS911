@@ -111,7 +111,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
       writeDaily(d,pid,{recs:{[aid]:r}});if(nst!=='ok'&&!r.cnc)toast('Elige la causa y, si quieres, agrega una foto.');return}
     if(t.closest('[data-cconf]')&&canDaily){confirmProp(d,aid);toast('Confirmado');return}
     const lvb=t.closest('[data-clv]');if(lvb&&canDaily){const k=lvb.dataset.clv;if(k==='stop')capSheet(aid,d,'stop');else kAct(aid,d,k);return}
-    const dnb=t.closest('[data-cdone]');if(dnb&&canDaily){markDone(aid,d);return}
+    const dnb=t.closest('[data-cdone]');if(dnb&&canDaily){askDone(aid,d);return}
     const rob=t.closest('[data-creopen]');if(rob&&canDaily){reopenDone(aid);return}
     const exb=t.closest('[data-cexe]');if(exb&&cur&&canDaily){execPop(exb,aid,exb.dataset.cexe);return}
     const rpb=t.closest('[data-crep]');if(rpb&&cur&&canWrite){reprogAct(aid,rpb.dataset.crep,d);return}

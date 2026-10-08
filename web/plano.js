@@ -522,7 +522,7 @@ function actQuick(anchor,aid){const x=S.act.get(aid);if(!x)return;const a=S.amb.
   const later=(x.days||[]).filter(y=>y>M.date).length;const h={};let html=`<div class="ph">${esc(x.name||'(sin nombre)')}</div><div class="ptx">${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')} · sin ubicar en el plano</div>`;
   if(cp&&prev){html+=`<button data-do="prev">📍 Ubicar donde trabajó la última vez</button>`;h.prev=()=>{M.scDraw=x.sc;newZone(unflat(prev.pts),{actId:aid},prev.vista);toast('Ubicada como la última vez. Ajústala si cambia.')}}
   if(cp&&!PHONE()){html+=`<button data-do="draw">✏️ Dibujar su zona en el plano</button>`;h.draw=()=>{M.scDraw=x.sc;M.pend={actId:aid};if(typeof rskWarn==='function')rskWarn(aid);M.tool='zona';M.selId=null;requestRender();toast('Dibuja la zona en el plano: toca las esquinas y cierra en la primera.')}}
-  if(cd){html+=`<button data-do="done">✓ Ya está terminada${later?` <kbd>libera ${later} día${later>1?'s':''}</kbd>`:''}</button>`;h.done=()=>{if(typeof markDone==='function'){markDone(aid,M.date);requestRender()}}}
+  if(cd){html+=`<button data-do="done">✓ Ya está terminada${later?` <kbd>libera ${later} día${later>1?'s':''}</kbd>`:''}</button>`;h.done=()=>{if(typeof askDone==='function')askDone(aid,M.date).then(ok=>{if(ok)requestRender()})}}
   if(cp){html+=`<button data-do="nova">⏸ No se hará hoy…</button>`;h.nova=()=>setTimeout(()=>M.date>t0?noVa(anchor,x,{}):novaDialog(anchor,x),0)}
   if(cr){html+=`<button data-do="rst">⚠ Tiene una restricción…</button>`;h.rst=()=>setTimeout(()=>restrQuick(anchor,x),0)}
   if(!Object.keys(h).length)html+=`<div class="ptx">No tienes permiso para cambiarla.</div>`;
@@ -1424,7 +1424,7 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
     /* foto del plan comprometido (contra ella se mide el PPC diario), con las actividades releídas del servidor;
        un día que ya llegó conserva la que tenía (o la de antes de publicar) */
     let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso()){for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});for(const na of newActs)Acts.set(na.id,{...na.doc,id:na.id})}
-      snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
+      snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,who:dplanWho(snapIds,Acts),at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
     return{out,skipped,held,W,restrs,doc,was:pubD,snapIds,paOut,newActs}})}
   catch(e){PUBBUSY=false;toast('No se pudo publicar: '+(e&&(e.code||e.message)||'error'));return}
   PUBBUSY=false;
@@ -1828,7 +1828,7 @@ function dzMove(btn,x){const from=M.date;const to=wshift(from,1);
     {one:()=>{if(dzWrite(x,dzShift(x,from,false),`“${short(x.name,40)}” pasa al ${fmtD(to)}`))dzLog(`→ ${x.name} pasa al ${fmtD(to)}`)},
      all:()=>{if(dzWrite(x,dzShift(x,from,true),`“${short(x.name,40)}” y lo que sigue, un día hábil después`))dzLog(`→ ${x.name} y lo que sigue, un día después`)}})}
 function dzFin(x){if(typeof canDaily==='undefined'||!canDaily)return;const d=M.date>todayIso()?todayIso():M.date;
-  uiAsk({title:`¿“${x.name}” ya está terminada${d===todayIso()?' hoy':' el '+fmtD(d)}?`,text:'Se liberan los días que le quedan en el lookahead.',ok:'Sí, terminada',tone:'ok'}).then(ok=>{if(!ok)return;markDone(x.id,d);dzLog(`✔ ${x.name} terminada`)})}
+  uiAsk({title:`¿“${x.name}” ya está terminada${d===todayIso()?' hoy':' el '+fmtD(d)}?`,text:typeof DONE_TXT==='string'?DONE_TXT:'Se liberan los días que le quedan en el lookahead.',ok:'Sí, terminada',tone:'ok'}).then(ok=>{if(!ok)return;markDone(x.id,d);dzLog(`✔ ${x.name} terminada`)})}
 function dzRes(btn,x){const types=P().restrTypes||[];
   openPop(btn,`<div class="ph">Restricción · ${esc(short(x.name,40))}</div><div class="ptx">No va el ${fmtD(M.date)}. La restricción queda en <b>Restricciones</b>, amarrada a esta actividad.</div>
     <div class="qrow"><select id="dzrt" aria-label="Tipo">${types.map(t=>`<option>${esc(t)}</option>`).join('')}</select></div>
@@ -1922,7 +1922,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-xreo]'))){if(!dzEng())return true;const o=remDoc(b.dataset.xreo);if(o){rec([o]);CROSS.key='';requestRender();toast('El cruce vuelve a quedar pendiente','Deshacer',undo)}return true}
   if((b=g('[data-pcx]'))){const ids=b.dataset.pcx.split('|');const P=ids.flatMap(id=>{const z=zget(id);return z?unflat(z.pts):[]});if(P.length)zoomTo(P);const c=CROSS.list.find(q=>(q.a.id===ids[0]&&q.b.id===ids[1])||(q.a.id===ids[1]&&q.b.id===ids[0]));if(c&&typeof canWrite!=='undefined'&&canWrite){const r=b.getBoundingClientRect();const an=anchorAt(r.left,r.bottom-1);setTimeout(()=>crossPop(an,c),260)}return true}
   if((b=g('[data-same]'))){const[aid,zid]=b.dataset.same.split('|');const z=zget(zid),x=S.act.get(aid);if(z&&x){M.scDraw=x.sc;newZone(unflat(z.pts),{actId:aid},zVista(z))}return true}
-  if((b=g('[data-done]'))){markDone(b.dataset.done,M.date);return true}
+  if((b=g('[data-done]'))){askDone(b.dataset.done,M.date);return true}
   if((b=g('[data-repe]'))){const[id,fd]=b.dataset.repe.split('|');execPop(b,id,fd);return true}
   if((b=g('[data-repx]'))){const[id,fd]=b.dataset.repx.split('|');dismissRep(id,fd);return true}
   if((b=g('[data-repd]'))){const[id,fd]=b.dataset.repd.split('|');const t0=todayIso();openPop(b,`<div class="ph">Reprogramar para…</div><div class="qrow"><input type="date" id="rpdt" min="${t0}" value="${M.date>t0?M.date:t0}"></div><button data-do="ok" class="pri">Reprogramar</button><button data-do="no">Cancelar</button>`,

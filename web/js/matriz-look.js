@@ -142,7 +142,14 @@ async function mxUnifyDlg(){if(!isAdmin)return;
    Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
 function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
   const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>=T)?v:null}
-function mxRowBadge(x,k){const v=mxRowWarn(x);return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
+/* ---------- Terminadas en Campo y la Matriz (oct 2026, decidido con el dueño) ----------
+   Marcar «Terminada» en Campo no es la verdad: puede ser un error (faltaba una luminaria). La fila terminada solo se oculta del
+   Lookahead cuando la Matriz la tiene CONFIRMADA como Terminado; si no (sin validar o la Matriz dice otra cosa) sigue visible con
+   «✓?» y desde ahí el ingeniero confirma en la Matriz o la reabre. mxDoneSt: null | 'ok' (ocultable) | 'pend' (por validar). */
+function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'?'ok':'pend'}
+const mxDonePend=x=>mxDoneSt(x)==='pend';
+function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
+function mxRowBadge(x,k){const v=mxRowWarn(x);if(!v&&mxDonePend(x))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
 function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
     const v=mxRowWarn({...o.after,id:o.id});if(!v)continue;const a=S.amb.get(o.after.ambId);
@@ -179,3 +186,11 @@ function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||
 function mxGoCell(amb,cat){const p=pisoOfAmb(amb);if(p&&U.piso&&U.piso!==p)U.piso=p;const c=MX.cat.get(cat);
   if(c&&mxSel().length&&!mxSel().includes(c.sc))U.mxSc=[];if(c&&c.cl==='e')U.mxAll=true;
   U.mxV='mat';MX.sel.clear();MX.focus={amb,cat,until:performance.now()+3000,scrolled:false};saveUI();goTab('mat')}
+
+/* clic en ✓?: confirmar Terminado en la Matriz (la fila se oculta) o reabrir la actividad (no estaba terminada) */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mxd]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.mxd);if(!x||!mxDonePend(x))return;
+  const cid=mxCatOf(x);const a=S.amb.get(x.ambId);
+  openPop(b,`<div class="ph">✓? ${esc(x.name)}</div><div class="ptx">Se marcó <b>terminada</b> en Campo el ${esc(fmtD(DONE.get(x.id)))}${a?' en '+esc(a.code):''}, pero ${esc(mxDoneTxt(x))}. Mientras no se confirme sigue en el Lookahead.</div>
+   ${mxEd()?'<button data-do="ok">✓ Confirmar Terminado en la Matriz</button>':''}${canDaily?'<button data-do="reo">Reabrir: no está terminada</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   {ok:()=>{const DEL=firebase.firestore.FieldValue.delete();const prev=((MX.amb.get(x.ambId)||{}).c||{})[cid];mxWrite(new Map([[x.ambId,{[cid]:'t'}]]),'Terminado confirmado en la Matriz',new Map([[x.ambId,{[cid]:prev===undefined?DEL:prev}]]))},
+    reo:()=>reopenDone(x.id),mat:()=>mxGoCell(x.ambId,cid)})},true);

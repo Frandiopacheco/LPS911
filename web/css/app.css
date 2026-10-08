@@ -3094,3 +3094,5 @@ body.lkfs .top,body.lkfs #bnav,body.lkfs #verban{display:none!important}
 #ffs.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* propuestas de los SC en tablet: solo el título y los botones (la explicación queda en el título emergente) */
 @media (min-width:761px) and (max-width:1366px){#ppbar .ppx{display:none}}
+.mxbadge.mxdn{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+td.mc.dsc{position:relative}td.mc.dsc::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--today)}

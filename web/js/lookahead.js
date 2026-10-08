@@ -46,7 +46,7 @@ function buildLookShell(main){
     <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
-    <span id="fday"></span><span id="fpast"></span><span id="fmxp"></span>
+    <span id="fday"></span><span id="fpast"></span><span id="fdone"></span><span id="fmxp"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
@@ -80,6 +80,7 @@ function buildLookShell(main){
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
   $('#fmxp').onclick=e=>{if(e.target.closest('button'))mxPendDlg()};
   $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;saveUI();requestRender()}};
+  $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
   $('#fobs').onchange=e=>{U.onlyObs=e.target.checked;saveUI();requestRender()};
   $('#fchg').onchange=e=>{U.changes=e.target.checked;saveUI();requestRender();if(U.changes&&!baselines().size)toast('Aún no hay un plan congelado para comparar. Congela el plan en la pestaña Plan semanal.')};
@@ -163,9 +164,10 @@ function renderLookInner(main){
   renderGrid($('#grid'),days,dset);
   {const fm=$('#fmxp');if(fm){const hv=typeof mxPendPill==='function'?mxPendPill():'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
+  {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="Terminadas y confirmadas en la Matriz. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
 }
-let LK_PAST=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
-function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
+let LK_PAST=0,LK_DONE=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
+function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
   const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
@@ -185,10 +187,12 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
       if(U.sector&&U.sector!==s.id)continue;
       const list=[];let nAct=0;
       for(const{a,acts}of ambs){
-        let nPast=0;
+        let nPast=0,nDone=0;
         const vis=acts.filter(x=>{
           if(RVF&&!x._rv)return false;
           if(hidePast&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&(x.days||[]).length&&!(x.days||[]).some(d=>d>=w0)){nPast++;return false}
+          /* terminada y confirmada en la Matriz: el ambiente queda limpio para programar («Ver terminadas» las muestra) */
+          if(hideDone&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&mxDoneSt(x)==='ok'){nDone++;return false}
           if(!scOk(x.sc))return false;
           if(U.onlyWin&&!(x.days||[]).some(d=>dset.has(d)))return false;
           if(U.onlyRestr&&!pr.get(x.id))return false;
@@ -198,8 +202,8 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
           if(aset&&!aset.has(an(x.name)))return false;
           if(qs.length){const t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();if(!qs.some(w=>t.includes(w)))return false}
           return true});
-        LK_PAST+=nPast;
-        if(!vis.length&&(filt||acts.length>nPast))continue;
+        LK_PAST+=nPast;LK_DONE+=nDone;
+        if(!vis.length&&(filt||acts.length>nPast+nDone))continue;
         nAct+=vis.length;list.push({a,vis,acts});
       }
       if(filt&&!list.length)continue;
@@ -226,7 +230,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;const w0=days.length?days[0].d:'';c
           let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
           if(i===0)h+=ambCells;
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
-          h+=`<td class="s4 act${(()=>{const nb=(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)+(typeof libState==='function'&&libState(x)?1:0)+(typeof mxRowWarn==='function'&&mxRowWarn(x)?1:0);return nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''})()}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(pr.get(x.id)?1:0)+(typeof libState==='function'&&libState(x)?1:0)):''}${typeof libBadge==='function'?libBadge(x).replace('class="lqbadge"',(pr.get(x.id)||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
+          h+=`<td class="s4 act${(()=>{const nb=(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)+(typeof libState==='function'&&libState(x)?1:0)+(typeof mxRowWarn==='function'&&(mxRowWarn(x)||mxDonePend(x))?1:0);return nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''})()}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(pr.get(x.id)?1:0)+(typeof libState==='function'&&libState(x)?1:0)):''}${typeof libBadge==='function'?libBadge(x).replace('class="lqbadge"',(pr.get(x.id)||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=U.qmode==='metrado';
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';

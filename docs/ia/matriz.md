@@ -97,3 +97,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 
 - La carga inicial **solo crea**: volver a cargar el mismo archivo completa lo que falte (p. ej. el tipo de ambientes que no existían la primera vez) y no toca lo demás.
 - Los estados de `mamb.c` están ligados al **id** de la actividad (`k015`…). Renombrar, cambiar SC o clase no los afecta. Fusionar o quitar actividades sí: sus estados quedarían huérfanos. Por eso los cambios de catálogo van **en la app** (Catálogo: fusionar traslada los estados), no con un archivo nuevo. Volver a cargar el archivo nunca borra ni cambia estados ya marcados.
+
+## Terminadas en Campo ↔ Matriz (oct 2026, decidido con el dueño)
+
+- «Terminada» en Campo / plan diario pide confirmar (`askDone`, base.js): «¿está terminada en todo el ambiente?».
+- Lookahead: una fila en `DONE` se **oculta** solo si la Matriz la tiene **confirmada** Terminado (`mxDoneSt(x)==='ok'`, matriz-look.js); botón `#fdone` «N terminadas ocultas · Ver» (`U.showDone`). Si no está confirmada: sigue visible con «✓?» (`.mxbadge.mxdn`, `data-mxd`): confirmar Terminado en la Matriz (`mxWrite`, con Deshacer) o reabrir (`reopenDone`).
+- Matriz: celda con punto (`td.mc.dsc`, `o.dsc` en `mxCells`) cuando todas sus filas están terminadas en Campo pero lo confirmado no es Terminado; la ficha (`mxInfo`) ofrece reabrir en el Lookahead.
