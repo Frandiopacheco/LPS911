@@ -3147,3 +3147,6 @@ table.mx .mxc span{color:var(--ink);font-weight:600;font-size:11.5px;letter-spac
 .mxwrap .phd .phm .mxvseg{margin:0;align-self:center}
 .mxwrap .phd .phm .mxstat{margin:0}
 table.mx .mxg th.mxgo{overflow:visible}
+/* nombres de actividad (2.º ajuste, oct 2026): sin negrita, más grandes y con la letra del sistema (Segoe UI en Windows), más nítida en vertical */
+table.mx .mxc span{font-family:system-ui,"Segoe UI",Roboto,Arial,sans-serif;font-weight:400;font-size:13px;letter-spacing:0;-webkit-font-smoothing:auto;color:var(--ink)}
+table.mx.mxz0 .mxc span{font-size:12px}table.mx.mxz2 .mxc span{font-size:14px}
