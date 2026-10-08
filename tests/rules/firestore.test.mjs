@@ -1107,3 +1107,18 @@ test('matriz: el SC cambia una celda de su partida por vez (con k) junto con su 
   await assertSucceeds(setDoc(doc(ed, 'mamb/a9'), { m: { kg: { ok: { by: 'editor@obra.pe' } } }, by: 'editor@obra.pe', t: 3 }, { merge: true }));
   await assertFails(deleteDoc(doc(user(OWNER), 'mlog/l9')));
 });
+
+test('matriz: una actividad de varios SC (scs) la llena también el SC sumado; el SC no se suma solo al crear', async () => {
+  const sc = user('sc@obra.pe');
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'mcat/kx'), { name: 'Flashing', sc: 'c-otro', scs: ['c-gabel'], cl: 't' });
+    await setDoc(doc(db, 'mcat/ky'), { name: 'Solo otro', sc: 'c-otro', cl: 't' });
+  });
+  const meta = { by: 'sc@obra.pe', n: 'SC', t: 2 };const cm = { ...meta, sc: true };
+  const lote = (cat, lid) => { const b = writeBatch(sc); b.set(doc(sc, 'mamb/a5'), { c: { [cat]: 'c' }, m: { [cat]: cm }, k: cat, l: lid, ...meta }, { merge: true });
+    b.set(doc(sc, 'mlog/' + lid), { amb: 'a5', cat, sc: 'c-gabel', from: null, to: 'c', st: 'pend', ...meta }); return b.commit(); };
+  await assertSucceeds(lote('kx', 'x1'));
+  await assertFails(lote('ky', 'x2'));
+  await assertFails(setDoc(doc(sc, 'mcat/k60'), { name: 'Nueva', sc: 'c-gabel', scs: ['c-otro'], cl: 't', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe' } }));
+});

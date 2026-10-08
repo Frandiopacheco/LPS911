@@ -468,7 +468,7 @@ service cloud.firestore {
       allow read: if lpsMember();
       allow create: if canEdit() || (isSC() && request.resource.data.get('by', '') == mid()
         && request.resource.data.get('sc', '') in scsOf() && request.resource.data.get('rev', null) is map
-        && request.resource.data.rev.get('by', '') == mid() && !request.resource.data.keys().hasAny(['arch', 'revOk']));
+        && request.resource.data.rev.get('by', '') == mid() && !request.resource.data.keys().hasAny(['arch', 'revOk', 'scs']));
       allow update: if canEdit();
       allow delete: if false;
     }
@@ -498,7 +498,8 @@ service cloud.firestore {
       let k = d.get('k', '');
       let l = d.get('l', '');
       return isSC() && d.get('by', '') == mid() && k != '' && l is string && l != '' && exists(/databases/$(database)/documents/mcat/$(k))
-        && get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf() && scCellVal(d, k)
+        && (get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf()
+          || get(/databases/$(database)/documents/mcat/$(k)).data.get('scs', []).hasAny(scsOf())) && scCellVal(d, k)
         && existsAfter(/databases/$(database)/documents/mlog/$(l)) && scLogOk(id, d, k, l);
     }
     match /mamb/{id} {
