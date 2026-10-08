@@ -122,3 +122,6 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 ## Fotos semanales: historial y restablecer (oct 2026)
 - Formato `mver.a[amb] = 'cat:estado[?],…'` (`?` = sin validar) con `v:2`; las anteriores (sin `v`) no distinguen lo sin validar.
 - Al guardar (`mxFoto`) se agrega al instante a `MX.ver`, se compara con ella y se abre el historial (`mxFotoHist`). Botón «🕘 Fotos (n)» (`#mxfhist`): Comparar (todos) y **Restablecer** (solo administrador, `mxFotoRestore`): primero guarda una foto `nota:'antes de restablecer'`, luego deja las celdas confirmadas como en la foto (lo sin validar de la foto deja de estar confirmado) con `mxWrite` y Deshacer.
+
+## Exportar (oct 2026)
+- «⬇ Excel» (`#mxxls`, `mxExport`): lo que está a la vista (`MX.view`: piso, filtros, orden). Hojas **Matriz** (encabezado por SC con su color, nombres en vertical, símbolos ✓ ◐ ○ – con color; sin validar en cursiva gris; % por ambiente y por columna; paneles fijos), **Lista** (una fila por celda, con autofiltro) y **Leyenda**. Prueba: `tests/e2e/matriz-excel.spec.js`.
