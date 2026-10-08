@@ -106,3 +106,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 ## Consulta / edición y «Otra actividad» (oct 2026)
 - La grilla abre en **consulta** (`MX.edit` falso, por sesión): se desplaza con el dedo y tocar una celda abre su ficha sin botones (`onclick`, no `pointerdown`). **✎ Editar** (`#mxedit`, `mxCanEd()`: editor/admin o SC) habilita seleccionar y marcar (`mxEdG()`); en edición `td.mc` tiene `touch-action:none` para arrastrar y seleccionar. Los avisos (cambios de SC, nombres sin catálogo) se ven sin entrar a editar (`mxEd()`).
 - Recorrido: «¿Falta algo?» siempre visible; hasta 5 sugerencias de ambientes parecidos (≥ 25 % los tiene) y **+ Otra actividad** (`mxRecPick`) para buscar en todo el catálogo lo que el ambiente no tiene (SC: solo su partida). Al final del buscador, «Crear … en el catálogo» (`mxRecNew`): crea la actividad (mismas reglas que desde el lookahead: el SC queda `rev`; el ingeniero puede sumarla al tipo) y la agrega al ambiente como pendiente; si el nombre ya existe, solo la agrega.
+
+## Vista de escritorio (oct 2026)
+
+- Cabecera compacta: indicadores en una línea (`.mxstat`), «Cómo se usa» en el botón ⓘ (`#mxhelp`, texto en `MX.helpH`), SC en el menú «Subcontratistas ▾» (`#mxscdd` → `mxScMenu`, botones `data-mxsk`: clic = solo ese, Ctrl+clic = sumar/quitar).
+- Tabla: alto de la pantalla (`mxFit`, también al cambiar el tamaño de la ventana), columnas fijas Ambiente/Tipo/% (vars `--aw/--tw/--pw`), nombre del SC del grupo y del sector siguen a la vista al desplazar.
+- Tamaño de celda − / + (`U.mxZ` 0/1/2 → clase `mxz0..2`, vars `--cw/--nh`). Clic en el nombre del SC del grupo (`th[data-mxgo]`) salta a sus columnas (`mxGoCol`).
