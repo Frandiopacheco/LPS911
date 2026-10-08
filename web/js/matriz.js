@@ -45,7 +45,8 @@ function mxCells(){const k=MX.v+'|'+DV+'|'+DONEV;if(MX.mc&&MX.mcK===k)return MX.
 /* filas: pisos a la vista → sectores → ambientes (en su orden) */
 function mxRows(){const R=[];for(const p of visPisos()){const secs=[...S.sec.values()].filter(s=>s.pisoId===p.id).sort((a,b)=>(a.order||0)-(b.order||0));
   for(const s of secs){const ambs=[...S.amb.values()].filter(a=>a.sectorId===s.id).sort((a,b)=>(a.order||0)-(b.order||0));if(ambs.length)R.push({p,s,ambs})}}return R}
-const mxSel=()=>U.sc?U.sc.split(',').filter(Boolean):[];
+/* subcontratistas elegidos en la matriz (varios; propio de esta pestaña, no cambia el filtro del lookahead) */
+const mxSel=()=>Array.isArray(U.mxSc)?U.mxSc.filter(id=>S.con.has(id)||[...MX.cat.values()].some(c=>c.sc===id)):[];
 /* columnas: actividades del catálogo que aparecen en los ambientes a la vista (por subcontratista y orden del catálogo) */
 function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(a=>Object.keys(cells.get(a.id)||{}).forEach(c=>used.add(c))));
   const scs=mxSel();return[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||scs.includes(c.sc))&&(U.mxAll||c.cl!=='e'))
@@ -62,7 +63,9 @@ function renderMat(main){ensureMx();
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
-  const cells=mxCells();const rows=mxRows();const cols=mxCols(rows,cells);const cmp=mxCmpMap();const ed=mxEd();
+  const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
+  /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
+  if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEd();
   /* totales de lo que está a la vista */
   const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0};const colT=cols.map(()=>({a:0,t:0}));
   const ambPct=new Map();
@@ -85,8 +88,8 @@ function renderMat(main){ensureMx();
     ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
    </div>
    ${unm.length&&ed?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
+   <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar mxbar0">
-    <span class="fgl">Subcontratista</span><select id="mxsc" aria-label="Subcontratista"><option value="">Todos</option>${scs.map(s=>`<option value="${esc(s.id)}"${mxSel().length===1&&mxSel()[0]===s.id?' selected':''}>${esc(s.n)}</option>`).join('')}</select>
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
@@ -144,7 +147,7 @@ function mxWire(main){
   const imp=$('#mximp');if(imp)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)};
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
-  const ss=$('#mxsc');if(ss)ss.onchange=e=>{U.sc=e.target.value;saveUI();MX.sel.clear();render()};
+  main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:L.includes(id)?L.filter(x=>x!==id):[...L,id];U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
