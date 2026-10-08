@@ -14,6 +14,8 @@ test('Tablero: avance semanal contra lo congelado, con extra aparte', async ({ p
   await expect.poll(() => page.evaluate(() => { const o = dashAvance(58, new Set(['p1']), todayIso()); return [o.meta, o.esp, o.real, o.extra, o.sc.c1.real, o.sc.c2 && o.sc.c2.extra]; })).toEqual([3, 2, 2, 1, 2, 1]);
   await page.evaluate(() => render());
   await expect(page.locator('#dav')).toContainText('Avance de la semana 58');
-  await expect(page.locator('#dav')).toContainText('2/3 · debía 2');
+  await expect(page.locator('#dav')).toContainText('2/3');
+  await expect(page.locator('#dav')).not.toContainText('debía');
+  await expect(page.locator('#dav')).toContainText('1 cumplido fuera de lo congelado');
   noErrors(errors, 'avance semanal');
 });
