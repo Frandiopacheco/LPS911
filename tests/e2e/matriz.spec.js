@@ -33,6 +33,12 @@ test('sin catálogo: el administrador lo carga desde el archivo y no reemplaza l
 test('editor: marca una celda, selecciona una columna y la valida en bloque; Deshacer', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: CAT });
   await expect(page.locator('#mxt')).toBeVisible();
+  // abre en consulta: tocar una celda solo muestra la ficha, sin botones para cambiarla
+  await cell(page, 'a1', 0).click();
+  await expect(page.locator('#pop')).toContainText('Editar');
+  await expect(page.locator('#pop button[data-s]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.click('#mxedit');
   // a1 tiene tipo: sus dos actividades salen propuestas (sin validar)
   await expect(cell(page, 'a1', 0)).toHaveClass(/sug/);
   // clic en la celda → ficha → Terminado
@@ -74,6 +80,7 @@ test('nombres del lookahead sin catálogo: se asignan a una actividad y desde ah
 test('foto semanal y comparar: marca lo que cambió desde la foto', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   page.on('dialog', d => d.accept());
+  await page.click('#mxedit');
   await page.click('#mxfoto');
   await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('mver')).length)).toBe(1);
   const f = await page.evaluate(() => Object.values(window.__dbAll('mver'))[0]);
@@ -90,6 +97,7 @@ test('subcontratista: ve la matriz; en su partida solo tiene los botones de SC',
   await expect(page.locator('#mxt')).toBeVisible();
   await expect(page.locator('select[data-mxtipo]')).toHaveCount(0);
   await expect(page.locator('#mxfoto')).toHaveCount(0);
+  await page.click('#mxedit');
   await cell(page, 'a1', 0).click();
   await expect(page.locator('#pop')).toContainText('Redes empotradas');
   // su partida (c1): solo los botones de SC (cambio directo con constancia), no los del ingeniero

@@ -39,6 +39,9 @@ function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
   on('mcatp','prop');on('mtipo','tipo');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'));
   mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
+/* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */
+const mxCanEd=()=>mxEd()||(!!me&&SCK()&&!verRO());
+const mxEdG=()=>mxEd()&&!!MX.edit;
 
 /* alias → actividad del catálogo */
 function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();
@@ -79,7 +82,8 @@ function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o
 function renderMat(main){ensureMx();ensureMver();
   const loaded=MX.ld.cat&&MX.ld.tipo&&MX.ld.amb;
   const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆ Cargar catálogo<input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
-  if(mxEd()&&MX.cat.size)acts.push(`<button class="ib pri" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸 Guardar foto semanal</button>`);
+  if(mxCanEd()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓ Terminar edición':'✎ Editar'}</button>`);
+  if(mxEd()&&MX.cat.size)acts.push(`<button class="ib" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸 Guardar foto semanal</button>`);
   const head=pageHead('Matriz de ambientes',`${U.piso?esc((S.pis.get(U.piso)||{}).name||''):'Todos los pisos'} · estado actual de cada actividad por ambiente`,acts.join(''));
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
@@ -89,7 +93,7 @@ function renderMat(main){ensureMx();ensureMver();
   if(U.mxV==='rec'){renderMxRec(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
-  if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEd();
+  if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEdG();
   /* totales de lo que está a la vista */
   const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0};const colT=cols.map(()=>({a:0,t:0}));
   const ambPct=new Map();
@@ -111,9 +115,9 @@ function renderMat(main){ensureMx();ensureMver();
     <div class="tile"><span class="k">Sin validar</span><span class="v">${tot.sug} <small>propuestas del sistema</small></span></div>
     ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
    </div>
-   ${ed&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
-   ${ed&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
-   ${unm.length&&ed?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
+   ${mxEd()&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
+   ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
+   ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar mxbar0">
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
@@ -176,17 +180,19 @@ function mxWire(main){mxWireV(main);
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
+  const eb=$('#mxedit');if(eb)eb.onclick=()=>{MX.edit=!MX.edit;MX.sel.clear();closePop();render()};
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
   mxWireBar();
   const t=$('#mxt');if(!t)return;
-  t.onclick=e=>{const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEd()&&(ch||rh))return;
+  t.onclick=e=>{const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
+    if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
     if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
     if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
   t.onpointerdown=e=>{const td=e.target.closest('td.mc');if(!td||e.button!==0)return;const c=mxCellAt(td);if(!c)return;
-    if(!mxEd()){mxInfo(td,c);return}
+    if(!mxEdG())return; // consulta: el toque se atiende en onclick (así se puede desplazar)
     e.preventDefault();
     if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();return}
     MX.drag={a:c,add:e.ctrlKey||e.metaKey,base:new Set(MX.sel)};MX.moved=false;MX.anchor=c;DRAGGING=true};
@@ -197,11 +203,11 @@ document.addEventListener('pointerup',e=>{if(!MX.drag)return;const d=MX.drag;MX.
     const td=document.querySelector(`#mxt tr[data-amb="${CSS.escape(d.a.amb)}"] td[data-k="${d.a.ci}"]`);MX.sel=new Set([k]);mxPaintSel();if(td)mxInfo(td,d.a);return}
   if(ready)requestRender()});
 function mxToggle(keys,e){if(e.ctrlKey||e.metaKey||e.shiftKey)keys.forEach(k=>MX.sel.add(k));else{const all=keys.length&&keys.every(k=>MX.sel.has(k));MX.sel=all?new Set():new Set(keys)}mxPaintSel()}
-document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEd())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape')return;
+document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape')return;
   const m={'1':'p','2':'c','3':'t','0':'n',Enter:'ok'}[e.key];if(m){e.preventDefault();closePop();mxApply(m);return}if(e.key==='Escape'){MX.sel.clear();mxPaintSel()}});
 
 /* ficha de una celda: de dónde sale, qué hay en el lookahead y (si edita) cambiar su estado */
-function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!cat||!a)return;const o=(mxCells().get(c.amb)||{})[c.cat];const ed=mxEd();const scE=!ed&&typeof mxScCan==='function'&&mxScCan(cat);
+function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!cat||!a)return;const o=(mxCells().get(c.amb)||{})[c.cat];const ed=mxEdG();const scE=!mxEd()&&!!MX.edit&&typeof mxScCan==='function'&&mxScCan(cat);const hint=!MX.edit&&(mxEd()||(typeof mxScCan==='function'&&mxScCan(cat)));
   const m=MX.amb.get(c.amb)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
   const src=!o?'No está en este ambiente.':o.src==='tipo'?`Del tipo de ambiente «${esc(tp?tp.name:'')}».`:o.src==='look'?'Del lookahead.':'Agregada a mano.';
   const L=(o&&o.acts||[]).map(id=>S.act.get(id)).filter(Boolean).map(x=>{const d=x.days||[];const dn=DONE.get(x.id);return`<div class="ptx">${esc(x.name)} · ${d.length?esc(fmtD(d[0]))+(d.length>1?'–'+esc(fmtD(d[d.length-1])):''):'sin días'}${dn?` · <b>terminada ${esc(fmtD(dn))}</b>`:''}</div>`}).join('');
@@ -209,6 +215,7 @@ function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!c
    <div class="ptx">${o?`<b>${MXS[o.s]}</b>${o.sug?' · propuesta del sistema, sin validar':''}`:''} ${src}</div>
    ${o&&o.dsc?`<div class="ptx">⚑ En Campo la marcaron <b>terminada</b> (${esc(o.acts.map(id=>fmtD(DONE.get(id))).filter(Boolean).join(', '))}), pero aquí dice «${MXS[o.s]}». Confirma Terminado o reábrela en el Lookahead.</div>${canDaily?'<button data-do="reo">Reabrir en el Lookahead (no está terminada)</button>':''}`:''}${L?'<hr><div class="ph">En el lookahead</div>'+L:''}
    ${typeof mxWhoHtml==='function'?mxWhoHtml(c.amb,c.cat):''}
+   ${hint?'<hr><div class="ptx">Para cambiarla, toca <b>✎ Editar</b> arriba.</div>':''}
    ${scE?`<hr>${['p','c','t','n'].map(s=>`<button data-do="scs" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}`:''}
    ${ed?`<hr>${['p','c','t','n'].map(s=>`<button data-do="s" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}${o&&o.sug?'<button data-do="s" data-s="ok">✓ Validar como está</button>':''}${o&&o.src==='man'?'<button data-do="rm" class="danger">Quitar de este ambiente</button>':''}`:''}`,
    {reo:()=>{(o&&o.acts||[]).forEach(id=>reopenDone(id,true));toast('Reabierta en el Lookahead');render()},s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat),scs:d=>mxScSet(c.amb,c.cat,d.s)})}
