@@ -477,9 +477,33 @@ service cloud.firestore {
       allow create, update: if canEdit();
       allow delete: if false;
     }
+    // El SC cambia una celda por vez de su partida (k = actividad; mcat/k de su partida), directo y con su correo (oct 2026).
+    function scCellVal(d, k) { return !(k in d.get('c', {})) || d.c[k] in ['p', 'c', 't', 'n']; }
+    function scCellOk(d) {
+      let k = d.get('k', '');
+      return isSC() && d.get('by', '') == mid() && k != '' && exists(/databases/$(database)/documents/mcat/$(k))
+        && get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf() && scCellVal(d, k);
+    }
     match /mamb/{id} {
       allow read: if lpsMember();
-      allow create, update: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow create: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (scCellOk(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
+      allow update: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (scCellOk(request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
+            && request.resource.data.get('m', {}).diff(resource.data.get('m', {})).affectedKeys().hasOnly([request.resource.data.k]));
+      allow delete: if false;
+    }
+    // Constancia de cada cambio de un SC en la matriz: la crea quien cambia; la revisa (visto / revertido) un editor;
+    // el SC solo la marca «deshecha» si la deshizo él mismo. No se borra.
+    match /mlog/{id} {
+      allow read: if lpsMember();
+      allow create: if request.resource.data.get('by', '') == mid() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()));
+      allow update: if canEdit() || (isSC() && resource.data.get('by', '') == mid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st']) && request.resource.data.st == 'undo');
       allow delete: if false;
     }
     // Propuestas de actividades nuevas para el catálogo: las crea el SC (de su partida, pendiente, con su correo) o un editor;
