@@ -77,7 +77,9 @@ test('nombres del lookahead sin catálogo: se asignan a una actividad y desde ah
   await page.selectOption('[data-mxm="0"]', 'k1');
   await page.click('#mxmok');
   await expect.poll(() => page.evaluate(() => window.__dbGet('mcat', 'k1').al)).toEqual(['redes empotradas', 'entubado empotrado']);
-  await expect(page.locator('.mxun')).toHaveCount(0);
+  // «Entubado empotrado» es de otro SC (c2) que la actividad elegida (c1): ya no sale como «sin catálogo», sino en el aviso de otro SC (auditoría 08/10, M02)
+  await expect(page.locator('.mxun')).toHaveCount(1);
+  await expect(page.locator('.mxun')).toContainText('otro subcontratista');
   noErrors(errors, 'nombres sin catálogo');
 });
 

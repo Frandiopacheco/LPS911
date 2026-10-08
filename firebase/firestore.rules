@@ -479,19 +479,36 @@ service cloud.firestore {
     }
     // El SC cambia una celda por vez de su partida (k = actividad; mcat/k de su partida), directo y con su correo (oct 2026).
     function scCellVal(d, k) { return !(k in d.get('c', {})) || d.c[k] in ['p', 'c', 't', 'n']; }
-    function scCellOk(d) {
+    // Auditoría 08/10 (M06): el «último cambio» de la celda (m.k) es del propio SC (no puede firmar como ingeniero) y el cambio va
+    // en el mismo lote que su constancia mlog/l: una nueva (pend, misma celda y valor) o la suya pasando de pend a undo (Deshacer).
+    // bk (volvió a algo ya dado por bueno) solo al deshacer.
+    function scMetaOk(d, k, undo) {
+      let m = d.get('m', {}).get(k, null);
+      return m is map && m.get('by', '') == mid() && m.get('sc', false) == true
+        && m.keys().hasOnly(undo ? ['by', 'n', 't', 'sc', 'bk'] : ['by', 'n', 't', 'sc']);
+    }
+    function scLogOk(id, d, k, l) {
+      let p = /databases/$(database)/documents/mlog/$(l);
+      let a = getAfter(p).data;
+      return a.get('amb', '') == id && a.get('cat', '') == k && a.get('by', '') == mid()
+        && ((!exists(p) && a.get('st', '') == 'pend' && a.get('to', '') == d.c[k] && scMetaOk(d, k, false))
+          || (exists(p) && get(p).data.get('st', '') == 'pend' && a.get('st', '') == 'undo' && scMetaOk(d, k, true)));
+    }
+    function scCellOk(id, d) {
       let k = d.get('k', '');
-      return isSC() && d.get('by', '') == mid() && k != '' && exists(/databases/$(database)/documents/mcat/$(k))
-        && get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf() && scCellVal(d, k);
+      let l = d.get('l', '');
+      return isSC() && d.get('by', '') == mid() && k != '' && l is string && l != '' && exists(/databases/$(database)/documents/mcat/$(k))
+        && get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf() && scCellVal(d, k)
+        && existsAfter(/databases/$(database)/documents/mlog/$(l)) && scLogOk(id, d, k, l);
     }
     match /mamb/{id} {
       allow read: if lpsMember();
       allow create: if (canEdit() && request.resource.data.get('by', '') == mid())
-        || (scCellOk(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+        || (scCellOk(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
       allow update: if (canEdit() && request.resource.data.get('by', '') == mid())
-        || (scCellOk(request.resource.data)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+        || (scCellOk(id, request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
             && request.resource.data.get('m', {}).diff(resource.data.get('m', {})).affectedKeys().hasOnly([request.resource.data.k]));
       allow delete: if false;

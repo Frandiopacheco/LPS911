@@ -13,6 +13,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Tanda B: avisos al celular (FCM), Lookahead que dibuje solo las filas visibles.
 - Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
 - Liberaciones: zonas como polígono (hoy rectángulo).
+- Auditoría Matriz 08/10: los clientes con la versión anterior en caché no pueden guardar cambios del SC en la matriz hasta recargar (las reglas ahora exigen `l`). Los cambios de SC anteriores a esta versión no tienen `m.ok`: su «Terminado» queda «✓?» en el Lookahead hasta que un ingeniero lo confirme. Restablecer una foto (`mxFotoRestore`) sigue reemplazando lo marcado después (es la intención; solo el administrador).
 
 ## Para una próxima obra: módulo de casco (decidido con el dueño, oct 2026)
 
