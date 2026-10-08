@@ -17,5 +17,6 @@ test('Tablero: avance semanal contra lo congelado, con extra aparte', async ({ p
   await expect(page.locator('#dav')).toContainText('2/3');
   await expect(page.locator('#dav')).not.toContainText('debía');
   await expect(page.locator('#dav')).toContainText('1 cumplido fuera de lo congelado');
+  await expect(page.locator('#dav .dave')).not.toHaveCount(0);
   noErrors(errors, 'avance semanal');
 });
