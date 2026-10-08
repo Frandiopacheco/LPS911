@@ -1035,3 +1035,13 @@ test('propuestas al catálogo (mcatp): el SC propone de su partida; decide quien
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'mcatp/p1')));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'mcatp/p5'), { name: 'x', sc: 'c-gabel', st: 'pend', by: 'lector@obra.pe', t: 1 }));
 });
+
+test('catálogo: el SC agrega actividades de su partida marcadas «por revisar»; no edita ni revisa', async () => {
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(setDoc(doc(sc, 'mcat/k50'), { name: 'Pruebas', sc: 'c-gabel', cl: 't', al: ['pruebas'], by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', t: 1, amb: 'a1', tipo: null } }));
+  await assertFails(setDoc(doc(sc, 'mcat/k51'), { name: 'Sin revisar', sc: 'c-gabel', cl: 't', by: 'sc@obra.pe' }));
+  await assertFails(setDoc(doc(sc, 'mcat/k52'), { name: 'Otra partida', sc: 'c-otro', cl: 't', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe' } }));
+  await assertFails(setDoc(doc(sc, 'mcat/k53'), { name: 'Otro autor', sc: 'c-gabel', cl: 't', by: 'otro@obra.pe', rev: { by: 'otro@obra.pe' } }));
+  await assertFails(updateDoc(doc(sc, 'mcat/k50'), { name: 'Cambiada' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'mcat/k50'), { name: 'Pruebas de presión', revOk: { by: 'editor@obra.pe' } }));
+});

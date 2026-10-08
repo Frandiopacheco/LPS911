@@ -36,41 +36,53 @@ async function mxAmbTipo(ambId){if(!ambId)return null;let m=MX.amb.get(ambId);
 function mxTipoAdd(tid,cat){return fcol('mtipo').doc(tid).set({acts:mxFV().arrayUnion(cat),...mxNow()},{merge:true})}
 const mxTipoTxt=tp=>`Agregar también al tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n} ambientes)`:''}`;
 
-/* nombre que no está en el catálogo: usar una parecida, agregarla (ingeniero) o proponerla (SC) */
-async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM();const tp=ed?await mxAmbTipo(x.ambId):null;
+/* nombre que no está en el catálogo: usar una parecida o agregarla al catálogo ahí mismo.
+   Ingeniero y SC agregan directo (el SC no espera aprobación: sigue con su propuesta de programación). Por defecto solo en ese
+   ambiente; «Agregar a todos los ambientes del tipo…» es opcional. Lo que agrega un SC queda marcado `rev` («por revisar»):
+   el ingeniero recibe el aviso (Hoy y Matriz › Catálogo), la corrige y al renombrarla se actualiza el lookahead. */
+async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM();const can=ed||sc;const tp=can?await mxAmbTipo(x.ambId):null;
   const useName=c=>{const cur=S.act.get(x.id);if(!cur)return;apply([op('acts',x.id,{...cur,name:c.name})])};
+  const scs=sc?myScsI():null;const scOpts=sc?scs.map(id=>`<option value="${esc(id)}"${id===x.sc?' selected':''}>${esc(conOf(id).name)}</option>`).join(''):mxScOpts(x.sc);
   lqModal(`<div class="lqtop"><b>«${esc(v)}» no está en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>
    ${sim.length?`<div class="ph">¿Es alguna de estas?</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
-   ${ed?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${mxScOpts(x.sc)}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label><label>Especialidad<select id="mxaesp">${mxEspOpts(mxEspOf(x.sc))}</select></label></div>
-     ${tp?`<label class="mxur"><input type="checkbox" id="mxatp" checked><span><b>${mxTipoTxt(tp)}</b><small>Así sale en todos los ambientes de ese tipo. Desmárcalo si es algo puntual de este ambiente (Específica).</small></span></label>`:''}`
-     :sc?`<div class="ph">O propónla al catálogo</div><p class="note">El ingeniero la revisa; cuando la apruebe podrás usarla.</p><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label></div>`:''}
+   ${can?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${scOpts}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label><label>Especialidad<select id="mxaesp">${mxEspOpts(mxEspOf(x.sc))}</select></label></div>
+     <p class="note">Se agrega solo a este ambiente.${sc?' El ingeniero la revisará (nombre, clase, tipo) y si la corrige, el lookahead se actualiza solo.':''}</p>
+     ${tp?`<label class="mxur"><input type="checkbox" id="mxatp"><span><b>Agregar a todos los ambientes del tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n})`:''}</b><small>${sc?'El ingeniero lo confirma al revisarla.':'Sale en todos los ambientes de ese tipo.'}</small></span></label>`:''}`:''}
    <p class="note" id="mxamsg"></p>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${ed?'<button class="ib pri" id="mxaok">Agregar al catálogo y usarla</button>':sc?'<button class="ib pri" id="mxapr">Proponer al catálogo</button>':''}</div>`,
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${can?'<button class="ib pri" id="mxaok">Agregar al catálogo y usarla</button>':''}</div>`,
    async e=>{const u=e.target.closest('[data-mxuse]');if(u){const c=MX.cat.get(u.dataset.mxuse);lqClose();if(c)useName(c);return}
-     if(e.target.closest('#mxaok')){const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
-       const dup=mxAli().get(mnk(name));if(dup){lqClose();useName(MX.cat.get(dup));return}
-       const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,esp:$('#mxaesp').value==='__new'?'':$('#mxaesp').value,al:[mnk(name)],ord};
-       const toT=tp&&$('#mxatp')&&$('#mxatp').checked;
-       try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();useName(c);toast(toT?`Agregada al catálogo y al tipo «${tp.name}»`:'Agregada al catálogo')}catch(err){mxErr(err)}return}
-     if(e.target.closest('#mxapr')){const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
-       try{await fcol('mcatp').doc('p'+NOW().toString(36)).set({name,sc:x.sc||'',actId:x.id,ambId:x.ambId||'',st:'pend',...mxNow()});lqClose();toast('Propuesta enviada al ingeniero')}catch(err){mxErr(err)}}},
-   async e=>{if(e.target.id==='mxacl'){const c=$('#mxatp');if(c)c.checked=e.target.value==='t'}
+     if(!e.target.closest('#mxaok'))return;const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
+     const dup=mxAli().get(mnk(name));if(dup){lqClose();useName(MX.cat.get(dup));return}
+     const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&$('#mxatp')&&$('#mxatp').checked);
+     const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,esp:$('#mxaesp').value==='__new'?'':$('#mxaesp').value,al:[mnk(name)],ord};
+     if(sc)c.rev={by:me.email,n:me.name||'',t:NOW(),amb:x.ambId||'',tipo:toT?tp.id:null};
+     try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT&&ed)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();useName(c);
+       toast(sc?'Agregada al catálogo: el ingeniero la revisará':toT?`Agregada al catálogo y al tipo «${tp.name}»`:'Agregada al catálogo (solo este ambiente)')}catch(err){mxErr(err)}},
+   async e=>{if(e.target.id==='mxacl'&&e.target.value==='e'){const c=$('#mxatp');if(c)c.checked=false}
      if(e.target.id==='mxasc'){const es=$('#mxaesp');const d=mxEspOf(e.target.value);if(es&&d){if(![...es.options].some(o=>o.value===d))es.insertAdjacentHTML('afterbegin',`<option value="${esc(d)}">${esc(d)}</option>`);es.value=d}}
      if(e.target.id==='mxaesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
 
+/* actividades que agregaron los SC y nadie revisó todavía */
+const mxRevList=()=>[...MX.cat.values()].filter(c=>c.rev&&!c.arch).sort((a,b)=>(a.rev.t||0)-(b.rev.t||0));
+
 /* ---------- herramientas del catálogo (vista Catálogo) ---------- */
-function mxCatTools(){const ed=mxEd();const pend=[...MX.prop.values()].filter(p=>p.st==='pend');const mine=SCK()?[...MX.prop.values()].filter(p=>p.by===me.email).sort((a,b)=>(b.t||0)-(a.t||0)).slice(0,8):[];
+function mxCatTools(){const ed=mxEd();const pend=[...MX.prop.values()].filter(p=>p.st==='pend');const rv=mxRevList();
+  const mine=SCK()?rv.filter(c=>c.rev.by===me.email):[];
   let h='';
   if(isAdmin)h+=`<div class="card mxtools"><div class="pad fbar"><b>Lookahead</b>
     <span class="fgl">Exigir catálogo</span><span class="seg" role="group" aria-label="Exigir catálogo en el lookahead"><button data-mxreq="0" class="${P().catReq?'':'on'}">No</button><button data-mxreq="1" class="${P().catReq?'on':''}">Sí</button></span>
     <span class="note">${P().catReq?'Solo se escriben actividades del catálogo.':'Todavía se aceptan nombres libres.'}</span><span class="fsp"></span>
     <button class="ib" id="mxuni">Unificar nombres del lookahead…</button></div></div>`;
+  if(ed&&rv.length)h+=`<div class="card mxrev"><div class="hd">Agregadas por los subcontratistas <span class="sub">${rv.length} por revisar · corrige nombre, clase o especialidad en la tabla (el lookahead se actualiza) o fusiónala si ya existía</span></div><div class="tscroll"><table class="t rt"><tbody>
+    ${rv.map(c=>{const a=S.amb.get(c.rev.amb);const tp=c.rev.tipo&&MX.tipo.get(c.rev.tipo);const inT=tp&&(tp.acts||[]).includes(c.id);return`<tr><td data-l="Actividad"><b>${esc(c.name)}</b> <small class="note">${esc(MXCL[c.cl]||'')}</small></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td>
+      <td data-l="Ambiente">${a?esc(a.code+' '+a.name):''}</td><td data-l="Agregó">${esc(c.rev.n||c.rev.by||'')} · ${esc(fmtD(ldt(c.rev.t||0)))}</td>
+      <td class="mxrb">${tp&&!inT?`<button class="ib" data-mxrtp="${esc(c.id)}" title="El SC pidió que salga en todos los ambientes de este tipo">+ Tipo «${esc(tp.name)}»</button>`:''}<button class="ib" data-mxrfus="${esc(c.id)}">Fusionar…</button><button class="ib pri" data-mxrok="${esc(c.id)}">✓ Revisada</button></td></tr>`}).join('')}</tbody></table></div></div>`;
   if(ed&&pend.length)h+=`<div class="card"><div class="hd">Propuestas de los subcontratistas <span class="sub">${pend.length} por revisar</span></div><div class="tscroll"><table class="t rt"><tbody>
     ${pend.sort((a,b)=>(a.t||0)-(b.t||0)).map(p=>{const a=S.amb.get(p.ambId);return`<tr><td data-l="Actividad"><b>${esc(p.name)}</b></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(p.sc).color)}"></span>${esc(conOf(p.sc).name)}</td>
       <td data-l="Para">${a?esc(a.code+' '+a.name):''}</td><td data-l="Propuso">${esc(p.n||p.by||'')} · ${esc(fmtD(ldt(p.t||0)))}</td>
       <td><button class="ib pri" data-mxpok="${esc(p.id)}">Aprobar</button> <button class="ib" data-mxpno="${esc(p.id)}">Rechazar</button></td></tr>`}).join('')}</tbody></table></div></div>`;
-  if(mine.length)h+=`<div class="card"><div class="hd">Tus propuestas al catálogo</div><div class="pad">${mine.map(p=>`<div>${esc(p.name)} · <b>${p.st==='ok'?'aprobada':p.st==='rej'?'rechazada'+(p.note?': '+esc(p.note):''):'por revisar'}</b></div>`).join('')}</div></div>`;
+  if(mine.length)h+=`<div class="card"><div class="hd">Agregaste al catálogo</div><div class="pad">${mine.map(c=>`<div>${esc(c.name)} · <b>por revisar</b></div>`).join('')}</div></div>`;
   return h}
 function mxWireCatTools(main){
   main.querySelectorAll('[data-mxreq]').forEach(b=>b.onclick=async()=>{const v=b.dataset.mxreq==='1';if(!!P().catReq===v)return;
@@ -78,7 +90,12 @@ function mxWireCatTools(main){
     apply([op('meta','project',{...P(),catReq:v})],v?'El lookahead ahora exige actividades del catálogo':'El lookahead vuelve a aceptar nombres libres')});
   const un=$('#mxuni');if(un)un.onclick=mxUnifyDlg;
   main.querySelectorAll('[data-mxpok]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpok,true));
-  main.querySelectorAll('[data-mxpno]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpno,false))}
+  main.querySelectorAll('[data-mxpno]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpno,false));
+  main.querySelectorAll('[data-mxrok]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxrok;const c=MX.cat.get(id);if(!c||!c.rev)return;const r=c.rev;
+    fcol('mcat').doc(id).set({rev:mxFV().delete(),revOk:{by:me.email,n:me.name||'',t:NOW()},...mxNow()},{merge:true}).then(()=>toast('Marcada como revisada','Deshacer',()=>fcol('mcat').doc(id).set({rev:r,...mxNow()},{merge:true}))).catch(mxErr)});
+  main.querySelectorAll('[data-mxrfus]').forEach(b=>b.onclick=()=>mxMergeDlg(b.dataset.mxrfus));
+  main.querySelectorAll('[data-mxrtp]').forEach(b=>b.onclick=()=>{const c=MX.cat.get(b.dataset.mxrtp);const tp=c&&c.rev&&MX.tipo.get(c.rev.tipo);if(!tp)return;mxTipoAdd(tp.id,c.id).then(()=>toast(`Agregada al tipo «${tp.name}»`)).catch(mxErr)})}
+/* propuestas antiguas (mcatp): desde oct 2026 el SC agrega directo; estas se siguen pudiendo resolver */
 async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return;const meta={dec:ok?'ok':'rej',decBy:me.email,decN:me.name||'',decT:NOW()};
   try{if(ok){const dup=mxAli().get(mnk(p.name));let cid=dup;
       if(!dup){cid='k'+NOW().toString(36);const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;await fcol('mcat').doc(cid).set({name:p.name,sc:p.sc||'',cl:'t',esp:mxEspOf(p.sc||''),al:[mnk(p.name)],ord,...mxNow()})}

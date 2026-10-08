@@ -28,7 +28,7 @@ test('catálogo: renombrar y cambiar clase no toca lo marcado; Deshacer', async 
 });
 
 test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  const errors = await openApp(page, { tab: 'mat', extra: [...CAT, ['acts', 'd9', { ambId: 'a1', sc: 'c1', name: 'Redes dup', days: [], order: 60 }]] });
   await page.click('[data-mxv="cat"]');
   await row(page, 'k9').locator('[data-mcm]').click();
   await page.click('#pop [data-do="fus"]');
@@ -42,6 +42,8 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   expect((await get(page, 'mcat', 'k1')).al).toEqual(['redes empotradas', 'redes dup', 'redes duplicada']);
   expect((await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1']);
   expect((await get(page, 'mcat', 'k9')).arch.fus).toBe('k1');
+  // la fila del lookahead que usaba «Redes (duplicada)» pasa a llamarse como la que queda
+  await expect.poll(async () => (await get(page, 'acts', 'd9')).name).toBe('Redes empotradas');
   await expect(row(page, 'k9')).toHaveCount(0);
   // restaurar desde Archivadas
   await page.click('[data-mxarch="1"]');
@@ -51,6 +53,7 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   expect((await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
   expect((await get(page, 'mcat', 'k1')).al).toEqual(['redes empotradas']);
   expect((await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1', 'k9']);
+  await expect.poll(async () => (await get(page, 'acts', 'd9')).name).toBe('Redes dup');
   noErrors(errors, 'fusionar');
 });
 
