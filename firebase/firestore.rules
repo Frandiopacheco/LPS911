@@ -461,6 +461,29 @@ service cloud.firestore {
       allow read: if isTar();
       allow write: if false;
     }
+    // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
+    // La lee todo LPS; en la fase 1 editan administrador y editores. No se borra (lo que sobra se archiva o queda «no aplica»).
+    match /mcat/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit();
+      allow delete: if false;
+    }
+    match /mtipo/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit();
+      allow delete: if false;
+    }
+    match /mamb/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow delete: if false;
+    }
+    // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
+    match /mver/{id} {
+      allow read: if lpsMember();
+      allow create: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow update, delete: if false;
+    }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
       allow write: if canEdit() && dataCol(col) && col != 'pisos';

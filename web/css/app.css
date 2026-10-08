@@ -2934,3 +2934,62 @@ a.kbig{display:flex;align-items:center;justify-content:center;text-decoration:no
 .pop .paz{display:flex;margin:6px 0 2px;font-size:12.5px}
 /* modos del plan diario (Cumplimiento · Programar · Interferencias): contador de cruces */
 .mpm .mpmn{background:#d32f2f;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;line-height:17px}
+
+/* ===== Matriz de ambientes (js/matriz.js) ===== */
+.mxwrap{max-width:none}
+.mxleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink2)}
+.mxleg>span{display:inline-flex;align-items:center;gap:5px}
+.mxleg .mc,.mxsb .mc,.pop .mc{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:4px;font-size:11px;flex:none}
+.mxbox{overflow:auto;max-height:calc(100vh - 300px);min-height:240px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--panel);box-shadow:var(--sh-1)}
+table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
+table.mx th,table.mx td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:0}
+table.mx thead th{position:sticky;background:var(--panel);z-index:2}
+table.mx .mxg th{top:0;height:24px;font-weight:600;font-size:11px;text-align:left;padding:0 6px;border-top:3px solid var(--c,var(--line));white-space:nowrap;overflow:hidden;max-width:0}
+table.mx .mxg th span{display:block;overflow:hidden;text-overflow:ellipsis}
+table.mx .mxn th{top:24px;height:132px;vertical-align:bottom;min-width:26px;max-width:26px;width:26px}
+table.mx .mxc span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:124px;padding:4px 0;margin:0 auto;font-weight:500;color:var(--ink2)}
+table.mx .mxc{box-shadow:inset 0 -3px 0 var(--c,transparent)}
+table.mx .mxc.dsg span{color:var(--warn);font-style:italic}
+table.mx.ed .mxc,table.mx.ed th.mxa[data-mxrow]{cursor:pointer}
+table.mx.ed .mxc:hover,table.mx.ed th.mxa[data-mxrow]:hover{background:var(--accent-soft)}
+table.mx .mxa{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;font-weight:400;padding:0 8px;white-space:nowrap;min-width:210px;max-width:260px;overflow:hidden;text-overflow:ellipsis;height:26px}
+table.mx .mxa b{font:500 11px var(--f-mono);color:var(--muted);margin-right:4px}
+table.mx thead .mxa{z-index:3;vertical-align:bottom;padding-bottom:6px;font-weight:600}
+table.mx .mxtp{padding:0 4px;white-space:nowrap;color:var(--ink2);font-size:11px;min-width:110px}
+table.mx .mxtp select{height:22px;font-size:11px;max-width:130px;border:1px solid var(--line2);border-radius:var(--r-xs);background:var(--panel);color:var(--ink)}
+table.mx .mxpc{text-align:right;padding:0 6px;font:500 11px var(--f-mono);color:var(--ink2);min-width:40px}
+table.mx thead .mxtp,table.mx thead .mxpc{vertical-align:bottom;padding-bottom:6px;font-weight:600}
+table.mx .mxp th{background:var(--sec);text-align:left;padding:5px 8px;font-weight:700;position:sticky;left:0}
+table.mx .mxs th{background:var(--panel2);text-align:left;padding:3px 8px;font-weight:600;color:var(--ink2);font-size:11px}
+table.mx tfoot td,table.mx tfoot th{position:sticky;bottom:0;background:var(--panel2);font:500 10px var(--f-mono);text-align:center;height:24px;border-top:1px solid var(--line);z-index:1}
+table.mx tfoot .mxa{z-index:2;text-align:left;font:600 11px var(--f-ui)}
+/* celdas: estado */
+td.mc{width:26px;min-width:26px;height:26px;text-align:center;font-weight:700;font-size:12px;user-select:none;position:relative}
+table.mx.ed td.mc{cursor:cell}
+.mc.x{background:repeating-linear-gradient(135deg,transparent 0 5px,var(--line2) 5px 6px)}
+.mc.s-p{background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.mc.s-c{background:var(--warn-soft);color:var(--warn)}
+.mc.s-t{background:var(--ok-soft);color:var(--ok)}
+.mc.s-n{background:var(--panel2);color:var(--muted);font-weight:400}
+.mc.sug{outline:1.5px dashed var(--muted);outline-offset:-4px;opacity:.82}
+.mc.chg::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+td.mc.sl{box-shadow:inset 0 0 0 2px var(--accent);background-image:linear-gradient(color-mix(in srgb,var(--accent) 16%,transparent),color-mix(in srgb,var(--accent) 16%,transparent))}
+/* barra de la selección */
+.mxsb{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--sh-2);animation:lps-rise var(--t) var(--ease)}
+.mxsb>b{font-size:13px;margin-right:4px}
+.mxsb .ib{display:inline-flex;align-items:center;gap:6px}
+.pop button.on{font-weight:700}
+.mxun{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* asignar nombres sin catálogo */
+.mxml{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin:8px 0}
+.mxmr{display:grid;grid-template-columns:1fr minmax(180px,48%);gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line2)}
+.mxmr span{display:flex;flex-direction:column}.mxmr small{color:var(--muted)}
+.mxmr select{height:var(--h-ctl);border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);min-width:0}
+@media (max-width:760px){
+  .mxbox{max-height:calc(100vh - 230px)}
+  table.mx .mxa{min-width:140px;max-width:150px}
+  table.mx .mxtp{display:none}
+  .mxsb{left:8px;right:8px;transform:none;bottom:calc(64px + env(safe-area-inset-bottom))}
+  .mxsb .ib{height:40px}
+  .mxmr{grid-template-columns:1fr}
+}
