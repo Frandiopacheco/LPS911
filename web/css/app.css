@@ -3220,3 +3220,6 @@ g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
 .taddb{display:none}
 @media (max-width:760px){.taddb{display:flex;margin:12px 12px 0;width:calc(100% - 24px);justify-content:center;min-height:40px}
   .tadd:not(.open){display:none}.tmem td.ted{display:none!important}}
+/* fila del lookahead fuera del catálogo (∉) o de otro SC */
+.mxbadge.mxcb{background:var(--warn-soft,#fff3d6);color:var(--warn,#9a6a12);border-color:var(--warn,#9a6a12)}
+.mxscs{display:block;font-size:11px;color:var(--muted);margin-top:2px}

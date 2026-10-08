@@ -37,7 +37,7 @@ const mxClOpts=sel=>Object.entries(MXCL).map(([k,l])=>`<option value="${k}"${k==
 /* ---------- Catálogo ---------- */
 function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=mxSel();const q=mnk(MXC.q);
   const all=[...MX.cat.values()];
-  const L=all.filter(c=>!!c.arch===MXC.arch&&(!scs.length||scs.includes(c.sc))&&(!MXC.cl||c.cl===MXC.cl)&&(!q||mnk(c.name).includes(q)||(c.al||[]).some(a=>a.includes(q))))
+  const L=all.filter(c=>!!c.arch===MXC.arch&&(!scs.length||mxHasSc(c,scs))&&(!MXC.cl||c.cl===MXC.cl)&&(!q||mnk(c.name).includes(q)||(c.al||[]).some(a=>a.includes(q))))
     .sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name));
   const nArch=all.filter(c=>c.arch).length;
   const scList=[...new Set(all.filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
@@ -56,7 +56,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
      const fus=c.arch&&c.arch.fus?MX.cat.get(c.arch.fus):null;
      return`<tr data-mcid="${esc(c.id)}"${c.arch?' class="mxarch"':''}>
       <td data-l="Actividad">${c.rev&&!c.arch?`<span class="pill warn" title="La agregó ${esc(c.rev.n||c.rev.by||'')} desde el lookahead">Nueva · por revisar</span> `:''}${ro?`<b>${esc(c.name)}</b>${c.arch?`<small class="note"> · ${fus?'fusionada con «'+esc(fus.name)+'»':'archivada'} ${esc(fmtD(ldt(c.arch.t).slice(0,10)))}</small>`:''}`:`<input class="tin" data-mcf="name" value="${esc(c.name)}" aria-label="Nombre">`}</td>
-      <td data-l="Subcontratista">${ro?`<span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}`:`<select data-mcf="sc" aria-label="Subcontratista">${mxScOpts(c.sc)}</select>`}</td>
+      <td data-l="Subcontratista">${ro?`<span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}`:`<select data-mcf="sc" aria-label="Subcontratista">${mxScOpts(c.sc)}</select>`}${(c.scs||[]).length?`<small class="mxscs" title="También la hacen">+ ${(c.scs||[]).map(i=>esc(conOf(i).name)).join(', ')}</small>`:''}</td>
       <td data-l="Clase">${ro?esc(MXCL[c.cl]||''):`<select data-mcf="cl" aria-label="Clase">${mxClOpts(c.cl)}</select>`}</td>
       <td data-l="Especialidad">${ro?esc(c.esp||''):`<select data-mcf="esp" aria-label="Especialidad">${mxEspOpts(c.esp||'')}</select>`}</td>
       <td class="mono" data-l="Ambientes">${c.arch?'—':u.amb}</td><td class="mono" data-l="Marcadas">${u.st}</td>
@@ -126,8 +126,18 @@ function mxCatNew(){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const sc=m
      if(e.target.id==='mxnesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
 
 function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
-  openPop(btn,`<div class="ph">${esc(c.name)}</div><button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button><hr><button data-do="arc" class="danger">Archivar</button>`,
-   {fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id)})}
+  openPop(btn,`<div class="ph">${esc(c.name)}</div><button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
+   {fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
+/* otros SC que también hacen la actividad (c.scs): sus filas del lookahead alimentan la Matriz y su SC puede llenarla */
+function mxCatScsAdd(id,sc){return fcol('mcat').doc(id).set({scs:mxFV().arrayUnion(sc),...mxNow()},{merge:true})}
+function mxCatScsDlg(id){const c=MX.cat.get(id);if(!c||!mxEd()){lqClose();return}const L=(c.scs||[]).filter(i=>i!==c.sc);const rest=[...S.con.values()].filter(x=>x.id!==c.sc&&!L.includes(x.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  lqModal(`<div class="lqtop"><b>${esc(c.name)} · subcontratistas</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   <p class="note">Principal: <b>${esc(conOf(c.sc).name)}</b> (su columna en la Matriz). Si otros SC también la hacen, súmalos: sus filas del lookahead con este nombre salen en la Matriz y pueden llenarla.</p>
+   <div class="scchips">${L.map(i=>`<span class="scchip" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}<button data-mxscrm="${esc(i)}" aria-label="Quitar ${esc(conOf(i).name)}">&times;</button></span>`).join('')||'<span class="mu">Solo el principal.</span>'}</div>
+   <select class="tin" id="mxscadd" aria-label="Sumar subcontratista"><option value="">+ Sumar subcontratista…</option>${rest.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>
+   <div class="lqbtns"><button class="ib pri" data-lqx>Listo</button></div>`,
+   async e=>{const b=e.target.closest('[data-mxscrm]');if(!b)return;try{await fcol('mcat').doc(id).set({scs:mxFV().arrayRemove(b.dataset.mxscrm),...mxNow()},{merge:true});const x=MX.cat.get(id);if(x)x.scs=(x.scs||[]).filter(i=>i!==b.dataset.mxscrm)}catch(err){mxErr(err)}mxCatScsDlg(id)},
+   async e=>{if(e.target.id!=='mxscadd'||!e.target.value)return;const v=e.target.value;try{await mxCatScsAdd(id,v);const x=MX.cat.get(id);if(x)x.scs=[...new Set([...(x.scs||[]),v])]}catch(err){mxErr(err)}mxCatScsDlg(id)})}
 
 async function mxCatArchive(id){const c=MX.cat.get(id);if(!c)return;const u=mxCatUse().get(id)||{amb:0,st:0};
   const ok=await uiAsk({title:`Archivar «${c.name}»`,text:`Deja de salir en la matriz${u.amb?` (aparece en ${u.amb} ambientes)`:''}.${u.st?` Sus ${u.st} estados marcados se guardan y vuelven si la restauras.`:''} Si en realidad es la misma que otra actividad, mejor usa «Fusionar».`,ok:'Archivar',tone:'warn'});if(!ok)return;
