@@ -3184,3 +3184,16 @@ body.mxfs .top,body.mxfs #bnav,body.mxfs #verban{display:none!important}
   .mxwrap .callout.mxun{padding:4px 10px;margin:2px 0}
   .mxwrap .fbar.mxbar0{margin:4px 0}
 }
+/* Tablero: filtrado cruzado (clic en una fila de SC) y avance físico (oct 2026) */
+.dsgo{cursor:pointer}.dsgo:hover .dsn{text-decoration:underline}
+.ddim{opacity:.35}.dsel .dsn{font-weight:800}
+g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
+.dscdd.on{border-color:var(--accent);color:var(--accent)}
+.dfon{cursor:pointer}.dfon i{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:5px}
+.dfr{display:grid;grid-template-columns:150px minmax(0,1fr) 46px 120px 175px 150px;gap:10px;align-items:center}
+.dfr .dfc2 .pill{font-size:11px;white-space:nowrap}
+.dfr .dfc3{font-size:12px;color:var(--ink2);white-space:nowrap}.dfr .dfc3.bad{color:var(--bad);font-weight:700}
+.dfr.dlow .davr{background:var(--muted)}.dfr.dlow .dsval{color:var(--muted)}
+.dfec{margin-left:auto;font:500 12px var(--f-ui);text-transform:none;letter-spacing:0;color:var(--ink2)}
+@media (max-width:1100px){.dfr{grid-template-columns:130px minmax(0,1fr) 42px 100px}.dfr .dfc2,.dfr .dfc3{display:none}}
+@media (max-width:640px){.dfr{grid-template-columns:minmax(0,1fr) 44px;row-gap:4px}.dfr .dsn{grid-column:1/-1}.dfr .dsw{display:none}}

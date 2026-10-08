@@ -27,15 +27,15 @@ test('el SC (modo propuesta) no ve «Cambiar de ambiente»', async ({ page }) =>
   noErrors(errors, 'sc sin cambiar ambiente');
 });
 
-test('Tablero: clic elige un solo SC; Ctrl+clic suma', async ({ page }) => {
+test('Tablero: clic en la fila de un SC filtra solo ese; Ctrl+clic suma', async ({ page }) => {
   const errors = await openApp(page, { tab: 'dash', editar: false });
-  const chips = page.locator('[data-dsc]:not([data-dsc=""])');
+  const chips = page.locator('#dsc [data-dsc]');
   await expect(chips.first()).toBeVisible();
   const a = await chips.nth(0).getAttribute('data-dsc'), b = await chips.nth(1).getAttribute('data-dsc');
-  await page.locator(`[data-dsc="${a}"]`).click();
-  await page.locator(`[data-dsc="${b}"]`).click();
+  await page.locator(`#dsc [data-dsc="${a}"]`).click();
+  await page.locator(`#dsc [data-dsc="${b}"]`).click();
   expect(await page.evaluate(() => [...DB_.sc])).toEqual([b]);
-  await page.locator(`[data-dsc="${a}"]`).click({ modifiers: ['Control'] });
+  await page.locator(`#dsc [data-dsc="${a}"]`).click({ modifiers: ['Control'] });
   expect((await page.evaluate(() => [...DB_.sc])).sort()).toEqual([a, b].sort());
   noErrors(errors, 'tablero filtro sc');
 });

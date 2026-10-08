@@ -20,21 +20,21 @@ const mnk=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
 /* el catálogo también lo usa el lookahead (nombres de actividad): se carga aparte y antes que el resto de la matriz */
 let mcatSub=null;
 function ensureMcat(){if(mcatSub||!db)return;
-  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'))requestRender()},
+  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))requestRender()},
     err=>{MX.err=err&&err.code||'error';MX.ld.cat=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mcatSub)mcatSub();mcatSub=null;MX.cat.clear();MX.ld.cat=false;MX.v++})}
 /* estados por ambiente: también los usa el Lookahead (alertas de lo terminado que sigue programado) */
 let mambSub=null;
 function ensureMamb(){if(mambSub||!db)return;
-  mambSub=fcol('mamb').onSnapshot(sn=>{MX.amb.clear();sn.docs.forEach(d=>MX.amb.set(d.id,{...d.data(),id:d.id}));MX.ld.amb=true;MX.v++;DV++;if(ready&&(U.tab==='mat'||U.tab==='look'))requestRender()},
+  mambSub=fcol('mamb').onSnapshot(sn=>{MX.amb.clear();sn.docs.forEach(d=>MX.amb.set(d.id,{...d.data(),id:d.id}));MX.ld.amb=true;MX.v++;DV++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='dash'))requestRender()},
     err=>{MX.err=err&&err.code||'error';MX.ld.amb=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mambSub)mambSub();mambSub=null;MX.amb.clear();MX.ld.amb=false;MX.v++})}
 /* fotos semanales: solo en la pestaña Matriz */
 let mverSub=null;
-function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&U.tab==='mat')requestRender()},()=>{});
+function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&(U.tab==='mat'||U.tab==='dash'))requestRender()},()=>{});
   unsubs.push(()=>{if(mverSub)mverSub();mverSub=null;MX.ver.clear()})}
 function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
-  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'))requestRender()},
+  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))requestRender()},
     err=>{MX.err=err&&err.code||'error';if(k in MX.ld)MX.ld[k]=true;if(ready&&U.tab==='mat')requestRender()}));
   on('mcatp','prop');on('mtipo','tipo');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'));
   mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
