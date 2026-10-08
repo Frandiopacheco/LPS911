@@ -998,3 +998,27 @@ test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, re
   await assertFails(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'prod' }] }));
   await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
 });
+
+test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no se borra; la foto semanal no cambia', async () => {
+  const ed = user('editor@obra.pe'), ow = user(OWNER), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
+  await assertSucceeds(setDoc(doc(ow, 'mcat/k001'), { name: 'Espejos', sc: 'c-gabel', cl: 't', al: ['espejos'], ord: 10 }));
+  await assertSucceeds(setDoc(doc(ed, 'mtipo/tp01'), { name: 'SS.HH.', acts: ['k001'], order: 10 }));
+  await assertFails(setDoc(doc(sc, 'mcat/k002'), { name: 'Otra', sc: 'c-gabel', cl: 't' }));
+  await assertSucceeds(getDoc(doc(lec, 'mcat/k001')));
+  await assertSucceeds(getDoc(doc(sc, 'mtipo/tp01')));
+  await assertFails(deleteDoc(doc(ow, 'mcat/k001')));
+  await assertFails(deleteDoc(doc(ow, 'mtipo/tp01')));
+  // estado por ambiente: con el correo de quien escribe
+  await assertSucceeds(setDoc(doc(ed, 'mamb/a1'), { tipo: 'tp01', c: { k001: 't' }, by: 'editor@obra.pe', t: 1 }, { merge: true }));
+  await assertFails(setDoc(doc(ed, 'mamb/a1'), { c: { k001: 'p' }, by: 'otro@obra.pe', t: 2 }, { merge: true }));
+  await assertFails(setDoc(doc(user('campo@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'campo@obra.pe', t: 2 }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a2'), { c: { k001: 'p' }, by: 'sc@obra.pe', t: 2 }));
+  await assertSucceeds(getDoc(doc(lec, 'mamb/a1')));
+  await assertFails(deleteDoc(doc(ow, 'mamb/a1')));
+  // foto semanal
+  await assertSucceeds(setDoc(doc(ed, 'mver/f1'), { t: 1, d: '2026-10-08', by: 'editor@obra.pe', a: { a1: 'k001:t' } }));
+  await assertFails(setDoc(doc(ed, 'mver/f2'), { t: 1, by: 'otro@obra.pe', a: {} }));
+  await assertFails(updateDoc(doc(ed, 'mver/f1'), { a: {} }));
+  await assertFails(deleteDoc(doc(ow, 'mver/f1')));
+  await assertSucceeds(getDoc(doc(sc, 'mver/f1')));
+});
