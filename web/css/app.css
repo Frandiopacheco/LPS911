@@ -3103,3 +3103,4 @@ td.mc.dsc{position:relative}td.mc.dsc::after{content:"";position:absolute;top:2p
 .mxpk:hover{background:var(--accent-soft)}.mxpk span:last-child{display:flex;flex-direction:column}.mxpk small{color:var(--muted)}
 /* Matriz en modo edición: arrastrar sobre las celdas selecciona (en tablet no desplaza); en consulta se desplaza normal */
 table.mx.ed td.mc{touch-action:none}
+.mxpk.mxpkn{border-style:dashed;color:var(--accent)}.mxpkp{display:grid;place-items:center;width:22px;font-size:18px;font-weight:700}
