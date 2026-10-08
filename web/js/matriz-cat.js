@@ -10,7 +10,7 @@ const mxFV=()=>firebase.firestore.FieldValue;
 const mxErr=e=>toast('No se pudo guardar: '+(e&&e.code||e));
 
 /** pestañas internas de la matriz */
-function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['cat','Catálogo'],['tipo','Tipos de ambiente']]
+function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente']]
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
 function mxWireV(main){main.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=()=>{U.mxV=b.dataset.mxv;saveUI();MX.sel.clear();render()})}
 

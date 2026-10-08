@@ -84,6 +84,7 @@ function renderMat(main){ensureMx();ensureMver();
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'){renderMxTipo(main,head);return}
+  if(U.mxV==='rec'){renderMxRec(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEd();
