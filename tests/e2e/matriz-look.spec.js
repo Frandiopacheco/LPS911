@@ -34,8 +34,8 @@ test('unificar nombres: solo cambia el nombre, salta las filas con propuesta pen
   noErrors(errors, 'unificar');
 });
 
-test('exigir catálogo: el nombre del catálogo se impone y lo que no está se agrega al catálogo', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+test('exigir catálogo: el nombre del catálogo se impone y lo que no está se agrega al catálogo (y a su tipo)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: [...CAT, ['mtipo', 'tp1', { name: 'Dpto', acts: ['k1'], order: 10 }], ['mamb', 'a2', { tipo: 'tp1', by: 'x', t: 1 }]] });
   page.on('dialog', d => d.accept());
   await page.click('[data-mxv="cat"]');
   await page.click('[data-mxreq="1"]');
@@ -50,9 +50,15 @@ test('exigir catálogo: el nombre del catálogo se impone y lo que no está se a
   await nameIn(page, 'e1').press('Enter');
   await expect(page.locator('#lqm')).toContainText('no está en el catálogo');
   expect((await get(page, 'acts', 'e1')).name).toBe('Entubado empotrado');
+  // el ambiente (a2) es de tipo «Dpto»: se ofrece agregarla también al tipo (marcado por defecto)
+  await expect(page.locator('#mxatp')).toBeChecked();
+  await page.selectOption('#mxacl', 'e');
+  await expect(page.locator('#mxatp')).not.toBeChecked();
+  await page.selectOption('#mxacl', 't');
   await page.click('#mxaok');
   await expect.poll(async () => (await get(page, 'acts', 'e1')).name).toBe('Instalación de espejos');
-  expect(await page.evaluate(() => Object.values(__dbAll('mcat')).some(c => c.name === 'Instalación de espejos' && c.sc === 'c2'))).toBe(true);
+  const nid = await page.evaluate(() => Object.entries(__dbAll('mcat')).find(([, c]) => c.name === 'Instalación de espejos' && c.sc === 'c2')[0]);
+  await expect.poll(async () => (await get(page, 'mtipo', 'tp1')).acts).toEqual(['k1', nid]);
   noErrors(errors, 'exigir catálogo');
 });
 
@@ -82,4 +88,17 @@ test('el ingeniero aprueba una propuesta del SC y queda en el catálogo', async 
   expect((await get(page, 'mcat', cid)).name).toBe('Pruebas de presión');
   await expect(page.locator('#mxuni')).toHaveCount(0); // unificar: solo el administrador
   noErrors(errors, 'aprobar propuesta');
+});
+
+test('desde el Lookahead sin abrir la Matriz: también ofrece agregar al tipo del ambiente', async ({ page }) => {
+  const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }], ['mtipo', 'tp1', { name: 'Dpto', acts: ['k1'], order: 10 }], ['mamb', 'a1', { tipo: 'tp1', by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
+  await nameIn(page, 'e0').fill('Cielo raso');
+  await nameIn(page, 'e0').press('Enter');
+  await expect(page.locator('#mxatp')).toBeChecked();
+  await expect(page.locator('#lqm')).toContainText('tipo «Dpto»');
+  await page.click('#mxaok');
+  await expect.poll(async () => (await get(page, 'mtipo', 'tp1')).acts.length).toBe(2);
+  noErrors(errors, 'tipo desde el lookahead');
 });

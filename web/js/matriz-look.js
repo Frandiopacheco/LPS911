@@ -26,13 +26,24 @@ function mxSimilar(v,sc,n){const a=new Set(mnk(v).split(' ').filter(w=>w.length>
   return mxCatAct().map(c=>{const b=mnk(c.name).split(' ');let k=0;b.forEach(w=>{if(a.has(w)||[...a].some(z=>w.startsWith(z.slice(0,5))&&z.length>4))k++});return{c,k:k+(c.sc===sc?0.5:0)}})
     .filter(o=>o.k>=1).sort((p,q)=>q.k-p.k).slice(0,n||6).map(o=>o.c)}
 
+/* tipo del ambiente (lo lee de la base si la matriz no está cargada, p. ej. desde el Lookahead); null si no tiene */
+async function mxAmbTipo(ambId){if(!ambId)return null;let m=MX.amb.get(ambId);
+  if(!m&&!MX.ld.amb){try{const d=await fcol('mamb').doc(ambId).get();m=d.exists?d.data():null}catch(e){m=null}}
+  const tid=m&&m.tipo;if(!tid)return null;let t=MX.tipo.get(tid);
+  if(!t&&!MX.ld.tipo){try{const d=await fcol('mtipo').doc(tid).get();t=d.exists?{...d.data(),id:tid}:null}catch(e){t=null}}
+  if(!t||t.arch)return null;const n=MX.ld.amb?[...MX.amb.values()].filter(a=>a.tipo===tid&&S.amb.has(a.id)).length:null;return{...t,id:tid,n}}
+/** agrega la actividad al tipo (arrayUnion: no pisa lo que otro haya agregado al mismo tiempo) */
+function mxTipoAdd(tid,cat){return fcol('mtipo').doc(tid).set({acts:mxFV().arrayUnion(cat),...mxNow()},{merge:true})}
+const mxTipoTxt=tp=>`Agregar también al tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n} ambientes)`:''}`;
+
 /* nombre que no está en el catálogo: usar una parecida, agregarla (ingeniero) o proponerla (SC) */
-function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM();
+async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM();const tp=ed?await mxAmbTipo(x.ambId):null;
   const useName=c=>{const cur=S.act.get(x.id);if(!cur)return;apply([op('acts',x.id,{...cur,name:c.name})])};
   lqModal(`<div class="lqtop"><b>«${esc(v)}» no está en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>
    ${sim.length?`<div class="ph">¿Es alguna de estas?</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
-   ${ed?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${mxScOpts(x.sc)}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label></div>`
+   ${ed?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${mxScOpts(x.sc)}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label></div>
+     ${tp?`<label class="mxur"><input type="checkbox" id="mxatp" checked><span><b>${mxTipoTxt(tp)}</b><small>Así sale en todos los ambientes de ese tipo. Desmárcalo si es algo puntual de este ambiente (Específica).</small></span></label>`:''}`
      :sc?`<div class="ph">O propónla al catálogo</div><p class="note">El ingeniero la revisa; cuando la apruebe podrás usarla.</p><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label></div>`:''}
    <p class="note" id="mxamsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${ed?'<button class="ib pri" id="mxaok">Agregar al catálogo y usarla</button>':sc?'<button class="ib pri" id="mxapr">Proponer al catálogo</button>':''}</div>`,
@@ -40,9 +51,11 @@ function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM
      if(e.target.closest('#mxaok')){const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
        const dup=mxAli().get(mnk(name));if(dup){lqClose();useName(MX.cat.get(dup));return}
        const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,esp:'',al:[mnk(name)],ord};
-       try{await fcol('mcat').doc(id).set({...c,...mxNow()});MX.cat.set(id,c);MX.v++;lqClose();useName(c);toast('Agregada al catálogo')}catch(err){mxErr(err)}return}
+       const toT=tp&&$('#mxatp')&&$('#mxatp').checked;
+       try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();useName(c);toast(toT?`Agregada al catálogo y al tipo «${tp.name}»`:'Agregada al catálogo')}catch(err){mxErr(err)}return}
      if(e.target.closest('#mxapr')){const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
-       try{await fcol('mcatp').doc('p'+NOW().toString(36)).set({name,sc:x.sc||'',actId:x.id,ambId:x.ambId||'',st:'pend',...mxNow()});lqClose();toast('Propuesta enviada al ingeniero')}catch(err){mxErr(err)}}})}
+       try{await fcol('mcatp').doc('p'+NOW().toString(36)).set({name,sc:x.sc||'',actId:x.id,ambId:x.ambId||'',st:'pend',...mxNow()});lqClose();toast('Propuesta enviada al ingeniero')}catch(err){mxErr(err)}}},
+   e=>{if(e.target.id==='mxacl'){const c=$('#mxatp');if(c)c.checked=e.target.value==='t'}})}
 
 /* ---------- herramientas del catálogo (vista Catálogo) ---------- */
 function mxCatTools(){const ed=mxEd();const pend=[...MX.prop.values()].filter(p=>p.st==='pend');const mine=SCK()?[...MX.prop.values()].filter(p=>p.by===me.email).sort((a,b)=>(b.t||0)-(a.t||0)).slice(0,8):[];
@@ -67,7 +80,9 @@ function mxWireCatTools(main){
 async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return;const meta={dec:ok?'ok':'rej',decBy:me.email,decN:me.name||'',decT:NOW()};
   try{if(ok){const dup=mxAli().get(mnk(p.name));let cid=dup;
       if(!dup){cid='k'+NOW().toString(36);const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;await fcol('mcat').doc(cid).set({name:p.name,sc:p.sc||'',cl:'t',esp:'',al:[mnk(p.name)],ord,...mxNow()})}
-      await fcol('mcatp').doc(id).set({st:'ok',catId:cid,...meta},{merge:true});toast(dup?`Ya existía «${MX.cat.get(dup).name}»: se marcó aprobada`:`«${p.name}» agregada al catálogo`)}
+      await fcol('mcatp').doc(id).set({st:'ok',catId:cid,...meta},{merge:true});toast(dup?`Ya existía «${MX.cat.get(dup).name}»: se marcó aprobada`:`«${p.name}» agregada al catálogo`);
+      /* el ambiente para el que la pidió tiene tipo: ¿la trae todo ese tipo? */
+      const tp=await mxAmbTipo(p.ambId);if(tp&&!(tp.acts||[]).includes(cid)&&await uiAsk({title:'¿Agregar también al tipo de ambiente?',text:`La pidieron para un ambiente de tipo «${tp.name}»${tp.n!=null?` (${tp.n} ambientes)`:''}. Si se hace en todos, agrégala al tipo; si es algo puntual, no.`,ok:'Agregar al tipo',cancel:'Solo este ambiente',tone:'info'})){await mxTipoAdd(tp.id,cid);toast(`Agregada también al tipo «${tp.name}»`)}}
     else{const note=await uiAsk({title:`Rechazar «${p.name}»`,input:{label:'Motivo (lo verá el subcontratista)'},ok:'Rechazar',tone:'warn'});if(note===false||note==null)return;
       await fcol('mcatp').doc(id).set({st:'rej',note:String(note||''),...meta},{merge:true});toast('Propuesta rechazada')}}catch(e){mxErr(e)}}
 
