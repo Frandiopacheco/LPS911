@@ -36,13 +36,32 @@ function blockMoveDialog(btn,ids,label){const L=ids.filter(id=>canMoveAct(S.act.
   function go(s){const n=Math.max(1,Math.min(60,parseInt(($('#bmn')||{}).value,10)||1));const past=!!($('#bmpast')||{}).checked;shiftActs(L,s*n,past?'0000-00-00':t,label)}}
 
 /* barra de la selección: aparece abajo mientras haya filas elegidas */
+/* Cambiar de ambiente (oct 2026): el ingeniero (admin/editor, no en modo propuesta) pasa actividades a otro ambiente del
+   MISMO piso, con sus días, cantidades y registros (los registros del día se guardan por piso, por eso no cruza pisos).
+   Quedan al final del ambiente destino, en su orden. Se deshace con Ctrl+Z. */
+const canAmbMove=()=>!!canWrite&&!PM()&&!(U.ver&&U.verMode==='ver');
+function ambMoveDialog(btn,ids){if(!canAmbMove())return;const L=ids.map(id=>S.act.get(id)).filter(Boolean);if(!L.length)return;
+  const pids=new Set(L.map(x=>pisoOfAct(x.id)));if(pids.size>1){toast('Elige actividades de un solo piso: el cambio de ambiente es dentro del mismo piso.');return}
+  const pid=[...pids][0];const secs=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid).sort((a,b)=>(a.order||0)-(b.order||0));
+  const from=new Set(L.map(x=>x.ambId));
+  const opts=secs.map(s=>{const A=[...S.amb.values()].filter(a=>a.sectorId===s.id).sort((a,b)=>(a.order||0)-(b.order||0));if(!A.length)return'';
+    return`<optgroup label="${esc(s.code+(s.name?' · '+s.name:''))}">${A.map(a=>`<option value="${a.id}"${from.size===1&&from.has(a.id)?' disabled':''}>${esc(a.code+' · '+(a.name||''))}</option>`).join('')}</optgroup>`}).join('');
+  const n=L.length;
+  openPop(btn,`<div class="ph">Cambiar de ambiente</div><div class="ptx">${n} actividad${n>1?'es':''} pasa${n>1?'n':''} al ambiente que elijas (mismo piso), con sus días y registros. Quedan al final del ambiente.</div><div class="qrow"><select id="ambmv" style="max-width:340px" aria-label="Ambiente destino">${opts}</select><button data-do="go">Mover</button></div>`,
+  {go:()=>{const to=($('#ambmv')||{}).value;if(to)ambMoveTo(L.map(x=>x.id),to)}})}
+function ambMoveTo(ids,to){if(!canAmbMove())return 0;const a=S.amb.get(to);if(!a)return 0;
+  const L=ids.map(id=>S.act.get(id)).filter(x=>x&&x.ambId!==to&&pisoOfAct(x.id)===pisoOfAmb(to)).sort((p,q)=>(p.order||0)-(q.order||0));
+  if(!L.length){toast('No hay actividades que cambiar de ambiente.');return 0}
+  let base=Math.max(0,...[...S.act.values()].filter(x=>x.ambId===to).map(x=>+x.order||0));
+  apply(L.map(x=>op('acts',x.id,{...x,ambId:to,order:(base+=10)})),`${L.length} actividad${L.length>1?'es':''} pasada${L.length>1?'s':''} al ambiente ${a.code}`);
+  if(SELA.size)selClear();return L.length}
 function selBar(){let b=$('#mvbar');const on=SELA.size&&U.tab==='look'&&ready;
   if(!on){if(b)b.remove();return}
   for(const id of[...SELA])if(!S.act.has(id))SELA.delete(id);
   if(!b){b=document.createElement('div');b.id='mvbar';b.className='mvbar';b.setAttribute('role','toolbar');b.setAttribute('aria-label','Mover en bloque');document.body.appendChild(b);
     b.onclick=e=>{const k=e.target.closest('[data-sb]');if(!k)return;const v=k.dataset.sb;const L=[...SELA];
-      if(v==='clr')selClear();else if(v==='more')blockMoveDialog(k,L,'la selección');else shiftActs(L,+v,todayIso(),'Selección')}}
-  const n=SELA.size;const h=`<b>${n} actividad${n>1?'es':''}</b><button class="ib" data-sb="-1" title="Adelantar 1 día hábil (Alt+←)">← 1 día</button><button class="ib" data-sb="1" title="Atrasar 1 día hábil (Alt+→)">1 día →</button><button class="ib" data-sb="more">Mover…</button><button class="ib" data-sb="clr">Quitar selección</button><span class="mvh">Toca ⋮ en otras filas para sumarlas</span>`;
+      if(v==='clr')selClear();else if(v==='amb')ambMoveDialog(k,L);else if(v==='more')blockMoveDialog(k,L,'la selección');else shiftActs(L,+v,todayIso(),'Selección')}}
+  const n=SELA.size;const h=`<b>${n} actividad${n>1?'es':''}</b><button class="ib" data-sb="-1" title="Adelantar 1 día hábil (Alt+←)">← 1 día</button><button class="ib" data-sb="1" title="Atrasar 1 día hábil (Alt+→)">1 día →</button><button class="ib" data-sb="more">Mover…</button>${canAmbMove()?'<button class="ib" data-sb="amb">Cambiar de ambiente…</button>':''}<button class="ib" data-sb="clr">Quitar selección</button><span class="mvh">Toca ⋮ en otras filas para sumarlas</span>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 document.addEventListener('keydown',e=>{if(!SELA.size||U.tab!=='look')return;const inField=e.target.closest&&e.target.closest('input,textarea,select');if(inField)return;
   if(e.key==='Escape'){selClear();return}

@@ -64,7 +64,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
   main.innerHTML=h;mxWireV(main);mxWireCat(main);mxWireCatTools(main)}
 
 function mxWireCat(main){
-  main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:L.includes(id)?L.filter(x=>x!==id):[...L,id];U.mxSc=L;saveUI();render()});
+  main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();render()});
   const q=$('#mxcq');if(q){q.oninput=()=>{MXC.q=q.value;clearTimeout(MXC.qt);MXC.qt=setTimeout(()=>{render();const n=$('#mxcq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}},250)}}
   main.querySelectorAll('[data-mxcl]').forEach(b=>b.onclick=()=>{MXC.cl=b.dataset.mxcl;render()});
   main.querySelectorAll('[data-mxarch]').forEach(b=>b.onclick=()=>{MXC.arch=b.dataset.mxarch==='1';render()});

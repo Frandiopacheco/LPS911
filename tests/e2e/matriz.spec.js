@@ -102,11 +102,14 @@ test('filtro de varios subcontratistas: solo sus columnas y los ambientes donde 
   await page.click('[data-mxsc="c3"]');
   await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
   await expect(page.locator('#mxt th.mxc')).toContainText('Tarrajeo');
+  // clic solo elige ese SC; Ctrl+clic suma o quita (mismo criterio que el Lookahead y el Tablero)
   await page.click('[data-mxsc="c1"]');
+  expect(await page.evaluate(() => U.mxSc)).toEqual(['c1']);
+  await page.click('[data-mxsc="c3"]', { modifiers: ['Control'] });
   await expect(page.locator('#mxt th.mxc')).toHaveCount(2);
-  expect(await page.evaluate(() => U.mxSc)).toEqual(['c3', 'c1']);
+  expect(await page.evaluate(() => U.mxSc)).toEqual(['c1', 'c3']);
   expect(await page.evaluate(() => U.sc)).toBe(''); // no cambia el filtro del lookahead
-  await page.click('[data-mxsc="c3"]');
+  await page.click('[data-mxsc="c3"]', { modifiers: ['Control'] });
   await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
   await page.click('[data-mxsc=""]');
   await expect(page.locator('#mxt th.mxc')).toHaveCount(3);
