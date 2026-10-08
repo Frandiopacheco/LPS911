@@ -56,3 +56,15 @@ test('lookahead: «pendientes sin programar» lista lo pendiente de la matriz y 
   await expect(page.locator('.tile', { hasText: 'aún programado' })).toHaveCount(0);
   noErrors(errors, 'pendientes sin programar');
 });
+
+test('«Ver en la Matriz» lleva a la celda y resalta su fila y su columna unos 3 segundos', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: CAT });
+  await page.click('#grid [data-mxw="t0"]');
+  await page.click('#pop [data-do="mat"]');
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'mat');
+  await expect(page.locator('#mxt tr[data-amb="a1"]')).toHaveClass(/mxhl/);
+  await expect(page.locator('#mxt td.mxhlx')).toHaveCount(1);
+  await expect(page.locator('#mxt th.mxc.mxhl')).toContainText('Tarrajeo');
+  await expect(page.locator('#mxt .mxhl, #mxt .mxhlx')).toHaveCount(0, { timeout: 6000 });
+  noErrors(errors, 'resaltar');
+});

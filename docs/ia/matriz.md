@@ -70,6 +70,7 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - El Lookahead carga catálogo, tipos y estados (`ensureMx()` en `renderLook`; las fotos `mver` solo en la Matriz con `ensureMver`). `mamb`/`mtipo` redibujan también el Lookahead.
 - En cada celda (`mxCells`): `fut` = filas del lookahead con días ≥ hoy; `warn` = **confirmada** «Terminado» o «No aplica» con `fut`; `sp` = **Pendiente** (confirmada o propuesta por el tipo) sin días ≥ hoy. «En curso» no avisa.
 - **Terminada y aún programada:** ⚠ en la fila (`mxRowBadge`/`mxRowWarn`); clic → ficha con «Quitar los días desde mañana…» (`mxUnprogram`: hoy y lo pasado no se tocan; `apply` con Deshacer, historial y días cerrados) y «Ver en la Matriz». Al agregar un día ≥ hoy a esa fila, aviso con Deshacer (`mxApplyWarn`, desde `apply`). No bloquea.
+- **«Ver en la Matriz»** (`mxGoCell`): abre la Matriz en el piso del ambiente (quita el filtro de SC o «Típicas» si escondían la columna), centra la celda dentro de `#mxbox` y resalta fila, columna y celda 3 s (`MX.focus`, `mxFocusPaint` después de cada dibujo; clases `mxhl`/`mxhlc`/`mxhlx`).
 - **Pendientes sin programar:** píldora en la barra del Lookahead (`#fmxp`, `mxPendPill`) con los pisos a la vista y los SC del filtro (el SC: los suyos). Abre la lista por ambiente (`mxPendDlg`) y permite **agregarlas al lookahead sin días** (un `apply`; el SC en modo propuesta las propone).
 - Prueba: `tests/e2e/matriz-alertas.spec.js`.
 
