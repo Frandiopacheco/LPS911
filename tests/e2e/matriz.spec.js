@@ -95,3 +95,20 @@ test('subcontratista: ve la matriz y la ficha, pero no cambia nada', async ({ pa
   await expect(page.locator('#pop button[data-s]')).toHaveCount(0);
   noErrors(errors, 'matriz SC');
 });
+
+test('filtro de varios subcontratistas: solo sus columnas y los ambientes donde tienen algo', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: [...CAT, ['mcat', 'k3', { name: 'Entubado', sc: 'c2', cl: 't', al: ['entubado empotrado'], ord: 30 }]] });
+  await expect(page.locator('#mxt th.mxc')).toHaveCount(3);
+  await page.click('[data-mxsc="c3"]');
+  await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
+  await expect(page.locator('#mxt th.mxc')).toContainText('Tarrajeo');
+  await page.click('[data-mxsc="c1"]');
+  await expect(page.locator('#mxt th.mxc')).toHaveCount(2);
+  expect(await page.evaluate(() => U.mxSc)).toEqual(['c3', 'c1']);
+  expect(await page.evaluate(() => U.sc)).toBe(''); // no cambia el filtro del lookahead
+  await page.click('[data-mxsc="c3"]');
+  await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
+  await page.click('[data-mxsc=""]');
+  await expect(page.locator('#mxt th.mxc')).toHaveCount(3);
+  noErrors(errors, 'filtro SC');
+});
