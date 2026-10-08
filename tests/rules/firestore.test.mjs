@@ -21,6 +21,7 @@ test.beforeEach(async () => {
     const db = c.firestore();
     const S = (p, d) => setDoc(doc(db, p), d);
     await S('members/editor@obra.pe', { role: 'editor', name: 'Editor' });
+    await S('meta/propwin', { closeAt: Date.now() + 864e5 }); // ventana de propuestas habilitada (sin ella el SC no propone)
     await S('members/campo@obra.pe', { role: 'campo', name: 'Jefe de campo' });
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
@@ -262,6 +263,7 @@ test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingen
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
   await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
   await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/propwin')); });
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x8: { sent: false } } }, { merge: true })); // nunca habilitada: cerrada
 });
 test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async () => {
   const h = { id: 'x1', st: 'rej', by: 'editor@obra.pe', n: 'Elena', t: 1 };

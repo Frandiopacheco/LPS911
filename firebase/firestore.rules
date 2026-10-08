@@ -150,10 +150,10 @@ service cloud.firestore {
     }
     // ventana de propuestas (meta/propwin.closeAt, ms): pasado el corte, el SC queda en solo lectura hasta que un ingeniero la habilite
     // de nuevo (pone el próximo corte). Sin documento: abierta (la app ya muestra el bloqueo desde el primer corte).
+    // sin documento (nadie la habilitó) está cerrada: primero programa el ingeniero (oct 2026)
     function propOpen() {
-      return !exists(/databases/$(database)/documents/meta/propwin)
-        || get(/databases/$(database)/documents/meta/propwin).data.get('closeAt', 0) == 0
-        || get(/databases/$(database)/documents/meta/propwin).data.closeAt > request.time.toMillis();
+      return exists(/databases/$(database)/documents/meta/propwin)
+        && get(/databases/$(database)/documents/meta/propwin).data.get('closeAt', 0) > request.time.toMillis();
     }
     match /lhprop/{sc} {
       allow read: if lpsMember();

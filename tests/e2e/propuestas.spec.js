@@ -270,3 +270,21 @@ test('ventana de propuestas: pasado el corte el SC solo ve; el ingeniero la habi
   await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita');
 });
+
+test('ventana de propuestas: si el ingeniero nunca la habilitó, está cerrada (primero programa el ingeniero)', async ({ page }) => {
+  const W0 = ['meta', 'propwin', {}]; // sin hora de cierre = nunca habilitada
+  let errors = await openApp(page, { as: 'sc', tab: 'look', extra: [W0] });
+  await expect(page.locator('#ppbar')).toContainText('aún no habilitadas');
+  expect(await page.evaluate(() => propPut('acts', 'i0', { ...S.act.get('i0'), days: ['2026-10-05'] }))).toBe(true); // no guarda nada
+  expect(await page.evaluate(() => __dbGet('lhprop', 'c1'))).toBeFalsy();
+  noErrors(errors, 'sc nunca habilitada');
+  const p2 = await page.context().newPage();
+  errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W0] });
+  await expect(p2.locator('#ppbar')).toContainText('aún no las habilitas');
+  p2.on('dialog', d => d.accept());
+  await p2.locator('#ppbar [data-pp="open"]').click();
+  const nx = await p2.evaluate(() => propNextCut());
+  await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
+  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  noErrors(errors, 'editor habilita la primera vez');
+});

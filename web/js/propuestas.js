@@ -18,7 +18,7 @@ function pmSync(){if(PM()){if(!S.act._pm)ACT_OFF=S.act;const v=new Map(ACT_OFF);
 const cleanAct=a=>{const c={...a};delete c._del;delete c.id;return c};
 /* escritura del SC: va al borrador, no al lookahead oficial */
 function propPut(col,id,after){if(!PM())return false;
-  if(propClosed()){toast('Las propuestas están cerradas desde el corte: el ingeniero está revisando el lookahead. Podrás proponer cuando lo habilite.');requestRender();return true}
+  if(propClosed()){toast('Las propuestas están cerradas: el ingeniero está programando el lookahead. Podrás proponer cuando lo habilite.');requestRender();return true}
   if(col!=='acts'){toast('En modo propuesta solo cambias las actividades de tu partida. Ambientes, sectores y lo demás los edita el ingeniero de producción.');return true}
   const off=ACT_OFF&&ACT_OFF.get(id)||null;const cur=S.act.get(id)||null;const mine=myScsI();
   const sc=off?off.sc:(after&&after.sc)||(cur&&cur.sc);
@@ -62,10 +62,12 @@ function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d
 const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
 /** hora (ms) del corte para entregar propuestas de la semana n */
 function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
-/* ---- ventana de propuestas (oct 2026): pasado el corte, el SC queda en solo lectura hasta que un ingeniero (admin/editor) la habilite
-   de nuevo, después de revisar y ajustar el lookahead. meta/propwin.closeAt = hora (ms) del próximo corte; sin documento, el primer
-   corte después del 6 oct 2026. Las reglas (propOpen) bloquean la escritura del SC en lhprop con la misma hora. */
-function propCloseAt(){const pw=S.meta&&S.meta.get('propwin');if(pw&&+pw.closeAt>0)return+pw.closeAt;return propCut(weekOf('2026-10-06')+1)}
+/* ---- ventana de propuestas (oct 2026, decidido con el dueño): primero el ingeniero programa el lookahead; recién cuando un
+   ingeniero (admin/editor) toca «Habilitar propuestas» los SC pueden proponer, hasta el corte configurado (Configuración ›
+   Proyecto); al corte se bloquea solo. meta/propwin.closeAt = hora (ms) del corte de la ventana abierta; sin documento
+   (nadie habilitó nunca) está CERRADO. Las reglas (propOpen) bloquean la escritura del SC en lhprop con la misma hora. */
+function propCloseAt(){const pw=S.meta&&S.meta.get('propwin');return pw&&+pw.closeAt>0?+pw.closeAt:0}
+const propNever=()=>!propCloseAt();
 const propClosed=()=>NOW()>=propCloseAt();
 /** próximo corte después de ahora (la ventana que se abre al habilitar) */
 function propNextCut(){const cw=weekOf(todayIso());let c=propCut(cw+1);if(c<=NOW())c=propCut(cw+2);return c}
@@ -294,13 +296,13 @@ function renderPropBar(){const v=$('#main .view');if(!v)return;let pb=$('#ppbar'
   let h='';
   if(me&&me.role==='sc'&&!(U.ver&&U.verMode==='ver')){const its=myScsI().flatMap(sc=>propItems(sc));const un=its.filter(o=>!o.it.sent).length,se=its.length-un;
     ensureLhh();const hist=histOf(myScsI());let seen=0;try{seen=+localStorage.getItem('lps.pseen')||0}catch(e){}const nw=hist.filter(x=>x.t>seen).length;
-    if(propClosed()){h=`<div class="ppb sc ppclosed"><div><b>🔒 Propuestas cerradas</b> · pasó el corte (${esc(fmtCut(propCloseAt()))}). El ingeniero está revisando y ajustando el lookahead: por ahora es <b>solo lectura</b>. Podrás proponer cambios para la siguiente semana cuando él lo habilite.</div>
+    if(propClosed()){h=`<div class="ppb sc ppclosed"><div><b>🔒 Propuestas cerradas</b> · ${propNever()?'aún no habilitadas':`pasó el corte (${esc(fmtCut(propCloseAt()))})`}. El ingeniero está programando el lookahead: por ahora es <b>solo lectura</b>. Podrás proponer cambios para la siguiente semana cuando él lo habilite.</div>
       <div class="ppa">${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
     else h=`<div class="ppb sc"><div><b>Modo propuesta</b> · <span class="mu">abierto hasta el ${esc(fmtCut(propCloseAt()))}</span> · edita los días, metrados y actividades de <b>${esc(myScsI().map(c=>conOf(c).name).join(', '))}</b>. Lo de los demás es solo lectura. Tus cambios se aplican cuando el ingeniero responsable del piso los acepte.</div>
       <div class="ppa">${un?`<span class="pill warn">${un} sin enviar</span>`:''}${se?`<span class="pill neu">${se} en revisión</span>`:''}${its.length?'<button class="ib" data-pp="mine">Ver mis cambios</button>':''}<button class="ib pri" data-pp="send"${un?'':' disabled title="Todavía no cambiaste nada: edita días, metrados o actividades de tu partida y luego envía"'}>${un?'Enviar al ingeniero responsable ('+un+')':'Sin cambios por enviar'}</button>${hist.length?`<button class="ib" data-pp="hist">Respuestas${nw?` <b class="bc">${nw}</b>`:''}</button>`:''}</div></div>`}
   else if(canWrite&&!(U.ver&&U.verMode==='ver')){const by=revCounts();let oth=0;for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&!canDecide(id,it))oth++;
     const cl=propClosed();const WB=cl?`<button class="ib pri" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>`:'';
-    if(cl)h=`<div class="ppb ed ppclosed"><div><b>🔒 Propuestas de los SC cerradas</b> desde el corte (${esc(fmtCut(propCloseAt()))}): los subcontratistas solo ven. Revisa y ajusta el lookahead; luego habilítalas para la siguiente semana.${by.size?' · '+[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):''}</div><div class="ppa">${by.size?'<button class="ib" data-pp="rev">Revisar propuestas</button>':''}${WB}</div></div>`;
+    if(cl)h=`<div class="ppb ed ppclosed"><div><b>🔒 Propuestas de los SC cerradas</b> ${propNever()?'(aún no las habilitas)':`desde el corte (${esc(fmtCut(propCloseAt()))})`}: los subcontratistas solo ven. Programa el lookahead; cuando termines, habilítalas: se cierran solas en el corte.${by.size?' · '+[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):''}</div><div class="ppa">${by.size?'<button class="ib" data-pp="rev">Revisar propuestas</button>':''}${WB}</div></div>`;
     else if(by.size||oth)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${by.size?[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):'<span class="mu">ninguna en tus pisos</span>'}${oth?`<span class="mu"> · ${oth} de pisos a cargo de otros (solo las ves)</span>`:''}<span class="mu"> · en la grilla: días propuestos rayados con borde de color, días que se quitarían tachados · rayado tenue con borde punteado = liberado (ya figura terminada)</span></div><div class="ppa">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}</div></div>`;if(revOn())h=revBarHtml()}
   if(propErr)h+=`<div class="callout">No se pudieron leer las propuestas (${esc(propErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   if(pb.dataset.h!==h){pb.innerHTML=h;pb.dataset.h=h}pb.hidden=!h}
