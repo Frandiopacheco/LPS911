@@ -53,12 +53,36 @@ function mxRecSug(amb,cells){const m=MX.amb.get(amb)||{};const tp=m.tipo&&MX.tip
 function mxRecPick(amb,ed,add){const have=(mxCells().get(amb)||{});const L=[...MX.cat.values()].filter(c=>!c.arch&&!have[c.id]&&(ed||mxScCan(c)))
     .sort((x,y)=>conOf(x.sc).name.localeCompare(conOf(y.sc).name)||x.name.localeCompare(y.name));
   const a=S.amb.get(amb);const li=q=>{const k=mnk(q||'');const F=L.filter(c=>!k||mnk(c.name+' '+conOf(c.sc).name).includes(k)).slice(0,80);
-    return F.length?F.map(c=>`<button class="mxpk" data-mxpk="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span><span><b>${esc(c.name)}</b><small>${esc(conOf(c.sc).name)}</small></span></button>`).join(''):'<p class="note">Nada con ese nombre en el catálogo. Si falta, agrégala en Catálogo o desde el lookahead.</p>'};
+    return(F.length?F.map(c=>`<button class="mxpk" data-mxpk="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span><span><b>${esc(c.name)}</b><small>${esc(conOf(c.sc).name)}</small></span></button>`).join(''):'<p class="note">No está en el catálogo.</p>')
+      +`<button class="mxpk mxpkn" data-mxpknew><span class="mxpkp">＋</span><span><b>${q&&q.trim()?`Crear «${esc(q.trim())}» en el catálogo`:'Nueva actividad en el catálogo'}</b><small>Se agrega al catálogo y a este ambiente${ed?'':'; el ingeniero la revisará'}</small></span></button>`};
   lqModal(`<div class="lqtop"><b>Agregar actividad a ${esc(a?a.code+' · '+a.name:'')}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
     <input class="tin" id="mxpq" type="search" placeholder="Buscar actividad o subcontratista" aria-label="Buscar en el catálogo" style="width:100%;box-sizing:border-box">
     <div class="mxpkl" id="mxpkl">${li('')}</div><div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
-    e=>{const b=e.target.closest('[data-mxpk]');if(b){lqClose();add(b.dataset.mxpk)}});
+    e=>{if(e.target.closest('[data-mxpknew]')){const v=($('#mxpq')||{}).value||'';lqClose();mxRecNew(amb,ed,v.trim(),add);return}const b=e.target.closest('[data-mxpk]');if(b){lqClose();add(b.dataset.mxpk)}});
   const q=$('#mxpq');if(q){q.oninput=()=>{$('#mxpkl').innerHTML=li(q.value)};setTimeout(()=>q.focus(),50)}}
+
+/* crear la actividad en el catálogo desde el Recorrido y agregarla a este ambiente (pendiente). Mismas reglas que desde el lookahead:
+   el ingeniero la crea directo; el SC también, en su partida, y queda «por revisar» (rev). Opcional: al tipo del ambiente (solo ingeniero). */
+async function mxRecNew(amb,ed,v,add){const tp=await mxAmbTipo(amb);const sc0=ed?(mxSel()[0]||''):(myScsI()[0]||'');
+  const scOpts=ed?mxScOpts(sc0):myScsI().map(id=>`<option value="${esc(id)}">${esc(conOf(id).name)}</option>`).join('');
+  const sim=v?mxSimilar(v,sc0).filter(c=>ed||mxScCan(c)):[];const have=mxCells().get(amb)||{};
+  lqModal(`<div class="lqtop"><b>Nueva actividad en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   ${sim.length?`<div class="ph">¿Es alguna de estas?</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"${have[c.id]?' disabled title="Ya está en este ambiente"':''}><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
+   <div class="mxform"><label>Nombre<input class="tin" id="mxrnn" value="${esc(v)}" placeholder="p. ej. Instalación de espejos"></label><label>Subcontratista<select id="mxrnsc">${scOpts}</select></label><label>Clase<select id="mxrncl">${mxClOpts('t')}</select></label><label>Especialidad<select id="mxrnesp">${mxEspOpts(mxEspOf(sc0))}</select></label></div>
+   ${tp&&ed?`<label class="mxur"><input type="checkbox" id="mxrntp"><span><b>Agregar también a todos los ambientes del tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n})`:''}</b><small>Si no, queda solo en este ambiente.</small></span></label>`:`<p class="note">Se agrega solo a este ambiente.${ed?'':' El ingeniero la revisará (nombre, clase, tipo).'}</p>`}
+   <p class="note" id="mxrnmsg"></p>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxrnok">Crear y agregar</button></div>`,
+   async e=>{const u=e.target.closest('[data-mxuse]');if(u&&!u.disabled){lqClose();add(u.dataset.mxuse);return}
+     const ok=e.target.closest('#mxrnok');if(!ok)return;const name=$('#mxrnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxrnmsg').textContent='Escribe el nombre.';return}
+     const dup=mxAli().get(mnk(name));if(dup&&MX.cat.has(dup)&&!MX.cat.get(dup).arch){const d=MX.cat.get(dup);if(have[dup]){$('#mxrnmsg').textContent=`«${d.name}» ya existe y ya está en este ambiente.`;return}lqClose();add(dup);toast(`Ya existía «${d.name}»: agregada a este ambiente`);return}
+     const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&ed&&$('#mxrntp')&&$('#mxrntp').checked);
+     const c={id,name,sc:$('#mxrnsc').value,cl:$('#mxrncl').value,esp:$('#mxrnesp').value==='__new'?'':$('#mxrnesp').value,al:[mnk(name)],ord};
+     if(!ed)c.rev={by:me.email,n:me.name||'',t:NOW(),amb,tipo:null};ok.disabled=true;
+     try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();add(id);
+       toast(ed?(toT?`Creada en el catálogo y en el tipo «${tp.name}»`:'Creada en el catálogo y agregada a este ambiente'):'Creada en el catálogo: el ingeniero la revisará')}catch(err){ok.disabled=false;mxErr(err)}},
+   async e=>{if(e.target.id==='mxrncl'&&e.target.value==='e'){const c=$('#mxrntp');if(c)c.checked=false}
+     if(e.target.id==='mxrnsc'){const es=$('#mxrnesp');const d=mxEspOf(e.target.value);if(es&&d){if(![...es.options].some(o=>o.value===d))es.insertAdjacentHTML('afterbegin',`<option value="${esc(d)}">${esc(d)}</option>`);es.value=d}}
+     if(e.target.id==='mxrnesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
 
 function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(id);const m=MX.amb.get(id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
   const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c).sort((x,y)=>mxSeqCmp(x.c,y.c));

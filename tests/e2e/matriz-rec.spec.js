@@ -52,3 +52,26 @@ test('recorrido: el lector ve el checklist sin poder cambiarlo', async ({ page }
   await expect(page.locator('#mxrok')).toHaveCount(0);
   noErrors(errors, 'recorrido lector');
 });
+
+test('recorrido: «+ Otra actividad» crea una actividad nueva en el catálogo y la agrega al ambiente', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'rec'; render(); });
+  await page.click('[data-mxra="a1"]');
+  await page.click('#mxrpick');
+  await page.fill('#mxpq', 'Instalación de espejos');
+  await page.click('[data-mxpknew]');
+  await expect(page.locator('#mxrnn')).toHaveValue('Instalación de espejos');
+  await page.click('#mxrnok');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).find(c => c.name === 'Instalación de espejos')?.sc)).toBeTruthy();
+  const id = await page.evaluate(() => Object.entries(__dbAll('mcat')).find(([, c]) => c.name === 'Instalación de espejos')[0]);
+  await expect.poll(() => page.evaluate(i => (__dbGet('mamb', 'a1').c || {})[i], id)).toBe('p');
+  await expect(page.locator(`[data-mxrc="${id}"]`)).toContainText('Instalación de espejos');
+  // con un nombre que ya existe no la duplica: la agrega
+  await page.click('#mxrpick');
+  await page.fill('#mxpq', 'pintura');
+  await page.click('[data-mxpknew]');
+  await page.click('#mxrnok');
+  await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1').c || {}).k3)).toBe('p');
+  expect(await page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => /pintura/i.test(c.name)).length)).toBe(1);
+  noErrors(errors, 'recorrido nueva actividad');
+});
