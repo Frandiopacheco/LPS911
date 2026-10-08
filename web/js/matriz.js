@@ -133,6 +133,7 @@ function renderMat(main){ensureMx();ensureMver();
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
     <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
+    <button class="ib" id="mxxls" title="Exportar a Excel lo que está a la vista (piso, filtros y orden)">⬇ Excel</button>
     <button class="ib" id="mxhelp" title="Cómo se usa la matriz" aria-label="Ayuda">ⓘ</button>
     <span class="mxleg">${['p','c','t','n'].map(s=>`<span><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</span>`).join('')}<span><i class="mc s-p sug"></i>Sin validar</span>${cmp?'<span><i class="mc s-t chg">✓</i>Cambió</span>':''}</span>
    </div>`;
@@ -204,6 +205,7 @@ function mxWire(main){mxWireV(main);
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
+  const xb=$('#mxxls');if(xb)xb.onclick=mxExport;
   const hb=$('#mxhelp');if(hb)hb.onclick=()=>openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${MX.helpH||''}</div>`,{});
   main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();const t=$('#mxt');if(t){t.classList.remove('mxz0','mxz1','mxz2');t.classList.add('mxz'+mxZ())}});
   mxFit();
@@ -303,6 +305,44 @@ async function mxFotoRestore(id){if(!isAdmin)return;const f=MX.ver.get(id);if(!f
   if(!by.size){toast('La matriz ya está igual que en esa foto');return}
   const bk=mxFotoData();try{await fcol('mver').doc('f'+NOW()).set({t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a:bk.a,v:2,nota:'antes de restablecer'})}catch(e){toast('No se pudo guardar la foto de respaldo: '+(e&&e.code||e));return}
   lqClose();await mxWrite(by,`Matriz restablecida al ${fmtD(f.d)} (${by.size} ambientes)`,un);render()}
+
+/* Exportar la matriz a Excel (oct 2026): lo que está a la vista (piso, filtros, orden). Hoja «Matriz» con colores por estado
+   (sin validar en cursiva gris) y hoja «Lista» plana para filtrar. Usa xlsx-js-style (loadXlsx de exportes.js). */
+async function mxExport(){const V=MX.view;if(!V||!V.cols||!V.cols.length){toast('No hay columnas para exportar con este filtro.');return}
+  try{await loadXlsx();const X=window.XLSX;const p=P();const cells=mxCells();const{rows,cols}=V;
+    const B={style:'thin',color:{rgb:'C9CED6'}};const bd={top:B,bottom:B,left:B,right:B};
+    const FILL={t:'D8F0DF',c:'FCEBC8',p:'FFFFFF',n:'E6E8EB'};const IC={t:'✓',c:'◐',p:'○',n:'–'};
+    const hx=c=>String(conOf(c).color||'#8C959F').replace('#','').toUpperCase().padStart(6,'0');
+    const F=['Piso','Sector','Código','Ambiente','Tipo','% terminado'];const nF=F.length;
+    const aoa=[[...F.map(()=>''),...cols.map(c=>conOf(c.sc).name)],[...F,...cols.map(c=>c.name)]];const st=[];const merges=[];
+    let k=0;while(k<cols.length){let j=k;while(j+1<cols.length&&cols[j+1].sc===cols[k].sc)j++;if(j>k)merges.push({s:{r:0,c:nF+k},e:{r:0,c:nF+j}});k=j+1}
+    const lista=[['Piso','Sector','Código','Ambiente','Tipo','Subcontratista','Actividad','Estado','Validado','Último cambio']];
+    const colT=cols.map(()=>({a:0,t:0}));
+    for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};const m=MX.amb.get(a.id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);let ap=0,tt=0;
+      const line=[r.p.code,r.s.code+' · '+r.s.name,a.code,a.name,tp?tp.name:'',null];const rs=[];
+      cols.forEach((c,i)=>{const o=C[c.id];if(!o){line.push('');rs.push(null);return}line.push(IC[o.s]||'');rs.push(o);
+        if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
+        const who=(m.m||{})[c.id];lista.push([r.p.code,r.s.code+' · '+r.s.name,a.code,a.name,tp?tp.name:'',conOf(c.sc).name,c.name,MXS[o.s],o.sug?'No (propuesta del sistema)':'Sí',who?`${who.n||who.by||''} ${who.t?new Date(who.t).toLocaleDateString('es-PE'):''}`.trim():''])});
+      line[5]=ap?tt/ap:null;aoa.push(line);st.push(rs)}
+    aoa.push(['Terminado','','','','',null,...colT.map(t=>t.a?t.t/t.a:null)]);
+    const ws=X.utils.aoa_to_sheet(aoa);ws['!merges']=merges;
+    ws['!cols']=[{wch:6},{wch:20},{wch:8},{wch:30},{wch:16},{wch:9},...cols.map(()=>({wch:4.5}))];
+    ws['!rows']=[{hpt:18},{hpt:150}];ws['!freeze']={xSplit:nF,ySplit:2};ws['!views']=[{state:'frozen',xSplit:nF,ySplit:2}];
+    const set=(r,c,s)=>{const key=X.utils.encode_cell({r,c});if(!ws[key])ws[key]={t:'s',v:''};ws[key].s=s};
+    F.forEach((_,c)=>set(1,c,{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{vertical:'bottom',wrapText:true},border:bd}));
+    cols.forEach((c,i)=>{set(0,nF+i,{font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:hx(c.sc)}},alignment:{horizontal:'left'},border:bd});
+      set(1,nF+i,{font:{sz:9},alignment:{textRotation:90,vertical:'bottom',horizontal:'center',wrapText:false},border:{...bd,bottom:{style:'medium',color:{rgb:hx(c.sc)}}}})});
+    st.forEach((rs,ri)=>{const r=ri+2;for(let c=0;c<nF;c++)set(r,c,{font:{sz:10},border:bd,...(c===5?{numFmt:'0%',alignment:{horizontal:'right'}}:{})});
+      rs.forEach((o,i)=>set(r,nF+i,o?{font:{sz:11,bold:!o.sug,italic:!!o.sug,color:{rgb:o.sug?'8C959F':o.s==='t'?'2E7D4F':o.s==='c'?'9A6A12':'333333'}},fill:{fgColor:{rgb:o.sug?'F7F7F8':FILL[o.s]}},alignment:{horizontal:'center',vertical:'center'},border:bd}:{fill:{patternType:'gray125'},border:bd}))});
+    const lr=aoa.length-1;for(let c=0;c<nF+cols.length;c++)set(lr,c,{font:{bold:true,sz:9},fill:{fgColor:{rgb:'EEF1F4'}},border:bd,...(c>=5?{numFmt:'0%',alignment:{horizontal:'center'}}:{})});
+    const ws2=X.utils.aoa_to_sheet(lista);ws2['!cols']=[{wch:6},{wch:20},{wch:8},{wch:30},{wch:16},{wch:20},{wch:36},{wch:12},{wch:24},{wch:22}];ws2['!autofilter']={ref:X.utils.encode_range({s:{r:0,c:0},e:{r:lista.length-1,c:9}})};
+    for(let c=0;c<10;c++){const key=X.utils.encode_cell({r:0,c});ws2[key].s={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}}}}
+    const ley=[['Matriz de ambientes'],[(p.name||'')+' · '+(U.piso?(S.pis.get(U.piso)||{}).name||'':'Todos los pisos')],['Exportado el '+fmtD(todayIso())+' por '+(me.name||me.email)],[''],['Símbolo','Estado'],...['p','c','t','n'].map(s=>[IC[s],MXS[s]]),['(cursiva gris)','Sin validar: propuesta del sistema, nadie la confirmó']];
+    const ws3=X.utils.aoa_to_sheet(ley);ws3['!cols']=[{wch:16},{wch:50}];
+    const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Matriz');X.utils.book_append_sheet(wb,ws2,'Lista');X.utils.book_append_sheet(wb,ws3,'Leyenda');
+    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
+    saveBlob(`${p.code||'LPS'}_Matriz_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Matriz exportada a Excel')}
+  catch(e){toast('No se pudo exportar: '+(e&&e.message||e))}}
 
 /* asignar al catálogo los nombres del lookahead que no están (agrega el alias a la actividad elegida) */
 function mxMapDlg(){if(!mxEd())return;const L=mxUnmapped();if(!L.length)return;
