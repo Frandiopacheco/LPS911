@@ -149,5 +149,6 @@ test('el celular con enlace cuyo usuario pasó a una cuenta con DNI: sale y le p
 
 test('Equipo: la invitación por enlace recomienda la cuenta con usuario y contraseña', async ({ page }) => {
   await openApp(page, { as: 'admin', tab: 'team', editar: false });
+  await page.click('[data-teamv="cap"]');
   await expect(page.locator('[data-tctanote]')).toContainText('Tareo › Personal › Hacer capataz');
 });

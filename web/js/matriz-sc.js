@@ -6,7 +6,7 @@
    Ver docs/ia/matriz.md. */
 
 /** ¿el SC puede cambiar esta actividad? (solo su partida) */
-const mxScCan=cat=>!!(cat&&!cat.arch&&me&&SCK()&&!verRO()&&myScsI().includes(cat.sc));
+const mxScCan=cat=>!!(cat&&!cat.arch&&me&&SCK()&&!verRO()&&mxHasSc(cat,myScsI()));
 
 /** el SC cambia una celda: mamb (una celda, con k) + constancia en mlog, en un solo lote */
 async function mxScSet(amb,cat,s){const c=MX.cat.get(cat);if(!mxScCan(c))return;const m=MX.amb.get(amb)||{};const prev=(m.c||{})[cat];if(prev===s)return;
@@ -14,7 +14,8 @@ async function mxScSet(amb,cat,s){const c=MX.cat.get(cat);if(!mxScCan(c))return;
   const lid='l'+NOW().toString(36)+Math.random().toString(36).slice(2,6);
   /* conf: contradice lo que dio por bueno un ingeniero: lo confirmó él o vio («✓ Visto», m.ok) el cambio anterior del SC (auditoría 08/10, M04) */
   const okBy=pm&&(!pm.sc?pm:pm.ok||(pm.bk?{n:'un ingeniero'}:null));
-  const log={amb,cat,sc:c.sc,from:prev||null,sugFrom:prev?null:(o?o.s:null),to:s,conf:!!(prev&&okBy),confN:prev&&okBy?okBy.n||okBy.by||'':'',st:'pend',...meta};
+  const lsc=mxScsOf(c).find(s=>myScsI().includes(s))||c.sc;
+  const log={amb,cat,sc:lsc,from:prev||null,sugFrom:prev?null:(o?o.s:null),to:s,conf:!!(prev&&okBy),confN:prev&&okBy?okBy.n||okBy.by||'':'',st:'pend',...meta};
   try{const b=db.batch();b.set(fcol('mamb').doc(amb),{c:{[cat]:s},m:{[cat]:{...mxCM(true),t:meta.t}},k:cat,l:lid,...meta},{merge:true});b.set(fcol('mlog').doc(lid),log);await b.commit();
     toast(`${c.name}: ${MXS[s]}`,'Deshacer',()=>mxScUndo(amb,cat,prev,s,lid,!!(pm&&(!pm.sc||pm.ok||pm.bk))))}catch(e){toast('No se pudo guardar: '+(e&&e.code||e))}}
 async function mxScUndo(amb,cat,prev,s,lid,bk){const cur=((MX.amb.get(amb)||{}).c||{})[cat];if(cur!==s){toast('Ya cambió después: no se deshace.');return}

@@ -13,7 +13,7 @@ const mxCatAct=()=>[...MX.cat.values()].filter(c=>!c.arch);
 
 /** al escribir el nombre de una actividad del lookahead: el nombre del catálogo (texto), false si se bloqueó, null si no aplica */
 function mxNameGate(v,x,t){if(!mxCatReq()||!v)return null;const id=mxAli().get(mnk(v));const c=id&&MX.cat.get(id);
-  if(c&&!c.arch){if(x&&x.sc&&c.sc!==x.sc)setTimeout(()=>toast(`Ojo: «${c.name}» es de ${conOf(c.sc).name} en el catálogo y esta fila es de ${conOf(x.sc).name}: no saldrá en la Matriz hasta que coincidan.`),60);
+  if(c&&!c.arch){if(x&&x.sc&&!mxScsOf(c).includes(x.sc))setTimeout(()=>toast(`Ojo: «${c.name}» es de ${conOf(c.sc).name} en el catálogo y esta fila es de ${conOf(x.sc).name}: no saldrá en la Matriz hasta que coincidan.`),60);
     else if(c.name!==v)toast(`Se escribió «${c.name}», como está en el catálogo.`);return c.name}
   t.value=t.dataset.o!=null?t.dataset.o:(x.name||'');setTimeout(()=>mxNoCatDlg(v,x),0);return false}
 
@@ -151,7 +151,13 @@ function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return
 function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'&&!mxScPend(x.ambId,c)?'ok':'pend'}
 const mxDonePend=x=>mxDoneSt(x)==='pend';
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
-function mxRowBadge(x,k){const v=mxRowWarn(x);if(!v&&mxDonePend(x))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
+/* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
+   'sc' = es de una actividad de otro SC (no sale en la Matriz). null = bien, o el catálogo aún no carga / está vacío */
+function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct().length)return null;const id=mxCatOfN(x);if(!id)return'off';const c=MX.cat.get(id);if(!c||c.arch)return'off';return x.sc&&!mxScsOf(c).includes(x.sc)?'sc':null}
+function mxCatBadge(x,k){const w=mxRowCat(x);if(!w)return'';const c=w==='sc'?MX.cat.get(mxCatOfN(x)):null;
+  return`<span class="mxbadge mxcb" style="--k:${k||0}" data-mxc="${esc(x.id)}" role="button" tabindex="0" title="${w==='off'?'No está en el catálogo de actividades: no sale en la Matriz. Clic: elegir o agregar':`En el catálogo «${esc(c.name)}» es de ${esc(conOf(c.sc).name)}: esta fila no sale en la Matriz. Clic: ver opciones`}">${w==='off'?'∉':'SC'}</span>`}
+function mxRowBadge(x,k){const cb=mxCatBadge(x,k);if(cb)k=(k||0)+1;return cb+mxRowBadge0(x,k)}
+function mxRowBadge0(x,k){const v=mxRowWarn(x);if(!v&&mxDonePend(x))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
 function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
     const v=mxRowWarn({...o.after,id:o.id});if(!v)continue;const a=S.amb.get(o.after.ambId);
@@ -168,7 +174,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(
    en los pisos a la vista y los subcontratistas del filtro (el SC: los suyos). «En curso» no avisa. */
 function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cells=mxCells();const vp=new Set(visPisos().map(p=>p.id));const mine=SCK()?new Set(myScsI()):null;const L=[];
   for(const[amb,C]of cells){const a=S.amb.get(amb);if(!a||!vp.has(pisoOfAmb(amb)))continue;
-    for(const[cid,o]of Object.entries(C)){if(!o.sp)continue;const c=MX.cat.get(cid);if(!c||c.arch)continue;if(mine?!mine.has(c.sc):!scOk(c.sc))continue;L.push({a,c,o})}}
+    for(const[cid,o]of Object.entries(C)){if(!o.sp)continue;const c=MX.cat.get(cid);if(!c||c.arch)continue;if(mine?!mxScsOf(c).some(s=>mine.has(s)):!mxScsOf(c).some(scOk))continue;L.push({a,c,o})}}
   return L.sort((p,q)=>(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true})||conOf(p.c.sc).name.localeCompare(conOf(q.c.sc).name)||p.c.name.localeCompare(q.c.name))}
 function mxPendPill(){const n=mxPendList().length;return n?`<button class="dpill mxpp" title="Actividades pendientes en la matriz que no tienen días en el lookahead de hoy en adelante">${n} pendiente${n>1?'s':''} sin programar · Ver</button>`:''}
 function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||PM();
@@ -188,6 +194,15 @@ function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||
 function mxGoCell(amb,cat){const p=pisoOfAmb(amb);if(p&&U.piso&&U.piso!==p)U.piso=p;const c=MX.cat.get(cat);
   if(c&&mxSel().length&&!mxSel().includes(c.sc))U.mxSc=[];if(c&&c.cl==='e')U.mxAll=true;
   U.mxV='mat';MX.sel.clear();MX.focus={amb,cat,until:performance.now()+3000,scrolled:false};saveUI();goTab('mat')}
+
+/* clic en ∉ / SC: elegir o agregar en el catálogo, o resolver el SC distinto */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mxc]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.mxc);if(!x)return;const w=mxRowCat(x);if(!w)return;
+  if(w==='off'){closePop();if(mxEd()||PM())mxNoCatDlg(x.name,x);else openPop(b,`<div class="ph">∉ ${esc(x.name)}</div><div class="ptx">No está en el catálogo de actividades, así que no sale en la Matriz. Un ingeniero puede asignarla.</div>`,{});return}
+  const c=MX.cat.get(mxCatOfN(x));const ed=mxEd();
+  openPop(b,`<div class="ph">SC distinto · ${esc(x.name)}</div><div class="ptx">En el catálogo es de <b>${esc(conOf(c.sc).name)}</b>${(c.scs||[]).length?' (y '+(c.scs||[]).map(i=>esc(conOf(i).name)).join(', ')+')':''}; esta fila es de <b>${esc(conOf(x.sc).name)}</b>. Mientras no coincidan, no sale en la Matriz.</div>
+   ${ed?`<button data-do="add">Sumar ${esc(conOf(x.sc).name)} a la actividad (la hacen los dos)</button><button data-do="mov">Pasar esta fila a ${esc(conOf(c.sc).name)}</button>`:''}`,
+   {add:async()=>{try{await mxCatScsAdd(c.id,x.sc);toast(`«${c.name}»: ahora también de ${conOf(x.sc).name}`);requestRender()}catch(err){mxErr(err)}},
+    mov:()=>{const cur=S.act.get(x.id);if(cur)apply([op('acts',x.id,{...cur,sc:c.sc})],`«${x.name}» pasa a ${conOf(c.sc).name}`)}})},true);
 
 /* clic en ✓?: confirmar Terminado en la Matriz (la fila se oculta) o reabrir la actividad (no estaba terminada) */
 document.addEventListener('click',e=>{const b=e.target.closest('[data-mxd]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.mxd);if(!x||!mxDonePend(x))return;

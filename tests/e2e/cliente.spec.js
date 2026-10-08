@@ -122,13 +122,18 @@ for (const as of ['editor', 'sc', 'campo', 'lector']) {
 
 test('el administrador designa quién tiene acceso a la versión cliente', async ({ page }) => {
   const errors = await openApp(page, { tab: 'team' });
-  // los grupos del equipo vienen plegados: se abre el de editores
-  await expect(page.locator('input[data-mem="editor@obra.pe"]')).toHaveCount(0);
+  // los grupos del equipo vienen plegados: se abre el de editores y la ficha de la persona (✎ Editar)
+  await expect(page.locator('[data-tedit="editor@obra.pe"]')).toHaveCount(0);
   await page.click('[data-tgrp="editor"]');
-  const chk = page.locator('input[data-mem="editor@obra.pe"][data-f="cli"]');
+  await page.click('button[data-tedit="editor@obra.pe"]');
+  const chk = page.locator('#lqm input[data-mem="editor@obra.pe"][data-f="cli"]');
   await chk.check();
   await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'editor@obra.pe').cli)).toBe(true);
-  await expect(page.locator('input[data-mem="sc@obra.pe"][data-f="cli"]')).toHaveCount(0); // al subcontratista no se le puede dar
+  await expect(page.locator('#lqm')).toContainText('Versión cliente');
+  await page.click('#lqm [data-lqx].pri');
+  await page.click('[data-tgrp="sc"]');
+  await page.click('button[data-tedit="sc@obra.pe"]');
+  await expect(page.locator('#lqm input[data-mem="sc@obra.pe"][data-f="cli"]')).toHaveCount(0); // al subcontratista no se le puede dar
   noErrors(errors, 'designar');
 });
 

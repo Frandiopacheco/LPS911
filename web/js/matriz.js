@@ -51,7 +51,11 @@ function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();
 const mxCatOfN=x=>mxAli().get(mnk(x&&x.name))||'';
 /* vínculo con la matriz (auditoría 08/10, M02): una fila solo alimenta la actividad del catálogo si es del mismo SC
    (una actividad del catálogo = un SC, decidido con el dueño). Las que no coinciden salen en el aviso «otro SC» (mxScMismatch). */
-const mxScOk=(x,c)=>!x.sc||!c||c.sc===x.sc;
+/* una actividad puede ser de varios SC (oct 2026, decidido con el dueño: p. ej. «Instalación de flashing» de APM FB y APM MP):
+   c.sc = el principal (columna de la Matriz), c.scs = los demás que también la hacen */
+const mxScsOf=c=>c?[c.sc,...(Array.isArray(c.scs)?c.scs:[])].filter(Boolean):[];
+const mxHasSc=(c,list)=>mxScsOf(c).some(s=>list.includes(s));
+const mxScOk=(x,c)=>!x.sc||!c||mxScsOf(c).includes(x.sc);
 const mxCatOf=x=>{const id=mxCatOfN(x);return id&&mxScOk(x,MX.cat.get(id))?id:''};
 
 /** celdas de cada ambiente: {catId:{s,sug,src,acts}}. s = estado; sug = lo propone el sistema (aún nadie lo confirmó);
@@ -76,11 +80,11 @@ function mxRows(){const R=[];for(const p of visPisos()){const secs=[...S.sec.val
   for(const s of secs){const ambs=[...S.amb.values()].filter(a=>a.sectorId===s.id).sort((a,b)=>(a.order||0)-(b.order||0));if(ambs.length)R.push({p,s,ambs})}}return R}
 /* subcontratistas elegidos en la matriz (varios; propio de esta pestaña, no cambia el filtro del lookahead) */
 /* el SC ve solo su partida en la Matriz, el Recorrido y el Catálogo (oct 2026, decidido con el dueño) */
-const mxMine=c=>!SCK()||!!(c&&myScsI().includes(c.sc));
+const mxMine=c=>!SCK()||!!(c&&mxHasSc(c,myScsI()));
 const mxSel=()=>SCK()?myScsI():Array.isArray(U.mxSc)?U.mxSc.filter(id=>S.con.has(id)||[...MX.cat.values()].some(c=>c.sc===id)):[];
 /* columnas: actividades del catálogo que aparecen en los ambientes a la vista (por subcontratista y orden del catálogo) */
 function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(a=>Object.keys(cells.get(a.id)||{}).forEach(c=>used.add(c))));
-  const scs=mxSel();const L=[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||scs.includes(c.sc))&&(U.mxAll||c.cl!=='e'));
+  const scs=mxSel();const L=[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||mxHasSc(c,scs))&&(U.mxAll||c.cl!=='e'));
   const az=(a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name);
   /* orden por programación (oct 2026, decidido con el dueño): primero los SC con días programados en los ambientes a la vista de hoy a
      3 semanas (más días primero), luego los que tienen pendientes sin programar y al final los que ya no tienen nada que hacer ahí.
@@ -189,15 +193,16 @@ function mxUnmapped(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id)
 /* filas del lookahead (pisos a la vista) cuyo nombre es de una actividad del catálogo de OTRO subcontratista (M02/M03):
    no alimentan la matriz hasta que coincidan. Agrupadas por actividad y SC de la fila. */
 function mxScMismatch(){const vp=new Set(visPisos().map(p=>p.id));const m=new Map();
-  for(const x of S.act.values()){if(!x.sc||!vp.has(pisoOfAmb(x.ambId)))continue;const id=mxCatOfN(x);const c=id&&MX.cat.get(id);if(!c||c.arch||c.sc===x.sc)continue;
+  for(const x of S.act.values()){if(!x.sc||!vp.has(pisoOfAmb(x.ambId)))continue;const id=mxCatOfN(x);const c=id&&MX.cat.get(id);if(!c||c.arch||mxScsOf(c).includes(x.sc))continue;
     const k=id+'|'+x.sc;let e=m.get(k);if(!e)m.set(k,e={c,sc:x.sc,ids:[]});e.ids.push(x.id)}
   return[...m.values()].sort((a,b)=>a.c.name.localeCompare(b.c.name))}
 function mxScMisDlg(){if(!mxEd())return;const L=mxScMismatch();if(!L.length){lqClose();return}
   lqModal(`<div class="lqtop"><b>Filas con otro subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
-   <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo (ahí se ofrece pasar las filas).</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><button class="ib" data-mxsm="${i}">Pasar a ${esc(conOf(u.c.sc).name)}</button></div>`).join('')}</div>
+   <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. <b>Si los dos SC hacen esa actividad</b>, súmalo a la actividad (queda de los dos). Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo.</p>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button></span></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
-   async e=>{const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
+   async e=>{const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
+     const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
      const ops=u.ids.map(id=>S.act.get(id)).filter(x=>x&&!pend.has(x.id)&&x.sc===u.sc).map(x=>op('acts',x.id,{...x,sc:u.c.sc}));
      const sk=u.ids.length-ops.length;if(ops.length)apply(ops,`«${u.c.name}»: ${ops.length} ${ops.length===1?'fila pasa':'filas pasan'} a ${conOf(u.c.sc).name}`);
      if(sk)setTimeout(()=>toast(`${sk} ${sk===1?'fila tiene':'filas tienen'} una propuesta del SC pendiente: no se ${sk===1?'cambió':'cambiaron'}.`),80);mxScMisDlg()})}

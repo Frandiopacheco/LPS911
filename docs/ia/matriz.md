@@ -140,3 +140,8 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - **M06 (reglas):** el SC escribe `mamb` con `l` = id de su constancia, en el **mismo lote** que `mlog/l` nuevo (`pend`, misma celda y valor) o que su paso de `pend` a `undo`; `m.<k>` debe ser suyo (`by == mid()`, `sc == true`, sin `ok`; `bk` solo al deshacer). Pruebas en `tests/rules`.
 - No se cambió (decidido): M07 «Revisado esta semana» no se invalida con cambios posteriores; M08 el % incluye lo sin validar.
 - Prueba: `tests/e2e/matriz-auditoria.spec.js`.
+
+## Actividades de varios SC y aviso en el Lookahead (oct 2026, pedido del dueño)
+- **Varios SC por actividad:** `mcat.scs` = otros SC que también la hacen (`c.sc` sigue siendo el principal: su columna en la Matriz). `mxScsOf(c)`, `mxHasSc(c,list)`: el vínculo de filas (`mxScOk`), lo que ve y llena el SC (`mxMine`, `mxScCan`; la constancia `mlog.sc` va a nombre de su partida), el filtro de SC de Matriz y Catálogo y los pendientes sin programar usan todos sus SC. Se edita en Catálogo › ⋮ › «Otros subcontratistas que la hacen…» (`mxCatScsDlg`, `arrayUnion`/`arrayRemove`), en el aviso «otro subcontratista» (`[data-mxsadd]` «Sumar X a la actividad») y desde la fila del Lookahead. Reglas: el SC llena celdas si `mcat.sc` o `mcat.scs` es de su partida; al crear una actividad no puede poner `scs`.
+- **Aviso en el Lookahead** (`mxRowCat`, `mxCatBadge` dentro de `mxRowBadge`): `∉` = el nombre no está en el catálogo (clic: `mxNoCatDlg`, elegir una parecida o agregarla; quien no edita solo ve el aviso); `SC` = es de una actividad de otro SC (clic: «Sumar X a la actividad» o «Pasar esta fila a …», solo editores). Solo con el catálogo cargado y no vacío.
+- Prueba: `tests/e2e/matriz-catalogo-lk.spec.js`.
