@@ -248,6 +248,27 @@ function actFill(sel){if(!sel||sel.dataset.alzd)return;sel.dataset.alzd='1';cons
 /* filtros de la lista: a quién afecta, quién la registró, quién la libera y fechas */
 function rAff(r){const x=S.act.get(r.actId);const sc=r.sc||(x&&x.sc);return sc?conOf(sc).name:'—'}
 function rReg(r){const m=r.by&&MEM.get(r.by);if(m&&m.role==='sc'&&m.sc)return conOf(m.sc).name;return r.byName||(m&&m.name)||r.by||'—'}
+/* Responsable de una restricción (oct 2026, pedido del dueño): solo alguien del equipo —una persona, una empresa (SC) o un área—,
+   no texto libre. Se guarda el nombre en `resp` (como antes: exportes, Excel, avisos). Un nombre antiguo que no está en la lista se
+   conserva y se marca hasta que se elija otro. La lista de personas viene de Equipo (members): la ven ingenieros y administrador;
+   el SC y las áreas ven su propio nombre, las empresas y las áreas. */
+let RESPC=null;
+function respChoices(){const k=MEM.size+'|'+S.con.size+'|'+(me&&me.name);if(RESPC&&RESPC.k===k&&performance.now()-RESPC.t<2000)return RESPC.v;const v=respChoices0();RESPC={k,t:performance.now(),v};return v}
+function respChoices0(){const P_=new Map();const add=(n,sub)=>{n=String(n||'').trim();if(n&&!P_.has(fold(n)))P_.set(fold(n),{n,sub})};
+  for(const[em,m]of MEM){if(!m||TAR_ROLES.includes(m.role)||m.role==='lector'||m.role==='planner'||em.startsWith('u_'))continue;
+    add(m.name||em,(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+m.area:'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>conOf(i).name).join(', '):''))}
+  if(me&&me.name)add(me.name,'tú');
+  const per=[...P_.values()].sort((a,b)=>a.n.localeCompare(b.n));const seen=new Set(per.map(p=>fold(p.n)));
+  const emp=[...S.con.values()].map(c=>c.name).filter(n=>n&&!seen.has(fold(n))).sort((a,b)=>a.localeCompare(b));emp.forEach(n=>seen.add(fold(n)));
+  const ar=(typeof restrAreasL==='function'?restrAreasL():[]).filter(n=>n&&!seen.has(fold(n)));
+  return{per,emp,ar,all:new Set([...seen,...ar.map(fold)])}}
+const respOk=v=>!v||respChoices().all.has(fold(v));
+function respOpts(cur){const C=respChoices();cur=String(cur||'').trim();const bad=cur&&!C.all.has(fold(cur));const sel=n=>fold(n)===fold(cur)?' selected':'';
+  return`<option value=""${cur?'':' selected'}>— elige responsable —</option>${bad?`<option value="${esc(cur)}" selected>${esc(cur)} (no está en el equipo)</option>`:''}`
+   +(C.per.length?`<optgroup label="Personas del equipo">${C.per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
+   +(C.emp.length?`<optgroup label="Empresas (subcontratistas)">${C.emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
+   +(C.ar.length?`<optgroup label="Áreas">${C.ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
+function rRespSel(attrs,cur,ro){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur)}</select>`}
 function rWho(r){return(r.status==='lib'?(r.libN||r.resp):r.resp)||'—'}
 function rFOk(r){const F=U.rF||{};return(!F.aff||rAff(r)===F.aff)&&(!F.reg||rReg(r)===F.reg)&&(!F.who||rWho(r)===F.who)
   &&(!F.c1||(r.created||'')>=F.c1)&&(!F.c2||(r.created&&r.created<=F.c2))&&(!F.l1||(r.freed&&r.freed>=F.l1))&&(!F.l2||(r.freed&&r.freed<=F.l2))}
@@ -297,7 +318,7 @@ function renderRestr(main){
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
           <label>Descripción<input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></label>
-          <label>Responsable<input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro}></label>
+          <label>Responsable${rRespSel(fk('resp'),r.resp,ro)}</label>
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label>
           <label>Compromiso del área (AS)<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label>
           <label>Observaciones del área (AS)<input class="ci" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Impedimento para levantarla, comentarios…"${ro}></label></div>`
@@ -308,7 +329,7 @@ function renderRestr(main){
     <td class="rc-act"><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?`<div class="rloc">${rArch(r)?'<span class="pill neu">Actividad en la papelera · no cuenta como pendiente</span>':'La actividad ya no está en el lookahead'}</div>`:''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
     <td class="rc-tp"><select class="ci" ${fk('type')}${ro} aria-label="Tipo">${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select>${gsel(r,fk)}</td>
     <td class="rc-ds"><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro} aria-label="Descripción"><input class="ci rcobs" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Obs. del área (AS): impedimento, comentarios…"${ro} aria-label="Observaciones del área de soporte">${rthumbs(r)}</td>
-    <td class="rc-rp"><input class="ci" ${fk('resp')} value="${esc(r.resp)}" placeholder="Responsable"${ro} aria-label="Responsable"></td>
+    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro)}</td>
     <td class="rc-dt"><label class="rdl">Requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label><label class="rdl" title="Fecha en que el área de soporte se compromete a levantarla">Compromiso AS<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label><label class="rdl">Liberada<input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></label></td>
     <td class="rc-x">${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
@@ -338,7 +359,7 @@ function renderRestr(main){
       try{toast('Comprimiendo foto…');const data=await shrinkPhoto(f);const fid=uid('f');FOTO.set(fid,data);
         await fcol('fotos').doc(fid).set({data,restrId:r.id,pisoId:restrPiso(r)||'',by:me.email,ts:NOW()});
         const r2=S.res.get(r.id)||r;apply([op('restr',r.id,{...r2,photos:[...(r2.photos||[]),fid]})]);toast(`Foto agregada (${Math.round(data.length*.75/1024)} KB)`)}catch(err){toast('No se pudo guardar la foto: '+(err.code||err.message))}return}
-    if(!t.dataset.r)return;const r=S.res.get(t.dataset.r);if(!r||!rCanEd(r))return;const f=t.dataset.f;if(SCK()&&(f==='status'||f==='freed'))return;if(AREA()&&(f==='grp'||f==='area'))return;const n={...r,[f]:t.value};
+    if(!t.dataset.r)return;const r=S.res.get(t.dataset.r);if(!r||!rCanEd(r))return;const f=t.dataset.f;if(SCK()&&(f==='status'||f==='freed'))return;if(AREA()&&(f==='grp'||f==='area'))return;const n={...r,[f]:t.value};if(f==='resp'&&t.value&&!respOk(t.value)&&t.value!==r.resp){toast('Elige al responsable de la lista del equipo.');render();return}
     if(SCK()&&f==='actId'){const x=S.act.get(t.value);if(!x||!myScsI().includes(x.sc)){toast('Elige una actividad de tu partida.');render();return}n.sc=x.sc}if(f==='grp'&&t.value==='campo')n.area='';
     if(f==='status'&&t.value==='lib'&&!r.freed)n.freed=todayIso();if(f==='status'&&t.value==='pend')n.freed='';if(f==='freed'&&t.value)n.status='lib';if(f==='freed'&&!t.value&&r.status==='lib')n.status='pend';if(f==='freed'&&t.value&&t.value>todayIso()){toast('La fecha de liberación no puede ser futura.');render();return}
     if(n.status==='lib'&&r.status!=='lib'){n.libBy=me.email;n.libN=me.name||me.email}if(n.status!=='lib'&&r.status==='lib'){n.libBy='';n.libN=''}if(f==='actId'&&t.value)n.pisoId=pisoOfAct(t.value);

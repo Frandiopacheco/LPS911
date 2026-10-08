@@ -3229,3 +3229,5 @@ g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
 #grid tr.rhl .ci,#grid tr.rhl .anv{background:transparent!important;font-weight:700}
 #grid tr.rhl>td{animation:rhlin .5s ease-out}@keyframes rhlin{from{background-color:var(--today)}}
 @media (prefers-reduced-motion:reduce){#grid tr.rhl>td{animation:none}}
+/* responsable de restricción: elegido del equipo; un nombre antiguo fuera del equipo se marca */
+select.rresp{max-width:100%}select.rresp.rbad{border:1px solid var(--bad)!important;color:var(--bad)}

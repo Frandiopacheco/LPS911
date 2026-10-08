@@ -103,3 +103,20 @@ test('exportar las restricciones a Excel con los filtros de la pantalla; la tabl
   expect(ws.A7).toBeUndefined();
   noErrors(errors, 'restricciones excel');
 });
+
+test('el responsable se elige del equipo (personas, empresas o áreas); un nombre antiguo queda marcado', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'restr', extra: [['restr', 'rz', { actId: 't0', pisoId: 'p1', type: 'Materiales', desc: 'Prueba', resp: 'Juanito Pérez', need: '2026-10-05', freed: '', status: 'pend', created: '2026-10-01', sc: 'c3', by: 'frandiopacheco@gmail.com' }]] });
+  const sel = page.locator('select[data-r="rz"][data-f="resp"]').first();
+  await expect(sel).toHaveClass(/rbad/);
+  const opts = await sel.locator('option').allTextContents();
+  expect(opts.some(o => o.startsWith('Elena Editora'))).toBe(true); // persona del equipo
+  expect(opts).toContain('SC TARRAJEO'); // empresa
+  expect(opts).toContain('Calidad'); // área
+  expect(opts).toContain('Juanito Pérez (no está en el equipo)');
+  await sel.selectOption('Elena Editora');
+  await expect.poll(() => page.evaluate(() => __dbGet('restr', 'rz').resp)).toBe('Elena Editora');
+  await expect(page.locator('select[data-r="rz"][data-f="resp"]').first()).not.toHaveClass(/rbad/);
+  // no se puede escribir cualquier nombre
+  expect(await page.locator('input[data-r="rz"][data-f="resp"]').count()).toBe(0);
+  noErrors(errors, 'responsable del equipo');
+});
