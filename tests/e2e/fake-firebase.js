@@ -37,6 +37,8 @@ window.__uiAskNative = true;
     S('members', 'tcos@obra.pe', { role: 'tcos', name: 'Cosme Costos' });
     S('members', 'jefe@obra.pe', { role: 'editor', name: 'Jaime Jefe', tpub: true });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
+    /* ventana de propuestas de los SC habilitada (sin ella están cerradas hasta que el ingeniero las habilite) */
+    S('meta', 'propwin', { closeAt: Date.parse('2027-01-01T00:00:00-05:00') });
     S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1, resp: ['editor@obra.pe'] });
     S('pisos', 'p2', { code: 'P2', name: 'Segundo piso', order: 2 });
     S('sectors', 's1', { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 });
