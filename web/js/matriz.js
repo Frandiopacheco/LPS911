@@ -35,7 +35,7 @@ const mxCatOf=x=>mxAli().get(mnk(x&&x.name))||'';
 function mxCells(){const k=MX.v+'|'+DV+'|'+DONEV;if(MX.mc&&MX.mcK===k)return MX.mc;const ali=mxAli();const look=new Map();
   for(const x of S.act.values()){const c=ali.get(mnk(x.name));if(!c)continue;let a=look.get(x.ambId);if(!a)look.set(x.ambId,a=new Map());let l=a.get(c);if(!l)a.set(c,l=[]);l.push(x.id)}
   const out=new Map();
-  for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp=m.tipo&&MX.tipo.get(m.tipo);const L=look.get(amb.id)||new Map();const C={};
+  for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
     if(tp)(tp.acts||[]).forEach(c=>add(c,'tipo'));for(const c of L.keys())add(c,'look');for(const c of Object.keys(st))add(c,'man');
     for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s=o.acts.length&&o.acts.every(id=>DONE.has(id))?'t':'p'}}
@@ -63,6 +63,8 @@ function renderMat(main){ensureMx();
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
+  if(U.mxV==='cat'){renderMxCat(main,head);return}
+  if(U.mxV==='tipo'){renderMxTipo(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEd();
@@ -75,7 +77,7 @@ function renderMat(main){ensureMx();
   const unm=mxUnmapped();
   const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
   const vers=[...MX.ver.values()].sort((a,b)=>(b.t||0)-(a.t||0));
-  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${head}
+  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
    ${helpBox('Cómo se usa la matriz',`<p>Cada fila es un ambiente y cada columna una actividad del catálogo. La celda dice cómo está hoy esa actividad en ese ambiente: <b>pendiente</b>, <b>en curso</b>, <b>terminado</b> o <b>no aplica</b>.</p>
     <p>Las celdas con borde punteado las propone el sistema (del tipo de ambiente y del lookahead, terminadas según Campo) y nadie las ha confirmado. En el levantamiento semanal, selecciónalas y marca su estado real o pulsa <b>Validar</b>.</p>
     ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente.</p>':''}
@@ -143,7 +145,7 @@ function mxRect(a,b){const S2=new Set();const ambs=[];MX.view.rows.forEach(r=>r.
 function mxPaintSel(){const t=$('#mxt');if(!t)return;t.querySelectorAll('td.mc').forEach(td=>{const c=mxCellAt(td);td.classList.toggle('sl',!!c&&MX.sel.has(c.amb+'|'+c.cat))});
   const old=$('#mxsb');const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
 function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
-function mxWire(main){
+function mxWire(main){mxWireV(main);
   const imp=$('#mximp');if(imp)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)};
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;

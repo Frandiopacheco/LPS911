@@ -7,7 +7,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 Estado **actual** de cada actividad del catálogo en cada ambiente (pendiente / en curso / terminado / no aplica). Sirve para sincerar la obra cada semana y programar el lookahead sobre lo que de verdad falta: el lookahead puede tener filas borradas, terminadas mal marcadas, etc.; la matriz es la referencia de «cómo está la obra hoy».
 
 - **Fase 1 (decidido con el dueño):** editan administrador y editores (`mxEd()` = `canWrite && !PM() && !verRO()`); el resto la ve. Estados: `p` Pendiente, `c` En curso, `t` Terminado, `n` No aplica (sin «liberado por Calidad»).
-- **Pendiente para fases siguientes:** el SC propone y el ingeniero valida; editar el catálogo y los tipos desde la app (hoy solo se cargan y se asignan alias); ligar el lookahead al catálogo (lista de actividades en vez de texto libre) y avisos al programar; gráficos de avance por SC y ventana (semana / 3 / 6 semanas).
+- **Fase 2 (hecho):** editar catálogo y tipos en la app (`js/matriz-cat.js`, ver abajo).
+- **Pendiente para fases siguientes:** el SC propone y el ingeniero valida; ligar el lookahead al catálogo (lista de actividades en vez de texto libre) y avisos al programar; gráficos de avance por SC y ventana (semana / 3 / 6 semanas).
 
 ## Datos (colecciones propias; **no** escribe `acts`, `ambientes` ni `weeks`)
 
@@ -36,7 +37,20 @@ Un ambiente tiene una actividad si viene de: su **tipo** (`mtipo.acts`), el **lo
 - Rendimiento medido con la obra real: un piso (≈55 ambientes, 66 columnas) ~0,16 s; todos los pisos ~0,65 s.
 - Prueba: `tests/e2e/matriz.spec.js`.
 
+## Catálogo y Tipos de ambiente (`js/matriz-cat.js`, fase 2)
+
+Vistas internas de la pestaña (`U.mxV` = `mat` | `cat` | `tipo`, en `saveUI`; botones `[data-mxv]`, `mxViewSeg()`). Editan `mxEd()`; el resto las ve.
+
+- **Catálogo** (`renderMxCat`): tabla con filtros (chips de SC compartidos con la matriz `U.mxSc`, búsqueda por nombre o alias, clase, activas/archivadas). Columnas «Amb.» (dónde aparece) y «Marcadas» (celdas con estado confirmado) (`mxCatUse`). Cambiar nombre / SC / clase / especialidad (`mxCatSet`, con Deshacer) **no toca** los estados: van por id. Nombre repetido: avisa y sugiere fusionar.
+- **Nueva actividad** (`mxCatNew`): id `k<NOW base36>`, alias con su propio nombre; no deja crear un nombre ya existente.
+- **Archivar** (`arch:{t,by,n}`): deja de salir en la matriz; sus estados quedan en `mamb.c` y vuelven al restaurar.
+- **Fusionar A → B** (`mxMerge`, en lotes): en cada `mamb` con estado de A, lo pasa a B si B no tenía (si tenía, se conserva el de B) y borra el de A; en los tipos reemplaza A por B; agrega a B los alias de A (y el nombre de A). A queda archivada con `arch.fus=B` y todo lo necesario para deshacer: `moved` {amb:estado}, `added` [amb donde se escribió B], `tp` {tipo: ¿ya tenía B?}, `al` [alias agregados a B].
+- **Restaurar** (`mxCatRestore`): quita `arch`; si fue fusión, devuelve los estados de A, borra de B solo lo que la fusión escribió y nadie cambió después, vuelve a poner A en los tipos y quita de B los alias que se le pasaron. También es el «Deshacer» del aviso.
+- **Nombres del lookahead** (`mxAliasPop`): ver y quitar alias (con Deshacer).
+- **Tipos** (`renderMxTipo`): tarjetas con nombre editable, actividades como chips (quitar ×, agregar con la lista), «+ Tipo», archivar/restaurar tipo (un tipo archivado ya no da actividades: `mxCells` lo ignora). Lo marcado en cada ambiente se conserva siempre.
+- Pruebas: `tests/e2e/matriz-cat.spec.js`.
+
 ## Cambiar el catálogo después de cargarlo
 
 - La carga inicial **solo crea**: volver a cargar el mismo archivo completa lo que falte (p. ej. el tipo de ambientes que no existían la primera vez) y no toca lo demás.
-- Los estados de `mamb.c` están ligados al **id** de la actividad (`k015`…). Renombrar, cambiar SC o clase no los afecta. Fusionar o quitar actividades sí: sus estados quedarían huérfanos. Por eso los cambios de catálogo van **en la app** (fase 2: editar, archivar y fusionar moviendo los estados), no con un archivo nuevo que reemplace.
+- Los estados de `mamb.c` están ligados al **id** de la actividad (`k015`…). Renombrar, cambiar SC o clase no los afecta. Fusionar o quitar actividades sí: sus estados quedarían huérfanos. Por eso los cambios de catálogo van **en la app** (Catálogo: fusionar traslada los estados), no con un archivo nuevo. Volver a cargar el archivo nunca borra ni cambia estados ya marcados.

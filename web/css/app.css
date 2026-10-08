@@ -3003,3 +3003,25 @@ td.mc.sl{box-shadow:inset 0 0 0 2px var(--accent);background-image:linear-gradie
 .mxscb{gap:6px}
 .mxscb .chip{cursor:pointer;min-height:28px}
 @media (max-width:760px){.mxscb .chip{min-height:40px}}
+/* Matriz › Catálogo y Tipos (js/matriz-cat.js) */
+.mxvseg{align-self:flex-start}
+.mxvseg button{height:32px;padding:0 14px}
+.mxq{min-width:240px;flex:1;max-width:380px}
+table.mxct td{vertical-align:middle}
+table.mxct .tin{width:100%;min-width:160px}
+table.mxct select{height:30px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);max-width:180px}
+table.mxct tr.mxarch td{color:var(--muted)}
+.mxsw{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:6px;vertical-align:-1px}
+.mxform{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.mxform label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--ink2)}
+.mxform label:first-child{grid-column:1/-1}
+.mxform select,.mxform .tin{height:var(--h-ctl);border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);font-weight:400}
+.mxtg{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.mxtc{padding:12px;display:flex;flex-direction:column;gap:10px}
+.mxth{display:flex;align-items:center;gap:8px}.mxth .note{white-space:nowrap}.mxth .tin{flex:1;font-weight:600}.mxth b{flex:1}
+.mxtl{display:flex;flex-wrap:wrap;gap:6px}
+.mxtl .chip{padding-right:4px}
+.mxtx{border:0;background:none;color:var(--muted);font-size:14px;line-height:1;padding:0 4px;cursor:pointer;border-radius:4px}
+.mxtx:hover{color:var(--bad);background:var(--bad-soft)}
+.mxtc select{height:30px;border:1px dashed var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2)}
+@media (max-width:760px){.mxform{grid-template-columns:1fr}.mxq{min-width:0;max-width:none}.mxtg{grid-template-columns:1fr}.mxtx{padding:6px 8px}}
