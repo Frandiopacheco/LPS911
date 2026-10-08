@@ -78,7 +78,7 @@ body.cap-mode .top .brand .code{display:none}
 .khi>div{flex:1;min-width:0;display:flex;flex-direction:column}
 .khi b{font-size:19px}
 .khi span{font-size:13px;color:var(--muted)}
-.khi .ib{width:44px;height:40px;font-size:18px}
+.khi .ib{min-width:44px;height:40px;font-size:18px;white-space:nowrap}
 .kchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;max-width:100%;min-width:0}
 .kap>*,.khd>*,.kbody{min-width:0;max-width:100%}
 .kchips.kw{flex-wrap:wrap;overflow:visible}
@@ -444,8 +444,8 @@ td.d.dsel{box-shadow:inset 1px 0 0 var(--accent),inset -1px 0 0 var(--accent);ba
 .mnote .callout{margin:8px 16px}
 .mchips{display:inline-flex;gap:6px;flex-wrap:wrap}.mvis{display:inline-flex;border:1px solid var(--accent);border-radius:8px;overflow:hidden}.mvb{border:0;background:var(--panel);color:var(--accent);height:30px;padding:0 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}.mvb+.mvb{border-left:1px solid var(--accent)}.mvb.on{background:var(--accent);color:var(--accent-ink)}
 #mmvis{height:32px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;font-weight:600;padding:0 6px}.mchip{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:3px 10px;font-size:12.5px;cursor:pointer;color:var(--ink)}.mchip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.mchip b{font:700 9.5px var(--f-mono);opacity:.8}.mchip .warn{color:var(--warn);font-weight:600}.mchip.on .warn{color:#ffe08a}
-.pv{position:relative;overflow:hidden;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}.pv:active{cursor:grabbing}
-.pvw{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}.pvw img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;image-rendering:auto}
+.pv{position:relative;overflow:hidden;touch-action:none;isolation:isolate;contain:paint;cursor:grab;user-select:none;-webkit-user-select:none}.pv:active{cursor:grabbing}
+.pvw{position:absolute;left:0;top:0;transform-origin:0 0}.pv.pvmv .pvw{will-change:transform}.pvw img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;image-rendering:auto}
 .pvmk{position:absolute;inset:0;pointer-events:none}.pvm{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid #c62828;background:rgba(255,255,255,.55);font:700 11px/20px var(--f-mono);text-align:center;color:#c62828;font-style:normal;box-shadow:0 0 0 1px #fff}
 .pvm::before,.pvm::after{content:"";position:absolute;background:#c62828;left:50%;top:50%}.pvm::before{width:40px;height:1px;margin-left:-20px}.pvm::after{width:1px;height:40px;margin-top:-20px}.pvm.on{border-color:#1565c0;color:#1565c0}.pvm.on::before,.pvm.on::after{background:#1565c0}
 .mdlg{position:fixed;inset:0;background:rgba(10,14,12,.5);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -3084,3 +3084,13 @@ td.mc.scp::after{content:"";position:absolute;bottom:2px;right:2px;width:6px;hei
 .mxlr>span:first-child{display:flex;flex-direction:column;gap:2px;flex:1;min-width:220px}.mxlr small{color:var(--muted)}
 .mxlr.conf{background:var(--bad-soft)}.mxlr.conf small{color:var(--bad)}
 .mxlb{display:flex;gap:6px}.mxlb .ib{min-height:36px}
+
+/* Tablet (oct 2026): en las vistas con plano, pellizcar fuera del visor ya no amplía toda la página ni la arrastra
+   (en Android eso dejaba la barra superior en negro y el plano descuadrado); tampoco «jalar para recargar». */
+body.v-campo,body.v-mapa,body.v-dash,body.cap-mode{touch-action:pan-x pan-y}
+html:has(body.v-campo),html:has(body.v-mapa),html:has(body.v-dash),html:has(body.cap-mode){overscroll-behavior:none}
+/* Lookahead a pantalla completa (⛶): sin la barra superior ni las pestañas; la grilla gana casi toda la altura */
+body.lkfs .top,body.lkfs #bnav,body.lkfs #verban{display:none!important}
+#ffs.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* propuestas de los SC en tablet: solo el título y los botones (la explicación queda en el título emergente) */
+@media (min-width:761px) and (max-width:1366px){#ppbar .ppx{display:none}}
