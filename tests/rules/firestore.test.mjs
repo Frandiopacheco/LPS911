@@ -1022,3 +1022,16 @@ test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no
   await assertFails(deleteDoc(doc(ow, 'mver/f1')));
   await assertSucceeds(getDoc(doc(sc, 'mver/f1')));
 });
+
+test('propuestas al catálogo (mcatp): el SC propone de su partida; decide quien edita; no se borran', async () => {
+  const sc = user('sc@obra.pe'), ed = user('editor@obra.pe');
+  await assertSucceeds(setDoc(doc(sc, 'mcatp/p1'), { name: 'Espejos', sc: 'c-gabel', st: 'pend', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p2'), { name: 'Otra', sc: 'c-otro', st: 'pend', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p3'), { name: 'Otra', sc: 'c-gabel', st: 'ok', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p4'), { name: 'Otra', sc: 'c-gabel', st: 'pend', by: 'otro@obra.pe', t: 1 }));
+  await assertFails(updateDoc(doc(sc, 'mcatp/p1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mcatp/p1'), { st: 'ok', decBy: 'editor@obra.pe' }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mcatp/p1')));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'mcatp/p1')));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'mcatp/p5'), { name: 'x', sc: 'c-gabel', st: 'pend', by: 'lector@obra.pe', t: 1 }));
+});

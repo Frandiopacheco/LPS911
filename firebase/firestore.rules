@@ -478,6 +478,15 @@ service cloud.firestore {
       allow create, update: if canEdit() && request.resource.data.get('by', '') == mid();
       allow delete: if false;
     }
+    // Propuestas de actividades nuevas para el catálogo: las crea el SC (de su partida, pendiente, con su correo) o un editor;
+    // decide (aprueba / rechaza) solo quien edita. No se borran.
+    match /mcatp/{id} {
+      allow read: if lpsMember();
+      allow create: if request.resource.data.get('by', '') == mid() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()));
+      allow update: if canEdit();
+      allow delete: if false;
+    }
     // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
     match /mver/{id} {
       allow read: if lpsMember();
