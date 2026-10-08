@@ -1,5 +1,7 @@
 // Matriz de ambientes (js/matriz.js): carga del catálogo, estados por celda, selección en bloque, nombres sin catálogo y foto semanal.
 import { test, expect } from '@playwright/test';
+/* filtro de SC de la matriz: menú «Subcontratistas ▾» (clic = solo ese, Ctrl+clic = sumar) */
+const pickSc = async (page, id, add) => { if (!(await page.locator('#pop:not([hidden]) [data-mxsk]').count())) await page.click('#mxscdd'); await page.click(`#pop [data-mxsk="${id}"]`, add ? { modifiers: ['Control'] } : {}); };
 import { openApp, noErrors } from './helpers.js';
 
 /* catálogo de prueba: «Redes empotradas» (SC c1) y «Tarrajeo de muros» (SC c3); el tipo «Dpto» trae las dos */
@@ -109,19 +111,35 @@ test('subcontratista: ve la matriz; en su partida solo tiene los botones de SC',
 test('filtro de varios subcontratistas: solo sus columnas y los ambientes donde tienen algo', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: [...CAT, ['mcat', 'k3', { name: 'Entubado', sc: 'c2', cl: 't', al: ['entubado empotrado'], ord: 30 }]] });
   await expect(page.locator('#mxt th.mxc')).toHaveCount(3);
-  await page.click('[data-mxsc="c3"]');
+  await pickSc(page, 'c3');
   await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
   await expect(page.locator('#mxt th.mxc')).toContainText('Tarrajeo');
   // clic solo elige ese SC; Ctrl+clic suma o quita (mismo criterio que el Lookahead y el Tablero)
-  await page.click('[data-mxsc="c1"]');
+  await pickSc(page, 'c1');
   expect(await page.evaluate(() => U.mxSc)).toEqual(['c1']);
-  await page.click('[data-mxsc="c3"]', { modifiers: ['Control'] });
+  await pickSc(page, 'c3', true);
   await expect(page.locator('#mxt th.mxc')).toHaveCount(2);
   expect(await page.evaluate(() => U.mxSc)).toEqual(['c1', 'c3']);
   expect(await page.evaluate(() => U.sc)).toBe(''); // no cambia el filtro del lookahead
-  await page.click('[data-mxsc="c3"]', { modifiers: ['Control'] });
+  await pickSc(page, 'c3', true);
   await expect(page.locator('#mxt th.mxc')).toHaveCount(1);
-  await page.click('[data-mxsc=""]');
+  await pickSc(page, '');
   await expect(page.locator('#mxt th.mxc')).toHaveCount(3);
   noErrors(errors, 'filtro SC');
+});
+
+test('vista de escritorio: cabecera compacta, tamaño de celda y ayuda en un botón', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  await expect(page.locator('.mxstat')).toContainText('Terminado');
+  await expect(page.locator('.mxtiles')).toHaveCount(0);
+  await expect(page.locator('#mxt')).toHaveClass(/mxz1/);
+  await page.click('[data-mxz="1"]');
+  await expect(page.locator('#mxt')).toHaveClass(/mxz2/);
+  expect(await page.evaluate(() => U.mxZ)).toBe(2);
+  await page.click('[data-mxz="-1"]'); await page.click('[data-mxz="-1"]');
+  await expect(page.locator('#mxt')).toHaveClass(/mxz0/);
+  await page.click('#mxhelp');
+  await expect(page.locator('#pop')).toContainText('Cómo se usa la matriz');
+  await expect(page.locator('#mxt th[data-mxgo]').first()).toBeVisible();
+  noErrors(errors, 'vista escritorio');
 });

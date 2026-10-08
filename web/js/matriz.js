@@ -103,26 +103,22 @@ function renderMat(main){ensureMx();ensureMver();
   const unm=mxUnmapped();
   const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
   const vers=[...MX.ver.values()].sort((a,b)=>(b.t||0)-(a.t||0));
-  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
-   ${helpBox('Cómo se usa la matriz',`<p>Cada fila es un ambiente y cada columna una actividad del catálogo. La celda dice cómo está hoy esa actividad en ese ambiente: <b>pendiente</b>, <b>en curso</b>, <b>terminado</b> o <b>no aplica</b>.</p>
+  MX.helpH=`<p>Cada fila es un ambiente y cada columna una actividad del catálogo. La celda dice cómo está hoy esa actividad en ese ambiente: <b>pendiente</b>, <b>en curso</b>, <b>terminado</b> o <b>no aplica</b>.</p>
     <p>Las celdas con borde punteado las propone el sistema (del tipo de ambiente y del lookahead, terminadas según Campo) y nadie las ha confirmado. En el levantamiento semanal, selecciónalas y marca su estado real o pulsa <b>Validar</b>.</p>
     ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente.</p>':''}
-    <p><b>Foto semanal:</b> guarda el estado de la obra. Elige una foto en «Comparar con» para ver qué avanzó desde entonces.</p>`)}
-   <div class="tiles mxtiles">
-    <div class="tile hl"><span class="k">Terminado</span><span class="v">${pc(tot.t)} <small>${tot.t} de ${apl}</small></span></div>
-    <div class="tile"><span class="k">En curso</span><span class="v">${pc(tot.c)} <small>${tot.c}</small></span></div>
-    <div class="tile"><span class="k">Pendiente</span><span class="v">${pc(tot.p)} <small>${tot.p}</small></span></div>
-    <div class="tile"><span class="k">Sin validar</span><span class="v">${tot.sug} <small>propuestas del sistema</small></span></div>
-    ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
-   </div>
+    <p><b>Foto semanal:</b> guarda el estado de la obra. Elige una foto en «Comparar con» para ver qué avanzó desde entonces.</p>`;
+  let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${head}${mxViewSeg()}
+   <div class="mxstat"><span class="mxst t"><i style="width:${apl?Math.round(100*tot.t/apl):0}%"></i></span><b>Terminado ${pc(tot.t)}</b> <small>${tot.t} de ${apl}</small><span class="mxdot">·</span>En curso <b>${pc(tot.c)}</b><span class="mxdot">·</span>Pendiente <b>${pc(tot.p)}</b><span class="mxdot">·</span>Sin validar <b>${tot.sug}</b>${cmp?`<span class="mxdot">·</span>Cambios desde la foto <b>${tot.chg}</b> <small>${tot.chgT} terminados</small>`:''}</div>
    ${mxEd()&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
    ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
-   <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar mxbar0">
+    <button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
+    <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
+    <button class="ib" id="mxhelp" title="Cómo se usa la matriz" aria-label="Ayuda">ⓘ</button>
     <span class="mxleg">${['p','c','t','n'].map(s=>`<span><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</span>`).join('')}<span><i class="mc s-p sug"></i>Sin validar</span>${cmp?'<span><i class="mc s-t chg">✓</i>Cambió</span>':''}</span>
    </div>`;
   if(!cols.length){h+=`<p class="note">No hay actividades del catálogo en ${U.piso?'este piso':'los pisos'} con este filtro.</p></div></div>`;main.innerHTML=h;mxWire(main);return}
@@ -131,13 +127,13 @@ function renderMat(main){ensureMx();ensureMver();
   const grp=[];cols.forEach(c=>{const g=grp[grp.length-1];if(g&&g.sc===c.sc)g.n++;else grp.push({sc:c.sc,n:1})});
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const multi=visPisos().length>1;const NC=cols.length+3;
-  h+=`<div class="mxbox" id="mxbox"><table class="mx${ed?' ed':''}" id="mxt"><thead>
-   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${grp.map(g=>{const c=conOf(g.sc);return`<th colspan="${g.n}" style="--c:${esc(c.color)}" title="${esc(c.name)}"><span>${esc(c.name)}</span></th>`}).join('')}</tr>
+  h+=`<div class="mxbox" id="mxbox"><table class="mx mxz${mxZ()}${ed?' ed':''}" id="mxt"><thead>
+   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${esc(c.name)}</span></th>`}).join('')})()}</tr>
    <tr class="mxn">${cols.map((c,i)=>`<th class="mxc${c.cl==='d'?' dsg':''}" data-mxcol="${i}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(c.name)} · ${esc(conOf(c.sc).name)} · ${MXCL[c.cl]||''}${ed?' (clic: seleccionar la columna)':''}"><span>${esc(c.name)}</span></th>`).join('')}</tr></thead><tbody>`;
   let ri=0;let lastP='';
   for(const r of rows){
-    if(multi&&r.p.id!==lastP){h+=`<tr class="mxp"><th colspan="${NC}">${esc(r.p.code)} · ${esc(r.p.name)}</th></tr>`;lastP=r.p.id}
-    h+=`<tr class="mxs"><th colspan="${NC}">${esc(r.s.code)} · ${esc(r.s.name)}</th></tr>`;
+    if(multi&&r.p.id!==lastP){h+=`<tr class="mxp"><th colspan="${NC}"><span class="mxsl">${esc(r.p.code)} · ${esc(r.p.name)}</span></th></tr>`;lastP=r.p.id}
+    h+=`<tr class="mxs"><th colspan="${NC}"><span class="mxsl">${esc(r.s.code)} · ${esc(r.s.name)}</span></th></tr>`;
     for(const a of r.ambs){const C=cells.get(a.id)||{};const m=MX.amb.get(a.id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);const p=ambPct.get(a.id);
       h+=`<tr data-mxr="${ri}" data-amb="${esc(a.id)}"><th class="mxa" data-mxrow="${ri}" title="${esc(a.code)} ${esc(a.name)}${ed?' (clic: seleccionar la fila)':''}"><b>${esc(a.code)}</b> ${esc(a.name)}</th>
        <td class="mxtp">${ed?`<select data-mxtipo="${esc(a.id)}" aria-label="Tipo de ${esc(a.name)}"><option value="">—</option>${tipos.map(t=>`<option value="${esc(t.id)}"${tp&&tp.id===t.id?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:esc(tp?tp.name:'—')}</td>
@@ -175,11 +171,26 @@ function mxRect(a,b){const S2=new Set();const ambs=[];MX.view.rows.forEach(r=>r.
 function mxPaintSel(){const t=$('#mxt');if(!t)return;t.querySelectorAll('td.mc').forEach(td=>{const c=mxCellAt(td);td.classList.toggle('sl',!!c&&MX.sel.has(c.amb+'|'+c.cat))});
   const old=$('#mxsb');const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
 function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
+/* vista de escritorio (oct 2026): tamaño de celda (U.mxZ 0/1/2), tabla del alto de la pantalla, saltar a un SC, ayuda y SC en menús */
+const mxZ=()=>{const z=+U.mxZ;return z>=0&&z<=2?z:1};
+function mxFit(){const b=$('#mxbox');if(!b||!b.isConnected)return;const top=b.getBoundingClientRect().top;b.style.maxHeight=Math.max(240,innerHeight-top-14)+'px'}
+addEventListener('resize',()=>{if(U.tab==='mat')mxFit()});
+function mxGoCol(i){const b=$('#mxbox'),t=$('#mxt');if(!b||!t)return;const th=t.querySelector(`th[data-mxcol="${i}"]`);if(!th)return;
+  const fix=[...t.querySelectorAll('thead .mxh0,thead th.mxtp,thead th.mxpc')].reduce((w,e)=>w+(e.offsetParent?e.offsetWidth:0),0);b.scrollTo({left:Math.max(0,th.offsetLeft-fix),behavior:'smooth'})}
+function mxScMenu(btn){const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));const L=mxSel();
+  openPop(btn,`<div class="ph">Subcontratistas</div><div class="ptx mu">Clic: solo ese · Ctrl+clic: sumar o quitar</div><div class="mxscl"><button data-mxsk=""${L.length?'':' class="on"'}>Todos</button>${scs.map(s=>`<button data-mxsk="${esc(s.id)}"${L.includes(s.id)?' class="on"':''} style="--c:${esc(conOf(s.id).color)}"><i></i>${esc(s.n)}${L.includes(s.id)?' ✓':''}</button>`).join('')}</div>`,{});
+  const P_=$('#pop');if(P_)P_.onclick=e=>{const b=e.target.closest('[data-mxsk]');if(!b)return;const id=b.dataset.mxsk;let L=mxSel();
+    L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();
+    if(!(e.ctrlKey||e.metaKey||e.shiftKey))closePop();render();if(e.ctrlKey||e.metaKey||e.shiftKey){const nb=$('#mxscdd');if(nb)mxScMenu(nb)}}}
 function mxWire(main){mxWireV(main);
   const imp=$('#mximp');if(imp)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)};
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
+  const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
+  const hb=$('#mxhelp');if(hb)hb.onclick=()=>openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${MX.helpH||''}</div>`,{});
+  main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();const t=$('#mxt');if(t){t.classList.remove('mxz0','mxz1','mxz2');t.classList.add('mxz'+mxZ())}});
+  mxFit();
   const eb=$('#mxedit');if(eb)eb.onclick=()=>{MX.edit=!MX.edit;MX.sel.clear();closePop();render()};
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
@@ -187,7 +198,7 @@ function mxWire(main){mxWireV(main);
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
   mxWireBar();
   const t=$('#mxt');if(!t)return;
-  t.onclick=e=>{const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
+  t.onclick=e=>{const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
     if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
     if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};

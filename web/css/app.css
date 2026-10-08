@@ -3104,3 +3104,36 @@ td.mc.dsc{position:relative}td.mc.dsc::after{content:"";position:absolute;top:2p
 /* Matriz en modo edición: arrastrar sobre las celdas selecciona (en tablet no desplaza); en consulta se desplaza normal */
 table.mx.ed td.mc{touch-action:none}
 .mxpk.mxpkn{border-style:dashed;color:var(--accent)}.mxpkp{display:grid;place-items:center;width:22px;font-size:18px;font-weight:700}
+/* Matriz en escritorio (oct 2026): cabecera compacta, tabla del alto de la pantalla con columnas fijas y tamaño de celda */
+.mxstat{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--ink2);margin:2px 0 8px}
+.mxstat b{color:var(--ink)}.mxstat small{color:var(--muted)}.mxstat .mxdot{color:var(--line)}
+.mxst{display:inline-block;width:90px;height:8px;border-radius:4px;background:var(--panel2);overflow:hidden}
+.mxst i{display:block;height:100%;background:var(--ok)}
+.mxscdd.on{border-color:var(--accent);color:var(--accent)}
+.mxscl{display:flex;flex-direction:column;max-height:60vh;overflow:auto;min-width:220px}
+.mxscl button{display:flex;align-items:center;gap:8px}
+.mxscl button i{width:10px;height:10px;border-radius:3px;background:var(--c,var(--line));flex:none}
+.mxscl button.on{font-weight:700}
+.mxhlp{max-width:440px;font-size:12.5px;line-height:1.45;padding:0 10px 8px}.mxhlp p{margin:6px 0}
+.mxzm button{min-width:30px;font-weight:700}
+table.mx .mxgo{cursor:pointer}table.mx .mxgo:hover span{text-decoration:underline}
+/* columnas fijas: Ambiente, Tipo y % */
+table.mx{--aw:210px;--tw:118px;--pw:44px}
+table.mx .mxa{width:var(--aw);min-width:var(--aw);max-width:var(--aw);box-sizing:border-box}
+table.mx .mxtp{position:sticky;left:var(--aw);z-index:1;background:var(--panel);width:var(--tw);min-width:var(--tw);max-width:var(--tw);box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
+table.mx .mxpc{position:sticky;left:calc(var(--aw) + var(--tw));z-index:1;background:var(--panel);width:var(--pw);min-width:var(--pw);max-width:var(--pw);box-sizing:border-box;box-shadow:inset -1px 0 0 var(--line)}
+table.mx thead .mxtp,table.mx thead .mxpc{z-index:3}
+table.mx tfoot .mxtp,table.mx tfoot .mxpc{z-index:2;background:var(--panel2)}
+/* tamaño de celda: compacto / normal / grande */
+table.mx.mxz0{--cw:22px;--nh:118px}table.mx.mxz1{--cw:30px;--nh:140px}table.mx.mxz2{--cw:38px;--nh:170px}
+table.mx .mxn th{height:var(--nh,132px);min-width:var(--cw,26px);max-width:var(--cw,26px);width:var(--cw,26px)}
+table.mx .mxc span{max-height:calc(var(--nh,132px) - 8px)}
+table.mx td.mc{width:var(--cw,26px);min-width:var(--cw,26px);height:var(--cw,26px)}
+table.mx.mxz2 td.mc{font-size:14px}table.mx.mxz0 td.mc{font-size:10px}
+.mxbox{max-height:none}
+@media (max-width:760px){table.mx{--aw:140px;--tw:0px}table.mx .mxpc{left:var(--aw)}}
+.mxwrap .callout.mxun{padding:6px 12px;font-size:12.5px;margin:4px 0}
+.mxwrap .callout.mxun .ib{height:28px}
+/* el nombre del SC del grupo sigue a la vista al desplazarse a la derecha */
+table.mx .mxg th.mxgo span{position:sticky;left:calc(var(--aw) + var(--tw) + var(--pw) + 6px);display:inline-block;max-width:100%}
+table.mx .mxsl{position:sticky;left:8px;display:inline-block}
