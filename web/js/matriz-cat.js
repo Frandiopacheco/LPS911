@@ -20,6 +20,16 @@ function mxCatUse(){const k=MX.v+'|'+DV+'|'+DONEV;if(MXC.use&&MXC.useK===k)retur
   for(const m of MX.amb.values())for(const id of Object.keys(m.c||{}))g(id).st++;
   MXC.use=u;MXC.useK=k;return u}
 const mxScOpts=sel=>[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('');
+/* especialidades: lista cerrada (las que ya usan el catálogo y los subcontratistas) + «Nueva…» */
+function mxEspList(){const m=new Map();const add=e=>{e=String(e||'').replace(/\s+/g,' ').trim();if(e&&!m.has(mnk(e)))m.set(mnk(e),e)};
+  for(const c of MX.cat.values())if(!c.arch)add(c.esp);for(const c of S.con.values())add(c.esp);return[...m.values()].sort((a,b)=>a.localeCompare(b))}
+/** la especialidad más usada en el catálogo para un subcontratista (o la de su ficha) */
+function mxEspOf(sc){const n={};for(const c of MX.cat.values())if(!c.arch&&c.sc===sc&&c.esp)n[c.esp]=(n[c.esp]||0)+1;const t=Object.entries(n).sort((a,b)=>b[1]-a[1])[0];return t?t[0]:(S.con.get(sc)||{}).esp||''}
+const mxEspOpts=sel=>{const L=mxEspList();return`<option value="">—</option>${L.map(e=>`<option value="${esc(e)}"${e===sel?' selected':''}>${esc(e)}</option>`).join('')}${sel&&!L.includes(sel)?`<option value="${esc(sel)}" selected>${esc(sel)}</option>`:''}<option value="__new">＋ Nueva especialidad…</option>`};
+/** si eligió «Nueva…», la pide (si ya existe con otra escritura usa la existente); devuelve el texto o null si canceló */
+async function mxEspPick(sel,prev){if(sel.value!=='__new')return sel.value;const t=await uiAsk({title:'Nueva especialidad',input:{label:'Nombre (p. ej. Instalaciones sanitarias)',required:true},ok:'Agregar',tone:'info'});
+  const v=t?String(t).replace(/\s+/g,' ').trim():'';if(!v){sel.value=prev||'';return null}const ex=mxEspList().find(e=>mnk(e)===mnk(v));const r=ex||v;
+  if(![...sel.options].some(o=>o.value===r)){const o=document.createElement('option');o.value=r;o.textContent=r;sel.insertBefore(o,sel.lastElementChild)}sel.value=r;if(ex&&ex!==v)toast(`Ya existía como «${ex}»: se usa esa.`);return r}
 const mxClOpts=sel=>Object.entries(MXCL).map(([k,l])=>`<option value="${k}"${k===sel?' selected':''}>${l}</option>`).join('');
 
 /* ---------- Catálogo ---------- */
@@ -46,7 +56,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
       <td data-l="Actividad">${ro?`<b>${esc(c.name)}</b>${c.arch?`<small class="note"> · ${fus?'fusionada con «'+esc(fus.name)+'»':'archivada'} ${esc(fmtD(ldt(c.arch.t).slice(0,10)))}</small>`:''}`:`<input class="tin" data-mcf="name" value="${esc(c.name)}" aria-label="Nombre">`}</td>
       <td data-l="Subcontratista">${ro?`<span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}`:`<select data-mcf="sc" aria-label="Subcontratista">${mxScOpts(c.sc)}</select>`}</td>
       <td data-l="Clase">${ro?esc(MXCL[c.cl]||''):`<select data-mcf="cl" aria-label="Clase">${mxClOpts(c.cl)}</select>`}</td>
-      <td data-l="Especialidad">${ro?esc(c.esp||''):`<input class="tin" data-mcf="esp" value="${esc(c.esp||'')}" aria-label="Especialidad">`}</td>
+      <td data-l="Especialidad">${ro?esc(c.esp||''):`<select data-mcf="esp" aria-label="Especialidad">${mxEspOpts(c.esp||'')}</select>`}</td>
       <td class="mono" data-l="Ambientes">${c.arch?'—':u.amb}</td><td class="mono" data-l="Marcadas">${u.st}</td>
       <td data-l="Nombres"><button class="lnkb" data-mcal="${esc(c.id)}" title="Ver los nombres del lookahead">${(c.al||[]).length}</button></td>
       <td>${ed?(c.arch?`<button class="ib" data-mcres="${esc(c.id)}">Restaurar</button>`:`<button class="ab" data-mcm="${esc(c.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`):''}</td></tr>`}).join('')||`<tr><td colspan="8" class="note">No hay actividades con este filtro.</td></tr>`}
@@ -59,7 +69,8 @@ function mxWireCat(main){
   main.querySelectorAll('[data-mxcl]').forEach(b=>b.onclick=()=>{MXC.cl=b.dataset.mxcl;render()});
   main.querySelectorAll('[data-mxarch]').forEach(b=>b.onclick=()=>{MXC.arch=b.dataset.mxarch==='1';render()});
   const nw=$('#mxcnew');if(nw)nw.onclick=mxCatNew;
-  main.querySelectorAll('[data-mcf]').forEach(el=>el.onchange=()=>mxCatSet(el.closest('tr').dataset.mcid,el.dataset.mcf,el.value));
+  main.querySelectorAll('[data-mcf]').forEach(el=>el.onchange=async()=>{const id=el.closest('tr').dataset.mcid;let v=el.value;
+    if(el.dataset.mcf==='esp'){v=await mxEspPick(el,(MX.cat.get(id)||{}).esp);if(v==null)return}mxCatSet(id,el.dataset.mcf,v)});
   main.querySelectorAll('[data-mcm]').forEach(b=>b.onclick=()=>mxCatMenu(b,b.dataset.mcm));
   main.querySelectorAll('[data-mcres]').forEach(b=>b.onclick=()=>mxCatRestore(b.dataset.mcres));
   main.querySelectorAll('[data-mcal]').forEach(b=>b.onclick=()=>mxAliasPop(b,b.dataset.mcal))}
@@ -77,13 +88,15 @@ function mxCatNew(){if(!mxEd())return;const sc=mxSel()[0]||'';
    <div class="mxform"><label>Nombre<input class="tin" id="mxnn" placeholder="p. ej. Instalación de espejos"></label>
     <label>Subcontratista<select id="mxnsc">${mxScOpts(sc)}</select></label>
     <label>Clase<select id="mxncl">${mxClOpts('t')}</select></label>
-    <label>Especialidad<input class="tin" id="mxnesp"></label></div>
+    <label>Especialidad<select id="mxnesp">${mxEspOpts(mxEspOf(sc))}</select></label></div>
    <p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
      const k=mnk(name);const dup=[...MX.cat.values()].find(x=>!x.arch&&mnk(x.name)===k);if(dup){$('#mxnmsg').textContent=`Ya existe «${dup.name}» (${conOf(dup.sc).name}).`;return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
-     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,esp:$('#mxnesp').value.trim(),al:[k],ord,...mxNow()});lqClose();toast('Actividad creada')}catch(err){mxErr(err)}})}
+     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,esp:$('#mxnesp').value==='__new'?'':$('#mxnesp').value,al:[k],ord,...mxNow()});lqClose();toast('Actividad creada')}catch(err){mxErr(err)}},
+   async e=>{if(e.target.id==='mxnsc'){const es=$('#mxnesp');const d=mxEspOf(e.target.value);if(d){if(![...es.options].some(o=>o.value===d))es.insertAdjacentHTML('afterbegin',`<option value="${esc(d)}">${esc(d)}</option>`);es.value=d}}
+     if(e.target.id==='mxnesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
 
 function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
   openPop(btn,`<div class="ph">${esc(c.name)}</div><button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button><hr><button data-do="arc" class="danger">Archivar</button>`,
