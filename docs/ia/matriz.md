@@ -57,7 +57,7 @@ Vista `U.mxV='rec'` («Recorrido»). Decidido con el dueño: entrar por **lista*
 - **Lista** (`renderMxRec`): pisos a la vista → sector → tarjetas de ambiente (tipo, % terminado, por hacer, sin validar, «✓ Revisado …» esta semana). Barra «N de M revisados esta semana» (`mxWk0` = lunes de la semana) y «Solo los que faltan» (`MXR.only`).
 - **Ambiente** (`renderMxRecAmb`): checklist de sus celdas con 4 botones grandes (≥ 44 px) por actividad; lo terminado / no aplica va plegado al final. Cada toque guarda al instante (`mxWrite`, con Deshacer). Info por fila: terminada en Campo, próximo día programado, «propuesta del sistema».
 - **Secuencia de obra** (`mxSeq`): mediana del primer día de las filas del lookahead de cada actividad (toda la obra); sin fechas, al final por `ord`.
-- **¿Falta algo?** (`mxRecSug`): hasta 5 actividades que tiene ≥ 50 % de los ambientes del mismo tipo (sin tipo: mismo nombre sin números) y este no; «+ Agregar» la pone pendiente.
+- **¿Falta algo?** (`mxRecSug`): hasta 5 actividades que tiene ≥ 25 % de los ambientes del mismo tipo (sin tipo: mismo nombre sin números) y este no; «+ Agregar» la pone pendiente.
 - **Confirmar y seguir**: guarda lo propuesto tal cual (`c`) y `mamb.rv={d,t,by,n}` y pasa al siguiente ambiente de la lista. «Siguiente sin confirmar» no guarda.
 - Prueba: `tests/e2e/matriz-rec.spec.js`.
 
@@ -129,3 +129,14 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 ## Tablet y pantalla completa (oct 2026)
 - ⛶ (`#mxfs`, `mxFsSet`): oculta barra superior y pestañas (`body.mxfs`) y pide pantalla completa al navegador; se apaga al salir de la pestaña.
 - Tablet (`min-width:761px and max-width:1366px and pointer:coarse`): botones de la cabecera solo con ícono (`.mxlbl` oculto), sin subtítulo, indicadores resumidos (`.mxsx` oculto; el detalle y la leyenda van en ⓘ), Ambiente 170 px sin Tipo, encabezado de actividades a 150 px.
+
+## Auditoría 08/10/2026 (ChatGPT, pestaña Matriz) — correcciones (decididas con el dueño)
+- **Vínculo con el SC (M02/M03):** una actividad del catálogo es de **un solo SC**. `mxCatOf(x)` liga la fila solo si `x.sc` coincide con el SC del catálogo (`mxScOk`); `mxCatOfN(x)` es solo por nombre y se usa para renombrar, fusionar y unificar. Filas con otro SC: aviso en la Matriz «… de otro subcontratista» (`mxScMismatch`/`mxScMisDlg`: «Pasar a <SC del catálogo>», un `apply`, salta propuestas pendientes). En el Lookahead, `mxNameGate` avisa al escribir un nombre de otro SC. Cambiar el SC en el Catálogo (`mxCatScSet`) ofrece pasar también las filas del SC anterior (o «Solo el catálogo»).
+- **Selección en bloque (M09):** `mxRect` (arrastre y Shift+clic) toma solo las celdas que el ambiente ya tiene; agregar una actividad a un ambiente sigue siendo clic sobre la celda vacía.
+- **Escritura (M10/M01):** `mxWrite` guarda en lotes (`db.batch`, 400 ambientes por lote) y avisa si quedó guardado solo una parte. «Deshacer» (`mxUndo`) vuelve solo las celdas que siguen como las dejó ese cambio; las que otra persona cambió después se respetan.
+- **Metadatos de celda** `mamb.m.<cat>` = `{by,n,t,sc?,ok?,bk?}` (`mxCM`): se escriben siempre con `sc`/`ok`/`bk` explícitos (con *merge* Firestore conservaba los viejos: una celda confirmada por el ingeniero seguía figurando como del SC). `ok` = «✓ Visto» del ingeniero sobre el cambio del SC (`mxLogOk`, solo si la celda sigue con ese cambio: `m.t == mlog.t`); `bk` = el SC deshizo y volvió a algo ya dado por bueno.
+- **M04:** `conf` del siguiente cambio del SC también es verdadero si el ingeniero había dado «✓ Visto» (`m.ok`).
+- **M05:** `mxScPend(amb,cat)` = lo cambió un SC y nadie lo vio. Su «Terminado» **no oculta** la fila terminada del Lookahead (`mxDoneSt` → `pend`, texto «falta el ✓ Visto»). Confirmar Terminado o «Validar» desde la Matriz también lo da por bueno. El % de la Matriz sigue contando todo (decidido: incluye lo sin validar, M08).
+- **M06 (reglas):** el SC escribe `mamb` con `l` = id de su constancia, en el **mismo lote** que `mlog/l` nuevo (`pend`, misma celda y valor) o que su paso de `pend` a `undo`; `m.<k>` debe ser suyo (`by == mid()`, `sc == true`, sin `ok`; `bk` solo al deshacer). Pruebas en `tests/rules`.
+- No se cambió (decidido): M07 «Revisado esta semana» no se invalida con cambios posteriores; M08 el % incluye lo sin validar.
+- Prueba: `tests/e2e/matriz-auditoria.spec.js`.

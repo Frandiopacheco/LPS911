@@ -47,12 +47,17 @@ const mxEdG=()=>mxEd()&&!!MX.edit;
 function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();
   for(const c of MX.cat.values()){if(c.arch)continue;(c.al||[]).forEach(k=>{if(!m.has(k))m.set(k,c.id)});const k=mnk(c.name);if(k&&!m.has(k))m.set(k,c.id)}
   MX.ali=m;MX.aliV=MX.v;return m}
-const mxCatOf=x=>mxAli().get(mnk(x&&x.name))||'';
+/* por nombre (renombrar, fusionar, unificar: el nombre se unifica sea cual sea el SC de la fila) */
+const mxCatOfN=x=>mxAli().get(mnk(x&&x.name))||'';
+/* vínculo con la matriz (auditoría 08/10, M02): una fila solo alimenta la actividad del catálogo si es del mismo SC
+   (una actividad del catálogo = un SC, decidido con el dueño). Las que no coinciden salen en el aviso «otro SC» (mxScMismatch). */
+const mxScOk=(x,c)=>!x.sc||!c||c.sc===x.sc;
+const mxCatOf=x=>{const id=mxCatOfN(x);return id&&mxScOk(x,MX.cat.get(id))?id:''};
 
 /** celdas de cada ambiente: {catId:{s,sug,src,acts}}. s = estado; sug = lo propone el sistema (aún nadie lo confirmó);
     src = de dónde sale (tipo, lookahead o agregada a mano). Se recalcula cuando cambian los datos (MX.v, DV, DONEV). */
 function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(MX.mc&&MX.mcK===k)return MX.mc;const ali=mxAli();const look=new Map();
-  for(const x of S.act.values()){const c=ali.get(mnk(x.name));if(!c)continue;let a=look.get(x.ambId);if(!a)look.set(x.ambId,a=new Map());let l=a.get(c);if(!l)a.set(c,l=[]);l.push(x.id)}
+  for(const x of S.act.values()){const c=ali.get(mnk(x.name));if(!c||!mxScOk(x,MX.cat.get(c)))continue;let a=look.get(x.ambId);if(!a)look.set(x.ambId,a=new Map());let l=a.get(c);if(!l)a.set(c,l=[]);l.push(x.id)}
   const out=new Map();
   for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
@@ -115,16 +120,17 @@ function renderMat(main){ensureMx();ensureMver();
   for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};let ap=0,tt=0;cols.forEach((c,i)=>{const o=C[c.id];if(!o)return;tot[o.s]++;if(o.sug)tot.sug++;if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
       if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){tot.chg++;if(o.s==='t')tot.chgT++}}});ambPct.set(a.id,ap?tt/ap:null)}
   const apl=tot.p+tot.c+tot.t;const pc=x=>apl?Math.round(100*x/apl)+'%':'—';
-  const unm=mxUnmapped();
+  const unm=mxUnmapped();let mis=[];
   const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
   const vers=[...MX.ver.values()].sort((a,b)=>(b.t||0)-(a.t||0));
   MX.helpH=`<p>Cada fila es un ambiente y cada columna una actividad del catálogo. La celda dice cómo está hoy esa actividad en ese ambiente: <b>pendiente</b>, <b>en curso</b>, <b>terminado</b> o <b>no aplica</b>.</p>
     <p>Las celdas con borde punteado las propone el sistema (del tipo de ambiente y del lookahead, terminadas según Campo) y nadie las ha confirmado. En el levantamiento semanal, selecciónalas y marca su estado real o pulsa <b>Validar</b>.</p>
-    ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente.</p>':''}
+    ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente; al arrastrar solo se toman las celdas que el ambiente ya tiene.</p>':''}
     <p><b>Foto semanal:</b> guarda el estado de la obra. Elige una foto en «Comparar con» para ver qué avanzó desde entonces.</p>`;
   let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg()+`<div class="mxstat"><span class="mxst t"><i style="width:${apl?Math.round(100*tot.t/apl):0}%"></i></span><b>Terminado ${pc(tot.t)}</b> <small>${tot.t} de ${apl}</small><span class="mxsx"><span class="mxdot">·</span>En curso <b>${pc(tot.c)}</b><span class="mxdot">·</span>Pendiente <b>${pc(tot.p)}</b></span><span class="mxdot">·</span>Sin validar <b>${tot.sug}</b><span class="mxsx">${cmp?`<span class="mxdot">·</span>Cambios desde la foto <b>${tot.chg}</b> <small>${tot.chgT} terminados</small>`:''}</span></div>`)}
    ${mxEd()&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
    ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
+   ${mxEd()&&(mis=mxScMismatch()).length?`<div class="callout mxun">${mis.reduce((s,u)=>s+u.ids.length,0)} ${mis.reduce((s,u)=>s+u.ids.length,0)===1?'fila':'filas'} del lookahead ${mis.reduce((s,u)=>s+u.ids.length,0)===1?'tiene':'tienen'} el nombre de una actividad de otro subcontratista: no salen en la matriz. <button class="ib" id="mxsmis">Revisar…</button></div>`:''}
    ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxbar0">
     ${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
@@ -180,11 +186,29 @@ function mxUnmapped(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id)
   for(const x of S.act.values()){const k=mnk(x.name);if(!k||ali.has(k)||!vp.has(pisoOfAmb(x.ambId)))continue;let e=m.get(k);if(!e)m.set(k,e={k,name:String(x.name).trim(),sc:x.sc,ids:[]});e.ids.push(x.id)}
   return[...m.values()].sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||a.name.localeCompare(b.name))}
 
+/* filas del lookahead (pisos a la vista) cuyo nombre es de una actividad del catálogo de OTRO subcontratista (M02/M03):
+   no alimentan la matriz hasta que coincidan. Agrupadas por actividad y SC de la fila. */
+function mxScMismatch(){const vp=new Set(visPisos().map(p=>p.id));const m=new Map();
+  for(const x of S.act.values()){if(!x.sc||!vp.has(pisoOfAmb(x.ambId)))continue;const id=mxCatOfN(x);const c=id&&MX.cat.get(id);if(!c||c.arch||c.sc===x.sc)continue;
+    const k=id+'|'+x.sc;let e=m.get(k);if(!e)m.set(k,e={c,sc:x.sc,ids:[]});e.ids.push(x.id)}
+  return[...m.values()].sort((a,b)=>a.c.name.localeCompare(b.c.name))}
+function mxScMisDlg(){if(!mxEd())return;const L=mxScMismatch();if(!L.length){lqClose();return}
+  lqModal(`<div class="lqtop"><b>Filas con otro subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo (ahí se ofrece pasar las filas).</p>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><button class="ib" data-mxsm="${i}">Pasar a ${esc(conOf(u.c.sc).name)}</button></div>`).join('')}</div>
+   <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
+   async e=>{const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
+     const ops=u.ids.map(id=>S.act.get(id)).filter(x=>x&&!pend.has(x.id)&&x.sc===u.sc).map(x=>op('acts',x.id,{...x,sc:u.c.sc}));
+     const sk=u.ids.length-ops.length;if(ops.length)apply(ops,`«${u.c.name}»: ${ops.length} ${ops.length===1?'fila pasa':'filas pasan'} a ${conOf(u.c.sc).name}`);
+     if(sk)setTimeout(()=>toast(`${sk} ${sk===1?'fila tiene':'filas tienen'} una propuesta del SC pendiente: no se ${sk===1?'cambió':'cambiaron'}.`),80);mxScMisDlg()})}
+
 /* ---------- interacción ---------- */
 function mxCellAt(td){const tr=td.closest('tr[data-amb]');if(!tr||!MX.view)return null;const c=MX.view.cols[+td.dataset.k];return c?{amb:tr.dataset.amb,r:+tr.dataset.mxr,ci:+td.dataset.k,cat:c.id}:null}
-function mxRect(a,b){const S2=new Set();const ambs=[];MX.view.rows.forEach(r=>r.ambs.forEach(x=>ambs.push(x.id)));
+/* rectángulo de selección: solo las celdas que el ambiente ya tiene (auditoría 08/10, M09: arrastrar no agrega actividades a
+   ambientes que no las tenían; para agregar una, clic sobre la celda vacía) */
+function mxRect(a,b){const S2=new Set();const ambs=[];MX.view.rows.forEach(r=>r.ambs.forEach(x=>ambs.push(x.id)));const cells=mxCells();
   const r0=Math.min(a.r,b.r),r1=Math.max(a.r,b.r),c0=Math.min(a.ci,b.ci),c1=Math.max(a.ci,b.ci);
-  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++)S2.add(ambs[r]+'|'+MX.view.cols[c].id);return S2}
+  for(let r=r0;r<=r1;r++){const C=cells.get(ambs[r])||{};for(let c=c0;c<=c1;c++){const id=MX.view.cols[c].id;if(C[id])S2.add(ambs[r]+'|'+id)}}return S2}
 function mxPaintSel(){const t=$('#mxt');if(!t)return;t.querySelectorAll('td.mc').forEach(td=>{const c=mxCellAt(td);td.classList.toggle('sl',!!c&&MX.sel.has(c.amb+'|'+c.cat))});
   const old=$('#mxsb');const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
 function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
@@ -209,6 +233,7 @@ function mxWire(main){mxWireV(main);
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const fh=$('#mxfhist');if(fh)fh.onclick=()=>mxFotoHist();
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
+  const smb=$('#mxsmis');if(smb)smb.onclick=mxScMisDlg;
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
   const xb=$('#mxxls');if(xb)xb.onclick=mxExport;
@@ -266,14 +291,27 @@ async function mxUnprogram(ids,name){if(!mxEd())return;const T=todayIso();const 
 
 /* guarda estados: un documento por ambiente (set con merge, así dos personas pueden marcar celdas distintas del mismo ambiente a la vez) */
 /* m.<cat> = quién cambió la celda por última vez ({by,n,t,sc?}); sirve para saber qué confirmó el ingeniero y qué cambió un SC */
-function mxMeta(c,sc){const DEL=firebase.firestore.FieldValue.delete();const meta={by:me.email,n:me.name||'',t:NOW()};if(sc)meta.sc=true;const m={};
+/* mxCM: metadatos de una celda. Con merge, Firestore conserva los campos viejos del mapa: sc y ok se borran explícitamente
+   (si no, una celda que confirmó el ingeniero seguía figurando como del SC). ok = «✓ Visto» del ingeniero sobre el cambio del SC; bk = el SC deshizo su cambio y la celda volvió a algo ya dado por bueno. */
+function mxCM(sc){const DEL=firebase.firestore.FieldValue.delete();return{by:me.email,n:me.name||'',t:NOW(),sc:sc?true:DEL,ok:DEL,bk:DEL}}
+function mxMeta(c,sc){const DEL=firebase.firestore.FieldValue.delete();const meta=mxCM(sc);const m={};
   for(const[k,v]of Object.entries(c))m[k]=v&&typeof v==='object'&&!Array.isArray(v)&&!MXS[v]?DEL:meta;return m}
-async function mxWrite(byAmb,label,undo){const ps=[];const meta={by:me.email,n:me.name||'',t:NOW()};
-  for(const[amb,c]of byAmb)ps.push(fcol('mamb').doc(amb).set({c,m:mxMeta(c),...meta},{merge:true}));
-  try{await Promise.all(ps);if(undo)toast(label,'Deshacer',()=>mxWrite(undo,'Deshecho',null));else toast(label)}catch(e){toast('No se pudo guardar: '+(e&&e.code||e))}}
+/* en lotes (auditoría 08/10, M10): cada lote se guarda entero o nada; si falla uno, se avisa cuántos ambientes quedaron guardados.
+   Deshacer (M01) solo vuelve las celdas que siguen como las dejó este cambio: si alguien las cambió después, se respetan. */
+const mxIsDel=v=>v!=null&&typeof v==='object';
+async function mxWrite(byAmb,label,undo){const meta={by:me.email,n:me.name||'',t:NOW()};const L=[...byAmb];let ok=0;
+  for(let i=0;i<L.length;i+=400){const part=L.slice(i,i+400);const b=db.batch();part.forEach(([amb,c])=>b.set(fcol('mamb').doc(amb),{c,m:mxMeta(c),...meta},{merge:true}));
+    try{await b.commit();ok+=part.length}catch(e){const er=e&&e.code||e;toast(ok?`Se guardó solo una parte: ${ok} de ${L.length} ambientes (${er}). Revisa y vuelve a intentar lo que falta.`:'No se pudo guardar: '+er);return false}}
+  if(undo)toast(label,'Deshacer',()=>mxUndo(byAmb,undo));else toast(label);return true}
+function mxUndo(done,undo){const by=new Map();let skip=0;
+  for(const[amb,u]of undo){const cur=(MX.amb.get(amb)||{}).c||{};const w=done.get(amb)||{};const o={};
+    for(const[cat,v]of Object.entries(u)){const exp=mxIsDel(w[cat])?undefined:w[cat];if(cur[cat]!==exp){skip++;continue}o[cat]=v}
+    if(Object.keys(o).length)by.set(amb,o)}
+  if(!by.size){toast(skip?'Ya cambió después (otra persona): no se deshace.':'No hay nada que deshacer.');return}
+  mxWrite(by,skip?`Deshecho; ${skip} ${skip===1?'celda cambió':'celdas cambiaron'} después y se ${skip===1?'deja':'dejan'} como está${skip===1?'':'n'}`:'Deshecho',null)}
 function mxApply(s){if(!mxEd()||!MX.sel.size)return;const cells=mxCells();const DEL=firebase.firestore.FieldValue.delete();const by=new Map(),un=new Map();let n=0;
   for(const k of MX.sel){const[amb,cat]=k.split('|');const o=(cells.get(amb)||{})[cat];if(s==='ok'&&!o)continue;const v=s==='ok'?o.s:s;
-    const prev=((MX.amb.get(amb)||{}).c||{})[cat];if(prev===v)continue;
+    const prev=((MX.amb.get(amb)||{}).c||{})[cat];if(prev===v&&!mxScPend(amb,cat))continue; // lo que cambió un SC: confirmarlo igual lo da por bueno
     if(!by.has(amb)){by.set(amb,{});un.set(amb,{})}by.get(amb)[cat]=v;un.get(amb)[cat]=prev===undefined?DEL:prev;n++}
   MX.sel.clear();if(!n){mxPaintSel();toast('No hay cambios que guardar.');return}
   mxWrite(by,s==='ok'?`${n} ${n===1?'celda validada':'celdas validadas'}`:`${n} ${n===1?'celda':'celdas'} → ${MXS[s]}`,un)}

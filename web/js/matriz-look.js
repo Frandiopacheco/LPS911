@@ -13,7 +13,8 @@ const mxCatAct=()=>[...MX.cat.values()].filter(c=>!c.arch);
 
 /** al escribir el nombre de una actividad del lookahead: el nombre del catálogo (texto), false si se bloqueó, null si no aplica */
 function mxNameGate(v,x,t){if(!mxCatReq()||!v)return null;const id=mxAli().get(mnk(v));const c=id&&MX.cat.get(id);
-  if(c&&!c.arch){if(c.name!==v)toast(`Se escribió «${c.name}», como está en el catálogo.`);return c.name}
+  if(c&&!c.arch){if(x&&x.sc&&c.sc!==x.sc)setTimeout(()=>toast(`Ojo: «${c.name}» es de ${conOf(c.sc).name} en el catálogo y esta fila es de ${conOf(x.sc).name}: no saldrá en la Matriz hasta que coincidan.`),60);
+    else if(c.name!==v)toast(`Se escribió «${c.name}», como está en el catálogo.`);return c.name}
   t.value=t.dataset.o!=null?t.dataset.o:(x.name||'');setTimeout(()=>mxNoCatDlg(v,x),0);return false}
 
 /* lista de sugerencias del campo «Actividad»: el catálogo, primero las del subcontratista de la fila */
@@ -111,7 +112,7 @@ function mxLookOff(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id))
 /* ---------- Unificar nombres (solo administrador) ---------- */
 function mxUnifyPlan(docs){const pend=new Set();for(const d of docs)for(const[id,v]of Object.entries(d.items||{}))if(v)pend.add(id);
   const vp=new Set(visPisos().map(p=>p.id));const G=new Map();
-  for(const x of S.act.values()){if(!vp.has(pisoOfAmb(x.ambId)))continue;const id=mxCatOf(x);const c=id&&MX.cat.get(id);if(!c||c.arch)continue;const from=String(x.name||'').replace(/\s+/g,' ').trim();if(from===c.name)continue;
+  for(const x of S.act.values()){if(!vp.has(pisoOfAmb(x.ambId)))continue;const id=mxCatOfN(x);const c=id&&MX.cat.get(id);if(!c||c.arch)continue;const from=String(x.name||'').replace(/\s+/g,' ').trim();if(from===c.name)continue;
     const k=c.id+'|'+from;let g=G.get(k);if(!g)G.set(k,g={k,c,from,ids:[],skip:0});if(pend.has(x.id))g.skip++;else g.ids.push(x.id)}
   return[...G.values()].sort((a,b)=>conOf(a.c.sc).name.localeCompare(conOf(b.c.sc).name)||a.c.name.localeCompare(b.c.name)||b.ids.length-a.ids.length)}
 async function mxUnifyDlg(){if(!isAdmin)return;
@@ -146,9 +147,10 @@ function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return
    Marcar «Terminada» en Campo no es la verdad: puede ser un error (faltaba una luminaria). La fila terminada solo se oculta del
    Lookahead cuando la Matriz la tiene CONFIRMADA como Terminado; si no (sin validar o la Matriz dice otra cosa) sigue visible con
    «✓?» y desde ahí el ingeniero confirma en la Matriz o la reabre. mxDoneSt: null | 'ok' (ocultable) | 'pend' (por validar). */
-function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'?'ok':'pend'}
+/* M05 (auditoría 08/10, decidido con el dueño): el «Terminado» que puso un SC no oculta la fila hasta que un ingeniero lo da por visto */
+function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'&&!mxScPend(x.ambId,c)?'ok':'pend'}
 const mxDonePend=x=>mxDoneSt(x)==='pend';
-function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
+function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 function mxRowBadge(x,k){const v=mxRowWarn(x);if(!v&&mxDonePend(x))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
 function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;

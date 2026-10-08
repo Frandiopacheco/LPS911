@@ -83,18 +83,31 @@ function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;
   if(f==='name'){const k=mnk(v);const o=[...MX.cat.values()].find(x=>x.id!==id&&!x.arch&&mnk(x.name)===k);if(o)toast(`Ojo: ya existe «${o.name}» (${conOf(o.sc).name}). Si son la misma, usa ⋮ › Fusionar.`)}
   const prev=c[f]??'';if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
+  if(f==='sc'){mxCatScSet(id,prev,v);return}
   fcol('mcat').doc(id).set({[f]:v,...mxNow()},{merge:true}).then(()=>toast(`${{name:'Nombre',sc:'Subcontratista',cl:'Clase',esp:'Especialidad'}[f]} guardado`,'Deshacer',()=>fcol('mcat').doc(id).set({[f]:prev,...mxNow()},{merge:true}))).catch(mxErr)}
 
 /* ---- el lookahead sigue al catálogo: renombrar o fusionar una actividad cambia el nombre de sus filas ----
    (por nombre/alias; se saltan las filas con propuesta del SC pendiente; un solo apply → historial y Deshacer) */
 async function mxPendProp(){try{const S2=new Set();(await fcol('lhprop').get()).docs.forEach(d=>{for(const[id,v]of Object.entries(d.data().items||{}))if(v)S2.add(id)});return S2}catch(e){return new Set()}}
-const mxRowsOf=(catId,pend)=>[...S.act.values()].filter(x=>!pend.has(x.id)&&mxCatOf(x)===catId);
+const mxRowsOf=(catId,pend)=>[...S.act.values()].filter(x=>!pend.has(x.id)&&mxCatOfN(x)===catId);
 function mxRenameRows(rows,name,label){const ren={};const ops=[];for(const x of rows){if(x.name===name)continue;ren[x.id]=x.name;ops.push(op('acts',x.id,{...x,name}))}if(ops.length)apply(ops,label);return ren}
 function mxUnrename(ren,cur,label){const ops=[];for(const[id,old]of Object.entries(ren||{})){const x=S.act.get(id);if(x&&x.name===cur)ops.push(op('acts',id,{...x,name:old}))}if(ops.length)apply(ops,label);return ops.length}
 async function mxCatRename(id,prev,v){const rows=mxRowsOf(id,await mxPendProp());
   try{await fcol('mcat').doc(id).set({name:v,al:mxFV().arrayUnion(...[mnk(prev),mnk(v)].filter(Boolean)),...mxNow()},{merge:true})}catch(e){mxErr(e);return}
   const ren=mxRenameRows(rows,v,`Catálogo: «${prev}» → «${v}»`);const n=Object.keys(ren).length;
   toast(`Nombre guardado${n?` · ${n} ${n===1?'fila del lookahead actualizada':'filas del lookahead actualizadas'}`:''}`,'Deshacer',async()=>{try{await fcol('mcat').doc(id).set({name:prev,...mxNow()},{merge:true})}catch(e){mxErr(e)}mxUnrename(ren,v,`Deshacer: «${v}» → «${prev}»`)})}
+
+/* cambiar el SC de una actividad (auditoría 08/10, M03): ofrece pasar también sus filas del lookahead que eran del SC anterior
+   (un apply: historial y Deshacer; se saltan las filas con propuesta del SC pendiente; semanas congeladas y PPC no cambian) */
+async function mxCatScSet(id,prev,v){const c=MX.cat.get(id);if(!c)return;
+  try{await fcol('mcat').doc(id).set({sc:v,...mxNow()},{merge:true})}catch(e){mxErr(e);return}
+  const und=()=>fcol('mcat').doc(id).set({sc:prev,...mxNow()},{merge:true}).catch(mxErr);
+  const rows=prev?mxRowsOf(id,await mxPendProp()).filter(x=>x.sc===prev):[];
+  if(!rows.length){toast('Subcontratista guardado','Deshacer',und);return}
+  const go=await uiAsk({title:'¿Cambiar también el lookahead?',text:`«${c.name}» pasa de ${conOf(prev).name} a ${conOf(v).name}. En el lookahead hay ${rows.length} ${rows.length===1?'fila':'filas'} de esta actividad a nombre de ${conOf(prev).name}.`,
+    list:['«Pasar las filas»: quedan a nombre de '+conOf(v).name+' (se puede deshacer).','«Solo el catálogo»: esas filas dejan de salir en la Matriz y aparecen en el aviso «otro subcontratista».','Las semanas congeladas y los PPC pasados no cambian.'],ok:'Pasar las filas',cancel:'Solo el catálogo',tone:'warn'});
+  if(go)apply(rows.map(x=>op('acts',x.id,{...x,sc:v})),`«${c.name}»: ${rows.length} ${rows.length===1?'fila del lookahead pasa':'filas del lookahead pasan'} a ${conOf(v).name}`);
+  else toast('Subcontratista guardado (solo el catálogo)','Deshacer',und)}
 
 /* nueva actividad */
 function mxCatNew(){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const sc=mxSel()[0]||'';
