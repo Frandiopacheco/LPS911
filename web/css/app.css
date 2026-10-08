@@ -3023,3 +3023,12 @@ table.mxct tr.mxarch td{color:var(--muted)}
 .mxtx:hover{color:var(--bad);background:var(--bad-soft)}
 .mxtc select{height:30px;border:1px dashed var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2)}
 @media (max-width:760px){.mxform{grid-template-columns:1fr}.mxq{min-width:0;max-width:none}.mxtg{grid-template-columns:1fr}.mxtx{padding:6px 8px}}
+/* Catálogo ↔ Lookahead (js/matriz-look.js) */
+.mxtools .fbar{gap:10px}
+.mxsim{display:flex;flex-direction:column;gap:6px;margin:6px 0 10px}
+.mxsim .ib{justify-content:flex-start;text-align:left;height:auto;min-height:36px;padding:6px 10px;gap:6px}
+.mxul{display:flex;flex-direction:column;max-height:50vh;overflow:auto;margin:6px 0;border:1px solid var(--line2);border-radius:var(--r-ctl)}
+.mxur{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-bottom:1px solid var(--line2);cursor:pointer}
+.mxur:last-child{border-bottom:0}
+.mxur span{display:flex;flex-direction:column;gap:2px}.mxur s{color:var(--muted)}.mxur small{color:var(--muted)}
+.mxur input{margin-top:3px}

@@ -50,6 +50,17 @@ Vistas internas de la pestaña (`U.mxV` = `mat` | `cat` | `tipo`, en `saveUI`; b
 - **Tipos** (`renderMxTipo`): tarjetas con nombre editable, actividades como chips (quitar ×, agregar con la lista), «+ Tipo», archivar/restaurar tipo (un tipo archivado ya no da actividades: `mxCells` lo ignora). Lo marcado en cada ambiente se conserva siempre.
 - Pruebas: `tests/e2e/matriz-cat.spec.js`.
 
+## Catálogo ↔ Lookahead (`js/matriz-look.js`, oct 2026)
+
+Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el vínculo sigue siendo **por nombre** (alias `al` + nombre del catálogo, `mxAli`), no se agrega ningún campo a `acts`.
+
+- **El catálogo se carga también en el Lookahead** (`ensureMcat()` en `renderLook`; el resto de la matriz solo al abrir su pestaña).
+- **Unificar nombres** (solo administrador, Catálogo › «Unificar nombres del lookahead…», `mxUnifyDlg`): por los pisos a la vista (`U.piso`), agrupa filas cuyo nombre corresponde a una actividad pero está escrito distinto («REDES EMPOTRADAS» → «Redes empotradas»). Vista previa con casillas por variante; aplica **un solo `apply`** que cambia solo `name` (Deshacer e historial `lhlog`). Opcional: también las plantillas de ambiente (`meta/project.templates`). **Se saltan** las filas con un elemento en `lhprop` (borrador o enviado; se leen en el momento con `get()`). No toca `weeks` (semanas congeladas), `daily`, `dplan`, `cliver`: conservan el nombre con que se comprometieron.
+- **Exigir catálogo** (`P().catReq`, solo administrador, Catálogo › «Exigir catálogo»; `mxCatReq()`): en `commitField` del lookahead, `mxNameGate` convierte el nombre al del catálogo (variantes por `mnk`) o lo bloquea y abre `mxNoCatDlg`: parecidas (`mxSimilar`), y **agregar al catálogo y usarla** (editor/admin) o **proponer al catálogo** (SC en modo propuesta → `mcatp`). La lista de sugerencias (`actSuggest` → `mxSuggest`) pasa a ser el catálogo, primero el SC de la fila. Las filas antiguas con nombre fuera del catálogo siguen igual hasta que se edite su nombre.
+- **Propuestas al catálogo** `mcatp/{id}`: `{name, sc, actId, ambId, st:'pend'|'ok'|'rej', by, n, t, note?, catId?, decBy, decN, decT}`. Reglas: crea el SC (de su partida, `st:'pend'`, `by==mid`) o un editor; decide `canEdit`; no se borran. Catálogo muestra «Propuestas de los subcontratistas» (Aprobar crea la actividad si no existe; Rechazar pide motivo) y al SC «Tus propuestas».
+- Con el respaldo del 07/10: 654 filas cambiarían de nombre (160 variantes), 1352 ya usan el nombre del catálogo, 8 sin catálogo.
+- Prueba: `tests/e2e/matriz-look.spec.js`.
+
 ## Cambiar el catálogo después de cargarlo
 
 - La carga inicial **solo crea**: volver a cargar el mismo archivo completa lo que falte (p. ej. el tipo de ambientes que no existían la primera vez) y no toca lo demás.

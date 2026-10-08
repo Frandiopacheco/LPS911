@@ -96,7 +96,7 @@ function buildLookShell(main){
   main.dataset.built='1';
 }
 let gridRows=null,gridHead='';
-function renderLook(main){
+function renderLook(main){if(typeof ensureMcat==='function')ensureMcat();
   if(isMob()&&!U.lookFull){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
   if(!main.dataset.built)buildLookShell(main);
@@ -543,6 +543,7 @@ function actNameIdx(){if(ANC&&ANCv===DV)return ANC;const m=new Map();
 function actCanon(v,selfId){const k=an(v);if(!k)return null;const self=S.act.get(selfId);const e=actNameIdx().find(o=>o.k===k);if(!e)return null;
   const n=e.n-(self&&an(self.name)===k?1:0);return n>0?{...e,n}:null}
 function actSuggest(inp){let dl=document.getElementById('dlact');if(!dl){dl=document.createElement('datalist');dl.id='dlact';document.body.appendChild(dl)}
+  if(typeof mxCatReq==='function'&&mxCatReq()){mxSuggest(inp,dl);return}
   const x=S.act.get(inp.dataset.a);const sc=x&&x.sc;const own=x?an(x.name):'';
   const L=actNameIdx().filter(o=>o.k!==own||o.n>1).sort((a,b)=>((b.scs[sc]?1:0)-(a.scs[sc]?1:0))||(b.n-a.n)||a.name.localeCompare(b.name)).slice(0,400);
   dl.innerHTML=L.map(o=>`<option value="${esc(o.name)}">${esc(conOf(o.sc).name)} · ${o.n} amb.${o.und?' · '+esc(o.und):''}</option>`).join('')}
@@ -554,7 +555,10 @@ function commitField(t){
       const ps=progSum(x);if(v!=null&&ps>v+1e-9)toast(`Ojo: ya hay ${fq(ps)} ${x.und||''} programados y el nuevo total es ${fq(v)}. El saldo queda en rojo (−${fq(ps-v)}); reduce algunos días.`);
       else if((v==null||v===0)&&ps>0)toast('La actividad quedó sin metrado total: sus cantidades por día se conservan, pero se programa por días hasta que vuelvas a poner un total.')}
     if(f==='und')v=v.trim().toUpperCase();
-    let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();const c=actCanon(v,x.id);if(c){if(c.name!==v){v=c.name;t.value=v;t.dataset.o=v;toast(`Se escribió “${c.name}”, como ya se llama en ${c.n} ambiente${c.n>1?'s':''}.`)}if(!x.und&&c.und)und0=c.und}}
+    let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();
+      /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
+      const g=typeof mxNameGate==='function'?mxNameGate(v,x,t):null;if(g===false)return;if(g!=null&&g!==v){v=g;t.value=v;t.dataset.o=v}
+      const c=g!=null?null:actCanon(v,x.id);if(g!=null){const c2=actCanon(v,x.id);if(!x.und&&c2&&c2.und)und0=c2.und}if(c){if(c.name!==v){v=c.name;t.value=v;t.dataset.o=v;toast(`Se escribió “${c.name}”, como ya se llama en ${c.n} ambiente${c.n>1?'s':''}.`)}if(!x.und&&c.und)und0=c.und}}
     if(x[f]===v&&!und0)return;const nx={...x,[f]:v};if(und0)nx.und=und0;if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);}
   else if(t.dataset.amb){const x=S.amb.get(t.dataset.amb);if(!x)return;v=f==='code'?v.trim():v.replace(/\s+/g,' ').trim();if(x[f]===v)return;apply([op('ambientes',x.id,{...x,[f]:v})])}
   else if(t.dataset.piso){const x=S.pis.get(t.dataset.piso);if(!x)return;v=v.trim();if(t.dataset.codeedit){delete t.dataset.codeedit;const m=v.split(/\s*·\s*/);if(m.length>=2){apply([op('pisos',x.id,{...x,code:m[0].trim(),name:m.slice(1).join(' · ').trim()})]);t.dataset.o=t.value;return}}if(x[f]===v)return;apply([op('pisos',x.id,{...x,[f]:v})])}

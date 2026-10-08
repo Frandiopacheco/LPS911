@@ -33,6 +33,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
    ${helpBox('Cómo se edita el catálogo',`<p>Cambiar el nombre, el subcontratista, la clase o la especialidad <b>no afecta</b> lo marcado en la matriz: los estados están ligados a la actividad, no a su nombre.</p>
     <p><b>Fusionar</b> (⋮): cuando dos actividades son la misma. Los estados marcados pasan a la otra (si las dos tienen estado en un ambiente, se conserva el de la que queda), sus nombres del lookahead también, y en los tipos de ambiente se reemplaza. La fusionada queda archivada y se puede <b>restaurar</b> deshaciendo todo.</p>
     <p><b>Archivar</b>: deja de salir en la matriz, pero sus estados se guardan y vuelven al restaurarla. Nada se borra.</p>`)}
+   ${mxCatTools()}
    <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${scs.length?'':' on'}" data-mxsc="">Todos</button>${scList.map(s=>`<button class="chip${scs.includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar"><input class="tin mxq" id="mxcq" type="search" placeholder="Buscar actividad o nombre del lookahead" value="${esc(MXC.q)}" aria-label="Buscar">
     <span class="seg" role="group" aria-label="Clase"><button data-mxcl="" class="${MXC.cl?'':'on'}">Todas</button>${Object.entries(MXCL).map(([k,l])=>`<button data-mxcl="${k}" class="${MXC.cl===k?'on':''}">${l}</button>`).join('')}</span>
@@ -50,7 +51,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
       <td data-l="Nombres"><button class="lnkb" data-mcal="${esc(c.id)}" title="Ver los nombres del lookahead">${(c.al||[]).length}</button></td>
       <td>${ed?(c.arch?`<button class="ib" data-mcres="${esc(c.id)}">Restaurar</button>`:`<button class="ab" data-mcm="${esc(c.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`):''}</td></tr>`}).join('')||`<tr><td colspan="8" class="note">No hay actividades con este filtro.</td></tr>`}
    </tbody></table></div></div></div></div>`;
-  main.innerHTML=h;mxWireV(main);mxWireCat(main)}
+  main.innerHTML=h;mxWireV(main);mxWireCat(main);mxWireCatTools(main)}
 
 function mxWireCat(main){
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:L.includes(id)?L.filter(x=>x!==id):[...L,id];U.mxSc=L;saveUI();render()});
