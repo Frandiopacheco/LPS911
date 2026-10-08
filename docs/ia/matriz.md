@@ -65,12 +65,13 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Con el respaldo del 07/10: 654 filas cambiarían de nombre (160 variantes), 1352 ya usan el nombre del catálogo, 8 sin catálogo.
 - Prueba: `tests/e2e/matriz-look.spec.js`.
 
-## Alertas Matriz ↔ Lookahead (oct 2026)
+## Alertas en el Lookahead (oct 2026; decidido con el dueño: la Matriz queda solo para registrar, sin recuadros ni filtros de alertas)
 
-- `mamb` se carga también en el Lookahead (`ensureMamb()` en `renderLook`; su snapshot sube `DV` y redibuja).
-- En cada celda (`mxCells`): `fut` = filas del lookahead con días ≥ hoy; `warn` = estado **confirmado** «Terminado» o «No aplica» y `fut` no vacío; `sp` = pendiente / en curso sin días ≥ hoy («sin programar»).
-- **Matriz:** tiles «Terminado y aún programado» y «Pendiente sin programar»; filtro «Ver: Todo / ⚠ Alertas / Sin programar» (`U.mxF`, en `saveUI`; solo ambientes con alguna y atenúa el resto); celdas `warn` con borde rojo. En la ficha: «Quitar del lookahead los días desde mañana…» (`mxUnprogram`: hoy y lo pasado no se tocan; `apply` → Deshacer, historial y control de días cerrados).
-- **Lookahead:** marca ⚠ en la fila (`mxRowBadge`, `mxRowWarn`; clic → Matriz con «Alertas» y el piso de la fila) y aviso al agregar un día ≥ hoy a una fila en alerta (`mxApplyWarn`, llamado desde `apply` en base.js), con Deshacer. No bloquea.
+- El Lookahead carga catálogo, tipos y estados (`ensureMx()` en `renderLook`; las fotos `mver` solo en la Matriz con `ensureMver`). `mamb`/`mtipo` redibujan también el Lookahead.
+- En cada celda (`mxCells`): `fut` = filas del lookahead con días ≥ hoy; `warn` = **confirmada** «Terminado» o «No aplica» con `fut`; `sp` = **Pendiente** (confirmada o propuesta por el tipo) sin días ≥ hoy. «En curso» no avisa.
+- **Terminada y aún programada:** ⚠ en la fila (`mxRowBadge`/`mxRowWarn`); clic → ficha con «Quitar los días desde mañana…» (`mxUnprogram`: hoy y lo pasado no se tocan; `apply` con Deshacer, historial y días cerrados) y «Ver en la Matriz». Al agregar un día ≥ hoy a esa fila, aviso con Deshacer (`mxApplyWarn`, desde `apply`). No bloquea.
+- **Pendientes sin programar:** píldora en la barra del Lookahead (`#fmxp`, `mxPendPill`) con los pisos a la vista y los SC del filtro (el SC: los suyos). Abre la lista por ambiente (`mxPendDlg`) y permite **agregarlas al lookahead sin días** (un `apply`; el SC en modo propuesta las propone).
+- Prueba: `tests/e2e/matriz-alertas.spec.js`.
 
 ## Cambiar el catálogo después de cargarlo
 

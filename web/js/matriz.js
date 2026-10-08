@@ -29,11 +29,15 @@ function ensureMamb(){if(mambSub||!db)return;
   mambSub=fcol('mamb').onSnapshot(sn=>{MX.amb.clear();sn.docs.forEach(d=>MX.amb.set(d.id,{...d.data(),id:d.id}));MX.ld.amb=true;MX.v++;DV++;if(ready&&(U.tab==='mat'||U.tab==='look'))requestRender()},
     err=>{MX.err=err&&err.code||'error';MX.ld.amb=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mambSub)mambSub();mambSub=null;MX.amb.clear();MX.ld.amb=false;MX.v++})}
+/* fotos semanales: solo en la pestaña Matriz */
+let mverSub=null;
+function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&U.tab==='mat')requestRender()},()=>{});
+  unsubs.push(()=>{if(mverSub)mverSub();mverSub=null;MX.ver.clear()})}
 function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
-  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&U.tab==='mat')requestRender()},
+  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'))requestRender()},
     err=>{MX.err=err&&err.code||'error';if(k in MX.ld)MX.ld[k]=true;if(ready&&U.tab==='mat')requestRender()}));
-  on('mcatp','prop');on('mtipo','tipo');on('mver','ver',fcol('mver').orderBy('t','desc').limit(8));
-  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','ver','prop'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
+  on('mcatp','prop');on('mtipo','tipo');
+  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 
 /* alias → actividad del catálogo */
@@ -52,8 +56,8 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
     if(tp)(tp.acts||[]).forEach(c=>add(c,'tipo'));for(const c of L.keys())add(c,'look');for(const c of Object.keys(st))add(c,'man');
     for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s=o.acts.length&&o.acts.every(id=>DONE.has(id))?'t':'p'}
       /* fut: tiene días de hoy en adelante en el lookahead. Alerta (warn): confirmada terminada / no aplica y aún programada.
-         Sin programar (sp): pendiente o en curso sin ningún día de hoy en adelante */
-      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fut.length>0;o.sp=(o.s==='p'||o.s==='c')&&!o.fut.length}
+         Sin programar (sp): pendiente (no en curso) sin ningún día de hoy en adelante */
+      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fut.length>0;o.sp=o.s==='p'&&!o.fut.length}
     out.set(amb.id,C)}
   MX.mc=out;MX.mcK=k;return out}
 
@@ -70,7 +74,7 @@ function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(
 /* foto semanal elegida para comparar: {ambId:{catId:estado}} */
 function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o={};for(const[a,s]of Object.entries(f.a||{})){const m={};String(s).split(',').forEach(p=>{const[c,v]=p.split(':');if(c&&v)m[c]=v});o[a]=m}return o}
 
-function renderMat(main){ensureMx();
+function renderMat(main){ensureMx();ensureMver();
   const loaded=MX.ld.cat&&MX.ld.tipo&&MX.ld.amb;
   const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆ Cargar catálogo<input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
   if(mxEd()&&MX.cat.size)acts.push(`<button class="ib pri" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸 Guardar foto semanal</button>`);
@@ -82,14 +86,11 @@ function renderMat(main){ensureMx();
   if(U.mxV==='tipo'){renderMxTipo(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
-  /* «Ver»: solo alertas o solo lo pendiente sin programar (ambientes que tienen alguna) */
-  const MF=U.mxF==='warn'||U.mxF==='sp'?U.mxF:'';
-  if(MF){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.entries(cells.get(a.id)||{}).some(([c,o])=>ids.has(c)&&o[MF]))})).filter(r=>r.ambs.length)}
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEd();
   /* totales de lo que está a la vista */
-  const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0,warn:0,sp:0};const colT=cols.map(()=>({a:0,t:0}));
+  const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0};const colT=cols.map(()=>({a:0,t:0}));
   const ambPct=new Map();
-  for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};let ap=0,tt=0;cols.forEach((c,i)=>{const o=C[c.id];if(!o)return;tot[o.s]++;if(o.sug)tot.sug++;if(o.warn)tot.warn++;if(o.sp)tot.sp++;if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
+  for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};let ap=0,tt=0;cols.forEach((c,i)=>{const o=C[c.id];if(!o)return;tot[o.s]++;if(o.sug)tot.sug++;if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
       if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){tot.chg++;if(o.s==='t')tot.chgT++}}});ambPct.set(a.id,ap?tt/ap:null)}
   const apl=tot.p+tot.c+tot.t;const pc=x=>apl?Math.round(100*x/apl)+'%':'—';
   const unm=mxUnmapped();
@@ -105,15 +106,12 @@ function renderMat(main){ensureMx();
     <div class="tile"><span class="k">En curso</span><span class="v">${pc(tot.c)} <small>${tot.c}</small></span></div>
     <div class="tile"><span class="k">Pendiente</span><span class="v">${pc(tot.p)} <small>${tot.p}</small></span></div>
     <div class="tile"><span class="k">Sin validar</span><span class="v">${tot.sug} <small>propuestas del sistema</small></span></div>
-    <div class="tile${tot.warn?' mxtw':''}"><span class="k">Terminado y aún programado</span><span class="v">${tot.warn} <small>revisar el lookahead</small></span></div>
-    <div class="tile"><span class="k">Pendiente sin programar</span><span class="v">${tot.sp} <small>sin días desde hoy</small></span></div>
     ${cmp?`<div class="tile"><span class="k">Cambios desde la foto</span><span class="v">${tot.chg} <small>${tot.chgT} terminados</small></span></div>`:''}
    </div>
    ${ed&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&ed?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${mxSel().length?'':' on'}" data-mxsc="">Todos</button>${scs.map(s=>`<button class="chip${mxSel().includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}" title="Clic: agrega o quita"><i></i>${esc(s.n)}</button>`).join('')}</div>
    <div class="fbar mxbar0">
-    <span class="fgl">Ver</span><span class="seg" role="group" aria-label="Ver"><button data-mxf="" class="${MF?'':'on'}">Todo</button><button data-mxf="warn" class="${MF==='warn'?'on':''}" title="Terminado o no aplica en la matriz, pero con días programados de hoy en adelante">⚠ Alertas${tot.warn?` (${tot.warn})`:''}</button><button data-mxf="sp" class="${MF==='sp'?'on':''}" title="Pendiente o en curso sin días en el lookahead de hoy en adelante">Sin programar</button></span>
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
     <span class="fsp"></span>
@@ -137,7 +135,7 @@ function renderMat(main){ensureMx();
        <td class="mxpc">${p==null?'':Math.round(100*p)+'%'}</td>`;
       cols.forEach((c,ci)=>{const o=C[c.id];const k=a.id+'|'+c.id;const sel=MX.sel.has(k)?' sl':'';
         if(!o){h+=`<td class="mc x${sel}" data-k="${ci}"></td>`;return}
-        let cl=`mc s-${o.s}${o.sug?' sug':''}${o.warn?' warn':''}${MF&&o.sp&&MF==='sp'?' spx':''}${MF&&!o[MF]?' dim':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'')+(o.warn?' · ⚠ aún programada en el lookahead':'')+(o.sp?' · sin programar':'');
+        let cl=`mc s-${o.s}${o.sug?' sug':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'');
         if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){cl+=' chg';tt+=` · antes: ${b?MXS[b]:'no estaba'}`}}
         h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
@@ -172,7 +170,6 @@ function mxWire(main){mxWireV(main);
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:L.includes(id)?L.filter(x=>x!==id):[...L,id];U.mxSc=L;saveUI();MX.sel.clear();render()});
-  main.querySelectorAll('[data-mxf]').forEach(b=>b.onclick=()=>{U.mxF=b.dataset.mxf;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
@@ -203,10 +200,8 @@ function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!c
   const L=(o&&o.acts||[]).map(id=>S.act.get(id)).filter(Boolean).map(x=>{const d=x.days||[];const dn=DONE.get(x.id);return`<div class="ptx">${esc(x.name)} · ${d.length?esc(fmtD(d[0]))+(d.length>1?'–'+esc(fmtD(d[d.length-1])):''):'sin días'}${dn?` · <b>terminada ${esc(fmtD(dn))}</b>`:''}</div>`}).join('');
   openPop(td,`<div class="ph">${esc(cat.name)}</div><div class="ptx">${esc(a.code)} ${esc(a.name)} · ${esc(conOf(cat.sc).name)}</div>
    <div class="ptx">${o?`<b>${MXS[o.s]}</b>${o.sug?' · propuesta del sistema, sin validar':''}`:''} ${src}</div>${L?'<hr><div class="ph">En el lookahead</div>'+L:''}
-   ${o&&o.warn?`<div class="callout mxwc">⚠ La matriz dice <b>${MXS[o.s]}</b>, pero en el lookahead sigue programada de hoy en adelante.</div>${ed?'<button data-do="unp" class="danger">Quitar del lookahead los días desde mañana…</button>':''}`:''}
-   ${o&&o.sp&&ed?'<div class="ptx">Sin días en el lookahead de hoy en adelante: falta programarla.</div>':''}
    ${ed?`<hr>${['p','c','t','n'].map(s=>`<button data-do="s" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}${o&&o.sug?'<button data-do="s" data-s="ok">✓ Validar como está</button>':''}${o&&o.src==='man'?'<button data-do="rm" class="danger">Quitar de este ambiente</button>':''}`:''}`,
-   {s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat),unp:()=>mxUnprogram(o.fut,cat.name)})}
+   {s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat)})}
 /* quita los días desde mañana (hoy ya está comprometido) de las filas del lookahead; pasa por apply: Deshacer, historial y días cerrados */
 async function mxUnprogram(ids,name){if(!mxEd())return;const T=todayIso();const ops=[];let nd=0;
   for(const id of ids){const x=S.act.get(id);if(!x)continue;const keep=(x.days||[]).filter(d=>d<=T);const drop=(x.days||[]).filter(d=>d>T);if(!drop.length)continue;nd+=drop.length;

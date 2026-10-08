@@ -45,7 +45,7 @@ function buildLookShell(main){
     <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
-    <span id="fday"></span><span id="fpast"></span>
+    <span id="fday"></span><span id="fpast"></span><span id="fmxp"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
@@ -77,6 +77,7 @@ function buildLookShell(main){
   $('#fwin').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.win=+b.dataset.w;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
+  $('#fmxp').onclick=e=>{if(e.target.closest('button'))mxPendDlg()};
   $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
   $('#fobs').onchange=e=>{U.onlyObs=e.target.checked;saveUI();requestRender()};
@@ -96,7 +97,7 @@ function buildLookShell(main){
   main.dataset.built='1';
 }
 let gridRows=null,gridHead='';
-function renderLook(main){if(typeof ensureMcat==='function'){ensureMcat();ensureMamb()}
+function renderLook(main){if(typeof ensureMx==='function')ensureMx();
   if(isMob()&&!U.lookFull){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
   if(!main.dataset.built)buildLookShell(main);
@@ -159,6 +160,7 @@ function renderLookInner(main){
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
   renderGrid($('#grid'),days,dset);
+  {const fm=$('#fmxp');if(fm){const hv=typeof mxPendPill==='function'?mxPendPill():'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
 }
 let LK_PAST=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
