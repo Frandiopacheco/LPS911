@@ -248,6 +248,19 @@ function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,sc:{}};for(const w of S.wk
     for(const[id,it]of Object.entries(w.items||{})){if(!dashOk(it.sc,it.act))continue;const q=r[id];const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
       if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q))o.nimp++}}}
   o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp):null;return o}
+/* Avance de la semana contra lo congelado (oct 2026, decidido con el dueño): cada día de cada actividad de la semana congelada
+   es una unidad. Meta = todas; esperado = las de días hasta hoy; real = días de la semana (hasta hoy) con «Cumplido» en el
+   cumplimiento diario, aunque se haya cumplido otro día de la semana (tope: sus días comprometidos). Parcial y No cuentan 0.
+   Lo cumplido que no estaba en lo congelado (o por encima de lo comprometido) va aparte como «extra» y no suma a la meta.
+   Atribución por el SC de la foto (it.sc). Solo pisos con la semana congelada. */
+function dashAvance(n,vs,d){const wd=weekDays(n).filter(z=>z<=d);const o={meta:0,esp:0,real:0,extra:0,pis:0,sc:{}};const g=sc=>o.sc[sc]=o.sc[sc]||{meta:0,esp:0,real:0,extra:0};const inW=new Set();
+  for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;o.pis++;
+    for(const[id,it]of Object.entries(w.items||{})){inW.add(id);if(!dashOk(it.sc,it.act))continue;const ds=it.days||[];if(!ds.length)continue;const so=g(it.sc);
+      const esp=ds.filter(z=>z<=d).length;let ok=0;for(const z of wd){const rc=recOf(z,id);if(rc&&rc.status==='ok')ok++}
+      const r=Math.min(ok,ds.length);o.meta+=ds.length;so.meta+=ds.length;o.esp+=esp;so.esp+=esp;o.real+=r;so.real+=r;if(ok>r){o.extra+=ok-r;so.extra+=ok-r}}}
+  if(o.pis)for(const x of S.act.values()){if(inW.has(x.id)||!dashOk(x.sc,x.name))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid)||!S.wk.get(wkId(n,pid))?.frozenAt)continue;
+    for(const z of wd){const rc=recOf(z,x.id);if(rc&&rc.status==='ok'){const sc=scAt(rc,x);o.extra++;g(sc).extra++}}}
+  return o}
 /* tipos de actividad para el filtro: nombres de lo programado en las últimas 6 semanas y las 2 siguientes */
 function dashTypes(d){const a=addD(d,-42),b=addD(d,14);const m=new Map();for(const x of S.act.values()){if(!(x.days||[]).some(z=>z>=a&&z<=b))continue;if(DB_.sc.size&&!DB_.sc.has(x.sc))continue;const k=an(x.name);if(!k)continue;const o=m.get(k);if(o)o.n++;else m.set(k,{k,t:String(x.name).trim(),n:1})}
   return[...m.values()].sort((p,q)=>p.t.localeCompare(q.t))}
@@ -272,6 +285,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
   const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d)o.late++});
   const rRows=Object.entries(rBy).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>({label:k,v:o.n,sub:o.late?o.late+' vencidas':''}));
+  const AV=dashAvance(cw,vsP,d);
   /* por subcontratista, hoy */
   const bySc=new Map();act.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,seq:0,run:0,stop:0,ok:0,no:0,n:0};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
   const scs=[...bySc.entries()].sort((a,b)=>b[1].n-a[1].n||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
@@ -298,12 +312,17 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const sc=`<div class="dcard"><div class="dch">Avance de hoy por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${sbar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw">${o.stop?`⏸ ${o.stop}`:''}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
     <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div>
     ${Object.keys(stopMot).length||later?`<div class="dmot"><b>Detenidas hoy:</b> ${Object.entries(stopMot).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}${later?`<span class="chip mu">Inicia después (tren) <b>${later}</b></span>`:''}</div>`:''}</div>`;
+  const avRow=(lab,o,color)=>{const m=o.meta||1;const dif=o.real-o.esp;return`<div class="dar"><span class="dsn"${color?` style="--c:${color}"`:''}>${color?'<i></i>':''}${lab}</span><span class="davb" title="Real ${o.real} · esperado a hoy ${o.esp} · meta ${o.meta}"><i class="davr" style="width:${Math.min(100,o.real/m*100)}%"></i><i class="dave" style="left:${Math.min(100,o.esp/m*100)}%"></i></span><span class="dsval">${o.meta?Math.round(o.real/m*100)+'%':'—'}</span><span class="dsw">${o.real}/${o.meta} · debía ${o.esp} · <b class="${dif<0?'davn':'davp'}">${dif>0?'+':''}${dif}</b>${o.extra?` · <span class="mu">+${o.extra} extra</span>`:''}</span></div>`};
+  const avSc=Object.entries(AV.sc).filter(([,v])=>v.meta).sort((a,b)=>(a[1].real-a[1].esp)/a[1].meta-(b[1].real-b[1].esp)/b[1].meta||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  const avX=Object.entries(AV.sc).filter(([,v])=>!v.meta&&v.extra).map(([sc,v])=>`${esc(conOf(sc).name)} ${v.extra}`);
+  const gav=`<div class="dcard"><div class="dch">Avance de la semana ${cw} contra lo congelado</div>${AV.meta?`<p class="dnote">Cada día de cada actividad congelada cuenta 1. Real = días con «Cumplido» en el cumplimiento diario (Parcial y No cuentan 0; vale si se cumplió otro día de la semana). La raya marca lo que debía llevar a hoy; arriba los más atrasados.</p>
+    <div class="dav">${avRow('<b>Total</b>',AV)}${avSc.map(([sc,v])=>avRow(esc(conOf(sc).name),v,conOf(sc).color)).join('')}</div>${avX.length?`<p class="dnote">Extra fuera de lo congelado (SC sin compromisos en la semana): ${avX.join(' · ')}</p>`:''}`:`<p class="mu">${AV.pis?'Sin compromisos congelados con estos filtros.':'La semana '+cw+' aún no está congelada en estos pisos.'}</p>`}</div>`;
   const g3=`<div class="dcard"><div class="dch">Causas de no cumplimiento · 30 días</div>${top.length?`<div class="dsv chart">${svgBarsH(top.map(([k,v])=>({label:k,v})),v=>String(v))}</div>`:'<p class="mu">Sin incumplimientos registrados.</p>'}</div>
     <div class="dcard"><div class="dch">Restricciones abiertas por responsable <span>${RS.length}</span></div>${rRows.length?`<div class="dsv chart">${svgBarsH(rRows,v=>String(v))}</div>`:'<p class="mu">No hay restricciones abiertas.</p>'}</div>`;
   const pls=visPisos().filter(p=>items.some(i=>i.pid===p.id));if(!pls.some(p=>p.id===DB_.pid))DB_.pid=(pls.find(p=>API&&[...API.zonedSet(p.id)].length)||pls[0]||{}).id||'';
-  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div id="dkp"></div><div class="dgrid2" id="dg1"></div><div class="dgrid2"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><p class="dnote">Toca un ambiente para ver su información.</p><div class="dplanw"><div class="kplan" id="dplan"></div></div></div></div><div class="dgrid2" id="dg3"></div></div>`;main.dataset.built='1';main.onclick=dashClick;main.onchange=e=>{if(e.target.id==='dty'){DB_.ty=e.target.value;dashRe()}}}
+  if(!main.dataset.built){main.innerHTML=`<div class="dash"><div id="dtop"></div><div id="dkp"></div><div class="dgrid2" id="dg1"></div><div id="dav"></div><div class="dgrid2"><div id="dsc"></div><div class="dcard dplanc"><div class="dch">Plano en vivo <span class="dpch" id="dpch"></span></div><p class="dnote">Toca un ambiente para ver su información.</p><div class="dplanw"><div class="kplan" id="dplan"></div></div></div></div><div class="dgrid2" id="dg3"></div></div>`;main.dataset.built='1';main.onclick=dashClick;main.onchange=e=>{if(e.target.id==='dty'){DB_.ty=e.target.value;dashRe()}}}
   const put=(id,html)=>{const el=$('#'+id,main);if(el&&el.dataset.h!==html){el.innerHTML=html;el.dataset.h=html}};
-  put('dtop',hh);put('dkp',kp);put('dg1',g1);put('dsc',sc);put('dg3',g3);
+  put('dtop',hh);put('dkp',kp);put('dg1',g1);put('dav',gav);put('dsc',sc);put('dg3',g3);
   put('dpch',pls.map(p=>`<button class="${DB_.pid===p.id?'on':''}" data-dp="${p.id}">${esc(p.code)}</button>`).join(''));
   if(API&&DB_.pid){const its=items.filter(i=>i.pid===DB_.pid&&!i.nova);const colors=new Map(its.map(i=>[i.x.id,KST[i.st.k].c]));API.capPlan($('#dplan',main),{pid:DB_.pid,colors,nums:API.nums(DB_.pid),bs:28,fitAll:true,onPick:aid=>dashPop(aid,d)})}
   document.body.classList.toggle('dash-tv',DB_.tv)}
