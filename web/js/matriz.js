@@ -70,7 +70,9 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
 function mxRows(){const R=[];for(const p of visPisos()){const secs=[...S.sec.values()].filter(s=>s.pisoId===p.id).sort((a,b)=>(a.order||0)-(b.order||0));
   for(const s of secs){const ambs=[...S.amb.values()].filter(a=>a.sectorId===s.id).sort((a,b)=>(a.order||0)-(b.order||0));if(ambs.length)R.push({p,s,ambs})}}return R}
 /* subcontratistas elegidos en la matriz (varios; propio de esta pestaña, no cambia el filtro del lookahead) */
-const mxSel=()=>Array.isArray(U.mxSc)?U.mxSc.filter(id=>S.con.has(id)||[...MX.cat.values()].some(c=>c.sc===id)):[];
+/* el SC ve solo su partida en la Matriz, el Recorrido y el Catálogo (oct 2026, decidido con el dueño) */
+const mxMine=c=>!SCK()||!!(c&&myScsI().includes(c.sc));
+const mxSel=()=>SCK()?myScsI():Array.isArray(U.mxSc)?U.mxSc.filter(id=>S.con.has(id)||[...MX.cat.values()].some(c=>c.sc===id)):[];
 /* columnas: actividades del catálogo que aparecen en los ambientes a la vista (por subcontratista y orden del catálogo) */
 function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(a=>Object.keys(cells.get(a.id)||{}).forEach(c=>used.add(c))));
   const scs=mxSel();const L=[...used].map(c=>MX.cat.get(c)).filter(c=>c&&(!scs.length||scs.includes(c.sc))&&(U.mxAll||c.cl!=='e'));
@@ -89,19 +91,20 @@ function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(
     ||((ci[b.id].pg>0)-(ci[a.id].pg>0))||(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name)})}
 
 /* foto semanal elegida para comparar: {ambId:{catId:estado}} */
-function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o={};for(const[a,s]of Object.entries(f.a||{})){const m={};String(s).split(',').forEach(p=>{const[c,v]=p.split(':');if(c&&v)m[c]=v});o[a]=m}return o}
+function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o={};for(const[a,s]of Object.entries(f.a||{})){const m={};String(s).split(',').forEach(p=>{const[c,v0]=p.split(':');const v=v0&&v0.replace('?','');if(c&&v)m[c]=v});o[a]=m}return o}
 
 function renderMat(main){ensureMx();ensureMver();
   const loaded=MX.ld.cat&&MX.ld.tipo&&MX.ld.amb;
   const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆ Cargar catálogo<input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
   if(mxCanEd()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓ Terminar edición':'✎ Editar'}</button>`);
+  if(MX.ver.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib" id="mxfhist" title="Fotos guardadas: comparar${isAdmin?' o restablecer':''}">🕘 Fotos (${MX.ver.size})</button>`);
   if(mxEd()&&MX.cat.size)acts.push(`<button class="ib" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸 Guardar foto semanal</button>`);
   const head=pageHead('Matriz de ambientes',`${U.piso?esc((S.pis.get(U.piso)||{}).name||''):'Todos los pisos'} · estado actual de cada actividad por ambiente`,acts.join(''));
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
   if(U.mxV==='cat'){renderMxCat(main,head);return}
-  if(U.mxV==='tipo'){renderMxTipo(main,head);return}
+  if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
@@ -124,7 +127,7 @@ function renderMat(main){ensureMx();ensureMver();
    ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
    ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
    <div class="fbar mxbar0">
-    <button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>
+    ${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <label class="mxord" title="Por programación: primero los SC con trabajo programado en estos ambientes de hoy a 3 semanas"><span class="fgl">Orden</span><select id="mxord" aria-label="Orden de las columnas"><option value="prog"${U.mxOrd==='az'?'':' selected'}>Por programación</option><option value="az"${U.mxOrd==='az'?' selected':''}>Alfabético</option></select></label>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
@@ -197,6 +200,7 @@ function mxScMenu(btn){const scs=[...new Set([...MX.cat.values()].filter(c=>!c.a
 function mxWire(main){mxWireV(main);
   const imp=$('#mximp');if(imp)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)};
   const fb=$('#mxfoto');if(fb)fb.onclick=mxFoto;
+  const fh=$('#mxfhist');if(fh)fh.onclick=()=>mxFotoHist();
   const mp=$('#mxmap');if(mp)mp.onclick=mxMapDlg;
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
@@ -270,10 +274,35 @@ function mxSetTipo(amb,tipo){if(!mxEd())return;const prev=(MX.amb.get(amb)||{}).
   fcol('mamb').doc(amb).set({tipo:t,by:me.email,n:me.name||'',t:NOW()},{merge:true}).then(()=>toast('Tipo de ambiente guardado','Deshacer',()=>fcol('mamb').doc(amb).set({tipo:prev,by:me.email,n:me.name||'',t:NOW()},{merge:true}))).catch(e=>toast('No se pudo guardar: '+(e&&e.code||e)))}
 
 /* foto semanal: el estado de toda la obra (todas las celdas, también las sin validar) en un documento compacto */
-async function mxFoto(){if(!mxEd())return;const cells=mxCells();const a={};let n=0;
-  for(const[amb,C]of cells){const p=Object.entries(C).map(([c,o])=>c+':'+o.s);if(p.length){a[amb]=p.join(',');n+=p.length}}
+/* Foto semanal (oct 2026): '?' al final = celda sin validar (propuesta del sistema). Al guardar se abre el historial. */
+function mxFotoData(){const a={};let n=0;for(const[amb,C]of mxCells()){const p=Object.entries(C).map(([c,o])=>c+':'+o.s+(o.sug?'?':''));if(p.length){a[amb]=p.join(',');n+=p.length}}return{a,n}}
+async function mxFoto(){if(!mxEd())return;const{a,n}=mxFotoData();
   const ok=await uiAsk({title:'Guardar foto semanal',text:`Se guarda el estado de hoy (${fmtD(todayIso())}) de ${Object.keys(a).length} ambientes y ${n} celdas. Luego podrás compararla en «Comparar con».`,ok:'Guardar foto',tone:'info'});if(!ok)return;
-  const id='f'+NOW();try{await fcol('mver').doc(id).set({t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a});MX.cmp=id;toast('Foto guardada');render()}catch(e){toast('No se pudo guardar la foto: '+(e&&e.code||e))}}
+  const id='f'+NOW();const doc={t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a,v:2};try{await fcol('mver').doc(id).set(doc);if(!MX.ver.has(id)){MX.ver.set(id,{...doc,id});MX.v++}MX.cmp=id;render();toast('📸 Foto guardada · '+fmtD(todayIso()));mxFotoHist(id)}catch(e){toast('No se pudo guardar la foto: '+(e&&e.code||e))}}
+/* resumen de una foto: celdas, terminadas (de lo que aplica) y sin validar */
+function mxFotoSum(f){let n=0,t=0,ap=0,sug=0;for(const s of Object.values(f.a||{}))for(const p of String(s).split(',')){const[c,v0]=p.split(':');if(!c||!v0)continue;const v=v0.replace('?','');if(v0.endsWith('?'))sug++;n++;if(v!=='n'){ap++;if(v==='t')t++}}
+  return{n,t,ap,sug,old:!(f.v>=2)}}
+function mxFotoHist(nuevo){const L=[...MX.ver.values()].sort((a,b)=>(b.t||0)-(a.t||0));
+  const row=f=>{const s=mxFotoSum(f);return`<div class="mxfh${f.id===nuevo?' nw':''}"><div><b>${esc(fmtD(f.d))}</b> · semana ${esc(String(f.w??''))}${f.id===nuevo?' <span class="pill ok">recién guardada</span>':''}${f.nota?` <span class="pill">${esc(f.nota)}</span>`:''}<br><small class="note">${esc(f.n||f.by||'')} · ${new Date(f.t).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})} · ${s.n} celdas · terminado ${s.ap?Math.round(100*s.t/s.ap):0}%${s.sug?` · ${s.sug} sin validar`:''}</small></div>
+    <div class="mxfhb"><button class="ib" data-mxfc="${esc(f.id)}"${MX.cmp===f.id?' disabled':''}>${MX.cmp===f.id?'Comparando':'Comparar'}</button>${isAdmin?`<button class="ib" data-mxfr="${esc(f.id)}" title="Solo el administrador">Restablecer…</button>`:''}</div></div>`};
+  lqModal(`<div class="lqtop"><b>Fotos semanales de la matriz</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   <p class="note">Las últimas ${L.length} fotos. «Comparar» muestra qué cambió desde esa foto.${isAdmin?' «Restablecer» vuelve la matriz a como estaba en la foto (antes se guarda una foto del estado actual, así se puede volver).':''}</p>
+   <div class="mxfhl">${L.map(row).join('')||'<p class="note">Todavía no hay fotos.</p>'}</div>
+   <div class="lqbtns">${MX.cmp?'<button class="ib" data-mxfc="">Dejar de comparar</button>':''}<button class="ib pri" data-lqx>Cerrar</button></div>`,
+   e=>{const c=e.target.closest('[data-mxfc]');if(c){MX.cmp=c.dataset.mxfc;lqClose();render();return}const r=e.target.closest('[data-mxfr]');if(r)mxFotoRestore(r.dataset.mxfr)})}
+/* restablecer (solo administrador): las celdas confirmadas quedan como en la foto; lo sin validar de la foto vuelve a ser propuesta */
+async function mxFotoRestore(id){if(!isAdmin)return;const f=MX.ver.get(id);if(!f)return;const s=mxFotoSum(f);
+  const ok=await uiAsk({title:`Restablecer la matriz al ${fmtD(f.d)}`,text:`Las celdas vuelven a como estaban en esa foto (${s.n} celdas). Lo marcado después se reemplaza. Antes se guarda una foto del estado actual para poder volver.`,list:s.old?['Esta foto es anterior a que se distinguiera lo sin validar: todas sus celdas quedarán como confirmadas.']:[],ok:'Restablecer',tone:'danger'});if(!ok)return;
+  const DEL=firebase.firestore.FieldValue.delete();const tgt=new Map();
+  for(const[amb,str]of Object.entries(f.a||{})){const m={};for(const p of String(str).split(',')){const[c,v0]=p.split(':');if(!c||!v0||v0.endsWith('?'))continue;if(MXS[v0])m[c]=v0}tgt.set(amb,m)}
+  const by=new Map(),un=new Map();const ambs=new Set([...tgt.keys(),...[...MX.amb.entries()].filter(([,m])=>m&&m.c&&Object.keys(m.c).length).map(([k])=>k)]);
+  for(const amb of ambs){const cur=(MX.amb.get(amb)||{}).c||{};const t=tgt.get(amb)||{};const ch={},u={};
+    for(const[c,v]of Object.entries(t))if(cur[c]!==v){ch[c]=v;u[c]=cur[c]===undefined?DEL:cur[c]}
+    for(const[c,v]of Object.entries(cur))if(!(c in t)){ch[c]=DEL;u[c]=v}
+    if(Object.keys(ch).length){by.set(amb,ch);un.set(amb,u)}}
+  if(!by.size){toast('La matriz ya está igual que en esa foto');return}
+  const bk=mxFotoData();try{await fcol('mver').doc('f'+NOW()).set({t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a:bk.a,v:2,nota:'antes de restablecer'})}catch(e){toast('No se pudo guardar la foto de respaldo: '+(e&&e.code||e));return}
+  lqClose();await mxWrite(by,`Matriz restablecida al ${fmtD(f.d)} (${by.size} ambientes)`,un);render()}
 
 /* asignar al catálogo los nombres del lookahead que no están (agrega el alias a la actividad elegida) */
 function mxMapDlg(){if(!mxEd())return;const L=mxUnmapped();if(!L.length)return;
