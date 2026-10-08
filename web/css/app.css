@@ -3141,3 +3141,9 @@ table.mx .mxsl{position:sticky;left:8px;display:inline-block}
    Windows con zoom). Donde se puede se escriben de lado sin girar (sideways-lr); el texto, más oscuro y en peso 600. */
 table.mx .mxc span{color:var(--ink);font-weight:600;font-size:11.5px;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
 @supports (writing-mode:sideways-lr){table.mx .mxc span{writing-mode:sideways-lr;transform:none}}
+/* matriz: vistas e indicadores en la fila del título (oct 2026) */
+.mxwrap .phd{flex-wrap:wrap;align-items:center;gap:8px 18px}
+.mxwrap .phd .phm{display:flex;align-items:center;gap:6px 18px;flex-wrap:wrap;flex:1 1 auto;min-width:0}
+.mxwrap .phd .phm .mxvseg{margin:0;align-self:center}
+.mxwrap .phd .phm .mxstat{margin:0}
+table.mx .mxg th.mxgo{overflow:visible}
