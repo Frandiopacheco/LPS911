@@ -3,9 +3,9 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
-const TAB_ORDER=['hoy','dash','look','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
+const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',restr:'Restricciones',plan:'PPC semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'PPC semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
   tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
@@ -22,7 +22,7 @@ function tabAllowed(t){if(!me)return false;
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed);const r=me.role;
-  const M={admin:['dash','look','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','restr','plan','mapa','campo','lib','ind'],
+  const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],
     campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
@@ -48,6 +48,7 @@ function bnavItems(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tab
   return ['hoy',...L].filter(tabAllowed).slice(0,4)}
 function bnavMore(){const b=new Set(bnavItems());return tabOrder().filter(t=>!b.has(t)&&tabAllowed(t))}
 Object.assign(BNI,{
+  mat:SVG('<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9.5h17M3.5 15h17M9 3.5v17M14.5 3.5v17"/>'),
   hoy:SVG('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8.5 14.5l2.2 2.2 4.8-4.7"/>'),
   lib:SVG('<path d="M12 3l7 3v5.5c0 4.3-3 7.8-7 9.5-4-1.7-7-5.2-7-9.5V6z"/><path d="M8.8 12.2l2.3 2.3 4.4-4.5"/>'),
   look:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M14 10v4M11 16v4"/>'),

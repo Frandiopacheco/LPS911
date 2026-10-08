@@ -44,12 +44,18 @@ test('cierres sin revisar: solo los de hace 2 días o más y sin registro', () =
   assert.strictEqual(L.length, 1);
   assert.strictEqual(L[0].actId, 'x1');
   assert.strictEqual(L[0].rec.prog, 4);
-  assert.strictEqual(L[0].rec.done, true);
+  // Cumplido sin confirmar → No cumplido «Sin confirmación», no imputable y sin terminada; lo propuesto queda en prop
+  assert.strictEqual(L[0].rec.status, 'no');
+  assert.strictEqual(L[0].rec.cnc, 'Sin confirmación');
+  assert.strictEqual(L[0].rec.imp, false);
+  assert.strictEqual(L[0].rec.done, false);
+  assert.strictEqual(L[0].rec.exec, null);
+  assert.deepStrictEqual([L[0].rec.prop.status, L[0].rec.prop.done], ['ok', true]);
   assert.strictEqual(L[0].rec.sc, 'c1');
   assert.strictEqual(L[0].rec.byName, 'Juan');
 });
 
-test('cierres sin revisar: un cumplido lleva lo ejecutado = programado; lo quitado por el ingeniero no vuelve', () => {
+test('cierres sin revisar: un cumplido sin confirmar no lleva ejecutado; lo quitado por el ingeniero no vuelve', () => {
   const lives = [
     { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } },
     { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'ok' } }
@@ -58,7 +64,8 @@ test('cierres sin revisar: un cumplido lleva lo ejecutado = programado; lo quita
   const acts = new Map([['x1', { sc: 'c1', metrado: 10, qty: { '2026-09-27': 4 } }], ['x2', { sc: 'c1' }]]);
   const L = closesToAccept(lives, daily, acts, '2026-09-30');
   assert.deepStrictEqual(L.map(o => o.actId), ['x1']);
-  assert.strictEqual(L[0].rec.exec, 4);
+  assert.strictEqual(L[0].rec.prog, 4);
+  assert.strictEqual(L[0].rec.exec, null);
 });
 
 /* Firestore mínimo en memoria: set con merge mezcla mapas anidados, como el real */
@@ -103,9 +110,10 @@ test('cierre automático: tampoco vuelve si el ingeniero quitó el registro; sí
   const db = memDb({ 'daily/2026-09-28_p1': { date: '2026-09-28', pisoId: 'p1', recs: { x2: { status: null, clr: true } } } });
   const r = await acceptCloses(db, L);
   const recs = db.st.get('daily/2026-09-28_p1').recs;
-  assert.strictEqual(recs.x1.status, 'ok');
+  assert.strictEqual(recs.x1.status, 'no');
+  assert.strictEqual(recs.x1.cnc, 'Sin confirmación');
   assert.strictEqual(recs.x2.status, null);
-  assert.strictEqual(db.st.get('doneidx/p1').d.x1, '2026-09-28');
+  assert.strictEqual(db.st.get('doneidx/p1'), undefined); // sin confirmar no queda como terminada
   assert.deepStrictEqual(r, { n: 1, skip: 1 });
 });
 
@@ -179,7 +187,7 @@ test('cierre de las 20:00: día hábil siguiente y foto del plan por piso', () =
     acts: M({ x1: { ambId: 'a1', days: ['2026-10-05'], qty: { '2026-10-05': 12 } }, x2: { ambId: 'a1', days: ['2026-10-05'] }, x3: { ambId: 'a1', days: ['2026-10-05'], arch: { t: 1 } }, x4: { ambId: 'a2', days: ['2026-10-06'] }, x5: { ambId: 'a1', days: ['2026-10-02', '2026-10-05'] } }),
     done: new Map([['x5', '2026-10-02']])
   }, '2026-10-05');
-  assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null } } }]);
+  assert.deepStrictEqual(L, [{ id: '2026-10-05_p1', doc: { date: '2026-10-05', pisoId: 'p1', ids: { x1: 12, x2: null }, who: { x1: { sc: '', amb: 'a1' }, x2: { sc: '', amb: 'a1' } } } }]);
 });
 
 test('auditoría N01: no se acepta el cierre que declara otra partida que la de la actividad', () => {
@@ -198,8 +206,18 @@ test('auditoría N04: con plan del día cerrado, lo comprometido es la cantidad 
   const dplans = new Map([['2026-09-27_p1', { ids: { x1: 20 } }]]);
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30', dplans);
   assert.strictEqual(L[0].rec.prog, 20);
-  assert.strictEqual(L[0].rec.exec, 20);
+  assert.strictEqual(L[0].rec.exec, null); // Cumplido sin confirmar: no se da por ejecutado
   // sin foto, como antes
   const L2 = closesToAccept(lives, new Map(), acts, '2026-09-30', new Map());
   assert.strictEqual(L2[0].rec.prog, 10);
+});
+
+test('cierres sin revisar: un Parcial o No cumplido propuesto entra tal cual, con su causa', () => {
+  const lives = [
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'no', cnc: 'Materiales' } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'partial', cnc: 'Subcontratas' } }
+  ];
+  const acts = new Map([['x1', { sc: 'c1' }], ['x2', { sc: 'c1' }]]);
+  const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
+  assert.deepStrictEqual(L.map(o => [o.rec.status, o.rec.cnc, o.rec.imp]), [['no', 'Materiales', null], ['partial', 'Subcontratas', null]]);
 });

@@ -44,7 +44,11 @@ function buildVersion({ project, pisos, sectors, ambientes, acts }, now = Date.n
   return { id, idx, docs };
 }
 
-/* Cierres del capataz que nadie revisó en 2 días → registro diario (igual que autoAccept de la página) */
+/* Cierres del capataz que nadie revisó en 2 días → registro diario.
+   Un «Cumplido» que ningún ingeniero confirmó entra como No cumplido, causa «Sin confirmación», no imputable al SC
+   y sin «terminada» (la actividad sigue pendiente para reprogramar); lo que propuso el SC queda en prop.
+   Un Parcial o No cumplido propuesto entra tal cual (decidido con el dueño, oct 2026). */
+const CNC_SIN_CONF = 'Sin confirmación';
 /* dplanById (opcional): planes del día cerrados; si el día tiene foto, lo comprometido es su cantidad, no la vigente.
    Un cierre cuya partida no es la de la actividad no se acepta (lo pudo escribir otra partida). */
 function closesToAccept(lives, dailyById, acts, today, dplanById) {
@@ -63,13 +67,14 @@ function closesToAccept(lives, dailyById, acts, today, dplanById) {
     const dp = dplanById && dplanById.get(lv.date + '_' + lv.pisoId);
     const dq = dp && dp.ids && Object.prototype.hasOwnProperty.call(dp.ids, lv.actId) ? dp.ids[lv.actId] : undefined;
     const q = hasM ? (typeof dq === 'number' ? dq : ((x.qty || {})[lv.date] ?? null)) : null;
+    const ok = c.status === 'ok';
     out.push({
       date: lv.date, pisoId: lv.pisoId, actId: lv.actId,
       rec: {
-        status: c.status, prog: q, und: x.und || '',
-        exec: c.status === 'ok' ? q : null,
-        cnc: c.cnc || '', imp: null, note: c.note || '', late: false, done: !!c.done, photos: lv.photos || [],
-        prop: { status: c.status, cnc: c.cnc || '', by: c.by || '', byName: c.n || '', ts: c.t || 0 },
+        status: ok ? 'no' : c.status, prog: q, und: x.und || '',
+        exec: null,
+        cnc: ok ? CNC_SIN_CONF : (c.cnc || ''), imp: ok ? false : null, note: c.note || '', late: false, done: false, photos: lv.photos || [],
+        prop: { status: c.status, cnc: c.cnc || '', done: !!c.done, by: c.by || '', byName: c.n || '', ts: c.t || 0 },
         sc: x.sc || '', nm: x.name || '', ambId: x.ambId || '',
         auto: true, autoSrv: true, by: c.by || '', byName: c.n || '', ts: c.t || Date.now()
       }
@@ -206,12 +211,14 @@ function buildDayPlan({ pisos, sectors, ambientes, acts, done = new Map() }, d) 
   const pids = new Set(P.map(p => p.id)); const first = P[0].id;
   const secById = new Map(live(sectors).map(s => [s.id, s])), ambById = new Map(live(ambientes).map(a => [a.id, a]));
   const pisoOfAmb = id => { const a = ambById.get(id); const s = a && secById.get(a.sectorId); return a ? (s && s.pisoId && pids.has(s.pisoId) ? s.pisoId : first) : ''; };
-  const by = new Map(P.map(p => [p.id, {}]));
+  const by = new Map(P.map(p => [p.id, {}])); const wh = new Map(P.map(p => [p.id, {}]));
   for (const x of live(acts)) {
     if (!(x.days || []).includes(d)) continue; const dn = done.get(x.id); if (dn && d > dn) continue;
     const pid = pisoOfAmb(x.ambId); if (!by.has(pid)) continue; const q = (x.qty || {})[d]; by.get(pid)[x.id] = q != null ? +q : null;
+    /* who: SC y ambiente de cada compromiso al publicar (auditoría PPC diario, hallazgo 6): cambiar la partida o el ambiente después no reasigna el historial */
+    wh.get(pid)[x.id] = { sc: x.sc || '', amb: x.ambId || '' };
   }
-  return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids } }));
+  return [...by.entries()].filter(([, ids]) => Object.keys(ids).length).map(([pisoId, ids]) => ({ id: d + '_' + pisoId, doc: { date: d, pisoId, ids, who: wh.get(pisoId) } }));
 }
 
 /* ---------- Publicación automática de los borradores del plan (a la hora de cierre) ---------- */
@@ -369,7 +376,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     if (R) for (const [id, u] of Object.entries(R.acts)) Acts.set(id, { ...(Acts.get(id) || {}), ...(A.get(id) || {}), ...u, id });
     if (R) for (const na of R.newActs || []) Acts.set(na.id, { ...na.doc, id: na.id });
     const pl = buildDayPlan({ pisos, sectors, ambientes, acts: Acts, done }, d).find(o => o.doc.pisoId === pid);
-    const ids = pl ? pl.doc.ids : {};
+    const ids = pl ? pl.doc.ids : {}; const who = pl ? pl.doc.who : {};
     if (R) {
       for (const [id, u] of Object.entries(R.acts)) tx.update(col('acts').doc(id), u);
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
@@ -390,7 +397,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P2 = P;
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
     const pub = !!(R && R.pub);
-    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
+    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, who, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
     return { R, P: P2, ids };
   });
 }
@@ -450,6 +457,7 @@ const ctaMigrables = (fichas, de) => (fichas || []).filter(f => f && de && f.cap
    y se exporta también desde aquí. Ver docs/ia/tareo.md, «Implementación de F3 — servidor». */
 const TPUB = require('./tpub');
 
-module.exports = { ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
+module.exports = {
+  CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso };

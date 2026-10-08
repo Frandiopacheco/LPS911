@@ -55,14 +55,16 @@ function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
   const rowH=26,W=380,L=122,R=44,h=data.length*rowH+8;const mx=Math.max(1,...data.map(d=>d.max??d.v));
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
   data.forEach((d,i)=>{const y=4+i*rowH;const bw=Math.max(d.v>0?3:0,(W-L-R)*(d.v/mx));
-    s+=`<g><title>${esc(d.label)}: ${fmt(d.v)}${d.sub?' · '+esc(d.sub):''}</title>${d.color?`<rect x="0" y="${y+8}" width="12" height="12" rx="3" fill="${d.color}"/>`:''}<text class="nm" x="${d.color?18:0}" y="${y+18}">${esc(d.label.length>17?d.label.slice(0,16)+'…':d.label)}</text>
+    s+=`<g${d.dsc?` data-dsc="${esc(d.dsc)}" class="dsgo${DB_.sc.size?(DB_.sc.has(d.dsc)?' dsel':' ddim'):''}"`:''}><title>${esc(d.label)}: ${fmt(d.v)}${d.sub?' · '+esc(d.sub):''}${d.dsc?' · clic: filtrar el tablero por este SC':''}</title>${d.color?`<rect x="0" y="${y+8}" width="12" height="12" rx="3" fill="${d.color}"/>`:''}<text class="nm" x="${d.color?18:0}" y="${y+18}">${esc(d.label.length>17?d.label.slice(0,16)+'…':d.label)}</text>
     <rect x="${L}" y="${y+6}" width="${W-L-R}" height="16" rx="4" fill="var(--panel2)"/><path class="bar" d="M${L},${y+6} h${Math.max(0,bw-4)} q4,0 4,4 v8 q0,4 -4,4 h-${Math.max(0,bw-4)} Z"/><text class="lab" x="${L+bw+6}" y="${y+18}">${fmt(d.v)}</text></g>`});
   return s+'</svg>'}
 /* el SC de un día ya registrado es el que guardó el registro (rc.sc): cambiar la partida de la actividad después no
    pasa su historial a la empresa nueva; sin registro (o propuesta del capataz sin sc) manda la partida actual */
 const scAt=(rc,x)=>(rc&&rc.sc)||x.sc;
-/* PPC diario contra el plan cerrado del día (dplan): lo comprometido es la foto; lo agregado después no cuenta (sale en adds)
-   y lo que salió del día sin registro, ya pasado el día, cuenta como no cumplido por programación (no imputable al SC). */
+/* PPC diario contra el plan cerrado del día (dplan): lo comprometido es la foto; lo agregado después no cuenta (sale en adds).
+   El estado de cada fila comprometida sale solo de su registro (o del «No va»), con la misma regla para todas: que la actividad
+   siga o no ese día en el Lookahead no cambia nada. Sin registro queda «sin verificar»; no se inventa un No ni una causa
+   (auditoría PPC diario, hallazgo 3, oct 2026). */
 /* «No va» del plan diario y PPC diario (decidido con el dueño, oct 2026):
    - decidido ANTES del día (en la reunión de la víspera): ese día ya no es compromiso diario → sale del PPC diario (el semanal
      lo sigue midiendo: si no se cumple en la semana, cuenta con su causa);
@@ -78,13 +80,17 @@ function nvRec(x,d){if(d>todayIso())return null;ensureNova();const z=NOVA.get(d+
   if(z&&+z.ts>0&&+z.ts<dayStartMs(d))return'out';const o=v||z;if(!o)return null;
   const PROGN=(P().cnc||[]).find(c=>cncCode(c)==='PROG')||'Programación';const cnc=o.cnc||PROGN;
   return{status:'no',cnc,imp:o.imp!=null?!!o.imp:(o.cnc?null:false),rsc:o.rsc||'',pc:!!o.pc,note:'No va: '+(o.m||o.motivo||'reprogramada en el plan diario'),_nova:true,sc:x.sc}}
-function dayDataSnap(dates,vset,rows){const adds=[];const today=todayIso();const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));const PROGN=(P().cnc||[]).find(c=>cncCode(c)==='PROG')||'Programación';
-  for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true}else{adds.push(r);rows.splice(i,1)}}
+/* hallazgo 6: con la foto que guarda SC y ambiente (dplan.who), la fila usa los de la publicación; sin registro con sc,
+   el SC es el de la foto. Fotos antiguas (sin who): como antes, la actividad vigente. */
+function whoFix(r,sn){const w=sn&&sn.who&&sn.who[r.x.id];if(!w)return;if(!(r.rc&&r.rc.sc)&&w.sc)r.sc=w.sc;
+  if(w.amb&&w.amb!==r.a.id){const a=ambOf(w.amb);const s=a&&secOf(a.sectorId);if(a&&s){r.a=a;r.s=s}}}
+function dayDataSnap(dates,vset,rows){const adds=[];const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
+  for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true;whoFix(r,sn)}else{adds.push(r);rows.splice(i,1)}}
   for(const d of dates)for(const pid of vset){const sn=dplanOf(d,pid);if(!sn||!sn.ids)continue;
     for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;if(doneBefore(id,d)&&!recOf(d,id))continue; /* terminada antes: no se le pide ese día */const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
       const nv=recOf(d,id)?null:nvRec(x,d);if(nv==='out')continue;
-      const rc=recOf(d,id)||nv||(d<today?{status:'no',cnc:PROGN,imp:false,_out:true,note:'Salió del plan del día sin registro'}:null);
-      rows.push({p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)});seen.add(id+'|'+d)}}
+      const rc=recOf(d,id)||nv||null;
+      const r={p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)};whoFix(r,sn);rows.push(r);seen.add(id+'|'+d)}}
   return adds}
 function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
   for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:scAt(rc,x)})}}

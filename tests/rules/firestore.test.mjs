@@ -21,6 +21,7 @@ test.beforeEach(async () => {
     const db = c.firestore();
     const S = (p, d) => setDoc(doc(db, p), d);
     await S('members/editor@obra.pe', { role: 'editor', name: 'Editor' });
+    await S('meta/propwin', { closeAt: Date.now() + 864e5 }); // ventana de propuestas habilitada (sin ella el SC no propone)
     await S('members/campo@obra.pe', { role: 'campo', name: 'Jefe de campo' });
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
@@ -262,6 +263,7 @@ test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingen
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
   await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
   await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/propwin')); });
+  await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x8: { sent: false } } }, { merge: true })); // nunca habilitada: cerrada
 });
 test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async () => {
   const h = { id: 'x1', st: 'rej', by: 'editor@obra.pe', n: 'Elena', t: 1 };
@@ -997,4 +999,79 @@ test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, re
   await assertFails(updateDoc(doc(p, id), { prod: { t: 8, by: 'u_tcap1' } }));
   await assertFails(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'prod' }] }));
   await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
+});
+
+test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no se borra; la foto semanal no cambia', async () => {
+  const ed = user('editor@obra.pe'), ow = user(OWNER), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
+  await assertSucceeds(setDoc(doc(ow, 'mcat/k001'), { name: 'Espejos', sc: 'c-gabel', cl: 't', al: ['espejos'], ord: 10 }));
+  await assertSucceeds(setDoc(doc(ed, 'mtipo/tp01'), { name: 'SS.HH.', acts: ['k001'], order: 10 }));
+  await assertFails(setDoc(doc(sc, 'mcat/k002'), { name: 'Otra', sc: 'c-gabel', cl: 't' }));
+  await assertSucceeds(getDoc(doc(lec, 'mcat/k001')));
+  await assertSucceeds(getDoc(doc(sc, 'mtipo/tp01')));
+  await assertFails(deleteDoc(doc(ow, 'mcat/k001')));
+  await assertFails(deleteDoc(doc(ow, 'mtipo/tp01')));
+  // estado por ambiente: con el correo de quien escribe
+  await assertSucceeds(setDoc(doc(ed, 'mamb/a1'), { tipo: 'tp01', c: { k001: 't' }, by: 'editor@obra.pe', t: 1 }, { merge: true }));
+  await assertFails(setDoc(doc(ed, 'mamb/a1'), { c: { k001: 'p' }, by: 'otro@obra.pe', t: 2 }, { merge: true }));
+  await assertFails(setDoc(doc(user('campo@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'campo@obra.pe', t: 2 }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a2'), { c: { k001: 'p' }, by: 'sc@obra.pe', t: 2 }));
+  await assertSucceeds(getDoc(doc(lec, 'mamb/a1')));
+  await assertFails(deleteDoc(doc(ow, 'mamb/a1')));
+  // foto semanal
+  await assertSucceeds(setDoc(doc(ed, 'mver/f1'), { t: 1, d: '2026-10-08', by: 'editor@obra.pe', a: { a1: 'k001:t' } }));
+  await assertFails(setDoc(doc(ed, 'mver/f2'), { t: 1, by: 'otro@obra.pe', a: {} }));
+  await assertFails(updateDoc(doc(ed, 'mver/f1'), { a: {} }));
+  await assertFails(deleteDoc(doc(ow, 'mver/f1')));
+  await assertSucceeds(getDoc(doc(sc, 'mver/f1')));
+});
+
+test('propuestas al catálogo (mcatp): el SC propone de su partida; decide quien edita; no se borran', async () => {
+  const sc = user('sc@obra.pe'), ed = user('editor@obra.pe');
+  await assertSucceeds(setDoc(doc(sc, 'mcatp/p1'), { name: 'Espejos', sc: 'c-gabel', st: 'pend', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p2'), { name: 'Otra', sc: 'c-otro', st: 'pend', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p3'), { name: 'Otra', sc: 'c-gabel', st: 'ok', by: 'sc@obra.pe', t: 1 }));
+  await assertFails(setDoc(doc(sc, 'mcatp/p4'), { name: 'Otra', sc: 'c-gabel', st: 'pend', by: 'otro@obra.pe', t: 1 }));
+  await assertFails(updateDoc(doc(sc, 'mcatp/p1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mcatp/p1'), { st: 'ok', decBy: 'editor@obra.pe' }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mcatp/p1')));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'mcatp/p1')));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'mcatp/p5'), { name: 'x', sc: 'c-gabel', st: 'pend', by: 'lector@obra.pe', t: 1 }));
+});
+
+test('catálogo: el SC agrega actividades de su partida marcadas «por revisar»; no edita ni revisa', async () => {
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(setDoc(doc(sc, 'mcat/k50'), { name: 'Pruebas', sc: 'c-gabel', cl: 't', al: ['pruebas'], by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', t: 1, amb: 'a1', tipo: null } }));
+  await assertFails(setDoc(doc(sc, 'mcat/k51'), { name: 'Sin revisar', sc: 'c-gabel', cl: 't', by: 'sc@obra.pe' }));
+  await assertFails(setDoc(doc(sc, 'mcat/k52'), { name: 'Otra partida', sc: 'c-otro', cl: 't', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe' } }));
+  await assertFails(setDoc(doc(sc, 'mcat/k53'), { name: 'Otro autor', sc: 'c-gabel', cl: 't', by: 'otro@obra.pe', rev: { by: 'otro@obra.pe' } }));
+  await assertFails(updateDoc(doc(sc, 'mcat/k50'), { name: 'Cambiada' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'mcat/k50'), { name: 'Pruebas de presión', revOk: { by: 'editor@obra.pe' } }));
+});
+
+test('matriz: el SC cambia una celda de su partida por vez (con k) y deja constancia; no toca otras partidas', async () => {
+  const sc = user('sc@obra.pe'), ed = user('editor@obra.pe');
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'mcat/kg'), { name: 'Pintura', sc: 'c-gabel', cl: 't' });
+    await setDoc(doc(db, 'mcat/ko'), { name: 'Otra', sc: 'c-otro', cl: 't' });
+    await setDoc(doc(db, 'mamb/a1'), { tipo: 'tp1', c: { ko: 'p' }, by: 'editor@obra.pe', t: 1 });
+  });
+  const meta = { by: 'sc@obra.pe', n: 'SC', t: 2 };
+  await assertSucceeds(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 't' }, m: { kg: { ...meta, sc: true } }, k: 'kg', ...meta }, { merge: true }));
+  // otra partida, dos celdas a la vez, valor raro o tocar el tipo: no
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { ko: 't' }, m: { ko: meta }, k: 'ko', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p', ko: 't' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'x' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { tipo: 'tp2', c: { kg: 'p' }, k: 'kg', ...meta }, { merge: true }));
+  await assertFails(setDoc(doc(sc, 'mamb/a1'), { c: { kg: 'p' }, k: 'kg', ...meta, by: 'otro@obra.pe' }, { merge: true }));
+  // ambiente nuevo
+  await assertSucceeds(setDoc(doc(sc, 'mamb/a9'), { c: { kg: 'p' }, m: { kg: meta }, k: 'kg', ...meta }));
+  // constancia
+  await assertSucceeds(setDoc(doc(sc, 'mlog/l1'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'pend', ...meta }));
+  await assertFails(setDoc(doc(sc, 'mlog/l2'), { amb: 'a1', cat: 'ko', sc: 'c-otro', to: 't', st: 'pend', ...meta }));
+  await assertFails(setDoc(doc(sc, 'mlog/l3'), { amb: 'a1', cat: 'kg', sc: 'c-gabel', to: 't', st: 'ok', ...meta }));
+  await assertSucceeds(updateDoc(doc(sc, 'mlog/l1'), { st: 'undo' }));
+  await assertFails(updateDoc(doc(sc, 'mlog/l1'), { st: 'ok' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mlog/l1'), { st: 'rev', rev: { by: 'editor@obra.pe' } }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'mlog/l1')));
 });

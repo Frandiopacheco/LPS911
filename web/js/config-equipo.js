@@ -75,6 +75,7 @@ function renderCfg(main){
    <label for="p_rd">Lunes de esa semana</label><input id="p_rd" data-p="refDate" type="date" value="${p.refDate}"${isAdmin?'':' readonly'}>
    <label for="p_pcd">Propuestas de SC: día de corte</label><select id="p_pcd" data-p="propCutDow"${isAdmin?'':' disabled'}>${(()=>{const c=propCutCfg();return[1,2,3,4,5,6,0].map(d=>`<option value="${d}"${c.dow===d?' selected':''}>${DOW_N[d][0].toUpperCase()+DOW_N[d].slice(1)} antes de la semana</option>`).join('')})()}</select>
    <label for="p_pch">Propuestas de SC: hora de corte</label><input id="p_pch" data-p="propCutHH" type="time" value="${esc(propCutCfg().hh)}"${isAdmin?'':' readonly'}>
+   <label for="p_fin">Fin de obra (fecha meta)</label><input id="p_fin" data-p="finObra" type="date" value="${esc(P().finObra||'')}"${isAdmin?'':' readonly'} title="El Tablero marca en rojo a los subcontratistas que, a su ritmo actual, no terminan antes de esta fecha">
    <label for="p_plc">Plan diario: publicación automática (si nadie publicó)</label><input id="p_plc" data-p="planCutHH" type="time" max="23:30" step="900" value="${esc(planCutHH())}"${isAdmin?'':' readonly'} title="El plan del día hábil siguiente se publica solo a esta hora (hasta las 23:30): se aplican los cambios de la reunión y las propuestas sin revisar se rechazan">
    <label>Logo de la empresa (Excel)</label><span class="logoc">${logoPrev('logoE')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoE" hidden>Subir…</label>':''}</span>
    <label>Logo del cliente (Excel)</label><span class="logoc">${logoPrev('logoC')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoC" hidden>Subir…</label>':''}</span>
@@ -253,13 +254,14 @@ async function importJson(file){
   else{const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
     if(!await uiAsk({title:`¿Cargar ${writes.length} registros?`,list:[...Object.entries(by).map(([c,n])=>`${n} en ${c}`),...(dels.length?[`${dels.length} se eliminan`]:[])],note:'Los registros con el mismo identificador se reemplazan por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.',ok:'Cargar',tone:'danger'}))return}
   const msg=$('#impmsg');let done=0;
-  try{await batchWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
+  try{const skip=await importWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
     await batchWrites(dels.map(([c,id])=>[c,id,null]));
     dels.forEach(([c,id])=>S[COLS[c]].delete(id));if(dels.length)requestRender();
     const newCon=new Set(Object.keys(cols.contractors||{}));const miss=new Set();Object.values(cols.acts||{}).forEach(a=>{if(a&&a.sc&&!S.con.has(a.sc)&&!newCon.has(a.sc))miss.add(a.sc)});
     const nObs=Object.values(cols.acts||{}).filter(a=>a&&a.obs).length;
     const extra=(miss.size?` Ojo: ${miss.size} subcontratista(s) no existen en Configuración (${[...miss].join(', ')}); esas actividades se verán sin color hasta que los crees.`:'')+(nObs?` Hay ${nObs} actividades con observaciones para revisar: en el Lookahead marca “Con observaciones”.`:'');
-    toast(`Datos cargados: ${writes.length} registros.`);IMPMSG=`Listo: ${writes.length} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
+    const nSk=[...skip.values()].reduce((a,b)=>a+b,0);const skMsg=nSk?` No se cargaron ${nSk} registros que las reglas no permiten escribir con tu usuario (${[...skip].map(([c,n])=>`${c}: ${n}`).join(', ')}); son historiales de otras personas y no afectan el lookahead.`:'';
+    toast(`Datos cargados: ${writes.length-nSk} registros.`);IMPMSG=`Listo: ${writes.length-nSk} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+skMsg+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
   catch(err){IMPMSG='';toast('La carga se detuvo: '+(err.code||err.message)+'. Puedes volver a intentarlo; no se duplican registros.')}
 }
 

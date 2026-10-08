@@ -150,10 +150,10 @@ service cloud.firestore {
     }
     // ventana de propuestas (meta/propwin.closeAt, ms): pasado el corte, el SC queda en solo lectura hasta que un ingeniero la habilite
     // de nuevo (pone el próximo corte). Sin documento: abierta (la app ya muestra el bloqueo desde el primer corte).
+    // sin documento (nadie la habilitó) está cerrada: primero programa el ingeniero (oct 2026)
     function propOpen() {
-      return !exists(/databases/$(database)/documents/meta/propwin)
-        || get(/databases/$(database)/documents/meta/propwin).data.get('closeAt', 0) == 0
-        || get(/databases/$(database)/documents/meta/propwin).data.closeAt > request.time.toMillis();
+      return exists(/databases/$(database)/documents/meta/propwin)
+        && get(/databases/$(database)/documents/meta/propwin).data.get('closeAt', 0) > request.time.toMillis();
     }
     match /lhprop/{sc} {
       allow read: if lpsMember();
@@ -176,7 +176,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (edPiso(resource.data) && edPiso(request.resource.data)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null)
         && (resource.data.get('reo', null) != null || resource.data.get('ids', null) == null
-            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'log', 'date', 'pisoId'])));
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'who', 'log', 'date', 'pisoId'])));
       allow delete: if isAdmin() || (edPiso(resource.data) && dplanFuture(resource.data.get('date', '')));
     }
     // Historial de cambios del lookahead (uno por cambio): lo escribe quien edita; no se cambia ni se borra
@@ -460,6 +460,66 @@ service cloud.firestore {
     match /tpubidx/{id} {
       allow read: if isTar();
       allow write: if false;
+    }
+    // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
+    // La lee todo LPS; en la fase 1 editan administrador y editores. No se borra (lo que sobra se archiva o queda «no aplica»).
+    // El SC también agrega actividades desde el lookahead (oct 2026): de su partida, con su correo y marcadas «por revisar» (rev).
+    match /mcat/{id} {
+      allow read: if lpsMember();
+      allow create: if canEdit() || (isSC() && request.resource.data.get('by', '') == mid()
+        && request.resource.data.get('sc', '') in scsOf() && request.resource.data.get('rev', null) is map
+        && request.resource.data.rev.get('by', '') == mid() && !request.resource.data.keys().hasAny(['arch', 'revOk']));
+      allow update: if canEdit();
+      allow delete: if false;
+    }
+    match /mtipo/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit();
+      allow delete: if false;
+    }
+    // El SC cambia una celda por vez de su partida (k = actividad; mcat/k de su partida), directo y con su correo (oct 2026).
+    function scCellVal(d, k) { return !(k in d.get('c', {})) || d.c[k] in ['p', 'c', 't', 'n']; }
+    function scCellOk(d) {
+      let k = d.get('k', '');
+      return isSC() && d.get('by', '') == mid() && k != '' && exists(/databases/$(database)/documents/mcat/$(k))
+        && get(/databases/$(database)/documents/mcat/$(k)).data.get('sc', '') in scsOf() && scCellVal(d, k);
+    }
+    match /mamb/{id} {
+      allow read: if lpsMember();
+      allow create: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (scCellOk(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
+      allow update: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (scCellOk(request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
+            && request.resource.data.get('m', {}).diff(resource.data.get('m', {})).affectedKeys().hasOnly([request.resource.data.k]));
+      allow delete: if false;
+    }
+    // Constancia de cada cambio de un SC en la matriz: la crea quien cambia; la revisa (visto / revertido) un editor;
+    // el SC solo la marca «deshecha» si la deshizo él mismo. No se borra.
+    match /mlog/{id} {
+      allow read: if lpsMember();
+      allow create: if request.resource.data.get('by', '') == mid() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()));
+      allow update: if canEdit() || (isSC() && resource.data.get('by', '') == mid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st']) && request.resource.data.st == 'undo');
+      allow delete: if false;
+    }
+    // Propuestas de actividades nuevas para el catálogo: las crea el SC (de su partida, pendiente, con su correo) o un editor;
+    // decide (aprueba / rechaza) solo quien edita. No se borran.
+    match /mcatp/{id} {
+      allow read: if lpsMember();
+      allow create: if request.resource.data.get('by', '') == mid() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()));
+      allow update: if canEdit();
+      allow delete: if false;
+    }
+    // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
+    match /mver/{id} {
+      allow read: if lpsMember();
+      allow create: if canEdit() && request.resource.data.get('by', '') == mid();
+      allow update, delete: if false;
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);

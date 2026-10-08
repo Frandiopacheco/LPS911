@@ -69,7 +69,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg','tareo'];
+  'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
@@ -92,6 +92,17 @@ function bkRemind(){if(!isAdmin)return;const d=bkAgo();const last=+store.get('bk
 async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){const b=db.batch();let sz=0,k=0;
     while(i<writes.length&&k<400){const w=writes[i];const s=w[2]?JSON.stringify(w[2]).length:50;if(k>0&&sz+s>6e6)break;sz+=s;k++;i++;if(w[2])b.set(fcol(w[0]).doc(w[1]),w[2]);else b.delete(fcol(w[0]).doc(w[1]))}
     await b.commit();done+=k;onProg&&onProg(done)}}
+
+/* carga de un archivo de datos o respaldo: por colección, y si las reglas rechazan un lote (p. ej. historiales que solo escribe
+   su autor: lhlog, lhphist) lo reintenta registro por registro y salta solo los rechazados. Antes un solo rechazo detenía toda la carga. */
+async function importWrites(writes,onProg){const by=new Map();writes.forEach(w=>{if(!by.has(w[0]))by.set(w[0],[]);by.get(w[0]).push(w)});
+  const skip=new Map();let done=0;
+  for(const[col,ws]of by){for(let i=0;i<ws.length;i+=400){const part=ws.slice(i,i+400);
+    try{await batchWrites(part);done+=part.length}
+    catch(e){if(!/permission/i.test(String(e&&(e.code||e.message)||e)))throw e;
+      for(const w of part){try{await fcol(w[0]).doc(w[1]).set(w[2])}catch(e2){if(!/permission/i.test(String(e2&&(e2.code||e2.message)||e2)))throw e2;skip.set(col,(skip.get(col)||0)+1)}done++;onProg&&onProg(done)}}
+    onProg&&onProg(done)}}
+  return skip}
 
 /* =====================================================================
    ETAPA 33 · Tanda 2 (parte 1): papelera, calendario de la obra, hora del servidor
