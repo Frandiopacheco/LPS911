@@ -155,7 +155,7 @@ async function mxUnifyDlg(){if(!isAdmin)return;
    La matriz dice «Terminado» o «No aplica» (confirmado por una persona) y la fila del lookahead sigue con días de hoy en adelante.
    Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
 function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
-  const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>=T)?v:null}
+  const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?v:null}/* hoy no cuenta: ya no se reprograma y suele ser el día en que se terminó */
 /* ---------- Terminadas en Campo y la Matriz (oct 2026, decidido con el dueño) ----------
    Marcar «Terminada» en Campo no es la verdad: puede ser un error (faltaba una luminaria). La fila terminada solo se oculta del
    Lookahead cuando la Matriz la tiene CONFIRMADA como Terminado; si no (sin validar o la Matriz dice otra cosa) sigue visible con
@@ -180,8 +180,8 @@ function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
 document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.mxw);if(!x)return;
   const v=mxRowWarn(x);if(!v)return;const cid=mxCatOf(x);const cells=mxCells().get(x.ambId)||{};const o=cells[cid];const m=MX.amb.get(x.ambId)||{};
   openPop(b,`<div class="ph">⚠ ${esc(x.name)}</div><div class="ptx">La matriz dice <b>${MXS[v]}</b> en este ambiente${m.n?` (lo registró ${esc(m.n)})`:''}, pero sigue programada de hoy en adelante.</div>
-   ${mxEd()&&o&&o.fut.length?'<button data-do="unp" class="danger">Quitar los días desde mañana…</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
-   {unp:()=>mxUnprogram(o.fut,x.name),mat:()=>mxGoCell(x.ambId,cid)})},true);
+   ${mxEd()&&o&&o.fwd&&o.fwd.length?'<button data-do="unp" class="danger">Quitar los días desde mañana…</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   {unp:()=>mxUnprogram(o.fwd,x.name),mat:()=>mxGoCell(x.ambId,cid)})},true);
 
 /* ---------- Pendientes sin programar (aviso en la barra del Lookahead) ----------
    Celdas de la matriz «Pendiente» (confirmadas o propuestas por el tipo) sin ningún día de hoy en adelante en el lookahead,

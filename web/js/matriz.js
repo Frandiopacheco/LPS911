@@ -72,7 +72,7 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
     for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s=o.acts.length&&o.acts.every(id=>DONE.has(id))?'t':'p'}
       /* fut: tiene días de hoy en adelante en el lookahead. Alerta (warn): confirmada terminada / no aplica y aún programada.
          Sin programar (sp): pendiente (no en curso) sin ningún día de hoy en adelante */
-      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fut.length>0;o.sp=o.s==='p'&&!o.fut.length;
+      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.fwd=o.fut.filter(id=>(S.act.get(id).days||[]).some(d=>d>T0));o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0;o.sp=o.s==='p'&&!o.fut.length;
       /* dsc: Campo la marcó terminada (todas sus filas) pero la matriz confirmó otra cosa: el ingeniero decide (confirmar o reabrir) */
       o.dsc=!o.sug&&o.s!=='t'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))}
     out.set(amb.id,C)}
