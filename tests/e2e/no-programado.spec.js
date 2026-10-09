@@ -191,3 +191,22 @@ test('el SC registra un trabajo no programado de su partida en «En obra» y el 
   expect(n.ver).toBeUndefined();
   noErrors(errors, 'sc registra');
 });
+
+test('el SC solo ve el no programado de su partida', async ({ page }) => {
+  const MIO = ['nprog', 'n2', { date: HOY, pisoId: 'p1', ambId: 'a2', sc: 'c1', desc: 'Picado de muro', und: '', exec: null, note: '', photos: [], pt: null, by: 'sc@obra.pe', byName: 'Sandra', ts: 2, scProp: true }];
+  const OTRO = ['acts', 'x9', { ambId: 'a2', sc: 'c3', name: 'Tarrajeo', days: [HOY], order: 99 }];
+  const sc = await openApp(page, { as: 'sc', extra: [REG, MIO, OTRO] });
+  const vis = await page.evaluate(d => npItems([d]).map(i => i.e.desc), HOY);
+  expect(vis).toEqual(['Picado de muro']);
+  noErrors(sc, 'sc no programado');
+});
+
+test('ingeniero: filtro «No programado» y aviso de cruce con otro SC', async ({ page }) => {
+  const OTRO = ['acts', 'x9', { ambId: 'a2', sc: 'c3', name: 'Tarrajeo', days: [HOY], order: 99 }];
+  const errors = await openApp(page, { tab: 'campo', extra: [REG, OTRO] });
+  await page.evaluate(() => { CU.view = 'list'; CU.show = 'np'; render(); });
+  await expect(page.locator('#main article[data-np="n1"]')).toBeVisible();
+  await expect(page.locator('#main article[data-np="n1"] .npcx')).toContainText('Cruce');
+  await expect(page.locator('#main article[data-a]')).toHaveCount(0);
+  noErrors(errors, 'filtro no programado');
+});

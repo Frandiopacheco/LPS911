@@ -34,7 +34,7 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   await page.click('#pop [data-do="fus"]');
   await page.selectOption('#mxfb', 'k1');
   await expect(page.locator('#mxfi')).toContainText('2 estados');
-  await expect(page.locator('#mxfi')).toContainText('se conserva el de «Redes empotradas»');
+  await expect(page.locator('#mxfi')).toContainText('queda el más avanzado');
   await page.click('#mxfok');
   // a1: las dos tenían estado → queda el de k1; a2: el de k9 pasa a k1
   await expect.poll(async () => (await get(page, 'mamb', 'a2')).c).toEqual({ k1: 't' });

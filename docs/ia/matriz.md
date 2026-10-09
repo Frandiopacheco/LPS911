@@ -157,3 +157,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Las filas antiguas que quedan con el nombre de la genérica no salen como «∉» (`mxDesAli` en `mxRowCat` y `mxLookOff`).
 - **Posibles por desglosar** (Catálogo, `#mxdlist` → `mxDesListDlg`, `mxDesCands`): clase «Por desglosar», nombre general (palabras de `MXD_GEN` en nombres de ≤ 4 palabras) o mediana de días por fila ≥ máx(8, 2,5 × la de la obra). «Está bien así» guarda `mcat.okd` (y pasa la clase «Por desglosar» a Típica).
 - Prueba: `tests/e2e/matriz-des.spec.js`.
+
+## Revisión de actividades nuevas del SC (oct 2026, decidido con el dueño)
+- Tarjeta «Agregadas por los subcontratistas» (Catálogo, `mxCatTools`): **✓ Aceptar** (borra `rev`, guarda `revOk`), **✎ Nombre** (`mxRevRename` → `mxCatRename`: catálogo + filas del lookahead; si el nombre ya existe ofrece combinar), **Combinar…** (`mxMergeDlg`), **Rechazar…** (`mxRevReject`: solo archiva —`arch.rej`— si no tiene filas ni estados; si los tiene, abre Combinar) y **+ Todos los «tipo»** (`mxRevTipo`: el tipo que pidió el SC o, si no, el del ambiente donde la agregó).
+- **Posible duplicado** (`mxDupOf`): misma especialidad (`espOfSc`) o mismo SC y ≥ 60 % de palabras en común → botón «⚠ ¿Es «X»? Combinar» que abre Combinar con X elegida (`mxMergeDlg(a,pre)`).
+- **Combinar con estados distintos:** queda el **más avanzado** (`MXRANK`/`mxMaxSt`: Terminado › En curso › Pendiente › No aplica); el diálogo lista los ambientes en conflicto. Lo que se sobrescribe en B se guarda en `arch.bset {amb:[antes,después]}` y Restaurar lo devuelve si nadie lo cambió. Combinar también borra `rev`.
+- Pruebas: `tests/e2e/matriz-look.spec.js` (duplicado/combinar, rechazar).
