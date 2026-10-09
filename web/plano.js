@@ -120,7 +120,7 @@ function renderMapa(main){ensureLam();
     ${cur&&!cur.base&&base?`<label class="chk"><input type="checkbox" id="munder"${M.under?' checked':''}> Arquitectura debajo</label><input type="range" id="mop" min="0.15" max="1" step="0.05" value="${M.op}" aria-label="Opacidad de la especialidad" title="Opacidad de la especialidad"${M.under?'':' disabled'}>`:''}
     <span class="sp" style="flex:1"></span>
  ${pmEng()?(()=>{const m=pmode();let n=0;try{computeCross();n=CROSS.list.length}catch(err){}return`<span class="mseg mpm" role="group" aria-label="Qué haces en el plano"><button data-pm="cu" class="${m==='cu'?'on':''}" title="Ver lo registrado en Campo. Clic derecho sobre una actividad: su cumplimiento">✓ Cumplimiento</button><button data-pm="prog" class="${m==='prog'?'on':''}" title="Clic derecho sobre una actividad: Va · No va · Culminado; sobre un ambiente: ＋ trabajo no programado">✏️ Programar</button><button data-pm="cx" class="${m==='cx'?'on':''}" title="Ver los cruces entre partidas. Clic derecho sobre un ambiente: revisar sus interferencias">⚠ Interferencias${n?` <b class="mpmn">${n}</b>`:''}</button></span>`})():''}
-    <button class="ib pri" id="mmeetb" title="Proyectar el plan del día en la reunión">Modo reunión</button><button class="ib" id="mview" title="Etiquetas, plano de fondo y leyenda">Vista ▾</button><button class="ib" id="mpdf" title="Plan de trabajo de obra (PDF / Excel), detalle del piso o imagen">Exportar…</button><button class="ib" id="mfit" title="Encuadrar todo el plano en la pantalla">Ver todo</button><button class="ib" id="mhi" title="Calidad de imagen">${useHi()?'Alta resolución':'Resolución liviana'}</button>
+    <button class="ib pri" id="mmeetb" title="Proyectar el plan del día en la reunión">Modo reunión</button><button class="ib" id="mview" title="Etiquetas, plano de fondo y leyenda">Vista ▾</button><button class="ib" id="mpdf" title="Plan de trabajo de obra (PDF / Excel), detalle del piso o imagen"${DRPROG?' disabled':''}>${DRPROG?esc(DRPROG):'Exportar…'}</button><button class="ib" id="mfit" title="Encuadrar todo el plano en la pantalla">Ver todo</button><button class="ib" id="mhi" title="Calidad de imagen">${useHi()?'Alta resolución':'Resolución liviana'}</button>
     ${isAdmin&&cur&&!cur.base&&base?`<button class="ib" id="malign2">${cur.aligned?'Corregir alineación':'Alinear'}</button>`:''}${isAdmin?`<button class="ib pri" id="mup" title="Capas de especialidad sobre la lámina base. La lámina base del piso se sube en Sectorización.">Subir especialidad…</button>${cur?`<button class="ib" id="mmenu" title="Cambiar nombre, alinear, reemplazar o eliminar la lámina seleccionada">&#8943; Editar lámina</button>`:''}`:''}`;
   if(bar.dataset.h!==hb){bar.innerHTML=hb;bar.dataset.h=hb}
   const note=$('#mnote');const nh=lamErr?`<div class="callout">No se pudieron leer las láminas (${esc(lamErr)}). Si acabas de actualizar la página, falta publicar las reglas nuevas de Firestore (LEEME).</div>`:M.busy?`<div class="callout">${esc(M.busy)}</div>`:(cur&&!cur.base&&!cur.aligned&&base)?`<div class="callout warnc"><b>${esc(cur.esp)} aún no está alineada con la arquitectura</b>: por eso no coincide al superponerla. ${isAdmin?'<button class="ib pri" id="malign">Alinear ahora</button>':'Pide al administrador que la alinee.'}</div>`:'';
@@ -972,21 +972,47 @@ function drData(d){const ps=typeof pisos==='function'?pisos():[...S.pis.values()
     groups.push({n:gi,p,title:(p.name||p.code||'').toUpperCase(),rows,color:DR_COL[(gi-1)%DR_COL.length]})}
   const misc=String(drCfg().misc||'').split('\n').map(l=>l.split('|').map(s=>s.trim())).filter(a=>a[0]).map((a,i)=>({code:`${gi+1}.${String(i+1).padStart(2,'0')}`,desc:a[0].toUpperCase(),und:a[1]||'',met:a[2]==null||a[2]===''?null:(isNaN(+a[2])?a[2]:+a[2])}));
   return{groups,misc,miscN:gi+1}}
-/* un canvas por piso (y vista) con las zonas numeradas con el ítem del listado */
-async function drPlans(D,opt,say){const out=[];
+/* un plano por piso (y vista) con las zonas numeradas con el ítem del listado (y uno por SC si se pide).
+   Antes se guardaban todos los lienzos (~3300×2000 px, 19–32 MB cada uno) hasta armar el PDF/Excel y se cargaba la lámina
+   en calidad completa (hasta 40 MP): en una tablet se cerraba la pestaña. Ahora va piso por piso: se dibuja, se pasa a JPEG
+   al momento (drImg) y se suelta el lienzo antes del siguiente; la lámina liviana se usa si alcanza (drQ) y entre planos
+   se cede a la pantalla (el botón muestra el avance). */
+const DR_W=3300;
+/** lámina para el exporte: la liviana ('l', ~3000 px) si alcanza para el ancho de salida con el recorte de las zonas (o en
+    tablet/celular, que ya la usan en pantalla); si no, la completa ('f'). En la PC el resultado se ve igual. */
+function drQ(v,pid,scs){if(!v.nl)return'f';if(!useHi())return'l';const lw=v.lw||Math.min(v.w||0,LITE);if(!lw||!v.w)return'f';const T=v.T||I;const s_=Math.hypot(T.a,T.b)||1;
+  const B0=boundsOf({...v,T});const Z=shapesOf(pid).filter(z=>z.kind==='zona'&&zVista(z)===v.id);let need=0;
+  for(const sc of scs){const B=cropBox(B0,Z.filter(z=>!sc||z.sc===sc));need=Math.max(need,DR_W*s_*v.w/B.w)}return lw*1.25>=need?'l':'f'}
+/** el lienzo pasa a imagen (PDF: JPEG del lienzo; Excel: JPEG de 2400 px) y se suelta al momento */
+function drImg(cv,kind){const w=cv.width,h=cv.height;let url;
+  if(kind==='xlsx'){const sm=document.createElement('canvas');sm.width=2400;sm.height=Math.round(2400*h/w);sm.getContext('2d').drawImage(cv,0,0,sm.width,sm.height);url=sm.toDataURL('image/jpeg',.9);sm.width=sm.height=0}
+  else url=cv.toDataURL('image/jpeg',.9);
+  cv.width=cv.height=0;return{url,w,h}}
+const drYield=()=>new Promise(r=>setTimeout(r,0));
+async function drPlans(D,opt,say,kind){const jobs=[];
   for(const g of D.groups){const zl=new Map();g.rows.forEach(r=>r.zones.forEach(z=>zl.set(z.id,r.code)));if(!zl.size)continue;
     const vistas=basesOf(g.p.id);
     for(const v of vistas){const zv=[...PD.values()].filter(z=>z.pisoId===g.p.id&&z.kind==='zona'&&zVista(z)===v.id);if(!zv.some(z=>zl.has(z.id)))continue;
-      say&&say(`Dibujando ${g.title}…`);const im=await loadImgEl(await imgURL(v,'f'));const pairs=crossPairs(zv);const vn=vistas.length>1?' · '+lname(v).toUpperCase():'';
-      const ent=g.rows.filter(r=>r.zones.some(z=>zVista(z)===v.id));
-      out.push({g,v,title:g.title+vn,cv:await renderPlanCanvas(v,{pid:g.p.id,im,W:3300,R:54,nums:{zl},pairs}),ent,pairs});
+      const pairs=crossPairs(zv);const vn=vistas.length>1?' · '+lname(v).toUpperCase():'';
+      const ent=g.rows.filter(r=>r.zones.some(z=>zVista(z)===v.id));const L=[{title:g.title+vn,ent,sc:''}];
       if(opt.perSc){const scs=[...new Set(ent.map(r=>r.sc))].sort((a,b)=>nat(conOf(a).name,conOf(b).name));
-        for(const sc of scs){say&&say(`Dibujando ${g.title} · ${conOf(sc).name}…`);out.push({g,v,title:g.title+vn+' · '+conOf(sc).name,sc,cv:await renderPlanCanvas(v,{pid:g.p.id,im,W:3300,R:54,nums:{zl},pairs,scOnly:sc}),ent:ent.filter(r=>r.sc===sc),pairs})}}}}
+        for(const sc of scs)L.push({title:g.title+vn+' · '+conOf(sc).name,sc,ent:ent.filter(r=>r.sc===sc)})}
+      jobs.push({g,v,zl,pairs,L})}}
+  const tot=jobs.reduce((n,j)=>n+j.L.length,0);let k=0;const out=[];
+  for(const j of jobs){let im=await loadImgEl(await imgURL(j.v,drQ(j.v,j.g.p.id,j.L.map(o=>o.sc))));
+    for(const o of j.L){say&&say(`Dibujando ${j.g.title}${o.sc?' · '+conOf(o.sc).name:''}…`,++k,tot);
+      const cv=await renderPlanCanvas(j.v,{pid:j.g.p.id,im,W:DR_W,R:54,nums:{zl:j.zl},pairs:j.pairs,...(o.sc?{scOnly:o.sc}:{})});
+      out.push({g:j.g,v:j.v,title:o.title,...(o.sc?{sc:o.sc}:{}),ent:o.ent,pairs:j.pairs,img:drImg(cv,kind)});await drYield()}
+    im=null}
   return out}
-async function exportDR(kind,opt){const d=M.date;const D=drData(d);if(!D.groups.length){toast('No hay actividades programadas este día.');return}
-  const say=m=>toast(m);say(kind==='xlsx'?'Generando Excel…':'Generando PDF…');
-  try{const plans=opt.plans?await drPlans(D,opt,say):[];if(kind==='xlsx')await drXlsx(D,d,plans);else await drPdf(D,d,plans)}
-  catch(err){console.error(err);toast('No se pudo generar: '+(err.message||err))}}
+/* avance del exporte en el botón «Exportar…» (se mantiene aunque la pantalla se vuelva a dibujar) */
+let DRPROG='';
+function drProg(t){DRPROG=t;const b=$('#mpdf');if(b){b.textContent=t||'Exportar…';b.disabled=!!t}}
+async function exportDR(kind,opt){if(DRPROG)return;const d=M.date;const D=drData(d);if(!D.groups.length){toast('No hay actividades programadas este día.');return}
+  const K=kind==='xlsx'?'Excel':'PDF';const say=(m,k,n)=>{toast(m);if(n)drProg(`${K} ${k}/${n}…`)};say(`Generando ${K}…`);drProg(`${K}…`);
+  try{const plans=opt.plans?await drPlans(D,opt,say,kind):[];drProg(`Armando ${K}…`);await drYield();if(kind==='xlsx')await drXlsx(D,d,plans);else await drPdf(D,d,plans)}
+  catch(err){console.error(err);toast('No se pudo generar: '+(err.message||err))}
+  finally{drProg('')}}
 function drDone(name,blob,kind){if(window.PLANO_EXPORT_PREVIEW){window['__dr_'+kind]=blob;toast('Listo (vista previa de prueba)')}else{saveBlob(name,blob);toast(kind==='xlsx'?'Excel descargado':'PDF descargado')}}
 async function drPdf(D,d,plans){await loadPdf();const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});const C=drCfg();const logo=C.logo||DR_LOGO;
   const Mg=10,W=190;const cw=[11,132,14,33];
@@ -1015,8 +1041,8 @@ async function drPdf(D,d,plans){await loadPdf();const{jsPDF}=window.jspdf;const 
     doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(0);doc.text(PT(`${C.titulo} · PLANO DEL DÍA`),Mg+36,Mg+6);doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60);doc.text(PT(`${pl.g.n}. ${pl.title}   ·   ${dayUp(d)}   ·   ${C.proyecto}`),Mg+36,Mg+11);
     doc.setFillColor(...hexRGB(pl.sc?conOf(pl.sc).color:pl.g.color));doc.rect(Wl-Mg-4,Mg,4,14,'F');
     const n=pl.ent.length;const cols=n>36?4:n>18?3:2;const nr=Math.ceil(n/cols);const rowH=4.1;const legH=n?nr*rowH+5:0;
-    const y0=Mg+17,availW=Wl-2*Mg,availH=Hl-y0-Mg-legH-6;const ratio=pl.cv.width/pl.cv.height;const iw=Math.min(availW,availH*ratio),ih=iw/ratio;const x0=Mg+(availW-iw)/2;
-    doc.addImage(pl.cv.toDataURL('image/jpeg',.9),'JPEG',x0,y0,iw,ih);doc.setLineWidth(.2);doc.setDrawColor(150);doc.rect(x0,y0,iw,ih);
+    const y0=Mg+17,availW=Wl-2*Mg,availH=Hl-y0-Mg-legH-6;const ratio=pl.img.w/pl.img.h;const iw=Math.min(availW,availH*ratio),ih=iw/ratio;const x0=Mg+(availW-iw)/2;
+    doc.addImage(pl.img.url,'JPEG',x0,y0,iw,ih);pl.img.url=null;doc.setLineWidth(.2);doc.setDrawColor(150);doc.rect(x0,y0,iw,ih);
     const yl=y0+ih+5;const cwl=availW/cols;
     pl.ent.forEach((r,k)=>{const cx=Mg+Math.floor(k/nr)*cwl,cy=yl+(k%nr)*rowH;const c=conOf(r.sc).color;doc.setFillColor(...hexRGB(c));doc.roundedRect(cx,cy-2.9,9,3.8,1.6,1.6,'F');
       doc.setFont('helvetica','bold');doc.setFontSize(6.4);doc.setTextColor(lum(c)>.55?20:255);doc.text(r.code,cx+4.5,cy-.2,{align:'center'});
@@ -1055,8 +1081,8 @@ async function drXlsx(D,d,plans){await loadExcelJS();const C=drCfg();const logo=
     s.columns=[{width:10},{width:95},{width:26},{width:12},{width:12},{width:12},{width:12},{width:12}];
     const c1=s.getCell('A1');c1.value=`${C.titulo} · PLANO DEL DÍA`;c1.font={name:'Calibri',size:16,bold:true};
     const c2=s.getCell('A2');c2.value=`${pl.g.n}. ${pl.title} · ${dayUp(d)} · ${C.proyecto}`;c2.font={name:'Calibri',size:11,color:{argb:'FF444444'}};
-    const wpx=1500,hpx=Math.round(wpx*pl.cv.height/pl.cv.width);const sm=document.createElement('canvas');sm.width=2400;sm.height=Math.round(2400*pl.cv.height/pl.cv.width);sm.getContext('2d').drawImage(pl.cv,0,0,sm.width,sm.height);
-    const iid=wb.addImage({base64:sm.toDataURL('image/jpeg',.9),extension:'jpeg'});s.addImage(iid,{tl:{col:0,row:3},ext:{width:wpx,height:hpx}});
+    const wpx=1500,hpx=Math.round(wpx*pl.img.h/pl.img.w);
+    const iid=wb.addImage({base64:pl.img.url,extension:'jpeg'});pl.img.url=null;s.addImage(iid,{tl:{col:0,row:3},ext:{width:wpx,height:hpx}});
     let rr=4+Math.ceil(hpx/20)+1;const lh=s.getRow(rr);['ITEM','DESCRIPCIÓN','SUBCONTRATISTA'].forEach((v,i)=>{const c=lh.getCell(1+i);c.value=v;c.fill=fill('#7F7F7F');c.font={name:'Calibri',size:11,bold:true,color:{argb:'FFFFFFFF'}};c.border=box;c.alignment={horizontal:'center'}});rr++;
     for(const x of pl.ent){const row=s.getRow(rr++);const col=conOf(x.sc).color;const a=row.getCell(1);a.value=num(x.code);if(typeof a.value==='number')a.numFmt='0.00';a.fill=fill(col);a.font={name:'Calibri',size:11,bold:true,color:{argb:lum(col)>.55?'FF1B1B1B':'FFFFFFFF'}};a.alignment={horizontal:'center'};
       row.getCell(2).value=x.desc;row.getCell(3).value=conOf(x.sc).name;[1,2,3].forEach(i=>row.getCell(i).border=box)}
