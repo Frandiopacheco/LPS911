@@ -341,7 +341,13 @@ function mxSetTipo(amb,tipo){if(!mxEd())return;const prev=(MX.amb.get(amb)||{}).
 function mxFotoData(){const a={};let n=0;for(const[amb,C]of mxCells()){const p=Object.entries(C).map(([c,o])=>c+':'+o.s+(o.sug?'?':''));if(p.length){a[amb]=p.join(',');n+=p.length}}return{a,n}}
 async function mxFoto(){if(!mxEd())return;const{a,n}=mxFotoData();
   const ok=await uiAsk({title:'Guardar foto semanal',text:`Se guarda el estado de hoy (${fmtD(todayIso())}) de ${Object.keys(a).length} ambientes y ${n} celdas. Luego podrás compararla en «Comparar con».`,ok:'Guardar foto',tone:'info'});if(!ok)return;
-  const id='f'+NOW();const doc={t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a,v:2};try{await fcol('mver').doc(id).set(doc);if(!MX.ver.has(id)){MX.ver.set(id,{...doc,id});MX.v++}MX.cmp=id;render();toast('📸 Foto guardada · '+fmtD(todayIso()));mxFotoHist(id)}catch(e){toast('No se pudo guardar la foto: '+(e&&e.code||e))}}
+  const id='f'+NOW();const doc={t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a,v:2};
+  /* un documento de Firestore admite hasta 1 MiB: avisar antes en vez de fallar en silencio */
+  if(JSON.stringify(doc).length>950000){uiAsk({title:'La foto es demasiado grande',text:'La matriz completa no entra en una sola foto. Elige un piso arriba y guarda la foto por piso.',ok:'Entendido',tone:'warn'});return}
+  /* no se espera la confirmación del servidor (con señal débil parecía que «no pasaba nada»): se muestra al instante y,
+     si el servidor la rechaza, bgWrite lo avisa */
+  bgWrite(fcol('mver').doc(id).set(doc).catch(e=>{MX.ver.delete(id);MX.v++;if(MX.cmp===id)MX.cmp='';requestRender();toast('No se pudo guardar la foto: '+(e&&e.code||e));throw e}));
+  if(!MX.ver.has(id)){MX.ver.set(id,{...doc,id});MX.v++}MX.cmp=id;U.mxV='mat';saveUI();render();toast('📸 Foto guardada · '+fmtD(todayIso()));mxFotoHist(id)}
 /* resumen de una foto: celdas, terminadas (de lo que aplica) y sin validar */
 function mxFotoSum(f){let n=0,t=0,ap=0,sug=0;for(const s of Object.values(f.a||{}))for(const p of String(s).split(',')){const[c,v0]=p.split(':');if(!c||!v0)continue;const v=v0.replace('?','');if(v0.endsWith('?'))sug++;n++;if(v!=='n'){ap++;if(v==='t')t++}}
   return{n,t,ap,sug,old:!(f.v>=2)}}
