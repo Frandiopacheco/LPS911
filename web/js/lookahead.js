@@ -184,7 +184,10 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
   const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':''),f:fmtD(x2.d),past:x2.d<=today}));
-  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';
+  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const QM=U.qmode==='metrado';
+  /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
+     las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
+  const ctx=lkCtx();
   let head='<colgroup><col class="s0"><col class="s1"><col class="s2"><col class="s3"><col class="s4"><col class="cU"><col class="cM"><col class="cS"><col class="cN"><col class="cI"><col class="cF">'+'<col>'.repeat(nd)+'</colgroup>';
   head+='<thead><tr><th class="fx s0" rowspan="2">Ítem</th><th class="fx s1" rowspan="2">Código</th><th class="fx s2" rowspan="2">Ambiente</th><th class="fx s3" rowspan="2">Subcontratista</th><th class="fx s4" rowspan="2">Actividad</th><th class="fx cU" rowspan="2">Und</th><th class="fx cM" rowspan="2">Metrado</th><th class="fx cS" rowspan="2" title="Metrado total menos lo programado">Saldo</th><th class="fx cN" rowspan="2" title="Días programados">Días</th><th class="fx cI" rowspan="2">Inicio</th><th class="fx cF" rowspan="2">Fin</th>';
   for(let w=U.week;w<U.week+U.win;w++){const wd=weekDays(w);head+=`<th class="wkh${U.wkF===w?' wsel':''}" colspan="6" data-wkh="${w}" title="${U.wkF===w?'Clic para ver todas las semanas':'Clic para ver solo las actividades de la semana '+w}"><b>Sem ${w}</b><span>${fmtD(wd[0])} – ${fmtD(wd[5])}</span></th>`}
@@ -224,27 +227,30 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
     }
     if((filt||U.sector)&&!blocks.length)continue;
     const pc=U.collapsed.includes(p.id);
-    rows.push({k:'p:'+p.id,h:`<tr class="piso" data-piso-row="${p.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${pc?' cl':''}" data-tg="${p.id}" aria-label="Plegar piso">&#9662;</button><span class="p-code">${esc(p.code)}</span><input class="ci" data-piso="${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Nombre del piso"${ro}><span class="meta">${blocks.length} sect. · ${pAmb} amb. · ${pAct} act.</span>${CI?cliBufBtn('p',p.id):''}${canWrite?`<button class="ib" data-addsec="${p.id}">+ Sector</button><button class="ab" data-pisomenu="${p.id}" aria-label="Opciones del piso" title="Opciones del piso">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`});
+    rows.push(new LkRow('p:'+p.id,()=>`<tr class="piso" data-piso-row="${p.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${pc?' cl':''}" data-tg="${p.id}" aria-label="Plegar piso">&#9662;</button><span class="p-code">${esc(p.code)}</span><input class="ci" data-piso="${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Nombre del piso"${ro}><span class="meta">${blocks.length} sect. · ${pAmb} amb. · ${pAct} act.</span>${CI?cliBufBtn('p',p.id):''}${canWrite?`<button class="ib" data-addsec="${p.id}">+ Sector</button><button class="ab" data-pisomenu="${p.id}" aria-label="Opciones del piso" title="Opciones del piso">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
     if(pc)continue;
-    if(!blocks.length)rows.push({k:'pe:'+p.id,h:`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`});
+    if(!blocks.length)rows.push(new LkRow('pe:'+p.id,()=>`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`));
     for(const{s,list,nAmb,nAct}of blocks){
       const coll=U.collapsed.includes(s.id);
-      rows.push({k:'s:'+s.id,h:`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${ro}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`});
+      rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${ro}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
       if(coll)continue;
-      for(const{a,vis,acts}of list){const nIx=new Map();acts.forEach((y,k)=>nIx.set(y.id,k+1));
-
+      for(const{a,vis,acts}of list){
+        /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
+        let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
         const rs=Math.max(1,vis.length);
-        const ambCells=`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
-        if(!vis.length){shown++;rows.push({k:'a:'+a.id,h:`<tr class="ar first"><td class="s0"></td>${ambCells}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`});continue}
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        if(!vis.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         vis.forEach((x,i)=>{
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
+          const rk='x:'+x.id+(i===0?':'+a.id+':'+rs:'');
+          rows.push(new LkRow(rk,()=>{
           /* (auditoría de código 08/10, L6) una fila con datos dañados se muestra como «⚠ dato inválido»: no deja la grilla en blanco */
           try{
           const c=conOf(x.sc);const st=actStats(x);const ds=new Set(DY(x));const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
           let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
-          if(i===0)h+=ambCells;
+          if(i===0)h+=ambCells();
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
           /* (auditoría de código 08/10, L1) liberación, catálogo y alertas de la Matriz: una vez por fila (antes, 2 a 4 veces cada uno) */
           const prn=pr.get(x.id);const lb=typeof libOf==='function'?libOf(x.id):null;const lst=lb?lb.st:'';const mxc=typeof mxRowCat==='function'?mxRowCat(x):null;
@@ -252,7 +258,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
           const nb=(x.obs?1:0)+((prn||isNew)?1:0)+(lst?1:0)+(mxw||mxd?1:0)+(mxc?1:0);
           h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
-          const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=U.qmode==='metrado';
+          const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=QM;
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
           h+=`<td class="ro cN">${st.n||''}</td><td class="ro cI">${fmtS(st.ini)}</td><td class="ro cF">${fmtS(st.fin)}</td>`;
           const ptip=(x._rv||pv||PM())?propRowTip(x,pv):'';const ptt=ptip?' · Propuesta: '+esc(ptip):'';
@@ -268,8 +274,9 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
             const rc=di.past?recOf(x2.d,x.id):null;const rst=rc?ST[rc.status]||ST.no:null;const mk=(rc?`<i class="dm ${rst.c}">${rst.i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${rst.t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
             if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'sin metrado asignado'}${mt}"><span class="qv">${v!=null?fq(v):'•'}</span>${mk}</td>`}
             else h+=`<td class="${cl}" data-d="${x2.d}"${lbd?` title="${di.f} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${di.f}${mt}"`:''}>${mk}</td>`}
-          rows.push({k:'x:'+x.id+(i===0?':'+a.id+':'+rs:''),h:h+'</tr>'});
-          }catch(err){lkBadRow(x,err);rows.push({k:'x:'+x.id+(i===0?':'+a.id+':'+rs:''),h:`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells:''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`})}
+          return h+'</tr>';
+          }catch(err){lkBadRow(x,err);return`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells():''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`}
+          }));
         });
       }
     }
@@ -278,7 +285,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
   if(!S.pis.size)rows.push({k:'nopiso',h:`<tr><td colspan="${11+nd}"><div class="empty">Todavía no hay datos. ${isAdmin?'Carga <b>datos-iniciales.json</b> desde la pestaña <b>Equipo</b>, o crea un piso con el botón de abajo.':'Pide al administrador que cargue los datos del proyecto.'}</div></td></tr>`});
   if(canWrite&&!filt&&!U.sector&&!U.piso)rows.push({k:'addpiso',h:`<tr class="addrow"><td colspan="5" style="position:sticky;left:0"><div style="padding:0 8px"><button class="ib" data-addpiso="1">+ Nuevo piso</button></div></td><td colspan="${6+nd}"></td></tr>`});
   const keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
-  if(rows.length>=VIRT_MIN){GV={tbl,head,rows,blocks:gridBlocks(rows),r0:-1,r1:-1};virtPaint(true,keep);markPeers();return}
+  if(rows.length>=VIRT_MIN){GV={tbl,head,rows,ctx,nd,blocks:gridBlocks(rows),r0:-1,r1:-1};virtPaint(true,keep);markPeers();return}
   GV=null;const tb=tbl.tBodies[0];
   /* si cambian pocas filas se reemplazan solo esas (en un solo armado); si cambian muchas, se redibuja la tabla de una vez:
      reemplazar miles de filas una por una es mucho más lento que un solo innerHTML */
@@ -295,28 +302,76 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
    que no cortan un ambiente (por su celda combinada); arriba y abajo van dos filas vacías con la altura de lo que no se
    dibuja, así la barra de desplazamiento es la real. Al desplazarse se dibuja el tramo nuevo. */
 const VIRT_MIN=400;let GV=null,vRaf=0,RH=29;const BH=new Map();
+/* (auditoría de código 08/10, L2) fila de la grilla con su HTML perezoso: se arma la primera vez que se lee r.h y queda guardado.
+   renderGrid sigue recorriendo todas las filas (filtros, contadores, bloques), pero en el Lookahead grande solo se arma el HTML de
+   las que virtPaint pinta. LKHB cuenta las filas armadas (lo usan las pruebas). */
+let LKHB=0;
+class LkRow{constructor(k,f){this.k=k;this.f=f;this.s=null}
+  get h(){if(this.s===null){LKHB++;this.s=this.f();this.f=null}return this.s}}
+/* lo que la fila lee de afuera y que el dibujo cambia por un momento (versión guardada, revisión de propuestas, vista cliente,
+   modo consulta): se guarda al dibujar y se repone mientras se arman filas después (al desplazarse o con gridReveal) */
+function lkCtx(){const c={pis:S.pis,sec:S.sec,amb:S.amb,act:S.act,cw:canWrite};
+  return fn=>{if(S.pis===c.pis&&S.sec===c.sec&&S.amb===c.amb&&S.act===c.act&&canWrite===c.cw)return fn();
+    const o={pis:S.pis,sec:S.sec,amb:S.amb,act:S.act,cw:canWrite};S.pis=c.pis;S.sec=c.sec;S.amb=c.amb;S.act=c.act;canWrite=c.cw;
+    try{return fn()}finally{S.pis=o.pis;S.sec=o.sec;S.amb=o.amb;S.act=o.act;canWrite=o.cw}}}
 function gridBlocks(rows){const B=[];let cur=null;rows.forEach((r,i)=>{const k=r.k;const cont=cur&&k.startsWith('x:')&&k.split(':').length===2;if(!cont){cur={k,i0:i,n:0};B.push(cur)}cur.n++});return B}
 const blockH=b=>BH.get(b.k)??b.n*RH;
 const vsp=(h,nd)=>`<tr class="vsp" aria-hidden="true"><td colspan="${11+nd}" style="height:${Math.max(0,Math.round(h))}px"></td></tr>`;
+/* (auditoría de código 08/10, L10) alto del encabezado: se guarda y se vuelve a medir solo si cambia su HTML o la clase de #gw */
+const LKTH={k:'',v:0,need:''};
+function lkThH(g){const k=g.head+'|'+g.tbl.parentElement.className;if(LKTH.k===k)return LKTH.v;LKTH.need=k;vMeasureSoon();return LKTH.v||(g.tbl.tHead?g.tbl.tHead.offsetHeight:60)}
+/* medir después, no justo al escribir (eso obligaba al navegador a calcular el diseño dos veces por dibujo): solo los bloques
+   recién puestos o cambiados; lo que sigue en la página ya tiene su alto guardado */
+const VMQ=[];let vmRaf=0;
+function vMeasureSoon(){if(!vmRaf)vmRaf=requestAnimationFrame(()=>{vmRaf=0;vMeasure()})}
+function vMeasure(){const g=GV;
+  if(LKTH.need&&g&&g.tbl.isConnected&&g.tbl.tHead&&LKTH.need===g.head+'|'+g.tbl.parentElement.className&&gridHead===g.head){const v=g.tbl.tHead.offsetHeight;if(v){LKTH.k=LKTH.need;LKTH.v=v}}LKTH.need='';
+  if(!VMQ.length)return;let sa=0,na=0;
+  for(const m of VMQ){const t=m.trs;if(!t.length||!t[0].isConnected||!t[t.length-1].isConnected)continue;let h=0,ha=0,n=0;for(const tr of t){const oh=tr.offsetHeight;h+=oh;if(tr.dataset.a){ha+=oh;n++}}
+    if(!h)continue;BH.set(m.k,h);sa+=ha;na+=n}
+  VMQ.length=0;if(na)RH=sa/na}
 function virtPaint(force,keep){const g=GV;if(!g)return;const tbl=g.tbl;if(!tbl.isConnected)return;const gw=tbl.parentElement;
-  const th=tbl.tHead?tbl.tHead.offsetHeight:60;const vh=gw.clientHeight||800,buf=Math.max(700,vh);const top=Math.max(0,gw.scrollTop-th);
+  /* al desplazarse, el diseño ya está hecho: medir lo pendiente ahora no cuesta y mejora las alturas antes de calcular el tramo */
+  if(!force&&VMQ.length)vMeasure();
+  const th=lkThH(g);const vh=gw.clientHeight||800,buf=Math.max(700,vh);const top=Math.max(0,gw.scrollTop-th);
   const off=[];let y=0;for(const b of g.blocks){off.push(y);y+=blockH(b)}const total=y;
   let b0=0;while(b0<g.blocks.length-1&&off[b0]+blockH(g.blocks[b0])<top-buf)b0++;
   let b1=b0;while(b1<g.blocks.length-1&&off[b1+1]<top+vh+buf)b1++;
   const r0=g.blocks[b0].i0,r1=g.blocks[b1].i0+g.blocks[b1].n;
   if(!force&&r0===g.r0&&r1===g.r1)return;
   if(keep===undefined)keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
-  const win=g.rows.slice(r0,r1),nd=(g.head.match(/<col>/g)||[]).length,padT=off[b0],padB=total-off[b1]-blockH(g.blocks[b1]);
-  const tb=tbl.tBodies[0];
-  const same=tb&&gridHead===g.head&&g.r0===r0&&g.r1===r1&&gridRows&&gridRows.length===win.length&&tb.rows.length===win.length+2&&gridRows.every((r,i)=>r.k===win[i].k);
-  if(same){const chg=win.reduce((a,r,i)=>(r.h!==gridRows[i].h&&a.push(i),a),[]);if(chg.length){const t=document.createElement('tbody');t.innerHTML=chg.map(i=>win[i].h).join('');const nr=[...t.rows];chg.forEach((i,j)=>tb.rows[i+1].replaceWith(nr[j]))}
-    tb.rows[0].cells[0].style.height=Math.round(padT)+'px';tb.rows[tb.rows.length-1].cells[0].style.height=Math.max(0,Math.round(padB))+'px'}
+  const win=g.rows.slice(r0,r1),nd=g.nd,padT=off[b0],padB=total-off[b1]-blockH(g.blocks[b1]);
+  /* (L2) se arma el HTML solo de las filas de este tramo (con el mismo contexto con que se dibujó la grilla) */
+  g.ctx(()=>{for(const r of win)r.h});
+  const tb=tbl.tBodies[0],prev=gridRows;let fresh=null; /* índices (en win) de filas puestas o cambiadas; null = todas */
+  /* (L10) si la tabla ya muestra un tramo de estas filas, se conserva el encabezado y lo que sigue igual: se quitan las filas que
+     salieron, se agregan las que entraron y se cambian solo las que cambiaron. Si no calza, se rehace solo el cuerpo. */
+  const okDom=tb&&prev&&gridHead===g.head&&tb.rows.length===prev.length+2&&tb.rows[0].classList.contains('vsp');
+  if(okDom){const pk=new Map();prev.forEach((r,j)=>pk.set(r.k,j));
+    let a=-1,b=-1;for(let i=0;i<win.length;i++){const j=pk.get(win[i].k);if(j!==undefined){a=i;b=j;break}}
+    let n=0;if(a>=0)while(a+n<win.length&&b+n<prev.length&&win[a+n].k===prev[b+n].k)n++;
+    let ok=n>0&&(a===0||b===0)&&(a+n===win.length||b+n===prev.length);
+    if(ok)for(let i=a+n;i<win.length;i++)if(pk.has(win[i].k)){ok=false;break}
+    const chg=[];if(ok)for(let i=0;i<n;i++)if(win[a+i]!==prev[b+i]&&win[a+i].h!==prev[b+i].h)chg.push(i);
+    if(ok&&chg.length+a+(win.length-a-n)<=Math.max(40,win.length*0.5)){
+      const trs=[...tb.rows];const top0=trs[0],bot=trs[trs.length-1];
+      for(let j=0;j<b;j++)trs[j+1].remove();for(let j=b+n;j<prev.length;j++)trs[j+1].remove();
+      const pre=win.slice(0,a),post=win.slice(a+n);
+      if(pre.length||post.length||chg.length){const t=document.createElement('tbody');t.innerHTML=pre.map(r=>r.h).join('')+post.map(r=>r.h).join('')+chg.map(i=>win[a+i].h).join('');const nr=[...t.rows];
+        if(pre.length){const f=document.createDocumentFragment();f.append(...nr.slice(0,pre.length));top0.after(f)}
+        if(post.length){const f=document.createDocumentFragment();f.append(...nr.slice(pre.length,pre.length+post.length));bot.before(f)}
+        chg.forEach((i,j)=>trs[b+i+1].replaceWith(nr[pre.length+post.length+j]))}
+      fresh=new Set();for(let i=0;i<a;i++)fresh.add(i);for(let i=a+n;i<win.length;i++)fresh.add(i);chg.forEach(i=>fresh.add(a+i));
+      const hT=Math.round(padT)+'px',hB=Math.max(0,Math.round(padB))+'px';
+      if(top0.cells[0].style.height!==hT)top0.cells[0].style.height=hT;if(bot.cells[0].style.height!==hB)bot.cells[0].style.height=hB}
+    else{const nb=document.createElement('tbody');nb.innerHTML=vsp(padT,nd)+win.map(r=>r.h).join('')+vsp(padB,nd);tb.replaceWith(nb)}}
   else tbl.innerHTML=g.head+'<tbody>'+vsp(padT,nd)+win.map(r=>r.h).join('')+vsp(padB,nd)+'</tbody>';
   gridHead=g.head;gridRows=win;g.r0=r0;g.r1=r1;
-  /* medir lo dibujado para que las alturas de lo que no se ve sean cada vez más exactas */
-  const tb2=tbl.tBodies[0];let ri=1,sa=0,na=0;
-  for(let bi=b0;bi<=b1;bi++){const b=g.blocks[bi];let h=0;for(let j=0;j<b.n;j++){const tr=tb2.rows[ri++];if(!tr)break;const oh=tr.offsetHeight;h+=oh;if(tr.dataset.a){sa+=oh;na++}}BH.set(b.k,h)}
-  if(na)RH=sa/na;
+  /* medir (después) los bloques nuevos, cambiados o sin alto conocido: así las alturas de lo que no se ve son cada vez más exactas */
+  const tb2=tbl.tBodies[0];
+  for(let bi=b0;bi<=b1;bi++){const bk=g.blocks[bi];const i0=bk.i0-r0;let need=!fresh||!BH.has(bk.k);if(!need)for(let j=0;j<bk.n;j++)if(fresh.has(i0+j)){need=true;break}
+    if(need){const trs=[];for(let j=0;j<bk.n;j++){const tr=tb2.rows[i0+j+1];if(tr)trs.push(tr)}VMQ.push({k:bk.k,trs})}}
+  if(VMQ.length)vMeasureSoon();
   if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}}
 function virtScroll(){if(!GV||vRaf)return;vRaf=requestAnimationFrame(()=>{vRaf=0;if(paint||qed)return;virtPaint(false);markPeers()})}
 /** Lleva a la vista la fila de una actividad aunque todavía no esté dibujada (Lookahead grande). */
@@ -324,7 +379,7 @@ function virtScroll(){if(!GV||vRaf)return;vRaf=requestAnimationFrame(()=>{vRaf=0
 const LK_SHOW=new Set();
 function gridReveal(aid){const g=GV;if(!g||!g.tbl.isConnected)return;if(g.tbl.querySelector(`tr[data-a="${CSS.escape(aid)}"]`))return;
   const i=g.rows.findIndex(r=>r.k==='x:'+aid||r.k.startsWith('x:'+aid+':'));if(i<0)return;let y=0;for(const b of g.blocks){if(i>=b.i0&&i<b.i0+b.n)break;y+=blockH(b)}
-  const gw=g.tbl.parentElement;gw.scrollTop=Math.max(0,y+(g.tbl.tHead?g.tbl.tHead.offsetHeight:60)-gw.clientHeight/2);virtPaint(true)}
+  const gw=g.tbl.parentElement;gw.scrollTop=Math.max(0,y+lkThH(g)-gw.clientHeight/2);virtPaint(true)}
 function focusKey(el){return{a:el.dataset.a,amb:el.dataset.amb,sec:el.dataset.sec,piso:el.dataset.piso,f:el.dataset.f,s:el.selectionStart,e:el.selectionEnd}}
 function restoreFocus(root,k){const sel=k.a?`[data-a="${k.a}"][data-f="${k.f}"]`:k.amb?`[data-amb="${k.amb}"][data-f="${k.f}"]`:k.piso?`[data-piso="${k.piso}"][data-f="${k.f}"]`:k.sec?`[data-sec="${k.sec}"][data-f="${k.f}"]`:null;
   const el=sel&&root.querySelector('.ci'+sel);if(el){el.focus({preventScroll:true});el.dataset.o=el.value;try{if(k.s!=null)el.setSelectionRange(k.s,k.e)}catch(e){}}}

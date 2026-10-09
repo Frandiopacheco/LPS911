@@ -51,6 +51,51 @@ test('Lookahead grande: se dibuja lo que se ve y al bajar aparece lo demás', as
   noErrors(errors, 'lookahead grande');
 });
 
+// (auditoría de código 08/10, L2/L10) el HTML de cada fila se arma solo cuando se pinta; al desplazarse se arman las nuevas
+test('Lookahead grande: solo se arma el HTML de las filas que se pintan', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { extra: obraGrande(), tab: 'look' });
+  const st = () => page.evaluate(() => ({ n: LKHB, total: GV.rows.length, armadas: GV.rows.filter(r => r.s !== null).length, tramo: GV.r1 - GV.r0,
+    tramoArmado: GV.rows.slice(GV.r0, GV.r1).every(r => r.s !== null) }));
+  // redibujar (como cuando llega un cambio): solo se arma el tramo visible
+  await page.evaluate(() => { LKHB = 0; render(); });
+  const a = await st();
+  expect(a.total, 'obra grande').toBeGreaterThan(2000);
+  expect(a.n, 'filas armadas al redibujar').toBe(a.tramo);
+  expect(a.armadas).toBe(a.tramo);
+  expect(a.n).toBeLessThan(400);
+  // la tabla conserva el encabezado al desplazarse; se arman solo las filas que entran
+  const b = await page.evaluate(() => { const th = document.querySelector('#grid thead'); LKHB = 0; const r0 = GV.r0, r1 = GV.r1;
+    const gw = document.getElementById('gw'); gw.scrollTop += 900; virtPaint(false); markPeers();
+    return { n: LKHB, nuevas: Math.max(0, GV.r1 - r1) + Math.max(0, r0 - GV.r0), mismoTh: document.querySelector('#grid thead') === th }; });
+  expect(b.n, 'al desplazarse se arman solo las filas nuevas').toBe(b.nuevas);
+  expect(b.n).toBeGreaterThan(0);
+  expect(b.mismoTh, 'no rehace el encabezado').toBe(true);
+  const c = await st();
+  expect(c.tramoArmado).toBe(true);
+  expect(c.armadas).toBeLessThan(c.total / 4);
+  // gridReveal (Ver en el lookahead) encuentra una fila lejana que aún no se armó
+  expect(await page.evaluate(() => GV.rows.find(r => r.k.startsWith('x:xx2399')).s)).toBeNull();
+  await page.evaluate(() => gotoAct('xx2399'));
+  await expect(page.locator('#grid tr[data-a="xx2399"]')).toBeVisible();
+  noErrors(errors, 'filas perezosas');
+});
+
+// las filas que se arman al desplazarse respetan el modo con que se dibujó la grilla (aquí, el modo consulta: sin editar)
+test('Lookahead grande en modo consulta: las filas que aparecen al bajar siguen sin poder editarse', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { extra: obraGrande(), tab: 'look', editar: false });
+  // se revisa en el mismo instante en que se pintan (antes de que otro dibujo completo las rehaga)
+  const ro = await page.evaluate(() => { const g = document.getElementById('gw'); g.scrollTop = g.scrollHeight; virtPaint(false); markPeers();
+    const i = document.querySelector('#grid input[data-a="xx2399"][data-f="name"]'); return i ? i.readOnly : 'no está'; });
+  expect(ro, 'fila armada al desplazarse: solo lectura').toBe(true);
+  const inp = page.locator('input[data-a="xx2399"][data-f="name"]');
+  await expect(inp).toHaveCount(1);
+  await expect(inp).toHaveAttribute('readonly', '');
+  expect(await page.locator('#grid button[data-actmenu]').count(), 'sin menú de actividad en modo consulta').toBe(0);
+  noErrors(errors, 'modo consulta grande');
+});
+
 test('Restricciones con muchas restricciones y una obra grande abre rápido', async ({ page }) => {
   test.setTimeout(120_000);
   const ex = obraGrande(); const acts = ex.filter(e => e[0] === 'acts').map(e => e[1]);
