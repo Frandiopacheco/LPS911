@@ -225,7 +225,11 @@ service cloud.firestore {
       allow update: if canEdit() || isCal()
         || (isSC() && resource.data.sc in scsOf() && request.resource.data.sc == resource.data.sc
             && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['crit', 'sup', 'rest']));
+            // auditoría 09/10: el SC no programa (prog), no cambia quién la pidió ni de qué actividad es, y no borra
+            // observaciones de Calidad ni el historial (solo pueden crecer)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['crit', 'sup', 'rest', 'prog', 'by', 'actId', 'done'])
+            && request.resource.data.get('obs', []).size() >= resource.data.get('obs', []).size()
+            && request.resource.data.get('hist', []).size() >= resource.data.get('hist', []).size());
       allow delete: if isAdmin();
     }
     // Versión para el cliente (holguras, versiones emitidas): el administrador y quienes él designe.
@@ -542,7 +546,10 @@ service cloud.firestore {
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
-      allow write: if canEdit() && dataCol(col) && col != 'pisos';
+      allow create, update: if canEdit() && dataCol(col) && col != 'pisos';
+      // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador
+      // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
+      allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx']));
     }
   }
 }

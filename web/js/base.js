@@ -30,12 +30,12 @@ const store={get(k,d){try{const v=localStorage.getItem('lps911.'+k);return v==nu
 let FDB=null;/* todas las rutas de datos pasan por aquí (preparación multiempresa: luego será obras/<id>/<colección>) */
 const fcol=n=>(db||FDB).collection(n);
 const PLANO_SRC='plano.js?v=33';
-const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map()};
+const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxSc:Array.isArray(U.mxSc)?U.mxSc:[]});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc'});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -335,6 +335,13 @@ document.addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='SELECT'
 {const rel=()=>{if(PDOWN){PDOWN=false;setTimeout(flushDeferred,0)}};document.addEventListener('pointerup',rel,true);document.addEventListener('pointercancel',rel,true)}
 {const done=e=>{if(e.target&&e.target.tagName==='SELECT'){SEL_T=0;setTimeout(flushDeferred,0)}};document.addEventListener('change',done,true);document.addEventListener('focusout',done,true)}
 function requestRender(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=false;if(paint||isDirtyFocus()||uiBusy()){deferred=true;if(!dTimer)dTimer=setTimeout(()=>{dTimer=0;flushDeferred()},700);return}render()})}
+/* auditoría 09/10 (datos reales): lo que llega de otros usuarios (snapshots) redibuja con requestRemoteRender. En las vistas
+   pesadas (Plan semanal o Matriz con todos los pisos: 0,5–1 s por dibujo en PC) se agrupa: como mucho un dibujo cada
+   5× lo que tardó el último (1–4 s), para que la tablet no quede congelada con cada cambio ajeno. Lo que hace el propio usuario
+   sigue usando requestRender (inmediato). */
+const RCOST={};let RLAST=0,rrT=0;
+function requestRemoteRender(){const c=RCOST[U.tab]||0;if(c<120){requestRender();return}if(rrT)return;
+  const gap=Math.min(4000,Math.max(1000,c*5));rrT=setTimeout(()=>{rrT=0;requestRender()},Math.max(0,RLAST+gap-performance.now()))}
 function flushDeferred(){if(deferred){deferred=false;requestRender()}}
 
 /* ---------- conexión ---------- */
@@ -435,7 +442,7 @@ function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role===
         for(const c of all){const id=c.doc.id;if(c.type==='removed'){LIVE.delete(id);data=true;continue}
           const cur=LIVE.get(id);if(dch.has(id)||!cur){LIVE.set(id,liveDoc(c.doc));data=true}else{const p=!!(c.doc.metadata&&c.doc.metadata.hasPendingWrites);if(cur._pend!==p)LIVE.set(id,{...cur,_pend:p})}}}
       if(data)doneRebuild();
-      const sg=liveSig();const same=sg===LIVE_SIG&&!liveErr;LIVE_SIG=sg;liveErr=null;snapOk('live');if(ready&&!(same&&U.tab==='look'))requestRender()},
+      const sg=liveSig();const same=sg===LIVE_SIG&&!liveErr;LIVE_SIG=sg;liveErr=null;snapOk('live');if(ready&&!(same&&U.tab==='look'))requestRemoteRender()},
     err=>{liveErr=err&&err.code||'error';liveSub=null;snapFail('live',err,()=>{liveFrom=null;ensureLive(f)});if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
 /* lo que el Lookahead usa de los reportes en vivo: los cierres (estado, terminada, causa, quién) y de quién es el reporte; no inicio/pausa */
@@ -472,7 +479,7 @@ function daySubOpen(f){if(daySub)daySub();dayFrom=f;let ok;dayP=new Promise(r=>o
   daySub=fcol('daily').where('date','>=',f).onSnapshot(sn=>{
       if(first){first=false;for(const[id,v]of DAY)if(!(v&&v.date<f))DAY.delete(id);sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}))}
       else{const ch=sn.docChanges();if(!ch.length){snapOk('daily');ok();return}for(const c of ch){if(c.type==='removed')DAY.delete(c.doc.id);else DAY.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
-      doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
+      doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRemoteRender()},
     err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;daySubOpen(f)});ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
 function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear();DAYW.clear();const o=OLDR.daily;o.gen++;o.cov=null;o.p=Promise.resolve()}
@@ -492,7 +499,7 @@ function dplSubOpen(f){if(dplSub)dplSub();dplFrom=f;
   dplSub=fcol('dplan').where('date','>=',f).onSnapshot(sn=>{
       if(first){first=false;for(const[id,v]of DPL)if(!(v&&v.date<f))DPL.delete(id);sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}))}
       else{const ch=sn.docChanges();if(!ch.length){snapOk('dplan');return}for(const c of ch){if(c.type==='removed')DPL.delete(c.doc.id);else DPL.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
-      DV++;snapOk('dplan');if(ready)requestRender()},
+      DV++;snapOk('dplan');if(ready)requestRemoteRender()},
     err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;dplSubOpen(f)})});
   if(!unsubs.includes(stopDplan))unsubs.push(stopDplan)}
 function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear();const o=OLDR.dplan;o.gen++;o.cov=null;o.p=Promise.resolve()}
@@ -562,7 +569,7 @@ function onData(){
   if(!ready&&TAR_ONLY()){/* solo tareo: listo cuando cargan sus colecciones (nada de Last Planner) */
     if(typeof TCOLS==='undefined'||!Object.values(TCOLS).every(k=>S.loaded[k]))return;ready=true;clockSync();swWarm()}
   if(!ready){if(!Object.values(COLS).every(k=>S.loaded[k]))return;ready=true;clockSync();brandSync();if(U.week==null)U.week=curWeek();pickPiso();ensureVers();setTimeout(autoVersion,2500);setTimeout(didxMigrate,4000);bkRemind();swWarm();}
-  if(typeof respSync==='function')respSync();requestRender();
+  if(typeof respSync==='function')respSync();requestRemoteRender();
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
@@ -709,9 +716,10 @@ function render(){
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}
-  try{views[U.tab](main)}catch(err){console.error(err);main.dataset.view='';main.dataset.built='';main.dataset.lqv='';
+  const rt0=performance.now();try{views[U.tab](main)}catch(err){console.error(err);main.dataset.view='';main.dataset.built='';main.dataset.lqv='';
     main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout warnc"><b>No se pudo mostrar “${esc(tabName(U.tab))}”.</b> Vuelve a intentarlo o recarga la página; si se repite, envía este detalle al administrador: <span class="mono">${esc(String(err&&err.message||err).slice(0,200))}</span><div style="margin-top:8px"><button class="ib pri" onclick="location.reload()">Recargar la página</button></div></div></div></div>`}
   if(st!=null){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=st}
   if(fk){const el=main.querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(el){el.focus({preventScroll:true});el.dataset.o=el.value;try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
+  RLAST=performance.now();RCOST[U.tab]=RLAST-rt0;
 }
 

@@ -19,14 +19,32 @@ function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp
   for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
   for(const o of Object.values(m)){o.ppc=o.n?o.ok/o.n:null;o.ppcSc=ppcScOf(o.ok,o.n,o.nimp,o.ext)}return m}
 const confirmUF={};
+/* Plan semanal: vista por subcontratista o por ambiente (U.planV) y buscador (PLQ, solo en esta sesión). Las dos son solo
+   presentación sobre los mismos compromisos: no escriben en la semana congelada ni cambian el PPC. */
+let PLQ='';
+const plNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+function planQText(it,r){return plNorm([it.act,it.code,it.amb,it.sector,conOf(it.sc).name,r.cnc?cncLabel(r.cnc):'',r.note,r.mit].join(' '))}
+/** nombre del sector en el lookahead vivo (solo para mostrar; la foto congelada guarda el código) */
+function secNameOf(id,pid,code){const x=S.act.get(id);const a=x&&S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);if(s&&s.name)return s.name+' · ';
+  for(const o of S.sec.values())if(o.code===code&&pisoOfSecObj(o)===pid&&o.name)return o.name+' · ';return''}
+/** oculta lo que no coincide con el buscador; los botones Sí/No y las causas siguen funcionando en lo que queda visible */
+function planFilter(main){const alts=plNorm(PLQ).split(/[,;]/).map(t=>t.trim()).filter(Boolean).map(t=>t.split(' '));let tot=0,vis=0;
+  for(const sec of main.querySelectorAll('section[data-pid]')){const trs=sec.querySelectorAll('tbody tr[data-id][data-q]');if(!trs.length){sec.classList.toggle('plq-off',!!alts.length);continue}
+    const gv=new Set();let k=0;
+    for(const tr of trs){tot++;const q=tr.dataset.q;const ok=!alts.length||alts.some(ws=>ws.every(w=>q.includes(w)));tr.classList.toggle('plq-off',!ok);if(ok){k++;tr.dataset.g.split('\n').forEach(g=>gv.add(g))}}
+    for(const g of sec.querySelectorAll('tbody tr[data-gk]'))g.classList.toggle('plq-off',!gv.has(g.dataset.gk));
+    sec.classList.toggle('plq-off',!!alts.length&&!k);vis+=k}
+  const n0=$('#plq0');if(n0)n0.hidden=!(alts.length&&!vis);const nn=$('#plqn');if(nn)nn.textContent=alts.length?`${vis} de ${tot} compromisos`:''}
 function renderPlan(main){
   ensureDaily(addD(weekStart(U.week),-7));
-  const n=U.week,wd=weekDays(n),cnc=P().cnc||[];const vp=visPisos();
+  const n=U.week,wd=weekDays(n),cnc=P().cnc||[];const vp=visPisos();const byAmb=U.planV==='amb';
   let tN=0,tOk=0,tNo=0,fz=0,body='';
   for(const p of vp){
     const w=S.wk.get(wkId(n,p.id)),frozen=!!(w&&w.frozenAt);
     const items=frozen?w.items||{}:liveItems(n,p.id);const res=frozen?w.res||{}:{};
     const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));
+    /* sugerencias de campo: una sola vez por fila (antes se calculaban dos veces) */
+    const SUG=new Map();for(const id of ids)SUG.set(id,fieldSug(id,items[id]));
     if(!ids.length&&!frozen){body+=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">Sin actividades programadas en la semana ${n}</span></div></section>`;continue}
     const nOk=ids.filter(i=>res[i]&&res[i].ok===true).length,nNo=ids.filter(i=>res[i]&&res[i].ok===false).length;
     if(frozen){fz++;tN+=ids.length;tOk+=nOk;tNo+=nNo}
@@ -34,10 +52,10 @@ function renderPlan(main){
     const extra=frozen?Object.entries(liveItems(n,p.id)).filter(([id])=>!(id in items)):[];
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
     const cf=(confirmUF[p.id]||0)>NOW();
-    let h=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
+    let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':''}>${w.auto?'Congelado automáticamente':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
-     ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=fieldSug(id,items[id]);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
+     ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
      ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${canWrite?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
@@ -46,31 +64,46 @@ function renderPlan(main){
       <div class="tile"><span class="k">No cumplidos</span><span class="v" style="color:var(--bad)">${frozen?nNo:'—'}</span></div>
       <div class="tile"><span class="k">Por evaluar</span><span class="v">${frozen?ids.length-nOk-nNo:ids.length}</span></div>
       <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div><div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista (causa no imputable u otra partida que no entregó el frente)"><span class="k">PPC del SC</span><span class="v">${st&&st.ppcSc!=null?pct(st.ppcSc):'—'}${st&&st.nimp?` <small>${st.nimp} no imput.</small>`:''}</span></div></div></div>
-     <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>Descripción</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead><tbody>`;
-    const scSt=frozen?wkScStats([w]):{};
-    for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;const so=scSt[sc];
-      h+=`<tr class="grp"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`;
-      for(const id of l){const it=items[id];const r=res[id]||{};const ds=new Set(it.days);
-        h+=`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="Descripción"><span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div></td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
+     <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>${byAmb?'Subcontratista':'Descripción'}</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead><tbody>`;
+    const rowH=(id,gk)=>{const it=items[id];const r=res[id]||{};const ds=new Set(it.days);const c=conOf(it.sc);
+      return`<tr data-id="${id}" data-g="${esc(gk)}" data-q="${esc(planQText(it,r))}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&canWrite?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
-        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=fieldSug(id,it);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.mv?` · ${sg.mv} reprogramado${sg.mv>1?'s':''} en el plan diario: ${esc(sg.mvm)}`:''}${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}${sg.rsc?' · responde '+esc(conOf(sg.rsc).name):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.mv?` · ${sg.mv} reprog.`:''}${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No')+(sg.ok===false&&sg.cnc&&!r.cnc?' ('+esc(cncCode(sg.cnc)||sg.cnc)+')':''):''}</div>`})()}</td>
+        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=SUG.get(id);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.prop?` · ${sg.prop} cierre${sg.prop>1?'s':''} del capataz/SC sin confirmar (no cuenta${sg.prop>1?'n':''} para «Aplicar»: confírmalo en Campo o decide aquí)`:''}${sg.mv?` · ${sg.mv} reprogramado${sg.mv>1?'s':''} en el plan diario: ${esc(sg.mvm)}`:''}${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}${sg.rsc?' · responde '+esc(conOf(sg.rsc).name):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.mv?` · ${sg.mv} reprog.`:''}${sg.prop?` · <b class="fprop">${sg.prop} por confirmar</b>`:''}${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No')+(sg.ok===false&&sg.cnc&&!r.cnc?' ('+esc(cncCode(sg.cnc)||sg.cnc)+')':''):''}</div>`})()}</td>
         <td class="full" data-l="Tipo de causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&(r.ok===false||r.cnc)?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir tipo…':'—'}</option>${cncOpts(cnc,r.cnc)}</select>${r.ok===false?respSel(p.id,id,it,r,frozen&&canWrite):''}</td>
         <td class="full" data-l="Causa (detalle)"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen&&r.ok===false?'Qué pasó':''}"${frozen&&canWrite?'':' disabled'} aria-label="Causa (detalle)"></td>
-        <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&canWrite&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`}}
+        <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&canWrite&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`};
+    const scSt=frozen?wkScStats([w]):{};
+    if(byAmb){/* por ambiente, como en el lookahead: sector → ambiente → actividades (orden del lookahead al congelar) */
+      let cs=null,ca=null;
+      for(const id of ids){const it=items[id];const sk=it.sector||'—',ak=sk+'|'+(it.code||'')+'|'+(it.amb||'');
+        if(sk!==cs){cs=sk;ca=null;const L=ids.filter(i=>(items[i].sector||'—')===sk);const ok=L.filter(i=>res[i]&&res[i].ok===true).length;
+          h+=`<tr class="grp plsec" data-gk="${esc(sk)}"><td colspan="10"><span class="mono" style="font-weight:700">${esc(sk)}</span> <span class="note">${esc(secNameOf(id,p.id,sk))}${L.length} compromiso${L.length>1?'s':''}${frozen?` · PPC ${pct(ok/L.length)}`:''}</span></td></tr>`}
+        if(ak!==ca){ca=ak;const L=ids.filter(i=>{const o=items[i];return(o.sector||'—')+'|'+(o.code||'')+'|'+(o.amb||'')===ak});const ok=L.filter(i=>res[i]&&res[i].ok===true).length;
+          h+=`<tr class="grp plamb" data-gk="${esc(ak)}"><td colspan="10"><span class="mono">${esc(it.code||'')}</span> ${esc(it.amb||'')} <span class="note">${L.length} compromiso${L.length>1?'s':''}${frozen?` · ${ok}/${L.length} cumplido${ok===1?'':'s'}`:''}</span></td></tr>`}
+        h+=rowH(id,sk+'\n'+ak)}}
+    else for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;const so=scSt[sc];
+      h+=`<tr class="grp" data-gk="${esc(sc)}"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`;
+      for(const id of l)h+=rowH(id,sc)}
     h+=`</tbody></table></div>`;
     if(extra.length)h+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div><table class="t"><tbody>${extra.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table></div>`;
     body+=h+'</section>';
   }
   const gp=tN?tOk/tN:null;
+  /* el buscador no se pierde cuando llegan cambios de otros usuarios y se redibuja */
+  const ae=document.activeElement;const qf=ae&&ae.id==='plq'?[ae.selectionStart,ae.selectionEnd]:null;
   main.innerHTML=`<div class="scroll"><div class="wrap">
-   ${pageHead('PPC semanal',`Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}`,`<button class="ib" id="bppcx" title="Formato de la empresa: actividades, programación, cumplimiento y análisis de incumplimiento">Exportar Excel</button>`)}<div class="card">
+   ${pageHead('Plan semanal',`Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}`,`<button class="ib" id="bppcx" title="Formato de la empresa: actividades, programación, cumplimiento y análisis de incumplimiento">Exportar Excel</button>`)}<div class="card">
    <div class="pad">${vp.length>1?`<div class="tiles" style="margin-bottom:12px"><div class="tile"><span class="k">Pisos congelados</span><span class="v">${fz}<small> de ${vp.length}</small></span></div><div class="tile"><span class="k">Compromisos congelados</span><span class="v">${tN}</span></div><div class="tile"><span class="k">Cumplidos</span><span class="v" style="color:var(--ok)">${tOk}</span></div><div class="tile hl"><span class="k">PPC global sem ${n}</span><span class="v">${pct(gp)}</span></div></div>`:''}
    ${(()=>{const vs=histPisoSet();const P_=[...new Set([...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vs.has(w.pisoId)).map(w=>w.n))].map(k=>{const o=ppcWeekAgg(k,vs);return o?{...o,wk:+k}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
      return P_.length>1?`<details class="ppch"${U.ppcHist===false?'':' open'}><summary>PPC semanal histórico · ${P_.length} semanas</summary><div class="chart tscroll">${linesLegend()+svgLines(ppcHistPts(P_),{h:200})}</div></details>`:''})()}
    ${helpBox('¿Cómo funciona congelar y evaluar?',`<p>Cada piso congela y evalúa su plan por separado, así los equipos trabajan en paralelo. Al <b>congelar</b> un piso, sus actividades de la semana ${n} quedan fijadas como compromisos y se guarda una foto del lookahead para ver los cambios. Si marcas directamente Sí o No, ese piso se congela en ese momento.</p>`)}</div></div>
-   ${body||'<div class="empty">No hay pisos creados.</div>'}</div></div>`;
+   <div class="pltb"><span class="seg" id="plv" role="group" aria-label="Ver el plan"><button data-v="sc" class="${byAmb?'':'on'}">Por subcontratista</button><button data-v="amb" class="${byAmb?'on':''}">Por ambiente</button></span><input type="search" id="plq" value="${esc(PLQ)}" placeholder="Buscar actividad, ambiente, sector, SC o causa (varios: separa con coma)" aria-label="Buscar en el plan semanal"><span class="note" id="plqn"></span></div>
+   ${body||'<div class="empty">No hay pisos creados.</div>'}<div class="empty" id="plq0" hidden>Ningún compromiso coincide con la búsqueda.</div></div></div>`;
+  planFilter(main);if(qf){const q=$('#plq');if(q){q.focus();try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
+  $('#plq').oninput=e=>{PLQ=e.target.value;planFilter(main)};
+  $('#plv').onclick=e=>{const b=e.target.closest('[data-v]');if(!b||b.classList.contains('on'))return;U.planV=b.dataset.v;saveUI();render()};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
     if(e.target.closest('[data-applyfield]')){const wk=S.wk.get(wkId(n,pid));if(!wk)return;const upd={};for(const[id,it]of Object.entries(wk.items||{})){const r=(wk.res||{})[id]||{};const sg=fieldSug(id,it);if(!sg||sg.ok==null||r.ok!=null)continue;
@@ -96,30 +129,39 @@ function rplFor(x,d){let best=null,bk='';for(const[k,v]of Object.entries((x&&x.r
 /* sugerencia para evaluar un compromiso congelado con lo que se registró en la semana: los registros de campo y, para los días
    que el plan diario reprogramó (ya no están en el lookahead y nadie los registró), la causa que se decidió en la reunión */
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
-  const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);
+  /* auditoría 09/10 (decidido con el dueño, opción B): los cierres del capataz/SC sin confirmar no cuentan para la sugerencia; se
+     muestran aparte como «por confirmar» y el ingeniero decide. (aceptarCierres los pasa a «No cumplido · Sin confirmación».) */
+  const rof=d=>{const r=recOf(d,id);return r&&r._prop?null:r};
+  const prop=weekDays(weekOf(it.days[0])).filter(d=>{const r=recOf(d,id);return r&&r._prop}).length;
+  const rd=wd.map(d=>[d,rof(d)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);
   const x=S.act.get(id);const xd=new Set((x&&x.days)||[]);
-  const mvd=it.days.filter(d=>!xd.has(d)&&!recOf(d,id)).map(d=>[d,rplFor(x,d)]).filter(([,v])=>v&&v.cnc);
-  if(!reg.length&&!mvd.length)return null;
+  const mvd=it.days.filter(d=>!xd.has(d)&&!rof(d)).map(d=>[d,rplFor(x,d)]).filter(([,v])=>v&&v.cnc);
+  if(!reg.length&&!mvd.length)return prop?{ok:null,cnc:'',imp:null,rsc:'',pc:false,exec:0,exc:'',n:0,total:it.days.length,okd:0,rec:false,mv:0,mvm:'',prop}:null;
   const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));
   /* un «Cumplido» por excepción (motivo en exc) cuenta como lo programado de ese día para decidir el cumplimiento */
   const execOk=r2(reg.reduce((s,r)=>{const e=r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0;return s+(r.status==='ok'&&r.exc&&r.prog!=null?Math.max(e,+r.prog):e)},0));const exc=(reg.find(r=>r.status==='ok'&&r.exc)||{}).exc||'';const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
-  const mset=new Set(mvd.map(([d])=>d));const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
-  const allC=it.days.every(d=>recOf(d,id)||mset.has(d));let ok=null;
+  const mset=new Set(mvd.map(([d])=>d));const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!rof(d));const over=wd[5]<today;
+  const allC=it.days.every(d=>rof(d)||mset.has(d));let ok=null;
   if(it.q){if(execOk>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
   else{if(okd>=it.days.length)ok=true;else if(over||(allC&&!pendF))ok=false}
+  /* con cierres sin confirmar no se concluye «No»: decide el ingeniero */
+  if(prop&&ok===false)ok=null;
   /* causa principal: la más repetida entre los días registrados y los reprogramados */
   const src=[...reg.filter(r=>r.status!=='ok'&&r.cnc).map(r=>({cnc:r.cnc,imp:impOf(r),rsc:r.rsc||'',pc:!!r.pc})),...mvd.map(([,v])=>({cnc:v.cnc,imp:v.imp!==false,rsc:v.rsc||'',pc:!!v.pc}))];
   const cc={};src.forEach(o=>{cc[o.cnc]=(cc[o.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
   /* imputabilidad: la de la causa principal en los días que la registraron; empate = imputable al SC */
   let imp=null,rsc='',pc=false;{const L=src.filter(o=>o.cnc===cnc);if(L.length){const f=L.filter(o=>o.imp===false).length;imp=f>L.length-f?false:true;const o=L.find(o=>o.rsc&&o.rsc!==(x||it0).sc);if(o&&!imp){rsc=o.rsc;pc=o.pc}}}
   const mvm=mvd.length?(mvd[0][1].m||''):'';
-  return{ok,cnc,imp,rsc,pc,exec,exc,n:reg.length,total:it.days.length,okd,rec,mv:mvd.length,mvm}}
+  return{ok,cnc,imp,rsc,pc,exec,exc,n:reg.length,total:it.days.length,okd,rec,mv:mvd.length,mvm,prop}}
 /** «Responde»: según la causa, el SC de la actividad, nadie del lado SC, u otra partida (frente no entregado; el ingeniero decide si le cuenta) */
 function respSel(pid,id,it,r,ed){const v=r.rsc&&r.rsc!==it.sc?'p:'+r.rsc:r.imp==null?'d':r.imp?'y':'n';const di=cncImp(r.cnc);
   const others=[...S.con.values()].filter(c=>c.id!==it.sc).sort((a,b)=>a.name.localeCompare(b.name));
   return`<select class="ci rspsel" data-resp data-fk="rsp:${pid}:${id}"${ed?'':' disabled'} aria-label="Quién responde" title="Quién responde por este no cumplido"><option value="d"${v==='d'?' selected':''}>Según la causa: ${di?'imputable al SC':'no imputable'}</option><option value="y"${v==='y'?' selected':''}>Imputable al SC</option><option value="n"${v==='n'?' selected':''}>No imputable al SC</option>${others.map(c=>`<option value="p:${c.id}"${v==='p:'+c.id?' selected':''}>Responde ${esc(c.name)} (no entregó)</option>`).join('')}</select>${v.startsWith('p:')?`<label class="chk rspc"><input type="checkbox" data-rpc${r.pc?' checked':''}${ed?'':' disabled'}> le cuenta en su PPC</label>`:''}`}
 /** n.º de la actividad dentro de su ambiente (el mismo que muestra el lookahead) */
-function actNum(id){const x=S.act.get(id);if(!x)return 0;const i=siblings('acts','ambId',x.ambId).findIndex(y=>y.id===id);return i<0?0:i+1}
+/* índice por ambiente memorizado por versión de datos (DV): antes se recorrían y ordenaban las ~2000 actividades por cada fila */
+let ACTN=null,ACTNV=-1;
+function actNum(id){const x=S.act.get(id);if(!x)return 0;if(ACTNV!==DV||!ACTN){ACTN=new Map();ACTNV=DV}let m=ACTN.get(x.ambId);
+  if(!m){m=new Map();siblings('acts','ambId',x.ambId).forEach((y,i)=>m.set(y.id,i+1));ACTN.set(x.ambId,m)}return m.get(id)||0}
 /** opciones de causa: las configuradas y, si la guardada ya no está en la lista, también esa (para no perderla al editar) */
 const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<option value="${esc(k)}" title="${esc(cncTip(k))}"${cur===k?' selected':''}>${esc(cncLabel(k))}</option>`).join('');
 /* guarda solo los campos que cambian de cada evaluación (res.<actividad>.<campo>): si otra persona cambió otro campo
@@ -218,7 +260,13 @@ function restrPiso(r){return r.actId&&S.act.has(r.actId)?pisoOfAct(r.actId):(r.p
 /* restricción de una actividad que está en la papelera: no cuenta como pendiente (se ve marcada en la lista) */
 const rArch=r=>!!(r&&r.actId&&!S.act.has(r.actId)&&ARCH.act&&ARCH.act.has(r.actId));
 const rOpenC=r=>r.status!=='lib'&&!rArch(r);
-function restrInScope(){return[...S.res.values()].filter(r=>{if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
+/* qué restricciones ve cada rol (oct 2026, pedido del dueño): el SC, las que registró él y en las que es responsable (él o su
+   empresa); un área de apoyo (OT, Calidad…), las de su área y las que registró o le asignaron. Ingenieros, admin y lectores: todas.
+   Solo es lo que se muestra (lista, contadores, Hoy, Excel); las reglas de escritura no cambian. */
+function restrMine(r){if(!me||!r)return false;if(r.by&&r.by===me.email)return true;const R=fold(r.resp||'');if(!R)return false;
+  const mine=[me.name,...(SCK()?memScs(me).map(i=>conOf(i).name):[]),...(AREA()&&me.area?[me.area]:[])].filter(Boolean).map(fold);return mine.includes(R)}
+function restrVis(r){if(SCK())return restrMine(r);if(AREA())return(!!me.area&&myArea(r))||restrMine(r);return true}
+function restrInScope(){return[...S.res.values()].filter(r=>{if(!restrVis(r))return false;if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
 function actOptions(sel,only){let h=only?'':'<option value="">— Sin actividad —</option>';for(const{p,secs}of visTree())for(const{s,ambs}of secs)for(const{a,acts:all}of ambs){const acts=only?all.filter(x=>only.has(x.sc)):all;if(!acts.length)continue;h+=`<optgroup label="${esc((U.piso?'':p.code+' · ')+a.code+' · '+a.name)}">`+acts.map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'(sin nombre)')} — ${esc(conOf(x.sc).name)}</option>`).join('')+'</optgroup>'}
   if(sel&&S.act.has(sel)&&!h.includes(`value="${sel}"`)){const x=S.act.get(sel);h+=`<option value="${sel}" selected>${esc(x.name)} (otro piso)</option>`}return h}
 const rOpen=new Set();
@@ -273,21 +321,31 @@ function rReg(r){const m=r.by&&MEM.get(r.by);if(m&&m.role==='sc'&&m.sc)return co
    el SC y las áreas ven su propio nombre, las empresas y las áreas. */
 let RESPC=null;
 function respChoices(){const k=MEM.size+'|'+S.con.size+'|'+(me&&me.name);if(RESPC&&RESPC.k===k&&performance.now()-RESPC.t<2000)return RESPC.v;const v=respChoices0();RESPC={k,t:performance.now(),v};return v}
-function respChoices0(){const P_=new Map();const add=(n,sub)=>{n=String(n||'').trim();if(n&&!P_.has(fold(n)))P_.set(fold(n),{n,sub})};
+function respChoices0(){const P_=new Map();const add=(n,sub,o)=>{n=String(n||'').trim();if(n&&!P_.has(fold(n)))P_.set(fold(n),{n,sub,...(o||{})})};
   for(const[em,m]of MEM){if(!m||TAR_ROLES.includes(m.role)||m.role==='lector'||m.role==='planner'||em.startsWith('u_'))continue;
-    add(m.name||em,(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+m.area:'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>conOf(i).name).join(', '):''))}
-  if(me&&me.name)add(me.name,'tú');
+    add(m.name||em,(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+m.area:'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>conOf(i).name).join(', '):''),{role:m.role,area:m.area||'',scs:memScs(m)})}
+  if(me&&me.name)add(me.name,'tú',{role:me.role,area:me.area||'',scs:memScs(me)});
   const per=[...P_.values()].sort((a,b)=>a.n.localeCompare(b.n));const seen=new Set(per.map(p=>fold(p.n)));
   const emp=[...S.con.values()].map(c=>c.name).filter(n=>n&&!seen.has(fold(n))).sort((a,b)=>a.localeCompare(b));emp.forEach(n=>seen.add(fold(n)));
   const ar=(typeof restrAreasL==='function'?restrAreasL():[]).filter(n=>n&&!seen.has(fold(n)));
   return{per,emp,ar,all:new Set([...seen,...ar.map(fold)])}}
 const respOk=v=>!v||respChoices().all.has(fold(v));
-function respOpts(cur){const C=respChoices();cur=String(cur||'').trim();const bad=cur&&!C.all.has(fold(cur));const sel=n=>fold(n)===fold(cur)?' selected':'';
+/* con la restricción r, la lista se acota a su clase (oct 2026, pedido del dueño): «Otras áreas» → las personas de esa área (o de
+   todas las áreas si aún no eligió una) y las áreas; «Campo» → ingenieros, administrador y la gente del SC de la actividad, más las
+   empresas. Sin r (plan diario) va la lista completa. El valor guardado siempre se muestra; la validación (respOk) usa la lista completa. */
+function respOpts(cur,r){const C=respChoices();cur=String(cur||'').trim();const bad=cur&&!C.all.has(fold(cur));const sel=n=>fold(n)===fold(cur)?' selected':'';
+  let per=C.per,emp=C.emp,ar=C.ar;
+  if(r){const x=r.actId&&(S.act.get(r.actId)||ARCH.act.get(r.actId));const sc=r.sc||(x&&x.sc)||'';
+    if(grpOf(r)==='area'){const fa=fold(r.area||'');per=per.filter(p=>p.role==='area'&&(!fa||fold(p.area)===fa));emp=[];ar=ar.filter(n=>!fa||fold(n)===fa)}
+    else{per=per.filter(p=>p.role==='admin'||p.role==='editor'||p.role==='campo'||((p.role==='sc'||p.role==='capataz')&&(!sc||(p.scs||[]).includes(sc))));ar=[];
+      if(sc){const nm=conOf(sc).name;emp=[...emp.filter(n=>fold(n)===fold(nm)),...emp.filter(n=>fold(n)!==fold(nm))]}}
+    /* el valor actual, aunque quede fuera del filtro */
+    if(cur&&!bad&&![...per.map(p=>p.n),...emp,...ar].some(n=>fold(n)===fold(cur))){const p=C.per.find(o=>fold(o.n)===fold(cur));if(p)per=[p,...per];else if(C.emp.some(n=>fold(n)===fold(cur)))emp=[cur,...emp];else ar=[cur,...ar]}}
   return`<option value=""${cur?'':' selected'}>— elige responsable —</option>${bad?`<option value="${esc(cur)}" selected>${esc(cur)} (no está en el equipo)</option>`:''}`
-   +(C.per.length?`<optgroup label="Personas del equipo">${C.per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
-   +(C.emp.length?`<optgroup label="Empresas (subcontratistas)">${C.emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
-   +(C.ar.length?`<optgroup label="Áreas">${C.ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
-function rRespSel(attrs,cur,ro){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur)}</select>`}
+   +(per.length?`<optgroup label="Personas del equipo">${per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
+   +(emp.length?`<optgroup label="Empresas (subcontratistas)">${emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
+   +(ar.length?`<optgroup label="Áreas">${ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
+function rRespSel(attrs,cur,ro,r){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur,r)}</select>`}
 function rWho(r){return(r.status==='lib'?(r.libN||r.resp):r.resp)||'—'}
 function rFOk(r){const F=U.rF||{};return(!F.aff||rAff(r)===F.aff)&&(!F.reg||rReg(r)===F.reg)&&(!F.who||rWho(r)===F.who)
   &&(!F.c1||(r.created||'')>=F.c1)&&(!F.c2||(r.created&&r.created<=F.c2))&&(!F.l1||(r.freed&&r.freed>=F.l1))&&(!F.l2||(r.freed&&r.freed<=F.l2))}
@@ -303,7 +361,7 @@ function renderRestr(main){
   let list=all.filter(r=>U.rfilter==='all'||(U.rfilter==='pend'?r.status!=='lib':r.status==='lib'));
   if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);
   const nAV=list.filter(r=>r.status!=='lib'&&actVenc(r.actId)).length;if(RVEN&&!nAV)RVEN=false;if(RVEN)list=list.filter(r=>r.status!=='lib'&&actVenc(r.actId));
-  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);if(AREA()&&U.rMine!==false&&me.area)list=list.filter(r=>myArea(r));
+  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
   const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
@@ -317,7 +375,6 @@ function renderRestr(main){
   <div class="card"><div class="hd">Lista
    <span class="seg" id="rf"><button data-f="pend" class="${U.rfilter==='pend'?'on':''}">Pendientes</button><button data-f="lib" class="${U.rfilter==='lib'?'on':''}">Liberadas</button><button data-f="all" class="${U.rfilter==='all'?'on':''}">Todas</button></span>
    <span class="seg" id="rg" title="Operativas de campo vs. las que dependen de otras áreas (OT, Ingeniería, etc.)"><button data-g="" class="${U.rgrp?'':'on'}">Todas</button><button data-g="campo" class="${U.rgrp==='campo'?'on':''}">Campo</button><button data-g="area" class="${U.rgrp==='area'?'on':''}">Otras áreas</button></span>
-   ${AREA()&&me.area?`<span class="seg" id="rmine"><button data-m="1" class="${U.rMine!==false?'on':''}">De ${esc(me.area)}</button><button data-m="0" class="${U.rMine===false?'on':''}">Todas</button></span>`:''}
    ${nAV||RVEN?`<button type="button" class="chip${RVEN?' on':''}" id="rven" title="${AVTIP}">⚠ Actividad no ejecutada <b>${nAV}</b></button>`:''}
    ${U.rAct?`<span class="pill neu">Filtrado: ${esc(S.act.get(U.rAct)?.name||'actividad')} <button class="ab" id="rclr" aria-label="Quitar filtro">&times;</button></span>`:''}
    </div>${rFBar(all)}${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
@@ -337,7 +394,7 @@ function renderRestr(main){
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
           <label>Descripción<input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></label>
-          <label>Responsable${rRespSel(fk('resp'),r.resp,ro)}</label>
+          <label>Responsable${rRespSel(fk('resp'),r.resp,ro,r)}</label>
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label>
           <label>Compromiso del área (AS)<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label>
           <label>Observaciones del área (AS)<input class="ci" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Impedimento para levantarla, comentarios…"${ro}></label></div>`
@@ -348,14 +405,14 @@ function renderRestr(main){
     <td class="rc-act"><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?`<div class="rloc">${rArch(r)?'<span class="pill neu">Actividad en la papelera · no cuenta como pendiente</span>':'La actividad ya no está en el lookahead'}</div>`:''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
     <td class="rc-tp"><select class="ci" ${fk('type')}${ro} aria-label="Tipo">${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select>${gsel(r,fk)}</td>
     <td class="rc-ds"><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro} aria-label="Descripción"><input class="ci rcobs" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Obs. del área (AS): impedimento, comentarios…"${ro} aria-label="Observaciones del área de soporte">${rthumbs(r)}</td>
-    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro)}</td>
+    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro,r)}</td>
     <td class="rc-dt"><label class="rdl">Requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label><label class="rdl" title="Fecha en que el área de soporte se compromete a levantarla">Compromiso AS<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label><label class="rdl">Liberada<input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></label></td>
     <td class="rc-x">${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
   h+=mob?'</div>'+more+'</div></div></div>':'</tbody></table></div>'+more+'</div></div></div>';
   main.innerHTML=h;
   $('#rg',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rgrp=b.dataset.g;saveUI();render()};
-  {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
+
   $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;U.rLim=0;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
   {const xb=$('#rxls',main);if(xb)xb.onclick=()=>{const F=U.rF||{};const fs=[U.rfilter==='pend'?'Pendientes':U.rfilter==='lib'?'Liberadas':'Todas',F.aff&&'Afecta a '+F.aff,F.reg&&'Registró '+F.reg,F.who&&'La libera '+F.who,(F.c1||F.c2)&&`Registrada ${F.c1?fmtD(F.c1):'…'}–${F.c2?fmtD(F.c2):'…'}`,(F.l1||F.l2)&&`Liberada ${F.l1?fmtD(F.l1):'…'}–${F.l2?fmtD(F.l2):'…'}`].filter(Boolean).join(' · ');restrXlsx(list,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · ${fs}`)}}
@@ -366,7 +423,7 @@ function renderRestr(main){
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada')}return} /* la foto queda guardada: deshacer la recupera */
-    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(SCK()&&!await uiAsk({title:'¿Eliminar esta restricción?',ok:'Eliminar',tone:'danger'}))return;apply([op('restr',r.id,null)],'Restricción eliminada')})();return} /* sus fotos se conservan: deshacer la devuelve completa */
+    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(!await uiAsk({title:'¿Eliminar esta restricción?',text:canWrite&&!PM()?'Va a la Papelera (Configuración): desde ahí se puede restaurar.':'',ok:'Eliminar',tone:'danger'}))return;apply([arc('restr',r.id)],'Restricción eliminada')})();return} /* auditoría 09/10: eliminar = archivar (Papelera), nunca borrar; sus fotos se conservan */
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const rm=e.target.closest('[data-rmap]');if(rm){gotoPlano(rm.dataset.rmap);return}

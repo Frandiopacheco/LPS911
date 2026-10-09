@@ -1450,7 +1450,7 @@ function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso
     openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pend.length} propuesta${pend.length>1?'s':''} del SC por revisar.</b> Para publicar el plan hay que revisarlas todas (Revisar en «Por decidir»).${adm?`<br>Como administrador puedes decidirlas todas de una vez: aceptar = ${pend.length-nf?`los «no va» pasan al día hábil siguiente (solo esa actividad)`:''}${pend.length-nf&&nf?' y ':''}${nf?'las culminadas se dan por culminadas':''}; rechazar = van según lo programado.`:''}</div>
       <button data-do="ver" class="pri">Ir a revisar</button>${adm?`<button data-do="acc">✓ Aceptar todas (${pend.length})</button><button data-do="rej">✗ Rechazar todas (${pend.length})</button>`:''}<button data-do="no">Cerrar</button>`,
       {ver:()=>{M.pdOpen=true;requestRender()},acc:()=>dpAll(true),rej:()=>dpAll(false),no:()=>{}});return}
-  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} Al publicar se cierra el plan de ese día. La semana congelada del PPC semanal no cambia.${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:pubPlan,no:()=>{}})}
+  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} Al publicar se cierra el plan de ese día. La semana congelada del Plan semanal no cambia.${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:pubPlan,no:()=>{}})}
 /** solo el administrador: aceptar o rechazar todas las propuestas pendientes del día y piso. Aceptar un «no va» lo deja como
     borrador al día hábil siguiente (solo esa actividad, con la causa que puso el SC); una culminada se da por culminada. */
 let DPALL=false;
@@ -1480,6 +1480,8 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
     const ds=await Promise.all(D.map(z=>tx.get(fcol('pdz').doc(z.id))));const pas=await Promise.all(PA.map(z=>tx.get(fcol('pdz').doc(z.id))));
     const Pz=[];pas.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:PA[i].id};if(zz.draft&&zz.st==='ok')Pz.push(zz)});Pz.sort((a,b)=>(a.ts||0)-(b.ts||0));
     const A=new Map();(await Promise.all([...cand].map(id=>tx.get(fcol('acts').doc(id))))).forEach(d=>{if(d.exists)A.set(d.id,actNorm({...d.data(),id:d.id}))});
+    /* auditoría 09/10: restricciones res-<borrador> ya liberadas (deshacer publicación y volver a publicar) no se reescriben */
+    const RLIB=new Set();(await Promise.all(D.map(z=>tx.get(fcol('restr').doc('res-'+z.id))))).forEach(s_=>{if(s_.exists&&(s_.data()||{}).status==='lib')RLIB.add(s_.id)});
     const Dz=[];ds.forEach((d,i)=>{if(!d.exists)return;const zz={...d.data(),id:D[i].id};if(zz.draft)Dz.push(zz)});Dz.sort((a,b)=>(a.ts||0)-(b.ts||0)||String(a.id).localeCompare(String(b.id)));
     /* planes ya cerrados de otras fechas que se tocarían: esa actividad no se mueve (si es la principal, el cambio queda sin publicar) */
     const closed=new Map();const DD=[...new Set([...pubDates(Dz,A,date),...Pz.filter(z=>z.t==='adel'&&z.from).map(z=>z.from)])].filter(d=>d!==date);(await Promise.all(DD.map(dd=>tx.get(fcol('dplan').doc(dd+'_'+pid))))).forEach((s_,i)=>{const v=s_.exists?s_.data():null;if(v&&v.ids&&!v.reo)closed.set(DD[i],new Set(Object.keys(v.ids)))});
@@ -1509,14 +1511,14 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
     for(const o of paOut)tx.update(fcol('pdz').doc(o.id),{draft:false,pub:PID,...(o.actId?{actId:o.actId}:{})});
     /* las áreas dibujadas para lo agregado pasan a ser de la actividad */
     for(const o of paOut){o.zs=paZones(o.id).map(z=>z.id);for(const zid of o.zs)tx.update(fcol('pdz').doc(zid),{actId:o.actId||o.aid,fuera:false})}
-    for(const r of restrs){const{id,...b}=r;tx.set(fcol('restr').doc(id),b)}
+    for(const r of restrs){if(RLIB.has(r.id))continue;const{id,...b}=r;tx.set(fcol('restr').doc(id),b)}
     for(const o of out)tx.update(fcol('pdz').doc(o.id),{draft:false,mv:o.mv,rid:o.rid,pub:PID});
     const doc={date,pisoId:pid,sc:'',kind:'pub',n:(pubD&&pubD.n||0)+out.length+paOut.length,by:me.email,byName:me.name||me.email,ts:NOW()};tx.set(pref,doc);
     /* foto del plan comprometido (contra ella se mide el PPC diario), con las actividades releídas del servidor;
        un día que ya llegó conserva la que tenía (o la de antes de publicar) */
     let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso()){for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});for(const na of newActs)Acts.set(na.id,{...na.doc,id:na.id})}
       snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,who:dplanWho(snapIds,Acts),at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
-    return{out,skipped,held,W,restrs,doc,was:pubD,snapIds,paOut,newActs}})}
+    return{out,skipped,held,W,restrs:restrs.filter(r=>!RLIB.has(r.id)),doc,was:pubD,snapIds,paOut,newActs}})}
   catch(e){PUBBUSY=false;toast('No se pudo publicar: '+(e&&(e.code||e.message)||'error'));return}
   PUBBUSY=false;
   if(R_.blocked){toast(`No se publicó: ${R_.held.join(' · ')} tocaría un día ya publicado. Quita o cambia ese «no va» (Cambios del plan) o pide al administrador reabrir ese día.`);requestRender();return}

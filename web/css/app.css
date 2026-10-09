@@ -1310,6 +1310,12 @@ button.dpill.pastp{border:0;cursor:pointer;padding:2px 10px;background:var(--pan
 button.dpill.pastp:hover{color:var(--ink)}
 td.act input::-webkit-calendar-picker-indicator{display:none!important}
 .ppcs td.inum{text-align:center;color:var(--muted);font-weight:600}
+.pltb{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.pltb input[type=search]{flex:1;min-width:220px;height:var(--h-ctl);border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 10px;background:var(--panel);color:inherit}
+.plq-off{display:none!important}
+/* auditoría 09/10: los pisos fuera de pantalla no se maquetan (Plan semanal con todos los pisos: ~20 000 nodos) */
+.plsecv{content-visibility:auto;contain-intrinsic-size:auto 900px}
+.ppcs tr.plamb td{padding-left:22px;font-weight:500}
 .ppcs th{white-space:normal}.ppcs td .ci{width:100%;min-width:0}.ppcs .fsug{white-space:normal;max-width:130px}
 td.act .lqbadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);margin:0}
 td.act .lqbadge.sh{right:26px}

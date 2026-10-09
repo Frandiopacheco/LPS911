@@ -202,7 +202,7 @@ function renderInd(main){
    <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${full.length?` <small>${full.length} sem</small>`:''}</span></div>
    <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${full.length}${part?' <small>+1 en curso</small>':''}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
-  if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>PPC semanal</b> y evalúas cada uno con Sí / No.</div>`;
+  if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>Plan semanal</b> y evalúas cada uno con Sí / No.</div>`;
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
   /* misma población que Indicadores › Diario (dayData): incluye lo archivado y los registros históricos */
   /* una sola pasada (auditoría de código 08/10, M5): lo no programado por día sale de DD.extras y la tabla de la semana

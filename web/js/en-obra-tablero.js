@@ -244,10 +244,15 @@ function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.
   const items=[];for(const x of S.act.values()){if(!schedOrSnap(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;if(!dashOk(x.sc,x.name))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
   return items}
 /* PPC semanal oficial (semanas congeladas) con los filtros: compromisos de la foto de la semana (it.sc, it.act) */
-function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,sc:{}};for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
-    for(const[id,it]of Object.entries(w.items||{})){if(!dashOk(it.sc,it.act))continue;const q=r[id];const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
-      if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q))o.nimp++}}}
-  o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp):null;return o}
+/* auditoría 09/10: misma fórmula que Plan semanal e Indicadores. Sin filtro de SC = la del piso (ppcOf: un «frente no entregado»
+   que le cuenta al SC anterior sí es imputable); con filtro de SC = la del SC (wkScStats: no imputable para él, y suma las fallas
+   de otras partidas que el ingeniero le hizo contar a los SC elegidos) */
+function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,ext:0,sc:{}};const byS=DB_.sc.size>0;for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
+    for(const[id,it]of Object.entries(w.items||{})){const q=r[id];
+      if(byS&&q&&q.ok===false&&q.rsc&&q.pc&&q.rsc!==it.sc&&DB_.sc.has(q.rsc)&&(!DB_.ty||an(it.act)===DB_.ty))o.ext++;
+      if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
+      if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q)&&(byS||!(q.rsc&&q.pc)))o.nimp++}}}
+  o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp,o.ext):null;return o}
 /* Avance de la semana contra lo congelado (oct 2026, decidido con el dueño): cada día de cada actividad de la semana congelada
    es una unidad. Meta = todas; esperado = las de días hasta hoy; real = días de la semana (hasta hoy) con «Cumplido» en el
    cumplimiento diario, aunque se haya cumplido otro día de la semana (tope: sus días comprometidos). Parcial y No cuentan 0.
