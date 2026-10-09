@@ -249,7 +249,13 @@ function restrPiso(r){return r.actId&&S.act.has(r.actId)?pisoOfAct(r.actId):(r.p
 /* restricción de una actividad que está en la papelera: no cuenta como pendiente (se ve marcada en la lista) */
 const rArch=r=>!!(r&&r.actId&&!S.act.has(r.actId)&&ARCH.act&&ARCH.act.has(r.actId));
 const rOpenC=r=>r.status!=='lib'&&!rArch(r);
-function restrInScope(){return[...S.res.values()].filter(r=>{if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
+/* qué restricciones ve cada rol (oct 2026, pedido del dueño): el SC, las que registró él y en las que es responsable (él o su
+   empresa); un área de apoyo (OT, Calidad…), las de su área y las que registró o le asignaron. Ingenieros, admin y lectores: todas.
+   Solo es lo que se muestra (lista, contadores, Hoy, Excel); las reglas de escritura no cambian. */
+function restrMine(r){if(!me||!r)return false;if(r.by&&r.by===me.email)return true;const R=fold(r.resp||'');if(!R)return false;
+  const mine=[me.name,...(SCK()?memScs(me).map(i=>conOf(i).name):[]),...(AREA()&&me.area?[me.area]:[])].filter(Boolean).map(fold);return mine.includes(R)}
+function restrVis(r){if(SCK())return restrMine(r);if(AREA())return(!!me.area&&myArea(r))||restrMine(r);return true}
+function restrInScope(){return[...S.res.values()].filter(r=>{if(!restrVis(r))return false;if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
 function actOptions(sel,only){let h=only?'':'<option value="">— Sin actividad —</option>';for(const{p,secs}of visTree())for(const{s,ambs}of secs)for(const{a,acts:all}of ambs){const acts=only?all.filter(x=>only.has(x.sc)):all;if(!acts.length)continue;h+=`<optgroup label="${esc((U.piso?'':p.code+' · ')+a.code+' · '+a.name)}">`+acts.map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'(sin nombre)')} — ${esc(conOf(x.sc).name)}</option>`).join('')+'</optgroup>'}
   if(sel&&S.act.has(sel)&&!h.includes(`value="${sel}"`)){const x=S.act.get(sel);h+=`<option value="${sel}" selected>${esc(x.name)} (otro piso)</option>`}return h}
 const rOpen=new Set();
@@ -344,7 +350,7 @@ function renderRestr(main){
   let list=all.filter(r=>U.rfilter==='all'||(U.rfilter==='pend'?r.status!=='lib':r.status==='lib'));
   if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);
   const nAV=list.filter(r=>r.status!=='lib'&&actVenc(r.actId)).length;if(RVEN&&!nAV)RVEN=false;if(RVEN)list=list.filter(r=>r.status!=='lib'&&actVenc(r.actId));
-  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);if(AREA()&&U.rMine!==false&&me.area)list=list.filter(r=>myArea(r));
+  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
   const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
@@ -358,7 +364,6 @@ function renderRestr(main){
   <div class="card"><div class="hd">Lista
    <span class="seg" id="rf"><button data-f="pend" class="${U.rfilter==='pend'?'on':''}">Pendientes</button><button data-f="lib" class="${U.rfilter==='lib'?'on':''}">Liberadas</button><button data-f="all" class="${U.rfilter==='all'?'on':''}">Todas</button></span>
    <span class="seg" id="rg" title="Operativas de campo vs. las que dependen de otras áreas (OT, Ingeniería, etc.)"><button data-g="" class="${U.rgrp?'':'on'}">Todas</button><button data-g="campo" class="${U.rgrp==='campo'?'on':''}">Campo</button><button data-g="area" class="${U.rgrp==='area'?'on':''}">Otras áreas</button></span>
-   ${AREA()&&me.area?`<span class="seg" id="rmine"><button data-m="1" class="${U.rMine!==false?'on':''}">De ${esc(me.area)}</button><button data-m="0" class="${U.rMine===false?'on':''}">Todas</button></span>`:''}
    ${nAV||RVEN?`<button type="button" class="chip${RVEN?' on':''}" id="rven" title="${AVTIP}">⚠ Actividad no ejecutada <b>${nAV}</b></button>`:''}
    ${U.rAct?`<span class="pill neu">Filtrado: ${esc(S.act.get(U.rAct)?.name||'actividad')} <button class="ab" id="rclr" aria-label="Quitar filtro">&times;</button></span>`:''}
    </div>${rFBar(all)}${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
@@ -396,7 +401,7 @@ function renderRestr(main){
   h+=mob?'</div>'+more+'</div></div></div>':'</tbody></table></div>'+more+'</div></div></div>';
   main.innerHTML=h;
   $('#rg',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rgrp=b.dataset.g;saveUI();render()};
-  {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
+
   $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;U.rLim=0;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
   {const xb=$('#rxls',main);if(xb)xb.onclick=()=>{const F=U.rF||{};const fs=[U.rfilter==='pend'?'Pendientes':U.rfilter==='lib'?'Liberadas':'Todas',F.aff&&'Afecta a '+F.aff,F.reg&&'Registró '+F.reg,F.who&&'La libera '+F.who,(F.c1||F.c2)&&`Registrada ${F.c1?fmtD(F.c1):'…'}–${F.c2?fmtD(F.c2):'…'}`,(F.l1||F.l2)&&`Liberada ${F.l1?fmtD(F.l1):'…'}–${F.l2?fmtD(F.l2):'…'}`].filter(Boolean).join(' · ');restrXlsx(list,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · ${fs}`)}}
