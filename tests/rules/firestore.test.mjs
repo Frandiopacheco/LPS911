@@ -322,6 +322,26 @@ test('congelado automático (frz): todos lo leen y nadie lo escribe desde la app
   await assertFails(setDoc(doc(user('editor@obra.pe'), 'frz/60'), { n: 60, k: 0 }));
   await assertFails(deleteDoc(doc(user(OWNER), 'frz/60')));
 });
+test('foto del lookahead al congelar (wsnap): la lee LPS; la escriben solo admin y editores (como weeks)', async () => {
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'wsnap/60_p1'), { snap: { x1: ['2026-10-05'] }, n: 60, pisoId: 'p1' }));
+  for (const m of ['lector@obra.pe', 'campo@obra.pe', 'sc@obra.pe', 'ot@obra.pe', 'veedor@obra.pe']) await assertSucceeds(getDoc(doc(user(m), 'wsnap/60_p1')));
+  await assertSucceeds(getDoc(doc(cap('cap1'), 'wsnap/60_p1')));
+  await assertFails(getDoc(doc(user('nadie@x.pe'), 'wsnap/60_p1')));
+  await assertFails(getDoc(doc(user('tasis@obra.pe'), 'wsnap/60_p1')));
+  // congelar desde la página: weeks + wsnap en la misma transacción (editor/admin)
+  for (const m of ['editor@obra.pe', OWNER]) {
+    const db = user(m); const b = writeBatch(db);
+    b.set(doc(db, 'weeks/61_p1'), { n: 61, pisoId: 'p1', frozenAt: 'x', items: {}, res: {} });
+    b.set(doc(db, 'wsnap/61_p1'), { snap: {}, n: 61, pisoId: 'p1', t: 'x' });
+    await assertSucceeds(b.commit());
+  }
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'wsnap/60_p1__h1'), { snap: {}, n: 60, pisoId: 'p1', histOf: '60_p1' }));
+  for (const m of ['lector@obra.pe', 'campo@obra.pe', 'sc@obra.pe', 'ot@obra.pe', 'veedor@obra.pe']) {
+    await assertFails(setDoc(doc(user(m), 'wsnap/60_p1'), { snap: {} }));
+    await assertFails(deleteDoc(doc(user(m), 'wsnap/60_p1')));
+  }
+  await assertFails(setDoc(doc(cap('cap1'), 'wsnap/60_p1'), { snap: {} }));
+});
 test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'pzon/x1'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));
@@ -627,7 +647,7 @@ test('tareo: la configuración la cambia solo el administrador', async () => {
   await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
 });
 test('tareo: los roles de solo tareo no leen ni escriben nada de LPS', async () => {
-  const lps = ['acts/x1', 'meta/main', 'pisos/p1', 'daily/2026-10-01_p1', 'restr/r-ot', 'live/2026-10-01_x1', 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'mp/n1', 'cli/buf'];
+  const lps = ['acts/x1', 'meta/main', 'pisos/p1', 'daily/2026-10-01_p1', 'restr/r-ot', 'live/2026-10-01_x1', 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'wsnap/60_p1', 'mp/n1', 'cli/buf'];
   for (const db of [user('tasis@obra.pe'), user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) {
     for (const p of lps) await assertFails(getDoc(doc(db, p)));
     for (const c of ['acts', 'restr', 'daily', 'live']) await assertFails(getDocs(collection(db, c)));

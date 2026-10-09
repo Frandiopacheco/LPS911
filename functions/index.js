@@ -14,7 +14,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -56,8 +56,13 @@ exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'Americ
   logger.info(`Cierres registrados automáticamente: ${n}${skip ? ` (${skip} ya revisados por un ingeniero, sin cambios)` : ''}`);
 });
 
-/* Cada 15 minutos mira si ya pasó el corte de la semana que viene; fuera de esa ventana solo lee meta/project. */
+/* Cada 15 minutos mira si ya pasó el corte de la semana que viene; fuera de esa ventana solo lee meta/project.
+   De paso mueve, por partes, la foto del lookahead (snap) de weeks a wsnap (migración M1; cuando termina solo lee frz/_wsnap). */
 exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+  try { await congelar(); }
+  finally { try { await migrarWsnap(); } catch (e) { logger.error('Migración de fotos del lookahead (wsnap): falló esta pasada, se reintenta en 15 minutos', e); } }
+});
+async function congelar() {
   const project = (await db().collection('meta').doc('project').get()).data() || {};
   const now = Date.now();
   const W = weeksToFreeze(project, now);
@@ -91,7 +96,8 @@ exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
     const R = await runFloors([...byPiso.keys()], async pid => {
       const o = byPiso.get(pid); const ref = db().collection('weeks').doc(o.id);
       /* como «Congelar» de la página: si alguien ya lo congeló (o lo hizo mientras corría), se respeta su versión */
-      return db().runTransaction(async tx => { const d = await tx.get(ref); if (d.exists && held(d.data())) return false; tx.set(ref, o.doc); return true; });
+      /* la foto del lookahead va aparte (wsnap), en la misma transacción */
+      return db().runTransaction(async tx => { const d = await tx.get(ref); if (d.exists && held(d.data())) return false; tx.set(ref, o.doc); tx.set(db().collection('wsnap').doc(o.id), o.wsnap); return true; });
     }, (pid, e) => logger.error(`Semana ${n}: no se pudo congelar el piso ${pid}`, e));
     const k = [...R.out.values()].filter(Boolean).length;
     const rec = retryRecord(prev, plan, { at, n, pisos: [...byPiso.keys()] }, R.done, R.fail, { k });
@@ -99,7 +105,41 @@ exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
     logger.info(`Semana ${n}: ${k} piso(s) congelado(s) automáticamente${plan.only ? ` (reintento ${rec.tries})` : ''}`);
     if (R.fail.length) logger.error(`Semana ${n}: ${R.fail.length} piso(s) sin congelar (${R.fail.join(', ')}); ${rec.tries >= RETRY_MAX ? 'se agotaron los reintentos: congélalos a mano' : 'se reintentan en 15 minutos'}`);
   }
-});
+}
+
+/* Migración M1 (auditoría de datos): la foto del lookahead (snap) sale de weeks (que todos descargan al entrar) a wsnap/<id>.
+   Recorre weeks por id, WSNAP_PAGE documentos por pasada (cursor en frz/_wsnap, que solo escribe el servidor y nadie escucha).
+   Cada documento con snap va en su propia transacción que lo relee: escribe wsnap (wsnapPlan) y quita el campo de weeks juntos;
+   si alguien lo cambió mientras tanto, se usa lo que hay en ese momento. Al llegar al final deja {wsnap:true} y no vuelve a leer. */
+async function migrarWsnap() {
+  const mref = db().collection('frz').doc('_wsnap');
+  const ms = await mref.get(); const m = ms.exists ? ms.data() : {};
+  if (m.wsnap === true) return;
+  let q = db().collection('weeks').orderBy(admin.firestore.FieldPath.documentId()).limit(WSNAP_PAGE);
+  if (m.cursor) q = q.startAfter(m.cursor);
+  const page = await q.get();
+  const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+  let moved = 0, same = 0, kept = 0;
+  for (const d of page.docs) {
+    const w = d.data(); if (w.snap === undefined && !(w.v && w.v.snap !== undefined)) continue;
+    const r = await db().runTransaction(async tx => {
+      const wref = db().collection('weeks').doc(d.id), sref = db().collection('wsnap').doc(d.id);
+      const [ws, ss] = [await tx.get(wref), await tx.get(sref)];
+      const plan = ws.exists ? wsnapPlan(d.id, ws.data(), ss.exists ? ss.data() : null, stamp) : null;
+      if (!plan) return null;
+      plan.sets.forEach(([id, doc]) => tx.set(db().collection('wsnap').doc(id), doc));
+      tx.update(wref, { [plan.del]: admin.firestore.FieldValue.delete() });
+      return plan;
+    });
+    if (!r) continue;
+    moved++; if (r.same) same++; if (r.sets.length > 1) kept++;
+  }
+  const last = page.docs.length ? page.docs[page.docs.length - 1].id : m.cursor || null;
+  const fin = page.docs.length < WSNAP_PAGE;
+  const tot = (+m.n || 0) + moved;
+  await mref.set(fin ? { wsnap: true, doneAt: new Date().toISOString(), n: tot } : { cursor: last, n: tot, at: new Date().toISOString() });
+  logger.info(`Migración wsnap: ${page.docs.length} documento(s) de weeks revisado(s), ${moved} foto(s) movida(s)${same ? ` (${same} ya estaban en wsnap)` : ''}${kept ? `, ${kept} foto(s) anterior(es) de wsnap guardada(s) como __m` : ''}; total ${tot}${fin ? ' · terminada' : ''}`);
+}
 
 /* El plan de mañana se cierra en la reunión al publicarlo. Si nadie lo publicó, a la hora de cierre (Configuración, por defecto 21:00) el servidor, por piso:
    publica los borradores de la reunión («no va → reprogramar»: corre las fechas, deja la marca ↷ y registra la restricción),

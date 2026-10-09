@@ -30,7 +30,11 @@ function actPop(btn){
   $('#apl').onchange=e=>{const c=e.target.closest('[data-ak]');if(!c)return;const k=c.dataset.ak;U.acts=c.checked?[...new Set([...U.acts,k])]:U.acts.filter(x=>x!==k);saveUI();requestRender()}}
 function actBtnLabel(){return U.acts.length?`Actividades · ${U.acts.length}`:'Actividades'}
 function baselines(){ // por piso: última semana congelada <= semana visible
-  const m=new Map();for(const w of S.wk.values()){if(!w.frozenAt||!w.pisoId||w.n>U.week)continue;const b=m.get(w.pisoId);if(!b||w.n>b.n)m.set(w.pisoId,w)}return m;
+  const m=new Map();for(const w of S.wk.values()){if(!w.frozenAt||!w.pisoId||w.n>U.week)continue;const b=m.get(w.pisoId);if(!b||w.n>b.n)m.set(w.pisoId,w)}
+  /* su foto del lookahead: weeks.snap (datos antiguos) o wsnap/<id> (wsnapOf, plan-restricciones.js). Mientras se lee, ese piso va
+     como si no tuviera congelado (al llegar se redibuja); sin foto guardada, como antes (snap vacío) */
+  for(const[pid,w]of[...m]){if(w.snap)continue;const sn=wsnapOf(w);if(sn===undefined)m.delete(pid);else if(sn)m.set(pid,{...w,snap:sn})}
+  return m;
 }
 function buildLookShell(main){
   gridRows=null;gridHead='';

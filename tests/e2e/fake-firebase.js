@@ -134,15 +134,25 @@ window.__uiAskNative = true;
       onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(docSnap(n, id)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
     };
   }
+  /* consultas hechas (para las pruebas: qué se pidió) y, con __E2E.noIdx (o window.__noIdx), un índice compuesto que falta: una igualdad en un campo
+     más un rango en otro responde failed-precondition, como Firestore mientras el índice no está construido */
+  window.__qlog = window.__qlog || [];
+  const needsIdx = f => { const eq = f.filter(x => x[1] === '==').map(x => x[0]), rg = f.filter(x => ['>=', '<=', '>', '<'].includes(x[1])).map(x => x[0]); return rg.some(r => eq.some(e => e !== r)); };
+  const idxErr = () => { const e = new Error('The query requires an index.'); e.code = 'failed-precondition'; return e; };
   function colRef(n, filters = [], lim = 0) {
+    const noIdx = !!(E.noIdx || window.__noIdx) && needsIdx(filters);
     const q = {
       id: n, path: n,
       doc: id => docRef(n, id || 'id' + Math.random().toString(36).slice(2, 12)),
       add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); col(n).set(id, resolve(d)); changed(n); return docRef(n, id); },
       where: (f, op, v) => colRef(n, [...filters, [f, op, v]], lim),
       orderBy: () => q, limit: k => colRef(n, filters, k), startAt: () => q, startAfter: () => q, endAt: () => q,
-      get: async () => qSnap(n, filters, lim),
-      onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(qSnap(n, filters, lim)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
+      get: async () => { window.__qlog.push({ n, filters: clone(filters), get: true }); if (noIdx) throw idxErr(); return qSnap(n, filters, lim); },
+      onSnapshot(...a) {
+        window.__qlog.push({ n, filters: clone(filters) });
+        if (noIdx) { const fs_ = a.filter(f => typeof f === 'function'); setTimeout(() => fs_[1] && fs_[1](idxErr()), 0); return () => {}; }
+        const cb = cbOf(a); const s = { n, fire: () => cb(qSnap(n, filters, lim)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
+      },
     };
     return q;
   }
