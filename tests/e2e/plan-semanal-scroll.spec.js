@@ -24,3 +24,16 @@ test('marcar Sí en medio de la lista deja la fila en el mismo lugar', async ({ 
   expect(Math.abs(y1 - y0)).toBeLessThan(40);
   noErrors(errors, 'plan scroll');
 });
+
+test('un cambio de otro usuario (redibujo sin tocar nada) tampoco mueve la página', async ({ page }) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  const errors = await openApp(page, { tab: 'plan', extra: EXTRA });
+  const row = page.locator('section[data-pid="p1"] tr[data-id="q120"]');
+  await row.scrollIntoViewIfNeeded();
+  const y0 = (await row.boundingBox()).y;
+  await page.evaluate(() => render());
+  await page.waitForTimeout(300);
+  const y1 = (await page.locator('section[data-pid="p1"] tr[data-id="q120"]').boundingBox()).y;
+  expect(Math.abs(y1 - y0)).toBeLessThan(40);
+  noErrors(errors, 'plan scroll remoto');
+});
