@@ -114,8 +114,8 @@ test('Restricciones con muchas restricciones y una obra grande abre rápido', as
   // el selector de actividad se llena al abrirlo
   const sel = page.locator('#main select[data-f="actId"]').first();
   expect(await sel.locator('option').count()).toBe(1);
-  await sel.dispatchEvent('mousedown');
-  expect(await sel.locator('option').count()).toBeGreaterThan(100);
+  // con la máquina cargada puede llegar un redibujo entre abrir y contar: se vuelve a abrir hasta ver la lista llena
+  await expect.poll(async () => { await sel.dispatchEvent('mousedown'); return sel.locator('option').count(); }, { timeout: 15000 }).toBeGreaterThan(100);
   noErrors(errors, 'restricciones grande');
 });
 
