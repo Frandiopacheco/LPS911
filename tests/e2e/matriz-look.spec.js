@@ -11,6 +11,7 @@ const CAT = [
   // propuesta del SC sin resolver sobre z2: se salta
   ['lhprop', 'c1', { sc: 'c1', items: { z2: { after: { ambId: 'a2', sc: 'c1', name: 'Redes emp.', days: ['2026-10-07'] }, base: null, sent: true, sentAt: 1, ts: 1, by: 'sc@obra.pe' } } }],
 ];
+const sinLib = page => page.evaluate(() => { for (const [k, v] of LIB) if (v.actId === 'e0' || v.actId === 'e1') LIB.delete(k); }); // e0/e1 tienen liberaciones (historial): estas pruebas son del catálogo
 const nameIn = (page, a) => page.locator(`#grid .ci[data-a="${a}"][data-f="name"]`);
 const get = (page, c, id) => page.evaluate(([c, id]) => window.__dbGet(c, id), [c, id]);
 
@@ -41,6 +42,7 @@ test('exigir catálogo: el nombre del catálogo se impone y lo que no está se a
   await page.click('[data-mxreq="1"]');
   await expect.poll(async () => (await get(page, 'meta', 'project')).catReq).toBe(true);
   await page.evaluate(() => goTab('look'));
+  await sinLib(page);
   // variante → nombre del catálogo
   await nameIn(page, 'e0').fill('tarrajeo de muros');
   await nameIn(page, 'e0').press('Enter');
@@ -133,6 +135,7 @@ test('desde el Lookahead sin abrir la Matriz: también ofrece agregar al tipo de
   const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }], ['mtipo', 'tp1', { name: 'Dpto', acts: ['k1'], order: 10 }], ['mamb', 'a1', { tipo: 'tp1', by: 'x', t: 1 }]];
   const errors = await openApp(page, { tab: 'look', extra });
   await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
+  await sinLib(page);
   await nameIn(page, 'e0').fill('Cielo raso');
   await nameIn(page, 'e0').press('Enter');
   await expect(page.locator('#mxatp')).not.toBeChecked();
