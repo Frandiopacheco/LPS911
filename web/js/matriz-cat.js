@@ -1,6 +1,6 @@
 "use strict";
 /* LPS 911 · Matriz de ambientes › Catálogo y Tipos de ambiente (fase 2, oct 2026): editar el catálogo desde la app.
-   Renombrar, cambiar SC / clase / especialidad, agregar, archivar, fusionar (traslada los estados marcados y es reversible)
+   Renombrar, cambiar SC / clase, agregar, archivar, fusionar (traslada los estados marcados y es reversible)
    y editar qué actividades trae cada tipo de ambiente. Nada se borra: archivar y fusionar guardan lo necesario para restaurar.
    Ver docs/ia/matriz.md. */
 
@@ -22,16 +22,6 @@ function mxCatUse(){const k=MX.v+'|'+DV+'|'+DONEV;if(MXC.use&&MXC.useK===k)retur
   for(const m of MX.amb.values())for(const id of Object.keys(m.c||{}))g(id).st++;
   MXC.use=u;MXC.useK=k;return u}
 const mxScOpts=sel=>[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('');
-/* especialidades: lista cerrada (las que ya usan el catálogo y los subcontratistas) + «Nueva…» */
-function mxEspList(){const m=new Map();const add=e=>{e=String(e||'').replace(/\s+/g,' ').trim();if(e&&!m.has(mnk(e)))m.set(mnk(e),e)};
-  for(const c of MX.cat.values())if(!c.arch)add(c.esp);for(const c of S.con.values())add(c.esp);return[...m.values()].sort((a,b)=>a.localeCompare(b))}
-/** la especialidad más usada en el catálogo para un subcontratista (o la de su ficha) */
-function mxEspOf(sc){const n={};for(const c of MX.cat.values())if(!c.arch&&c.sc===sc&&c.esp)n[c.esp]=(n[c.esp]||0)+1;const t=Object.entries(n).sort((a,b)=>b[1]-a[1])[0];return t?t[0]:(S.con.get(sc)||{}).esp||''}
-const mxEspOpts=sel=>{const L=mxEspList();return`<option value="">—</option>${L.map(e=>`<option value="${esc(e)}"${e===sel?' selected':''}>${esc(e)}</option>`).join('')}${sel&&!L.includes(sel)?`<option value="${esc(sel)}" selected>${esc(sel)}</option>`:''}<option value="__new">＋ Nueva especialidad…</option>`};
-/** si eligió «Nueva…», la pide (si ya existe con otra escritura usa la existente); devuelve el texto o null si canceló */
-async function mxEspPick(sel,prev){if(sel.value!=='__new')return sel.value;const t=await uiAsk({title:'Nueva especialidad',input:{label:'Nombre (p. ej. Instalaciones sanitarias)',required:true},ok:'Agregar',tone:'info'});
-  const v=t?String(t).replace(/\s+/g,' ').trim():'';if(!v){sel.value=prev||'';return null}const ex=mxEspList().find(e=>mnk(e)===mnk(v));const r=ex||v;
-  if(![...sel.options].some(o=>o.value===r)){const o=document.createElement('option');o.value=r;o.textContent=r;sel.insertBefore(o,sel.lastElementChild)}sel.value=r;if(ex&&ex!==v)toast(`Ya existía como «${ex}»: se usa esa.`);return r}
 const mxClOpts=sel=>Object.entries(MXCL).map(([k,l])=>`<option value="${k}"${k===sel?' selected':''}>${l}</option>`).join('');
 
 /* ---------- Catálogo ---------- */
@@ -42,8 +32,9 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
   const nArch=all.filter(c=>c.arch).length;
   const scList=[...new Set(all.filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));
   let h=`<div class="scroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg())}
-   ${helpBox('Cómo se edita el catálogo',`<p>Cambiar el nombre, el subcontratista, la clase o la especialidad <b>no afecta</b> lo marcado en la matriz: los estados están ligados a la actividad, no a su nombre.</p>
+   ${helpBox('Cómo se edita el catálogo',`<p>Cambiar el nombre, el subcontratista o la clase <b>no afecta</b> lo marcado en la matriz: los estados están ligados a la actividad, no a su nombre.</p>
     <p><b>Fusionar</b> (⋮): cuando dos actividades son la misma. Los estados marcados pasan a la otra (si las dos tienen estado en un ambiente, se conserva el de la que queda), sus nombres del lookahead también, y en los tipos de ambiente se reemplaza. La fusionada queda archivada y se puede <b>restaurar</b> deshaciendo todo.</p>
+    <p><b>Desglosar</b> (⋮, administrador): cuando una actividad agrupa varios trabajos («Instalaciones ICR» → bajadas, rociadores, gabinetes). Se divide en toda la obra: catálogo, tipos, Matriz y lookahead (solo los días que aún se pueden reprogramar). «Restaurar» lo deshace.</p>
     <p><b>Archivar</b>: deja de salir en la matriz, pero sus estados se guardan y vuelven al restaurarla. Nada se borra.</p>`)}
    ${mxCatTools()}
    ${SCK()?'':`<div class="fbar mxscb"><span class="fgl">Subcontratistas</span><button class="chip${scs.length?'':' on'}" data-mxsc="">Todos</button>${scList.map(s=>`<button class="chip${scs.includes(s.id)?' on':''}" data-mxsc="${esc(s.id)}" style="--c:${esc(conOf(s.id).color)}"><i></i>${esc(s.n)}</button>`).join('')}</div>`}
@@ -53,12 +44,12 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
     <span class="fsp"></span><span class="note">${L.length} de ${all.filter(c=>!!c.arch===MXC.arch).length}</span>${(ed||(SCK()&&!verRO()))&&!MXC.arch?'<button class="ib pri" id="mxcnew">+ Actividad</button>':''}</div>
    <div class="card"><div class="tscroll"><table class="t rt mxct"><thead><tr><th>Actividad</th><th>Subcontratista</th><th>Clase</th><th>Especialidad</th><th title="Ambientes donde aparece">Amb.</th><th title="Celdas con estado confirmado">Marcadas</th><th title="Nombres del lookahead que corresponden a esta actividad">Nombres</th><th></th></tr></thead><tbody>
    ${L.map(c=>{const u=use.get(c.id)||{amb:0,st:0};const ro=!ed||c.arch;
-     const fus=c.arch&&c.arch.fus?MX.cat.get(c.arch.fus):null;
+     const fus=c.arch&&c.arch.fus?MX.cat.get(c.arch.fus):null;const des=c.arch&&c.arch.des;
      return`<tr data-mcid="${esc(c.id)}"${c.arch?' class="mxarch"':''}>
-      <td data-l="Actividad">${c.rev&&!c.arch?`<span class="pill warn" title="La agregó ${esc(c.rev.n||c.rev.by||'')} desde el lookahead">Nueva · por revisar</span> `:''}${ro?`<b>${esc(c.name)}</b>${c.arch?`<small class="note"> · ${fus?'fusionada con «'+esc(fus.name)+'»':'archivada'} ${esc(fmtD(ldt(c.arch.t).slice(0,10)))}</small>`:''}`:`<input class="tin" data-mcf="name" value="${esc(c.name)}" aria-label="Nombre">`}</td>
+      <td data-l="Actividad">${c.rev&&!c.arch?`<span class="pill warn" title="La agregó ${esc(c.rev.n||c.rev.by||'')} desde el lookahead">Nueva · por revisar</span> `:''}${ro?`<b>${esc(c.name)}</b>${c.arch?`<small class="note"> · ${fus?'fusionada con «'+esc(fus.name)+'»':des?'desglosada en '+(des.names||[]).map(n=>'«'+esc(n)+'»').join(', '):'archivada'} ${esc(fmtD(ldt(c.arch.t).slice(0,10)))}</small>`:''}`:`<input class="tin" data-mcf="name" value="${esc(c.name)}" aria-label="Nombre">`}</td>
       <td data-l="Subcontratista">${ro?`<span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}`:`<select data-mcf="sc" aria-label="Subcontratista">${mxScOpts(c.sc)}</select>`}${(c.scs||[]).length?`<small class="mxscs" title="También la hacen">+ ${(c.scs||[]).map(i=>esc(conOf(i).name)).join(', ')}</small>`:''}</td>
       <td data-l="Clase">${ro?esc(MXCL[c.cl]||''):`<select data-mcf="cl" aria-label="Clase">${mxClOpts(c.cl)}</select>`}</td>
-      <td data-l="Especialidad">${ro?esc(c.esp||''):`<select data-mcf="esp" aria-label="Especialidad">${mxEspOpts(c.esp||'')}</select>`}</td>
+      <td data-l="Especialidad" class="mu" title="Es la del subcontratista: se cambia en Configuración › Especialidades / Subcontratistas">${esc(espOfSc(c.sc))||'—'}</td>
       <td class="mono" data-l="Ambientes">${c.arch?'—':u.amb}</td><td class="mono" data-l="Marcadas">${u.st}</td>
       <td data-l="Nombres"><button class="lnkb" data-mcal="${esc(c.id)}" title="Ver los nombres del lookahead">${(c.al||[]).length}</button></td>
       <td>${ed?(c.arch?`<button class="ib" data-mcres="${esc(c.id)}">Restaurar</button>`:`<button class="ab" data-mcm="${esc(c.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`):''}</td></tr>`}).join('')||`<tr><td colspan="8" class="note">No hay actividades con este filtro.</td></tr>`}
@@ -71,20 +62,19 @@ function mxWireCat(main){
   main.querySelectorAll('[data-mxcl]').forEach(b=>b.onclick=()=>{MXC.cl=b.dataset.mxcl;render()});
   main.querySelectorAll('[data-mxarch]').forEach(b=>b.onclick=()=>{MXC.arch=b.dataset.mxarch==='1';render()});
   const nw=$('#mxcnew');if(nw)nw.onclick=mxCatNew;
-  main.querySelectorAll('[data-mcf]').forEach(el=>el.onchange=async()=>{const id=el.closest('tr').dataset.mcid;let v=el.value;
-    if(el.dataset.mcf==='esp'){v=await mxEspPick(el,(MX.cat.get(id)||{}).esp);if(v==null)return}mxCatSet(id,el.dataset.mcf,v)});
+  main.querySelectorAll('[data-mcf]').forEach(el=>el.onchange=()=>{const id=el.closest('tr').dataset.mcid;mxCatSet(id,el.dataset.mcf,el.value)});
   main.querySelectorAll('[data-mcm]').forEach(b=>b.onclick=()=>mxCatMenu(b,b.dataset.mcm));
   main.querySelectorAll('[data-mcres]').forEach(b=>b.onclick=()=>mxCatRestore(b.dataset.mcres));
   main.querySelectorAll('[data-mcal]').forEach(b=>b.onclick=()=>mxAliasPop(b,b.dataset.mcal))}
 
 /* cambio de un campo (con Deshacer) */
-function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;v=f==='name'||f==='esp'?String(v).replace(/\s+/g,' ').trim():v;
+function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;v=f==='name'?String(v).replace(/\s+/g,' ').trim():v;
   if(f==='name'&&!v){toast('El nombre no puede quedar vacío.');render();return}
   if(f==='name'){const k=mnk(v);const o=[...MX.cat.values()].find(x=>x.id!==id&&!x.arch&&mnk(x.name)===k);if(o)toast(`Ojo: ya existe «${o.name}» (${conOf(o.sc).name}). Si son la misma, usa ⋮ › Fusionar.`)}
   const prev=c[f]??'';if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
   if(f==='sc'){mxCatScSet(id,prev,v);return}
-  fcol('mcat').doc(id).set({[f]:v,...mxNow()},{merge:true}).then(()=>toast(`${{name:'Nombre',sc:'Subcontratista',cl:'Clase',esp:'Especialidad'}[f]} guardado`,'Deshacer',()=>fcol('mcat').doc(id).set({[f]:prev,...mxNow()},{merge:true}))).catch(mxErr)}
+  fcol('mcat').doc(id).set({[f]:v,...mxNow()},{merge:true}).then(()=>toast(`${{name:'Nombre',sc:'Subcontratista',cl:'Clase'}[f]} guardado`,'Deshacer',()=>fcol('mcat').doc(id).set({[f]:prev,...mxNow()},{merge:true}))).catch(mxErr)}
 
 /* ---- el lookahead sigue al catálogo: renombrar o fusionar una actividad cambia el nombre de sus filas ----
    (por nombre/alias; se saltan las filas con propuesta del SC pendiente; un solo apply → historial y Deshacer) */
@@ -114,20 +104,17 @@ function mxCatNew(){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const sc=m
   lqModal(`<div class="lqtop"><b>Nueva actividad del catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <div class="mxform"><label>Nombre<input class="tin" id="mxnn" placeholder="p. ej. Instalación de espejos"></label>
     <label>Subcontratista<select id="mxnsc">${ed?mxScOpts(sc):myScsI().map(id=>`<option value="${esc(id)}">${esc(conOf(id).name)}</option>`).join('')}</select></label>
-    <label>Clase<select id="mxncl">${mxClOpts('t')}</select></label>
-    <label>Especialidad<select id="mxnesp">${mxEspOpts(mxEspOf(sc))}</select></label></div>
+    <label>Clase<select id="mxncl">${mxClOpts('t')}</select></label></div>
    ${ed?'':'<p class="note">Queda en el catálogo de tu partida; el ingeniero la revisará (nombre, clase, tipo de ambiente).</p>'}<p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
      const k=mnk(name);const dup=[...MX.cat.values()].find(x=>!x.arch&&mnk(x.name)===k);if(dup){$('#mxnmsg').textContent=`Ya existe «${dup.name}» (${conOf(dup.sc).name}).`;return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
-     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,esp:$('#mxnesp').value==='__new'?'':$('#mxnesp').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});lqClose();toast(ed?'Actividad creada':'Actividad creada · el ingeniero la revisará')}catch(err){mxErr(err)}},
-   async e=>{if(e.target.id==='mxnsc'){const es=$('#mxnesp');const d=mxEspOf(e.target.value);if(d){if(![...es.options].some(o=>o.value===d))es.insertAdjacentHTML('afterbegin',`<option value="${esc(d)}">${esc(d)}</option>`);es.value=d}}
-     if(e.target.id==='mxnesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
+     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});lqClose();toast(ed?'Actividad creada':'Actividad creada · el ingeniero la revisará')}catch(err){mxErr(err)}},)}
 
 function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
-  openPop(btn,`<div class="ph">${esc(c.name)}</div><button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
-   {fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
+  openPop(btn,`<div class="ph">${esc(c.name)}</div>${mxdCan()?'<button data-do="des">Desglosar en varias actividades…</button>':''}<button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
+   {des:()=>mxDesDlg(id),fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
 /* otros SC que también hacen la actividad (c.scs): sus filas del lookahead alimentan la Matriz y su SC puede llenarla */
 function mxCatScsAdd(id,sc){return fcol('mcat').doc(id).set({scs:mxFV().arrayUnion(sc),...mxNow()},{merge:true})}
 function mxCatScsDlg(id){const c=MX.cat.get(id);if(!c||!mxEd()){lqClose();return}const L=(c.scs||[]).filter(i=>i!==c.sc);const rest=[...S.con.values()].filter(x=>x.id!==c.sc&&!L.includes(x.id)).sort((a,b)=>a.name.localeCompare(b.name));
@@ -167,7 +154,7 @@ async function mxMerge(a,b){const A=MX.cat.get(a),B=MX.cat.get(b);if(!A||!B||a==
   const ren=mxRenameRows(rows,B.name,`Fusión: «${A.name}» → «${B.name}»`);if(Object.keys(ren).length)await fcol('mcat').doc(a).set({arch:{ren}},{merge:true})}
 
 /* restaurar: quita el archivo y, si fue una fusión, devuelve estados, nombres y tipos (solo lo que nadie cambió después) */
-async function mxCatRestore(id,quiet){if(!mxEd())return;const A=MX.cat.get(id);if(!A||!A.arch)return;const r=A.arch;const FV=mxFV();const DEL=FV.delete();const meta=mxNow();const ops=[];
+async function mxCatRestore(id,quiet){if(!mxEd())return;const A=MX.cat.get(id);if(!A||!A.arch)return;if(A.arch.des){mxDesRestore(id,quiet);return}const r=A.arch;const FV=mxFV();const DEL=FV.delete();const meta=mxNow();const ops=[];
   if(r.fus){const b=r.fus;const B=MX.cat.get(b);
     for(const[amb,v]of Object.entries(r.moved||{})){const c=(MX.amb.get(amb)||{}).c||{};const up={[id]:v};if((r.added||[]).includes(amb)&&c[b]===v)up[b]=DEL;ops.push(['mamb',amb,{c:up,...meta}])}
     for(const[t,hadB]of Object.entries(r.tp||{})){const T=MX.tipo.get(t);if(!T)continue;let L=[...(T.acts||[])];const i=L.indexOf(b);if(!hadB&&i>=0)L[i]=id;else if(!L.includes(id))L.push(id);ops.push(['mtipo',t,{acts:[...new Set(L)],...meta}])}

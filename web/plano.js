@@ -9,6 +9,10 @@ const PDFJS=window.PLANO_PDFJS||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.17
 const PDFJS_WORKER=window.PLANO_PDFJS_WORKER||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 const FULL=8000,LITE=3000,CHUNK=800000,MAXPX=40e6;
 const ESPS=['Arquitectura','Estructuras','Instalaciones eléctricas','Instalaciones sanitarias','Agua contra incendio','Aire acondicionado','Comunicaciones','Cielo raso','Enchapes','Carpintería','Fachada'];
+/* especialidad de la lámina: id de la lista única de Configuración (especialidades.js); los textos antiguos se muestran tal cual */
+const EN=v=>typeof espN==='function'?espN(v):String(v||'');
+const ESPO=sel=>typeof espList==='function'&&espList().length?espOpts(sel):'<option value="">—</option>'+ESPS.map(x=>`<option value="${esc(x)}"${x===sel?' selected':''}>${esc(x)}</option>`).join('')+(sel&&!ESPS.includes(sel)?`<option value="${esc(sel)}" selected>${esc(sel)}</option>`:'');
+const espPickL=async(sel,prev)=>{if(sel.value==='__new'&&typeof espPick==='function')await espPick(sel,prev)};
 const LAM=new Map();let lamSub=null,lamErr=null,lamReady=false;
 const IMG=new Map(); // key id|rev|q -> {url,promise}
 /* subcontratista resaltado en el plano: el elegido en el panel (por defecto sí; se recuerda) o el que se tocó en la leyenda */
@@ -23,12 +27,12 @@ function ensureLam(){if(lamSub||!db)return;
   lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));imgPrune();lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},
     err=>{lamErr=err&&err.code||'error';lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()});
   unsubs.push(()=>{if(lamSub)lamSub();lamSub=null;LAM.clear();lamReady=false;IMG.forEach(v=>{if(v.url)URL.revokeObjectURL(v.url)});IMG.clear();M.view=null})}
-const lamsOf=pid=>[...LAM.values()].filter(l=>l.pisoId===pid&&!l.arch).sort((a,b)=>(b.base?1:0)-(a.base?1:0)||(a.order||0)-(b.order||0)||a.esp.localeCompare(b.esp));
+const lamsOf=pid=>[...LAM.values()].filter(l=>l.pisoId===pid&&!l.arch).sort((a,b)=>(b.base?1:0)-(a.base?1:0)||(a.order||0)-(b.order||0)||EN(a.esp).localeCompare(EN(b.esp)));
 const basesOf=pid=>lamsOf(pid).filter(l=>l.base);
 const baseOf=pid=>{const B=basesOf(pid);return(pid===M.piso&&B.find(b=>b.id===M.vista))||B[0]};
 const baseOfL=l=>!l?null:l.base?l:(l.baseId&&LAM.get(l.baseId))||basesOf(l.pisoId)[0];
 const vistaOf=l=>{const b=baseOfL(l);return b?b.id:''};
-const lname=l=>l?(l.name||l.esp||''):'';
+const lname=l=>l?(l.name||EN(l.esp)||''):'';
 const zVista=z=>z.vista||(basesOf(z.pisoId)[0]||{}).id||'';
 function useHi(){return M.hi!=null?M.hi:!(matchMedia('(pointer:coarse)').matches||innerWidth<900)}
 /* (auditoría de código 08/10, P7) las partes de la imagen se descargan a la vez; si falla, se recuerda la falla y no se reintenta en cada
@@ -116,7 +120,7 @@ function renderMapa(main){ensureLam();
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
   const hb=`<button class="ib${M.panel?' on':''}" id="mpan" title="Mostrar u ocultar el plan del día">Plan del día</button><span class="dnav"><button class="ib" data-mdd="-1" aria-label="Día anterior">&#8249;</button><b>${dw} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" aria-label="Día siguiente">&#8250;</button>${M.date!==today?'<button class="ib" data-mdd="0">Hoy</button>':''}</span>${U.piso?'':`<select id="mpiso" aria-label="Piso">${ps.map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`}
     ${BS.length>1?`<span class="mvis" title="Planos base de este piso (vistas)">${BS.map(b=>`<button class="mvb${b.id===M.vista?' on':''}" data-vis="${b.id}">${esc(lname(b))}</button>`).join('')}</span>`:''}
-    <span class="mchips">${L.map(l=>`<button class="mchip${l.id===M.sel?' on':''}" data-lsel="${l.id}" title="${esc(l.esp)} · doble clic para cambiar el nombre">${l.base?'<b>BASE</b> ':''}${esc(lname(l))}${!l.base&&!l.aligned?' <span class="warn">sin alinear</span>':''}</button>`).join('')||'<span class="note">Este piso aún no tiene láminas.</span>'}</span>
+    <span class="mchips">${L.map(l=>`<button class="mchip${l.id===M.sel?' on':''}" data-lsel="${l.id}" title="${esc(EN(l.esp))} · doble clic para cambiar el nombre">${l.base?'<b>BASE</b> ':''}${esc(lname(l))}${!l.base&&!l.aligned?' <span class="warn">sin alinear</span>':''}</button>`).join('')||'<span class="note">Este piso aún no tiene láminas.</span>'}</span>
     ${cur&&!cur.base&&base?`<label class="chk"><input type="checkbox" id="munder"${M.under?' checked':''}> Arquitectura debajo</label><input type="range" id="mop" min="0.15" max="1" step="0.05" value="${M.op}" aria-label="Opacidad de la especialidad" title="Opacidad de la especialidad"${M.under?'':' disabled'}>`:''}
     <span class="sp" style="flex:1"></span>
  ${pmEng()?(()=>{const m=pmode();let n=0;try{computeCross();n=CROSS.list.length}catch(err){}return`<span class="mseg mpm" role="group" aria-label="Qué haces en el plano"><button data-pm="cu" class="${m==='cu'?'on':''}" title="Ver lo registrado en Campo. Clic derecho sobre una actividad: su cumplimiento">✓ Cumplimiento</button><button data-pm="prog" class="${m==='prog'?'on':''}" title="Clic derecho sobre una actividad: Va · No va · Culminado; sobre un ambiente: ＋ trabajo no programado">✏️ Programar</button><button data-pm="cx" class="${m==='cx'?'on':''}" title="Ver los cruces entre partidas. Clic derecho sobre un ambiente: revisar sus interferencias">⚠ Interferencias${n?` <b class="mpmn">${n}</b>`:''}</button></span>`})():''}
@@ -1838,7 +1842,7 @@ async function fzOpen(sc,selC){const f=fzOf(sc);let src=f&&((f.cuad||[]).length|
   cuad.forEach(q=>{q.items=cqItems(q).map(i=>({cat:i.cat||'',esp:i.esp||'',n:+i.n||0}))});
   const F={cuad,sel:Math.max(0,selC?cuad.findIndex(q=>q.id===selC):0),hor:{t:src&&src.hor&&src.hor.t==='e'?'e':'n',fin:(src&&src.hor&&src.hor.t==='e'&&src.hor.fin)||'19:00'},copied};
   const qn=q=>q.items.reduce((a,i)=>a+(+i.n||0),0),tot=()=>F.cuad.reduce((a,q)=>a+qn(q),0);
-  const rowsHtml=()=>{const q=F.cuad[F.sel];return q.items.map((i,k)=>`<div class="fzr"><input list="fzcats" data-fi="${k}" data-ff="cat" value="${esc(i.cat||'')}" placeholder="Categoría" aria-label="Categoría"><input data-fi="${k}" data-ff="esp" value="${esc(i.esp||'')}" placeholder="Especialidad (p. ej. pintor)" aria-label="Especialidad"><span class="fzn"><button data-fn="${k}|-1" aria-label="Menos">−</button><b data-fnv="${k}">${+i.n||0}</b><button data-fn="${k}|1" aria-label="Más">+</button></span><button class="ab" data-fdel="${k}" aria-label="Quitar">&times;</button></div>`).join('')||'<p class="lqmsg">Esta cuadrilla aún no tiene personal.</p>'};
+  const rowsHtml=()=>{const q=F.cuad[F.sel];return q.items.map((i,k)=>`<div class="fzr"><input list="fzcats" data-fi="${k}" data-ff="cat" value="${esc(i.cat||'')}" placeholder="Categoría" aria-label="Categoría"><input data-fi="${k}" data-ff="esp" value="${esc(i.esp||'')}" placeholder="Oficio (p. ej. pintor)" aria-label="Oficio"><span class="fzn"><button data-fn="${k}|-1" aria-label="Menos">−</button><b data-fnv="${k}">${+i.n||0}</b><button data-fn="${k}|1" aria-label="Más">+</button></span><button class="ab" data-fdel="${k}" aria-label="Quitar">&times;</button></div>`).join('')||'<p class="lqmsg">Esta cuadrilla aún no tiene personal.</p>'};
   const chipsHtml=()=>F.cuad.map((q,k)=>`<button class="fzqc${k===F.sel?' on':''}" data-fqs="${k}" style="--q:${CQC[k%CQC.length]}"><i>${esc(q.id)}</i><span data-fqn="${k}">${qn(q)} p.</span></button>`).join('')+'<button class="ib" data-fqadd="1">+ Cuadrilla</button>';
   const totHtml=()=>{const n=tot();return`Total en obra: <b>${n}</b> persona${n===1?'':'s'}${F.cuad.length>1?' · '+F.cuad.map(q=>esc(q.id)+': '+qn(q)).join(' · '):''}`};
   const inner=()=>{const q=F.cuad[F.sel];return`<div class="lqtop"><b>👷 ${esc(conOf(sc).name)} · ${dvLbl(M.date)}</b><button class="ab" data-lqx aria-label="Cerrar">&times;</button></div>
@@ -1896,7 +1900,7 @@ function cqAssign(sc,aid,c,fromAid){const f=fzOf(sc);if(!f)return;const asg=f.as
   if(asg[aid]&&asg[aid].c===c)return;const o=Math.max(0,...Object.values(asg).filter(a=>a.c===c).map(a=>a.o||0))+1;fzAsg(sc,{[aid]:{c,o}})}
 function cqRemove(sc,aid){const f=fzOf(sc);if(!f||!(f.asg||{})[aid])return;fzAsg(sc,{[aid]:null})}
 function cqZoneAt(x,y,sc){const el=document.elementFromPoint(x,y);const t=el&&el.closest&&el.closest('#mstage [data-z]');if(!t)return null;const z=zget(t.dataset.z);return z&&z.kind==='zona'&&z.actId&&z.sc===sc?z:null}
-/* etiqueta de una cuadrilla en el plano: su personal por especialidad (es el mismo de la fuerza laboral del día) */
+/* etiqueta de una cuadrilla en el plano: su personal por oficio (es el mismo de la fuerza laboral del día) */
 function cqMenu(anchor,sc,aid){const f=fzOf(sc);const a=f&&f.asg&&f.asg[aid];if(!a)return;const y=S.act.get(aid);const qi=(f.cuad||[]).findIndex(q=>q.id===a.c);const q=(f.cuad||[])[qi];const tg=cqTag(sc,aid);
   const its=q?cqItems(q):[];const tot=its.reduce((s_,i)=>s_+(+i.n||0),0);
   const again=()=>setTimeout(()=>{const l=$(`#mstage [data-cqt="${CSS.escape(aid)}"]`);if(l)cqMenu(l,sc,aid)},60);
@@ -1905,8 +1909,8 @@ function cqMenu(anchor,sc,aid){const f=fzOf(sc);const a=f&&f.asg&&f.asg[aid];if(
   its.forEach((_,k)=>{H['m'+k]=()=>setN(k,-1);H['p'+k]=()=>setN(k,1)});
   openPop(anchor,`<div class="ph">${esc(tg?tg.t:a.c)} · ${esc(short(y?y.name:'',34))}</div>
     <div class="ptx">Personal de la cuadrilla ${esc(a.c)}: <b>${tot}</b> · cambia también su fuerza laboral del día</div>
-    ${its.length?its.map((i,k)=>`<div class="qrow"><span class="mu">${esc(i.cat||'')}${i.esp?' · '+esc(i.esp):''}</span><span class="fzn"><button data-do="m${k}" aria-label="Menos ${esc(i.cat||'')}">−</button><b>${+i.n||0}</b><button data-do="p${k}" aria-label="Más ${esc(i.cat||'')}">+</button></span></div>`).join(''):'<div class="ptx">Sin detalle por especialidad.</div>'}
-    <button data-do="ed">Editar el personal (otra especialidad, otra cuadrilla)…</button>
+    ${its.length?its.map((i,k)=>`<div class="qrow"><span class="mu">${esc(i.cat||'')}${i.esp?' · '+esc(i.esp):''}</span><span class="fzn"><button data-do="m${k}" aria-label="Menos ${esc(i.cat||'')}">−</button><b>${+i.n||0}</b><button data-do="p${k}" aria-label="Más ${esc(i.cat||'')}">+</button></span></div>`).join(''):'<div class="ptx">Sin detalle por oficio.</div>'}
+    <button data-do="ed">Editar el personal (otro oficio, otra cuadrilla)…</button>
     ${tg&&tg.r>1?'<button data-do="first">Ponerla primero</button>':''}<button data-do="rm">Quitar la cuadrilla</button>`,H)}
 let CQD=null;
 document.addEventListener('pointerdown',e=>{if(U.tab!=='mapa'||e.button!==0)return;const chip=e.target.closest&&e.target.closest('[data-cqd]');const tag=!chip&&e.target.closest&&e.target.closest('#mstage [data-cqt]');if(!chip&&!tag)return;
@@ -2063,7 +2067,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
 async function doAlign(l){const base=baseOfL(l);if(base&&base.id===l.id)return;if(!base)return;try{M.busy='Cargando imágenes para alinear…';requestRender();const[ru,tu]=await Promise.all([imgURL(base,'f'),imgURL(l,'f')]);M.busy='';requestRender();
   alignDialog({ref:base,refURL:ru,tgt:{w:l.w,h:l.h,url:tu},title:`Alinear ${lname(l)} con ${lname(base)}`,init:l.pts||null,onSave:async(T,pts)=>{await fcol('laminas').doc(l.id).update({T,aligned:true,pts});toast('Lámina alineada. Si quedó mal, usa “Corregir alineación”.')}})}catch(err){M.busy='';requestRender();toast(err.message)}}
 function lamMenu(btn,l){const base=baseOfL(l);const specs=lamsOf(l.pisoId).filter(x=>!x.base&&vistaOf(x)===l.id);
-  openPop(btn,`<div class="ph">${esc(lname(l))}${l.base?' · plano base':' · '+esc(l.esp)}</div><div class="ptx">${l.w} × ${l.h} px · subida por ${esc(l.byName||l.by||'')}${l.src?' · '+esc(l.src):''}</div>
+  openPop(btn,`<div class="ph">${esc(lname(l))}${l.base?' · plano base':' · '+esc(EN(l.esp))}</div><div class="ptx">${l.w} × ${l.h} px · subida por ${esc(l.byName||l.by||'')}${l.src?' · '+esc(l.src):''}</div>
    ${!l.base&&base?`<button data-do="align">${l.aligned?'Revisar / afinar alineación…':'Alinear con '+esc(lname(base))+'…'}</button>`:''}
    <button data-do="ren">Cambiar nombre / especialidad…</button><button data-do="repl">Reemplazar por nueva revisión…</button>
    ${!l.base?'<button data-do="mkbase">Convertir en plano base propio (otra vista)…</button>':''}
@@ -2077,13 +2081,13 @@ function lamMenu(btn,l){const base=baseOfL(l);const specs=lamsOf(l.pisoId).filte
      setTimeout(()=>openPop(btn,`<div class="ph">¿Eliminar la lámina “${esc(lname(l))}”?</div><div class="ptx">Deja de verse en este piso para todos. Se guarda archivada: se recupera en «Vista ▾ › Láminas archivadas».${l.base&&basesOf(l.pisoId).length>1?' Lo dibujado sobre esta vista dejará de mostrarse.':''}</div><button data-do="yes" class="danger">Sí, archivar lámina</button><button data-do="no">Cancelar</button>`,{no:()=>{},
        yes:async()=>{try{await fcol('laminas').doc(l.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});toast('Lámina archivada','Deshacer',()=>lamRestore(l.id))}catch(err){toast('No se pudo archivar: '+(err.code||err.message))}}}),0)}})}
 function renameDialog(btn,l){const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true"><h3>Nombre de la lámina</h3>
-   <label>Nombre (así aparece en los botones)<input id="rnm" value="${esc(l.name||'')}" placeholder="${esc(l.esp)}" maxlength="60"></label>
-   <label>Especialidad<input id="res" list="resps" value="${esc(l.esp)}"><datalist id="resps">${ESPS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></label>
+   <label>Nombre (así aparece en los botones)<input id="rnm" value="${esc(l.name||'')}" placeholder="${esc(EN(l.esp))}" maxlength="60"></label>
+   <label>Especialidad<select id="res">${ESPO(l.esp)}</select></label>
    <p class="note">Ejemplos: “Fachada Norte”, “IIEE · Tomacorrientes”, “Arquitectura rev. B”. Si dejas el nombre vacío se muestra la especialidad.</p>
    <div class="mdlgb"><button class="ib" id="rcancel">Cancelar</button><button class="ib pri" id="rok">Guardar</button></div></div>`;
-  document.body.appendChild(box);const i=$('#rnm',box);i.focus();i.select();
+  document.body.appendChild(box);const i=$('#rnm',box);i.focus();i.select();$('#res',box).onchange=e=>espPickL(e.target,l.esp);
   $('#rcancel',box).onclick=()=>box.remove();
-  const ok=async()=>{const nm=$('#rnm',box).value.trim(),es=$('#res',box).value.trim()||l.esp;try{await fcol('laminas').doc(l.id).update({name:nm,esp:es});box.remove();toast('Nombre guardado')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
+  const ok=async()=>{const nm=$('#rnm',box).value.trim(),es0=$('#res',box).value,es=es0&&es0!=='__new'?es0:l.esp;try{await fcol('laminas').doc(l.id).update({name:nm,esp:es});box.remove();toast('Nombre guardado')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
   $('#rok',box).onclick=ok;box.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ok()}if(e.key==='Escape')box.remove()})}
 async function lamRestore(id){try{await fcol('laminas').doc(id).update({arch:firebase.firestore.FieldValue.delete()});toast('Lámina recuperada')}catch(err){toast('No se pudo recuperar: '+(err.code||err.message))}}
 async function delChunks(l,rev){const b=db.batch();for(let i=0;i<(l.nf||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_f_${i}`));for(let i=0;i<(l.nl||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_l_${i}`));await b.commit()}
@@ -2096,7 +2100,7 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
    <label id="utw">Tipo<select id="utipo"><option value="spec">Especialidad sobre un plano base</option><option value="base">Plano base nuevo (otra vista: otra fachada, otra zona…)</option></select></label>
    <label id="ubw">Se superpone sobre<select id="ubase"></select></label>
    <label>Nombre (así aparecerá en los botones)<input id="uname" placeholder="Ej.: Fachada Norte, IIEE · Alumbrado" maxlength="60"></label>
-   <label>Especialidad<input id="uesp" list="uesps" placeholder="Ej.: Aire acondicionado"><datalist id="uesps">${ESPS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></label>`}
+   <label>Especialidad<select id="uesp">${ESPO('')}</select></label>`}
    <label>Archivo (PDF de AutoCAD, PNG o JPG)<input type="file" id="ufile" accept="application/pdf,image/png,image/jpeg,image/webp"></label>
    <p class="note" id="uinfo"></p>
    <div class="uprog" id="uprog"></div>
@@ -2106,12 +2110,12 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
   const sync=()=>{if(repl){info.innerHTML=(repl.base?'Es un plano base: después de procesarlo marcarás puntos para alinearlo con la revisión anterior, así lo ya dibujado sobre el plano no se mueve.':'Después de procesarlo marcarás puntos para alinearlo con su plano base.')+' Súbelo desde una PC con Chrome o Edge.';return}
     const pid=$('#upiso',box).value;const B=basesOf(pid);const tsel=$('#utipo',box);if(!B.length||opt.mode==='base')tsel.value='base';if(opt.mode==='spec')tsel.value='spec';$('#utw',box).hidden=!B.length||!!opt.mode;
     const bsel=$('#ubase',box);const cur=bsel.value||(pid===M.piso?M.vista:'');bsel.innerHTML=B.map(b=>`<option value="${b.id}"${b.id===cur?' selected':''}>${esc(lname(b))}</option>`).join('');
-    const isB=tsel.value==='base';$('#ubw',box).hidden=isB||!B.length;const esp=$('#uesp',box);if(isB&&!esp.value)esp.value=B.length?'':'Arquitectura';
+    const isB=tsel.value==='base';$('#ubw',box).hidden=isB||!B.length;const esp=$('#uesp',box);if(isB&&!esp.value&&!B.length){const ar=typeof espFind==='function'?espFind('Arquitectura'):null;const v=ar&&!ar.arch?ar.id:'Arquitectura';if([...esp.options].some(o=>o.value===v))esp.value=v}
     info.innerHTML=(isB?(B.length?'Será <b>otro plano base</b> de este piso, con su propio plan del día (útil para cada fachada o una zona que no entra en la misma lámina). No se alinea con los demás.':'Será el <b>plano base</b> del piso (normalmente la arquitectura). Las demás especialidades se alinean sobre él.'):'Después de procesarla marcarás puntos para alinearla con el plano base elegido.')+' Súbelo desde una PC con Chrome o Edge.'};
-  if(!repl){$('#upiso',box).onchange=sync;$('#utipo',box).onchange=sync}sync();
+  if(!repl){$('#upiso',box).onchange=sync;$('#utipo',box).onchange=sync;$('#uesp',box).onchange=e=>espPickL(e.target,'')}sync();
   $('#ucancel',box).onclick=close;
   $('#ugo',box).onclick=async()=>{const f=$('#ufile',box).files[0];if(!f){toast('Elige el archivo.');return}
-    const pid=repl?repl.pisoId:$('#upiso',box).value;const esp=repl?repl.esp:($('#uesp',box).value||'').trim();const name=repl?(repl.name||''):($('#uname',box).value||'').trim();
+    const pid=repl?repl.pisoId:$('#upiso',box).value;const esp=repl?repl.esp:(($('#uesp',box).value||'').trim().replace(/^__new$/,''));const name=repl?(repl.name||''):($('#uname',box).value||'').trim();
     if(!esp&&!name){toast('Escribe el nombre o la especialidad.');return}
     const B=basesOf(pid);const newBase=!repl&&(!B.length||$('#utipo',box).value==='base');const target=repl?baseOfL(repl):(newBase?null:LAM.get($('#ubase',box).value)||B[0]);
     const prog=$('#uprog',box);const say=t=>{prog.textContent=t};$('#ugo',box).disabled=true;
@@ -2119,7 +2123,7 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     try{const out=await processFile(f,say);close();
       if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true},out);toast(opt.mode==='base'?'Lámina base guardada. Ahora ubica sus sectores y ambientes.':'Plano base guardado');M.piso=pid;if(opt.onBase)opt.onBase(M.vista);requestRender();return}
       const ref=repl&&repl.base?repl:target;M.busy='Cargando la referencia para alinear…';requestRender();const refURL=await imgURL(ref,'f');M.busy='';requestRender();
-      const nm=name||esp;
+      const nm=name||EN(esp);
       alignDialog({ref,refURL,tgt:{w:out.w,h:out.h,url:out.fullURL},title:repl?`Alinear la nueva revisión de ${lname(repl)}`:`Alinear ${nm} con ${lname(ref)}`,allowSkip:!(repl&&repl.base),
         onSave:async(T,pts)=>{await saveLam(repl?{...repl,T,aligned:true,pts}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T,aligned:true,pts},out,repl);toast('Lámina guardada y alineada')},
         onSkip:async()=>{await saveLam(repl?{...repl,aligned:false}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T:I,aligned:false},out,repl);toast('Lámina guardada sin alinear')}})}
@@ -2176,7 +2180,7 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
     <span class="note">Marca el mismo punto en los dos planos: usa <b>cruces de ejes</b> (donde se cortan las líneas de ejes, no el círculo con la letra, que cada plano dibuja en otra posición). Con 2 puntos basta; con 3 o 4 puntos repartidos en las esquinas queda más preciso. Acércate con la rueda del ratón; un clic coloca el punto activo.</span></div>
     <div class="alnt"><span class="seg" id="apt">${[0,1,2,3].map(i=>`<button data-p="${i}"${i===0?' class="on"':''}>Punto ${i+1}</button>`).join('')}</span><button class="ib" id="aclr" title="Borrar el punto activo">Borrar punto</button><button class="ib" id="areset" title="Borrar todos los puntos y el ajuste fino">Empezar de nuevo</button><span id="ast" class="note"></span><span class="sp" style="flex:1"></span>
       <button class="ib" id="aprev" disabled>Vista previa y ajuste fino</button>${o.allowSkip?'<button class="ib" id="askip">Guardar sin alinear</button>':''}<button class="ib" id="acancel">Cancelar</button><button class="ib pri" id="asave" disabled>Guardar</button></div>
-    <div class="alnp"><div class="alnpane"><div class="alnlab">Referencia: ${esc(o.ref.esp)}</div><div class="alnv" id="aref"></div></div><div class="alnpane"><div class="alnlab" id="atl">Lámina a alinear</div><div class="alnv" id="atgt"></div></div></div>
+    <div class="alnp"><div class="alnpane"><div class="alnlab">Referencia: ${esc(EN(o.ref.esp))}</div><div class="alnv" id="aref"></div></div><div class="alnpane"><div class="alnlab" id="atl">Lámina a alinear</div><div class="alnv" id="atgt"></div></div></div>
     <div class="alnprev" id="aprevw" hidden><div class="alnlab"><span>Vista previa</span><label class="chk" style="font-weight:500">Opacidad <input type="range" id="aop" min="0" max="1" step="0.05" value="0.6" aria-label="Opacidad"></label>
       <span class="afine">Ajuste fino: <button class="ib" data-n="dx:-1" title="Mover a la izquierda (flecha ←; con Shift, 10)">←</button><button class="ib" data-n="dx:1" title="Mover a la derecha (→)">→</button><button class="ib" data-n="dy:-1" title="Mover arriba (↑)">↑</button><button class="ib" data-n="dy:1" title="Mover abajo (↓)">↓</button>
       <button class="ib" data-n="r:-0.02" title="Girar a la izquierda 0,02°">⟲</button><button class="ib" data-n="r:0.02" title="Girar a la derecha 0,02°">⟳</button><button class="ib" data-n="s:-0.5" title="Reducir 0,05 %">−</button><button class="ib" data-n="s:0.5" title="Agrandar 0,05 %">+</button><button class="ib" id="an0" title="Quitar el ajuste fino">Reiniciar</button><span id="anv" class="mu"></span></span></div><div class="alnv" id="apv"></div></div></div>`;
