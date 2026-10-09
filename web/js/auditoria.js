@@ -85,7 +85,7 @@ const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
   /* la versión cliente solo la lee quien tiene acceso: los demás no los piden (no es un error) */
-  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||(typeof canCli==='function'&&canCli()));
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||isAdmin||(typeof canCli==='function'&&canCli()));/* la versión cliente está retirada, pero su historial sigue en el respaldo del administrador */
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;

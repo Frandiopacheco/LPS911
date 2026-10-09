@@ -13,7 +13,11 @@ const CLVD=new Map();  // versiones emitidas ya leídas: id → {ready,pis,sec,a
 /* Acceso: el administrador siempre; los demás solo si el administrador los designa en Equipo (members.cli).
    El subcontratista y el capataz nunca (trabajan con la versión interna). Las reglas de Firestore dicen lo mismo. */
 const CLI_ROLES=['editor','campo','area','lector'];
-const canCli=()=>!!me&&!!db&&(me.role==='admin'||(me.cli===true&&CLI_ROLES.includes(me.role)));
+/* RETIRADA (oct 2026, decidido con el dueño): en el lookahead estorbaba; el control frente al cliente vendrá con el plan maestro.
+   Con CLI_OFF nadie la ve (botón, holguras, avisos, Hoy, Indicadores, Excel, Equipo). El código y los datos (cli, clidx, cliver)
+   se conservan: para volver a usarla basta poner CLI_OFF=false. */
+const CLI_OFF=true;
+const canCli=()=>!CLI_OFF&&!!me&&!!db&&(me.role==='admin'||(me.cli===true&&CLI_ROLES.includes(me.role)));
 const BUF_LV={x:'la actividad',a:'el ambiente',s:'el sector',p:'el piso',all:'toda la obra'};
 
 /** Se deja de escuchar al perder el acceso (el administrador lo quitó en Equipo). */
