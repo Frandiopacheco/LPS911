@@ -50,7 +50,7 @@ async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const
   lqModal(`<div class="lqtop"><b>«${esc(v)}» no está en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>
    ${sim.length?`<div class="ph">¿Es alguna de estas?</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
-   ${can?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${scOpts}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label><label>Especialidad<select id="mxaesp">${mxEspOpts(mxEspOf(x.sc))}</select></label></div>
+   ${can?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${scOpts}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label></div>
      <p class="note">Se agrega solo a este ambiente.${sc?' El ingeniero la revisará (nombre, clase, tipo) y si la corrige, el lookahead se actualiza solo.':''}</p>
      ${tp?`<label class="mxur"><input type="checkbox" id="mxatp"><span><b>Agregar a todos los ambientes del tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n})`:''}</b><small>${sc?'El ingeniero lo confirma al revisarla.':'Sale en todos los ambientes de ese tipo.'}</small></span></label>`:''}`:''}
    <p class="note" id="mxamsg"></p>
@@ -59,13 +59,11 @@ async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const
      if(!e.target.closest('#mxaok'))return;const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
      const dup=mxAli().get(mnk(name));if(dup){lqClose();useName(MX.cat.get(dup));return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&$('#mxatp')&&$('#mxatp').checked);
-     const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,esp:$('#mxaesp').value==='__new'?'':$('#mxaesp').value,al:[mnk(name)],ord};
+     const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,al:[mnk(name)],ord};
      if(sc)c.rev={by:me.email,n:me.name||'',t:NOW(),amb:x.ambId||'',tipo:toT?tp.id:null};
      try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT&&ed)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();useName(c);
        toast(sc?'Agregada al catálogo: el ingeniero la revisará':toT?`Agregada al catálogo y al tipo «${tp.name}»`:'Agregada al catálogo (solo este ambiente)')}catch(err){mxErr(err)}},
-   async e=>{if(e.target.id==='mxacl'&&e.target.value==='e'){const c=$('#mxatp');if(c)c.checked=false}
-     if(e.target.id==='mxasc'){const es=$('#mxaesp');const d=mxEspOf(e.target.value);if(es&&d){if(![...es.options].some(o=>o.value===d))es.insertAdjacentHTML('afterbegin',`<option value="${esc(d)}">${esc(d)}</option>`);es.value=d}}
-     if(e.target.id==='mxaesp'&&e.target.value==='__new')await mxEspPick(e.target,'')})}
+   async e=>{if(e.target.id==='mxacl'&&e.target.value==='e'){const c=$('#mxatp');if(c)c.checked=false}})}
 
 /* actividades que agregaron los SC y nadie revisó todavía */
 const mxRevList=()=>[...MX.cat.values()].filter(c=>c.rev&&!c.arch).sort((a,b)=>(a.rev.t||0)-(b.rev.t||0));
@@ -78,7 +76,8 @@ function mxCatTools(){const ed=mxEd();const pend=[...MX.prop.values()].filter(p=
     <span class="fgl">Exigir catálogo</span><span class="seg" role="group" aria-label="Exigir catálogo en el lookahead"><button data-mxreq="0" class="${P().catReq?'':'on'}">No</button><button data-mxreq="1" class="${P().catReq?'on':''}">Sí</button></span>
     <span class="note">${P().catReq?'Solo se escriben actividades del catálogo.':'Todavía se aceptan nombres libres.'}</span><span class="fsp"></span>
     <button class="ib" id="mxuni">Unificar nombres del lookahead…</button></div></div>`;
-  if(ed&&rv.length)h+=`<div class="card mxrev"><div class="hd">Agregadas por los subcontratistas <span class="sub">${rv.length} por revisar · corrige nombre, clase o especialidad en la tabla (el lookahead se actualiza) o fusiónala si ya existía</span></div><div class="tscroll"><table class="t rt"><tbody>
+  if(ed){const nd=mxDesCands().length;h+=`<div class="card mxtools"><div class="pad fbar"><b>Desglose</b><span class="note">Actividades generales («Instalaciones ICR»…) que conviene dividir en sus trabajos.</span><span class="fsp"></span><button class="ib${nd?' pri':''}" id="mxdlist">Posibles por desglosar${nd?` (${nd})`:''}…</button></div></div>`}
+  if(ed&&rv.length)h+=`<div class="card mxrev"><div class="hd">Agregadas por los subcontratistas <span class="sub">${rv.length} por revisar · corrige nombre o clase en la tabla (el lookahead se actualiza) o fusiónala si ya existía</span></div><div class="tscroll"><table class="t rt"><tbody>
     ${rv.map(c=>{const a=S.amb.get(c.rev.amb);const tp=c.rev.tipo&&MX.tipo.get(c.rev.tipo);const inT=tp&&(tp.acts||[]).includes(c.id);return`<tr><td data-l="Actividad"><b>${esc(c.name)}</b> <small class="note">${esc(MXCL[c.cl]||'')}</small></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td>
       <td data-l="Ambiente">${a?esc(a.code+' '+a.name):''}</td><td data-l="Agregó">${esc(c.rev.n||c.rev.by||'')} · ${esc(fmtD(ldt(c.rev.t||0)))}</td>
       <td class="mxrb">${tp&&!inT?`<button class="ib" data-mxrtp="${esc(c.id)}" title="El SC pidió que salga en todos los ambientes de este tipo">+ Tipo «${esc(tp.name)}»</button>`:''}<button class="ib" data-mxrfus="${esc(c.id)}">Fusionar…</button><button class="ib pri" data-mxrok="${esc(c.id)}">✓ Revisada</button></td></tr>`}).join('')}</tbody></table></div></div>`;
@@ -93,6 +92,7 @@ function mxWireCatTools(main){
     if(v){const n=mxLookOff().length;if(n&&!await uiAsk({title:'Exigir catálogo en el lookahead',text:`Hay ${n} filas del lookahead con nombres que no están en el catálogo. Siguen igual, pero al editar su nombre habrá que elegir uno del catálogo. Conviene unificar o asignar antes.`,ok:'Exigir igual',tone:'warn'}))return}
     apply([op('meta','project',{...P(),catReq:v})],v?'El lookahead ahora exige actividades del catálogo':'El lookahead vuelve a aceptar nombres libres')});
   const un=$('#mxuni');if(un)un.onclick=mxUnifyDlg;
+  const dl=$('#mxdlist');if(dl)dl.onclick=mxDesListDlg;
   main.querySelectorAll('[data-mxpok]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpok,true));
   main.querySelectorAll('[data-mxpno]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpno,false));
   main.querySelectorAll('[data-mxrok]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxrok;const c=MX.cat.get(id);if(!c||!c.rev)return;const r=c.rev;
@@ -102,7 +102,7 @@ function mxWireCatTools(main){
 /* propuestas antiguas (mcatp): desde oct 2026 el SC agrega directo; estas se siguen pudiendo resolver */
 async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return;const meta={dec:ok?'ok':'rej',decBy:me.email,decN:me.name||'',decT:NOW()};
   try{if(ok){const dup=mxAli().get(mnk(p.name));let cid=dup;
-      if(!dup){cid='k'+NOW().toString(36);const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;await fcol('mcat').doc(cid).set({name:p.name,sc:p.sc||'',cl:'t',esp:mxEspOf(p.sc||''),al:[mnk(p.name)],ord,...mxNow()})}
+      if(!dup){cid='k'+NOW().toString(36);const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;await fcol('mcat').doc(cid).set({name:p.name,sc:p.sc||'',cl:'t',al:[mnk(p.name)],ord,...mxNow()})}
       await fcol('mcatp').doc(id).set({st:'ok',catId:cid,...meta},{merge:true});toast(dup?`Ya existía «${MX.cat.get(dup).name}»: se marcó aprobada`:`«${p.name}» agregada al catálogo`);
       /* el ambiente para el que la pidió tiene tipo: ¿la trae todo ese tipo? */
       const tp=await mxAmbTipo(p.ambId);if(tp&&!(tp.acts||[]).includes(cid)&&await uiAsk({title:'¿Agregar también al tipo de ambiente?',text:`La pidieron para un ambiente de tipo «${tp.name}»${tp.n!=null?` (${tp.n} ambientes)`:''}. Si se hace en todos, agrégala al tipo; si es algo puntual, no.`,ok:'Agregar al tipo',cancel:'Solo este ambiente',tone:'info'})){await mxTipoAdd(tp.id,cid);toast(`Agregada también al tipo «${tp.name}»`)}}
@@ -110,7 +110,7 @@ async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return
       await fcol('mcatp').doc(id).set({st:'rej',note:String(note||''),...meta},{merge:true});toast('Propuesta rechazada')}}catch(e){mxErr(e)}}
 
 /* filas del lookahead (pisos a la vista) cuyo nombre no está en el catálogo */
-function mxLookOff(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id));return[...S.act.values()].filter(x=>mnk(x.name)&&!ali.has(mnk(x.name))&&vp.has(pisoOfAmb(x.ambId)))}
+function mxLookOff(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id));const des=mxDesAli();return[...S.act.values()].filter(x=>mnk(x.name)&&!ali.has(mnk(x.name))&&!des.has(mnk(x.name))&&vp.has(pisoOfAmb(x.ambId)))}
 
 /* ---------- Unificar nombres (solo administrador) ---------- */
 function mxUnifyPlan(docs){const pend=new Set();for(const d of docs)for(const[id,v]of Object.entries(d.items||{}))if(v)pend.add(id);
@@ -156,7 +156,7 @@ const mxDonePend=x=>mxDoneSt(x)==='pend';
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 /* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
    'sc' = es de una actividad de otro SC (no sale en la Matriz). null = bien, o el catálogo aún no carga / está vacío */
-function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct0().length)return null;const id=mxCatOfN(x);if(!id)return'off';const c=MX.cat.get(id);if(!c||c.arch)return'off';return x.sc&&!mxScsOf(c).includes(x.sc)?'sc':null}
+function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct0().length)return null;const id=mxCatOfN(x);if(!id)return mxDesAli().has(mnk(x.name))?null:'off';const c=MX.cat.get(id);if(!c||c.arch)return'off';return x.sc&&!mxScsOf(c).includes(x.sc)?'sc':null}
 function mxCatBadge(x,k,pc){const w=pc?pc.cat:mxRowCat(x);if(!w)return'';const c=w==='sc'?MX.cat.get(mxCatOfN(x)):null;
   return`<span class="mxbadge mxcb" style="--k:${k||0}" data-mxc="${esc(x.id)}" role="button" tabindex="0" title="${w==='off'?'No está en el catálogo de actividades: no sale en la Matriz. Clic: elegir o agregar':`En el catálogo «${esc(c.name)}» es de ${esc(conOf(c.sc).name)}: esta fila no sale en la Matriz. Clic: ver opciones`}">${w==='off'?'∉':'SC'}</span>`}
 /* pc (opcional): {cat,warn,done} ya calculados por la grilla para la fila, para no repetirlos (auditoría de código 08/10, L1) */
@@ -186,13 +186,24 @@ function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||
   lqModal(`<div class="lqtop"><b>Pendientes sin programar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En la matriz están <b>pendientes</b> y no tienen días en el lookahead de hoy en adelante${U.piso?' (este piso)':''}${SCK()?' (tu partida)':U.sc?' (subcontratistas del filtro)':''}. ${can?'Marca las que quieras agregar: se crean en el lookahead sin días, para que les pongas fecha.':''}</p>
    ${can?'<div class="fbar"><label><input type="checkbox" id="mxpall"> Todas</label><span class="fsp"></span><span class="note" id="mxpcnt">0 marcadas</span></div>':''}
-   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpg"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b></div>${rs.map(r=>`<label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>`).join('')}`).join('')}</div>
+   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpg"><button type="button" class="lnkb" data-mxpamb="${esc(rs[0].a.id)}" title="Ir a este ambiente en el lookahead"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b> ↗</button></div>${rs.map(r=>`<div class="mxpr"><label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>
+     ${r.o.acts.length?`<button type="button" class="ib" data-mxpgo="${r.i}" title="Ir a su fila en el lookahead para ponerle fecha">Ver fila ↗</button>`:can?`<button type="button" class="ib" data-mxpadd="${r.i}" title="La agrega a este ambiente sin días y te lleva a la fila para ponerle fecha">+ Agregar e ir ↗</button>`:''}</div>`).join('')}`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button>${can?'<button class="ib pri" id="mxpok">Agregar al lookahead</button>':''}</div>`,
-   e=>{if(!e.target.closest('#mxpok'))return;const sel=[...document.querySelectorAll('[data-mxp]:checked')].map(c=>L[+c.dataset.mxp]);if(!sel.length){toast('Marca al menos una.');return}
+   e=>{const ga=e.target.closest('[data-mxpamb]');if(ga){lqClose();mxGoAmb(ga.dataset.mxpamb);return}
+     const gv=e.target.closest('[data-mxpgo]');if(gv){const r=L[+gv.dataset.mxpgo];const id=r.o.acts.find(i=>S.act.has(i));lqClose();if(id)gotoAct(id);else mxGoAmb(r.a.id);return}
+     const ad=e.target.closest('[data-mxpadd]');const one=ad?[L[+ad.dataset.mxpadd]]:null;
+     if(!one&&!e.target.closest('#mxpok'))return;const sel=one||[...document.querySelectorAll('[data-mxp]:checked')].map(c=>L[+c.dataset.mxp]);if(!sel.length){toast('Marca al menos una.');return}
      const ops=[];const last=new Map();for(const r of sel){const sib=[...S.act.values()].filter(x=>x.ambId===r.a.id);let o=last.get(r.a.id);if(o==null)o=sib.length?Math.max(...sib.map(x=>x.order||0)):0;o+=10;last.set(r.a.id,o);
        const id=uid('act');ops.push(op('acts',id,{id,ambId:r.a.id,sc:r.c.sc,name:r.c.name,und:'',metrado:null,days:[],order:o}))}
-     lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`)},
+     lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`);
+     /* te lleva a la (primera) fila nueva para ponerle fecha */
+     const first=ops[0]&&ops[0].id;if(first)setTimeout(()=>{if(S.act.has(first))gotoAct(first)},60)},
    e=>{if(e.target.id==='mxpall')document.querySelectorAll('[data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'})}
+
+/* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
+function mxGoAmb(amb){const sib=[...S.act.values()].filter(x=>x.ambId===amb).sort((a,b)=>(a.order||0)-(b.order||0));if(sib.length){gotoAct(sib[0].id);return}
+  const a=S.amb.get(amb);const p=pisoOfAmb(amb);if(p&&U.piso!==p){U.piso=p;U.pisoAll=false}if(a)U.collapsed=(U.collapsed||[]).filter(c=>c!==a.sectorId&&c!==p);U.tab='look';saveUI();render();
+  toast(`${a?a.code+' '+a.name:'El ambiente'} todavía no tiene actividades en el lookahead.`)}
 
 /* llevar a la celda de la Matriz (ambiente × actividad) y resaltar su fila y su columna 3 s. Si un filtro la esconde, se abre */
 function mxGoCell(amb,cat){const p=pisoOfAmb(amb);if(p&&U.piso&&U.piso!==p)U.piso=p;const c=MX.cat.get(cat);

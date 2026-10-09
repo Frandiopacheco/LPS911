@@ -154,8 +154,9 @@ function propTouch(b, a) {
   if ((a.und || '') !== (b.und || '') || (a.metrado ?? null) !== (b.metrado ?? null) || (a.name || '') !== (b.name || '')) ad.forEach(d => T.add(d));
   return [...T].sort();
 }
-/* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, snap, propOut } como «Congelar».
-   Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
+/* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, propOut } como «Congelar», y aparte
+   la foto del lookahead del piso (snap: días de todas sus actividades), que va a wsnap/<n>_<piso> (auditoría de datos M1: dentro de
+   weeks la descargaba todo el mundo al entrar y crecía con cada semana). Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
 function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [] }, n, nowIso) {
   const live = m => [...m.values()].filter(x => !x.arch);
   const P = live(pisos).sort(byOrder); if (!P.length) return [];
@@ -191,7 +192,8 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
       const pa = it.after && off ? propMerge(it.after, it.base || off, off) : it.after;
       if (propTouch(off, pa).some(z => days.has(z))) propOut.push((d.sc || d.id) + '/' + id);
     }
-    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, snap, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut } : {}) } });
+    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut } : {}) },
+      wsnap: { snap, n, pisoId: p.id, t: nowIso } });
   }
   return out;
 }
@@ -490,8 +492,27 @@ function retryRecord(prev, plan, base, done, fail, sum) {
   return o;
 }
 
+/* ---------- Migración: la foto del lookahead (snap) sale de weeks a wsnap (auditoría de datos M1) ----------
+   Sin perder nada: por cada documento de weeks que todavía tiene snap (semana congelada: snap; copia de un descongelado
+   __h: v.snap) se escribe wsnap/<mismo id> y recién entonces se quita el campo de weeks, las dos cosas juntas (una transacción
+   por documento). Si wsnap/<id> ya existe con otra foto, esa se guarda antes en wsnap/<id>__m<hora> (la de weeks manda: es la
+   que acompaña a su congelado). → null si el documento no tiene nada que mover. */
+const WSNAP_PAGE = 100;
+function wsnapPlan(id, w, ex, stamp) {
+  if (!w) return null;
+  const top = w.snap !== undefined, inV = !top && !!w.v && typeof w.v === 'object' && w.v.snap !== undefined;
+  if (!top && !inV) return null;
+  const snap = (top ? w.snap : w.v.snap) || {};
+  const doc = { snap, n: w.n ?? null, pisoId: w.pisoId || '', t: (top ? w.frozenAt : w.v.frozenAt) || null, mig: true, ...(w.histOf ? { histOf: w.histOf } : {}) };
+  const sets = [];
+  const same = !!ex && canon(ex.snap || {}) === canon(snap);
+  if (ex && !same) sets.push([id + '__m' + stamp, { ...ex, movedAt: stamp }]);
+  if (!same) sets.push([id, doc]);
+  return { sets, del: top ? 'snap' : 'v.snap', same };
+}
+
 module.exports = {
   CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
-  RETRY_MAX, retryPlan, runFloors, retryRecord };
+  RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan };

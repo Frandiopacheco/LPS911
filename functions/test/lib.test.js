@@ -171,7 +171,10 @@ test('congelado automático: compromisos de la semana por piso, como «Congelar�
   assert.strictEqual(d.items.x1.und, 'm2');
   assert.deepStrictEqual(d.items.x2.days, ['2026-10-12']);
   assert.strictEqual(d.items.x2.amb, 'Oficina');
-  assert.deepStrictEqual(d.snap.x1, ['2026-10-09', '2026-10-12', '2026-10-13']);
+  // la foto del lookahead va aparte, a wsnap/<id> (M1): weeks ya no la lleva
+  assert.strictEqual(d.snap, undefined);
+  assert.deepStrictEqual(L[0].wsnap.snap.x1, ['2026-10-09', '2026-10-12', '2026-10-13']);
+  assert.deepStrictEqual([L[0].wsnap.n, L[0].wsnap.pisoId, L[0].wsnap.t], [60, 'p1', '2026-10-10T18:00:00.000Z']);
   assert.deepStrictEqual(d.propOut, ['c2/x2']); // enviada y sin decidir; la no enviada no cuenta
 });
 

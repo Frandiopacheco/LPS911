@@ -3231,3 +3231,8 @@ g.dsgo.ddim{opacity:.3}g.dsgo:hover .nm{text-decoration:underline}
 @media (prefers-reduced-motion:reduce){#grid tr.rhl>td{animation:none}}
 /* responsable de restricción: elegido del equipo; un nombre antiguo fuera del equipo se marca */
 select.rresp{max-width:100%}select.rresp.rbad{border:1px solid var(--bad)!important;color:var(--bad)}
+
+/* Desglosar (matriz-des.js): filas de partes */
+.mxdp{display:flex;gap:6px;align-items:center;margin:4px 0}.mxdp .tin{flex:1;min-width:0}.mxdp select{max-width:40%}
+/* Pendientes sin programar: fila con botón para ir al lookahead */
+.mxpr{display:flex;align-items:center;gap:8px}.mxpr .mxur{flex:1;min-width:0}.mxpr .ib{flex:none}

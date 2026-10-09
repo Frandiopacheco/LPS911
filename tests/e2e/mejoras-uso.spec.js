@@ -159,6 +159,7 @@ test('Causas: el cuadro de la empresa en Configuración y la lista antigua pasa 
   const errors = await openApp(page, { tab: 'cfg', extra: [OLD] });
   await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').cnc), { timeout: 10000 }).toEqual(['Programación', 'Materiales', 'Control de calidad', 'Externo', 'Cliente - Supervisión', 'Errores de ejecución', 'Subcontratas', 'Equipos y herramientas', 'Administrativos', 'Diseño', 'Otros']);
   expect(await page.evaluate(() => window.__dbGet('meta', 'project').cncOld)).toEqual(['Mano de obra', 'Clima']);
+  await page.click('[data-cfgv="rst"]');
   await expect(page.locator('#main .cimpr', { hasText: 'Cliente - Supervisión' })).toContainText('CLI');
   expect(await page.evaluate(() => [cncCode('Clima'), cncCode('Mano de obra'), cncImp('Diseño'), cncImp('Subcontratas')])).toEqual(['EXT', 'SC', false, true]);
   noErrors(errors, 'causas');
@@ -201,10 +202,11 @@ test('Lookahead: se abre en modo consulta; «Editar» habilita la edición', asy
 test('lo que llega de la base no pisa un cambio propio que aún no sale', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look' });
   const r = await page.evaluate(async () => {
-    const x = S.act.get('e0'); QK['acts/e0'] = 1; S.act.set('e0', { ...x, days: ['2026-10-20'] });
+    /* qkMark: escritura propia recién entregada (base.js, auditoría C1) */
+    const x = S.act.get('e0'); qkMark('acts', 'e0'); S.act.set('e0', { ...x, days: ['2026-10-20'] });
     await window.firebase.firestore().collection('acts').doc('t0').update({ name: 'Otro cambio' });
     await new Promise(r => setTimeout(r, 50));
-    const out = S.act.get('e0').days; delete QK['acts/e0']; return out;
+    const out = S.act.get('e0').days; clearTimeout(QK['acts/e0'].t); delete QK['acts/e0']; return out;
   });
   expect(r).toEqual(['2026-10-20']);
   noErrors(errors, 'cola');

@@ -38,33 +38,40 @@ async function planosOldChange(e){const t=e.target;
   return false}
 
 /* ================= CONFIGURACIÓN ================= */
+/* Configuración por secciones (oct 2026, como Equipo): U.cfgV */
+const CFGV=()=>[['sc','Subcontratistas'],['esp','Especialidades'],['tpl','Plantillas'],['rst','Causas y restricciones'],['cal','Calendario'],['cld','Calidad'],['pry','Proyecto'],...(canWrite&&!PM()?[['arc','Papelera']]:[])];
+const cfgV=()=>CFGV().some(([k])=>k===U.cfgV)?U.cfgV:'sc';
+function cfgSeg(){const v=cfgV();return`<span class="seg tseg" role="tablist" aria-label="Secciones de Configuración">${CFGV().map(([k,l])=>`<button type="button" role="tab" data-cfgv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${l}</button>`).join('')}</span>`}
 function renderCfg(main){
+  if(typeof ensureMcat==='function')ensureMcat();const tally=espCatTally();
   const p=P();const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));const use={};for(const x of S.act.values())use[x.sc]=(use[x.sc]||0)+1;
   const ro=canWrite?'':' readonly',dis=canWrite?'':' disabled';
   const tpls=(p.templates||[]).map(t=>({...t,acts:(t.acts||[]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a)}));
   const conSel=(sel,ti,ai)=>`<select data-tsc="${ti}:${ai}"${dis}>${cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración','Subcontratistas, plantillas, causas, tipos de restricción, calendario e inspectores')}
+  const cv=cfgV();
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración','Datos de la obra que usan todas las pestañas')}
   ${canWrite?'':`<div class="callout">Tu rol es ${esc(ROLE[me.role]||me.role)}: puedes ver la configuración pero no cambiarla.</div>`}
-  <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t rt"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th title="Sale en el análisis de restricciones (AR)">Especialidad</th><th>Actividades</th><th></th></tr></thead><tbody>
-   ${cons.map(c=>`<tr><td data-l="Color"><input type="color" data-c="${c.id}" data-f="color" value="${esc(c.color)}"${dis} aria-label="Color de ${esc(c.name)}"></td><td data-l="Nombre"><input class="ci" data-c="${c.id}" data-f="name" data-fk="c:${c.id}:n" value="${esc(c.name)}"${ro}></td><td data-l="Partida"><input class="ci" data-c="${c.id}" data-f="partida" data-fk="c:${c.id}:p" value="${esc(c.partida||'')}"${ro}></td><td data-l="Especialidad"><input class="ci" data-c="${c.id}" data-f="esp" data-fk="c:${c.id}:e" value="${esc(c.esp||'')}" placeholder="p. ej. Instalaciones sanitarias"${ro}></td><td class="mono" data-l="Actividades">${use[c.id]||0}</td><td>${canWrite&&!use[c.id]?`<button class="ab" data-cdel="${c.id}" aria-label="Eliminar" title="Eliminar (no tiene actividades)">&times;</button>`:''}</td></tr>`).join('')}
-  </tbody></table></div>${canWrite?'<div class="pad"><button class="ib" id="cadd">+ Subcontratista</button></div>':''}</div>
-  <div class="card"><h2>Plantillas de ambiente <span class="sub">Se usan en “+ Ambiente” para crear varias actividades de una vez</span></h2><div class="pad"><div class="tpls">
+  ${cfgSeg()}
+  ${cv==='sc'?`  <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t rt"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th title="Una por subcontratista (si hace dos, regístralo como dos). Sale en el catálogo, el AR y los indicadores">Especialidad</th><th>Actividades</th><th></th></tr></thead><tbody>
+   ${cons.map(c=>`<tr><td data-l="Color"><input type="color" data-c="${c.id}" data-f="color" value="${esc(c.color)}"${dis} aria-label="Color de ${esc(c.name)}"></td><td data-l="Nombre"><input class="ci" data-c="${c.id}" data-f="name" data-fk="c:${c.id}:n" value="${esc(c.name)}"${ro}></td><td data-l="Partida"><input class="ci" data-c="${c.id}" data-f="partida" data-fk="c:${c.id}:p" value="${esc(c.partida||'')}"${ro}></td><td data-l="Especialidad"><select data-c="${c.id}" data-f="esp" aria-label="Especialidad de ${esc(c.name)}"${dis}>${espOpts(c.esp||'')}</select>${espScHint(c,tally)}</td><td class="mono" data-l="Actividades">${use[c.id]||0}</td><td>${canWrite&&!use[c.id]?`<button class="ab" data-cdel="${c.id}" aria-label="Eliminar" title="Eliminar (no tiene actividades)">&times;</button>`:''}</td></tr>`).join('')}
+  </tbody></table></div>${canWrite?'<div class="pad"><button class="ib" id="cadd">+ Subcontratista</button></div>':''}</div>`:''}
+  ${cv==='esp'?espCard():''}
+  ${cv==='tpl'?`  <div class="card"><h2>Plantillas de ambiente <span class="sub">Se usan en “+ Ambiente” para crear varias actividades de una vez</span></h2><div class="pad"><div class="tpls">
    ${tpls.map((t,ti)=>`<div class="tplc"><div class="row"><input class="tn" data-tname="${ti}" value="${esc(t.name)}" aria-label="Nombre de la plantilla"${ro}>${canWrite?`<button class="ab" data-tdel="${ti}" title="Eliminar plantilla" aria-label="Eliminar plantilla">&times;</button>`:''}</div>
      ${t.acts.map((a,ai)=>`<div class="row">${conSel(a.sc,ti,ai)}<input class="an" data-tact="${ti}:${ai}" value="${esc(a.name)}" placeholder="Actividad" list="lqdl-${esc(a.sc||'')}"${ro}>${canWrite?`<button class="ab" data-tadel="${ti}:${ai}" aria-label="Quitar actividad">&times;</button>`:''}</div>`).join('')}
      ${canWrite?`<div class="row"><button class="ib" data-taadd="${ti}" style="height:26px;font-size:12px">+ Actividad</button><button class="ib" data-tup="${ti}" style="height:26px;font-size:12px">Subir</button></div>`:''}</div>`).join('')}
-   </div>${tplDatalists(tpls)}${canWrite?'<div style="margin-top:10px"><button class="ib" id="tnew">+ Nueva plantilla</button></div>':''}<p class="note" style="margin:8px 0 0">Al escribir una actividad se sugieren los nombres que ya usa el lookahead. ◆ indica que requiere liberación de calidad; “≈ usar…” corrige un nombre parecido para que los ambientes nuevos hereden su liberación.</p></div></div>
-  <div class="cfg">
-   <div class="card"><h2>Causas de no cumplimiento</h2><div class="pad"><textarea class="box" data-l="cnc" aria-label="Causas, una por línea"${ro}>${esc((p.cnc||[]).join('\n'))}</textarea><p class="note">Una por línea. Se guarda al salir del cuadro. Por defecto es el <b>cuadro de causas de la empresa</b> (11 códigos); cada causa muestra su código en las listas y en el Excel del PPC.</p>${canWrite&&(p.cnc||[]).join('|')!==CNC_STD.map(o=>o.n).join('|')?`<button class="ib" data-cncstd="1">Usar el cuadro de causas de la empresa</button>`:''}
+   </div>${tplDatalists(tpls)}${canWrite?'<div style="margin-top:10px"><button class="ib" id="tnew">+ Nueva plantilla</button></div>':''}<p class="note" style="margin:8px 0 0">Al escribir una actividad se sugieren los nombres que ya usa el lookahead. ◆ indica que requiere liberación de calidad; “≈ usar…” corrige un nombre parecido para que los ambientes nuevos hereden su liberación.</p></div></div>`:''}
+  ${cv==='rst'?`<div class="cfg">   <div class="card"><h2>Causas de no cumplimiento</h2><div class="pad"><textarea class="box" data-l="cnc" aria-label="Causas, una por línea"${ro}>${esc((p.cnc||[]).join('\n'))}</textarea><p class="note">Una por línea. Se guarda al salir del cuadro. Por defecto es el <b>cuadro de causas de la empresa</b> (11 códigos); cada causa muestra su código en las listas y en el Excel del PPC.</p>${canWrite&&(p.cnc||[]).join('|')!==CNC_STD.map(o=>o.n).join('|')?`<button class="ib" data-cncstd="1">Usar el cuadro de causas de la empresa</button>`:''}
      <h3 class="cimph">¿Imputable al subcontratista?</h3><p class="note" style="margin-top:0">Si la causa no depende del subcontratista (p. ej. actividad previa), su incumplimiento no le baja el <b>PPC del SC</b>. En Campo se puede corregir caso por caso.</p>
      <div class="cimpl">${(p.cnc||[]).map(k=>{const v=cncImp(k);const o=cncStd(k);return`<div class="cimpr"><span><b class="mono" style="display:inline-block;min-width:52px">${esc(cncCode(k))}</b>${esc(k)}${o?`<span class="note" style="display:block;margin-left:56px">${esc(o.d.join(' '))}</span>`:''}</span><span class="seg"><button data-cimpc="${esc(k)}" data-v="1" class="${v?'on':''}"${dis}>Sí</button><button data-cimpc="${esc(k)}" data-v="0" class="${v?'':'on'}"${dis}>No</button></span></div>`}).join('')}</div></div></div>
+   <div class="card"><h2>Tipos de restricción</h2><div class="pad"><textarea class="box" data-l="restrTypes" aria-label="Tipos, uno por línea"${ro}>${esc((p.restrTypes||[]).join('\n'))}</textarea><p class="note">Uno por línea. Se guarda al salir del cuadro.</p></div></div>
    <div class="card"><h2>Clase de cada tipo de restricción</h2><div class="pad"><p class="note">Operativa de campo: se resuelve en la obra (materiales, mano de obra, equipos, actividad previa). Otras áreas: depende de OT, Ingeniería, Logística, etc. Cada restricción puede cambiarse por separado.</p>
      <div class="cimpl">${(p.restrTypes||[]).map(k=>{const g=typeGrp(k);return`<div class="cimpr"><span>${esc(k)}</span><span class="seg"><button data-rgrpc="${esc(k)}" data-v="campo" class="${g==='campo'?'on':''}"${dis}>Campo</button><button data-rgrpc="${esc(k)}" data-v="area" class="${g==='area'?'on':''}"${dis}>Otras áreas</button></span></div>`}).join('')}</div></div></div>
-   <div class="card"><h2>Inspectores de calidad</h2><div class="pad"><textarea class="box" id="cfgInsp" aria-label="Inspectores, uno por línea"${canLibCfg()?'':' disabled'}>${esc(libInsp().join('\n'))}</textarea><p class="note">Uno por línea. Se eligen al programar una liberación y sirven para filtrar la agenda de cada uno. La editan Calidad y el administrador.</p></div></div>
    <div class="card"><h2>Áreas de apoyo</h2><div class="pad"><textarea class="box" data-l="restrAreas" aria-label="Áreas, una por línea"${ro}>${esc(restrAreasL().join('\n'))}</textarea><p class="note">Una por línea (OT, Ingeniería…). Se ofrecen al marcar una restricción como “Otras áreas”.</p></div></div>
-   <div class="card"><h2>Tipos de restricción</h2><div class="pad"><textarea class="box" data-l="restrTypes" aria-label="Tipos, uno por línea"${ro}>${esc((p.restrTypes||[]).join('\n'))}</textarea><p class="note">Uno por línea. Se guarda al salir del cuadro.</p></div></div>
-  </div>
-  ${calCard()}${archCard()}
-  <div class="card"><h2>Proyecto ${isAdmin?'':'<span class="sub">Solo el administrador puede cambiar estos datos</span>'}</h2><div class="pad frm">
+  </div>`:''}
+  ${cv==='cal'?calCard():''}
+  ${cv==='cld'?`<div class="cfg">   <div class="card"><h2>Inspectores de calidad</h2><div class="pad"><textarea class="box" id="cfgInsp" aria-label="Inspectores, uno por línea"${canLibCfg()?'':' disabled'}>${esc(libInsp().join('\n'))}</textarea><p class="note">Uno por línea. Se eligen al programar una liberación y sirven para filtrar la agenda de cada uno. La editan Calidad y el administrador.</p></div></div></div>`:''}
+  ${cv==='pry'?`  <div class="card"><h2>Proyecto ${isAdmin?'':'<span class="sub">Solo el administrador puede cambiar estos datos</span>'}</h2><div class="pad frm">
    <label for="p_name">Nombre corto</label><input id="p_name" data-p="name" value="${esc(p.name)}"${isAdmin?'':' readonly'}>
    <label for="p_full">Proyecto</label><textarea id="p_full" data-p="fullName" rows="3"${isAdmin?'':' readonly'}>${esc(p.fullName)}</textarea>
    <label for="p_owner">Propietario</label><input id="p_owner" data-p="owner" value="${esc(p.owner)}"${isAdmin?'':' readonly'}>
@@ -79,21 +86,23 @@ function renderCfg(main){
    <label for="p_plc">Plan diario: publicación automática (si nadie publicó)</label><input id="p_plc" data-p="planCutHH" type="time" max="23:30" step="900" value="${esc(planCutHH())}"${isAdmin?'':' readonly'} title="El plan del día hábil siguiente se publica solo a esta hora (hasta las 23:30): se aplican los cambios de la reunión y las propuestas sin revisar se rechazan">
    <label>Logo de la empresa (Excel)</label><span class="logoc">${logoPrev('logoE')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoE" hidden>Subir…</label>':''}</span>
    <label>Logo del cliente (Excel)</label><span class="logoc">${logoPrev('logoC')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoC" hidden>Subir…</label>':''}</span>
-  </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}). Las propuestas que tocan una semana y se envían después de su corte (hora de Lima) se marcan «fuera de plazo»: llegan igual, y para aceptarlas se pide el motivo.</p></div>
+  </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}). Las propuestas que tocan una semana y se envían después de su corte (hora de Lima) se marcan «fuera de plazo»: llegan igual, y para aceptarlas se pide el motivo.</p></div>`:''}
+  ${cv==='arc'?archCard():''}
   </div></div>`;
-  calWire(main);
+  calWire(main);espWire(main);
   const saveP=ch=>apply([op('meta','project',{...P(),...ch})]);
   const saveT=fn=>{const t=clone(tpls);fn(t);saveP({templates:t})};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onchange=e=>{const t=e.target;if(t.id==='cfgInsp'){if(canLibCfg()){const L=[...new Set(t.value.split('\n').map(x=>x.trim()).filter(Boolean))];libmPut({insp:L},`${L.length} inspector(es) guardados`)}return}if(!canWrite)return;
     if(t.dataset.logo&&t.files&&t.files[0]){logoUpload(t.dataset.logo,t.files[0]);return}
     if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='propCutDow')v=parseInt(v,10);if(t.dataset.p==='propCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=propCutCfg().hh;return}if(t.dataset.p==='planCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v<='23:30')){toast('Elige una hora hasta las 23:30.');t.value=planCutHH();return}if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}saveP({[t.dataset.p]:v})}
+    else if(t.dataset.c&&t.dataset.f==='esp'){const c=S.con.get(t.dataset.c);espPick(t,c.esp).then(v=>{if(v==null||v===(c.esp||''))return;const cur=S.con.get(c.id);if(cur)apply([op('contractors',c.id,{...cur,esp:v})],`${cur.name}: especialidad «${espN(v)||'—'}»`)})}
     else if(t.dataset.c){const c=S.con.get(t.dataset.c);let v=t.value;if(t.dataset.f==='name'){v=v.trim().toUpperCase();if(!v){t.value=c.name;return}}apply([op('contractors',c.id,{...c,[t.dataset.f]:v})])}
     else if(t.dataset.l){saveP({[t.dataset.l]:t.value.split('\n').map(x=>x.trim()).filter(Boolean)})}
     else if(t.dataset.tname!=null){saveT(a=>{a[+t.dataset.tname].name=t.value.trim()||'Plantilla'})}
     else if(t.dataset.tsc){const[i,j]=t.dataset.tsc.split(':').map(Number);saveT(a=>{a[i].acts[j].sc=t.value})}
     else if(t.dataset.tact){const[i,j]=t.dataset.tact.split(':').map(Number);saveT(a=>{a[i].acts[j].name=t.value.trim()})}};
-  main.onclick=e=>{const b=e.target.closest('button');if(!b||!canWrite)return;
+  main.onclick=e=>{const b=e.target.closest('button');if(b&&b.dataset.cfgv){U.cfgV=b.dataset.cfgv;saveUI();render();return}if(!b||!canWrite)return;
     if(b.dataset.rgrpc!=null){saveP({restrGrp:{...(P().restrGrp||{}),[b.dataset.rgrpc]:b.dataset.v}});return}
     if(b.dataset.cncstd){saveP({cnc:CNC_STD.map(o=>o.n),cncStd:CNC_STD_V});toast('Causas: cuadro de la empresa (los registros anteriores conservan su causa).');return}
     if(b.dataset.cimpc!=null){saveP({cncImp:{...(P().cncImp||{}),[b.dataset.cimpc]:b.dataset.v==='1'}});return}

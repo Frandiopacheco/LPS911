@@ -57,6 +57,24 @@ test('lookahead: «pendientes sin programar» lista lo pendiente de la matriz y 
   noErrors(errors, 'pendientes sin programar');
 });
 
+test('pendientes sin programar: «+ Agregar e ir» crea la fila y lleva a ella; el ambiente lleva al lookahead', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; render(); });
+  await page.click('#fmxp button');
+  await page.click('[data-mxpadd="0"]');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3').length)).toBe(1);
+  const id = await page.evaluate(() => Object.entries(__dbAll('acts')).find(([, x]) => x.name === 'Pintura' && x.ambId === 'a3')[0]);
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  await expect(page.locator(`#grid tr[data-a="${id}"]`)).toBeVisible();
+  // el nombre del ambiente también lleva al lookahead
+  await page.evaluate(() => { const x = [...S.act.values()].find(a => a.name === 'Pintura'); apply([op('acts', x.id, null)]); });
+  await page.click('#fmxp button');
+  await page.click('[data-mxpamb]');
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'look');
+  noErrors(errors, 'pendientes ir');
+});
+
 test('«Ver en la Matriz» lleva a la celda y resalta su fila y su columna unos 3 segundos', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: CAT });
   await page.click('#grid [data-mxw="t0"]');
