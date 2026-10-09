@@ -14,7 +14,9 @@ function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="V
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
 /* cabecera en una fila (oct 2026): vistas (y en la Matriz, los indicadores) entre el título y los botones */
 function mxHd(head,mid){const m=`<div class="phm">${mid}</div>`;return head.includes('<div class="pha">')?head.replace('<div class="pha">',m+'<div class="pha">'):head.replace('</header>',m+'</header>')}
-function mxWireV(main){main.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=()=>{U.mxV=b.dataset.mxv;saveUI();MX.sel.clear();render()})}
+function mxWireV(main){main.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=()=>{U.mxV=b.dataset.mxv;saveUI();MX.sel.clear();render()});
+  /* botones de la cabecera que salen en todas las vistas (Catálogo, Recorrido, Tipos): antes solo se conectaban en la Matriz */
+  const fb=$('#mxfoto',main);if(fb)fb.onclick=mxFoto;const imp=$('#mximp',main);if(imp&&!imp.onchange)imp.onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)mxImport(f)}}
 
 /* uso de cada actividad: ambientes donde aparece y celdas con estado confirmado */
 function mxCatUse(){const k=MX.v+'|'+DV+'|'+DONEV;if(MXC.use&&MXC.useK===k)return MXC.use;const u=new Map();const g=id=>{let o=u.get(id);if(!o)u.set(id,o={amb:0,st:0});return o};
