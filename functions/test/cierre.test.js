@@ -260,3 +260,11 @@ test('cierre: lo agregado al plan se aplica y sus áreas dibujadas pasan a la ac
   assert.strictEqual(g('pdz/zpa').actId, 'nx1');
   assert.ok('nx1' in (g('dplan/' + D + '_p1').ids || {}), 'entra en la foto del plan');
 });
+
+test('auditoría 09/10: volver a publicar no reescribe como pendiente una restricción ya liberada', async () => {
+  const lib = { actId: 'x1', status: 'lib', freed: '2026-10-05', libN: 'Ing. Campo', desc: 'liberada antes', resp: 'SC X' };
+  const { db, ctx } = world({ 'restr/res-nv1': lib });
+  await closePlanPiso(db, ctx, D, Date.now());
+  assert.deepStrictEqual(db.st.get('restr/res-nv1'), lib);
+  assert.strictEqual(db.st.get('pdz/nv1').draft, false); // el borrador sí se publica
+});

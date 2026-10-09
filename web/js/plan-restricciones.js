@@ -43,6 +43,8 @@ function renderPlan(main){
     const w=S.wk.get(wkId(n,p.id)),frozen=!!(w&&w.frozenAt);
     const items=frozen?w.items||{}:liveItems(n,p.id);const res=frozen?w.res||{}:{};
     const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));
+    /* sugerencias de campo: una sola vez por fila (antes se calculaban dos veces) */
+    const SUG=new Map();for(const id of ids)SUG.set(id,fieldSug(id,items[id]));
     if(!ids.length&&!frozen){body+=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">Sin actividades programadas en la semana ${n}</span></div></section>`;continue}
     const nOk=ids.filter(i=>res[i]&&res[i].ok===true).length,nNo=ids.filter(i=>res[i]&&res[i].ok===false).length;
     if(frozen){fz++;tN+=ids.length;tOk+=nOk;tNo+=nNo}
@@ -50,10 +52,10 @@ function renderPlan(main){
     const extra=frozen?Object.entries(liveItems(n,p.id)).filter(([id])=>!(id in items)):[];
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
     const cf=(confirmUF[p.id]||0)>NOW();
-    let h=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
+    let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':''}>${w.auto?'Congelado automáticamente':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
-     ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=fieldSug(id,items[id]);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
+     ${canWrite&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
      ${canWrite?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${canWrite?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
@@ -68,7 +70,7 @@ function renderPlan(main){
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&canWrite?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
-        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=fieldSug(id,it);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.mv?` · ${sg.mv} reprogramado${sg.mv>1?'s':''} en el plan diario: ${esc(sg.mvm)}`:''}${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}${sg.rsc?' · responde '+esc(conOf(sg.rsc).name):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.mv?` · ${sg.mv} reprog.`:''}${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No')+(sg.ok===false&&sg.cnc&&!r.cnc?' ('+esc(cncCode(sg.cnc)||sg.cnc)+')':''):''}</div>`})()}</td>
+        <td class="full" data-l="Cumplido"><span class="yn"><button class="y${r.ok===true?' on':''}" data-yn="1"${canWrite?'':' disabled'}>Sí</button><button class="n${r.ok===false?' on':''}" data-yn="0"${canWrite?'':' disabled'}>No</button></span>${(()=>{const sg=SUG.get(id);if(!sg)return'<div class="fsug">Campo: sin registros</div>';return`<div class="fsug ${sg.ok===true?'ok':sg.ok===false?'no':''}" title="Registros de campo: ${sg.okd} de ${sg.total} días cumplidos${sg.prop?` · ${sg.prop} cierre${sg.prop>1?'s':''} del capataz/SC sin confirmar (no cuenta${sg.prop>1?'n':''} para «Aplicar»: confírmalo en Campo o decide aquí)`:''}${sg.mv?` · ${sg.mv} reprogramado${sg.mv>1?'s':''} en el plan diario: ${esc(sg.mvm)}`:''}${sg.cnc?' · causa más frecuente: '+esc(sg.cnc):''}${sg.rsc?' · responde '+esc(conOf(sg.rsc).name):''}">Campo: ${sg.okd}/${sg.total} días ✓${sg.mv?` · ${sg.mv} reprog.`:''}${sg.prop?` · <b class="fprop">${sg.prop} por confirmar</b>`:''}${sg.rec?' · recuperada en la semana':''}${sg.ok!=null&&r.ok!==sg.ok?' · sugiere '+(sg.ok?'Sí':'No')+(sg.ok===false&&sg.cnc&&!r.cnc?' ('+esc(cncCode(sg.cnc)||sg.cnc)+')':''):''}</div>`})()}</td>
         <td class="full" data-l="Tipo de causa"><select class="ci" data-cnc data-fk="cnc:${p.id}:${id}"${frozen&&canWrite&&(r.ok===false||r.cnc)?'':' disabled'} aria-label="Causa"><option value="">${r.ok===false?'Elegir tipo…':'—'}</option>${cncOpts(cnc,r.cnc)}</select>${r.ok===false?respSel(p.id,id,it,r,frozen&&canWrite):''}</td>
         <td class="full" data-l="Causa (detalle)"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen&&r.ok===false?'Qué pasó':''}"${frozen&&canWrite?'':' disabled'} aria-label="Causa (detalle)"></td>
         <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&canWrite&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`};
@@ -127,30 +129,39 @@ function rplFor(x,d){let best=null,bk='';for(const[k,v]of Object.entries((x&&x.r
 /* sugerencia para evaluar un compromiso congelado con lo que se registró en la semana: los registros de campo y, para los días
    que el plan diario reprogramó (ya no están en el lookahead y nadie los registró), la causa que se decidió en la reunión */
 function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
-  const rd=wd.map(d=>[d,recOf(d,id)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);
+  /* auditoría 09/10 (decidido con el dueño, opción B): los cierres del capataz/SC sin confirmar no cuentan para la sugerencia; se
+     muestran aparte como «por confirmar» y el ingeniero decide. (aceptarCierres los pasa a «No cumplido · Sin confirmación».) */
+  const rof=d=>{const r=recOf(d,id);return r&&r._prop?null:r};
+  const prop=weekDays(weekOf(it.days[0])).filter(d=>{const r=recOf(d,id);return r&&r._prop}).length;
+  const rd=wd.map(d=>[d,rof(d)]).filter(([d,r])=>r&&(cd.has(d)||r.status));const reg=rd.map(([,r])=>r);
   const x=S.act.get(id);const xd=new Set((x&&x.days)||[]);
-  const mvd=it.days.filter(d=>!xd.has(d)&&!recOf(d,id)).map(d=>[d,rplFor(x,d)]).filter(([,v])=>v&&v.cnc);
-  if(!reg.length&&!mvd.length)return null;
+  const mvd=it.days.filter(d=>!xd.has(d)&&!rof(d)).map(d=>[d,rplFor(x,d)]).filter(([,v])=>v&&v.cnc);
+  if(!reg.length&&!mvd.length)return prop?{ok:null,cnc:'',imp:null,rsc:'',pc:false,exec:0,exc:'',n:0,total:it.days.length,okd:0,rec:false,mv:0,mvm:'',prop}:null;
   const exec=r2(reg.reduce((s,r)=>s+(r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0),0));
   /* un «Cumplido» por excepción (motivo en exc) cuenta como lo programado de ese día para decidir el cumplimiento */
   const execOk=r2(reg.reduce((s,r)=>{const e=r.exec!=null?+r.exec||0:r.status==='ok'&&r.prog!=null?+r.prog:0;return s+(r.status==='ok'&&r.exc&&r.prog!=null?Math.max(e,+r.prog):e)},0));const exc=(reg.find(r=>r.status==='ok'&&r.exc)||{}).exc||'';const okd=reg.filter(r=>r.status==='ok').length;const rec=rd.some(([d,r])=>!cd.has(d)&&r.status==='ok');
-  const mset=new Set(mvd.map(([d])=>d));const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!recOf(d,id));const over=wd[5]<today;
-  const allC=it.days.every(d=>recOf(d,id)||mset.has(d));let ok=null;
+  const mset=new Set(mvd.map(([d])=>d));const pendF=(x&&x.days||[]).some(d=>wd.includes(d)&&d>=today&&!rof(d));const over=wd[5]<today;
+  const allC=it.days.every(d=>rof(d)||mset.has(d));let ok=null;
   if(it.q){if(execOk>=it.q-1e-9)ok=true;else if(over||(allC&&!pendF))ok=false}
   else{if(okd>=it.days.length)ok=true;else if(over||(allC&&!pendF))ok=false}
+  /* con cierres sin confirmar no se concluye «No»: decide el ingeniero */
+  if(prop&&ok===false)ok=null;
   /* causa principal: la más repetida entre los días registrados y los reprogramados */
   const src=[...reg.filter(r=>r.status!=='ok'&&r.cnc).map(r=>({cnc:r.cnc,imp:impOf(r),rsc:r.rsc||'',pc:!!r.pc})),...mvd.map(([,v])=>({cnc:v.cnc,imp:v.imp!==false,rsc:v.rsc||'',pc:!!v.pc}))];
   const cc={};src.forEach(o=>{cc[o.cnc]=(cc[o.cnc]||0)+1});const cnc=(Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]||[''])[0];
   /* imputabilidad: la de la causa principal en los días que la registraron; empate = imputable al SC */
   let imp=null,rsc='',pc=false;{const L=src.filter(o=>o.cnc===cnc);if(L.length){const f=L.filter(o=>o.imp===false).length;imp=f>L.length-f?false:true;const o=L.find(o=>o.rsc&&o.rsc!==(x||it0).sc);if(o&&!imp){rsc=o.rsc;pc=o.pc}}}
   const mvm=mvd.length?(mvd[0][1].m||''):'';
-  return{ok,cnc,imp,rsc,pc,exec,exc,n:reg.length,total:it.days.length,okd,rec,mv:mvd.length,mvm}}
+  return{ok,cnc,imp,rsc,pc,exec,exc,n:reg.length,total:it.days.length,okd,rec,mv:mvd.length,mvm,prop}}
 /** «Responde»: según la causa, el SC de la actividad, nadie del lado SC, u otra partida (frente no entregado; el ingeniero decide si le cuenta) */
 function respSel(pid,id,it,r,ed){const v=r.rsc&&r.rsc!==it.sc?'p:'+r.rsc:r.imp==null?'d':r.imp?'y':'n';const di=cncImp(r.cnc);
   const others=[...S.con.values()].filter(c=>c.id!==it.sc).sort((a,b)=>a.name.localeCompare(b.name));
   return`<select class="ci rspsel" data-resp data-fk="rsp:${pid}:${id}"${ed?'':' disabled'} aria-label="Quién responde" title="Quién responde por este no cumplido"><option value="d"${v==='d'?' selected':''}>Según la causa: ${di?'imputable al SC':'no imputable'}</option><option value="y"${v==='y'?' selected':''}>Imputable al SC</option><option value="n"${v==='n'?' selected':''}>No imputable al SC</option>${others.map(c=>`<option value="p:${c.id}"${v==='p:'+c.id?' selected':''}>Responde ${esc(c.name)} (no entregó)</option>`).join('')}</select>${v.startsWith('p:')?`<label class="chk rspc"><input type="checkbox" data-rpc${r.pc?' checked':''}${ed?'':' disabled'}> le cuenta en su PPC</label>`:''}`}
 /** n.º de la actividad dentro de su ambiente (el mismo que muestra el lookahead) */
-function actNum(id){const x=S.act.get(id);if(!x)return 0;const i=siblings('acts','ambId',x.ambId).findIndex(y=>y.id===id);return i<0?0:i+1}
+/* índice por ambiente memorizado por versión de datos (DV): antes se recorrían y ordenaban las ~2000 actividades por cada fila */
+let ACTN=null,ACTNV=-1;
+function actNum(id){const x=S.act.get(id);if(!x)return 0;if(ACTNV!==DV||!ACTN){ACTN=new Map();ACTNV=DV}let m=ACTN.get(x.ambId);
+  if(!m){m=new Map();siblings('acts','ambId',x.ambId).forEach((y,i)=>m.set(y.id,i+1));ACTN.set(x.ambId,m)}return m.get(id)||0}
 /** opciones de causa: las configuradas y, si la guardada ya no está en la lista, también esa (para no perderla al editar) */
 const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<option value="${esc(k)}" title="${esc(cncTip(k))}"${cur===k?' selected':''}>${esc(cncLabel(k))}</option>`).join('');
 /* guarda solo los campos que cambian de cada evaluación (res.<actividad>.<campo>): si otra persona cambió otro campo
@@ -412,7 +423,7 @@ function renderRestr(main){
   main.onclick=e=>{
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada')}return} /* la foto queda guardada: deshacer la recupera */
-    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(SCK()&&!await uiAsk({title:'¿Eliminar esta restricción?',ok:'Eliminar',tone:'danger'}))return;apply([op('restr',r.id,null)],'Restricción eliminada')})();return} /* sus fotos se conservan: deshacer la devuelve completa */
+    const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(!await uiAsk({title:'¿Eliminar esta restricción?',text:canWrite&&!PM()?'Va a la Papelera (Configuración): desde ahí se puede restaurar.':'',ok:'Eliminar',tone:'danger'}))return;apply([arc('restr',r.id)],'Restricción eliminada')})();return} /* auditoría 09/10: eliminar = archivar (Papelera), nunca borrar; sus fotos se conservan */
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const rm=e.target.closest('[data-rmap]');if(rm){gotoPlano(rm.dataset.rmap);return}

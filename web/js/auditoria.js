@@ -137,12 +137,13 @@ function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
       const x={id,ambId:rc.ambId,sc:rc.sc||'',name:rc.nm||'(actividad borrada)',und:rc.und||'',days:[doc.date],gone:true};const c=ctx(x);if(!c)continue;
       rows.push({...c,x,d:doc.date,rc:{...rc},sched:true,sc:x.sc,arch:true});seen.add(id+'|'+doc.date)}}}
-const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad'};
+const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción'};
 let ARCQ='';
-function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
+function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
 function archLabel(col,v){if(col==='acts'){const a=ambOf(v.ambId);return`${esc(v.name||'sin nombre')} <span class="mu">· ${esc(conOf(v.sc).name)} · ${esc(a?a.code:'')}${(v.days||[]).length?' · '+esc(rngTxt(v.days)):''}</span>`}
+  if(col==='restr'){const x=actOf(v.actId);return`${esc(v.type||'')}${v.desc?' · '+esc(v.desc):''} <span class="mu">· ${esc(x?x.name:'sin actividad')}${v.resp?' · '+esc(v.resp):''}</span>`}
   if(col==='ambientes')return`${esc(v.code||'')} ${esc(v.name||'')}`;return`${esc(v.code||'')} · ${esc(v.name||'')}`}
-function archCard(){if(!canWrite||PM())return'';const L=archList();const q=ARCQ.trim().toLowerCase();const F=q?L.filter(o=>(String(o.v.name||'')+' '+String(o.v.code||'')+' '+(o.col==='acts'?conOf(o.v.sc).name:'')).toLowerCase().includes(q)):L;
+function archCard(){if(!canWrite||PM())return'';const L=archList();const q=ARCQ.trim().toLowerCase();const F=q?L.filter(o=>(String(o.v.name||'')+' '+String(o.v.code||'')+' '+(o.col==='acts'?conOf(o.v.sc).name:'')+(o.col==='restr'?' '+(o.v.type||'')+' '+(o.v.desc||'')+' '+(o.v.resp||''):'')).toLowerCase().includes(q)):L;
   return`<div class="card" id="arccard"><h2>Papelera <span class="sub">${L.length} elemento${L.length===1?'':'s'} eliminado${L.length===1?'':'s'}</span></h2><div class="pad">
    <p class="note" style="margin-top:0">Lo que eliminas del Lookahead queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
    ${L.length?`<input class="tin" id="arcq" placeholder="Buscar por nombre, código o subcontratista" value="${esc(ARCQ)}" style="width:min(420px,100%);margin-bottom:8px">
@@ -162,7 +163,7 @@ function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const 
   for(const a of ARCH.amb.values())if(secIds.has(a.sectorId)&&same(a))un('ambientes',a);
   const ambIds=new Set(ops.filter(o=>o.col==='ambientes').map(o=>o.id));if(col==='ambientes')ambIds.add(id);
   for(const x of ARCH.act.values())if(ambIds.has(x.ambId)&&same(x)&&!(col==='acts'&&x.id===id))un('acts',x);
-  const seen=new Set();apply(ops.filter(o=>{const k=o.col+'/'+o.id;if(seen.has(k))return false;seen.add(k);return true}),`${ARCN[col]} restaurado${col==='acts'?'a':''}`)}
+  const seen=new Set();apply(ops.filter(o=>{const k=o.col+'/'+o.id;if(seen.has(k))return false;seen.add(k);return true}),`${ARCN[col]} restaurad${col==='acts'||col==='restr'?'a':'o'}`)}
 
 /* ---- calendario de la obra: sábado laborable y feriados ---- */
 let CALP=undefined,CALS=null;

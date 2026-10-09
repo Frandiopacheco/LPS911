@@ -115,11 +115,12 @@ async function exportPpcXlsx(){const btn=$('#bxppc');const bt=btn?btn.textConten
     const cl=Object.entries(cc).sort((a,b)=>b[1].n-a[1].n);
     sheet('Causas','Causas de incumplimiento (Parcial y No cumplido)',['Causa','Configurada como','Total','Imputables al SC','No imputables al SC'],cl.map(([k,o])=>[k,k==='Sin causa registrada'?'Imputable (sin causa)':cncImp(k)?'Imputable':'No imputable',o.n,o.imp,o.no]),[26,20,8,16,18],(c)=>c<2?cs:ns,
       cl.length?['TOTAL','',cl.reduce((s,[,o])=>s+o.n,0),cl.reduce((s,[,o])=>s+o.imp,0),cl.reduce((s,[,o])=>s+o.no,0)]:null);
-    if(!dia){const W={};const WP=[];for(const pp of vp){const w=S.wk.get(wkId(U.week,pp.id));if(!w||!w.frozenAt)continue;const o={n:0,ok:0,no:0,nimp:0,pend:0};
-        for(const[id,it]of Object.entries(w.items||{})){const rr=(w.res||{})[id];const a=W[it.sc]=W[it.sc]||{n:0,ok:0,no:0,nimp:0,pend:0};const ni=rr?.ok===false&&!(rr.imp!=null?rr.imp:cncImp(rr.cnc));
-          for(const q of[a,o]){q.n++;if(rr?.ok===true)q.ok++;else if(rr?.ok===false){q.no++;if(ni)q.nimp++}else q.pend++}}WP.push([pp,o])}
-      const wr=o=>[o.n,o.ok,o.no,o.nimp,o.pend,o.n?o.ok/o.n:'—',o.n-o.nimp>0?o.ok/(o.n-o.nimp):'—'];const WH=['Compromisos','Cumplidos','No cumplidos','De ellos no imputables','Sin evaluar','PPC','PPC del SC'];
-      const T0={n:0,ok:0,no:0,nimp:0,pend:0};WP.forEach(([,o])=>{for(const k in T0)T0[k]+=o[k]});
+    if(!dia){/* auditoría 09/10: la misma fórmula que Plan semanal e Indicadores (wkScStats por SC, ppcOf por piso) */
+      const W={};const WP=[];const docs=[];for(const pp of vp){const w=S.wk.get(wkId(U.week,pp.id));if(!w||!w.frozenAt)continue;docs.push(w);const st=ppcOf(w)||{n:0,ok:0,nimp:0};
+        const no=Object.keys(w.items||{}).filter(i=>((w.res||{})[i]||{}).ok===false).length;WP.push([pp,{n:st.n,ok:st.ok,no,nimp:st.nimp,pend:st.n-st.ok-no,ext:0}])}
+      for(const[sc,s]of Object.entries(wkScStats(docs)))W[sc]={n:s.n,ok:s.ok,no:s.no,nimp:s.nimp,pend:s.n-s.ok-s.no,ext:s.ext};
+      const wr=o=>[o.n,o.ok,o.no,o.nimp,o.pend,o.n?o.ok/o.n:'—',ppcScOf(o.ok,o.n,o.nimp,o.ext)??'—'];const WH=['Compromisos','Cumplidos','No cumplidos','De ellos no imputables','Sin evaluar','PPC','PPC del SC'];
+      const T0={n:0,ok:0,no:0,nimp:0,pend:0,ext:0};WP.forEach(([,o])=>{for(const k in T0)T0[k]+=o[k]});
       const g=(c,v)=>c===0?cs:(c>=6&&typeof v==='number')?ps:ns;
       const ks=Object.keys(W).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
       sheet('PPC semanal SC',`PPC semanal (compromisos del Plan semanal) · semana ${U.week}`,['Subcontratista',...WH],ks.length?ks.map(sc=>[conOf(sc).name,...wr(W[sc])]):[[`Ningún piso congeló la semana ${U.week} (se congela en Plan semanal).`]],[22,12,10,12,18,11,9,11],g,ks.length?['TOTAL',...wr(T0)]:null);
