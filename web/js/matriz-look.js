@@ -66,6 +66,13 @@ async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const
    async e=>{if(e.target.id==='mxacl'&&e.target.value==='e'){const c=$('#mxatp');if(c)c.checked=false}})}
 
 /* actividades que agregaron los SC y nadie revisó todavía */
+/* posible duplicado de una actividad nueva: misma especialidad (o mismo SC) y nombres casi iguales (palabras en común ≥ 60 %) */
+function mxDupOf(c){const W=x=>new Set(mnk(x).split(' ').filter(w=>w.length>2));const a=W(c.name);if(!a.size)return null;const e=espOfSc(c.sc);let best=null,bs=0;
+  for(const o of mxCatAct0()){if(o.id===c.id||o.rev)continue;if(o.sc!==c.sc&&(!e||espOfSc(o.sc)!==e))continue;const b=W(o.name);if(!b.size)continue;let k=0;a.forEach(w=>{if(b.has(w)||[...b].some(z=>z.length>4&&w.length>4&&z.slice(0,5)===w.slice(0,5)))k++});
+    const sc=k/Math.max(a.size,b.size)+(o.sc===c.sc?.05:0);if(sc>bs){bs=sc;best=o}}
+  return bs>=.6?best:null}
+/* tipo que se puede ampliar: el que pidió el SC o, si no, el del ambiente donde la agregó */
+function mxRevTipo(c){const id=(c.rev&&c.rev.tipo)||((MX.amb.get(c.rev&&c.rev.amb)||{}).tipo);const T=id&&MX.tipo.get(id);return T&&!T.arch&&!(T.acts||[]).includes(c.id)?T:null}
 const mxRevList=()=>[...MX.cat.values()].filter(c=>c.rev&&!c.arch).sort((a,b)=>(a.rev.t||0)-(b.rev.t||0));
 
 /* ---------- herramientas del catálogo (vista Catálogo) ---------- */
@@ -77,10 +84,10 @@ function mxCatTools(){const ed=mxEd();const pend=[...MX.prop.values()].filter(p=
     <span class="note">${P().catReq?'Solo se escriben actividades del catálogo.':'Todavía se aceptan nombres libres.'}</span><span class="fsp"></span>
     <button class="ib" id="mxuni">Unificar nombres del lookahead…</button></div></div>`;
   if(ed){const nd=mxDesCands().length;h+=`<div class="card mxtools"><div class="pad fbar"><b>Desglose</b><span class="note">Actividades generales («Instalaciones ICR»…) que conviene dividir en sus trabajos.</span><span class="fsp"></span><button class="ib${nd?' pri':''}" id="mxdlist">Posibles por desglosar${nd?` (${nd})`:''}…</button></div></div>`}
-  if(ed&&rv.length)h+=`<div class="card mxrev"><div class="hd">Agregadas por los subcontratistas <span class="sub">${rv.length} por revisar · corrige nombre o clase en la tabla (el lookahead se actualiza) o fusiónala si ya existía</span></div><div class="tscroll"><table class="t rt"><tbody>
-    ${rv.map(c=>{const a=S.amb.get(c.rev.amb);const tp=c.rev.tipo&&MX.tipo.get(c.rev.tipo);const inT=tp&&(tp.acts||[]).includes(c.id);return`<tr><td data-l="Actividad"><b>${esc(c.name)}</b> <small class="note">${esc(MXCL[c.cl]||'')}</small></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td>
+  if(ed&&rv.length)h+=`<div class="card mxrev"><div class="hd">Agregadas por los subcontratistas <span class="sub">${rv.length} por revisar · acepta, corrige el nombre (el lookahead se actualiza) o combínala si ya existía</span></div><div class="tscroll"><table class="t rt"><tbody>
+    ${rv.map(c=>{const a=S.amb.get(c.rev.amb);const tp=c.rev.tipo&&MX.tipo.get(c.rev.tipo);const inT=tp&&(tp.acts||[]).includes(c.id);const T2=mxRevTipo(c);const dup=mxDupOf(c);return`<tr><td data-l="Actividad"><b>${esc(c.name)}</b> <small class="note">${esc(MXCL[c.cl]||'')}</small></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td>
       <td data-l="Ambiente">${a?esc(a.code+' '+a.name):''}</td><td data-l="Agregó">${esc(c.rev.n||c.rev.by||'')} · ${esc(fmtD(ldt(c.rev.t||0)))}</td>
-      <td class="mxrb">${tp&&!inT?`<button class="ib" data-mxrtp="${esc(c.id)}" title="El SC pidió que salga en todos los ambientes de este tipo">+ Tipo «${esc(tp.name)}»</button>`:''}<button class="ib" data-mxrfus="${esc(c.id)}">Fusionar…</button><button class="ib pri" data-mxrok="${esc(c.id)}">✓ Revisada</button></td></tr>`}).join('')}</tbody></table></div></div>`;
+      <td class="mxrb">${dup?`<button class="ib mxdup" data-mxrdup="${esc(c.id)}" data-b="${esc(dup.id)}" title="Nombre muy parecido a una actividad que ya existe">⚠ ¿Es «${esc(dup.name)}»? Combinar</button>`:''}${T2?`<button class="ib" data-mxrtp="${esc(c.id)}" title="${tp&&!inT?'El SC pidió que salga en todos los ambientes de este tipo':'Hoy solo está en el ambiente donde se agregó'}">+ Todos los «${esc(T2.name)}»</button>`:''}<button class="ib" data-mxrren="${esc(c.id)}">✎ Nombre</button><button class="ib" data-mxrfus="${esc(c.id)}">Combinar…</button><button class="ib" data-mxrno="${esc(c.id)}">Rechazar…</button><button class="ib pri" data-mxrok="${esc(c.id)}">✓ Aceptar</button></td></tr>`}).join('')}</tbody></table></div></div>`;
   if(ed&&pend.length)h+=`<div class="card"><div class="hd">Propuestas de los subcontratistas <span class="sub">${pend.length} por revisar</span></div><div class="tscroll"><table class="t rt"><tbody>
     ${pend.sort((a,b)=>(a.t||0)-(b.t||0)).map(p=>{const a=S.amb.get(p.ambId);return`<tr><td data-l="Actividad"><b>${esc(p.name)}</b></td><td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(p.sc).color)}"></span>${esc(conOf(p.sc).name)}</td>
       <td data-l="Para">${a?esc(a.code+' '+a.name):''}</td><td data-l="Propuso">${esc(p.n||p.by||'')} · ${esc(fmtD(ldt(p.t||0)))}</td>
@@ -96,9 +103,12 @@ function mxWireCatTools(main){
   main.querySelectorAll('[data-mxpok]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpok,true));
   main.querySelectorAll('[data-mxpno]').forEach(b=>b.onclick=()=>mxPropDecide(b.dataset.mxpno,false));
   main.querySelectorAll('[data-mxrok]').forEach(b=>b.onclick=()=>{const id=b.dataset.mxrok;const c=MX.cat.get(id);if(!c||!c.rev)return;const r=c.rev;
-    fcol('mcat').doc(id).set({rev:mxFV().delete(),revOk:{by:me.email,n:me.name||'',t:NOW()},...mxNow()},{merge:true}).then(()=>toast('Marcada como revisada','Deshacer',()=>fcol('mcat').doc(id).set({rev:r,...mxNow()},{merge:true}))).catch(mxErr)});
+    fcol('mcat').doc(id).set({rev:mxFV().delete(),revOk:{by:me.email,n:me.name||'',t:NOW()},...mxNow()},{merge:true}).then(()=>toast('Aceptada','Deshacer',()=>fcol('mcat').doc(id).set({rev:r,...mxNow()},{merge:true}))).catch(mxErr)});
   main.querySelectorAll('[data-mxrfus]').forEach(b=>b.onclick=()=>mxMergeDlg(b.dataset.mxrfus));
-  main.querySelectorAll('[data-mxrtp]').forEach(b=>b.onclick=()=>{const c=MX.cat.get(b.dataset.mxrtp);const tp=c&&c.rev&&MX.tipo.get(c.rev.tipo);if(!tp)return;mxTipoAdd(tp.id,c.id).then(()=>toast(`Agregada al tipo «${tp.name}»`)).catch(mxErr)})}
+  main.querySelectorAll('[data-mxrdup]').forEach(b=>b.onclick=()=>mxMergeDlg(b.dataset.mxrdup,b.dataset.b));
+  main.querySelectorAll('[data-mxrren]').forEach(b=>b.onclick=()=>mxRevRename(b.dataset.mxrren));
+  main.querySelectorAll('[data-mxrno]').forEach(b=>b.onclick=()=>mxRevReject(b.dataset.mxrno));
+  main.querySelectorAll('[data-mxrtp]').forEach(b=>b.onclick=()=>{const c=MX.cat.get(b.dataset.mxrtp);const tp=c&&mxRevTipo(c);if(!tp)return;mxTipoAdd(tp.id,c.id).then(()=>toast(`Agregada al tipo «${tp.name}»`)).catch(mxErr)})}
 /* propuestas antiguas (mcatp): desde oct 2026 el SC agrega directo; estas se siguen pudiendo resolver */
 async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return;const meta={dec:ok?'ok':'rej',decBy:me.email,decN:me.name||'',decT:NOW()};
   try{if(ok){const dup=mxAli().get(mnk(p.name));let cid=dup;
@@ -235,3 +245,16 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxd]');if(
    ${mxEd()?'<button data-do="ok">✓ Confirmar Terminado en la Matriz</button>':''}${canDaily?'<button data-do="reo">Reabrir: no está terminada</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
    {ok:()=>{const DEL=firebase.firestore.FieldValue.delete();const prev=((MX.amb.get(x.ambId)||{}).c||{})[cid];mxWrite(new Map([[x.ambId,{[cid]:'t'}]]),'Terminado confirmado en la Matriz',new Map([[x.ambId,{[cid]:prev===undefined?DEL:prev}]]))},
     reo:()=>reopenDone(x.id),mat:()=>mxGoCell(x.ambId,cid)})},true);
+
+/* revisión de una actividad nueva del SC: cambiar nombre (catálogo + lookahead, con Deshacer) */
+async function mxRevRename(id){const c=MX.cat.get(id);if(!c||!mxEd())return;
+  const v=await uiAsk({title:'Cambiar nombre',text:`Se cambia en el catálogo y en todas las filas del lookahead de «${c.name}». Las semanas congeladas conservan el nombre anterior.`,input:{label:'Nombre',value:c.name,required:true},ok:'Guardar',tone:'info'});
+  if(typeof v!=='string')return;const n=v.replace(/\s+/g,' ').trim();if(!n||n===c.name)return;
+  const o=[...MX.cat.values()].find(x=>x.id!==id&&!x.arch&&mnk(x.name)===mnk(n));
+  if(o){if(await uiAsk({title:`Ya existe «${o.name}»`,text:`${conOf(o.sc).name}. Si es la misma actividad, conviene combinarlas en vez de repetir el nombre.`,ok:'Combinar con esa',cancel:'Cancelar',tone:'warn'}))mxMergeDlg(id,o.id);return}
+  mxCatRename(id,c.name,n)}
+/* rechazar: solo se archiva si no se usa; si ya tiene filas o estados, hay que combinarla con otra */
+async function mxRevReject(id){const c=MX.cat.get(id);if(!c||!mxEd())return;const rows=mxRowsOf(id,new Set()).length;const st=(mxCatUse().get(id)||{st:0}).st;
+  if(rows||st){if(await uiAsk({title:`No se puede rechazar «${c.name}»`,text:`Ya se usa: ${rows?`${rows} ${rows===1?'fila':'filas'} del lookahead`:''}${rows&&st?' y ':''}${st?`${st} ${st===1?'estado marcado':'estados marcados'} en la matriz`:''}. Para no perder nada, combínala con la actividad correcta: sus filas y estados pasan a esa.`,ok:'Combinar…',tone:'warn'}))mxMergeDlg(id);return}
+  if(!await uiAsk({title:`Rechazar «${c.name}»`,text:'No tiene filas en el lookahead ni estados en la matriz. Queda archivada (se puede restaurar).',ok:'Rechazar',tone:'warn'}))return;const r=c.rev;
+  fcol('mcat').doc(id).set({rev:mxFV().delete(),arch:{t:NOW(),by:me.email,n:me.name||'',rej:true},...mxNow()},{merge:true}).then(()=>toast('Rechazada','Deshacer',()=>fcol('mcat').doc(id).set({rev:r,arch:mxFV().delete(),...mxNow()},{merge:true}).catch(mxErr))).catch(mxErr)}

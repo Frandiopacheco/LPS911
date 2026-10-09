@@ -22,13 +22,17 @@ function ensureNP(from){if(!db||(npFrom&&from>=npFrom))return;if(npSub)npSub();n
 function stopNP(){if(npSub)npSub();npSub=null;npFrom=null;NPM.clear()}
 
 /** Trabajos no programados de unos días (y pisos): los nuevos (nprog) y los antiguos del registro diario. */
+/* el SC y el capataz solo ven lo no programado de su partida (decidido con el dueño, oct 2026); ingenieros, áreas y veedor ven todo */
+const npVis=e=>!me||canNP()||!(me.role==='sc'||me.role==='capataz')||(me.scs||[]).includes(e.sc);
+/* cruce: en ese ambiente, ese día, otro SC tiene algo programado (aviso para el ingeniero) */
+function npCross(i){const e=i.e;if(!e.ambId)return[];const out=new Set();for(const x of S.act.values())if(x.ambId===e.ambId&&x.sc&&x.sc!==e.sc&&schedOrSnap(x,i.d))out.add(x.sc);return[...out]}
 function npItems(dates,vset){const ds=dates instanceof Set?dates:new Set(dates);const out=[];
   for(const doc of DAY.values()){if(!ds.has(doc.date)||(vset&&!vset.has(doc.pisoId)))continue;
-    for(const[id,e]of Object.entries(doc.extra||{}))if(e&&!e.del)out.push({id,src:'dx',e,d:doc.date,pid:doc.pisoId,p:S.pis.get(doc.pisoId),a:S.amb.get(e.ambId)})}
-  for(const n of NPM.values()){if(n.del||!ds.has(n.date)||(vset&&!vset.has(n.pisoId)))continue;out.push({id:n.id,src:'np',e:n,d:n.date,pid:n.pisoId,p:S.pis.get(n.pisoId),a:S.amb.get(n.ambId)})}
+    for(const[id,e]of Object.entries(doc.extra||{}))if(e&&!e.del&&npVis(e))out.push({id,src:'dx',e,d:doc.date,pid:doc.pisoId,p:S.pis.get(doc.pisoId),a:S.amb.get(e.ambId)})}
+  for(const n of NPM.values()){if(n.del||!npVis(n)||!ds.has(n.date)||(vset&&!vset.has(n.pisoId)))continue;out.push({id:n.id,src:'np',e:n,d:n.date,pid:n.pisoId,p:S.pis.get(n.pisoId),a:S.amb.get(n.ambId)})}
   return out.sort((a,b)=>(a.e.ts||0)-(b.e.ts||0))}
 /** Puntos para el plano de Campo */
-function npMarks(d,pid){return npItems([d],new Set([pid])).filter(i=>i.src==='np'&&i.e.pt).map(i=>({id:i.id,x:i.e.pt.x,y:i.e.pt.y,v:i.e.pt.v,sc:i.e.sc,c:conOf(i.e.sc).color,t:'+',tip:`${conOf(i.e.sc).name}: ${i.e.desc||''}`}))}
+function npMarks(d,pid,f){return npItems([d],new Set([pid])).filter(i=>i.src==='np'&&i.e.pt&&(!f||f(i))).map(i=>({id:i.id,x:i.e.pt.x,y:i.e.pt.y,v:i.e.pt.v,sc:i.e.sc,c:conOf(i.e.sc).color,t:'+',tip:`${conOf(i.e.sc).name}: ${i.e.desc||''}`}))}
 
 /* ---------- ficha rápida (hoja inferior) ---------- */
 function npNew(o){if(!canNPx())return;const d=o.d||campoDate();
@@ -114,7 +118,7 @@ function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.amb
 
 /* ---------- lista del día (Campo › Tarjetas y debajo del plano) ---------- */
 function npCard(i){const e=i.e;const c=conOf(e.sc);const am=i.a;const legacy=i.src==='dx';
-  return`<article class="cc st-np npc" data-np="${esc(i.id)}" data-src="${i.src}" data-pid="${esc(i.pid)}" style="--c:${c.color}"><div class="cct"><b>${esc(e.desc||'')}</b><span>${am?esc(am.code+' · '+am.name):'sin ambiente'} · ${esc(c.name)}${e.exec!=null?` · ${fq(e.exec)} ${esc(e.und||'')}`:''}${e.actId&&S.act.get(e.actId)?' · <em>ya en el lookahead</em>':''}${e.scProp&&!e.ver?' · <em class="miss">por verificar (lo registró el SC)</em>':''}</span></div>${e.note?`<div class="note">${esc(e.note)}</div>`:''}
+  return`<article class="cc st-np npc" data-np="${esc(i.id)}" data-src="${i.src}" data-pid="${esc(i.pid)}" style="--c:${c.color}"><div class="cct"><b>${esc(e.desc||'')}</b><span>${am?esc(am.code+' · '+am.name):'sin ambiente'} · ${esc(c.name)}${e.exec!=null?` · ${fq(e.exec)} ${esc(e.und||'')}`:''}${e.actId&&S.act.get(e.actId)?' · <em>ya en el lookahead</em>':''}${e.scProp&&!e.ver?' · <em class="miss">por verificar (lo registró el SC)</em>':''}</span></div>${canDaily?(()=>{const cx=npCross(i);return cx.length?`<div class="npcx">⚠ Cruce: en este ambiente hoy también tiene programado ${cx.map(sc=>esc(conOf(sc).name)).join(', ')}</div>`:''})():''}${e.note?`<div class="note">${esc(e.note)}</div>`:''}
     ${(e.photos||[]).length?`<div class="cph">${(e.photos||[]).map(id=>{loadFoto(id);return`<div class="th"><img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto"></div>`}).join('')}</div>`:''}
     <div class="cby"><span>${esc(e.byName||e.by||'')} · ${hhmm(e.ts)}${e.pt?' · 📍 en el plano':''}</span>${legacy?(canDaily?'<button class="lnkb" data-npdx>Eliminar</button>':''):`<button class="lnkb" data-npo>${npMine(e)?'Editar':'Ver'}</button>`}</div></article>`}
 function npListHtml(d,vset,f){const L=npItems([d],vset).filter(i=>!f||f(i));if(!L.length)return'';

@@ -142,3 +142,43 @@ test('desde el Lookahead sin abrir la Matriz: también ofrece agregar al tipo de
   await expect.poll(async () => (await get(page, 'mtipo', 'tp1')).acts.length).toBe(2);
   noErrors(errors, 'tipo desde el lookahead');
 });
+
+test('revisión de lo agregado por el SC: sugiere el duplicado y al combinar queda el estado más avanzado; Restaurar lo devuelve', async ({ page }) => {
+  const extra = [...CAT,
+    ['mcat', 'k8', { name: 'Redes empotradas agua', sc: 'c1', cl: 't', al: ['redes empotradas agua'], ord: 80, by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', n: 'Sandra', t: 1, amb: 'a1', tipo: null } }],
+    ['mamb', 'a1', { c: { k1: 'p', k8: 't' }, by: 'x', t: 1 }],
+    ['acts', 'z8', { ambId: 'a1', sc: 'c1', name: 'Redes empotradas agua', days: ['2026-10-08'], order: 60 }]];
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.click('[data-mxv="cat"]');
+  const dup = page.locator('[data-mxrdup="k8"]');
+  await expect(dup).toContainText('Redes empotradas');
+  await dup.click();
+  await expect(page.locator('#mxfi')).toContainText('queda el más avanzado');
+  await expect(page.locator('#mxfi')).toContainText('Terminado');
+  await page.click('#mxfok');
+  // k1 tenía Pendiente y k8 Terminado: queda Terminado en k1
+  await expect.poll(async () => (await get(page, 'mamb', 'a1')).c).toEqual({ k1: 't' });
+  await expect.poll(async () => (await get(page, 'acts', 'z8')).name).toBe('Redes empotradas');
+  const k8 = await get(page, 'mcat', 'k8');
+  expect(k8.arch.fus).toBe('k1');
+  expect(k8.rev).toBeUndefined();
+  await page.click('#toast button');
+  await expect.poll(async () => (await get(page, 'mamb', 'a1')).c).toEqual({ k1: 'p', k8: 't' });
+  noErrors(errors, 'combinar con duplicado');
+});
+
+test('rechazar: se archiva si no se usa; si ya tiene filas pide combinarla', async ({ page }) => {
+  page.on('dialog', d => d.accept());
+  const extra = [...CAT,
+    ['mcat', 'k5', { name: 'Limpieza fina', sc: 'c1', cl: 't', al: ['limpieza fina'], ord: 50, by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', n: 'Sandra', t: 1, amb: 'a1' } }],
+    ['mcat', 'k6', { name: 'Resane general', sc: 'c1', cl: 't', al: ['resane general'], ord: 60, by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', n: 'Sandra', t: 2, amb: 'a1' } }],
+    ['acts', 'z6', { ambId: 'a1', sc: 'c1', name: 'Resane general', days: ['2026-10-08'], order: 60 }]];
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.click('[data-mxv="cat"]');
+  await page.click('[data-mxrno="k5"]');
+  await expect.poll(async () => (await get(page, 'mcat', 'k5')).arch?.rej).toBe(true);
+  await page.click('[data-mxrno="k6"]');
+  await expect(page.locator('#mxfb')).toBeVisible();
+  expect((await get(page, 'mcat', 'k6')).arch).toBeUndefined();
+  noErrors(errors, 'rechazar');
+});
