@@ -39,7 +39,7 @@ test('con "reducir movimiento" no hay animaciones', async ({ page }) => {
 
 test('todas las páginas tienen el mismo encabezado (título, contexto y acciones)', async ({ page }) => {
   const errors = await openApp(page);
-  const T = { restr: 'Restricciones', plan: 'PPC semanal', campo: 'Campo', lib: 'Liberaciones', ind: 'Indicadores', planos: 'Sectorización', cfg: 'Configuración', team: 'Equipo' };
+  const T = { restr: 'Restricciones', plan: 'Plan semanal', campo: 'Campo', lib: 'Liberaciones', ind: 'Indicadores', planos: 'Sectorización', cfg: 'Configuración', team: 'Equipo' };
   for (const [t, title] of Object.entries(T)) {
     await openTab(page, t);
     await expect(page.locator('#main .phd h2')).toHaveText(title);

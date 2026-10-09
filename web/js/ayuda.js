@@ -56,7 +56,7 @@ const AY_FLOWS={
 
   sem:{t:'Semana: congelar y medir el PPC',s:'Del compromiso del viernes al PPC semanal.',n:[
     {o:'Reunión semanal (viernes)'},
-    {p:'Congelar la semana',d:'PPC semanal › Congelar. Si quedan propuestas sin decidir, avisa antes.',tab:'plan'},
+    {p:'Congelar la semana',d:'Plan semanal › Congelar. Si quedan propuestas sin decidir, avisa antes.',tab:'plan'},
     {q:'¿Se congeló antes del corte?',y:[{p:'Congelada a mano'}],n:[{p:'Congelado automático',d:'Sábado 13:00 por defecto (Configuración › Proyecto).'}]},
     {p:'Durante la semana: registros de campo',tab:'campo'},
     {p:'«Aplicar registros de campo»',d:'Trae cumplimiento, causa e imputabilidad de lo registrado.',tab:'plan'},

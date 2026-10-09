@@ -22,7 +22,7 @@ const AY_TUT={
     e:'Eléctricas y Sanitarias caen mañana en el SH 2 – Hombres. Acuerdan que entra primero Sanitarias (pruebas hidráulicas) y luego Eléctricas: marcas 1.º y 2.º en el cruce y publicas.'},
 
   sem:{t:'Congelar la semana y medir el PPC',g:'El viernes se compromete la semana siguiente y se mide contra eso.',
-    s:[{x:'En PPC semanal, el viernes tras la reunión toca «Congelar» en cada piso.',tab:'plan'},'Si no lo congelas, el servidor lo congela solo el sábado a la 1 pm.','Durante la semana, «Aplicar registros de campo» trae lo que se marcó en Campo.','Evalúa cada No cumplido: causa, detalle, mitigación y si es imputable al SC.',{x:'Revisa el PPC del piso y del SC en Indicadores; exporta el Excel con el formato de la empresa.',tab:'ind'}],
+    s:[{x:'En Plan semanal, el viernes tras la reunión toca «Congelar» en cada piso.',tab:'plan'},'Si no lo congelas, el servidor lo congela solo el sábado a la 1 pm.','Durante la semana, «Aplicar registros de campo» trae lo que se marcó en Campo.','Evalúa cada No cumplido: causa, detalle, mitigación y si es imputable al SC.',{x:'Revisa el PPC del piso y del SC en Indicadores; exporta el Excel con el formato de la empresa.',tab:'ind'}],
     e:'La semana 59 tuvo 40 compromisos y 32 cumplidos: PPC 80 %. De los 8 fallos, 3 fueron por «frente no entregado» por otra partida: no le bajan el PPC al SC afectado.'},
 
   campo:{t:'Verificar el cumplimiento en Campo',g:'Registrar si lo programado del día se cumplió. Esto alimenta el PPC.',
@@ -78,7 +78,7 @@ const AY_TUT={
 
   consulta:{t:'Consultar sin cambiar nada',g:'Ver la información de la obra.',
     s:[{x:'Hoy: resumen de lo que pasa hoy.',tab:'hoy'},{x:'Tablero: avance en vivo.',tab:'dash'},{x:'Lookahead: la programación vigente.',tab:'look'},{x:'Indicadores: PPC y causas.',tab:'ind'}],
-    e:'Antes del comité de obra abres el Tablero y el PPC semanal para tener los números a la mano.'},
+    e:'Antes del comité de obra abres el Tablero y el Plan semanal para tener los números a la mano.'},
 
   team:{t:'Dar acceso al equipo (administrador)',g:'Sumar personas con el rol correcto.',
     s:[{x:'Abre Equipo, escribe el correo, el nombre y el rol; «Agregar al equipo».',tab:'team'},'Editor: asígnale sus pisos. SC: su partida. Área: su área («Calidad» maneja liberaciones).','La persona entra con «¿Primera vez? Crear mi cuenta» y confirma su correo.','A los capataces invítalos con el QR desde En obra o Equipo.'],
