@@ -3238,3 +3238,4 @@ select.rresp{max-width:100%}select.rresp.rbad{border:1px solid var(--bad)!import
 .mxpr{display:flex;align-items:center;gap:8px}.mxpr .mxur{flex:1;min-width:0}.mxpr .ib{flex:none}
 /* Recorrido: «¿Falta algo?» plegable */
 summary.mxrsq{list-style:none;justify-content:flex-start}summary.mxrsq::-webkit-details-marker{display:none}summary.mxrsq::before{content:"▸";color:var(--ink2);transition:transform var(--t-fast) var(--ease)}.mxrsug[open]>summary.mxrsq::before{transform:rotate(90deg)}summary.mxrsq{min-height:40px}.mxrsb>#mxrpick{margin:0 0 8px}
+.mxpgw[hidden],.mxpr[hidden]{display:none}#lqm #mxpq2{flex:1;min-width:180px}

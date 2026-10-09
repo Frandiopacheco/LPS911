@@ -75,6 +75,19 @@ test('pendientes sin programar: «+ Agregar e ir» crea la fila y lleva a ella; 
   noErrors(errors, 'pendientes ir');
 });
 
+test('pendientes sin programar: el buscador filtra por ambiente, actividad o SC', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; render(); });
+  await page.click('#fmxp button');
+  await page.fill('#mxpq2', 'zzz');
+  await expect(page.locator('#mxpnone')).toBeVisible();
+  await expect(page.locator('#lqm .mxpr:visible')).toHaveCount(0);
+  await page.fill('#mxpq2', 'pintu tarraj');
+  await expect(page.locator('#lqm .mxpr:visible')).toHaveCount(1);
+  await expect(page.locator('#mxpvis')).toContainText('1 de 1');
+  noErrors(errors, 'buscador pendientes');
+});
+
 test('«Ver en la Matriz» lleva a la celda y resalta su fila y su columna unos 3 segundos', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: CAT });
   await page.click('#grid [data-mxw="t0"]');

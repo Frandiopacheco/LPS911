@@ -1,3 +1,5 @@
+> **RETIRADA (oct 2026, decidido con el dueño):** la versión cliente estorbaba en el lookahead; el control frente al cliente vendrá con el plan maestro. `CLI_OFF=true` en `cliente.js` hace que `canCli()` sea falso para todos: sin botón «Vista cliente», holguras, avisos de holgura consumida, tarjetas de Hoy/Indicadores, Excel cliente ni casilla en Equipo. Código, reglas y datos (`cli`, `clidx`, `cliver`) se conservan; el respaldo del administrador los sigue incluyendo. Pruebas en `cliente.spec.js` (y N05/N07/N10 de `auditoria-02e575c`) quedan con `skip`. Para volver: `CLI_OFF=false`.
+
 # Versión cliente y exportes a Excel
 
 Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este tema.
