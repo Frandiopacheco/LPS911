@@ -1164,3 +1164,17 @@ test('auditoría 09/10: en liberaciones el SC no programa ni borra observaciones
   // levantar: marca las observaciones y agrega al historial
   await assertSucceeds(updateDoc(doc(sc, 'lib/l-obs2'), { st: 'lev', obs: [{ t: 'Fisura', ok: true }], hist: [{ st: 'sol' }, { st: 'obs' }, { st: 'lev' }] }));
 });
+test('plan semanal: la evaluación la cambia el responsable del piso o el admin; congelar cualquier editor', async () => {
+  await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    await setDoc(doc(db, 'pisos/pr1'), { code: 'PR1', resp: ['editor2@obra.pe'] }); await setDoc(doc(db, 'pisos/pr2'), { code: 'PR2', resp: [] });
+    await setDoc(doc(db, 'weeks/91_pr1'), { n: 91, pisoId: 'pr1', frozenAt: 'x', items: {}, res: {} });
+    await setDoc(doc(db, 'weeks/91_pr2'), { n: 91, pisoId: 'pr2', frozenAt: 'x', items: {}, res: {} }); });
+  const ed = user('editor@obra.pe'), ed2 = user('editor2@obra.pe');
+  await assertFails(updateDoc(doc(ed, 'weeks/91_pr1'), { 'res.x1.ok': true }));
+  await assertSucceeds(updateDoc(doc(ed2, 'weeks/91_pr1'), { 'res.x1.ok': true }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'weeks/91_pr1'), { 'res.x1.ok': false }));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr2'), { 'res.x1.ok': true })); // piso sin responsable
+  await assertSucceeds(setDoc(doc(ed, 'weeks/92_pr1'), { n: 92, pisoId: 'pr1', frozenAt: 'y', items: {}, res: {} })); // congelar
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr1'), { frozenAt: 'z' }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'weeks/91_pr1'), { 'res.x1.ok': true }));
+});
