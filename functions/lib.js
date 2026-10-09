@@ -365,6 +365,9 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P = [];
     for (const z of props) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists && (s.data() || {}).st === 'pend') P.push(z.id); }
     let R = D.length ? publishDrafts({ drafts: D, acts: A, dplans: DP, contractors, project, pub: ps.exists ? ps.data() : null }, d, pid, now) : null;
+    /* auditoría 09/10: una restricción res-<borrador> que ya existe y está liberada (deshacer publicación y volver a publicar)
+       no se reescribe como pendiente */
+    if (R && R.restrs.length) { const keep = []; for (const r of R.restrs) { const s = await tx.get(col('restr').doc(r.id)); if (!(s.exists && (s.data() || {}).status === 'lib')) keep.push(r); } R = { ...R, restrs: keep }; }
     const nW = R ? Object.keys(R.acts).length + R.restrs.length + R.novas.length + (R.padds || []).length + (R.newActs || []).length + zones.length + (R.pub ? 1 : 0) : 0;
     /* límite de 500 escrituras por transacción: si no entra, no se publica (los borradores quedan para el ingeniero) */
     /* si no entra, no se publica ni se cierra el día (sin foto): mañana el ingeniero ve «⚠ Sin publicar» y lo publica él;
