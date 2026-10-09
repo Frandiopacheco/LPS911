@@ -116,21 +116,29 @@ window.__uiAskNative = true;
     return { docs, size: docs.length, empty: !docs.length, forEach(f) { docs.forEach(f); }, docChanges: () => docs.map(doc => ({ type: 'added', doc })), metadata: { hasPendingWrites: false, fromCache: false } };
   }
   const cbOf = a => a.find(f => typeof f === 'function');
+  /* sin señal (pruebas): con window.__dbHold = true cada escritura se aplica al momento en la base, como la caché local de
+     Firestore (las fotos la incluyen), pero su promesa no se cumple hasta window.__dbRelease() (el servidor no confirma).
+     window.__dbWrites cuenta las escrituras que recibe el SDK. Sin __dbHold todo funciona como siempre. */
+  const held = [];
+  window.__dbWrites = 0;
+  window.__dbRelease = () => { const h = held.splice(0); h.forEach(f => f()); return h.length; };
+  const ack = () => { window.__dbWrites++; return window.__dbHold ? new Promise(ok => held.push(ok)) : null; };
   function docRef(n, id) {
     return {
       id, path: n + '/' + id,
       collection: sub => colRef(n + '/' + id + '/' + sub),
       get: async () => docSnap(n, id),
-      set: async (d, o) => { chkData(d); col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); },
+      set: async (d, o) => { const h = ack(); chkData(d); col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); if (h) await h; },
       update: async (...a) => {
+        const h = ack();
         if (!col(n).has(id)) { const e = new Error('No document to update'); e.code = 'not-found'; throw e; }
         if (a.length === 1) chkData(a[0]); else for (let i = 1; i < a.length; i += 2) chkData({ v: a[i] });
         const cur = clone(col(n).get(id)) || {};
         if (a.length === 1) for (const [k, v] of Object.entries(a[0])) setPath(cur, k.split('.'), v);
         else for (let i = 0; i < a.length; i += 2) setPath(cur, a[i] instanceof FP ? a[i].p : String(a[i]).split('.'), a[i + 1]);
-        col(n).set(id, cur); changed(n);
+        col(n).set(id, cur); changed(n); if (h) await h;
       },
-      delete: async () => { col(n).delete(id); changed(n); },
+      delete: async () => { const h = ack(); col(n).delete(id); changed(n); if (h) await h; },
       onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(docSnap(n, id)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
     };
   }
@@ -148,7 +156,7 @@ window.__uiAskNative = true;
   }
   function batch() {
     const L = [];
-    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { hold = hold || new Set(); holdN++; try { for (const f of L) await f(); } finally { if (--holdN === 0) { const h = hold; hold = null; h.forEach(n => changed(n)); } } } };
+    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { hold = hold || new Set(); holdN++; let ps = null; try { if (window.__dbHold) ps = L.map(f => f()); else for (const f of L) await f(); } finally { if (--holdN === 0) { const h = hold; hold = null; h.forEach(n => changed(n)); } } if (ps) await Promise.all(ps); } };
   }
   const fs = { collection: n => colRef(n), doc: p => { const [c, id] = p.split('/'); return docRef(c, id); }, batch, enablePersistence: async () => {}, useEmulator() {},
     runTransaction: async fn => fn({ get: r => r.get(), set: (r, d, o) => r.set(d, o), update: (r, ...a) => r.update(...a), delete: r => r.delete() }) };

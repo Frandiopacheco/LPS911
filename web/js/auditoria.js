@@ -9,7 +9,8 @@ let SWREG=null,SWASK=false;
 function swBanner(w){let b=$('#swupd');if(b)return;b=document.createElement('div');b.id='swupd';b.className='swupd';
   b.innerHTML='<span>Hay una versión nueva de la página.</span><button type="button" class="ib pri">Actualizar</button><button type="button" class="ib" aria-label="Más tarde">Más tarde</button>';
   const[up,later]=b.querySelectorAll('button');
-  up.onclick=async()=>{if(pending>0&&!await uiAsk({title:'Hay cambios subiéndose',text:`${pending} cambio${pending>1?'s':''} tuyo${pending>1?'s':''} aún se está${pending>1?'n':''} enviando. Si actualizas ahora, se envía${pending>1?'n':''} cuando vuelvas a abrir la página.`,ok:'Actualizar igual',cancel:'Esperar',tone:'warn'}))return;SWASK=true;if(w&&w.state!=='redundant')w.postMessage('skip');else location.reload();setTimeout(()=>location.reload(),2500)};
+  /* es cierto desde la auditoría C1: cada cambio ya está en la cola local de Firestore (IndexedDB), no solo en la memoria de la página */
+  up.onclick=async()=>{if(pending>0&&!await uiAsk({title:'Hay cambios subiéndose',text:`${pending} cambio${pending>1?'s':''} tuyo${pending>1?'s':''} aún se está${pending>1?'n':''} enviando. Si actualizas ahora, queda${pending>1?'n':''} guardado${pending>1?'s':''} en este equipo y se envía${pending>1?'n':''} al volver a abrir la página.`,ok:'Actualizar igual',cancel:'Esperar',tone:'warn'}))return;SWASK=true;if(w&&w.state!=='redundant')w.postMessage('skip');else location.reload();setTimeout(()=>location.reload(),2500)};
   later.onclick=()=>b.remove();document.body.appendChild(b)}
 if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_SW){
   navigator.serviceWorker.addEventListener('controllerchange',()=>{if(SWASK)location.reload()});

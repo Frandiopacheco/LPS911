@@ -197,31 +197,47 @@ function strip(o){const c={...o};delete c.id;return c}
 function actNorm(o){const ds=o&&o.days;if(Array.isArray(ds))for(let i=1;i<ds.length;i++)if(!(ds[i-1]<ds[i])){o.days=[...new Set(ds)].sort();break}return o}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
 let DV=0; /* sube con cada cambio de datos (para cachés) */
-/* escrituras propias en cola que aún no salen (esperan la anterior del mismo documento): mientras tanto, lo que llega
-   de la base para ese documento es una versión vieja y no debe pisar la local (hacía parpadear las barras al mover) */
-const QK={};
-function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+/* Escrituras al SDK al instante (auditoría C1, oct 2026): cada cambio se entrega a Firestore en el mismo momento, sin esperar
+   a que el servidor confirme el anterior del mismo documento. Firestore respeta el orden de las escrituras de este equipo y,
+   sin señal, las guarda en su cola local (IndexedDB): si se cierra o recarga la página, salen al volver a abrirla.
+   Antes cada escritura esperaba la confirmación de la anterior: sin señal, la segunda en adelante solo vivía en la memoria de
+   la página y se perdía al cerrarla. Lo que queda por documento es solo contabilidad (pendientes, barra, errores).
+   QK: durante QKMS ms después de escribir, una foto de la base para ese documento pudo armarse antes de la escritura (vieja):
+   no pisa la local; se guarda la última que llegó y se aplica al vencer el plazo (qkFlush), así nunca queda algo viejo pegado. */
+const QK={};const QKMS=1500;
+function qkMark(col,id){const k=COLS[col];if(!k)return;const key=col+'/'+id;const o=QK[key]||(QK[key]={col,id,has:false,v:null,t:0});clearTimeout(o.t);o.t=setTimeout(()=>qkFlush(key),QKMS)}
+/** ¿la foto que llega para col/id debe esperar? (hay una escritura propia reciente): se guarda la última (v = datos o null si ya no está) */
+function qkHold(col,id,v){const o=QK[col+'/'+id];if(!o)return false;o.has=true;o.v=v;return true}
+function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)return;const k=COLS[o.col];const cur=S[k].get(o.id)||(ARCH[k]&&ARCH[k].get(o.id))||null;
+  if(canon(cur)===canon(o.v))return;colSet(k,o.id,o.v);DV++;if(ready)requestRender()}
+/** pone (o quita, v=null) un documento en S/ARCH según su archivo */
+function colSet(k,id,v){const AR=ARCH[k];if(!v){S[k].delete(id);if(AR)AR.delete(id);return}if(v.arch&&AR){S[k].delete(id);AR.set(id,v)}else{if(AR)AR.delete(id);S[k].set(id,v)}}
+/* para la carga entera de una colección (primera foto): lo que tiene escritura propia reciente se queda con la versión local */
+function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);qkHold(col,id,mp.get(id)||null);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+/* último contenido completo que este equipo escribió en cada documento (solo mientras hay escrituras sin confirmar):
+   si el servidor dice que el documento ya no existe (not-found), se vuelve a crear con lo último, no con una versión intermedia */
+const WLAST={};
+/** entrega la escritura al SDK en este mismo instante; un error de validación inmediato se trata como rechazo */
+function fsNow(fn){try{return Promise.resolve(fn())}catch(e){return Promise.reject(e)}}
 function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
-  const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
+  const k=COLS[col];const prev=getDoc(col,id);colSet(k,id,data?{...clone(data),id}:null);
   if(!db||(!canWrite&&!scR))return Promise.resolve();
   const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body,col):null;
   if(args&&!args.length)return Promise.resolve();
-  pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);QK[key]=(QK[key]||0)+1;
-  const run=()=>{QK[key]--;if(QK[key]<=0)delete QK[key];return run0()};
-  /* mover días (args.then): quitar y agregar se encolan en el mismo instante, así sin señal quedan los dos en la cola local */
-  const run0=()=>!body?ref.delete():args?Promise.all([ref.update(...args),args.then?ref.update(...args.then):null]).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
-  const p=(chains[key]||Promise.resolve()).then(()=>dbCall(run))
-    .then(()=>{lastErr=null},e=>{handleWriteErr(e)}).finally(()=>{pending--;setStatus()});
-  chains[key]=p;return p;
+  const key=col+'/'+id;const ref=fcol(col).doc(id);qkMark(col,id);const w=WLAST[key]||(WLAST[key]={n:0,b:null});const my=++w.n;w.b=body;
+  /* mover días (args.then): quitar y agregar salen en el mismo instante y en ese orden */
+  const p=!body?fsNow(()=>ref.delete()):args?Promise.all([fsNow(()=>ref.update(...args)),args.then?fsNow(()=>ref.update(...args.then)):null]):fsNow(()=>ref.set(body));
+  return bgWrite(p.catch(e=>{const c=e&&e.code;const last=WLAST[key]&&WLAST[key].b;
+      /* el documento no existe en el servidor (lo borraron) o un fallo de red raro: se reescribe entero con lo último de este equipo */
+      if((c==='not-found'||c==='unavailable')&&last)return fsNow(()=>ref.set(last));throw e})
+    .finally(()=>{const o=WLAST[key];if(o&&o.n===my)delete WLAST[key]}));
 }
 function fsArgs(partial){const a=[];for(const[k,v]of Object.entries(partial)){if(v&&typeof v==='object'&&!Array.isArray(v))for(const[k2,v2]of Object.entries(v))a.push(new firebase.firestore.FieldPath(k,k2),v2);else a.push(k,v)}return a}
 function patch(col,id,partial,localApply){
   if(localApply)localApply();
   if(!db||!canWrite)return;
-  pending++;setStatus();const key=col+'/'+id;
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol(col).doc(id).update(...fsArgs(partial))))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()});
+  qkMark(col,id);bgWrite(fsNow(()=>fcol(col).doc(id).update(...fsArgs(partial))));
 }
 function handleWriteErr(e){const c=e&&e.code;
   if(c==='permission-denied'&&typeof AREA==='function'&&AREA()){lastErr='Sin permiso';toast('No se pudo guardar: solo puedes registrar y resolver las restricciones de '+(me.area||'tu área')+'.')}
@@ -477,10 +493,13 @@ function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar av
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
   if(db&&canDaily&&obj.recs)didxFromDaily(d,pid,obj.recs);doneRebuild();requestRender();
-  if(!db||!canDaily)return;pending++;setStatus();const key='daily/'+id;
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
-function stopSession(){snapReset();unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
+  /* al SDK en este mismo instante (C1): sin señal queda en la cola local de Firestore y no se pierde al cerrar la página */
+  if(!db||!canDaily)return;const ref=fcol('daily').doc(id);
+  bgWrite(fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})).catch(e=>{
+    /* fallo de red raro: se reenvían completos los registros tocados, como están ahora en este equipo (no una versión intermedia) */
+    if(!(e&&e.code==='unavailable'))throw e;const now=DAY.get(id)||{};const rr={};for(const aid of Object.keys(obj.recs||{}))if(now.recs&&aid in now.recs)rr[aid]=now.recs[aid];
+    return fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(obj.recs?{recs:rr}:{})},{merge:true}))}))}
+function stopSession(){snapReset();for(const k in QK){clearTimeout(QK[k].t);delete QK[k]}unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
   for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
 function onData(){
