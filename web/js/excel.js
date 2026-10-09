@@ -16,10 +16,23 @@ function xStyle(s){const o={};if(!s)return o;
   if(s.alignment){const a=s.alignment;o.alignment={...(a.horizontal?{horizontal:a.horizontal}:{}),...(a.vertical?{vertical:a.vertical==='center'?'middle':a.vertical}:{}),...(a.wrapText?{wrapText:true}:{}),...(a.textRotation?{textRotation:a.textRotation}:{})}}
   if(s.border){const b={};for(const k of['top','bottom','left','right']){const e=s.border[k];if(e&&e.style)b[k]={style:e.style,...(e.color&&e.color.rgb?{color:{argb:argb(e.color.rgb)}}:{})}}o.border=b}
   if(s.numFmt)o.numFmt=s.numFmt;return o}
-/** copia una hoja de xlsx-js-style a ExcelJS; skip = filas (base 0) del encabezado antiguo que no se copian */
-function xToJ(wb,name,ws,X,skip){const J=wb.addWorksheet(name);skip=skip||0;
-  for(const k of Object.keys(ws)){if(k[0]==='!')continue;const{r,c}=X.utils.decode_cell(k);if(r<skip)continue;const x=ws[k];const cell=J.getCell(r+1,c+1);
-    cell.value=x.f?{formula:x.f,...(x.v!==undefined&&x.v!==''?{result:x.v}:{})}:x.v;const st=xStyle(x.s);for(const p of Object.keys(st))cell[p]=st[p]}
+/* estilos ya convertidos (auditoría de código 08/10, M7): un objeto por estilo distinto y no uno por celda. Primero por
+   identidad del objeto (los estilos compartidos) y si no por su contenido. Las celdas comparten el objeto: no se modifica
+   en el lugar (siempre se asigna uno nuevo, como ya hace este archivo). */
+function xStyleC(cache,s){if(!s)return null;let o=cache.id.get(s);if(o)return o;const k=JSON.stringify(s);o=cache.k.get(k);
+  if(!o){o=xStyle(s);cache.k.set(k,o)}cache.id.set(s,o);return o}
+/** copia una hoja de xlsx-js-style a ExcelJS; skip = filas (base 0) del encabezado antiguo que no se copian.
+    Generador: cada tanto cede el paso (xToJA lo usa para no congelar la pantalla con hojas grandes) */
+function* xToJG(wb,name,ws,X,skip,out){const J=wb.addWorksheet(name);out.J=J;skip=skip||0;const cache={id:new WeakMap(),k:new Map()};const keys=Object.keys(ws);let n=0;
+  for(const k of keys){if(k[0]==='!')continue;const{r,c}=X.utils.decode_cell(k);if(r<skip)continue;const x=ws[k];const cell=J.getCell(r+1,c+1);
+    cell.value=x.f?{formula:x.f,...(x.v!==undefined&&x.v!==''?{result:x.v}:{})}:x.v;const st=xStyleC(cache,x.s);if(st)for(const p of Object.keys(st))cell[p]=st[p];
+    if(++n%4000===0)yield n/keys.length}
+  xToJEnd(J,ws,skip);return J}
+function xToJ(wb,name,ws,X,skip){const out={};const g=xToJG(wb,name,ws,X,skip,out);while(!g.next().done);return out.J}
+/** igual que xToJ pero cede el paso a la pantalla cada ~4000 celdas (≈ 200 filas del lookahead); prog(0..1) para el botón */
+async function xToJA(wb,name,ws,X,skip,prog){const out={};const g=xToJG(wb,name,ws,X,skip,out);
+  for(let s=g.next();!s.done;s=g.next()){if(prog)prog(s.value);await new Promise(r=>setTimeout(r))}return out.J}
+function xToJEnd(J,ws,skip){
   for(const m of ws['!merges']||[]){if(m.s.r<skip)continue;try{J.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1)}catch(e){}}
   (ws['!cols']||[]).forEach((c,i)=>{if(c&&(c.wch||c.wpx))J.getColumn(i+1).width=c.wch||Math.round(c.wpx/7)});
   (ws['!rows']||[]).forEach((rr,i)=>{if(rr&&rr.hpt&&i>=skip)J.getRow(i+1).height=rr.hpt});
@@ -60,10 +73,17 @@ function xHeader(J,kind,L){const H=XHDR[kind];const p=P();const today=todayIso()
   /* logos: dentro de su recuadro, sin deformarse */
   for(const k of['e','c']){const g=L&&L[k];const box=H.img[k];if(!g||!box)continue;const s=Math.min(box.w/g.w,box.h/g.h);J.addImage(g.id,{tl:{col:box.col,row:box.row},ext:{width:Math.round(g.w*s),height:Math.round(g.h*s)},editAs:'oneCell'})}}
 /* ---- hoja AR: análisis de restricciones (4 semanas que vienen desde la semana n0, con fórmulas X / O) ---- */
-function xAR(wb,list,n0,L){const J=wb.addWorksheet('AR');wb.calcProperties={fullCalcOnLoad:true};
+/* Las liberadas antes de la ventana de 4 semanas se archivan (decidido con el dueño, auditoría de código 08/10, M7): en AR quedan
+   las pendientes y las liberadas desde el primer día de la ventana; las demás van a la hoja «Liberadas (archivo)» (solo valores,
+   sin fórmulas), que se agrega solo si hay alguna. Async: cede el paso a la pantalla cada 200 filas (hay que esperarla). */
+const xArDays=n0=>{const D=[];for(let w=0;w<4;w++)D.push(...weekDays(n0+w),addD(weekDays(n0+w)[5],1));return D};
+/** separa la lista del AR: {ar: pendientes y liberadas desde d0 (o sin fecha), arch: liberadas antes de d0} */
+function xArSplit(list,d0){const ar=[],arch=[];for(const q of list)(q.status==='lib'&&q.freed&&q.freed<d0?arch:ar).push(q);return{ar,arch}}
+const xYield=()=>new Promise(r=>setTimeout(r));
+async function xAR(wb,list0,n0,L){const J=wb.addWorksheet('AR');wb.calcProperties={fullCalcOnLoad:true};
   /* resultado de cada día (como la fórmula): O = se levantó ese día; X = la fecha comprometida (o la requerida si no hay compromiso) */
   const dayRes=(q,d)=>{const fr=q.status==='lib'?q.freed:'';if(fr)return fr===d?'O':'';return(q.comp||q.need)===d?'X':''};
-  const DAYS=[];for(let w=0;w<4;w++)DAYS.push(...weekDays(n0+w),addD(weekDays(n0+w)[5],1));
+  const DAYS=xArDays(n0);const{ar:list,arch}=xArSplit(list0,DAYS[0]);
   const cnt=w=>{let o=0,x=0;for(const q of list)for(let k=0;k<7;k++){const r=dayRes(q,DAYS[w*7+k]);if(r==='O')o++;else if(r==='X')x++}return{o,x}};
   const tot=[0,1,2,3].reduce((t,w)=>{const c=cnt(w);return t+c.o+c.x},0);const W=4,D=W*7;const C0=12;/* L */const last=Math.max(13,12+list.length);const today=todayIso();
   const thin={style:'thin',color:{argb:'FF000000'}};const B={top:thin,bottom:thin,left:thin,right:thin};const f8={name:'Calibri',size:8,bold:true};const f10={name:'Calibri',size:10};
@@ -87,18 +107,35 @@ function xAR(wb,list,n0,L){const J=wb.addWorksheet('AR');wb.calcProperties={full
   H.forEach(([c,t])=>box(`${c}10:${c}11`,t,{wrap:true,...(c==='J'||c==='K'?{fill:red,font:{...f8,color:{argb:'FFFFFFFF'}}}:{})}));
   box('AN10:AN11','OBSERVACIONES - AS\n(Impedimento de las Áreas de Soporte para levantar la restricción, comentarios, etc)',{wrap:true});
   /* una fila por restricción: X en la fecha comprometida (o la requerida si no hay compromiso) y O cuando se levantó */
-  list.forEach((q,i)=>{const r=13+i;const x=S.act.get(q.actId);const sc=q.sc||(x&&x.sc)||'';J.getRow(r).height=25.5;
+  for(let i=0;i<list.length;i++){const q=list[i];if(i&&i%200===0)await xYield();const r=13+i;const x=S.act.get(q.actId);const sc=q.sc||(x&&x.sc)||'';J.getRow(r).height=25.5;
     const d=(v,col)=>{const c=cell(col+r,v?xDate(v):null,{font:f10,fmt:'d-mmm',wrap:true});return c};
     cell('B'+r,i+1,{font:f10});cell('C'+r,x?x.name:(q.actId?'(ya no está en el lookahead)':''),{font:f10,wrap:true}).alignment={horizontal:'left',vertical:'middle',wrapText:true};
     cell('D'+r,q.desc||q.type||'',{font:f10,wrap:true}).alignment={horizontal:'left',vertical:'middle',wrapText:true};
     d(q.created,'E');d(q.need,'F');cell('G'+r,q.resp||'',{font:f10,wrap:true});cell('H'+r,grpOf(q)==='area'?(q.area||'Otras áreas').toUpperCase():'PRODUCCIÓN',{font:f10,wrap:true});
     d(q.comp,'I');d(q.status==='lib'?q.freed:'','J');cell('K'+r,sc?(conOf(sc).esp||conOf(sc).partida||''):'',{font:f10,wrap:true});
     for(let k=0;k<D;k++){const col=XCOL(C0-1+k);cell(col+r,{formula:`IF($J${r}="",IF($I${r}="",IF($F${r}=${col}$11,"X",""),IF($I${r}=${col}$11,"X","")),IF($J${r}=${col}$11,"O",""))`,result:dayRes(q,DAYS[k])},{font:f10})}
-    cell('AN'+r,q.obsAs||'',{font:f10,wrap:true})});
+    cell('AN'+r,q.obsAs||'',{font:f10,wrap:true})}
   if(list.length)J.addConditionalFormatting({ref:`L13:AM${last}`,rules:[
     {type:'containsText',operator:'containsText',text:'O',style:{fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FF00B050'}},font:{color:{argb:'FFFFFFFF'},bold:true}}},
     {type:'containsText',operator:'containsText',text:'X',style:{fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFF0000'}},font:{color:{argb:'FFFFFFFF'},bold:true}}}]});
-  J.views=[{state:'frozen',xSplit:4,ySplit:12,showGridLines:false}];return J}
+  J.views=[{state:'frozen',xSplit:4,ySplit:12,showGridLines:false}];
+  if(arch.length)await xArArch(wb,arch,DAYS[0]);return J}
+/** hoja «Liberadas (archivo)»: restricciones liberadas antes de la ventana del AR, solo valores (sin fórmulas) */
+async function xArArch(wb,list,d0){const J=wb.addWorksheet('Liberadas (archivo)');
+  const thin={style:'thin',color:{argb:'FFBFBFBF'}};const B={top:thin,bottom:thin,left:thin,right:thin};const f10={name:'Calibri',size:10};
+  const t=J.getCell('A1');t.value='RESTRICCIONES LIBERADAS (ARCHIVO)';t.font={name:'Calibri',size:14,bold:true,color:{argb:'FF1F3A4D'}};
+  const s=J.getCell('A2');s.value=`Liberadas antes del ${fmtD(d0)} ${d0.slice(0,4)} (inicio de las 4 semanas del AR) · ${list.length} ${list.length===1?'restricción':'restricciones'}`;s.font={name:'Calibri',size:10,color:{argb:'FF555555'}};
+  const H=[['N.º',5],['Actividad',34],['Ubicación',22],['Tipo',16],['Descripción de la restricción',40],['Responsable',20],['Área responsable',18],['Especialidad',18],['Fecha de identificación',13],['Fecha requerida',13],['Compromiso',13],['Fecha liberada',13],['Liberó',18],['Observaciones',36]];
+  const hf={type:'pattern',pattern:'solid',fgColor:{argb:'FF1F3A4D'}};const hr=4;
+  H.forEach(([h,w],i)=>{const c=J.getCell(hr,i+1);c.value=h;c.font={name:'Calibri',size:10,bold:true,color:{argb:'FFFFFFFF'}};c.fill=hf;c.border=B;c.alignment={horizontal:'center',vertical:'middle',wrapText:true};J.getColumn(i+1).width=w});
+  J.getRow(hr).height=30;const al={vertical:'middle',wrapText:true},alc={horizontal:'center',vertical:'middle'};
+  for(let i=0;i<list.length;i++){if(i&&i%200===0)await xYield();const q=list[i];const x=S.act.get(q.actId)||(ARCH.act&&ARCH.act.get(q.actId));const a=x&&(S.amb.get(x.ambId)||(ARCH.amb&&ARCH.amb.get(x.ambId)));
+    const pp=S.pis.get(restrPiso(q))||(ARCH.pis&&ARCH.pis.get(restrPiso(q)));const sc=q.sc||(x&&x.sc)||'';
+    const v=[i+1,x?x.name:(q.actId?'(ya no está en el lookahead)':''),[pp&&pp.code,a&&(a.code+' '+(a.name||''))].filter(Boolean).join(' · '),q.type||'',q.desc||'',q.resp||'',grpOf(q)==='area'?(q.area||'Otras áreas').toUpperCase():'PRODUCCIÓN',sc?(conOf(sc).esp||conOf(sc).partida||''):'',
+      q.created?xDate(q.created):null,q.need?xDate(q.need):null,q.comp?xDate(q.comp):null,q.freed?xDate(q.freed):null,q.libN||'',q.obsAs||''];
+    v.forEach((val,c)=>{const cell=J.getCell(hr+1+i,c+1);cell.value=val;cell.font=f10;cell.border=B;cell.alignment=c===0||(c>=8&&c<=11)?alc:al;if(c>=8&&c<=11)cell.numFmt='d-mmm-yy'})}
+  J.autoFilter={from:{row:hr,column:1},to:{row:hr+Math.max(1,list.length),column:H.length}};
+  J.views=[{state:'frozen',xSplit:0,ySplit:hr}];return J}
 /* ---- hoja Sectorización: la lámina base de cada piso con sus sectores y ambientes ---- */
 async function xSector(wb,pids){const J=wb.addWorksheet('Sectorización');J.getColumn(1).width=2;let r=2;let any=false;
   for(const pid of pids){const p=S.pis.get(pid);if(!p)continue;const im=typeof szImage==='function'?await szImage(pid).catch(()=>null):null;

@@ -71,9 +71,9 @@ const scAt=(rc,x)=>(rc&&rc.sc)||x.sc;
    - decidido el mismo día (o reprogramado después de publicar, marca acts.rpl): no cumplido con esa causa e imputabilidad,
      en vez de quedar «sin verificar».
    Las «No va» se leen de pdz (kind == 'nova', una sola condición: no necesita índice) y se indexan por fecha|actividad. */
-const NOVA=new Map();let novaSub=null;
-function ensureNova(){if(novaSub||!db)return;novaSub=fcol('pdz').where('kind','==','nova').onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});if(ready&&['ind','dash','hoy'].includes(U.tab))requestRender()},()=>{});
-  unsubs.push(()=>{if(novaSub)novaSub();novaSub=null;NOVA.clear()})}
+const NOVA=new Map();let novaSub=null;let NOVAV=0; /* sube con cada cambio de NOVA (memoria de dayData) */
+function ensureNova(){if(novaSub||!db)return;novaSub=fcol('pdz').where('kind','==','nova').onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});NOVAV++;if(ready&&['ind','dash','hoy'].includes(U.tab))requestRender()},()=>{});
+  unsubs.push(()=>{if(novaSub)novaSub();novaSub=null;NOVA.clear();NOVAV++})}
 const dayStartMs=d=>Date.parse(d+'T00:00:00Z')+LIMA_OFF;
 /** 'out' = no cuenta en el PPC diario; un registro = no cumplido por «No va»; null = nada que hacer */
 function nvRec(x,d){if(d>todayIso())return null;ensureNova();const z=NOVA.get(d+'|'+x.id);const v=x.rpl&&x.rpl[d];
@@ -92,15 +92,28 @@ function dayDataSnap(dates,vset,rows){const adds=[];const seen=new Set(rows.map(
       const rc=recOf(d,id)||nv||null;
       const r={p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)};whoFix(r,sn);rows.push(r);seen.add(id+'|'+d)}}
   return adds}
-function dayData(dates,vset){const ds=new Set(dates);const rows=[],extras=[];const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
+function dayDataCore(dates,vset){const rows=[];
   for(const{p,secs}of tree()){if(!vset.has(p.id))continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts)for(const d of dates){const sched=schedOn(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late))rows.push({p,s,a,x,d,rc,sched,sc:scAt(rc,x)})}}
   dayDataArch(dates,vset,rows);
   const adds=dayDataSnap(dates,vset,rows);
   for(let i=rows.length-1;i>=0;i--){const r=rows[i];if(r.rc)continue;const n=nvRec(r.x,r.d);if(n==='out')rows.splice(i,1);else if(n)r.rc=n}
-  extras.push(...npItems(ds,vset));
+  return{rows,...dayAgg(rows),adds}}
+/* totales por SC, por piso, causas y total de unas filas de dayData */
+function dayAgg(rows){const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,partial:0,no:0,nimp:0};
   const z=()=>({prog:0,ver:0,ok:0,partial:0,no:0,nimp:0});const add=(o,r)=>{o.prog++;if(r.rc){o.ver++;o[r.rc.status]++;if(impOf(r.rc)===false)o.nimp++}};
   rows.forEach(r=>{add(scA[r.sc]=scA[r.sc]||z(),r);add(piA[r.p.id]=piA[r.p.id]||z(),r);add(tot,r);if(r.rc&&r.rc.status!=='ok'){const k=cncKey(r.rc.cnc);cnc[k]=(cnc[k]||0)+1}});
-  return{rows,extras,scA,piA,cnc,tot,adds}}
+  return{scA,piA,cnc,tot}}
+/* con memoria (auditoría de código 08/10, M5): el Tablero la pide para 30 días en cada dibujo (cada 60 s y con cada cambio que
+   llega) e Indicadores varias veces. La clave lleva todo lo que cambia el resultado: DV (lookahead, archivados, fotos del plan,
+   configuración), DONEV (registros de campo, cierres en vivo, terminadas), NOVAV («No va»), hoy, fechas y pisos; además se compara
+   la identidad de los Maps (las versiones guardadas y la del cliente reemplazan S.act sin subir DV). Lo no programado (npItems)
+   es barato y no tiene versión: se arma siempre. El resultado se comparte entre llamadas: no se modifican sus filas. */
+const DDM=new Map();
+function dayData(dates,vset){const ds=new Set(dates);
+  const k=DV+'|'+DONEV+'|'+NOVAV+'|'+todayIso()+'|'+dates.join(',')+'|'+[...vset].sort().join(',');
+  const refs=[S.act,S.amb,S.sec,S.pis,ARCH.act,ARCH.amb,DAY,LIVE,DPL];let e=DDM.get(k);
+  if(!e||e.refs.some((r,i)=>r!==refs[i])){e={refs,v:dayDataCore(dates,vset)};DDM.delete(k);if(DDM.size>=12)DDM.delete(DDM.keys().next().value);DDM.set(k,e)}
+  return{...e.v,extras:npItems(ds,vset)}}
 function cumplTable(entries,label){return`<div class="tscroll"><table class="t ctab"><thead><tr><th></th><th class="r">Prog.</th><th class="r hm">Verif.</th><th class="r">✓</th><th class="r hm">½</th><th class="r hm">✗</th><th class="r hm">Sin verif.</th><th class="r hm" title="Parcial o No cumplido por causas que no dependen del subcontratista">No imputables</th><th>PPC bruto</th><th title="Sin contar los incumplimientos no imputables al subcontratista">PPC del SC</th></tr></thead><tbody>${entries.map(([k,o])=>{const v=o.ver?o.ok/o.ver:null;const vs=pscOf(o);
   return`<tr><td>${label(k)}</td><td class="r">${o.prog}</td><td class="r hm">${o.ver}</td><td class="r ok">${o.ok||''}</td><td class="r pa hm">${o.partial||''}</td><td class="r no hm">${o.no||''}</td><td class="r mu hm">${o.prog-o.ver||''}</td><td class="r mu hm">${o.nimp||''}</td><td>${v==null?'<span class="mu">sin verificar</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?(v==null?'':'<span class="mu">—</span>'):`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
 const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;padding:0;background:none"><i></i>${esc(conOf(sc).name)}</span>`;
@@ -180,14 +193,17 @@ function renderInd(main){
   if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>PPC semanal</b> y evalúas cada uno con Sí / No.</div>`;
   const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
   /* misma población que Indicadores › Diario (dayData): incluye lo archivado y los registros históricos */
+  /* una sola pasada (auditoría de código 08/10, M5): lo no programado por día sale de DD.extras y la tabla de la semana
+     se arma con las filas de DD cuando sus días están todos en dd (si no, se calcula aparte) */
   const DD=dayData(dd,vset);const byD={};DD.rows.forEach(r=>(byD[r.d]=byD[r.d]||[]).push(r));const dayRows=[];const dCnc={};let nExtra=0;
+  const npD={};DD.extras.forEach(i=>npD[i.d]=(npD[i.d]||0)+1);
   for(const d of dd){let sch=0,okc=0,reg=0;for(const r of byD[d]||[]){if(r.sched)sch++;const rc=r.rc;if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc){const k=cncKey(rc.cnc);dCnc[k]=(dCnc[k]||0)+1}}}
-    nExtra+=npItems([d],vset).length;
+    nExtra+=npD[d]||0;
     if(reg)dayRows.push({label:DL[(pd(d).getUTCDay()+6)%7]+' '+d.slice(8),v:okc/reg,sub:`${okc} de ${reg} verificadas · ${sch} programadas`})}
   h+=`<div class="card chart"><h2>PPC diario (alerta · registros de campo) <span class="sub">% de lo verificado en campo marcado “Cumplido” · semanas ${U.week-2}–${U.week}${nExtra?` · ${nExtra} trabajos no programados`:''}</span></h2><div class="pad tscroll">${dayRows.length?svgBarsV(dayRows):'<div class="empty">Aún no hay registros de campo en estas semanas. Se llenan desde la pestaña <b>Campo</b>.</div>'}</div></div>`;
-  {const wd=weekDays(U.week).filter(x=>x<=todayIso());const W=dayData(wd,vset);const e=Object.entries(W.scA).filter(([,o])=>o.ver).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  {const wd=weekDays(U.week).filter(x=>x<=todayIso());const ddS=new Set(dd);const W=wd.every(x=>ddS.has(x))?dayAgg(wd.flatMap(x=>byD[x]||[])):dayData(wd,vset);const e=Object.entries(W.scA).filter(([,o])=>o.ver).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
    h+=`<div class="card"><h2>Cumplimiento en campo por subcontratista <span class="sub">semana ${U.week} · registros diarios acumulados</span></h2><div class="pad">${e.length?cumplTable(e,scLabel):'<div class="empty">Sin registros de campo en esta semana.</div>'}</div></div>`}
-  {const nd=dd.map(d=>({d,n:npItems([d],vset).length})).filter(o=>o.n);if(nd.length)h+=`<div class="card chart"><h2>Trabajo no programado por día <span class="sub">frentes vistos en obra sin estar programados · semanas ${U.week-2}–${U.week}</span></h2><div class="pad">${svgBarsH(nd.map(o=>({label:DOWN[(pd(o.d).getUTCDay()+6)%7].slice(0,3)+' '+fmtD(o.d),v:o.n})),v=>v+'')}</div></div>`}
+  {const nd=dd.map(d=>({d,n:npD[d]||0})).filter(o=>o.n);if(nd.length)h+=`<div class="card chart"><h2>Trabajo no programado por día <span class="sub">frentes vistos en obra sin estar programados · semanas ${U.week-2}–${U.week}</span></h2><div class="pad">${svgBarsH(nd.map(o=>({label:DOWN[(pd(o.d).getUTCDay()+6)%7].slice(0,3)+' '+fmtD(o.d),v:o.n})),v=>v+'')}</div></div>`}
   if(Object.keys(dCnc).length)h+=`<div class="card chart"><h2>Causas registradas en campo <span class="sub">Parcial y No cumplido · mismas semanas</span></h2><div class="pad">${svgBarsH(Object.entries(dCnc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
   h+=`<div class="charts">
    <div class="card chart"><h2>PPC semanal histórico <span class="sub">todas las semanas congeladas</span></h2><div class="pad tscroll">${ppcs.length?linesLegend()+svgLines(ppcHistPts(ppcs)):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>

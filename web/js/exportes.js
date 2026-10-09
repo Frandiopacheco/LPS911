@@ -8,6 +8,15 @@ function loadPdf(){if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API.a
   pdfP=ls(PDFJS[0]).then(()=>ls(PDFJS[1])).catch(e=>{pdfP=null;throw e});return pdfP}
 async function getFoto(id){if(FOTO.get(id))return FOTO.get(id);try{const d=await fcol('fotos').doc(id).get();if(d.exists){const v=d.data().data;FOTO.set(id,v);return v}}catch(e){}return null}
 const imgSize=src=>new Promise(ok=>{const i=new Image();i.onload=()=>ok([i.naturalWidth,i.naturalHeight]);i.onerror=()=>ok(null);i.src=src});
+/* fotos del PDF (auditoría de código 08/10, M6): se descargan de a 6 a la vez y se reducen a 1000 px (JPEG 0,7) antes de
+   ponerlas en el PDF: con muchas fotos el reporte salía lento y pesado. → {src,w,h} o null */
+const pdfImg=id=>getFoto(id).then(src=>!src?null:new Promise(ok=>{const i=new Image();i.onload=()=>{const w0=i.naturalWidth,h0=i.naturalHeight;if(!w0||!h0){ok(null);return}
+  const k=Math.min(1,1000/Math.max(w0,h0));const w=Math.max(1,Math.round(w0*k)),h=Math.max(1,Math.round(h0*k));
+  try{const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);g.drawImage(i,0,0,w,h);ok({src:c.toDataURL('image/jpeg',0.7),w,h})}catch(e){ok({src,w:w0,h:h0})}};
+  i.onerror=()=>ok(null);i.src=src})).catch(()=>null);
+/** fn sobre cada elemento con a lo más n a la vez; devuelve los resultados en el mismo orden */
+async function poolMap(L,n,fn){const out=new Array(L.length);let k=0;const run=async()=>{while(k<L.length){const i=k++;try{out[i]=await fn(L[i],i)}catch(e){out[i]=null}}};
+  await Promise.all(Array.from({length:Math.min(n,L.length)},run));return out}
 async function reportPdf(d){const btn=$('#bpdf');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   try{await ensureDaily(addD(d,-1));
     const vpAll=visPisos();const D0=dayData([d],new Set(vpAll.map(x=>x.id)));
@@ -55,7 +64,8 @@ async function reportPdf(d){const btn=$('#bpdf');const bt=btn?btn.textContent:''
         didParseCell:c=>{if(c.section==='body'&&c.column.index===6)c.cell.styles.fillColor=stFill[st[c.row.index]]}});
       if(withPh){const ph=[];rows.forEach(r=>(r.rc?.photos||[]).forEach(id=>ph.push([id,`${r.a.code} · ${r.x.name}`])));ex.forEach(e=>(e.e.photos||[]).forEach(id=>ph.push([id,`${e.a?.code||''} · ${e.e.desc}`])));
         if(ph.length){if(btn)btn.textContent='Cargando fotos…';y=doc.lastAutoTable.finalY+4;let col=0;const cw=64,chh=48,gap=4;
-          for(const[id,cap]of ph){const src=await getFoto(id);if(!src)continue;const sz=await imgSize(src);if(!sz)continue;
+          let nd=0;const IM=await poolMap(ph,6,async([id])=>{const o=await pdfImg(id);nd++;if(btn)btn.textContent=`Cargando fotos… ${nd}/${ph.length}`;return o});
+          for(let q=0;q<ph.length;q++){const cap=ph[q][1];const im=IM[q];if(!im)continue;const sz=[im.w,im.h];const src=im.src;
             if(col===0&&y+chh+8>H-14){doc.addPage();y=20}
             const k=Math.min(cw/sz[0],chh/sz[1]);const w=sz[0]*k,hh=sz[1]*k;const x=M+col*(cw+gap);
             try{doc.addImage(src,'JPEG',x,y,w,hh)}catch(e){continue}
@@ -181,9 +191,10 @@ async function exportXlsx(){
     /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
     /* formato de la empresa (ExcelJS, con logos): Lookahead · PPC semanal · PPC del SC · AR (análisis de restricciones) · Sectorización */
     await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
-    xHeader(xToJ(J,'Lookahead',ws,X,6),'look',LG);
+    /* la hoja grande cede el paso a la pantalla y muestra el avance en el botón (auditoría de código 08/10, M7) */
+    xHeader(await xToJA(J,'Lookahead',ws,X,6,f=>{btn.textContent=`Generando… ${Math.round(100*f)}%`}),'look',LG);btn.textContent='Generando…';
     {const wsP=ppcSemWs(X,U.week);if(wsP)xHeader(xToJ(J,'PPC semanal',wsP,X,5),'ppc',LG);const w2=ppcScWs(X,U.week);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
-    xAR(J,arList(),U.week,LG);
+    await xAR(J,arList(),U.week,LG);
     await xSector(J,visPisos().map(q=>q.id));
     await xSave(J,`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`);
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
@@ -308,6 +319,6 @@ function ppcScWs(X,n){const docs=visPisos().map(p=>S.wk.get(wkId(n,p.id))).filte
 async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   /* formato de la empresa (AR: análisis de restricciones, 4 semanas desde la semana elegida) y el detalle de la pantalla */
   try{await loadXlsx();const X=window.XLSX;const p=P();await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
-    xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
+    await xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
     await xSave(J,`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`)}
   catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}

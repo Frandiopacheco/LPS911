@@ -14,7 +14,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -65,30 +65,39 @@ exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
   const pisos = await all('pisos');
   const vivos = [...pisos.values()].filter(p => !p.arch);
   for (const n of W) {
-    /* ya se hizo esta semana (frz/<n>): no se vuelve a leer todo cada 15 minutos */
+    /* ya se hizo esta semana (frz/<n>): no se vuelve a leer todo cada 15 minutos. Si un piso falló, las pasadas siguientes
+       reintentan solo ese piso, hasta RETRY_MAX veces (auditoría de código 08/10, M2) */
     const fref = db().collection('frz').doc(String(n));
-    if ((await fref.get()).exists) continue;
-    const refs = vivos.map(p => db().collection('weeks').doc(n + '_' + p.id));
+    const fs = await fref.get(); const prev = fs.exists ? fs.data() : null;
+    const plan = retryPlan(prev);
+    if (!plan) continue;
+    const mine = vivos.filter(p => !plan.only || plan.only.has(p.id));
+    const at = new Date(now).toISOString();
+    if (plan.only && !mine.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'los pisos que faltaban ya no existen' }, [], [], { k: 0 })); continue; }
+    const refs = mine.map(p => db().collection('weeks').doc(n + '_' + p.id));
     const snaps = refs.length ? await db().getAll(...refs) : [];
     /* descongelada a propósito después del corte (unfrozenAt) = alguien la está corrigiendo: no se vuelve a congelar sola */
     const cut = propCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
     const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
-    if (vivos.length && skip.size === snaps.length) { await fref.set({ at: new Date(now).toISOString(), n, k: 0, nota: 'todos los pisos ya estaban congelados' }); continue; }
+    if (mine.length && skip.size === snaps.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'todos los pisos ya estaban congelados' }, [], [], { k: 0 })); continue; }
     const today = limaToday(now);
     const [sectors, ambientes, acts, didx, daily, lives, props] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
       db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop')]);
     const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(d => d.data()), lives: lives.docs.map(d => d.data()), acts });
     const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()] }, n, new Date(now).toISOString());
-    let k = 0;
-    for (const o of L) {
-      if (skip.has(o.id)) continue;
-      const ref = db().collection('weeks').doc(o.id);
+    const todo = L.filter(o => !skip.has(o.id) && (!plan.only || plan.only.has(o.doc.pisoId)));
+    const byPiso = new Map(todo.map(o => [o.doc.pisoId, o]));
+    /* cada piso en su propia transacción y con su propio try/catch: si uno falla, los demás se congelan igual */
+    const R = await runFloors([...byPiso.keys()], async pid => {
+      const o = byPiso.get(pid); const ref = db().collection('weeks').doc(o.id);
       /* como «Congelar» de la página: si alguien ya lo congeló (o lo hizo mientras corría), se respeta su versión */
-      const wrote = await db().runTransaction(async tx => { const d = await tx.get(ref); if (d.exists && held(d.data())) return false; tx.set(ref, o.doc); return true; });
-      if (wrote) k++;
-    }
-    await fref.set({ at: new Date(now).toISOString(), n, k, pisos: L.filter(o => !skip.has(o.id)).map(o => o.doc.pisoId) });
-    logger.info(`Semana ${n}: ${k} piso(s) congelado(s) automáticamente`);
+      return db().runTransaction(async tx => { const d = await tx.get(ref); if (d.exists && held(d.data())) return false; tx.set(ref, o.doc); return true; });
+    }, (pid, e) => logger.error(`Semana ${n}: no se pudo congelar el piso ${pid}`, e));
+    const k = [...R.out.values()].filter(Boolean).length;
+    const rec = retryRecord(prev, plan, { at, n, pisos: [...byPiso.keys()] }, R.done, R.fail, { k });
+    await fref.set(rec);
+    logger.info(`Semana ${n}: ${k} piso(s) congelado(s) automáticamente${plan.only ? ` (reintento ${rec.tries})` : ''}`);
+    if (R.fail.length) logger.error(`Semana ${n}: ${R.fail.length} piso(s) sin congelar (${R.fail.join(', ')}); ${rec.tries >= RETRY_MAX ? 'se agotaron los reintentos: congélalos a mano' : 'se reintentan en 15 minutos'}`);
   }
 });
 
@@ -102,30 +111,34 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   const project = (await db().collection('meta').doc('project').get()).data() || {};
   const now = Date.now(); if (!planCutDue(project, now)) return;
   const today = limaToday(now); const cref = db().collection('pcl').doc(today);
-  if ((await cref.get()).exists) return;
-  const d = nextWork(project, today);
+  /* hecho hoy (pcl/<fecha>) = no se vuelve a hacer. Si un piso falló, las pasadas siguientes reintentan solo ese piso,
+     hasta RETRY_MAX veces (auditoría de código 08/10, M3); un piso que ya tiene foto se salta solo (closePlanPiso) */
+  const cs = await cref.get(); const prev = cs.exists ? cs.data() : null;
+  const plan = retryPlan(prev);
+  if (!plan) return;
+  const d = (plan.only && prev.d) || nextWork(project, today);
   const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
     db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('contractors'),
     db().collection('pdz').where('date', '==', d).get()]);
   const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(x => x.data()), lives: lives.docs.map(x => x.data()), acts });
   const zs = pdzDay.docs.map(x => ({ ...x.data(), id: x.id }));
-  const vivos = [...pisos.values()].filter(p => !p.arch);
+  const vivos = [...pisos.values()].filter(p => !p.arch && (!plan.only || plan.only.has(p.id)));
   let k = 0, np = 0, nr = 0;
-  for (const p of vivos) {
-    const pid = p.id;
+  const R = await runFloors(vivos.map(p => p.id), async pid => {
+    const p = pisos.get(pid);
     const drafts = zs.filter(z => ((z.kind === 'nova' && z.draft) || (z.kind === 'padd' && z.draft && z.st === 'ok')) && z.pisoId === pid);
     const props = pendProps(zs, d, pid);
-    let res;
     const zones = zs.filter(z => z.kind === 'zona' && z.paId && z.pisoId === pid);
-    try { res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, zones, piso: p, logger }, d, now); }
-    catch (e) { logger.error(`Plan del ${d} piso ${pid}: no se pudo cerrar`, e); continue; }
-    if (res.skip) continue;
+    const res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, zones, piso: p, logger }, d, now);
+    if (res.skip) return;
     if (Object.keys(res.ids).length) k++;
     if (res.R) { np += res.R.novas.length; if (res.R.log.length) logger.warn(`Plan del ${d} piso ${pid}: ${res.R.log.join(' · ')}`); if (res.R.skipped.length) logger.info(`Plan del ${d} piso ${pid}: ya no estaban ese día: ${res.R.skipped.join(', ')}`); }
     nr += res.P.length;
-  }
-  await cref.set({ at: new Date(now).toISOString(), d, hh: planCutHH(project), k, np, nr });
-  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)`);
+  }, (pid, e) => logger.error(`Plan del ${d} piso ${pid}: no se pudo cerrar`, e));
+  const rec = retryRecord(prev, plan, { at: new Date(now).toISOString(), d, hh: planCutHH(project) }, R.done, R.fail, { k, np, nr });
+  await cref.set(rec);
+  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)${plan.only ? ` (reintento ${rec.tries})` : ''}`);
+  if (R.fail.length) logger.error(`Plan del ${d}: ${R.fail.length} piso(s) sin cerrar (${R.fail.join(', ')}); ${rec.tries >= RETRY_MAX ? 'se agotaron los reintentos: publícalo a mano en el Plan diario' : 'se reintentan en 15 minutos'}`);
 });
 
 /* Cuentas de capataz del tareo (docs/ia/tareo.md, «Cuentas de capataz»): usuario = DNI, contraseña; por debajo, correo sintético
