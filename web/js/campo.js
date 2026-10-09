@@ -84,8 +84,12 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
   if(extras.length)h+=`<div class="camb npsec">Trabajo no programado <b>${extras.length}</b></div>${extras.map(npCard).join('')}`;
   if(canNP()&&pd(d).getUTCDay()!==0&&d<=today)h+=`<button class="cadd" id="xopen">+ Trabajo no programado</button>`;
   h+='</div></div>';
-  main.innerHTML=h;
+  /* solo se rearma si cambió (auditoría de código 08/10, P3): con cada dato que llega se rehacía todo y en la tablet se perdía lo que
+     se estaba escribiendo o tocando. La marca va en el elemento raíz: si otra vista (o el Plano) lo reemplazó, se rearma.
+     Los manejadores de main se reasignan igual (capturan el día y los filtros de este dibujo). */
+  {const r0=main.firstElementChild;if(!r0||r0._cmp!==h||main.children.length!==1){main.innerHTML=h;main.firstElementChild._cmp=h}}
   main.onfocusin=e=>{if(e.target.classList&&e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
+  /* si no se rearmó, los selects siguen siendo los mismos: reasignar sus onchange es inofensivo */
   $('#csec',main).onchange=e=>{CU.sec=e.target.value;saveCU();render()};
   $('#csc',main).onchange=e=>{CU.sc=e.target.value;saveCU();render()};
   main.onclick=async e=>{const t=e.target;

@@ -14,7 +14,8 @@ function lhLog(ops,label,extra){try{if(!db||!me||!canWrite||(typeof PM==='functi
     items.push({id:o.id,nm:x.name||'',amb:am?am.code:'',sc:x.sc||'',k,b:bb,a:aa})}
   if(!items.length)return;const t=NOW();const gid=t+'_'+Math.random().toString(36).slice(2,8);const np=Math.ceil(items.length/HMAX);
   /* todo el detalle se guarda: en tandas de HMAX, documentos del mismo grupo (g, parte pt de np); la ventana los junta */
-  for(let i=0;i<np;i++)fcol('lhlog').doc(i?gid+'_'+i:gid).set({t,d:todayIso(),by:(me.email||'').toLowerCase(),n:me.name||me.email,label:label||'',tab:U.tab||'',items:items.slice(i*HMAX,(i+1)*HMAX),...(np>1?{g:gid,pt:i,np}:{}),...(extra||{})}).catch(()=>{});
+  /* en segundo plano, pero si falla se ve en la barra (bgWrite, base.js) */
+  for(let i=0;i<np;i++)bgWrite(fcol('lhlog').doc(i?gid+'_'+i:gid).set({t,d:todayIso(),by:(me.email||'').toLowerCase(),n:me.name||me.email,label:label||'',tab:U.tab||'',items:items.slice(i*HMAX,(i+1)*HMAX),...(np>1?{g:gid,pt:i,np}:{}),...(extra||{})}));
   return gid}catch(e){}}
 /** junta las partes de un mismo cambio (g) en una sola entrada */
 function histMerge(L){const out=[],by=new Map();for(const d of L.slice().sort((a,b)=>(a.pt||0)-(b.pt||0))){if(!d.g){out.push(d);continue}const c=by.get(d.g);if(c){c.items=[...c.items,...(d.items||[])];continue}const n={...d,items:[...(d.items||[])]};by.set(d.g,n);out.push(n)}return out}

@@ -275,7 +275,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const c={none:0,seq:0,run:0,stop:0,ok:0,no:0};act.forEach(i=>c[i.st.k]++);const closed=c.ok+c.no;
   const stopL=act.filter(i=>i.st.k==='stop');const stopMot={};let later=0;stopL.forEach(i=>{const m=String(i.st.lv&&i.st.lv.mot||'Sin motivo').split(' — ')[0];if(m===STOP_INFO){later++;return}stopMot[m]=(stopMot[m]||0)+1});
   /* PPC diario de hoy con los filtros (misma base que Indicadores › Diario) */
-  const dRows=dayData([d],vsP).rows.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
+  const dRows0=dayData([d],vsP).rows;const dRows=dRows0.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
   const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)W.push({w,...o})}
   const PW=W.find(o=>o.w===cw)||null;const full=W.filter(o=>o.w<cw&&o.ppc!=null&&o.ev>=o.n).slice(-4);const avg4=full.length?full.reduce((t,o)=>t+o.ok,0)/Math.max(1,full.reduce((t,o)=>t+o.n,0)):null;
   /* PPC por subcontratista: últimas 4 semanas congeladas */
@@ -283,7 +283,8 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const scAgg={};Wall.slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev}));
   const scRows=Object.entries(scAgg).filter(([,v])=>v.ev).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
   /* causas de no cumplimiento · 30 días (registros verificados, con los filtros) */
-  const cn={};dayData(Array.from({length:30},(_,k)=>addD(d,-29+k)),vsP).rows.forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
+  /* los 29 días anteriores y hoy por separado (auditoría de código 08/10, M5): dayData tiene memoria y hoy ya se calculó arriba */
+  const cn={};[...dayData(Array.from({length:29},(_,k)=>addD(d,-29+k)),vsP).rows,...dRows0].forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
   const top=Object.entries(cn).sort((a,b)=>b[1]-a[1]).slice(0,6);
   /* restricciones abiertas (afectan a actividades que pasan los filtros) */
   const RS=restrInScope().filter(rOpenC).filter(r=>{const x=r.actId&&S.act.get(r.actId);if(!DB_.sc.size&&!DB_.ty)return true;if(!x)return!DB_.ty&&(!r.sc||!DB_.sc.size||DB_.sc.has(r.sc));return dashOk(x.sc,x.name)});

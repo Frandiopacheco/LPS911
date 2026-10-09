@@ -11,7 +11,10 @@ const SZ_PAL=['#1F77B4','#D62728','#2CA02C','#9467BD','#FF7F0E','#17BECF','#8C56
 const szGeo=(o,v)=>o&&o.geo&&o.geo[v]&&o.geo[v].length>=6?o.geo[v]:null;
 const szCol=o=>o==='a'?'ambientes':'sectors';
 /** Sectores y ambientes del piso, en el orden del lookahead */
-function szTree(pid){const t=tree().find(x=>x.p.id===pid);return t?t.secs.map(({s,ambs})=>({s,ambs:ambs.map(({a,acts})=>({a,n:acts.length}))})):[]}
+/* memorizado por piso con DV: renderPlanos lo pedía N+6 veces y el Plan diario en cada dibujo (szLayer), y cada vez rehacía tree()
+   entero (auditoría de código 08/10, P5). No mutar lo que devuelve. */
+const SZT={k:-1,m:null};
+function szTree(pid){const k=typeof DV!=='undefined'?DV:-2;if(SZT.k!==k||!SZT.m){const m=new Map();for(const t of tree())m.set(t.p.id,t.secs.map(({s,ambs})=>({s,ambs:ambs.map(({a,acts})=>({a,n:acts.length}))})));SZT.k=k;SZT.m=m}return SZT.m.get(pid)||[]}
 function szStats(pid,vista){let n=0,k=0;for(const{ambs}of szTree(pid))for(const{a}of ambs){n++;if(vista?szGeo(a,vista):a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6))k++}return{n,k}}
 function szBase(pid){const API=window.__plano;const bs=API&&API.basesOf?API.basesOf(pid):[];if(!bs.some(b=>b.id===SZ.vista))SZ.vista=(bs[0]||{}).id||'';return bs}
 

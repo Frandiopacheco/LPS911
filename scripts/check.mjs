@@ -12,6 +12,24 @@ export function appFiles(web) {
   return { html, js, css };
 }
 
+/** Nombres globales repetidos entre archivos de js/: son scripts clásicos que comparten las variables globales, así que una
+    `function X` nueva en otro archivo reemplaza a la anterior sin ningún aviso (pasó: una función pisó a otra del mismo nombre).
+    Se revisan las declaraciones al inicio de línea (nivel superior): function / async function / class / const / let / var. */
+export function dupGlobals(web, js) {
+  const by = new Map();
+  for (const f of js) {
+    const p = path.join(web, f);
+    if (!fs.existsSync(p)) continue;
+    const code = fs.readFileSync(p, 'utf8');
+    for (const m of code.matchAll(/^(?:async\s+)?function\s*\*?\s*([\w$]+)|^class\s+([\w$]+)|^(?:const|let|var)\s+([\w$]+)\s*=/gm)) {
+      const n = m[1] || m[2] || m[3];
+      if (!by.has(n)) by.set(n, new Set());
+      by.get(n).add(f);
+    }
+  }
+  return [...by].filter(([, s]) => s.size > 1).map(([n, s]) => `✗ «${n}» está definido en más de un archivo (${[...s].join(', ')}): los nombres son globales, uno pisa al otro; cambia uno de los dos`);
+}
+
 export function checkWeb(web) {
   const errs = [];
   const parse = (name, code) => { try { new vm.Script(code, { filename: name }); } catch (e) { errs.push(`✗ ${name}: ${e.message}`); } };
@@ -42,6 +60,7 @@ export function checkWeb(web) {
     parse(f, code);
   }
   if (js.length && js[js.length - 1] !== 'js/inicio.js') errs.push('✗ js/inicio.js (el arranque) debe ser el último archivo que carga index.html');
+  errs.push(...dupGlobals(web, js));
   // Todo el código junto debe poder leerse como un solo programa (evita nombres repetidos entre archivos)
   if (!errs.length) parse('js/* (todos juntos)', js.map(f => fs.readFileSync(path.join(web, f), 'utf8')).join('\n;\n'));
   for (const f of ['plano.js', 'sw.js']) parse(f, fs.readFileSync(path.join(web, f), 'utf8'));

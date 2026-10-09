@@ -24,7 +24,8 @@ Estado **actual** de cada actividad del catálogo en cada ambiente (pendiente / 
 
 Un ambiente tiene una actividad si viene de: su **tipo** (`mtipo.acts`), el **lookahead** (fila de `acts` cuyo nombre normalizado está en algún `al`: `mxAli()`), o se agregó **a mano** (clave en `mamb.c`). Estado: el de `mamb.c` si existe; si no, lo **propone** el sistema (`sug`, borde punteado): terminado si todas sus filas del lookahead están en `DONE`, si no pendiente. «Validar» guarda lo propuesto tal cual.
 
-- `mnk(s)`: sin tildes, minúsculas, solo letras y números. El archivo de carga inicial usa la misma regla.
+- `mnk(s)`: sin tildes, minúsculas, solo letras y números. El archivo de carga inicial usa la misma regla. Tiene memoria (`MNK`, se vacía al pasar de 5000 nombres; auditoría de código 08/10, L1).
+- Selección (`mxPaintSel`, M8): solo cambia la clase `sl` de las celdas que entran o salen de la selección. `mxSelIx(tabla)` arma una vez por tabla dibujada el índice `amb|cat → td` y lo pintado (`MX.ix`); al redibujar la tabla es otra y se rehace. La barra de abajo solo actualiza el número si ya está.
 - Nombres del lookahead que no están en ningún `al` salen en el aviso «N nombres… no están en el catálogo» → `mxMapDlg` agrega el alias (`arrayUnion`) a la actividad elegida. No toca el lookahead.
 
 ## Interfaz

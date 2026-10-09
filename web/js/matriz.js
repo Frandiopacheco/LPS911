@@ -14,7 +14,10 @@ let mxSubs=null;
 
 /** nombre normalizado para ligar el lookahead (texto libre) con el catálogo: sin tildes, minúsculas, solo letras y números.
     El archivo de carga inicial usa la misma regla (alias `al` de cada actividad). */
-const mnk=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+/* con memoria (auditoría de código 08/10, L1): el lookahead la llama varias veces por fila en cada dibujo; se vacía al pasar de 5000 nombres */
+const MNK=new Map();
+const mnk=s=>{const k=String(s||'');let r=MNK.get(k);if(r!==undefined)return r;
+  r=k.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(MNK.size>5000)MNK.clear();MNK.set(k,r);return r};
 
 /* se carga al abrir la pestaña (no pesa en el arranque de los demás) */
 /* el catálogo también lo usa el lookahead (nombres de actividad): se carga aparte y antes que el resto de la matriz */
@@ -214,8 +217,16 @@ function mxCellAt(td){const tr=td.closest('tr[data-amb]');if(!tr||!MX.view)retur
 function mxRect(a,b){const S2=new Set();const ambs=[];MX.view.rows.forEach(r=>r.ambs.forEach(x=>ambs.push(x.id)));const cells=mxCells();
   const r0=Math.min(a.r,b.r),r1=Math.max(a.r,b.r),c0=Math.min(a.ci,b.ci),c1=Math.max(a.ci,b.ci);
   for(let r=r0;r<=r1;r++){const C=cells.get(ambs[r])||{};for(let c=c0;c<=c1;c++){const id=MX.view.cols[c].id;if(C[id])S2.add(ambs[r]+'|'+id)}}return S2}
-function mxPaintSel(){const t=$('#mxt');if(!t)return;t.querySelectorAll('td.mc').forEach(td=>{const c=mxCellAt(td);td.classList.toggle('sl',!!c&&MX.sel.has(c.amb+'|'+c.cat))});
-  const old=$('#mxsb');const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
+/* pinta la selección (auditoría de código 08/10, M8): solo toca las celdas cuyo estado cambió. El índice amb|cat → td y lo que
+   está pintado se arman una vez por tabla dibujada (al redibujar, la tabla es otra y se rehacen) */
+function mxSelIx(t){if(MX.ix&&MX.ix.t===t)return MX.ix;const m=new Map(),on=new Set();const cols=MX.view?MX.view.cols:[];
+  t.querySelectorAll('tr[data-amb]').forEach(tr=>{const amb=tr.dataset.amb;tr.querySelectorAll('td.mc').forEach(td=>{const c=cols[+td.dataset.k];if(!c)return;const k=amb+'|'+c.id;m.set(k,td);if(td.classList.contains('sl'))on.add(k)})});
+  return MX.ix={t,m,on}}
+function mxPaintSel(){const t=$('#mxt');if(!t)return;const ix=mxSelIx(t);
+  for(const k of ix.on)if(!MX.sel.has(k)){const td=ix.m.get(k);if(td)td.classList.remove('sl');ix.on.delete(k)}
+  for(const k of MX.sel)if(!ix.on.has(k)){const td=ix.m.get(k);if(td){td.classList.add('sl');ix.on.add(k)}}
+  const old=$('#mxsb');const n=MX.sel.size;if(old&&n&&old.firstElementChild){old.firstElementChild.textContent=`${n} ${n===1?'celda':'celdas'}`;return}
+  const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
 function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
 /* vista de escritorio (oct 2026): tamaño de celda (U.mxZ 0/1/2), tabla del alto de la pantalla, saltar a un SC, ayuda y SC en menús */
 const mxZ=()=>{const z=+U.mxZ;return z>=0&&z<=2?z:1};

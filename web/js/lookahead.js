@@ -68,9 +68,10 @@ function buildLookShell(main){
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
-  $('#fq').oninput=e=>{U.q=e.target.value;requestRender()};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
+  /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
+  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
-  $('#fclr').onclick=()=>{U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
+  $('#fclr').onclick=()=>{clearTimeout(lkQTimer);lkQTimer=0;U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};
@@ -98,7 +99,7 @@ function buildLookShell(main){
   wireGrid($('#grid'));$('#gw').addEventListener('scroll',()=>{closeQEditor(true);virtScroll()},{passive:true});
   main.dataset.built='1';
 }
-let gridRows=null,gridHead='';
+let gridRows=null,gridHead='',lkQTimer=0;
 function renderLook(main){if(typeof ensureMx==='function')ensureMx();
   if(isMob()&&!U.lookFull){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
@@ -130,7 +131,7 @@ function renderLookMob(main){ensureDaily(addD(weekStart(U.week),-7));
   if(!n)h+=`<div class="empty">No hay actividades programadas este día${U.sc||U.sector?' con estos filtros':''}.</div>`;
   for(const{p,a,L}of groups){h+=`<div class="camb"><span class="mono">${U.piso?'':esc(p.code)+' · '}${esc(a.code)}</span>${esc(a.name)}</div>`;
     for(const x of L){const c=conOf(x.sc);const rc=d<=today?recOf(d,x.id):null;const q=hasM(x)?(x.qty||{})[d]:null;const ds=new Set(x.days||[]);
-      h+=`<article class="lmc" data-a="${x.id}" style="--c:${c.color}"><div class="t"><b>${esc(x.name||'(sin nombre)')}</b>${rc?`<span class="stt ${ST[rc.status].c}">${ST[rc.status].i} ${ST[rc.status].t}</span>`:''}</div>
+      h+=`<article class="lmc" data-a="${x.id}" style="--c:${c.color}"><div class="t"><b>${esc(x.name||'(sin nombre)')}</b>${rc?(()=>{const so=ST[rc.status]||ST.no;return`<span class="stt ${so.c}">${so.i} ${so.t}</span>`})():''}</div>
         <div class="s">${esc(c.name)}${q!=null?` · ${fq(q)} ${esc(x.und||'')}`:''}${pend[x.id]?` · <span class="rw">⚠ ${pend[x.id]} restricción${pend[x.id]>1?'es':''}</span>`:''}${x.obs?' · <span class="rw">con observación</span>':''}</div>
         <span class="mini" style="--c:${c.color}">${wd.map((y,i)=>`<i class="${ds.has(y)?'on':''}">${DL[i]}</i>`).join('')}</span></article>`}}
   h+=`<div class="lmfoot"><button class="ib" id="lmfull">Ver tabla completa del lookahead</button><span class="note">Para editar el lookahead usa una PC. Cambia de semana con las flechas de arriba.</span></div></div>`;
@@ -154,7 +155,8 @@ function renderLookInner(main){
   $('#gw').classList.toggle('meet',U.meeting);$('#gw').classList.toggle('ro-mode',!canWrite);
   const days=winDays();const dset=new Set(days.map(x=>x.d));
   {const fd=$('#fday');const wIn=U.wkF&&U.wkF>=U.week&&U.wkF<U.week+U.win;const hv=U.day&&days.some(x=>x.d===U.day)?`<span class="dpill">Solo ${DOWN[(pd(U.day).getUTCDay()+6)%7].toLowerCase()} ${fmtD(U.day)}<button id="fdayx" aria-label="Ver todos los días" title="Ver todos los días">&times;</button></span>`:wIn?`<span class="dpill">Solo semana ${U.wkF} (${fmtD(weekDays(U.wkF)[0])} – ${fmtD(weekDays(U.wkF)[5])})<button id="fdayx" aria-label="Ver todas las semanas" title="Ver todas las semanas">&times;</button></span>`:'';if(fd.innerHTML!==hv){fd.innerHTML=hv;const bx=$('#fdayx');if(bx)bx.onclick=()=>{U.day='';U.wkF=0;requestRender()}}}
-  const cnt={};for(const a of S.act.values()){if(vset.has(pisoOfAmb(a.ambId))&&(U.day?(a.days||[]).includes(U.day):U.wkF?(a.days||[]).some(d=>weekDays(U.wkF).includes(d)):(a.days||[]).some(d=>dset.has(d))))cnt[a.sc]=(cnt[a.sc]||0)+1}
+  /* (auditoría de código 08/10, L5) los días de «Solo semana N» se calculan una vez, no por día de cada actividad */
+  const cnt={};{const wkS=U.wkF?new Set(weekDays(U.wkF)):null;for(const a of S.act.values()){const ad=Array.isArray(a.days)?a.days:[];if(vset.has(pisoOfAmb(a.ambId))&&(U.day?ad.includes(U.day):wkS?ad.some(d=>wkS.has(d)):ad.some(d=>dset.has(d))))cnt[a.sc]=(cnt[a.sc]||0)+1}}
   const present=new Set();for(const a of S.act.values()){const am=S.amb.get(a.ambId);if(!am||!vset.has(pisoOfAmb(a.ambId)))continue;if(U.sector&&am.sectorId!==U.sector)continue;present.add(a.sc)}
   const sl=scSel();const cons=[...S.con.values()].filter(c=>present.has(c.id)||sl.includes(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
   const lg=cons.map(c=>`<button class="chip${sl.includes(c.id)?' on':''}${sl.length&&!sl.includes(c.id)?' dim':''}" data-id="${c.id}" style="--c:${c.color}" title="${esc((c.partida?c.partida+' · ':'')+'Clic: solo este · Ctrl+clic: sumar o quitar varios')}"><i></i>${esc(c.name)}${cnt[c.id]?` <b>${cnt[c.id]}</b>`:''}</button>`).join('');
@@ -166,12 +168,22 @@ function renderLookInner(main){
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="Terminadas y confirmadas en la Matriz. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
 }
+/* (auditoría de código 08/10, L6) aviso en la consola, una sola vez por actividad, de la fila que no se pudo dibujar */
+const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(id))return;LKBADW.add(id);console.warn('Lookahead: fila con dato inválido',id,err)}
+/* (auditoría de código 08/10, L12) caché del texto de búsqueda por fila (se vacía cuando cambia DV) */
+const LKQT={v:-1,m:new WeakMap()};
 let LK_PAST=0,LK_DONE=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
 function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
   const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
   const conOpts=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  /* (auditoría de código 08/10, L6) días que no son una lista (dato dañado) se leen como «sin días» en vez de romper la grilla */
+  const DY=x=>Array.isArray(x.days)?x.days:[];
+  /* (auditoría de código 08/10, L12) texto de búsqueda de cada fila: se arma una vez por versión de los datos (DV) */
+  if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
+  /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
+  const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':''),f:fmtD(x2.d),past:x2.d<=today}));
   const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';
   let head='<colgroup><col class="s0"><col class="s1"><col class="s2"><col class="s3"><col class="s4"><col class="cU"><col class="cM"><col class="cS"><col class="cN"><col class="cI"><col class="cF">'+'<col>'.repeat(nd)+'</colgroup>';
   head+='<thead><tr><th class="fx s0" rowspan="2">Ítem</th><th class="fx s1" rowspan="2">Código</th><th class="fx s2" rowspan="2">Ambiente</th><th class="fx s3" rowspan="2">Subcontratista</th><th class="fx s4" rowspan="2">Actividad</th><th class="fx cU" rowspan="2">Und</th><th class="fx cM" rowspan="2">Metrado</th><th class="fx cS" rowspan="2" title="Metrado total menos lo programado">Saldo</th><th class="fx cN" rowspan="2" title="Días programados">Días</th><th class="fx cI" rowspan="2">Inicio</th><th class="fx cF" rowspan="2">Fin</th>';
@@ -190,17 +202,18 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
         let nPast=0,nDone=0;
         const vis=acts.filter(x=>{
           if(RVF&&!x._rv)return false;
-          if(hidePast&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&(x.days||[]).length&&!(x.days||[]).some(d=>d>=w0)){nPast++;return false}
+          const xd=DY(x);
+          if(hidePast&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&xd.length&&!xd.some(d=>d>=w0)){nPast++;return false}
           /* terminada y confirmada en la Matriz: el ambiente queda limpio para programar («Ver terminadas» las muestra) */
           if(hideDone&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&mxDoneSt(x)==='ok'){nDone++;return false}
           if(!scOk(x.sc))return false;
-          if(U.onlyWin&&!(x.days||[]).some(d=>dset.has(d)))return false;
+          if(U.onlyWin&&!xd.some(d=>dset.has(d)))return false;
           if(U.onlyRestr&&!pr.get(x.id))return false;
           if(U.onlyObs&&!x.obs)return false;
-          if(U.day&&!(x.days||[]).includes(U.day)&&!recOf(U.day,x.id))return false;
-          if(wkSet&&!(x.days||[]).some(d=>wkSet.has(d)))return false;
+          if(U.day&&!xd.includes(U.day)&&!recOf(U.day,x.id))return false;
+          if(wkSet&&!xd.some(d=>wkSet.has(d)))return false;
           if(aset&&!aset.has(an(x.name)))return false;
-          if(qs.length){const t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();if(!qs.some(w=>t.includes(w)))return false}
+          if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
         LK_PAST+=nPast;LK_DONE+=nDone;
         if(!vis.length&&(filt||acts.length>nPast+nDone))continue;
@@ -224,30 +237,39 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
         const ambCells=`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length){shown++;rows.push({k:'a:'+a.id,h:`<tr class="ar first"><td class="s0"></td>${ambCells}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`});continue}
         vis.forEach((x,i)=>{
-          shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);const c=conOf(x.sc);const st=actStats(x);const ds=new Set(x.days||[]);const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
+          shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
+          /* (auditoría de código 08/10, L6) una fila con datos dañados se muestra como «⚠ dato inválido»: no deja la grilla en blanco */
+          try{
+          const c=conOf(x.sc);const st=actStats(x);const ds=new Set(DY(x));const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
           let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
           if(i===0)h+=ambCells;
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
-          h+=`<td class="s4 act${(()=>{const nb=(x.obs?1:0)+((pr.get(x.id)||isNew)?1:0)+(typeof libState==='function'&&libState(x)?1:0)+(typeof mxRowWarn==='function'&&(mxRowWarn(x)||mxDonePend(x))?1:0)+(typeof mxRowCat==='function'&&mxRowCat(x)?1:0);return nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''})()}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${pr.get(x.id)?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(pr.get(x.id)?1:0)+(typeof libState==='function'&&libState(x)?1:0)):''}${typeof libBadge==='function'?libBadge(x).replace('class="lqbadge"',(pr.get(x.id)||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${pr.get(x.id)?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${pr.get(x.id)>1?pr.get(x.id):''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
+          /* (auditoría de código 08/10, L1) liberación, catálogo y alertas de la Matriz: una vez por fila (antes, 2 a 4 veces cada uno) */
+          const prn=pr.get(x.id);const lb=typeof libOf==='function'?libOf(x.id):null;const lst=lb?lb.st:'';const mxc=typeof mxRowCat==='function'?mxRowCat(x):null;
+          const mxw=typeof mxRowWarn==='function'?mxRowWarn(x):null;const mxd=!mxw&&typeof mxDonePend==='function'?mxDonePend(x):false;
+          const nb=(x.obs?1:0)+((prn||isNew)?1:0)+(lst?1:0)+(mxw||mxd?1:0)+(mxc?1:0);
+          h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=U.qmode==='metrado';
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
           h+=`<td class="ro cN">${st.n||''}</td><td class="ro cI">${fmtS(st.ini)}</td><td class="ro cF">${fmtS(st.fin)}</td>`;
           const ptip=(x._rv||pv||PM())?propRowTip(x,pv):'';const ptt=ptip?' · Propuesta: '+esc(ptip):'';
-          for(let k=0;k<nd;k++){const x2=days[k];const on=ds.has(x2.d);let cl='d';if(!isWork(x2.d))cl+=' hol';
+          for(let k=0;k<nd;k++){const x2=days[k];const di=DI[k];const on=ds.has(x2.d);let cl=di.pre;
             if(on){cl+=' on';if(k===0||!ds.has(days[k-1].d))cl+=' rs';if(k===nd-1||!ds.has(days[k+1].d))cl+=' re'}
             if(sd){if(on&&!sd.has(x2.d)&&!isNew)cl+=' add';if(!on&&sd.has(x2.d))cl+=' rem'}
             if(pv){if(!on&&pv.add.has(x2.d))cl+=' pa';if(on&&pv.del.has(x2.d))cl+=' pr'}
             if(x._rv){const od=x._rv.off?new Set(x._rv.off.days||[]):null;if(od&&!x._rv.del){if(!on&&od.has(x2.d))cl+=' rvo';if(on&&!od.has(x2.d))cl+=' rvn'}if(on&&rvC&&rvC.has(x2.d))cl+=' rvc';if(rvP&&rvP.has(x2.d))cl+=' rvp'}
-            if(cis&&!on&&cis.has(x2.d))cl+=' cin';if(on&&libDay(x,x2.d))cl+=' lib';if(x2.i===0)cl+=' wk0';if(x2.d===today)cl+=' tdy';if(x2.d===U.day)cl+=' dsel';if(a.hito===x2.d)cl+=' hito';
+            if(cis&&!on&&cis.has(x2.d))cl+=' cin';const lbd=on&&libDay(x,x2.d);if(lbd)cl+=' lib';cl+=di.post;if(a.hito===x2.d)cl+=' hito';
             /* día que no fue por decisión del plan diario: ↷ con el motivo y a dónde pasó */
             const rp=!on&&x.rpl&&x.rpl[x2.d];if(rp)cl+=' rpl';
-            const rc=x2.d<=today?recOf(x2.d,x.id):null;const mk=(rc?`<i class="dm ${ST[rc.status].c}">${ST[rc.status].i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${ST[rc.status].t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
-            if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}" data-d="${x2.d}" title="${fmtD(x2.d)}: ${v!=null?fq(v)+' '+esc(x.und||''):'sin metrado asignado'}${mt}"><span class="qv">${v!=null?fq(v):'•'}</span>${mk}</td>`}
-            else h+=`<td class="${cl}" data-d="${x2.d}"${cl.includes(' lib')?` title="${fmtD(x2.d)} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${fmtD(x2.d)}${mt}"`:''}>${mk}</td>`}
+            /* (auditoría de código 08/10, L6) estado de Campo desconocido: se muestra como «No cumplido» en vez de romper la grilla */
+            const rc=di.past?recOf(x2.d,x.id):null;const rst=rc?ST[rc.status]||ST.no:null;const mk=(rc?`<i class="dm ${rst.c}">${rst.i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${rst.t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
+            if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'sin metrado asignado'}${mt}"><span class="qv">${v!=null?fq(v):'•'}</span>${mk}</td>`}
+            else h+=`<td class="${cl}" data-d="${x2.d}"${lbd?` title="${di.f} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${di.f}${mt}"`:''}>${mk}</td>`}
           rows.push({k:'x:'+x.id+(i===0?':'+a.id+':'+rs:''),h:h+'</tr>'});
+          }catch(err){lkBadRow(x,err);rows.push({k:'x:'+x.id+(i===0?':'+a.id+':'+rs:''),h:`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells:''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`})}
         });
       }
     }
@@ -475,6 +497,10 @@ function wireGrid(tbl){
 window.addEventListener('pointermove',e=>{if(qsel){const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(td&&td.parentElement.dataset.a===qsel.a&&!qsel.cells.has(td.dataset.d)){const tr=td.parentElement;const all=[...tr.querySelectorAll('td.d')];const i0=all.findIndex(t=>t.dataset.d===qsel.start),i1=all.indexOf(td);qsel.cells.forEach(t=>t.classList.remove('sel'));qsel.cells=new Map();all.slice(Math.min(i0,i1),Math.max(i0,i1)+1).forEach(t=>{t.classList.add('sel');qsel.cells.set(t.dataset.d,t)})}return}
   if(!paint)return;const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(td)paintCell(td)});
 window.addEventListener('pointerup',()=>{if(paint)endPaint();if(qsel)endQSel()});
+/* (auditoría de código 08/10, L7) si el puntero se cancela (lápiz, gesto del sistema) o la ventana pierde el foco a medio pintar,
+   no llega el pointerup: se descarta lo pintado SIN guardar y la grilla vuelve a mostrar lo que hay (antes el pincel quedaba pegado) */
+function lkPaintAbort(){if(!paint&&!qsel)return;paint=null;if(qsel){qsel.cells.forEach(t=>t.classList.remove('sel'));qsel=null}gridRows=null;requestRender()}
+window.addEventListener('pointercancel',lkPaintAbort);window.addEventListener('blur',lkPaintAbort);
 let qsel=null,qtap=null,qed=null;
 function endQSel(){const q=qsel;qsel=null;const cells=[...q.cells.values()];if(cells.length===1){cells[0].classList.remove('sel');openQEditor(cells[0]);return}
   const x=S.act.get(q.a);if(!x){requestRender();return}const ds=[...q.cells.keys()].sort();const inRange=ds.reduce((s,d)=>s+(+(x.qty||{})[d]||0),0);const avail=r2(x.metrado-(progSum(x)-inRange));const und=esc(x.und||'');
