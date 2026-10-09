@@ -110,10 +110,20 @@ window.__uiAskNative = true;
   const docSnap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) }; };
   const ops = { '==': (a, b) => a === b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '<': (a, b) => a < b, '!=': (a, b) => a !== b,
     in: (a, b) => (b || []).includes(a), 'array-contains': (a, b) => Array.isArray(a) && a.includes(b) };
-  function qSnap(n, filters, lim) {
+  /* prev (de cada suscripción): id → JSON de la última foto que vio; docChanges() trae solo lo que cambió desde entonces,
+     como Firestore (la primera foto: todo 'added'). Sin prev (get), todo 'added'. */
+  function qSnap(n, filters, lim, prev) {
     let docs = [...col(n).keys()].map(id => docSnap(n, id)).filter(s => filters.every(([f, op, v]) => ops[op]((s.data() || {})[f], v)));
     if (lim) docs = docs.slice(0, lim);
-    return { docs, size: docs.length, empty: !docs.length, forEach(f) { docs.forEach(f); }, docChanges: () => docs.map(doc => ({ type: 'added', doc })), metadata: { hasPendingWrites: false, fromCache: false } };
+    let changes;
+    if (!prev) changes = docs.map(doc => ({ type: 'added', doc }));
+    else {
+      changes = []; const seen = new Set();
+      for (const doc of docs) { seen.add(doc.id); const j = JSON.stringify(col(n).get(doc.id)); const o = prev.get(doc.id);
+        if (o === undefined) changes.push({ type: 'added', doc }); else if (o !== j) changes.push({ type: 'modified', doc }); prev.set(doc.id, j); }
+      for (const [id, j] of [...prev]) if (!seen.has(id)) { prev.delete(id); const d = JSON.parse(j); changes.push({ type: 'removed', doc: { id, exists: false, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) } }); }
+    }
+    return { docs, size: docs.length, empty: !docs.length, forEach(f) { docs.forEach(f); }, docChanges: () => changes, metadata: { hasPendingWrites: false, fromCache: false } };
   }
   const cbOf = a => a.find(f => typeof f === 'function');
   /* sin señal (pruebas): con window.__dbHold = true cada escritura se aplica al momento en la base, como la caché local de
@@ -150,7 +160,7 @@ window.__uiAskNative = true;
       where: (f, op, v) => colRef(n, [...filters, [f, op, v]], lim),
       orderBy: () => q, limit: k => colRef(n, filters, k), startAt: () => q, startAfter: () => q, endAt: () => q,
       get: async () => qSnap(n, filters, lim),
-      onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(qSnap(n, filters, lim)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
+      onSnapshot(...a) { const cb = cbOf(a); const prev = new Map(); const s = { n, fire: () => cb(qSnap(n, filters, lim, prev)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
     };
     return q;
   }

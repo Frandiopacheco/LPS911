@@ -209,7 +209,7 @@ function qkMark(col,id){const k=COLS[col];if(!k)return;const key=col+'/'+id;cons
 /** ¿la foto que llega para col/id debe esperar? (hay una escritura propia reciente): se guarda la última (v = datos o null si ya no está) */
 function qkHold(col,id,v){const o=QK[col+'/'+id];if(!o)return false;o.has=true;o.v=v;return true}
 function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)return;const k=COLS[o.col];const cur=S[k].get(o.id)||(ARCH[k]&&ARCH[k].get(o.id))||null;
-  if(canon(cur)===canon(o.v))return;colSet(k,o.id,o.v);DV++;if(ready)requestRender()}
+  if(canon(cur)===canon(o.v))return;S[k]=new Map(S[k]);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v);DV++;if(ready)requestRender()}
 /** pone (o quita, v=null) un documento en S/ARCH según su archivo */
 function colSet(k,id,v){const AR=ARCH[k];if(!v){S[k].delete(id);if(AR)AR.delete(id);return}if(v.arch&&AR){S[k].delete(id);AR.set(id,v)}else{if(AR)AR.delete(id);S[k].set(id,v)}}
 /* para la carga entera de una colección (primera foto): lo que tiene escritura propia reciente se queda con la versión local */
@@ -360,7 +360,18 @@ async function memFirst(ref){const srv=ref.get({source:'server'});
   try{return await ref.get()}catch(e){return null}}
 /* suscripción a una colección entera (COLS de Last Planner, TCOLS del tareo); si se cae, se reabre sola (snapFail) */
 function subCol(col,k,lps){let un=null;const key='col:'+col;
-  const open=()=>{un=fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,lps&&col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));if(lps)keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;snapOk(key);onData()},
+  const mk=d=>lps&&col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id};
+  /* fotos incrementales (auditoría C4/L11, oct 2026): la primera foto carga todo; después solo se procesa lo que cambió
+     (snap.docChanges()). Con 2000 actividades, cada cambio ya no vuelve a leer y normalizar todas. Los Map se copian (su
+     identidad cambia como antes: cachés como cliActs comparan S.act===…), pero los objetos de lo que no cambió son los mismos. */
+  const open=()=>{let first=true;un=fcol(col).onSnapshot(snap=>{
+      if(first){first=false;const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,mk(d)));if(lps)keepQueued(col,mp);setColData(k,mp)}
+      else{const ch=snap.docChanges();if(!ch.length){snapOk(key);return}
+        const nk=new Map(S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
+        for(const c of ch){const id=c.doc.id;const v=c.type==='removed'?null:mk(c.doc);if(lps&&qkHold(col,id,v))continue;
+          nk.delete(id);if(na)na.delete(id);if(v){if(v.arch&&na)na.set(id,v);else nk.set(id,v)}}
+        S[k]=nk;if(na)ARCH[k]=na;DV++}
+      S.loaded[k]=true;snapOk(key);onData()},
     err=>{un=null;snapFail(key,err,open)})};
   open();unsubs.push(()=>{if(un)un();un=null})}
 const memOffMsg=d=>d&&d.movTo?'Tu usuario de este celular se pasó a una cuenta con DNI y contraseña: entra con tu DNI y la contraseña que te dio la oficina.':'Tu cuenta está desactivada. Habla con la oficina.';
@@ -414,17 +425,31 @@ function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&d
 function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
-  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();
+  /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
+     no vuelve a leer los datos ni recalcula las terminadas (C4): solo actualiza _pend de ese documento */
+  let first=true;
+  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{let data=true;
+      if(first){first=false;LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,liveDoc(d)))}
+      else{const all=sn.docChanges({includeMetadataChanges:true});if(!all.length&&!liveErr){snapOk('live');return}
+        const dch=new Set(sn.docChanges().map(c=>c.doc.id));data=dch.size>0;
+        for(const c of all){const id=c.doc.id;if(c.type==='removed'){LIVE.delete(id);data=true;continue}
+          const cur=LIVE.get(id);if(dch.has(id)||!cur){LIVE.set(id,liveDoc(c.doc));data=true}else{const p=!!(c.doc.metadata&&c.doc.metadata.hasPendingWrites);if(cur._pend!==p)LIVE.set(id,{...cur,_pend:p})}}}
+      if(data)doneRebuild();
       const sg=liveSig();const same=sg===LIVE_SIG&&!liveErr;LIVE_SIG=sg;liveErr=null;snapOk('live');if(ready&&!(same&&U.tab==='look'))requestRender()},
     err=>{liveErr=err&&err.code||'error';liveSub=null;snapFail('live',err,()=>{liveFrom=null;ensureLive(f)});if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
 /* lo que el Lookahead usa de los reportes en vivo: los cierres (estado, terminada, causa, quién) y de quién es el reporte; no inicio/pausa */
 let LIVE_SIG=null;
 function liveSig(){let s='';for(const[id,lv]of LIVE){const c=lv.close;if(c)s+=id+'|'+(lv.sc||'')+'|'+(lv.pisoId||'')+'|'+(lv.actId||'')+'|'+(lv.photos||[]).length+'|'+JSON.stringify(c)+'\n'}return s}
+const liveDoc=d=>({...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)});
 function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null}
 let dayP=Promise.resolve();
 function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
-  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}));doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
+  let first=true;/* la primera foto carga todo; después solo lo que cambió (C4) */
+  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{
+      if(first){first=false;DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('daily');ok();return}for(const c of ch){if(c.type==='removed')DAY.delete(c.doc.id);else DAY.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
+      doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
     err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;ensureDaily(from)});ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
 function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
@@ -436,7 +461,11 @@ const dayId=(d,pid)=>d+'_'+pid;
    tiene registro de campo (cerrar el día: saldo, terminada). El administrador puede reabrirlo con un motivo (reo; queda en log). */
 const DPL=new Map();let dplSub=null,dplFrom=null;
 function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;if(dplSub)dplSub();dplFrom=from;
-  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}));DV++;snapOk('dplan');if(ready)requestRender()},
+  let first=true;/* la primera foto carga todo; después solo lo que cambió (C4) */
+  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{
+      if(first){first=false;DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('dplan');return}for(const c of ch){if(c.type==='removed')DPL.delete(c.doc.id);else DPL.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
+      DV++;snapOk('dplan');if(ready)requestRender()},
     err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;ensureDplan(from)})});
   if(!unsubs.includes(stopDplan))unsubs.push(stopDplan)}
 function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear()}

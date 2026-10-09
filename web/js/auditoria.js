@@ -26,14 +26,20 @@ if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_
 function swWarm(){if(!navigator.serviceWorker||!navigator.serviceWorker.controller)return;setTimeout(()=>{fetch(PLANO_SRC).catch(()=>{})},8000)}
 
 /* ---- índice de actividades terminadas (no depende de cuántos días se cargan) ---- */
-const DIDX=new Map(),REOP=new Map();let didxSub=null;
-function ensureDoneIdx(){if(!db||didxSub)return;
-  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();REOP.clear();sn.docs.forEach(d=>{const v=d.data()||{},m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
-    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
-    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();snapOk('doneidx');if(ready)requestRender()},
+const DIDX=new Map(),REOP=new Map(),DIDXD=new Map();let didxSub=null;/* DIDXD: datos de cada documento (piso) del índice */
+function ensureDoneIdx(){if(!db||didxSub)return;let first=true;
+  /* la primera foto carga todo; después solo se leen los documentos que cambiaron (auditoría C4) y se rearma el índice */
+  didxSub=fcol('doneidx').onSnapshot(sn=>{
+      if(first){first=false;DIDXD.clear();sn.docs.forEach(d=>DIDXD.set(d.id,d.data()||{}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('doneidx');return}for(const c of ch){if(c.type==='removed')DIDXD.delete(c.doc.id);else DIDXD.set(c.doc.id,c.doc.data()||{})}}
+      didxAgg();doneRebuild();snapOk('doneidx');if(ready)requestRender()},
     err=>{didxSub=null;snapFail('doneidx',err,ensureDoneIdx)});/* si se cae, se reabre sola (base.js) */
   if(!unsubs.includes(stopDoneIdx))unsubs.push(stopDoneIdx)}
-function stopDoneIdx(){if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()}
+/** DIDX (terminada: la fecha más temprana entre pisos) y REOP (reapertura: la más tardía) a partir de DIDXD */
+function didxAgg(){DIDX.clear();REOP.clear();for(const v of DIDXD.values()){const m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
+    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
+    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}}}
+function stopDoneIdx(){if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear();DIDXD.clear()}
 function didxWrite(pid,map,f){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
   for(const[a,v]of Object.entries(map))d[a]=v==null?(FV&&FV.delete?FV.delete():null):v;
   bgWrite(fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}))}
