@@ -544,9 +544,17 @@ service cloud.firestore {
       allow create: if canEdit() && request.resource.data.get('by', '') == mid();
       allow update, delete: if false;
     }
+    // Plan semanal (oct 2026, pedido del dueño): congelar lo hace cualquier editor; la evaluación (res) solo la cambia el
+    // responsable del piso o el administrador (piso sin responsable: cualquier editor). Las copias __h (histOf) las crea quien descongela.
+    match /weeks/{id} {
+      allow create: if canEdit();
+      allow update: if canEdit() && (edPiso(resource.data)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['res'])
+        || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0));
+    }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
-      allow create, update: if canEdit() && dataCol(col) && col != 'pisos';
+      allow create, update: if canEdit() && dataCol(col) && col != 'pisos' && col != 'weeks';
       // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador
       // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
       allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx']));

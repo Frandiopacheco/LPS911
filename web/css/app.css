@@ -1233,6 +1233,7 @@ td.s0 .clb{margin:0;min-width:22px;padding:0 2px}
 .camb.npsec{display:flex;align-items:center;gap:8px}.camb.npsec b{font:700 12px var(--f-mono);background:var(--accent-soft);color:var(--accent);border-radius:10px;padding:1px 7px}
 .cc.npc{border-style:dashed;border-left-style:solid;cursor:pointer}
 .cc.npc .cct em{color:var(--accent);font-style:normal}
+.cc.npc .npcx{margin-top:4px;font-size:12px;color:var(--warn);font-weight:600}
 .npmore{align-self:flex-start;font-size:14px;padding:6px 0}
 .nprow{display:flex;gap:8px}.nprow .kin:first-child{flex:1;min-width:0}.nprow .kin:last-child{width:90px}
 .npph{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -3245,3 +3246,8 @@ select.rresp{max-width:100%}select.rresp.rbad{border:1px solid var(--bad)!import
 /* Recorrido: «¿Falta algo?» plegable */
 summary.mxrsq{list-style:none;justify-content:flex-start}summary.mxrsq::-webkit-details-marker{display:none}summary.mxrsq::before{content:"▸";color:var(--ink2);transition:transform var(--t-fast) var(--ease)}.mxrsug[open]>summary.mxrsq::before{transform:rotate(90deg)}summary.mxrsq{min-height:40px}.mxrsb>#mxrpick{margin:0 0 8px}
 .mxpgw[hidden],.mxpr[hidden]{display:none}#lqm #mxpq2{flex:1;min-width:180px}
+
+/* revisión de actividades nuevas del catálogo (oct 2026) */
+.mxrev .mxrb{text-align:right}.mxrev .mxrb .ib{margin:2px}
+.mxrev .ib.mxdup{border-color:var(--warn);color:var(--warn)}
+.callout.mxcf{margin-top:8px}.callout.mxcf ul{margin:6px 0 0;padding-left:18px;max-height:180px;overflow:auto}
