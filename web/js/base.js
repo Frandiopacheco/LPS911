@@ -187,9 +187,10 @@ function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status
 
 /* ---------- escritura con cola por documento ---------- */
 let pending=0,lastErr=null;const chains={};
-function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0);el.classList.toggle('err',!!lastErr||!db);
+let SESS=0,SNAPPD=false;const SNAPBAD=new Map();/* suscripciones caídas que se están reintentando: clave → {n: intentos, t: temporizador} (snapFail) */
+function setStatus(){const el=$('#status');el.classList.toggle('busy',pending>0||SNAPBAD.size>0);el.classList.toggle('err',!!lastErr||!db);
   const off=navigator.onLine===false;el.classList.toggle('err',!!lastErr||!db||off);
-  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor','tcap','tasis'].includes(me.role))?'Guardado':'Solo lectura')}
+  el.lastElementChild.textContent=!db?'Sin conexión':off?(pending?'Sin internet · '+pending+' cambio(s) por subir':'Sin internet'):lastErr?lastErr:pending>0?'Guardando…':SNAPBAD.size?'Datos desactualizados · reintentando…':(typeof PM==='function'&&PM()?'Modo propuesta · guardado':canWrite||canDaily||(me&&['capataz','sc','area','veedor','tcap','tasis'].includes(me.role))?'Guardado':'Solo lectura')}
 addEventListener('online',()=>{lastErr=null;setStatus()});addEventListener('offline',()=>setStatus());
 function strip(o){const c={...o};delete c.id;return c}
 /* los días de una actividad se guardan con arrayUnion/arrayRemove (fsDiff): al leerlos se dejan ordenados y sin repetir */
@@ -225,11 +226,28 @@ function patch(col,id,partial,localApply){
 function handleWriteErr(e){const c=e&&e.code;
   if(c==='permission-denied'&&typeof AREA==='function'&&AREA()){lastErr='Sin permiso';toast('No se pudo guardar: solo puedes registrar y resolver las restricciones de '+(me.area||'tu área')+'.')}
   else if(c==='permission-denied'&&typeof SCK==='function'&&SCK()&&U.tab==='restr'){lastErr='Sin permiso';toast('No se pudo guardar la restricción: solo puedes crear o cambiar las tuyas, de actividades de tu partida y sin liberar.')}
-  else if(c==='permission-denied'){canWrite=false;lastErr='Sin permiso de edición';toast('Tu rol no permite editar. Pide al administrador el rol de Editor.');gridRows=null;render()}
+  /* un rechazo suelto no quita la edición de toda la sesión (antes dejaba todo en solo lectura por un solo documento):
+     si el rol de verdad cambió, lo corrige la suscripción a members (startSession) */
+  else if(c==='permission-denied'){lastErr='Sin permiso';toast('No se pudo guardar este cambio (permiso). Recarga la página; si sigue, revisa tu rol.')}
   else if(c==='resource-exhausted'){lastErr='Cuota diaria agotada';toast('Se alcanzó el límite diario del plan gratuito de Firebase. Los cambios se guardarán cuando se renueve la cuota.')}
   else{lastErr='Error al guardar';toast('No se pudo guardar un cambio ('+(c||'error')+'). Revisa tu conexión y vuelve a intentarlo.')}
   setStatus();
 }
+/* escritura suelta, fuera de la cola por documento (historial, índice de terminadas, responsables, registro del día cerrado):
+   no frena nada, pero cuenta en «Guardando…» y, si falla, se ve en la barra como cualquier otra */
+function bgWrite(p){pending++;setStatus();return Promise.resolve(p).then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
+
+/* ---------- suscripciones que se reabren solas ----------
+   Un onSnapshot que falla (señal, cuota, permiso) queda cerrado para siempre: se vuelve a abrir con espera creciente
+   (2 s, 5 s, 15 s y luego cada 30 s) y mientras tanto la barra dice «Datos desactualizados · reintentando…».
+   Sin avisos repetidos: solo uno si es falta de permiso. */
+function snapFail(key,err,reopen){const o=SNAPBAD.get(key)||{n:0,t:0};clearTimeout(o.t);const w=[2e3,5e3,15e3,3e4][Math.min(o.n,3)];o.n++;const tk=SESS;
+  o.t=setTimeout(()=>{if(tk!==SESS||!db)return;try{reopen()}catch(e){console.error(e)}},w);SNAPBAD.set(key,o);
+  if(o.n===1)console.warn('LPS: se cayó la suscripción «'+key+'» ('+(err&&err.code||err)+'); se reintenta sola');
+  if(err&&err.code==='permission-denied'&&!SNAPPD){SNAPPD=true;toast('Tu cuenta no tiene acceso a parte de los datos. Si sigue, pide acceso al administrador.')}
+  setStatus()}
+function snapOk(key){const o=SNAPBAD.get(key);if(!o)return;clearTimeout(o.t);SNAPBAD.delete(key);setStatus()}
+function snapReset(){SESS++;for(const o of SNAPBAD.values())clearTimeout(o.t);SNAPBAD.clear();SNAPPD=false}
 
 /* ---------- deshacer / rehacer ---------- */
 const undoS=[],redoS=[];
@@ -315,6 +333,20 @@ async function capJoin(fdb,u){const ref=fcol('members').doc('u_'+u.uid);let m=nu
   let name='';try{name=joinName||localStorage.getItem('lps.jname')||''}catch(e){name=joinName}name=(name||'Capataz').slice(0,60);
   try{await ref.set(tcap?{role:'tcap',name,inv:invCode,added:NOW()}:{role:'capataz',name,scs:d.scs,sc:d.scs[0],inv:invCode,added:NOW()})}catch(err){me=null;pendingMsg='No se pudo registrar ('+(err.code||err.message)+'). Avisa al administrador: puede que falten las reglas nuevas de Firestore.';await auth.signOut();return false}
   clearInv();setTimeout(()=>toast('¡Listo, '+name.split(' ')[0]+(tcap?'! Ya puedes llenar el tareo de tu cuadrilla.':'! Ya puedes reportar el avance de tu partida.')),1500);return true}
+/* con poca señal, leer members del servidor puede tardar mucho (quedaba en «Conectando…»): a los 2 s se usa la copia guardada
+   en el equipo, si la hay, y se sigue; la suscripción a members (startSession) corrige el rol o cierra la sesión al llegar la del servidor.
+   Sin copia guardada se sigue esperando al servidor, como antes. */
+async function memFirst(ref){const srv=ref.get({source:'server'});
+  const r=await Promise.race([srv.then(s=>({s}),e=>({e})),new Promise(ok=>setTimeout(()=>ok({t:true}),2000))]);
+  if(r.s)return r.s;
+  if(r.t){try{const c=await ref.get({source:'cache'});if(c&&c.exists)return c}catch(e){}
+    try{return await srv}catch(e){}}
+  try{return await ref.get()}catch(e){return null}}
+/* suscripción a una colección entera (COLS de Last Planner, TCOLS del tareo); si se cae, se reabre sola (snapFail) */
+function subCol(col,k,lps){let un=null;const key='col:'+col;
+  const open=()=>{un=fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,lps&&col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));if(lps)keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;snapOk(key);onData()},
+    err=>{un=null;snapFail(key,err,open)})};
+  open();unsubs.push(()=>{if(un)un();un=null})}
 const memOffMsg=d=>d&&d.movTo?'Tu usuario de este celular se pasó a una cuenta con DNI y contraseña: entra con tu DNI y la contraseña que te dio la oficina.':'Tu cuenta está desactivada. Habla con la oficina.';
 async function startSession(u,fdb){
   stopSession();
@@ -323,8 +355,7 @@ async function startSession(u,fdb){
   else if(invCode){clearInv();setTimeout(()=>toast('Ese enlace es para registrar capataces: ábrelo en el celular del capataz (aquí ya tienes tu sesión).'),2500)}
   if(!anon&&!u.emailVerified){showLogin(`Confirma tu correo: te enviamos un enlace a ${u.email}. Ábrelo y luego pulsa “Ya confirmé mi correo”. Revisa también la carpeta de spam.`,true);return}
   if(!anon)me={uid:u.uid,email:String(u.email||'').toLowerCase()};
-  const ref=fcol('members').doc(me.email);let m=null;
-  try{m=await ref.get({source:'server'})}catch(e){try{m=await ref.get()}catch(e2){m=null}}
+  const ref=fcol('members').doc(me.email);let m=await memFirst(ref);
   if((!m||!m.exists)&&isOwnerEmail(me.email)){try{await ref.set({role:'admin',name:me.email.split('@')[0],added:NOW()});m=await ref.get()}catch(e){}}
   if(!m||!m.exists){const em=me.email;me=null;pendingMsg=tCtaEs(em)?`Tu usuario ${em.split('@')[0]} ya no tiene acceso. Habla con la oficina.`:`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
   /* cuenta desactivada (members.off) o enlace de capataz pasado a una cuenta con DNI (movTo): docs/ia/tareo.md */
@@ -335,16 +366,12 @@ async function startSession(u,fdb){
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
   /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
-  if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS)){
-    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
-  }
+  if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
   ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();}
-  if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS)){
-    unsubs.push(fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,{...d.data(),id:d.id}));setColData(k,mp);S.loaded[k]=true;onData()},err=>snapErr(err)));
-  }
+  if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS))subCol(col,k,false);
   /* el asistente de tareo necesita la lista del equipo (asignar obreros a capataces) */
   const memQ=canDaily||me.role==='tasis'?fcol('members'):fcol('members').doc(me.email);
-  unsubs.push(memQ.onSnapshot(snap=>{MEM.clear();(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
+  const memCb=snap=>{snapOk('members');MEM.clear();(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
     if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
@@ -352,7 +379,8 @@ async function startSession(u,fdb){
     if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
     if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
-    renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()},()=>{}));
+    renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()};
+  let memUn=null;const memOpen=()=>{memUn=memQ.onSnapshot(memCb,err=>{memUn=null;snapFail('members',err,memOpen)})};memOpen();unsubs.push(()=>{if(memUn)memUn();memUn=null});
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
   if(rtdb&&!TAR_ONLY()){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
     conRef.on('value',s=>{if(s.val()===true&&presRef)presRef.onDisconnect().remove().then(()=>sendPresence(true)).catch(()=>{})});
@@ -369,12 +397,19 @@ function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&d
 /** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
 function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
-  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();liveErr=null;if(ready)requestRender()},err=>{liveErr=err&&err.code||'error';if(ready)requestRender()});
+  /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
+  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();
+      const sg=liveSig();const same=sg===LIVE_SIG&&!liveErr;LIVE_SIG=sg;liveErr=null;snapOk('live');if(ready&&!(same&&U.tab==='look'))requestRender()},
+    err=>{liveErr=err&&err.code||'error';liveSub=null;snapFail('live',err,()=>{liveFrom=null;ensureLive(f)});if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
-function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear()}
+/* lo que el Lookahead usa de los reportes en vivo: los cierres (estado, terminada, causa, quién) y de quién es el reporte; no inicio/pausa */
+let LIVE_SIG=null;
+function liveSig(){let s='';for(const[id,lv]of LIVE){const c=lv.close;if(c)s+=id+'|'+(lv.sc||'')+'|'+(lv.pisoId||'')+'|'+(lv.actId||'')+'|'+(lv.photos||[]).length+'|'+JSON.stringify(c)+'\n'}return s}
+function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null}
 let dayP=Promise.resolve();
 function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
-  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}));doneRebuild();dayErr=null;ok();if(ready)requestRender()},err=>{dayErr=err&&err.code;ok();if(ready&&U.tab==='campo')requestRender()});
+  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}));doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
+    err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;ensureDaily(from)});ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
 function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
 const dayId=(d,pid)=>d+'_'+pid;
@@ -385,7 +420,8 @@ const dayId=(d,pid)=>d+'_'+pid;
    tiene registro de campo (cerrar el día: saldo, terminada). El administrador puede reabrirlo con un motivo (reo; queda en log). */
 const DPL=new Map();let dplSub=null,dplFrom=null;
 function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;if(dplSub)dplSub();dplFrom=from;
-  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}));DV++;if(ready)requestRender()},()=>{});
+  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}));DV++;snapOk('dplan');if(ready)requestRender()},
+    err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;ensureDplan(from)})});
   if(!unsubs.includes(stopDplan))unsubs.push(stopDplan)}
 function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear()}
 const dplanOf=(d,pid)=>DPL.get(d+'_'+pid)||null;
@@ -408,7 +444,7 @@ function lockGuard(ops,retry){if(!me)return true;/* en modo propuesta el SC solo
   if(isAdmin){if(!LKOK){uiAsk({title:`El plan del ${lab} ya está cerrado`,text:`${lockWhy(ds[0],H[0].pid)}.`,note:'Como administrador puedes cambiarlo igual: quedará registrado en el día. El PPC del día se sigue midiendo contra lo que se publicó.',ok:'Cambiarlo igual',tone:'warn'}).then(ok=>{if(ok&&retry){LKOK=true;try{retry()}finally{LKOK=false}}});return false}
     for(const k of new Set(H.map(h=>h.d+'_'+h.pid))){const[d,pid]=[k.slice(0,10),k.slice(11)];dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'cambio en el lookahead'})}return true}
   toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
-function dplanLog(d,pid,e){if(!db)return;const ref=fcol('dplan').doc(d+'_'+pid);ref.set({date:d,pisoId:pid,log:firebase.firestore.FieldValue.arrayUnion(e)},{merge:true}).catch(()=>{})}
+function dplanLog(d,pid,e){if(!db)return;const ref=fcol('dplan').doc(d+'_'+pid);bgWrite(ref.set({date:d,pisoId:pid,log:firebase.firestore.FieldValue.arrayUnion(e)},{merge:true}))}
 /** foto de lo programado un día en un piso (lo que el plan diario deja comprometido): {actId: cantidad del día | null} */
 /** terminada antes de ese día (no por un cierre de ese mismo día): ya no se le pide nada ese día */
 function doneBefore(aid,d){const t=typeof DONE!=='undefined'&&DONE.get(aid);return!!t&&t<d}
@@ -443,11 +479,10 @@ function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar av
   if(db&&canDaily&&obj.recs)didxFromDaily(d,pid,obj.recs);doneRebuild();requestRender();
   if(!db||!canDaily)return;pending++;setStatus();const key='daily/'+id;
   chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})))
-    .then(()=>{lastErr=null},e=>{if(e&&e.code==='permission-denied'){canDaily=false;lastErr='Sin permiso';toast('Tu rol no permite registrar avance. Pide el rol Campo o Editor.')}else handleWriteErr(e)}).finally(()=>{pending--;setStatus()})}
-function stopSession(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
+    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
+function stopSession(){snapReset();unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
   for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
-function snapErr(err){const pd=err&&err.code==='permission-denied';lastErr=pd?'Sin acceso':'Conexión perdida';setStatus();toast(pd?'Tu cuenta no tiene acceso a estos datos. Pide acceso al administrador.':'Se perdió la conexión con la base de datos. Recarga la página.')}
 function onData(){
   if(!ready&&TAR_ONLY()){/* solo tareo: listo cuando cargan sus colecciones (nada de Last Planner) */
     if(typeof TCOLS==='undefined'||!Object.values(TCOLS).every(k=>S.loaded[k]))return;ready=true;clockSync();swWarm()}
@@ -579,18 +614,22 @@ function enterView(main){
     if(isMob()){k.remove()}else{main.remove();k.id='main';k.classList.remove('lkeep');k.style.cssText='';k.dataset.view='look';return k}}
   /* la entrada suave solo en páginas livianas: en el Lookahead y el Plan diario costaría más de lo que aporta */
   if(!['look','mapa','dash'].includes(U.tab))viewIn(main);return main}
+/* lo que render() hace antes de la vista (barra superior, modo propuesta, aviso de «Ver como»…): si algo de eso falla,
+   la pestaña se dibuja igual (antes un error ahí dejaba la pantalla sin redibujar). El error se anota una vez por pieza. */
+const RERR=new Set();
+function rSafe(tag,fn){try{fn()}catch(err){if(!RERR.has(tag)){RERR.add(tag);console.error('render › '+tag,err)}}}
 function render(){
   if(!ready)return;
   if(me&&TAR_ONLY())U.mod='tar';else if(U.mod==='tar'&&!canTar())U.mod='lps';
   /* cada módulo tiene sus pestañas: una del otro módulo lleva a la inicial del actual */
   if(me&&(U.mod==='tar')!==TAR_TABS.includes(U.tab))U.tab=U.mod==='tar'?'tdia':'hoy';
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
-  if(typeof dayAuto==='function')dayAuto();
-  let main=$('#main');renderTop();
-  if(U.mod==='tar'){document.body.classList.remove('cap-mode','v-dash','dash-tv');if(LKP)presStop();vaBanner()}else{
-  if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')presStop();if(U.tab==='look'||(me&&me.role==='sc'))ensureProp();pmSync();document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
+  if(typeof dayAuto==='function')rSafe('dayAuto',dayAuto);
+  let main=$('#main');rSafe('renderTop',renderTop);
+  if(U.mod==='tar'){document.body.classList.remove('cap-mode','v-dash','dash-tv');if(LKP)rSafe('presStop',presStop);rSafe('vaBanner',vaBanner)}else{
+  if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
-  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)window.__plano.zcClose();vaBanner();}
+  if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
   const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='tar'?'tdia':'look';
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
