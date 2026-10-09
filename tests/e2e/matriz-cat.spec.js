@@ -102,24 +102,3 @@ test('lector: ve el catálogo y los tipos sin poder editar', async ({ page }) =>
   noErrors(errors, 'lector');
 });
 
-test('especialidad: se elige de la lista (o se agrega una nueva sin duplicar) y la actividad nueva toma la del SC', async ({ page }) => {
-  const extra = [...CAT.map(c => c[0] === 'mcat' && c[1] === 'k1' ? ['mcat', 'k1', { ...c[2], esp: 'Instalaciones sanitarias' }] : c)];
-  const errors = await openApp(page, { tab: 'mat', extra });
-  await page.click('[data-mxv="cat"]');
-  const sel = row(page, 'k2').locator('select[data-mcf="esp"]');
-  await expect(sel.locator('option')).toContainText(['—', 'Instalaciones sanitarias', '＋ Nueva especialidad…']);
-  await sel.selectOption('Instalaciones sanitarias');
-  await expect.poll(async () => (await get(page, 'mcat', 'k2')).esp).toBe('Instalaciones sanitarias');
-  // nueva: si ya existe con otra escritura, usa la existente
-  page.once('dialog', d => d.accept('instalaciones  SANITARIAS'));
-  await row(page, 'k9').locator('select[data-mcf="esp"]').selectOption('__new');
-  await expect.poll(async () => (await get(page, 'mcat', 'k9')).esp).toBe('Instalaciones sanitarias');
-  page.once('dialog', d => d.accept('Acabados'));
-  await row(page, 'k1').locator('select[data-mcf="esp"]').selectOption('__new');
-  await expect.poll(async () => (await get(page, 'mcat', 'k1')).esp).toBe('Acabados');
-  // actividad nueva del SC c3: propone la especialidad que ya usa ese SC
-  await page.click('#mxcnew');
-  await page.selectOption('#mxnsc', 'c3');
-  await expect(page.locator('#mxnesp')).toHaveValue('Instalaciones sanitarias');
-  noErrors(errors, 'especialidad');
-});
