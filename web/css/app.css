@@ -631,6 +631,7 @@ td.s1 .ci{font:600 12px var(--f-mono)}
 textarea.ci.an{resize:none;display:block;field-sizing:content;font-weight:600;line-height:1.25;overflow:hidden;text-transform:none}
 .ambbox{position:relative}
 .ambbox .ab{position:absolute;right:2px;bottom:2px}
+.ambbox .ab.adda{bottom:auto;top:2px;font-weight:700}
 tr.ar.first>td{border-top:1px solid var(--line)}
 td.sc{border-left:4px solid var(--c)}
 td.sc select.ci{padding:0 2px 0 5px;font-size:12px;font-weight:500;appearance:none;-webkit-appearance:none;cursor:pointer;text-overflow:ellipsis}
