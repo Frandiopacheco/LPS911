@@ -296,6 +296,7 @@ test('7b · si la actividad principal tocaría otro día ya publicado, no se pub
 
 test('18 · la hora de la publicación automática se edita en Configuración (por defecto 21:00)', async ({ page }) => {
   const errors = await openApp(page, { tab: 'cfg' });
+  await page.click('[data-cfgv="pry"]');
   await expect(page.locator('#p_plc')).toHaveValue('21:00');
   await page.locator('#p_plc').fill('19:30');
   await page.locator('#p_plc').dispatchEvent('change');
@@ -329,6 +330,7 @@ test('20 · revisión de propuestas: «Rechazar todo lo visible»', async ({ pag
 
 test('21 · Configuración: subir el logo de la empresa lo guarda', async ({ page }) => {
   const errors = await openApp(page, { tab: 'cfg' });
+  await page.click('[data-cfgv="pry"]');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   await page.locator('input[data-logo="logoE"]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
   await expect(page.locator('#toast')).toContainText('Logo guardado');

@@ -166,6 +166,7 @@ test('1 · el corte se configura (día y hora) en Configuración › Proyecto', 
   const errors = await openApp(page, { tab: 'cfg', extra: [...ACTS, props({ q1: P1() })] });
   const late = () => page.evaluate(() => !!propLate(__dbGet('lhprop', 'c1').items.q1, S.act.get('q1')));
   expect(await late()).toBe(true);
+  await page.click('[data-cfgv="pry"]');
   await page.selectOption('#p_pcd', '0');
   await page.fill('#p_pch', '18:00'); await page.locator('#p_pch').dispatchEvent('change');
   await expect.poll(() => page.evaluate(() => [P().propCutDow, P().propCutHH])).toEqual([0, '18:00']);

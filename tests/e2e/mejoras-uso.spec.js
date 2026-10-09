@@ -159,6 +159,7 @@ test('Causas: el cuadro de la empresa en Configuración y la lista antigua pasa 
   const errors = await openApp(page, { tab: 'cfg', extra: [OLD] });
   await expect.poll(() => page.evaluate(() => window.__dbGet('meta', 'project').cnc), { timeout: 10000 }).toEqual(['Programación', 'Materiales', 'Control de calidad', 'Externo', 'Cliente - Supervisión', 'Errores de ejecución', 'Subcontratas', 'Equipos y herramientas', 'Administrativos', 'Diseño', 'Otros']);
   expect(await page.evaluate(() => window.__dbGet('meta', 'project').cncOld)).toEqual(['Mano de obra', 'Clima']);
+  await page.click('[data-cfgv="rst"]');
   await expect(page.locator('#main .cimpr', { hasText: 'Cliente - Supervisión' })).toContainText('CLI');
   expect(await page.evaluate(() => [cncCode('Clima'), cncCode('Mano de obra'), cncImp('Diseño'), cncImp('Subcontratas')])).toEqual(['EXT', 'SC', false, true]);
   noErrors(errors, 'causas');

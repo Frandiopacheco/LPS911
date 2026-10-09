@@ -163,6 +163,7 @@ test('Calidad marca crítica y supervisión al programar; inspectores en Configu
   await expect(page.locator(`${M} [data-lqid="Lsol"]`)).toContainText('⛔ Restringe: Tarrajeo de muros');
   // Inspectores en Configuración (siguen en libm/main, sin tocar lo antiguo)
   await openTab(page, 'cfg');
+  await page.click('[data-cfgv="cld"]');
   await page.fill('#cfgInsp', 'Ing. Uno\nIng. Tres');
   await page.locator('#cfgInsp').blur();
   await expect.poll(async () => ((await libm(page)).insp || []).join()).toBe('Ing. Uno,Ing. Tres');
