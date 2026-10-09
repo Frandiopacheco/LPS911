@@ -96,7 +96,7 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
    <div class="mxrhd"><button class="ib" id="mxrback">← Lista</button><div><h3>${esc(a.code)} · ${esc(a.name)}</h3><span class="note">${esc((secOf(a.sectorId)||{}).name||'')}${tp?' · '+esc(tp.name):''} · ${rvOk?'✓ revisado '+esc(mxRvTxt(m.rv)):m.rv?'última revisión '+esc(mxRvTxt(m.rv)):'sin revisar'}</span></div></div>
    ${open.length?`<div class="mxrl">${open.map(row).join('')}</div>`:'<p class="callout">Todo lo de este ambiente está terminado o no aplica.</p>'}
    ${done.length?`<details class="mxrdone"${MXR.showDone?' open':''}><summary>Terminadas o que no aplican (${done.length})</summary><div class="mxrl">${done.map(row).join('')}</div></details>`:''}
-   ${(sug=sug.filter(x=>ed||mxScCan(x.c))),(ed||SCK())?`<div class="mxrsug"><div class="mxrsq"><b>¿Falta algo?</b><button class="ib" id="mxrpick">+ Otra actividad</button></div>${sug.length?sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join(''):'<p class="note">Sin sugerencias: los ambientes parecidos no tienen otras actividades. Usa «+ Otra actividad» para buscar en el catálogo.</p>'}</div>`:''}
+   ${(sug=sug.filter(x=>ed||mxScCan(x.c))),(ed||SCK())?`<details class="mxrsug" id="mxrsugd"${U.mxRecSug?' open':''}><summary class="mxrsq"><b>¿Falta algo?</b><span class="note">${sug.length?`${sug.length} sugerencia${sug.length===1?'':'s'}`:'sin sugerencias'}</span></summary><div class="mxrsb"><button class="ib" id="mxrpick">+ Otra actividad</button>${sug.length?sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join(''):'<p class="note">Sin sugerencias: los ambientes parecidos no tienen otras actividades. Usa «+ Otra actividad» para buscar en el catálogo.</p>'}</div></details>`:''}
    </div></div>
    <div class="mxrfoot">${ed?`<button class="ib pri" id="mxrok">✓ Confirmar${nSug?` (${nSug} sin validar quedan como están)`:''}${nx?' y seguir →':''}</button>`:''}${nx?`<button class="ib" id="mxrnext">Siguiente sin confirmar →</button>`:''}</div>`;
   main.innerHTML=h;mxWireV(main);
@@ -112,4 +112,6 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
   const addC=cid=>{if(!ed){mxScSet(id,cid,'p');return}const DEL=firebase.firestore.FieldValue.delete();
     mxWrite(new Map([[id,{[cid]:'p'}]]),`Agregada: ${MX.cat.get(cid).name} (pendiente)`,new Map([[id,{[cid]:DEL}]]))};
   main.querySelectorAll('[data-mxradd]').forEach(b=>b.onclick=()=>addC(b.dataset.mxradd));
-  const pk=$('#mxrpick');if(pk)pk.onclick=()=>mxRecPick(id,ed,addC)}
+  const pk=$('#mxrpick');if(pk)pk.onclick=()=>mxRecPick(id,ed,addC);
+  /* «¿Falta algo?» plegable; se recuerda abierto o cerrado */
+  const sd=$('#mxrsugd');if(sd)sd.ontoggle=()=>{if(!!U.mxRecSug!==sd.open){U.mxRecSug=sd.open;saveUI()}}}

@@ -58,7 +58,7 @@ Vista `U.mxV='rec'` («Recorrido»). Decidido con el dueño: entrar por **lista*
 - **Lista** (`renderMxRec`): pisos a la vista → sector → tarjetas de ambiente (tipo, % terminado, por hacer, sin validar, «✓ Revisado …» esta semana). Barra «N de M revisados esta semana» (`mxWk0` = lunes de la semana) y «Solo los que faltan» (`MXR.only`).
 - **Ambiente** (`renderMxRecAmb`): checklist de sus celdas con 4 botones grandes (≥ 44 px) por actividad; lo terminado / no aplica va plegado al final. Cada toque guarda al instante (`mxWrite`, con Deshacer). Info por fila: terminada en Campo, próximo día programado, «propuesta del sistema».
 - **Secuencia de obra** (`mxSeq`): mediana del primer día de las filas del lookahead de cada actividad (toda la obra); sin fechas, al final por `ord`.
-- **¿Falta algo?** (`mxRecSug`): hasta 5 actividades que tiene ≥ 25 % de los ambientes del mismo tipo (sin tipo: mismo nombre sin números) y este no; «+ Agregar» la pone pendiente.
+- **¿Falta algo?** (`mxRecSug`; plegable `<details id="mxrsugd">`, cerrado por defecto, se recuerda en `U.mxRecSug`): hasta 5 actividades que tiene ≥ 25 % de los ambientes del mismo tipo (sin tipo: mismo nombre sin números) y este no; «+ Agregar» la pone pendiente.
 - **Confirmar y seguir**: guarda lo propuesto tal cual (`c`) y `mamb.rv={d,t,by,n}` y pasa al siguiente ambiente de la lista. «Siguiente sin confirmar» no guarda.
 - Prueba: `tests/e2e/matriz-rec.spec.js`.
 
