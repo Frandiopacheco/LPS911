@@ -13,7 +13,7 @@ const LST={sol:{t:'Solicitada',c:'#6B747B'},pro:{t:'Programada',c:'#1F5F7A'},obs
 const libDone=st=>st==='lib'||st==='libm';
 function ensureLib(){if(libSub||!db)return;libSub=fcol('lib').onSnapshot(sn=>{LIB.clear();sn.docs.forEach(d=>LIB.set(d.id,{...d.data(),id:d.id}));libErr=null;libLoaded=true;libVer++;LIBC.ver=-1;if(ready)requestRender()},err=>{libErr=err&&err.code||'error';if(ready&&U.tab==='lib')requestRender()});
   libmSub=fcol('libm').doc('main').onSnapshot(d=>{LIBM=d.exists?d.data():null;libmVer++;if(ready)requestRender()},()=>{});
-  unsubs.push(()=>{if(libSub)libSub();libSub=null;LIB.clear();if(libmSub)libmSub();libmSub=null;LIBM=null})}
+  unsubs.push(()=>{if(libSub)libSub();libSub=null;LIB.clear();libVer++;if(libmSub)libmSub();libmSub=null;LIBM=null})}
 /* quién hace qué */
 function isCal(){return!!me&&(isAdmin||(AREA()&&/calidad/i.test(me.area||'')))}
 function canLibAsk(x){if(!me||!x)return false;if(isCal()||(canWrite&&!PM()))return true;return SCK()&&myScsI().includes(x.sc)}
@@ -27,7 +27,9 @@ const keyOf=x=>(x&&x.sc||'')+'|'+nrm(x&&x.name);
 /** Calidad o el administrador: inspectores y marcas (crítica, supervisión) de una liberación */
 const canLibCfg=()=>!!me&&(isAdmin||(AREA()&&/calidad/i.test(me.area||'')));
 const LIBC={ver:0};
-function libOf(aid){if(!aid)return null;let b=null;for(const l of LIB.values()){if(l.actId!==aid||l.st==='anu')continue;if(!b||(l.ts||0)>(b.ts||0))b=l}return b}
+/* (auditoría de código 08/10, L1) índice actividad → liberación vigente: se arma una vez por versión de LIB (libVer), no en cada fila */
+const LIBX={v:-1,m:null};
+function libOf(aid){if(!aid)return null;if(LIBX.v!==libVer||!LIBX.m){const m=new Map();for(const l of LIB.values()){if(!l.actId||l.st==='anu')continue;const b=m.get(l.actId);if(!b||(l.ts||0)>(b.ts||0))m.set(l.actId,l)}LIBX.m=m;LIBX.v=libVer}return LIBX.m.get(aid)||null}
 function libState(x){const l=libOf(x.id);return l?l.st:''}
 /* catálogo: actividades distintas del lookahead (por subcontratista): sugiere nombres en las plantillas de ambiente */
 function libCatalog(){const m=new Map();for(const x of S.act.values()){const k=keyOf(x);if(!nrm(x.name))continue;let e=m.get(k);if(!e){e={key:k,sc:x.sc,names:new Map(),n:0,ambs:new Set()};m.set(k,e)}e.n++;e.ambs.add(x.ambId);e.names.set(x.name,(e.names.get(x.name)||0)+1)}
@@ -36,7 +38,8 @@ const libInsp=()=>(LIBM&&Array.isArray(LIBM.insp))?LIBM.insp:[];
 /* guarda en libm/main solo lo que cambia (merge): hoy, la lista de inspectores */
 function libmPut(patch,msg){LIBM={...(LIBM||{}),...patch};libmVer++;requestRender();
   return fcol('libm').doc('main').set({...patch,by:me.email,n:me.name||me.email,ts:NOW()},{merge:true}).then(()=>{if(msg)toast(msg)}).catch(err=>toast('No se pudo guardar: '+(err.code==='permission-denied'?'solo Calidad o el administrador':(err.code||err.message))))}
-function libBadge(x){const st=libState(x);if(!st)return'';const s=LST[st];const l=libOf(x.id);
+/* l0: la liberación ya buscada por quien llama (la grilla la calcula una vez por fila) */
+function libBadge(x,l0){const l=l0===undefined?libOf(x.id):l0;const st=l?l.st:'';if(!st)return'';const s=LST[st]||LST.sol;
   return`<span class="lqbadge" data-lqact="${x.id}" role="button" tabindex="0" style="--c:${s.c}" title="Liberación: ${esc(s.t)}${l&&l.prog&&l.prog.d?' · '+fmtD(l.prog.d)+(l.prog.h?' '+esc(l.prog.h):''):''}${l&&l.crit?' · crítica'+(l.rest?': restringe '+esc(l.rest):''):''}">◆</span>`}
 /* --- escritura --- */
 function libHist(l,st,note){return[...(l&&l.hist||[]),{st,t:NOW(),by:me.email,n:me.name||me.email,note:note||''}].slice(-30)}

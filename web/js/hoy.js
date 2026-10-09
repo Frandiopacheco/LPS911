@@ -9,6 +9,15 @@ function hoyActs(d){const vs=new Set(visPisos().map(p=>p.id));const mine=SCK()?n
   return[...S.act.values()].filter(x=>schedOn(x,d)&&!(nv&&nv.has(x.id))&&vs.has(pisoOfAct(x.id))&&(!mine||mine.has(x.sc)))}
 const hoyLoc=x=>{const a=S.amb.get(x.ambId);const p=S.pis.get(pisoOfAct(x.id));return[(p&&p.code)||'',a?a.code+' · '+a.name:''].filter(Boolean).join(' · ')};
 
+/** cuántas actividades arrastra cada una al reprogramarse (marcas ↷ con tr = id de la que manda): una pasada por render, no una por marca */
+function hoyTrCount(){const m=new Map();for(const y of S.act.values()){if(!y.rpl)continue;const seen=new Set();
+  for(const w of Object.values(y.rpl))if(w&&w.tr&&!seen.has(w.tr)){seen.add(w.tr);m.set(w.tr,(m.get(w.tr)||0)+1)}}return m}
+/** pisos con algo comprometido en la semana n: lo mismo que Object.keys(liveItems(n,pid)).length (PPC semanal), en una sola pasada por tree() */
+function hoyPisosSem(n){const days=new Set(weekDays(n));const out=new Set();
+  for(const{p,secs}of tree()){if(out.has(p.id))continue;
+    if(secs.some(({ambs})=>ambs.some(({acts})=>acts.some(x=>(x.days||[]).some(z=>days.has(z)&&!libDay(x,z))))))out.add(p.id)}
+  return out}
+
 /* cada tarjeta: {k, title, n, sub, tone, items:[{t, s}], go, goLabel, empty} */
 function hoyCard(c){const ok=!c.n;
   return`<section class="hoyc${ok?' ok':''}${c.tone&&!ok?' '+c.tone:''}" data-hoy="${c.k}">
@@ -31,10 +40,10 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
       items:L.slice(0,12).map(l=>({t:`${(MX.cat.get(l.cat)||{}).name||''} → ${MXS[l.to]||l.to}`,s:`${conOf(l.sc).name} · ${(S.amb.get(l.amb)||{}).code||''}${l.conf?' · ⚠ cambió lo confirmado':''}`})),go:'mat',goLabel:'Revisar',empty:''}}
   /* cambios del plan que te involucran: lo que la reunión (o el ingeniero) reprogramó para ayer, hoy o el próximo día hábil.
      Sale de las marcas ↷ del lookahead (acts.rpl), que se ponen al publicar el plan o al reprogramar con el plan ya publicado. */
-  {const d0=wshift(d,-1);const mine=SCK()?new Set(myScsI()):null;const L=[];
+  {const d0=wshift(d,-1);const mine=SCK()?new Set(myScsI()):null;const L=[];let nTr=null;
     for(const x of S.act.values()){if(x.arch||!x.rpl)continue;if(mine&&!mine.has(x.sc))continue;if(!mine&&r==='editor'&&!isPisoResp(pisoOfAct(x.id)))continue;
-      for(const[k,v]of Object.entries(x.rpl)){if(!v||v.tr||k<d0||k>tm)continue;const nT=[...S.act.values()].filter(y=>y.rpl&&Object.values(y.rpl).some(w=>w&&w.tr===x.id)).length;
-        L.push({k,x,v,nT})}}
+      for(const[k,v]of Object.entries(x.rpl)){if(!v||v.tr||k<d0||k>tm)continue;if(!nTr)nTr=hoyTrCount();
+        L.push({k,x,v,nT:nTr.get(x.id)||0})}}
     if(L.length||['sc','campo','editor','admin'].includes(r)){L.sort((a,b)=>b.k.localeCompare(a.k));
       out.cplan={k:'cplan',title:'Cambios del plan',n:L.length,tone:L.length?'warn':'',sub:'Lo que se reprogramó en la reunión o en el día (ayer, hoy y el próximo día hábil)',
         items:L.slice(0,12).map(o=>({t:o.x.name,s:`${hoyLoc(o.x)}${mine?'':' · '+conOf(o.x.sc).name} · no fue el ${fmtD(o.k)} → ${o.v.to?fmtD(o.v.to):'sin fecha'}${o.v.m?' · '+o.v.m:''}${o.nT?` · con ${o.nT} más del ambiente`:''}`})),
@@ -63,10 +72,10 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
       out.lib={k:'lib',title:'Liberaciones',n:obs.length+prog.length,tone:obs.length?'bad':'',sub:`${obs.length} observada${obs.length===1?'':'s'} por levantar · ${prog.length} inspección(es) hoy o mañana · ${mine.length} abierta${mine.length===1?'':'s'}`,
         items:[...obs.map(l=>({t:lab(l),s:`Observada · ${loc(l)}`})),...prog.map(l=>({t:lab(l),s:`Inspección ${l.prog.d===d?'hoy':'mañana'} ${l.prog.h||''} · ${loc(l)}`}))],go:'lib',goLabel:'Ir a Liberaciones',empty:mine.length?`${mine.length} en curso, nada que hacer hoy`:'No hay liberaciones abiertas'}}}
   /* plan semanal: pisos que faltan congelar esta semana */
-  if(canWrite&&r!=='sc'){const n=curWeek();const vp=visPisos().filter(p=>Object.keys(liveItems(n,p.id)).length);const nf=vp.filter(p=>!(S.wk.get(wkId(n,p.id))||{}).frozenAt);
+  if(canWrite&&r!=='sc'){const n=curWeek();const con=hoyPisosSem(n);const vp=visPisos().filter(p=>con.has(p.id));const nf=vp.filter(p=>!(S.wk.get(wkId(n,p.id))||{}).frozenAt);
     out.plan={k:'plan',title:`PPC semanal · semana ${n}`,n:nf.length,tone:'',sub:`${nf.length} piso${nf.length===1?'':'s'} sin congelar de ${vp.length} con actividades`,items:nf.map(p=>({t:`${p.code} · ${p.name}`})),go:'plan',goLabel:'Ir al Plan semanal',empty:vp.length?'Todos los pisos están congelados':'No hay actividades esta semana'}}
   /* semana que viene: se congela sola en el corte (el mismo de las propuestas); se avisa los dos días antes */
-  if(canWrite&&r!=='sc'){const n1=curWeek()+1;const cut=propCut(n1);const left=cut-NOW();if(left>0&&left<2*864e5){const vp=visPisos().filter(p=>Object.keys(liveItems(n1,p.id)).length);const nf=vp.filter(p=>!(S.wk.get(wkId(n1,p.id))||{}).frozenAt);
+  if(canWrite&&r!=='sc'){const n1=curWeek()+1;const cut=propCut(n1);const left=cut-NOW();if(left>0&&left<2*864e5){const con=hoyPisosSem(n1);const vp=visPisos().filter(p=>con.has(p.id));const nf=vp.filter(p=>!(S.wk.get(wkId(n1,p.id))||{}).frozenAt);
     out.plan2={k:'plan2',title:`Semana ${n1}: se congela sola`,n:nf.length,tone:'warn',sub:`El ${frzCutTxt(n1)} se congelan solos los pisos que nadie haya congelado (${nf.length} de ${vp.length}). Revisa las propuestas pendientes antes.`,items:nf.map(p=>({t:`${p.code} · ${p.name}`})),go:'plan',goLabel:'Ir al PPC semanal',empty:vp.length?`Todos los pisos de la semana ${n1} ya están congelados`:`No hay actividades en la semana ${n1}`}}}
   /* pisos sin responsable: ahí decide cualquier editor (propuestas y plan diario) */
   if(isAdmin&&typeof pisosSinResp==='function'&&S.pis.size){const L=pisosSinResp();if(L.length)out.resp={k:'resp',title:'Pisos sin responsable',n:L.length,tone:'',sub:'Cualquier editor decide sus propuestas y su plan diario. Asigna un responsable en Equipo para que solo él decida.',items:L.map(p=>({t:`${p.code} · ${p.name}`})),go:'team',goLabel:'Ir a Equipo',empty:''}}

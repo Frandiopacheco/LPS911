@@ -123,6 +123,8 @@ function propPlain(off,a){if(!a)return'Pide quitar esta actividad';const ad=[...
   if(!P.length)return'';const t=P.length>1?P.slice(0,-1).join(', ')+' y '+P[P.length-1]:P[0];return t[0].toUpperCase()+t.slice(1)}
 /** la explicación de una fila del lookahead: en revisión, con propuestas enviadas a la vista o en el modo propuesta del SC */
 function propRowTip(x,pv){try{if(x._rv)return propPlain(x._rv.off||null,x._rv.del?null:x);
+  /* (auditoría de código 08/10, L8) fila sin borrador: pmSync deja el mismo objeto que el oficial, así que no hay nada que explicar */
+  if(!pv&&ACT_OFF&&ACT_OFF.get(x.id)===x)return'';
   if(pv){const it=((PROP.get(pv.sc)||{}).items||{})[x.id];const off=S.act.get(x.id);if(it&&off)return propPlain(off,it.after?propMerge(it.after,it.base||off,off,false):null)}
   if(PM()&&ACT_OFF){const off=ACT_OFF.get(x.id)||null;const t=propPlain(off,x);return off&&canon([off.days,off.qty,off.metrado,off.und,off.name])===canon([x.days,x.qty,x.metrado,x.und,x.name])?'':t}}catch(e){}return''}
 /* cruces con otras disciplinas para ayudar a decidir */
@@ -411,11 +413,14 @@ function revSwap(){const off=S.act;const v=new Map(off);
     else if(!o){if(S.amb.has(it.after.ambId))v.set(id,{...clone(it.after),id,_rv:{off:null,sc,isNew:true,n:it.n,late:propLate(it,null)}})}
     /* lo que se verá al aceptar: lo vigente + solo lo que la propuesta cambió (no todo el objeto que armó el SC) */
     else v.set(id,{...propMerge(clone(it.after),it.base||o,o,false),id,_rv:{off:o,sc,n:it.n,late:propLate(it,o)}})}
-  S.act=v;return()=>{S.act=off}}
+  S.act=v;return()=>{S.act=off;RVCIX.src=null;RVCIX.m=null}}
 function revShift(x){const o=x._rv&&x._rv.off;if(!o||x._rv.del)return 0;const a=[...(o.days||[])].sort()[0],b=[...(x.days||[])].sort()[0];if(!a||!b)return 0;return wdist(a,b)}
+/* (auditoría de código 08/10, L9) índice ambiente → actividades, armado una vez por cada mapa de S.act (en revisión, revSwap arma uno nuevo en cada dibujo) */
+const RVCIX={src:null,n:-1,m:null};
+function revAmbIx(){if(RVCIX.src!==S.act||RVCIX.n!==S.act.size||!RVCIX.m){const m=new Map();for(const y of S.act.values()){const L=m.get(y.ambId);if(L)L.push(y);else m.set(y.ambId,[y])}RVCIX.src=S.act;RVCIX.n=S.act.size;RVCIX.m=m}return RVCIX.m}
 function revConflicts(x){const out=new Map();if(!x._rv||x._rv.del)return out;const ds=new Set(x.days||[]);
   /* también contra las otras propuestas pendientes (con los días que proponen), no solo contra lo vigente */
-  for(const y of S.act.values()){if(y.id===x.id||y.ambId!==x.ambId||y.sc===x.sc||(y._rv&&y._rv.del))continue;(y.days||[]).forEach(d=>{if(ds.has(d)){const L=out.get(d)||[];L.push(conOf(y.sc).name+' · '+y.name+(y._rv?' (propuesta)':''));out.set(d,L)}})}return out}
+  for(const y of revAmbIx().get(x.ambId)||[]){if(y.id===x.id||y.ambId!==x.ambId||y.sc===x.sc||(y._rv&&y._rv.del))continue;(y.days||[]).forEach(d=>{if(ds.has(d)){const L=out.get(d)||[];L.push(conOf(y.sc).name+' · '+y.name+(y._rv?' (propuesta)':''));out.set(d,L)}})}return out}
 function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.length;const idx=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;
   return`<div class="ppb rv"><div class="rvl"><b>Revisando propuestas</b>
     <span class="rvchips"><button class="${!U.revSc?'on':''}" data-rvsc="">Todos <b>${[...cnt.values()].reduce((a,b)=>a+b,0)}</b></button>${[...cnt.entries()].sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="${U.revSc===sc?'on':''}" data-rvsc="${sc}" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></button>`).join('')}</span>

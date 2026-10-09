@@ -458,9 +458,10 @@ function tpxWsAsis(X,days,PB){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(d
   sh.set(RL+1,1,'Horas de descanso médico = jornada del día (lunes a viernes y sábado según la configuración del tareo).',S0.pie);
   return sh.done([5,11,26,22,9,15,...days.map(()=>5),2,...days.map(()=>5),8,2,...days.map(()=>5),8],{xSplit:6,ySplit:5})}
 /* publicaciones vigentes de un periodo (tpubidx → tpub/{fecha}_v{vigente}) */
-async function tpxVigentes(a,b){const sn=await fcol('tpubidx').where('fecha','>=',a).where('fecha','<=',b).get();const L=[];
-  for(const x of sn.docs){const I=x.data()||{};const f=I.fecha||x.id;if(f<a||f>b||I.v==null)continue;const p=await tpGet(tpId(f,I.v));if(p)L.push({...p,fecha:p.fecha||f})}
-  return new Map(L.map(p=>[p.fecha,p]))}
+/* las versiones se leen a la vez, no día por día (auditoría de código 08/10, M11); el orden del resultado no cambia */
+async function tpxVigentes(a,b){const sn=await fcol('tpubidx').where('fecha','>=',a).where('fecha','<=',b).get();
+  const R=await Promise.all(sn.docs.map(async x=>{const I=x.data()||{};const f=I.fecha||x.id;if(f<a||f>b||I.v==null)return null;const p=await tpGet(tpId(f,I.v));return p?{...p,fecha:p.fecha||f}:null}));
+  return new Map(R.filter(Boolean).map(p=>[p.fecha,p]))}
 /* arma y descarga el Excel: 'dia' (una hoja), 'semana' o 'rango' (Resumen HH + Tareo Semana + una hoja por día publicado). doc: versión elegida */
 async function tpxBajar(tipo,a,b,doc){if(TPK.busy)return;if(tipo==='rango'&&tpDates(a,b).length>62){toast('Elige un rango de hasta 62 días.');return}
   TPK.busy='x';requestRender();

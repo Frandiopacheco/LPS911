@@ -9,7 +9,10 @@
 
 /** ¿el lookahead solo acepta actividades del catálogo? */
 function mxCatReq(){return!!P().catReq&&MX.ld.cat&&[...MX.cat.values()].some(c=>!c.arch)}
-const mxCatAct=()=>[...MX.cat.values()].filter(c=>!c.arch);
+/* (auditoría de código 08/10, L1) la lista se arma una vez por versión de la Matriz (MX.v); cada llamada recibe su copia (algunos la ordenan) */
+const MXCAC={v:-1,L:null};
+function mxCatAct0(){if(MXCAC.v!==MX.v||!MXCAC.L){MXCAC.L=[...MX.cat.values()].filter(c=>!c.arch);MXCAC.v=MX.v}return MXCAC.L}
+const mxCatAct=()=>mxCatAct0().slice();
 
 /** al escribir el nombre de una actividad del lookahead: el nombre del catálogo (texto), false si se bloqueó, null si no aplica */
 function mxNameGate(v,x,t){if(!mxCatReq()||!v)return null;const id=mxAli().get(mnk(v));const c=id&&MX.cat.get(id);
@@ -153,11 +156,12 @@ const mxDonePend=x=>mxDoneSt(x)==='pend';
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 /* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
    'sc' = es de una actividad de otro SC (no sale en la Matriz). null = bien, o el catálogo aún no carga / está vacío */
-function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct().length)return null;const id=mxCatOfN(x);if(!id)return'off';const c=MX.cat.get(id);if(!c||c.arch)return'off';return x.sc&&!mxScsOf(c).includes(x.sc)?'sc':null}
-function mxCatBadge(x,k){const w=mxRowCat(x);if(!w)return'';const c=w==='sc'?MX.cat.get(mxCatOfN(x)):null;
+function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct0().length)return null;const id=mxCatOfN(x);if(!id)return'off';const c=MX.cat.get(id);if(!c||c.arch)return'off';return x.sc&&!mxScsOf(c).includes(x.sc)?'sc':null}
+function mxCatBadge(x,k,pc){const w=pc?pc.cat:mxRowCat(x);if(!w)return'';const c=w==='sc'?MX.cat.get(mxCatOfN(x)):null;
   return`<span class="mxbadge mxcb" style="--k:${k||0}" data-mxc="${esc(x.id)}" role="button" tabindex="0" title="${w==='off'?'No está en el catálogo de actividades: no sale en la Matriz. Clic: elegir o agregar':`En el catálogo «${esc(c.name)}» es de ${esc(conOf(c.sc).name)}: esta fila no sale en la Matriz. Clic: ver opciones`}">${w==='off'?'∉':'SC'}</span>`}
-function mxRowBadge(x,k){const cb=mxCatBadge(x,k);if(cb)k=(k||0)+1;return cb+mxRowBadge0(x,k)}
-function mxRowBadge0(x,k){const v=mxRowWarn(x);if(!v&&mxDonePend(x))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
+/* pc (opcional): {cat,warn,done} ya calculados por la grilla para la fila, para no repetirlos (auditoría de código 08/10, L1) */
+function mxRowBadge(x,k,pc){const cb=mxCatBadge(x,k,pc);if(cb)k=(k||0)+1;return cb+mxRowBadge0(x,k,pc)}
+function mxRowBadge0(x,k,pc){const v=pc?pc.warn:mxRowWarn(x);if(!v&&(pc?pc.done:mxDonePend(x)))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
 function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
     const v=mxRowWarn({...o.after,id:o.id});if(!v)continue;const a=S.amb.get(o.after.ambId);
