@@ -444,15 +444,38 @@ function liveSig(){let s='';for(const[id,lv]of LIVE){const c=lv.close;if(c)s+=id
 const liveDoc=d=>({...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)});
 function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null}
 let dayP=Promise.resolve();
-function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
-  let first=true;/* la primera foto carga todo; después solo lo que cambió (C4) */
-  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{
-      if(first){first=false;DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}))}
+/* Ventana viva + rangos antiguos (auditoría C8/P8, oct 2026): daily y dplan se escuchan en vivo como mucho desde hace DAYWIN
+   días; lo anterior que pida una pantalla (volver semanas atrás) se lee UNA vez con get(), desde el lunes de esa semana hasta
+   donde ya hay datos, y se junta en los mismos Map (OLDR guarda desde dónde hay). Antes cada paso hacia atrás reabría la
+   suscripción desde una fecha más temprana y volvía a bajar todo. Lo antiguo no se actualiza en vivo (sí lo que escribe este equipo). */
+const DAYWIN=21;
+const monOf=d=>addD(d,-((pd(d).getUTCDay()+6)%7));
+const OLDR={daily:{cov:null,p:Promise.resolve(),gen:0},dplan:{cov:null,p:Promise.resolve(),gen:0}};
+let DAYWN=0;const DAYW=new Map();/* registros del día escritos aquí (writeDaily): una lectura antigua que llega después no los pisa */
+function oldFetch(col,M,from,to,done){const o=OLDR[col];const a=monOf(from);const top=o.cov&&o.cov<to?o.cov:to;if(a>=top)return o.p;
+  const g=o.gen,wn=DAYWN;o.cov=a;
+  const p=fcol(col).where('date','>=',a).where('date','<',top).get().then(sn=>{if(g!==o.gen)return;
+      for(const d of sn.docs){const v={...d.data(),id:d.id};const cur=M.get(d.id);
+        if(col==='daily'&&cur&&(DAYW.get(d.id)||0)>wn)v.recs={...(v.recs||{}),...(cur.recs||{})};M.set(d.id,v)}
+      /* sin señal la lectura sale de la copia del equipo (puede estar incompleta): ese rango se vuelve a pedir la próxima vez */
+      if(sn.metadata&&sn.metadata.fromCache&&o.cov===a)o.cov=top;done()},
+    err=>{if(g===o.gen&&o.cov===a)o.cov=top;console.warn('LPS: no se pudo leer '+col+' anterior al '+top+' ('+(err&&err.code||err)+'); se reintenta al volver a pedirlo')});
+  o.p=Promise.all([o.p,p]);return o.p}
+function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;
+  /* hacia atrás, la suscripción baja de una vez hasta el tope (DAYWIN): así se reabre como mucho una vez */
+  const lim=addD(todayIso(),-DAYWIN);const f=dayFrom||from<lim?lim:from;if(!dayFrom||f<dayFrom)daySubOpen(f);
+  if(from>=dayFrom)return dayP;
+  oldFetch('daily',DAY,from,dayFrom,()=>{doneRebuild();if(ready)requestRender()});
+  return Promise.race([Promise.all([dayP,OLDR.daily.p]),new Promise(r=>setTimeout(r,8000))])}
+function daySubOpen(f){if(daySub)daySub();dayFrom=f;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
+  let first=true;/* la primera foto carga todo su rango (lo antiguo leído con get() se queda); después solo lo que cambió (C4) */
+  daySub=fcol('daily').where('date','>=',f).onSnapshot(sn=>{
+      if(first){first=false;for(const[id,v]of DAY)if(!(v&&v.date<f))DAY.delete(id);sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}))}
       else{const ch=sn.docChanges();if(!ch.length){snapOk('daily');ok();return}for(const c of ch){if(c.type==='removed')DAY.delete(c.doc.id);else DAY.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
       doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
-    err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;ensureDaily(from)});ok();if(ready&&U.tab==='campo')requestRender()});
+    err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;daySubOpen(f)});ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
-function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
+function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear();DAYW.clear();const o=OLDR.daily;o.gen++;o.cov=null;o.p=Promise.resolve()}
 const dayId=(d,pid)=>d+'_'+pid;
 /* ---------- Plan del día cerrado (dplan/<fecha>_<piso>) ----------
    El plan de un día se cierra al publicarlo en la reunión del día anterior (o solo a la hora de cierre, por defecto 21:00, si nadie lo publicó: tarea
@@ -460,15 +483,19 @@ const dayId=(d,pid)=>d+'_'+pid;
    Hoy y los días pasados siempre están cerrados. Un día cerrado no se reprograma (lookahead ni plan diario), salvo lo que ya
    tiene registro de campo (cerrar el día: saldo, terminada). El administrador puede reabrirlo con un motivo (reo; queda en log). */
 const DPL=new Map();let dplSub=null,dplFrom=null;
-function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;if(dplSub)dplSub();dplFrom=from;
-  let first=true;/* la primera foto carga todo; después solo lo que cambió (C4) */
-  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{
-      if(first){first=false;DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}))}
+function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;
+  const lim=addD(todayIso(),-DAYWIN);const f=dplFrom||from<lim?lim:from;if(!dplFrom||f<dplFrom)dplSubOpen(f);
+  /* lo anterior a la ventana viva: una lectura por rango (ver ensureDaily) */
+  if(from<dplFrom)oldFetch('dplan',DPL,from,dplFrom,()=>{DV++;if(ready)requestRender()})}
+function dplSubOpen(f){if(dplSub)dplSub();dplFrom=f;
+  let first=true;/* la primera foto carga todo su rango (lo antiguo leído con get() se queda); después solo lo que cambió (C4) */
+  dplSub=fcol('dplan').where('date','>=',f).onSnapshot(sn=>{
+      if(first){first=false;for(const[id,v]of DPL)if(!(v&&v.date<f))DPL.delete(id);sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}))}
       else{const ch=sn.docChanges();if(!ch.length){snapOk('dplan');return}for(const c of ch){if(c.type==='removed')DPL.delete(c.doc.id);else DPL.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
       DV++;snapOk('dplan');if(ready)requestRender()},
-    err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;ensureDplan(from)})});
+    err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;dplSubOpen(f)})});
   if(!unsubs.includes(stopDplan))unsubs.push(stopDplan)}
-function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear()}
+function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear();const o=OLDR.dplan;o.gen++;o.cov=null;o.p=Promise.resolve()}
 const dplanOf=(d,pid)=>DPL.get(d+'_'+pid)||null;
 /* lookahead y propuestas: hoy y los días futuros cerrados (los pasados se pueden corregir: el PPC se mide contra las fotos) */
 function dayLocked(d,pid){if(!d||!pid)return false;ensureDplan(addD(todayIso(),-7));const o=dplanOf(d,pid);if(o&&o.reo)return false;const t=todayIso();if(d<t)return false;if(d===t)return true;return!!(o&&o.ids)}
@@ -517,7 +544,7 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
   if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
-function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
