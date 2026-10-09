@@ -249,7 +249,13 @@ function restrPiso(r){return r.actId&&S.act.has(r.actId)?pisoOfAct(r.actId):(r.p
 /* restricción de una actividad que está en la papelera: no cuenta como pendiente (se ve marcada en la lista) */
 const rArch=r=>!!(r&&r.actId&&!S.act.has(r.actId)&&ARCH.act&&ARCH.act.has(r.actId));
 const rOpenC=r=>r.status!=='lib'&&!rArch(r);
-function restrInScope(){return[...S.res.values()].filter(r=>{if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
+/* qué restricciones ve cada rol (oct 2026, pedido del dueño): el SC, las que registró él y en las que es responsable (él o su
+   empresa); un área de apoyo (OT, Calidad…), las de su área y las que registró o le asignaron. Ingenieros, admin y lectores: todas.
+   Solo es lo que se muestra (lista, contadores, Hoy, Excel); las reglas de escritura no cambian. */
+function restrMine(r){if(!me||!r)return false;if(r.by&&r.by===me.email)return true;const R=fold(r.resp||'');if(!R)return false;
+  const mine=[me.name,...(SCK()?memScs(me).map(i=>conOf(i).name):[]),...(AREA()&&me.area?[me.area]:[])].filter(Boolean).map(fold);return mine.includes(R)}
+function restrVis(r){if(SCK())return restrMine(r);if(AREA())return(!!me.area&&myArea(r))||restrMine(r);return true}
+function restrInScope(){return[...S.res.values()].filter(r=>{if(!restrVis(r))return false;if(!U.piso)return true;const p=restrPiso(r);return!p||p===U.piso})}
 function actOptions(sel,only){let h=only?'':'<option value="">— Sin actividad —</option>';for(const{p,secs}of visTree())for(const{s,ambs}of secs)for(const{a,acts:all}of ambs){const acts=only?all.filter(x=>only.has(x.sc)):all;if(!acts.length)continue;h+=`<optgroup label="${esc((U.piso?'':p.code+' · ')+a.code+' · '+a.name)}">`+acts.map(x=>`<option value="${x.id}"${x.id===sel?' selected':''}>${esc(x.name||'(sin nombre)')} — ${esc(conOf(x.sc).name)}</option>`).join('')+'</optgroup>'}
   if(sel&&S.act.has(sel)&&!h.includes(`value="${sel}"`)){const x=S.act.get(sel);h+=`<option value="${sel}" selected>${esc(x.name)} (otro piso)</option>`}return h}
 const rOpen=new Set();
@@ -304,21 +310,31 @@ function rReg(r){const m=r.by&&MEM.get(r.by);if(m&&m.role==='sc'&&m.sc)return co
    el SC y las áreas ven su propio nombre, las empresas y las áreas. */
 let RESPC=null;
 function respChoices(){const k=MEM.size+'|'+S.con.size+'|'+(me&&me.name);if(RESPC&&RESPC.k===k&&performance.now()-RESPC.t<2000)return RESPC.v;const v=respChoices0();RESPC={k,t:performance.now(),v};return v}
-function respChoices0(){const P_=new Map();const add=(n,sub)=>{n=String(n||'').trim();if(n&&!P_.has(fold(n)))P_.set(fold(n),{n,sub})};
+function respChoices0(){const P_=new Map();const add=(n,sub,o)=>{n=String(n||'').trim();if(n&&!P_.has(fold(n)))P_.set(fold(n),{n,sub,...(o||{})})};
   for(const[em,m]of MEM){if(!m||TAR_ROLES.includes(m.role)||m.role==='lector'||m.role==='planner'||em.startsWith('u_'))continue;
-    add(m.name||em,(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+m.area:'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>conOf(i).name).join(', '):''))}
-  if(me&&me.name)add(me.name,'tú');
+    add(m.name||em,(ROLE[m.role]||m.role)+(m.role==='area'&&m.area?' · '+m.area:'')+((m.role==='sc'||m.role==='capataz')&&memScs(m).length?' · '+memScs(m).map(i=>conOf(i).name).join(', '):''),{role:m.role,area:m.area||'',scs:memScs(m)})}
+  if(me&&me.name)add(me.name,'tú',{role:me.role,area:me.area||'',scs:memScs(me)});
   const per=[...P_.values()].sort((a,b)=>a.n.localeCompare(b.n));const seen=new Set(per.map(p=>fold(p.n)));
   const emp=[...S.con.values()].map(c=>c.name).filter(n=>n&&!seen.has(fold(n))).sort((a,b)=>a.localeCompare(b));emp.forEach(n=>seen.add(fold(n)));
   const ar=(typeof restrAreasL==='function'?restrAreasL():[]).filter(n=>n&&!seen.has(fold(n)));
   return{per,emp,ar,all:new Set([...seen,...ar.map(fold)])}}
 const respOk=v=>!v||respChoices().all.has(fold(v));
-function respOpts(cur){const C=respChoices();cur=String(cur||'').trim();const bad=cur&&!C.all.has(fold(cur));const sel=n=>fold(n)===fold(cur)?' selected':'';
+/* con la restricción r, la lista se acota a su clase (oct 2026, pedido del dueño): «Otras áreas» → las personas de esa área (o de
+   todas las áreas si aún no eligió una) y las áreas; «Campo» → ingenieros, administrador y la gente del SC de la actividad, más las
+   empresas. Sin r (plan diario) va la lista completa. El valor guardado siempre se muestra; la validación (respOk) usa la lista completa. */
+function respOpts(cur,r){const C=respChoices();cur=String(cur||'').trim();const bad=cur&&!C.all.has(fold(cur));const sel=n=>fold(n)===fold(cur)?' selected':'';
+  let per=C.per,emp=C.emp,ar=C.ar;
+  if(r){const x=r.actId&&(S.act.get(r.actId)||ARCH.act.get(r.actId));const sc=r.sc||(x&&x.sc)||'';
+    if(grpOf(r)==='area'){const fa=fold(r.area||'');per=per.filter(p=>p.role==='area'&&(!fa||fold(p.area)===fa));emp=[];ar=ar.filter(n=>!fa||fold(n)===fa)}
+    else{per=per.filter(p=>p.role==='admin'||p.role==='editor'||p.role==='campo'||((p.role==='sc'||p.role==='capataz')&&(!sc||(p.scs||[]).includes(sc))));ar=[];
+      if(sc){const nm=conOf(sc).name;emp=[...emp.filter(n=>fold(n)===fold(nm)),...emp.filter(n=>fold(n)!==fold(nm))]}}
+    /* el valor actual, aunque quede fuera del filtro */
+    if(cur&&!bad&&![...per.map(p=>p.n),...emp,...ar].some(n=>fold(n)===fold(cur))){const p=C.per.find(o=>fold(o.n)===fold(cur));if(p)per=[p,...per];else if(C.emp.some(n=>fold(n)===fold(cur)))emp=[cur,...emp];else ar=[cur,...ar]}}
   return`<option value=""${cur?'':' selected'}>— elige responsable —</option>${bad?`<option value="${esc(cur)}" selected>${esc(cur)} (no está en el equipo)</option>`:''}`
-   +(C.per.length?`<optgroup label="Personas del equipo">${C.per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
-   +(C.emp.length?`<optgroup label="Empresas (subcontratistas)">${C.emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
-   +(C.ar.length?`<optgroup label="Áreas">${C.ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
-function rRespSel(attrs,cur,ro){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur)}</select>`}
+   +(per.length?`<optgroup label="Personas del equipo">${per.map(p=>`<option value="${esc(p.n)}"${sel(p.n)}>${esc(p.n)}${p.sub?' — '+esc(p.sub):''}</option>`).join('')}</optgroup>`:'')
+   +(emp.length?`<optgroup label="Empresas (subcontratistas)">${emp.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')
+   +(ar.length?`<optgroup label="Áreas">${ar.map(n=>`<option value="${esc(n)}"${sel(n)}>${esc(n)}</option>`).join('')}</optgroup>`:'')}
+function rRespSel(attrs,cur,ro,r){const bad=!respOk(cur);return`<select class="ci rresp${bad?' rbad':''}" ${attrs}${ro||''}${bad?' title="Ese nombre no está en el equipo: elige a alguien de la lista"':''}>${respOpts(cur,r)}</select>`}
 function rWho(r){return(r.status==='lib'?(r.libN||r.resp):r.resp)||'—'}
 function rFOk(r){const F=U.rF||{};return(!F.aff||rAff(r)===F.aff)&&(!F.reg||rReg(r)===F.reg)&&(!F.who||rWho(r)===F.who)
   &&(!F.c1||(r.created||'')>=F.c1)&&(!F.c2||(r.created&&r.created<=F.c2))&&(!F.l1||(r.freed&&r.freed>=F.l1))&&(!F.l2||(r.freed&&r.freed<=F.l2))}
@@ -334,7 +350,7 @@ function renderRestr(main){
   let list=all.filter(r=>U.rfilter==='all'||(U.rfilter==='pend'?r.status!=='lib':r.status==='lib'));
   if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);
   const nAV=list.filter(r=>r.status!=='lib'&&actVenc(r.actId)).length;if(RVEN&&!nAV)RVEN=false;if(RVEN)list=list.filter(r=>r.status!=='lib'&&actVenc(r.actId));
-  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);if(AREA()&&U.rMine!==false&&me.area)list=list.filter(r=>myArea(r));
+  if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
   const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
@@ -348,7 +364,6 @@ function renderRestr(main){
   <div class="card"><div class="hd">Lista
    <span class="seg" id="rf"><button data-f="pend" class="${U.rfilter==='pend'?'on':''}">Pendientes</button><button data-f="lib" class="${U.rfilter==='lib'?'on':''}">Liberadas</button><button data-f="all" class="${U.rfilter==='all'?'on':''}">Todas</button></span>
    <span class="seg" id="rg" title="Operativas de campo vs. las que dependen de otras áreas (OT, Ingeniería, etc.)"><button data-g="" class="${U.rgrp?'':'on'}">Todas</button><button data-g="campo" class="${U.rgrp==='campo'?'on':''}">Campo</button><button data-g="area" class="${U.rgrp==='area'?'on':''}">Otras áreas</button></span>
-   ${AREA()&&me.area?`<span class="seg" id="rmine"><button data-m="1" class="${U.rMine!==false?'on':''}">De ${esc(me.area)}</button><button data-m="0" class="${U.rMine===false?'on':''}">Todas</button></span>`:''}
    ${nAV||RVEN?`<button type="button" class="chip${RVEN?' on':''}" id="rven" title="${AVTIP}">⚠ Actividad no ejecutada <b>${nAV}</b></button>`:''}
    ${U.rAct?`<span class="pill neu">Filtrado: ${esc(S.act.get(U.rAct)?.name||'actividad')} <button class="ab" id="rclr" aria-label="Quitar filtro">&times;</button></span>`:''}
    </div>${rFBar(all)}${SCK()?'<div class="pad note" style="padding-top:0">Puedes registrar restricciones de las actividades de tu partida y corregirlas mientras estén pendientes. Las libera el ingeniero.</div>':''}${AREA()?`<div class="pad note" style="padding-top:0">${me.area?`Registras, resuelves y liberas las restricciones de <b>${esc(me.area)}</b>. Las demás las ves como consulta.`:'Aún no tienes un área asignada: pide al administrador que la elija en Equipo.'}</div>`:''}
@@ -368,7 +383,7 @@ function renderRestr(main){
           <label>Tipo<select class="ci" ${fk('type')}${ro}>${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select></label>
           <label>Clase / área${gsel(r,fk)}</label>
           <label>Descripción<input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro}></label>
-          <label>Responsable${rRespSel(fk('resp'),r.resp,ro)}</label>
+          <label>Responsable${rRespSel(fk('resp'),r.resp,ro,r)}</label>
           <label>Fecha requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label>
           <label>Compromiso del área (AS)<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label>
           <label>Observaciones del área (AS)<input class="ci" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Impedimento para levantarla, comentarios…"${ro}></label></div>`
@@ -379,14 +394,14 @@ function renderRestr(main){
     <td class="rc-act"><select class="ci" ${fk('actId')}${alz}${ro}>${ao}</select>${r.actId&&S.act.has(r.actId)?`<div class="rloc">${esc(actLoc(r.actId))} <button type="button" class="lnkb" data-rgo="${r.actId}">Ver en el lookahead ↗</button> <button type="button" class="lnkb" data-rmap="${r.actId}">Ver en el plano ↗</button></div>`:r.actId?`<div class="rloc">${rArch(r)?'<span class="pill neu">Actividad en la papelera · no cuenta como pendiente</span>':'La actividad ya no está en el lookahead'}</div>`:''}<div class="rloc">Afecta a ${esc(rAff(r))} · registró ${esc(rReg(r))}${r.created?' el '+fmtD(r.created):''}${r.status==='lib'&&r.libN?` · liberó ${esc(r.libN)}`:''}</div></td>
     <td class="rc-tp"><select class="ci" ${fk('type')}${ro} aria-label="Tipo">${[...new Set([...types,r.type].filter(Boolean))].map(t=>`<option${t===r.type?' selected':''}>${esc(t)}</option>`).join('')}</select>${gsel(r,fk)}</td>
     <td class="rc-ds"><input class="ci" ${fk('desc')} value="${esc(r.desc)}" placeholder="¿Qué falta liberar?"${ro} aria-label="Descripción"><input class="ci rcobs" ${fk('obsAs')} value="${esc(r.obsAs||'')}" placeholder="Obs. del área (AS): impedimento, comentarios…"${ro} aria-label="Observaciones del área de soporte">${rthumbs(r)}</td>
-    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro)}</td>
+    <td class="rc-rp">${rRespSel(fk('resp')+' aria-label="Responsable"',r.resp,ro,r)}</td>
     <td class="rc-dt"><label class="rdl">Requerida<input class="ci" type="date" ${fk('need')} value="${esc(r.need)}"${ro}></label><label class="rdl" title="Fecha en que el área de soporte se compromete a levantarla">Compromiso AS<input class="ci" type="date" ${fk('comp')} value="${esc(r.comp||'')}"${ro}></label><label class="rdl">Liberada<input class="ci" type="date" ${fk('freed')} value="${esc(r.freed)}"${roL}></label></td>
     <td class="rc-x">${rCanDel(r)?`<button class="ab" data-rdel="${r.id}" aria-label="Eliminar restricción" title="Eliminar">&times;</button>`:''}</td></tr>`}
   const more=rest?`<div class="pad" style="text-align:center"><button class="ib" id="rmore">Mostrar ${Math.min(rest,300)} más <span class="mu">(faltan ${rest})</span></button></div>`:'';
   h+=mob?'</div>'+more+'</div></div></div>':'</tbody></table></div>'+more+'</div></div></div>';
   main.innerHTML=h;
   $('#rg',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rgrp=b.dataset.g;saveUI();render()};
-  {const rm=$('#rmine',main);if(rm)rm.onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rMine=b.dataset.m==='1';render()}}
+
   $('#rf',main).onclick=e=>{const b=e.target.closest('button');if(!b)return;U.rfilter=b.dataset.f;U.rLim=0;saveUI();render()};
   const ra=$('#radd',main);if(ra)ra.onclick=()=>{if(SCK()){const x=U.rAct&&S.act.get(U.rAct);if(x&&myScsI().includes(x.sc))newRestr(U.rAct);else scRestrPick(ra);return}newRestr(U.rAct||'')};
   {const xb=$('#rxls',main);if(xb)xb.onclick=()=>{const F=U.rF||{};const fs=[U.rfilter==='pend'?'Pendientes':U.rfilter==='lib'?'Liberadas':'Todas',F.aff&&'Afecta a '+F.aff,F.reg&&'Registró '+F.reg,F.who&&'La libera '+F.who,(F.c1||F.c2)&&`Registrada ${F.c1?fmtD(F.c1):'…'}–${F.c2?fmtD(F.c2):'…'}`,(F.l1||F.l2)&&`Liberada ${F.l1?fmtD(F.l1):'…'}–${F.l2?fmtD(F.l2):'…'}`].filter(Boolean).join(' · ');restrXlsx(list,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · ${fs}`)}}

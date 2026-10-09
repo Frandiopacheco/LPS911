@@ -57,7 +57,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
     out.obra={k:'obra',title:'Tu avance de hoy',n:no.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${st.filter(o=>o.k==='run').length} en ejecución · ${no.length} sin iniciar`,
       items:no.map(o=>({t:o.x.name,s:hoyLoc(o.x)})),go:'cap',goLabel:'Ir a En obra',empty:A.length?'Todo lo de hoy ya empezó':'No tienes actividades programadas hoy'}}
   /* restricciones: las de mi área (Calidad/OT), las de mi partida (SC) o todas */
-  {let R=restrInScope().filter(rOpenC);if(AREA()&&me.area)R=R.filter(myArea);if(SCK()){const m=new Set(myScsI());R=R.filter(x=>m.has(x.sc)||(x.actId&&m.has((S.act.get(x.actId)||{}).sc)))}
+  {let R=restrInScope().filter(rOpenC);/* restrInScope ya deja a cada rol solo lo suyo */
     const lim=wshift(d,3);const late=R.filter(x=>x.need&&x.need<d),soon=R.filter(x=>x.need&&x.need>=d&&x.need<=lim);const L=[...late,...soon].sort((a,b)=>a.need.localeCompare(b.need));
     out.restr={k:'restr',title:AREA()&&me.area?`Restricciones de ${me.area}`:SCK()?'Restricciones de tu partida':'Restricciones',n:L.length,tone:late.length?'bad':'warn',
       sub:`${late.length} vencida${late.length===1?'':'s'} · ${soon.length} vence${soon.length===1?'':'n'} en 3 días · ${R.length} pendiente${R.length===1?'':'s'} en total`,
