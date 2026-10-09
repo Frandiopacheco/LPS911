@@ -110,7 +110,7 @@ function renderMapa(main){ensureLam();
   if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.rvx=false}M.lpiso=M.piso}
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
-  {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null}}ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));pmSync();
+  {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;M.tmp=null;M.pend=null}}ensurePlan();hSync();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));pmSync();
   if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';main.addEventListener('toggle',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('mrdy'))M.rdyOpen=t.open},true);M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
@@ -157,11 +157,23 @@ function renderMapa(main){ensureLam();
    pzon/{actId}: última zona usada por la actividad {pisoId,pts,ts}
    ===================================================================== */
 const DOWN_=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-const PD=new Map(),ZN=new Map();let PDV=0;/* sube con cada cambio del plan del día (para cachés) */let pdSub=null,pdKey=null,znSub=null,znKey=null,planHook=false;M.pdErr=null;
+const PD=new Map(),ZN=new Map();let PDV=0;/* sube con cada cambio del plan del día (para cachés) */let pdKey=null,znSub=null,znKey=null,planHook=false;M.pdErr=null;
+/* Campo, Tablero y Liberaciones usan el plan de hoy (capInit) y el Plan diario abre en el día siguiente: cada ida y vuelta
+   volvía a suscribirse a pdz. Ahora quedan suscritas las dos últimas fechas (PDS: fecha → {m, un, ok, err}) y al volver
+   se repone PD con lo que ya llegó, sin otra suscripción. */
+const PDS=new Map();
+const pdRR=()=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()};
 function ensurePlan(){if(!db)return;
-  if(pdKey!==M.date){if(pdSub)pdSub();pdKey=M.date;PDV++;PD.clear();pdSub=fcol('pdz').where('date','==',M.date).onSnapshot(sn=>{PDV++;PD.clear();sn.docs.forEach(d=>PD.set(d.id,{...d.data(),id:d.id}));M.pdErr=null;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},err=>{M.pdErr=err&&err.code||'error';if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()})}
+  if(pdKey!==M.date){const d=pdKey=M.date;PDV++;let e=PDS.get(d);
+    if(e){PDS.delete(d);PDS.set(d,e)}
+    else{e={m:new Map(),un:null,ok:false,err:null};PDS.set(d,e);
+      e.un=fcol('pdz').where('date','==',d).onSnapshot(sn=>{e.m.clear();sn.docs.forEach(x=>e.m.set(x.id,{...x.data(),id:x.id}));e.ok=true;e.err=null;
+          if(pdKey!==d)return;PDV++;PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=null;pdRR()},
+        err=>{e.err=err&&err.code||'error';if(pdKey!==d)return;M.pdErr=e.err;pdRR()});
+      while(PDS.size>2){const k=PDS.keys().next().value;const o=PDS.get(k);PDS.delete(k);if(o.un)o.un()}}
+    PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=e.err}
   if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},()=>{})}
-  if(!planHook){planHook=true;unsubs.push(()=>{if(pdSub)pdSub();if(znSub)znSub();pdSub=znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
+  if(!planHook){planHook=true;unsubs.push(()=>{for(const o of PDS.values())if(o.un)o.un();PDS.clear();if(znSub)znSub();znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
 const flat=a=>a.flatMap(p=>[Math.round(p.x*10)/10,Math.round(p.y*10)/10]);
 const unflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
 const myRole=()=>me&&me.role;
@@ -211,9 +223,11 @@ async function updPD(id,patch){try{await fcol('pdz').doc(id).update(patch)}catch
 async function delPD(id){try{await fcol('pdz').doc(id).delete()}catch(err){toast('No se pudo borrar: '+(err.code||err.message))}}
 function learn(z){if(z&&z.kind==='zona'&&z.actId&&z.pts)fcol('pzon').doc(z.actId).set({pisoId:z.pisoId,vista:zVista(z),pts:z.pts,sc:z.sc||'',ts:NOW(),by:me.email}).catch(()=>{})}
 const shapesV=pid=>shapesOf(pid).filter(z=>z.kind!=='xok'&&(z.kind==='nova'||zVista(z)===M.vista));
-/* historial para deshacer / rehacer (solo lo hecho en esta sesión) */
-const HIST=[],REDO=[];
-function rec(g){if(g&&g.length){HIST.push(g);if(HIST.length>80)HIST.shift();REDO.length=0}}
+/* historial para deshacer / rehacer (solo lo hecho en esta sesión), uno por día y piso: ir a Campo, al Tablero o a
+   Liberaciones (que usan el plan de hoy) y volver al plan de mañana ya no lo borra */
+const HSTK=new Map();let HK='',HIST=[],REDO=[];
+function hSync(){const k=M.date+'|'+M.piso;if(k===HK)return;HK=k;let o=HSTK.get(k);if(!o){o={h:[],r:[]};HSTK.set(k,o);if(HSTK.size>12)HSTK.delete(HSTK.keys().next().value)}HIST=o.h;REDO=o.r}
+function rec(g){hSync();if(g&&g.length){HIST.push(g);if(HIST.length>80)HIST.shift();REDO.length=0}}
 const strip_=z=>{const{id,...d}=z;return d};
 function addDoc(id,doc){PDV++;PD.set(id,{...doc,id});savePD(id,doc);return{op:'add',id,doc}}
 function remDoc(id){const z=PD.get(id);if(!z)return null;PDV++;PD.delete(id);delPD(id);return{op:'del',id,doc:strip_(z)}}
@@ -228,8 +242,8 @@ function applyG(g,undo){PDV++;let sk=0;for(const o of (undo?[...g].reverse():g))
       if(undo&&o.after&&Object.keys(o.after).some(k=>k!=='ts'&&!(o.after[k]===DELS_&&DELS_?pdGet(z,k)==null:pdSame(pdGet(z,k),o.after[k])))){sk++;continue}
       pdPatch(z,p);updPD(o.id,p)}}
   if(M.selId&&!PD.has(M.selId))M.selId=null;requestRender();if(sk)toast(`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`)}
-function undo(){const g=HIST.pop();if(!g){toast('No hay nada que deshacer.');return}applyG(g,true);REDO.push(g)}
-function redo(){const g=REDO.pop();if(!g)return;applyG(g,false);HIST.push(g)}
+function undo(){hSync();const g=HIST.pop();if(!g){toast('No hay nada que deshacer.');return}applyG(g,true);REDO.push(g)}
+function redo(){hSync();const g=REDO.pop();if(!g)return;applyG(g,false);HIST.push(g)}
 const own=z=>!!z&&!z.virt&&z.kind!=='nova'&&z.kind!=='xok'&&canPlan(z.sc);
 function rskMsg(aid){if(typeof restrPend!=='function')return'';const rs=restrPend(aid);if(!rs.length)return'';const x=S.act.get(aid);return`⚠ “${(x&&x.name)||'Actividad'}” tiene ${rs.length} restricción${rs.length>1?'es':''} pendiente${rs.length>1?'s':''}: ${rs.slice(0,2).map(rTxt).join(' | ')}${rs.length>2?' …':''}. Se programa igual, queda marcada con alerta.`}
 function rskWarn(aid,quiet){const m=rskMsg(aid);if(m&&!quiet)toast(m);return m?1:0}
@@ -672,7 +686,7 @@ function cuCount(R){const o={ok:0,partial:0,no:0,none:0};for(const r of R){const
 function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplidas${o.partial?` · ${o.partial} parcial${o.partial>1?'es':''}`:''}${o.no?` · ${o.no} no`:''}${o.none?` · ${o.none} sin registro`:''}${v?` · ${Math.round(o.ok/v*100)} %`:''}`}
 /** cambia lo que se revisa en la reunión: «cu» = cumplimiento del día · «plan» = el plan del día siguiente (va / no va, cruces) */
 function meetMode(m,keepDay){M.mmode=m;zcClose();M.colorBy=m==='cu'?'cu':'sc';if(m==='plan'){M.cxOpen=true;M.chOpen=true}
-  if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
+  if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
   requestRender();setTimeout(()=>meetGo(M.meetSc),120)}
 function meetExit(){M.meet=false;M.meetSc='';zcClose();if(M.cb0!=null){M.colorBy=M.cb0;M.cb0=null}try{if(document.fullscreenElement)document.exitFullscreen()}catch(err){}requestRender()}
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
@@ -1992,7 +2006,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if(t.id==='dzadd'){dzAdd(t);return true}
   if((b=g('[data-goszamb]'))){if(typeof szGoAmb==='function')szGoAmb(b.dataset.goszamb);return true}
   if(t.id==='mpan'||t.id==='mpx'){M.panel=!M.panel;requestRender();return true}
-  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
+  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}
