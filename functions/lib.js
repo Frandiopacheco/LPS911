@@ -457,7 +457,41 @@ const ctaMigrables = (fichas, de) => (fichas || []).filter(f => f && de && f.cap
    y se exporta también desde aquí. Ver docs/ia/tareo.md, «Implementación de F3 — servidor». */
 const TPUB = require('./tpub');
 
+/* ---------- Reintentos por piso de congelarSemana (frz/<n>) y cerrarPlan (pcl/<fecha>) (auditoría de código 08/10, M2/M3) ----------
+   Cada piso va en su propio try/catch: si uno falla, los demás siguen. La constancia guarda los pisos que fallaron (fail) y
+   cuántas pasadas van (tries); las pasadas siguientes (cada 15 min) solo reintentan esos pisos, hasta RETRY_MAX pasadas.
+   Sin fallas pendientes no se vuelve a leer nada más que la constancia. Constancias antiguas (sin fail) = hecho. */
+const RETRY_MAX = 8;
+/** qué hacer según la constancia: null = nada (hecho o se agotaron los intentos); {only:null,tries:0} = todo (primera vez);
+ *  {only:Set de pisos, tries} = reintentar solo esos */
+function retryPlan(doc, max = RETRY_MAX) {
+  if (!doc) return { only: null, tries: 0 };
+  const fail = Array.isArray(doc.fail) ? doc.fail.filter(Boolean) : [];
+  if (!fail.length) return null;
+  const tries = Math.max(1, +doc.tries || 1);
+  if (tries >= max) return null;
+  return { only: new Set(fail), tries };
+}
+/** corre fn(id) piso por piso; un error no corta el resto. → {done:[ids], fail:[ids], out:Map(id → resultado)} */
+async function runFloors(ids, fn, onErr) {
+  const done = [], fail = [], out = new Map();
+  for (const id of ids) {
+    try { out.set(id, await fn(id)); done.push(id); }
+    catch (e) { fail.push(id); if (onErr) try { onErr(id, e); } catch (e2) { /* el aviso no corta la tarea */ } }
+  }
+  return { done, fail, out };
+}
+/** constancia nueva: base (at, n o d…) + lo hecho antes y ahora (done y los contadores de sum se suman) + los que fallaron */
+function retryRecord(prev, plan, base, done, fail, sum) {
+  const p = (plan && plan.tries && prev) || {};
+  const o = { ...base, tries: ((plan && plan.tries) || 0) + 1, fail: [...fail] };
+  o.done = [...new Set([...(Array.isArray(p.done) ? p.done : []), ...done])];
+  for (const [k, v] of Object.entries(sum || {})) o[k] = (+p[k] || 0) + (+v || 0);
+  return o;
+}
+
 module.exports = {
   CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
-  wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso };
+  wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
+  RETRY_MAX, retryPlan, runFloors, retryRecord };
