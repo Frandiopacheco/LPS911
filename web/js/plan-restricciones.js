@@ -35,6 +35,15 @@ function planFilter(main){const alts=plNorm(PLQ).split(/[,;]/).map(t=>t.trim()).
     for(const g of sec.querySelectorAll('tbody tr[data-gk]'))g.classList.toggle('plq-off',!gv.has(g.dataset.gk));
     sec.classList.toggle('plq-off',!!alts.length&&!k);vis+=k}
   const n0=$('#plq0');if(n0)n0.hidden=!(alts.length&&!vis);const nn=$('#plqn');if(nn)nn.textContent=alts.length?`${vis} de ${tot} compromisos`:''}
+function planAnchor(main){const sc=main.querySelector('.scroll');if(!sc||main.dataset.view!=='plan')return null;const top=sc.getBoundingClientRect().top;
+  if(sc.scrollTop<=0)return{st:0};
+  for(const tr of sc.querySelectorAll('section[data-pid] tr[data-id]')){const r=tr.getBoundingClientRect();if(!r.height||r.bottom<=top)continue;
+    return{st:sc.scrollTop,pid:tr.closest('section').dataset.pid,id:tr.dataset.id,dy:r.top-top}}
+  return{st:sc.scrollTop}}
+function planRestore(main,a){main.__own=true;const sc=main.querySelector('.scroll');if(!sc||!a)return;
+  const tr=a.id&&sc.querySelector(`section[data-pid="${CSS.escape(a.pid)}"] tr[data-id="${CSS.escape(a.id)}"]`);
+  if(!tr||!tr.getClientRects().length){sc.scrollTop=a.st;return}
+  tr.scrollIntoView({block:'start'});const fix=()=>{const top=sc.getBoundingClientRect().top;sc.scrollTop+=tr.getBoundingClientRect().top-top-a.dy};fix();requestAnimationFrame(fix)}
 function renderPlan(main){
   ensureDaily(addD(weekStart(U.week),-7));
   const n=U.week,wd=weekDays(n),cnc=P().cnc||[];const vp=visPisos();const byAmb=U.planV==='amb';
@@ -97,6 +106,9 @@ function renderPlan(main){
   const gp=tN?tOk/tN:null;
   /* el buscador no se pierde cuando llegan cambios de otros usuarios y se redibuja */
   const ae=document.activeElement;const qf=ae&&ae.id==='plq'?[ae.selectionStart,ae.selectionEnd]:null;
+  /* posición: los pisos usan content-visibility (alto estimado), así que al redibujar no basta con reponer scrollTop
+     (la página «saltaba al final»): se recuerda la primera fila a la vista y se vuelve a ponerla en el mismo lugar */
+  const anc=planAnchor(main);
   main.innerHTML=`<div class="scroll"><div class="wrap">
    ${pageHead('Plan semanal',`Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}`,`<button class="ib" id="bppcx" title="Formato de la empresa: actividades, programación, cumplimiento y análisis de incumplimiento">Exportar Excel</button>`)}<div class="card">
    <div class="pad">${vp.length>1?`<div class="tiles" style="margin-bottom:12px"><div class="tile"><span class="k">Pisos congelados</span><span class="v">${fz}<small> de ${vp.length}</small></span></div><div class="tile"><span class="k">Compromisos congelados</span><span class="v">${tN}</span></div><div class="tile"><span class="k">Cumplidos</span><span class="v" style="color:var(--ok)">${tOk}</span></div><div class="tile hl"><span class="k">PPC global sem ${n}</span><span class="v">${pct(gp)}</span></div></div>`:''}
@@ -105,7 +117,8 @@ function renderPlan(main){
    ${helpBox('¿Cómo funciona congelar y evaluar?',`<p>Cada piso congela y evalúa su plan por separado, así los equipos trabajan en paralelo. Al <b>congelar</b> un piso, sus actividades de la semana ${n} quedan fijadas como compromisos y se guarda una foto del lookahead para ver los cambios. Si marcas directamente Sí o No, ese piso se congela en ese momento.</p>`)}</div></div>
    <div class="pltb"><span class="seg" id="plv" role="group" aria-label="Ver el plan"><button data-v="sc" class="${byAmb?'':'on'}">Por subcontratista</button><button data-v="amb" class="${byAmb?'on':''}">Por ambiente</button></span><input type="search" id="plq" value="${esc(PLQ)}" placeholder="Buscar actividad, ambiente, sector, SC o causa (varios: separa con coma)" aria-label="Buscar en el plan semanal"><span class="note" id="plqn"></span></div>
    ${body||'<div class="empty">No hay pisos creados.</div>'}<div class="empty" id="plq0" hidden>Ningún compromiso coincide con la búsqueda.</div></div></div>`;
-  planFilter(main);if(qf){const q=$('#plq');if(q){q.focus();try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
+  planFilter(main);if(qf){const q=$('#plq');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
+  planRestore(main,anc);
   $('#plq').oninput=e=>{PLQ=e.target.value;planFilter(main)};
   $('#plv').onclick=e=>{const b=e.target.closest('[data-v]');if(!b||b.classList.contains('on'))return;U.planV=b.dataset.v;saveUI();render()};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
