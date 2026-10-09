@@ -143,11 +143,11 @@ function ncCard(wSel){const cnc=P().cnc||[];const L=[];
   return`<div class="card" id="nccard"><h2>No cumplidos de la semana ${U.week} <span class="sub">${L.length} compromiso${L.length===1?'':'s'}${sinC?` · ${sinC} sin causa`:''}${sinM?` · ${sinM} sin mitigación`:''}${ed?' · edita la causa y la mitigación aquí':''}</span></h2>
    <div class="tscroll"><table class="t rt"><thead><tr><th>Ítem</th><th>Actividad</th><th>Subcontratista</th><th style="min-width:180px">Causa</th><th style="min-width:160px">Comentario</th><th style="min-width:200px">Mitigación / acción</th></tr></thead><tbody>
    ${L.map(({w,p,id,it,r})=>{const k=`${w.n}|${p.id}|${id}`;return`<tr data-nck="${esc(k)}"><td class="mono" data-l="Ítem">${U.piso?'':esc(p.code)+' · '}${esc(it.code||'')}</td><td class="lead wrapc">${esc(it.act||'')}<div class="note">${esc(it.amb||'')}</div></td><td data-l="Subcontratista">${scLabel(it.sc)}</td>
-     <td class="full" data-l="Causa">${ed?`<select class="ci" data-ncf="cnc" data-fk="nc:cnc:${esc(k)}" aria-label="Causa"><option value="">Elegir causa…</option>${cncOpts(cnc,r.cnc)}</select>`:esc(r.cnc||'—')}</td>
-     <td class="full" data-l="Comentario">${ed?`<input class="ci" data-ncf="note" data-fk="nc:note:${esc(k)}" value="${esc(r.note||'')}" placeholder="Detalle" aria-label="Comentario">`:esc(r.note||'—')}</td>
-     <td class="full" data-l="Mitigación">${ed?`<input class="ci" data-ncf="mit" data-fk="nc:mit:${esc(k)}" value="${esc(r.mit||'')}" placeholder="Qué se hará para que no se repita" aria-label="Mitigación">`:esc(r.mit||'—')}</td></tr>`}).join('')}
+     <td class="full" data-l="Causa">${ed&&isPisoResp(p.id)?`<select class="ci" data-ncf="cnc" data-fk="nc:cnc:${esc(k)}" aria-label="Causa"><option value="">Elegir causa…</option>${cncOpts(cnc,r.cnc)}</select>`:esc(r.cnc||'—')}</td>
+     <td class="full" data-l="Comentario">${ed&&isPisoResp(p.id)?`<input class="ci" data-ncf="note" data-fk="nc:note:${esc(k)}" value="${esc(r.note||'')}" placeholder="Detalle" aria-label="Comentario">`:esc(r.note||'—')}</td>
+     <td class="full" data-l="Mitigación">${ed&&isPisoResp(p.id)?`<input class="ci" data-ncf="mit" data-fk="nc:mit:${esc(k)}" value="${esc(r.mit||'')}" placeholder="Qué se hará para que no se repita" aria-label="Mitigación">`:esc(r.mit||'—')}</td></tr>`}).join('')}
    </tbody></table></div></div>`}
-function ncChange(t){const f=t.dataset.ncf;const tr=t.closest('tr[data-nck]');if(!f||!tr||!canWrite)return false;const[n,pid,id]=tr.dataset.nck.split('|');const w=S.wk.get(wkId(+n,pid));if(!w)return true;
+function ncChange(t){const f=t.dataset.ncf;const tr=t.closest('tr[data-nck]');if(!f||!tr||!canWrite)return false;const[n,pid,id]=tr.dataset.nck.split('|');if(!isPisoResp(pid))return true;const w=S.wk.get(wkId(+n,pid));if(!w)return true;
   const cur=(w.res||{})[id]||{};const v=f==='cnc'?t.value:t.value.trim();t.dataset.o=t.value;setRes(+n,pid,id,{...cur,[f]:v});return true}
 function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;saveUI();render();return}
