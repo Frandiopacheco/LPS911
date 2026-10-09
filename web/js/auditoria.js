@@ -29,11 +29,13 @@ const DIDX=new Map(),REOP=new Map();let didxSub=null;
 function ensureDoneIdx(){if(!db||didxSub)return;
   didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();REOP.clear();sn.docs.forEach(d=>{const v=d.data()||{},m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
     /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
-    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();if(ready)requestRender()},()=>{});
-  unsubs.push(()=>{if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()})}
+    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();snapOk('doneidx');if(ready)requestRender()},
+    err=>{didxSub=null;snapFail('doneidx',err,ensureDoneIdx)});/* si se cae, se reabre sola (base.js) */
+  if(!unsubs.includes(stopDoneIdx))unsubs.push(stopDoneIdx)}
+function stopDoneIdx(){if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()}
 function didxWrite(pid,map,f){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
   for(const[a,v]of Object.entries(map))d[a]=v==null?(FV&&FV.delete?FV.delete():null):v;
-  fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}).catch(()=>{})}
+  bgWrite(fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}))}
 function didxFromDaily(d,pid,recs){const m={};for(const[aid,r]of Object.entries(recs||{})){if(!r||!('done'in r))continue;const cur=DIDX.get(aid);
     if(r.done){if(!cur||d<cur){m[aid]=d;DIDX.set(aid,d)}}else if(cur===d){m[aid]=null;DIDX.delete(aid)}}
   if(Object.keys(m).length)didxWrite(pid,m)}
@@ -226,7 +228,7 @@ const memPisos=m=>Array.isArray(m&&m.pisos)?m.pisos:[];
 let RESP_T=null;const RESP_W=new Set();
 function respSync(){if(!db||typeof isAdmin==='undefined'||!isAdmin||!MEM.size||!S.loaded||!S.loaded.pis)return;clearTimeout(RESP_T);RESP_T=setTimeout(()=>{
   for(const p of S.pis.values()){const L=respOf(p.id).map(o=>String(o.em).toLowerCase()).sort();const cur=Array.isArray(p.resp)?[...p.resp].sort():[];
-    if(canon(L)===canon(cur)||RESP_W.has(p.id))continue;RESP_W.add(p.id);fcol('pisos').doc(p.id).update({resp:L}).catch(()=>{}).finally(()=>RESP_W.delete(p.id))}},1500)}
+    if(canon(L)===canon(cur)||RESP_W.has(p.id))continue;RESP_W.add(p.id);bgWrite(fcol('pisos').doc(p.id).update({resp:L})).finally(()=>RESP_W.delete(p.id))}},1500)}
 function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
 /* quién decide en un piso (propuestas del lookahead y plan diario): el administrador siempre; un editor en los pisos a su

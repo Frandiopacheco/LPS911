@@ -1,7 +1,7 @@
 // Preparación de la publicación (la ejecuta Netlify en cada cambio).
 // 1) Elige la configuración de Firebase según la rama: produccion → config/produccion.js; otra → config/pruebas.js
-// 2) Pone la versión (commit) en sw.js y en las URLs de css/, js/ y plano.js, para que la app avise "Hay una versión nueva"
-//    sin tener que cambiar números a mano.
+// 2) Pone la versión (commit) en sw.js y en las URLs de css/, js/, plano.js y firebase-config.js, para que la app avise
+//    "Hay una versión nueva" sin tener que cambiar números a mano.
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkWeb } from './check.mjs';
@@ -33,10 +33,15 @@ const stamp = f => {
   return t;
 };
 const html = stamp('index.html');
+// firebase-config.js se genera en cada publicación: en el código va sin versión (las pruebas lo reemplazan por su nombre)
+// y aquí se le pone, así el service worker lo guarda como los demás archivos con versión (sin esperar a la red al abrir)
+const fbc = /src="firebase-config\.js(?:\?v=[\w-]+)?"/;
+if (!fbc.test(html)) { console.error('\n✗ index.html no carga firebase-config.js\n'); process.exit(1); }
+fs.writeFileSync(path.join(web, 'index.html'), html.replace(fbc, `src="firebase-config.js?v=${ver}"`));
 const assets = [...html.matchAll(/(?:src|href)="((?:js|css)\/[\w-]+\.(?:js|css))\?v=/g)].map(m => m[1]);
 for (const f of assets) if (f.endsWith('.js')) stamp(f);
 const n = (fs.readFileSync(path.join(web, 'js', 'base.js'), 'utf8').match(/plano\.js\?v=[\w-]+/g) || []).length;
-const list = [...assets, 'plano.js'].map(f => `'${f}?v=${ver}'`).join(', ');
+const list = [...assets, 'plano.js', 'firebase-config.js'].map(f => `'${f}?v=${ver}'`).join(', ');
 sw = fs.readFileSync(path.join(web, 'sw.js'), 'utf8').replace(/const ASSETS = \[[^\]]*\];/, `const ASSETS = [${list}];`);
 fs.writeFileSync(path.join(web, 'sw.js'), sw);
 
