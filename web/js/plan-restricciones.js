@@ -127,9 +127,9 @@ const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<opt
 function resPatch(n,pid,upd){const w=S.wk.get(wkId(n,pid));if(!w)return;const FP=firebase.firestore.FieldPath;const args=[];const nres={...(w.res||{})};
   for(const[id,val]of Object.entries(upd)){const cur=(w.res||{})[id]||{};const nv={...cur};for(const[f,v]of Object.entries(val||{})){if(canon(v)===canon(cur[f]))continue;args.push(new FP('res',id,f),v===undefined?null:v);nv[f]=v}nres[id]=nv}
   w.res=nres;requestRender();if(!args.length||!db||!canWrite)return;
-  pending++;setStatus();const key='weeks/'+wkId(n,pid);
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
+  /* auditoría de código 08/10 (C1): se entrega al SDK al instante (no espera la confirmación de la anterior): sin señal queda
+     en la cola del equipo y no solo en la memoria de la página */
+  bgWrite(dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))}
 function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
 /* Corte semanal: la semana n se congela sola en el mismo corte de las propuestas de SC (Configuración › Proyecto; por
    defecto el sábado 13:00 de Lima antes del lunes). Lo hace el servidor (tarea congelarSemana) si nadie la congeló antes. */
