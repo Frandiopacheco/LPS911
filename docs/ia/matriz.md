@@ -163,3 +163,8 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - **Posible duplicado** (`mxDupOf`): misma especialidad (`espOfSc`) o mismo SC y ≥ 60 % de palabras en común → botón «⚠ ¿Es «X»? Combinar» que abre Combinar con X elegida (`mxMergeDlg(a,pre)`).
 - **Combinar con estados distintos:** queda el **más avanzado** (`MXRANK`/`mxMaxSt`: Terminado › En curso › Pendiente › No aplica); el diálogo lista los ambientes en conflicto. Lo que se sobrescribe en B se guarda en `arch.bset {amb:[antes,después]}` y Restaurar lo devuelve si nadie lo cambió. Combinar también borra `rev`.
 - Pruebas: `tests/e2e/matriz-look.spec.js` (duplicado/combinar, rechazar).
+
+## Diseño más amigable (oct 2026, pedido del dueño)
+- Celdas como fichas de color (borde de 3 px del color del panel + `border-radius`): **Terminado** verde lleno con ✓ blanco, **En curso** ámbar, **Pendiente** gris claro con borde, **No aplica** solo «–». **Sin validar** = la misma ficha en versión clara (sin borde punteado). Celdas que no aplican al ambiente (`.mc.x`) sin rayado.
+- Encabezados más altos (`--nh` 150/190/220 según tamaño) para leer el nombre completo; banda del SC teñida con su color. Tipo de ambiente: el `select` se ve como texto hasta pasar el mouse. % del ambiente con barra (`--p`); totales en 0 % atenuados (`.mxf.z`).
+- Avisos en **una bandeja** `.mxals` con botones `.mxal` (mismos ids: `#mxlog`, `[data-mxv=cat]`, `#mxsmis`, `#mxmap`); ya no hay `.callout.mxun` en la Matriz.
