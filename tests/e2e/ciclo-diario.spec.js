@@ -391,3 +391,87 @@ test('reporte «sin inicio marcado» para WhatsApp: consolidado y por SC', async
   expect(await page.locator('#sisheet a[href^="https://wa.me/?text="]').getAttribute('href')).toContain('Iniciado');
   noErrors(errors, 'sin iniciar');
 });
+
+/* «No va → reprogramar» con el plan ya publicado (día reabierto por el administrador): id fijo nv_<fecha>_<actividad> en una
+   transacción, restricción res-<id>, y los días se corren desde lo que tiene la base (auditoría de robustez, P11) */
+async function publicadoYReabierto(page) {
+  await publicar(page);
+  page.once('dialog', d => d.accept('Corrección de prueba'));
+  await page.locator('#mpanel [data-lko]').click();
+  await expect(page.locator('#mpanel .pubb.reo')).toBeVisible();
+}
+const novasDe = (page, aid) => page.evaluate(aid => Object.entries(window.__dbAll('pdz')).filter(([, z]) => z.kind === 'nova' && z.actId === aid).map(([id]) => id), aid);
+const restrDe = (page, aid) => page.evaluate(aid => Object.entries(window.__dbAll('restr')).filter(([, r]) => r.actId === aid && !r.arch).map(([id]) => id), aid);
+
+test('22 · «No va» en un plan publicado: dos ingenieros a la vez dejan una sola «no va», una restricción y sin días de más', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await publicadoYReabierto(page);
+  const [sig, sig2] = await page.evaluate(d => [wshift(d, 1), wshift(d, 2)], MANANA);
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.locator(`#pop [data-to="${sig2}"]`).click();
+  // la tablet decidió la misma actividad un instante antes (a otra fecha): ya está en la base, pero a esta página aún no le llega
+  await enSilencio(page, 'pdz', `nv_${MANANA}_e0`, { date: MANANA, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Falta de personal', k: 'per', repTo: sig, rid: `res-nv_${MANANA}_e0`, by: 'editor@obra.pe', ts: 2 });
+  await enSilencio(page, 'acts', 'e0', { days: [HOY, sig], qty: {} });
+  await page.locator('#pop .nvok').click();
+  await expect(page.locator('#toast')).toContainText('Otro usuario ya decidió esta actividad');
+  // no se escribió nada: una sola «no va», ninguna restricción nueva y los días son los que dejó la tablet (sin sumar los de esta)
+  expect(await novasDe(page, 'e0')).toEqual([`nv_${MANANA}_e0`]);
+  expect((await pdzDoc(page, `nv_${MANANA}_e0`)).repTo).toBe(sig);
+  expect(await restrDe(page, 'e0')).toEqual([]);
+  expect(sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, sig]));
+  noErrors(errors, 'no va concurrente');
+});
+
+test('22b · «No va» en un plan publicado: id fijo, restricción res-<id>, Deshacer y volver a decidir', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await publicadoYReabierto(page);
+  const sig = await page.evaluate(d => wshift(d, 1), MANANA);
+  const NV = `nv_${MANANA}_e0`, RS = `res-nv_${MANANA}_e0`;
+  const noVa = async () => {
+    await row(page, 'e0').locator('[data-dv^="no"]').click();
+    await page.locator('#pop [data-nk="per"]').click();
+    await page.locator('#pop [data-nv="nolib"]').click();
+    await page.locator('#pop .nvok').click();
+  };
+  await noVa();
+  await expect.poll(async () => sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, sig]));
+  const z = await pdzDoc(page, NV);
+  expect([z.kind, z.k, z.rid, z.repTo, sorted(z.mv.e0.n)]).toEqual(['nova', 'per', RS, sig, sorted([HOY, sig])]);
+  expect(await restrDe(page, 'e0')).toEqual([RS]);
+  expect((await act(page, 'e0')).rpl[MANANA].to).toBe(sig);
+  // Deshacer: vuelven los días, la «no va» se quita y la restricción se archiva
+  await page.locator('#toast button', { hasText: 'Deshacer' }).click();
+  await expect.poll(async () => sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, MANANA]));
+  await expect.poll(() => novasDe(page, 'e0')).toEqual([]);
+  expect(await restrDe(page, 'e0')).toEqual([]);
+  // se puede volver a decidir (el mismo id fijo): una sola «no va» y la misma restricción, otra vez vigente
+  await noVa();
+  await expect.poll(() => novasDe(page, 'e0')).toEqual([NV]);
+  await expect.poll(() => restrDe(page, 'e0')).toEqual([RS]);
+  expect(sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, sig]));
+  noErrors(errors, 'no va publicado');
+});
+
+test('22c · «No va hoy» de dos personas a la vez: solo la primera reprograma y registra', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.click('#wtoday');
+  page.once('dialog', d => d.accept('Corrección de prueba'));
+  await page.locator('#mpanel [data-lko]').click();
+  await expect(page.locator('#mpanel .pubb.reo')).toBeVisible();
+  const sig = await page.evaluate(d => wshift(d, 1), MANANA);
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.fill('#nvd', sig);
+  // otro ingeniero ya dijo que no va hoy (llegó a la base, no a esta página)
+  await enSilencio(page, 'pdz', `nv_${HOY}_e0`, { date: HOY, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Clima', repTo: '', eng: true, by: 'editor@obra.pe', ts: 2 });
+  await page.locator('#pop [data-do="ok"]').click();
+  await expect(page.locator('#toast')).toContainText('Otro usuario ya decidió esta actividad');
+  expect(await novasDe(page, 'e0')).toEqual([`nv_${HOY}_e0`]);
+  expect(await restrDe(page, 'e0')).toEqual([]);
+  expect(sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, MANANA]));
+  expect(((await page.evaluate(d => window.__dbGet('daily', d + '_p1'), HOY)) || { recs: {} }).recs.e0).toBeFalsy();
+  noErrors(errors, 'no va hoy concurrente');
+});

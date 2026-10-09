@@ -110,45 +110,73 @@ window.__uiAskNative = true;
   const docSnap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) }; };
   const ops = { '==': (a, b) => a === b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '<': (a, b) => a < b, '!=': (a, b) => a !== b,
     in: (a, b) => (b || []).includes(a), 'array-contains': (a, b) => Array.isArray(a) && a.includes(b) };
-  function qSnap(n, filters, lim) {
+  /* prev (de cada suscripción): id → JSON de la última foto que vio; docChanges() trae solo lo que cambió desde entonces,
+     como Firestore (la primera foto: todo 'added'). Sin prev (get), todo 'added'. */
+  function qSnap(n, filters, lim, prev) {
     let docs = [...col(n).keys()].map(id => docSnap(n, id)).filter(s => filters.every(([f, op, v]) => ops[op]((s.data() || {})[f], v)));
     if (lim) docs = docs.slice(0, lim);
-    return { docs, size: docs.length, empty: !docs.length, forEach(f) { docs.forEach(f); }, docChanges: () => docs.map(doc => ({ type: 'added', doc })), metadata: { hasPendingWrites: false, fromCache: false } };
+    let changes;
+    if (!prev) changes = docs.map(doc => ({ type: 'added', doc }));
+    else {
+      changes = []; const seen = new Set();
+      for (const doc of docs) { seen.add(doc.id); const j = JSON.stringify(col(n).get(doc.id)); const o = prev.get(doc.id);
+        if (o === undefined) changes.push({ type: 'added', doc }); else if (o !== j) changes.push({ type: 'modified', doc }); prev.set(doc.id, j); }
+      for (const [id, j] of [...prev]) if (!seen.has(id)) { prev.delete(id); const d = JSON.parse(j); changes.push({ type: 'removed', doc: { id, exists: false, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) } }); }
+    }
+    return { docs, size: docs.length, empty: !docs.length, forEach(f) { docs.forEach(f); }, docChanges: () => changes, metadata: { hasPendingWrites: false, fromCache: false } };
   }
   const cbOf = a => a.find(f => typeof f === 'function');
+  /* sin señal (pruebas): con window.__dbHold = true cada escritura se aplica al momento en la base, como la caché local de
+     Firestore (las fotos la incluyen), pero su promesa no se cumple hasta window.__dbRelease() (el servidor no confirma).
+     window.__dbWrites cuenta las escrituras que recibe el SDK. Sin __dbHold todo funciona como siempre. */
+  const held = [];
+  window.__dbWrites = 0;
+  window.__dbRelease = () => { const h = held.splice(0); h.forEach(f => f()); return h.length; };
+  const ack = () => { window.__dbWrites++; return window.__dbHold ? new Promise(ok => held.push(ok)) : null; };
   function docRef(n, id) {
     return {
       id, path: n + '/' + id,
       collection: sub => colRef(n + '/' + id + '/' + sub),
       get: async () => docSnap(n, id),
-      set: async (d, o) => { chkData(d); col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); },
+      set: async (d, o) => { const h = ack(); chkData(d); col(n).set(id, o && o.merge ? deepMerge(col(n).get(id), d) : resolve(d)); changed(n); if (h) await h; },
       update: async (...a) => {
+        const h = ack();
         if (!col(n).has(id)) { const e = new Error('No document to update'); e.code = 'not-found'; throw e; }
         if (a.length === 1) chkData(a[0]); else for (let i = 1; i < a.length; i += 2) chkData({ v: a[i] });
         const cur = clone(col(n).get(id)) || {};
         if (a.length === 1) for (const [k, v] of Object.entries(a[0])) setPath(cur, k.split('.'), v);
         else for (let i = 0; i < a.length; i += 2) setPath(cur, a[i] instanceof FP ? a[i].p : String(a[i]).split('.'), a[i + 1]);
-        col(n).set(id, cur); changed(n);
+        col(n).set(id, cur); changed(n); if (h) await h;
       },
-      delete: async () => { col(n).delete(id); changed(n); },
+      delete: async () => { const h = ack(); col(n).delete(id); changed(n); if (h) await h; },
       onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(docSnap(n, id)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
     };
   }
+  /* consultas hechas (para las pruebas: qué se pidió) y, con __E2E.noIdx (o window.__noIdx), un índice compuesto que falta: una igualdad en un campo
+     más un rango en otro responde failed-precondition, como Firestore mientras el índice no está construido */
+  window.__qlog = window.__qlog || [];
+  const needsIdx = f => { const eq = f.filter(x => x[1] === '==').map(x => x[0]), rg = f.filter(x => ['>=', '<=', '>', '<'].includes(x[1])).map(x => x[0]); return rg.some(r => eq.some(e => e !== r)); };
+  const idxErr = () => { const e = new Error('The query requires an index.'); e.code = 'failed-precondition'; return e; };
   function colRef(n, filters = [], lim = 0) {
+    const noIdx = !!(E.noIdx || window.__noIdx) && needsIdx(filters);
     const q = {
       id: n, path: n,
       doc: id => docRef(n, id || 'id' + Math.random().toString(36).slice(2, 12)),
       add: async d => { const id = 'id' + Math.random().toString(36).slice(2, 12); col(n).set(id, resolve(d)); changed(n); return docRef(n, id); },
       where: (f, op, v) => colRef(n, [...filters, [f, op, v]], lim),
       orderBy: () => q, limit: k => colRef(n, filters, k), startAt: () => q, startAfter: () => q, endAt: () => q,
-      get: async () => qSnap(n, filters, lim),
-      onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(qSnap(n, filters, lim)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
+      get: async () => { window.__qlog.push({ n, filters: clone(filters), get: true }); if (noIdx) throw idxErr(); return qSnap(n, filters, lim); },
+      onSnapshot(...a) {
+        window.__qlog.push({ n, filters: clone(filters) });
+        if (noIdx) { const fs_ = a.filter(f => typeof f === 'function'); setTimeout(() => fs_[1] && fs_[1](idxErr()), 0); return () => {}; }
+        const cb = cbOf(a); const prev = new Map(); const s = { n, fire: () => cb(qSnap(n, filters, lim, prev)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
+      },
     };
     return q;
   }
   function batch() {
     const L = [];
-    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { hold = hold || new Set(); holdN++; try { for (const f of L) await f(); } finally { if (--holdN === 0) { const h = hold; hold = null; h.forEach(n => changed(n)); } } } };
+    return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, ...a) => L.push(() => r.update(...a)), delete: r => L.push(() => r.delete()), commit: async () => { hold = hold || new Set(); holdN++; let ps = null; try { if (window.__dbHold) ps = L.map(f => f()); else for (const f of L) await f(); } finally { if (--holdN === 0) { const h = hold; hold = null; h.forEach(n => changed(n)); } } if (ps) await Promise.all(ps); } };
   }
   const fs = { collection: n => colRef(n), doc: p => { const [c, id] = p.split('/'); return docRef(c, id); }, batch, enablePersistence: async () => {}, useEmulator() {},
     runTransaction: async fn => fn({ get: r => r.get(), set: (r, d, o) => r.set(d, o), update: (r, ...a) => r.update(...a), delete: r => r.delete() }) };

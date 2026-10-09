@@ -197,31 +197,47 @@ function strip(o){const c={...o};delete c.id;return c}
 function actNorm(o){const ds=o&&o.days;if(Array.isArray(ds))for(let i=1;i<ds.length;i++)if(!(ds[i-1]<ds[i])){o.days=[...new Set(ds)].sort();break}return o}
 async function dbCall(fn){try{return await fn()}catch(e){if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,400+Math.random()*700));return await fn()}throw e}}
 let DV=0; /* sube con cada cambio de datos (para cachés) */
-/* escrituras propias en cola que aún no salen (esperan la anterior del mismo documento): mientras tanto, lo que llega
-   de la base para ese documento es una versión vieja y no debe pisar la local (hacía parpadear las barras al mover) */
-const QK={};
-function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+/* Escrituras al SDK al instante (auditoría C1, oct 2026): cada cambio se entrega a Firestore en el mismo momento, sin esperar
+   a que el servidor confirme el anterior del mismo documento. Firestore respeta el orden de las escrituras de este equipo y,
+   sin señal, las guarda en su cola local (IndexedDB): si se cierra o recarga la página, salen al volver a abrirla.
+   Antes cada escritura esperaba la confirmación de la anterior: sin señal, la segunda en adelante solo vivía en la memoria de
+   la página y se perdía al cerrarla. Lo que queda por documento es solo contabilidad (pendientes, barra, errores).
+   QK: durante QKMS ms después de escribir, una foto de la base para ese documento pudo armarse antes de la escritura (vieja):
+   no pisa la local; se guarda la última que llegó y se aplica al vencer el plazo (qkFlush), así nunca queda algo viejo pegado. */
+const QK={};const QKMS=1500;
+function qkMark(col,id){const k=COLS[col];if(!k)return;const key=col+'/'+id;const o=QK[key]||(QK[key]={col,id,has:false,v:null,t:0});clearTimeout(o.t);o.t=setTimeout(()=>qkFlush(key),QKMS)}
+/** ¿la foto que llega para col/id debe esperar? (hay una escritura propia reciente): se guarda la última (v = datos o null si ya no está) */
+function qkHold(col,id,v){const o=QK[col+'/'+id];if(!o)return false;o.has=true;o.v=v;return true}
+function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)return;const k=COLS[o.col];const cur=S[k].get(o.id)||(ARCH[k]&&ARCH[k].get(o.id))||null;
+  if(canon(cur)===canon(o.v))return;S[k]=new Map(S[k]);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v);DV++;if(ready)requestRender()}
+/** pone (o quita, v=null) un documento en S/ARCH según su archivo */
+function colSet(k,id,v){const AR=ARCH[k];if(!v){S[k].delete(id);if(AR)AR.delete(id);return}if(v.arch&&AR){S[k].delete(id);AR.set(id,v)}else{if(AR)AR.delete(id);S[k].set(id,v)}}
+/* para la carga entera de una colección (primera foto): lo que tiene escritura propia reciente se queda con la versión local */
+function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);qkHold(col,id,mp.get(id)||null);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+/* último contenido completo que este equipo escribió en cada documento (solo mientras hay escrituras sin confirmar):
+   si el servidor dice que el documento ya no existe (not-found), se vuelve a crear con lo último, no con una versión intermedia */
+const WLAST={};
+/** entrega la escritura al SDK en este mismo instante; un error de validación inmediato se trata como rechazo */
+function fsNow(fn){try{return Promise.resolve(fn())}catch(e){return Promise.reject(e)}}
 function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
-  const k=COLS[col];const prev=getDoc(col,id);const AR=ARCH[k];if(data){if(data.arch&&AR){S[k].delete(id);AR.set(id,{...clone(data),id})}else{if(AR)AR.delete(id);S[k].set(id,{...clone(data),id})}}else{S[k].delete(id);if(AR)AR.delete(id)}
+  const k=COLS[col];const prev=getDoc(col,id);colSet(k,id,data?{...clone(data),id}:null);
   if(!db||(!canWrite&&!scR))return Promise.resolve();
   const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body,col):null;
   if(args&&!args.length)return Promise.resolve();
-  pending++;setStatus();const key=col+'/'+id;const ref=fcol(col).doc(id);QK[key]=(QK[key]||0)+1;
-  const run=()=>{QK[key]--;if(QK[key]<=0)delete QK[key];return run0()};
-  /* mover días (args.then): quitar y agregar se encolan en el mismo instante, así sin señal quedan los dos en la cola local */
-  const run0=()=>!body?ref.delete():args?Promise.all([ref.update(...args),args.then?ref.update(...args.then):null]).catch(e=>{if(e&&e.code==='not-found')return ref.set(body);throw e}):ref.set(body);
-  const p=(chains[key]||Promise.resolve()).then(()=>dbCall(run))
-    .then(()=>{lastErr=null},e=>{handleWriteErr(e)}).finally(()=>{pending--;setStatus()});
-  chains[key]=p;return p;
+  const key=col+'/'+id;const ref=fcol(col).doc(id);qkMark(col,id);const w=WLAST[key]||(WLAST[key]={n:0,b:null});const my=++w.n;w.b=body;
+  /* mover días (args.then): quitar y agregar salen en el mismo instante y en ese orden */
+  const p=!body?fsNow(()=>ref.delete()):args?Promise.all([fsNow(()=>ref.update(...args)),args.then?fsNow(()=>ref.update(...args.then)):null]):fsNow(()=>ref.set(body));
+  return bgWrite(p.catch(e=>{const c=e&&e.code;const last=WLAST[key]&&WLAST[key].b;
+      /* el documento no existe en el servidor (lo borraron) o un fallo de red raro: se reescribe entero con lo último de este equipo */
+      if((c==='not-found'||c==='unavailable')&&last)return fsNow(()=>ref.set(last));throw e})
+    .finally(()=>{const o=WLAST[key];if(o&&o.n===my)delete WLAST[key]}));
 }
 function fsArgs(partial){const a=[];for(const[k,v]of Object.entries(partial)){if(v&&typeof v==='object'&&!Array.isArray(v))for(const[k2,v2]of Object.entries(v))a.push(new firebase.firestore.FieldPath(k,k2),v2);else a.push(k,v)}return a}
 function patch(col,id,partial,localApply){
   if(localApply)localApply();
   if(!db||!canWrite)return;
-  pending++;setStatus();const key=col+'/'+id;
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol(col).doc(id).update(...fsArgs(partial))))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()});
+  qkMark(col,id);bgWrite(fsNow(()=>fcol(col).doc(id).update(...fsArgs(partial))));
 }
 function handleWriteErr(e){const c=e&&e.code;
   if(c==='permission-denied'&&typeof AREA==='function'&&AREA()){lastErr='Sin permiso';toast('No se pudo guardar: solo puedes registrar y resolver las restricciones de '+(me.area||'tu área')+'.')}
@@ -344,7 +360,18 @@ async function memFirst(ref){const srv=ref.get({source:'server'});
   try{return await ref.get()}catch(e){return null}}
 /* suscripción a una colección entera (COLS de Last Planner, TCOLS del tareo); si se cae, se reabre sola (snapFail) */
 function subCol(col,k,lps){let un=null;const key='col:'+col;
-  const open=()=>{un=fcol(col).onSnapshot(snap=>{const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,lps&&col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id}));if(lps)keepQueued(col,mp);setColData(k,mp);S.loaded[k]=true;snapOk(key);onData()},
+  const mk=d=>lps&&col==='acts'?actNorm({...d.data(),id:d.id}):{...d.data(),id:d.id};
+  /* fotos incrementales (auditoría C4/L11, oct 2026): la primera foto carga todo; después solo se procesa lo que cambió
+     (snap.docChanges()). Con 2000 actividades, cada cambio ya no vuelve a leer y normalizar todas. Los Map se copian (su
+     identidad cambia como antes: cachés como cliActs comparan S.act===…), pero los objetos de lo que no cambió son los mismos. */
+  const open=()=>{let first=true;un=fcol(col).onSnapshot(snap=>{
+      if(first){first=false;const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,mk(d)));if(lps)keepQueued(col,mp);setColData(k,mp)}
+      else{const ch=snap.docChanges();if(!ch.length){snapOk(key);return}
+        const nk=new Map(S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
+        for(const c of ch){const id=c.doc.id;const v=c.type==='removed'?null:mk(c.doc);if(lps&&qkHold(col,id,v))continue;
+          nk.delete(id);if(na)na.delete(id);if(v){if(v.arch&&na)na.set(id,v);else nk.set(id,v)}}
+        S[k]=nk;if(na)ARCH[k]=na;DV++}
+      S.loaded[k]=true;snapOk(key);onData()},
     err=>{un=null;snapFail(key,err,open)})};
   open();unsubs.push(()=>{if(un)un();un=null})}
 const memOffMsg=d=>d&&d.movTo?'Tu usuario de este celular se pasó a una cuenta con DNI y contraseña: entra con tu DNI y la contraseña que te dio la oficina.':'Tu cuenta está desactivada. Habla con la oficina.';
@@ -398,20 +425,57 @@ function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&d
 function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
-  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,{...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)}));doneRebuild();
+  /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
+     no vuelve a leer los datos ni recalcula las terminadas (C4): solo actualiza _pend de ese documento */
+  let first=true;
+  liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{let data=true;
+      if(first){first=false;LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,liveDoc(d)))}
+      else{const all=sn.docChanges({includeMetadataChanges:true});if(!all.length&&!liveErr){snapOk('live');return}
+        const dch=new Set(sn.docChanges().map(c=>c.doc.id));data=dch.size>0;
+        for(const c of all){const id=c.doc.id;if(c.type==='removed'){LIVE.delete(id);data=true;continue}
+          const cur=LIVE.get(id);if(dch.has(id)||!cur){LIVE.set(id,liveDoc(c.doc));data=true}else{const p=!!(c.doc.metadata&&c.doc.metadata.hasPendingWrites);if(cur._pend!==p)LIVE.set(id,{...cur,_pend:p})}}}
+      if(data)doneRebuild();
       const sg=liveSig();const same=sg===LIVE_SIG&&!liveErr;LIVE_SIG=sg;liveErr=null;snapOk('live');if(ready&&!(same&&U.tab==='look'))requestRender()},
     err=>{liveErr=err&&err.code||'error';liveSub=null;snapFail('live',err,()=>{liveFrom=null;ensureLive(f)});if(ready)requestRender()});
   if(!unsubs.includes(stopLive))unsubs.push(stopLive)}
 /* lo que el Lookahead usa de los reportes en vivo: los cierres (estado, terminada, causa, quién) y de quién es el reporte; no inicio/pausa */
 let LIVE_SIG=null;
 function liveSig(){let s='';for(const[id,lv]of LIVE){const c=lv.close;if(c)s+=id+'|'+(lv.sc||'')+'|'+(lv.pisoId||'')+'|'+(lv.actId||'')+'|'+(lv.photos||[]).length+'|'+JSON.stringify(c)+'\n'}return s}
+const liveDoc=d=>({...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)});
 function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null}
 let dayP=Promise.resolve();
-function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;if(daySub)daySub();dayFrom=from;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
-  daySub=fcol('daily').where('date','>=',from).onSnapshot(sn=>{DAY.clear();sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}));doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
-    err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;ensureDaily(from)});ok();if(ready&&U.tab==='campo')requestRender()});
+/* Ventana viva + rangos antiguos (auditoría C8/P8, oct 2026): daily y dplan se escuchan en vivo como mucho desde hace DAYWIN
+   días; lo anterior que pida una pantalla (volver semanas atrás) se lee UNA vez con get(), desde el lunes de esa semana hasta
+   donde ya hay datos, y se junta en los mismos Map (OLDR guarda desde dónde hay). Antes cada paso hacia atrás reabría la
+   suscripción desde una fecha más temprana y volvía a bajar todo. Lo antiguo no se actualiza en vivo (sí lo que escribe este equipo). */
+const DAYWIN=21;
+const monOf=d=>addD(d,-((pd(d).getUTCDay()+6)%7));
+const OLDR={daily:{cov:null,p:Promise.resolve(),gen:0},dplan:{cov:null,p:Promise.resolve(),gen:0}};
+let DAYWN=0;const DAYW=new Map();/* registros del día escritos aquí (writeDaily): una lectura antigua que llega después no los pisa */
+function oldFetch(col,M,from,to,done){const o=OLDR[col];const a=monOf(from);const top=o.cov&&o.cov<to?o.cov:to;if(a>=top)return o.p;
+  const g=o.gen,wn=DAYWN;o.cov=a;
+  const p=fcol(col).where('date','>=',a).where('date','<',top).get().then(sn=>{if(g!==o.gen)return;
+      for(const d of sn.docs){const v={...d.data(),id:d.id};const cur=M.get(d.id);
+        if(col==='daily'&&cur&&(DAYW.get(d.id)||0)>wn)v.recs={...(v.recs||{}),...(cur.recs||{})};M.set(d.id,v)}
+      /* sin señal la lectura sale de la copia del equipo (puede estar incompleta): ese rango se vuelve a pedir la próxima vez */
+      if(sn.metadata&&sn.metadata.fromCache&&o.cov===a)o.cov=top;done()},
+    err=>{if(g===o.gen&&o.cov===a)o.cov=top;console.warn('LPS: no se pudo leer '+col+' anterior al '+top+' ('+(err&&err.code||err)+'); se reintenta al volver a pedirlo')});
+  o.p=Promise.all([o.p,p]);return o.p}
+function ensureDaily(from){ensureLive(from);ensureDplan(from);if(typeof ensureNP==='function')ensureNP(from);if(!db||(dayFrom&&from>=dayFrom))return dayP;
+  /* hacia atrás, la suscripción baja de una vez hasta el tope (DAYWIN): así se reabre como mucho una vez */
+  const lim=addD(todayIso(),-DAYWIN);const f=dayFrom||from<lim?lim:from;if(!dayFrom||f<dayFrom)daySubOpen(f);
+  if(from>=dayFrom)return dayP;
+  oldFetch('daily',DAY,from,dayFrom,()=>{doneRebuild();if(ready)requestRender()});
+  return Promise.race([Promise.all([dayP,OLDR.daily.p]),new Promise(r=>setTimeout(r,8000))])}
+function daySubOpen(f){if(daySub)daySub();dayFrom=f;let ok;dayP=new Promise(r=>ok=r);setTimeout(()=>ok(),8000);
+  let first=true;/* la primera foto carga todo su rango (lo antiguo leído con get() se queda); después solo lo que cambió (C4) */
+  daySub=fcol('daily').where('date','>=',f).onSnapshot(sn=>{
+      if(first){first=false;for(const[id,v]of DAY)if(!(v&&v.date<f))DAY.delete(id);sn.docs.forEach(d=>DAY.set(d.id,{...d.data(),id:d.id}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('daily');ok();return}for(const c of ch){if(c.type==='removed')DAY.delete(c.doc.id);else DAY.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
+      doneRebuild();dayErr=null;snapOk('daily');ok();if(ready)requestRender()},
+    err=>{dayErr=err&&err.code;daySub=null;snapFail('daily',err,()=>{dayFrom=null;daySubOpen(f)});ok();if(ready&&U.tab==='campo')requestRender()});
   if(!unsubs.includes(stopDaily))unsubs.push(stopDaily)}
-function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear()}
+function stopDaily(){if(daySub)daySub();daySub=null;dayFrom=null;dayP=Promise.resolve();DAY.clear();FOTO.clear();DAYW.clear();const o=OLDR.daily;o.gen++;o.cov=null;o.p=Promise.resolve()}
 const dayId=(d,pid)=>d+'_'+pid;
 /* ---------- Plan del día cerrado (dplan/<fecha>_<piso>) ----------
    El plan de un día se cierra al publicarlo en la reunión del día anterior (o solo a la hora de cierre, por defecto 21:00, si nadie lo publicó: tarea
@@ -419,11 +483,19 @@ const dayId=(d,pid)=>d+'_'+pid;
    Hoy y los días pasados siempre están cerrados. Un día cerrado no se reprograma (lookahead ni plan diario), salvo lo que ya
    tiene registro de campo (cerrar el día: saldo, terminada). El administrador puede reabrirlo con un motivo (reo; queda en log). */
 const DPL=new Map();let dplSub=null,dplFrom=null;
-function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;if(dplSub)dplSub();dplFrom=from;
-  dplSub=fcol('dplan').where('date','>=',from).onSnapshot(sn=>{DPL.clear();sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}));DV++;snapOk('dplan');if(ready)requestRender()},
-    err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;ensureDplan(from)})});
+function ensureDplan(from){if(!db||(dplFrom&&from>=dplFrom))return;
+  const lim=addD(todayIso(),-DAYWIN);const f=dplFrom||from<lim?lim:from;if(!dplFrom||f<dplFrom)dplSubOpen(f);
+  /* lo anterior a la ventana viva: una lectura por rango (ver ensureDaily) */
+  if(from<dplFrom)oldFetch('dplan',DPL,from,dplFrom,()=>{DV++;if(ready)requestRender()})}
+function dplSubOpen(f){if(dplSub)dplSub();dplFrom=f;
+  let first=true;/* la primera foto carga todo su rango (lo antiguo leído con get() se queda); después solo lo que cambió (C4) */
+  dplSub=fcol('dplan').where('date','>=',f).onSnapshot(sn=>{
+      if(first){first=false;for(const[id,v]of DPL)if(!(v&&v.date<f))DPL.delete(id);sn.docs.forEach(d=>DPL.set(d.id,{...d.data(),id:d.id}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('dplan');return}for(const c of ch){if(c.type==='removed')DPL.delete(c.doc.id);else DPL.set(c.doc.id,{...c.doc.data(),id:c.doc.id})}}
+      DV++;snapOk('dplan');if(ready)requestRender()},
+    err=>{dplSub=null;snapFail('dplan',err,()=>{dplFrom=null;dplSubOpen(f)})});
   if(!unsubs.includes(stopDplan))unsubs.push(stopDplan)}
-function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear()}
+function stopDplan(){if(dplSub)dplSub();dplSub=null;dplFrom=null;DPL.clear();const o=OLDR.dplan;o.gen++;o.cov=null;o.p=Promise.resolve()}
 const dplanOf=(d,pid)=>DPL.get(d+'_'+pid)||null;
 /* lookahead y propuestas: hoy y los días futuros cerrados (los pasados se pueden corregir: el PPC se mide contra las fotos) */
 function dayLocked(d,pid){if(!d||!pid)return false;ensureDplan(addD(todayIso(),-7));const o=dplanOf(d,pid);if(o&&o.reo)return false;const t=todayIso();if(d<t)return false;if(d===t)return true;return!!(o&&o.ids)}
@@ -472,15 +544,18 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
   if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
-function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
   if(db&&canDaily&&obj.recs)didxFromDaily(d,pid,obj.recs);doneRebuild();requestRender();
-  if(!db||!canDaily)return;pending++;setStatus();const key='daily/'+id;
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('daily').doc(id).set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
-function stopSession(){snapReset();unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
+  /* al SDK en este mismo instante (C1): sin señal queda en la cola local de Firestore y no se pierde al cerrar la página */
+  if(!db||!canDaily)return;const ref=fcol('daily').doc(id);
+  bgWrite(fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})).catch(e=>{
+    /* fallo de red raro: se reenvían completos los registros tocados, como están ahora en este equipo (no una versión intermedia) */
+    if(!(e&&e.code==='unavailable'))throw e;const now=DAY.get(id)||{};const rr={};for(const aid of Object.keys(obj.recs||{}))if(now.recs&&aid in now.recs)rr[aid]=now.recs[aid];
+    return fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(obj.recs?{recs:rr}:{})},{merge:true}))}))}
+function stopSession(){snapReset();for(const k in QK){clearTimeout(QK[k].t);delete QK[k]}unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
   for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
 function onData(){

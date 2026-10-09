@@ -127,17 +127,29 @@ const cncOpts=(cnc,cur)=>(cur&&!cnc.includes(cur)?[...cnc,cur]:cnc).map(k=>`<opt
 function resPatch(n,pid,upd){const w=S.wk.get(wkId(n,pid));if(!w)return;const FP=firebase.firestore.FieldPath;const args=[];const nres={...(w.res||{})};
   for(const[id,val]of Object.entries(upd)){const cur=(w.res||{})[id]||{};const nv={...cur};for(const[f,v]of Object.entries(val||{})){if(canon(v)===canon(cur[f]))continue;args.push(new FP('res',id,f),v===undefined?null:v);nv[f]=v}nres[id]=nv}
   w.res=nres;requestRender();if(!args.length||!db||!canWrite)return;
-  pending++;setStatus();const key='weeks/'+wkId(n,pid);
-  chains[key]=(chains[key]||Promise.resolve()).then(()=>dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))
-    .then(()=>{lastErr=null},e=>handleWriteErr(e)).finally(()=>{pending--;setStatus()})}
+  /* auditoría de código 08/10 (C1): se entrega al SDK al instante (no espera la confirmación de la anterior): sin señal queda
+     en la cola del equipo y no solo en la memoria de la página */
+  bgWrite(dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))}
 function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
 /* Corte semanal: la semana n se congela sola en el mismo corte de las propuestas de SC (Configuración › Proyecto; por
    defecto el sábado 13:00 de Lima antes del lunes). Lo hace el servidor (tarea congelarSemana) si nadie la congeló antes. */
 function frzCutTxt(n){const t=propCut(n);const d=ldt(t);return`${DOW_N[pd(d).getUTCDay()]} ${fmtD(d)}, ${hhmm(t)}`}
+/* Foto del lookahead al congelar (snap = días de todas las actividades del piso; con ella el Lookahead marca «cambios contra lo
+   congelado»). Va en wsnap/<semana>_<piso> {snap, n, pisoId, t}, no dentro de weeks: weeks lo descarga todo el mundo al entrar y la
+   foto crecía con cada semana (auditoría de datos M1). Datos antiguos: weeks.snap (lo mueve el servidor, migración en congelarSemana).
+   wsnapOf(w) → la foto, null si no hay, undefined mientras se lee (una lectura suelta por semana congelada; al llegar, redibuja). */
+const WSN=new Map(),WSNP=new Set(),WSNE=new Map();
+const wsnKey=w=>w.id+'|'+(w.frozenAt||'');
+function wsnapOf(w){if(!w)return null;if(w.snap)return w.snap;const k=wsnKey(w);if(WSN.has(k))return WSN.get(k);if(!db)return null;
+  if(WSNP.has(k)||NOW()-(WSNE.get(k)||0)<30000)return undefined;WSNP.add(k);
+  fcol('wsnap').doc(w.id).get().then(d=>{WSN.set(k,d.exists?((d.data()||{}).snap||{}):null);WSNE.delete(k);WSNP.delete(k);requestRender()},
+    ()=>{WSNE.set(k,NOW());WSNP.delete(k)}); /* sin conexión o sin permiso: se reintenta en 30 s, con el próximo dibujo */
+  return undefined}
+const wsnRef=id=>fcol('wsnap').doc(id);
 /* Congelar corre en una transacción: si otra persona ya congeló este piso y semana (o lo hizo desde una copia atrasada),
    se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
 async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
-  const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},snap,frozenBy:me?me.email:''};
+  const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},frozenBy:me?me.email:''};
   /* propuestas de SC enviadas y sin decidir para este piso y semana: se avisa antes de cerrar y se guarda cuáles quedaron fuera */
   if(canWrite){let pend;try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
     if(!pend)pend=propPendWeek(n,pid,[...PROP.values()]);
@@ -145,20 +157,21 @@ async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};
       if(!await uiAsk({title:`${pend.length} propuesta${pend.length>1?'s':''} sin decidir`,text:`Para ${code}, semana ${n}:`,list:[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean),
         note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return;
       doc.propOut=pend.map(o=>o.sc+'/'+o.id)}}
-  if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});requestRender();return}
+  if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);requestRender();return}
   if(!canWrite)return;const ref=fcol('weeks').doc(id);
   let out;try{out=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(ex&&ex.frozenAt)return{ex};
-      const nd={...doc};tx.set(ref,nd);return{nd}})}
+      const nd={...doc};tx.set(ref,nd);tx.set(wsnRef(id),{snap,n,pisoId:pid,t:doc.frozenAt});return{nd}})}
   catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para congelar la semana necesitas internet.':'No se pudo congelar: '+((e&&(e.code||e.message))||e));return}
   if(out.ex){/* ya estaba congelada: se usa la vigente; la evaluación pedida solo entra si ese compromiso aún no tiene */
     S.wk.set(id,{...out.ex,id});const[k,v]=Object.entries(res||{})[0]||[];
     if(k&&(out.ex.items||{})[k]&&!((out.ex.res||{})[k]&&(out.ex.res[k].ok!=null)))setRes(n,pid,k,v);
     toast(`${code} · semana ${n} ya estaba congelada por otra persona: se usa esa versión`);requestRender();return}
-  S.wk.set(id,{...out.nd,id});requestRender();toast(res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
-/* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones y foto del lookahead) se copia a
-   su propio documento weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta
-   en ningún PPC) y la semana vuelve a borrador. «Recuperar» la repone mientras nadie la haya vuelto a congelar. */
-const WK_VF=['frozenAt','items','res','snap','frozenBy','propOut','auto'];
+  WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);S.wk.set(id,{...out.nd,id});requestRender();toast(res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
+/* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones) se copia a su propio documento
+   weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta en ningún PPC) y la
+   semana vuelve a borrador; su foto del lookahead se copia a wsnap/<…>__h<hora> (de wsnap/<semana>_<piso> o, en datos antiguos,
+   de weeks.snap). «Recuperar» la repone mientras nadie la haya vuelto a congelar (también la foto: v.snap antiguo o wsnap __h). */
+const WK_VF=['frozenAt','items','res','frozenBy','propOut','auto'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
@@ -167,7 +180,9 @@ async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid
   if(!db){local();return}
   const ref=fcol('weeks').doc(id),href=fcol('weeks').doc(hid);const DEL=firebase.firestore.FieldValue.delete();
   try{const ok=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(!ex||!ex.frozenAt)return false;
-      tx.set(href,pack(ex));const upd={};WK_VF.forEach(k=>upd[k]=DEL);upd.unfrozenAt=at;/* el congelado automático no vuelve a congelar lo que alguien descongeló a propósito */tx.update(ref,upd);return true});
+      const ws=await tx.get(wsnRef(id));const wd=ws.exists?ws.data():null;const fs=ex.snap!==undefined?ex.snap:wd&&wd.snap;
+      tx.set(href,pack(ex));if(fs!=null)tx.set(wsnRef(hid),{snap:fs,n,pisoId:pid,t:ex.frozenAt||null,histOf:id});
+      const upd={};[...WK_VF,'snap'].forEach(k=>upd[k]=DEL);upd.unfrozenAt=at;/* el congelado automático no vuelve a congelar lo que alguien descongeló a propósito */tx.update(ref,upd);return true});
     if(!ok){toast('La semana ya no estaba congelada.');return}
     local();toast(`${code} · semana ${n} descongelada: la evaluación quedó guardada y puedes recuperarla`)}
   catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para descongelar necesitas internet.':'No se pudo descongelar: '+((e&&(e.code||e.message))||e))}}
@@ -176,7 +191,11 @@ async function restoreWeek(n,pid,hid){const id=wkId(n,pid);const code=S.pis.get(
   if(!db){local(h.v||{});return}
   const ref=fcol('weeks').doc(id),href=fcol('weeks').doc(hid);
   try{const v=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const hs=await tx.get(href);const ex=sn.exists?sn.data():null;const hd=hs.exists?hs.data():null;
-      if((ex&&ex.frozenAt)||!hd||hd.restAt)return null;tx.set(ref,{n,pisoId:pid,...(hd.v||{})},{merge:true});tx.update(href,{restAt:at,restBy:me?me.email:''});return hd.v||{}});
+      if((ex&&ex.frozenAt)||!hd||hd.restAt)return null;const hw=await tx.get(wsnRef(hid));
+      /* la foto del lookahead vuelve a wsnap/<semana>_<piso> (de la copia antigua v.snap o de wsnap __h); weeks queda sin snap */
+      const{snap:vs,...v0}=hd.v||{};const fs=vs!==undefined?vs:hw.exists?(hw.data()||{}).snap:undefined;
+      tx.set(ref,{n,pisoId:pid,...v0},{merge:true});if(fs!=null)tx.set(wsnRef(id),{snap:fs,n,pisoId:pid,t:v0.frozenAt||null});
+      tx.update(href,{restAt:at,restBy:me?me.email:''});if(fs!=null)WSN.set(wsnKey({id,frozenAt:v0.frozenAt}),fs);return v0});
     if(!v){toast('No se recuperó: alguien volvió a congelar esta semana o ya se recuperó.');return}
     local(v);toast(`${code} · semana ${n}: versión congelada recuperada`)}
   catch(e){toast('No se pudo recuperar: '+((e&&(e.code||e.message))||e))}}

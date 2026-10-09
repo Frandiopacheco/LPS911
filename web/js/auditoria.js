@@ -9,7 +9,8 @@ let SWREG=null,SWASK=false;
 function swBanner(w){let b=$('#swupd');if(b)return;b=document.createElement('div');b.id='swupd';b.className='swupd';
   b.innerHTML='<span>Hay una versión nueva de la página.</span><button type="button" class="ib pri">Actualizar</button><button type="button" class="ib" aria-label="Más tarde">Más tarde</button>';
   const[up,later]=b.querySelectorAll('button');
-  up.onclick=async()=>{if(pending>0&&!await uiAsk({title:'Hay cambios subiéndose',text:`${pending} cambio${pending>1?'s':''} tuyo${pending>1?'s':''} aún se está${pending>1?'n':''} enviando. Si actualizas ahora, se envía${pending>1?'n':''} cuando vuelvas a abrir la página.`,ok:'Actualizar igual',cancel:'Esperar',tone:'warn'}))return;SWASK=true;if(w&&w.state!=='redundant')w.postMessage('skip');else location.reload();setTimeout(()=>location.reload(),2500)};
+  /* es cierto desde la auditoría C1: cada cambio ya está en la cola local de Firestore (IndexedDB), no solo en la memoria de la página */
+  up.onclick=async()=>{if(pending>0&&!await uiAsk({title:'Hay cambios subiéndose',text:`${pending} cambio${pending>1?'s':''} tuyo${pending>1?'s':''} aún se está${pending>1?'n':''} enviando. Si actualizas ahora, queda${pending>1?'n':''} guardado${pending>1?'s':''} en este equipo y se envía${pending>1?'n':''} al volver a abrir la página.`,ok:'Actualizar igual',cancel:'Esperar',tone:'warn'}))return;SWASK=true;if(w&&w.state!=='redundant')w.postMessage('skip');else location.reload();setTimeout(()=>location.reload(),2500)};
   later.onclick=()=>b.remove();document.body.appendChild(b)}
 if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_SW){
   navigator.serviceWorker.addEventListener('controllerchange',()=>{if(SWASK)location.reload()});
@@ -25,14 +26,20 @@ if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_
 function swWarm(){if(!navigator.serviceWorker||!navigator.serviceWorker.controller)return;setTimeout(()=>{fetch(PLANO_SRC).catch(()=>{})},8000)}
 
 /* ---- índice de actividades terminadas (no depende de cuántos días se cargan) ---- */
-const DIDX=new Map(),REOP=new Map();let didxSub=null;
-function ensureDoneIdx(){if(!db||didxSub)return;
-  didxSub=fcol('doneidx').onSnapshot(sn=>{DIDX.clear();REOP.clear();sn.docs.forEach(d=>{const v=d.data()||{},m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
-    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
-    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}});doneRebuild();snapOk('doneidx');if(ready)requestRender()},
+const DIDX=new Map(),REOP=new Map(),DIDXD=new Map();let didxSub=null;/* DIDXD: datos de cada documento (piso) del índice */
+function ensureDoneIdx(){if(!db||didxSub)return;let first=true;
+  /* la primera foto carga todo; después solo se leen los documentos que cambiaron (auditoría C4) y se rearma el índice */
+  didxSub=fcol('doneidx').onSnapshot(sn=>{
+      if(first){first=false;DIDXD.clear();sn.docs.forEach(d=>DIDXD.set(d.id,d.data()||{}))}
+      else{const ch=sn.docChanges();if(!ch.length){snapOk('doneidx');return}for(const c of ch){if(c.type==='removed')DIDXD.delete(c.doc.id);else DIDXD.set(c.doc.id,c.doc.data()||{})}}
+      didxAgg();doneRebuild();snapOk('doneidx');if(ready)requestRender()},
     err=>{didxSub=null;snapFail('doneidx',err,ensureDoneIdx)});/* si se cae, se reabre sola (base.js) */
   if(!unsubs.includes(stopDoneIdx))unsubs.push(stopDoneIdx)}
-function stopDoneIdx(){if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear()}
+/** DIDX (terminada: la fecha más temprana entre pisos) y REOP (reapertura: la más tardía) a partir de DIDXD */
+function didxAgg(){DIDX.clear();REOP.clear();for(const v of DIDXD.values()){const m=v.d||{};for(const[a,dt]of Object.entries(m))if(dt&&typeof dt==='string'){const c=DIDX.get(a);if(!c||dt<c)DIDX.set(a,dt)}
+    /* r = reaperturas: las marcas de «terminada» hasta esa fecha ya no cuentan (aunque vengan del capataz o de días no cargados) */
+    for(const[a,dt]of Object.entries(v.r||{}))if(dt&&typeof dt==='string'){const c=REOP.get(a);if(!c||dt>c)REOP.set(a,dt)}}}
+function stopDoneIdx(){if(didxSub)didxSub();didxSub=null;DIDX.clear();REOP.clear();DIDXD.clear()}
 function didxWrite(pid,map,f){if(!db||!canDaily||!pid)return;const FV=firebase.firestore.FieldValue;const d={};
   for(const[a,v]of Object.entries(map))d[a]=v==null?(FV&&FV.delete?FV.delete():null):v;
   bgWrite(fcol('doneidx').doc(pid).set({[f||'d']:d},{merge:true}))}
@@ -70,7 +77,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* ---- respaldo completo ---- */
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
-const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
+const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
   'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
