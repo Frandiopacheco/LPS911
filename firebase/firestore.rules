@@ -84,7 +84,8 @@ service cloud.firestore {
     }
     function noResp(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
     function edPiso(d) { return isAdmin() || (canEdit() && respOk(d.get('pisoId', ''))); }
-    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
+    // wsnap/<semana>_<piso>: foto del lookahead al congelar (antes weeks.snap; auditoría de datos M1): mismas reglas que weeks
+    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
 
     match /members/{mail} {
       // la lista completa (con correos) solo la ve el personal interno; cada uno siempre puede leer su propio registro

@@ -70,10 +70,22 @@ const scAt=(rc,x)=>(rc&&rc.sc)||x.sc;
      lo sigue midiendo: si no se cumple en la semana, cuenta con su causa);
    - decidido el mismo día (o reprogramado después de publicar, marca acts.rpl): no cumplido con esa causa e imputabilidad,
      en vez de quedar «sin verificar».
-   Las «No va» se leen de pdz (kind == 'nova', una sola condición: no necesita índice) y se indexan por fecha|actividad. */
-const NOVA=new Map();let novaSub=null;let NOVAV=0; /* sube con cada cambio de NOVA (memoria de dayData) */
-function ensureNova(){if(novaSub||!db)return;novaSub=fcol('pdz').where('kind','==','nova').onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});NOVAV++;if(ready&&['ind','dash','hoy'].includes(U.tab))requestRender()},()=>{});
-  unsubs.push(()=>{if(novaSub)novaSub();novaSub=null;NOVA.clear();NOVAV++})}
+   Las «No va» se leen de pdz (kind == 'nova') y se indexan por fecha|actividad. Solo desde hace NOVA_D (45) días (auditoría de datos
+   M4: antes se escuchaban todas desde el inicio de la obra): Tablero (30 días) e Indicadores (3 semanas) caben; si una vista pide
+   un día más antiguo (Indicadores o un reporte de una fecha vieja), dayData amplía la suscripción desde ese día (ensureNova(desde)),
+   como ensureDaily. Necesita el índice pdz(kind, date) (firestore.indexes.json); mientras no esté construido Firestore responde
+   failed-precondition y se usa la consulta de antes, sin límite de fecha (novaAll). */
+const NOVA=new Map();let novaSub=null,novaFrom=null,novaAll=false,novaWait=false;let NOVAV=0; /* sube con cada cambio de NOVA (memoria de dayData) */
+const NOVA_D=45;
+function ensureNova(from){if(!db||novaWait)return;const f0=addD(todayIso(),-NOVA_D);const f=from&&from<f0?from:f0;
+  if(novaSub&&(novaAll||f>=novaFrom))return;if(novaSub)novaSub();novaFrom=f;
+  const q=novaAll?fcol('pdz').where('kind','==','nova'):fcol('pdz').where('kind','==','nova').where('date','>=',f);
+  novaSub=q.onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});NOVAV++;snapOk('nova');if(ready&&['ind','dash','hoy'].includes(U.tab))requestRender()},
+    err=>{novaSub=null;
+      if(err&&err.code==='failed-precondition'&&!novaAll){novaAll=true;console.warn('LPS: falta el índice pdz(kind, date); las «No va» se leen sin límite de fecha');ensureNova(from);return}
+      novaWait=true;snapFail('nova',err,()=>{novaWait=false;ensureNova(novaFrom)})});
+  if(!unsubs.includes(stopNova))unsubs.push(stopNova)}
+function stopNova(){if(novaSub)novaSub();novaSub=null;novaFrom=null;novaWait=false;NOVA.clear();NOVAV++}
 const dayStartMs=d=>Date.parse(d+'T00:00:00Z')+LIMA_OFF;
 /** 'out' = no cuenta en el PPC diario; un registro = no cumplido por «No va»; null = nada que hacer */
 function nvRec(x,d){if(d>todayIso())return null;ensureNova();const z=NOVA.get(d+'|'+x.id);const v=x.rpl&&x.rpl[d];
@@ -109,7 +121,7 @@ function dayAgg(rows){const scA={},piA={},cnc={};const tot={prog:0,ver:0,ok:0,pa
    la identidad de los Maps (las versiones guardadas y la del cliente reemplazan S.act sin subir DV). Lo no programado (npItems)
    es barato y no tiene versión: se arma siempre. El resultado se comparte entre llamadas: no se modifican sus filas. */
 const DDM=new Map();
-function dayData(dates,vset){const ds=new Set(dates);
+function dayData(dates,vset){const ds=new Set(dates);if(dates.length)ensureNova(dates.reduce((a,b)=>b<a?b:a)); /* las «No va» desde el día más antiguo pedido */
   const k=DV+'|'+DONEV+'|'+NOVAV+'|'+todayIso()+'|'+dates.join(',')+'|'+[...vset].sort().join(',');
   const refs=[S.act,S.amb,S.sec,S.pis,ARCH.act,ARCH.amb,DAY,LIVE,DPL];let e=DDM.get(k);
   if(!e||e.refs.some((r,i)=>r!==refs[i])){e={refs,v:dayDataCore(dates,vset)};DDM.delete(k);if(DDM.size>=12)DDM.delete(DDM.keys().next().value);DDM.set(k,e)}

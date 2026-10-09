@@ -207,6 +207,13 @@ jobs:
             grep -vE "^(i|✔) " deploy.log | grep -iE "error|denied|permission|billing|not found|failed|must|could not" | sed 's/\x1b\[[0-9;]*m//g' | tail -8 | while IFS= read -r l; do echo "::error::$l"; done
             [ -f firebase-debug.log ] && grep -iE "\"message\"|error" firebase-debug.log | tail -8 | while IFS= read -r l; do echo "::error::debug: ${l:0:400}"; done
           fi
+          if [ $rc -eq 0 ]; then
+            # índices compuestos (firebase/firestore.indexes.json), aparte y SIN --force: así no borra índices creados a mano en la consola.
+            # Si falla no corta la publicación: la página usa la consulta sin índice mientras tanto (p. ej. las «No va», pdz kind+date)
+            firebase deploy --only firestore:indexes --project "$TARGET" --non-interactive > idx.log 2>&1; irc=$?
+            tail -15 idx.log
+            if [ $irc -ne 0 ]; then echo "::warning::No se instalaron los índices de Firestore (firestore.indexes.json); la página sigue funcionando con la consulta anterior. Revisa el registro de este paso."; fi
+          fi
           exit $rc
 
   publicar-web:

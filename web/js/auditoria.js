@@ -77,7 +77,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* ---- respaldo completo ---- */
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
-const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
+const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
   'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
