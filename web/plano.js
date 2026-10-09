@@ -110,7 +110,7 @@ function renderMapa(main){ensureLam();
   if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.rvx=false}M.lpiso=M.piso}
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
-  {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null}}ensurePlan();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));pmSync();
+  {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;M.tmp=null;M.pend=null}}ensurePlan();hSync();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));pmSync();
   if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';main.addEventListener('toggle',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('mrdy'))M.rdyOpen=t.open},true);M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
@@ -120,7 +120,7 @@ function renderMapa(main){ensureLam();
     ${cur&&!cur.base&&base?`<label class="chk"><input type="checkbox" id="munder"${M.under?' checked':''}> Arquitectura debajo</label><input type="range" id="mop" min="0.15" max="1" step="0.05" value="${M.op}" aria-label="Opacidad de la especialidad" title="Opacidad de la especialidad"${M.under?'':' disabled'}>`:''}
     <span class="sp" style="flex:1"></span>
  ${pmEng()?(()=>{const m=pmode();let n=0;try{computeCross();n=CROSS.list.length}catch(err){}return`<span class="mseg mpm" role="group" aria-label="Qué haces en el plano"><button data-pm="cu" class="${m==='cu'?'on':''}" title="Ver lo registrado en Campo. Clic derecho sobre una actividad: su cumplimiento">✓ Cumplimiento</button><button data-pm="prog" class="${m==='prog'?'on':''}" title="Clic derecho sobre una actividad: Va · No va · Culminado; sobre un ambiente: ＋ trabajo no programado">✏️ Programar</button><button data-pm="cx" class="${m==='cx'?'on':''}" title="Ver los cruces entre partidas. Clic derecho sobre un ambiente: revisar sus interferencias">⚠ Interferencias${n?` <b class="mpmn">${n}</b>`:''}</button></span>`})():''}
-    <button class="ib pri" id="mmeetb" title="Proyectar el plan del día en la reunión">Modo reunión</button><button class="ib" id="mview" title="Etiquetas, plano de fondo y leyenda">Vista ▾</button><button class="ib" id="mpdf" title="Plan de trabajo de obra (PDF / Excel), detalle del piso o imagen">Exportar…</button><button class="ib" id="mfit" title="Encuadrar todo el plano en la pantalla">Ver todo</button><button class="ib" id="mhi" title="Calidad de imagen">${useHi()?'Alta resolución':'Resolución liviana'}</button>
+    <button class="ib pri" id="mmeetb" title="Proyectar el plan del día en la reunión">Modo reunión</button><button class="ib" id="mview" title="Etiquetas, plano de fondo y leyenda">Vista ▾</button><button class="ib" id="mpdf" title="Plan de trabajo de obra (PDF / Excel), detalle del piso o imagen"${DRPROG?' disabled':''}>${DRPROG?esc(DRPROG):'Exportar…'}</button><button class="ib" id="mfit" title="Encuadrar todo el plano en la pantalla">Ver todo</button><button class="ib" id="mhi" title="Calidad de imagen">${useHi()?'Alta resolución':'Resolución liviana'}</button>
     ${isAdmin&&cur&&!cur.base&&base?`<button class="ib" id="malign2">${cur.aligned?'Corregir alineación':'Alinear'}</button>`:''}${isAdmin?`<button class="ib pri" id="mup" title="Capas de especialidad sobre la lámina base. La lámina base del piso se sube en Sectorización.">Subir especialidad…</button>${cur?`<button class="ib" id="mmenu" title="Cambiar nombre, alinear, reemplazar o eliminar la lámina seleccionada">&#8943; Editar lámina</button>`:''}`:''}`;
   if(bar.dataset.h!==hb){bar.innerHTML=hb;bar.dataset.h=hb}
   const note=$('#mnote');const nh=lamErr?`<div class="callout">No se pudieron leer las láminas (${esc(lamErr)}). Si acabas de actualizar la página, falta publicar las reglas nuevas de Firestore (LEEME).</div>`:M.busy?`<div class="callout">${esc(M.busy)}</div>`:(cur&&!cur.base&&!cur.aligned&&base)?`<div class="callout warnc"><b>${esc(cur.esp)} aún no está alineada con la arquitectura</b>: por eso no coincide al superponerla. ${isAdmin?'<button class="ib pri" id="malign">Alinear ahora</button>':'Pide al administrador que la alinee.'}</div>`:'';
@@ -157,11 +157,23 @@ function renderMapa(main){ensureLam();
    pzon/{actId}: última zona usada por la actividad {pisoId,pts,ts}
    ===================================================================== */
 const DOWN_=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-const PD=new Map(),ZN=new Map();let PDV=0;/* sube con cada cambio del plan del día (para cachés) */let pdSub=null,pdKey=null,znSub=null,znKey=null,planHook=false;M.pdErr=null;
+const PD=new Map(),ZN=new Map();let PDV=0;/* sube con cada cambio del plan del día (para cachés) */let pdKey=null,znSub=null,znKey=null,planHook=false;M.pdErr=null;
+/* Campo, Tablero y Liberaciones usan el plan de hoy (capInit) y el Plan diario abre en el día siguiente: cada ida y vuelta
+   volvía a suscribirse a pdz. Ahora quedan suscritas las dos últimas fechas (PDS: fecha → {m, un, ok, err}) y al volver
+   se repone PD con lo que ya llegó, sin otra suscripción. */
+const PDS=new Map();
+const pdRR=()=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()};
 function ensurePlan(){if(!db)return;
-  if(pdKey!==M.date){if(pdSub)pdSub();pdKey=M.date;PDV++;PD.clear();pdSub=fcol('pdz').where('date','==',M.date).onSnapshot(sn=>{PDV++;PD.clear();sn.docs.forEach(d=>PD.set(d.id,{...d.data(),id:d.id}));M.pdErr=null;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},err=>{M.pdErr=err&&err.code||'error';if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()})}
+  if(pdKey!==M.date){const d=pdKey=M.date;PDV++;let e=PDS.get(d);
+    if(e){PDS.delete(d);PDS.set(d,e)}
+    else{e={m:new Map(),un:null,ok:false,err:null};PDS.set(d,e);
+      e.un=fcol('pdz').where('date','==',d).onSnapshot(sn=>{e.m.clear();sn.docs.forEach(x=>e.m.set(x.id,{...x.data(),id:x.id}));e.ok=true;e.err=null;
+          if(pdKey!==d)return;PDV++;PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=null;pdRR()},
+        err=>{e.err=err&&err.code||'error';if(pdKey!==d)return;M.pdErr=e.err;pdRR()});
+      while(PDS.size>2){const k=PDS.keys().next().value;const o=PDS.get(k);PDS.delete(k);if(o.un)o.un()}}
+    PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=e.err}
   if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},()=>{})}
-  if(!planHook){planHook=true;unsubs.push(()=>{if(pdSub)pdSub();if(znSub)znSub();pdSub=znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
+  if(!planHook){planHook=true;unsubs.push(()=>{for(const o of PDS.values())if(o.un)o.un();PDS.clear();if(znSub)znSub();znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
 const flat=a=>a.flatMap(p=>[Math.round(p.x*10)/10,Math.round(p.y*10)/10]);
 const unflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
 const myRole=()=>me&&me.role;
@@ -211,9 +223,11 @@ async function updPD(id,patch){try{await fcol('pdz').doc(id).update(patch)}catch
 async function delPD(id){try{await fcol('pdz').doc(id).delete()}catch(err){toast('No se pudo borrar: '+(err.code||err.message))}}
 function learn(z){if(z&&z.kind==='zona'&&z.actId&&z.pts)fcol('pzon').doc(z.actId).set({pisoId:z.pisoId,vista:zVista(z),pts:z.pts,sc:z.sc||'',ts:NOW(),by:me.email}).catch(()=>{})}
 const shapesV=pid=>shapesOf(pid).filter(z=>z.kind!=='xok'&&(z.kind==='nova'||zVista(z)===M.vista));
-/* historial para deshacer / rehacer (solo lo hecho en esta sesión) */
-const HIST=[],REDO=[];
-function rec(g){if(g&&g.length){HIST.push(g);if(HIST.length>80)HIST.shift();REDO.length=0}}
+/* historial para deshacer / rehacer (solo lo hecho en esta sesión), uno por día y piso: ir a Campo, al Tablero o a
+   Liberaciones (que usan el plan de hoy) y volver al plan de mañana ya no lo borra */
+const HSTK=new Map();let HK='',HIST=[],REDO=[];
+function hSync(){const k=M.date+'|'+M.piso;if(k===HK)return;HK=k;let o=HSTK.get(k);if(!o){o={h:[],r:[]};HSTK.set(k,o);if(HSTK.size>12)HSTK.delete(HSTK.keys().next().value)}HIST=o.h;REDO=o.r}
+function rec(g){hSync();if(g&&g.length){HIST.push(g);if(HIST.length>80)HIST.shift();REDO.length=0}}
 const strip_=z=>{const{id,...d}=z;return d};
 function addDoc(id,doc){PDV++;PD.set(id,{...doc,id});savePD(id,doc);return{op:'add',id,doc}}
 function remDoc(id){const z=PD.get(id);if(!z)return null;PDV++;PD.delete(id);delPD(id);return{op:'del',id,doc:strip_(z)}}
@@ -228,8 +242,8 @@ function applyG(g,undo){PDV++;let sk=0;for(const o of (undo?[...g].reverse():g))
       if(undo&&o.after&&Object.keys(o.after).some(k=>k!=='ts'&&!(o.after[k]===DELS_&&DELS_?pdGet(z,k)==null:pdSame(pdGet(z,k),o.after[k])))){sk++;continue}
       pdPatch(z,p);updPD(o.id,p)}}
   if(M.selId&&!PD.has(M.selId))M.selId=null;requestRender();if(sk)toast(`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`)}
-function undo(){const g=HIST.pop();if(!g){toast('No hay nada que deshacer.');return}applyG(g,true);REDO.push(g)}
-function redo(){const g=REDO.pop();if(!g)return;applyG(g,false);HIST.push(g)}
+function undo(){hSync();const g=HIST.pop();if(!g){toast('No hay nada que deshacer.');return}applyG(g,true);REDO.push(g)}
+function redo(){hSync();const g=REDO.pop();if(!g)return;applyG(g,false);HIST.push(g)}
 const own=z=>!!z&&!z.virt&&z.kind!=='nova'&&z.kind!=='xok'&&canPlan(z.sc);
 function rskMsg(aid){if(typeof restrPend!=='function')return'';const rs=restrPend(aid);if(!rs.length)return'';const x=S.act.get(aid);return`⚠ “${(x&&x.name)||'Actividad'}” tiene ${rs.length} restricción${rs.length>1?'es':''} pendiente${rs.length>1?'s':''}: ${rs.slice(0,2).map(rTxt).join(' | ')}${rs.length>2?' …':''}. Se programa igual, queda marcada con alerta.`}
 function rskWarn(aid,quiet){const m=rskMsg(aid);if(m&&!quiet)toast(m);return m?1:0}
@@ -278,21 +292,31 @@ function textDialog(w,cx,cy,z){openPop(anchorAt(cx,cy),`<div class="ph">${z?'Edi
   {ok:()=>{const t=($('#ntx')?.value||'').trim();if(!t)return;if(z){rec([updDoc(z.id,{t},{t:z.t})]);requestRender()}else newNote('texto',[w],t)}});setTimeout(()=>{const i=$('#ntx');if(i){i.focus();i.select();i.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=ok]').click()}})}},0)}
 function novaDialog(btn,x,opt){opt=opt||{};const cnc=(P().cnc||[]);const t0=todayIso();let def=addD(M.date,1);if(pd(def).getUTCDay()===0)def=addD(def,1);const cw=typeof canWrite!=='undefined'&&canWrite;
   const sug=opt.motivo&&(cnc.find(k=>k===opt.motivo)||cnc.find(k=>/interfer|cruce|frente|otra partida/i.test(k))||cnc.find(k=>cncCode(k)==='PROG'))||opt.motivo||'';const cncL=sug&&!cnc.includes(sug)?[sug,...cnc]:cnc;
-  function save(motivo,rdate){const id=uid('pz');
+  async function save(motivo,rdate){const D0=M.date,P0=M.piso,id=nvId(D0,x.id);
     /* se guarda lo de antes (registro del día y fechas) para que «Vuelve a ir» devuelva exactamente eso */
-    const prevRec=typeof recReal==='function'?recReal(M.date,x.id):null;const x0={days:[...(x.days||[])],qty:{...(x.qty||{})}};
-    let mv=null;if(rdate&&cw){reprogAct(x.id,rdate,M.date);const x1=S.act.get(x.id)||x;mv={[x.id]:{p:x0.days,pq:x0.qty,n:x1.days||[],nq:x1.qty||{}}}}
-    const rid=opt.onSave?opt.onSave():'';
-    const doc={date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo,repTo:rdate||'',...(opt.prio?{prio:opt.prio}:{}),...(opt.prop?{prop:opt.prop.id}:{}),...(dzEng()?{eng:true}:{}),...(mv?{mv}:{}),...(rid?{rid}:{}),prevRec:prevRec?JSON.parse(JSON.stringify(prevRec)):null,by:me.email,byName:me.name||me.email,ts:NOW()};const g=[addDoc(id,doc)];
+    const prevRec=typeof recReal==='function'?recReal(D0,x.id):null;
+    const doc0={date:D0,pisoId:P0,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo,repTo:rdate||'',...(opt.prio?{prio:opt.prio}:{}),...(opt.prop?{prop:opt.prop.id}:{}),...(dzEng()?{eng:true}:{}),prevRec:prevRec?JSON.parse(JSON.stringify(prevRec)):null,by:me.email,byName:me.name||me.email,ts:NOW()};
+    /* dos personas a la vez sobre la misma actividad: solo la primera crea la «no va» (id fijo, en una transacción);
+       la otra no reprograma, no registra la restricción ni el día: se le avisa */
+    if(!await nvClaim(id,doc0))return;
+    const xa=S.act.get(x.id)||x;const x0={days:[...(xa.days||[])],qty:{...(xa.qty||{})}};
+    let mv=null;if(rdate&&cw){reprogAct(x.id,rdate,D0);const x1=S.act.get(x.id)||x;mv={[x.id]:{p:x0.days,pq:x0.qty,n:x1.days||[],nq:x1.qty||{}}}}
+    const rid=opt.onSave?opt.onSave(id):'';
+    const doc={...doc0,...(mv?{mv}:{}),...(rid?{rid}:{})};const g=[addDoc(id,doc)];
     if(opt.prop&&PD.has(opt.prop.id))g.push(updDoc(opt.prop.id,{st:'ok',dec:'No va hoy',decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));
-    shapesOf(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id&&!z.virt).forEach(z=>g.push(remDoc(z.id)));rec(g.filter(Boolean));
-    let regd=false;if(typeof canDaily!=='undefined'&&canDaily&&M.date<=t0){const cur=recOf(M.date,x.id);writeDaily(M.date,M.piso,{recs:{[x.id]:{...baseRec(M.date,x,cur),status:'no',cnc:motivo,imp:opt.imp??null,...(opt.rsc?{rsc:opt.rsc,pc:!!opt.pc}:{}),note:(cur&&cur.note)||'No se hará hoy (plan diario)',viaNova:true}}});regd=true}
+    shapesOf(P0).filter(z=>z.kind==='zona'&&z.actId===x.id&&!z.virt).forEach(z=>g.push(remDoc(z.id)));rec(g.filter(Boolean));
+    let regd=false;if(typeof canDaily!=='undefined'&&canDaily&&D0<=t0){const cur=recOf(D0,x.id);writeDaily(D0,P0,{recs:{[x.id]:{...baseRec(D0,x,cur),status:'no',cnc:motivo,imp:opt.imp??null,...(opt.rsc?{rsc:opt.rsc,pc:!!opt.pc}:{}),note:(cur&&cur.note)||'No se hará hoy (plan diario)',viaNova:true}}});regd=true}
     requestRender();toast(`No se hará hoy${regd?' · registrada como no cumplida':''}${rdate&&cw?' · reprogramada para el '+fmtD(rdate):''}`,'Deshacer',()=>revertNova(id))}
   openPop(btn,`<div class="ph">${opt.title?esc(opt.title):'No se hará hoy'}</div><div class="ptx">${opt.lead?opt.lead+' ':''}Estaba programada para hoy pero no se va a ejecutar. ${M.date<=t0?'Queda registrada como <b>no cumplida</b> (cuenta en el PPC del día) con el motivo que elijas.':'Quedará anotada en el plan del día.'}</div>
    <div class="qrow"><select id="nvm" aria-label="Motivo">${cncL.map(k=>`<option value="${esc(k)}"${k===sug?' selected':''}>${esc(cncLabel(k))}</option>`).join('')}</select></div>
    ${cw?`<div class="qrow"><label class="mu">Reprogramar para <input type="date" id="nvd" min="${addD(M.date,1)}" value="${def}"></label></div>`:''}
    ${cw?'<button data-do="ok" class="pri">Confirmar y reprogramar</button><button data-do="nod">Confirmar, reprogramo después</button>':'<button data-do="nod" class="pri">Confirmar</button>'}<button data-do="no">Cancelar</button>`,
    {no:()=>{},nod:()=>save(($('#nvm')||{}).value||'',''),ok:()=>{const v=($('#nvd')||{}).value;if(!v){toast('Elige la fecha o usa “reprogramo después”.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}save(($('#nvm')||{}).value||'',v)}})}
+/** «No va hoy»: reserva el id fijo de la «no va» en una transacción. Si ya existe (otra persona la decidió), no escribe y avisa. */
+async function nvClaim(id,doc){if(!db)return true;let r;
+  try{r=await db.runTransaction(async tx=>{const ref=fcol('pdz').doc(id);if((await tx.get(ref)).exists)return false;tx.set(ref,doc);return true})}
+  catch(e){toast('No se pudo guardar: '+(e&&(e.code||e.message)||'error'));return false}
+  if(!r){toast('Otro usuario ya decidió esta actividad: revisa');requestRender()}return r}
 function revertNova(id){const z=PD.get(id);if(!z)return;if(z.k){if(!dzEng()){toast('Esa decisión la cambia el ingeniero.');return}revertRep(z);return}
   if(z.eng&&!dzEng()){toast('Esa decisión la tomó el ingeniero: él la cambia.');return}
   const o=remDoc(id);if(o)rec([o]);const x=S.act.get(z.actId);if(!x){requestRender();return}let warn='';
@@ -662,7 +686,7 @@ function cuCount(R){const o={ok:0,partial:0,no:0,none:0};for(const r of R){const
 function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplidas${o.partial?` · ${o.partial} parcial${o.partial>1?'es':''}`:''}${o.no?` · ${o.no} no`:''}${o.none?` · ${o.none} sin registro`:''}${v?` · ${Math.round(o.ok/v*100)} %`:''}`}
 /** cambia lo que se revisa en la reunión: «cu» = cumplimiento del día · «plan» = el plan del día siguiente (va / no va, cruces) */
 function meetMode(m,keepDay){M.mmode=m;zcClose();M.colorBy=m==='cu'?'cu':'sc';if(m==='plan'){M.cxOpen=true;M.chOpen=true}
-  if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
+  if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
   requestRender();setTimeout(()=>meetGo(M.meetSc),120)}
 function meetExit(){M.meet=false;M.meetSc='';zcClose();if(M.cb0!=null){M.colorBy=M.cb0;M.cb0=null}try{if(document.fullscreenElement)document.exitFullscreen()}catch(err){}requestRender()}
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
@@ -962,21 +986,47 @@ function drData(d){const ps=typeof pisos==='function'?pisos():[...S.pis.values()
     groups.push({n:gi,p,title:(p.name||p.code||'').toUpperCase(),rows,color:DR_COL[(gi-1)%DR_COL.length]})}
   const misc=String(drCfg().misc||'').split('\n').map(l=>l.split('|').map(s=>s.trim())).filter(a=>a[0]).map((a,i)=>({code:`${gi+1}.${String(i+1).padStart(2,'0')}`,desc:a[0].toUpperCase(),und:a[1]||'',met:a[2]==null||a[2]===''?null:(isNaN(+a[2])?a[2]:+a[2])}));
   return{groups,misc,miscN:gi+1}}
-/* un canvas por piso (y vista) con las zonas numeradas con el ítem del listado */
-async function drPlans(D,opt,say){const out=[];
+/* un plano por piso (y vista) con las zonas numeradas con el ítem del listado (y uno por SC si se pide).
+   Antes se guardaban todos los lienzos (~3300×2000 px, 19–32 MB cada uno) hasta armar el PDF/Excel y se cargaba la lámina
+   en calidad completa (hasta 40 MP): en una tablet se cerraba la pestaña. Ahora va piso por piso: se dibuja, se pasa a JPEG
+   al momento (drImg) y se suelta el lienzo antes del siguiente; la lámina liviana se usa si alcanza (drQ) y entre planos
+   se cede a la pantalla (el botón muestra el avance). */
+const DR_W=3300;
+/** lámina para el exporte: la liviana ('l', ~3000 px) si alcanza para el ancho de salida con el recorte de las zonas (o en
+    tablet/celular, que ya la usan en pantalla); si no, la completa ('f'). En la PC el resultado se ve igual. */
+function drQ(v,pid,scs){if(!v.nl)return'f';if(!useHi())return'l';const lw=v.lw||Math.min(v.w||0,LITE);if(!lw||!v.w)return'f';const T=v.T||I;const s_=Math.hypot(T.a,T.b)||1;
+  const B0=boundsOf({...v,T});const Z=shapesOf(pid).filter(z=>z.kind==='zona'&&zVista(z)===v.id);let need=0;
+  for(const sc of scs){const B=cropBox(B0,Z.filter(z=>!sc||z.sc===sc));need=Math.max(need,DR_W*s_*v.w/B.w)}return lw*1.25>=need?'l':'f'}
+/** el lienzo pasa a imagen (PDF: JPEG del lienzo; Excel: JPEG de 2400 px) y se suelta al momento */
+function drImg(cv,kind){const w=cv.width,h=cv.height;let url;
+  if(kind==='xlsx'){const sm=document.createElement('canvas');sm.width=2400;sm.height=Math.round(2400*h/w);sm.getContext('2d').drawImage(cv,0,0,sm.width,sm.height);url=sm.toDataURL('image/jpeg',.9);sm.width=sm.height=0}
+  else url=cv.toDataURL('image/jpeg',.9);
+  cv.width=cv.height=0;return{url,w,h}}
+const drYield=()=>new Promise(r=>setTimeout(r,0));
+async function drPlans(D,opt,say,kind){const jobs=[];
   for(const g of D.groups){const zl=new Map();g.rows.forEach(r=>r.zones.forEach(z=>zl.set(z.id,r.code)));if(!zl.size)continue;
     const vistas=basesOf(g.p.id);
     for(const v of vistas){const zv=[...PD.values()].filter(z=>z.pisoId===g.p.id&&z.kind==='zona'&&zVista(z)===v.id);if(!zv.some(z=>zl.has(z.id)))continue;
-      say&&say(`Dibujando ${g.title}…`);const im=await loadImgEl(await imgURL(v,'f'));const pairs=crossPairs(zv);const vn=vistas.length>1?' · '+lname(v).toUpperCase():'';
-      const ent=g.rows.filter(r=>r.zones.some(z=>zVista(z)===v.id));
-      out.push({g,v,title:g.title+vn,cv:await renderPlanCanvas(v,{pid:g.p.id,im,W:3300,R:54,nums:{zl},pairs}),ent,pairs});
+      const pairs=crossPairs(zv);const vn=vistas.length>1?' · '+lname(v).toUpperCase():'';
+      const ent=g.rows.filter(r=>r.zones.some(z=>zVista(z)===v.id));const L=[{title:g.title+vn,ent,sc:''}];
       if(opt.perSc){const scs=[...new Set(ent.map(r=>r.sc))].sort((a,b)=>nat(conOf(a).name,conOf(b).name));
-        for(const sc of scs){say&&say(`Dibujando ${g.title} · ${conOf(sc).name}…`);out.push({g,v,title:g.title+vn+' · '+conOf(sc).name,sc,cv:await renderPlanCanvas(v,{pid:g.p.id,im,W:3300,R:54,nums:{zl},pairs,scOnly:sc}),ent:ent.filter(r=>r.sc===sc),pairs})}}}}
+        for(const sc of scs)L.push({title:g.title+vn+' · '+conOf(sc).name,sc,ent:ent.filter(r=>r.sc===sc)})}
+      jobs.push({g,v,zl,pairs,L})}}
+  const tot=jobs.reduce((n,j)=>n+j.L.length,0);let k=0;const out=[];
+  for(const j of jobs){let im=await loadImgEl(await imgURL(j.v,drQ(j.v,j.g.p.id,j.L.map(o=>o.sc))));
+    for(const o of j.L){say&&say(`Dibujando ${j.g.title}${o.sc?' · '+conOf(o.sc).name:''}…`,++k,tot);
+      const cv=await renderPlanCanvas(j.v,{pid:j.g.p.id,im,W:DR_W,R:54,nums:{zl:j.zl},pairs:j.pairs,...(o.sc?{scOnly:o.sc}:{})});
+      out.push({g:j.g,v:j.v,title:o.title,...(o.sc?{sc:o.sc}:{}),ent:o.ent,pairs:j.pairs,img:drImg(cv,kind)});await drYield()}
+    im=null}
   return out}
-async function exportDR(kind,opt){const d=M.date;const D=drData(d);if(!D.groups.length){toast('No hay actividades programadas este día.');return}
-  const say=m=>toast(m);say(kind==='xlsx'?'Generando Excel…':'Generando PDF…');
-  try{const plans=opt.plans?await drPlans(D,opt,say):[];if(kind==='xlsx')await drXlsx(D,d,plans);else await drPdf(D,d,plans)}
-  catch(err){console.error(err);toast('No se pudo generar: '+(err.message||err))}}
+/* avance del exporte en el botón «Exportar…» (se mantiene aunque la pantalla se vuelva a dibujar) */
+let DRPROG='';
+function drProg(t){DRPROG=t;const b=$('#mpdf');if(b){b.textContent=t||'Exportar…';b.disabled=!!t}}
+async function exportDR(kind,opt){if(DRPROG)return;const d=M.date;const D=drData(d);if(!D.groups.length){toast('No hay actividades programadas este día.');return}
+  const K=kind==='xlsx'?'Excel':'PDF';const say=(m,k,n)=>{toast(m);if(n)drProg(`${K} ${k}/${n}…`)};say(`Generando ${K}…`);drProg(`${K}…`);
+  try{const plans=opt.plans?await drPlans(D,opt,say,kind):[];drProg(`Armando ${K}…`);await drYield();if(kind==='xlsx')await drXlsx(D,d,plans);else await drPdf(D,d,plans)}
+  catch(err){console.error(err);toast('No se pudo generar: '+(err.message||err))}
+  finally{drProg('')}}
 function drDone(name,blob,kind){if(window.PLANO_EXPORT_PREVIEW){window['__dr_'+kind]=blob;toast('Listo (vista previa de prueba)')}else{saveBlob(name,blob);toast(kind==='xlsx'?'Excel descargado':'PDF descargado')}}
 async function drPdf(D,d,plans){await loadPdf();const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});const C=drCfg();const logo=C.logo||DR_LOGO;
   const Mg=10,W=190;const cw=[11,132,14,33];
@@ -1005,8 +1055,8 @@ async function drPdf(D,d,plans){await loadPdf();const{jsPDF}=window.jspdf;const 
     doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(0);doc.text(PT(`${C.titulo} · PLANO DEL DÍA`),Mg+36,Mg+6);doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60);doc.text(PT(`${pl.g.n}. ${pl.title}   ·   ${dayUp(d)}   ·   ${C.proyecto}`),Mg+36,Mg+11);
     doc.setFillColor(...hexRGB(pl.sc?conOf(pl.sc).color:pl.g.color));doc.rect(Wl-Mg-4,Mg,4,14,'F');
     const n=pl.ent.length;const cols=n>36?4:n>18?3:2;const nr=Math.ceil(n/cols);const rowH=4.1;const legH=n?nr*rowH+5:0;
-    const y0=Mg+17,availW=Wl-2*Mg,availH=Hl-y0-Mg-legH-6;const ratio=pl.cv.width/pl.cv.height;const iw=Math.min(availW,availH*ratio),ih=iw/ratio;const x0=Mg+(availW-iw)/2;
-    doc.addImage(pl.cv.toDataURL('image/jpeg',.9),'JPEG',x0,y0,iw,ih);doc.setLineWidth(.2);doc.setDrawColor(150);doc.rect(x0,y0,iw,ih);
+    const y0=Mg+17,availW=Wl-2*Mg,availH=Hl-y0-Mg-legH-6;const ratio=pl.img.w/pl.img.h;const iw=Math.min(availW,availH*ratio),ih=iw/ratio;const x0=Mg+(availW-iw)/2;
+    doc.addImage(pl.img.url,'JPEG',x0,y0,iw,ih);pl.img.url=null;doc.setLineWidth(.2);doc.setDrawColor(150);doc.rect(x0,y0,iw,ih);
     const yl=y0+ih+5;const cwl=availW/cols;
     pl.ent.forEach((r,k)=>{const cx=Mg+Math.floor(k/nr)*cwl,cy=yl+(k%nr)*rowH;const c=conOf(r.sc).color;doc.setFillColor(...hexRGB(c));doc.roundedRect(cx,cy-2.9,9,3.8,1.6,1.6,'F');
       doc.setFont('helvetica','bold');doc.setFontSize(6.4);doc.setTextColor(lum(c)>.55?20:255);doc.text(r.code,cx+4.5,cy-.2,{align:'center'});
@@ -1045,8 +1095,8 @@ async function drXlsx(D,d,plans){await loadExcelJS();const C=drCfg();const logo=
     s.columns=[{width:10},{width:95},{width:26},{width:12},{width:12},{width:12},{width:12},{width:12}];
     const c1=s.getCell('A1');c1.value=`${C.titulo} · PLANO DEL DÍA`;c1.font={name:'Calibri',size:16,bold:true};
     const c2=s.getCell('A2');c2.value=`${pl.g.n}. ${pl.title} · ${dayUp(d)} · ${C.proyecto}`;c2.font={name:'Calibri',size:11,color:{argb:'FF444444'}};
-    const wpx=1500,hpx=Math.round(wpx*pl.cv.height/pl.cv.width);const sm=document.createElement('canvas');sm.width=2400;sm.height=Math.round(2400*pl.cv.height/pl.cv.width);sm.getContext('2d').drawImage(pl.cv,0,0,sm.width,sm.height);
-    const iid=wb.addImage({base64:sm.toDataURL('image/jpeg',.9),extension:'jpeg'});s.addImage(iid,{tl:{col:0,row:3},ext:{width:wpx,height:hpx}});
+    const wpx=1500,hpx=Math.round(wpx*pl.img.h/pl.img.w);
+    const iid=wb.addImage({base64:pl.img.url,extension:'jpeg'});pl.img.url=null;s.addImage(iid,{tl:{col:0,row:3},ext:{width:wpx,height:hpx}});
     let rr=4+Math.ceil(hpx/20)+1;const lh=s.getRow(rr);['ITEM','DESCRIPCIÓN','SUBCONTRATISTA'].forEach((v,i)=>{const c=lh.getCell(1+i);c.value=v;c.fill=fill('#7F7F7F');c.font={name:'Calibri',size:11,bold:true,color:{argb:'FFFFFFFF'}};c.border=box;c.alignment={horizontal:'center'}});rr++;
     for(const x of pl.ent){const row=s.getRow(rr++);const col=conOf(x.sc).color;const a=row.getCell(1);a.value=num(x.code);if(typeof a.value==='number')a.numFmt='0.00';a.fill=fill(col);a.font={name:'Calibri',size:11,bold:true,color:{argb:lum(col)>.55?'FF1B1B1B':'FFFFFFFF'}};a.alignment={horizontal:'center'};
       row.getCell(2).value=x.desc;row.getCell(3).value=conOf(x.sc).name;[1,2,3].forEach(i=>row.getCell(i).border=box)}
@@ -1527,7 +1577,8 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
 /** las actividades que siguen a x en su ambiente (el «tren») y tienen días desde la fecha del plan */
 function trenOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);
   return L.slice(i+1).filter(y=>!(typeof DONE!=='undefined'&&DONE.has(y.id))&&(y.days||[]).some(d=>d>=M.date))}
-function shiftOp(y,n,from){const map=d=>d>=from?wshift(d,n):d;const days=[...new Set((y.days||[]).map(map))].sort();const qty={};for(const[d,v]of Object.entries(y.qty||{})){const k=map(d);qty[k]=(qty[k]||0)+(+v||0)}return op('acts',y.id,{...y,days,qty})}
+function shiftDays(y,n,from){const map=d=>d>=from?wshift(d,n):d;const days=[...new Set((y.days||[]).map(map))].sort();const qty={};for(const[d,v]of Object.entries(y.qty||{})){const k=map(d);qty[k]=(qty[k]||0)+(+v||0)}return{...y,days,qty}}
+function shiftOp(y,n,from){return op('acts',y.id,shiftDays(y,n,from))}
 function dvClick(btn,x,k){const eng=dzEng();const p=dpOf(x.id);
   if(k==='va'){if(p&&p.st==='pend'){const o=remDoc(p.id);if(o)rec([o]);dzLog(`✓ ${x.name}: va`);requestRender()}return}
   if(k==='fin'){if(eng){if(p&&p.st==='pend'){dpAccept(btn,x,{...p,k:'fin'});return}dvFin(x);return}
@@ -1591,7 +1642,7 @@ function nvMot(st){const d=(st.desc||'').trim();const l=nvLbl(st.k);const pr=st.
 /** SC de la actividad anterior en el ambiente (la que debía entregar el frente) */
 function predOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);for(let j=i-1;j>=0;j--)if(L[j].sc&&L[j].sc!==x.sc)return L[j].sc;return''}
 /** registro en Restricciones de lo que no va (toda reprogramación queda registrada) */
-function nvRestr(x,st,need){const rid=uid('res');const A=nvAttr(x,st);const resp=A.rsc?conOf(A.rsc).name:'';
+function nvRestr(x,st,need,rid0){const rid=rid0||uid('res');const A=nvAttr(x,st);const resp=A.rsc?conOf(A.rsc).name:'';
   return{rid,doc:{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:A.rt||restrTypeFor(A.c),desc:(st.desc||'').trim()||nvMot(st),resp,need,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario',cnc:A.cnc,ccode:A.c,imp:A.imp,rsc:A.rsc,pc:A.pc}}}
 /** por defecto en «Programación»: si el SC había propuesto cambiar esa actividad y se le rechazó (o sigue sin decidir), es de obra */
 async function nvProgDef(x){try{const P_=typeof PROP!=='undefined'?PROP.get(x.sc):null;const leg=Object.values((P_&&P_.hist)||{}).some(h=>h&&h.id===x.id&&h.st==='rej'&&!h.undone);
@@ -1637,8 +1688,7 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
     if(v==='prop'){if(!ok())return;closePop();dpPropose(x,st.k,st.desc,st.k==='fre'?{pred:st.pred}:null);return}
     if(v==='lib'){if(!ok())return;closePop();if(st.prop){dpTake(st.prop,dpDec('ok','Va: se libera a primera hora')).then(r=>{if(r)libGo()});return}libGo();return}
     if(v==='nolib'){if(!ok())return;if(today){closePop();dvResToday(btn,x,st,st.prop);return}step('rep');return}
-    if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();
-      if(st.prop){dpTake(st.prop,dpDec('ok','Reprogramada al '+st.to)).then(r=>{if(r)doRep()});return}doRep();return}}
+    if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();doRep();return}}
   function libGo(){
       /* va con aviso: la restricción queda registrada por liberar ese día a primera hora (se mide igual) */
       const R=nvRestr(x,st,M.date);apply([op('restr',R.rid,R.doc)],'');
@@ -1646,30 +1696,71 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
       if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Va: se libera a primera hora',decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));
       toast(`Va · aviso en el plano y restricción por liberar: ${nvMot(st)}`);requestRender()}
   function doRep(){const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}
-    const T=st.tren?trenOf(x):[];const A=nvAttr(x,st);const mot=nvMot(st);const ca={c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,pc:A.pc,rt:A.rt||''};
+    const T=st.tren?trenOf(x):[];
     /* plan aún sin publicar: la decisión queda en el plan y se aplica al lookahead al «Publicar plan» */
-    if(pubDraft()){const nid=nvDraftAdd(x,st,T,n);
-      toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)} · se aplica al publicar el plan`,'Deshacer',()=>{const o=remDoc(nid);if(o)rec([o]);if(st.prop)dpReopen(st.prop);requestRender()});requestRender();return}
-    const ops=[shiftOp(x,n,M.date),...T.map(y=>shiftOp(y,n,M.date))];
-    ops.forEach((o_,i)=>{const y=i===0?x:T[i-1];const k=i===0?M.date:rplDay(y,M.date);if(k)o_.after.rpl={...(y.rpl||{}),[k]:{to:i===0?st.to:wshift(k,n),m:mot,...ca,...(i?{tr:x.id}:{})}}});
-    const R=nvRestr(x,st,st.to);ops.unshift(op('restr',R.rid,R.doc));
-    const mv={};ops.forEach(o_=>{if(o_.col!=='acts')return;const y=S.act.get(o_.id);if(y)mv[o_.id]={p:y.days||[],pq:y.qty||{},n:o_.after.days,nq:o_.after.qty||{}}});
-    apply(ops,'');const nid=uid('pz');const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,...ca,repTo:st.to,tren:T.length,mv,rid:R.rid,pred:st.k==='fre'?st.pred:'',prop:st.prop?st.prop.id:'',by:me.email,byName:me.name||me.email,ts:NOW()})];
-    if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Reprogramada al '+st.to,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));
-    toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)} · restricción registrada`,'Deshacer',()=>{const z=PD.get(nid);if(z)revertRep(z)});requestRender()}
+    if(pubDraft()){const go=()=>{const nid=nvDraftAdd(x,st,T,n);
+        toast(`“${short(x.name,32)}”${T.length?` y ${T.length} más`:''} → ${dvLbl(st.to)} · se aplica al publicar el plan`,'Deshacer',()=>{const o=remDoc(nid);if(o)rec([o]);if(st.prop)dpReopen(st.prop);requestRender()});requestRender()};
+      if(st.prop){dpTake(st.prop,dpDec('ok','Reprogramada al '+st.to)).then(r=>{if(r)go()});return}go();return}
+    /* ya publicado (día reabierto): se aplica al momento, en una transacción (nvRepPub) */
+    nvRepPub(x,st,T,n)}
   if(st.k==='int'&&today){novaDialog(btn,x,{motivo:'Interferencia con otra partida',prio:o.prio||null,prop:st.prop,title:'No va por interferencia',lead:esc(st.desc||'')});return}
   if(st.k==='int'&&eng)step('rep');else if(st.k)step('det');else step('mot');progDef()}
 /** «No va → reprogramar» en un plan sin publicar: queda como borrador (el lookahead no cambia hasta publicar). Devuelve el id. */
 function nvDraftAdd(x,st,T,n){const A=nvAttr(x,st);const mot=nvMot(st);const ca={c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,pc:A.pc,rt:A.rt||''};const nid=uid('pz');
   const g=[addDoc(nid,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,...ca,repTo:st.to,tren:T.length,draft:true,ids:[x.id,...T.map(y=>y.id)],shift:n,rdesc:st.desc||mot,pred:st.k==='fre'?st.pred:'',prop:st.prop?st.prop.id:'',by:me.email,byName:me.name||me.email,ts:NOW()})];
   if(st.prop)g.push(updDoc(st.prop.id,{st:'ok',dec:'Reprogramada al '+st.to,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',dec:null,decBy:null,decN:null,decT:null}));rec(g.filter(Boolean));return nid}
+/* «No va → reprogramar» con el plan ya publicado (día reabierto). Antes se creaban la «no va» y la restricción con ids al azar y
+   los días se corrían con la copia local: dos ingenieros a la vez (la PC de la reunión y una tablet) dejaban dos «no va», dos
+   restricciones y, si eligieron fechas distintas, días de más. Ahora, como dpTake: id fijo nv_<fecha>_<actividad>, creado en una
+   transacción que no escribe nada si ya existe (otro ya decidió) o si la propuesta del SC cambió; los días se corren desde la
+   actividad leída en la transacción y la restricción usa el id fijo res-<id de la «no va»> (como al publicar). */
+const nvId=(d,aid)=>'nv_'+d+'_'+aid;
+const NVBUSY=new Set();
+async function nvRepPub(x,st,T,n){if(!db){toast('Sin conexión con la base: no se reprogramó.');return}
+  const date=M.date,nid=nvId(date,x.id);if(NVBUSY.has(nid))return;
+  /* un día cerrado no se mueve sin aviso (igual que apply): se revisa con la copia local antes de ir a la base */
+  if(typeof lockGuard==='function'&&!lockGuard([x,...T].map(y=>shiftOp(y,n,date)),()=>nvRepPub(x,st,T,n)))return;
+  const A=nvAttr(x,st);const mot=nvMot(st);const ca={c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,pc:A.pc,rt:A.rt||''};
+  const R0=nvRestr(x,st,st.to,'res-'+nid);const{id:_r0,...rb}=R0.doc;const ids=[x.id,...T.map(y=>y.id)];const p=st.prop;const pt=p?dpDec('ok','Reprogramada al '+st.to):null;
+  NVBUSY.add(nid);let r;
+  try{r=await db.runTransaction(async tx=>{const zref=fcol('pdz').doc(nid);
+    if((await tx.get(zref)).exists)return{bad:'taken'};
+    if(p){const ps=await tx.get(fcol('pdz').doc(p.id));if(!ps.exists)return{bad:'gone'};const c=ps.data();if(c.st!=='pend')return{bad:'taken'};
+      if((c.ts||0)!==(p.ts||0)||(c.k||'')!==(p.k||'')||(c.desc||'')!==(p.desc||''))return{bad:'changed'}}
+    const rs=await tx.get(fcol('restr').doc(R0.rid));
+    const Ad=await Promise.all(ids.map(id=>tx.get(fcol('acts').doc(id))));const Am=new Map();Ad.forEach((d,i)=>{if(d.exists)Am.set(ids[i],actNorm({...d.data(),id:ids[i]}))});
+    const y0=Am.get(x.id);if(!y0||y0.arch||!(y0.days||[]).includes(date))return{bad:'moved'};
+    const W=[],mv={};
+    ids.forEach((id,i)=>{const y=Am.get(id);if(!y||y.arch||(i&&!(y.days||[]).some(d=>d>=date)))return;const nx=shiftDays(y,n,date);
+      /* el día que no fue queda marcado en el lookahead (↷); en el tren, su primer día movido */
+      const k=i===0?date:rplDay(y,date);if(k)nx.rpl={...(y.rpl||{}),[k]:{to:i===0?st.to:wshift(k,n),m:mot,...ca,...(i?{tr:x.id}:{})}};
+      mv[id]={p:y.days||[],pq:y.qty||{},n:nx.days,nq:nx.qty||{}};W.push({id,b:y,a:nx})});
+    /* la restricción usa el id fijo; si ya hay una vigente con ese id (de una «no va» anterior que se deshizo pero ya se liberó), no se pisa */
+    const rid=rs.exists&&!rs.data().arch?uid('res'):R0.rid;
+    for(const w of W)tx.update(fcol('acts').doc(w.id),{days:w.a.days,qty:w.a.qty||{},...(w.a.rpl?{rpl:w.a.rpl}:{})});
+    tx.set(fcol('restr').doc(rid),rb);
+    const doc={date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:mot,k:st.k,...ca,repTo:st.to,tren:W.length-1,mv,rid,pred:st.k==='fre'?st.pred:'',prop:p?p.id:'',by:me.email,byName:me.name||me.email,ts:NOW()};
+    tx.set(zref,doc);if(p)tx.update(fcol('pdz').doc(p.id),pt);
+    return{W,rid,doc}})}
+  catch(e){toast('No se pudo reprogramar: '+(e&&(e.code||e.message)||'error'));return}
+  finally{NVBUSY.delete(nid)}
+  if(r.bad){toast(r.bad==='taken'?'Otro usuario ya decidió esta actividad: revisa':r.bad==='changed'?'El subcontratista cambió su propuesta mientras la revisabas: revísala de nuevo.':r.bad==='gone'?'El subcontratista retiró su propuesta.':`Otro usuario ya cambió “${short(x.name,32)}” (ya no está el ${dvLbl(date)}): revisa`);requestRender();return}
+  /* reflejar al momento (llega igual por la base) y dejar el deshacer y el historial del lookahead como hacía apply */
+  const ops=[{col:'restr',id:r.rid,before:clone(getDoc('restr',r.rid)),after:{...clone(rb),id:r.rid}}];
+  for(const w of r.W){const c=S.act.get(w.id)||w.b;const b={...c,days:w.b.days||[],qty:w.b.qty||{}};if(w.b.rpl)b.rpl=w.b.rpl;else delete b.rpl;
+    const a={...c,days:w.a.days,qty:w.a.qty||{}};if(w.a.rpl)a.rpl=w.a.rpl;ops.push({col:'acts',id:w.id,before:clone(b),after:clone(a)});S.act.set(w.id,a)}
+  if(ARCH.res)ARCH.res.delete(r.rid);S.res.set(r.rid,{...clone(rb),id:r.rid});DV++;
+  ops.label='';if(typeof lhLog==='function')ops.lid=lhLog(ops,'');if(typeof undoS!=='undefined'){undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
+  PD.set(nid,{...r.doc,id:nid});PDV++;const g=[{op:'add',id:nid,doc:r.doc}];
+  if(p){const z=PD.get(p.id);if(z)pdPatch(z,pt);g.push({op:'upd',id:p.id,before:{st:'pend',dec:null,decBy:null,decN:null,decT:null},after:pt})}rec(g);
+  const nT=r.W.length-1;toast(`“${short(x.name,32)}”${nT?` y ${nT} más`:''} → ${dvLbl(st.to)} · restricción registrada`,'Deshacer',()=>{const z=PD.get(nid);if(z)revertRep(z)});requestRender()}
 /** primer día (desde la fecha del plan) que una actividad del tren deja de hacer: ahí queda su marca ↷ */
 function rplDay(y,from){return(y.days||[]).filter(d=>d>=from).sort()[0]||''}
 /** causa de no cumplimiento para lo que no va hoy (cuenta en el PPC del día) */
 function cncFor(k){if(k&&nvcOf(k))return nvCnc(nvcOf(k).c);const L=P().cnc||[];const want=k==='per'?'SC':'PROG';return L.find(c=>cncCode(c)===want)||L[0]||''}
 /** hoy (o un día pasado): la restricción se registra y sigue el flujo de «no se hará hoy» de siempre (con la causa y quién responde) */
 function dvResToday(btn,x,st,prop){/* la restricción se registra solo si se confirma (cancelar no deja una restricción suelta) */
-  const A=nvAttr(x,st);const reg=()=>{const R=nvRestr(x,st,M.date);apply([op('restr',R.rid,R.doc)],'Restricción registrada');return R.rid};
+  const A=nvAttr(x,st);const reg=nid=>{/* id fijo res-<id de la «no va»> (si ya hay una vigente con ese id, otro) */let r0=nid?'res-'+nid:'';const ex=r0&&getDoc('restr',r0);if(ex&&!ex.arch)r0='';const R=nvRestr(x,st,M.date,r0);apply([op('restr',R.rid,R.doc)],'Restricción registrada');return R.rid};
   setTimeout(()=>novaDialog(btn,x,{motivo:A.cnc,imp:A.imp===cncImp(A.cnc)?null:A.imp,rsc:A.rsc,pc:A.pc,title:'No va hoy · '+nvMot(st),prop,onSave:reg}),0)}
 /* ---------- Cambios del plan (recuadro a la derecha) ---------- */
 function chHtml(sc){const K=M.date+'|'+M.piso;const E=[];
@@ -1915,7 +2006,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if(t.id==='dzadd'){dzAdd(t);return true}
   if((b=g('[data-goszamb]'))){if(typeof szGoAmb==='function')szGoAmb(b.dataset.goszamb);return true}
   if(t.id==='mpan'||t.id==='mpx'){M.panel=!M.panel;requestRender();return true}
-  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;HIST.length=0;REDO.length=0;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
+  if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
   if(t.closest('#mundo')){undo();return true}

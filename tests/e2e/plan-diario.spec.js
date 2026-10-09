@@ -707,3 +707,28 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   await expect.poll(async () => (await areas()).map(z => z.actId)).toEqual([nid, nid]);
   noErrors(errors, 'agregar al plan');
 });
+
+test('ir al Tablero y volver no borra el «Deshacer» del plan ni vuelve a suscribirse al plan del día', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await expect(page.locator('#mpanel .mp-h')).toContainText('02 oct');
+  await row(page, 'e0').locator('[data-dv^="no"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.locator('#pop .nvok').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(1);
+  /* se cuentan las suscripciones al plan del día (pdz por fecha) */
+  await page.evaluate(() => { window.__subs = []; const f = db.collection.bind(db); db.collection = c => { const r = f(c); if (c !== 'pdz') return r; const w = r.where; r.where = (...a) => { const q = w(...a); const o = q.onSnapshot; q.onSnapshot = (...b) => { window.__subs.push(a[2]); return o.apply(q, b); }; return q; }; return r; }; });
+  for (let i = 0; i < 2; i++) {
+    await openTab(page, 'dash');
+    await expect.poll(() => page.evaluate(() => window.__plano.M.date)).toBe(HOY); // el Tablero usa el plan de hoy
+    await openTab(page, 'mapa');
+    await expect(page.locator('#mpanel .mp-h')).toContainText('02 oct');
+  }
+  expect(await page.evaluate(() => window.__subs)).toEqual([HOY]); // solo la de hoy (Tablero), una vez; el día siguiente sigue suscrito
+  await expect(row(page, 'e0')).toContainText('No va');
+  // el «Deshacer» del plan de mañana sigue ahí
+  await expect(page.locator('#mundo')).toBeEnabled();
+  await page.locator('#mundo').click();
+  await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
+  noErrors(errors, 'deshacer tras Tablero');
+});
