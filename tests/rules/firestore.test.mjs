@@ -1142,3 +1142,25 @@ test('matriz: una actividad de varios SC (scs) la llena también el SC sumado; e
   await assertFails(lote('ky', 'x2'));
   await assertFails(setDoc(doc(sc, 'mcat/k60'), { name: 'Nueva', sc: 'c-gabel', scs: ['c-otro'], cl: 't', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe' } }));
 });
+test('auditoría 09/10: semanas, fotos y configuración solo las borra el admin; el editor sí deshace lo que crea', async () => {
+  await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    await setDoc(doc(db, 'weeks/90_p1'), { n: 90, pisoId: 'p1', frozenAt: 'x', items: {}, res: {} });
+    await setDoc(doc(db, 'wsnap/90_p1'), { snap: {} }); await setDoc(doc(db, 'acts/a-nueva'), { name: 'x' }); });
+  const ed = user('editor@obra.pe');
+  await assertFails(deleteDoc(doc(ed, 'weeks/90_p1')));
+  await assertFails(deleteDoc(doc(ed, 'wsnap/90_p1')));
+  await assertFails(deleteDoc(doc(ed, 'meta/project')));
+  await assertSucceeds(deleteDoc(doc(ed, 'acts/a-nueva')));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/90_p1'), { 'res.x1.ok': true }));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'weeks/90_p1')));
+});
+test('auditoría 09/10: en liberaciones el SC no programa ni borra observaciones o historial', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lib/l-obs2'), { actId: 'x1', sc: 'c-gabel', st: 'obs', by: 'sc@obra.pe', obs: [{ t: 'Fisura', ok: false }], hist: [{ st: 'sol' }, { st: 'obs' }] }); });
+  const sc = user('sc@obra.pe');
+  await assertFails(updateDoc(doc(sc, 'lib/l-obs2'), { obs: [] }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-obs2'), { hist: [] }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-obs2'), { prog: { d: '2026-10-02', h: '09:00', insp: 'yo' } }));
+  await assertFails(updateDoc(doc(sc, 'lib/l-obs2'), { by: 'otro@obra.pe' }));
+  // levantar: marca las observaciones y agrega al historial
+  await assertSucceeds(updateDoc(doc(sc, 'lib/l-obs2'), { st: 'lev', obs: [{ t: 'Fisura', ok: true }], hist: [{ st: 'sol' }, { st: 'obs' }, { st: 'lev' }] }));
+});
