@@ -6,7 +6,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 
 **LPS 911**: app web del *Last Planner System* para una obra de construcción en Lima (Perú). Incluye lookahead, plan semanal, restricciones, registro de campo, capataces en celular, tablero en vivo, plan diario (sectorización en planos), liberaciones de calidad e indicadores (PPC).
 - Usuarios: ingenieros de producción y de campo, subcontratistas (SC), capataces, áreas de apoyo (Oficina Técnica, Calidad) y administrador.
-- Pestañas (`data-tab`): `hoy` Hoy (inicio de cada rol), `dash` Tablero, `look` Lookahead, `mat` Matriz de ambientes, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` PPC semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización", "Plan semanal" → "PPC semanal"); los ids no.
+- Pestañas (`data-tab`): `hoy` Hoy (inicio de cada rol), `dash` Tablero, `look` Lookahead, `mat` Matriz de ambientes, `campo` Campo, `mapa` Plan diario, `cap` En obra, `plan` Plan semanal, `restr` Restricciones, `lib` Liberaciones, `ind` Indicadores, `planos` Sectorización, `cfg` Configuración, `team` Equipo. Los nombres visibles cambiaron ("Plano diario" → "Plan diario", "Planos" → "Sectorización", "Plan semanal" → "PPC semanal" → otra vez "Plan semanal"); los ids no.
 - **Toda la interfaz y los mensajes van en español** (Perú), con trato de "tú".
 
 ## Reglas que no se rompen

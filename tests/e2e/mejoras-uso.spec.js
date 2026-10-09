@@ -21,8 +21,8 @@ const res = page => page.evaluate(() => window.__dbGet('weeks', '58_p1').res);
 
 test('PPC semanal: n.º de ítem, tipo de causa del cuadro y mitigación', async ({ page }) => {
   const errors = await openApp(page, { tab: 'plan', extra: [META, SEMANA] });
-  await expect(page.locator('#main .phd h2')).toHaveText('PPC semanal');
-  await expect(page.locator('[data-tab="plan"]').first()).toHaveText('PPC semanal');
+  await expect(page.locator('#main .phd h2')).toHaveText('Plan semanal');
+  await expect(page.locator('[data-tab="plan"]').first()).toHaveText('Plan semanal');
   const tr = page.locator('section[data-pid="p1"] tr[data-id="e0"]');
   await expect(tr.locator('td.inum')).toHaveText('2');
   await expect(tr.locator('[data-cnc] option')).toContainText(['PROG · Programación', 'MAT · Materiales', 'OT · Otros']);
