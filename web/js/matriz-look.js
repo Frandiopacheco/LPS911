@@ -179,7 +179,12 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(
 function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cells=mxCells();const vp=new Set(visPisos().map(p=>p.id));const mine=SCK()?new Set(myScsI()):null;const L=[];
   for(const[amb,C]of cells){const a=S.amb.get(amb);if(!a||!vp.has(pisoOfAmb(amb)))continue;
     for(const[cid,o]of Object.entries(C)){if(!o.sp)continue;const c=MX.cat.get(cid);if(!c||c.arch)continue;if(mine?!mxScsOf(c).some(s=>mine.has(s)):!mxScsOf(c).some(scOk))continue;L.push({a,c,o})}}
-  return L.sort((p,q)=>(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true})||conOf(p.c.sc).name.localeCompare(conOf(q.c.sc).name)||p.c.name.localeCompare(q.c.name))}
+  /* mismo orden que el lookahead: piso → sector → ambiente (su orden en la grilla); dentro del ambiente, primero lo que ya tiene fila
+     (en el orden de sus filas) y luego lo demás por el orden del catálogo */
+  const pi=new Map(visPisos().map((p,i)=>[p.id,i]));const so=id=>(S.sec.get(id)||{}).order||0;
+  const ro=r=>{const os=r.o.acts.map(id=>S.act.get(id)).filter(Boolean).map(x=>x.order||0);return os.length?[0,Math.min(...os)]:[1,r.c.ord||0]};
+  return L.sort((p,q)=>{const d=(pi.get(pisoOfAmb(p.a.id))??99)-(pi.get(pisoOfAmb(q.a.id))??99)||so(p.a.sectorId)-so(q.a.sectorId)||(p.a.sectorId||'').localeCompare(q.a.sectorId||'')||(p.a.order||0)-(q.a.order||0)||(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true});if(d)return d;
+    const x=ro(p),y=ro(q);return x[0]-y[0]||x[1]-y[1]||p.c.name.localeCompare(q.c.name)})}
 function mxPendPill(){const n=mxPendList().length;return n?`<button class="dpill mxpp" title="Actividades pendientes en la matriz que no tienen días en el lookahead de hoy en adelante">${n} pendiente${n>1?'s':''} sin programar · Ver</button>`:''}
 function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||PM();
   const by=new Map();L.forEach((r,i)=>{const k=r.a.id;if(!by.has(k))by.set(k,[]);by.get(k).push({...r,i})});
