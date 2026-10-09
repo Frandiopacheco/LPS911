@@ -716,9 +716,9 @@ function render(){
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}
-  const rt0=performance.now();try{views[U.tab](main)}catch(err){console.error(err);main.dataset.view='';main.dataset.built='';main.dataset.lqv='';
+  main.__own=false;const rt0=performance.now();try{views[U.tab](main)}catch(err){console.error(err);main.dataset.view='';main.dataset.built='';main.dataset.lqv='';
     main.innerHTML=`<div class="scroll"><div class="wrap"><div class="callout warnc"><b>No se pudo mostrar “${esc(tabName(U.tab))}”.</b> Vuelve a intentarlo o recarga la página; si se repite, envía este detalle al administrador: <span class="mono">${esc(String(err&&err.message||err).slice(0,200))}</span><div style="margin-top:8px"><button class="ib pri" onclick="location.reload()">Recargar la página</button></div></div></div></div>`}
-  if(st!=null){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=st}
+  if(st!=null&&!main.__own){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=st}/* __own: la vista repone su posición (Plan semanal) */
   if(fk){const el=main.querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(el){el.focus({preventScroll:true});el.dataset.o=el.value;try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
   RLAST=performance.now();RCOST[U.tab]=RLAST-rt0;
 }
