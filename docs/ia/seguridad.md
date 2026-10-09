@@ -17,3 +17,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Límite de accesos en las reglas del tareo (oct 2026)
 
 En `match /tareo/{id}` el guardado del capataz quedaba rechazado (PERMISSION_DENIED) al sumar otra rama que lee `members` (revisión de producción, `tOfiEd`), aunque esa rama fuera falsa: el pedido llegaba al límite de lecturas/evaluación. Regla práctica: **cada rama de un `allow` empieza por una condición que no lee documentos y que distingue a quién va dirigida** (p. ej. `resource.data.cap == mid()` para el capataz y `!= mid()` para la oficina), y solo después llama a funciones que leen `members`. Las pruebas de reglas no corren en el entorno de las IA (el emulador no descarga): se ven en GitHub.
+
+## Auditoría con datos reales (09/10/2026)
+- Regla general `/{col}/{id}`: `create, update` para editores; `delete` de `weeks`, `wsnap`, `meta`, `lhver`, `lhidx` solo el admin (el editor sigue deshaciendo lo que crea en actividades, ambientes, sectores y restricciones).
+- `lib`: el SC no cambia `prog`, `by`, `actId`, `done` (además de `crit/sup/rest`) y `obs`/`hist` solo pueden crecer.
+- «Cargar datos desde archivo» en producción (`LPS_ENV!=='pruebas'`, respaldos completos, no actualizaciones del lookahead) pide escribir PRODUCCIÓN.
+- No se hizo (decisión: riesgo mayor que el beneficio por ahora): suscribir solo las últimas semanas de `weeks` (hoy ~150 KB; revisar a los ~6 meses).

@@ -319,7 +319,10 @@ async function importJson(file){
   if(data.tipo==='actualizacion'){const falta=((data.requiere||{}).pisos||[]).filter(id=>!S.pis.has(id));
     if(falta.length){IMPMSG='Esta actualización es para el lookahead ya cargado, pero en la página no están los pisos '+falta.join(', ')+'. Carga primero el lookahead completo.';const m=$('#impmsg');if(m)m.textContent=IMPMSG;toast('Falta cargar primero el lookahead completo.');return}
     if(!await uiAsk({title:'¿Aplicar la actualización?',text:data.resumen||'',list:[`${writes.length} registros se actualizan`,`${dels.length} se eliminan`],note:'Las demás actividades (y lo que hayas corregido en ellas) no se tocan.',ok:'Continuar',tone:dels.length?'warn':'info'}))return}
-  else{const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
+  /* auditoría 09/10: en producción, cargar un archivo devuelve los datos a la fecha del respaldo; se exige escribir PRODUCCIÓN */
+  if(window.LPS_ENV!=='pruebas'&&data.tipo!=='actualizacion'){const w=await uiAsk({title:'Estás en la obra REAL (producción)',html:`Cargar <b>${writes.length}</b> registros reemplaza lo actual por lo del archivo${data.fecha?` (respaldo del ${esc(String(data.fecha).slice(0,10))})`:''}: lo que se cambió después en la obra se pierde.`,note:'Si querías probar, hazlo en la copia de prueba (cinta roja PRUEBAS).',input:{label:'Escribe PRODUCCIÓN para continuar',required:true},ok:'Continuar',tone:'danger'});
+    if(w==null||String(w).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')!=='PRODUCCION'){if(w!=null)toast('No se cargó: hay que escribir PRODUCCIÓN.');return}}
+  if(data.tipo!=='actualizacion'){const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
     if(!await uiAsk({title:`¿Cargar ${writes.length} registros?`,list:[...Object.entries(by).map(([c,n])=>`${n} en ${c}`),...(dels.length?[`${dels.length} se eliminan`]:[])],note:'Los registros con el mismo identificador se reemplazan por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.',ok:'Cargar',tone:'danger'}))return}
   const msg=$('#impmsg');let done=0;
   try{const skip=await importWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});

@@ -50,3 +50,14 @@ test('5 · el Tablero calcula el PPC del SC igual que el Plan semanal (frente no
   expect(r.c2).toBeCloseTo(r.ws, 6);    // c2: 1/(1+1) = 50 %
   noErrors(errors, 'ppc del sc');
 });
+
+test('7 · en producción, cargar un respaldo exige escribir PRODUCCIÓN', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'team' });
+  const run = (txt) => page.evaluate(async txt => { window.LPS_ENV = 'produccion';
+    const f = new File([JSON.stringify({ formato: 'lps911-v2', fecha: '2026-10-01T00:00:00Z', colecciones: { acts: { 'imp-x': { name: 'Importada', ambId: 'a1', sc: 'c1', days: [] } } } })], 'r.json');
+    window.__ans = txt; await importJson(f); await new Promise(r => setTimeout(r, 300)); return !!window.__dbGet('acts', 'imp-x'); }, txt);
+  let n = 0; page.on('dialog', d => { n++; d.type() === 'prompt' ? d.accept(n === 1 ? 'hola' : 'produccion') : d.accept(); });
+  expect(await run()).toBe(false);          // escribió otra cosa: no carga
+  expect(await run()).toBe(true);           // «produccion» (sin tilde también vale): carga
+  noErrors(errors, 'carga en producción');
+});
