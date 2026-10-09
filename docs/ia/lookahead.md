@@ -24,3 +24,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Filtros por SC con chips** (Lookahead, Tablero, Matriz): clic = solo ese SC (clic de nuevo = todos); Ctrl/Shift+clic suma o quita.
 
 - **Resaltar una fila** (oct 2026, pedido del dueño): `lkHighlight(aid, ms=3000)` (plan-restricciones.js) resalta **toda la fila** ~3 s (clase `tr.rhl`, fondo y bordes con `--today`; las barras de los días quedan encima). Es un estado (`LK_HL`), no solo una clase: `markPeers` (después de cada dibujo, también el virtual al desplazarse) llama a `lkHlPaint` para volver a ponerla. Lo usa «Ver en el lookahead» de Restricciones (`gotoAct`). Antes `rflash` se perdía al redibujar.
+
+## Filas con historial (oct 2026, decidido con el dueño)
+- En Excel se «reciclaba» una fila terminada cambiándole nombre y SC. Aquí los registros de Campo, «terminada» (`DONE`), restricciones y liberaciones van por **id de fila**: reciclarla los pasaría a la otra actividad.
+- `actHist(x)`: terminada, días < hoy, registros en `DAY`, restricciones (`S.res`), liberaciones (`LIB`). En `commitField`, cambiar `name` o `sc` de una fila con historial abre `histGate`: **Crear actividad nueva** (`histNewRow`: fila debajo con el nombre/SC nuevo; si la fila estaba terminada, sus días posteriores a hoy y a la fecha de término pasan a la nueva) o, **solo el administrador**, «Corregir esta fila…» con motivo obligatorio (queda en el `label` del historial).
+- No se bloquea: filas sin historial, cambios de escritura (`mnk` igual) ni otro nombre de la misma actividad del catálogo (`actSameName`). Renombrar/fusionar desde el Catálogo y «Pasar a <SC>» del aviso de la Matriz siguen igual (es la misma actividad).
+- Agregar rápido: botón «+» en cada ambiente (`.ab.adda`, `data-addact`); al escribir el nombre de una fila nueva toma el SC de la actividad del catálogo.
+- Prueba: `tests/e2e/lookahead-historial.spec.js`.

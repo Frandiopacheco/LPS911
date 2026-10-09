@@ -240,7 +240,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
         const rs=Math.max(1,vis.length);
-        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         vis.forEach((x,i)=>{
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
@@ -649,12 +649,48 @@ function commitField(t){
       /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
       const g=typeof mxNameGate==='function'?mxNameGate(v,x,t):null;if(g===false)return;if(g!=null&&g!==v){v=g;t.value=v;t.dataset.o=v}
       const c=g!=null?null:actCanon(v,x.id);if(g!=null){const c2=actCanon(v,x.id);if(!x.und&&c2&&c2.und)und0=c2.und}if(c){if(c.name!==v){v=c.name;t.value=v;t.dataset.o=v;toast(`Se escribió “${c.name}”, como ya se llama en ${c.n} ambiente${c.n>1?'s':''}.`)}if(!x.und&&c.und)und0=c.und}}
-    if(x[f]===v&&!und0)return;const nx={...x,[f]:v};if(und0)nx.und=und0;if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);}
+    if(x[f]===v&&!und0)return;
+    /* fila con historial: no se reutiliza para otra actividad (decidido con el dueño, oct 2026) */
+    if((f==='name'||f==='sc')&&x[f]&&!actSameName(x,f,v)&&actHist(x).length){t.value=t.dataset.o;histGate(x,f,v);return}
+    const nx={...x,[f]:v};if(und0)nx.und=und0;
+    /* fila nueva: toma el SC de la actividad del catálogo elegida */
+    if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v}));if(cc&&cc.sc&&cc.sc!==x.sc&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);}
   else if(t.dataset.amb){const x=S.amb.get(t.dataset.amb);if(!x)return;v=f==='code'?v.trim():v.replace(/\s+/g,' ').trim();if(x[f]===v)return;apply([op('ambientes',x.id,{...x,[f]:v})])}
   else if(t.dataset.piso){const x=S.pis.get(t.dataset.piso);if(!x)return;v=v.trim();if(t.dataset.codeedit){delete t.dataset.codeedit;const m=v.split(/\s*·\s*/);if(m.length>=2){apply([op('pisos',x.id,{...x,code:m[0].trim(),name:m.slice(1).join(' · ').trim()})]);t.dataset.o=t.value;return}}if(x[f]===v)return;apply([op('pisos',x.id,{...x,[f]:v})])}
   else if(t.dataset.sec){const x=S.sec.get(t.dataset.sec);if(!x)return;v=v.trim();if(t.dataset.codeedit){delete t.dataset.codeedit;const m=v.split(/\s*·\s*/);if(m.length>=2){apply([op('sectors',x.id,{...x,code:m[0].trim(),name:m.slice(1).join(' · ').trim()})]);t.dataset.o=t.value;return}}if(x[f]===v)return;apply([op('sectors',x.id,{...x,[f]:v})])}
   t.dataset.o=t.value;
 }
+/* ---------- filas con historial (oct 2026) ----------
+   Cambiar el nombre o el SC de una fila que ya tiene historial la convertiría en otra actividad: los registros, «terminada»,
+   restricciones y liberaciones (ligados al id de la fila) pasarían a la nueva. Se ofrece crear una fila nueva; solo el
+   administrador puede corregir la fila, con motivo (queda en el historial). */
+function actHist(x){const r=[];const t=todayIso();
+  if(DONE.get(x.id))r.push('está marcada como terminada');
+  const past=(x.days||[]).filter(d=>d<t).length;if(past)r.push(`tiene ${past} ${past===1?'día ya pasado':'días ya pasados'} en el programa`);
+  let reg=0;for(const doc of DAY.values()){const q=doc.recs&&doc.recs[x.id];if(q&&q.status)reg++}if(reg)r.push(`tiene ${reg} ${reg===1?'registro':'registros'} en Campo`);
+  const nr=[...S.res.values()].filter(z=>z.actId===x.id).length;if(nr)r.push(`tiene ${nr} ${nr===1?'restricción':'restricciones'}`);
+  const nl=typeof LIB!=='undefined'?[...LIB.values()].filter(z=>z.actId===x.id&&!z.arch).length:0;if(nl)r.push(`tiene ${nl} ${nl===1?'liberación':'liberaciones'} de Calidad`);
+  return r}
+/* el nombre nuevo es la misma actividad (solo cambia la escritura o es otro nombre de la misma actividad del catálogo) */
+function actSameName(x,f,v){if(f!=='name')return false;if(mnk(x.name)===mnk(v))return true;
+  if(typeof mxCatOfN!=='function')return false;const a=mxCatOfN(x),b=mxCatOfN({name:v});return!!a&&a===b}
+async function histGate(x,f,v){const why=actHist(x);const what=f==='name'?`el nombre a «${v}»`:`el subcontratista a ${conOf(v).name}`;
+  const list=[...why,'Esos datos están ligados a esta fila: si cambias '+(f==='name'?'su nombre':'su subcontratista')+', pasarían a la otra actividad.'];
+  const nw=await uiAsk({title:`«${x.name||'Actividad'}» ya tiene historial`,text:`Para programar otra actividad en este ambiente, créala como fila nueva; esta queda como está.`,list,ok:'Crear actividad nueva',cancel:isAdmin?'Corregir esta fila…':'Cancelar',tone:'warn'});
+  if(nw){histNewRow(x,f,v);return}
+  if(!isAdmin)return;
+  const m=await uiAsk({title:'Corregir la fila (administrador)',text:`Cambia ${what} en esta misma fila: su historial (${why.join(', ')}) pasa a esa actividad. Úsalo solo para corregir un error.`,input:{label:'Motivo de la corrección',required:true},ok:'Corregir',tone:'danger'});
+  if(!m)return;const cur=S.act.get(x.id);if(!cur)return;const nx={...cur,[f]:v};if(nx.obs){delete nx.obs;delete nx.obsSug}
+  apply([op('acts',x.id,nx)],`Corrección del administrador: ${f==='name'?`«${cur.name}» → «${v}»`:`${conOf(cur.sc).name} → ${conOf(v).name} en «${cur.name}»`} · motivo: ${m}`)}
+function histNewRow(x,f,v){const sib=siblings('acts','ambId',x.ambId);const id=uid('act');const t=todayIso();const dn=DONE.get(x.id);
+  /* si la fila está terminada, sus días por venir eran para el trabajo nuevo: pasan a la fila nueva */
+  const mv=dn?(x.days||[]).filter(d=>d>t&&d>dn):[];
+  const name=f==='name'?v:x.name,sc=f==='sc'?v:x.sc;const c=f==='name'?actCanon(v,x.id):null;
+  const n={id,ambId:x.ambId,sc,name,und:f==='sc'?(x.und||''):((c&&c.und)||''),metrado:null,days:mv,order:orderAfter(sib,x)};
+  if(f==='name'&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v}));if(cc&&cc.sc&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))n.sc=cc.sc}
+  const ops=[op('acts',id,n)];if(mv.length){const q={...(x.qty||{})};mv.forEach(d=>delete q[d]);ops.push(op('acts',x.id,{...x,days:(x.days||[]).filter(d=>!mv.includes(d)),qty:q}))}
+  apply(ops,`Actividad nueva «${name}» en ${(S.amb.get(x.ambId)||{}).code||'el ambiente'}${mv.length?` (con ${mv.length} ${mv.length===1?'día':'días'} que estaban en «${x.name}»)`:''}`);
+  focusLater(`#grid .ci[data-a="${id}"][data-f="name"]`)}
 function moveFocus(t,dir){const f=t.dataset.f;const key=t.dataset.a?'a':t.dataset.amb?'amb':t.dataset.piso?'piso':'sec';
   const list=$$(`#grid .ci[data-${key}][data-f="${f}"]`);const i=list.indexOf(t);const n=list[i+dir];if(n){n.focus();if(n.select&&n.tagName==='INPUT')n.select()}}
 function firstActOfAmb(ambId){if(!ambId)return null;const l=[...S.act.values()].filter(x=>x.ambId===ambId).sort(byOrder);return l.length?l[l.length-1].id:null}

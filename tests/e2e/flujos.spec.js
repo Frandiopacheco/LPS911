@@ -6,17 +6,18 @@ const get = (page, c, id) => page.evaluate(([c, id]) => window.__dbGet(c, id), [
 const all = (page, c) => page.evaluate(c => window.__dbAll(c), c);
 
 test('lookahead: renombrar, deshacer y buscar', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look' });
+  // r0: fila sin historial (las que tienen registros o liberaciones piden crear una fila nueva: lookahead-historial.spec.js)
+  const errors = await openApp(page, { tab: 'look', extra: [['acts', 'r0', { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', und: 'pto', metrado: null, days: [], order: 95 }]] });
   await openTab(page, 'look');
-  const name = page.locator('input[data-a="i0"][data-f="name"]');
+  const name = page.locator('input[data-a="r0"][data-f="name"]');
   await expect(name).toHaveValue('Redes empotradas');
   await name.fill('Redes empotradas de agua');
   await name.press('Enter');
-  await expect.poll(async () => (await get(page, 'acts', 'i0')).name).toBe('Redes empotradas de agua');
+  await expect.poll(async () => (await get(page, 'acts', 'r0')).name).toBe('Redes empotradas de agua');
   await page.click('#bundo');
-  await expect.poll(async () => (await get(page, 'acts', 'i0')).name).toBe('Redes empotradas');
+  await expect.poll(async () => (await get(page, 'acts', 'r0')).name).toBe('Redes empotradas');
   await page.click('#bredo');
-  await expect.poll(async () => (await get(page, 'acts', 'i0')).name).toBe('Redes empotradas de agua');
+  await expect.poll(async () => (await get(page, 'acts', 'r0')).name).toBe('Redes empotradas de agua');
   await page.fill('#fq', 'tarrajeo');
   await expect(page.locator('input[data-a="i0"][data-f="name"]')).toHaveCount(0);
   await expect(page.locator('input[data-a="t0"][data-f="name"]')).toBeVisible();
