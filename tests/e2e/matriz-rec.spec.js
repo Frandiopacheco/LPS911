@@ -23,7 +23,10 @@ test('recorrido: checklist en secuencia, sugerencia del tipo, confirmar marca re
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1').c || {}).k1)).toBe('t');
   // terminada: pasa a «Terminadas o que no aplican»
   await expect(page.locator('.mxrdone')).toContainText('(1)');
-  // ¿Falta algo?: los otros 2 Dpto tienen Pintura
+  // ¿Falta algo?: plegado por defecto; al abrirlo queda abierto. Los otros 2 Dpto tienen Pintura
+  await expect(page.locator('#mxrsugd')).not.toHaveAttribute('open', '');
+  await expect(page.locator('#mxrsugd > summary')).toContainText('1 sugerencia');
+  await page.click('#mxrsugd > summary');
   await expect(page.locator('.mxrsug')).toContainText('2 de 2 Dpto la tienen');
   await page.click('[data-mxradd="k3"]');
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k3)).toBe('p');
@@ -57,6 +60,7 @@ test('recorrido: «+ Otra actividad» crea una actividad nueva en el catálogo y
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; U.mxV = 'rec'; render(); });
   await page.click('[data-mxra="a1"]');
+  await page.click('#mxrsugd > summary');
   await page.click('#mxrpick');
   await page.fill('#mxpq', 'Instalación de espejos');
   await page.click('[data-mxpknew]');

@@ -152,7 +152,7 @@ function teamScope(em,m){const r=roleOfM(em,m);const L=[];
   return L.join(' ')}
 function teamPerms(em,m){const r=roleOfM(em,m);if(r==='admin')return'<span class="mu">todo</span>';const L=[];
   if(r!=='capataz'&&!TAR_ROLES.includes(r)&&dashOn(m))L.push('<span class="pill neu">Tablero</span>');
-  if(CLI_ROLES.includes(r)&&m.cli===true)L.push('<span class="pill neu">Versión cliente</span>');
+  if(!CLI_OFF&&CLI_ROLES.includes(r)&&m.cli===true)L.push('<span class="pill neu">Versión cliente</span>');
   if(r==='editor'&&m.tpub===true)L.push('<span class="pill neu">Publica tareo</span>');
   return L.join(' ')}
 /* ficha de una persona: todo lo editable (mismos data-mem/data-f que antes, así sirven los mismos manejadores) */
@@ -167,7 +167,7 @@ function teamEdit(em){const m=MEM.get(em);if(!m||!isAdmin){TEDIT=null;lqClose();
     ${!lock&&m.role==='area'?`<label><span class="fgl">Área</span>${areaCell(em,m)}</label>`:''}
     ${r==='admin'?'':`<div class="tedp"><span class="fgl">Permisos</span>
       ${m.role==='capataz'||TAR_ROLES.includes(m.role)?'':`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="dash"${dashOn(m)?' checked':''}> Ve el Tablero</label>`}
-      ${CLI_ROLES.includes(m.role)?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="cli"${m.cli===true?' checked':''}> Versión cliente <small class="mu">(holguras, versiones emitidas, PPC del cliente)</small></label>`:''}
+      ${!CLI_OFF&&CLI_ROLES.includes(m.role)?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="cli"${m.cli===true?' checked':''}> Versión cliente <small class="mu">(holguras, versiones emitidas, PPC del cliente)</small></label>`:''}
       ${m.role==='editor'?tpubCell(em,m):''}</div>`}
    </div>
    <div class="lqbtns">${lock?'':`<button class="ib danger" data-mdel="${esc(em)}">Quitar acceso</button>`}<span class="fsp"></span><button class="ib pri" data-lqx>Listo</button></div>`,

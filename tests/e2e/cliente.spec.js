@@ -1,6 +1,8 @@
 // Versión para el cliente: holguras por nivel (manda la más específica), vista de solo lectura, Excel, emisión,
 // alerta de holgura consumida, PPC del cliente y quién la puede ver.
 import { test, expect } from '@playwright/test';
+// Versión cliente RETIRADA (oct 2026, decidido con el dueño): CLI_OFF en cliente.js. Se conservan las pruebas para cuando vuelva.
+test.skip(true, 'versión cliente retirada');
 import { openApp, noErrors, openTab } from './helpers.js';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';

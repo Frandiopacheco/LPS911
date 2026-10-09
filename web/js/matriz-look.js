@@ -179,15 +179,20 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxw]');if(
 function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cells=mxCells();const vp=new Set(visPisos().map(p=>p.id));const mine=SCK()?new Set(myScsI()):null;const L=[];
   for(const[amb,C]of cells){const a=S.amb.get(amb);if(!a||!vp.has(pisoOfAmb(amb)))continue;
     for(const[cid,o]of Object.entries(C)){if(!o.sp)continue;const c=MX.cat.get(cid);if(!c||c.arch)continue;if(mine?!mxScsOf(c).some(s=>mine.has(s)):!mxScsOf(c).some(scOk))continue;L.push({a,c,o})}}
-  return L.sort((p,q)=>(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true})||conOf(p.c.sc).name.localeCompare(conOf(q.c.sc).name)||p.c.name.localeCompare(q.c.name))}
+  /* mismo orden que el lookahead: piso → sector → ambiente (su orden en la grilla); dentro del ambiente, primero lo que ya tiene fila
+     (en el orden de sus filas) y luego lo demás por el orden del catálogo */
+  const pi=new Map(visPisos().map((p,i)=>[p.id,i]));const so=id=>(S.sec.get(id)||{}).order||0;
+  const ro=r=>{const os=r.o.acts.map(id=>S.act.get(id)).filter(Boolean).map(x=>x.order||0);return os.length?[0,Math.min(...os)]:[1,r.c.ord||0]};
+  return L.sort((p,q)=>{const d=(pi.get(pisoOfAmb(p.a.id))??99)-(pi.get(pisoOfAmb(q.a.id))??99)||so(p.a.sectorId)-so(q.a.sectorId)||(p.a.sectorId||'').localeCompare(q.a.sectorId||'')||(p.a.order||0)-(q.a.order||0)||(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true});if(d)return d;
+    const x=ro(p),y=ro(q);return x[0]-y[0]||x[1]-y[1]||p.c.name.localeCompare(q.c.name)})}
 function mxPendPill(){const n=mxPendList().length;return n?`<button class="dpill mxpp" title="Actividades pendientes en la matriz que no tienen días en el lookahead de hoy en adelante">${n} pendiente${n>1?'s':''} sin programar · Ver</button>`:''}
 function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||PM();
   const by=new Map();L.forEach((r,i)=>{const k=r.a.id;if(!by.has(k))by.set(k,[]);by.get(k).push({...r,i})});
   lqModal(`<div class="lqtop"><b>Pendientes sin programar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En la matriz están <b>pendientes</b> y no tienen días en el lookahead de hoy en adelante${U.piso?' (este piso)':''}${SCK()?' (tu partida)':U.sc?' (subcontratistas del filtro)':''}. ${can?'Marca las que quieras agregar: se crean en el lookahead sin días, para que les pongas fecha.':''}</p>
-   ${can?'<div class="fbar"><label><input type="checkbox" id="mxpall"> Todas</label><span class="fsp"></span><span class="note" id="mxpcnt">0 marcadas</span></div>':''}
-   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpg"><button type="button" class="lnkb" data-mxpamb="${esc(rs[0].a.id)}" title="Ir a este ambiente en el lookahead"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b> ↗</button></div>${rs.map(r=>`<div class="mxpr"><label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>
-     ${r.o.acts.length?`<button type="button" class="ib" data-mxpgo="${r.i}" title="Ir a su fila en el lookahead para ponerle fecha">Ver fila ↗</button>`:can?`<button type="button" class="ib" data-mxpadd="${r.i}" title="La agrega a este ambiente sin días y te lleva a la fila para ponerle fecha">+ Agregar e ir ↗</button>`:''}</div>`).join('')}`).join('')}</div>
+   <div class="fbar"><input class="tin mxq" id="mxpq2" type="search" placeholder="Buscar ambiente, actividad o subcontratista" aria-label="Buscar en pendientes sin programar">${can?'<label><input type="checkbox" id="mxpall"> Todas</label>':''}<span class="fsp"></span><span class="note" id="mxpvis">${L.length} pendiente${L.length===1?'':'s'}</span>${can?'<span class="note" id="mxpcnt">0 marcadas</span>':''}</div>
+   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpgw" data-q="${esc(fold(rs[0].a.code+' '+rs[0].a.name+' '+((S.sec.get(rs[0].a.sectorId)||{}).name||'')))}"><div class="mxpg"><button type="button" class="lnkb" data-mxpamb="${esc(rs[0].a.id)}" title="Ir a este ambiente en el lookahead"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b> ↗</button></div>${rs.map(r=>`<div class="mxpr" data-q="${esc(fold(r.c.name+' '+conOf(r.c.sc).name))}"><label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>
+     ${r.o.acts.length?`<button type="button" class="ib" data-mxpgo="${r.i}" title="Ir a su fila en el lookahead para ponerle fecha">Ver fila ↗</button>`:can?`<button type="button" class="ib" data-mxpadd="${r.i}" title="La agrega a este ambiente sin días y te lleva a la fila para ponerle fecha">+ Agregar e ir ↗</button>`:''}</div>`).join('')}</div>`).join('')}<p class="note" id="mxpnone" hidden>Nada coincide con la búsqueda.</p></div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button>${can?'<button class="ib pri" id="mxpok">Agregar al lookahead</button>':''}</div>`,
    e=>{const ga=e.target.closest('[data-mxpamb]');if(ga){lqClose();mxGoAmb(ga.dataset.mxpamb);return}
      const gv=e.target.closest('[data-mxpgo]');if(gv){const r=L[+gv.dataset.mxpgo];const id=r.o.acts.find(i=>S.act.has(i));lqClose();if(id)gotoAct(id);else mxGoAmb(r.a.id);return}
@@ -198,7 +203,11 @@ function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||
      lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`);
      /* te lleva a la (primera) fila nueva para ponerle fecha */
      const first=ops[0]&&ops[0].id;if(first)setTimeout(()=>{if(S.act.has(first))gotoAct(first)},60)},
-   e=>{if(e.target.id==='mxpall')document.querySelectorAll('[data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'})}
+   e=>{if(e.target.id==='mxpall')document.querySelectorAll('.mxpr:not([hidden]) [data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'});
+  /* buscador: varias palabras; coincide con el ambiente (código, nombre, sector) o con la actividad y su SC */
+  const q=$('#mxpq2');if(q){q.oninput=()=>{const W=fold(q.value).trim().split(/\s+/).filter(Boolean);let vis=0;
+    document.querySelectorAll('#lqm .mxpgw').forEach(g=>{const ga=g.dataset.q;let any=false;g.querySelectorAll('.mxpr').forEach(r=>{const t=ga+' '+r.dataset.q;const ok=W.every(w=>t.includes(w));r.hidden=!ok;if(ok){any=true;vis++}});g.hidden=!any});
+    const v=$('#mxpvis');if(v)v.textContent=W.length?`${vis} de ${L.length}`:`${L.length} pendiente${L.length===1?'':'s'}`;const no=$('#mxpnone');if(no)no.hidden=vis>0;const all=$('#mxpall');if(all)all.checked=false};setTimeout(()=>q.focus(),50)}}
 
 /* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
 function mxGoAmb(amb){const sib=[...S.act.values()].filter(x=>x.ambId===amb).sort((a,b)=>(a.order||0)-(b.order||0));if(sib.length){gotoAct(sib[0].id);return}

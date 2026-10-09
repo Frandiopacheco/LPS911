@@ -47,7 +47,6 @@ function buildLookShell(main){
     <button class="ib pri" id="fedit" hidden>✎ Editar</button>
     <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
     <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
-    <button class="ib" id="fcli" hidden title="Programa que se envía al cliente: el interno más la holgura">Vista cliente</button>
     <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
     <span id="fday"></span><span id="fpast"></span><span id="fdone"></span><span id="fmxp"></span>
@@ -73,7 +72,7 @@ function buildLookShell(main){
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
   /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
-  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);$('#fcli').onclick=cliToggle;
+  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
   $('#fclr').onclick=()=>{clearTimeout(lkQTimer);lkQTimer=0;U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
@@ -109,7 +108,6 @@ function renderLook(main){if(typeof ensureMx==='function')ensureMx();
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
   if(!main.dataset.built)buildLookShell(main);
   renderVerBar();ensureCli();
-  {const fc=$('#fcli');if(fc){const ok=canCli()&&!LKP;if(fc.hidden!==!ok)fc.hidden=!ok;fc.classList.toggle('on',!!U.cliv)}}
   if(U.cliv&&!canCli())U.cliv=false;
   if(U.cliv){cliRenderLook(main);selBar();presBar();presZoom();return}else cliBanner();
   const vd=U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;

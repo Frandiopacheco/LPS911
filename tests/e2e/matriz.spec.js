@@ -83,6 +83,20 @@ test('nombres del lookahead sin catálogo: se asignan a una actividad y desde ah
   noErrors(errors, 'nombres sin catálogo');
 });
 
+test('guardar foto también funciona desde Catálogo, Recorrido y Tipos (antes el botón no hacía nada)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  page.on('dialog', d => d.accept());
+  for (const [i, v] of ['cat', 'rec', 'tipo'].entries()) {
+    await page.click(`[data-mxv="${v}"]`);
+    await page.click('#mxfoto');
+    await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('mver')).length)).toBe(i + 1);
+    await expect(page.locator('#lqm .mxfh.nw')).toContainText('recién guardada');
+    await page.click('#lqm [data-lqx].pri');
+    await page.clock.setFixedTime(new Date(`2026-10-01T1${i}:00:00-05:00`)); // otra hora: otra foto
+  }
+  noErrors(errors, 'foto desde otras vistas');
+});
+
 test('foto semanal y comparar: marca lo que cambió desde la foto', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   page.on('dialog', d => d.accept());
