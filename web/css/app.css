@@ -3327,3 +3327,5 @@ table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.
 .mxplsw{display:inline-block;width:14px;height:14px;border-radius:4px;background:var(--c);vertical-align:-2px;margin-right:4px}.mxplsw.o{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
 .mxplsel .pad{display:flex;flex-direction:column;gap:4px;font-size:12.5px}.mxplr{display:flex;align-items:center}
 @media (max-width:900px){.mxplb{grid-template-columns:1fr}.mxplmap{height:60vh}.mxpls{max-height:none}}
+.pvl.mxpll{background:transparent;box-shadow:none;padding:0;border-radius:0;font:500 10.5px/1.15 var(--f-ui);color:var(--ink2);opacity:.8;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 3px var(--panel),0 0 3px var(--panel)}
+.pvl.mxpll.dim{opacity:.45}.pvl.mxpll.sel{opacity:1;font-weight:700;color:var(--ink);outline:none}
