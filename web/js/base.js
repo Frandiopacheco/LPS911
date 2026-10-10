@@ -35,7 +35,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc'});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -165,7 +165,7 @@ const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda como aviso para que un ingeniero lo confirme (el estado de la obra lo dice la Matriz).';
 async function askDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return false;const a=S.amb.get(x.ambId);
   const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok)markDone(aid,d);return!!ok}
-function markDone(aid,d,keepR){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
+function markDone(aid,d,keepR){if(typeof cliOn==='function'&&cliOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
   const left=(x.days||[]).filter(y=>y>d).length;
   /* las marcas de «terminada» anteriores a la reapertura siguen sin contar: solo se baja la reapertura si la nueva fecha es anterior */
   if(!keepR&&REOP.has(aid)&&d<=REOP.get(aid)){const nr=addD(d,-1);REOP.set(aid,nr);didxWrite(pisoOfAct(aid),{[aid]:nr},'r')}
@@ -176,7 +176,7 @@ function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(cons
   for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv)&&!recClr(lv.date,aid))o.push(lv.date);return o}
 /** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
  *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
-function reopenDone(aid,quiet){const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
+function reopenDone(aid,quiet){if(typeof cliOn==='function'&&cliOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
   const ds=doneDates(aid);const upto=ds.length?ds.reduce((m,d)=>d>m?d:m):dn;const pid=pisoOfAct(aid);const prevR=REOP.get(aid)||null;
   if(upto){REOP.set(aid,upto);didxWrite(pid,{[aid]:upto},'r')}
   if(DIDX.has(aid)){DIDX.delete(aid);didxWrite(pid,{[aid]:null})}
@@ -220,6 +220,8 @@ const WLAST={};
 /** entrega la escritura al SDK en este mismo instante; un error de validación inmediato se trata como rechazo */
 function fsNow(fn){try{return Promise.resolve(fn())}catch(e){return Promise.reject(e)}}
 function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&&(SCK()||AREA());
+  /* pestaña Cliente: todo va a la capa del cliente (cliente.js), nunca al lookahead interno */
+  if(!scR&&typeof cliPut==='function'&&cliPut(col,id,data))return Promise.resolve();
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
   const k=COLS[col];const prev=getDoc(col,id);colSet(k,id,data?{...clone(data),id}:null);
   if(!db||(!canWrite&&!scR))return Promise.resolve();
@@ -269,7 +271,7 @@ function snapReset(){SESS++;for(const o of SNAPBAD.values())clearTimeout(o.t);SN
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
 /* after: se llama cuando el cambio se aplica de verdad (al momento, o después si el administrador confirma un día cerrado) */
-function apply(ops,label,after){ops=ops.filter(Boolean);if(!ops.length)return;if(typeof lockGuard==='function'&&!lockGuard(ops,()=>apply(ops,label,after)))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo);if(typeof mxApplyWarn==='function')mxApplyWarn(ops);if(after)after()}
+function apply(ops,label,after){ops=ops.filter(Boolean);if(!ops.length)return;const CLM=typeof cliOn==='function'&&cliOn();if(!CLM&&typeof lockGuard==='function'&&!lockGuard(ops,()=>apply(ops,label,after)))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(!CLM&&typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo);if(!CLM&&typeof mxApplyWarn==='function')mxApplyWarn(ops);if(after)after()}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
 function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
 /* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
@@ -374,10 +376,10 @@ function subCol(col,k,lps){let un=null;const key='col:'+col;
   const open=()=>{let first=true;un=fcol(col).onSnapshot(snap=>{
       if(first){first=false;const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,mk(d)));if(lps)keepQueued(col,mp);setColData(k,mp)}
       else{const ch=snap.docChanges();if(!ch.length){snapOk(key);return}
-        const nk=new Map(S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
+        const ov=k==='act'&&S.act&&S.act._cli&&typeof cliBaseSet==='function';const nk=new Map(ov?actInt():S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
         for(const c of ch){const id=c.doc.id;const v=c.type==='removed'?null:mk(c.doc);if(lps&&qkHold(col,id,v))continue;
           nk.delete(id);if(na)na.delete(id);if(v){if(v.arch&&na)na.set(id,v);else nk.set(id,v)}}
-        S[k]=nk;if(na)ARCH[k]=na;DV++}
+        if(ov)cliBaseSet(nk);else S[k]=nk;if(na)ARCH[k]=na;DV++}
       S.loaded[k]=true;snapOk(key);onData()},
     err=>{un=null;snapFail(key,err,open)})};
   open();unsubs.push(()=>{if(un)un();un=null})}
@@ -519,7 +521,7 @@ function lockHits(ops){const H=[];for(const o of ops){if(!o||o.col!=='acts')cont
     for(const d of T)if(dayLocked(d,pid)&&!recReal(d,o.id))H.push({d,pid,id:o.id})}return H}
 /* se llama desde apply: false = no se aplica. El administrador puede seguir (queda registrado en el día). */
 let LKOK=false;
-function lockGuard(ops,retry){if(!me)return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
+function lockGuard(ops,retry){if(!me)return true;if(typeof cliOn==='function'&&cliOn())return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
   if(isAdmin){if(!LKOK){uiAsk({title:`El plan del ${lab} ya está cerrado`,text:`${lockWhy(ds[0],H[0].pid)}.`,note:'Como administrador puedes cambiarlo igual: quedará registrado en el día. El PPC del día se sigue midiendo contra lo que se publicó.',ok:'Cambiarlo igual',tone:'warn'}).then(ok=>{if(ok&&retry){LKOK=true;try{retry()}finally{LKOK=false}}});return false}
     for(const k of new Set(H.map(h=>h.d+'_'+h.pid))){const[d,pid]=[k.slice(0,10),k.slice(11)];dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'cambio en el lookahead'})}return true}
   toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
@@ -551,7 +553,7 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
   if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
-function writeDaily(d,pid,obj){if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+function writeDaily(d,pid,obj){if(typeof cliOn==='function'&&cliOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
@@ -623,9 +625,11 @@ const SVG=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),mapa:SVG('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
   ind:SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),cap:SVG('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>'),restr:SVG('<path d="M4 21V4h11l-1 4h6v9h-9l1-4H4"/>'),more:SVG('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>')};
 const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.textContent.trim():t};
-function goTab(t){U.tab=t;saveUI();sendPresence();render()}
+/* «Cliente» es el Lookahead con la capa del cliente (U.cliv): la pestaña cli no tiene vista propia */
+const tabKey=()=>U.tab==='look'&&U.cliv?'cli':U.tab;
+function goTab(t){if(t==='cli'){U.tab='look';U.cliv=true;U.cliVer='';U.ver=''}else{if(t==='look'||U.cliv)U.cliv=false;U.tab=t}if(U.tab==='look')gridRows=null;saveUI();sendPresence();render()}
 function renderBnav(){const b=$('#bnav');if(!b)return;const pr=U.mod==='tar'?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===U.tab);
-  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${U.tab===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[U.tab]||tabName(U.tab)):'Más'}</span></button>`;
+  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[U.tab]||tabName(U.tab)):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
   const items=bnavMore();
@@ -649,12 +653,12 @@ function renderTop(){
   if(U.mod==='tar'){/* Tareo: sin piso, semana, deshacer ni exportes de Last Planner (los oculta también el CSS con body.mod-tar) */
     let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}
     stx('#pname','Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+'Tareo');
-    $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===U.tab));
+    $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
     navApply();topDateApply();topToolsApply();updUndo();setStatus();renderBnav();return}
   const p=P();stx('#pname',p.name||'Proyecto');$('#pname').title=p.fullName||'';
   stx('#pcode',(p.code||'')+' · Last Planner System');
   const wd=weekDays(U.week);if(typeof dateMode!=='function'||dateMode()==='week'){stx('#wnum','Semana '+U.week);stx('#wdates',fmtD(wd[0])+' – '+fmtD(wd[5]))}
-  $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===U.tab));
+  $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
   const ps=pisos();if(U.piso&&!S.pis.has(U.piso))U.piso='';
   shx('#fpiso','<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join(''));
   const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;stx(rc,String(pr));
@@ -668,7 +672,7 @@ $('#fpiso').onchange=e=>{U.piso=e.target.value;U.pisoAll=!e.target.value;U.secto
 $('#wprev').onclick=()=>{U.week--;render()};
 $('#wnext').onclick=()=>{U.week++;render()};
 $('#wtoday').onclick=()=>{U.week=curWeek();render()};
-$('#tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(!b)return;U.tab=b.dataset.tab;saveUI();sendPresence();render()};
+$('#tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(!b)return;goTab(b.dataset.tab)};
 $('#bundo').onclick=undo;$('#bredo').onclick=redo;
 $('#bexport').onclick=()=>{if(ready)exportXlsx()};
 document.addEventListener('keydown',e=>{
@@ -706,6 +710,7 @@ function render(){
   /* cada módulo tiene sus pestañas: una del otro módulo lleva a la inicial del actual */
   if(me&&(U.mod==='tar')!==TAR_TABS.includes(U.tab))U.tab=U.mod==='tar'?'tdia':'hoy';
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
+  if(U.tab!=='look'&&U.cliv)U.cliv=false;if(typeof cliSync==='function')rSafe('cliSync',cliSync);
   if(typeof dayAuto==='function')rSafe('dayAuto',dayAuto);
   let main=$('#main');rSafe('renderTop',renderTop);
   if(U.mod==='tar'){document.body.classList.remove('cap-mode','v-dash','dash-tv');if(LKP)rSafe('presStop',presStop);rSafe('vaBanner',vaBanner)}else{

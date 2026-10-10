@@ -224,3 +224,59 @@ test('cierres sin revisar: un Parcial o No cumplido propuesto entra tal cual, co
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
   assert.deepStrictEqual(L.map(o => [o.rec.status, o.rec.cnc, o.rec.imp]), [['no', 'Materiales', null], ['partial', 'Subcontratas', null]]);
 });
+
+/* ---------- versión cliente ---------- */
+const { cliCompose, buildCliVersion, cliDue, cliCutTs, cliForW } = require('../lib');
+const CP = { refWeek: 58, refDate: '2026-09-28', cal: { sat: true } };
+const cliData = (o = {}) => ({
+  project: CP,
+  pisos: M({ p1: { code: 'P1', name: 'Piso 1', order: 10 } }),
+  sectors: M({ s1: { code: 'S1', pisoId: 'p1' } }),
+  ambientes: M({ a1: { code: '101', sectorId: 's1' }, a2: { code: '102', sectorId: 's1' } }),
+  acts: M({
+    x1: { ambId: 'a1', name: 'Tarrajeo', sc: 'c1', days: ['2026-10-05', '2026-10-06'], qty: {} },
+    x2: { ambId: 'a2', name: 'Pintura', sc: 'c2', days: ['2026-10-07'] },
+    x3: { ambId: 'a2', name: 'Archivada', sc: 'c2', days: ['2026-10-07'], arch: { t: 1 } },
+  }),
+  ...o,
+});
+test('versión cliente: holgura más específica, fila fijada, oculta y solo del cliente', () => {
+  const buf = { all: 1, a: { a2: 2 } };
+  const clia = new Map([
+    ['x1', { f: { name: 'Tarrajeo de muros' } }],
+    ['x2', { hide: true, h: {} }],
+    ['n1', { own: true, a: { ambId: 'a1', name: 'Remates', sc: 'c1', days: ['2026-10-12'] } }],
+    ['n2', { own: true, a: { ambId: 'a1', name: 'Borrada', days: [] }, arch: { t: 1 } }],
+  ]);
+  const m = cliCompose(cliData({ buf, clia }));
+  // x1: +1 día hábil (obra), con el nombre cambiado; x2 oculta; x3 archivada; n1 solo del cliente
+  assert.deepStrictEqual(m.get('x1').days, ['2026-10-06', '2026-10-07']);
+  assert.strictEqual(m.get('x1').name, 'Tarrajeo de muros');
+  assert.ok(!m.has('x2') && !m.has('x3') && !m.has('n2'));
+  assert.strictEqual(m.get('n1').own, true);
+  // ambiente con +2 manda sobre la obra; los días fijados no usan holgura
+  const m2 = cliCompose(cliData({ buf, clia: new Map([['x1', { f: { days: ['2026-10-09'], qty: {} } }]]) }));
+  assert.deepStrictEqual(m2.get('x1').days, ['2026-10-09']);
+  assert.deepStrictEqual(m2.get('x2').days, ['2026-10-09']);
+  // sábado no laborable: la holgura lo salta
+  const m3 = cliCompose(cliData({ project: { ...CP, cal: { sat: false } }, buf: { all: 3 } }));
+  assert.deepStrictEqual(m3.get('x2').days, ['2026-10-12']);
+});
+test('versión cliente: emisión automática el sábado 23:00, una sola vez y solo si nadie emitió', () => {
+  // semana 60 empieza el lunes 12/10/2026; su corte es el sábado 10/10 23:00 Lima = 11/10 04:00 UTC
+  assert.strictEqual(cliCutTs(CP, 60), Date.UTC(2026, 9, 11, 4));
+  assert.strictEqual(cliDue(CP, [], Date.UTC(2026, 9, 11, 3, 59)), null);
+  assert.strictEqual(cliDue(CP, [], Date.UTC(2026, 9, 11, 4, 1)), 60);
+  assert.strictEqual(cliDue(CP, [{ forW: 60, date: '2026-10-08' }], Date.UTC(2026, 9, 11, 4, 1)), null);
+  // emitida para otra semana: no cuenta
+  assert.strictEqual(cliDue(CP, [{ forW: 59, date: '2026-10-01' }], Date.UTC(2026, 9, 11, 4, 1)), 60);
+  // versiones antiguas sin forW: desde el lunes siguiente a su fecha
+  assert.strictEqual(cliForW(CP, { date: '2026-10-08' }), 60);
+  assert.strictEqual(cliForW(CP, { date: '2026-10-05' }), 59);
+  const v = buildCliVersion(cliData({ buf: { all: 1 } }), 60, Date.UTC(2026, 9, 11, 4, 1));
+  assert.strictEqual(v.idx.forW, 60);
+  assert.strictEqual(v.id, 'auto-c60');
+  const acts = JSON.parse(v.docs[0][1].json).acts;
+  assert.deepStrictEqual(Object.keys(acts).sort(), ['x1', 'x2']);
+  assert.deepStrictEqual(acts.x1.days, ['2026-10-06', '2026-10-07']);
+});

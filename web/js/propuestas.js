@@ -389,7 +389,7 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
    ETAPA 30 · Modo revisión de propuestas dentro de la grilla
    ===================================================================== */
 U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null,REVDRAG=null;
-const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!(U.ver&&U.verMode==='ver'));
+const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver'));
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
 /* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
 function revVisItems(){const V=RVVIS;return V?revItems().filter(o=>V.has(o.id)):[]}

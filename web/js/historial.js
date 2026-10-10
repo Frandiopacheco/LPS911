@@ -6,7 +6,7 @@
 const HFLDS=['days','qty','metrado','und','name','sc','ambId'];
 const HMAX=150;
 /** registra un cambio del lookahead (lo llama apply) */
-function lhLog(ops,label,extra){try{if(!db||!me||!canWrite||(typeof PM==='function'&&PM()))return;const items=[];
+function lhLog(ops,label,extra){try{if(!db||!me||!canWrite||(typeof cliOn==='function'&&cliOn())||(typeof PM==='function'&&PM()))return;const items=[];
   for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before,a=o.after;const k=!b?'new':!a?'del':a.arch&&!b.arch?'arch':!a.arch&&b.arch?'res':'mod';
     const pick=x=>{const r={};if(!x)return r;HFLDS.forEach(f=>{if(x[f]!==undefined&&x[f]!==null)r[f]=x[f]});return r};
     const B=pick(b),A=pick(a);if(k==='mod'&&canon(B)===canon(A))continue;const x=a||b;const am=S.amb.get(x.ambId)||(ARCH.amb&&ARCH.amb.get(x.ambId));

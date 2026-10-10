@@ -71,7 +71,8 @@ export async function openTab(page, t) {
   const b = page.locator(`#tabs button[data-tab="${t}"]`);
   if (await b.isVisible()) await b.click();
   else { await page.click('#tabMore'); await page.click(`#pop [data-do="t_${t}"]`); }
-  await expect(page.locator('#main')).toHaveAttribute('data-view', t);
+  /* «Cliente» es el Lookahead con la capa del cliente: su vista es look */
+  await expect(page.locator('#main')).toHaveAttribute('data-view', t === 'cli' ? 'look' : t);
 }
 
 export const noErrors = (errors, ctx) => expect(errors, `errores en el navegador (${ctx})`).toEqual([]);
