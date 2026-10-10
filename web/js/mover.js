@@ -39,7 +39,7 @@ function blockMoveDialog(btn,ids,label){const L=ids.filter(id=>canMoveAct(S.act.
 /* Cambiar de ambiente (oct 2026): el ingeniero (admin/editor, no en modo propuesta) pasa actividades a otro ambiente del
    MISMO piso, con sus días, cantidades y registros (los registros del día se guardan por piso, por eso no cruza pisos).
    Quedan al final del ambiente destino, en su orden. Se deshace con Ctrl+Z. */
-const canAmbMove=()=>!!canWrite&&!PM()&&!(U.ver&&U.verMode==='ver');
+const canAmbMove=()=>!!canWrite&&!PM()&&!U.cliv&&!(U.ver&&U.verMode==='ver');
 function ambMoveDialog(btn,ids){if(!canAmbMove())return;const L=ids.map(id=>S.act.get(id)).filter(Boolean);if(!L.length)return;
   const pids=new Set(L.map(x=>pisoOfAct(x.id)));if(pids.size>1){toast('Elige actividades de un solo piso: el cambio de ambiente es dentro del mismo piso.');return}
   const pid=[...pids][0];const secs=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid).sort((a,b)=>(a.order||0)-(b.order||0));

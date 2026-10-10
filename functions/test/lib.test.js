@@ -280,3 +280,24 @@ test('versión cliente: emisión automática el sábado 23:00, una sola vez y so
   assert.deepStrictEqual(Object.keys(acts).sort(), ['x1', 'x2']);
   assert.deepStrictEqual(acts.x1.days, ['2026-10-06', '2026-10-07']);
 });
+
+test('congelado del plan semanal: corte propio, o el de las propuestas si no se configuró', () => {
+  const { frzCutTs, weeksToFreeze } = require('../lib');
+  // sin configurar: sábado 13:00 (el de las propuestas)
+  assert.strictEqual(frzCutTs(CP, 60), Date.UTC(2026, 9, 10, 18));
+  // domingo 21:00 antes de la semana 60 (lunes 12/10) = 12/10 02:00 UTC; las propuestas siguen el sábado 13:00
+  const P2 = { ...CP, frzCutDow: 0, frzCutHH: '21:00' };
+  assert.strictEqual(frzCutTs(P2, 60), Date.UTC(2026, 9, 12, 2));
+  assert.deepStrictEqual(weeksToFreeze(P2, Date.UTC(2026, 9, 10, 18, 30)), []); // sábado 13:30: todavía no
+  assert.deepStrictEqual(weeksToFreeze(P2, Date.UTC(2026, 9, 12, 2, 5)), [60]); // domingo 21:05: sí
+  assert.strictEqual(frzCutTs({ ...CP, frzCutDow: null, frzCutHH: null }, 60), Date.UTC(2026, 9, 10, 18));
+});
+test('versión cliente: un sector de un piso archivado no se emite (como la página)', () => {
+  const d = cliData();
+  d.pisos = M({ p1: { code: 'P1', name: 'Piso 1', order: 10 }, p0: { code: 'P0', name: 'Archivado', order: 5, arch: { t: 1 } } });
+  d.sectors = M({ s1: { code: 'S1', pisoId: 'p1' }, s0: { code: 'S0', pisoId: 'p0' } });
+  d.ambientes = M({ a1: { code: '101', sectorId: 's1' }, a2: { code: '102', sectorId: 's0' } });
+  const v = buildCliVersion(d, 60, Date.UTC(2026, 9, 11, 4, 1));
+  const acts = JSON.parse(v.docs[0][1].json).acts;
+  assert.deepStrictEqual(Object.keys(acts), ['x1']);
+});

@@ -15,7 +15,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -51,6 +51,8 @@ exports.emitirCliente = onSchedule({ schedule: '1,16,31,46 23 * * 6', timeZone: 
   if (!v) { logger.info('Sin pisos: nada que emitir'); return; }
   const idxRef = db().collection('clidx').doc(v.id);
   if ((await idxRef.get()).exists) return;
+  /* el administrador pudo emitir mientras se armaba esta: se vuelve a mirar justo antes */
+  if (cliDue(project, [...(await all('clidx')).values()], now) == null) { logger.info('Versión cliente: el administrador ya la emitió'); return; }
   for (let i = 0; i < v.docs.length; i += 8) {
     const b = db().batch();
     v.docs.slice(i, i + 8).forEach(([k, d]) => b.set(db().collection('cliver').doc(k), d));
@@ -105,7 +107,7 @@ async function congelar() {
     const refs = mine.map(p => db().collection('weeks').doc(n + '_' + p.id));
     const snaps = refs.length ? await db().getAll(...refs) : [];
     /* descongelada a propósito después del corte (unfrozenAt) = alguien la está corrigiendo: no se vuelve a congelar sola */
-    const cut = propCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
+    const cut = frzCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
     const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
     if (mine.length && skip.size === snaps.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'todos los pisos ya estaban congelados' }, [], [], { k: 0 })); continue; }
     const today = limaToday(now);

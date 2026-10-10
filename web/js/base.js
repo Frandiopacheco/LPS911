@@ -40,7 +40,7 @@ const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
 const pisoOfAmb=id=>{const a=S.amb.get(id)||ARCH.amb.get(id);return a?pisoOfSecObj(S.sec.get(a.sectorId)||ARCH.sec.get(a.sectorId)):''};
-const pisoOfAct=id=>{const x=S.act.get(id)||ARCH.act.get(id);return x?pisoOfAmb(x.ambId):''};
+const pisoOfAct=id=>{const x=(typeof actInt==='function'?actInt():S.act).get(id)||ARCH.act.get(id)||S.act.get(id);return x?pisoOfAmb(x.ambId):''};
 const visPisos=()=>pisos().filter(p=>!U.piso||p.id===U.piso);
 /** pisos para los indicadores históricos: con «Todos los pisos» incluye los archivados (sus semanas evaluadas siguen contando) */
 const histPisoSet=()=>new Set(U.piso?[U.piso]:[...S.pis.keys(),...ARCH.pis.keys()]);
@@ -165,7 +165,7 @@ const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda como aviso para que un ingeniero lo confirme (el estado de la obra lo dice la Matriz).';
 async function askDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return false;const a=S.amb.get(x.ambId);
   const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok)markDone(aid,d);return!!ok}
-function markDone(aid,d,keepR){if(typeof cliOn==='function'&&cliOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
+function markDone(aid,d,keepR){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
   const left=(x.days||[]).filter(y=>y>d).length;
   /* las marcas de «terminada» anteriores a la reapertura siguen sin contar: solo se baja la reapertura si la nueva fecha es anterior */
   if(!keepR&&REOP.has(aid)&&d<=REOP.get(aid)){const nr=addD(d,-1);REOP.set(aid,nr);didxWrite(pisoOfAct(aid),{[aid]:nr},'r')}
@@ -176,7 +176,7 @@ function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(cons
   for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv)&&!recClr(lv.date,aid))o.push(lv.date);return o}
 /** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
  *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
-function reopenDone(aid,quiet){if(typeof cliOn==='function'&&cliOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
+function reopenDone(aid,quiet){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
   const ds=doneDates(aid);const upto=ds.length?ds.reduce((m,d)=>d>m?d:m):dn;const pid=pisoOfAct(aid);const prevR=REOP.get(aid)||null;
   if(upto){REOP.set(aid,upto);didxWrite(pid,{[aid]:upto},'r')}
   if(DIDX.has(aid)){DIDX.delete(aid);didxWrite(pid,{[aid]:null})}
@@ -208,12 +208,15 @@ const QK={};const QKMS=1500;
 function qkMark(col,id){const k=COLS[col];if(!k)return;const key=col+'/'+id;const o=QK[key]||(QK[key]={col,id,has:false,v:null,t:0});clearTimeout(o.t);o.t=setTimeout(()=>qkFlush(key),QKMS)}
 /** ¿la foto que llega para col/id debe esperar? (hay una escritura propia reciente): se guarda la última (v = datos o null si ya no está) */
 function qkHold(col,id,v){const o=QK[col+'/'+id];if(!o)return false;o.has=true;o.v=v;return true}
-function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)return;const k=COLS[o.col];const cur=S[k].get(o.id)||(ARCH[k]&&ARCH[k].get(o.id))||null;
-  if(canon(cur)===canon(o.v))return;S[k]=new Map(S[k]);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v);DV++;if(ready)requestRender()}
+function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)return;const k=COLS[o.col];const ov=k==='act'&&S.act&&S.act._cli&&typeof cliBaseSet==='function';const src=ov?actInt():S[k];const cur=src.get(o.id)||(ARCH[k]&&ARCH[k].get(o.id))||null;
+  if(canon(cur)===canon(o.v))return;
+  /* con la capa del cliente puesta (pestaña Cliente), lo que llega va al lookahead interno, nunca a la capa */
+  if(ov){const nb=new Map(src);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);const AR=ARCH[k];if(!o.v){nb.delete(o.id);if(AR)AR.delete(o.id)}else if(o.v.arch&&AR){nb.delete(o.id);AR.set(o.id,o.v)}else{if(AR)AR.delete(o.id);nb.set(o.id,o.v)}cliBaseSet(nb)}
+  else{S[k]=new Map(S[k]);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v)}DV++;if(ready)requestRender()}
 /** pone (o quita, v=null) un documento en S/ARCH según su archivo */
 function colSet(k,id,v){const AR=ARCH[k];if(!v){S[k].delete(id);if(AR)AR.delete(id);return}if(v.arch&&AR){S[k].delete(id);AR.set(id,v)}else{if(AR)AR.delete(id);S[k].set(id,v)}}
 /* para la carga entera de una colección (primera foto): lo que tiene escritura propia reciente se queda con la versión local */
-function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);qkHold(col,id,mp.get(id)||null);const cur=S[k].get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
+function keepQueued(col,mp){const k=COLS[col];if(!k)return;const pre=col+'/';const src=k==='act'&&typeof actInt==='function'?actInt():S[k];for(const key in QK){if(!key.startsWith(pre))continue;const id=key.slice(pre.length);qkHold(col,id,mp.get(id)||null);const cur=src.get(id)||(ARCH[k]&&ARCH[k].get(id));if(cur)mp.set(id,cur);else mp.delete(id)}}
 /* último contenido completo que este equipo escribió en cada documento (solo mientras hay escrituras sin confirmar):
    si el servidor dice que el documento ya no existe (not-found), se vuelve a crear con lo último, no con una versión intermedia */
 const WLAST={};
@@ -271,18 +274,21 @@ function snapReset(){SESS++;for(const o of SNAPBAD.values())clearTimeout(o.t);SN
 const undoS=[],redoS=[];
 const op=(col,id,after)=>({col,id,before:clone(getDoc(col,id)),after:after?clone(after):null});
 /* after: se llama cuando el cambio se aplica de verdad (al momento, o después si el administrador confirma un día cerrado) */
-function apply(ops,label,after){ops=ops.filter(Boolean);if(!ops.length)return;const CLM=typeof cliOn==='function'&&cliOn();if(!CLM&&typeof lockGuard==='function'&&!lockGuard(ops,()=>apply(ops,label,after)))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(!CLM&&typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',undo);if(!CLM&&typeof mxApplyWarn==='function')mxApplyWarn(ops);if(after)after()}
+function apply(ops,label,after){ops=ops.filter(Boolean);if(!ops.length)return;const CLM=typeof cliTabOn==='function'&&cliTabOn();
+  /* pestaña Cliente: solo actividades (lo demás lo rechaza cliPut con aviso; no entra al deshacer) */
+  if(CLM){ops=ops.filter(o=>o.col==='acts');if(!ops.length){toast('En la versión cliente solo se cambian las actividades: pisos, sectores y ambientes vienen del lookahead interno.');requestRender();return}}
+  if(!CLM&&typeof lockGuard==='function'&&!lockGuard(ops,()=>apply(ops,label,after)))return false;ops.forEach(o=>put(o.col,o.id,o.after));ops.label=label||'';if(!CLM&&typeof lhLog==='function')ops.lid=lhLog(ops,label);undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo();requestRender();if(label)toast(label,'Deshacer',()=>{if((typeof cliTabOn==='function'&&cliTabOn())!==CLM){toast('Ese cambio es de la otra pestaña (Lookahead / Cliente): vuelve a ella para deshacerlo.');return}undo()});if(!CLM&&typeof mxApplyWarn==='function')mxApplyWarn(ops);if(after)after()}
 function canon(o){if(o==null)return'null';if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(typeof o==='object')return'{'+Object.keys(o).filter(k=>k!=='id').sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o)}
 function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc(o.col,o.id);if(canon(cur)!==canon(o[from])){skipped++;continue}put(o.col,o.id,o[to]);if(done)done.push({col:o.col,id:o.id,before:o[from],after:o[to]})}return skipped}
 /* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
 function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
 function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;
   /* deshacer tampoco cambia un día ya cerrado (publicado) sin aviso: pasa por el mismo control que cualquier cambio */
-  if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})),()=>undo())){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
+  if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})),()=>undo())){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
@@ -425,13 +431,14 @@ async function startSession(u,fdb){
 }
 const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=null,liveFrom=null,liveErr=null;
 let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
-function doneRebuild(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
+function doneRebuild(){if(typeof withInt==='function'&&S.act&&S.act._cli)return withInt(doneRebuild0);return doneRebuild0()}
+function doneRebuild0(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
   for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
   for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||!liveOwn(lv)||recReal(lv.date,lv.actId)||recClr(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}
 /** el ingeniero quitó el registro de ese día («Quitar registro»): el cierre del capataz o del SC ya no cuenta, tampoco como terminada */
 function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return!!(r&&r.clr)}
 /** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
-function liveOwn(lv){const x=lv&&(S.act.get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
+function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
   /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
@@ -521,7 +528,7 @@ function lockHits(ops){const H=[];for(const o of ops){if(!o||o.col!=='acts')cont
     for(const d of T)if(dayLocked(d,pid)&&!recReal(d,o.id))H.push({d,pid,id:o.id})}return H}
 /* se llama desde apply: false = no se aplica. El administrador puede seguir (queda registrado en el día). */
 let LKOK=false;
-function lockGuard(ops,retry){if(!me)return true;if(typeof cliOn==='function'&&cliOn())return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
+function lockGuard(ops,retry){if(!me)return true;if(typeof cliTabOn==='function'&&cliTabOn())return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
   if(isAdmin){if(!LKOK){uiAsk({title:`El plan del ${lab} ya está cerrado`,text:`${lockWhy(ds[0],H[0].pid)}.`,note:'Como administrador puedes cambiarlo igual: quedará registrado en el día. El PPC del día se sigue midiendo contra lo que se publicó.',ok:'Cambiarlo igual',tone:'warn'}).then(ok=>{if(ok&&retry){LKOK=true;try{retry()}finally{LKOK=false}}});return false}
     for(const k of new Set(H.map(h=>h.d+'_'+h.pid))){const[d,pid]=[k.slice(0,10),k.slice(11)];dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'cambio en el lookahead'})}return true}
   toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
@@ -553,7 +560,7 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
   if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
-function writeDaily(d,pid,obj){if(typeof cliOn==='function'&&cliOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
@@ -628,13 +635,13 @@ const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.tex
 /* «Cliente» es el Lookahead con la capa del cliente (U.cliv): la pestaña cli no tiene vista propia */
 const tabKey=()=>U.tab==='look'&&U.cliv?'cli':U.tab;
 function goTab(t){if(t==='cli'){U.tab='look';U.cliv=true;U.cliVer='';U.ver=''}else{if(t==='look'||U.cliv)U.cliv=false;U.tab=t}if(U.tab==='look')gridRows=null;saveUI();sendPresence();render()}
-function renderBnav(){const b=$('#bnav');if(!b)return;const pr=U.mod==='tar'?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===U.tab);
-  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[U.tab]||tabName(U.tab)):'Más'}</span></button>`;
+function renderBnav(){const b=$('#bnav');if(!b)return;const pr=U.mod==='tar'?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===tabKey());
+  const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[tabKey()]||tabName(tabKey())):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
   const items=bnavMore();
   const sh=document.createElement('div');sh.className='msheet';sh.id='msheet';
-  sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${U.tab===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
+  sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
     ${canLps()&&canTar()?`<div class="msmod"><span>Módulo</span>${modSegHtml()}</div>`:''}
     ${U.mod==='tar'?'<hr>':`<p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
     <button data-act="xls">Exportar Excel del lookahead</button><button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;

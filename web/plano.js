@@ -1526,8 +1526,9 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
   if(R_.W.size&&typeof lhLog==='function'){const ops=[...R_.W].map(([id,y])=>{const b=S.act.get(id);return b?{col:'acts',id,before:b,after:{...b,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})}}:null}).filter(Boolean);
     const n_=R_.out.filter(o=>Object.keys(o.mv||{}).length).length;lhLog(ops,`Plan del ${dvLbl(date)} publicado: ${n_} «No va» reprogramado${n_>1?'s':''} en la reunión`)}
   /* reflejar al momento (llegará igual por la base) */
-  for(const[id,y]of R_.W){const c=S.act.get(id);if(c)S.act.set(id,{...c,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})})}
-  for(const na of R_.newActs||[])if(!S.act.has(na.id))S.act.set(na.id,{...na.doc,id:na.id});for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,pub:PID,...(o.actId?{actId:o.actId}:{})});for(const zid of o.zs||[]){const q=PD.get(zid);if(q)Object.assign(q,{actId:o.actId||o.aid,fuera:false})}}for(const r of R_.restrs)S.res.set(r.id,r);
+  const AI_=typeof actInt==='function'?actInt():S.act;const AP_=(id,v)=>typeof actBasePut==='function'?actBasePut(id,v):S.act.set(id,v);
+  for(const[id,y]of R_.W){const c=AI_.get(id);if(c)AP_(id,{...c,days:y.days,qty:y.qty,...(y.rpl?{rpl:y.rpl}:{})})}
+  for(const na of R_.newActs||[])if(!AI_.has(na.id))AP_(na.id,{...na.doc,id:na.id});for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,pub:PID,...(o.actId?{actId:o.actId}:{})});for(const zid of o.zs||[]){const q=PD.get(zid);if(q)Object.assign(q,{actId:o.actId||o.aid,fuera:false})}}for(const r of R_.restrs)S.res.set(r.id,r);
   for(const o of R_.out){const z=PD.get(o.id);if(z)Object.assign(z,{draft:false,mv:o.mv,rid:o.rid,pub:PID})}PD.set(PID,{...R_.doc,id:PID});if(R_.snapIds){DPL.set(date+'_'+pid,{...(DPL.get(date+'_'+pid)||{}),id:date+'_'+pid,date,pisoId:pid,ids:R_.snapIds,pub:PID,auto:false,reo:null})}DV++;PDV++;
   /* publicado tarde (el día ya llegó): lo que no fue queda como no cumplido ese día, igual que un «No va hoy» */
   if(typeof canDaily!=='undefined'&&canDaily)for(const o of R_.out){if(o.date>todayIso()||!Object.keys(o.mv||{}).length)continue;const x=S.act.get(o.aid);if(!x||(recReal(o.date,o.aid)||{}).status)continue;
@@ -1573,10 +1574,10 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
   UNPUBBUSY=false;
   if(T.bad){toast(`No se deshizo nada: ${T.bad.length>1?'estas actividades ya se cambiaron':'esta actividad ya se cambió'} después de publicar (${T.bad.slice(0,3).map(n=>short(n,28)).join(' · ')}${T.bad.length>3?'…':''}). El plan sigue publicado; corrígelo en el lookahead o pide al administrador reabrir el día.`);return}
   /* reflejar al momento (llegará igual por la base) y dejarlo en el historial del lookahead */
-  const ops=[];for(const[id,y]of T.W){const c=S.act.get(id);if(c){ops.push(op('acts',id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}}));S.act.set(id,{...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}})}}
+  const AI_=typeof actInt==='function'?actInt():S.act;const ops=[];for(const[id,y]of T.W){const c=AI_.get(id);if(c){const nv={...c,days:y.days,qty:y.qty||{},rpl:y.rpl||{}};ops.push({col:'acts',id,before:clone(c),after:clone(nv)});if(typeof actBasePut==='function')actBasePut(id,nv);else S.act.set(id,nv)}}
   if(typeof lhLog==='function'&&ops.length)lhLog(ops,'Publicación deshecha');
   for(const o of R_.out){const r=o.rid&&S.res.get(o.rid);if(r&&!r.arch&&r.status!=='lib')S.res.set(o.rid,{...r,arch:T.arch});const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,mv:null,rid:'',pub:null})}
-  for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,pub:null});if(o.nw&&o.actId)S.act.delete(o.actId);for(const zid of o.zs||[]){const q=PD.get(zid);if(q)q.actId=null}}
+  for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,pub:null});if(o.nw&&o.actId){if(typeof actBasePut==='function')actBasePut(o.actId,null);else S.act.delete(o.actId)}for(const zid of o.zs||[]){const q=PD.get(zid);if(q)q.actId=null}}
   if(!R_.was){PD.delete(PID);if(dropSnap&&DPL.has(dk))DPL.delete(dk)}DV++;PDV++;
   for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova)writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
   toast('Publicación deshecha: los cambios vuelven a borrador');requestRender()}
@@ -1753,10 +1754,10 @@ async function nvRepPub(x,st,T,n){if(!db){toast('Sin conexión con la base: no s
   if(r.bad){toast(r.bad==='taken'?'Otro usuario ya decidió esta actividad: revisa':r.bad==='changed'?'El subcontratista cambió su propuesta mientras la revisabas: revísala de nuevo.':r.bad==='gone'?'El subcontratista retiró su propuesta.':`Otro usuario ya cambió “${short(x.name,32)}” (ya no está el ${dvLbl(date)}): revisa`);requestRender();return}
   /* reflejar al momento (llega igual por la base) y dejar el deshacer y el historial del lookahead como hacía apply */
   const ops=[{col:'restr',id:r.rid,before:clone(getDoc('restr',r.rid)),after:{...clone(rb),id:r.rid}}];
-  for(const w of r.W){const c=S.act.get(w.id)||w.b;const b={...c,days:w.b.days||[],qty:w.b.qty||{}};if(w.b.rpl)b.rpl=w.b.rpl;else delete b.rpl;
-    const a={...c,days:w.a.days,qty:w.a.qty||{}};if(w.a.rpl)a.rpl=w.a.rpl;ops.push({col:'acts',id:w.id,before:clone(b),after:clone(a)});S.act.set(w.id,a)}
+  for(const w of r.W){const c=(typeof actInt==='function'?actInt():S.act).get(w.id)||w.b;const b={...c,days:w.b.days||[],qty:w.b.qty||{}};if(w.b.rpl)b.rpl=w.b.rpl;else delete b.rpl;
+    const a={...c,days:w.a.days,qty:w.a.qty||{}};if(w.a.rpl)a.rpl=w.a.rpl;ops.push({col:'acts',id:w.id,before:clone(b),after:clone(a)});if(typeof actBasePut==='function')actBasePut(w.id,a);else S.act.set(w.id,a)}
   if(ARCH.res)ARCH.res.delete(r.rid);S.res.set(r.rid,{...clone(rb),id:r.rid});DV++;
-  ops.label='';if(typeof lhLog==='function')ops.lid=lhLog(ops,'');if(typeof undoS!=='undefined'){undoS.push(ops);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
+  ops.label='';if(typeof lhLog==='function')ops.lid=lhLog(ops,'');if(typeof undoS!=='undefined'){const[uS,rS]=typeof undoInt==='function'?undoInt():[undoS,redoS];uS.push(ops);if(uS.length>150)uS.shift();rS.length=0;updUndo()}
   PD.set(nid,{...r.doc,id:nid});PDV++;const g=[{op:'add',id:nid,doc:r.doc}];
   if(p){const z=PD.get(p.id);if(z)pdPatch(z,pt);g.push({op:'upd',id:p.id,before:{st:'pend',dec:null,decBy:null,decN:null,decT:null},after:pt})}rec(g);
   const nT=r.W.length-1;toast(`“${short(x.name,32)}”${nT?` y ${nT} más`:''} → ${dvLbl(st.to)} · restricción registrada`,'Deshacer',()=>{const z=PD.get(nid);if(z)revertRep(z)});requestRender()}

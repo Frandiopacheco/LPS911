@@ -198,7 +198,7 @@ test('inspectores de liberaciones (libm): los editan Calidad y el administrador'
   await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
 });
-test('versión cliente: solo el administrador; lo emitido no se modifica', async () => {
+test('versión cliente: solo el administrador; lo emitido no se modifica ni se borra', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'cli/buf'), { all: 1 }));
   await assertSucceeds(setDoc(doc(user(OWNER), 'clia/x1'), { f: { name: 'Otra' } }));
   await assertSucceeds(getDoc(doc(user(OWNER), 'clia/x1')));
@@ -216,10 +216,11 @@ test('versión cliente: solo el administrador; lo emitido no se modifica', async
   await assertFails(getDoc(doc(cap('cap1'), 'clia/x1')));
   await assertSucceeds(setDoc(doc(user(OWNER), 'clidx/c1'), { label: 'Semana 58', forW: 58 }));
   await assertSucceeds(setDoc(doc(user(OWNER), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
-  // emitida: no se cambia (ni el administrador); se puede archivar borrándola (solo él)
+  // emitida: no se cambia ni se borra (ni el administrador)
   await assertFails(updateDoc(doc(user(OWNER), 'clidx/c1'), { forW: 57 }));
   await assertFails(setDoc(doc(user(OWNER), 'cliver/c1__p1'), { verId: 'c1', json: '{"acts":{}}' }));
-  await assertSucceeds(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+  await assertFails(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+  await assertFails(deleteDoc(doc(user(OWNER), 'cliver/c1__p1')));
 });
 test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno corrige lo suyo', async () => {
   const np = (by, o = {}) => ({ date: '2026-10-01', pisoId: 'p1', ambId: 'a1', sc: 'c-gabel', desc: 'Tarrajeo', by, ...o });

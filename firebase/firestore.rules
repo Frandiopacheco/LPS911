@@ -242,14 +242,12 @@ service cloud.firestore {
     match /clia/{id} {
       allow read, write: if canCli();
     }
-    // lo emitido no se modifica (el compromiso con el cliente queda tal cual); el servidor emite la automática
+    // lo emitido no se modifica ni se borra, ni el administrador (el compromiso con el cliente queda tal cual); el servidor emite la automática
     match /clidx/{id} {
       allow read, create: if canCli();
-      allow delete: if isAdmin();
     }
     match /cliver/{id} {
       allow read, create: if canCli();
-      allow delete: if isAdmin();
     }
     // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador
     match /libm/{id} {
