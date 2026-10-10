@@ -82,7 +82,7 @@ function buildLookShell(main){
   $('#fwin').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.win=+b.dataset.w;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
-  $('#fmxp').onclick=e=>{if(!e.target.closest('button'))return;U.lkGh=!U.lkGh;GHT.clear();saveUI();requestRender()};
+  $('#fmxp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(!LK_GHOK){toast(b.title);return}U.lkGh=!U.lkGh;GHT.clear();saveUI();requestRender()};
   $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;saveUI();requestRender()}};
   $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
@@ -166,7 +166,7 @@ function renderLookInner(main){
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
   renderGrid($('#grid'),days,dset);
-  {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n?`<button class="dpill mxpp${U.lkGh?' on':''}" aria-pressed="${!!U.lkGh}" title="Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}">${U.lkGh?'✓ ':''}Faltan programar <b>${n}</b></button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
+  {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n?`<button class="dpill mxpp${U.lkGh&&LK_GHOK?' on':''}${LK_GHOK?'':' off'}" aria-pressed="${!!U.lkGh}"${LK_GHOK?'':' aria-disabled="true"'} title="${LK_GHOK?`Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}`:'Quita la búsqueda y los filtros de semana, día, actividades, restricciones u observaciones para ver lo que falta programar (con piso, sector y subcontratistas sí se ven)'}">${U.lkGh&&LK_GHOK?'✓ ':''}Faltan programar <b>${n}</b></button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="Terminadas y confirmadas en la Matriz. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
 }
@@ -174,7 +174,7 @@ function renderLookInner(main){
 const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(id))return;LKBADW.add(id);console.warn('Lookahead: fila con dato inválido',id,err)}
 /* (auditoría de código 08/10, L12) caché del texto de búsqueda por fila (se vacía cuando cambia DV) */
 const LKQT={v:-1,m:new WeakMap()};
-let LK_PAST=0,LK_DONE=0,LK_GHN=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
+let LK_PAST=0,LK_DONE=0,LK_GHN=0,LK_GHOK=true;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
 function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
@@ -198,7 +198,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
   head+='</tr></thead>';
   const rows=[];let shown=0;
   /* faltan programar (Matriz): filas fantasma dentro de cada ambiente; solo con los filtros de piso/sector/SC */
-  const GH=CV||(U.ver&&U.verMode==='ver')?null:lkGhosts();const ghOk=!!GH&&!(qs.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||wkSet||aset||RV);
+  const GH=CV||(U.ver&&U.verMode==='ver')?null:lkGhosts();const ghOk=!!GH&&!(qs.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||wkSet||aset||RV);LK_GHOK=ghOk;
   for(const{p,secs}of visTree()){
     const snapW=bases&&bases.get(p.id);const snap=snapW?snapW.snap||{}:null;
     const blocks=[];let pAmb=0,pAct=0;
@@ -546,7 +546,7 @@ function wireGrid(tbl){
   /* faltan programar: tocar un día de la fila fantasma la programa; ⋮ y el chip del ambiente */
   tbl.addEventListener('click',e=>{const ch=e.target.closest('[data-ghamb]');if(ch){const id=ch.dataset.ghamb;GHT.has(id)?GHT.delete(id):GHT.add(id);requestRender();return}
     const gm=e.target.closest('[data-ghmenu]');if(gm){lkGhostMenu(gm,gm.dataset.ghmenu);return}
-    const td=e.target.closest('tr[data-gh] td.d');if(td)lkGhostDay(td.parentElement.dataset.gh,td.dataset.d)});
+    const td=e.target.closest('tr[data-gh] td.d');if(td&&!(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey))lkGhostDay(td.parentElement.dataset.gh,td.dataset.d)});
   tbl.addEventListener('click',e=>{const h=e.target.closest('.anum:not(.dg)');if(!h)return;const tr=h.closest('tr[data-a]');if(tr)lkRowSel(tr.dataset.a)});
   tbl.addEventListener('pointerdown',e=>{const h=e.target.closest('.anum.dg');if(!h||e.button!==0)return;const tr=h.closest('tr[data-a]');const x=tr&&S.act.get(tr.dataset.a);if(!x)return;
     e.preventDefault();e.stopPropagation();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();

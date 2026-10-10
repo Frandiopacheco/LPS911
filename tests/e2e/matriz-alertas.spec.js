@@ -98,3 +98,65 @@ test('faltan programar: el SC solo ve lo de su partida', async ({ page }) => {
   await expect(page.locator('#grid tr[data-gh="a3|k3"]')).toHaveCount(0);
   noErrors(errors, 'SC faltantes');
 });
+
+/* auditoría 10/10 de «Faltan programar» */
+test('auditoría 1: si la única fila está terminada en Campo, se reabre al programar (el día entra al plan)', async ({ page }) => {
+  const extra = [...CAT, ['acts', 'z9', { ambId: 'a3', sc: 'c3', name: 'Pintura', und: '', metrado: null, days: ['2026-09-21'], order: 90 }],
+    ['daily', '2026-09-21_p2', { date: '2026-09-21', pisoId: 'p2', recs: { z9: { status: 'ok', done: true, sc: 'c3', nm: 'Pintura', ambId: 'a3', by: 'campo@obra.pe', ts: 1 } } }],
+    ['mamb', 'a3', { tipo: 'tp1', c: { k3: 'p' }, by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; U.showPast = false; render(); });
+  await expect.poll(() => page.evaluate(() => DONE.has('z9'))).toBe(true);
+  await expect(gh(page)).toContainText('¿Terminó?');
+  await gh(page).locator('td.d[data-d="2026-10-05"]').click();
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'z9').days)).toEqual(['2026-09-21', '2026-10-05']);
+  await expect.poll(() => page.evaluate(() => DONE.has('z9'))).toBe(false);
+  expect(await page.evaluate(() => libDay(S.act.get('z9'), '2026-10-05'))).toBe(false);
+  noErrors(errors, 'reabrir terminada');
+});
+
+test('auditoría 2: con filtro de SC secundario, la fila nueva es de ese SC y «Agregar sin días» no duplica', async ({ page }) => {
+  const extra = [...CAT, ['mcat', 'k3', { name: 'Pintura', sc: 'c3', scs: ['c2'], cl: 't', al: ['pintura'], ord: 30 }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await page.evaluate(() => { U.piso = ''; U.sc = 'c2'; U.lkGh = true; render(); });
+  await gh(page).locator('[data-ghmenu]').click();
+  await page.click('#pop [data-do="add"]');
+  const pint = () => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3').map(x => x.sc));
+  await expect.poll(pint).toEqual(['c2']);
+  // ya no queda la fila gris (la nueva se ve con el filtro); si se fuerza el menú, avisa y no crea otra
+  await expect(gh(page)).toHaveCount(0);
+  await page.evaluate(() => lkGhostMenu(document.body, 'a3|k3'));
+  await page.click('#pop [data-do="add"]');
+  await expect(page.locator('#toast')).toContainText('ya está en');
+  expect(await pint()).toEqual(['c2']);
+  noErrors(errors, 'filtro SC secundario');
+});
+
+test('auditoría 3: el SC en modo propuesta usa su propia fila (no la del otro SC de la actividad)', async ({ page }) => {
+  const extra = [...CAT, ['mcat', 'k3', { name: 'Pintura', sc: 'c3', scs: ['c1'], cl: 't', al: ['pintura'], ord: 30 }],
+    ['acts', 'z8', { ambId: 'a3', sc: 'c3', name: 'Pintura', und: '', metrado: null, days: ['2026-09-21'], order: 90 }]];
+  const errors = await openApp(page, { as: 'sc', tab: 'look', extra });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; render(); });
+  await expect(gh(page)).toBeVisible();
+  const n0 = await page.evaluate(() => Object.keys(__dbAll('lhprop')).length);
+  await gh(page).locator('td.d[data-d="2026-10-05"]').click();
+  // propone una fila nueva a nombre de su partida (c1); la fila de c3 no se toca
+  await expect.poll(() => page.evaluate(() => [...S.act.values()].filter(x => x.name === 'Pintura' && x.ambId === 'a3' && x.sc === 'c1' && (x.days || []).includes('2026-10-05')).length)).toBe(1);
+  expect(await page.evaluate(() => __dbGet('acts', 'z8').days)).toEqual(['2026-09-21']);
+  expect(await page.evaluate(() => Object.keys(__dbAll('lhprop')).length)).toBeGreaterThanOrEqual(n0);
+  noErrors(errors, 'SC propia fila');
+});
+
+test('auditoría 4-5-9: con búsqueda el botón queda apagado y explica; hoy se puede tocar; Ctrl+clic no programa', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; render(); });
+  await expect(gh(page).locator('td.d[data-d="2026-10-01"]')).toHaveCount(1); // hoy
+  await gh(page).locator('td.d[data-d="2026-10-06"]').click({ modifiers: ['Control'] });
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura').length)).toBe(0);
+  await page.evaluate(() => { U.q = 'pintura'; render(); });
+  await expect(page.locator('#fmxp button.off')).toHaveCount(1);
+  await page.click('#fmxp button', { force: true });
+  await expect(page.locator('#toast')).toContainText('Quita la búsqueda');
+  noErrors(errors, 'botón apagado');
+});
