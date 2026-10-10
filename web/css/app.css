@@ -3296,3 +3296,16 @@ table.mx tfoot .mxf:not(.z){color:var(--ok);font-weight:700}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.mx td.mc.s-t{color:#0F1A13}:root:not([data-theme="light"]) table.mx td.mc.s-c{background:#C99A2E;color:#1E1503}:root:not([data-theme="light"]) .mxleg .mc.s-t{color:#0F1A13}}
 :root[data-theme="dark"] table.mx td.mc.s-t,:root[data-theme="dark"] .mxleg .mc.s-t{color:#0F1A13}:root[data-theme="dark"] table.mx td.mc.s-c{background:#C99A2E;color:#1E1503}
 table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.mc.s-c{font-size:13px}
+
+/* ===== Faltan programar dentro del Lookahead (filas fantasma, oct 2026) ===== */
+#grid tr.gh>td{background-color:var(--panel)}
+#grid tr.gh td.s4{display:table-cell}
+#grid tr.gh .ghn{font-style:italic;color:var(--muted);padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;max-width:calc(100% - 52px);vertical-align:middle}
+#grid tr.gh .ghb{display:inline-block;vertical-align:middle;font:600 9.5px var(--f-ui);letter-spacing:.03em;text-transform:uppercase;color:var(--warn);background:var(--warn-soft);border-radius:999px;padding:1px 7px}
+#grid tr.gh .ghsc{display:block;padding:0 6px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px dashed var(--c)}
+#grid tr.gh td.d[data-d]{cursor:copy}
+#grid tr.gh td.d[data-d]:hover{background:color-mix(in srgb,var(--c) 45%,transparent);box-shadow:inset 0 0 0 1px var(--c)}
+#grid tr.gh td.d[data-d]:hover::after{content:"+";display:block;text-align:center;font-weight:700;color:var(--ink)}
+.ghchip{display:inline-block;margin:0 6px 6px;border:1px dashed var(--warn);background:var(--panel);color:var(--warn);border-radius:999px;font:600 10px var(--f-ui);padding:1px 7px;cursor:pointer;white-space:nowrap}
+.ghchip.on{background:var(--warn-soft);border-style:solid}
+.dpill.mxpp.on{background:var(--warn);color:var(--panel)}

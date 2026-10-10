@@ -82,7 +82,7 @@ function buildLookShell(main){
   $('#fwin').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.win=+b.dataset.w;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
-  $('#fmxp').onclick=e=>{if(e.target.closest('button'))mxPendDlg()};
+  $('#fmxp').onclick=e=>{if(!e.target.closest('button'))return;U.lkGh=!U.lkGh;GHT.clear();saveUI();requestRender()};
   $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;saveUI();requestRender()}};
   $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
@@ -166,7 +166,7 @@ function renderLookInner(main){
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
   renderGrid($('#grid'),days,dset);
-  {const fm=$('#fmxp');if(fm){const hv=typeof mxPendPill==='function'?mxPendPill():'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
+  {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n?`<button class="dpill mxpp${U.lkGh?' on':''}" aria-pressed="${!!U.lkGh}" title="Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}">${U.lkGh?'✓ ':''}Faltan programar <b>${n}</b></button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="Terminadas y confirmadas en la Matriz. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
 }
@@ -174,8 +174,8 @@ function renderLookInner(main){
 const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(id))return;LKBADW.add(id);console.warn('Lookahead: fila con dato inválido',id,err)}
 /* (auditoría de código 08/10, L12) caché del texto de búsqueda por fila (se vacía cuando cambia DV) */
 const LKQT={v:-1,m:new WeakMap()};
-let LK_PAST=0,LK_DONE=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
-function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
+let LK_PAST=0,LK_DONE=0,LK_GHN=0;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
+function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
   const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
@@ -197,6 +197,8 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
   days.forEach(x=>{const nw=nwReason(x.d);head+=`<th class="dh${x.i===0?' wk0':''}${x.d===today?' tdy':''}${x.d===U.day?' dsel':''}${nw?' hol':''}" data-dh="${x.d}" title="${nw?esc(nw)+' · ':''}${x.d===U.day?'Clic para ver todas las actividades':'Clic para ver solo las actividades del '+fmtD(x.d)}"><b>${DL[x.i]}</b>${x.d.slice(8)}</th>`});
   head+='</tr></thead>';
   const rows=[];let shown=0;
+  /* faltan programar (Matriz): filas fantasma dentro de cada ambiente; solo con los filtros de piso/sector/SC */
+  const GH=CV||(U.ver&&U.verMode==='ver')?null:lkGhosts();if(GH)GH.forEach(L=>LK_GHN+=L.length);const ghOk=!!GH&&!(qs.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||wkSet||aset||RV);
   for(const{p,secs}of visTree()){
     const snapW=bases&&bases.get(p.id);const snap=snapW?snapW.snap||{}:null;
     const blocks=[];let pAmb=0,pAct=0;
@@ -221,8 +223,9 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
         LK_PAST+=nPast;LK_DONE+=nDone;
-        if(!vis.length&&(filt||acts.length>nPast+nDone))continue;
-        nAct+=vis.length;list.push({a,vis,acts});
+        const gAll=ghOk?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];const gh=gAll.length&&(!!U.lkGh!==GHT.has(a.id))?gAll:[];
+        if(!vis.length&&!gh.length&&(filt||acts.length>nPast+nDone))continue;
+        nAct+=vis.length;list.push({a,vis,acts,gh,gN:gAll.length});
       }
       if(filt&&!list.length)continue;
       blocks.push({s,list,nAmb:list.length,nAct});pAmb+=list.length;pAct+=nAct;
@@ -236,12 +239,12 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
       const coll=U.collapsed.includes(s.id);
       rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${ro}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
       if(coll)continue;
-      for(const{a,vis,acts}of list){
+      for(const{a,vis,acts,gh,gN}of list){
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
-        const rs=Math.max(1,vis.length);
-        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
-        if(!vis.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
+        const rs=Math.max(1,vis.length+gh.length);
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">+${gN} por programar</button>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        if(!vis.length&&!gh.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         vis.forEach((x,i)=>{
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
           const rk='x:'+x.id+(i===0?':'+a.id+':'+rs:'');
@@ -280,6 +283,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;const hideDone=!U.showDon
           }catch(err){lkBadRow(x,err);return`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells():''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`}
           }));
         });
+        gh.forEach((g,j)=>{shown++;const f0=!vis.length&&j===0;rows.push(new LkRow('x:g'+a.id+'_'+g.c.id+(f0?':'+a.id+':'+rs:''),()=>lkGhostRow(a,g,f0,f0?ambCells():'',days,DI,nd)))});
       }
     }
   }
@@ -530,7 +534,7 @@ function wireGrid(tbl){
   });
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
-    const td=e.target.closest('td.d');if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'La vista cliente es de solo lectura: edita en el programa interno y la holgura se suma sola.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'La vista cliente es de solo lectura: edita en el programa interno y la holgura se suma sola.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
     if(U.qmode==='metrado'){const x=S.act.get(td.parentElement.dataset.a);if(x&&hasM(x)){closeQEditor(false);if(e.pointerType==='touch'){qtap={td,x:e.clientX,y:e.clientY};return}if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();qsel={a:x.id,start:td.dataset.d,cells:new Map([[td.dataset.d,td]])};td.classList.add('sel');return}}
     if(e.pointerType==='touch'){tap={td,x:e.clientX,y:e.clientY};return}
     if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
@@ -539,6 +543,10 @@ function wireGrid(tbl){
     paint={on:!(a.days||[]).includes(td.dataset.d),cells:new Map()};paintCell(td);
   });
   /* arrastrar el número de la actividad (a la izquierda del nombre) para cambiar su orden dentro del ambiente */
+  /* faltan programar: tocar un día de la fila fantasma la programa; ⋮ y el chip del ambiente */
+  tbl.addEventListener('click',e=>{const ch=e.target.closest('[data-ghamb]');if(ch){const id=ch.dataset.ghamb;GHT.has(id)?GHT.delete(id):GHT.add(id);requestRender();return}
+    const gm=e.target.closest('[data-ghmenu]');if(gm){lkGhostMenu(gm,gm.dataset.ghmenu);return}
+    const td=e.target.closest('tr[data-gh] td.d');if(td)lkGhostDay(td.parentElement.dataset.gh,td.dataset.d)});
   tbl.addEventListener('click',e=>{const h=e.target.closest('.anum:not(.dg)');if(!h)return;const tr=h.closest('tr[data-a]');if(tr)lkRowSel(tr.dataset.a)});
   tbl.addEventListener('pointerdown',e=>{const h=e.target.closest('.anum.dg');if(!h||e.button!==0)return;const tr=h.closest('tr[data-a]');const x=tr&&S.act.get(tr.dataset.a);if(!x)return;
     e.preventDefault();e.stopPropagation();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
