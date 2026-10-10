@@ -153,17 +153,20 @@ test('11 · Aplicar registros al PPC semanal conserva «no imputable» decidido 
   noErrors(errors, 'imputabilidad');
 });
 
-test('12 · El gráfico semanal del PPC diario cuenta lo archivado igual que el Diario', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'ind', extra: [act('x1'), act('x2', { name: 'Otra prueba' }), daily({ x1: rec({}), x2: rec({ status: 'no', exec: 0, cnc: 'Materiales', nm: 'Otra prueba' }) })] });
-  await page.evaluate(() => fcol('acts').doc('x2').update({ arch: { t: NOW(), by: 'x', n: 'Admin' } }));
-  await expect.poll(() => page.evaluate(() => S.act.has('x2'))).toBe(false);
+test('12 · Indicadores › Semanal muestra solo el plan semanal congelado, no lo reportado en Campo', async ({ page }) => {
+  /* 3 compromisos congelados del SC c1: 1 Sí, 1 No, 1 sin evaluar → 33 % (igual que el Plan semanal); el registro de campo
+     dice «Cumplido» en el que se evaluó No y no debe cambiar nada (pedido del dueño, oct 2026) */
+  const it3 = { ...items, x2: { ...items.x1, act: 'Segunda', ord: 2 }, x3: { ...items.x1, act: 'Tercera', ord: 3 } };
+  const errors = await openApp(page, { tab: 'ind', extra: [act('x1'), act('x2', { name: 'Segunda' }), act('x3', { name: 'Tercera' }), daily({ x1: rec({}), x2: rec({ nm: 'Segunda' }) }), week({ items: it3, res: { x1: { ok: true }, x2: { ok: false, cnc: 'Materiales' } } })] });
   await page.evaluate(() => { U.indMode = 'sem'; U.week = 58; render(); });
-  const lbl = await page.evaluate(d => DL[(pd(d).getUTCDay() + 6) % 7] + ' ' + d.slice(8), HOY);
-  const t = await page.locator('.card.chart svg title').evaluateAll((L, lbl) => L.map(e => e.textContent).find(s => s.startsWith(lbl + ':')), lbl);
-  const daily1 = await page.evaluate(d => { const t = dayData([d], new Set(visPisos().map(p => p.id))).tot; return [t.ok, t.ver]; }, HOY);
-  expect(t).toContain(`${daily1[0]} de ${daily1[1]} verificadas`);
-  expect(daily1[1]).toBeGreaterThanOrEqual(2);
-  noErrors(errors, 'gráfico');
+  const main = page.locator('#main');
+  await expect(main).toContainText('Cumplimiento del plan semanal por subcontratista');
+  for (const t of ['PPC diario (alerta', 'Cumplimiento en campo', 'Trabajo no programado por día', 'Causas registradas en campo'])
+    await expect(main).not.toContainText(t);
+  const row = main.locator('.card', { hasText: 'Cumplimiento del plan semanal' }).locator('tbody tr').first();
+  await expect(row).toContainText('33%');
+  expect(await page.evaluate(() => (wkScStats([S.wk.get('58_p1')]).c1 || {}).n)).toBe(3);
+  noErrors(errors, 'semanal congelado');
 });
 
 test('13 · En Campo se puede ver mañana, pero no registrar avance', async ({ page }) => {
