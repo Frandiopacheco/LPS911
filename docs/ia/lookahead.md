@@ -31,3 +31,5 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - No se bloquea: filas sin historial, cambios de escritura (`mnk` igual) ni otro nombre de la misma actividad del catálogo (`actSameName`). Renombrar/fusionar desde el Catálogo y «Pasar a <SC>» del aviso de la Matriz siguen igual (es la misma actividad).
 - Agregar rápido: botón «+» en cada ambiente (`.ab.adda`, `data-addact`); al escribir el nombre de una fila nueva toma el SC de la actividad del catálogo.
 - Prueba: `tests/e2e/lookahead-historial.spec.js`.
+
+- **Ctrl+Z / Ctrl+Y** (oct 2026): el atajo global (base.js) solo actúa en las pestañas con botón de deshacer (`UNDO_TABS`: look —también Cliente—, plan, restr, cfg, planos). Antes deshacía sin aviso el último cambio del Lookahead desde cualquier pestaña, y en el Plan diario deshacía a la vez el plano (que tiene su propio deshacer en `plano.js`) y el Lookahead. Prueba: `tests/e2e/deshacer.spec.js`.

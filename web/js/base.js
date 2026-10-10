@@ -684,6 +684,9 @@ $('#bundo').onclick=undo;$('#bredo').onclick=redo;
 $('#bexport').onclick=()=>{if(ready)exportXlsx()};
 document.addEventListener('keydown',e=>{
   if(U.mod==='tar')return;/* deshacer/rehacer es del lookahead: en el Tareo no debe tocar nada */
+  /* solo donde está el botón de deshacer (Lookahead/Cliente, Plan semanal, Restricciones, Configuración, Sectorización): en otra
+     pestaña Ctrl+Z deshacía sin aviso el último cambio del Lookahead; el Plan diario tiene su propio deshacer (plano.js) */
+  if(typeof UNDO_TABS!=='undefined'&&!UNDO_TABS.includes(U.tab))return;
   const inField=e.target.closest&&e.target.closest('input,textarea,select');
   if((e.ctrlKey||e.metaKey)&&!inField&&e.key.toLowerCase()==='z'&&!e.shiftKey){e.preventDefault();undo()}
   else if((e.ctrlKey||e.metaKey)&&!inField&&(e.key.toLowerCase()==='y'||(e.key.toLowerCase()==='z'&&e.shiftKey))){e.preventDefault();redo()}
