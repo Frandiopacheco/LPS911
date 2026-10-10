@@ -200,26 +200,41 @@ function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cel
    o el chip «+N por programar» del ambiente). Tocar un día la programa: si ya tiene fila (oculta por vencida) le suma ese día;
    si no, crea la fila con ese día. No se guarda nada hasta que se programa. */
 const GHT=new Set(); /* ambientes con lo contrario del interruptor general (abiertos con el interruptor apagado o cerrados con él encendido) */
-function lkGhosts(){if(typeof mxPendList!=='function')return null;const L=mxPendList();if(!L.length)return null;const m=new Map();
-  for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);m.get(r.a.id).push({c:r.c,o:r.o,rows:r.o.acts.filter(id=>S.act.has(id))})}return m}
+/* caché: se rehace solo si cambian los datos (MX.v, DV, DONEV), el día, los pisos a la vista, el filtro de SC o el rol (auditoría 10/10) */
+const LKGHC={k:'',v:null};
+function lkGhosts(){if(typeof mxPendList!=='function')return null;
+  const k=[MX.v,DV,DONEV,todayIso(),visPisos().map(p=>p.id).join(','),U.sc||'',me?me.role:'',PM()?1:0,U.va?JSON.stringify(U.va):''].join('|');if(LKGHC.k===k)return LKGHC.v;
+  const L=mxPendList();let m=null;
+  if(L.length){m=new Map();for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);
+    const rows=r.o.acts.filter(id=>{const x=S.act.get(id);return x&&!x._del});
+    /* «¿Terminó?» solo si alguna de sus filas tuvo días (todos vencidos): una fila vacía nunca se programó */
+    m.get(r.a.id).push({c:r.c,o:r.o,rows,past:rows.some(id=>(S.act.get(id).days||[]).length)})}}
+  LKGHC.k=k;LKGHC.v=m;return m}
 function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
   let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
-    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.rows.length?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb${g.rows.length?' ghq':''}" title="${g.rows.length?'Ya tuvo días programados (vencidos) y nadie la cerró: si ya se hizo, ⋮ › «Ya está terminada»; si falta, toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.rows.length?'¿Terminó?':'Falta'}</span></td>
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb${g.past?' ghq':''}" title="${g.past?'Ya tuvo días programados (vencidos) y nadie la cerró: si ya se hizo, ⋮ › «Ya está terminada»; si falta, toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.past?'¿Terminó?':'Falta'}</span></td>
     <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
-  for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&!di.past?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
+  const T=todayIso();for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&days[i].d>=T?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
   return h+'</tr>'}
-function lkGhostSc(c){const L=mxScsOf(c);if(PM()){const m=L.find(s=>myScsI().includes(s));if(m)return m}return c.sc}
+/* SC de la fila nueva: el SC en modo propuesta, el suyo; con filtro de SC, el primero del filtro que hace la actividad; si no, el principal */
+function lkGhostSc(c){const L=mxScsOf(c);if(PM()){const m=L.find(s=>myScsI().includes(s));if(m)return m}if(U.sc){const f=L.find(s=>scOk(s));if(f)return f}return c.sc}
+/* filas de esa actividad en el ambiente que se pueden usar: no eliminadas (ni pedidas eliminar por el SC), del SC en modo propuesta, visibles con el filtro de SC */
+function lkGhostRows(amb,cid){return[...S.act.values()].filter(x=>x.ambId===amb&&!x._del&&mxCatOf(x)===cid&&(!PM()||myScsI().includes(x.sc))&&scOk(x.sc))}
 function lkGhostDay(key,d){if(!d||!(canWrite||PM())||verRO())return;const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;
   if(d<todayIso()){toast('Ese día ya pasó: programa desde hoy en adelante.');return}
-  const rows=[...S.act.values()].filter(x=>x.ambId===amb&&mxCatOf(x)===cid);
-  if(rows.length){const x=rows.sort((p,q)=>((q.days||[]).slice(-1)[0]||'').localeCompare((p.days||[]).slice(-1)[0]||'')||(q.order||0)-(p.order||0))[0];
-    apply([op('acts',x.id,{...x,days:[...new Set([...(x.days||[]),d])].sort()})],`«${x.name}» reprogramada en ${a.code} el ${fmtD(d)}`);return}
+  const rows=lkGhostRows(amb,cid);
+  if(rows.length){/* primero una fila abierta (no terminada en Campo); entre ellas, la de último día más reciente */
+    const lastD=x=>(x.days||[]).slice(-1)[0]||'';const open=rows.filter(x=>!DONE.has(x.id));const L=(open.length?open:rows).sort((p,q)=>lastD(q).localeCompare(lastD(p))||(q.order||0)-(p.order||0));const x=L[0];
+    /* si solo hay filas terminadas, se reabre (como al pintar un día después de terminada): si no, el día saldría «liberado» y no entraría al plan */
+    apply([op('acts',x.id,{...x,days:[...new Set([...(x.days||[]),d])].sort()})],`«${x.name}» reprogramada en ${a.code} el ${fmtD(d)}`,()=>{if(!open.length)reopenAfter(x.id,[d])});return}
   const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
   apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[d],order})],`«${c.name}» programada en ${a.code} el ${fmtD(d)}`)}
 function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;const ed=mxEd();const g0=((lkGhosts()||new Map()).get(amb)||[]).find(g=>g.c.id===cid);
   openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">La Matriz la da como pendiente y no tiene días de hoy en adelante. Toca un día de la fila para programarla.</div>
-   ${g0&&g0.rows.length&&ed?'<button data-do="ok">Ya está terminada (Matriz)</button>':''}${g0&&g0.rows.length?'':'<button data-do="add">Agregar al ambiente sin días</button>'}${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
-   {add:()=>{const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
+   ${g0&&g0.past&&ed?'<button data-do="ok">Ya está terminada (Matriz)</button>':''}${g0&&g0.past?'':'<button data-do="add">Agregar al ambiente sin días</button>'}${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   {add:()=>{/* se vuelve a mirar al hacer clic: otra persona pudo agregarla mientras el menú estaba abierto (auditoría 10/10) */
+      const ya=lkGhostRows(amb,cid);if(ya.length){toast(`«${c.name}» ya está en ${a.code}.`);gotoAct(ya[0].id);return}
+      const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
       apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[],order})],`«${c.name}» agregada a ${a.code} (sin días)`)},
     na:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'n'}]]),`${c.name}: no aplica en ${a.code}`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
     ok:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'t'}]]),`${c.name}: terminada en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
