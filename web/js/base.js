@@ -35,7 +35,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc'});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'?'tar':'lps',pisoAll:!!U.pisoAll,lbMore:!!U.lbMore,legOff:!!U.legOff,tab:U.tab,win:U.win,qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc'});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -162,7 +162,7 @@ const doneOf=x=>DONE.get(x.id)||null;
 const libDay=(x,d)=>{const dn=DONE.get(x.id);return!!(dn&&d>dn&&(x.days||[]).includes(d))};
 const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 /* «Terminada» pide confirmar (oct 2026): un error aquí libera los días que faltan; en la Matriz queda por validar */
-const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda por validar hasta que un ingeniero lo confirme.';
+const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda como aviso para que un ingeniero lo confirme (el estado de la obra lo dice la Matriz).';
 async function askDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return false;const a=S.amb.get(x.ambId);
   const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok)markDone(aid,d);return!!ok}
 function markDone(aid,d,keepR){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;

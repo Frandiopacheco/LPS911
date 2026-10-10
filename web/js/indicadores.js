@@ -128,6 +128,9 @@ function dayData(dates,vset){const ds=new Set(dates);if(dates.length)ensureNova(
   return{...e.v,extras:npItems(ds,vset)}}
 function cumplTable(entries,label){return`<div class="tscroll"><table class="t ctab"><thead><tr><th></th><th class="r">Prog.</th><th class="r hm">Verif.</th><th class="r">✓</th><th class="r hm">½</th><th class="r hm">✗</th><th class="r hm">Sin verif.</th><th class="r hm" title="Parcial o No cumplido por causas que no dependen del subcontratista">No imputables</th><th>PPC bruto</th><th title="Sin contar los incumplimientos no imputables al subcontratista">PPC del SC</th></tr></thead><tbody>${entries.map(([k,o])=>{const v=o.ver?o.ok/o.ver:null;const vs=pscOf(o);
   return`<tr><td>${label(k)}</td><td class="r">${o.prog}</td><td class="r hm">${o.ver}</td><td class="r ok">${o.ok||''}</td><td class="r pa hm">${o.partial||''}</td><td class="r no hm">${o.no||''}</td><td class="r mu hm">${o.prog-o.ver||''}</td><td class="r mu hm">${o.nimp||''}</td><td>${v==null?'<span class="mu">sin verificar</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?(v==null?'':'<span class="mu">—</span>'):`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
+/** tabla por SC del plan semanal congelado (wkScStats): compromisos, Sí, No, sin evaluar, no imputables, PPC bruto (Sí / compromisos) y del SC */
+function wkScTable(entries,label){return`<div class="tscroll"><table class="t ctab"><thead><tr><th></th><th class="r">Compromisos</th><th class="r">Sí</th><th class="r">No</th><th class="r hm">Sin evaluar</th><th class="r hm" title="No cumplidos por causas que no dependen del subcontratista">No imputables</th><th class="r hm" title="Fallas de otras partidas que el ingeniero le hizo contar">De otras partidas</th><th title="Cumplidos (Sí) entre todos los compromisos congelados, como en el Plan semanal">PPC bruto</th><th title="Sin contar los no cumplidos no imputables al subcontratista">PPC del SC</th></tr></thead><tbody>${entries.map(([k,o])=>{const v=o.n?o.ok/o.n:null;const vs=o.ppcSc;
+  return`<tr><td>${label(k)}</td><td class="r">${o.n}</td><td class="r ok">${o.ok||''}</td><td class="r no">${o.no||''}</td><td class="r mu hm">${o.n-o.ev||''}</td><td class="r mu hm">${o.nimp||''}</td><td class="r mu hm">${o.ext||''}</td><td>${v==null?'':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?'<span class="mu">—</span>':`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
 const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;padding:0;background:none"><i></i>${esc(conOf(sc).name)}</span>`;
 const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
@@ -183,7 +186,6 @@ function renderIndDay(main){
   h+='</div></div>';main.innerHTML=h;wireInd(main)}
 function renderInd(main){
   if(U.indMode!=='sem'){renderIndDay(main);return}
-  ensureDaily(addD(weekStart(U.week-2),-1));
   const vp=visPisos();const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
   const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
@@ -203,20 +205,10 @@ function renderInd(main){
    <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${full.length}${part?' <small>+1 en curso</small>':''}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
   if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>Plan semanal</b> y evalúas cada uno con Sí / No.</div>`;
-  const dFrom=weekStart(U.week-2),dTo=[weekDays(U.week)[5],todayIso()].sort()[0];const dd=[];for(let d=dFrom;d<=dTo;d=addD(d,1)){if(isWork(d))dd.push(d)}
-  /* misma población que Indicadores › Diario (dayData): incluye lo archivado y los registros históricos */
-  /* una sola pasada (auditoría de código 08/10, M5): lo no programado por día sale de DD.extras y la tabla de la semana
-     se arma con las filas de DD cuando sus días están todos en dd (si no, se calcula aparte) */
-  const DD=dayData(dd,vset);const byD={};DD.rows.forEach(r=>(byD[r.d]=byD[r.d]||[]).push(r));const dayRows=[];const dCnc={};let nExtra=0;
-  const npD={};DD.extras.forEach(i=>npD[i.d]=(npD[i.d]||0)+1);
-  for(const d of dd){let sch=0,okc=0,reg=0;for(const r of byD[d]||[]){if(r.sched)sch++;const rc=r.rc;if(rc){reg++;if(rc.status==='ok')okc++;else if(rc.cnc){const k=cncKey(rc.cnc);dCnc[k]=(dCnc[k]||0)+1}}}
-    nExtra+=npD[d]||0;
-    if(reg)dayRows.push({label:DL[(pd(d).getUTCDay()+6)%7]+' '+d.slice(8),v:okc/reg,sub:`${okc} de ${reg} verificadas · ${sch} programadas`})}
-  h+=`<div class="card chart"><h2>PPC diario (alerta · registros de campo) <span class="sub">% de lo verificado en campo marcado “Cumplido” · semanas ${U.week-2}–${U.week}${nExtra?` · ${nExtra} trabajos no programados`:''}</span></h2><div class="pad tscroll">${dayRows.length?svgBarsV(dayRows):'<div class="empty">Aún no hay registros de campo en estas semanas. Se llenan desde la pestaña <b>Campo</b>.</div>'}</div></div>`;
-  {const wd=weekDays(U.week).filter(x=>x<=todayIso());const ddS=new Set(dd);const W=wd.every(x=>ddS.has(x))?dayAgg(wd.flatMap(x=>byD[x]||[])):dayData(wd,vset);const e=Object.entries(W.scA).filter(([,o])=>o.ver).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
-   h+=`<div class="card"><h2>Cumplimiento en campo por subcontratista <span class="sub">semana ${U.week} · registros diarios acumulados</span></h2><div class="pad">${e.length?cumplTable(e,scLabel):'<div class="empty">Sin registros de campo en esta semana.</div>'}</div></div>`}
-  {const nd=dd.map(d=>({d,n:npD[d]||0})).filter(o=>o.n);if(nd.length)h+=`<div class="card chart"><h2>Trabajo no programado por día <span class="sub">frentes vistos en obra sin estar programados · semanas ${U.week-2}–${U.week}</span></h2><div class="pad">${svgBarsH(nd.map(o=>({label:DOWN[(pd(o.d).getUTCDay()+6)%7].slice(0,3)+' '+fmtD(o.d),v:o.n})),v=>v+'')}</div></div>`}
-  if(Object.keys(dCnc).length)h+=`<div class="card chart"><h2>Causas registradas en campo <span class="sub">Parcial y No cumplido · mismas semanas</span></h2><div class="pad">${svgBarsH(Object.entries(dCnc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
+  /* Indicadores › Semanal: solo el plan semanal congelado y su evaluación Sí/No (pedido del dueño, oct 2026). Lo reportado en
+     Campo (PPC diario, cumplimiento por días, no programado, causas de campo) vive solo en Indicadores › Diario. */
+  {const e=Object.entries(scP).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+   h+=`<div class="card"><h2>Cumplimiento del plan semanal por subcontratista <span class="sub">semana ${U.week} · compromisos congelados evaluados con Sí / No</span></h2><div class="pad">${e.length?wkScTable(e,scLabel):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>`}
   h+=`<div class="charts">
    <div class="card chart"><h2>PPC semanal histórico <span class="sub">todas las semanas congeladas</span></h2><div class="pad tscroll">${ppcs.length?linesLegend()+svgLines(ppcHistPts(ppcs)):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
    ${!U.piso&&vp.length>1?`<div class="card chart"><h2>PPC por piso <span class="sub">semana ${U.week}</span></h2><div class="pad">${pisoP.length?svgBarsH(pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,sub:x.st.ok+' de '+x.st.n})),pct):`<div class="empty">Ningún piso congeló la semana ${U.week}.</div>`}</div></div>`:''}

@@ -72,14 +72,14 @@ test('editor: marca una celda, selecciona una columna y la valida en bloque; Des
 
 test('nombres del lookahead sin catálogo: se asignan a una actividad y desde ahí salen en la matriz', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
-  await expect(page.locator('.mxun')).toContainText('1 nombre');
+  await expect(page.locator('#mxmap')).toContainText('sin actividad del catálogo');
   await page.click('#mxmap');
   await page.selectOption('[data-mxm="0"]', 'k1');
   await page.click('#mxmok');
   await expect.poll(() => page.evaluate(() => window.__dbGet('mcat', 'k1').al)).toEqual(['redes empotradas', 'entubado empotrado']);
   // «Entubado empotrado» es de otro SC (c2) que la actividad elegida (c1): ya no sale como «sin catálogo», sino en el aviso de otro SC (auditoría 08/10, M02)
-  await expect(page.locator('.mxun')).toHaveCount(1);
-  await expect(page.locator('.mxun')).toContainText('otro subcontratista');
+  await expect(page.locator('.mxal')).toHaveCount(1);
+  await expect(page.locator('#mxsmis')).toContainText('SC distinto');
   noErrors(errors, 'nombres sin catálogo');
 });
 

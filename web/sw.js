@@ -31,8 +31,11 @@ async function networkFirst(req, key, ms) {
 }
 // Lo guardado primero (la página abre al instante aunque la señal sea mala) y se actualiza en segundo plano para la próxima vez.
 // La versión nueva la sigue avisando el service worker nuevo («Hay una versión nueva»): al instalarse guarda su propio index.html.
+// Si el servidor no entrega la página (p. ej. la copia de prueba pide volver a iniciar sesión en Netlify: 401/403 o redirección),
+// se avisa a la página: antes se seguía mostrando la versión guardada en silencio y nunca llegaba la versión nueva (10/10/2026).
+function navBad(r) { if (r && !r.ok) self.clients.matchAll({ type: 'window' }).then(cs => cs.forEach(c => c.postMessage({ t: 'nav-bad', s: r.status, k: r.type }))).catch(() => {}); return r; }
 function staleWhileRevalidate(e, req, key) {
-  const net = fetch(req).then(r => put(VER, key, r));
+  const net = fetch(req).then(navBad).then(r => put(VER, key, r));
   e.waitUntil(net.then(() => {}, () => {}));
   return caches.match(key).then(hit => hit || net).catch(() => new Response('Sin conexión', { status: 503 }));
 }
@@ -59,11 +62,13 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     if (url.pathname.startsWith('/mockdb/')) return;
+    // ?fresh: directo al servidor (para volver a iniciar sesión en Netlify o ver la versión del servidor sin lo guardado)
+    if (url.searchParams.has('fresh')) return;
+    if (url.pathname.endsWith('/sw.js')) return;
     if (req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
       e.respondWith(staleWhileRevalidate(e, req, 'index.html'));
       return;
     }
-    if (url.pathname.endsWith('/sw.js')) return;
     // archivos con versión (js/…?v=NN, css/…?v=NN, plano.js?v=NN, firebase-config.js?v=NN): no cambian nunca, se guardan la primera vez
     if (url.search) { e.respondWith(cacheFirst(req, VER).catch(() => fetch(req))); return; }
     e.respondWith(networkFirst(req, req, 4000));

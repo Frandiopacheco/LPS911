@@ -69,12 +69,12 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
   for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
     if(tp)(tp.acts||[]).forEach(c=>add(c,'tipo'));for(const c of L.keys())add(c,'look');for(const c of Object.keys(st))add(c,'man');
-    for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s=o.acts.length&&o.acts.every(id=>DONE.has(id))?'t':'p'}
+    for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s='p'} /* sin confirmar: pendiente; lo que diga Campo no se toma como propuesta (la Matriz es la referencia, 10/10) */
       /* fut: tiene días de hoy en adelante en el lookahead. Alerta (warn): confirmada terminada / no aplica y aún programada.
          Sin programar (sp): pendiente (no en curso) sin ningún día de hoy en adelante */
       o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.fwd=o.fut.filter(id=>(S.act.get(id).days||[]).some(d=>d>T0));o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0;o.sp=o.s==='p'&&!o.fut.length;
       /* dsc: Campo la marcó terminada (todas sus filas) pero la matriz confirmó otra cosa: el ingeniero decide (confirmar o reabrir) */
-      o.dsc=!o.sug&&o.s!=='t'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))}
+      o.dsc=o.s!=='t'&&o.s!=='n'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))} /* aviso: Campo la marcó terminada; el ingeniero confirma o no */
     out.set(amb.id,C)}
   MX.mc=out;MX.mcK=k;return out}
 
@@ -118,6 +118,7 @@ function renderMat(main){ensureMx();ensureMver();
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
+  if(U.mxV==='pla'){renderMxPla(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEdG();
@@ -135,10 +136,12 @@ function renderMat(main){ensureMx();ensureMver();
     ${ed?'<p><b>Seleccionar:</b> arrastra sobre las celdas, Shift+clic amplía, clic en el nombre de una actividad o de un ambiente toma toda la columna o fila. Luego usa la barra de abajo o las teclas 1 Pendiente, 2 En curso, 3 Terminado, 0 No aplica, Enter Validar. Un clic sobre una celda vacía la agrega a ese ambiente; al arrastrar solo se toman las celdas que el ambiente ya tiene.</p>':''}
     <p><b>Foto semanal:</b> guarda el estado de la obra. Elige una foto en «Comparar con» para ver qué avanzó desde entonces.</p>`;
   let h=`<div class="scroll mxscroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg()+`<div class="mxstat"><span class="mxst t"><i style="width:${apl?Math.round(100*tot.t/apl):0}%"></i></span><b>Terminado ${pc(tot.t)}</b> <small>${tot.t} de ${apl}</small><span class="mxsx"><span class="mxdot">·</span>En curso <b>${pc(tot.c)}</b><span class="mxdot">·</span>Pendiente <b>${pc(tot.p)}</b></span><span class="mxdot">·</span>Sin validar <b>${tot.sug}</b><span class="mxsx">${cmp?`<span class="mxdot">·</span>Cambios desde la foto <b>${tot.chg}</b> <small>${tot.chgT} terminados</small>`:''}</span></div>`)}
-   ${mxEd()&&typeof mxLogPend==='function'&&mxLogPend().length?`<div class="callout mxun">${mxLogPend().length} ${mxLogPend().length===1?'cambio':'cambios'} de los subcontratistas en la matriz por revisar. <button class="ib" id="mxlog">Revisar</button></div>`:''}
-   ${mxEd()&&typeof mxRevList==='function'&&mxRevList().length?`<div class="callout mxun">${mxRevList().length} ${mxRevList().length===1?'actividad nueva agregada':'actividades nuevas agregadas'} por los subcontratistas desde el lookahead, por revisar. <button class="ib" data-mxv="cat">Revisar en el Catálogo</button></div>`:''}
-   ${mxEd()&&(mis=mxScMismatch()).length?`<div class="callout mxun">${mis.reduce((s,u)=>s+u.ids.length,0)} ${mis.reduce((s,u)=>s+u.ids.length,0)===1?'fila':'filas'} del lookahead ${mis.reduce((s,u)=>s+u.ids.length,0)===1?'tiene':'tienen'} el nombre de una actividad de otro subcontratista: no salen en la matriz. <button class="ib" id="mxsmis">Revisar…</button></div>`:''}
-   ${unm.length&&mxEd()?`<div class="callout mxun">${unm.length} ${unm.length===1?'nombre':'nombres'} del lookahead no ${unm.length===1?'está':'están'} en el catálogo (${unm.reduce((s,u)=>s+u.ids.length,0)} filas): no salen en la matriz. <button class="ib" id="mxmap">Asignar al catálogo…</button></div>`:''}
+   ${(()=>{if(!mxEd())return'';const A=[];
+     if(typeof mxLogPend==='function'&&mxLogPend().length){const n=mxLogPend().length;A.push(`<button class="mxal" id="mxlog"><b>${n}</b> ${n===1?'cambio':'cambios'} de subcontratistas por revisar</button>`)}
+     if(typeof mxRevList==='function'&&mxRevList().length){const n=mxRevList().length;A.push(`<button class="mxal" data-mxv="cat"><b>${n}</b> ${n===1?'actividad nueva':'actividades nuevas'} en el catálogo</button>`)}
+     if((mis=mxScMismatch()).length){const n=mis.reduce((s,u)=>s+u.ids.length,0);A.push(`<button class="mxal" id="mxsmis" title="Tienen el nombre de una actividad de otro subcontratista: no salen en la matriz"><b>${n}</b> ${n===1?'fila':'filas'} con SC distinto al del catálogo</button>`)}
+     if(unm.length){const n=unm.reduce((s,u)=>s+u.ids.length,0);A.push(`<button class="mxal" id="mxmap" title="${unm.length} nombres del lookahead que no están en el catálogo: no salen en la matriz"><b>${n}</b> ${n===1?'fila':'filas'} sin actividad del catálogo</button>`)}
+     return A.length?`<div class="mxals"><span class="mxalt">Por revisar</span>${A.join('')}</div>`:''})()}
    <div class="fbar mxbar0">
     ${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
@@ -167,14 +170,14 @@ function renderMat(main){ensureMx();ensureMver();
     for(const a of r.ambs){const C=cells.get(a.id)||{};const m=MX.amb.get(a.id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);const p=ambPct.get(a.id);
       h+=`<tr data-mxr="${ri}" data-amb="${esc(a.id)}"><th class="mxa" data-mxrow="${ri}" title="${esc(a.code)} ${esc(a.name)}${ed?' (clic: seleccionar la fila)':''}"><b>${esc(a.code)}</b> ${esc(a.name)}</th>
        <td class="mxtp">${ed?`<select data-mxtipo="${esc(a.id)}" aria-label="Tipo de ${esc(a.name)}"><option value="">—</option>${tipos.map(t=>`<option value="${esc(t.id)}"${tp&&tp.id===t.id?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:esc(tp?tp.name:'—')}</td>
-       <td class="mxpc">${p==null?'':Math.round(100*p)+'%'}</td>`;
+       <td class="mxpc"${p==null?'':` style="--p:${Math.round(100*p)}%"`}>${p==null?'':Math.round(100*p)+'%'}</td>`;
       cols.forEach((c,ci)=>{const o=C[c.id];const k=a.id+'|'+c.id;const sel=MX.sel.has(k)?' sl':'';
         if(!o){h+=`<td class="mc x${sel}" data-k="${ci}"></td>`;return}
         let cl=`mc s-${o.s}${o.sug?' sug':''}${o.dsc?' dsc':''}${PSC&&PSC.has(k)?' scp':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'')+(o.dsc?' · Campo la marcó terminada':'');
         if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){cl+=' chg';tt+=` · antes: ${b?MXS[b]:'no estaba'}`}}
         h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
-  h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>`<td class="mxf">${t.a?Math.round(100*t.t/t.a)+'%':''}</td>`).join('')}</tr></tfoot></table></div>
+  h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
    </div></div>${ed?mxSelBar():''}`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};

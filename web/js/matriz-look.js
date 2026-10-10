@@ -156,13 +156,15 @@ async function mxUnifyDlg(){if(!isAdmin)return;
    Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
 function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
   const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?v:null}/* hoy no cuenta: ya no se reprograma y suele ser el día en que se terminó */
-/* ---------- Terminadas en Campo y la Matriz (oct 2026, decidido con el dueño) ----------
-   Marcar «Terminada» en Campo no es la verdad: puede ser un error (faltaba una luminaria). La fila terminada solo se oculta del
-   Lookahead cuando la Matriz la tiene CONFIRMADA como Terminado; si no (sin validar o la Matriz dice otra cosa) sigue visible con
-   «✓?» y desde ahí el ingeniero confirma en la Matriz o la reabre. mxDoneSt: null | 'ok' (ocultable) | 'pend' (por validar). */
-/* M05 (auditoría 08/10, decidido con el dueño): el «Terminado» que puso un SC no oculta la fila hasta que un ingeniero lo da por visto */
-function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'&&!mxScPend(x.ambId,c)?'ok':'pend'}
-const mxDonePend=x=>mxDoneSt(x)==='pend';
+/* ---------- La Matriz es la referencia del estado de la obra (decidido con el dueño, 10/10/2026) ----------
+   Campo solo sirve para el PPC (diario; sugerencia para el semanal). Lo que el Lookahead oculta o recomienda sale solo de la
+   Matriz: una fila se oculta («terminadas ocultas») cuando la Matriz tiene CONFIRMADO Terminado o No aplica en ese ambiente
+   y la fila no tiene días después de hoy (los de después avisan con ⚠); el «Terminada» de Campo no influye (antes hacía falta y además ponía «✓?»).
+   M05 (auditoría 08/10): el Terminado que puso un SC no cuenta hasta que un ingeniero lo da por visto.
+   mxDoneSt: 'ok' (ocultable) | null. */
+function mxDoneSt(x){if(!x||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];
+  if(v!=='t'&&v!=='n')return null;if(mxScPend(x.ambId,c))return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?null:'ok'}
+const mxDonePend=()=>false;
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 /* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
    'sc' = es de una actividad de otro SC (no sale en la Matriz). null = bien, o el catálogo aún no carga / está vacío */
@@ -195,29 +197,50 @@ function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cel
   const ro=r=>{const os=r.o.acts.map(id=>S.act.get(id)).filter(Boolean).map(x=>x.order||0);return os.length?[0,Math.min(...os)]:[1,r.c.ord||0]};
   return L.sort((p,q)=>{const d=(pi.get(pisoOfAmb(p.a.id))??99)-(pi.get(pisoOfAmb(q.a.id))??99)||so(p.a.sectorId)-so(q.a.sectorId)||(p.a.sectorId||'').localeCompare(q.a.sectorId||'')||(p.a.order||0)-(q.a.order||0)||(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true});if(d)return d;
     const x=ro(p),y=ro(q);return x[0]-y[0]||x[1]-y[1]||p.c.name.localeCompare(q.c.name)})}
-function mxPendPill(){const n=mxPendList().length;return n?`<button class="dpill mxpp" title="Actividades pendientes en la matriz que no tienen días en el lookahead de hoy en adelante">${n} pendiente${n>1?'s':''} sin programar · Ver</button>`:''}
-function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||PM();
-  const by=new Map();L.forEach((r,i)=>{const k=r.a.id;if(!by.has(k))by.set(k,[]);by.get(k).push({...r,i})});
-  lqModal(`<div class="lqtop"><b>Pendientes sin programar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
-   <p class="note">En la matriz están <b>pendientes</b> y no tienen días en el lookahead de hoy en adelante${U.piso?' (este piso)':''}${SCK()?' (tu partida)':U.sc?' (subcontratistas del filtro)':''}. ${can?'Marca las que quieras agregar: se crean en el lookahead sin días, para que les pongas fecha.':''}</p>
-   <div class="fbar"><input class="tin mxq" id="mxpq2" type="search" placeholder="Buscar ambiente, actividad o subcontratista" aria-label="Buscar en pendientes sin programar">${can?'<label><input type="checkbox" id="mxpall"> Todas</label>':''}<span class="fsp"></span><span class="note" id="mxpvis">${L.length} pendiente${L.length===1?'':'s'}</span>${can?'<span class="note" id="mxpcnt">0 marcadas</span>':''}</div>
-   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpgw" data-q="${esc(fold(rs[0].a.code+' '+rs[0].a.name+' '+((S.sec.get(rs[0].a.sectorId)||{}).name||'')))}"><div class="mxpg"><button type="button" class="lnkb" data-mxpamb="${esc(rs[0].a.id)}" title="Ir a este ambiente en el lookahead"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b> ↗</button></div>${rs.map(r=>`<div class="mxpr" data-q="${esc(fold(r.c.name+' '+conOf(r.c.sc).name))}"><label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>
-     ${r.o.acts.length?`<button type="button" class="ib" data-mxpgo="${r.i}" title="Ir a su fila en el lookahead para ponerle fecha">Ver fila ↗</button>`:can?`<button type="button" class="ib" data-mxpadd="${r.i}" title="La agrega a este ambiente sin días y te lleva a la fila para ponerle fecha">+ Agregar e ir ↗</button>`:''}</div>`).join('')}</div>`).join('')}<p class="note" id="mxpnone" hidden>Nada coincide con la búsqueda.</p></div>
-   <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button>${can?'<button class="ib pri" id="mxpok">Agregar al lookahead</button>':''}</div>`,
-   e=>{const ga=e.target.closest('[data-mxpamb]');if(ga){lqClose();mxGoAmb(ga.dataset.mxpamb);return}
-     const gv=e.target.closest('[data-mxpgo]');if(gv){const r=L[+gv.dataset.mxpgo];const id=r.o.acts.find(i=>S.act.has(i));lqClose();if(id)gotoAct(id);else mxGoAmb(r.a.id);return}
-     const ad=e.target.closest('[data-mxpadd]');const one=ad?[L[+ad.dataset.mxpadd]]:null;
-     if(!one&&!e.target.closest('#mxpok'))return;const sel=one||[...document.querySelectorAll('[data-mxp]:checked')].map(c=>L[+c.dataset.mxp]);if(!sel.length){toast('Marca al menos una.');return}
-     const ops=[];const last=new Map();for(const r of sel){const sib=[...S.act.values()].filter(x=>x.ambId===r.a.id);let o=last.get(r.a.id);if(o==null)o=sib.length?Math.max(...sib.map(x=>x.order||0)):0;o+=10;last.set(r.a.id,o);
-       const id=uid('act');ops.push(op('acts',id,{id,ambId:r.a.id,sc:r.c.sc,name:r.c.name,und:'',metrado:null,days:[],order:o}))}
-     lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`);
-     /* te lleva a la (primera) fila nueva para ponerle fecha */
-     const first=ops[0]&&ops[0].id;if(first)setTimeout(()=>{if(S.act.has(first))gotoAct(first)},60)},
-   e=>{if(e.target.id==='mxpall')document.querySelectorAll('.mxpr:not([hidden]) [data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'});
-  /* buscador: varias palabras; coincide con el ambiente (código, nombre, sector) o con la actividad y su SC */
-  const q=$('#mxpq2');if(q){q.oninput=()=>{const W=fold(q.value).trim().split(/\s+/).filter(Boolean);let vis=0;
-    document.querySelectorAll('#lqm .mxpgw').forEach(g=>{const ga=g.dataset.q;let any=false;g.querySelectorAll('.mxpr').forEach(r=>{const t=ga+' '+r.dataset.q;const ok=W.every(w=>t.includes(w));r.hidden=!ok;if(ok){any=true;vis++}});g.hidden=!any});
-    const v=$('#mxpvis');if(v)v.textContent=W.length?`${vis} de ${L.length}`:`${L.length} pendiente${L.length===1?'':'s'}`;const no=$('#mxpnone');if(no)no.hidden=vis>0;const all=$('#mxpall');if(all)all.checked=false};setTimeout(()=>q.focus(),50)}}
+/* ---------- Faltan programar dentro del Lookahead (oct 2026, reemplaza la lista aparte) ----------
+   Lo pendiente de la Matriz sin días de hoy en adelante sale como fila fantasma en su ambiente («Faltan programar» en la barra
+   o el chip «+N por programar» del ambiente). Tocar un día la programa: si ya tiene fila (oculta por vencida) le suma ese día;
+   si no, crea la fila con ese día. No se guarda nada hasta que se programa. */
+const GHT=new Set(); /* ambientes plegados a mano con el chip (solo con el botón «Faltan programar» encendido; apagado no se ve nada) */
+/* caché: se rehace solo si cambian los datos (MX.v, DV, DONEV), el día, los pisos a la vista, el filtro de SC o el rol (auditoría 10/10) */
+const LKGHC={k:'',v:null};
+function lkGhosts(){if(typeof mxPendList!=='function')return null;
+  const k=[MX.v,DV,DONEV,todayIso(),visPisos().map(p=>p.id).join(','),U.sc||'',me?me.role:'',PM()?1:0,U.va?JSON.stringify(U.va):''].join('|');if(LKGHC.k===k)return LKGHC.v;
+  const L=mxPendList();let m=null;
+  if(L.length){m=new Map();for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);
+    const rows=r.o.acts.filter(id=>{const x=S.act.get(id);return x&&!x._del});
+    /* «¿Terminó?» solo si alguna de sus filas tuvo días (todos vencidos): una fila vacía nunca se programó */
+    m.get(r.a.id).push({c:r.c,o:r.o,rows,past:rows.some(id=>(S.act.get(id).days||[]).length)})}}
+  LKGHC.k=k;LKGHC.v=m;return m}
+function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
+  let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb${g.past?' ghq':''}" title="${g.past?'Ya tuvo días programados (vencidos) y nadie la cerró: si ya se hizo, ⋮ › «Ya está terminada»; si falta, toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.past?'¿Terminó?':'Falta'}</span></td>
+    <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
+  const T=todayIso();for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&days[i].d>=T?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
+  return h+'</tr>'}
+/* SC de la fila nueva: el SC en modo propuesta, el suyo; con filtro de SC, el primero del filtro que hace la actividad; si no, el principal */
+function lkGhostSc(c){const L=mxScsOf(c);if(PM()){const m=L.find(s=>myScsI().includes(s));if(m)return m}if(U.sc){const f=L.find(s=>scOk(s));if(f)return f}return c.sc}
+/* filas de esa actividad en el ambiente que se pueden usar: no eliminadas (ni pedidas eliminar por el SC), del SC en modo propuesta, visibles con el filtro de SC */
+function lkGhostRows(amb,cid){return[...S.act.values()].filter(x=>x.ambId===amb&&!x._del&&mxCatOf(x)===cid&&(!PM()||myScsI().includes(x.sc))&&scOk(x.sc))}
+function lkGhostDay(key,d){if(!d||!(canWrite||PM())||verRO())return;const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;
+  if(d<todayIso()){toast('Ese día ya pasó: programa desde hoy en adelante.');return}
+  const rows=lkGhostRows(amb,cid);
+  if(rows.length){/* primero una fila abierta (no terminada en Campo); entre ellas, la de último día más reciente */
+    const lastD=x=>(x.days||[]).slice(-1)[0]||'';const open=rows.filter(x=>!DONE.has(x.id));const L=(open.length?open:rows).sort((p,q)=>lastD(q).localeCompare(lastD(p))||(q.order||0)-(p.order||0));const x=L[0];
+    /* si solo hay filas terminadas, se reabre (como al pintar un día después de terminada): si no, el día saldría «liberado» y no entraría al plan */
+    apply([op('acts',x.id,{...x,days:[...new Set([...(x.days||[]),d])].sort()})],`«${x.name}» reprogramada en ${a.code} el ${fmtD(d)}`,()=>{if(!open.length)reopenAfter(x.id,[d])});return}
+  const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
+  apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[d],order})],`«${c.name}» programada en ${a.code} el ${fmtD(d)}`)}
+function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;const ed=mxEd();const g0=((lkGhosts()||new Map()).get(amb)||[]).find(g=>g.c.id===cid);
+  openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">La Matriz la da como pendiente y no tiene días de hoy en adelante. Toca un día de la fila para programarla.</div>
+   ${g0&&g0.past&&ed?'<button data-do="ok">Ya está terminada (Matriz)</button>':''}${g0&&g0.past?'':'<button data-do="add">Agregar al ambiente sin días</button>'}${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   {add:()=>{/* se vuelve a mirar al hacer clic: otra persona pudo agregarla mientras el menú estaba abierto (auditoría 10/10) */
+      const ya=lkGhostRows(amb,cid);if(ya.length){toast(`«${c.name}» ya está en ${a.code}.`);gotoAct(ya[0].id);return}
+      const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
+      apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[],order})],`«${c.name}» agregada a ${a.code} (sin días)`)},
+    na:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'n'}]]),`${c.name}: no aplica en ${a.code}`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
+    ok:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'t'}]]),`${c.name}: terminada en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
+    mat:()=>mxGoCell(amb,cid)})}
 
 /* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
 function mxGoAmb(amb){const sib=[...S.act.values()].filter(x=>x.ambId===amb).sort((a,b)=>(a.order||0)-(b.order||0));if(sib.length){gotoAct(sib[0].id);return}
