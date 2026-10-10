@@ -43,3 +43,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 ## Configuración por secciones (oct 2026, como Equipo)
 - `U.cfgV` (en `saveUI`), `CFGV()`/`cfgV()`/`cfgSeg()` en `config-equipo.js`: Subcontratistas · Especialidades · Plantillas · Causas y restricciones (causas, tipos, clase de cada tipo, áreas de apoyo) · Calendario · Calidad (inspectores) · Proyecto · Papelera (solo quien edita). Solo se dibuja la sección elegida; los manejadores siguen delegados en `main`. Prueba: `tests/e2e/configuracion.spec.js`.
+
+## Versión guardada y sesión de Netlify (10/10/2026)
+- `sw.js` sirve la página con «lo guardado primero» (`staleWhileRevalidate`). En la copia de prueba (protegida por Netlify) una sesión vencida hacía que el servidor respondiera 401/redirección y la app seguía mostrando la versión vieja en silencio, sin aviso de «Actualizar».
+- Ahora, si la página del servidor no llega bien, el service worker avisa (`postMessage {t:'nav-bad'}`) y la app muestra «Tu sesión de Netlify… venció» con **Volver a entrar** (`?fresh=1`: esa dirección no pasa por el service worker, así aparece el login de Netlify). Abrir `/sw.js` ya no devuelve la app.
