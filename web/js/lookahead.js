@@ -223,9 +223,9 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
         LK_PAST+=nPast;LK_DONE+=nDone;
-        const gAll=GH&&(!U.sector||U.sector===s.id)?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];LK_GHN+=gAll.length;const gVis=ghOk?gAll:[];const gh=gVis.length&&(!!U.lkGh!==GHT.has(a.id))?gVis:[];
+        const gAll=GH&&(!U.sector||U.sector===s.id)?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];LK_GHN+=gAll.length;const gVis=ghOk?gAll:[];const gh=gVis.length&&U.lkGh&&!GHT.has(a.id)?gVis:[];
         if(!vis.length&&!gh.length&&(filt||acts.length>nPast+nDone))continue;
-        nAct+=vis.length;list.push({a,vis,acts,gh,gN:gVis.length});
+        nAct+=vis.length;list.push({a,vis,acts,gh,gN:U.lkGh?gVis.length:0});
       }
       if(filt&&!list.length)continue;
       blocks.push({s,list,nAmb:list.length,nAct});pAmb+=list.length;pAct+=nAct;
@@ -243,7 +243,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
         const rs=Math.max(1,vis.length+gh.length);
-        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">+${gN} por programar</button>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length&&!gh.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         vis.forEach((x,i)=>{
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
