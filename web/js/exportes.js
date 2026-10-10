@@ -142,9 +142,11 @@ function autoF(X,ws,hr){if(!ws['!ref'])return;const R=X.utils.decode_range(ws['!
 async function exportXlsx(){
   const btn=$('#bexport');btn.disabled=true;btn.textContent='Generando…';let unswap=null;
   const CLV=U.tab==='look'&&U.cliv&&canCli();let cliLab='';
+  /* el PPC del cliente se calcula antes de cambiar S.act (con el interno, igual que en Indicadores) */
+  let CLW=null;
   try{await loadXlsx();const vd0=!CLV&&U.tab==='look'&&U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;if(vd0&&vd0.ready)unswap=swapVer(vd0);
-    if(CLV){const cv=U.cliVer&&CLVD.get(U.cliVer);if(U.cliVer&&!(cv&&cv.ready))throw new Error('La versión emitida aún se está cargando. Intenta en un momento.');
-      if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Programa con holgura al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
+    if(CLV){const cv=U.cliVer&&CLVD.get(U.cliVer);if(U.cliVer&&!(cv&&cv.ready))throw new Error('La versión emitida aún se está cargando. Intenta en un momento.');CLW=await cliWeekDocs(U.week);
+      if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Versión cliente al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
     const bd={top:{style:'thin',color:{rgb:'BFBFBF'}},bottom:{style:'thin',color:{rgb:'BFBFBF'}},left:{style:'thin',color:{rgb:'BFBFBF'}},right:{style:'thin',color:{rgb:'BFBFBF'}}};
     const hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
     const ws={};const merges=[];const F9={name:'Calibri',sz:10};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||{border:bd,font:F9,alignment:{vertical:'center'}}}};
@@ -184,20 +186,18 @@ async function exportXlsx(){
     ws['!rows']=[{hpt:22},{hpt:15}];
     ws['!freeze']={xSplit:10,ySplit:hr+3};ws['!views']=[{state:'frozen',xSplit:10,ySplit:hr+3}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lookahead');
-    if(CLV){/* al cliente solo va su programa y su PPC: nada del plan interno, restricciones ni avance diario */
-      const pc=cliPpcAoa();const wsP=X.utils.aoa_to_sheet(pc.sum);wsP['!cols']=pc.cols;pc.hdr.forEach(r0=>{for(let c=0;c<pc.sum[r0].length;c++){const k=X.utils.encode_cell({r:r0,c});if(wsP[k])wsP[k].s=hs}});X.utils.book_append_sheet(wb,wsP,'PPC');
-      const lg=[['SUBCONTRATISTA','PARTIDA']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'']));const ws4=X.utils.aoa_to_sheet(lg);ws4['!cols']=[{wch:18},{wch:26}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
-      const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-      saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}
     /* el mismo libro lleva el PPC semanal (formato de la empresa, semana visible) y las restricciones del piso */
     /* formato de la empresa (ExcelJS, con logos): Lookahead · PPC semanal · PPC del SC · AR (análisis de restricciones) · Sectorización */
     await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
     /* la hoja grande cede el paso a la pantalla y muestra el avance en el botón (auditoría de código 08/10, M7) */
     xHeader(await xToJA(J,'Lookahead',ws,X,6,f=>{btn.textContent=`Generando… ${Math.round(100*f)}%`}),'look',LG);btn.textContent='Generando…';
-    {const wsP=ppcSemWs(X,U.week);if(wsP)xHeader(xToJ(J,'PPC semanal',wsP,X,5),'ppc',LG);const w2=ppcScWs(X,U.week);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
-    await xAR(J,arList(),U.week,LG);
+    /* versión cliente (oct 2026, pedido del dueño): las mismas hojas y el mismo formato; el PPC es el del cliente (contra la versión
+       emitida para la semana, con el cumplimiento de obra) y las restricciones de filas ocultas al cliente no van */
+    {const src=CLW?new Map(CLW.docs.map(d=>[d.pisoId,d])):null;const wsP=CLV?(CLW?ppcSemWs(X,U.week,src):null):ppcSemWs(X,U.week);if(wsP)xHeader(xToJ(J,'PPC semanal',wsP,X,5),'ppc',LG);
+     const w2=CLV?(CLW&&CLW.started?ppcScWs(X,U.week,CLW.docs):null):ppcScWs(X,U.week);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
+    await xAR(J,CLV?arList().filter(q=>!q.actId||S.act.has(q.actId)):arList(),U.week,LG);
     await xSector(J,visPisos().map(q=>q.id));
-    await xSave(J,`${(p.code||'LPS')}_Lookahead_${unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`);
+    await xSave(J,`${(p.code||'LPS')}_Lookahead_${CLV?'CLIENTE_':unswap?'VERSION_'+(LHI.get(U.ver)?.date||'')+'_':''}${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`);
   }catch(e){if(!(e&&e.code==='declined'))toast(e&&e.message?e.message:'No se pudo generar el Excel.')}
   finally{if(unswap)unswap();btn.disabled=false;btn.textContent='Exportar Excel'}
 }
@@ -211,7 +211,7 @@ async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:
     await xSave(J,`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`);
   }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
 /** hoja «PPC semanal» en el formato de la empresa (la usan el Excel del PPC y el del Lookahead); null si no hay compromisos */
-function ppcSemWs(X,n){{const p=P();const wd=weekDays(n);const vp=visPisos();
+function ppcSemWs(X,n,src){{const p=P();const wd=weekDays(n);const vp=visPisos();
     const B={style:'thin',color:{rgb:'000000'}};const bd={top:B,bottom:B,left:B,right:B};
     const F=(o={})=>({name:o.name||'Arial',sz:o.sz||9,bold:!!o.b,color:{rgb:o.c||'000000'}});
     const st=(o={})=>{const r={border:o.nb?undefined:bd,font:F(o),alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.fmt)r.numFmt=o.fmt;return r};
@@ -240,7 +240,7 @@ function ppcSemWs(X,n){{const p=P();const wd=weekDays(n);const vp=visPisos();
     const gr=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB'}),grC=st({b:true,sz:11,name:'Calibri',fill:'F2DCDB',h:'center'});
     const SI=st({b:true,h:'center',c:'00B050'}),NO=st({b:true,h:'center',c:'FF0000'});
     let tSi=0,tNo=0,tN=0,tOk=0;
-    for(const pp of vp){const w=S.wk.get(wkId(n,pp.id));const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
+    for(const pp of vp){const w=src?src.get(pp.id):S.wk.get(wkId(n,pp.id));if(src&&!w)continue;const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
       const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
       set(r,1,pp.code||'',flC);set(r,2,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fl);for(let c=3;c<20;c++)set(r,c,'',fl);set(r,20,pp.code||'',fx);set(r,21,'',fx);set(r,22,'',fx);r++;
       for(let i=0;i<ids.length;){const it0=items[ids[i]];let j=i;while(j<ids.length&&items[ids[j]].code===it0.code&&items[ids[j]].amb===it0.amb)j++;
@@ -299,7 +299,7 @@ function restrWs(X,list,sub){const p=P();const today=todayIso();
   ws['!rows']=[{hpt:22}];ws['!views']=[{state:'frozen',xSplit:0,ySplit:hr+1}];return ws}
 /** hoja «PPC del SC» (semana congelada n, pisos visibles): por subcontratista el PPC bruto y el PPC del SC (sin lo que no
     dependía de él) y el detalle de cada no cumplido con su causa y quién responde. La hoja del formato de la empresa no cambia. */
-function ppcScWs(X,n){const docs=visPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();
+function ppcScWs(X,n,docs0){const docs=docs0||visPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();
   const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
   const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.z)r.numFmt=o.z;return r};
   const ws={};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};

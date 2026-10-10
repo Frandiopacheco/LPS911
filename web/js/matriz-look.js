@@ -174,7 +174,7 @@ function mxCatBadge(x,k,pc){const w=pc?pc.cat:mxRowCat(x);if(!w)return'';const c
 /* pc (opcional): {cat,warn,done} ya calculados por la grilla para la fila, para no repetirlos (auditoría de código 08/10, L1) */
 function mxRowBadge(x,k,pc){const cb=mxCatBadge(x,k,pc);if(cb)k=(k||0)+1;return cb+mxRowBadge0(x,k,pc)}
 function mxRowBadge0(x,k,pc){const v=pc?pc.warn:mxRowWarn(x);if(!v&&(pc?pc.done:mxDonePend(x)))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
-function mxApplyWarn(ops){if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
+function mxApplyWarn(ops){if(typeof cliTabOn==='function'&&cliTabOn())return;if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
     const v=mxRowWarn({...o.after,id:o.id});if(!v)continue;const a=S.amb.get(o.after.ambId);
     setTimeout(()=>toast(`⚠ «${o.after.name}»${a?' en '+a.code:''}: la matriz dice «${MXS[v]}». ¿De verdad va?`,'Deshacer',undo),60);return}}

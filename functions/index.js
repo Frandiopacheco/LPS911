@@ -6,6 +6,7 @@
 //   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
 // - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
 //   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
+// - emitirCliente: el sábado a las 23:00 (Lima) emite la versión cliente de la semana siguiente si el administrador no la emitió.
 // - cuentaCapataz (la llama la página): crea y administra las cuentas DNI + contraseña de los capataces del tareo.
 // - publicarTareo (la llama la página): previa, publicación y rectificación del tareo del día (F3).
 'use strict';
@@ -14,7 +15,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, propCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -35,6 +36,30 @@ exports.versionDominical = onSchedule({ schedule: '5 12 * * 0', timeZone: 'Ameri
   }
   await idxRef.set(v.idx);
   logger.info(`Versión ${v.id} guardada: ${v.docs.length} pisos`);
+});
+
+/* Versión cliente: si a las 23:00 del sábado nadie emitió la de la semana siguiente, se emite sola tal como está (decidido con el
+   dueño, oct 2026). Corre varias veces esa hora por si una pasada falla; cliDue evita emitir dos veces. */
+exports.emitirCliente = onSchedule({ schedule: '1,16,31,46 23 * * 6', timeZone: 'America/Lima', retryCount: 2 }, async () => {
+  const project = (await db().collection('meta').doc('project').get()).data() || {};
+  const now = Date.now();
+  const idx = await all('clidx');
+  const n = cliDue(project, [...idx.values()], now);
+  if (n == null) { logger.info('Versión cliente: nada que emitir (ya emitida o fuera de hora)'); return; }
+  const cli = await db().collection('cli').doc('buf').get();
+  const v = buildCliVersion({ project, pisos: await all('pisos'), sectors: await all('sectors'), ambientes: await all('ambientes'), acts: await all('acts'), buf: cli.exists ? cli.data() : {}, clia: await all('clia') }, n, now);
+  if (!v) { logger.info('Sin pisos: nada que emitir'); return; }
+  const idxRef = db().collection('clidx').doc(v.id);
+  if ((await idxRef.get()).exists) return;
+  /* el administrador pudo emitir mientras se armaba esta: se vuelve a mirar justo antes */
+  if (cliDue(project, [...(await all('clidx')).values()], now) == null) { logger.info('Versión cliente: el administrador ya la emitió'); return; }
+  for (let i = 0; i < v.docs.length; i += 8) {
+    const b = db().batch();
+    v.docs.slice(i, i + 8).forEach(([k, d]) => b.set(db().collection('cliver').doc(k), d));
+    await b.commit();
+  }
+  await idxRef.set(v.idx);
+  logger.info(`Versión cliente ${v.id} emitida (semana ${n}): ${v.docs.length} pisos`);
 });
 
 exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'America/Lima', retryCount: 2 }, async () => {
@@ -82,7 +107,7 @@ async function congelar() {
     const refs = mine.map(p => db().collection('weeks').doc(n + '_' + p.id));
     const snaps = refs.length ? await db().getAll(...refs) : [];
     /* descongelada a propósito después del corte (unfrozenAt) = alguien la está corrigiendo: no se vuelve a congelar sola */
-    const cut = propCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
+    const cut = frzCutTs(project, n); const held = x => !!x && (!!x.frozenAt || (!!x.unfrozenAt && Date.parse(x.unfrozenAt) >= cut));
     const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
     if (mine.length && skip.size === snaps.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'todos los pisos ya estaban congelados' }, [], [], { k: 0 })); continue; }
     const today = limaToday(now);

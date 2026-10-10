@@ -104,7 +104,8 @@ function buildLookShell(main){
 }
 let gridRows=null,gridHead='',lkQTimer=0;
 function renderLook(main){if(typeof ensureMx==='function')ensureMx();
-  if(isMob()&&!U.lookFull){main.dataset.built='';renderLookMob(main);return}
+  /* la pestaña Cliente siempre con la tabla (la vista de celular no tiene la capa del cliente) */
+  if(isMob()&&!U.lookFull&&!U.cliv){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
   if(!main.dataset.built)buildLookShell(main);
   renderVerBar();ensureCli();
@@ -176,7 +177,7 @@ const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(i
 const LKQT={v:-1,m:new WeakMap()};
 let LK_PAST=0,LK_DONE=0,LK_GHN=0,LK_GHOK=true;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
 function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
-  const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=!CV&&canCli()&&!(U.ver&&U.verMode==='ver')?cliLate():null;
+  const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
   const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
   const conOpts=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
@@ -186,7 +187,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
   const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':''),f:fmtD(x2.d),past:x2.d<=today}));
-  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const QM=U.qmode==='metrado';
+  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';
   /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
      las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
   const ctx=lkCtx();
@@ -232,18 +233,18 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
     }
     if((filt||U.sector)&&!blocks.length)continue;
     const pc=U.collapsed.includes(p.id);
-    rows.push(new LkRow('p:'+p.id,()=>`<tr class="piso" data-piso-row="${p.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${pc?' cl':''}" data-tg="${p.id}" aria-label="Plegar piso">&#9662;</button><span class="p-code">${esc(p.code)}</span><input class="ci" data-piso="${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Nombre del piso"${ro}><span class="meta">${blocks.length} sect. · ${pAmb} amb. · ${pAct} act.</span>${CI?cliBufBtn('p',p.id):''}${canWrite?`<button class="ib" data-addsec="${p.id}">+ Sector</button><button class="ab" data-pisomenu="${p.id}" aria-label="Opciones del piso" title="Opciones del piso">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
+    rows.push(new LkRow('p:'+p.id,()=>`<tr class="piso" data-piso-row="${p.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${pc?' cl':''}" data-tg="${p.id}" aria-label="Plegar piso">&#9662;</button><span class="p-code">${esc(p.code)}</span><input class="ci" data-piso="${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Nombre del piso"${roS}><span class="meta">${blocks.length} sect. · ${pAmb} amb. · ${pAct} act.</span>${CI?cliBufBtn('p',p.id):''}${canWrite&&!CV?`<button class="ib" data-addsec="${p.id}">+ Sector</button><button class="ab" data-pisomenu="${p.id}" aria-label="Opciones del piso" title="Opciones del piso">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
     if(pc)continue;
-    if(!blocks.length)rows.push(new LkRow('pe:'+p.id,()=>`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`));
+    if(!blocks.length)rows.push(new LkRow('pe:'+p.id,()=>`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite&&!CV?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`));
     for(const{s,list,nAmb,nAct}of blocks){
       const coll=U.collapsed.includes(s.id);
-      rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${ro}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
+      rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${roS}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite&&!CV?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
       if(coll)continue;
       for(const{a,vis,acts,gh,gN}of list){
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
         const rs=Math.max(1,vis.length+gh.length);
-        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${ro}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${ro}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${roS}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${roS}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length&&!gh.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         vis.forEach((x,i)=>{
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
@@ -254,14 +255,14 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
           const c=conOf(x.sc);const st=actStats(x);const ds=new Set(DY(x));const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
-          let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}</div></td>`;
+          let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):''}${CV?cliRowMark(x.id):''}</div></td>`;
           if(i===0)h+=ambCells();
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
           /* (auditoría de código 08/10, L1) liberación, catálogo y alertas de la Matriz: una vez por fila (antes, 2 a 4 veces cada uno) */
           const prn=pr.get(x.id);const lb=typeof libOf==='function'?libOf(x.id):null;const lst=lb?lb.st:'';const mxc=typeof mxRowCat==='function'?mxRowCat(x):null;
           const mxw=typeof mxRowWarn==='function'?mxRowWarn(x):null;const mxd=false; /* sin «✓?»: el Lookahead solo recomienda desde la Matriz (10/10) */
           const nb=(x.obs?1:0)+((prn||isNew)?1:0)+(lst?1:0)+(mxw||mxd?1:0)+(mxc?1:0);
-          h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
+          h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${!CV&&typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${!CV&&typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=QM;
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
@@ -399,14 +400,14 @@ function renderMapaTab(main){if(window.renderMapaImpl){window.renderMapaImpl(mai
 
 /* --- versiones del lookahead --- */
 const LHI=new Map(),VERD=new Map();let lhiSub=null,lhiErr=null,autoTimer=null;U.ver='';U.verMode='ver';
-const verRO=()=>!!(U.tab==='look'&&((U.ver&&U.verMode==='ver')||U.cliv||lkLockOn()));
+const verRO=()=>!!(U.tab==='look'&&((U.ver&&U.verMode==='ver')||(U.cliv&&U.cliVer)||lkLockOn()));
 /* ---------- Lookahead en modo consulta: se abre sin poder editar; «Editar» habilita la edición ----------
    Así nadie cambia algo por un clic sin querer. En consulta, arrastrar desplaza la tabla (manito). */
 let LKED=false,LK_CAN=false;
-const lkLocked=()=>U.tab==='look'&&!LKED&&!LKP&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&!(typeof revOn==='function'&&revOn());
+const lkLocked=()=>U.tab==='look'&&!LKED&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.verMode==='ver')&&!(typeof revOn==='function'&&revOn());
 const lkLockOn=()=>LK_CAN&&lkLocked();
 function lkEdit(on){LKED=on;gridRows=null;closePop();if(!on&&typeof selClear==='function'&&SELA.size)selClear();requestRender();toast(on?'Edición activada: ya puedes cambiar el lookahead.':'Modo consulta: arrastra para desplazarte; nada se modifica.')}
-function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&!U.cliv&&!(U.ver&&U.verMode==='ver');if(b.hidden!==!show)b.hidden=!show;
+function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.verMode==='ver');if(b.hidden!==!show)b.hidden=!show;
   b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Terminar edición':'✎ Editar';b.title=LKED?'Volver al modo consulta (solo ver y desplazarse)':'Habilitar la edición del lookahead';
   const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn())}
 function ensureVers(){if(lhiSub||!db)return;
@@ -418,10 +419,10 @@ function ensureVers(){if(lhiSub||!db)return;
 function lastSundayNoon(now=NOW()){const L=5*3600e3;const t=new Date(now-L);const dow=t.getUTCDay();
   let base=Date.UTC(t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()-dow,12)+L;if(base>now)base-=7*864e5;
   const iso=new Date(base-L).toISOString().slice(0,10);return{ts:base,iso}}
-function snapPiso(pid){const secs={},ambs={},acts={};
+function snapPiso(pid,M){const secs={},ambs={},acts={};if(!M)M=actInt();
   for(const s of S.sec.values())if(pisoOfSecObj(s)===pid)secs[s.id]=strip(s);
   for(const a of S.amb.values())if(secs[a.sectorId])ambs[a.id]=strip(a);
-  for(const x of S.act.values())if(ambs[x.ambId]){const c=strip(x);delete c.obs;delete c.obsSug;acts[x.id]=c}
+  for(const x of M.values())if(ambs[x.ambId]){const c=strip(x);delete c.obs;delete c.obsSug;acts[x.id]=c}
   return{secs,ambs,acts}}
 async function saveVersion(id,label,kind){
   const pis=pisos();if(!pis.length)return false;const idx={label,kind,ts:NOW(),date:todayIso(),by:me.email,byName:me.name||me.email,week:curWeek(),pisos:{}};
@@ -431,9 +432,9 @@ async function saveVersion(id,label,kind){
   for(let i=0;i<docs.length;i+=8){const b=db.batch();docs.slice(i,i+8).forEach(([k,v])=>b.set(fcol('lhver').doc(k),v));await b.commit()}
   await fcol('lhidx').doc(id).set(idx);return true}
 let autoBusy=false;const AUTO_FROM='2026-10-04'; // primer domingo con guardado automático
-async function autoVersion(){if(!ready||!canWrite||PM()||!db||autoBusy||lhiErr)return;const sd=lastSundayNoon();const id='auto-'+sd.iso;if(sd.iso<AUTO_FROM||LHI.has(id)||!S.pis.size)return;
+async function autoVersion(){if(!ready||!canWrite||PM()||!db||autoBusy||lhiErr||(S.act&&S.act._cli))return;const sd=lastSundayNoon();const id='auto-'+sd.iso;if(sd.iso<AUTO_FROM||LHI.has(id)||!S.pis.size)return;
   autoBusy=true;try{const d=await fcol('lhidx').doc(id).get();if(!d.exists){await saveVersion(id,`Automática · dom ${fmtD(sd.iso)} 12:00 (sem ${weekOf(addD(sd.iso,1))})`,'auto')}}catch(e){}finally{autoBusy=false}}
-function saveVerMenu(btn){if(!canWrite||PM())return;const now=new Date(NOW());const def=`Sem ${curWeek()} · ${fmtD(todayIso())} ${hhmm(now.getTime())}`;
+function saveVerMenu(btn){if(!canWrite||PM())return;if(cliOn()){toast('Estás en la versión cliente: «Emitir al cliente» guarda su foto. Las versiones del lookahead interno se guardan desde el Lookahead.');return}const now=new Date(NOW());const def=`Sem ${curWeek()} · ${fmtD(todayIso())} ${hhmm(now.getTime())}`;
   openPop(btn,`<div class="ph">Guardar versión del lookahead</div><div class="ptx">Se guarda una copia de todos los pisos tal como están ahora. Podrás verla o compararla más adelante.</div>
    <div class="qrow" style="padding:0 10px 8px"><input id="vlab" value="${esc(def)}" maxlength="60" aria-label="Nombre de la versión" style="width:230px;text-align:left"></div><button data-do="save">Guardar versión</button>`,
    {save:async()=>{const lab=($('#vlab')?.value||def).trim()||def;const id='v-'+NOW().toString(36);toast('Guardando versión…');
@@ -534,7 +535,7 @@ function wireGrid(tbl){
   });
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
-    const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'La vista cliente es de solo lectura: edita en el programa interno y la holgura se suma sola.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'Es una versión emitida al cliente (solo lectura). Elige «Actual (editable)» para editar.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
     if(U.qmode==='metrado'){const x=S.act.get(td.parentElement.dataset.a);if(x&&hasM(x)){closeQEditor(false);if(e.pointerType==='touch'){qtap={td,x:e.clientX,y:e.clientY};return}if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();qsel={a:x.id,start:td.dataset.d,cells:new Map([[td.dataset.d,td]])};td.classList.add('sel');return}}
     if(e.pointerType==='touch'){tap={td,x:e.clientX,y:e.clientY};return}
     if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
@@ -622,10 +623,10 @@ function endPaint(){
   if(p.on)for(const[a,ds]of Object.entries(by))reopenAfter(a,ds)
 }
 /** Toque en un día «liberado» (la actividad está marcada terminada): reabrirla para que sus días vuelvan a contar */
-function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;
+function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;if(cliOn()){toast(`“${x.name}” está terminada en obra (${fmtD(dn)}): eso no se cambia desde la versión cliente.`);return}
   if(!canDaily){toast(`“${x.name}” se marcó terminada el ${fmtD(dn)}. El ingeniero de producción o de campo puede reabrirla.`);return}
   reopenDone(x.id)}
-function obsMenu(btn,aid){if(verRO())return;const x=S.act.get(aid);if(!x||!x.obs)return;
+function obsMenu(btn,aid){if(verRO())return;if(U.cliv){toast('La observación es del lookahead interno: resuélvela desde el Lookahead.');return}const x=S.act.get(aid);if(!x||!x.obs)return;
   const sug=(x.obsSug||[]).filter(id=>S.con.has(id)&&id!==x.sc);
   openPop(btn,`<div class="ph">Observación al importar</div><div class="ptx">${esc(x.obs)}</div>${canWrite?`${sug.map(id=>`<button data-do="sc" data-sc="${id}">Cambiar a ${esc(conOf(id).name)}</button>`).join('')}<button data-do="ok">Está bien así (quitar aviso)</button>`:''}`,{
     sc:ds=>{const y=S.act.get(aid);if(!y)return;const n={...y,sc:ds.sc};delete n.obs;delete n.obsSug;apply([op('acts',aid,n)],'Subcontratista cambiado a '+conOf(ds.sc).name)},
@@ -655,11 +656,11 @@ function commitField(t){
     if(f==='und')v=v.trim().toUpperCase();
     let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();
       /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
-      const g=typeof mxNameGate==='function'?mxNameGate(v,x,t):null;if(g===false)return;if(g!=null&&g!==v){v=g;t.value=v;t.dataset.o=v}
+      const g=typeof mxNameGate==='function'&&!cliOn()?mxNameGate(v,x,t):null;if(g===false)return;if(g!=null&&g!==v){v=g;t.value=v;t.dataset.o=v}
       const c=g!=null?null:actCanon(v,x.id);if(g!=null){const c2=actCanon(v,x.id);if(!x.und&&c2&&c2.und)und0=c2.und}if(c){if(c.name!==v){v=c.name;t.value=v;t.dataset.o=v;toast(`Se escribió “${c.name}”, como ya se llama en ${c.n} ambiente${c.n>1?'s':''}.`)}if(!x.und&&c.und)und0=c.und}}
     if(x[f]===v&&!und0)return;
     /* fila con historial: no se reutiliza para otra actividad (decidido con el dueño, oct 2026) */
-    if((f==='name'||f==='sc')&&x[f]&&!actSameName(x,f,v)&&actHist(x).length){t.value=t.dataset.o;histGate(x,f,v);return}
+    if((f==='name'||f==='sc')&&x[f]&&!cliOn()&&!actSameName(x,f,v)&&actHist(x).length){t.value=t.dataset.o;histGate(x,f,v);return}
     const nx={...x,[f]:v};if(und0)nx.und=und0;
     /* fila nueva: toma el SC de la actividad del catálogo elegida */
     if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v}));if(cc&&cc.sc&&cc.sc!==x.sc&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);}
@@ -716,15 +717,15 @@ function reorderAct(x,y,after){const sib=siblings('acts','ambId',x.ambId).filter
   if(ops.length)apply(ops,`“${x.name||'Actividad'}” pasa al n.º ${j+1} del ambiente`)}
 function moveItem(col,field,x,dir){const sib=siblings(col,field,x[field]);const i=sib.findIndex(s=>s.id===x.id);const j=i+dir;if(j<0||j>=sib.length)return;const y=sib[j];
   let oa=y.order,ob=x.order;if(oa===ob){ob=oa+dir}apply([op(col,x.id,{...x,order:oa}),op(col,y.id,{...y,order:ob})])}
-function actMenu(btn,aid){const x=S.act.get(aid);if(!x)return;
-  openPop(btn,`<div class="ph">Actividad</div><button data-do="sel">Seleccionar para mover en bloque<kbd>Ctrl+clic</kbd></button><button data-do="mvb">Mover sus días…</button>${typeof canAmbMove==='function'&&canAmbMove()?'<button data-do="amb">Cambiar de ambiente…</button>':''}${canCli()?`<button data-do="buf">Holgura para el cliente…${bufKbd('x',aid)}</button>`:''}<hr><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}</button>`:''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
+function actMenu(btn,aid){if(cliOn()){cliActMenu(btn,aid);return}const x=S.act.get(aid);if(!x)return;
+  openPop(btn,`<div class="ph">Actividad</div><button data-do="sel">Seleccionar para mover en bloque<kbd>Ctrl+clic</kbd></button><button data-do="mvb">Mover sus días…</button>${typeof canAmbMove==='function'&&canAmbMove()?'<button data-do="amb">Cambiar de ambiente…</button>':''}<hr><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}</button>`:''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
   {sel:()=>selToggle(aid),amb:()=>setTimeout(()=>ambMoveDialog(btn,[aid]),0),buf:()=>setTimeout(()=>bufDialog(btn,'x',aid,'la actividad '+(x.name||'')),0),mvb:()=>setTimeout(()=>blockMoveDialog(btn,[aid],x.name||'la actividad'),0),reo:()=>reopenDone(aid),ins:()=>insertAct(aid),dup:()=>insertAct(aid,true),up:()=>moveItem('acts','ambId',x,-1),dn:()=>moveItem('acts','ambId',x,1),
    clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),lib:()=>setTimeout(()=>libAsk(aid),0),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),
    del:()=>apply([arc('acts',aid)],PM()?`Pedido de quitar “${x.name||'sin nombre'}” (queda en tu propuesta)`:`Actividad “${x.name||'sin nombre'}” eliminada (queda en la Papelera de Configuración)`)})}
-function ambMenu(btn,ambId){const a=S.amb.get(ambId);if(!a)return;
+function ambMenu(btn,ambId){if(cliOn()){cliAmbMenu(btn,ambId);return}const a=S.amb.get(ambId);if(!a)return;
   if(PM()){const mine=actsOfAmb(ambId).filter(x=>myScsI().includes(x.sc));openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button>${mine.length?'<button data-do="mvd">Mover mis actividades en días…</button>':''}<div class="ptx">Crear, duplicar o mover ambientes lo hace el ingeniero de producción.</div>`,
     {act:()=>addAct(ambId),mvd:()=>setTimeout(()=>blockMoveDialog(btn,mine.map(x=>x.id),'tus actividades de '+a.code),0)});return}
-  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="mvd">Mover todo el ambiente en días…</button><button data-do="selA">Seleccionar sus actividades</button><button data-do="geo">Ubicar en la lámina (Sectorización)…<kbd>${a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6)?'ubicado':'sin ubicar'}</kbd></button>${canCli()?`<button data-do="buf">Holgura para el cliente…${bufKbd('a',ambId)}</button>`:''}<hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
+  openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button><button data-do="new">Nuevo ambiente debajo…</button><button data-do="dup">Duplicar ambiente con actividades</button><button data-do="dup0">Duplicar ambiente sin días</button><hr><div class="ph">Hito del ambiente</div><div class="qrow"><input id="hlab" value="${esc(a.hitoLabel||'FC')}" maxlength="12" aria-label="Nombre corto del hito" style="width:70px;text-align:left"><input type="date" id="hdate" value="${esc(a.hito||'')}" aria-label="Fecha del hito"><button data-do="hito">Guardar</button></div>${a.hito?'<button data-do="hclr">Quitar hito</button>':''}<hr><button data-do="mvd">Mover todo el ambiente en días…</button><button data-do="selA">Seleccionar sus actividades</button><button data-do="geo">Ubicar en la lámina (Sectorización)…<kbd>${a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6)?'ubicado':'sin ubicar'}</kbd></button><hr><button data-do="up">Subir</button><button data-do="dn">Bajar</button><button data-do="mv">Mover a otro sector…</button><hr><button data-do="del" class="danger">Eliminar ambiente y sus actividades</button>`,
   {geo:()=>szGoAmb(ambId),buf:()=>setTimeout(()=>bufDialog(btn,'a',ambId,'el ambiente '+a.code),0),mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfAmb(ambId).map(x=>x.id),'el ambiente '+a.code),0),selA:()=>{actsOfAmb(ambId).forEach(x=>{if(canMoveAct(x))SELA.add(x.id)});selBar();requestRender()},act:()=>addAct(ambId),new:()=>addAmbMenu(btn,a.sectorId,a),dup:()=>dupAmb(a),dup0:()=>dupAmb(a,true),
    hito:()=>{const v=$('#hdate').value;const l=($('#hlab').value||'Hito').trim().toUpperCase();if(!v){toast('Elige una fecha.');return}apply([op('ambientes',a.id,{...a,hito:v,hitoLabel:l})],`Hito ${l} de ${a.code}: ${fmtD(v)}`)},
    hclr:()=>{const n={...a};delete n.hito;delete n.hitoLabel;apply([op('ambientes',a.id,n)],'Hito quitado')},up:()=>moveItem('ambientes','sectorId',a,-1),dn:()=>moveItem('ambientes','sectorId',a,1),mv:()=>setTimeout(()=>moveAmbDialog(btn,a),0),
@@ -762,7 +763,7 @@ function pasteActs(aid,lines){const x=S.act.get(aid);if(!x)return;const sib=sibl
   const step=nxt?(nxt.order-x.order)/(items.length+1):10;let lastSc=f.sc||x.sc;
   items.slice(1).forEach((it,k)=>{const id=uid('act')+k;lastSc=it.sc||lastSc;ops.push(op('acts',id,{id,ambId:x.ambId,sc:lastSc,name:it.name,und:'',metrado:null,days:[],order:x.order+step*(k+1)}))});
   apply(ops,`${items.length} actividades pegadas`)}
-function pasteAmbs(ambId,lines){const a=S.amb.get(ambId);if(!a)return;const sib=siblings('ambientes','sectorId',a.sectorId);const i=sib.findIndex(z=>z.id===a.id);const nxt=sib[i+1];
+function pasteAmbs(ambId,lines){if(U.cliv){toast('En la versión cliente los ambientes no se cambian: vienen del lookahead interno.');return}const a=S.amb.get(ambId);if(!a)return;const sib=siblings('ambientes','sectorId',a.sectorId);const i=sib.findIndex(z=>z.id===a.id);const nxt=sib[i+1];
   const s=S.sec.get(a.sectorId);let n=sib.length;const parse=l=>{const c=l.split('\t').map(v=>v.trim()).filter(Boolean);return c.length>=2?{code:c[0],name:c.slice(1).join(' ')}:{code:null,name:c.join(' ')}};
   const items=lines.map(parse);const ops=[op('ambientes',a.id,{...a,name:items[0].name.toUpperCase(),code:items[0].code||a.code})];
   const step=nxt?(nxt.order-a.order)/(items.length+1):10;const firstSc=(siblings('acts','ambId',a.id)[0]||{}).sc||([...S.con.keys()][0]||'');
@@ -783,7 +784,7 @@ function pisoMenu(btn,pid){const p=S.pis.get(pid);if(!p)return;const others=piso
   const cnt=o=>[...S.sec.values()].filter(s=>pisoOfSecObj(s)===o.id).length;
   openPop(btn,`<div class="ph">${esc(p.code)} · ${esc(p.name)}</div><button data-do="sec">+ Sector</button>
    ${others.length?'<hr><div class="ph">Copiar estructura desde…</div>'+others.map(o=>`<button data-do="copy" data-src="${o.id}">${esc(o.code)} · ${esc(o.name)}<kbd>${cnt(o)} sect.</kbd></button>`).join(''):''}
-   <hr><button data-do="mvd">Mover todo el piso en días…</button>${canCli()?`<button data-do="buf">Holgura para el cliente…${bufKbd('p',pid)}</button>`:''}<hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
+   <hr><button data-do="mvd">Mover todo el piso en días…</button><hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
   {buf:()=>setTimeout(()=>bufDialog(btn,'p',pid,'el piso '+p.code),0),mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfPiso(pid).map(x=>x.id),'el piso '+p.code),0),sec:()=>addSector(pid),copy:d=>copyPisoStructure(d.src,pid),
    code:()=>{const inp=document.querySelector(`#grid .ci[data-piso="${pid}"]`);toast('Escribe el nuevo código en el nombre así: “P2 · Segundo piso” y pulsa Enter.');if(inp){inp.value=p.code+' · '+p.name;inp.focus();inp.dataset.codeedit='1'}},
    up:()=>movePiso(p,-1),dn:()=>movePiso(p,1),
@@ -792,7 +793,7 @@ function movePiso(p,dir){const l=pisos();const i=l.findIndex(x=>x.id===p.id);con
 function secMenu(btn,sid){const s=S.sec.get(sid);if(!s)return;const pid=pisoOfSecObj(s);const others=pisos().filter(o=>o.id!==pid);
   openPop(btn,`<div class="ph">Sector ${esc(s.code)}</div><button data-do="amb">+ Ambiente…</button><button data-do="dup">Duplicar sector (sin días)</button>
    ${others.length?'<hr><div class="ph">Copiar este sector a…</div>'+others.map(o=>`<button data-do="to" data-dst="${o.id}">${esc(o.code)} · ${esc(o.name)}</button>`).join(''):''}
-   <hr><button data-do="mvd">Mover todo el sector en días…</button>${canCli()?`<button data-do="buf">Holgura para el cliente…${bufKbd('s',sid)}</button>`:''}<hr><button data-do="code">Cambiar código</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar sector y su contenido</button>`,
+   <hr><button data-do="mvd">Mover todo el sector en días…</button><hr><button data-do="code">Cambiar código</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar sector y su contenido</button>`,
   {buf:()=>setTimeout(()=>bufDialog(btn,'s',sid,'el sector '+s.code),0),mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfSec(sid).map(x=>x.id),'el sector '+s.code),0),amb:()=>addAmbMenu(btn,sid,null),
    dup:()=>{const sib=siblings('sectors','pisoId',pid);const ops=[];const r=copySectorOps(s,pid,orderAfter(sib,s),ops,false);ops[0].after.code=s.code+"'";apply(ops,`Sector duplicado: ${r.na} ambientes, ${r.nx} actividades`)},
    to:d=>{const dst=[...S.sec.values()].filter(x=>pisoOfSecObj(x)===d.dst);const ops=[];const r=copySectorOps(s,d.dst,dst.reduce((m,x)=>Math.max(m,x.order||0),0)+10,ops,false);apply(ops,`Sector copiado a ${S.pis.get(d.dst)?.code}: ${r.na} ambientes, ${r.nx} actividades`)},

@@ -198,27 +198,29 @@ test('inspectores de liberaciones (libm): los editan Calidad y el administrador'
   await assertFails(setDoc(doc(user('ot@obra.pe'), 'libm/main'), { rules: [] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'libm/main'), { rules: [] }));
 });
-test('versión cliente: solo el administrador y quienes él designe', async () => {
+test('versión cliente: solo el administrador; lo emitido no se modifica ni se borra', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'cli/buf'), { all: 1 }));
-  // designados por el administrador (members.cli): leen y cambian
-  for (const who of ['editor2@obra.pe', 'campo2@obra.pe']) {
-    await assertSucceeds(setDoc(doc(user(who), 'cli/buf'), { all: 2, p: { p1: 1 } }));
-    await assertSucceeds(getDoc(doc(user(who), 'cli/buf')));
-  }
-  // sin designar (aunque sea editor), y el SC aunque tenga la marca: nada
-  for (const who of ['editor@obra.pe', 'sc@obra.pe', 'sc2@obra.pe', 'campo@obra.pe', 'lector@obra.pe', 'calidad@obra.pe', 'ot@obra.pe']) {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'clia/x1'), { f: { name: 'Otra' } }));
+  await assertSucceeds(getDoc(doc(user(OWNER), 'clia/x1')));
+  // nadie más, aunque tenga la marca antigua members.cli (editor2, campo2)
+  for (const who of ['editor2@obra.pe', 'campo2@obra.pe', 'editor@obra.pe', 'sc@obra.pe', 'sc2@obra.pe', 'campo@obra.pe', 'lector@obra.pe', 'calidad@obra.pe', 'ot@obra.pe']) {
     await assertFails(getDoc(doc(user(who), 'cli/buf')));
     await assertFails(setDoc(doc(user(who), 'cli/buf'), { all: 0 }));
+    await assertFails(getDoc(doc(user(who), 'clia/x1')));
+    await assertFails(setDoc(doc(user(who), 'clia/x2'), { hide: true }));
     await assertFails(getDoc(doc(user(who), 'clidx/c1')));
     await assertFails(getDoc(doc(user(who), 'cliver/c1__p1')));
+    await assertFails(setDoc(doc(user(who), 'clidx/c9'), { label: 'x', forW: 60 }));
   }
   await assertFails(getDoc(doc(cap('cap1'), 'cli/buf')));
-  // nadie se da acceso a sí mismo
-  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'members/editor@obra.pe'), { cli: true }));
-  await assertSucceeds(setDoc(doc(user('editor2@obra.pe'), 'clidx/c1'), { label: 'Emitida sem 58', week: 58 }));
-  await assertSucceeds(setDoc(doc(user('editor2@obra.pe'), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
-  await assertFails(deleteDoc(doc(user('editor2@obra.pe'), 'clidx/c1')));
-  await assertSucceeds(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+  await assertFails(getDoc(doc(cap('cap1'), 'clia/x1')));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'clidx/c1'), { label: 'Semana 58', forW: 58 }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'cliver/c1__p1'), { verId: 'c1', json: '{}' }));
+  // emitida: no se cambia ni se borra (ni el administrador)
+  await assertFails(updateDoc(doc(user(OWNER), 'clidx/c1'), { forW: 57 }));
+  await assertFails(setDoc(doc(user(OWNER), 'cliver/c1__p1'), { verId: 'c1', json: '{"acts":{}}' }));
+  await assertFails(deleteDoc(doc(user(OWNER), 'clidx/c1')));
+  await assertFails(deleteDoc(doc(user(OWNER), 'cliver/c1__p1')));
 });
 test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno corrige lo suyo', async () => {
   const np = (by, o = {}) => ({ date: '2026-10-01', pisoId: 'p1', ambId: 'a1', sc: 'c-gabel', desc: 'Tarrajeo', by, ...o });

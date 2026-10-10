@@ -60,6 +60,9 @@ function sendPropNow(){const now=NOW();let n=0,nl=0;
 const DOW_N=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
 const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
+/* Corte del congelado del plan semanal (oct 2026, decidido con el dueño: independiente del de las propuestas; si no se configuró, el mismo) */
+function frzCutCfg(){const p=P();const d=parseInt(p.frzCutDow,10);if(!(d>=0&&d<=6)||!/^\d\d:\d\d$/.test(p.frzCutHH||''))return{...propCutCfg(),same:true};return{dow:d,hh:p.frzCutHH,same:false}}
+function frzCut(n){const c=frzCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
 /** hora (ms) del corte para entregar propuestas de la semana n */
 function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
 /* ---- ventana de propuestas (oct 2026, decidido con el dueño): primero el ingeniero programa el lookahead; recién cuando un
@@ -389,7 +392,7 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
    ETAPA 30 · Modo revisión de propuestas dentro de la grilla
    ===================================================================== */
 U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null,REVDRAG=null;
-const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!(U.ver&&U.verMode==='ver'));
+const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver'));
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
 /* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
 function revVisItems(){const V=RVVIS;return V?revItems().filter(o=>V.has(o.id)):[]}

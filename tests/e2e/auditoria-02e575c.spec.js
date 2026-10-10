@@ -33,7 +33,7 @@ test('N04: «Cumplido» en Campo se mide contra la cantidad del plan cerrado, no
   noErrors(errors, 'N04');
 });
 
-test.skip('seguimiento N10 (versión cliente retirada, oct 2026): el PPC del cliente no cuenta un cierre del capataz que el ingeniero quitó', async ({ page }) => {
+test('seguimiento N10: el PPC del cliente no cuenta un cierre del capataz que el ingeniero quitó', async ({ page }) => {
   const sn = { secs: { s1: { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 } }, ambs: { a1: { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0 } },
     acts: { e0: { ambId: 'a1', sc: 'c2', name: 'Entubado empotrado', und: 'ml', metrado: 40, days: [HOY], order: 20 } } };
   const base = [
@@ -55,7 +55,7 @@ test.skip('seguimiento N10 (versión cliente retirada, oct 2026): el PPC del cli
   noErrors(errors, 'N10');
 });
 
-test.skip('N05 (versión cliente retirada, oct 2026): guardar una holgura no borra la que otro usuario guardó en otra actividad', async ({ page }) => {
+test('N05: guardar una holgura no borra la que otro usuario guardó en otra actividad', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [['cli', 'buf', { all: 1, x: { e0: 3 } }]] });
   await page.evaluate(() => ensureCli());
   await page.waitForFunction(() => CLIB && CLIB.x && CLIB.x.e0 === 3);
@@ -85,14 +85,14 @@ test('N06: con el día cerrado, pasar un trabajo no programado al lookahead no d
   noErrors(errors, 'N06');
 });
 
-test.skip('N07 (versión cliente retirada, oct 2026): la vista cliente se recalcula al cambiar el calendario (feriado, sábado no laborable)', async ({ page }) => {
+test('N07: la versión cliente se recalcula al cambiar el calendario (feriado, sábado no laborable)', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [['cli', 'buf', { all: 1 }]] });
-  await page.evaluate(() => cliToggle());
+  await page.evaluate(() => goTab('cli'));
   await page.waitForFunction(() => CLIB && CLIB.all === 1);
   const before = await page.evaluate(() => cliActs().get('e0').days);
   await page.evaluate(async () => { await fcol('meta').doc('project').update({ cal: { sat: false, hol: [{ d: '2026-10-02', n: 'Día no laborable' }] } }); });
   await page.waitForFunction(() => P().cal && P().cal.sat === false);
-  const r = await page.evaluate(() => ({ got: cliActs().get('e0').days, want: cliShift(S.act.get('e0')).days }));
+  const r = await page.evaluate(() => ({ got: cliActs().get('e0').days, want: cliShift(actInt().get('e0')).days }));
   expect(r.got).toEqual(r.want);
   expect(r.got).not.toEqual(before);
   noErrors(errors, 'N07');

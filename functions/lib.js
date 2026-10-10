@@ -122,11 +122,17 @@ function propCutTs(p, n) {
   const back = ((1 - d) + 7) % 7 || 7;
   return Date.parse(addD(weekStart(p, n), -back) + 'T' + hh + ':00Z') + LIMA;
 }
+/* Corte del congelado del plan semanal (Configuración › Proyecto, frzCutDow/frzCutHH; oct 2026 separado del de las propuestas:
+   si no se configuró, es el mismo de las propuestas de SC) */
+function frzCutTs(p, n) {
+  const has = p && p.frzCutDow != null && p.frzCutDow !== '' && /^\d\d:\d\d$/.test(p.frzCutHH || '');
+  return has ? propCutTs({ ...p, propCutDow: p.frzCutDow, propCutHH: p.frzCutHH }, n) : propCutTs(p, n);
+}
 /* Semanas que el servidor debe congelar ahora: la que viene, desde su corte hasta su lunes (inclusive, por si la tarea se atrasó) */
 function weeksToFreeze(p, now = Date.now()) {
   if (!p || !p.refDate) return [];
   const today = limaToday(now); const w0 = weekOf(p, today);
-  return [w0, w0 + 1].filter(n => now >= propCutTs(p, n) && today <= weekStart(p, n));
+  return [w0, w0 + 1].filter(n => now >= frzCutTs(p, n) && today <= weekStart(p, n));
 }
 /* Fecha de terminada por actividad (igual que la página: índice, registros con «terminada» y cierres del capataz; respeta reaperturas) */
 /* acts (opcional, Map o {id: act}): el cierre solo cuenta si lo declaró la partida de la actividad (como liveOwn de la página);
@@ -514,8 +520,75 @@ function wsnapPlan(id, w, ex, stamp) {
   return { sets, del: top ? 'snap' : 'v.snap', same };
 }
 
+/* ---------- Versión para el cliente (igual que web/js/cliente.js) ----------
+   Capa sobre el lookahead interno: holgura en días hábiles (cli/buf: actividad › ambiente › sector › piso › obra, manda la
+   más específica), cambios por fila (clia/<id>.f; si cambian los días, la fila queda fijada), ocultas (hide) y filas solo
+   del cliente (own + a). La emisión de la semana n vence el sábado 23:00 (Lima) antes de su lunes. */
+const cliCutTs = (p, n) => Date.parse(addD(weekStart(p, n), -2) + 'T23:00:00Z') + LIMA;
+/* semana desde la que vale una versión emitida (las antiguas, sin forW: desde el lunes de su fecha o el siguiente) */
+function cliForW(p, v) { if (v && v.forW != null) return +v.forW; const w = weekOf(p, v.date); return weekStart(p, w) === v.date ? w : w + 1; }
+function cliCompose({ project, pisos, sectors, ambientes, acts, buf = {}, clia = new Map() }) {
+  const live = m => [...m.values()].filter(x => !x.arch);
+  const P = live(pisos).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const first = P.length ? P[0].id : '';
+  const pisoOfSec = s => (s && s.pisoId && pisos.has(s.pisoId) ? s.pisoId : first);
+  const has = (m, k) => m && k != null && Object.prototype.hasOwnProperty.call(m, k);
+  const bufOf = x => {
+    const a = ambientes.get(x.ambId); const s = a && sectors.get(a.sectorId);
+    for (const [l, k] of [['x', x.id], ['a', a && a.id], ['s', a && a.sectorId], ['p', s ? pisoOfSec(s) : null]]) if (has(buf[l], k)) return +buf[l][k] || 0;
+    return +buf.all || 0;
+  };
+  const shift = x => {
+    const n = bufOf(x); if (!n) return x;
+    const days = [...new Set((x.days || []).map(d => wshift(project, d, n)))].sort();
+    const qty = {}; for (const [d, v] of Object.entries(x.qty || {})) { const k = wshift(project, d, n); qty[k] = (qty[k] || 0) + (+v || 0); }
+    return { ...x, days, qty };
+  };
+  const out = new Map();
+  for (const x of live(acts)) {
+    const o = clia.get(x.id); if (o && (o.hide || o.own)) continue;
+    const f = o && o.f;
+    out.set(x.id, !f || !Object.keys(f).length ? shift(x) : f.days ? { ...x, ...f, id: x.id } : { ...shift(x), ...f, id: x.id });
+  }
+  for (const [id, o] of clia) if (o && o.own && !o.arch && o.a && !out.has(id) && ambientes.has(o.a.ambId) && !ambientes.get(o.a.ambId).arch) {
+    const a = { ...o.a, id, own: true }; if (Array.isArray(a.days)) a.days = [...new Set(a.days)].sort(); out.set(id, a);
+  }
+  return out;
+}
+/* Foto para el cliente (mismo formato que «Emitir al cliente» de la página), para la semana n */
+function buildCliVersion(data, n, now = Date.now()) {
+  const { project, pisos, sectors, ambientes } = data;
+  const live = m => [...m.values()].filter(x => !x.arch);
+  const P = live(pisos).sort((a, b) => (a.order || 0) - (b.order || 0));
+  if (!P.length) return null;
+  const first = P[0].id;
+  /* como pisoOfSecObj de la página: un sector de un piso archivado sigue en ese piso (y no se emite) */
+  const pisoOfSec = s => (s && s.pisoId && pisos.has(s.pisoId) ? s.pisoId : first);
+  const X = cliCompose(data);
+  const today = limaToday(now);
+  const id = 'auto-c' + n;
+  const idx = { label: `Semana ${n} · automática (sáb ${fmtD(addD(weekStart(project, n), -2))} 23:00)`, kind: 'auto', ts: now, date: today, week: weekOf(project, addD(today, 1)), forW: n, by: 'servidor', byName: 'Servidor (automático)', buf: data.buf || {}, pisos: {} };
+  const docs = []; const S = live(sectors), A = live(ambientes);
+  for (const p of P) {
+    const secs = {}, ambs = {}, ax = {};
+    for (const s of S) if (pisoOfSec(s) === p.id) secs[s.id] = strip(s);
+    for (const a of A) if (secs[a.sectorId]) ambs[a.id] = strip(a);
+    for (const x of X.values()) if (ambs[x.ambId]) { const c = strip(x); delete c.obs; delete c.obsSug; ax[x.id] = c; }
+    idx.pisos[p.id] = { code: p.code, name: p.name, order: p.order || 0, acts: Object.keys(ax).length };
+    docs.push([id + '__' + p.id, { verId: id, pisoId: p.id, piso: strip(p), json: JSON.stringify({ secs, ambs, acts: ax }) }]);
+  }
+  return { id, idx, docs };
+}
+/* ¿Le toca al servidor emitir ahora? Semana n = la siguiente; desde su corte (sáb 23:00) hasta su lunes, si nadie emitió para n */
+function cliDue(p, versions, now = Date.now()) {
+  if (!p || !p.refDate) return null;
+  const today = limaToday(now); const n = weekOf(p, today) + 1;
+  if (now < cliCutTs(p, n) || today >= weekStart(p, n)) return null;
+  return versions.some(v => cliForW(p, v) === n) ? null : n;
+}
+
 module.exports = {
   CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
-  RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan };
+  RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };
