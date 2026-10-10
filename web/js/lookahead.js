@@ -198,7 +198,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
   head+='</tr></thead>';
   const rows=[];let shown=0;
   /* faltan programar (Matriz): filas fantasma dentro de cada ambiente; solo con los filtros de piso/sector/SC */
-  const GH=CV||(U.ver&&U.verMode==='ver')?null:lkGhosts();if(GH)GH.forEach(L=>LK_GHN+=L.length);const ghOk=!!GH&&!(qs.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||wkSet||aset||RV);
+  const GH=CV||(U.ver&&U.verMode==='ver')?null:lkGhosts();const ghOk=!!GH&&!(qs.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||wkSet||aset||RV);
   for(const{p,secs}of visTree()){
     const snapW=bases&&bases.get(p.id);const snap=snapW?snapW.snap||{}:null;
     const blocks=[];let pAmb=0,pAct=0;
@@ -223,9 +223,9 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
         LK_PAST+=nPast;LK_DONE+=nDone;
-        const gAll=ghOk?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];const gh=gAll.length&&(!!U.lkGh!==GHT.has(a.id))?gAll:[];
+        const gAll=GH&&(!U.sector||U.sector===s.id)?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];LK_GHN+=gAll.length;const gVis=ghOk?gAll:[];const gh=gVis.length&&(!!U.lkGh!==GHT.has(a.id))?gVis:[];
         if(!vis.length&&!gh.length&&(filt||acts.length>nPast+nDone))continue;
-        nAct+=vis.length;list.push({a,vis,acts,gh,gN:gAll.length});
+        nAct+=vis.length;list.push({a,vis,acts,gh,gN:gVis.length});
       }
       if(filt&&!list.length)continue;
       blocks.push({s,list,nAmb:list.length,nAct});pAmb+=list.length;pAct+=nAct;

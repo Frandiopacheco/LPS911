@@ -3309,3 +3309,4 @@ table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.
 .ghchip{display:inline-block;margin:0 6px 6px;border:1px dashed var(--warn);background:var(--panel);color:var(--warn);border-radius:999px;font:600 10px var(--f-ui);padding:1px 7px;cursor:pointer;white-space:nowrap}
 .ghchip.on{background:var(--warn-soft);border-style:solid}
 .dpill.mxpp.on{background:var(--warn);color:var(--panel)}
+#grid tr.gh .ghb.ghq{color:var(--accent);background:var(--accent-soft)}
