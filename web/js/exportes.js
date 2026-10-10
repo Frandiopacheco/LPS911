@@ -144,7 +144,7 @@ async function exportXlsx(){
   const CLV=U.tab==='look'&&U.cliv&&canCli();let cliLab='';
   try{await loadXlsx();const vd0=!CLV&&U.tab==='look'&&U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;if(vd0&&vd0.ready)unswap=swapVer(vd0);
     if(CLV){const cv=U.cliVer&&CLVD.get(U.cliVer);if(U.cliVer&&!(cv&&cv.ready))throw new Error('La versión emitida aún se está cargando. Intenta en un momento.');
-      if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Programa con holgura al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
+      if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Versión cliente al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
     const bd={top:{style:'thin',color:{rgb:'BFBFBF'}},bottom:{style:'thin',color:{rgb:'BFBFBF'}},left:{style:'thin',color:{rgb:'BFBFBF'}},right:{style:'thin',color:{rgb:'BFBFBF'}}};
     const hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
     const ws={};const merges=[];const F9={name:'Calibri',sz:10};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||{border:bd,font:F9,alignment:{vertical:'center'}}}};

@@ -3,9 +3,9 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
-const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','planos','cfg','team'];
+const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','cli','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
   tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
@@ -17,12 +17,12 @@ function tabAllowed(t){if(!me)return false;
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
     if(t==='tdia')return me.role!=='tcos';if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
   if(U.mod==='tar'||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
-  if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
+  if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed);const r=me.role;
-  const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],
+  const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','cli'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],
     campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}

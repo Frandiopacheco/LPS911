@@ -89,7 +89,7 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
   /* holgura del cliente consumida: la fecha interna ya pasa la que se le informó */
   if(typeof canCli==='function'&&canCli()){ensureCli();const M=cliLate();if(CLX.size){const vs=new Set(visPisos().map(p=>p.id));const L=M?[...M.entries()].filter(([id])=>vs.has(pisoOfAct(id))&&S.act.has(id)).sort((a,b)=>a[1].cli.localeCompare(b[1].cli)):[];
     out.cli={k:'cli',title:'Holgura del cliente',n:L.length,tone:'bad',sub:`${L.length} actividad${L.length===1?'':'es'} ya termina${L.length===1?'':'n'} después de la fecha emitida al cliente${cliLast()?' ('+esc(cliLast().label)+')':''}`,
-      items:L.map(([id,o])=>({t:S.act.get(id).name,s:`Cliente: ${fmtD(o.cli)} · interno: ${fmtD(o.end)} · ${hoyLoc(S.act.get(id))}`})),go:'look',goLabel:'Ver en el Lookahead (⚑)',empty:M?'Todo dentro de las fechas informadas al cliente':'Cargando la versión emitida…'}}}
+      items:L.map(([id,o])=>({t:S.act.get(id).name,s:`Cliente: ${fmtD(o.cli)} · interno: ${fmtD(o.end)} · ${hoyLoc(S.act.get(id))}`})),go:'cli',goLabel:'Ir a la pestaña Cliente',empty:M?'Todo dentro de las fechas informadas al cliente':'Cargando la versión emitida…'}}}
   /* trabajo no programado visto hoy en el recorrido (informativo: no es algo pendiente) */
   if(canNP()){const L=npItems([d],new Set(visPisos().map(p=>p.id)));const by={};L.forEach(i=>by[i.e.sc]=(by[i.e.sc]||0)+1);
     out.np={k:'np',title:'Trabajo no programado hoy',n:0,tone:'',sub:'',items:[],go:'campo',goLabel:VEED()?'Ir al recorrido (Campo › Plano)':'Ver en Campo',

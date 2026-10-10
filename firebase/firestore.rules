@@ -34,7 +34,8 @@ service cloud.firestore {
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
-    function canCli() { return isAdmin() || (isMember() && role() in ['editor', 'campo', 'area', 'lector'] && get(memberPath()).data.get('cli', false) == true); }
+    // Versión cliente: solo el administrador (decidido con el dueño, oct 2026; antes también designados con members.cli)
+    function canCli() { return isAdmin(); }
     // Plan maestro: solo el administrador y el planner (rol que solo modifica el maestro). Nadie más lo lee.
     function canMP() { return isMember() && role() in ['admin', 'planner']; }
     function canDaily() { return isMember() && role() in ['admin', 'editor', 'campo']; }
@@ -232,17 +233,22 @@ service cloud.firestore {
             && request.resource.data.get('hist', []).size() >= resource.data.get('hist', []).size());
       allow delete: if isAdmin();
     }
-    // Versión para el cliente (holguras, versiones emitidas): el administrador y quienes él designe.
+    // Versión para el cliente (holguras, capa por actividad, versiones emitidas): solo el administrador.
     // Los demás trabajan con la versión interna y no la ven.
     match /cli/{id} {
       allow read, write: if canCli();
     }
+    // capa del cliente por actividad (holgura aparte, en cli/buf): cambios, ocultas y filas solo del cliente
+    match /clia/{id} {
+      allow read, write: if canCli();
+    }
+    // lo emitido no se modifica (el compromiso con el cliente queda tal cual); el servidor emite la automática
     match /clidx/{id} {
-      allow read, create, update: if canCli();
+      allow read, create: if canCli();
       allow delete: if isAdmin();
     }
     match /cliver/{id} {
-      allow read, create, update: if canCli();
+      allow read, create: if canCli();
       allow delete: if isAdmin();
     }
     // Matriz de liberaciones: la ven todos; la editan Calidad y el administrador

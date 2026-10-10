@@ -82,7 +82,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clidx','cliver','tper','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog'];
+  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
@@ -121,8 +121,8 @@ async function importWrites(writes,onProg){const by=new Map();writes.forEach(w=>
    ETAPA 33 · Tanda 2 (parte 1): papelera, calendario de la obra, hora del servidor
    ===================================================================== */
 /* ---- papelera: eliminar = archivar (se puede recuperar; el historial no cambia) ---- */
-function getDoc(col,id){const k=COLS[col];if(!k)return null;return S[k].get(id)||(ARCH[k]&&ARCH[k].get(id))||null}
-function setColData(k,mp){if(typeof DV!=='undefined')DV++;if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}S[k]=mp}
+function getDoc(col,id){const k=COLS[col];if(!k)return null;if(k==='act'&&S.act&&S.act._cli&&typeof cliHidden==='function')return S.act.get(id)||cliHidden(id)||null;return S[k].get(id)||(ARCH[k]&&ARCH[k].get(id))||null}
+function setColData(k,mp){if(typeof DV!=='undefined')DV++;if(ARCH[k]){const ar=new Map();for(const[id,v]of mp)if(v&&v.arch){ar.set(id,v);mp.delete(id)}ARCH[k]=ar}if(k==='act'&&S.act&&S.act._cli&&typeof cliBaseSet==='function')cliBaseSet(mp);else S[k]=mp}
 let ARC_T=null;
 function arc(col,id){if(col==='acts'&&PM())return op(col,id,null);const cur=getDoc(col,id);if(!cur||cur.arch)return null;
   if(!ARC_T){ARC_T={t:NOW(),by:me?me.email:'',n:me?(me.name||''):''};setTimeout(()=>{ARC_T=null},0)}
