@@ -204,7 +204,7 @@ function lkGhosts(){if(typeof mxPendList!=='function')return null;const L=mxPend
   for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);m.get(r.a.id).push({c:r.c,o:r.o,rows:r.o.acts.filter(id=>S.act.has(id))})}return m}
 function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
   let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
-    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.rows.length?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb" title="${g.rows.length?'Tuvo días antes: toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.rows.length?'Reprog.':'Falta'}</span></td>
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.rows.length?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb${g.rows.length?' ghq':''}" title="${g.rows.length?'Ya tuvo días programados (vencidos) y nadie la cerró: si ya se hizo, ⋮ › «Ya está terminada»; si falta, toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.rows.length?'¿Terminó?':'Falta'}</span></td>
     <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
   for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&!di.past?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
   return h+'</tr>'}
@@ -216,12 +216,13 @@ function lkGhostDay(key,d){if(!d||!(canWrite||PM())||verRO())return;const[amb,ci
     apply([op('acts',x.id,{...x,days:[...new Set([...(x.days||[]),d])].sort()})],`«${x.name}» reprogramada en ${a.code} el ${fmtD(d)}`);return}
   const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
   apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[d],order})],`«${c.name}» programada en ${a.code} el ${fmtD(d)}`)}
-function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;const ed=mxEd();
+function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;const ed=mxEd();const g0=((lkGhosts()||new Map()).get(amb)||[]).find(g=>g.c.id===cid);
   openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">La Matriz la da como pendiente y no tiene días de hoy en adelante. Toca un día de la fila para programarla.</div>
-   <button data-do="add">Agregar al ambiente sin días</button>${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   ${g0&&g0.rows.length&&ed?'<button data-do="ok">Ya está terminada (Matriz)</button>':''}${g0&&g0.rows.length?'':'<button data-do="add">Agregar al ambiente sin días</button>'}${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
    {add:()=>{const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
       apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[],order})],`«${c.name}» agregada a ${a.code} (sin días)`)},
     na:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'n'}]]),`${c.name}: no aplica en ${a.code}`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
+    ok:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'t'}]]),`${c.name}: terminada en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
     mat:()=>mxGoCell(amb,cid)})}
 
 /* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
