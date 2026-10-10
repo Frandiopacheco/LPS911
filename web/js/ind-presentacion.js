@@ -6,7 +6,7 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 let IPR=null; // {pg: lámina 0..2, z: tamaño}
-const IPR_PG=['Resumen','Subcontratistas','Causas'];
+const IPR_PG=['Resumen','Pisos','Subcontratistas','Causas'];
 function iprStart(){if(IPR)return;IPR={pg:0,z:1};closePop();
   const o=document.createElement('div');o.id='ipr';o.className='ipr';o.setAttribute('role','dialog');o.setAttribute('aria-label','Indicadores semanales · presentación');document.body.appendChild(o);
   o.onclick=iprClick;o.onchange=iprChange;document.body.classList.add('ipr-on');
@@ -64,8 +64,8 @@ function iprDraw(){const o=$('#ipr');if(!IPR||!o)return;if(U.tab!=='ind'){iprSto
     <span class="iprg"><button class="ib" data-ip="z-" aria-label="Letra más pequeña">A−</button><button class="ib" data-ip="z+" aria-label="Letra más grande">A+</button></span>
     <button class="ib" data-ip="x">Salir <kbd>Esc</kbd></button></header>`;
   let body;
-  if(!D.tot.n)body=`<div class="iprempty">La semana ${n} no está congelada${U.piso?' en este piso':''}.<small>El indicador sale de los compromisos congelados en <b>Plan semanal</b> evaluados con Sí / No.</small></div>`;
-  else if(IPR.pg===0)body=iprResumen(n,D);else if(IPR.pg===1)body=iprSc(n,D);else body=iprCausas(n,D);
+  if(!D.tot.n&&IPR.pg!==1)body=`<div class="iprempty">La semana ${n} no está congelada${U.piso?' en este piso':''}.<small>El indicador sale de los compromisos congelados en <b>Plan semanal</b> evaluados con Sí / No.</small></div>`;
+  else if(IPR.pg===0)body=iprResumen(n,D);else if(IPR.pg===1)body=iprPisos(n);else if(IPR.pg===2)body=iprSc(n,D);else body=iprCausas(n,D);
   const st=o.querySelector('.iprc');const sc=st?st.scrollTop:0;
   o.innerHTML=bar+`<div class="iprc" style="--ipz:${IPR.z}">${body}</div><footer class="iprft">${IPR_PG.map((t,i)=>`<i class="${IPR.pg===i?'on':''}"></i>`).join('')}<span>← → para cambiar de lámina</span></footer>`;
   const st2=o.querySelector('.iprc');if(st2&&st)st2.scrollTop=sc}
@@ -107,3 +107,41 @@ function iprCausas(n,D){const cl=Object.entries(D.cnc).sort((a,b)=>b[1].n-a[1].n
     <section class="iprcard"><h3>Causas de no cumplimiento <small>semana ${n} · ${D.nc.length} no cumplidos</small></h3>${iprBars(cl.map(([k,o])=>({label:k,v:o.n,tone:'bad',sub:o.nimp?`${o.nimp} no imputable${o.nimp===1?'':'s'} al SC`:''})))}</section>
     <section class="iprcard"><h3>No cumplidos por subcontratista <small>actividad · ambiente · causa</small></h3><div class="iprnc">${scs.map(sc=>`<div class="iprncg"><h4><i style="background:${esc(conOf(sc).color)}"></i>${esc(conOf(sc).name)} <small>${by[sc].length}</small></h4><ul>${by[sc].map(x=>`<li><b>${esc(x.it.act||'')}</b><span>${esc(x.it.amb||x.it.code||'')}${!U.piso&&x.p?' · '+esc(x.p.code):''}</span><em>${esc(x.k)}${x.r.note?' — '+esc(x.r.note):''}</em></li>`).join('')}</ul></div>`).join('')}</div></section>
   </div>`}
+
+/* ===== lámina «Pisos»: compara el PPC de todos los pisos (no usa el filtro de piso) ===== */
+const IPR_PC=['#2f6f9f','#c46a2c','#3f8f4f','#8a5aa8','#b39a1e','#2f9a9a','#b0475c','#6b7a8a','#7a5a2a','#4a5ab0'];
+/** PPC por piso y semana (semanas congeladas ≤ n, las últimas 12 con algún piso) */
+function iprPisoData(n){const all=new Map([...ARCH.pis,...S.pis]);const by={};const wks=new Set();
+  for(const w of S.wk.values()){if(!w.frozenAt||!w.pisoId||w.n>n||!all.has(w.pisoId))continue;const st=ppcOf(w);if(!st||!st.ev)continue;(by[w.pisoId]=by[w.pisoId]||{})[w.n]=st;wks.add(w.n)}
+  const W=[...wks].sort((a,b)=>a-b).slice(-12);
+  const P=Object.keys(by).map(id=>all.get(id)).filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0)).filter(p=>W.some(k=>by[p.id][k]));
+  return{W,P,by}}
+/** varias líneas (una por piso) en escala 0–100 %, con el rótulo al final de cada una */
+function iprSvgMulti(W,series){const n=W.length;const L=44,R=150,T=16,B=32,h=320,Wd=Math.max(820,n*70+L+R),ih=h-T-B,iw=Wd-L-R;
+  const X=i=>L+(n>1?i*iw/(n-1):iw/2),Y=v=>T+ih*(1-v);
+  let s=`<svg viewBox="0 0 ${Wd} ${h}" role="img" aria-label="PPC semanal por piso">`;
+  [0,.25,.5,.75,1].forEach(g=>{const y=Y(g);s+=`<line class="gl" x1="${L}" x2="${Wd-R+8}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${g*100}%</text>`});
+  W.forEach((k,i)=>{s+=`<text x="${X(i)}" y="${h-10}" text-anchor="middle">S${k}</text>`});
+  const ends=[];
+  series.forEach(se=>{let d='',on=false;se.v.forEach((v,i)=>{if(v==null){on=false;return}d+=(on?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1);on=true});
+    s+=`<path d="${d}" fill="none" stroke="${se.c}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+    se.v.forEach((v,i)=>{if(v!=null)s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4.5" fill="${se.c}" stroke="var(--panel)" stroke-width="2"><title>${esc(se.l)} · S${W[i]}: ${pct(v)}</title></circle>`});
+    let li=-1;se.v.forEach((v,i)=>{if(v!=null)li=i});if(li>=0)ends.push({y:Y(se.v[li])+4,x:X(li)+10,t:se.l+' '+pct(se.v[li]),c:se.c})});
+  ends.sort((a,b)=>a.y-b.y);for(let i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<15)ends[i].y=ends[i-1].y+15; /* que no se encimen */
+  ends.forEach(e=>{s+=`<text x="${e.x}" y="${e.y}" style="fill:${e.c};font-weight:700;font-size:14px">${esc(e.t)}</text>`});
+  return s+'</svg>'}
+function iprPisos(n){const{W,P,by}=iprPisoData(n);
+  if(!P.length)return`<div class="iprempty">Ningún piso tiene semanas congeladas y evaluadas hasta la semana ${n}.</div>`;
+  const col=i=>IPR_PC[i%IPR_PC.length];
+  const cur=P.map((p,i)=>({p,c:col(i),st:by[p.id][n],pr:by[p.id][n-1]}));
+  const avgOf=p=>{const v=W.map(k=>by[p.id][k]).filter(st=>st&&st.ev>=st.n);return v.length?v.reduce((t,st)=>t+st.ppc,0)/v.length:null};
+  const nowRows=cur.filter(x=>x.st);
+  let h=`<div class="iprgrid">
+   <section class="iprcard"><h3>PPC por piso <small>semana ${n} · todos los pisos</small></h3>${nowRows.length?iprBars(nowRows.map(x=>({label:x.p.code+' · '+x.p.name,color:x.c,v:x.st.ppc,max:1,fmt:pct,tone:iprTone(x.st.ppc),sub:`${x.st.ok} de ${x.st.n}${x.st.ev<x.st.n?` · ${x.st.n-x.st.ev} sin evaluar`:''}`}))):`<div class="empty">Ningún piso congeló la semana ${n}.</div>`}</section>
+   <section class="iprcard"><h3>Comparación <small>semana ${n} frente a la anterior</small></h3><div class="tscroll"><table class="t ctab iprtab"><thead><tr><th>Piso</th><th class="r">Sem ${n-1}</th><th class="r">Sem ${n}</th><th class="r">Cambio</th><th class="r">Promedio</th></tr></thead><tbody>
+    ${cur.map(x=>{const a=x.pr?x.pr.ppc:null,b=x.st?x.st.ppc:null;const d=a!=null&&b!=null?Math.round((b-a)*100):null;const av=avgOf(x.p);
+      return`<tr><td><i class="iprdot" style="background:${x.c}"></i><b>${esc(x.p.code)}</b> · ${esc(x.p.name)}</td><td class="r">${pct(a)}</td><td class="r"><b class="${iprTone(b)}">${pct(b)}</b></td><td class="r ${d==null?'':d>=0?'ok':'no'}">${d==null?'—':(d>0?'▲ +':d<0?'▼ ':'')+d+' pts'}</td><td class="r">${pct(av)}</td></tr>`}).join('')}
+   </tbody></table></div><p class="iprnote">Promedio: semanas completas evaluadas de las mostradas.</p></section>
+  </div>
+  <section class="iprcard" style="margin-top:clamp(12px,1.5vw,24px)"><h3>Evolución del PPC por piso <small>últimas ${W.length} semanas · una línea por piso</small></h3><div class="iprsvg chart">${iprSvgMulti(W,cur.map(x=>({l:x.p.code,c:x.c,v:W.map(k=>by[x.p.id][k]?by[x.p.id][k].ppc:null)})))}</div></section>`;
+  return h}
