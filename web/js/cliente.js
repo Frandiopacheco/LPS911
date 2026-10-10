@@ -247,6 +247,19 @@ function cliPpcCard(vset){if(!canCli())return'';ensureCli();if(!CLX.size)return`
     ${sel&&Object.keys(scs).length?`<h3 class="clih">Semana ${U.week} por subcontratista</h3>${svgBarsH(Object.entries(scs).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n})),pct)}`:''}
     <p class="note">El cumplimiento sale de lo registrado en obra: cumple si al cierre de la semana la actividad está terminada o sus días cumplidos (✓ = 1, ½ = 0,5) alcanzan los días que el cliente esperaba hasta ese cierre (las ${CLI_HIST} semanas previas también cuentan). La semana en curso se mide hasta hoy. Las filas solo del cliente no entran.</p>
     <button class="ib" id="bxcli">Excel del PPC cliente</button></div></div>`}
+/** Compromisos del cliente de la semana n (versión emitida para n), con la forma de las semanas congeladas (items/res por piso)
+    para armar las hojas «PPC semanal» y «PPC del SC» del Excel con el mismo formato que el interno. Cumplimiento: el de cliPpc
+    (obra); la causa y la mitigación de un no cumplido, las que se registraron en el plan semanal interno. null si no hay versión. */
+async function cliWeekDocs(n){const L=cliVerFor(n);if(!L)return null;if(!CLVD.get(L.id)||!CLVD.get(L.id).ready)await cliLoad(L.id);const v=CLVD.get(L.id);if(!v||!v.ready)return null;
+  const vset=new Set(visPisos().map(p=>p.id));const wd=weekDays(n);const started=wd[0]<=todayIso();
+  const P_=started?(cliPpc(vset).W.find(o=>o.w===n)||null):null;const okOf=new Map(P_?P_.items.map(i=>[i.x.id,i.ok]):[]);
+  const by=new Map();
+  for(const x of v.act.values()){if(x.own)continue;const pid=cliPisoOf(v,x);if(!vset.has(pid))continue;const inW=(x.days||[]).filter(d=>d>=wd[0]&&d<=wd[5]);if(!inW.length)continue;
+    let d=by.get(pid);if(!d){d={pisoId:pid,n,frozenAt:L.ts||1,items:{},res:{}};by.set(pid,d)}
+    const a=v.amb.get(x.ambId)||{};const s=v.sec.get(a.sectorId)||{};const q=inW.reduce((t,dd)=>t+(+((x.qty||{})[dd])||0),0);
+    d.items[x.id]={ord:(s.order||0)*1e6+(a.order||0)*1e3+(x.order||0),code:a.code||'',amb:a.name||'',act:x.name||'',und:x.und||'',q:q||null,sc:x.sc,days:inW};
+    if(okOf.has(x.id)){const wi=S.wk.get(wkId(n,pid));const ir=wi&&wi.res&&wi.res[x.id];d.res[x.id]=okOf.get(x.id)?{ok:true}:{...(ir&&ir.ok===false?ir:{}),ok:false}}}
+  return{label:L.label||'',started,docs:[...by.values()]}}
 /** Hojas del PPC cliente (resumen por semana + detalle), para el Excel del cliente y el de Indicadores. */
 function cliPpcAoa(){const vset=new Set(visPisos().map(p=>p.id));const{W}=cliPpc(vset);const p=P();
   const sum=[[`PPC DEL CLIENTE · ${p.fullName||p.name||''}`],[`Medido contra la versión emitida para cada semana · ${pisoLabel().replace(/&[^;]+;/g,'')} · al ${fmtD(todayIso())} ${todayIso().slice(0,4)}`],[],
