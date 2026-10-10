@@ -11,8 +11,8 @@ function svgBarsV(data,{h=220}={}){ // data [{label,v(0..1),sub}]
   return s+'</svg>'}
 /* PPC semanal histórico: dos líneas (bruto y del SC) en una sola escala 0–100 %, promedio de las semanas completas y
    una zona de toque por semana con el detalle. La línea del SC va punteada (no se distingue solo por color). */
-function svgLines(pts,{h=230}={}){ // pts [{label,a,b,sub,part}]
-  const n=pts.length;const L=40,R=78,T=16,B=30,W=Math.max(380,n*44+L+R),ih=h-T-B,iw=W-L-R;const X=i=>L+(n>1?i*iw/(n-1):iw/2),Y=v=>T+ih*(1-v);
+function svgLines(pts,{h=230,minW=380}={}){ // pts [{label,a,b,sub,part}]; minW: ancho mínimo (la presentación lo pide más ancho)
+  const n=pts.length;const L=40,R=78,T=16,B=30,W=Math.max(minW,n*44+L+R),ih=h-T-B,iw=W-L-R;const X=i=>L+(n>1?i*iw/(n-1):iw/2),Y=v=>T+ih*(1-v);
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="PPC semanal histórico: bruto y del SC">`;
   [0,.25,.5,.75,1].forEach(g=>{const y=Y(g);s+=`<line class="gl" x1="${L}" x2="${W-R+6}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${g*100}%</text>`});
   const full=pts.filter(p=>!p.part&&p.a!=null);if(full.length>1){const av=full.reduce((t,p)=>t+p.a,0)/full.length;const y=Y(av);s+=`<line class="avg" x1="${L}" x2="${W-R+6}" y1="${y}" y2="${y}"/><text class="avgl" x="${L+6}" y="${y-5}">prom. ${pct(av)}</text>`}
@@ -136,7 +136,7 @@ const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
 function indBar(){const d=indDay();const today=todayIso();const dia=U.indMode!=='sem';
   return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`} · ${pisoLabel()}`,
-    dia?'<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>':`<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
+    dia?'<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>':`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
    +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
    ${dia?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
 /** No cumplidos de la semana elegida: causa, comentario y mitigación, editables aquí mismo (los mismos datos del Plan semanal) */
@@ -156,6 +156,7 @@ function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e
   main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;saveUI();render();return}
   const dn=t.closest('[data-idd]');if(dn){const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);daySet(nd&&nd<todayIso()?nd:null);render();return}
   if(t.id==='bpdf'){reportPdf(indDay());return}
+  if(t.id==='bipr'){iprStart();return}
   if(t.id==='bxppc'){exportPpcXlsx();return}
   if(t.id==='bxcli'){cliPpcXlsx();return}
   const g=t.closest('tr[data-goc]');if(g){const[aid,d]=g.dataset.goc.split('|');goCampo(aid,d)}};
@@ -185,6 +186,7 @@ function renderIndDay(main){
       ${inc.map(r=>`<tr data-goc="${r.x.id}|${d}"><td class="mono" data-l="Ítem">${U.piso?'':esc(r.p.code)+' · '}${esc(r.a.code)}</td><td class="wrapc" data-l="Ambiente">${esc(r.a.name)}</td><td class="wrapc lead">${esc(r.x.name)}</td><td data-l="Subcontratista">${scLabel(r.sc)}</td><td class="${ST[r.rc.status].c}" data-l="Estado">${ST[r.rc.status].i} ${ST[r.rc.status].t}</td><td class="wrapc" data-l="Causa">${r.rc.cnc?esc(r.rc.cnc):'<span style="color:var(--bad)">sin causa</span>'}</td><td data-l="Imputable al SC">${impOf(r.rc)?'Sí':'<span class="mu">No</span>'}</td><td class="wrapc mu full" data-l="Comentario">${esc(r.rc.note||'')}</td></tr>`).join('')}</tbody></table></div></div>`}
   h+='</div></div>';main.innerHTML=h;wireInd(main)}
 function renderInd(main){
+  if(IPR&&U.indMode==='sem'){iprDraw();return} /* modo presentación abierto: solo se redibuja la capa (ind-presentacion.js) */
   if(U.indMode!=='sem'){renderIndDay(main);return}
   const vp=visPisos();const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
