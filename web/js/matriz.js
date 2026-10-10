@@ -69,12 +69,12 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
   for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
     if(tp)(tp.acts||[]).forEach(c=>add(c,'tipo'));for(const c of L.keys())add(c,'look');for(const c of Object.keys(st))add(c,'man');
-    for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s=o.acts.length&&o.acts.every(id=>DONE.has(id))?'t':'p'}
+    for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s='p'} /* sin confirmar: pendiente; lo que diga Campo no se toma como propuesta (la Matriz es la referencia, 10/10) */
       /* fut: tiene días de hoy en adelante en el lookahead. Alerta (warn): confirmada terminada / no aplica y aún programada.
          Sin programar (sp): pendiente (no en curso) sin ningún día de hoy en adelante */
       o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.fwd=o.fut.filter(id=>(S.act.get(id).days||[]).some(d=>d>T0));o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0;o.sp=o.s==='p'&&!o.fut.length;
       /* dsc: Campo la marcó terminada (todas sus filas) pero la matriz confirmó otra cosa: el ingeniero decide (confirmar o reabrir) */
-      o.dsc=!o.sug&&o.s!=='t'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))}
+      o.dsc=o.s!=='t'&&o.s!=='n'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))} /* aviso: Campo la marcó terminada; el ingeniero confirma o no */
     out.set(amb.id,C)}
   MX.mc=out;MX.mcK=k;return out}
 
