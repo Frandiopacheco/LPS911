@@ -172,3 +172,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Celdas como fichas de color (borde de 3 px del color del panel + `border-radius`): **Terminado** verde lleno con ✓ blanco, **En curso** ámbar, **Pendiente** gris claro con borde, **No aplica** solo «–». **Sin validar** = la misma ficha en versión clara (sin borde punteado). Celdas que no aplican al ambiente (`.mc.x`) sin rayado.
 - Encabezados más altos (`--nh` 150/190/220 según tamaño) para leer el nombre completo; banda del SC teñida con su color. Tipo de ambiente: el `select` se ve como texto hasta pasar el mouse. % del ambiente con barra (`--p`); totales en 0 % atenuados (`.mxf.z`).
 - Avisos en **una bandeja** `.mxals` con botones `.mxal` (mismos ids: `#mxlog`, `[data-mxv=cat]`, `#mxsmis`, `#mxmap`); ya no hay `.callout.mxun` en la Matriz.
+
+## Plano (`js/matriz-plano.js`, vista `U.mxV='pla'`, oct 2026, decidido con el dueño)
+- Sobre la lámina base del piso (`U.piso`) con las formas de Sectorización (`a.geo[vista]`, `szGeo`) resalta los ambientes según la Matriz **tal cual** (`mxCells`, incluye lo «sin validar»): **Pendiente** rojo, **En curso** ámbar, lo demás sin color (`MXPL_C`). Solo lectura: no escribe nada.
+- Filtro: SC (`U.mxPlSc`; el SC solo los suyos) y **una actividad** (`U.mxPlCat`, por defecto) o **toda la partida** (`'*'`): rojo si alguna actividad del SC está pendiente, si no ámbar si alguna en curso; la etiqueta lleva el número.
+- Se arma una vez (`#mxplmap` con `__plano.ambMap`, el visor no se destruye); lámina = la base con más ambientes dibujados (o `#mxplv`). Lista lateral de pendientes / en curso (clic resalta el ambiente) y aviso de ambientes con pendientes sin forma. `plano.js` vuelve a dibujar también con `U.tab==='mat'` al cargar láminas e imágenes.
+- Prueba: `tests/e2e/matriz-plano.spec.js`. Con el respaldo real (P1, GABEL PINTURA · Segunda mano): 30 pendientes; dibujo ~4 ms.

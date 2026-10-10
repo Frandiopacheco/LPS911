@@ -10,7 +10,7 @@ const mxFV=()=>firebase.firestore.FieldValue;
 const mxErr=e=>toast('No se pudo guardar: '+(e&&e.code||e));
 
 /** pestañas internas de la matriz */
-function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente']].filter(([k])=>!(k==='tipo'&&SCK()))
+function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['pla','Plano'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente']].filter(([k])=>!(k==='tipo'&&SCK()))
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
 /* cabecera en una fila (oct 2026): vistas (y en la Matriz, los indicadores) entre el título y los botones */
 function mxHd(head,mid){const m=`<div class="phm">${mid}</div>`;return head.includes('<div class="pha">')?head.replace('<div class="pha">',m+'<div class="pha">'):head.replace('</header>',m+'</header>')}

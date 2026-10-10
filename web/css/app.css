@@ -3311,3 +3311,19 @@ table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.
 .dpill.mxpp.on{background:var(--warn);color:var(--panel)}
 #grid tr.gh .ghb.ghq{color:var(--accent);background:var(--accent-soft)}
 .dpill.mxpp.off{opacity:.55;border-style:dashed;cursor:help}
+
+/* ===== Matriz › Plano (oct 2026) ===== */
+.mxplf{margin:8px 0}
+.mxplb{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+.mxplmw{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden}
+.mxplmap{height:calc(100vh - 260px);min-height:420px}
+.mxpls{display:flex;flex-direction:column;gap:4px;max-height:calc(100vh - 260px);overflow:auto}
+.mxplt{display:flex;flex-direction:column;gap:2px;padding:4px 2px 8px;font-size:13px}.mxplt span{color:var(--ink2);font-size:12px}
+.mxplg{font:700 11px var(--f-ui);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 0 2px}
+.mxpli{display:flex;align-items:center;gap:2px 6px;flex-wrap:wrap;height:auto;line-height:1.3;text-align:left;border:1px solid var(--line2);background:var(--panel);border-radius:var(--r-ctl);padding:6px 8px;font:inherit;font-size:12.5px;cursor:pointer;min-height:36px}
+.mxpli i{width:10px;height:10px;border-radius:3px;background:var(--c);flex:none}.mxpli b{font:600 11px var(--f-mono);color:var(--muted)}
+.mxpli small{flex-basis:100%;padding-left:16px;color:var(--ink2)}
+.mxpli.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mxplsw{display:inline-block;width:14px;height:14px;border-radius:4px;background:var(--c);vertical-align:-2px;margin-right:4px}.mxplsw.o{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.mxplsel .pad{display:flex;flex-direction:column;gap:4px;font-size:12.5px}.mxplr{display:flex;align-items:center}
+@media (max-width:900px){.mxplb{grid-template-columns:1fr}.mxplmap{height:60vh}.mxpls{max-height:none}}

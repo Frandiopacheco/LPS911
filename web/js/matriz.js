@@ -118,6 +118,7 @@ function renderMat(main){ensureMx();ensureMver();
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
+  if(U.mxV==='pla'){renderMxPla(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEdG();
