@@ -14,6 +14,10 @@ function swBanner(w){let b=$('#swupd');if(b)return;b=document.createElement('div
   later.onclick=()=>b.remove();document.body.appendChild(b)}
 if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol)&&!window.NO_SW){
   navigator.serviceWorker.addEventListener('controllerchange',()=>{if(SWASK)location.reload()});
+  /* el servidor no entregó la página nueva (la copia de prueba pide volver a entrar a Netlify): se avisa en vez de quedarse en la versión guardada */
+  navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};if(m.t!=='nav-bad'||document.getElementById('swauth'))return;if(!(m.s===401||m.s===403||m.k==='opaqueredirect'))return;
+    const b=document.createElement('div');b.className='swupd';b.id='swauth';b.innerHTML=`<span>${window.LPS_ENV==='pruebas'?'Tu sesión de Netlify (copia de prueba) venció: estás viendo una versión guardada.':'No se pudo comprobar la versión nueva del servidor.'}</span><button type="button" class="ib pri">Volver a entrar</button><button type="button" class="ib" aria-label="Cerrar">Más tarde</button>`;
+    const[go,no]=b.querySelectorAll('button');go.onclick=()=>{location.href=location.pathname+'?fresh=1'+location.hash};no.onclick=()=>b.remove();document.body.appendChild(b)});
   addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').then(reg=>{SWREG=reg;
     const watch=w=>{if(!w)return;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)swBanner(w)})};
     if(reg.waiting&&navigator.serviceWorker.controller)swBanner(reg.waiting);
