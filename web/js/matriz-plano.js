@@ -18,6 +18,9 @@ function mxPlState(pid,sc,cat){const cells=mxCells();const cats=cat==='*'?mxPlCa
   for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id)||{};const p=[],c=[];for(const k of cats){const o=C[k];if(!o)continue;if(o.s==='p')p.push(k);else if(o.s==='c')c.push(k)}
     out.set(a.id,{a,s:t.s,k:p.length?'p':c.length?'c':'',p,c})}
   return out}
+/* nombre corto del ambiente para el plano: sin «de/del/la…» ni signos; cada palabra larga a 4 letras («CUARTO DE BASURA» → «CUAR. BASU.») */
+function mxPlShort(n){const STOP=new Set(['de','del','la','el','los','las','y','e','para']);const W=String(n||'').replace(/[()\-–—,.:/]+/g,' ').split(/\s+/).filter(w=>w&&!STOP.has(w.toLowerCase()));
+  let out='';for(const w of W){const t=w.length>6&&!/^\d+$/.test(w)?w.slice(0,4)+'.':w;out+=(out?' ':'')+t;if(out.length>=9)break}return out||String(n||'').slice(0,8)}
 function renderMxPla(main,head){const pid=U.piso;const scs=mxPlScs();
   if(!scs.includes(U.mxPlSc))U.mxPlSc=scs[0]||'';const sc=U.mxPlSc;const cats=sc?mxPlCats(sc):[];
   if(U.mxPlCat!=='*'&&!cats.some(c=>c.id===U.mxPlCat))U.mxPlCat=(cats[0]||{}).id||'';
@@ -40,9 +43,9 @@ function renderMxPla(main,head){const pid=U.piso;const scs=mxPlScs();
   const me_=$('#mxplmsg',main);const mh=msg?`<div class="callout">${msg}</div>`:'';if(me_.innerHTML!==mh)me_.innerHTML=mh;$('#mxplb',main).hidden=!!msg;if(msg)return;
   const ST=mxPlState(pid,sc,all?'*':U.mxPlCat);const L=[...ST.values()];
   const shapes=[];for(const o of L){const g=szGeo(o.a,v);if(!g)continue;const n=o.p.length+o.c.length;
-    shapes.push({id:'a:'+o.a.id,kind:'a',pts:g,label:o.a.code+(all&&n?' · '+n:''),c:o.k?MXPL_C[o.k]:MXPL_C.x,sel:MXPL.sel===o.a.id,dim:!o.k})}
+    shapes.push({id:'a:'+o.a.id,kind:'a',pts:g,label:o.a.code,name:o.a.name+(all&&n?' · '+n:''),short:mxPlShort(o.a.name)+(all&&n?' ·'+n:''),tip:`${o.a.code} ${o.a.name}${n?` · ${o.p.length?o.p.length+' pendiente'+(o.p.length>1?'s':''):''}${o.p.length&&o.c.length?', ':''}${o.c.length?o.c.length+' en curso':''}`:''}`,c:o.k?MXPL_C[o.k]:MXPL_C.x,sel:MXPL.sel===o.a.id,dim:!o.k})}
   /* sin lámina (o aún cargando) ambMap muestra su propio aviso */
-  const base=API.ambMap($('#mxplmap',main),{pid,vista:v,canEdit:false,canUp:false,shapes,draw:null,tmp:null,edit:null,onPick:id=>{MXPL.sel=id&&id.startsWith('a:')?id.slice(2):'';render()}});/* sin lámina igual se muestra la lista */
+  const base=API.ambMap($('#mxplmap',main),{plain:true,pid,vista:v,canEdit:false,canUp:false,shapes,draw:null,tmp:null,edit:null,onPick:id=>{MXPL.sel=id&&id.startsWith('a:')?id.slice(2):'';render()}});/* sin lámina igual se muestra la lista */
   /* resumen y listas */
   const pen=L.filter(o=>o.k==='p'),cur=L.filter(o=>o.k==='c');const nog=base?L.filter(o=>o.k&&!szGeo(o.a,v)):[];
   const nm=id=>esc((MX.cat.get(id)||{}).name||'');
