@@ -28,7 +28,7 @@ function liveLine(d,aid){const lv=liveOf(d,aid);if(!lv||!(lv.log||[]).length)ret
 /* fotos de la actividad ese día (detención, cierre del capataz/SC o registro del ingeniero): se ven en la ficha y se amplían al tocarlas */
 function actPhotos(d,aid){const lv=liveOf(d,aid);const r=recOf(d,aid);const ids=[...new Set([...((lv&&lv.photos)||[]),...((r&&r.photos)||[])])];if(!ids.length)return'';
   return`<div class="kphs">${ids.map(id=>{if(typeof loadFoto==='function')loadFoto(id);const src=FOTO.get(id)||'';return`<img data-ph="${id}" src="${src}" alt="Foto"${src?'':' style="opacity:.3"'}>`}).join('')}</div>`}
-function liveWrite(d,aid,patch,ev,extra){if(typeof cliOn==='function'&&cliOn())return;const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
+function liveWrite(d,aid,patch,ev,extra){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
   const e={...ev,t:NOW(),by:me.email,n:me.name||''};
   const doc={date:d,actId:aid,pisoId:pisoOfAct(aid),sc:x.sc,...patch,log:[...(cur.log||[]),e].slice(-40),...(extra||{})};
   LIVE.set(id,{...cur,...doc,id,_pend:true});const FVs=firebase.firestore.FieldValue;

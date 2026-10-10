@@ -142,6 +142,8 @@ function autoF(X,ws,hr){if(!ws['!ref'])return;const R=X.utils.decode_range(ws['!
 async function exportXlsx(){
   const btn=$('#bexport');btn.disabled=true;btn.textContent='Generando…';let unswap=null;
   const CLV=U.tab==='look'&&U.cliv&&canCli();let cliLab='';
+  /* el PPC del cliente se calcula antes de cambiar S.act (con el interno, igual que en Indicadores) */
+  const CLPC=CLV?cliPpcAoa():null;
   try{await loadXlsx();const vd0=!CLV&&U.tab==='look'&&U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;if(vd0&&vd0.ready)unswap=swapVer(vd0);
     if(CLV){const cv=U.cliVer&&CLVD.get(U.cliVer);if(U.cliVer&&!(cv&&cv.ready))throw new Error('La versión emitida aún se está cargando. Intenta en un momento.');
       if(cv){unswap=swapVer(cv);cliLab=(CLX.get(U.cliVer)||{}).label||''}else{const o=S.act;S.act=cliActs();unswap=()=>{S.act=o};cliLab='Versión cliente al '+fmtD(todayIso())}}const X=window.XLSX;const p=P();const days=winDays();const nd=days.length;
@@ -185,7 +187,7 @@ async function exportXlsx(){
     ws['!freeze']={xSplit:10,ySplit:hr+3};ws['!views']=[{state:'frozen',xSplit:10,ySplit:hr+3}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lookahead');
     if(CLV){/* al cliente solo va su programa y su PPC: nada del plan interno, restricciones ni avance diario */
-      const pc=cliPpcAoa();const wsP=X.utils.aoa_to_sheet(pc.sum);wsP['!cols']=pc.cols;pc.hdr.forEach(r0=>{for(let c=0;c<pc.sum[r0].length;c++){const k=X.utils.encode_cell({r:r0,c});if(wsP[k])wsP[k].s=hs}});X.utils.book_append_sheet(wb,wsP,'PPC');
+      const pc=CLPC;const wsP=X.utils.aoa_to_sheet(pc.sum);wsP['!cols']=pc.cols;pc.hdr.forEach(r0=>{for(let c=0;c<pc.sum[r0].length;c++){const k=X.utils.encode_cell({r:r0,c});if(wsP[k])wsP[k].s=hs}});X.utils.book_append_sheet(wb,wsP,'PPC');
       const lg=[['SUBCONTRATISTA','PARTIDA']];[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lg.push([c.name,c.partida||'']));const ws4=X.utils.aoa_to_sheet(lg);ws4['!cols']=[{wch:18},{wch:26}];X.utils.book_append_sheet(wb,ws4,'Leyenda');
       const buf=X.write(wb,{type:'array',bookType:'xlsx'});
       saveBlob(`${(p.code||'LPS')}_Lookahead_CLIENTE_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${U.week}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));return}

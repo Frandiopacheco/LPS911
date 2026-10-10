@@ -138,3 +138,86 @@ test('cambios de otros en el interno llegan a la pestaña Cliente sin mezclar la
   expect(await page.evaluate(() => ({ cli: !!S.act._cli, d: S.act.get('e0').days, n: S.act.get('t1').name }))).toEqual({ cli: false, d: e0.days, n: 'Tarrajeo frotachado' });
   noErrors(errors, 'datos que llegan');
 });
+
+/* ---------- regresiones de la auditoría (10/10) ---------- */
+test('A1: editar en el Lookahead y abrir Cliente enseguida no deja la capa como interno', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [['cli', 'buf', { all: 2 }]] });
+  const e0 = await dbAct(page, 'e0');
+  await page.evaluate(() => { const x = S.act.get('t1'); apply([op('acts', 't1', { ...x, name: 'Tarrajeo rápido' })], 'cambio'); goTab('cli'); });
+  await page.waitForFunction(() => CLIB && CLIB.all === 2);
+  await page.waitForTimeout(2200); // pasa el tiempo de la cola de escrituras (qkFlush)
+  expect(await page.evaluate(() => ({ base: !!actInt()._cli, d: actInt().get('e0').days }))).toEqual({ base: false, d: e0.days });
+  await openTab(page, 'look');
+  expect(await page.evaluate(() => ({ cli: !!S.act._cli, d: S.act.get('e0').days, n: S.act.get('t1').name }))).toEqual({ cli: false, d: e0.days, n: 'Tarrajeo rápido' });
+  noErrors(errors, 'A1');
+});
+
+test('A2/A11: deshacer y rehacer en Cliente (pintar un día, fila propia, eliminarla) vuelven al estado exacto', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  await abrirCliente(page);
+  await page.locator('tr[data-a="t0"] td.d:not(.on)').first().click();
+  await expect.poll(async () => !!(await clia(page, 't0'))).toBe(true);
+  await page.click('#bundo');
+  await expect.poll(() => clia(page, 't0')).toBe(null);
+  // pintar y borrar el mismo día no deja la fila fijada
+  const td = page.locator('tr[data-a="t0"] td.d:not(.on)').first();
+  const d = await td.getAttribute('data-d');
+  await td.click();
+  await page.locator(`tr[data-a="t0"] td.d[data-d="${d}"]`).click();
+  await expect.poll(() => clia(page, 't0')).toBe(null);
+  // fila propia: crear, deshacer, rehacer
+  await page.click('[data-ambmenu="a1"]');
+  await page.click('#pop [data-do="act"]');
+  const own = await page.evaluate(() => [...CLIA.entries()].find(([, o]) => o.own)?.[0]);
+  await page.click('#bundo');
+  await expect.poll(() => clia(page, own)).toBe(null);
+  await page.click('#bredo');
+  await expect.poll(async () => (await clia(page, own))?.own).toBe(true);
+  await expect(page.locator(`tr[data-a="${own}"]`)).toHaveCount(1);
+  // eliminarla y deshacer
+  await page.click(`[data-actmenu="${own}"]`);
+  await page.click('#pop [data-do="del"]');
+  await expect(page.locator(`tr[data-a="${own}"]`)).toHaveCount(0);
+  await page.click('#bundo');
+  await expect(page.locator(`tr[data-a="${own}"]`)).toHaveCount(1);
+  await expect(page.locator('#toast')).not.toContainText('Deshecho en parte');
+  noErrors(errors, 'A2');
+});
+
+test('A3: con una versión emitida a la vista, deshacer y mover no tocan el interno', async ({ page }) => {
+  page.on('dialog', dg => dg.accept());
+  const errors = await openApp(page, { tab: 'look' });
+  // un cambio interno en la pila del Lookahead
+  await page.evaluate(() => { const x = S.act.get('t1'); apply([op('acts', 't1', { ...x, name: 'Cambio interno' })], 'interno'); });
+  await expect.poll(async () => (await dbAct(page, 't1')).name).toBe('Cambio interno');
+  await abrirCliente(page);
+  await page.click('#cliban [data-cb="emit"]');
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('clidx')).length)).toBe(1);
+  const id = await page.evaluate(() => Object.keys(window.__dbAll('clidx'))[0]);
+  await page.selectOption('#cliver', id);
+  await page.waitForFunction(id => CLVD.get(id) && CLVD.get(id).ready, id);
+  const e0 = await dbAct(page, 'e0');
+  await page.keyboard.press('Control+z');
+  await page.evaluate(() => { const x = S.act.get('e0'); apply([op('acts', 'e0', { ...x, name: 'no debe guardarse' })], 'x'); });
+  await page.waitForTimeout(300);
+  expect((await dbAct(page, 't1')).name).toBe('Cambio interno');
+  expect(await dbAct(page, 'e0')).toEqual(e0);
+  noErrors(errors, 'A3');
+});
+
+test('A7: el PPC del cliente de una semana no cambia según la semana que se mira', async ({ page }) => {
+  const sn = { secs: { s1: { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 } }, ambs: { a1: { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0 } },
+    acts: { i0: { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', days: ['2026-09-30'], order: 10 } } };
+  const errors = await openApp(page, { tab: 'look', extra: [
+    ['clidx', 'c0', { label: 'S58', date: '2026-09-26', ts: 1, forW: 58, pisos: { p1: { code: 'P1', name: 'Primer piso' } } }],
+    ['cliver', 'c0__p1', { piso: { code: 'P1', name: 'Primer piso', order: 1 }, json: JSON.stringify(sn) }]] });
+  const r = await page.evaluate(async () => {
+    ensureCli(); ensureDaily('2026-07-01');
+    await new Promise(ok => { const t = setInterval(() => { if (CLVD.get('c0') && CLVD.get('c0').ready) { clearInterval(t); ok(); } }, 50); });
+    const at = w => { const u = U.week; U.week = w; const o = cliPpc(new Set(['p1'])).W.find(x => x.w === 58); U.week = u; return o && [o.n, o.ok]; };
+    return [at(58), at(60), at(63)];
+  });
+  expect(r[0]).toEqual(r[1]);
+  expect(r[0]).toEqual(r[2]);
+  noErrors(errors, 'A7');
+});

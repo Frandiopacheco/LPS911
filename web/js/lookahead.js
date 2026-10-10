@@ -104,7 +104,8 @@ function buildLookShell(main){
 }
 let gridRows=null,gridHead='',lkQTimer=0;
 function renderLook(main){if(typeof ensureMx==='function')ensureMx();
-  if(isMob()&&!U.lookFull){main.dataset.built='';renderLookMob(main);return}
+  /* la pestaña Cliente siempre con la tabla (la vista de celular no tiene la capa del cliente) */
+  if(isMob()&&!U.lookFull&&!U.cliv){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
   if(!main.dataset.built)buildLookShell(main);
   renderVerBar();ensureCli();
@@ -234,7 +235,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
     const pc=U.collapsed.includes(p.id);
     rows.push(new LkRow('p:'+p.id,()=>`<tr class="piso" data-piso-row="${p.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${pc?' cl':''}" data-tg="${p.id}" aria-label="Plegar piso">&#9662;</button><span class="p-code">${esc(p.code)}</span><input class="ci" data-piso="${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Nombre del piso"${roS}><span class="meta">${blocks.length} sect. · ${pAmb} amb. · ${pAct} act.</span>${CI?cliBufBtn('p',p.id):''}${canWrite&&!CV?`<button class="ib" data-addsec="${p.id}">+ Sector</button><button class="ab" data-pisomenu="${p.id}" aria-label="Opciones del piso" title="Opciones del piso">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
     if(pc)continue;
-    if(!blocks.length)rows.push(new LkRow('pe:'+p.id,()=>`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`));
+    if(!blocks.length)rows.push(new LkRow('pe:'+p.id,()=>`<tr><td colspan="${11+nd}"><div class="empty" style="padding:18px 16px;text-align:left">Este piso aún no tiene sectores. ${canWrite&&!CV?`<button class="ib" data-addsec="${p.id}">+ Agregar sector</button>`:''}</div></td></tr>`));
     for(const{s,list,nAmb,nAct}of blocks){
       const coll=U.collapsed.includes(s.id);
       rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${roS}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite&&!CV?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
@@ -261,7 +262,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;const hideDone=!
           const prn=pr.get(x.id);const lb=typeof libOf==='function'?libOf(x.id):null;const lst=lb?lb.st:'';const mxc=typeof mxRowCat==='function'?mxRowCat(x):null;
           const mxw=typeof mxRowWarn==='function'?mxRowWarn(x):null;const mxd=false; /* sin «✓?»: el Lookahead solo recomienda desde la Matriz (10/10) */
           const nb=(x.obs?1:0)+((prn||isNew)?1:0)+(lst?1:0)+(mxw||mxd?1:0)+(mxc?1:0);
-          h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
+          h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${!CV&&typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${!CV&&typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
           h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=QM;
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
@@ -625,7 +626,7 @@ function endPaint(){
 function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;if(cliOn()){toast(`“${x.name}” está terminada en obra (${fmtD(dn)}): eso no se cambia desde la versión cliente.`);return}
   if(!canDaily){toast(`“${x.name}” se marcó terminada el ${fmtD(dn)}. El ingeniero de producción o de campo puede reabrirla.`);return}
   reopenDone(x.id)}
-function obsMenu(btn,aid){if(verRO())return;const x=S.act.get(aid);if(!x||!x.obs)return;
+function obsMenu(btn,aid){if(verRO())return;if(U.cliv){toast('La observación es del lookahead interno: resuélvela desde el Lookahead.');return}const x=S.act.get(aid);if(!x||!x.obs)return;
   const sug=(x.obsSug||[]).filter(id=>S.con.has(id)&&id!==x.sc);
   openPop(btn,`<div class="ph">Observación al importar</div><div class="ptx">${esc(x.obs)}</div>${canWrite?`${sug.map(id=>`<button data-do="sc" data-sc="${id}">Cambiar a ${esc(conOf(id).name)}</button>`).join('')}<button data-do="ok">Está bien así (quitar aviso)</button>`:''}`,{
     sc:ds=>{const y=S.act.get(aid);if(!y)return;const n={...y,sc:ds.sc};delete n.obs;delete n.obsSug;apply([op('acts',aid,n)],'Subcontratista cambiado a '+conOf(ds.sc).name)},
@@ -762,7 +763,7 @@ function pasteActs(aid,lines){const x=S.act.get(aid);if(!x)return;const sib=sibl
   const step=nxt?(nxt.order-x.order)/(items.length+1):10;let lastSc=f.sc||x.sc;
   items.slice(1).forEach((it,k)=>{const id=uid('act')+k;lastSc=it.sc||lastSc;ops.push(op('acts',id,{id,ambId:x.ambId,sc:lastSc,name:it.name,und:'',metrado:null,days:[],order:x.order+step*(k+1)}))});
   apply(ops,`${items.length} actividades pegadas`)}
-function pasteAmbs(ambId,lines){const a=S.amb.get(ambId);if(!a)return;const sib=siblings('ambientes','sectorId',a.sectorId);const i=sib.findIndex(z=>z.id===a.id);const nxt=sib[i+1];
+function pasteAmbs(ambId,lines){if(U.cliv){toast('En la versión cliente los ambientes no se cambian: vienen del lookahead interno.');return}const a=S.amb.get(ambId);if(!a)return;const sib=siblings('ambientes','sectorId',a.sectorId);const i=sib.findIndex(z=>z.id===a.id);const nxt=sib[i+1];
   const s=S.sec.get(a.sectorId);let n=sib.length;const parse=l=>{const c=l.split('\t').map(v=>v.trim()).filter(Boolean);return c.length>=2?{code:c[0],name:c.slice(1).join(' ')}:{code:null,name:c.join(' ')}};
   const items=lines.map(parse);const ops=[op('ambientes',a.id,{...a,name:items[0].name.toUpperCase(),code:items[0].code||a.code})];
   const step=nxt?(nxt.order-a.order)/(items.length+1):10;const firstSc=(siblings('acts','ambId',a.id)[0]||{}).sc||([...S.con.keys()][0]||'');

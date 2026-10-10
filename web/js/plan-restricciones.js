@@ -191,9 +191,9 @@ function resPatch(n,pid,upd){const w=S.wk.get(wkId(n,pid));if(!w)return;const FP
      en la cola del equipo y no solo en la memoria de la página */
   bgWrite(dbCall(()=>fcol('weeks').doc(wkId(n,pid)).update(...args)))}
 function setRes(n,pid,id,val){resPatch(n,pid,{[id]:val})}
-/* Corte semanal: la semana n se congela sola en el mismo corte de las propuestas de SC (Configuración › Proyecto; por
-   defecto el sábado 13:00 de Lima antes del lunes). Lo hace el servidor (tarea congelarSemana) si nadie la congeló antes. */
-function frzCutTxt(n){const t=propCut(n);const d=ldt(t);return`${DOW_N[pd(d).getUTCDay()]} ${fmtD(d)}, ${hhmm(t)}`}
+/* Corte semanal: la semana n se congela sola en el corte del congelado (Configuración › Proyecto; si no se configuró, el de las
+   propuestas de SC: por defecto el sábado 13:00 de Lima antes del lunes). Lo hace el servidor (tarea congelarSemana) si nadie la congeló antes. */
+function frzCutTxt(n){const t=frzCut(n);const d=ldt(t);return`${DOW_N[pd(d).getUTCDay()]} ${fmtD(d)}, ${hhmm(t)}`}
 /* Foto del lookahead al congelar (snap = días de todas las actividades del piso; con ella el Lookahead marca «cambios contra lo
    congelado»). Va en wsnap/<semana>_<piso> {snap, n, pisoId, t}, no dentro de weeks: weeks lo descarga todo el mundo al entrar y la
    foto crecía con cada semana (auditoría de datos M1). Datos antiguos: weeks.snap (lo mueve el servidor, migración en congelarSemana).

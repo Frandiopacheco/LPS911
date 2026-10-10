@@ -122,11 +122,17 @@ function propCutTs(p, n) {
   const back = ((1 - d) + 7) % 7 || 7;
   return Date.parse(addD(weekStart(p, n), -back) + 'T' + hh + ':00Z') + LIMA;
 }
+/* Corte del congelado del plan semanal (Configuración › Proyecto, frzCutDow/frzCutHH; oct 2026 separado del de las propuestas:
+   si no se configuró, es el mismo de las propuestas de SC) */
+function frzCutTs(p, n) {
+  const has = p && p.frzCutDow != null && p.frzCutDow !== '' && /^\d\d:\d\d$/.test(p.frzCutHH || '');
+  return has ? propCutTs({ ...p, propCutDow: p.frzCutDow, propCutHH: p.frzCutHH }, n) : propCutTs(p, n);
+}
 /* Semanas que el servidor debe congelar ahora: la que viene, desde su corte hasta su lunes (inclusive, por si la tarea se atrasó) */
 function weeksToFreeze(p, now = Date.now()) {
   if (!p || !p.refDate) return [];
   const today = limaToday(now); const w0 = weekOf(p, today);
-  return [w0, w0 + 1].filter(n => now >= propCutTs(p, n) && today <= weekStart(p, n));
+  return [w0, w0 + 1].filter(n => now >= frzCutTs(p, n) && today <= weekStart(p, n));
 }
 /* Fecha de terminada por actividad (igual que la página: índice, registros con «terminada» y cierres del capataz; respeta reaperturas) */
 /* acts (opcional, Map o {id: act}): el cierre solo cuenta si lo declaró la partida de la actividad (como liveOwn de la página);
@@ -555,8 +561,9 @@ function buildCliVersion(data, n, now = Date.now()) {
   const live = m => [...m.values()].filter(x => !x.arch);
   const P = live(pisos).sort((a, b) => (a.order || 0) - (b.order || 0));
   if (!P.length) return null;
-  const pids = new Set(P.map(p => p.id)); const first = P[0].id;
-  const pisoOfSec = s => (s && s.pisoId && pids.has(s.pisoId) ? s.pisoId : first);
+  const first = P[0].id;
+  /* como pisoOfSecObj de la página: un sector de un piso archivado sigue en ese piso (y no se emite) */
+  const pisoOfSec = s => (s && s.pisoId && pisos.has(s.pisoId) ? s.pisoId : first);
   const X = cliCompose(data);
   const today = limaToday(now);
   const id = 'auto-c' + n;
@@ -582,6 +589,6 @@ function cliDue(p, versions, now = Date.now()) {
 
 module.exports = {
   CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };
