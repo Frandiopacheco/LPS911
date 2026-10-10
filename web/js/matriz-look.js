@@ -199,7 +199,7 @@ function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cel
    Lo pendiente de la Matriz sin días de hoy en adelante sale como fila fantasma en su ambiente («Faltan programar» en la barra
    o el chip «+N por programar» del ambiente). Tocar un día la programa: si ya tiene fila (oculta por vencida) le suma ese día;
    si no, crea la fila con ese día. No se guarda nada hasta que se programa. */
-const GHT=new Set(); /* ambientes con lo contrario del interruptor general (abiertos con el interruptor apagado o cerrados con él encendido) */
+const GHT=new Set(); /* ambientes plegados a mano con el chip (solo con el botón «Faltan programar» encendido; apagado no se ve nada) */
 /* caché: se rehace solo si cambian los datos (MX.v, DV, DONEV), el día, los pisos a la vista, el filtro de SC o el rol (auditoría 10/10) */
 const LKGHC={k:'',v:null};
 function lkGhosts(){if(typeof mxPendList!=='function')return null;
