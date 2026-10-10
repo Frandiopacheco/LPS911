@@ -53,3 +53,30 @@ test('Restricciones: el área de soporte registra su compromiso y sus observacio
   await expect.poll(() => page.evaluate(() => window.__dbGet('restr', 'rC').obsAs)).toBe('Se pidió al proyectista');
   noErrors(errors, 'compromiso AS');
 });
+
+test('Excel de la versión cliente: mismas hojas y formato que el interno, con el PPC del cliente', async ({ page }) => {
+  page.on('dialog', d => d.accept());
+  // versión emitida para la semana 58 (la que se ve): e0 con un día en la semana; i1 oculta al cliente con una restricción
+  const sn = { secs: { s1: { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 } }, ambs: { a1: { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0 } },
+    acts: { e0: { ambId: 'a1', sc: 'c2', name: 'Entubado para el cliente', und: 'ml', days: [HOY], order: 20 } } };
+  const errors = await openApp(page, { tab: 'look', extra: [META, ...LAMINA, ...AMB, ['fotos', 'logo_e', { data: LOGO }], ['fotos', 'logo_c', { data: LOGO }],
+    ['clidx', 'c0', { label: 'Semana 58', date: '2026-09-26', ts: 1, forW: 58, pisos: { p1: { code: 'P1', name: 'Primer piso' } } }],
+    ['cliver', 'c0__p1', { piso: { code: 'P1', name: 'Primer piso', order: 1 }, json: JSON.stringify(sn) }],
+    ['clia', 'i1', { hide: true, h: {} }],
+    ['restr', 'rH', { actId: 'i1', pisoId: 'p1', sc: 'c1', desc: 'Restricción de fila oculta', type: 'Materiales', status: 'pend', created: HOY, need: MANANA }]] });
+  await conExcel(page);
+  await page.click('#tabs button[data-tab="cli"]');
+  await expect(page.locator('#cliban')).toContainText('Versión cliente');
+  await page.waitForFunction(() => CLX.has('c0'));
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#cliban [data-cb="xls"]')]);
+  expect(dl.suggestedFilename()).toContain('CLIENTE');
+  const wb = new ExcelJS.Workbook();await wb.xlsx.readFile(await dl.path());
+  expect(wb.worksheets.map(w => w.name).slice(0, 3)).toEqual(['Lookahead', 'PPC semanal', 'PPC del SC']);
+  expect(wb.worksheets.map(w => w.name)).toContain('AR');
+  expect(wb.worksheets.map(w => w.name)).toContain('Sectorización');
+  for (const n of ['Lookahead', 'PPC semanal', 'AR']) expect(wb.getWorksheet(n).getImages().length, n).toBe(2);
+  const txt = ws => { const L = []; ws.eachRow(r => r.eachCell(c => L.push(String(c.value && c.value.richText ? c.value.richText.map(t => t.text).join('') : c.value ?? '')))); return L.join(' | '); };
+  expect(txt(wb.getWorksheet('PPC semanal'))).toContain('Entubado para el cliente');
+  expect(txt(wb.getWorksheet('AR'))).not.toContain('Restricción de fila oculta');
+  noErrors(errors, 'excel cliente');
+});
