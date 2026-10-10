@@ -195,29 +195,34 @@ function mxPendList(){if(!MX.ld.cat||!MX.ld.amb||!MX.cat.size)return[];const cel
   const ro=r=>{const os=r.o.acts.map(id=>S.act.get(id)).filter(Boolean).map(x=>x.order||0);return os.length?[0,Math.min(...os)]:[1,r.c.ord||0]};
   return L.sort((p,q)=>{const d=(pi.get(pisoOfAmb(p.a.id))??99)-(pi.get(pisoOfAmb(q.a.id))??99)||so(p.a.sectorId)-so(q.a.sectorId)||(p.a.sectorId||'').localeCompare(q.a.sectorId||'')||(p.a.order||0)-(q.a.order||0)||(p.a.code||'').localeCompare(q.a.code||'',undefined,{numeric:true});if(d)return d;
     const x=ro(p),y=ro(q);return x[0]-y[0]||x[1]-y[1]||p.c.name.localeCompare(q.c.name)})}
-function mxPendPill(){const n=mxPendList().length;return n?`<button class="dpill mxpp" title="Actividades pendientes en la matriz que no tienen días en el lookahead de hoy en adelante">${n} pendiente${n>1?'s':''} sin programar · Ver</button>`:''}
-function mxPendDlg(){const L=mxPendList();if(!L.length)return;const can=mxEd()||PM();
-  const by=new Map();L.forEach((r,i)=>{const k=r.a.id;if(!by.has(k))by.set(k,[]);by.get(k).push({...r,i})});
-  lqModal(`<div class="lqtop"><b>Pendientes sin programar</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
-   <p class="note">En la matriz están <b>pendientes</b> y no tienen días en el lookahead de hoy en adelante${U.piso?' (este piso)':''}${SCK()?' (tu partida)':U.sc?' (subcontratistas del filtro)':''}. ${can?'Marca las que quieras agregar: se crean en el lookahead sin días, para que les pongas fecha.':''}</p>
-   <div class="fbar"><input class="tin mxq" id="mxpq2" type="search" placeholder="Buscar ambiente, actividad o subcontratista" aria-label="Buscar en pendientes sin programar">${can?'<label><input type="checkbox" id="mxpall"> Todas</label>':''}<span class="fsp"></span><span class="note" id="mxpvis">${L.length} pendiente${L.length===1?'':'s'}</span>${can?'<span class="note" id="mxpcnt">0 marcadas</span>':''}</div>
-   <div class="mxul">${[...by.values()].map(rs=>`<div class="mxpgw" data-q="${esc(fold(rs[0].a.code+' '+rs[0].a.name+' '+((S.sec.get(rs[0].a.sectorId)||{}).name||'')))}"><div class="mxpg"><button type="button" class="lnkb" data-mxpamb="${esc(rs[0].a.id)}" title="Ir a este ambiente en el lookahead"><b>${esc(rs[0].a.code)} ${esc(rs[0].a.name)}</b> ↗</button></div>${rs.map(r=>`<div class="mxpr" data-q="${esc(fold(r.c.name+' '+conOf(r.c.sc).name))}"><label class="mxur">${can?`<input type="checkbox" data-mxp="${r.i}">`:''}<span><span><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span>${esc(r.c.name)}</span><small>${esc(conOf(r.c.sc).name)} · ${r.o.sug?'del tipo de ambiente':'marcada pendiente'}${r.o.acts.length?' · tuvo días antes':''}</small></span></label>
-     ${r.o.acts.length?`<button type="button" class="ib" data-mxpgo="${r.i}" title="Ir a su fila en el lookahead para ponerle fecha">Ver fila ↗</button>`:can?`<button type="button" class="ib" data-mxpadd="${r.i}" title="La agrega a este ambiente sin días y te lleva a la fila para ponerle fecha">+ Agregar e ir ↗</button>`:''}</div>`).join('')}</div>`).join('')}<p class="note" id="mxpnone" hidden>Nada coincide con la búsqueda.</p></div>
-   <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button>${can?'<button class="ib pri" id="mxpok">Agregar al lookahead</button>':''}</div>`,
-   e=>{const ga=e.target.closest('[data-mxpamb]');if(ga){lqClose();mxGoAmb(ga.dataset.mxpamb);return}
-     const gv=e.target.closest('[data-mxpgo]');if(gv){const r=L[+gv.dataset.mxpgo];const id=r.o.acts.find(i=>S.act.has(i));lqClose();if(id)gotoAct(id);else mxGoAmb(r.a.id);return}
-     const ad=e.target.closest('[data-mxpadd]');const one=ad?[L[+ad.dataset.mxpadd]]:null;
-     if(!one&&!e.target.closest('#mxpok'))return;const sel=one||[...document.querySelectorAll('[data-mxp]:checked')].map(c=>L[+c.dataset.mxp]);if(!sel.length){toast('Marca al menos una.');return}
-     const ops=[];const last=new Map();for(const r of sel){const sib=[...S.act.values()].filter(x=>x.ambId===r.a.id);let o=last.get(r.a.id);if(o==null)o=sib.length?Math.max(...sib.map(x=>x.order||0)):0;o+=10;last.set(r.a.id,o);
-       const id=uid('act');ops.push(op('acts',id,{id,ambId:r.a.id,sc:r.c.sc,name:r.c.name,und:'',metrado:null,days:[],order:o}))}
-     lqClose();apply(ops,`${ops.length} ${ops.length===1?'actividad agregada':'actividades agregadas'} al lookahead (sin días)`);
-     /* te lleva a la (primera) fila nueva para ponerle fecha */
-     const first=ops[0]&&ops[0].id;if(first)setTimeout(()=>{if(S.act.has(first))gotoAct(first)},60)},
-   e=>{if(e.target.id==='mxpall')document.querySelectorAll('.mxpr:not([hidden]) [data-mxp]').forEach(c=>c.checked=e.target.checked);const n=document.querySelectorAll('[data-mxp]:checked').length;const el=$('#mxpcnt');if(el)el.textContent=n+' marcadas'});
-  /* buscador: varias palabras; coincide con el ambiente (código, nombre, sector) o con la actividad y su SC */
-  const q=$('#mxpq2');if(q){q.oninput=()=>{const W=fold(q.value).trim().split(/\s+/).filter(Boolean);let vis=0;
-    document.querySelectorAll('#lqm .mxpgw').forEach(g=>{const ga=g.dataset.q;let any=false;g.querySelectorAll('.mxpr').forEach(r=>{const t=ga+' '+r.dataset.q;const ok=W.every(w=>t.includes(w));r.hidden=!ok;if(ok){any=true;vis++}});g.hidden=!any});
-    const v=$('#mxpvis');if(v)v.textContent=W.length?`${vis} de ${L.length}`:`${L.length} pendiente${L.length===1?'':'s'}`;const no=$('#mxpnone');if(no)no.hidden=vis>0;const all=$('#mxpall');if(all)all.checked=false};setTimeout(()=>q.focus(),50)}}
+/* ---------- Faltan programar dentro del Lookahead (oct 2026, reemplaza la lista aparte) ----------
+   Lo pendiente de la Matriz sin días de hoy en adelante sale como fila fantasma en su ambiente («Faltan programar» en la barra
+   o el chip «+N por programar» del ambiente). Tocar un día la programa: si ya tiene fila (oculta por vencida) le suma ese día;
+   si no, crea la fila con ese día. No se guarda nada hasta que se programa. */
+const GHT=new Set(); /* ambientes con lo contrario del interruptor general (abiertos con el interruptor apagado o cerrados con él encendido) */
+function lkGhosts(){if(typeof mxPendList!=='function')return null;const L=mxPendList();if(!L.length)return null;const m=new Map();
+  for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);m.get(r.a.id).push({c:r.c,o:r.o,rows:r.o.acts.filter(id=>S.act.has(id))})}return m}
+function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
+  let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.rows.length?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb" title="${g.rows.length?'Tuvo días antes: toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.rows.length?'Reprog.':'Falta'}</span></td>
+    <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
+  for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&!di.past?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
+  return h+'</tr>'}
+function lkGhostSc(c){const L=mxScsOf(c);if(PM()){const m=L.find(s=>myScsI().includes(s));if(m)return m}return c.sc}
+function lkGhostDay(key,d){if(!d||!(canWrite||PM())||verRO())return;const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;
+  if(d<todayIso()){toast('Ese día ya pasó: programa desde hoy en adelante.');return}
+  const rows=[...S.act.values()].filter(x=>x.ambId===amb&&mxCatOf(x)===cid);
+  if(rows.length){const x=rows.sort((p,q)=>((q.days||[]).slice(-1)[0]||'').localeCompare((p.days||[]).slice(-1)[0]||'')||(q.order||0)-(p.order||0))[0];
+    apply([op('acts',x.id,{...x,days:[...new Set([...(x.days||[]),d])].sort()})],`«${x.name}» reprogramada en ${a.code} el ${fmtD(d)}`);return}
+  const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
+  apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[d],order})],`«${c.name}» programada en ${a.code} el ${fmtD(d)}`)}
+function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;const ed=mxEd();
+  openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">La Matriz la da como pendiente y no tiene días de hoy en adelante. Toca un día de la fila para programarla.</div>
+   <button data-do="add">Agregar al ambiente sin días</button>${ed?'<button data-do="na">No aplica en este ambiente</button>':''}<button data-do="mat">Ver en la Matriz</button>`,
+   {add:()=>{const sib=[...S.act.values()].filter(x=>x.ambId===amb);const order=sib.length?Math.max(...sib.map(x=>x.order||0))+10:10;const id=uid('act');
+      apply([op('acts',id,{id,ambId:amb,sc:lkGhostSc(c),name:c.name,und:'',metrado:null,days:[],order})],`«${c.name}» agregada a ${a.code} (sin días)`)},
+    na:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'n'}]]),`${c.name}: no aplica en ${a.code}`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
+    mat:()=>mxGoCell(amb,cid)})}
 
 /* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
 function mxGoAmb(amb){const sib=[...S.act.values()].filter(x=>x.ambId===amb).sort((a,b)=>(a.order||0)-(b.order||0));if(sib.length){gotoAct(sib[0].id);return}

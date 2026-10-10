@@ -38,54 +38,44 @@ test('lookahead: aviso al programar un día nuevo en una fila terminada', async 
   noErrors(errors, 'aviso al programar');
 });
 
-test('lookahead: «pendientes sin programar» lista lo pendiente de la matriz y lo agrega sin días; la matriz no cambia', async ({ page }) => {
+/* faltan programar: filas fantasma dentro de cada ambiente (reemplazan la lista aparte, oct 2026) */
+const gh = page => page.locator('#grid tr[data-gh="a3|k3"]');
+test('faltan programar: el interruptor muestra la fila fantasma y tocar un día la programa', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: CAT });
-  await page.evaluate(() => { U.piso = ''; render(); });
-  await expect(page.locator('#fmxp')).toContainText('1 pendiente sin programar');
+  await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
+  await expect(page.locator('#fmxp')).toContainText('Faltan programar 1');
+  await expect(gh(page)).toHaveCount(0);
   await page.click('#fmxp button');
-  await expect(page.locator('#lqm')).toContainText('Pintura');
-  await page.check('[data-mxp="0"]');
-  await page.click('#mxpok');
-  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3' && x.sc === 'c3' && x.days.length === 0).length)).toBe(1);
-  // sigue sin días: el aviso continúa hasta que se programe
-  await expect(page.locator('#fmxp')).toContainText('1 pendiente');
-  // la matriz queda como antes: sin recuadros ni filtro de alertas
-  await page.evaluate(() => goTab('mat'));
-  await expect(page.locator('#mxt')).toBeVisible();
-  await expect(page.locator('[data-mxf]')).toHaveCount(0);
-  await expect(page.locator('.tile', { hasText: 'aún programado' })).toHaveCount(0);
-  noErrors(errors, 'pendientes sin programar');
+  await expect(gh(page)).toContainText('Pintura');
+  await expect(gh(page)).toContainText('Falta');
+  // los días pasados no se pueden tocar
+  await expect(gh(page).locator('td.d[data-d="2026-09-30"]')).toHaveCount(0);
+  await gh(page).locator('td.d[data-d="2026-10-05"]').click();
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3' && x.sc === 'c3').map(x => x.days))).toEqual([['2026-10-05']]);
+  await expect(gh(page)).toHaveCount(0);
+  await expect(page.locator('#fmxp button')).toHaveCount(0);
+  // la matriz no cambia
+  expect(await page.evaluate(() => (__dbGet('mamb', 'a3').c || {}).k3)).toBeUndefined();
+  noErrors(errors, 'fila fantasma');
 });
 
-test('pendientes sin programar: «+ Agregar e ir» crea la fila y lleva a ella; el ambiente lleva al lookahead', async ({ page }) => {
+test('faltan programar: el chip del ambiente abre solo ese ambiente; ⋮ agrega sin días o marca «No aplica»', async ({ page }) => {
+  page.on('dialog', d => d.accept());
   const errors = await openApp(page, { tab: 'look', extra: CAT });
-  await page.evaluate(() => { U.piso = ''; render(); });
-  await page.click('#fmxp button');
-  await page.click('[data-mxpadd="0"]');
-  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3').length)).toBe(1);
-  const id = await page.evaluate(() => Object.entries(__dbAll('acts')).find(([, x]) => x.name === 'Pintura' && x.ambId === 'a3')[0]);
-  await expect(page.locator('#lqm')).toHaveCount(0);
-  await expect(page.locator(`#grid tr[data-a="${id}"]`)).toBeVisible();
-  // el nombre del ambiente también lleva al lookahead
-  await page.evaluate(() => { const x = [...S.act.values()].find(a => a.name === 'Pintura'); apply([op('acts', x.id, null)]); });
-  await page.click('#fmxp button');
-  await page.click('[data-mxpamb]');
-  await expect(page.locator('#lqm')).toHaveCount(0);
-  await expect(page.locator('#main')).toHaveAttribute('data-view', 'look');
-  noErrors(errors, 'pendientes ir');
-});
-
-test('pendientes sin programar: el buscador filtra por ambiente, actividad o SC', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: CAT });
-  await page.evaluate(() => { U.piso = ''; render(); });
-  await page.click('#fmxp button');
-  await page.fill('#mxpq2', 'zzz');
-  await expect(page.locator('#mxpnone')).toBeVisible();
-  await expect(page.locator('#lqm .mxpr:visible')).toHaveCount(0);
-  await page.fill('#mxpq2', 'pintu tarraj');
-  await expect(page.locator('#lqm .mxpr:visible')).toHaveCount(1);
-  await expect(page.locator('#mxpvis')).toContainText('1 de 1');
-  noErrors(errors, 'buscador pendientes');
+  await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
+  await page.click('[data-ghamb="a3"]');
+  await expect(gh(page)).toBeVisible();
+  await gh(page).locator('[data-ghmenu]').click();
+  await page.click('#pop [data-do="na"]');
+  await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a3').c || {}).k3)).toBe('n');
+  await expect(gh(page)).toHaveCount(0);
+  await page.click('#toast button');
+  await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a3').c || {}).k3)).toBeUndefined();
+  await expect(gh(page)).toBeVisible();
+  await gh(page).locator('[data-ghmenu]').click();
+  await page.click('#pop [data-do="add"]');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3' && x.days.length === 0).length)).toBe(1);
+  noErrors(errors, 'chip y menú');
 });
 
 test('«Ver en la Matriz» lleva a la celda y resalta su fila y su columna unos 3 segundos', async ({ page }) => {
@@ -98,4 +88,13 @@ test('«Ver en la Matriz» lleva a la celda y resalta su fila y su columna unos 
   await expect(page.locator('#mxt th.mxc.mxhl')).toContainText('Tarrajeo');
   await expect(page.locator('#mxt .mxhl, #mxt .mxhlx')).toHaveCount(0, { timeout: 6000 });
   noErrors(errors, 'resaltar');
+});
+
+test('faltan programar: el SC solo ve lo de su partida', async ({ page }) => {
+  const extra = [...CAT, ['mcat', 'k8', { name: 'Prueba de redes', sc: 'c1', cl: 't', al: ['prueba de redes'], ord: 80 }], ['mtipo', 'tp1', { name: 'Dpto', acts: ['k3', 'k8'], order: 10 }]];
+  const errors = await openApp(page, { as: 'sc', tab: 'look', extra });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; render(); });
+  await expect(page.locator('#grid tr[data-gh="a3|k8"]')).toBeVisible();
+  await expect(page.locator('#grid tr[data-gh="a3|k3"]')).toHaveCount(0);
+  noErrors(errors, 'SC faltantes');
 });
