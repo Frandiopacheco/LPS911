@@ -1,4 +1,4 @@
-// Terminadas: el Lookahead oculta solo lo confirmado como Terminado en la Matriz; lo marcado en Campo sin confirmar queda «✓?».
+// Terminadas: el Lookahead oculta lo que la Matriz confirma como Terminado / No aplica (sin días después de hoy); lo de Campo no influye (10/10).
 // Foto del plan diario con SC y ambiente (hallazgo 6). Confirmación al marcar «Terminada».
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors } from './helpers.js';
@@ -9,24 +9,35 @@ const CAT = [
   ['doneidx', 'p1', { d: { i0: '2026-09-30', i1: '2026-09-30' } }], // i0 (a1) e i1 (a2) terminadas en Campo
 ];
 
-test('lookahead: oculta la terminada confirmada; la no confirmada queda con ✓? y se confirma desde ahí', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: CAT });
-  await expect(page.locator('#grid tr[data-a="i1"]')).toHaveCount(1);
+test('lookahead: solo la Matriz oculta; lo marcado en Campo no oculta ni pone «✓?»', async ({ page }) => {
+  // a3: la Matriz dice No aplica y Campo nunca la cerró → también se oculta
+  const errors = await openApp(page, { tab: 'look', extra: [...CAT, ['mamb', 'a3', { c: { k1: 'n' }, by: 'x', t: 1 }]] });
+  await page.evaluate(() => { U.piso = ''; render(); });
   await expect(page.locator('#grid tr[data-a="i0"]')).toHaveCount(0);
-  await expect(page.locator('#fdone')).toContainText('1 terminada oculta');
-  await expect(page.locator('#grid [data-mxd="i1"]')).toHaveCount(1);
-  // «Ver terminadas» la vuelve a mostrar
+  await expect(page.locator('#grid tr[data-a="i2"]')).toHaveCount(0);
+  // i1: terminada en Campo, la Matriz no dice nada → sigue a la vista y sin «✓?»
+  await expect(page.locator('#grid tr[data-a="i1"]')).toHaveCount(1);
+  await expect(page.locator('#grid [data-mxd]')).toHaveCount(0);
+  await expect(page.locator('#fdone')).toContainText('2 terminadas ocultas');
   await page.click('#fdone button');
   await expect(page.locator('#grid tr[data-a="i0"]')).toHaveCount(1);
   await page.click('#fdone button');
-  await expect(page.locator('#grid tr[data-a="i0"]')).toHaveCount(0);
-  // confirmar i1 en la Matriz → se oculta
-  await page.click('#grid [data-mxd="i1"]');
-  await expect(page.locator('#pop')).toContainText('por validar');
-  await page.click('#pop [data-do="ok"]');
-  await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a2') || {}).c)).toEqual({ k1: 't' });
+  // al confirmarla en la Matriz se oculta
+  await page.evaluate(() => mxWrite(new Map([['a2', { k1: 't' }]]), 'ok'));
   await expect(page.locator('#grid tr[data-a="i1"]')).toHaveCount(0);
-  noErrors(errors, 'terminadas y matriz');
+  // una fila con días después de hoy no se oculta (avisa con ⚠)
+  await page.evaluate(() => { const x = S.act.get('i1'); apply([op('acts', 'i1', { ...x, days: [...x.days, '2026-10-05'] })]); });
+  await expect(page.locator('#grid tr[data-a="i1"]')).toHaveCount(1);
+  await expect(page.locator('#grid [data-mxw="i1"]')).toHaveCount(1);
+  noErrors(errors, 'la Matriz manda');
+});
+
+test('la Matriz no toma lo de Campo como propuesta: sin confirmar queda Pendiente con aviso', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: [CAT[0], ['mtipo', 'tp1', { name: 'Dpto', acts: ['k1'], order: 1 }], ['mamb', 'a2', { tipo: 'tp1', by: 'x', t: 1 }], CAT[2]] });
+  await page.evaluate(() => { U.piso = ''; render(); });
+  const o = await page.evaluate(() => mxCells().get('a2').k1);
+  expect([o.s, o.sug, o.dsc]).toEqual(['p', true, true]);
+  noErrors(errors, 'propuesta sin Campo');
 });
 
 test('marcar «Terminada» pide confirmar; si no, no se marca', async ({ page }) => {

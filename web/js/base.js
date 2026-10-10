@@ -162,7 +162,7 @@ const doneOf=x=>DONE.get(x.id)||null;
 const libDay=(x,d)=>{const dn=DONE.get(x.id);return!!(dn&&d>dn&&(x.days||[]).includes(d))};
 const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 /* «Terminada» pide confirmar (oct 2026): un error aquí libera los días que faltan; en la Matriz queda por validar */
-const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda por validar hasta que un ingeniero lo confirme.';
+const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda como aviso para que un ingeniero lo confirme (el estado de la obra lo dice la Matriz).';
 async function askDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return false;const a=S.amb.get(x.ambId);
   const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok)markDone(aid,d);return!!ok}
 function markDone(aid,d,keepR){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;

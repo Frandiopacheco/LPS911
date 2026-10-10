@@ -47,7 +47,7 @@ test('M05: el «Terminado» que pone el SC no oculta la fila del Lookahead', asy
   const m = await page.evaluate(() => __dbGet('mamb', 'a1'));
   expect(m.m.k1).toMatchObject({ sc: true, by: 'sc@obra.pe' });
   expect(await page.evaluate(id => __dbGet('mlog', id).st, m.l)).toBe('pend'); // la celda apunta a su constancia (M06)
-  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('pend');
+  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe(null); // no oculta hasta el «✓ Visto»
   noErrors(errors, 'terminado del SC');
 });
 
@@ -58,7 +58,7 @@ const SCCHG = [...CAT, ['doneidx', 'p1', { d: { i0: '2026-09-30' } }],
 test('M04/M05: «✓ Visto» queda en la celda y recién ahí la terminada se oculta', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: SCCHG });
   await page.evaluate(() => { U.piso = ''; render(); });
-  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('pend');
+  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe(null);
   await page.click('#mxlog');
   await page.click('[data-mxlok="l1"]');
   await expect.poll(() => page.evaluate(() => !!(__dbGet('mamb', 'a1').m.k1.ok))).toBe(true);

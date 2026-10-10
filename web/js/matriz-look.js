@@ -156,13 +156,15 @@ async function mxUnifyDlg(){if(!isAdmin)return;
    Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
 function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
   const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?v:null}/* hoy no cuenta: ya no se reprograma y suele ser el día en que se terminó */
-/* ---------- Terminadas en Campo y la Matriz (oct 2026, decidido con el dueño) ----------
-   Marcar «Terminada» en Campo no es la verdad: puede ser un error (faltaba una luminaria). La fila terminada solo se oculta del
-   Lookahead cuando la Matriz la tiene CONFIRMADA como Terminado; si no (sin validar o la Matriz dice otra cosa) sigue visible con
-   «✓?» y desde ahí el ingeniero confirma en la Matriz o la reabre. mxDoneSt: null | 'ok' (ocultable) | 'pend' (por validar). */
-/* M05 (auditoría 08/10, decidido con el dueño): el «Terminado» que puso un SC no oculta la fila hasta que un ingeniero lo da por visto */
-function mxDoneSt(x){if(!x||!DONE.has(x.id)||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];return v==='t'&&!mxScPend(x.ambId,c)?'ok':'pend'}
-const mxDonePend=x=>mxDoneSt(x)==='pend';
+/* ---------- La Matriz es la referencia del estado de la obra (decidido con el dueño, 10/10/2026) ----------
+   Campo solo sirve para el PPC (diario; sugerencia para el semanal). Lo que el Lookahead oculta o recomienda sale solo de la
+   Matriz: una fila se oculta («terminadas ocultas») cuando la Matriz tiene CONFIRMADO Terminado o No aplica en ese ambiente
+   y la fila no tiene días después de hoy (los de después avisan con ⚠); el «Terminada» de Campo no influye (antes hacía falta y además ponía «✓?»).
+   M05 (auditoría 08/10): el Terminado que puso un SC no cuenta hasta que un ingeniero lo da por visto.
+   mxDoneSt: 'ok' (ocultable) | null. */
+function mxDoneSt(x){if(!x||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];
+  if(v!=='t'&&v!=='n')return null;if(mxScPend(x.ambId,c))return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?null:'ok'}
+const mxDonePend=()=>false;
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 /* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
    'sc' = es de una actividad de otro SC (no sale en la Matriz). null = bien, o el catálogo aún no carga / está vacío */
