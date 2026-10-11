@@ -3441,3 +3441,9 @@ body.ipr-on{overflow:hidden}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .plvold{background:#3a2a10;color:#ffcf8a;border-color:#6b4a18}}
 :root[data-theme="dark"] .plvold{background:#3a2a10;color:#ffcf8a;border-color:#6b4a18}
 .plbusy{flex-basis:100%;font-size:12.5px;padding:6px 10px;border-radius:var(--r-ctl,8px);background:var(--panel2);border:1px solid var(--line)}
+.ploffok{color:var(--ok)}
+.ploffbar{display:flex;align-items:center;gap:10px}
+.ploffbar i{flex:1;min-width:80px;height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;display:block}
+.ploffbar em{display:block;height:100%;width:0;background:var(--accent);transition:width var(--t-fast,.12s)}
+.plvh .ib.on{border-color:var(--ok);color:var(--ok)}
+.ploffbar{z-index:310}

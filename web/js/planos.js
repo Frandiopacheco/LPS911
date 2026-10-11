@@ -129,7 +129,7 @@ async function plProcess(it,say){
   const mm=[Math.round(v1.width/72*25.4),Math.round(v1.height/72*25.4)];
   /* subidas en paralelo (máx. 6) mientras se siguen cortando mosaicos */
   const pend=new Set();let up=0,total=0,fail=null;
-  const send=(path,blob,type)=>{total++;const p=plPut(path,blob,type).then(()=>{up++},e=>{fail=fail||e}).finally(()=>pend.delete(p));pend.add(p);return p};
+  let bytes=0;const send=(path,blob,type)=>{total++;bytes+=blob.size||0;const p=plPut(path,blob,type).then(()=>{up++},e=>{fail=fail||e}).finally(()=>pend.delete(p));pend.add(p);return p};
   const room=async()=>{while(pend.size>=6)await Promise.race(pend);if(fail)throw fail};
   const cut=async(src,z,ox,oy)=>{/* mosaicos del nivel z que caen en src (que empieza en ox,oy del nivel) */
     const lw=Math.ceil(W/2**z),lh=Math.ceil(H/2**z);const x0=Math.floor(ox/PL_T),y0=Math.floor(oy/PL_T),x1=Math.ceil(Math.min(lw,ox+src.width)/PL_T),y1=Math.ceil(Math.min(lh,oy+src.height)/PL_T);
@@ -160,7 +160,7 @@ async function plProcess(it,say){
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
   const m=it.m;const prev=old?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:it.file.name.replace(/\.pdf$/i,''),fsize:it.file.size,
-    rev,base,W,H,Z,T:PL_T,mm,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
+    rev,base,W,H,Z,T:PL_T,mm,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};
   await fcol('plb').doc(id).set(doc);
   return{id,rev,secs:Math.round((performance.now()-t0)/1000),files:total}}
@@ -175,12 +175,13 @@ function renderPBib(main){plSub();
     main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,plaEd()?'<button class="ib pri" id="plgocar">Cargar planos…</button>':'')}
       <div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="Buscar: código, título, archivo…" autocomplete="off" aria-label="Buscar planos">
         <select class="tin" id="plfp" aria-label="Piso"></select><select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>
-        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}<span class="plcnt" id="plcnt"></span></div>
+        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}<span class="plcnt" id="plcnt"></span></div>
       <div id="pllist"></div></div></div>`;
     $('#plq',main).oninput=e=>{PLF.q=e.target.value;plList(main)};
     const ch=(sel,k)=>{$(sel,main).onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');
     const fa=$('#plfa',main);if(fa)fa.onchange=e=>{PLF.arch=e.target.checked;plList(main)};
     const gc=$('#plgocar',main);if(gc)gc.onclick=()=>goTab('pcar');
+    const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(b)plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
@@ -197,7 +198,7 @@ function plList(main){const host=$('#pllist',main);if(!host)return;
   const g=new Map();L.forEach(p=>{if(!g.has(p.disc))g.set(p.disc,[]);g.get(p.disc).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
-      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}</small></span></button>`).join('')}</div>`).join('');
+      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}</small></span></button>`).join('')}</div>`).join('');
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}}
 let plIO=null;
 function plThumbs(host){if(plIO)plIO.disconnect();
@@ -266,6 +267,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
+    ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plaEd()?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
     <button class="ib" data-pv="x" aria-label="Cerrar">✕</button></div>
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
@@ -274,7 +276,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
   if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),sp);
   PLV.box.onclick=async e=>{const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView();else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
-    else if(a==='pdf')plPdf(p,sp,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 async function plPdf(p,sp,btn){btn.disabled=true;const t=btn.textContent;btn.textContent='Descargando…';
   try{const b=await plGet(sp.base+'/orig.pdf');const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=(sp.fname||p.cod)+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
@@ -359,3 +361,46 @@ async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='
       plqCheck();plqDraw(true)}}
   finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
     const ok=PQ.items.filter(x=>x.st==='ok').length;if(ok)toast(`Carga terminada: ${ok} plano(s) listos en la biblioteca.`)}}
+
+/* ---------- Sin conexión (solo tablet, decidido con el dueño oct 2026) ----------
+   Baja todos los mosaicos de los planos elegidos a la caché del equipo (la misma de plGet, que siempre mira primero ahí:
+   sin internet se ven completos). Lo guardado se anota por equipo en localStorage `lps911.ploff` {id:{rev,base,t,mb}};
+   si el plano tiene una revisión nueva, la tarjeta dice «actualizar» y al guardarla se borra la revisión anterior. */
+const plTablet=()=>{try{return matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)>=600}catch(e){return false}};
+const PLOFF=Object.assign({},store.get('ploff',{}));
+const plOffPut=()=>store.set('ploff',PLOFF);
+const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)?'ok':'old'};
+const plOffTag=p=>{if(!plTablet())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
+const plMB=p=>p.sz?p.sz/1048576:7;
+function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp'];for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
+async function plOffDrop(base){try{const c=await caches.open(PLC_NAME);const pre=location.origin+'/__plan/'+base+'/';for(const r of await c.keys())if(r.url.startsWith(pre))await c.delete(r)}catch(e){}}
+const PLOQ={run:false,stop:false};
+function plOffBar(t,pct){let b=$('#ploffbar');if(t==null){if(b)b.remove();return}
+  if(!b){b=document.createElement('div');b.id='ploffbar';b.className='swupd ploffbar';b.innerHTML='<span></span><i><em></em></i><button type="button" class="ib">Detener</button>';b.querySelector('button').onclick=()=>{PLOQ.stop=true};document.body.appendChild(b)}
+  b.querySelector('span').textContent=t;b.querySelector('em').style.width=Math.round(pct*100)+'%'}
+async function plOffSave(list){if(PLOQ.run){toast('Ya se están guardando planos.');return}
+  list=list.filter(p=>p&&!p.arch&&plOffSt(p)!=='ok');if(!list.length){toast('Esos planos ya están guardados en esta tablet.');return}
+  if(navigator.onLine===false){toast('Necesitas internet para guardarlos.');return}
+  const need=list.reduce((a,p)=>a+plMB(p),0);
+  try{if(navigator.storage&&navigator.storage.persist)await navigator.storage.persist();const e=navigator.storage&&navigator.storage.estimate&&await navigator.storage.estimate();
+    if(e&&e.quota&&(e.quota-e.usage)/1048576<need*1.2){toast(`No hay espacio suficiente en la tablet (se necesitan ~${Math.round(need)} MB).`);return}}catch(e){}
+  PLOQ.run=true;PLOQ.stop=false;let ok=0,err=0;const tasks=list.map(p=>({p,paths:plPaths(p)}));const tot=tasks.reduce((a,t)=>a+t.paths.length,0);let done=0;
+  try{for(const[i,t]of tasks.entries()){if(PLOQ.stop)break;const p=t.p;let fail=false;const q=[...t.paths];
+      const worker=async()=>{while(q.length&&!PLOQ.stop){const path=q.shift();try{await plGet(path)}catch(e){fail=true}done++;plOffBar(`Guardando para sin conexión: plano ${i+1} de ${tasks.length} (${p.cod})`,done/tot)}};
+      await Promise.all([1,2,3,4,5,6].map(worker));
+      if(PLOQ.stop)break;if(fail){err++;continue}
+      const old=PLOFF[p.id];if(old&&old.base!==p.base)plOffDrop(old.base);PLOFF[p.id]={rev:p.rev||1,base:p.base,t:NOW(),mb:+plMB(p).toFixed(1)};plOffPut();ok++}}
+  finally{PLOQ.run=false;plOffBar(null);requestRender();if(PLV)plvDraw();
+    toast(PLOQ.stop?`Detenido: ${ok} plano(s) guardados.`:err?`${ok} guardados; ${err} no se pudieron bajar (revisa la conexión y vuelve a intentar).`:`Listo: ${ok} plano(s) disponibles sin conexión en esta tablet.`)}}
+async function plOffRemove(ids){for(const id of ids){const o=PLOFF[id];if(!o)continue;await plOffDrop(o.base);delete PLOFF[id]}plOffPut();requestRender();if(PLV)plvDraw()}
+function plOffOne(p,btn){const st=plOffSt(p);
+  if(st==='ok'){openPop(btn,`<div class="ph">Guardado en esta tablet</div><div class="ptx">${esc(p.cod)} se ve completo sin internet (~${Math.round(plMB(p))} MB).</div><button data-do="rm">Quitar de esta tablet</button>`,{rm:()=>plOffRemove([p.id]).then(()=>toast('Quitado de esta tablet'))});return}
+  plOffSave([p])}
+function plOffMenu(btn){const L=plFiltered(),act=plAct();const pend=L.filter(p=>plOffSt(p)!=='ok'),upd=act.filter(p=>plOffSt(p)==='old');
+  const saved=Object.keys(PLOFF).filter(id=>PLB.has(id));const mb=saved.reduce((a,id)=>a+(PLOFF[id].mb||7),0);const need=pend.reduce((a,p)=>a+plMB(p),0);
+  openPop(btn,`<div class="ph">Ver sin conexión (esta tablet)</div><div class="ptx">Guarda los planos completos en la tablet para verlos sin internet en obra. Usa los filtros (piso, especialidad) para elegir cuáles. Guardados ahora: <b>${saved.length}</b> (~${Math.round(mb)} MB).</div>
+    ${pend.length?`<button data-do="sv">⤓ Guardar los ${pend.length} plano${pend.length===1?'':'s'} de la lista (~${Math.round(need)} MB)</button>`:'<div class="ptx">✓ Todos los planos de la lista ya están guardados.</div>'}
+    ${upd.length?`<button data-do="up">⟳ Actualizar ${upd.length} con revisión nueva</button>`:''}
+    ${saved.length?`<button data-do="rl">Quitar de la tablet los de esta lista</button><button data-do="ra">Quitar todos de esta tablet</button>`:''}`,
+    {sv:()=>plOffSave(pend),up:()=>plOffSave(upd),rl:()=>plOffRemove(L.map(p=>p.id)).then(()=>toast('Quitados de esta tablet')),
+     ra:async()=>{if(await uiAsk({title:'¿Quitar todos los planos de esta tablet?',text:'Se podrán volver a guardar cuando haya internet.',ok:'Quitar',tone:'warn'})){await plOffRemove(Object.keys(PLOFF));toast('Planos quitados de esta tablet')}}})}
