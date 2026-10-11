@@ -1,5 +1,6 @@
 // Planos › Modelo 3D (beta, docs/ia/planos.md): se convierte un IFC pequeño en el navegador, se abre con el visor nuevo
-// (That Open Components) y se recorre la interfaz de tablet: pisos, cortes, medir, propiedades, aislar/ocultar y vistas.
+// (That Open Components) y se recorre la interfaz de tablet: pisos, cortes, medir (con ajuste a vértices), menú flotante (Cortar · Aislar · Ocultar),
+// panel lateral plegable de propiedades, casita (vista general) y que al salir y volver el visor quede como se dejó.
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -69,16 +70,56 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
     try { await page.waitForFunction(() => P3.selN > 0, null, { timeout: 7000 }); hit = true; break } catch (e) {}
   }
   expect(hit, 'un toque sobre el modelo selecciona un elemento').toBe(true);
-  await expect(page.locator('#p3prop')).toBeVisible();
-  await expect(page.locator('#p3prop .p3pt')).not.toHaveText('Cargando…', { timeout: 15_000 });
-  await page.click('#p3prop [data-a="hide"]');
+  // menú flotante: solo Cortar, Aislar y Ocultar
+  await expect(page.locator('#p3fm')).toBeVisible();
+  await expect(page.locator('#p3fm .p3a')).toHaveText([/Cortar/, /Aislar/, /Ocultar/]);
+  // panel lateral izquierdo con las propiedades; se pliega y se vuelve a abrir
+  await expect(page.locator('#p3side')).toBeVisible();
+  await expect(page.locator('#p3side .p3pt')).not.toHaveText('Cargando…', { timeout: 15_000 });
+  const sb = await page.locator('#p3side .p3sidein').boundingBox(), hb = await page.locator('#p3host').boundingBox();
+  expect(sb.x - hb.x, 'el panel está pegado a la izquierda').toBeLessThan(20);
+  await page.click('#p3side .p3sidetab');
+  await expect(page.locator('#p3side')).toHaveClass(/fold/);
+  await page.waitForTimeout(400);
+  expect((await page.locator('#p3side .p3sidetab').boundingBox()).x - hb.x, 'plegado: queda la pestaña en el borde').toBeLessThan(40);
+  await page.click('#p3side .p3sidetab');
+  await expect(page.locator('#p3side')).not.toHaveClass(/fold/);
+  // Cortar desde el menú flotante: crea el corte y cierra el menú
+  await page.click('#p3fm [data-a="cutsurf"]');
+  await expect(page.locator('#p3dock [data-a="pn:cortes"] .p3n')).toHaveText('1');
+  await expect(page.locator('#p3fm')).toBeHidden();
+  await page.click('#p3dock [data-a="pn:cortes"]'); await page.click('#p3pn [data-a="sec-clear"]'); await page.click('#p3pn [data-a="pn:"]');
+  await expect(page.locator('#p3dock .p3n')).toHaveCount(0);
+  // volver a seleccionar y ocultar desde el menú
+  const pick = async () => { for (const [fx, fy] of [[.5, .5], [.45, .55], [.55, .45], [.4, .6], [.6, .6], [.5, .4], [.5, .65], [.35, .5]]) {
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    try { await page.waitForFunction(() => P3.selN > 0, null, { timeout: 7000 }); return true } catch (e) {} } return false };
+  expect(await pick(), 'se vuelve a seleccionar').toBe(true);
+  await expect(page.locator('#p3fm')).toBeVisible();
+  await page.click('#p3fm [data-a="hide"]');
   await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveText('1');
+  await expect(page.locator('#p3fm')).toBeHidden();
   await page.click('#p3dock [data-a="showall"]');
   await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveCount(0);
+  // medir: el punto se ajusta a la esquina (vértice) del elemento, aunque se toque a unos píxeles de ella
+  expect(await pick(), 'selecciona para ubicar una esquina').toBe(true);
+  const c = await page.evaluate(async () => { const b = await P3.v.selectionBox(), T = P3.v.THREE, cam = P3.v.camera.three, r = P3.v.canvas.getBoundingClientRect(); const pts = [];
+    for (const x of [b.min[0], b.max[0]]) for (const y of [b.min[1], b.max[1]]) for (const z of [b.min[2], b.max[2]]) pts.push(new T.Vector3(x, y, z));
+    pts.sort((a, d) => a.distanceTo(cam.position) - d.distanceTo(cam.position)); const k = pts[0], ctr = new T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+    const sp = k.clone().project(cam), sc = ctr.clone().project(cam), X = s => r.left + (s.x * .5 + .5) * r.width, Y = s => r.top + (-s.y * .5 + .5) * r.height;
+    return { w: k.toArray(), x: X(sp), y: Y(sp), cx: X(sc), cy: Y(sc) } });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  const len = Math.hypot(c.cx - c.x, c.cy - c.y) || 1, tx = c.x + (c.cx - c.x) / len * 9, ty = c.y + (c.cy - c.y) / len * 9;
+  const sn = await page.evaluate(([x, y]) => P3.v.snapProbe(x, y), [tx, ty]);
+  expect(sn && sn.kind, 'a 9 px de una esquina se ajusta al vértice').toBe('v');
+  expect(Math.hypot(sn.p[0] - c.w[0], sn.p[1] - c.w[1], sn.p[2] - c.w[2]), 'y es justo esa esquina').toBeLessThan(0.02);
   // medir: dos toques dan una medida
   await page.click('#p3dock [data-a="pn:medir"]'); await page.click('#p3pn [data-a="meas"]');
   await expect(page.locator('#p3ban')).toContainText('punto A');
-  for (const [fx, fy] of [[.45, .5], [.55, .55]]) { await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy); await page.waitForTimeout(400); }
+  await page.mouse.move(tx, ty); await expect(page.locator('.p3snap.v')).toBeVisible({ timeout: 10_000 }); /* con el ratón se ve el marcador de la esquina */
+  await page.mouse.click(tx, ty); await page.waitForTimeout(400);
+  expect(await page.evaluate(() => P3.v.measure.lastSnap), 'el clic quedó en la esquina').toBe('v');
+  await page.mouse.click(box.x + box.width * .55, box.y + box.height * .55); await page.waitForTimeout(400);
   await expect(page.locator('#p3dock [data-a="pn:medir"] .p3n')).toHaveText('1', { timeout: 10_000 });
   await page.click('#p3ban [data-a="tool-off"]'); await page.click('#p3dock [data-a="pn:medir"]');
   await expect(page.locator('#p3pn .p3li')).toHaveCount(1);
@@ -87,10 +128,38 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   await page.click('#p3dock [data-a="pn:rend"]');
   await page.click('#p3pn [data-a="preset"][data-p="rapida"]');
   await expect(page.locator('#p3pn .seg .on')).toHaveText('Rápida');
-  // salir y volver a la pestaña: el visor se arma de nuevo sin errores
+  // casita: vuelve a la vista general (sin piso aislado, perspectiva)
+  await page.click('#p3dock [data-a="pn:pisos"]');
+  await page.locator('#p3pn [data-a="lvl"]:not([data-l=""])').first().click();
+  await page.click('#p3pn [data-a="plan"]');
+  expect(await page.evaluate(() => [P3.v.level, P3.v.plan])).toEqual([expect.any(String), true]);
+  await page.click('#p3home');
+  await page.waitForFunction(() => P3.v.level === '' && !P3.v.plan && P3.lvl === '' && P3.v.projectionName === 'Perspective', null, { timeout: 15_000 });
+  const hb2 = await page.locator('#p3host').boundingBox(), hm = await page.locator('#p3home').boundingBox();
+  expect(hm.x - hb2.x, 'la casita está abajo a la izquierda').toBeLessThan(30);
+  expect(hb2.y + hb2.height - (hm.y + hm.height), 'la casita está abajo a la izquierda').toBeLessThan(90);
+  await page.click('#p3pn [data-a="pn:"]');
+  // salir y volver a la pestaña: el visor queda como se dejó (mismo visor, misma cámara, mismo piso y lo oculto), sin recargar los modelos
+  await page.click('#p3dock [data-a="pn:pisos"]'); await page.locator('#p3pn [data-a="lvl"]:not([data-l=""])').first().click(); await page.click('#p3pn [data-a="pn:"]');
+  await page.click('#p3dock [data-a="pn:vista"]'); await page.click('#p3pn [data-a="view"][data-v="right"]'); await page.click('#p3pn [data-a="pn:"]'); await page.waitForTimeout(1200);
+  const before = await page.evaluate(() => { window.__v3 = P3.v; const p = P3.v.camera.controls.getPosition(new (P3.v.THREE.Vector3)()); return { lvl: P3.v.level, cam: p.toArray() } });
+  expect(before.lvl).not.toBe('');
   await page.evaluate(() => { U.tab = 'pbib'; render() });
+  await page.waitForTimeout(500);
   await page.evaluate(() => { U.tab = 'p3d'; render() });
   await expect(page.locator('#p3dock .p3b')).toHaveCount(6);
+  await expect(page.locator('#p3models .plchip.on')).toHaveCount(1, { timeout: 5000 });
+  const after = await page.evaluate(() => { const p = P3.v.camera.controls.getPosition(new (P3.v.THREE.Vector3)()); return { same: P3.v === window.__v3, lvl: P3.v.level, cam: p.toArray(), uiLvl: P3.lvl } });
+  expect(after.same, 'el visor no se vuelve a armar').toBe(true);
+  expect(after.lvl).toBe(before.lvl); expect(after.uiLvl).toBe(before.lvl);
+  expect(Math.hypot(...after.cam.map((v, i) => v - before.cam[i])), 'la cámara queda donde estaba').toBeLessThan(0.01);
+  // si pasa mucho tiempo fuera, el visor se libera de la memoria pero al volver se repone el estado (piso, cámara)
+  await page.evaluate(() => { p3Park(); U.tab = 'pbib'; render() });
+  await page.evaluate(() => { U.tab = 'p3d'; render() });
   await expect(page.locator('#p3models .plchip.on')).toHaveCount(1, { timeout: 60_000 });
+  await page.waitForFunction(() => P3.snap === null && P3.v && P3.v.level && P3.lvl === P3.v.level, null, { timeout: 60_000 });
+  const back = await page.evaluate(() => { const p = P3.v.camera.controls.getPosition(new (P3.v.THREE.Vector3)()); return { lvl: P3.v.level, cam: p.toArray() } });
+  expect(back.lvl).toBe(before.lvl);
+  expect(Math.hypot(...back.cam.map((v, i) => v - before.cam[i])), 'la cámara se repone tras liberar el visor').toBeLessThan(0.05);
   noErrors(errors.filter(e => !/Multiple instances of Three/.test(e)), 'modelo 3D');
 });

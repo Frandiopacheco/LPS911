@@ -2891,7 +2891,6 @@ div.tp-dif{padding-left:0}
 .p3mlab.tot{transform:translate(-50%,-135%);font-size:14px;background:#be123cf0;border-left-color:#fff}
 .p3mlab.del{transform:translate(-50%,-50%);width:26px;height:26px;padding:0;border-radius:50%;display:grid;place-items:center;font-size:12px;background:#334155f2;border-left:0;cursor:pointer}
 .p3ms small i{font-style:normal;margin-left:6px;font-weight:600}.p3ms small .x{color:#ef4444}.p3ms small .y{color:#16a34a}.p3ms small .z{color:#2563eb}
-.p3prop.min{max-height:none;padding:6px 8px;width:min(300px,calc(100% - 20px))}
 @media (pointer:coarse) and (min-width:761px){
   .ib{min-height:38px}.seg button{min-height:36px}.tabs button{min-height:42px}
   .chipb{min-height:34px}
@@ -3518,7 +3517,7 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .p3empty .callout{pointer-events:auto}
 .p3empty[hidden]{display:none}
 .p3ban{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:10px;padding:6px 8px 6px 14px;background:var(--panel);border:1px solid var(--line);border-radius:999px;box-shadow:var(--sh-2);font-size:13.5px;font-weight:600;max-width:calc(100% - 20px)}
-.p3ban[hidden],.p3prop[hidden],.p3pn[hidden],.p3hint[hidden]{display:none}
+.p3ban[hidden],.p3pn[hidden],.p3hint[hidden]{display:none}
 .p3dock{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:6;display:flex;gap:4px;padding:5px;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-2);max-width:calc(100% - 16px)}
 .p3b{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:64px;min-height:50px;padding:4px 8px;border:0;background:none;border-radius:12px;color:var(--ink);cursor:pointer}
 .p3b:hover{background:var(--panel2)}
@@ -3541,14 +3540,35 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .p3live{font:600 13px var(--f-ui);padding:8px 10px;background:var(--panel2);border-radius:var(--r-ctl,8px)}
 .p3res{padding:8px 10px;background:var(--panel2);border-radius:var(--r-ctl,8px);font-size:13px}
 .p3res small{color:var(--muted)}
-.p3prop{position:absolute;right:10px;bottom:76px;z-index:6;width:min(300px,calc(100% - 20px));max-height:min(55%,440px);display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,10px);box-shadow:var(--sh-2);overflow:hidden}
 .p3ph{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .p3pt{font-size:14px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .p3meta{display:flex;flex-wrap:wrap;gap:5px}
-.p3acts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-.p3a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:46px;padding:3px 2px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel);font-size:10.5px;font-weight:600;line-height:1.1;text-align:center;cursor:pointer;color:var(--ink)}
-.p3a span{font-size:17px;line-height:1.1}.p3a:hover{background:var(--panel2)}.p3a.on{background:var(--accent-soft);border-color:var(--accent)}
-.p3tg{border:0;background:none;text-align:left;font-weight:600;font-size:13px;padding:6px 2px;min-height:36px;cursor:pointer;color:var(--ink)}.p3tg small{color:var(--muted);font-weight:500}
+/* panel lateral izquierdo: propiedades de lo seleccionado; se pliega hacia la izquierda y deja una pestaña para volver a abrirlo */
+.p3side{position:absolute;left:10px;top:10px;bottom:76px;width:min(320px,calc(100% - 20px));z-index:6;transition:transform var(--t,.2s) var(--ease,ease)}
+.p3side[hidden]{display:none}
+.p3side.fold{transform:translateX(calc(-100% - 10px));pointer-events:none}
+.p3side.fold .p3sidetab{pointer-events:auto}
+.p3sidein{height:100%;display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,10px);box-shadow:var(--sh-2);overflow:hidden}
+.p3sidetab{position:absolute;left:100%;top:50%;transform:translateY(-50%);width:28px;height:72px;margin-left:-1px;padding:0;display:grid;place-items:center;border:1px solid var(--line);border-left:0;border-radius:0 12px 12px 0;background:var(--panel);box-shadow:var(--sh-2);color:var(--ink);font-size:22px;line-height:1;cursor:pointer}
+.p3sidetab:hover{background:var(--panel2)}
+.p3side.fold .p3sidetab{border-left:1px solid var(--line)}
+/* menú flotante junto al punto tocado: Cortar · Aislar · Ocultar */
+.p3fm{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:8;display:flex;gap:2px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh-2)}
+.p3fm[hidden]{display:none}
+.p3fm::after{content:"";position:absolute;left:var(--ax,50%);bottom:-6px;width:10px;height:10px;margin-left:-5px;background:var(--panel);border:solid var(--line);border-width:0 1px 1px 0;transform:rotate(45deg)}
+.p3fm.below::after{bottom:auto;top:-6px;border-width:1px 0 0 1px}
+.p3fm.far::after{display:none}
+.p3a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:62px;min-height:48px;padding:3px 8px;border:0;border-radius:10px;background:none;font-size:11px;font-weight:600;line-height:1.1;text-align:center;cursor:pointer;color:var(--ink)}
+.p3a span{font-size:18px;line-height:1.1}.p3a:hover{background:var(--panel2)}.p3a:active{background:var(--accent-soft)}
+/* «casita»: vuelve a la vista general */
+.p3home{position:absolute;left:10px;bottom:13px;z-index:6;width:56px;height:56px;padding:0;display:grid;place-items:center;border-radius:50%;background:var(--panel);border:1px solid var(--line);box-shadow:var(--sh-2);color:var(--ink);cursor:pointer}
+.p3home:hover{background:var(--panel2)}.p3home:active{background:var(--accent-soft)}
+.p3cv [data-thatopen-logo]{left:auto!important;right:.75rem}/* la marca de That Open pasa a la derecha: la casita ocupa la esquina inferior izquierda */
+/* marcador de ajuste al medir con el ratón: cuadrado = esquina, rombo = arista, círculo = superficie */
+.p3snap{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;box-sizing:border-box;pointer-events:none;border:2.5px solid #16a34a;background:#16a34a22}
+.p3snap[hidden]{display:none}
+.p3snap.e{border-color:#2563eb;background:#2563eb22;transform:rotate(45deg)}
+.p3snap.s{width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border-color:#64748b;background:#64748b22}
 .p3body{overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
 .p3kv{display:flex;gap:8px;justify-content:space-between;align-items:baseline;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--line2,var(--line))}
 .p3kv>span{color:var(--muted);flex:0 0 42%}
@@ -3559,15 +3579,17 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .p3none{font-size:12.5px;color:var(--muted)}
 .p3hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;background:var(--panel);border:1px solid var(--line);border-radius:999px;box-shadow:var(--sh-1);font-size:12.5px;max-width:calc(100% - 20px)}
 .p3host.p3sel .p3hint,.p3ban:not([hidden])~.p3hint{display:none}
-.p3host.p3sel .p3ban{top:auto}
 .p3mlab b{font-weight:700}
-@media (pointer:coarse) and (min-width:761px){.p3dock .p3b{min-width:72px;min-height:56px}}
+@media (pointer:coarse) and (min-width:761px){.p3dock .p3b{min-width:72px;min-height:56px}.p3home{bottom:16px}}
+@media (min-width:761px){.p3host.p3so .p3pn{left:342px;width:min(380px,calc(100% - 352px))}}
+@media (pointer:coarse){.p3sidetab{width:36px}.p3a{min-height:52px;min-width:66px}}
 @media (pointer:coarse){.p3host .ib{min-height:44px;min-width:44px}.p3lv .plchip{min-height:44px}}
 @media (max-width:760px){
   .p3w{padding:6px}
   .p3b{min-width:0;flex:1 1 0;padding:4px 1px}.p3l{font-size:9.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis}.p3dock{bottom:6px;left:6px;right:6px;transform:none;justify-content:space-between;max-width:none}
-  .p3pn,.p3prop{left:6px;right:6px;width:auto;bottom:74px}
-  .p3prop{max-height:44%}
+  .p3pn{left:6px;right:6px;width:auto;bottom:74px}
+  .p3side{left:6px;top:6px;bottom:130px;width:min(300px,calc(100% - 52px))}.p3side.fold{transform:translateX(calc(-100% - 6px))}
+  .p3home{left:8px;bottom:74px;width:48px;height:48px}
   .p3pn{max-height:56%}
 }
 :root[data-theme="dark"] .p3host{background:#1b2127}

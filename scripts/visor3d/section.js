@@ -84,6 +84,11 @@ export function createSection(C) {
   /* ¿el puntero está sobre una flecha de algún plano? (para no tomar ese toque como un toque sobre el modelo) */
   const overGizmo = () => false; /* los tiradores son botones sobre el lienzo: sus toques no llegan a él */
   const dispose = () => { removeHelper(); try { clipper.deleteAll() } catch (e) {} layer.remove() };
+  /* guardar y reponer los cortes (al volver al modelo después de haberlo liberado de la memoria) */
+  const exportCuts = () => { const o = { surf: [], box: null }; for (const it of items.values()) if (it.kind === 'surf') o.surf.push({ o: it.o.toArray(), n: it.n.toArray(), label: it.label });
+    if (boxOn) { const { min, max } = boxBounds(); if ([...min, ...max].every(Number.isFinite)) o.box = { min, max } } return o };
+  const importCuts = d => { if (!d) return; for (const s of d.surf || []) addPlane(new THREE.Vector3(...s.o), new THREE.Vector3(...s.n), 'surf', s.label || 'Corte');
+    if (d.box) box(new THREE.Box3(new THREE.Vector3(...d.box.min), new THREE.Vector3(...d.box.max))) };
   const planes = () => { const o = []; for (const id of items.keys()) { const p = clipper.list.get(id); if (p && p.enabled !== false && p.three) o.push(p.three) } return o };
-  return { planes, tapSurface, box, flip, remove, clearAll, showGizmos, enable, overGizmo, busy: () => dragging, list, count: () => items.size, hasBox: () => boxOn, onChange: cb => { onChange = cb }, dispose, set onPlaced(f) { C.onPlaced = f }, get gizmosVisible() { return !hideGizmos } };
+  return { planes, exportCuts, importCuts, tapSurface, box, flip, remove, clearAll, showGizmos, enable, overGizmo, busy: () => dragging, list, count: () => items.size, hasBox: () => boxOn, onChange: cb => { onChange = cb }, dispose, set onPlaced(f) { C.onPlaced = f }, get gizmosVisible() { return !hideGizmos } };
 }
