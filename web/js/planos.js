@@ -263,7 +263,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null;
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false;
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
@@ -271,9 +271,9 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
   /* dedos «fantasma»: si la tablet no avisó que un dedo se levantó (salió por el borde, el sistema tomó el gesto…), el visor
      contaba un dedo de más y el siguiente pellizco no hacía zoom. Un toque nuevo (isPrimary) limpia lo que quedó colgado. */
-  host.addEventListener('pointerdown',e=>{if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2))P.clear();pinch=null;
+  host.addEventListener('pointerdown',e=>{if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
     try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
-    if(P.size>=2){const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
+    if(P.size>=2){afterPinch=false;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
     if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
   host.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
@@ -281,12 +281,14 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
         const t=performance.now();zvel.push({t,lk:Math.log(d/pinch.d),dx:mx-pinch.cx,dy:my-pinch.cy,cx,cy});while(zvel.length&&t-zvel[0].t>60)zvel.shift();V.s=ns}
       pinch.d=d;pinch.cx=mx;pinch.cy=my;V.tick();return}
+    /* el dedo que queda al terminar un pellizco (casi nunca se levantan los dos a la vez) no arrastra ni corta la inercia del zoom, como en Dalux */
+    if(afterPinch){p.x=e.clientX;p.y=e.clientY;return}
     const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{const was=P.size===1&&!pinch;
+  const end=e=>{const was=P.size===1&&!pinch&&!afterPinch;
     /* doble toque = dos toques cortos, quietos y cercanos en menos de 0,3 s */
     if(was&&tap&&performance.now()-tap.t<250){const now=performance.now();
       if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){const r=host.getBoundingClientRect();V.zoomAt(2,tap.x-r.left,tap.y-r.top);lastTap=null}else lastTap={t:now,x:tap.x,y:tap.y}}
-    tap=null;const wasPinch=P.size>=2&&!!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
+    tap=null;const wasPinch=P.size>=2&&!!pinch;P.delete(e.pointerId);if(P.size<2){if(pinch&&P.size)afterPinch=true;pinch=null}if(!P.size)afterPinch=false;
     if(wasPinch&&zvel.length>1){const t=performance.now(),last=zvel[zvel.length-1];const dt=Math.max(16,t-zvel[0].t);
       const v=zvel.reduce((a,z)=>a+z.lk,0)/dt,vx=zvel.reduce((a,z)=>a+z.dx,0)/dt,vy=zvel.reduce((a,z)=>a+z.dy,0)/dt;
       /* solo si los dedos se movían al soltar (no si se quedaron quietos antes de levantarlos) */
@@ -297,11 +299,12 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
   host.addEventListener('lostpointercapture',e=>{if(P.has(e.pointerId))end(e)});
   /* red de seguridad: cuando ya no queda ningún dedo en la pantalla, se olvida todo */
-  host.addEventListener('touchend',e=>{if(!e.touches.length&&P.size){P.clear();pinch=null;host.classList.remove('drag')}},{passive:true});
+  host.addEventListener('touchend',e=>{if(!e.touches.length&&P.size){P.clear();pinch=null;afterPinch=false;host.classList.remove('drag')}},{passive:true});
   host.addEventListener('touchcancel',()=>{P.clear();pinch=null;host.classList.remove('drag')},{passive:true});
   const ro=new ResizeObserver(()=>{const atFit=Math.abs(V.s-V.fit)<1e-9;resize();if(atFit)V.fitView();else V.tick()});ro.observe(host);
   V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
   V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
+  V.dbg=()=>({zfling,afterPinch,pointers:P.size,pinch:!!pinch});
   V.loaded=()=>[...V.tiles.values()].filter(e=>e.bm).length;
   V.destroy=()=>{V.dead=true;ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
   requestAnimationFrame(()=>{V.fitView();if(spec.view)V.setView(spec.view)});return V}
