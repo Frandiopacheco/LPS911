@@ -58,8 +58,8 @@ test('admin: módulo Planos en el selector, sin los controles de Last Planner', 
   noErrors(errors, 'admin');
 });
 
-test('quién ve el módulo: lector y SC solo consultan; capataz y roles de tareo no lo ven', async ({ page }) => {
-  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['editor', true, true], ['tcap', false, false]]) {
+test('quién ve el módulo: lector, SC y Calidad solo consultan; Oficina Técnica carga; capataz y tareo no lo ven', async ({ page }) => {
+  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['calidad', true, false], ['ot', true, true], ['editor', true, true], ['tcap', false, false]]) {
     const errors = await openApp(page, { as, editar: false });
     const st = await page.evaluate(() => ({ ve: canPla(), carga: plaEd(), mods: MODS().map(m => m[0]) }));
     expect(st.ve, as).toBe(ve); expect(st.carga, as).toBe(carga);

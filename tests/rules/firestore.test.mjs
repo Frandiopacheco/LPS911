@@ -1190,13 +1190,14 @@ test('planos: el equipo de LPS lee; capataz y roles de tareo no', async () => {
   for (const db of [cap('cap1'), user('tasis@obra.pe'), user('tcos@obra.pe'), unverified('editor@obra.pe')])
     await assertFails(getDoc(doc(db, 'plb/ARQ_AG03')));
 });
-test('planos: solo administrador y editores cargan; forma mínima; nadie borra', async () => {
-  for (const db of [user('editor@obra.pe'), user(OWNER)]) {
+test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; nadie borra', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'members/oftec@obra.pe'), { role: 'area', name: 'OT 2', area: 'Oficina Técnica' }); });
+  for (const db of [user('editor@obra.pe'), user(OWNER), user('ot@obra.pe'), user('oftec@obra.pe')]) {
     await assertSucceeds(setDoc(doc(db, 'plb/ARQ_AG04'), PLB({ cod: 'AG04', base: 'planos/ARQ_AG04/r1' })));
     await assertSucceeds(updateDoc(doc(db, 'plb/ARQ_AG04'), { rev: 2, base: 'planos/ARQ_AG04/r2' }));
     await assertFails(deleteDoc(doc(db, 'plb/ARQ_AG04')));
   }
-  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe')])
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('calidad@obra.pe'), user('campo@obra.pe')])
     await assertFails(setDoc(doc(db, 'plb/ARQ_AG05'), PLB({ cod: 'AG05', base: 'planos/ARQ_AG05/r1' })));
   const ed = user('editor@obra.pe');
   await assertFails(setDoc(doc(ed, 'plb/x1'), PLB({ cod: '' })));

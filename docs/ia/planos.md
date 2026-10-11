@@ -15,7 +15,7 @@ Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia e
 | id | Nombre | Quién |
 | --- | --- | --- |
 | `pbib` | Planos (biblioteca + visor) | `canPla()`: todo el equipo de LPS menos el capataz de un SC |
-| `pcar` | Cargar planos | `plaEd()`: admin y editor |
+| `pcar` | Cargar planos | `plaEd()`: admin, editor y Oficina Técnica (`isOTArea()`: rol `area` con área «OT» u «Oficina Técnica»; reglas `isOT()`) |
 
 `U.mod==='pla'`. En `base.js`: `canPla`, `plaEd`, `modOk(m)`, `MODS()` (módulos que puede abrir; el selector `#modsel` se arma con ellos y aparece si hay más de uno), `tabMod(t)`, `modHome(m)`, `offLps()` (Tareo o Planos: se ocultan piso, semana, deshacer y exportes de LPS; CSS `body.mod-pla`). La suscripción a `plb` es perezosa: empieza al abrir el módulo (`plSub()`), no carga nada para quien no entra.
 
@@ -25,7 +25,7 @@ Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia e
   - `disc`: especialidad del plano (`PL_DISC`: ARQ, EST, IS, IE, IM, COM, ACI, DACI, GAS, SEG, OTR). **No** es la lista de especialidades/partidas de los SC de Configuración.
   - Mismo `id` = **nueva revisión**: `rev+1`, nueva carpeta `r<rev>` y la anterior pasa a `revs`. El mismo archivo (nombre y tamaño) se marca «ya cargado» y no se procesa.
   - `rot`: código leído del rótulo (texto más grande con forma de código); `ok` si coincide con el del nombre.
-  - Reglas: lee `plaRead()` (equipo LPS sin capataz), escribe `canEdit()` con `plbOk()`; nadie borra (archivar = `arch:{t,by,n}`).
+  - Reglas: lee `plaRead()` (equipo LPS sin capataz), escribe `canEdit() || isOT()` con `plbOk()`; nadie borra (archivar = `arch:{t,by,n}`).
 - Firebase **Storage** (`firebase/storage.rules`), carpeta `planos/<id>/r<rev>/`: `th.webp` (miniatura 480 px), `<z>/<x>_<y>.webp` (mosaicos; z=0 es el detalle) y `orig.pdf`. Se usa la **API REST** (`firebasestorage.googleapis.com/v0`) con `Authorization: Firebase <idToken>` (sin SDK de Storage). Las reglas leen `members` de Firestore (`firestore.get`). El CI instala las reglas y el CORS del depósito (`firebase/storage-cors.json`) en un paso aparte que **no corta** la publicación si Storage no está activado.
 - Caché en el equipo: Cache API `lps-planos` (las rutas no cambian nunca: cada revisión tiene su carpeta).
 - El documento se escribe **después** de subir todos los archivos: nunca aparece un plano a medias.
