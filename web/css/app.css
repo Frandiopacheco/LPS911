@@ -710,7 +710,7 @@ tr.addrow td{height:44px;background:var(--panel)}
 .pop hr{border:0;border-top:1px solid var(--line2);margin:4px 2px}
 .pop .ph{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 10px 2px}
 .pop kbd{margin-left:auto;font:11px var(--f-mono);color:var(--muted)}
-.toast{width:max-content;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);border-radius:8px;padding:9px 14px;display:flex;gap:14px;align-items:center;z-index:60;box-shadow:var(--shadow);font-size:13px;max-width:calc(100% - 32px)}
+.toast{width:max-content;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);border-radius:8px;padding:9px 14px;display:flex;gap:14px;align-items:center;z-index:460;box-shadow:var(--shadow);font-size:13px;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--today);font-weight:700;padding:0}
 
 /* cards / generic */
@@ -1675,7 +1675,8 @@ table.rtab .rc-x{width:30px}
 .lqc .lqchs .chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 
 /* ventana de confirmación propia (uiAsk, base.js) */
-.uask{position:fixed;inset:0;z-index:170;background:var(--backdrop,rgba(15,20,18,.42));display:grid;place-items:center;padding:16px;animation:lps-fade var(--t-fast,.12s) var(--ease,ease)}
+/* por encima de todo, también del visor de Planos (.plv 300) y del visor de fotos (.lb 400): antes quedaba escondida detrás */
+.uask{position:fixed;inset:0;z-index:450;background:var(--backdrop,rgba(15,20,18,.42));display:grid;place-items:center;padding:16px;animation:lps-fade var(--t-fast,.12s) var(--ease,ease)}
 .uac{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-dlg,14px);box-shadow:var(--sh-2,var(--shadow));width:min(480px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:18px 20px 16px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.45;animation:lps-pop var(--t,.18s) var(--ease,ease)}
 .uah{display:flex;align-items:center;gap:10px}.uah b{font-size:16px;line-height:1.25}
 .uah i{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 15px/1 var(--f-mono,monospace);font-style:normal;background:var(--accent-soft);color:var(--accent)}

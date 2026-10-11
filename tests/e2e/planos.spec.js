@@ -525,3 +525,42 @@ test.describe('vínculos en tablet (toque)', () => {
     noErrors(errors, 'vínculos tablet');
   });
 });
+
+test('vínculos: la ventana de confirmar (Borrar, Texto) y los avisos se ven encima del visor', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', ['P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', 'ZZZ-P2D-ARQ-E05-AG07_CORTES A B']
+    .map(n => ({ name: `2459243-PTSA-XXX-${n}.pdf`, mimeType: 'application/pdf', buffer: pdf })));
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  // un vínculo ya guardado en la lámina
+  await page.evaluate(() => fcol('plb').doc('ARQ_AG03').update({ lk: [{ id: 'k1', x0: 0.3, y0: 0.2, x1: 0.34, y1: 0.24, to: 'ARQ_AG07', v: null, t: '' }] }));
+  await page.evaluate(() => { U.tab = 'pbib'; render(); window.__uiAskReal = true; }); // la ventana real, no la del navegador
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  await page.click('#plv [data-pv="lk"]');
+  await page.evaluate(async () => {
+    const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen(PLV.tv.W * 0.32, PLV.tv.H * 0.22 / (PLV.tv.H / PLV.tv.H));
+    const y = PLV.tv.toScreen(0, 0.22 * PLV.tv.H).y;
+    const ev = t => host.dispatchEvent(new PointerEvent(t, { pointerId: 5, clientX: r.left + s.x, clientY: r.top + y, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    ev('pointerdown'); await new Promise(r => setTimeout(r, 30)); ev('pointerup');
+  });
+  await expect(page.locator('#plv .plkbar [data-pk="del"]')).toBeVisible();
+  // Texto: la ventana con campo se ve y se puede escribir
+  await page.click('#plv .plkbar [data-pk="txt"]');
+  await page.fill('#uask textarea', 'Corte A');
+  await page.click('#uask [data-ua="si"]'); // antes: quedaba detrás del visor y este clic no llegaba
+  await expect.poll(() => page.evaluate(() => PLB.get('ARQ_AG03').lk[0].t)).toBe('Corte A');
+  // Borrar: confirmar en la ventana real y el aviso «Vínculo quitado» encima del visor
+  await page.click('#plv .plkbar [data-pk="del"]');
+  await page.click('#uask [data-ua="si"]');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(0);
+  await expect(page.locator('#toast')).toContainText('Vínculo quitado');
+  const top = await page.evaluate(() => { const t = document.getElementById('toast').getBoundingClientRect(); const el = document.elementFromPoint(t.left + t.width / 2, t.top + t.height / 2); return !!el && !!el.closest('#toast'); });
+  expect(top).toBe(true);
+  noErrors(errors, 'vínculos ventana');
+});
