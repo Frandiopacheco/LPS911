@@ -296,7 +296,7 @@ const PQ={items:[],run:false,stop:false,t0:0,done:0,secs:[]};
 function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scroll"><div class="wrap"><p class="note">Solo el administrador y los editores cargan planos.</p></div></div>';return}
   if(main.dataset.built!=='pcar'){main.dataset.built='pcar';
     main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Cargar planos','Arrastra los PDF (uno por lámina). El sistema lee el código, la especialidad y el piso del nombre del archivo y del rótulo; revisa la tabla y pulsa <b>Procesar</b>.')}
-      ${helpBox('Cómo exportar los PDF desde AutoCAD',`<ul><li>Impresora <b>DWG To PDF.pc3</b>, papel del tamaño real de la lámina (p. ej. 1200 × 900 mm), <b>Extensión</b>, <b>Ajustar al papel</b>, centrado, con el CTB del proyecto.</li><li>Una lámina por archivo y con el mismo nombre del DWG (el «-Model» que agrega AutoCAD se quita solo).</li><li>Si subes otra vez una lámina con el mismo código, queda como <b>nueva revisión</b> y la anterior se guarda en el historial.</li><li>El proceso corre en esta PC (unos 30–60 s por lámina): usa una PC con Chrome o Edge y no cierres la pestaña hasta que termine.</li></ul>`)}
+      ${helpBox('Cómo exportar los PDF desde AutoCAD',`<ul><li>Impresora <b>DWG To PDF.pc3</b>, papel del tamaño real de la lámina (p. ej. 1200 × 900 mm), <b>Extensión</b>, <b>Ajustar al papel</b>, centrado, con el CTB del proyecto.</li><li>Una lámina por archivo y con el mismo nombre del DWG (el «-Model» que agrega AutoCAD se quita solo).</li><li>Si subes otra vez una lámina con el mismo código, queda como <b>nueva revisión</b> y la anterior se guarda en el historial.</li><li>El proceso corre en esta PC (unos 20–60 s por lámina): usa una PC con Chrome o Edge y deja la pestaña <b>visible</b> hasta que termine (minimizada o tapada, el navegador la frena). Puedes trabajar en otra pantalla o dejar esta ventana a un lado. El avance se ve en el título de la pestaña.</li><li>En Edge: Configuración › Sistema y rendimiento › «No suspender nunca estos sitios» → agrega la dirección de LPS 911.</li></ul>`)}
       <label class="pldrop" id="pldrop"><input type="file" id="plfile" accept="application/pdf,.pdf" multiple hidden><b>Arrastra aquí los PDF</b><span>o toca para elegirlos (puedes elegir muchos a la vez)</span></label>
       <div id="plqbar" class="plbar"></div><div id="plqtab"></div></div></div>`;
     const inp=$('#plfile',main),dz=$('#pldrop',main);inp.onchange=()=>{plAdd([...inp.files]);inp.value=''};
@@ -327,7 +327,7 @@ function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)re
   const I=PQ.items,cnt=k=>I.filter(x=>x.st===k).length;const pend=cnt('pend'),ok=cnt('ok'),err=cnt('err'),bad=cnt('bad'),skip=cnt('skip');
   const avg=PQ.secs.length?PQ.secs.reduce((a,b)=>a+b,0)/PQ.secs.length:45;const left=pend+(PQ.run?1:0);
   shx(bar,!I.length?'':`${PQ.run?`<button class="ib" data-q="stop">Detener</button>`:`<button class="ib pri" data-q="go"${pend?'':' disabled'}>Procesar ${pend} plano${pend===1?'':'s'}</button>`}
-    <span class="plcnt">${[ok?`✓ ${ok} listos`:'',err?`✕ ${err} con error`:'',bad?`${bad} por completar`:'',skip?`${skip} ya cargados`:''].filter(Boolean).join(' · ')}${PQ.run&&left?` · faltan ~${Math.max(1,Math.round(left*avg/60))} min`:''}</span>
+    ${PQ.run?'<span class="plbusy">⏳ Procesando en esta PC: deja esta pestaña <b>visible</b> (no la minimices ni la tapes con otra ventana). Si quedó oculta, sigue al volver.</span>':''}<span class="plcnt">${[ok?`✓ ${ok} listos`:'',err?`✕ ${err} con error`:'',bad?`${bad} por completar`:'',skip?`${skip} ya cargados`:''].filter(Boolean).join(' · ')}${PQ.run&&left?` · faltan ~${Math.max(1,Math.round(left*avg/60))} min`:''}</span>
     ${!PQ.run?`<button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
   if(!force&&tab.dataset.n===String(I.length)&&PQ.run)return;
   clearTimeout(plqT);plqT=setTimeout(()=>plqTable(tab),force?0:200)}
@@ -348,11 +348,14 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
 function plRowSay(i,t){const c=document.getElementById('plst'+i);if(c)c.textContent=t;const it=PQ.items[i];if(it)it.msg=t}
 const plUnload=e=>{e.preventDefault();e.returnValue=''};
 async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='pend'))return;
-  PQ.run=true;PQ.stop=false;window.addEventListener('beforeunload',plUnload);let wl=null;try{if(navigator.wakeLock)wl=await navigator.wakeLock.request('screen')}catch(e){}
+  PQ.run=true;PQ.stop=false;window.addEventListener('beforeunload',plUnload);let wl=null;const wlGet=async()=>{try{if(navigator.wakeLock&&document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen')}catch(e){}};await wlGet();
+  /* la pantalla de bloqueo suelta el «mantener encendida»: se pide de nuevo al volver a la pestaña */
+  const onVis=()=>{if(document.visibilityState==='visible'&&PQ.run)wlGet()};document.addEventListener('visibilitychange',onVis);
+  const title0=document.title;const tot=PQ.items.filter(x=>x.st==='pend').length;let n=0;
   plqDraw(true);
-  try{for(;;){if(PQ.stop)break;const i=PQ.items.findIndex(x=>x.st==='pend');if(i<0)break;const it=PQ.items[i];it.st='run';it.msg='Empezando…';plqDraw(true);
+  try{for(;;){if(PQ.stop)break;const i=PQ.items.findIndex(x=>x.st==='pend');if(i<0)break;const it=PQ.items[i];it.st='run';it.msg='Empezando…';n++;document.title=`(${n}/${tot}) Cargando planos · LPS 911`;plqDraw(true);
       try{const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
       catch(e){console.error('plano',it.file.name,e);it.st='err';it.msg='✕ '+(e.message||'Error al procesar');if(e.fatal){PQ.stop=true;toast(e.message)}}
       plqCheck();plqDraw(true)}}
-  finally{PQ.run=false;window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
+  finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
     const ok=PQ.items.filter(x=>x.st==='ok').length;if(ok)toast(`Carga terminada: ${ok} plano(s) listos en la biblioteca.`)}}

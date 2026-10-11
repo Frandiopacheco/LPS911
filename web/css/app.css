@@ -3440,3 +3440,4 @@ body.ipr-on{overflow:hidden}
 @media (max-width:760px){.plgrid{grid-template-columns:repeat(2,1fr);gap:8px}.plvt{max-width:60vw}.plvh .ib{min-width:40px;height:40px}.plcnt{margin-left:0;width:100%}}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .plvold{background:#3a2a10;color:#ffcf8a;border-color:#6b4a18}}
 :root[data-theme="dark"] .plvold{background:#3a2a10;color:#ffcf8a;border-color:#6b4a18}
+.plbusy{flex-basis:100%;font-size:12.5px;padding:6px 10px;border-radius:var(--r-ctl,8px);background:var(--panel2);border:1px solid var(--line)}
