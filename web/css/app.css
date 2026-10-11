@@ -3517,3 +3517,6 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .plmc .tin{flex:1;min-width:150px;height:var(--h-ctl,34px)}
 .plms{font-size:11px;color:var(--muted)}
 @media (max-width:760px){.plmbar{bottom:34px;width:calc(100vw - 16px)}.plmbar .ib{min-height:40px}}
+/* Medir: cursor de cruz fina con el centro libre (el punto activo es el del centro, 25 × 25 px) en vez de la manito */
+.plvc.medir,.plvc.medir.drag{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='25' height='25' viewBox='0 0 25 25'><g fill='none' stroke-linecap='square'><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='white' stroke-width='3.4'/><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='%23d6336c' stroke-width='1.4'/></g></svg>") 12 12,crosshair}
+.plvc.medir.sobre,.plvc.medir.sobre.drag{cursor:move}

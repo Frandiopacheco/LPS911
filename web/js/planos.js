@@ -310,7 +310,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   /* medir: coordenadas del plano (píxeles del nivel de detalle) ↔ pantalla; el dibujo de encima (V.over) y los toques (V.onTap, V.onDown…) los pone planos-medir.js */
   V.toWorld=(cx,cy)=>{const r=host.getBoundingClientRect();return{x:(cx-r.left-V.x)/V.s,y:(cy-r.top-V.y)/V.s}};
   V.toScreen=(wx,wy)=>({x:V.x+wx*V.s,y:V.y+wy*V.s});
-  V.cv=cv;V.getDpr=()=>dpr;V.W=spec.W;V.H=spec.H;
+  V.cv=cv;V.host=host;V.getDpr=()=>dpr;V.W=spec.W;V.H=spec.H;
   V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
   V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
   V.dbg=()=>({zfling,afterPinch,pointers:P.size,pinch:!!pinch});

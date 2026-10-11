@@ -327,6 +327,8 @@ test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina pa
   await page.click('#plv [data-pv="med"]');
   await expect(page.locator('#plv .plmbar')).toBeVisible();
   await expect(page.locator('#plv .plmbar [data-pm="dist"]')).toBeDisabled(); // sin calibrar
+  await expect(page.locator('.plvc')).toHaveClass(/medir/);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.plvc')).cursor)).toMatch(/^url\(/); // cruz fina, no la manito
   const tap = (wx, wy) => page.evaluate(async ([wx, wy]) => {
     const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen(wx, wy), x = r.left + s.x, y = r.top + s.y;
     const ev = (t) => host.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, pointerType: 'mouse', isPrimary: true, bubbles: true }));
@@ -353,12 +355,20 @@ test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina pa
   await page.click('#plv .plmbar [data-pm="area"]');
   await tap(W * 0.3, W * 0.3); await tap(W * 0.3 + 500, W * 0.3); await tap(W * 0.3 + 500, W * 0.3 + 200); await tap(W * 0.3, W * 0.3 + 200);
   await expect(page.locator('#plmv')).toContainText('10.00 m²'); // 5 m × 2 m
+  // sobre un punto puesto el cursor pasa a «mover»; fuera de él vuelve a la cruz
+  const sobre = await page.evaluate(() => { const q = PLM.L.area[0], r = document.querySelector('.plvc').getBoundingClientRect(), t = PLV.tv.toScreen(q.x, q.y); return { x: r.left + t.x, y: r.top + t.y }; });
+  await page.mouse.move(sobre.x, sobre.y);
+  await expect(page.locator('.plvc')).toHaveClass(/sobre/);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.plvc')).cursor)).toBe('move');
+  await page.mouse.move(sobre.x + 120, sobre.y + 120);
+  await expect(page.locator('.plvc')).not.toHaveClass(/sobre/);
   // acercar no cambia la medida (se guarda en coordenadas del plano); Esc sale de medir antes de cerrar el visor
   await page.evaluate(() => PLV.tv.zoomAt(2, 300, 300));
   await page.waitForTimeout(400);
   await expect(page.locator('#plmv')).toContainText('10.00 m²');
   await page.keyboard.press('Escape');
   await expect(page.locator('#plv .plmbar')).toHaveCount(0);
+  await expect(page.locator('.plvc')).not.toHaveClass(/medir/); // vuelve la manito para mover el plano
   await expect(page.locator('#plv')).toHaveCount(1);
   noErrors(errors, 'medir');
 });
