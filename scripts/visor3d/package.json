@@ -1,0 +1,8 @@
+{
+  "name": "lps911-visor3d",
+  "private": true,
+  "type": "module",
+  "description": "Fuente del visor 3D experimental (módulo Planos › Modelo 3D). Se empaqueta a web/vendor/visor3d/ con: npm install && npm run build",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "@thatopen/fragments": "3.4.8", "three": "0.186.1", "web-ifc": "0.0.78", "esbuild": "0.24.0" }
+}

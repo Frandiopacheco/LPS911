@@ -50,3 +50,11 @@ Nomenclatura `2459243-PTSA-XXX-<NIVEL>-P2D-<ESP>-E05-<COD>_<TÍTULO>`. Se ubica 
 ## Pruebas
 
 `tests/e2e/planos.spec.js`: selector y roles, lector de nombres, carga de un PDF generado (pdf.js servido desde `node_modules/pdfjs-dist`, Storage simulado reemplazando `plPut`/`plGet`), mosaicos esperados por nivel, visor que pide solo mosaicos visibles al acercar, nueva revisión. Reglas: `tests/rules/firestore.test.mjs` («planos: …»).
+
+## Modelo 3D (beta, solo el administrador)
+
+Pestaña `p3d` del módulo Planos (`web/js/planos3d.js`). Experimental para evaluar en la tablet (oct 2026).
+- **Visor empaquetado aparte** en `web/vendor/visor3d/` (three.js + That Open Fragments + web-ifc), fuente en `scripts/visor3d/` (`npm install && npm run build`; el resultado se sube al repo porque la app no tiene empaquetador). `visor3d.js` (~0,8 MB) + `visor3d-worker.js` (~1,2 MB) se bajan al entrar; `ifc-import.js` (~3,8 MB) + `web-ifc.wasm` solo al cargar IFC. `window.Visor3D = {convert(file,onProgress), create(host)}`.
+- **Carga:** «Cargar IFC…» convierte cada IFC **en la PC** a `.frag` (ARQ 107 MB → 17,5 MB en ~30 s) y lo sube a Storage `modelos/<esp>/r<rev>.frag`; Firestore `p3d/<esp>` `{disc, nm, path, rev, fsize, isize, secs, by, byN, ts}` (reglas `p3dOk`, cargan admin/editor/OT). La especialidad sale del nombre (`…-M3D-ARQ-E05.ifc` → `ARQ`).
+- **Visor:** se cargan solas ARQ, EST y AFC (o todas si hay ≤ 3); el resto con su botón. Selector de piso: los `IfcBuildingStorey` de cada modelo, unidos por nombre («2. SEGUNDO PISO» = «SEGUNDO PISO») y los niveles de acabado (`…FL`) sumados al piso de encima; al elegir uno se aísla y se corta a 1,3 m sobre el piso. La altura real del piso es la cara superior más común de sus losas (ponderada por área), en coordenadas del mundo (Fragments desplaza cada modelo: `model.object.position`). Tocar un elemento muestra nombre, tipo y categoría (`raycastAll`, ignorando lo que queda arriba del corte).
+- **Pendiente:** el IFC de arquitectura no trae ambientes (`IfcSpace`: solo 2); para vincular con la Matriz hay que reexportar con Rooms/Spaces.

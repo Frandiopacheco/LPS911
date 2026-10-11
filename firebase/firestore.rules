@@ -388,6 +388,16 @@ service cloud.firestore {
       allow read: if plaRead();
       allow create, update: if (canEdit() || isOT()) && plbOk();
     }
+    // Modelo 3D (beta, docs/ia/planos.md): un documento por especialidad con la ruta del modelo convertido (.frag) en Storage
+    function p3dOk(id) {
+      let d = request.resource.data;
+      return d.disc is string && d.disc == id && d.disc.size() <= 20 && d.rev is int && d.rev >= 1
+        && d.path is string && d.path.matches('modelos/[A-Za-z0-9_.-]+/r[0-9]+[.]frag');
+    }
+    match /p3d/{id} {
+      allow read: if plaRead();
+      allow create, update: if (canEdit() || isOT()) && p3dOk(id);
+    }
     // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
     function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
     // fecha YYYY-MM-DD entre hace 3 días y hoy (hora de Lima, UTC-5; tolera un día por el reloj y la zona)

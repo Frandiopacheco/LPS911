@@ -1205,3 +1205,17 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
   await assertFails(setDoc(doc(ed, 'plb/x3'), PLB({ base: 'otra/carpeta' })));
   await assertFails(setDoc(doc(ed, 'plb/x4'), PLB({ W: '100' })));
 });
+
+// ── Modelo 3D (beta) ──
+test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínima', async () => {
+  const D = x => ({ disc: 'ARQ', rev: 1, path: 'modelos/ARQ/r1.frag', ...x });
+  for (const db of [user('editor@obra.pe'), user(OWNER), user('ot@obra.pe')]) await assertSucceeds(setDoc(doc(db, 'p3d/ARQ'), D()));
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('campo@obra.pe')]) {
+    await assertSucceeds(getDoc(doc(db, 'p3d/ARQ'))); await assertFails(setDoc(doc(db, 'p3d/ARQ'), D({ rev: 2, path: 'modelos/ARQ/r2.frag' })));
+  }
+  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'p3d/ARQ')));
+  const ed = user('editor@obra.pe');
+  await assertFails(setDoc(doc(ed, 'p3d/EST'), D()));                                  // id distinto de disc
+  await assertFails(setDoc(doc(ed, 'p3d/ARQ'), D({ path: 'planos/x/r1/th.webp' })));
+  await assertFails(deleteDoc(doc(ed, 'p3d/ARQ')));
+});
