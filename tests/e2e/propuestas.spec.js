@@ -69,14 +69,19 @@ test('7 · «Aceptar todo lo visible» solo acepta lo que muestra la grilla con 
   noErrors(errors, 'aceptar visibles');
 });
 
-test('8 · revisando una propuesta, tocar un día vacío no cambia el programa oficial', async ({ page }) => {
+test('8 · revisando una propuesta, tocar un día lo agrega a lo propuesto y el programa oficial no cambia hasta aceptar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [REC0, prop({ i0: item(moved(I0, ['2026-10-02']), I0) })] });
   await revision(page);
   await cell(page, 'i0', '2026-10-05').click();
-  await expect(page.locator('#toast')).toContainText('Estás revisando esta propuesta');
+  await expect(page.locator('#ppbar')).toContainText('días editados');
+  /* solo es la vista previa: lo oficial y lo que envió el SC siguen igual */
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
-  noErrors(errors, 'revisión sin edición directa');
+  /* ✓ acepta con los días que dejó el ingeniero */
+  await page.click('#grid tr[data-a="i0"] [data-rva="ok"]');
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-10-02', '2026-10-05']);
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0 ?? null).toBeNull();
+  noErrors(errors, 'revisión con días editados');
 });
 
 test('9 · aceptar desplazando sobre un feriado junta los días sin perder cantidades', async ({ page }) => {
