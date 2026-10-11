@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
-import { PostproductionRenderer, PostproductionAspect } from '@thatopen/components-front';
 import CameraControls from 'camera-controls';
 import { levelsOf, levelIndex } from './levels.js';
 import { readProps } from './props.js';
@@ -27,8 +26,9 @@ function create(host, opts = {}) {
   const components = new OBC.Components();
   const world = components.get(OBC.Worlds).create();
   world.scene = new OBC.SimpleScene(components);
-  /* renderizador con posproducción (bordes + oclusión ambiental): solo se calcula al quedarse quieta la cámara (ver setFx) */
-  world.renderer = new PostproductionRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance' });
+  /* (oct 2026 se probó PostproductionRenderer con bordes y oclusión al detener la cámara: el cambio simple ↔ con efectos al recorrer
+     se veía como si el modelo se pintara y despintara; se quitó. Ver docs/ia/planos.md › Calidad visual) */
+  world.renderer = new OBC.SimpleRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance' });
   world.camera = new OBC.OrthoPerspectiveCamera(components);
   const R = world.renderer, cam = world.camera, cc = cam.controls, canvas = R.three.domElement;
   R.mode = OBC.RendererMode.MANUAL;       /* solo se dibuja cuando algo cambia (needsUpdate) */
@@ -36,44 +36,17 @@ function create(host, opts = {}) {
   components.init();
   world.scene.setup();
   world.scene.three.background = new THREE.Color(opts.bg || 0xeef1f3);
-  /* luz: cielo/suelo (cada orientación de cara con su tono) + sol fijo + un relleno suave desde la cámara (las caras que miras nunca quedan negras).
-     La escena por defecto traía una luz ambiente fuerte que aplanaba todo. */
+  /* luz: cielo/suelo (cada orientación de cara con su tono) + sol fijo + un contraluz suave fijo. Todo fijo: el tono de una cara no cambia
+     al girar la cámara. La escena por defecto traía una luz ambiente fuerte que aplanaba todo. */
   world.scene.deleteAllLights();
   const sun = new THREE.DirectionalLight(0xfff6e8, 1.15); sun.position.set(0.55, 1, 0.35);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.35);
-  world.scene.three.add(new THREE.HemisphereLight(0xf4f8ff, 0x8f8676, 1.05), sun, new THREE.AmbientLight(0xffffff, 0.2), fill, fill.target);
-  const tgt0 = new THREE.Vector3();
-  R.onBeforeUpdate.add(() => { cc.getTarget(tgt0); fill.position.copy(cam.three.position).sub(tgt0) });   /* el relleno sigue a la cámara (luz direccional: solo cuenta la dirección) */
+  const back = new THREE.DirectionalLight(0xffffff, 0.35); back.position.set(-0.6, 0.4, -0.7);
+  world.scene.three.add(new THREE.HemisphereLight(0xf4f8ff, 0x8f8676, 1.05), sun, back, new THREE.AmbientLight(0xffffff, 0.25));
   canvas.style.touchAction = 'none';
   const fragments = components.get(OBC.FragmentsManager);
   fragments.init(here + 'visor3d-worker.js');
   if (opts.quality != null) fragments.core.settings.graphicsQuality = opts.quality;
   const redraw = () => { R.needsUpdate = true };
-  /* bordes y sombreado en rincones (posproducción). Al mover la cámara se dibuja simple y fluido; al soltarla, tras FX_MS, un cuadro
-     con los efectos (PostproductionRenderer, modo MANUAL). Apagado en «Rápida» (setPreset). */
-  const FX_MS = 220;
-  /* Apagar una posproducción que nunca se encendió lanza «Base pass not initialized» (lo hace el propio temporizador del renderizador,
-     p. ej. justo al crear o liberar el visor): se ignora ese caso. */
-  { const proto = Object.getPrototypeOf(R.postproduction), d = Object.getOwnPropertyDescriptor(proto, 'enabled');
-    if (d && d.set && !d.set.__lps) { const set = function (v) { if (!v && !this._initialized) { this._enabled = false; return } d.set.call(this, v) }; set.__lps = true;
-      Object.defineProperty(proto, 'enabled', { ...d, set }) } }
-  R.manualModeDelay = FX_MS; R.turnOffOnManualMode = true; R.manualDefaultStyle = PostproductionAspect.COLOR;
-  let fxOn = false;
-  /* El paso de bordes pinta cada pieza con un material propio, también las transparentes (ambientes IfcSpace, vidrios): un ambiente apoyado
-     sobre el piso peleaba con él y dejaba rayas. Lo transparente no dibuja bordes (no tapa ni marca lo que hay detrás). */
-  const NO_EDGE = new THREE.MeshBasicMaterial({ visible: false });
-  /* la posproducción toma su propia resolución (×2 fija) y su cámara al crearse: se igualan a las del renderizador (preset, perspectiva/ortogonal) */
-  function fxSize() { const pp = R.postproduction, c = pp.composer; if (!c) return; c.setPixelRatio(R.three.getPixelRatio()); pp.setSize(host.clientWidth || 1, host.clientHeight || 1) }
-  R.onResize.add(() => setTimeout(fxSize, 0));
-  R.onBeforeUpdate.add(() => { const pp = R.postproduction; if (pp._basePass && pp._basePass.camera !== cam.three) pp.updateCamera() });
-  function noEdgesOnGlass(e) { if (e.__lps) return; e.__lps = true; const orig = e.setMaterialToMesh.bind(e);
-    e.setMaterialToMesh = on => { orig(on); if (!on || !fragments.initialized) return;
-      for (const [, mdl] of fragments.core.models.list) for (const [, t] of mdl.tiles) { const prev = t.userData.edgePassPreviousMaterial; if (!prev || !Array.isArray(t.material)) continue;
-        const pa = Array.isArray(prev) ? prev : [prev]; if (!pa.some(x => x && x.transparent && x.opacity < 1)) continue;
-        t.material = t.material.map((m, i) => { const q = pa[Math.min(i, pa.length - 1)]; return q && q.transparent && q.opacity < 1 ? NO_EDGE : m }) } } }
-  function setFx(on) { fxOn = !!on; const pp = R.postproduction; pp.enabled = fxOn; R._previousEnabled = fxOn;   /* _previousEnabled: lo repone el temporizador del renderizador */
-    if (fxOn) { pp.style = PostproductionAspect.COLOR_PEN_SHADOWS; const e = pp.edgesPass; e.width = 1; e.color = new THREE.Color(0x3d4650); e.depthBiasStrength = 0.02; noEdgesOnGlass(e) }
-    redraw() }
 
   /* ───────── cámara: inercia y gestos (un dedo gira, dos dedos acercan y desplazan) ───────── */
   cc.smoothTime = 0.32;            /* tras soltar, el movimiento se frena en ~⅓ de segundo (inercia) */
@@ -239,10 +212,10 @@ function create(host, opts = {}) {
       if (el < ms) requestAnimationFrame(tick); else { dead2 = true; cc.smoothTime = keep; const iv = []; for (let i = 1; i < ts.length; i++) iv.push(ts[i] - ts[i - 1]); iv.sort((a, b) => a - b);
         const dropped = iv.filter(x => x > 33.4).length; res({ ms: Math.round(el), cuadros: ts.length, fps: +(ts.length / el * 1000).toFixed(1), p50: +pct(iv, 0.5).toFixed(1), p95: +pct(iv, 0.95).toFixed(1), max: +(iv[iv.length - 1] || 0).toFixed(1), lentos: dropped, ...V.stats(), dpr: R.three.getPixelRatio() }) } };
     requestAnimationFrame(tick) }) }
-  const PRESETS = { alta: [2, 1, true], equilibrada: [1.5, 0.7, true], rapida: [1, 0.4, false] };   /* [resolución máx., detalle, bordes y sombreado al detenerse] */
+  const PRESETS = { alta: [2, 1], equilibrada: [1.5, 0.7], rapida: [1, 0.4] };   /* [resolución máx., detalle] */
   let preset = '';
-  function setPreset(name) { const [d, q, fx] = PRESETS[name] || PRESETS.alta; preset = name in PRESETS ? name : 'alta'; setFx(fx && opts.fx !== false);
-    R.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, d)); R.resize(); fxSize(); fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw(); keepDrawing(500) }
+  function setPreset(name) { const [d, q] = PRESETS[name] || PRESETS.alta; preset = name in PRESETS ? name : 'alta';
+    R.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, d)); R.resize(); fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw(); keepDrawing(500) }
 
   /* ───────── vistas ───────── */
   const ctr = b => b.getCenter(new THREE.Vector3());
@@ -323,7 +296,7 @@ function create(host, opts = {}) {
     /* rendimiento */
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),
-    perf, bench, preset: setPreset, get presetName() { return preset }, get fx() { return fxOn }, set fx(v) { setFx(v) },
+    perf, bench, preset: setPreset, get presetName() { return preset },
     /* foto del estado (cámara, piso, cortes, ocultos, aislado) para reponerlo si el visor se libera de la memoria y se vuelve a armar */
     snapshot() { const p = new THREE.Vector3(), t = new THREE.Vector3(); cc.getPosition(p); cc.getTarget(t); const ser = m => m ? [...m].filter(([, x]) => x.size).map(([k, x]) => [k, [...x]]) : null;
       return { cam: { p: p.toArray(), t: t.toArray(), ortho: !cam.three.isPerspectiveCamera, zoom: cam.threeOrtho ? cam.threeOrtho.zoom : 1 }, level, cutOn, cutH, plan: planOn, hidden: ser(hidden), isolated: ser(isolated), cuts: sections.exportCuts() } },
@@ -334,7 +307,7 @@ function create(host, opts = {}) {
         await cc.setLookAt(...sn.cam.p, ...sn.cam.t, false); if (sn.cam.ortho && cam.threeOrtho) { cam.threeOrtho.zoom = sn.cam.zoom || 1; cam.threeOrtho.updateProjectionMatrix() } }
       redraw(); keepDrawing(500); emitState() },
     redraw, keepDrawing, canvas, camera: cam, renderer: R,
-    destroy() { dead = true; ro.disconnect(); try { sections.dispose(); measure.dispose() } catch (e) {} clearTimeout(R._timeout); try { components.dispose() } catch (e) {} host.innerHTML = '' },
+    destroy() { dead = true; ro.disconnect(); try { sections.dispose(); measure.dispose() } catch (e) {} try { components.dispose() } catch (e) {} host.innerHTML = '' },
   };
   requestAnimationFrame(pump);
   setPreset(opts.preset || 'alta');
