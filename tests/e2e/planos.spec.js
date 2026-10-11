@@ -212,3 +212,30 @@ test('visor: panel ☰ Planos, otra especialidad en la misma zona y ▲▼ de pi
   await expect(page.locator('#plv')).toHaveCount(1);
   noErrors(errors, 'panel');
 });
+
+test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  const r = await page.evaluate(async () => {
+    const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const ev = (type, id, x) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', bubbles: true }));
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    ev('pointerdown', 1, cx - 40); ev('pointerdown', 2, cx + 40);
+    for (let i = 1; i <= 8; i++) { ev('pointermove', 1, cx - 40 - i * 12); ev('pointermove', 2, cx + 40 + i * 12); await raf(); }
+    const atRelease = PLV.tv.s; ev('pointerup', 1, cx - 136); ev('pointerup', 2, cx + 136);
+    const seq = []; for (let i = 0; i < 40; i++) { await raf(); seq.push(PLV.tv.s); }
+    return { atRelease, seq };
+  });
+  expect(r.seq[5]).toBeGreaterThan(r.atRelease * 1.01);             // siguió acercando tras soltar
+  expect(r.seq[39]).toBeCloseTo(r.seq[38], 4);                       // y se detuvo
+  noErrors(errors, 'inercia');
+});
