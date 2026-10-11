@@ -74,3 +74,15 @@ test('4 · «Aceptar todo lo visible» acepta con los cambios la fila que ajusta
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q1').days)).toEqual(['2026-10-06', '2026-10-07']);
   noErrors(errors, 'aceptar todo con cambios');
 });
+
+test('5 · quitar el último día de una fila la saca de la propuesta (se rechaza) y no cambia el lookahead', async ({ page }) => {
+  const after = { ...A0, days: ['2026-10-05'], qty: { '2026-10-05': 30 } };
+  const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q0: item(after, A0, SAT3_1259) }, SAT3_1259)] });
+  await page.evaluate(() => { U.rev = true; requestRender(); });
+  await page.evaluate(() => revToggleDay('q0', '2026-10-05'));
+  await expect.poll(async () => (await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.q0 ?? null).toBeNull();
+  expect((await page.evaluate(() => __dbGet('acts', 'q0'))).days).toEqual(A0.days);
+  const h = Object.values(await page.evaluate(() => __dbAll('lhphist')));
+  expect(h[0]).toMatchObject({ st: 'rej' });
+  noErrors(errors, 'quitar último día');
+});
