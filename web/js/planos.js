@@ -222,7 +222,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   const resize=()=>{dpr=Math.min(window.devicePixelRatio||1,2.5);const[w,h]=size();cw=w;ch=h;const W=Math.round(w*dpr),H=Math.round(h*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}cv.style.width=w+'px';cv.style.height=h+'px'};
   const sMin=()=>V.fit*0.5,sMax=()=>2/(window.devicePixelRatio||1)*1.5;
   const clampS=v=>Math.max(sMin(),Math.min(sMax(),v));
-  V.fitView=(animate)=>{resize();const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
+  V.fitView=(animate)=>{resize();zfling=null;const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
     if(animate){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.tiles_();V.tick()}};
   V.zoomAt=(k,cx,cy)=>{const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const ts=clampS(s0*k),r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
   V.animTo=(s,x,y)=>{fling=null;zfling=null;anim={s,x,y};V.tick()};
@@ -263,23 +263,30 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,lastTap=0,vel=[],zvel=[];
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null;
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
     if(e.deltaX!==0||(Math.abs(d)<50&&!Number.isInteger(e.deltaY))){anim=null;fling=null;V.x-=e.deltaX;V.y-=d;V.tick();return}
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
-  host.addEventListener('pointerdown',e=>{try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
-    if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
-    const t=performance.now();if(P.size===1&&t-lastTap<300){const r=host.getBoundingClientRect();V.zoomAt(2,e.clientX-r.left,e.clientY-r.top);lastTap=0}else lastTap=t});
+  /* dedos «fantasma»: si la tablet no avisó que un dedo se levantó (salió por el borde, el sistema tomó el gesto…), el visor
+     contaba un dedo de más y el siguiente pellizco no hacía zoom. Un toque nuevo (isPrimary) limpia lo que quedó colgado. */
+  host.addEventListener('pointerdown',e=>{if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2))P.clear();pinch=null;
+    try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
+    if(P.size>=2){const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
+    if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
   host.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
-    if(P.size===2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
       const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
       if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
         const t=performance.now();zvel.push({t,lk:Math.log(d/pinch.d),dx:mx-pinch.cx,dy:my-pinch.cy,cx,cy});while(zvel.length&&t-zvel[0].t>60)zvel.shift();V.s=ns}
       pinch.d=d;pinch.cx=mx;pinch.cy=my;V.tick();return}
-    const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{const was=P.size===1&&!pinch;const wasPinch=P.size===2&&!!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
+    const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
+  const end=e=>{const was=P.size===1&&!pinch;
+    /* doble toque = dos toques cortos, quietos y cercanos en menos de 0,3 s */
+    if(was&&tap&&performance.now()-tap.t<250){const now=performance.now();
+      if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){const r=host.getBoundingClientRect();V.zoomAt(2,tap.x-r.left,tap.y-r.top);lastTap=null}else lastTap={t:now,x:tap.x,y:tap.y}}
+    tap=null;const wasPinch=P.size>=2&&!!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
     if(wasPinch&&zvel.length>1){const t=performance.now(),last=zvel[zvel.length-1];const dt=Math.max(16,t-zvel[0].t);
       const v=zvel.reduce((a,z)=>a+z.lk,0)/dt,vx=zvel.reduce((a,z)=>a+z.dx,0)/dt,vy=zvel.reduce((a,z)=>a+z.dy,0)/dt;
       /* solo si los dedos se movían al soltar (no si se quedaron quietos antes de levantarlos) */
@@ -288,9 +295,13 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(was&&vel.length>1){const dt=Math.max(16,performance.now()-vel[0].t),sx=vel.reduce((a,v)=>a+v.dx,0),sy=vel.reduce((a,v)=>a+v.dy,0);const vx=sx/dt,vy=sy/dt;
         if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60)fling={vx,vy}}vel=[];V.tick()}};
   host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
+  host.addEventListener('lostpointercapture',e=>{if(P.has(e.pointerId))end(e)});
+  /* red de seguridad: cuando ya no queda ningún dedo en la pantalla, se olvida todo */
+  host.addEventListener('touchend',e=>{if(!e.touches.length&&P.size){P.clear();pinch=null;host.classList.remove('drag')}},{passive:true});
+  host.addEventListener('touchcancel',()=>{P.clear();pinch=null;host.classList.remove('drag')},{passive:true});
   const ro=new ResizeObserver(()=>{const atFit=Math.abs(V.s-V.fit)<1e-9;resize();if(atFit)V.fitView();else V.tick()});ro.observe(host);
   V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
-  V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;V.tiles_();V.tick()};
+  V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
   V.loaded=()=>[...V.tiles.values()].filter(e=>e.bm).length;
   V.destroy=()=>{V.dead=true;ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
   requestAnimationFrame(()=>{V.fitView();if(spec.view)V.setView(spec.view)});return V}

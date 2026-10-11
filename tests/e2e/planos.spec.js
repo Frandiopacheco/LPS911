@@ -229,27 +229,46 @@ test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', asy
     const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
     const ev = (type, id, x) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', bubbles: true }));
     const raf = () => new Promise(r => requestAnimationFrame(r));
-    ev('pointerdown', 1, cx - 40); ev('pointerdown', 2, cx + 40);
-    for (let i = 1; i <= 8; i++) { ev('pointermove', 1, cx - 40 - i * 12); ev('pointermove', 2, cx + 40 + i * 12); await raf(); }
-    const atRelease = PLV.tv.s; ev('pointerup', 1, cx - 136); ev('pointerup', 2, cx + 136);
-    const seq = []; for (let i = 0; i < 40; i++) { await raf(); seq.push(PLV.tv.s); }
+    /* separación de los dedos que crece en proporción constante (gesto simétrico en escala logarítmica) */
+    const hd = i => 40 * Math.pow(1.12, i);
+    ev('pointerdown', 1, cx - hd(0)); ev('pointerdown', 2, cx + hd(0));
+    for (let i = 1; i <= 8; i++) { ev('pointermove', 1, cx - hd(i)); ev('pointermove', 2, cx + hd(i)); await raf(); }
+    const atRelease = PLV.tv.s; ev('pointerup', 1, cx - hd(8)); ev('pointerup', 2, cx + hd(8));
+    const seq = []; for (let i = 0; i < 120; i++) { await raf(); seq.push(PLV.tv.s); }
     return { atRelease, seq };
   });
   expect(r.seq[5]).toBeGreaterThan(r.atRelease * 1.01);             // siguió acercando tras soltar
-  expect(r.seq[39]).toBeCloseTo(r.seq[38], 4);                       // y se detuvo
-  // alejar con el mismo gesto: la inercia es la misma (simétrica en escala logarítmica)
-  const o = await page.evaluate(async () => {
+  expect(r.seq[119]).toBeCloseTo(r.seq[118], 4);                       // y se detuvo
+  // dedo «fantasma»: un dedo que nunca avisó que se levantó no debe bloquear el siguiente pellizco
+  const g = await page.evaluate(async () => {
     const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-    const ev = (type, id, x) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', bubbles: true }));
+    const ev = (type, id, x, prim) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', isPrimary: !!prim, bubbles: true }));
     const raf = () => new Promise(r => requestAnimationFrame(r));
-    ev('pointerdown', 3, cx - 136); ev('pointerdown', 4, cx + 136);
-    for (let i = 1; i <= 8; i++) { ev('pointermove', 3, cx - 136 + i * 12); ev('pointermove', 4, cx + 136 - i * 12); await raf(); }
-    const atRelease = PLV.tv.s; ev('pointerup', 3, cx - 40); ev('pointerup', 4, cx + 40);
-    for (let i = 0; i < 60; i++) await raf();
-    return { atRelease, end: PLV.tv.s };
+    PLV.tv.fitView(); await raf(); await raf();
+    ev('pointerdown', 20, cx, true); ev('pointerdown', 21, cx + 50); /* nunca llegan sus pointerup */
+    const s0 = PLV.tv.s;
+    ev('pointerdown', 30, cx - 40, true); ev('pointerdown', 31, cx + 40);
+    for (let i = 1; i <= 6; i++) { ev('pointermove', 30, cx - 40 - i * 10); ev('pointermove', 31, cx + 40 + i * 10); await raf(); }
+    const s1 = PLV.tv.s; ev('pointerup', 30, cx - 100); ev('pointerup', 31, cx + 100);
+    return { s0, s1 };
   });
-  const gin = Math.log(r.seq[39] / r.atRelease), gout = Math.log(o.atRelease / o.end);
-  expect(gout).toBeGreaterThan(0);
-  expect(Math.abs(gin - gout) / gin).toBeLessThan(0.35);
+  expect(g.s1, JSON.stringify(g)).toBeGreaterThan(g.s0 * 1.5);
+  // doble toque acerca; un toque seguido de un pellizco ya no dispara el doble toque (antes «peleaban» y el zoom no respondía)
+  const d2 = await page.evaluate(async () => {
+    const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const ev = (type, id, x, prim) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', isPrimary: !!prim, bubbles: true }));
+    const raf = () => new Promise(r => requestAnimationFrame(r)); const wait = ms => new Promise(r => setTimeout(r, ms));
+    PLV.tv.fitView(); await raf(); await raf(); const f = PLV.tv.s;
+    ev('pointerdown', 40, cx, true); ev('pointerup', 40, cx); await wait(80); ev('pointerdown', 41, cx, true); ev('pointerup', 41, cx);
+    for (let i = 0; i < 60; i++) await raf(); const dbl = PLV.tv.s / f;
+    PLV.tv.fitView(); await raf(); await raf(); const f2 = PLV.tv.s;
+    ev('pointerdown', 50, cx, true); ev('pointerup', 50, cx); await wait(60);
+    ev('pointerdown', 51, cx - 40, true); ev('pointerdown', 52, cx + 40);
+    for (let i = 1; i <= 6; i++) { ev('pointermove', 51, cx - 40 - i * 10); ev('pointermove', 52, cx + 40 + i * 10); await raf(); }
+    const pin = PLV.tv.s / f2; ev('pointerup', 51, cx - 100); ev('pointerup', 52, cx + 100);
+    return { dbl, pin };
+  });
+  expect(d2.dbl).toBeGreaterThan(1.8);
+  expect(d2.pin).toBeGreaterThan(2.2); expect(d2.pin).toBeLessThan(2.8); // ≈ 200/80: solo el pellizco, sin el zoom del doble toque
   noErrors(errors, 'inercia');
 });
