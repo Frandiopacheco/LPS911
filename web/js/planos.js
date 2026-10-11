@@ -208,42 +208,72 @@ function plThumbs(host){if(plIO)plIO.disconnect();
   $$('img[data-th]',host).forEach(i=>plIO.observe(i))}
 
 /* ---------- Visor de alta definición (mosaicos) ---------- */
+/* Visor suave (como Dalux/Revizto): durante el gesto solo se mueve una capa (una transformación por cuadro, en la GPU);
+   los mosaicos se vuelven a acomodar a su tamaño real al terminar. Zoom animado (rueda, botones, doble toque), inercia al
+   soltar, mosaicos que aparecen con fundido y precarga alrededor de lo visible para que al desplazarse no se vea borroso. */
 function plTiles(host,spec){/* spec: {base,W,H,Z,T} — devuelve el visor */
   const V={s:1,x:0,y:0,imgs:new Map(),need:new Set(),raf:0,dead:false,fit:1};const T=spec.T||PL_T;
-  host.innerHTML='';host.classList.add('plvc');
+  host.innerHTML='<div class="plvl"></div>';host.classList.add('plvc');const LY=host.firstChild;
+  let ls=1,lastNeed=0,idleT=0,anim=null,fling=null;
   const size=()=>[host.clientWidth||1,host.clientHeight||1];
-  V.fitView=()=>{const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;V.s=V.fit;V.x=(w-spec.W*V.s)/2;V.y=(h-spec.H*V.s)/2;V.draw()};
-  V.zoomAt=(k,cx,cy)=>{const ns=Math.max(V.fit*0.5,Math.min(2/(window.devicePixelRatio||1)*1.5,V.s*k));const r=ns/V.s;V.x=cx-(cx-V.x)*r;V.y=cy-(cy-V.y)*r;V.s=ns;V.draw()};
-  V.draw=()=>{if(V.raf)return;V.raf=requestAnimationFrame(()=>{V.raf=0;if(!V.dead)V.update()})};
+  const sMin=()=>V.fit*0.5,sMax=()=>2/(window.devicePixelRatio||1)*1.5;
+  const clampS=v=>Math.max(sMin(),Math.min(sMax(),v));
+  V.fitView=(animate)=>{const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
+    if(animate&&V.imgs.size){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.relayout();V.tick()}};
+  /* zoom animado hacia un punto (cx,cy de la pantalla) */
+  V.zoomAt=(k,cx,cy)=>{const ts=clampS((anim?anim.s:V.s)*k);const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
+  V.animTo=(s,x,y)=>{fling=null;anim={s,x,y};V.tick()};
+  V.tick=()=>{if(V.raf)return;V.raf=requestAnimationFrame(V.frame)};
+  V.frame=()=>{V.raf=0;if(V.dead)return;let more=false;
+    if(anim){const f=0.28;V.s+=(anim.s-V.s)*f;V.x+=(anim.x-V.x)*f;V.y+=(anim.y-V.y)*f;
+      if(Math.abs(anim.s-V.s)/anim.s<0.002&&Math.abs(anim.x-V.x)<0.5&&Math.abs(anim.y-V.y)<0.5){V.s=anim.s;V.x=anim.x;V.y=anim.y;anim=null}else more=true}
+    if(fling){V.x+=fling.vx*16;V.y+=fling.vy*16;fling.vx*=0.92;fling.vy*=0.92;if(Math.hypot(fling.vx,fling.vy)<0.02)fling=null;else more=true}
+    V.place();const now=performance.now();if(now-lastNeed>110){lastNeed=now;V.tiles()}
+    if(more)V.tick();V.idle()};
+  /* una sola transformación para toda la capa mientras se mueve */
+  V.place=()=>{const k=V.s/ls;LY.style.transform=`translate3d(${V.x}px,${V.y}px,0) scale(${k})`;if(k<0.6||k>1.6)V.relayout()};
+  V.relayout=()=>{ls=V.s;for(const e of V.imgs.values())V.pos(e);LY.style.transform=`translate3d(${V.x}px,${V.y}px,0)`};
+  V.pos=e=>{const st=e.im.style;st.transform=`translate(${e.wx*ls}px,${e.wy*ls}px)`;st.width=e.ww*ls+'px';st.height=e.wh*ls+'px'};
+  V.idle=()=>{host.classList.add('mv');clearTimeout(idleT);idleT=setTimeout(()=>{if(V.dead||anim||fling)return;host.classList.remove('mv');V.relayout();V.tiles()},140)};
+  V.draw=()=>V.tick();
   const coarse=Math.max(0,spec.Z-2);
-  V.update=()=>{const[w,h]=size();const dpr=window.devicePixelRatio||1;
-    const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(V.s*dpr)))));
-    const need=new Set();const add=(z,vis)=>{const k=2**z,lw=Math.ceil(spec.W/k),lh=Math.ceil(spec.H/k),nx=Math.ceil(lw/T),ny=Math.ceil(lh/T);
-      let x0=0,y0=0,x1=nx,y1=ny;if(vis){const wx0=-V.x/V.s,wy0=-V.y/V.s,wx1=wx0+w/V.s,wy1=wy0+h/V.s;x0=Math.max(0,Math.floor(wx0/(T*k)));y0=Math.max(0,Math.floor(wy0/(T*k)));x1=Math.min(nx,Math.ceil(wx1/(T*k)));y1=Math.min(ny,Math.ceil(wy1/(T*k)))}
+  V.tiles=()=>{const[w,h]=size();const dpr=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
+    const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dpr)))));
+    const need=new Set();const add=(z,vis,m)=>{const k=2**z,lw=Math.ceil(spec.W/k),lh=Math.ceil(spec.H/k),nx=Math.ceil(lw/T),ny=Math.ceil(lh/T);
+      let x0=0,y0=0,x1=nx,y1=ny;if(vis){const vw=w/V.s,vh=h/V.s,wx0=-V.x/V.s-vw*m,wy0=-V.y/V.s-vh*m,wx1=-V.x/V.s+vw*(1+m),wy1=-V.y/V.s+vh*(1+m);
+        x0=Math.max(0,Math.floor(wx0/(T*k)));y0=Math.max(0,Math.floor(wy0/(T*k)));x1=Math.min(nx,Math.ceil(wx1/(T*k)));y1=Math.min(ny,Math.ceil(wy1/(T*k)))}
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)need.add(z+'/'+x+'_'+y)};
-    add(coarse,false);if(zd<coarse)add(zd,true);V.need=need;
+    add(coarse,false,0);if(zd<coarse){add(zd,true,0.35);if(zd+1<coarse)add(zd+1,true,0)}V.need=need;
     for(const k of need)if(!V.imgs.has(k)){const[z,xy]=k.split('/');const[x,y]=xy.split('_').map(Number);const zz=+z,f=2**zz;const lw=Math.ceil(spec.W/f),lh=Math.ceil(spec.H/f);
-      const im=document.createElement('img');im.alt='';im.draggable=false;im.style.zIndex=String(10+spec.Z-zz);
-      const e={im,z:zz,wx:x*T*f,wy:y*T*f,ww:Math.min(T,lw-x*T)*f,wh:Math.min(T,lh-y*T)*f,ok:false,url:''};V.imgs.set(k,e);host.appendChild(im);
-      plGet(`${spec.base}/${k}.webp`).then(b=>{if(V.dead||!V.imgs.has(k))return;e.url=URL.createObjectURL(b);im.onload=()=>{e.ok=true;V.purge()};im.src=e.url},()=>{im.classList.add('err')})}
-    for(const e of V.imgs.values())e.im.style.transform=`translate(${V.x+e.wx*V.s}px,${V.y+e.wy*V.s}px)`,e.im.style.width=e.ww*V.s+'px',e.im.style.height=e.wh*V.s+'px';
+      const im=document.createElement('img');im.alt='';im.draggable=false;im.decoding='async';im.style.zIndex=String(10+spec.Z-zz);
+      const e={im,z:zz,wx:x*T*f,wy:y*T*f,ww:Math.min(T,lw-x*T)*f,wh:Math.min(T,lh-y*T)*f,ok:false,url:''};V.imgs.set(k,e);V.pos(e);LY.appendChild(im);
+      plGet(`${spec.base}/${k}.webp`).then(b=>{if(V.dead||!V.imgs.has(k))return;e.url=URL.createObjectURL(b);im.onload=()=>{e.ok=true;im.classList.add('ok');V.purge()};im.src=e.url},()=>{im.classList.add('err')})}
     V.purge()};
+  V.update=()=>{V.place();V.tiles()};
   /* quita lo que ya no hace falta, pero solo cuando lo nuevo ya cargó (así no parpadea al acercar o alejar) */
   V.purge=()=>{let ready=true;for(const k of V.need){const e=V.imgs.get(k);if(e&&!e.ok&&!e.im.classList.contains('err')){ready=false;break}}
-    for(const[k,e]of V.imgs)if(!V.need.has(k)&&(ready||V.imgs.size>160)){e.im.remove();if(e.url)URL.revokeObjectURL(e.url);V.imgs.delete(k)}};
-  /* gestos: rueda, arrastre, pellizco y doble toque */
-  const P=new Map();let pinch=null,lastTap=0;
-  host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();V.zoomAt(Math.exp(-e.deltaY*(e.deltaMode===1?0.05:0.0016)),e.clientX-r.left,e.clientY-r.top)},{passive:false});
-  host.addEventListener('pointerdown',e=>{host.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');
+    for(const[k,e]of V.imgs)if(!V.need.has(k)&&(ready||V.imgs.size>220)){e.im.remove();if(e.url)URL.revokeObjectURL(e.url);V.imgs.delete(k)}};
+  /* gestos: rueda (y pellizco del touchpad), arrastre con inercia, pellizco con dos dedos y doble toque */
+  const P=new Map();let pinch=null,lastTap=0,vel=[];
+  host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
+    const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
+    if(e.ctrlKey){/* pellizco en el touchpad: sigue a los dedos sin animar */anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
+    if(e.deltaX!==0||(Math.abs(d)<50&&!Number.isInteger(e.deltaY))){/* dos dedos en el touchpad: desplaza */anim=null;fling=null;V.x-=e.deltaX;V.y-=d;V.tick();return}
+    V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
+  host.addEventListener('pointerdown',e=>{host.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;vel=[];
     if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}}
     const t=performance.now();if(P.size===1&&t-lastTap<300){const r=host.getBoundingClientRect();V.zoomAt(2,e.clientX-r.left,e.clientY-r.top);lastTap=0}else lastTap=t});
   host.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
-    if(P.size===2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch.d>0)V.zoomAt(d/pinch.d,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);pinch.d=d;return}
-    V.x+=e.clientX-p.x;V.y+=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;V.draw()});
-  const end=e=>{P.delete(e.pointerId);if(P.size<2)pinch=null;if(!P.size)host.classList.remove('drag')};
+    if(P.size===2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=(a.x+b.x)/2-r.left,cy=(a.y+b.y)/2-r.top;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns}pinch.d=d;V.tick();return}
+    const dx=e.clientX-p.x,dy=e.clientY-p.y;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
+  const end=e=>{const was=P.size===1&&!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
+    if(!P.size){host.classList.remove('drag');
+      if(was&&vel.length>1){const dt=Math.max(16,performance.now()-vel[0].t),sx=vel.reduce((a,v)=>a+v.dx,0),sy=vel.reduce((a,v)=>a+v.dy,0);const vx=sx/dt,vy=sy/dt;
+        if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60){fling={vx,vy};V.tick()}}vel=[]}};
   host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
-  const ro=new ResizeObserver(()=>{if(V.s===V.fit)V.fitView();else V.draw()});ro.observe(host);
-  V.destroy=()=>{V.dead=true;ro.disconnect();for(const e of V.imgs.values())if(e.url)URL.revokeObjectURL(e.url);V.imgs.clear();host.innerHTML=''};
+  const ro=new ResizeObserver(()=>{if(Math.abs(V.s-V.fit)<1e-9)V.fitView();else V.tick()});ro.observe(host);
+  V.destroy=()=>{V.dead=true;clearTimeout(idleT);ro.disconnect();for(const e of V.imgs.values())if(e.url)URL.revokeObjectURL(e.url);V.imgs.clear();host.innerHTML=''};
   requestAnimationFrame(()=>V.fitView());return V}
 let PLV=null;
 function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
@@ -251,7 +281,7 @@ function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement};document.body.appendChild(box);plvDraw();box.focus();
   box.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea'))return;
     if(e.key==='Escape'){e.preventDefault();plClose()}else if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
-    else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView()}})}
+    else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
 function plClose(silent){if(!PLV)return;if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;plvDraw()}
@@ -275,7 +305,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
   if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),sp);
   PLV.box.onclick=async e=>{const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
-    if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView();else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
+    if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
     else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 async function plPdf(p,sp,btn){btn.disabled=true;const t=btn.textContent;btn.textContent='Descargando…';
