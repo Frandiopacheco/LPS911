@@ -237,5 +237,19 @@ test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', asy
   });
   expect(r.seq[5]).toBeGreaterThan(r.atRelease * 1.01);             // siguió acercando tras soltar
   expect(r.seq[39]).toBeCloseTo(r.seq[38], 4);                       // y se detuvo
+  // alejar con el mismo gesto: la inercia es la misma (simétrica en escala logarítmica)
+  const o = await page.evaluate(async () => {
+    const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const ev = (type, id, x) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: cy, pointerType: 'touch', bubbles: true }));
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    ev('pointerdown', 3, cx - 136); ev('pointerdown', 4, cx + 136);
+    for (let i = 1; i <= 8; i++) { ev('pointermove', 3, cx - 136 + i * 12); ev('pointermove', 4, cx + 136 - i * 12); await raf(); }
+    const atRelease = PLV.tv.s; ev('pointerup', 3, cx - 40); ev('pointerup', 4, cx + 40);
+    for (let i = 0; i < 60; i++) await raf();
+    return { atRelease, end: PLV.tv.s };
+  });
+  const gin = Math.log(r.seq[39] / r.atRelease), gout = Math.log(o.atRelease / o.end);
+  expect(gout).toBeGreaterThan(0);
+  expect(Math.abs(gin - gout) / gin).toBeLessThan(0.35);
   noErrors(errors, 'inercia');
 });
