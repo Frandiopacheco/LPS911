@@ -30,9 +30,9 @@ Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia e
 - Caché en el equipo: Cache API `lps-planos` (las rutas no cambian nunca: cada revisión tiene su carpeta).
 - El documento se escribe **después** de subir todos los archivos: nunca aparece un plano a medias.
 
-## Visor suave (`plTiles`)
+## Visor (`plTiles`): un solo lienzo
 
-Los mosaicos viven en una capa (`.plvl`); durante el gesto solo cambia la transformación de la capa (`translate3d`+`scale`, una por cuadro) y al quedar quieto 140 ms (`V.idle`) se reacomodan a su tamaño real (`V.relayout`, nítido). Zoom animado hacia el punto (`V.zoomAt` → `V.animTo`, interpolación por cuadro), inercia al soltar (`fling`), fundido al aparecer cada mosaico (`img.ok`, apagado con «reducir movimiento»), precarga del 35 % alrededor de lo visible y del nivel siguiente. Rueda del mouse = zoom animado; touchpad: dos dedos desplaza, pellizco (ctrl+rueda) acerca sin animar.
+Un `<canvas class="plcv">` (con `devicePixelRatio`, máx. 2,5) donde cada cuadro se dibujan los mosaicos ya decodificados (`createImageBitmap` → `ImageBitmap`), primero los niveles gruesos y encima los finos, con fundido de 140 ms y medio píxel extra contra las juntas. Nunca hay un cuadro en blanco: el nivel grueso siempre está cargado. Memoria: máx. `PL_CAP` (56) mosaicos decodificados; se sueltan (`close()`) los que no hacen falta, los más viejos primero, nunca el nivel grueso. Zoom animado (`V.zoomAt` → `V.animTo`), inercia (`fling`), pellizco, doble toque; precarga del 30 % alrededor y del nivel siguiente. **Antes** eran `<img>` sueltas que se reacomodaban al terminar cada gesto: en tablets Android parpadeaba (oct 2026). `V.loaded()` = mosaicos dibujables (pruebas).
 
 ## Navegar sin salir del visor
 

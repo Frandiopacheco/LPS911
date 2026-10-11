@@ -207,57 +207,62 @@ function plThumbs(host){if(host._io)host._io.disconnect();
   $$('img[data-th]',host).forEach(i=>io.observe(i))}
 
 /* ---------- Visor de alta definición (mosaicos) ---------- */
-/* Visor suave (como Dalux/Revizto): durante el gesto solo se mueve una capa (una transformación por cuadro, en la GPU);
-   los mosaicos se vuelven a acomodar a su tamaño real al terminar. Zoom animado (rueda, botones, doble toque), inercia al
-   soltar, mosaicos que aparecen con fundido y precarga alrededor de lo visible para que al desplazarse no se vea borroso. */
-function plTiles(host,spec){/* spec: {base,W,H,Z,T} — devuelve el visor */
-  const V={s:1,x:0,y:0,imgs:new Map(),need:new Set(),raf:0,dead:false,fit:1};const T=spec.T||PL_T;
-  host.innerHTML='<div class="plvl"></div>';host.classList.add('plvc');const LY=host.firstChild;
-  let ls=1,lastNeed=0,idleT=0,anim=null,fling=null;
+/* Visor (como Dalux/Revizto): un solo lienzo (canvas) donde cada cuadro se dibujan los mosaicos ya decodificados en memoria
+   (ImageBitmap). Nunca hay un cuadro en blanco: debajo siempre está el nivel grueso y encima el detalle que ya llegó, con un
+   fundido corto. Zoom animado (rueda, botones, doble toque), inercia al soltar, pellizco, y precarga alrededor de lo visible.
+   (Antes eran <img> sueltas que se reacomodaban al terminar cada gesto: en tablets Android eso parpadeaba.) */
+const PL_CAP=56;/* mosaicos decodificados en memoria como máximo (1024² ≈ 4 MB cada uno) */
+function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor */
+  const V={s:1,x:0,y:0,tiles:new Map(),need:new Set(),raf:0,dead:false,fit:1};const T=spec.T||PL_T;
+  host.innerHTML='<canvas class="plcv"></canvas>';host.classList.add('plvc');const cv=host.firstChild;const g=cv.getContext('2d',{alpha:false});
+  let dpr=1,cw=1,ch=1,anim=null,fling=null,lastNeed=0,moving=false;
   const size=()=>[host.clientWidth||1,host.clientHeight||1];
+  const resize=()=>{dpr=Math.min(window.devicePixelRatio||1,2.5);const[w,h]=size();cw=w;ch=h;const W=Math.round(w*dpr),H=Math.round(h*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}cv.style.width=w+'px';cv.style.height=h+'px'};
   const sMin=()=>V.fit*0.5,sMax=()=>2/(window.devicePixelRatio||1)*1.5;
   const clampS=v=>Math.max(sMin(),Math.min(sMax(),v));
-  V.fitView=(animate)=>{const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
-    if(animate&&V.imgs.size){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.relayout();V.tick()}};
-  /* zoom animado hacia un punto (cx,cy de la pantalla) */
-  V.zoomAt=(k,cx,cy)=>{const ts=clampS((anim?anim.s:V.s)*k);const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
+  V.fitView=(animate)=>{resize();const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
+    if(animate){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.tiles_();V.tick()}};
+  V.zoomAt=(k,cx,cy)=>{const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const ts=clampS(s0*k),r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
   V.animTo=(s,x,y)=>{fling=null;anim={s,x,y};V.tick()};
-  V.tick=()=>{if(V.raf)return;V.raf=requestAnimationFrame(V.frame)};
+  V.tick=()=>{if(!V.raf&&!V.dead)V.raf=requestAnimationFrame(V.frame)};
+  V.draw=V.tick;
   V.frame=()=>{V.raf=0;if(V.dead)return;let more=false;
     if(anim){const f=0.28;V.s+=(anim.s-V.s)*f;V.x+=(anim.x-V.x)*f;V.y+=(anim.y-V.y)*f;
       if(Math.abs(anim.s-V.s)/anim.s<0.002&&Math.abs(anim.x-V.x)<0.5&&Math.abs(anim.y-V.y)<0.5){V.s=anim.s;V.x=anim.x;V.y=anim.y;anim=null}else more=true}
     if(fling){V.x+=fling.vx*16;V.y+=fling.vy*16;fling.vx*=0.92;fling.vy*=0.92;if(Math.hypot(fling.vx,fling.vy)<0.02)fling=null;else more=true}
-    V.place();const now=performance.now();if(now-lastNeed>110){lastNeed=now;V.tiles()}
-    if(more)V.tick();V.idle()};
-  /* una sola transformación para toda la capa mientras se mueve */
-  V.place=()=>{const k=V.s/ls;LY.style.transform=`translate3d(${V.x}px,${V.y}px,0) scale(${k})`;if(k<0.6||k>1.6)V.relayout()};
-  V.relayout=()=>{ls=V.s;for(const e of V.imgs.values())V.pos(e);LY.style.transform=`translate3d(${V.x}px,${V.y}px,0)`};
-  V.pos=e=>{const st=e.im.style;st.transform=`translate(${e.wx*ls}px,${e.wy*ls}px)`;st.width=e.ww*ls+'px';st.height=e.wh*ls+'px'};
-  V.idle=()=>{host.classList.add('mv');clearTimeout(idleT);idleT=setTimeout(()=>{if(V.dead||anim||fling)return;host.classList.remove('mv');V.relayout();V.tiles()},140)};
-  V.draw=()=>V.tick();
+    const act=more||P.size>0;const now=performance.now();
+    if(!act||now-lastNeed>110){lastNeed=now;V.tiles_()}
+    moving=act;const fading=V.paint(now);if(more||fading)V.tick()};
+  /* dibuja: primero los niveles gruesos y encima los finos; cada mosaico nuevo entra con un fundido de 140 ms */
+  V.paint=now=>{g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.fillStyle='#fff';g.fillRect(0,0,cv.width,cv.height);
+    g.setTransform(dpr,0,0,dpr,0,0);g.imageSmoothingEnabled=true;g.imageSmoothingQuality=moving?'medium':'high';
+    const L=[];for(const e of V.tiles.values())if(e.bm)L.push(e);L.sort((a,b)=>b.z-a.z);let fading=false;
+    for(const e of L){const x=V.x+e.wx*V.s,y=V.y+e.wy*V.s,w=e.ww*V.s,h=e.wh*V.s;if(x>cw||y>ch||x+w<0||y+h<0)continue;
+      const a=Math.min(1,(now-e.t0)/140);if(a<1)fading=true;g.globalAlpha=a;
+      /* medio píxel de más para que no se vean juntas entre mosaicos */g.drawImage(e.bm,x,y,w+0.6,h+0.6)}
+    g.globalAlpha=1;return fading};
   const coarse=Math.max(0,spec.Z-2);
-  V.tiles=()=>{const[w,h]=size();const dpr=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
-    const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dpr)))));
+  V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
+    const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dprL)))));const now=performance.now();
     const need=new Set();const add=(z,vis,m)=>{const k=2**z,lw=Math.ceil(spec.W/k),lh=Math.ceil(spec.H/k),nx=Math.ceil(lw/T),ny=Math.ceil(lh/T);
-      let x0=0,y0=0,x1=nx,y1=ny;if(vis){const vw=w/V.s,vh=h/V.s,wx0=-V.x/V.s-vw*m,wy0=-V.y/V.s-vh*m,wx1=-V.x/V.s+vw*(1+m),wy1=-V.y/V.s+vh*(1+m);
+      let x0=0,y0=0,x1=nx,y1=ny;if(vis){const vw=cw/V.s,vh=ch/V.s,wx0=-V.x/V.s-vw*m,wy0=-V.y/V.s-vh*m,wx1=-V.x/V.s+vw*(1+m),wy1=-V.y/V.s+vh*(1+m);
         x0=Math.max(0,Math.floor(wx0/(T*k)));y0=Math.max(0,Math.floor(wy0/(T*k)));x1=Math.min(nx,Math.ceil(wx1/(T*k)));y1=Math.min(ny,Math.ceil(wy1/(T*k)))}
       for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)need.add(z+'/'+x+'_'+y)};
-    add(coarse,false,0);if(zd<coarse){add(zd,true,0.35);if(zd+1<coarse)add(zd+1,true,0)}V.need=need;
-    for(const k of need)if(!V.imgs.has(k)){const[z,xy]=k.split('/');const[x,y]=xy.split('_').map(Number);const zz=+z,f=2**zz;const lw=Math.ceil(spec.W/f),lh=Math.ceil(spec.H/f);
-      const im=document.createElement('img');im.alt='';im.draggable=false;im.decoding='async';im.style.zIndex=String(10+spec.Z-zz);
-      const e={im,z:zz,wx:x*T*f,wy:y*T*f,ww:Math.min(T,lw-x*T)*f,wh:Math.min(T,lh-y*T)*f,ok:false,url:''};V.imgs.set(k,e);V.pos(e);LY.appendChild(im);
-      plGet(`${spec.base}/${k}.webp`).then(b=>{if(V.dead||!V.imgs.has(k))return;e.url=URL.createObjectURL(b);im.onload=()=>{e.ok=true;im.classList.add('ok');V.purge()};im.src=e.url},()=>{im.classList.add('err')})}
-    V.purge()};
-  V.update=()=>{V.place();V.tiles()};
-  /* quita lo que ya no hace falta, pero solo cuando lo nuevo ya cargó (así no parpadea al acercar o alejar) */
-  V.purge=()=>{let ready=true;for(const k of V.need){const e=V.imgs.get(k);if(e&&!e.ok&&!e.im.classList.contains('err')){ready=false;break}}
-    for(const[k,e]of V.imgs)if(!V.need.has(k)&&(ready||V.imgs.size>220)){e.im.remove();if(e.url)URL.revokeObjectURL(e.url);V.imgs.delete(k)}};
-  /* gestos: rueda (y pellizco del touchpad), arrastre con inercia, pellizco con dos dedos y doble toque */
+    add(coarse,false,0);if(zd<coarse){add(zd,true,0.3);if(zd+1<coarse)add(zd+1,true,0)}V.need=need;
+    for(const k of need){let e=V.tiles.get(k);if(e){e.used=now;continue}
+      const[z,xy]=k.split('/');const[x,y]=xy.split('_').map(Number);const zz=+z,f=2**zz;const lw=Math.ceil(spec.W/f),lh=Math.ceil(spec.H/f);
+      e={z:zz,wx:x*T*f,wy:y*T*f,ww:Math.min(T,lw-x*T)*f,wh:Math.min(T,lh-y*T)*f,bm:null,t0:0,used:now};V.tiles.set(k,e);
+      plGet(`${spec.base}/${k}.webp`).then(b=>plBitmap(b)).then(bm=>{if(V.dead||V.tiles.get(k)!==e){plBmClose(bm);return}
+        e.bm=bm;e.t0=performance.now();V.evict();V.tick()},()=>{V.tiles.delete(k)})}};
+  /* memoria: se sueltan los mosaicos que no hacen falta, los más viejos primero (nunca el nivel grueso) */
+  V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
+    L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
+  /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
   const P=new Map();let pinch=null,lastTap=0,vel=[];
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
-    if(e.ctrlKey){/* pellizco en el touchpad: sigue a los dedos sin animar */anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
-    if(e.deltaX!==0||(Math.abs(d)<50&&!Number.isInteger(e.deltaY))){/* dos dedos en el touchpad: desplaza */anim=null;fling=null;V.x-=e.deltaX;V.y-=d;V.tick();return}
+    if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
+    if(e.deltaX!==0||(Math.abs(d)<50&&!Number.isInteger(e.deltaY))){anim=null;fling=null;V.x-=e.deltaX;V.y-=d;V.tick();return}
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
   host.addEventListener('pointerdown',e=>{host.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;vel=[];
     if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}}
@@ -269,13 +274,18 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T} — devuelve el visor */
   const end=e=>{const was=P.size===1&&!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
     if(!P.size){host.classList.remove('drag');
       if(was&&vel.length>1){const dt=Math.max(16,performance.now()-vel[0].t),sx=vel.reduce((a,v)=>a+v.dx,0),sy=vel.reduce((a,v)=>a+v.dy,0);const vx=sx/dt,vy=sy/dt;
-        if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60){fling={vx,vy};V.tick()}}vel=[]}};
+        if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60)fling={vx,vy}}vel=[];V.tick()}};
   host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
-  const ro=new ResizeObserver(()=>{if(Math.abs(V.s-V.fit)<1e-9)V.fitView();else V.tick()});ro.observe(host);
-  V.destroy=()=>{V.dead=true;clearTimeout(idleT);ro.disconnect();for(const e of V.imgs.values())if(e.url)URL.revokeObjectURL(e.url);V.imgs.clear();host.innerHTML=''};
-  V.getView=()=>{const[w,h]=size();return{nx:(w/2-V.x)/V.s/spec.W,ny:(h/2-V.y)/V.s/spec.H,k:V.s/V.fit}};
-  V.setView=v=>{const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=w/2-v.nx*spec.W*V.s;V.y=h/2-v.ny*spec.H*V.s;anim=null;fling=null;V.relayout();V.tick()};
+  const ro=new ResizeObserver(()=>{const atFit=Math.abs(V.s-V.fit)<1e-9;resize();if(atFit)V.fitView();else V.tick()});ro.observe(host);
+  V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
+  V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;V.tiles_();V.tick()};
+  V.loaded=()=>[...V.tiles.values()].filter(e=>e.bm).length;
+  V.destroy=()=>{V.dead=true;ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
   requestAnimationFrame(()=>{V.fitView();if(spec.view)V.setView(spec.view)});return V}
+/* decodifica fuera del hilo principal (createImageBitmap); si el navegador no lo tiene, con <img>.decode() */
+async function plBitmap(blob){if(window.createImageBitmap)return createImageBitmap(blob);
+  const u=URL.createObjectURL(blob);const im=new Image();im.src=u;try{await im.decode()}finally{setTimeout(()=>URL.revokeObjectURL(u),0)}return im}
+const plBmClose=bm=>{try{if(bm&&bm.close)bm.close()}catch(e){}};
 let PLV=null;
 function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;

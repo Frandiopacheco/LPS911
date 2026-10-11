@@ -122,7 +122,8 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toContainText('PLANTA PRIMER PISO');
   await expect(page.locator('.plc img.ok')).toHaveCount(1);
   await page.click('.plc[data-pl="ARQ_AG03"]');
-  await expect(page.locator('#plv .plvc img').first()).toBeVisible();
+  await expect(page.locator('#plv canvas.plcv')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => PLV.tv.loaded())).toBeGreaterThan(0);
   // al acercar se piden los mosaicos de detalle (nivel 0) de la zona visible, no todos
   await page.evaluate(() => { window.__GETS.length = 0; for (let i = 0; i < 6; i++) plvZoom(1.6); });
   await expect.poll(() => page.evaluate(() => window.__GETS.filter(p => /\/0\/\d+_\d+\.webp$/.test(p)).length)).toBeGreaterThan(0);
