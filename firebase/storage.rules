@@ -21,5 +21,12 @@ service firebase.storage {
         && request.resource.size < 80 * 1024 * 1024
         && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
     }
+    // Modelo 3D (beta): modelos/<especialidad>/r<rev>.frag — mismos permisos que los planos
+    match /modelos/{rest=**} {
+      allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']));
+      allow create, update: if (isOwner() || (verified() && isMember() && (role() in ['admin', 'editor'] || isOT())))
+        && request.resource.size < 200 * 1024 * 1024
+        && request.resource.contentType.matches('application/octet-stream');
+    }
   }
 }

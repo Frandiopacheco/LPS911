@@ -10,3 +10,4 @@ ui-debug.log
 respaldos/
 *.json.bak
 tests/e2e/fake-compartido.generado.js
+scripts/visor3d/node_modules/

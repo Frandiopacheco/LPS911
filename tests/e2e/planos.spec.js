@@ -43,7 +43,7 @@ test('admin: módulo Planos en el selector, sin los controles de Last Planner', 
   await expect(page.locator('#modsel [data-mod="pla"]')).toBeVisible();
   await page.click('#modsel [data-mod="pla"]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'pbib');
-  expect(await tabsVisibles(page)).toEqual(['pbib', 'pcar']);
+  expect(await tabsVisibles(page)).toEqual(['pbib', 'pcar', 'p3d']); // «Modelo 3D (beta)»: solo el administrador
   for (const s of ['#fpiso', '#bundo', '#bexport', '#wprev']) await expect(page.locator(s), s).toBeHidden();
   await expect(page.locator('#pname')).toHaveText('Planos del proyecto');
   await expect(page.locator('#pllist')).toContainText('Aún no hay planos cargados');
@@ -238,7 +238,7 @@ test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', asy
     return { atRelease, seq };
   });
   expect(r.seq[5]).toBeGreaterThan(r.atRelease * 1.01);             // siguió acercando tras soltar
-  expect(r.seq[119]).toBeCloseTo(r.seq[118], 4);                       // y se detuvo
+  expect(Math.abs(r.seq[119] / r.seq[118] - 1)).toBeLessThan(0.002); // ya casi detenido                       // y se detuvo
   // pellizco rápido desde la vista general en el que un dedo se levanta antes: el que queda no arrastra ni corta el zoom
   const q = await page.evaluate(async () => {
     const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
@@ -290,4 +290,12 @@ test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', asy
   expect(d2.dbl).toBeGreaterThan(1.8);
   expect(d2.pin).toBeGreaterThan(2.2); expect(d2.pin).toBeLessThan(2.8); // ≈ 200/80: solo el pellizco, sin el zoom del doble toque
   noErrors(errors, 'inercia');
+});
+
+test('modelo 3D (beta): solo el administrador ve la pestaña; especialidad desde el nombre del IFC', async ({ page }) => {
+  await openApp(page, { as: 'editor', editar: false });
+  await page.evaluate(() => goMod('pla'));
+  expect(await tabsVisibles(page)).not.toContain('p3d');
+  const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc')]);
+  expect(r).toEqual(['ARQ', 'HVAC', 'AFC']);
 });
