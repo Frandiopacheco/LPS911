@@ -8,6 +8,7 @@ const CDN_CACHE = 'lps911-cdn-2';
 // ASSETS lo completa scripts/build.mjs con los archivos de css/ y js/ y firebase-config.js (con su versión)
 const ASSETS = [];
 const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'firebase-config.js', ...ASSETS];
+const PRUEBA = /^main--/.test(self.location.hostname);
 const CDN_HOSTS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
@@ -66,6 +67,9 @@ self.addEventListener('fetch', e => {
     if (url.searchParams.has('fresh')) return;
     if (url.pathname.endsWith('/sw.js')) return;
     if (req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
+      // copia de prueba (main--…): red primero, así al recargar se ve al tiro la versión recién publicada (antes mostraba la
+      // guardada y había que esperar el aviso o borrar la caché). En la obra se mantiene «lo guardado primero» (abre al instante con mala señal).
+      if (PRUEBA) { e.respondWith(networkFirst(req, 'index.html', 3000)); return; }
       e.respondWith(staleWhileRevalidate(e, req, 'index.html'));
       return;
     }
