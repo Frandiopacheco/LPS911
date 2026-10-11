@@ -3506,3 +3506,14 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .p3card .ib{position:absolute;right:6px;top:6px;height:28px;min-width:28px;padding:0}
 .p3card small{color:var(--muted);font-size:11.5px}
 #tabs [data-tab="p3d"] small{font:700 9.5px var(--f-ui);text-transform:uppercase;color:var(--muted);margin-left:3px}
+
+/* Planos › Medir (planos-medir.js): barra flotante sobre el visor */
+.plmbar{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:15;width:min(94vw,560px);display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
+.plmt,.plmx,.plmc{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.plmbar .ib.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plmbar .ib:disabled{opacity:.45}
+.plmv{font-size:13.5px;line-height:1.3;min-height:20px}
+.plmv b{font-size:16px}
+.plmc .tin{flex:1;min-width:150px;height:var(--h-ctl,34px)}
+.plms{font-size:11px;color:var(--muted)}
+@media (max-width:760px){.plmbar{bottom:34px;width:calc(100vw - 16px)}.plmbar .ib{min-height:40px}}
