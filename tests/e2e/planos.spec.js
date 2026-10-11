@@ -429,9 +429,23 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
   await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
 
-  // salir de editar y seguirlo con un toque: abre el destino en la zona fijada y aparece «← AG03»
+  // «＋ Otra zona»: el otro extremo del corte, mismo destino, zona y texto, sin volver a elegir lámina
+  await page.click('#plv .plkbar [data-pk="dup"]');
+  await expect(page.locator('#plv .plkbar')).toContainText('Otra zona hacia');
+  await tap(W * 0.60, W * 0.20); await tap(W * 0.64, W * 0.24);
+  await expect.poll(nLk).toBe(2);
+  await expect(page.locator('#plv .plkch')).toHaveCount(0);
+  const lk2 = await page.evaluate(() => PLB.get('ARQ_AG03').lk[1]);
+  expect(lk2.to).toBe('IS_IS06'); expect(lk2.t).toBe('Corte Z'); expect(lk2.v).toEqual(lk.v); expect(lk2.x0).toBeCloseTo(0.60, 2);
+
+  // salir de editar: por defecto los vínculos no se dibujan (plano limpio), pero un toque los sigue igual
   await page.click('#plv .plkbar [data-pk="off"]');
   await expect(page.locator('#plv .plkbar')).toHaveCount(0);
+  expect(await page.evaluate(() => PLK.show)).toBe(false);
+  await tap(W * 0.62, W * 0.22); // el otro extremo
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS06');
+  await page.click('#plv .plback');
+  await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
   await page.evaluate(() => PLV.tv.setView({ nx: 0.4, ny: 0.3, k: 1 }));
   const v0 = await page.evaluate(() => PLV.tv.getView());
   await tap(W * 0.7, W * 0.4); // fuera de la zona: no navega (queda el doble toque de zoom)
@@ -455,8 +469,8 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await expect(page.locator('#plv .plkbar [data-pk="del"]')).toBeVisible();
   page.once('dialog', d => d.accept());
   await page.click('#plv .plkbar [data-pk="del"]');
-  await expect.poll(nLk).toBe(0);
+  await expect.poll(nLk).toBe(1);
   const db = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
-  expect(db.lk.length).toBe(1); expect(db.lk[0].arch && db.lk[0].arch.by).toBeTruthy();
+  expect(db.lk.length).toBe(2); expect(db.lk[0].arch && db.lk[0].arch.by).toBeTruthy(); expect(db.lk[1].arch).toBeUndefined();
   noErrors(errors, 'vínculos');
 });
