@@ -81,11 +81,11 @@ function create(host, opts = {}) {
   async function applyVis() { const jobs = [];
     for (const [id, m] of models) { const lv = levelOf.get(id), hid = hidden.get(id), iso = isolated && isolated.get(id);
       if (isolated && !(iso && iso.size)) { jobs.push((async () => { await m.model.setVisible(undefined, false) })()); continue }
-      if (!lv && !iso && !(hid && hid.size)) { jobs.push(m.model.resetVisible()); continue }
+      if (!lv && !iso) { jobs.push((async () => { await m.model.resetVisible(); if (hid && hid.size) await m.model.setVisible([...hid], false) })()); continue } /* solo ocultos: se apagan esos pocos, no se reescribe todo el modelo */
       jobs.push((async () => { const base = iso ? [...iso].filter(i => !lv || lv.has(i)) : lv ? [...lv] : (m.allIds || (m.allIds = await m.model.getItemsIdsWithGeometry()));
         const ids = hid && hid.size ? base.filter(i => !hid.has(i)) : base;
         await m.model.setVisible(undefined, false); if (ids.length) await m.model.setVisible(ids, true) })()) }
-    await Promise.all(jobs); await fragments.core.update(true); redraw(); keepDrawing(400); emitState() }
+    const t0 = performance.now(); await Promise.all(jobs); const t1 = performance.now(); await fragments.core.update(true); if (window.__P3DBG) console.log('applyVis set', Math.round(t1 - t0), 'update', Math.round(performance.now() - t1)); redraw(); keepDrawing(400); emitState() }
   async function applyLevel() { levelOf.clear();
     if (level) for (const [id, m] of models) levelOf.set(id, new Set(idx.idsOf(m, level)));
     applyClip(); await applyVis() }
@@ -190,15 +190,15 @@ function create(host, opts = {}) {
     async props() { const o = selMap(); const id = Object.keys(o)[0]; if (!id) return null; const m = models.get(id); return readProps(m.model, o[id][0], id) },
     /* ocultar / aislar / transparentar / mostrar todo (sobre la selección) */
     async hide() { for (const [id, s] of sel) { const h = setOf(hidden, id); s.forEach(i => h.add(i)) } await setSel({}, false); await applyVis() },
-    async isolate() { if (!selCount()) return; isolated = new Map([...sel].map(([k, s]) => [k, new Set(s)])); await setSel({}, false); await applyVis() },
+    async isolate() { if (!selCount()) return; const b = await boxOfSel(); isolated = new Map([...sel].map(([k, s]) => [k, new Set(s)])); await setSel({}, false); await applyVis(); if (!b.isEmpty()) await fitBox(b, true, 1.6) },
     async ghostSel() { for (const [id, s] of sel) { const g = setOf(ghost, id); s.forEach(i => g.add(i)) } await setSel({}, false); await applyGhost() },
     async ghostOthers() { if (!selCount()) return; for (const [id, m] of models) { const all = m.allIds || (m.allIds = await m.model.getItemsIdsWithGeometry()); const keep = sel.get(id), g = setOf(ghost, id); all.forEach(i => { if (!keep || !keep.has(i)) g.add(i) }) } await setSel({}, false); await applyGhost() },
-    async showAll() { hidden.clear(); ghost.clear(); isolated = null; await setSel({}, false); await applyVis(); await applyGhost() },
+    async showAll() { const hadG = [...ghost.values()].some(g => g.size); hidden.clear(); ghost.clear(); isolated = null; await setSel({}, false); await applyVis(); if (hadG) await applyGhost() },
     onState(cb) { onState = cb },
     get state() { return { hidden: [...hidden.values()].reduce((n, s) => n + s.size, 0), ghost: [...ghost.values()].reduce((n, s) => n + s.size, 0), isolated: !!isolated } },
     /* herramientas: 'select' | 'section' (toque sobre una superficie) | 'measure' */
     setTool(t) { tool = t; if (t !== 'measure') measure.stop(); if (onTool) onTool(t); canvas.style.cursor = t === 'select' ? '' : 'crosshair' }, get tool() { return tool }, onTool(cb) { onTool = cb },
-    section: sections, async sectionBox(target) { const b = target === 'sel' ? await boxOfSel() : target === 'level' ? levelBox() : box.clone(); return sections.box(b) }, measure,
+    section: sections, async sectionBox(target) { const b = target === 'sel' ? await boxOfSel() : target === 'level' ? levelBox() : box.clone(); const ok = sections.box(b); if (ok && target === 'sel') await fitBox(b, true, 2.2); return ok }, measure,
     /* rendimiento */
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),

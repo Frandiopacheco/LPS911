@@ -8,7 +8,7 @@
    las mismas variables globales. */
 
 const P3={v:null,lib:null,host:null,docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
-  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
+  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,pdet:false,bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
 /* especialidades que se cargan solas al abrir (las demás se prenden a pedido: el mobiliario, por ejemplo, pesa mucho) */
 const P3_AUTO=['ARQ','EST','AFC'];
 const P3_NAMES={ARQ:'Arquitectura',EST:'Estructuras',AFC:'Agua fría y caliente',DES:'Desagüe',ACI:'Agua contra incendio',AAC:'Aire acondicionado',ALI:'Alimentadores',ILU:'Iluminación',TOC:'Tomacorrientes',
@@ -80,11 +80,13 @@ function p3Prop(){const p=P3.props,n=P3.selN;if(!n)return'';
   const grp=p?(p.tipo?`<div class="p3kv"><span>Tipo</span><b>${esc(p.tipo)}</b></div>`:'')+(p.tag?`<div class="p3kv"><span>Marca</span><b>${esc(p.tag)}</b></div>`:'')+(p.guid?`<div class="p3kv"><span>GlobalId</span><b class="p3mono">${esc(p.guid)}</b><button class="ib" data-a="guid" aria-label="Copiar GlobalId" title="Copiar">⧉</button></div>`:'')
     +p.grupos.map((g,i)=>`<details class="p3grp"${i<2?' open':''}><summary>${esc(g.titulo)} <small>${g.filas.length}</small></summary>${g.filas.map(r=>`<div class="p3kv"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')}</details>`).join('')
     +(p.grupos.length?'':'<p class="p3none">Este elemento no trae propiedades adicionales en el IFC.</p>'):'';
+  const A=(a,ico,t,on)=>`<button class="p3a${on?' on':''}" data-a="${a}"${on!==undefined?` aria-pressed="${!!on}"`:''}><span>${ico}</span>${t}</button>`;
   return`<div class="p3ph">${head}<button class="ib" data-a="clearsel" aria-label="Cerrar">✕</button></div><div class="p3meta">${meta}</div>
-    <div class="p3acts"><button class="ib" data-a="isolate">🎯 Aislar</button><button class="ib" data-a="hide">🙈 Ocultar</button><button class="ib" data-a="ghost">◫ Transparentar</button><button class="ib" data-a="ghostrest">◐ Atenuar el resto</button><button class="ib" data-a="focus">⌖ Enfocar</button><button class="ib" data-a="cutsel">▣ Caja aquí</button><button class="ib${P3.multi?' on':''}" data-a="multi" aria-pressed="${P3.multi}">＋ Varios</button></div><div class="p3body">${grp}</div>`}
+    <div class="p3acts">${A('isolate','🎯','Aislar')}${A('hide','🙈','Ocultar')}${A('ghost','◫','Transp.')}${A('ghostrest','🌫','Atenuar resto')}${A('focus','⌖','Enfocar')}${A('cutsel','▣','Caja aquí')}${A('multi','＋','Varios',P3.multi)}</div>
+    <button class="p3tg" data-a="pdet" aria-expanded="${P3.pdet}">${P3.pdet?'▾':'▸'} Propiedades${p&&p.grupos.length?` <small>${p.grupos.reduce((n,g)=>n+g.filas.length,0)}</small>`:''}</button>${P3.pdet?`<div class="p3body">${grp}</div>`:''}`}
 
 /* ───────── barra inferior, paneles y avisos ───────── */
-function p3Dock(){const st=P3.st,mod=st.hidden+st.ghost+(st.isolated?1:0),t=P3.tool,B=(a,ico,txt,on,extra)=>`<button type="button" class="p3b${on?' on':''}" data-a="${a}" aria-pressed="${!!on}" title="${txt}"><span class="p3i">${ico}</span><span class="p3l">${txt}</span>${extra||''}</button>`;
+function p3Dock(){const st=P3.st,mod=(st.hidden?1:0)+(st.ghost?1:0)+(st.isolated?1:0),t=P3.tool,B=(a,ico,txt,on,extra)=>`<button type="button" class="p3b${on?' on':''}" data-a="${a}" aria-pressed="${!!on}" title="${txt}"><span class="p3i">${ico}</span><span class="p3l">${txt}</span>${extra||''}</button>`;
   return B('pn:pisos','🏢','Pisos',P3.panel==='pisos'||P3.lvl)+B('pn:cortes','✂','Cortes',P3.panel==='cortes'||P3.cuts.length||t==='section',P3.cuts.length?`<i class="p3n">${P3.cuts.length}</i>`:'')
     +B('pn:medir','📏','Medir',P3.panel==='medir'||t==='measure',P3.meds.filter(m=>!m.pending).length?`<i class="p3n">${P3.meds.filter(m=>!m.pending).length}</i>`:'')+B('pn:vista','🧭','Vista',P3.panel==='vista')
     +B('showall','👁','Mostrar',false,mod?`<i class="p3n">${mod}</i>`:'')+B('pn:rend','⏱','Fluidez',P3.panel==='rend')}
@@ -114,6 +116,7 @@ function p3Panel(){const p=P3.panel;if(!p)return'';
 function p3Banner(){const t=P3.tool;if(t==='section')return`<span>✂ Toca una superficie para cortar</span><button class="ib" data-a="tool-off">Cancelar</button>`;
   if(t==='measure'){const pend=P3.meds.some(m=>m.pending);return`<span>📏 ${pend?'Toca el punto B':'Toca el punto A'}</span><button class="ib" data-a="tool-off">Listo</button>`}
   if(P3.selN&&P3.multi)return`<span>＋ Toca más elementos para sumarlos o quitarlos</span><button class="ib" data-a="multi">Listo</button>`;
+  if(P3.cuts.length&&!P3.selN)return`<span>✂ ${P3.cuts.length} corte${P3.cuts.length>1?'s':''} · mueve las flechas azules</span><button class="ib" data-a="sec-vis">${P3.v&&!P3.v.section.gizmosVisible?'Mostrar':'Ocultar'} flechas</button><button class="ib" data-a="sec-clear">Quitar</button>`;
   if(P3.lvl&&P3.plan)return`<span>🗺 ${esc(P3.lvl.charAt(0)+P3.lvl.slice(1).toLowerCase())} · planta a ${P3.cutH.toFixed(2).replace('.',',')} m</span>`;return''}
 function p3Ui(){const h=P3.host;if(!h||!h.isConnected)return;
   shx($('#p3dock',h),p3Dock());const pn=$('#p3pn',h),ph=p3Panel();pn.hidden=!ph;shx(pn,ph);
@@ -134,7 +137,7 @@ async function p3Click(e){const el=e.target.closest('[data-a]');if(!el||!P3.v||e
     case'cuth-':case'cuth+':P3.cutH=Math.max(0.2,Math.min(3,+(P3.cutH+(a==='cuth+'?0.1:-0.1)).toFixed(2)));v.setCutHeight(P3.cutH);p3Ui();break;
     case'plan':P3.plan=!P3.plan;await v.planView(P3.plan);P3.proj=v.projectionName==='Orthographic'?'ortho':'persp';p3Ui();break;
     case'sec-surf':v.setTool('section');break;
-    case'sec-box':{const ok=await v.sectionBox(el.dataset.t);if(!ok)toast('No hay nada que encuadrar');else{P3.panel='cortes'}p3Ui();break}
+    case'sec-box':{const ok=await v.sectionBox(el.dataset.t);if(!ok)toast('No hay nada que encuadrar');else{P3.panel='';await v.clearSelection()}p3Ui();break}
     case'sec-flip':v.section.flip(el.dataset.id);break;
     case'sec-del':await v.section.remove(el.dataset.id);break;
     case'sec-vis':v.section.showGizmos(!v.section.gizmosVisible);p3Ui();break;
@@ -152,7 +155,8 @@ async function p3Click(e){const el=e.target.closest('[data-a]');if(!el||!P3.v||e
     case'ghost':await v.ghostSel();break;
     case'ghostrest':await v.ghostOthers();break;
     case'focus':await v.fitSelection();break;
-    case'cutsel':{const ok=await v.sectionBox('sel');if(ok){P3.panel='cortes';p3Ui()}break}
+    case'cutsel':{const ok=await v.sectionBox('sel');if(ok){P3.panel='';await v.clearSelection();p3Ui()}break}
+    case'pdet':P3.pdet=!P3.pdet;p3Ui();break;
     case'multi':P3.multi=!P3.multi;v.multi=P3.multi;p3Ui();break;
     case'clearsel':await v.clearSelection();break;
     case'guid':try{await navigator.clipboard.writeText(P3.props.guid);toast('GlobalId copiado')}catch(x){toast('No se pudo copiar')}break;
