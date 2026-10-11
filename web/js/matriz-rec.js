@@ -11,7 +11,9 @@ const MXR={amb:null,only:false,showDone:false};
 function mxSeq(){const k=MX.v+'|'+DV;if(MXR.seq&&MXR.seqK===k)return MXR.seq;const ali=mxAli();const F=new Map();
   for(const x of S.act.values()){const d=(x.days||[]).length?[...x.days].sort()[0]:null;if(!d)continue;const c=ali.get(mnk(x.name));if(!c)continue;if(!F.has(c))F.set(c,[]);F.get(c).push(d)}
   const seq=new Map();for(const[c,L]of F){L.sort();seq.set(c,L[Math.floor(L.length/2)])}MXR.seq=seq;MXR.seqK=k;return seq}
-function mxSeqCmp(a,b){const S2=mxSeq();const x=S2.get(a.id),y=S2.get(b.id);if(x&&y&&x!==y)return x<y?-1:1;if(x&&!y)return-1;if(!x&&y)return 1;return(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name)}
+function mxSeqCmp(a,b){/* tren de trabajo (matriz-tren.js) primero; lo que no está en el tren, después y por fechas del lookahead */
+  const ta=typeof a.tr==='number'?a.tr:null,tb=typeof b.tr==='number'?b.tr:null;if(ta!=null||tb!=null){if(ta==null)return 1;if(tb==null)return-1;if(ta!==tb)return ta-tb}
+  const S2=mxSeq();const x=S2.get(a.id),y=S2.get(b.id);if(x&&y&&x!==y)return x<y?-1:1;if(x&&!y)return-1;if(!x&&y)return 1;return(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name)}
 
 const mxWk0=()=>weekStart(weekOf(todayIso()));
 const mxRvTxt=rv=>rv?`${rv.d===todayIso()?'hoy':fmtD(rv.d)}${rv.n?' · '+rv.n:''}`:'';

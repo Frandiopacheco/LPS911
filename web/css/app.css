@@ -3468,3 +3468,19 @@ body.ipr-on{overflow:hidden}
 .plvpi{font-size:12.5px;line-height:1.25;min-width:0}
 .plvpi small{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:760px){.plchip{min-height:36px}.plvpr{min-height:60px}}
+
+/* ---------- Tren de trabajo (Matriz › Tren, matriz-tren.js) y terminadas aún programadas (opción B) ---------- */
+:root{--mxt-st:rgba(255,255,255,.62)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--mxt-st:rgba(18,20,22,.6)}}
+:root[data-theme="dark"]{--mxt-st:rgba(18,20,22,.6)}
+td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-st) 0 2px,transparent 2px 6px)}
+.ghchip.mxtc{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent);background:var(--bad-soft)}
+.mxtrl{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px;max-width:760px}
+.mxtr{display:grid;grid-template-columns:32px 6px minmax(0,1fr) auto;align-items:center;gap:10px;padding:6px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-ctl)}
+.mxtr.dg{cursor:grab}.mxtr.drg{opacity:.4}.mxtr.ovr{box-shadow:var(--ring)}
+.mxtrn{font:600 12px var(--f-ui);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.mxtrd{width:6px;height:28px;border-radius:3px}
+.mxtrt{min-width:0}.mxtrt b{display:block;font-weight:500;overflow-wrap:anywhere}.mxtrt small{color:var(--muted)}
+.mxtrb{display:flex;gap:2px}.mxtrb .ab{min-width:32px;min-height:32px}
+.mxtrf{margin-top:12px;padding:8px 12px}.mxtrf summary{cursor:pointer;font-weight:600}
+@media (max-width:760px){.mxtr{grid-template-columns:24px 5px minmax(0,1fr)}.mxtrb{grid-column:3}.mxtrb .ab{min-width:40px;min-height:40px}}
