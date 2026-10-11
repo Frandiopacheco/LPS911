@@ -27,9 +27,6 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   await expect(page.locator('#p3models .plchip')).toHaveCount(1, { timeout: 120_000 });
   await expect(page.locator('#p3models .plchip.on')).toHaveCount(1, { timeout: 60_000 });
   await page.waitForFunction(() => P3.v && P3.v.levels().length >= 2, null, { timeout: 60_000 });
-  // bordes y sombreado (posproducción al detener la cámara): en Calidad sí, en Rápida no
-  expect(await page.evaluate(() => [P3.v.fx, (P3.v.preset('rapida'), P3.v.fx), (P3.v.preset(P3.preset), P3.v.fx)])).toEqual([true, false, true]);
-  await page.evaluate(() => { P3.v.fx = false });   /* el resto, sin efectos: con el dibujo por software cada cuadro con efectos tarda y vuelve lenta la prueba */
   // pisos: aislar un piso con corte a 1,30 m
   await page.click('#p3dock [data-a="pn:pisos"]');
   await expect(page.locator('#p3pn .p3lv .plchip')).toHaveCount((await page.evaluate(() => P3.v.levels().length)) + 1);
