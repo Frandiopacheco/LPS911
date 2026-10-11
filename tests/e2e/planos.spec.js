@@ -474,3 +474,54 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   expect(db.lk.length).toBe(2); expect(db.lk[0].arch && db.lk[0].arch.by).toBeTruthy(); expect(db.lk[1].arch).toBeUndefined();
   noErrors(errors, 'vínculos');
 });
+
+test.describe('vínculos en tablet (toque)', () => {
+  test.use({ hasTouch: true });
+  test('el clic fantasma tras el segundo toque no elige una lámina al azar; las dos flechas del corte llevan al mismo destino', async ({ page }) => {
+    test.setTimeout(150_000);
+    const errors = await openApp(page, { as: 'admin', editar: false });
+    await preparar(page);
+    await page.evaluate(memStorage);
+    await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+    const pdf = pdfDemo();
+    await page.setInputFiles('#plfile', ['P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', 'ZZZ-P2D-ARQ-E05-AG07_CORTES A B', 'ZZZ-P2D-ARQ-E05-AG09_CORTES E F']
+      .map(n => ({ name: `2459243-PTSA-XXX-${n}.pdf`, mimeType: 'application/pdf', buffer: pdf })));
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plqtab tr.ok')).toHaveCount(3, { timeout: 120_000 });
+    await page.evaluate(() => { U.tab = 'pbib'; render(); });
+    await page.click('.plc[data-pl="ARQ_AG03"]');
+    await page.waitForTimeout(500);
+    await page.locator('#plv [data-pv="lk"]').tap();
+    const r = await page.evaluate(() => document.querySelector('.plvc').getBoundingClientRect().toJSON());
+    const ax = r.left + r.width / 2, ay = r.top + 200; // el segundo toque cae justo donde aparece la lista de láminas
+    await page.touchscreen.tap(ax - 20, ay - 20); await page.waitForTimeout(150); await page.touchscreen.tap(ax, ay);
+    await page.waitForTimeout(800);
+    await expect(page.locator('#plv .plkch')).toBeVisible(); // antes: se saltaba la lista y abría una lámina cualquiera
+    await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+    await page.locator('#plv .plkr[data-kc="ARQ_AG07"]').first().tap();
+    await expect(page.locator('#plv .plvt b')).toHaveText('AG07');
+    await page.waitForTimeout(700);
+    await page.locator('#plv .plkbar [data-pk="fix"]').tap();
+    await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+    await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(1);
+    // segunda «A» (el otro extremo del corte) con «＋ Otra zona»
+    await page.waitForTimeout(700);
+    await page.locator('#plv .plkbar [data-pk="dup"]').tap();
+    const bx = r.left + r.width / 2 + 250, by = r.top + 200; // dentro de la hoja (la lámina de prueba es más angosta que la pantalla)
+    await page.waitForTimeout(700);
+    await page.touchscreen.tap(bx - 20, by - 20); await page.waitForTimeout(150); await page.touchscreen.tap(bx, by);
+    await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).map(l => l.to))).toEqual(['ARQ_AG07', 'ARQ_AG07']);
+    // fuera de edición (vínculos ocultos), cada flecha abre AG07
+    await page.waitForTimeout(700);
+    await page.locator('#plv .plkbar [data-pk="off"]').tap();
+    for (const [x, y] of [[ax - 10, ay - 10], [bx - 10, by - 10]]) {
+      await page.waitForTimeout(500);
+      await page.touchscreen.tap(x, y);
+      await expect(page.locator('#plv .plvt b')).toHaveText('AG07');
+      await page.waitForTimeout(500);
+      await page.locator('#plv .plback').tap();
+      await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+    }
+    noErrors(errors, 'vínculos tablet');
+  });
+});

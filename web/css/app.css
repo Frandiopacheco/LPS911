@@ -3628,3 +3628,4 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .plkr{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel);color:var(--ink);cursor:pointer;font:500 13px var(--f-ui);min-height:44px}
 .plkr:hover,.plkr.on{border-color:var(--accent)}
 .plkr small{flex-basis:100%;color:var(--muted);font-size:11.5px}
+.plkg{font:700 10.5px var(--f-ui);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:6px 2px 2px}

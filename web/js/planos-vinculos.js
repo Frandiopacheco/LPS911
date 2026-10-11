@@ -16,7 +16,7 @@
      (sin quitar el doble toque de zoom fuera de las zonas) y, al editar, `V.onTap/onDown/onDrag/onUp`. Medir y Vincular no
      conviven: al entrar a uno se sale del otro. */
 
-const PLK={show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null};
+const PLK={tapT:0,tx:-99,ty:-99,show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null};
 const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
 
 /* ---------- datos ---------- */
@@ -87,7 +87,10 @@ function plkEsc(){if(!PLV)return false;
 function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();
   PLK.edit=!!on;if(!on){PLK.sel=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.dup=null}
   const b=PLV.box.querySelector('[data-pv="lk"]');if(b)b.classList.toggle('on',PLK.edit);plkSync();plkBar()}
-async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK.pick)return;const w=v.toWorld(cx,cy);
+/* en tablet, tras el toque llega un «clic» de compatibilidad ~300 ms después, en el mismo punto: si allí acaba de aparecer la
+   lista de láminas o la barra, ese clic elegía una lámina al azar. Se ignoran los clics de la interfaz justo después de un toque. */
+const plkGhost=e=>performance.now()-PLK.tapT<700&&Math.hypot(e.clientX-PLK.tx,e.clientY-PLK.ty)<30;
+async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK.pick)return;PLK.tapT=performance.now();PLK.tx=cx;PLK.ty=cy;const w=v.toWorld(cx,cy);
   if(PLK.a){ /* segunda esquina; si casi no se movió, una zona del tamaño de un globo alrededor del punto */
     const a=PLK.a;let x0=Math.min(a.x,w.x),x1=Math.max(a.x,w.x),y0=Math.min(a.y,w.y),y1=Math.max(a.y,w.y);
     if(x1-x0<12||y1-y0<12){x0=a.x-60;x1=a.x+60;y0=a.y-60;y1=a.y+60}
@@ -136,9 +139,12 @@ function plkChDraw(){if(!PLV||!PLK.ch)return;let el=PLV.box.querySelector('.plkc
   PLV.box.appendChild(el);const q=el.querySelector('#plkq'),t=el.querySelector('#plkt'),host=el.querySelector('.plkl');t.value=PLK.ch.d.t||'';
   const list=()=>{const w=plUp(q.value).trim().split(/\s+/).filter(Boolean);
     const L=plAct().filter(p=>!w.length||w.every(x=>plUp([p.cod,p.tit,p.fname,PL_DN[p.disc]].join(' ')).includes(x))).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b));
-    host.innerHTML=L.length?L.slice(0,80).map(p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></button>`).join('')+(L.length>80?'<p class="note">Hay más: escribe para acotar.</p>':''):'<p class="note">Ninguna lámina con esa búsqueda.</p>'};
+    /* arriba, las láminas a las que ya lleva esta misma lámina (la otra flecha del corte suele ir al mismo destino) */
+    const used=w.length?[]:[...new Set(plkLinks(PLB.get(PLK.ch.originId)).map(l=>l.to))].map(id=>PLB.get(id)).filter(p=>p&&!p.arch);
+    const row=p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></button>`;
+    host.innerHTML=(used.length?`<div class="plkg">Ya vinculadas desde esta lámina</div>${used.map(row).join('')}<div class="plkg">Todas</div>`:'')+(L.length?L.slice(0,80).map(p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></button>`).join('')+(L.length>80?'<p class="note">Hay más: escribe para acotar.</p>':''):'<p class="note">Ninguna lámina con esa búsqueda.</p>')};
   list();q.oninput=list;
-  el.onclick=e=>{const b=e.target.closest('[data-kc]');if(!b)return;e.stopPropagation();const k=b.dataset.kc;
+  el.onclick=e=>{const b=e.target.closest('[data-kc]');if(!b)return;e.stopPropagation();if(plkGhost(e))return;const k=b.dataset.kc;
     if(k==='x'){plkChClose();return}
     const c=PLK.ch;if(!c||!PLB.has(k))return;const txt=t.value.trim();el.remove();PLK.ch=null;plkPickStart({...c.d,to:k,t:txt},c.originId,c.isNew)};
   el.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();plkChClose()}else e.stopPropagation()};
@@ -170,15 +176,15 @@ function plkBar(){if(!PLV)return;let el=PLV.box.querySelector('.plkbar');
     h=`<div class="plkv">Acerca la zona de <b class="mono">${esc(t?t.cod:'')}</b> que debe verse al tocar el vínculo.</div>
       <div class="plkx"><button type="button" class="ib pri" data-pk="fix">✓ Fijar esta zona</button><button type="button" class="ib" data-pk="whole" title="Abrir la lámina completa">Lámina entera</button><span class="plvsp"></span><button type="button" class="ib" data-pk="cancel">Cancelar</button></div>`}
   else{const l=PLK.sel&&L.find(x=>x.id===PLK.sel);let msg;
-    if(l){const t=PLB.get(l.to);msg=`<b>${esc(l.t||'→ '+(t?t.cod:'sin destino'))}</b> → <span class="mono">${esc(t?t.cod:'—')}</span> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}<br><small>Arrastra las esquinas o el cuerpo para ajustarlo.</small>`}
+    if(l){const t=PLB.get(l.to);msg=`<b>${esc(l.t||'→ '+(t?t.cod:'sin destino'))}</b> → <span class="mono">${esc(t?t.cod:'—')}</span> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}<br><small>¿La misma remisión tiene otra marca (el otro extremo del corte)? Toca <b>＋ Otra zona</b>. Arrastra las esquinas o el cuerpo para ajustar.</small>`}
     else if(PLK.a)msg='Ahora toca la <b>esquina opuesta</b> (o toca el mismo punto para una zona del tamaño de un globo).';
     else if(PLK.dup){const t=PLB.get(PLK.dup.to);msg=`Otra zona hacia <b class="mono">${esc(t?t.cod:'')}</b>: toca una esquina de la otra marca (p. ej. el otro extremo del corte).`}
     else msg='Toca una <b>esquina</b> del globo, rótulo o detalle que remite a otra lámina; luego la opuesta. Toca un vínculo para ajustarlo.';
     h=`<div class="plkv" aria-live="polite">${msg}</div>
-      ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra zona</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
+      ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib pri" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra zona</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
       <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small><span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
   el.innerHTML=h;if(!document.activeElement||document.activeElement===document.body)PLV.box.focus()}
-async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tagName==='INPUT')return;const a=b.dataset.pk;if(!PLV)return;
+async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tagName==='INPUT'||plkGhost(e))return;const a=b.dataset.pk;if(!PLV)return;
   const p=PLB.get(PLV.id),l=plkLinks(p).find(x=>x.id===PLK.sel);
   if(a==='off')plkEdit(false);
   else if(a==='undo'){PLK.a=null;PLK.dup=null;PLV.tv.tick();plkBar()}
