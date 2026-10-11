@@ -6,34 +6,35 @@
 const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','cli','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
 const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
-  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración'};
+  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
-const tabOrder=()=>U.mod==='tar'?TAR_TABS:TAB_ORDER;
+const tabOrder=()=>U.mod==='tar'?TAR_TABS:U.mod==='pla'?PLA_TABS:TAB_ORDER;
 
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
 function tabAllowed(t){if(!me)return false;
+  if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!canPla())return false;return t==='pcar'?plaEd():true}
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin';
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
     if(t==='tdia')return me.role!=='tcos';if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
-  if(U.mod==='tar'||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
+  if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
-function tabPrimary(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed);const r=me.role;
+function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed);const r=me.role;
   const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','cli'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],
     campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}
-function tabHome(){return tabPrimary()[0]||(U.mod==='tar'?'tdia':'look')}
+function tabHome(){return tabPrimary()[0]||(U.mod==='lps'?'look':modHome(U.mod))}
 
 /** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
   const btn=t=>nav.querySelector(`button[data-tab="${t}"]`);
   const sig=prim.join()+'|'+sec.join();const re=nav.dataset.sig!==sig;nav.dataset.sig=sig;
-  [...TAB_ORDER,...TAR_TABS].forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
+  [...TAB_ORDER,...TAR_TABS,...PLA_TABS].forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
   let mb=$('#tabMore');if(!mb){mb=document.createElement('button');mb.id='tabMore';mb.type='button';mb.className='tmore';mb.setAttribute('aria-haspopup','menu');mb.onclick=()=>moreMenu(mb)}
   if(re||mb.parentNode!==nav)nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
   const mh=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;if(mb.innerHTML!==mh)mb.innerHTML=mh;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}
@@ -42,7 +43,7 @@ function moreMenu(anchor){const sec=tabSecondary();
     Object.fromEntries(sec.map(t=>['t_'+t,()=>goTab(t)])))}
 
 /* ---------- menú inferior del celular: 4 accesos según el rol + "Más" ---------- */
-function bnavItems(){if(!me)return[];if(U.mod==='tar')return TAR_TABS.filter(tabAllowed).slice(0,4);const r=me.role;
+function bnavItems(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed).slice(0,4);const r=me.role;
   const L=r==='sc'?['cap','mapa','restr','lib']:r==='campo'?['campo','mapa','restr','ind']:r==='area'?(isCalArea()?['lib','restr','mapa','ind']:['restr','lib','ind','look'])
     :r==='lector'?['restr','lib','ind','look']:r==='veedor'?['campo','mapa','ind','restr']:['campo','mapa','restr','lib'];
   return ['hoy',...L].filter(tabAllowed).slice(0,4)}

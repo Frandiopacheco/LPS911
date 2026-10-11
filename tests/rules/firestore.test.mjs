@@ -1180,3 +1180,27 @@ test('plan semanal: la evaluación la cambia el responsable del piso o el admin;
   await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr1'), { frozenAt: 'z' }));
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'weeks/91_pr1'), { 'res.x1.ok': true }));
 });
+
+// ── Módulo Planos (docs/ia/planos.md) ──
+const PLB = (x) => ({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', W: 14175, H: 10630, Z: 5, tit: 'PLANTA PRIMER PISO', ...x });
+test('planos: el equipo de LPS lee; capataz y roles de tareo no', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'plb/ARQ_AG03'), PLB()); });
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER)])
+    await assertSucceeds(getDoc(doc(db, 'plb/ARQ_AG03')));
+  for (const db of [cap('cap1'), user('tasis@obra.pe'), user('tcos@obra.pe'), unverified('editor@obra.pe')])
+    await assertFails(getDoc(doc(db, 'plb/ARQ_AG03')));
+});
+test('planos: solo administrador y editores cargan; forma mínima; nadie borra', async () => {
+  for (const db of [user('editor@obra.pe'), user(OWNER)]) {
+    await assertSucceeds(setDoc(doc(db, 'plb/ARQ_AG04'), PLB({ cod: 'AG04', base: 'planos/ARQ_AG04/r1' })));
+    await assertSucceeds(updateDoc(doc(db, 'plb/ARQ_AG04'), { rev: 2, base: 'planos/ARQ_AG04/r2' }));
+    await assertFails(deleteDoc(doc(db, 'plb/ARQ_AG04')));
+  }
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe')])
+    await assertFails(setDoc(doc(db, 'plb/ARQ_AG05'), PLB({ cod: 'AG05', base: 'planos/ARQ_AG05/r1' })));
+  const ed = user('editor@obra.pe');
+  await assertFails(setDoc(doc(ed, 'plb/x1'), PLB({ cod: '' })));
+  await assertFails(setDoc(doc(ed, 'plb/x2'), PLB({ rev: 0 })));
+  await assertFails(setDoc(doc(ed, 'plb/x3'), PLB({ base: 'otra/carpeta' })));
+  await assertFails(setDoc(doc(ed, 'plb/x4'), PLB({ W: '100' })));
+});

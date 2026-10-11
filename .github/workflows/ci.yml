@@ -213,6 +213,14 @@ jobs:
             firebase deploy --only firestore:indexes --project "$TARGET" --non-interactive > idx.log 2>&1; irc=$?
             tail -15 idx.log
             if [ $irc -ne 0 ]; then echo "::warning::No se instalaron los índices de Firestore (firestore.indexes.json); la página sigue funcionando con la consulta anterior. Revisa el registro de este paso."; fi
+            # reglas de Storage (módulo Planos), aparte: si el proyecto aún no tiene Storage activado (Firebase › Storage › Comenzar)
+            # falla sin cortar la publicación; solo el módulo Planos queda sin poder subir ni ver archivos hasta activarlo
+            firebase deploy --only storage --project "$TARGET" --non-interactive > st.log 2>&1; src=$?
+            tail -15 st.log
+            if [ $src -ne 0 ]; then echo "::warning::No se instalaron las reglas de Storage (firebase/storage.rules). ¿Está activado Storage en el proyecto? El módulo Planos no podrá subir ni ver archivos hasta instalarlas."; fi
+            # CORS del depósito: el módulo Planos descarga los mosaicos con fetch() desde la página (las reglas de Storage siguen mandando)
+            BKT=$(grep -oE 'storageBucket: *"[^"]+"' config/$TARGET.js | sed -E 's/.*"([^"]+)"/\1/')
+            if [ -n "$BKT" ]; then gcloud storage buckets update "gs://$BKT" --cors-file=firebase/storage-cors.json --project "$(python3 -c "import json;print(json.load(open('.firebaserc'))['projects']['$TARGET'])")" > cors.log 2>&1 || { tail -5 cors.log; echo "::warning::No se pudo configurar el CORS de Storage (gs://$BKT). El módulo Planos no podrá descargar mosaicos hasta configurarlo."; }; fi
           fi
           exit $rc
 

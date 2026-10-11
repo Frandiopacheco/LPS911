@@ -374,6 +374,18 @@ service cloud.firestore {
       allow read: if isTar();
       allow write: if isAdmin();
     }
+    // Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto (los archivos van en Firebase Storage, planos/…).
+    // Lee el equipo de Last Planner salvo el capataz de un SC; cargan y editan el administrador y los editores. Nadie borra: se archiva.
+    function plaRead() { return lpsMember() && role() != 'capataz'; }
+    function plbOk() {
+      let d = request.resource.data;
+      return d.cod is string && d.cod.size() > 0 && d.cod.size() <= 40 && d.disc is string && d.rev is int && d.rev >= 1
+        && d.base is string && d.base.matches('planos/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    match /plb/{id} {
+      allow read: if plaRead();
+      allow create, update: if canEdit() && plbOk();
+    }
     // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
     function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
     // fecha YYYY-MM-DD entre hace 3 días y hoy (hora de Lima, UTC-5; tolera un día por el reloj y la zona)

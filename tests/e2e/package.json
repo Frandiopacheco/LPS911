@@ -8,6 +8,7 @@
   "devDependencies": {
     "@playwright/test": "1.56.0",
     "exceljs": "^4.4.0",
+    "pdfjs-dist": "^3.11.174",
     "xlsx-js-style": "1.2.0"
   }
 }
