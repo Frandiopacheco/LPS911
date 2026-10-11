@@ -167,3 +167,47 @@ test.describe('sin conexión (tablet)', () => {
     noErrors(errors, 'tablet');
   });
 });
+
+test('visor: panel ☰ Planos, otra especialidad en la misma zona y ▲▼ de piso sin salir', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', [
+    { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS06_PLANTA PRIMER PISO - REDES DE AGUA FRIA.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS07_PLANTA SEGUNDO PISO - REDES DE AGUA FRIA.pdf', mimeType: 'application/pdf', buffer: pdf },
+  ]);
+  // el rótulo del PDF de prueba dice AG03: se corrigen los códigos de sanitarias en la tabla no hace falta (vienen del nombre)
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(3, { timeout: 120_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  // fila «mismo punto»: ARQ AG03 e IS IS06 (P1); ▲ P2 lleva a IS07 desde sanitarias
+  await expect(page.locator('#plv .plvq [data-pj]')).toHaveCount(2);
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { PLV.tv.setView({ nx: 0.3, ny: 0.4, k: 3 }); });
+  const v0 = await page.evaluate(() => PLV.tv.getView());
+  await page.click('#plv .plvq [data-pj="IS_IS06"]');
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS06');
+  await page.waitForTimeout(300);
+  const v1 = await page.evaluate(() => PLV.tv.getView());
+  expect(Math.abs(v1.nx - v0.nx)).toBeLessThan(0.01); expect(Math.abs(v1.ny - v0.ny)).toBeLessThan(0.01); expect(Math.abs(v1.k - v0.k)).toBeLessThan(0.05);
+  await page.click('#plv .plvq [data-pj="IS_IS07"]');
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS07');
+  // panel: filtrar por piso y saltar a otro plano
+  await page.click('#plv [data-pv="menu"]');
+  await expect(page.locator('#plv .plvp .plvpr')).toHaveCount(1); // abre en el piso del plano actual (P2)
+  await page.click('#plv .plvp [data-pf="piso:"]');
+  await expect(page.locator('#plv .plvp .plvpr')).toHaveCount(3);
+  await page.fill('#plv .plvp input', 'ag03');
+  await expect(page.locator('#plv .plvp .plvpr')).toHaveCount(1);
+  await page.click('#plv .plvp [data-pg="ARQ_AG03"]');
+  await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+  await page.keyboard.press('Escape'); // cierra primero el panel
+  await expect(page.locator('#plv .plvp')).toHaveCount(0);
+  await expect(page.locator('#plv')).toHaveCount(1);
+  noErrors(errors, 'panel');
+});
