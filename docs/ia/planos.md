@@ -68,3 +68,4 @@ Botón **📏 Medir** en la barra del visor: distancia, poligonal y área sobre 
 - **No se guardan las mediciones** (son temporales, a propósito: el visor debe seguir rápido y no hay datos de obra en juego). Cuentas puras: `plmD`, `plmLen`, `plmArea`, `plmFmtL/A` (probadas en `planos.spec.js`).
 - **Precisión:** a 300 dpi y 1/100, un píxel del plano ≈ 8,5 mm reales; con buen zoom se mide a ±1–2 cm. Es una medida a mano alzada sobre una imagen (sin imán a las líneas del DWG): sirve para chequeos de obra, no para metrados formales. Posible mejora: imán a líneas leyendo `orig.pdf`.
 - **Táctil:** al arrastrar un punto aparece una lupa 3× sobre el dedo (`plmLupa`).
+- **Cursor (mouse):** en modo medir el visor lleva la clase `.medir` y el cursor es una cruz fina con el centro libre (SVG en CSS, punto activo en el centro) en vez de la manito de mover el plano; sobre un punto ya puesto pasa a «mover» (`.sobre`, `plmHover`). Al salir de medir vuelve la manito.
