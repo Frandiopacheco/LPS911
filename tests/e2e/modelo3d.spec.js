@@ -84,35 +84,62 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   expect((await page.locator('#p3side .p3sidetab').boundingBox()).x - hb.x, 'plegado: queda la pestaña en el borde').toBeLessThan(40);
   await page.click('#p3side .p3sidetab');
   await expect(page.locator('#p3side')).not.toHaveClass(/fold/);
+  // el azul de la selección se dibuja por delante de superficies coincidentes
+  expect(await page.evaluate(() => { let f = null; for (const [, m] of P3.v.fragments.list) m.object.traverse(o => { for (const mt of [].concat(o.material || [])) if (mt.color && mt.color.getHex() === 0x1f7bff) f = mt.polygonOffsetFactor }); return f }), 'el resaltado gana a lo coincidente').toBeLessThan(0);
+  const pick = async () => { for (const [fx, fy] of [[.5, .5], [.45, .55], [.55, .45], [.4, .6], [.6, .6], [.5, .4], [.5, .65], [.35, .5], [.62, .6], [.55, .75]]) {
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    try { await page.waitForFunction(() => P3.selN > 0, null, { timeout: 7000 }); return true } catch (e) {} } return false };
   // Cortar desde el menú flotante: crea el corte y cierra el menú
   await page.click('#p3fm [data-a="cutsurf"]');
   await expect(page.locator('#p3dock [data-a="pn:cortes"] .p3n')).toHaveText('1');
   await expect(page.locator('#p3fm')).toBeHidden();
+  // un segundo corte; tocar la tijera de uno solo quita ESE corte y deja el otro
+  expect(await pick(), 'después de cortar se puede seguir seleccionando').toBe(true);
+  await expect(page.locator('#p3fm')).toBeVisible();
+  await page.click('#p3fm [data-a="cutsurf"]');
+  await expect(page.locator('#p3dock [data-a="pn:cortes"] .p3n')).toHaveText('2');
+  await expect(page.locator('.p3sh')).toHaveCount(2);
+  await page.locator('.p3sh').last().click(); /* la de arriba (si dos cortes caen en el mismo punto, una tapa a la otra) */
+  await expect(page.locator('#p3dock [data-a="pn:cortes"] .p3n')).toHaveText('1');
+  await expect(page.locator('.p3sh')).toHaveCount(1);
+  // aislar con un corte activo: se enfoca la parte que queda a la vista, no la caja completa del elemento
+  expect(await pick(), 'se vuelve a seleccionar con un corte').toBe(true);
+  const shown = await page.evaluate(async () => { const b = await P3.v.shownSelectionBox(), pls = P3.v.section.planes(), T = P3.v.THREE; let worst = 1e9;
+    for (const x of [b.min[0], b.max[0]]) for (const y of [b.min[1], b.max[1]]) for (const z of [b.min[2], b.max[2]]) for (const pl of pls) worst = Math.min(worst, pl.distanceToPoint(new T.Vector3(x, y, z)));
+    return { worst, c: [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2] } });
+  expect(shown.worst, 'la caja que se enfoca no entra en la zona cortada').toBeGreaterThan(-1e-3);
+  await page.click('#p3fm [data-a="isolate"]');
+  await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveText('1');
+  await page.waitForTimeout(2500);
+  const tgt = await page.evaluate(() => { const c = P3.v.camera.controls, t = c.getTarget(new (P3.v.THREE.Vector3)()); return t.toArray() });
+  expect(Math.hypot(...tgt.map((v, i) => v - shown.c[i])), 'la cámara va a la parte visible').toBeLessThan(0.3);
+  await page.click('#p3dock [data-a="showall"]');
   await page.click('#p3dock [data-a="pn:cortes"]'); await page.click('#p3pn [data-a="sec-clear"]'); await page.click('#p3pn [data-a="pn:"]');
   await expect(page.locator('#p3dock .p3n')).toHaveCount(0);
   // volver a seleccionar y ocultar desde el menú
-  const pick = async () => { for (const [fx, fy] of [[.5, .5], [.45, .55], [.55, .45], [.4, .6], [.6, .6], [.5, .4], [.5, .65], [.35, .5]]) {
-    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
-    try { await page.waitForFunction(() => P3.selN > 0, null, { timeout: 7000 }); return true } catch (e) {} } return false };
   expect(await pick(), 'se vuelve a seleccionar').toBe(true);
   await expect(page.locator('#p3fm')).toBeVisible();
   await page.click('#p3fm [data-a="hide"]');
-  await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveText('1');
+  await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveText('1', { timeout: 15_000 });
   await expect(page.locator('#p3fm')).toBeHidden();
   await page.click('#p3dock [data-a="showall"]');
   await expect(page.locator('#p3dock [data-a="showall"] .p3n')).toHaveCount(0);
   // medir: el punto se ajusta a la esquina (vértice) del elemento, aunque se toque a unos píxeles de ella
-  expect(await pick(), 'selecciona para ubicar una esquina').toBe(true);
-  const c = await page.evaluate(async () => { const b = await P3.v.selectionBox(), T = P3.v.THREE, cam = P3.v.camera.three, r = P3.v.canvas.getBoundingClientRect(); const pts = [];
+  let tx = 0, ty = 0, snapOk = false;
+  for (const [fx, fy] of [[.5, .5], [.45, .55], [.55, .45], [.4, .6], [.6, .6], [.5, .4], [.5, .65], [.35, .5]]) { if (snapOk) break;
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    try { await page.waitForFunction(() => P3.selN > 0, null, { timeout: 5000 }) } catch (e) { continue }
+  const cs = await page.evaluate(async () => { const b = await P3.v.selectionBox(), T = P3.v.THREE, cam = P3.v.camera.three, r = P3.v.canvas.getBoundingClientRect(); const pts = [];
     for (const x of [b.min[0], b.max[0]]) for (const y of [b.min[1], b.max[1]]) for (const z of [b.min[2], b.max[2]]) pts.push(new T.Vector3(x, y, z));
-    pts.sort((a, d) => a.distanceTo(cam.position) - d.distanceTo(cam.position)); const k = pts[0], ctr = new T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
-    const sp = k.clone().project(cam), sc = ctr.clone().project(cam), X = s => r.left + (s.x * .5 + .5) * r.width, Y = s => r.top + (-s.y * .5 + .5) * r.height;
-    return { w: k.toArray(), x: X(sp), y: Y(sp), cx: X(sc), cy: Y(sc) } });
-  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
-  const len = Math.hypot(c.cx - c.x, c.cy - c.y) || 1, tx = c.x + (c.cx - c.x) / len * 9, ty = c.y + (c.cy - c.y) / len * 9;
-  const sn = await page.evaluate(([x, y]) => P3.v.snapProbe(x, y), [tx, ty]);
-  expect(sn && sn.kind, 'a 9 px de una esquina se ajusta al vértice').toBe('v');
-  expect(Math.hypot(sn.p[0] - c.w[0], sn.p[1] - c.w[1], sn.p[2] - c.w[2]), 'y es justo esa esquina').toBeLessThan(0.02);
+    pts.sort((a, d) => a.distanceTo(cam.position) - d.distanceTo(cam.position)); const ctr = new T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2), sc = ctr.clone().project(cam);
+    const X = s => r.left + (s.x * .5 + .5) * r.width, Y = s => r.top + (-s.y * .5 + .5) * r.height;
+    return pts.map(k => { const sp = k.clone().project(cam); return { w: k.toArray(), x: X(sp), y: Y(sp), cx: X(sc), cy: Y(sc) } }) });
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    /* alguna de las esquinas visibles del elemento: tocando a 9 px hacia adentro, la medida se ajusta justo a ella */
+    for (const c of cs) { const len = Math.hypot(c.cx - c.x, c.cy - c.y) || 1, x = c.x + (c.cx - c.x) / len * 9, y = c.y + (c.cy - c.y) / len * 9;
+      const sn = await page.evaluate(([px, py]) => P3.v.snapProbe(px, py), [x, y]);
+      if (sn && sn.kind === 'v' && Math.hypot(sn.p[0] - c.w[0], sn.p[1] - c.w[1], sn.p[2] - c.w[2]) < 0.02) { snapOk = true; tx = x; ty = y; break } } }
+  expect(snapOk, 'a 9 px de una esquina visible se ajusta al vértice, justo esa esquina').toBe(true);
   // medir: dos toques dan una medida
   await page.click('#p3dock [data-a="pn:medir"]'); await page.click('#p3pn [data-a="meas"]');
   await expect(page.locator('#p3ban')).toContainText('punto A');

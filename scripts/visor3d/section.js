@@ -22,20 +22,22 @@ export function createSection(C) {
 
   /* El tirador del corte es un botón propio (tijera) y no las flechas del Clipper: más chico, se agarra con el dedo y no tapa el modelo.
      Arrastrarlo mueve el plano a lo largo de su normal (el movimiento en pantalla se proyecta sobre la dirección de la normal). */
-  function makeHandle(id, it) { const el = document.createElement('button'); el.type = 'button'; el.className = 'p3sh' + (it.kind === 'box' ? ' box' : ''); el.textContent = it.kind === 'box' ? '↔' : '✂'; el.title = it.label + ' · arrastra para mover'; layer.appendChild(el);
+  function makeHandle(id, it) { const el = document.createElement('button'); el.type = 'button'; el.className = 'p3sh' + (it.kind === 'box' ? ' box' : ''); el.textContent = it.kind === 'box' ? '↔' : '✂'; el.title = it.kind === 'box' ? it.label + ' · arrastra para mover' : it.label + ' · arrastra para mover · toca para quitar este corte'; layer.appendChild(el);
     let drag = null;
-    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.setPointerCapture(e.pointerId); dragging = true; drag = { x: e.clientX, y: e.clientY, o: it.o.clone() }; el.classList.add('on') });
-    el.addEventListener('pointermove', e => { if (!drag) return; const o = drag.o, a = o.clone().project(cam3()), b = o.clone().addScaledVector(it.n, 1).project(cam3()); const r = canvas.getBoundingClientRect();
+    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.setPointerCapture(e.pointerId); dragging = true; drag = { x: e.clientX, y: e.clientY, o: it.o.clone(), t: performance.now(), moved: false }; el.classList.add('on') });
+    el.addEventListener('pointermove', e => { if (!drag) return; if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) drag.moved = true; if (!drag.moved) return; const o = drag.o, a = o.clone().project(cam3()), b = o.clone().addScaledVector(it.n, 1).project(cam3()); const r = canvas.getBoundingClientRect();
       let vx = (b.x - a.x) * 0.5 * r.width, vy = -(b.y - a.y) * 0.5 * r.height, L2 = vx * vx + vy * vy; if (L2 < 1) { vx = 0; vy = -60; L2 = 3600 } /* normal apuntando a la cámara: arrastrar hacia arriba la sube */
       const t = ((e.clientX - drag.x) * vx + (e.clientY - drag.y) * vy) / L2; setOrigin(id, o.clone().addScaledVector(it.n, t)) });
-    const end = e => { if (!drag) return; drag = null; el.classList.remove('on'); try { el.releasePointerCapture(e.pointerId) } catch (x) {} redraw(); setTimeout(() => { dragging = false }, 60) };
+    const end = e => { if (!drag) return; const tap = e.type === 'pointerup' && !drag.moved && performance.now() - drag.t < 500; drag = null; el.classList.remove('on'); try { el.releasePointerCapture(e.pointerId) } catch (x) {} redraw(); setTimeout(() => { dragging = false }, 60);
+      if (tap && it.kind === 'surf') remove(id) }; /* un toque (sin arrastrar) quita solo este corte; los demás se quedan */
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); return el }
   const cam3 = () => C.cam.three;
   function setOrigin(id, o) { const it = items.get(id), p = clipper.list.get(id); if (!it || !p) return; it.o.copy(o); p.setFromNormalAndCoplanarPoint(it.n.clone(), o.clone()); redraw() }
   const proj = new THREE.Vector3();
   function placeHandles() { if (!items.size) return; const r = canvas.getBoundingClientRect();
     for (const it of items.values()) { if (!it.el) continue; proj.copy(it.o).project(cam3()); const ok = !hideGizmos && proj.z < 1 && Math.abs(proj.x) < 1.15 && Math.abs(proj.y) < 1.15;
-      it.el.style.display = ok ? '' : 'none'; if (ok) { it.el.style.left = (proj.x * 0.5 + 0.5) * r.width + 'px'; it.el.style.top = (-proj.y * 0.5 + 0.5) * r.height + 'px' } } }
+      it.el.style.display = ok ? '' : 'none'; const off = it.kind === 'surf' ? 30 : 0; /* la tijera queda un poco al lado del punto cortado: así no tapa el lugar donde uno vuelve a tocar */
+      if (ok) { it.el.style.left = (proj.x * 0.5 + 0.5) * r.width + off + 'px'; it.el.style.top = (-proj.y * 0.5 + 0.5) * r.height - off + 'px' } } }
   R.onAfterUpdate.add(placeHandles);
 
   function addPlane(point, normal, kind, label, face) {

@@ -59,7 +59,9 @@ function create(host, opts = {}) {
   const models = new Map();   /* id → {model, levels, slabs, allIds} */
   let dead = false;
   const idx = levelIndex(models);
-  fragments.core.models.materials.list.onItemSet.add(({ value: m }) => { if (!('isLodMaterial' in m && m.isLodMaterial)) { m.polygonOffset = true; m.polygonOffsetUnits = 1; m.polygonOffsetFactor = Math.random() } });
+  fragments.core.models.materials.list.onItemSet.add(({ value: m }) => { if (!('isLodMaterial' in m && m.isLodMaterial)) { m.polygonOffset = true; m.polygonOffsetUnits = 1; m.polygonOffsetFactor = Math.random();
+    /* el azul de la selección se dibuja por delante de superficies coincidentes (losa y acabado, muro y su revestimiento): si no, queda tapado y «no se resalta» */
+    if (m.color && m.color.getHex && m.color.getHex() === SEL_MAT.color.getHex()) { m.polygonOffsetUnits = -4; m.polygonOffsetFactor = -4 } } });
   fragments.list.onItemSet.add(({ value: model }) => {
     model.useCamera(cam.three);
     model.useClippingPlanes(R.clippingPlanes);
@@ -139,15 +141,31 @@ function create(host, opts = {}) {
     if (isolated) { const iso = isolated.get(id); if (!iso || !iso.has(h.localId)) return false }
     const lv = levelOf.get(id); if (lv && !lv.has(h.localId)) return false;
     if (h.point) for (const pl of planesNow()) if (pl.distanceToPoint(h.point) < -1e-3) return false; return true }
-  async function pickAt(cx, cy) { const mouse = new THREE.Vector2(cx, cy); let best = null;
+  /* volúmenes auxiliares del IFC (ambientes/espacios, aberturas): se pueden tocar, pero solo si en ese punto no hay un elemento real (muro, losa…).
+     Si no, al cortar y mirar por dentro de un ambiente se «seleccionaba» el volumen del ambiente y no se veía nada resaltado. */
+  const lowOf = id => { const m = models.get(id); if (!m) return Promise.resolve(new Set());
+    return m.low || (m.low = m.model.getItemsOfCategories([/^IFCSPACE$/, /^IFCOPENINGELEMENT$/, /^IFCVIRTUALELEMENT$/]).then(r => new Set(Object.values(r).flat())).catch(() => new Set())) };
+  async function pickAt(cx, cy) { const mouse = new THREE.Vector2(cx, cy); let best = null, low = null;
     for (const [id, { model }] of models) { if (!model.object.visible) continue;
-      const hits = await model.raycastAll({ camera: cam.three, mouse, dom: canvas }).catch(() => null) || []; const g = ghost.get(id);
-      for (const h of hits) { if (g && g.has(h.localId)) continue; if (!seen(id, h)) continue; if (!best || h.distance < best.hit.distance) best = { id, hit: h, model } } }
-    return best }
+      const hits = await model.raycastAll({ camera: cam.three, mouse, dom: canvas }).catch(() => null) || []; const g = ghost.get(id), aux = hits.length ? await lowOf(id) : null;
+      for (const h of hits) { if (g && g.has(h.localId)) continue; if (!seen(id, h)) continue; const c = { id, hit: h, model };
+        if (aux.has(h.localId)) { if (!low || h.distance < low.hit.distance) low = c } else if (!best || h.distance < best.hit.distance) best = c } }
+    return best || low }
   const sections = createSection({ THREE, OBC, components, world, fragments, R, cam, canvas, redraw, models, getBox: () => box, selBox: async () => boxOfSel(), levelBox: () => levelBox() });
   sections.onPlaced = () => V.setTool('select');
   const measure = createMeasure({ THREE, OBC, components, world, fragments, R, cam, canvas, redraw, pickAt });
 
+  /* caja de un elemento recortada por los cortes y el corte de planta activos: la parte que de verdad se ve. Si un muro largo o una losa queda casi toda en la zona cortada,
+     enfocar su caja completa llevaba la cámara a un espacio vacío. */
+  const BOX_EDGES = [[0, 1], [1, 3], [3, 2], [2, 0], [4, 5], [5, 7], [7, 6], [6, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+  function clipBox(b, planes) { let cur = b.clone(); if (cur.isEmpty()) return cur;
+    for (const pl of planes) { const c = []; for (let i = 0; i < 8; i++) c.push(new THREE.Vector3(i & 1 ? cur.max.x : cur.min.x, i & 2 ? cur.max.y : cur.min.y, i & 4 ? cur.max.z : cur.min.z));
+      const d = c.map(v => pl.distanceToPoint(v)), pts = []; c.forEach((v, i) => { if (d[i] >= 0) pts.push(v) });
+      for (const [i, j] of BOX_EDGES) if ((d[i] < 0) !== (d[j] < 0)) pts.push(c[i].clone().lerp(c[j], d[i] / (d[i] - d[j])));
+      if (!pts.length) return b.clone(); /* todo cortado: se deja la caja completa */
+      cur = new THREE.Box3().setFromPoints(pts) }
+    return cur }
+  const shownBox = b => clipBox(b, planesNow());
   async function boxOfSel() { const b = new THREE.Box3(); for (const [id, s] of sel) { const m = models.get(id); if (!m || !s.size) continue; const bb = await m.model.getMergedBox([...s]); if (!bb.isEmpty()) b.union(bb.clone().translate(m.model.object.position)) } return b }
   function levelBox() { if (!level) return box.clone(); const y = idx.floorY(level); if (y == null) return box.clone(); const b = box.clone(); b.min.y = y - 0.05; b.max.y = y + cutH + 1.7; return b }
 
@@ -228,13 +246,14 @@ function create(host, opts = {}) {
     async snapProbe(cx, cy) { const r = canvas.getBoundingClientRect(), hit = await pickAt(cx, cy); if (!hit) return null; const sn = await measure.snapAt(hit, { x: cx - r.left, y: cy - r.top }); return { kind: sn.kind, p: sn.p.toArray() } },
     async probe(cx, cy) { const h = await pickAt(cx, cy); return h ? { p: h.hit.point.toArray(), id: h.id, lid: h.hit.localId } : null },
     async selectionBox() { const b = await boxOfSel(); return b.isEmpty() ? null : { min: b.min.toArray(), max: b.max.toArray() } },
+    async shownSelectionBox() { const b = shownBox(await boxOfSel()); return b.isEmpty() ? null : { min: b.min.toArray(), max: b.max.toArray() } },
     levelInfo() { return { offset: idx.offset(), main: idx.mainLevels().main.map(l => ({ key: l.key, elev: l.elev, floorY: idx.floorY(l.key) })), models: [...models].map(([id, m]) => ({ id, slabs: m.slabs, posY: m.model.object.position.y, levels: m.levels.map(l => ({ name: l.name, elev: l.elev, y0: l.y0, floor: l.floor, n: l.ids.length })) })) } },
     /* cámara */
     reset() { frame(visBox(), true) },
     /** «Casita»: vuelve a la vista general. Sale de planta/ortogonal, quita el piso aislado, la selección y lo aislado, y encuadra todo el modelo
         (los cortes y lo oculto a propósito se conservan: se quitan con «Mostrar»). */
     async home() { planOn = false; try { cam.set('Orbit') } catch (e) {} await setProjection('persp'); level = ''; isolated = null; measure.stop(); if (selCount()) await setSel({}, false); await applyLevel(); frame(visBox(), true) },
-    resize() { try { R.resize() } catch (e) {} redraw(); keepDrawing(500) }, fit: b => fitBox(b || box), fitSelection: async () => { const b = await boxOfSel(); if (!b.isEmpty()) await focusBox(b, 1.3) },
+    resize() { try { R.resize() } catch (e) {} redraw(); keepDrawing(500) }, fit: b => fitBox(b || box), fitSelection: async () => { const b = shownBox(await boxOfSel()); if (!b.isEmpty()) await focusBox(b, 1.3) },
     view(name) { const b = level ? levelBox() : box, c = ctr(b), s = b.getSize(new THREE.Vector3()), r = Math.max(s.x, s.y, s.z) * 1.2 || 50;
       const P = { top: [0, 1, 0.0001], front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0], iso: [0.7, 0.7, 0.9] }[name] || [0.7, 0.7, 0.9];
       cc.setLookAt(c.x + P[0] * r, c.y + P[1] * r, c.z + P[2] * r, c.x, c.y, c.z, true) },
@@ -257,7 +276,7 @@ function create(host, opts = {}) {
     async props() { const o = selMap(); const id = Object.keys(o)[0]; if (!id) return null; const m = models.get(id); return readProps(m.model, o[id][0], id) },
     /* ocultar / aislar / transparentar / mostrar todo (sobre la selección) */
     async hide() { for (const [id, s] of sel) { const h = setOf(hidden, id); s.forEach(i => h.add(i)) } await setSel({}, false); await applyVis() },
-    async isolate() { if (!selCount()) return; const b = await boxOfSel(); isolated = new Map([...sel].map(([k, s]) => [k, new Set(s)])); await setSel({}, false); await applyVis(); if (!b.isEmpty()) await focusBox(b, 1.3) },
+    async isolate() { if (!selCount()) return; const b = shownBox(await boxOfSel()); isolated = new Map([...sel].map(([k, s]) => [k, new Set(s)])); await setSel({}, false); await applyVis(); if (!b.isEmpty()) await focusBox(b, 1.3) },
     async ghostSel() { for (const [id, s] of sel) { const g = setOf(ghost, id); s.forEach(i => g.add(i)) } await setSel({}, false); await applyGhost() },
     async ghostOthers() { if (!selCount()) return; for (const [id, m] of models) { const all = m.allIds || (m.allIds = await m.model.getItemsIdsWithGeometry()); const keep = sel.get(id), g = setOf(ghost, id); all.forEach(i => { if (!keep || !keep.has(i)) g.add(i) }) } await setSel({}, false); await applyGhost() },
     async showAll() { const hadG = [...ghost.values()].some(g => g.size); hidden.clear(); ghost.clear(); ovlOf.clear(); isolated = null; await setSel({}, false); await applyVis(); if (hadG) { await buildOverlays(); await paintAll() } },
