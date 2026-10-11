@@ -41,7 +41,8 @@ function plmAttach(){PLM.L=plmNew();PLM.drag=-1;
   plmHook(PLV.tv);plmBar()}
 function plmToggle(){if(!PLV||!PLV.tv)return;PLM.on=!PLM.on;
   const b=PLV.box.querySelector('[data-pv="med"]');if(b)b.classList.toggle('on',PLM.on);
-  if(!PLM.on){PLM.L=plmNew();PLM.drag=-1;plmBarOff();plmUnhook(PLV.tv);return}
+  if(!PLM.on){PLM.L=plmNew();PLM.drag=-1;plmBarOff();plmUnhook(PLV.tv);plkSync();return}  /* al salir de medir vuelve la capa de vínculos */
+  if(PLK.edit)plkEdit(false);                                                              /* Medir y Vincular no conviven */
   PLM.L=plmNew();PLM.tool=plmMpp()?'dist':'cal';plmHook(PLV.tv);plmBar()}
 
 /* ---------- toques ---------- */

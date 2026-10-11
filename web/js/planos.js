@@ -290,6 +290,8 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   const end=e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}const was=P.size===1&&!pinch&&!afterPinch;
     /* en modo medir un toque corto pone un punto (y no hay doble toque de zoom) */
     if(was&&tap&&V.onTap&&performance.now()-tap.t<400){V.onTap(tap.x,tap.y);lastTap=null}else
+    /* vínculos (planos-vinculos.js): un toque corto sobre una zona vinculada la abre; fuera de las zonas sigue el doble toque de zoom */
+    if(was&&tap&&V.onLink&&performance.now()-tap.t<400&&V.onLink(tap.x,tap.y)){lastTap=null}else
     /* doble toque = dos toques cortos, quietos y cercanos en menos de 0,3 s */
     if(was&&tap&&performance.now()-tap.t<250){const now=performance.now();
       if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){const r=host.getBoundingClientRect();V.zoomAt(2,tap.x-r.left,tap.y-r.top);lastTap=null}else lastTap={t:now,x:tap.x,y:tap.y}}
@@ -326,13 +328,13 @@ function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,
     pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);plvDraw();box.focus();
-  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(PLM.on){plmToggle()}else plClose();return}
+  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
     if(e.target.closest('input,select,textarea'))return;
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
     else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
-function plClose(silent){if(!PLV)return;plmReset();if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
-function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;plvDraw()}
+function plClose(silent){if(!PLV)return;plmReset();plkReset();if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
+function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1};
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
@@ -340,6 +342,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
   const sib=plSameSpot(p),up=plFloorStep(p,1),dn=plFloorStep(p,-1);const pc=id=>esc((S.pis.get(id)||ARCH.pis.get(id)||{}).code||'');
   PLV.box.innerHTML=`<div class="plvh">
     <button class="ib plvmenu${PLV.panel?' on':''}" data-pv="menu" aria-expanded="${PLV.panel}" title="Buscar y filtrar planos sin salir">☰ Planos</button>
+    ${plkBackBtn()}
     <button class="ib" data-pv="prev" aria-label="Plano anterior"${n<2?' disabled':''}>‹</button>
     <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||p.niv||'General'].filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
     <button class="ib" data-pv="next" aria-label="Plano siguiente"${n<2?' disabled':''}>›</button>
@@ -347,6 +350,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
     <button class="ib${PLM.on?' on':''}" data-pv="med" title="Medir distancias y áreas sobre el plano">📏 Medir</button>
+    ${plkHdrBtn(p)}
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
     ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plaEd()?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
@@ -356,14 +360,14 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
     const g=e.target.closest('[data-pg]');if(g){PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
     const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo});plvPanel();return}
     const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
-    else if(a==='med')plmToggle();else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='med')plmToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 /* ---------- Panel «☰ Planos» dentro del visor y saltos entre láminas ---------- */
 const PL_NOISE=/^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|SOTANO|AZOTEA|PISO|NIVEL|PLANTA|DEL|LOS|LAS|CON|PARA)$/;
@@ -377,7 +381,7 @@ function plFloorStep(p,d){if(!p.pisoId)return null;const ps=pisos().map(x=>x.id)
   for(let k=i+d;k>=0&&k<ps.length;k+=d){const c=plAct().filter(q=>q.pisoId===ps[k]&&q.disc===p.disc&&q.tipo===p.tipo);if(c.length){c.sort((a,b)=>plSim(b,p)-plSim(a,p)||plCodCmp(a,b));return c[0]}}return null}
 /** cambia de lámina sin salir; keep: conserva la zona y el zoom (las láminas de un piso tienen el mismo formato y encuadre) */
 function plJump(id,keep){const q=PLB.get(id);if(!q||!PLV)return;PLV.view=keep&&PLV.tv?PLV.tv.getView():null;
-  /* con los saltos de «mismo punto» y ▲▼ el filtro de piso del panel sigue al plano */if(keep&&PLV.pf.piso&&PLV.pf.piso!=='-'&&q.pisoId)PLV.pf.piso=q.pisoId;PLV.id=id;PLV.rev=q.rev||1;
+  /* con los saltos de «mismo punto» y ▲▼ el filtro de piso del panel sigue al plano */if(keep&&PLV.pf.piso&&PLV.pf.piso!=='-'&&q.pisoId)PLV.pf.piso=q.pisoId;PLV.id=id;PLV.rev=q.rev||1;PLV.back=[];
   if(!PLV.list.includes(id))PLV.list=[...PLV.list,id];plvDraw()}
 function plvRes(){const f=PLV.pf,w=plUp(f.q).trim().split(/\s+/).filter(Boolean);
   return plAct().filter(p=>(!f.piso||(f.piso==='-'?!p.pisoId:p.pisoId===f.piso))&&(!f.disc||p.disc===f.disc)&&(!f.tipo||p.tipo===f.tipo)

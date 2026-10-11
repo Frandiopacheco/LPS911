@@ -372,3 +372,91 @@ test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina pa
   await expect(page.locator('#plv')).toHaveCount(1);
   noErrors(errors, 'medir');
 });
+
+test('vínculos: crear en el visor (zona, lámina destino y zona del destino), seguirlo con un toque, ← Volver y quitarlo', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', [
+    { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS06_PLANTA PRIMER PISO - REDES DE AGUA FRIA.pdf', mimeType: 'application/pdf', buffer: pdf },
+  ]);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  const tap = (wx, wy) => page.evaluate(async ([wx, wy]) => {
+    const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen(wx, wy), x = r.left + s.x, y = r.top + s.y;
+    const ev = (t) => host.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: x, clientY: y, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    ev('pointerdown'); await new Promise(r => setTimeout(r, 30)); ev('pointerup'); await new Promise(r => requestAnimationFrame(r));
+  }, [wx, wy]);
+  const W = await page.evaluate(() => PLV.tv.W);
+  const nLk = () => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length);
+
+  // sin vínculos, el modo editar se abre con el botón de la cabecera; Medir y Vincular no conviven
+  await page.click('#plv [data-pv="lk"]');
+  await expect(page.locator('#plv .plkbar')).toBeVisible();
+  await expect(page.locator('.plvc')).toHaveClass(/vinc/);
+  await page.click('#plv [data-pv="med"]');
+  await expect(page.locator('#plv .plkbar')).toHaveCount(0);
+  await expect(page.locator('#plv .plmbar')).toBeVisible();
+  await page.click('#plv [data-pv="med"]');
+  await expect(page.locator('#plv .plmbar')).toHaveCount(0);
+  await page.click('#plv [data-pv="lk"]');
+  await expect(page.locator('#plv .plkbar')).toBeVisible();
+
+  // dos esquinas → elegir lámina destino (con texto) → acercar la zona del destino y fijarla
+  await tap(W * 0.30, W * 0.20); await tap(W * 0.34, W * 0.24);
+  await expect(page.locator('#plv .plkch')).toBeVisible();
+  await page.fill('#plkt', 'Corte Z');
+  await page.fill('#plkq', 'IS06');
+  await page.click('#plv .plkr[data-kc="IS_IS06"]');
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS06');
+  await expect(page.locator('#plv .plkbar')).toContainText('Acerca la zona');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => PLV.tv.setView({ nx: 0.6, ny: 0.5, k: 4 }));
+  await page.click('#plv .plkbar [data-pk="fix"]');
+  await expect(page.locator('#plv .plvt b')).toHaveText('AG03'); // vuelve a la lámina de origen
+  await expect.poll(nLk).toBe(1);
+  const lk = await page.evaluate(() => PLB.get('ARQ_AG03').lk[0]);
+  expect(lk.to).toBe('IS_IS06'); expect(lk.t).toBe('Corte Z'); expect(lk.v.k).toBeCloseTo(4, 1); expect(lk.v.nx).toBeCloseTo(0.6, 2);
+  expect(lk.x0).toBeCloseTo(0.30, 2); expect(lk.x1).toBeCloseTo(0.34, 2); expect(lk.x0).toBeLessThan(lk.x1);
+  expect(lk.by).toBeTruthy(); expect(lk.arch).toBeUndefined();
+  expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
+  await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
+
+  // salir de editar y seguirlo con un toque: abre el destino en la zona fijada y aparece «← AG03»
+  await page.click('#plv .plkbar [data-pk="off"]');
+  await expect(page.locator('#plv .plkbar')).toHaveCount(0);
+  await page.evaluate(() => PLV.tv.setView({ nx: 0.4, ny: 0.3, k: 1 }));
+  const v0 = await page.evaluate(() => PLV.tv.getView());
+  await tap(W * 0.7, W * 0.4); // fuera de la zona: no navega (queda el doble toque de zoom)
+  await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+  await tap(W * 0.32, W * 0.22);
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS06');
+  await page.waitForTimeout(300);
+  const v1 = await page.evaluate(() => PLV.tv.getView());
+  expect(Math.abs(v1.nx - 0.6)).toBeLessThan(0.01); expect(Math.abs(v1.k - 4)).toBeLessThan(0.05);
+  await expect(page.locator('#plv .plback')).toContainText('AG03');
+  await page.click('#plv .plback');
+  await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
+  await page.waitForTimeout(300);
+  const v2 = await page.evaluate(() => PLV.tv.getView());
+  expect(Math.abs(v2.nx - v0.nx)).toBeLessThan(0.01); expect(Math.abs(v2.ny - v0.ny)).toBeLessThan(0.01); expect(Math.abs(v2.k - v0.k)).toBeLessThan(0.05);
+  await expect(page.locator('#plv .plback')).toHaveCount(0); // ya no hay a dónde volver
+
+  // quitar: se archiva (no se pierde) y deja de verse
+  await page.click('#plv [data-pv="lk"]');
+  await tap(W * 0.32, W * 0.22);
+  await expect(page.locator('#plv .plkbar [data-pk="del"]')).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.click('#plv .plkbar [data-pk="del"]');
+  await expect.poll(nLk).toBe(0);
+  const db = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(db.lk.length).toBe(1); expect(db.lk[0].arch && db.lk[0].arch.by).toBeTruthy();
+  noErrors(errors, 'vínculos');
+});
