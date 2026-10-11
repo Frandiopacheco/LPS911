@@ -17,7 +17,7 @@
      conviven: al entrar a uno se sale del otro. */
 
 const PLK={tapT:0,tx:-99,ty:-99,show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null};
-const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
+const PLK_R=100;const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
 
 /* ---------- datos ---------- */
 const plkLinks=p=>p&&Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch&&l.id):[];
@@ -27,7 +27,9 @@ const plkClamp=(n,a=0,b=1)=>Math.max(a,Math.min(b,n));
 async function plkSave(pid,fn){const ref=fcol('plb').doc(pid);let out=null;
   await db.runTransaction(async tx=>{const sn=await tx.get(ref);if(!sn.exists)throw new Error('La lámina ya no existe');
     out=fn((sn.data().lk||[]).map(x=>({...x})));tx.update(ref,{lk:out})});
-  const q=PLB.get(pid);if(q)q.lk=out;if(PLV&&PLV.tv)PLV.tv.tick();return out}
+  const q=PLB.get(pid);if(q)q.lk=out;if(PLV&&PLV.tv)PLV.tv.tick();
+  /* el contador del botón 🔗 de la cabecera */if(PLV&&PLV.id===pid&&q){const b=PLV.box.querySelector('[data-pv="lk"]');if(b){const t=document.createElement('div');t.innerHTML=plkHdrBtn(q);if(t.firstChild)b.replaceWith(t.firstChild)}}
+  return out}
 
 /* ---------- geometría ---------- */
 /** rectángulo en pantalla (relativo al lienzo) de un vínculo */
@@ -90,23 +92,21 @@ function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();
 /* en tablet, tras el toque llega un «clic» de compatibilidad ~300 ms después, en el mismo punto: si allí acaba de aparecer la
    lista de láminas o la barra, ese clic elegía una lámina al azar. Se ignoran los clics de la interfaz justo después de un toque. */
 const plkGhost=e=>performance.now()-PLK.tapT<700&&Math.hypot(e.clientX-PLK.tx,e.clientY-PLK.ty)<30;
+/* un solo toque sobre la marca (burbuja de corte, globo de detalle…) crea el vínculo con una zona del tamaño de una burbuja
+   centrada en el toque (`PLK_R` píxeles del plano a cada lado ≈ 1,7 cm de hoja a 300 dpi); luego se ajusta con las esquinas.
+   Antes eran dos toques (esquina y esquina opuesta) y, con un vínculo elegido, el primero solo lo soltaba: se perdía la cuenta. */
 async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK.pick)return;PLK.tapT=performance.now();PLK.tx=cx;PLK.ty=cy;const w=v.toWorld(cx,cy);
-  if(PLK.a){ /* segunda esquina; si casi no se movió, una zona del tamaño de un globo alrededor del punto */
-    const a=PLK.a;let x0=Math.min(a.x,w.x),x1=Math.max(a.x,w.x),y0=Math.min(a.y,w.y),y1=Math.max(a.y,w.y);
-    if(x1-x0<12||y1-y0<12){x0=a.x-60;x1=a.x+60;y0=a.y-60;y1=a.y+60}
-    PLK.a=null;v.tick();
-    if(plkLinks(p).length>=PLK_MAX){toast('Esta lámina ya tiene el máximo de vínculos ('+PLK_MAX+').');plkBar();return}
-    const g={x0:plkClamp(x0/v.W),y0:plkClamp(y0/v.H),x1:plkClamp(x1/v.W),y1:plkClamp(y1/v.H)};
-    if(PLK.dup){const s=PLK.dup,nid=plkId();PLK.dup=null;   /* otra marca de la misma remisión: mismo destino, zona y texto */
-      try{await plkSave(p.id,arr=>{arr.push({id:nid,...g,to:s.to,v:s.v||null,t:s.t||'',by:me.email,byN:me.name||me.email,ts:NOW()});return arr});PLK.sel=nid;toast('Otra zona vinculada')}
-      catch(e){toast('No se pudo guardar el vínculo: '+(e.code||e.message))}
-      plkBar();return}
-    plkChoose({id:plkId(),...g,to:'',t:'',v:null},p.id,true);return}
-  const h=plkHit(cx,cy,plkLinks(p));
-  if(h){PLK.sel=h.id;v.tick();plkBar();return}
-  if(PLK.sel){PLK.sel=null;v.tick();plkBar();return}
-  if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;
-  PLK.a=w;v.tick();plkBar()}
+  const h=PLK.dup?null:plkHit(cx,cy,plkLinks(p));
+  if(h){PLK.sel=h.id;v.tick();plkBar();return}                  /* tocar un vínculo lo elige para ajustarlo */
+  if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;                      /* fuera de la hoja */
+  PLK.sel=null;
+  if(plkLinks(p).length>=PLK_MAX){toast('Esta lámina ya tiene el máximo de vínculos ('+PLK_MAX+').');plkBar();return}
+  const g={x0:plkClamp((w.x-PLK_R)/v.W),y0:plkClamp((w.y-PLK_R)/v.H),x1:plkClamp((w.x+PLK_R)/v.W),y1:plkClamp((w.y+PLK_R)/v.H)};
+  if(PLK.dup){const s=PLK.dup,nid=plkId();PLK.dup=null;          /* otra marca de la misma remisión: mismo destino, zona y texto */
+    try{await plkSave(p.id,arr=>{arr.push({id:nid,...g,to:s.to,v:s.v||null,t:s.t||'',by:me.email,byN:me.name||me.email,ts:NOW()});return arr});PLK.sel=nid;toast('Otra marca vinculada')}
+    catch(e){toast('No se pudo guardar el vínculo: '+(e.code||e.message))}
+    plkBar();return}
+  v.tick();plkChoose({id:plkId(),...g,to:'',t:'',v:null},p.id,true)}
 /* arrastrar una esquina del vínculo elegido, o todo el vínculo desde dentro */
 function plkDown(cx,cy){if(PLK.ch||PLK.pick||PLK.a||!PLK.sel)return false;const v=PLV.tv,p=PLB.get(PLV.id);
   const l=plkLinks(p).find(x=>x.id===PLK.sel);if(!l)return false;
@@ -176,12 +176,11 @@ function plkBar(){if(!PLV)return;let el=PLV.box.querySelector('.plkbar');
     h=`<div class="plkv">Acerca la zona de <b class="mono">${esc(t?t.cod:'')}</b> que debe verse al tocar el vínculo.</div>
       <div class="plkx"><button type="button" class="ib pri" data-pk="fix">✓ Fijar esta zona</button><button type="button" class="ib" data-pk="whole" title="Abrir la lámina completa">Lámina entera</button><span class="plvsp"></span><button type="button" class="ib" data-pk="cancel">Cancelar</button></div>`}
   else{const l=PLK.sel&&L.find(x=>x.id===PLK.sel);let msg;
-    if(l){const t=PLB.get(l.to);msg=`<b>${esc(l.t||'→ '+(t?t.cod:'sin destino'))}</b> → <span class="mono">${esc(t?t.cod:'—')}</span> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}<br><small>¿La misma remisión tiene otra marca (el otro extremo del corte)? Toca <b>＋ Otra zona</b>. Arrastra las esquinas o el cuerpo para ajustar.</small>`}
-    else if(PLK.a)msg='Ahora toca la <b>esquina opuesta</b> (o toca el mismo punto para una zona del tamaño de un globo).';
-    else if(PLK.dup){const t=PLB.get(PLK.dup.to);msg=`Otra zona hacia <b class="mono">${esc(t?t.cod:'')}</b>: toca una esquina de la otra marca (p. ej. el otro extremo del corte).`}
-    else msg='Toca una <b>esquina</b> del globo, rótulo o detalle que remite a otra lámina; luego la opuesta. Toca un vínculo para ajustarlo.';
+    if(l){const t=PLB.get(l.to);msg=`<b>${esc(l.t||'→ '+(t?t.cod:'sin destino'))}</b> → <span class="mono">${esc(t?t.cod:'—')}</span> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}<br><small>¿El corte tiene otra burbuja? Toca <b>＋ Otra marca</b>. Arrastra las esquinas para ajustar la zona. Para un vínculo nuevo, toca otra marca del plano.</small>`}
+    else if(PLK.dup){const t=PLB.get(PLK.dup.to);msg=`Otra marca hacia <b class="mono">${esc(t?t.cod:'')}</b>: toca la otra marca (p. ej. la otra burbuja del corte).`}
+    else msg='Toca la <b>marca</b> (burbuja de corte, globo de detalle, rótulo) que remite a otra lámina. Toca un vínculo ya puesto para ajustarlo o borrarlo.';
     h=`<div class="plkv" aria-live="polite">${msg}</div>
-      ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib pri" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra zona</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
+      ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib pri" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra marca</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
       <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small><span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
   el.innerHTML=h;if(!document.activeElement||document.activeElement===document.body)PLV.box.focus()}
 async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tagName==='INPUT'||plkGhost(e))return;const a=b.dataset.pk;if(!PLV)return;
@@ -216,6 +215,7 @@ function plkDraw(g,v){const p=PLB.get(PLV.id);if(!p)return;const E=PLK.edit&&!PL
     g.beginPath();g.rect(rx,ry,rw,rh);g.fill();g.stroke();g.setLineDash([]);
     if(sel||rw>=44){const txt=l.t||(t?'→ '+t.cod:'sin destino'),ty=ry>16?ry-3:ry+rh+15;g.lineWidth=3.5;g.strokeStyle='#fff';g.strokeText(txt,rx,ty);g.fillStyle=sel?'#a63d08':'#0b4f94';g.fillText(txt,rx,ty)}
     if(sel)for(const c of [[s.x,s.y],[s.x+s.w,s.y],[s.x+s.w,s.y+s.h],[s.x,s.y+s.h]]){g.beginPath();g.arc(c[0],c[1],7,0,Math.PI*2);g.fillStyle='#fff';g.fill();g.lineWidth=2.4;g.strokeStyle=PLK_SEL;g.stroke()}}
+  if(PLK.ch){const s=plkS(PLK.ch.d,v);g.setLineDash([]);g.lineWidth=3;g.strokeStyle=PLK_SEL;g.fillStyle='rgba(232,89,12,.14)';g.beginPath();g.rect(s.x,s.y,s.w,s.h);g.fill();g.stroke()}   /* la marca que se está vinculando */
   if(E&&PLK.a){const s=v.toScreen(PLK.a.x,PLK.a.y);g.beginPath();g.arc(s.x,s.y,7,0,Math.PI*2);g.fillStyle='#fff';g.fill();g.lineWidth=2.4;g.strokeStyle=PLK_SEL;g.stroke();
     g.beginPath();g.arc(s.x,s.y,1.8,0,Math.PI*2);g.fillStyle=PLK_SEL;g.fill()}
   g.restore()}
