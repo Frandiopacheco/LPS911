@@ -299,3 +299,66 @@ test('modelo 3D (beta): solo el administrador ve la pestaña; especialidad desde
   const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc')]);
   expect(r).toEqual(['ARQ', 'HVAC', 'AFC']);
 });
+
+test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina para todo el equipo', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  // cuentas puras: 3-4-5, cuadrado de 10 × 10 y un triángulo
+  const c = await page.evaluate(() => ({
+    d: plmD({ x: 0, y: 0 }, { x: 3, y: 4 }),
+    len: plmLen([{ x: 0, y: 0 }, { x: 3, y: 4 }, { x: 3, y: 10 }]),
+    lenC: plmLen([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }], true),
+    sq: plmArea([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]),
+    tri: plmArea([{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 0, y: 8 }]),
+    f: [plmFmtL(0.0345), plmFmtL(12.3456), plmFmtA(7.891)],
+  }));
+  expect(c.d).toBe(5); expect(c.len).toBe(11); expect(c.lenC).toBe(40); expect(c.sq).toBe(100); expect(c.tri).toBe(24);
+  expect(c.f).toEqual(['3.5 cm', '12.35 m', '7.89 m²']);
+  // en el visor: sin calibrar solo deja calibrar; se calibra con una cota real y las medidas salen en metros
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  await page.click('#plv [data-pv="med"]');
+  await expect(page.locator('#plv .plmbar')).toBeVisible();
+  await expect(page.locator('#plv .plmbar [data-pm="dist"]')).toBeDisabled(); // sin calibrar
+  const tap = (wx, wy) => page.evaluate(async ([wx, wy]) => {
+    const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen(wx, wy), x = r.left + s.x, y = r.top + s.y;
+    const ev = (t) => host.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: x, clientY: y, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    ev('pointerdown'); await new Promise(r => setTimeout(r, 30)); ev('pointerup'); await new Promise(r => requestAnimationFrame(r));
+  }, [wx, wy]);
+  const W = await page.evaluate(() => PLV.tv.W);
+  // cota de 1000 px del plano = 10 m reales → 1 px = 1 cm
+  await tap(W * 0.2, W * 0.1); await tap(W * 0.2 + 1000, W * 0.1);
+  await page.fill('#plmL', '10');
+  let aviso = '';
+  page.once('dialog', d => { aviso = d.message(); d.accept(); }); // la lámina de prueba (A3) no está a 1/100: avisa y se calibra igual
+  await page.click('#plv .plmbar [data-pm="calok"]');
+  await expect.poll(() => page.evaluate(() => (PLB.get('ARQ_AG03').cal || {}).mpp)).toBeCloseTo(0.01, 4); // guardada para todos
+  expect(await page.evaluate(() => PLB.get('ARQ_AG03').cal.rev)).toBe(1);
+  expect(aviso).toContain('1/100');
+  await expect(page.locator('#plv .plmbar [data-pm="dist"]')).toBeEnabled();
+  await expect(page.locator('#plv .plmbar .plms')).toContainText('1 px = 1.00 cm');
+  // distancia 3-4-5 = 500 px → 5.00 m; poligonal; área
+  await tap(W * 0.3, W * 0.3); await tap(W * 0.3 + 300, W * 0.3 + 400);
+  await expect(page.locator('#plmv')).toContainText('5.00 m');
+  await page.click('#plv .plmbar [data-pm="poli"]');
+  await tap(W * 0.3, W * 0.3); await tap(W * 0.3 + 300, W * 0.3); await tap(W * 0.3 + 300, W * 0.3 + 400);
+  await expect(page.locator('#plmv')).toContainText('7.00 m');
+  await page.click('#plv .plmbar [data-pm="area"]');
+  await tap(W * 0.3, W * 0.3); await tap(W * 0.3 + 500, W * 0.3); await tap(W * 0.3 + 500, W * 0.3 + 200); await tap(W * 0.3, W * 0.3 + 200);
+  await expect(page.locator('#plmv')).toContainText('10.00 m²'); // 5 m × 2 m
+  // acercar no cambia la medida (se guarda en coordenadas del plano); Esc sale de medir antes de cerrar el visor
+  await page.evaluate(() => PLV.tv.zoomAt(2, 300, 300));
+  await page.waitForTimeout(400);
+  await expect(page.locator('#plmv')).toContainText('10.00 m²');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#plv .plmbar')).toHaveCount(0);
+  await expect(page.locator('#plv')).toHaveCount(1);
+  noErrors(errors, 'medir');
+});

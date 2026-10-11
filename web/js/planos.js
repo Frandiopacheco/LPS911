@@ -245,7 +245,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     for(const e of L){const x=V.x+e.wx*V.s,y=V.y+e.wy*V.s,w=e.ww*V.s,h=e.wh*V.s;if(x>cw||y>ch||x+w<0||y+h<0)continue;
       const a=Math.min(1,(now-e.t0)/140);if(a<1)fading=true;g.globalAlpha=a;
       /* medio píxel de más para que no se vean juntas entre mosaicos */g.drawImage(e.bm,x,y,w+0.6,h+0.6)}
-    g.globalAlpha=1;return fading};
+    g.globalAlpha=1;if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
   const coarse=Math.max(0,spec.Z-2);
   V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
     const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dprL)))));const now=performance.now();
@@ -263,7 +263,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false;
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null;
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
@@ -271,11 +271,14 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
   /* dedos «fantasma»: si la tablet no avisó que un dedo se levantó (salió por el borde, el sistema tomó el gesto…), el visor
      contaba un dedo de más y el siguiente pellizco no hacía zoom. Un toque nuevo (isPrimary) limpia lo que quedó colgado. */
-  host.addEventListener('pointerdown',e=>{if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
+  host.addEventListener('pointerdown',e=>{if(mdrag!=null)return;
+    /* medir: tocar un punto ya puesto lo arrastra (sin mover el plano) */
+    if(V.onDown&&e.isPrimary&&V.onDown(e.clientX,e.clientY)){mdrag=e.pointerId;try{host.setPointerCapture(e.pointerId)}catch(err){}return}
+    if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
     try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
     if(P.size>=2){afterPinch=false;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
     if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
-  host.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
+  host.addEventListener('pointermove',e=>{if(mdrag===e.pointerId){if(V.onDrag)V.onDrag(e.clientX,e.clientY);return}const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
       const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
       if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
@@ -284,7 +287,9 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     /* el dedo que queda al terminar un pellizco (casi nunca se levantan los dos a la vez) no arrastra ni corta la inercia del zoom, como en Dalux */
     if(afterPinch){p.x=e.clientX;p.y=e.clientY;return}
     const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{const was=P.size===1&&!pinch&&!afterPinch;
+  const end=e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}const was=P.size===1&&!pinch&&!afterPinch;
+    /* en modo medir un toque corto pone un punto (y no hay doble toque de zoom) */
+    if(was&&tap&&V.onTap&&performance.now()-tap.t<400){V.onTap(tap.x,tap.y);lastTap=null}else
     /* doble toque = dos toques cortos, quietos y cercanos en menos de 0,3 s */
     if(was&&tap&&performance.now()-tap.t<250){const now=performance.now();
       if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){const r=host.getBoundingClientRect();V.zoomAt(2,tap.x-r.left,tap.y-r.top);lastTap=null}else lastTap={t:now,x:tap.x,y:tap.y}}
@@ -297,11 +302,15 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(was&&vel.length>1){const dt=Math.max(16,performance.now()-vel[0].t),sx=vel.reduce((a,v)=>a+v.dx,0),sy=vel.reduce((a,v)=>a+v.dy,0);const vx=sx/dt,vy=sy/dt;
         if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60)fling={vx,vy}}vel=[];V.tick()}};
   host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
-  host.addEventListener('lostpointercapture',e=>{if(P.has(e.pointerId))end(e)});
+  host.addEventListener('lostpointercapture',e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}if(P.has(e.pointerId))end(e)});
   /* red de seguridad: cuando ya no queda ningún dedo en la pantalla, se olvida todo */
   host.addEventListener('touchend',e=>{if(!e.touches.length&&P.size){P.clear();pinch=null;afterPinch=false;host.classList.remove('drag')}},{passive:true});
   host.addEventListener('touchcancel',()=>{P.clear();pinch=null;host.classList.remove('drag')},{passive:true});
   const ro=new ResizeObserver(()=>{const atFit=Math.abs(V.s-V.fit)<1e-9;resize();if(atFit)V.fitView();else V.tick()});ro.observe(host);
+  /* medir: coordenadas del plano (píxeles del nivel de detalle) ↔ pantalla; el dibujo de encima (V.over) y los toques (V.onTap, V.onDown…) los pone planos-medir.js */
+  V.toWorld=(cx,cy)=>{const r=host.getBoundingClientRect();return{x:(cx-r.left-V.x)/V.s,y:(cy-r.top-V.y)/V.s}};
+  V.toScreen=(wx,wy)=>({x:V.x+wx*V.s,y:V.y+wy*V.s});
+  V.cv=cv;V.getDpr=()=>dpr;V.W=spec.W;V.H=spec.H;
   V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
   V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
   V.dbg=()=>({zfling,afterPinch,pointers:P.size,pinch:!!pinch});
@@ -317,12 +326,12 @@ function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,
     pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);plvDraw();box.focus();
-  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else plClose();return}
+  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(PLM.on){plmToggle()}else plClose();return}
     if(e.target.closest('input,select,textarea'))return;
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
     else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
-function plClose(silent){if(!PLV)return;if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
+function plClose(silent){if(!PLV)return;plmReset();if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1};
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
@@ -337,6 +346,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     <span class="plvsp"></span>
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
+    <button class="ib${PLM.on?' on':''}" data-pv="med" title="Medir distancias y áreas sobre el plano">📏 Medir</button>
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
     ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plaEd()?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
@@ -346,14 +356,14 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
     const g=e.target.closest('[data-pg]');if(g){PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
     const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo});plvPanel();return}
     const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
-    else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='med')plmToggle();else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 /* ---------- Panel «☰ Planos» dentro del visor y saltos entre láminas ---------- */
 const PL_NOISE=/^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|SOTANO|AZOTEA|PISO|NIVEL|PLANTA|DEL|LOS|LAS|CON|PARA)$/;
