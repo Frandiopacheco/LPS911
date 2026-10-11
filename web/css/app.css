@@ -310,6 +310,15 @@ tr.rvrow.rvnew td.s4 input,tr.rvrow.rvnew td.s4 .anv{font-weight:700}
 .rvtag.new{background:#2e7d4f}.rvtag.del{background:#c62828}
 .rvk{font:600 10.5px var(--f-ui);color:var(--ink);background:#ffe9a8;border-radius:6px;padding:0 4px;white-space:nowrap}
 .rvk:empty{display:none}
+/* revisión de propuestas (oct 2026): en cada fila solo ✓ ✗, para que el nombre se lea; se reserva su espacio a la derecha del nombre */
+tr.rvrow td.act .ci{padding-right:60px!important}
+tr.rvrow td.act.hb .ci{padding-right:84px!important}
+tr.rvrow td.act.hb2 .ci{padding-right:106px!important}
+tr.rvrow.rvsel td.act .ci{padding-right:112px!important}
+tr.rvrow.rvsel td.act.hb .ci{padding-right:136px!important}
+tr.rvrow.rvsel td.act.hb2 .ci{padding-right:158px!important}
+.rvmv{display:inline-flex;gap:4px;align-items:center}
+.rvwhy{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 6px;max-width:260px}
 .rvw{display:block;font:600 9.5px var(--f-mono);color:#a64b00;line-height:1;margin-top:-2px;text-decoration:line-through}
 
 .clvb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:2px 0 4px}
