@@ -59,3 +59,18 @@ test('3 · rechazar con motivo de un toque lo deja en el historial (campo aparte
   expect(h[0]).toMatchObject({ st: 'rej', why: 'Fuera de secuencia', note: '' });
   noErrors(errors, 'rechazo con motivo');
 });
+
+test('4 · «Aceptar todo lo visible» acepta con los cambios la fila que ajustaste y las demás como vinieron', async ({ page }) => {
+  const A1 = { ...A0, ambId: 'a2', name: 'Colgadores' };
+  const p0 = { ...A0, days: ['2026-10-05', '2026-10-06', '2026-10-07'], qty: { '2026-10-05': 10, '2026-10-06': 20 } };
+  const p1 = { ...A1, days: ['2026-10-06', '2026-10-07'], qty: { '2026-10-06': 10 } };
+  const errors = await openApp(page, { tab: 'look', extra: [...ACTS, ['acts', 'q1', A1], props({ q0: item(p0, A0, SAT3_1259), q1: item(p1, A1, SAT3_1259) }, SAT3_1259)] });
+  await page.evaluate(() => { U.rev = true; requestRender(); });
+  /* el ingeniero deja q0 con otros días (vista previa) */
+  await page.evaluate(() => { REVSEL = { sc: 'c1', id: 'q0', k: 0, days: ['2026-10-06', '2026-10-08'] }; requestRender(); });
+  page.once('dialog', d => d.accept());
+  await page.click('#ppbar [data-rvall]');
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q0').days)).toEqual(['2026-10-06', '2026-10-08']);
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q1').days)).toEqual(['2026-10-06', '2026-10-07']);
+  noErrors(errors, 'aceptar todo con cambios');
+});

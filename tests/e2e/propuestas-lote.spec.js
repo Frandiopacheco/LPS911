@@ -11,8 +11,8 @@ const items = Object.fromEntries([...Array(N)].map((_, i) => ['q' + i, { after: 
 test('aceptar 30 propuestas: una sola transacción; la que el SC cambió entretanto queda pendiente', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...acts, ['lhprop', 'c1', { sc: 'c1', items, sentAt: SAT, sentBy: 'Sandra' }]] });
   const n = await page.evaluate(async N => {
-    let tx = 0; const rt = db.runTransaction.bind(db);
-    db.runTransaction = async fn => { tx++; if (tx === 1) await fcol('lhprop').doc('c1').set({ items: { q7: { ...PROP.get('c1').items.q7, ts: 2, after: { ...PROP.get('c1').items.q7.after, metrado: 99 } } } }, { merge: true }); return rt(fn); };
+    let tx = 0; const rt = db.runTransaction.bind(db); const q7 = PROP.get('c1').items.q7; /* antes del reflejo inmediato */
+    db.runTransaction = async fn => { tx++; if (tx === 1) await fcol('lhprop').doc('c1').set({ items: { q7: { ...q7, ts: 2, after: { ...q7.after, metrado: 99 } } } }, { merge: true }); return rt(fn); };
     const L = [...Array(N)].map((_, i) => ({ sc: 'c1', id: 'q' + i }));
     await decideMany(L); db.runTransaction = rt; return tx;
   }, N);
