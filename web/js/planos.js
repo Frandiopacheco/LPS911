@@ -215,7 +215,7 @@ const PL_CAP=56;/* mosaicos decodificados en memoria como máximo (1024² ≈ 4 
 function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor */
   const V={s:1,x:0,y:0,tiles:new Map(),need:new Set(),raf:0,dead:false,fit:1};const T=spec.T||PL_T;
   host.innerHTML='<canvas class="plcv"></canvas>';host.classList.add('plvc');const cv=host.firstChild;const g=cv.getContext('2d',{alpha:false});
-  let dpr=1,cw=1,ch=1,anim=null,fling=null,lastNeed=0,moving=false;
+  let dpr=1,cw=1,ch=1,anim=null,fling=null,zfling=null,lastNeed=0,moving=false;
   const size=()=>[host.clientWidth||1,host.clientHeight||1];
   const resize=()=>{dpr=Math.min(window.devicePixelRatio||1,2.5);const[w,h]=size();cw=w;ch=h;const W=Math.round(w*dpr),H=Math.round(h*dpr);if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}cv.style.width=w+'px';cv.style.height=h+'px'};
   const sMin=()=>V.fit*0.5,sMax=()=>2/(window.devicePixelRatio||1)*1.5;
@@ -223,13 +223,16 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.fitView=(animate)=>{resize();const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
     if(animate){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.tiles_();V.tick()}};
   V.zoomAt=(k,cx,cy)=>{const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const ts=clampS(s0*k),r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
-  V.animTo=(s,x,y)=>{fling=null;anim={s,x,y};V.tick()};
+  V.animTo=(s,x,y)=>{fling=null;zfling=null;anim={s,x,y};V.tick()};
   V.tick=()=>{if(!V.raf&&!V.dead)V.raf=requestAnimationFrame(V.frame)};
   V.draw=V.tick;
   V.frame=()=>{V.raf=0;if(V.dead)return;let more=false;
     if(anim){const f=0.28;V.s+=(anim.s-V.s)*f;V.x+=(anim.x-V.x)*f;V.y+=(anim.y-V.y)*f;
       if(Math.abs(anim.s-V.s)/anim.s<0.002&&Math.abs(anim.x-V.x)<0.5&&Math.abs(anim.y-V.y)<0.5){V.s=anim.s;V.x=anim.x;V.y=anim.y;anim=null}else more=true}
     if(fling){V.x+=fling.vx*16;V.y+=fling.vy*16;fling.vx*=0.92;fling.vy*=0.92;if(Math.hypot(fling.vx,fling.vy)<0.02)fling=null;else more=true}
+    /* inercia del pellizco (como Dalux): al soltar los dedos el zoom sigue un poco y frena; también el desplazamiento del centro */
+    if(zfling){const ns=clampS(V.s*Math.exp(zfling.v*16)),k=ns/V.s;V.x=zfling.cx-(zfling.cx-V.x)*k+zfling.vx*16;V.y=zfling.cy-(zfling.cy-V.y)*k+zfling.vy*16;zfling.cx+=zfling.vx*16;zfling.cy+=zfling.vy*16;
+      const hit=ns===V.s;V.s=ns;zfling.v*=0.88;zfling.vx*=0.88;zfling.vy*=0.88;if(hit||(Math.abs(zfling.v)<0.00004&&Math.hypot(zfling.vx,zfling.vy)<0.02))zfling=null;else more=true}
     const act=more||P.size>0;const now=performance.now();
     if(!act||now-lastNeed>110){lastNeed=now;V.tiles_()}
     moving=act;const fading=V.paint(now);if(more||fading)V.tick()};
@@ -258,20 +261,27 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,lastTap=0,vel=[];
+  const P=new Map();let pinch=null,lastTap=0,vel=[],zvel=[];
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
     if(e.deltaX!==0||(Math.abs(d)<50&&!Number.isInteger(e.deltaY))){anim=null;fling=null;V.x-=e.deltaX;V.y-=d;V.tick();return}
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
-  host.addEventListener('pointerdown',e=>{host.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;vel=[];
-    if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}}
+  host.addEventListener('pointerdown',e=>{try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
+    if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
     const t=performance.now();if(P.size===1&&t-lastTap<300){const r=host.getBoundingClientRect();V.zoomAt(2,e.clientX-r.left,e.clientY-r.top);lastTap=0}else lastTap=t});
   host.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size===2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);
-      if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=(a.x+b.x)/2-r.left,cy=(a.y+b.y)/2-r.top;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns}pinch.d=d;V.tick();return}
-    const dx=e.clientX-p.x,dy=e.clientY-p.y;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{const was=P.size===1&&!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
+      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
+        const t=performance.now();zvel.push({t,lk:Math.log(d/pinch.d),dx:mx-pinch.cx,dy:my-pinch.cy,cx,cy});while(zvel.length&&t-zvel[0].t>100)zvel.shift();V.s=ns}
+      pinch.d=d;pinch.cx=mx;pinch.cy=my;V.tick();return}
+    const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
+  const end=e=>{const was=P.size===1&&!pinch;const wasPinch=P.size===2&&!!pinch;P.delete(e.pointerId);if(P.size<2)pinch=null;
+    if(wasPinch&&zvel.length>1){const t=performance.now(),last=zvel[zvel.length-1];const dt=Math.max(16,t-zvel[0].t);
+      const v=zvel.reduce((a,z)=>a+z.lk,0)/dt,vx=zvel.reduce((a,z)=>a+z.dx,0)/dt,vy=zvel.reduce((a,z)=>a+z.dy,0)/dt;
+      /* solo si los dedos se movían al soltar (no si se quedaron quietos antes de levantarlos) */
+      if(t-last.t<70&&(Math.abs(v)>0.0004||Math.hypot(vx,vy)>0.25))zfling={v,vx,vy,cx:last.cx,cy:last.cy};zvel=[];V.tick()}
     if(!P.size){host.classList.remove('drag');
       if(was&&vel.length>1){const dt=Math.max(16,performance.now()-vel[0].t),sx=vel.reduce((a,v)=>a+v.dx,0),sy=vel.reduce((a,v)=>a+v.dy,0);const vx=sx/dt,vy=sy/dt;
         if(Math.hypot(vx,vy)>0.25&&performance.now()-vel[vel.length-1].t<60)fling={vx,vy}}vel=[];V.tick()}};
