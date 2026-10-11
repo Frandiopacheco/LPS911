@@ -239,6 +239,25 @@ test('visor: al soltar un pellizco el zoom sigue un poco y frena (inercia)', asy
   });
   expect(r.seq[5]).toBeGreaterThan(r.atRelease * 1.01);             // siguió acercando tras soltar
   expect(r.seq[119]).toBeCloseTo(r.seq[118], 4);                       // y se detuvo
+  // pellizco rápido desde la vista general en el que un dedo se levanta antes: el que queda no arrastra ni corta el zoom
+  const q = await page.evaluate(async () => {
+    const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+    const ev = (type, id, x, y, prim) => host.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: !!prim, bubbles: true }));
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    PLV.tv.fitView(); await raf(); await raf(); const s0 = PLV.tv.s;
+    const hd = i => 30 * Math.pow(1.25, i);
+    ev('pointerdown', 60, cx - hd(0), cy, true); ev('pointerdown', 61, cx + hd(0), cy);
+    for (let i = 1; i <= 6; i++) { ev('pointermove', 60, cx - hd(i), cy); ev('pointermove', 61, cx + hd(i), cy); if (i < 6) await raf(); }
+    ev('pointerup', 61, cx + hd(6), cy); const sUp = PLV.tv.s;            /* un dedo sale primero, mientras se mueve… */
+    window.__d1 = JSON.stringify(PLV.tv.dbg());
+    const x0 = PLV.tv.x;
+    for (let i = 1; i <= 4; i++) { ev('pointermove', 60, cx - hd(6) + i * 20, cy + i * 15); await raf(); } /* …y el otro se desliza al levantarse */
+    ev('pointerup', 60, cx - hd(6) + 80, cy + 60);
+    for (let i = 0; i < 30; i++) await raf();
+    return { s0, sUp, s: PLV.tv.s, d1: window.__d1 };
+  });
+  expect(q.sUp).toBeGreaterThan(q.s0 * 3);
+  expect(q.s, JSON.stringify(q)).toBeGreaterThan(q.sUp * 1.05); // la inercia del zoom siguió
   // dedo «fantasma»: un dedo que nunca avisó que se levantó no debe bloquear el siguiente pellizco
   const g = await page.evaluate(async () => {
     const host = document.querySelector('.plvc'), b = host.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
