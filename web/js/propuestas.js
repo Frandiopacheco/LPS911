@@ -478,7 +478,7 @@ function revToggleDay(id,d){const it=revItems().find(q=>q.id===id);if(!it||!it.i
   const pid=propPiso(id,it.it);if(!isAdmin&&typeof dayLocked==='function'&&dayLocked(d,pid)&&!recReal(d,id)){toast(`El ${fmtD(d)} ya tiene el plan cerrado (${lockWhy(d,pid)}): no se puede programar ahí.`);return}
   const mine=REVSEL&&REVSEL.id===id;const k=mine?REVSEL.k:0;
   const cur=mine&&REVSEL.days?REVSEL.days:[...(it.it.after.days||[])].sort().map(x=>k?wshift(x,k):x);
-  const set=new Set(cur);if(set.has(d)){if(set.size<2){toast('Una propuesta necesita al menos un día. Para quitar la actividad, recházala.');return}set.delete(d)}else set.add(d);
+  const set=new Set(cur);if(set.has(d)){if(set.size<2){toast('Quitaste el último día: la fila sale de la propuesta (rechazada). Puedes deshacer.');revDecide(id,'rej',{});return}set.delete(d)}else set.add(d);
   REVSEL={sc:it.sc,id,k:0,days:[...set].sort()};requestRender()}
 function revClick(e){if(!revOn())return;const t=e.target;let b;
   if((b=t.closest('[data-rva]'))){e.stopPropagation();e.preventDefault();const id=b.closest('tr').dataset.a;const k=b.dataset.rva;
