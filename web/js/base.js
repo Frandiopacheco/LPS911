@@ -57,10 +57,12 @@ const canTar=()=>!!me&&(TAR_ONLY()||me.role==='admin'||(me.role==='editor'&&me.t
 const canLps=()=>!!me&&!TAR_ONLY();
 const tarEdit=()=>!!me&&(me.role==='admin'||me.role==='tasis');
 /* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner (no el capataz de un SC,
-   que solo usa «En obra»); cargan y editan los planos el administrador y los editores */
+   que solo usa «En obra»); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar'];
 const canPla=()=>canLps()&&me.role!=='capataz';
-const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor');
+/* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
+const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
+const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
 /* módulos de la app: [id, nombre] de los que este usuario puede abrir (el selector aparece si hay más de uno) */
 const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():canLps();
 const MODS=()=>[['lps','Last Planner'],['tar','Tareo'],['pla','Planos']].filter(x=>modOk(x[0]));

@@ -2,7 +2,7 @@ rules_version = '2';
 // Reglas de Firebase Storage — LPS 911. Solo el módulo Planos (docs/ia/planos.md) guarda archivos aquí:
 // planos/<id>/r<rev>/… (miniatura, mosaicos de alta definición y el PDF original).
 // Los permisos siguen a la colección "members" de Firestore, como firebase/firestore.rules:
-// lee el equipo de Last Planner (no capataces ni roles de solo tareo); suben el administrador y los editores; nadie borra.
+// lee el equipo de Last Planner (no capataces ni roles de solo tareo); suben el administrador, los editores y Oficina Técnica; nadie borra.
 service firebase.storage {
   match /b/{bucket}/o {
     function verified() { return request.auth != null && request.auth.token.get('email_verified', false) == true; }
@@ -12,10 +12,12 @@ service firebase.storage {
     function memPath() { return /databases/(default)/documents/members/$(mid()); }
     function isMember() { return (verified() || anon()) && firestore.exists(memPath()); }
     function role() { return firestore.get(memPath()).data.get('role', ''); }
+    // Oficina Técnica (área «OT» u «Oficina Técnica») también sube planos
+    function isOT() { let d = firestore.get(memPath()).data; return d.get('role', '') == 'area' && d.get('area', '').lower().trim().matches('o\\.? ?t\\.?|oficina t[eé]cnica.*'); }
     match /planos/{rest=**} {
       allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']));
       // create y update (reintentar una subida a medias); nunca delete
-      allow create, update: if (isOwner() || (verified() && isMember() && role() in ['admin', 'editor']))
+      allow create, update: if (isOwner() || (verified() && isMember() && (role() in ['admin', 'editor'] || isOT())))
         && request.resource.size < 80 * 1024 * 1024
         && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
     }
