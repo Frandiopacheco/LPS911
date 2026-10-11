@@ -34,6 +34,11 @@ Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia e
 
 Los mosaicos viven en una capa (`.plvl`); durante el gesto solo cambia la transformación de la capa (`translate3d`+`scale`, una por cuadro) y al quedar quieto 140 ms (`V.idle`) se reacomodan a su tamaño real (`V.relayout`, nítido). Zoom animado hacia el punto (`V.zoomAt` → `V.animTo`, interpolación por cuadro), inercia al soltar (`fling`), fundido al aparecer cada mosaico (`img.ok`, apagado con «reducir movimiento»), precarga del 35 % alrededor de lo visible y del nivel siguiente. Rueda del mouse = zoom animado; touchpad: dos dedos desplaza, pellizco (ctrl+rueda) acerca sin animar.
 
+## Navegar sin salir del visor
+
+- **☰ Planos** (arriba a la izquierda): panel con buscador y chips de piso, especialidad y tipo (`PLV.pf`; especialidad y tipo se recuerdan en `lps911.plvf`, el piso abre en el del plano actual). Tocar un resultado abre esa lámina y las flechas ‹ › recorren esos resultados.
+- **Fila «Mismo punto»** (`plSameSpot`): láminas del mismo piso y tipo; tocar una abre esa especialidad **en la misma zona y con el mismo zoom** (`V.getView()`/`V.setView()` en coordenadas normalizadas de la hoja: sirve porque las láminas de un piso tienen el mismo formato y encuadre). **▲ ▼** (`plFloorStep`): misma especialidad y tipo en el piso de arriba/abajo, con el título más parecido (agua ↔ agua), también en la misma zona.
+
 ## Sin conexión (solo tablet)
 
 `plTablet()` (pantalla táctil y lado menor ≥ 600 px; no celular ni PC). Botón «⤓ Sin conexión» en la biblioteca (guarda los planos de la lista filtrada, actualiza los de revisión nueva, quita) y en el visor (un plano). Baja **todos** los mosaicos (`plPaths(p)`) con `plGet` a la caché `lps-planos`, pide `navigator.storage.persist()` y revisa el espacio. Lo guardado se anota por equipo en `localStorage` `lps911.ploff` `{id:{rev,base,t,mb}}`; revisión nueva → «⟳ actualizar» y, al guardarla, se borra la carpeta de la anterior (`plOffDrop`). `plb.sz` = bytes subidos (para estimar MB; si falta, 7 MB).

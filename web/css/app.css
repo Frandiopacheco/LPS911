@@ -3451,3 +3451,24 @@ body.ipr-on{overflow:hidden}
 .ploffbar em{display:block;height:100%;width:0;background:var(--accent);transition:width var(--t-fast,.12s)}
 .plvh .ib.on{border-color:var(--ok);color:var(--ok)}
 .ploffbar{z-index:310}
+.plvq{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:thin}
+.plvql{font:700 10.5px var(--f-ui);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap;margin-right:2px}
+.plchip{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 10px;font:500 12.5px var(--f-ui);cursor:pointer;white-space:nowrap;min-height:30px}
+.plchip b{font-weight:700}
+.plchip:hover{border-color:var(--accent)}
+.plchip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plvmenu.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plvp{position:absolute;left:0;bottom:0;width:min(360px,88vw);z-index:20;display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--panel);border-right:1px solid var(--line);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
+.plvph{display:flex;align-items:center;justify-content:space-between}
+.plvp>.tin{height:var(--h-ctl,34px)}
+.plvps{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.plvps>span{flex-basis:100%;font:700 10.5px var(--f-ui);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.plvpl{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px;margin:0 -4px;padding:0 4px}
+.plvpr{display:flex;gap:8px;align-items:center;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:4px;cursor:pointer;font:inherit;color:var(--ink)}
+.plvpr:hover{background:var(--panel2)}
+.plvpr.on{border-color:var(--accent);background:var(--panel2)}
+.plvpt{flex:none;width:72px;height:54px;background:#fff;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+.plvpt img{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .15s}.plvpt img.ok{opacity:1}
+.plvpi{font-size:12.5px;line-height:1.25;min-width:0}
+.plvpi small{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:760px){.plchip{min-height:36px}.plvpr{min-height:60px}}
