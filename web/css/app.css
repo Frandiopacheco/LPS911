@@ -3414,7 +3414,11 @@ body.ipr-on{overflow:hidden}
 .plvb{flex:1;min-height:0;position:relative}
 .plvc{position:relative;overflow:hidden;background:#fff;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
 .plvc.drag{cursor:grabbing}
-.plvc img{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;pointer-events:none;image-rendering:auto}
+.plvl{position:absolute;left:0;top:0;transform-origin:0 0}
+.plvc.mv .plvl{will-change:transform}
+.plvc img{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;pointer-events:none;image-rendering:auto;opacity:0;transition:opacity .18s ease-out}
+.plvc img.ok{opacity:1}
+@media (prefers-reduced-motion:reduce){.plvc img{transition:none}}
 .plvf{padding:4px 12px;font-size:11.5px;color:var(--muted);background:var(--panel);border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .plef{display:flex;flex-direction:column;gap:8px;padding:4px 8px 8px;min-width:280px}
 .plef label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
