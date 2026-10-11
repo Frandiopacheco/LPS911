@@ -2880,6 +2880,18 @@ div.tp-dif{padding-left:0}
   .campo>*:not(.cc){grid-column:1/-1}
 }
 /* pantallas táctiles (tablet): botones y pestañas más fáciles de tocar */
+.p3sh{position:absolute;pointer-events:auto;touch-action:none;width:36px;height:36px;margin:-18px 0 0 -18px;padding:0;border-radius:50%;background:#fff;border:2px solid #1f6fe5;color:#1f6fe5;display:grid;place-items:center;font-size:17px;line-height:1;box-shadow:0 1px 5px #0005;cursor:grab}
+.p3sh.box{width:28px;height:28px;margin:-14px 0 0 -14px;font-size:14px;font-weight:700}
+.p3sh.on{background:#1f6fe5;color:#fff;cursor:grabbing}
+.p3mh{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab}
+.p3mh.on{background:#3b82f633;border:2px solid #3b82f6}
+.p3mlab{position:absolute;transform:translate(-50%,-50%);background:#0f172ae8;color:#fff;font:600 12.5px var(--f-ui);padding:2px 8px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px #0006;border-left:4px solid var(--c,#64748b)}
+.p3mlab[hidden]{display:none}
+.p3mlab i{font-style:normal;opacity:.9;margin-right:2px}
+.p3mlab.tot{transform:translate(-50%,-135%);font-size:14px;background:#be123cf0;border-left-color:#fff}
+.p3mlab.del{transform:translate(-50%,-50%);width:26px;height:26px;padding:0;border-radius:50%;display:grid;place-items:center;font-size:12px;background:#334155f2;border-left:0;cursor:pointer}
+.p3ms small i{font-style:normal;margin-left:6px;font-weight:600}.p3ms small .x{color:#ef4444}.p3ms small .y{color:#16a34a}.p3ms small .z{color:#2563eb}
+.p3prop.min{max-height:none;padding:6px 8px;width:min(300px,calc(100% - 20px))}
 @media (pointer:coarse) and (min-width:761px){
   .ib{min-height:38px}.seg button{min-height:36px}.tabs button{min-height:42px}
   .chipb{min-height:34px}

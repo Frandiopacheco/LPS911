@@ -8,7 +8,7 @@
    las mismas variables globales. */
 
 const P3={v:null,lib:null,host:null,docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
-  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,pdet:false,bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
+  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,pdet:false,pmin:false,bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
 /* especialidades que se cargan solas al abrir (las demás se prenden a pedido: el mobiliario, por ejemplo, pesa mucho) */
 const P3_AUTO=['ARQ','EST','AFC'];
 const P3_NAMES={ARQ:'Arquitectura',EST:'Estructuras',AFC:'Agua fría y caliente',DES:'Desagüe',ACI:'Agua contra incendio',AAC:'Aire acondicionado',ALI:'Alimentadores',ILU:'Iluminación',TOC:'Tomacorrientes',
@@ -81,7 +81,8 @@ function p3Prop(){const p=P3.props,n=P3.selN;if(!n)return'';
     +p.grupos.map((g,i)=>`<details class="p3grp"${i<2?' open':''}><summary>${esc(g.titulo)} <small>${g.filas.length}</small></summary>${g.filas.map(r=>`<div class="p3kv"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')}</details>`).join('')
     +(p.grupos.length?'':'<p class="p3none">Este elemento no trae propiedades adicionales en el IFC.</p>'):'';
   const A=(a,ico,t,on)=>`<button class="p3a${on?' on':''}" data-a="${a}"${on!==undefined?` aria-pressed="${!!on}"`:''}><span>${ico}</span>${t}</button>`;
-  return`<div class="p3ph">${head}<button class="ib" data-a="clearsel" aria-label="Cerrar">✕</button></div><div class="p3meta">${meta}</div>
+  if(P3.pmin)return`<div class="p3ph">${head}<button class="ib" data-a="pmin" aria-label="Ver el panel" title="Ver el panel">▴</button><button class="ib" data-a="clearsel" aria-label="Cerrar">✕</button></div>`;
+  return`<div class="p3ph">${head}<button class="ib" data-a="pmin" aria-label="Achicar" title="Achicar para ver el modelo">▾</button><button class="ib" data-a="clearsel" aria-label="Cerrar">✕</button></div><div class="p3meta">${meta}</div>
     <div class="p3acts">${A('isolate','🎯','Aislar')}${A('hide','🙈','Ocultar')}${A('ghost','◫','Transp.')}${A('ghostrest','🌫','Atenuar resto')}${A('focus','⌖','Enfocar')}${A('cutsel','▣','Caja aquí')}${A('multi','＋','Varios',P3.multi)}</div>
     <button class="p3tg" data-a="pdet" aria-expanded="${P3.pdet}">${P3.pdet?'▾':'▸'} Propiedades${p&&p.grupos.length?` <small>${p.grupos.reduce((n,g)=>n+g.filas.length,0)}</small>`:''}</button>${P3.pdet?`<div class="p3body">${grp}</div>`:''}`}
 
@@ -100,10 +101,10 @@ function p3Panel(){const p=P3.panel;if(!p)return'';
     <div class="p3row"><button class="ib pri" data-a="sec-surf">✂ Cortar tocando una superficie</button></div>
     <div class="p3sm">Caja de sección alrededor de:</div><div class="p3row"><button class="ib" data-a="sec-box" data-t="model">Todo el modelo</button><button class="ib" data-a="sec-box" data-t="level"${P3.lvl?'':' disabled'}>El piso</button><button class="ib" data-a="sec-box" data-t="sel"${P3.selN?'':' disabled'}>La selección</button></div>
     ${P3.cuts.length?`<div class="p3list">${P3.cuts.filter(c=>c.kind==='surf').map(c=>`<div class="p3li"><span>${esc(c.label)}</span><button class="ib" data-a="sec-flip" data-id="${esc(c.id)}" title="Invertir el lado que se corta">⇄</button><button class="ib" data-a="sec-del" data-id="${esc(c.id)}" aria-label="Quitar">✕</button></div>`).join('')}${hasBox?`<div class="p3li"><span>Caja de sección</span><button class="ib" data-a="sec-del" data-id="${esc(P3.cuts.find(c=>c.kind==='box').id)}" aria-label="Quitar la caja">✕</button></div>`:''}</div>
-    <div class="p3row"><button class="ib" data-a="sec-vis">${P3.v&&!P3.v.section.gizmosVisible?'Mostrar':'Ocultar'} flechas</button><button class="ib" data-a="sec-clear">Quitar todos</button></div><p class="p3sm">Arrastra las flechas azules para mover el corte.</p>`:'<p class="p3sm">Después de cortar, arrastra las flechas azules para ajustar la posición.</p>'}`}
+    <div class="p3row"><button class="ib" data-a="sec-vis">${P3.v&&!P3.v.section.gizmosVisible?'Mostrar':'Ocultar'} tiradores</button><button class="ib" data-a="sec-clear">Quitar todos</button></div><p class="p3sm">Arrastra el botón ✂ (o ↔ en la caja) para mover el corte.</p>`:'<p class="p3sm">Después de cortar, arrastra el botón ✂ para ajustar la posición.</p>'}`}
   if(p==='medir'){const L=P3.meds.filter(m=>!m.pending);return`<div class="p3pnh"><b>Medir</b><button class="ib" data-a="pn:" aria-label="Cerrar">✕</button></div>
     <div class="p3row"><button class="ib pri" data-a="meas">📏 ${P3.tool==='measure'?'Midiendo…':'Empezar a medir'}</button>${L.length?'<button class="ib" data-a="meas-clear">Borrar todo</button>':''}</div>
-    ${L.length?`<div class="p3list">${L.map(m=>`<div class="p3li"><span><b>${esc(m.text)}</b> <small>↔ ${m.dh.toFixed(2).replace('.',',')} · ↕ ${m.dv.toFixed(2).replace('.',',')}</small></span><button class="ib" data-a="meas-del" data-id="${m.id}" aria-label="Borrar">✕</button></div>`).join('')}</div>`:'<p class="p3sm">Toca un punto A y luego un punto B. Se ajusta al vértice más cercano. ↔ horizontal · ↕ vertical.</p>'}`}
+    ${L.length?`<div class="p3list">${L.map(m=>`<div class="p3li p3ms"><span><b>${esc(m.text)}</b> <small><i class="x">ΔX ${m.tx}</i> <i class="y">ΔY ${m.ty}</i> <i class="z">ΔZ ${m.tz}</i></small></span><button class="ib" data-a="meas-del" data-id="${m.id}" aria-label="Borrar">✕</button></div>`).join('')}</div>`:'<p class="p3sm">Toca un punto A y luego un punto B (se ajustan al vértice o arista más cercana). Después arrástralos para afinar. Se muestra ΔX, ΔY y ΔZ sobre los ejes y la distancia total.</p>'}`}
   if(p==='vista')return`<div class="p3pnh"><b>Vista</b><button class="ib" data-a="pn:" aria-label="Cerrar">✕</button></div>
     <div class="p3lv">${P3_VIEWS.map(v=>`<button class="plchip" data-a="view" data-v="${v[0]}">${v[1]}</button>`).join('')}</div>
     <div class="p3row"><span class="seg"><button class="${P3.proj==='persp'?'on':''}" data-a="proj" data-p="persp">Perspectiva</button><button class="${P3.proj==='ortho'?'on':''}" data-a="proj" data-p="ortho">Ortogonal</button></span><button class="ib" data-a="reset">Vista general</button></div>`;
@@ -116,13 +117,13 @@ function p3Panel(){const p=P3.panel;if(!p)return'';
 function p3Banner(){const t=P3.tool;if(t==='section')return`<span>✂ Toca una superficie para cortar</span><button class="ib" data-a="tool-off">Cancelar</button>`;
   if(t==='measure'){const pend=P3.meds.some(m=>m.pending);return`<span>📏 ${pend?'Toca el punto B':'Toca el punto A'}</span><button class="ib" data-a="tool-off">Listo</button>`}
   if(P3.selN&&P3.multi)return`<span>＋ Toca más elementos para sumarlos o quitarlos</span><button class="ib" data-a="multi">Listo</button>`;
-  if(P3.cuts.length&&!P3.selN)return`<span>✂ ${P3.cuts.length} corte${P3.cuts.length>1?'s':''} · mueve las flechas azules</span><button class="ib" data-a="sec-vis">${P3.v&&!P3.v.section.gizmosVisible?'Mostrar':'Ocultar'} flechas</button><button class="ib" data-a="sec-clear">Quitar</button>`;
+  if(P3.cuts.length&&!P3.selN)return`<span>✂ ${P3.cuts.length} corte${P3.cuts.length>1?'s':''} · arrastra el botón ✂</span><button class="ib" data-a="sec-vis">${P3.v&&!P3.v.section.gizmosVisible?'Mostrar':'Ocultar'} tiradores</button><button class="ib" data-a="sec-clear">Quitar</button>`;
   if(P3.lvl&&P3.plan)return`<span>🗺 ${esc(P3.lvl.charAt(0)+P3.lvl.slice(1).toLowerCase())} · planta a ${P3.cutH.toFixed(2).replace('.',',')} m</span>`;return''}
 function p3Ui(){const h=P3.host;if(!h||!h.isConnected)return;
   shx($('#p3dock',h),p3Dock());const pn=$('#p3pn',h),ph=p3Panel();pn.hidden=!ph;shx(pn,ph);
   const pr=$('#p3prop',h),pp=p3Prop();pr.hidden=!pp;shx(pr,pp);
   const bn=$('#p3ban',h),bt=p3Banner();bn.hidden=!bt;shx(bn,bt);
-  h.classList.toggle('p3sel',!!P3.selN);
+  h.classList.toggle('p3sel',!!P3.selN);pr.classList.toggle('min',P3.pmin);
   clearInterval(P3.tm);P3.tm=null;if(P3.panel==='rend'&&P3.v){const tick=()=>{const l=$('#p3live',h);if(!l||!P3.v)return;const p=P3.v.perf();stx(l,p.fps?`${p.fps} FPS · cuadro típico ${p.p50} ms · peor ${p.p95} ms · ${p.calls} llamadas · ${p3Fmt(p.tris)} triángulos`:`En reposo (no se dibuja nada) · ${p.calls} llamadas · ${p3Fmt(p.tris)} triángulos`)};tick();P3.tm=setInterval(tick,500)}}
 function p3Hint(){let seen='';try{seen=localStorage.getItem('lps.p3hint')||''}catch(e){}if(seen)return;const el=$('#p3hint');if(!el)return;el.hidden=false;
   el.innerHTML=`<span>${p3Touch()?'1 dedo gira · 2 dedos acercan y mueven · toca un elemento para ver sus datos':'Arrastra para girar · clic derecho para mover · rueda para acercar · clic en un elemento para ver sus datos'}</span><button class="ib" data-a="hint-ok" aria-label="Entendido">✕</button>`}
@@ -156,6 +157,7 @@ async function p3Click(e){const el=e.target.closest('[data-a]');if(!el||!P3.v||e
     case'ghostrest':await v.ghostOthers();break;
     case'focus':await v.fitSelection();break;
     case'cutsel':{const ok=await v.sectionBox('sel');if(ok){P3.panel='';await v.clearSelection();p3Ui()}break}
+    case'pmin':P3.pmin=!P3.pmin;p3Ui();break;
     case'pdet':P3.pdet=!P3.pdet;p3Ui();break;
     case'multi':P3.multi=!P3.multi;v.multi=P3.multi;p3Ui();break;
     case'clearsel':await v.clearSelection();break;
