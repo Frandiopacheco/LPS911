@@ -244,6 +244,12 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const i
     prop:propDiff(base,it.after),chg:o?(o.after.arch?{arch:[false,true]}:propDiff(o.before,o.after)):null};
   return{sc,id,st,it:itS,o,h,key,key0,opt}}
 /** después de guardar: reflejar al momento (llega igual por la base), Deshacer y aviso */
+/** reflejo local inmediato (oct 2026): la pantalla responde al instante y la base confirma después; devuelve cómo revertirlo si no se guardó */
+function propOpt(P_){const{sc,id,key}=P_;const k=COLS.acts;const had=S[k].get(id),hadA=ARCH[k].get(id);const doc=PROP.get(sc);const item=doc&&doc.items?doc.items[id]:undefined;
+  propLocal(P_);
+  return()=>{if(had)S[k].set(id,had);else S[k].delete(id);if(hadA)ARCH[k].set(id,hadA);else ARCH[k].delete(id);
+    const d2=PROP.get(sc)||{sc,items:{}};PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:item}});LHH.delete(key);
+    const i=undoS.findIndex(g=>g.prop&&g.prop.key===key);if(i>=0)undoS.splice(i,1);updUndo();DV++;requestRender()}}
 function propLocal(P_){const{sc,id,st,it,o,h,key,opt}=P_;const doc=PROP.get(sc);
   if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
     const g=[o];g.prop={sc,id,it,key,hk:1};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
@@ -253,18 +259,19 @@ function propLocal(P_){const{sc,id,st,it,o,h,key,opt}=P_;const doc=PROP.get(sc);
 /** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
 async function decideProp(sc,id,st,opt){const P_=await propPrep(sc,id,st,opt);if(typeof P_==='string')return P_;const{it,o,h,key,key0}=P_;opt=P_.opt;
   const say=m=>{if(!opt.bulk)toast(m)};
-  PDBUSY.add(key0);
+  PDBUSY.add(key0);let rb=null;
   try{if(!db)throw new PropStop('Sin conexión con la base.');
+    rb=propOpt(P_);
     await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const aref=fcol('acts').doc(id);
-      const ps=await tx.get(pref);const srv=ps.exists?((ps.data()||{}).items||{})[id]:null;
+      const[ps,as]=await Promise.all([tx.get(pref),o?tx.get(aref):null]);const srv=ps.exists?((ps.data()||{}).items||{})[id]:null;
       if(!srv||!srv.sent||propVer(srv)!==propVer(it))throw new PropStop('El subcontratista cambió esta propuesta mientras la revisabas: revisa la versión nueva.','ver');
-      if(o){const as=await tx.get(aref);const cur=as.exists?actNorm(as.data()):null;
+      if(o){const cur=as.exists?actNorm(as.data()):null;
         if(canon(cur?strip(cur):null)!==canon(o.before?strip(o.before):null))throw new PropStop('La actividad cambió hace un momento (otro usuario o un cambio que aún se estaba guardando). Vuelve a intentarlo.','act');
         const body=strip(clone(o.after));if(cur){const args=fsDiff(strip(cur),body,'acts',true);if(args.length)tx.update(aref,...args)}else tx.set(aref,body)}
       tx.update(pref,new firebase.firestore.FieldPath('items',id),null);tx.set(fcol('lhphist').doc(key),h)})}
-  catch(e){PDBUSY.delete(key0);if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
+  catch(e){PDBUSY.delete(key0);if(rb)rb();if(e&&e.lps){say(e.lps);return e.k}say('No se pudo registrar la respuesta: '+(e&&(e.code||e.message)||'error')+'. No se cambió nada.');return'err'}
   PDBUSY.delete(key0);
-  return propLocal(P_)}
+  return'ok'}
 /** deshacer (o rehacer) una aceptación también devuelve (o vuelve a quitar) la propuesta del SC; el historial la marca, no se borra */
 async function propUndoHook(g,back){const P_=g.prop;if(!P_||!db)return;const{sc,id,it,key,hk}=P_;const FP=firebase.firestore.FieldPath;
   const ud={t:NOW(),by:me.email,n:me.name||''};const DEL=firebase.firestore.FieldValue.delete();
@@ -315,18 +322,19 @@ async function decideMany(L){let ok=0;const why={};
   if(by.size&&!db){toast('Sin conexión con la base.');return}
   const FP=firebase.firestore.FieldPath;
   await Promise.all([...by.entries()].map(async([sc,items])=>{for(let i=0;i<items.length;i+=120){const part=items.slice(i,i+120);part.forEach(P_=>PDBUSY.add(P_.key0));
-    try{const done=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);const ps=await tx.get(pref);const srvI=(ps.exists?(ps.data()||{}).items:null)||{};
-        const cur=await Promise.all(part.map(P_=>P_.o?tx.get(fcol('acts').doc(P_.id)):null));const go=[];const skip={};
-        part.forEach((P_,j)=>{const srv=srvI[P_.id];if(!srv||!srv.sent||propVer(srv)!==propVer(P_.it)){skip.ver=(skip.ver||0)+1;return}
-          if(P_.o){const as=cur[j];const c=as.exists?actNorm(as.data()):null;if(canon(c?strip(c):null)!==canon(P_.o.before?strip(P_.o.before):null)){skip.act=(skip.act||0)+1;return}P_.cur=c}
+    const rbs=new Map(part.map(P_=>[P_,propOpt(P_)]));/* reflejo inmediato: lo que la base no guarde se revierte abajo */
+    try{const done=await db.runTransaction(async tx=>{const pref=fcol('lhprop').doc(sc);
+        const[ps,...cur]=await Promise.all([tx.get(pref),...part.map(P_=>P_.o?tx.get(fcol('acts').doc(P_.id)):null)]);const srvI=(ps.exists?(ps.data()||{}).items:null)||{};const go=[];const skip={};const sk=[];
+        part.forEach((P_,j)=>{const srv=srvI[P_.id];if(!srv||!srv.sent||propVer(srv)!==propVer(P_.it)){skip.ver=(skip.ver||0)+1;sk.push(P_);return}
+          if(P_.o){const as=cur[j];const c=as.exists?actNorm(as.data()):null;if(canon(c?strip(c):null)!==canon(P_.o.before?strip(P_.o.before):null)){skip.act=(skip.act||0)+1;sk.push(P_);return}P_.cur=c}
           go.push(P_)});
         const args=[];for(const P_ of go){const aref=fcol('acts').doc(P_.id);
           if(P_.o){const body=strip(clone(P_.o.after));if(P_.cur){const d=fsDiff(strip(P_.cur),body,'acts',true);if(d.length)tx.update(aref,...d)}else tx.set(aref,body)}
           args.push(new FP('items',P_.id),null);tx.set(fcol('lhphist').doc(P_.key),P_.h)}
-        if(args.length)tx.update(pref,...args);return{go,skip}});
-      done.go.forEach(P_=>{PDBUSY.delete(P_.key0);propLocal(P_);ok++});part.forEach(P_=>PDBUSY.delete(P_.key0));
+        if(args.length)tx.update(pref,...args);return{go,skip,sk}});
+      done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++});part.forEach(P_=>PDBUSY.delete(P_.key0));
       for(const[k,n]of Object.entries(done.skip))add(k,n)}
-    catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));add('err',part.length);console.warn('aceptar',e)}}}));
+    catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));rbs.forEach(f=>f());add('err',part.length);console.warn('aceptar',e)}}}));
   const W={closed:'cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
   toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
@@ -369,9 +377,11 @@ function propBarClick(e){const t=e.target;let r;
       uiAsk({title:`¿Rechazar las ${A.length} propuestas${U.revSc?' de '+conOf(U.revSc).name:''}?`,text:'Ninguna se ve en la grilla:',list:revHiddenWhy(A),note:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',ok:`Rechazar las ${A.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(A)});return}const oc=revItems().length-L.length;
     uiAsk({title:`¿Rechazar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',note:oc?`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'',ok:`Rechazar ${L.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(L)});return}
   if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
-    /* una fila movida con ‹ › solo se acepta así con su ✓: el lote toma las propuestas como vienen */
-    const sh=REVSEL&&(REVSEL.k||REVSEL.days)&&L.some(o=>o.id===REVSEL.id)?S.act.get(REVSEL.id):null;
-    uiAsk({title:`¿Aceptar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'Se aceptan tal como las envió el subcontratista.',list:[...(oc?[`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`]:[]),...(sh?[`«${sh.name||'una actividad'}» la ${REVSEL.days?'editaste':'moviste '+Math.abs(REVSEL.k)+' día'+(Math.abs(REVSEL.k)>1?'s':'')} en la vista previa, pero aquí se acepta en las fechas que propuso el SC. Para aceptarla ${REVSEL.days?'editada':'movida'}, cancela y usa ✓ en su fila.`]:[])],ok:`Aceptar ${L.length}`,tone:sh?'warn':'ok'}).then(ok=>{if(ok)decideMany(L)});return}
+    /* oct 2026: la fila que ajustaste (días editados o movida con ‹ ›) se acepta con tus cambios; las demás, como las envió el SC */
+    const ed=REVSEL&&(REVSEL.k||REVSEL.days)?L.find(o=>o.id===REVSEL.id):null;
+    uiAsk({title:`¿Aceptar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:ed?`«${(ed.it.after&&ed.it.after.name)||'Una actividad'}» se acepta con tus cambios; las demás, como las envió el subcontratista.`:'Se aceptan tal como las envió el subcontratista.',list:oc?[`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`]:[],ok:`Aceptar ${L.length}`,tone:'ok'}).then(async ok=>{if(!ok)return;
+      let rest=L;if(ed){const a=revAcc(ed.id);rest=L.filter(o=>o.id!==ed.id);await decideProp(ed.sc,ed.id,a[0],a[1])}
+      if(rest.length)decideMany(rest);else{REVSEL=null;requestRender()}});return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='open'){propOpenWin();return}
   if(k==='close'){propCloseWin();return}
@@ -404,7 +414,7 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
 /* =====================================================================
    ETAPA 30 · Modo revisión de propuestas dentro de la grilla
    ===================================================================== */
-U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null,REVDRAG=null;
+U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null;
 const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver'));
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
 /* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
@@ -441,7 +451,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
   return`<div class="ppb rv"><div class="rvl"><b>Revisando propuestas</b>
     <span class="rvchips"><button class="${!U.revSc?'on':''}" data-rvsc="">Todos <b>${[...cnt.values()].reduce((a,b)=>a+b,0)}</b></button>${[...cnt.entries()].sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="${U.revSc===sc?'on':''}" data-rvsc="${sc}" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></button>`).join('')}</span>
     <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${(()=>{const nl=L.filter(o=>propLate(o.it,S.act.get(o.id))).length;return nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}: para aceptarlas se pide el motivo">${nl} fuera de plazo</span>`:''})()}
-    <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · toca un día para agregarlo o quitarlo de lo propuesto · mueve la fila elegida con <b>‹ ›</b> o arrastrando la barra · ✓ acepta · ✗ rechaza</span>${(()=>{const so=REVSEL&&L.find(o=>o.id===REVSEL.id);const can=!!(so&&so.it.after&&(so.it.after.days||[]).length);const d=can?'':' disabled title="Elige en la grilla una fila con días propuestos"';return`<span class="rvmv"><button class="ib" data-rvmv="l"${d||' title="Mover lo propuesto un día hábil antes"'} aria-label="Un día antes">‹</button><button class="ib" data-rvmv="r"${d||' title="Mover lo propuesto un día hábil después"'} aria-label="Un día después">›</button><button class="ib" data-rvmv="date"${d||' title="Aceptar con otra fecha de inicio…"'}>📅 Otra fecha</button></span>`})()}${REVSEL&&REVSEL.days?(()=>{const so=L.find(o=>o.id===REVSEL.id);return`<span class="pill warn">${esc((so&&so.it.after&&so.it.after.name)||'Actividad')}: días editados (${esc(rngTxt(REVSEL.days))}) · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
+    <span class="mu rvhelp">Tenue = vigente · intenso = propuesto · toca un día para agregarlo o quitarlo de lo propuesto · mueve la fila elegida con <b>‹ ›</b> · ✓ acepta · ✗ rechaza</span>${(()=>{const so=REVSEL&&L.find(o=>o.id===REVSEL.id);const can=!!(so&&so.it.after&&(so.it.after.days||[]).length);const d=can?'':' disabled title="Elige en la grilla una fila con días propuestos"';return`<span class="rvmv"><button class="ib" data-rvmv="l"${d||' title="Mover lo propuesto un día hábil antes"'} aria-label="Un día antes">‹</button><button class="ib" data-rvmv="r"${d||' title="Mover lo propuesto un día hábil después"'} aria-label="Un día después">›</button><button class="ib" data-rvmv="date"${d||' title="Aceptar con otra fecha de inicio…"'}>📅 Otra fecha</button></span>`})()}${REVSEL&&REVSEL.days?(()=>{const so=L.find(o=>o.id===REVSEL.id);return`<span class="pill warn">${esc((so&&so.it.after&&so.it.after.name)||'Actividad')}: días editados (${esc(rngTxt(REVSEL.days))}) · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}${REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button>`})():''}</div>
     <div class="ppa"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button>
     ${(()=>{const nv=revVisItems().length;return`<button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>${nv||!tot?`<button class="ib" data-rvrej${nv?'':' disabled'} title="Rechaza las propuestas que muestra la grilla con los filtros actuales: el lookahead no cambia">✗ Rechazar todo lo visible (${nv})</button>`:`<button class="ib" data-rvrej title="Ninguna se ve en la grilla (${esc(revHiddenWhy(L).join('; '))}). Rechazarlas no cambia el lookahead">✗ Rechazar las ${tot} (no se ven)</button>`}`})()}<button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div></div>`}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
@@ -478,17 +488,10 @@ function revClick(e){if(!revOn())return;const t=e.target;let b;
     return}
   const tr=t.closest('tr.rvrow');if(tr&&!t.closest('input,select,button,textarea')){const it=revItems().find(q=>q.id===tr.dataset.a);if(it&&(!REVSEL||REVSEL.id!==it.id)){REVSEL={sc:it.sc,id:it.id,k:0};requestRender()}}}
 function revDown(e){if(!revOn()||e.button>0)return;const td=e.target.closest('td.d');const tr=td&&td.closest('tr.rvrow');if(!tr||e.target.closest('.dm'))return;
-  if(tr.classList.contains('rvdel')){e.stopPropagation();e.preventDefault();toast('Esta fila pide quitar la actividad: acéptala (✓) o recházala (✗).');return}
-  const id=tr.dataset.a;const it=revItems().find(q=>q.id===id);
-  /* oct 2026: clic en un día = agregar o quitar ese día de lo propuesto; arrastrar una barra = mover el bloque */
-  if(!td.classList.contains('on')){e.stopPropagation();e.preventDefault();if(it)revToggleDay(id,td.dataset.d);return}
-  e.stopPropagation();e.preventDefault();if(!it)return;
-  if(REVSEL&&REVSEL.id===id&&REVSEL.days){revToggleDay(id,td.dataset.d);return}
-  const cells=[...tr.querySelectorAll('td.d[data-d]')];const x0=e.clientX;const i0=cells.indexOf(td);const base=REVSEL&&REVSEL.id===id?REVSEL.k:0;REVSEL={sc:it.sc,id,k:base};
-  REVDRAG={id,cells,i0,base,moved:false};tr.classList.add('rvdragging');
-  const mv=ev=>{const c=document.elementFromPoint(ev.clientX,tr.getBoundingClientRect().top+tr.offsetHeight/2);const td2=c&&c.closest&&c.closest('td.d[data-d]');if(!td2||td2.parentElement!==tr)return;const i1=cells.indexOf(td2);const k=base+(i1-i0);if(k!==REVSEL.k){REVSEL.k=k;REVDRAG.moved=true;revPreview(tr)}};
-  const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);tr.classList.remove('rvdragging');const mvd=REVDRAG&&REVDRAG.moved;REVDRAG=null;if(!mvd)revToggleDay(id,td.dataset.d);else requestRender()};
-  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up)}
+  e.stopPropagation();e.preventDefault();
+  if(tr.classList.contains('rvdel')){toast('Esta fila pide quitar la actividad: acéptala (✓) o recházala (✗).');return}
+  /* oct 2026: un clic en un día agrega o quita ese día de lo propuesto. Ya no se mueve arrastrando con el puntero (fallaba al repetirlo): se usa ‹ › */
+  revToggleDay(tr.dataset.a,td.dataset.d)}
 function revPreview(tr){const id=tr.dataset.a;const x=S.act.get(id);const it=revItems().find(q=>q.id===id);if(!it||!it.it.after)return;const k=REVSEL.k;const sh=new Set((it.it.after.days||[]).map(d=>wshift(d,k)));
   tr.querySelectorAll('td.d[data-d]').forEach(td=>td.classList.toggle('rvp',k!==0&&sh.has(td.dataset.d)));const lab=tr.querySelector('.rvk');if(lab)lab.textContent=k?`${k>0?'→ +':'← '}${k}d · Enter o ✓ para aceptar así`:''}
 function revKey(e){if(!revOn()||!REVSEL)return;const tg=e.target;if(tg&&tg.closest&&tg.closest('input,textarea,select'))return;

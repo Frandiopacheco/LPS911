@@ -299,7 +299,6 @@ td.d.rvn{box-shadow:inset 0 3px 0 #2e7d4f}
 td.d.rvc::before{content:"";position:absolute;z-index:3;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:#d32f2f;box-shadow:0 0 0 1.5px #fff}
 td.d.rvp{box-shadow:inset 0 0 0 2px var(--ink);background:rgba(0,0,0,.06)}
 tr.rvrow td.d.on{cursor:grab}
-tr.rvdragging td.d.on{cursor:grabbing}
 tr.rvrow.rvdel td.d.on::after{opacity:.35;background-image:linear-gradient(to top right,transparent calc(50% - 1.5px),#c62828 calc(50% - 1.5px),#c62828 calc(50% + 1.5px),transparent calc(50% + 1.5px))}
 tr.rvrow.rvdel td.s4 input,tr.rvrow.rvdel td.s4 .anv{text-decoration:line-through;color:#b71c1c}
 tr.rvrow.rvnew td.s4 input,tr.rvrow.rvnew td.s4 .anv{font-weight:700}

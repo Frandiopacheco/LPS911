@@ -151,13 +151,13 @@ test('ex-3 · congelar con propuestas sin decidir avisa y guarda cuáles quedaro
   noErrors(errors, 'congelar con pendientes');
 });
 
-test('ex-4 · «Aceptar todo» avisa que no usa el desplazamiento de la vista previa', async ({ page }) => {
+test('ex-4 · «Aceptar todo» avisa que la fila movida se acepta con tus cambios', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q0: P0(1), q1: P1(1) }, 1)] });
   await page.evaluate(() => { U.rev = true; REVSEL = { sc: 'c1', id: 'q1', k: 1 }; gridRows = null; render(); });
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
   await page.click('#ppbar [data-rvall]');
-  await expect.poll(() => msg).toContain('la moviste 1 día');
+  await expect.poll(() => msg).toContain('con tus cambios');
   expect(await page.evaluate(() => Object.keys(__dbAll('lhphist')).length)).toBe(0);
   noErrors(errors, 'aceptar todo con desplazamiento');
 });
