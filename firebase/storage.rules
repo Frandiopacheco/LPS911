@@ -1,0 +1,23 @@
+rules_version = '2';
+// Reglas de Firebase Storage — LPS 911. Solo el módulo Planos (docs/ia/planos.md) guarda archivos aquí:
+// planos/<id>/r<rev>/… (miniatura, mosaicos de alta definición y el PDF original).
+// Los permisos siguen a la colección "members" de Firestore, como firebase/firestore.rules:
+// lee el equipo de Last Planner (no capataces ni roles de solo tareo); suben el administrador y los editores; nadie borra.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function verified() { return request.auth != null && request.auth.token.get('email_verified', false) == true; }
+    function anon() { return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function mid() { return anon() ? 'u_' + request.auth.uid : request.auth.token.email.lower(); }
+    function isOwner() { return verified() && request.auth.token.email.lower() == 'frandiopacheco@gmail.com'; }
+    function memPath() { return /databases/(default)/documents/members/$(mid()); }
+    function isMember() { return (verified() || anon()) && firestore.exists(memPath()); }
+    function role() { return firestore.get(memPath()).data.get('role', ''); }
+    match /planos/{rest=**} {
+      allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']));
+      // create y update (reintentar una subida a medias); nunca delete
+      allow create, update: if (isOwner() || (verified() && isMember() && role() in ['admin', 'editor']))
+        && request.resource.size < 80 * 1024 * 1024
+        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
+    }
+  }
+}
