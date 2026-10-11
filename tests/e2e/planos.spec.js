@@ -47,6 +47,7 @@ test('admin: módulo Planos en el selector, sin los controles de Last Planner', 
   for (const s of ['#fpiso', '#bundo', '#bexport', '#wprev']) await expect(page.locator(s), s).toBeHidden();
   await expect(page.locator('#pname')).toHaveText('Planos del proyecto');
   await expect(page.locator('#pllist')).toContainText('Aún no hay planos cargados');
+  await expect(page.locator('#ploff')).toHaveCount(0); // «sin conexión» es solo para tablet
   // se recuerda al recargar y se vuelve a Last Planner y al Tareo
   await page.reload();
   await expect(page.locator('#loading')).toHaveCount(0, { timeout: 15_000 });
@@ -140,4 +141,29 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   // el mismo archivo otra vez: «ya está cargado» y no se procesa
   await page.setInputFiles('#plfile', { name: name.replace('.pdf', ' REV.pdf'), mimeType: 'application/pdf', buffer: pdf });
   noErrors(errors, 'carga');
+});
+
+test.describe('sin conexión (tablet)', () => {
+  test.use({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true });
+  test('en tablet guarda los planos de la lista completos y los marca; en PC no aparece', async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors = await openApp(page, { as: 'admin', editar: false });
+    await preparar(page);
+    await page.evaluate(memStorage);
+    expect(await page.evaluate(() => plTablet())).toBe(true);
+    await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+    await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+    const d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+    expect(d.sz).toBeGreaterThan(1000);
+    await page.evaluate(() => { U.tab = 'pbib'; render(); window.__GETS.length = 0; });
+    await page.click('#ploff');
+    await page.click('#pop [data-do="sv"]');
+    await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toContainText('sin conexión', { timeout: 30_000 });
+    const r = await page.evaluate(() => ({ all: plPaths(PLB.get('ARQ_AG03')), got: [...new Set(window.__GETS)], off: PLOFF.ARQ_AG03 }));
+    expect(r.got.sort()).toEqual(r.all.sort());
+    expect(r.off).toMatchObject({ rev: 1, base: 'planos/ARQ_AG03/r1' });
+    noErrors(errors, 'tablet');
+  });
 });
