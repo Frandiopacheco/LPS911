@@ -409,8 +409,8 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await page.click('#plv [data-pv="lk"]');
   await expect(page.locator('#plv .plkbar')).toBeVisible();
 
-  // dos esquinas → elegir lámina destino (con texto) → acercar la zona del destino y fijarla
-  await tap(W * 0.30, W * 0.20); await tap(W * 0.34, W * 0.24);
+  // un toque sobre la marca → elegir lámina destino (con texto) → acercar la zona del destino y fijarla
+  await tap(W * 0.32, W * 0.22);
   await expect(page.locator('#plv .plkch')).toBeVisible();
   await page.fill('#plkt', 'Corte Z');
   await page.fill('#plkq', 'IS06');
@@ -424,19 +424,27 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await expect.poll(nLk).toBe(1);
   const lk = await page.evaluate(() => PLB.get('ARQ_AG03').lk[0]);
   expect(lk.to).toBe('IS_IS06'); expect(lk.t).toBe('Corte Z'); expect(lk.v.k).toBeCloseTo(4, 1); expect(lk.v.nx).toBeCloseTo(0.6, 2);
-  expect(lk.x0).toBeCloseTo(0.30, 2); expect(lk.x1).toBeCloseTo(0.34, 2); expect(lk.x0).toBeLessThan(lk.x1);
+  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); expect((lk.x1 - lk.x0) * W).toBeCloseTo(200, 0); // zona del tamaño de una burbuja
   expect(lk.by).toBeTruthy(); expect(lk.arch).toBeUndefined();
   expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
   await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
 
   // «＋ Otra zona»: el otro extremo del corte, mismo destino, zona y texto, sin volver a elegir lámina
   await page.click('#plv .plkbar [data-pk="dup"]');
-  await expect(page.locator('#plv .plkbar')).toContainText('Otra zona hacia');
-  await tap(W * 0.60, W * 0.20); await tap(W * 0.64, W * 0.24);
+  await expect(page.locator('#plv .plkbar')).toContainText('Otra marca hacia');
+  await tap(W * 0.62, W * 0.22);
   await expect.poll(nLk).toBe(2);
   await expect(page.locator('#plv .plkch')).toHaveCount(0);
+  await expect(page.locator('#plv [data-pv="lk"]')).toContainText('2'); // el contador de la cabecera se actualiza
   const lk2 = await page.evaluate(() => PLB.get('ARQ_AG03').lk[1]);
-  expect(lk2.to).toBe('IS_IS06'); expect(lk2.t).toBe('Corte Z'); expect(lk2.v).toEqual(lk.v); expect(lk2.x0).toBeCloseTo(0.60, 2);
+  expect(lk2.to).toBe('IS_IS06'); expect(lk2.t).toBe('Corte Z'); expect(lk2.v).toEqual(lk.v); expect((lk2.x0 + lk2.x1) / 2).toBeCloseTo(0.62, 2);
+  // con un vínculo elegido, tocar otra marca del plano empieza uno nuevo de inmediato (antes el toque solo lo soltaba)
+  expect(await page.evaluate(() => PLK.sel)).toBeTruthy();
+  await tap(W * 0.5, W * 0.5);
+  await expect(page.locator('#plv .plkch')).toBeVisible();
+  await page.click('#plv .plkch [data-kc="x"]');
+  await expect(page.locator('#plv .plkch')).toHaveCount(0);
+  expect(await nLk()).toBe(2);
 
   // salir de editar: por defecto los vínculos no se dibujan (plano limpio), pero un toque los sigue igual
   await page.click('#plv .plkbar [data-pk="off"]');
@@ -493,8 +501,8 @@ test.describe('vínculos en tablet (toque)', () => {
     await page.waitForTimeout(500);
     await page.locator('#plv [data-pv="lk"]').tap();
     const r = await page.evaluate(() => document.querySelector('.plvc').getBoundingClientRect().toJSON());
-    const ax = r.left + r.width / 2, ay = r.top + 200; // el segundo toque cae justo donde aparece la lista de láminas
-    await page.touchscreen.tap(ax - 20, ay - 20); await page.waitForTimeout(150); await page.touchscreen.tap(ax, ay);
+    const ax = r.left + r.width / 2, ay = r.top + 200; // el toque cae justo donde aparece la lista de láminas (el clic fantasma de la tablet caería sobre ella)
+    await page.touchscreen.tap(ax, ay);
     await page.waitForTimeout(800);
     await expect(page.locator('#plv .plkch')).toBeVisible(); // antes: se saltaba la lista y abría una lámina cualquiera
     await expect(page.locator('#plv .plvt b')).toHaveText('AG03');
@@ -509,7 +517,7 @@ test.describe('vínculos en tablet (toque)', () => {
     await page.locator('#plv .plkbar [data-pk="dup"]').tap();
     const bx = r.left + r.width / 2 + 250, by = r.top + 200; // dentro de la hoja (la lámina de prueba es más angosta que la pantalla)
     await page.waitForTimeout(700);
-    await page.touchscreen.tap(bx - 20, by - 20); await page.waitForTimeout(150); await page.touchscreen.tap(bx, by);
+    await page.touchscreen.tap(bx, by);
     await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).map(l => l.to))).toEqual(['ARQ_AG07', 'ARQ_AG07']);
     // fuera de edición (vínculos ocultos), cada flecha abre AG07
     await page.waitForTimeout(700);
