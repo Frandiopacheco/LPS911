@@ -122,7 +122,7 @@ function create(host, opts = {}) {
     await fragments.core.update(true); redraw(); keepDrawing(400); emitState() }
 
   /* ───────── selección ───────── */
-  const sel = new Map(); let onSelect = null, tool = 'select', onTool = null;
+  const sel = new Map(); let onSelect = null, tool = 'select', onTool = null, lastPick = null, frameCb = null;
   const selCount = () => { let n = 0; for (const s of sel.values()) n += s.size; return n };
   const selMap = () => { const o = {}; for (const [k, s] of sel) if (s.size) o[k] = [...s]; return o };
   async function paintSel(prev) { for (const [id, s] of prev) { const m = models.get(id); if (!m || !s.size) continue; const ids = [...s]; await m.model.resetHighlight(ids);
@@ -132,7 +132,7 @@ function create(host, opts = {}) {
   async function setSel(map, add) { const prev = new Map([...sel].map(([k, s]) => [k, new Set(s)]));
     if (!add) sel.clear();
     for (const [id, ids] of Object.entries(map || {})) { const s = setOf(sel, id); for (const i of ids) { if (add && s.has(i)) s.delete(i); else s.add(i) } }
-    await paintSel(prev); if (onSelect) onSelect({ count: selCount(), map: selMap() }) }
+    await paintSel(prev); if (!selCount()) lastPick = null; if (onSelect) onSelect({ count: selCount(), map: selMap() }) }
   /* ¿el acierto del raycast se ve en pantalla? El raycast no sabe de ocultos, pisos, aislados ni cortes: lo que está recortado no se debe poder tocar */
   const planesNow = () => { const a = []; if (cutActive) a.push(cutPlane, botPlane); return a.concat(sections.planes()) };
   function seen(id, h) { const hid = hidden.get(id); if (hid && hid.has(h.localId)) return false;
@@ -161,8 +161,15 @@ function create(host, opts = {}) {
     if (tool === 'section' || tool === 'measure') { const hit = await pickAt(e.clientX, e.clientY); if (tool === 'section') await sections.tapSurface(hit); else await measure.tap(hit, { x, y }); return }
     const hit = await pickAt(e.clientX, e.clientY);
     if (!hit) { if (!d.shift) await setSel({}, false); return }
-    await setSel({ [hit.id]: [hit.hit.localId] }, d.shift || V.multi) };
+    lastPick = hit; await setSel({ [hit.id]: [hit.hit.localId] }, d.shift || V.multi) };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  /* medir con ratón: marcador de ajuste (esquina / arista / superficie) que sigue al cursor */
+  let hvT = 0, hvBusy = false;
+  canvas.addEventListener('pointermove', e => { if (tool !== 'measure' || e.pointerType !== 'mouse' || e.buttons || hvBusy) return; const now = performance.now(); if (now - hvT < 60) return; hvT = now; hvBusy = true;
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    pickAt(e.clientX, e.clientY).then(hit => { if (tool === 'measure') measure.hover(hit, hit ? { x, y } : null) }).catch(() => {}).finally(() => { hvBusy = false }) });
+  canvas.addEventListener('pointerleave', () => measure.hover(null));
+  R.onAfterUpdate.add(() => { if (frameCb) frameCb() });
 
   const ro = new ResizeObserver(() => redraw()); ro.observe(host);
 
@@ -196,6 +203,8 @@ function create(host, opts = {}) {
   function frame(b, anim) { const c = ctr(b), s = b.getSize(new THREE.Vector3()), r = Math.max(s.x, s.z, s.y) || 50;
     cc.setLookAt(c.x + r * 0.7, c.y + r * 0.7, c.z + r * 0.9, c.x, c.y, c.z, !!anim); cc.maxDistance = r * 12; cc.minDistance = 0.3; cam.threePersp.near = Math.max(0.05, r / 4000); cam.threePersp.far = r * 40; cam.threePersp.updateProjectionMatrix(); redraw() }
   let planOn = false;
+  /* caja de lo que está prendido (las especialidades apagadas no cuentan al encuadrar «todo el modelo») */
+  const visBox = () => { const b = new THREE.Box3(); for (const m of models.values()) if (m.model.object.visible && m.bb && !m.bb.isEmpty()) b.union(m.bb); return b.isEmpty() ? box.clone() : b };
   async function setProjection(p) { cam.projection.set(p === 'ortho' ? 'Orthographic' : 'Perspective'); redraw() }
 
   /* ───────── API ───────── */
@@ -204,7 +213,7 @@ function create(host, opts = {}) {
     async add(id, bytes) { const model = await fragments.core.load(bytes, { modelId: id, camera: cam.three, clippingPlanes: R.clippingPlanes });
       /* fragments.list.onItemSet ya lo agregó a la escena */
       await fragments.core.update(true); const levels = await levelsOf(model).catch(() => []); models.set(id, { model, levels, slabs: model.__slabs || 0 });
-      const b = new THREE.Box3().setFromObject(model.object); if (!b.isEmpty()) { const first = box.isEmpty(); box.union(b); if (first) frame(box, false) }
+      const b = new THREE.Box3().setFromObject(model.object); models.get(id).bb = b.clone(); if (!b.isEmpty()) { const first = box.isEmpty(); box.union(b); if (first) frame(box, false) }
       if (level) await applyLevel(); redraw(); keepDrawing(600); return { levels: levels.map(l => l.name) } },
     async visible(id, on) { const m = models.get(id); if (!m) return; m.model.object.visible = on; await fragments.core.update(true); redraw() },
     has: id => models.has(id), isOn: id => !!(models.get(id) && models.get(id).model.object.visible),
@@ -215,11 +224,17 @@ function create(host, opts = {}) {
     cut(on) { cutOn = !!on; applyClip(); if (level) applyLevel() }, setCutHeight(h) { cutH = Math.max(0.2, Math.min(3, +h || 1.3)); applyClip(); if (level) { clearTimeout(lvTimer); lvTimer = setTimeout(applyLevel, 250) } },
     levelBox,
     async dbgLevel() { const o = []; for (const [id, m] of models) { const set = levelOf.get(id) || new Set(), mem = new Set(idx.idsOf(m, level)); const c = await m.model.getItemsOfCategories([/^IFCSLAB$/]); const sl = Object.values(c).flat(); o.push({ id, spatial: set.size, member: mem.size, slabsSpatial: sl.filter(i => set.has(i)).length, slabsMember: sl.filter(i => mem.has(i)).length, slabs: sl.length, bx: !!m.bx }) } return o },
+    /* (pruebas) punto al que se ajustaría una medida en esa posición de pantalla */
+    async snapProbe(cx, cy) { const r = canvas.getBoundingClientRect(), hit = await pickAt(cx, cy); if (!hit) return null; const sn = await measure.snapAt(hit, { x: cx - r.left, y: cy - r.top }); return { kind: sn.kind, p: sn.p.toArray() } },
     async probe(cx, cy) { const h = await pickAt(cx, cy); return h ? { p: h.hit.point.toArray(), id: h.id, lid: h.hit.localId } : null },
     async selectionBox() { const b = await boxOfSel(); return b.isEmpty() ? null : { min: b.min.toArray(), max: b.max.toArray() } },
     levelInfo() { return { offset: idx.offset(), main: idx.mainLevels().main.map(l => ({ key: l.key, elev: l.elev, floorY: idx.floorY(l.key) })), models: [...models].map(([id, m]) => ({ id, slabs: m.slabs, posY: m.model.object.position.y, levels: m.levels.map(l => ({ name: l.name, elev: l.elev, y0: l.y0, floor: l.floor, n: l.ids.length })) })) } },
     /* cámara */
-    reset() { frame(box, true) }, fit: b => fitBox(b || box), fitSelection: async () => { const b = await boxOfSel(); if (!b.isEmpty()) await focusBox(b, 1.3) },
+    reset() { frame(visBox(), true) },
+    /** «Casita»: vuelve a la vista general. Sale de planta/ortogonal, quita el piso aislado, la selección y lo aislado, y encuadra todo el modelo
+        (los cortes y lo oculto a propósito se conservan: se quitan con «Mostrar»). */
+    async home() { planOn = false; try { cam.set('Orbit') } catch (e) {} await setProjection('persp'); level = ''; isolated = null; measure.stop(); if (selCount()) await setSel({}, false); await applyLevel(); frame(visBox(), true) },
+    resize() { try { R.resize() } catch (e) {} redraw(); keepDrawing(500) }, fit: b => fitBox(b || box), fitSelection: async () => { const b = await boxOfSel(); if (!b.isEmpty()) await focusBox(b, 1.3) },
     view(name) { const b = level ? levelBox() : box, c = ctr(b), s = b.getSize(new THREE.Vector3()), r = Math.max(s.x, s.y, s.z) * 1.2 || 50;
       const P = { top: [0, 1, 0.0001], front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0], iso: [0.7, 0.7, 0.9] }[name] || [0.7, 0.7, 0.9];
       cc.setLookAt(c.x + P[0] * r, c.y + P[1] * r, c.z + P[2] * r, c.x, c.y, c.z, true) },
@@ -232,6 +247,12 @@ function create(host, opts = {}) {
       redraw() },
     get plan() { return planOn },
     /* selección y propiedades */
+    onFrame(cb) { frameCb = cb },
+    /** Posición en pantalla (px del visor) del punto que se tocó para seleccionar; null si la selección no viene de un toque. */
+    anchorPx() { if (!lastPick || !lastPick.hit || !lastPick.hit.point) return null; const r = canvas.getBoundingClientRect(), s = lastPick.hit.point.clone().project(cam.three);
+      return { x: (s.x * 0.5 + 0.5) * r.width, y: (-s.y * 0.5 + 0.5) * r.height, w: r.width, h: r.height, vis: s.z < 1 && Math.abs(s.x) <= 1 && Math.abs(s.y) <= 1 } },
+    /** «Cortar» del menú flotante: corta por la superficie que se tocó (el plano queda 2 cm dentro) y suelta la selección. */
+    async cutSelection() { if (!lastPick) return null; const pick = lastPick; await setSel({}, false); return sections.tapSurface(pick) },
     onSelect(cb) { onSelect = cb }, async select(map, add) { await setSel(map, add) }, clearSelection() { return setSel({}, false) }, selection: selMap, selectionCount: selCount,
     async props() { const o = selMap(); const id = Object.keys(o)[0]; if (!id) return null; const m = models.get(id); return readProps(m.model, o[id][0], id) },
     /* ocultar / aislar / transparentar / mostrar todo (sobre la selección) */
@@ -249,6 +270,15 @@ function create(host, opts = {}) {
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),
     perf, bench, preset: setPreset, get presetName() { return preset },
+    /* foto del estado (cámara, piso, cortes, ocultos, aislado) para reponerlo si el visor se libera de la memoria y se vuelve a armar */
+    snapshot() { const p = new THREE.Vector3(), t = new THREE.Vector3(); cc.getPosition(p); cc.getTarget(t); const ser = m => m ? [...m].filter(([, x]) => x.size).map(([k, x]) => [k, [...x]]) : null;
+      return { cam: { p: p.toArray(), t: t.toArray(), ortho: !cam.three.isPerspectiveCamera, zoom: cam.threeOrtho ? cam.threeOrtho.zoom : 1 }, level, cutOn, cutH, plan: planOn, hidden: ser(hidden), isolated: ser(isolated), cuts: sections.exportCuts() } },
+    async restore(sn) { if (!sn) return;
+      hidden.clear(); for (const [k, a] of sn.hidden || []) hidden.set(k, new Set(a)); isolated = sn.isolated ? new Map(sn.isolated.map(([k, a]) => [k, new Set(a)])) : null;
+      cutOn = sn.cutOn !== false; cutH = sn.cutH || 1.3; level = sn.level || ''; planOn = !!sn.plan; sections.importCuts(sn.cuts); await applyLevel();
+      if (sn.cam) { if (sn.cam.ortho) { await setProjection('ortho'); if (planOn) { cam.set('Plan'); cam.threeOrtho.near = -5000; cam.threeOrtho.far = 5000 } }
+        await cc.setLookAt(...sn.cam.p, ...sn.cam.t, false); if (sn.cam.ortho && cam.threeOrtho) { cam.threeOrtho.zoom = sn.cam.zoom || 1; cam.threeOrtho.updateProjectionMatrix() } }
+      redraw(); keepDrawing(500); emitState() },
     redraw, keepDrawing, canvas, camera: cam, renderer: R,
     destroy() { dead = true; ro.disconnect(); try { sections.dispose(); measure.dispose() } catch (e) {} try { components.dispose() } catch (e) {} host.innerHTML = '' },
   };
