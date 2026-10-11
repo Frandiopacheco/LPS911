@@ -40,8 +40,8 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   // cortes: caja de sección alrededor del modelo y quitarla
   await page.click('#p3dock [data-a="pn:cortes"]');
   await page.click('#p3pn [data-a="sec-box"][data-t="model"]');
-  await expect(page.locator('#p3dock .p3n')).toHaveText('6');
-  await page.click('#p3pn [data-a="sec-clear"]');
+  await expect(page.locator('#p3dock .p3n').first()).toHaveText('6');
+  await page.click('#p3ban [data-a="sec-clear"]');
   await expect(page.locator('#p3dock .p3n')).toHaveCount(0);
   // gestos táctiles (tablet): un dedo gira, dos dedos acercan
   await page.click('#p3dock [data-a="pn:vista"]'); await page.click('#p3pn [data-a="view"][data-v="iso"]'); await page.click('#p3pn [data-a="pn:"]');

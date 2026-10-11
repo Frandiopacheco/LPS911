@@ -20,8 +20,8 @@ export function createSection(C) {
 
   function addPlane(point, normal, kind, label, face, size) {
     const id = clipper.createFromNormalAndCoplanarPoint(world, normal, point); const p = clipper.list.get(id); if (!p) return null;
-    p.visible = !hideGizmos; if (size) p.size = size;
-    try { p.controls.size = 1.5 } catch (e) {} /* flechas más grandes: se agarran con el dedo */
+    p.visible = !hideGizmos; p.size = size || 0.5; /* el cuadro azul del plano es chico: lo que se ve es la flecha */
+    try { p.controls.size = kind === 'box' ? 0.7 : 0.9 } catch (e) {} /* flechas al alcance del dedo, sin tapar el modelo */
     items.set(id, { kind, label, face }); redraw(); emit(); return id }
 
   /** Toque sobre una superficie: corta lo que está delante de ella (sin cambiar el aislado ni el piso). */
@@ -42,7 +42,7 @@ export function createSection(C) {
     if (!b || b.isEmpty()) { emit(); redraw(); return false }
     const c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3()); boxOn = true;
     for (const [f, nm, n] of FACES) { const ax = f[1]; const sign = f[0] === '+' ? 1 : -1; const pt = c.clone(); pt.setComponent('xyz'.indexOf(ax), (sign > 0 ? b.max : b.min).getComponent('xyz'.indexOf(ax)));
-      const others = ['x', 'y', 'z'].filter(k => k !== ax).map(k => s.getComponent('xyz'.indexOf(k))); addPlane(pt, new THREE.Vector3(...n), 'box', 'Caja · ' + nm, f, Math.min(...others) * 0.5 || 5) }
+      const others = ['x', 'y', 'z'].filter(k => k !== ax).map(k => s.getComponent('xyz'.indexOf(k))); addPlane(pt, new THREE.Vector3(...n), 'box', 'Caja · ' + nm, f, 0.3) }
     makeHelper(); emit(); redraw(); return true }
   function boxBounds() { const o = { min: [-Infinity, -Infinity, -Infinity], max: [Infinity, Infinity, Infinity] };
     for (const [id, it] of items) { if (it.kind !== 'box') continue; const p = clipper.list.get(id); if (!p) continue; const k = 'xyz'.indexOf(it.face[1]); const nk = p.three.normal.getComponent(k); if (!nk) continue; /* plano alineado a un eje: n·x + c = 0 → x = −c / n */
