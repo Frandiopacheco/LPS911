@@ -592,7 +592,9 @@ test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el 
   await page.evaluate(() => PLV.tv.setView({ nx: 0.4, ny: 0.5, k: 12 }));
   await expect.poll(() => page.evaluate(() => PLV.tv.sharp()), { timeout: 15_000 }).not.toBeNull();
   const a = await page.evaluate(() => ({ sh: PLV.tv.sharp(), s: PLV.tv.s, x: PLV.tv.x, dpr: devicePixelRatio, cw: document.querySelector('.plvc').clientWidth }));
-  expect(a.sh.s).toBe(a.s); expect(a.sh.x).toBe(a.x); expect(a.sh.w).toBe(Math.ceil(a.cw * a.dpr));
+  expect(a.sh.s).toBe(a.s); expect(a.sh.x).toBe(a.x);
+  // dibuja con margen alrededor de la pantalla (para desplazarse sin ver el cambio a baja resolución)
+  expect(a.sh.w).toBeGreaterThan(a.cw * a.dpr * 1.3); expect(a.sh.rect.x).toBeLessThan(0); expect(a.sh.rect.x + a.sh.rect.w).toBeGreaterThan(a.cw);
   expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
   // con el dedo/ratón apoyado no se dibuja nada nuevo (no compite con el gesto)
   await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
@@ -603,7 +605,12 @@ test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el 
   expect((await page.evaluate(() => PLV.tv.sharp())).x).toBe(a.x); // la capa anterior sigue (se mueve con el plano), no se rehízo
   await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
     h.dispatchEvent(new PointerEvent('pointerup', { pointerId: 3, clientX: r.left + 200, clientY: r.top + 250, pointerType: 'mouse', isPrimary: true, bubbles: true })); });
-  // al soltar y quedarse quieto, se redibuja en la nueva posición (el PDF ya no se vuelve a bajar)
+  // un desplazamiento corto queda dentro de la zona nítida: al soltar no se redibuja nada (sin parpadeo)
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => PLV.tv.sharpBusy())).toBe(false);
+  expect((await page.evaluate(() => PLV.tv.sharp())).n).toBe(a.sh.n);
+  // uno largo sale de la zona: al detenerse se redibuja en la nueva posición (el PDF ya no se vuelve a bajar)
+  await page.evaluate(() => { const v = PLV.tv.getView(); PLV.tv.setView({ ...v, nx: v.nx - 0.08 }); });
   await expect.poll(() => page.evaluate(() => { const s = PLV.tv.sharp(); return s && s.x === PLV.tv.x && s.y === PLV.tv.y; }), { timeout: 15_000 }).toBe(true);
   expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
   // al alejar a la vista general se suelta (memoria)
