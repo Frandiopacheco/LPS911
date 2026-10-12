@@ -24,6 +24,10 @@ test('Presentar: pantalla completa con resumen, subcontratistas y causas del pla
   await expect(ipr).toContainText('PPC por piso');
   await page.screenshot({ path: 'test-results/ipr-resumen.png' });
   await page.keyboard.press('ArrowRight');
+  await expect(ipr).toContainText('Evolución del PPC por piso');
+  await expect(ipr.locator('.iprtab tbody tr')).toHaveCount(2);
+  await page.screenshot({ path: 'test-results/ipr-pisos.png' });
+  await page.keyboard.press('ArrowRight');
   await expect(ipr).toContainText('PPC por subcontratista');
   await expect(ipr.locator('.iprb').first()).toContainText('100%');
   await page.screenshot({ path: 'test-results/ipr-sc.png' });
