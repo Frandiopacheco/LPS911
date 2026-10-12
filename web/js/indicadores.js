@@ -136,7 +136,7 @@ const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
 function indBar(){const d=indDay();const today=todayIso();const dia=U.indMode!=='sem';
   return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`} · ${pisoLabel()}`,
-    dia?'<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>':`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
+    dia?`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para proyectar el cumplimiento del día">▶ Presentar</button>'}<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
    +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
    ${dia?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
 /** No cumplidos de la semana elegida: causa, comentario y mitigación, editables aquí mismo (los mismos datos del Plan semanal) */
@@ -153,8 +153,11 @@ function ncCard(wSel){const cnc=P().cnc||[];const L=[];
 function ncChange(t){const f=t.dataset.ncf;const tr=t.closest('tr[data-nck]');if(!f||!tr||!canWrite)return false;const[n,pid,id]=tr.dataset.nck.split('|');if(!isPisoResp(pid))return true;const w=S.wk.get(wkId(+n,pid));if(!w)return true;
   const cur=(w.res||{})[id]||{};const v=f==='cnc'?t.value:t.value.trim();t.dataset.o=t.value;setRes(+n,pid,id,{...cur,[f]:v});return true}
 function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
-  main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;saveUI();render();return}
-  const dn=t.closest('[data-idd]');if(dn){const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);daySet(nd&&nd<todayIso()?nd:null);render();return}
+  main.onclick=e=>{const t=e.target;const m=t.closest('#imode button');if(m){U.indMode=m.dataset.m;IXD_SC='';saveUI();render();return}
+  const xm=t.closest('[data-xm]');if(xm){IXD_M=xm.dataset.xm==='sc'?'sc':'br';render();return} /* semáforo (ind-dia.js) */
+  const xs=t.closest('[data-ixsc]');if(xs){IXD_SC=IXD_SC===xs.dataset.ixsc?'':xs.dataset.ixsc;render();if(IXD_SC)requestAnimationFrame(()=>$('#ixinc')?.scrollIntoView({behavior:'smooth',block:'start'}));return}
+  if(t.closest('#ixscx')){IXD_SC='';render();return}
+  const dn=t.closest('[data-idd]');if(dn){IXD_SC='';const v=+dn.dataset.idd;const nd=v===0?null:shiftDay(indDay(),v);daySet(nd&&nd<todayIso()?nd:null);render();return}
   if(t.id==='bpdf'){reportPdf(indDay());return}
   if(t.id==='bipr'){iprStart();return}
   if(t.id==='bxppc'){exportPpcXlsx();return}
@@ -176,17 +179,18 @@ function renderIndDay(main){
   if(!t.prog&&!D.extras.length)h+=`<div class="empty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
   else{
     const scs=Object.entries(D.scA).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
-    h+=`<div class="card"><h2>Cumplimiento por subcontratista <span class="sub">${fmtD(d)}</span></h2><div class="pad">${cumplTable(scs,scLabel)}</div></div>`;
+    h+=ixdCard(D,d)+`<details class="card ixd-det"><summary>Tabla detallada por subcontratista <span class="sub">${fmtD(d)}</span></summary><div class="pad">${cumplTable(scs,scLabel)}</div></details>`;
     if(!U.piso&&vp.length>1){const ps=vp.filter(p=>D.piA[p.id]).map(p=>[p.id,D.piA[p.id]]);h+=`<div class="card"><h2>Cumplimiento por piso <span class="sub">${fmtD(d)}</span></h2><div class="pad">${cumplTable(ps,id=>{const p=S.pis.get(id);return`<b>${esc(p.code)}</b> · ${esc(p.name)}`})}</div></div>`}
     if(D.extras.length)h+=npIndCard(D.extras,d);
     const cl=Object.entries(D.cnc).sort((a,b)=>b[1]-a[1]);
     if(cl.length)h+=`<div class="card chart"><h2>Causas del día <span class="sub">Parcial y No cumplido</span></h2><div class="pad">${svgBarsH(cl.map(([k,v])=>({label:k,v})),v=>v+'')}</div></div>`;
-    const inc=D.rows.filter(r=>r.rc&&r.rc.status!=='ok').sort((a,b)=>a.p.order-b.p.order||a.s.order-b.s.order||a.a.order-b.a.order||a.x.order-b.x.order);
-    if(inc.length)h+=`<div class="card"><h2>Incumplimientos del día <span class="sub">${inc.length} · clic para ver o editar en Campo</span></h2><div class="tscroll"><table class="t ctab rt"><thead><tr><th>Ítem</th><th>Ambiente</th><th>Actividad</th><th>Subcontratista</th><th>Estado</th><th>Causa</th><th>Imputable al SC</th><th>Comentario</th></tr></thead><tbody>
-      ${inc.map(r=>`<tr data-goc="${r.x.id}|${d}"><td class="mono" data-l="Ítem">${U.piso?'':esc(r.p.code)+' · '}${esc(r.a.code)}</td><td class="wrapc" data-l="Ambiente">${esc(r.a.name)}</td><td class="wrapc lead">${esc(r.x.name)}</td><td data-l="Subcontratista">${scLabel(r.sc)}</td><td class="${ST[r.rc.status].c}" data-l="Estado">${ST[r.rc.status].i} ${ST[r.rc.status].t}</td><td class="wrapc" data-l="Causa">${r.rc.cnc?esc(r.rc.cnc):'<span style="color:var(--bad)">sin causa</span>'}</td><td data-l="Imputable al SC">${impOf(r.rc)?'Sí':'<span class="mu">No</span>'}</td><td class="wrapc mu full" data-l="Comentario">${esc(r.rc.note||'')}</td></tr>`).join('')}</tbody></table></div></div>`}
+    if(IXD_SC&&!D.scA[IXD_SC])IXD_SC='';
+    const inc=D.rows.filter(r=>r.rc&&r.rc.status!=='ok'&&(!IXD_SC||r.sc===IXD_SC)).sort((a,b)=>a.p.order-b.p.order||a.s.order-b.s.order||a.a.order-b.a.order||a.x.order-b.x.order);
+    if(inc.length||IXD_SC)h+=`<div class="card" id="ixinc"><h2>Incumplimientos del día <span class="sub">${inc.length} · clic para ver o editar en Campo</span>${IXD_SC?` <span class="dpill">Solo ${esc(ixdName(IXD_SC))}<button id="ixscx" aria-label="Ver todos los subcontratistas">×</button></span>`:''}</h2>${inc.length?`<div class="tscroll"><table class="t ctab rt"><thead><tr><th>Ítem</th><th>Ambiente</th><th>Actividad</th><th>Subcontratista</th><th>Estado</th><th>Causa</th><th>Imputable al SC</th><th>Comentario</th></tr></thead><tbody>
+      ${inc.map(r=>`<tr data-goc="${r.x.id}|${d}"><td class="mono" data-l="Ítem">${U.piso?'':esc(r.p.code)+' · '}${esc(r.a.code)}</td><td class="wrapc" data-l="Ambiente">${esc(r.a.name)}</td><td class="wrapc lead">${esc(r.x.name)}</td><td data-l="Subcontratista">${scLabel(r.sc)}</td><td class="${ST[r.rc.status].c}" data-l="Estado">${ST[r.rc.status].i} ${ST[r.rc.status].t}</td><td class="wrapc" data-l="Causa">${r.rc.cnc?esc(r.rc.cnc):'<span style="color:var(--bad)">sin causa</span>'}</td><td data-l="Imputable al SC">${impOf(r.rc)?'Sí':'<span class="mu">No</span>'}</td><td class="wrapc mu full" data-l="Comentario">${esc(r.rc.note||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="pad"><div class="empty">Este subcontratista no tiene incumplimientos registrados este día.</div></div>`}</div>`}
   h+='</div></div>';main.innerHTML=h;wireInd(main)}
 function renderInd(main){
-  if(IPR&&U.indMode==='sem'){iprDraw();return} /* modo presentación abierto: solo se redibuja la capa (ind-presentacion.js) */
+  if(IPR){iprDraw();return} /* modo presentación abierto (semanal o del día): solo se redibuja la capa (ind-presentacion.js / ind-dia.js) */
   if(U.indMode!=='sem'){renderIndDay(main);return}
   const vp=visPisos();const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
