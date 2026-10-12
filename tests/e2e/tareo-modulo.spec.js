@@ -79,7 +79,9 @@ test('admin en el celular: cambia de módulo desde «Más»', async ({ page }) =
 for (const as of ['lector', 'sc', 'capataz', 'editor']) {
   test(`${as}: no ve el selector ni el Tareo`, async ({ page }) => {
     const errors = await openApp(page, { as, editar: false });
-    await expect(page.locator('#modsel')).toBeHidden();
+    /* el selector aparece por el módulo Planos (docs/ia/planos.md), menos para el capataz; nunca con el Tareo */
+    if (as === 'capataz') await expect(page.locator('#modsel')).toBeHidden();
+    else { await expect(page.locator('#modsel')).toBeVisible(); await expect(page.locator('#modsel [data-mod="tar"]')).toHaveCount(0); }
     expect(await page.evaluate(() => ({ t: canTar(), mod: U.mod }))).toEqual({ t: false, mod: 'lps' });
     expect(await tabsVisibles(page)).not.toContain('tdia');
     await page.evaluate(() => { U.tab = 'tper'; render(); });

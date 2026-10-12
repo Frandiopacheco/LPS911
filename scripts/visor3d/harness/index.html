@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arnés del visor 3D</title>
+<style>html,body{margin:0;height:100%;font:13px system-ui}#host{position:absolute;inset:0}#log{position:absolute;left:6px;bottom:6px;background:#fffc;padding:4px 8px;border-radius:6px;max-width:60%}</style></head>
+<body><div id="host"></div><div id="log">arnés listo</div>
+<script type="module">
+// Arnés para probar el motor del visor (scripts/visor3d) sin la app ni Firebase: window.H expone lo necesario para Playwright.
+const log = t => { document.getElementById('log').textContent = t; console.log('[h]', t) };
+await import('../../../web/vendor/visor3d/visor3d.js');
+const V = window.Visor3D;
+window.H = {
+  V, v: null,
+  create(opts) { this.v = V.create(document.getElementById('host'), opts || {}); return true },
+  /* convierte un IFC (File) en el navegador y lo carga; devuelve tiempos y tamaños */
+  async loadIfc(file, id, save) { const t0 = performance.now(); const frag = await V.convert(file, p => log(`convirtiendo ${id} ${Math.round(p * 100)}%`)); const t1 = performance.now(); const fsize = frag.length;
+    if (save) await fetch('/__save/' + save, { method: 'POST', body: new Blob([frag]) }); /* guarda el .frag para reusarlo (Playwright lo escribe a disco) */
+    const t1b = performance.now(); const r = await this.v.add(id, frag); const t2 = performance.now(); log(`${id} listo`); return { id, ifc: file.size, frag: fsize, convertMs: Math.round(t1 - t0), openMs: Math.round(t2 - t1b), levels: r.levels } },
+  async loadFragUrl(url, id) { const t0 = performance.now(); const b = new Uint8Array(await (await fetch(url)).arrayBuffer()); const r = await this.v.add(id, b); return { id, frag: b.length, openMs: Math.round(performance.now() - t0), levels: r.levels } },
+};
+log('visor cargado');
+</script></body></html>
