@@ -215,7 +215,11 @@ const PL_CAP=56;
 /* capa nítida (docs/ia/planos.md › Nitidez): con zoom más allá del detalle de los mosaicos, al detenerse se redibuja lo que está
    en pantalla desde el PDF original (vectorial). PL_SH_MIN: píxeles de pantalla por píxel del plano desde los que hace falta;
    PL_SH_IDLE: espera quieto antes de dibujar; PL_SH_PX: tope de píxeles del lienzo nítido (memoria de la tablet). */
-const PL_SH_MIN=0.95,PL_SH_IDLE=170,PL_SH_PX=7e6,PL_SH_DOCS=3;
+const PL_SH_MIN=0.95,PL_SH_IDLE=170,PL_SH_PX=8e6,PL_SH_DOCS=3;
+/* margen nítido alrededor de la pantalla (fracción del ancho/alto por lado, máx.): al desplazarse dentro de él no se ve el cambio
+   a baja resolución. Dibujar más área cuesta casi lo mismo (pdf.js tarda por recorrer el plano, no por los píxeles); lo limita la
+   memoria (PL_SH_PX). PL_SH_KEEP: si al detenerse la pantalla sigue dentro de la zona nítida con este margen, no se redibuja. */
+const PL_SH_M=0.6,PL_SH_KEEP=0.08,PL_SH_FADE=180;
 const PLPDF=new Map();   /* base → promesa de la página 1 del PDF original (las últimas PL_SH_DOCS láminas abiertas) */
 function plPdfPage(base){let e=PLPDF.get(base);
   if(e){PLPDF.delete(base);PLPDF.set(base,e);return e.pg}
@@ -235,9 +239,15 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   const sMin=()=>V.fit*0.5,sMax=()=>6/(window.devicePixelRatio||1);   /* hasta 6 px de pantalla por px del plano: la capa nítida (PDF) da el detalle */
   const clampS=v=>Math.max(sMin(),Math.min(sMax(),v));
   /* ---- capa nítida: estado. sharp = último dibujo del PDF {c (lienzo), s,x,y (vista con que se dibujó), w,h, t0} ---- */
-  let sharp=null,shTask=null,shTimer=0,shKey='',shOff=false;
+  let sharp=null,shPrev=null,shTask=null,shTimer=0,shKey='',shOff=false;
   const shWant=()=>!shOff&&V.s*dpr>PL_SH_MIN;
-  const shDrop=()=>{if(sharp){sharp.c.width=sharp.c.height=0;sharp=null}};
+  const shFree=o=>{if(o)o.c.width=o.c.height=0};
+  const shDrop=()=>{shFree(sharp);sharp=null;shFree(shPrev);shPrev=null};
+  /* rectángulo (en pantalla) que hoy cubre una capa nítida */
+  const shRect=o=>{const r=V.s/o.s;return{x:V.x+(o.ox-o.x)*r,y:V.y+(o.oy-o.y)*r,w:o.w*r,h:o.h*r,r}};
+  /* ¿la pantalla sigue cubierta (con margen) por la capa nítida actual, a la misma escala? → no hace falta redibujar */
+  const shCovers=()=>{if(!sharp)return false;const q=shRect(sharp);if(Math.abs(q.r-1)>0.002)return false;const mx=cw*PL_SH_KEEP,my=ch*PL_SH_KEEP;
+    return q.x<=-mx&&q.y<=-my&&q.x+q.w>=cw+mx&&q.y+q.h>=ch+my};
   const shStop=()=>{clearTimeout(shTimer);shTimer=0;if(shTask){try{shTask.cancel()}catch(e){}shTask=null}};
   /* se llama en cada cuadro: si la vista cambió, se cancela lo pendiente; quieto y con zoom profundo, se programa el dibujo */
   const shStep=act=>{const key=[V.s*1e6|0,V.x*10|0,V.y*10|0,cw,ch].join(',');
@@ -245,17 +255,31 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     if(act){shStop();return}
     if(!shWant()){if(sharp&&V.s*dpr<PL_SH_MIN*0.7)shDrop();return}
     if(shTimer||shTask||(sharp&&sharp.key===key))return;
+    if(shCovers()){sharp.key=key;return}
     shTimer=setTimeout(()=>{shTimer=0;shRender(key)},PL_SH_IDLE)};
-  const shRender=async key=>{if(V.dead||key!==shKey)return;const s=V.s,x=V.x,y=V.y,w=cw,h=ch;let k=dpr;if(w*h*k*k>PL_SH_PX)k=Math.sqrt(PL_SH_PX/(w*h));
+  const shRender=async key=>{if(V.dead||key!==shKey)return;const s=V.s,x=V.x,y=V.y,w=cw,h=ch;let k=dpr,m=0;
+    if(w*h*k*k>PL_SH_PX)k=Math.sqrt(PL_SH_PX/(w*h));else m=Math.min(PL_SH_M,(Math.sqrt(PL_SH_PX/(w*h*k*k))-1)/2);
+    /* zona a dibujar en pantalla (css px): la pantalla más el margen; recortada a la hoja para no gastar en el blanco de fuera */
+    let ox=-m*w,oy=-m*h,ex=w+m*w,ey=h+m*h;ox=Math.max(ox,x);oy=Math.max(oy,y);ex=Math.min(ex,x+spec.W*s);ey=Math.min(ey,y+spec.H*s);
+    if(ex-ox<2||ey-oy<2)return;const rw=ex-ox,rh=ey-oy;
     let pg;try{pg=await plPdfPage(spec.base)}catch(e){shOff=true;console.warn('nitidez: sin PDF original',e&&e.message);return}   /* sin PDF (sin conexión): quedan los mosaicos */
     if(V.dead||key!==shKey||shTask)return;
-    const c=document.createElement('canvas');c.width=Math.ceil(w*k);c.height=Math.ceil(h*k);const cg=c.getContext('2d',{alpha:false});
+    const c=document.createElement('canvas');c.width=Math.ceil(rw*k);c.height=Math.ceil(rh*k);const cg=c.getContext('2d');
     const S0=spec.W/pg.getViewport({scale:1}).width;  /* escala del PDF que dio el nivel de detalle (W px) */
     const t0=performance.now();
-    const task=pg.render({canvasContext:cg,viewport:pg.getViewport({scale:S0*s*k}),transform:[1,0,0,1,x*k,y*k]});shTask=task;
+    const task=pg.render({canvasContext:cg,viewport:pg.getViewport({scale:S0*s*k}),transform:[1,0,0,1,(x-ox)*k,(y-oy)*k]});shTask=task;
     try{await task.promise}catch(e){if(shTask===task)shTask=null;c.width=c.height=0;return}
     if(shTask===task)shTask=null;if(V.dead||key!==shKey){c.width=c.height=0;return}
-    shDrop();sharp={c,s,x,y,w,h,key,t0:performance.now(),ms:Math.round(performance.now()-t0)};V.tick()};
+    /* bordes difuminados: donde termina la zona nítida (y no es el borde de la hoja) se funde con los mosaicos, sin línea de corte */
+    const f=Math.min(48,m*Math.min(w,h)*0.5)*k;
+    if(f>2){cg.setTransform(1,0,0,1,0,0);cg.globalCompositeOperation='destination-out';
+      const edge=(x0,y0,x1,y1,rx,ry,rw2,rh2)=>{const gr=cg.createLinearGradient(x0,y0,x1,y1);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(1,'rgba(0,0,0,0)');cg.fillStyle=gr;cg.fillRect(rx,ry,rw2,rh2)};
+      const W2=c.width,H2=c.height,sx=x*1,sy=y*1;
+      if(ox>sx+1)edge(0,0,f,0,0,0,f,H2);if(ex<sx+spec.W*s-1)edge(W2,0,W2-f,0,W2-f,0,f,H2);
+      if(oy>sy+1)edge(0,0,0,f,0,0,W2,f);if(ey<sy+spec.H*s-1)edge(0,H2,0,H2-f,0,H2-f,W2,f);
+      cg.globalCompositeOperation='source-over'}
+    /* la capa anterior queda debajo hasta que la nueva termina de aparecer: lo que ya estaba nítido no pasa por borroso */
+    shFree(shPrev);shPrev=sharp;sharp={c,s,x,y,ox,oy,w:rw,h:rh,key,t0:performance.now(),ms:Math.round(performance.now()-t0)};V.tick()};
   V.fitView=(animate)=>{resize();zfling=null;const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
     if(animate){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.tiles_();V.tick()}};
   V.zoomAt=(k,cx,cy)=>{const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const ts=clampS(s0*k),r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
@@ -280,8 +304,9 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       const a=Math.min(1,(now-e.t0)/140);if(a<1)fading=true;g.globalAlpha=a;
       /* medio píxel de más para que no se vean juntas entre mosaicos */g.drawImage(e.bm,x,y,w+0.6,h+0.6)}
     /* capa nítida encima de los mosaicos: sigue al plano al moverlo o acercarlo hasta que se vuelve a dibujar */
-    if(sharp){const r=V.s/sharp.s;if(r>0.5&&r<2){const a=Math.min(1,(now-sharp.t0)/160);if(a<1)fading=true;g.globalAlpha=a;
-      g.drawImage(sharp.c,V.x-sharp.x*r,V.y-sharp.y*r,sharp.w*r,sharp.h*r)}}
+    if(sharp){const dr=o=>{const q=shRect(o);if(q.r>0.5&&q.r<2)g.drawImage(o.c,q.x,q.y,q.w,q.h)};const a=Math.min(1,(now-sharp.t0)/PL_SH_FADE);
+      if(a<1){fading=true;if(shPrev){g.globalAlpha=1;dr(shPrev)}}else if(shPrev){shFree(shPrev);shPrev=null}
+      g.globalAlpha=a;dr(sharp)}
     g.globalAlpha=1;if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
   const coarse=Math.max(0,spec.Z-2);
   V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
@@ -354,7 +379,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
   V.dbg=()=>({zfling,afterPinch,pointers:P.size,pinch:!!pinch});
   V.loaded=()=>[...V.tiles.values()].filter(e=>e.bm).length;
-  V.sharp=()=>sharp?{s:sharp.s,x:sharp.x,y:sharp.y,ms:sharp.ms,w:sharp.c.width,h:sharp.c.height}:null;   /* pruebas */
+  V.sharp=()=>sharp?{s:sharp.s,x:sharp.x,y:sharp.y,ms:sharp.ms,w:sharp.c.width,h:sharp.c.height,rect:shRect(sharp),n:sharp.t0}:null;   /* pruebas */
   V.sharpBusy=()=>!!(shTimer||shTask);
   V.destroy=()=>{V.dead=true;shStop();shDrop();ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
   requestAnimationFrame(()=>{V.fitView();if(spec.view)V.setView(spec.view)});return V}
