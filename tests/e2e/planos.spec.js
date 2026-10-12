@@ -572,3 +572,42 @@ test('vínculos: la ventana de confirmar (Borrar, Texto) y los avisos se ven enc
   expect(top).toBe(true);
   noErrors(errors, 'vínculos ventana');
 });
+
+test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el PDF original; al moverse se cancela', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); window.__GETS.length = 0; });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(600);
+  // vista general: los mosaicos alcanzan, no se baja el PDF
+  expect(await page.evaluate(() => PLV.tv.sharp())).toBeNull();
+  expect(await page.evaluate(() => __GETS.some(p => p.endsWith('orig.pdf')))).toBe(false);
+  // zoom profundo y quieto: aparece la capa nítida, dibujada con la vista actual
+  await page.evaluate(() => PLV.tv.setView({ nx: 0.4, ny: 0.5, k: 12 }));
+  await expect.poll(() => page.evaluate(() => PLV.tv.sharp()), { timeout: 15_000 }).not.toBeNull();
+  const a = await page.evaluate(() => ({ sh: PLV.tv.sharp(), s: PLV.tv.s, x: PLV.tv.x, dpr: devicePixelRatio, cw: document.querySelector('.plvc').clientWidth }));
+  expect(a.sh.s).toBe(a.s); expect(a.sh.x).toBe(a.x); expect(a.sh.w).toBe(Math.ceil(a.cw * a.dpr));
+  expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
+  // con el dedo/ratón apoyado no se dibuja nada nuevo (no compite con el gesto)
+  await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
+    h.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 3, clientX: r.left + 300, clientY: r.top + 300, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    h.dispatchEvent(new PointerEvent('pointermove', { pointerId: 3, clientX: r.left + 200, clientY: r.top + 250, pointerType: 'mouse', isPrimary: true, bubbles: true })); });
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => PLV.tv.sharpBusy())).toBe(false);
+  expect((await page.evaluate(() => PLV.tv.sharp())).x).toBe(a.x); // la capa anterior sigue (se mueve con el plano), no se rehízo
+  await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
+    h.dispatchEvent(new PointerEvent('pointerup', { pointerId: 3, clientX: r.left + 200, clientY: r.top + 250, pointerType: 'mouse', isPrimary: true, bubbles: true })); });
+  // al soltar y quedarse quieto, se redibuja en la nueva posición (el PDF ya no se vuelve a bajar)
+  await expect.poll(() => page.evaluate(() => { const s = PLV.tv.sharp(); return s && s.x === PLV.tv.x && s.y === PLV.tv.y; }), { timeout: 15_000 }).toBe(true);
+  expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
+  // al alejar a la vista general se suelta (memoria)
+  await page.evaluate(() => PLV.tv.fitView());
+  await expect.poll(() => page.evaluate(() => PLV.tv.sharp())).toBeNull();
+  noErrors(errors, 'nitidez');
+});
