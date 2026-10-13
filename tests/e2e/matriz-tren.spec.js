@@ -52,6 +52,7 @@ test('opción B: con «Faltan programar» encendido, días rayados y chip «✓ 
   await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
   await expect(page.locator('#grid td.mxt')).toHaveCount(0);
   await expect(page.locator('[data-mxtamb]')).toHaveCount(0);
+  await page.click('#fmore');
   await page.click('#fmxp button');
   await expect(page.locator('#grid tr[data-a="t0"] td.mxt').first()).toBeVisible();
   await expect(page.locator('[data-mxtamb="a1"]')).toContainText('1 ✓ en Matriz');

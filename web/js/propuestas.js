@@ -482,6 +482,8 @@ function rvPanelSync(){let el=document.getElementById('rvpanel');
   if(!el){el=document.createElement('aside');el.id='rvpanel';el.onclick=e=>{if(e.target.closest('[data-rvfold]')){try{localStorage.setItem('lps.rvfold',rvFold()?'0':'1')}catch(er){}rvPanelSync();return}propBarClick(e)};
     el.onchange=e=>{if(e.target.id==='rvctx'){U.revCtx=e.target.checked;requestRender()}};document.body.appendChild(el)}
   el.className=cls+(f&&mode!=='open'?' fold':'');
+  /* oct 2026: arranca a la altura de la grilla (no tapa las pestañas ni «Más»); plegado, un poco más abajo para no tapar la cabecera de días */
+  {const g=document.getElementById('gw');const gt=g?Math.round(g.getBoundingClientRect().top):120;const folded=el.classList.contains('fold');el.style.top=Math.max(60,gt+(folded?70:4))+'px';el.style.maxHeight=`calc(100vh - ${Math.max(60,gt+4)+14}px)`}
   if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}

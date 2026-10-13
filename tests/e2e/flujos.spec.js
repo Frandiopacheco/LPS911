@@ -22,7 +22,7 @@ test('lookahead: renombrar, deshacer y buscar', async ({ page }) => {
   await expect(page.locator('input[data-a="i0"][data-f="name"]')).toHaveCount(0);
   await expect(page.locator('input[data-a="t0"][data-f="name"]')).toBeVisible();
   await page.fill('#fq', '');
-  await page.click('#fmore');
+  await page.click('#fdots');
   await page.click('#fcoll');
   await expectTabOk(page, 'look');
   noErrors(errors, 'lookahead');
