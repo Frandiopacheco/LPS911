@@ -93,6 +93,10 @@ function iprdPisos(D){const R=Object.entries(D.piA).map(([id,o])=>{const p=S.pis
     <div class="ixd-legb">${ixdLegend()}</div>
     <p class="iprnote">Toca un piso para ver solo su cumplimiento en las demás láminas.</p></section>`}
 
+/** fotos de un incumplimiento (las del registro de Campo y las del reporte en vivo); tocar una la agranda (iprClick) */
+function ixdPhotos(x){const lv=typeof liveOf==='function'?liveOf(x.d,x.x.id):null;const ids=[...new Set([...((x.rc&&x.rc.photos)||[]),...((lv&&lv.photos)||[])])];if(!ids.length)return'';
+  return`<div class="ixd-ph">${ids.map(id=>{loadFoto(id);const src=FOTO.get(id)||'';return`<img data-ph="${esc(id)}" src="${src}" alt="Foto del incumplimiento"${src?'':' style="opacity:.3"'}>`}).join('')}</div>`}
+
 function ixdSplit(imp,nimp){if(!imp&&!nimp)return'<div class="empty">Sin incumplimientos verificados.</div>';
   return`<div class="ixd-split">${imp?`<span class="i" style="flex:${imp}"><b>${imp}</b></span>`:''}${nimp?`<span class="n" style="flex:${nimp}"><b>${nimp}</b></span>`:''}</div>
     <div class="ixd-sl"><span><i class="i"></i>Imputables al subcontratista · <b>${imp}</b></span><span><i class="n"></i>No imputables (causa ajena) · <b>${nimp}</b></span></div>`}
@@ -126,7 +130,7 @@ function iprdCriticos(D,R){const crit=ixdGroups(R).bad;
   if(!crit.length)return`<div class="iprempty">Ningún subcontratista quedó en crítico (menos de 50 %).<small>Revisa la lámina Subcontratistas para ver a los que quedaron en parcial.</small></div>`;
   return`<div class="ixd-crit">${crit.map(r=>{const c=conOf(r.sc);const L=D.rows.filter(x=>x.sc===r.sc&&x.rc&&x.rc.status!=='ok').sort(ixdSort);const sin=r.o.prog-r.o.ver;
     return`<section class="iprcard ixd-cc"><h3><i class="sw" style="background:${esc(c.color)}"></i>${esc(c.name)} <b class="ixd-pv">${pct(r.v)}</b> <small>${r.o.ok} de ${r.o.ver} verificadas${r.nimp?` · ${r.nimp} no imputable${r.nimp===1?'':'s'}`:''}${sin?` · ${sin} sin verificar`:''}</small></h3>
-      ${L.length?`<table class="ixd-tbl"><thead><tr><th>Ambiente</th><th>Actividad</th><th>Estado</th><th>Causa</th><th></th></tr></thead><tbody>${L.map(x=>`<tr><td>${U.piso?'':esc(x.p.code)+' · '}${esc(x.a.code)} ${esc(x.a.name)}</td><td class="lead">${esc(x.x.name)}</td><td class="${ST[x.rc.status].c}">${ST[x.rc.status].i} ${ST[x.rc.status].t}</td><td>${x.rc.cnc?esc(x.rc.cnc):'<em class="mu">sin causa</em>'}${x.rc.note?`<small>${esc(x.rc.note)}</small>`:''}</td><td>${ixdTag(x.rc)}</td></tr>`).join('')}</tbody></table>`:`<div class="empty">No tiene incumplimientos registrados: lo programado no se verificó.</div>`}
+      ${L.length?`<table class="ixd-tbl"><thead><tr><th>Ambiente</th><th>Actividad</th><th>Estado</th><th>Causa</th><th></th></tr></thead><tbody>${L.map(x=>`<tr><td>${U.piso?'':esc(x.p.code)+' · '}${esc(x.a.code)} ${esc(x.a.name)}</td><td class="lead">${esc(x.x.name)}</td><td class="${ST[x.rc.status].c}">${ST[x.rc.status].i} ${ST[x.rc.status].t}</td><td>${x.rc.cnc?esc(x.rc.cnc):'<em class="mu">sin causa</em>'}${x.rc.note?`<small>${esc(x.rc.note)}</small>`:''}${ixdPhotos(x)}</td><td>${ixdTag(x.rc)}</td></tr>`).join('')}</tbody></table>`:`<div class="empty">No tiene incumplimientos registrados: lo programado no se verificó.</div>`}
     </section>`}).join('')}</div>`}
 
 function iprdCausas(D){const cI={},cN={};

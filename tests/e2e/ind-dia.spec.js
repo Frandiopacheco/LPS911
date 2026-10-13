@@ -8,13 +8,15 @@ const act = (id, sc, name, ambId = 'a1') => ['acts', id, { ambId, sc, name, und:
 /* c1 SANITARIAS: i0 e i1 ya vienen del Firebase falso (Dpto 101 y 102, hoy) → las dos Sí = 100 %  → «Cumplieron»
    c2 ELECTRICAS: e0 Sí, e1 No (imputable)                                      = 50 %          → «Parcial»
    c3 TARRAJEO:   k1 No (imputable), k2 No (ajeno al SC), k3 Sí                  = 33 % bruto · 50 % del SC → «Crítico» / «Parcial» */
+const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const EXTRA = [
+  ['fotos', 'ph1', { data: PX, kind: 'rec' }],
   act('k1', 'c3', 'Tarrajeo de cielo raso'), act('k2', 'c3', 'Tarrajeo de columnas', 'a2'), act('k3', 'c3', 'Tarrajeo de vigas'),
   ['daily', HOY + '_p1', { date: HOY, pisoId: 'p1', recs: {
     i0: rec({ sc: 'c1', nm: 'Redes empotradas', ambId: 'a1' }), i1: rec({ sc: 'c1', nm: 'Redes empotradas', ambId: 'a2' }),
     e0: rec({ sc: 'c2', nm: 'Entubado empotrado', ambId: 'a1' }),
     e1: rec({ sc: 'c2', nm: 'Entubado empotrado', ambId: 'a2', status: 'no', exec: 0, cnc: 'Materiales', imp: true, note: 'No llegó el tubo' }),
-    k1: rec({ sc: 'c3', nm: 'Tarrajeo de cielo raso', ambId: 'a1', status: 'no', exec: 0, cnc: 'Personal', imp: true, note: 'Faltó cuadrilla' }),
+    k1: rec({ sc: 'c3', nm: 'Tarrajeo de cielo raso', ambId: 'a1', status: 'no', exec: 0, cnc: 'Personal', imp: true, note: 'Faltó cuadrilla', photos: ['ph1'] }),
     k2: rec({ sc: 'c3', nm: 'Tarrajeo de columnas', ambId: 'a2', status: 'no', exec: 0, cnc: 'Frente no entregado', imp: false, note: 'Aún sin liberar' }),
     k3: rec({ sc: 'c3', nm: 'Tarrajeo de vigas', ambId: 'a1' }),
   }, extra: {} }],
@@ -77,6 +79,11 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await expect(ipr.locator('.ixd-cc')).toHaveCount(1);
   await expect(ipr.locator('.ixd-cc')).toContainText('Faltó cuadrilla');
   await expect(ipr.locator('.ixd-cc .ixd-tag.imp')).toHaveCount(1);
+  await expect(ipr.locator('.ixd-cc .ixd-ph img')).toHaveCount(1);   // foto del incumplimiento (k1)
+  await ipr.locator('.ixd-cc .ixd-ph img').click();
+  await expect(page.locator('.lb img')).toBeVisible();
+  await page.locator('.lb [data-x]').click();
+  await expect(ipr).toBeVisible();
   await expect(ipr.locator('.ixd-cc .ixd-tag.nimp')).toHaveCount(1);
   await page.screenshot({ path: 'test-results/ind-dia-criticos.png' });
   await page.keyboard.press('ArrowRight');
@@ -166,4 +173,27 @@ test('Indicadores › Cliente: un editor no ve la pestaña y un modo guardado ca
   await expect(page.locator('#imode [data-m="cli"]')).toHaveCount(0);
   await expect(page.locator('#imode [data-m="dia"]')).toHaveClass(/on/);
   noErrors(errors, 'indicadores cliente editor');
+});
+
+test('PPC histórico a mano: se lee el texto, se guarda y se grafica en Semanal y Cliente (el dato manual manda sobre el congelado)', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'ind' });
+  // lectura del texto: %, fracción, coma decimal, «-» = sin dato y líneas inválidas
+  const r = await page.evaluate(() => ppcHistParse('52  84  80\nS53 0,86 -\n54 90%\n55 150 10\nxx 1 2\n56 - -'));
+  expect(r.h).toEqual({ 52: { a: 0.84, c: 0.8 }, 53: { a: 0.86 }, 54: { a: 0.9 } });
+  expect(r.bad).toHaveLength(3);
+  // guardar desde la ventana (en las pruebas pasa por prompt)
+  await page.locator('#imode [data-m="sem"]').click();
+  page.once('dialog', d => d.accept('52  84  80\n53  86  -'));
+  await page.locator('#bppch').click();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('meta', 'project') || {}).ppcHist)).toEqual({ 52: { a: 0.84, c: 0.8 }, 53: { a: 0.86 } });
+  const pts = await page.evaluate(() => ppcHistAll([]).map(p => [p.label, p.a, p.b, p.man]));
+  expect(pts).toEqual([['S52', 0.84, null, true], ['S53', 0.86, null, true]]);
+  await expect(page.locator('#main .chart svg text', { hasText: 'S52' })).toHaveCount(1);
+  // pestaña Cliente: S52 con cliente 80 % e interno 84 %
+  await page.locator('#imode [data-m="cli"]').click();
+  await expect(page.locator('#main .chart svg text', { hasText: 'S52' })).toHaveCount(1);
+  await expect(page.locator('#main .tile').first()).toContainText('80%');
+  // un editor no ve el botón
+  noErrors(errors, 'ppc histórico a mano');
 });

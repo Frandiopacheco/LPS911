@@ -99,7 +99,7 @@ test('emitir: vale para la semana siguiente, sin las ocultas y con las filas pro
   await page.evaluate(n => { U.week = n; }, n);
   await openTab(page, 'ind');
   await page.click('#imode [data-m="cli"]');
-  const card = page.locator('.card', { hasText: "contra la versión emitida" });
+  const card = page.locator('.card', { hasText: 'solo administradores' });
   await expect(card).toBeVisible();
   const items = await page.evaluate(n => { const r = cliPpc(new Set(visPisos().map(p => p.id))); const w = r.W.find(o => o.w === n); return w ? w.items.map(i => i.x.id) : null; }, n);
   if (items) { expect(items).not.toContain(own); expect(items).not.toContain('i1'); }
