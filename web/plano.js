@@ -1135,10 +1135,13 @@ function crossOf(pid){shapesOf(pid);const k=M.piso+'|'+(SHC.get(pid)||{}).k;cons
 function crossOf_(pid){const out=[];const zs=shapesOf(pid).filter(z=>z.kind==='zona');const vs=[...new Set(zs.map(z=>zVista(z)))];const ZL_=planNumbering(null,pid).zl;
   vs.forEach(v=>crossPairs(zs.filter(z=>zVista(z)===v)).list.forEach(c=>out.push({a:zNo(c.a,ZL_)+conOf(c.a.sc).name+': '+zoneLabel(c.a),b:zNo(c.b,ZL_)+conOf(c.b.sc).name+': '+zoneLabel(c.b)})));return out}
 function zonedSet(pid){return new Set(shapesOf(pid).filter(z=>z.kind==='zona'&&z.actId).map(z=>z.actId))}
+const CPB=new Map(); /* lámina elegida por piso en capPlan (pid → id de la base): un piso con varias fachadas/vistas muestra una a la vez */
 function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);const zsAll=o.zones||shapesOf(o.pid).filter(z=>z.kind==='zona');const mine=zsAll.filter(z=>z.actId&&o.colors.has(z.actId));
   if(!lamReady){if(!host._v)host.innerHTML='<div class="kemp">Cargando plano…</div>';return}
   if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene plano cargado.${o.empty!=null?' '+o.empty:(typeof canWrite!=='undefined'&&canWrite?' Súbelo en <b>Sectorización</b>.':'')}</div>`;host._v=null;host._fk='';return}
-  let base=bs[0],best=-1;bs.forEach(b=>{const n=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
+  let base=bs[0],best=-1;const cntB={};bs.forEach(b=>{const n=cntB[b.id]=mine.filter(z=>zVista(z)===b.id).length;if(n>best){best=n;base=b}});
+  /* si el piso tiene varias láminas (p. ej. las fachadas), se puede elegir cuál ver; por defecto la que tiene más actividades */
+  {const sel=bs.find(b=>b.id===CPB.get(o.pid));if(sel)base=sel}
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);const oo=host._o||o;
     const pt={x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v:host._base||''};
     /* doble toque rápido en cualquier lugar (también sobre una actividad de otro SC): trabajo no programado */
@@ -1166,7 +1169,14 @@ function capPlan(host,o){const bs=basesOf(o.pid);if(o.onEmpty)znLoad(o.pid);cons
   /* trabajo no programado visto en obra: un punto con «+» del color del subcontratista */
   (o.marks||[]).filter(m=>(m.v||base.id)===base.id).forEach(m=>{svg+=`<circle cx="${m.x}" cy="${m.y}" r="5" fill="${m.c}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     labels.push({id:'np:'+m.id,x:m.x,y:m.y,t:m.t||'+',nb:1,np:1,bs:o.bs||40,cls:'npm'+(o.bs&&o.bs<40?' sm':''),area:1,c:m.c,f:m.c,tip:m.tip||''})});
-  if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;v.apply()}
+  if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;v.apply();
+  /* selector de láminas (solo si el piso tiene más de una): botones con la cantidad de actividades de cada una */
+  {let bar=host.querySelector(':scope>.pvlams');
+   if(bs.length>1){const h=bs.map(b=>{const n=cntB[b.id]||0;return`<button type="button" data-lam="${esc(b.id)}" class="${b.id===base.id?'on':''}${n?'':' z'}" title="${esc(lname(b)||'Vista')}${n?' · '+n+' actividad'+(n===1?'':'es'):' · sin actividades'}">${esc(lname(b)||'Vista')}${n?` <b>${n}</b>`:''}</button>`}).join('');
+    if(!bar){bar=document.createElement('div');bar.className='pvlams';bar.addEventListener('pointerdown',e=>e.stopPropagation());bar.addEventListener('wheel',e=>e.stopPropagation());
+      bar.addEventListener('click',e=>{const b=e.target.closest('[data-lam]');if(!b||!host._o)return;e.stopPropagation();CPB.set(host._o.pid,b.dataset.lam);host._fk='';capPlan(host,host._o)});host.appendChild(bar)}
+    if(bar._h!==h){bar.innerHTML=h;bar._h=h}}
+   else if(bar)bar.remove()}}
 
 /* dibujar una zona rectangular sobre el visor de capPlan: cb(pts planos, vista) */
 function capDraw(host,cb){host._drawCb=cb||null;host.classList.toggle('drawing',!!cb);if(host._dw)return;host._dw=1;let st=null,rect=null;
@@ -1204,7 +1214,8 @@ function ambMap(host,o){const bs=basesOf(o.pid);
     svg+=`<polygon points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.16:.05}" stroke="${z.c}" stroke-width="${z.sel?4:2.5}" stroke-dasharray="10 6" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     const bb=bboxOf(P);labels.push({id:z.id,x:bb.x+bb.w/2,y:bb.y,t:z.label,c:z.c,f:'#fff',cls:'szs'+(z.sel?' sel':'')})}
   for(const z of o.shapes.filter(z=>z.kind==='a')){const P=unflat(z.pts);if(!P.length)continue;
-    svg+=`<polygon${o.edit&&z.sel?' data-edit="1"':''} points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.6:z.dim?.07:.38}" stroke="${z.sel?'#111':z.dim?z.c+'55':z.c}" stroke-width="${z.sel?2.5:1}" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    svg+=`<polygon${o.edit&&z.sel?' data-edit="1"':''} points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?(z.sop??.6):z.dim?.07:(z.op??.38)}" stroke="${z.sel?'#111':z.dim?z.c+'55':z.c}" stroke-width="${z.sel?2.5:1}" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    if(z.nolab)continue; /* Matriz › Gráfico: sin código encima, el nombre del ambiente ya está en el plano */
     const ce=centroid(P),bb=bboxOf(P);labels.push({id:z.id,x:ce.x,y:ce.y,t:z.label,area:bb.w*bb.h,c:z.sel?'#111':z.c,f:'#fff',cls:'sza'+(z.sel?' sel':'')})}
   if(o.tmp&&o.tmp.length){svg+=`<polyline points="${ptsS(o.tmp)}" fill="rgba(31,95,122,.18)" stroke="#1F5F7A" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}

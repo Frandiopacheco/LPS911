@@ -8,6 +8,13 @@ const KST={none:{t:'Sin iniciar',c:'#8C959F'},seq:{t:'En secuencia',c:'#7E57C2'}
 /* motivos de «Detenido» (oct 2026, reemplaza «En secuencia»): «Inicia después» es el tren de trabajo (solo informativo) */
 const STOP_MOT=['Inicia después','Actividad predecesora','Seguridad','Materiales','Calidad','Otros'];
 const STOP_INFO='Inicia después';
+/* causa de no cumplimiento que sugiere el motivo de «Detenido» (oct 2026, pedido del dueño): al verificar el cumplimiento, el motivo de la
+   detención pasa por defecto a la causa del «No cumplido» (se puede cambiar). «Inicia después» es informativo: no sugiere nada. */
+const STOP_CNC={'Actividad predecesora':'PROG','Materiales':'MAT','Calidad':'QA/QC','Seguridad':'OT','Otros':'OT'};
+function stopCnc(d,aid){const lv=liveOf(d,aid);if(!lv)return null;let raw=lv.st==='stop'&&lv.mot?String(lv.mot):'';
+  if(!raw)for(const e of [...(lv.log||[])].reverse()){if(e&&e.s==='stop'&&e.m&&e.m!==STOP_INFO){raw=String(e.m);break}}
+  if(!raw)return null;const i=raw.indexOf(' — ');const mot=i<0?raw:raw.slice(0,i),note=i<0?'':raw.slice(i+3).trim();const code=STOP_CNC[mot];if(!code)return null;
+  const L=P().cnc||[];const c=L.find(n=>cncCode(n)===code);return c?{cnc:c,mot,note}:null}
 const liveOf=(d,aid)=>LIVE.get(d+'_'+aid)||null;
 function kState(d,aid){const r=recReal(d,aid);if(r)return{k:r.status==='ok'?'ok':'no',conf:true,r};const lv=liveOf(d,aid);
   if(lv&&lv.close&&lv.close.status)return{k:lv.close.status,conf:false,lv};if(lv&&lv.st)return{k:lv.st,lv};if(lv&&lv.seq&&lv.seq.on)return{k:'seq',lv};return{k:'none',lv}}
@@ -105,9 +112,10 @@ function capClick(e){const t=e.target;let b;if(t.closest('[data-sini]')){sinIniO
   capSheet(aid,d,'main')}
 function kAct(aid,d,k){const lv=liveOf(d,aid);const re=!!(lv&&lv.st==='stop'&&lv.t0);if(k==='run'||k==='res'){liveWrite(d,aid,{st:'run',t0:lv&&lv.t0||NOW(),mot:'',seq:{on:false,after:''}},{s:re?'res':'run'});toast(re?'Marcada reanudada':'Marcada iniciada')}}
 function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);
-  if(!keep||!KS||KS.aid!==aid||KS.d!==d)KS={aid,d,mode,cs:'',cnc:'',mot:'',note:'',done:false,imp:null,photo:null};KS.mode=mode;
+  if(!keep||!KS||KS.aid!==aid||KS.d!==d)KS={aid,d,mode,cs:'',cnc:'',mot:'',note:'',done:false,imp:null,photo:null,sg:''};KS.mode=mode;
   const s=kState(d,aid);const lv=liveOf(d,aid);const nums=window.__plano&&window.__plano.nums?window.__plano.nums(pisoOfAct(aid)):new Map();const n=nums.get(aid);const past=d<todayIso();
   const E=ENG();if(mode==='close'&&!keep){if(E){const r=recOf(d,aid);if(r){KS.cs=r.status==='partial'?'no':r.status;KS.cnc=r.cnc||'';KS.note=r.note||'';KS.done=!!r.done;KS.imp=r.imp??null}}else if(lv&&lv.close){KS.cs=lv.close.status||'';KS.cnc=lv.close.cnc||'';KS.note=lv.close.note||'';KS.done=!!lv.close.done}}
+  if(mode==='close'&&KS.cs==='no'&&!KS.cnc){const sg=stopCnc(d,aid);if(sg){KS.cnc=sg.cnc;KS.imp=null;KS.sg=sg.mot;if(!KS.note.trim()&&sg.note)KS.note=sg.note}}
   const cnc=P().cnc||[];const later=(x.days||[]).filter(y=>y>d).length;
   let h=`<div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${n||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}${past?' · <b>'+fmtD(d)+'</b>':''}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}`;
@@ -116,7 +124,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
       <input class="kin" id="kmott" placeholder="${KS.mot==='Otros'?'Detalle (obligatorio)':'Detalle (opcional)'}" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
       <div class="kbtns"><button class="kbig warn" data-ka="stopsave">⏸ Guardar «Detenido»</button><button class="kbig ghost" data-ka="back">Volver</button></div>`}
   else if(mode==='close'){h+=`<div class="ksl">¿Se cumplió lo programado para ${past?'ese día':'hoy'}?</div><div class="kbtns two"><button class="kbig ok${KS.cs==='ok'?' on':''}" data-kcs="ok">✓ Cumplido</button><button class="kbig no${KS.cs==='no'?' on':''}" data-kcs="no">✗ No cumplido</button></div>
-      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>`:''}
+      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>${KS.sg&&KS.cnc&&(stopCnc(d,aid)||{}).cnc===KS.cnc?`<p class="knote">Causa tomada del motivo de detención («${esc(KS.sg)}»). Puedes cambiarla.</p>`:''}`:''}
       ${E&&KS.cs==='no'&&KS.cnc?`<div class="ksl">¿Imputable a ${esc(conOf(x.sc).name)}?</div><span class="seg kseg"><button class="${(KS.imp??cncImp(KS.cnc))?'on':''}" data-kimp="1">Sí</button><button class="${(KS.imp??cncImp(KS.cnc))?'':'on'}" data-kimp="0">No</button></span><p class="knote">${KS.imp!=null?'Cambiado a mano.':'Según la causa.'} Igual que en las tarjetas: lo no imputable no le baja el PPC del SC.</p>`:''}
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
@@ -151,7 +159,7 @@ async function kSheetChange(e){const t=e.target;if(t.id==='kdone'){KS.done=t.che
   if(t.id==='kphoto'&&t.files[0]){const f=t.files[0];t.value='';try{$('#kphn').textContent='Comprimiendo foto…';KS.photo=await shrinkPhoto(f);$('#kphn').textContent=`Foto lista (${Math.round(KS.photo.length*.75/1024)} KB)`;if(KS.mode==='close')capSheet(KS.aid,KS.d,'close',true)}catch(err){toast(err.message)}}}
 function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.closest('.kphs img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:')&&typeof lightbox==='function')lightbox(im.src);return}}if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-kx]')){kClose();return}if(!KS)return;const{aid,d}=KS;let b;
   if((b=t.closest('[data-kmot]'))){KS.mot=b.dataset.kmot;capSheet(aid,d,'stop',true);return}
-  if((b=t.closest('[data-kcs]'))){KS.cs=b.dataset.kcs;if(KS.cs==='ok'){KS.cnc='';KS.imp=null}capSheet(aid,d,'close',true);return}
+  if((b=t.closest('[data-kcs]'))){KS.cs=b.dataset.kcs;if(KS.cs==='ok'){KS.cnc='';KS.imp=null;KS.sg=''}capSheet(aid,d,'close',true);return}
   if((b=t.closest('[data-kcnc]'))){KS.cnc=b.dataset.kcnc;KS.imp=null;capSheet(aid,d,'close',true);return}
   if((b=t.closest('[data-kimp]'))){const v=b.dataset.kimp==='1';KS.imp=v===cncImp(KS.cnc)?null:v;capSheet(aid,d,'close',true);return}
   if(!(b=t.closest('[data-ka]')))return;const k=b.dataset.ka;

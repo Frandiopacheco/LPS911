@@ -112,7 +112,9 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
       if(!(x.days||[]).includes(d)&&!cur&&!inSnap(x,d)){toast('Esta actividad no está programada este día.');return}
       /* «Cumplido» con menos de lo programado: se pregunta (todo se ejecutó, o excepción con motivo) */
       if(nst==='ok'&&shortOf(r)&&!(cur&&cur.status==='ok')){excAsk(stb,r,{all:true},rr=>writeDaily(d,pid,{recs:{[aid]:rr}}));return}
-      writeDaily(d,pid,{recs:{[aid]:r}});if(nst!=='ok'&&!r.cnc)toast('Elige la causa y, si quieres, agrega una foto.');return}
+      /* No cumplido / Parcial: la causa por defecto sale del motivo de «Detenido» de ese día (stopCnc, en-obra-tablero.js) */
+      let sgm='';if(nst!=='ok'&&!r.cnc){const sg=stopCnc(d,aid);if(sg){r.cnc=sg.cnc;r.imp=null;if(!String(r.note||'').trim()&&sg.note)r.note=sg.note;sgm=sg.mot}}
+      writeDaily(d,pid,{recs:{[aid]:r}});if(sgm)toast(`Causa tomada del motivo de detención («${sgm}»). Puedes cambiarla.`);else if(nst!=='ok'&&!r.cnc)toast('Elige la causa y, si quieres, agrega una foto.');return}
     if(t.closest('[data-cconf]')&&canDaily){confirmProp(d,aid);toast('Confirmado');return}
     const lvb=t.closest('[data-clv]');if(lvb&&canDaily){const k=lvb.dataset.clv;if(k==='stop')capSheet(aid,d,'stop');else kAct(aid,d,k);return}
     const dnb=t.closest('[data-cdone]');if(dnb&&canDaily){askDone(aid,d);return}
