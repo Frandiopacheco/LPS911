@@ -143,6 +143,8 @@ test('Presentar el día: tocar una barra filtra todas las láminas (subcontratis
   await ipr.locator('[data-pg="0"]').click();
   await expect(ipr.locator('.iprring b')).toHaveText('57%');
   noErrors(errors, 'filtros cruzados');
+});
+
 test('Indicadores › Cliente: solo el administrador lo ve; muestra el PPC contra lo emitido y no aparece en Semanal', async ({ page }) => {
   await page.setViewportSize({ width: 1500, height: 900 });
   const errors = await openApp(page, { tab: 'ind' });
