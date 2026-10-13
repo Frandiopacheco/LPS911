@@ -52,7 +52,7 @@ function ixdCard(D,d){const R=ixdRows(D);if(!R.length)return'';
     ${ixdSummary(R)}<div class="ixd-tools">${ixdToggle(false)}${ixdLegend()}</div>${ixdGroupsHtml(R,true,IXD_SC)}</div></div>`}
 
 /* ================= presentación del día ================= */
-const IPRD_PG=['Resumen','Subcontratistas','A verificar','Causas'];
+const IPRD_PG=['Resumen','Subcontratistas','A verificar','Causas','Jornada'];
 const ixdTag=rc=>impOf(rc)===false?'<span class="ixd-tag nimp" title="La causa no depende del subcontratista">No imputable</span>':'<span class="ixd-tag imp">Imputable al SC</span>';
 const ixdSort=(a,b)=>a.p.order-b.p.order||a.s.order-b.s.order||a.a.order-b.a.order||a.x.order-b.x.order;
 
@@ -74,7 +74,7 @@ function iprdDraw(o){
   let body;
   const flt=iprdFlt();
   if(!D0.tot.prog&&!D0.extras.length)body=`<div class="iprempty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
-  else if(IPR.pg===0)body=flt+iprdResumen(D,R)+iprdPisos(Dpi,Object.keys(D0.piA).length);else if(IPR.pg===1)body=flt+iprdSc(R);else if(IPR.pg===2)body=flt+iprdCriticos(D,ixdRows(D));else body=flt+iprdCausas(D);
+  else if(IPR.pg===0)body=flt+iprdResumen(D,R)+iprdPisos(Dpi,Object.keys(D0.piA).length);else if(IPR.pg===1)body=flt+iprdSc(R);else if(IPR.pg===2)body=flt+iprdCriticos(D,ixdRows(D));else if(IPR.pg===3)body=flt+iprdCausas(D);else body=iprdJornada(d);
   const st=o.querySelector('.iprc');const sc=st?st.scrollTop:0;
   o.innerHTML=bar+`<div class="iprc" style="--ipz:${IPR.z}">${body}</div><footer class="iprft">${IPRD_PG.map((t,i)=>`<i class="${IPR.pg===i?'on':''}"></i>`).join('')}<span>← → para cambiar de lámina</span></footer>`;
   const st2=o.querySelector('.iprc');if(st2&&st)st2.scrollTop=sc}

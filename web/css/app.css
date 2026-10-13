@@ -3726,3 +3726,20 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .ixd-ph{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.4em}
 .ixd-ph img{height:5.5em;width:auto;max-width:12em;object-fit:cover;border-radius:var(--r-xs);border:1px solid var(--line);cursor:zoom-in}
 .ixd-pisos.two{columns:2;column-gap:2em}
+
+/* Estado de la jornada (js/jornada.js): barras por SC de inicio y de cierre; solo variables de tema (claro y oscuro) */
+.jor-w{display:flex;flex-direction:column;gap:16px;margin:8px 0 12px}
+.jor-b{display:flex;flex-direction:column;gap:.45em}
+.jor-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.15em .8em;border-bottom:1px solid var(--line2);padding-bottom:.35em;margin-bottom:.2em}
+.jor-h b{font-size:1.05em}.jor-h span{font-size:.82em;color:var(--muted)}
+.jor-r{display:grid;grid-template-columns:minmax(7em,34%) 1fr 5.6em;gap:.7em;align-items:center;font-size:.92em;break-inside:avoid}
+.jor-r .nm{display:flex;align-items:center;gap:.5em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.jor-r .nm i{flex:0 0 auto;width:.8em;height:.8em;border-radius:3px}
+.jor-r .tr{position:relative;height:1.1em;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;overflow:hidden}
+.jor-r .fl{position:absolute;left:0;top:0;bottom:0;border-radius:999px}
+.jor-r.ok .fl{background:var(--ok)}.jor-r.warn .fl{background:var(--warn)}.jor-r.bad .fl{background:var(--bad)}
+.jor-r .ct{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.jor-r.ok .ct{color:var(--ok)}.jor-r.warn .ct{color:var(--warn)}.jor-r.bad .ct{color:var(--bad);font-weight:700}
+.jor-p{display:flex;flex-direction:column;gap:1em}.jor-bt{display:flex;gap:.6em;justify-content:flex-end;flex-wrap:wrap}
+.jor-2{display:grid;grid-template-columns:1fr 1fr;gap:2.2em;align-items:start}
+@media (max-width:900px){.jor-2{grid-template-columns:1fr}}

@@ -1,0 +1,45 @@
+// Estado de la jornada (js/jornada.js): gráfico por SC de quién marcó el inicio y quién cerró el día, imagen para WhatsApp y
+// lámina «Jornada» de Presentar del día. Los números salen de kState: deben coincidir con lo que muestra el reporte «Sin iniciar».
+import { test, expect } from '@playwright/test';
+import { openApp, noErrors, HOY } from './helpers.js';
+
+test('Jornada: inicio y cierre por SC, con los mismos números que «Sin iniciar»; imagen PNG y lámina de presentación', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'dash' });
+  // datos: lo programado hoy, por SC; el reporte «Sin iniciar» y la hoja deben coincidir
+  const t = await page.evaluate(() => {
+    const R = jorData(todayIso()), S0 = sinIniData();
+    return { n: R.ini.tot, sin: S0.nSin, tot: S0.tot, ini: R.ini.acts, cer: R.cer.acts, rows: R.rows.length, bySc: R.rows.map(r => [r.sc, r.n, r.ini, r.cer]) };
+  });
+  expect(t.n).toBe(t.tot);
+  expect(t.ini).toBe(t.tot - t.sin);          // con inicio marcado = programadas − sin inicio
+  expect(t.cer).toBeLessThanOrEqual(t.ini);   // no se cierra lo que no se inició (en los datos de prueba)
+  expect(t.rows).toBeGreaterThan(0);
+  // hoja desde el Tablero
+  await page.locator('#main [data-jor="open"]').click();
+  const sh = page.locator('#jsheet');
+  await expect(sh.locator('.jor-b[data-jf="ini"] .jor-r').first()).toBeVisible();
+  await expect(sh.locator('.jor-b[data-jf="cer"] .jor-r').first()).toBeVisible();
+  expect(await sh.locator('.jor-b[data-jf="ini"] .jor-r').count()).toBe(t.rows);
+  // orden: los que faltan primero
+  const cls = await sh.locator('.jor-b[data-jf="ini"] .jor-r').evaluateAll(L => L.map(e => e.classList.contains('ok')));
+  expect(cls).toEqual([...cls].sort((a, b) => Number(a) - Number(b)));
+  // imagen: PNG válido, con alto según las filas
+  const img = await page.evaluate(async () => { const b = await jorImage(todayIso()); const h = new Uint8Array(await b.arrayBuffer()).slice(0, 8); return { type: b.type, size: b.size, head: [...h] }; });
+  expect(img.type).toBe('image/png');
+  expect(img.size).toBeGreaterThan(3000);
+  expect(img.head).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  // sin compartir del sistema ni portapapeles: se descarga
+  const dl = page.waitForEvent('download');
+  await sh.locator('[data-jor="dl"]').click();
+  expect((await dl).suggestedFilename()).toBe('jornada_' + HOY + '.png');
+  await sh.locator('[data-kx]').click();
+  await expect(page.locator('#jsheet')).toHaveCount(0);
+  // lámina «Jornada» en Presentar del día
+  await page.evaluate(() => { U.tab = 'ind'; U.indMode = 'dia'; render(); });
+  await page.locator('#bipr').click();
+  await page.locator('#ipr [data-pg="4"]').click();
+  await expect(page.locator('#ipr .jor-2 .jor-b')).toHaveCount(2);
+  await expect(page.locator('#ipr [data-jor="share"]')).toBeVisible();
+  noErrors(errors, 'jornada');
+});
