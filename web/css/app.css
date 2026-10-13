@@ -3799,3 +3799,6 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
   .mapa.dockmin .mcqb{right:40px}
 }
 .lkpop.lkmenu .ib.pri{color:var(--ink);font-weight:600}
+/* franja de Equipos plegada: solo una cabecera delgada */
+.mfzbar .mfzh[aria-expanded="false"]{padding:3px 12px;font-size:12px}
+.mfzbar .mfzh[aria-expanded="false"] b{line-height:15px}

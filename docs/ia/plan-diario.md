@@ -62,3 +62,5 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Paneles laterales acoplados (el plano se achica, nada flota) y plegables a una franja vertical `.mstrip`, con estado guardado en `localStorage` (`lps.mpfold`, `lps.mrfold`, objeto `PFOLD`). El panel derecho no se abre ni pliega solo (movería el plano).
 - Panel derecho (`DOCK`): Por decidir y Cambios, más «Listo para la reunión». La pestaña **Cruces** solo aparece en el modo Interferencias, en la reunión (Plan), en «Recorrer» o para el SC (`cxDock`). Se quitó la Leyenda.
 - **Equipos** (`#mfzb`) vive en la franja acoplada de abajo `#mfzbar` (la crea `dockRender`).
+- La franja de Equipos es una sola fila (cada SC en una línea) y se pliega con su cabecera (`PFOLD.b`, `lps.mfzfold`; en el celular sigue `M.fzOpen`).
+- El visor vuelve a encuadrar el plano cuando cambia su tamaño (paneles que se abren o pliegan) mientras el usuario no lo haya movido (`v.touched`, lo marcan arrastrar, pellizcar, la rueda y `zoomTo`; `fit()` lo reinicia).
