@@ -237,13 +237,14 @@ function renderPBib(main){plSub();
     main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,plaEd()?'<button class="ib pri" id="plgocar">Cargar planos…</button>':'')}
       <div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="Buscar: código, título, archivo…" autocomplete="off" aria-label="Buscar planos">
         <select class="tin" id="plfp" aria-label="Piso"></select><select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>
-        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}<span class="plcnt" id="plcnt"></span></div>
+        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<span class="plcnt" id="plcnt"></span></div>
       <div id="pllist"></div></div></div>`;
     $('#plq',main).oninput=e=>{PLF.q=e.target.value;plList(main)};
     const ch=(sel,k)=>{$(sel,main).onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');
     const fa=$('#plfa',main);if(fa)fa.onchange=e=>{PLF.arch=e.target.checked;plList(main)};
     const gc=$('#plgocar',main);if(gc)gc.onclick=()=>goTab('pcar');
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
+    const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
     $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(b)plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
@@ -542,11 +543,41 @@ function plEdit(p,btn){
     <label>Piso<select class="tin" id="pleP"><option value="">General (sin piso)</option>${pisos().map(x=>`<option value="${x.id}"${x.id===p.pisoId?' selected':''}>${esc(x.code+' · '+x.name)}</option>`).join('')}</select></label>
     <label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>
     <p class="note">El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.</p>
-    <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}</div></div>`,
+    <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
     {sv:async()=>{const d={tit:$('#pleT').value.trim(),pisoId:$('#pleP').value,tipo:$('#pleK').value};try{await fcol('plb').doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
        try{await fcol('plb').doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
-     ua:async()=>{try{await fcol('plb').doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}}})}
+     ua:async()=>{try{await fcol('plb').doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
+     del:()=>plDelete([p])})}
+
+/* ---------- Eliminar planos (solo el administrador; docs/ia/planos.md › Eliminar) ----------
+   A diferencia de «Archivar», borra de verdad: el documento `plb/<id>` y todos sus archivos de Storage (todas las revisiones, también
+   las carpetas que dejó «Empezar en Rev. 1»: `planos/<id>/…` y `planos/<id>.<marca>/…`). Pide escribir BORRAR. */
+const plAdm=()=>!!me&&me.role==='admin';
+/** nombres de los archivos de Storage que empiezan con `prefix` (API REST, de 1000 en 1000) */
+async function plStList(prefix){const out=[];let tok='';
+  for(let i=0;i<100;i++){const r=await fetch(plApi()+'/o?prefix='+encodeURIComponent(prefix)+(tok?'&pageToken='+encodeURIComponent(tok):''),{headers:{Authorization:'Firebase '+await plTok()}});
+    if(!r.ok)throw new Error('Storage respondió '+r.status);const j=await r.json();(j.items||[]).forEach(x=>out.push(x.name));if(!j.nextPageToken)break;tok=j.nextPageToken}
+  return out}
+async function plStDel(path){const r=await fetch(plApi()+'/o/'+encodeURIComponent(path),{method:'DELETE',headers:{Authorization:'Firebase '+await plTok()}});
+  if(!r.ok&&r.status!==404)throw new Error(r.status===403?'Sin permiso para borrar en Storage (¿reglas de Storage instaladas?).':'Storage respondió '+r.status)}
+async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean);if(!list.length){toast('No hay planos en la lista.');return}
+  const one=list.length===1,lk=list.reduce((a,p)=>a+plLkN(p),0);
+  const v=await uiAsk({title:one?`¿Eliminar ${list[0].cod}?`:`¿Eliminar ${list.length} planos?`,tone:'danger',
+    text:`Se borran de verdad${one?'':' los planos que muestra la lista'}: la lámina, todas sus revisiones y sus archivos${lk?` (y ${lk} vínculo${lk===1?'':'s'})`:''}. No se puede deshacer. Si solo quieres ocultarla, usa «Archivar».`,
+    list:list.slice(0,12).map(p=>`${p.cod} · ${p.tit||''} · rev. ${p.rev||1}${p.revs&&p.revs.length?` (+${p.revs.length})`:''}`).concat(list.length>12?[`… y ${list.length-12} más`]:[]),
+    input:{label:'Escribe BORRAR para confirmar',required:true},ok:'Eliminar',cancel:'Cancelar'});
+  if(v==null)return;if(String(v).trim().toUpperCase()!=='BORRAR'){toast('No se eliminó: había que escribir BORRAR.');return}
+  if(PLV&&list.some(p=>p.id===PLV.id))plClose(true);
+  let ok=0,files=0,fail=0;toast(`Eliminando ${list.length} plano${list.length===1?'':'s'}…`);
+  for(const p of list){
+    try{await fcol('plb').doc(p.id).delete();ok++}catch(e){fail++;console.error('eliminar plano',p.id,e);continue}
+    /* archivos: primero el registro (desaparece al instante para todos); luego Storage, que puede tardar */
+    try{const names=[...await plStList(`planos/${p.id}/`),...await plStList(`planos/${p.id}.`)];
+      for(let i=0;i<names.length;i+=8)await Promise.all(names.slice(i,i+8).map(n=>plStDel(n).then(()=>files++)))}
+    catch(e){console.error('eliminar archivos',p.id,e)}
+    if(PLOFF[p.id]){await plOffDrop(PLOFF[p.id].base);delete PLOFF[p.id];plOffPut()}}
+  toast(fail?`Se eliminaron ${ok} de ${list.length} (${fail} con error).`:`Eliminado${one?'':'s'}: ${ok} plano${ok===1?'':'s'} y ${files} archivo${files===1?'':'s'}.`);requestRender()}
 
 /* ---------- Carga masiva ---------- */
 const PQ={items:[],run:false,stop:false,t0:0,done:0,secs:[]};

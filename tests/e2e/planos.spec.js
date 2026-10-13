@@ -756,3 +756,54 @@ test('revisiones: los vínculos pasan a la nueva revisión (y se recolocan si ah
   expect(await page.evaluate(() => [...__ST.keys()].some(k => k.startsWith('planos/ARQ_AG03/r1/')))).toBe(true); // lo de prueba no se borra
   noErrors(errors, 'revisiones');
 });
+
+test('eliminar planos (solo administrador): pide escribir BORRAR y borra la lámina con todos sus archivos', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); }; });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', ['P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', 'P02-P2D-ARQ-E05-AG04_PLANTA SEGUNDO PISO', 'ZZZ-P2D-ARQ-E05-AG09_CORTES']
+    .map(n => ({ name: `2459243-PTSA-XXX-${n}.pdf`, mimeType: 'application/pdf', buffer: pdf })));
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(3, { timeout: 150_000 });
+  const files = id => page.evaluate(id => [...__ST.keys()].filter(k => k.startsWith('planos/' + id + '/') || k.startsWith('planos/' + id + '.')).length, id);
+  expect(await files('ARQ_AG03')).toBeGreaterThan(5);
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  // desde ⋯ del visor: escribir otra cosa no borra nada
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.click('#plv [data-pv="edit"]');
+  page.once('dialog', d => d.accept('borar'));
+  await page.click('#pop [data-do="del"]');
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(true);
+  // con BORRAR: se va el registro y sus archivos; los demás quedan
+  await page.click('#plv [data-pv="edit"]');
+  page.once('dialog', d => d.accept('BORRAR'));
+  await page.click('#pop [data-do="del"]');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(false);
+  await expect.poll(() => files('ARQ_AG03')).toBe(0);
+  await expect(page.locator('#plv')).toHaveCount(0);
+  expect(await files('ARQ_AG04')).toBeGreaterThan(5);
+  // en lote: lo que muestra la lista filtrada
+  await page.fill('#plq', 'AG04');
+  await expect(page.locator('#plcnt')).toHaveText('1 plano');
+  let msg = ''; page.once('dialog', d => { msg = d.message(); d.accept('BORRAR'); });
+  await page.click('#pldel');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG04'))).toBe(false);
+  expect(msg).toContain('AG04'); expect(msg).not.toContain('AG09');
+  expect(await page.evaluate(() => !!__dbGet('plb', 'ARQ_AG09'))).toBe(true);
+  expect(await files('ARQ_AG09')).toBeGreaterThan(5);
+  noErrors(errors, 'eliminar');
+});
+
+test('eliminar planos: un editor no ve la opción', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', editar: false });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pbib'; render(); });
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'pbib');
+  await expect(page.locator('#pldel')).toHaveCount(0);
+  expect(await page.evaluate(() => plAdm())).toBe(false);
+  noErrors(errors, 'editor');
+});
