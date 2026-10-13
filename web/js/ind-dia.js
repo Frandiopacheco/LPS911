@@ -8,7 +8,6 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 let IXD_M='br';  // con qué PPC se clasifica: 'br' = bruto (cumplidos / verificados) · 'sc' = del SC (sin lo no imputable)
-let IXD_SC='';   // SC tocado en el gráfico: filtra «Incumplimientos del día» (solo en la sesión)
 const IXD_OK=.8, IXD_WARN=.5; // ≥ 80 % cumplió · 50–80 % parcial · < 50 % crítico
 const ixdBand=v=>v==null?'none':v>=IXD_OK?'ok':v>=IXD_WARN?'warn':'bad';
 const IXD_G={bad:{t:'Crítico',h:'menos de 50 % · verificar el cumplimiento a detalle'},warn:{t:'Parcial',h:'entre 50 % y 80 %'},ok:{t:'Cumplieron',h:'80 % o más'},none:{t:'Sin verificar',h:'nadie registró su cumplimiento'}};
@@ -28,7 +27,7 @@ function ixdRow(r,click,sel){const c=r.pi?{name:ixdNm(r),color:'var(--accent,#25
   const f=o.ver?100*o.ok/o.ver:0,h=o.ver?100*r.nimp/o.ver:0;
   const alt=IXD_M==='sc'?(r.br==null?'':` · bruto ${pct(r.br)}`):(r.nimp&&r.ps!=null?` · del SC ${pct(r.ps)}`:'');
   const tip=`${c.name}: ${o.ok} cumplidas, ${o.partial} parciales y ${o.no} no cumplidas de ${o.ver} verificadas (${o.prog} programadas)${r.nimp?` · ${r.nimp} no imputable${r.nimp===1?'':'s'} al SC`:''}`;
-  return`<div class="ixr ${r.band}${click&&sel!=null&&sel===key?' sel':''}${click&&sel&&sel!==key?' dim':''}"${click?` ${at}="${esc(key)}" role="button" tabindex="0"`:''} title="${esc(tip)}${click?' · clic: ver sus incumplimientos':''}">
+  return`<div class="ixr ${r.band}${click&&sel!=null&&sel===key?' sel':''}${click&&sel&&sel!==key?' dim':''}"${click?` ${at}="${esc(key)}" role="button" tabindex="0"`:''} title="${esc(tip)}${click?' · clic: filtrar toda la pantalla':''}">
     <span class="nm"><i style="background:${esc(c.color)}"></i>${esc(c.name)}</span>
     <span class="tr"><span class="fl ${r.band}" style="width:${f.toFixed(1)}%"></span>${h?`<span class="gh" style="left:${f.toFixed(1)}%;width:${h.toFixed(1)}%"></span>`:''}<i class="tk" style="left:50%"></i><i class="tk" style="left:80%"></i></span>
     <span class="vl">${r.v==null?`<b>—</b><small>${o.ver?'todo lo fallado fue ajeno al SC':o.prog+' programada'+(o.prog===1?'':'s')+' sin verificar'}</small>`:`<b>${pct(r.v)}</b><small>${o.ok} de ${o.ver}${alt}</small>`}</span></div>`}
@@ -48,8 +47,8 @@ const ixdLegend=()=>`<div class="ixd-leg"><span><i class="s ok"></i>Cumplido</sp
 
 /** tarjeta de la página (Indicadores › Diario) */
 function ixdCard(D,d){const R=ixdRows(D);if(!R.length)return'';
-  return`<div class="card ixd"><h2>Cumplimiento del día por subcontratista <span class="sub">${fmtD(d)} · toca un subcontratista para ver sus incumplimientos</span></h2><div class="pad">
-    ${ixdSummary(R)}<div class="ixd-tools">${ixdToggle(false)}${ixdLegend()}</div>${ixdGroupsHtml(R,true,IXD_SC)}</div></div>`}
+  return`<div class="card ixd"><h2>Cumplimiento del día por subcontratista <span class="sub">${fmtD(d)} · toca un subcontratista para filtrar toda la pantalla</span></h2><div class="pad">
+    ${ixdSummary(R)}<div class="ixd-tools">${ixdToggle(false)}${ixdLegend()}</div>${ixdGroupsHtml(R,true,IPRF.sc)}</div></div>`}
 
 /* ================= presentación del día ================= */
 const IPRD_PG=['Resumen','Subcontratistas','A verificar','Causas','Jornada'];
@@ -80,15 +79,23 @@ function iprdDraw(o){
   const st2=o.querySelector('.iprc');if(st2&&st)st2.scrollTop=sc}
 
 /** filas de un conjunto de `dayData` filtradas por SC y/o piso (los totales se recalculan igual que dayData) */
-function iprdFilt(D,sc,pi){if(!sc&&!pi)return D;const rows=D.rows.filter(r=>(!sc||r.sc===sc)&&(!pi||r.p.id===pi));return{...D,rows,...dayAgg(rows),extras:D.extras}}
+function iprdFilt(D,sc,pi){if(!sc&&!pi)return D;const rows=D.rows.filter(r=>(!sc||r.sc===sc)&&(!pi||r.p.id===pi));return{...D,rows,...dayAgg(rows),extras:D.extras.filter(i=>(!sc||(i.e&&i.e.sc)===sc)&&(!pi||(i.p&&i.p.id)===pi))}}
 /** franja con los filtros activos (se quitan con ✕) o la pista de que las barras se tocan */
 function iprdFlt(){const ch=[];
   if(IPRF.sc)ch.push(`<button class="ixd-fc" data-ip="fsc" data-v="${esc(IPRF.sc)}" title="Quitar este filtro"><i style="background:${esc(conOf(IPRF.sc).color)}"></i>${esc(ixdName(IPRF.sc))} ✕</button>`);
   if(IPRF.pi){const p=S.pis.get(IPRF.pi)||ARCH.pis.get(IPRF.pi);ch.push(`<button class="ixd-fc" data-ip="fpi" data-v="${esc(IPRF.pi)}" title="Quitar este filtro">${esc(p?p.code+' · '+p.name:'Piso')} ✕</button>`)}
   return ch.length?`<div class="ixd-flt"><span>Mostrando solo:</span>${ch.join('')}<button class="ib" data-ip="fclr">Quitar filtros</button></div>`:`<div class="ixd-flt hint"><span>Toca una barra de subcontratista o de piso para filtrar todas las láminas.</span></div>`}
+/** filas (una por piso) con la forma de las de subcontratistas, para ixdRow */
+function ixdPiRows(D){return Object.entries(D.piA).map(([id,o])=>{const p=S.pis.get(id)||ARCH.pis.get(id);if(!p)return null;const br=o.ver?o.ok/o.ver:null,ps=pscOf(o),v=IXD_M==='sc'?ps:br,nimp=o.nimp||0;
+    return{pi:p,sc:'',o,br,ps,v,band:ixdBand(v),nimp,imp:o.ver-o.ok-nimp}}).filter(Boolean).sort((a,b)=>a.pi.order-b.pi.order)}
+/** franja de filtros de la página (Diario y Semanal): los chips quitan su filtro al tocarlos (mismos data-ixsc / data-ixpi) */
+function ixdFltHtml(){const ch=[];
+  if(IPRF.sc)ch.push(`<button class="ixd-fc" data-ixsc="${esc(IPRF.sc)}" title="Quitar este filtro"><i style="background:${esc(conOf(IPRF.sc).color)}"></i>${esc(ixdName(IPRF.sc))} ✕</button>`);
+  if(IPRF.pi){const p=S.pis.get(IPRF.pi)||ARCH.pis.get(IPRF.pi);ch.push(`<button class="ixd-fc" data-ixpi="${esc(IPRF.pi)}" title="Quitar este filtro">${esc(p?p.code+' · '+p.name:'Piso')} ✕</button>`)}
+  return ch.length?`<div class="ixd-flt"><span>Mostrando solo:</span>${ch.join('')}<button class="ib" data-ixclr="1">Quitar filtros</button></div>`:''}
+
 /** comparativo de PPC por piso, al pie del Resumen (mismo semáforo que los subcontratistas; tocar un piso filtra todo) */
-function iprdPisos(D,nAll){const R=Object.entries(D.piA).map(([id,o])=>{const p=S.pis.get(id)||ARCH.pis.get(id);if(!p)return null;const br=o.ver?o.ok/o.ver:null,ps=pscOf(o),v=IXD_M==='sc'?ps:br,nimp=o.nimp||0;
-    return{pi:p,sc:'',o,br,ps,v,band:ixdBand(v),nimp,imp:o.ver-o.ok-nimp}}).filter(Boolean).sort((a,b)=>a.pi.order-b.pi.order);
+function iprdPisos(D,nAll){const R=ixdPiRows(D);
   if(!R.length||nAll<2)return'';
   return`<section class="iprcard"><h3>PPC por piso <small>${R.length} pisos · ${IXD_M==='sc'?'según el PPC del SC':'según el PPC bruto'}${IPRF.sc?' · solo '+esc(ixdName(IPRF.sc)):''} · toca un piso para filtrar</small></h3>
     <div class="ixd-pisos${R.length>8?' two':''}">${R.map(r=>ixdRow(r,true,IPRF.pi)).join('')}</div>

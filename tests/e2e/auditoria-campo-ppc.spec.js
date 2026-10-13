@@ -187,7 +187,7 @@ test('12 · Indicadores › Semanal muestra solo el plan semanal congelado, no l
   await expect(main).toContainText('Cumplimiento del plan semanal por subcontratista');
   for (const t of ['PPC diario (alerta', 'Cumplimiento en campo', 'Trabajo no programado por día', 'Causas registradas en campo'])
     await expect(main).not.toContainText(t);
-  const row = main.locator('.card', { hasText: 'Cumplimiento del plan semanal' }).locator('tbody tr').first();
+  const row = main.locator('.ixd-grp [data-ixsc="c1"]').first();
   await expect(row).toContainText('33%');
   expect(await page.evaluate(() => (wkScStats([S.wk.get('58_p1')]).c1 || {}).n)).toBe(3);
   noErrors(errors, 'semanal congelado');
