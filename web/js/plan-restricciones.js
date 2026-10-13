@@ -332,7 +332,15 @@ function actOne(aid){const x=aid&&S.act.get(aid);if(!x)return aid?`<option value
 function actFill(sel){if(!sel||sel.dataset.alzd)return;sel.dataset.alzd='1';const v=sel.value;sel.innerHTML=actOptions(v,sel.dataset.alz==='sc'?new Set(myScsI()):null);sel.value=v}
 /* filtros de la lista: a quién afecta, quién la registró, quién la libera y fechas */
 function rAff(r){const x=S.act.get(r.actId);const sc=r.sc||(x&&x.sc);return sc?conOf(sc).name:'—'}
-function rReg(r){const m=r.by&&MEM.get(r.by);if(m&&m.role==='sc'&&m.sc)return conOf(m.sc).name;return r.byName||(m&&m.name)||r.by||'—'}
+/* «Registró» (oct 2026, el filtro separaba a una misma persona en dos: por su nombre y por su correo): la persona se identifica por su
+   correo (`by`) y se muestra siempre igual para todos: la empresa si es de un SC (o capataz), si no su nombre actual del equipo; quien no puede
+   leer la lista del equipo (SC, áreas) usa el nombre que quedó en otras restricciones del mismo correo (`rByNames`) antes que el correo. */
+let RBYN=null;
+function rByNames(){const m=new Map();for(const r of S.res.values()){const b=r.by&&String(r.by).toLowerCase();if(b&&r.byName&&!m.has(b))m.set(b,r.byName)}
+  if(me&&me.email&&me.name)m.set(String(me.email).toLowerCase(),me.name);RBYN=m;return m}
+function rReg(r){const em=r.by&&String(r.by).toLowerCase();const m=em&&(MEM.get(r.by)||MEM.get(em));
+  if(m){const sc=(m.role==='sc'||m.role==='capataz')?memScs(m)[0]:'';if(sc)return conOf(sc).name;return m.name||r.byName||r.by||'—'}
+  return(em&&((RBYN||rByNames()).get(em)))||r.byName||r.by||'—'}
 /* Responsable de una restricción (oct 2026, pedido del dueño): solo alguien del equipo —una persona, una empresa (SC) o un área—,
    no texto libre. Se guarda el nombre en `resp` (como antes: exportes, Excel, avisos). Un nombre antiguo que no está en la lista se
    conserva y se marca hasta que se elija otro. La lista de personas viene de Equipo (members): la ven ingenieros y administrador;
@@ -374,7 +382,7 @@ function rFBar(all){const F=U.rF||{};const opts=(k,fn,lbl)=>{const v=[...new Set
     <label class="rfl">Liberada<span><input type="date" data-rf="l1" value="${esc(F.l1||'')}" aria-label="Liberada desde"> – <input type="date" data-rf="l2" value="${esc(F.l2||'')}" aria-label="Liberada hasta"></span></label>
     ${on?'<button class="ib" id="rfclr">Quitar filtros</button>':''}</div>`}
 function renderRestr(main){
-  const today=todayIso();const all=restrInScope();const types=P().restrTypes||[];
+  rByNames();const today=todayIso();const all=restrInScope();const types=P().restrTypes||[];
   const aw=n=>{const x=S.act.get(n);return x&&actStats(x).ini?weekOf(actStats(x).ini):null};
   let list=all.filter(r=>U.rfilter==='all'||(U.rfilter==='pend'?r.status!=='lib':r.status==='lib'));
   if(U.rAct)list=list.filter(r=>r.actId===U.rAct);list=list.filter(rFOk);

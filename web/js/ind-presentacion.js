@@ -5,26 +5,33 @@
    Es una capa encima de la app (#ipr): mientras está abierta, renderInd solo la redibuja (llegan datos en vivo).
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
-let IPR=null; // {pg: lámina 0..2, z: tamaño}
+let IPR=null; // {pg: lámina, z: tamaño, m: 'sem' (plan semanal, láminas de aquí) | 'dia' (cumplimiento del día: láminas de ind-dia.js)}
 const IPR_PG=['Resumen','Subcontratistas','Causas'];
-function iprStart(){if(IPR)return;IPR={pg:0,z:1};closePop();
+function iprStart(){if(IPR)return;IPR={pg:0,z:1,m:indM()==='sem'?'sem':'dia'};closePop();
   const o=document.createElement('div');o.id='ipr';o.className='ipr';o.setAttribute('role','dialog');o.setAttribute('aria-label','Indicadores semanales · presentación');document.body.appendChild(o);
   o.onclick=iprClick;o.onchange=iprChange;document.body.classList.add('ipr-on');
   try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
   iprDraw()}
-function iprStop(){if(!IPR)return;IPR=null;$('#ipr')?.remove();document.body.classList.remove('ipr-on');
+function iprStop(){if(!IPR)return;IPR=null;IPRF={sc:'',pi:''};$('#ipr')?.remove();document.body.classList.remove('ipr-on');
   try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}
   requestRender()}
-function iprClick(e){const t=e.target.closest('[data-ip]');if(!t)return;const k=t.dataset.ip;
+function iprClick(e){const im=e.target.closest('.ixd-ph img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:'))lightbox(im.src);return}
+  const xr=e.target.closest('[data-ixsc],[data-ixpi]');if(xr&&IPR&&IPR.m==='dia'){const sc=xr.dataset.ixsc,pi=xr.dataset.ixpi;if(sc!=null)IPRF.sc=IPRF.sc===sc?'':sc;else IPRF.pi=IPRF.pi===pi?'':pi;iprDraw();return}
+  const t=e.target.closest('[data-ip]');if(!t)return;const k=t.dataset.ip;
   if(k==='x'){iprStop();return}
-  if(k==='wp')U.week--;else if(k==='wn')U.week++;else if(k==='wt')U.week=curWeek();
+  if(k==='dp'||k==='dn'||k==='dt'){const nd=k==='dt'?null:shiftDay(indDay(),k==='dn'?1:-1);daySet(nd&&nd<todayIso()?nd:null)} /* modo 'dia' (ind-dia.js) */
+  else if(k==='fsc'||k==='fpi'){const f=k==='fsc'?'sc':'pi';IPRF[f]=IPRF[f]===t.dataset.v?'':t.dataset.v}
+  else if(k==='fclr')IPRF={sc:'',pi:''}
+  else if(k==='xm')IXD_M=t.dataset.xm==='sc'?'sc':'br';
+  else if(k==='wp')U.week--;else if(k==='wn')U.week++;else if(k==='wt')U.week=curWeek();
   else if(k==='z-'||k==='z+')IPR.z=Math.max(.8,Math.min(1.6,+(IPR.z+(k==='z+'?.1:-.1)).toFixed(2)));
   else if(t.dataset.pg!=null)IPR.pg=+t.dataset.pg;
   iprDraw()}
-function iprChange(e){const t=e.target;if(t.id==='iprpiso'){U.piso=t.value;U.pisoAll=!t.value;U.sector='';saveUI();requestRender()}}
+function iprChange(e){const t=e.target;if(t.id==='iprpiso'){IPRF.pi='';U.piso=t.value;U.pisoAll=!t.value;U.sector='';saveUI();requestRender()}}
 document.addEventListener('keydown',e=>{if(!IPR||(e.target&&/^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)))return;
   if(e.key==='Escape'){iprStop();return}
-  if(e.key==='ArrowRight'||e.key==='PageDown'){IPR.pg=Math.min(IPR_PG.length-1,IPR.pg+1);iprDraw();e.preventDefault()}
+  const np=(IPR.m==='dia'?IPRD_PG:IPR_PG).length;
+  if(e.key==='ArrowRight'||e.key==='PageDown'){IPR.pg=Math.min(np-1,IPR.pg+1);iprDraw();e.preventDefault()}
   else if(e.key==='ArrowLeft'||e.key==='PageUp'){IPR.pg=Math.max(0,IPR.pg-1);iprDraw();e.preventDefault()}});
 document.addEventListener('fullscreenchange',()=>{if(IPR&&!document.fullscreenElement)iprStop()});
 
@@ -46,13 +53,14 @@ function iprData(n){const vset=histPisoSet();
 
 const iprTone=v=>v==null?'':v>=.8?'ok':v>=.6?'warn':'bad';
 /** anillo grande del PPC */
-function iprRing(v,sub){const R=54,C=2*Math.PI*R;const f=v==null?0:Math.max(0,Math.min(1,v));
-  return`<div class="iprring ${iprTone(v)}"><svg viewBox="0 0 128 128" aria-hidden="true"><circle cx="64" cy="64" r="${R}" class="trk"/><circle cx="64" cy="64" r="${R}" class="val" stroke-dasharray="${(C*f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 64 64)"/></svg><div class="iprrv"><b>${pct(v)}</b><span>${sub}</span></div></div>`}
+function iprRing(v,sub,tone=iprTone(v)){const R=54,C=2*Math.PI*R;const f=v==null?0:Math.max(0,Math.min(1,v));
+  return`<div class="iprring ${tone}"><svg viewBox="0 0 128 128" aria-hidden="true"><circle cx="64" cy="64" r="${R}" class="trk"/><circle cx="64" cy="64" r="${R}" class="val" stroke-dasharray="${(C*f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 64 64)"/></svg><div class="iprrv"><b>${pct(v)}</b><span>${sub}</span></div></div>`}
 /** barras horizontales en HTML (crecen con la pantalla, a diferencia del SVG) */
 function iprBars(rows){if(!rows.length)return'';const mx=Math.max(1,...rows.map(r=>r.max??r.v));
   return`<div class="iprbars">${rows.map(r=>`<div class="iprb"><span class="nm">${r.color?`<i style="background:${esc(r.color)}"></i>`:''}${esc(r.label)}</span><span class="tr"><span class="fl ${r.tone||''}" style="width:${Math.max(r.v>0?1.5:0,100*r.v/mx).toFixed(1)}%"></span></span><span class="vl"><b>${r.fmt?r.fmt(r.v):r.v}</b>${r.sub?`<small>${r.sub}</small>`:''}</span></div>`).join('')}</div>`}
 
 function iprDraw(){const o=$('#ipr');if(!IPR||!o)return;if(U.tab!=='ind'){iprStop();return}
+  if(IPR.m==='dia'){iprdDraw(o);return} /* cumplimiento del día: js/ind-dia.js */
   const n=U.week,D=iprData(n);const wd=weekDays(n);
   const ps=pisos();
   const bar=`<header class="iprbar">
@@ -73,7 +81,7 @@ function iprDraw(){const o=$('#ipr');if(!IPR||!o)return;if(U.tab!=='ind'){iprSto
 function iprResumen(n,D){const c=D.cur,t=D.tot;const dlt=c&&D.prev?Math.round((c.ppc-D.prev.ppc)*100):null;
   const sinEv=t.n-t.ev;
   const kpi=(k,v,s,tone)=>`<div class="iprk ${tone||''}"><span>${k}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const hist=D.ppcs.filter(x=>x.wk<=n).slice(-12);
+  const hist=ppcHistAll(D.ppcs,n).slice(-12);
   let h=`<div class="iprhero">
     ${iprRing(c?c.ppc:null,`PPC semana ${n}`)}
     <div class="iprks">
@@ -86,7 +94,7 @@ function iprResumen(n,D){const c=D.cur,t=D.tot;const dlt=c&&D.prev?Math.round((c
       ${kpi('Promedio',pct(D.avg),D.full.length?`${D.full.length} semanas completas`:'')}
     </div></div>`;
   h+=`<div class="iprgrid${!U.piso&&D.pisoP.length>1?'':' one'}">
-    <section class="iprcard"><h3>PPC semanal histórico <small>últimas ${hist.length} semanas</small></h3>${hist.length?linesLegend()+`<div class="iprsvg chart">${svgLines(ppcHistPts(hist),{h:300,minW:820})}</div>`:'<div class="empty">Sin semanas evaluadas.</div>'}</section>
+    <section class="iprcard"><h3>PPC semanal histórico <small>últimas ${hist.length} semanas</small></h3>${hist.length?linesLegend()+`<div class="iprsvg chart">${svgLines(hist,{h:300,minW:820})}</div>`:'<div class="empty">Sin semanas evaluadas.</div>'}</section>
     ${!U.piso&&D.pisoP.length>1?`<section class="iprcard"><h3>PPC por piso <small>semana ${n}</small></h3>${iprBars(D.pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,fmt:pct,tone:iprTone(x.st.ppc),sub:x.st.ok+' de '+x.st.n})))}</section>`:''}
   </div>`;
   return h}

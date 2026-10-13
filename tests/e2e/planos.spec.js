@@ -11,7 +11,7 @@ const tabsVisibles = page => page.$$eval('#tabs button[data-tab]', bs => bs.filt
 /** PDF mínimo de una página (A3 apaisado) con un marco, líneas y el rótulo «ARQUITECTURA · AG03» */
 function pdfDemo() {
   const W = 1191, H = 842;
-  const ops = ['2 w 20 20 ' + (W - 40) + ' ' + (H - 40) + ' re S'];
+  const ops = ['2 w 10 10 ' + (W - 20) + ' ' + (H - 20) + ' re S']; // marco pegado al borde: hoja ya bien exportada, no se recorta
   for (let i = 1; i < 30; i++) ops.push(`0.5 w ${40 + i * 37} 60 m ${40 + i * 37} ${H - 60} l S`);
   ops.push('BT /F1 14 Tf 800 60 Td (ARQUITECTURA) Tj ET', 'BT /F1 48 Tf 1000 50 Td (AG03) Tj ET', 'BT /F1 9 Tf 60 400 Td (CUARTO DE BOMBAS) Tj ET');
   const content = ops.join('\n');
@@ -110,7 +110,7 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
   const d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
-  expect(d).toMatchObject({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', tipo: 'Planta', T: 1024, rot: { cod: 'AG03', ok: true } });
+  expect(d).toMatchObject({ cod: 'AG03', disc: 'ARQ', rev: 1, tipo: 'Planta', T: 1024, rot: { cod: 'AG03', ok: true } }); expect(d.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r1$/); // carpeta única por carga
   expect(d.pisoId).toBe(await page.evaluate(() => [...S.pis.values()].find(p => p.code === 'P1')?.id || ''));
   // A3 a 300 dpi ≈ 4961 px de ancho → 4 niveles; están todos los mosaicos, la miniatura y el PDF original
   expect(d.W).toBeGreaterThan(4900); expect(d.Z).toBe(4);
@@ -129,6 +129,10 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await expect.poll(() => page.evaluate(() => window.__GETS.filter(p => /\/0\/\d+_\d+\.webp$/.test(p)).length)).toBeGreaterThan(0);
   const det = await page.evaluate(() => window.__GETS.filter(p => /\/0\//.test(p)).length);
   expect(det).toBeLessThan(exp.filter(p => /\/0\//.test(p)).length);
+  // degradado de calidad: se piden todos los niveles entre el del zoom y el grueso (sin salto de golpe) y nunca más del tope de mosaicos
+  const nd = await page.evaluate(() => { const n = [...PLV.tv.need]; return { tot: n.length, lv: [...new Set(n.map(k => k.split('/')[0]))].sort() }; });
+  expect(nd.lv).toEqual(['0', '1', '2']);
+  expect(nd.tot).toBeLessThanOrEqual(48);
   await page.keyboard.press('Escape');
   await expect(page.locator('#plv')).toHaveCount(0);
   // otro archivo con el mismo código: nueva revisión (la anterior queda en el historial)
@@ -138,7 +142,7 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plqtab tbody tr').last().locator('.plst')).toContainText('rev. 2', { timeout: 90_000 });
   const d2 = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
-  expect(d2.rev).toBe(2); expect(d2.base).toBe('planos/ARQ_AG03/r2'); expect(d2.revs.map(r => r.rev)).toEqual([1]);
+  expect(d2.rev).toBe(2); expect(d2.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r2$/); expect(d2.revs.map(r => r.rev)).toEqual([1]);
   // el mismo archivo otra vez: «ya está cargado» y no se procesa
   await page.setInputFiles('#plfile', { name: name.replace('.pdf', ' REV.pdf'), mimeType: 'application/pdf', buffer: pdf });
   noErrors(errors, 'carga');
@@ -164,7 +168,7 @@ test.describe('sin conexión (tablet)', () => {
     await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toContainText('sin conexión', { timeout: 30_000 });
     const r = await page.evaluate(() => ({ all: plPaths(PLB.get('ARQ_AG03')), got: [...new Set(window.__GETS)], off: PLOFF.ARQ_AG03 }));
     expect(r.got.sort()).toEqual(r.all.sort());
-    expect(r.off).toMatchObject({ rev: 1, base: 'planos/ARQ_AG03/r1' });
+    expect(r.off).toMatchObject({ rev: 1, base: d.base });
     noErrors(errors, 'tablet');
   });
 });
@@ -424,7 +428,7 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await expect.poll(nLk).toBe(1);
   const lk = await page.evaluate(() => PLB.get('ARQ_AG03').lk[0]);
   expect(lk.to).toBe('IS_IS06'); expect(lk.t).toBe('Corte Z'); expect(lk.v.k).toBeCloseTo(4, 1); expect(lk.v.nx).toBeCloseTo(0.6, 2);
-  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); expect((lk.x1 - lk.x0) * W).toBeCloseTo(200, 0); // zona del tamaño de una burbuja
+  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); const zw = (lk.x1 - lk.x0) * W; expect(zw).toBeGreaterThanOrEqual(12); expect(zw).toBeLessThanOrEqual(80); // zona del tamaño de una burbuja (≈ 14 px de pantalla, tope 40 px del plano a cada lado)
   expect(lk.by).toBeTruthy(); expect(lk.arch).toBeUndefined();
   expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
   await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
@@ -571,4 +575,270 @@ test('vínculos: la ventana de confirmar (Borrar, Texto) y los avisos se ven enc
   const top = await page.evaluate(() => { const t = document.getElementById('toast').getBoundingClientRect(); const el = document.elementFromPoint(t.left + t.width / 2, t.top + t.height / 2); return !!el && !!el.closest('#toast'); });
   expect(top).toBe(true);
   noErrors(errors, 'vínculos ventana');
+});
+
+test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el PDF original; al moverse se cancela', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); window.__GETS.length = 0; });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(600);
+  // vista general: los mosaicos alcanzan, no se baja el PDF
+  expect(await page.evaluate(() => PLV.tv.sharp())).toBeNull();
+  expect(await page.evaluate(() => __GETS.some(p => p.endsWith('orig.pdf')))).toBe(false);
+  // zoom profundo y quieto: aparece la capa nítida, dibujada con la vista actual
+  await page.evaluate(() => PLV.tv.setView({ nx: 0.4, ny: 0.5, k: 12 }));
+  await expect.poll(() => page.evaluate(() => PLV.tv.sharp()), { timeout: 15_000 }).not.toBeNull();
+  const a = await page.evaluate(() => ({ sh: PLV.tv.sharp(), s: PLV.tv.s, x: PLV.tv.x, dpr: devicePixelRatio, cw: document.querySelector('.plvc').clientWidth }));
+  expect(a.sh.s).toBe(a.s); expect(a.sh.x).toBe(a.x);
+  // dibuja con margen alrededor de la pantalla (para desplazarse sin ver el cambio a baja resolución)
+  expect(a.sh.w).toBeGreaterThan(a.cw * a.dpr * 1.3); expect(a.sh.rect.x).toBeLessThan(0); expect(a.sh.rect.x + a.sh.rect.w).toBeGreaterThan(a.cw);
+  expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
+  // con el dedo/ratón apoyado no se dibuja nada nuevo (no compite con el gesto)
+  await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
+    h.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 3, clientX: r.left + 300, clientY: r.top + 300, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    h.dispatchEvent(new PointerEvent('pointermove', { pointerId: 3, clientX: r.left + 200, clientY: r.top + 250, pointerType: 'mouse', isPrimary: true, bubbles: true })); });
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => PLV.tv.sharpBusy())).toBe(false);
+  expect((await page.evaluate(() => PLV.tv.sharp())).x).toBe(a.x); // la capa anterior sigue (se mueve con el plano), no se rehízo
+  await page.evaluate(() => { const h = document.querySelector('.plvc'), r = h.getBoundingClientRect();
+    h.dispatchEvent(new PointerEvent('pointerup', { pointerId: 3, clientX: r.left + 200, clientY: r.top + 250, pointerType: 'mouse', isPrimary: true, bubbles: true })); });
+  // un desplazamiento corto queda dentro de la zona nítida: al soltar no se redibuja nada (sin parpadeo)
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => PLV.tv.sharpBusy())).toBe(false);
+  expect((await page.evaluate(() => PLV.tv.sharp())).n).toBe(a.sh.n);
+  // uno largo sale de la zona: al detenerse se redibuja en la nueva posición (el PDF ya no se vuelve a bajar)
+  await page.evaluate(() => { const v = PLV.tv.getView(); PLV.tv.setView({ ...v, nx: v.nx - 0.08 }); });
+  await expect.poll(() => page.evaluate(() => { const s = PLV.tv.sharp(); return s && s.x === PLV.tv.x && s.y === PLV.tv.y; }), { timeout: 15_000 }).toBe(true);
+  expect(await page.evaluate(() => __GETS.filter(p => p.endsWith('orig.pdf')).length)).toBe(1);
+  // al alejar a la vista general se suelta (memoria)
+  await page.evaluate(() => PLV.tv.fitView());
+  await expect.poll(() => page.evaluate(() => PLV.tv.sharp())).toBeNull();
+  noErrors(errors, 'nitidez');
+});
+
+test('recorte al marco: lo que está fuera del marco no entra; sin marco o con la opción apagada, hoja completa', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  // A3 con marco a 60 pt del borde izquierdo y un texto girado fuera de él (como «FORMATO 120 x 90 Esc 1/100»)
+  const mk = (marco) => {
+    const W = 1191, H = 842; const ops = ['BT /F1 30 Tf 0 1 -1 0 40 100 Tm (FORMATO 120 x 90) Tj ET'];
+    if (marco) ops.push('2 w 60 20 ' + (W - 80) + ' ' + (H - 40) + ' re S');
+    for (let i = 1; i < 20; i++) ops.push(`0.5 w ${100 + i * 50} 80 m ${100 + i * 50} ${H - 300} l S`);
+    ops.push('BT /F1 48 Tf 1000 50 Td (AG03) Tj ET');
+    const content = ops.join('\n');
+    const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+    let out = '%PDF-1.4\n'; const offs = [];
+    objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+    const x = out.length;
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+    return Buffer.from(out, 'latin1');
+  };
+  await page.setInputFiles('#plfile', [
+    { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: mk(true) },
+    { name: '2459243-PTSA-XXX-P02-P2D-ARQ-E05-AG04_PLANTA SEGUNDO PISO.pdf', mimeType: 'application/pdf', buffer: mk(false) },
+  ]);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  await expect(page.locator('#plqtab')).toContainText('recortado al marco');
+  await expect(page.locator('#plqtab')).toContainText('sin marco claro');
+  const a = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03')), b = await page.evaluate(() => __dbGet('plb', 'ARQ_AG04'));
+  // el marco: x 60→1171 pt, y 20→822 pt (con medio trazo de holgura); el texto de la izquierda (x≈10–40) queda fuera
+  expect(a.crop.x0).toBeGreaterThan(55); expect(a.crop.x0).toBeLessThan(60); expect(a.crop.x1).toBeGreaterThan(1171); expect(a.crop.x1).toBeLessThan(1176);
+  expect(a.W).toBeLessThan(b.W); expect(a.mm[0]).toBeGreaterThan(390); expect(a.mm[0]).toBeLessThan(395);   // ≈ 1117 pt
+  expect(b.crop).toBeNull(); expect(b.mm[0]).toBe(420);
+  // con la opción apagada no se recorta (nueva revisión de AG03, hoja completa) y se recuerda
+  await page.uncheck('#plqbar [data-q="crop"]');
+  expect(await page.evaluate(() => store.get('plcrop', true))).toBe(false);
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO (2).pdf', mimeType: 'application/pdf', buffer: mk(true) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect.poll(() => page.evaluate(() => (__dbGet('plb', 'ARQ_AG03') || {}).rev), { timeout: 90_000 }).toBe(2);
+  const a2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(a2.crop).toBeNull(); expect(a2.mm[0]).toBe(420); expect(a2.revs[0].crop.x0).toBeGreaterThan(55); // la revisión anterior conserva su recorte
+  await page.evaluate(() => store.set('plcrop', true));
+  noErrors(errors, 'recorte');
+});
+
+/** PDF de 1200 × 900 mm (3402 × 2551 pt) con un marco doble en el rectángulo [x0,y0,x1,y1] (pt, origen arriba a la izquierda),
+ *  ejes dentro del marco y, si se pide, cosas fuera: cuadraditos en las esquinas de la hoja, texto vertical y líneas sueltas */
+function pdfMarco({ box, extras = [], marco = true }) {
+  const W = 3402, H = 2551, Y = y => H - y; const ops = [];
+  if (marco) { const [x0, y0, x1, y1] = box;
+    ops.push(`3 w ${x0} ${Y(y1)} ${x1 - x0} ${y1 - y0} re S`, `1 w ${x0 + 25} ${Y(y1 - 25)} ${x1 - x0 - 50} ${y1 - y0 - 50} re S`);
+    for (let i = 1; i < 8; i++) { const x = x0 + (x1 - x0) * i / 8; ops.push(`0.5 w ${x} ${Y(y0 + 60)} m ${x} ${Y(y1 - 60)} l S`); } }
+  for (const e of extras) ops.push(e);
+  const content = ops.join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let out = '%PDF-1.4\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(out, 'latin1');
+}
+
+test('recorte al marco: encuentra el marco aunque la lámina ocupe poco de la hoja o haya líneas sueltas fuera', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(() => plPdfJs());
+  const frameOf = buf => page.evaluate(async b64 => { const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const pg = await (await pdfjsLib.getDocument({ data: bin }).promise).getPage(1); return plFrame(pg); }, buf.toString('base64'));
+  const near = (c, box, tol = 8) => { expect(c, 'sin marco').not.toBeNull(); ['x0', 'y0', 'x1', 'y1'].forEach((k, i) => expect(Math.abs(c[k] - box[i]), k).toBeLessThan(tol)); };
+  const sueltos = ['10 10 6 6 re f', '3380 2530 6 6 re f', '3380 10 6 6 re f', 'BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'];
+  // A: la lámina ocupa ~30 % de la hoja (objetos invisibles lejos la achicaron) — antes no se recortaba
+  let box = [1400, 850, 2420, 1615];
+  near(await frameOf(pdfMarco({ box, extras: sueltos })), box);
+  // B: líneas largas sueltas fuera del marco (más largas que el marco) — antes el rectángulo «no cerraba»
+  box = [700, 500, 2700, 2000];
+  near(await frameOf(pdfMarco({ box, extras: [...sueltos, '2 w 100 2400 m 3300 2400 l S', '2 w 3300 100 m 3300 2450 l S'] })), box);
+  // C: el marco ya llena la hoja → nada que recortar
+  expect(await frameOf(pdfMarco({ box: [10, 10, 3392, 2541] }))).toBeNull();
+  // D: sin marco (solo líneas sueltas) → no inventa uno
+  expect(await frameOf(pdfMarco({ box, marco: false, extras: ['1 w 200 300 m 3000 300 l S', '1 w 200 300 m 200 2000 l S'] }))).toBeNull();
+  noErrors(errors, 'recorte');
+});
+
+test('revisiones: los vínculos pasan a la nueva revisión (y se recolocan si ahora viene recortada); «Empezar en Rev. 1» la deja limpia', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const nombre = s => `2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO${s}.pdf`;
+  const cargar = async (buf, s) => {
+    if (await page.locator('#plqbar [data-q="clr"]').count()) await page.click('#plqbar [data-q="clr"]');
+    await page.setInputFiles('#plfile', { name: nombre(s), mimeType: 'application/pdf', buffer: buf });
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+    return page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  };
+  // rev. 1 sin recortar (opción apagada): hoja de 1200 × 900 con el marco corrido a la derecha, como las exportadas con «Extensión»
+  const box = [200, 20, 3402, 2420], hoja = pdfMarco({ box, extras: ['BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'] });
+  await page.evaluate(() => store.set('plcrop', false)); await page.evaluate(() => render());
+  let d = await cargar(hoja, '');
+  expect(d.rev).toBe(1); expect(d.crop).toBeNull();
+  // un vínculo en el centro del marco (coordenadas de la hoja completa)
+  const cx = (box[0] + box[2]) / 2 / 3402, cy = (box[1] + box[3]) / 2 / 2551;
+  await page.evaluate(([cx, cy]) => fcol('plb').doc('ARQ_AG03').update({ lk: [{ id: 'k1', x0: cx - 0.01, y0: cy - 0.01, x1: cx + 0.01, y1: cy + 0.01, to: 'ARQ_AG03', v: null, t: 'A' }] }), [cx, cy]);
+  // rev. 2 recortada al marco: el vínculo pasa y queda otra vez en el centro (ahora del recorte)
+  await page.evaluate(() => store.set('plcrop', true)); await page.evaluate(() => render());
+  d = await cargar(hoja, ' R2');
+  expect(d.rev).toBe(2); expect(d.crop).not.toBeNull(); expect(d.revs.length).toBe(1);
+  expect(d.lk.length).toBe(1);
+  expect((d.lk[0].x0 + d.lk[0].x1) / 2).toBeCloseTo(0.5, 2); expect((d.lk[0].y0 + d.lk[0].y1) / 2).toBeCloseTo(0.5, 2);
+  // rev. 3 igual de recortada: el vínculo pasa sin cambios
+  const lk2 = d.lk[0];
+  d = await cargar(hoja, ' R3');
+  expect(d.rev).toBe(3); expect(d.lk[0]).toEqual(lk2);
+  // «Empezar en Rev. 1» (solo admin): pide confirmar, queda rev. 1 sin historial, vínculos ni calibración, en otra carpeta
+  await page.evaluate(() => fcol('plb').doc('ARQ_AG03').update({ cal: { mpp: 0.01, rev: 3 } }));
+  if (await page.locator('#plqbar [data-q="clr"]').count()) await page.click('#plqbar [data-q="clr"]');
+  await page.setInputFiles('#plfile', { name: nombre(' APROBADO'), mimeType: 'application/pdf', buffer: hoja });
+  await page.check('#plqbar [data-q="fresh"]');
+  let aviso = ''; page.once('dialog', dl => { aviso = dl.message(); dl.accept(); });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+  expect(aviso).toContain('Rev. 1'); expect(aviso).toContain('AG03 · rev. 3 (+2 anteriores) · 1 vínculo');
+  await expect(page.locator('#plqtab')).toContainText('reemplazó a la de prueba');
+  d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  expect(d.rev).toBe(1); expect(d.revs).toEqual([]); expect(d.lk).toBeUndefined(); expect(d.cal).toBeUndefined();
+  expect(d.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r1$/);
+  expect(await page.evaluate(b => [...__ST.keys()].some(k => k.startsWith(b + '/')), d.base)).toBe(true);
+  expect(await page.evaluate(() => [...__ST.keys()].filter(k => k.startsWith('planos/ARQ_AG03.') && k.endsWith('/orig.pdf')).length)).toBe(4); // lo de prueba no se borra (4 cargas, 4 carpetas)
+  noErrors(errors, 'revisiones');
+});
+
+test('eliminar planos (solo administrador): pide escribir BORRAR y borra la lámina con todos sus archivos', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); }; });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', ['P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', 'P02-P2D-ARQ-E05-AG04_PLANTA SEGUNDO PISO', 'ZZZ-P2D-ARQ-E05-AG09_CORTES']
+    .map(n => ({ name: `2459243-PTSA-XXX-${n}.pdf`, mimeType: 'application/pdf', buffer: pdf })));
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(3, { timeout: 150_000 });
+  const files = id => page.evaluate(id => [...__ST.keys()].filter(k => k.startsWith('planos/' + id + '/') || k.startsWith('planos/' + id + '.')).length, id);
+  expect(await files('ARQ_AG03')).toBeGreaterThan(5);
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  // desde ⋯ del visor: escribir otra cosa no borra nada
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.click('#plv [data-pv="edit"]');
+  page.once('dialog', d => d.accept('borar'));
+  await page.click('#pop [data-do="del"]');
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(true);
+  // con BORRAR: se va el registro y sus archivos; los demás quedan
+  await page.click('#plv [data-pv="edit"]');
+  page.once('dialog', d => d.accept('BORRAR'));
+  await page.click('#pop [data-do="del"]');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(false);
+  await expect.poll(() => files('ARQ_AG03')).toBe(0);
+  await expect(page.locator('#plv')).toHaveCount(0);
+  expect(await files('ARQ_AG04')).toBeGreaterThan(5);
+  // en lote: lo que muestra la lista filtrada
+  await page.fill('#plq', 'AG04');
+  await expect(page.locator('#plcnt')).toHaveText('1 plano');
+  let msg = ''; page.once('dialog', d => { msg = d.message(); d.accept('BORRAR'); });
+  await page.click('#pldel');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG04'))).toBe(false);
+  expect(msg).toContain('AG04'); expect(msg).not.toContain('AG09');
+  expect(await page.evaluate(() => !!__dbGet('plb', 'ARQ_AG09'))).toBe(true);
+  expect(await files('ARQ_AG09')).toBeGreaterThan(5);
+  noErrors(errors, 'eliminar');
+});
+
+test('eliminar y volver a cargar: la carga nueva va a otra carpeta (la caché del equipo no devuelve los mosaicos viejos)', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); }; });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const nombre = '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf';
+  const hoja = pdfMarco({ box: [200, 20, 3402, 2420], extras: ['BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'] });
+  // primera carga sin recortar (como con una versión anterior de la app)
+  await page.evaluate(() => store.set('plcrop', false)); await page.evaluate(() => render());
+  await page.setInputFiles('#plfile', { name: nombre, mimeType: 'application/pdf', buffer: hoja });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+  const d1 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  // se elimina y se vuelve a cargar, ahora recortada: otra vez Rev. 1, pero en OTRA carpeta
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  page.once('dialog', dl => dl.accept('BORRAR'));
+  await page.click('#pldel');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(false);
+  await page.evaluate(() => { store.set('plcrop', true); U.tab = 'pcar'; render(); });
+  await page.click('#plqbar [data-q="clr"]').catch(() => {});
+  await page.setInputFiles('#plfile', { name: nombre, mimeType: 'application/pdf', buffer: hoja });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab')).toContainText('recortado al marco', { timeout: 120_000 });
+  const d2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(d2.rev).toBe(1); expect(d2.crop).not.toBeNull();
+  expect(d2.base).not.toBe(d1.base);   // antes: las dos eran planos/ARQ_AG03/r1 y el equipo mostraba los mosaicos viejos
+  noErrors(errors, 'recargar');
+});
+
+test('eliminar planos: un editor no ve la opción', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', editar: false });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pbib'; render(); });
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'pbib');
+  await expect(page.locator('#pldel')).toHaveCount(0);
+  expect(await page.evaluate(() => plAdm())).toBe(false);
+  noErrors(errors, 'editor');
 });

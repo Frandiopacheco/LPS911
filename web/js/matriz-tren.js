@@ -6,7 +6,7 @@
    - el Recorrido: la checklist sigue el tren (`mxSeqCmp`).
    Las filas reales del lookahead NO se reordenan. Ver docs/ia/matriz.md › Tren de trabajo. */
 
-const MXT={tipo:'',q:'',drag:null};
+const MXT={tipo:'',q:'',drag:null,init:false};
 const mxTrOn=c=>c&&!c.arch&&typeof c.tr==='number';
 /* actividades del tren, en orden */
 function mxTrList(){return mxCatAct0().filter(mxTrOn).sort((a,b)=>a.tr-b.tr||a.name.localeCompare(b.name))}
@@ -43,14 +43,15 @@ async function mxTrImport(){if(!isAdmin)return;
   mxTrWrite(chg,`Tren cargado: ${ids.length} actividades`)}
 
 function renderMxTren(main,head){const ed=mxEd();const L=mxTrList();const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
+  if(!MXT.init&&tipos.length){MXT.init=true;MXT.tipo=tipos[0].id}
   if(MXT.tipo&&!MX.tipo.has(MXT.tipo))MXT.tipo='';const TS=MXT.tipo?mxTrTipoSet(MXT.tipo):null;
   const tipN=new Map();for(const t of tipos)for(const k of t.acts||[])tipN.set(k,(tipN.get(k)||0)+1);
   const vis=L.map((c,i)=>({c,i})).filter(r=>!TS||TS.has(r.c.id));
   const q=mnk(MXT.q);const fuera=mxCatAct0().filter(c=>!mxTrOn(c)&&(!TS||TS.has(c.id))&&(!q||mnk(c.name).includes(q)||mnk(conOf(c.sc).name).includes(q))).sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name)||a.name.localeCompare(b.name));
   const row=({c,i},n)=>{const co=conOf(c.sc);return`<li class="mxtr${ed?' dg':''}" data-tri="${i}"${ed?' draggable="true"':''}><span class="mxtrn">${n}</span><i class="mxtrd" style="background:${esc(co.color)}"></i><span class="mxtrt"><b>${esc(c.name)}</b><small>${esc(co.name)}${tipN.get(c.id)?` · en ${tipN.get(c.id)} ${tipN.get(c.id)===1?'tipo':'tipos'}`:''}</small></span>${ed?`<span class="mxtrb"><button class="ab" data-trup="${i}" aria-label="Subir"${n===1?' disabled':''}>↑</button><button class="ab" data-trdn="${i}" aria-label="Bajar"${n===vis.length?' disabled':''}>↓</button><button class="ab" data-trdel="${esc(c.id)}" aria-label="Quitar del tren" title="Quitar del tren">×</button></span>`:''}</li>`};
   main.innerHTML=`<div class="scroll"><div class="wrap mxwrap">${mxHd(head,mxViewSeg())}
-   ${helpBox('Qué es el tren de trabajo',`<p>Es la secuencia constructiva general: el orden en que se ejecutan las actividades en cualquier ambiente. Cada tipo de ambiente usa solo las que le aplican, en este mismo orden.</p><p>Se usa para ubicar las filas de «Faltan programar» dentro de cada ambiente del Lookahead (después de la actividad que la antecede en el tren) y para ordenar la checklist del Recorrido. Las filas que ya existen en el lookahead no se reordenan.</p>`)}
-   <div class="fbar"><label class="note" for="mxtrtp">Ver como queda en</label><select id="mxtrtp" class="tin"><option value="">Todos los tipos</option>${tipos.map(t=>`<option value="${esc(t.id)}"${t.id===MXT.tipo?' selected':''}>${esc(t.name)}</option>`).join('')}</select>
+   ${helpBox('Qué es el tren de trabajo',`<p>Es la secuencia constructiva general: el orden en que se ejecutan las actividades en cualquier ambiente. Cada tipo de ambiente usa solo las que le aplican, en este mismo orden. Elige un tipo para ver su secuencia; «Todo el tren» muestra la general.</p><p>Se usa para ubicar las filas de «Faltan programar» dentro de cada ambiente del Lookahead (después de la actividad que la antecede en el tren) y para ordenar la checklist del Recorrido. Las filas que ya existen en el lookahead no se reordenan.</p>`)}
+   <div class="fbar"><span class="seg mxtrseg" role="group" aria-label="Tipo de ambiente">${tipos.map(t=>`<button class="${t.id===MXT.tipo?'on':''}" data-trtp="${esc(t.id)}" aria-pressed="${t.id===MXT.tipo}">${esc(t.name)}</button>`).join('')}<button class="${MXT.tipo?'':'on'}" data-trtp="" aria-pressed="${!MXT.tipo}">Todo el tren</button></span>
     <span class="note">${MXT.tipo?`${vis.length} de ${L.length} actividades del tren`:`${L.length} actividades en el tren`}</span><span class="fsp"></span>${isAdmin?'<button class="ib" id="mxtrimp" title="Pegar un orden completo (por ejemplo, el acordado en el borrador)">Cargar orden…</button>':''}</div>
    ${L.length?`<ol class="mxtrl" id="mxtrl">${vis.map((r,j)=>row(r,j+1)).join('')||'<li class="note">Ninguna actividad del tren aparece en este tipo.</li>'}</ol>`:`<div class="callout">El tren está vacío. ${isAdmin?'Usa «Cargar orden…» para pegar el orden acordado, o agrega actividades desde la lista de abajo.':ed?'Agrega actividades desde la lista de abajo.':'El administrador debe cargarlo.'}</div>`}
    <details class="card mxtrf"${MXT.q?' open':''}><summary>Fuera del tren <span class="note">(${fuera.length})</span></summary>
@@ -59,7 +60,7 @@ function renderMxTren(main,head){const ed=mxEd();const L=mxTrList();const tipos=
     <p class="note">Sin lugar en el tren, su fila de «Faltan programar» sale al final del ambiente.</p></details>
    </div></div>`;
   mxWireV(main);
-  $('#mxtrtp',main).onchange=e=>{MXT.tipo=e.target.value;render()};
+  main.querySelectorAll('[data-trtp]').forEach(b=>b.onclick=()=>{MXT.tipo=b.dataset.trtp;render()});
   const qi=$('#mxtrq',main);if(qi)qi.oninput=()=>{MXT.q=qi.value;clearTimeout(MXT.qt);MXT.qt=setTimeout(()=>{render();const n=$('#mxtrq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}},250)};
   const im=$('#mxtrimp',main);if(im)im.onclick=mxTrImport;
   if(!ed)return;

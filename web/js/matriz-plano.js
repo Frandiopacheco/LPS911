@@ -1,5 +1,5 @@
 "use strict";
-/* LPS 911 · Matriz › Plano (oct 2026, decidido con el dueño): sobre la lámina base del piso (las formas de Sectorización),
+/* LPS 911 · Matriz › Gráfico (antes «Plano»; oct 2026, decidido con el dueño; sin códigos sobre el plano y más transparente): sobre la lámina base del piso (las formas de Sectorización),
    resalta los ambientes donde una actividad (o toda la partida de un SC) está Pendiente (rojo) o En curso (ámbar), según la
    Matriz tal cual (lo «sin validar» también cuenta). Lo demás va sin color. Solo lectura: no cambia la Matriz.
    Se arma una vez (el visor de la lámina no se destruye) y luego solo se actualizan sus partes.
@@ -39,8 +39,8 @@ function renderMxPla(main,head){const pid=U.piso;const scs=mxPlScs();
   const msg=!pid?'Elige un piso arriba (selector de piso) para ver su plano.':!sc?'No hay actividades en el catálogo.':!API?'Cargando láminas…':'';
   const me_=$('#mxplmsg',main);const mh=msg?`<div class="callout">${msg}</div>`:'';if(me_.innerHTML!==mh)me_.innerHTML=mh;$('#mxplb',main).hidden=!!msg;if(msg)return;
   const ST=mxPlState(pid,sc,all?'*':U.mxPlCat);const L=[...ST.values()];
-  const shapes=[];for(const o of L){const g=szGeo(o.a,v);if(!g)continue;const n=o.p.length+o.c.length;
-    shapes.push({id:'a:'+o.a.id,kind:'a',pts:g,label:o.a.code+(all&&n?' · '+n:''),c:o.k?MXPL_C[o.k]:MXPL_C.x,sel:MXPL.sel===o.a.id,dim:!o.k})}
+  const shapes=[];for(const o of L){const g=szGeo(o.a,v);if(!g)continue;
+    shapes.push({id:'a:'+o.a.id,kind:'a',pts:g,label:o.a.code,nolab:true,op:.24,sop:.5,c:o.k?MXPL_C[o.k]:MXPL_C.x,sel:MXPL.sel===o.a.id,dim:!o.k})}
   /* sin lámina (o aún cargando) ambMap muestra su propio aviso */
   const base=API.ambMap($('#mxplmap',main),{pid,vista:v,canEdit:false,canUp:false,shapes,draw:null,tmp:null,edit:null,onPick:id=>{MXPL.sel=id&&id.startsWith('a:')?id.slice(2):'';render()}});/* sin lámina igual se muestra la lista */
   /* resumen y listas */

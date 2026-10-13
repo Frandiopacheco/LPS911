@@ -387,6 +387,8 @@ service cloud.firestore {
     match /plb/{id} {
       allow read: if plaRead();
       allow create, update: if (canEdit() || isOT()) && plbOk();
+      // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
+      allow delete: if isAdmin();
     }
     // Modelo 3D (beta, docs/ia/planos.md): un documento por especialidad con la ruta del modelo convertido (.frag) en Storage
     function p3dOk(id) {
