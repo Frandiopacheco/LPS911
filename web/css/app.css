@@ -3713,3 +3713,9 @@ table.mx .mxplus{display:inline-flex;align-items:center;justify-content:center;v
 table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .mxntp{margin-top:10px}.mxntp .kchips{margin-top:6px}.mxntp .chk{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line2);border-radius:999px;background:var(--panel)}
 .mxtrseg{flex-wrap:wrap;height:auto}
+.ixr[data-ixsc],.ixr[data-ixpi]{cursor:pointer}.ixr[data-ixpi]:hover{background:var(--panel2)}
+.ixr.dim{opacity:.45}.ixr.dim:hover{opacity:1}
+.ixd-flt{display:flex;flex-wrap:wrap;align-items:center;gap:.6em;margin:0 0 .8em;font-size:.95em}
+.ixd-flt.hint{color:var(--muted);font-size:.85em}
+.ixd-fc{display:inline-flex;align-items:center;gap:.4em;padding:.25em .7em;border:1px solid var(--accent);border-radius:999px;background:var(--panel2);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
+.ixd-fc i{width:.8em;height:.8em;border-radius:3px}

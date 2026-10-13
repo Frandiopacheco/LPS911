@@ -13,28 +13,30 @@ const IXD_OK=.8, IXD_WARN=.5; // ≥ 80 % cumplió · 50–80 % parcial · < 50 
 const ixdBand=v=>v==null?'none':v>=IXD_OK?'ok':v>=IXD_WARN?'warn':'bad';
 const IXD_G={bad:{t:'Crítico',h:'menos de 50 % · verificar el cumplimiento a detalle'},warn:{t:'Parcial',h:'entre 50 % y 80 %'},ok:{t:'Cumplieron',h:'80 % o más'},none:{t:'Sin verificar',h:'nadie registró su cumplimiento'}};
 const ixdName=sc=>conOf(sc).name;
+const ixdNm=r=>r.pi?r.pi.code+' · '+r.pi.name:ixdName(r.sc);
+let IPRF={sc:'',pi:''}; // filtros cruzados de la presentación (tocar una barra): subcontratista y piso
 
 /** una fila por SC con su PPC bruto y del SC; `v`/`band` según la clasificación elegida (IXD_M) */
 function ixdRows(D){return Object.entries(D.scA).map(([sc,o])=>{const br=o.ver?o.ok/o.ver:null,ps=pscOf(o),nimp=o.nimp||0;
   const v=IXD_M==='sc'?ps:br;return{sc,o,br,ps,v,band:ixdBand(v),nimp,imp:o.ver-o.ok-nimp}})}
 function ixdGroups(R){const g={bad:[],warn:[],ok:[],none:[]};R.forEach(r=>g[r.band].push(r));
-  const byN=(a,b)=>ixdName(a.sc).localeCompare(ixdName(b.sc));
+  const byN=(a,b)=>ixdNm(a).localeCompare(ixdNm(b));
   g.bad.sort((a,b)=>a.v-b.v||byN(a,b));g.warn.sort((a,b)=>a.v-b.v||byN(a,b));g.ok.sort((a,b)=>b.v-a.v||byN(a,b));g.none.sort(byN);return g}
 
 /** barra de un SC: relleno = cumplidos / verificados (color del semáforo), rayado = no cumplido por causa ajena al SC */
-function ixdRow(r,click){const c=conOf(r.sc),o=r.o;
+function ixdRow(r,click,sel){const c=r.pi?{name:ixdNm(r),color:'var(--accent,#2563eb)'}:conOf(r.sc),o=r.o;const at=r.pi?'data-ixpi':'data-ixsc',key=r.pi?r.pi.id:r.sc;
   const f=o.ver?100*o.ok/o.ver:0,h=o.ver?100*r.nimp/o.ver:0;
   const alt=IXD_M==='sc'?(r.br==null?'':` · bruto ${pct(r.br)}`):(r.nimp&&r.ps!=null?` · del SC ${pct(r.ps)}`:'');
   const tip=`${c.name}: ${o.ok} cumplidas, ${o.partial} parciales y ${o.no} no cumplidas de ${o.ver} verificadas (${o.prog} programadas)${r.nimp?` · ${r.nimp} no imputable${r.nimp===1?'':'s'} al SC`:''}`;
-  return`<div class="ixr ${r.band}${click&&IXD_SC===r.sc?' sel':''}"${click?` data-ixsc="${esc(r.sc)}" role="button" tabindex="0"`:''} title="${esc(tip)}${click?' · clic: ver sus incumplimientos':''}">
+  return`<div class="ixr ${r.band}${click&&sel!=null&&sel===key?' sel':''}${click&&sel&&sel!==key?' dim':''}"${click?` ${at}="${esc(key)}" role="button" tabindex="0"`:''} title="${esc(tip)}${click?' · clic: ver sus incumplimientos':''}">
     <span class="nm"><i style="background:${esc(c.color)}"></i>${esc(c.name)}</span>
     <span class="tr"><span class="fl ${r.band}" style="width:${f.toFixed(1)}%"></span>${h?`<span class="gh" style="left:${f.toFixed(1)}%;width:${h.toFixed(1)}%"></span>`:''}<i class="tk" style="left:50%"></i><i class="tk" style="left:80%"></i></span>
     <span class="vl">${r.v==null?`<b>—</b><small>${o.ver?'todo lo fallado fue ajeno al SC':o.prog+' programada'+(o.prog===1?'':'s')+' sin verificar'}</small>`:`<b>${pct(r.v)}</b><small>${o.ok} de ${o.ver}${alt}</small>`}</span></div>`}
-function ixdGroupsHtml(R,click){const g=ixdGroups(R);
-  return['bad','warn','ok','none'].filter(k=>g[k].length).map(k=>`<section class="ixd-grp ${k}"><h4 class="ixd-gh"><i></i>${IXD_G[k].t} <b>${g[k].length}</b><small>${IXD_G[k].h}</small></h4>${g[k].map(r=>ixdRow(r,click)).join('')}</section>`).join('')}
+function ixdGroupsHtml(R,click,sel){const g=ixdGroups(R);
+  return['bad','warn','ok','none'].filter(k=>g[k].length).map(k=>`<section class="ixd-grp ${k}"><h4 class="ixd-gh"><i></i>${IXD_G[k].t} <b>${g[k].length}</b><small>${IXD_G[k].h}</small></h4>${g[k].map(r=>ixdRow(r,click,sel)).join('')}</section>`).join('')}
 /** cuatro contadores del semáforo; con `names` (presentación) listan a los SC de cada grupo */
 function ixdSummary(R,names){const g=ixdGroups(R);
-  const box=k=>{const L=g[k];const nm=names&&L.length?`<span class="ixd-nm">${L.slice(0,8).map(r=>esc(ixdName(r.sc))).join(' · ')}${L.length>8?` · y ${L.length-8} más`:''}</span>`:'';
+  const box=k=>{const L=g[k];const nm=names&&L.length?`<span class="ixd-nm">${L.slice(0,8).map(r=>esc(ixdNm(r))).join(' · ')}${L.length>8?` · y ${L.length-8} más`:''}</span>`:'';
     return`<div class="ixd-c ${k}"><span>${IXD_G[k].t}</span><b>${L.length}</b><small>${k==='bad'?'&lt; 50 %':k==='warn'?'50–80 %':k==='ok'?'≥ 80 %':'sin registro'}</small>${nm}</div>`};
   return`<div class="ixd-sum">${['ok','warn','bad','none'].map(box).join('')}</div>`}
 /** interruptor «clasificar por»: en la página lo atiende wireInd (data-xm), en la presentación iprClick (data-ip="xm") */
@@ -44,15 +46,18 @@ const ixdLegend=()=>`<div class="ixd-leg"><span><i class="s ok"></i>Cumplido</sp
 /** tarjeta de la página (Indicadores › Diario) */
 function ixdCard(D,d){const R=ixdRows(D);if(!R.length)return'';
   return`<div class="card ixd"><h2>Cumplimiento del día por subcontratista <span class="sub">${fmtD(d)} · toca un subcontratista para ver sus incumplimientos</span></h2><div class="pad">
-    ${ixdSummary(R)}<div class="ixd-tools">${ixdToggle(false)}${ixdLegend()}</div>${ixdGroupsHtml(R,true)}</div></div>`}
+    ${ixdSummary(R)}<div class="ixd-tools">${ixdToggle(false)}${ixdLegend()}</div>${ixdGroupsHtml(R,true,IXD_SC)}</div></div>`}
 
 /* ================= presentación del día ================= */
-const IPRD_PG=['Resumen','Subcontratistas','A verificar','Causas'];
+const IPRD_PG=['Resumen','Subcontratistas','Por piso','A verificar','Causas'];
 const ixdTag=rc=>impOf(rc)===false?'<span class="ixd-tag nimp" title="La causa no depende del subcontratista">No imputable</span>':'<span class="ixd-tag imp">Imputable al SC</span>';
 const ixdSort=(a,b)=>a.p.order-b.p.order||a.s.order-b.s.order||a.a.order-b.a.order||a.x.order-b.x.order;
 
 function iprdDraw(o){
-  const d=indDay(),today=todayIso();ensureDaily(addD(d,-1));const D=dayData([d],histPisoSet());const R=ixdRows(D);
+  const d=indDay(),today=todayIso();ensureDaily(addD(d,-1));const D0=dayData([d],histPisoSet());
+  if(IPRF.sc&&!D0.scA[IPRF.sc])IPRF.sc='';if(IPRF.pi&&!D0.piA[IPRF.pi])IPRF.pi='';
+  /* filtro cruzado: cada gráfico ignora su propio filtro (para seguir viendo las demás barras) y aplica el del otro */
+  const D=iprdFilt(D0,IPRF.sc,IPRF.pi),Dsc=iprdFilt(D0,'',IPRF.pi),Dpi=iprdFilt(D0,IPRF.sc,'');const R=ixdRows(Dsc);
   o.setAttribute('aria-label','Indicadores del día · presentación');
   const bar=`<header class="iprbar">
     <div class="iprt"><b>Cumplimiento del día</b><small>${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''} · ${pisoLabel()}</small></div>
@@ -64,11 +69,29 @@ function iprdDraw(o){
     <span class="iprg"><button class="ib" data-ip="z-" aria-label="Letra más pequeña">A−</button><button class="ib" data-ip="z+" aria-label="Letra más grande">A+</button></span>
     <button class="ib" data-ip="x">Salir <kbd>Esc</kbd></button></header>`;
   let body;
-  if(!D.tot.prog&&!D.extras.length)body=`<div class="iprempty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
-  else if(IPR.pg===0)body=iprdResumen(D,R);else if(IPR.pg===1)body=iprdSc(R);else if(IPR.pg===2)body=iprdCriticos(D,R);else body=iprdCausas(D);
+  const flt=iprdFlt();
+  if(!D0.tot.prog&&!D0.extras.length)body=`<div class="iprempty">${nwReason(d)?esc(nwReason(d))+': día no laborable.':'No hay actividades programadas este día'+(U.piso?' en este piso':'')+'.'}</div>`;
+  else if(IPR.pg===0)body=flt+iprdResumen(D,R);else if(IPR.pg===1)body=flt+iprdSc(R);else if(IPR.pg===2)body=flt+iprdPisos(Dpi);else if(IPR.pg===3)body=flt+iprdCriticos(D,ixdRows(D));else body=flt+iprdCausas(D);
   const st=o.querySelector('.iprc');const sc=st?st.scrollTop:0;
   o.innerHTML=bar+`<div class="iprc" style="--ipz:${IPR.z}">${body}</div><footer class="iprft">${IPRD_PG.map((t,i)=>`<i class="${IPR.pg===i?'on':''}"></i>`).join('')}<span>← → para cambiar de lámina</span></footer>`;
   const st2=o.querySelector('.iprc');if(st2&&st)st2.scrollTop=sc}
+
+/** filas de un conjunto de `dayData` filtradas por SC y/o piso (los totales se recalculan igual que dayData) */
+function iprdFilt(D,sc,pi){if(!sc&&!pi)return D;const rows=D.rows.filter(r=>(!sc||r.sc===sc)&&(!pi||r.p.id===pi));return{...D,rows,...dayAgg(rows),extras:D.extras}}
+/** franja con los filtros activos (se quitan con ✕) o la pista de que las barras se tocan */
+function iprdFlt(){const ch=[];
+  if(IPRF.sc)ch.push(`<button class="ixd-fc" data-ip="fsc" data-v="${esc(IPRF.sc)}" title="Quitar este filtro"><i style="background:${esc(conOf(IPRF.sc).color)}"></i>${esc(ixdName(IPRF.sc))} ✕</button>`);
+  if(IPRF.pi){const p=S.pis.get(IPRF.pi)||ARCH.pis.get(IPRF.pi);ch.push(`<button class="ixd-fc" data-ip="fpi" data-v="${esc(IPRF.pi)}" title="Quitar este filtro">${esc(p?p.code+' · '+p.name:'Piso')} ✕</button>`)}
+  return ch.length?`<div class="ixd-flt"><span>Mostrando solo:</span>${ch.join('')}<button class="ib" data-ip="fclr">Quitar filtros</button></div>`:`<div class="ixd-flt hint"><span>Toca una barra de subcontratista o de piso para filtrar todas las láminas.</span></div>`}
+/** comparativo de PPC por piso (misma clasificación en semáforo que los subcontratistas) */
+function iprdPisos(D){const R=Object.entries(D.piA).map(([id,o])=>{const p=S.pis.get(id)||ARCH.pis.get(id);if(!p)return null;const br=o.ver?o.ok/o.ver:null,ps=pscOf(o),v=IXD_M==='sc'?ps:br,nimp=o.nimp||0;
+    return{pi:p,sc:'',o,br,ps,v,band:ixdBand(v),nimp,imp:o.ver-o.ok-nimp}}).filter(Boolean);
+  if(!R.length)return'<div class="iprempty">Sin pisos con actividades este día.</div>';
+  return`<section class="iprcard"><h3>PPC por piso <small>${R.length} · ${IXD_M==='sc'?'clasificados por PPC del SC':'clasificados por PPC bruto'}${IPRF.sc?' · solo '+esc(ixdName(IPRF.sc)):''}</small></h3>
+    ${ixdSummary(R,true)}
+    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,true,IPRF.pi)}</div>
+    <div class="ixd-legb">${ixdLegend()}</div>
+    <p class="iprnote">Toca un piso para ver solo su cumplimiento en las demás láminas.</p></section>`}
 
 function ixdSplit(imp,nimp){if(!imp&&!nimp)return'<div class="empty">Sin incumplimientos verificados.</div>';
   return`<div class="ixd-split">${imp?`<span class="i" style="flex:${imp}"><b>${imp}</b></span>`:''}${nimp?`<span class="n" style="flex:${nimp}"><b>${nimp}</b></span>`:''}</div>
@@ -95,9 +118,9 @@ function iprdResumen(D,R){const t=D.tot,br=t.ver?t.ok/t.ver:null,ps=pscOf(t);con
 
 function iprdSc(R){if(!R.length)return'<div class="iprempty">Sin subcontratistas con actividades este día.</div>';
   return`<section class="iprcard"><h3>Cumplimiento por subcontratista <small>${R.length} · ${IXD_M==='sc'?'clasificados por PPC del SC':'clasificados por PPC bruto'}</small></h3>
-    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,false)}</div>
+    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,true,IPRF.sc)}</div>
     <div class="ixd-legb">${ixdLegend()}</div>
-    <p class="iprnote">PPC bruto = cumplidos / verificados (Parcial cuenta como no cumplido). «Del SC» no cuenta lo que falló por causas que no dependen del subcontratista (rayado).</p></section>`}
+    <p class="iprnote">Toca un subcontratista para filtrar todas las láminas. PPC bruto = cumplidos / verificados (Parcial cuenta como no cumplido). «Del SC» no cuenta lo que falló por causas que no dependen del subcontratista (rayado).</p></section>`}
 
 function iprdCriticos(D,R){const crit=ixdGroups(R).bad;
   if(!crit.length)return`<div class="iprempty">Ningún subcontratista quedó en crítico (menos de 50 %).<small>Revisa la lámina Subcontratistas para ver a los que quedaron en parcial.</small></div>`;

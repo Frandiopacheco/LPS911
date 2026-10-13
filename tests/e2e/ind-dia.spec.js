@@ -72,6 +72,8 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await expect(ipr.locator('.ixd-grp.bad')).toContainText('SC TARRAJEO');
   await page.screenshot({ path: 'test-results/ind-dia-sc.png' });
   await page.keyboard.press('ArrowRight');
+  await expect(ipr).toContainText('PPC por piso');
+  await page.keyboard.press('ArrowRight');
   await expect(ipr.locator('.ixd-cc')).toHaveCount(1);
   await expect(ipr.locator('.ixd-cc')).toContainText('Faltó cuadrilla');
   await expect(ipr.locator('.ixd-cc .ixd-tag.imp')).toHaveCount(1);
@@ -83,7 +85,7 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await page.screenshot({ path: 'test-results/ind-dia-causas.png' });
   // clasificar por PPC del SC: ya no hay críticos
   await ipr.locator('#iprxm [data-xm="sc"]').click();
-  await ipr.locator('[data-pg="2"]').click();
+  await ipr.locator('[data-pg="3"]').click();
   await expect(ipr).toContainText('Ningún subcontratista quedó en crítico');
   // día anterior y vuelta a hoy
   await ipr.locator('[data-ip="dp"]').click();
@@ -110,4 +112,35 @@ test('Presentar el día en modo oscuro y sin actividades', async ({ page }) => {
   await page.evaluate(() => { daySet('2026-09-26'); requestRender(); });
   await expect(page.locator('#ipr')).toContainText('No hay actividades programadas');
   noErrors(errors, 'presentación del día oscuro');
+});
+
+test('Presentar el día: tocar una barra filtra todas las láminas (subcontratista y piso) y se quita', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const errors = await openApp(page, { tab: 'ind', extra: EXTRA });
+  await page.evaluate(() => { U.indMode = 'dia'; U.piso = ''; render(); });
+  await page.locator('#bipr').click();
+  const ipr = page.locator('#ipr');
+  await expect(ipr.locator('.ixd-flt.hint')).toBeVisible();
+  // lámina Por piso: el comparativo trae el piso con actividades
+  await ipr.locator('[data-pg="2"]').click();
+  await expect(ipr).toContainText('PPC por piso');
+  await expect(ipr.locator('[data-ixpi]').first()).toBeVisible();
+  // tocar un subcontratista: el resumen pasa a ser solo de él (SC TARRAJEO: 1 de 3 = 33 %)
+  await ipr.locator('[data-pg="1"]').click();
+  await ipr.locator('[data-ixsc="c3"]').click();
+  await expect(ipr.locator('.ixd-fc')).toContainText('SC TARRAJEO');
+  await ipr.locator('[data-pg="0"]').click();
+  await expect(ipr.locator('.iprring b')).toHaveText('33%');
+  // las barras de los demás siguen visibles en su lámina, atenuadas
+  await ipr.locator('[data-pg="1"]').click();
+  await expect(ipr.locator('[data-ixsc="c1"]')).toHaveClass(/dim/);
+  // tocar piso y quitar todo
+  await ipr.locator('[data-pg="2"]').click();
+  await ipr.locator('[data-ixpi]').first().click();
+  await expect(ipr.locator('.ixd-fc')).toHaveCount(2);
+  await ipr.locator('[data-ip="fclr"]').click();
+  await expect(ipr.locator('.ixd-flt.hint')).toBeVisible();
+  await ipr.locator('[data-pg="0"]').click();
+  await expect(ipr.locator('.iprring b')).toHaveText('57%');
+  noErrors(errors, 'filtros cruzados');
 });
