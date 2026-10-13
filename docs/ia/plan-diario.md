@@ -55,3 +55,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Visibilidad del no programado (oct 2026, decidido con el dueño):** el SC y el capataz solo ven lo de su partida (`npVis` dentro de `npItems`: vale para Campo, En obra, plano, Plan diario e Indicadores); ingenieros, áreas y veedor ven todo. En En obra el contador por piso y los puntos del plano siguen el filtro de SC (`CP.sc`; `npMarks(d,pid,f)`). Campo › Tarjetas: botón «No programado» en `#cshow` (`CU.show='np'`: solo lo no programado; «Por confirmar» muestra además lo del SC por verificar). **Cruce** (`npCross`): la tarjeta avisa al ingeniero (`canDaily`) si en ese ambiente ese día otro SC tiene algo programado (`.npcx`).
 
 - `capPlan`: si el piso tiene varias láminas (fachadas), barra de chips `.pvlams` para elegirla (`CPB`).
+
+## Distribución de la pantalla (oct 2026, pedido del dueño)
+- Barra: día, piso, láminas, modos **Programar · Interferencias** (se quitó «Cumplimiento»: se registra en Campo; la vista de cumplimiento sigue en el **Modo reunión**), Modo reunión, Ver todo y menú **⋯** (`#mdots` → `#mdotsm.lkpop`: Vista, Exportar, resolución, Subir especialidad, Editar/Alinear lámina). `pmode()` nunca devuelve `'cu'` fuera de la reunión.
+- Fila de SC (`#msc.mscrow`) bajo la barra con los filtros `[data-dzsc]` (antes en el panel izquierdo). Ojo: `.msc` ya existía (hoja de módulos del celular).
+- Paneles laterales acoplados (el plano se achica, nada flota) y plegables a una franja vertical `.mstrip`, con estado guardado en `localStorage` (`lps.mpfold`, `lps.mrfold`, objeto `PFOLD`). El panel derecho no se abre ni pliega solo (movería el plano).
+- Panel derecho (`DOCK`): Por decidir y Cambios, más «Listo para la reunión». La pestaña **Cruces** solo aparece en el modo Interferencias, en la reunión (Plan), en «Recorrer» o para el SC (`cxDock`). Se quitó la Leyenda.
+- **Equipos** (`#mfzb`) vive en la franja acoplada de abajo `#mfzbar` (la crea `dockRender`).
