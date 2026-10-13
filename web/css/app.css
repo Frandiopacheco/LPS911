@@ -3598,6 +3598,7 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 #tabs [data-tab="p3d"] small{font:700 9.5px var(--f-ui);text-transform:uppercase;color:var(--muted);margin-left:3px}
 
 /* Planos › Medir (planos-medir.js): barra flotante sobre el visor */
+.plcrop{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-right:4px}
 .plmbar{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:15;width:min(94vw,560px);display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
 .plmt,.plmx,.plmc{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .plmbar .ib.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
