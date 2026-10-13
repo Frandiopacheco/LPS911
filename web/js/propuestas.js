@@ -359,7 +359,7 @@ function renderPropBar(){rvPanelSync();const v=$('#main .view');if(!v)return;let
     const cl=propClosed();const WB=cl?`<button class="ib pri" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>`:`<button class="ib" data-pp="close" title="Los SC quedan en solo lectura ya, sin esperar al corte">🔒 Bloquear propuestas</button>`;
     if(cl)h=`<div class="ppb ed ppclosed"><div><b>🔒 Propuestas de los SC cerradas</b> ${propNever()?'(aún no las habilitas)':propManual()?`(las bloqueaste el ${esc(fmtCut(propCloseAt()))})`:`desde el corte (${esc(fmtCut(propCloseAt()))})`}<span class="ppx">: los subcontratistas solo ven. Programa el lookahead; cuando termines, habilítalas: se cierran solas en el corte.</span>${by.size?' · '+[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):''}</div><div class="ppa">${by.size?'<button class="ib" data-pp="rev">Revisar propuestas</button>':''}${WB}</div></div>`;
     else if(by.size||oth)h=`<div class="ppb ed"><div><b>Propuestas de subcontratistas</b> · ${by.size?[...by.entries()].map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join(' '):'<span class="mu">ninguna en tus pisos</span>'}${oth?`<span class="mu"> · ${oth} de pisos a cargo de otros (solo las ves)</span>`:''}<span class="mu ppx"> · en la grilla: días propuestos rayados con borde de color, días que se quitarían tachados · rayado tenue con borde punteado = liberado (ya figura terminada)</span></div><div class="ppa">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}${WB}</div></div>`;
-    else h=`<div class="ppb ed"><div><b>🔓 Propuestas de los SC abiertas</b> · <span class="mu">hasta el ${esc(fmtCut(propCloseAt()))}</span><span class="mu ppx"> · aún no llega ninguna</span></div><div class="ppa">${WB}</div></div>`;if(revOn())h=''}
+    else h=`<div class="ppb ed"><div><b>🔓 Propuestas de los SC abiertas</b> · <span class="mu">hasta el ${esc(fmtCut(propCloseAt()))}</span><span class="mu ppx"> · aún no llega ninguna</span></div><div class="ppa">${WB}</div></div>`;h=''}
   if(propErr)h+=`<div class="callout">No se pudieron leer las propuestas (${esc(propErr)}). Falta publicar las reglas nuevas de Firestore.</div>`;
   if(pb.dataset.h!==h){pb.innerHTML=h;pb.dataset.h=h}pb.hidden=!h}
 /* Rechazar: motivo con un toque (oct 2026). El motivo de los botones queda en el historial (`why`) y el SC no lo ve; el texto libre sigue siendo el «Comentario» que sí ve. */
@@ -465,13 +465,23 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
 /** panel lateral de revisión: solo existe mientras hay propuestas pendientes; plegado queda una pestaña con el número */
 const rvFold=()=>{try{return localStorage.getItem('lps.rvfold')==='1'}catch(e){return false}};
 function rvPanelSync(){let el=document.getElementById('rvpanel');
-  if(typeof revOn==='function'&&revOn()&&!revItems().length){/* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;REVSEL=null;if(el)el.remove();toast('Terminaste de revisar las propuestas.');requestRender();return}
-  const on=typeof revOn==='function'&&revOn();
-  if(!on){if(el)el.remove();return}
+  const gone=()=>{if(el)el.remove()};
+  if(typeof revOn==='function'&&revOn()&&!revItems().length){/* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;REVSEL=null;gone();toast('Terminaste de revisar las propuestas.');requestRender();return}
+  let mode='',h='',cls='rvpanel';const f=rvFold();
+  if(typeof revOn==='function'&&revOn()){mode='rev';h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvn">${revItems().length}</span></button>`:revBarHtml()}
+  else if(canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&me&&me.role!=='sc'){
+    /* oct 2026: la barra general «Propuestas de subcontratistas» vive aquí, a la derecha: solo hay panel si hay propuestas pendientes */
+    const by=revCounts();let oth=0;for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&!canDecide(id,it))oth++;
+    const cl=propClosed();const tot=[...by.values()].reduce((x,y)=>x+y,0);
+    if(by.size||oth){mode='gen';h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvn">${tot||oth}</span></button>`
+      :`<div class="rvhd"><b>Propuestas pendientes <span class="rvn">${tot||oth}</span></b><button class="ib" data-rvfold title="Plegar el panel" aria-label="Plegar panel">›</button></div>
+        <div class="rvbody">${by.size?`<div class="rvchips">${[...by.entries()].sort((x,y)=>conOf(x[0]).name.localeCompare(conOf(y[0]).name)).map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join('')}</div>`:'<span class="mu">Ninguna en tus pisos</span>'}${oth?`<span class="mu">${oth} de pisos a cargo de otros (solo las ves)</span>`:''}${cl?`<span class="mu">🔒 Cerradas a los SC${propNever()?' (aún no las habilitas)':propManual()?' (las bloqueaste)':' desde el corte'}</span>`:''}
+        <div class="rvall">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}${cl?'<button class="ib" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>':'<button class="ib" data-pp="close" title="Los SC quedan en solo lectura ya, sin esperar al corte">🔒 Bloquear propuestas</button>'}</div></div>`}
+    else if(cl){/* sin pendientes y cerradas: solo queda el acceso para habilitarlas (si no, no habría cómo abrirlas) */mode='open';cls+=' fold';h='<button class="rvtab" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>'}}
+  if(!mode){gone();return}
   if(!el){el=document.createElement('aside');el.id='rvpanel';el.onclick=e=>{if(e.target.closest('[data-rvfold]')){try{localStorage.setItem('lps.rvfold',rvFold()?'0':'1')}catch(er){}rvPanelSync();return}propBarClick(e)};
     el.onchange=e=>{if(e.target.id==='rvctx'){U.revCtx=e.target.checked;requestRender()}};document.body.appendChild(el)}
-  const f=rvFold();el.className='rvpanel'+(f?' fold':'');
-  const h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvn">${revItems().length}</span></button>`:revBarHtml();
+  el.className=cls+(f&&mode!=='open'?' fold':'');
   if(el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}}
 function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;i=i<0?(dir>0?0:L.length-1):(i+dir+L.length)%L.length;const o=L[i];REVSEL={sc:o.sc,id:o.id,k:0};
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}

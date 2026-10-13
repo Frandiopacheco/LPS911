@@ -270,9 +270,9 @@ test('ventana de propuestas: pasado el corte el SC solo ve; el ingeniero la habi
   const p2 = await page.context().newPage();
   errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W] });
   p2.on('dialog', d => d.accept());
-  await p2.locator('#ppbar [data-pp="open"]').click();
+  await p2.locator('#rvpanel [data-pp="open"]').click();
   await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(Date.parse('2026-10-03T13:00:00-05:00'));
-  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita');
 });
 
@@ -285,24 +285,24 @@ test('ventana de propuestas: si el ingeniero nunca la habilitó, está cerrada (
   noErrors(errors, 'sc nunca habilitada');
   const p2 = await page.context().newPage();
   errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W0] });
-  await expect(p2.locator('#ppbar')).toContainText('aún no las habilitas');
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toBeVisible(); // sin pendientes: solo queda la pestaña para habilitar
   p2.on('dialog', d => d.accept());
-  await p2.locator('#ppbar [data-pp="open"]').click();
+  await p2.locator('#rvpanel [data-pp="open"]').click();
   const nx = await p2.evaluate(() => propNextCut());
   await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
-  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita la primera vez');
 });
 
 test('ventana de propuestas: el ingeniero puede bloquearlas a mano antes del corte y volver a habilitarlas', async ({ page }) => {
-  let errors = await openApp(page, { as: 'editor', tab: 'look' }); // el Firebase falso la siembra abierta hasta 2027
+  let errors = await openApp(page, { as: 'editor', tab: 'look', extra: [prop({ i0: item(moved(I0, ['2026-10-05']), I0) })] }); // abierta hasta 2027; el panel solo aparece con propuestas pendientes
   page.on('dialog', d => d.accept());
-  await expect(page.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
-  await page.locator('#ppbar [data-pp="close"]').click();
+  await expect(page.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
+  await page.locator('#rvpanel [data-pp="close"]').click();
   await expect.poll(() => page.evaluate(() => { const w = __dbGet('meta', 'propwin') || {}; return w.man === true && w.closeAt <= NOW(); })).toBe(true);
-  await expect(page.locator('#ppbar')).toContainText('las bloqueaste');
-  await expect(page.locator('#ppbar [data-pp="close"]')).toHaveCount(0);
-  await page.locator('#ppbar [data-pp="open"]').click();
+  await expect(page.locator('#rvpanel')).toContainText('las bloqueaste');
+  await expect(page.locator('#rvpanel [data-pp="close"]')).toHaveCount(0);
+  await page.locator('#rvpanel [data-pp="open"]').click();
   const nx = await page.evaluate(() => propNextCut());
   await expect.poll(() => page.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
   await expect.poll(() => page.evaluate(() => !!(__dbGet('meta', 'propwin') || {}).man)).toBe(false);
