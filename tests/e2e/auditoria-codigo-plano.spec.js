@@ -79,6 +79,7 @@ test('P10 · el «Plan de trabajo» se arma piso por piso: no quedan todos los l
   });
   const errors = await openApp(page, { tab: 'mapa', extra });
   await page.route(/cdn\.jsdelivr\.net\/npm\/exceljs/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(EXCELJS, 'utf8') }));
+  await page.locator('#mdots').click(); // oct 2026: Exportar va en el menú ⋯
   await page.locator('#mpdf').click();
   await page.locator('#xds').check(); // además, un plano por subcontratista: 2 pisos + 3 por SC = 5 planos
   await page.evaluate(() => { window.__cvs = []; });

@@ -107,6 +107,7 @@ test('Lookahead: lo vencido sin reprogramar se oculta (sin borrarse)', async ({ 
   await expect(page.locator('tr[data-a="v0"]')).toHaveCount(0);
   const pill = page.locator('#fpast button');
   await expect(pill).toContainText('1 vencida oculta');
+  await page.click('#fmore');
   await pill.click();
   await expect(page.locator('tr[data-a="v0"]')).toHaveCount(1);
   expect(await page.evaluate(() => !!window.__dbGet('acts', 'v0').arch)).toBe(false);

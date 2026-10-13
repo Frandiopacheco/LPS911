@@ -69,7 +69,7 @@ test('4 · «Aceptar todo lo visible» acepta con los cambios la fila que ajusta
   /* el ingeniero deja q0 con otros días (vista previa) */
   await page.evaluate(() => { REVSEL = { sc: 'c1', id: 'q0', k: 0, days: ['2026-10-06', '2026-10-08'] }; requestRender(); });
   page.once('dialog', d => d.accept());
-  await page.click('#ppbar [data-rvall]');
+  await page.click('#rvpanel [data-rvall]');
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q0').days)).toEqual(['2026-10-06', '2026-10-08']);
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q1').days)).toEqual(['2026-10-06', '2026-10-07']);
   noErrors(errors, 'aceptar todo con cambios');

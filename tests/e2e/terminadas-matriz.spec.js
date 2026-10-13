@@ -19,8 +19,10 @@ test('lookahead: solo la Matriz oculta; lo marcado en Campo no oculta ni pone «
   await expect(page.locator('#grid tr[data-a="i1"]')).toHaveCount(1);
   await expect(page.locator('#grid [data-mxd]')).toHaveCount(0);
   await expect(page.locator('#fdone')).toContainText('2 terminadas ocultas');
+  await page.click('#fmore');
   await page.click('#fdone button');
   await expect(page.locator('#grid tr[data-a="i0"]')).toHaveCount(1);
+  await page.click('#fmore');
   await page.click('#fdone button');
   // al confirmarla en la Matriz se oculta
   await page.evaluate(() => mxWrite(new Map([['a2', { k1: 't' }]]), 'ok'));

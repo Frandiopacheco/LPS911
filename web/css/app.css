@@ -281,6 +281,21 @@ tr.pmro td.s4 input,tr.pmro td.s4 .anv,tr.pmro td.s3{opacity:.65}
 /* etapa 30: modo revisión */
 .ppb.rv{background:#fff7e8;border:1px solid #f5c98a;position:sticky;top:0;z-index:30;box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .rvl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* panel lateral de revisión de propuestas (oct 2026): flotante a la derecha, plegable a una pestaña */
+.rvpanel{position:fixed;right:10px;top:clamp(96px,16vh,150px);width:min(310px,calc(100vw - 20px));max-height:calc(100vh - clamp(96px,16vh,150px) - 14px);display:flex;flex-direction:column;z-index:46;background:#fff7e8;border:1px solid #f5c98a;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.22);font-size:13px;line-height:1.4;color:var(--ink)}
+.rvpanel .rvhd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px 7px 12px;border-bottom:1px solid #f5c98a}
+.rvpn{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--bad,#c62828);color:#fff;font:700 12px/20px var(--f-mono);text-align:center}
+.rvpanel .rvbody{display:flex;flex-direction:column;gap:9px;padding:10px 12px 12px;overflow-y:auto;overscroll-behavior:contain}
+.rvpanel .rvnav{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.rvpanel .rvmv,.rvpanel .rvft{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rvpanel .rvall{display:flex;flex-direction:column;gap:6px}
+.rvpanel .rvall .ib{width:100%;height:34px;justify-content:center}
+.rvpanel .rvpsel{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.rvpanel .ib{height:32px}
+.rvpanel.fold{width:auto;max-height:none;background:transparent;border:0;box-shadow:none;right:0}
+.rvtab{display:flex;align-items:center;gap:7px;border:1px solid #f5c98a;border-right:0;background:#fff7e8;color:var(--ink);border-radius:12px 0 0 12px;padding:9px 12px;font:700 13px var(--f-ui);cursor:pointer;box-shadow:-4px 4px 14px rgba(0,0,0,.2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .rvpanel,:root:not([data-theme="light"]) .rvtab{background:#2a2216;border-color:rgba(245,166,35,.45);color:var(--ink)}:root:not([data-theme="light"]) .rvpanel .rvhd{border-color:rgba(245,166,35,.45)}:root:not([data-theme="light"]) .rvpanel .mu{color:#b8b2a6}}
+:root[data-theme="dark"] .rvpanel,:root[data-theme="dark"] .rvtab{background:#2a2216;border-color:rgba(245,166,35,.45);color:var(--ink)}:root[data-theme="dark"] .rvpanel .rvhd{border-color:rgba(245,166,35,.45)}:root[data-theme="dark"] .rvpanel .mu{color:#b8b2a6}
 .rvchips{display:flex;gap:5px;flex-wrap:wrap}
 .rvchips button{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:3px 10px;font:600 12.5px var(--f-ui);display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--ink)}
 .rvchips button i{width:9px;height:9px;border-radius:3px;background:var(--c)}
@@ -340,8 +355,20 @@ body.env-pruebas .top{box-shadow:inset 0 4px 0 #c62828}
 body.env-pruebas .brand h1::after{content:"PRUEBAS";display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;background:#c62828;color:#fff;font:800 10px/1.5 var(--f-ui);letter-spacing:.1em;vertical-align:1px}
 
 /* etapa 34: experiencia de uso */
-.bmore{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:8px;border-top:1px dashed var(--line)}
-.bmore[hidden]{display:none}
+.bmore[hidden],.lkpop[hidden]{display:none}
+/* barra del lookahead (oct 2026): «Filtros y vista» y «⋯» son menús flotantes (fijos bajo su botón, los ubica lkPopPlace) */
+.lkpop{position:fixed;z-index:47;display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:min(330px,calc(100vw - 16px));max-height:calc(100vh - 120px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);box-shadow:var(--sh-2);padding:10px 12px 12px;animation:lps-fade var(--t-fast,.12s) var(--ease,ease)}
+.lkpop .lkph{font:600 11px var(--f-ui);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.lkpop .lkph:first-child{margin-top:0}
+.lkpop .lkprow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lkpop .lkprow>span:empty{display:none}
+.lkpop .lkpnone{font-size:12.5px}
+.lkpop.lkmenu{width:auto;min-width:190px;padding:6px;gap:2px}
+.lkpop.lkmenu .ib{width:100%;justify-content:flex-start;border-color:transparent;background:transparent}
+.lkpop.lkmenu .ib:hover{background:var(--panel2)}
+.lkpop.lkmenu .ib[hidden]{display:none}
+#fdots{min-width:36px;font-size:16px;line-height:1}
+#fdots.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 #fmore.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .fmn{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font:700 11px/1 var(--f-ui);padding:0 5px;margin-left:2px}
 #fmore.on .fmn{background:var(--panel);color:var(--ink)}
@@ -1198,7 +1225,7 @@ tr.asel>td.s0{box-shadow:inset 4px 0 0 var(--accent)}
 /* =====================================================================
    MODO PRESENTACIÓN DEL LOOKAHEAD (reunión semanal)
    ===================================================================== */
-body.pres .top,body.pres #bnav,body.pres .view>.bar,body.pres #verban,body.pres .ppb,body.pres .vabar{display:none!important}
+body.pres .top,body.pres #bnav,body.pres .view>.bar,body.pres #verban,body.pres .ppb,body.pres .rvpanel,body.pres .vabar{display:none!important}
 .presbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:var(--sh-1);z-index:20}
 .presbar .pbt{display:flex;flex-direction:column;font-size:16px;line-height:1.15;margin-right:6px}
 .presbar .pbt small{font-size:12.5px;font-weight:400;color:var(--muted)}
@@ -2906,8 +2933,9 @@ div.tp-dif{padding-left:0}
   /* conectados: solo los dos primeros (el resto ocupa una fila entera) */
   .who{flex-wrap:nowrap}.who .who-c:nth-child(n+3){display:none}
   /* Lookahead: la barra de botones en una sola fila que se desliza, para que la grilla empiece más arriba */
-  .view>.bar:not(:has(.bmore:not([hidden]))){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:6px 12px;gap:6px}
-  .view>.bar:not(:has(.bmore:not([hidden])))>*{flex:none}
+  .view>.bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:6px 12px;gap:6px}
+  .view>.bar>*{flex:none}
+  #fver{max-width:190px}
   .view>.bar input[type=search]{width:170px}
   /* propuestas de los SC: una línea */
   #ppbar .ppb{flex-wrap:nowrap;margin:4px 0;padding:5px 10px;gap:8px}
@@ -3726,3 +3754,51 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .ixd-ph{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.4em}
 .ixd-ph img{height:5.5em;width:auto;max-width:12em;object-fit:cover;border-radius:var(--r-xs);border:1px solid var(--line);cursor:zoom-in}
 .ixd-pisos.two{columns:2;column-gap:2em}
+
+/* Estado de la jornada (js/jornada.js): barras por SC de inicio y de cierre; solo variables de tema (claro y oscuro) */
+.jor-w{display:flex;flex-direction:column;gap:16px;margin:8px 0 12px}
+.jor-b{display:flex;flex-direction:column;gap:.45em}
+.jor-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.15em .8em;border-bottom:1px solid var(--line2);padding-bottom:.35em;margin-bottom:.2em}
+.jor-h b{font-size:1.05em}.jor-h span{font-size:.82em;color:var(--muted)}
+.jor-r{display:grid;grid-template-columns:minmax(7em,34%) 1fr 5.6em;gap:.7em;align-items:center;font-size:.92em;break-inside:avoid}
+.jor-r .nm{display:flex;align-items:center;gap:.5em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.jor-r .nm i{flex:0 0 auto;width:.8em;height:.8em;border-radius:3px}
+.jor-r .tr{position:relative;height:1.1em;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;overflow:hidden}
+.jor-r .fl{position:absolute;left:0;top:0;bottom:0;border-radius:999px}
+.jor-r.ok .fl{background:var(--ok)}.jor-r.warn .fl{background:var(--warn)}.jor-r.bad .fl{background:var(--bad)}
+.jor-r .ct{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.jor-r.ok .ct{color:var(--ok)}.jor-r.warn .ct{color:var(--warn)}.jor-r.bad .ct{color:var(--bad);font-weight:700}
+.jor-p{display:flex;flex-direction:column;gap:1em}.jor-bt{display:flex;gap:.6em;justify-content:flex-end;flex-wrap:wrap}
+.jor-2{display:grid;grid-template-columns:1fr 1fr;gap:2.2em;align-items:start}
+@media (max-width:900px){.jor-2{grid-template-columns:1fr}}
+/* Plan diario reorganizado (oct 2026): fila de SC bajo la barra, paneles laterales acoplados y plegables a una franja, Equipos abajo */
+.mscrow{display:flex;align-items:center;padding:6px 16px;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto;scrollbar-width:none}
+.mscrow[hidden]{display:none}
+.mscrow .dzf{flex-wrap:nowrap;margin:0}.mscrow .dzf button{flex:none}
+.mpanel.fold{width:30px;padding:0;overflow:hidden;gap:0}
+.mstrip{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;height:100%;min-height:120px;padding:10px 0;border:0;background:var(--panel2);color:var(--ink2);cursor:pointer;font:600 12.5px var(--f-ui)}
+.mstrip:hover{background:var(--accent-soft);color:var(--accent)}
+.mstrip>span{pointer-events:none}
+.mstrip-a{font-size:16px;line-height:1}
+.mstrip-t{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+#mdots{min-width:36px;font-size:16px;line-height:1}
+#mdots.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.mfzbar{flex:none;border-top:1px solid var(--line);background:var(--panel)}
+.mfzbar[hidden]{display:none}
+.mfzbar>.mfzb{position:static;max-height:none;border:0;border-radius:0;box-shadow:none;display:flex!important;flex-direction:row;align-items:stretch;background:transparent;min-height:0}
+.mfzbar .mfzh{flex:none;width:auto;border-radius:0;justify-content:flex-start;gap:8px;padding:6px 12px;white-space:nowrap}
+.mfzbar .mpdl{flex:1;min-width:0;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;overflow:auto hidden;max-height:none;padding:4px 10px;scrollbar-width:thin}
+/* oct 2026: una sola fila; cada SC en una línea (nombre · resumen · cuadrillas) */
+.mfzbar .mfzi{flex:none;flex-direction:row;align-items:center;gap:8px;white-space:nowrap;min-width:0;max-width:none;padding:4px 10px}
+.mfzbar .mfzi small{white-space:nowrap}
+.mfzbar .mfzq{white-space:nowrap}
+@media (min-width:900px){
+  .mrs.dock.shut{top:0!important;bottom:0;right:0!important;width:30px!important;max-width:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0}
+  .mrs.dock.shut .mrst{height:100%;border:0}
+  .mapa.dockmin .mwrap>.mstage{right:30px}
+  .mapa.dockmin .mcqb{right:40px}
+}
+.lkpop.lkmenu .ib.pri{color:var(--ink);font-weight:600}
+/* franja de Equipos plegada: solo una cabecera delgada */
+.mfzbar .mfzh[aria-expanded="false"]{padding:3px 12px;font-size:12px}
+.mfzbar .mfzh[aria-expanded="false"] b{line-height:15px}

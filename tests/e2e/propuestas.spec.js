@@ -21,7 +21,7 @@ async function lookMetrado(page) {
 const cell = (page, a, d) => page.locator(`#grid tr[data-a="${a}"] td.d[data-d="${d}"]`);
 async function revision(page) {
   await page.evaluate(() => { U.rev = true; REVSEL = null; gridRows = null; render(); });
-  await expect(page.locator('#ppbar .ppb.rv')).toBeVisible();
+  await expect(page.locator('#rvpanel')).toBeVisible();
 }
 
 test('1 · una cantidad que no es número no borra los días ni sus cantidades', async ({ page }) => {
@@ -58,9 +58,9 @@ test('7 · «Aceptar todo lo visible» solo acepta lo que muestra la grilla con 
     i0: item(moved(I0, ['2026-10-02', '2026-10-03']), I0), i2: item(moved(I2, ['2026-10-02', '2026-10-03']), I2) })] });
   await page.evaluate(() => { U.piso = 'p1'; });
   await revision(page);
-  await expect(page.locator('#ppbar [data-rvall]')).toContainText('(1 de 2)');
+  await expect(page.locator('#rvpanel [data-rvall]')).toContainText('(1 de 2)');
   page.once('dialog', d => d.accept());
-  await page.click('#ppbar [data-rvall]');
+  await page.click('#rvpanel [data-rvall]');
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-10-02', '2026-10-03']);
   const p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
   expect(p.items.i0).toBeNull();
@@ -73,7 +73,7 @@ test('8 · revisando una propuesta, tocar un día lo agrega a lo propuesto y el 
   const errors = await openApp(page, { tab: 'look', extra: [REC0, prop({ i0: item(moved(I0, ['2026-10-02']), I0) })] });
   await revision(page);
   await cell(page, 'i0', '2026-10-05').click();
-  await expect(page.locator('#ppbar')).toContainText('días editados');
+  await expect(page.locator('#rvpanel')).toContainText('días editados');
   /* solo es la vista previa: lo oficial y lo que envió el SC siguen igual */
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
@@ -154,7 +154,7 @@ test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de 
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-05']);
   /* aceptar todo lo visible no la toma: queda pendiente para revisarla sola */
   page.once('dialog', d => d.accept());
-  await page.click('#ppbar [data-rvall]');
+  await page.click('#rvpanel [data-rvall]');
   await expect(page.locator('#toast')).toContainText('el programa oficial cambió');
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
   /* aceptando la pregunta, se aplica */
@@ -253,7 +253,7 @@ test('14 · la revisión muestra el cruce entre dos propuestas del mismo ambient
   await expect(c).toHaveClass(/rvc/);
   expect(await c.getAttribute('title')).toContain('(propuesta)');
   /* y en la lista de propuestas */
-  await page.click('#ppbar [data-pp="list"]');
+  await page.click('#rvpanel [data-pp="list"]');
   await expect(page.locator('#ppm')).toContainText('Otra propuesta pendiente en el mismo ambiente');
   noErrors(errors, 'cruces entre propuestas');
 });
@@ -270,9 +270,9 @@ test('ventana de propuestas: pasado el corte el SC solo ve; el ingeniero la habi
   const p2 = await page.context().newPage();
   errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W] });
   p2.on('dialog', d => d.accept());
-  await p2.locator('#ppbar [data-pp="open"]').click();
+  await p2.locator('#rvpanel [data-pp="open"]').click();
   await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(Date.parse('2026-10-03T13:00:00-05:00'));
-  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita');
 });
 
@@ -285,24 +285,24 @@ test('ventana de propuestas: si el ingeniero nunca la habilitó, está cerrada (
   noErrors(errors, 'sc nunca habilitada');
   const p2 = await page.context().newPage();
   errors = await openApp(p2, { as: 'editor', tab: 'look', extra: [W0] });
-  await expect(p2.locator('#ppbar')).toContainText('aún no las habilitas');
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toBeVisible(); // sin pendientes: solo queda la pestaña para habilitar
   p2.on('dialog', d => d.accept());
-  await p2.locator('#ppbar [data-pp="open"]').click();
+  await p2.locator('#rvpanel [data-pp="open"]').click();
   const nx = await p2.evaluate(() => propNextCut());
   await expect.poll(() => p2.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
-  await expect(p2.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
+  await expect(p2.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
   noErrors(errors, 'editor habilita la primera vez');
 });
 
 test('ventana de propuestas: el ingeniero puede bloquearlas a mano antes del corte y volver a habilitarlas', async ({ page }) => {
-  let errors = await openApp(page, { as: 'editor', tab: 'look' }); // el Firebase falso la siembra abierta hasta 2027
+  let errors = await openApp(page, { as: 'editor', tab: 'look', extra: [prop({ i0: item(moved(I0, ['2026-10-05']), I0) })] }); // abierta hasta 2027; el panel solo aparece con propuestas pendientes
   page.on('dialog', d => d.accept());
-  await expect(page.locator('#ppbar [data-pp="open"]')).toHaveCount(0);
-  await page.locator('#ppbar [data-pp="close"]').click();
+  await expect(page.locator('#rvpanel [data-pp="open"]')).toHaveCount(0);
+  await page.locator('#rvpanel [data-pp="close"]').click();
   await expect.poll(() => page.evaluate(() => { const w = __dbGet('meta', 'propwin') || {}; return w.man === true && w.closeAt <= NOW(); })).toBe(true);
-  await expect(page.locator('#ppbar')).toContainText('las bloqueaste');
-  await expect(page.locator('#ppbar [data-pp="close"]')).toHaveCount(0);
-  await page.locator('#ppbar [data-pp="open"]').click();
+  await expect(page.locator('#rvpanel')).toContainText('las bloqueaste');
+  await expect(page.locator('#rvpanel [data-pp="close"]')).toHaveCount(0);
+  await page.locator('#rvpanel [data-pp="open"]').click();
   const nx = await page.evaluate(() => propNextCut());
   await expect.poll(() => page.evaluate(() => (__dbGet('meta', 'propwin') || {}).closeAt)).toBe(nx);
   await expect.poll(() => page.evaluate(() => !!(__dbGet('meta', 'propwin') || {}).man)).toBe(false);

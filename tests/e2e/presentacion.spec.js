@@ -4,7 +4,7 @@ import { openApp, noErrors } from './helpers.js';
 
 test('presentar el lookahead en la reunión semanal', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look' });
-  await page.click('#fpres');
+  await page.evaluate(() => presStart()); // oct 2026: el botón «Presentar» salió de la barra del lookahead
   await expect(page.locator('#presbar')).toBeVisible();
   await expect(page.locator('.top')).toBeHidden();
   await expect(page.locator('#fq')).toBeHidden();

@@ -156,7 +156,7 @@ test('ex-4 · «Aceptar todo» avisa que la fila movida se acepta con tus cambio
   await page.evaluate(() => { U.rev = true; REVSEL = { sc: 'c1', id: 'q1', k: 1 }; gridRows = null; render(); });
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
-  await page.click('#ppbar [data-rvall]');
+  await page.click('#rvpanel [data-rvall]');
   await expect.poll(() => msg).toContain('con tus cambios');
   expect(await page.evaluate(() => Object.keys(__dbAll('lhphist')).length)).toBe(0);
   noErrors(errors, 'aceptar todo con desplazamiento');

@@ -37,59 +37,67 @@ function baselines(){ // por piso: última semana congelada <= semana visible
   return m;
 }
 function buildLookShell(main){
+  /* oct 2026: los menús de la barra abren cerrados; «Modo reunión» ya no está en la barra (solo lo usa ▶ Presentar en otras pantallas) */
+  U.lbMore=false;U.lbDots=false;if(!(typeof LKP!=='undefined'&&LKP))U.meeting=false;
   gridRows=null;gridHead='';
   main.innerHTML=`<div class="view">
   <div class="bar">
     <input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar">
     <select id="fsec" aria-label="Sector"></select>
     <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
-    <span class="seg" id="fwin" aria-label="Semanas visibles"><button data-w="3">3 sem</button><button data-w="6">6 sem</button><button data-w="12">12 sem</button></span>
-    <button class="ib pri" id="fedit" hidden>✎ Editar</button>
-    <button class="ib" id="fpres" title="Pantalla completa para la reunión semanal">▶ Presentar</button>
-    <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
-    <button class="ib" id="fmore" aria-expanded="false" title="Más filtros y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
+    <select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select>
+    <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Mostrar lo oculto, filtrar y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
-    <span id="fday"></span><span id="fpast"></span><span id="fdone"></span><span id="fmxp"></span>
+    <span id="fday"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
-    <button class="ib" id="fhist" title="Quién cambió qué y cuándo: cambios del lookahead y decisiones sobre propuestas, por fecha">🕑 Historial</button>
-    <button class="ib" id="fvsave" hidden>Guardar versión…</button><button class="ib" id="fvdel" hidden>Eliminar versión</button>
-    <div class="bmore" id="bmore" hidden>
+    <button class="ib" id="fdots" aria-expanded="false" aria-haspopup="true" aria-label="Más opciones" title="Historial, versiones y plegar">⋯</button>
+    <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
+    <button class="ib pri" id="fedit" hidden>✎ Editar</button>
+    <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Filtros y vista">
+      <div class="lkph">Mostrar</div>
+      <div class="lkprow"><span id="fpast"></span><span id="fdone"></span><span id="fmxp"></span><span class="mu lkpnone" id="fshn">No hay nada oculto en esta vista.</span></div>
+      <div class="lkph">Filtrar</div>
       <button class="ib" id="fact" title="Elegir una o varias actividades específicas (p. ej. Gabel y Pintura de 2da mano)">Actividades</button>
       <label class="chk"><input type="checkbox" id="fonly"> Solo con días en la ventana</label>
-      <label class="chk" title="Actividades cuyos días ya pasaron y no tienen ningún día desde el inicio de la ventana (no se borran: vuelven al programarles un día)"><input type="checkbox" id="fpastc"> Mostrar las ya vencidas</label>
       <label class="chk"><input type="checkbox" id="frestr"> Con restricciones</label>
       <label class="chk" id="lobs" hidden title="Actividades marcadas al importar el Excel para revisar el subcontratista"><input type="checkbox" id="fobs"> Con observaciones <b id="nobs"></b></label>
+      <div class="lkph">Vista</div>
       <label class="chk"><input type="checkbox" id="fchg"> Ver cambios</label>
       <label class="chk"><input type="checkbox" id="fleg"> Mostrar subcontratistas</label>
-      <span class="sp"></span>
+      <input type="checkbox" id="fpastc" hidden>
+    </div>
+    <div class="lkpop lkmenu" id="bdots" hidden role="menu" aria-label="Más opciones">
+      <button class="ib" id="fhist" title="Quién cambió qué y cuándo: cambios del lookahead y decisiones sobre propuestas, por fecha">🕑 Historial</button>
+      <button class="ib" id="fvsave" hidden>Guardar versión…</button><button class="ib" id="fvdel" hidden>Eliminar versión</button>
       <button class="ib" id="fcoll">Plegar todo</button>
-      <button class="ib" id="fmeet">Modo reunión</button>
     </div>
   </div>
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
   /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
-  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#fpres').onclick=presStart;$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);
-  $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;saveUI();moreSync()};
+  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);
+  $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;U.lbDots=false;moreSync()};
+  $('#fdots').onclick=()=>{U.lbDots=!U.lbDots;U.lbMore=false;moreSync()};
+  $('#bdots').addEventListener('click',e=>{if(e.target.closest('button')){U.lbDots=false;moreSync()}});
+  lkPopWire();
   $('#fclr').onclick=()=>{clearTimeout(lkQTimer);lkQTimer=0;U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};
   $('#fmode').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.qmode=b.dataset.m;saveUI();closeQEditor(true);requestRender();if(U.qmode==='metrado')toast('Modo metrado: haz clic en un día para escribir la cantidad, o arrastra varios días para repartir el saldo.')};
-  $('#fwin').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.win=+b.dataset.w;saveUI();requestRender()};
+  $('#fwin').onchange=e=>{U.win=+e.target.value;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
-  $('#fmxp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(!LK_GHOK){toast(b.title);return}U.lkGh=!U.lkGh;GHT.clear();saveUI();requestRender()};
-  $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;saveUI();requestRender()}};
-  $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;saveUI();requestRender()}};
+  $('#fmxp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(!LK_GHOK){toast(b.title);return}U.lkGh=!U.lkGh;U.lbMore=false;GHT.clear();saveUI();requestRender()};
+  $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;U.lbMore=false;saveUI();requestRender()}};
+  $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;U.lbMore=false;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
   $('#fobs').onchange=e=>{U.onlyObs=e.target.checked;saveUI();requestRender()};
   $('#fchg').onchange=e=>{U.changes=e.target.checked;saveUI();requestRender();if(U.changes&&!baselines().size)toast('Aún no hay un plan congelado para comparar. Congela el plan en la pestaña Plan semanal.')};
   $('#fcoll').onclick=()=>{const vs=new Set(visPisos().map(p=>p.id));const all=[...vs,...[...S.sec.values()].filter(s=>vs.has(pisoOfSecObj(s))).map(s=>s.id)];const allC=all.every(id=>U.collapsed.includes(id));U.collapsed=allC?U.collapsed.filter(id=>!all.includes(id)):[...new Set([...U.collapsed,...all.filter(id=>!vs.has(id))])];saveUI();requestRender()};
-  $('#fmeet').onclick=()=>{U.meeting=!U.meeting;if(U.meeting&&U.win>3)U.win=3;saveUI();requestRender()};
   $('#fver').onchange=e=>{U.ver=e.target.value;if(U.ver)U.cliv=false;if(U.ver&&!U.verMode)U.verMode='ver';if(U.ver)loadVer(U.ver);gridRows=null;closePop();requestRender()};
   $('#fvm').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.verMode=b.dataset.v;gridRows=null;requestRender()};
   $('#fvsave').onclick=e=>saveVerMenu(e.currentTarget);
@@ -150,11 +158,10 @@ function renderLookInner(main){
   if(U.sector&&!secs.some(s=>s.id===U.sector))U.sector='';
   {const fa=$('#fact');if(fa){fa.textContent=actBtnLabel();fa.classList.toggle('on',U.acts.length>0)}}
   $('#fsec').innerHTML='<option value="">Todos los sectores'+(U.piso?' del piso':'')+'</option>'+secs.map(s=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${U.piso?'':esc((S.pis.get(pisoOfSecObj(s))||{}).code||'')+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('');
-  $$('#fwin button').forEach(b=>b.classList.toggle('on',+b.dataset.w===U.win));
+  {const fw=$('#fwin');if(fw.value!==String(U.win)){if(![...fw.options].some(o=>o.value===String(U.win)))fw.insertAdjacentHTML('beforeend',`<option value="${U.win}">${U.win} sem</option>`);fw.value=String(U.win)}}
   $$('#fmode button').forEach(b=>b.classList.toggle('on',b.dataset.m===U.qmode));$('#gw').classList.toggle('qm',U.qmode==='metrado');
   $('#fonly').checked=U.onlyWin;$('#fpastc').checked=!!U.showPast;$('#frestr').checked=U.onlyRestr;
   {let no=0;for(const a of S.act.values())if(a.obs&&vset.has(pisoOfAmb(a.ambId)))no++;if(!no&&U.onlyObs)U.onlyObs=false;$('#lobs').hidden=!no;$('#nobs').textContent=no||'';$('#fobs').checked=U.onlyObs}$('#fchg').checked=U.changes;
-  $('#fmeet').classList.toggle('on',U.meeting);
   $('#gw').classList.toggle('meet',U.meeting);$('#gw').classList.toggle('ro-mode',!canWrite);
   const days=winDays();const dset=new Set(days.map(x=>x.d));
   {const fd=$('#fday');const wIn=U.wkF&&U.wkF>=U.week&&U.wkF<U.week+U.win;const hv=U.day&&days.some(x=>x.d===U.day)?`<span class="dpill">Solo ${DOWN[(pd(U.day).getUTCDay()+6)%7].toLowerCase()} ${fmtD(U.day)}<button id="fdayx" aria-label="Ver todos los días" title="Ver todos los días">&times;</button></span>`:wIn?`<span class="dpill">Solo semana ${U.wkF} (${fmtD(weekDays(U.wkF)[0])} – ${fmtD(weekDays(U.wkF)[5])})<button id="fdayx" aria-label="Ver todas las semanas" title="Ver todas las semanas">&times;</button></span>`:'';if(fd.innerHTML!==hv){fd.innerHTML=hv;const bx=$('#fdayx');if(bx)bx.onclick=()=>{U.day='';U.wkF=0;requestRender()}}}
@@ -170,6 +177,7 @@ function renderLookInner(main){
   {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n||LK_MXT?`<button class="dpill mxpp${U.lkGh&&LK_GHOK?' on':''}${LK_GHOK?'':' off'}" aria-pressed="${!!U.lkGh}"${LK_GHOK?'':' aria-disabled="true"'} title="${LK_GHOK?`Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}`:'Quita la búsqueda y los filtros de semana, día, actividades, restricciones u observaciones para ver lo que falta programar (con piso, sector y subcontratistas sí se ven)'}">${U.lkGh&&LK_GHOK?'✓ ':''}Faltan programar <b>${n}</b>${LK_MXT?` · <b>${LK_MXT}</b> ✓ en Matriz`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="La Matriz las tiene confirmadas como Terminado o No aplica y no tienen días de hoy en adelante. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
+  moreSync();
 }
 /* (auditoría de código 08/10, L6) aviso en la consola, una sola vez por actividad, de la fila que no se pudo dibujar */
 const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(id))return;LKBADW.add(id);console.warn('Lookahead: fila con dato inválido',id,err)}
