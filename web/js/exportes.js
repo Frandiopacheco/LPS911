@@ -82,7 +82,7 @@ async function reportPdf(d){const btn=$('#bpdf');const bt=btn?btn.textContent:''
 
 /* ================= EXCEL DEL PPC (diario / semanal) ================= */
 async function exportPpcXlsx(){const btn=$('#bxppc');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
-  try{const dia=U.indMode!=='sem';const today=todayIso();const dates=dia?[indDay()]:weekDays(U.week).filter(d=>d<=today);
+  try{const dia=indM()==='dia';const today=todayIso();const dates=dia?[indDay()]:weekDays(U.week).filter(d=>d<=today);
     if(!dates.length){toast('La semana aún no empieza.');return}
     await ensureDaily(addD(dates[0],-1));await loadXlsx();const X=window.XLSX;const p=P();const vp=visPisos();const vset=new Set(vp.map(x=>x.id));const D=dayData(dates,vset);
     const bd={top:{style:'thin',color:{rgb:'BFBFBF'}},bottom:{style:'thin',color:{rgb:'BFBFBF'}},left:{style:'thin',color:{rgb:'BFBFBF'}},right:{style:'thin',color:{rgb:'BFBFBF'}}};
