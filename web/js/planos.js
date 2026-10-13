@@ -279,6 +279,12 @@ function plThumbs(host){if(host._io)host._io.disconnect();
    fundido corto. Zoom animado (rueda, botones, doble toque), inercia al soltar, pellizco, y precarga alrededor de lo visible.
    (Antes eran <img> sueltas que se reacomodaban al terminar cada gesto: en tablets Android eso parpadeaba.) */
 const PL_CAP=56;
+/* mosaicos alrededor de la pantalla (docs/ia/planos.md › Degradado de calidad): además del nivel que corresponde al zoom (con PL_TM[0] de
+   margen por lado, como siempre) se piden los niveles siguientes hasta el grueso, cada uno con más margen (PL_TM[1], PL_TM[2]…). Cada
+   nivel tiene 4 veces menos mosaicos que el anterior, así que cuesta poco, y al desplazar o alejar lo que entra baja de calidad de a poco
+   y no de golpe al nivel grueso (1/8). PL_NEED_MAX: tope de mosaicos pedidos a la vez (memoria de la tablet: cada uno ≈ 4 MB decodificado,
+   PL_CAP = 56); lo que no cabe se descarta empezando por lo más lejano de la pantalla, y lo de siempre (nivel del zoom + grueso) nunca. */
+const PL_TM=[0.3,0.6,1.0],PL_NEED_MAX=48,PL_FLING_MS=250;
 /* capa nítida (docs/ia/planos.md › Nitidez): con zoom más allá del detalle de los mosaicos, al detenerse se redibuja lo que está
    en pantalla desde el PDF original (vectorial). PL_SH_MIN: píxeles de pantalla por píxel del plano desde los que hace falta;
    PL_SH_IDLE: espera quieto antes de dibujar; PL_SH_PX: tope de píxeles del lienzo nítido (memoria de la tablet). */
@@ -378,11 +384,30 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   const coarse=Math.max(0,spec.Z-2);
   V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
     const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dprL)))));const now=performance.now();
-    const need=new Set();const add=(z,vis,m)=>{const k=2**z,lw=Math.ceil(spec.W/k),lh=Math.ceil(spec.H/k),nx=Math.ceil(lw/T),ny=Math.ceil(lh/T);
-      let x0=0,y0=0,x1=nx,y1=ny;if(vis){const vw=cw/V.s,vh=ch/V.s,wx0=-V.x/V.s-vw*m,wy0=-V.y/V.s-vh*m,wx1=-V.x/V.s+vw*(1+m),wy1=-V.y/V.s+vh*(1+m);
-        x0=Math.max(0,Math.floor(wx0/(T*k)));y0=Math.max(0,Math.floor(wy0/(T*k)));x1=Math.min(nx,Math.ceil(wx1/(T*k)));y1=Math.min(ny,Math.ceil(wy1/(T*k)))}
-      for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)need.add(z+'/'+x+'_'+y)};
-    add(coarse,false,0);if(zd<coarse){add(zd,true,0.3);if(zd+1<coarse)add(zd+1,true,0)}V.need=need;
+    /* vistas que hay que cubrir: la actual, la de destino de la animación de zoom (al alejar, lo que va a entrar ya se pide) y hacia
+       donde la lleva la inercia del arrastre */
+    const vws=[{s:V.s,x:V.x,y:V.y}];if(anim)vws.push({s:anim.s,x:anim.x,y:anim.y});if(fling)vws.push({s:V.s,x:V.x+fling.vx*PL_FLING_MS,y:V.y+fling.vy*PL_FLING_MS});
+    /* rectángulo del plano (en px del detalle) que cubren esas vistas con un margen m (fracción de la pantalla por lado) */
+    const rect=m=>{let a=1e12,b=1e12,c=-1e12,d=-1e12;for(const v of vws){const vw=cw/v.s,vh=ch/v.s,x0=-v.x/v.s,y0=-v.y/v.s;
+      a=Math.min(a,x0-vw*m);b=Math.min(b,y0-vh*m);c=Math.max(c,x0+vw*(1+m));d=Math.max(d,y0+vh*(1+m))}return[a,b,c,d]};
+    const r0=rect(0);
+    /* mosaicos del nivel z dentro del rectángulo con margen m, con su distancia (en px del plano) a lo que se ve ahora */
+    const tilesIn=(z,m)=>{const k=2**z,nx=Math.ceil(Math.ceil(spec.W/k)/T),ny=Math.ceil(Math.ceil(spec.H/k)/T),[a,b,c,d]=rect(m),out=[];
+      const x0=Math.max(0,Math.floor(a/(T*k))),y0=Math.max(0,Math.floor(b/(T*k))),x1=Math.min(nx,Math.ceil(c/(T*k))),y1=Math.min(ny,Math.ceil(d/(T*k)));
+      for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const wx=x*T*k,wy=y*T*k;
+        out.push({k:z+'/'+x+'_'+y,z,d:Math.max(0,r0[0]-(wx+T*k),wx-r0[2],r0[1]-(wy+T*k),wy-r0[3])})}return out};
+    const need=new Set();
+    /* nivel grueso: toda la lámina, siempre */
+    {const k=2**coarse,nx=Math.ceil(Math.ceil(spec.W/k)/T),ny=Math.ceil(Math.ceil(spec.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)need.add(coarse+'/'+x+'_'+y)}
+    if(zd<coarse){
+      /* lo de siempre: el nivel del zoom con margen y el siguiente solo en pantalla; lo más cercano a la pantalla se pide primero */
+      const base=[...tilesIn(zd,PL_TM[0]),...(zd+1<coarse?tilesIn(zd+1,0):[])].sort((p,q)=>p.d-q.d||p.z-q.z);
+      for(const t of base)need.add(t.k);
+      /* niveles intermedios con más margen: lo más cercano primero y, si no caben (PL_NEED_MAX), se descarta lo más lejano */
+      const ex=[];for(let z=zd+1;z<coarse;z++)for(const t of tilesIn(z,PL_TM[Math.min(z-zd,PL_TM.length-1)]))if(!need.has(t.k))ex.push(t);
+      ex.sort((p,q)=>p.d-q.d||p.z-q.z);const room=Math.max(0,PL_NEED_MAX-need.size);
+      for(let i=0;i<ex.length&&i<room;i++)need.add(ex[i].k)}
+    V.need=need;
     for(const k of need){let e=V.tiles.get(k);if(e){e.used=now;continue}
       const[z,xy]=k.split('/');const[x,y]=xy.split('_').map(Number);const zz=+z,f=2**zz;const lw=Math.ceil(spec.W/f),lh=Math.ceil(spec.H/f);
       e={z:zz,wx:x*T*f,wy:y*T*f,ww:Math.min(T,lw-x*T)*f,wh:Math.min(T,lh-y*T)*f,bm:null,t0:0,used:now};V.tiles.set(k,e);

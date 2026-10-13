@@ -129,6 +129,10 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await expect.poll(() => page.evaluate(() => window.__GETS.filter(p => /\/0\/\d+_\d+\.webp$/.test(p)).length)).toBeGreaterThan(0);
   const det = await page.evaluate(() => window.__GETS.filter(p => /\/0\//.test(p)).length);
   expect(det).toBeLessThan(exp.filter(p => /\/0\//.test(p)).length);
+  // degradado de calidad: se piden todos los niveles entre el del zoom y el grueso (sin salto de golpe) y nunca más del tope de mosaicos
+  const nd = await page.evaluate(() => { const n = [...PLV.tv.need]; return { tot: n.length, lv: [...new Set(n.map(k => k.split('/')[0]))].sort() }; });
+  expect(nd.lv).toEqual(['0', '1', '2']);
+  expect(nd.tot).toBeLessThanOrEqual(48);
   await page.keyboard.press('Escape');
   await expect(page.locator('#plv')).toHaveCount(0);
   // otro archivo con el mismo código: nueva revisión (la anterior queda en el historial)
