@@ -132,8 +132,8 @@ test('Presentar el día: el comparativo por piso va al pie del Resumen y tocar u
   await page.locator('#bipr').click();
   const ipr = page.locator('#ipr');
   await expect(ipr.locator('.ixd-flt.hint')).toBeVisible();
-  // no es una lámina aparte: son 4 láminas y el comparativo está en el Resumen
-  await expect(ipr.locator('.iprpg button')).toHaveCount(4);
+  // no es una lámina aparte: son 5 láminas (la última, «Jornada») y el comparativo está en el Resumen
+  await expect(ipr.locator('.iprpg button')).toHaveCount(5);
   await expect(ipr.locator('.iprcard', { hasText: 'PPC por piso' })).toBeVisible();
   await expect(ipr.locator('.iprcard [data-ixpi]')).toHaveCount(2);
   await expect(ipr.locator('.iprring b')).toHaveText('50%');
