@@ -281,6 +281,20 @@ tr.pmro td.s4 input,tr.pmro td.s4 .anv,tr.pmro td.s3{opacity:.65}
 /* etapa 30: modo revisión */
 .ppb.rv{background:#fff7e8;border:1px solid #f5c98a;position:sticky;top:0;z-index:30;box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .rvl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* panel lateral de revisión de propuestas (oct 2026): flotante a la derecha, plegable a una pestaña */
+.rvpanel{position:fixed;right:10px;top:clamp(96px,16vh,150px);width:min(310px,calc(100vw - 20px));max-height:calc(100vh - clamp(96px,16vh,150px) - 14px);display:flex;flex-direction:column;z-index:46;background:#fff7e8;border:1px solid #f5c98a;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.22);font-size:13px;line-height:1.4;color:var(--ink)}
+.rvpanel .rvhd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px 7px 12px;border-bottom:1px solid #f5c98a}
+.rvn{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--bad,#c62828);color:#fff;font:700 12px/20px var(--f-mono);text-align:center}
+.rvpanel .rvbody{display:flex;flex-direction:column;gap:9px;padding:10px 12px 12px;overflow-y:auto;overscroll-behavior:contain}
+.rvpanel .rvnav{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.rvpanel .rvmv,.rvpanel .rvft{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rvpanel .rvall{display:flex;flex-direction:column;gap:6px}
+.rvpanel .rvall .ib{width:100%;height:34px;justify-content:center}
+.rvpanel .rvsel{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.rvpanel .ib{height:32px}
+.rvpanel.fold{width:auto;max-height:none;background:transparent;border:0;box-shadow:none;right:0}
+.rvtab{display:flex;align-items:center;gap:7px;border:1px solid #f5c98a;border-right:0;background:#fff7e8;color:var(--ink);border-radius:12px 0 0 12px;padding:9px 12px;font:700 13px var(--f-ui);cursor:pointer;box-shadow:-4px 4px 14px rgba(0,0,0,.2)}
+:root:not([data-theme="light"]) .rvpanel,:root:not([data-theme="light"]) .rvtab{background:#2a2216;border-color:rgba(245,166,35,.45)}
 .rvchips{display:flex;gap:5px;flex-wrap:wrap}
 .rvchips button{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:3px 10px;font:600 12.5px var(--f-ui);display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--ink)}
 .rvchips button i{width:9px;height:9px;border-radius:3px;background:var(--c)}
@@ -1198,7 +1212,7 @@ tr.asel>td.s0{box-shadow:inset 4px 0 0 var(--accent)}
 /* =====================================================================
    MODO PRESENTACIÓN DEL LOOKAHEAD (reunión semanal)
    ===================================================================== */
-body.pres .top,body.pres #bnav,body.pres .view>.bar,body.pres #verban,body.pres .ppb,body.pres .vabar{display:none!important}
+body.pres .top,body.pres #bnav,body.pres .view>.bar,body.pres #verban,body.pres .ppb,body.pres .rvpanel,body.pres .vabar{display:none!important}
 .presbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:var(--sh-1);z-index:20}
 .presbar .pbt{display:flex;flex-direction:column;font-size:16px;line-height:1.15;margin-right:6px}
 .presbar .pbt small{font-size:12.5px;font-weight:400;color:var(--muted)}

@@ -737,7 +737,7 @@ function render(){
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
   if(U.tab!=='look'&&U.cliv)U.cliv=false;if(typeof cliSync==='function')rSafe('cliSync',cliSync);
   if(typeof dayAuto==='function')rSafe('dayAuto',dayAuto);
-  let main=$('#main');rSafe('renderTop',renderTop);
+  let main=$('#main');rSafe('renderTop',renderTop);if(U.tab!=='look'&&typeof rvPanelSync==='function')rvPanelSync();
   if(offLps()){document.body.classList.remove('cap-mode','v-dash','dash-tv');if(LKP)rSafe('presStop',presStop);rSafe('vaBanner',vaBanner)}else{
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
