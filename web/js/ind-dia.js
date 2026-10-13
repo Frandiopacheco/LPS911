@@ -32,7 +32,10 @@ function ixdRow(r,click,sel){const c=r.pi?{name:ixdNm(r),color:'var(--accent,#25
     <span class="nm"><i style="background:${esc(c.color)}"></i>${esc(c.name)}</span>
     <span class="tr"><span class="fl ${r.band}" style="width:${f.toFixed(1)}%"></span>${h?`<span class="gh" style="left:${f.toFixed(1)}%;width:${h.toFixed(1)}%"></span>`:''}<i class="tk" style="left:50%"></i><i class="tk" style="left:80%"></i></span>
     <span class="vl">${r.v==null?`<b>—</b><small>${o.ver?'todo lo fallado fue ajeno al SC':o.prog+' programada'+(o.prog===1?'':'s')+' sin verificar'}</small>`:`<b>${pct(r.v)}</b><small>${o.ok} de ${o.ver}${alt}</small>`}</span></div>`}
-function ixdGroupsHtml(R,click,sel){const g=ixdGroups(R);
+function ixdGroupsHtml(R,click,sel,flat){const g=ixdGroups(R);
+  /* flat (presentación): una sola lista continua, mismo orden (crítico → parcial → cumplieron → sin verificar) y sin títulos de grupo;
+     el color de cada barra ya dice en qué tramo está */
+  if(flat)return`<div class="ixd-flat">${['bad','warn','ok','none'].flatMap(k=>g[k]).map(r=>ixdRow(r,click,sel)).join('')}</div>`;
   return['bad','warn','ok','none'].filter(k=>g[k].length).map(k=>`<section class="ixd-grp ${k}"><h4 class="ixd-gh"><i></i>${IXD_G[k].t} <b>${g[k].length}</b><small>${IXD_G[k].h}</small></h4>${g[k].map(r=>ixdRow(r,click,sel)).join('')}</section>`).join('')}
 /** cuatro contadores del semáforo; con `names` (presentación) listan a los SC de cada grupo */
 function ixdSummary(R,names){const g=ixdGroups(R);
@@ -120,7 +123,7 @@ function iprdResumen(D,R){const t=D.tot,br=t.ver?t.ok/t.ver:null,ps=pscOf(t);con
 
 function iprdSc(R){if(!R.length)return'<div class="iprempty">Sin subcontratistas con actividades este día.</div>';
   return`<section class="iprcard"><h3>Cumplimiento por subcontratista <small>${R.length} · ${IXD_M==='sc'?'clasificados por PPC del SC':'clasificados por PPC bruto'}</small></h3>
-    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,true,IPRF.sc)}</div>
+    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,true,IPRF.sc,true)}</div>
     <div class="ixd-legb">${ixdLegend()}</div>
     <p class="iprnote">Toca un subcontratista para filtrar todas las láminas. PPC bruto = cumplidos / verificados (Parcial cuenta como no cumplido). «Del SC» no cuenta lo que falló por causas que no dependen del subcontratista (rayado).</p></section>`}
 

@@ -3689,6 +3689,7 @@ body:has(#plv) #pop{z-index:440}
 .ixd-sl span{display:inline-flex;align-items:center;gap:.4em}.ixd-sl i{width:.8em;height:.8em;border-radius:3px}
 .ixd-sl .i{background:var(--bad)}.ixd-sl .n{background:var(--muted)}
 .ixd-cols.two{column-count:2;column-gap:clamp(16px,2.5vw,40px)}
+.ixd-cols .ixd-flat .ixr{break-inside:avoid}
 .ixd-cols .ixd-gh{break-after:avoid}
 .ixd-crit{display:flex;flex-direction:column;gap:clamp(12px,1.4vw,22px)}
 .ixd-cc{border-left:.35em solid var(--bad)}
