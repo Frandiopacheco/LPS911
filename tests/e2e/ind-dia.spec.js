@@ -71,7 +71,10 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await page.screenshot({ path: 'test-results/ind-dia-resumen.png' });
   await page.keyboard.press('ArrowRight');
   await expect(ipr).toContainText('Cumplimiento por subcontratista');
-  await expect(ipr.locator('.ixd-grp.bad')).toContainText('SC TARRAJEO');
+  // presentación: una sola lista continua, sin títulos «Crítico / Parcial / Cumplieron»; el crítico va primero y en rojo
+  await expect(ipr.locator('.ixd-gh')).toHaveCount(0);
+  await expect(ipr.locator('.ixd-flat .ixr').first()).toHaveClass(/bad/);
+  await expect(ipr.locator('.ixd-flat .ixr.bad')).toContainText('SC TARRAJEO');
   await page.screenshot({ path: 'test-results/ind-dia-sc.png' });
   await page.keyboard.press('ArrowRight');
   await expect(ipr.locator('.ixd-cc')).toHaveCount(1);
