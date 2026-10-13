@@ -45,6 +45,7 @@ test('faltan programar: el interruptor muestra la fila fantasma y tocar un día 
   await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
   await expect(page.locator('#fmxp')).toContainText('Faltan programar 1');
   await expect(gh(page)).toHaveCount(0);
+  await page.click('#fmore');
   await page.click('#fmxp button');
   await expect(gh(page)).toContainText('Pintura');
   await expect(gh(page)).toContainText('Falta');
@@ -67,6 +68,7 @@ test('faltan programar: apagado no hay chips ni filas; encendido el chip pliega 
   await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
   await expect(page.locator('[data-ghamb]')).toHaveCount(0);
   await expect(gh(page)).toHaveCount(0);
+  await page.click('#fmore');
   await page.click('#fmxp button');
   await expect(gh(page)).toBeVisible();
   await page.click('[data-ghamb="a3"]');
@@ -165,6 +167,7 @@ test('auditoría 4-5-9: con búsqueda el botón queda apagado y explica; hoy se 
   expect(await page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura').length)).toBe(0);
   await page.evaluate(() => { U.q = 'pintura'; render(); });
   await expect(page.locator('#fmxp button.off')).toHaveCount(1);
+  await page.click('#fmore');
   await page.click('#fmxp button', { force: true });
   await expect(page.locator('#toast')).toContainText('Quita la búsqueda');
   noErrors(errors, 'botón apagado');

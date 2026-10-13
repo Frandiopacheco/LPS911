@@ -221,9 +221,22 @@ function pickPiso(){if(U.piso&&S.pis.has(U.piso))return;if(U.pisoAll||S.pis.size
   U.piso=best||(ps[0]&&ps[0].id)||'';U.sector='';saveUI()}
 /* Lookahead: panel "Filtros y vista" */
 function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidden=!U.lbMore;b.setAttribute('aria-expanded',U.lbMore?'true':'false');b.classList.toggle('on',!!U.lbMore);
-  const n=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
-  {const c=$('#fclr');if(c)c.hidden=!(n||U.q||U.sector||U.sc)}
-  const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff)}
+  /* oct 2026: el globo cuenta también lo oculto que se está mostrando (vencidas, terminadas, faltan programar) */
+  const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf+[U.showPast,U.showDone,U.lkGh].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc)}
+  {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML||($('#fmxp')||{}).innerHTML)}
+  const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff);
+  const bd=$('#bdots'),db=$('#fdots');if(bd&&db){bd.hidden=!U.lbDots;db.setAttribute('aria-expanded',U.lbDots?'true':'false');db.classList.toggle('on',!!U.lbDots)}
+  lkPopPlace()}
+/* menús flotantes de la barra del lookahead (Filtros y vista, ⋯): fijos bajo su botón, se cierran al tocar fuera o con Esc */
+function lkPopPlace(){const P=[['#bmore','#fmore',false],['#bdots','#fdots',true]];
+  for(const[pp,bb,right]of P){const p=$(pp),b=$(bb);if(!p||!b||p.hidden)continue;const r=b.getBoundingClientRect();p.style.top=Math.round(r.bottom+6)+'px';
+    if(right){p.style.left='';p.style.right=Math.max(8,Math.round(innerWidth-r.right))+'px'}else{p.style.right='';p.style.left=Math.max(8,Math.min(Math.round(r.left),innerWidth-p.offsetWidth-8))+'px'}}}
+let LKPOPW=false;
+function lkPopWire(){if(LKPOPW)return;LKPOPW=true;
+  document.addEventListener('pointerdown',e=>{if(!U.lbMore&&!U.lbDots)return;const t=e.target;if(t.closest&&t.closest('#bmore,#fmore,#bdots,#fdots,.pop,.uask'))return;U.lbMore=false;U.lbDots=false;moreSync()},true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(U.lbMore||U.lbDots)){U.lbMore=false;U.lbDots=false;moreSync()}});
+  addEventListener('resize',()=>{lkPopPlace();if(typeof rvPanelSync==='function')rvPanelSync()})}
 /* Campo: resumen de filtros (celular) */
 function cfxSum(secs,cons,nS){const s=CU.sec&&secs.find(o=>o.s.id===CU.sec);const c=CU.sc&&cons.find(o=>o.id===CU.sc);const sh={all:'Todas',pend:'Pendientes',reg:'Registradas',prop:'Por confirmar'}[CU.show]||'Todas';
   return`<span>${s?esc(s.s.code+' · '+s.s.name):'Todos los sectores'} · ${c?esc(c.name):'Todos los SC'} · ${sh}</span><b>${nS} prog.</b><i>${CU.fx?'▴':'▾'}</i>`}
