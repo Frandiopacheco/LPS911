@@ -3612,6 +3612,8 @@ td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-s
 .plvc.medir,.plvc.medir.drag{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='25' height='25' viewBox='0 0 25 25'><g fill='none' stroke-linecap='square'><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='white' stroke-width='3.4'/><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='%23d6336c' stroke-width='1.4'/></g></svg>") 12 12,crosshair}
 .plvc.medir.sobre,.plvc.medir.sobre.drag{cursor:move}
 /* Planos › Vínculos (planos-vinculos.js): barra de edición, selector de destino y botón «← Volver» */
+/* menús (⋯ datos del plano, sin conexión…) abiertos desde el visor de Planos (.plv 300): encima de él (antes quedaban detrás) */
+body:has(#plv) #pop{z-index:440}
 .plvc.vinc,.plvc.vinc.drag{cursor:crosshair}
 .plvc.lkhov,.plvc.lkhov.drag{cursor:pointer}
 .plvh .plback{border-color:var(--accent);color:var(--accent);font-weight:600}

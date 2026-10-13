@@ -11,7 +11,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 
 ## Reglas que no se rompen
 
-1. **Nunca perder datos de la obra.** No borres colecciones ni documentos sin pedirlo. "Eliminar" en la app **archiva** (`arch:{t,by,n}`); el borrado real solo existe en Equipo › Limpieza (pide escribir BORRAR).
+1. **Nunca perder datos de la obra.** No borres colecciones ni documentos sin pedirlo. "Eliminar" en la app **archiva** (`arch:{t,by,n}`); el borrado real solo existe en Equipo › Limpieza y en Planos › Eliminar (solo el administrador; ambos piden escribir BORRAR).
 2. **Nunca escribas en la rama `produccion`.** Los cambios van a `main` o en un *pull request* hacia `main`. La obra solo se actualiza cuando el dueño aprueba `main → produccion` (ver `PUBLICAR.md`).
 3. No edites `web/firebase-config.js`: no está en el repo, lo genera `scripts/build.mjs` desde `config/`.
 4. Cambios de reglas (`firebase/firestore.rules`): agrega o ajusta pruebas en `tests/rules/firestore.test.mjs`.
