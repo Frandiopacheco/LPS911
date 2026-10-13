@@ -7,7 +7,7 @@
 
 let IPR=null; // {pg: lámina, z: tamaño, m: 'sem' (plan semanal, láminas de aquí) | 'dia' (cumplimiento del día: láminas de ind-dia.js)}
 const IPR_PG=['Resumen','Subcontratistas','Causas'];
-function iprStart(){if(IPR)return;IPR={pg:0,z:1,m:U.indMode==='sem'?'sem':'dia'};closePop();
+function iprStart(){if(IPR)return;IPR={pg:0,z:1,m:indM()==='sem'?'sem':'dia'};closePop();
   const o=document.createElement('div');o.id='ipr';o.className='ipr';o.setAttribute('role','dialog');o.setAttribute('aria-label','Indicadores semanales · presentación');document.body.appendChild(o);
   o.onclick=iprClick;o.onchange=iprChange;document.body.classList.add('ipr-on');
   try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}

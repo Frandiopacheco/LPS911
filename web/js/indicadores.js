@@ -134,10 +134,12 @@ function wkScTable(entries,label){return`<div class="tscroll"><table class="t ct
 const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;padding:0;background:none"><i></i>${esc(conOf(sc).name)}</span>`;
 const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
-function indBar(){const d=indDay();const today=todayIso();const dia=U.indMode!=='sem';
-  return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`} · ${pisoLabel()}`,
-    dia?`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para proyectar el cumplimiento del día">▶ Presentar</button>'}<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
-   +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${dia?'':'on'}">Semanal</button></span>
+/* modo de Indicadores: 'dia' · 'sem' · 'cli' (PPC contra lo emitido al cliente; solo administrador) */
+const indM=()=>U.indMode==='sem'?'sem':U.indMode==='cli'&&canCli()?'cli':'dia';
+function indBar(){const d=indDay();const today=todayIso();const md=indM(),dia=md==='dia';
+  return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`}${md==='cli'?' · lo informado al cliente':''} · ${pisoLabel()}`,
+    md==='cli'?'':dia?`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para proyectar el cumplimiento del día">▶ Presentar</button>'}<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
+   +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${md==='sem'?'on':''}">Semanal</button>${canCli()?`<button data-m="cli" class="${md==='cli'?'on':''}" title="PPC contra lo emitido al cliente (solo administradores)">Cliente</button>`:''}</span>
    ${dia?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
 /** No cumplidos de la semana elegida: causa, comentario y mitigación, editables aquí mismo (los mismos datos del Plan semanal) */
 function ncCard(wSel){const cnc=P().cnc||[];const L=[];
@@ -189,9 +191,21 @@ function renderIndDay(main){
     if(inc.length||IXD_SC)h+=`<div class="card" id="ixinc"><h2>Incumplimientos del día <span class="sub">${inc.length} · clic para ver o editar en Campo</span>${IXD_SC?` <span class="dpill">Solo ${esc(ixdName(IXD_SC))}<button id="ixscx" aria-label="Ver todos los subcontratistas">×</button></span>`:''}</h2>${inc.length?`<div class="tscroll"><table class="t ctab rt"><thead><tr><th>Ítem</th><th>Ambiente</th><th>Actividad</th><th>Subcontratista</th><th>Estado</th><th>Causa</th><th>Imputable al SC</th><th>Comentario</th></tr></thead><tbody>
       ${inc.map(r=>`<tr data-goc="${r.x.id}|${d}"><td class="mono" data-l="Ítem">${U.piso?'':esc(r.p.code)+' · '}${esc(r.a.code)}</td><td class="wrapc" data-l="Ambiente">${esc(r.a.name)}</td><td class="wrapc lead">${esc(r.x.name)}</td><td data-l="Subcontratista">${scLabel(r.sc)}</td><td class="${ST[r.rc.status].c}" data-l="Estado">${ST[r.rc.status].i} ${ST[r.rc.status].t}</td><td class="wrapc" data-l="Causa">${r.rc.cnc?esc(r.rc.cnc):'<span style="color:var(--bad)">sin causa</span>'}</td><td data-l="Imputable al SC">${impOf(r.rc)?'Sí':'<span class="mu">No</span>'}</td><td class="wrapc mu full" data-l="Comentario">${esc(r.rc.note||'')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="pad"><div class="empty">Este subcontratista no tiene incumplimientos registrados este día.</div></div>`}</div>`}
   h+='</div></div>';main.innerHTML=h;wireInd(main)}
+/** Indicadores › Cliente (solo administrador): el PPC contra la versión emitida al cliente, junto al interno */
+function renderIndCli(main){const vset=histPisoSet();ensureCli();ensureDaily(cliPpcFrom());
+  const{W}=CLX.size?cliPpc(vset):{W:[]};const cerr=W.filter(o=>!o.cur&&o.ppc!=null);const last=cerr[cerr.length-1];
+  const pi=last?ppcWeekAgg(last.w,vset):null;const dlt=last&&pi?Math.round((last.ppc-pi.ppc)*100):null;
+  const avg=cerr.length?cerr.reduce((s,o)=>s+o.ppc,0)/cerr.length:null;
+  const tiles=`<div class="tiles">
+   <div class="tile hl"><span class="k">PPC del cliente · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.w}</small>`:''}</span></div>
+   <div class="tile"><span class="k">PPC interno · misma semana</span><span class="v">${pi?pct(pi.ppc):'—'}${pi?` <small>sem ${last.w}</small>`:''}</span></div>
+   <div class="tile" title="PPC del cliente menos PPC interno"><span class="k">Diferencia</span><span class="v">${dlt==null?'—':(dlt>0?'+':'')+dlt+' pts'}</span></div>
+   <div class="tile"><span class="k">Promedio del cliente</span><span class="v">${pct(avg)}${cerr.length?` <small>${cerr.length} sem</small>`:''}</span></div></div>`;
+  main.innerHTML=`<div class="scroll"><div class="wrap">${indBar()}${tiles}${cliPpcCard(vset)}</div></div>`;wireInd(main)}
 function renderInd(main){
   if(IPR){iprDraw();return} /* modo presentación abierto (semanal o del día): solo se redibuja la capa (ind-presentacion.js / ind-dia.js) */
-  if(U.indMode!=='sem'){renderIndDay(main);return}
+  if(indM()==='cli'){renderIndCli(main);return}
+  if(indM()==='dia'){renderIndDay(main);return}
   const vp=visPisos();const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
   const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
@@ -223,7 +237,6 @@ function renderInd(main){
   </div>`;
   h+=reproCard(U.week,vset)+restrCauseCard(U.week,vset);
   h+=ncCard(wSel);
-  if(canCli())h+=cliPpcCard(vset);
   const days=winDays();const load={};
   for(const x of S.act.values()){if(!vset.has(pisoOfAmb(x.ambId)))continue;for(const d of x.days||[])(load[x.sc]=load[x.sc]||{})[d]=(load[x.sc][d]||0)+1}
   const scs=Object.keys(load).filter(sc=>days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));

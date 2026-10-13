@@ -56,3 +56,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Campo: al marcar «no cumplida» sobre una actividad detenida/reportada en vivo, la causa de no cumplimiento se toma del motivo de detención (`stopCnc`); solo la causa y la nota, no el estado; se puede cambiar.
 
 - Indicadores › Diario › Presentar (`ind-dia.js`): láminas Resumen · Subcontratistas · **Por piso** (comparativo con el mismo semáforo, `iprdPisos`) · A verificar · Causas. **Filtros cruzados** (`IPRF {sc,pi}`): tocar una barra de SC o de piso filtra todas las láminas (`iprdFilt` recalcula con `dayAgg`); cada gráfico ignora su propio filtro para seguir mostrando las demás barras (atenuadas, `.dim`). Franja `.ixd-flt` con ✕ para quitar; se limpia al salir.
+- Indicadores tiene tres modos (`indM()`): Diario, Semanal y Cliente (solo admin; PPC contra lo emitido al cliente con tarjetas de última semana, PPC interno de esa semana, diferencia y promedio; ver `cliente-excel.md`).

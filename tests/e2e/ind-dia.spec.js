@@ -143,4 +143,25 @@ test('Presentar el día: tocar una barra filtra todas las láminas (subcontratis
   await ipr.locator('[data-pg="0"]').click();
   await expect(ipr.locator('.iprring b')).toHaveText('57%');
   noErrors(errors, 'filtros cruzados');
+test('Indicadores › Cliente: solo el administrador lo ve; muestra el PPC contra lo emitido y no aparece en Semanal', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'ind' });
+  await expect(page.locator('#imode [data-m="cli"]')).toBeVisible();
+  await page.locator('#imode [data-m="cli"]').click();
+  await expect(page.locator('#main')).toContainText('PPC del cliente');
+  await expect(page.locator('#main .tile').first()).toContainText('PPC del cliente');
+  await expect(page.locator('#imode [data-m="cli"]')).toHaveClass(/on/);
+  await expect(page.locator('#bipr')).toHaveCount(0);
+  await page.locator('#imode [data-m="sem"]').click();
+  await expect(page.locator('#main')).not.toContainText('PPC del cliente ·');
+  await expect(page.locator('#main .card').filter({ hasText: 'contra la versión emitida' })).toHaveCount(0);
+  noErrors(errors, 'indicadores cliente');
+});
+
+test('Indicadores › Cliente: un editor no ve la pestaña y un modo guardado cae en Diario', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'ind', as: 'editor' });
+  await page.evaluate(() => { U.indMode = 'cli'; render(); });
+  await expect(page.locator('#imode [data-m="cli"]')).toHaveCount(0);
+  await expect(page.locator('#imode [data-m="dia"]')).toHaveClass(/on/);
+  noErrors(errors, 'indicadores cliente editor');
 });
