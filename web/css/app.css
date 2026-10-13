@@ -3787,8 +3787,11 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .mfzbar[hidden]{display:none}
 .mfzbar>.mfzb{position:static;max-height:none;border:0;border-radius:0;box-shadow:none;display:flex!important;flex-direction:row;align-items:stretch;background:transparent;min-height:0}
 .mfzbar .mfzh{flex:none;width:auto;border-radius:0;justify-content:flex-start;gap:8px;padding:6px 12px;white-space:nowrap}
-.mfzbar .mpdl{flex:1;min-width:0;display:flex;flex-wrap:nowrap;align-items:flex-start;gap:8px;overflow:auto hidden;max-height:92px;padding:6px 10px}
-.mfzbar .mfzi{flex:none;min-width:200px;max-width:320px;padding:4px 8px}
+.mfzbar .mpdl{flex:1;min-width:0;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;overflow:auto hidden;max-height:none;padding:4px 10px;scrollbar-width:thin}
+/* oct 2026: una sola fila; cada SC en una línea (nombre · resumen · cuadrillas) */
+.mfzbar .mfzi{flex:none;flex-direction:row;align-items:center;gap:8px;white-space:nowrap;min-width:0;max-width:none;padding:4px 10px}
+.mfzbar .mfzi small{white-space:nowrap}
+.mfzbar .mfzq{white-space:nowrap}
 @media (min-width:900px){
   .mrs.dock.shut{top:0!important;bottom:0;right:0!important;width:30px!important;max-width:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0}
   .mrs.dock.shut .mrst{height:100%;border:0}
@@ -3796,3 +3799,6 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
   .mapa.dockmin .mcqb{right:40px}
 }
 .lkpop.lkmenu .ib.pri{color:var(--ink);font-weight:600}
+/* franja de Equipos plegada: solo una cabecera delgada */
+.mfzbar .mfzh[aria-expanded="false"]{padding:3px 12px;font-size:12px}
+.mfzbar .mfzh[aria-expanded="false"] b{line-height:15px}

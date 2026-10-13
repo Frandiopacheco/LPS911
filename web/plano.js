@@ -82,7 +82,7 @@ function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:
       return`<span class="pvl${l.cls?' '+l.cls:''}" data-z="${esc(l.id||'')}"${l.tip?` title="${esc(l.tip)}"`:''} style="left:${x}px;top:${y}px;--c:${l.c||'#333'};color:${l.f||'#fff'}${l.ang!=null?`;--a:${l.ang}deg`:''}${l.fs?`;font-size:${l.fs}px`:''}">${esc(l.t)}${l.hs?'<b class="tph nw" data-th="1"></b><b class="tph ne" data-th="1"></b><b class="tph sw" data-th="1"></b><b class="tph se" data-th="1"></b>':''}</span>`}).join('');
     /* solo si cambió: reescribir las etiquetas iguales en cada dibujo las hacía parpadear en la tablet */
     const lbh=`<svg class="pvld" xmlns="http://www.w3.org/2000/svg">${ln}</svg>`+lh+v.handles.map((h,i)=>`<b class="pvh${h.cls?' '+h.cls:''}" data-h="${i}" style="left:${h.x*v.z+v.x}px;top:${h.y*v.z+v.y}px"></b>`).join('');if(LB._h!==lbh){LB.innerHTML=lbh;LB._h=lbh}};
-  v.fit=()=>{const b=v.bounds;if(!b)return;const r=host.getBoundingClientRect();if(!r.width)return;const ins=v.inset?v.inset():0;const RW=Math.max(200,r.width-ins);const z=Math.min(RW/b.w,r.height/b.h)*.96;v.z=z;v.x=(RW-b.w*z)/2-b.x*z;v.y=(r.height-b.h*z)/2-b.y*z;v.apply()};
+  v.fit=()=>{v.touched=0;const b=v.bounds;if(!b)return;const r=host.getBoundingClientRect();if(!r.width)return;const ins=v.inset?v.inset():0;const RW=Math.max(200,r.width-ins);const z=Math.min(RW/b.w,r.height/b.h)*.96;v.z=z;v.x=(RW-b.w*z)/2-b.x*z;v.y=(r.height-b.h*z)/2-b.y*z;v.apply()};
   let rafA=0;v.applySoon=()=>{if(rafA)return;rafA=requestAnimationFrame(()=>{rafA=0;v.apply()})};
   v.zoomAt=(k,cx,cy)=>{const nz=Math.min(Math.max(v.z*k,.01),8);k=nz/v.z;v.x=cx-(cx-v.x)*k;v.y=cy-(cy-v.y)*k;v.z=nz;v.applySoon()};
   v.toWorld=(cx,cy)=>{const r=host.getBoundingClientRect();return{x:(cx-r.left-v.x)/v.z,y:(cy-r.top-v.y)/v.z}};
@@ -98,13 +98,13 @@ function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:
   host.addEventListener('pointerdown',e=>{if(e.button>0)return;clearTimeout(mvT);host.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;start={x:e.clientX,y:e.clientY};
     if(pts.size===2){const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:v.z}}});
   host.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const p=pts.get(e.pointerId);const dx=e.clientX-p.x,dy=e.clientY-p.y;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(moved>=6&&!host.classList.contains('pvmv'))mvOn();v.x+=dx;v.y+=dy;v.applySoon()}
-    else if(pts.size===2&&pinch){if(!host.classList.contains('pvmv'))mvOn();const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const r=host.getBoundingClientRect();moved=99;v.zoomAt((pinch.z*d/pinch.d)/v.z,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);if(pts.get(e.pointerId)===p){} }});
+    if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(moved>=6){v.touched=1;if(!host.classList.contains('pvmv'))mvOn()}v.x+=dx;v.y+=dy;v.applySoon()}
+    else if(pts.size===2&&pinch){v.touched=1;if(!host.classList.contains('pvmv'))mvOn();const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);const r=host.getBoundingClientRect();moved=99;v.zoomAt((pinch.z*d/pinch.d)/v.z,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);if(pts.get(e.pointerId)===p){} }});
   const up=e=>{if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);if(pts.size<2)pinch=null;if(!pts.size)mvOff(250);
     if(!pts.size&&moved<6&&v.onTap&&start&&e.type==='pointerup'){const w=v.toWorld(e.clientX,e.clientY);v.onTap(w,e)}};
   host.addEventListener('pointerup',up);host.addEventListener('pointercancel',up);
-  host.addEventListener('wheel',e=>{e.preventDefault();mvOn();mvOff(300);const r=host.getBoundingClientRect();v.zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),e.clientX-r.left,e.clientY-r.top)},{passive:false});
-  let lw=0,lh=0;new ResizeObserver(()=>{const r=host.getBoundingClientRect();if(!v.fitted&&v.bounds){v.fit();v.fitted=1}else{if(lw&&lh){v.x+=(r.width-lw)/2;v.y+=(r.height-lh)/2}v.apply()}lw=r.width;lh=r.height}).observe(host);
+  host.addEventListener('wheel',e=>{e.preventDefault();v.touched=1;mvOn();mvOff(300);const r=host.getBoundingClientRect();v.zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),e.clientX-r.left,e.clientY-r.top)},{passive:false});
+  let lw=0,lh=0;new ResizeObserver(()=>{const r=host.getBoundingClientRect();if((!v.fitted||!v.touched)&&v.bounds&&r.width){v.fit();v.fitted=1}else{if(lw&&lh){v.x+=(r.width-lw)/2;v.y+=(r.height-lh)/2}v.apply()}lw=r.width;lh=r.height}).observe(host);
   return v}
 function boundsOf(l){const c=[{x:0,y:0},{x:l.w,y:0},{x:0,y:l.h},{x:l.w,y:l.h}].map(p=>ap(l.T||I,p));const xs=c.map(p=>p.x),ys=c.map(p=>p.y);return{x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)}}
 
@@ -115,7 +115,8 @@ let MDW=false;function mdotsWire(){if(MDW)return;MDW=true;document.addEventListe
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&M.dots){M.dots=false;mdotsSync()}});addEventListener('resize',mdotsPlace)}
 /* paneles laterales plegables (oct 2026): plegados quedan como una franja delgada con el nombre en vertical (como las paletas de AutoCAD) */
 const PFOLD={get l(){try{return localStorage.getItem('lps.mpfold')==='1'}catch(e){return false}},set l(v){try{localStorage.setItem('lps.mpfold',v?'1':'0')}catch(e){}},
-  get r(){try{return localStorage.getItem('lps.mrfold')==='1'}catch(e){return false}},set r(v){try{localStorage.setItem('lps.mrfold',v?'1':'0')}catch(e){}}};
+  get r(){try{return localStorage.getItem('lps.mrfold')==='1'}catch(e){return false}},set r(v){try{localStorage.setItem('lps.mrfold',v?'1':'0')}catch(e){}},
+  get b(){try{return localStorage.getItem('lps.mfzfold')==='1'}catch(e){return false}},set b(v){try{localStorage.setItem('lps.mfzfold',v?'1':'0')}catch(e){}}};
 /* ---------- vista principal ---------- */
 function renderMapa(main){mdotsWire();ensureLam();
   const ps=pisos();if(U.piso)M.piso=U.piso;if(!M.piso||!S.pis.has(M.piso)){const withL=ps.find(p=>lamsOf(p.id).length);M.piso=(withL||ps[0]||{}).id||''}
@@ -484,7 +485,7 @@ function drawOverlay(){const v=M.view;if(!v)return;computeCross();const NUMS=pla
 function insets(){if(!M.meet)return{l:0,t:0,r:0,b:0};const c=$('#mcard');const cr=c&&!c.hidden?c.getBoundingClientRect():null;const hr=M.view.host.getBoundingClientRect();
   if(cr&&innerWidth>900)return{l:0,t:0,r:hr.right-cr.left+10,b:0};if(cr)return{l:0,t:0,r:0,b:hr.bottom-cr.top+10};return{l:0,t:0,r:0,b:0}}
 function fitBox(b,maxZ){const v=M.view;if(!v)return;const r=v.host.getBoundingClientRect();const n=insets();const W=r.width-n.l-n.r,H=r.height-n.t-n.b;const z=Math.min(W/b.w,H/b.h,maxZ||8);v.z=z;v.x=n.l+W/2-(b.x+b.w/2)*z;v.y=n.t+H/2-(b.y+b.h/2)*z;v.apply()}
-function zoomTo(P){if(!M.view||!P.length)return;const b=bboxOf(P);const pad=Math.max(b.w,b.h)*.6+200;fitBox({x:b.x-pad/2,y:b.y-pad/2,w:b.w+pad,h:b.h+pad},2.5)}
+function zoomTo(P){if(!M.view||!P.length)return;M.view.touched=1;const b=bboxOf(P);const pad=Math.max(b.w,b.h)*.6+200;fitBox({x:b.x-pad/2,y:b.y-pad/2,w:b.w+pad,h:b.h+pad},2.5)}
 function fitAll(){const v=M.view;if(!v||!v.bounds)return;if(!M.meet){v.fit();return}const b=v.bounds;fitBox({x:b.x-b.w*.02,y:b.y-b.h*.02,w:b.w*1.04,h:b.h*1.04})}
 /* =====================================================================
    ETAPA 3 · Modo reunión, cruces entre subcontratistas y exportar imagen
@@ -1866,7 +1867,8 @@ function fzCardHtml(role,sc){const mine=fzMine();if(!mine)return'';const f=fzOf(
 const cqItems=q=>Array.isArray(q.items)?q.items:[];
 function fzAgg(cuad){const m=new Map();for(const q of cuad)for(const i of cqItems(q)){const cat=String(i.cat||'').trim(),esp=String(i.esp||'').trim();if(!cat||!(+i.n>0))continue;const k=cat.toLowerCase()+'|'+esp.toLowerCase();const o=m.get(k)||{cat,esp,n:0};o.n+=+i.n;m.set(k,o)}return[...m.values()]}
 /* en el celular «Equipos del día» empieza plegado: abierto tapaba el plano */
-function fzIsOpen(){/* en el panel con pestañas siempre se arma (se ve al elegir su pestaña) */return true}
+/* oct 2026: Equipos va en la franja de abajo; se pliega con su cabecera y queda como lo dejaste (en el celular, solo mientras dura la página) */
+function fzIsOpen(){return innerWidth<900?M.fzOpen!==false:!PFOLD.b}
 async function fzOpen(sc,selC){const f=fzOf(sc);let src=f&&((f.cuad||[]).length||(f.items||[]).length)?f:null;let copied=false;
   if(!src){try{const d=await fcol('pdz').doc('fzl_'+sc).get();if(d.exists){src=d.data();copied=true}}catch(e){}}
   let cuad=src?JSON.parse(JSON.stringify(src.cuad||[])):[];
@@ -1922,7 +1924,7 @@ function fzBoxHtml(role,sf){const mine=role==='sc'?new Set(myScs()):null;const s
     const rt=(f.cuad||[]).map(q=>{const R=cqRoute(f,q.id).map(a=>{const y=S.act.get(a);const ay=y&&S.amb.get(y.ambId);return ay?ay.code:'?'});return`<span class="mfzq${M.cqFocus===sc+'|'+q.id?' fo':''}" data-cqf="${sc}|${esc(q.id)}" role="button" title="Ver su recorrido en el plano" style="--q:${cqCol(f,q.id)}"><i>${esc(q.id)}</i>${R.length?esc(R.join(' → ')):'<em>sin actividad</em>'}${q.n?` · ${q.n} p.`:''}</span>`}).join('');
     return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>${fzTot(f)} personas · ${(f.cuad||[]).length} cuadrillas · <span class="${ext?'ext':''}">${horTxt(f)}</span>${sin?` · <span class="bad">${sin} sin cuadrilla</span>`:''}</small>${rt}</div>`});
   /* en el celular, mientras se reparte una cuadrilla elegida, el recuadro va plegado para no tapar los números del plano */
-  const op_=fzIsOpen()&&!(M.cqSel&&innerWidth<900);return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▴':'▾'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
+  const op_=fzIsOpen()&&!(M.cqSel&&innerWidth<900);return`<button class="mpdh mfzh" data-fztog="1" aria-expanded="${op_}" title="${op_?'Plegar la franja de equipos':'Mostrar los equipos'}">Equipos del ${dvLbl(M.date)} <b>${scs.length}</b><span>${op_?'▾':'▴'}</span></button>${op_?`<div class="mpdl">${rows.join('')}</div>`:''}`}
 /* asignar, mover y quitar cuadrillas */
 /** cambia solo las actividades tocadas del reparto (ch = {actId: {c,o,n?} | null}) */
 function fzAsg(sc,ch){const id=fzId(M.date,sc);const f=PD.get(id);if(!f)return;const old=f.asg||{};const patch={},before={};
@@ -2028,7 +2030,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lo
   if((b=g('[data-cqclr]'))){cqClear();return true}
   if((b=g('[data-cqf]'))){const k=b.dataset.cqf;M.cqFocus=M.cqFocus===k?'':k;requestRender();return true}
   if((b=g('[data-chtog]'))){M.chOpen=!M.chOpen;requestRender();return true}
-  if((b=g('[data-fztog]'))){/* plegado por el reparto en el celular: abrirlo termina el reparto de esa cuadrilla */if(M.cqSel&&innerWidth<900){M.cqSel='';M.fzOpen=true}else M.fzOpen=!fzIsOpen();requestRender();return true}
+  if((b=g('[data-fztog]'))){/* plegado por el reparto en el celular: abrirlo termina el reparto de esa cuadrilla */if(M.cqSel&&innerWidth<900){M.cqSel='';M.fzOpen=true}else if(innerWidth<900)M.fzOpen=!fzIsOpen();else PFOLD.b=!PFOLD.b;requestRender();return true}
   if((b=g('[data-pub]'))){pubAsk(b);return true}
   if(g('[data-lko]')){lkReopen();return true}
   if(g('[data-lkc]')){lkClose();return true}
