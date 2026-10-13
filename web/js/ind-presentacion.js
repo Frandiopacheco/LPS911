@@ -81,7 +81,7 @@ function iprDraw(){const o=$('#ipr');if(!IPR||!o)return;if(U.tab!=='ind'){iprSto
 function iprResumen(n,D){const c=D.cur,t=D.tot;const dlt=c&&D.prev?Math.round((c.ppc-D.prev.ppc)*100):null;
   const sinEv=t.n-t.ev;
   const kpi=(k,v,s,tone)=>`<div class="iprk ${tone||''}"><span>${k}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const hist=D.ppcs.filter(x=>x.wk<=n).slice(-12);
+  const hist=ppcHistAll(D.ppcs,n).slice(-12);
   let h=`<div class="iprhero">
     ${iprRing(c?c.ppc:null,`PPC semana ${n}`)}
     <div class="iprks">
@@ -94,7 +94,7 @@ function iprResumen(n,D){const c=D.cur,t=D.tot;const dlt=c&&D.prev?Math.round((c
       ${kpi('Promedio',pct(D.avg),D.full.length?`${D.full.length} semanas completas`:'')}
     </div></div>`;
   h+=`<div class="iprgrid${!U.piso&&D.pisoP.length>1?'':' one'}">
-    <section class="iprcard"><h3>PPC semanal histórico <small>últimas ${hist.length} semanas</small></h3>${hist.length?linesLegend()+`<div class="iprsvg chart">${svgLines(ppcHistPts(hist),{h:300,minW:820})}</div>`:'<div class="empty">Sin semanas evaluadas.</div>'}</section>
+    <section class="iprcard"><h3>PPC semanal histórico <small>últimas ${hist.length} semanas</small></h3>${hist.length?linesLegend()+`<div class="iprsvg chart">${svgLines(hist,{h:300,minW:820})}</div>`:'<div class="empty">Sin semanas evaluadas.</div>'}</section>
     ${!U.piso&&D.pisoP.length>1?`<section class="iprcard"><h3>PPC por piso <small>semana ${n}</small></h3>${iprBars(D.pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,fmt:pct,tone:iprTone(x.st.ppc),sub:x.st.ok+' de '+x.st.n})))}</section>`:''}
   </div>`;
   return h}

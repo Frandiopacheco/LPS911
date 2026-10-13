@@ -11,7 +11,7 @@ function svgBarsV(data,{h=220}={}){ // data [{label,v(0..1),sub}]
   return s+'</svg>'}
 /* PPC semanal histórico: dos líneas (bruto y del SC) en una sola escala 0–100 %, promedio de las semanas completas y
    una zona de toque por semana con el detalle. La línea del SC va punteada (no se distingue solo por color). */
-function svgLines(pts,{h=230,minW=380}={}){ // pts [{label,a,b,sub,part}]; minW: ancho mínimo (la presentación lo pide más ancho)
+function svgLines(pts,{h=230,minW=380,nA='bruto',nB='del SC',eA='bruto',eB='SC'}={}){ // pts [{label,a,b,sub,part}]; minW: ancho mínimo (la presentación lo pide más ancho)
   const n=pts.length;const L=40,R=78,T=16,B=30,W=Math.max(minW,n*44+L+R),ih=h-T-B,iw=W-L-R;const X=i=>L+(n>1?i*iw/(n-1):iw/2),Y=v=>T+ih*(1-v);
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="PPC semanal histórico: bruto y del SC">`;
   [0,.25,.5,.75,1].forEach(g=>{const y=Y(g);s+=`<line class="gl" x1="${L}" x2="${W-R+6}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${g*100}%</text>`});
@@ -21,9 +21,33 @@ function svgLines(pts,{h=230,minW=380}={}){ // pts [{label,a,b,sub,part}]; minW:
   s+=line('b','sc')+line('a','br');
   /* rótulo directo al final de cada línea (se separan si quedan encima) */
   const li=n-1;const la=pts[li].a,lb=pts[li].b;if(la!=null){let ya=Y(la)+4,yb=lb!=null?Y(lb)+4:null;if(yb!=null&&Math.abs(ya-yb)<13){if(ya<=yb){ya-=7;yb+=7}else{ya+=7;yb-=7}}
-    s+=`<text class="lbl" x="${X(li)+8}" y="${ya}">bruto ${pct(la)}</text>`;if(yb!=null)s+=`<text class="lbl" x="${X(li)+8}" y="${yb}">SC ${pct(lb)}</text>`}
-  pts.forEach((p,i)=>{const x0=n>1?X(i)-iw/(n-1)/2:L,w=n>1?iw/(n-1):iw;s+=`<g class="hit"><title>${esc(p.label)}${p.part?' (en evaluación)':''}: bruto ${pct(p.a)} · del SC ${pct(p.b)}${p.sub?' · '+esc(p.sub):''}</title><rect x="${Math.max(L,x0)}" y="${T}" width="${w}" height="${ih}" fill="transparent"/></g><text x="${X(i)}" y="${h-10}" text-anchor="middle">${esc(p.label)}</text>`});
+    s+=`<text class="lbl" x="${X(li)+8}" y="${ya}">${eA} ${pct(la)}</text>`;if(yb!=null)s+=`<text class="lbl" x="${X(li)+8}" y="${yb}">${eB} ${pct(lb)}</text>`}
+  pts.forEach((p,i)=>{const x0=n>1?X(i)-iw/(n-1)/2:L,w=n>1?iw/(n-1):iw;s+=`<g class="hit"><title>${esc(p.label)}${p.part?' (en evaluación)':''}: ${nA} ${pct(p.a)} · ${nB} ${pct(p.b)}${p.sub?' · '+esc(p.sub):''}</title><rect x="${Math.max(L,x0)}" y="${T}" width="${w}" height="${ih}" fill="transparent"/></g><text x="${X(i)}" y="${h-10}" text-anchor="middle">${esc(p.label)}</text>`});
   return s+'</svg>'}
+/* ---------- PPC histórico cargado a mano (oct 2026, pedido del dueño) ----------
+   El sistema recién empezó a congelar el plan semanal: las semanas anteriores solo existen como un número. `meta/project.ppcHist` =
+   {"<semana>":{a:PPC interno (0–1), c:PPC cliente (0–1)}} (solo el administrador lo edita). Una semana con dato a mano usa ese valor
+   en los gráficos; sin él, lo que arroja el plan congelado. */
+const ppcMan=()=>P().ppcHist||{};
+/** puntos de «PPC semanal histórico» (interno): los congelados y, por semana, los cargados a mano (que mandan si existen) */
+function ppcHistAll(ppcs,maxWk){const M=ppcMan();const m=new Map();
+  ppcs.forEach(x=>{if(maxWk==null||x.wk<=maxWk)m.set(x.wk,{wk:x.wk,...ppcHistPts([x])[0]})});
+  for(const[k,o]of Object.entries(M)){const w=+k;if(!(w>0)||o==null||o.a==null||(maxWk!=null&&w>maxWk))continue;m.set(w,{wk:w,label:'S'+w,a:o.a,b:null,part:false,man:true,sub:'dato cargado a mano'})}
+  return[...m.values()].sort((a,b)=>a.wk-b.wk)}
+/** texto «semana  PPC interno  PPC cliente» (uno por línea) → {h, bad}. Los % pueden ir como 85, 85% o 0,85; «-» = sin dato */
+function ppcHistParse(t){const h={},bad=[];
+  const num=s=>{s=String(s||'').trim().replace(',','.');if(!s||/^[-—–]+$/.test(s))return null;const pc=s.endsWith('%');const v=parseFloat(s);if(isNaN(v)||v<0)return NaN;const f=pc||v>1?v/100:v;return f>1?NaN:f};
+  for(const l of String(t||'').split(/\n/).map(x=>x.trim()).filter(Boolean)){const T=l.split(/[\s;\t]+/);const w=parseInt(String(T[0]).replace(/^s/i,''),10);
+    const a=num(T[1]),c=T.length>2?num(T[2]):null;
+    if(!(w>0&&w<1000)||T.length<2||Number.isNaN(a)||Number.isNaN(c)||(a==null&&c==null)){bad.push(l);continue}
+    h[w]={...(a!=null?{a}:{}),...(c!=null?{c}:{})}}
+  return{h,bad}}
+async function ppcHistEdit(){if(!isAdmin)return;const M=ppcMan();
+  const cur=Object.keys(M).map(Number).sort((a,b)=>a-b).map(w=>`${w}  ${M[w].a!=null?Math.round(M[w].a*100):'-'}  ${M[w].c!=null?Math.round(M[w].c*100):'-'}`).join('\n');
+  const t=await uiAsk({title:'PPC histórico (semanas anteriores al sistema)',html:'<p>Una semana por línea: <b>semana  PPC interno  PPC cliente</b>. Ejemplo: <code>52  84  80</code>. Usa «-» si no tienes ese dato. Estas semanas se grafican con tu dato; las que el sistema ya congeló usan lo que arroja el plan semanal, salvo que cargues un valor aquí.</p>',input:{label:'Semanas',value:cur,placeholder:'52  84  80\n53  86  -'},ok:'Guardar',tone:'info'});
+  if(t==null)return;const{h,bad}=ppcHistParse(t);
+  if(bad.length&&!await uiAsk({title:'Hay líneas que no se entienden',list:bad.slice(0,6),note:'Se omiten. ¿Guardar el resto?',ok:'Guardar',tone:'warn'}))return;
+  apply([op('meta','project',{...P(),ppcHist:h})],'PPC histórico guardado');requestRender()}
 const linesLegend=()=>`<div class="lnleg"><span><i class="br"></i>PPC bruto</span><span><i class="sc"></i>PPC del SC (sin lo no imputable)</span><span><i class="avg"></i>Promedio de semanas completas</span></div>`;
 /** puntos del histórico: la última semana a medio evaluar va marcada (hueca) y no entra al promedio */
 const ppcHistPts=ppcs=>ppcs.map(x=>({label:'S'+x.wk,a:x.ppc,b:x.ppcSc??x.ppc,part:x.ev<x.n,sub:`${x.ok} de ${x.n} compromisos${x.nimp?` · ${x.nimp} no imputables`:''}`}));
@@ -163,6 +187,7 @@ function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e
   if(t.id==='bpdf'){reportPdf(indDay());return}
   if(t.id==='bipr'){iprStart();return}
   if(t.id==='bxppc'){exportPpcXlsx();return}
+  if(t.closest('#bppch')){ppcHistEdit();return}
   if(t.id==='bxcli'){cliPpcXlsx();return}
   const g=t.closest('tr[data-goc]');if(g){const[aid,d]=g.dataset.goc.split('|');goCampo(aid,d)}};
   main.onchange=e=>{if(ncChange(e.target))return;if(e.target.id==='pdfph'){U.pdfPh=e.target.checked;saveUI()}if(e.target.id==='pdfskip'){U.pdfSkip=e.target.checked;saveUI()}}}
@@ -193,15 +218,22 @@ function renderIndDay(main){
   h+='</div></div>';main.innerHTML=h;wireInd(main)}
 /** Indicadores › Cliente (solo administrador): el PPC contra la versión emitida al cliente, junto al interno */
 function renderIndCli(main){const vset=histPisoSet();ensureCli();ensureDaily(cliPpcFrom());
-  const{W}=CLX.size?cliPpc(vset):{W:[]};const cerr=W.filter(o=>!o.cur&&o.ppc!=null);const last=cerr[cerr.length-1];
-  const pi=last?ppcWeekAgg(last.w,vset):null;const dlt=last&&pi?Math.round((last.ppc-pi.ppc)*100):null;
-  const avg=cerr.length?cerr.reduce((s,o)=>s+o.ppc,0)/cerr.length:null;
+  const{W}=CLX.size?cliPpc(vset):{W:[]};const M=ppcMan();
+  /* una fila por semana: PPC cliente (el cargado a mano manda; si no, el calculado contra la versión emitida) y PPC interno de esa semana */
+  const wk=new Set(W.map(o=>o.w));for(const k of Object.keys(M))if(M[k]&&(M[k].c!=null||M[k].a!=null))wk.add(+k);
+  const pts=[...wk].filter(w=>w>0).sort((a,b)=>a-b).map(w=>{const o=W.find(x=>x.w===w),m=M[w]||{};const c=m.c!=null?m.c:(o?o.ppc:null);
+    const pi=ppcWeekAgg(w,vset);const i=m.a!=null?m.a:(pi?pi.ppc:null);const man=m.c!=null;
+    return{wk:w,label:'S'+w,a:c,b:i,part:!man&&!!(o&&o.cur),man,sub:man?'dato cargado a mano':o?`${o.ok} de ${o.n} compromisos`:''}}).filter(p=>p.a!=null||p.b!=null);
+  const cerr=pts.filter(p=>!p.part&&p.a!=null);const last=cerr[cerr.length-1];
+  const dlt=last&&last.b!=null?Math.round((last.a-last.b)*100):null;
+  const avg=cerr.length?cerr.reduce((s,p)=>s+p.a,0)/cerr.length:null;
   const tiles=`<div class="tiles">
-   <div class="tile hl"><span class="k">PPC del cliente · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.w}</small>`:''}</span></div>
-   <div class="tile"><span class="k">PPC interno · misma semana</span><span class="v">${pi?pct(pi.ppc):'—'}${pi?` <small>sem ${last.w}</small>`:''}</span></div>
+   <div class="tile hl"><span class="k">PPC del cliente · última</span><span class="v">${last?pct(last.a):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span></div>
+   <div class="tile"><span class="k">PPC interno · misma semana</span><span class="v">${last?pct(last.b):'—'}${last&&last.b!=null?` <small>sem ${last.wk}</small>`:''}</span></div>
    <div class="tile" title="PPC del cliente menos PPC interno"><span class="k">Diferencia</span><span class="v">${dlt==null?'—':(dlt>0?'+':'')+dlt+' pts'}</span></div>
    <div class="tile"><span class="k">Promedio del cliente</span><span class="v">${pct(avg)}${cerr.length?` <small>${cerr.length} sem</small>`:''}</span></div></div>`;
-  main.innerHTML=`<div class="scroll"><div class="wrap">${indBar()}${tiles}${cliPpcCard(vset)}</div></div>`;wireInd(main)}
+  const chart=`<div class="card chart"><h2>PPC histórico: cliente vs interno <span class="sub">anteriores al sistema: cargadas a mano · desde que se emite: contra la versión emitida</span>${isAdmin?' <button class="ib" id="bppch">✎ Cargar PPC histórico</button>':''}</h2><div class="pad tscroll">${pts.length?`<div class="lnleg"><span><i class="br"></i>PPC del cliente</span><span><i class="sc"></i>PPC interno</span><span><i class="avg"></i>Promedio del cliente</span></div>${svgLines(pts,{nA:'cliente',nB:'interno',eA:'cliente',eB:'interno'})}`:'<div class="empty">Aún no hay semanas. Carga el histórico con «Cargar PPC histórico» o emite la primera versión al cliente.</div>'}</div></div>`;
+  main.innerHTML=`<div class="scroll"><div class="wrap">${indBar()}${tiles}${chart}${cliPpcCard(vset)}</div></div>`;wireInd(main)}
 function renderInd(main){
   if(IPR){iprDraw();return} /* modo presentación abierto (semanal o del día): solo se redibuja la capa (ind-presentacion.js / ind-dia.js) */
   if(indM()==='cli'){renderIndCli(main);return}
@@ -217,12 +249,13 @@ function renderInd(main){
   const wSel=docs.filter(w=>w.n===U.week);const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n)delete scP[k];
   const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)||ARCH.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
   const pend=restrInScope().filter(rOpenC).length;
+  const histP=ppcHistAll(ppcs);const histF=histP.filter(p=>!p.part&&p.a!=null);const avgH=histF.length?histF.reduce((s,p)=>s+p.a,0)/histF.length:null;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
    <div class="tile hl"><span class="k">PPC semanal (oficial) · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span>${part?`<span class="mu" style="font-size:12px">Sem ${part.wk} en evaluación: ${part.ev} de ${part.n} evaluados</span>`:''}</div>
    <div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista"><span class="k">PPC del SC · última</span><span class="v">${last&&last.ppcSc!=null?pct(last.ppcSc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span></div>
-   <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avg)}${full.length?` <small>${full.length} sem</small>`:''}</span></div>
-   <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${full.length}${part?' <small>+1 en curso</small>':''}</span></div>
+   <div class="tile"><span class="k">PPC promedio</span><span class="v">${pct(avgH)}${histF.length?` <small>${histF.length} sem</small>`:''}</span></div>
+   <div class="tile"><span class="k">Semanas evaluadas</span><span class="v">${histF.length}${part?' <small>+1 en curso</small>':''}</span></div>
    <div class="tile"><span class="k">Restricciones pendientes</span><span class="v">${pend}</span></div></div>`;
   if(!ppcs.length)h+=`<div class="callout">El PPC aparece cuando congelas los compromisos de un piso en <b>Plan semanal</b> y evalúas cada uno con Sí / No.</div>`;
   /* Indicadores › Semanal: solo el plan semanal congelado y su evaluación Sí/No (pedido del dueño, oct 2026). Lo reportado en
@@ -230,7 +263,7 @@ function renderInd(main){
   {const e=Object.entries(scP).sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name));
    h+=`<div class="card"><h2>Cumplimiento del plan semanal por subcontratista <span class="sub">semana ${U.week} · compromisos congelados evaluados con Sí / No</span></h2><div class="pad">${e.length?wkScTable(e,scLabel):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>`}
   h+=`<div class="charts">
-   <div class="card chart"><h2>PPC semanal histórico <span class="sub">todas las semanas congeladas</span></h2><div class="pad tscroll">${ppcs.length?linesLegend()+svgLines(ppcHistPts(ppcs)):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
+   <div class="card chart"><h2>PPC semanal histórico <span class="sub">anteriores al sistema: cargadas a mano · desde que se congela: el plan semanal</span>${isAdmin?' <button class="ib" id="bppch">✎ Cargar PPC histórico</button>':''}</h2><div class="pad tscroll">${histP.length?linesLegend()+svgLines(histP)+(histP.some(p=>p.man)?'<p class="note">Las semanas cargadas a mano no tienen PPC del SC.</p>':''):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>
    ${!U.piso&&vp.length>1?`<div class="card chart"><h2>PPC por piso <span class="sub">semana ${U.week}</span></h2><div class="pad">${pisoP.length?svgBarsH(pisoP.map(x=>({label:x.p.code+' · '+x.p.name,v:x.st.ppc,max:1,sub:x.st.ok+' de '+x.st.n})),pct):`<div class="empty">Ningún piso congeló la semana ${U.week}.</div>`}</div></div>`:''}
    <div class="card chart"><h2>Causas de no cumplimiento <span class="sub">acumulado</span></h2><div class="pad">${cncL.length?svgBarsH(cncL.map(([k,v])=>({label:k,v})),v=>v+''):'<div class="empty">Sin incumplimientos registrados.</div>'}</div></div>
    <div class="card chart"><h2>PPC por subcontratista <span class="sub">semana ${U.week}</span></h2><div class="pad">${Object.keys(scP).length?svgBarsH(Object.entries(scP).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n+(o.nimp||o.ext?` · PPC del SC ${pct(o.ppcSc)}${o.nimp?` (${o.nimp} no imput.)`:''}${o.ext?` · ${o.ext} de otras partidas`:''}`:'')})),pct):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>

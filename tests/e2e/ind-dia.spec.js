@@ -174,3 +174,26 @@ test('Indicadores › Cliente: un editor no ve la pestaña y un modo guardado ca
   await expect(page.locator('#imode [data-m="dia"]')).toHaveClass(/on/);
   noErrors(errors, 'indicadores cliente editor');
 });
+
+test('PPC histórico a mano: se lee el texto, se guarda y se grafica en Semanal y Cliente (el dato manual manda sobre el congelado)', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'ind' });
+  // lectura del texto: %, fracción, coma decimal, «-» = sin dato y líneas inválidas
+  const r = await page.evaluate(() => ppcHistParse('52  84  80\nS53 0,86 -\n54 90%\n55 150 10\nxx 1 2\n56 - -'));
+  expect(r.h).toEqual({ 52: { a: 0.84, c: 0.8 }, 53: { a: 0.86 }, 54: { a: 0.9 } });
+  expect(r.bad).toHaveLength(3);
+  // guardar desde la ventana (en las pruebas pasa por prompt)
+  await page.locator('#imode [data-m="sem"]').click();
+  page.once('dialog', d => d.accept('52  84  80\n53  86  -'));
+  await page.locator('#bppch').click();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('meta', 'project') || {}).ppcHist)).toEqual({ 52: { a: 0.84, c: 0.8 }, 53: { a: 0.86 } });
+  const pts = await page.evaluate(() => ppcHistAll([]).map(p => [p.label, p.a, p.b, p.man]));
+  expect(pts).toEqual([['S52', 0.84, null, true], ['S53', 0.86, null, true]]);
+  await expect(page.locator('#main .chart svg text', { hasText: 'S52' })).toHaveCount(1);
+  // pestaña Cliente: S52 con cliente 80 % e interno 84 %
+  await page.locator('#imode [data-m="cli"]').click();
+  await expect(page.locator('#main .chart svg text', { hasText: 'S52' })).toHaveCount(1);
+  await expect(page.locator('#main .tile').first()).toContainText('80%');
+  // un editor no ve el botón
+  noErrors(errors, 'ppc histórico a mano');
+});
