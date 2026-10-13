@@ -164,7 +164,11 @@ async function plProcess(it,say){
   const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);
   /* «Empezar en Rev. 1» (solo admin): la lámina ya existía (cargas de prueba) y se reemplaza sin historial, vínculos ni calibración.
      Carpeta nueva (las rutas de Storage nunca se reutilizan: la caché de los equipos se guía por ellas); la anterior no se borra. */
-  const fresh=!!(it.fresh&&old);const rev=fresh?1:old?(old.rev||1)+1:1;const base=fresh?`planos/${id}.${NOW().toString(36)}/r1`:`planos/${id}/r${rev}`;
+  const fresh=!!(it.fresh&&old);const rev=fresh?1:old?(old.rev||1)+1:1;
+  /* carpeta ÚNICA por carga (`planos/<id>.<marca>/r<rev>`): la caché de cada equipo (Cache API `lps-planos`) se guía por la ruta y
+     da por hecho que nunca cambia. Antes era `planos/<id>/r<rev>`: al eliminar una lámina y volver a cargarla (otra vez Rev. 1) la
+     ruta se repetía y los equipos mostraban los mosaicos y el PDF viejos (sin recortar; la capa nítida salía corrida). */
+  const base=`planos/${id}.${NOW().toString(36)}${Math.random().toString(36).slice(2,6)}/r${rev}`;
   const v1=pg.getViewport({scale:1});
   /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
   let crop=null;if(it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
@@ -576,7 +580,8 @@ async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean)
     try{const names=[...await plStList(`planos/${p.id}/`),...await plStList(`planos/${p.id}.`)];
       for(let i=0;i<names.length;i+=8)await Promise.all(names.slice(i,i+8).map(n=>plStDel(n).then(()=>files++)))}
     catch(e){console.error('eliminar archivos',p.id,e)}
-    if(PLOFF[p.id]){await plOffDrop(PLOFF[p.id].base);delete PLOFF[p.id];plOffPut()}}
+    if(PLOFF[p.id]){delete PLOFF[p.id];plOffPut()}
+    await plCacheDrop(p.id);PLPDF.forEach((v,k)=>{if(k.startsWith(`planos/${p.id}/`)||k.startsWith(`planos/${p.id}.`))PLPDF.delete(k)})}
   toast(fail?`Se eliminaron ${ok} de ${list.length} (${fail} con error).`:`Eliminado${one?'':'s'}: ${ok} plano${ok===1?'':'s'} y ${files} archivo${files===1?'':'s'}.`);requestRender()}
 
 /* ---------- Carga masiva ---------- */
@@ -662,6 +667,9 @@ const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)&&(!o.base|
 const plOffTag=p=>{if(!plTablet())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
 const plMB=p=>p.sz?p.sz/1048576:7;
 function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.base+'/orig.pdf'];   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
+/** borra de la caché de este equipo todo lo de una lámina (todas sus carpetas) */
+async function plCacheDrop(id){try{const c=await caches.open(PLC_NAME);const a=location.origin+'/__plan/planos/'+id+'/',b=location.origin+'/__plan/planos/'+id+'.';
+  for(const r of await c.keys())if(r.url.startsWith(a)||r.url.startsWith(b))await c.delete(r)}catch(e){}}
 async function plOffDrop(base){try{const c=await caches.open(PLC_NAME);const pre=location.origin+'/__plan/'+base+'/';for(const r of await c.keys())if(r.url.startsWith(pre))await c.delete(r)}catch(e){}}
 const PLOQ={run:false,stop:false};
 function plOffBar(t,pct){let b=$('#ploffbar');if(t==null){if(b)b.remove();return}
