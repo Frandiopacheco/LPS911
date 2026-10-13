@@ -65,14 +65,15 @@ test('en Campo › Plano las actividades salen numeradas en su ambiente', async 
 test('reunión: «sin interferencia» quita el achurado del cruce', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); // hoy: en A-1 trabajan SANITARIAS (Redes) y ELÉCTRICAS (Entubado)
-  // los cruces van en un recuadro a la derecha del plano, plegado; el panel izquierdo ya no los lista
+  // los cruces van en la pestaña Cruces del panel derecho, que aparece en el modo Interferencias
+  await expect(page.locator('#mrst [data-rtab="mcxb"]')).toHaveCount(0);
+  await page.click('#mbar [data-pm="cx"]'); // oct 2026: la pestaña Cruces aparece en el modo Interferencias
   await expect(page.locator('#mrst [data-rtab="mcxb"]')).toContainText('Cruces');
   await expect(page.locator('#mpanel .mp-cx')).toHaveCount(0);
   await page.click('#mrst [data-rtab="mcxb"]');
   await expect(page.locator('#mcxb .mp-cx').first()).toBeVisible();
   const n0 = await page.locator('#mcxb .mp-cx').count();
   const p = await enPantalla(page, '#mstage', 200, 200);
-  await page.click('#mbar [data-pm="cx"]'); // modo Interferencias
   await page.mouse.click(p.x, p.y, { button: 'right' });
   await page.click('#pop [data-x="ok"]');
   await expect(page.locator('#mcxb .mp-cx')).toHaveCount(n0 - 1);
@@ -86,6 +87,7 @@ test('revisión previa: «🔍 Revisar interferencias» recorre los cruces y lo 
   await expect(page.locator('#mrst .mrdy')).toContainText('Listo para la reunión');
   const n0 = await page.evaluate(() => { window.__plano; return document.querySelectorAll('#mcxb .mcxh').length ? +document.querySelector('#mcxb .mcxh b').textContent : 0; });
   expect(n0).toBeGreaterThan(0);
+  await page.click('#mbar [data-pm="cx"]'); // oct 2026: la pestaña Cruces aparece en el modo Interferencias
   await page.locator('#mrst [data-rtab="mcxb"]').click();
   await page.locator('#mcxb [data-rvx="start"]').click();
   await expect(page.locator('#pop .xrvn')).toContainText(`Cruce 1 de ${n0}`);
@@ -103,13 +105,13 @@ test('revisión previa: «🔍 Revisar interferencias» recorre los cruces y lo 
 test('resaltar solo al subcontratista elegido viene marcado y se mantiene al cambiar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday');
-  await page.locator('#mpanel [data-dzsc="c1"]').click();
+  await page.locator('#msc [data-dzsc="c1"]').click();
   await expect(page.locator('#mscv')).toBeChecked();
-  await page.locator('#mpanel [data-dzsc="c2"]').click();
+  await page.locator('#msc [data-dzsc="c2"]').click();
   await expect(page.locator('#mscv')).toBeChecked();
   expect(await page.evaluate(() => window.__plano.M.scDraw)).toBe('c2');
   await page.locator('#mscv').uncheck();
-  await page.locator('#mpanel [data-dzsc="c1"]').click();
+  await page.locator('#msc [data-dzsc="c1"]').click();
   await expect(page.locator('#mscv')).not.toBeChecked();
   noErrors(errors, 'resaltar');
 });
@@ -322,8 +324,8 @@ test('en el celular: se toca la cuadrilla y luego la actividad', async ({ page }
 test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', async ({ page }) => {
   const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: 'Gasfitero', n: 3 }, { cat: 'Peón', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2 }, { id: 'C2', n: 3 }], hor: { t: 'e', fin: '19:00' }, asg: { s9: { c: 'C1', o: 1 }, s8: { c: 'C1', o: 2 } }, sinDist: false, ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8, F] });
-  await page.locator('#mrst [data-rtab="mfzb"]').click();
-  const b = page.locator('#mfzb');
+  const b = page.locator('#mfzbar #mfzb'); // oct 2026: Equipos va en la franja de abajo
+  if ((await b.locator('.mfzh').getAttribute('aria-expanded')) !== 'true') await b.locator('.mfzh').click();
   await expect(b).toContainText('SC SANITARIAS');
   await expect(b).toContainText('5 personas · 2 cuadrillas');
   await expect(b).toContainText('extendido hasta 7:00 p. m.');
@@ -349,16 +351,16 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
 test('Ctrl+clic elige varias partidas; tocar el plano fuera de ellas no abre otras', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
   await page.click('#wtoday'); // hoy: SANITARIAS y ELÉCTRICAS
-  await page.locator('#mpanel [data-dzsc="c2"]').click();
+  await page.locator('#msc [data-dzsc="c2"]').click();
   await expect(row(page, 'i0')).toHaveCount(0);
-  await page.locator('#mpanel [data-dzsc="c1"]').click({ modifiers: ['Control'] });
-  await expect(page.locator('#mpanel .dzf button.on')).toHaveCount(2);
+  await page.locator('#msc [data-dzsc="c1"]').click({ modifiers: ['Control'] });
+  await expect(page.locator('#msc .dzf button.on')).toHaveCount(2);
   await expect(row(page, 'i0')).toBeVisible();
   await expect(row(page, 'e0')).toBeVisible();
   await expect(page.locator('#mscv')).toBeChecked();
   // un clic simple vuelve a una sola
-  await page.locator('#mpanel [data-dzsc="c2"]').click();
-  await expect(page.locator('#mpanel .dzf button.on')).toHaveCount(1);
+  await page.locator('#msc [data-dzsc="c2"]').click();
+  await expect(page.locator('#msc .dzf button.on')).toHaveCount(1);
   // las zonas de Sectorización no se seleccionan (no se pueden mover)
   const bx = await page.locator('#mstage polygon[data-z="v:e0"]').boundingBox();
   await page.mouse.click(bx.x + 15, bx.y + 15);
@@ -371,6 +373,7 @@ test('arrastrar una etiqueta a otra actividad la suma como la siguiente; lo que 
   const F = ['pdz', 'fz_' + MANANA + '_c1', { date: MANANA, sc: 'c1', kind: 'fza', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2, items: [{ cat: 'Operario', esp: '', n: 2 }] }], hor: { t: 'n', fin: '17:00' }, asg: { s9: { c: 'C1', o: 1 } }, sinDist: false, ts: 1 }];
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8, F] });
   await page.waitForFunction(() => window.__plano && window.__plano.M);
+  await page.waitForFunction(() => window.__plano && window.__plano.M); // plano.js se carga tarde
   await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
   await expect(page.locator('#mstage [data-cqt="s9"]')).toBeVisible();
   await arrastrar(page, '#mstage [data-cqt="s9"]', '#mstage .pvl[data-z="v:s8"]');
@@ -486,6 +489,7 @@ test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y q
   const Z3 = ['pdz', 'pz3', { date: HOY, pisoId: 'p1', vista: 'L1', sc: 'c3', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: null, desc: 'Resane de muro', fuera: true, ambId: 'a1', by: 'admin@obra.pe', ts: 1 }]; // trabajo no programado planificado
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, Z3] });
   await page.click('#wtoday');
+  await page.click('#mbar [data-pm="cx"]'); // oct 2026: la pestaña Cruces aparece en el modo Interferencias
   await page.click('#mrst [data-rtab="mcxb"]');
   await page.locator('#mcxb .mp-cx').first().click(); // tocar en la lista abre la decisión
   await expect(page.locator('#pop .xo')).toHaveCount(3);
@@ -512,6 +516,7 @@ test('cruce: se ordenan arrastrando (1.º, 2.º, 3.º…), la ✗ reprograma y q
 test('cruce del plan de mañana: la ✗ abre la reprogramación con los días siguientes', async ({ page }) => {
   const Z = ['pdz', 'pzM', { date: MANANA, pisoId: 'p1', vista: 'L1', sc: 'c1', kind: 'zona', pts: [110, 110, 290, 110, 290, 290, 110, 290], actId: 's9', ambId: 'a1', by: 'admin@obra.pe', ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, Z] });
+  await page.click('#mbar [data-pm="cx"]'); // oct 2026: la pestaña Cruces aparece en el modo Interferencias
   await page.click('#mrst [data-rtab="mcxb"]');
   await page.locator('#mcxb .mp-cx').first().click();
   await page.locator('#pop .xo .xno').first().click();
@@ -608,6 +613,7 @@ test('el reparto de cuadrillas se guarda por actividad (otro equipo del mismo SC
     ['pdz', `fz_${MANANA}_c1`, { date: MANANA, kind: 'fza', sc: 'c1', items: [{ cat: 'Operario', esp: '', n: 2 }], cuad: [{ id: 'C1', n: 2, items: [{ cat: 'Operario', esp: '', n: 2 }] }], hor: { t: 'n', fin: '17:00' }, asg: {} }]] });
   // desde el celular asignan C1 a s8; en la PC, sin haberlo recibido aún, se asigna a s9
   await page.evaluate(d => window.firebase.firestore().collection('pdz').doc('fz_' + d + '_c1').update({ 'asg.s8': { c: 'C1', o: 1 } }), MANANA);
+  await page.waitForFunction(() => window.__plano && window.__plano.M); // plano.js se carga tarde
   await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
   await arrastrar(page, '#mcqb [data-cqd="C1"]', '#mstage .pvl[data-z="v:s9"]');
   await expect.poll(async () => Object.keys((await page.evaluate(d => window.__dbGet('pdz', 'fz_' + d + '_c1'), MANANA)).asg || {}).sort()).toEqual(['s8', 's9']);
@@ -617,6 +623,7 @@ test('el reparto de cuadrillas se guarda por actividad (otro equipo del mismo SC
 test('la etiqueta de la cuadrilla muestra su personal por especialidad y sumar cambia la fuerza laboral', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8,
     ['pdz', `fz_${MANANA}_c1`, { date: MANANA, kind: 'fza', sc: 'c1', items: [{ cat: 'Operario', esp: 'Gasfitero', n: 2 }, { cat: 'Peón', esp: '', n: 1 }], cuad: [{ id: 'C1', n: 3, items: [{ cat: 'Operario', esp: 'Gasfitero', n: 2 }, { cat: 'Peón', esp: '', n: 1 }] }], hor: { t: 'n', fin: '17:00' }, asg: { s8: { c: 'C1', o: 1 } } }]] });
+  await page.waitForFunction(() => window.__plano && window.__plano.M); // plano.js se carga tarde
   await page.evaluate(() => { window.__plano.M.cqOn = true; requestRender(); });
   await page.locator('#mstage [data-cqt="s8"]').click();
   await expect(page.locator('#pop')).toContainText('Operario · Gasfitero');
@@ -629,8 +636,8 @@ test('la etiqueta de la cuadrilla muestra su personal por especialidad y sumar c
 test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', async ({ page }) => {
   await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday'); await page.waitForTimeout(600);
-  // hoy entra en Cumplimiento: sin achurado; en Interferencias aparece
-  await expect(page.locator('#mbar [data-pm="cu"]')).toHaveClass(/on/);
+  // hoy entra en Programar (el modo Cumplimiento se quitó, oct 2026): sin achurado; en Interferencias aparece
+  await expect(page.locator('#mbar [data-pm="prog"]')).toHaveClass(/on/);
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]')).toHaveCount(0);
   await page.click('#mbar [data-pm="cx"]');
   await expect(page.locator('#mstage rect[fill="url(#hxr)"]').first()).toBeAttached();
@@ -643,18 +650,14 @@ test('fuera de la reunión, tocar el achurado de un cruce abre su decisión', as
   await expect(page.locator('#pop .xbox')).toBeVisible();
 });
 
-test('modo Cumplimiento: clic derecho muestra lo registrado, sin botones para registrar', async ({ page }) => {
+test('sin modo Cumplimiento en la barra (se registra en Campo); en el Modo reunión sigue la vista de cumplimiento', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
-  await page.click('#wtoday'); await page.waitForTimeout(600);
-  await expect(page.locator('#mbar [data-pm="cu"]')).toHaveClass(/on/);
-  const p = await enPantalla(page, '#mstage', 500, 280);
-  await page.mouse.click(p.x, p.y);
-  await page.waitForTimeout(400);
-  await expect(page.locator('#mzc')).toHaveCount(0);
-  await page.mouse.click(p.x, p.y, { button: 'right' });
-  await expect(page.locator('#mzc')).toContainText('se registra en Campo');
-  await expect(page.locator('#mzc [data-zcs]')).toHaveCount(0);
-  noErrors(errors, 'modo cumplimiento');
+  await page.click('#wtoday'); await page.waitForTimeout(400);
+  await expect(page.locator('#mbar [data-pm="cu"]')).toHaveCount(0);
+  await expect(page.locator('#mbar [data-pm="prog"]')).toHaveClass(/on/);
+  await page.click('#mmeetb');
+  await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
+  noErrors(errors, 'sin modo cumplimiento');
 });
 
 test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica al lookahead al publicar', async ({ page }) => {
@@ -676,7 +679,8 @@ test('agregar al plan desde el ambiente: nueva actividad y adelantar; se aplica 
   // sin área dibujada, lo agregado se resalta en todo su ambiente
   await expect(page.locator('#mstage polygon[data-z^="v:pa:"]')).toHaveCount(1);
   // con mouse se agrega con clic derecho sobre el ambiente
-  await page.mouse.click(p.x, p.y, { button: 'right' });
+  const p2 = await enPantalla(page, '#mstage', 500, 280); // el panel derecho pudo cambiar el encuadre
+  await page.mouse.click(p2.x, p2.y, { button: 'right' });
   await expect(page.locator('#pop')).toContainText('Trabajo no programado · A-2');
   await page.locator('#pop [data-do="new"]').click();
   await page.selectOption('#pasc', 'c2');
