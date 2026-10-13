@@ -11,7 +11,7 @@ const tabsVisibles = page => page.$$eval('#tabs button[data-tab]', bs => bs.filt
 /** PDF mínimo de una página (A3 apaisado) con un marco, líneas y el rótulo «ARQUITECTURA · AG03» */
 function pdfDemo() {
   const W = 1191, H = 842;
-  const ops = ['2 w 20 20 ' + (W - 40) + ' ' + (H - 40) + ' re S'];
+  const ops = ['2 w 10 10 ' + (W - 20) + ' ' + (H - 20) + ' re S']; // marco pegado al borde: hoja ya bien exportada, no se recorta
   for (let i = 1; i < 30; i++) ops.push(`0.5 w ${40 + i * 37} 60 m ${40 + i * 37} ${H - 60} l S`);
   ops.push('BT /F1 14 Tf 800 60 Td (ARQUITECTURA) Tj ET', 'BT /F1 48 Tf 1000 50 Td (AG03) Tj ET', 'BT /F1 9 Tf 60 400 Td (CUARTO DE BOMBAS) Tj ET');
   const content = ops.join('\n');
@@ -617,4 +617,92 @@ test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el 
   await page.evaluate(() => PLV.tv.fitView());
   await expect.poll(() => page.evaluate(() => PLV.tv.sharp())).toBeNull();
   noErrors(errors, 'nitidez');
+});
+
+test('recorte al marco: lo que está fuera del marco no entra; sin marco o con la opción apagada, hoja completa', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  // A3 con marco a 60 pt del borde izquierdo y un texto girado fuera de él (como «FORMATO 120 x 90 Esc 1/100»)
+  const mk = (marco) => {
+    const W = 1191, H = 842; const ops = ['BT /F1 30 Tf 0 1 -1 0 40 100 Tm (FORMATO 120 x 90) Tj ET'];
+    if (marco) ops.push('2 w 60 20 ' + (W - 80) + ' ' + (H - 40) + ' re S');
+    for (let i = 1; i < 20; i++) ops.push(`0.5 w ${100 + i * 50} 80 m ${100 + i * 50} ${H - 300} l S`);
+    ops.push('BT /F1 48 Tf 1000 50 Td (AG03) Tj ET');
+    const content = ops.join('\n');
+    const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+    let out = '%PDF-1.4\n'; const offs = [];
+    objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+    const x = out.length;
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+    return Buffer.from(out, 'latin1');
+  };
+  await page.setInputFiles('#plfile', [
+    { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: mk(true) },
+    { name: '2459243-PTSA-XXX-P02-P2D-ARQ-E05-AG04_PLANTA SEGUNDO PISO.pdf', mimeType: 'application/pdf', buffer: mk(false) },
+  ]);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  await expect(page.locator('#plqtab')).toContainText('recortado al marco');
+  await expect(page.locator('#plqtab')).toContainText('sin marco claro');
+  const a = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03')), b = await page.evaluate(() => __dbGet('plb', 'ARQ_AG04'));
+  // el marco: x 60→1171 pt, y 20→822 pt (con medio trazo de holgura); el texto de la izquierda (x≈10–40) queda fuera
+  expect(a.crop.x0).toBeGreaterThan(55); expect(a.crop.x0).toBeLessThan(60); expect(a.crop.x1).toBeGreaterThan(1171); expect(a.crop.x1).toBeLessThan(1176);
+  expect(a.W).toBeLessThan(b.W); expect(a.mm[0]).toBeGreaterThan(390); expect(a.mm[0]).toBeLessThan(395);   // ≈ 1117 pt
+  expect(b.crop).toBeNull(); expect(b.mm[0]).toBe(420);
+  // con la opción apagada no se recorta (nueva revisión de AG03, hoja completa) y se recuerda
+  await page.uncheck('#plqbar [data-q="crop"]');
+  expect(await page.evaluate(() => store.get('plcrop', true))).toBe(false);
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO (2).pdf', mimeType: 'application/pdf', buffer: mk(true) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect.poll(() => page.evaluate(() => (__dbGet('plb', 'ARQ_AG03') || {}).rev), { timeout: 90_000 }).toBe(2);
+  const a2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(a2.crop).toBeNull(); expect(a2.mm[0]).toBe(420); expect(a2.revs[0].crop.x0).toBeGreaterThan(55); // la revisión anterior conserva su recorte
+  await page.evaluate(() => store.set('plcrop', true));
+  noErrors(errors, 'recorte');
+});
+
+/** PDF de 1200 × 900 mm (3402 × 2551 pt) con un marco doble en el rectángulo [x0,y0,x1,y1] (pt, origen arriba a la izquierda),
+ *  ejes dentro del marco y, si se pide, cosas fuera: cuadraditos en las esquinas de la hoja, texto vertical y líneas sueltas */
+function pdfMarco({ box, extras = [], marco = true }) {
+  const W = 3402, H = 2551, Y = y => H - y; const ops = [];
+  if (marco) { const [x0, y0, x1, y1] = box;
+    ops.push(`3 w ${x0} ${Y(y1)} ${x1 - x0} ${y1 - y0} re S`, `1 w ${x0 + 25} ${Y(y1 - 25)} ${x1 - x0 - 50} ${y1 - y0 - 50} re S`);
+    for (let i = 1; i < 8; i++) { const x = x0 + (x1 - x0) * i / 8; ops.push(`0.5 w ${x} ${Y(y0 + 60)} m ${x} ${Y(y1 - 60)} l S`); } }
+  for (const e of extras) ops.push(e);
+  const content = ops.join('\n');
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let out = '%PDF-1.4\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(out, 'latin1');
+}
+
+test('recorte al marco: encuentra el marco aunque la lámina ocupe poco de la hoja o haya líneas sueltas fuera', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(() => plPdfJs());
+  const frameOf = buf => page.evaluate(async b64 => { const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const pg = await (await pdfjsLib.getDocument({ data: bin }).promise).getPage(1); return plFrame(pg); }, buf.toString('base64'));
+  const near = (c, box, tol = 8) => { expect(c, 'sin marco').not.toBeNull(); ['x0', 'y0', 'x1', 'y1'].forEach((k, i) => expect(Math.abs(c[k] - box[i]), k).toBeLessThan(tol)); };
+  const sueltos = ['10 10 6 6 re f', '3380 2530 6 6 re f', '3380 10 6 6 re f', 'BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'];
+  // A: la lámina ocupa ~30 % de la hoja (objetos invisibles lejos la achicaron) — antes no se recortaba
+  let box = [1400, 850, 2420, 1615];
+  near(await frameOf(pdfMarco({ box, extras: sueltos })), box);
+  // B: líneas largas sueltas fuera del marco (más largas que el marco) — antes el rectángulo «no cerraba»
+  box = [700, 500, 2700, 2000];
+  near(await frameOf(pdfMarco({ box, extras: [...sueltos, '2 w 100 2400 m 3300 2400 l S', '2 w 3300 100 m 3300 2450 l S'] })), box);
+  // C: el marco ya llena la hoja → nada que recortar
+  expect(await frameOf(pdfMarco({ box: [10, 10, 3392, 2541] }))).toBeNull();
+  // D: sin marco (solo líneas sueltas) → no inventa uno
+  expect(await frameOf(pdfMarco({ box, marco: false, extras: ['1 w 200 300 m 3000 300 l S', '1 w 200 300 m 200 2000 l S'] }))).toBeNull();
+  noErrors(errors, 'recorte');
 });

@@ -115,6 +115,43 @@ function plRotulo(items){let best=null;const words=plUp(items.map(i=>i.str).join
   const disc=/ARQUITECTURA/.test(words)?'ARQ':/ESTRUCTURA/.test(words)?'EST':/SANITARIA/.test(words)?'IS':/ELECTRICA/.test(words)?'IE':/MECANICA/.test(words)?'IM':/COMUNICACION/.test(words)?'COM':'';
   return{cod:best?best.s:'',disc}}
 
+/** marco de la lámina (docs/ia/planos.md › Recorte al marco): con «Extensión» AutoCAD mete en el PDF lo que está fuera del marco
+   (el texto «FORMATO 120 x 90», objetos invisibles…) y la lámina sale chica o con franjas. Se dibuja la hoja a ~2400 px y se buscan
+   líneas largas horizontales y verticales (tramo continuo con huecos de hasta 2 px, ≥ 12 % de la hoja). Se prueba cada línea
+   horizontal como borde superior: necesita una vertical en cada extremo que baje desde ella y una horizontal abajo que las una
+   (cada lado cubre ≥ 85 %). Gana el rectángulo cerrado MÁS GRANDE: así no importa que la lámina ocupe poco de la hoja ni que haya
+   líneas sueltas fuera del marco. Devuelve {x0,y0,x1,y1} en puntos del PDF (vista a escala 1, origen arriba a la izquierda) o null
+   (sin marco claro, o el marco ya ocupa casi toda la hoja). */
+async function plFrame(pg){const v1=pg.getViewport({scale:1}),a=2400/Math.max(v1.width,v1.height),vp=pg.getViewport({scale:a});
+  const w=Math.floor(vp.width),h=Math.floor(vp.height),c=plCanvas(w,h),g=c.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,w,h);
+  await pg.render({canvasContext:g,viewport:vp}).promise;const d=g.getImageData(0,0,w,h).data;c.width=c.height=0;
+  const dark=new Uint8Array(w*h);for(let i=0,j=0;i<dark.length;i++,j+=4)dark[i]=(d[j]*0.3+d[j+1]*0.59+d[j+2]*0.11)<170?1:0;
+  return plFrameFind(dark,w,h,a,v1)}
+/** la búsqueda del rectángulo, aparte para probarla con imágenes sintéticas */
+function plFrameFind(dark,w,h,a,v1){const GAP=2,MIN=0.12,TOL=Math.max(3,Math.round(Math.min(w,h)*0.003));
+  /* tramo más largo de cada fila / columna (tolera huecos de GAP px), con su inicio y fin */
+  const runs=(n,len,at)=>{const out=new Array(n);for(let k=0;k<n;k++){let best=0,bs=0,be=0,st=-1,last=-99;
+      for(let t=0;t<len;t++){if(at(k,t)){if(t-last>GAP+1)st=t;last=t;if(t-st+1>best){best=t-st+1;bs=st;be=t}}}out[k]={n:best,s:bs,e:be}}return out};
+  const R=runs(h,w,(y,x)=>dark[y*w+x]),C=runs(w,h,(x,y)=>dark[y*w+x]);
+  const vOk=x=>x>=0&&x<w&&C[x].n>=MIN*h;
+  /* vertical que pasa por (x≈x0, y) y baja: devuelve la columna con el tramo más largo cerca de x0 que contenga y */
+  const vAt=(x0,y)=>{let b=null;for(let x=x0-TOL;x<=x0+TOL;x++){if(!vOk(x))continue;const r=C[x];if(r.s<=y+TOL&&r.e>y+0.1*h&&(!b||r.e>b.r.e))b={x,r}}return b};
+  const cov=(r,lo,hi)=>Math.min(r.e,hi)-Math.max(r.s,lo);
+  let best=null;
+  for(let y=0;y<h;y++){const r=R[y];if(r.n<MIN*w)continue;if(y>0&&R[y-1].n>=MIN*w&&Math.abs(R[y-1].s-r.s)<=TOL&&Math.abs(R[y-1].e-r.e)<=TOL)continue;   /* misma línea gruesa: solo su primera fila */
+    const L=vAt(r.s,y),Rt=vAt(r.e,y);if(!L||!Rt)continue;
+    const top=y,lef=Math.min(L.x,r.s),rig=Math.max(Rt.x,r.e),bw=rig-lef;
+    /* borde inferior: la horizontal más baja que cubra el ancho, dentro de lo que bajan las dos verticales */
+    const yMax=Math.min(L.r.e,Rt.r.e);let bot=-1;
+    for(let yb=Math.min(h-1,yMax+TOL);yb>top+0.1*h;yb--){if(R[yb].n>=0.85*bw&&cov(R[yb],lef,rig)>=0.85*bw){bot=yb;break}}
+    if(bot<0)continue;const bh=bot-top;
+    if(cov(L.r,top,bot)<0.85*bh||cov(Rt.r,top,bot)<0.85*bh||cov(r,lef,rig)<0.85*bw)continue;   /* no es un rectángulo cerrado */
+    if(bw<0.15*w||bh<0.15*h)continue;
+    if(!best||bw*bh>best.bw*best.bh)best={top,bot,lef,rig,bw,bh}}
+  if(!best)return null;const{top,bot,lef,rig}=best;
+  if(lef<=0.015*w&&top<=0.015*h&&rig>=0.985*w&&bot>=0.985*h)return null;   /* el marco ya llena la hoja: nada que recortar */
+  const pad=2/a;   /* medio trazo más: que la línea del marco quede entera */
+  return{x0:Math.max(0,lef/a-pad),y0:Math.max(0,top/a-pad),x1:Math.min(v1.width,(rig+1)/a+pad),y1:Math.min(v1.height,(bot+1)/a+pad)}}
 /** procesa un PDF: dibuja en alta definición, corta mosaicos por niveles, sube todo y registra el plano */
 async function plProcess(it,say){
   await plPdfJs();const t0=performance.now();
@@ -124,9 +161,17 @@ async function plProcess(it,say){
     if(!it.m.cod&&rot.cod)it.m.cod=rot.cod;if(!it.m.disc&&rot.disc)it.m.disc=rot.disc}catch(e){it.rot={cod:'',disc:''}}
   if(!it.m.cod)throw new Error('Sin código de lámina: escríbelo en la tabla.');if(!it.m.disc)throw new Error('Sin especialidad: elígela en la tabla.');
   const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);const rev=old?(old.rev||1)+1:1;const base=`planos/${id}/r${rev}`;
-  const v1=pg.getViewport({scale:1});const lp=Math.max(v1.width,v1.height);const px=Math.min(PL_MAXPX,Math.round(lp/72*PL_DPI));const vp=pg.getViewport({scale:px/lp});
-  const W=Math.floor(vp.width),H=Math.floor(vp.height);let Z=1;while(Math.max(W,H)/2**(Z-1)>PL_T)Z++;
-  const mm=[Math.round(v1.width/72*25.4),Math.round(v1.height/72*25.4)];
+  const v1=pg.getViewport({scale:1});
+  /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
+  let crop=null;if(it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
+  it.cropped=!!crop;const cx0=crop?crop.x0:0,cy0=crop?crop.y0:0,cwp=crop?crop.x1-crop.x0:v1.width,chp=crop?crop.y1-crop.y0:v1.height;
+  const lp=Math.max(cwp,chp);const px=Math.min(PL_MAXPX,Math.round(lp/72*PL_DPI));const sc=px/lp;const vp=pg.getViewport({scale:sc});
+  const W=Math.floor(cwp*sc),H=Math.floor(chp*sc);let Z=1;while(Math.max(W,H)/2**(Z-1)>PL_T)Z++;
+  const tx=-cx0*sc,ty=-cy0*sc;   /* desplazamiento del recorte */
+  let mm=[Math.round(cwp/72*25.4),Math.round(chp/72*25.4)];
+  /* marco con proporción del formato del proyecto (120 × 90): su tamaño real es 1200 × 900 mm aunque «Ajustar al papel» lo haya encogido
+     (p. ej. 1178 mm) o la lámina ocupara poco de la hoja; así la escala de referencia de Medir (plmNominal) queda en 1/100 exacta */
+  if(crop&&Math.abs(cwp/chp-4/3)<0.02)mm=[1200,900];
   /* subidas en paralelo (máx. 6) mientras se siguen cortando mosaicos */
   const pend=new Set();let up=0,total=0,fail=null;
   let bytes=0;const send=(path,blob,type)=>{total++;bytes+=blob.size||0;const p=plPut(path,blob,type).then(()=>{up++},e=>{fail=fail||e}).finally(()=>pend.delete(p));pend.add(p);return p};
@@ -141,13 +186,13 @@ async function plProcess(it,say){
   say(`Dibujando en alta definición (${W.toLocaleString('es-PE')} × ${H.toLocaleString('es-PE')} px)…`);
   let L=null;/* nivel 1 (mitad), base de los siguientes */
   const full=plCanvasOk(W,H);
-  if(full){const g=full.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,H);await pg.render({canvasContext:g,viewport:vp}).promise;
+  if(full){const g=full.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,H);await pg.render({canvasContext:g,viewport:vp,transform:[1,0,0,1,tx,ty]}).promise;
     await cut(full,0,0,0);if(Z>1)L=plHalf(full);full.width=full.height=0}
   else{/* franjas de 4 mosaicos de alto: el navegador no permite un lienzo tan grande */
     const SH=PL_T*4;if(Z>1)L=plCanvas(Math.ceil(W/2),Math.ceil(H/2));const lg=L&&L.getContext('2d');if(lg){lg.imageSmoothingQuality='high';lg.fillStyle='#fff';lg.fillRect(0,0,L.width,L.height)}
     for(let y0=0;y0<H;y0+=SH){const sh=Math.min(SH,H-y0);const c=plCanvas(W,sh);const g=c.getContext('2d');if(!g)throw new Error('La lámina es demasiado grande para este navegador.');
       g.fillStyle='#fff';g.fillRect(0,0,W,sh);say(`Dibujando franja ${Math.floor(y0/SH)+1} de ${Math.ceil(H/SH)}…`);
-      await pg.render({canvasContext:g,viewport:vp,transform:[1,0,0,1,0,-y0]}).promise;await cut(c,0,0,y0);if(lg)lg.drawImage(c,0,y0/2,c.width/2,sh/2);c.width=c.height=0}}
+      await pg.render({canvasContext:g,viewport:vp,transform:[1,0,0,1,tx,ty-y0]}).promise;await cut(c,0,0,y0);if(lg)lg.drawImage(c,0,y0/2,c.width/2,sh/2);c.width=c.height=0}}
   let thumbSrc=null;
   for(let z=1;z<Z;z++){await cut(L,z,0,0);if(!thumbSrc&&Math.max(L.width,L.height)<=2*PL_T)thumbSrc=L;
     if(z<Z-1){const n=plHalf(L);if(L!==thumbSrc)L.width=L.height=0;L=n}}
@@ -158,12 +203,12 @@ async function plProcess(it,say){
   say('Subiendo el PDF original…');await room();send(`${base}/orig.pdf`,new Blob([buf],{type:'application/pdf'}),'application/pdf');
   while(pend.size)await Promise.race(pend);if(fail)throw fail;try{pdf.destroy()}catch(e){}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
-  const m=it.m;const prev=old?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
+  const m=it.m;const prev=old?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:it.file.name.replace(/\.pdf$/i,''),fsize:it.file.size,
-    rev,base,W,H,Z,T:PL_T,mm,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
+    rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};
   await fcol('plb').doc(id).set(doc);
-  return{id,rev,secs:Math.round((performance.now()-t0)/1000),files:total}}
+  return{id,rev,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
 
 /* ---------- Biblioteca ---------- */
 function plFiltered(){const q=plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
@@ -265,9 +310,9 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     let pg;try{pg=await plPdfPage(spec.base)}catch(e){shOff=true;console.warn('nitidez: sin PDF original',e&&e.message);return}   /* sin PDF (sin conexión): quedan los mosaicos */
     if(V.dead||key!==shKey||shTask)return;
     const c=document.createElement('canvas');c.width=Math.ceil(rw*k);c.height=Math.ceil(rh*k);const cg=c.getContext('2d');
-    const S0=spec.W/pg.getViewport({scale:1}).width;  /* escala del PDF que dio el nivel de detalle (W px) */
+    const cr=spec.crop,S0=spec.W/(cr?cr.x1-cr.x0:pg.getViewport({scale:1}).width);  /* escala del PDF que dio el nivel de detalle (W px); con recorte, el ancho del marco */
     const t0=performance.now();
-    const task=pg.render({canvasContext:cg,viewport:pg.getViewport({scale:S0*s*k}),transform:[1,0,0,1,(x-ox)*k,(y-oy)*k]});shTask=task;
+    const task=pg.render({canvasContext:cg,viewport:pg.getViewport({scale:S0*s*k}),transform:[1,0,0,1,(x-ox)*k-(cr?cr.x0:0)*S0*s*k,(y-oy)*k-(cr?cr.y0:0)*S0*s*k]});shTask=task;
     try{await task.promise}catch(e){if(shTask===task)shTask=null;c.width=c.height=0;return}
     if(shTask===task)shTask=null;if(V.dead||key!==shKey){c.width=c.height=0;return}
     /* bordes difuminados: donde termina la zona nítida (y no es el borde de la hoja) se funde con los mosaicos, sin línea de corte */
@@ -399,8 +444,8 @@ function plOpen(id,list){const p=PLB.get(id);if(!p)return;plClose(true);
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
 function plClose(silent){if(!PLV)return;plmReset();plkReset();if(PLV.tv)PLV.tv.destroy();PLV.box.remove();const r=PLV.ret;PLV=null;if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
-function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1};
-  const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
+function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,crop:p.crop||null,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1};
+  const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
   const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()];
   const sib=plSameSpot(p),up=plFloorStep(p,1),dn=plFloorStep(p,-1);const pc=id=>esc((S.pis.get(id)||ARCH.pis.get(id)||{}).code||'');
@@ -497,7 +542,8 @@ function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scrol
     const inp=$('#plfile',main),dz=$('#pldrop',main);inp.onchange=()=>{plAdd([...inp.files]);inp.value=''};
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('on')});dz.addEventListener('dragleave',()=>dz.classList.remove('on'));
     dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('on');plAdd([...e.dataTransfer.files])});
-    $('#plqbar',main).onclick=e=>{const b=e.target.closest('[data-q]');if(!b)return;const a=b.dataset.q;
+    $('#plqbar',main).onchange=e=>{if(e.target.dataset.q==='crop')store.set('plcrop',e.target.checked)};
+    $('#plqbar',main).onclick=e=>{const b=e.target.closest('[data-q]');if(!b||b.tagName==='INPUT')return;const a=b.dataset.q;
       if(a==='go')plRun();else if(a==='stop'){PQ.stop=true;toast('Se detendrá al terminar la lámina en curso.')}else if(a==='clr'){PQ.items=PQ.items.filter(x=>x.st==='run');plqDraw(true)}
       else if(a==='clrok'){PQ.items=PQ.items.filter(x=>x.st!=='ok'&&x.st!=='skip');plqDraw(true)}};
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
@@ -523,7 +569,7 @@ function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)re
   const avg=PQ.secs.length?PQ.secs.reduce((a,b)=>a+b,0)/PQ.secs.length:45;const left=pend+(PQ.run?1:0);
   shx(bar,!I.length?'':`${PQ.run?`<button class="ib" data-q="stop">Detener</button>`:`<button class="ib pri" data-q="go"${pend?'':' disabled'}>Procesar ${pend} plano${pend===1?'':'s'}</button>`}
     ${PQ.run?'<span class="plbusy">⏳ Procesando en esta PC: deja esta pestaña <b>visible</b> (no la minimices ni la tapes con otra ventana). Si quedó oculta, sigue al volver.</span>':''}<span class="plcnt">${[ok?`✓ ${ok} listos`:'',err?`✕ ${err} con error`:'',bad?`${bad} por completar`:'',skip?`${skip} ya cargados`:''].filter(Boolean).join(' · ')}${PQ.run&&left?` · faltan ~${Math.max(1,Math.round(left*avg/60))} min`:''}</span>
-    ${!PQ.run?`<button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
+    ${!PQ.run?`<label class="plcrop" title="Quita lo que está fuera del marco de la lámina (texto «FORMATO…», objetos invisibles que la achican)"><input type="checkbox" data-q="crop"${store.get('plcrop',true)!==false?' checked':''}> Recortar al marco</label><button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
   if(!force&&tab.dataset.n===String(I.length)&&PQ.run)return;
   clearTimeout(plqT);plqT=setTimeout(()=>plqTable(tab),force?0:200)}
 function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
@@ -549,7 +595,7 @@ async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='
   const title0=document.title;const tot=PQ.items.filter(x=>x.st==='pend').length;let n=0;
   plqDraw(true);
   try{for(;;){if(PQ.stop)break;const i=PQ.items.findIndex(x=>x.st==='pend');if(i<0)break;const it=PQ.items[i];it.st='run';it.msg='Empezando…';n++;document.title=`(${n}/${tot}) Cargando planos · LPS 911`;plqDraw(true);
-      try{const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
+      try{it.crop=store.get('plcrop',true)!==false;const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev} · ${r.crop?`recortado al marco (${r.mm[0]} × ${r.mm[1]} mm)`:(it.crop===false?'hoja completa':'sin marco claro: hoja completa')} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
       catch(e){console.error('plano',it.file.name,e);it.st='err';it.msg='✕ '+(e.message||'Error al procesar');if(e.fatal){PQ.stop=true;toast(e.message)}}
       plqCheck();plqDraw(true)}}
   finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
