@@ -466,7 +466,7 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
 const rvFold=()=>{try{return localStorage.getItem('lps.rvfold')==='1'}catch(e){return false}};
 function rvPanelSync(){let el=document.getElementById('rvpanel');
   const gone=()=>{if(el)el.remove()};
-  if(typeof revOn==='function'&&revOn()&&!revItems().length){/* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;REVSEL=null;gone();toast('Terminaste de revisar las propuestas.');requestRender();return}
+  if(typeof revOn==='function'&&revOn()&&!revItems().length){/* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;REVSEL=null;gone();requestRender();return}
   let mode='',h='',cls='rvpanel';const f=rvFold();
   if(typeof revOn==='function'&&revOn()){mode='rev';h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvn">${revItems().length}</span></button>`:revBarHtml()}
   else if(canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&me&&me.role!=='sc'){
