@@ -706,3 +706,53 @@ test('recorte al marco: encuentra el marco aunque la lámina ocupe poco de la ho
   expect(await frameOf(pdfMarco({ box, marco: false, extras: ['1 w 200 300 m 3000 300 l S', '1 w 200 300 m 200 2000 l S'] }))).toBeNull();
   noErrors(errors, 'recorte');
 });
+
+test('revisiones: los vínculos pasan a la nueva revisión (y se recolocan si ahora viene recortada); «Empezar en Rev. 1» la deja limpia', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const nombre = s => `2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO${s}.pdf`;
+  const cargar = async (buf, s) => {
+    if (await page.locator('#plqbar [data-q="clr"]').count()) await page.click('#plqbar [data-q="clr"]');
+    await page.setInputFiles('#plfile', { name: nombre(s), mimeType: 'application/pdf', buffer: buf });
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+    return page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  };
+  // rev. 1 sin recortar (opción apagada): hoja de 1200 × 900 con el marco corrido a la derecha, como las exportadas con «Extensión»
+  const box = [200, 20, 3402, 2420], hoja = pdfMarco({ box, extras: ['BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'] });
+  await page.evaluate(() => store.set('plcrop', false)); await page.evaluate(() => render());
+  let d = await cargar(hoja, '');
+  expect(d.rev).toBe(1); expect(d.crop).toBeNull();
+  // un vínculo en el centro del marco (coordenadas de la hoja completa)
+  const cx = (box[0] + box[2]) / 2 / 3402, cy = (box[1] + box[3]) / 2 / 2551;
+  await page.evaluate(([cx, cy]) => fcol('plb').doc('ARQ_AG03').update({ lk: [{ id: 'k1', x0: cx - 0.01, y0: cy - 0.01, x1: cx + 0.01, y1: cy + 0.01, to: 'ARQ_AG03', v: null, t: 'A' }] }), [cx, cy]);
+  // rev. 2 recortada al marco: el vínculo pasa y queda otra vez en el centro (ahora del recorte)
+  await page.evaluate(() => store.set('plcrop', true)); await page.evaluate(() => render());
+  d = await cargar(hoja, ' R2');
+  expect(d.rev).toBe(2); expect(d.crop).not.toBeNull(); expect(d.revs.length).toBe(1);
+  expect(d.lk.length).toBe(1);
+  expect((d.lk[0].x0 + d.lk[0].x1) / 2).toBeCloseTo(0.5, 2); expect((d.lk[0].y0 + d.lk[0].y1) / 2).toBeCloseTo(0.5, 2);
+  // rev. 3 igual de recortada: el vínculo pasa sin cambios
+  const lk2 = d.lk[0];
+  d = await cargar(hoja, ' R3');
+  expect(d.rev).toBe(3); expect(d.lk[0]).toEqual(lk2);
+  // «Empezar en Rev. 1» (solo admin): pide confirmar, queda rev. 1 sin historial, vínculos ni calibración, en otra carpeta
+  await page.evaluate(() => fcol('plb').doc('ARQ_AG03').update({ cal: { mpp: 0.01, rev: 3 } }));
+  if (await page.locator('#plqbar [data-q="clr"]').count()) await page.click('#plqbar [data-q="clr"]');
+  await page.setInputFiles('#plfile', { name: nombre(' APROBADO'), mimeType: 'application/pdf', buffer: hoja });
+  await page.check('#plqbar [data-q="fresh"]');
+  let aviso = ''; page.once('dialog', dl => { aviso = dl.message(); dl.accept(); });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+  expect(aviso).toContain('Rev. 1'); expect(aviso).toContain('AG03 · rev. 3 (+2 anteriores) · 1 vínculo');
+  await expect(page.locator('#plqtab')).toContainText('reemplazó a la de prueba');
+  d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  expect(d.rev).toBe(1); expect(d.revs).toEqual([]); expect(d.lk).toBeUndefined(); expect(d.cal).toBeUndefined();
+  expect(d.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r1$/);
+  expect(await page.evaluate(b => [...__ST.keys()].some(k => k.startsWith(b + '/')), d.base)).toBe(true);
+  expect(await page.evaluate(() => [...__ST.keys()].some(k => k.startsWith('planos/ARQ_AG03/r1/')))).toBe(true); // lo de prueba no se borra
+  noErrors(errors, 'revisiones');
+});

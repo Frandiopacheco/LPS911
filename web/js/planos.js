@@ -95,6 +95,7 @@ function plParse(fname){
   let tit=[...extra,tail].filter(Boolean).join(' - ').replace(/_/g,' ').replace(/\s+\d{1,2}\.\d{1,2}\.\d{2,4}$/,'').replace(/\s+RAPM\s+\d{6}$/i,'').replace(/\s{2,}/g,' ').trim();
   const disc=PL_DTOK[dTok]||plDiscOfCod(cod)||'';const nv=plNivOf(nTok,tit);
   return{cod:cod.replace('-',''),disc,niv:nv.niv,pisoId:plPisoOf(nv.cand),tipo:plTipoOf(tit),tit,eta}}
+const plLkN=p=>Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch).length:0;
 const plIdOf=m=>((m.disc||'X')+'_'+(m.cod||('S'+plHash(m.fname||'')))).replace(/[^A-Za-z0-9_.-]/g,'');
 function plHash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(36)}
 
@@ -160,7 +161,10 @@ async function plProcess(it,say){
   try{const rot=plRotulo((await pg.getTextContent()).items||[]);it.rot=rot;
     if(!it.m.cod&&rot.cod)it.m.cod=rot.cod;if(!it.m.disc&&rot.disc)it.m.disc=rot.disc}catch(e){it.rot={cod:'',disc:''}}
   if(!it.m.cod)throw new Error('Sin código de lámina: escríbelo en la tabla.');if(!it.m.disc)throw new Error('Sin especialidad: elígela en la tabla.');
-  const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);const rev=old?(old.rev||1)+1:1;const base=`planos/${id}/r${rev}`;
+  const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);
+  /* «Empezar en Rev. 1» (solo admin): la lámina ya existía (cargas de prueba) y se reemplaza sin historial, vínculos ni calibración.
+     Carpeta nueva (las rutas de Storage nunca se reutilizan: la caché de los equipos se guía por ellas); la anterior no se borra. */
+  const fresh=!!(it.fresh&&old);const rev=fresh?1:old?(old.rev||1)+1:1;const base=fresh?`planos/${id}.${NOW().toString(36)}/r1`:`planos/${id}/r${rev}`;
   const v1=pg.getViewport({scale:1});
   /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
   let crop=null;if(it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
@@ -203,12 +207,25 @@ async function plProcess(it,say){
   say('Subiendo el PDF original…');await room();send(`${base}/orig.pdf`,new Blob([buf],{type:'application/pdf'}),'application/pdf');
   while(pend.size)await Promise.race(pend);if(fail)throw fail;try{pdf.destroy()}catch(e){}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
-  const m=it.m;const prev=old?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
+  const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:it.file.name.replace(/\.pdf$/i,''),fsize:it.file.size,
-    rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
+    rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};
+  /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
+  if(old&&!fresh&&Array.isArray(old.lk)&&old.lk.length)doc.lk=plLkCarry(old,crop,v1);
   await fcol('plb').doc(id).set(doc);
-  return{id,rev,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
+  return{id,rev,fresh,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
+/** vínculos de la revisión anterior en coordenadas de la nueva: van normalizados a la hoja o al recorte de cada una. Si cambió el
+   recorte (p. ej. la anterior era hoja completa y la nueva viene recortada al marco), se pasan por puntos del PDF; solo si las hojas
+   tienen el mismo tamaño (si no, se dejan igual: se revisan a mano). */
+function plLkCarry(old,crop,v1){const L=old.lk.map(l=>({...l}));
+  const oc=old.crop||null,nc=crop||null,same=(a,b)=>!a&&!b||a&&b&&Math.abs(a.x0-b.x0)<1&&Math.abs(a.y0-b.y0)<1&&Math.abs(a.x1-b.x1)<1&&Math.abs(a.y1-b.y1)<1;
+  if(same(oc,nc))return L;
+  let oW,oH,ox=0,oy=0;if(oc){ox=oc.x0;oy=oc.y0;oW=oc.x1-oc.x0;oH=oc.y1-oc.y0}
+  else{if(!old.mm||!old.mm[0])return L;oW=old.mm[0]/25.4*72;oH=old.mm[1]/25.4*72;if(Math.abs(oW-v1.width)>9||Math.abs(oH-v1.height)>9)return L}   /* otra hoja: no se adivina */
+  const nx=nc?nc.x0:0,ny=nc?nc.y0:0,nW=nc?nc.x1-nc.x0:v1.width,nH=nc?nc.y1-nc.y0:v1.height;
+  const fx=x=>Math.max(0,Math.min(1,(ox+x*oW-nx)/nW)),fy=y=>Math.max(0,Math.min(1,(oy+y*oH-ny)/nH));
+  return L.map(l=>({...l,x0:fx(l.x0),x1:fx(l.x1),y0:fy(l.y0),y1:fy(l.y1)}))}
 
 /* ---------- Biblioteca ---------- */
 function plFiltered(){const q=plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
@@ -542,7 +559,7 @@ function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scrol
     const inp=$('#plfile',main),dz=$('#pldrop',main);inp.onchange=()=>{plAdd([...inp.files]);inp.value=''};
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('on')});dz.addEventListener('dragleave',()=>dz.classList.remove('on'));
     dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('on');plAdd([...e.dataTransfer.files])});
-    $('#plqbar',main).onchange=e=>{if(e.target.dataset.q==='crop')store.set('plcrop',e.target.checked)};
+    $('#plqbar',main).onchange=e=>{if(e.target.dataset.q==='crop')store.set('plcrop',e.target.checked);if(e.target.dataset.q==='fresh')PQ.fresh=e.target.checked};
     $('#plqbar',main).onclick=e=>{const b=e.target.closest('[data-q]');if(!b||b.tagName==='INPUT')return;const a=b.dataset.q;
       if(a==='go')plRun();else if(a==='stop'){PQ.stop=true;toast('Se detendrá al terminar la lámina en curso.')}else if(a==='clr'){PQ.items=PQ.items.filter(x=>x.st==='run');plqDraw(true)}
       else if(a==='clrok'){PQ.items=PQ.items.filter(x=>x.st!=='ok'&&x.st!=='skip');plqDraw(true)}};
@@ -569,7 +586,7 @@ function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)re
   const avg=PQ.secs.length?PQ.secs.reduce((a,b)=>a+b,0)/PQ.secs.length:45;const left=pend+(PQ.run?1:0);
   shx(bar,!I.length?'':`${PQ.run?`<button class="ib" data-q="stop">Detener</button>`:`<button class="ib pri" data-q="go"${pend?'':' disabled'}>Procesar ${pend} plano${pend===1?'':'s'}</button>`}
     ${PQ.run?'<span class="plbusy">⏳ Procesando en esta PC: deja esta pestaña <b>visible</b> (no la minimices ni la tapes con otra ventana). Si quedó oculta, sigue al volver.</span>':''}<span class="plcnt">${[ok?`✓ ${ok} listos`:'',err?`✕ ${err} con error`:'',bad?`${bad} por completar`:'',skip?`${skip} ya cargados`:''].filter(Boolean).join(' · ')}${PQ.run&&left?` · faltan ~${Math.max(1,Math.round(left*avg/60))} min`:''}</span>
-    ${!PQ.run?`<label class="plcrop" title="Quita lo que está fuera del marco de la lámina (texto «FORMATO…», objetos invisibles que la achican)"><input type="checkbox" data-q="crop"${store.get('plcrop',true)!==false?' checked':''}> Recortar al marco</label><button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
+    ${!PQ.run?`<label class="plcrop" title="Quita lo que está fuera del marco de la lámina (texto «FORMATO…», objetos invisibles que la achican)"><input type="checkbox" data-q="crop"${store.get('plcrop',true)!==false?' checked':''}> Recortar al marco</label>${me&&me.role==='admin'?`<label class="plcrop" title="Para reemplazar cargas de prueba: las láminas que ya existen quedan como Rev. 1, sin su historial, vínculos ni calibración"><input type="checkbox" data-q="fresh"${PQ.fresh?' checked':''}> Empezar en Rev. 1</label>`:''}<button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
   if(!force&&tab.dataset.n===String(I.length)&&PQ.run)return;
   clearTimeout(plqT);plqT=setTimeout(()=>plqTable(tab),force?0:200)}
 function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
@@ -589,13 +606,15 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
 function plRowSay(i,t){const c=document.getElementById('plst'+i);if(c)c.textContent=t;const it=PQ.items[i];if(it)it.msg=t}
 const plUnload=e=>{e.preventDefault();e.returnValue=''};
 async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='pend'))return;
+  if(PQ.fresh){const rep=PQ.items.filter(x=>x.st==='pend'&&PLB.has(plIdOf({...x.m,fname:x.file.name}))).map(x=>{const p=PLB.get(plIdOf({...x.m,fname:x.file.name}));return`${p.cod} · rev. ${p.rev||1}${p.revs&&p.revs.length?` (+${p.revs.length} anteriores)`:''}${plLkN(p)?` · ${plLkN(p)} vínculo${plLkN(p)===1?'':'s'}`:''}`});
+    if(rep.length&&!await uiAsk({title:`¿Reemplazar ${rep.length} lámina${rep.length===1?'':'s'} y empezar en Rev. 1?`,text:'Quedarán como Rev. 1: se descarta su historial de revisiones, sus vínculos y su calibración (eran cargas de prueba). Los archivos anteriores no se borran.',list:rep.slice(0,12).concat(rep.length>12?[`… y ${rep.length-12} más`]:[]),ok:'Reemplazar',cancel:'Cancelar',tone:'warn'}))return}
   PQ.run=true;PQ.stop=false;window.addEventListener('beforeunload',plUnload);let wl=null;const wlGet=async()=>{try{if(navigator.wakeLock&&document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen')}catch(e){}};await wlGet();
   /* la pantalla de bloqueo suelta el «mantener encendida»: se pide de nuevo al volver a la pestaña */
   const onVis=()=>{if(document.visibilityState==='visible'&&PQ.run)wlGet()};document.addEventListener('visibilitychange',onVis);
   const title0=document.title;const tot=PQ.items.filter(x=>x.st==='pend').length;let n=0;
   plqDraw(true);
   try{for(;;){if(PQ.stop)break;const i=PQ.items.findIndex(x=>x.st==='pend');if(i<0)break;const it=PQ.items[i];it.st='run';it.msg='Empezando…';n++;document.title=`(${n}/${tot}) Cargando planos · LPS 911`;plqDraw(true);
-      try{it.crop=store.get('plcrop',true)!==false;const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev} · ${r.crop?`recortado al marco (${r.mm[0]} × ${r.mm[1]} mm)`:(it.crop===false?'hoja completa':'sin marco claro: hoja completa')} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
+      try{it.crop=store.get('plcrop',true)!==false;it.fresh=!!PQ.fresh;const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev}${r.fresh?' (reemplazó a la de prueba)':''} · ${r.crop?`recortado al marco (${r.mm[0]} × ${r.mm[1]} mm)`:(it.crop===false?'hoja completa':'sin marco claro: hoja completa')} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
       catch(e){console.error('plano',it.file.name,e);it.st='err';it.msg='✕ '+(e.message||'Error al procesar');if(e.fatal){PQ.stop=true;toast(e.message)}}
       plqCheck();plqDraw(true)}}
   finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
@@ -608,7 +627,7 @@ async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='
 const plTablet=()=>{try{return matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)>=600}catch(e){return false}};
 const PLOFF=Object.assign({},store.get('ploff',{}));
 const plOffPut=()=>store.set('ploff',PLOFF);
-const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)?'ok':'old'};
+const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)&&(!o.base||o.base===p.base)?'ok':'old'};   /* «Empezar en Rev. 1» repite el número: se compara también la carpeta */
 const plOffTag=p=>{if(!plTablet())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
 const plMB=p=>p.sz?p.sz/1048576:7;
 function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.base+'/orig.pdf'];   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
