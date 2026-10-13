@@ -44,14 +44,18 @@ test('Semáforo: cumplieron / parcial / crítico, imputable vs no, y filtro por 
   await expect(grp(page, 'warn')).toContainText('SC TARRAJEO');
   await page.locator('#ixm [data-xm="br"]').click();
   await expect(grp(page, 'bad')).toContainText('SC TARRAJEO');
-  // tocar un SC filtra «Incumplimientos del día»
+  // tocar un SC filtra toda la pantalla (Power BI): los totales, «Incumplimientos del día» y la franja de filtros
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(3);
   await grp(page, 'bad').locator('[data-ixsc]').click();
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(2);
   await expect(page.locator('#ixinc')).not.toContainText('No llegó el tubo');
-  await expect(page.locator('#ixinc .dpill')).toContainText('SC TARRAJEO');
-  await page.locator('#ixscx').click();
+  await expect(page.locator('#main .ixd-flt .ixd-fc')).toContainText('SC TARRAJEO');
+  await expect(page.locator('#main .tile.hl')).toContainText('33%');          // 1 de 3: solo TARRAJEO
+  await expect(page.locator('#main .card', { hasText: 'Causas del día' })).not.toContainText('Materiales');
+  await expect(page.locator('#main [data-ixsc="c1"]').first()).toHaveClass(/dim/); // las demás barras siguen, atenuadas
+  await page.locator('#main [data-ixclr]').click();
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(3);
+  await expect(page.locator('#main .ixd-flt')).toHaveCount(0);
   noErrors(errors, 'semáforo diario');
 });
 
@@ -74,8 +78,6 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await expect(ipr.locator('.ixd-grp.bad')).toContainText('SC TARRAJEO');
   await page.screenshot({ path: 'test-results/ind-dia-sc.png' });
   await page.keyboard.press('ArrowRight');
-  await expect(ipr).toContainText('PPC por piso');
-  await page.keyboard.press('ArrowRight');
   await expect(ipr.locator('.ixd-cc')).toHaveCount(1);
   await expect(ipr.locator('.ixd-cc')).toContainText('Faltó cuadrilla');
   await expect(ipr.locator('.ixd-cc .ixd-tag.imp')).toHaveCount(1);
@@ -92,7 +94,7 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await page.screenshot({ path: 'test-results/ind-dia-causas.png' });
   // clasificar por PPC del SC: ya no hay críticos
   await ipr.locator('#iprxm [data-xm="sc"]').click();
-  await ipr.locator('[data-pg="3"]').click();
+  await ipr.locator('[data-pg="2"]').click();
   await expect(ipr).toContainText('Ningún subcontratista quedó en crítico');
   // día anterior y vuelta a hoy
   await ipr.locator('[data-ip="dp"]').click();
@@ -121,34 +123,39 @@ test('Presentar el día en modo oscuro y sin actividades', async ({ page }) => {
   noErrors(errors, 'presentación del día oscuro');
 });
 
-test('Presentar el día: tocar una barra filtra todas las láminas (subcontratista y piso) y se quita', async ({ page }) => {
+const EXTRA2 = [...EXTRA, act('k4', 'c1', 'Redes en segundo piso', 'a3'),
+  ['daily', HOY + '_p2', { date: HOY, pisoId: 'p2', recs: { k4: rec({ sc: 'c1', nm: 'Redes en segundo piso', ambId: 'a3', status: 'no', exec: 0, cnc: 'Materiales', imp: true }) }, extra: {} }]];
+
+test('Presentar el día: el comparativo por piso va al pie del Resumen y tocar una barra filtra todo', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
-  const errors = await openApp(page, { tab: 'ind', extra: EXTRA });
+  const errors = await openApp(page, { tab: 'ind', extra: EXTRA2 });
   await page.evaluate(() => { U.indMode = 'dia'; U.piso = ''; render(); });
   await page.locator('#bipr').click();
   const ipr = page.locator('#ipr');
   await expect(ipr.locator('.ixd-flt.hint')).toBeVisible();
-  // lámina Por piso: el comparativo trae el piso con actividades
-  await ipr.locator('[data-pg="2"]').click();
-  await expect(ipr).toContainText('PPC por piso');
-  await expect(ipr.locator('[data-ixpi]').first()).toBeVisible();
-  // tocar un subcontratista: el resumen pasa a ser solo de él (SC TARRAJEO: 1 de 3 = 33 %)
+  // no es una lámina aparte: son 4 láminas y el comparativo está en el Resumen
+  await expect(ipr.locator('.iprpg button')).toHaveCount(4);
+  await expect(ipr.locator('.iprcard', { hasText: 'PPC por piso' })).toBeVisible();
+  await expect(ipr.locator('.iprcard [data-ixpi]')).toHaveCount(2);
+  await expect(ipr.locator('.iprring b')).toHaveText('50%');
+  // tocar un piso: todo el resumen pasa a ser de ese piso (P2: 0 de 1)
+  await ipr.locator('[data-ixpi="p2"]').click();
+  await expect(ipr.locator('.ixd-fc')).toHaveCount(1);
+  await expect(ipr.locator('.iprring b')).toHaveText('0%');
+  await expect(ipr.locator('[data-ixpi="p1"]')).toHaveClass(/dim/);
+  await ipr.locator('[data-ip="fclr"]').click();
+  // tocar un subcontratista (SC TARRAJEO: 1 de 3 = 33 %); el comparativo por piso pasa a ser solo de él
   await ipr.locator('[data-pg="1"]').click();
   await ipr.locator('[data-ixsc="c3"]').click();
   await expect(ipr.locator('.ixd-fc')).toContainText('SC TARRAJEO');
   await ipr.locator('[data-pg="0"]').click();
   await expect(ipr.locator('.iprring b')).toHaveText('33%');
-  // las barras de los demás siguen visibles en su lámina, atenuadas
+  await expect(ipr.locator('.iprcard', { hasText: 'PPC por piso' })).toContainText('solo SC TARRAJEO');
   await ipr.locator('[data-pg="1"]').click();
   await expect(ipr.locator('[data-ixsc="c1"]')).toHaveClass(/dim/);
-  // tocar piso y quitar todo
-  await ipr.locator('[data-pg="2"]').click();
-  await ipr.locator('[data-ixpi]').first().click();
-  await expect(ipr.locator('.ixd-fc')).toHaveCount(2);
   await ipr.locator('[data-ip="fclr"]').click();
-  await expect(ipr.locator('.ixd-flt.hint')).toBeVisible();
   await ipr.locator('[data-pg="0"]').click();
-  await expect(ipr.locator('.iprring b')).toHaveText('57%');
+  await expect(ipr.locator('.iprring b')).toHaveText('50%');
   noErrors(errors, 'filtros cruzados');
 });
 
@@ -196,4 +203,20 @@ test('PPC histórico a mano: se lee el texto, se guarda y se grafica en Semanal 
   await expect(page.locator('#main .tile').first()).toContainText('80%');
   // un editor no ve el botón
   noErrors(errors, 'ppc histórico a mano');
+});
+
+test('Indicadores › Diario con 2 pisos: tocar un piso filtra los SC, las causas y los incumplimientos', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'ind', extra: EXTRA2 });
+  await page.evaluate(() => { U.indMode = 'dia'; U.piso = ''; render(); });
+  await expect(page.locator('#main .card', { hasText: 'Cumplimiento por piso' }).locator('[data-ixpi]')).toHaveCount(2);
+  await page.locator('#main [data-ixpi="p2"]').first().click();
+  await expect(page.locator('#main .tile.hl')).toContainText('0%');                 // P2: 0 de 1
+  await expect(page.locator('#main .ixd-grp [data-ixsc="c3"]')).toHaveCount(0);     // TARRAJEO no tiene nada en P2
+  await expect(page.locator('#main .ixd-grp [data-ixsc="c1"]')).toHaveCount(1);
+  await expect(page.locator('#ixinc tbody tr')).toHaveCount(1);
+  await expect(page.locator('#main .card', { hasText: 'Causas del día' })).toContainText('Materiales');
+  await page.locator('#main .ixd-flt [data-ixpi]').click();
+  await expect(page.locator('#main .ixd-flt')).toHaveCount(0);
+  noErrors(errors, 'diario por piso');
 });
