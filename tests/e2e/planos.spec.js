@@ -110,7 +110,7 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
   const d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
-  expect(d).toMatchObject({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', tipo: 'Planta', T: 1024, rot: { cod: 'AG03', ok: true } });
+  expect(d).toMatchObject({ cod: 'AG03', disc: 'ARQ', rev: 1, tipo: 'Planta', T: 1024, rot: { cod: 'AG03', ok: true } }); expect(d.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r1$/); // carpeta única por carga
   expect(d.pisoId).toBe(await page.evaluate(() => [...S.pis.values()].find(p => p.code === 'P1')?.id || ''));
   // A3 a 300 dpi ≈ 4961 px de ancho → 4 niveles; están todos los mosaicos, la miniatura y el PDF original
   expect(d.W).toBeGreaterThan(4900); expect(d.Z).toBe(4);
@@ -138,7 +138,7 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plqtab tbody tr').last().locator('.plst')).toContainText('rev. 2', { timeout: 90_000 });
   const d2 = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
-  expect(d2.rev).toBe(2); expect(d2.base).toBe('planos/ARQ_AG03/r2'); expect(d2.revs.map(r => r.rev)).toEqual([1]);
+  expect(d2.rev).toBe(2); expect(d2.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r2$/); expect(d2.revs.map(r => r.rev)).toEqual([1]);
   // el mismo archivo otra vez: «ya está cargado» y no se procesa
   await page.setInputFiles('#plfile', { name: name.replace('.pdf', ' REV.pdf'), mimeType: 'application/pdf', buffer: pdf });
   noErrors(errors, 'carga');
@@ -164,7 +164,7 @@ test.describe('sin conexión (tablet)', () => {
     await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toContainText('sin conexión', { timeout: 30_000 });
     const r = await page.evaluate(() => ({ all: plPaths(PLB.get('ARQ_AG03')), got: [...new Set(window.__GETS)], off: PLOFF.ARQ_AG03 }));
     expect(r.got.sort()).toEqual(r.all.sort());
-    expect(r.off).toMatchObject({ rev: 1, base: 'planos/ARQ_AG03/r1' });
+    expect(r.off).toMatchObject({ rev: 1, base: d.base });
     noErrors(errors, 'tablet');
   });
 });
@@ -753,7 +753,7 @@ test('revisiones: los vínculos pasan a la nueva revisión (y se recolocan si ah
   expect(d.rev).toBe(1); expect(d.revs).toEqual([]); expect(d.lk).toBeUndefined(); expect(d.cal).toBeUndefined();
   expect(d.base).toMatch(/^planos\/ARQ_AG03\.[a-z0-9]+\/r1$/);
   expect(await page.evaluate(b => [...__ST.keys()].some(k => k.startsWith(b + '/')), d.base)).toBe(true);
-  expect(await page.evaluate(() => [...__ST.keys()].some(k => k.startsWith('planos/ARQ_AG03/r1/')))).toBe(true); // lo de prueba no se borra
+  expect(await page.evaluate(() => [...__ST.keys()].filter(k => k.startsWith('planos/ARQ_AG03.') && k.endsWith('/orig.pdf')).length)).toBe(4); // lo de prueba no se borra (4 cargas, 4 carpetas)
   noErrors(errors, 'revisiones');
 });
 
@@ -797,6 +797,37 @@ test('eliminar planos (solo administrador): pide escribir BORRAR y borra la lám
   expect(await page.evaluate(() => !!__dbGet('plb', 'ARQ_AG09'))).toBe(true);
   expect(await files('ARQ_AG09')).toBeGreaterThan(5);
   noErrors(errors, 'eliminar');
+});
+
+test('eliminar y volver a cargar: la carga nueva va a otra carpeta (la caché del equipo no devuelve los mosaicos viejos)', async ({ page }) => {
+  test.setTimeout(200_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); }; });
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const nombre = '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf';
+  const hoja = pdfMarco({ box: [200, 20, 3402, 2420], extras: ['BT /F1 40 Tf 0 1 -1 0 60 400 Tm (FORMATO 120 x 90 Esc 1/100) Tj ET'] });
+  // primera carga sin recortar (como con una versión anterior de la app)
+  await page.evaluate(() => store.set('plcrop', false)); await page.evaluate(() => render());
+  await page.setInputFiles('#plfile', { name: nombre, mimeType: 'application/pdf', buffer: hoja });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(1, { timeout: 120_000 });
+  const d1 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  // se elimina y se vuelve a cargar, ahora recortada: otra vez Rev. 1, pero en OTRA carpeta
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  page.once('dialog', dl => dl.accept('BORRAR'));
+  await page.click('#pldel');
+  await expect.poll(() => page.evaluate(() => !!__dbGet('plb', 'ARQ_AG03'))).toBe(false);
+  await page.evaluate(() => { store.set('plcrop', true); U.tab = 'pcar'; render(); });
+  await page.click('#plqbar [data-q="clr"]').catch(() => {});
+  await page.setInputFiles('#plfile', { name: nombre, mimeType: 'application/pdf', buffer: hoja });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab')).toContainText('recortado al marco', { timeout: 120_000 });
+  const d2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(d2.rev).toBe(1); expect(d2.crop).not.toBeNull();
+  expect(d2.base).not.toBe(d1.base);   // antes: las dos eran planos/ARQ_AG03/r1 y el equipo mostraba los mosaicos viejos
+  noErrors(errors, 'recargar');
 });
 
 test('eliminar planos: un editor no ve la opción', async ({ page }) => {
