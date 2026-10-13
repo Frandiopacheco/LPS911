@@ -10,7 +10,7 @@ const mxFV=()=>firebase.firestore.FieldValue;
 const mxErr=e=>toast('No se pudo guardar: '+(e&&e.code||e));
 
 /** pestañas internas de la matriz */
-function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['pla','Plano'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente'],['tren','Tren']].filter(([k])=>!((k==='tipo'||k==='tren')&&SCK()))
+function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['pla','Gráfico'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente'],['tren','Tren']].filter(([k])=>!((k==='tipo'||k==='tren')&&SCK()))
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
 /* cabecera en una fila (oct 2026): vistas (y en la Matriz, los indicadores) entre el título y los botones */
 function mxHd(head,mid){const m=`<div class="phm">${mid}</div>`;return head.includes('<div class="pha">')?head.replace('<div class="pha">',m+'<div class="pha">'):head.replace('</header>',m+'</header>')}
@@ -102,17 +102,23 @@ async function mxCatScSet(id,prev,v){const c=MX.cat.get(id);if(!c)return;
   else toast('Subcontratista guardado (solo el catálogo)','Deshacer',und)}
 
 /* nueva actividad */
-function mxCatNew(){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const sc=mxSel()[0]||'';
+/* sc0: subcontratista ya elegido (el «+» del encabezado de su grupo en la Matriz); fromMx: se abre desde la Matriz (editores: ofrece los tipos de
+   ambiente donde aplica; sin tipo ni ambiente la actividad no sale como columna hasta que se agregue a algún ambiente) */
+function mxCatNew(sc0,fromMx){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const sc=sc0||mxSel()[0]||'';const tps=ed&&fromMx?[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name)):[];
   lqModal(`<div class="lqtop"><b>Nueva actividad del catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <div class="mxform"><label>Nombre<input class="tin" id="mxnn" placeholder="p. ej. Instalación de espejos"></label>
-    <label>Subcontratista<select id="mxnsc">${ed?mxScOpts(sc):myScsI().map(id=>`<option value="${esc(id)}">${esc(conOf(id).name)}</option>`).join('')}</select></label>
+    <label>Subcontratista<select id="mxnsc">${ed?mxScOpts(sc):myScsI().map(id=>`<option value="${esc(id)}"${id===sc?' selected':''}>${esc(conOf(id).name)}</option>`).join('')}</select></label>
     <label>Clase<select id="mxncl">${mxClOpts('t')}</select></label></div>
+   ${tps.length?`<div class="mxntp"><b>¿En qué tipos de ambiente aplica?</b><div class="kchips kw">${tps.map(t=>`<label class="chk"><input type="checkbox" data-mxntp="${esc(t.id)}"> ${esc(t.name)}</label>`).join('')}</div><p class="note">Marca los tipos donde se hace: así sale como columna en todos esos ambientes. Si no marcas ninguno, se agrega al catálogo y la sumas después a un ambiente (Recorrido › Otra actividad).</p></div>`:''}
    ${ed?'':'<p class="note">Queda en el catálogo de tu partida; el ingeniero la revisará (nombre, clase, tipo de ambiente).</p>'}<p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
      const k=mnk(name);const dup=[...MX.cat.values()].find(x=>!x.arch&&mnk(x.name)===k);if(dup){$('#mxnmsg').textContent=`Ya existe «${dup.name}» (${conOf(dup.sc).name}).`;return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
-     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});lqClose();toast(ed?'Actividad creada':'Actividad creada · el ingeniero la revisará')}catch(err){mxErr(err)}},)}
+     const tsel=[...document.querySelectorAll('[data-mxntp]:checked')].map(i=>i.dataset.mxntp);
+     try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});
+       for(const tid of tsel)await mxTipoAdd(tid,id);
+       lqClose();toast(ed?(tsel.length?`Actividad creada y agregada a ${tsel.length} tipo${tsel.length===1?'':'s'} de ambiente`:'Actividad creada'):'Actividad creada · el ingeniero la revisará')}catch(err){mxErr(err)}},)}
 
 function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
   openPop(btn,`<div class="ph">${esc(c.name)}</div>${mxdCan()?'<button data-do="des">Desglosar en varias actividades…</button>':''}<button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,

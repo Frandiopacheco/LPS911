@@ -95,7 +95,8 @@ function iprdResumen(D,R){const t=D.tot,br=t.ver?t.ok/t.ver:null,ps=pscOf(t);con
 
 function iprdSc(R){if(!R.length)return'<div class="iprempty">Sin subcontratistas con actividades este día.</div>';
   return`<section class="iprcard"><h3>Cumplimiento por subcontratista <small>${R.length} · ${IXD_M==='sc'?'clasificados por PPC del SC':'clasificados por PPC bruto'}</small></h3>
-    ${ixdLegend()}<div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,false)}</div>
+    <div class="ixd-cols${R.length>12?' two':''}">${ixdGroupsHtml(R,false)}</div>
+    <div class="ixd-legb">${ixdLegend()}</div>
     <p class="iprnote">PPC bruto = cumplidos / verificados (Parcial cuenta como no cumplido). «Del SC» no cuenta lo que falló por causas que no dependen del subcontratista (rayado).</p></section>`}
 
 function iprdCriticos(D,R){const crit=ixdGroups(R).bad;
