@@ -12,18 +12,21 @@ function iprStart(){if(IPR)return;IPR={pg:0,z:1,m:U.indMode==='sem'?'sem':'dia'}
   o.onclick=iprClick;o.onchange=iprChange;document.body.classList.add('ipr-on');
   try{if(document.documentElement.requestFullscreen&&!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}
   iprDraw()}
-function iprStop(){if(!IPR)return;IPR=null;$('#ipr')?.remove();document.body.classList.remove('ipr-on');
+function iprStop(){if(!IPR)return;IPR=null;IPRF={sc:'',pi:''};$('#ipr')?.remove();document.body.classList.remove('ipr-on');
   try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}
   requestRender()}
-function iprClick(e){const t=e.target.closest('[data-ip]');if(!t)return;const k=t.dataset.ip;
+function iprClick(e){const xr=e.target.closest('[data-ixsc],[data-ixpi]');if(xr&&IPR&&IPR.m==='dia'){const sc=xr.dataset.ixsc,pi=xr.dataset.ixpi;if(sc!=null)IPRF.sc=IPRF.sc===sc?'':sc;else IPRF.pi=IPRF.pi===pi?'':pi;iprDraw();return}
+  const t=e.target.closest('[data-ip]');if(!t)return;const k=t.dataset.ip;
   if(k==='x'){iprStop();return}
   if(k==='dp'||k==='dn'||k==='dt'){const nd=k==='dt'?null:shiftDay(indDay(),k==='dn'?1:-1);daySet(nd&&nd<todayIso()?nd:null)} /* modo 'dia' (ind-dia.js) */
+  else if(k==='fsc'||k==='fpi'){const f=k==='fsc'?'sc':'pi';IPRF[f]=IPRF[f]===t.dataset.v?'':t.dataset.v}
+  else if(k==='fclr')IPRF={sc:'',pi:''}
   else if(k==='xm')IXD_M=t.dataset.xm==='sc'?'sc':'br';
   else if(k==='wp')U.week--;else if(k==='wn')U.week++;else if(k==='wt')U.week=curWeek();
   else if(k==='z-'||k==='z+')IPR.z=Math.max(.8,Math.min(1.6,+(IPR.z+(k==='z+'?.1:-.1)).toFixed(2)));
   else if(t.dataset.pg!=null)IPR.pg=+t.dataset.pg;
   iprDraw()}
-function iprChange(e){const t=e.target;if(t.id==='iprpiso'){U.piso=t.value;U.pisoAll=!t.value;U.sector='';saveUI();requestRender()}}
+function iprChange(e){const t=e.target;if(t.id==='iprpiso'){IPRF.pi='';U.piso=t.value;U.pisoAll=!t.value;U.sector='';saveUI();requestRender()}}
 document.addEventListener('keydown',e=>{if(!IPR||(e.target&&/^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)))return;
   if(e.key==='Escape'){iprStop();return}
   const np=(IPR.m==='dia'?IPRD_PG:IPR_PG).length;

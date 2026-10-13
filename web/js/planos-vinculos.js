@@ -17,7 +17,7 @@
      conviven: al entrar a uno se sale del otro. */
 
 const PLK={tapT:0,tx:-99,ty:-99,show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null};
-const PLK_R=100;const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
+const PLK_R=40;const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
 
 /* ---------- datos ---------- */
 const plkLinks=p=>p&&Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch&&l.id):[];
@@ -93,7 +93,7 @@ function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();
    lista de láminas o la barra, ese clic elegía una lámina al azar. Se ignoran los clics de la interfaz justo después de un toque. */
 const plkGhost=e=>performance.now()-PLK.tapT<700&&Math.hypot(e.clientX-PLK.tx,e.clientY-PLK.ty)<30;
 /* un solo toque sobre la marca (burbuja de corte, globo de detalle…) crea el vínculo con una zona del tamaño de una burbuja
-   centrada en el toque (`PLK_R` píxeles del plano a cada lado ≈ 1,7 cm de hoja a 300 dpi); luego se ajusta con las esquinas.
+   centrada en el toque (≈ 14 px de pantalla a cada lado, tope `PLK_R` píxeles del plano); luego se ajusta con las esquinas.
    Antes eran dos toques (esquina y esquina opuesta) y, con un vínculo elegido, el primero solo lo soltaba: se perdía la cuenta. */
 async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK.pick)return;PLK.tapT=performance.now();PLK.tx=cx;PLK.ty=cy;const w=v.toWorld(cx,cy);
   const h=PLK.dup?null:plkHit(cx,cy,plkLinks(p));
@@ -101,7 +101,9 @@ async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK
   if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;                      /* fuera de la hoja */
   PLK.sel=null;
   if(plkLinks(p).length>=PLK_MAX){toast('Esta lámina ya tiene el máximo de vínculos ('+PLK_MAX+').');plkBar();return}
-  const g={x0:plkClamp((w.x-PLK_R)/v.W),y0:plkClamp((w.y-PLK_R)/v.H),x1:plkClamp((w.x+PLK_R)/v.W),y1:plkClamp((w.y+PLK_R)/v.H)};
+  /* radio según el zoom (oct 2026: con 100 px fijos del plano, al verlo completo la «burbuja» salía enorme): ≈ 14 px de pantalla, entre 6 y `PLK_R` del plano */
+  const R=Math.max(6,Math.min(PLK_R,14/(v.s||1)));
+  const g={x0:plkClamp((w.x-R)/v.W),y0:plkClamp((w.y-R)/v.H),x1:plkClamp((w.x+R)/v.W),y1:plkClamp((w.y+R)/v.H)};
   if(PLK.dup){const s=PLK.dup,nid=plkId();PLK.dup=null;          /* otra marca de la misma remisión: mismo destino, zona y texto */
     try{await plkSave(p.id,arr=>{arr.push({id:nid,...g,to:s.to,v:s.v||null,t:s.t||'',by:me.email,byN:me.name||me.email,ts:NOW()});return arr});PLK.sel=nid;toast('Otra marca vinculada')}
     catch(e){toast('No se pudo guardar el vínculo: '+(e.code||e.message))}

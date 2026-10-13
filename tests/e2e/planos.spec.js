@@ -424,7 +424,7 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await expect.poll(nLk).toBe(1);
   const lk = await page.evaluate(() => PLB.get('ARQ_AG03').lk[0]);
   expect(lk.to).toBe('IS_IS06'); expect(lk.t).toBe('Corte Z'); expect(lk.v.k).toBeCloseTo(4, 1); expect(lk.v.nx).toBeCloseTo(0.6, 2);
-  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); expect((lk.x1 - lk.x0) * W).toBeCloseTo(200, 0); // zona del tamaño de una burbuja
+  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); const zw = (lk.x1 - lk.x0) * W; expect(zw).toBeGreaterThanOrEqual(12); expect(zw).toBeLessThanOrEqual(80); // zona del tamaño de una burbuja (≈ 14 px de pantalla, tope 40 px del plano a cada lado)
   expect(lk.by).toBeTruthy(); expect(lk.arch).toBeUndefined();
   expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
   await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
