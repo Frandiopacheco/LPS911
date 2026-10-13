@@ -3719,3 +3719,5 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .ixd-flt.hint{color:var(--muted);font-size:.85em}
 .ixd-fc{display:inline-flex;align-items:center;gap:.4em;padding:.25em .7em;border:1px solid var(--accent);border-radius:999px;background:var(--panel2);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
 .ixd-fc i{width:.8em;height:.8em;border-radius:3px}
+.ixd-ph{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.4em}
+.ixd-ph img{height:5.5em;width:auto;max-width:12em;object-fit:cover;border-radius:var(--r-xs);border:1px solid var(--line);cursor:zoom-in}

@@ -8,13 +8,15 @@ const act = (id, sc, name, ambId = 'a1') => ['acts', id, { ambId, sc, name, und:
 /* c1 SANITARIAS: i0 e i1 ya vienen del Firebase falso (Dpto 101 y 102, hoy) → las dos Sí = 100 %  → «Cumplieron»
    c2 ELECTRICAS: e0 Sí, e1 No (imputable)                                      = 50 %          → «Parcial»
    c3 TARRAJEO:   k1 No (imputable), k2 No (ajeno al SC), k3 Sí                  = 33 % bruto · 50 % del SC → «Crítico» / «Parcial» */
+const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const EXTRA = [
+  ['fotos', 'ph1', { data: PX, kind: 'rec' }],
   act('k1', 'c3', 'Tarrajeo de cielo raso'), act('k2', 'c3', 'Tarrajeo de columnas', 'a2'), act('k3', 'c3', 'Tarrajeo de vigas'),
   ['daily', HOY + '_p1', { date: HOY, pisoId: 'p1', recs: {
     i0: rec({ sc: 'c1', nm: 'Redes empotradas', ambId: 'a1' }), i1: rec({ sc: 'c1', nm: 'Redes empotradas', ambId: 'a2' }),
     e0: rec({ sc: 'c2', nm: 'Entubado empotrado', ambId: 'a1' }),
     e1: rec({ sc: 'c2', nm: 'Entubado empotrado', ambId: 'a2', status: 'no', exec: 0, cnc: 'Materiales', imp: true, note: 'No llegó el tubo' }),
-    k1: rec({ sc: 'c3', nm: 'Tarrajeo de cielo raso', ambId: 'a1', status: 'no', exec: 0, cnc: 'Personal', imp: true, note: 'Faltó cuadrilla' }),
+    k1: rec({ sc: 'c3', nm: 'Tarrajeo de cielo raso', ambId: 'a1', status: 'no', exec: 0, cnc: 'Personal', imp: true, note: 'Faltó cuadrilla', photos: ['ph1'] }),
     k2: rec({ sc: 'c3', nm: 'Tarrajeo de columnas', ambId: 'a2', status: 'no', exec: 0, cnc: 'Frente no entregado', imp: false, note: 'Aún sin liberar' }),
     k3: rec({ sc: 'c3', nm: 'Tarrajeo de vigas', ambId: 'a1' }),
   }, extra: {} }],
@@ -77,6 +79,11 @@ test('Presentar el día: resumen, subcontratistas, a verificar y causas (imputab
   await expect(ipr.locator('.ixd-cc')).toHaveCount(1);
   await expect(ipr.locator('.ixd-cc')).toContainText('Faltó cuadrilla');
   await expect(ipr.locator('.ixd-cc .ixd-tag.imp')).toHaveCount(1);
+  await expect(ipr.locator('.ixd-cc .ixd-ph img')).toHaveCount(1);   // foto del incumplimiento (k1)
+  await ipr.locator('.ixd-cc .ixd-ph img').click();
+  await expect(page.locator('.lb img')).toBeVisible();
+  await page.locator('.lb [data-x]').click();
+  await expect(ipr).toBeVisible();
   await expect(ipr.locator('.ixd-cc .ixd-tag.nimp')).toHaveCount(1);
   await page.screenshot({ path: 'test-results/ind-dia-criticos.png' });
   await page.keyboard.press('ArrowRight');

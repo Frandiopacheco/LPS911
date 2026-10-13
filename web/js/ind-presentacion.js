@@ -15,7 +15,8 @@ function iprStart(){if(IPR)return;IPR={pg:0,z:1,m:indM()==='sem'?'sem':'dia'};cl
 function iprStop(){if(!IPR)return;IPR=null;IPRF={sc:'',pi:''};$('#ipr')?.remove();document.body.classList.remove('ipr-on');
   try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}
   requestRender()}
-function iprClick(e){const xr=e.target.closest('[data-ixsc],[data-ixpi]');if(xr&&IPR&&IPR.m==='dia'){const sc=xr.dataset.ixsc,pi=xr.dataset.ixpi;if(sc!=null)IPRF.sc=IPRF.sc===sc?'':sc;else IPRF.pi=IPRF.pi===pi?'':pi;iprDraw();return}
+function iprClick(e){const im=e.target.closest('.ixd-ph img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:'))lightbox(im.src);return}
+  const xr=e.target.closest('[data-ixsc],[data-ixpi]');if(xr&&IPR&&IPR.m==='dia'){const sc=xr.dataset.ixsc,pi=xr.dataset.ixpi;if(sc!=null)IPRF.sc=IPRF.sc===sc?'':sc;else IPRF.pi=IPRF.pi===pi?'':pi;iprDraw();return}
   const t=e.target.closest('[data-ip]');if(!t)return;const k=t.dataset.ip;
   if(k==='x'){iprStop();return}
   if(k==='dp'||k==='dn'||k==='dt'){const nd=k==='dt'?null:shiftDay(indDay(),k==='dn'?1:-1);daySet(nd&&nd<todayIso()?nd:null)} /* modo 'dia' (ind-dia.js) */
