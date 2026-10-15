@@ -29,6 +29,8 @@ test('congelar desde una versión: compromisos y foto salen de la versión; se c
   await page.evaluate(() => unfreezeWeek(59, 'p1'));
   expect((await page.evaluate(() => window.__dbGet('weeks', '59_p1'))).frozenAt).toBeUndefined();
 
+  // t1 se marcó terminada el lunes: igual entra con sus dos días (copia tal cual la versión; el PPC es semanal)
+  await page.evaluate(() => DONE.set('t1', '2026-10-06'));
   await page.evaluate(id => freezeFromVer(59, 'p1', id), VID);
   const w = await page.evaluate(() => window.__dbGet('weeks', '59_p1'));
   expect(w.frozenAt).toBeTruthy();
@@ -37,6 +39,7 @@ test('congelar desde una versión: compromisos y foto salen de la versión; se c
   expect(w.items.t0.days).toEqual(['2026-10-06', '2026-10-08']);
   expect([w.items.t0.q, w.items.t0.und]).toEqual([15, 'm2']);
   expect(w.items.i0.days).toEqual(['2026-10-09']); // solo los días de la semana
+  expect(w.items.t1.days).toEqual(['2026-10-06', '2026-10-07']);
   // t1 tiene los mismos días que lo congelado antes: conserva su evaluación; t0 cambió de días: queda por evaluar
   expect(w.res.t1.ok).toBe(false);
   expect(w.res.t0).toBeUndefined();
@@ -67,4 +70,14 @@ test('el botón «Desde versión…» aparece en el borrador y abre la lista de 
   await page.locator('section[data-pid="p1"] [data-freezever]').click();
   await expect(page.locator('#vfz')).toHaveValue(VID);
   noErrors(errors, 'botón desde versión');
+});
+
+test('solo el administrador: el editor no ve el botón ni puede congelar desde una versión', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'plan', extra: VER });
+  await page.evaluate(() => { U.week = 59; render(); });
+  await expect(page.locator('section[data-pid="p1"] [data-freeze]')).toBeVisible();
+  await expect(page.locator('section[data-pid="p1"] [data-freezever]')).toHaveCount(0);
+  await page.evaluate(id => freezeFromVer(59, 'p1', id), VID);
+  expect(await page.evaluate(() => window.__dbGet('weeks', '59_p1'))).toBeFalsy();
+  noErrors(errors, 'editor sin desde versión');
 });
