@@ -65,11 +65,11 @@ function renderPlan(main){
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
     const cf=(confirmUF[p.id]||0)>NOW();
     let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
-     ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':''}>${w.auto?'Congelado automáticamente':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
+     ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
-     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
      <div class="pad"><div class="tiles">
@@ -128,6 +128,7 @@ function renderPlan(main){
         /* también la imputabilidad decidida en Campo (la de la causa principal); null = la que trae la causa por defecto */
         const cnc=sg.ok?'':(sg.cnc||r.cnc||'');upd[id]={...r,ok:sg.ok,cnc,imp:sg.ok||sg.imp==null||sg.imp===cncImp(cnc)?null:sg.imp,rsc:sg.ok?'':(sg.rsc||''),pc:!sg.ok&&!!sg.pc,note:r.note||(sg.ok&&sg.exc?'Excepción en campo: '+sg.exc:sg.ok===false&&sg.mvm?'Reprogramada en el plan diario: '+sg.mvm:''),exec:it.q?sg.exec:(r.exec??null)}}
       const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
+    {const fv=e.target.closest('[data-freezever]');if(fv){verFreezePick(fv,n,pid);return}}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
     if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;unfreezeWeek(n,pid)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
     {const rb=e.target.closest('[data-wkrest]');if(rb){restoreWeek(n,pid,rb.dataset.wkrest);return}}
@@ -208,8 +209,10 @@ function wsnapOf(w){if(!w)return null;if(w.snap)return w.snap;const k=wsnKey(w);
 const wsnRef=id=>fcol('wsnap').doc(id);
 /* Congelar corre en una transacción: si otra persona ya congeló este piso y semana (o lo hizo desde una copia atrasada),
    se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
-async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
-  const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||{},frozenBy:me?me.email:''};
+/* src (opcional, «Congelar desde versión»): {items, snap, res, ver:{id,label}} armados desde una versión guardada del lookahead
+   en vez del lookahead vivo; el documento guarda fromVer para saber de dónde salió. */
+async function freezeWeek(n,pid,res,src){const items=src?src.items:liveItems(n,pid);let snap={};if(src)snap=src.snap;else for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
+  const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||(src&&src.res)||{},frozenBy:me?me.email:'',...(src&&src.ver?{fromVer:src.ver}:{})};
   /* propuestas de SC enviadas y sin decidir para este piso y semana: se avisa antes de cerrar y se guarda cuáles quedaron fuera */
   if(canWrite){let pend;try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
     if(!pend)pend=propPendWeek(n,pid,[...PROP.values()]);
@@ -226,12 +229,12 @@ async function freezeWeek(n,pid,res){const items=liveItems(n,pid);const snap={};
     S.wk.set(id,{...out.ex,id});const[k,v]=Object.entries(res||{})[0]||[];
     if(k&&(out.ex.items||{})[k]&&!((out.ex.res||{})[k]&&(out.ex.res[k].ok!=null)))setRes(n,pid,k,v);
     toast(`${code} · semana ${n} ya estaba congelada por otra persona: se usa esa versión`);requestRender();return}
-  WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);S.wk.set(id,{...out.nd,id});requestRender();toast(res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
+  WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);S.wk.set(id,{...out.nd,id});requestRender();toast(src&&src.ver?`${code} · semana ${n} congelada desde la versión «${src.ver.label}»`:res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
 /* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones) se copia a su propio documento
    weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta en ningún PPC) y la
    semana vuelve a borrador; su foto del lookahead se copia a wsnap/<…>__h<hora> (de wsnap/<semana>_<piso> o, en datos antiguos,
    de weeks.snap). «Recuperar» la repone mientras nadie la haya vuelto a congelar (también la foto: v.snap antiguo o wsnap __h). */
-const WK_VF=['frozenAt','items','res','frozenBy','propOut','auto'];
+const WK_VF=['frozenAt','items','res','frozenBy','propOut','auto','fromVer'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
@@ -259,6 +262,45 @@ async function restoreWeek(n,pid,hid){const id=wkId(n,pid);const code=S.pis.get(
     if(!v){toast('No se recuperó: alguien volvió a congelar esta semana o ya se recuperó.');return}
     local(v);toast(`${code} · semana ${n}: versión congelada recuperada`)}
   catch(e){toast('No se pudo recuperar: '+((e&&(e.code||e.message))||e))}}
+
+/* ---- Congelar desde una versión guardada del lookahead (oct 2026, pedido del dueño) ----
+   Cuando el lookahead vivo ya no refleja lo comprometido (p. ej. se cambió después del autoguardado del domingo), el piso se
+   congela con los compromisos de una versión guardada (lhver/<versión>__<piso>): copia tal cual los días de esa semana en la
+   versión (sin quitar lo marcado como terminado: el PPC es semanal) y la foto del lookahead sale de esa versión. Solo el
+   administrador (pedido del dueño; las reglas exigen admin para escribir weeks.fromVer). Si la semana se había descongelado, la evaluación
+   de la última versión congelada se conserva en los compromisos que siguen iguales (mismos días); el resto queda por evaluar. */
+function verItems(n,pid,sn){const days=new Set(weekDays(n));const items={},snap={};const secs=sn.secs||{},ambs=sn.ambs||{},acts=sn.acts||{};
+  for(const[xid,x0]of Object.entries(acts)){const x={...x0,id:xid};const a=ambs[x.ambId];const s=a&&secs[a.sectorId];if(!s)continue;
+    snap[xid]=(x.days||[]).slice().sort();
+    const d=(x.days||[]).filter(z=>days.has(z)).sort();if(!d.length)continue; /* tal cual la versión: sin quitar días por «terminada» */
+    const it={sc:x.sc||'',sector:s.code||'',code:a.code||'',amb:a.name||'',act:x.name||'',days:d,ord:(s.order||0)*1e6+(a.order||0)*1e3+(x.order||0)};
+    if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}
+    items[xid]=it}
+  return{items,snap}}
+/** evaluación de la última versión congelada (descongelada) que sigue valiendo: mismo compromiso y mismos días */
+function verKeepRes(n,pid,items){const L=wkHist(wkId(n,pid));const hv=L[L.length-1];const v=hv&&hv.v||{};const old=v.items||{},R=v.res||{};const out={};
+  for(const[id,it]of Object.entries(items)){const r=R[id],o=old[id];if(!r||!o)continue;if((o.days||[]).join()!==(it.days||[]).join())continue;out[id]=r}return out}
+/** versión sugerida: la automática del domingo anterior a la semana, si existe; si no, la más reciente */
+function verDefault(n){const id='auto-'+addD(weekStart(n),-1);if(LHI.has(id))return id;const L=[...LHI.values()].sort((a,b)=>b.ts-a.ts);return L.length?L[0].id:''}
+function verFreezePick(btn,n,pid){if(!isAdmin){toast('Solo el administrador puede congelar desde una versión.');return}const L=[...LHI.values()].filter(v=>v.pisos&&v.pisos[pid]).sort((a,b)=>b.ts-a.ts);const code=S.pis.get(pid)?.code||'';
+  if(!L.length){toast(lhiErr?'Las versiones del lookahead no están disponibles.':'No hay versiones guardadas del lookahead para este piso.');return}
+  const def=verDefault(n);
+  openPop(btn,`<div class="ph">Congelar ${esc(code)} desde una versión</div><div class="ptx">Los compromisos de la semana ${n} salen de la versión elegida del lookahead, no del lookahead actual. El lookahead no se modifica.</div>
+   <div class="qrow" style="padding:0 10px 8px"><select id="vfz" aria-label="Versión del lookahead" style="max-width:340px">${L.map(v=>`<option value="${esc(v.id)}"${v.id===def?' selected':''}>${v.kind==='auto'?'⏱ ':''}${esc(v.label)}</option>`).join('')}</select></div>
+   <button data-do="go">Revisar y congelar</button>`,{go:()=>{const id=($('#vfz')||{}).value;closePop();if(id)freezeFromVer(n,pid,id)}})}
+async function freezeFromVer(n,pid,verId){if(!isAdmin){toast('Solo el administrador puede congelar desde una versión.');return}const v=LHI.get(verId);const code=S.pis.get(pid)?.code||'';if(!v){toast('No se encontró la versión.');return}
+  const w=S.wk.get(wkId(n,pid));if(w&&w.frozenAt){toast(`${code} · semana ${n} ya está congelada: descongélala primero.`);return}
+  if(!db){toast('Para congelar desde una versión necesitas internet.');return}
+  let sn;try{const d=await fcol('lhver').doc(verId+'__'+pid).get();sn=d.exists?JSON.parse(d.data().json||'{}'):null}
+  catch(e){toast('No se pudo leer la versión: '+((e&&(e.code||e.message))||e));return}
+  if(!sn){toast(`La versión «${v.label}» no tiene datos de ${code}.`);return}
+  const{items,snap}=verItems(n,pid,sn);const k=Object.keys(items).length;
+  if(!k){toast(`La versión «${v.label}» no tiene actividades de ${code} en la semana ${n}.`);return}
+  const live=liveItems(n,pid);const dif=Object.keys(items).filter(id=>!live[id]||live[id].days.join()!==items[id].days.join()).length+Object.keys(live).filter(id=>!items[id]).length;
+  const keep=verKeepRes(n,pid,items);const nk=Object.keys(keep).length;
+  if(!await uiAsk({title:`Congelar ${code} desde «${v.label}»`,text:`Semana ${n}:`,list:[`${k} compromiso${k>1?'s':''} salen de esa versión`,dif?`${dif} difiere${dif>1?'n':''} del lookahead actual (se usa lo de la versión)`:'Coincide con el lookahead actual',nk?`Se conserva la evaluación de ${nk} compromiso${nk>1?'s':''} que siguen iguales`:''].filter(Boolean),
+    note:'El lookahead no cambia. Si te equivocas, puedes descongelar y recuperar la versión anterior.',ok:'Congelar',tone:'info'}))return;
+  await freezeWeek(n,pid,null,{items,snap,res:keep,ver:{id:verId,label:v.label||verId}})}
 
 /* ================= RESTRICCIONES ================= */
 /* el subcontratista crea restricciones de sus actividades y edita las suyas mientras estén pendientes; liberarlas es del ingeniero */

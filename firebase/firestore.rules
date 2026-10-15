@@ -576,11 +576,13 @@ service cloud.firestore {
     }
     // Plan semanal (oct 2026, pedido del dueño): congelar lo hace cualquier editor; la evaluación (res) solo la cambia el
     // responsable del piso o el administrador (piso sin responsable: cualquier editor). Las copias __h (histOf) las crea quien descongela.
+    // Congelar desde una versión del lookahead (weeks.fromVer): solo el administrador; quitarlo (descongelar) sí puede el editor.
     match /weeks/{id} {
-      allow create: if canEdit();
+      allow create: if canEdit() && (isAdmin() || !('fromVer' in request.resource.data));
       allow update: if canEdit() && (edPiso(resource.data)
         || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['res'])
-        || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0));
+        || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0))
+        && (isAdmin() || !('fromVer' in request.resource.data) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['fromVer']));
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
