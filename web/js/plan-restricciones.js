@@ -69,7 +69,7 @@ function renderPlan(main){
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
-     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button><button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
      <div class="pad"><div class="tiles">
@@ -265,13 +265,14 @@ async function restoreWeek(n,pid,hid){const id=wkId(n,pid);const code=S.pis.get(
 
 /* ---- Congelar desde una versión guardada del lookahead (oct 2026, pedido del dueño) ----
    Cuando el lookahead vivo ya no refleja lo comprometido (p. ej. se cambió después del autoguardado del domingo), el piso se
-   congela con los compromisos de una versión guardada (lhver/<versión>__<piso>): mismas reglas que «Congelar» (solo los días de
-   la semana, sin lo ya terminado) y la foto del lookahead sale de esa versión. Si la semana se había descongelado, la evaluación
+   congela con los compromisos de una versión guardada (lhver/<versión>__<piso>): copia tal cual los días de esa semana en la
+   versión (sin quitar lo marcado como terminado: el PPC es semanal) y la foto del lookahead sale de esa versión. Solo el
+   administrador (pedido del dueño; las reglas exigen admin para escribir weeks.fromVer). Si la semana se había descongelado, la evaluación
    de la última versión congelada se conserva en los compromisos que siguen iguales (mismos días); el resto queda por evaluar. */
 function verItems(n,pid,sn){const days=new Set(weekDays(n));const items={},snap={};const secs=sn.secs||{},ambs=sn.ambs||{},acts=sn.acts||{};
   for(const[xid,x0]of Object.entries(acts)){const x={...x0,id:xid};const a=ambs[x.ambId];const s=a&&secs[a.sectorId];if(!s)continue;
     snap[xid]=(x.days||[]).slice().sort();
-    const d=(x.days||[]).filter(z=>days.has(z)&&!libDay(x,z)).sort();if(!d.length)continue;
+    const d=(x.days||[]).filter(z=>days.has(z)).sort();if(!d.length)continue; /* tal cual la versión: sin quitar días por «terminada» */
     const it={sc:x.sc||'',sector:s.code||'',code:a.code||'',amb:a.name||'',act:x.name||'',days:d,ord:(s.order||0)*1e6+(a.order||0)*1e3+(x.order||0)};
     if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}
     items[xid]=it}
@@ -281,13 +282,13 @@ function verKeepRes(n,pid,items){const L=wkHist(wkId(n,pid));const hv=L[L.length
   for(const[id,it]of Object.entries(items)){const r=R[id],o=old[id];if(!r||!o)continue;if((o.days||[]).join()!==(it.days||[]).join())continue;out[id]=r}return out}
 /** versión sugerida: la automática del domingo anterior a la semana, si existe; si no, la más reciente */
 function verDefault(n){const id='auto-'+addD(weekStart(n),-1);if(LHI.has(id))return id;const L=[...LHI.values()].sort((a,b)=>b.ts-a.ts);return L.length?L[0].id:''}
-function verFreezePick(btn,n,pid){const L=[...LHI.values()].filter(v=>v.pisos&&v.pisos[pid]).sort((a,b)=>b.ts-a.ts);const code=S.pis.get(pid)?.code||'';
+function verFreezePick(btn,n,pid){if(!isAdmin){toast('Solo el administrador puede congelar desde una versión.');return}const L=[...LHI.values()].filter(v=>v.pisos&&v.pisos[pid]).sort((a,b)=>b.ts-a.ts);const code=S.pis.get(pid)?.code||'';
   if(!L.length){toast(lhiErr?'Las versiones del lookahead no están disponibles.':'No hay versiones guardadas del lookahead para este piso.');return}
   const def=verDefault(n);
   openPop(btn,`<div class="ph">Congelar ${esc(code)} desde una versión</div><div class="ptx">Los compromisos de la semana ${n} salen de la versión elegida del lookahead, no del lookahead actual. El lookahead no se modifica.</div>
    <div class="qrow" style="padding:0 10px 8px"><select id="vfz" aria-label="Versión del lookahead" style="max-width:340px">${L.map(v=>`<option value="${esc(v.id)}"${v.id===def?' selected':''}>${v.kind==='auto'?'⏱ ':''}${esc(v.label)}</option>`).join('')}</select></div>
    <button data-do="go">Revisar y congelar</button>`,{go:()=>{const id=($('#vfz')||{}).value;closePop();if(id)freezeFromVer(n,pid,id)}})}
-async function freezeFromVer(n,pid,verId){if(!canWrite)return;const v=LHI.get(verId);const code=S.pis.get(pid)?.code||'';if(!v){toast('No se encontró la versión.');return}
+async function freezeFromVer(n,pid,verId){if(!isAdmin){toast('Solo el administrador puede congelar desde una versión.');return}const v=LHI.get(verId);const code=S.pis.get(pid)?.code||'';if(!v){toast('No se encontró la versión.');return}
   const w=S.wk.get(wkId(n,pid));if(w&&w.frozenAt){toast(`${code} · semana ${n} ya está congelada: descongélala primero.`);return}
   if(!db){toast('Para congelar desde una versión necesitas internet.');return}
   let sn;try{const d=await fcol('lhver').doc(verId+'__'+pid).get();sn=d.exists?JSON.parse(d.data().json||'{}'):null}
@@ -296,7 +297,7 @@ async function freezeFromVer(n,pid,verId){if(!canWrite)return;const v=LHI.get(ve
   const{items,snap}=verItems(n,pid,sn);const k=Object.keys(items).length;
   if(!k){toast(`La versión «${v.label}» no tiene actividades de ${code} en la semana ${n}.`);return}
   const live=liveItems(n,pid);const dif=Object.keys(items).filter(id=>!live[id]||live[id].days.join()!==items[id].days.join()).length+Object.keys(live).filter(id=>!items[id]).length;
-  const keep=canWrite&&isPisoResp(pid)?verKeepRes(n,pid,items):{};const nk=Object.keys(keep).length;
+  const keep=verKeepRes(n,pid,items);const nk=Object.keys(keep).length;
   if(!await uiAsk({title:`Congelar ${code} desde «${v.label}»`,text:`Semana ${n}:`,list:[`${k} compromiso${k>1?'s':''} salen de esa versión`,dif?`${dif} difiere${dif>1?'n':''} del lookahead actual (se usa lo de la versión)`:'Coincide con el lookahead actual',nk?`Se conserva la evaluación de ${nk} compromiso${nk>1?'s':''} que siguen iguales`:''].filter(Boolean),
     note:'El lookahead no cambia. Si te equivocas, puedes descongelar y recuperar la versión anterior.',ok:'Congelar',tone:'info'}))return;
   await freezeWeek(n,pid,null,{items,snap,res:keep,ver:{id:verId,label:v.label||verId}})}

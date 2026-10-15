@@ -1180,6 +1180,20 @@ test('plan semanal: la evaluación la cambia el responsable del piso o el admin;
   await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr1'), { frozenAt: 'z' }));
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'weeks/91_pr1'), { 'res.x1.ok': true }));
 });
+test('plan semanal: congelar desde una versión (fromVer) solo el admin; el editor evalúa y descongela igual', async () => {
+  await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    await setDoc(doc(db, 'pisos/pv1'), { code: 'PV1', resp: ['editor@obra.pe'] });
+    await setDoc(doc(db, 'weeks/93_pv1'), { n: 93, pisoId: 'pv1', unfrozenAt: 'u' });
+    await setDoc(doc(db, 'weeks/94_pv1'), { n: 94, pisoId: 'pv1', frozenAt: 'x', items: {}, res: {}, fromVer: { id: 'auto-1', label: 'A' } }); });
+  const ed = user('editor@obra.pe');
+  const FV = { n: 93, pisoId: 'pv1', frozenAt: 'y', items: {}, res: {}, fromVer: { id: 'auto-1', label: 'A' } };
+  await assertFails(setDoc(doc(ed, 'weeks/93_pv1'), FV)); // update de un borrador
+  await assertFails(setDoc(doc(ed, 'weeks/95_pv1'), { ...FV, n: 95 })); // create
+  await assertSucceeds(setDoc(doc(user(OWNER), 'weeks/93_pv1'), FV));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/94_pv1'), { 'res.x1.ok': true })); // evaluar una semana congelada desde versión
+  await assertFails(updateDoc(doc(ed, 'weeks/94_pv1'), { fromVer: { id: 'otra', label: 'B' } }));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/94_pv1'), { frozenAt: deleteField(), items: deleteField(), res: deleteField(), fromVer: deleteField(), unfrozenAt: 'z' })); // descongelar
+});
 
 // ── Módulo Planos (docs/ia/planos.md) ──
 const PLB = (x) => ({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', W: 14175, H: 10630, Z: 5, tit: 'PLANTA PRIMER PISO', ...x });
