@@ -70,3 +70,28 @@ test('registros del día, plan cerrado e índice de terminadas: un cambio de otr
   expect(r.sameDpl, 'el plan cerrado de otro piso conserva su objeto').toBe(true);
   noErrors(errors, 'fotos incrementales del día');
 });
+
+/* auditoría REN-05: las fotos (que nunca cambian) se leen primero de la copia del equipo; antes get() iba siempre al servidor */
+test('las fotos se leen de la copia del equipo y no se vuelven a bajar del servidor', async ({ page }) => {
+  await page.addInitScript(() => {
+    let fb; window.__fotoGet = { srv: 0, cache: 0 };
+    Object.defineProperty(window, 'firebase', { configurable: true, get: () => fb, set: v => {
+      fb = v; const f0 = v.firestore;
+      const wrap = () => { const fs = f0(); if (!fs.__f) { fs.__f = 1; const oc = fs.collection;
+        fs.collection = n => { const c = oc(n); if (n !== 'fotos') return c; const od = c.doc;
+          return { ...c, doc: id => { const d = od(id); return { ...d, get: o => { window.__fotoGet[o && o.source === 'cache' ? 'cache' : 'srv']++; return d.get(o); } }; } }; }; }
+        return fs; };
+      v.firestore = Object.assign(wrap, f0);
+    } });
+  });
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const R = { status: 'ok', photos: ['f1'], sc: 'c2', nm: 'Entubado empotrado', ambId: 'a1', by: 'campo@obra.pe', ts: 1 };
+  const errors = await openApp(page, { tab: 'campo', extra: [['fotos', 'f1', { data: PNG, date: HOY, pisoId: 'p1', actId: 'e0', by: 'campo@obra.pe', ts: 1 }], ['daily', HOY + '_p1', { date: HOY, pisoId: 'p1', recs: { e0: R }, extra: {} }]] });
+  await page.evaluate(() => loadFoto('f1')); // la miniatura (Campo, En obra, Restricciones, Plan diario…)
+  await expect.poll(() => page.evaluate(() => FOTO.get('f1'))).toBe(PNG);
+  expect(await page.evaluate(async () => { FOTO.delete('f1'); return (await getFoto('f1')) || ''; })).toBe(PNG); // exportes (PDF)
+  const g = await page.evaluate(() => window.__fotoGet);
+  expect(g.srv, 'lecturas al servidor').toBe(0);
+  expect(g.cache).toBeGreaterThanOrEqual(2);
+  noErrors(errors, 'fotos desde la copia');
+});

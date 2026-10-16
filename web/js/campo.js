@@ -12,7 +12,10 @@ function shiftDay(d,dir){let x=addD(d,dir);if(pd(x).getUTCDay()===0)x=addD(x,dir
 function shrinkPhoto(file){return new Promise((ok,ko)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(u);let W=img.naturalWidth,H=img.naturalHeight,max=1280,q=.62,out='';
   for(let k=0;k<7;k++){const sc=Math.min(1,max/Math.max(W,H));const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round(H*sc);const g=c.getContext('2d');g.drawImage(img,0,0,c.width,c.height);out=c.toDataURL('image/jpeg',q);if(out.length<260000)break;if(q>.45)q-=.08;else max=Math.round(max*.8)}ok(out)};
   img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('No se pudo leer la foto.'))};img.src=u})}
-function loadFoto(id){if(FOTO.has(id)||!db)return;FOTO.set(id,null);fcol('fotos').doc(id).get().then(d=>{if(d.exists){FOTO.set(id,d.data().data);$$(`img[data-ph="${id}"]`).forEach(i=>i.src=FOTO.get(id))}}).catch(()=>FOTO.delete(id))}
+/* las fotos no cambian nunca (cada una tiene su id): primero la copia del equipo y, si no está, el servidor. get() sin opciones iba
+   siempre al servidor y bajaba hasta ~260 KB por foto en cada sesión (auditoría REN-05) */
+const fotoDoc=id=>{const r=fcol('fotos').doc(id);return r.get({source:'cache'}).then(d=>d&&d.exists?d:r.get(),()=>r.get())};
+function loadFoto(id){if(FOTO.has(id)||!db)return;FOTO.set(id,null);fotoDoc(id).then(d=>{if(d.exists){FOTO.set(id,d.data().data);$$(`img[data-ph="${id}"]`).forEach(i=>i.src=FOTO.get(id))}}).catch(()=>FOTO.delete(id))}
 /* «prog» = lo comprometido ese día: si después se reprogramó el saldo (la cantidad del día bajó o el día salió), el registro
    conserva el compromiso original */
 /** cantidad comprometida del día: la del plan cerrado (dplan.ids) si el día tiene foto; si no, la vigente del lookahead */
