@@ -200,7 +200,9 @@ function renderPlan(main){
 function rplFor(x,d){let best=null,bk='';for(const[k,v]of Object.entries((x&&x.rpl)||{}))if(v&&k<=d&&k>bk){bk=k;best=v}return best}
 /* sugerencia para evaluar un compromiso congelado con lo que se registró en la semana: los registros de campo y, para los días
    que el plan diario reprogramó (ya no están en el lookahead y nadie los registró), la causa que se decidió en la reunión */
-function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
+function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);let it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;
+  /* terminada antes de lo congelado (auditoría LOG-03): la meta por metrado también se recorta a los días hasta la terminada */
+  if(dn0&&it0.q&&it0.qd&&it.days.length<it0.days.length)it={...it,q:r2(it.days.reduce((s,d)=>s+(+it0.qd[d]||0),0))};const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
   /* auditoría 09/10 (decidido con el dueño, opción B): los cierres del capataz/SC sin confirmar no cuentan para la sugerencia; se
      muestran aparte como «por confirmar» y el ingeniero decide. (aceptarCierres los pasa a «No cumplido · Sin confirmación».) */
   const rof=d=>{const r=recOf(d,id);return r&&r._prop?null:r};

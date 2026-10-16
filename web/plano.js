@@ -513,7 +513,8 @@ function setRec(z,status,cnc){if(typeof writeDaily!=='function')return;const x=S
   /* corrección de algo ya registrado: queda el rastro (qué decía antes y quién lo había registrado) */
   if(cur&&cur.status&&!cur._prop&&(cur.status!==status||(cnc!=null&&(cur.cnc||'')!==cnc))){r.hist=[...(cur.hist||[]),{st:cur.status,cnc:cur.cnc||'',by:cur.by||'',n:cur.byName||cur.by||'',t:cur.ts||0}].slice(-10);r.corr={n:me.name||me.email,by:me.email,t:NOW(),via:M.meet?'reunión':'plan diario'}}
   else if(cur&&cur.hist){r.hist=cur.hist;if(cur.corr)r.corr=cur.corr}
-  r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else if(cnc!=null){r.cnc=cnc;r.imp=null}
+  /* «No cumplido»/«Parcial» no es terminada: se quita la marca (auditoría LOG-02) */
+  r.status=status;if(status==='ok'){r.cnc='';r.imp=null}else{r.done=false;if(cnc!=null){r.cnc=cnc;r.imp=null}}
   /* de «Cumplido» a otro estado: la cantidad que se completó sola (= lo programado) ya no vale; un avance parcial escrito a mano se conserva */
   if(status!=='ok'&&cur&&cur.status==='ok'&&r.exec!=null&&r.prog!=null&&+r.exec===+r.prog)r.exec=null;
   if(status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;writeDaily(M.date,M.piso,{recs:{[x.id]:r}});requestRender();toast(`${STT[status]} registrado en Campo`)}

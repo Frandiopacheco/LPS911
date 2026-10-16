@@ -112,7 +112,7 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
         toast('Foto quitada','Deshacer',()=>{const d2=DAY.get(dayId(d,pid));const e2=d2&&d2.extra&&d2.extra[xid];if(e2)writeDaily(d,pid,{extra:{[xid]:back(e2)}})})}}
       return}
     const art=t.closest('article[data-a]');if(!art)return;const aid=art.dataset.a;const x=S.act.get(aid);if(!x)return;const pid=pisoOfAct(aid);const cur=recOf(d,aid);
-    const stb=t.closest('[data-st]');if(stb&&canDaily){const nst=stb.dataset.st;const r=baseRec(d,x,cur);r.status=nst;if(nst==='ok'){r.cnc='';r.imp=null;if(r.exec==null&&r.prog!=null)r.exec=r.prog;openCards.delete(aid)}else{r.exc='';openCards.add(aid);if(cur&&cur.status==='ok'&&cur.exec!=null&&cur.exec===r.prog)r.exec=null}
+    const stb=t.closest('[data-st]');if(stb&&canDaily){const nst=stb.dataset.st;const r=baseRec(d,x,cur);r.status=nst;if(nst==='ok'){r.cnc='';r.imp=null;if(r.exec==null&&r.prog!=null)r.exec=r.prog;openCards.delete(aid)}else{r.exc='';r.done=false;/* «No cumplido»/«Parcial» no es terminada (auditoría LOG-02) */openCards.add(aid);if(cur&&cur.status==='ok'&&cur.exec!=null&&cur.exec===r.prog)r.exec=null}
       if(!(x.days||[]).includes(d)&&!cur&&!inSnap(x,d)){toast('Esta actividad no está programada este día.');return}
       /* «Cumplido» con menos de lo programado: se pregunta (todo se ejecutó, o excepción con motivo) */
       if(nst==='ok'&&shortOf(r)&&!(cur&&cur.status==='ok')){excAsk(stb,r,{all:true},rr=>writeDaily(d,pid,{recs:{[aid]:rr}}));return}

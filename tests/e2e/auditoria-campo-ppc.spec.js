@@ -203,3 +203,32 @@ test('13 · En Campo se puede ver mañana, pero no registrar avance', async ({ p
   expect(await page.evaluate(d => window.__dbGet('daily', d + '_p1'), MANANA)).toBeUndefined();
   noErrors(errors, 'futuro');
 });
+
+/* auditoría B (LOG-02): corregir a «✗ No» quita la marca de terminada; antes quedaba {status:'no', done:true} y los días siguientes seguían liberados */
+test('LOG-02 · «Cumplido + Terminada» corregido a «✗ No» deja de estar terminada', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'campo', extra: [act('x1', { days: [HOY, MANANA], qty: { [HOY]: 5, [MANANA]: 5 } }), daily({ x1: rec({ exec: 5, prog: 5, done: true }) }), ['doneidx', 'p1', { d: { x1: HOY } }]] });
+  await expect.poll(() => page.evaluate(() => DONE.has('x1'))).toBe(true);
+  await card(page, 'x1').locator('[data-st="no"]').click();
+  await expect.poll(async () => (await getRec(page, 'x1')).status).toBe('no');
+  expect((await getRec(page, 'x1')).done).toBe(false);
+  await expect.poll(() => page.evaluate(() => DONE.has('x1'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => ((window.__dbGet('doneidx', 'p1') || {}).d || {}).x1 || null)).toBe(null);
+  expect(await page.evaluate(d => schedOn(S.act.get('x1'), d), MANANA)).toBe(true);
+  noErrors(errors, 'no cumplido quita terminada');
+});
+
+/* auditoría B (LOG-03): terminada antes de lo congelado; con metrado la meta también se recorta a los días hasta la terminada */
+test('LOG-03 · terminada el miércoles (por metrado): la sugerencia del Plan semanal es Sí', async ({ page }) => {
+  const W = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'];
+  const qd = Object.fromEntries(W.map(d => [d, 10]));
+  const it = { x1: { ...items.x1, days: W, q: 50, qd, und: 'm2' } };
+  const dl = (d, o) => ['daily', d + '_p1', { date: d, pisoId: 'p1', recs: { x1: rec({ prog: 10, exec: 10, ...o }) } }];
+  const errors = await openApp(page, { tab: 'plan', extra: [
+    act('x1', { metrado: 30, days: W.slice(0, 3), qty: { [W[0]]: 10, [W[1]]: 10, [W[2]]: 10 } }), week({ items: it }),
+    dl(W[0]), dl(W[1]), dl(W[2], { done: true }), ['doneidx', 'p1', { d: { x1: W[2] } }]] });
+  await expect.poll(() => page.evaluate(() => DONE.get('x1'))).toBe(W[2]);
+  await page.evaluate(ds => ds.forEach(d => ensureDaily(d)), W);
+  await page.locator('section[data-pid="p1"] [data-applyfield]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('weeks', '58_p1').res.x1?.ok)).toBe(true);
+  noErrors(errors, 'terminada antes por metrado');
+});
