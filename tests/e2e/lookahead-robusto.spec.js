@@ -29,8 +29,9 @@ test('L6: un registro de Campo con estado desconocido o una fila que falla no de
 test('L7: si la ventana pierde el foco a medio pintar, no queda el pincel pegado ni se guarda; pintar normal sí guarda', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look' });
   const days0 = await page.evaluate(() => [...__dbGet('acts', 'i0').days]);
-  const td = page.locator('#grid tr[data-a="i0"] td.d:not(.on):not(.hol)').first();
-  const d = await td.getAttribute('data-d');
+  /* un día futuro: hoy y los pasados solo los cambia el administrador (con confirmación) */
+  const d = await page.evaluate(() => [...document.querySelectorAll('#grid tr[data-a="i0"] td.d:not(.on):not(.hol)')].map(t => t.dataset.d).find(x => x > todayIso()));
+  const td = page.locator(`#grid tr[data-a="i0"] td.d[data-d="${d}"]`);
   const b = await td.boundingBox();
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down();
   expect(await page.evaluate(() => !!paint)).toBe(true);
