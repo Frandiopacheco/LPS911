@@ -2837,6 +2837,13 @@ div.tp-dif{padding-left:0}
   .chipb{min-height:34px}
   .kbig{min-height:46px}
 }
+/* UI-02/EJE-12: en el celular los botones y campos miden 40 px (antes 30–32 px salvo parches sueltos). min-height le gana también
+   a las alturas fijas pequeñas (inline o de un componente). La grilla del Lookahead no cambia (sus botones siguen compactos). */
+@media (max-width:760px){
+  :root{--h-ctl:40px}
+  .ib,.seg button{min-height:var(--h-ctl)}
+  #grid .ib{min-height:0}
+}
 /* tablet vertical: sin el nombre de la obra en la barra (ya se ve en la pestaña), así piso, semana y botones entran en una sola fila */
 @media (min-width:761px) and (max-width:899px){.top .brand{display:none}.wk{margin-right:auto}}
 /* lookahead en tablet vertical: columnas de ambiente y subcontratista más angostas para ver más días */
