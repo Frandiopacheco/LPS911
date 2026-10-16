@@ -587,16 +587,18 @@ function firstOpen(from,pid){let f=from;for(let i=0;i<40&&dayLocked(f,pid);i++)f
 /** razón legible de por qué un día está cerrado */
 function lockWhy(d,pid){const o=dplanOf(d,pid);if(d<todayIso())return'ya pasó';if(d===todayIso())return'es hoy: solo se registra el cumplimiento';return o&&o.auto?`se publicó solo a las ${planCutHH()}`:'ya se publicó'}
 /* lo que toca un cambio del lookahead en días cerrados (días o cantidades), sin contar los días que ya tienen registro de campo */
-function lockHits(ops){const H=[];for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before||{},a=o.after||{};const pid=pisoOfAmb(a.ambId||b.ambId);if(!pid)continue;
+/* oct 2026 (decidido con el dueño): desde la pestaña Lookahead, hoy y los días pasados solo los cambia el administrador (strict),
+   aunque ya tengan registro de campo. Campo y el Plan diario siguen con la regla de antes (reprogramar un «No va», pasar el saldo). */
+function lockHits(ops,strict){const H=[];const t=todayIso();for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before||{},a=o.after||{};const pid=pisoOfAmb(a.ambId||b.ambId);if(!pid)continue;
     const bd=new Set(b.days||[]),ad=new Set(a.days||[]);const T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});
     const bq=b.qty||{},aq=a.qty||{};new Set([...Object.keys(bq),...Object.keys(aq)]).forEach(d=>{if(canon(bq[d]??null)!==canon(aq[d]??null))T.add(d)});
-    for(const d of T)if(dayLocked(d,pid)&&!recReal(d,o.id))H.push({d,pid,id:o.id})}return H}
+    for(const d of T)if((strict&&d<=t)||(dayLocked(d,pid)&&!recReal(d,o.id)))H.push({d,pid,id:o.id})}return H}
 /* se llama desde apply: false = no se aplica. El administrador puede seguir (queda registrado en el día). */
 let LKOK=false;
-function lockGuard(ops,retry){if(!me)return true;if(typeof cliTabOn==='function'&&cliTabOn())return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops);if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
+function lockGuard(ops,retry){if(!me)return true;if(typeof cliTabOn==='function'&&cliTabOn())return true;/* en modo propuesta el SC solo arma su propuesta: el cierre se revisa al aceptarla */if(typeof PM==='function'&&PM())return true;const H=lockHits(ops,U.tab==='look');if(!H.length)return true;const ds=[...new Set(H.map(h=>h.d))].sort();const lab=ds.map(d=>fmtD(d)).join(', ');
   if(isAdmin){if(!LKOK){uiAsk({title:`El plan del ${lab} ya está cerrado`,text:`${lockWhy(ds[0],H[0].pid)}.`,note:'Como administrador puedes cambiarlo igual: quedará registrado en el día. El PPC del día se sigue midiendo contra lo que se publicó.',ok:'Cambiarlo igual',tone:'warn'}).then(ok=>{if(ok&&retry){LKOK=true;try{retry()}finally{LKOK=false}}});return false}
     for(const k of new Set(H.map(h=>h.d+'_'+h.pid))){const[d,pid]=[k.slice(0,10),k.slice(11)];dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'cambio en el lookahead'})}return true}
-  toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana.'}`);return false}
+  toast(`El plan del ${lab} ya está cerrado (${lockWhy(ds[0],H[0].pid)}): no se reprograma. ${ds[0]>todayIso()?'Para corregirlo, deshaz la publicación en el Plan diario.':'Registra el cumplimiento en Campo y reprograma desde mañana. En el lookahead, hoy y los días pasados solo los cambia un administrador.'}`);return false}
 function dplanLog(d,pid,e){if(!db)return;const ref=fcol('dplan').doc(d+'_'+pid);bgWrite(ref.set({date:d,pisoId:pid,log:firebase.firestore.FieldValue.arrayUnion(e)},{merge:true}))}
 /** foto de lo programado un día en un piso (lo que el plan diario deja comprometido): {actId: cantidad del día | null} */
 /** terminada antes de ese día (no por un cierre de ese mismo día): ya no se le pide nada ese día */
