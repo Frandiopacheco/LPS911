@@ -388,6 +388,8 @@ function cxAmbPop(w,X,Y){computeCross();const fv=scVis();const ok=c=>scIn(fv,c.a
   openPop(anchorAt(X,Y),`<div class="ph">⚠ ${L.length} interferencias en ${esc(a.code)} ${esc(a.name)}</div><div class="pal">${b}</div>`,h)}
 function hitIds(cx,cy,r){const out=new Set();const pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r]];for(const[dx,dy]of pts){for(const el of document.elementsFromPoint(cx+dx,cy+dy)){const z=el.closest&&el.closest('[data-z]');if(z&&z.dataset.z)out.add(z.dataset.z)}}return[...out]}
 const erasable=z=>own(z)&&(myRole()==='sc'||z.sc===M.scDraw)&&(M.eraseWhat==='all'||z.kind!=='zona');
+/* una sola escucha de teclado viva (la del visor actual): antes se sumaba una por visita y un Ctrl+Z deshacía varias veces */
+let KDH=null;
 function installDraw(v){const host=v.host;let drag=null;
   const stop=e=>{e.stopImmediatePropagation();e.preventDefault()};
   host.addEventListener('pointerdown',e=>{if(e.button>0)return;const w=v.toWorld(e.clientX,e.clientY);
@@ -432,14 +434,16 @@ function installDraw(v){const host=v.host;let drag=null;
   host.addEventListener('dblclick',e=>{if(M.tool==='poly'&&M.tmp){stop(e);finishPoly(e.clientX,e.clientY);return}
     const zEl=e.target.closest&&e.target.closest('[data-z]');const z=zEl&&zget(zEl.dataset.z);if(z&&z.kind==='texto'&&own(z)){stop(e);textDialog(null,e.clientX,e.clientY,z)}},true);
   const KEYS={v:'pan',r:'zona',p:'poly',f:'flecha',t:'texto',l:'trazo',e:'borrar'};
-  document.addEventListener('keydown',e=>{if(U.tab!=='mapa'||document.querySelector('.mdlg')||!pop.hidden||/INPUT|TEXTAREA|SELECT/.test((e.target.tagName||'')))return;
+  if(KDH)document.removeEventListener('keydown',KDH);
+  KDH=e=>{if(U.tab!=='mapa'||document.querySelector('.mdlg')||!pop.hidden||/INPUT|TEXTAREA|SELECT/.test((e.target.tagName||'')))return;
     const k=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();return}
     if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();redo();return}
     if(e.key==='Escape'){if(M.tmp||M.pend){M.tmp=null;M.pend=null;requestRender()}else if(M.selId){M.selId=null;requestRender()}return}
     if(e.key==='Enter'&&M.tool==='poly'&&M.tmp){const r=host.getBoundingClientRect();finishPoly(r.left+r.width/2,r.top+r.height/2);return}
     if((e.key==='Delete'||e.key==='Backspace')&&M.selId){const z=zget(M.selId);if(own(z)){e.preventDefault();delIds([z.id])}return}
-    if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&KEYS[k]){M.tool=KEYS[k];M.tmp=null;requestRender()}})}
+    if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&KEYS[k]){M.tool=KEYS[k];M.tmp=null;requestRender()}};
+  document.addEventListener('keydown',KDH)}
 function finishPoly(cx,cy){const t=M.tmp;if(!t||t.pts.length<3){toast('Un polígono necesita al menos 3 puntos.');return}M.tmp={kind:'zona',pts:t.pts};if(M.pend){const p=M.tmp.pts;M.tmp=null;newZone(p,{...M.pend,fromPend:1},null,cx,cy);return}drawOverlay();linkChooser(M.tmp.pts,cx,cy)}
 function delSel(){const z=zget(M.selId);if(own(z))delIds([z.id])}
 const LW={1:2.5,2:4,3:7};

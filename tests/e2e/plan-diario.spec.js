@@ -736,3 +736,30 @@ test('ir al Tablero y volver no borra el «Deshacer» del plan ni vuelve a suscr
   await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'nova').length).toBe(0);
   noErrors(errors, 'deshacer tras Tablero');
 });
+
+/* auditoría REN-01: cada visita al Plan diario sumaba una escucha de teclado y un Ctrl+Z deshacía varias veces */
+test('ir y volver al Plan diario varias veces: un Ctrl+Z deshace una sola vez', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await expect(page.locator('#mpanel .mp-h')).toContainText('02 oct');
+  const novas = async () => (await pdz(page)).filter(z => z.kind === 'nova').length;
+  for (const id of ['e0', 'e1']) {
+    await row(page, id).locator('[data-dv^="no"]').click();
+    await page.locator('#pop [data-nk="per"]').click();
+    await page.locator('#pop [data-nv="nolib"]').click();
+    await page.locator('#pop .nvok').click();
+    await expect(row(page, id)).toContainText('No va');
+  }
+  await expect.poll(novas).toBe(2);
+  for (let i = 0; i < 4; i++) {
+    await openTab(page, 'dash');
+    await openTab(page, 'mapa');
+    await expect(page.locator('#mpanel .mp-h')).toContainText('02 oct');
+  }
+  await page.evaluate(() => { window.__toasts = []; const t = window.toast; window.toast = (...a) => { window.__toasts.push(a[0]); return t(...a); }; document.activeElement && document.activeElement.blur && document.activeElement.blur(); });
+  await page.keyboard.press('Control+z');
+  await expect.poll(novas).toBe(1);
+  await page.waitForTimeout(400);
+  expect(await novas()).toBe(1); // una sola vez: la otra «No va» sigue
+  expect(await page.evaluate(() => window.__toasts.filter(t => /nada que deshacer/.test(t)).length)).toBe(0);
+  noErrors(errors, 'Ctrl+Z tras volver al plan');
+});
