@@ -8,7 +8,7 @@ const CDN_CACHE = 'lps911-cdn-2';
 // ASSETS lo completa scripts/build.mjs con los archivos de css/ y js/ y firebase-config.js (con su versión)
 const ASSETS = [];
 const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'firebase-config.js', ...ASSETS];
-const PRUEBA = /^main--/.test(self.location.hostname);
+const PRUEBA = /^main--|pruebas/.test(self.location.hostname); /* copia de prueba: Netlify (main--…) o Firebase Hosting (lps911-pruebas-….web.app) */
 const CDN_HOSTS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 // ?v= de ASSETS = huella (sha1, 8 letras) del contenido (scripts/build.mjs). Al instalar una versión nueva solo se baja lo que
