@@ -396,7 +396,14 @@ async function capJoin(fdb,u){const ref=fcol('members').doc('u_'+u.uid);let m=nu
 /* con poca señal, leer members del servidor puede tardar mucho (quedaba en «Conectando…»): a los 2 s se usa la copia guardada
    en el equipo, si la hay, y se sigue; la suscripción a members (startSession) corrige el rol o cierra la sesión al llegar la del servidor.
    Sin copia guardada se sigue esperando al servidor, como antes. */
+/* auditoría REN-04: con la ficha del usuario guardada en el equipo se entra al momento (las suscripciones dan su primera foto desde
+   la copia); ya no se esperan hasta 2 s al servidor. Cuando el servidor contesta, si el rol o la partida cambiaron se recarga la página
+   para abrir las suscripciones de ese rol (la recarga ya lee la ficha nueva); si lo quitaron o lo desactivaron, memCb cierra la sesión.
+   Mientras tanto las reglas de Firestore siguen mandando en lo que se lee y escribe del servidor. */
+function memVerify(srv,c){const s0=c.data()||{};srv.then(s=>{if(!me||!s||!s.exists)return;const d=s.data()||{};if(d.off===true)return;
+  if(roleSig(d)!==roleSig(s0)){toast('Tu rol cambió. Recargando…');setTimeout(()=>location.reload(),800)}},()=>{})}
 async function memFirst(ref){const srv=ref.get({source:'server'});
+  try{const c=await ref.get({source:'cache'});if(c&&c.exists){memVerify(srv,c);return c}}catch(e){}
   const r=await Promise.race([srv.then(s=>({s}),e=>({e})),new Promise(ok=>setTimeout(()=>ok({t:true}),2000))]);
   if(r.s)return r.s;
   if(r.t){try{const c=await ref.get({source:'cache'});if(c&&c.exists)return c}catch(e){}
