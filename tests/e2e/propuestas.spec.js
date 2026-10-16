@@ -152,14 +152,18 @@ test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de 
   expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('conf');
   expect(msg).toContain('cambió en: días');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-05']);
-  /* aceptar todo lo visible no la toma: queda pendiente para revisarla sola */
-  page.once('dialog', d => d.accept());
+  /* aceptar todo lo visible: una sola pregunta por las que chocan; «Dejarlas pendientes» no las toma */
+  const msgs = []; const onD = d => { msgs.push(d.message()); msgs.length === 1 ? d.accept() : d.dismiss(); };
+  page.on('dialog', onD);
   await page.click('#rvpanel [data-rvall]');
-  await expect(page.locator('#toast')).toContainText('el programa oficial cambió');
+  await expect(page.locator('#toast')).toContainText('elegiste dejarlas pendientes');
+  page.off('dialog', onD);
+  expect(msgs[1]).toContain('vigente');
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
-  /* aceptando la pregunta, se aplica */
-  page.once('dialog', d => d.accept());
-  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
+  /* aceptando esa pregunta, se aplica desde el lote (ya no hay que ir una por una) */
+  page.on('dialog', d => d.accept());
+  await page.click('#rvpanel [data-rvall]');
+  await expect(page.locator('#toast')).toContainText('1 propuesta aceptada');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02']);
   noErrors(errors, 'conflicto con lo oficial');
 });

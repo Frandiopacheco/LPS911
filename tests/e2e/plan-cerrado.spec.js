@@ -41,13 +41,18 @@ test('lookahead: el administrador puede cambiar un día cerrado, y queda registr
   noErrors(errors, 'admin cambia cerrado');
 });
 
-test('propuestas: no se acepta una que cambia hoy sin registro; rechazar sí', async ({ page }) => {
+test('propuestas: hoy sin registro queda como estaba; se acepta el resto. Si solo cambia hoy, no se acepta; rechazar sí', async ({ page }) => {
   const I0 = { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', und: 'pto', metrado: 20, days: ['2026-09-30', HOY], order: 10 };
-  const P = ['lhprop', 'c1', { sc: 'c1', sentAt: 1, items: { i0: { after: { ...I0, days: ['2026-09-30', MANANA] }, base: I0, ts: 1, by: 'sc@obra.pe', n: 'Sandra', sent: true, sentAt: 1 } } }];
-  const errors = await openApp(page, { as: 'editor', tab: 'look', extra: [['members', 'editor@obra.pe', { role: 'editor', name: 'Elena', pisos: ['p1'] }], P] });
-  expect(await page.evaluate(() => decideProp('c1', 'i0', 'ok'))).toBe('closed');
-  expect(await dias(page, 'i0')).toEqual(['2026-09-30', HOY]);
-  expect(await page.evaluate(() => decideProp('c1', 'i0', 'rej'))).toBe('ok');
+  const it = after => ({ after: { ...I0, ...after }, base: I0, ts: 1, by: 'sc@obra.pe', n: 'Sandra', sent: true, sentAt: 1 });
+  /* i0: pasa hoy a mañana → se agrega mañana y hoy (plan cerrado) se queda; z9: solo quita hoy → nada que aceptar */
+  const P = ['lhprop', 'c1', { sc: 'c1', sentAt: 1, items: { i0: it({ days: ['2026-09-30', MANANA] }), z9: it({ days: ['2026-09-30'] }) } }];
+  const errors = await openApp(page, { as: 'editor', tab: 'look', extra: [['members', 'editor@obra.pe', { role: 'editor', name: 'Elena', pisos: ['p1'] }], ['acts', 'z9', I0], P] });
+  expect(await page.evaluate(() => decideProp('c1', 'i0', 'ok'))).toBe('ok');
+  await expect.poll(() => dias(page, 'i0')).toEqual(['2026-09-30', HOY, MANANA]);
+  await expect(page.locator('#toast')).toContainText('quedó como estaba (plan cerrado)');
+  expect(await page.evaluate(() => decideProp('c1', 'z9', 'ok'))).toBe('closed');
+  expect(await dias(page, 'z9')).toEqual(['2026-09-30', HOY]);
+  expect(await page.evaluate(() => decideProp('c1', 'z9', 'rej'))).toBe('ok');
   noErrors(errors, 'propuesta cerrada');
 });
 
