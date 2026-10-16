@@ -126,6 +126,8 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 /** etiqueta para listas: «PROG · Programación» */
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
+/* campos de meta/project que solo cambia el administrador (SEG-01; los mismos en firebase/firestore.rules) */
+const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','finObra'];
 const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
@@ -240,7 +242,11 @@ function put(col,id,data){DV++;const scR=col==='restr'&&typeof SCK==='function'&
   /* pestaña Cliente: todo va a la capa del cliente (cliente.js), nunca al lookahead interno */
   if(!scR&&typeof cliPut==='function'&&cliPut(col,id,data))return Promise.resolve();
   if(!scR&&typeof propPut==='function'&&propPut(col,id,data))return Promise.resolve();
-  const k=COLS[col];const prev=getDoc(col,id);colSet(k,id,data?{...clone(data),id}:null);
+  const k=COLS[col];const prev=getDoc(col,id);
+  /* SEG-01: lo de Configuración › Proyecto reservado al administrador queda como está en la base cuando guarda un editor
+     (P() lo completa con valores por defecto que el documento quizá no tiene, y las reglas rechazarían toda la escritura) */
+  if(col==='meta'&&id==='project'&&data&&!isAdmin){data={...data};for(const f of META_ADM){if(prev&&f in prev)data[f]=prev[f];else delete data[f]}}
+  colSet(k,id,data?{...clone(data),id}:null);
   if(!db||(!canWrite&&!scR))return Promise.resolve();
   const body=data?strip(clone(data)):null;const args=body&&prev?fsDiff(strip(prev),body,col):null;
   if(args&&!args.length)return Promise.resolve();

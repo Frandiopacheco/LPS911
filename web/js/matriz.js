@@ -370,10 +370,13 @@ async function mxFotoRestore(id){if(!isAdmin)return;const f=MX.ver.get(id);if(!f
   const ok=await uiAsk({title:`Restablecer la matriz al ${fmtD(f.d)}`,text:`Las celdas vuelven a como estaban en esa foto (${s.n} celdas). Lo marcado después se reemplaza. Antes se guarda una foto del estado actual para poder volver.`,list:s.old?['Esta foto es anterior a que se distinguiera lo sin validar: todas sus celdas quedarán como confirmadas.']:[],ok:'Restablecer',tone:'danger'});if(!ok)return;
   const DEL=firebase.firestore.FieldValue.delete();const tgt=new Map();
   for(const[amb,str]of Object.entries(f.a||{})){const m={};for(const p of String(str).split(',')){const[c,v0]=p.split(':');if(!c||!v0||v0.endsWith('?'))continue;if(MXS[v0])m[c]=v0}tgt.set(amb,m)}
-  const by=new Map(),un=new Map();const ambs=new Set([...tgt.keys(),...[...MX.amb.entries()].filter(([,m])=>m&&m.c&&Object.keys(m.c).length).map(([k])=>k)]);
+  /* MOD-03: solo lo que está a la vista (como la foto): ambientes activos y actividades no archivadas. Los estados de un ambiente o
+     una actividad archivados no se tocan (la foto no los incluye y borrarlos los perdía al restaurarlos de la Papelera) */
+  const catArch=c=>{const x=MX.cat.get(c);return!!(x&&x.arch)};
+  const by=new Map(),un=new Map();const ambs=new Set([...tgt.keys(),...[...MX.amb.entries()].filter(([,m])=>m&&m.c&&Object.keys(m.c).length).map(([k])=>k)].filter(k=>S.amb.has(k)));
   for(const amb of ambs){const cur=(MX.amb.get(amb)||{}).c||{};const t=tgt.get(amb)||{};const ch={},u={};
-    for(const[c,v]of Object.entries(t))if(cur[c]!==v){ch[c]=v;u[c]=cur[c]===undefined?DEL:cur[c]}
-    for(const[c,v]of Object.entries(cur))if(!(c in t)){ch[c]=DEL;u[c]=v}
+    for(const[c,v]of Object.entries(t))if(cur[c]!==v&&!catArch(c)){ch[c]=v;u[c]=cur[c]===undefined?DEL:cur[c]}
+    for(const[c,v]of Object.entries(cur))if(!(c in t)&&!catArch(c)){ch[c]=DEL;u[c]=v}
     if(Object.keys(ch).length){by.set(amb,ch);un.set(amb,u)}}
   if(!by.size){toast('La matriz ya está igual que en esa foto');return}
   const bk=mxFotoData();try{await fcol('mver').doc('f'+NOW()).set({t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a:bk.a,v:2,nota:'antes de restablecer'})}catch(e){toast('No se pudo guardar la foto de respaldo: '+(e&&e.code||e));return}

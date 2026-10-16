@@ -196,6 +196,22 @@ test('fotos: el administrador restablece una foto (antes guarda una de respaldo)
   noErrors(errors, 'restablecer foto');
 });
 
+// MOD-03: restablecer no borra los estados de un ambiente archivado ni de una actividad archivada (la foto no los trae)
+test('fotos: restablecer no toca los ambientes ni las actividades archivados', async ({ page }) => {
+  const F = ['mver', 'f1', { t: Date.parse('2026-09-24T10:00:00-05:00'), d: '2026-09-24', w: 58, by: 'x', n: 'Elena', v: 2, a: { a1: 'k1:t' } }];
+  const X = [...CAT, F, ['mcat', 'k8', { name: 'Vieja', sc: 'c1', cl: 't', al: ['vieja'], ord: 80, arch: { t: 1, by: 'x' } }],
+    ['ambientes', 'a9', { sectorId: 's1', code: 'A-9', name: 'Dpto archivado', order: 9, arch: { t: 1, by: 'x', n: 'X' } }],
+    ['mamb', 'a1', { c: { k1: 'c', k8: 't' }, by: 'x', t: 1 }], ['mamb', 'a9', { c: { k1: 't', k2: 'c' }, by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'mat', extra: X });
+  page.on('dialog', d => d.accept());
+  expect(await page.evaluate(() => S.amb.has('a9'))).toBe(false);
+  await page.click('#mxfhist');
+  await page.click('#lqm [data-mxfr="f1"]');
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c)).toEqual({ k1: 't', k8: 't' });
+  expect(await page.evaluate(() => __dbGet('mamb', 'a9').c)).toEqual({ k1: 't', k2: 'c' });
+  noErrors(errors, 'restablecer con archivados');
+});
+
 test('fotos: el editor ve el historial pero no puede restablecer', async ({ page }) => {
   const F = ['mver', 'f1', { t: 1, d: '2026-09-24', w: 58, by: 'x', n: 'Elena', v: 2, a: { a1: 'k1:t' } }];
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...CAT, F] });

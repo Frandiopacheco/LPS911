@@ -252,6 +252,9 @@ function cliPpcCard(vset){if(!canCli())return'';ensureCli();if(!CLX.size)return`
     (obra); la causa y la mitigación de un no cumplido, las que se registraron en el plan semanal interno. null si no hay versión. */
 async function cliWeekDocs(n){const L=cliVerFor(n);if(!L)return null;if(!CLVD.get(L.id)||!CLVD.get(L.id).ready)await cliLoad(L.id);const v=CLVD.get(L.id);if(!v||!v.ready)return null;
   const vset=new Set(visPisos().map(p=>p.id));const wd=weekDays(n);const started=wd[0]<=todayIso();
+  /* MOD-04: el cumplimiento cuenta los días desde CLI_HIST semanas antes: hay que tener cargado el registro de Campo de esas
+     semanas (la pestaña Cliente solo baja desde la semana anterior; Indicadores sí lo pedía y el Excel salía distinto) */
+  if(started)await ensureDaily(cliPpcFrom()<cliPpcF(n)?cliPpcFrom():cliPpcF(n));
   const P_=started?(cliPpc(vset).W.find(o=>o.w===n)||null):null;const okOf=new Map(P_?P_.items.map(i=>[i.x.id,i.ok]):[]);
   const by=new Map();
   for(const x of v.act.values()){if(x.own)continue;const pid=cliPisoOf(v,x);if(!vset.has(pid))continue;const inW=(x.days||[]).filter(d=>d>=wd[0]&&d<=wd[5]);if(!inW.length)continue;

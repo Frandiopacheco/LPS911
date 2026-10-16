@@ -390,6 +390,48 @@ test('reloj e índice de terminadas', async () => {
   await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'doneidx/p1'), { d: { x1: '2026-10-01' } }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'doneidx/p1'), { d: {} }));
 });
+// SEG-02: registro diario, reportes en vivo e índice de terminadas: la app nunca los borra; solo el administrador (Limpieza)
+test('SEG-02: daily, live y doneidx solo los borra el administrador; campo y editores siguen escribiendo', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'doneidx/p1'), { d: { x1: '2026-10-01' } }); });
+  for (const db of [user('campo@obra.pe'), user('editor@obra.pe'), user('sc@obra.pe'), cap('cap1')]) {
+    await assertFails(deleteDoc(doc(db, 'daily/2026-10-01_p1')));
+    await assertFails(deleteDoc(doc(db, 'live/2026-10-01_x1')));
+    await assertFails(deleteDoc(doc(db, 'doneidx/p1')));
+  }
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'daily/2026-10-01_p1'), { recs: { x1: { status: 'ok' } } }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'daily/2026-10-01_p1'), { 'recs.x1.status': 'partial' }));
+  await assertSucceeds(updateDoc(doc(user('campo@obra.pe'), 'live/2026-10-01_x1'), { close: { status: 'ok' } }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'doneidx/p1'), { d: { x4: '2026-10-01' } }, { merge: true }));
+  const adm = user(OWNER);
+  await assertSucceeds(deleteDoc(doc(adm, 'daily/2026-10-01_p1')));
+  await assertSucceeds(deleteDoc(doc(adm, 'live/2026-10-01_x1')));
+  await assertSucceeds(deleteDoc(doc(adm, 'doneidx/p1')));
+});
+
+// SEG-01: Configuración › Proyecto (numeración de semanas, cortes, publicación automática, fin de obra): solo el administrador
+test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo demás (calendario, especialidades, respaldo, propuestas)', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    await setDoc(doc(c.firestore(), 'meta/project'), { name: 'Obra', refWeek: 58, refDate: '2026-09-28', propCutDow: 6, propCutHH: '13:00', planCutHH: '21:00', cal: { sat: true }, esps: [] });
+  });
+  const ed = user('editor@obra.pe');
+  for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' },
+    { frzCutDow: 6 }, { frzCutHH: '20:00' }, { finObra: '2027-06-30' }, { refWeek: 58, frzCutDow: null }])
+    await assertFails(updateDoc(doc(ed, 'meta/project'), ch));
+  await assertFails(setDoc(doc(ed, 'meta/project'), { name: 'Obra', cal: { sat: false } })); // reemplazar entero borra refWeek…
+  await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { cal: { sat: false } }));
+  await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { esps: [{ id: 'arq', n: 'Arquitectura' }] }));
+  await assertSucceeds(setDoc(doc(ed, 'meta/project'), { lastBk: { t: 1, by: 'editor@obra.pe', img: false } }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ed, 'meta/project'), { doneIdx: 1 }, { merge: true }));
+  await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { refWeek: 58, cal: { sat: true } })); // mismo valor: no cambia
+  await assertSucceeds(setDoc(doc(ed, 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
+  await assertSucceeds(setDoc(doc(ed, 'meta/otro'), { x: 1 }));
+  for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')])
+    await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: false } }));
+  const adm = user(OWNER);
+  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
+  await assertFails(deleteDoc(doc(ed, 'meta/project')));
+});
+
 test('invitaciones: se lee una por su código; solo el admin lista o crea', async () => {
   await assertSucceeds(getDoc(doc(cap('cap9'), 'inv/abc')));
   await assertFails(getDocs(collection(cap('cap9'), 'inv')));

@@ -2,7 +2,7 @@
 /* LPS 911 · Sectorización, Configuración y Equipo.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 /* ================= PLANOS ================= */
-const PLAN=new Map();let planosSub=null,planosLoaded=false;const confirmPlano={};
+const PLAN=new Map();let planosSub=null,planosLoaded=false;
 function ensurePlanos(){if(planosSub||!db)return;
   planosSub=fcol('planos').onSnapshot(sn=>{PLAN.clear();sn.docs.forEach(d=>PLAN.set(d.id,{...d.data(),id:d.id}));planosLoaded=true;if(U.tab==='planos')requestRender()},
     err=>{planosLoaded=true;planosErr=err&&err.code;if(U.tab==='planos')requestRender()});
@@ -19,13 +19,16 @@ function planosOldCard(){ensurePlanos();const list=[...PLAN.values()].filter(p=>
    ${canWrite?'<label class="ib">+ Subir imagen<input type="file" id="pup" accept="image/*" multiple hidden></label> <span class="note" id="pmsg">Para ubicar ambientes usa la lámina del piso (arriba).</span>':''}`;
   if(!planosLoaded)h+='<div class="empty">Cargando…</div>';
   else if(planosErr)h+=`<div class="callout">No se pudieron leer (${esc(planosErr)}).</div>`;
-  else if(list.length)h+='<div class="planos">'+list.map(p=>{const cd=(confirmPlano[p.id]||0)>NOW();return`<figure class="plano"><img src="${p.data}" alt="${esc(p.title)}" data-pv="${p.id}" loading="lazy"><figcaption><input value="${esc(p.title)}" data-pt="${p.id}" data-fk="pt:${p.id}" aria-label="Título del plano"${canWrite?'':' readonly'}></figcaption>
-    ${canWrite?`<div class="ptools"><select data-pp="${p.id}" aria-label="Piso del plano">${popt(p.pisoId||'')}</select><span style="flex:1"></span><button class="ib${cd?' warn':''}" data-pdel="${p.id}" style="height:28px;font-size:12px">${cd?'Confirmar':'Eliminar'}</button></div>`:(p.pisoId?`<div class="ptools note">${esc(S.pis.get(p.pisoId)?.name||'')}</div>`:'')}</figure>`}).join('')+'</div>';
+  else if(list.length)h+='<div class="planos">'+list.map(p=>`<figure class="plano"><img src="${p.data}" alt="${esc(p.title)}" data-pv="${p.id}" loading="lazy"><figcaption><input value="${esc(p.title)}" data-pt="${p.id}" data-fk="pt:${p.id}" aria-label="Título del plano"${canWrite?'':' readonly'}></figcaption>
+    ${canWrite?`<div class="ptools"><select data-pp="${p.id}" aria-label="Piso del plano">${popt(p.pisoId||'')}</select><span style="flex:1"></span><button class="ib" data-pdel="${p.id}">Eliminar</button></div>`:(p.pisoId?`<div class="ptools note">${esc(S.pis.get(p.pisoId)?.name||'')}</div>`:'')}</figure>`).join('')+'</div>';
   return h+'</div></details>'}
 async function planosOldClick(e){const im=e.target.closest('img[data-pv]');if(im){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-z="1">Tamaño real</button><button class="ib" data-x="1">Cerrar</button></div><img src="${im.src}" alt="">`;
     lb.onclick=ev=>{if(ev.target.dataset.z){const i=lb.querySelector('img');i.classList.toggle('full');ev.target.textContent=i.classList.contains('full')?'Ajustar a pantalla':'Tamaño real'}else if(ev.target.dataset.x||ev.target===lb)lb.remove()};
     document.addEventListener('keydown',function k(ev){if(ev.key==='Escape'){lb.remove();document.removeEventListener('keydown',k)}});document.body.appendChild(lb);return true}
-  const d=e.target.closest('[data-pdel]');if(d){const id=d.dataset.pdel;if((confirmPlano[id]||0)>NOW()){confirmPlano[id]=0;try{await fcol('planos').doc(id).delete();toast('Imagen eliminada')}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}}else{confirmPlano[id]=NOW()+4000;render();setTimeout(()=>{if(U.tab==='planos')render()},4100)}return true}
+  /* UI-04: borrado real (la imagen no se archiva): se confirma con uiAsk en vez de «toca otra vez» */
+  const d=e.target.closest('[data-pdel]');if(d){const id=d.dataset.pdel;const p=PLAN.get(id);
+    if(!await uiAsk({title:'¿Eliminar esta imagen de sectorización?',text:`«${(p&&p.title)||'Imagen sin título'}» se borra para todos y no se puede deshacer. Ya no se usa para ubicar ambientes; si quieres conservarla como referencia, no la elimines.`,ok:'Eliminar',tone:'danger'}))return true;
+    try{await fcol('planos').doc(id).delete();toast('Imagen eliminada')}catch(err){toast('No se pudo eliminar: '+(err.code||err.message))}return true}
   return false}
 async function planosOldChange(e){const t=e.target;
   if(t.dataset.pt){try{await fcol('planos').doc(t.dataset.pt).update({title:t.value.trim()});t.dataset.o=t.value}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
@@ -59,7 +62,7 @@ function renderCfg(main){
   ${cv==='tpl'?`  <div class="card"><h2>Plantillas de ambiente <span class="sub">Se usan en “+ Ambiente” para crear varias actividades de una vez</span></h2><div class="pad"><div class="tpls">
    ${tpls.map((t,ti)=>`<div class="tplc"><div class="row"><input class="tn" data-tname="${ti}" value="${esc(t.name)}" aria-label="Nombre de la plantilla"${ro}>${canWrite?`<button class="ab" data-tdel="${ti}" title="Eliminar plantilla" aria-label="Eliminar plantilla">&times;</button>`:''}</div>
      ${t.acts.map((a,ai)=>`<div class="row">${conSel(a.sc,ti,ai)}<input class="an" data-tact="${ti}:${ai}" value="${esc(a.name)}" placeholder="Actividad" list="lqdl-${esc(a.sc||'')}"${ro}>${canWrite?`<button class="ab" data-tadel="${ti}:${ai}" aria-label="Quitar actividad">&times;</button>`:''}</div>`).join('')}
-     ${canWrite?`<div class="row"><button class="ib" data-taadd="${ti}" style="height:26px;font-size:12px">+ Actividad</button><button class="ib" data-tup="${ti}" style="height:26px;font-size:12px">Subir</button></div>`:''}</div>`).join('')}
+     ${canWrite?`<div class="row"><button class="ib" data-taadd="${ti}" style="font-size:12px">+ Actividad</button><button class="ib" data-tup="${ti}" style="font-size:12px">Subir</button></div>`:''}</div>`).join('')}
    </div>${tplDatalists(tpls)}${canWrite?'<div style="margin-top:10px"><button class="ib" id="tnew">+ Nueva plantilla</button></div>':''}<p class="note" style="margin:8px 0 0">Al escribir una actividad se sugieren los nombres que ya usa el lookahead. ◆ indica que requiere liberación de calidad; “≈ usar…” corrige un nombre parecido para que los ambientes nuevos hereden su liberación.</p></div></div>`:''}
   ${cv==='rst'?`<div class="cfg">   <div class="card"><h2>Causas de no cumplimiento</h2><div class="pad"><textarea class="box" data-l="cnc" aria-label="Causas, una por línea"${ro}>${esc((p.cnc||[]).join('\n'))}</textarea><p class="note">Una por línea. Se guarda al salir del cuadro. Por defecto es el <b>cuadro de causas de la empresa</b> (11 códigos); cada causa muestra su código en las listas y en el Excel del PPC.</p>${canWrite&&(p.cnc||[]).join('|')!==CNC_STD.map(o=>o.n).join('|')?`<button class="ib" data-cncstd="1">Usar el cuadro de causas de la empresa</button>`:''}
      <h3 class="cimph">¿Imputable al subcontratista?</h3><p class="note" style="margin-top:0">Si la causa no depende del subcontratista (p. ej. actividad previa), su incumplimiento no le baja el <b>PPC del SC</b>. En Campo se puede corregir caso por caso.</p>

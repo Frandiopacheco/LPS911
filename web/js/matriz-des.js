@@ -79,7 +79,10 @@ async function mxDesDlg(genId){if(!mxdCan()){toast('Solo el administrador desglo
    async e=>{if(e.target.closest('#mxdadd')){MXD.parts.push({name:'',sc:G.sc});draw();const L=$$('[data-dpn]');if(L.length)L[L.length-1].focus();return}
      const x=e.target.closest('[data-dpx]');if(x){MXD.parts.splice(+x.dataset.dpx,1);if(!MXD.parts.length)MXD.parts.push({name:'',sc:G.sc});draw();return}
      const ok=e.target.closest('#mxdok');if(!ok)return;const parts=mxDesParts();if(parts.length<2){$('#mxdmsg').textContent='Escribe al menos dos partes distintas.';return}
-     ok.disabled=true;try{await mxDesApply(genId,parts);lqClose()}catch(err){ok.disabled=false;mxErr(err)}},
+     ok.disabled=true;
+     /* MOD-01: con cambios del SC sin revisar en la genérica no se desglosa (sus constancias quedarían en la archivada) */
+     const np=await mxScPendN(genId);if(np){ok.disabled=false;$('#mxdmsg').textContent=`«${G.name}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar en la Matriz: revísalos primero («✓ Visto» o «↶ Revertir») y vuelve a desglosar.`;return}
+     try{await mxDesApply(genId,parts);lqClose()}catch(err){ok.disabled=false;mxErr(err)}},
    e=>{const n=e.target.dataset.dpn,s=e.target.dataset.dps;if(n!=null){MXD.parts[+n].name=e.target.value;const E=MX.cat.get(mxAli().get(mnk(e.target.value))||'');if(E&&E.id!==genId){MXD.parts[+n].sc=E.sc;const sl=$(`[data-dps="${n}"]`);if(sl)sl.value=E.sc}prev()}
      if(s!=null){MXD.parts[+s].sc=e.target.value;prev()}});
   draw();const box=$('#mxdps');if(box)box.addEventListener('input',e=>{if(e.target.dataset.dpn!=null){MXD.parts[+e.target.dataset.dpn].name=e.target.value;prev()}});
