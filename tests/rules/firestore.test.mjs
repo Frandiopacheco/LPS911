@@ -432,6 +432,18 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
   await assertFails(deleteDoc(doc(ed, 'meta/project')));
 });
 
+// Imágenes de sectorización anteriores (decisión del dueño, oct 2026): solo el administrador las elimina, y se archivan
+test('planos (sectorización anterior): el editor edita título y piso; solo el admin archiva y nadie más borra', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'planos/pa1'), { title: 'Antigua', pisoId: '', order: 1, data: 'x' }); });
+  const ed = user('editor@obra.pe');
+  await assertSucceeds(updateDoc(doc(ed, 'planos/pa1'), { title: 'Antigua 2' }));
+  await assertFails(updateDoc(doc(ed, 'planos/pa1'), { arch: { t: 1, by: 'editor@obra.pe', n: 'Editor' } }));
+  await assertFails(deleteDoc(doc(ed, 'planos/pa1')));
+  const adm = user(OWNER);
+  await assertSucceeds(updateDoc(doc(adm, 'planos/pa1'), { arch: { t: 1, by: OWNER, n: 'Admin' } }));
+  await assertSucceeds(deleteDoc(doc(adm, 'planos/pa1'))); // Equipo › Limpieza
+});
+
 test('invitaciones: se lee una por su código; solo el admin lista o crea', async () => {
   await assertSucceeds(getDoc(doc(cap('cap9'), 'inv/abc')));
   await assertFails(getDocs(collection(cap('cap9'), 'inv')));

@@ -95,19 +95,31 @@ test('la lámina base se sube en Sectorización; el Plan diario solo sube especi
   noErrors(errors, 'subir base');
 });
 
-// UI-04: eliminar una imagen de sectorización anterior (borrado real) pide confirmar con uiAsk; «Cancelar» no borra
-test('imágenes anteriores: eliminar pide confirmación', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'planos', extra: [['planos', 'pl1', { title: 'Sectorización antigua', data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', order: 1 }]] });
+// UI-04 (decisión del dueño): eliminar una imagen de sectorización anterior es solo del administrador, pide confirmación
+// y la archiva (no la borra); el editor no ve el botón
+test('imágenes anteriores: solo el administrador elimina, con confirmación, y queda archivada', async ({ page }) => {
+  const IMG = [['planos', 'pl1', { title: 'Sectorización antigua', data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', order: 1 }]];
+  const errors = await openApp(page, { tab: 'planos', extra: IMG });
   await page.locator('.szold summary').click();
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
   await page.click('[data-pdel="pl1"]');
   await expect.poll(() => msg).toContain('Sectorización antigua');
-  expect(await page.evaluate(() => !!window.__dbGet('planos', 'pl1'))).toBe(true);
+  expect(await page.evaluate(() => !!(window.__dbGet('planos', 'pl1') || {}).arch)).toBe(false);
   page.once('dialog', d => d.accept());
   await page.click('[data-pdel="pl1"]');
-  await expect.poll(() => page.evaluate(() => !!window.__dbGet('planos', 'pl1'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => !!(window.__dbGet('planos', 'pl1') || {}).arch)).toBe(true);
+  expect(await page.evaluate(() => !!window.__dbGet('planos', 'pl1'))).toBe(true);
+  await expect(page.locator('[data-pdel="pl1"]')).toHaveCount(0);
   noErrors(errors, 'eliminar imagen anterior');
+});
+
+test('imágenes anteriores: el editor no ve «Eliminar»', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'planos', extra: [['planos', 'pl1', { title: 'Sectorización antigua', data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', order: 1 }]] });
+  await page.locator('.szold summary').click();
+  await expect(page.locator('[data-pt="pl1"]')).toBeVisible();
+  await expect(page.locator('[data-pdel="pl1"]')).toHaveCount(0);
+  noErrors(errors, 'editor sin eliminar');
 });
 
 test('quien no edita solo consulta el mapa', async ({ page }) => {

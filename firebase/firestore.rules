@@ -599,10 +599,12 @@ service cloud.firestore {
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
-      allow create, update: if canEdit() && dataCol(col) && !(col in ['pisos', 'weeks', 'meta']);
+      allow create, update: if canEdit() && dataCol(col) && !(col in ['pisos', 'weeks', 'meta'])
+        // imágenes de sectorización anteriores: solo el administrador las archiva (decisión del dueño, oct 2026)
+        && (col != 'planos' || isAdmin() || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['arch']));
       // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador
       // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
-      allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx']));
+      allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx', 'planos']));
     }
   }
 }
