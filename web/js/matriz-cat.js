@@ -69,10 +69,14 @@ function mxWireCat(main){
   main.querySelectorAll('[data-mcres]').forEach(b=>b.onclick=()=>mxCatRestore(b.dataset.mcres));
   main.querySelectorAll('[data-mcal]').forEach(b=>b.onclick=()=>mxAliasPop(b,b.dataset.mcal))}
 
+/* MOD-02: ¿de qué otra actividad activa es ya este nombre? Mira nombres y alias (nombres del lookahead), igual que mxAli */
+function mxNameOwner(name,self){const i=mxAli().get(mnk(name));return i&&i!==self?MX.cat.get(i)||null:null}
+const mxNameDupTxt=(name,o)=>mnk(o.name)===mnk(name)?`Ya existe «${o.name}» (${conOf(o.sc).name}).`:`«${name}» ya es un nombre del lookahead de «${o.name}» (${conOf(o.sc).name}).`;
 /* cambio de un campo (con Deshacer) */
 function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;v=f==='name'?String(v).replace(/\s+/g,' ').trim():v;
   if(f==='name'&&!v){toast('El nombre no puede quedar vacío.');render();return}
-  if(f==='name'){const k=mnk(v);const o=[...MX.cat.values()].find(x=>x.id!==id&&!x.arch&&mnk(x.name)===k);if(o)toast(`Ojo: ya existe «${o.name}» (${conOf(o.sc).name}). Si son la misma, usa ⋮ › Fusionar.`)}
+  /* MOD-02: un nombre (o nombre del lookahead) que ya es de otra actividad no se aplica: si son la misma, se fusionan */
+  if(f==='name'){const o=mxNameOwner(v,id);if(o){render();uiAsk({title:'Ese nombre ya existe',text:`${mxNameDupTxt(v,o)} Si son la misma actividad, fusiónalas; si no, usa otro nombre.`,ok:'Fusionar…',cancel:'Cancelar',tone:'warn'}).then(go=>{if(go)mxMergeDlg(id,o.id)});return}}
   const prev=c[f]??'';if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
   if(f==='sc'){mxCatScSet(id,prev,v);return}
@@ -113,7 +117,7 @@ function mxCatNew(sc0,fromMx){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;
    ${ed?'':'<p class="note">Queda en el catálogo de tu partida; el ingeniero la revisará (nombre, clase, tipo de ambiente).</p>'}<p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
-     const k=mnk(name);const dup=[...MX.cat.values()].find(x=>!x.arch&&mnk(x.name)===k);if(dup){$('#mxnmsg').textContent=`Ya existe «${dup.name}» (${conOf(dup.sc).name}).`;return}
+     const k=mnk(name);const dup=mxNameOwner(name,'');if(dup){$('#mxnmsg').textContent=mxNameDupTxt(name,dup);return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
      const tsel=[...document.querySelectorAll('[data-mxntp]:checked')].map(i=>i.dataset.mxntp);
      try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});
