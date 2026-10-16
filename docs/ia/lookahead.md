@@ -33,3 +33,19 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Prueba: `tests/e2e/lookahead-historial.spec.js`.
 
 - **Ctrl+Z / Ctrl+Y** (oct 2026): el atajo global (base.js) solo actúa en las pestañas con botón de deshacer (`UNDO_TABS`: look —también Cliente—, plan, restr, cfg, planos). Antes deshacía sin aviso el último cambio del Lookahead desde cualquier pestaña, y en el Plan diario deshacía a la vez el plano (que tiene su propio deshacer en `plano.js`) y el Lookahead. Prueba: `tests/e2e/deshacer.spec.js`.
+
+## Por metrado (rediseño oct 2026, pedido del dueño)
+
+- **Editor dentro de la celda:** en «Por metrado», tocar un día de una fila con metrado total abre `input.qin` **dentro del mismo `td`** (clase `qing`); ya no hay recuadro flotante `.qed`. La fecha y el máximo van en el título del campo; la columna **Saldo** de la fila muestra en vivo lo que quedaría (`td.cS.qlive`, rojo si se pasa) y vuelve a su contenido al cerrar. Mientras el foco está en `.qin`, `uiBusy()` hace esperar a `requestRender` (si no, un cambio de otro usuario en la fila borraba el campo). Enter/Tab/flechas siguen pasando a la celda vecina; Esc cancela.
+- **Días marcados sin cantidad** (programados por días antes de pasar a metrado): no son 0, se conservan; se dibujan como **barra hueca** del color del SC (`td.d.qz`). Si queda saldo, la celda Saldo se vuelve el botón `.qrep` «⇢ saldo» (`data-qrep`), que reparte el saldo en partes iguales **solo en esos días** (`distribute`). Al pasar a «Por metrado», `lkQModeTip()` avisa cuántas filas quedaron así.
+- Filas sin metrado total en modo metrado: Saldo «—» (`td.cS.qno`), el campo Metrado muestra «total» y la fila se sigue pintando por días.
+- Arrastrar varios días sigue abriendo el menú (repartir saldo, misma cantidad cada día, solo marcar, borrar).
+- Prueba: `lookahead-metrado.spec.js`.
+
+## Subcontratista nuevo desde la fila (oct 2026)
+
+Los subcontratistas del lookahead son `contractors` (Configuración › Subcontratistas), **independientes** de los usuarios de Equipo: un SC que llega a la obra más adelante se programa sin usuario ni correo. La lista de cada fila (`scFill`) termina en «+ Nuevo subcontratista…» (`__new`, solo `canWrite` fuera de modo propuesta y de la versión cliente) → `lkNewSc`: pide el nombre (`uiAsk`), lo crea en mayúsculas con un color libre de `SC_PAL` y lo asigna a la fila en un solo `apply` (si ya existe con ese nombre, solo lo asigna; si la fila tiene historial, pasa por `histGate`). Cuando el SC llega, en Equipo se le invita y se le asigna esa empresa.
+
+## Plano del piso al lado (▦ Plano, oct 2026)
+
+Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (planos.js): abre el visor del módulo Planos **acoplado a la derecha** (`plOpen(id, lista, {dock:true, piso})`, `.plv.dock`, `body.lkdock`): el `<main>` del lookahead se angosta (`margin-right:var(--lkdw)`) y sigue editable. Detalle en `docs/ia/planos.md` › «Plano al lado del lookahead». Con el plano acoplado solo la columna Actividad queda fija (`body.lkdock #grid .s0–.s3{left:auto}`) y la grilla se corre hasta los días (`plDockScroll`).

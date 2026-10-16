@@ -833,9 +833,16 @@ td.d.sel{box-shadow:inset 0 0 0 2px var(--ink)}
 td.cS{font:12px var(--f-mono);text-align:right;padding-right:6px;color:var(--ink2);font-variant-numeric:tabular-nums}
 td.cS.neg{color:var(--bad);font-weight:600;background:var(--bad-soft)}
 td.cS.zero{color:var(--ok);font-weight:600}
-.qed{position:fixed;z-index:65;background:var(--panel);border:2px solid var(--accent);border-radius:6px;box-shadow:var(--shadow);padding:2px 3px 3px}
-.qed input{width:100%;height:24px;border:0;font:600 13px var(--f-mono);text-align:right;background:transparent;outline:0;padding:0 2px}
-.qed .qhint{font-size:10.5px;color:var(--muted);white-space:nowrap;padding:0 2px}
+/* metrado: la cantidad se escribe dentro de la misma celda (sin recuadro flotante); el saldo de la fila se ve en vivo */
+td.d.qing::after{opacity:.18}
+td.d .qin{position:absolute;inset:4px 1px;z-index:4;width:calc(100% - 2px);min-width:0;height:auto;margin:0;padding:0 2px;border:0;border-radius:4px;background:var(--panel);color:var(--ink);box-shadow:0 0 0 2px var(--accent),var(--sh-1);font:600 12px/1 var(--f-mono);text-align:center;font-variant-numeric:tabular-nums;outline:0;user-select:text;-webkit-user-select:text;cursor:text}
+td.cS.qlive{box-shadow:inset 0 0 0 2px var(--accent);color:var(--ink);font-weight:600}
+/* día marcado sin cantidad (modo metrado): barra hueca del color del SC, no un 0 */
+#gw.qm td.d.on.qz::after{background:transparent;background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 0 0 0 1.5px var(--c)}
+td.cS .qrep{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:flex-end;gap:3px;width:100%;height:22px;padding:0 4px;border-radius:var(--r-ctl,8px);background:var(--accent-soft,rgba(0,120,200,.12));color:var(--accent);font:600 12px var(--f-mono);cursor:pointer;font-variant-numeric:tabular-nums}
+td.cS .qrep:hover{background:var(--accent);color:var(--accent-ink)}
+td.cS .qrep:focus-visible{box-shadow:var(--ring)}
+td.cS.qno{color:var(--muted);text-align:center}
 .pop .qrow{display:flex;gap:6px;padding:4px 8px 6px;align-items:center}
 .pop .qrow input{width:90px;height:28px;border:1px solid var(--line);border-radius:6px;padding:0 6px;background:var(--panel);font:13px var(--f-mono);text-align:right}
 .pop .qrow button{width:auto;padding:6px 10px;background:var(--accent);color:var(--accent-ink);border-radius:6px;font-weight:600}
@@ -3716,3 +3723,18 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 /* franja de Equipos plegada: solo una cabecera delgada */
 .mfzbar .mfzh[aria-expanded="false"]{padding:3px 12px;font-size:12px}
 .mfzbar .mfzh[aria-expanded="false"] b{line-height:15px}
+
+/* plano del piso acoplado a la derecha del Lookahead (▦ Plano): pantalla dividida; ⛶ lo agranda (vuelve a ser .plv normal) */
+body.lkdock #main{margin-right:var(--lkdw,50vw)}
+body.lkdock #grid .s0,body.lkdock #grid .s1,body.lkdock #grid .s2,body.lkdock #grid .s3{left:auto}
+body.lkdock #grid .s4{left:0}
+body.lkdock #grid thead th.s4{z-index:7}
+.plv.dock{inset:auto 0 0 auto;top:var(--lkdt,0px);width:var(--lkdw,50vw);z-index:58;border-left:1px solid var(--line);box-shadow:var(--sh-2);animation:none}
+.plv.dock .plvf,.plv.dock [data-pv="pdf"]{display:none}
+.plv.dock .plvt{max-width:none;flex:1 1 120px}
+.plv.dock .plvsp{display:none}
+.plvsplit{position:absolute;left:-4px;top:0;bottom:0;width:9px;z-index:30;cursor:col-resize;touch-action:none}
+.plvsplit::after{content:"";position:absolute;left:3px;top:50%;width:3px;height:44px;margin-top:-22px;border-radius:2px;background:var(--line);transition:background var(--t-fast,.12s)}
+.plvsplit:hover::after{background:var(--accent)}
+.plvghost{position:fixed;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent);z-index:400;pointer-events:none}
+#fplano.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
