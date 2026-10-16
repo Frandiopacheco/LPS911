@@ -504,6 +504,34 @@ test('LOG-01 · reunión: «No va hoy → reprogramar» de una partida por metra
   noErrors(errors, 'no va con día cerrado');
 });
 
+/* auditoría LOG-04: «Vuelve a ir» no borra una verificación hecha después en Campo */
+test('LOG-04 · «No va hoy» → Campo «Cumplido» → «Vuelve a ir»: el registro sigue «Cumplido»', async ({ page }) => {
+  const RHOY = ['dplan', `${HOY}_p1`, { date: HOY, pisoId: 'p1', ids: { e0: null, e1: null, i0: null, i1: null }, pub: 'pub_h', reo: { t: 1, by: 'frandiopacheco@gmail.com', why: 'reunión' } }];
+  const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, RHOY] });
+  const recE0 = async () => (((await page.evaluate(d => window.__dbGet('daily', d + '_p1'), HOY)) || { recs: {} }).recs.e0 || {});
+  await page.click('#wtoday');
+  await row(page, 'e0').locator('[data-dv="no|e0"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.locator('#pop [data-do="nod"]').click();
+  await expect.poll(async () => (await recE0()).status).toBe('no');
+  expect((await recE0()).viaNova).toBe(true);
+  // 11:00 llegó la cuadrilla: el ingeniero lo corrige a «✓ Cumplido» en Campo
+  await page.locator('#tabs button[data-tab="campo"]').click();
+  await page.locator('#main article[data-a="e0"] [data-st="ok"]').click();
+  await expect.poll(async () => (await recE0()).status).toBe('ok');
+  await expect.poll(async () => (await recE0()).viaNova).toBeFalsy();
+  // 15:00 alguien limpia el plan con «Vuelve a ir»
+  await page.locator('#tabs button[data-tab="mapa"]').click();
+  await page.click('#wtoday');
+  await page.evaluate(() => { window.__plano.M.chOpen = true; requestRender(); });
+  await page.locator(`#mpanel [data-undo="nv_${HOY}_e0"]`).click();
+  await expect.poll(() => pdzDoc(page, `nv_${HOY}_e0`)).toBeFalsy();
+  await page.waitForTimeout(300);
+  expect((await recE0()).status).toBe('ok');
+  noErrors(errors, 'vuelve a ir tras cumplido');
+});
+
 test('LOG-01 · programar un día cerrado en una actividad terminada no la reabre', async ({ page }) => {
   const SIG = '2026-10-05';
   const DI = ['doneidx', 'p1', { d: { e0: '2026-09-29' } }];

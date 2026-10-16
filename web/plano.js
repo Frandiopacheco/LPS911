@@ -341,9 +341,10 @@ function revertNova(id){const z=PD.get(id);if(!z)return;if(z.k){if(!dzEng()){toa
   /* auditoría LOG-01: la «no va», el registro del día, la restricción y la propuesta solo se deshacen cuando las fechas de verdad vuelven;
      con el día cerrado (lockGuard) no se toca nada y la «no va» sigue con su «Vuelve a ir». Va en el `after` de apply (también si el admin confirma después) */
   const fin=()=>{const o=remDoc(id);if(o)rec([o]);
-    /* registro del día: vuelve el que había antes (o se quita si no había) */
+    /* registro del día: vuelve el que había antes (o se quita si no había). Solo si sigue siendo el que dejó la «no va»:
+       si alguien lo corrigió después (p. ej. «✓ Cumplido» en Campo), queda como lo dejó esa persona (auditoría LOG-04) */
     const rc=typeof recReal==='function'?recReal(z.date,x.id):null;
-    if(rc&&rc.viaNova&&typeof canDaily!=='undefined'&&canDaily){const pr=z.prevRec;writeDaily(z.date,z.pisoId,{recs:{[x.id]:pr?{...pr,viaNova:false}:{...baseRec(z.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
+    if(rc&&rc.viaNova&&rc.status==='no'&&(+rc.ts||0)<=(+z.ts||0)+60e3&&typeof canDaily!=='undefined'&&canDaily){const pr=z.prevRec;writeDaily(z.date,z.pisoId,{recs:{[x.id]:pr?{...pr,viaNova:false}:{...baseRec(z.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
     /* la restricción que se registró con esta decisión se archiva si sigue pendiente */
     if(z.rid){const r=S.res.get(z.rid);if(r&&r.status!=='lib'){const a=arc('restr',z.rid);if(a)apply([a],'')}}
     if(z.prop){const p=PD.get(z.prop);if(p&&p.st==='ok')dpReopen(p)}
@@ -1623,7 +1624,7 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
   for(const o of R_.out){const r=o.rid&&S.res.get(o.rid);if(r&&!r.arch&&r.status!=='lib')S.res.set(o.rid,{...r,arch:T.arch});const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,mv:null,rid:'',pub:null})}
   for(const o of R_.paOut||[]){const z=PD.get(o.id);if(z)Object.assign(z,{draft:true,pub:null});if(o.nw&&o.actId){if(typeof actBasePut==='function')actBasePut(o.actId,null);else S.act.delete(o.actId)}for(const zid of o.zs||[]){const q=PD.get(zid);if(q)q.actId=null}}
   if(!R_.was){PD.delete(PID);if(dropSnap&&DPL.has(dk))DPL.delete(dk)}DV++;PDV++;
-  for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova)writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
+  for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova&&rc.status==='no')writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
   toast('Publicación deshecha: los cambios vuelven a borrador');requestRender()}
 /** las actividades que siguen a x en su ambiente (el «tren») y tienen días desde la fecha del plan */
 function trenOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);

@@ -583,7 +583,10 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
 function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
-  for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
+  for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false;
+    /* registro reescrito por una pantalla que no conoce la marca de la «no va» (Campo, En obra…): deja de ser «de la no va» también en la base
+       (dailyPatch solo envía las claves presentes; sin esto viaNova:true quedaba pegado y «Vuelve a ir» borraba la verificación; auditoría LOG-04) */
+    if(!('viaNova'in r)&&(cur.recs||{})[aid]&&cur.recs[aid].viaNova)r.viaNova=false}const sendRecs=obj.recs?dailyPatch(cur,obj.recs):null;
   DAY.set(id,{...cur,recs:{...(cur.recs||{}),...(obj.recs||{})},extra:{...(cur.extra||{}),...(obj.extra||{})}});
   if(db&&canDaily&&obj.recs)didxFromDaily(d,pid,obj.recs);doneRebuild();requestRender();
   /* al SDK en este mismo instante (C1): sin señal queda en la cola local de Firestore y no se pierde al cerrar la página */
