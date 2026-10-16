@@ -39,7 +39,13 @@ function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','d
 function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
   const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
     err=>{MX.err=err&&err.code||'error';if(k in MX.ld)MX.ld[k]=true;if(ready&&U.tab==='mat')requestRender()}));
-  on('mcatp','prop');on('mtipo','tipo');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'));
+  /* SEG-05 (paso 1): el SC pide solo las propuestas al catálogo (mcatp) y sus cambios sin revisar (mlog) de su partida (scSubs,
+     base.js; solo igualdades: sin índice compuesto). Antes leía mcatp entera y, si entraba por el Lookahead (canWrite = PM()), mlog entera. */
+  const onSc=(col,k,more,keep)=>u.push(scSubs(col,more,keep,(L,sn)=>{const m=MX[k];m.clear();L.forEach(x=>m.set(x.id,x));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
+    err=>{MX.err=err&&err.code||'error';if(ready&&U.tab==='mat')requestRender()}));
+  if(SCK()){onSc('mcatp','prop');onSc('mlog','log',q=>q.where('st','==','pend'),x=>x.st==='pend')}
+  else{on('mcatp','prop');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'))}
+  on('mtipo','tipo');
   mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 /* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */

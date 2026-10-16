@@ -79,6 +79,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/restricciones.md` | Pantalla de Restricciones. |
 | `docs/ia/cliente-excel.md` | Versión cliente y exportes a Excel con el formato de la empresa. |
 | `docs/ia/seguridad.md` | Reglas de `live`, `fotos`, `dplan` (auditoría 02e575c). |
+| `docs/ia/seg05-paso2.md` | Lectura por partida del SC (SEG-05): qué colecciones pide filtradas y el borrador de reglas del paso 2. |
 | `docs/ia/tareo.md` | Módulo Tareo (personal obrero): selector de módulo, roles `tcap`/`tasis`/`tcos`, máster, partidas de control, jornada. |
 | `docs/ia/planos.md` | Módulo Planos (biblioteca de planos): selector de 3 módulos, `plb`, Firebase Storage (mosaicos), carga masiva, visor, medir y vínculos entre láminas. |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |

@@ -53,21 +53,21 @@ const linesLegend=()=>`<div class="lnleg"><span><i class="br"></i>PPC bruto</spa
 const ppcHistPts=ppcs=>ppcs.map(x=>({label:'S'+x.wk,a:x.ppc,b:x.ppcSc??x.ppc,part:x.ev<x.n,sub:`${x.ok} de ${x.n} compromisos${x.nimp?` · ${x.nimp} no imputables`:''}`}));
 /* reprogramaciones del plan diario de la semana n (marcas ↷ del lookahead): por causa, por SC y a quién afectó cada uno */
 const reproCause=v=>cncKey(v.cnc||(/personal/i.test(v.m||'')?'Subcontratas':''));
-function reproData(n,vset){const wd=new Set(weekDays(n));const L=[];
-  for(const x of[...S.act.values(),...(ARCH.act?ARCH.act.values():[])]){if(!x.rpl)continue;const pid=pisoOfAmb(x.ambId);if(!vset.has(pid))continue;for(const[d,v]of Object.entries(x.rpl))if(v&&wd.has(d))L.push({x,d,v,lead:!v.tr})}
+function reproData(n,vset,M){const wd=new Set(weekDays(n));const L=[];
+  for(const x of[...S.act.values(),...(ARCH.act?ARCH.act.values():[])]){if(!x.rpl||(M&&!M.has(x.sc)))continue;const pid=pisoOfAmb(x.ambId);if(!vset.has(pid))continue;for(const[d,v]of Object.entries(x.rpl))if(v&&wd.has(d))L.push({x,d,v,lead:!v.tr})}
   const byC={},byS={};const g=sc=>byS[sc]=byS[sc]||{lead:0,tren:0,imp:0,afe:0};
   for(const o of L){const so=g(o.x.sc);if(o.lead){so.lead++;byC[reproCause(o.v)]=(byC[reproCause(o.v)]||0)+1;if(o.v.imp!==false&&(!o.v.rsc||o.v.rsc===o.x.sc))so.imp++;if(o.v.rsc&&o.v.rsc!==o.x.sc)g(o.v.rsc).afe++}else so.tren++}
   return{L,byC,byS,lead:L.filter(o=>o.lead).length,tren:L.filter(o=>!o.lead).length}}
-function reproCard(n,vset){const R=reproData(n,vset);if(!R.L.length)return`<div class="card"><h2>Reprogramaciones del plan diario <span class="sub">semana ${n}</span></h2><div class="pad"><div class="empty">No se reprogramó nada desde el plan diario esta semana.</div></div></div>`;
+function reproCard(n,vset,M){const R=reproData(n,vset,M);if(!R.L.length)return`<div class="card"><h2>Reprogramaciones del plan diario <span class="sub">semana ${n}</span></h2><div class="pad"><div class="empty">No se reprogramó nada desde el plan diario esta semana.</div></div></div>`;
   const prog=Object.entries(R.byC).filter(([k])=>/^PROG/.test(k)).reduce((t,[,v])=>t+v,0);
-  const rows=Object.entries(R.byS).sort((a,b)=>(b[1].lead+b[1].afe)-(a[1].lead+a[1].afe)||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  const rows=Object.entries(R.byS).filter(([sc])=>!M||M.has(sc)).sort((a,b)=>(b[1].lead+b[1].afe)-(a[1].lead+a[1].afe)||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
   return`<div class="card chart"><h2>Reprogramaciones del plan diario <span class="sub">semana ${n} · cuánto se mueve y por qué</span></h2><div class="pad">
     <div class="tiles"><div class="tile"><span class="k">Reprogramadas</span><span class="v">${R.lead}</span></div><div class="tile"><span class="k">Arrastradas en el tren</span><span class="v">${R.tren}</span></div><div class="tile" title="Lo reprogramado porque estaba mal programado: muestra cuánto falta sincerar el lookahead"><span class="k">Por programación</span><span class="v">${R.lead?pct(prog/R.lead):'—'}<small> ${prog}</small></span></div></div>
     ${svgBarsH(Object.entries(R.byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}
     <div class="tscroll"><table class="t rt"><thead><tr><th>Subcontratista</th><th class="r">Reprogramadas</th><th class="r">En el tren</th><th class="r" title="Reprogramadas por una causa que le corresponde (personal, la aceptó mal programada…)">Imputables a él</th><th class="r" title="Actividades de otras partidas que no fueron porque este SC no entregó el frente">Afectó a otras partidas</th></tr></thead><tbody>
     ${rows.map(([sc,o])=>`<tr><td data-l="Subcontratista"><span class="chip" style="--c:${conOf(sc).color};border:0;background:none;padding-left:0"><i></i>${esc(conOf(sc).name)}</span></td><td class="r" data-l="Reprogramadas">${o.lead||''}</td><td class="r" data-l="En el tren">${o.tren||''}</td><td class="r" data-l="Imputables a él">${o.imp||''}</td><td class="r${o.afe?' no':''}" data-l="Afectó a otras">${o.afe||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
 /* restricciones registradas en la semana n: por causa (la del cuadro si viene del plan diario) y por SC */
-function restrCauseCard(n,vset){const wd=new Set(weekDays(n));const today=todayIso();const L=[...S.res.values()].filter(r=>r.created&&wd.has(r.created)&&vset.has(restrPiso(r)));
+function restrCauseCard(n,vset,M){const wd=new Set(weekDays(n));const today=todayIso();const L=[...S.res.values()].filter(r=>r.created&&wd.has(r.created)&&vset.has(restrPiso(r))&&(!M||M.has(r.sc||((S.act.get(r.actId)||{}).sc)||'')));
   if(!L.length)return'';const cause=r=>r.cnc?cncKey(r.cnc):(r.type||'Sin causa registrada');const byC={},byS={};
   for(const r of L){byC[cause(r)]=(byC[cause(r)]||0)+1;const sc=r.sc||((S.act.get(r.actId)||{}).sc)||'';const o=byS[sc]=byS[sc]||{n:0,lib:0,late:0,pend:0};o.n++;if(r.status==='lib'){o.lib++;if(r.need&&r.freed&&r.freed>r.need)o.late++}else{o.pend++;if(r.need&&r.need<today)o.late++}}
   const rows=Object.entries(byS).sort((a,b)=>b[1].n-a[1].n);
@@ -156,18 +156,29 @@ function cumplTable(entries,label){return`<div class="tscroll"><table class="t c
 function wkScTable(entries,label){return`<div class="tscroll"><table class="t ctab"><thead><tr><th></th><th class="r">Compromisos</th><th class="r">Sí</th><th class="r">No</th><th class="r hm">Sin evaluar</th><th class="r hm" title="No cumplidos por causas que no dependen del subcontratista">No imputables</th><th class="r hm" title="Fallas de otras partidas que el ingeniero le hizo contar">De otras partidas</th><th title="Cumplidos (Sí) entre todos los compromisos congelados, como en el Plan semanal">PPC bruto</th><th title="Sin contar los no cumplidos no imputables al subcontratista">PPC del SC</th></tr></thead><tbody>${entries.map(([k,o])=>{const v=o.n?o.ok/o.n:null;const vs=o.ppcSc;
   return`<tr><td>${label(k)}</td><td class="r">${o.n}</td><td class="r ok">${o.ok||''}</td><td class="r no">${o.no||''}</td><td class="r mu hm">${o.n-o.ev||''}</td><td class="r mu hm">${o.nimp||''}</td><td class="r mu hm">${o.ext||''}</td><td>${v==null?'':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`}</td><td>${vs==null?'<span class="mu">—</span>':`<span class="pbar sc"><i style="width:${Math.round(vs*100)}%"></i></span><b>${pct(vs)}</b>`}</td></tr>`}).join('')}</tbody></table></div>`}
 const scLabel=sc=>`<span class="chip" style="--c:${conOf(sc).color};border:0;padding:0;background:none"><i></i>${esc(conOf(sc).name)}</span>`;
+/* SEG-05 (decidido con el dueño, oct 2026): el subcontratista ve en Indicadores solo SU PPC (el de sus partidas, me.scs). Es un
+   filtro de pantalla: daily y weeks siguen siendo documentos compartidos (ver docs/ia/seg05-paso2.md). Sin presentación ni
+   exportes (Excel del PPC y PDF del día llevan a todas las partidas). */
+const indScs=()=>me&&me.role==='sc'?new Set(scList()):null;
+/** dayData recortado a las filas de sus partidas (totales, por piso y causas se recalculan con dayAgg) */
+function indScD(D,M){if(!M)return D;const rows=D.rows.filter(r=>M.has(r.sc));
+  return{...D,rows,...dayAgg(rows),adds:(D.adds||[]).filter(r=>M.has(r.sc)),extras:(D.extras||[]).filter(i=>i.e&&M.has(i.e.sc))}}
+/** compromisos congelados de unas semanas, sumados solo para las partidas M (como wkScStats) → {n, ok, ev, nimp, ext, ppc, ppcSc} o null */
+function wkScAgg(docs,M){const m=wkScStats(docs);const o={n:0,ok:0,ev:0,nimp:0,ext:0};
+  for(const s of M){const x=m[s];if(!x)continue;o.n+=x.n;o.ok+=x.ok;o.ev+=x.ev;o.nimp+=x.nimp;o.ext+=x.ext}
+  return o.n?{...o,ppc:o.ok/o.n,ppcSc:ppcScOf(o.ok,o.n,o.nimp,o.ext)}:null}
 const DOWN=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function indDay(){let d=curDay();if(d>todayIso())d=todayIso();if(pd(d).getUTCDay()===0)d=addD(d,-1);return d}
 /* modo de Indicadores: 'dia' · 'sem' · 'cli' (PPC contra lo emitido al cliente; solo administrador) */
 const indM=()=>U.indMode==='sem'?'sem':U.indMode==='cli'&&canCli()?'cli':'dia';
-function indBar(){const d=indDay();const today=todayIso();const md=indM(),dia=md==='dia';
-  return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`}${md==='cli'?' · lo informado al cliente':''} · ${pisoLabel()}`,
-    md==='cli'?'':dia?`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para proyectar el cumplimiento del día">▶ Presentar</button>'}<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
+function indBar(){const d=indDay();const today=todayIso();const md=indM(),dia=md==='dia';const M=indScs();
+  return pageHead('Indicadores',`${dia?`${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''}`:`Semana ${U.week}`}${md==='cli'?' · lo informado al cliente':''} · ${pisoLabel()}${M?' · solo '+esc([...M].map(c=>conOf(c).name).join(', ')):''}`,
+    md==='cli'||M?'':dia?`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para proyectar el cumplimiento del día">▶ Presentar</button>'}<button class="ib" id="bxppc">Excel del PPC</button><button class="ib pri" id="bpdf">Reporte PDF del día</button>`:`${isMob()?'':'<button class="ib" id="bipr" title="Pantalla completa para la reunión">▶ Presentar</button>'}<button class="ib pri" id="bxppc">Excel del PPC · semana ${U.week}</button>`)
    +`<div class="fbar"><span class="seg" id="imode"><button data-m="dia" class="${dia?'on':''}">Diario</button><button data-m="sem" class="${md==='sem'?'on':''}">Semanal</button>${canCli()?`<button data-m="cli" class="${md==='cli'?'on':''}" title="PPC contra lo emitido al cliente (solo administradores)">Cliente</button>`:''}</span>
-   ${dia?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
+   ${dia&&!M?`<span class="fsp"></span><span class="fgl">Reporte PDF:</span><label class="chk" title="Deja fuera del PDF los pisos donde nadie registró avance ese día"><input type="checkbox" id="pdfskip"${U.pdfSkip?' checked':''}> Omitir pisos sin verificar</label><label class="chk"><input type="checkbox" id="pdfph"${U.pdfPh?' checked':''}> Incluir fotos</label>`:''}</div>`}
 /** No cumplidos de la semana elegida: causa, comentario y mitigación, editables aquí mismo (los mismos datos del Plan semanal) */
-function ncCard(wSel){const cnc=P().cnc||[];const L=[];
-  for(const w of wSel){const p=S.pis.get(w.pisoId);if(!p)continue;for(const[id,it]of Object.entries(w.items||{})){const r=(w.res||{})[id];if(r&&r.ok===false)L.push({w,p,id,it,r})}}
+function ncCard(wSel,M){const cnc=P().cnc||[];const L=[];
+  for(const w of wSel){const p=S.pis.get(w.pisoId);if(!p)continue;for(const[id,it]of Object.entries(w.items||{})){if(M&&!M.has(it.sc))continue;const r=(w.res||{})[id];if(r&&r.ok===false)L.push({w,p,id,it,r})}}
   if(!L.length)return'';L.sort((a,b)=>a.p.order-b.p.order||(a.it.ord||0)-(b.it.ord||0));const ed=canWrite;const sinC=L.filter(o=>!o.r.cnc).length,sinM=L.filter(o=>!o.r.mit).length;
   return`<div class="card" id="nccard"><h2>No cumplidos de la semana ${U.week} <span class="sub">${L.length} compromiso${L.length===1?'':'s'}${sinC?` · ${sinC} sin causa`:''}${sinM?` · ${sinM} sin mitigación`:''}${ed?' · edita la causa y la mitigación aquí':''}</span></h2>
    <div class="tscroll"><table class="t rt"><thead><tr><th>Ítem</th><th>Actividad</th><th>Subcontratista</th><th style="min-width:180px">Causa</th><th style="min-width:160px">Comentario</th><th style="min-width:200px">Mitigación / acción</th></tr></thead><tbody>
@@ -192,7 +203,7 @@ function wireInd(main){main.onfocusin=e=>{if(e.target.classList.contains('ci'))e
   const g=t.closest('tr[data-goc]');if(g){const[aid,d]=g.dataset.goc.split('|');goCampo(aid,d)}};
   main.onchange=e=>{if(ncChange(e.target))return;if(e.target.id==='pdfph'){U.pdfPh=e.target.checked;saveUI()}if(e.target.id==='pdfskip'){U.pdfSkip=e.target.checked;saveUI()}}}
 function renderIndDay(main){
-  const d=indDay();ensureDaily(addD(d,-1));const vp=visPisos();const vset=histPisoSet();const D=dayData([d],vset);const t=D.tot;
+  const d=indDay();ensureDaily(addD(d,-1));const vp=visPisos();const vset=histPisoSet();const D=indScD(dayData([d],vset),indScs());const t=D.tot;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
     <div class="tile hl"><span class="k">PPC diario · alerta</span><span class="v">${t.ver?pct(t.ok/t.ver):'—'}${t.ver?` <small>${t.ok} de ${t.ver}</small>`:''}</span></div>
@@ -238,18 +249,20 @@ function renderInd(main){
   if(IPR){iprDraw();return} /* modo presentación abierto (semanal o del día): solo se redibuja la capa (ind-presentacion.js / ind-dia.js) */
   if(indM()==='cli'){renderIndCli(main);return}
   if(indM()==='dia'){renderIndDay(main);return}
-  const vp=visPisos();const vset=histPisoSet();
+  const vp=visPisos();const vset=histPisoSet();const M=indScs();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
-  const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=ppcWeekAgg(n,vset);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
+  const wAgg=n=>{if(!M)return ppcWeekAgg(n,vset);const o=wkScAgg(docs.filter(w=>w.n===n),M);return o&&o.ev>0?o:null};
+  const ppcs=[...new Set(docs.map(w=>w.n))].map(n=>{const o=wAgg(n);return o?{...o,wk:+n}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
   /* el promedio y la «última» solo con semanas evaluadas por completo; una a medias se muestra aparte como parcial */
   const full=ppcs.filter(x=>x.ev>=x.n);const part=ppcs.length&&ppcs[ppcs.length-1].ev<ppcs[ppcs.length-1].n?ppcs[ppcs.length-1]:null;
   const last=full[full.length-1];const avg=full.length?full.reduce((s,x)=>s+x.ppc,0)/full.length:null;
-  const cncC={};docs.forEach(w=>Object.values(w.res||{}).forEach(r=>{if(r&&r.ok===false){const k=cncKey(r.cnc);cncC[k]=(cncC[k]||0)+1}}));
+  const cncC={};docs.forEach(w=>Object.entries(w.res||{}).forEach(([id,r])=>{if(M&&!M.has(((w.items||{})[id]||{}).sc))return;if(r&&r.ok===false){const k=cncKey(r.cnc);cncC[k]=(cncC[k]||0)+1}}));
   const cncL=Object.entries(cncC).sort((a,b)=>b[1]-a[1]);
-  const wSel=docs.filter(w=>w.n===U.week);const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n)delete scP[k];
-  const pisoP=wSel.map(w=>({w,st:ppcOf(w),p:S.pis.get(w.pisoId)||ARCH.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
+  const wSel=docs.filter(w=>w.n===U.week);const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n||(M&&!M.has(k)))delete scP[k];
+  const pisoP=wSel.map(w=>({w,st:M?wkScAgg([w],M):ppcOf(w),p:S.pis.get(w.pisoId)||ARCH.pis.get(w.pisoId)})).filter(x=>x.st&&x.p).sort((a,b)=>a.p.order-b.p.order);
   const pend=restrInScope().filter(rOpenC).length;
-  const histP=ppcHistAll(ppcs);const histF=histP.filter(p=>!p.part&&p.a!=null);const avgH=histF.length?histF.reduce((s,p)=>s+p.a,0)/histF.length:null;
+  /* el SC: sin los datos cargados a mano (son de toda la obra) */
+  const histP=M?ppcs.map(x=>({wk:x.wk,...ppcHistPts([x])[0]})):ppcHistAll(ppcs);const histF=histP.filter(p=>!p.part&&p.a!=null);const avgH=histF.length?histF.reduce((s,p)=>s+p.a,0)/histF.length:null;
   let h=`<div class="scroll"><div class="wrap">${indBar()}
    <div class="tiles">
    <div class="tile hl"><span class="k">PPC semanal (oficial) · última</span><span class="v">${last?pct(last.ppc):'—'}${last?` <small>sem ${last.wk}</small>`:''}</span>${part?`<span class="mu" style="font-size:12px">Sem ${part.wk} en evaluación: ${part.ev} de ${part.n} evaluados</span>`:''}</div>
@@ -268,11 +281,11 @@ function renderInd(main){
    <div class="card chart"><h2>Causas de no cumplimiento <span class="sub">acumulado</span></h2><div class="pad">${cncL.length?svgBarsH(cncL.map(([k,v])=>({label:k,v})),v=>v+''):'<div class="empty">Sin incumplimientos registrados.</div>'}</div></div>
    <div class="card chart"><h2>PPC por subcontratista <span class="sub">semana ${U.week}</span></h2><div class="pad">${Object.keys(scP).length?svgBarsH(Object.entries(scP).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n+(o.nimp||o.ext?` · PPC del SC ${pct(o.ppcSc)}${o.nimp?` (${o.nimp} no imput.)`:''}${o.ext?` · ${o.ext} de otras partidas`:''}`:'')})),pct):`<div class="empty">La semana ${U.week} no está congelada${U.piso?' en este piso':''}.</div>`}</div></div>
   </div>`;
-  h+=reproCard(U.week,vset)+restrCauseCard(U.week,vset);
-  h+=ncCard(wSel);
+  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M);
+  h+=ncCard(wSel,M);
   const days=winDays();const load={};
   for(const x of S.act.values()){if(!vset.has(pisoOfAmb(x.ambId)))continue;for(const d of x.days||[])(load[x.sc]=load[x.sc]||{})[d]=(load[x.sc][d]||0)+1}
-  const scs=Object.keys(load).filter(sc=>days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
+  const scs=Object.keys(load).filter(sc=>(!M||M.has(sc))&&days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
   const mx=Math.max(1,...scs.flatMap(sc=>days.map(x=>load[sc][x.d]||0)));
   const tot=days.map(x=>scs.reduce((s,sc)=>s+(load[sc][x.d]||0),0));
   h+=`<div class="card"><h2>Carga diaria por subcontratista <span class="sub">frentes (actividades) programados · semanas ${U.week}–${U.week+U.win-1} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span></h2><div class="pad tscroll"><table class="heat"><thead><tr><th></th>${days.map(x=>`<th${x.d===todayIso()?' style="color:var(--ink)"':''}>${DL[x.i]}<br>${x.d.slice(8)}</th>`).join('')}</tr></thead><tbody>

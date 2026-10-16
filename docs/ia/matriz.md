@@ -82,6 +82,7 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - **Revisión del ingeniero:** tarjeta en Hoy («Actividades nuevas en el catálogo», `mxRevList`; su botón abre Matriz › Catálogo), aviso en la Matriz y tarjeta «Agregadas por los subcontratistas» en Catálogo: «+ Tipo «X»» (si el SC lo pidió), «Fusionar…», «✓ Revisada» (borra `rev`, guarda `revOk`). En la tabla salen con «Nueva · por revisar».
 - **El lookahead sigue al catálogo:** renombrar una actividad (`mxCatRename`) agrega el nombre anterior a sus alias y cambia el nombre de **todas sus filas del lookahead** (todas los pisos; `mxRowsOf` por nombre/alias, salta las filas con propuesta del SC pendiente), en un `apply` (historial); «Deshacer» del aviso devuelve catálogo y filas (`mxUnrename`, solo las que nadie cambió). Fusionar A→B también renombra las filas de A a B y guarda `arch.ren` para que «Restaurar» las devuelva.
 - **Propuestas antiguas** `mcatp` (antes de que el SC agregara directo): se siguen mostrando y resolviendo (Aprobar / Rechazar); ya no se crean nuevas desde la app.
+- **SEG-05:** el SC suscribe `mcatp` y `mlog` (pendientes) solo de su partida (`scSubs` en `ensureMx`); antes leía `mcatp` entera y, si la Matriz se cargaba desde el Lookahead, también `mlog`. Ver `seg05-paso2.md`.
 - Con el respaldo del 07/10: 654 filas cambiarían de nombre (160 variantes), 1352 ya usan el nombre del catálogo, 8 sin catálogo.
 - Prueba: `tests/e2e/matriz-look.spec.js`.
 

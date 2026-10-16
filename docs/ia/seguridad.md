@@ -14,6 +14,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - Publicación (`ci.yml`): `publicar-web` depende de `instalar`; sin llave de Firebase, `instalar` falla. `check.mjs` lo comprueba (`checkCI`). Los fallos de las pruebas de reglas salen como anotaciones (línea y motivo) en GitHub.
 - `live` y el veedor (oct 2026): solo puede crear/actualizar el campo `seq` («en secuencia») de una actividad real (`liveActOk`); no inicia, detiene ni cierra (prueba en `tests/rules`).
 
+## SEG-05: lectura por partida del subcontratista (oct 2026)
+- Paso 1 (página) hecho: el SC consulta `nprog`, `lhprop`, `lhphist`, `mcatp` y `mlog` solo de su partida (`scSubs`/`scGet`, base.js) y en Indicadores ve solo su PPC (filtro de pantalla). Reglas **sin cambio** todavía.
+- Paso 2 (reglas): borrador exacto y pruebas en `docs/ia/seg05-paso2.md`. Se aplica días después de publicar el paso 1, cuando todos los equipos tengan la página nueva y los índices `nprog(sc, date)` y `lhphist(sc, sk)` estén habilitados. El capataz queda fuera (`isSC()`, no `crew()`).
+
 ## Límite de accesos en las reglas del tareo (oct 2026)
 
 En `match /tareo/{id}` el guardado del capataz quedaba rechazado (PERMISSION_DENIED) al sumar otra rama que lee `members` (revisión de producción, `tOfiEd`), aunque esa rama fuera falsa: el pedido llegaba al límite de lecturas/evaluación. Regla práctica: **cada rama de un `allow` empieza por una condición que no lee documentos y que distingue a quién va dirigida** (p. ej. `resource.data.cap == mid()` para el capataz y `!= mid()` para la oficina), y solo después llama a funciones que leen `members`. Las pruebas de reglas no corren en el entorno de las IA (el emulador no descarga): se ven en GitHub.

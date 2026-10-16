@@ -7,7 +7,12 @@
 const PROP=new Map();let propSub=null,propErr=null;let ACT_OFF=null;
 const myScsI=()=>(me&&me.scs)||[];
 const PM=()=>!!me&&me.role==='sc'&&U.tab==='look'&&!(U.ver&&U.verMode==='ver');
-function ensureProp(){if(propSub||!db)return;propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))snapRender(sn)},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
+function ensureProp(){if(propSub||!db)return;
+  /* SEG-05 (paso 1): el SC lee solo el documento de su partida (lhprop/{sc}, por id: sin consulta ni índice), uno por partida */
+  if(me&&me.role==='sc'){const offs=myScsI().map(sc=>fcol('lhprop').doc(sc).onSnapshot(d=>{if(d.exists)PROP.set(sc,{...d.data(),id:sc});else PROP.delete(sc);propErr=null;pmSync();if(ready&&(U.tab==='look'))requestRender()},
+      err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()}));
+    propSub=()=>offs.forEach(f=>f());unsubs.push(()=>{if(propSub)propSub();propSub=null;PROP.clear()});return}
+  propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))snapRender(sn)},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
   unsubs.push(()=>{if(propSub)propSub();propSub=null;PROP.clear()})}
 const propItems=(sc)=>Object.entries((PROP.get(sc)||{}).items||{}).filter(([,it])=>!!it).map(([id,it])=>({sc,id,it}));
 /* vista del SC: lo oficial con su borrador encima */
@@ -180,8 +185,9 @@ const HFIELDS=['days','qty','metrado','und','name'];
 function propDiff(b,a){const o={};const fl=v=>Array.isArray(v)?v.join(','):v;for(const f of HFIELDS){const x=b?b[f]??null:null,y=a?a[f]??null:null;if(canon(x)!==canon(y))o[f]=[fl(x),fl(y)]}return o}
 const lhhSk=(sc,t)=>sc+'|'+String(Math.round(t)).padStart(15,'0');
 function ensureLhh(){if(lhhSub.length||!db||!me||me.role!=='sc')return;const since=NOW()-120*864e5;
-  for(const sc of myScsI())lhhSub.push(fcol('lhphist').where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~').onSnapshot(sn=>{
-    for(const k of[...LHH.keys()])if(LHH.get(k).sc===sc)LHH.delete(k);sn.docs.forEach(d=>LHH.set(d.id,{...d.data(),id:d.id}));if(ready&&U.tab==='look')requestRender()},()=>{}));
+  /* SEG-05 (paso 1): con where('sc','==',sc) delante (índice lhphist(sc, sk)); sin el índice, toda la partida filtrada aquí (scSubs) */
+  lhhSub.push(scSubs('lhphist',(q,sc)=>q.where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~'),x=>(x.t||0)>=since,L=>{
+    LHH.clear();L.forEach(x=>LHH.set(x.id,x));if(ready&&U.tab==='look')requestRender()},()=>{}));
   unsubs.push(()=>{lhhSub.forEach(f=>f());lhhSub=[];LHH.clear()})}
 /** detalle de un registro: lo aplicado (o, si se rechazó, lo que se pidió) en cantidades, metrado, unidad y nombre */
 function histChgHtml(x){const c=x.st==='rej'?x.prop:(x.chg||x.prop);if(!c)return'';const L=[];const v=z=>z==null||z===''?'—':esc(String(z));

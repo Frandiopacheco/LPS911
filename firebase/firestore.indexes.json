@@ -7,6 +7,22 @@
         { "fieldPath": "kind", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "nprog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sc", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lhphist",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sc", "order": "ASCENDING" },
+        { "fieldPath": "sk", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
