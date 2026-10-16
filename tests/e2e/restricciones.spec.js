@@ -120,3 +120,15 @@ test('el responsable se elige del equipo (personas, empresas o áreas); un nombr
   expect(await page.locator('input[data-r="rz"][data-f="resp"]').count()).toBe(0);
   noErrors(errors, 'responsable del equipo');
 });
+
+test('REN-06: la escucha táctil de Restricciones es pasiva, se pone una sola vez y no usa ontouchstart', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__ts = []; const o = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (t, f, opt) { if (t === 'touchstart' && this && this.id === 'main') window.__ts.push(!!(opt && opt.passive)); return o.call(this, t, f, opt); };
+  });
+  const errors = await openApp(page, { tab: 'restr' });
+  await page.evaluate(() => { goTab('plan'); goTab('restr'); goTab('mat'); });
+  expect(await page.evaluate(() => typeof document.getElementById('main').ontouchstart)).not.toBe('function');
+  expect(await page.evaluate(() => window.__ts)).toEqual([true]);
+  noErrors(errors, 'touchstart pasivo');
+});

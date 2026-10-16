@@ -1325,6 +1325,11 @@ td.act input::-webkit-calendar-picker-indicator{display:none!important}
 .plsecv{content-visibility:auto;contain-intrinsic-size:auto 900px}
 .ppcs tr.plamb td{padding-left:22px;font-weight:500}
 .ppcs th{white-space:normal}.ppcs td .ci{width:100%;min-width:0}.ppcs .fsug{white-space:normal;max-width:130px}
+/* auditoría EJE-01: Plan semanal grande, bloques de filas fuera de la pantalla (solo un espacio con el alto medido) */
+.ppcs tr.plvsp td{padding:0!important;border:0!important;background:none}
+@media (max-width:760px){table.rt.ppcs tr.plvsp{display:block;padding:0;border:0}}
+/* con filas a medio dibujar el ancho de «Actividad» ya no lo fija la fila más larga: un mínimo evita que las columnas bailen al desplazar */
+@media (min-width:761px){table.ppcs.psv td.lead{min-width:200px}}
 td.act .lqbadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);margin:0}
 td.act .lqbadge.sh{right:26px}
 /* Lookahead en modo consulta: la manito para desplazarse */
