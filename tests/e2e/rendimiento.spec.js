@@ -47,7 +47,7 @@ test('Lookahead grande: se dibuja lo que se ve y al bajar aparece lo demás', as
   // el subcontratista de la fila se elige de la lista completa
   const sel = page.locator('select[data-a="xx1800"][data-f="sc"]');
   await sel.focus();
-  expect(await sel.locator('option').count()).toBe(25);
+  expect(await sel.locator('option:not([disabled]):not([value="__new"])').count()).toBe(25); // + separador y «+ Nuevo subcontratista…»
   noErrors(errors, 'lookahead grande');
 });
 
