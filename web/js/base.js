@@ -377,8 +377,12 @@ const RCOST={};let RLAST=0,rrT=0;
 function requestRemoteRender(){const c=RCOST[U.tab]||0;if(c<120){requestRender();return}if(rrT)return;
   const gap=Math.min(4000,Math.max(1000,c*5));rrT=setTimeout(()=>{rrT=0;requestRender()},Math.max(0,RLAST+gap-performance.now()))}
 /* foto de Firestore (auditoría REN-02): lo escrito en este equipo (hasPendingWrites) se dibuja al momento; lo de otros usuarios
-   se agrupa en las vistas pesadas como el resto de las suscripciones. Sin foto (error de la suscripción): al momento. */
-function snapRender(sn){if(!sn||(sn.metadata&&sn.metadata.hasPendingWrites))requestRender();else requestRemoteRender()}
+   se agrupa en las vistas pesadas como el resto de las suscripciones. Sin foto (error de la suscripción): al momento.
+   La primera foto de una suscripción (todo «added»: recién abierta o reabierta) y la de un solo documento (libm, cli/buf: configuración,
+   cambia poco) también van al momento: si no, abrir la Matriz en una vista pesada esperaba 1–4 s a sus datos. */
+function snapRender(sn){if(!sn||(sn.metadata&&sn.metadata.hasPendingWrites)||typeof sn.docChanges!=='function'){requestRender();return}
+  let first=false;try{const ch=sn.docChanges();first=ch.length===sn.size&&ch.every(c=>c.type==='added')}catch(e){}
+  if(first)requestRender();else requestRemoteRender()}
 function flushDeferred(){if(deferred){deferred=false;requestRender()}}
 
 /* ---------- conexión ---------- */

@@ -155,7 +155,7 @@ test('Plan diario con una obra grande: abrir, recibir cambios de otros y desplaz
 /* auditoría REN-02: los cambios de otros usuarios en Liberaciones, Matriz, propuestas… se agrupan en las vistas pesadas como los de acts;
    lo escrito en este equipo (hasPendingWrites) se sigue dibujando al momento */
 test('cambios ajenos en Liberaciones y Matriz se agrupan en una vista pesada; lo propio se dibuja al momento', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'lib' });
+  const errors = await openApp(page, { tab: 'lib', extra: [['mamb', 'a1', { x: -1 }]] }); // mamb ya tiene el documento: los cambios son «modified» (la primera foto se dibuja al momento)
   /* la vista «cuesta» 300 ms (como la Matriz o el Plan semanal con datos reales) */
   await page.evaluate(() => { window.__nr = 0; const r = window.render; window.render = (...a) => { window.__nr++; const o = r(...a); RCOST[U.tab] = 300; return o; }; RCOST[U.tab] = 300; RLAST = performance.now(); });
   const contar = async (escribir) => {
@@ -171,6 +171,10 @@ test('cambios ajenos en Liberaciones y Matriz se agrupan en una vista pesada; lo
   // lo propio: la foto llega con hasPendingWrites y se dibuja en el siguiente cuadro
   await page.waitForTimeout(1600);
   await page.evaluate(() => { window.__nr = 0; snapRender({ metadata: { hasPendingWrites: true } }); });
+  await expect.poll(() => page.evaluate(() => window.__nr), { timeout: 500 }).toBe(1);
+  // la primera foto de una suscripción recién abierta (todo «added»), aunque sea de otros, también va al momento
+  await page.waitForTimeout(1600);
+  await page.evaluate(() => { window.__nr = 0; RLAST = performance.now(); snapRender({ metadata: { hasPendingWrites: false }, size: 2, docChanges: () => [{ type: 'added' }, { type: 'added' }] }); });
   await expect.poll(() => page.evaluate(() => window.__nr), { timeout: 500 }).toBe(1);
   noErrors(errors, 'agrupar cambios ajenos');
 });
