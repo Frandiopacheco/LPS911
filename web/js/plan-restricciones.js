@@ -18,7 +18,6 @@ function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||
 function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp:0,ext:0,ev:0};
   for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
   for(const o of Object.values(m)){o.ppc=o.n?o.ok/o.n:null;o.ppcSc=ppcScOf(o.ok,o.n,o.nimp,o.ext)}return m}
-const confirmUF={};
 /* Plan semanal: vista por subcontratista o por ambiente (U.planV) y buscador (PLQ, solo en esta sesión). Las dos son solo
    presentación sobre los mismos compromisos: no escriben en la semana congelada ni cambian el PPC. */
 let PLQ='';
@@ -63,13 +62,12 @@ function renderPlan(main){
     const st=frozen?ppcOf(w):null;
     const extra=frozen?Object.entries(liveItems(n,p.id)).filter(([id])=>!(id in items)):[];
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
-    const cf=(confirmUF[p.id]||0)>NOW();
     let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
-     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${(frozen?ED:FZ)?(frozen?`<button class="ib" data-unfreeze="1">Descongelar</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
      <div class="pad"><div class="tiles">
@@ -130,7 +128,8 @@ function renderPlan(main){
       const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
     {const fv=e.target.closest('[data-freezever]');if(fv){verFreezePick(fv,n,pid);return}}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
-    if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;unfreezeWeek(n,pid)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
+    /* auditoría UI-04: se confirma con uiAsk como el resto de la app (antes «toca otra vez en 5 s» y dos redibujos completos) */
+    if(e.target.closest('[data-unfreeze]')){const pc=S.pis.get(pid)?.code||'';uiAsk({title:`¿Descongelar la semana ${n}${pc?' de '+pc:''}?`,text:'Los compromisos vuelven a ser el borrador en vivo y la semana deja de contar en el PPC hasta que la congeles otra vez. La evaluación hecha no se pierde: queda en el historial y puedes recuperarla con «Recuperar la versión congelada».',tone:'warn',ok:'Descongelar',cancel:'Cancelar'}).then(ok=>{if(ok)unfreezeWeek(n,pid)});return}
     {const rb=e.target.closest('[data-wkrest]');if(rb){restoreWeek(n,pid,rb.dataset.wkrest);return}}
     const b=e.target.closest('[data-yn]');if(!b||b.disabled)return;const id=b.closest('tr').dataset.id;const ok=b.dataset.yn==='1';const wk=S.wk.get(wkId(n,pid));
     if(!wk||!wk.frozenAt){freezeWeek(n,pid,{[id]:{ok,cnc:'',note:''}});return}
@@ -510,6 +509,8 @@ function renderRestr(main){
     t.dataset.o=t.value;apply([op('restr',r.id,n)])};
   main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.alz)actFill(e.target);if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onmousedown=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
-  main.ontouchstart=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
+  /* auditoría REN-06: escucha pasiva (no frena el desplazamiento táctil) y solo actúa en Restricciones: #main se reutiliza en las
+     demás pestañas y antes la escucha no pasiva quedaba puesta en todas */
+  if(!main.__rts){main.__rts=1;main.addEventListener('touchstart',e=>{if(main.dataset.view!=='restr')return;const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)},{passive:true})}
 }
 

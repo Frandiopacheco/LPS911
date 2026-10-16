@@ -28,8 +28,15 @@ test('1 · «Listo» cierra la ficha sin dar la actividad por terminada', async 
 test('2 · Descongelar guarda la versión evaluada y se puede recuperar después de recargar', async ({ page }) => {
   const errors = await openApp(page, { tab: 'plan', extra: [act('x1'), week({ res: { x1: { ok: false, cnc: 'Materiales', note: 'No llegó', mit: 'Pedir antes' } } })] });
   const sec = page.locator('section[data-pid="p1"]');
+  // UI-04: se confirma con uiAsk (tono de advertencia); «Cancelar» no descongela
+  page.once('dialog', d => d.dismiss());
   await sec.locator('[data-unfreeze]').click();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => !!(window.__dbGet('weeks', '58_p1') || {}).frozenAt)).toBe(true);
+  let msg = '';
+  page.once('dialog', d => { msg = d.message(); d.accept(); });
   await sec.locator('[data-unfreeze]').click();
+  await expect.poll(() => msg).toContain('¿Descongelar la semana 58');
   await expect.poll(() => page.evaluate(() => !!(window.__dbGet('weeks', '58_p1') || {}).frozenAt)).toBe(false);
   const hist = await page.evaluate(() => Object.values(window.__dbAll('weeks')).filter(w => w.histOf === '58_p1'));
   expect(hist.length).toBe(1);
