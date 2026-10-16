@@ -16,7 +16,7 @@ const npSC=()=>!!me&&me.role==='sc';
 const canNPx=()=>canNP()||npSC();
 
 function ensureNP(from){if(!db||(npFrom&&from>=npFrom))return;if(npSub)npSub();npFrom=from;
-  npSub=fcol('nprog').where('date','>=',from).onSnapshot(sn=>{NPM.clear();sn.docs.forEach(d=>NPM.set(d.id,{...d.data(),id:d.id}));npErr=null;if(ready)requestRender();if(NS&&$('#npsheet'))npDraw()},
+  npSub=fcol('nprog').where('date','>=',from).onSnapshot(sn=>{NPM.clear();sn.docs.forEach(d=>NPM.set(d.id,{...d.data(),id:d.id}));npErr=null;if(ready)snapRender(sn);if(NS&&$('#npsheet'))npDraw()},
     err=>{npErr=err&&err.code||'error';if(ready)requestRender()});
   if(!unsubs.includes(stopNP))unsubs.push(stopNP)}
 function stopNP(){if(npSub)npSub();npSub=null;npFrom=null;NPM.clear()}

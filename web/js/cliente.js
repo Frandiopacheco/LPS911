@@ -34,10 +34,10 @@ const CLI_F=['days','qty','name','sc','und','metrado','order'];
 /** Se deja de escuchar al perder el acceso. */
 function cliStop(){if(cliBufSub)cliBufSub();if(cliIdxSub)cliIdxSub();if(cliOvSub)cliOvSub();cliBufSub=cliIdxSub=cliOvSub=null;CLIB=null;CLX.clear();CLVD.clear();CLIA.clear();CLIAV++;cliOvCache=cliLateCache=null;U.cliv=false;U.cliVer='';cliSync()}
 function ensureCli(){if(!canCli()||cliBufSub)return;
-  cliBufSub=fcol('cli').doc('buf').onSnapshot(d=>{CLIB=d.exists?d.data():{};cliErr=null;cliOvCache=null;if(ready)requestRender()},
+  cliBufSub=fcol('cli').doc('buf').onSnapshot(d=>{CLIB=d.exists?d.data():{};cliErr=null;cliOvCache=null;if(ready)snapRender(d)},
     e=>{cliErr=e&&e.code||'error';CLIB={};if(ready)requestRender()});
-  cliIdxSub=fcol('clidx').onSnapshot(sn=>{CLX.clear();sn.docs.forEach(d=>CLX.set(d.id,{...d.data(),id:d.id}));cliLateCache=null;const L=cliLast();if(L)cliLoad(L.id);if(ready)requestRender()},()=>{});
-  cliOvSub=fcol('clia').onSnapshot(sn=>{CLIA.clear();sn.docs.forEach(d=>CLIA.set(d.id,d.data()));CLIAV++;cliOvCache=null;if(ready)requestRender()},e=>{cliErr=e&&e.code||'error';if(ready)requestRender()});
+  cliIdxSub=fcol('clidx').onSnapshot(sn=>{CLX.clear();sn.docs.forEach(d=>CLX.set(d.id,{...d.data(),id:d.id}));cliLateCache=null;const L=cliLast();if(L)cliLoad(L.id);if(ready)snapRender(sn)},()=>{});
+  cliOvSub=fcol('clia').onSnapshot(sn=>{CLIA.clear();sn.docs.forEach(d=>CLIA.set(d.id,d.data()));CLIAV++;cliOvCache=null;if(ready)snapRender(sn)},e=>{cliErr=e&&e.code||'error';if(ready)requestRender()});
   unsubs.push(()=>{if(cliBufSub)cliBufSub();if(cliIdxSub)cliIdxSub();if(cliOvSub)cliOvSub();cliBufSub=cliIdxSub=cliOvSub=null;CLIB=null;CLX.clear();CLVD.clear();CLIA.clear();CLIAV++;cliOvCache=cliLateCache=null;U.cliv=false;U.cliVer=''})}
 
 /** Holgura que le toca a un elemento: la más específica que esté definida (actividad › ambiente › sector › piso › obra).

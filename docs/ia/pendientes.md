@@ -30,4 +30,5 @@ Corregido en el PR «Auditoría con datos reales»:
 - Volver a publicar no reescribe una restricción `res-<borrador>` ya liberada (página `RLIB` y servidor `closePlanPiso`).
 - «Aplicar registros de campo» ignora los cierres del capataz/SC sin confirmar (`_prop`): `fieldSug().prop` los muestra como «N por confirmar» y no concluye «No» (decisión del dueño: opción B).
 Pendiente (no se tocó por decisión del dueño): la semana 58 quedó casi sin evaluar (PPC oficial 1 %).
-Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan los cambios ajenos).
+Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan los cambios ajenos; desde la auditoría núcleo REN-02 también los de `mcat`/`mamb`/`mver`/catálogo, `lib`, `nprog`, `lhprop`, `members`, cliente y `pdz`/`pzon`).
+- Auditoría núcleo (oct 2026), quedó para después: registros antiguos con `{status:'no', done:true}` siguen contando como terminados (LOG-02; corregirlos o exigir `status==='ok'` en `doneRebuild0` y `doneMap` del servidor es decisión del dueño); `rsc/pc` de una «No va» quedan pegados si después se cambia la causa en Campo (variante menor de LOG-04); `actQuick` del plano (lista «sin ubicar» de la reunión) y los manejadores `[data-nova]`/`[data-dz]` ya no tienen botones que los abran (código muerto).

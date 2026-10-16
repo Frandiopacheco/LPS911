@@ -7,7 +7,7 @@
 const PROP=new Map();let propSub=null,propErr=null;let ACT_OFF=null;
 const myScsI=()=>(me&&me.scs)||[];
 const PM=()=>!!me&&me.role==='sc'&&U.tab==='look'&&!(U.ver&&U.verMode==='ver');
-function ensureProp(){if(propSub||!db)return;propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))requestRender()},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
+function ensureProp(){if(propSub||!db)return;propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))snapRender(sn)},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
   unsubs.push(()=>{if(propSub)propSub();propSub=null;PROP.clear()})}
 const propItems=(sc)=>Object.entries((PROP.get(sc)||{}).items||{}).filter(([,it])=>!!it).map(([id,it])=>({sc,id,it}));
 /* vista del SC: lo oficial con su borrador encima */

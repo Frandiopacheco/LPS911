@@ -106,7 +106,12 @@ window.__uiAskNative = true;
   const subs = new Set();
   /* un lote (batch) avisa una sola vez al terminar, como Firestore */
   let hold = null, holdN = 0;
-  const changed = n => { if (hold) { hold.add(n); return; } persist(); for (const s of [...subs]) if (s.n === n) setTimeout(s.fire, 0); };
+  /* la foto de una CONSULTA que sigue a una escritura de esta página llega con hasPendingWrites (como la caché local de Firestore);
+     con window.__dbRemote = true se simula que la escribió otro usuario (hasPendingWrites: false; snapRender la agrupa).
+     Las fotos de UN documento no lo marcan: el falso no manda después la foto de «confirmado por el servidor» (includeMetadataChanges),
+     y el Tareo del capataz (tcSnap) se quedaría en «Se enviará al tener señal». */
+  const changed = n => { if (hold) { hold.add(n); return; } persist(); const pw = !window.__dbRemote; for (const s of [...subs]) if (s.n === n) setTimeout(() => s.fire(pw), 0); };
+  const withPW = (sn, pw) => { if (pw) sn.metadata = { ...sn.metadata, hasPendingWrites: true }; return sn; };
   const docSnap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) }; };
   const ops = { '==': (a, b) => a === b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '<': (a, b) => a < b, '!=': (a, b) => a !== b,
     in: (a, b) => (b || []).includes(a), 'array-contains': (a, b) => Array.isArray(a) && a.includes(b) };
@@ -169,7 +174,7 @@ window.__uiAskNative = true;
       onSnapshot(...a) {
         window.__qlog.push({ n, filters: clone(filters) });
         if (noIdx) { const fs_ = a.filter(f => typeof f === 'function'); setTimeout(() => fs_[1] && fs_[1](idxErr()), 0); return () => {}; }
-        const cb = cbOf(a); const prev = new Map(); const s = { n, fire: () => cb(qSnap(n, filters, lim, prev)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
+        const cb = cbOf(a); const prev = new Map(); const s = { n, fire: pw => cb(withPW(qSnap(n, filters, lim, prev), pw)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
       },
     };
     return q;

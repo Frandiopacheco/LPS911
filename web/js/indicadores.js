@@ -104,7 +104,7 @@ const NOVA_D=45;
 function ensureNova(from){if(!db||novaWait)return;const f0=addD(todayIso(),-NOVA_D);const f=from&&from<f0?from:f0;
   if(novaSub&&(novaAll||f>=novaFrom))return;if(novaSub)novaSub();novaFrom=f;
   const q=novaAll?fcol('pdz').where('kind','==','nova'):fcol('pdz').where('kind','==','nova').where('date','>=',f);
-  novaSub=q.onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});NOVAV++;snapOk('nova');if(ready&&['ind','dash','hoy'].includes(U.tab))requestRender()},
+  novaSub=q.onSnapshot(sn=>{NOVA.clear();sn.docs.forEach(dc=>{const z=dc.data();if(z&&!z.draft&&z.date&&z.actId)NOVA.set(z.date+'|'+z.actId,z)});NOVAV++;snapOk('nova');if(ready&&['ind','dash','hoy'].includes(U.tab))snapRender(sn)},
     err=>{novaSub=null;
       if(err&&err.code==='failed-precondition'&&!novaAll){novaAll=true;console.warn('LPS: falta el índice pdz(kind, date); las «No va» se leen sin límite de fecha');ensureNova(from);return}
       novaWait=true;snapFail('nova',err,()=>{novaWait=false;ensureNova(novaFrom)})});

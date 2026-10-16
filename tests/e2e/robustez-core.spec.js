@@ -20,6 +20,35 @@ test('con señal mala entra igual: si el servidor no responde en 2 s usa la copi
   noErrors(errors, 'members sin respuesta del servidor');
 });
 
+/* auditoría REN-04: con la ficha en la copia del equipo no se esperan 2 s al servidor; si el servidor trae otro rol, se recarga */
+const memServidor = ({ ms, cambia }) => {
+  let fb; const n = +(sessionStorage.getItem('e2e.loads') || 0) + 1; sessionStorage.setItem('e2e.loads', String(n));
+  Object.defineProperty(window, 'firebase', { configurable: true, get: () => fb, set: v => {
+    fb = v; const f0 = v.firestore;
+    const wrap = () => { const fs = f0(); if (!fs.__w) { fs.__w = 1; const oc = fs.collection;
+      fs.collection = c0 => { const c = oc(c0); if (c0 !== 'members') return c; const od = c.doc;
+        return { ...c, doc: id => { const d = od(id); return { ...d, get: o => { if (o && o.source === 'server') { window.__srvT0 = window.__srvT0 || performance.now(); } if (o && o.source === 'server') return new Promise(ok => setTimeout(async () => {
+          const s = await d.get(); if (!cambia || n > 1) return ok(s); const x = { ...s.data(), role: 'lector' }; ok({ ...s, exists: true, data: () => x }); }, ms)); return d.get(o); } }; } }; }; }
+      return fs; };
+    v.firestore = Object.assign(wrap, f0);
+  } });
+};
+test('al abrir con la ficha guardada no espera al servidor (antes hasta 2 s de «Conectando…»)', async ({ page }) => {
+  await page.addInitScript(memServidor, { ms: 5000, cambia: false });
+  const errors = await openApp(page, { as: 'editor' });
+  const t = await page.evaluate(() => performance.now() - window.__srvT0);
+  expect(t, 'ms desde que se pidió la ficha al servidor hasta tener la app abierta (antes ≥ 2000)').toBeLessThan(1500);
+  expect(await page.evaluate(() => [me.role, canWrite])).toEqual(['editor', true]);
+  await page.waitForTimeout(5500); // el servidor contesta lo mismo: no se recarga
+  expect(await page.evaluate(() => sessionStorage.getItem('e2e.loads'))).toBe('1');
+  noErrors(errors, 'entrar desde la copia');
+});
+test('si el servidor trae otro rol que la copia del equipo, la app se recarga con el rol nuevo', async ({ page }) => {
+  await page.addInitScript(memServidor, { ms: 600, cambia: true });
+  await openApp(page, { as: 'editor' });
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('e2e.loads')), { timeout: 8000 }).toBe('2');
+});
+
 test('un permiso denegado en un solo cambio no deja al editor en solo lectura', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'look' });
   const r = await page.evaluate(async ({ HOY }) => {
