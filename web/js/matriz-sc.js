@@ -24,6 +24,9 @@ async function mxScUndo(amb,cat,prev,s,lid,bk){const cur=((MX.amb.get(amb)||{}).
 
 /* ---------- revisión del ingeniero ---------- */
 const mxLogPend=()=>[...MX.log.values()].filter(l=>l.st==='pend'&&MX.cat.has(l.cat)).sort((a,b)=>(b.conf-a.conf)||(a.t||0)-(b.t||0));
+/** cuántos cambios del SC sin revisar tiene una actividad del catálogo (MOD-01: fusionar o desglosar los esperan; se consulta a la base
+    por si la suscripción de mlog no está abierta) */
+async function mxScPendN(cat){try{return(await fcol('mlog').where('st','==','pend').where('cat','==',cat).get()).size}catch(e){return mxLogPend().filter(l=>l.cat===cat).length}}
 /** celdas con un cambio del SC sin revisar (marca en la matriz) */
 function mxLogKeys(){if(!canWrite)return null;const s=new Set();for(const l of MX.log.values())if(l.st==='pend')s.add(l.amb+'|'+l.cat);return s}
 /** en la ficha de la celda: quién la cambió por última vez */

@@ -57,6 +57,35 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   noErrors(errors, 'fusionar');
 });
 
+// MOD-01: fusionar no deja atrás los cambios del SC sin revisar ni el metadato de la celda
+test('fusionar: espera los cambios del SC sin revisar y el estado pasa con su metadato (Restaurar lo devuelve)', async ({ page }) => {
+  const scM = { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true };
+  const extra = CAT.map(r => r[1] === 'a2' ? ['mamb', 'a2', { c: { k9: 't' }, m: { k9: scM }, k: 'k9', by: 'sc@obra.pe', t: 2 }] : r);
+  extra.push(['mlog', 'l1', { amb: 'a2', cat: 'k9', sc: 'c1', from: null, to: 't', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]);
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.click('[data-mxv="cat"]');
+  await row(page, 'k9').locator('[data-mcm]').click();
+  await page.click('#pop [data-do="fus"]');
+  await page.selectOption('#mxfb', 'k1');
+  await page.click('#mxfok');
+  await expect(page.locator('#mxfi')).toContainText('1 cambio de subcontratistas sin revisar');
+  expect((await get(page, 'mcat', 'k9')).arch).toBeUndefined();
+  expect((await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
+  // el ingeniero lo da por visto: ahora sí se fusiona y el estado pasa con quién lo cambió y su «✓ Visto»
+  await page.evaluate(() => { const b = db.batch(); mxLogOk(b, MX.log.get('l1') || { ...__dbGet('mlog', 'l1'), id: 'l1' }, { by: 'admin@obra.pe', n: 'Admin', t: 3 }); return b.commit(); });
+  await expect.poll(async () => !!(await get(page, 'mamb', 'a2')).m.k9.ok).toBe(true);
+  await page.click('#mxfok');
+  await expect.poll(async () => (await get(page, 'mamb', 'a2')).c).toEqual({ k1: 't' });
+  const m = (await get(page, 'mamb', 'a2')).m;
+  expect(m.k1).toMatchObject({ by: 'sc@obra.pe', sc: true, ok: { by: 'admin@obra.pe' } });
+  // restaurar: el estado y el metadato vuelven a la de origen
+  await page.click('[data-mxarch="1"]');
+  await page.click('[data-mcres="k9"]');
+  await expect.poll(async () => (await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
+  expect((await get(page, 'mamb', 'a2')).m.k1).toBeUndefined();
+  noErrors(errors, 'fusionar con cambios del SC');
+});
+
 test('archivar quita la columna de la matriz pero guarda los estados; nueva actividad', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   page.on('dialog', d => d.accept());

@@ -84,3 +84,20 @@ test('editor: ve la lista pero no el botón Desglosar', async ({ page }) => {
   await expect(page.locator('#pop [data-do="des"]')).toHaveCount(0);
   noErrors(errors, 'editor');
 });
+
+// MOD-01: con cambios del SC sin revisar en la genérica no se desglosa
+test('desglosar espera los cambios del SC sin revisar de la genérica', async ({ page }) => {
+  const extra = [...CAT, ['mlog', 'l1', { amb: 'a1', cat: 'k5', sc: 'c1', from: 'p', to: 'c', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]];
+  const errors = await openApp(page, { tab: 'mat', extra });
+  page.on('dialog', d => d.accept());
+  await page.click('[data-mxv="cat"]');
+  await row(page, 'k5').locator('[data-mcm]').click();
+  await page.click('#pop [data-do="des"]');
+  await page.fill('[data-dpn="0"]', 'Bajada para rociadores');
+  await page.fill('[data-dpn="1"]', 'Instalación de rociadores');
+  await page.click('#mxdok');
+  await expect(page.locator('#mxdmsg')).toContainText('sin revisar');
+  expect((await get(page, 'mcat', 'k5')).arch).toBeUndefined();
+  expect((await get(page, 'acts', 'g2')).name).toBe('Instalaciones ICR');
+  noErrors(errors, 'desglosar con cambios del SC');
+});
