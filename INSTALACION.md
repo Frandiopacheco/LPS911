@@ -8,7 +8,7 @@ En [console.firebase.google.com](https://console.firebase.google.com), dentro de
 
 1. **Firestore Database** › Crear base de datos › modo **producción**. Usa la misma ubicación que el proyecto real.
 2. **Authentication** › Comenzar › Método de acceso: activa **Correo electrónico/contraseña** y **Anónimo** (este último es para los capataces).
-3. **Authentication** › Configuración › **Dominios autorizados** › Agregar: `main--<tu-sitio>.netlify.app`, cambiando `<tu-sitio>` por el nombre de tu sitio en Netlify.
+3. **Authentication** › Configuración › **Dominios autorizados**: `<proyecto>.web.app` y `<proyecto>.firebaseapp.com` ya vienen autorizados (la página se publica en Firebase Hosting del mismo proyecto).
 4. ⚙️ **Configuración del proyecto** › General › Tus apps › Web (‹/›) › registrar. Copia el bloque `firebaseConfig`; va en `config/pruebas.js`.
 5. El proyecto ya está en plan **Blaze**. Ponle también una alerta de presupuesto (por ejemplo 5 USD).
 
@@ -29,24 +29,19 @@ Repite esto en **cada** proyecto, empezando por el de pruebas:
    - En el valor pegas todo el contenido del archivo JSON.
 5. Borra el archivo JSON de tu computadora. Esa llave da acceso total al proyecto: no la compartas ni la subas al repositorio.
 
-## 3. Netlify: GitHub publica la página
+## 3. La página: Firebase Hosting (antes Netlify)
 
-En el plan gratuito, Netlify no arma por su cuenta repositorios privados con cambios de otras personas. Por eso es GitHub quien publica, después de revisar.
-
-1. **Detener las compilaciones propias de Netlify.** En el sitio **lps911-central**, entra a **Project configuration › Build & deploy › Continuous deployment**. En **Build settings**, pulsa **Configure**, elige **Stop builds** y guarda.
-2. **Crear el token.** Haz clic en tu ícono (abajo a la izquierda) › **User settings** › **Applications** › **Personal access tokens** › **New access token**.
-   - Nombre: `github-lps911`.
-   - Vencimiento: el más largo que ofrezca.
-   - Pulsa **Generate token** y **copia** el token. Solo se muestra una vez.
-3. **Guardarlo en GitHub.** Ve a **LPS911 › Settings › Secrets and variables › Actions › New repository secret**. En Name escribe `NETLIFY_AUTH_TOKEN`, en Secret pega el token y pulsa **Add secret**.
+Desde oct 2026 GitHub publica la página en **Firebase Hosting** del mismo proyecto, con la misma llave del paso 2 (el rol **Editor** ya incluye Firebase Hosting; si GitHub avisa «permission denied» al publicar, agrega a la cuenta de servicio el rol **Administrador de Firebase Hosting**). No hay nada más que configurar.
 
 Resultado:
-- **main** se publica en `https://main--lps911-central.netlify.app`, la copia de prueba.
-- **produccion** se publica en `https://lps911-central.netlify.app`, la obra.
+- **main** se publica en `https://lps911-pruebas-49641.web.app`, la copia de prueba.
+- **produccion** se publica en `https://lps911.web.app`, la obra.
+
+(Antes era Netlify: cobra créditos por cada publicación a producción y el plan gratuito se agotó. Las direcciones `*.netlify.app` quedaron con la última versión y ya no se actualizan.)
 
 ## 4. Datos en la copia de prueba
 
-1. Abre `https://main--<tu-sitio>.netlify.app`. Verás la cinta roja **PRUEBAS**.
+1. Abre `https://lps911-pruebas-49641.web.app`. Verás la cinta roja **PRUEBAS**.
 2. Crea tu cuenta con el mismo correo de administrador y confírmala.
 3. En **Equipo › Cargar datos desde archivo**, carga un **respaldo de datos** del sitio real. Así pruebas con datos parecidos sin tocar la obra.
 

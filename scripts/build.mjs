@@ -1,4 +1,4 @@
-// Preparación de la publicación (la ejecuta Netlify en cada cambio).
+// Preparación de la publicación (la ejecuta GitHub antes de publicar en Firebase Hosting).
 // 1) Elige la configuración de Firebase según la rama: produccion → config/produccion.js; otra → config/pruebas.js
 // 2) Pone la versión (commit) en sw.js, para que la app avise "Hay una versión nueva" sin tener que cambiar números a mano.
 // 3) Pone en las URLs de css/, js/, plano.js y firebase-config.js la huella de su contenido (?v=…): solo se vuelve a bajar lo que cambió.

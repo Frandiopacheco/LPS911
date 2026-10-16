@@ -1,13 +1,13 @@
 # LPS 911 · Last Planner de obra
 
-App web del Last Planner System: lookahead, plan semanal, registro de campo, capataces, tablero e indicadores. Usa Firebase (Firestore, Auth y Realtime Database) y se publica en Netlify.
+App web del Last Planner System: lookahead, plan semanal, registro de campo, capataces, tablero e indicadores. Usa Firebase (Firestore, Auth y Realtime Database) y la página se publica en Firebase Hosting (antes Netlify).
 
 ## Cómo se publica
 
 ```
-cambio en GitHub ──► rama main        ──► Netlify: copia de PRUEBAS   (main--<sitio>.netlify.app)
+cambio en GitHub ──► rama main        ──► Firebase Hosting: copia de PRUEBAS (lps911-pruebas-49641.web.app)
                  │                     └► GitHub: reglas + tareas en lps911-pruebas
-                 └► rama produccion  ──► Netlify: sitio de la OBRA
+                 └► rama produccion  ──► Firebase Hosting: sitio de la OBRA (lps911.web.app)
                                        └► GitHub: reglas + tareas en el proyecto real
 ```
 
