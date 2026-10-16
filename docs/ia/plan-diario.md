@@ -64,3 +64,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Equipos** (`#mfzb`) vive en la franja acoplada de abajo `#mfzbar` (la crea `dockRender`).
 - La franja de Equipos es una sola fila (cada SC en una línea) y se pliega con su cabecera (`PFOLD.b`, `lps.mfzfold`; en el celular sigue `M.fzOpen`).
 - El visor vuelve a encuadrar el plano cuando cambia su tamaño (paneles que se abren o pliegan) mientras el usuario no lo haya movido (`v.touched`, lo marcan arrastrar, pellizcar, la rueda y `zoomTo`; `fit()` lo reinicia).
+- **Imágenes de sectorización anteriores** (`planos`, Sectorización › «Imágenes de sectorización anteriores», `config-equipo.js`): «Eliminar» es **solo del administrador**, pide confirmación (`uiAsk`) y **archiva** (`arch:{t,by,n}`), no borra; las archivadas no se muestran. Reglas: solo el admin cambia `arch` y borra `planos` (Equipo › Limpieza). Decisión del dueño, oct 2026.
