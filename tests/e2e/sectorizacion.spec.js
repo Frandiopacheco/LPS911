@@ -95,6 +95,21 @@ test('la lámina base se sube en Sectorización; el Plan diario solo sube especi
   noErrors(errors, 'subir base');
 });
 
+// UI-04: eliminar una imagen de sectorización anterior (borrado real) pide confirmar con uiAsk; «Cancelar» no borra
+test('imágenes anteriores: eliminar pide confirmación', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'planos', extra: [['planos', 'pl1', { title: 'Sectorización antigua', data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', order: 1 }]] });
+  await page.locator('.szold summary').click();
+  let msg = '';
+  page.once('dialog', d => { msg = d.message(); d.dismiss(); });
+  await page.click('[data-pdel="pl1"]');
+  await expect.poll(() => msg).toContain('Sectorización antigua');
+  expect(await page.evaluate(() => !!window.__dbGet('planos', 'pl1'))).toBe(true);
+  page.once('dialog', d => d.accept());
+  await page.click('[data-pdel="pl1"]');
+  await expect.poll(() => page.evaluate(() => !!window.__dbGet('planos', 'pl1'))).toBe(false);
+  noErrors(errors, 'eliminar imagen anterior');
+});
+
 test('quien no edita solo consulta el mapa', async ({ page }) => {
   const errors = await openApp(page, { as: 'lector', tab: 'planos', extra: LAMINA });
   await page.locator('[data-szp="p1"]').click();
