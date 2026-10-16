@@ -710,6 +710,9 @@ tr.addrow td{height:44px;background:var(--panel)}
 .pop kbd{margin-left:auto;font:11px var(--f-mono);color:var(--muted)}
 .toast{width:max-content;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);border-radius:8px;padding:9px 14px;display:flex;gap:14px;align-items:center;z-index:460;box-shadow:var(--shadow);font-size:13px;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--today);font-weight:700;padding:0}
+/* EJE-08: en oscuro el aviso es claro (--ink): el ámbar quedaba a 1,5:1; el azul de marca da 5,7:1 */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .toast button{color:#1F5F7A}}
+:root[data-theme="dark"] .toast button{color:#1F5F7A}
 
 /* cards / generic */
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
@@ -3250,6 +3253,9 @@ table.mx tfoot .mxf:not(.z){color:var(--ok);font-weight:700}
 .mxal:hover{border-color:var(--warn)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.mx td.mc.s-t{color:#0F1A13}:root:not([data-theme="light"]) table.mx td.mc.s-c{background:#C99A2E;color:#1E1503}:root:not([data-theme="light"]) .mxleg .mc.s-t{color:#0F1A13}}
 :root[data-theme="dark"] table.mx td.mc.s-t,:root[data-theme="dark"] .mxleg .mc.s-t{color:#0F1A13}:root[data-theme="dark"] table.mx td.mc.s-c{background:#C99A2E;color:#1E1503}
+/* UI-01: en oscuro, «sin validar» sigue más claro que lo validado (las reglas de arriba lo pisaban: ✓ ilegible y «En curso» igual al validado) */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.mx td.mc.s-t.sug{color:var(--ok)}:root:not([data-theme="light"]) table.mx td.mc.s-c.sug{background:color-mix(in srgb,#C99A2E 38%,var(--panel));color:#E8C46A}}
+:root[data-theme="dark"] table.mx td.mc.s-t.sug{color:var(--ok)}:root[data-theme="dark"] table.mx td.mc.s-c.sug{background:color-mix(in srgb,#C99A2E 38%,var(--panel));color:#E8C46A}
 table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.mc.s-c{font-size:13px}
 
 /* ===== Faltan programar dentro del Lookahead (filas fantasma, oct 2026) ===== */
