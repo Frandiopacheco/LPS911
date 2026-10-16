@@ -289,6 +289,28 @@ function snapFail(key,err,reopen){const o=SNAPBAD.get(key)||{n:0,t:0};clearTimeo
   if(err&&err.code==='permission-denied'&&!SNAPPD){SNAPPD=true;toast('Tu cuenta no tiene acceso a parte de los datos. Si sigue, pide acceso al administrador.')}
   setStatus()}
 function snapOk(key){const o=SNAPBAD.get(key);if(!o)return;clearTimeout(o.t);SNAPBAD.delete(key);setStatus()}
+/* ---- lectura por partida del subcontratista (SEG-05, paso 1; ver docs/ia/seg05-paso2.md) ----
+   El SC (rol `sc`) pide solo lo de SU partida en nprog, lhphist, mcatp y mlog: una consulta por partida (me.scs) con
+   where('sc','==',s) delante de los demás filtros (`more(q,s)`). Así funciona con las reglas de hoy y con las del paso 2
+   (que solo dejan leer al SC documentos con sc en scsOf()). Si falta el índice compuesto (failed-precondition, índice en
+   construcción) se repite con solo where('sc','==',s), que no necesita índice, y el resto lo filtra la página (`keep`).
+   Ninguna de estas colecciones está en COLS: no frenan el arranque («Conectando…»). Sin partidas responde al momento con []. */
+const scList=()=>(me&&Array.isArray(me.scs)?me.scs:[]).filter(Boolean);
+/** suscripción por partida: cb(docs juntos de todas las partidas, foto que llegó o null); onErr(err) si una se cae */
+function scSubs(col,more,keep,cb,onErr){const scs=scList();const got=new Map(),offs=new Map();let dead=false;
+  if(!scs.length){setTimeout(()=>{if(!dead)cb([],null)},0);return()=>{dead=true}}
+  const emit=sn=>{if(dead)return;const L=[];for(const s of scs)L.push(...(got.get(s)||[]));cb(L,sn)};
+  const open=(s,plain)=>{let q=fcol(col).where('sc','==',s);if(!plain&&more)q=more(q,s);
+    offs.set(s,q.onSnapshot(sn=>{got.set(s,sn.docs.map(d=>({...d.data(),id:d.id})).filter(x=>!plain||!keep||keep(x,s)));emit(sn)},
+      err=>{if(dead)return;if(!plain&&more&&err&&err.code==='failed-precondition'){console.warn('LPS: falta el índice de «'+col+'» por partida; se lee toda la partida y se filtra aquí');open(s,true);return}if(onErr)onErr(err)}))};
+  scs.forEach(s=>open(s,false));
+  return()=>{dead=true;offs.forEach(f=>{try{f()}catch(e){}});offs.clear()}}
+/** lectura suelta por partida (mismas reglas que scSubs): devuelve los documentos juntos */
+async function scGet(col,more,keep){const out=[];
+  for(const s of scList()){let sn;try{sn=await(more?more(fcol(col).where('sc','==',s),s):fcol(col).where('sc','==',s)).get();sn.docs.forEach(d=>out.push({...d.data(),id:d.id}))}
+    catch(err){if(!(more&&err&&err.code==='failed-precondition'))throw err;
+      sn=await fcol(col).where('sc','==',s).get();sn.docs.forEach(d=>{const x={...d.data(),id:d.id};if(!keep||keep(x,s))out.push(x)})}}
+  return out}
 function snapReset(){SESS++;for(const o of SNAPBAD.values())clearTimeout(o.t);SNAPBAD.clear();SNAPPD=false}
 
 /* ---------- deshacer / rehacer ---------- */
@@ -456,9 +478,11 @@ async function startSession(u,fdb){
   const memCb=snap=>{snapOk('members');MEM.clear();let rch=false;(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
-    if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
+    if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');const sk0=me.role==='sc'?scList().join():'-';me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
     /* si cambia lo que hay que cargar (solo tareo, ve el Tareo, lista del equipo), se vuelve a abrir con las suscripciones correctas */
-    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;rch=true;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
+    /* SEG-05: las suscripciones del SC van por partida (scSubs): si entra o sale del rol sc, o cambian sus partidas, se reabre todo */
+    const sk1=v.role==='sc'?memScs(v).filter(Boolean).join():'-';
+    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')||sk0!==sk1){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;rch=true;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
     if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
     /* cambio de rol: al momento; lo demás (nombres, responsables de otros) se agrupa como los otros cambios ajenos (auditoría REN-02) */
