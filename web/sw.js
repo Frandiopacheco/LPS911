@@ -11,8 +11,24 @@ const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.pn
 const PRUEBA = /^main--/.test(self.location.hostname);
 const CDN_HOSTS = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
+// ?v= de ASSETS = huella (sha1, 8 letras) del contenido (scripts/build.mjs). Al instalar una versión nueva solo se baja lo que
+// cambió: lo que ya está guardado con la misma URL (en la caché anterior, sea cual sea su nombre) se copia, pero solo si su
+// contenido coincide con la huella (si no, se baja de nuevo). Si un archivo de ASSETS no se pudo bajar (red cortada a la mitad),
+// la instalación falla y sigue la versión anterior completa; el navegador lo vuelve a intentar en la próxima revisión.
+async function sha8(r) { try { const b = await crypto.subtle.digest('SHA-1', await r.clone().arrayBuffer()); return [...new Uint8Array(b)].slice(0, 4).map(x => x.toString(16).padStart(2, '0')).join(''); } catch (e) { return ''; } }
+async function keep(c, u) {
+  const v = (u.match(/\?v=([0-9a-f]{8})$/) || [])[1];
+  if (!v) return c.add(new Request(u, { cache: 'reload' })).catch(() => {});
+  const hit = await caches.match(u);
+  if (hit && await sha8(hit) === v) return c.put(u, hit);
+  // primero la caché del navegador (en la primera visita la página acaba de bajarlo; el servidor contesta «sin cambios»)
+  let r = await fetch(u).catch(() => null);
+  if (!r || !r.ok || await sha8(r) !== v) r = await fetch(new Request(u, { cache: 'reload' }));
+  if (!r.ok) throw new Error(u + ' ' + r.status);
+  return c.put(u, r);
+}
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VER).then(c => Promise.all(SHELL.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => {})))));
+  e.waitUntil(caches.open(VER).then(c => Promise.all(SHELL.map(u => keep(c, u)))));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('lps911-') && k !== VER && k !== CDN_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
