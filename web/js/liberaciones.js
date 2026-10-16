@@ -11,8 +11,8 @@
 const LIB=new Map();let libSub=null,libErr=null,libVer=0,libLoaded=false;
 const LST={sol:{t:'Solicitada',c:'#6B747B'},pro:{t:'Programada',c:'#1F5F7A'},obs:{t:'Observada',c:'#9A6A12'},lev:{t:'Levantada · por reinspeccionar',c:'#B7791F'},lib:{t:'Liberada',c:'#2E7D4F'},libm:{t:'Liberada con obs. menores',c:'#2E7D4F'},anu:{t:'Anulada',c:'#9AA3A8'},sin:{t:'Pendiente de solicitar',c:'#B83A2E'}};
 const libDone=st=>st==='lib'||st==='libm';
-function ensureLib(){if(libSub||!db)return;libSub=fcol('lib').onSnapshot(sn=>{LIB.clear();sn.docs.forEach(d=>LIB.set(d.id,{...d.data(),id:d.id}));libErr=null;libLoaded=true;libVer++;LIBC.ver=-1;if(ready)requestRender()},err=>{libErr=err&&err.code||'error';if(ready&&U.tab==='lib')requestRender()});
-  libmSub=fcol('libm').doc('main').onSnapshot(d=>{LIBM=d.exists?d.data():null;libmVer++;if(ready)requestRender()},()=>{});
+function ensureLib(){if(libSub||!db)return;libSub=fcol('lib').onSnapshot(sn=>{LIB.clear();sn.docs.forEach(d=>LIB.set(d.id,{...d.data(),id:d.id}));libErr=null;libLoaded=true;libVer++;LIBC.ver=-1;if(ready)snapRender(sn)},err=>{libErr=err&&err.code||'error';if(ready&&U.tab==='lib')requestRender()});
+  libmSub=fcol('libm').doc('main').onSnapshot(d=>{LIBM=d.exists?d.data():null;libmVer++;if(ready)snapRender(d)},()=>{});
   unsubs.push(()=>{if(libSub)libSub();libSub=null;LIB.clear();libVer++;if(libmSub)libmSub();libmSub=null;LIBM=null})}
 /* quién hace qué */
 function isCal(){return!!me&&(isAdmin||(AREA()&&/calidad/i.test(me.area||'')))}

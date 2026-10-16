@@ -477,3 +477,79 @@ test('22c · «No va hoy» de dos personas a la vez: solo la primera reprograma 
   expect(((await page.evaluate(d => window.__dbGet('daily', d + '_p1'), HOY)) || { recs: {} }).recs.e0).toBeFalsy();
   noErrors(errors, 'no va hoy concurrente');
 });
+
+/* auditoría LOG-01: lo que va alrededor de apply() (reabrir, anunciar «reprogramada», guardar el «antes») solo ocurre si el cambio se aplicó */
+test('LOG-01 · reunión: «No va hoy → reprogramar» de una partida por metrado con el día siguiente cerrado no anuncia lo que no hizo', async ({ page }) => {
+  const E0 = ['acts', 'e0', { ambId: 'a1', sc: 'c2', name: 'Entubado empotrado', und: 'ml', metrado: 40, days: [HOY, MANANA], qty: { [HOY]: 10, [MANANA]: 10 }, order: 20 }];
+  const RHOY = ['dplan', `${HOY}_p1`, { date: HOY, pisoId: 'p1', ids: { e0: 10, e1: null, i0: null, i1: null }, pub: 'pub_h', reo: { t: 1, by: 'frandiopacheco@gmail.com', why: 'reunión' } }];
+  const PMAN = ['dplan', `${MANANA}_p1`, { date: MANANA, pisoId: 'p1', ids: { e1: null }, pub: 'pub_m' }];
+  const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, E0, RHOY, PMAN] });
+  await page.click('#wtoday');
+  await expect.poll(() => page.evaluate(d => dayLocked(d, 'p1'), MANANA)).toBe(true);
+  await row(page, 'e0').locator('[data-dv="no|e0"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.fill('#nvd', MANANA);
+  await page.locator('#pop [data-do="ok"]').click();
+  await expect(page.locator('#toast')).toContainText('NO se reprogramó: día cerrado');
+  await expect(page.locator('#toast')).not.toContainText('reprogramada para el');
+  // el lookahead no cambió, la «no va» no guarda un «antes/después» falso y el día sí quedó registrado como no cumplido
+  const x = await act(page, 'e0');
+  expect(sorted(x.days)).toEqual(sorted([HOY, MANANA]));
+  expect(x.qty).toEqual({ [HOY]: 10, [MANANA]: 10 });
+  const nv = await pdzDoc(page, `nv_${HOY}_e0`);
+  expect(nv.mv).toBeFalsy();
+  expect(nv.repTo).toBe('');
+  await expect.poll(async () => (((await page.evaluate(d => window.__dbGet('daily', d + '_p1'), HOY)) || { recs: {} }).recs.e0 || {}).status).toBe('no');
+  noErrors(errors, 'no va con día cerrado');
+});
+
+/* auditoría LOG-04: «Vuelve a ir» no borra una verificación hecha después en Campo */
+test('LOG-04 · «No va hoy» → Campo «Cumplido» → «Vuelve a ir»: el registro sigue «Cumplido»', async ({ page }) => {
+  const RHOY = ['dplan', `${HOY}_p1`, { date: HOY, pisoId: 'p1', ids: { e0: null, e1: null, i0: null, i1: null }, pub: 'pub_h', reo: { t: 1, by: 'frandiopacheco@gmail.com', why: 'reunión' } }];
+  const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, RHOY] });
+  const recE0 = async () => (((await page.evaluate(d => window.__dbGet('daily', d + '_p1'), HOY)) || { recs: {} }).recs.e0 || {});
+  await page.click('#wtoday');
+  await row(page, 'e0').locator('[data-dv="no|e0"]').click();
+  await page.locator('#pop [data-nk="per"]').click();
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.locator('#pop [data-do="nod"]').click();
+  await expect.poll(async () => (await recE0()).status).toBe('no');
+  expect((await recE0()).viaNova).toBe(true);
+  // 11:00 llegó la cuadrilla: el ingeniero lo corrige a «✓ Cumplido» en Campo
+  await page.locator('#tabs button[data-tab="campo"]').click();
+  await page.locator('#main article[data-a="e0"] [data-st="ok"]').click();
+  await expect.poll(async () => (await recE0()).status).toBe('ok');
+  await expect.poll(async () => (await recE0()).viaNova).toBeFalsy();
+  // 15:00 alguien limpia el plan con «Vuelve a ir»
+  await page.locator('#tabs button[data-tab="mapa"]').click();
+  await page.click('#wtoday');
+  await page.evaluate(() => { window.__plano.M.chOpen = true; requestRender(); });
+  await page.locator(`#mpanel [data-undo="nv_${HOY}_e0"]`).click();
+  await expect.poll(() => pdzDoc(page, `nv_${HOY}_e0`)).toBeFalsy();
+  await page.waitForTimeout(300);
+  expect((await recE0()).status).toBe('ok');
+  noErrors(errors, 'vuelve a ir tras cumplido');
+});
+
+test('LOG-01 · programar un día cerrado en una actividad terminada no la reabre', async ({ page }) => {
+  const SIG = '2026-10-05';
+  const DI = ['doneidx', 'p1', { d: { e0: '2026-09-29' } }];
+  const PMAN = ['dplan', `${MANANA}_p1`, { date: MANANA, pisoId: 'p1', ids: { e1: null }, pub: 'pub_m' }];
+  const PSIG = ['dplan', `${SIG}_p1`, { date: SIG, pisoId: 'p1', ids: { e1: null }, pub: 'pub_s' }];
+  const errors = await openApp(page, { as: 'editor', tab: 'look', extra: [DI, PMAN, PSIG] });
+  await expect.poll(() => page.evaluate(() => DONE.has('e0'))).toBe(true);
+  await expect.poll(() => page.evaluate(d => dayLocked(d, 'p1'), SIG)).toBe(true);
+  const didx = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__dbGet('doneidx', 'p1') || {})));
+  // cantidad en un día publicado (commitQ) y pintar un día publicado (endPaint): ambos se rechazan
+  await page.evaluate(d => commitQ('e0', d, '5'), MANANA);
+  await expect(page.locator('#toast')).toContainText('ya está cerrado');
+  await page.evaluate(d => { paint = { on: true, cells: new Map([['e0|' + d, { a: 'e0', d }]]) }; endPaint(); }, SIG);
+  await page.waitForTimeout(300);
+  const di = await didx();
+  expect(di.d).toEqual({ e0: '2026-09-29' });
+  expect((di.r || {}).e0).toBeFalsy();
+  expect(await page.evaluate(() => DONE.has('e0'))).toBe(true);
+  expect(sorted((await act(page, 'e0')).days)).toEqual(sorted([HOY, MANANA]));
+  noErrors(errors, 'reabrir con día cerrado');
+});

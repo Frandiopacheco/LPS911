@@ -7,7 +7,12 @@
 const PROP=new Map();let propSub=null,propErr=null;let ACT_OFF=null;
 const myScsI=()=>(me&&me.scs)||[];
 const PM=()=>!!me&&me.role==='sc'&&U.tab==='look'&&!(U.ver&&U.verMode==='ver');
-function ensureProp(){if(propSub||!db)return;propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))requestRender()},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
+function ensureProp(){if(propSub||!db)return;
+  /* SEG-05 (paso 1): el SC lee solo el documento de su partida (lhprop/{sc}, por id: sin consulta ni índice), uno por partida */
+  if(me&&me.role==='sc'){const offs=myScsI().map(sc=>fcol('lhprop').doc(sc).onSnapshot(d=>{if(d.exists)PROP.set(sc,{...d.data(),id:sc});else PROP.delete(sc);propErr=null;pmSync();if(ready&&(U.tab==='look'))requestRender()},
+      err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()}));
+    propSub=()=>offs.forEach(f=>f());unsubs.push(()=>{if(propSub)propSub();propSub=null;PROP.clear()});return}
+  propSub=fcol('lhprop').onSnapshot(sn=>{PROP.clear();sn.docs.forEach(d=>PROP.set(d.id,{...d.data(),id:d.id}));propErr=null;pmSync();if(ready&&(U.tab==='look'))snapRender(sn)},err=>{propErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
   unsubs.push(()=>{if(propSub)propSub();propSub=null;PROP.clear()})}
 const propItems=(sc)=>Object.entries((PROP.get(sc)||{}).items||{}).filter(([,it])=>!!it).map(([id,it])=>({sc,id,it}));
 /* vista del SC: lo oficial con su borrador encima */
@@ -24,6 +29,9 @@ function propPut(col,id,after){if(!PM())return false;
   const sc=off?off.sc:(after&&after.sc)||(cur&&cur.sc);
   if(off&&after&&after.sc!==off.sc){toast('La partida de una actividad no se cambia en la propuesta: si corresponde a otra partida, pídeselo al ingeniero de producción.');requestRender();return true}
   if(!mine.includes(sc)||(after&&!mine.includes(after.sc))){toast('Solo puedes proponer cambios en las actividades de '+mine.map(c=>conOf(c).name).join(', ')+'.');requestRender();return true}
+  /* oct 2026 (decidido con el dueño): el SC propone desde mañana; hoy y los días pasados no se tocan (retirar una actividad sí se puede proponer) */
+  if(after){const t=todayIso();const L=propDayTouch(off,cleanAct(after)).filter(d=>d<=t);
+    if(L.length){toast(`Solo puedes proponer desde mañana: ${L.length>1?'los días':'el'} ${L.map(fmtD).join(', ')} ${L.some(d=>d===t)?'(hoy) ':''}ya no se ${L.length>1?'cambian':'cambia'}. Lo de hoy se reporta en «En obra».`);requestRender();return true}}
   let item;
   if(after==null){item=off?{after:null,base:cleanAct(off)}:null}
   else{const a=cleanAct(after);if(off&&canon(a)===canon(cleanAct(off)))item=null;else item={after:a,base:off?cleanAct(off):null}}
@@ -180,8 +188,9 @@ const HFIELDS=['days','qty','metrado','und','name'];
 function propDiff(b,a){const o={};const fl=v=>Array.isArray(v)?v.join(','):v;for(const f of HFIELDS){const x=b?b[f]??null:null,y=a?a[f]??null:null;if(canon(x)!==canon(y))o[f]=[fl(x),fl(y)]}return o}
 const lhhSk=(sc,t)=>sc+'|'+String(Math.round(t)).padStart(15,'0');
 function ensureLhh(){if(lhhSub.length||!db||!me||me.role!=='sc')return;const since=NOW()-120*864e5;
-  for(const sc of myScsI())lhhSub.push(fcol('lhphist').where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~').onSnapshot(sn=>{
-    for(const k of[...LHH.keys()])if(LHH.get(k).sc===sc)LHH.delete(k);sn.docs.forEach(d=>LHH.set(d.id,{...d.data(),id:d.id}));if(ready&&U.tab==='look')requestRender()},()=>{}));
+  /* SEG-05 (paso 1): con where('sc','==',sc) delante (índice lhphist(sc, sk)); sin el índice, toda la partida filtrada aquí (scSubs) */
+  lhhSub.push(scSubs('lhphist',(q,sc)=>q.where('sk','>=',lhhSk(sc,since)).where('sk','<=',sc+'|~'),x=>(x.t||0)>=since,L=>{
+    LHH.clear();L.forEach(x=>LHH.set(x.id,x));if(ready&&U.tab==='look')requestRender()},()=>{}));
   unsubs.push(()=>{lhhSub.forEach(f=>f());lhhSub=[];LHH.clear()})}
 /** detalle de un registro: lo aplicado (o, si se rechazó, lo que se pidió) en cantidades, metrado, unidad y nombre */
 function histChgHtml(x){const c=x.st==='rej'?x.prop:(x.chg||x.prop);if(!c)return'';const L=[];const v=z=>z==null||z===''?'—':esc(String(z));
@@ -196,8 +205,23 @@ const histOf=scs=>scs.flatMap(sc=>[...Object.values((PROP.get(sc)||{}).hist||{})
 let PDBUSY=new Set();
 class PropStop extends Error{constructor(m,k){super(m);this.lps=m;this.k=k||'stop'}}
 /** campos que la propuesta cambia y que el programa oficial también cambió desde que el SC la armó */
-function propConflicts(it,off,shift){const base=it.base;if(!it.after||!base||!off)return[];const L=[];
-  for(const f of PFIELDS){const pc=canon(it.after[f]??null)!==canon(base[f]??null)||(shift&&(f==='days'||f==='qty'));if(pc&&canon(off[f]??null)!==canon(base[f]??null))L.push(f)}return L}
+function propConflicts(it,off,shift,fz){const base=it.base;if(!it.after||!base||!off)return[];const L=[];
+  /* con fz solo cuentan los días abiertos: lo que cambió en días pasados o cerrados (p. ej. al publicar el plan diario) no choca, porque al aceptar esos días quedan como están */
+  const v=(x,f)=>{const y=x[f]??null;if(!fz||y==null)return y;if(f==='days')return y.filter(d=>!fz(d)).sort();if(f==='qty'){const q={};for(const[d,n]of Object.entries(y))if(!fz(d))q[d]=n;return q}return y};
+  for(const f of PFIELDS){const b=canon(v(base,f)),a=canon(v(it.after,f)),o=canon(v(off,f));const sh=shift&&(f==='days'||f==='qty');
+    if((a!==b||sh)&&o!==b&&(sh||a!==o))L.push(f)}return L}
+/** días que aceptar una propuesta no cambia (oct 2026, decidido con el dueño): 'past' = ya pasó; 'lock' = hoy (aunque tenga registro
+    de campo) o un día con el plan publicado. Esos días quedan como en el programa oficial; solo el administrador puede «Aceptar igual». */
+function propFrozenFn(id,pid){const t=todayIso();return d=>d<t?'past':d===t||dayLocked(d,pid)?'lock':false}
+/** nw con los días congelados (fz) como en el programa oficial (off): ni se agregan ni se quitan ni cambian su cantidad.
+    Así un cambio oficial hecho después de la propuesta (p. ej. al publicar el plan diario) no se pisa ni bloquea la aceptación. */
+function propProtect(nw,off,fz){if(!nw||!fz)return nw;const K=new Set(propTouch(off,nw).filter(fz));if(!K.size)return nw;const r={...nw};
+  const days=new Set((nw.days||[]).filter(d=>!K.has(d)));((off&&off.days)||[]).forEach(d=>{if(K.has(d))days.add(d)});r.days=[...days].sort();
+  if(nw.qty||(off&&off.qty)){const q={};for(const[d,n]of Object.entries(nw.qty||{}))if(!K.has(d)&&days.has(d))q[d]=n;for(const[d,n]of Object.entries((off&&off.qty)||{}))if(K.has(d)&&days.has(d))q[d]=n;r.qty=q}
+  return r}
+/** días (o cantidades por día) que cambian entre b y a; sin contar nombre, unidad ni metrado */
+function propDayTouch(b,a){const bd=new Set((b&&b.days)||[]),ad=new Set((a&&a.days)||[]),T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});
+  const bq=(b&&b.qty)||{},aq=(a&&a.qty)||{};new Set([...Object.keys(bq),...Object.keys(aq)]).forEach(d=>{if(canon(bq[d]??null)!==canon(aq[d]??null))T.add(d)});return[...T].sort()}
 /** la propuesta movida con ‹ › para que empiece en «start»: un día no laborable dentro del bloque cae en el mismo día hábil
     que el siguiente (se juntan sin perder cantidades). Devuelve {a, merged}. */
 function propShiftTo(after,start){const a=clone(after);if(!(a.days||[]).length)return{a,merged:0};const ds=[...new Set(a.days)].sort();const k=wdist(ds[0],start);const mp=d=>wshift(d,k);
@@ -210,12 +234,24 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const i
   const it=opt.days&&itS.after&&st!=='rej'?{...itS,after:propDays(itS.after,opt.days)}:itS;
   if(!canDecide(id,it)){if(!opt.bulk)toast(propWho(id,it)+'.');return'perm'}
   const key0=sc+'/'+id;if(PDBUSY.has(key0))return'busy';
-  /* aceptar no puede cambiar días cuyo plan ya está cerrado (hoy, pasados o publicados); rechazar sí se puede */
-  /* se revisa con las fechas que de verdad se guardarán (si se movió con ‹ ›, las movidas) */
-  if(st!=='rej'&&typeof dayLocked==='function'){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const sh=st==='shift'&&opt.start&&it.after;const aft=sh?propShiftTo(it.after,opt.start).a:it.after;
-    const L=propTouch(o0||it.base||null,aft&&o0?propMerge(aft,it.base||o0,o0,!!sh):aft).filter(d=>dayLocked(d,pid)&&!recReal(d,id));
-    if(L.length){if(isAdmin&&!opt.bulk&&await uiAsk({title:'Toca un día con el plan cerrado',text:`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado.`,note:'Como administrador puedes aceptarla igual: queda registrado en el día.',ok:'Aceptar igual',tone:'warn'})){L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
-      else{if(!opt.bulk)toast(`No se puede aceptar: cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Acéptala con otra fecha o recházala.`);return'closed'}}}
+  /* días con el plan cerrado (hoy sin registro, publicados) y días pasados: aceptar no los cambia; rechazar sí se puede.
+     oct 2026: en vez de bloquear toda la propuesta, se acepta lo de los días abiertos y esos días quedan como en el programa
+     oficial (propProtect). Solo se bloquea si no queda nada que aceptar o si cambia nombre/unidad/metrado de una actividad con un
+     día cerrado (eso toca todos sus días). Se revisa con las fechas que de verdad se guardarán (si se movió con ‹ ›, las movidas). */
+  const fz=st!=='rej'&&typeof dayLocked==='function'?propFrozenFn(id,propPiso(id,it)):null;
+  if(fz){const o0=S.act.get(id)||null;const pid=propPiso(id,it);const sh=st==='shift'&&opt.start&&it.after;const aft=sh?propShiftTo(it.after,opt.start).a:it.after;
+    const M=aft&&o0?propMerge(aft,it.base||o0,o0,!!sh):aft;const lk=d=>fz(d)==='lock';
+    const T=propTouch(o0||it.base||null,M);const L=T.filter(lk);
+    let block=false;
+    /* retirar una actividad que tiene un día cerrado, o moverla con ‹ › a un día cerrado (lo eligió el ingeniero: se le avisa en vez de cambiarlo) */
+    if(!M||sh)block=!!L.length;
+    else if(T.some(fz)){const Pz=propProtect(M,o0,fz);const T2=propTouch(o0,Pz);
+      const empty=o0?!T2.length&&canon(o0.order??null)===canon(Pz.order??null):!(Pz.days||[]).length;
+      if(T2.some(lk)||empty){if(L.length)block=true;else{if(!opt.bulk)toast('No hay nada que aceptar: la propuesta solo cambia días que ya pasaron.');return'closed'}}
+      else{const K=propTouch(M,Pz);if(K.length)opt.kept=K}}
+    if(block){if(isAdmin&&!opt.bulk&&await uiAsk({title:'Toca un día con el plan cerrado',text:`Esta propuesta cambia el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado.`,note:'Como administrador puedes aceptarla igual: queda registrado en el día.',ok:'Aceptar igual',tone:'warn'})){opt.noFz=true;delete opt.kept;L.forEach(d=>dplanLog(d,pid,{t:NOW(),by:me.email,n:me.name||me.email,what:'propuesta aceptada con el plan cerrado'}))}
+      else{if(!opt.bulk)toast(`No se puede aceptar: ${M?'cambia':'retira la actividad, que tiene'} el ${L.map(fmtD).join(', ')}, que ya tiene el plan cerrado. Acéptala con otra fecha o recházala.`);return'closed'}}}
+  const FZ=fz&&!opt.noFz&&st!=='shift'?fz:null;
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   const say=m=>{if(!opt.bulk)toast(m)};
   /* fuera de plazo: se puede aceptar, pero con motivo (queda en el historial con quién y cuándo) */
@@ -230,12 +266,12 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const i
       if(!off){const ar=getDoc('acts',id);
         if(ar&&ar.arch){say(`“${ar.name||'La actividad'}” está en la Papelera. Restáurala primero (Configuración › Papelera) o rechaza la propuesta.`);return'arch'}
         if(!S.amb.has(a.ambId)){say('El ambiente de esa actividad ya no existe.');return'amb'}
-        delete a.arch;ops=[op('acts',id,{...a,id})]}
-      else{const cf=propConflicts(it,off,st==='shift');
-        if(cf.length){if(opt.bulk)return'conf';
+        delete a.arch;a=propProtect(a,null,FZ);ops=[op('acts',id,{...a,id})]}
+      else{const cf=opt.confOk?[]:propConflicts(it,off,st==='shift',FZ);
+        if(cf.length){if(opt.bulk){opt.conf=cf;return'conf'}
           if(!await uiAsk({title:'El programa cambió desde la propuesta',html:`Desde que ${esc(it.n||'el subcontratista')} armó esta propuesta, el programa oficial de <b>${esc(off.name||'la actividad')}</b> cambió en: ${esc(cf.map(f=>PFLBL[f]).join(', '))}.`,
             list:cf.includes('days')?[`Vigente: ${rngTxt(off.days)}`,`Propuesto: ${rngTxt(a.days)}`]:null,note:'Si aceptas, esos campos quedan como en la propuesta.',ok:'Aceptar igual',tone:'warn'}))return'conf'}
-        ops=[op('acts',id,propMerge(a,base,off,st==='shift'))]}
+        a=propProtect(propMerge(a,base,off,st==='shift'),off,FZ);ops=[op('acts',id,a)]}
       finalDays=a.days||[]}}
   const x=it.after||base||{};const am=S.amb.get(x.ambId);const t=NOW();const key=sc+'_'+id+'_'+t;
   const o=ops[0]||null;
@@ -243,6 +279,8 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const i
     sc,actId:id,sk:lhhSk(sc,t),sentAt:it.sentAt||null,sent0:it.sent0||it.sentAt||null,late:late?{w:late.w,cut:late.cut}:null,lateNote:st!=='rej'&&late?opt.lateNote||'':'',
     prop:propDiff(base,it.after),chg:o?(o.after.arch?{arch:[false,true]}:propDiff(o.before,o.after)):null};
   return{sc,id,st,it:itS,o,h,key,key0,opt}}
+/** días que quedaron como en el programa oficial al aceptar (pasados o con el plan cerrado) */
+function propKeptTxt(L){const t=todayIso();const c=L.filter(d=>d>=t);return c.length?`${c.length>1?'los días':'el'} ${c.map(fmtD).join(', ')} quedó${c.length>1?'ron':''} como estaba${c.length>1?'n':''} (plan cerrado)`:'los días ya pasados quedaron como estaban'}
 /** después de guardar: reflejar al momento (llega igual por la base), Deshacer y aviso */
 /** reflejo local inmediato (oct 2026): la pantalla responde al instante y la base confirma después; devuelve cómo revertirlo si no se guardó */
 function propOpt(P_){const{sc,id,key}=P_;const k=COLS.acts;const had=S[k].get(id),hadA=ARCH[k].get(id);const doc=PROP.get(sc);const item=doc&&doc.items?doc.items[id]:undefined;
@@ -254,7 +292,7 @@ function propLocal(P_){const{sc,id,st,it,o,h,key,opt}=P_;const doc=PROP.get(sc);
   if(o){const k=COLS.acts;if(o.after.arch){S[k].delete(id);ARCH[k].set(id,{...clone(o.after),id})}else{ARCH[k].delete(id);S[k].set(id,{...clone(o.after),id})}DV++;
     const g=[o];g.prop={sc,id,it,key,hk:1};undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}
   LHH.set(key,{...h,id:key});const d2=PROP.get(sc)||doc||{sc,items:{}};PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:null}});requestRender();
-  if(!opt.bulk)toast(st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada',o?'Deshacer':null,o?undo:null);
+  if(!opt.bulk)toast((st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada')+(st!=='rej'&&opt.kept&&opt.kept.length?` · ${propKeptTxt(opt.kept)}`:''),o?'Deshacer':null,o?undo:null);
   return'ok'}
 /** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
 async function decideProp(sc,id,st,opt){const P_=await propPrep(sc,id,st,opt);if(typeof P_==='string')return P_;const{it,o,h,key,key0}=P_;opt=P_.opt;
@@ -317,8 +355,17 @@ async function decideMany(L){let ok=0;const why={};
      (≈ medio segundo cada una). Ahora se preparan todas y se guarda UNA transacción por subcontratista (en partes de 120):
      relee lhprop/{sc} y las actividades; las que el SC o alguien cambió mientras tanto se saltan (quedan pendientes). */
   const add=(k,n=1)=>{why[k]=(why[k]||0)+n};const by=new Map();
-  for(const o of L){const P_=await propPrep(o.sc,o.id,'ok',{bulk:true,lateNote});if(typeof P_==='string'){add(P_);continue}
-    if(PDBUSY.has(P_.key0)){add('busy');continue}if(!by.has(o.sc))by.set(o.sc,[]);by.get(o.sc).push(P_)}
+  const CF=[];let kept=0;
+  const take=P_=>{if(PDBUSY.has(P_.key0)){add('busy');return}if(!by.has(P_.sc))by.set(P_.sc,[]);by.get(P_.sc).push(P_)};
+  for(const o of L){const op_={bulk:true,lateNote};const P_=await propPrep(o.sc,o.id,'ok',op_);if(P_==='conf'){CF.push({o,cf:op_.conf||[]});continue}if(typeof P_==='string'){add(P_);continue}take(P_)}
+  /* oct 2026: las que chocan con un cambio del programa oficial ya no se dejan pendientes sin más: se pregunta UNA vez por todo el lote
+     (antes había que aceptarlas una por una). Si aceptas, en esos campos queda lo que propuso el SC; los días pasados o cerrados no cambian. */
+  if(CF.length){const row=({o,cf})=>{const off=S.act.get(o.id)||{};const it=((PROP.get(o.sc)||{}).items||{})[o.id]||{};const a=it.after||{};
+      return`${off.name||a.name||'(sin nombre)'}: ${cf.map(f=>PFLBL[f]).join(', ')}`+(cf.includes('days')?` · vigente ${rngTxt(off.days||[])} → propuesto ${rngTxt(a.days||[])}`:'')};
+    const yes=await uiAsk({title:`${CF.length===1?'Una propuesta choca':CF.length+' propuestas chocan'} con cambios del programa oficial`,text:`Desde que el subcontratista las armó, alguien cambió en el programa oficial lo mismo que ellas proponen:`,
+      list:CF.slice(0,10).map(row).concat(CF.length>10?[`… y ${CF.length-10} más`]:[]),note:'Si aceptas, en esos campos queda lo que propuso el subcontratista (los días pasados o con el plan cerrado no cambian). Si no, quedan pendientes.',ok:`Aceptar ${CF.length===1?'igual':'las '+CF.length+' igual'}`,cancel:'Dejarlas pendientes',tone:'warn'});
+    if(!yes)add('confNo',CF.length);
+    else for(const{o}of CF){const P_=await propPrep(o.sc,o.id,'ok',{bulk:true,lateNote,confOk:true});if(typeof P_==='string'){add(P_);continue}take(P_)}}
   if(by.size&&!db){toast('Sin conexión con la base.');return}
   const FP=firebase.firestore.FieldPath;
   await Promise.all([...by.entries()].map(async([sc,items])=>{for(let i=0;i<items.length;i+=120){const part=items.slice(i,i+120);part.forEach(P_=>PDBUSY.add(P_.key0));
@@ -332,12 +379,12 @@ async function decideMany(L){let ok=0;const why={};
           if(P_.o){const body=strip(clone(P_.o.after));if(P_.cur){const d=fsDiff(strip(P_.cur),body,'acts',true);if(d.length)tx.update(aref,...d)}else tx.set(aref,body)}
           args.push(new FP('items',P_.id),null);tx.set(fcol('lhphist').doc(P_.key),P_.h)}
         if(args.length)tx.update(pref,...args);return{go,skip,sk}});
-      done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++});part.forEach(P_=>PDBUSY.delete(P_.key0));
+      done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++;if(P_.opt.kept&&P_.opt.kept.length)kept++});part.forEach(P_=>PDBUSY.delete(P_.key0));
       for(const[k,n]of Object.entries(done.skip))add(k,n)}
     catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));rbs.forEach(f=>f());add('err',part.length);console.warn('aceptar',e)}}}));
-  const W={closed:'cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta (revísalas una por una)',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+  const W={closed:'solo cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',conf:'el programa oficial cambió desde la propuesta',confNo:'el programa oficial cambió desde la propuesta y elegiste dejarlas pendientes',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
-  toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
+  toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(kept&&ok?` (en ${kept===1?'una':kept} quedaron como estaban los días pasados o con el plan cerrado)`:'')+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
 function propOverlay(){if(PM()||!canWrite)return null;const m=new Map();
   for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{})){if(!it||!it.sent)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?propMerge(it.after,it.base||off,off,false).days||[]:[]);
@@ -438,7 +485,7 @@ function revSwap(){const off=S.act;const v=new Map(off);
     if(!it.after){if(o)v.set(id,{...o,_rv:{off:o,sc,del:true,n:it.n,late:propLate(it,o)}})}
     else if(!o){if(S.amb.has(it.after.ambId))v.set(id,{...clone(af),id,_rv:{off:null,sc,isNew:true,n:it.n,late:propLate(it,null)}})}
     /* lo que se verá al aceptar: lo vigente + solo lo que la propuesta cambió (no todo el objeto que armó el SC) */
-    else v.set(id,{...propMerge(clone(af),it.base||o,o,false),id,_rv:{off:o,sc,n:it.n,late:propLate(it,o)}})}
+    else v.set(id,{...propProtect(propMerge(clone(af),it.base||o,o,false),o,propFrozenFn(id,pisoOfAmb(o.ambId))),id,_rv:{off:o,sc,n:it.n,late:propLate(it,o)}})}
   S.act=v;return()=>{S.act=off;RVCIX.src=null;RVCIX.m=null}}
 function revShift(x){const o=x._rv&&x._rv.off;if(!o||x._rv.del)return 0;const a=[...(o.days||[])].sort()[0],b=[...(x.days||[])].sort()[0];if(!a||!b)return 0;return wdist(a,b)}
 /* (auditoría de código 08/10, L9) índice ambiente → actividades, armado una vez por cada mapa de S.act (en revisión, revSwap arma uno nuevo en cada dibujo) */
@@ -506,7 +553,8 @@ function revAcc(id){const it=revItems().find(q=>q.id===id);if(!it||!it.it.after)
 /** clic en un día de la grilla de revisión: agrega o quita ese día de lo propuesto (como al editar el lookahead sin propuestas). Se acepta con ✓ */
 function revToggleDay(id,d){const it=revItems().find(q=>q.id===id);if(!it||!it.it.after||!d)return;
   if(!isWork(d)){toast(nwReason(d)+': no es día laborable.');return}
-  const pid=propPiso(id,it.it);if(!isAdmin&&typeof dayLocked==='function'&&dayLocked(d,pid)&&!recReal(d,id)){toast(`El ${fmtD(d)} ya tiene el plan cerrado (${lockWhy(d,pid)}): no se puede programar ahí.`);return}
+  const pid=propPiso(id,it.it);if(d<=todayIso()){toast(`El ${fmtD(d)} ${d===todayIso()?'es hoy':'ya pasó'}: al revisar propuestas solo se programa desde mañana.`);return}
+  if(!isAdmin&&typeof dayLocked==='function'&&dayLocked(d,pid)&&!recReal(d,id)){toast(`El ${fmtD(d)} ya tiene el plan cerrado (${lockWhy(d,pid)}): no se puede programar ahí.`);return}
   const mine=REVSEL&&REVSEL.id===id;const k=mine?REVSEL.k:0;
   const cur=mine&&REVSEL.days?REVSEL.days:[...(it.it.after.days||[])].sort().map(x=>k?wshift(x,k):x);
   const set=new Set(cur);if(set.has(d)){if(set.size<2){toast('Quitaste el último día: la fila sale de la propuesta (rechazada). Puedes deshacer.');revDecide(id,'rej',{});return}set.delete(d)}else set.add(d);

@@ -6,7 +6,7 @@ const PDFJS=['https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js','h
 function loadPdf(){if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API.autoTable)return Promise.resolve();if(pdfP)return pdfP;
   const ls=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>ko(new Error('No se pudo cargar el generador de PDF. Revisa tu conexión.'));document.head.appendChild(s)});
   pdfP=ls(PDFJS[0]).then(()=>ls(PDFJS[1])).catch(e=>{pdfP=null;throw e});return pdfP}
-async function getFoto(id){if(FOTO.get(id))return FOTO.get(id);try{const d=await fcol('fotos').doc(id).get();if(d.exists){const v=d.data().data;FOTO.set(id,v);return v}}catch(e){}return null}
+async function getFoto(id){if(FOTO.get(id))return FOTO.get(id);try{const d=await fotoDoc(id);if(d.exists){const v=d.data().data;FOTO.set(id,v);return v}}catch(e){}return null}
 const imgSize=src=>new Promise(ok=>{const i=new Image();i.onload=()=>ok([i.naturalWidth,i.naturalHeight]);i.onerror=()=>ok(null);i.src=src});
 /* fotos del PDF (auditoría de código 08/10, M6): se descargan de a 6 a la vez y se reducen a 1000 px (JPEG 0,7) antes de
    ponerlas en el PDF: con muchas fotos el reporte salía lento y pesado. → {src,w,h} o null */

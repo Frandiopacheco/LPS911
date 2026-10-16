@@ -143,7 +143,8 @@ service cloud.firestore {
       // el veedor solo marca o quita «en secuencia» (tren de trabajo): no inicia, no detiene ni cierra
       allow update: if canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id))
         || (isVeedor() && liveActOk(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq', 'log', 'sat']));
-      allow delete: if canDaily();
+      // SEG-02: la app nunca borra reportes en vivo (cierres del capataz/SC): solo el administrador (Limpieza)
+      allow delete: if isAdmin();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
     function lhpHistOk() {
@@ -276,7 +277,9 @@ service cloud.firestore {
     }
     match /daily/{id} {
       allow read: if lpsMember();
-      allow write: if canDaily();
+      allow create, update: if canDaily();
+      // SEG-02: el registro diario (base del PPC) no lo borra campo ni el editor; solo el administrador (Equipo › Limpieza)
+      allow delete: if isAdmin();
     }
     // Trabajo no programado registrado en el recorrido (con punto en el plano y foto).
     // Cada uno corrige o anula lo suyo; campo, editores y administrador, todo. Nadie lo borra de verdad (se anula con del).
@@ -333,7 +336,8 @@ service cloud.firestore {
     // Índice de actividades terminadas (para no tener que leer todo el historial diario)
     match /doneidx/{p} {
       allow read: if lpsMember();
-      allow write: if canDaily();
+      allow create, update: if canDaily();
+      allow delete: if isAdmin(); // SEG-02
     }
     // Pisos: el editor los edita, pero los responsables (resp, lista de correos) los pone solo el administrador (Equipo)
     match /pisos/{id} {
@@ -584,12 +588,23 @@ service cloud.firestore {
         || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0))
         && (isAdmin() || !('fromVer' in request.resource.data) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['fromVer']));
     }
+    // SEG-01: Configuración › Proyecto. La numeración de semanas, los cortes (propuestas y congelado), la publicación automática del
+    // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia. El editor sigue guardando
+    // lo demás de meta/project (calendario, especialidades, plantillas, causas, encabezado, PPC histórico…) y meta/propwin.
+    // Lectura y borrado: regla general de abajo (borrar meta, solo el administrador).
+    match /meta/{id} {
+      allow create, update: if isAdmin() || (canEdit() && (id != 'project'
+        || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
+          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'finObra'])));
+    }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
-      allow create, update: if canEdit() && dataCol(col) && col != 'pisos' && col != 'weeks';
+      allow create, update: if canEdit() && dataCol(col) && !(col in ['pisos', 'weeks', 'meta'])
+        // imágenes de sectorización anteriores: solo el administrador las archiva (decisión del dueño, oct 2026)
+        && (col != 'planos' || isAdmin() || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['arch']));
       // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador
       // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
-      allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx']));
+      allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx', 'planos']));
     }
   }
 }

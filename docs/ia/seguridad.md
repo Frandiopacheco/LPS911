@@ -14,9 +14,17 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - Publicación (`ci.yml`): `publicar-web` depende de `instalar`; sin llave de Firebase, `instalar` falla. `check.mjs` lo comprueba (`checkCI`). Los fallos de las pruebas de reglas salen como anotaciones (línea y motivo) en GitHub.
 - `live` y el veedor (oct 2026): solo puede crear/actualizar el campo `seq` («en secuencia») de una actividad real (`liveActOk`); no inicia, detiene ni cierra (prueba en `tests/rules`).
 
+## SEG-05: lectura por partida del subcontratista (oct 2026)
+- Paso 1 (página) hecho: el SC consulta `nprog`, `lhprop`, `lhphist`, `mcatp` y `mlog` solo de su partida (`scSubs`/`scGet`, base.js) y en Indicadores ve solo su PPC (filtro de pantalla). Reglas **sin cambio** todavía.
+- Paso 2 (reglas): borrador exacto y pruebas en `docs/ia/seg05-paso2.md`. Se aplica días después de publicar el paso 1, cuando todos los equipos tengan la página nueva y los índices `nprog(sc, date)` y `lhphist(sc, sk)` estén habilitados. El capataz queda fuera (`isSC()`, no `crew()`).
+
 ## Límite de accesos en las reglas del tareo (oct 2026)
 
 En `match /tareo/{id}` el guardado del capataz quedaba rechazado (PERMISSION_DENIED) al sumar otra rama que lee `members` (revisión de producción, `tOfiEd`), aunque esa rama fuera falsa: el pedido llegaba al límite de lecturas/evaluación. Regla práctica: **cada rama de un `allow` empieza por una condición que no lee documentos y que distingue a quién va dirigida** (p. ej. `resource.data.cap == mid()` para el capataz y `!= mid()` para la oficina), y solo después llama a funciones que leen `members`. Las pruebas de reglas no corren en el entorno de las IA (el emulador no descarga): se ven en GitHub.
+
+## Auditoría oct 2026 (informe A: SEG-01, SEG-02)
+- **SEG-01** `match /meta/{id}` propio (la regla general ya no escribe `meta`): en `meta/project` solo el administrador cambia `refWeek`, `refDate`, `propCutDow`, `propCutHH`, `frzCutDow`, `frzCutHH`, `planCutHH` y `finObra` (`diff(resource == null ? {} : resource.data).affectedKeys().hasAny([...])`, así no depende de que las claves existan). El editor sigue guardando lo demás (calendario, especialidades, plantillas, causas, encabezado `dr`, `ppcHist`, `catReq`, `lastBk`, `doneIdx`…) y `meta/propwin`. En la app, `put` (base.js) deja esos campos como están en la base cuando guarda alguien que no es administrador (`META_ADM`, misma lista que las reglas): `P()` los completa con `P_DEF` y, si el documento no los tenía, el guardado entero del editor se rechazaba. Si cambias la lista, cámbiala en los dos lados.
+- **SEG-02** `daily`, `live` y `doneidx`: `create, update` como antes; **borrar solo el administrador** (la app nunca los borra; la Limpieza de Equipo es del administrador). `fotos` no cambió.
 
 ## Auditoría con datos reales (09/10/2026)
 - Regla general `/{col}/{id}`: `create, update` para editores; `delete` de `weeks`, `wsnap`, `meta`, `lhver`, `lhidx` solo el admin (el editor sigue deshaciendo lo que crea en actividades, ambientes, sectores y restricciones).

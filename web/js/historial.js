@@ -22,8 +22,10 @@ function histMerge(L){const out=[],by=new Map();for(const d of L.slice().sort((a
 /* ---- ventana «Historial» (Lookahead): un día a la vez, lo más reciente arriba ---- */
 const HST={d:'',f:'all',q:'',L:null,P:null,busy:false};
 async function histLoad(){if(!db){HST.L=[];HST.P=[];return}HST.busy=true;histDraw();const t0=Date.parse(HST.d+'T00:00:00Z')+LIMA_OFF,t1=t0+864e5;
-  try{const[a,b]=await Promise.all([fcol('lhlog').where('t','>=',t0).where('t','<',t1).get(),fcol('lhphist').where('t','>=',t0).where('t','<',t1).get()]);
-    HST.L=histMerge(a.docs.map(d=>({...d.data(),id:d.id})));HST.P=b.docs.map(d=>({...d.data(),id:d.id}))}
+  /* SEG-05 (paso 1): el SC lee solo las decisiones de su partida: where('sc','==',s) + rango en sk (índice lhphist(sc, sk), el mismo de ensureLhh) */
+  const scP=me&&me.role==='sc'?scGet('lhphist',(q,s)=>q.where('sk','>=',lhhSk(s,t0)).where('sk','<',lhhSk(s,t1)),x=>x.t>=t0&&x.t<t1):null;
+  try{const[a,b]=await Promise.all([fcol('lhlog').where('t','>=',t0).where('t','<',t1).get(),scP||fcol('lhphist').where('t','>=',t0).where('t','<',t1).get()]);
+    HST.L=histMerge(a.docs.map(d=>({...d.data(),id:d.id})));HST.P=scP?b:b.docs.map(d=>({...d.data(),id:d.id}))}
   catch(e){HST.L=[];HST.P=[];toast('No se pudo leer el historial: '+(e.code||e.message))}HST.busy=false;histDraw()}
 function histItem(it){const sc=conOf(it.sc).name;const head=`<span class="mono">${esc(it.amb||'')}</span> ${esc(it.nm||'(sin nombre)')} <span class="mu">· ${esc(sc)}</span>`;
   const txt=it.k==='new'?`Nueva actividad${(it.a.days||[]).length?' · '+rngTxt(it.a.days):''}`:it.k==='del'?'Eliminada':it.k==='arch'?'Enviada a la Papelera':it.k==='res'?'Recuperada de la Papelera':

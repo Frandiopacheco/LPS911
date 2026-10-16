@@ -23,23 +23,29 @@ const mnk=s=>{const k=String(s||'');let r=MNK.get(k);if(r!==undefined)return r;
 /* el catálogo también lo usa el lookahead (nombres de actividad): se carga aparte y antes que el resto de la matriz */
 let mcatSub=null;
 function ensureMcat(){if(mcatSub||!db)return;
-  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))requestRender()},
+  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
     err=>{MX.err=err&&err.code||'error';MX.ld.cat=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mcatSub)mcatSub();mcatSub=null;MX.cat.clear();MX.ld.cat=false;MX.v++})}
 /* estados por ambiente: también los usa el Lookahead (alertas de lo terminado que sigue programado) */
 let mambSub=null;
 function ensureMamb(){if(mambSub||!db)return;
-  mambSub=fcol('mamb').onSnapshot(sn=>{MX.amb.clear();sn.docs.forEach(d=>MX.amb.set(d.id,{...d.data(),id:d.id}));MX.ld.amb=true;MX.v++;DV++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='dash'))requestRender()},
+  mambSub=fcol('mamb').onSnapshot(sn=>{MX.amb.clear();sn.docs.forEach(d=>MX.amb.set(d.id,{...d.data(),id:d.id}));MX.ld.amb=true;MX.v++;DV++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='dash'))snapRender(sn)},
     err=>{MX.err=err&&err.code||'error';MX.ld.amb=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mambSub)mambSub();mambSub=null;MX.amb.clear();MX.ld.amb=false;MX.v++})}
 /* fotos semanales: solo en la pestaña Matriz */
 let mverSub=null;
-function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&(U.tab==='mat'||U.tab==='dash'))requestRender()},()=>{});
+function ensureMver(){if(mverSub||!db)return;mverSub=fcol('mver').orderBy('t','desc').limit(8).onSnapshot(sn=>{MX.ver.clear();sn.docs.forEach(d=>MX.ver.set(d.id,{...d.data(),id:d.id}));MX.v++;if(ready&&(U.tab==='mat'||U.tab==='dash'))snapRender(sn)},()=>{});
   unsubs.push(()=>{if(mverSub)mverSub();mverSub=null;MX.ver.clear()})}
 function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
-  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))requestRender()},
+  const on=(col,k,q)=>u.push((q||fcol(col)).onSnapshot(sn=>{const m=MX[k];m.clear();sn.docs.forEach(d=>m.set(d.id,{...d.data(),id:d.id}));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
     err=>{MX.err=err&&err.code||'error';if(k in MX.ld)MX.ld[k]=true;if(ready&&U.tab==='mat')requestRender()}));
-  on('mcatp','prop');on('mtipo','tipo');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'));
+  /* SEG-05 (paso 1): el SC pide solo las propuestas al catálogo (mcatp) y sus cambios sin revisar (mlog) de su partida (scSubs,
+     base.js; solo igualdades: sin índice compuesto). Antes leía mcatp entera y, si entraba por el Lookahead (canWrite = PM()), mlog entera. */
+  const onSc=(col,k,more,keep)=>u.push(scSubs(col,more,keep,(L,sn)=>{const m=MX[k];m.clear();L.forEach(x=>m.set(x.id,x));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
+    err=>{MX.err=err&&err.code||'error';if(ready&&U.tab==='mat')requestRender()}));
+  if(SCK()){onSc('mcatp','prop');onSc('mlog','log',q=>q.where('st','==','pend'),x=>x.st==='pend')}
+  else{on('mcatp','prop');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'))}
+  on('mtipo','tipo');
   mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 /* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */
@@ -370,10 +376,13 @@ async function mxFotoRestore(id){if(!isAdmin)return;const f=MX.ver.get(id);if(!f
   const ok=await uiAsk({title:`Restablecer la matriz al ${fmtD(f.d)}`,text:`Las celdas vuelven a como estaban en esa foto (${s.n} celdas). Lo marcado después se reemplaza. Antes se guarda una foto del estado actual para poder volver.`,list:s.old?['Esta foto es anterior a que se distinguiera lo sin validar: todas sus celdas quedarán como confirmadas.']:[],ok:'Restablecer',tone:'danger'});if(!ok)return;
   const DEL=firebase.firestore.FieldValue.delete();const tgt=new Map();
   for(const[amb,str]of Object.entries(f.a||{})){const m={};for(const p of String(str).split(',')){const[c,v0]=p.split(':');if(!c||!v0||v0.endsWith('?'))continue;if(MXS[v0])m[c]=v0}tgt.set(amb,m)}
-  const by=new Map(),un=new Map();const ambs=new Set([...tgt.keys(),...[...MX.amb.entries()].filter(([,m])=>m&&m.c&&Object.keys(m.c).length).map(([k])=>k)]);
+  /* MOD-03: solo lo que está a la vista (como la foto): ambientes activos y actividades no archivadas. Los estados de un ambiente o
+     una actividad archivados no se tocan (la foto no los incluye y borrarlos los perdía al restaurarlos de la Papelera) */
+  const catArch=c=>{const x=MX.cat.get(c);return!!(x&&x.arch)};
+  const by=new Map(),un=new Map();const ambs=new Set([...tgt.keys(),...[...MX.amb.entries()].filter(([,m])=>m&&m.c&&Object.keys(m.c).length).map(([k])=>k)].filter(k=>S.amb.has(k)));
   for(const amb of ambs){const cur=(MX.amb.get(amb)||{}).c||{};const t=tgt.get(amb)||{};const ch={},u={};
-    for(const[c,v]of Object.entries(t))if(cur[c]!==v){ch[c]=v;u[c]=cur[c]===undefined?DEL:cur[c]}
-    for(const[c,v]of Object.entries(cur))if(!(c in t)){ch[c]=DEL;u[c]=v}
+    for(const[c,v]of Object.entries(t))if(cur[c]!==v&&!catArch(c)){ch[c]=v;u[c]=cur[c]===undefined?DEL:cur[c]}
+    for(const[c,v]of Object.entries(cur))if(!(c in t)&&!catArch(c)){ch[c]=DEL;u[c]=v}
     if(Object.keys(ch).length){by.set(amb,ch);un.set(amb,u)}}
   if(!by.size){toast('La matriz ya está igual que en esa foto');return}
   const bk=mxFotoData();try{await fcol('mver').doc('f'+NOW()).set({t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a:bk.a,v:2,nota:'antes de restablecer'})}catch(e){toast('No se pudo guardar la foto de respaldo: '+(e&&e.code||e));return}

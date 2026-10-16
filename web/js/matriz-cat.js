@@ -69,10 +69,14 @@ function mxWireCat(main){
   main.querySelectorAll('[data-mcres]').forEach(b=>b.onclick=()=>mxCatRestore(b.dataset.mcres));
   main.querySelectorAll('[data-mcal]').forEach(b=>b.onclick=()=>mxAliasPop(b,b.dataset.mcal))}
 
+/* MOD-02: ¿de qué otra actividad activa es ya este nombre? Mira nombres y alias (nombres del lookahead), igual que mxAli */
+function mxNameOwner(name,self){const i=mxAli().get(mnk(name));return i&&i!==self?MX.cat.get(i)||null:null}
+const mxNameDupTxt=(name,o)=>mnk(o.name)===mnk(name)?`Ya existe «${o.name}» (${conOf(o.sc).name}).`:`«${name}» ya es un nombre del lookahead de «${o.name}» (${conOf(o.sc).name}).`;
 /* cambio de un campo (con Deshacer) */
 function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;v=f==='name'?String(v).replace(/\s+/g,' ').trim():v;
   if(f==='name'&&!v){toast('El nombre no puede quedar vacío.');render();return}
-  if(f==='name'){const k=mnk(v);const o=[...MX.cat.values()].find(x=>x.id!==id&&!x.arch&&mnk(x.name)===k);if(o)toast(`Ojo: ya existe «${o.name}» (${conOf(o.sc).name}). Si son la misma, usa ⋮ › Fusionar.`)}
+  /* MOD-02: un nombre (o nombre del lookahead) que ya es de otra actividad no se aplica: si son la misma, se fusionan */
+  if(f==='name'){const o=mxNameOwner(v,id);if(o){render();uiAsk({title:'Ese nombre ya existe',text:`${mxNameDupTxt(v,o)} Si son la misma actividad, fusiónalas; si no, usa otro nombre.`,ok:'Fusionar…',cancel:'Cancelar',tone:'warn'}).then(go=>{if(go)mxMergeDlg(id,o.id)});return}}
   const prev=c[f]??'';if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
   if(f==='sc'){mxCatScSet(id,prev,v);return}
@@ -113,7 +117,7 @@ function mxCatNew(sc0,fromMx){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;
    ${ed?'':'<p class="note">Queda en el catálogo de tu partida; el ingeniero la revisará (nombre, clase, tipo de ambiente).</p>'}<p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
-     const k=mnk(name);const dup=[...MX.cat.values()].find(x=>!x.arch&&mnk(x.name)===k);if(dup){$('#mxnmsg').textContent=`Ya existe «${dup.name}» (${conOf(dup.sc).name}).`;return}
+     const k=mnk(name);const dup=mxNameOwner(name,'');if(dup){$('#mxnmsg').textContent=mxNameDupTxt(name,dup);return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
      const tsel=[...document.querySelectorAll('[data-mxntp]:checked')].map(i=>i.dataset.mxntp);
      try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});
@@ -153,16 +157,24 @@ function mxMergeDlg(a,pre){const A=MX.cat.get(a);if(!A)return;const cats=[...MX.
    <div class="note" id="mxfi">${txt(pre&&MX.cat.get(pre)?pre:'')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxfok">Fusionar</button></div>`,
    async e=>{if(!e.target.closest('#mxfok'))return;const b=$('#mxfb').value;if(!b){$('#mxfi').textContent='Elige con qué actividad se fusiona.';return}
-     const bt=e.target.closest('#mxfok');bt.disabled=true;try{await mxMerge(a,b);lqClose();toast(`Fusionada con «${MX.cat.get(b).name}»`,'Deshacer',()=>mxCatRestore(a,true))}catch(err){bt.disabled=false;mxErr(err)}},
+     const bt=e.target.closest('#mxfok');bt.disabled=true;
+     /* MOD-01: con cambios del SC sin revisar en «a» no se fusiona (sus constancias quedarían en la archivada y su «Terminado» ocultaría filas sin «✓ Visto») */
+     const np=await mxScPendN(a);if(np){bt.disabled=false;$('#mxfi').innerHTML=`<div class="callout warnc"><span><b>«${esc(A.name)}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar.</b> Revísalos primero (Hoy › Cambios de los SC en la matriz, «✓ Visto» o «↶ Revertir») y vuelve a fusionar.</span></div>`;return}
+     try{await mxMerge(a,b);lqClose();toast(`Fusionada con «${MX.cat.get(b).name}»`,'Deshacer',()=>mxCatRestore(a,true))}catch(err){bt.disabled=false;mxErr(err)}},
    e=>{if(e.target.id==='mxfb')$('#mxfi').innerHTML=txt(e.target.value)})}
 async function mxMerge(a,b){const A=MX.cat.get(a),B=MX.cat.get(b);if(!A||!B||a===b)return;const FV=mxFV();const DEL=FV.delete();const meta=mxNow();const rows=mxRowsOf(a,await mxPendProp());
   const moved={},added=[],tp={};const ops=[];
   const bset={};
-  for(const m of MX.amb.values()){const c=m.c||{};if(!(a in c))continue;moved[m.id]=c[a];const up={[a]:DEL};if(!(b in c)){up[b]=c[a];added.push(m.id)}else{const v=mxMaxSt(c[b],c[a]);if(v!==c[b]){up[b]=v;bset[m.id]=[c[b],v]}}ops.push(['mamb',m.id,{c:up,...meta}])}
+  /* el estado que pasa de a → b lleva su metadato (quién lo cambió, si fue un SC y si un ingeniero lo vio: MOD-01); bm guarda el de b para restaurar */
+  const bm={};const mOf=(m,k)=>(m.m||{})[k];const mFull=(o,DEL)=>({...o,sc:o.sc??DEL,ok:o.ok??DEL,bk:o.bk??DEL});
+  for(const m of MX.amb.values()){const c=m.c||{};if(!(a in c))continue;moved[m.id]=c[a];const up={[a]:DEL};let mu=null;const ma=mOf(m,a);
+    if(!(b in c)){up[b]=c[a];added.push(m.id);if(ma)mu={[b]:mFull(ma,DEL)}}
+    else{const v=mxMaxSt(c[b],c[a]);if(v!==c[b]){up[b]=v;bset[m.id]=[c[b],v];bm[m.id]=mOf(m,b)||null;mu={[b]:ma?mFull(ma,DEL):DEL}}}
+    ops.push(['mamb',m.id,{c:up,...(mu?{m:mu}:{}),...meta}])}
   for(const t of MX.tipo.values()){const L=t.acts||[];if(!L.includes(a))continue;tp[t.id]=L.includes(b);ops.push(['mtipo',t.id,{acts:[...new Set(L.map(x=>x===a?b:x))],...meta}])}
   const bal=new Set(B.al||[]);const al=[...new Set([...(A.al||[]),mnk(A.name)])].filter(k=>k&&!bal.has(k));
   if(al.length)ops.push(['mcat',b,{al:FV.arrayUnion(...al),...meta}]);
-  ops.push(['mcat',a,{rev:DEL,arch:{t:NOW(),by:me.email,n:me.name||'',fus:b,moved,added,bset,tp,al},...meta}]);
+  ops.push(['mcat',a,{rev:DEL,arch:{t:NOW(),by:me.email,n:me.name||'',fus:b,moved,added,bset,bm,tp,al},...meta}]);
   for(let i=0;i<ops.length;i+=450){const bt=db.batch();ops.slice(i,i+450).forEach(([c,id,v])=>bt.set(fcol(c).doc(id),v,{merge:true}));await bt.commit()}
   /* sus filas del lookahead pasan a llamarse como la que queda (se guarda cómo se llamaban para restaurar) */
   const ren=mxRenameRows(rows,B.name,`Fusión: «${A.name}» → «${B.name}»`);if(Object.keys(ren).length)await fcol('mcat').doc(a).set({arch:{ren}},{merge:true})}
@@ -170,7 +182,10 @@ async function mxMerge(a,b){const A=MX.cat.get(a),B=MX.cat.get(b);if(!A||!B||a==
 /* restaurar: quita el archivo y, si fue una fusión, devuelve estados, nombres y tipos (solo lo que nadie cambió después) */
 async function mxCatRestore(id,quiet){if(!mxEd())return;const A=MX.cat.get(id);if(!A||!A.arch)return;if(A.arch.des){mxDesRestore(id,quiet);return}const r=A.arch;const FV=mxFV();const DEL=FV.delete();const meta=mxNow();const ops=[];
   if(r.fus){const b=r.fus;const B=MX.cat.get(b);
-    for(const[amb,v]of Object.entries(r.moved||{})){const c=(MX.amb.get(amb)||{}).c||{};const up={[id]:v};if((r.added||[]).includes(amb)&&c[b]===v)up[b]=DEL;const bs=(r.bset||{})[amb];if(bs&&c[b]===bs[1])up[b]=bs[0];ops.push(['mamb',amb,{c:up,...meta}])}
+    for(const[amb,v]of Object.entries(r.moved||{})){const c=(MX.amb.get(amb)||{}).c||{};const up={[id]:v};let mu=null;
+      if((r.added||[]).includes(amb)&&c[b]===v){up[b]=DEL;mu={[b]:DEL}}
+      const bs=(r.bset||{})[amb];if(bs&&c[b]===bs[1]){up[b]=bs[0];if(r.bm&&amb in r.bm){const o=r.bm[amb];mu={[b]:o?{...o,sc:o.sc??DEL,ok:o.ok??DEL,bk:o.bk??DEL}:DEL}}}
+      ops.push(['mamb',amb,{c:up,...(mu?{m:mu}:{}),...meta}])}
     for(const[t,hadB]of Object.entries(r.tp||{})){const T=MX.tipo.get(t);if(!T)continue;let L=[...(T.acts||[])];const i=L.indexOf(b);if(!hadB&&i>=0)L[i]=id;else if(!L.includes(id))L.push(id);ops.push(['mtipo',t,{acts:[...new Set(L)],...meta}])}
     if(B&&(r.al||[]).length)ops.push(['mcat',b,{al:FV.arrayRemove(...r.al),...meta}]);
     if(B&&r.ren)mxUnrename(r.ren,B.name,`Restaurar «${A.name}»: nombres del lookahead`)}

@@ -31,7 +31,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 | `firebase/database.rules.json` | Realtime Database: solo `presence` ("conectados"). |
 | `functions/` | Cloud Functions (Node.js 22): `versionDominical` (dom 12:05 Lima), `aceptarCierres` (23:30 Lima), `congelarSemana` (cada 15 min; congela en el corte semanal) y `cerrarPlan` (cada 15 min; pasada la hora de Configuración › Proyecto `planCutHH`, por defecto 21:00, máx. 23:30, una vez por día con constancia en `pcl/<fecha>`; **publica** el plan del día hábil siguiente donde nadie lo publicó: aplica los borradores de la reunión, rechaza las propuestas del SC sin revisar y guarda la foto). `emitirCliente` (sábado 23:00 Lima): emite la versión cliente de la semana siguiente si el administrador no la emitió. La lógica pura está en `lib.js`, con pruebas en `test/`. |
 | `tests/rules/` | Pruebas de reglas con `@firebase/rules-unit-testing` (corren en GitHub con el emulador). |
-| `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión en `sw.js` y en las URLs `?v=` de `css/`, `js/` y `plano.js`, y llena `ASSETS` del service worker para que funcione sin internet. |
+| `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión (commit) en `sw.js`, en las URLs `?v=` de `css/`, `js/`, `plano.js` y `firebase-config.js` pone la **huella de su contenido** (tras publicar, cada equipo solo baja lo que cambió), publica `app.css` sin comentarios y llena `ASSETS` del service worker para que funcione sin internet (ver `interfaz.md`). |
 | `scripts/check.mjs` | Revisión de `web/`: sintaxis de cada archivo, que todo lo que carga `index.html` exista (y que no sobre nada en `js/`), `"use strict"` al inicio y `inicio.js` al final: `node scripts/check.mjs`. |
 | `tests/e2e/` | Pruebas de la interfaz con Playwright y un Firebase falso en memoria (ver "Cómo probar"). `mundo-compartido.js` + `auditoria-ciclo.spec.js`: el ciclo diario con 16 usuarios a la vez sobre una misma base (corre aparte con `CICLO=1`). |
 | `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright en 3 partes + ciclo diario, a la vez; no se repite al unir si el código ya pasó en el PR) → instala en Firebase → publica en Netlify. |
@@ -79,6 +79,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/restricciones.md` | Pantalla de Restricciones. |
 | `docs/ia/cliente-excel.md` | Versión cliente y exportes a Excel con el formato de la empresa. |
 | `docs/ia/seguridad.md` | Reglas de `live`, `fotos`, `dplan` (auditoría 02e575c). |
+| `docs/ia/seg05-paso2.md` | Lectura por partida del SC (SEG-05): qué colecciones pide filtradas y el borrador de reglas del paso 2. |
 | `docs/ia/tareo.md` | Módulo Tareo (personal obrero): selector de módulo, roles `tcap`/`tasis`/`tcos`, máster, partidas de control, jornada. |
 | `docs/ia/planos.md` | Módulo Planos (biblioteca de planos): selector de 3 módulos, `plb`, Firebase Storage (mosaicos), carga masiva, visor, medir y vínculos entre láminas. |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |

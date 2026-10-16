@@ -27,3 +27,30 @@ test('aceptar 30 propuestas: una sola transacción; la que el SC cambió entreta
   await expect(page.locator('#toast')).toContainText('el SC las cambió');
   noErrors(errors, 'aceptar en lote');
 });
+
+/* caso real (16 oct 2026): «0 propuestas aceptadas · 1 porque el programa oficial cambió; 1 porque cambian días con el plan ya cerrado».
+   El plan diario cambió hoy en lo oficial después de que el SC propuso, y otra propuesta quitaba hoy (plan cerrado). Ahora se aceptan
+   las dos: lo de hoy (y lo pasado) queda como en lo oficial y lo de los días abiertos queda como propuso el SC. */
+test('aceptar en lote: un cambio oficial en días cerrados no choca y los días cerrados quedan como estaban', async ({ page }) => {
+  const { HOY, MANANA } = await import('./helpers.js');
+  const B = days => ({ ambId: 'a1', sc: 'c1', name: 'Tarrajeo', und: 'm2', metrado: 30, days, order: 300 });
+  const it = (after, base) => ({ after, base, ts: 1, by: 'sc@obra.pe', n: 'Sandra', sent: true, sentAt: 1 });
+  const extra = [
+    /* r1: hoy salió del programa al publicar (No va) después de que el SC propuso pasar el lun 05 al mar 06 */
+    ['acts', 'r1', B([MANANA, '2026-10-05'])],
+    /* r2: el SC quita hoy (plan cerrado) y agrega el mar 06 */
+    ['acts', 'r2', B([HOY, '2026-10-05'])],
+    ['lhprop', 'c1', { sc: 'c1', sentAt: 1, items: {
+      r1: it(B([HOY, MANANA, '2026-10-06']), B([HOY, MANANA, '2026-10-05'])),
+      r2: it(B(['2026-10-05', '2026-10-06']), B([HOY, '2026-10-05'])) } }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  let asked = 0; page.on('dialog', d => { asked++; d.accept(); });
+  await page.evaluate(() => decideMany([{ sc: 'c1', id: 'r1' }, { sc: 'c1', id: 'r2' }]));
+  await expect(page.locator('#toast')).toContainText('2 propuestas aceptadas');
+  expect(asked, 'sin preguntas: no hay choque en los días abiertos').toBe(0);
+  expect((await page.evaluate(() => __dbGet('acts', 'r1'))).days).toEqual([MANANA, '2026-10-06']);
+  expect((await page.evaluate(() => __dbGet('acts', 'r2'))).days).toEqual([HOY, '2026-10-05', '2026-10-06']);
+  const left = await page.evaluate(() => Object.values(__dbGet('lhprop', 'c1').items).filter(Boolean).length);
+  expect(left).toBe(0);
+  noErrors(errors, 'lote con días cerrados');
+});

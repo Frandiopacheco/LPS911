@@ -61,7 +61,8 @@ test('7 · «Aceptar todo lo visible» solo acepta lo que muestra la grilla con 
   await expect(page.locator('#rvpanel [data-rvall]')).toContainText('(1 de 2)');
   page.once('dialog', d => d.accept());
   await page.click('#rvpanel [data-rvall]');
-  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-10-02', '2026-10-03']);
+  /* el 30 (pasado) y hoy 01 quedan como estaban en lo oficial */
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
   const p = await page.evaluate(() => __dbGet('lhprop', 'c1'));
   expect(p.items.i0).toBeNull();
   expect(p.items.i2 && p.items.i2.sent).toBe(true);
@@ -79,7 +80,7 @@ test('8 · revisando una propuesta, tocar un día lo agrega a lo propuesto y el 
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
   /* ✓ acepta con los días que dejó el ingeniero */
   await page.click('#grid tr[data-a="i0"] [data-rva="ok"]');
-  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-10-02', '2026-10-05']);
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'i0').days)).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-05']);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0 ?? null).toBeNull();
   noErrors(errors, 'revisión con días editados');
 });
@@ -152,14 +153,18 @@ test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de 
   expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('conf');
   expect(msg).toContain('cambió en: días');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-05']);
-  /* aceptar todo lo visible no la toma: queda pendiente para revisarla sola */
-  page.once('dialog', d => d.accept());
+  /* aceptar todo lo visible: una sola pregunta por las que chocan; «Dejarlas pendientes» no las toma */
+  const msgs = []; const onD = d => { msgs.push(d.message()); msgs.length === 1 ? d.accept() : d.dismiss(); };
+  page.on('dialog', onD);
   await page.click('#rvpanel [data-rvall]');
-  await expect(page.locator('#toast')).toContainText('el programa oficial cambió');
+  await expect(page.locator('#toast')).toContainText('elegiste dejarlas pendientes');
+  page.off('dialog', onD);
+  expect(msgs[1]).toContain('vigente');
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
-  /* aceptando la pregunta, se aplica */
-  page.once('dialog', d => d.accept());
-  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
+  /* aceptando esa pregunta, se aplica desde el lote (ya no hay que ir una por una) */
+  page.on('dialog', d => d.accept());
+  await page.click('#rvpanel [data-rvall]');
+  await expect(page.locator('#toast')).toContainText('1 propuesta aceptada');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02']);
   noErrors(errors, 'conflicto con lo oficial');
 });
@@ -177,10 +182,12 @@ test('5 · una propuesta de una actividad en la Papelera no la restaura', async 
 
 test('6 · quitar un día del borrador también quita su cantidad guardada', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'look' });
-  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, metrado: 30, days: ['2026-10-05', '2026-10-06'], qty: { '2026-10-05': 10, '2026-10-06': 20 } })]); });
+  /* desde mañana (hoy y lo pasado el SC no los toca) */
+  const d0 = await page.evaluate(() => [...S.act.get('i0').days]);
+  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, metrado: 30, days: [...x.days, '2026-10-05', '2026-10-06'], qty: { '2026-10-05': 10, '2026-10-06': 20 } })]); });
   await expect.poll(() => page.evaluate(() => Object.keys(__dbGet('lhprop', 'c1').items.i0.after.qty || {}).length)).toBe(2);
-  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, days: ['2026-10-06'], qty: { '2026-10-06': 20 } })]); });
-  await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.after.days)).toEqual(['2026-10-06']);
+  await page.evaluate(() => { const x = S.act.get('i0'); apply([op('acts', 'i0', { ...x, days: x.days.filter(d => d !== '2026-10-05'), qty: { '2026-10-06': 20 } })]); });
+  await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.after.days)).toEqual([...d0, '2026-10-06']);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.after.qty).toEqual({ '2026-10-06': 20 });
   /* enviar tampoco mezcla: el elemento queda igual, ahora enviado */
   await page.evaluate(() => sendProp());
@@ -193,7 +200,7 @@ test('12 · deshacer una aceptación devuelve la propuesta a pendientes; rehacer
   const errors = await openApp(page, { tab: 'look', extra: [REC0, P_I0(moved(I0, ['2026-10-02', '2026-10-03']))] });
   await revision(page);
   expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
-  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
   await page.click('#bundo');
   await expect(page.locator('#toast')).toContainText('vuelve a quedar pendiente');
   expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(I0.days);
@@ -207,7 +214,7 @@ test('12 · deshacer una aceptación devuelve la propuesta a pendientes; rehacer
   expect(h[0].undone).toBeTruthy();
   await page.click('#bredo');
   await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0)).toBeNull();
-  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02', '2026-10-03']);
+  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
   expect(Object.values(await page.evaluate(() => __dbAll('lhphist')))[0].undone).toBeUndefined();
   noErrors(errors, 'deshacer aceptación');
 });

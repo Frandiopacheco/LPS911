@@ -16,7 +16,10 @@ const npSC=()=>!!me&&me.role==='sc';
 const canNPx=()=>canNP()||npSC();
 
 function ensureNP(from){if(!db||(npFrom&&from>=npFrom))return;if(npSub)npSub();npFrom=from;
-  npSub=fcol('nprog').where('date','>=',from).onSnapshot(sn=>{NPM.clear();sn.docs.forEach(d=>NPM.set(d.id,{...d.data(),id:d.id}));npErr=null;if(ready)requestRender();if(NS&&$('#npsheet'))npDraw()},
+  /* SEG-05 (paso 1): el SC pide solo lo de su partida (scSubs, base.js; índice nprog(sc, date)). El capataz sigue igual. */
+  if(npSC())npSub=scSubs('nprog',q=>q.where('date','>=',from),x=>(x.date||'')>=from,(L,sn)=>{NPM.clear();L.forEach(x=>NPM.set(x.id,x));npErr=null;if(ready)snapRender(sn);if(NS&&$('#npsheet'))npDraw()},
+    err=>{npErr=err&&err.code||'error';if(ready)requestRender()});
+  else npSub=fcol('nprog').where('date','>=',from).onSnapshot(sn=>{NPM.clear();sn.docs.forEach(d=>NPM.set(d.id,{...d.data(),id:d.id}));npErr=null;if(ready)snapRender(sn);if(NS&&$('#npsheet'))npDraw()},
     err=>{npErr=err&&err.code||'error';if(ready)requestRender()});
   if(!unsubs.includes(stopNP))unsubs.push(stopNP)}
 function stopNP(){if(npSub)npSub();npSub=null;npFrom=null;NPM.clear()}

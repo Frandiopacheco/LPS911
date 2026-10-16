@@ -57,6 +57,62 @@ test('fusionar traslada estados, nombres y tipos; restaurar lo deja como estaba'
   noErrors(errors, 'fusionar');
 });
 
+// MOD-01: fusionar no deja atrás los cambios del SC sin revisar ni el metadato de la celda
+test('fusionar: espera los cambios del SC sin revisar y el estado pasa con su metadato (Restaurar lo devuelve)', async ({ page }) => {
+  const scM = { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true };
+  const extra = CAT.map(r => r[1] === 'a2' ? ['mamb', 'a2', { c: { k9: 't' }, m: { k9: scM }, k: 'k9', by: 'sc@obra.pe', t: 2 }] : r);
+  extra.push(['mlog', 'l1', { amb: 'a2', cat: 'k9', sc: 'c1', from: null, to: 't', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]);
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.click('[data-mxv="cat"]');
+  await row(page, 'k9').locator('[data-mcm]').click();
+  await page.click('#pop [data-do="fus"]');
+  await page.selectOption('#mxfb', 'k1');
+  await page.click('#mxfok');
+  await expect(page.locator('#mxfi')).toContainText('1 cambio de subcontratistas sin revisar');
+  expect((await get(page, 'mcat', 'k9')).arch).toBeUndefined();
+  expect((await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
+  // el ingeniero lo da por visto: ahora sí se fusiona y el estado pasa con quién lo cambió y su «✓ Visto»
+  await page.evaluate(() => { const b = db.batch(); mxLogOk(b, MX.log.get('l1') || { ...__dbGet('mlog', 'l1'), id: 'l1' }, { by: 'admin@obra.pe', n: 'Admin', t: 3 }); return b.commit(); });
+  await expect.poll(async () => !!(await get(page, 'mamb', 'a2')).m.k9.ok).toBe(true);
+  await page.click('#mxfok');
+  await expect.poll(async () => (await get(page, 'mamb', 'a2')).c).toEqual({ k1: 't' });
+  const m = (await get(page, 'mamb', 'a2')).m;
+  expect(m.k1).toMatchObject({ by: 'sc@obra.pe', sc: true, ok: { by: 'admin@obra.pe' } });
+  // restaurar: el estado y el metadato vuelven a la de origen
+  await page.click('[data-mxarch="1"]');
+  await page.click('[data-mcres="k9"]');
+  await expect.poll(async () => (await get(page, 'mamb', 'a2')).c).toEqual({ k9: 't' });
+  expect((await get(page, 'mamb', 'a2')).m.k1).toBeUndefined();
+  noErrors(errors, 'fusionar con cambios del SC');
+});
+
+// MOD-02: un nombre que ya es de otra actividad (nombre o alias) no se crea ni se aplica al renombrar
+test('nombres repetidos: «+ Actividad» mira los alias y renombrar a un nombre existente ofrece fusionar', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mat', extra: CAT });
+  await page.click('[data-mxv="cat"]');
+  await page.click('#mxcnew');
+  await page.fill('#mxnn', 'Redes dup'); // alias de k9
+  await page.click('#mxnok');
+  await expect(page.locator('#mxnmsg')).toContainText('ya es un nombre del lookahead de «Redes (duplicada)»');
+  expect(Object.values(await page.evaluate(() => window.__dbAll('mcat'))).filter(c => c.name === 'Redes dup')).toHaveLength(0);
+  await page.click('#lqm [data-lqx]');
+  // renombrar k2 al nombre de k1: pregunta; «Cancelar» no cambia nada
+  let msg = '';
+  page.once('dialog', d => { msg = d.message(); d.dismiss(); });
+  await row(page, 'k2').locator('[data-mcf="name"]').fill('redes empotradas');
+  await row(page, 'k2').locator('[data-mcf="name"]').press('Enter');
+  await expect.poll(() => msg).toContain('Ya existe «Redes empotradas»');
+  expect((await get(page, 'mcat', 'k2')).name).toBe('Tarrajeo de muros');
+  await expect(row(page, 'k2').locator('[data-mcf="name"]')).toHaveValue('Tarrajeo de muros');
+  // «Fusionar…» abre la fusión con la otra ya elegida (sin renombrar)
+  page.once('dialog', d => d.accept());
+  await row(page, 'k2').locator('[data-mcf="name"]').fill('Redes empotradas');
+  await row(page, 'k2').locator('[data-mcf="name"]').press('Enter');
+  await expect(page.locator('#mxfb')).toHaveValue('k1');
+  expect((await get(page, 'mcat', 'k2')).name).toBe('Tarrajeo de muros');
+  noErrors(errors, 'nombres repetidos');
+});
+
 test('archivar quita la columna de la matriz pero guarda los estados; nueva actividad', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   page.on('dialog', d => d.accept());

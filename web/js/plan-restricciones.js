@@ -18,7 +18,6 @@ function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||
 function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp:0,ext:0,ev:0};
   for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
   for(const o of Object.values(m)){o.ppc=o.n?o.ok/o.n:null;o.ppcSc=ppcScOf(o.ok,o.n,o.nimp,o.ext)}return m}
-const confirmUF={};
 /* Plan semanal: vista por subcontratista o por ambiente (U.planV) y buscador (PLQ, solo en esta sesión). Las dos son solo
    presentación sobre los mismos compromisos: no escriben en la semana congelada ni cambian el PPC. */
 let PLQ='';
@@ -27,27 +26,70 @@ function planQText(it,r){return plNorm([it.act,it.code,it.amb,it.sector,conOf(it
 /** nombre del sector en el lookahead vivo (solo para mostrar; la foto congelada guarda el código) */
 function secNameOf(id,pid,code){const x=S.act.get(id);const a=x&&S.amb.get(x.ambId);const s=a&&S.sec.get(a.sectorId);if(s&&s.name)return s.name+' · ';
   for(const o of S.sec.values())if(o.code===code&&pisoOfSecObj(o)===pid&&o.name)return o.name+' · ';return''}
-/** oculta lo que no coincide con el buscador; los botones Sí/No y las causas siguen funcionando en lo que queda visible */
-function planFilter(main){const alts=plNorm(PLQ).split(/[,;]/).map(t=>t.trim()).filter(Boolean).map(t=>t.split(' '));let tot=0,vis=0;
-  for(const sec of main.querySelectorAll('section[data-pid]')){const trs=sec.querySelectorAll('tbody tr[data-id][data-q]');if(!trs.length){sec.classList.toggle('plq-off',!!alts.length);continue}
-    const gv=new Set();let k=0;
-    for(const tr of trs){tot++;const q=tr.dataset.q;const ok=!alts.length||alts.some(ws=>ws.every(w=>q.includes(w)));tr.classList.toggle('plq-off',!ok);if(ok){k++;tr.dataset.g.split('\n').forEach(g=>gv.add(g))}}
-    for(const g of sec.querySelectorAll('tbody tr[data-gk]'))g.classList.toggle('plq-off',!gv.has(g.dataset.gk));
-    sec.classList.toggle('plq-off',!!alts.length&&!k);vis+=k}
+/* Plan semanal grande (auditoría EJE-01): con muchos compromisos solo se dibujan las filas cerca de la pantalla, como el
+   Lookahead. Cada piso guarda sus filas como datos (PSV.secs[].E: encabezados de grupo y compromisos, cuyo HTML se arma
+   recién al pintarlas) y la tabla se parte en bloques <tbody data-plb> de PSV_B filas; fuera de la pantalla, un bloque es
+   un <tbody class="plvb"> vacío con el alto medido (PSVH, por fila) o estimado (PSVA). El buscador filtra los datos (no
+   oculta filas del DOM). Por debajo de PSV_MIN compromisos se pinta todo como antes. Solo cambia el dibujo: marcar Sí/No,
+   causas y ejecutado siguen por main.onclick/onchange → setRes, y nada escribe en items ni frozenAt. */
+const PSV_MIN=250,PSV_B=20,PSVH=new Map(),PSVA={d:[64,34],m:[330,40]};let PSV=null,PSVPR=0;
+const psMode=()=>matchMedia('(max-width:760px)').matches?'m':'d';
+const psAlts=()=>plNorm(PLQ).split(/[,;]/).map(t=>t.trim()).filter(Boolean).map(t=>t.split(' '));
+/** lo que queda con el buscador: compromisos que coinciden y los encabezados de sus grupos */
+function psVisList(E,alts){if(!alts.length)return E;const gv=new Set(),ok=new Set();
+  for(const e of E)if(e.id&&alts.some(ws=>ws.every(w=>e.q.includes(w)))){ok.add(e);e.gs.forEach(g=>gv.add(g))}
+  return E.filter(e=>e.id?ok.has(e):gv.has(e.g))}
+const psKey=(pre,e)=>pre+(e.id||'g:'+e.g);
+function psTb(s,bi,paint){const es=s.vis.slice(bi*PSV_B,(bi+1)*PSV_B);
+  if(paint)return`<tbody data-plb="${bi}">${es.map(e=>e.h!=null?e.h:(e.h=e.f())).join('')}</tbody>`;
+  const m=psMode(),A=PSVA[m],pre=m+'|'+(U.planV||'sc')+'|'+s.pid+'|';let h=0;for(const e of es){const v=PSVH.get(psKey(pre,e));h+=v!=null?v:A[e.id?0:1]}
+  return`<tbody data-plb="${bi}" class="plvb"><tr class="plvsp" aria-hidden="true"><td colspan="10" style="height:${Math.round(h)}px"></td></tr></tbody>`}
+function psTbodies(s,all){let h='';for(let i=0,nb=Math.ceil(s.vis.length/PSV_B);i<nb;i++)h+=psTb(s,i,all);return h||'<tbody></tbody>'}
+/** guarda el alto de cada fila pintada (para que el bloque vacío mida lo mismo al salir de la pantalla) */
+function psMeasure(s,tbs){const m=psMode(),pre=m+'|'+(U.planV||'sc')+'|'+s.pid+'|';let sum=0,k=0;
+  for(const tb of tbs)for(const tr of tb.rows){const h=tr.getBoundingClientRect().height;if(!h)continue;const id=tr.dataset.id,g=tr.dataset.gk;
+    if(id){PSVH.set(pre+id,h);sum+=h;k++}else if(g!=null)PSVH.set(pre+'g:'+g,h)}
+  if(k)PSVA[m][0]=PSVA[m][0]*.5+sum/k*.5;if(PSVH.size>40000)PSVH.clear()}
+/** pinta los bloques cerca de la pantalla y vacía los que quedaron lejos (no el que tiene el foco); all = todos (imprimir) */
+function planPaint(main,all){const V=PSV;if(!V||V.main!==main||!main.isConnected||main.dataset.view!=='plan')return;all=all||PSVPR===2;if(!(V.virt||all))return;
+  const sc=main.querySelector('.scroll');if(!sc)return;
+  for(let it=0;it<5;it++){const r=sc.getBoundingClientRect();const M=Math.max(300,r.height);const ae=document.activeElement;const todo=[];
+    for(const s of V.secs){if(!s.tbl||!s.tbl.isConnected)continue;
+      for(const tb of s.tbl.tBodies){if(tb.dataset.plb==null)continue;const b=tb.getBoundingClientRect();const ph=tb.classList.contains('plvb');
+        if(all||(b.bottom>r.top-M&&b.top<r.bottom+M)){if(ph)todo.push([s,tb,1])}
+        else if(!ph&&(b.bottom<r.top-3*M||b.top>r.bottom+3*M)&&!(ae&&tb.contains(ae)))todo.push([s,tb,0])}}
+    if(!todo.length)break;
+    /* primero se miden los que salen (una sola maquetación), luego se cambian todos y se miden los nuevos */
+    for(const[s,tb,p]of todo)if(!p)psMeasure(s,[tb]);
+    const nw=new Map();for(const[s,tb,p]of todo){tb.insertAdjacentHTML('afterend',psTb(s,+tb.dataset.plb,p));const x=tb.nextElementSibling;tb.remove();if(p)(nw.get(s)||nw.set(s,[]).get(s)).push(x)}
+    for(const[s,l]of nw)psMeasure(s,l);if(all)break}}
+/** pinta el bloque de una fila aunque esté lejos (para volver a la fila de antes al redibujar, como gridReveal del Lookahead) */
+function psReveal(main,pid,id){const V=PSV;if(!V||V.main!==main||!V.virt)return;const s=V.secs.find(o=>o.pid===pid);if(!s||!s.tbl)return;
+  const i=s.vis.findIndex(e=>e.id===id);if(i<0)return;const tb=[...s.tbl.tBodies].find(b=>b.dataset.plb===String(Math.floor(i/PSV_B)));
+  if(!tb||!tb.classList.contains('plvb'))return;tb.insertAdjacentHTML('afterend',psTb(s,+tb.dataset.plb,1));const x=tb.nextElementSibling;tb.remove();psMeasure(s,[x])}
+/** contadores del buscador y pisos sin coincidencias */
+function psCounts(main){const alts=psAlts();let tot=0,vis=0;
+  for(const sec of main.querySelectorAll('section[data-pid]')){const s=PSV&&PSV.main===main&&PSV.secs.find(o=>o.pid===sec.dataset.pid);
+    if(!s){sec.classList.toggle('plq-off',!!alts.length);continue}const k=s.vis.filter(e=>e.id).length;tot+=s.n;vis+=k;sec.classList.toggle('plq-off',!!alts.length&&!k)}
   const n0=$('#plq0');if(n0)n0.hidden=!(alts.length&&!vis);const nn=$('#plqn');if(nn)nn.textContent=alts.length?`${vis} de ${tot} compromisos`:''}
+/** buscador: filtra los datos y rehace solo los <tbody> (no redibuja la página); los botones Sí/No y las causas siguen funcionando en lo que queda */
+function planFilter(main){const V=PSV;if(!V||V.main!==main)return;const alts=psAlts();
+  for(const s of V.secs){s.vis=psVisList(s.E,alts);if(!s.tbl)continue;[...s.tbl.tBodies].forEach(b=>b.remove());s.tbl.insertAdjacentHTML('beforeend',psTbodies(s,!V.virt))}
+  psCounts(main);if(V.virt)planPaint(main)}
 function planAnchor(main){const sc=main.querySelector('.scroll');if(!sc||main.dataset.view!=='plan')return null;const top=sc.getBoundingClientRect().top;
   if(sc.scrollTop<=0)return{st:0};
   for(const tr of sc.querySelectorAll('section[data-pid] tr[data-id]')){const r=tr.getBoundingClientRect();if(!r.height||r.bottom<=top)continue;
     return{st:sc.scrollTop,pid:tr.closest('section').dataset.pid,id:tr.dataset.id,dy:r.top-top}}
   return{st:sc.scrollTop}}
 function planRestore(main,a){main.__own=true;const sc=main.querySelector('.scroll');if(!sc||!a)return;
+  if(a.id)psReveal(main,a.pid,a.id);
   const tr=a.id&&sc.querySelector(`section[data-pid="${CSS.escape(a.pid)}"] tr[data-id="${CSS.escape(a.id)}"]`);
   if(!tr||!tr.getClientRects().length){sc.scrollTop=a.st;return}
-  tr.scrollIntoView({block:'start'});const fix=()=>{const top=sc.getBoundingClientRect().top;sc.scrollTop+=tr.getBoundingClientRect().top-top-a.dy};fix();requestAnimationFrame(fix)}
+  tr.scrollIntoView({block:'start'});const fix=()=>{if(!tr.isConnected)return;const top=sc.getBoundingClientRect().top;sc.scrollTop+=tr.getBoundingClientRect().top-top-a.dy;planPaint(main)};fix();requestAnimationFrame(fix)}
 function renderPlan(main){
   ensureDaily(addD(weekStart(U.week),-7));
   const n=U.week,wd=weekDays(n),cnc=P().cnc||[];const vp=visPisos();const byAmb=U.planV==='amb';
-  let tN=0,tOk=0,tNo=0,fz=0,body='';
+  let tN=0,tOk=0,tNo=0,fz=0;const parts=[],secs=[];
   for(const p of vp){
     /* evalúa (Sí/No, causas, aplicar registros, descongelar) el responsable del piso o el administrador (oct 2026, pedido del dueño);
        piso sin responsable: cualquier editor. Congelar sigue abierto a los editores. */
@@ -57,19 +99,18 @@ function renderPlan(main){
     const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));
     /* sugerencias de campo: una sola vez por fila (antes se calculaban dos veces) */
     const SUG=new Map();for(const id of ids)SUG.set(id,fieldSug(id,items[id]));
-    if(!ids.length&&!frozen){body+=`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">Sin actividades programadas en la semana ${n}</span></div></section>`;continue}
+    if(!ids.length&&!frozen){parts.push(`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">Sin actividades programadas en la semana ${n}</span></div></section>`);continue}
     const nOk=ids.filter(i=>res[i]&&res[i].ok===true).length,nNo=ids.filter(i=>res[i]&&res[i].ok===false).length;
     if(frozen){fz++;tN+=ids.length;tOk+=nOk;tNo+=nNo}
     const st=frozen?ppcOf(w):null;
     const extra=frozen?Object.entries(liveItems(n,p.id)).filter(([id])=>!(id in items)):[];
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
-    const cf=(confirmUF[p.id]||0)>NOW();
     let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
      ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
-     ${(frozen?ED:FZ)?(frozen?`<button class="ib${cf?' warn':''}" data-unfreeze="1">${cf?'Confirmar: descongelar (la evaluación queda en el historial)':'Descongelar'}</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
+     ${(frozen?ED:FZ)?(frozen?`<button class="ib" data-unfreeze="1">Descongelar</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
        return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():''}
      <div class="pad"><div class="tiles">
@@ -77,9 +118,9 @@ function renderPlan(main){
       <div class="tile"><span class="k">No cumplidos</span><span class="v" style="color:var(--bad)">${frozen?nNo:'—'}</span></div>
       <div class="tile"><span class="k">Por evaluar</span><span class="v">${frozen?ids.length-nOk-nNo:ids.length}</span></div>
       <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div><div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista (causa no imputable u otra partida que no entregó el frente)"><span class="k">PPC del SC</span><span class="v">${st&&st.ppcSc!=null?pct(st.ppcSc):'—'}${st&&st.nimp?` <small>${st.nimp} no imput.</small>`:''}</span></div></div></div>
-     <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>${byAmb?'Subcontratista':'Descripción'}</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead><tbody>`;
-    const rowH=(id,gk)=>{const it=items[id];const r=res[id]||{};const ds=new Set(it.days);const c=conOf(it.sc);
-      return`<tr data-id="${id}" data-g="${esc(gk)}" data-q="${esc(planQText(it,r))}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
+     <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>${byAmb?'Subcontratista':'Descripción'}</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead>`;
+    const rowH=id=>{const it=items[id];const r=res[id]||{};const ds=new Set(it.days);const c=conOf(it.sc);
+      return`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&ED?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
@@ -88,21 +129,26 @@ function renderPlan(main){
         <td class="full" data-l="Causa (detalle)"><input class="ci" data-note data-fk="note:${p.id}:${id}" value="${esc(r.note||'')}" placeholder="${frozen&&r.ok===false?'Qué pasó':''}"${frozen&&ED?'':' disabled'} aria-label="Causa (detalle)"></td>
         <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&ED&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`};
     const scSt=frozen?wkScStats([w]):{};
+    /* filas como datos (EJE-01): g = encabezado de grupo; id = compromiso, con su texto de búsqueda (q), sus grupos (gs) y su HTML perezoso (f) */
+    const E=[];const row=(id,gs)=>E.push({id,q:planQText(items[id],res[id]||{}),gs,f:()=>rowH(id)});
     if(byAmb){/* por ambiente, como en el lookahead: sector → ambiente → actividades (orden del lookahead al congelar) */
       let cs=null,ca=null;
       for(const id of ids){const it=items[id];const sk=it.sector||'—',ak=sk+'|'+(it.code||'')+'|'+(it.amb||'');
         if(sk!==cs){cs=sk;ca=null;const L=ids.filter(i=>(items[i].sector||'—')===sk);const ok=L.filter(i=>res[i]&&res[i].ok===true).length;
-          h+=`<tr class="grp plsec" data-gk="${esc(sk)}"><td colspan="10"><span class="mono" style="font-weight:700">${esc(sk)}</span> <span class="note">${esc(secNameOf(id,p.id,sk))}${L.length} compromiso${L.length>1?'s':''}${frozen?` · PPC ${pct(ok/L.length)}`:''}</span></td></tr>`}
+          E.push({g:sk,h:`<tr class="grp plsec" data-gk="${esc(sk)}"><td colspan="10"><span class="mono" style="font-weight:700">${esc(sk)}</span> <span class="note">${esc(secNameOf(id,p.id,sk))}${L.length} compromiso${L.length>1?'s':''}${frozen?` · PPC ${pct(ok/L.length)}`:''}</span></td></tr>`})}
         if(ak!==ca){ca=ak;const L=ids.filter(i=>{const o=items[i];return(o.sector||'—')+'|'+(o.code||'')+'|'+(o.amb||'')===ak});const ok=L.filter(i=>res[i]&&res[i].ok===true).length;
-          h+=`<tr class="grp plamb" data-gk="${esc(ak)}"><td colspan="10"><span class="mono">${esc(it.code||'')}</span> ${esc(it.amb||'')} <span class="note">${L.length} compromiso${L.length>1?'s':''}${frozen?` · ${ok}/${L.length} cumplido${ok===1?'':'s'}`:''}</span></td></tr>`}
-        h+=rowH(id,sk+'\n'+ak)}}
+          E.push({g:ak,h:`<tr class="grp plamb" data-gk="${esc(ak)}"><td colspan="10"><span class="mono">${esc(it.code||'')}</span> ${esc(it.amb||'')} <span class="note">${L.length} compromiso${L.length>1?'s':''}${frozen?` · ${ok}/${L.length} cumplido${ok===1?'':'s'}`:''}</span></td></tr>`})}
+        row(id,[sk,ak])}}
     else for(const sc of Object.keys(bySc).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))){const c=conOf(sc);const l=bySc[sc];const ok=l.filter(i=>res[i]&&res[i].ok===true).length;const so=scSt[sc];
-      h+=`<tr class="grp" data-gk="${esc(sc)}"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`;
-      for(const id of l)h+=rowH(id,sc)}
-    h+=`</tbody></table></div>`;
-    if(extra.length)h+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div><table class="t"><tbody>${extra.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table></div>`;
-    body+=h+'</section>';
+      E.push({g:sc,h:`<tr class="grp" data-gk="${esc(sc)}"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`});
+      for(const id of l)row(id,[sc])}
+    let t=`</table></div>`;
+    if(extra.length)t+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div><table class="t"><tbody>${extra.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table></div>`;
+    const sv={pid:p.id,pre:h,post:t+'</section>',E,n:ids.length,vis:E,tbl:null};secs.push(sv);parts.push(sv);
   }
+  /* EJE-01: con muchos compromisos, solo los bloques cerca de la pantalla (los pisos ya no necesitan content-visibility) */
+  const alts=psAlts();const virt=secs.reduce((a,o)=>a+o.n,0)>PSV_MIN;secs.forEach(o=>{o.vis=psVisList(o.E,alts)});
+  const body=parts.map(o=>typeof o==='string'?o:(virt?o.pre.replace('card plsecv','card').replace('class="t rt ppcs"','class="t rt ppcs psv"'):o.pre)+psTbodies(o,!virt)+o.post).join('');
   const gp=tN?tOk/tN:null;
   /* el buscador no se pierde cuando llegan cambios de otros usuarios y se redibuja */
   const ae=document.activeElement;const qf=ae&&ae.id==='plq'?[ae.selectionStart,ae.selectionEnd]:null;
@@ -117,7 +163,13 @@ function renderPlan(main){
    ${helpBox('¿Cómo funciona congelar y evaluar?',`<p>Cada piso congela y evalúa su plan por separado, así los equipos trabajan en paralelo. Al <b>congelar</b> un piso, sus actividades de la semana ${n} quedan fijadas como compromisos y se guarda una foto del lookahead para ver los cambios. Si marcas directamente Sí o No, ese piso se congela en ese momento.</p>`)}</div></div>
    <div class="pltb"><span class="seg" id="plv" role="group" aria-label="Ver el plan"><button data-v="sc" class="${byAmb?'':'on'}">Por subcontratista</button><button data-v="amb" class="${byAmb?'on':''}">Por ambiente</button></span><input type="search" id="plq" value="${esc(PLQ)}" placeholder="Buscar actividad, ambiente, sector, SC o causa (varios: separa con coma)" aria-label="Buscar en el plan semanal"><span class="note" id="plqn"></span></div>
    ${body||'<div class="empty">No hay pisos creados.</div>'}<div class="empty" id="plq0" hidden>Ningún compromiso coincide con la búsqueda.</div></div></div>`;
-  planFilter(main);if(qf){const q=$('#plq');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
+  PSV={main,virt,secs};for(const o of secs)o.tbl=main.querySelector(`section[data-pid="${CSS.escape(o.pid)}"] table.ppcs`);
+  psCounts(main);if(qf){const q=$('#plq');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
+  const sc=main.querySelector('.scroll');
+  if(virt){if(anc&&anc.st&&sc)sc.scrollTop=anc.st;planPaint(main);
+    let raf=0;if(sc)sc.addEventListener('scroll',()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;planPaint(main)})},{passive:true})}
+  /* imprimir (Ctrl+P) saca todas las filas y no las vacía hasta terminar (PSVPR 2 = imprimiendo) */
+  if(!PSVPR){PSVPR=1;window.addEventListener('beforeprint',()=>{PSVPR=2;if(U.tab==='plan')planPaint($('#main'),true)});window.addEventListener('afterprint',()=>{PSVPR=1;if(U.tab==='plan')planPaint($('#main'))})}
   planRestore(main,anc);
   $('#plq').oninput=e=>{PLQ=e.target.value;planFilter(main)};
   $('#plv').onclick=e=>{const b=e.target.closest('[data-v]');if(!b||b.classList.contains('on'))return;U.planV=b.dataset.v;saveUI();render()};
@@ -130,7 +182,8 @@ function renderPlan(main){
       const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
     {const fv=e.target.closest('[data-freezever]');if(fv){verFreezePick(fv,n,pid);return}}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
-    if(e.target.closest('[data-unfreeze]')){if((confirmUF[pid]||0)>NOW()){confirmUF[pid]=0;unfreezeWeek(n,pid)}else{confirmUF[pid]=NOW()+5000;render();setTimeout(()=>{if(U.tab==='plan')render()},5100)}return}
+    /* auditoría UI-04: se confirma con uiAsk como el resto de la app (antes «toca otra vez en 5 s» y dos redibujos completos) */
+    if(e.target.closest('[data-unfreeze]')){const pc=S.pis.get(pid)?.code||'';uiAsk({title:`¿Descongelar la semana ${n}${pc?' de '+pc:''}?`,text:'Los compromisos vuelven a ser el borrador en vivo y la semana deja de contar en el PPC hasta que la congeles otra vez. La evaluación hecha no se pierde: queda en el historial y puedes recuperarla con «Recuperar la versión congelada».',tone:'warn',ok:'Descongelar',cancel:'Cancelar'}).then(ok=>{if(ok)unfreezeWeek(n,pid)});return}
     {const rb=e.target.closest('[data-wkrest]');if(rb){restoreWeek(n,pid,rb.dataset.wkrest);return}}
     const b=e.target.closest('[data-yn]');if(!b||b.disabled)return;const id=b.closest('tr').dataset.id;const ok=b.dataset.yn==='1';const wk=S.wk.get(wkId(n,pid));
     if(!wk||!wk.frozenAt){freezeWeek(n,pid,{[id]:{ok,cnc:'',note:''}});return}
@@ -147,7 +200,9 @@ function renderPlan(main){
 function rplFor(x,d){let best=null,bk='';for(const[k,v]of Object.entries((x&&x.rpl)||{}))if(v&&k<=d&&k>bk){bk=k;best=v}return best}
 /* sugerencia para evaluar un compromiso congelado con lo que se registró en la semana: los registros de campo y, para los días
    que el plan diario reprogramó (ya no están en el lookahead y nadie los registró), la causa que se decidió en la reunión */
-function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);const it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
+function fieldSug(id,it0){if(!(it0.days||[]).length)return null;const x0=S.act.get(id);const dn0=x0&&DONE.get(x0.id);let it=dn0?{...it0,days:it0.days.filter(d=>d<=dn0)}:it0;if(!it.days.length)return null;
+  /* terminada antes de lo congelado (auditoría LOG-03): la meta por metrado también se recorta a los días hasta la terminada */
+  if(dn0&&it0.q&&it0.qd&&it.days.length<it0.days.length)it={...it,q:r2(it.days.reduce((s,d)=>s+(+it0.qd[d]||0),0))};const wd=weekDays(weekOf(it.days[0]));const cd=new Set(it.days);const today=todayIso();
   /* auditoría 09/10 (decidido con el dueño, opción B): los cierres del capataz/SC sin confirmar no cuentan para la sugerencia; se
      muestran aparte como «por confirmar» y el ingeniero decide. (aceptarCierres los pasa a «No cumplido · Sin confirmación».) */
   const rof=d=>{const r=recOf(d,id);return r&&r._prop?null:r};
@@ -510,6 +565,8 @@ function renderRestr(main){
     t.dataset.o=t.value;apply([op('restr',r.id,n)])};
   main.onfocusin=e=>{if(e.target.dataset&&e.target.dataset.alz)actFill(e.target);if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onmousedown=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
-  main.ontouchstart=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)};
+  /* auditoría REN-06: escucha pasiva (no frena el desplazamiento táctil) y solo actúa en Restricciones: #main se reutiliza en las
+     demás pestañas y antes la escucha no pasiva quedaba puesta en todas */
+  if(!main.__rts){main.__rts=1;main.addEventListener('touchstart',e=>{if(main.dataset.view!=='restr')return;const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.alz)actFill(t)},{passive:true})}
 }
 
