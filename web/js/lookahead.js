@@ -42,6 +42,7 @@ function buildLookShell(main){
   gridRows=null;gridHead='';
   main.innerHTML=`<div class="view">
   <div class="bar">
+    <span class="seg" id="fview" aria-label="Vista" title="Grilla: editar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura)."><button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span>
     <input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar">
     <select id="fsec" aria-label="Sector"></select>
     <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
@@ -77,9 +78,10 @@ function buildLookShell(main){
   </div>
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
-  <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
+  <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div><div class="flwrap" id="flw" hidden></div></div>`;
   /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
   $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);{const fp=$('#fplano');if(fp)fp.onclick=()=>lkPlano()}$('#fedit').onclick=()=>lkEdit(!LKED);
+  $('#fview').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='flujo'&&!lkFlowOk()){toast('Durante la revisión de propuestas se usa la grilla.');return}U.lkV=b.dataset.v;closePop();saveUI();requestRender()};
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;U.lbDots=false;moreSync()};
   $('#fdots').onclick=()=>{U.lbDots=!U.lbDots;U.lbMore=false;moreSync()};
   $('#bdots').addEventListener('click',e=>{if(e.target.closest('button')){U.lbDots=false;moreSync()}});
@@ -119,7 +121,7 @@ function renderLook(main){if(typeof ensureMx==='function')ensureMx();
   if(!main.dataset.built)buildLookShell(main);if(typeof plDockFollow==='function')plDockFollow();
   renderVerBar();ensureCli();
   if(U.cliv&&!canCli())U.cliv=false;
-  if(U.cliv){cliRenderLook(main);selBar();presBar();presZoom();return}else cliBanner();
+  if(U.cliv){$('#gw').hidden=false;$('#flw').hidden=true;cliRenderLook(main);selBar();presBar();presZoom();return}else cliBanner();
   const vd=U.ver&&U.verMode==='ver'?VERD.get(U.ver):null;
   if(vd&&vd.ready){const un=swapVer(vd);const cw=canWrite;canWrite=false;try{renderLookInner(main)}finally{canWrite=cw;un()}return}
   LK_CAN=!!canWrite;lkEditSync();
@@ -174,7 +176,8 @@ function renderLookInner(main){
   const lge=$('#legend');if(lge.dataset.h!==lg){lge.innerHTML=lg;lge.dataset.h=lg}
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
-  renderGrid($('#grid'),days,dset);
+  {const fl=U.lkV==='flujo'&&lkFlowOk();$('#gw').hidden=fl;$('#flw').hidden=!fl;$$('#fview button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fl?'flujo':'grid')));
+    if(fl){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;flowRender($('#flw'),days)}else renderGrid($('#grid'),days,dset)}
   {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n||LK_MXT?`<button class="dpill mxpp${U.lkGh&&LK_GHOK?' on':''}${LK_GHOK?'':' off'}" aria-pressed="${!!U.lkGh}"${LK_GHOK?'':' aria-disabled="true"'} title="${LK_GHOK?`Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}`:'Quita la búsqueda y los filtros de semana, día, actividades, restricciones u observaciones para ver lo que falta programar (con piso, sector y subcontratistas sí se ven)'}">${U.lkGh&&LK_GHOK?'✓ ':''}Faltan programar <b>${n}</b>${LK_MXT?` · <b>${LK_MXT}</b> ✓ en Matriz`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="La Matriz las tiene confirmadas como Terminado o No aplica y no tienen días de hoy en adelante. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
