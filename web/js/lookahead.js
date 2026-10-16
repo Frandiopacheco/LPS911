@@ -612,7 +612,7 @@ function endQSel(){const q=qsel;qsel=null;const cells=[...q.cells.values()];if(c
    <div class="ph">Misma cantidad cada día</div><div class="qrow"><input id="qper" inputmode="decimal" placeholder="${und||'cant.'}" aria-label="Cantidad por día"><button data-do="per">Aplicar</button></div>
    <hr><button data-do="mark">Solo marcar días (sin cantidad)</button><button data-do="clr" class="danger">Borrar estos días</button>`,
   {dist:()=>distribute(q.a,ds,null),per:()=>{const v=parseNum($('#qper').value);if(v==null||!Number.isFinite(v)||v<=0){toast(Number.isNaN(v)?'Escribe solo números (por ejemplo 30 o 12.5). No se cambió nada.':'Escribe una cantidad mayor que cero.');requestRender();return}distribute(q.a,ds,v)},
-   mark:()=>{const y=S.act.get(q.a);const days=new Set(y.days||[]);ds.forEach(d=>days.add(d));apply([op('acts',y.id,{...y,days:[...days].sort()})]);reopenAfter(y.id,ds)},
+   mark:()=>{const y=S.act.get(q.a);const days=new Set(y.days||[]);ds.forEach(d=>days.add(d));apply([op('acts',y.id,{...y,days:[...days].sort()})],undefined,()=>reopenAfter(y.id,ds))},
    clr:()=>{let y=S.act.get(q.a);ds.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],'Días borrados')}});
   const qp=$('#qper');if(qp){qp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=per]').click()}});setTimeout(()=>qp.focus(),0)}
   requestRender()}
@@ -629,7 +629,7 @@ function distribute(aid,ds,per){if(per!=null&&!(Number.isFinite(per)&&per>0))ret
   let vals;if(per==null){const each=Math.floor(avail/ds.length*100)/100;vals=ds.map((d,i)=>i===ds.length-1?r2(avail-each*(ds.length-1)):each)}
   else{vals=[];let left=avail;for(const d of ds){const v=Math.min(per,left);vals.push(r2(v));left=r2(left-v)}}
   let cut=per!=null&&per*ds.length>avail+1e-9;ds.forEach((d,i)=>{x=withQty(x,d,vals[i]>0?vals[i]:null)});
-  apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`);reopenAfter(aid,ds.filter((d,i)=>vals[i]>0))}
+  apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`,()=>reopenAfter(aid,ds.filter((d,i)=>vals[i]>0)))}
 /* editor de la cantidad DENTRO de la celda (oct 2026, pedido del dueño): antes era un recuadro flotante más grande que la celda,
    con la fecha y el máximo debajo. Ahora la celda misma se vuelve el campo y el saldo de la fila (columna Saldo) muestra en vivo
    lo que quedaría con lo escrito (en rojo si se pasa). La fecha y el máximo quedan en el título de la celda. */
@@ -660,15 +660,16 @@ function commitQ(aid,d,raw){const x=S.act.get(aid);if(!x)return;let v=parseNum(r
   const cur=+(x.qty||{})[d]||0;const max=r2(x.metrado-(progSum(x)-cur));
   if(v!=null&&v>max+1e-9){if(max<=0){toast(`Ya está programado todo el metrado (${fq(x.metrado)} ${und}). Aumenta el metrado total o reduce otro día.`);requestRender();return}
     toast(`Se ajustó a ${fq(max)} ${und}: es el saldo disponible de ${fq(x.metrado)} ${und}.`);v=max}
-  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}apply([op('acts',aid,nx)]);if(v)reopenAfter(aid,[d])}
+  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}apply([op('acts',aid,nx)],undefined,v?()=>reopenAfter(aid,[d]):null)}
 function paintCell(td){const a=td.parentElement.dataset.a;if(!a)return;const k=a+'|'+td.dataset.d;if(paint.cells.has(k))return;paint.cells.set(k,{a,d:td.dataset.d});td.classList.toggle('on',paint.on);td.classList.add('rs','re')}
 function endPaint(){
   const p=paint;paint=null;const by={};for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);
   const ops=[];for(const[a,ds]of Object.entries(by)){const x=S.act.get(a);if(!x)continue;const set=new Set(x.days||[]);ds.forEach(d=>p.on?set.add(d):set.delete(d));
     const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,nx))}}
-  apply(ops);if(!ops.length)requestRender();deferred=false;
-  /* si se programan días después de la fecha en que se marcó terminada, se reabre sola: seguir programándola no debe estar bloqueado */
-  if(p.on)for(const[a,ds]of Object.entries(by))reopenAfter(a,ds)
+  /* si se programan días después de la fecha en que se marcó terminada, se reabre sola: seguir programándola no debe estar bloqueado.
+     Solo si el cambio se aplicó: con un día cerrado (lockGuard) no se reabre nada (auditoría LOG-01) */
+  const ro=p.on?()=>{for(const[a,ds]of Object.entries(by))reopenAfter(a,ds)}:null;
+  if(ops.length)apply(ops,undefined,ro);else{requestRender();if(ro)ro()}deferred=false
 }
 /** Toque en un día «liberado» (la actividad está marcada terminada): reabrirla para que sus días vuelvan a contar */
 function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;if(cliOn()){toast(`“${x.name}” está terminada en obra (${fmtD(dn)}): eso no se cambia desde la versión cliente.`);return}

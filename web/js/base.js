@@ -150,13 +150,14 @@ const fq=v=>{v=r2(v);if(Math.abs(v)>=10000)return(Math.round(v/100)/10)+'k';if(M
 function failInfo(x,upTo,back=10){const rt=recOf(upTo,x.id);if(rt&&rt.status==='ok'&&rt.late)return null;let f=null;for(let d=addD(upTo,-1);d>=addD(upTo,-back);d=addD(d,-1)){const r=recOf(d,x.id);if(!r)continue;if(r.status==='ok')return null;f={d,r};break}
   if(!f||(x.days||[]).some(d=>d>f.d)||x.noRep===f.d)return null;const dn=DONE.get(x.id);if(dn&&dn>=f.d)return null;return f}
 function repSaldo(x,fd){if(!hasM(x))return null;const r=recOf(fd,x.id);const prog=r&&r.prog!=null?r.prog:(x.qty||{})[fd];if(prog==null)return null;const rem=r2(prog-(+(r&&r.exec)||0));return rem>0?rem:prog}
-function reprogAct(aid,d,fd){const x=S.act.get(aid);if(!x||!canWrite)return;let nx={...x,days:[...new Set([...(x.days||[]),d])].sort()};
+function reprogAct(aid,d,fd,after){const x=S.act.get(aid);if(!x||!canWrite)return;let nx={...x,days:[...new Set([...(x.days||[]),d])].sort()};
   /* el saldo pasa al día nuevo y el día fallido queda con lo ejecutado (0 si no se hizo nada): el metrado no se duplica.
      El compromiso original sigue en el registro diario (prog) y en la semana congelada */
   const sal=repSaldo(x,fd);if(sal!=null){const r=recOf(fd,aid);const ex=r&&r.exec!=null?+r.exec||0:0;const q={...(nx.qty||{})};if(fd&&q[fd]!=null)q[fd]=r2(Math.min(ex,+q[fd]));q[d]=r2((+q[d]||0)+sal);nx={...nx,qty:q}}
   /* si estaba marcada terminada antes del día nuevo, se reabre: si no, el día reprogramado saldría «liberado» (rayado) y no contaría */
-  const dn=DONE.get(aid);const reo=!!(dn&&d>dn&&canDaily);if(reo)reopenDone(aid,true);
-  apply([op('acts',aid,nx)],`Reprogramada para el ${DOWN[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}${sal!=null?` (${fq(sal)} ${x.und||''})`:''}${reo?` · estaba terminada el ${fmtD(dn)}: se reabrió`:''}`)}
+  const dn=DONE.get(aid);const reo=!!(dn&&d>dn&&canDaily);
+  /* true = se aplicó; false = el día está cerrado (lockGuard lo rechazó): no se reabre nada (auditoría LOG-01) */
+  return apply([op('acts',aid,nx)],`Reprogramada para el ${DOWN[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}${sal!=null?` (${fq(sal)} ${x.und||''})`:''}${reo?` · estaba terminada el ${fmtD(dn)}: se reabrió`:''}`,()=>{if(reo)reopenDone(aid,true);if(after)after()})!==false}
 function markExec(aid,ed,fd){const x=S.act.get(aid);if(!x||!canDaily)return;const cur=recOf(ed,aid);const late=!(x.days||[]).includes(ed);
   writeDaily(ed,pisoOfAct(aid),{recs:{[aid]:{...baseRec(ed,x,cur),status:'ok',late:late||!!(cur&&cur.late),cnc:'',imp:null,note:(cur&&cur.note)||(late?`Ejecutada sin estar programada${fd?' (no cumplida el '+fmtD(fd)+')':''}`:'')}}});
   toast(`“${x.name}” registrada como ejecutada el ${fmtD(ed)}`)}
