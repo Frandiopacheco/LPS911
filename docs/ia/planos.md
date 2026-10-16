@@ -129,3 +129,13 @@ Tocar un corte, elevación, detalle o cualquier referencia de una lámina y abri
 - **Prueba:** `tests/e2e/planos.spec.js` › «vínculos» (crear, elegir destino y zona, seguir con un toque, volver al mismo encuadre, Medir/Vincular excluyentes, quitar = archivar).
 - **Pendiente (etapa 2):** sugerencias automáticas desde el texto del PDF; ir al corte exacto sin que alguien fije la zona (anclas por título `CORTE x-x`); vínculos en la vista de láminas anteriores (hoy se ven en todas las revisiones, con las mismas coordenadas).
 
+
+## Plano al lado del lookahead (oct 2026, pedido del dueño)
+
+Para ver el plano mientras se edita el lookahead sin salir de él. Se eligió acoplarlo en vez de una ventana flotante encima: no tapa la grilla y no la vuelve a armar (solo cambia el ancho de `<main>`).
+- `lkPlano()` (botón «▦ Plano» del Lookahead): carga `plb` si hace falta (`plSub`, espera `plbReady`), elige la lámina del piso del lookahead (`plPickFor(U.piso)`: planta de arquitectura, si no otra planta, si no la primera) y abre `plOpen(id, plFloorList(piso), {dock:true, piso})`. Sin piso elegido o piso sin planos: abre con el panel «☰ Planos» para elegir. Otra vez el botón cierra.
+- `PLV.canDock` (abierto desde el lookahead) y `PLV.dock` (acoplado ahora). `plDockSet(on)`: clase `.plv.dock` (no modal, `z-index:58` para que los menús del lookahead queden encima), `body.lkdock`, variables `--lkdt` (alto de la barra superior, `plDockPlace`, también al entrar/salir de ⛶ del lookahead y al cambiar el tamaño de la ventana) y `--lkdw` (ancho). Botón ⛶/◧ en la cabecera del visor (`data-pv="dock"`) alterna acoplado ↔ pantalla completa.
+- **Ancho:** borde `.plvsplit` (lo repone `plDockSplitAdd` en cada `plvDraw`); al arrastrar solo se mueve una guía (`.plvghost`) y el ancho se aplica al soltar (redimensionar la grilla en cada movimiento sería lento con miles de filas). Se guarda la fracción en `store` `lkdw` (por defecto 0,5; mín. 320 px para el plano y 420 para el lookahead).
+- **Sigue al piso:** `plDockFollow()` (desde `renderLook`): si cambia `U.piso`, salta a la lámina de la misma especialidad y tipo del piso nuevo (`plPickFor(piso, actual)`, título más parecido) conservando zona y zoom (`plJump(id, true)`).
+- Se cierra al salir de la pestaña Lookahead (`render` en base.js). En celular no se acopla.
+- Prueba: `lookahead-metrado.spec.js` › «plano del piso al lado del lookahead…».

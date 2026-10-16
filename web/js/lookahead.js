@@ -53,6 +53,7 @@ function buildLookShell(main){
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
     <button class="ib" id="fdots" aria-expanded="false" aria-haspopup="true" aria-label="Más opciones" title="Historial, versiones y plegar">⋯</button>
+    ${typeof canPla==='function'&&canPla()&&!isMob()?'<button class="ib" id="fplano" title="Ver el plano del piso al lado del lookahead (se puede agrandar a pantalla completa)">▦ Plano</button>':''}
     <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
     <button class="ib pri" id="fedit" hidden>✎ Editar</button>
     <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Filtros y vista">
@@ -78,7 +79,7 @@ function buildLookShell(main){
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div></div>`;
   /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
-  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);$('#fedit').onclick=()=>lkEdit(!LKED);
+  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);{const fp=$('#fplano');if(fp)fp.onclick=()=>lkPlano()}$('#fedit').onclick=()=>lkEdit(!LKED);
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;U.lbDots=false;moreSync()};
   $('#fdots').onclick=()=>{U.lbDots=!U.lbDots;U.lbMore=false;moreSync()};
   $('#bdots').addEventListener('click',e=>{if(e.target.closest('button')){U.lbDots=false;moreSync()}});
@@ -87,7 +88,7 @@ function buildLookShell(main){
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};
-  $('#fmode').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.qmode=b.dataset.m;saveUI();closeQEditor(true);requestRender();if(U.qmode==='metrado')toast('Modo metrado: haz clic en un día para escribir la cantidad, o arrastra varios días para repartir el saldo.')};
+  $('#fmode').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.qmode=b.dataset.m;saveUI();closeQEditor(true);requestRender();if(U.qmode==='metrado')requestAnimationFrame(()=>requestAnimationFrame(lkQModeTip))};
   $('#fwin').onchange=e=>{U.win=+e.target.value;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
@@ -115,7 +116,7 @@ function renderLook(main){if(typeof ensureMx==='function')ensureMx();
   /* la pestaña Cliente siempre con la tabla (la vista de celular no tiene la capa del cliente) */
   if(isMob()&&!U.lookFull&&!U.cliv){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
-  if(!main.dataset.built)buildLookShell(main);
+  if(!main.dataset.built)buildLookShell(main);if(typeof plDockFollow==='function')plDockFollow();
   renderVerBar();ensureCli();
   if(U.cliv&&!canCli())U.cliv=false;
   if(U.cliv){cliRenderLook(main);selBar();presBar();presZoom();return}else cliBanner();
@@ -277,9 +278,11 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           const mxw=typeof mxRowWarn==='function'?mxRowWarn(x):null;const mxd=false; /* sin «✓?»: el Lookahead solo recomienda desde la Matriz (10/10) */
           const nb=(x.obs?1:0)+((prn||isNew)?1:0)+(lst?1:0)+(mxw||mxd?1:0)+(mxc?1:0);
           h+=`<td class="s4 act${nb>=3?' hb2 hb3':nb>=2?' hb2':nb?' hb':''}">${x._rv?revCellHtml(x,rvSel):''}<span class="anv" aria-hidden="true">${esc(x.name)}</span><input class="ci" data-a="${x.id}" data-f="name" value="${esc(x.name)}" placeholder="Nueva actividad" aria-label="Actividad"${roA?roA:' list="dlact" autocomplete="off"'}${pv?` title="Propuesta de ${esc(conOf(pv.sc).name)}"`:''}>${x.obs?`<span class="obadge${prn?' sh':''}" data-obs="${x.id}" role="button" tabindex="0" title="${esc(x.obs)}">!</span>`:''}${!CV&&typeof mxRowBadge==='function'?mxRowBadge(x,(x.obs?1:0)+(prn?1:0)+(lst?1:0),{cat:mxc,warn:mxw,done:mxd}):''}${!CV&&typeof libBadge==='function'?libBadge(x,lb).replace('class="lqbadge"',(prn||isNew||x.obs)?'class="lqbadge sh"':'class="lqbadge"'):''}${prn?`<span class="rbadge" data-goto-restr="${x.id}" title="${esc(restrTip(x.id))}">R${prn>1?prn:''}</span>`:isNew?'<span class="nbadge" title="Actividad nueva respecto al plan congelado">NUEVA</span>':''}${lt?`<span class="clate" title="Termina el ${fmtD(lt.end)}: pasa la fecha emitida al cliente (${fmtD(lt.cli)}). La holgura se consumió.">⚑</span>`:''}</td>`;
-          h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
+          h+=`<td class="cU"><input class="ci" data-a="${x.id}" data-f="und" value="${esc(x.und||'')}" aria-label="Unidad"${roA}></td><td class="cM"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="metrado" value="${x.metrado??''}" aria-label="Metrado"${QM&&!hasM(x)?' placeholder="total"':''}${roA}>${x._rv&&x._rv.off&&(x._rv.off.metrado??null)!==(x.metrado??null)?`<span class="rvw" title="Metrado vigente">antes ${x._rv.off.metrado??'—'}</span>`:''}</td>`;
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=QM;
-          h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${sal<0?'−'+fq(-sal):fq(sal)}</td>`:'<td class="cS"></td>';
+          /* modo metrado: si hay días marcados sin cantidad y queda saldo, el saldo se vuelve un botón que lo reparte en esos días */
+          const nq=qmode&&mq&&sal>0&&!roA&&canWrite?(x.days||[]).filter(d=>(x.qty||{})[d]==null).length:0;
+          h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${nq?`<button type="button" class="qrep" data-qrep="${x.id}" title="Repartir el saldo (${fq(sal)} ${esc(x.und||'')}) en partes iguales en los ${nq} día${nq>1?'s':''} sin cantidad">⇢ ${fq(sal)}</button>`:sal<0?'−'+fq(-sal):fq(sal)}</td>`:qmode&&!roA&&canWrite?'<td class="cS qno" title="Escribe primero el metrado total para programar por cantidades">—</td>':'<td class="cS"></td>';
           h+=`<td class="ro cN">${st.n||''}</td><td class="ro cI">${fmtS(st.ini)}</td><td class="ro cF">${fmtS(st.fin)}</td>`;
           const ptip=(x._rv||pv||PM())?propRowTip(x,pv):'';const ptt=ptip?' · Propuesta: '+esc(ptip):'';
           for(let k=0;k<nd;k++){const x2=days[k];const di=DI[k];const on=ds.has(x2.d);let cl=di.pre;
@@ -292,7 +295,8 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
             const rp=!on&&x.rpl&&x.rpl[x2.d];if(rp)cl+=' rpl';
             /* (auditoría de código 08/10, L6) estado de Campo desconocido: se muestra como «No cumplido» en vez de romper la grilla */
             const rc=di.past?recOf(x2.d,x.id):null;const rst=rc?ST[rc.status]||ST.no:null;const mk=(rc?`<i class="dm ${rst.c}">${rst.i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${rst.t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
-            if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'sin metrado asignado'}${mt}"><span class="qv">${v!=null?fq(v):'•'}</span>${mk}</td>`}
+            /* modo metrado: un día marcado sin cantidad se ve como barra hueca (no como 0): falta escribir cuánto */
+            if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}${v!=null?'':' qz'}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'día programado sin cantidad · toca para escribirla'}${mt}">${v!=null?`<span class="qv">${fq(v)}</span>`:''}${mk}</td>`}
             else h+=`<td class="${cl}" data-d="${x2.d}"${lbd?` title="${di.f} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${di.f}${mt}"`:''}>${mk}</td>`}
           return h+'</tr>';
           }catch(err){lkBadRow(x,err);return`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells():''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`}
@@ -498,7 +502,24 @@ let paint=null,tap=null;
 /* la lista de subcontratistas de cada fila se arma recién al abrirla: con miles de filas y decenas de empresas
    eran decenas de miles de opciones en la página (lo más pesado del Lookahead) */
 function scFill(sel){if(!sel||!sel.dataset.lz)return;delete sel.dataset.lz;const v=sel.value;
-  sel.innerHTML=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('');sel.value=v}
+  sel.innerHTML=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('')
+    +(canWrite&&!PM()&&!cliOn()?'<option disabled>──────────</option><option value="__new">+ Nuevo subcontratista…</option>':'');sel.value=v}
+/* subcontratista nuevo desde la fila (oct 2026): un SC que aún no llega a la obra no necesita usuario ni correo para programarlo.
+   Se crea en Configuración › Subcontratistas (misma lista de siempre) y se asigna a la fila. Cuando llegue, en Equipo se le invita
+   y se le asigna esta empresa. */
+const SC_PAL=['#2E7D32','#C62828','#6A1B9A','#EF6C00','#00838F','#AD1457','#5D4037','#1565C0','#9E9D24','#4527A0','#00695C','#D84315','#37474F','#F9A825'];
+async function lkNewSc(x,t){t.value=x.sc;
+  const v=await uiAsk({title:'Nuevo subcontratista',text:'Se agrega a la lista de subcontratistas y se asigna a esta actividad. No necesita usuario ni correo: cuando llegue a la obra, en Equipo lo invitas y le asignas esta empresa.',input:{label:'Nombre (como aparece en el lookahead)',required:true},ok:'Agregar y asignar'});
+  const name=String(v||'').replace(/\s+/g,' ').trim().toUpperCase();if(!name)return;
+  const cur=S.act.get(x.id);if(!cur)return;
+  const ex=[...S.con.values()].find(c=>String(c.name||'').trim().toUpperCase()===name);
+  const used=new Set([...S.con.values()].map(c=>String(c.color||'').toUpperCase()));const color=SC_PAL.find(c=>!used.has(c))||SC_PAL[S.con.size%SC_PAL.length];
+  const id=ex?ex.id:uid('c');const ops=ex?[]:[op('contractors',id,{id,name,partida:'',color})];
+  if(cur.sc===id){if(ex)toast(`${name} ya está asignado a esta actividad.`);return}
+  /* fila con historial: el cambio de SC pasa por la misma revisión de siempre */
+  if(cur.sc&&actHist(cur).length){if(ops.length)apply(ops,`Subcontratista ${name} agregado`);histGate(cur,'sc',id);return}
+  const nx={...cur,sc:id};if(nx.obs){delete nx.obs;delete nx.obsSug}ops.push(op('acts',cur.id,nx));
+  apply(ops,ex?`Asignado a ${name} (ya existía en la lista)`:`${name} agregado y asignado. Su especialidad y color se ajustan en Configuración › Subcontratistas.`)}
 function wireGrid(tbl){
   const lz=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.lz)scFill(t)};tbl.addEventListener('mousedown',lz,true);tbl.addEventListener('touchstart',lz,{capture:true,passive:true});tbl.addEventListener('focusin',lz,true);
   tbl.addEventListener('focusin',e=>{const t=e.target;if(t.classList.contains('ci'))t.dataset.o=t.value;if(t.tagName==='INPUT'&&t.dataset.a&&t.dataset.f==='name'&&!t.readOnly)actSuggest(t);const a=t.dataset&&t.dataset.a||null;if(a!==myAct){myAct=a;sendPresence()}});
@@ -561,6 +582,8 @@ function wireGrid(tbl){
   tbl.addEventListener('click',e=>{const ch=e.target.closest('[data-ghamb]');if(ch){const id=ch.dataset.ghamb;GHT.has(id)?GHT.delete(id):GHT.add(id);requestRender();return}
     const gm=e.target.closest('[data-ghmenu]');if(gm){lkGhostMenu(gm,gm.dataset.ghmenu);return}
     const td=e.target.closest('tr[data-gh] td.d');if(td&&!(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey))lkGhostDay(td.parentElement.dataset.gh,td.dataset.d)});
+  tbl.addEventListener('click',e=>{const b=e.target.closest('[data-qrep]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.qrep);if(!x)return;
+    distribute(x.id,(x.days||[]).filter(d=>(x.qty||{})[d]==null).sort(),null)});
   tbl.addEventListener('click',e=>{const h=e.target.closest('.anum:not(.dg)');if(!h)return;const tr=h.closest('tr[data-a]');if(tr)lkRowSel(tr.dataset.a)});
   tbl.addEventListener('pointerdown',e=>{const h=e.target.closest('.anum.dg');if(!h||e.button!==0)return;const tr=h.closest('tr[data-a]');const x=tr&&S.act.get(tr.dataset.a);if(!x)return;
     e.preventDefault();e.stopPropagation();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
@@ -593,6 +616,11 @@ function endQSel(){const q=qsel;qsel=null;const cells=[...q.cells.values()];if(c
    clr:()=>{let y=S.act.get(q.a);ds.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],'Días borrados')}});
   const qp=$('#qper');if(qp){qp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=per]').click()}});setTimeout(()=>qp.focus(),0)}
   requestRender()}
+/* al pasar a «Por metrado»: qué esperar de lo que ya estaba programado por días (los días se conservan, solo les falta la cantidad) */
+function lkQModeTip(){if(U.qmode!=='metrado')return;const n=$$('#grid td.cS .qrep').length,z=$$('#grid td.cS.qno').length;
+  toast(n?`${n} actividad${n>1?'es tienen':' tiene'} días marcados sin cantidad (barra hueca): no se perdieron. Toca ⇢ en Saldo para repartir el saldo en esos días, o escribe la cantidad de cada día.`
+    :z?'Por metrado: toca un día para escribir su cantidad o arrastra varios para repartir. Las filas sin metrado total (—) se siguen programando por días.'
+    :'Por metrado: toca un día para escribir su cantidad, o arrastra varios días para repartir el saldo.')}
 function parseNum(t){t=String(t??'').trim().replace(/\s/g,'');if(t==='')return null;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t))t=t.replace(/\./g,'').replace(',','.');else t=t.replace(',','.');const v=Number(t);return isFinite(v)?v:NaN}
 /* programar días después de la fecha de terminada la reabre (igual que al marcar días con el mouse) */
 function reopenAfter(aid,ds){const dn=DONE.get(aid);if(dn&&canDaily&&(ds||[]).some(d=>d>dn))reopenDone(aid)}
@@ -602,23 +630,30 @@ function distribute(aid,ds,per){if(per!=null&&!(Number.isFinite(per)&&per>0))ret
   else{vals=[];let left=avail;for(const d of ds){const v=Math.min(per,left);vals.push(r2(v));left=r2(left-v)}}
   let cut=per!=null&&per*ds.length>avail+1e-9;ds.forEach((d,i)=>{x=withQty(x,d,vals[i]>0?vals[i]:null)});
   apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`);reopenAfter(aid,ds.filter((d,i)=>vals[i]>0))}
+/* editor de la cantidad DENTRO de la celda (oct 2026, pedido del dueño): antes era un recuadro flotante más grande que la celda,
+   con la fecha y el máximo debajo. Ahora la celda misma se vuelve el campo y el saldo de la fila (columna Saldo) muestra en vivo
+   lo que quedaría con lo escrito (en rojo si se pasa). La fecha y el máximo quedan en el título de la celda. */
 function openQEditor(td){if(!td||!canWrite)return;const aid=td.parentElement.dataset.a,d=td.dataset.d;const x=S.act.get(aid);if(!x||!hasM(x))return;
-  closeQEditor(true);const cur=(x.qty||{})[d];const others=r2(progSum(x)-(+cur||0));const max=r2(x.metrado-others);
-  const r=td.getBoundingClientRect();const box=document.createElement('div');box.className='qed';const w=Math.max(r.width+30,92);
-  box.style.left=Math.min(Math.max(4,r.left-(w-r.width)/2),innerWidth-w-4)+'px';box.style.top=(r.top-2)+'px';box.style.width=w+'px';
-  box.innerHTML=`<input class="ci" inputmode="decimal" value="${cur!=null?cur:''}" aria-label="Metrado programado el ${fmtD(d)}"><div class="qhint">${DL[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · máx ${fq(Math.max(0,max))} ${esc(x.und||'')}</div>`;
-  document.body.appendChild(box);const inp=box.querySelector('input');inp.dataset.o=inp.value;inp.focus();inp.select();
-  qed={box,inp,aid,d};myAct=aid;sendPresence();
+  closeQEditor(true);const cur=(x.qty||{})[d];const others=r2(progSum(x)-(+cur||0));const max=r2(x.metrado-others);const und=x.und||'';
+  const inp=document.createElement('input');inp.className='qin';inp.inputMode='decimal';inp.autocomplete='off';inp.value=cur!=null?String(cur):'';
+  inp.setAttribute('aria-label',`Metrado programado el ${fmtD(d)} (máximo ${fq(Math.max(0,max))} ${und})`);inp.title=`${DL[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · máx ${fq(Math.max(0,max))} ${und}`;
+  td.classList.add('qing');td.appendChild(inp);inp.dataset.o=inp.value;inp.focus();inp.select();
+  const sc=td.parentElement.querySelector('td.cS');const sc0=sc?sc.innerHTML:'';const scC=sc?sc.className:'';
+  const live=()=>{if(!sc)return;const v=parseNum(inp.value);const left=r2(x.metrado-others-(Number.isFinite(v)&&v>0?v:0));
+    sc.className='cS qlive'+(left<0?' neg':left===0?' zero':'');sc.textContent=left<0?'−'+fq(-left):fq(left)};live();
+  qed={box:inp,inp,td,aid,d,sc,sc0,scC};myAct=aid;sendPresence();
+  inp.addEventListener('input',live);
   inp.addEventListener('keydown',e=>{
     if(e.key==='Escape'){e.preventDefault();closeQEditor(false);return}
     const mv=e.key==='Enter'||e.key==='Tab'?(e.shiftKey?-1:1):e.key==='ArrowRight'&&inp.selectionStart===inp.value.length?1:e.key==='ArrowLeft'&&inp.selectionStart===0?-1:0;
     const vr=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0;
     if(mv||vr){e.preventDefault();const next=neighborCell(aid,d,mv,vr);closeQEditor(true);if(next)requestAnimationFrame(()=>requestAnimationFrame(()=>{const t=$(`#grid tr[data-a="${CSS.escape(next.a)}"] td.d[data-d="${next.d}"]`);if(t){t.scrollIntoView({block:'nearest',inline:'nearest'});openQEditor(t)}}))}});
+  inp.addEventListener('pointerdown',e=>e.stopPropagation());
   inp.addEventListener('blur',()=>setTimeout(()=>{if(qed&&qed.inp===inp)closeQEditor(true)},0));
 }
 function neighborCell(aid,d,dx,dy){const days=winDays().map(x=>x.d);if(dx){const i=days.indexOf(d)+dx;return i>=0&&i<days.length?{a:aid,d:days[i]}:null}
   const rows=$$('#grid tr.ar[data-a]').map(t=>t.dataset.a).filter(a=>{const x=S.act.get(a);return x&&hasM(x)});const i=rows.indexOf(aid)+dy;return i>=0&&i<rows.length?{a:rows[i],d}:null}
-function closeQEditor(save){if(!qed)return;const q=qed;qed=null;const raw=q.inp.value;q.box.remove();if(myAct===q.aid){myAct=null;sendPresence()}if(save&&raw!==q.inp.dataset.o)commitQ(q.aid,q.d,raw);else flushDeferred()}
+function closeQEditor(save){if(!qed)return;const q=qed;qed=null;const raw=q.inp.value;q.box.remove();if(q.td)q.td.classList.remove('qing');if(q.sc&&q.sc.isConnected){q.sc.className=q.scC;q.sc.innerHTML=q.sc0}if(myAct===q.aid){myAct=null;sendPresence()}if(save&&raw!==q.inp.dataset.o)commitQ(q.aid,q.d,raw);else flushDeferred()}
 function commitQ(aid,d,raw){const x=S.act.get(aid);if(!x)return;let v=parseNum(raw);const und=x.und||'';
   if(Number.isNaN(v)){toast('Escribe solo números (por ejemplo 30 o 12.5).');return}
   if(v!=null&&v<0){toast('La cantidad no puede ser negativa.');return}
@@ -663,6 +698,7 @@ function commitField(t){
   if(verRO())return;if(!canWrite||t.dataset.o===undefined&&t.tagName!=='SELECT')return;
   const f=t.dataset.f;let v=t.value;if(t.tagName!=='SELECT'&&v===t.dataset.o)return;
   if(t.dataset.a){const x=S.act.get(t.dataset.a);if(!x)return;
+    if(f==='sc'&&v==='__new'){lkNewSc(x,t);return}
     if(f==='metrado'){v=parseNum(v);if(Number.isNaN(v)||(v!=null&&v<0)){t.value=t.dataset.o;toast('El metrado debe ser un número positivo.');return}
       const ps=progSum(x);if(v!=null&&ps>v+1e-9)toast(`Ojo: ya hay ${fq(ps)} ${x.und||''} programados y el nuevo total es ${fq(v)}. El saldo queda en rojo (−${fq(ps-v)}); reduce algunos días.`);
       else if((v==null||v===0)&&ps>0)toast('La actividad quedó sin metrado total: sus cantidades por día se conservan, pero se programa por días hasta que vuelvas a poner un total.')}
@@ -822,7 +858,7 @@ function lkRowSel(id){LKROW=LKROW===id?null:id;document.querySelectorAll('#grid 
 /* Lookahead a pantalla completa (tablet, oct 2026): oculta la barra superior y las pestañas, y pide al navegador pantalla
    completa (sin la barra de direcciones). Se puede seguir editando. Sale con ⛶, con «atrás» o al cambiar de pestaña. */
 let LKFS=false;
-function lkFs(on){LKFS=!!on&&U.tab==='look';document.body.classList.toggle('lkfs',LKFS);const b=$('#ffs');if(b){b.classList.toggle('on',LKFS);b.textContent=LKFS?'Salir ⛶':'⛶'}
+function lkFs(on){LKFS=!!on&&U.tab==='look';document.body.classList.toggle('lkfs',LKFS);if(typeof plDockPlace==='function')requestAnimationFrame(plDockPlace);const b=$('#ffs');if(b){b.classList.toggle('on',LKFS);b.textContent=LKFS?'Salir ⛶':'⛶'}
   try{if(LKFS&&!document.fullscreenElement&&document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
     else if(!LKFS&&document.fullscreenElement&&!LKP)document.exitFullscreen().catch(()=>{})}catch(e){}}
 document.addEventListener('fullscreenchange',()=>{if(LKFS&&!document.fullscreenElement)lkFs(false)});
