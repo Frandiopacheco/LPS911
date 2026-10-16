@@ -44,3 +44,27 @@ test('PPC semanal muestra el histórico arriba', async ({ page }) => {
   await expect(page.locator('details.ppch svg .ln.br')).toHaveCount(1);
   noErrors(errors, 'histórico en PPC semanal');
 });
+
+test('Indicadores semanal: semáforo por SC y por piso que filtran toda la pantalla al tocar una barra', async ({ page }) => {
+  const W58b = ['weeks', '58_p2', { n: 58, pisoId: 'p2', frozenAt: '2026-09-26T18:00:00.000Z', items: { a: IT('c1', HOY) }, res: { a: { ok: false, cnc: 'Materiales' } } }];
+  const errors = await openApp(page, { tab: 'ind', extra: [W57, W58, W58b] });
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.evaluate(() => { U.indMode = 'sem'; U.week = 58; U.piso = ''; render(); });
+  await expect(page.locator('#main .ixd-grp [data-ixsc]')).toHaveCount(3);
+  await expect(page.locator('#main .card', { hasText: 'Cumplimiento por piso' }).locator('[data-ixpi]')).toHaveCount(2);
+  // SC ELECTRICAS (c2): 1 de 2 → 50 %; el comparativo por piso sigue mostrando los pisos, solo con lo suyo
+  await page.locator('#main [data-ixsc="c2"]').first().click();
+  await expect(page.locator('#main .ixd-flt .ixd-fc')).toContainText('SC ELECTRICAS');
+  await expect(page.locator('#main .tile', { hasText: 'Semana 58 · PPC' }).first()).toContainText('50%');
+  await expect(page.locator('#main .card', { hasText: 'Causas de no cumplimiento' })).toContainText('Subcontratas');
+  await expect(page.locator('#main .card', { hasText: 'Causas de no cumplimiento' })).not.toContainText('Materiales');
+  await page.locator('#main [data-ixclr]').click();
+  // piso P2: solo el compromiso de c1, no cumplido por materiales
+  await page.locator('#main [data-ixpi="p2"]').first().click();
+  await expect(page.locator('#main .ixd-grp [data-ixsc]')).toHaveCount(1);
+  await expect(page.locator('#main .card', { hasText: 'Causas de no cumplimiento' })).toContainText('Materiales');
+  await expect(page.locator('#main .tile', { hasText: 'Semana 58 · PPC' }).first()).toContainText('0%');
+  await page.locator('#main .ixd-flt [data-ixpi]').click();
+  await expect(page.locator('#main .ixd-flt')).toHaveCount(0);
+  noErrors(errors, 'semanal power bi');
+});

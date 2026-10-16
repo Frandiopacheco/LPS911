@@ -44,14 +44,18 @@ test('Semáforo: cumplieron / parcial / crítico, imputable vs no, y filtro por 
   await expect(grp(page, 'warn')).toContainText('SC TARRAJEO');
   await page.locator('#ixm [data-xm="br"]').click();
   await expect(grp(page, 'bad')).toContainText('SC TARRAJEO');
-  // tocar un SC filtra «Incumplimientos del día»
+  // tocar un SC filtra toda la pantalla (Power BI): los totales, «Incumplimientos del día» y la franja de filtros
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(3);
   await grp(page, 'bad').locator('[data-ixsc]').click();
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(2);
   await expect(page.locator('#ixinc')).not.toContainText('No llegó el tubo');
-  await expect(page.locator('#ixinc .dpill')).toContainText('SC TARRAJEO');
-  await page.locator('#ixscx').click();
+  await expect(page.locator('#main .ixd-flt .ixd-fc')).toContainText('SC TARRAJEO');
+  await expect(page.locator('#main .tile.hl')).toContainText('33%');          // 1 de 3: solo TARRAJEO
+  await expect(page.locator('#main .card', { hasText: 'Causas del día' })).not.toContainText('Materiales');
+  await expect(page.locator('#main [data-ixsc="c1"]').first()).toHaveClass(/dim/); // las demás barras siguen, atenuadas
+  await page.locator('#main [data-ixclr]').click();
   await expect(page.locator('#ixinc tbody tr')).toHaveCount(3);
+  await expect(page.locator('#main .ixd-flt')).toHaveCount(0);
   noErrors(errors, 'semáforo diario');
 });
 
@@ -202,4 +206,20 @@ test('PPC histórico a mano: se lee el texto, se guarda y se grafica en Semanal 
   await expect(page.locator('#main .tile').first()).toContainText('80%');
   // un editor no ve el botón
   noErrors(errors, 'ppc histórico a mano');
+});
+
+test('Indicadores › Diario con 2 pisos: tocar un piso filtra los SC, las causas y los incumplimientos', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'ind', extra: EXTRA2 });
+  await page.evaluate(() => { U.indMode = 'dia'; U.piso = ''; render(); });
+  await expect(page.locator('#main .card', { hasText: 'Cumplimiento por piso' }).locator('[data-ixpi]')).toHaveCount(2);
+  await page.locator('#main [data-ixpi="p2"]').first().click();
+  await expect(page.locator('#main .tile.hl')).toContainText('0%');                 // P2: 0 de 1
+  await expect(page.locator('#main .ixd-grp [data-ixsc="c3"]')).toHaveCount(0);     // TARRAJEO no tiene nada en P2
+  await expect(page.locator('#main .ixd-grp [data-ixsc="c1"]')).toHaveCount(1);
+  await expect(page.locator('#ixinc tbody tr')).toHaveCount(1);
+  await expect(page.locator('#main .card', { hasText: 'Causas del día' })).toContainText('Materiales');
+  await page.locator('#main .ixd-flt [data-ixpi]').click();
+  await expect(page.locator('#main .ixd-flt')).toHaveCount(0);
+  noErrors(errors, 'diario por piso');
 });
