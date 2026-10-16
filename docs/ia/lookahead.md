@@ -51,3 +51,13 @@ Los subcontratistas del lookahead son `contractors` (Configuración › Subcontr
 
 Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (planos.js): abre el visor del módulo Planos **acoplado a la derecha** (`plOpen(id, lista, {dock:true, piso})`, `.plv.dock`, `body.lkdock`): el `<main>` del lookahead se angosta (`margin-right:var(--lkdw)`) y sigue editable. Detalle en `docs/ia/planos.md` › «Plano al lado del lookahead». Con el plano acoplado solo la columna Actividad queda fija (`body.lkdock #grid .s0–.s3{left:auto}`) y la grilla se corre hasta los días (`plDockScroll`).
 - **Scroll y aspecto (oct 2026):** `#gw{overflow-anchor:none}` evita que el navegador reajuste el scroll cuando `vMeasure` corrige los altos de las filas virtuales; cuadrícula de días más tenue y barras con esquinas de 6 px (bloque al final de `app.css`). Probado: más margen de dibujo (`buf`) hace que `virtPaint` arme filas dos veces y rompe `rendimiento.spec.js`; no lo cambies sin ajustar esa prueba.
+
+## Vista «Flujo» (`js/lookahead-flujo.js`, oct 2026, decidido con el dueño)
+- Interruptor **Grilla | Flujo** en la barra (`#fview`, `U.lkV`, se guarda en `saveUI`). Flujo es **solo lectura** y lo ven todos los roles; en revisión de propuestas se fuerza la grilla (`lkFlowOk`). La vista Cliente siempre muestra la grilla.
+- `renderLookInner`: con Flujo oculta `#gw`, muestra `#flw` y llama `flowRender(el, days)` en lugar de `renderGrid` (pone `gridRows=null` y los contadores `LK_*` en 0, así las píldoras de vencidas/terminadas no quedan viejas).
+- Filas: una por piso (`p:<id>`), desplegable en sectores (`s:<id>`, `U.flOpen`); con un solo piso arriba (`U.piso`) o un sector elegido, los sectores salen desplegados. Dentro de cada fila, una línea por SC elegido en la leyenda (`scSel()`); sin elegir, una línea «Todos los SC» con `--accent`.
+- Cada día: barra del color del SC; intensidad = ambientes distintos con trabajo ese día, relativa al máximo de ese SC en el mismo nivel (piso o sector). El `title` lista ambientes y actividades.
+- Respeta piso, sector, SC, búsqueda (`U.q`, por coma), actividades (`U.acts`), «Solo semana» (`U.wkF`) y «Solo día» (`U.day`).
+- `flowFit` reparte el alto de la pantalla entre las filas (`--flh`, 16–40 px) y la tabla usa `table-layout:fixed` al 100 % del ancho: llena el proyector sin Ctrl+scroll.
+- Clic en un día con trabajo → `U.lkV='grid'`, `U.sc` = ese SC y `gotoAct` a la primera actividad (por `order`) de ese día.
+- Prueba: `tests/e2e/lookahead-flujo.spec.js`.
