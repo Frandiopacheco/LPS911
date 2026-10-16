@@ -737,6 +737,27 @@ test('ir al Tablero y volver no borra el «Deshacer» del plan ni vuelve a suscr
   noErrors(errors, 'deshacer tras Tablero');
 });
 
+/* auditoría EJE-07: la ventana «Revisar» abierta desde la lista no se cierra cuando otro ingeniero guarda (la fila se redibuja) */
+test('ventana «Revisar» abierta: el guardado de otro ingeniero y un desplazamiento no la cierran', async ({ page }) => {
+  const dp = (aid, amb, sc) => ['pdz', `dp_${MANANA}_${aid}`, { date: MANANA, pisoId: 'p1', sc, kind: 'dprop', actId: aid, ambId: amb, k: 'per', desc: '', st: 'pend', by: 'sc@obra.pe', byName: 'Sandra', ts: 1 }];
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, dp('s9', 'a1', 'c1'), dp('e1', 'a2', 'c2')] });
+  await row(page, 's9').locator('[data-dpa]').click();
+  await expect(page.locator('#pop .nvbox')).toBeVisible();
+  const y0 = await page.locator('#pop').evaluate(p => p.getBoundingClientRect().top);
+  // otro ingeniero decide la otra propuesta: el panel se redibuja con lo nuevo
+  await page.evaluate(id => fcol('pdz').doc(id).set({ st: 'rej', dec: 'Va', decBy: 'editor@obra.pe', decN: 'Otro', decT: 2 }, { merge: true }), `dp_${MANANA}_e1`);
+  await expect(row(page, 'e1').locator('.dzp.rej')).toBeVisible();
+  // el navegador ajusta el desplazamiento del panel (o el usuario lo mueve un poco): antes, eso cerraba la ventana
+  await page.locator('#mpanel').evaluate(p => { p.scrollTop += 1; p.dispatchEvent(new Event('scroll')); });
+  await page.waitForTimeout(200);
+  await expect(page.locator('#pop .nvbox')).toBeVisible();
+  expect(Math.abs((await page.locator('#pop').evaluate(p => p.getBoundingClientRect().top)) - y0)).toBeLessThan(40); // sigue junto a su fila
+  await page.locator('#pop [data-nv="nolib"]').click();
+  await page.locator('#pop .nvok').click();
+  await expect(row(page, 's9')).toContainText('No va');
+  noErrors(errors, 'revisar con datos de otros');
+});
+
 /* auditoría LOG-02: en la ficha de cumplimiento del plano, pasar a «✗ No» quita la marca de terminada */
 test('reunión: corregir a «✗ No» en la ficha de cumplimiento quita la marca de terminada', async ({ page }) => {
   const r = { status: 'ok', done: true, sc: 'c1', ambId: 'a1', by: 'campo@obra.pe', ts: 1 };

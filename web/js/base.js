@@ -343,8 +343,13 @@ const pop=$('#pop');let popFor=null;
 function popPlace(){const anchor=popFor;if(!anchor||pop.hidden)return;const r=anchor.getBoundingClientRect();const w=pop.offsetWidth,h=pop.offsetHeight;
   let x=Math.min(r.left,innerWidth-w-8),y=r.bottom+4;if(y+h>innerHeight-8)y=Math.max(8,r.top-h-4);pop.style.left=Math.max(8,x)+'px';pop.style.top=y+'px'}
 /* la ventanita sigue a su botón al desplazar; si el botón sale de la vista (o se redibujó), se cierra */
-addEventListener('scroll',e=>{if(pop.hidden||!popFor||(e.target&&e.target.nodeType===1&&pop.contains(e.target)))return;const a=popFor;
-  if(!a.isConnected){closePop();return}const r=a.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight||(!r.width&&!r.height)){closePop();return}popPlace()},true);
+/* auditoría EJE-07: si la fila se redibujó por datos de otro usuario, el botón es otro elemento: se busca el mismo (por id o data-*) y la
+   ventanita se ancla a él; antes, el primer desplazamiento (o el ajuste del navegador al cambiar las filas) la cerraba a mitad de decidir */
+function popSel(el){for(const at of el.attributes||[]){if(at.name==='id')return'#'+CSS.escape(at.value);if(at.name.startsWith('data-'))return`${el.tagName}[${at.name}="${CSS.escape(at.value)}"]`}return null}
+function popReanchor(a){const own=a&&popSel(a);if(!own)return null;const Q=[own];for(let p=a.parentElement;p;p=p.parentElement){const s=popSel(p);if(s){Q.push(s+' '+own);if(p.id)break}}
+  for(const q of Q){let L;try{L=document.querySelectorAll(q)}catch(e){continue}if(L.length===1&&!pop.contains(L[0]))return L[0]}return null}
+addEventListener('scroll',e=>{if(pop.hidden||!popFor||(e.target&&e.target.nodeType===1&&pop.contains(e.target)))return;let a=popFor;
+  if(!a.isConnected){a=popReanchor(a);if(!a){closePop();return}popFor=a}const r=a.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight||(!r.width&&!r.height)){closePop();return}popPlace()},true);
 function openPop(anchor,html,handlers){pop.innerHTML=html;pop.hidden=false;popFor=anchor;popPlace();
   pop.onclick=e=>{const b=e.target.closest('button[data-do]');if(!b)return;closePop();handlers[b.dataset.do]&&handlers[b.dataset.do](b.dataset)};
   const f=pop.querySelector('button');f&&f.focus();}
