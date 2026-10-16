@@ -428,7 +428,7 @@ function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&
   b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Terminar edición':'✎ Editar';b.title=LKED?'Volver al modo consulta (solo ver y desplazarse)':'Habilitar la edición del lookahead';
   const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn())}
 function ensureVers(){if(lhiSub||!db)return;
-  lhiSub=fcol('lhidx').onSnapshot(sn=>{LHI.clear();sn.docs.forEach(d=>LHI.set(d.id,{...d.data(),id:d.id}));lhiErr=null;if(U.ver&&!LHI.has(U.ver))U.ver='';if(ready&&U.tab==='look')requestRender()},
+  lhiSub=fcol('lhidx').onSnapshot(sn=>{LHI.clear();sn.docs.forEach(d=>LHI.set(d.id,{...d.data(),id:d.id}));lhiErr=null;if(U.ver&&!LHI.has(U.ver))U.ver='';if(ready&&U.tab==='look')snapRender(sn)},
     err=>{lhiErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});
   if(!autoTimer)autoTimer=setInterval(autoVersion,60000);
   unsubs.push(()=>{if(lhiSub)lhiSub();lhiSub=null;LHI.clear();VERD.clear();U.ver='';clearInterval(autoTimer);autoTimer=null})}

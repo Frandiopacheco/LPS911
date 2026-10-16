@@ -1,7 +1,7 @@
 // Velocidad con una obra grande (2400 actividades, 25 subcontratistas). Mide estilo, diseño y código del navegador
 // al entrar a las pestañas. Los límites son amplios (las máquinas de GitHub varían) y avisan si algo se vuelve lento.
 import { test, expect } from '@playwright/test';
-import { openApp, noErrors } from './helpers.js';
+import { openApp, noErrors, openTab } from './helpers.js';
 import { obraGrande } from './obra-grande.js';
 
 test('entrar y volver al Lookahead con una obra grande', async ({ page }) => {
@@ -150,4 +150,27 @@ test('Plan diario con una obra grande: abrir, recibir cambios de otros y desplaz
   expect(res.cambio.ms, 'redibujar tras un cambio de otro usuario').toBeLessThan(2500);
   expect(res.desplazar.codigo, 'desplazar no vuelve a armar las etiquetas').toBeLessThan(1500);
   noErrors(errors, 'plan diario grande');
+});
+
+/* auditoría REN-02: los cambios de otros usuarios en Liberaciones, Matriz, propuestas… se agrupan en las vistas pesadas como los de acts;
+   lo escrito en este equipo (hasPendingWrites) se sigue dibujando al momento */
+test('cambios ajenos en Liberaciones y Matriz se agrupan en una vista pesada; lo propio se dibuja al momento', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'lib' });
+  /* la vista «cuesta» 300 ms (como la Matriz o el Plan semanal con datos reales) */
+  await page.evaluate(() => { window.__nr = 0; const r = window.render; window.render = (...a) => { window.__nr++; const o = r(...a); RCOST[U.tab] = 300; return o; }; RCOST[U.tab] = 300; RLAST = performance.now(); });
+  const contar = async (escribir) => {
+    await page.evaluate(() => { window.__nr = 0; RLAST = performance.now(); window.__dbRemote = true; });
+    for (let i = 0; i < 5; i++) { await page.evaluate(escribir, i); await page.waitForTimeout(120); }
+    await page.waitForTimeout(100);
+    return page.evaluate(() => { window.__dbRemote = false; return window.__nr; });
+  };
+  expect(await contar(i => fcol('lib').doc('Lsol').set({ note: 'otro ' + i }, { merge: true })), 'lib de otro usuario').toBeLessThanOrEqual(1);
+  await openTab(page, 'mat');
+  await page.evaluate(() => { RCOST[U.tab] = 300; });
+  expect(await contar(i => fcol('mamb').doc('a1').set({ x: i }, { merge: true })), 'mamb de otro usuario').toBeLessThanOrEqual(1);
+  // lo propio: la foto llega con hasPendingWrites y se dibuja en el siguiente cuadro
+  await page.waitForTimeout(1600);
+  await page.evaluate(() => { window.__nr = 0; snapRender({ metadata: { hasPendingWrites: true } }); });
+  await expect.poll(() => page.evaluate(() => window.__nr), { timeout: 500 }).toBe(1);
+  noErrors(errors, 'agrupar cambios ajenos');
 });

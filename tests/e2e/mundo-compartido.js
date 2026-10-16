@@ -22,7 +22,8 @@ rep('function colRef(n, filters = [], lim = 0) {', `
     return r;
   }
   const rv = v => { if (Array.isArray(v)) return v.map(rv); if (v && typeof v === 'object') { const k = Object.keys(v); if (k.length === 1 && v.__del === true) return DEL; if (k.length === 1 && v.__ts === true) return TS; const o = {}; for (const x of k) o[x] = rv(v[x]); return o; } return v; };
-  window.__hubRecv = s => { const m = JSON.parse(s); const r = docRef0(m.c, m.id); const a = rv(m.a); try { Promise.resolve(r[m.op](...a)).catch(() => {}); } catch (e) {} };
+  /* lo que llega de otra página es de otro usuario: su foto va sin hasPendingWrites (window.__dbRemote, fake-firebase.js) */
+  window.__hubRecv = s => { const m = JSON.parse(s); const r = docRef0(m.c, m.id); const a = rv(m.a); window.__dbRemote = true; try { Promise.resolve(r[m.op](...a)).catch(() => {}); } catch (e) {} finally { window.__dbRemote = false; } };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const txLock = async (fn, tx) => { if (!window.__hubLock) return fn(tx); await window.__hubLock(); try { await sleep(30); return await fn(tx); } finally { await sleep(30); await Promise.allSettled([...PEND]); await window.__hubUnlock(); } };
   function colRef(n, filters = [], lim = 0) {`);

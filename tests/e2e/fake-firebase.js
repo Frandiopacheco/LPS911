@@ -106,7 +106,10 @@ window.__uiAskNative = true;
   const subs = new Set();
   /* un lote (batch) avisa una sola vez al terminar, como Firestore */
   let hold = null, holdN = 0;
-  const changed = n => { if (hold) { hold.add(n); return; } persist(); for (const s of [...subs]) if (s.n === n) setTimeout(s.fire, 0); };
+  /* la foto que sigue a una escritura de esta página llega con hasPendingWrites (como la caché local de Firestore); con
+     window.__dbRemote = true se simula que la escribió otro usuario (hasPendingWrites: false; snapRender la agrupa) */
+  const changed = n => { if (hold) { hold.add(n); return; } persist(); const pw = !window.__dbRemote; for (const s of [...subs]) if (s.n === n) setTimeout(() => s.fire(pw), 0); };
+  const withPW = (sn, pw) => { if (pw) sn.metadata = { ...sn.metadata, hasPendingWrites: true }; return sn; };
   const docSnap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => clone(d), get: k => (d || {})[k], metadata: { hasPendingWrites: false, fromCache: false }, ref: docRef(n, id) }; };
   const ops = { '==': (a, b) => a === b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '<': (a, b) => a < b, '!=': (a, b) => a !== b,
     in: (a, b) => (b || []).includes(a), 'array-contains': (a, b) => Array.isArray(a) && a.includes(b) };
@@ -149,7 +152,7 @@ window.__uiAskNative = true;
         col(n).set(id, cur); changed(n); if (h) await h;
       },
       delete: async () => { const h = ack(); col(n).delete(id); changed(n); if (h) await h; },
-      onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: () => cb(docSnap(n, id)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
+      onSnapshot(...a) { const cb = cbOf(a); const s = { n, fire: pw => cb(withPW(docSnap(n, id), pw)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s); },
     };
   }
   /* consultas hechas (para las pruebas: qué se pidió) y, con __E2E.noIdx (o window.__noIdx), un índice compuesto que falta: una igualdad en un campo
@@ -169,7 +172,7 @@ window.__uiAskNative = true;
       onSnapshot(...a) {
         window.__qlog.push({ n, filters: clone(filters) });
         if (noIdx) { const fs_ = a.filter(f => typeof f === 'function'); setTimeout(() => fs_[1] && fs_[1](idxErr()), 0); return () => {}; }
-        const cb = cbOf(a); const prev = new Map(); const s = { n, fire: () => cb(qSnap(n, filters, lim, prev)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
+        const cb = cbOf(a); const prev = new Map(); const s = { n, fire: pw => cb(withPW(qSnap(n, filters, lim, prev), pw)) }; subs.add(s); setTimeout(s.fire, 0); return () => subs.delete(s);
       },
     };
     return q;

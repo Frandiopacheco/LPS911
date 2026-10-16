@@ -24,7 +24,7 @@ const M={vista:'',piso:'',sel:'',under:true,op:0.7,hi:null,view:null,busy:'',dat
 
 /* ---------- datos ---------- */
 function ensureLam(){if(lamSub||!db)return;
-  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));imgPrune();lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat')requestRender()},
+  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));imgPrune();lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat')snapRender(sn)},
     err=>{lamErr=err&&err.code||'error';lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(lamSub)lamSub();lamSub=null;LAM.clear();lamReady=false;IMG.forEach(v=>{if(v.url)URL.revokeObjectURL(v.url)});IMG.clear();M.view=null})}
 const lamsOf=pid=>[...LAM.values()].filter(l=>l.pisoId===pid&&!l.arch).sort((a,b)=>(b.base?1:0)-(a.base?1:0)||(a.order||0)-(b.order||0)||EN(a.esp).localeCompare(EN(b.esp)));
@@ -176,17 +176,18 @@ const PD=new Map(),ZN=new Map();let PDV=0;/* sube con cada cambio del plan del d
    volvía a suscribirse a pdz. Ahora quedan suscritas las dos últimas fechas (PDS: fecha → {m, un, ok, err}) y al volver
    se repone PD con lo que ya llegó, sin otra suscripción. */
 const PDS=new Map();
-const pdRR=()=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()};
+/* sn: la foto (lo propio al momento, lo ajeno agrupado; auditoría REN-02); sin foto (error): al momento */
+const pdRR=sn=>{if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')snapRender(sn)};
 function ensurePlan(){if(!db)return;
   if(pdKey!==M.date){const d=pdKey=M.date;PDV++;let e=PDS.get(d);
     if(e){PDS.delete(d);PDS.set(d,e)}
     else{e={m:new Map(),un:null,ok:false,err:null};PDS.set(d,e);
       e.un=fcol('pdz').where('date','==',d).onSnapshot(sn=>{e.m.clear();sn.docs.forEach(x=>e.m.set(x.id,{...x.data(),id:x.id}));e.ok=true;e.err=null;
-          if(pdKey!==d)return;PDV++;PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=null;pdRR()},
+          if(pdKey!==d)return;PDV++;PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=null;pdRR(sn)},
         err=>{e.err=err&&err.code||'error';if(pdKey!==d)return;M.pdErr=e.err;pdRR()});
       while(PDS.size>2){const k=PDS.keys().next().value;const o=PDS.get(k);PDS.delete(k);if(o.un)o.un()}}
     PD.clear();for(const[k,v]of e.m)PD.set(k,v);M.pdErr=e.err}
-  if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')requestRender()},()=>{})}
+  if(znKey!==M.piso){if(znSub)znSub();znKey=M.piso;ZN.clear();if(M.piso)znSub=fcol('pzon').where('pisoId','==',M.piso).onSnapshot(sn=>{ZN.clear();sn.docs.forEach(d=>ZN.set(d.id,{...d.data(),id:d.id}));if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos')snapRender(sn)},()=>{})}
   if(!planHook){planHook=true;unsubs.push(()=>{for(const o of PDS.values())if(o.un)o.un();PDS.clear();if(znSub)znSub();znSub=null;pdKey=znKey=null;PD.clear();ZN.clear();planHook=false})}}
 const flat=a=>a.flatMap(p=>[Math.round(p.x*10)/10,Math.round(p.y*10)/10]);
 const unflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};

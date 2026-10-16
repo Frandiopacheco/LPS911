@@ -376,6 +376,9 @@ function requestRender(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=fals
 const RCOST={};let RLAST=0,rrT=0;
 function requestRemoteRender(){const c=RCOST[U.tab]||0;if(c<120){requestRender();return}if(rrT)return;
   const gap=Math.min(4000,Math.max(1000,c*5));rrT=setTimeout(()=>{rrT=0;requestRender()},Math.max(0,RLAST+gap-performance.now()))}
+/* foto de Firestore (auditoría REN-02): lo escrito en este equipo (hasPendingWrites) se dibuja al momento; lo de otros usuarios
+   se agrupa en las vistas pesadas como el resto de las suscripciones. Sin foto (error de la suscripción): al momento. */
+function snapRender(sn){if(!sn||(sn.metadata&&sn.metadata.hasPendingWrites))requestRender();else requestRemoteRender()}
 function flushDeferred(){if(deferred){deferred=false;requestRender()}}
 
 /* ---------- conexión ---------- */
@@ -439,15 +442,16 @@ async function startSession(u,fdb){
   if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS))subCol(col,k,false);
   /* el asistente de tareo necesita la lista del equipo (asignar obreros a capataces) */
   const memQ=canDaily||me.role==='tasis'?fcol('members'):fcol('members').doc(me.email);
-  const memCb=snap=>{snapOk('members');MEM.clear();(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
+  const memCb=snap=>{snapOk('members');MEM.clear();let rch=false;(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
     if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
     /* si cambia lo que hay que cargar (solo tareo, ve el Tareo, lista del equipo), se vuelve a abrir con las suscripciones correctas */
-    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
+    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;rch=true;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
     if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
-    renderWho();if(typeof respSync==='function')respSync();if(ready)requestRender()};
+    /* cambio de rol: al momento; lo demás (nombres, responsables de otros) se agrupa como los otros cambios ajenos (auditoría REN-02) */
+    renderWho();if(typeof respSync==='function')respSync();if(ready){if(rch)requestRender();else snapRender(snap)}};
   let memUn=null;const memOpen=()=>{memUn=memQ.onSnapshot(memCb,err=>{memUn=null;snapFail('members',err,memOpen)})};memOpen();unsubs.push(()=>{if(memUn)memUn();memUn=null});
   me.name=md.name||(me.anon?'Capataz':me.email.split('@')[0]);
   if(rtdb&&!TAR_ONLY()){presRef=rtdb.ref('presence/'+me.uid);conRef=rtdb.ref('.info/connected');
