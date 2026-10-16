@@ -221,3 +221,24 @@ test('A7: el PPC del cliente de una semana no cambia según la semana que se mir
   expect(r[0]).toEqual(r[2]);
   noErrors(errors, 'A7');
 });
+
+// MOD-04: el Excel del cliente (cliWeekDocs) cuenta los días cumplidos de las semanas previas aunque no se haya pasado por Indicadores
+test('MOD-04: el Excel cliente carga el registro de Campo de las semanas previas antes de medir el cumplimiento', async ({ page }) => {
+  const sn = { secs: { s1: { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 } }, ambs: { a1: { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0 } },
+    acts: { q7: { ambId: 'a1', sc: 'c1', name: 'Redes empotradas', days: ['2026-09-01', '2026-09-02', '2026-09-29'], order: 10 } } };
+  const rec = { status: 'ok', sc: 'c1', nm: 'Redes empotradas', ambId: 'a1', by: 'campo@obra.pe', ts: 1 };
+  const errors = await openApp(page, { tab: 'look', extra: [
+    ['clidx', 'c0', { label: 'S50', date: '2026-08-01', ts: 1, forW: 50, pisos: { p1: { code: 'P1', name: 'Primer piso' } } }],
+    ['cliver', 'c0__p1', { piso: { code: 'P1', name: 'Primer piso', order: 1 }, json: JSON.stringify(sn) }],
+    ...['2026-09-01', '2026-09-02', '2026-09-29'].map(d => ['daily', d + '_p1', { date: d, pisoId: 'p1', recs: { q7: rec }, extra: {} }])] });
+  const r = await page.evaluate(async () => {
+    ensureCli();
+    await new Promise(ok => { const t = setInterval(() => { if (CLX.size) { clearInterval(t); ok(); } }, 50); });
+    const had = DAY.has('2026-09-01_p1');
+    const w = await cliWeekDocs(U.week);
+    return { had, res: w && w.docs[0] && w.docs[0].res.q7 };
+  });
+  expect(r.had).toBe(false); // la pestaña no lo tenía cargado
+  expect(r.res).toEqual({ ok: true });
+  noErrors(errors, 'MOD-04');
+});
