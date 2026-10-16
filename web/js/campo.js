@@ -104,8 +104,12 @@ function renderCampo(main){if(VEED()&&!CU.view)CU.view='plan';if(CU.view==='plan
     const pd_=t.closest('[data-phdel]');if(pd_&&canDaily){const fid=pd_.dataset.phdel;const[kind,key]=pd_.dataset.k.split(/:(.*)/s);
       /* se quita el vínculo, no la foto: queda en «phQ» (fotos quitadas) y en la colección, por si otro registro la usa */
       const phq=(o,f)=>[...new Set([...(o.phQ||[]),f])];
-      if(kind==='r'){const x=S.act.get(key);const rc=recOf(d,key);if(x&&rc)writeDaily(d,pisoOfAct(key),{recs:{[key]:{...rc,photos:(rc.photos||[]).filter(i=>i!==fid),phQ:phq(rc,fid)}}})}
-      else{const[pid,xid]=key.split(':');const doc=DAY.get(dayId(d,pid));const ex=doc&&doc.extra&&doc.extra[xid];if(ex)writeDaily(d,pid,{extra:{[xid]:{...ex,photos:(ex.photos||[]).filter(i=>i!==fid),phQ:phq(ex,fid)}}})}
+      /* UI-03: «Deshacer» la devuelve (vuelve a photos y sale de phQ) sobre el registro como esté en ese momento */
+      const back=o=>({...o,photos:[...new Set([...(o.photos||[]),fid])],phQ:(o.phQ||[]).filter(i=>i!==fid)});
+      if(kind==='r'){const x=S.act.get(key);const rc=recOf(d,key);if(x&&rc){const pid=pisoOfAct(key);if(writeDaily(d,pid,{recs:{[key]:{...rc,photos:(rc.photos||[]).filter(i=>i!==fid),phQ:phq(rc,fid)}}})!==false)
+        toast('Foto quitada','Deshacer',()=>{const r2=recOf(d,key);if(r2)writeDaily(d,pid,{recs:{[key]:back(r2)}})})}}
+      else{const[pid,xid]=key.split(':');const doc=DAY.get(dayId(d,pid));const ex=doc&&doc.extra&&doc.extra[xid];if(ex){if(writeDaily(d,pid,{extra:{[xid]:{...ex,photos:(ex.photos||[]).filter(i=>i!==fid),phQ:phq(ex,fid)}}})!==false)
+        toast('Foto quitada','Deshacer',()=>{const d2=DAY.get(dayId(d,pid));const e2=d2&&d2.extra&&d2.extra[xid];if(e2)writeDaily(d,pid,{extra:{[xid]:back(e2)}})})}}
       return}
     const art=t.closest('article[data-a]');if(!art)return;const aid=art.dataset.a;const x=S.act.get(aid);if(!x)return;const pid=pisoOfAct(aid);const cur=recOf(d,aid);
     const stb=t.closest('[data-st]');if(stb&&canDaily){const nst=stb.dataset.st;const r=baseRec(d,x,cur);r.status=nst;if(nst==='ok'){r.cnc='';r.imp=null;if(r.exec==null&&r.prog!=null)r.exec=r.prog;openCards.delete(aid)}else{r.exc='';openCards.add(aid);if(cur&&cur.status==='ok'&&cur.exec!=null&&cur.exec===r.prog)r.exec=null}

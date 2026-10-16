@@ -58,6 +58,23 @@ test('3 · Quitar una foto o el registro no borra las fotos', async ({ page }) =
   noErrors(errors, 'fotos');
 });
 
+// UI-03: quitar una foto en Campo ofrece «Deshacer» y la «×» mide al menos 32 px
+test('3b · Quitar una foto se puede deshacer; la × mide 32 px', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'campo', extra: [act('x1'), ['fotos', 'ph1', { data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }], ['fotos', 'ph2', { data: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }],
+    daily({ x1: rec({ status: 'no', exec: 0, cnc: 'Materiales', photos: ['ph1', 'ph2'] }) })] });
+  await card(page, 'x1').locator('[data-more]').click();
+  const x = card(page, 'x1').locator('[data-phdel="ph2"]');
+  const bb = await x.boundingBox();
+  expect(Math.min(bb.width, bb.height)).toBeGreaterThanOrEqual(32);
+  await x.click();
+  await expect.poll(async () => (await getRec(page, 'x1')).photos).toEqual(['ph1']);
+  await expect(page.locator('#toast')).toContainText('Foto quitada');
+  await page.click('#toast button');
+  await expect.poll(async () => (await getRec(page, 'x1')).photos).toEqual(['ph1', 'ph2']);
+  expect((await getRec(page, 'x1')).phQ || []).toEqual([]);
+  noErrors(errors, 'deshacer foto');
+});
+
 test('5 · Guardar la mitigación no pisa la causa que otra persona cambió (copia atrasada)', async ({ page }) => {
   const errors = await openApp(page, { tab: 'plan', extra: [act('x1'), week({ res: { x1: { ok: false, cnc: 'Materiales', note: 'Nota inicial', mit: '' } } })] });
   /* otra sesión cambia la causa (detalle) */
