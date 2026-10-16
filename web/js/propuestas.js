@@ -432,7 +432,7 @@ function propBarClick(e){const t=e.target;let r;
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='open'){propOpenWin();return}
   if(k==='close'){propCloseWin();return}
-  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
+  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){if(U.revSc&&!revCounts().has(U.revSc))U.revSc='';U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
 function propModal(mode){PMOD={mode};let el=$('#ppm');if(!el){el=document.createElement('div');el.id='ppm';el.className='ppm';el.innerHTML='<div class="ppc"></div>';document.body.appendChild(el);el.onclick=propModalClick}propModalRender()}
 function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PMOD.mode;let h='';
@@ -513,7 +513,11 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
 const rvFold=()=>{try{return localStorage.getItem('lps.rvfold')==='1'}catch(e){return false}};
 function rvPanelSync(){let el=document.getElementById('rvpanel');
   const gone=()=>{if(el)el.remove()};
-  if(typeof revOn==='function'&&revOn()&&!revItems().length){/* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;REVSEL=null;gone();requestRender();return}
+  if(typeof revOn==='function'&&revOn()&&!revItems().length){
+    /* oct 2026: el SC elegido se quedó sin pendientes (p. ej. tras «Rechazar todo lo visible») pero otros SC aún tienen: se pasa a «Todos».
+       Antes salía de la revisión con el filtro del SC puesto, y «Revisar propuestas» volvía a salir al instante sin mostrar nada. */
+    if(U.revSc&&revCounts().size){const n=conOf(U.revSc).name;U.revSc='';REVSEL=null;requestRender();toast(`${n} ya no tiene propuestas pendientes: se muestran las de los demás subcontratistas.`);return}
+    /* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;U.revSc='';REVSEL=null;gone();requestRender();return}
   let mode='',h='',cls='rvpanel';const f=rvFold();
   if(typeof revOn==='function'&&revOn()){mode='rev';h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvpn">${revItems().length}</span></button>`:revBarHtml()}
   else if(canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&me&&me.role!=='sc'){

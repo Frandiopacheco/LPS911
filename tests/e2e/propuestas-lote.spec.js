@@ -54,3 +54,29 @@ test('aceptar en lote: un cambio oficial en días cerrados no choca y los días 
   expect(left).toBe(0);
   noErrors(errors, 'lote con días cerrados');
 });
+
+/* caso real (16 oct 2026): con un SC elegido en el panel, «Rechazar todo lo visible» lo dejaba sin pendientes y la revisión se cerraba
+   con ese filtro puesto; «Revisar propuestas» volvía a cerrarse al instante aunque otros SC tenían propuestas. */
+test('rechazar todo lo de un SC no traba la revisión: pasa a «Todos» y se sigue revisando a los demás', async ({ page }) => {
+  const A = (sc, i) => ({ ambId: 'a1', sc, name: 'Act ' + sc + i, und: 'm2', metrado: 10, days: ['2026-10-05'], order: 500 + i });
+  const it = x => ({ after: { ...x, days: ['2026-10-06'] }, base: x, ts: 1, by: 'sc@obra.pe', n: 'SC', sent: true, sentAt: 1 });
+  const extra = [['acts', 'x1', A('c1', 1)], ['acts', 'x2', A('c1', 2)], ['acts', 'y1', A('c2', 1)],
+    ['lhprop', 'c1', { sc: 'c1', sentAt: 1, items: { x1: it(A('c1', 1)), x2: it(A('c1', 2)) } }],
+    ['lhprop', 'c2', { sc: 'c2', sentAt: 1, items: { y1: it(A('c2', 1)) } }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await page.evaluate(() => { U.rev = true; U.revSc = 'c1'; REVSEL = null; gridRows = null; render(); });
+  await expect(page.locator('#rvpanel [data-rvrej]')).toContainText('(2)');
+  page.on('dialog', d => d.accept());
+  await page.click('#rvpanel [data-rvrej]');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbGet('lhprop', 'c1').items).filter(Boolean).length)).toBe(0);
+  // sigue en la revisión, ahora con «Todos», y se ve la propuesta del otro SC
+  await expect.poll(() => page.evaluate(() => [U.rev, U.revSc])).toEqual([true, '']);
+  await expect(page.locator('#rvpanel .rvpn').first()).toHaveText('1');
+  await expect(page.locator('#rvpanel [data-rvall]')).toBeEnabled();
+  // y si el filtro quedó puesto fuera de la revisión, «Revisar propuestas» lo limpia y entra
+  await page.evaluate(() => { U.rev = false; U.revSc = 'c1'; render(); });
+  await page.locator('[data-pp="rev"]').first().click();
+  await expect.poll(() => page.evaluate(() => [U.rev, U.revSc])).toEqual([true, '']);
+  await expect(page.locator('#rvpanel [data-rvall]')).toBeEnabled();
+  noErrors(errors, 'revisión tras rechazar un SC');
+});
