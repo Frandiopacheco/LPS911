@@ -31,3 +31,4 @@ Corregido en el PR «Auditoría con datos reales»:
 - «Aplicar registros de campo» ignora los cierres del capataz/SC sin confirmar (`_prop`): `fieldSug().prop` los muestra como «N por confirmar» y no concluye «No» (decisión del dueño: opción B).
 Pendiente (no se tocó por decisión del dueño): la semana 58 quedó casi sin evaluar (PPC oficial 1 %).
 Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan los cambios ajenos; desde la auditoría núcleo REN-02 también los de `mcat`/`mamb`/`mver`/catálogo, `lib`, `nprog`, `lhprop`, `members`, cliente y `pdz`/`pzon`).
+- Publicación de la página: desde oct 2026 va a Firebase Hosting (ya no Netlify); cada publicación cambia `VER` en `sw.js`, y eso dispara el aviso de «versión nueva» en los equipos abiertos.
