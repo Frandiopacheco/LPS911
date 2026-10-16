@@ -3743,3 +3743,8 @@ body.lkdock #grid thead th.s4{z-index:7}
 .plvsplit:hover::after{background:var(--accent)}
 .plvghost{position:fixed;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent);z-index:400;pointer-events:none}
 #fplano.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.ixd .ixd-pisos.two{columns:2;column-gap:2em}
+/* A verificar: todas las tablas con las mismas columnas (una por subcontratista) para que los títulos queden alineados */
+.ixd-tbl{table-layout:fixed}
+.ixd-tbl col.c1{width:26%}.ixd-tbl col.c2{width:24%}.ixd-tbl col.c3{width:13%}.ixd-tbl col.c4{width:27%}.ixd-tbl col.c5{width:10%}
+.ixd-tbl td,.ixd-tbl th{overflow-wrap:anywhere}
