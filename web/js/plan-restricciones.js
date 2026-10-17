@@ -21,6 +21,11 @@ function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp
 /* Plan semanal: vista por subcontratista o por ambiente (U.planV) y buscador (PLQ, solo en esta sesión). Las dos son solo
    presentación sobre los mismos compromisos: no escriben en la semana congelada ni cambian el PPC. */
 let PLQ='';
+/* filtros del Plan semanal (oct 2026, pedido del dueño; solo en esta sesión, como el buscador): PSF.sc = subcontratista,
+   PSF.st = '' todos | 'pend' por evaluar (sin Sí/No) | 'cnc' no cumplidos sin causa. Solo filtran lo que se ve. */
+const PSF={sc:'',st:''};
+const psStOk=e=>!PSF.st||(PSF.st==='pend'?e.pend:PSF.st==='cnc'?e.nocnc:true);
+const psOn=()=>!!(psAlts().length||PSF.sc||PSF.st);
 const plNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
 function planQText(it,r){return plNorm([it.act,it.code,it.amb,it.sector,conOf(it.sc).name,r.cnc?cncLabel(r.cnc):'',r.note,r.mit].join(' '))}
 /** nombre del sector en el lookahead vivo (solo para mostrar; la foto congelada guarda el código) */
@@ -36,8 +41,8 @@ const PSV_MIN=250,PSV_B=20,PSVH=new Map(),PSVA={d:[64,34],m:[330,40]};let PSV=nu
 const psMode=()=>matchMedia('(max-width:760px)').matches?'m':'d';
 const psAlts=()=>plNorm(PLQ).split(/[,;]/).map(t=>t.trim()).filter(Boolean).map(t=>t.split(' '));
 /** lo que queda con el buscador: compromisos que coinciden y los encabezados de sus grupos */
-function psVisList(E,alts){if(!alts.length)return E;const gv=new Set(),ok=new Set();
-  for(const e of E)if(e.id&&alts.some(ws=>ws.every(w=>e.q.includes(w)))){ok.add(e);e.gs.forEach(g=>gv.add(g))}
+function psVisList(E,alts){if(!alts.length&&!PSF.sc&&!PSF.st)return E;const gv=new Set(),ok=new Set();
+  for(const e of E)if(e.id&&(!PSF.sc||e.sc===PSF.sc)&&psStOk(e)&&(!alts.length||alts.some(ws=>ws.every(w=>e.q.includes(w))))){ok.add(e);e.gs.forEach(g=>gv.add(g))}
   return E.filter(e=>e.id?ok.has(e):gv.has(e.g))}
 const psKey=(pre,e)=>pre+(e.id||'g:'+e.g);
 function psTb(s,bi,paint){const es=s.vis.slice(bi*PSV_B,(bi+1)*PSV_B);
@@ -68,10 +73,10 @@ function psReveal(main,pid,id){const V=PSV;if(!V||V.main!==main||!V.virt)return;
   const i=s.vis.findIndex(e=>e.id===id);if(i<0)return;const tb=[...s.tbl.tBodies].find(b=>b.dataset.plb===String(Math.floor(i/PSV_B)));
   if(!tb||!tb.classList.contains('plvb'))return;tb.insertAdjacentHTML('afterend',psTb(s,+tb.dataset.plb,1));const x=tb.nextElementSibling;tb.remove();psMeasure(s,[x])}
 /** contadores del buscador y pisos sin coincidencias */
-function psCounts(main){const alts=psAlts();let tot=0,vis=0;
+function psCounts(main){const on=psOn();let tot=0,vis=0;
   for(const sec of main.querySelectorAll('section[data-pid]')){const s=PSV&&PSV.main===main&&PSV.secs.find(o=>o.pid===sec.dataset.pid);
-    if(!s){sec.classList.toggle('plq-off',!!alts.length);continue}const k=s.vis.filter(e=>e.id).length;tot+=s.n;vis+=k;sec.classList.toggle('plq-off',!!alts.length&&!k)}
-  const n0=$('#plq0');if(n0)n0.hidden=!(alts.length&&!vis);const nn=$('#plqn');if(nn)nn.textContent=alts.length?`${vis} de ${tot} compromisos`:''}
+    if(!s){sec.classList.toggle('plq-off',on);continue}const k=s.vis.filter(e=>e.id).length;tot+=s.n;vis+=k;sec.classList.toggle('plq-off',on&&!k)}
+  const n0=$('#plq0');if(n0)n0.hidden=!(on&&!vis);const nn=$('#plqn');if(nn)nn.textContent=on?`${vis} de ${tot} compromisos`:''}
 /** buscador: filtra los datos y rehace solo los <tbody> (no redibuja la página); los botones Sí/No y las causas siguen funcionando en lo que queda */
 function planFilter(main){const V=PSV;if(!V||V.main!==main)return;const alts=psAlts();
   for(const s of V.secs){s.vis=psVisList(s.E,alts);if(!s.tbl)continue;[...s.tbl.tBodies].forEach(b=>b.remove());s.tbl.insertAdjacentHTML('beforeend',psTbodies(s,!V.virt))}
@@ -89,7 +94,7 @@ function planRestore(main,a){main.__own=true;const sc=main.querySelector('.scrol
 function renderPlan(main){
   ensureDaily(addD(weekStart(U.week),-7));
   const n=U.week,wd=weekDays(n),cnc=P().cnc||[];const vp=visPisos();const byAmb=U.planV==='amb';
-  let tN=0,tOk=0,tNo=0,fz=0;const parts=[],secs=[];
+  let tN=0,tOk=0,tNo=0,fz=0;const parts=[],secs=[],ALLE=[];
   for(const p of vp){
     /* evalúa (Sí/No, causas, aplicar registros, descongelar) el responsable del piso o el administrador (oct 2026, pedido del dueño);
        piso sin responsable: cualquier editor. Congelar sigue abierto a los editores. */
@@ -135,7 +140,7 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
         <td class="full" data-l="Mitigación"><input class="ci" data-mit data-fk="mit:${p.id}:${id}" value="${esc(r.mit||'')}" placeholder="${frozen&&r.ok===false?'Qué se hará para que no se repita':''}"${frozen&&ED&&(r.ok===false||r.mit)?'':' disabled'} aria-label="Mitigación"></td></tr>`};
     const scSt=frozen?wkScStats([w]):{};
     /* filas como datos (EJE-01): g = encabezado de grupo; id = compromiso, con su texto de búsqueda (q), sus grupos (gs) y su HTML perezoso (f) */
-    const E=[];const row=(id,gs)=>E.push({id,q:planQText(items[id],res[id]||{}),gs,f:()=>rowH(id)});
+    const E=[];const row=(id,gs)=>{const r=res[id]||{};const e={id,q:planQText(items[id],r),gs,f:()=>rowH(id),sc:items[id].sc,pend:r.ok!==true&&r.ok!==false,nocnc:frozen&&r.ok===false&&!r.cnc};E.push(e);ALLE.push(e)};
     if(byAmb){/* por ambiente, como en el lookahead: sector → ambiente → actividades (orden del lookahead al congelar) */
       let cs=null,ca=null;
       for(const id of ids){const it=items[id];const sk=it.sector||'—',ak=sk+'|'+(it.code||'')+'|'+(it.amb||'');
@@ -166,8 +171,11 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
    ${(()=>{const vs=histPisoSet();const P_=[...new Set([...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vs.has(w.pisoId)).map(w=>w.n))].map(k=>{const o=ppcWeekAgg(k,vs);return o?{...o,wk:+k}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
      return P_.length>1?`<details class="ppch"${U.ppcHist===false?'':' open'}><summary>PPC semanal histórico · ${P_.length} semanas</summary><div class="chart tscroll">${linesLegend()+svgLines(ppcHistPts(P_),{h:200})}</div></details>`:''})()}
    ${helpBox('¿Cómo funciona congelar y evaluar?',`<p>Cada piso congela y evalúa su plan por separado, así los equipos trabajan en paralelo. Al <b>congelar</b> un piso, sus actividades de la semana ${n} quedan fijadas como compromisos y se guarda una foto del lookahead para ver los cambios. Si marcas directamente Sí o No, ese piso se congela en ese momento.</p>`)}</div></div>
-   <div class="pltb"><span class="seg" id="plv" role="group" aria-label="Ver el plan"><button data-v="sc" class="${byAmb?'':'on'}">Por subcontratista</button><button data-v="amb" class="${byAmb?'on':''}">Por ambiente</button></span><input type="search" id="plq" value="${esc(PLQ)}" placeholder="Buscar actividad, ambiente, sector, SC o causa (varios: separa con coma)" aria-label="Buscar en el plan semanal"><span class="note" id="plqn"></span></div>
-   ${body||'<div class="empty">No hay pisos creados.</div>'}<div class="empty" id="plq0" hidden>Ningún compromiso coincide con la búsqueda.</div></div></div>`;
+   <div class="pltb"><span class="seg" id="plv" role="group" aria-label="Ver el plan"><button data-v="sc" class="${byAmb?'':'on'}">Por subcontratista</button><button data-v="amb" class="${byAmb?'on':''}">Por ambiente</button></span><input type="search" id="plq" value="${esc(PLQ)}" placeholder="Buscar actividad, ambiente, sector, SC o causa (varios: separa con coma)" aria-label="Buscar en el plan semanal">${(()=>{const scs=[...new Set(ALLE.map(e=>e.sc))].filter(Boolean).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
+     const ALs=PSF.sc?ALLE.filter(e=>e.sc===PSF.sc):ALLE;const nP=ALs.filter(e=>e.pend).length,nC=ALs.filter(e=>e.nocnc).length;
+     return`<select class="tin" id="plsc" aria-label="Filtrar por subcontratista"><option value="">Todos los subcontratistas</option>${scs.map(k=>`<option value="${esc(k)}"${PSF.sc===k?' selected':''}>${esc(conOf(k).name)}</option>`).join('')}</select>
+     <span class="seg" id="plst" role="group" aria-label="Filtrar por estado"><button data-st="" class="${PSF.st?'':'on'}">Todos</button><button data-st="pend" class="${PSF.st==='pend'?'on':''}" title="Sin marcar Sí o No">Por evaluar <b>${nP}</b></button><button data-st="cnc" class="${PSF.st==='cnc'?'on':''}" title="Marcados No y sin tipo de causa">Sin causa <b>${nC}</b></button></span>`})()}<span class="note" id="plqn"></span></div>
+   ${body||'<div class="empty">No hay pisos creados.</div>'}<div class="empty" id="plq0" hidden>Ningún compromiso coincide con la búsqueda o los filtros.</div></div></div>`;
   PSV={main,virt,secs};for(const o of secs)o.tbl=main.querySelector(`section[data-pid="${CSS.escape(o.pid)}"] table.ppcs`);
   psCounts(main);if(qf){const q=$('#plq');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(qf[0],qf[1])}catch(_){}}}
   const sc=main.querySelector('.scroll');
@@ -177,6 +185,8 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
   if(!PSVPR){PSVPR=1;window.addEventListener('beforeprint',()=>{PSVPR=2;if(U.tab==='plan')planPaint($('#main'),true)});window.addEventListener('afterprint',()=>{PSVPR=1;if(U.tab==='plan')planPaint($('#main'))})}
   planRestore(main,anc);
   $('#plq').oninput=e=>{PLQ=e.target.value;planFilter(main)};
+  $('#plsc').onchange=e=>{PSF.sc=e.target.value;render()};
+  $('#plst').onclick=e=>{const b=e.target.closest('[data-st]');if(!b||b.classList.contains('on'))return;PSF.st=b.dataset.st;render()};
   $('#plv').onclick=e=>{const b=e.target.closest('[data-v]');if(!b||b.classList.contains('on'))return;U.planV=b.dataset.v;saveUI();render()};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
