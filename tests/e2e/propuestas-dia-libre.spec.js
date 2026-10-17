@@ -67,7 +67,7 @@ test('4 · «Aceptar todo lo visible» acepta con los cambios la fila que ajusta
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, ['acts', 'q1', A1], props({ q0: item(p0, A0, SAT3_1259), q1: item(p1, A1, SAT3_1259) }, SAT3_1259)] });
   await page.evaluate(() => { U.rev = true; requestRender(); });
   /* el ingeniero deja q0 con otros días (vista previa) */
-  await page.evaluate(() => { REVSEL = { sc: 'c1', id: 'q0', k: 0, days: ['2026-10-06', '2026-10-08'] }; requestRender(); });
+  await page.evaluate(() => { revEdSet('q0', PROP.get('c1').items.q0, ['2026-10-06', '2026-10-08']); REVSEL = { sc: 'c1', id: 'q0', k: 0 }; requestRender(); });
   page.once('dialog', d => d.accept());
   await page.click('#rvpanel [data-rvall]');
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'q0').days)).toEqual(['2026-10-06', '2026-10-08']);
@@ -75,14 +75,15 @@ test('4 · «Aceptar todo lo visible» acepta con los cambios la fila que ajusta
   noErrors(errors, 'aceptar todo con cambios');
 });
 
-test('5 · quitar el último día de una fila la saca de la propuesta (se rechaza) y no cambia el lookahead', async ({ page }) => {
+test('5 · quitar el último día de una fila ya no la rechaza: queda vacía (sin días) y la propuesta sigue pendiente', async ({ page }) => {
   const after = { ...A0, days: ['2026-10-05'], qty: { '2026-10-05': 30 } };
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q0: item(after, A0, SAT3_1259) }, SAT3_1259)] });
   await page.evaluate(() => { U.rev = true; requestRender(); });
   await page.evaluate(() => revToggleDay('q0', '2026-10-05'));
-  await expect.poll(async () => (await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.q0 ?? null).toBeNull();
+  expect(await page.evaluate(() => revEd('q0'))).toEqual([]);
+  expect(await page.evaluate(() => revAcc('q0')[0])).toBe('empty');
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.q0).toBeTruthy();
   expect((await page.evaluate(() => __dbGet('acts', 'q0'))).days).toEqual(A0.days);
-  const h = Object.values(await page.evaluate(() => __dbAll('lhphist')));
-  expect(h[0]).toMatchObject({ st: 'rej' });
+  expect(Object.values(await page.evaluate(() => __dbAll('lhphist')))).toHaveLength(0);
   noErrors(errors, 'quitar último día');
 });
