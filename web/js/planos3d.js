@@ -8,7 +8,7 @@
    vuelve a la vista general. El visor se conserva armado al salir de la pestaña (ver P3_KEEP). Parte de la app: index.html carga los archivos de js/ en orden y todos comparten
    las mismas variables globales. */
 
-const P3={v:null,lib:null,host:null,wrap:null,away:0,snap:null,want:null,gopen:new Map(),docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
+const P3={v:null,lib:null,gone:new Map(),host:null,wrap:null,away:0,snap:null,want:null,gopen:new Map(),docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
   panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,side:(()=>{try{const x=localStorage.getItem('lps.p3side');return x===null?!isMob():x==='1'}catch(e){return !isMob()}})(),bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
 /* Al salir de la pestaña (a ver planos, a otro módulo…) el visor NO se destruye: queda armado y apartado, y al volver se repone tal como se dejó (cámara,
    piso, cortes, lo oculto, la selección). Para no gastar la memoria de la tablet, si pasan P3_KEEP ms fuera se libera y se guarda una foto del estado
@@ -20,10 +20,14 @@ const P3_NAMES={ARQ:'Arquitectura',EST:'Estructuras',AFC:'Agua fría y caliente'
   CAS:'Comunicaciones',CES:'Corrientes especiales',DYA:'Detección y alarma',GAS:'Gas',MOB:'Mobiliario',PET:'Petróleo',VEN:'Ventilación',BAN:'Bandejas',FED:'Fuerza',HVAC:'HVAC'};
 const P3_VIEWS=[['iso','Isométrica'],['top','Superior'],['front','Frente'],['back','Atrás'],['left','Izquierda'],['right','Derecha']];
 const P3_PRESETS=[['alta','Calidad'],['equilibrada','Equilibrada'],['rapida','Rápida']];
-function p3Sub(){if(P3.un||!me)return;P3.un=fcol('p3d').onSnapshot(sn=>{P3.docs.clear();sn.docs.forEach(d=>P3.docs.set(d.id,{...d.data(),id:d.id}));P3.ready=true;if(U.tab==='p3d')p3Sync()},
+function p3Sub(){if(P3.un||!me)return;P3.un=fcol('p3d').onSnapshot(sn=>{P3.docs.clear();P3.gone.clear();sn.docs.forEach(d=>{const x={...d.data(),id:d.id};(x.del?P3.gone:P3.docs).set(d.id,x)});P3.ready=true;if(U.tab==='p3d')p3Sync()},
   err=>{P3.ready=true;console.error('p3d',err);toast('No se pudo leer los modelos 3D: '+(err.code||err.message))});unsubs.push(()=>{if(P3.un)P3.un();P3.un=null})}
 async function p3Lib(){if(P3.lib)return P3.lib;await import(new URL('vendor/visor3d/visor3d.js',location.href).href);P3.lib=window.Visor3D;return P3.lib}
-const p3Disc=n=>{const m=String(n).toUpperCase().match(/-M3D-([A-Z]+)-E[O0]?\d/)||String(n).toUpperCase().match(/-([A-Z]{2,6})-E[O0]?\d+\.IFC$/);return m?m[1]:String(n).replace(/\.ifc$/i,'').slice(-8).toUpperCase().replace(/[^A-Z0-9]/g,'')};
+/* especialidad: el código tras M3D (CAS, ALI…); si el archivo viene de otro paquete (campo de origen distinto de XX/XXX, p. ej. «DC»), se le suma: …-DC-ZZZ-M3D-CAS-E05 → «CAS-DC», para que no reemplace al CAS de …-XX-…
+   (oct 2026: la obra tiene dos juegos, XX y DC, con códigos repetidos) */
+const p3Disc=n=>{const u=String(n).toUpperCase();const m=u.match(/-M3D-([A-Z]+)-E[O0]?\d/)||u.match(/-([A-Z]{2,6})-E[O0]?\d+\.IFC$/);if(!m)return String(n).replace(/\.ifc$/i,'').slice(-8).toUpperCase().replace(/[^A-Z0-9]/g,'');const o=u.match(/-([A-Z]{2,3})-[A-Z0-9]{2,4}-M3D-/);return o&&!/^(X+|Z+)$/.test(o[1])?`${m[1]}-${o[1]}`:m[1]};
+const p3Base=d=>String(d).split('-')[0];
+const p3Name=d=>{const[b,o]=String(d).split('-');return(P3_NAMES[b]||b)+(o?` (${o})`:'')};
 const p3Ord=d=>{const i=['ARQ','EST','AFC','DES','ACI','AAC','VEN','ILU','TOC','ALI','CAS','CES','DYA','GAS','PET','MOB'].indexOf(d);return i<0?99:i};
 const p3Fmt=n=>n>=1e6?(n/1e6).toFixed(1)+' M':n>=1e3?Math.round(n/1e3)+' mil':String(n);
 const p3Touch=()=>matchMedia('(pointer:coarse)').matches;
@@ -36,7 +40,7 @@ function renderP3d(main){p3Sub();
         <b class="p3t">Modelo 3D <span class="chip">beta</span></b>
         <span id="p3models" class="p3models"></span>
         <span class="plvsp"></span><span class="plcnt" id="p3busy"></span>
-        <label class="ib pri" title="Convierte los IFC en esta PC y los sube (puedes elegir varios)">Cargar IFC…<input type="file" id="p3file" accept=".ifc" multiple hidden></label></div>
+        ${plAdm()?'<button type="button" class="ib" id="p3mg" title="Ver y eliminar los modelos cargados">Modelos ▾</button>':''}<label class="ib pri" title="Convierte los IFC en esta PC y los sube (puedes elegir varios)">Cargar IFC…<input type="file" id="p3file" accept=".ifc" multiple hidden></label></div>
       <div class="p3host" id="p3host"><div class="p3cv" id="p3cv"></div><div class="p3empty" id="p3empty"></div>
         <div class="p3ban" id="p3ban" hidden></div><aside class="p3side" id="p3side" aria-label="Propiedades del elemento" hidden></aside><div class="p3fm" id="p3fm" role="toolbar" aria-label="Acciones sobre lo seleccionado" hidden></div><div class="p3pn" id="p3pn" hidden></div>
         <div class="p3hint" id="p3hint" hidden></div>
@@ -44,6 +48,7 @@ function renderP3d(main){p3Sub();
         <nav class="p3dock" id="p3dock" aria-label="Herramientas del modelo 3D"></nav></div></div>`;
     P3.wrap=$('.p3w',main);P3.host=$('#p3host',main);
     $('#p3file',main).onchange=e=>{const fs=[...e.target.files];e.target.value='';p3Upload(fs)};
+    {const mg=$('#p3mg',main);if(mg)mg.onclick=()=>p3Manage(mg)}
     $('#p3models',main).onclick=e=>{const b=e.target.closest('[data-m]');if(b)p3Toggle(b.dataset.m)};
     P3.host.addEventListener('click',p3Click);P3.host.addEventListener('input',p3Input);P3.host.addEventListener('toggle',p3Toggled,true);
     document.addEventListener('keydown',p3Key);window.addEventListener('resize',p3Fit);
@@ -71,11 +76,11 @@ async function p3Start(){if(P3.v)return;const host=P3.host;
     p3Hint();p3Sync()}catch(e){console.error(e);p3Busy('');toast('No se pudo cargar el visor 3D: '+(e.message||e))}}
 
 /* ───────── especialidades ───────── */
-function p3Sync(){const box=$('#p3models');if(!box)return;const L=[...P3.docs.values()].sort((a,b)=>p3Ord(a.disc)-p3Ord(b.disc));
+function p3Sync(){const box=$('#p3models');if(!box)return;const L=[...P3.docs.values()].sort((a,b)=>p3Ord(p3Base(a.disc))-p3Ord(p3Base(b.disc))||String(a.disc).localeCompare(String(b.disc)));
   const em=$('#p3empty');if(em){em.hidden=!!L.length;em.innerHTML=!P3.ready?'Cargando…':L.length?'':'<div class="callout"><b>Aún no hay modelos.</b> Usa <b>Cargar IFC…</b> (en una PC con Chrome o Edge): cada IFC se convierte aquí y se sube. Empieza por arquitectura (ARQ).</div>'}
   /* se cargan solas las principales; el resto, al tocarlas */
   if(P3.v)for(const d of L)if(P3.on[d.id]===undefined&&(P3.want?!!P3.want[d.id]:(P3_AUTO.includes(d.disc)||L.length<=3)))p3Toggle(d.id);
-  shx(box,L.map(d=>{const st=P3.loading.has(d.id)?'ld':P3.on[d.id]?'on':'';return`<button type="button" class="plchip ${st}" data-m="${esc(d.id)}" aria-pressed="${st==='on'}" title="${esc((P3_NAMES[d.disc]||d.disc)+' · '+(d.fsize?(d.fsize/1048576).toFixed(1)+' MB':'')+(d.nm?' · '+d.nm:''))}">${P3.loading.has(d.id)?'⏳ ':''}${esc(d.disc)}</button>`}).join(''));
+  shx(box,L.map(d=>{const st=P3.loading.has(d.id)?'ld':P3.on[d.id]?'on':'';return`<button type="button" class="plchip ${st}" data-m="${esc(d.id)}" aria-pressed="${st==='on'}" title="${esc(p3Name(d.disc)+' · '+(d.fsize?(d.fsize/1048576).toFixed(1)+' MB':'')+(d.nm?' · '+d.nm:''))}">${P3.loading.has(d.id)?'⏳ ':''}${esc(d.disc)}</button>`}).join(''));
   p3Levels();p3Restore()}
 function p3Levels(){if(!P3.v)return;const lv=P3.v.levels();if(lv.join('|')!==P3.lvls.join('|')){P3.lvls=lv;if(P3.lvl&&!lv.includes(P3.lvl))P3.lvl='';p3Ui()}}
 async function p3Toggle(id){const d=P3.docs.get(id);if(!d||!P3.v||P3.loading.has(id))return;
@@ -189,7 +194,7 @@ function p3Key(e){if(!P3.host||!P3.host.isConnected||!P3.v||/INPUT|TEXTAREA|SELE
 /* carga: convierte cada IFC en esta PC y lo sube; mismo código de especialidad = nueva versión */
 async function p3Upload(files){files=files.filter(f=>/\.ifc$/i.test(f.name));if(!files.length){toast('Elige archivos .ifc');return}
   const lib=await p3Lib();let ok=0;window.addEventListener('beforeunload',plUnload);
-  try{for(const[i,f]of files.entries()){const disc=p3Disc(f.name);const old=P3.docs.get(disc);const rev=(old&&old.rev||0)+1;const path=`modelos/${disc}/r${rev}.frag`;
+  try{for(const[i,f]of files.entries()){const disc=p3Disc(f.name);const old=P3.docs.get(disc)||P3.gone.get(disc);const rev=(old&&old.rev||0)+1;const path=`modelos/${disc}/r${rev}.frag`;
       try{p3Busy(`(${i+1}/${files.length}) Convirtiendo ${disc}… 0%`);const t0=performance.now();
         const frag=await lib.convert(f,p=>p3Busy(`(${i+1}/${files.length}) Convirtiendo ${disc}… ${Math.round(p*100)}%`));
         p3Busy(`(${i+1}/${files.length}) Subiendo ${disc} (${(frag.length/1048576).toFixed(1)} MB)…`);await plPut(path,new Blob([frag],{type:'application/octet-stream'}),'application/octet-stream');
@@ -197,3 +202,27 @@ async function p3Upload(files){files=files.filter(f=>/\.ifc$/i.test(f.name));if(
         if(P3.v&&P3.v.has(disc))toast(`${disc}: versión nueva cargada. Recarga la página para verla.`);ok++}
       catch(e){console.error(e);toast(`${disc}: no se pudo cargar (${e.message||e})`)}}}
   finally{window.removeEventListener('beforeunload',plUnload);p3Busy(ok?`${ok} modelo(s) cargados`:'')}}
+
+/* ---------- Eliminar modelos (solo el administrador; docs/ia/planos.md › Modelo 3D) ----------
+   Borra de Storage todas las revisiones (`modelos/<esp>/…`) y deja en `p3d/<esp>` solo un registro con `del`, para que la próxima carga
+   siga la numeración (r<n+1>): así ningún equipo abre la copia guardada del modelo borrado. Pide escribir BORRAR. */
+function p3Manage(btn){if(!plAdm())return;const L=[...P3.docs.values()].sort((a,b)=>p3Ord(p3Base(a.disc))-p3Ord(p3Base(b.disc))||String(a.disc).localeCompare(String(b.disc)));
+  if(!L.length){toast('No hay modelos cargados.');return}
+  const mb=d=>d.fsize?(d.fsize/1048576).toFixed(1)+' MB':'';
+  openPop(btn,`<div class="ph">Modelos cargados (${L.length})</div>${L.map(d=>`<button data-do="one" data-m="${esc(d.id)}" title="Eliminar ${esc(d.disc)}">🗑 <b>${esc(d.disc)}</b> · ${esc(p3Name(d.disc))} · rev. ${d.rev||1}${mb(d)?' · '+mb(d):''}</button>`).join('')}
+    <button data-do="all" class="bad">🗑 Eliminar todos (${L.length})</button>`,{one:ds=>p3Delete([ds.m]),all:()=>p3Delete(L.map(d=>d.id))})}
+async function p3Delete(ids){if(!plAdm())return;const L=ids.map(id=>P3.docs.get(id)).filter(Boolean);if(!L.length)return;const one=L.length===1;
+  const v=await uiAsk({title:one?`¿Eliminar el modelo ${L[0].disc}?`:`¿Eliminar ${L.length} modelos?`,tone:'danger',
+    text:`Se borran de verdad ${one?'el modelo y todas sus revisiones':'esos modelos y todas sus revisiones'}. Los IFC de tu PC no se tocan: después puedes volver a cargarlos con «Cargar IFC…».`,
+    list:L.slice(0,12).map(d=>`${d.disc} · ${p3Name(d.disc)} · rev. ${d.rev||1}`).concat(L.length>12?[`… y ${L.length-12} más`]:[]),
+    input:{label:'Escribe BORRAR para confirmar',required:true},ok:'Eliminar',cancel:'Cancelar'});
+  if(v==null)return;if(String(v).trim().toUpperCase()!=='BORRAR'){toast('No se eliminó: había que escribir BORRAR.');return}
+  let ok=0,fail=0;p3Busy(`Eliminando ${L.length} modelo${one?'':'s'}…`);let c=null;try{c=await caches.open(PLC_NAME)}catch(e){}
+  for(const d of L){
+    try{await fcol('p3d').doc(d.id).set({disc:d.disc,rev:d.rev||1,path:d.path,nm:d.nm||'',del:{t:NOW(),by:me.email,n:me.name||me.email}});ok++}
+    catch(e){fail++;console.error('eliminar modelo',d.id,e);continue}
+    /* primero el registro (desaparece al instante para todos); luego Storage y la copia guardada en este equipo */
+    try{const names=await plStList(`modelos/${d.id}/`);for(const n of names){await plStDel(n);if(c)try{await c.delete(location.origin+'/__plan/'+n)}catch(e){}}}
+    catch(e){console.error('eliminar archivos del modelo',d.id,e)}
+    if(P3.v&&P3.v.has(d.id)){P3.on[d.id]=false;try{await P3.v.visible(d.id,false)}catch(e){}}}
+  p3Busy('');p3Sync();toast(fail?`Se eliminaron ${ok} de ${L.length} (${fail} con error).`:`Eliminado${one?'':'s'}: ${ok} modelo${ok===1?'':'s'}.`)}

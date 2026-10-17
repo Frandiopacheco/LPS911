@@ -300,8 +300,42 @@ test('modelo 3D (beta): solo el administrador ve la pestaña; especialidad desde
   await openApp(page, { as: 'editor', editar: false });
   await page.evaluate(() => goMod('pla'));
   expect(await tabsVisibles(page)).not.toContain('p3d');
-  const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc')]);
-  expect(r).toEqual(['ARQ', 'HVAC', 'AFC']);
+  const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc'), p3Disc('2459243-PTSA-XXX-ZZZ-M3D-ACC-E05.ifc')]);
+  expect(r).toEqual(['ARQ', 'HVAC-DC', 'AFC', 'ACC']); // otro juego (DC) no pisa al de XX
+});
+
+test('modelo 3D: eliminar (solo admin, pide BORRAR) borra todas las revisiones y la carga siguiente sigue la numeración', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(async () => {
+    window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); };
+    for (const k of ['modelos/CAS/r1.frag', 'modelos/CAS/r2.frag', 'modelos/CAS-DC/r1.frag']) __ST.set(k, new Blob(['x']));
+    await fcol('p3d').doc('CAS').set({ disc: 'CAS', rev: 2, path: 'modelos/CAS/r2.frag', fsize: 1 });
+    await fcol('p3d').doc('CAS-DC').set({ disc: 'CAS-DC', rev: 1, path: 'modelos/CAS-DC/r1.frag', fsize: 1 });
+    const mk = () => new Proxy(function () {}, { get: (_, k) => k === 'then' ? undefined : k === Symbol.toPrimitive ? () => '' : k === 'has' ? () => false : k === 'levels' ? () => [] : mk(), apply: () => undefined });
+    window.p3Lib = async () => ({ create: () => mk() });  // sin visor real
+    goMod('pla'); U.tab = 'p3d'; render();
+  });
+  await expect(page.locator('#p3models .plchip')).toHaveCount(2);
+  await page.click('#p3mg');
+  page.once('dialog', d => d.accept('borrar no'));
+  await page.click('#pop [data-do="one"][data-m="CAS"]');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => !!__dbGet('p3d', 'CAS').del)).toBe(false);
+  await page.click('#p3mg');
+  page.once('dialog', d => d.accept('BORRAR'));
+  await page.click('#pop [data-do="one"][data-m="CAS"]');
+  await expect.poll(() => page.evaluate(() => !!(__dbGet('p3d', 'CAS') || {}).del)).toBe(true);
+  await expect.poll(() => page.evaluate(() => [...__ST.keys()].sort().join())).toBe('modelos/CAS-DC/r1.frag');   // el CAS de DC sigue
+  await expect(page.locator('#p3models .plchip')).toHaveCount(1);
+  expect(await page.evaluate(() => [P3.docs.has('CAS'), P3.gone.get('CAS').rev])).toEqual([false, 2]);  // la próxima carga será r3
+  noErrors(errors, 'eliminar modelo');
+});
+
+test('modelo 3D: un editor no ve «Modelos ▾»', async ({ page }) => {
+  await openApp(page, { as: 'editor', editar: false });
+  await page.evaluate(() => { window.p3Lib = async () => ({ create: () => ({ has: () => false, levels: () => [], resize() {}, destroy() {} }) }); goMod('pla'); U.tab = 'p3d'; render(); });
+  await expect(page.locator('#p3mg')).toHaveCount(0);
 });
 
 test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina para todo el equipo', async ({ page }) => {
