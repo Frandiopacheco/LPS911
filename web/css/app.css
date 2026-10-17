@@ -3749,9 +3749,9 @@ body.lkdock #grid thead th.s4{z-index:7}
 .ixd-tbl col.c1{width:26%}.ixd-tbl col.c2{width:24%}.ixd-tbl col.c3{width:13%}.ixd-tbl col.c4{width:27%}.ixd-tbl col.c5{width:10%}
 .ixd-tbl td,.ixd-tbl th{overflow-wrap:anywhere}
 
-/* Lookahead más fluido y limpio (oct 2026): sin saltos del navegador al corregir los altos de las filas virtuales (overflow-anchor),
-   cuadrícula de días más tenue y barras más suaves. Solo CSS: no cambia la estructura de la tabla. */
-#gw{overflow-anchor:none}
+/* Lookahead más limpio (oct 2026): cuadrícula de días más tenue y barras más suaves. Solo CSS: no cambia la estructura de la tabla.
+   NO poner overflow-anchor:none en #gw: el anclaje del navegador compensa cuando vMeasure corrige los altos de las filas virtuales;
+   sin él, con filas altas (nombres largos) la pantalla quedaba en blanco al desplazarse (datos reales, oct 2026). */
 .g td.d{border-right-color:color-mix(in srgb,var(--line2) 55%,transparent)}
 .g td.d.wk0,.g td.wk0{border-left-color:var(--line)}
 td.d.on::after{inset:7px -1px}
