@@ -1249,6 +1249,19 @@ test('plan semanal: congelar desde una versión (fromVer) solo el admin; el edit
   await assertSucceeds(updateDoc(doc(ed, 'weeks/94_pv1'), { frozenAt: deleteField(), items: deleteField(), res: deleteField(), fromVer: deleteField(), unfrozenAt: 'z' })); // descongelar
 });
 
+test('plan semanal: la evaluación del cliente (cres) solo la marca el admin; el editor descongela igual', async () => {
+  await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    await setDoc(doc(db, 'pisos/pc1'), { code: 'PC1', resp: ['editor@obra.pe'] });
+    await setDoc(doc(db, 'weeks/96_pc1'), { n: 96, pisoId: 'pc1', frozenAt: 'x', items: {}, res: {}, cres: { a1: { ok: true } } }); });
+  const ed = user('editor@obra.pe');
+  await assertFails(updateDoc(doc(ed, 'weeks/96_pc1'), { 'cres.a1.ok': false }));
+  await assertFails(updateDoc(doc(ed, 'weeks/96_pc1'), { 'cres.a2': { ok: true } }));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/96_pc1'), { 'res.x1.ok': true })); // el editor sigue evaluando lo interno
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'weeks/96_pc1'), { 'cres.a1.ok': false }));
+  await assertSucceeds(updateDoc(doc(ed, 'weeks/96_pc1'), { frozenAt: deleteField(), items: deleteField(), res: deleteField(), cres: deleteField(), unfrozenAt: 'z' })); // descongelar
+  await assertSucceeds(setDoc(doc(ed, 'weeks/96_pc1'), { frozenAt: 'x', items: {}, res: {}, cres: { a1: { ok: false } } }, { merge: true })); // recuperar
+});
+
 // ── Módulo Planos (docs/ia/planos.md) ──
 const PLB = (x) => ({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', W: 14175, H: 10630, Z: 5, tit: 'PLANTA PRIMER PISO', ...x });
 test('planos: el equipo de LPS lee; capataz y roles de tareo no', async () => {
