@@ -147,7 +147,8 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   // medir: dos toques dan una medida
   await page.click('#p3dock [data-a="pn:medir"]'); await page.click('#p3pn [data-a="meas"]');
   await expect(page.locator('#p3ban')).toContainText('punto A');
-  await page.mouse.move(tx, ty); await expect(page.locator('.p3snap.v')).toBeVisible({ timeout: 10_000 }); /* con el ratón se ve el marcador de la esquina */
+  /* con el ratón se ve el marcador de la esquina; con la máquina cargada (GitHub, GL por software) el primer movimiento a veces no llega: se repite */
+  await expect(async () => { await page.mouse.move(tx + 3, ty + 3); await page.mouse.move(tx, ty); await expect(page.locator('.p3snap.v')).toBeVisible({ timeout: 3_000 }); }).toPass({ timeout: 30_000 });
   await page.mouse.click(tx, ty); await page.waitForTimeout(400);
   expect(await page.evaluate(() => P3.v.measure.lastSnap), 'el clic quedó en la esquina').toBe('v');
   await page.mouse.click(box.x + box.width * .55, box.y + box.height * .55); await page.waitForTimeout(400);
