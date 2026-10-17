@@ -71,3 +71,33 @@ test('Productividad: el ingeniero crea una partida crítica y corrige un reporte
   await expect.poll(() => page.evaluate(() => window.__dbGet('pav', '2026-09-29_pc1_p1_-'))).toMatchObject({ q: 45, by: 'campo@obra.pe', h: [{ q: 50, by: 'sc@obra.pe' }] });
   noErrors(errors, 'ingeniero');
 });
+
+test('Productividad: saldo inicial suma al acumulado pero no al ritmo; solo lo pone el ingeniero', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  const errors = await openApp(page, { as: 'campo', extra });
+  await page.evaluate(() => { U.piso = ''; PVSEL = 'pc1'; goTab('prod'); });
+  const before = await page.evaluate(() => { const x = pvStats(PCR.get('pc1'), pvReps('pc1'), todayIso()); return { acu: x.acu, rit: x.rit, fin: x.fin }; });
+  await page.locator('.pvdet [data-pv="ini"]').click();
+  const sh = page.locator('#pvsheet');
+  await sh.locator('[data-ip="p2"]').fill('300');
+  await sh.locator('[data-pi="ok"]').click();
+  await expect(sh).toBeVisible();                              // sin motivo no guarda
+  await sh.locator('[data-pi="nota"]').fill('Medido en obra antes del sistema');
+  await sh.locator('[data-pi="ok"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('pav', 'ini_pc1_p2'))).toMatchObject({ ini: true, q: 300, piso: 'p2', sc: 'c1', by: 'campo@obra.pe' });
+  const after = await page.evaluate(() => { const x = pvStats(PCR.get('pc1'), pvReps('pc1'), todayIso()); return { acu: x.acu, rit: x.rit, ini: x.ini, fin: x.fin, p2: x.byP.get('p2') }; });
+  expect(after.acu).toBe(before.acu + 300);
+  expect(after.rit).toBe(before.rit);                          // el ritmo no cambia
+  expect(after.ini).toBe(300); expect(after.p2).toBe(300);
+  expect(after.fin <= before.fin).toBe(true);                  // menos saldo: termina antes o igual
+  await expect(page.locator('tr.pvini')).toContainText('Saldo inicial');
+  noErrors(errors, 'saldo inicial');
+});
+
+test('Productividad: el SC no ve el botón de saldo inicial', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', extra });
+  await page.evaluate(() => { U.piso = ''; PVSEL = 'pc1'; goTab('prod'); });
+  await expect(page.locator('tr[data-pvs="pc1"]')).toHaveCount(1);
+  await expect(page.locator('[data-pv="ini"]')).toHaveCount(0);
+  noErrors(errors, 'sc sin saldo inicial');
+});

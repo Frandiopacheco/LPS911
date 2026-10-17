@@ -1371,3 +1371,18 @@ test('productividad casa: los ingenieros leen partidas y HH; registran metrado; 
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pmet/m-editorobrape')));
   await assertFails(getDoc(doc(user('sc@obra.pe'), 'pmet/m-editorobrape')));
 });
+
+// Productividad: saldo inicial (avance previo) solo lo ponen los ingenieros y el administrador
+test('productividad: el SC no pone ni cambia el saldo inicial de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pcrit/pc-gabel'), { sc: 'c-gabel', nom: 'Enchape', und: 'm²', met: 4200, fin: '' });
+    await setDoc(doc(db, 'pav/ini_pc-gabel_p1'), { pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p1', zona: '', q: 500, ini: true, nota: 'medido', by: 'editor@obra.pe', ts: 1 });
+  });
+  const ini = (by, o = {}) => ({ pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p2', zona: '', q: 300, ini: true, nota: 'x', by, ts: 1, ...o });
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('sc@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), ini('sc@obra.pe', { piso: 'p1', q: 900 })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), { ...ini('sc@obra.pe', { piso: 'p1', q: 900 }), ini: false }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('campo@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pmet/ini_10.05_p1'), { pc: '10.05', d: '2026-10-10', piso: 'p1', zona: '', q: 800, ini: true, nota: 'x', by: 'editor@obra.pe', ts: 1 }));
+});

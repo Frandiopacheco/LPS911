@@ -3849,3 +3849,4 @@ table.pcreg td{padding:6px 8px}
 .plkpx label.ib{cursor:pointer}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .plkbar .plkpb,:root:not([data-theme="light"]) .plkpt{color:#b197fc;border-color:#9775fa}}
 :root[data-theme="dark"] .plkbar .plkpb,:root[data-theme="dark"] .plkpt{color:#b197fc;border-color:#9775fa}
+.pvtw tr.pvini>td{background:var(--panel2)}
