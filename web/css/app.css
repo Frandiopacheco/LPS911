@@ -3833,3 +3833,19 @@ table.pvt td,.pvtw table.t td{padding:8px;white-space:nowrap}
 .pvsum>div{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pvsum small{font-size:12.5px;color:var(--ink2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .pvact{display:flex;align-items:center;gap:8px;padding-top:4px}.pvact .ib.pri{min-height:44px;padding:0 20px}
 .pvmp{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}.pvmp label{display:flex;flex-direction:column;gap:4px;font-size:12px}.pvmp input{height:40px}
+/* Productividad F2 (productividad-casa.js): IP de casa y registro diario del metrado */
+.pvseg{align-self:flex-start}
+.pvwrap .callout.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,transparent);color:var(--ink)}
+.pvwrap .callout.info{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 30%,transparent);color:var(--ink)}
+.pcfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.pcfg>div{display:flex;flex-direction:column;gap:2px;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--r-ctl);padding:8px 10px}
+.pcfg span{font-size:12px;color:var(--muted)}.pcfg b{font-size:15px}.pcfg small{font-size:12px;color:var(--muted)}
+.pcsh{font-size:14px}
+.pvsvg .pcb{fill:var(--line)}.pvsvg .pcb.ok{fill:var(--ok)}.pvsvg .pcb.warn{fill:var(--warn)}.pvsvg .pcb.bad{fill:var(--bad)}
+.pcdate{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pcdate input[type=date]{height:var(--h-ctl,38px);border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 10px;font:600 14px var(--f-ui);background:var(--panel);color:var(--ink)}
+.pchh{font-size:13px;color:var(--ink2);margin-left:8px;display:inline-flex;gap:6px;align-items:center}
+table.pcreg td{padding:6px 8px}
+.pcq{width:82px;height:36px;box-sizing:border-box;border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 8px;text-align:right;font:500 14px var(--f-mono);background:var(--panel);color:var(--ink)}
+.pcq:focus{outline:none;box-shadow:var(--ring);border-color:var(--accent)}
+.pcz{min-width:82px;justify-content:flex-end;font-family:var(--f-mono)}

@@ -490,6 +490,7 @@ Principios (auditorías externas, aprobadas por el dueño): la publicación la h
 - Escritura (en una transacción o lote atómico):
   - `tpub/{fecha}_v{n}` — **inmutable**: `{fecha, v, at, by, byN, motivo, ant: n-1|null, fuentes: [{id, cap, capN, envN, revBy, revAt}], pcs: {<pcId>: {cod, nom, und, grp, grpN, ua}}, rows: [{dni, ape, nom, cat, cua, cap, capN, as, mot, alt, h: {<pcId>: horas}, trab, ext}], exc: {<dni>: {motivo, ape, nom}}, tot: {obreros, pres, aus, porMot, hh, he, alt}, dif: <resumen de cambios vs. versión anterior o null>}`.
   - `tpubidx/{fecha}` — `{fecha, v: <vigente>, vers: [{v, at, by, motivo}], abierto: null|{t,by,motivo}}`.
+  - `hhpc/{fecha}` — resumen de HH por partida de la versión publicada, sin datos de personas (`tpResumenHH`), para el IP de Productividad (ver `productividad.md`).
   - Tareos fuente: `st:'pub'`, `pubV: n`, `hist` con `a:'pub'`.
 - Reglas: `tpub` y `tpubidx` los lee `isTar()` (incluido `tcos`); nadie los escribe desde la app (solo la función con Admin SDK). `tcos` sigue sin leer `tareo` ni `tfot`.
 
