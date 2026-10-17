@@ -417,22 +417,27 @@ function propBarClick(e){const t=e.target;let r;
   if((r=t.closest('[data-rvsc]'))){U.revSc=r.dataset.rvsc;REVSEL=null;requestRender();return}
   if((r=t.closest('[data-rvnav]'))){revGo(+r.dataset.rvnav);return}
   if((r=t.closest('[data-rvmv]'))){if(!REVSEL){toast('Elige en la grilla la fila que quieres mover.');return}revAct(r.dataset.rvmv,REVSEL.id,r);return}
-  if(t.closest('[data-rvk0]')){if(REVSEL){REVSEL.k=0;delete REVSEL.days}requestRender();return}
-  if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;requestRender();return}
+  if(t.closest('[data-rvk0]')){if(REVSEL){REVSEL.k=0;REVED.delete(REVSEL.id)}requestRender();return}
+  if(t.closest('[data-rvexit]')){U.rev=false;REVSEL=null;REVED.clear();requestRender();return}
   if(t.closest('[data-rvrej]')){let L=revVisItems();if(!L.length){const A=revItems();if(!A.length){toast('No hay propuestas pendientes.');return}
       /* ninguna se ve en la grilla: se explica por qué y se pueden rechazar igual (rechazar no cambia el lookahead) */
       uiAsk({title:`¿Rechazar las ${A.length} propuestas${U.revSc?' de '+conOf(U.revSc).name:''}?`,text:'Ninguna se ve en la grilla:',list:revHiddenWhy(A),note:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',ok:`Rechazar las ${A.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(A)});return}const oc=revItems().length-L.length;
     uiAsk({title:`¿Rechazar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:'El lookahead no cambia y cada subcontratista lo ve en «Respuestas».',note:oc?`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`:'',ok:`Rechazar ${L.length}`,tone:'danger'}).then(ok=>{if(ok)rejectMany(L)});return}
   if(t.closest('[data-rvall]')){const L=revVisItems();if(!L.length){toast('No hay propuestas en lo que muestra la grilla con estos filtros.');return}const oc=revItems().length-L.length;
     /* oct 2026: la fila que ajustaste (días editados o movida con ‹ ›) se acepta con tus cambios; las demás, como las envió el SC */
-    const ed=REVSEL&&(REVSEL.k||REVSEL.days)?L.find(o=>o.id===REVSEL.id):null;
-    uiAsk({title:`¿Aceptar ${L.length>1?'las '+L.length+' propuestas':'la propuesta'} que muestra la grilla?`,text:ed?`«${(ed.it.after&&ed.it.after.name)||'Una actividad'}» se acepta con tus cambios; las demás, como las envió el subcontratista.`:'Se aceptan tal como las envió el subcontratista.',list:oc?[`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`]:[],ok:`Aceptar ${L.length}`,tone:'ok'}).then(async ok=>{if(!ok)return;
-      let rest=L;if(ed){const a=revAcc(ed.id);rest=L.filter(o=>o.id!==ed.id);await decideProp(ed.sc,ed.id,a[0],a[1])}
-      if(rest.length)decideMany(rest);else{REVSEL=null;requestRender()}});return}
+    /* oct 2026: cada fila que ajustaste (días editados o movida con ‹ ›) se acepta con sus cambios; las que vaciaste quedan pendientes */
+    const A=L.map(o=>({o,a:revAcc(o.id)}));const emp=A.filter(x=>x.a[0]==='empty').map(x=>x.o);const ed=A.filter(x=>x.a[0]!=='empty'&&(x.a[0]==='shift'||x.a[1].days)).map(x=>x.o);
+    const nm=o=>'«'+((o.it.after&&o.it.after.name)||'una actividad')+'»';const nOk=L.length-emp.length;
+    if(!nOk){toast(emp.length===1?`${nm(emp[0])} quedó sin días: elige los nuevos días o recházala con ✗.`:'Las filas visibles quedaron sin días: elige los nuevos días o recházalas con ✗.');return}
+    const lst=[];if(ed.length)lst.push(ed.length===1?`${nm(ed[0])} se acepta con tus cambios.`:`${ed.length} filas se aceptan con tus cambios: ${ed.slice(0,4).map(nm).join(', ')}${ed.length>4?'…':''}`);
+    if(emp.length)lst.push(`${emp.length===1?nm(emp[0])+' quedó':emp.length+' filas quedaron'} sin días: sigue${emp.length===1?'':'n'} pendiente${emp.length===1?'':'s'}.`);if(oc)lst.push(`Las otras ${oc} (ocultas por los filtros o plegadas) siguen pendientes.`);
+    uiAsk({title:`¿Aceptar ${nOk>1?'las '+nOk+' propuestas':'la propuesta'} que muestra la grilla?`,text:ed.length?'Las demás, como las envió el subcontratista.':'Se aceptan tal como las envió el subcontratista.',list:lst,ok:`Aceptar ${nOk}`,tone:'ok'}).then(async ok=>{if(!ok)return;
+      for(const o of ed){const a=revAcc(o.id);if(a[0]==='empty')continue;const r=await decideProp(o.sc,o.id,a[0],a[1]);if(r==='ok')REVED.delete(o.id)}
+      const rest=L.filter(o=>!ed.includes(o)&&!emp.includes(o));if(rest.length)decideMany(rest);else{REVSEL=null;requestRender()}});return}
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='open'){propOpenWin();return}
   if(k==='close'){propCloseWin();return}
-  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){if(U.revSc&&!revCounts().has(U.revSc))U.revSc='';U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
+  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){if(U.revSc&&!revCounts().has(U.revSc))U.revSc='';if(!U.rev)REVED.clear();U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
 function propModal(mode){PMOD={mode};let el=$('#ppm');if(!el){el=document.createElement('div');el.id='ppm';el.className='ppm';el.innerHTML='<div class="ppc"></div>';document.body.appendChild(el);el.onclick=propModalClick}propModalRender()}
 function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PMOD.mode;let h='';
@@ -462,6 +467,15 @@ function propModalClick(e){const t=e.target;const el=$('#ppm');if(t===el||t.clos
    ETAPA 30 · Modo revisión de propuestas dentro de la grilla
    ===================================================================== */
 U.rev=false;U.revSc='';U.revCtx=false;let REVSEL=null;
+/* oct 2026: los días editados al revisar se guardan POR FILA (id → {days, v}) mientras dure la revisión. Antes había uno solo
+   (REVSEL.days): editar otra fila borraba en silencio lo hecho en la anterior. v = versión de la propuesta (propVer): si el SC la
+   reenvía mientras revisas, la edición de esa fila se descarta (revEdPrune avisa). days:[] = la vaciaste para elegir otros días. */
+const REVED=new Map();
+function revEd(id){const e=REVED.get(id);return e?e.days:null}
+function revEdSet(id,it,days){REVED.set(id,{days:[...new Set(days)].sort(),v:propVer(it)})}
+function revEdPrune(){if(!REVED.size)return;const gone=[];for(const[id,e]of REVED){let it=null;for(const d of PROP.values()){const x=d.items&&d.items[id];if(x&&x.sent){it=x;break}}
+    if(!it){REVED.delete(id);continue}if(propVer(it)!==e.v){REVED.delete(id);gone.push(it.after&&it.after.name||'una actividad')}}
+  if(gone.length)setTimeout(()=>toast(`El subcontratista reenvió ${gone.length===1?'«'+gone[0]+'»':gone.length+' propuestas'}: se descartó lo que habías editado ahí; revisa la versión nueva.`),0)}
 const revOn=()=>!!(U.rev&&canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver'));
 function revItems(){const L=[];for(const doc of PROP.values()){if(U.revSc&&doc.sc!==U.revSc)continue;for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))L.push({sc:doc.sc,id,it})}return L}
 /* las que la grilla muestra con los filtros vigentes (búsqueda, piso, sector, partida…): «Aceptar todo lo visible» solo toma estas */
@@ -481,7 +495,7 @@ function revHiddenWhy(L){const V=RVVIS||new Set();const why={};const add=k=>{why
 function revCounts(){const m=new Map();for(const doc of PROP.values())for(const[id,it]of Object.entries(doc.items||{}))if(it&&it.sent&&canDecide(id,it))m.set(doc.sc,(m.get(doc.sc)||0)+1);return m}
 /* durante el render, la grilla muestra lo propuesto encima de lo vigente */
 function revSwap(){const off=S.act;const v=new Map(off);
-  for(const{sc,id,it}of revItems()){const o=off.get(id)||null;const af=REVSEL&&REVSEL.id===id&&REVSEL.days&&it.after?propDays(it.after,REVSEL.days):it.after;
+  revEdPrune();for(const{sc,id,it}of revItems()){const o=off.get(id)||null;const ed=revEd(id);const af=ed&&it.after?propDays(it.after,ed):it.after;
     if(!it.after){if(o)v.set(id,{...o,_rv:{off:o,sc,del:true,n:it.n,late:propLate(it,o)}})}
     else if(!o){if(S.amb.has(it.after.ambId))v.set(id,{...clone(af),id,_rv:{off:null,sc,isNew:true,n:it.n,late:propLate(it,null)}})}
     /* lo que se verá al aceptar: lo vigente + solo lo que la propuesta cambió (no todo el objeto que armó el SC) */
@@ -495,11 +509,14 @@ function revConflicts(x){const out=new Map();if(!x._rv||x._rv.del)return out;con
   /* también contra las otras propuestas pendientes (con los días que proponen), no solo contra lo vigente */
   for(const y of revAmbIx().get(x.ambId)||[]){if(y.id===x.id||y.ambId!==x.ambId||y.sc===x.sc||(y._rv&&y._rv.del))continue;(y.days||[]).forEach(d=>{if(ds.has(d)){const L=out.get(d)||[];L.push(conOf(y.sc).name+' · '+y.name+(y._rv?' (propuesta)':''));out.set(d,L)}})}return out}
 function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.length;const idx=REVSEL?L.findIndex(o=>o.id===REVSEL.id):-1;
-  const nv=revVisItems().length;const so=REVSEL&&L.find(o=>o.id===REVSEL.id);const can=!!(so&&so.it.after&&(so.it.after.days||[]).length);const d=can?'':' disabled title="Elige en la grilla una fila con días propuestos"';
+  const nv=revVisItems().length;const so=REVSEL&&L.find(o=>o.id===REVSEL.id);const soEd=so?revEd(so.id):null;const can=!!(so&&so.it.after&&(soEd||so.it.after.days||[]).length);const d=can?'':' disabled title="Elige en la grilla una fila con días propuestos"';
   const nl=L.filter(o=>propLate(o.it,S.act.get(o.id))).length;
   /* oct 2026: panel lateral derecho plegable (antes una barra arriba que cargaba la parte superior) */
   const chips=`<button class="${!U.revSc?'on':''}" data-rvsc="">Todos <b>${[...cnt.values()].reduce((a,b)=>a+b,0)}</b></button>${[...cnt.entries()].sort((a,b)=>conOf(a[0]).name.localeCompare(conOf(b[0]).name)).map(([sc,n])=>`<button class="${U.revSc===sc?'on':''}" data-rvsc="${sc}" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></button>`).join('')}`;
-  const edit=REVSEL&&REVSEL.days?`<div class="rvpsel"><span class="pill warn">${esc((so&&so.it.after&&so.it.after.name)||'Actividad')}: días editados (${esc(rngTxt(REVSEL.days))}) · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button></div>`
+  const nEd=[...REVED.keys()].filter(id=>L.some(o=>o.id===id)).length;const otros=nEd-(soEd?1:0);const oT=otros>0?` · ${otros} fila${otros>1?'s':''} más con días editados`:'';
+  const edit=soEd&&!soEd.length?`<div class="rvpsel"><span class="pill warn">${esc((so.it.after&&so.it.after.name)||'Actividad')}: sin días · elige los nuevos días en la grilla o recházala con ✗${oT}</span><button class="ib" data-rvk0>Volver a lo propuesto</button></div>`
+    :soEd?`<div class="rvpsel"><span class="pill warn">${esc((so.it.after&&so.it.after.name)||'Actividad')}: días editados (${esc(rngTxt(soEd))}) · ✓ en la fila para aceptar así${oT}</span><button class="ib" data-rvk0>Volver a lo propuesto</button></div>`
+    :otros>0&&!(REVSEL&&REVSEL.k)?`<div class="rvpsel"><span class="pill">${otros} fila${otros>1?'s':''} con días editados: se aceptan con tus cambios (✓ en cada una o «Aceptar todo»)</span></div>`
     :REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<div class="rvpsel"><span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button></div>`})():'';
   return`<div class="rvhd"><b>Propuestas pendientes <span class="rvpn">${tot}</span></b><button class="ib" data-rvfold title="Plegar el panel (sigues en la revisión)" aria-label="Plegar panel">›</button></div>
     <div class="rvbody"><div class="rvchips">${chips}</div>
@@ -517,7 +534,7 @@ function rvPanelSync(){let el=document.getElementById('rvpanel');
     /* oct 2026: el SC elegido se quedó sin pendientes (p. ej. tras «Rechazar todo lo visible») pero otros SC aún tienen: se pasa a «Todos».
        Antes salía de la revisión con el filtro del SC puesto, y «Revisar propuestas» volvía a salir al instante sin mostrar nada. */
     if(U.revSc&&revCounts().size){const n=conOf(U.revSc).name;U.revSc='';REVSEL=null;requestRender();toast(`${n} ya no tiene propuestas pendientes: se muestran las de los demás subcontratistas.`);return}
-    /* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;U.revSc='';REVSEL=null;gone();requestRender();return}
+    /* ya no queda nada por revisar: sale solo de la revisión */U.rev=false;U.revSc='';REVSEL=null;REVED.clear();gone();requestRender();return}
   let mode='',h='',cls='rvpanel';const f=rvFold();
   if(typeof revOn==='function'&&revOn()){mode='rev';h=f?`<button class="rvtab" data-rvfold title="Abrir el panel de propuestas pendientes">‹ Propuestas <span class="rvpn">${revItems().length}</span></button>`:revBarHtml()}
   else if(canWrite&&!PM()&&U.tab==='look'&&!U.cliv&&!(U.ver&&U.verMode==='ver')&&me&&me.role!=='sc'){
@@ -540,18 +557,18 @@ function revGo(dir){const L=revItems();if(!L.length)return;let i=REVSEL?L.findIn
   const am=S.amb.get((o.it.after||S.act.get(o.id)||{}).ambId);if(am){const sec=am.sectorId;U.collapsed=U.collapsed.filter(c=>c!==sec&&c!==pisoOfAmb(am.id))}
   requestRender();setTimeout(()=>{gridReveal(o.id);const tr=$(`#grid tr[data-a="${CSS.escape(o.id)}"]`);if(tr)tr.scrollIntoView({block:'center',behavior:'smooth'})},120)}
 function revDecide(id,st,opt){const o=revItems().find(q=>q.id===id)||[...PROP.values()].flatMap(d=>Object.entries(d.items||{}).filter(([k,it])=>k===id&&it).map(([k,it])=>({sc:d.sc,id:k,it})))[0];if(!o)return;
-  const L=revItems();const i=L.findIndex(q=>q.id===id);return decideProp(o.sc,id,st,opt).then(r=>{const R=revItems().filter(q=>q.id!==id||r!=='ok');REVSEL=R.length?{sc:R[Math.min(Math.max(i,0),R.length-1)].sc,id:R[Math.min(Math.max(i,0),R.length-1)].id,k:0}:null;return r})}
+  const L=revItems();const i=L.findIndex(q=>q.id===id);return decideProp(o.sc,id,st,opt).then(r=>{if(r==='ok')REVED.delete(id);const R=revItems().filter(q=>q.id!==id||r!=='ok');REVSEL=R.length?{sc:R[Math.min(Math.max(i,0),R.length-1)].sc,id:R[Math.min(Math.max(i,0),R.length-1)].id,k:0}:null;return r})}
 /* mover lo propuesto (‹ ›) o aceptar con otra fecha (📅): desde la barra de revisión, para la fila elegida */
 function revAct(k,id,b){const it=revItems().find(q=>q.id===id);if(!it)return;
   if(k==='l'||k==='r'){if(!REVSEL||REVSEL.id!==id)REVSEL={sc:it.sc,id,k:0};revStep(k==='r'?1:-1);requestRender();return}
-  if(k==='date'){if(!it.it.after)return;const ov=REVSEL&&REVSEL.id===id&&REVSEL.days;const ds=[...(ov||it.it.after.days||[])].sort();if(!ds.length)return;const cur=!ov&&REVSEL&&REVSEL.id===id&&REVSEL.k?wshift(ds[0],REVSEL.k):ds[0];
+  if(k==='date'){if(!it.it.after)return;const ov=revEd(id);const ds=[...(ov||it.it.after.days||[])].sort();if(!ds.length){toast('La fila no tiene días: elige los días en la grilla.');return}const cur=!ov&&REVSEL&&REVSEL.id===id&&REVSEL.k?wshift(ds[0],REVSEL.k):ds[0];
     openPop(b,`<div class="ph">Aceptar con otra fecha</div><div class="ptx">Propuesto: ${esc(rngTxt(ds))}. Elige el nuevo día de inicio: se mueve todo el bloque (días hábiles, lunes a sábado).</div><div class="qrow"><input type="date" id="pst" value="${cur}"><button data-do="go">Aceptar</button></div>`,
       {go:()=>{const v=($('#pst')||{}).value;if(!v){toast('Elige una fecha.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}if(ov){const kk=wdist(ds[0],v);revDecide(id,'ok',{days:ds.map(d=>wshift(d,kk))});return}revDecide(id,'shift',{start:v})}});setTimeout(()=>{const i=$('#pst');if(i)i.focus()},30)}}
 /** ‹ › : mueve lo propuesto un día hábil (si ya editaste los días, mueve esos días) */
-function revStep(d){if(!REVSEL)return;if(REVSEL.days)REVSEL.days=REVSEL.days.map(x=>wshift(x,d)).sort();else REVSEL.k+=d}
+function revStep(d){if(!REVSEL)return;const ed=revEd(REVSEL.id);if(ed){const e=REVED.get(REVSEL.id);e.days=ed.map(x=>wshift(x,d)).sort()}else REVSEL.k+=d}
 /** cómo se acepta una fila: con los días que dejó el ingeniero, desplazada con ‹ ›, o tal como la envió el SC */
 function revAcc(id){const it=revItems().find(q=>q.id===id);if(!it||!it.it.after)return['ok',{}];const mine=REVSEL&&REVSEL.id===id;
-  if(mine&&REVSEL.days)return['ok',{days:REVSEL.days}];
+  const ed=revEd(id);if(ed)return ed.length?['ok',{days:ed}]:['empty',{}];
   if(mine&&REVSEL.k){const st=[...(it.it.after.days||[])].sort()[0];return['shift',{start:wshift(st,REVSEL.k)}]}
   return['ok',{}]}
 /** clic en un día de la grilla de revisión: agrega o quita ese día de lo propuesto (como al editar el lookahead sin propuestas). Se acepta con ✓ */
@@ -560,13 +577,14 @@ function revToggleDay(id,d){const it=revItems().find(q=>q.id===id);if(!it||!it.i
   const pid=propPiso(id,it.it);if(d<=todayIso()){toast(`El ${fmtD(d)} ${d===todayIso()?'es hoy':'ya pasó'}: al revisar propuestas solo se programa desde mañana.`);return}
   if(!isAdmin&&typeof dayLocked==='function'&&dayLocked(d,pid)&&!recReal(d,id)){toast(`El ${fmtD(d)} ya tiene el plan cerrado (${lockWhy(d,pid)}): no se puede programar ahí.`);return}
   const mine=REVSEL&&REVSEL.id===id;const k=mine?REVSEL.k:0;
-  const cur=mine&&REVSEL.days?REVSEL.days:[...(it.it.after.days||[])].sort().map(x=>k?wshift(x,k):x);
-  const set=new Set(cur);if(set.has(d)){if(set.size<2){toast('Quitaste el último día: la fila sale de la propuesta (rechazada). Puedes deshacer.');revDecide(id,'rej',{});return}set.delete(d)}else set.add(d);
-  REVSEL={sc:it.sc,id,k:0,days:[...set].sort()};requestRender()}
+  const cur=revEd(id)||[...(it.it.after.days||[])].sort().map(x=>k?wshift(x,k):x);
+  /* oct 2026: quitar el último día ya NO rechaza la fila: queda vacía para elegir otros días (no se acepta sin días) */
+  const set=new Set(cur);if(set.has(d)){set.delete(d);if(!set.size)toast('La fila quedó sin días: elige los nuevos días o recházala con ✗.')}else set.add(d);
+  revEdSet(id,it.it,[...set]);REVSEL={sc:it.sc,id,k:0};requestRender()}
 function revClick(e){if(!revOn())return;const t=e.target;let b;
   if((b=t.closest('[data-rva]'))){e.stopPropagation();e.preventDefault();const id=b.closest('tr').dataset.a;const k=b.dataset.rva;
     if(k==='l'||k==='r'||k==='date'){revAct(k,id,b);return}
-    if(k==='ok'){const a=revAcc(id);revDecide(id,a[0],a[1])}
+    if(k==='ok'){const a=revAcc(id);if(a[0]==='empty'){toast('La fila no tiene días: elige los nuevos días o recházala con ✗.');return}revDecide(id,a[0],a[1])}
     else rejPop(b,o=>revDecide(id,'rej',o));
     return}
   const tr=t.closest('tr.rvrow');if(tr&&!t.closest('input,select,button,textarea')){const it=revItems().find(q=>q.id===tr.dataset.a);if(it&&(!REVSEL||REVSEL.id!==it.id)){REVSEL={sc:it.sc,id:it.id,k:0};requestRender()}}}
@@ -578,9 +596,9 @@ function revDown(e){if(!revOn()||e.button>0)return;const td=e.target.closest('td
 function revPreview(tr){const id=tr.dataset.a;const x=S.act.get(id);const it=revItems().find(q=>q.id===id);if(!it||!it.it.after)return;const k=REVSEL.k;const sh=new Set((it.it.after.days||[]).map(d=>wshift(d,k)));
   tr.querySelectorAll('td.d[data-d]').forEach(td=>td.classList.toggle('rvp',k!==0&&sh.has(td.dataset.d)));const lab=tr.querySelector('.rvk');if(lab)lab.textContent=k?`${k>0?'→ +':'← '}${k}d · Enter o ✓ para aceptar así`:''}
 function revKey(e){if(!revOn()||!REVSEL)return;const tg=e.target;if(tg&&tg.closest&&tg.closest('input,textarea,select'))return;
-  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const d=e.key==='ArrowRight'?1:-1;if(REVSEL.days){revStep(d);requestRender();return}REVSEL.k+=d;const tr=$(`#grid tr[data-a="${CSS.escape(REVSEL.id)}"]`);if(tr)revPreview(tr)}
-  else if(e.key==='Enter'){e.preventDefault();const id=REVSEL.id;if(!revItems().find(q=>q.id===id))return;const a=revAcc(id);revDecide(id,a[0],a[1])}
-  else if(e.key==='Escape'){REVSEL.k=0;delete REVSEL.days;requestRender()}
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const d=e.key==='ArrowRight'?1:-1;if(revEd(REVSEL.id)){revStep(d);requestRender();return}REVSEL.k+=d;const tr=$(`#grid tr[data-a="${CSS.escape(REVSEL.id)}"]`);if(tr)revPreview(tr)}
+  else if(e.key==='Enter'){e.preventDefault();const id=REVSEL.id;if(!revItems().find(q=>q.id===id))return;const a=revAcc(id);if(a[0]==='empty'){toast('La fila no tiene días: elige los nuevos días o recházala con ✗.');return}revDecide(id,a[0],a[1])}
+  else if(e.key==='Escape'){REVSEL.k=0;REVED.delete(REVSEL.id);requestRender()}
   else if(e.key==='ArrowDown'||e.key==='ArrowUp'){if(e.altKey){e.preventDefault();revGo(e.key==='ArrowDown'?1:-1)}}}
 document.addEventListener('keydown',revKey);
 function revWire(){const g=$('#gw')||$('#grid');if(g&&!g._rvw){g._rvw=1;g.addEventListener('click',revClick,true);g.addEventListener('pointerdown',revDown,true)}}
