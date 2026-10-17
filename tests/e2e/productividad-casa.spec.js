@@ -46,6 +46,17 @@ test('Casa: IP por partida con HH publicadas y metrado por piso; registro diario
   await sh.locator('[data-pd="piso"]').selectOption('p1'); await sh.locator('[data-pd="zona"]').selectOption('s1');
   await sh.locator('[data-pd="q"]').fill('12'); await sh.locator('[data-pd="ok"]').click();
   await expect.poll(() => page.evaluate(h => window.__dbGet('pmet', h + '_p10_05_p1_s1'), HOY)).toMatchObject({ q: 12, zona: 's1' });
+  // saldo inicial: suma al avance, no al IP
+  await page.locator('#pvsheet [data-pd="x"]').click();
+  await page.evaluate(() => { U.pvV = 'casa'; PCSEL = 'p10_05'; requestRender(); });
+  const b0 = await st(page, 'p10_05');
+  await page.locator('.pvdet [data-pv="ini"]').click();
+  await page.locator('#pvsheet [data-ip="p1"]').fill('400');
+  await page.locator('#pvsheet [data-pi="nota"]').fill('Avance previo medido');
+  await page.locator('#pvsheet [data-pi="ok"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('pmet', 'ini_p10_05_p1'))).toMatchObject({ ini: true, q: 400 });
+  const b1 = await st(page, 'p10_05');
+  expect(b1.eje).toBe(b0.eje + 400); expect(b1.ejeC).toBe(b0.ejeC); expect(b1.ip).toBeCloseTo(b0.ip); expect(b1.ini).toBe(400);
   noErrors(errors, 'casa');
 });
 

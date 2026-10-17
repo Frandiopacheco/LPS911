@@ -21,8 +21,8 @@ function stopPv(){if(pvSubs)pvSubs.forEach(f=>{try{f()}catch(e){}});pvSubs=null;
 const pvParts=()=>[...PCR.values()].filter(p=>!p.arch&&pvMine(p.sc)).sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name,'es')||(a.ord||0)-(b.ord||0)||String(a.nom).localeCompare(String(b.nom),'es'));
 const pvReps=pc=>[...PAV.values()].filter(r=>r.pc===pc&&!r.arch&&+r.q>0);
 /** cálculo puro de una partida: acumulado, ritmo, fin proyectado, ritmo necesario y estado */
-function pvStats(p,reps,today){const byD=new Map(),byP=new Map();let acu=0,hh=0,hhq=0,first='';
-  for(const r of reps){const q=+r.q||0;acu+=q;byD.set(r.d,(byD.get(r.d)||0)+q);byP.set(r.piso,(byP.get(r.piso)||0)+q);if(+r.hh>0){hh+=+r.hh;hhq+=q}if(!first||r.d<first)first=r.d}
+function pvStats(p,reps,today){const byD=new Map(),byP=new Map();let acu=0,hh=0,hhq=0,first='',ini=0;
+  for(const r of reps){const q=+r.q||0;acu+=q;if(r.ini){byP.set(r.piso,(byP.get(r.piso)||0)+q);ini+=q;continue}byD.set(r.d,(byD.get(r.d)||0)+q);byP.set(r.piso,(byP.get(r.piso)||0)+q);if(+r.hh>0){hh+=+r.hh;hhq+=q}if(!first||r.d<first)first=r.d}
   const met=+p.met||0,saldo=Math.max(0,met-acu);
   /* ventana del ritmo: hasta hoy si ya se reportó hoy; si no, hasta el último día hábil anterior */
   let end=byD.has(today)?today:addD(today,-1);while(!isWork(end)&&!byD.has(end)&&end>first)end=addD(end,-1);
@@ -31,7 +31,7 @@ function pvStats(p,reps,today){const byD=new Map(),byP=new Map();let acu=0,hh=0,
   const fin=saldo<=0?'':rit>0?wshift(end,Math.ceil(saldo/rit)):'';
   let nd=0,nec=null;if(p.fin&&saldo>0){let y=byD.has(today)?addD(today,1):today;while(y<=p.fin&&nd<800){if(isWork(y))nd++;y=addD(y,1)}nec=nd?saldo/nd:Infinity}
   const st=!met?'none':saldo<=0?'done':!p.fin?'none':!rit?'nodata':nec===Infinity?'late':rit>=nec?'ok':rit>=nec*.85?'risk':'late';
-  return{acu,met,saldo,pct:met?Math.min(100,acu/met*100):0,rit,days:k,fin,nec,st,byD,byP,hh,hhr:hhq?hh/hhq:0,first,today:byD.get(today)||0}}
+  return{ini,acu,met,saldo,pct:met?Math.min(100,acu/met*100):0,rit,days:k,fin,nec,st,byD,byP,hh,hhr:hhq?hh/hhq:0,first,today:byD.get(today)||0}}
 const PV_ST={ok:['A tiempo','ok'],risk:['En riesgo','warn'],late:['Atrasada','bad'],done:['Terminada','ok'],nodata:['Sin datos',''],none:['Sin fecha comprometida','']};
 const pvChip=st=>{const s=PV_ST[st]||PV_ST.none;return`<span class="pvst ${s[1]}">${s[0]}</span>`};
 const pvZona=r=>{if(!r.zona)return'Todo el piso';const a=S.amb.get(r.zona);if(a)return`${a.code||''} ${a.name||''}`.trim();const s=S.sec.get(r.zona);return s?`${s.code||''} · ${s.name||''}`:'—'};
@@ -63,7 +63,7 @@ function renderProd(main){if(typeof pcOk==='function'&&pcOk()&&!SCK()&&(U.pvV===
   h+='</div></div>';main.innerHTML=h;pvWire(main)}
 
 function pvDetail(p,s,t){const c=conOf(p.sc);const ps=visPisos().length?pisos():[];const mp=p.mp||{};
-  let h=`<section class="pvdet"><div class="card pvc"><div class="pvch"><b>${esc(p.nom)}</b><span>${esc(c.name)} · ${esc(p.und||'')}</span>${pvEd()?`<span class="sp"></span><button class="ib" data-pv="edit" data-id="${esc(p.id)}">Editar partida</button>`:''}</div>
+  let h=`<section class="pvdet"><div class="card pvc"><div class="pvch"><b>${esc(p.nom)}</b><span>${esc(c.name)} · ${esc(p.und||'')}</span>${pvEd()?`<span class="sp"></span><button class="ib" data-pv="ini" data-id="${esc(p.id)}" title="Avance que ya existía antes de empezar a reportar aquí: suma al acumulado, no al ritmo">Saldo inicial</button><button class="ib" data-pv="edit" data-id="${esc(p.id)}">Editar partida</button>`:''}</div>
     <div class="pvpis">${ps.map(pi=>{const q=s.byP.get(pi.id)||0,m=+mp[pi.id]||0;if(!q&&!m)return'';const w=m?Math.min(100,q/m*100):0;
       return`<div class="pvpr"><span>${esc(pi.code)} · ${esc(pi.name)}</span><span class="pvbar lg"><i style="width:${m?w.toFixed(1):0}%;--c:${c.color}"></i></span><span class="m">${pvN(q)}${m?` / ${pvN(m)}`:''} ${esc(p.und||'')}</span></div>`}).join('')||'<div class="note">Todavía no hay avance reportado.</div>'}</div>
     ${Object.keys(mp).length?'':'<div class="note">Sin meta por piso: se muestra solo lo acumulado. Puedes poner la meta de cada piso en «Editar partida».</div>'}
@@ -71,7 +71,7 @@ function pvDetail(p,s,t){const c=conOf(p.sc);const ps=visPisos().length?pisos():
     <div class="card pvc"><div class="pvch"><b>Avance diario</b><span>últimos 15 días hábiles</span></div>${pvChart(p,s,t,c.color)}</div></section>`;
   const L=pvReps(p.id).sort((a,b)=>b.d.localeCompare(a.d)||String(a.piso).localeCompare(String(b.piso))).slice(0,60);
   h+=`<div class="card pvtw"><div class="pvch pad"><b>Reportes</b><span>${L.length?`los últimos ${L.length}`:''}</span></div>${L.length?`<div class="pvsc"><table class="t"><thead><tr><th>Fecha</th><th>Piso</th><th>Sector / ambiente</th><th class="r">Metrado</th><th class="r">HH</th><th>Nota</th><th>Reportó</th><th></th></tr></thead><tbody>${L.map(r=>{const pi=S.pis.get(r.piso)||{};const ok=pvEd()||(SCK()&&pvMine(r.sc));
-    return`<tr><td>${fmtD(r.d)}</td><td>${esc(pi.code||'—')}</td><td>${esc(pvZona(r))}</td><td class="r m">${pvN(r.q)}</td><td class="r m">${+r.hh>0?pvN(r.hh):'—'}</td><td>${esc(r.nota||'')}</td><td class="mu">${esc(pvWho(r))}${(r.h||[]).length?' · editado':''}</td><td class="r">${ok?`<button class="ib" data-pv="rep" data-id="${esc(r.id)}">Editar</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="note pad">Sin reportes todavía.</div>'}</div>`;
+    return`<tr${r.ini?' class="pvini"':''}><td>${fmtD(r.d)}${r.ini?' <span class="pvst">Saldo inicial</span>':''}</td><td>${esc(pi.code||'—')}</td><td>${esc(pvZona(r))}</td><td class="r m">${pvN(r.q)}</td><td class="r m">${+r.hh>0?pvN(r.hh):'—'}</td><td>${esc(r.nota||'')}</td><td class="mu">${esc(pvWho(r))}${(r.h||[]).length?' · editado':''}</td><td class="r">${r.ini?(pvEd()?`<button class="ib" data-pv="ini" data-id="${esc(p.id)}">Editar</button>`:''):ok?`<button class="ib" data-pv="rep" data-id="${esc(r.id)}">Editar</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="note pad">Sin reportes todavía.</div>'}</div>`;
   return h}
 /* barras del metrado diario (días hábiles) con la línea del ritmo necesario */
 function pvChart(p,s,t,col){const D=[];let x=t;while(D.length<15){if(isWork(x)||s.byD.has(x))D.unshift(x);x=addD(x,-1);if(x<addD(t,-60))break}
@@ -89,7 +89,7 @@ function pvWire(main){main.onchange=e=>{if(typeof pcChange==='function')pcChange
   main.onclick=e=>{{const v=e.target.closest('[data-pvv]');if(v){U.pvV=v.dataset.pvv;saveUI();requestRender();return}}
   {const c=e.target.closest('button[data-pc]');if(c){const a=c.dataset.pc;if(a==='reg'){U.pvV='reg';PCD=todayIso()}else if(a==='back')U.pvV='casa';else if(a==='bf'){pcBackfill();return}else if(a==='prev')PCD=addD(PCD,-1);else if(a==='next'){const n=addD(PCD,1);if(n<=todayIso())PCD=n}else if(a==='det'){pcDetOpen(c.dataset.id);return}saveUI();requestRender();return}}
   {const r=e.target.closest('tr[data-pcs]');if(r){PCSEL=PCSEL===r.dataset.pcs?'':r.dataset.pcs;requestRender();return}}
-  const b=e.target.closest('[data-pv]');if(b){const a=b.dataset.pv;if(a==='rep')pvRepOpen(b.dataset.id||'');else if(a==='new')pvPartOpen('');else if(a==='edit')pvPartOpen(b.dataset.id);return}
+  const b=e.target.closest('[data-pv]');if(b){const a=b.dataset.pv;if(a==='rep')pvRepOpen(b.dataset.id||'');else if(a==='ini')pvIniOpen(b.dataset.pvk||'sc',b.dataset.id);else if(a==='new')pvPartOpen('');else if(a==='edit')pvPartOpen(b.dataset.id);return}
   const tr=e.target.closest('tr[data-pvs]');if(tr){PVSEL=PVSEL===tr.dataset.pvs?'':tr.dataset.pvs;requestRender()}};
   main.onkeydown=e=>{const tr=e.target.closest('tr[data-pvs],tr[data-pcs]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}}}
 
@@ -133,6 +133,28 @@ async function pvRepSave(){const f=PVF;const p=PCR.get(f.pc);const t=todayIso();
 async function pvRepArch(){const f=PVF;const r=PAV.get(f.id);if(!r)return;if(!await uiAsk({title:'¿Quitar este reporte?',text:`${fmtD(r.d)} · ${pvN(r.q)}. Deja de sumar al avance; queda guardado en el historial.`,ok:'Quitar',tone:'danger'}))return;
   const doc={...r,arch:{t:NOW(),by:me.email||'',n:me.name||''},by:me.email||'',byN:me.name||'',ts:NOW()};delete doc.id;PAV.set(r.id,{...doc,id:r.id});const sh=$('#pvsheet');if(sh)sh.remove();requestRender();
   try{await fcol('pav').doc(r.id).set(doc);toast('Reporte quitado')}catch(err){toast('No se pudo quitar: '+(err.code||err.message))}}
+
+/* ---------- hoja: saldo inicial (avance que ya existía antes de reportar aquí), por piso; admin e ingenieros ----------
+   Un documento por partida y piso: id ini_{pc}_{piso}, {ini:true, d: fecha de corte, q, nota: motivo}. Suma al acumulado y al
+   avance por piso; NO entra al ritmo (SC) ni al IP (casa: no tiene HH del tareo). kind: 'sc' (pav) | 'casa' (pmet). */
+function pvIniOpen(kind,pc){if(!pvEd())return;const casa=kind==='casa';const M=casa?PMET:PAV,col=casa?'pmet':'pav';
+  const x=casa?pcTpc().get(pc):PCR.get(pc);if(!x)return;const und=x.und||'';const id=pi=>`ini_${pc}_${pi}`;
+  const cur=pisos().map(pi=>({pi,r:M.get(id(pi.id))})).map(o=>({...o,q:o.r&&!o.r.arch?+o.r.q:0}));const r0=cur.find(o=>o.q);
+  const sh=pvSheet('pvsheet',`<div class="ksh"><div><b>Saldo inicial · ${esc(casa?(x.cod||'')+' · '+(x.nom||''):x.nom)}</b><span>Avance que ya existía antes de empezar a registrar aquí. Suma al acumulado; no entra al ${casa?'IP':'ritmo'}.</span></div><button class="ib" data-pi="x" aria-label="Cerrar">✕</button></div>
+    <label class="pvf">Acumulado al día<input type="date" data-pi="d" value="${esc(r0?r0.r.d:todayIso())}" max="${todayIso()}"></label>
+    <fieldset class="pvf"><legend>Acumulado por piso (${esc(und)})</legend><div class="pvmp">${cur.map(o=>`<label>${esc(o.pi.code)}<input type="number" min="0" step="any" data-ip="${esc(o.pi.id)}" value="${o.q||''}"></label>`).join('')}</div></fieldset>
+    <label class="pvf">Motivo <b class="pvreq">*</b><input type="text" maxlength="200" data-pi="nota" value="${esc(r0?r0.r.nota||'':'')}" placeholder="p. ej. avance medido en obra antes de usar el sistema"></label>
+    <div class="pvact"><span class="sp"></span><button class="ib pri" data-pi="ok">Guardar saldo inicial</button></div>`);
+  sh.querySelector('.ksc').onclick=async e=>{const b=e.target.closest('button[data-pi]');if(!b)return;if(b.dataset.pi==='x'){sh.remove();return}
+    const d=sh.querySelector('[data-pi="d"]').value,nota=sh.querySelector('[data-pi="nota"]').value.trim();
+    if(!d||d>todayIso()){toast('Elige la fecha del acumulado');return}if(!nota){toast('Escribe el motivo');return}
+    const W=[];for(const i of sh.querySelectorAll('[data-ip]')){const pi=i.dataset.ip,v=i.value===''?0:+String(i.value).replace(',','.');if(!(v>=0)){toast('Escribe números');return}
+      const old=M.get(id(pi));const was=old&&!old.arch?+old.q:0;if(!v&&!was)continue;
+      const doc={pc,d,piso:pi,zona:'',q:v,nota,ini:true,by:me.email||'',byN:me.name||'',ts:NOW(),arch:v?null:{t:NOW(),by:me.email||'',n:me.name||''}};if(!casa)doc.sc=x.sc;
+      if(old)doc.h=[...(old.h||[]),{q:was,by:old.by||'',ts:old.ts||0}].slice(-10);W.push([id(pi),doc])}
+    if(!W.length){toast('Escribe el acumulado de al menos un piso');return}
+    W.forEach(([k,doc])=>M.set(k,{...doc,id:k}));sh.remove();requestRender();
+    try{for(const[k,doc]of W)await fcol(col).doc(k).set(doc);toast('Saldo inicial guardado')}catch(err){toast('No se pudo guardar: '+(err.code==='permission-denied'?'no tienes permiso':(err.code||err.message)))}}}
 
 /* ---------- hoja: crear / editar partida crítica (admin e ingenieros) ---------- */
 function pvPartOpen(id){if(!pvEd())return;const p=id?PCR.get(id):null;const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));const mp=(p&&p.mp)||{};

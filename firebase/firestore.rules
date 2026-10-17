@@ -299,18 +299,20 @@ service cloud.firestore {
       allow create, update: if canDaily() && request.resource.data.sc is string && request.resource.data.met is number;
       allow delete: if isAdmin();
     }
-    // pav: el SC reporta lo de su partida sin confirmación (by = él, sc de su partida y el de la partida crítica);
+    // pav: el SC reporta lo de su partida sin confirmación (by = él, sc de su partida y el de la partida crítica); el saldo
+    // inicial (ini: true) solo lo ponen los ingenieros y el administrador;
     // los ingenieros y el administrador escriben cualquiera. Metrado numérico y no negativo.
     function pavDocOk(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
     function pavScOk(d) {
-      return isSC() && d.by == mid() && d.sc in scsOf()
+      return isSC() && d.by == mid() && d.sc in scsOf() && d.get('ini', false) != true
         && get(/databases/$(database)/documents/pcrit/$(d.pc)).data.sc == d.sc;
     }
     match /pav/{id} {
       allow read: if lpsMember();
       allow create: if pavDocOk(request.resource.data) && (canDaily() || pavScOk(request.resource.data));
       allow update: if pavDocOk(request.resource.data) && (canDaily()
-        || (pavScOk(request.resource.data) && resource.data.sc in scsOf() && resource.data.pc == request.resource.data.pc));
+        || (pavScOk(request.resource.data) && resource.data.sc in scsOf() && resource.data.pc == request.resource.data.pc
+          && resource.data.get('ini', false) != true));
       allow delete: if isAdmin();
     }
     // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)
