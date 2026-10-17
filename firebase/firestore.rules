@@ -424,7 +424,8 @@ service cloud.firestore {
     }
     match /p3d/{id} {
       allow read: if plaRead();
-      allow create, update: if (canEdit() || isOT()) && p3dOk(id);
+      // «Eliminar» (solo el admin) deja el registro con `del` y la última rev., para que la próxima carga siga la numeración
+      allow create, update: if (canEdit() || isOT()) && p3dOk(id) && (!('del' in request.resource.data) || isAdmin());
     }
     // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
     function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
