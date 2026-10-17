@@ -3840,3 +3840,12 @@ table.pcreg td{padding:6px 8px}
 .pcq{width:82px;height:36px;box-sizing:border-box;border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 8px;text-align:right;font:500 14px var(--f-mono);background:var(--panel);color:var(--ink)}
 .pcq:focus{outline:none;box-shadow:var(--ring);border-color:var(--accent)}
 .pcz{min-width:82px;justify-content:flex-end;font-family:var(--f-mono)}
+/* Propuestas de vínculos (planos-propuestas.js) */
+.plkpn{margin-left:4px;padding:0 5px;border-radius:999px;background:#7048e8;color:#fff;font-size:10px;font-weight:700}
+.plkbar .plkpb{border-color:#7048e8;color:#5530c9}
+.plkpt{color:#5530c9}
+.plkpsec{margin-top:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;border-left:4px solid #7048e8}
+.plkpx{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.plkpx label.ib{cursor:pointer}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .plkbar .plkpb,:root:not([data-theme="light"]) .plkpt{color:#b197fc;border-color:#9775fa}}
+:root[data-theme="dark"] .plkbar .plkpb,:root[data-theme="dark"] .plkpt{color:#b197fc;border-color:#9775fa}

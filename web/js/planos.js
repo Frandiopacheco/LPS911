@@ -660,7 +660,8 @@ function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scrol
     main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Cargar planos','Arrastra los PDF (uno por lámina). El sistema lee el código, la especialidad y el piso del nombre del archivo y del rótulo; revisa la tabla y pulsa <b>Procesar</b>.')}
       ${helpBox('Cómo exportar los PDF desde AutoCAD',`<ul><li>Impresora <b>DWG To PDF.pc3</b>, papel del tamaño real de la lámina (p. ej. 1200 × 900 mm), <b>Extensión</b>, <b>Ajustar al papel</b>, centrado, con el CTB del proyecto.</li><li>Una lámina por archivo y con el mismo nombre del DWG (el «-Model» que agrega AutoCAD se quita solo).</li><li>Si subes otra vez una lámina con el mismo código, queda como <b>nueva revisión</b> y la anterior se guarda en el historial.</li><li>El proceso corre en esta PC (unos 20–60 s por lámina): usa una PC con Chrome o Edge y deja la pestaña <b>visible</b> hasta que termine (minimizada o tapada, el navegador la frena). Puedes trabajar en otra pantalla o dejar esta ventana a un lado. El avance se ve en el título de la pestaña.</li><li>En Edge: Configuración › Sistema y rendimiento › «No suspender nunca estos sitios» → agrega la dirección de LPS 911.</li></ul>`)}
       <label class="pldrop" id="pldrop"><input type="file" id="plfile" accept="application/pdf,.pdf" multiple hidden><b>Arrastra aquí los PDF</b><span>o toca para elegirlos (puedes elegir muchos a la vez)</span></label>
-      <div id="plqbar" class="plbar"></div><div id="plqtab"></div></div></div>`;
+      <div id="plqbar" class="plbar"></div><div id="plqtab"></div>${plkpSecHtml()}</div></div>`;
+    plkpSecBind(main);
     const inp=$('#plfile',main),dz=$('#pldrop',main);inp.onchange=()=>{plAdd([...inp.files]);inp.value=''};
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('on')});dz.addEventListener('dragleave',()=>dz.classList.remove('on'));
     dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('on');plAdd([...e.dataTransfer.files])});
@@ -671,7 +672,7 @@ function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scrol
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
       it.m[el.dataset.f]=el.value.trim();if(el.dataset.f==='cod')it.m.cod=it.m.cod.toUpperCase().replace(/\s+/g,'');plqCheck();plqDraw(true)});
     $('#plqtab',main).addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
-  plqDraw(false)}
+  plqDraw(false);plkpSecUpd()}
 function plAdd(files){const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');const no=files.length-pdfs.length;
   const have=new Set(PQ.items.map(x=>x.file.name+'|'+x.file.size));let n=0;
   for(const f of pdfs){if(have.has(f.name+'|'+f.size))continue;PQ.items.push({file:f,m:plParse(f.name),st:'pend',msg:''});n++}
