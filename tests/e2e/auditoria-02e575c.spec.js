@@ -33,7 +33,7 @@ test('N04: «Cumplido» en Campo se mide contra la cantidad del plan cerrado, no
   noErrors(errors, 'N04');
 });
 
-test('seguimiento N10: el PPC del cliente no cuenta un cierre del capataz que el ingeniero quitó', async ({ page }) => {
+test('seguimiento N10: la sugerencia del PPC del cliente no cuenta un cierre del capataz que el ingeniero quitó', async ({ page }) => {
   const sn = { secs: { s1: { pisoId: 'p1', code: 'S1', name: 'Sector 1', order: 1 } }, ambs: { a1: { sectorId: 's1', code: 'A-1', name: 'Dpto 101', order: 0 } },
     acts: { e0: { ambId: 'a1', sc: 'c2', name: 'Entubado empotrado', und: 'ml', metrado: 40, days: [HOY], order: 20 } } };
   const base = [
@@ -43,7 +43,8 @@ test('seguimiento N10: el PPC del cliente no cuenta un cierre del capataz que el
     ['live', `${HOY}_e0`, { date: HOY, pisoId: 'p1', actId: 'e0', sc: 'c2', close: { status: 'ok', by: 'cap', n: 'Capataz', t: 1 } }],
   ];
   const ppc = async () => { await page.evaluate(d => { ensureLive(d); ensureCli(); }, HOY); await page.waitForFunction(() => CLVD.get('c0') && CLVD.get('c0').ready);
-    return page.evaluate(() => cliPpc(new Set(['p1'])).W.find(o => o.w === 58).ppc); };
+    // oct 2026: el cumplimiento del cliente sale del Plan semanal; Campo solo da la sugerencia (días cumplidos que cuenta cliGot)
+    return page.evaluate(() => (cliGot(cliPpcF(58)).get('e0') || []).reduce((t, [, q]) => t + q, 0)); };
   let errors = await openApp(page, { tab: 'campo', extra: base });
   expect(await ppc()).toBe(1); // control: sin quitar, el cierre del capataz cuenta
   noErrors(errors, 'N10 control');
