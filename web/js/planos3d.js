@@ -8,7 +8,7 @@
    vuelve a la vista general. El visor se conserva armado al salir de la pestaña (ver P3_KEEP). Parte de la app: index.html carga los archivos de js/ en orden y todos comparten
    las mismas variables globales. */
 
-const P3={v:null,lib:null,gone:new Map(),host:null,wrap:null,away:0,snap:null,want:null,gopen:new Map(),docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
+const P3={v:null,lib:null,gone:new Map(),lrev:{},host:null,wrap:null,away:0,snap:null,want:null,gopen:new Map(),docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
   panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,side:(()=>{try{const x=localStorage.getItem('lps.p3side');return x===null?!isMob():x==='1'}catch(e){return !isMob()}})(),bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:''};
 /* Al salir de la pestaña (a ver planos, a otro módulo…) el visor NO se destruye: queda armado y apartado, y al volver se repone tal como se dejó (cámara,
    piso, cortes, lo oculto, la selección). Para no gastar la memoria de la tablet, si pasan P3_KEEP ms fuera se libera y se guarda una foto del estado
@@ -54,7 +54,7 @@ function renderP3d(main){p3Sub();
     document.addEventListener('keydown',p3Key);window.addEventListener('resize',p3Fit);
     p3Fit();p3Ui();p3Start()}
   p3Sync()}
-function p3Kill(){clearInterval(P3.chk);if(P3.v){try{P3.v.destroy()}catch(e){}P3.v=null}clearInterval(P3.tm);P3.tm=null;P3.on={};P3.loading.clear();P3.panel='';P3.selN=0;P3.props=null;P3.tool='select';P3.cuts=[];P3.meds=[];P3.lvl='';P3.lvls=[];P3.plan=false;P3.multi=false;P3.cutH=1.3;P3.cutOn=true;P3.proj='persp';P3.bench=null;P3.st={hidden:0,ghost:0,isolated:false};P3.wrap=null;P3.away=0;document.removeEventListener('keydown',p3Key);window.removeEventListener('resize',p3Fit)}
+function p3Kill(){clearInterval(P3.chk);P3.lrev={};if(P3.v){try{P3.v.destroy()}catch(e){}P3.v=null}clearInterval(P3.tm);P3.tm=null;P3.on={};P3.loading.clear();P3.panel='';P3.selN=0;P3.props=null;P3.tool='select';P3.cuts=[];P3.meds=[];P3.lvl='';P3.lvls=[];P3.plan=false;P3.multi=false;P3.cutH=1.3;P3.cutOn=true;P3.proj='persp';P3.bench=null;P3.st={hidden:0,ghost:0,isolated:false};P3.wrap=null;P3.away=0;document.removeEventListener('keydown',p3Key);window.removeEventListener('resize',p3Fit)}
 /* demasiado tiempo fuera de la pestaña: se libera la memoria y se guarda una foto del estado para reponerlo al volver */
 function p3Park(){if(!P3.v)return;try{P3.snap={on:{...P3.on},v:P3.v.snapshot()}}catch(e){console.warn('foto del visor 3D',e);P3.snap=null}p3Kill();P3.host=null}
 /* reponer la foto cuando ya están abiertos los modelos que estaban prendidos */
@@ -78,6 +78,9 @@ async function p3Start(){if(P3.v)return;const host=P3.host;
 /* ───────── especialidades ───────── */
 function p3Sync(){const box=$('#p3models');if(!box)return;const L=[...P3.docs.values()].sort((a,b)=>p3Ord(p3Base(a.disc))-p3Ord(p3Base(b.disc))||String(a.disc).localeCompare(String(b.disc)));
   const em=$('#p3empty');if(em){em.hidden=!!L.length;em.innerHTML=!P3.ready?'Cargando…':L.length?'':'<div class="callout"><b>Aún no hay modelos.</b> Usa <b>Cargar IFC…</b> (en una PC con Chrome o Edge): cada IFC se convierte aquí y se sube. Empieza por arquitectura (ARQ).</div>'}
+  /* versión nueva de un modelo que ya está abierto (se volvió a cargar, aquí o en otro equipo): el visor no sabe quitar un modelo, así que se
+     rearma con la foto del estado (cámara, piso, cortes…) y baja la versión nueva; antes seguía mostrando la anterior hasta recargar la página */
+  if(P3.v&&!P3.loading.size&&L.some(d=>P3.v.has(d.id)&&P3.lrev[d.id]!==undefined&&P3.lrev[d.id]!==d.rev)){p3Park();if(U.tab==='p3d')requestRender();return}
   /* se cargan solas las principales; el resto, al tocarlas */
   if(P3.v)for(const d of L)if(P3.on[d.id]===undefined&&(P3.want?!!P3.want[d.id]:(P3_AUTO.includes(d.disc)||L.length<=3)))p3Toggle(d.id);
   shx(box,L.map(d=>{const st=P3.loading.has(d.id)?'ld':P3.on[d.id]?'on':'';return`<button type="button" class="plchip ${st}" data-m="${esc(d.id)}" aria-pressed="${st==='on'}" title="${esc(p3Name(d.disc)+' · '+(d.fsize?(d.fsize/1048576).toFixed(1)+' MB':'')+(d.nm?' · '+d.nm:''))}">${P3.loading.has(d.id)?'⏳ ':''}${esc(d.disc)}</button>`}).join(''));
@@ -86,7 +89,7 @@ function p3Levels(){if(!P3.v)return;const lv=P3.v.levels();if(lv.join('|')!==P3.
 async function p3Toggle(id){const d=P3.docs.get(id);if(!d||!P3.v||P3.loading.has(id))return;
   if(P3.v.has(id)){P3.on[id]=!P3.on[id];await P3.v.visible(id,P3.on[id]);p3Sync();return}
   P3.loading.add(id);P3.on[id]=true;p3Sync();const t0=performance.now();
-  try{p3Busy(`Bajando ${d.disc}…`);const b=await plGet(d.path);p3Busy(`Abriendo ${d.disc}…`);await P3.v.add(id,new Uint8Array(await b.arrayBuffer()));
+  try{p3Busy(`Bajando ${d.disc}…`);const b=await plGet(d.path);p3Busy(`Abriendo ${d.disc}…`);await P3.v.add(id,new Uint8Array(await b.arrayBuffer()));P3.lrev[id]=d.rev;
     p3Busy(`${d.disc} listo en ${((performance.now()-t0)/1000).toFixed(1)} s`);setTimeout(()=>{if(P3.busy.endsWith(' s'))p3Busy('')},4000)}
   catch(e){console.error(e);P3.on[id]=false;p3Busy('');toast(`No se pudo abrir ${d.disc}: `+(e.message||e))}
   finally{P3.loading.delete(id);p3Sync();p3Restore()}}
@@ -199,7 +202,7 @@ async function p3Upload(files){files=files.filter(f=>/\.ifc$/i.test(f.name));if(
         const frag=await lib.convert(f,p=>p3Busy(`(${i+1}/${files.length}) Convirtiendo ${disc}… ${Math.round(p*100)}%`));
         p3Busy(`(${i+1}/${files.length}) Subiendo ${disc} (${(frag.length/1048576).toFixed(1)} MB)…`);await plPut(path,new Blob([frag],{type:'application/octet-stream'}),'application/octet-stream');
         await fcol('p3d').doc(disc).set({disc,nm:f.name.replace(/\.ifc$/i,''),path,rev,fsize:frag.length,isize:f.size,secs:Math.round((performance.now()-t0)/1000),by:me.email,byN:me.name||me.email,ts:NOW()});
-        if(P3.v&&P3.v.has(disc))toast(`${disc}: versión nueva cargada. Recarga la página para verla.`);ok++}
+        ok++}
       catch(e){console.error(e);toast(`${disc}: no se pudo cargar (${e.message||e})`)}}}
   finally{window.removeEventListener('beforeunload',plUnload);p3Busy(ok?`${ok} modelo(s) cargados`:'')}}
 
