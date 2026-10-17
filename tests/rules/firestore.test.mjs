@@ -1336,3 +1336,28 @@ test('productividad: partidas críticas y avance diario del SC', async () => {
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pav/a1')));
   await assertSucceeds(deleteDoc(doc(user(OWNER), 'pav/a1')));
 });
+
+// Productividad F2: IP de casa (partidas de control, resumen de HH publicado y metrado ejecutado)
+test('productividad casa: los ingenieros leen partidas y HH; registran metrado; nadie más escribe el resumen de HH', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'hhpc/2026-10-16'), { fecha: '2026-10-16', v: 1, hh: 80, pcs: { '10.05': { hh: 80 } } }); });
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER, 'tasis@obra.pe']) {
+    await assertSucceeds(getDoc(doc(user(who), 'tpc/10.05')));
+    await assertSucceeds(getDoc(doc(user(who), 'hhpc/2026-10-16')));
+  }
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'veedor@obra.pe']) {
+    await assertFails(getDoc(doc(user(who), 'tpc/10.05')));
+    await assertFails(getDoc(doc(user(who), 'hhpc/2026-10-16')));
+  }
+  // el resumen de HH lo escribe la función (o el administrador al rearmarlo)
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'hhpc/2026-10-17'), { hh: 1 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), 'hhpc/2026-10-17'), { hh: 1 }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'hhpc/2026-10-17'), { hh: 1 }));
+  // metrado ejecutado: admin e ingenieros; piso obligatorio y número no negativo
+  const m = (o = {}) => ({ pc: '10.05', d: '2026-10-16', piso: 'p1', zona: '', q: 102, by: 'x', ts: 1, ...o });
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER]) await assertSucceeds(setDoc(doc(user(who), 'pmet/m-' + who.replace(/\W/g, '')), m()));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'tasis@obra.pe', 'jefe@obra.pe'].filter(w => w !== 'jefe@obra.pe')) await assertFails(setDoc(doc(user(who), 'pmet/m-x'), m()));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'pmet/m-y'), m({ piso: '' })));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'pmet/m-z'), m({ q: -1 })));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pmet/m-editorobrape')));
+  await assertFails(getDoc(doc(user('sc@obra.pe'), 'pmet/m-editorobrape')));
+});

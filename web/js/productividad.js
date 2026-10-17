@@ -37,12 +37,12 @@ const pvChip=st=>{const s=PV_ST[st]||PV_ST.none;return`<span class="pvst ${s[1]}
 const pvZona=r=>{if(!r.zona)return'Todo el piso';const a=S.amb.get(r.zona);if(a)return`${a.code||''} ${a.name||''}`.trim();const s=S.sec.get(r.zona);return s?`${s.code||''} · ${s.name||''}`:'—'};
 const pvWho=r=>r.byN||String(r.by||'').split('@')[0];
 
-function renderProd(main){ensurePv();const t=todayIso();const P=pvParts();
+function renderProd(main){if(typeof pcOk==='function'&&pcOk()&&!SCK()&&(U.pvV==='casa'||U.pvV==='reg')){renderCasa(main);return}ensurePv();const t=todayIso();const P=pvParts();
   const R=P.map(p=>({p,s:pvStats(p,pvReps(p.id),t)}));if(PVSEL&&!R.some(o=>o.p.id===PVSEL))PVSEL='';
   const cnt=k=>R.filter(o=>o.s.st===k).length,sinHoy=R.filter(o=>o.s.st!=='done'&&!o.s.today);
   const canRep=pvEd()||(SCK()&&P.length);
   const acts=`${canRep?'<button class="ib pri" data-pv="rep">Reportar avance</button>':''}${pvEd()?'<button class="ib" data-pv="new">+ Partida crítica</button>':''}`;
-  let h=`<div class="scroll"><div class="wrap pvwrap">${pageHead('Productividad',SCK()?'Avance de tus partidas críticas':'Subcontratistas: avance, ritmo y proyección de sus partidas críticas',acts)}`;
+  let h=`<div class="scroll"><div class="wrap pvwrap">${pageHead('Productividad',SCK()?'Avance de tus partidas críticas':'Subcontratistas: avance, ritmo y proyección de sus partidas críticas',acts)}${typeof pvSeg==='function'?pvSeg():''}`;
   h+=helpBox('¿Cómo funciona?',`<p>Cada día el subcontratista reporta el metrado <b>ejecutado de verdad</b> de sus partidas críticas, por piso (sector o ambiente si quiere; las HH son opcionales). Los ingenieros pueden corregirlo.</p><p><b>Ritmo</b> = promedio de los últimos ${PV_N} días hábiles. <b>Fin proyectado</b> = cuándo termina el saldo a ese ritmo. <b>Ritmo necesario</b> = lo que tendría que hacer por día hábil para llegar a la fecha comprometida. Este metrado no es el del Lookahead: aquel mide si se cumplió lo programado; este, cuánto se produce.</p>`);
   if(pvErr)h+=`<div class="callout warn">No se pudieron leer los datos (${esc(pvErr)}). ${pvErr==='permission-denied'?'Falta publicar las reglas nuevas de Firestore.':''}</div>`;
   if(!P.length){h+=`<div class="empty">${pvEd()?'Aún no hay partidas críticas. Crea la primera con «+ Partida crítica» (p. ej. enchape de porcelanato, con su metrado total y la fecha comprometida).':'Aún no hay partidas críticas de tu partida. Las crea el ingeniero.'}</div></div></div>`;main.innerHTML=h;pvWire(main);return}
@@ -85,9 +85,13 @@ function pvChart(p,s,t,col){const D=[];let x=t;while(D.length<15){if(isWork(x)||
     <text x="2" y="${H-6}" class="lb">${fmtD(D[0])}</text><text x="${W-2}" y="${H-6}" text-anchor="end" class="lb">${fmtD(D[D.length-1])}</text></svg>
     <div class="pvleg"><span><i class="b" style="background:${col}"></i>metrado del día</span>${s.rit?`<span><i class="l rit"></i>ritmo actual ${pvN(Math.round(s.rit*10)/10)}/día</span>`:''}${nec?`<span><i class="l nec"></i>ritmo necesario ${pvN(Math.round(nec*10)/10)}/día</span>`:''}</div>`}
 
-function pvWire(main){main.onclick=e=>{const b=e.target.closest('[data-pv]');if(b){const a=b.dataset.pv;if(a==='rep')pvRepOpen(b.dataset.id||'');else if(a==='new')pvPartOpen('');else if(a==='edit')pvPartOpen(b.dataset.id);return}
+function pvWire(main){main.onchange=e=>{if(typeof pcChange==='function')pcChange(e)};
+  main.onclick=e=>{{const v=e.target.closest('[data-pvv]');if(v){U.pvV=v.dataset.pvv;saveUI();requestRender();return}}
+  {const c=e.target.closest('button[data-pc]');if(c){const a=c.dataset.pc;if(a==='reg'){U.pvV='reg';PCD=todayIso()}else if(a==='back')U.pvV='casa';else if(a==='bf'){pcBackfill();return}else if(a==='prev')PCD=addD(PCD,-1);else if(a==='next'){const n=addD(PCD,1);if(n<=todayIso())PCD=n}else if(a==='det'){pcDetOpen(c.dataset.id);return}saveUI();requestRender();return}}
+  {const r=e.target.closest('tr[data-pcs]');if(r){PCSEL=PCSEL===r.dataset.pcs?'':r.dataset.pcs;requestRender();return}}
+  const b=e.target.closest('[data-pv]');if(b){const a=b.dataset.pv;if(a==='rep')pvRepOpen(b.dataset.id||'');else if(a==='new')pvPartOpen('');else if(a==='edit')pvPartOpen(b.dataset.id);return}
   const tr=e.target.closest('tr[data-pvs]');if(tr){PVSEL=PVSEL===tr.dataset.pvs?'':tr.dataset.pvs;requestRender()}};
-  main.onkeydown=e=>{const tr=e.target.closest('tr[data-pvs]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}}}
+  main.onkeydown=e=>{const tr=e.target.closest('tr[data-pvs],tr[data-pcs]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}}}
 
 /* ---------- hoja: reportar / editar avance ---------- */
 let PVF=null;

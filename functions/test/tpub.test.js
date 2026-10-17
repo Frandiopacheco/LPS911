@@ -266,7 +266,11 @@ test('publicar: escribe tpub, tpubidx y marca los tareos; con bloqueos no escrib
   const R = tpEjecutar(ctx({ accion: 'publicar', fecha: F }));
   assert.strictEqual(R.res.ok, true);
   assert.strictEqual(R.res.id, F + '_v1');
-  const [p, ix, ...ts] = R.escr;
+  const [p, ix, ...rest] = R.escr; const ts = rest.filter(w => w.col === 'tareo');
+  const hc = rest.find(w => w.col === 'hhpc');
+  assert.deepStrictEqual([hc.id, hc.tipo, hc.datos.fecha, hc.datos.v], [F, 'poner', F, 1]);
+  assert.strictEqual(hc.datos.hh, Object.values(hc.datos.pcs).reduce((a, o) => a + o.hh, 0));
+  assert.ok(Object.keys(hc.datos.pcs).length > 0 && !JSON.stringify(hc.datos).match(/\d{8}/), 'sin DNI ni datos de personas');
   assert.deepStrictEqual([p.col, p.id, p.tipo], ['tpub', F + '_v1', 'crear']);
   assert.strictEqual(p.datos.v, 1); assert.strictEqual(p.datos.ant, null); assert.strictEqual(p.datos.dif, null);
   assert.deepStrictEqual(ix, { col: 'tpubidx', id: F, tipo: 'poner', datos: { fecha: F, v: 1, vers: [{ v: 1, at: 1000, by: 'j@o.pe', byN: 'Jefe', motivo: '' }], abierto: null } });

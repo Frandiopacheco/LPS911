@@ -1,6 +1,6 @@
 # Productividad (pestaña `prod`, `js/productividad.js`)
 
-Decidido con el dueño (oct 2026). Dos partes; **F1 (subcontratistas) está hecha**, F2 (casa / IP) y F3 (sugerencias y rendimientos para planificar) pendientes. Boceto aprobado: lienzo «LPS 911 · Productividad (boceto)».
+Decidido con el dueño (oct 2026). Dos partes; **F1 (subcontratistas) y F2 (casa / IP) hechas**; F3 (sugerencias y rendimientos para planificar) pendiente. Boceto aprobado: lienzo «LPS 911 · Productividad (boceto)».
 
 ## Principio
 - El metrado de Productividad es el **ejecutado sincerado**. No se usa el del Lookahead/Campo (mide confiabilidad: se programa, se mueve, se borra). En F3 Campo servirá solo como **sugerencia** al reportar.
@@ -18,7 +18,16 @@ Decidido con el dueño (oct 2026). Dos partes; **F1 (subcontratistas) está hech
 - Respaldo: `pcrit` y `pav` en `BK_DATA`.
 - Prueba: `tests/e2e/productividad.spec.js`.
 
-## F2 (pendiente): IP de casa
-- Partidas = `tpc` del Tareo (und, `met`, `hhp`). Metrado diario por partida **por piso** (registro del ingeniero). HH = publicaciones vigentes del Tareo (`tpub`, `rows[].h[pcId]`); el metrado se guarda aunque el día no esté publicado.
-- IP = ratio presupuestado ÷ ratio real (= HH ganadas ÷ HH gastadas); mayor a 1 es mejor. Lo ven admin e ingenieros (hoy `tpub` solo lo leen `isTar()`: hará falta un resumen legible por los ingenieros).
-- Límite conocido: el tareo no registra piso, así que el IP es de toda la obra; el avance sí va por piso.
+## F2: IP de casa (`js/productividad-casa.js`)
+- Vista «Casa (IP)» de la pestaña (`U.pvV`: `sc` | `casa` | `reg`, en `saveUI`; seg `pvSeg()`). La ven admin, ingenieros (`canDaily`) y quien ve el Tareo (`pcOk()`); el SC y el lector no.
+- Partidas = `tpc` del Tareo (`cod, nom, und, met` = metrado meta, `hhp` = HH presupuestadas). Los ingenieros sin Tareo las leen con su propia suscripción (`PTPC`; reglas: `tpc` lee `isTar() || canDaily()`).
+- `pmet/{fecha}_{pc}_{piso}_{zona|-}` `{pc, d, piso, zona, q, by, byN, ts, h, arch}`: metrado ejecutado de casa. Registro: tabla partida × piso (`renderPcReg`, guarda al salir de la casilla con `pcPut`; vacío o 0 archiva); «Detalle» (`pcDetOpen`) para sector o ambiente. Respeta el piso elegido arriba (`visPisos`). Si llega un dato mientras escribes, la casilla conserva el foco y el valor.
+- `hhpc/{fecha}` `{fecha, v, at, hh, pcs:{pcId:{hh, cod, nom, und}}}`: HH por partida de la publicación vigente, **sin datos de personas**. La escribe `publicarTareo` (`tpResumenHH` en `functions/tpub.js`, también al rectificar); el admin puede rearmar los días publicados antes con «Traer HH del tareo» (`pcBackfill`, copia de la misma cuenta en `pcResumen`). Reglas: lee `isTar() || canDaily()`, escribe solo `isAdmin()` (la función usa Admin SDK).
+- `pcStats(x)`: ratio presupuestado `rp = hhp/met`; ratio real `rr = HH / metrado de los días con HH publicadas` (`ejeC`); **IP = rp/rr** (= HH ganadas ÷ gastadas; mayor a 1 es mejor; decidido con el dueño); IP por semana (`weekOf`); proyección = HH + saldo × `rr` (o `rp` sin real) y desvío vs `hhp`. `hhSinMet`: HH publicadas sin ningún metrado (se marca «sin metrado»). El metrado de días sin publicar suma al avance, no al IP.
+- Avisos: hasta qué día hay HH publicadas, días con HH sin metrado y días con metrado esperando la publicación (últimas 3 semanas).
+- Decimales con punto (como el resto de la app); ratios chicos (kg) con 3 cifras significativas (`pcR`).
+- Pruebas: `tests/e2e/productividad-casa.spec.js`, «productividad casa: …» en las reglas, `functions/test/tpub.test.js` (hhpc al publicar).
+- Límite conocido: el tareo no registra piso: el IP es de toda la obra; el avance va por piso.
+
+## F3 (pendiente)
+- Sugerencia desde Campo al registrar (requiere enlazar actividad del catálogo ↔ partida de control / partida crítica) y rendimiento histórico en el Lookahead al programar por metrado.
