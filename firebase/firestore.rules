@@ -292,6 +292,27 @@ service cloud.firestore {
         || (resource.data.by == mid() && scNpOk(request.resource.data));
       allow delete: if isAdmin();
     }
+    // Productividad F1 (oct 2026, docs/ia/productividad.md): partidas críticas de los SC y su avance diario ejecutado.
+    // pcrit: las crean y editan el administrador y los ingenieros (canDaily); nadie las borra salvo el administrador (se archivan).
+    match /pcrit/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canDaily() && request.resource.data.sc is string && request.resource.data.met is number;
+      allow delete: if isAdmin();
+    }
+    // pav: el SC reporta lo de su partida sin confirmación (by = él, sc de su partida y el de la partida crítica);
+    // los ingenieros y el administrador escriben cualquiera. Metrado numérico y no negativo.
+    function pavDocOk(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
+    function pavScOk(d) {
+      return isSC() && d.by == mid() && d.sc in scsOf()
+        && get(/databases/$(database)/documents/pcrit/$(d.pc)).data.sc == d.sc;
+    }
+    match /pav/{id} {
+      allow read: if lpsMember();
+      allow create: if pavDocOk(request.resource.data) && (canDaily() || pavScOk(request.resource.data));
+      allow update: if pavDocOk(request.resource.data) && (canDaily()
+        || (pavScOk(request.resource.data) && resource.data.sc in scsOf() && resource.data.pc == request.resource.data.pc));
+      allow delete: if isAdmin();
+    }
     // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)
     function fotoNewOk() {
       let d = request.resource.data;

@@ -3,9 +3,9 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
-const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','cli','planos','cfg','team'];
+const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','prod','cli','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',prod:'Productividad',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
   tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
@@ -23,8 +23,8 @@ function tabAllowed(t){if(!me)return false;
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed);const r=me.role;
-  const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','cli'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind'],
-    campo:['dash','campo','mapa','restr','plan','lib','ind'],sc:['look','cap','mapa','restr','lib','ind'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
+  const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod','cli'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod'],
+    campo:['dash','campo','mapa','restr','plan','lib','ind','prod'],sc:['look','cap','mapa','restr','lib','ind','prod'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}

@@ -1301,3 +1301,38 @@ test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínim
   await assertFails(setDoc(doc(ed, 'p3d/ARQ'), D({ path: 'planos/x/r1/th.webp' })));
   await assertFails(deleteDoc(doc(ed, 'p3d/ARQ')));
 });
+
+// Productividad F1: partidas críticas (admin e ingenieros) y avance diario (el SC el de su partida; los ingenieros cualquiera)
+test('productividad: partidas críticas y avance diario del SC', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pcrit/pc-gabel'), { sc: 'c-gabel', nom: 'Enchape', und: 'm²', met: 4200, fin: '2026-11-21' });
+    await setDoc(doc(db, 'pcrit/pc-otro'), { sc: 'c-otro', nom: 'Drywall', und: 'm²', met: 3600, fin: '' });
+  });
+  const pc = { sc: 'c-gabel', nom: 'Pintura', und: 'm²', met: 100, fin: '' };
+  for (const who of [OWNER, 'editor@obra.pe', 'campo@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'pcrit/n-' + who.replace(/\W/g, '')), pc));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'veedor@obra.pe']) await assertFails(setDoc(doc(user(who), 'pcrit/n-x'), pc));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pcrit/pc-gabel')));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'pcrit/pc-gabel')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), 'pcrit/pc-gabel')));
+
+  const av = (by, o = {}) => ({ pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-16', piso: 'p1', zona: '', q: 85, hh: null, nota: '', by, ts: 1, ...o });
+  // el SC reporta lo suyo y lo corrige
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pav/a1'), av('sc@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pav/a1'), av('sc@obra.pe', { q: 90, hh: 48 })));
+  // pero no lo de otra partida, ni a nombre de otro, ni sin piso, ni negativo, ni cambiando la partida crítica
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a2'), av('sc@obra.pe', { pc: 'pc-otro', sc: 'c-otro' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a3'), av('sc@obra.pe', { pc: 'pc-otro' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a4'), av('editor@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a5'), av('sc@obra.pe', { piso: '' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a6'), av('sc@obra.pe', { q: -5 })));
+  // el ingeniero corrige el reporte del SC y reporta cualquier partida
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/a1'), av('campo@obra.pe', { q: 80 })));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pav/a7'), av('editor@obra.pe', { pc: 'pc-otro', sc: 'c-otro' })));
+  // el SC no toca el reporte de otra partida (aunque lo cambie a la suya)
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a7'), av('sc@obra.pe')));
+  // lector y veedor no escriben; solo el administrador borra de verdad
+  for (const who of ['lector@obra.pe', 'veedor@obra.pe', 'ot@obra.pe']) await assertFails(setDoc(doc(user(who), 'pav/a8'), av(who)));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pav/a1')));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'pav/a1')));
+});
