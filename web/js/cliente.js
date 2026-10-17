@@ -34,10 +34,10 @@ const CLI_F=['days','qty','name','sc','und','metrado','order'];
 /** Se deja de escuchar al perder el acceso. */
 function cliStop(){if(cliBufSub)cliBufSub();if(cliIdxSub)cliIdxSub();if(cliOvSub)cliOvSub();cliBufSub=cliIdxSub=cliOvSub=null;CLIB=null;CLX.clear();CLVD.clear();CLIA.clear();CLIAV++;cliOvCache=cliLateCache=null;U.cliv=false;U.cliVer='';cliSync()}
 function ensureCli(){if(!canCli()||cliBufSub)return;
-  cliBufSub=fcol('cli').doc('buf').onSnapshot(d=>{CLIB=d.exists?d.data():{};cliErr=null;cliOvCache=null;if(ready)snapRender(d)},
+  cliBufSub=fcol('cli').doc('buf').onSnapshot(d=>{const was=CLIB;CLIB=d.exists?d.data():{};cliErr=null;cliOvCache=null;if(ready&&(d.exists||(was&&Object.keys(was).length)))snapRender(d)},
     e=>{cliErr=e&&e.code||'error';CLIB={};if(ready)requestRender()});
-  cliIdxSub=fcol('clidx').onSnapshot(sn=>{CLX.clear();sn.docs.forEach(d=>CLX.set(d.id,{...d.data(),id:d.id}));cliLateCache=null;const L=cliLast();if(L)cliLoad(L.id);if(ready)snapRender(sn)},()=>{});
-  cliOvSub=fcol('clia').onSnapshot(sn=>{CLIA.clear();sn.docs.forEach(d=>CLIA.set(d.id,d.data()));CLIAV++;cliOvCache=null;if(ready)snapRender(sn)},e=>{cliErr=e&&e.code||'error';if(ready)requestRender()});
+  cliIdxSub=fcol('clidx').onSnapshot(sn=>{const was=CLX.size;CLX.clear();sn.docs.forEach(d=>CLX.set(d.id,{...d.data(),id:d.id}));cliLateCache=null;const L=cliLast();if(L)cliLoad(L.id);if(ready&&(was||sn.size))snapRender(sn)},()=>{});
+  cliOvSub=fcol('clia').onSnapshot(sn=>{const was=CLIA.size;CLIA.clear();sn.docs.forEach(d=>CLIA.set(d.id,d.data()));CLIAV++;cliOvCache=null;/* vacío y sin cambios: no redibuja (abrir el Plan semanal ya no salta) */if(ready&&(was||sn.size))snapRender(sn)},e=>{cliErr=e&&e.code||'error';if(ready)requestRender()});
   unsubs.push(()=>{if(cliBufSub)cliBufSub();if(cliIdxSub)cliIdxSub();if(cliOvSub)cliOvSub();cliBufSub=cliIdxSub=cliOvSub=null;CLIB=null;CLX.clear();CLVD.clear();CLIA.clear();CLIAV++;cliOvCache=cliLateCache=null;U.cliv=false;U.cliVer=''})}
 
 /** Holgura que le toca a un elemento: la más específica que esté definida (actividad › ambiente › sector › piso › obra).
@@ -211,9 +211,13 @@ function cliHidPop(btn){const L=cliHiddenList();if(!L.length)return;
 
 /* ---------- PPC del cliente: contra la versión emitida para cada semana ----------
    Semana n: manda la versión emitida para n (la última; si no hay, la vigente de antes). Compromiso = actividad con días en la
-   semana n según esa versión. Se cumple si al cierre de la semana la actividad está terminada, o si los días cumplidos en obra
-   (✓ = 1, ½ = 0,5) desde el inicio de la ventana alcanzan los días que el cliente esperaba hasta ese cierre. Las filas solo
-   del cliente no tienen registro de obra: no entran. */
+   semana n según esa versión. Las filas solo del cliente no tienen registro de obra: no entran.
+   Cumplimiento (oct 2026, pedido del dueño): sale del PLAN SEMANAL (lo marcado a mano), nunca directo de Campo.
+   - Sí interno y los días del cliente en la semana están dentro de los internos → Sí (cumplió algo igual o más exigente).
+   - No interno y los días internos de la semana están dentro de los del cliente → No (el cliente esperaba lo mismo o más).
+   - Si no (el cliente esperaba menos, o la actividad no está en el congelado interno) → lo marca el administrador en
+     weeks.cres[<actividad>].ok (Plan semanal o Indicadores › Cliente). Campo y el ejecutado solo dan una sugerencia (sug).
+   - Interno sin evaluar o piso sin congelar → por evaluar (no cuenta como cumplido). */
 const CLI_PW=6,CLI_HIST=4;
 function cliVerFor(w){let best=null;const man=v=>v.kind==='auto'?0:1;
   for(const v of CLX.values()){const f=cliForW(v);if(f>w)continue;if(!best||f>best.f||(f===best.f&&(man(v)>man(best.v)||(man(v)===man(best.v)&&v.ts>best.v.ts))))best={v,f}}return best?best.v:null}
@@ -221,31 +225,66 @@ const cliPpcFrom=()=>weekStart(U.week-CLI_PW+1-CLI_HIST);
 /* inicio fijo de la cuenta de días de la semana w: CLI_HIST semanas antes (igual se mire desde donde se mire) */
 const cliPpcF=w=>weekStart(w-CLI_HIST);
 function cliPisoOf(v,x){const a=v.amb.get(x.ambId);const s=a&&v.sec.get(a.sectorId);return s?s.pisoId:''}
-function cliPpc(vset){return withInt(()=>cliPpc0(vset))}
-function cliPpc0(vset){const F=cliPpcFrom();const today=todayIso();
-  /* días cumplidos por actividad (registro del ingeniero; si no hay, el cierre del capataz) */
-  const got=new Map();const add=(aid,d,st)=>{const v=st==='ok'?1:st==='partial'?.5:0;if(!v)return;let L=got.get(aid);if(!L)got.set(aid,L=[]);L.push([d,v])};
+/* días cumplidos por actividad según Campo (registro del ingeniero; si no hay, el cierre del capataz): solo para la sugerencia */
+function cliGot(F){const got=new Map();const add=(aid,d,st)=>{const v=st==='ok'?1:st==='partial'?.5:0;if(!v)return;let L=got.get(aid);if(!L)got.set(aid,L=[]);L.push([d,v])};
   const seen=new Set();for(const doc of DAY.values()){if(doc.date<F)continue;for(const[aid,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status)continue;seen.add(doc.date+'_'+aid);add(aid,doc.date,rc.status)}}
-  /* el cierre del capataz cuenta como en Campo (recOf): no si el ingeniero lo quitó («Quitar registro») ni si es de otra partida */
   for(const[k,lv]of LIVE){const c=lv&&lv.close;if(!c||!c.status||seen.has(k))continue;const d=k.slice(0,10),aid=k.slice(11);if(d<F)continue;const r=recOf(d,aid);if(r&&r._prop)add(aid,d,r.status)}
+  return got}
+/** Compromisos del cliente de la semana w (versión v ya cargada), con su evaluación. vset null = todos los pisos. */
+function cliWeekItems(w,v,vset,got){const wd=weekDays(w);const today=todayIso();const cur=wd[5]>=today;const end=cur?today:wd[5];const Fw=cliPpcF(w);const items=[];
+  for(const x of v.act.values()){if(x.own)continue;const pid=cliPisoOf(v,x);if(vset&&!vset.has(pid))continue;const cd=x.days||[];const inW=cd.filter(d=>d>=wd[0]&&d<=wd[5]);if(!inW.length)continue;
+    const need=cd.filter(d=>d>=Fw&&d<=end).length;const g=(got.get(x.id)||[]).reduce((s,[d,q])=>d>=Fw&&d<=end?s+q:s,0);
+    const wk=S.wk.get(wkId(w,pid));const fz=!!(wk&&wk.frozenAt);const it=fz?(wk.items||{})[x.id]:null;const r=fz?(wk.res||{})[x.id]||{}:{};const cr=fz?(wk.cres||{})[x.id]:null;
+    let ok=null,how='pend',why='';
+    if(!fz)why='Plan semanal sin congelar';
+    else if(it&&r.ok!==true&&r.ok!==false)why='Falta evaluar el plan semanal';
+    else{const cs=new Set(inW),is=new Set(it?it.days||[]:[]);
+      if(it&&r.ok===true&&inW.every(d=>is.has(d))){ok=true;how='auto'}
+      else if(it&&r.ok===false&&[...is].every(d=>cs.has(d))){ok=false;how='auto'}
+      else{how='man';why=it?'El cliente esperaba distinto que el plan interno':'No está en el plan semanal interno';if(cr&&(cr.ok===true||cr.ok===false))ok=cr.ok}}
+    /* sugerencia: ejecutado del plan semanal contra el metrado que esperaba el cliente; si no hay, días cumplidos en Campo */
+    let sug=null;if(how==='man'){const cq=inW.reduce((t,d)=>t+(+((x.qty||{})[d])||0),0);const dn=DONE.get(x.id);
+      if(r.exec!=null&&cq>0)sug=r.exec>=cq-1e-9;else sug=!!(dn&&dn<=end)||(need>0&&g>=need)}
+    items.push({x,pid,days:inW,need,got:g,ok:ok===true,st:ok===true?'ok':ok===false?'no':'pend',how,why,sug,it:it||null})}
+  return{items,cur}}
+function cliPpc(vset){return withInt(()=>cliPpc0(vset))}
+function cliPpc0(vset){const F=cliPpcFrom();const today=todayIso();const got=cliGot(F);
   const W=[];let loading=false;
   for(let w=U.week-CLI_PW+1;w<=U.week;w++){const wd=weekDays(w);if(wd[0]>today)continue;const L=cliVerFor(w);if(!L)continue;const v=CLVD.get(L.id);if(!v||!v.ready){cliLoad(L.id);loading=true;continue}
-    const cur=wd[5]>=today;const end=cur?today:wd[5];const Fw=cliPpcF(w);const items=[];
-    for(const x of v.act.values()){if(x.own)continue;const pid=cliPisoOf(v,x);if(!vset.has(pid))continue;const cd=x.days||[];const inW=cd.filter(d=>d>=wd[0]&&d<=end);if(!inW.length)continue;
-      const need=cd.filter(d=>d>=Fw&&d<=end).length;const dn=DONE.get(x.id);const g=(got.get(x.id)||[]).reduce((s,[d,q])=>d>=Fw&&d<=end?s+q:s,0);
-      const ok=!!(dn&&dn<=end)||g>=need;items.push({x,pid,days:inW,need,got:g,ok})}
-    const n=items.length,okN=items.filter(i=>i.ok).length;W.push({w,ver:L,n,ok:okN,ppc:n?okN/n:null,cur,items})}
+    const{items,cur}=cliWeekItems(w,v,vset,got);
+    const n=items.length,okN=items.filter(i=>i.st==='ok').length,noN=items.filter(i=>i.st==='no').length;W.push({w,ver:L,n,ok:okN,no:noN,pend:n-okN-noN,ppc:n?okN/n:null,cur,items})}
   return{W,loading}}
+/** Evaluación del cliente de un piso y semana para el Plan semanal (solo admin): Map actividad → ítem; null si no hay versión. */
+function cliPlanEval(w,pid){if(!canCli())return null;ensureCli();const L=cliVerFor(w);if(!L)return null;const v=CLVD.get(L.id);if(!v||!v.ready){cliLoad(L.id);return null}
+  return withInt(()=>{const{items}=cliWeekItems(w,v,new Set([pid]),cliGot(cliPpcF(w)));return new Map(items.map(i=>[i.x.id,i]))})}
+/** Marca a mano el cumplimiento del cliente (weeks.cres): tocar el mismo valor lo quita. */
+function cliEvalSet(w,pid,aid,ok){if(!canCli()){toast('Solo un administrador evalúa el PPC del cliente.');return}const wk=S.wk.get(wkId(w,pid));if(!wk||!wk.frozenAt){toast('Primero congela el plan semanal de ese piso.');return}
+  const cur=(wk.cres||{})[aid]||{};const nv=cur.ok===ok?null:ok;wk.cres={...(wk.cres||{}),[aid]:{ok:nv,by:me?me.email:'',t:NOW()}};requestRender();
+  const FP=firebase.firestore.FieldPath;bgWrite(dbCall(()=>fcol('weeks').doc(wkId(w,pid)).update(new FP('cres',aid),{ok:nv,by:me?me.email:'',t:NOW()})))}
+/* botones Sí/No del cliente (Plan semanal e Indicadores › Cliente) */
+document.addEventListener('click',e=>{if(e.target.closest('[data-gocli]')){e.stopPropagation();U.indMode='cli';goTab('ind');return}const b=e.target.closest('[data-cyn]');if(!b||b.disabled)return;e.stopPropagation();cliEvalSet(+b.dataset.cw,b.dataset.cp,b.dataset.ca,b.dataset.cyn==='1')},true);
+const cliYN=(w,i)=>`<span class="yn clyn"><button class="y${i.st==='ok'?' on':''}" data-cyn="1" data-cw="${w}" data-cp="${esc(i.pid)}" data-ca="${esc(i.x.id)}">Sí</button><button class="n${i.st==='no'?' on':''}" data-cyn="0" data-cw="${w}" data-cp="${esc(i.pid)}" data-ca="${esc(i.x.id)}">No</button></span>`;
+const cliSugTxt=i=>i.sug==null?'':`Sugiere ${i.sug?'Sí':'No'} · Campo: ${fq(i.got)} de ${i.need} días esperados`;
 function cliPpcCard(vset){if(!canCli())return'';ensureCli();if(!CLX.size)return`<div class="card"><h2>PPC del cliente <span class="sub">contra la versión emitida</span></h2><div class="pad"><div class="empty">Aún no hay versiones emitidas al cliente. Se emiten desde la pestaña <b>Cliente</b> › <b>Emitir al cliente</b>.</div></div></div>`;
   ensureDaily(cliPpcFrom());const{W,loading}=cliPpc(vset);const sel=W.find(o=>o.w===U.week);
   const scs={};if(sel)for(const i of sel.items){const o=scs[i.x.sc]=scs[i.x.sc]||{n:0,ok:0};o.n++;if(i.ok)o.ok++}
+  /* compromisos que el plan semanal no resuelve solo: los marca el administrador (con la sugerencia de Campo / ejecutado) */
+  const man=sel?sel.items.filter(i=>i.how==='man').sort((a,b)=>(a.st==='pend'?0:1)-(b.st==='pend'?0:1)||conOf(a.x.sc).name.localeCompare(conOf(b.x.sc).name)):[];
+  const pnd=sel?sel.items.filter(i=>i.how==='pend'):[];
   const bar=v=>v==null?'<span class="mu">—</span>':`<span class="pbar"><i style="width:${Math.round(v*100)}%"></i></span><b>${pct(v)}</b>`;
   return`<div class="card"><h2>PPC del cliente <span class="sub">contra la versión emitida · lo que se le informa · solo administradores</span></h2><div class="pad">
     ${loading?'<p class="note">Cargando versiones emitidas…</p>':''}
-    ${W.length?`<div class="tscroll"><table class="t ctab rt"><thead><tr><th>Semana</th><th>Versión emitida</th><th class="r">Compromisos</th><th class="r">Cumplidos</th><th>PPC cliente</th><th>PPC interno</th></tr></thead><tbody>
-      ${W.map(o=>{const pi=ppcWeekAgg(o.w,vset);return`<tr${o.w===U.week?' class="on"':''}><td data-l="Semana"><b>S${o.w}</b>${o.cur?' <span class="mu">en curso</span>':''}</td><td class="wrapc mu" data-l="Versión">${esc(o.ver.label||'')}</td><td class="r" data-l="Compromisos">${o.n}</td><td class="r ok" data-l="Cumplidos">${o.ok}</td><td data-l="PPC cliente">${bar(o.ppc)}</td><td data-l="PPC interno">${bar(pi?pi.ppc:null)}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Ninguna semana de este periodo tiene una versión emitida vigente.</div>'}
+    ${W.length?`<div class="tscroll"><table class="t ctab rt"><thead><tr><th>Semana</th><th>Versión emitida</th><th class="r">Compromisos</th><th class="r">Cumplidos</th><th class="r">Por evaluar</th><th>PPC cliente</th><th>PPC interno</th></tr></thead><tbody>
+      ${W.map(o=>{const pi=ppcWeekAgg(o.w,vset);return`<tr${o.w===U.week?' class="on"':''}><td data-l="Semana"><b>S${o.w}</b>${o.cur?' <span class="mu">en curso</span>':''}</td><td class="wrapc mu" data-l="Versión">${esc(o.ver.label||'')}</td><td class="r" data-l="Compromisos">${o.n}</td><td class="r ok" data-l="Cumplidos">${o.ok}</td><td class="r${o.pend?' warn':''}" data-l="Por evaluar">${o.pend||'—'}</td><td data-l="PPC cliente">${bar(o.ppc)}</td><td data-l="PPC interno">${bar(pi?pi.ppc:null)}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">Ninguna semana de este periodo tiene una versión emitida vigente.</div>'}
     ${sel&&Object.keys(scs).length?`<h3 class="clih">Semana ${U.week} por subcontratista</h3>${svgBarsH(Object.entries(scs).sort((a,b)=>b[1].ok/b[1].n-a[1].ok/a[1].n).map(([sc,o])=>({label:conOf(sc).name,v:o.ok/o.n,max:1,color:conOf(sc).color,sub:o.ok+' de '+o.n})),pct)}`:''}
-    <p class="note">El cumplimiento sale de lo registrado en obra: cumple si al cierre de la semana la actividad está terminada o sus días cumplidos (✓ = 1, ½ = 0,5) alcanzan los días que el cliente esperaba hasta ese cierre (las ${CLI_HIST} semanas previas también cuentan). La semana en curso se mide hasta hoy. Las filas solo del cliente no entran.</p>
+    ${man.length?`<h3 class="clih">Semana ${U.week}: evaluar para el cliente <span class="sub">${man.filter(i=>i.st==='pend').length} sin marcar de ${man.length}</span></h3><p class="note">El plan semanal no lo resuelve solo: el cliente esperaba otros días que el plan interno, o la actividad no está en el congelado interno. Marca si se cumplió lo que esperaba el cliente; la sugerencia sale del ejecutado o de Campo y no cuenta hasta que la marques.</p>
+      <div class="tscroll"><table class="t ctab rt"><thead><tr><th>Piso</th><th>Ambiente</th><th>Actividad</th><th>Subcontratista</th><th>Días cliente</th><th>Plan interno</th><th>Cliente</th></tr></thead><tbody>
+      ${man.map(i=>{const v=cliVerFor(U.week);const vd=v&&CLVD.get(v.id);const a=vd&&vd.amb.get(i.x.ambId)||{};const wk=S.wk.get(wkId(U.week,i.pid));const r=i.it?((wk&&wk.res)||{})[i.x.id]||{}:null;
+        return`<tr><td class="mono" data-l="Piso">${esc(S.pis.get(i.pid)?.code||'')}</td><td class="wrapc" data-l="Ambiente">${esc((a.code?a.code+' · ':'')+(a.name||''))}</td><td class="wrapc lead">${esc(i.x.name||'')}</td><td data-l="Subcontratista">${scLabel(i.x.sc)}</td>
+        <td class="mono" data-l="Días cliente">${i.days.map(fmtD).join(', ')}</td><td data-l="Plan interno">${!i.it?'<span class="mu">no está</span>':`${r.ok===true?'<span class="ok">Sí</span>':r.ok===false?'<span class="bad">No</span>':'—'} <span class="mu mono">${(i.it.days||[]).map(fmtD).join(', ')}</span>`}</td>
+        <td data-l="Cliente">${cliYN(U.week,i)}<div class="fsug ${i.sug===true?'ok':i.sug===false?'no':''}">${esc(cliSugTxt(i))}</div></td></tr>`}).join('')}</tbody></table></div>`:''}
+    ${pnd.length?`<p class="note">${pnd.length} compromiso${pnd.length>1?'s':''} del cliente esperan a que se evalúe (o se congele) el plan semanal interno de la semana ${U.week}.</p>`:''}
+    <p class="note">El cumplimiento sale del <b>Plan semanal</b>: si lo interno se cumplió y el cliente no esperaba más, es Sí; si no se cumplió y el cliente esperaba lo mismo o más, es No. Cuando el cliente esperaba menos (más holgura) o la actividad no está en el congelado interno, lo marca un administrador aquí o en el Plan semanal. Las filas solo del cliente no entran.</p>
     <button class="ib" id="bxcli">Excel del PPC cliente</button></div></div>`}
 /** Compromisos del cliente de la semana n (versión emitida para n), con la forma de las semanas congeladas (items/res por piso)
     para armar las hojas «PPC semanal» y «PPC del SC» del Excel con el mismo formato que el interno. Cumplimiento: el de cliPpc
@@ -255,7 +294,7 @@ async function cliWeekDocs(n){const L=cliVerFor(n);if(!L)return null;if(!CLVD.ge
   /* MOD-04: el cumplimiento cuenta los días desde CLI_HIST semanas antes: hay que tener cargado el registro de Campo de esas
      semanas (la pestaña Cliente solo baja desde la semana anterior; Indicadores sí lo pedía y el Excel salía distinto) */
   if(started)await ensureDaily(cliPpcFrom()<cliPpcF(n)?cliPpcFrom():cliPpcF(n));
-  const P_=started?(cliPpc(vset).W.find(o=>o.w===n)||null):null;const okOf=new Map(P_?P_.items.map(i=>[i.x.id,i.ok]):[]);
+  const P_=started?(cliPpc(vset).W.find(o=>o.w===n)||null):null;const okOf=new Map(P_?P_.items.filter(i=>i.st!=='pend').map(i=>[i.x.id,i.st==='ok']):[]);
   const by=new Map();
   for(const x of v.act.values()){if(x.own)continue;const pid=cliPisoOf(v,x);if(!vset.has(pid))continue;const inW=(x.days||[]).filter(d=>d>=wd[0]&&d<=wd[5]);if(!inW.length)continue;
     let d=by.get(pid);if(!d){d={pisoId:pid,n,frozenAt:L.ts||1,items:{},res:{}};by.set(pid,d)}

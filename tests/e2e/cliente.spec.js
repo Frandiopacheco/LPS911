@@ -239,6 +239,41 @@ test('MOD-04: el Excel cliente carga el registro de Campo de las semanas previas
     return { had, res: w && w.docs[0] && w.docs[0].res.q7 };
   });
   expect(r.had).toBe(false); // la pestaña no lo tenía cargado
-  expect(r.res).toEqual({ ok: true });
+  // oct 2026: el cumplimiento del cliente sale del Plan semanal; sin semana interna congelada queda por evaluar (Campo solo sugiere)
+  expect(r.res).toBeUndefined();
   noErrors(errors, 'MOD-04');
+});
+
+// Oct 2026 (pedido del dueño): el PPC del cliente sale de lo marcado en el Plan semanal, no del registro de Campo.
+test('PPC cliente desde el Plan semanal: automático cuando el interno lo resuelve, a mano (cres) cuando el cliente esperaba otra cosa', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look' });
+  const r = await page.evaluate(async () => {
+    const w = U.week - 1, wd = weekDays(w), pid = 'p1', id = wkId(w, pid);
+    const [, , mie, jue, vie, sab] = wd;
+    const it = days => ({ sc: 'c1', act: 'x', days, ord: 1 });
+    await fcol('weeks').doc(id).set({ n: w, pisoId: pid, frozenAt: 1,
+      items: { A: it([jue, vie, sab]), B: it([jue, vie, sab]), C: it([jue, vie, sab]), E: it([vie]) },
+      res: { A: { ok: false, cnc: 'x' }, B: { ok: true }, C: { ok: false, cnc: 'x' } } });
+    await new Promise(ok => { const t = setInterval(() => { const d = S.wk.get(id); if (d && d.frozenAt) { clearInterval(t); ok(); } }, 30); });
+    const v = { ready: true, pis: new Map(), sec: new Map([['s1', { pisoId: pid }]]), amb: new Map([['a1', { sectorId: 's1' }]]), act: new Map() };
+    const add = (aid, days) => v.act.set(aid, { id: aid, ambId: 'a1', sc: 'c1', name: aid, days });
+    add('A', [vie, sab, wshift(sab, 1)]); // pintura: interno jue-sáb (No), cliente vie-lun → a mano
+    add('B', [vie, sab]); // interno Sí y el cliente esperaba menos → Sí
+    add('C', [jue, vie, sab]); // interno No y el cliente esperaba lo mismo → No
+    add('D', [mie]); // no está en el congelado interno → a mano
+    add('E', [vie]); // interno sin evaluar → por evaluar
+    const ev = () => Object.fromEntries(cliWeekItems(w, v, null, new Map()).items.map(i => [i.x.id, i.how + ':' + i.st]));
+    const before = ev();
+    cliEvalSet(w, pid, 'A', true); cliEvalSet(w, pid, 'D', false);
+    await new Promise(ok => { const t = setInterval(() => { const d = window.__dbGet('weeks', id); if (d && d.cres && d.cres.D) { clearInterval(t); ok(); } }, 30); });
+    const after = ev();
+    cliEvalSet(w, pid, 'A', true); // tocar lo mismo lo quita
+    const off = ev().A;
+    return { before, after, off, db: window.__dbGet('weeks', id).cres };
+  });
+  expect(r.before).toEqual({ A: 'man:pend', B: 'auto:ok', C: 'auto:no', D: 'man:pend', E: 'pend:pend' });
+  expect(r.after).toMatchObject({ A: 'man:ok', D: 'man:no', B: 'auto:ok', C: 'auto:no' });
+  expect(r.off).toBe('man:pend');
+  expect(r.db.D.ok).toBe(false);
+  noErrors(errors, 'PPC cliente desde el plan semanal');
 });

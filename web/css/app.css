@@ -3789,3 +3789,7 @@ table.flt td.fd.on i{position:absolute;inset:max(2px,calc(var(--flh,26px)*.18)) 
 table.flt td.fd.on.rs i{left:2px;border-top-left-radius:5px;border-bottom-left-radius:5px}
 table.flt td.fd.on.re i{right:2px;border-top-right-radius:5px;border-bottom-right-radius:5px}
 table.flt td.fd.on:hover i{background:var(--c);box-shadow:0 0 0 1.5px var(--ink);z-index:2}
+
+/* PPC del cliente marcado a mano en el Plan semanal (solo admin) */
+.clev{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}
+.clev>.k{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
