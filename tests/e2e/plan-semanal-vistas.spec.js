@@ -41,3 +41,22 @@ test('Plan semanal: por ambiente + buscador, y se marca el cumplimiento sin toca
   await expect(sec(page).locator('tr.plamb')).toHaveCount(0);
   noErrors(errors, 'vistas');
 });
+
+test('Plan semanal: filtros por subcontratista, por evaluar y sin causa', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'plan', extra: [...EXTRA.slice(0, 2),
+    ['weeks', '58_p1', { n: 58, pisoId: 'p1', frozenAt: '2026-09-28T08:00:00.000Z', items, res: { x1: { ok: false, cnc: '' } }, snap: {} }]] });
+  await expect(page.locator('#plst [data-st="pend"] b')).toHaveText('1');
+  await expect(page.locator('#plst [data-st="cnc"] b')).toHaveText('1');
+  await page.locator('#plst [data-st="cnc"]').click();
+  await expect(sec(page).locator('tr[data-id="x1"]')).toBeVisible();
+  await expect(sec(page).locator('tr[data-id="x2"]')).toBeHidden();
+  await page.locator('#plst [data-st="pend"]').click();
+  await expect(sec(page).locator('tr[data-id="x2"]')).toBeVisible();
+  await expect(sec(page).locator('tr[data-id="x1"]')).toBeHidden();
+  await page.locator('#plst [data-st=""]').click();
+  await page.selectOption('#plsc', 'c1');
+  await expect(sec(page).locator('tr[data-id="x1"]')).toBeVisible();
+  await expect(sec(page).locator('tr[data-id="x2"]')).toBeHidden();
+  await expect(page.locator('#plqn')).toHaveText('1 de 2 compromisos');
+  noErrors(errors, 'filtros plan semanal');
+});
