@@ -687,15 +687,17 @@ test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el 
     await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
   }
 });
-test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo', async () => {
+test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo (salvo las partidas, los ingenieros)', async () => {
   for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('campo@obra.pe'), user('veedor@obra.pe'), user('extrano@x.pe')]) {
     await assertFails(getDoc(doc(db, 'tper/03684337')));
     await assertFails(getDocs(collection(db, 'tper')));
-    await assertFails(getDoc(doc(db, 'tpc/10.05')));
     await assertFails(getDoc(doc(db, 'tcfg/main')));
     await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
     await assertFails(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
   }
+  // las partidas de control (sin datos de personas) sí las leen los ingenieros: Productividad › Casa (IP)
+  for (const db of [user('editor@obra.pe'), user('campo@obra.pe')]) await assertSucceeds(getDoc(doc(db, 'tpc/10.05')));
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('veedor@obra.pe'), user('extrano@x.pe')]) await assertFails(getDoc(doc(db, 'tpc/10.05')));
 });
 test('tareo: la configuración la cambia solo el administrador', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'tcfg/main'), { refIni: '12:30', limEnv: '18:00', tolGar: 10 }));
