@@ -586,7 +586,11 @@ service cloud.firestore {
       allow update: if canEdit() && (edPiso(resource.data)
         || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['res'])
         || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0))
-        && (isAdmin() || !('fromVer' in request.resource.data) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['fromVer']));
+        && (isAdmin() || !('fromVer' in request.resource.data) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['fromVer']))
+        // cres: evaluación del PPC del cliente (oct 2026). Solo el administrador la marca; el editor solo la mueve al
+        // descongelar o recuperar la semana (pasa de congelada a borrador o al revés)
+        && (isAdmin() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cres'])
+          || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null);
     }
     // SEG-01: Configuración › Proyecto. La numeración de semanas, los cortes (propuestas y congelado), la publicación automática del
     // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia. El editor sigue guardando

@@ -34,18 +34,18 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
 | `scripts/build.mjs` | Lo usa la publicación: elige config por rama, pone la versión (commit) en `sw.js`, en las URLs `?v=` de `css/`, `js/`, `plano.js` y `firebase-config.js` pone la **huella de su contenido** (tras publicar, cada equipo solo baja lo que cambió), publica `app.css` sin comentarios y llena `ASSETS` del service worker para que funcione sin internet (ver `interfaz.md`). |
 | `scripts/check.mjs` | Revisión de `web/`: sintaxis de cada archivo, que todo lo que carga `index.html` exista (y que no sobre nada en `js/`), `"use strict"` al inicio y `inicio.js` al final: `node scripts/check.mjs`. |
 | `tests/e2e/` | Pruebas de la interfaz con Playwright y un Firebase falso en memoria (ver "Cómo probar"). `mundo-compartido.js` + `auditoria-ciclo.spec.js`: el ciclo diario con 16 usuarios a la vez sobre una misma base (corre aparte con `CICLO=1`). |
-| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright en 3 partes + ciclo diario, a la vez; no se repite al unir si el código ya pasó en el PR) → instala en Firebase → publica en Netlify. |
+| `.github/workflows/ci.yml` | Revisa (sintaxis, functions, reglas) y prueba la interfaz (Playwright en 3 partes + ciclo diario, a la vez; no se repite al unir si el código ya pasó en el PR) → instala en Firebase → publica la página en Firebase Hosting. |
 
 ## Entornos
 
-| Rama | Firebase | Netlify |
+| Rama | Firebase | Página (Firebase Hosting) |
 | --- | --- | --- |
-| `main` | `lps911-pruebas-49641` (sin Realtime Database) | `https://main--lps911-central.netlify.app` (cinta roja PRUEBAS) |
-| `produccion` | `lps911` | `https://lps911-central.netlify.app` |
+| `main` | `lps911-pruebas-49641` (sin Realtime Database) | `https://lps911-pruebas-49641.web.app` (cinta roja PRUEBAS) |
+| `produccion` | `lps911` | `https://lps911.web.app` |
 
-Netlify protege las copias que no son producción (`main--…` pide iniciar sesión en Netlify), así que no se abren desde otro celular ni en incógnito. Para probar roles y celular usa, en la copia de prueba, Equipo › **👁 Ver como…** y **📱 Vista celular** (solo el administrador real; ver abajo).
+**Oct 2026: la página pasó de Netlify a Firebase Hosting** (Netlify cobra 15 créditos por publicación a producción y se agotó el plan gratuito). Las direcciones antiguas `lps911-central.netlify.app` y `main--lps911-central.netlify.app` quedaron con la última versión publicada allí y ya no se actualizan. Para probar roles y celular usa, en la copia de prueba, Equipo › **👁 Ver como…** y **📱 Vista celular** (solo el administrador real; ver abajo).
 
-Secretos de GitHub: `FIREBASE_SA_PRUEBAS`, `FIREBASE_SA_PRODUCCION` y `NETLIFY_AUTH_TOKEN`. Netlify no compila por su cuenta: publica GitHub con `netlify deploy`.
+Secretos de GitHub: `FIREBASE_SA_PRUEBAS` y `FIREBASE_SA_PRODUCCION` (instalan reglas, tareas y la página; la cuenta de servicio necesita el rol **Administrador de Firebase Hosting**). `NETLIFY_AUTH_TOKEN` ya no se usa.
 
 ## Roles (reglas y app)
 

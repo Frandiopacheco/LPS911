@@ -2,8 +2,10 @@
 
 Hay dos lugares:
 
-- **Copia de prueba:** rama `main` → `https://main--lps911-central.netlify.app`, con la cinta roja PRUEBAS y datos de prueba.
-- **Obra:** rama `produccion` → `https://lps911-central.netlify.app`, con los datos reales.
+- **Copia de prueba:** rama `main` → `https://lps911-pruebas-49641.web.app`, con la cinta roja PRUEBAS y datos de prueba.
+- **Obra:** rama `produccion` → `https://lps911.web.app`, con los datos reales.
+
+(Oct 2026: la página pasó de Netlify a Firebase Hosting. Las direcciones `*.netlify.app` ya no se actualizan.)
 
 Todo cambio entra primero a `main`. A la obra solo llega cuando tú lo apruebas.
 
