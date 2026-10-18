@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
-import { PostproductionRenderer, PostproductionAspect } from '@thatopen/components-front';
 import CameraControls from 'camera-controls';
 import { levelsOf, levelIndex } from './levels.js';
 import { readProps } from './props.js';
@@ -30,7 +29,8 @@ function create(host, opts = {}) {
   world.scene = new OBC.SimpleScene(components);
   /* (oct 2026 se probó PostproductionRenderer con bordes y oclusión al detener la cámara: el cambio simple ↔ con efectos al recorrer
      se veía como si el modelo se pintara y despintara; se quitó. Ver docs/ia/planos.md › Calidad visual) */
-  world.renderer = new PostproductionRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+  /* profundidad logarítmica: sin ella el piso de ARQ y la losa de EST en el mismo plano salían a rayas (z-fighting) vistos de lejos */
+  world.renderer = new OBC.SimpleRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
   world.camera = new OBC.OrthoPerspectiveCamera(components);
   const R = world.renderer, cam = world.camera, cc = cam.controls, canvas = R.three.domElement;
   R.mode = OBC.RendererMode.MANUAL;       /* solo se dibuja cuando algo cambia (needsUpdate) */
@@ -45,28 +45,7 @@ function create(host, opts = {}) {
   const back = new THREE.DirectionalLight(0xffffff, 0.35); back.position.set(-0.6, 0.4, -0.7);
   world.scene.three.add(new THREE.HemisphereLight(0xf4f8ff, 0x8f8676, 1.05), sun, back, new THREE.AmbientLight(0xffffff, 0.25));
   canvas.style.touchAction = 'none';
-  /* ───────── acabados mejorados (oct 2026): bordes de cada elemento + sombreado de contacto (oclusión ambiental), SIEMPRE activos ─────────
-     La vez anterior (#282) se calculaban solo al detener la cámara y el salto simple ↔ con efectos se veía como si el modelo se pintara y
-     despintara (#285 lo quitó). Ahora no se alterna: o siempre, o nunca («Acabados» en Fluidez). Cuesta rendimiento en cada cuadro.
-     Profundidad logarítmica: sin ella el piso de ARQ y la losa de EST en el mismo plano salían a rayas (z-fighting) vistos de lejos. */
-  { const proto = Object.getPrototypeOf(R.postproduction), d = Object.getOwnPropertyDescriptor(proto, 'enabled');
-    if (d && d.set && !d.set.__lps) { const set = function (v) { if (!v && !this._initialized) { this._enabled = false; return } d.set.call(this, v) }; set.__lps = true;
-      Object.defineProperty(proto, 'enabled', { ...d, set }) } }
-  R.turnOffOnManualMode = false;
-  let fxOn = false;
-  const NO_EDGE = new THREE.MeshBasicMaterial({ visible: false });
-  function fxSize() { const pp = R.postproduction, c = pp.composer; if (!c) return; c.setPixelRatio(R.three.getPixelRatio()); pp.setSize(host.clientWidth || 1, host.clientHeight || 1) }
-  R.onResize.add(() => setTimeout(fxSize, 0));
-  R.onBeforeUpdate.add(() => { const pp = R.postproduction; if (fxOn && pp._basePass && pp._basePass.camera !== cam.three) pp.updateCamera() });
-  /* lo transparente (vidrios, ambientes IfcSpace) no dibuja bordes: no tapa ni raya lo que hay detrás */
-  function noEdgesOnGlass(e) { if (e.__lps) return; e.__lps = true; const orig = e.setMaterialToMesh.bind(e);
-    e.setMaterialToMesh = on => { orig(on); if (!on || !fragments.initialized) return;
-      for (const [, mdl] of fragments.core.models.list) for (const [, t] of mdl.tiles) { const prev = t.userData.edgePassPreviousMaterial; if (!prev || !Array.isArray(t.material)) continue;
-        const pa = Array.isArray(prev) ? prev : [prev]; if (!pa.some(x => x && x.transparent && x.opacity < 1)) continue;
-        t.material = t.material.map((m, i) => { const q = pa[Math.min(i, pa.length - 1)]; return q && q.transparent && q.opacity < 1 ? NO_EDGE : m }) } } }
-  function setFx(on) { fxOn = !!on; const pp = R.postproduction; try { pp.enabled = fxOn } catch (e) { console.warn('acabados', e) }
-    if (fxOn) { try { pp.style = PostproductionAspect.COLOR_PEN_SHADOWS; const e = pp.edgesPass; e.width = 1; e.color = new THREE.Color(0x3d4650); e.depthBiasStrength = 0.02; noEdgesOnGlass(e); fxSize() } catch (e) { console.warn('acabados', e) } }
-    redraw() }
+  /* (oct 2026, #353) se probaron bordes + oclusión ambiental siempre activos: se veía más lento y peor; se quitó. Ver docs/ia/planos.md */
   const fragments = components.get(OBC.FragmentsManager);
   fragments.init(here + 'visor3d-worker.js');
   if (opts.quality != null) fragments.core.settings.graphicsQuality = opts.quality;
@@ -132,7 +111,10 @@ function create(host, opts = {}) {
     try { const ids = m.allIds || (m.allIds = await m.model.getItemsIdsWithGeometry()), dy = m.model.object.position.y, n = ids.length, y0 = new Float32Array(n), y1 = new Float32Array(n);
       for (let i = 0; i < n; i += 4000) { const part = ids.slice(i, i + 4000), bs = await m.model.getBoxes(part); if (bs.length !== part.length) return m.bx = null; bs.forEach((b, k) => { y0[i + k] = b.min.y + dy; y1[i + k] = b.max.y + dy }) }
       m.bx = { ids, y0, y1 } } catch (e) { console.warn('boxesOf', e) } return m.bx }
-  const hideSet = id => { const a = hidden.get(id), b = ovlOf.get(id); if (!b || !b.size) return a; if (!a || !a.size) return b; return new Set([...a, ...b]) };
+  /* ambientes (IfcSpace): son volúmenes translúcidos que llenan cada habitación; con el IFC exportado con «habitaciones» aparecían como cajas
+     de vidrio sobre la azotea y dentro de los pisos. Ocultos por defecto (`spacesOn`); servirán para vincular con la Matriz (etapa siguiente). */
+  const spaceOf = new Map(); let spacesOn = false;
+  const hideSet = id => { const L = [hidden.get(id), ovlOf.get(id), spacesOn ? null : spaceOf.get(id)].filter(x => x && x.size); if (!L.length) return undefined; if (L.length === 1) return L[0]; return new Set(L.flatMap(x => [...x])) };
   async function applyVis() { const jobs = [];
     for (const [id, m] of models) { const lv = levelOf.get(id), hid = hideSet(id), iso = isolated && isolated.get(id);
       if (isolated && !(iso && iso.size)) { jobs.push((async () => { await m.model.setVisible(undefined, false) })()); continue }
@@ -180,7 +162,7 @@ function create(host, opts = {}) {
     await paintSel(prev); if (!selCount()) lastPick = null; if (onSelect) onSelect({ count: selCount(), map: selMap() }) }
   /* ¿el acierto del raycast se ve en pantalla? El raycast no sabe de ocultos, pisos, aislados ni cortes: lo que está recortado no se debe poder tocar */
   const planesNow = () => { const a = []; if (cutActive) a.push(cutPlane, botPlane); return a.concat(sections.planes()) };
-  function seen(id, h) { const hid = hidden.get(id); if (hid && hid.has(h.localId)) return false;
+  function seen(id, h) { const hid = hidden.get(id); if (hid && hid.has(h.localId)) return false; if (!spacesOn) { const sp = spaceOf.get(id); if (sp && sp.has(h.localId)) return false }
     if (isolated) { const iso = isolated.get(id); if (!iso || !iso.has(h.localId)) return false }
     const lv = levelOf.get(id); if (lv && !lv.has(h.localId)) return false;
     if (h.point) for (const pl of planesNow()) if (pl.distanceToPoint(h.point) < -1e-3) return false; return true }
@@ -250,7 +232,7 @@ function create(host, opts = {}) {
   const PRESETS = { alta: [2, 1], equilibrada: [1.5, 0.7], rapida: [1, 0.4] };   /* [resolución máx., detalle] */
   let preset = '';
   function setPreset(name) { const [d, q] = PRESETS[name] || PRESETS.alta; preset = name in PRESETS ? name : 'alta';
-    R.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, d)); R.resize(); fxSize(); fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw(); keepDrawing(500) }
+    R.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, d)); R.resize(); fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw(); keepDrawing(500) }
 
   /* ───────── vistas ───────── */
   const ctr = b => b.getCenter(new THREE.Vector3());
@@ -273,10 +255,11 @@ function create(host, opts = {}) {
     multi: false, world, components, fragments, THREE, OBC,
     async add(id, bytes) { const model = await fragments.core.load(bytes, { modelId: id, camera: cam.three, clippingPlanes: R.clippingPlanes });
       try { await model.setLodMode(lodVal(id)) } catch (e) { console.warn('modo de detalle', e) }
+      try { const r = await model.getItemsOfCategories([/^IFCSPACE$/]); const sp = new Set(Object.values(r).flat()); if (sp.size) spaceOf.set(id, sp) } catch (e) {}
       /* fragments.list.onItemSet ya lo agregó a la escena */
       await fragments.core.update(true); const levels = await levelsOf(model).catch(() => []); models.set(id, { model, levels, slabs: model.__slabs || 0 });
       const b = new THREE.Box3().setFromObject(model.object); models.get(id).bb = b.clone(); if (!b.isEmpty()) { const first = box.isEmpty(); box.union(b); if (first) frame(box, false) }
-      if (level) await applyLevel(); redraw(); keepDrawing(600); return { levels: levels.map(l => l.name) } },
+      if (level) await applyLevel(); else if (!spacesOn && spaceOf.get(id)) await applyVis(); redraw(); keepDrawing(600); return { levels: levels.map(l => l.name) } },
     async visible(id, on) { const m = models.get(id); if (!m) return; m.model.object.visible = on; await fragments.core.update(true); redraw() },
     has: id => models.has(id), isOn: id => !!(models.get(id) && models.get(id).model.object.visible),
     /* pisos */
@@ -330,7 +313,7 @@ function create(host, opts = {}) {
     setTool(t) { tool = t; if (t !== 'measure') measure.stop(); if (onTool) onTool(t); canvas.style.cursor = t === 'select' ? '' : 'crosshair' }, get tool() { return tool }, onTool(cb) { onTool = cb },
     section: sections, async sectionBox(target) { const b = target === 'sel' ? await boxOfSel() : target === 'level' ? levelBox() : box.clone(); const ok = sections.box(b); if (ok && target === 'sel') await focusBox(b, 1.8); return ok }, measure,
     /* rendimiento */
-    get fx() { return fxOn },   /* se fija al crear el visor (opts.fx): apagarlo en caliente dejaba los bordes dibujados; la app rearma el visor */
+    async spaces(on) { spacesOn = !!on; await applyVis() }, get spacesOn() { return spacesOn },
     async lod(mode) { lodMode = LODS.includes(mode) ? mode : 'auto'; for (const [id, m] of models) { try { await m.model.setLodMode(lodVal(id)) } catch (e) {} } await fragments.core.update(true); redraw(); keepDrawing(800) }, get lodName() { return lodMode },
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),
@@ -345,11 +328,10 @@ function create(host, opts = {}) {
         await cc.setLookAt(...sn.cam.p, ...sn.cam.t, false); if (sn.cam.ortho && cam.threeOrtho) { cam.threeOrtho.zoom = sn.cam.zoom || 1; cam.threeOrtho.updateProjectionMatrix() } }
       redraw(); keepDrawing(500); emitState() },
     redraw, keepDrawing, canvas, camera: cam, renderer: R,
-    destroy() { dead = true; ro.disconnect(); clearTimeout(R._timeout); try { sections.dispose(); measure.dispose() } catch (e) {} try { components.dispose() } catch (e) {} host.innerHTML = '' },
+    destroy() { dead = true; ro.disconnect(); try { sections.dispose(); measure.dispose() } catch (e) {} try { components.dispose() } catch (e) {} host.innerHTML = '' },
   };
   requestAnimationFrame(pump);
   setPreset(opts.preset || 'alta');
-  setTimeout(() => { if (!dead) setFx(opts.fx !== false) }, 0);
   return V;
 }
 window.Visor3D = { convert, create };
