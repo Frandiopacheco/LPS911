@@ -30,7 +30,7 @@ def fixname(n):
     return re.sub(r'#U([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), n)
 
 TITLE_MIN = 13.5
-R_CORTE = re.compile(r'^CORTE\s+([A-Z0-9]{1,2})(?:\s*-\s*([A-Z0-9]{1,2}))?$')
+R_CORTE = re.compile(r'^CORTE\s+([A-Z0-9]{1,2})(?:\s*-\s*([A-Z0-9]{1,2}))?(?:\s+-\s+(.+))?$')   # «CORTE 4 - SH SALA DE CONTROL»
 R_SEC = re.compile(r'^(?:SECCION|SEC\.?)\s*([A-Z0-9]{1,3})$')
 R_DET = re.compile(r"^DET(?:ALLE|\.)?\s*([A-Z]|\d{1,2}(?:\.\d)?|[A-Z]\d{1,2})'?(?:\s*-\s*[A-Z0-9]{1,3})?$")
 R_ELEV = re.compile(r'^ELEVACION\s+([A-Z0-9]{1,2})(?:\s*-\s*[A-Z0-9]{1,2})?$')
@@ -85,7 +85,7 @@ def sheet_data(path):
             r = fitz.Rect(l['bbox']) * rot
             sz = max(s['size'] for s in sp)
             if sz < 2: sz = (l['bbox'][3] - l['bbox'][1]) / 1.15  # texto escalado por la matriz (p. ej. AD45): tamaño por su caja
-            lines.append({'t': t, 'n': norm(t), 'size': sz,
+            lines.append({'t': t, 'n': norm(t), 'size': sz, 'gs': sz,
                           'bold': any('Bold' in s['font'] or s['flags'] & 16 for s in sp), 'r': r})
     # hojas exportadas con el dibujo chico dentro (p. ej. AD45): se reescalan los tamaños según el código del rótulo (≈ 57 pt)
     big = max((l['size'] for l in lines), default=0)
@@ -96,17 +96,18 @@ def sheet_data(path):
     W, H = p.rect.width, p.rect.height
     return doc, p, lines, W, H
 
-def drawing_zone(p, title, W, H, cache):
-    """el dibujo encima del título: componentes conexos de la hoja a ~18 dpi"""
-    if 'lab' not in cache:
-        sc = 0.25
+def drawing_zone(p, tl, W, H, cache):
+    """el dibujo encima del título: componentes conexos de la hoja rasterizada. La resolución sigue al tamaño del título
+    (≈ 18 dpi con títulos de 18 pt; más fina en láminas de dibujos chicos, p. ej. baños con títulos de 6 pt, para no unirlos)"""
+    title = tl['r']; sc = round(0.25 * max(1.0, min(4.0, 18.0 / max(tl.get('gs', 18), 1))), 3)
+    key = 'lab%.3f' % sc
+    if key not in cache:
         pix = p.get_pixmap(matrix=fitz.Matrix(sc, sc), colorspace=fitz.csGRAY, alpha=False)
         a = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
-        ink = a < 215
-        ink = ndimage.binary_dilation(ink, iterations=3)
+        ink = ndimage.binary_dilation(a < 215, iterations=3)
         lab, n = ndimage.label(ink)
-        cache.update(lab=lab, sc=sc, objs=ndimage.find_objects(lab), shape=ink.shape)
-    lab, sc, objs, (h, w) = cache['lab'], cache['sc'], cache['objs'], cache['shape']
+        cache[key] = (lab, ndimage.find_objects(lab), ink.shape)
+    lab, objs, (h, w) = cache[key]
     tx0, ty0, tx1, ty1 = [int(v * sc) for v in (title.x0, title.y0, title.x1, title.y1)]
     band = lab[max(0, ty0 - 15):max(1, ty0 + 1), max(0, tx0 - 4):min(w, tx1 + 30)]
     ids = set(np.unique(band)) - {0}
@@ -157,12 +158,26 @@ def main():
             m = R_ESC.match(l['n'])
             if m: ESC.setdefault(m.group(1), set()).add(s['cod'])
 
+    def best_of(C, s, r):
+        """varios títulos iguales en la lámina («CORTE 4 - SH LACTARIO», «CORTE 4 - SH SALA DE CONTROL»): gana el que comparte
+        palabras con el nombre del dibujo junto a la llamada (el texto con varias palabras más cercano); si no, el más cercano"""
+        if len(C) < 2: return C
+        cx, cy = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2
+        ctx = [l for l in s['lines'] if len(l['n'].split()) >= 2 and not key_of(l['t'])[0] and l['size'] >= 5]
+        ctx.sort(key=lambda l: (l['r'].x0 + l['r'].x1 - 2 * cx) ** 2 + (l['r'].y0 + l['r'].y1 - 2 * cy) ** 2)
+        words = set(w for l in ctx[:2] for w in l['n'].split() if len(w) > 2) - {'PISO', 'NIVEL', 'ESC.', 'UNID.'}
+        def sc(c):
+            tw = set(w for w in c[1]['n'].split() if len(w) > 2) - {'CORTE'}
+            d = ((c[1]['r'].x0 - cx) ** 2 + (c[1]['r'].y0 - cy) ** 2) ** 0.5
+            return (-len(tw & words), d)
+        return sorted(C, key=sc)
+
     def pick(k, s, bubble=False):
         """destino de una llamada: misma lámina > lámina de cortes (desde plantas) > secciones de AG en AD > la más cercana por número"""
         C = T.get(k, [])
         if not C: return None
         same = [c for c in C if c[0] == s['cod']]
-        if same: return same, 0.9, 'en la misma lámina'
+        if same: return same, (0.9 if len(same) == 1 else 0.75), 'en la misma lámina'
         sheets = sorted(set(c[0] for c in C))
         plan = 'PLANTA' in s['tit']
         if bubble and plan:
@@ -188,6 +203,11 @@ def main():
     out, rows = [], []
     for s in S.values():
         L = []
+        # marcas dobles (rombo con dos números, p. ej. 4|3 en los baños): dos letras/números sueltos pegados son una marca de corte
+        cand = [l for l in s['lines'] if R_BUB.match(l['n']) and not l['bold'] and 9 < l['size'] < 17]
+        cen = lambda l: ((l['r'].x0 + l['r'].x1) / 2, (l['r'].y0 + l['r'].y1) / 2)
+        for l in cand:
+            a = cen(l); l['pair'] = any(o is not l and abs(o['gs'] - l['gs']) < 0.25 * l['gs'] and ((cen(o)[0] - a[0]) ** 2 + (cen(o)[1] - a[1]) ** 2) ** 0.5 < 2.6 * l['gs'] for o in cand)
         def add(r, to, ar, t, c, m):
             L.append({'r': [round(v, 1) for v in r], 'a': to, **({'ar': [round(v, 1) for v in ar]} if ar else {}), 't': t, 'c': c, 'm': m})
             rows.append([s['cod'], t, to, c, m])
@@ -195,24 +215,22 @@ def main():
             r = l['r']
             # burbuja de corte
             mb = R_BUB.match(l['n'])
-            if mb and not l['bold'] and 9 < l['size'] < 17 and ('PLANTA' in s['tit'] or arrow_score(s['p'], r, l['size'], s['cache']) >= 0.3):
+            if mb and not l['bold'] and 9 < l['size'] < 17 and ('PLANTA' in s['tit'] or l.get('pair') or arrow_score(s['p'], r, l['gs'], s['cache']) >= 0.3):
                 k = 'CORTE:' + mb.group(1)
                 res = pick(k, s, bubble=True)
                 if res:
-                    C, c, why = res; dc, tl = C[0]
-                    cx, cy, R = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, l['size'] * 1.3
-                    zone, ok = drawing_zone(S[dc]['p'], tl['r'], S[dc]['W'], S[dc]['H'], S[dc]['cache'])
-                    add([cx - R, cy - R, cx + R, cy + R], dc, zone, 'Corte ' + mb.group(1), round(c * (1 if ok else 0.9), 2), 'burbuja de corte → ' + why)
+                    C, c, why = res; C = best_of(C, s, r) if C[0][0] == s['cod'] else C; dc, tl = C[0]
+                    cx, cy, R = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, l['gs'] * 1.3   # tamaño real en la hoja (no el reescalado)
+                    zone, ok = drawing_zone(S[dc]['p'], tl, S[dc]['W'], S[dc]['H'], S[dc]['cache'])
+                    add([cx - R, cy - R, cx + R, cy + R], dc, zone, 'Corte ' + mb.group(1), round(c * (1 if ok else 0.9), 2), 'burbuja de corte → ' + why + ' «' + tl['t'][:40] + '»')
                 continue
             if not l['title']:
                 k, lbl = key_of(l['t'])
                 if k and not k.startswith('CORTE:'):
                     res = pick(k, s)
                     if res:
-                        C, c, why = res; dc, tl = C[0]
-                        if len(C) > 1 and dc == s['cod']:  # mismo título repetido en la lámina: no se adivina
-                            c = min(c, 0.5)
-                        zone, ok = drawing_zone(S[dc]['p'], tl['r'], S[dc]['W'], S[dc]['H'], S[dc]['cache'])
+                        C, c, why = res; C = best_of(C, s, r) if C[0][0] == s['cod'] else C; dc, tl = C[0]
+                        zone, ok = drawing_zone(S[dc]['p'], tl, S[dc]['W'], S[dc]['H'], S[dc]['cache'])
                         pad = 6
                         add([r.x0 - pad, r.y0 - pad, r.x1 + pad, r.y1 + pad], dc, zone, lbl, round(c * (1 if ok else 0.9), 2), 'llamada ' + l['t'] + ' → ' + why)
                     continue

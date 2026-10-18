@@ -29,11 +29,12 @@ const plkpHit=(cx,cy,p)=>PLK.edit&&plaEd()?plkHit(cx,cy,plkpList(p)):null;
 
 /* ---------- visor ---------- */
 function plkpDraw(g,v,p,cw,ch){if(!plaEd())return;
-  for(const l of plkpList(p)){const s=plkS(l,v),rw=Math.max(s.w,22),rh=Math.max(s.h,22),rx=s.x+s.w/2-rw/2,ry=s.y+s.h/2-rh/2;
+  for(const l0 of plkpList(p)){const l=PLK.live&&PLK.live.id===l0.id?PLK.live:l0,s=plkS(l,v),rw=Math.max(s.w,22),rh=Math.max(s.h,22),rx=s.x+s.w/2-rw/2,ry=s.y+s.h/2-rh/2;
     if(rx>cw||ry>ch||rx+rw<0||ry+rh<0)continue;const sel=PLK.psel===l.id,t=PLB.get(l.to);
     g.setLineDash(sel?[]:[6,4]);g.lineWidth=sel?3:2;g.strokeStyle=PLKP_COL;g.fillStyle=sel?'rgba(112,72,232,.18)':'rgba(112,72,232,.08)';
     g.beginPath();g.rect(rx,ry,rw,rh);g.fill();g.stroke();g.setLineDash([]);
-    if(sel||rw>=40){const txt='? '+(l.t||(t?'→ '+t.cod:'sin destino')),ty=ry>16?ry-3:ry+rh+15;g.lineWidth=3.5;g.strokeStyle='#fff';g.strokeText(txt,rx,ty);g.fillStyle='#4c2bb5';g.fillText(txt,rx,ty)}}}
+    if(sel||rw>=40){const txt='? '+(l.t||(t?'→ '+t.cod:'sin destino')),ty=ry>16?ry-3:ry+rh+15;g.lineWidth=3.5;g.strokeStyle='#fff';g.strokeText(txt,rx,ty);g.fillStyle='#4c2bb5';g.fillText(txt,rx,ty)}
+    if(sel)for(const c of [[s.x,s.y],[s.x+s.w,s.y],[s.x+s.w,s.y+s.h],[s.x,s.y+s.h]]){g.beginPath();g.arc(c[0],c[1],7,0,Math.PI*2);g.fillStyle='#fff';g.fill();g.lineWidth=2.4;g.strokeStyle=PLKP_COL;g.stroke()}}}
 /** acerca la propuesta elegida (que se vea la marca con algo de contexto) */
 function plkpFocus(){const p=PLV&&PLB.get(PLV.id),l=p&&plkpList(p).find(x=>x.id===PLK.psel);if(!l||!PLV.tv)return;
   PLV.tv.setView(plkpView(l))}
@@ -42,7 +43,7 @@ function plkpBarHint(p){if(!plaEd())return'';const n=plkpList(p).length,all=plkp
 function plkpBarHtml(p){const l=plkpList(p).find(x=>x.id===PLK.psel),t=l&&PLB.get(l.to),L=plkpOrd(plkpList(p)),i=L.findIndex(x=>x.id===PLK.psel);
   const all=plkpSheets().reduce((a,q)=>a+plkpList(q).length,0);
   return`<div class="plkv" aria-live="polite"><b class="plkpt">Propuesta ${i+1} de ${L.length}${all>L.length?` (${all} en total)`:''}</b> · ${esc(l.t||'')} → <b class="mono">${esc(t?t.cod:'lámina no encontrada')}</b> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}
-      ${l.m?`<br><small>${esc(l.m)}${l.c!=null?` · confianza ${Math.round(l.c*100)} %`:''}</small>`:''}</div>
+      ${l.m?`<br><small>${esc(l.m)}${l.c!=null?` · confianza ${Math.round(l.c*100)} %`:''}</small>`:''}<br><small>Arrastra las esquinas para ajustar la zona; «Cambiar destino» si lleva a otra lámina.</small></div>
     <div class="plkx"><button type="button" class="ib pri" data-pk="p-ok"${t?'':' disabled'}>✓ Aceptar</button><button type="button" class="ib bad" data-pk="p-no">✕ Descartar</button><button type="button" class="ib" data-pk="p-go"${t?'':' disabled'} title="Abrir el destino para ver si es el correcto">Probar</button><button type="button" class="ib" data-pk="p-dest">Cambiar destino</button></div>
     <div class="plkx"><button type="button" class="ib" data-pk="p-all" title="Aceptar todas las propuestas de esta lámina">✓ Aceptar las ${L.length} de esta lámina</button>${all>L.length?`<button type="button" class="ib" data-pk="p-every" title="Aceptar todas las propuestas de todas las láminas">✓ Aceptar todas (${all})</button>`:''}<span class="plvsp"></span><button type="button" class="ib" data-pk="p-x">Cerrar</button><button type="button" class="ib pri" data-pk="p-next">Siguiente ›</button></div>`}
 const plkpView=l=>({nx:(l.x0+l.x1)/2,ny:(l.y0+l.y1)/2,k:Math.max(2,Math.min(10,0.09/Math.max(l.x1-l.x0,0.004)))});
