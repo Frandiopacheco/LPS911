@@ -300,8 +300,42 @@ test('modelo 3D (beta): solo el administrador ve la pestaña; especialidad desde
   await openApp(page, { as: 'editor', editar: false });
   await page.evaluate(() => goMod('pla'));
   expect(await tabsVisibles(page)).not.toContain('p3d');
-  const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc')]);
-  expect(r).toEqual(['ARQ', 'HVAC', 'AFC']);
+  const r = await page.evaluate(() => [p3Disc('2459243-PTSA-XX-ZZZ-M3D-ARQ-E05.ifc'), p3Disc('2459243-PTSA-DC-ZZZ-M3D-HVAC-E05.ifc'), p3Disc('2459243-PTSA-XX-ZZZ-M3D-AFC-E05.ifc'), p3Disc('2459243-PTSA-XXX-ZZZ-M3D-ACC-E05.ifc')]);
+  expect(r).toEqual(['ARQ', 'HVAC-DC', 'AFC', 'ACC']); // otro juego (DC) no pisa al de XX
+});
+
+test('modelo 3D: eliminar (solo admin, pide BORRAR) borra todas las revisiones y la carga siguiente sigue la numeración', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(async () => {
+    window.plStList = async pre => [...__ST.keys()].filter(k => k.startsWith(pre)); window.plStDel = async n => { __ST.delete(n); };
+    for (const k of ['modelos/CAS/r1.frag', 'modelos/CAS/r2.frag', 'modelos/CAS-DC/r1.frag']) __ST.set(k, new Blob(['x']));
+    await fcol('p3d').doc('CAS').set({ disc: 'CAS', rev: 2, path: 'modelos/CAS/r2.frag', fsize: 1 });
+    await fcol('p3d').doc('CAS-DC').set({ disc: 'CAS-DC', rev: 1, path: 'modelos/CAS-DC/r1.frag', fsize: 1 });
+    const mk = () => new Proxy(function () {}, { get: (_, k) => k === 'then' ? undefined : k === Symbol.toPrimitive ? () => '' : k === 'has' ? () => false : k === 'levels' ? () => [] : mk(), apply: () => undefined });
+    window.p3Lib = async () => ({ create: () => mk() });  // sin visor real
+    goMod('pla'); U.tab = 'p3d'; render();
+  });
+  await expect(page.locator('#p3models .plchip')).toHaveCount(2);
+  await page.click('#p3mg');
+  page.once('dialog', d => d.accept('borrar no'));
+  await page.click('#pop [data-do="one"][data-m="CAS"]');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => !!__dbGet('p3d', 'CAS').del)).toBe(false);
+  await page.click('#p3mg');
+  page.once('dialog', d => d.accept('BORRAR'));
+  await page.click('#pop [data-do="one"][data-m="CAS"]');
+  await expect.poll(() => page.evaluate(() => !!(__dbGet('p3d', 'CAS') || {}).del)).toBe(true);
+  await expect.poll(() => page.evaluate(() => [...__ST.keys()].sort().join())).toBe('modelos/CAS-DC/r1.frag');   // el CAS de DC sigue
+  await expect(page.locator('#p3models .plchip')).toHaveCount(1);
+  expect(await page.evaluate(() => [P3.docs.has('CAS'), P3.gone.get('CAS').rev])).toEqual([false, 2]);  // la próxima carga será r3
+  noErrors(errors, 'eliminar modelo');
+});
+
+test('modelo 3D: un editor no ve «Modelos ▾»', async ({ page }) => {
+  await openApp(page, { as: 'editor', editar: false });
+  await page.evaluate(() => { window.p3Lib = async () => ({ create: () => ({ has: () => false, levels: () => [], resize() {}, destroy() {} }) }); goMod('pla'); U.tab = 'p3d'; render(); });
+  await expect(page.locator('#p3mg')).toHaveCount(0);
 });
 
 test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina para todo el equipo', async ({ page }) => {
@@ -428,7 +462,7 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   await expect.poll(nLk).toBe(1);
   const lk = await page.evaluate(() => PLB.get('ARQ_AG03').lk[0]);
   expect(lk.to).toBe('IS_IS06'); expect(lk.t).toBe('Corte Z'); expect(lk.v.k).toBeCloseTo(4, 1); expect(lk.v.nx).toBeCloseTo(0.6, 2);
-  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); const zw = (lk.x1 - lk.x0) * W; expect(zw).toBeGreaterThanOrEqual(12); expect(zw).toBeLessThanOrEqual(80); // zona del tamaño de una burbuja (≈ 14 px de pantalla, tope 40 px del plano a cada lado)
+  expect((lk.x0 + lk.x1) / 2).toBeCloseTo(0.32, 2); expect(lk.x0).toBeLessThan(lk.x1); const zw = (lk.x1 - lk.x0) * W, pxmm = W / (1191 / 72 * 25.4); expect(zw / pxmm).toBeGreaterThan(10); expect(zw / pxmm).toBeLessThan(14); // zona del tamaño real de una burbuja: ≈ 12 mm de papel (antes ≈ 3 mm, salían diminutas)
   expect(lk.by).toBeTruthy(); expect(lk.arch).toBeUndefined();
   expect((await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'))).lk.length).toBe(1); // guardado en la base
   await expect(page.locator('#plv .plkbar')).toContainText('Corte Z'); // queda elegido, listo para ajustarlo
@@ -485,6 +519,70 @@ test('vínculos: crear en el visor (zona, lámina destino y zona del destino), s
   const db = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
   expect(db.lk.length).toBe(2); expect(db.lk[0].arch && db.lk[0].arch.by).toBeTruthy(); expect(db.lk[1].arch).toBeUndefined();
   noErrors(errors, 'vínculos');
+});
+
+test('vínculos: propuestas desde un archivo (Claude): se cargan sin crear vínculos, se aceptan o descartan en el visor y no se vuelven a proponer', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  const F1 = '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', F2 = '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS06_PLANTA PRIMER PISO - REDES DE AGUA FRIA';
+  await page.setInputFiles('#plfile', [
+    { name: F1 + '.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: F2 + '.pdf', mimeType: 'application/pdf', buffer: pdf },
+  ]);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  await expect(page.locator('#plkpgo')).toBeDisabled();
+  const J = { formato: 'lps911-vinculos', v: 1, origen: 'Claude', laminas: [
+    { archivo: F1, pt: [1191, 842], vinculos: [
+      { r: [300, 200, 330, 230], a: 'IS06', ar: [600, 300, 900, 500], t: 'Corte E-E', c: 0.9, m: 'título CORTE E-E en IS06' },
+      { r: [700, 600, 730, 630], a: F2, t: 'Det. 1', c: 0.6 },
+      { r: [10, 10, 20, 20], a: 'NO-EXISTE' },
+    ] },
+    { archivo: 'OTRA-LAMINA', vinculos: [{ r: [1, 1, 2, 2], a: 'IS06' }] },
+  ] };
+  const carga = () => page.setInputFiles('#plkpf', { name: 'propuestas.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(J)) });
+  page.once('dialog', d => d.accept());
+  await carga();
+  await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(2);
+  const db0 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(db0.lk || []).toHaveLength(0); // nada se crea solo
+  const p0 = db0.lkp.find(x => x.t === 'Corte E-E');
+  expect(p0.to).toBe('IS_IS06'); expect((p0.x0 + p0.x1) / 2).toBeCloseTo(315 / 1191, 3); expect((p0.y0 + p0.y1) / 2).toBeCloseTo(215 / 842, 3);
+  expect(p0.v.nx).toBeCloseTo(750 / 1191, 3); expect(p0.v.k).toBeGreaterThan(1);
+  await expect(page.locator('#plkpn')).toContainText('2 por revisar');
+
+  // revisar en el visor: aceptar la primera (pasa a vínculo) y descartar la segunda
+  await page.click('#plkpgo');
+  await expect(page.locator('#plv .plkbar')).toContainText('Propuesta 1 de 2');
+  await expect(page.locator('#plv [data-pv="lk"] .plkpn')).toContainText('+2');
+  await page.click('#plv .plkbar [data-pk="p-ok"]');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(1);
+  await expect(page.locator('#plv .plkbar')).toContainText('Propuesta 1 de 1');
+  await page.click('#plv .plkbar [data-pk="p-no"]');
+  await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(0);
+  const db1 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(db1.lk).toHaveLength(1); expect(db1.lk[0].to).toBe('IS_IS06'); expect(db1.lk[0].t).toBe('Corte E-E'); expect(db1.lk[0].src).toBe('prop'); expect(db1.lk[0].by).toBeTruthy();
+  expect(db1.lkp).toHaveLength(1); expect(db1.lkp[0].no && db1.lkp[0].no.by).toBeTruthy(); // descartada queda marcada
+  // el vínculo aceptado funciona como cualquier otro
+  await page.click('#plv .plkbar [data-pk="off"]');
+  await page.evaluate(() => PLV.tv.setView({ nx: 0.3, ny: 0.3, k: 1 }));
+  await page.evaluate(async () => { const l = PLB.get('ARQ_AG03').lk[0], host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen((l.x0 + l.x1) / 2 * PLV.tv.W, (l.y0 + l.y1) / 2 * PLV.tv.H);
+    const ev = t => host.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: r.left + s.x, clientY: r.top + s.y, pointerType: 'mouse', isPrimary: true, bubbles: true }));
+    ev('pointerdown'); await new Promise(r => setTimeout(r, 30)); ev('pointerup'); });
+  await expect(page.locator('#plv .plvt b')).toHaveText('IS06');
+  await page.click('#plv [data-pv="x"]');
+
+  // cargar el mismo archivo otra vez: no vuelve a proponer lo aceptado ni lo descartado
+  page.once('dialog', d => d.accept());
+  await carga();
+  await page.waitForTimeout(300);
+  const db2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
+  expect(db2.lkp).toHaveLength(1); expect(db2.lk).toHaveLength(1);
+  noErrors(errors, 'propuestas de vínculos');
 });
 
 test.describe('vínculos en tablet (toque)', () => {

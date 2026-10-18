@@ -22,13 +22,13 @@ const pcR=v=>!v||!isFinite(v)?'—':v>=10?v.toFixed(1):v>=0.1?v.toFixed(2):Strin
 const pcTone=v=>v==null?'':v>=1?'ok':v>=.9?'warn':'bad';
 /** cálculo puro de una partida de control: avance, HH, ratios, IP (acumulado y por semana) y proyección */
 function pcStats(x){const met=+x.met||0,hhp=+x.hhp||0,rp=met&&hhp?hhp/met:0;
-  let eje=0,ejeC=0,hh=0;const byP=new Map(),W=new Map();const w=d=>{const k=weekOf(d);let o=W.get(k);if(!o)W.set(k,o={q:0,hh:0});return o};
-  for(const r of pcMets(x.id)){const q=+r.q;eje+=q;byP.set(r.piso,(byP.get(r.piso)||0)+q);if(HHPC.has(r.d)){ejeC+=q;w(r.d).q+=q}}
+  let eje=0,ejeC=0,hh=0,ini=0;const byP=new Map(),W=new Map();const w=d=>{const k=weekOf(d);let o=W.get(k);if(!o)W.set(k,o={q:0,hh:0});return o};
+  for(const r of pcMets(x.id)){const q=+r.q;eje+=q;byP.set(r.piso,(byP.get(r.piso)||0)+q);if(r.ini){ini+=q;continue}if(HHPC.has(r.d)){ejeC+=q;w(r.d).q+=q}}
   for(const[d,doc]of HHPC){const o=doc&&doc.pcs&&doc.pcs[x.id];if(o&&+o.hh){hh+=+o.hh;w(d).hh+=+o.hh}}
   const rr=ejeC?hh/ejeC:0,ip=rp&&rr?rp/rr:null,gan=ejeC*rp,saldo=Math.max(0,met-eje);
   const proj=hhp?hh+saldo*(rr||rp):null;
   const ipw=k=>{const o=W.get(k);return o&&o.q&&o.hh&&rp?rp/(o.hh/o.q):null};
-  return{met,hhp,rp,eje,ejeC,hh,rr,ip,gan,saldo,pct:met?Math.min(100,eje/met*100):0,proj,desv:proj!=null?proj-hhp:null,byP,W,ipw,hhSinMet:hh>0&&!ejeC}}
+  return{ini,met,hhp,rp,eje,ejeC,hh,rr,ip,gan,saldo,pct:met?Math.min(100,eje/met*100):0,proj,desv:proj!=null?proj-hhp:null,byP,W,ipw,hhSinMet:hh>0&&!ejeC}}
 /* HH de una publicación (copia de tpResumenHH en functions/tpub.js, para traer los días publicados antes de que existiera hhpc) */
 function pcResumen(snap){const pcs={};let hh=0;for(const r of snap.rows||[])for(const[pc,h]of Object.entries(r.h||{})){const v=+h||0;if(!v)continue;hh+=v;const m=(snap.pcs||{})[pc]||{};const o=pcs[pc]||(pcs[pc]={hh:0,cod:m.cod||'',nom:m.nom||'',und:m.und||''});o.hh+=v}
   const r2=x=>Math.round(x*100)/100;for(const o of Object.values(pcs))o.hh=r2(o.hh);return{fecha:snap.fecha,v:snap.v,at:snap.at,hh:r2(hh),pcs}}
@@ -46,7 +46,7 @@ function renderCasa(main){ensurePc();const t=todayIso();if(U.pvV==='reg'){render
   h+=helpBox('¿Cómo se calcula?',`<p><b>Ratio presupuestado</b> = HH presupuestadas ÷ metrado meta de la partida. <b>Ratio real</b> = HH gastadas ÷ metrado ejecutado. <b>IP</b> = presupuestado ÷ real (= HH ganadas ÷ HH gastadas): mayor a 1, mejor que el presupuesto.</p><p>Las HH salen del tareo <b>publicado</b>; el metrado lo registran los ingenieros por piso. Para el IP solo cuentan los días con HH publicadas; el metrado de días aún sin publicar suma al avance. El tareo no registra piso: el avance se ve por piso y el IP es de toda la obra.</p>`);
   if(pcErr)h+=`<div class="callout warn">No se pudieron leer los datos (${esc(pcErr)}).</div>`;
   /* avisos: hasta qué día hay HH publicadas, días con HH sin metrado y días con metrado sin publicar (últimas 3 semanas) */
-  {const dh=[...HHPC.keys()].sort();const last=dh[dh.length-1];const from=addD(t,-21);const metD=new Set([...PMET.values()].filter(r=>!r.arch&&+r.q>0).map(r=>r.d));
+  {const dh=[...HHPC.keys()].sort();const last=dh[dh.length-1];const from=addD(t,-21);const metD=new Set([...PMET.values()].filter(r=>!r.arch&&!r.ini&&+r.q>0).map(r=>r.d));
     const sinMet=dh.filter(d=>d>=from&&!metD.has(d)&&+(HHPC.get(d)||{}).hh>0),sinHH=[...metD].filter(d=>d>=from&&d<t&&!HHPC.has(d)).sort();
     if(last||sinMet.length||sinHH.length)h+=`<div class="callout ${sinMet.length?'warn':'info'} pccall">${last?`<b>HH del tareo publicadas hasta el ${fmtD(last)}.</b> `:'<b>Aún no hay HH publicadas del tareo.</b> '}${sinHH.length?`${sinHH.length} día${sinHH.length>1?'s':''} con metrado esperan la publicación del tareo (${sinHH.slice(-3).map(fmtD).join(', ')}). `:''}${sinMet.length?`<b>${sinMet.length} día${sinMet.length>1?'s':''} con HH sin metrado registrado</b> (${sinMet.slice(-4).map(fmtD).join(', ')}): esas HH bajan el IP.`:''}</div>`}
   const T=L.filter(o=>o.s.ip!=null);const gan=T.reduce((a,o)=>a+o.s.gan,0),gas=T.reduce((a,o)=>a+o.s.hh,0);const ipo=gas?gan/gas:null;const low=T.filter(o=>o.s.ip<.9);const dv=L.reduce((a,o)=>a+(o.s.ip!=null&&o.s.desv!=null?o.s.desv:0),0);
@@ -71,10 +71,10 @@ function pcDetail(x,s,t){const und=x.und||'und';const wk=weekOf(t);const ws=[];f
     ${vals.map((v,i)=>v==null?'':`<rect x="${(i*bw+8).toFixed(1)}" y="${y(v).toFixed(1)}" width="${(bw-16).toFixed(1)}" height="${(B-y(v)).toFixed(1)}" rx="3" class="pcb ${pcTone(v)}"><title>Semana ${ws[i]}: IP ${pcF2(v)}</title></rect><text x="${(i*bw+bw/2).toFixed(1)}" y="${(y(v)-4).toFixed(1)}" text-anchor="middle" class="lb">${pcF2(v)}</text>`).join('')}
     ${ws.map((k,i)=>`<text x="${(i*bw+bw/2).toFixed(1)}" y="${H-6}" text-anchor="middle" class="lb">S${k}</text>`).join('')}</svg><div class="pvleg"><span><i class="l rit"></i>IP 1.00 (igual al presupuesto)</span></div>`;
   const pis=pisos().map(pi=>({pi,q:s.byP.get(pi.id)||0})).filter(o=>o.q);const mx=Math.max(1,...pis.map(o=>o.q));
-  return`<section class="pvdet"><div class="card pvc"><div class="pvch"><b>${esc(x.cod||'')} · ${esc(x.nom||'')}</b><span>${esc(und)}${x.ua?' · cuenta '+esc(x.ua):''}</span></div>
+  return`<section class="pvdet"><div class="card pvc"><div class="pvch"><b>${esc(x.cod||'')} · ${esc(x.nom||'')}</b><span>${esc(und)}${x.ua?' · cuenta '+esc(x.ua):''}</span>${canDaily?`<span class="sp"></span><button class="ib" data-pv="ini" data-pvk="casa" data-id="${esc(x.id)}" title="Avance que ya existía antes de registrar aquí: suma al avance, no al IP">Saldo inicial</button>`:''}</div>
     <div class="pcfg"><div><span>Ejecutado</span><b class="m">${pvN(s.eje)}${s.met?` / ${pvN(s.met)}`:''} ${esc(und)}</b></div><div><span>HH gastadas</span><b class="m">${pvN(Math.round(s.hh))}${s.hhp?` / ${pvN(s.hhp)} presup.`:''}</b></div>
       <div><span>Ratio real vs presupuestado</span><b class="m">${pcR(s.rr)} vs ${pcR(s.rp)} HH/${esc(und)}</b></div><div><span>Proyección al término</span><b class="m ${s.desv>0?'pvbad':'pvok'}">${s.proj!=null&&s.ip!=null?pvN(Math.round(s.proj))+' HH':'—'}</b><small>${s.desv!=null&&s.ip!=null?`${s.desv>0?'sobre':'bajo'} el presupuesto por ${pvN(Math.abs(Math.round(s.desv)))} HH`:'falta metrado, HH o presupuesto'}</small></div></div>
-    <b class="pcsh">Avance por piso</b><div class="pvpis">${pis.map(o=>`<div class="pvpr"><span>${esc(o.pi.code)} · ${esc(o.pi.name)}</span><span class="pvbar lg"><i style="width:${(o.q/mx*100).toFixed(1)}%"></i></span><span class="m">${pvN(o.q)} ${esc(und)}</span></div>`).join('')||'<div class="note">Sin metrado registrado todavía.</div>'}</div>
+    <b class="pcsh">Avance por piso</b>${s.ini?`<div class="note">Incluye saldo inicial de ${pvN(s.ini)} ${esc(und)} (no entra al IP: no tiene HH del tareo).</div>`:''}<div class="pvpis">${pis.map(o=>`<div class="pvpr"><span>${esc(o.pi.code)} · ${esc(o.pi.name)}</span><span class="pvbar lg"><i style="width:${(o.q/mx*100).toFixed(1)}%"></i></span><span class="m">${pvN(o.q)} ${esc(und)}</span></div>`).join('')||'<div class="note">Sin metrado registrado todavía.</div>'}</div>
     ${s.rr?`<div class="note">Para planificar: con el ratio real de esta obra, <b>${pcR(s.rr)} HH/${esc(und)}</b> ≈ <b>${pvN(Math.round(8.5/s.rr*10)/10)} ${esc(und)}</b> por obrero en una jornada de 8,5 h.</div>`:''}</div>
     <div class="card pvc"><div class="pvch"><b>IP por semana</b><span>últimas 8 semanas</span></div>${chart}</div></section>`}
 
@@ -82,7 +82,7 @@ function pcDetail(x,s,t){const und=x.und||'und';const wk=weekOf(t);const ws=[];f
 function renderPcReg(main){const fa=document.activeElement;const keep=fa&&fa.dataset&&fa.dataset.pcq!==undefined&&main.contains(fa)?{pc:fa.dataset.pcq,piso:fa.dataset.piso,v:fa.value,s:fa.selectionStart}:null;const t=todayIso();if(!PCD||PCD>t)PCD=t;const d=PCD;const P=visPisos();const hc=HHPC.get(d);
   const recent=new Set();{const f=addD(d,-14);for(const r of PMET.values())if(!r.arch&&+r.q>0&&r.d>=f&&r.d<=d)recent.add(r.pc);for(const[k,doc]of HHPC)if(k>=f&&k<=d)Object.keys((doc&&doc.pcs)||{}).forEach(p=>recent.add(p))}
   const L=pcList().filter(x=>U.pcAll||recent.has(x.id));
-  const cell=(pc,piso)=>{const R=[...PMET.values()].filter(r=>r.d===d&&r.pc===pc&&r.piso===piso&&!r.arch&&+r.q>0);return{q:R.reduce((a,r)=>a+(+r.q),0),zona:R.some(r=>r.zona)}};
+  const cell=(pc,piso)=>{const R=[...PMET.values()].filter(r=>r.d===d&&r.pc===pc&&r.piso===piso&&!r.arch&&!r.ini&&+r.q>0);return{q:R.reduce((a,r)=>a+(+r.q),0),zona:R.some(r=>r.zona)}};
   let h=`<div class="scroll"><div class="wrap pvwrap">${pageHead('Registrar metrado ejecutado','Casa · lo ejecutado de verdad, por piso (sector o ambiente en «Detalle»)',`<button class="ib" data-pc="back">‹ Volver al IP</button>`)}
     <div class="pcdate"><button class="ib" data-pc="prev" aria-label="Día anterior">‹</button><input type="date" data-pc="d" value="${d}" max="${t}" aria-label="Fecha"><button class="ib" data-pc="next" aria-label="Día siguiente"${d>=t?' disabled':''}>›</button>
       <span class="pchh">${hc?`HH del tareo publicadas: <b>${pvN(hc.hh)}</b>`:'<span class="pvst warn">HH del tareo por publicar</span> el metrado se guarda igual'}</span><span class="sp"></span><label class="chk"><input type="checkbox" data-pc="all"${U.pcAll?' checked':''}> Todas las partidas</label></div>`;
@@ -105,7 +105,7 @@ async function pcPut(d,pc,piso,zona,q){const id=pcId(d,pc,piso,zona);const old=P
   PMET.set(id,{...doc,id});try{await fcol('pmet').doc(id).set(doc)}catch(err){toast('No se pudo guardar: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message)))}}
 /* detalle de una partida en el día: filas por piso y sector/ambiente */
 function pcDetOpen(pc){const x=pcTpc().get(pc);if(!x)return;const d=PCD;
-  const draw=()=>{const R=[...PMET.values()].filter(r=>r.d===d&&r.pc===pc&&!r.arch&&+r.q>0).sort((a,b)=>String(a.piso).localeCompare(String(b.piso))||String(a.zona).localeCompare(String(b.zona)));
+  const draw=()=>{const R=[...PMET.values()].filter(r=>r.d===d&&r.pc===pc&&!r.arch&&!r.ini&&+r.q>0).sort((a,b)=>String(a.piso).localeCompare(String(b.piso))||String(a.zona).localeCompare(String(b.zona)));
     const pis=pisos();const zs=pid=>[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid).sort(byOrder).map(s=>`<option value="${esc(s.id)}">${esc(s.code)} · ${esc(s.name)}</option>${[...S.amb.values()].filter(a=>a.sectorId===s.id).sort(byOrder).map(a=>`<option value="${esc(a.id)}">&nbsp;&nbsp;${esc(a.code||'')} ${esc(a.name||'')}</option>`).join('')}`).join('');
     const sh=pvSheet('pvsheet',`<div class="ksh"><div><b>${esc(x.cod||'')} · ${esc(x.nom||'')}</b><span>${fmtD(d)} · ${esc(x.und||'')}</span></div><button class="ib" data-pd="x" aria-label="Cerrar">✕</button></div>
       ${R.length?`<table class="t"><thead><tr><th>Piso</th><th>Sector / ambiente</th><th class="r">Metrado</th><th></th></tr></thead><tbody>${R.map(r=>`<tr><td>${esc((S.pis.get(r.piso)||{}).code||'—')}</td><td>${esc(pvZona(r))}</td><td class="r">${pvN(r.q)}</td><td class="r"><button class="ib" data-pd="del" data-id="${esc(r.id)}">Quitar</button></td></tr>`).join('')}</tbody></table>`:'<div class="note">Sin metrado este día.</div>'}

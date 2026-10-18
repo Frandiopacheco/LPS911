@@ -18,6 +18,12 @@ Decidido con el dueño (oct 2026). Dos partes; **F1 (subcontratistas) y F2 (casa
 - Respaldo: `pcrit` y `pav` en `BK_DATA`.
 - Prueba: `tests/e2e/productividad.spec.js`.
 
+## Saldo inicial (oct 2026, decidido con el dueño)
+- Avance que ya existía antes de registrar aquí: botón «Saldo inicial» en el detalle de la partida (SC y casa), solo admin e ingenieros (`pvIniOpen(kind, pc)`). Un documento por partida y piso: `ini_{pc}_{piso}` en `pav` o `pmet` con `{ini:true, d: fecha del acumulado, q, nota: motivo obligatorio}`; vaciarlo lo archiva; guarda `h`.
+- Suma al acumulado, al avance por piso, al saldo y a la proyección; **no** entra al ritmo de los SC (`byD`, primer reporte) ni al IP de casa (`ejeC`, semanas) porque no tiene HH. No aparece en el registro diario ni en los avisos de días.
+- Reglas: el SC no crea ni cambia documentos con `ini` (pruebas «saldo inicial»).
+- Los errores de metrado de días concretos se corrigen **editando esos días** (decisión del dueño: no hay «sincerar acumulado» con ajustes).
+
 ## F2: IP de casa (`js/productividad-casa.js`)
 - Vista «Casa (IP)» de la pestaña (`U.pvV`: `sc` | `casa` | `reg`, en `saveUI`; seg `pvSeg()`). La ven admin, ingenieros (`canDaily`) y quien ve el Tareo (`pcOk()`); el SC y el lector no.
 - Partidas = `tpc` del Tareo (`cod, nom, und, met` = metrado meta, `hhp` = HH presupuestadas). Los ingenieros sin Tareo las leen con su propia suscripción (`PTPC`; reglas: `tpc` lee `isTar() || canDaily()`).

@@ -1302,6 +1302,14 @@ test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínim
   await assertFails(setDoc(doc(ed, 'p3d/EST'), D()));                                  // id distinto de disc
   await assertFails(setDoc(doc(ed, 'p3d/ARQ'), D({ path: 'planos/x/r1/th.webp' })));
   await assertFails(deleteDoc(doc(ed, 'p3d/ARQ')));
+  // «Eliminar»: registro con `del` (guarda la numeración), solo el administrador; luego se puede volver a cargar
+  const DEL = D({ del: { t: 1, by: 'x', n: 'x' } });
+  await assertFails(setDoc(doc(ed, 'p3d/ARQ'), DEL));
+  await assertFails(setDoc(doc(user('ot@obra.pe'), 'p3d/ARQ'), DEL));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'p3d/ARQ'), DEL));
+  await assertSucceeds(setDoc(doc(ed, 'p3d/ARQ'), D({ rev: 2, path: 'modelos/ARQ/r2.frag' })));
+  // especialidad con origen (dos juegos de IFC con el mismo código): «CAS-DC»
+  await assertSucceeds(setDoc(doc(ed, 'p3d/CAS-DC'), D({ disc: 'CAS-DC', path: 'modelos/CAS-DC/r1.frag' })));
 });
 
 // Productividad F1: partidas críticas (admin e ingenieros) y avance diario (el SC el de su partida; los ingenieros cualquiera)
@@ -1362,4 +1370,19 @@ test('productividad casa: los ingenieros leen partidas y HH; registran metrado; 
   await assertFails(setDoc(doc(user('editor@obra.pe'), 'pmet/m-z'), m({ q: -1 })));
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pmet/m-editorobrape')));
   await assertFails(getDoc(doc(user('sc@obra.pe'), 'pmet/m-editorobrape')));
+});
+
+// Productividad: saldo inicial (avance previo) solo lo ponen los ingenieros y el administrador
+test('productividad: el SC no pone ni cambia el saldo inicial de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pcrit/pc-gabel'), { sc: 'c-gabel', nom: 'Enchape', und: 'm²', met: 4200, fin: '' });
+    await setDoc(doc(db, 'pav/ini_pc-gabel_p1'), { pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p1', zona: '', q: 500, ini: true, nota: 'medido', by: 'editor@obra.pe', ts: 1 });
+  });
+  const ini = (by, o = {}) => ({ pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p2', zona: '', q: 300, ini: true, nota: 'x', by, ts: 1, ...o });
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('sc@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), ini('sc@obra.pe', { piso: 'p1', q: 900 })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), { ...ini('sc@obra.pe', { piso: 'p1', q: 900 }), ini: false }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('campo@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pmet/ini_10.05_p1'), { pc: '10.05', d: '2026-10-10', piso: 'p1', zona: '', q: 800, ini: true, nota: 'x', by: 'editor@obra.pe', ts: 1 }));
 });
