@@ -62,8 +62,11 @@ function create(host, opts = {}) {
   /* detalle: «completo» (por defecto, oct 2026) carga todo lo visible con su geometría y no lo cambia al mover la cámara (LodMode.ALL_VISIBLE);
      «por vista» es el modo normal de Fragments: solo lo que está en cámara y lo lejano simplificado o en líneas, y al recorrer se veían zonas
      que aparecían, desaparecían o cambiaban de detalle. Completo pide más a la tarjeta gráfica: en una tablet lenta, «por vista». */
-  let lodMode = opts.lod === 'vista' ? 'vista' : 'completo';
-  const lodVal = () => lodMode === 'completo' ? FRAGS.LodMode.ALL_VISIBLE : FRAGS.LodMode.DEFAULT;
+  /* «auto» (por defecto desde oct 2026): completos solo los modelos de `opts.lodFull` (ARQ, EST: los que se recorren y donde más se notaba);
+     las instalaciones (miles de accesorios pequeños) van por vista. Con todas las especialidades en «completo» se ponía lento hasta en laptop. */
+  const LODS = ['auto', 'completo', 'vista'];
+  let lodMode = LODS.includes(opts.lod) ? opts.lod : 'auto'; const lodFull = new Set(opts.lodFull || ['ARQ', 'EST']);
+  const lodVal = id => (lodMode === 'completo' || (lodMode === 'auto' && lodFull.has(id))) ? FRAGS.LodMode.ALL_VISIBLE : FRAGS.LodMode.DEFAULT;
   /* una vista nueva de tiles puede llegar un poco después de mover la cámara: se vuelve a dibujar cuando llegan */
   const lastCam = new THREE.Vector3(); let settle = 0;
   const keepDrawing = ms => { settle = Math.max(settle, performance.now() + ms) };
@@ -246,7 +249,7 @@ function create(host, opts = {}) {
   const V = {
     multi: false, world, components, fragments, THREE, OBC,
     async add(id, bytes) { const model = await fragments.core.load(bytes, { modelId: id, camera: cam.three, clippingPlanes: R.clippingPlanes });
-      try { await model.setLodMode(lodVal()) } catch (e) { console.warn('modo de detalle', e) }
+      try { await model.setLodMode(lodVal(id)) } catch (e) { console.warn('modo de detalle', e) }
       /* fragments.list.onItemSet ya lo agregó a la escena */
       await fragments.core.update(true); const levels = await levelsOf(model).catch(() => []); models.set(id, { model, levels, slabs: model.__slabs || 0 });
       const b = new THREE.Box3().setFromObject(model.object); models.get(id).bb = b.clone(); if (!b.isEmpty()) { const first = box.isEmpty(); box.union(b); if (first) frame(box, false) }
@@ -304,7 +307,7 @@ function create(host, opts = {}) {
     setTool(t) { tool = t; if (t !== 'measure') measure.stop(); if (onTool) onTool(t); canvas.style.cursor = t === 'select' ? '' : 'crosshair' }, get tool() { return tool }, onTool(cb) { onTool = cb },
     section: sections, async sectionBox(target) { const b = target === 'sel' ? await boxOfSel() : target === 'level' ? levelBox() : box.clone(); const ok = sections.box(b); if (ok && target === 'sel') await focusBox(b, 1.8); return ok }, measure,
     /* rendimiento */
-    async lod(mode) { lodMode = mode === 'vista' ? 'vista' : 'completo'; for (const [, m] of models) { try { await m.model.setLodMode(lodVal()) } catch (e) {} } await fragments.core.update(true); redraw(); keepDrawing(800) }, get lodName() { return lodMode },
+    async lod(mode) { lodMode = LODS.includes(mode) ? mode : 'auto'; for (const [id, m] of models) { try { await m.model.setLodMode(lodVal(id)) } catch (e) {} } await fragments.core.update(true); redraw(); keepDrawing(800) }, get lodName() { return lodMode },
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),
     perf, bench, preset: setPreset, get presetName() { return preset },
