@@ -26,9 +26,10 @@
 </main>
 <script>
 /* Página de mudanza que queda en la dirección antigua de Netlify (lps911-central.netlify.app). La app ahora está en Firebase Hosting.
-   Conserva la ruta y el # (enlaces directos) y quita el service worker y lo guardado de la app antigua (ver sw.js). */
+   Conserva el # (enlaces directos) y quita el service worker y lo guardado de la app antigua (ver sw.js). */
 (function () {
-  var dest = 'https://lps911.web.app' + location.pathname.replace(/index\.html$/, '') + location.search + location.hash;
+  /* siempre a la raíz (la app es una sola página); se conserva el # de los enlaces directos. Abierta desde la PC (file://) también va a la raíz. */
+  var dest = 'https://lps911.web.app/' + (location.protocol === 'https:' ? location.search : '') + location.hash;
   document.getElementById('go').href = dest;
   function go() { location.replace(dest) }
   try {

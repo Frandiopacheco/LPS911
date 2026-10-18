@@ -7,7 +7,7 @@ self.addEventListener('activate', function (e) {
     try { await self.clients.claim() } catch (x) {}
     try {
       var cs = await self.clients.matchAll({ type: 'window' });
-      for (var c of cs) { try { var u = new URL(c.url); await c.navigate('https://lps911.web.app' + u.pathname.replace(/index\.html$/, '') + u.search + u.hash) } catch (x) {} }
+      for (var c of cs) { try { var u = new URL(c.url); await c.navigate('https://lps911.web.app/' + u.search + u.hash) } catch (x) {} }
     } catch (x) {}
     try { await self.registration.unregister() } catch (x) {}
   })());
