@@ -9,7 +9,7 @@
    las mismas variables globales. */
 
 const P3={v:null,lib:null,gone:new Map(),lrev:{},host:null,wrap:null,away:0,snap:null,want:null,gopen:new Map(),docs:new Map(),ready:false,un:null,on:{},busy:'',loading:new Set(),
-  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,side:(()=>{try{const x=localStorage.getItem('lps.p3side');return x===null?!isMob():x==='1'}catch(e){return !isMob()}})(),bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:'',lod:(()=>{try{return localStorage.getItem('lps.p3lod')==='vista'?'vista':'completo'}catch(e){return'completo'}})()};
+  panel:'',selN:0,props:null,propsFor:'',st:{hidden:0,ghost:0,isolated:false},tool:'select',cuts:[],meds:[],multi:false,side:(()=>{try{const x=localStorage.getItem('lps.p3side');return x===null?!isMob():x==='1'}catch(e){return !isMob()}})(),bench:null,tm:null,hint:null,lvls:[],lvl:'',plan:false,cutH:1.3,cutOn:true,proj:'persp',preset:'',lod:(()=>{try{const x=localStorage.getItem('lps.p3lod2');return['auto','completo','vista'].includes(x)?x:'auto'}catch(e){return'auto'}})()};
 /* Al salir de la pestaña (a ver planos, a otro módulo…) el visor NO se destruye: queda armado y apartado, y al volver se repone tal como se dejó (cámara,
    piso, cortes, lo oculto, la selección). Para no gastar la memoria de la tablet, si pasan P3_KEEP ms fuera se libera y se guarda una foto del estado
    (P3.snap) que se repone al volver (los modelos sí se vuelven a abrir). */
@@ -140,8 +140,8 @@ function p3Panel(){const p=P3.panel;if(!p)return'';
   if(p==='rend'){const b=P3.bench;return`<div class="p3pnh"><b>Rendimiento</b><button class="ib" data-a="pn:" aria-label="Cerrar">✕</button></div>
     <div class="p3live" id="p3live">—</div><div class="p3sm">Calidad de dibujo (en tablet conviene «Equilibrada» o «Rápida»):</div>
     <div class="p3row"><span class="seg">${P3_PRESETS.map(x=>`<button class="${P3.preset===x[0]?'on':''}" data-a="preset" data-p="${x[0]}">${x[1]}</button>`).join('')}</span></div>
-    <div class="p3sm">Detalle del modelo: «Completo» no cambia nada al moverte (pide más a la tarjeta gráfica); «Por vista» carga solo lo que está en cámara y simplifica lo lejano.</div>
-    <div class="p3row"><span class="seg"><button class="${P3.lod==='completo'?'on':''}" data-a="lod" data-p="completo">Completo</button><button class="${P3.lod==='vista'?'on':''}" data-a="lod" data-p="vista">Por vista</button></span></div>
+    <div class="p3sm">Detalle del modelo: «Automático» deja completos arquitectura y estructuras y simplifica lo lejano de las instalaciones; «Completo» no cambia nada al moverte pero es lo más pesado; «Por vista» es lo más liviano.</div>
+    <div class="p3row"><span class="seg">${[['auto','Automático'],['completo','Completo'],['vista','Por vista']].map(x=>`<button class="${P3.lod===x[0]?'on':''}" data-a="lod" data-p="${x[0]}">${x[1]}</button>`).join('')}</span></div>
     <div class="p3row"><button class="ib pri" data-a="bench"${b&&b.run?' disabled':''}>${b&&b.run?'Midiendo… '+Math.round(b.pr*100)+'%':'⏱ Prueba de fluidez (4 s)'}</button></div>
     ${b&&b.res?`<div class="p3res"><b>${b.res.fps} FPS</b> · cuadro típico ${b.res.p50} ms · peor 5% ${b.res.p95} ms · más lento ${b.res.max} ms · ${b.res.lentos} cuadros lentos de ${b.res.cuadros}<br><small>${b.res.calls} llamadas · ${p3Fmt(b.res.tris)} triángulos · resolución ×${b.res.dpr} · calidad ${esc(P3_PRESETS.find(x=>x[0]===P3.preset)?.[1]||'')}</small></div>`:''}`}
   return''}
@@ -187,7 +187,7 @@ async function p3Click(e){const el=e.target.closest('[data-a]');if(!el||!P3.v||e
     case'side':P3.side=!P3.side;try{localStorage.setItem('lps.p3side',P3.side?'1':'0')}catch(x){}p3Ui();break;
     case'clearsel':await v.clearSelection();break;
     case'guid':try{await navigator.clipboard.writeText(P3.props.guid);toast('GlobalId copiado')}catch(x){toast('No se pudo copiar')}break;
-    case'lod':P3.lod=el.dataset.p==='vista'?'vista':'completo';v.lod(P3.lod);try{localStorage.setItem('lps.p3lod',P3.lod)}catch(x){}p3Ui();break;
+    case'lod':P3.lod=['auto','completo','vista'].includes(el.dataset.p)?el.dataset.p:'auto';v.lod(P3.lod);try{localStorage.setItem('lps.p3lod2',P3.lod)}catch(x){}p3Ui();break;
     case'preset':P3.preset=el.dataset.p;v.preset(P3.preset);try{localStorage.setItem('lps.p3q',P3.preset)}catch(x){}p3Ui();break;
     case'bench':{P3.bench={run:true,pr:0};p3Ui();const res=await v.bench(4000,pr=>{P3.bench.pr=pr;if(Math.round(pr*20)%2===0)p3Ui()});P3.bench={res};p3Ui();break}
   }}
