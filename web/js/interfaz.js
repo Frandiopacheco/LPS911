@@ -3,9 +3,9 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 /* Orden del ciclo Last Planner: planificar → liberar → comprometer → ejecutar → medir; lo de configuración al final */
-const TAB_ORDER=['hoy','dash','look','mat','restr','plan','mapa','campo','cap','lib','ind','prod','cli','planos','cfg','team'];
+const TAB_ORDER=['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','cli','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
-const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',prod:'Productividad',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
+const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',pull:'Sesión pull',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',prod:'Productividad',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
   tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
@@ -19,7 +19,7 @@ function tabAllowed(t){if(!me)return false;
     if(t==='tdia')return me.role!=='tcos';if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
   if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
-  if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
+  if(t==='pull')return pulEd();if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed);const r=me.role;

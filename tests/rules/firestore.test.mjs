@@ -1312,6 +1312,18 @@ test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínim
   await assertSucceeds(setDoc(doc(ed, 'p3d/CAS-DC'), D({ disc: 'CAS-DC', path: 'modelos/CAS-DC/r1.frag' })));
 });
 
+// Sesión pull: borrador de pull planning (admin e ingenieros de producción)
+test('sesión pull: solo admin y editores la crean y editan', async () => {
+  const ses = { nom: 'Salas', piso: 'p1', ambs: ['a1'], ps: {}, ln: {}, h: {}, base: {}, st: 'abierta' };
+  for (const who of [OWNER, 'editor@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'pull/s-' + who.replace(/\W/g, '')), ses));
+  for (const who of ['campo@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe']) await assertFails(setDoc(doc(user(who), 'pull/s-x'), ses));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'pull/s-editorobrape'), { 'ps.x1': { n: 'Engrillado', sc: 'c1', amb: 'a1', d0: '2026-11-02', dur: 2 } }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'pull/s-mal'), { nom: 'x', piso: 'p1' }));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pull/s-editorobrape')));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'pull/s-editorobrape')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), 'pull/s-editorobrape')));
+});
+
 // Productividad F1: partidas críticas (admin e ingenieros) y avance diario (el SC el de su partida; los ingenieros cualquiera)
 test('productividad: partidas críticas y avance diario del SC', async () => {
   await env.withSecurityRulesDisabled(async c => {

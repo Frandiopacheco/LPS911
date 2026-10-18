@@ -292,6 +292,13 @@ service cloud.firestore {
         || (resource.data.by == mid() && scNpOk(request.resource.data));
       allow delete: if isAdmin();
     }
+    // Sesión pull (oct 2026, docs/ia/pull.md): borrador de planificación con pósits. La ven todos los de LPS;
+    // la crean y editan el administrador y los ingenieros de producción (canEdit). Se archiva; borrar, solo el administrador.
+    match /pull/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit() && request.resource.data.ps is map && request.resource.data.piso is string;
+      allow delete: if isAdmin();
+    }
     // Productividad F1 (oct 2026, docs/ia/productividad.md): partidas críticas de los SC y su avance diario ejecutado.
     // pcrit: las crean y editan el administrador y los ingenieros (canDaily); nadie las borra salvo el administrador (se archivan).
     match /pcrit/{id} {
