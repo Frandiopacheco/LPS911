@@ -333,6 +333,7 @@ async function importJson(file){
   if(data.tipo!=='actualizacion'){const by={};writes.forEach(([c])=>by[c]=(by[c]||0)+1);
     if(!await uiAsk({title:`¿Cargar ${writes.length} registros?`,list:[...Object.entries(by).map(([c,n])=>`${n} en ${c}`),...(dels.length?[`${dels.length} se eliminan`]:[])],note:'Los registros con el mismo identificador se reemplazan por los del archivo y no se puede deshacer. Si no estás seguro, primero descarga el respaldo actual.',ok:'Cargar',tone:'danger'}))return}
   const msg=$('#impmsg');let done=0;
+  IMPORTING=true;
   try{const skip=await importWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
     await batchWrites(dels.map(([c,id])=>[c,id,null]));
     dels.forEach(([c,id])=>S[COLS[c]].delete(id));if(dels.length)requestRender();
@@ -342,6 +343,7 @@ async function importJson(file){
     const nSk=[...skip.values()].reduce((a,b)=>a+b,0);const skMsg=nSk?` No se cargaron ${nSk} registros que las reglas no permiten escribir con tu usuario (${[...skip].map(([c,n])=>`${c}: ${n}`).join(', ')}); son historiales de otras personas o versiones ya emitidas al cliente, y no afectan el lookahead.`:'';const cliMsg=nCli?` Las versiones ya emitidas al cliente (${nCli} registros) se dejaron como estaban: no se reemplazan.`:'';
     toast(`Datos cargados: ${writes.length-nSk} registros.`);IMPMSG=`Listo: ${writes.length-nSk} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+skMsg+cliMsg+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
   catch(err){IMPMSG='';toast('La carga se detuvo: '+(err.code||err.message)+'. Puedes volver a intentarlo; no se duplican registros.')}
+  finally{IMPORTING=false;requestRender()}
 }
 
 /* logos de los Excel (encabezado de la empresa): se guardan como foto (PNG reducido a 700 px de ancho, conserva la transparencia) */

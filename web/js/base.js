@@ -388,7 +388,9 @@ function isDirtyFocus(){const a=document.activeElement;return a&&a.classList&&a.
 /* Mientras alguien elige en una lista desplegable o arrastra sobre un plano, los cambios que llegan de otros usuarios
    esperan: redibujar en ese momento cerraba la lista o borraba el rectángulo que se está dibujando. */
 let SEL_T=0,PDOWN=false,dTimer=0,DRAGGING=false;/* DRAGGING: arrastre nativo en curso (Liberaciones › Bandeja) */
-const uiBusy=()=>{const a=document.activeElement;return PDOWN||DRAGGING||(!!a&&a.tagName==='SELECT'&&performance.now()-SEL_T<20000)||(!!a&&a.classList&&a.classList.contains('qin'))};/* qin: cantidad del día escribiéndose dentro de la celda del lookahead */
+/* IMPORTING: mientras se carga un archivo de datos no se redibuja (cada lote recalculaba toda la pantalla); al terminar, un solo dibujo */
+let IMPORTING=false;
+const uiBusy=()=>{const a=document.activeElement;return IMPORTING||PDOWN||DRAGGING||(!!a&&a.tagName==='SELECT'&&performance.now()-SEL_T<20000)||(!!a&&a.classList&&a.classList.contains('qin'))};/* qin: cantidad del día escribiéndose dentro de la celda del lookahead */
 document.addEventListener('pointerdown',e=>{const t=e.target;if(!t||!t.closest)return;if(t.closest('select'))SEL_T=performance.now();if(t.closest('.pv'))PDOWN=true},true);
 document.addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='SELECT')SEL_T=performance.now()},true);
 {const rel=()=>{if(PDOWN){PDOWN=false;setTimeout(flushDeferred,0)}};document.addEventListener('pointerup',rel,true);document.addEventListener('pointercancel',rel,true)}

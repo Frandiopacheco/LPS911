@@ -106,15 +106,28 @@ async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){
     while(i<writes.length&&k<400){const w=writes[i];const s=w[2]?JSON.stringify(w[2]).length:50;if(k>0&&sz+s>6e6)break;sz+=s;k++;i++;if(w[2])b.set(fcol(w[0]).doc(w[1]),w[2]);else b.delete(fcol(w[0]).doc(w[1]))}
     await b.commit();done+=k;onProg&&onProg(done)}}
 
-/* carga de un archivo de datos o respaldo: por colección, y si las reglas rechazan un lote (p. ej. historiales que solo escribe
-   su autor: lhlog, lhphist) lo reintenta registro por registro y salta solo los rechazados. Antes un solo rechazo detenía toda la carga. */
-async function importWrites(writes,onProg){const by=new Map();writes.forEach(w=>{if(!by.has(w[0]))by.set(w[0],[]);by.get(w[0]).push(w)});
-  const skip=new Map();let done=0;
-  for(const[col,ws]of by){for(let i=0;i<ws.length;i+=400){const part=ws.slice(i,i+400);
-    try{await batchWrites(part);done+=part.length}
-    catch(e){if(!/permission/i.test(String(e&&(e.code||e.message)||e)))throw e;
-      for(const w of part){try{await fcol(w[0]).doc(w[1]).set(w[2])}catch(e2){if(!/permission/i.test(String(e2&&(e2.code||e2.message)||e2)))throw e2;skip.set(col,(skip.get(col)||0)+1)}done++;onProg&&onProg(done)}}
-    onProg&&onProg(done)}}
+/* carga de un archivo de datos o respaldo. Las reglas no dejan reemplazar ciertos historiales (lhlog y mver solo se crean; lhlog,
+   mlog y mcatp nuevos solo con el autor = quien carga): esos registros se descartan ANTES de escribir, sin red para el autor y con una
+   sola lectura de los códigos que ya existen. Antes se intentaban y, al rechazarse el lote, se reintentaban de a uno: un respaldo
+   de la obra (9000+ registros de lhlog) tardaba más de 20 minutos. Si aun así una regla rechaza un lote, se reintenta registro
+   por registro en paralelo (20 a la vez) y se saltan solo los rechazados. */
+const IMP_AUTHOR={lhlog:0,mlog:1,mcatp:1};/* 1: además debe venir pendiente (st:'pend') para poder crearse */
+const IMP_ONCE=new Set(['lhlog','mver']);
+async function importWrites(writes,onProg){const skip=new Map();const sk=(c,n)=>skip.set(c,(skip.get(c)||0)+(n||1));
+  const my=String(me&&me.email||'').toLowerCase();let done=0;const prog=n=>{done+=n;onProg&&onProg(done)};
+  const by=new Map();writes.forEach(w=>{if(!by.has(w[0]))by.set(w[0],[]);by.get(w[0]).push(w)});
+  for(const[col,ws0]of by){let ws=ws0;
+    if(col in IMP_AUTHOR||IMP_ONCE.has(col)){let have=null;
+      const mine=w=>{const d=w[2]||{};return String(d.by||'').toLowerCase()===my&&(!IMP_AUTHOR[col]||d.st==='pend')};
+      /* lhlog: lo de otros autores no se puede crear ni reemplazar → fuera sin leer nada */
+      if(col==='lhlog'){const k=ws.filter(mine);sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}
+      if(ws.length){try{have=new Set((await fcol(col).get()).docs.map(d=>d.id))}catch(e){have=null}}
+      if(have){const k=ws.filter(w=>have.has(w[1])?!IMP_ONCE.has(col):(col in IMP_AUTHOR?mine(w):true));sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}}
+    for(let i=0;i<ws.length;i+=400){const part=ws.slice(i,i+400);
+      try{await batchWrites(part);prog(part.length)}
+      catch(e){if(!/permission/i.test(String(e&&(e.code||e.message)||e)))throw e;
+        for(let j=0;j<part.length;j+=20)await Promise.all(part.slice(j,j+20).map(async w=>{
+          try{await fcol(w[0]).doc(w[1]).set(w[2])}catch(e2){if(!/permission/i.test(String(e2&&(e2.code||e2.message)||e2)))throw e2;sk(col)}prog(1)}))}}}
   return skip}
 
 /* =====================================================================
