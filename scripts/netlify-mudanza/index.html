@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LPS 911 se mudó</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{--bg:#eef1f3;--card:#fff;--ink:#1d2730;--mut:#5b6875;--pri:#1f5f7a}
+  @media (prefers-color-scheme:dark){:root{--bg:#161b20;--card:#20272e;--ink:#e8edf1;--mut:#9aa7b3;--pri:#4fa3c4}}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+  .c{background:var(--card);border-radius:14px;padding:28px 24px;max-width:440px;width:100%;box-shadow:0 6px 24px rgba(0,0,0,.12);text-align:center}
+  h1{font-size:22px;margin:0 0 8px}
+  p{margin:0 0 18px;color:var(--mut)}
+  a.b{display:inline-block;background:var(--pri);color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px;min-height:44px}
+  .u{display:block;margin-top:14px;font-size:14px;color:var(--mut);word-break:break-all}
+</style>
+</head>
+<body>
+<main class="c">
+  <h1>LPS 911 tiene nueva dirección</h1>
+  <p>La aplicación se mudó. Te llevamos en unos segundos; guarda la nueva dirección en tus favoritos o en la pantalla de inicio de tu tablet.</p>
+  <a class="b" id="go" href="https://lps911.web.app/">Ir a LPS 911</a>
+  <span class="u">lps911.web.app</span>
+</main>
+<script>
+/* Página de mudanza que queda en la dirección antigua de Netlify (lps911-central.netlify.app). La app ahora está en Firebase Hosting.
+   Conserva la ruta y el # (enlaces directos) y quita el service worker y lo guardado de la app antigua (ver sw.js). */
+(function () {
+  var dest = 'https://lps911.web.app' + location.pathname.replace(/index\.html$/, '') + location.search + location.hash;
+  document.getElementById('go').href = dest;
+  function go() { location.replace(dest) }
+  try {
+    var jobs = [];
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister() })) }));
+    if (window.caches && caches.keys)
+      jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k) })) }));
+    Promise.all(jobs).catch(function () {}).then(function () { setTimeout(go, 2500) });
+  } catch (e) { setTimeout(go, 2500) }
+})();
+</script>
+</body>
+</html>
