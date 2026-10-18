@@ -582,6 +582,20 @@ test('vínculos: propuestas desde un archivo (Claude): se cargan sin crear vínc
   await page.waitForTimeout(300);
   const db2 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));
   expect(db2.lkp).toHaveLength(1); expect(db2.lk).toHaveLength(1);
+  // «Aceptar las de confianza alta» y «Aceptar todas»: de una vez, en todas las láminas
+  J.laminas[0].vinculos = [{ r: [100, 100, 120, 120], a: 'IS06', t: 'Alta', c: 0.9 }, { r: [900, 700, 920, 720], a: 'IS06', t: 'Baja', c: 0.4 }];
+  page.once('dialog', d => d.accept());
+  await carga();
+  await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(2);
+  page.once('dialog', d => d.accept());
+  await page.click('#plkpall80');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(2);
+  expect(await page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).map(x => x.t))).toEqual(['Baja']);
+  page.once('dialog', d => d.accept());
+  await page.click('#plkpall');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(3);
+  expect(await page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(0);
+  await expect(page.locator('#plkpall')).toBeDisabled();
   noErrors(errors, 'propuestas de vínculos');
 });
 
