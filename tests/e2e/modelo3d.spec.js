@@ -159,7 +159,7 @@ test('modelo 3D: convierte un IFC, lo abre y funcionan pisos, cortes, medir, pro
   // rendimiento: prueba de fluidez corta
   await page.click('#p3dock [data-a="pn:rend"]');
   await page.click('#p3pn [data-a="preset"][data-p="rapida"]');
-  await expect(page.locator('#p3pn .seg .on')).toHaveText('Rápida');
+  await expect(page.locator('#p3pn [data-a="preset"].on')).toHaveText('Rápida');
   // casita: vuelve a la vista general (sin piso aislado, perspectiva)
   await page.click('#p3dock [data-a="pn:pisos"]');
   await page.locator('#p3pn [data-a="lvl"]:not([data-l=""])').first().click();
