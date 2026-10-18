@@ -24,8 +24,8 @@ test('los días editados se guardan por fila: editar otra fila no borra lo anter
   await cell(page, 'r1', D[4]).click();
   await cell(page, 'r2', D[5]).click();
   await cell(page, 'r1', D[6]).click();
-  expect(await onDays(page, 'r1')).toEqual([D[1], D[2], D[4], D[6]]);
-  expect(await onDays(page, 'r2')).toEqual([D[2], D[3], D[5]]);
+  await expect.poll(() => onDays(page, 'r1')).toEqual([D[1], D[2], D[4], D[6]]);
+  await expect.poll(() => onDays(page, 'r2')).toEqual([D[2], D[3], D[5]]);
   page.once('dialog', d => d.accept());
   await page.locator('[data-rvall]').click();
   await expect.poll(() => page.evaluate(() => Object.values(__dbGet('lhprop', 'c1').items).filter(Boolean).length)).toBe(0);
@@ -39,7 +39,7 @@ test('quitar todos los días no rechaza la fila: queda vacía, no se acepta así
   const errors = await review(page);
   await cell(page, 'r2', D[2]).click();
   await cell(page, 'r2', D[3]).click();
-  expect(await onDays(page, 'r2')).toEqual([]);
+  await expect.poll(() => onDays(page, 'r2')).toEqual([]);
   expect(await page.evaluate(() => !!__dbGet('lhprop', 'c1').items.r2)).toBe(true);
   expect(Object.keys(await page.evaluate(() => __dbAll('lhphist')))).toHaveLength(0);
   await expect(page.locator('.rvpsel')).toContainText('sin días');
@@ -62,10 +62,81 @@ test('«Aceptar todo» deja pendiente la fila vacía; si el SC reenvía la fila,
   // el SC reenvía r1 con otra versión
   await page.evaluate(D => fcol('lhprop').doc('c1').set({ items: { r1: { ...__dbGet('lhprop', 'c1').items.r1, ts: 2, after: { ...__dbGet('lhprop', 'c1').items.r1.after, days: [D[5]] } } } }, { merge: true }), D);
   await expect(page.locator('#toast')).toContainText('reenvió');
-  expect(await onDays(page, 'r1')).toEqual([D[5]]);
+  await expect.poll(() => onDays(page, 'r1')).toEqual([D[5]]);
   page.once('dialog', d => d.accept());
   await page.locator('[data-rvall]').click();
   await expect.poll(() => page.evaluate(() => Object.keys(__dbGet('lhprop', 'c1').items).filter(k => __dbGet('lhprop', 'c1').items[k]))).toEqual(['r3']);
   expect((await page.evaluate(() => __dbGet('acts', 'r1'))).days).toEqual([D[5]]);
   noErrors(errors, 'aceptar todo con fila vacía');
+});
+
+/* ---- auditoría oct 2026 (Chromium + lectura de código + informe externo) ---- */
+const Q = { ...A('Montantes', 303), days: [D[0]], qty: { [D[0]]: 10 } };
+const extraQ = [['acts', 'r4', Q], ['lhprop', 'c1', { sc: 'c1', sentAt: 1, items: { r4: it(Q, [D[1], D[2]]) } }]];
+extraQ[1][2].items.r4.after.qty = { [D[1]]: 10, [D[2]]: 20 };
+
+test('Enter con la ventanita de motivos abierta no acepta otra fila; Escape no borra lo editado', async ({ page }) => {
+  const errors = await review(page);
+  await page.locator('#grid tr[data-a="r1"] td.act').click(); // r1 elegida
+  await cell(page, 'r2', D[5]).click(); // edita r2 (queda elegida r2)
+  await page.locator('#grid tr[data-a="r1"] td.act').click(); // vuelve a elegir r1
+  await page.locator('#grid tr[data-a="r3"] [data-rva="rej"]').click(); // ventanita de motivos de r3
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  /* Enter actúa sobre la ventanita (elige el motivo con el foco para r3), nunca acepta la fila elegida (r1) */
+  const H = Object.values(await page.evaluate(() => __dbAll('lhphist')));
+  expect(H.filter(h => h.st !== 'rej')).toHaveLength(0);
+  expect(await page.evaluate(() => !!__dbGet('lhprop', 'c1').items.r1)).toBe(true);
+  expect(await page.evaluate(() => revEd('r2'))).toEqual([D[2], D[3], D[5]]);
+  noErrors(errors, 'teclado con ventanita');
+});
+
+test('‹ › se guarda en cada fila y mueve también las cantidades por día', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: extraQ });
+  await page.locator('[data-pp="rev"]').first().click();
+  await expect(page.locator('#grid tr.rvrow[data-a="r4"]')).toBeVisible();
+  await page.evaluate(() => { REVSEL = { sc: 'c1', id: 'r4', k: 0 }; revStep(1); });
+  expect(await page.evaluate(() => REVED.get('r4'))).toMatchObject({ days: [D[2], D[3]], qty: { [D[2]]: 10, [D[3]]: 20 } });
+  await page.evaluate(() => { REVSEL = null; revGo(1); }); // elegir otra cosa no lo borra
+  expect(await page.evaluate(() => revEd('r4'))).toEqual([D[2], D[3]]);
+  await page.locator('#grid tr[data-a="r4"] [data-rva="ok"]').click();
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'r4').qty)).toEqual({ [D[2]]: 10, [D[3]]: 20 });
+  noErrors(errors, 'mover con cantidades');
+});
+
+test('se acepta la versión que se vio: si el SC reenvía entre que se ve y se confirma, esa queda pendiente', async ({ page }) => {
+  const errors = await review(page);
+  await page.evaluate(async D => {
+    const sel = revVisItems().map(o => ({ sc: o.sc, id: o.id, ver: RVSEEN.get(o.id) })); // lo que se vio al pulsar «Aceptar todo»
+    __dbRemote = true; const x = __dbGet('lhprop', 'c1').items.r1;
+    await fcol('lhprop').doc('c1').update(new firebase.firestore.FieldPath('items', 'r1'), { ...x, ts: 2, after: { ...x.after, days: [D[6]] } }); __dbRemote = false;
+    await new Promise(r => setTimeout(r, 50));
+    await decideMany(sel);
+  }, D);
+  await expect.poll(() => page.evaluate(() => Object.keys(__dbAll('lhphist')).length)).toBe(2);
+  expect((await page.evaluate(() => __dbGet('acts', 'r1'))).days).toEqual([D[0]]); // no se aplicó lo que nadie vio
+  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.r1.ts).toBe(2);
+  noErrors(errors, 'versión vista');
+});
+
+test('un solo Ctrl+Z deshace todo «Aceptar todo» y las propuestas vuelven a pendientes', async ({ page }) => {
+  const errors = await review(page);
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-rvall]').click();
+  await expect.poll(() => page.evaluate(() => Object.values(__dbGet('lhprop', 'c1').items).filter(Boolean).length)).toBe(0);
+  await page.evaluate(() => undo());
+  await expect.poll(() => page.evaluate(() => Object.values(__dbGet('lhprop', 'c1').items).filter(Boolean).length)).toBe(3);
+  for (const id of ['r1', 'r2', 'r3']) expect((await page.evaluate(id => __dbGet('acts', id), id)).days).toEqual([D[0]]);
+  noErrors(errors, 'deshacer el lote');
+});
+
+test('aceptar y deshacer casi seguidos: el deshacer espera a que se guarde y la base queda coherente', async ({ page }) => {
+  const errors = await review(page);
+  await page.evaluate(() => { const rt = db.runTransaction.bind(db); db.runTransaction = async fn => { await new Promise(r => setTimeout(r, 250)); const x = await rt(fn); await new Promise(r => setTimeout(r, 250)); return x; }; });
+  const p = page.evaluate(() => revDecide('r1', 'ok'));
+  await page.waitForTimeout(150); await page.evaluate(() => undo()); await p;
+  await expect.poll(() => page.evaluate(() => !!__dbGet('lhprop', 'c1').items.r1)).toBe(true);
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'r1').days)).toEqual([D[0]]);
+  noErrors(errors, 'aceptar y deshacer');
 });

@@ -32,3 +32,11 @@ Corregido en el PR «Auditoría con datos reales»:
 Pendiente (no se tocó por decisión del dueño): la semana 58 quedó casi sin evaluar (PPC oficial 1 %).
 Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan los cambios ajenos; desde la auditoría núcleo REN-02 también los de `mcat`/`mamb`/`mver`/catálogo, `lib`, `nprog`, `lhprop`, `members`, cliente y `pdz`/`pzon`).
 - Publicación de la página: desde oct 2026 va a Firebase Hosting (ya no Netlify); cada publicación cambia `VER` en `sw.js`, y eso dispara el aviso de «versión nueva» en los equipos abiertos.
+
+## Auditoría SC ↔ ingeniero en propuestas (oct 2026), quedó para después
+- Agregar un día con clic en una fila con cantidades por día lo deja sin cantidad (igual que en el lookahead normal).
+- Reglas de `lhprop`: no revisan el contenido de `items` (un SC podría, desde la consola, proponer sobre actividades de otra partida o fijar `sentAt`). `lhphist` lo puede leer todo miembro, incluido el motivo `why` que el SC no ve en la app (SEG-05 paso 2).
+- `dayLocked` depende de `ensureDplan` (asíncrono): recién abierto el Lookahead, un día publicado podría verse abierto por un momento.
+- `lhprop/{sc}` acumula claves `id:null` de cada decisión; vigilar el límite de 1 MB en obras largas.
+- Dos usuarios SC de la misma partida comparten `lhprop/{sc}`: «Enviar» de uno envía también los borradores del otro (¿por diseño?).
+- Duda del informe externo: confirmar que al entrar a la revisión se limpie la selección en bloque (`SELA`, mover.js).
