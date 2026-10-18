@@ -559,9 +559,33 @@ test('vínculos: propuestas desde un archivo (Claude): se cargan sin crear vínc
   await page.click('#plkpgo');
   await expect(page.locator('#plv .plkbar')).toContainText('Propuesta 1 de 2');
   await expect(page.locator('#plv [data-pv="lk"] .plkpn')).toContainText('+2');
+  // antes de aceptar, la zona de la propuesta se ajusta arrastrando una esquina
+  const z0 = await page.evaluate(() => { const l = plkpList(PLB.get('ARQ_AG03')).find(x => x.id === PLK.psel); return { ...l }; });
+  await page.evaluate(async l => {
+    const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), a = PLV.tv.toScreen(l.x1 * PLV.tv.W, l.y1 * PLV.tv.H);
+    const ev = (t, dx) => host.dispatchEvent(new PointerEvent(t, { pointerId: 7, clientX: r.left + a.x + dx, clientY: r.top + a.y + dx, pointerType: 'mouse', isPrimary: true, buttons: t === 'pointerup' ? 0 : 1, bubbles: true }));
+    ev('pointerdown', 0); for (const d of [10, 20, 30]) { await new Promise(r => setTimeout(r, 20)); ev('pointermove', d); } ev('pointerup', 30);
+  }, z0);
+  await expect.poll(() => page.evaluate(id => { const l = (__dbGet('plb', 'ARQ_AG03').lkp || []).find(x => x.id === id); return l && l.x1; }, z0.id)).toBeGreaterThan(z0.x1);
   await page.click('#plv .plkbar [data-pk="p-ok"]');
   await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(1);
+  expect((await page.evaluate(() => PLB.get('ARQ_AG03').lk[0])).x1).toBeGreaterThan(z0.x1); // se acepta con la zona ajustada
   await expect(page.locator('#plv .plkbar')).toContainText('Propuesta 1 de 1');
+  // «Cambiar destino» (la propuesta llevaba a otra lámina): se elige la correcta y su zona, y queda aceptada con ese destino
+  const pid2 = await page.evaluate(() => PLK.psel);
+  await page.click('#plv .plkbar [data-pk="p-dest"]');
+  await page.click('#plv .plkr[data-kc="ARQ_AG03"]');
+  await expect(page.locator('#plv .plkbar')).toContainText('Acerca la zona');
+  await page.click('#plv .plkbar [data-pk="whole"]');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(2);
+  expect(await page.evaluate(() => PLB.get('ARQ_AG03').lk[1].to)).toBe('ARQ_AG03');
+  expect(await page.evaluate(id => plkpList(PLB.get('ARQ_AG03')).some(x => x.id === id), pid2)).toBe(false);
+  // se quita para seguir con el resto de la prueba como estaba
+  await page.evaluate(() => plkSave('ARQ_AG03', arr => arr.slice(0, 1)));
+  page.once('dialog', d => d.accept());
+  await carga();
+  await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(1);
+  await page.evaluate(() => { PLK.psel = plkpList(PLB.get('ARQ_AG03'))[0].id; plkBar(); });
   await page.click('#plv .plkbar [data-pk="p-no"]');
   await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(0);
   const db1 = await page.evaluate(() => __dbGet('plb', 'ARQ_AG03'));

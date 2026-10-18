@@ -131,14 +131,15 @@ async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK
     plkBar();return}
   v.tick();plkChoose({id:plkId(),...g,to:'',t:'',v:null},p.id,true)}
 /* arrastrar una esquina del vínculo elegido, o todo el vínculo desde dentro */
-function plkDown(cx,cy){if(PLK.ch||PLK.pick||PLK.a||!PLK.sel)return false;const v=PLV.tv,p=PLB.get(PLV.id);
-  const l=plkLinks(p).find(x=>x.id===PLK.sel);if(!l)return false;
+function plkDown(cx,cy){if(PLK.ch||PLK.pick||PLK.a||(!PLK.sel&&!PLK.psel))return false;const v=PLV.tv,p=PLB.get(PLV.id);
+  /* la propuesta elegida también se ajusta (esquinas o arrastrándola), antes de aceptarla */
+  const l=PLK.sel?plkLinks(p).find(x=>x.id===PLK.sel):plkpList(p).find(x=>x.id===PLK.psel);if(!l)return false;
   const r=v.cv.getBoundingClientRect(),s=plkS(l,v),cs=[[s.x,s.y],[s.x+s.w,s.y],[s.x+s.w,s.y+s.h],[s.x,s.y+s.h]];
   let hit=-1,bd=PLK_HIT;cs.forEach((c,i)=>{const d=Math.hypot(r.left+c[0]-cx,r.top+c[1]-cy);if(d<bd){bd=d;hit=i}});
   if(hit>=0)PLK.drag={k:'c',i:hit};
   else if(cx-r.left>s.x&&cx-r.left<s.x+s.w&&cy-r.top>s.y&&cy-r.top<s.y+s.h)PLK.drag={k:'m',w:v.toWorld(cx,cy),b:{...l}};
   else return false;
-  PLK.live={...l};v.tick();return true}
+  PLK.live={...l,_p:!PLK.sel};v.tick();return true}
 function plkMove(cx,cy){const v=PLV.tv,d=PLK.drag,L=PLK.live;if(!d||!L)return;const w=v.toWorld(cx,cy),nx=plkClamp(w.x/v.W),ny=plkClamp(w.y/v.H);
   if(d.k==='c'){if(d.i===0||d.i===3)L.x0=nx;else L.x1=nx;if(d.i===0||d.i===1)L.y0=ny;else L.y1=ny}
   else{const b=d.b,lx=Math.min(b.x0,b.x1),hx=Math.max(b.x0,b.x1),ly=Math.min(b.y0,b.y1),hy=Math.max(b.y0,b.y1);
@@ -147,7 +148,8 @@ function plkMove(cx,cy){const v=PLV.tv,d=PLK.drag,L=PLK.live;if(!d||!L)return;co
 async function plkUp(){const L=PLK.live;PLK.drag=null;PLK.live=null;if(!PLV||!PLV.tv)return;
   if(L){const v=PLV.tv,g={x0:Math.min(L.x0,L.x1),x1:Math.max(L.x0,L.x1),y0:Math.min(L.y0,L.y1),y1:Math.max(L.y0,L.y1)};
     if((g.x1-g.x0)*v.W>=6&&(g.y1-g.y0)*v.H>=6){const pid=PLV.id;
-      try{await plkSave(pid,arr=>arr.map(x=>x.id===L.id?{...x,...g}:x))}catch(e){toast('No se pudo mover el vínculo: '+(e.code||e.message))}}}
+      try{if(L._p)await plkpSave(pid,(lk,lkp)=>({lk,lkp:lkp.map(x=>x.id===L.id?{...x,...g}:x)}));
+        else await plkSave(pid,arr=>arr.map(x=>x.id===L.id?{...x,...g}:x))}catch(e){toast('No se pudo mover el vínculo: '+(e.code||e.message))}}}
   PLV&&PLV.tv&&PLV.tv.tick()}
 
 /* ---------- elegir la lámina destino ---------- */
