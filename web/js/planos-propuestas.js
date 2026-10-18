@@ -44,7 +44,7 @@ function plkpBarHtml(p){const l=plkpList(p).find(x=>x.id===PLK.psel),t=l&&PLB.ge
   return`<div class="plkv" aria-live="polite"><b class="plkpt">Propuesta ${i+1} de ${L.length}${all>L.length?` (${all} en total)`:''}</b> · ${esc(l.t||'')} → <b class="mono">${esc(t?t.cod:'lámina no encontrada')}</b> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}
       ${l.m?`<br><small>${esc(l.m)}${l.c!=null?` · confianza ${Math.round(l.c*100)} %`:''}</small>`:''}</div>
     <div class="plkx"><button type="button" class="ib pri" data-pk="p-ok"${t?'':' disabled'}>✓ Aceptar</button><button type="button" class="ib bad" data-pk="p-no">✕ Descartar</button><button type="button" class="ib" data-pk="p-go"${t?'':' disabled'} title="Abrir el destino para ver si es el correcto">Probar</button><button type="button" class="ib" data-pk="p-dest">Cambiar destino</button></div>
-    <div class="plkx"><button type="button" class="ib" data-pk="p-all" title="Aceptar todas las propuestas de esta lámina">✓ Aceptar las ${L.length} de esta lámina</button><span class="plvsp"></span><button type="button" class="ib" data-pk="p-x">Cerrar</button><button type="button" class="ib pri" data-pk="p-next">Siguiente ›</button></div>`}
+    <div class="plkx"><button type="button" class="ib" data-pk="p-all" title="Aceptar todas las propuestas de esta lámina">✓ Aceptar las ${L.length} de esta lámina</button>${all>L.length?`<button type="button" class="ib" data-pk="p-every" title="Aceptar todas las propuestas de todas las láminas">✓ Aceptar todas (${all})</button>`:''}<span class="plvsp"></span><button type="button" class="ib" data-pk="p-x">Cerrar</button><button type="button" class="ib pri" data-pk="p-next">Siguiente ›</button></div>`}
 const plkpView=l=>({nx:(l.x0+l.x1)/2,ny:(l.y0+l.y1)/2,k:Math.max(2,Math.min(10,0.09/Math.max(l.x1-l.x0,0.004)))});
 /** pasa a la siguiente propuesta. `at` = posición que ocupaba la recién aceptada/descartada (ya salió de la lista): sigue la que quedó
    en su lugar. Sin `at` («Siguiente ›»): la que sigue en esta lámina; si no hay, la primera de la lámina siguiente que tenga. */
@@ -67,6 +67,7 @@ async function plkpClick(a,p){const l=plkpList(p).find(x=>x.id===PLK.psel),pos=p
   if(a==='p-rev'){const L=plkpOrd(plkpList(p));if(L.length){PLK.psel=L[0].id;PLK.sel=null;PLV.tv.tick();plkBar();plkpFocus()}else plkpNext();return}
   if(a==='p-x'){PLK.psel=null;PLV.tv.tick();plkBar();return}
   if(a==='p-next'){plkpNext();return}
+  if(a==='p-every'){await plkpAcceptAll(null);if(PLV){PLK.psel=null;PLV.tv.tick();plkBar()}return}
   if(!l)return;
   if(a==='p-go'){plkOpen(l);return}
   if(a==='p-dest'){plkChoose({...l,_p:1},p.id,false);return}
@@ -125,7 +126,14 @@ async function plkpLoad(file){let J;try{J=JSON.parse(await file.text())}catch(e)
 /** bloque de Cargar planos (lo pone renderPCar) */
 function plkpSecHtml(){return`<div class="card plkpsec" id="plkpsec"><b>🟣 Propuestas de vínculos</b>
   <p class="note">Archivo que prepara Claude a partir de los PDF (llamadas de corte, sección, elevación y detalle → la lámina a la que remiten). Se cargan como <b>propuestas</b>: no funcionan hasta que alguien las acepta en el visor.</p>
-  <div class="plkpx"><label class="ib"><input type="file" id="plkpf" accept=".json,application/json" hidden>Cargar archivo de propuestas…</label><button type="button" class="ib pri" id="plkpgo">Revisar propuestas</button><span class="plcnt" id="plkpn"></span></div></div>`}
-function plkpSecBind(main){const f=$('#plkpf',main),g=$('#plkpgo',main);if(f)f.onchange=()=>{const x=f.files[0];f.value='';if(x)plkpLoad(x)};if(g)g.onclick=plkpReview;plkpSecUpd()}
+  <div class="plkpx"><label class="ib"><input type="file" id="plkpf" accept=".json,application/json" hidden>Cargar archivo de propuestas…</label><button type="button" class="ib pri" id="plkpgo">Revisar propuestas</button><button type="button" class="ib" id="plkpall80" title="Acepta de una vez las propuestas con confianza de 80 % o más; las demás quedan para revisar">✓ Aceptar las de confianza alta</button><button type="button" class="ib" id="plkpall" title="Acepta de una vez todas las propuestas pendientes de todas las láminas">✓ Aceptar todas</button><span class="plcnt" id="plkpn"></span></div></div>`}
+/** acepta de una vez las propuestas pendientes de todas las láminas (con `min`, solo las de esa confianza o más) */
+async function plkpAcceptAll(min){const S=plkpSheets(),sel=p=>plkpList(p).filter(x=>min==null||(x.c!=null&&x.c>=min));
+  const T=S.map(p=>[p,sel(p)]).filter(([,L])=>L.length),n=T.reduce((a,[,L])=>a+L.length,0),tot=S.reduce((a,p)=>a+plkpList(p).length,0);
+  if(!n){toast(min==null?'No hay propuestas por revisar.':'No hay propuestas con esa confianza.');return}
+  if(!await uiAsk({title:`¿Aceptar ${n} propuesta${n===1?'':'s'} de vínculos?`,list:[`${n} de ${tot} pendientes, en ${T.length} lámina${T.length===1?'':'s'}`,min==null?'Todas, sin revisarlas una por una':`Solo las de confianza ${Math.round(min*100)} % o más; las otras ${tot-n} quedan para revisar`],note:'Pasan a ser vínculos normales: se pueden probar, ajustar o quitar uno por uno después.',ok:`Aceptar ${n}`,cancel:'Cancelar',tone:'info'}))return;
+  let ok=0,err=0;for(const[p,L]of T){try{ok+=await plkpAccept(p,L.map(x=>x.id))}catch(e){err++}}
+  toast(err?`${ok} vínculos aceptados; ${err} lámina${err===1?'':'s'} con error.`:`${ok} vínculo${ok===1?'':'s'} aceptado${ok===1?'':'s'}.`);plkpSecUpd()}
+function plkpSecBind(main){const f=$('#plkpf',main),g=$('#plkpgo',main);if(f)f.onchange=()=>{const x=f.files[0];f.value='';if(x)plkpLoad(x)};if(g)g.onclick=plkpReview;const a=$('#plkpall',main),a8=$('#plkpall80',main);if(a)a.onclick=()=>plkpAcceptAll(null);if(a8)a8.onclick=()=>plkpAcceptAll(0.8);plkpSecUpd()}
 function plkpSecUpd(){const el=$('#plkpn'),g=$('#plkpgo');if(!el)return;const S=plkpSheets(),n=S.reduce((a,q)=>a+plkpList(q).length,0);
-  el.textContent=n?`${n} por revisar en ${S.length} lámina${S.length===1?'':'s'}`:'Ninguna por revisar';if(g)g.disabled=!n}
+  el.textContent=n?`${n} por revisar en ${S.length} lámina${S.length===1?'':'s'}`:'Ninguna por revisar';for(const b of [g,$('#plkpall'),$('#plkpall80')])if(b)b.disabled=!n}
