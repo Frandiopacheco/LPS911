@@ -208,8 +208,10 @@ function plkBar(){if(!PLV)return;let el=PLV.box.querySelector('.plkbar');
     else msg='Toca la <b>marca</b> (burbuja de corte, globo de detalle, rótulo) que remite a otra lámina. Toca un vínculo ya puesto para ajustarlo o borrarlo.';
     h=`<div class="plkv" aria-live="polite">${msg}</div>
       ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib pri" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra marca</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
-      <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small>${plkpBarHint(p)}<span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
+      <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small>${plkpBarHint(p)}${plkOldN(p)?`<button type="button" class="ib" data-pk="oldoff" title="Vínculos puestos antes de cargar esta revisión: si el dibujo cambió de sitio en la hoja, quedaron corridos">🧹 Quitar ${plkOldN(p)} de la rev. anterior</button>`:''}<span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
   el.innerHTML=h;if(!document.activeElement||document.activeElement===document.body)PLV.box.focus()}
+/** vínculos vigentes puestos antes de cargar la revisión actual (rev > 1): candidatos a haber quedado corridos */
+function plkOldN(p){if(!p||(p.rev||1)<2||!p.ts)return 0;return plkLinks(p).filter(l=>(l.ts||0)<p.ts).length}
 async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tagName==='INPUT'||plkGhost(e))return;const a=b.dataset.pk;if(!PLV)return;
   const p=PLB.get(PLV.id),l=plkLinks(p).find(x=>x.id===PLK.sel);
   if(a.startsWith('p-')){plkpClick(a,p);return}
@@ -223,6 +225,11 @@ async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tag
   else if(a==='dest'&&l)plkChoose({...l},p.id,false);
   else if(a==='txt'&&l){const t=await uiAsk({title:'Texto del vínculo',text:'Es lo que se ve junto a la zona. Vacío = el código de la lámina destino.',input:{label:'Texto',value:l.t||''},ok:'Guardar'});
     if(t==null)return;try{await plkSave(p.id,arr=>arr.map(x=>x.id===l.id?{...x,t:t.slice(0,40)}:x));plkBar()}catch(er){toast('No se pudo guardar: '+(er.code||er.message))}}
+  else if(a==='oldoff'){const n=plkOldN(p);if(!n)return;
+    if(!await uiAsk({title:`¿Quitar ${n} vínculo${n>1?'s':''} de la revisión anterior?`,text:`Son los vínculos que se pusieron antes de cargar la Rev. ${p.rev} de esta lámina; si el dibujo cambió de tamaño o de sitio, quedaron corridos. Los vínculos y propuestas aceptados después de cargarla no se tocan. Quedan archivados, no se pierden.`,ok:'Quitar',cancel:'Cancelar',tone:'warn'}))return;
+    const t0=p.ts||0,arch={t:NOW(),by:me.email,n:me.name||me.email};
+    try{await plkSave(p.id,arr=>arr.map(x=>x&&!x.arch&&(x.ts||0)<t0?{...x,arch}:x));PLK.sel=null;plkBar();PLV.tv.tick();toast(`${n} vínculo${n>1?'s':''} quitado${n>1?'s':''}`)}
+    catch(er){toast('No se pudo quitar: '+(er.code||er.message))}}
   else if(a==='del'&&l){const t=PLB.get(l.to);
     if(!await uiAsk({title:'¿Quitar este vínculo?',text:`Deja de mostrarse${t?' el vínculo hacia '+t.cod:''}. Queda archivado, no se pierde.`,ok:'Quitar',cancel:'Cancelar',tone:'warn'}))return;
     try{await plkSave(p.id,arr=>arr.map(x=>x.id===l.id?{...x,arch:{t:NOW(),by:me.email,n:me.name||me.email}}:x));PLK.sel=null;plkBar();toast('Vínculo quitado')}
