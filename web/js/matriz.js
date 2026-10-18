@@ -123,6 +123,10 @@ function renderMat(main){ensureMx();ensureMver();
   if(MX.err&&!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">No se pudo leer la matriz (${esc(MX.err)}). Si recién se publicó esta versión, puede faltar instalar las reglas de seguridad.</div></div></div>`;mxWire(main);return}
   if(!loaded){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<p class="note">Cargando la matriz…</p></div></div>`;mxWire(main);return}
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
+  /* conservada al cambiar de pestaña (leaveView/enterView): si los datos y la vista son los mismos, no se rearman las ≈9000 celdas */
+  const kept=main.dataset.kept==='1';delete main.dataset.kept;const mk=mxViewKey();
+  if(kept&&main.dataset.built==='1'&&main.dataset.mxk===mk&&$('#mxbox')){mxWire(main);return}
+  main.dataset.built='';main.dataset.mxk='';
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
@@ -189,10 +193,14 @@ function renderMat(main){ensureMx();ensureMver();
   h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
    </div></div>${ed?mxSelBar():''}`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
-  main.innerHTML=h;MX.view={rows,cols};
+  main.innerHTML=h;MX.view={rows,cols};main.dataset.built='1';main.dataset.mxk=mk;
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
   mxFocusPaint()
   mxWire(main)}
+
+/* todo lo que cambia lo que dibuja renderMat (datos + opciones de la vista); si es igual, la pantalla conservada vale */
+function mxViewKey(){let va='';try{va=sessionStorage.getItem('lps.va')||''}catch(e){}
+  return[MX.v,DV,typeof DONEV!=='undefined'?DONEV:0,todayIso(),U.piso||'',U.mxV||'',U.mxAll?1:0,U.mxOrd||'',MX.cmp||'',mxSel().join(','),mxZ(),MX.edit?1:0,MX.sel.size,MX.focus?1:0,isAdmin?1:0,va].join('|')}
 
 /* barra de la selección (abajo) */
 function mxSelBar(){const n=MX.sel.size;if(!n)return'';

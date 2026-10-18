@@ -774,16 +774,18 @@ function viewIn(el){el.classList.remove('vin');void el.offsetWidth;el.classList.
 /* El Lookahead armado (miles de filas) no se destruye al cambiar de pestaña: su <main> se aparta, oculto con
    content-visibility:hidden (el navegador guarda su estilo y su diseño ya calculados), y otro <main> muestra la pestaña
    nueva. Al volver, se intercambian: no hay que volver a armar ni a calcular miles de filas, solo las que cambiaron. */
-let LOOK_KEEP=null;
-function leaveView(main){
-  if(main.dataset.view==='look'&&main.dataset.built==='1'&&!isMob()){const r=main.getBoundingClientRect();
+/* oct 2026: la Matriz (≈9000 celdas por piso con los datos de la obra) también se conserva; al volver, si nada cambió, no se rearma */
+const KEEP={look:null,mat:null};
+function leaveView(main){const v=main.dataset.view;
+  if((v==='look'||v==='mat')&&main.dataset.built==='1'&&!isMob()){const r=main.getBoundingClientRect();
     /* solo cambia su id y una clase sin nada heredable: tocar algo heredable obligaría a recalcular el estilo de miles de filas */
-    main.id='mainLook';main.classList.add('lkeep');main.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
-    const nm=document.createElement('main');nm.id='main';main.before(nm);LOOK_KEEP=main;return nm}
+    if(KEEP[v])KEEP[v].remove();
+    main.id=v==='look'?'mainLook':'mainMat';main.classList.add('lkeep');main.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    const nm=document.createElement('main');nm.id='main';main.before(nm);KEEP[v]=main;return nm}
   main.innerHTML='';return main}
 function enterView(main){
-  if(U.tab==='look'&&LOOK_KEEP){const k=LOOK_KEEP;LOOK_KEEP=null;
-    if(isMob()){k.remove()}else{main.remove();k.id='main';k.classList.remove('lkeep');k.style.cssText='';k.dataset.view='look';return k}}
+  const v=U.tab;if((v==='look'||v==='mat')&&KEEP[v]){const k=KEEP[v];KEEP[v]=null;
+    if(isMob()){k.remove()}else{main.remove();k.id='main';k.classList.remove('lkeep');k.style.cssText='';k.dataset.view=v;k.dataset.kept='1';return k}}
   /* la entrada suave solo en páginas livianas: en el Lookahead y el Plan diario costaría más de lo que aporta */
   if(!['look','mapa','dash'].includes(U.tab))viewIn(main);return main}
 /* lo que render() hace antes de la vista (barra superior, modo propuesta, aviso de «Ver como»…): si algo de eso falla,
