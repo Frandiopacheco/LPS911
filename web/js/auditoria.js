@@ -254,7 +254,7 @@ let RESP_T=null;const RESP_W=new Set();
 function respSync(){if(!db||typeof isAdmin==='undefined'||!isAdmin||!MEM.size||!S.loaded||!S.loaded.pis)return;clearTimeout(RESP_T);RESP_T=setTimeout(()=>{
   for(const p of S.pis.values()){const L=respOf(p.id).map(o=>String(o.em).toLowerCase()).sort();const cur=Array.isArray(p.resp)?[...p.resp].sort():[];
     if(canon(L)===canon(cur)||RESP_W.has(p.id))continue;RESP_W.add(p.id);bgWrite(fcol('pisos').doc(p.id).update({resp:L})).finally(()=>RESP_W.delete(p.id))}},1500)}
-function respOf(pid){const L=[];if(!pid)return L;for(const[em,m]of MEM)if(m&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
+function respOf(pid){const L=[];if(!pid)return L;/* oct 2026: un editor dado de baja ya no es responsable (trababa las propuestas de su piso) */for(const[em,m]of MEM)if(m&&!m.off&&m.role==='editor'&&memPisos(m).includes(pid))L.push({em,name:m.name||em});return L}
 function propPiso(id,it){const x=(it&&(it.after||it.base))||(ACT_OFF&&S.act._pm?ACT_OFF:S.act).get(id)||{};return x.ambId?pisoOfAmb(x.ambId):''}
 /* quién decide en un piso (propuestas del lookahead y plan diario): el administrador siempre; un editor en los pisos a su
    cargo; si el piso no tiene responsable, cualquier editor (así la reunión no se traba). «Ver como» editor usa sus pisos simulados. */

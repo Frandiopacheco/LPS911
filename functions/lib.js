@@ -152,7 +152,17 @@ function doneMap({ doneidx = [], daily = [], lives = [], acts = null, pisoOf = n
   return D;
 }
 const PFIELDS = ['days', 'qty', 'metrado', 'und', 'name', 'order'];
-function propMerge(a, base, off) { const nw = { ...off }; for (const f of PFIELDS) if (canon(a[f] ?? null) !== canon(base ? base[f] ?? null : null)) nw[f] = a[f]; return nw; }
+/* igual que propMerge de web/js/propuestas.js (oct 2026, «siempre prioriza el ingeniero»): un campo que el SC cambió se aplica solo
+   si el ingeniero no lo cambió también desde la base; días y cantidades se combinan día por día con la misma regla */
+function propMerge(a, base, off) {
+  const nw = { ...off }; const B = base || {}; const ch = (x, y, f) => canon(x[f] ?? null) !== canon(y[f] ?? null);
+  for (const f of PFIELDS) if (f !== 'days' && f !== 'qty' && ch(a, B, f) && !ch(off, B, f)) nw[f] = a[f];
+  const bd = new Set(B.days || []), ad = new Set(a.days || []), od = new Set(off.days || []); const eng = d => bd.has(d) !== od.has(d); const days = new Set(od);
+  ad.forEach(d => { if (!bd.has(d) && !eng(d)) days.add(d); }); bd.forEach(d => { if (!ad.has(d) && !eng(d)) days.delete(d); }); nw.days = [...days].sort();
+  if (a.qty || off.qty || B.qty) { const bq = B.qty || {}, aq = a.qty || {}, oq = off.qty || {}; const q = {};
+    for (const d of nw.days) { const s_ = canon(aq[d] ?? null) !== canon(bq[d] ?? null), e_ = canon(oq[d] ?? null) !== canon(bq[d] ?? null); const v = s_ && !e_ ? aq[d] : oq[d]; if (v != null) q[d] = v; } nw.qty = q; }
+  return nw;
+}
 function propTouch(b, a) {
   if (!a) return b ? [...(b.days || [])].sort() : []; if (!b) return [...(a.days || [])].sort();
   const bd = new Set(b.days || []), ad = new Set(a.days || []), T = new Set(); ad.forEach(d => { if (!bd.has(d)) T.add(d); }); bd.forEach(d => { if (!ad.has(d)) T.add(d); });
@@ -193,8 +203,10 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
     if (!Object.keys(items).length) continue;
     for (const x of X) if (pisoOfAmb(x.ambId) === p.id) snap[x.id] = (x.days || []).slice().sort();
     const propOut = [];
-    for (const d of props) for (const [id, it] of Object.entries(d.items || {})) {
-      if (!it || !it.sent) continue; const off = actById.get(id) || null; const x = it.after || off || it.base; if (!x || pisoOfAmb(x.ambId) !== p.id) continue;
+    for (const d of props) for (const [id, it0] of Object.entries(d.items || {})) {
+      /* oct 2026: si el SC edita algo ya enviado, la versión enviada (sentV) sigue pendiente */
+      const it = it0 && (it0.sent ? it0 : it0.sentV ? { ...it0.sentV, sent: true } : null);
+      if (!it) continue; const off = actById.get(id) || null; const x = it.after || off || it.base; if (!x || pisoOfAmb(x.ambId) !== p.id) continue;
       const pa = it.after && off ? propMerge(it.after, it.base || off, off) : it.after;
       if (propTouch(off, pa).some(z => days.has(z))) propOut.push((d.sc || d.id) + '/' + id);
     }

@@ -294,6 +294,8 @@ tr.rvrow.rvnew td.s4 input,tr.rvrow.rvnew td.s4 .anv{font-weight:700}
 .rvb{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:3px;z-index:4;pointer-events:auto}
 .rvb button{width:22px;height:22px;border-radius:50%;border:0;font:700 12px/1 var(--f-ui);cursor:pointer;color:#fff;padding:0;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .rvb button[data-rva=ok]{background:#2e7d4f}.rvb button[data-rva=rej]{background:#c62828}
+/* en tablet ✓ ✗ más grandes y con zona de toque de 44 px (la fila no deja botones de 40 px a la vista) */
+@media (pointer:coarse){.rvb{gap:8px}.rvb button{width:28px;height:28px;font-size:14px;position:relative}.rvb button::after{content:"";position:absolute;inset:-8px}tr.rvrow td.act .ci{padding-right:76px!important}tr.rvrow.rvsel td.act .ci{padding-right:128px!important}}
 .rvtag{font:700 10px var(--f-ui);background:#ef6c00;color:#fff;border-radius:6px;padding:2px 5px;white-space:nowrap}
 .rvtag.new{background:#2e7d4f}.rvtag.del{background:#c62828}
 .rvk{font:600 10.5px var(--f-ui);color:var(--ink);background:#ffe9a8;border-radius:6px;padding:0 4px;white-space:nowrap}

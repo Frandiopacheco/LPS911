@@ -229,6 +229,7 @@ function qkFlush(key){const o=QK[key];if(!o)return;delete QK[key];if(!o.has)retu
   if(canon(cur)===canon(o.v))return;
   /* con la capa del cliente puesta (pestaña Cliente), lo que llega va al lookahead interno, nunca a la capa */
   if(ov){const nb=new Map(src);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);const AR=ARCH[k];if(!o.v){nb.delete(o.id);if(AR)AR.delete(o.id)}else if(o.v.arch&&AR){nb.delete(o.id);AR.set(o.id,o.v)}else{if(AR)AR.delete(o.id);nb.set(o.id,o.v)}cliBaseSet(nb)}
+  else if(k==='act'&&S.act&&S.act._pm&&ACT_OFF){S.act=new Map(ACT_OFF);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v);ACT_OFF=S.act;pmSync()}
   else{S[k]=new Map(S[k]);if(ARCH[k])ARCH[k]=new Map(ARCH[k]);colSet(k,o.id,o.v)}DV++;if(ready)requestRender()}
 /** pone (o quita, v=null) un documento en S/ARCH según su archivo */
 function colSet(k,id,v){const AR=ARCH[k];if(!v){S[k].delete(id);if(AR)AR.delete(id);return}if(v.arch&&AR){S[k].delete(id);AR.set(id,v)}else{if(AR)AR.delete(id);S[k].set(id,v)}}
@@ -326,12 +327,14 @@ function replay(g,from,to,done){let skipped=0;for(const o of g){const cur=getDoc
 /* deshacer y rehacer también quedan en el historial (solo lo que de verdad se revirtió), con referencia al cambio original */
 function replayLog(g,dn,undoing){if(!dn.length||typeof lhLog!=='function')return;lhLog(dn,(undoing?'Deshacer':'Rehacer')+(g.label?': '+g.label:''),{[undoing?'undo':'redo']:g.lid||''})}
 function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está bloqueada.');return}const g=undoS.pop();if(!g)return;
+  /* oct 2026: una decisión de propuesta que aún se está guardando: se deshace apenas se confirme (antes quedaba la base a medias) */
+  if(g.wait&&!g.done){undoS.push(g);g.wait.then(()=>{g.done=true;if(undoS[undoS.length-1]===g)undo()});return}
   /* deshacer tampoco cambia un día ya cerrado (publicado) sin aviso: pasa por el mismo control que cualquier cambio */
   if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})),()=>undo())){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
   toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
-  if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
-function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if(g.prop&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
+  if((g.prop||g.props)&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
+function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if((g.prop||g.props)&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
 function updUndo(){$('#bundo').disabled=!undoS.length||!canWrite;$('#bredo').disabled=!redoS.length||!canWrite}
 
 /* ---------- toast & popover ---------- */
@@ -444,10 +447,10 @@ function subCol(col,k,lps){let un=null;const key='col:'+col;
   const open=()=>{let first=true;un=fcol(col).onSnapshot(snap=>{
       if(first){first=false;const mp=new Map();snap.docs.forEach(d=>mp.set(d.id,mk(d)));if(lps)keepQueued(col,mp);setColData(k,mp)}
       else{const ch=snap.docChanges();if(!ch.length){snapOk(key);return}
-        const ov=k==='act'&&S.act&&S.act._cli&&typeof cliBaseSet==='function';const nk=new Map(ov?actInt():S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
+        const ov=k==='act'&&S.act&&S.act._cli&&typeof cliBaseSet==='function';/* oct 2026: con el SC en modo propuesta, S.act es lo oficial + sus borradores: se actualiza lo oficial (ACT_OFF), no la superposición (antes los borradores quedaban como si fueran oficiales) */const pm=!ov&&k==='act'&&S.act&&S.act._pm&&ACT_OFF;const nk=new Map(ov?actInt():pm?ACT_OFF:S[k]),AR=ARCH[k],na=AR?new Map(AR):null;
         for(const c of ch){const id=c.doc.id;const v=c.type==='removed'?null:mk(c.doc);if(lps&&qkHold(col,id,v))continue;
           nk.delete(id);if(na)na.delete(id);if(v){if(v.arch&&na)na.set(id,v);else nk.set(id,v)}}
-        if(ov)cliBaseSet(nk);else S[k]=nk;if(na)ARCH[k]=na;DV++}
+        if(ov)cliBaseSet(nk);else if(pm){ACT_OFF=nk;S.act=nk;pmSync()}else S[k]=nk;if(na)ARCH[k]=na;DV++}
       S.loaded[k]=true;snapOk(key);onData()},
     err=>{un=null;snapFail(key,err,open)})};
   open();unsubs.push(()=>{if(un)un();un=null})}

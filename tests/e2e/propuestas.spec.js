@@ -145,27 +145,16 @@ test('2 · aceptar no consume una versión nueva que el SC envió mientras se re
   noErrors(errors, 'versión nueva');
 });
 
-test('3 · si el programa oficial cambió desde la propuesta, pregunta antes de pisarlo', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'look', extra: [REC0, ['acts', 'i0', moved(I0, ['2026-10-05'])], P_I0(moved(I0, ['2026-10-02']))] });
+test('3 · si el programa oficial cambió desde la propuesta, prioriza al ingeniero sin preguntar (oct 2026)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [REC0, ['acts', 'i0', { ...moved(I0, ['2026-10-05']), metrado: 25 }], P_I0({ ...moved(I0, ['2026-10-02']), metrado: 30 })] });
   await revision(page);
-  let msg = '';
-  page.once('dialog', d => { msg = d.message(); d.dismiss(); });
-  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('conf');
-  expect(msg).toContain('cambió en: días');
-  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-05']);
-  /* aceptar todo lo visible: una sola pregunta por las que chocan; «Dejarlas pendientes» no las toma */
-  const msgs = []; const onD = d => { msgs.push(d.message()); msgs.length === 1 ? d.accept() : d.dismiss(); };
-  page.on('dialog', onD);
-  await page.click('#rvpanel [data-rvall]');
-  await expect(page.locator('#toast')).toContainText('elegiste dejarlas pendientes');
-  page.off('dialog', onD);
-  expect(msgs[1]).toContain('vigente');
-  expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.sent).toBe(true);
-  /* aceptando esa pregunta, se aplica desde el lote (ya no hay que ir una por una) */
-  page.on('dialog', d => d.accept());
-  await page.click('#rvpanel [data-rvall]');
-  await expect(page.locator('#toast')).toContainText('1 propuesta aceptada');
-  expect((await page.evaluate(() => __dbGet('acts', 'i0'))).days).toEqual(['2026-10-02']);
+  page.on('dialog', d => { throw new Error('no debe preguntar: ' + d.message()); });
+  expect(await page.evaluate(() => revDecide('i0', 'ok'))).toBe('ok');
+  const a = await page.evaluate(() => __dbGet('acts', 'i0'));
+  /* el SC agregó el 02; el ingeniero había quitado el 30 y el 01 y puesto el 05: queda lo del ingeniero + el día que agregó el SC */
+  expect([...a.days].sort()).toEqual(['2026-10-02', '2026-10-05']);
+  /* metrado: lo cambiaron los dos (20 → 25 el ingeniero, 20 → 30 el SC): queda el del ingeniero */
+  expect(a.metrado).toBe(25);
   noErrors(errors, 'conflicto con lo oficial');
 });
 
