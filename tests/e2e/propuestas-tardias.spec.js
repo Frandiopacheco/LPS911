@@ -153,7 +153,7 @@ test('ex-3 · congelar con propuestas sin decidir avisa y guarda cuáles quedaro
 
 test('ex-4 · «Aceptar todo» avisa que la fila movida se acepta con tus cambios', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q0: P0(1), q1: P1(1) }, 1)] });
-  await page.evaluate(() => { U.rev = true; REVSEL = { sc: 'c1', id: 'q1', k: 1 }; gridRows = null; render(); });
+  await page.evaluate(() => { U.rev = true; REVSEL = { sc: 'c1', id: 'q1', k: 0 }; revStep(1); gridRows = null; render(); });
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
   await page.click('#rvpanel [data-rvall]');

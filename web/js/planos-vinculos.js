@@ -16,8 +16,8 @@
      (sin quitar el doble toque de zoom fuera de las zonas) y, al editar, `V.onTap/onDown/onDrag/onUp`. Medir y Vincular no
      conviven: al entrar a uno se sale del otro. */
 
-const PLK={tapT:0,tx:-99,ty:-99,show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null};
-const PLK_R=40;const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
+const PLK={tapT:0,tx:-99,ty:-99,show:store.get('plkvis',false)===true,hov:null,dup:null,edit:false,sel:null,selId:null,a:null,live:null,drag:null,pick:null,ch:null,psel:null,pnext:null};
+const PLK_COL='#1c7ed6',PLK_SEL='#e8590c',PLK_OFF='#868e96',PLK_HIT=22,PLK_MIN=40,PLK_MAX=300;
 
 /* ---------- datos ---------- */
 const plkLinks=p=>p&&Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch&&l.id):[];
@@ -54,8 +54,9 @@ function plkSync(){if(!PLV||!PLV.tv)return;const v=PLV.tv;
 /** el visor se arma de nuevo al cambiar de lámina o de revisión */
 function plkAttach(){if(!PLV)return;const p=PLB.get(PLV.id);
   PLK.sel=PLK.selId&&plkLinks(p).some(l=>l.id===PLK.selId)?PLK.selId:null;PLK.selId=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.ch=null;PLK.hov=null;PLK.dup=null;
-  if(PLM.on)PLK.edit=false;plkBar();plkSync()}
-function plkReset(){PLK.edit=false;PLK.sel=null;PLK.selId=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.pick=null;PLK.ch=null;PLK.hov=null;PLK.dup=null;if(PLV)PLV.back=[]}
+  PLK.psel=PLK.pnext&&plkpList(p).some(l=>l.id===PLK.pnext)?PLK.pnext:null;PLK.pnext=null;
+  if(PLM.on)PLK.edit=false;if(PLK.edit&&p)plkTexts(plSpecOf(p,PLV.rev)).catch(()=>{});plkBar();plkSync()}
+function plkReset(){PLK.edit=false;PLK.sel=null;PLK.selId=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.pick=null;PLK.ch=null;PLK.hov=null;PLK.dup=null;PLK.psel=null;PLK.pnext=null;if(PLV)PLV.back=[]}
 function plkHover(e){if(e.pointerType!=='mouse'||!PLV||!PLV.tv||PLM.on)return;const p=PLB.get(PLV.id);
   const h=p&&!PLK.pick&&!PLK.ch?plkHit(e.clientX,e.clientY,plkLinks(p)):null,id=h?h.id:null;
   PLV.tv.host.classList.toggle('lkhov',!!h);if(id!==PLK.hov){PLK.hov=id;PLV.tv.tick()}}
@@ -71,8 +72,8 @@ function plkBack(){const b=PLV&&PLV.back&&PLV.back.pop();if(!b)return;
 /** botones de la cabecera del visor (los pone `plvDraw`) */
 function plkBackBtn(){const b=PLV&&PLV.back&&PLV.back[PLV.back.length-1];if(!b)return'';const o=PLB.get(b.id);
   return`<button class="ib plback" data-pv="back" title="Volver a ${esc(o?o.cod:'la lámina anterior')}, donde estabas">← ${esc(o?o.cod:'Volver')}</button>`}
-function plkHdrBtn(p){const n=plkLinks(p).length,ed=plaEd();if(!n&&!ed)return'';
-  return`<button class="ib${(ed?PLK.edit:PLK.show)?' on':''}" data-pv="lk" title="${ed?'Vincular esta lámina con otras (cortes, detalles, referencias)':PLK.show?'Ocultar dónde están los vínculos (siguen funcionando)':'Mostrar dónde están los vínculos (funcionan igual aunque estén ocultos)'}">🔗 Vínculos${n?' '+n:''}</button>`}
+function plkHdrBtn(p){const n=plkLinks(p).length,ed=plaEd(),np=ed?plkpList(p).length:0;if(!n&&!ed)return'';
+  return`<button class="ib${(ed?PLK.edit:PLK.show)?' on':''}" data-pv="lk" title="${ed?'Vincular esta lámina con otras (cortes, detalles, referencias)':PLK.show?'Ocultar dónde están los vínculos (siguen funcionando)':'Mostrar dónde están los vínculos (funcionan igual aunque estén ocultos)'}">🔗 Vínculos${n?' '+n:''}${np?`<small class="plkpn" title="Propuestas por revisar en esta lámina">+${np}?</small>`:''}</button>`}
 function plkBtn(){if(!PLV||!PLV.tv)return;
   if(plaEd())plkEdit(!PLK.edit);
   else{PLK.show=!PLK.show;store.set('plkvis',PLK.show);const b=PLV.box.querySelector('[data-pv="lk"]');if(b)b.classList.toggle('on',PLK.show);plkSync()}}
@@ -81,43 +82,64 @@ function plkEsc(){if(!PLV)return false;
   if(PLK.ch){plkChClose();return true}
   if(PLK.pick){plkPickEnd(false);return true}
   if(PLK.a||PLK.dup){PLK.a=null;PLK.dup=null;PLV.tv.tick();plkBar();return true}
-  if(PLK.sel){PLK.sel=null;PLV.tv.tick();plkBar();return true}
+  if(PLK.sel||PLK.psel){PLK.sel=null;PLK.psel=null;PLV.tv.tick();plkBar();return true}
   if(PLK.edit){plkEdit(false);return true}
   return false}
 
 /* ---------- editar ---------- */
 function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();
-  PLK.edit=!!on;if(!on){PLK.sel=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.dup=null}
+  PLK.edit=!!on;if(on){const p=PLB.get(PLV.id);if(p)plkTexts(plSpecOf(p,PLV.rev)).catch(()=>{})}if(!on){PLK.psel=null;PLK.sel=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.dup=null}
   const b=PLV.box.querySelector('[data-pv="lk"]');if(b)b.classList.toggle('on',PLK.edit);plkSync();plkBar()}
 /* en tablet, tras el toque llega un «clic» de compatibilidad ~300 ms después, en el mismo punto: si allí acaba de aparecer la
    lista de láminas o la barra, ese clic elegía una lámina al azar. Se ignoran los clics de la interfaz justo después de un toque. */
 const plkGhost=e=>performance.now()-PLK.tapT<700&&Math.hypot(e.clientX-PLK.tx,e.clientY-PLK.ty)<30;
-/* un solo toque sobre la marca (burbuja de corte, globo de detalle…) crea el vínculo con una zona del tamaño de una burbuja
-   centrada en el toque (≈ 14 px de pantalla a cada lado, tope `PLK_R` píxeles del plano); luego se ajusta con las esquinas.
-   Antes eran dos toques (esquina y esquina opuesta) y, con un vínculo elegido, el primero solo lo soltaba: se perdía la cuenta. */
+/* un solo toque sobre la marca (burbuja de corte, globo de detalle…) crea el vínculo con una zona del tamaño REAL de una burbuja
+   (oct 2026, pedido del dueño: antes eran ≈ 14 px de pantalla con tope de 40 px del plano, unos 3 mm de papel: salían diminutas).
+   Ahora se mide en milímetros del papel (`PLK_MM`, radio 6 mm ≈ burbuja de 12 mm) y, si el PDF tiene a menos de 6 mm del toque un
+   texto corto (la letra o número de la burbuja), la zona se centra en él y su tamaño sale de la altura de ese texto. */
+const PLK_MM=6,PLK_SNAP_MM=6;
+/** píxeles del plano por milímetro de papel (los mosaicos salen a 300 dpi del marco recortado o de la hoja) */
+function plkPxMm(p,sp){sp=sp||p;const cr=sp&&sp.crop,wpt=cr?cr.x1-cr.x0:0;if(wpt>0&&sp.W)return sp.W/(wpt/72*25.4);if(p&&p.mm&&p.mm[0]&&sp.W)return sp.W/p.mm[0];return 300/25.4}
+const PLKTX=new Map();   /* base de la revisión → promesa de los textos cortos del PDF [{x,y,h,n}] en px del plano */
+function plkTexts(sp){let e=PLKTX.get(sp.base);if(e)return e;
+  e=(async()=>{const pg=await plPdfPage(sp.base),tc=await pg.getTextContent(),vp=pg.getViewport({scale:1}),cr=sp.crop,S0=sp.W/(cr?cr.x1-cr.x0:vp.width),ox=cr?cr.x0:0,oy=cr?cr.y0:0,out=[];
+    for(const it of tc.items){const s=(it.str||'').trim();if(!s||s.length>8)continue;const[a,b,c,d,x,y]=it.transform,la=Math.hypot(a,b)||1,lc=Math.hypot(c,d)||1;
+      const w=it.width||0,ux=x+a/la*w/2+c/lc*lc*0.35,uy=y+b/la*w/2+d/lc*lc*0.35,q=vp.convertToViewportPoint(ux,uy);
+      out.push({x:(q[0]-ox)*S0,y:(q[1]-oy)*S0,h:lc*S0,n:s.length})}
+    return out})();
+  e.catch(()=>{if(PLKTX.get(sp.base)===e)PLKTX.delete(sp.base)});PLKTX.set(sp.base,e);if(PLKTX.size>6)PLKTX.delete(PLKTX.keys().next().value);return e}
+/** espera los textos del PDF como mucho `ms` (la primera vez baja el PDF; mientras, la zona sale con el tamaño por defecto) */
+const plkTextsQuick=(sp,ms)=>Promise.race([plkTexts(sp).catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms))]);
+/** zona centrada en el toque (o en el texto de la burbuja más cercano) con el tamaño de la burbuja, normalizada a la hoja */
+async function plkZone(p,w){const v=PLV.tv,sp=plSpecOf(p,PLV.rev),mm=plkPxMm(p,sp);let cx=w.x,cy=w.y,R=PLK_MM*mm;
+  const T=await plkTextsQuick(sp,700);
+  if(T){let best=null,bd=Infinity;for(const t of T){if(t.h<1.2*mm||t.h>14*mm)continue;const d=Math.hypot(t.x-w.x,t.y-w.y);if(d>PLK_SNAP_MM*mm)continue;const sc=d+(t.n>3?3*mm:0);if(sc<bd){bd=sc;best=t}}
+    if(best){cx=best.x;cy=best.y;R=Math.max(4*mm,Math.min(10*mm,best.h*1.9))}}
+  return{x0:plkClamp((cx-R)/v.W),y0:plkClamp((cy-R)/v.H),x1:plkClamp((cx+R)/v.W),y1:plkClamp((cy+R)/v.H)}}
 async function plkTap(cx,cy){const v=PLV.tv,p=PLB.get(PLV.id);if(!p||PLK.ch||PLK.pick)return;PLK.tapT=performance.now();PLK.tx=cx;PLK.ty=cy;const w=v.toWorld(cx,cy);
   const h=PLK.dup?null:plkHit(cx,cy,plkLinks(p));
-  if(h){PLK.sel=h.id;v.tick();plkBar();return}                  /* tocar un vínculo lo elige para ajustarlo */
+  if(h){PLK.sel=h.id;PLK.psel=null;v.tick();plkBar();return}                  /* tocar un vínculo lo elige para ajustarlo */
+  const hp=PLK.dup?null:plkpHit(cx,cy,p);
+  if(hp){PLK.psel=hp.id;PLK.sel=null;v.tick();plkBar();return}                /* tocar una propuesta la elige para revisarla */
   if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;                      /* fuera de la hoja */
-  PLK.sel=null;
+  PLK.sel=null;PLK.psel=null;
   if(plkLinks(p).length>=PLK_MAX){toast('Esta lámina ya tiene el máximo de vínculos ('+PLK_MAX+').');plkBar();return}
-  /* radio según el zoom (oct 2026: con 100 px fijos del plano, al verlo completo la «burbuja» salía enorme): ≈ 14 px de pantalla, entre 6 y `PLK_R` del plano */
-  const R=Math.max(6,Math.min(PLK_R,14/(v.s||1)));
-  const g={x0:plkClamp((w.x-R)/v.W),y0:plkClamp((w.y-R)/v.H),x1:plkClamp((w.x+R)/v.W),y1:plkClamp((w.y+R)/v.H)};
+  const id0=PLV.id,g=await plkZone(p,w);if(!PLV||PLV.id!==id0||!PLK.edit||PLK.ch||PLK.pick)return;
   if(PLK.dup){const s=PLK.dup,nid=plkId();PLK.dup=null;          /* otra marca de la misma remisión: mismo destino, zona y texto */
     try{await plkSave(p.id,arr=>{arr.push({id:nid,...g,to:s.to,v:s.v||null,t:s.t||'',by:me.email,byN:me.name||me.email,ts:NOW()});return arr});PLK.sel=nid;toast('Otra marca vinculada')}
     catch(e){toast('No se pudo guardar el vínculo: '+(e.code||e.message))}
     plkBar();return}
   v.tick();plkChoose({id:plkId(),...g,to:'',t:'',v:null},p.id,true)}
 /* arrastrar una esquina del vínculo elegido, o todo el vínculo desde dentro */
-function plkDown(cx,cy){if(PLK.ch||PLK.pick||PLK.a||!PLK.sel)return false;const v=PLV.tv,p=PLB.get(PLV.id);
-  const l=plkLinks(p).find(x=>x.id===PLK.sel);if(!l)return false;
+function plkDown(cx,cy){if(PLK.ch||PLK.pick||PLK.a||(!PLK.sel&&!PLK.psel))return false;const v=PLV.tv,p=PLB.get(PLV.id);
+  /* la propuesta elegida también se ajusta (esquinas o arrastrándola), antes de aceptarla */
+  const l=PLK.sel?plkLinks(p).find(x=>x.id===PLK.sel):plkpList(p).find(x=>x.id===PLK.psel);if(!l)return false;
   const r=v.cv.getBoundingClientRect(),s=plkS(l,v),cs=[[s.x,s.y],[s.x+s.w,s.y],[s.x+s.w,s.y+s.h],[s.x,s.y+s.h]];
   let hit=-1,bd=PLK_HIT;cs.forEach((c,i)=>{const d=Math.hypot(r.left+c[0]-cx,r.top+c[1]-cy);if(d<bd){bd=d;hit=i}});
   if(hit>=0)PLK.drag={k:'c',i:hit};
   else if(cx-r.left>s.x&&cx-r.left<s.x+s.w&&cy-r.top>s.y&&cy-r.top<s.y+s.h)PLK.drag={k:'m',w:v.toWorld(cx,cy),b:{...l}};
   else return false;
-  PLK.live={...l};v.tick();return true}
+  PLK.live={...l,_p:!PLK.sel};v.tick();return true}
 function plkMove(cx,cy){const v=PLV.tv,d=PLK.drag,L=PLK.live;if(!d||!L)return;const w=v.toWorld(cx,cy),nx=plkClamp(w.x/v.W),ny=plkClamp(w.y/v.H);
   if(d.k==='c'){if(d.i===0||d.i===3)L.x0=nx;else L.x1=nx;if(d.i===0||d.i===1)L.y0=ny;else L.y1=ny}
   else{const b=d.b,lx=Math.min(b.x0,b.x1),hx=Math.max(b.x0,b.x1),ly=Math.min(b.y0,b.y1),hy=Math.max(b.y0,b.y1);
@@ -126,7 +148,8 @@ function plkMove(cx,cy){const v=PLV.tv,d=PLK.drag,L=PLK.live;if(!d||!L)return;co
 async function plkUp(){const L=PLK.live;PLK.drag=null;PLK.live=null;if(!PLV||!PLV.tv)return;
   if(L){const v=PLV.tv,g={x0:Math.min(L.x0,L.x1),x1:Math.max(L.x0,L.x1),y0:Math.min(L.y0,L.y1),y1:Math.max(L.y0,L.y1)};
     if((g.x1-g.x0)*v.W>=6&&(g.y1-g.y0)*v.H>=6){const pid=PLV.id;
-      try{await plkSave(pid,arr=>arr.map(x=>x.id===L.id?{...x,...g}:x))}catch(e){toast('No se pudo mover el vínculo: '+(e.code||e.message))}}}
+      try{if(L._p)await plkpSave(pid,(lk,lkp)=>({lk,lkp:lkp.map(x=>x.id===L.id?{...x,...g}:x)}));
+        else await plkSave(pid,arr=>arr.map(x=>x.id===L.id?{...x,...g}:x))}catch(e){toast('No se pudo mover el vínculo: '+(e.code||e.message))}}}
   PLV&&PLV.tv&&PLV.tv.tick()}
 
 /* ---------- elegir la lámina destino ---------- */
@@ -160,6 +183,7 @@ function plkPickStart(d,originId,isNew){const t=PLB.get(d.to);if(!t||!PLV)return
 async function plkPickEnd(save,whole){const k=PLK.pick;if(!k||!PLV)return;const v=PLV.tv;const d={...k.d};
   if(save)d.v=whole?null:v.getView();
   PLK.pick=null;PLV.id=k.o.id;PLV.rev=k.o.rev;PLV.view=k.o.view;
+  if(save&&d._p){try{await plkpRetarget(k.o.id,d);const r=plkpOrd(plkpList(PLB.get(k.o.id)))[0];PLK.pnext=r?r.id:null;toast('Vínculo aceptado con el nuevo destino')}catch(e){toast('No se pudo guardar el vínculo: '+(e.code||e.message))}plvDraw();return}
   if(save){const g={x0:Math.min(d.x0,d.x1),x1:Math.max(d.x0,d.x1),y0:Math.min(d.y0,d.y1),y1:Math.max(d.y0,d.y1)};
     try{await plkSave(k.o.id,arr=>{const i=arr.findIndex(x=>x.id===d.id);
       if(i<0)arr.push({id:d.id,...g,to:d.to,v:d.v,t:d.t||'',by:me.email,byN:me.name||me.email,ts:NOW()});
@@ -177,16 +201,18 @@ function plkBar(){if(!PLV)return;let el=PLV.box.querySelector('.plkbar');
   if(PLK.pick){const t=PLB.get(PLK.pick.d.to);
     h=`<div class="plkv">Acerca la zona de <b class="mono">${esc(t?t.cod:'')}</b> que debe verse al tocar el vínculo.</div>
       <div class="plkx"><button type="button" class="ib pri" data-pk="fix">✓ Fijar esta zona</button><button type="button" class="ib" data-pk="whole" title="Abrir la lámina completa">Lámina entera</button><span class="plvsp"></span><button type="button" class="ib" data-pk="cancel">Cancelar</button></div>`}
+  else if(PLK.psel&&plkpList(p).some(x=>x.id===PLK.psel))h=plkpBarHtml(p);
   else{const l=PLK.sel&&L.find(x=>x.id===PLK.sel);let msg;
     if(l){const t=PLB.get(l.to);msg=`<b>${esc(l.t||'→ '+(t?t.cod:'sin destino'))}</b> → <span class="mono">${esc(t?t.cod:'—')}</span> ${esc(t&&t.tit||'')}${l.v?'':' · lámina entera'}<br><small>¿El corte tiene otra burbuja? Toca <b>＋ Otra marca</b>. Arrastra las esquinas para ajustar la zona. Para un vínculo nuevo, toca otra marca del plano.</small>`}
     else if(PLK.dup){const t=PLB.get(PLK.dup.to);msg=`Otra marca hacia <b class="mono">${esc(t?t.cod:'')}</b>: toca la otra marca (p. ej. la otra burbuja del corte).`}
     else msg='Toca la <b>marca</b> (burbuja de corte, globo de detalle, rótulo) que remite a otra lámina. Toca un vínculo ya puesto para ajustarlo o borrarlo.';
     h=`<div class="plkv" aria-live="polite">${msg}</div>
       ${l&&!PLK.dup?`<div class="plkx"><button type="button" class="ib pri" data-pk="dup" title="La misma remisión aparece en otro lugar (el otro extremo del corte): solo marca la otra zona">＋ Otra marca</button><button type="button" class="ib" data-pk="go" title="Abrir el destino para probarlo">Probar</button><button type="button" class="ib" data-pk="dest">Cambiar destino</button><button type="button" class="ib" data-pk="txt">Texto</button><button type="button" class="ib bad" data-pk="del">Borrar</button></div>`:''}
-      <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small><span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
+      <div class="plkx"><label class="plkshow"><input type="checkbox" data-pk="show"${PLK.show?' checked':''}> Mostrar vínculos</label><small class="plms">${L.length} en esta lámina</small>${plkpBarHint(p)}<span class="plvsp"></span>${PLK.a||PLK.dup?'<button type="button" class="ib" data-pk="undo">↶ Cancelar</button>':''}<button type="button" class="ib" data-pk="off" title="Salir (Esc)">✓ Listo</button></div>`}
   el.innerHTML=h;if(!document.activeElement||document.activeElement===document.body)PLV.box.focus()}
 async function plkBarClick(e){const b=e.target.closest('[data-pk]');if(!b||b.tagName==='INPUT'||plkGhost(e))return;const a=b.dataset.pk;if(!PLV)return;
   const p=PLB.get(PLV.id),l=plkLinks(p).find(x=>x.id===PLK.sel);
+  if(a.startsWith('p-')){plkpClick(a,p);return}
   if(a==='off')plkEdit(false);
   else if(a==='undo'){PLK.a=null;PLK.dup=null;PLV.tv.tick();plkBar()}
   else if(a==='dup'&&l){PLK.dup={to:l.to,v:l.v||null,t:l.t||''};PLK.sel=null;PLV.tv.tick();plkBar()}
@@ -217,6 +243,7 @@ function plkDraw(g,v){const p=PLB.get(PLV.id);if(!p)return;const E=PLK.edit&&!PL
     g.beginPath();g.rect(rx,ry,rw,rh);g.fill();g.stroke();g.setLineDash([]);
     if(sel||rw>=44){const txt=l.t||(t?'→ '+t.cod:'sin destino'),ty=ry>16?ry-3:ry+rh+15;g.lineWidth=3.5;g.strokeStyle='#fff';g.strokeText(txt,rx,ty);g.fillStyle=sel?'#a63d08':'#0b4f94';g.fillText(txt,rx,ty)}
     if(sel)for(const c of [[s.x,s.y],[s.x+s.w,s.y],[s.x+s.w,s.y+s.h],[s.x,s.y+s.h]]){g.beginPath();g.arc(c[0],c[1],7,0,Math.PI*2);g.fillStyle='#fff';g.fill();g.lineWidth=2.4;g.strokeStyle=PLK_SEL;g.stroke()}}
+  if(E)plkpDraw(g,v,p,cw,ch);
   if(PLK.ch){const s=plkS(PLK.ch.d,v);g.setLineDash([]);g.lineWidth=3;g.strokeStyle=PLK_SEL;g.fillStyle='rgba(232,89,12,.14)';g.beginPath();g.rect(s.x,s.y,s.w,s.h);g.fill();g.stroke()}   /* la marca que se está vinculando */
   if(E&&PLK.a){const s=v.toScreen(PLK.a.x,PLK.a.y);g.beginPath();g.arc(s.x,s.y,7,0,Math.PI*2);g.fillStyle='#fff';g.fill();g.lineWidth=2.4;g.strokeStyle=PLK_SEL;g.stroke();
     g.beginPath();g.arc(s.x,s.y,1.8,0,Math.PI*2);g.fillStyle=PLK_SEL;g.fill()}

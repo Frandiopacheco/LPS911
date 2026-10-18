@@ -280,8 +280,23 @@
       const h = { t: now, by, a: 'pub', v: vN }; if (P.motivo) h.mot = P.motivo;
       escr.push({ col: 'tareo', id: t.id, tipo: 'cambiar', datos: { st: 'pub', pubV: vN, by, ts: now }, hist: h });
     }
+    escr.push({ col: 'hhpc', id: fecha, tipo: 'poner', datos: tpResumenHH(snap) });
     return { res: limpio({ ...base, ok: true, id, tot: snap.tot, dif: snap.dif, n: snap.fuentes.length }), escr };
   }
 
-  return { TP_HMAX: HMAX, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
+  /** Productividad F2 (docs/ia/productividad.md): resumen de HH por partida de control de la versión publicada, sin datos de
+      personas, para que los ingenieros calculen el IP. → {fecha, v, at, hh, pcs: {<pcId>: {hh, cod, nom, und}}} */
+  function tpResumenHH(snap) {
+    const pcs = {}; let hh = 0;
+    for (const r of snap.rows || []) for (const [pc, h] of Object.entries(r.h || {})) {
+      const v = +h || 0; if (!v) continue; hh += v;
+      const m = (snap.pcs || {})[pc] || {};
+      const o = pcs[pc] || (pcs[pc] = { hh: 0, cod: m.cod || '', nom: m.nom || '', und: m.und || '' }); o.hh += v;
+    }
+    const r2 = x => Math.round(x * 100) / 100;
+    for (const o of Object.values(pcs)) o.hh = r2(o.hh);
+    return { fecha: snap.fecha, v: snap.v, at: snap.at, hh: r2(hh), pcs };
+  }
+
+  return { TP_HMAX: HMAX, tpResumenHH, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
 });

@@ -687,15 +687,17 @@ test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el 
     await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
   }
 });
-test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo', async () => {
+test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo (salvo las partidas, los ingenieros)', async () => {
   for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('campo@obra.pe'), user('veedor@obra.pe'), user('extrano@x.pe')]) {
     await assertFails(getDoc(doc(db, 'tper/03684337')));
     await assertFails(getDocs(collection(db, 'tper')));
-    await assertFails(getDoc(doc(db, 'tpc/10.05')));
     await assertFails(getDoc(doc(db, 'tcfg/main')));
     await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
     await assertFails(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
   }
+  // las partidas de control (sin datos de personas) sí las leen los ingenieros: Productividad › Casa (IP)
+  for (const db of [user('editor@obra.pe'), user('campo@obra.pe')]) await assertSucceeds(getDoc(doc(db, 'tpc/10.05')));
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('veedor@obra.pe'), user('extrano@x.pe')]) await assertFails(getDoc(doc(db, 'tpc/10.05')));
 });
 test('tareo: la configuración la cambia solo el administrador', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'tcfg/main'), { refIni: '12:30', limEnv: '18:00', tolGar: 10 }));
@@ -1300,4 +1302,87 @@ test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínim
   await assertFails(setDoc(doc(ed, 'p3d/EST'), D()));                                  // id distinto de disc
   await assertFails(setDoc(doc(ed, 'p3d/ARQ'), D({ path: 'planos/x/r1/th.webp' })));
   await assertFails(deleteDoc(doc(ed, 'p3d/ARQ')));
+  // «Eliminar»: registro con `del` (guarda la numeración), solo el administrador; luego se puede volver a cargar
+  const DEL = D({ del: { t: 1, by: 'x', n: 'x' } });
+  await assertFails(setDoc(doc(ed, 'p3d/ARQ'), DEL));
+  await assertFails(setDoc(doc(user('ot@obra.pe'), 'p3d/ARQ'), DEL));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'p3d/ARQ'), DEL));
+  await assertSucceeds(setDoc(doc(ed, 'p3d/ARQ'), D({ rev: 2, path: 'modelos/ARQ/r2.frag' })));
+  // especialidad con origen (dos juegos de IFC con el mismo código): «CAS-DC»
+  await assertSucceeds(setDoc(doc(ed, 'p3d/CAS-DC'), D({ disc: 'CAS-DC', path: 'modelos/CAS-DC/r1.frag' })));
+});
+
+// Productividad F1: partidas críticas (admin e ingenieros) y avance diario (el SC el de su partida; los ingenieros cualquiera)
+test('productividad: partidas críticas y avance diario del SC', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pcrit/pc-gabel'), { sc: 'c-gabel', nom: 'Enchape', und: 'm²', met: 4200, fin: '2026-11-21' });
+    await setDoc(doc(db, 'pcrit/pc-otro'), { sc: 'c-otro', nom: 'Drywall', und: 'm²', met: 3600, fin: '' });
+  });
+  const pc = { sc: 'c-gabel', nom: 'Pintura', und: 'm²', met: 100, fin: '' };
+  for (const who of [OWNER, 'editor@obra.pe', 'campo@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'pcrit/n-' + who.replace(/\W/g, '')), pc));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'veedor@obra.pe']) await assertFails(setDoc(doc(user(who), 'pcrit/n-x'), pc));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pcrit/pc-gabel')));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'pcrit/pc-gabel')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), 'pcrit/pc-gabel')));
+
+  const av = (by, o = {}) => ({ pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-16', piso: 'p1', zona: '', q: 85, hh: null, nota: '', by, ts: 1, ...o });
+  // el SC reporta lo suyo y lo corrige
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pav/a1'), av('sc@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pav/a1'), av('sc@obra.pe', { q: 90, hh: 48 })));
+  // pero no lo de otra partida, ni a nombre de otro, ni sin piso, ni negativo, ni cambiando la partida crítica
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a2'), av('sc@obra.pe', { pc: 'pc-otro', sc: 'c-otro' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a3'), av('sc@obra.pe', { pc: 'pc-otro' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a4'), av('editor@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a5'), av('sc@obra.pe', { piso: '' })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a6'), av('sc@obra.pe', { q: -5 })));
+  // el ingeniero corrige el reporte del SC y reporta cualquier partida
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/a1'), av('campo@obra.pe', { q: 80 })));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pav/a7'), av('editor@obra.pe', { pc: 'pc-otro', sc: 'c-otro' })));
+  // el SC no toca el reporte de otra partida (aunque lo cambie a la suya)
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/a7'), av('sc@obra.pe')));
+  // lector y veedor no escriben; solo el administrador borra de verdad
+  for (const who of ['lector@obra.pe', 'veedor@obra.pe', 'ot@obra.pe']) await assertFails(setDoc(doc(user(who), 'pav/a8'), av(who)));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pav/a1')));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'pav/a1')));
+});
+
+// Productividad F2: IP de casa (partidas de control, resumen de HH publicado y metrado ejecutado)
+test('productividad casa: los ingenieros leen partidas y HH; registran metrado; nadie más escribe el resumen de HH', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'hhpc/2026-10-16'), { fecha: '2026-10-16', v: 1, hh: 80, pcs: { '10.05': { hh: 80 } } }); });
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER, 'tasis@obra.pe']) {
+    await assertSucceeds(getDoc(doc(user(who), 'tpc/10.05')));
+    await assertSucceeds(getDoc(doc(user(who), 'hhpc/2026-10-16')));
+  }
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'veedor@obra.pe']) {
+    await assertFails(getDoc(doc(user(who), 'tpc/10.05')));
+    await assertFails(getDoc(doc(user(who), 'hhpc/2026-10-16')));
+  }
+  // el resumen de HH lo escribe la función (o el administrador al rearmarlo)
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'hhpc/2026-10-17'), { hh: 1 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), 'hhpc/2026-10-17'), { hh: 1 }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'hhpc/2026-10-17'), { hh: 1 }));
+  // metrado ejecutado: admin e ingenieros; piso obligatorio y número no negativo
+  const m = (o = {}) => ({ pc: '10.05', d: '2026-10-16', piso: 'p1', zona: '', q: 102, by: 'x', ts: 1, ...o });
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER]) await assertSucceeds(setDoc(doc(user(who), 'pmet/m-' + who.replace(/\W/g, '')), m()));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'tasis@obra.pe', 'jefe@obra.pe'].filter(w => w !== 'jefe@obra.pe')) await assertFails(setDoc(doc(user(who), 'pmet/m-x'), m()));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'pmet/m-y'), m({ piso: '' })));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'pmet/m-z'), m({ q: -1 })));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'pmet/m-editorobrape')));
+  await assertFails(getDoc(doc(user('sc@obra.pe'), 'pmet/m-editorobrape')));
+});
+
+// Productividad: saldo inicial (avance previo) solo lo ponen los ingenieros y el administrador
+test('productividad: el SC no pone ni cambia el saldo inicial de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'pcrit/pc-gabel'), { sc: 'c-gabel', nom: 'Enchape', und: 'm²', met: 4200, fin: '' });
+    await setDoc(doc(db, 'pav/ini_pc-gabel_p1'), { pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p1', zona: '', q: 500, ini: true, nota: 'medido', by: 'editor@obra.pe', ts: 1 });
+  });
+  const ini = (by, o = {}) => ({ pc: 'pc-gabel', sc: 'c-gabel', d: '2026-10-10', piso: 'p2', zona: '', q: 300, ini: true, nota: 'x', by, ts: 1, ...o });
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('sc@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), ini('sc@obra.pe', { piso: 'p1', q: 900 })));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), { ...ini('sc@obra.pe', { piso: 'p1', q: 900 }), ini: false }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('campo@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pmet/ini_10.05_p1'), { pc: '10.05', d: '2026-10-10', piso: 'p1', zona: '', q: 800, ini: true, nota: 'x', by: 'editor@obra.pe', ts: 1 }));
 });

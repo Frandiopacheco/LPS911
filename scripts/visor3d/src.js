@@ -18,6 +18,7 @@ async function convert(file, onProgress) { const m = await import(here + 'ifc-im
 const SEL_MAT = { color: new THREE.Color(0x1f7bff), renderedFaces: FRAGS.RenderedFaces.TWO, opacity: 1, transparent: false };
 const GHOST = 0.12;           /* (ya no se usa: el setOpacity de Fragments no se ve en pantalla; ver applyGhost) */
 const OVL_MAX = 800;          /* hasta esta cantidad, lo «transparentado» se dibuja como cuerpo translúcido propio; más que eso, se pinta de gris claro */
+const GLASS = new THREE.Color(0x8fc3d4);
 const DIM_MAT = { color: new THREE.Color(0xdde3ea), renderedFaces: FRAGS.RenderedFaces.TWO, opacity: 1, transparent: false };
 const TAP_PX = 8, TAP_MS = 450; /* toque corto: casi sin moverse y sin quedarse apretado */
 
@@ -28,7 +29,8 @@ function create(host, opts = {}) {
   world.scene = new OBC.SimpleScene(components);
   /* (oct 2026 se probó PostproductionRenderer con bordes y oclusión al detener la cámara: el cambio simple ↔ con efectos al recorrer
      se veía como si el modelo se pintara y despintara; se quitó. Ver docs/ia/planos.md › Calidad visual) */
-  world.renderer = new OBC.SimpleRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance' });
+  /* profundidad logarítmica: sin ella el piso de ARQ y la losa de EST en el mismo plano salían a rayas (z-fighting) vistos de lejos */
+  world.renderer = new OBC.SimpleRenderer(components, host, { antialias: opts.antialias !== false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
   world.camera = new OBC.OrthoPerspectiveCamera(components);
   const R = world.renderer, cam = world.camera, cc = cam.controls, canvas = R.three.domElement;
   R.mode = OBC.RendererMode.MANUAL;       /* solo se dibuja cuando algo cambia (needsUpdate) */
@@ -43,6 +45,7 @@ function create(host, opts = {}) {
   const back = new THREE.DirectionalLight(0xffffff, 0.35); back.position.set(-0.6, 0.4, -0.7);
   world.scene.three.add(new THREE.HemisphereLight(0xf4f8ff, 0x8f8676, 1.05), sun, back, new THREE.AmbientLight(0xffffff, 0.25));
   canvas.style.touchAction = 'none';
+  /* (oct 2026, #353) se probaron bordes + oclusión ambiental siempre activos: se veía más lento y peor; se quitó. Ver docs/ia/planos.md */
   const fragments = components.get(OBC.FragmentsManager);
   fragments.init(here + 'visor3d-worker.js');
   if (opts.quality != null) fragments.core.settings.graphicsQuality = opts.quality;
@@ -58,6 +61,14 @@ function create(host, opts = {}) {
   cc.touches.one = A.TOUCH_ROTATE; cc.touches.two = A.TOUCH_DOLLY_TRUCK; cc.touches.three = A.TOUCH_TRUCK;
   cc.addEventListener('update', redraw);
   cc.addEventListener('update', () => fragments.core.update());
+  /* detalle: «completo» (por defecto, oct 2026) carga todo lo visible con su geometría y no lo cambia al mover la cámara (LodMode.ALL_VISIBLE);
+     «por vista» es el modo normal de Fragments: solo lo que está en cámara y lo lejano simplificado o en líneas, y al recorrer se veían zonas
+     que aparecían, desaparecían o cambiaban de detalle. Completo pide más a la tarjeta gráfica: en una tablet lenta, «por vista». */
+  /* «auto» (por defecto desde oct 2026): completos solo los modelos de `opts.lodFull` (ARQ, EST: los que se recorren y donde más se notaba);
+     las instalaciones (miles de accesorios pequeños) van por vista. Con todas las especialidades en «completo» se ponía lento hasta en laptop. */
+  const LODS = ['auto', 'completo', 'vista'];
+  let lodMode = LODS.includes(opts.lod) ? opts.lod : 'auto'; const lodFull = new Set(opts.lodFull || ['ARQ', 'EST']);
+  const lodVal = id => (lodMode === 'completo' || (lodMode === 'auto' && lodFull.has(id))) ? FRAGS.LodMode.ALL_VISIBLE : FRAGS.LodMode.DEFAULT;
   /* una vista nueva de tiles puede llegar un poco después de mover la cámara: se vuelve a dibujar cuando llegan */
   const lastCam = new THREE.Vector3(); let settle = 0;
   const keepDrawing = ms => { settle = Math.max(settle, performance.now() + ms) };
@@ -68,6 +79,9 @@ function create(host, opts = {}) {
   let dead = false;
   const idx = levelIndex(models);
   fragments.core.models.materials.list.onItemSet.add(({ value: m }) => { if (!('isLodMaterial' in m && m.isLodMaterial)) { m.polygonOffset = true; m.polygonOffsetUnits = 1; m.polygonOffsetFactor = Math.random();
+    /* vidrios: Revit los exporta con transparencia 0,85 (opacidad 0,15) y casi no se veían: mínimo 0,38, un tinte verde azulado suave, las dos
+       caras y sin escribir profundidad (lo que está detrás se sigue viendo entero) */
+    if (m.transparent && m.opacity < 0.95 && m.color && !(m.userData && m.userData.p3ovl)) { m.opacity = Math.max(m.opacity, 0.38); m.color.lerp(GLASS, 0.55); m.depthWrite = false; m.side = THREE.DoubleSide; m.needsUpdate = true }
     /* el azul de la selección se dibuja por delante de superficies coincidentes (losa y acabado, muro y su revestimiento): si no, queda tapado y «no se resalta» */
     if (m.color && m.color.getHex && m.color.getHex() === SEL_MAT.color.getHex()) { m.polygonOffsetUnits = -4; m.polygonOffsetFactor = -4 } } });
   fragments.list.onItemSet.add(({ value: model }) => {
@@ -97,7 +111,10 @@ function create(host, opts = {}) {
     try { const ids = m.allIds || (m.allIds = await m.model.getItemsIdsWithGeometry()), dy = m.model.object.position.y, n = ids.length, y0 = new Float32Array(n), y1 = new Float32Array(n);
       for (let i = 0; i < n; i += 4000) { const part = ids.slice(i, i + 4000), bs = await m.model.getBoxes(part); if (bs.length !== part.length) return m.bx = null; bs.forEach((b, k) => { y0[i + k] = b.min.y + dy; y1[i + k] = b.max.y + dy }) }
       m.bx = { ids, y0, y1 } } catch (e) { console.warn('boxesOf', e) } return m.bx }
-  const hideSet = id => { const a = hidden.get(id), b = ovlOf.get(id); if (!b || !b.size) return a; if (!a || !a.size) return b; return new Set([...a, ...b]) };
+  /* ambientes (IfcSpace): son volúmenes translúcidos que llenan cada habitación; con el IFC exportado con «habitaciones» aparecían como cajas
+     de vidrio sobre la azotea y dentro de los pisos. Ocultos por defecto (`spacesOn`); servirán para vincular con la Matriz (etapa siguiente). */
+  const spaceOf = new Map(); let spacesOn = false;
+  const hideSet = id => { const L = [hidden.get(id), ovlOf.get(id), spacesOn ? null : spaceOf.get(id)].filter(x => x && x.size); if (!L.length) return undefined; if (L.length === 1) return L[0]; return new Set(L.flatMap(x => [...x])) };
   async function applyVis() { const jobs = [];
     for (const [id, m] of models) { const lv = levelOf.get(id), hid = hideSet(id), iso = isolated && isolated.get(id);
       if (isolated && !(iso && iso.size)) { jobs.push((async () => { await m.model.setVisible(undefined, false) })()); continue }
@@ -145,7 +162,7 @@ function create(host, opts = {}) {
     await paintSel(prev); if (!selCount()) lastPick = null; if (onSelect) onSelect({ count: selCount(), map: selMap() }) }
   /* ¿el acierto del raycast se ve en pantalla? El raycast no sabe de ocultos, pisos, aislados ni cortes: lo que está recortado no se debe poder tocar */
   const planesNow = () => { const a = []; if (cutActive) a.push(cutPlane, botPlane); return a.concat(sections.planes()) };
-  function seen(id, h) { const hid = hidden.get(id); if (hid && hid.has(h.localId)) return false;
+  function seen(id, h) { const hid = hidden.get(id); if (hid && hid.has(h.localId)) return false; if (!spacesOn) { const sp = spaceOf.get(id); if (sp && sp.has(h.localId)) return false }
     if (isolated) { const iso = isolated.get(id); if (!iso || !iso.has(h.localId)) return false }
     const lv = levelOf.get(id); if (lv && !lv.has(h.localId)) return false;
     if (h.point) for (const pl of planesNow()) if (pl.distanceToPoint(h.point) < -1e-3) return false; return true }
@@ -237,10 +254,12 @@ function create(host, opts = {}) {
   const V = {
     multi: false, world, components, fragments, THREE, OBC,
     async add(id, bytes) { const model = await fragments.core.load(bytes, { modelId: id, camera: cam.three, clippingPlanes: R.clippingPlanes });
+      try { await model.setLodMode(lodVal(id)) } catch (e) { console.warn('modo de detalle', e) }
+      try { const r = await model.getItemsOfCategories([/^IFCSPACE$/]); const sp = new Set(Object.values(r).flat()); if (sp.size) spaceOf.set(id, sp) } catch (e) {}
       /* fragments.list.onItemSet ya lo agregó a la escena */
       await fragments.core.update(true); const levels = await levelsOf(model).catch(() => []); models.set(id, { model, levels, slabs: model.__slabs || 0 });
       const b = new THREE.Box3().setFromObject(model.object); models.get(id).bb = b.clone(); if (!b.isEmpty()) { const first = box.isEmpty(); box.union(b); if (first) frame(box, false) }
-      if (level) await applyLevel(); redraw(); keepDrawing(600); return { levels: levels.map(l => l.name) } },
+      if (level) await applyLevel(); else if (!spacesOn && spaceOf.get(id)) await applyVis(); redraw(); keepDrawing(600); return { levels: levels.map(l => l.name) } },
     async visible(id, on) { const m = models.get(id); if (!m) return; m.model.object.visible = on; await fragments.core.update(true); redraw() },
     has: id => models.has(id), isOn: id => !!(models.get(id) && models.get(id).model.object.visible),
     /* pisos */
@@ -294,6 +313,8 @@ function create(host, opts = {}) {
     setTool(t) { tool = t; if (t !== 'measure') measure.stop(); if (onTool) onTool(t); canvas.style.cursor = t === 'select' ? '' : 'crosshair' }, get tool() { return tool }, onTool(cb) { onTool = cb },
     section: sections, async sectionBox(target) { const b = target === 'sel' ? await boxOfSel() : target === 'level' ? levelBox() : box.clone(); const ok = sections.box(b); if (ok && target === 'sel') await focusBox(b, 1.8); return ok }, measure,
     /* rendimiento */
+    async spaces(on) { spacesOn = !!on; await applyVis() }, get spacesOn() { return spacesOn },
+    async lod(mode) { lodMode = LODS.includes(mode) ? mode : 'auto'; for (const [id, m] of models) { try { await m.model.setLodMode(lodVal(id)) } catch (e) {} } await fragments.core.update(true); redraw(); keepDrawing(800) }, get lodName() { return lodMode },
     quality(q) { fragments.core.settings.graphicsQuality = q; fragments.core.update(true); redraw() },
     stats: () => ({ models: models.size, calls: R.three.info.render.calls, tris: R.three.info.render.triangles, geoms: R.three.info.memory.geometries, tex: R.three.info.memory.textures, dpr: R.three.getPixelRatio() }),
     perf, bench, preset: setPreset, get presetName() { return preset },

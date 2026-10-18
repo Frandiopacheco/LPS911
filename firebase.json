@@ -8,7 +8,8 @@
     "headers": [
       { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
       { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "/firebase-config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+      { "source": "/firebase-config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+      { "source": "/vendor/visor3d/**", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
     ]
   },
   "functions": [{ "source": "functions", "codebase": "default", "runtime": "nodejs22", "ignore": ["node_modules", "test"] }],

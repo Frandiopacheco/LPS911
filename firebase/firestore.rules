@@ -292,6 +292,29 @@ service cloud.firestore {
         || (resource.data.by == mid() && scNpOk(request.resource.data));
       allow delete: if isAdmin();
     }
+    // Productividad F1 (oct 2026, docs/ia/productividad.md): partidas críticas de los SC y su avance diario ejecutado.
+    // pcrit: las crean y editan el administrador y los ingenieros (canDaily); nadie las borra salvo el administrador (se archivan).
+    match /pcrit/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canDaily() && request.resource.data.sc is string && request.resource.data.met is number;
+      allow delete: if isAdmin();
+    }
+    // pav: el SC reporta lo de su partida sin confirmación (by = él, sc de su partida y el de la partida crítica); el saldo
+    // inicial (ini: true) solo lo ponen los ingenieros y el administrador;
+    // los ingenieros y el administrador escriben cualquiera. Metrado numérico y no negativo.
+    function pavDocOk(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
+    function pavScOk(d) {
+      return isSC() && d.by == mid() && d.sc in scsOf() && d.get('ini', false) != true
+        && get(/databases/$(database)/documents/pcrit/$(d.pc)).data.sc == d.sc;
+    }
+    match /pav/{id} {
+      allow read: if lpsMember();
+      allow create: if pavDocOk(request.resource.data) && (canDaily() || pavScOk(request.resource.data));
+      allow update: if pavDocOk(request.resource.data) && (canDaily()
+        || (pavScOk(request.resource.data) && resource.data.sc in scsOf() && resource.data.pc == request.resource.data.pc
+          && resource.data.get('ini', false) != true));
+      allow delete: if isAdmin();
+    }
     // el rol se calcula una sola vez (con una función por rol se pasa el límite de 1000 expresiones de las reglas)
     function fotoNewOk() {
       let d = request.resource.data;
@@ -369,7 +392,8 @@ service cloud.firestore {
         && d.get('bloq', false) is bool && d.get('bloqBy', '') == email();
     }
     match /tpc/{id} {
-      allow read: if isTar();
+      // los ingenieros también las leen (Productividad › Casa: IP por partida; no tienen datos de personas)
+      allow read: if isTar() || canDaily();
       allow create: if tarEd() && tpcOk();
       allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
     }
@@ -402,7 +426,8 @@ service cloud.firestore {
     }
     match /p3d/{id} {
       allow read: if plaRead();
-      allow create, update: if (canEdit() || isOT()) && p3dOk(id);
+      // «Eliminar» (solo el admin) deja el registro con `del` y la última rev., para que la próxima carga siga la numeración
+      allow create, update: if (canEdit() || isOT()) && p3dOk(id) && (!('del' in request.resource.data) || isAdmin());
     }
     // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
     function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
@@ -499,6 +524,19 @@ service cloud.firestore {
     match /tpubidx/{id} {
       allow read: if isTar();
       allow write: if false;
+    }
+    // Productividad F2 (docs/ia/productividad.md): HH por partida de la publicación vigente (sin datos de personas). La escribe
+    // publicarTareo; el administrador puede rearmarla desde tpub (días publicados antes). La leen el tareo y los ingenieros.
+    match /hhpc/{id} {
+      allow read: if isTar() || canDaily();
+      allow write: if isAdmin();
+    }
+    // Metrado ejecutado de casa por partida de control, piso y (opcional) sector o ambiente: admin e ingenieros.
+    function pmetOk(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
+    match /pmet/{id} {
+      allow read: if isTar() || canDaily();
+      allow create, update: if canDaily() && pmetOk(request.resource.data);
+      allow delete: if isAdmin();
     }
     // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
     // La lee todo LPS; en la fase 1 editan administrador y editores. No se borra (lo que sobra se archiva o queda «no aplica»).
