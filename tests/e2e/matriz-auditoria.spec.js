@@ -15,7 +15,7 @@ test('M09: arrastrar sobre celdas vacías no agrega actividades; el clic sí', a
   const extra = [...CAT, ['mcat', 'k9', { name: 'Prueba singular', sc: 'c1', cl: 't', al: ['prueba singular'], ord: 5 }], ['mamb', 'a1', { c: { k9: 'p' }, by: 'x', t: 1 }]];
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
   await page.evaluate(() => { U.piso = ''; render(); });
-  await page.click('#mxedit');
+  await page.evaluate(() => { MX.edit = true; render(); });
   const a = await cell(page, 'a1', 'k9'), b = await cell(page, 'a2', 'k9');
   await a.hover(); await page.mouse.down(); await b.hover(); await page.mouse.up();
   expect(await page.evaluate(() => [...MX.sel])).toEqual(['a1|k9']);
@@ -28,7 +28,7 @@ test('M09: arrastrar sobre celdas vacías no agrega actividades; el clic sí', a
 test('M01: Deshacer no pisa lo que otra persona cambió después; M10: escribe en lote', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...CAT, ['mamb', 'a1', { c: { k2: 'p' }, by: 'x', t: 1 }]] });
   await page.evaluate(() => { U.piso = ''; render(); });
-  await page.click('#mxedit');
+  await page.evaluate(() => { MX.edit = true; render(); });
   await page.evaluate(() => { MX.sel = new Set(['a1|k1', 'a1|k2']); mxApply('t'); });
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c)).toEqual({ k1: 't', k2: 't' });
   // otro ingeniero cambia k2 después

@@ -52,20 +52,20 @@ function mxRecSug(amb,cells){const m=MX.amb.get(amb)||{};const tp=m.tipo&&MX.tip
     .map(([c,n])=>({c:MX.cat.get(c),n,of:peers.length,lbl:tp?tp.name:base(a.name)}))}
 
 /* «+ Otra actividad»: buscar en el catálogo y agregarla a este ambiente como pendiente (el SC, solo su partida) */
-function mxRecPick(amb,ed,add){const have=(mxCells().get(amb)||{});const L=[...MX.cat.values()].filter(c=>!c.arch&&!have[c.id]&&(ed||mxScCan(c)))
-    .sort((x,y)=>conOf(x.sc).name.localeCompare(conOf(y.sc).name)||x.name.localeCompare(y.name));
+function mxRecPick(amb,ed,add,pre){const have=(mxCells().get(amb)||{});const L=[...MX.cat.values()].filter(c=>!c.arch&&!have[c.id]&&(ed||mxScCan(c)))
+    .sort((x,y)=>(pre?mxHasSc(y,[pre])-mxHasSc(x,[pre]):0)||conOf(x.sc).name.localeCompare(conOf(y.sc).name)||x.name.localeCompare(y.name));
   const a=S.amb.get(amb);const li=q=>{const k=mnk(q||'');const F=L.filter(c=>!k||mnk(c.name+' '+conOf(c.sc).name).includes(k)).slice(0,80);
     return(F.length?F.map(c=>`<button class="mxpk" data-mxpk="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span><span><b>${esc(c.name)}</b><small>${esc(conOf(c.sc).name)}</small></span></button>`).join(''):'<p class="note">No está en el catálogo.</p>')
       +`<button class="mxpk mxpkn" data-mxpknew><span class="mxpkp">＋</span><span><b>${q&&q.trim()?`Crear «${esc(q.trim())}» en el catálogo`:'Nueva actividad en el catálogo'}</b><small>Se agrega al catálogo y a este ambiente${ed?'':'; el ingeniero la revisará'}</small></span></button>`};
   lqModal(`<div class="lqtop"><b>Agregar actividad a ${esc(a?a.code+' · '+a.name:'')}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
     <input class="tin" id="mxpq" type="search" placeholder="Buscar actividad o subcontratista" aria-label="Buscar en el catálogo" style="width:100%;box-sizing:border-box">
     <div class="mxpkl" id="mxpkl">${li('')}</div><div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
-    e=>{if(e.target.closest('[data-mxpknew]')){const v=($('#mxpq')||{}).value||'';lqClose();mxRecNew(amb,ed,v.trim(),add);return}const b=e.target.closest('[data-mxpk]');if(b){lqClose();add(b.dataset.mxpk)}});
+    e=>{if(e.target.closest('[data-mxpknew]')){const v=($('#mxpq')||{}).value||'';lqClose();mxRecNew(amb,ed,v.trim(),add,pre);return}const b=e.target.closest('[data-mxpk]');if(b){lqClose();add(b.dataset.mxpk)}});
   const q=$('#mxpq');if(q){q.oninput=()=>{$('#mxpkl').innerHTML=li(q.value)};setTimeout(()=>q.focus(),50)}}
 
 /* crear la actividad en el catálogo desde el Recorrido y agregarla a este ambiente (pendiente). Mismas reglas que desde el lookahead:
    el ingeniero la crea directo; el SC también, en su partida, y queda «por revisar» (rev). Opcional: al tipo del ambiente (solo ingeniero). */
-async function mxRecNew(amb,ed,v,add){const tp=await mxAmbTipo(amb);const sc0=ed?(mxSel()[0]||''):(myScsI()[0]||'');
+async function mxRecNew(amb,ed,v,add,pre){const tp=await mxAmbTipo(amb);const sc0=ed?(pre||mxSel()[0]||''):(myScsI()[0]||'');
   const scOpts=ed?mxScOpts(sc0):myScsI().map(id=>`<option value="${esc(id)}">${esc(conOf(id).name)}</option>`).join('');
   const sim=v?mxSimilar(v,sc0).filter(c=>ed||mxScCan(c)):[];const have=mxCells().get(amb)||{};
   lqModal(`<div class="lqtop"><b>Nueva actividad en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
@@ -100,7 +100,7 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
    ${done.length?`<details class="mxrdone"${MXR.showDone?' open':''}><summary>Terminadas o que no aplican (${done.length})</summary><div class="mxrl">${done.map(row).join('')}</div></details>`:''}
    ${(sug=sug.filter(x=>ed||mxScCan(x.c))),(ed||SCK())?`<details class="mxrsug" id="mxrsugd"${U.mxRecSug?' open':''}><summary class="mxrsq"><b>¿Falta algo?</b><span class="note">${sug.length?`${sug.length} sugerencia${sug.length===1?'':'s'}`:'sin sugerencias'}</span></summary><div class="mxrsb"><button class="ib" id="mxrpick">+ Otra actividad</button>${sug.length?sug.map(s=>`<div class="mxri"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(s.c.sc).color)}"></span><span><b>${esc(s.c.name)}</b><small>${esc(conOf(s.c.sc).name)} · ${s.n} de ${s.of} ${esc(s.lbl)} la tienen</small></span></div><button class="ib" data-mxradd="${esc(s.c.id)}">+ Agregar</button></div>`).join(''):'<p class="note">Sin sugerencias: los ambientes parecidos no tienen otras actividades. Usa «+ Otra actividad» para buscar en el catálogo.</p>'}</div></details>`:''}
    </div></div>
-   <div class="mxrfoot">${ed?`<button class="ib pri" id="mxrok">✓ Confirmar${nSug?` (${nSug} sin validar quedan como están)`:''}${nx?' y seguir →':''}</button>`:''}${nx?`<button class="ib" id="mxrnext">Siguiente sin confirmar →</button>`:''}</div>`;
+   <div class="mxrfoot">${ed?`<button class="ib pri" id="mxrok">✓ Confirmar${nSug?` (${nSug} sin validar quedan como están)`:''}${nx?' y seguir →':''}</button>`:''}${nx?`<button class="ib" id="mxrnext">${ed?'Siguiente sin confirmar →':'Siguiente ambiente →'}</button>`:''}</div>`;
   main.innerHTML=h;mxWireV(main);
   $('#mxrback').onclick=()=>{MXR.amb=null;render()};
   const go=n=>{MXR.amb=n?n.a.id:null;MXR.showDone=false;render();const s=main.querySelector('.scroll');if(s)s.scrollTop=0};
@@ -117,3 +117,26 @@ function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(i
   const pk=$('#mxrpick');if(pk)pk.onclick=()=>mxRecPick(id,ed,addC);
   /* «¿Falta algo?» plegable; se recuerda abierto o cerrado */
   const sd=$('#mxrsugd');if(sd)sd.ontoggle=()=>{if(!!U.mxRecSug!==sd.open){U.mxRecSug=sd.open;saveUI()}}}
+
+/* Matriz › «＋ Agregar a un ambiente» y el «+» del SC (oct 2026, pedido del dueño): primero el ambiente (cualquiera de los pisos a la
+   vista, también donde el SC aún no tiene nada) y luego la actividad del catálogo con buscador, como en el Recorrido (al final, crearla).
+   pre = SC sugerido: sus actividades salen primero. */
+function mxAddFlow(pre){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;const cells=mxCells();
+  const mine=c=>c&&!c.arch&&(ed?(!pre||mxHasSc(c,[pre])):mxScCan(c));
+  const L=[];for(const r of mxRows())for(const a of r.ambs){const C=cells.get(a.id)||{};L.push({a,r,n:Object.keys(C).filter(k=>mine(MX.cat.get(k))).length})}
+  const who=ed?(pre?conOf(pre).name:''):'tu partida';
+  const li=q=>{const k=mnk(q||'');const F=L.filter(o=>!k||mnk(o.a.code+' '+o.a.name+' '+o.r.s.name).includes(k));let h='',ls='';
+    for(const o of F.slice(0,150)){const g=o.r.p.code+' · '+o.r.s.name;if(g!==ls){h+=`<div class="ph">${esc(g)}</div>`;ls=g}
+      h+=`<button class="mxpk" data-mxaa="${esc(o.a.id)}"><span><b>${esc(o.a.code)} · ${esc(o.a.name)}</b><small>${who?(o.n?`${o.n} ${o.n===1?'actividad':'actividades'} de ${esc(who)}`:`sin actividades de ${esc(who)}`):`${o.n} actividades`}</small></span></button>`}
+    return h||'<p class="note">No hay ambientes con ese nombre en los pisos a la vista.</p>'};
+  lqModal(`<div class="lqtop"><b>Agregar actividad · elige el ambiente</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+    <input class="tin" id="mxaq" type="search" placeholder="Buscar ambiente (código o nombre)" aria-label="Buscar ambiente" style="width:100%;box-sizing:border-box">
+    <div class="mxpkl" id="mxakl">${li('')}</div><div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
+    e=>{const b=e.target.closest('[data-mxaa]');if(!b)return;const amb=b.dataset.mxaa;lqClose();mxRecPick(amb,ed,cid=>mxAddCell(amb,cid,ed),pre)});
+  const q=$('#mxaq');if(q){q.oninput=()=>{$('#mxakl').innerHTML=li(q.value)};setTimeout(()=>q.focus(),50)}}
+/** agrega la actividad al ambiente como pendiente (el SC directo, con su constancia) y la resalta en la Matriz */
+function mxAddCell(amb,cid,ed){const c=MX.cat.get(cid);if(!c)return;
+  if(ed){const sl=mxSel();if(sl.length&&!mxHasSc(c,sl)){U.mxSc=[...sl,c.sc]}}if(c.cl==='e'&&!U.mxAll)U.mxAll=true;saveUI();
+  MX.focus={amb,cat:cid,until:performance.now()+3000,scrolled:false};
+  if(!ed){mxScSet(amb,cid,'p');return}const DEL=firebase.firestore.FieldValue.delete();
+  mxWrite(new Map([[amb,{[cid]:'p'}]]),`Agregada: ${c.name} (pendiente)`,new Map([[amb,{[cid]:DEL}]])).then(()=>requestRender())}

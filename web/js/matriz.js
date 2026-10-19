@@ -51,6 +51,8 @@ const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 /* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */
 const mxCanEd=()=>mxEd()||(!!me&&SCK()&&!verRO());
 const mxEdG=()=>mxEd()&&!!MX.edit;
+/** PC con mouse (idea 4, oct 2026): la matriz siempre es editable; la consulta sin cambios queda para tablet y celular */
+const mxPC=()=>{if(window.__mxTouch)return false;try{return matchMedia('(hover:hover) and (pointer:fine)').matches}catch(e){return false}};
 
 /* alias → actividad del catálogo */
 function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();
@@ -113,10 +115,10 @@ function mxCols(rows,cells){const used=new Set();rows.forEach(r=>r.ambs.forEach(
 /* foto semanal elegida para comparar: {ambId:{catId:estado}} */
 function mxCmpMap(){const f=MX.cmp&&MX.ver.get(MX.cmp);if(!f)return null;const o={};for(const[a,s]of Object.entries(f.a||{})){const m={};String(s).split(',').forEach(p=>{const[c,v0]=p.split(':');const v=v0&&v0.replace('?','');if(c&&v)m[c]=v});o[a]=m}return o}
 
-function renderMat(main){ensureMx();ensureMver();
+function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=true;
   const loaded=MX.ld.cat&&MX.ld.tipo&&MX.ld.amb;
   const acts=[];if(isAdmin)acts.push(`<label class="ib" title="Carga inicial del catálogo, tipos de ambiente y tipo de cada ambiente (archivo preparado)">⬆<span class="mxlbl"> Cargar catálogo</span><input type="file" id="mximp" accept=".json,application/json" hidden></label>`);
-  if(mxCanEd()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓<span class="mxlbl"> Terminar edición</span>':'✎<span class="mxlbl"> Editar</span>'}</button>`);
+  if(mxCanEd()&&!mxPC()&&MX.cat.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib${MX.edit?' on':' pri'}" id="mxedit" title="${MX.edit?'Volver a consulta: desplazarse sin cambiar nada':'Habilitar seleccionar y marcar celdas'}">${MX.edit?'✓<span class="mxlbl"> Terminar edición</span>':'✎<span class="mxlbl"> Editar</span>'}</button>`);
   if(MX.ver.size&&(!U.mxV||U.mxV==='mat'))acts.push(`<button class="ib" id="mxfhist" title="Fotos guardadas: comparar${isAdmin?' o restablecer':''}">🕘<span class="mxlbl"> Fotos</span> (${MX.ver.size})</button>`);
   if(mxEd()&&MX.cat.size)acts.push(`<button class="ib" id="mxfoto" title="Guarda el estado de hoy para compararlo la próxima semana">📸<span class="mxlbl"> Guardar foto semanal</span></button>`);
   const head=pageHead('Matriz de ambientes',`${U.piso?esc((S.pis.get(U.piso)||{}).name||''):'Todos los pisos'} · estado actual de cada actividad por ambiente`,acts.join(''));
@@ -126,11 +128,16 @@ function renderMat(main){ensureMx();ensureMver();
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
+  if(U.mxV==='act'){renderMxAct(main,head);return}
   if(U.mxV==='pla'){renderMxPla(main,head);return}
   if(U.mxV==='tren'&&!SCK()){renderMxTren(main,head);return}
   const cells=mxCells();let rows=mxRows();const cols=mxCols(rows,cells);
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
-  if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}const cmp=mxCmpMap();const ed=mxEdG();
+  if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}
+  /* «Solo lo que falta» (idea 6): fuera los ambientes y las columnas sin nada pendiente ni en curso */
+  if(U.mxFalta){const open=o=>o&&(o.s==='p'||o.s==='c');rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>{const C=cells.get(a.id)||{};return cols.some(c=>open(C[c.id]))})})).filter(r=>r.ambs.length);
+    const keep=cols.filter(c=>rows.some(r=>r.ambs.some(a=>open((cells.get(a.id)||{})[c.id]))));cols.length=0;cols.push(...keep)}
+  const cmp=mxCmpMap();const ed=mxEdG();
   /* totales de lo que está a la vista */
   const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0};const colT=cols.map(()=>({a:0,t:0}));
   const ambPct=new Map();
@@ -156,6 +163,8 @@ function renderMat(main){ensureMx();ensureMver();
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <label class="mxord" title="Por programación: primero los SC con trabajo programado en estos ambientes de hoy a 3 semanas"><span class="fgl">Orden</span><select id="mxord" aria-label="Orden de las columnas"><option value="prog"${U.mxOrd==='az'?'':' selected'}>Por programación</option><option value="az"${U.mxOrd==='az'?' selected':''}>Alfabético</option></select></label>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
+    ${mxCanEd()?`<button class="ib" id="mxadd" title="Elegir un ambiente (aunque todavía no tenga tus actividades) y agregarle una actividad del catálogo">＋ Agregar a un ambiente</button>`:''}
+    <label class="chk" title="Oculta los ambientes y las actividades ya terminados o que no aplican"><input type="checkbox" id="mxfalta"${U.mxFalta?' checked':''}> Solo lo que falta</label>
     <span class="fsp"></span>
     <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
     <button class="ib${document.body.classList.contains('mxfs')?' on':''}" id="mxfs" title="Pantalla completa: oculta la barra superior y las pestañas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
@@ -169,8 +178,10 @@ function renderMat(main){ensureMx();ensureMver();
   const grp=[];cols.forEach(c=>{const g=grp[grp.length-1];if(g&&g.sc===c.sc)g.n++;else grp.push({sc:c.sc,n:1})});
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const multi=visPisos().length>1;const NC=cols.length+3;
-  h+=`<div class="mxbox" id="mxbox"><table class="mx mxz${mxZ()}${ed?' ed':''}" id="mxt"><thead>
-   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo${MX.ci&&cols[i0]&&MX.ci[cols[i0].id]&&MX.ci[cols[i0].id].tier===2?' mxdim':''}" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${mxPlusOk(g.sc)?`<button type="button" class="mxplus" data-mxnew="${esc(g.sc)}" title="Añadir una actividad nueva a ${esc(c.name)}" aria-label="Añadir actividad a ${esc(c.name)}">+</button>`:''}${esc(c.name)}</span></th>`}).join('')})()}</tr>
+  /* pocas columnas (un SC o unos cuantos elegidos): nombres en horizontal si caben a lo ancho; si no, en vertical (oct 2026) */
+  const hz=(()=>{const W=[84,110,136][mxZ()];const fx=innerWidth<=760?190:380;return cols.length*W<=Math.max(0,(main.clientWidth||innerWidth)-fx-40)})();
+  h+=`<div class="mxbox" id="mxbox"><table class="mx mxz${mxZ()}${ed?' ed':''}${hz?' mxhz':''}" id="mxt"><thead>
+   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo${MX.ci&&cols[i0]&&MX.ci[cols[i0].id]&&MX.ci[cols[i0].id].tier===2?' mxdim':''}" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${mxPlusOk(g.sc)?`<button type="button" class="mxplus" data-mxnew="${esc(g.sc)}" title="Agregar una actividad de ${esc(c.name)} a un ambiente" aria-label="Agregar actividad de ${esc(c.name)}">+</button>`:''}${esc(c.name)}</span></th>`}).join('')})()}</tr>
    <tr class="mxn">${cols.map((c,i)=>`<th class="mxc${c.cl==='d'?' dsg':''}${MX.ci&&MX.ci[c.id]&&MX.ci[c.id].pg?' mxpg':''}" data-mxcol="${i}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(c.name)} · ${esc(conOf(c.sc).name)} · ${MXCL[c.cl]||''}${ed?' (clic: seleccionar la columna)':''}"><span>${esc(c.name)}</span></th>`).join('')}</tr></thead><tbody>`;
   let ri=0;let lastP='';
   for(const r of rows){
@@ -190,9 +201,13 @@ function renderMat(main){ensureMx();ensureMver();
    </div></div>${ed?mxSelBar():''}`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};
+  /* el alto de la caja se fija antes de devolver el desplazamiento: sin él (max-height:none) el scroll quedaba en 0 y cada cambio llevaba arriba */
+  mxFit();
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
   mxFocusPaint()
-  mxWire(main)}
+  mxWire(main);
+  /* auditoría 19/10 (punto 4): tras redibujar, el resaltado de columna se recalcula con lo que está bajo el puntero (antes quedaba la anterior) */
+  MX.hk=null;{const st=document.getElementById('mxhovst');if(st)st.textContent='';const el=MX.hp&&document.elementFromPoint(MX.hp.x,MX.hp.y);if(el&&el.closest('#mxt'))mxHov({target:el})}}
 
 /* barra de la selección (abajo) */
 function mxSelBar(){const n=MX.sel.size;if(!n)return'';
@@ -265,19 +280,21 @@ function mxWire(main){mxWireV(main);
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
   const xb=$('#mxxls');if(xb)xb.onclick=mxExport;
+  const ab=$('#mxadd');if(ab)ab.onclick=()=>mxAddFlow(SCK()?'':(mxSel()[0]||''));
   const hb=$('#mxhelp');if(hb)hb.onclick=()=>{const lg=$('.mxleg');const st=$('.mxstat');openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${st?'<p>'+st.innerHTML+'</p>':''}${lg?'<div class="mxleg mxlegp">'+lg.innerHTML+'</div>':''}${MX.helpH||''}</div>`,{})};
   const fsb=$('#mxfs');if(fsb)fsb.onclick=()=>mxFsSet(!document.body.classList.contains('mxfs'));
-  main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();const t=$('#mxt');if(t){t.classList.remove('mxz0','mxz1','mxz2');t.classList.add('mxz'+mxZ())}});
+  main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();render()});
   mxFit();
   const eb=$('#mxedit');if(eb)eb.onclick=()=>{MX.edit=!MX.edit;MX.sel.clear();closePop();render()};
   main.querySelectorAll('[data-mxsc]').forEach(b=>b.onclick=e=>{const id=b.dataset.mxsc;let L=mxSel();L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();render()});
   main.querySelectorAll('[data-mxall]').forEach(b=>b.onclick=()=>{U.mxAll=b.dataset.mxall==='1';saveUI();MX.sel.clear();render()});
   const mo=$('#mxord');if(mo)mo.onchange=e=>{U.mxOrd=e.target.value;saveUI();MX.sel.clear();render()};
+  const fl=$('#mxfalta');if(fl)fl.onchange=()=>{U.mxFalta=fl.checked;saveUI();MX.sel.clear();render()};
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
   mxWireBar();
   const t=$('#mxt');if(!t)return;
-  t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxCatNew(np.dataset.mxnew,true);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
+  t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxAddFlow(np.dataset.mxnew);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
     if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
     if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
@@ -286,7 +303,8 @@ function mxWire(main){mxWireV(main);
     e.preventDefault();
     if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();return}
     MX.drag={a:c,add:e.ctrlKey||e.metaKey,base:new Set(MX.sel)};MX.moved=false;MX.anchor=c;DRAGGING=true};
-  t.onpointerover=e=>{if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
+  t.onpointerleave=()=>{MX.hk=null;const st=document.getElementById('mxhovst');if(st)st.textContent=''};
+  t.onpointerover=e=>{mxHov(e);if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
     if(c.amb===MX.drag.a.amb&&c.cat===MX.drag.a.cat&&!MX.moved)return;MX.moved=true;const R=mxRect(MX.drag.a,c);MX.sel=MX.drag.add?new Set([...MX.drag.base,...R]):R;mxPaintSel()}}
 document.addEventListener('pointerup',e=>{if(!MX.drag)return;const d=MX.drag;MX.drag=null;DRAGGING=false;
   if(!MX.moved){const k=d.a.amb+'|'+d.a.cat;if(d.add){if(MX.sel.has(k))MX.sel.delete(k);else MX.sel.add(k);mxPaintSel();return}
@@ -457,3 +475,8 @@ function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-perform
   if(tr){tr.classList.add('mxhl');}if(ci>=0){const h=t.querySelector(`th[data-mxcol="${ci}"]`);if(h)h.classList.add('mxhl');t.querySelectorAll(`td[data-k="${ci}"]`).forEach(td=>td.classList.add('mxhlc'))}
   const cell=tr&&ci>=0?tr.querySelector(`td[data-k="${ci}"]`):null;if(cell){cell.classList.add('mxhlx');if(!f.scrolled){f.scrolled=true;const b=$('#mxbox');if(b){const br=b.getBoundingClientRect(),cr=cell.getBoundingClientRect();b.scrollTop+=cr.top-br.top-b.clientHeight/2+cr.height/2;b.scrollLeft+=cr.left-br.left-b.clientWidth/2+cr.width/2}}}
   clearTimeout(MX.focusT);MX.focusT=setTimeout(()=>{MX.focus=null;document.querySelectorAll('#mxt .mxhl,#mxt .mxhlc,#mxt .mxhlx').forEach(e=>e.classList.remove('mxhl','mxhlc','mxhlx'))},left)}
+
+/* ---------- fila y columna bajo el puntero (idea 7): la fila con CSS (tr:hover), la columna con una regla que cambia */
+function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.clientY};const td=e.target&&e.target.closest?e.target.closest('td.mc,th.mxc'):null;const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
+  let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}
+  st.textContent=k===''?'':`#mxt td.mc[data-k="${k}"]{background-image:linear-gradient(var(--mxhov),var(--mxhov))}#mxt th.mxc[data-mxcol="${k}"]{background-color:var(--mxhovh)}`}

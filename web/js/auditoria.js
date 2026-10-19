@@ -237,7 +237,7 @@ function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidd
   /* oct 2026: el globo cuenta también lo oculto que se está mostrando (vencidas, terminadas, faltan programar) */
   const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf+[U.showPast,U.showDone,U.lkGh].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
   {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc)}
-  {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML||($('#fmxp')||{}).innerHTML)}
+  {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML)}
   const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff);
   const bd=$('#bdots'),db=$('#fdots');if(bd&&db){bd.hidden=!U.lbDots;db.setAttribute('aria-expanded',U.lbDots?'true':'false');db.classList.toggle('on',!!U.lbDots)}
   lkPopPlace()}

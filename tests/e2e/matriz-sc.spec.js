@@ -12,7 +12,7 @@ const cell = async (page, amb, cat) => { const i = await page.evaluate(c => MX.v
 test('SC: ve solo su partida y la cambia directo (queda constancia); si contradice al ingeniero queda destacado', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; render(); });
-  await page.click('#mxedit');
+  await page.evaluate(() => { MX.edit = true; render(); });
   await (await cell(page, 'a1', 'k1')).click();
   await page.click('#pop button[data-s="t"][data-do="scs"]');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c)).toEqual({ k1: 't' });
@@ -53,6 +53,19 @@ test('ingeniero: ve los cambios del SC en Hoy, revierte uno y da por visto otro'
   noErrors(errors, 'revisar cambios del SC');
 });
 
+test('SC: «＋ Agregar a un ambiente» elige un ambiente donde aún no tiene nada y una actividad del catálogo', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: [...CAT, ['mcat', 'k5', { name: 'Espejos', sc: 'c1', cl: 't', al: ['espejos'], ord: 30 }]] });
+  await page.evaluate(() => { U.piso = ''; render(); });
+  await page.click('#mxadd');
+  await page.click('#mxakl [data-mxaa="a3"]');
+  await expect(page.locator('#mxpkl [data-mxpk="k5"]')).toBeVisible(); // propuestas del catálogo (no texto libre)
+  await expect(page.locator('#mxpkl [data-mxpk="k2"]')).toHaveCount(0); // otra partida
+  await expect(page.locator('#mxpkl [data-mxpknew]')).toBeVisible();
+  await page.click('#mxpkl [data-mxpk="k5"]');
+  await expect.poll(() => page.evaluate(() => ((__dbGet('mamb', 'a3') || {}).c || {}).k5)).toBe('p');
+  noErrors(errors, 'SC agrega a un ambiente');
+});
+
 test('recorrido del SC: solo ve su partida y no marca el ambiente revisado', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; U.mxV = 'rec'; render(); });
@@ -60,6 +73,7 @@ test('recorrido del SC: solo ve su partida y no marca el ambiente revisado', asy
   await expect(page.locator('[data-mxrc="k1"] [data-mxrs="t"]')).toBeEnabled();
   await expect(page.locator('[data-mxrc="k2"]')).toHaveCount(0); // lo de otra partida no se muestra
   await expect(page.locator('#mxrok')).toHaveCount(0);
+  await expect(page.locator('#mxrnext')).not.toContainText('sin confirmar'); // el SC guarda al tocar: no hay nada que confirmar
   await page.click('[data-mxrc="k1"] [data-mxrs="c"]');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c?.k1)).toBe('c');
   noErrors(errors, 'recorrido SC');

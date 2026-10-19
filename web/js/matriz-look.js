@@ -281,3 +281,22 @@ async function mxRevReject(id){const c=MX.cat.get(id);if(!c||!mxEd())return;cons
   if(rows||st){if(await uiAsk({title:`No se puede rechazar «${c.name}»`,text:`Ya se usa: ${rows?`${rows} ${rows===1?'fila':'filas'} del lookahead`:''}${rows&&st?' y ':''}${st?`${st} ${st===1?'estado marcado':'estados marcados'} en la matriz`:''}. Para no perder nada, combínala con la actividad correcta: sus filas y estados pasan a esa.`,ok:'Combinar…',tone:'warn'}))mxMergeDlg(id);return}
   if(!await uiAsk({title:`Rechazar «${c.name}»`,text:'No tiene filas en el lookahead ni estados en la matriz. Queda archivada (se puede restaurar).',ok:'Rechazar',tone:'warn'}))return;const r=c.rev;
   fcol('mcat').doc(id).set({rev:mxFV().delete(),arch:{t:NOW(),by:me.email,n:me.name||'',rej:true},...mxNow()},{merge:true}).then(()=>toast('Rechazada','Deshacer',()=>fcol('mcat').doc(id).set({rev:r,arch:mxFV().delete(),...mxNow()},{merge:true}).catch(mxErr))).catch(mxErr)}
+
+/* R1 (oct 2026, decidido con el dueño): al nombrar una fila del Lookahead con una actividad que la Matriz tiene confirmada como
+   Terminado o No aplica en ese ambiente, la fila se ocultaría al instante. Se pregunta si vuelve a Pendiente en la Matriz para
+   programarla. Ingenieros (mxWrite, Deshacer) y el SC en su partida (mxScSet, con su constancia). */
+async function mxReopenAsk(x){if(!x||mxDoneSt(x)!=='ok')return;const cid=mxCatOf(x);const c=MX.cat.get(cid);if(!c)return;
+  const ed=mxEd();const sc=!ed&&SCK()&&mxScCan(c);const a=S.amb.get(x.ambId)||{};const m=MX.amb.get(x.ambId)||{};const v=(m.c||{})[cid];const who=(m.m||{})[cid];
+  if(!ed&&!sc){toast(`«${c.name}» figura como ${MXS[v]} en la Matriz en ${a.code||''}: la fila queda oculta. Pide a un ingeniero que la vuelva a Pendiente.`);return}
+  /* auditoría 19/10: si el ambiente ya tiene otra fila de esta actividad que volvería a verse (sin días o con días desde el inicio
+     de la ventana; las vencidas siguen ocultas), se usa esa y se quita la nueva, para no dejar dos filas iguales */
+  const w0=(winDays()[0]||{}).d||todayIso();
+  const old=[...S.act.values()].filter(o=>o.id!==x.id&&o.ambId===x.ambId&&!o._del&&mxCatOf(o)===cid&&(!(o.days||[]).length||(o.days||[]).some(d=>d>=w0)));
+  const ok=await uiAsk({title:`«${c.name}» está ${MXS[v]} en la Matriz`,tone:'warn',
+    text:`${a.code?a.code+' · '+(a.name||'')+'. ':''}${who&&who.n?`Lo marcó ${who.n}${who.t?' el '+fmtD(ldt(who.t)):''}. `:''}Si la dejas así, esta fila se oculta del Lookahead. Si todavía no está terminada, vuelve a Pendiente y podrás programarla.${old.length?` Este ambiente ya tiene ${old.length===1?'una fila':old.length+' filas'} de esta actividad: se usará esa y se quitará la que acabas de agregar.`:''}`,
+    ok:old.length?'Volver a Pendiente y usar la fila existente':'Volver a Pendiente y programar',cancel:'Dejarla como está'});
+  if(!ok)return;
+  if(sc)await mxScSet(x.ambId,cid,'p');
+  else{const DEL=firebase.firestore.FieldValue.delete();await mxWrite(new Map([[x.ambId,{[cid]:'p'}]]),`${c.name}: Pendiente en la Matriz (${a.code||''})`,new Map([[x.ambId,{[cid]:v===undefined?DEL:v}]]))}
+  if(old.length){const o=arc('acts',x.id);if(o)apply([o],`Fila repetida de «${c.name}» quitada (se usa la existente)`);toast(`Se usa la fila existente de «${c.name}» en ${a.code||'el ambiente'}`)}
+  requestRender()}

@@ -189,3 +189,22 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Prueba: `tests/e2e/matriz-tren.spec.js`.
 
 - Oct 2026: «Matriz › Gráfico» no muestra códigos (el plano ya rotula el ambiente) y rellena más transparente (`z.op/sop/nolab` en `ambMap`). «+» junto al SC en la Matriz crea actividad (`mxCatNew`, con chips de tipo).
+
+## Ajustes del 19/10/2026 (pedido del dueño)
+- **Desplazamiento:** `renderMat` llama a `mxFit()` antes de devolver el scroll de `#mxbox`. Antes `.mxbox{max-height:none}` dejaba la caja sin scroll en ese instante, el `scrollTop` quedaba en 0 y cada cambio llevaba arriba.
+- **Recorrido del SC:** cada toque ya guarda al instante; su botón dice «Siguiente ambiente →» (antes «Siguiente sin confirmar», que hacía pensar que faltaba confirmar). La revisión del ingeniero (✓ Visto / Revertir, fusionar y desglosar esperan) sigue igual.
+- **＋ Agregar a un ambiente** (`#mxadd`, editores y SC) y el «+» del SC en la cabecera (`data-mxnew`): `mxAddFlow(pre)` (matriz-rec.js) elige el ambiente (cualquiera de los pisos a la vista, también donde el SC aún no tiene nada) y luego `mxRecPick(amb,ed,add,pre)` con el catálogo (las del SC `pre` primero; al final «Crear … en el catálogo» → `mxRecNew(...,pre)`). `mxAddCell` la deja Pendiente (SC: `mxScSet`; ingeniero: `mxWrite` con Deshacer), suma el SC al filtro si hacía falta y la resalta (`MX.focus`). El «+» ya no abre `mxCatNew` con texto libre (sigue en Catálogo).
+- **Lookahead:** el botón «Faltan programar» (`#fmxp`) salió de «Filtros y vista» a la barra, junto a «Quitar filtros».
+
+## 19/10/2026 (2.ª parte, aprobado por el dueño tras la maqueta)
+- **«Por actividad»** (`js/matriz-act.js`, `U.mxV='act'`; `U.mxAct`, `U.mxActDone` en `saveUI`): se elige una actividad (chips si son ≤ 14, si no un `select` por SC; SC: solo su partida; ingeniero: según el filtro de SC) y se ven los ambientes de los pisos a la vista por sector con 4 botones. Un toque guarda; casillas + barra inferior aplican a varios (`mxActSet`: ingeniero un `mxWrite`; SC una celda por escritura con `mxScSet(...,quiet)` y un solo aviso con Deshacer). «Ocultar lo terminado» y «＋ Agregar a otro ambiente» (`mxActAddAmb`).
+- **Nombres en horizontal** (`table.mx.mxhz`): si las columnas caben a lo ancho (110 px c/u en tamaño normal), los nombres van en horizontal (hasta 3 líneas); si no, en vertical como antes. El tamaño −/+ redibuja.
+- **PC sin «Editar»** (`mxPC()`: `hover:hover` y `pointer:fine`): la matriz siempre es editable; la consulta queda para tablet y celular. En las pruebas, `window.__mxTouch=true` simula la tablet.
+- **Rellenar arrastrando:** se probó y se quitó (19/10, no le pareció práctico al dueño).
+- **Solo lo que falta** (`#mxfalta`, `U.mxFalta`): quita ambientes y columnas sin Pendiente ni En curso.
+- **Fila y columna bajo el puntero** (`mxHov`, estilo `#mxhovst`; solo con mouse).
+- **R1 en el Lookahead** (`mxReopenAsk`, matriz-look.js, desde `commitField` al nombrar una fila): si la Matriz tiene la actividad confirmada Terminado/No aplica en ese ambiente (la fila se ocultaría), pregunta «Volver a Pendiente y programar». Ingeniero: `mxWrite` con Deshacer; SC en su partida: `mxScSet` (queda para revisión del ingeniero como cualquier cambio suyo).
+- Prueba: `tests/e2e/matriz-act.spec.js`.
+- **Filtro en «Por actividad»** (ingenieros): menú «Subcontratistas ▾» (el mismo de la Matriz, `U.mxSc`) y buscador de actividad o SC (`#mxaq`, filtra los chips en pantalla sin redibujar); chips agrupados por SC.
+- **R1 sin filas repetidas** (auditoría 19/10): si el ambiente ya tiene otra fila de la actividad que volvería a verse (sin días o con días desde el inicio de la ventana), se usa esa y la nueva se archiva (`arc`, con historial); si la anterior está vencida, queda como historial oculto y se programa en la nueva. Pruebas en `matriz-act.spec.js`.
+- **Auditoría 19/10, puntos 3 y 4:** «Por actividad» del SC en bloque muestra «Guardando N de M…» (`mxActProg`, `#mxaprog` fijo en body), no acepta otro bloque mientras guarda (`MXA.busy`) y al final dice cuántos no se guardaron (`mxScSet(...,quiet)` ahora lanza el error). El resaltado de columna se recalcula tras cada redibujo con la última posición del puntero (`MX.hp`, `elementFromPoint`).
