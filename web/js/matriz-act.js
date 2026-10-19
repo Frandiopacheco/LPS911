@@ -53,8 +53,17 @@ async function mxActSet(ambs,cat,s,ed){if(!cat||!ambs.length)return;
     for(const a of ambs){const prev=((MX.amb.get(a)||{}).c||{})[cat.id];by.set(a,{[cat.id]:s});un.set(a,{[cat.id]:prev===undefined?DEL:prev})}
     await mxWrite(by,ambs.length===1?`${cat.name}: ${MXS[s]}`:`${cat.name}: ${MXS[s]} en ${ambs.length} ambientes`,un);render();return}
   if(!mxScCan(cat))return;if(ambs.length===1){await mxScSet(ambs[0],cat.id,s);return}
-  const done=[];for(const a of ambs){const u=await mxScSet(a,cat.id,s,true);if(u)done.push(u)}
-  render();toast(`${cat.name}: ${MXS[s]} en ${done.length} ambientes`,'Deshacer',async()=>{for(const u of done)await mxScUndo(...u,true);toast('Deshecho')})}
+  /* auditoría 19/10 (punto 3): las reglas piden una celda por escritura; con muchos ambientes tarda, así que se muestra el avance
+     («Guardando 12 de 30…»), no se aceptan otros cambios en bloque mientras tanto y al final se dice cuántos no se guardaron */
+  if(MXA.busy){toast('Espera a que termine de guardar el cambio anterior.');return}MXA.busy=true;
+  const pg=mxActProg(`Guardando 0 de ${ambs.length}…`);const done=[];let bad=0,err='';
+  try{for(let i=0;i<ambs.length;i++){try{const u=await mxScSet(ambs[i],cat.id,s,true);if(u)done.push(u)}catch(e){bad++;err=e&&e.code||String(e)}pg(`Guardando ${i+1} de ${ambs.length}…`)}}
+  finally{MXA.busy=false;pg(null)}
+  render();const und=done.length?['Deshacer',async()=>{const p2=mxActProg(`Deshaciendo 0 de ${done.length}…`);try{for(let i=0;i<done.length;i++){await mxScUndo(...done[i],true);p2(`Deshaciendo ${i+1} de ${done.length}…`)}}finally{p2(null)}toast('Deshecho')}]:[];
+  toast(bad?`${cat.name}: ${MXS[s]} en ${done.length} de ${ambs.length} ambientes. ${bad} no se guardaron (${err}); revisa la conexión y vuelve a marcarlos.`:`${cat.name}: ${MXS[s]} en ${done.length} ambientes`,...und)}
+/** aviso fijo de avance (no lo borra el redibujo de la pantalla); pg(texto) lo actualiza, pg(null) lo quita */
+function mxActProg(t){let el=document.getElementById('mxaprog');if(!el){el=document.createElement('div');el.id='mxaprog';el.className='mxaprog';el.setAttribute('role','status');document.body.appendChild(el)}
+  const set=v=>{if(v==null){el.remove();return}el.textContent=v};set(t);return set}
 
 /** agregar esta actividad a un ambiente que todavía no la tiene (pendiente) */
 function mxActAddAmb(cat,ed){if(!cat)return;const cells=mxCells();const L=[];for(const r of mxRows())for(const a of r.ambs)if(!(cells.get(a.id)||{})[cat.id])L.push({a,r});
