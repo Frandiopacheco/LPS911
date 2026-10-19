@@ -23,3 +23,27 @@ test('un rechazo de permisos en un historial no detiene la carga del respaldo', 
   await expect(page.locator('#impmsg')).toContainText('lhlog: 2');
   noErrors(errors, 'carga tolerante');
 });
+
+test('los historiales que las reglas rechazarían se descartan antes de escribir (sin reintentos de a uno) y no se redibuja durante la carga', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'team' });
+  await page.click('[data-teamv="dat"]');
+  page.on('dialog', d => d.accept());
+  const r = await page.evaluate(async () => {
+    const my = me.email.toLowerCase();
+    await db.collection('lhlog').doc('ya').set({ t: 1, by: my, items: [] });
+    await db.collection('mver').doc('v1').set({ t: 1 });
+    const sets = []; const bw = window.batchWrites; window.batchWrites = async (w, p) => { w.forEach(x => sets.push(x[0] + '/' + x[1])); return bw(w, p); };
+    let busy = 0; const rr = window.render; window.render = (...a) => { if (IMPORTING) busy++; return rr(...a); };
+    const data = { formato: 'lps911-v2', colecciones: {
+      lhlog: { ya: { t: 1, by: my, items: [] }, nuevo: { t: 2, by: my, items: [] }, ajeno: { t: 3, by: 'otro@obra.pe', items: [] } },
+      mver: { v1: { t: 1 }, v2: { t: 2 } },
+      sectors: { sy: { pisoId: 'p1', code: 'SY', name: 'Sector Y', order: 9 } } } };
+    await importJson({ text: async () => JSON.stringify(data) });
+    return { sets, busy, importing: IMPORTING };
+  });
+  expect(r.sets.sort()).toEqual(['lhlog/nuevo', 'mver/v2', 'sectors/sy']);
+  expect(r.busy).toBe(0);
+  expect(r.importing).toBe(false);
+  await expect(page.locator('#impmsg')).toContainText('lhlog: 2');
+  noErrors(errors, 'carga sin reintentos');
+});

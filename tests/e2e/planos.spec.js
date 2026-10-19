@@ -713,6 +713,35 @@ test('vínculos: la ventana de confirmar (Borrar, Texto) y los avisos se ven enc
   noErrors(errors, 'vínculos ventana');
 });
 
+test('vínculos: «Quitar de la rev. anterior» archiva de una vez los vínculos puestos antes de la revisión actual y deja los nuevos', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  const pdf = pdfDemo();
+  await page.setInputFiles('#plfile', ['P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO', 'ZZZ-P2D-ARQ-E05-AG07_CORTES A B']
+    .map(n => ({ name: `2459243-PTSA-XXX-${n}.pdf`, mimeType: 'application/pdf', buffer: pdf })));
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+  // Rev. 2 cargada hace un rato: k1 y k2 vienen de la Rev. 1 (corridos), k3 se aceptó después
+  await page.evaluate(() => { const T = NOW() - 60_000; return fcol('plb').doc('ARQ_AG03').update({ rev: 2, ts: T, lk: [
+    { id: 'k1', x0: 0.1, y0: 0.2, x1: 0.12, y1: 0.22, to: 'ARQ_AG07', v: null, t: '', ts: T - 5000 },
+    { id: 'k2', x0: 0.2, y0: 0.2, x1: 0.22, y1: 0.22, to: 'ARQ_AG07', v: null, t: '' },
+    { id: 'k3', x0: 0.5, y0: 0.5, x1: 0.52, y1: 0.52, to: 'ARQ_AG07', v: null, t: '', ts: T + 5000 }] }); });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); window.__uiAskReal = true; });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  await page.click('#plv [data-pv="lk"]');
+  await expect(page.locator('#plv .plkbar [data-pk="oldoff"]')).toContainText('Quitar 2 de la rev. anterior');
+  await page.click('#plv .plkbar [data-pk="oldoff"]');
+  await page.click('#uask [data-ua="si"]');
+  await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).map(l => l.id).join())).toBe('k3');
+  expect(await page.evaluate(() => PLB.get('ARQ_AG03').lk.filter(l => l.arch).length)).toBe(2); // archivados, no borrados
+  await expect(page.locator('#plv .plkbar [data-pk="oldoff"]')).toHaveCount(0);
+  noErrors(errors, 'vínculos rev. anterior');
+});
+
 test('nitidez: con zoom profundo, al detenerse se redibuja la pantalla desde el PDF original; al moverse se cancela', async ({ page }) => {
   test.setTimeout(150_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
