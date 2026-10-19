@@ -250,7 +250,6 @@ function mxSelIx(t){if(MX.ix&&MX.ix.t===t)return MX.ix;const m=new Map(),on=new 
 function mxPaintSel(){const t=$('#mxt');if(!t)return;const ix=mxSelIx(t);
   for(const k of ix.on)if(!MX.sel.has(k)){const td=ix.m.get(k);if(td)td.classList.remove('sl');ix.on.delete(k)}
   for(const k of MX.sel)if(!ix.on.has(k)){const td=ix.m.get(k);if(td){td.classList.add('sl');ix.on.add(k)}}
-  mxFillHandle(ix);
   const old=$('#mxsb');const n=MX.sel.size;if(old&&n&&old.firstElementChild){old.firstElementChild.textContent=`${n} ${n===1?'celda':'celdas'}`;return}
   const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
 function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
@@ -297,18 +296,15 @@ function mxWire(main){mxWireV(main);
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
     if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
     if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
-  t.onpointerdown=e=>{if(e.target.closest('.mxfh')&&e.button===0){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);const o=c&&(mxCells().get(c.amb)||{})[c.cat];if(o){e.preventDefault();e.stopPropagation();MX.fill={a:c,s:o.s,keys:[]};DRAGGING=true}return}
-    const td=e.target.closest('td.mc');if(!td||e.button!==0)return;const c=mxCellAt(td);if(!c)return;
+  t.onpointerdown=e=>{const td=e.target.closest('td.mc');if(!td||e.button!==0)return;const c=mxCellAt(td);if(!c)return;
     if(!mxEdG())return; // consulta: el toque se atiende en onclick (así se puede desplazar)
     e.preventDefault();
     if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();return}
     MX.drag={a:c,add:e.ctrlKey||e.metaKey,base:new Set(MX.sel)};MX.moved=false;MX.anchor=c;DRAGGING=true};
   t.onpointerleave=()=>{MX.hk=null;const st=document.getElementById('mxhovst');if(st)st.textContent=''};
-  mxFillHandle(mxSelIx(t));
-  t.onpointerover=e=>{if(MX.fill){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxFillOver(c);return}
-    mxHov(e);if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
+  t.onpointerover=e=>{mxHov(e);if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
     if(c.amb===MX.drag.a.amb&&c.cat===MX.drag.a.cat&&!MX.moved)return;MX.moved=true;const R=mxRect(MX.drag.a,c);MX.sel=MX.drag.add?new Set([...MX.drag.base,...R]):R;mxPaintSel()}}
-document.addEventListener('pointerup',e=>{if(MX.fill){mxFillEnd();return}if(!MX.drag)return;const d=MX.drag;MX.drag=null;DRAGGING=false;
+document.addEventListener('pointerup',e=>{if(!MX.drag)return;const d=MX.drag;MX.drag=null;DRAGGING=false;
   if(!MX.moved){const k=d.a.amb+'|'+d.a.cat;if(d.add){if(MX.sel.has(k))MX.sel.delete(k);else MX.sel.add(k);mxPaintSel();return}
     const td=document.querySelector(`#mxt tr[data-amb="${CSS.escape(d.a.amb)}"] td[data-k="${d.a.ci}"]`);MX.sel=new Set([k]);mxPaintSel();if(td)mxInfo(td,d.a);return}
   if(ready)requestRender()});
@@ -478,16 +474,6 @@ function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-perform
   const cell=tr&&ci>=0?tr.querySelector(`td[data-k="${ci}"]`):null;if(cell){cell.classList.add('mxhlx');if(!f.scrolled){f.scrolled=true;const b=$('#mxbox');if(b){const br=b.getBoundingClientRect(),cr=cell.getBoundingClientRect();b.scrollTop+=cr.top-br.top-b.clientHeight/2+cr.height/2;b.scrollLeft+=cr.left-br.left-b.clientWidth/2+cr.width/2}}}
   clearTimeout(MX.focusT);MX.focusT=setTimeout(()=>{MX.focus=null;document.querySelectorAll('#mxt .mxhl,#mxt .mxhlc,#mxt .mxhlx').forEach(e=>e.classList.remove('mxhl','mxhlc','mxhlx'))},left)}
 
-/* ---------- rellenar arrastrando (idea 5, oct 2026): con una celda elegida, su asa (esquina) se arrastra hacia arriba o abajo y
-   copia ese estado a los ambientes de la misma columna que tienen la actividad (como Excel). Solo editores, con Deshacer. */
-function mxFillHandle(ix){document.querySelectorAll('#mxt .mxfh').forEach(e=>e.remove());if(!mxEdG()||MX.sel.size!==1)return;
-  const td=ix.m.get([...MX.sel][0]);if(td)td.insertAdjacentHTML('beforeend','<span class="mxfh" title="Arrastra para copiar este estado a los ambientes de arriba o abajo"></span>')}
-function mxFillOver(c){const f=MX.fill;if(c.ci!==f.a.ci)return;const cells=mxCells();const lo=Math.min(c.r,f.a.r),hi=Math.max(c.r,f.a.r);
-  document.querySelectorAll('#mxt td.mxfr').forEach(td=>td.classList.remove('mxfr'));f.keys=[];
-  document.querySelectorAll('#mxt tr[data-mxr]').forEach(tr=>{const r=+tr.dataset.mxr;if(r<lo||r>hi||r===f.a.r)return;if(!(cells.get(tr.dataset.amb)||{})[f.a.cat])return;
-    const td=tr.querySelector(`td[data-k="${f.a.ci}"]`);if(td){td.classList.add('mxfr');f.keys.push(tr.dataset.amb+'|'+f.a.cat)}})}
-function mxFillEnd(){const f=MX.fill;MX.fill=null;DRAGGING=false;document.querySelectorAll('#mxt td.mxfr').forEach(td=>td.classList.remove('mxfr'));
-  if(!f.keys.length){requestRender();return}MX.sel=new Set(f.keys);mxApply(f.s)}
 /* ---------- fila y columna bajo el puntero (idea 7): la fila con CSS (tr:hover), la columna con una regla que cambia */
 function mxHov(e){if(!mxPC())return;const td=e.target.closest('td.mc,th.mxc');const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
   let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}

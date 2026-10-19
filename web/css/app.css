@@ -3951,8 +3951,6 @@ table.mx.mxhz .mxc.mxpg span{padding-top:14px}
 table.mx.mxhz{--ch:32px}table.mx.mxhz.mxz0{--ch:26px}table.mx.mxhz.mxz2{--ch:40px}
 table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 @media (hover:hover) and (pointer:fine){table.mx tbody tr[data-amb]:hover>td.mc{background-image:linear-gradient(var(--mxhov),var(--mxhov))}table.mx tbody tr[data-amb]:hover>th.mxa{background-color:var(--mxhovh)}}
-td.mc .mxfh{position:absolute;right:-4px;bottom:-4px;width:9px;height:9px;background:var(--accent,#1f5fae);border:2px solid var(--panel);border-radius:2px;cursor:ns-resize;z-index:2;touch-action:none}
-table.mx td.mc.mxfr{outline:2px dashed var(--ink2);outline-offset:-3px}
 .mxabar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .mxabar .tin{min-width:0;max-width:100%}
 .mxachips{display:flex;flex-wrap:wrap;gap:6px}

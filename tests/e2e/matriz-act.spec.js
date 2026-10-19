@@ -25,23 +25,12 @@ test('SC › Por actividad: un toque guarda y con casillas marca varios a la vez
   noErrors(errors, 'por actividad SC');
 });
 
-test('editor en la PC: sin botón Editar; «Solo lo que falta»; nombres en horizontal con pocas columnas; rellenar arrastrando', async ({ page }) => {
+test('editor en la PC: sin botón Editar; «Solo lo que falta»; nombres en horizontal con pocas columnas', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: CAT });
   await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
   await expect(page.locator('#mxt')).toBeVisible();
   await expect(page.locator('#mxedit')).toHaveCount(0);
   await expect(page.locator('#mxt')).toHaveClass(/mxhz/);
-  // rellenar: elige a1 (pendiente) y arrastra su asa hasta a3
-  const ci = await page.evaluate(() => MX.view.cols.findIndex(c => c.id === 'k1'));
-  await page.evaluate(() => { MX.sel = new Set(['a1|k1']); mxPaintSel(); });
-  await page.evaluate(() => mxApply('c'));
-  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('c');
-  await page.evaluate(() => { MX.sel = new Set(['a1|k1']); render(); });
-  const h = page.locator('#mxt .mxfh');
-  await expect(h).toHaveCount(1);
-  const to = page.locator(`#mxt tr[data-amb="a2"] td[data-k="${ci}"]`);
-  await h.hover(); await page.mouse.down(); await to.hover(); await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a2').c.k1)).toBe('c');
   // solo lo que falta: con el SC c1, a3 (terminado) sale de la tabla
   await page.evaluate(() => { U.mxSc = ['c1']; render(); });
   await expect(page.locator('#mxt tr[data-amb="a3"]')).toHaveCount(1);
