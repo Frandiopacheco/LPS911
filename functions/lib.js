@@ -202,15 +202,16 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
     }
     if (!Object.keys(items).length) continue;
     for (const x of X) if (pisoOfAmb(x.ambId) === p.id) snap[x.id] = (x.days || []).slice().sort();
-    const propOut = [];
+    const propOut = [], propOutT = {};
     for (const d of props) for (const [id, it0] of Object.entries(d.items || {})) {
       /* oct 2026: si el SC edita algo ya enviado, la versión enviada (sentV) sigue pendiente */
       const it = it0 && (it0.sent ? it0 : it0.sentV ? { ...it0.sentV, sent: true } : null);
       if (!it) continue; const off = actById.get(id) || null; const x = it.after || off || it.base; if (!x || pisoOfAmb(x.ambId) !== p.id) continue;
       const pa = it.after && off ? propMerge(it.after, it.base || off, off) : it.after;
-      if (propTouch(off, pa).some(z => days.has(z))) propOut.push((d.sc || d.id) + '/' + id);
+      if (propTouch(off, pa).some(z => days.has(z))) { const k = (d.sc || d.id) + '/' + id; propOut.push(k); propOutT[k] = it.sentAt || 0; }
     }
-    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut } : {}) },
+    /* propOutT (oct 2026): hora de envío de cada propuesta que quedó fuera, para poder ver en el Plan semanal cuándo llegó */
+    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut, propOutT } : {}) },
       wsnap: { snap, n, pisoId: p.id, t: nowIso } });
   }
   return out;
