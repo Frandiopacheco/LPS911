@@ -70,3 +70,38 @@ test('Por actividad › ingeniero: filtra por subcontratista y busca la activida
   await expect(page.locator('[data-mxac="k2"]')).toHaveClass(/on/);
   noErrors(errors, 'filtro por actividad');
 });
+
+// auditoría 19/10: R1 no deja dos filas iguales; las vencidas siguen siendo historial
+const R1 = (oldDays) => [['mcat', 'k1', { name: 'Redes empotradas', sc: 'c1', cl: 't', al: ['redes empotradas'], ord: 10 }], ['mamb', 'a3', { c: { k1: 't' }, by: 'x', t: 1 }],
+  ['acts', 'i2', { ambId: 'a3', sc: 'c1', name: 'REDES EMPOTRADAS', und: 'pto', days: ['2025-01-06'], order: 10 }], // la de la obra de prueba, vencida
+  ['acts', 'old1', { ambId: 'a3', pisoId: 'p2', sc: 'c1', name: 'Redes empotradas', und: 'glb', days: oldDays, order: 90 }]];
+async function nameNew(page) {
+  await page.evaluate(() => addAct('a3'));
+  const id = await expect.poll(() => page.evaluate(() => ([...S.act.values()].find(x => x.ambId === 'a3' && !x.name) || {}).id)).not.toBeUndefined().then(() => page.evaluate(() => [...S.act.values()].find(x => x.ambId === 'a3' && !x.name).id));
+  const inp = page.locator(`[data-a="${id}"][data-f="name"]`);
+  await inp.fill('Redes empotradas'); await inp.press('Enter');
+  return id;
+}
+test('R1 con una fila existente sin días: se usa esa y se quita la nueva (una sola fila a la vista)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'look', extra: R1([]) });
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => { U.piso = ''; render(); });
+  await expect(page.locator('#grid tr[data-a="old1"]')).toHaveCount(0); // oculta: la Matriz la da por terminada
+  const id = await nameNew(page);
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a3').c.k1)).toBe('p');
+  await expect.poll(() => page.evaluate(i => !!(__dbGet('acts', i) || {}).arch, id)).toBe(true);
+  await expect(page.locator('#grid tr[data-a="old1"]')).toHaveCount(1);
+  await expect(page.locator(`#grid tr[data-a="${id}"]`)).toHaveCount(0);
+  noErrors(errors, 'R1 fila existente');
+});
+test('R1 con la fila antigua vencida: queda como historial oculto y se programa en la nueva', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'look', extra: R1(['2025-01-06']) });
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => { U.piso = ''; U.showPast = false; render(); });
+  const id = await nameNew(page);
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a3').c.k1)).toBe('p');
+  expect(await page.evaluate(i => !!(__dbGet('acts', i) || {}).arch, id)).toBe(false);
+  await expect(page.locator(`#grid tr[data-a="${id}"]`)).toHaveCount(1);
+  await expect(page.locator('#grid tr[data-a="old1"]')).toHaveCount(0); // vencida
+  noErrors(errors, 'R1 vencida');
+});
