@@ -2775,6 +2775,15 @@ div.tp-dif{padding-left:0}
 .dpr{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}.dpr span{color:var(--muted)}.dpr b{text-align:right;font-weight:600}
 .dpo{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:13.5px}.dpo i{width:10px;height:10px;border-radius:50%;background:var(--k);flex:none}
 @media (max-width:1280px){.dkpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.dgrid2.dgA{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);align-items:stretch}
+.dgrid2.dgB{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}
+.dgrid2.dgA .dsv.chart svg{max-width:none}
+.dpr{display:grid;grid-template-columns:150px minmax(0,1fr) 48px auto;gap:10px;align-items:center}
+.dpr .dsw:empty{display:none}
+.dk b.dkt{font-size:22px;line-height:1.25}
+.dch .dseg{margin-left:auto;text-transform:none;letter-spacing:0}
+.dch .dseg button{font-size:12px;padding:3px 9px}
+@media (max-width:640px){.dpr{grid-template-columns:minmax(0,1fr) 44px;row-gap:4px}.dpr .dsn{grid-column:1/-1}.dch{flex-wrap:wrap}}
 @media (max-width:1100px){.dgrid2{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:640px){.dfty{width:100%}.dfty select{flex:1;max-width:none}}
 /* iPhone agranda la página al tocar un campo con letra menor a 16 px y no vuelve a su tamaño:
