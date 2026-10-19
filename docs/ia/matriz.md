@@ -189,3 +189,5 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Prueba: `tests/e2e/matriz-tren.spec.js`.
 
 - Oct 2026: «Matriz › Gráfico» no muestra códigos (el plano ya rotula el ambiente) y rellena más transparente (`z.op/sop/nolab` en `ambMap`). «+» junto al SC en la Matriz crea actividad (`mxCatNew`, con chips de tipo).
+
+- **Pantalla conservada (oct 2026):** al cambiar de pestaña, la Matriz (como el Lookahead) no se destruye: `leaveView` la aparta oculta (`KEEP.mat`, `#mainMat`, `.lkeep`) y `enterView` la repone. `renderMat` no rearma las celdas si `mxViewKey()` (datos `MX.v`/`DV`/`DONEV`, fecha y opciones de la vista) es igual al de la última vez; si algo cambió, se rearma como siempre. Con los datos de la obra, volver a la Matriz pasó de ~4 s a ~0,6 s en un equipo lento (CPU ×4). Prueba: `matriz-keep.spec.js`.
