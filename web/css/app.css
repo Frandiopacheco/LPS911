@@ -3941,3 +3941,24 @@ table.pcreg td{padding:6px 8px}
 .purs ul{margin:6px 0 0 18px;padding:0;font-size:13.5px;color:var(--bad)}.puck{display:flex;align-items:center;gap:8px;margin-top:6px;font-weight:600;cursor:pointer}.puck input{width:20px;height:20px}
 body.pufs .top,body.pufs #bnav,body.pufs #verban{display:none!important}
 @media (max-width:760px){.pusf.w{width:100%}.puhp{left:8px;width:calc(100% - 16px)}}
+
+/* Matriz (19/10/2026): nombres en horizontal cuando caben, asa de rellenar, fila y columna bajo el puntero, vista «Por actividad» */
+table.mx{--mxhov:color-mix(in srgb,var(--ink) 9%,transparent);--mxhovh:color-mix(in srgb,var(--ink) 7%,var(--panel))}
+table.mx.mxhz.mxz0{--cw:84px}table.mx.mxhz.mxz1{--cw:110px}table.mx.mxhz.mxz2{--cw:136px}
+table.mx.mxhz .mxn th{height:auto;vertical-align:bottom}
+table.mx.mxhz .mxc span{writing-mode:horizontal-tb;transform:none;white-space:normal;max-height:none;text-align:center;line-height:1.25;padding:6px 6px 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+table.mx.mxhz .mxc.mxpg span{padding-top:14px}
+table.mx.mxhz{--ch:32px}table.mx.mxhz.mxz0{--ch:26px}table.mx.mxhz.mxz2{--ch:40px}
+table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
+@media (hover:hover) and (pointer:fine){table.mx tbody tr[data-amb]:hover>td.mc{background-image:linear-gradient(var(--mxhov),var(--mxhov))}table.mx tbody tr[data-amb]:hover>th.mxa{background-color:var(--mxhovh)}}
+td.mc .mxfh{position:absolute;right:-4px;bottom:-4px;width:9px;height:9px;background:var(--accent,#1f5fae);border:2px solid var(--panel);border-radius:2px;cursor:ns-resize;z-index:2;touch-action:none}
+table.mx td.mc.mxfr{outline:2px dashed var(--ink2);outline-offset:-3px}
+.mxabar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.mxabar .tin{min-width:0;max-width:100%}
+.mxachips{display:flex;flex-wrap:wrap;gap:6px}
+.mxachips .chip{min-height:40px;border-left:4px solid var(--c,var(--line))}
+.mxai{flex-wrap:nowrap}.mxai .mxrin{flex:1 1 auto;min-width:0}
+.mxack{width:22px;height:22px;flex:none}
+.mxrsec{margin-bottom:12px}
+.mxabulk{justify-content:flex-start;align-items:center}
+@media (max-width:760px){.mxai{flex-wrap:wrap}.mxai .mxrin{flex-basis:calc(100% - 40px)}}
