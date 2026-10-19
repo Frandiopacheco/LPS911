@@ -116,7 +116,7 @@ function renderPlan(main){
     let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
      ${frozen?`<span class="pill ok"${w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
-     ${frozen&&(w.propOut||[]).length?`<span class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar</span>`:''}
+     ${frozen&&(w.propOut||[]).length?`<button class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana. Toca para ver cuáles y qué pasó con ellas">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar ›</button>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
      ${(frozen?ED:FZ)?(frozen?`<button class="ib" data-unfreeze="1">Descongelar</button>`:`${isAdmin?`<button class="ib" data-freezever="1" title="Congelar con los compromisos de una versión guardada del lookahead (p. ej. el autoguardado del domingo)">Desde versión…</button>`:''}<button class="ib pri" data-freeze="1">Congelar ${esc(p.code)}</button>`):''}</div>
      ${!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
@@ -153,7 +153,13 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
       E.push({g:sc,h:`<tr class="grp" data-gk="${esc(sc)}"><td colspan="10"><span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0;font-size:13px"><i></i>${esc(c.name)}</span> <span class="note">${l.length} compromiso${l.length>1?'s':''}${frozen?` · PPC ${pct(ok/l.length)}${so&&(so.nimp||so.ext)?` · del SC ${pct(so.ppcSc)}`:''}${so&&so.ext?` · ${so.ext} de otras partidas le cuenta${so.ext>1?'n':''}`:''}`:''}</span></td></tr>`});
       for(const id of l)row(id,[sc])}
     let t=`</table></div>`;
-    if(extra.length)t+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div><table class="t"><tbody>${extra.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table></div>`;
+    /* oct 2026: «después de congelar» se decide con la foto del lookahead guardada al congelar (wsnap), no solo con lo que falta en los
+       compromisos: una actividad que ya tenía esos mismos días al congelar no se programó después; no entró porque al congelar se tomó
+       como terminada (el servidor mira los registros de campo más antiguos que la página). Así no aparecen como «llegadas después». */
+    const snapX=extra.length?wsnapOf(w):null;const xIn=([id,it])=>!!snapX&&Array.isArray(snapX[id])&&it.days.every(d=>snapX[id].includes(d));
+    const xLate=extra.filter(e=>!xIn(e)),xDone=extra.filter(xIn);const xTb=L=>`<table class="t"><tbody>${L.map(([id,it])=>`<tr><td class="mono" style="white-space:nowrap">${esc(it.code)}</td><td>${esc(it.amb)}</td><td>${esc(it.act)}</td><td>${esc(conOf(it.sc).name)}</td></tr>`).join('')}</tbody></table>`;
+    if(xLate.length)t+=`<div class="pad"><div class="note" style="margin-bottom:6px"><b>Programadas después de congelar</b> · no cuentan para el PPC</div>${xTb(xLate)}</div>`;
+    if(xDone.length)t+=`<div class="pad"><details><summary class="note"><b>No entraron al congelar</b> · ${xDone.length} ya estaba${xDone.length>1?'n':''} programada${xDone.length>1?'s':''}, pero al congelar figuraba${xDone.length>1?'n':''} como terminada${xDone.length>1?'s':''} según los registros de campo · no cuentan para el PPC</summary>${xTb(xDone)}</details></div>`;
     const sv={pid:p.id,pre:h,post:t+'</section>',E,n:ids.length,vis:E,tbl:null};secs.push(sv);parts.push(sv);
   }
   /* EJE-01: con muchos compromisos, solo los bloques cerca de la pantalla (los pisos ya no necesitan content-visibility) */
@@ -166,7 +172,7 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
      (la página «saltaba al final»): se recuerda la primera fila a la vista y se vuelve a ponerla en el mismo lugar */
   const anc=planAnchor(main);
   main.innerHTML=`<div class="scroll"><div class="wrap">
-   ${pageHead('Plan semanal',`Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}`,`<button class="ib" id="bppcx" title="Formato de la empresa: actividades, programación, cumplimiento y análisis de incumplimiento">Exportar Excel</button>`)}<div class="card">
+   ${pageHead('Plan semanal',`Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}`,(()=>{const k=canWrite?freezeAllTargets(n).length:0;return k&&pisos().length>1?`<button class="ib pri" id="bfzall" title="Congela la semana ${n} en todos los pisos que aún no están congelados (no solo el piso elegido arriba)">Congelar todos los pisos (${k})</button>`:''})()+`<button class="ib" id="bppcx" title="Formato de la empresa: actividades, programación, cumplimiento y análisis de incumplimiento">Exportar Excel</button>`)}<div class="card">
    <div class="pad">${vp.length>1?`<div class="tiles" style="margin-bottom:12px"><div class="tile"><span class="k">Pisos congelados</span><span class="v">${fz}<small> de ${vp.length}</small></span></div><div class="tile"><span class="k">Compromisos congelados</span><span class="v">${tN}</span></div><div class="tile"><span class="k">Cumplidos</span><span class="v" style="color:var(--ok)">${tOk}</span></div><div class="tile hl"><span class="k">PPC global sem ${n}</span><span class="v">${pct(gp)}</span></div></div>`:''}
    ${(()=>{const vs=histPisoSet();const P_=[...new Set([...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vs.has(w.pisoId)).map(w=>w.n))].map(k=>{const o=ppcWeekAgg(k,vs);return o?{...o,wk:+k}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
      return P_.length>1?`<details class="ppch"${U.ppcHist===false?'':' open'}><summary>PPC semanal histórico · ${P_.length} semanas</summary><div class="chart tscroll">${linesLegend()+svgLines(ppcHistPts(P_),{h:200})}</div></details>`:''})()}
@@ -189,12 +195,13 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
   $('#plst').onclick=e=>{const b=e.target.closest('[data-st]');if(!b||b.classList.contains('on'))return;PSF.st=b.dataset.st;render()};
   $('#plv').onclick=e=>{const b=e.target.closest('[data-v]');if(!b||b.classList.contains('on'))return;U.planV=b.dataset.v;saveUI();render()};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
-  main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
+  main.onclick=e=>{if(e.target.closest('#bppcx')){ppcSemXlsx(n);return}if(e.target.closest('#bfzall')){freezeAll(n);return}const sec=e.target.closest('section[data-pid]');if(!sec)return;const pid=sec.dataset.pid;
     if(e.target.closest('[data-applyfield],[data-unfreeze],[data-wkrest],[data-yn]')&&!(canWrite&&isPisoResp(pid))){toast('Solo el responsable del piso (o el administrador) evalúa su plan semanal.');return}
     if(e.target.closest('[data-applyfield]')){const wk=S.wk.get(wkId(n,pid));if(!wk)return;const upd={};for(const[id,it]of Object.entries(wk.items||{})){const r=(wk.res||{})[id]||{};const sg=fieldSug(id,it);if(!sg||sg.ok==null||r.ok!=null)continue;
         /* también la imputabilidad decidida en Campo (la de la causa principal); null = la que trae la causa por defecto */
         const cnc=sg.ok?'':(sg.cnc||r.cnc||'');upd[id]={...r,ok:sg.ok,cnc,imp:sg.ok||sg.imp==null||sg.imp===cncImp(cnc)?null:sg.imp,rsc:sg.ok?'':(sg.rsc||''),pc:!sg.ok&&!!sg.pc,note:r.note||(sg.ok&&sg.exc?'Excepción en campo: '+sg.exc:sg.ok===false&&sg.mvm?'Reprogramada en el plan diario: '+sg.mvm:''),exec:it.q?sg.exec:(r.exec??null)}}
       const k=Object.keys(upd).length;if(!k)return;resPatch(n,pid,upd);toast(`${k} compromisos evaluados con los registros de campo. Revisa y corrige si hace falta.`);return}
+    if(e.target.closest('[data-propout]')){propOutShow(n,pid);return}
     {const fv=e.target.closest('[data-freezever]');if(fv){verFreezePick(fv,n,pid);return}}
     if(e.target.closest('[data-freeze]')){freezeWeek(n,pid);return}
     /* auditoría UI-04: se confirma con uiAsk como el resto de la app (antes «toca otra vez en 5 s» y dos redibujos completos) */
@@ -281,30 +288,71 @@ const wsnRef=id=>fcol('wsnap').doc(id);
    se usa la congelación vigente y no se reemplazan sus compromisos ni su evaluación. Necesita conexión. */
 /* src (opcional, «Congelar desde versión»): {items, snap, res, ver:{id,label}} armados desde una versión guardada del lookahead
    en vez del lookahead vivo; el documento guarda fromVer para saber de dónde salió. */
-async function freezeWeek(n,pid,res,src){const items=src?src.items:liveItems(n,pid);let snap={};if(src)snap=src.snap;else for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
+/* o (opcional, «Congelar todos los pisos»): {pend} = propuestas sin decidir ya revisadas y confirmadas para todos los pisos de una vez
+   (no vuelve a preguntar por piso), {quiet} = sin aviso suelto. Devuelve 'ok', 'ex' (ya estaba congelada), 'no' o 'err'. */
+async function freezeWeek(n,pid,res,src,o){o=o||{};const items=src?src.items:liveItems(n,pid);let snap={};if(src)snap=src.snap;else for(const x of S.act.values())if(pisoOfAmb(x.ambId)===pid)snap[x.id]=(x.days||[]).slice().sort();
   const code=S.pis.get(pid)?.code||'';const id=wkId(n,pid);const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||(src&&src.res)||{},frozenBy:me?me.email:'',...(src&&src.ver?{fromVer:src.ver}:{})};
   /* propuestas de SC enviadas y sin decidir para este piso y semana: se avisa antes de cerrar y se guarda cuáles quedaron fuera */
-  if(canWrite){let pend;try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
-    if(!pend)pend=propPendWeek(n,pid,[...PROP.values()]);
-    if(pend.length){const c={new:0,mod:0,del:0};pend.forEach(o=>c[o.kind]++);const pl=(k,s,p)=>k?`${k} ${k>1?p:s}`:'';
-      if(!await uiAsk({title:`${pend.length} propuesta${pend.length>1?'s':''} sin decidir`,text:`Para ${code}, semana ${n}:`,list:[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean),
-        note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return;
-      doc.propOut=pend.map(o=>o.sc+'/'+o.id)}}
-  if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return;S.wk.set(id,{...doc,id});WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);requestRender();return}
-  if(!canWrite)return;const ref=fcol('weeks').doc(id);
+  if(canWrite){let pend=o.pend||null;const ask=!pend;if(!pend){try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
+    if(!pend)pend=propPendWeek(n,pid,[...PROP.values()])}
+    if(pend.length){const c={new:0,mod:0,del:0};pend.forEach(q=>c[q.kind]++);const pl=(k,s,p)=>k?`${k} ${k>1?p:s}`:'';
+      if(ask&&!await uiAsk({title:`${pend.length} propuesta${pend.length>1?'s':''} sin decidir`,text:`Para ${code}, semana ${n}:`,list:[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean),
+        note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return'no';
+      doc.propOut=pend.map(q=>q.sc+'/'+q.id);doc.propOutT=Object.fromEntries(pend.map(q=>[q.sc+'/'+q.id,q.t||0]))}}
+  if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return'ex';S.wk.set(id,{...doc,id});WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);requestRender();return'ok'}
+  if(!canWrite)return'no';const ref=fcol('weeks').doc(id);
   let out;try{out=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(ex&&ex.frozenAt)return{ex};
       const nd={...doc};tx.set(ref,nd);tx.set(wsnRef(id),{snap,n,pisoId:pid,t:doc.frozenAt});return{nd}})}
-  catch(e){toast(e&&e.code==='unavailable'?'Sin conexión: para congelar la semana necesitas internet.':'No se pudo congelar: '+((e&&(e.code||e.message))||e));return}
+  catch(e){if(!o.quiet)toast(e&&e.code==='unavailable'?'Sin conexión: para congelar la semana necesitas internet.':'No se pudo congelar: '+((e&&(e.code||e.message))||e));return'err'}
   if(out.ex){/* ya estaba congelada: se usa la vigente; la evaluación pedida solo entra si ese compromiso aún no tiene */
     S.wk.set(id,{...out.ex,id});const[k,v]=Object.entries(res||{})[0]||[];
     if(k&&(out.ex.items||{})[k]&&!((out.ex.res||{})[k]&&(out.ex.res[k].ok!=null)))setRes(n,pid,k,v);
-    toast(`${code} · semana ${n} ya estaba congelada por otra persona: se usa esa versión`);requestRender();return}
-  WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);S.wk.set(id,{...out.nd,id});requestRender();toast(src&&src.ver?`${code} · semana ${n} congelada desde la versión «${src.ver.label}»`:res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`)}
+    if(!o.quiet)toast(`${code} · semana ${n} ya estaba congelada por otra persona: se usa esa versión`);requestRender();return'ex'}
+  WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);S.wk.set(id,{...out.nd,id});requestRender();if(o.quiet)return'ok';toast(src&&src.ver?`${code} · semana ${n} congelada desde la versión «${src.ver.label}»`:res?`${code} · semana ${n} congelada al registrar la primera evaluación`:`${code} · compromisos de la semana ${n} congelados`);return'ok'}
+/* ---- Congelar todos los pisos (oct 2026, pedido del dueño: además de congelar piso por piso) ----
+   Toma los pisos con compromisos en la semana n que aún no están congelados (todos, no solo el piso elegido arriba). Lee las propuestas
+   una sola vez, pregunta una sola vez por las que siguen sin decidir y congela cada piso en su propia transacción, como «Congelar»:
+   si alguien ya congeló uno mientras tanto, se respeta su versión. */
+function freezeAllTargets(n){return pisos().filter(p=>{const w=S.wk.get(wkId(n,p.id));return!(w&&w.frozenAt)&&Object.keys(liveItems(n,p.id)).length>0})}
+async function freezeAll(n){if(!canWrite)return;const T=freezeAllTargets(n);if(!T.length){toast(`No queda ningún piso por congelar en la semana ${n}.`);return}
+  let docs=null;try{docs=db?(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id})):null}catch(e){docs=null}if(!docs)docs=[...PROP.values()];
+  const PD=new Map(T.map(p=>[p.id,propPendWeek(n,p.id,docs)]));const np=[...PD.values()].reduce((a,L)=>a+L.length,0);
+  const C=new Map(T.map(p=>[p.id,Object.keys(liveItems(n,p.id)).length]));const k=[...C.values()].reduce((a,b)=>a+b,0);const pl=(x,s,p)=>`${x} ${x===1?s:p}`;
+  const list=T.map(p=>{const q=PD.get(p.id).length;return`${p.code} · ${p.name}: ${pl(C.get(p.id),'compromiso','compromisos')}${q?` · ${pl(q,'propuesta sin decidir','propuestas sin decidir')}`:''}`});
+  if(!await uiAsk({title:`¿Congelar la semana ${n} en ${pl(T.length,'piso','pisos')}?`,text:`Quedan fijados ${pl(k,'compromiso','compromisos')}:`,list,
+    note:(np?`Hay ${pl(np,'propuesta','propuestas')} de subcontratistas sin decidir: si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes (Lookahead › Revisar propuestas). `:'')+'Los pisos ya congelados no se tocan.',
+    ok:np?'Congelar igual':'Congelar todo',tone:np?'warn':'info'}))return;
+  const R={ok:0,ex:0,err:0};for(const p of T){const r=await freezeWeek(n,p.id,null,null,{pend:PD.get(p.id),quiet:true});if(r in R)R[r]++}
+  toast(`Semana ${n}: ${pl(R.ok,'piso congelado','pisos congelados')}`+(R.ex?` · ${R.ex} ya ${R.ex===1?'estaba congelado':'estaban congelados'} por otra persona`:'')+(R.err?` · ${R.err} no se ${R.err===1?'pudo':'pudieron'} congelar (revisa la conexión y vuelve a intentar)`:''))}
+/* ---- «N propuestas fuera al congelar»: cuáles eran y qué pasó después (oct 2026) ----
+   La lista weeks.propOut es una foto del momento de congelar: al tocar la píldora se ve cada propuesta con su hora de envío
+   (weeks.propOutT, desde oct 2026) y su estado de ahora (sigue pendiente, o la decisión registrada en lhphist con hora y quién). */
+async function propOutShow(n,pid){const w=S.wk.get(wkId(n,pid));if(!w||!(w.propOut||[]).length)return;const code=S.pis.get(pid)?.code||'';
+  const T=w.propOutT||{};const fz=Date.parse(w.frozenAt)||0;const keys=w.propOut.map(k=>{const i=k.indexOf('/');return{k,sc:k.slice(0,i),id:k.slice(i+1)}});
+  let docs=null,H=[];if(db){const ts=Object.values(T).filter(x=>x>0);const t0=Math.min(fz,...ts)-864e5;
+    try{const[a,b]=await Promise.all([fcol('lhprop').get(),fcol('lhphist').where('t','>=',t0).get()]);docs=new Map(a.docs.map(d=>[d.id,d.data()]));const want=new Set(keys.map(o=>o.id));H=b.docs.map(d=>d.data()).filter(h=>h&&want.has(h.actId))}catch(e){docs=null}}
+  if(!docs)docs=new Map([...PROP.entries()]);
+  const fdt=t=>t?new Date(t).toLocaleString('es-PE',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
+  const ST={ok:'Aceptada',shift:'Aceptada con otra fecha',rej:'Rechazada'};let nAfter=0,nPend=0,nLate=0;
+  const rows=keys.map(o=>{const raw=((docs.get(o.sc)||{}).items||{})[o.id];const pend=propSentOf(raw);const sent=T[o.k]||0;if(sent&&sent>fz)nLate++;
+    const x=S.act.get(o.id)||ARCH.act.get(o.id)||(pend&&(pend.after||pend.base))||(raw&&(raw.after||raw.base))||null;
+    const hs=H.filter(h=>h.actId===o.id&&(h.sc||o.sc)===o.sc&&!h.undone&&(h.t||0)>=(sent||0)).sort((a,b)=>(b.t||0)-(a.t||0));const h=hs[0];
+    const am=x&&S.amb.get(x.ambId);const name=(x&&x.name)||(h&&h.name)||'Actividad';
+    let st;if(pend){nPend++;st='<span class="pill warn">Sigue pendiente</span>'}
+    else if(h){const aft=(h.t||0)>fz;if(aft)nAfter++;st=`<span class="pill ${h.st==='rej'?'neu':'ok'}">${ST[h.st]||'Decidida'}</span> <span class="mu">${fdt(h.t)}${h.n?' · '+esc(h.n):''}${aft?' · después de congelar':' · antes de congelar'}</span>`}
+    else st='<span class="mu">Ya no está pendiente (el subcontratista la retiró o la cambió)</span>';
+    return`<tr><td>${esc(conOf(o.sc).name)}</td><td><b style="font-weight:500">${esc(name)}</b>${am?`<div class="note">${esc(am.code+' '+am.name)}</div>`:''}</td><td class="mu" style="white-space:nowrap">${sent?fdt(sent):'—'}</td><td>${st}</td></tr>`}).join('');
+  const sum=[nAfter?`${nAfter} se ${nAfter===1?'decidió':'decidieron'} después de congelar`:'',nPend?`${nPend} ${nPend===1?'sigue pendiente':'siguen pendientes'}`:''].filter(Boolean).join(' · ');
+  await uiAsk({title:`${code} · semana ${n}: ${keys.length} propuesta${keys.length>1?'s':''} fuera al congelar`,
+    html:`<p>Al congelar (${esc(fdt(fz))}${w.auto?', automático':''}) estas propuestas estaban <b>enviadas y sin decidir</b>, por eso no entraron al compromiso.${sum?' '+esc(sum)+'.':''}</p>
+      <div class="tscroll" style="max-height:50vh"><table class="t"><thead><tr><th>Subcontratista</th><th>Actividad</th><th>Enviada</th><th>Ahora</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${nAfter?'<p class="mu">Lo aceptado después de congelar ya está en el lookahead, pero no en el compromiso de esta semana. Si debe contar, el responsable del piso puede descongelar y volver a congelar.</p>':''}`,
+    ok:'Cerrar',cancel:false,tone:'info'})}
 /* Descongelar no borra: la versión congelada (compromisos, evaluación, causas, mitigaciones) se copia a su propio documento
    weeks/<semana>_<piso>__h<hora> {histOf, n, pisoId, v:{…}, unAt, unBy, unN} (sin frozenAt, así no cuenta en ningún PPC) y la
    semana vuelve a borrador; su foto del lookahead se copia a wsnap/<…>__h<hora> (de wsnap/<semana>_<piso> o, en datos antiguos,
    de weeks.snap). «Recuperar» la repone mientras nadie la haya vuelto a congelar (también la foto: v.snap antiguo o wsnap __h). */
-const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','auto','fromVer'];
+const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','propOutT','auto','fromVer'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);

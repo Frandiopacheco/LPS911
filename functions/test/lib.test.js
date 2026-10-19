@@ -176,6 +176,7 @@ test('congelado automático: compromisos de la semana por piso, como «Congelar�
   assert.deepStrictEqual(L[0].wsnap.snap.x1, ['2026-10-09', '2026-10-12', '2026-10-13']);
   assert.deepStrictEqual([L[0].wsnap.n, L[0].wsnap.pisoId, L[0].wsnap.t], [60, 'p1', '2026-10-10T18:00:00.000Z']);
   assert.deepStrictEqual(d.propOut, ['c2/x2']); // enviada y sin decidir; la no enviada no cuenta
+  assert.deepStrictEqual(Object.keys(d.propOutT), ['c2/x2']); // con su hora de envío (oct 2026)
 });
 
 const { nextWork, buildDayPlan } = require('../lib');
