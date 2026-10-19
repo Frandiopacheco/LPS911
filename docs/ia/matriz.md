@@ -200,8 +200,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - **«Por actividad»** (`js/matriz-act.js`, `U.mxV='act'`; `U.mxAct`, `U.mxActDone` en `saveUI`): se elige una actividad (chips si son ≤ 14, si no un `select` por SC; SC: solo su partida; ingeniero: según el filtro de SC) y se ven los ambientes de los pisos a la vista por sector con 4 botones. Un toque guarda; casillas + barra inferior aplican a varios (`mxActSet`: ingeniero un `mxWrite`; SC una celda por escritura con `mxScSet(...,quiet)` y un solo aviso con Deshacer). «Ocultar lo terminado» y «＋ Agregar a otro ambiente» (`mxActAddAmb`).
 - **Nombres en horizontal** (`table.mx.mxhz`): si las columnas caben a lo ancho (110 px c/u en tamaño normal), los nombres van en horizontal (hasta 3 líneas); si no, en vertical como antes. El tamaño −/+ redibuja.
 - **PC sin «Editar»** (`mxPC()`: `hover:hover` y `pointer:fine`): la matriz siempre es editable; la consulta queda para tablet y celular. En las pruebas, `window.__mxTouch=true` simula la tablet.
-- **Rellenar arrastrando** (`mxFillHandle`/`mxFillOver`/`mxFillEnd`): con una celda elegida, el asa `.mxfh` se arrastra por la columna y copia su estado (`mxApply`) a los ambientes que tienen la actividad.
+- **Rellenar arrastrando:** se probó y se quitó (19/10, no le pareció práctico al dueño).
 - **Solo lo que falta** (`#mxfalta`, `U.mxFalta`): quita ambientes y columnas sin Pendiente ni En curso.
 - **Fila y columna bajo el puntero** (`mxHov`, estilo `#mxhovst`; solo con mouse).
 - **R1 en el Lookahead** (`mxReopenAsk`, matriz-look.js, desde `commitField` al nombrar una fila): si la Matriz tiene la actividad confirmada Terminado/No aplica en ese ambiente (la fila se ocultaría), pregunta «Volver a Pendiente y programar». Ingeniero: `mxWrite` con Deshacer; SC en su partida: `mxScSet` (queda para revisión del ingeniero como cualquier cambio suyo).
 - Prueba: `tests/e2e/matriz-act.spec.js`.
+- **Filtro en «Por actividad»** (ingenieros): menú «Subcontratistas ▾» (el mismo de la Matriz, `U.mxSc`) y buscador de actividad o SC (`#mxaq`, filtra los chips en pantalla sin redibujar); chips agrupados por SC.
