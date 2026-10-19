@@ -1336,6 +1336,10 @@ td.act input::-webkit-calendar-picker-indicator{display:none!important}
 td.act .lqbadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);margin:0}
 td.act .lqbadge.sh{right:26px}
 /* Lookahead en modo consulta: la manito para desplazarse */
+/* oct 2026: sin anclaje de desplazamiento en la grilla virtual. Con miles de filas, al filtrar (p. ej. «Solo con días en la ventana») el
+   navegador corregía el desplazamiento cada vez que cambiaba el alto del relleno de arriba, la grilla se volvía a pintar y rebotaba sin
+   parar (parpadeo y pantalla en blanco). La grilla ya calcula sola qué filas pintar. */
+#gw{overflow-anchor:none}
 #gw.lkro .g tbody,#gw.lkro .g tbody .ci{cursor:grab}
 #gw.lkro.panning,#gw.lkro.panning *{cursor:grabbing!important;user-select:none}
 #fedit.on{background:var(--ok-soft,var(--panel2));border-color:var(--ok);color:var(--ok)}

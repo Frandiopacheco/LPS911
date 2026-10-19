@@ -61,3 +61,5 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 - `flowFit` reparte el alto de la pantalla entre las filas (`--flh`, 16–40 px) y la tabla usa `table-layout:fixed` al 100 % del ancho: llena el proyector sin Ctrl+scroll.
 - Clic en un día con trabajo → `U.lkV='grid'`, `U.sc` = ese SC y `gotoAct` a la primera actividad (por `order`) de ese día.
 - Prueba: `tests/e2e/lookahead-flujo.spec.js`.
+
+- **Sin anclaje de desplazamiento** (oct 2026): `#gw{overflow-anchor:none}`. Con miles de filas, al filtrar estando abajo el navegador corregía el desplazamiento cada vez que cambiaba el relleno de arriba de la grilla virtual (`virtPaint`) y la grilla rebotaba sin parar (parpadeo, pantalla en blanco). Prueba: `lookahead-filtro-parpadeo.spec.js`.
