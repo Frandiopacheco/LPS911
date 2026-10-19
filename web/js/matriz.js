@@ -43,8 +43,8 @@ function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
      base.js; solo igualdades: sin índice compuesto). Antes leía mcatp entera y, si entraba por el Lookahead (canWrite = PM()), mlog entera. */
   const onSc=(col,k,more,keep)=>u.push(scSubs(col,more,keep,(L,sn)=>{const m=MX[k];m.clear();L.forEach(x=>m.set(x.id,x));if(k in MX.ld)MX.ld[k]=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='look'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
     err=>{MX.err=err&&err.code||'error';if(ready&&U.tab==='mat')requestRender()}));
-  /* oct 2026 (decidido con el dueño): lo que cambia el SC vale al instante, sin revisión del ingeniero: mlog queda solo como constancia y no se suscribe */
-  if(SCK())onSc('mcatp','prop');else on('mcatp','prop');
+  if(SCK()){onSc('mcatp','prop');onSc('mlog','log',q=>q.where('st','==','pend'),x=>x.st==='pend')}
+  else{on('mcatp','prop');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'))}
   on('mtipo','tipo');
   mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();

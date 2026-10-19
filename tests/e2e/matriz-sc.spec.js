@@ -34,16 +34,23 @@ test('SC: ve solo su partida y la cambia directo (queda constancia); si contradi
   noErrors(errors, 'SC en la matriz');
 });
 
-test('lo que cambia el SC vale al instante: no hay revisión en Hoy ni en la Matriz', async ({ page }) => {
+test('ingeniero: ve los cambios del SC en Hoy, revierte uno y da por visto otro', async ({ page }) => {
   const extra = [...CAT,
     ['mamb', 'a1', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
-    ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: true, confN: 'Elena', st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]];
+    ['mamb', 'a3', { c: { k1: 'c' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
+    ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: true, confN: 'Elena', st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }],
+    ['mlog', 'l2', { amb: 'a3', cat: 'k1', sc: 'c1', from: null, sugFrom: 'p', to: 'c', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 3 }]];
   const errors = await openApp(page, { as: 'editor', tab: 'hoy', extra });
-  await expect(page.locator('[data-hoy="mlog"]')).toHaveCount(0);
-  await page.evaluate(() => { U.piso = ''; goTab('mat'); });
-  await expect(page.locator('#mxt')).toBeVisible();
-  await expect(page.locator('#mxlog')).toHaveCount(0);
-  noErrors(errors, 'sin revisión de cambios del SC');
+  await expect(page.locator('[data-hoy="mlog"]')).toContainText('Redes empotradas');
+  await page.click('[data-hoy="mlog"] [data-hgo]');
+  await expect(page.locator('#lqm')).toContainText('lo había confirmado Elena');
+  await page.click('[data-mxlrev="l1"]');
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('p');
+  expect(await page.evaluate(() => __dbGet('mlog', 'l1').st)).toBe('rev');
+  await page.click('[data-mxlok="l2"]');
+  await expect.poll(() => page.evaluate(() => __dbGet('mlog', 'l2').st)).toBe('ok');
+  expect(await page.evaluate(() => __dbGet('mamb', 'a3').c.k1)).toBe('c');
+  noErrors(errors, 'revisar cambios del SC');
 });
 
 test('SC: «＋ Agregar a un ambiente» elige un ambiente donde aún no tiene nada y una actividad del catálogo', async ({ page }) => {
@@ -66,6 +73,7 @@ test('recorrido del SC: solo ve su partida y no marca el ambiente revisado', asy
   await expect(page.locator('[data-mxrc="k1"] [data-mxrs="t"]')).toBeEnabled();
   await expect(page.locator('[data-mxrc="k2"]')).toHaveCount(0); // lo de otra partida no se muestra
   await expect(page.locator('#mxrok')).toHaveCount(0);
+  await expect(page.locator('#mxrnext')).not.toContainText('sin confirmar'); // el SC guarda al tocar: no hay nada que confirmar
   await page.click('[data-mxrc="k1"] [data-mxrs="c"]');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c?.k1)).toBe('c');
   noErrors(errors, 'recorrido SC');
