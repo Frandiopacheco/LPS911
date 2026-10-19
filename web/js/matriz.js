@@ -156,6 +156,7 @@ function renderMat(main){ensureMx();ensureMver();
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <label class="mxord" title="Por programación: primero los SC con trabajo programado en estos ambientes de hoy a 3 semanas"><span class="fgl">Orden</span><select id="mxord" aria-label="Orden de las columnas"><option value="prog"${U.mxOrd==='az'?'':' selected'}>Por programación</option><option value="az"${U.mxOrd==='az'?' selected':''}>Alfabético</option></select></label>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
+    ${mxCanEd()?`<button class="ib" id="mxadd" title="Elegir un ambiente (aunque todavía no tenga tus actividades) y agregarle una actividad del catálogo">＋ Agregar a un ambiente</button>`:''}
     <span class="fsp"></span>
     <span class="seg mxzm" role="group" aria-label="Tamaño de las celdas"><button data-mxz="-1" title="Más pequeño">−</button><button data-mxz="1" title="Más grande">+</button></span>
     <button class="ib${document.body.classList.contains('mxfs')?' on':''}" id="mxfs" title="Pantalla completa: oculta la barra superior y las pestañas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
@@ -170,7 +171,7 @@ function renderMat(main){ensureMx();ensureMver();
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const multi=visPisos().length>1;const NC=cols.length+3;
   h+=`<div class="mxbox" id="mxbox"><table class="mx mxz${mxZ()}${ed?' ed':''}" id="mxt"><thead>
-   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo${MX.ci&&cols[i0]&&MX.ci[cols[i0].id]&&MX.ci[cols[i0].id].tier===2?' mxdim':''}" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${mxPlusOk(g.sc)?`<button type="button" class="mxplus" data-mxnew="${esc(g.sc)}" title="Añadir una actividad nueva a ${esc(c.name)}" aria-label="Añadir actividad a ${esc(c.name)}">+</button>`:''}${esc(c.name)}</span></th>`}).join('')})()}</tr>
+   <tr class="mxg"><th class="mxa mxh0" rowspan="2">Ambiente</th><th class="mxtp" rowspan="2">Tipo</th><th class="mxpc" rowspan="2" title="Terminado de lo que aplica">%</th>${(()=>{let k=0;return grp.map(g=>{const c=conOf(g.sc);const i0=k;k+=g.n;return`<th colspan="${g.n}" class="mxgo${MX.ci&&cols[i0]&&MX.ci[cols[i0].id]&&MX.ci[cols[i0].id].tier===2?' mxdim':''}" data-mxgo="${i0}" style="--c:${esc(c.color)}" title="${esc(c.name)} · clic: ir a sus columnas"><span>${mxPlusOk(g.sc)?`<button type="button" class="mxplus" data-mxnew="${esc(g.sc)}" title="Agregar una actividad de ${esc(c.name)} a un ambiente" aria-label="Agregar actividad de ${esc(c.name)}">+</button>`:''}${esc(c.name)}</span></th>`}).join('')})()}</tr>
    <tr class="mxn">${cols.map((c,i)=>`<th class="mxc${c.cl==='d'?' dsg':''}${MX.ci&&MX.ci[c.id]&&MX.ci[c.id].pg?' mxpg':''}" data-mxcol="${i}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(c.name)} · ${esc(conOf(c.sc).name)} · ${MXCL[c.cl]||''}${ed?' (clic: seleccionar la columna)':''}"><span>${esc(c.name)}</span></th>`).join('')}</tr></thead><tbody>`;
   let ri=0;let lastP='';
   for(const r of rows){
@@ -190,6 +191,8 @@ function renderMat(main){ensureMx();ensureMver();
    </div></div>${ed?mxSelBar():''}`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};
+  /* el alto de la caja se fija antes de devolver el desplazamiento: sin él (max-height:none) el scroll quedaba en 0 y cada cambio llevaba arriba */
+  mxFit();
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
   mxFocusPaint()
   mxWire(main)}
@@ -265,6 +268,7 @@ function mxWire(main){mxWireV(main);
   const lg=$('#mxlog');if(lg)lg.onclick=mxLogDlg;
   const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
   const xb=$('#mxxls');if(xb)xb.onclick=mxExport;
+  const ab=$('#mxadd');if(ab)ab.onclick=()=>mxAddFlow(SCK()?'':(mxSel()[0]||''));
   const hb=$('#mxhelp');if(hb)hb.onclick=()=>{const lg=$('.mxleg');const st=$('.mxstat');openPop(hb,`<div class="ph">Cómo se usa la matriz</div><div class="mxhlp">${st?'<p>'+st.innerHTML+'</p>':''}${lg?'<div class="mxleg mxlegp">'+lg.innerHTML+'</div>':''}${MX.helpH||''}</div>`,{})};
   const fsb=$('#mxfs');if(fsb)fsb.onclick=()=>mxFsSet(!document.body.classList.contains('mxfs'));
   main.querySelectorAll('[data-mxz]').forEach(b=>b.onclick=()=>{U.mxZ=Math.max(0,Math.min(2,mxZ()+(+b.dataset.mxz)));saveUI();const t=$('#mxt');if(t){t.classList.remove('mxz0','mxz1','mxz2');t.classList.add('mxz'+mxZ())}});
@@ -277,7 +281,7 @@ function mxWire(main){mxWireV(main);
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
   mxWireBar();
   const t=$('#mxt');if(!t)return;
-  t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxCatNew(np.dataset.mxnew,true);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
+  t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxAddFlow(np.dataset.mxnew);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
     if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
     if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
