@@ -34,23 +34,29 @@ test('SC: ve solo su partida y la cambia directo (queda constancia); si contradi
   noErrors(errors, 'SC en la matriz');
 });
 
-test('ingeniero: ve los cambios del SC en Hoy, revierte uno y da por visto otro', async ({ page }) => {
+test('lo que cambia el SC vale al instante: no hay revisión en Hoy ni en la Matriz', async ({ page }) => {
   const extra = [...CAT,
     ['mamb', 'a1', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
-    ['mamb', 'a3', { c: { k1: 'c' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
-    ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: true, confN: 'Elena', st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }],
-    ['mlog', 'l2', { amb: 'a3', cat: 'k1', sc: 'c1', from: null, sugFrom: 'p', to: 'c', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 3 }]];
+    ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: true, confN: 'Elena', st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]];
   const errors = await openApp(page, { as: 'editor', tab: 'hoy', extra });
-  await expect(page.locator('[data-hoy="mlog"]')).toContainText('Redes empotradas');
-  await page.click('[data-hoy="mlog"] [data-hgo]');
-  await expect(page.locator('#lqm')).toContainText('lo había confirmado Elena');
-  await page.click('[data-mxlrev="l1"]');
-  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('p');
-  expect(await page.evaluate(() => __dbGet('mlog', 'l1').st)).toBe('rev');
-  await page.click('[data-mxlok="l2"]');
-  await expect.poll(() => page.evaluate(() => __dbGet('mlog', 'l2').st)).toBe('ok');
-  expect(await page.evaluate(() => __dbGet('mamb', 'a3').c.k1)).toBe('c');
-  noErrors(errors, 'revisar cambios del SC');
+  await expect(page.locator('[data-hoy="mlog"]')).toHaveCount(0);
+  await page.evaluate(() => { U.piso = ''; goTab('mat'); });
+  await expect(page.locator('#mxt')).toBeVisible();
+  await expect(page.locator('#mxlog')).toHaveCount(0);
+  noErrors(errors, 'sin revisión de cambios del SC');
+});
+
+test('SC: «＋ Agregar a un ambiente» elige un ambiente donde aún no tiene nada y una actividad del catálogo', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: [...CAT, ['mcat', 'k5', { name: 'Espejos', sc: 'c1', cl: 't', al: ['espejos'], ord: 30 }]] });
+  await page.evaluate(() => { U.piso = ''; render(); });
+  await page.click('#mxadd');
+  await page.click('#mxakl [data-mxaa="a3"]');
+  await expect(page.locator('#mxpkl [data-mxpk="k5"]')).toBeVisible(); // propuestas del catálogo (no texto libre)
+  await expect(page.locator('#mxpkl [data-mxpk="k2"]')).toHaveCount(0); // otra partida
+  await expect(page.locator('#mxpkl [data-mxpknew]')).toBeVisible();
+  await page.click('#mxpkl [data-mxpk="k5"]');
+  await expect.poll(() => page.evaluate(() => ((__dbGet('mamb', 'a3') || {}).c || {}).k5)).toBe('p');
+  noErrors(errors, 'SC agrega a un ambiente');
 });
 
 test('recorrido del SC: solo ve su partida y no marca el ambiente revisado', async ({ page }) => {

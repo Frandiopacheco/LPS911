@@ -2,7 +2,7 @@
 /* LPS 911 · Matriz: los subcontratistas llenan su partida (oct 2026, decidido con el dueño).
    El SC cambia directo (sin propuesta) el estado de las actividades de SU partida en cualquier ambiente, o las agrega a un
    ambiente; también lo que el ingeniero ya confirmó (queda destacado). Cada cambio deja una constancia en mlog (no se borra).
-   Cualquier editor revisa: «✓ Visto» o «↶ Revertir». Reglas: el SC escribe una celda por vez (campo k = actividad de su partida).
+   Oct 2026 (decidido con el dueño): vale al instante, sin revisión del ingeniero (mlog ya no se suscribe; queda la constancia). Reglas: el SC escribe una celda por vez (campo k = actividad de su partida).
    Ver docs/ia/matriz.md. */
 
 /** ¿el SC puede cambiar esta actividad? (solo su partida) */
@@ -26,7 +26,7 @@ async function mxScUndo(amb,cat,prev,s,lid,bk){const cur=((MX.amb.get(amb)||{}).
 const mxLogPend=()=>[...MX.log.values()].filter(l=>l.st==='pend'&&MX.cat.has(l.cat)).sort((a,b)=>(b.conf-a.conf)||(a.t||0)-(b.t||0));
 /** cuántos cambios del SC sin revisar tiene una actividad del catálogo (MOD-01: fusionar o desglosar los esperan; se consulta a la base
     por si la suscripción de mlog no está abierta) */
-async function mxScPendN(cat){try{return(await fcol('mlog').where('st','==','pend').where('cat','==',cat).get()).size}catch(e){return mxLogPend().filter(l=>l.cat===cat).length}}
+async function mxScPendN(cat){return 0}/* sin revisión (oct 2026): fusionar o desglosar ya no espera */
 /** celdas con un cambio del SC sin revisar (marca en la matriz) */
 function mxLogKeys(){if(!canWrite)return null;const s=new Set();for(const l of MX.log.values())if(l.st==='pend')s.add(l.amb+'|'+l.cat);return s}
 /** en la ficha de la celda: quién la cambió por última vez */
@@ -51,7 +51,7 @@ function mxLogDlg(){const L=mxLogPend();if(!L.length){lqClose();return}const by=
 function mxLogOk(b,l,done){if(!l)return;b.set(fcol('mlog').doc(l.id),{st:'ok',ok:done},{merge:true});
   const m=MX.amb.get(l.amb)||{};const pm=(m.m||{})[l.cat];if(pm&&pm.sc&&pm.t===l.t&&(m.c||{})[l.cat]===l.to)b.set(fcol('mamb').doc(l.amb),{m:{[l.cat]:{ok:done}},by:me.email,n:me.name||'',t:NOW()},{merge:true})}
 /** el estado de la celda lo cambió un SC y ningún ingeniero lo vio aún (M05: su «Terminado» no oculta la fila del Lookahead) */
-const mxScPend=(amb,cat)=>{const pm=((MX.amb.get(amb)||{}).m||{})[cat];return!!(pm&&pm.sc&&!pm.ok&&!pm.bk)};
+const mxScPend=(amb,cat)=>false;/* oct 2026: el «Terminado» del SC oculta la fila del Lookahead al instante (antes esperaba el «✓ Visto», M05) */
 async function mxLogRevert(l){if(!l||!mxEd())return;const cur=((MX.amb.get(l.amb)||{}).c||{})[l.cat];
   if(cur!==l.to&&!await uiAsk({title:'La celda cambió después',text:`Ahora dice «${cur?MXS[cur]:'sin confirmar'}». ¿Volverla igual a «${mxLogFrom(l)}»?`,ok:'Revertir igual',tone:'warn'}))return;
   const FV=firebase.firestore.FieldValue;const meta={by:me.email,n:me.name||'',t:NOW()};const b=db.batch();

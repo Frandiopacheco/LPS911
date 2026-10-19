@@ -49,6 +49,7 @@ function buildLookShell(main){
     <select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select>
     <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Mostrar lo oculto, filtrar y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
+    <span id="fmxp"></span>
     <span id="fday"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
@@ -59,7 +60,7 @@ function buildLookShell(main){
     <button class="ib pri" id="fedit" hidden>✎ Editar</button>
     <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Filtros y vista">
       <div class="lkph">Mostrar</div>
-      <div class="lkprow"><span id="fpast"></span><span id="fdone"></span><span id="fmxp"></span><span class="mu lkpnone" id="fshn">No hay nada oculto en esta vista.</span></div>
+      <div class="lkprow"><span id="fpast"></span><span id="fdone"></span><span class="mu lkpnone" id="fshn">No hay nada oculto en esta vista.</span></div>
       <div class="lkph">Filtrar</div>
       <button class="ib" id="fact" title="Elegir una o varias actividades específicas (p. ej. Gabel y Pintura de 2da mano)">Actividades</button>
       <label class="chk"><input type="checkbox" id="fonly"> Solo con días en la ventana</label>

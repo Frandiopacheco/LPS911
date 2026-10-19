@@ -189,3 +189,9 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - Prueba: `tests/e2e/matriz-tren.spec.js`.
 
 - Oct 2026: «Matriz › Gráfico» no muestra códigos (el plano ya rotula el ambiente) y rellena más transparente (`z.op/sop/nolab` en `ambMap`). «+» junto al SC en la Matriz crea actividad (`mxCatNew`, con chips de tipo).
+
+## Ajustes del 19/10/2026 (pedido del dueño)
+- **Desplazamiento:** `renderMat` llama a `mxFit()` antes de devolver el scroll de `#mxbox`. Antes `.mxbox{max-height:none}` dejaba la caja sin scroll en ese instante, el `scrollTop` quedaba en 0 y cada cambio llevaba arriba.
+- **El SC sin revisión:** lo que cambia el SC vale al instante. `mlog` ya no se suscribe (queda solo como constancia en la base): sin tarjeta en Hoy, sin aviso `#mxlog` ni punto morado; `mxScPend` siempre falso (su «Terminado» oculta la fila del Lookahead al instante); `mxScPendN` devuelve 0 (fusionar/desglosar no esperan). Reglas sin cambios.
+- **＋ Agregar a un ambiente** (`#mxadd`, editores y SC) y el «+» del SC en la cabecera (`data-mxnew`): `mxAddFlow(pre)` (matriz-rec.js) elige el ambiente (cualquiera de los pisos a la vista, también donde el SC aún no tiene nada) y luego `mxRecPick(amb,ed,add,pre)` con el catálogo (las del SC `pre` primero; al final «Crear … en el catálogo» → `mxRecNew(...,pre)`). `mxAddCell` la deja Pendiente (SC: `mxScSet`; ingeniero: `mxWrite` con Deshacer), suma el SC al filtro si hacía falta y la resalta (`MX.focus`). El «+» ya no abre `mxCatNew` con texto libre (sigue en Catálogo).
+- **Lookahead:** el botón «Faltan programar» (`#fmxp`) salió de «Filtros y vista» a la barra, junto a «Quitar filtros».

@@ -40,32 +40,20 @@ test('M01: Deshacer no pisa lo que otra persona cambió después; M10: escribe e
   noErrors(errors, 'deshacer');
 });
 
-test('M05: el «Terminado» que pone el SC no oculta la fila del Lookahead', async ({ page }) => {
+test('el «Terminado» que pone el SC oculta la fila del Lookahead al instante (sin «✓ Visto», oct 2026)', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'look', extra: [...CAT, ['doneidx', 'p1', { d: { i0: '2026-09-30' } }]] });
   await page.evaluate(() => mxScSet('a1', 'k1', 't'));
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1') || {}).c)).toEqual({ k1: 't' });
   const m = await page.evaluate(() => __dbGet('mamb', 'a1'));
   expect(m.m.k1).toMatchObject({ sc: true, by: 'sc@obra.pe' });
   expect(await page.evaluate(id => __dbGet('mlog', id).st, m.l)).toBe('pend'); // la celda apunta a su constancia (M06)
-  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe(null); // no oculta hasta el «✓ Visto»
+  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('ok'); // vale al instante
   noErrors(errors, 'terminado del SC');
 });
 
 const SCCHG = [...CAT, ['doneidx', 'p1', { d: { i0: '2026-09-30' } }],
   ['mamb', 'a1', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 5, sc: true } }, k: 'k1', l: 'l1', by: 'sc@obra.pe', t: 5 }],
   ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: null, sugFrom: 'p', to: 't', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 5 }]];
-
-test('M04/M05: «✓ Visto» queda en la celda y recién ahí la terminada se oculta', async ({ page }) => {
-  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: SCCHG });
-  await page.evaluate(() => { U.piso = ''; render(); });
-  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe(null);
-  await page.click('#mxlog');
-  await page.click('[data-mxlok="l1"]');
-  await expect.poll(() => page.evaluate(() => !!(__dbGet('mamb', 'a1').m.k1.ok))).toBe(true);
-  expect(await page.evaluate(() => __dbGet('mlog', 'l1').st)).toBe('ok');
-  expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('ok');
-  noErrors(errors, 'visto en la celda');
-});
 
 test('M04: el SC cambia algo que el ingeniero ya vio → sale destacado (conf)', async ({ page }) => {
   const extra = SCCHG.map(r => r[1] === 'a1' ? ['mamb', 'a1', { ...r[2], m: { k1: { ...r[2].m.k1, ok: { by: 'editor@obra.pe', n: 'Elena Editora', t: 6 } } } }] : r);
