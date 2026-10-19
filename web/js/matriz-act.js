@@ -23,10 +23,13 @@ function renderMxAct(main,head){const cells=mxCells();const ed=mxEd();const L=mx
       <div class="mxrin"><span><b>${esc(a.code)} · ${esc(a.name)}</b>${info(o)?`<small>${esc(info(o))}</small>`:''}</span></div>
       <div class="mxrbt" role="group" aria-label="Estado en ${esc(a.code)}">${['p','c','t','n'].map(s=>`<button class="mc s-${s}${o.s===s?' on':''}${o.s===s&&o.sug?' sug':''}" data-mxas="${s}"${can?'':' disabled'} aria-pressed="${o.s===s}"><i>${MXI[s]||'○'}</i>${MXS[s]}</button>`).join('')}</div></div>`};
   const multi=visPisos().length>1;
-  const sel=L.length<=14?`<div class="kchips mxachips">${L.map(c=>`<button class="chip${c.id===U.mxAct?' on':''}" data-mxac="${esc(c.id)}"${SCK()?'':` style="--c:${esc(conOf(c.sc).color)}"`}>${esc(c.name)}</button>`).join('')}</div>`
-    :`<select id="mxacsel" class="tin" aria-label="Actividad">${[...new Set(L.map(c=>c.sc))].map(sc=>`<optgroup label="${esc(conOf(sc).name)}">${L.filter(c=>c.sc===sc).map(c=>`<option value="${esc(c.id)}"${c.id===U.mxAct?' selected':''}>${esc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+  /* filtro (pedido del dueño): subcontratistas (el mismo menú de la Matriz) y buscador de actividades; chips agrupados por SC */
+  const scs=[...new Set(L.map(c=>c.sc))];
+  const sel=`<div class="mxaflt">${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
+     <input type="search" class="tin" id="mxaq" placeholder="Buscar actividad${SCK()?'':' o subcontratista'}" aria-label="Buscar actividad" value="${esc(MXA.q||'')}"><span class="note" id="mxaqn"></span></div>
+    <div class="mxachips">${scs.map(sc=>`<div class="mxacg" data-mxacg>${scs.length>1?`<span class="mxacgl"><span class="mxsw" style="--c:${esc(conOf(sc).color)}"></span>${esc(conOf(sc).name)}</span>`:''}${L.filter(c=>c.sc===sc).map(c=>`<button class="chip${c.id===U.mxAct?' on':''}" data-mxac="${esc(c.id)}" data-mxan="${esc(mnk(c.name+' '+conOf(c.sc).name))}" style="--c:${esc(conOf(c.sc).color)}">${esc(c.name)}</button>`).join('')}</div>`).join('')}</div>`;
   let h=`<div class="scroll"><div class="wrap mxwrap mxrw">${mxHd(head,mxViewSeg())}
-   ${L.length?`<div class="mxabar">${SCK()||mxSel().length===1?'':`<span class="note">Elige subcontratistas en la vista Matriz para acortar la lista.</span>`}${sel}</div>`:'<p class="callout">No hay actividades de tu partida en los pisos a la vista.</p>'}
+   ${L.length?`<div class="mxabar">${sel}</div>`:'<p class="callout">No hay actividades de tu partida en los pisos a la vista.</p>'}
    ${cat?`<div class="mxrbar"><div class="mxrprog"><b>${nd} de ${n}</b> ambientes terminados o que no aplican · <span class="mxsw" style="--c:${esc(conOf(cat.sc).color)}"></span>${esc(conOf(cat.sc).name)}<span class="mxrpb"><i style="width:${n?Math.round(100*nd/n):0}%"></i></span></div>
      <label class="chk"><input type="checkbox" id="mxadone"${U.mxActDone?' checked':''}> Ocultar lo terminado</label>${can?'<button class="ib" id="mxaadd">＋ Agregar a otro ambiente</button>':''}</div>
      ${grp.map(g=>`<div class="mxrsec"><div class="ph">${multi?esc(g.r.p.code)+' · ':''}${esc(g.r.s.code)} · ${esc(g.r.s.name)}</div><div class="mxrl">${g.its.map(row).join('')||'<p class="note">Todo terminado.</p>'}</div></div>`).join('')}`:''}
@@ -34,7 +37,10 @@ function renderMxAct(main,head){const cells=mxCells();const ed=mxEd();const L=mx
    ${can&&MXA.sel.size?`<div class="mxrfoot mxabulk"><span><b>${MXA.sel.size}</b> ${MXA.sel.size===1?'ambiente elegido':'ambientes elegidos'}</span>${['c','t','p','n'].map(s=>`<button class="ib${s==='t'?' pri':''}" data-mxab="${s}">${MXI[s]||'○'} ${MXS[s]}</button>`).join('')}<button class="ib" data-mxab="x">Quitar selección</button></div>`:''}`;
   main.innerHTML=h;mxWireV(main);
   main.querySelectorAll('[data-mxac]').forEach(b=>b.onclick=()=>{U.mxAct=b.dataset.mxac;MXA.sel.clear();saveUI();render()});
-  const se=$('#mxacsel');if(se)se.onchange=()=>{U.mxAct=se.value;MXA.sel.clear();saveUI();render()};
+  const sd=$('#mxscdd');if(sd)sd.onclick=()=>mxScMenu(sd);
+  const q=$('#mxaq');const flt=()=>{const k=mnk(q.value||'');MXA.q=q.value;let n=0;main.querySelectorAll('[data-mxan]').forEach(b=>{const on=!k||b.dataset.mxan.includes(k)||b.classList.contains('on');b.hidden=!on;if(on)n++});
+    main.querySelectorAll('[data-mxacg]').forEach(g=>g.hidden=!g.querySelector('[data-mxan]:not([hidden])'));$('#mxaqn').textContent=k?`${n} de ${L.length}`:`${L.length} actividades`};
+  if(q){q.oninput=flt;flt()}
   const dn=$('#mxadone');if(dn)dn.onchange=()=>{U.mxActDone=dn.checked;saveUI();render()};
   const ad=$('#mxaadd');if(ad)ad.onclick=()=>mxActAddAmb(cat,ed);
   main.querySelectorAll('[data-mxack]').forEach(c=>c.onchange=()=>{c.checked?MXA.sel.add(c.dataset.mxack):MXA.sel.delete(c.dataset.mxack);render()});

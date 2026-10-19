@@ -66,3 +66,18 @@ test('R1 del SC: vuelve a Pendiente en su partida (con su constancia)', async ({
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a3').c.k1)).toBe('p');
   noErrors(errors, 'R1 SC');
 });
+
+test('Por actividad › ingeniero: filtra por subcontratista y busca la actividad', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...CAT, ['mamb', 'a1', { c: { k1: 'p', k2: 'p' }, by: 'x', t: 1 }]] });
+  await page.evaluate(() => { U.piso = ''; U.mxSc = []; U.mxV = 'act'; render(); });
+  await expect(page.locator('[data-mxac="k2"]')).toBeVisible();
+  await page.fill('#mxaq', 'redes');
+  await expect(page.locator('[data-mxac="k2"]')).toBeHidden();
+  await expect(page.locator('[data-mxac="k1"]')).toBeVisible();
+  await page.fill('#mxaq', '');
+  await page.click('#mxscdd');
+  await page.click('#pop [data-mxsk="c3"]');
+  await expect(page.locator('[data-mxac="k1"]')).toHaveCount(0);
+  await expect(page.locator('[data-mxac="k2"]')).toHaveClass(/on/);
+  noErrors(errors, 'filtro por actividad');
+});

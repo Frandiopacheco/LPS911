@@ -205,3 +205,4 @@ Decidido con el dueño: un solo nombre por actividad en todo el lookahead; el v�
 - **Fila y columna bajo el puntero** (`mxHov`, estilo `#mxhovst`; solo con mouse).
 - **R1 en el Lookahead** (`mxReopenAsk`, matriz-look.js, desde `commitField` al nombrar una fila): si la Matriz tiene la actividad confirmada Terminado/No aplica en ese ambiente (la fila se ocultaría), pregunta «Volver a Pendiente y programar». Ingeniero: `mxWrite` con Deshacer; SC en su partida: `mxScSet` (queda para revisión del ingeniero como cualquier cambio suyo).
 - Prueba: `tests/e2e/matriz-act.spec.js`.
+- **Filtro en «Por actividad»** (ingenieros): menú «Subcontratistas ▾» (el mismo de la Matriz, `U.mxSc`) y buscador de actividad o SC (`#mxaq`, filtra los chips en pantalla sin redibujar); chips agrupados por SC.
