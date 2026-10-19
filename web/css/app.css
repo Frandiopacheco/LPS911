@@ -729,6 +729,7 @@ tr.addrow td{height:44px;background:var(--panel)}
 .tile .v small{font-size:13px;color:var(--muted);font-weight:400}
 .tile.hl{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .pill{display:inline-flex;align-items:center;gap:5px;border-radius:12px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+button.pill{border:0;font-family:inherit;line-height:inherit;cursor:pointer}button.pill:hover{filter:brightness(.95)}
 .pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.neu{background:var(--panel2);color:var(--ink2);border:1px solid var(--line)}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
 .t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:1}

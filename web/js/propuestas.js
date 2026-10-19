@@ -177,7 +177,7 @@ function propAlerts(sc,id,it,days){const A=[];const off=S.act.get(id);const x=it
 function propPendWeek(n,pid,docs){const wd=new Set(weekDays(n));const L=[];
   for(const d of docs)for(const[id,it0]of Object.entries(d.items||{})){const it=propSentOf(it0);if(!it)continue;const off=S.act.get(id)||null;const x=it.after||off||it.base;if(!x||pisoOfAmb(x.ambId)!==pid)continue;
     const pa=it.after&&off?propMerge(it.after,it.base||off,off,false):it.after;if(!propTouch(off,pa).some(z=>wd.has(z)))continue;
-    L.push({sc:d.sc||d.id,id,kind:!it.after?'del':!off?'new':'mod'})}return L}
+    L.push({sc:d.sc||d.id,id,kind:!it.after?'del':!off?'new':'mod',t:it.sentAt||0})}return L}
 /* días hábiles (lun–sáb) */
 function wshift(d,n){let x=d;const st=n>0?1:-1;let k=Math.abs(n);let g=0;while(k>0&&g++<2000){x=addD(x,st);if(isWork(x))k--}return x}
 function wdist(a,b){if(a===b)return 0;let n=0,x=a;const st=b>a?1:-1;while(x!==b){x=addD(x,st);if(isWork(x))n+=st;if(Math.abs(n)>400)break}return n}
