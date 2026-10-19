@@ -19,7 +19,7 @@ async function mxScSet(amb,cat,s,quiet){const c=MX.cat.get(cat);if(!mxScCan(c))r
   const log={amb,cat,sc:lsc,from:prev||null,sugFrom:prev?null:(o?o.s:null),to:s,conf:!!(prev&&okBy),confN:prev&&okBy?okBy.n||okBy.by||'':'',st:'pend',...meta};
   try{const b=db.batch();b.set(fcol('mamb').doc(amb),{c:{[cat]:s},m:{[cat]:{...mxCM(true),t:meta.t}},k:cat,l:lid,...meta},{merge:true});b.set(fcol('mlog').doc(lid),log);await b.commit();
     const un=[amb,cat,prev,s,lid,!!(pm&&(!pm.sc||pm.ok||pm.bk))];if(quiet)return un;
-    toast(`${c.name}: ${MXS[s]}`,'Deshacer',()=>mxScUndo(...un))}catch(e){toast('No se pudo guardar: '+(e&&e.code||e))}}
+    toast(`${c.name}: ${MXS[s]}`,'Deshacer',()=>mxScUndo(...un))}catch(e){if(quiet)throw e;toast('No se pudo guardar: '+(e&&e.code||e))}}
 async function mxScUndo(amb,cat,prev,s,lid,bk,quiet){const cur=((MX.amb.get(amb)||{}).c||{})[cat];if(cur!==s){if(!quiet)toast('Ya cambió después: no se deshace.');return}
   const FV=firebase.firestore.FieldValue;const meta={by:me.email,n:me.name||'',t:NOW()};
   try{const b=db.batch();b.set(fcol('mamb').doc(amb),{c:{[cat]:prev===undefined?FV.delete():prev},m:{[cat]:{...mxCM(true),t:meta.t,...(bk?{bk:true}:{})}},k:cat,l:lid,...meta},{merge:true});b.set(fcol('mlog').doc(lid),{st:'undo'},{merge:true});await b.commit();if(!quiet)toast('Deshecho')}catch(e){toast('No se pudo deshacer: '+(e&&e.code||e))}}

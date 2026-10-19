@@ -205,7 +205,9 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   mxFit();
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
   mxFocusPaint()
-  mxWire(main)}
+  mxWire(main);
+  /* auditoría 19/10 (punto 4): tras redibujar, el resaltado de columna se recalcula con lo que está bajo el puntero (antes quedaba la anterior) */
+  MX.hk=null;{const st=document.getElementById('mxhovst');if(st)st.textContent='';const el=MX.hp&&document.elementFromPoint(MX.hp.x,MX.hp.y);if(el&&el.closest('#mxt'))mxHov({target:el})}}
 
 /* barra de la selección (abajo) */
 function mxSelBar(){const n=MX.sel.size;if(!n)return'';
@@ -475,6 +477,6 @@ function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-perform
   clearTimeout(MX.focusT);MX.focusT=setTimeout(()=>{MX.focus=null;document.querySelectorAll('#mxt .mxhl,#mxt .mxhlc,#mxt .mxhlx').forEach(e=>e.classList.remove('mxhl','mxhlc','mxhlx'))},left)}
 
 /* ---------- fila y columna bajo el puntero (idea 7): la fila con CSS (tr:hover), la columna con una regla que cambia */
-function mxHov(e){if(!mxPC())return;const td=e.target.closest('td.mc,th.mxc');const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
+function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.clientY};const td=e.target&&e.target.closest?e.target.closest('td.mc,th.mxc'):null;const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
   let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}
   st.textContent=k===''?'':`#mxt td.mc[data-k="${k}"]{background-image:linear-gradient(var(--mxhov),var(--mxhov))}#mxt th.mxc[data-mxcol="${k}"]{background-color:var(--mxhovh)}`}

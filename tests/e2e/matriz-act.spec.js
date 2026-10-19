@@ -20,6 +20,7 @@ test('SC › Por actividad: un toque guarda y con casillas marca varios a la vez
   await page.click('[data-mxab="t"]');
   await expect.poll(() => page.evaluate(() => [__dbGet('mamb', 'a1').c.k1, __dbGet('mamb', 'a2').c.k1])).toEqual(['t', 't']);
   expect(await page.evaluate(() => Object.values(__dbAll('mlog')).filter(l => l.to === 't').length)).toBe(2); // constancia por celda
+  await expect(page.locator('#mxaprog')).toHaveCount(0); // el aviso de avance se quita al terminar
   await page.check('#mxadone');
   await expect(page.locator('[data-mxaa]')).toHaveCount(0);
   noErrors(errors, 'por actividad SC');
@@ -104,4 +105,17 @@ test('R1 con la fila antigua vencida: queda como historial oculto y se programa 
   await expect(page.locator(`#grid tr[data-a="${id}"]`)).toHaveCount(1);
   await expect(page.locator('#grid tr[data-a="old1"]')).toHaveCount(0); // vencida
   noErrors(errors, 'R1 vencida');
+});
+
+test('Por actividad › SC: si una escritura falla, dice cuántas no se guardaron', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'act'; render();
+    const orig = window.mxScSet; window.mxScSet = async (a, ...r) => { if (a === 'a2') throw { code: 'unavailable' }; return orig(a, ...r); }; });
+  await page.check('[data-mxack="a1"]');
+  await page.check('[data-mxack="a2"]');
+  await page.click('[data-mxab="c"]');
+  await expect(page.locator('#toast, .toast').first()).toContainText('1 no se guardaron');
+  await expect(page.locator('#mxaprog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('c');
+  noErrors(errors, 'falla parcial');
 });
