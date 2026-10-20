@@ -2125,6 +2125,46 @@ label.tc-lab{flex-direction:column;align-items:stretch;gap:6px}
 .tc-folds{display:flex;flex-wrap:wrap;align-items:center;gap:0 10px;margin:-4px 0 -6px}
 .tc-folds .tc-lnk{margin-left:auto}
 .tc-fold{border:0;background:none;color:var(--accent);font-size:14px;font-weight:600;min-height:40px;padding:0 2px;display:inline-flex;align-items:center;gap:5px}
+/* pantalla compacta del capataz (20-10-2026): días y pasos en una fila, contadores = filtros, una fila baja por obrero */
+.tc-head{padding:6px 8px;gap:6px}
+.tc-hrow{display:flex;align-items:center;gap:8px}
+.tc-hrow .tc-dates{flex:1 1 auto;min-width:0;display:flex;gap:4px}
+.tc-hrow .tc-date{flex:1 1 0;min-width:0;min-height:40px;padding:2px 4px;flex-direction:row;gap:4px;position:relative}
+.tc-hrow .tc-date b{font-size:13.5px}.tc-hrow .tc-date span{font-size:12px}
+.tc-hrow .tc-dst{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tc-hrow .tc-date.tc-dro::after{content:"✓";font-size:12px;font-weight:700;color:var(--ok)}.tc-hrow .tc-date.tc-dro.on::after{color:inherit}
+.tc-hrow .tc-steps{flex:none;display:flex;gap:2px}
+.tc-hrow .tc-step{min-height:40px;width:38px;border-bottom-width:3px;justify-content:center;padding:0}
+.tc-hrow .tc-step span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tc-hrow .tc-step i{width:28px;height:28px}
+.tc-st:not(.warn):not(.bad){display:none}
+.tc-st{text-align:left;font-size:12px}
+.tc-stk{gap:6px;padding:12px 8px 6px;margin:-12px -10px 0}
+.tc-fs .tc-f{min-height:36px;font-size:12px;font-weight:600;padding:2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;line-height:1.05}
+.tc-fs .tc-f b{font:700 15px var(--f-mono)}
+.tc-fs .tc-f.ok b{color:var(--ok)}.tc-fs .tc-f.bad b{color:var(--bad)}.tc-fs .tc-f.warn b{color:var(--warn)}
+.tc-fs .tc-f.warn:not(.on){border-color:var(--warn);background:var(--warn-soft)}
+.tc-fs .tc-f.on b{color:inherit}
+.tc-qr{display:flex;align-items:center;gap:8px}
+.tc .tc-qr .tc-q{flex:1;height:40px;font-size:15px}
+.tc-qr .tc-cnt{flex:none;font-size:12.5px!important;white-space:nowrap}
+.tc-list{gap:4px}
+.tc-ob{padding:5px 6px 5px 8px;gap:4px;border-left-width:4px}
+.tc-ob .tc-wr{gap:6px}
+.tc-ob .tc-n{min-width:24px;height:24px;font-size:11.5px}
+.tc-ob .tc-wn{cursor:pointer}
+.tc-ob .tc-wn>b{font-size:14.5px;line-height:1.15}.tc-ob .tc-wn>span{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-ob .tc-alt{flex:none;min-height:40px;gap:3px;font-size:13px}
+.tc-ob .tc-alt input{width:20px;height:20px}
+.tc-ob .tc-vn{flex:none;display:flex;gap:4px}
+.tc-ob .tc-v,.tc-ob .tc-nv{min-height:44px;min-width:52px;padding:0 8px;font-size:15px;border-width:1.5px}
+.tc-ob .tc-v span{font-size:13px}.tc-ob .tc-nv span{font-size:13px}
+.tc-ob .tc-folds{margin:-2px 0 -4px 30px}
+.tc-ob .tc-fold{min-height:34px;font-size:13px}
+.tc-ob .tc-err{font-size:13px;margin-left:30px}
+.tc-foot{padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+.tc .tc-foot .ib.tc-big{height:44px}
+@media (max-width:360px){.tc-ob .tc-v span,.tc-ob .tc-nv span{display:none}.tc-ob .tc-v,.tc-ob .tc-nv{min-width:44px}}
 .tc-fold b{color:var(--ink)}.tc-fold i{font-style:normal;font-size:11px}
 .tc-salp{display:flex;align-items:flex-end;gap:8px}
 .tc-salp label{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink2)}.tc-salp .ib{height:46px}
@@ -3988,3 +4028,28 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
   #grid tbody tr[data-a]:hover>td:not(.d):not(.amb),#grid tbody tr[data-gh]:hover>td:not(.d):not(.amb){background-image:linear-gradient(var(--lkhov),var(--lkhov))}}
 .mxspr{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.mxspr .chk{display:flex;gap:8px;align-items:flex-start}.mxspr .tin{min-width:0;width:100%}@media (max-width:760px){.mxspr{grid-template-columns:minmax(0,1fr)}}
 #grid tr.gh button.ghb{border:0;cursor:pointer;font:600 9.5px var(--f-ui);padding:2px 7px}#grid tr.gh button.ghb:hover{filter:brightness(.92);text-decoration:underline}
+/* tareo: «Mi cuadrilla» del capataz (tareo.js renderTCrew) */
+.tcw .tcw-q{width:100%;height:44px;font-size:16px;margin:4px 0 8px}
+.tcw-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-card);background:var(--panel);overflow:hidden}
+.tcw-r{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line2)}
+.tcw-r:last-child{border-bottom:0}
+.tcw-r>div{min-width:0;display:flex;flex-direction:column}
+.tcw-r b{font-size:15px}.tcw-r>div>span{font-size:13.5px;color:var(--ink2)}.tcw-r small{font-size:12.5px;color:var(--muted)}
+.tcw-l .tc-empty{padding:16px}
+/* tareo: lista de partidas del capataz (tcPcList) */
+.tc-pch{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:6px 2px 2px}
+.tc-pcg{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-ctl);overflow:hidden;background:var(--panel)}
+.tc .tc-pco{min-height:44px;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;border:0;border-bottom:1px solid var(--line2);border-radius:0;background:var(--panel);padding:4px 12px}
+.tc .tc-pco:last-child{border-bottom:0}
+.tc .tc-pco b{flex:none;min-width:48px;font:700 14px var(--f-mono);color:var(--accent)}
+.tc .tc-pco span{font-size:14px;color:var(--ink);line-height:1.2}
+.tc .tc-pco:active{background:var(--accent-soft)}
+.tc-pcd{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel2)}
+.tc-pcd+.tc-pcd{margin-top:4px}
+.tc-pcd>summary{min-height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;font-size:14px;font-weight:600;cursor:pointer;list-style:none}
+.tc-pcd>summary::-webkit-details-marker{display:none}
+.tc-pcd>summary::after{content:"▾";margin-left:auto;color:var(--muted)}.tc-pcd[open]>summary::after{content:"▴"}
+.tc-pcd>summary span{font-size:12px;color:var(--muted);font-weight:500}
+.tc-pcd>summary b{color:var(--accent)}
+.tc-pcd .tc-pcg{border:0;border-top:1px solid var(--line);border-radius:0}
+.tc-res>*{flex-shrink:0}
