@@ -62,6 +62,7 @@ test.beforeEach(async () => {
     await S('members/tcapm@obra.pe', { role: 'tcap', name: 'Capataz consorcio' });
     await S('members/u_tcap1', { role: 'tcap', name: 'Pedro' });
     await S('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
+    await S('members/campotar@obra.pe', { role: 'campo', name: 'Campo y asistente de tareo', tasis: true });
     await S('tper/03684337', { dni: '03684337', ape: 'QUISPE MAMANI', nom: 'JUAN', pue: 'OPERARIO ALBAÑIL', cat: 'OP', cua: 'ALBAÑILES', cap: '', act: true });
     await S('tpc/10.05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true });
     await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
@@ -1417,4 +1418,19 @@ test('productividad: el SC no pone ni cambia el saldo inicial de su partida', as
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'pav/ini_pc-gabel_p1'), { ...ini('sc@obra.pe', { piso: 'p1', q: 900 }), ini: false }));
   await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'pav/ini_pc-gabel_p2'), ini('campo@obra.pe')));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pmet/ini_10.05_p1'), { pc: '10.05', d: '2026-10-10', piso: 'p1', zona: '', q: 800, ini: true, nota: 'x', by: 'editor@obra.pe', ts: 1 }));
+});
+
+test('tareo (20-10-2026): el ingeniero de campo con tasis edita el tareo como el asistente y sigue registrando en Campo', async () => {
+  const a = user('campotar@obra.pe');
+  await assertSucceeds(setDoc(doc(a, 'tper/12345678'), PER('12345678')));
+  await assertSucceeds(setDoc(doc(a, 'tcfg/main'), { tolGar: 5 }, { merge: true }));
+  await assertSucceeds(getDocs(collection(a, 'tareo')));
+  await assertSucceeds(setDoc(doc(a, `tpexc/${limaDay(0)}`), { exc: {}, by: 'campotar@obra.pe', ts: 1 }, { merge: true }));
+  await assertSucceeds(getDoc(doc(a, 'acts/x1')));                       // sigue leyendo Last Planner
+  // el campo sin la casilla no
+  const c = user('campo@obra.pe');
+  await assertFails(setDoc(doc(c, 'tper/12345679'), PER('12345679')));
+  await assertFails(setDoc(doc(c, 'tcfg/main'), { tolGar: 5 }, { merge: true }));
+  // nadie se pone la casilla a sí mismo
+  await assertFails(updateDoc(doc(c, 'members/campo@obra.pe'), { tasis: true }));
 });

@@ -132,3 +132,26 @@ test('Ver como editor con «Publica tareo»', async ({ page }) => {
   await expect(page.locator('#vatpub')).toBeChecked();
   noErrors(errors, 'ver como jefe');
 });
+
+test('campo con «Asistente de tareo» (members.tasis): reporta en Campo y además maneja todo el Tareo', async ({ page }) => {
+  const errors = await openApp(page, { as: 'campo', editar: false, extra: [['members', 'campo@obra.pe', { role: 'campo', name: 'Carlos Campo', tasis: true }]] });
+  await expect(page.locator('#modsel')).toBeVisible();
+  const st = await page.evaluate(() => ({ campo: tabAllowed('campo'), daily: canDaily, only: TAR_ONLY(), as: TASIS(), ed: tarEdit() }));
+  expect(st).toEqual({ campo: true, daily: true, only: false, as: true, ed: true });
+  await page.click('#modsel [data-mod="tar"]');
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg']);
+  noErrors(errors, 'campo asistente');
+});
+
+test('Equipo: «También reporta en Campo» pasa al asistente a campo con tasis, y se puede volver', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(() => teamEdit('tasis@obra.pe'));
+  await page.check('#lqm [data-f="tasisCampo"]');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('members', 'tasis@obra.pe'))).toMatchObject({ role: 'campo', tasis: true });
+  await page.evaluate(() => teamEdit('tasis@obra.pe'));
+  await expect(page.locator('#lqm [data-f="tasis"]')).toBeChecked();
+  await page.uncheck('#lqm [data-f="tasisCampo"]');
+  await expect.poll(() => page.evaluate(() => { const m = window.__dbGet('members', 'tasis@obra.pe'); return [m.role, m.tasis]; })).toEqual(['tasis', undefined]);
+  noErrors(errors, 'equipo tasis');
+});

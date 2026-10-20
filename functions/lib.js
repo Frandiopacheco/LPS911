@@ -446,7 +446,7 @@ const ctaClave = (rnd = Math.random) => Array.from({ length: 6 }, () => Math.flo
 function ctaPuede(email, verified, member) {
   if (!verified || !email) return false;
   if (String(email).toLowerCase() === OWNER) return true;
-  return !!member && member.off !== true && ['admin', 'tasis'].includes(member.role);
+  return !!member && member.off !== true && (['admin', 'tasis'].includes(member.role) || (member.role === 'campo' && member.tasis === true));
 }
 /* nombre visible del capataz desde su ficha del máster: «Juan Carlos Quispe Mamani» */
 function ctaNombre(f) {

@@ -34,6 +34,8 @@ test('contraseña: mínimo 6, propuesta de 6 dígitos', () => {
 test('quién puede: dueño, admin y asistente de tareo con correo confirmado', () => {
   assert.ok(ctaPuede('frandiopacheco@gmail.com', true, null));
   assert.ok(ctaPuede('a@obra.pe', true, { role: 'admin' }));
+  assert.ok(ctaPuede('c@obra.pe', true, { role: 'campo', tasis: true })); // campo con «Asistente de tareo»
+  assert.ok(!ctaPuede('c@obra.pe', true, { role: 'campo' }));
   assert.ok(ctaPuede('t@obra.pe', true, { role: 'tasis' }));
   assert.ok(!ctaPuede('t@obra.pe', false, { role: 'tasis' }));
   assert.ok(!ctaPuede('t@obra.pe', true, { role: 'tasis', off: true }));

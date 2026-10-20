@@ -11,7 +11,7 @@ const tCtaMail=dni=>{const d=tCtaDni(dni);return d?d.toLowerCase()+'@'+TCTA_DOM:
 const tCtaEs=m=>typeof m==='string'&&m.toLowerCase().endsWith('@'+TCTA_DOM);
 /* contraseña propuesta: 6 dígitos al azar (fácil de dictar y de escribir en el celular) */
 function tCtaClave(){let a;try{a=crypto.getRandomValues(new Uint32Array(6))}catch(e){a=Array.from({length:6},()=>Math.floor(Math.random()*1e6))}return Array.from(a,x=>x%10).join('')}
-const tCtaPuede=()=>!!me&&(me.role==='admin'||me.role==='tasis'||isOwnerEmail(me.email));
+const tCtaPuede=()=>!!me&&(me.role==='admin'||TASIS()||isOwnerEmail(me.email));
 /* estado de la cuenta según members: 'sin' · 'act' · 'off' */
 function tCtaEstado(dni){const m=MEM.get(tCtaMail(dni));return!m?'sin':m.off?'off':'act'}
 const TCTA_ST={sin:'SIN CUENTA',act:'CUENTA ACTIVA',off:'DESACTIVADA'};

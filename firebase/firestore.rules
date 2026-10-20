@@ -24,13 +24,15 @@ service cloud.firestore {
     function tarOnly() { return !isOwner() && get(memberPath()).data.get('role', '') in ['tcap', 'tasis', 'tcos']; }
     // Miembro de LPS: todo el equipo menos los roles de solo Tareo (lectura de las colecciones de LPS)
     function lpsMember() { return isMember() && !tarOnly(); }
-    // Tareo: ven el módulo los roles de tareo, el administrador y el editor marcado «Publica tareo» (members.tpub)
+    // Asistente de tareo con Campo (20-10-2026): un ingeniero de campo con members.tasis tiene además todo lo del asistente de tareo
+    function campoTasis() { return role() == 'campo' && get(memberPath()).data.get('tasis', false) == true; }
+    // Tareo: ven el módulo los roles de tareo, el administrador, el campo asistente y el editor marcado «Publica tareo» (members.tpub)
     function isTar() {
-      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'admin']
+      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'admin'] || campoTasis()
         || (role() == 'editor' && get(memberPath()).data.get('tpub', false) == true));
     }
-    // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo
-    function tarEd() { return isMember() && notOff() && role() in ['admin', 'tasis']; }
+    // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo (o campo con tasis)
+    function tarEd() { return isMember() && notOff() && (role() in ['admin', 'tasis'] || campoTasis()); }
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
