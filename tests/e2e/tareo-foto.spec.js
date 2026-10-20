@@ -72,7 +72,7 @@ test('foto: propuesta de esquinas, Listo enderezado y claro, Repetir y Usar orig
   expect(out).toMatch(/^data:image\/jpeg/);
   const m = await medir(page, out);
   console.log('Listo 1600×1200 (ms):', await page.evaluate(() => window.__tfMs), m);
-  expect(Math.max(m.w, m.h)).toBeLessThanOrEqual(2000);
+  expect(Math.max(m.w, m.h)).toBeLessThanOrEqual(2400); // 20-10-2026: salida a 2400 px
   expect(m.w / m.h).toBeGreaterThan(1.3); expect(m.w / m.h).toBeLessThan(1.55);   // A4 apaisado
   expect(m.claro).toBeGreaterThan(0.6);                                          // fondo blanco (sin el gris de la obra)
   expect(m.azul).toBeGreaterThan(20);                                            // las firmas azules siguen azules
@@ -140,7 +140,7 @@ test('foto: 12 MP en un celular lento (CPU ×4) se procesa en pocos segundos', a
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   const m = await medir(page, out);
   console.log(`12 MP con CPU ×4: abrir+detectar ${tAbrir} ms (detección ${det.ms} ms), vista previa ${tPrev} ms, «Listo» ${tListo} ms, salida ${m.w}×${m.h}, ${Math.round(out.length / 1024)} KB`);
-  expect(Math.max(m.w, m.h)).toBeLessThanOrEqual(2000);
+  expect(Math.max(m.w, m.h)).toBeLessThanOrEqual(2400); // 20-10-2026: salida a 2400 px
   expect(tListo).toBeLessThan(15000);
   noErrors(errors, 'foto 12 MP');
 });

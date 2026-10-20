@@ -65,12 +65,8 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect(dan.locator('[data-tca="motT"]')).toContainText('Motivo: Descanso médico');
   await root.locator('[data-tca="todos"]').click();
   await expect(root.locator('#tcCnt')).toHaveText('Marcados 4 de 4');
-  // Carlos salió a otra hora (plegable) y Ana trabajó en altura
-  const car = root.locator('.tc-ob[data-dni="40000003"]');
-  await car.locator('[data-tca="salT"]').click();
-  await car.locator('input[data-tca="sal"]').fill('15:00');
-  await expect(car.locator('[data-tca="salT"]')).toContainText('Salió a las 15:00');
-  await expect(car.locator('input[data-tca="sal"]')).toHaveCount(0);
+  // ya no se pide la hora de salida (20-10-2026); Ana trabajó en altura
+  await expect(root.locator('[data-tca="salT"]')).toHaveCount(0);
   await root.locator('.tc-ob[data-dni="40000001"] input[data-tca="alt"]').check();
   await expect.poll(async () => (await dbDoc(page)).st).toBe('bor');
   expect((await dbDoc(page)).modo).toBe('hrs');
@@ -158,7 +154,7 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   const r = doc.rows;
   expect(r['40000001']).toMatchObject({ as: true, alt: true, h: { p10_05: 8.5 }, trab: 8.5, ext: 0, ini: '07:30', fin: '17:00' });
   expect(r['40000002']).toMatchObject({ as: true, h: { p10_05: 8.5, p20_01: 2 }, trab: 10.5, ext: 2, fin: '19:00' });
-  expect(r['40000003']).toMatchObject({ as: true, sal: '15:00', h: { p10_05: 4, p20_01: 4.5 }, trab: 8.5, ext: 0, fin: '15:00' });
+  expect(r['40000003']).toMatchObject({ as: true, h: { p10_05: 4, p20_01: 4.5 }, trab: 8.5, ext: 0 });
   expect(r['40000004']).toMatchObject({ as: false, mot: 'DM', trab: 0, ext: 0 });
   expect(doc.foto).toEqual([`${ID}_1`]);
   // enviado: solo lectura, sin pasos ni pie

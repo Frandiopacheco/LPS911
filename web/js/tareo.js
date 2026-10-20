@@ -445,7 +445,21 @@ function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&
    +(L.length>max?`<tr><td colspan="12" class="note">Se muestran ${max} de ${L.length}: usa el buscador o los filtros.</td></tr>`:'')}
 function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);tPerSelects();const n=$('#tperN');if(n){const hoy=todayIso();n.textContent=`Mostrando ${L.length} de ${tLive().length} · ${L.filter(p=>tActivo(p,hoy)).length} activos`}
   const s=$('#tselBar');if(s){s.hidden=!TU.sel.size;const c=$('#tselN');if(c)c.textContent=TU.sel.size}}
-function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
+/* «Mi cuadrilla» (20-10-2026): el capataz solo ve a sus obreros activos (nombre, DNI y categoría) con un buscador; sin máster,
+   filtros, cesados ni Excel. El buscador redibuja solo la lista. */
+let TCW_Q='';
+function tcwList(){const hoy=todayIso();const me1=typeof tcMe==='function'?tcMe():'';const q=tFold(TCW_Q);
+  const L=tLive().filter(p=>p.cap===me1&&tActivo(p,hoy)).sort((a,b)=>(a.ape||'').localeCompare(b.ape||'')||(a.dni||'').localeCompare(b.dni||''));
+  const V=L.filter(p=>!q||(p.dni||p.id||'').includes(q)||tFold(tName(p)).includes(q));
+  return{n:L.length,html:V.map((p,i)=>`<li class="tcw-r"><span class="tc-n">${i+1}</span><div><b>${esc(p.ape||'')}</b> <span>${esc(p.nom||'')}</span><small>DNI <span class="mono">${esc(p.dni||p.id||'')}</span>${p.cat?' · '+esc(p.cat):''}${p.cua?' · '+esc(p.cua):''}</small></div></li>`).join('')
+    ||`<li class="tc-empty">${L.length?`Nadie con «${esc(TCW_Q)}».`:'Aún no tienes obreros asignados: pide a la oficina que te los asigne.'}</li>`}}
+function renderTCrew(main){const x=tcwList();
+  main.innerHTML=`<div class="scroll"><div class="wrap tcw">${pageHead('Mi cuadrilla',`${x.n} ${x.n===1?'obrero activo':'obreros activos'}`)}
+   <input class="tin tcw-q" id="tcwQ" type="search" autocomplete="off" placeholder="Buscar: nombre o DNI" aria-label="Buscar en tu cuadrilla" value="${esc(TCW_Q)}">
+   <ol class="tcw-l" id="tcwL">${x.html}</ol>
+   <p class="note">Si falta alguien o sobra, avisa al asistente de tareo: él mantiene el máster.</p></div></div>`;
+  $('#tcwQ',main).addEventListener('input',e=>{TCW_Q=e.target.value;const l=$('#tcwL');if(l)l.innerHTML=tcwList().html})}
+function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
   const caps=tCaps();
   for(const id of[...TU.sel])if(!S.tper.has(id))TU.sel.delete(id);
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Personal',`${nAct} activos · ${all.length} en el máster`,`<button class="ib" id="tperXls">Exportar Excel</button>${ed?`<button class="ib" id="tperImp">Importar Excel de RR.HH.</button><button class="ib pri" id="tperAdd">+ Obrero</button>`:''}`)}

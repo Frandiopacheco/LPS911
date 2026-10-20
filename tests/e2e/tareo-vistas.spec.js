@@ -182,6 +182,7 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await tab(page, 'tcfg');
   await expect(page.locator('#tjTot')).toHaveText('48.0');
   await page.fill('[data-tjd="6"] [data-tj="fin"]', '13:30');
+  await page.locator('[data-tjd="6"] [data-tj="fin"]').blur();
   await expect(page.locator('#tjTot')).toHaveText('48.5');
   await expect(page.locator('#tjTol')).toHaveCount(0); // sin garita (20-10-2026)
   await page.click('#tjSave');
