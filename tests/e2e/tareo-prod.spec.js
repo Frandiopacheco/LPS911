@@ -45,7 +45,8 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   const m = await abrir(page, T1);
   // un solo espacio: sin el interruptor oficina/producción; el jefe tiene las acciones de la oficina; la foto va plegada al empezar
   await expect(m.locator('.tr-mode')).toHaveCount(0);
-  for (const s of ['#trRev', '#toReab', '#trPrConf', '#txAddO', '#txAddP', '#trCapSel']) await expect(m.locator(s)).toBeVisible();
+  for (const s of ['#trRev', '#toReab', '#txAddO', '#txAddP', '#trCapSel']) await expect(m.locator(s)).toBeVisible();
+  await expect(m.locator('#trPrConf')).toHaveCount(0); // sin «Conforme sin cambios» (20-10-2026)
   // sin cotejo, salida, garita ni «Mover horas» (20-10-2026); cuadrilla y categoría ocultas por omisión
   for (const k of ['fir', 'gar', 'sal', 'mot', 'cua', 'cat']) await expect(m.locator(`th[data-k="${k}"]`)).toHaveCount(0);
   await expect(m.locator('#trMv')).toHaveCount(0);
@@ -108,13 +109,12 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   const h = d.hist[d.hist.length - 1];
   expect(h).toMatchObject({ a: 'prod', by: 'jefe@obra.pe', tot: true, mot: 'BETA se quedó 30 min más en pedestales' });
   expect(h.det).toEqual(expect.arrayContaining([{ dni: '22222222', pc: 'p10_05', campo: 'h', antes: 8.5, despues: 9 }, { pc: 'p10_20', campo: 'pcs', antes: false, despues: true }]));
-  // la hoja sigue abierta con lo guardado; la lista del día muestra el chip
-  await expect(m.locator('#trPrConf')).toHaveText('Conforme otra vez');
-  await expect(m.locator('#trHead .tr-prodc')).toHaveText('Producción ✓');
+  // la hoja sigue abierta con lo guardado; ya no se muestra «Producción ✓» (20-10-2026)
+  await expect(m.locator('.tr-prodc')).toHaveCount(0);
   await expect(m.locator('#trEdN')).toHaveCount(0);
   await expect(cell(m, '22222222', 'p10_05')).not.toHaveClass(/tx-ch/);
   await m.locator('#trBack').click();
-  await expect(page.locator(`tr[data-to="${T1}"] .tr-prodc`)).toHaveText('Producción ✓');
+  await expect(page.locator(`tr[data-to="${T1}"]`)).toBeVisible();
   noErrors(errors, 'hoja jefe');
 });
 
@@ -359,19 +359,10 @@ test('hoja: el jefe agrega un obrero (de otra cuadrilla, con aviso), le pone hor
   noErrors(errors, 'agregar obrero');
 });
 
-test('hoja: «Conforme sin cambios» del admin; si otro usuario cambia el tareo, «Recargar versión actual» conserva lo cambiado; captura 1440×900', async ({ page }) => {
+test('hoja: si otro usuario cambia el tareo, «Recargar versión actual» conserva lo cambiado; captura 1440×900', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'admin', editar: false, extra: base() });
-  let m = await abrir(page, T2);
-  await expect(m.locator('#trQrev')).toBeVisible();
-  page.once('dialog', dg => dg.accept());
-  await m.locator('#trPrConf').click();
-  await expect.poll(async () => !!(await dbT(page, T2)).prod).toBe(true);
-  const d = await dbT(page, T2);
-  expect(d.st).toBe('rev');
-  expect(d.hist[d.hist.length - 1]).toMatchObject({ a: 'prod', cam: 'Conforme sin cambios', by: 'frandiopacheco@gmail.com' });
-  await m.locator('#trBack').click();
-  m = await abrir(page, T1);
+  const m = await abrir(page, T1);
   await cell(m, '11111111', 'p10_10').dblclick();
   await expect(m.locator('#txIn')).toHaveValue('4');
   await m.locator('#txIn').fill('4.5');

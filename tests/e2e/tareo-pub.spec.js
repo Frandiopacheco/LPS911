@@ -150,56 +150,48 @@ const TAREO = ['tareo', HOY + '_tcap@obra.pe', { date: HOY, cap: 'tcap@obra.pe',
   blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '17:00', dnis: ['40000001'] }], hist: [], by: 'tcap@obra.pe', ts: 1 }];
 const previas = async page => (await calls(page)).filter(c => c.accion === 'previa').length;
 
-test('Publicación: carga sola, se actualiza con los tareos, motivo a varios a la vez, publicar, abrir el tareo y errores', async ({ page }) => {
+test('Publicación (opción C): carga sola, se actualiza con los tareos, motivo con un toque (guardado), publicar, abrir el tareo y errores', async ({ page }) => {
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: [['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado', act: true }], TAREO] });
   const Q = dialogos(page);
-  await stub(page, { previa: { resumen: RES(), bloqueos: [{ k: 'estado', msg: 'Teodoro Capataz: enviado, falta revisar', tareo: HOY + '_tcap@obra.pe' }, { k: 'cob', msg: 'ZETA ANA no figura en ningún tareo', dni: '40000009' }], vigente: null, abierto: null }, publicar: { v: 1, id: HOY + '_v1' } });
+  const TR1 = { id: HOY + '_tcap@obra.pe', cap: 'tcap@obra.pe', capN: 'Teodoro Capataz', st: 'env', n: 1, pres: 1, aus: 0, hh: 8.5, he: 0 };
+  await stub(page, { previa: { resumen: RES({ tareos: [TR1] }), sinTareo: SIN, bloqueos: [{ k: 'estado', msg: 'Teodoro Capataz: enviado, falta revisar', tareo: TR1.id }, { k: 'cob', msg: 'ZETA ANA no figura en ningún tareo', dni: '40000009' }], vigente: null, abierto: null }, publicar: { v: 1, id: HOY + '_v1' } });
   await page.evaluate(() => { U.mod = 'tar'; goTab('tpub'); });
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tpub');
-  // sin «Ver estado del día»: la previa se pide sola
   await expect.poll(() => previas(page)).toBe(1);
-  await expect(page.locator('#tpbRes')).toContainText('17');
-  await expect(page.locator('#tpbEst')).toContainText('Revisado 1');
-  await expect(page.locator('#tpbSt')).toContainText('Faltan 4 cosas');            // 1 tareo sin revisar + 3 sin motivo
+  await expect(page.locator('#tpbTot')).toContainText('17 HH');
+  await expect(page.locator('#tpbSt')).toContainText('Faltan 4 cosas');            // 1 capataz sin revisar + 3 sin motivo
   await expect(page.locator('#tpbPub')).toBeDisabled();
-  // el bloqueo del tareo sale en su requisito; el del obrero sin tareo va en «Sin tareo» (se resuelve con la excepción)
-  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bno\b/);
-  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toContainText('falta revisar');
-  await expect(page.locator('#tpbChk [data-tpbs="sin"]')).toContainText('0 de 3');
-  await expect(page.locator('#tpbChk [data-tpbs="prod"]')).not.toHaveClass(/\bno\b/);   // informativo
-  await expect(page.locator('#tpbWhy')).toContainText('Resuelve');
+  await expect(page.locator('#tpbWhy')).toContainText('1 capataz sin revisar · 3 sin tareo sin motivo');
+  // capataces a la izquierda: el enviado arriba, con «Revisar»; sin «Producción»
+  await expect(page.locator(`#tpbCt tr[data-tpbp="${TR1.id}"]`)).toHaveClass(/warn/);
+  await expect(page.locator(`#tpbCt tr[data-tpbp="${TR1.id}"] [data-tpbt]`)).toHaveText('Revisar');
+  await expect(page.locator('#tpbRoot')).not.toContainText('producción');
+  // por resolver: los 3 sin tareo, cada uno con sus motivos
+  await expect(page.locator('#tpbPor .pb-l li[data-tpbd]')).toHaveCount(3);
   // un tareo del día cambia → la previa se vuelve a pedir sola (~2 s)
-  await page.evaluate(() => { window.__tpResp.previa = { ...window.__tpResp.previa, bloqueos: window.__tpResp.previa.bloqueos.slice(1) }; });
+  await page.evaluate(() => { const p = window.__tpResp.previa; window.__tpResp.previa = { ...p, bloqueos: p.bloqueos.slice(1), resumen: { ...p.resumen, tareos: [{ ...p.resumen.tareos[0], st: 'rev' }] } }; });
   await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'rev', ts: 2 }), HOY + '_tcap@obra.pe');
   await expect.poll(() => previas(page), { timeout: 6000 }).toBe(2);
   await expect(page.locator('#tpbSt')).toContainText('Faltan 3 cosas');
-  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bok\b/);
-  await expect(page.locator('#tpbWhy')).toContainText('Pon el motivo de 3 obreros');
-  // sin tareo agrupado por cuadrilla; motivo a varios a la vez
-  await expect(page.locator('#tpbSin .tp-sg')).toHaveCount(2);
-  await expect(page.locator('#tpbSin [data-tpbm="Vacaciones"]')).toBeDisabled();       // nadie elegido
-  await page.check('#tpbSin [data-tpbgx="ALBAÑILES"]');
-  await page.click('#tpbSin [data-tpbm="Vacaciones"]');
-  await expect(page.locator('[data-tpbmv="40000009"]')).toHaveText('Vacaciones');
-  await expect(page.locator('[data-tpbmv="40000008"]')).toHaveText('Vacaciones');
-  await expect(page.locator('[data-tpbmv="40000007"]')).toHaveText('Sin motivo');
+  await expect(page.locator('#tpbCapN')).toHaveText('1 de 1 revisados');
+  // un toque = motivo guardado (tpexc) y sale de «Por resolver» a «Resueltos»
+  await page.click('#tpbPor [data-tpbm="Vacaciones"][data-dni="40000009"]');
+  await page.click('#tpbPor [data-tpbm="Descanso médico"][data-dni="40000008"]');
+  await expect(page.locator('#tpbPor .pb-l li[data-tpbd]')).toHaveCount(1);
   await expect(page.locator('#tpbSt')).toContainText('Falta 1 cosa');
-  await expect(page.locator('#tpbPub')).toBeDisabled();
-  await page.check('#tpbSin [data-tpbx="40000007"]');
-  await page.click('#tpbSin [data-tpbm="Otro"]');
+  await expect.poll(async () => (await page.evaluate(f => window.__dbGet('tpexc', f), HOY) || {}).exc).toEqual({ 40000009: 'Vacaciones', 40000008: 'Descanso médico' });
+  // «Otro…» con texto propio
+  await page.click('#tpbPor [data-tpbo="40000007"]');
   await page.fill('#tpbOtro', 'Cambio de obra');
-  await page.click('#tpbOtroOk');
-  await expect(page.locator('[data-tpbmv="40000007"]')).toHaveText('Cambio de obra');
+  await page.click('#tpbPor [data-tpbok="40000007"]');
   await expect(page.locator('#tpbSt')).toContainText('Listo para publicar');
-  await expect(page.locator('#tpbPub')).toBeEnabled();
-  // quitar el motivo vuelve a bloquear; «Elegir a todos» + un motivo
-  await page.check('#tpbSin [data-tpbx="40000008"]');
-  await page.click('#tpbSin [data-tpbm=""]');
+  await expect(page.locator('#tpbPor .pb-ok')).toContainText('Todo resuelto');
+  // «Cambiar» en Resueltos lo devuelve a «Por resolver»
+  await page.click('#tpbRes summary');
+  await page.click('#tpbRes [data-tpbq="40000008"]');
+  await expect(page.locator('#tpbPor li[data-tpbd="40000008"]')).toBeVisible();
   await expect(page.locator('#tpbPub')).toBeDisabled();
-  await page.check('#tpbSin [data-tpbsa]');
-  await expect(page.locator('#tpbSin [data-tpbx]:checked')).toHaveCount(3);
-  await page.uncheck('#tpbSin [data-tpbx="40000007"]');
-  await page.click('#tpbSin [data-tpbm="Vacaciones"]');
+  await page.click('#tpbPor [data-tpbm="Vacaciones"][data-dni="40000008"]');
   await expect(page.locator('#tpbPub')).toBeEnabled();
   // cancelar la confirmación no llama a la función
   Q.push(null); await page.click('#tpbPub');
@@ -210,16 +202,13 @@ test('Publicación: carga sola, se actualiza con los tareos, motivo a varios a l
   await page.evaluate(() => { window.__tpErr.previa = { code: 'failed-precondition', message: 'El tareo de Bruno está en borrador.' }; });
   await page.click('#tpbVer');
   await expect(page.locator('#tpbErr')).toContainText('El tareo de Bruno está en borrador.');
-  await page.evaluate(() => { window.__tpErr.previa = { code: 'internal', message: 'internal' }; });
-  await page.click('#tpbVer');
-  await expect(page.locator('#tpbErr')).toContainText('publicarTareo');
-  // el «Abrir» del requisito abre el tareo en la revisión
-  await page.evaluate(h => { delete window.__tpErr.previa; window.__tpResp.previa.bloqueos = [{ k: 'estado', msg: 'falta revisar', tareo: h + '_tcap@obra.pe' }]; }, HOY);
+  await page.evaluate(() => { delete window.__tpErr.previa; });
   await page.click('#tpbVer');
   await expect(page.locator('#tpbErr')).toHaveCount(0);
-  await page.click('#tpbChk [data-tpbt]');
+  // «Ver» del capataz abre su tareo en la revisión
+  await page.click(`#tpbCt [data-tpbt="${TR1.id}"]`);
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  await expect(page.locator('#trWs')).toContainText('Teodoro Capataz');
+  await expect(page.locator('#trWs #trCapSel')).toHaveValue(TR1.id);
   noErrors(errors, 'publicación');
 });
 
@@ -246,10 +235,10 @@ test('Publicación: rectificar pide motivo; rectificación abierta publica la v2
   // 28.09 abierto para rectificar: aviso y «Publicar rectificación v2» con motivo obligatorio
   await page.fill('#tpbDate', '2026-09-28'); await page.locator('#tpbDate').dispatchEvent('change');
   await expect(page.locator('#tpbAb')).toContainText('Faltó un obrero');
-  await expect(page.locator('#tpbSt')).toContainText('Listo para publicar la rectificación v2');   // la previa llega sola
+  await expect(page.locator('#tpbSt')).toContainText('Listo para la rectificación v2');   // la previa llega sola
   await expect(page.locator('#tpbPub')).toHaveText('Publicar rectificación v2');
-  await expect(page.locator('#tpbDays [data-tpbf="2026-09-28"]')).toContainText('Abierto');
-  await expect(page.locator('#tpbDays [data-tpbf="2026-09-30"]')).toContainText('✓ v2');
+  await expect(page.locator('#tpbDays [data-tpbf="2026-09-28"]')).toHaveClass(/s-ab/);
+  await expect(page.locator('#tpbDays [data-tpbf="2026-09-30"]')).toHaveAttribute('title', /publicado v2/);
   await expect(page.locator('#tpbPub')).toBeEnabled();
   Q.push(''); await page.click('#tpbPub');
   expect((await calls(page)).filter(c => c.accion === 'publicar')).toHaveLength(0);

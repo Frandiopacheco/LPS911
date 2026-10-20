@@ -1001,6 +1001,25 @@ test('tareo F3: tpub y tpubidx los lee el módulo Tareo (también costos) y nadi
   await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
   await assertFails(getDoc(doc(user('jefe@obra.pe'), `tpub/${f}_v1`)));
 });
+test('tareo publicación (20-10-2026): tpexc lo escriben admin y jefe con tpub; tpauto solo la función', async () => {
+  const f = limaDay(0);
+  for (const [em, ok] of [[OWNER, true], ['jefe@obra.pe', true], ['tasis@obra.pe', false], ['tcos@obra.pe', false], ['editor@obra.pe', false], ['tcapm@obra.pe', false]]) {
+    const db = user(em); const w = setDoc(doc(db, `tpexc/${f}`), { exc: { '11111111': 'Vacaciones' }, by: em, ts: 1 }, { merge: true });
+    await (ok ? assertSucceeds(w) : assertFails(w));
+  }
+  // por otro (by distinto), campos de más o fecha mal: no
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), `tpexc/${f}`), { exc: {}, by: OWNER, ts: 1 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), `tpexc/${f}`), { exc: {}, by: 'jefe@obra.pe', ts: 1, v: 9 }));
+  await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tpexc/hoy'), { exc: {}, by: 'jefe@obra.pe', ts: 1 }));
+  await assertFails(deleteDoc(doc(user(OWNER), `tpexc/${f}`)));
+  // lectura: la oficina sí, el capataz y costos no
+  await assertSucceeds(getDoc(doc(user('tasis@obra.pe'), `tpexc/${f}`)));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), `tpexc/${f}`)));
+  await assertFails(getDoc(doc(user('tcapm@obra.pe'), `tpexc/${f}`)));
+  await tSeed(`tpauto/${f}`, { t: 1, ok: false, n: 2, msgs: [] });
+  await assertSucceeds(getDoc(doc(user('jefe@obra.pe'), `tpauto/${f}`)));
+  await assertFails(setDoc(doc(user(OWNER), `tpauto/${f}`), { t: 2, ok: true }));
+});
 test('tareo F3: la oficina no publica (st pub / pubV) ni cambia un tareo publicado; el capataz tampoco', async () => {
   const h = limaDay(-1), id = `tareo/${h}_u_tcap1`, p = cap('tcap1'), a = user('tasis@obra.pe'), o = user(OWNER);
   await tSeed(id, { date: h, cap: 'u_tcap1', st: 'rev', rows: { '11111111': { as: true } }, hist: [] });

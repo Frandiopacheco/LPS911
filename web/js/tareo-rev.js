@@ -410,7 +410,7 @@ function trHeadHtml(t,M){const s=M.s;const prev=trNb(-1),next=trNb(1);const L=TR
   if(TR.ed&&TR.ed.g){/* hoja: guardar/descartar los cambios; sin cambios, las acciones del tareo */
     const n=trEdN();
     if(n)btn.push(`<span class="tr-edn on" id="trEdN" role="status">${n} ${n===1?'cambio':'cambios'} sin guardar</span>`,`<button class="ib" data-tra="edx" id="trEdX">Descartar</button>`,`<button class="ib pri tr-edok" data-tra="edok" id="trEdOk">Guardar cambios</button>`);
-    if(!n){if(trProdOk())btn.push(`<button class="ib" data-tra="prconf" id="trPrConf" title="Marca «Revisado por producción» sin cambiar nada">${t.prod&&t.prod.t?'Conforme otra vez':'Conforme sin cambios'}</button>`);
+    if(!n){
       if(t.st==='env')btn.push(`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,`<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:` title="Lo marca revisado y pasa al siguiente capataz por revisar"`}>Marcar revisado</button>`);
       else btn.push(`<button class="ib" data-tra="qrev" id="trQrev">Quitar revisado</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`)}}
   else if(M.ed){
@@ -508,7 +508,7 @@ function trRightHtml(t,M){const{c,P,F,oDni,vis}=M;const s=M.s;
   const blq=t.blq||[];
   return`${trAvisos()}${t.st==='reab'&&t.reab?`<div class="callout t-warn">Reabierto por ${esc(toWho(t.reab.by))} a las ${esc(tHm(t.reab.t))}: ${esc(t.reab.mot||'')}</div>`:''}
    ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
-   ${t.prod&&t.prod.t?`<div class="callout tr-okc tr-prodn" id="trProdV">Revisado por producción: ${esc(t.prod.byN||toWho(t.prod.by))} · ${esc(fmtD(ldt(t.prod.t)))} ${esc(tHm(t.prod.t))}.</div>`:''}
+
    ${vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
    <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b></div>
     <div class="tr-mtw"><table class="t tr-mt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r" title="Horas trabajadas y horario">Total</th><th class="t-r" title="Horas extra">HE</th><th title="Trabajo en altura (bono)">A</th><th title="Observaciones${M.pas?' · ⇄ pasar a otro capataz':''}">Obs.</th></tr></thead>
@@ -789,7 +789,8 @@ async function trPasar(oid,dni,did,m){if(!toReabOk()||TR.busy||!did)return;TR.bu
 const trProdOk=()=>typeof tpPubOk==='function'&&tpPubOk();
 const trProdMark=()=>{const by=me.email||me.id||'';const n=toWho(by);return{t:NOW(),by,...(n&&n!==by?{byN:n}:{})}};
 /** chip «Producción ✓» (lista del día, encabezado de la revisión) */
-function trProdChip(t){const p=t&&t.prod;if(!p||!p.t)return'';const w=p.byN||toWho(p.by)||'';
+function trProdChip(t){return'';/* ya no se muestra (20-10-2026, decisión del dueño); la marca prod sigue guardándose */
+  /* eslint-disable-next-line no-unreachable */const p=t&&t.prod;if(!p||!p.t)return'';const w=p.byN||toWho(p.by)||'';
   return` <span class="tr-prodc" data-prod="1" title="Revisado por producción${w?': '+esc(w):''} · ${esc(fmtD(ldt(p.t)))} ${esc(tHm(p.t))}">Producción ✓</span>`}
 /** obreros presentes (que ya estaban en el tareo) cuyo total de HH cambia de a → b: [{dni, nom, a, b}] */
 function trPrTotCh(a,b){const o=[];const ra=(a&&a.rows)||{},rb=(b&&b.rows)||{};
@@ -992,7 +993,7 @@ function txPanel(t,M){const X=txCtx(t);TX.X=X;txFix(X);const ch=trPrTotCh(X.e.ba
   const oo=!!TR.op.obs;/* plegadas: cada fila lleva sus etiquetas en «Observaciones» */
   return`<div id="trAv">${trAvisos()}</div>
    ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
-   ${t.prod&&t.prod.t?`<div class="callout tr-okc tr-prodn" id="trProdV">Revisado por producción: ${esc(t.prod.byN||toWho(t.prod.by))} · ${esc(fmtD(ldt(t.prod.t)))} ${esc(tHm(t.prod.t))}.</div>`:''}
+
    <div id="trPrTotW">${trPrTotHtml(ch)}</div>
    ${vis.length?`<details class="callout t-warn to-obs tx-obs" id="trObs" data-trop="obs"${oo?' open':''}><summary><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b>${nb?` <span class="tx-obn">${nb} ${nb===1?'impide':'impiden'} marcar revisado</span>`:''}</summary><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></details>`:''}
    <section class="card tx-card" aria-label="Hoja del tareo">${txBarHtml(X)}

@@ -17,7 +17,9 @@ function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};const gri=/^
   for(const[k]of TDOW){const v=c.jor&&Object.prototype.hasOwnProperty.call(c.jor,k)?c.jor[k]:TCFG_DEF.jor[k];jor[k]=v&&v.ini&&v.fin?{ini:v.ini,fin:v.fin,ref:Math.max(0,+v.ref||0),refIni:v.refIni||gri}:null}
   const rn=c.refNoLab;const refNoLab=typeof rn==='number'?{ref:Math.max(0,rn),refIni:gri}:rn&&typeof rn==='object'?{ref:rn.ref!=null&&rn.ref!==''?Math.max(0,+rn.ref||0):TCFG_DEF.refNoLab.ref,refIni:rn.refIni||gri}:{...TCFG_DEF.refNoLab};
   const fer=[...new Set((Array.isArray(c.fer)?c.fer:[]).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
-  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar}}
+  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar,
+    /* publicación automática (20-10-2026): la hace el servidor (publicarTareoAuto); por omisión apagada, a las 21:00 */
+    pubAuto:{on:!!(c.pubAuto&&c.pubAuto.on===true),hh:/^\d{2}:\d{2}$/.test((c.pubAuto&&c.pubAuto.hh)||'')?c.pubAuto.hh:'21:00'}}}
 const tMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(s||''));return m?+m[1]*60+ +m[2]:null};
 const tR2=v=>Math.round(v*100)/100;
 const tFold=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
@@ -284,7 +286,8 @@ const toSinTxt=(f,g)=>`Obreros sin tareo · ${fmtD(f)} · ${g.name}\n`+g.L.map(p
 function toAccion(x){const ofi=toReabOk(),pr=!ofi&&typeof trProdOk==='function'&&trProdOk();const st=x.t?x.t.st||'bor':'sin';
   if(['sin','bor','reab'].includes(st))return['rec','Recordar',false];
   if(st==='env'&&ofi)return['open','Revisar',true];
-  if(['env','rev'].includes(st)&&pr&&!toProd(x))return['open','Revisar horas',true];
+  /* «Revisado por producción» ya no se muestra (20-10-2026): el jefe revisa en la misma hoja que la oficina */
+  if(st==='env'&&pr)return['open','Revisar',true];
   return['open','Abrir',false]}
 
 function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]=toAccion(x);
@@ -347,7 +350,7 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
   let env=0,pres=0,hh=0,he=0,fal=0,sm=0;const mot={};const C={sin:0,bor:0,rev:0,ok:0,pub:0};
   for(const x of L){C[toStg(x)]++;if(!x.t)continue;if(['env','rev','pub'].includes(x.t.st))env++;pres+=x.s.pres;hh+=x.s.hh;he+=x.s.he;fal+=x.s.fal;sm+=x.s.sm;for(const[k,n]of Object.entries(x.s.mot))mot[k]=(mot[k]||0)+n}
   const nObs=L.filter(x=>x.t&&x.s.obs.length).length,nProd=L.filter(toProd).length,nPr=L.filter(x=>x.t&&['env','rev','pub'].includes(x.t.st)).length,nLate=L.filter(x=>toLate(x,f)).length;
-  if(!['all','obs','prod','late',...TO_STG.map(s=>s[0])].includes(TD.flt))TD.flt='all';
+  if(!['all','obs','late',...TO_STG.map(s=>s[0])].includes(TD.flt))TD.flt='all';
   const vis=L.filter(toFltOk);
   const nl=tNoLab(f);const docs=[...TD.docs.values()];const G=TD.ok&&!nl?tSinTareo(f,docs):[];const nSin=G.reduce((s,g)=>s+g.L.length,0);
   const fb=(k,l,n,cls)=>`<button data-trflt="${k}" class="td-f${cls?' '+cls:''}${TD.flt===k?' on':''}" aria-pressed="${TD.flt===k}">${l} <b>${n}</b></button>`;
@@ -360,7 +363,7 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
      <div class="td-dh"><div class="td-big"><b id="toEnv">${env}<small> de ${L.length}</small></b><span>${L.length===1?'tareo enviado':'tareos enviados'}</span></div>
       <dl class="td-kp"><div><dt>Vinieron</dt><dd id="toPres">${pres}</dd></div><div title="${esc(motT)}"><dt>No vinieron</dt><dd id="toFal" class="${fal?'bad':''}">${fal}</dd></div>${sm?`<div title="El capataz aún no marca si vinieron"><dt>Sin marcar</dt><dd id="toSm" class="warn">${sm}</dd></div>`:''}<div><dt>HH</dt><dd id="toHH">${toH(hh)}</dd></div><div><dt>HE</dt><dd id="toHE">${toH(he)}</dd></div></dl></div>
      <div class="td-bar" aria-hidden="true">${TO_STG.map(([k])=>C[k]?`<i class="s-${k}" style="flex:${C[k]}"></i>`:'').join('')||'<i class="s-nil"></i>'}</div>
-     <div class="td-fl" id="trFlt" role="group" aria-label="Filtrar por estado">${fb('all','Todos',L.length)}${TO_STG.map(([k,l])=>fb(k,l,C[k],'s-'+k)).join('')}<span class="td-fsep" aria-hidden="true"></span>${fb('prod','Producción ✓',`${nProd}<small> de ${nPr}</small>`,'s-prod')}${fb('obs','Con observaciones',nObs,'s-obs')}${TD.flt==='late'?fb('late','No enviados a la hora',nLate,'s-late'):''}</div>
+     <div class="td-fl" id="trFlt" role="group" aria-label="Filtrar por estado">${fb('all','Todos',L.length)}${TO_STG.map(([k,l])=>fb(k,l,C[k],'s-'+k)).join('')}<span class="td-fsep" aria-hidden="true"></span>${fb('obs','Con observaciones',nObs,'s-obs')}${TD.flt==='late'?fb('late','No enviados a la hora',nLate,'s-late'):''}</div>
     </section>
     ${TD.ok?toAvisos(f,L):''}
     <section class="card td-board"><div class="td-bh"><input class="tin td-q" id="toQ" type="search" placeholder="Buscar capataz o cuadrilla" value="${esc(TD.q||'')}" aria-label="Buscar capataz o cuadrilla"><span class="note">${vis.length===L.length?`${L.length} ${L.length===1?'capataz':'capataces'}`:`${vis.length} de ${L.length} capataces`} · por revisar primero</span></div>
@@ -699,7 +702,10 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
      <label class="lqlab">Refrigerio en domingo o feriado (min)<input class="tin t-n" type="number" min="0" max="180" step="5" id="tjNlRef" value="${c.refNoLab.ref}"${dis}></label></div>
     <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
    <div class="card"><div class="pad t-form">
-    <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label></div>
+    <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label>
+    <label class="chk tj-auto"><input type="checkbox" id="tjAuto"${c.pubAuto.on?' checked':''}${dis}> Publicar el día automáticamente</label>
+    <label class="lqlab">A partir de las<input class="tin" type="time" id="tjAutoH" value="${esc(c.pubAuto.hh)}"${dis}></label>
+    <p class="note t-cfgn">Pasada esa hora, el servidor publica el día de hoy si todos los capataces están revisados, nadie figura en dos tareos y el personal sin tareo tiene su motivo. Si falta algo no publica y lo avisa en Publicación; vuelve a intentarlo cada 15 minutos.</p></div>
     ${ed?`<div class="pad"><button class="ib pri" id="tjSave">Guardar configuración</button></div>`:''}</div>
    <div class="card" id="tferCard"><h2>Feriados del tareo <span class="sub">Días no laborables para el tareo (todas las horas son extra). Son propios del tareo: todos los roles calculan igual.</span></h2>
     ${ed?`<div class="pad t-bar t-ferAdd"><input class="tin" type="date" id="tferD" aria-label="Fecha del feriado"><input class="tin" id="tferNm" placeholder="Nombre (opcional)" aria-label="Nombre del feriado" maxlength="60"><button class="ib pri" id="tferAdd">Agregar</button>${lps.length?`<button class="ib" id="tferLps" title="${lps.length} feriados en el calendario de Last Planner">Copiar feriados de Last Planner${fal?` (${fal})`:''}</button>`:''}</div>`:''}
@@ -712,7 +718,7 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
       const r=main.querySelector(`[data-tjd="${k}"]`);r.querySelectorAll('[data-tj]:not([data-tj="on"])').forEach(x=>x.disabled=!j)}$('#tjTot').textContent=t.toFixed(1)};
   main.querySelector('.t-jor').oninput=upd;main.querySelector('.t-jor').onchange=upd;
   $('#tjSave').onclick=async()=>{const jor=read();for(const[k,j]of Object.entries(jor))if(j&&!(tJorH(j)>0)){toast(`Revisa la jornada del ${TDOW.find(x=>x[0]===k)[1].toLowerCase()}: el fin debe ser posterior al inicio.`);return}
-    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
+    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,pubAuto:{on:$('#tjAuto').checked,hh:/^\d{2}:\d{2}$/.test($('#tjAutoH').value)?$('#tjAutoH').value:'21:00'},tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
   $('#tferAdd').onclick=()=>{const f=$('#tferD').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Elige la fecha del feriado.');return}const n=$('#tferNm').value.trim().replace(/\s+/g,' ');
     const C=TC();if(C.fer.includes(f)&&(C.ferN[f]||'')===n){toast('Ese feriado ya está.');return}

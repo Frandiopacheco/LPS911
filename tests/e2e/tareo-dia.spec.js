@@ -192,14 +192,14 @@ test('Tareos del día (rediseño): barra del día que filtra, tablero por priori
   await expect(fl.locator('[data-trflt="rev"]')).toContainText('3');
   await expect(fl.locator('[data-trflt="ok"]')).toContainText('2');
   await expect(fl.locator('[data-trflt="pub"]')).toContainText('1');
-  await expect(fl.locator('[data-trflt="prod"]')).toContainText('2 de 6');
+  await expect(fl.locator('[data-trflt="prod"]')).toHaveCount(0); // sin «Producción ✓» (20-10-2026)
   // orden: por revisar primero; los enviados llevan «Revisar»
   const stg = await page.locator('#toBody tr.td-r').evaluateAll(L => L.map(x => x.dataset.stg));
   expect(stg.slice(0, 3)).toEqual(['rev', 'rev', 'rev']);
   expect(stg.at(-1)).toBe('pub');
   await expect(page.locator(`tr[data-to="${HOY}_c01@obra.pe"] [data-toa]`)).toHaveText('Revisar');
   await expect(page.locator(`tr[data-to="${HOY}_c04@obra.pe"] [data-toa]`)).toHaveText('Abrir');
-  await expect(page.locator(`tr[data-to="${HOY}_c04@obra.pe"] .tr-prodc`)).toHaveText('Producción ✓');
+  await expect(page.locator('.tr-prodc')).toHaveCount(0);
   await expect(page.locator(`tr[data-to="${HOY}_c01@obra.pe"] .td-cua`)).toContainText('ALBAÑILES');
   await shot(page, '1-pc');
   // filtrar con la barra y volver a «Todos» tocando el mismo

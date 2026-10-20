@@ -254,6 +254,8 @@ window.__uiAskNative = true;
       if (!TP.tpPuede(em, !!(me && me.emailVerified), cm || null)) throw fnErr('permission-denied', 'Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
       const P = TP.tpPedido(d, new Date(Date.now() - 5 * 36e5).toISOString().slice(0, 10));
       if (P.error) throw fnErr('invalid-argument', P.error);
+      /* motivos guardados en la pantalla (tpexc/{fecha}), como tpCorrer del servidor (20-10-2026) */
+      const xg = col('tpexc').get(P.fecha); P.excepciones = TP.tpExcUnir(xg && xg.exc, P.excepciones);
       const withId = n => [...col(n).entries()].map(([id, x]) => ({ ...clone(x), id }));
       const idx = clone(col('tpubidx').get(P.fecha)) || null;
       const vigente = idx && +idx.v > 0 ? clone(col('tpub').get(P.fecha + '_v' + idx.v)) || null : null;
