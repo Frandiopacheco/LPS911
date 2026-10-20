@@ -146,3 +146,16 @@ test('«↗ Lookahead» también en Catálogo (⋮) y en los cambios de los SC',
   await expect.poll(() => page.evaluate(() => [U.tab, U.q.toLowerCase().includes('redes empotradas'), U.piso])).toEqual(['look', true, '']);
   noErrors(errors, 'lookahead desde la revisión');
 });
+
+test('varias celdas: menú junto a la selección (sin barra fija abajo)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.mxSc = ['c1']; U.mxV = 'mat'; render(); });
+  const ci = await page.evaluate(() => MX.view.cols.findIndex(c => c.id === 'k1'));
+  const a = page.locator(`#mxt tr[data-amb="a1"] td[data-k="${ci}"]`), b = page.locator(`#mxt tr[data-amb="a2"] td[data-k="${ci}"]`);
+  await a.hover(); await page.mouse.down(); await b.hover(); await page.mouse.up();
+  await expect(page.locator('#mxsb')).toHaveCount(0);
+  await expect(page.locator('#pop')).toContainText('2 celdas elegidas');
+  await page.click('#pop [data-do="sc"]');
+  await expect.poll(() => page.evaluate(() => [__dbGet('mamb', 'a1').c.k1, __dbGet('mamb', 'a2').c.k1])).toEqual(['c', 'c']);
+  noErrors(errors, 'menú de selección');
+});

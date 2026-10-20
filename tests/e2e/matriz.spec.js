@@ -54,8 +54,8 @@ test('editor: marca una celda, selecciona una columna y la valida en bloque; Des
   await expect(cell(page, 'a1', 0)).not.toHaveClass(/sug/);
   // la columna de Tarrajeo: seleccionar con el encabezado y validar con Enter
   await page.click('#mxt th[data-mxcol="1"]');
-  await expect(page.locator('#mxsb')).toContainText('celda');
-  await page.keyboard.press('Enter');
+  await expect(page.locator('#pop')).toContainText('celdas elegidas'); // menú junto a la selección (sin barra abajo)
+  await page.click('#pop [data-do="ok"]');
   await expect.poll(() => page.evaluate(() => window.__dbGet('mamb', 'a1').c.k2)).toBe('p');
   // fila completa (clic en el ambiente) + tecla 2 = En curso; Deshacer vuelve a lo propuesto
   await page.locator('#mxt tr[data-amb="a2"] th.mxa').click();

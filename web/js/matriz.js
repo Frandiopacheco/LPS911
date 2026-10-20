@@ -212,7 +212,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
         h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
   h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
-   </div></div>${ed?mxSelBar():''}`;
+   </div></div>`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};
   /* el alto de la caja se fija antes de devolver el desplazamiento: sin él (max-height:none) el scroll quedaba en 0 y cada cambio llevaba arriba */
@@ -225,11 +225,11 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   MX.hk=null;{const st=document.getElementById('mxhovst');if(st)st.textContent='';const el=MX.hp&&document.elementFromPoint(MX.hp.x,MX.hp.y);if(el&&el.closest('#mxt'))mxHov({target:el})}}
 
 /* barra de la selección (abajo) */
-function mxSelBar(){const n=MX.sel.size;if(!n)return'';
-  return`<div class="mxsb" id="mxsb" role="toolbar" aria-label="Celdas seleccionadas"><b>${n} ${n===1?'celda':'celdas'}</b>
-   ${['p','c','t','n'].map((s,i)=>`<button class="ib" data-mxset="${s}" title="Tecla ${['1','2','3','0'][i]}"><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}
-   <button class="ib pri" data-mxset="ok" title="Confirma lo que propone el sistema (Enter)">✓ Validar</button><button class="ab" data-mxclr aria-label="Quitar la selección" title="Quitar la selección (Esc)">&times;</button></div>`}
-
+/* varias celdas elegidas (19/10, el dueño quitó la barra fija de abajo): al terminar de elegir sale un menú junto a la selección
+   con los estados y «Validar» (las teclas 1/2/3/0/Enter siguen funcionando) */
+function mxSelPop(el){const n=MX.sel.size;if(!el||n<2||!mxEdG())return;
+  openPop(el,`<div class="ph mxselp">${n} celdas elegidas</div>${['p','c','t','n'].map(s=>`<button data-do="s${s}"><i class="mc s-${s}">${MXI[s]}</i> ${MXS[s]}</button>`).join('')}<button data-do="ok">✓ Validar lo propuesto</button><hr><button data-do="clr">Quitar la selección</button>`,
+    {sp:()=>mxApply('p'),sc:()=>mxApply('c'),st:()=>mxApply('t'),sn:()=>mxApply('n'),ok:()=>mxApply('ok'),clr:()=>{MX.sel.clear();mxPaintSel()}})}
 /* nombres del lookahead (pisos a la vista) que no están en el catálogo */
 function mxUnmapped(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id));const m=new Map();
   for(const x of S.act.values()){const k=mnk(x.name);if(!k||ali.has(k)||!vp.has(pisoOfAmb(x.ambId)))continue;let e=m.get(k);if(!e)m.set(k,e={k,name:String(x.name).trim(),sc:x.sc,ids:[]});e.ids.push(x.id)}
@@ -267,9 +267,7 @@ function mxSelIx(t){if(MX.ix&&MX.ix.t===t)return MX.ix;const m=new Map(),on=new 
 function mxPaintSel(){const t=$('#mxt');if(!t)return;const ix=mxSelIx(t);
   for(const k of ix.on)if(!MX.sel.has(k)){const td=ix.m.get(k);if(td)td.classList.remove('sl');ix.on.delete(k)}
   for(const k of MX.sel)if(!ix.on.has(k)){const td=ix.m.get(k);if(td){td.classList.add('sl');ix.on.add(k)}}
-  const old=$('#mxsb');const n=MX.sel.size;if(old&&n&&old.firstElementChild){old.firstElementChild.textContent=`${n} ${n===1?'celda':'celdas'}`;return}
-  const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
-function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
+  const old=$('#mxsb');if(old)old.remove()}
 /* vista de escritorio (oct 2026): tamaño de celda (U.mxZ 0/1/2), tabla del alto de la pantalla, saltar a un SC, ayuda y SC en menús */
 const mxZ=()=>{const z=+U.mxZ;return z>=0&&z<=2?z:1};
 function mxFit(){const b=$('#mxbox');if(!b||!b.isConnected)return;const top=b.getBoundingClientRect().top;b.style.maxHeight=Math.max(240,innerHeight-top-14)+'px'}
@@ -307,16 +305,15 @@ function mxWire(main){mxWireV(main);
   const fl=$('#mxfalta');if(fl)fl.onchange=()=>{U.mxFalta=fl.checked;saveUI();MX.sel.clear();render()};
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
-  mxWireBar();
   const t=$('#mxt');if(!t)return;
   t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxAddFlow(np.dataset.mxnew);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
-    if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
-    if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
+    if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);mxSelPop(ch);return}
+    if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);mxSelPop(rh);return}};
   t.onpointerdown=e=>{const td=e.target.closest('td.mc');if(!td||e.button!==0)return;const c=mxCellAt(td);if(!c)return;
     if(!mxEdG())return; // consulta: el toque se atiende en onclick (así se puede desplazar)
     e.preventDefault();
-    if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();return}
+    if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();mxSelPop(td);return}
     MX.drag={a:c,add:e.ctrlKey||e.metaKey,base:new Set(MX.sel)};MX.moved=false;MX.anchor=c;DRAGGING=true};
   t.onpointerleave=()=>{MX.hk=null;const st=document.getElementById('mxhovst');if(st)st.textContent=''};
   t.onpointerover=e=>{mxHov(e);if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
@@ -324,9 +321,10 @@ function mxWire(main){mxWireV(main);
 document.addEventListener('pointerup',e=>{if(!MX.drag)return;const d=MX.drag;MX.drag=null;DRAGGING=false;
   if(!MX.moved){const k=d.a.amb+'|'+d.a.cat;if(d.add){if(MX.sel.has(k))MX.sel.delete(k);else MX.sel.add(k);mxPaintSel();return}
     const td=document.querySelector(`#mxt tr[data-amb="${CSS.escape(d.a.amb)}"] td[data-k="${d.a.ci}"]`);MX.sel=new Set([k]);mxPaintSel();if(td)mxInfo(td,d.a);return}
+  const el=e.target&&e.target.closest?e.target.closest('#mxt td.mc'):null;mxSelPop(el||document.querySelector('#mxt td.mc.sl'));
   if(ready)requestRender()});
 function mxToggle(keys,e){if(e.ctrlKey||e.metaKey||e.shiftKey)keys.forEach(k=>MX.sel.add(k));else{const all=keys.length&&keys.every(k=>MX.sel.has(k));MX.sel=all?new Set():new Set(keys)}mxPaintSel()}
-document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape')return;
+document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape'&&!document.querySelector('#pop .mxselp'))return;
   const m={'1':'p','2':'c','3':'t','0':'n',Enter:'ok'}[e.key];if(m){e.preventDefault();closePop();mxApply(m);return}if(e.key==='Escape'){MX.sel.clear();mxPaintSel()}});
 
 /* ficha de una celda: de dónde sale, qué hay en el lookahead y (si edita) cambiar su estado */
