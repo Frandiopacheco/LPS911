@@ -36,11 +36,13 @@ function tCapCuenta(dni){
   const id=S.tper.has(String(dni))?String(dni):tCtaDni(dni);const p=S.tper.get(id);
   if(!p){toast('No se encontró la ficha de ese DNI en el máster.');return}
   if(!tCtaDni(id)){toast('El DNI de la ficha no es válido: corrígelo antes de crear la cuenta.');return}
-  TCTA={dni:tCtaDni(id),clave:tCtaClave(),busy:false,msg:'',bad:false,ok:null};tCtaDraw()}
+  /* 20-10-2026: con la cuenta ya activa, el campo empieza VACÍO: antes mostraba una contraseña al azar que no era la vigente y se
+     enviaba esa sin pulsar «Cambiar contraseña» (los capataces no podían entrar) */
+  const d0=tCtaDni(id);TCTA={dni:d0,clave:tCtaEstado(d0)==='act'?'':tCtaClave(),busy:false,msg:'',bad:false,ok:null};tCtaDraw()}
 function tCtaDraw(){const T=TCTA;if(!T)return;const p=S.tper.get(T.dni)||{};const mail=tCtaMail(T.dni);const st=T.ok?'act':tCtaEstado(T.dni);
   const anon=tCtaAnon();const nObr=(typeof tLive==='function'?tLive():[]).filter(x=>x.cap===mail).length;const dis=T.busy?' disabled':'';
   const deSel=`<label class="lqlab">Pasar sus datos de (capataz que hoy entra con enlace)<select class="tin" id="tctaDe"${dis}><option value="">No pasar nada</option>${anon.map(a=>`<option value="${esc(a.id)}">${esc(a.name)} · ${a.n} ${a.n===1?'obrero':'obreros'}</option>`).join('')}</select></label>`;
-  const pw=lbl=>`<label class="lqlab">${lbl}<span class="tcta-pw"><input class="tin mono" id="tctaPw" value="${esc(T.clave)}" autocomplete="off" spellcheck="false" maxlength="64"${dis}><button type="button" class="ib" data-tcta="gen"${dis}>Otra</button></span></label>`;
+  const pw=lbl=>`<label class="lqlab">${lbl}<span class="tcta-pw"><input class="tin mono" id="tctaPw" value="${esc(T.clave)}" placeholder="Escríbela o toca «Otra»" autocomplete="off" spellcheck="false" maxlength="64"${dis}><button type="button" class="ib" data-tcta="gen"${dis}>Otra</button></span></label>`;
   let body;
   if(T.ok){const txt=tCtaTexto(T.dni,T.ok.clave);
     body=`<div class="callout tcta-ok"><p class="lqmsg ok">${esc(T.ok.msg)}</p><p class="tcta-txt mono" id="tctaTxt">${esc(txt)}</p>
@@ -49,6 +51,7 @@ function tCtaDraw(){const T=TCTA;if(!T)return;const p=S.tper.get(T.dni)||{};cons
      <div class="lqbtns"><button class="ib" data-tcta="back">Listo</button></div>`}
   else if(st==='act'){
     body=`<p class="note">Entra con «Soy capataz»: usuario <b class="mono">${esc(T.dni)}</b> y su contraseña. Tiene ${nObr} ${nObr===1?'obrero asignado':'obreros asignados'}. Si pierde el celular, entra en otro con los mismos datos.</p>
+     <p class="callout t-warn tcta-nov">La contraseña actual <b>no se puede ver</b>. Si el capataz no puede entrar o no sabes cuál tiene, ponle una nueva aquí, pulsa <b>«Cambiar contraseña»</b> y envíale el mensaje que aparece.</p>
      ${pw('Contraseña nueva')}<div class="lqbtns lqbw"><button class="ib pri" data-tcta="clave"${dis}>Cambiar contraseña</button></div>
      ${anon.length?`${deSel}<div class="lqbtns lqbw"><button class="ib" data-tcta="migrar"${dis}>Pasar sus obreros</button></div>`:''}
      <div class="lqbtns lqbw tcta-off"><button class="ib bad" data-tcta="off"${dis}>Desactivar cuenta</button></div>`}
@@ -63,7 +66,7 @@ function tCtaDraw(){const T=TCTA;if(!T)return;const p=S.tper.get(T.dni)||{};cons
 async function tCtaAct(k){const T=TCTA;if(!T||T.busy)return;const pwI=$('#tctaPw'),deI=$('#tctaDe');if(pwI)T.clave=pwI.value;const de=deI?deI.value:'';
   const msg=(t,bad)=>{T.msg=t;T.bad=!!bad;const el=$('#tctaMsg');if(el){el.textContent=t;el.classList.toggle('bad',!!bad)}};
   if(k==='gen'){T.clave=tCtaClave();tCtaDraw();return}
-  if(k==='back'){T.ok=null;T.clave=tCtaClave();T.msg='';tCtaDraw();return}
+  if(k==='back'){T.ok=null;T.clave='';/* la cuenta ya existe: nada propuesto */T.msg='';tCtaDraw();return}
   if(k==='copy'){const txt=tCtaTexto(T.dni,T.ok.clave);try{await navigator.clipboard.writeText(txt);toast('Copiado.')}catch(e){const r=document.createRange();const el=$('#tctaTxt');if(el){r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)}toast('Selecciona el texto y cópialo.')}return}
   const clave=T.clave.trim();
   if((k==='crear'||k==='clave')&&(clave.length<6||clave!==T.clave))return msg('La contraseña debe tener al menos 6 caracteres, sin espacios.',true);

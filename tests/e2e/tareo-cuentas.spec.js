@@ -52,6 +52,9 @@ test('asistente de tareo: crea la cuenta, pasa los obreros del enlace, cambia la
   await m.locator('[data-tcta="back"]').click();
   await expect(m).toContainText('2 obreros asignados');
   await expect(m.locator('#tctaDe')).toHaveCount(0); // ya no quedan capataces con enlace
+  await expect(m.locator('#tctaPw')).toHaveValue(''); // la vigente no se ve: nada propuesto que se pueda enviar por error
+  await m.locator('[data-tcta="clave"]').click();
+  await expect(m.locator('#tctaMsg')).toContainText('al menos 6 caracteres');
   await m.locator('#tctaPw').fill('135790');
   await m.locator('[data-tcta="clave"]').click();
   await expect(m).toContainText('Contraseña cambiada');
