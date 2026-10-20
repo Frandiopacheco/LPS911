@@ -119,3 +119,15 @@ test('Por actividad › SC: si una escritura falla, dice cuántas no se guardaro
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('c');
   noErrors(errors, 'falla parcial');
 });
+
+test('filas con otro SC: «Ver en el Lookahead» abre la búsqueda de esa actividad', async ({ page }) => {
+  const extra = [...CAT, ['acts', 'cross', { ambId: 'a1', sc: 'c3', name: 'Redes empotradas', und: 'pto', days: [], order: 40 }]];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
+  await page.click('#mxsmis');
+  await page.click('[data-mxslk="0"]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q])).toEqual(['look', 'Redes empotradas']);
+  await expect(page.locator('#fq')).toHaveValue('Redes empotradas');
+  await expect(page.locator('#grid tr[data-a="cross"]')).toHaveCount(1);
+  noErrors(errors, 'ver en lookahead');
+});

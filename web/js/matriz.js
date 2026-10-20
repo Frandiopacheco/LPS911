@@ -244,9 +244,10 @@ function mxScMismatch(){const vp=new Set(visPisos().map(p=>p.id));const m=new Ma
 function mxScMisDlg(){if(!mxEd())return;const L=mxScMismatch();if(!L.length){lqClose();return}
   lqModal(`<div class="lqtop"><b>Filas con otro subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. <b>Si los dos SC hacen esa actividad</b>, súmalo a la actividad (queda de los dos). Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo.</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button></span></div>`).join('')}</div>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button><button class="ib" data-mxslk="${i}" title="Abre el Lookahead buscando «${esc(u.c.name)}» (todas sus filas, de cualquier SC)">↗ Ver en el Lookahead</button></span></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
-   async e=>{const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
+   async e=>{const lk=e.target.closest('[data-mxslk]');if(lk){const u=L[+lk.dataset.mxslk];lqClose();mxLookSearch(u.c.name,u.ids);return}
+     const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
      const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
      const ops=u.ids.map(id=>S.act.get(id)).filter(x=>x&&!pend.has(x.id)&&x.sc===u.sc).map(x=>op('acts',x.id,{...x,sc:u.c.sc}));
      const sk=u.ids.length-ops.length;if(ops.length)apply(ops,`«${u.c.name}»: ${ops.length} ${ops.length===1?'fila pasa':'filas pasan'} a ${conOf(u.c.sc).name}`);
@@ -495,3 +496,9 @@ function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-perform
 function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.clientY};const td=e.target&&e.target.closest?e.target.closest('td.mc,th.mxc'):null;const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
   let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}
   st.textContent=k===''?'':`#mxt td.mc[data-k="${k}"]{background-image:linear-gradient(var(--mxhov),var(--mxhov))}#mxt th.mxc[data-mxcol="${k}"]{background-color:var(--mxhovh)}`}
+
+/** abre el Lookahead buscando un nombre (para revisar el catálogo frente a las filas reales): quita sector, SC y actividades elegidas;
+    si todas las filas son de un piso, va a ese piso; si no, a todos (19/10, pedido del dueño) */
+function mxLookSearch(name,ids){const ps=new Set((ids||[]).map(id=>{const x=S.act.get(id);return x?pisoOfAmb(x.ambId):''}).filter(Boolean));
+  U.q=name;U.sector='';U.sc='';U.acts=[];U.day='';U.wkF=0;U.piso=ps.size===1?[...ps][0]:'';gridRows=null;saveUI();goTab('look');
+  setTimeout(()=>{const q=$('#fq');if(q&&q.value!==U.q){q.value=U.q;gridRows=null;requestRender()}},0);toast(`Lookahead: buscando «${name}»`)}
