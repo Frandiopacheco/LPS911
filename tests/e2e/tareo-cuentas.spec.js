@@ -36,8 +36,8 @@ test('asistente de tareo: crea la cuenta, pasa los obreros del enlace, cambia la
   await expect(m).toContainText('Cuenta creada · 2 obreros pasaron a su cuenta');
   await expect(m.locator('#tctaSt')).toHaveText('CUENTA ACTIVA');
   const txt = await m.locator('#tctaTxt').textContent();
-  expect(txt).toMatch(new RegExp(`^Usuario: ${DNI} · Contraseña: 246810 · Entra a http://localhost:\\d+/$`));
-  expect(decodeURIComponent(await m.locator('#tctaWa').getAttribute('href'))).toContain(`Usuario: ${DNI} · Contraseña: 246810`);
+  expect(txt).toMatch(new RegExp(`^Usuario \\(DNI\\): ${DNI} · Contraseña: 246810 · Entra a http://localhost:\\d+/\\?dni=${DNI} `));
+  expect(decodeURIComponent(await m.locator('#tctaWa').getAttribute('href'))).toContain(`Usuario (DNI): ${DNI} · Contraseña: 246810`);
   const calls = await page.evaluate(() => window.__fnCalls);
   expect(calls).toEqual([{ name: 'cuentaCapataz', data: { accion: 'crear', dni: DNI, clave: '246810', de: 'u_viejo1' } }]);
   const mem = await page.evaluate(id => window.__dbGet('members', id), MAIL);
@@ -151,4 +151,23 @@ test('Equipo: la invitación por enlace recomienda la cuenta con usuario y contr
   await openApp(page, { as: 'admin', tab: 'team', editar: false });
   await page.click('[data-teamv="cap"]');
   await expect(page.locator('[data-tctanote]')).toContainText('Tareo › Personal › Hacer capataz');
+});
+
+test('el capataz que escribe su DNI en «Correo» entra igual; el enlace ?dni= abre «Soy capataz» con su DNI', async ({ browser }) => {
+  const extra = [...EXTRA, ['members', MAIL, { role: 'tcap', name: 'Juan Carlos Quispe Mamani', dni: DNI, added: 1, by: 'tasis@obra.pe' }]];
+  const { ctx, page, errors } = await abrirSinSesion(browser, extra, { [MAIL]: { uid: 'ct1', pass: '246810' } });
+  await expect(page.locator('#lform')).toBeVisible();
+  await page.fill('#lemail', DNI);
+  await page.fill('#lpass', '246810');
+  await page.click('#lsubmit');
+  await expect(page.locator('#login')).toBeHidden();
+  expect(await page.evaluate(() => [me.email, me.role])).toEqual([MAIL, 'tcap']);
+  await page.evaluate(() => auth.signOut());
+  await page.evaluate(() => localStorage.removeItem('lps.lcap'));
+  await page.goto('/?dni=' + DNI);
+  await expect(page.locator('#lcap')).toBeVisible();
+  await expect(page.locator('#cdni')).toHaveValue(DNI);
+  expect(new URL(page.url()).search).toBe('');
+  noErrors(errors, 'dni en correo');
+  await ctx.close();
 });
