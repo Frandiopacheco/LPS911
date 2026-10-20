@@ -589,7 +589,7 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
   /* arrastrar el número de la actividad (a la izquierda del nombre) para cambiar su orden dentro del ambiente */
   /* faltan programar: tocar un día de la fila fantasma la programa; ⋮ y el chip del ambiente */
   tbl.addEventListener('click',e=>{const ch=e.target.closest('[data-ghamb]');if(ch){const id=ch.dataset.ghamb;GHT.has(id)?GHT.delete(id):GHT.add(id);requestRender();return}
-    const gm=e.target.closest('[data-ghmenu]');if(gm){lkGhostMenu(gm,gm.dataset.ghmenu);return}
+    const gq=e.target.closest('[data-ghq]');if(gq){lkGhostAsk(gq,gq.dataset.ghq);return}const gm=e.target.closest('[data-ghmenu]');if(gm){lkGhostMenu(gm,gm.dataset.ghmenu);return}
     const td=e.target.closest('tr[data-gh] td.d');if(td&&!(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey))lkGhostDay(td.parentElement.dataset.gh,td.dataset.d)});
   tbl.addEventListener('click',e=>{const b=e.target.closest('[data-qrep]');if(!b)return;e.stopPropagation();const x=S.act.get(b.dataset.qrep);if(!x)return;
     distribute(x.id,(x.days||[]).filter(d=>(x.qty||{})[d]==null).sort(),null)});
