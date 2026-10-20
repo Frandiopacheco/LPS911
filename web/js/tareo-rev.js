@@ -163,7 +163,7 @@ const trFotosOk=t=>((t&&t.foto)||[]).every(f=>TD.fotos.has(f));
    porque cambió la evidencia · pend: el panel derecho espera para redibujarse (se está escribiendo en una celda del editor) */
 /* foto a la vista en la hoja: lo último que eligió en este equipo; si nunca eligió, visible para el asistente (coteja) y plegada
    para el jefe y el admin (revisan horas) */
-function trFoLs(){try{const v=localStorage.getItem('lps.trfo');if(v==='0'||v==='1')return v==='1'}catch(e){}return!!(typeof me!=='undefined'&&me&&me.role==='tasis')}
+function trFoLs(){try{const v=localStorage.getItem('lps.trfo');if(v==='0'||v==='1')return v==='1'}catch(e){}return!!(typeof me!=='undefined'&&me&&TASIS())}
 const TR={id:'',fir:{},gar:{},b:{fir:{},gar:{}},sig:'',dirty:false,ed:null,edSig:'',fi:0,z:1,rot:0,busy:false,fsig:'',ord:[],op:{blq:true,hist:false},want:'',ro:null,cyc:'',conf:'',nota:'',pend:false,
   /* hoja (tareos por horas): pfo = foto a la vista (panel lateral plegable; se recuerda en el equipo) · want2: ya no se usa
      (antes, modo de la revisión de producción; se conserva para tpbAbrir) */

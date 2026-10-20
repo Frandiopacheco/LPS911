@@ -247,7 +247,7 @@ const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firma
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
 const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos';
 /* edita la oficina (coteja, corrige, revisa, reabre, pasa obreros): asistente, administrador y jefe de producción (editor con tpub) */
-const toReabOk=()=>!!me&&(isAdmin||me.role==='tasis'||(me.role==='editor'&&me.tpub===true));
+const toReabOk=()=>!!me&&(isAdmin||TASIS()||(me.role==='editor'&&me.tpub===true));
 const toH=v=>(+v||0).toLocaleString('es-PE',{maximumFractionDigits:2});
 const toWho=e=>{const m=e&&MEM.get(e);return m&&m.name||e||''};
 const tHm=t=>t?new Date(t-LIMA_OFF).toISOString().slice(11,16):'';
@@ -646,7 +646,7 @@ function tImportMasterRows(rows,sh,cols){const R=tParseMaster(rows,cols);const D
 /* ---------- Partidas de control ---------- */
 /* una sola tabla (columnas alineadas entre grupos) con fila de encabezado por grupo, como la hoja «Lista de partidas» */
 const TPU={q:'',est:'all'};
-const tBloqOk=()=>!!me&&(!!isAdmin||me.role==='tasis'||me.role==='tcos');
+const tBloqOk=()=>!!me&&(!!isAdmin||TASIS()||me.role==='tcos');
 const tF2=v=>v==null||v===''?'':Number(v).toLocaleString('es-PE',{maximumFractionDigits:2});
 /* ratio HH/und (columna «Ratio» del Excel): HH presupuestadas entre metrado */
 const tRatio=x=>{const m=+x.met,h=+x.hhp;return m>0&&h>0?(h/m).toLocaleString('es-PE',{maximumFractionDigits:4}):''};
@@ -728,7 +728,7 @@ async function tImportPc(){const f=await tPickFile();if(!f)return;let wb;try{wb=
 /* feriados del calendario de Last Planner (S.meta project cal.hol: [{d,n}]); solo los tiene quien carga los datos de LPS */
 const tLpsHol=()=>{const p=S.meta&&S.meta.get('project');const h=p&&p.cal&&Array.isArray(p.cal.hol)?p.cal.hol:[];return h.filter(o=>o&&/^\d{4}-\d{2}-\d{2}$/.test(o.d||''))};
 async function tFerSave(fer,ferN,txt){try{await fcol(TCOLS.tcfg).doc('main').set({fer:[...new Set(fer)].sort(),ferN,...tStamp()},{merge:true});toast(txt)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
-function renderTCfg(main){const c=TC();const ed=!!isAdmin||me.role==='tasis';const dis=ed?'':' disabled';const hoy=todayIso();
+function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?'':' disabled';const hoy=todayIso();
   const lps=ed?tLpsHol():[];const fal=lps.filter(o=>!c.fer.includes(o.d)).length;
   const dow=f=>{const w=TDOW.find(([k])=>k===String(pd(f).getUTCDay()));return w?w[1]:''};
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración del tareo','Jornada, refrigerio, feriados, hora límite de envío y tolerancia de garita')}
