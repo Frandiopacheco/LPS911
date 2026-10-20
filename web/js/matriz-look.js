@@ -214,7 +214,7 @@ function lkGhosts(){if(typeof mxPendList!=='function')return null;
   LKGHC.k=k;LKGHC.v=m;return m}
 function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
   let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
-    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span><span class="ghb${g.past?' ghq':''}" title="${g.past?'Ya tuvo días programados (vencidos) y nadie la cerró: si ya se hizo, ⋮ › «Ya está terminada»; si falta, toca un día para reprogramarla':'Toca un día de la fila para programarla'}">${g.past?'¿Terminó?':'Falta'}</span></td>
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span>${can?`<button type="button" class="ghb${g.past?' ghq':''}" data-ghq="${esc(k)}" title="${g.past?'Ya tuvo días programados y nadie la cerró: toca para responder si terminó o programarla':'Toca para programarla o marcarla en la Matriz'}">${g.past?'¿Terminó?':'Falta'}</button>`:`<span class="ghb${g.past?' ghq':''}">${g.past?'¿Terminó?':'Falta'}</span>`}</td>
     <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
   const T=todayIso();for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&days[i].d>=T?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
   return h+'</tr>'}
@@ -241,6 +241,19 @@ function lkGhostMenu(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(c
     na:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'n'}]]),`${c.name}: no aplica en ${a.code}`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
     ok:()=>{const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:'t'}]]),`${c.name}: terminada en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))},
     mat:()=>mxGoCell(amb,cid)})}
+
+/* tocar «¿Terminó?» / «Falta» (19/10, pedido del dueño): se responde ahí mismo. Sí terminó → Terminado en la Matriz (la fila
+   fantasma desaparece); falta → se programa el próximo día hábil (o se toca otro día de la fila); no aplica → No aplica en la Matriz.
+   Matriz: ingenieros (mxWrite, Deshacer) y el SC en su partida (mxScSet, queda para el «✓ Visto»). */
+function lkGhostAsk(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(cid);const a=S.amb.get(amb);if(!c||!a)return;
+  const g0=((lkGhosts()||new Map()).get(amb)||[]).find(g=>g.c.id===cid);const past=!!(g0&&g0.past);const ed=mxEd();const scm=!ed&&SCK()&&typeof mxScCan==='function'&&mxScCan(c);const mx=ed||scm;
+  const nx=wshift(todayIso(),1);
+  const set=v=>{if(scm){mxScSet(amb,cid,v);return}const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:v}]]),`${c.name}: ${MXS[v].toLowerCase()} en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))};
+  const bt={yes:mx?'<button data-do="yes">✓ Sí, ya terminó <small class="mu">(Matriz: Terminado)</small></button>':'',
+    prog:`<button data-do="prog">📅 No, programar el ${esc(fmtD(nx))}</button>`,na:mx?'<button data-do="na">– No aplica en este ambiente</button>':''};
+  openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">${past?'Tuvo días programados que ya pasaron y nadie la cerró. ¿Ya terminó?':'La Matriz la tiene pendiente y no está programada.'}</div>
+   ${past?bt.yes+bt.prog:bt.prog+bt.yes}${bt.na}<div class="ptx mu">Para otro día, toca ese día en la fila.</div><hr><button data-do="mat">Ver en la Matriz</button>`,
+   {yes:()=>set('t'),na:()=>set('n'),prog:()=>lkGhostDay(key,nx),mat:()=>mxGoCell(amb,cid)})}
 
 /* llevar a un ambiente del lookahead: a su primera actividad (si no tiene, al piso y su sector) */
 function mxGoAmb(amb){const sib=[...S.act.values()].filter(x=>x.ambId===amb).sort((a,b)=>(a.order||0)-(b.order||0));if(sib.length){gotoAct(sib[0].id);return}

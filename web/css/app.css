@@ -3979,3 +3979,4 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
   /* toda la fila (19/10): también ítem, SC, actividad, und., metrado, días…; no las celdas del ambiente, que abarcan varias filas */
   #grid tbody tr[data-a]:hover>td:not(.d):not(.amb),#grid tbody tr[data-gh]:hover>td:not(.d):not(.amb){background-image:linear-gradient(var(--lkhov),var(--lkhov))}}
 .mxspr{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.mxspr .chk{display:flex;gap:8px;align-items:flex-start}.mxspr .tin{min-width:0;width:100%}@media (max-width:760px){.mxspr{grid-template-columns:minmax(0,1fr)}}
+#grid tr.gh button.ghb{border:0;cursor:pointer;font:600 9.5px var(--f-ui);padding:2px 7px}#grid tr.gh button.ghb:hover{filter:brightness(.92);text-decoration:underline}
