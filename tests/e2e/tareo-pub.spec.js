@@ -112,8 +112,8 @@ test('Costos: lista por mes, sustituida, detalle y Excel del día y de la semana
   expect(nombres('01.10')).toEqual(nombres('28.09'));
   // Personal Obrero y Lista de partidas
   const PO = aoa(wb.Sheets['Personal Obrero']);
-  expect(PO[2].slice(0, 6)).toEqual(['N°', 'APELLIDOS', 'NOMBRES', 'CUADRILLA', 'CATEGORIA', 'DNI']);
-  expect(fila(PO, 'ALFA ROJAS').slice(0, 6)).toEqual([1, 'ALFA ROJAS', 'JUAN', 'CARPINTEROS', 'Operario', '40000001']);
+  expect(PO[2].slice(0, 7)).toEqual(['N°', 'APELLIDO PATERNO', 'APELLIDO MATERNO', 'NOMBRES', 'CUADRILLA', 'CATEGORIA', 'DNI']);
+  expect(fila(PO, '40000001').slice(0, 7)).toEqual([1, 'ALFA', 'ROJAS', 'JUAN', 'CARPINTEROS', 'Operario', '40000001']);
   const LP = aoa(wb.Sheets['Lista de partidas']);
   expect(LP[2].slice(1, 9)).toEqual(['CÓDIGO', 'DESCRIPCIÓN', 'und', 'Metrado', 'HH', 'Ratio', 'UA - TAREO', 'UA - POWERS']);
   expect(fila(LP, 'Encofrado de muros').slice(1, 4)).toEqual(['10.05', 'Encofrado de muros', 'm2']);
@@ -129,19 +129,24 @@ test('Costos: lista por mes, sustituida, detalle y Excel del día y de la semana
   expect(fila(R, 'ALFA ROJAS JUAN')[3]).toBe('Operario');
   const ra = fila(R, 'ALFA ROJAS JUAN');
   expect(ra.slice(4, 12)).toEqual([9, 0.5, '', '', 7, 0, 10, 1.5]);
-  expect(ra.slice(18, 21)).toEqual([26, 24, 2]);
+  expect(ra.slice(18, 23)).toEqual([26, 24, 2, 2, 0]);                 // TOTAL HH, HN, HE, H60, H100
+  expect(R[3].slice(18, 23)).toEqual(['TOTAL HH', 'HN', 'HE', 'H60', 'H100']);
+  expect(R[1][1]).toBe('Semana 58 (del 28.09.2026 a 04.10.2026)');      // la semana del 19.10.2026 es la 61
   // Tareo Semana: A / I / código, horas extra y horas de descanso médico (= jornada del día)
   const S = aoa(wb.Sheets['Tareo Semana']);
-  expect(S[2][6]).toBe('ASISTENCIA');
-  expect(S[3].slice(6, 13)).toEqual(['L', 'M', 'Mi', 'J', 'V', 'S', 'D']);
-  const sa = fila(S, 'ALFA ROJAS'), sb = fila(S, 'BETA SOTO'), sg = fila(S, 'GAMA DIAZ');
-  expect(sa.slice(6, 10)).toEqual(['A', '', 'I', 'A']);
-  expect(sa.slice(14, 22)).toEqual([0.5, '', 0, 1.5, '', '', '', 2]);  // horas extra y PARCIAL
-  expect(sb[6]).toBe('DM');
-  expect(sb[23]).toBe(8.5);                                              // DM del lunes = 8,5 h
-  expect(sb[30]).toBe(8.5);                                              // PARCIAL de descanso médico
-  expect(sg[6]).toBe('VA');
-  expect(sa[12]).toBe('D');                                              // domingo sin tareo: descanso
+  expect(S[1][1]).toBe('Tareo Semana 58 (del 28.09.2026 a 04.10.2026)');
+  expect(S[4].slice(2, 5)).toEqual(['Apellido Paterno', 'Apellido Materno', 'Nombres']);
+  expect(S[2][7]).toBe('ASISTENCIA');
+  expect(S[3].slice(7, 14)).toEqual(['L', 'M', 'Mi', 'J', 'V', 'S', 'D']);
+  const sa = fila(S, '40000001'), sb = fila(S, '40000002'), sg = fila(S, 'GAMA');
+  expect(sa.slice(2, 5)).toEqual(['ALFA', 'ROJAS', 'JUAN']);
+  expect(sa.slice(7, 11)).toEqual(['A', '', 'I', 'A']);
+  expect(sa.slice(15, 23)).toEqual([0.5, '', 0, 1.5, '', '', '', 2]);  // horas extra y PARCIAL
+  expect(sb[7]).toBe('DM');
+  expect(sb[24]).toBe(8.5);                                              // DM del lunes = 8,5 h
+  expect(sb[31]).toBe(8.5);                                              // PARCIAL de descanso médico
+  expect(sg[7]).toBe('VA');
+  expect(sa[13]).toBe('D');                                              // domingo sin tareo: descanso
   // Excel de un día desde la lista: una sola hoja
   const d = await bajar(page, '#tpkList [data-tpkx="2026-09-30"]');
   expect(d.wb.SheetNames).toEqual(['30.09']);

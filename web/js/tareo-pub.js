@@ -360,6 +360,10 @@ const tpxJor=(p,f)=>p&&typeof p.jor==='number'?p.jor:tJorDia({date:f,cfg:p&&p.cf
 const TPX_CAT={OP:'Operario',OF:'Oficial',PE:'Peon',CA:'Capataz',OT:'Otro'};
 const tpxCat=c=>TPX_CAT[c]||c||'';
 /* UA de POWERS = la UA del tareo sin el «-NN» final (CD1010010-01 → CD1010010), como «Lista de partidas» de costos */
+/* apellido paterno y materno separados (tApes de tareo.js), con la ficha del máster si coincide con el apellido publicado */
+const tpxApes=o=>{const f=(S.tper&&S.tper.get(o.dni))||{};const ape=o.ape||f.ape||'';return typeof tApes==='function'?tApes({...f,ape}):[ape,'']};
+/* «Semana 61 (del 19.10.2026 a 25.10.2026)» como el archivo de costos; sin número de semana configurado, solo el rango */
+const tpxSemT=(a,b)=>{const n=typeof tSemN==='function'?tSemN(a):null;return`${n?'Semana '+n+' ':''}(del ${tpxDmy(a)} a ${tpxDmy(b)})`};
 const tpxUaP=ua=>String(ua||'').replace(/-\d+$/,'');
 const tpxExcCod=m=>/vacaci/i.test(m||'')?'VA':/m[eé]dic/i.test(m||'')?'DM':'EX';
 function tpxSt(){const bd={style:'thin',color:{rgb:'A6A6A6'}};const B={top:bd,bottom:bd,left:bd,right:bd};const c={horizontal:'center',vertical:'center',wrapText:true};
@@ -390,7 +394,7 @@ function tpxWsDia(X,p,G0){const S0=tpxSt(),sh=tpxSheet(X),f=p.fecha||String(p.id
   const D=new Map(tpxGente(p).map(r=>[r.dni,r]));const G=G0?G0.map(o=>D.get(o.dni)||{...o,as:null,h:{},trab:0,ext:0,alt:false,mot:'',exc:'',fuera:true}):[...D.values()];
   const c0=5,cT=c0+pcs.length,cE=cT+1,cB=cT+2,cO=cT+3;
   sh.set(0,1,tpProj(),S0.tit);sh.set(0,4,'TAREO DIARIO DE PERSONAL OBRERO',S0.sub);sh.set(0,cO,'DM = DESCANSO MÉDICO',S0.yel);
-  sh.set(1,1,'FECHA',S0.sub);sh.set(1,2,`${TPX_DIA[pd(f).getUTCDay()]} ${tpxDmy(f)}`,S0.sub);sh.set(1,4,`Versión publicada v${p.v}`,S0.sub);sh.set(1,cO,'(A) = BONO POR TRABAJO EN ALTURA',S0.yel);
+  sh.set(1,1,'FECHA',S0.sub);sh.set(1,2,`${TPX_DIA[pd(f).getUTCDay()]} ${tpxDmy(f)}`,S0.sub);sh.set(1,4,`${typeof tSemN==='function'&&tSemN(f)?'Semana '+tSemN(f)+' · ':''}Versión publicada v${p.v}`,S0.sub);sh.set(1,cO,'(A) = BONO POR TRABAJO EN ALTURA',S0.yel);
   let i=0;while(i<pcs.length){let j=i;while(j+1<pcs.length&&pcs[j+1].grp===pcs[i].grp)j++;for(let k=i;k<=j;k++)sh.set(2,c0+k,k===i?(pcs[i].grpN||('GRUPO '+pcs[i].grp)).toUpperCase():'',S0.hdr);sh.merge(2,c0+i,2,c0+j);i=j+1}
   sh.set(3,4,'PARTIDAS',S0.sub);sh.set(4,4,'Código',S0.sub);
   pcs.forEach((x,k)=>{sh.set(3,c0+k,x.nom,S0.pcn);sh.set(4,c0+k,x.cod,S0.cod);sh.set(5,c0+k,'hrs',S0.hdr)});
@@ -425,27 +429,30 @@ const tHrsSum=h=>tR2(Object.values(h||{}).reduce((s,v)=>s+(tpNum(v)>0?tpNum(v):0
 function tpxUnion(days,PB){const M=new Map();for(const f of days){const p=PB.get(f);if(!p)continue;for(const r of tpxGente(p))M.set(r.dni,{...(M.get(r.dni)||{}),...r})}return[...M.values()].sort(tpxCmp)}
 const tpxRango=(a,b)=>a===b?tpxDmy(a):`del ${tpxDmy(a)} al ${tpxDmy(b)}`;
 /* «Resumen HH»: HH y HE por obrero y día; TOTAL HH, HN y HE */
-function tpxWsRes(X,days,PB){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length,cTot=4+2*n;
-  sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,`Resumen de HH ${tpxRango(days[0],days[n-1])}`,S0.sub);
+/* H60 / H100 (20-10-2026, el dueño): por día, las 2 primeras horas extra al 60 % y el resto al 100 % (construcción civil) */
+const tpxH60=e=>Math.min(2,Math.max(0,e));
+function tpxWsRes(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length,cTot=4+2*n;
+  sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,sem?tpxSemT(days[0],days[n-1]):`Resumen de HH ${tpxRango(days[0],days[n-1])}`,S0.sub);
   days.forEach((f,i)=>{const c=4+2*i;const p=PB.get(f);sh.set(2,c,TPX_DIA[pd(f).getUTCDay()]+(p?'':' (sin publicar)'),S0.hdr);sh.set(2,c+1,'',S0.hdr);sh.merge(2,c,2,c+1);sh.set(3,c,tpxDm(f),S0.hdr);sh.set(3,c+1,'HE',S0.hdr)});
-  ['N°','PERSONAL OBRERO','DNI','CATEGORIA'].forEach((l,c)=>sh.set(3,c,l,S0.hdr));[['TOTAL HH',0],['HN',1],['HE',2]].forEach(([l,k])=>sh.set(3,cTot+k,l,S0.hdr));
-  const TD0=days.map(()=>[0,0]);let A=0,B=0;
-  G.forEach((o,j)=>{const R=4+j;let hh=0,he=0;sh.set(R,0,j+1,S0.num);sh.set(R,1,[o.ape,o.nom].filter(Boolean).join(' '),S0.txt);sh.set(R,2,String(o.dni),S0.num);sh.set(R,3,tpxCat(o.cat),S0.num);
+  ['N°','PERSONAL OBRERO','DNI','CATEGORIA'].forEach((l,c)=>sh.set(3,c,l,S0.hdr));[['TOTAL HH',0],['HN',1],['HE',2],['H60',3],['H100',4]].forEach(([l,k])=>sh.set(3,cTot+k,l,S0.hdr));
+  const TD0=days.map(()=>[0,0]);let A=0,B=0,A6=0,A1=0;
+  G.forEach((o,j)=>{const R=4+j;let hh=0,he=0,h6=0;sh.set(R,0,j+1,S0.num);sh.set(R,1,[o.ape,o.nom].filter(Boolean).join(' '),S0.txt);sh.set(R,2,String(o.dni),S0.num);sh.set(R,3,tpxCat(o.cat),S0.num);
     days.forEach((f,i)=>{const p=PB.get(f);const r=p?tpRows(p).find(x=>x.dni===o.dni):null;const ok=r&&r.as===true;const t=ok?tpNum(r.trab):0,e=ok?tpNum(r.ext):0;
-      sh.set(R,4+2*i,p?(ok?tR2(t):0):'',S0.num);sh.set(R,5+2*i,p?(ok?tR2(e):0):'',S0.num);hh+=t;he+=e;TD0[i][0]+=t;TD0[i][1]+=e});
-    sh.set(R,cTot,tR2(hh),S0.numB);sh.set(R,cTot+1,tR2(hh-he),S0.num);sh.set(R,cTot+2,tR2(he),S0.num);A+=hh;B+=he});
+      sh.set(R,4+2*i,p?(ok?tR2(t):0):'',S0.num);sh.set(R,5+2*i,p?(ok?tR2(e):0):'',S0.num);hh+=t;he+=e;h6+=tpxH60(e);TD0[i][0]+=t;TD0[i][1]+=e});
+    sh.set(R,cTot,tR2(hh),S0.numB);sh.set(R,cTot+1,tR2(hh-he),S0.num);sh.set(R,cTot+2,tR2(he),S0.num);sh.set(R,cTot+3,tR2(h6),S0.num);sh.set(R,cTot+4,tR2(he-h6),S0.num);A+=hh;B+=he;A6+=h6;A1+=he-h6});
   const RT=4+G.length;sh.set(RT,1,'TOTAL',S0.tot);[0,2,3].forEach(c=>sh.set(RT,c,'',S0.tot));days.forEach((f,i)=>{sh.set(RT,4+2*i,tR2(TD0[i][0]),S0.tot);sh.set(RT,5+2*i,tR2(TD0[i][1]),S0.tot)});
-  sh.set(RT,cTot,tR2(A),S0.tot);sh.set(RT,cTot+1,tR2(A-B),S0.tot);sh.set(RT,cTot+2,tR2(B),S0.tot);
+  sh.set(RT,cTot,tR2(A),S0.tot);sh.set(RT,cTot+1,tR2(A-B),S0.tot);sh.set(RT,cTot+2,tR2(B),S0.tot);sh.set(RT,cTot+3,tR2(A6),S0.tot);sh.set(RT,cTot+4,tR2(A1),S0.tot);
+  sh.set(RT+1,1,'H60 = las 2 primeras horas extra de cada día (al 60 %) · H100 = las siguientes (al 100 %)',S0.pie);
   sh.set(RT+2,1,'Versiones publicadas: '+days.filter(f=>PB.get(f)).map(f=>{const p=PB.get(f);return`${tpxDm(f)} v${p.v} (${tpWho(p.by,p.byN)} · ${tpAt(p.at)})`}).join(' · '),S0.pie);
-  return sh.done([5,36,11,10,...days.flatMap(()=>[8,6]),10,9,9],{xSplit:4,ySplit:4})}
+  return sh.done([5,36,11,10,...days.flatMap(()=>[8,6]),10,9,9,9,9],{xSplit:4,ySplit:4})}
 /* «Tareo Semana»: asistencia (A / I / código), horas extra y horas de descanso médico (DM = jornada del día) por día */
-function tpxWsAsis(X,days,PB){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length;const cA=6,cH=cA+n+1,cD=cH+n+2;
-  sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,`Tareo ${tpxRango(days[0],days[n-1])}`,S0.sub);
+function tpxWsAsis(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length;const cA=7,cH=cA+n+1,cD=cH+n+2;
+  sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,sem?'Tareo '+tpxSemT(days[0],days[n-1]):`Tareo ${tpxRango(days[0],days[n-1])}`,S0.sub);
   [[cA,'ASISTENCIA',n],[cH,'HORAS EXTRAS',n+1],[cD,'HORAS DESCANSO MÉDICO',n+1]].forEach(([c,l,k])=>{for(let i=0;i<k;i++)sh.set(2,c+i,i?'':l,S0.hdr);sh.merge(2,c,2,c+k-1)});
   days.forEach((f,i)=>{const l=TPX_L[pd(f).getUTCDay()];[cA,cH,cD].forEach(c=>{sh.set(3,c+i,l,S0.hdr);sh.set(4,c+i,tpxDm(f),S0.hdr)})});
   [cH,cD].forEach(c=>{sh.set(3,c+n,'PARCIAL',S0.hdr);sh.set(4,c+n,'',S0.hdr)});
-  ['N°','DNI','Apellidos','Nombres','Categoría','Cuadrilla'].forEach((l,c)=>{sh.set(3,c,'',S0.hdr);sh.set(4,c,l,S0.hdr)});
-  G.forEach((o,j)=>{const R=5+j;let sh1=0,sd=0;sh.set(R,0,j+1,S0.num);sh.set(R,1,String(o.dni),S0.num);sh.set(R,2,o.ape||'',S0.txt);sh.set(R,3,o.nom||'',S0.txt);sh.set(R,4,tpxCat(o.cat),S0.num);sh.set(R,5,o.cua||'',S0.txt);
+  ['N°','DNI','Apellido Paterno','Apellido Materno','Nombres','Categoría','Cuadrilla'].forEach((l,c)=>{sh.set(3,c,'',S0.hdr);sh.set(4,c,l,S0.hdr)});
+  G.forEach((o,j)=>{const R=5+j;let sh1=0,sd=0;const ap=tpxApes(o);sh.set(R,0,j+1,S0.num);sh.set(R,1,String(o.dni),S0.num);sh.set(R,2,ap[0],S0.txt);sh.set(R,3,ap[1],S0.txt);sh.set(R,4,o.nom||'',S0.txt);sh.set(R,5,tpxCat(o.cat),S0.num);sh.set(R,6,o.cua||'',S0.txt);
     days.forEach((f,i)=>{const p=PB.get(f);let cod='',he='',dm='';
       if(p){const jor=tpxJor(p,f);const r=tpRows(p).find(x=>x.dni===o.dni);const ex=!r&&p.exc&&p.exc[o.dni];
         if(r&&r.as===true){const t=tpNum(r.trab);cod=jor>0&&t<jor?'I':'A';he=tR2(tpNum(r.ext))}else if(r){cod=r.mot||(r.as===false?'NV':'?');he=0}else if(ex){cod=tpxExcCod(ex.motivo);he=0}
@@ -456,14 +463,14 @@ function tpxWsAsis(X,days,PB){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(d
   const RL=5+G.length+1;
   sh.set(RL,1,'A = asistió la jornada completa · I = asistió menos que la jornada · DM = descanso médico · DA = descanso por accidente · VA = vacaciones · FA = falta · SU = suspensión · SM = subsidio por maternidad · SE = subsidio por enfermedad · LS = licencia sin goce · L = liquidado · NV = no vino (sin motivo) · EX = sin tareo con excepción (ver motivo en la hoja del día) · D = descanso (día no laborable)',S0.pie);
   sh.set(RL+1,1,'Horas de descanso médico = jornada del día (lunes a viernes y sábado según la configuración del tareo).',S0.pie);
-  return sh.done([5,11,26,22,9,15,...days.map(()=>5),2,...days.map(()=>5),8,2,...days.map(()=>5),8],{xSplit:6,ySplit:5})}
+  return sh.done([5,11,16,16,22,9,15,...days.map(()=>5),2,...days.map(()=>5),8,2,...days.map(()=>5),8],{xSplit:7,ySplit:5})}
 /* «Personal Obrero»: la gente del periodo con su ficha (como la hoja de costos): N°, apellidos, nombres, cuadrilla, categoría, DNI,
    puesto y capataz */
 function tpxWsPer(X,G){const S0=tpxSt(),sh=tpxSheet(X);sh.set(0,1,'RELACION DE PERSONAL OBRERO',S0.tit);
-  ['N°','APELLIDOS','NOMBRES','CUADRILLA','CATEGORIA','DNI','PUESTO','CAPATAZ'].forEach((l,c)=>sh.set(2,c,l,S0.hdr));
-  G.forEach((o,j)=>{const R=3+j;const f=(S.tper&&S.tper.get(o.dni))||{};sh.set(R,0,j+1,S0.num);sh.set(R,1,o.ape||f.ape||'',S0.txt);sh.set(R,2,o.nom||f.nom||'',S0.txt);sh.set(R,3,o.cua||f.cua||'',S0.txt);
-    sh.set(R,4,tpxCat(o.cat||f.cat),S0.num);sh.set(R,5,String(o.dni),S0.num);sh.set(R,6,f.pue||'',S0.txt);sh.set(R,7,o.capN||(f.cap&&typeof tCapName==='function'?tCapName(f.cap):'')||'',S0.txt)});
-  return sh.done([5,26,22,15,10,11,26,22],{xSplit:0,ySplit:3})}
+  ['N°','APELLIDO PATERNO','APELLIDO MATERNO','NOMBRES','CUADRILLA','CATEGORIA','DNI','PUESTO','CAPATAZ'].forEach((l,c)=>sh.set(2,c,l,S0.hdr));
+  G.forEach((o,j)=>{const R=3+j;const f=(S.tper&&S.tper.get(o.dni))||{};const ap=tpxApes(o);sh.set(R,0,j+1,S0.num);sh.set(R,1,ap[0],S0.txt);sh.set(R,2,ap[1],S0.txt);sh.set(R,3,o.nom||f.nom||'',S0.txt);sh.set(R,4,o.cua||f.cua||'',S0.txt);
+    sh.set(R,5,tpxCat(o.cat||f.cat),S0.num);sh.set(R,6,String(o.dni),S0.num);sh.set(R,7,f.pue||'',S0.txt);sh.set(R,8,o.capN||(f.cap&&typeof tCapName==='function'?tCapName(f.cap):'')||'',S0.txt)});
+  return sh.done([5,18,18,22,15,10,11,26,22],{xSplit:0,ySplit:3})}
 /* «Lista de partidas»: el catálogo de la publicación por grupo, con und, metrado y HH del presupuesto meta, ratio, UA - TAREO y
    UA - POWERS (como la hoja de costos) */
 function tpxWsPcs(X,PB){const S0=tpxSt(),sh=tpxSheet(X);const M=new Map();for(const p of PB.values())for(const x of tpxPcs(p))if(!M.has(x.id))M.set(x.id,x);
@@ -490,7 +497,7 @@ async function tpxBajar(tipo,a,b,doc){if(TPK.busy)return;if(tipo==='rango'&&tpDa
        en todas, la misma gente y en el mismo orden */
     const G=tipo==='dia'?null:tpxUnion(days,PB);
     if(tipo!=='dia'){X.utils.book_append_sheet(wb,tpxWsPer(X,G),'Personal Obrero');X.utils.book_append_sheet(wb,tpxWsPcs(X,PB),'Lista de partidas');
-      X.utils.book_append_sheet(wb,tpxWsAsis(X,days,PB),tipo==='semana'?'Tareo Semana':'Tareo Rango');X.utils.book_append_sheet(wb,tpxWsRes(X,days,PB),'Resumen HH')}
+      X.utils.book_append_sheet(wb,tpxWsAsis(X,days,PB,tipo==='semana'),tipo==='semana'?'Tareo Semana':'Tareo Rango');X.utils.book_append_sheet(wb,tpxWsRes(X,days,PB,tipo==='semana'),'Resumen HH')}
     for(const f of days){const p=PB.get(f);if(p)X.utils.book_append_sheet(wb,tpxWsDia(X,p,G),tpxDm(f))}
     const pre=(P().code||'').trim();const name=tipo==='dia'?`Tareo_${a}_v${PB.get(a).v}.xlsx`:tipo==='semana'?`Tareo_semana_${a}_al_${b}.xlsx`:`Tareo_${a}_al_${b}.xlsx`;
     saveBlob((pre?pre+'_':'')+name,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel del tareo generado')}
