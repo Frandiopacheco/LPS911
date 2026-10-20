@@ -113,7 +113,7 @@ test('UX2: dos «Juan Quispe» se distinguen en asistencia, columnas de la grill
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(2), per('41000099', 'QUISPE MAMANI', 'JUAN CARLOS'), ...PC] });
   await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
-  await expect(root.locator('.tc-ob[data-dni="41000000"]')).toContainText('DNI 41000000');
+  await expect(root.locator('.tc-ob[data-dni="41000000"]')).toContainText('41000000');
   await root.locator('[data-tca="todos"]').click();
   await root.locator('.tc-foot [data-tcs="2"]').click();
   await root.locator('#tcPcQ').fill('encof');

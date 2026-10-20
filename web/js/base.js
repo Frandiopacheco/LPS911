@@ -710,7 +710,7 @@ const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.tex
 /* «Cliente» es el Lookahead con la capa del cliente (U.cliv): la pestaña cli no tiene vista propia */
 const tabKey=()=>U.tab==='look'&&U.cliv?'cli':U.tab;
 function goTab(t){if(t==='cli'){U.tab='look';U.cliv=true;U.cliVer='';U.ver=''}else{if(t==='look'||U.cliv)U.cliv=false;U.tab=t}if(U.tab==='look')gridRows=null;saveUI();sendPresence();render()}
-function renderBnav(){const b=$('#bnav');if(!b)return;const pr=offLps()?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===tabKey());
+function renderBnav(){const b=$('#bnav');if(!b)return;const pr=offLps()?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,t==='tper'&&me&&me.role==='tcap'?'Mi cuadrilla':t==='tdia'&&me&&me.role==='tcap'?'Tareo':TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===tabKey());
   const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[tabKey()]||tabName(tabKey())):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
 function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}

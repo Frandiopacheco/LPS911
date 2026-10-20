@@ -38,15 +38,12 @@ function tConflictosDia(docs){const by=new Map();
   return[...by].filter(([,L])=>L.length>1).map(([dni,L])=>({dni,nom:trNm((L.find(x=>x.as)||L[0]).r)||dni,ts:L.map(({r,...x})=>x)}))
     .sort((a,b)=>a.nom.localeCompare(b.nom)||a.dni.localeCompare(b.dni))}
 const trAsTx=x=>x.as===true?'vino':x.as===false?`falta${x.mot?' '+x.mot:''}`:'sin marcar';
-/** observaciones de la revisión: las de tValida (bloquean salvo las `warn`) más el cotejo de firmas, la garita y los conflictos del día.
-    k: los de tValida · 'firp' firma sin cotejar (bloquea) · 'nofir' vino y no firmó · 'gar' salida en garita distinta ·
-    'dup' figura también en otro tareo del día (bloquea). bl = bloquea. Lee el cotejo de rows[dni].fir/gar (ver tConCot).
+/** observaciones de la revisión: las de tValida (bloquean salvo las `warn`) más los conflictos del día.
+    k: los de tValida · 'dup' figura también en otro tareo del día (bloquea). bl = bloquea.
+    Desde el 20-10-2026 (decisión del dueño) ya no hay cotejo de firmas ni garita: la firma es implícita (el formato físico firmado
+    va en la foto) y el asistente no marca nada; por eso no salen 'firp', 'nofir' ni 'gar'.
     docs: tareos del día para los conflictos (por omisión, los de la vista abierta si el tareo está entre ellos). */
-function tObsRev(doc,calc,docs){const d=doc||{};const c=calc&&!trOwnH(d)?calc:trCalc(d);const out=trValida(d).map(o=>({...o,bl:!o.warn}));const tol=TC().tolGar;
-  for(const[dni,r]of Object.entries(c.rows||{})){if(!r.as)continue;const n=trNm(r)||dni;
-    if(r.fir===false)out.push({dni,k:'nofir',bl:false,msg:`${n}: vino pero no firmó el formato.`});
-    else if(r.fir!==true)out.push({dni,k:'firp',bl:true,msg:`${n}: falta cotejar su firma.`});
-    const g=tMin(r.gar),f=tMin(r.fin);if(g!=null&&f!=null&&Math.abs(g-f)>tol)out.push({dni,k:'gar',bl:false,msg:`${n}: salida en garita distinta (garita ${r.gar}, tareo ${r.fin}).`})}
+function tObsRev(doc,calc,docs){const d=doc||{};const out=trValida(d).map(o=>({...o,bl:!o.warn}));
   if(docs===undefined&&d.id&&typeof TD!=='undefined'&&TD.docs.get(d.id))docs=[...TD.docs.values()];
   if(d.id&&docs)for(const x of tConflictosDia(docs.map(t=>t&&t.id===d.id?d:t))){if(!x.ts.some(y=>y.id===d.id))continue;
     const o=x.ts.filter(y=>y.id!==d.id).map(y=>`${y.name} (${trAsTx(y)})`).join(' y ');
@@ -176,7 +173,7 @@ const trEdOk=()=>toReabOk();
 /** ¿el tareo se revisa en la hoja tipo Excel? (por horas, «Enviado» o «Revisado», y quien lo abre edita) */
 const trGx=t=>!!t&&trHrs(t)&&trEdOk()&&['env','rev'].includes(t.st);
 const TR_CHG='Otro usuario cambió este tareo mientras trabajabas: usa «Recargar versión actual».';
-const TR_CYC='El capataz reenvió el tareo o cambió las fotos después de que cotejaste: se descartaron las firmas que marcaste sin guardar. Vuelve a cotejar con el formato actual.';
+const TR_CYC='El capataz reenvió el tareo o cambió las fotos mientras lo revisabas: no se marcó revisado. Revisa la versión nueva antes de marcarlo.';
 function trInit(t){const C=tCotDe(t);TR.fir={};TR.gar={};for(const[d,x]of Object.entries(C)){if(trHas(x,'fir'))TR.fir[d]=x.fir;if(x.gar)TR.gar[d]=x.gar}
   TR.b={fir:{...TR.fir},gar:{...TR.gar}};TR.sig=trSig(t,true);TR.cyc=trCyc(t);TR.dirty=false}
 /* error de la transacción porque cambió el ciclo de la evidencia (A2) */
@@ -311,11 +308,21 @@ const trOrdNow=()=>toList(TD.f).filter(trFltOk).map(x=>x.id);
 /** vecino en el orden de la lista tal como estaba al abrir (dir −1 / +1); '' si no hay */
 function trNb(dir){const L=TR.ord.filter(x=>x===TR.id||TD.docs.has(x));const i=L.indexOf(TR.id);if(i<0)return'';const j=i+dir;return j>=0&&j<L.length?L[j]:''}
 const trCapOf=id=>{const x=TD.docs.get(id);return x?(x.capN||tCapName(x.cap)||x.cap||''):''};
+/** selector de capataz en el encabezado (pedido del dueño, 20-10-2026): todos los tareos del día, los por revisar primero (orden del
+    tablero, sin su filtro), con su estado y observaciones; elegir uno abre su revisión sin volver a la lista */
+function trCapSel(t){const L=toList(TD.f).filter(x=>x.t&&!x.t.arch);if(!L.some(x=>x.id===t.id))L.unshift({id:t.id,t});
+  const opt=x=>{const d=x.t;const st=(TO_ST[d.st||'bor']||[d.st||''])[0];const n=x.s&&x.s.obs?x.s.obs.filter(o=>o.bl).length:0;
+    return`<option value="${esc(x.id)}"${x.id===t.id?' selected':''}>${esc(d.capN||tCapName(d.cap)||d.cap||'')} · ${esc(st)}${n?` · ${n} obs.`:''}</option>`};
+  return`<select class="tin tr-capsel" id="trCapSel" aria-label="Capataz: elige otro tareo del día para revisarlo" title="Elige otro capataz para revisar su tareo">${L.map(opt).join('')}</select>`}
+/** siguiente tareo «Enviado» (por revisar) después del actual en el orden del tablero; '' si no queda ninguno */
+function trNextPend(id){const L=toList(TD.f).filter(x=>x.t&&!x.t.arch).map(x=>x.id);const i=L.indexOf(id);
+  for(const k of[...L.slice(i+1),...L.slice(0,Math.max(0,i))]){const x=TD.docs.get(k);if(x&&x.st==='env'&&k!==id)return k}return''}
 /** abre la revisión (desde la lista: toma el orden de la lista; nav: viene de «anterior · siguiente») */
 function toDetalle(id,nav){const t=TD.docs.get(id);if(!t)return;/* 3.er argumento (modo de la revisión de producción): ya no existe */
   if(!nav||!TR.ord.length)TR.ord=trOrdNow();if(!TR.ord.includes(id))TR.ord.push(id);
   const nuevo=!$('#trWs');
-  if(TR.id!==id){Object.assign(TR,{id,ed:null,fi:0,z:1,rot:0,busy:false,fsig:'',conf:'',nota:'',pend:false,sel:null});txReset();trInit(t)}
+  /* el zoom y el giro de la foto se conservan al pasar a otro capataz (los formatos se fotografían igual): no se reencuadra */
+  if(TR.id!==id){Object.assign(TR,{id,ed:null,fi:0,busy:false,fsig:'',conf:'',nota:'',pend:false,sel:null});txReset();trInit(t)}
   for(const f of t.foto||[])TD.fErr.delete(f);/* al abrir se reintenta la foto que no cargó */
   trSsSet({id,f:t.date||TD.f});trDraw();if(nuevo){const b=$('#trBack');if(b)b.focus()}}
 /* al llegar datos: reabre la revisión tras recargar (TR.want) o refresca la abierta (sin pisar el cotejo o la corrección en curso) */
@@ -371,7 +378,7 @@ function trDraw(force){const id=TR.id;const t=TD.docs.get(id);if(!t)return;let w
     ws.addEventListener('focusout',e=>{if(e.target&&e.target.id==='txIn'&&TX.ing)txCommit(null);
       if(!TR.pend)return;const r=$('#trRight'),to=e.relatedTarget;if(to&&r&&r.contains(to))return;setTimeout(()=>{if(TR.pend&&!trBusyIn())trDraw()},0)});
     ws.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.trop)TR.op[d.dataset.trop]=d.open},true);
-    ws.addEventListener('load',e=>{if(e.target&&e.target.id==='trImg')trView()},true);
+    ws.addEventListener('load',e=>{if(e.target&&e.target.id==='trImg'){trView();const v=$('#trView');if(TR.vsc&&v){v.scrollLeft=TR.vsc.l;v.scrollTop=TR.vsc.t;TR.vsc=null}}},true);
     trPanInit(ws);trSplitInit(ws);if(window.ResizeObserver){TR.ro=new ResizeObserver(()=>trView());TR.ro.observe($('#trFoto'))}}
   /* tareo por horas «Enviado» o «Revisado» y quien lo abre edita: la hoja tipo Excel, siempre en edición sobre su propia base */
   const gx=trGx(t);if(TR.pfo==null)TR.pfo=trFoLs();
@@ -383,7 +390,8 @@ function trDraw(force){const id=TR.id;const t=TD.docs.get(id);if(!t)return;let w
   trPut($('#trHead'),trHeadHtml(t,M));
   trFotoLoad(t);
   const fs=(t.foto||[]).join('|')+'#'+TR.fi+'#'+trFotoSt(trFotoCur(t));
-  if(TR.fsig!==fs||ws.dataset.id!==id){$('#trFoto').innerHTML=trFotoHtml(t);TR.fsig=fs;ws.dataset.id=id;const v=$('#trView');if(v){v.scrollTop=0;v.scrollLeft=0}}
+  if(TR.fsig!==fs||ws.dataset.id!==id){const v0=$('#trView');const keep=v0&&ws.dataset.id&&ws.dataset.id!==id;if(keep)TR.vsc={l:v0.scrollLeft,t:v0.scrollTop};
+    $('#trFoto').innerHTML=trFotoHtml(t);TR.fsig=fs;ws.dataset.id=id;const v=$('#trView');if(v&&!keep){v.scrollTop=0;v.scrollLeft=0;TR.vsc=null}}
   ws.classList.toggle('tr-editing',!!TR.ed&&!TR.ed.g);ws.classList.toggle('tr-pch',!!TR.ed&&TR.ed.g&&trEdN()>0);
   if(!force&&trBusyIn()){TR.pend=true;const av=$('#trAv');if(av){const h=trAvisos();if(av.__h!==h){av.innerHTML=h;av.__h=h}}}
   else{TR.pend=false;trPut($('#trRight'),TR.ed?(TR.ed.g?txPanel(t,M):trEdHtml(t)):trRightHtml(t,M));if(gx)txPaint()}
@@ -402,20 +410,19 @@ function trHeadHtml(t,M){const s=M.s;const prev=trNb(-1),next=trNb(1);const L=TR
   if(TR.ed&&TR.ed.g){/* hoja: guardar/descartar los cambios; sin cambios, las acciones del tareo */
     const n=trEdN();
     if(n)btn.push(`<span class="tr-edn on" id="trEdN" role="status">${n} ${n===1?'cambio':'cambios'} sin guardar</span>`,`<button class="ib" data-tra="edx" id="trEdX">Descartar</button>`,`<button class="ib pri tr-edok" data-tra="edok" id="trEdOk">Guardar cambios</button>`);
-    if(TR.dirty)btn.push(`<button class="ib tr-sv" data-tra="save" id="trSave">Guardar cotejo</button>`);
-    if(!n){if(trProdOk())btn.push(`<button class="ib" data-tra="prconf" id="trPrConf" title="Marca «Revisado por producción» sin cambiar nada">${t.prod&&t.prod.t?'Conforme otra vez':'Conforme sin cambios'}</button>`);
-      if(t.st==='env')btn.push(`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,`<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:''}>Marcar revisado${M.nofir.length?' (con observación)':''}</button>`);
+    if(!n){
+      if(t.st==='env')btn.push(`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,`<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:` title="Lo marca revisado y pasa al siguiente capataz por revisar"`}>Marcar revisado</button>`);
       else btn.push(`<button class="ib" data-tra="qrev" id="trQrev">Quitar revisado</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`)}}
   else if(M.ed){
     if(TR.ed){const n=trEdN();btn.push(`<span class="tr-edn${n?' on':''}" id="trEdN" role="status">${n?`${n} ${n===1?'cambio':'cambios'} sin guardar`:'Sin cambios todavía'}</span>`,
       `<button class="ib" data-tra="edx" id="trEdX">Cancelar corrección</button>`,`<button class="ib pri tr-edok" data-tra="edok" id="trEdOk"${n?'':' title="Aún no cambiaste nada"'}>Guardar corrección</button>`)}
-    else if(t.st==='env'){if(TR.dirty)btn.push(`<button class="ib tr-sv" data-tra="save" id="trSave">Guardar cotejo</button>`);
+    else if(t.st==='env'){
       btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`,
-        `<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:''}>Marcar revisado${M.nofir.length?' (con observación)':''}</button>`)}
+        `<button class="ib pri" data-tra="rev" id="trRev"${M.blk.length?` disabled title="${esc(M.blk.map(o=>o.msg).join('\n'))}"`:''}>Marcar revisado</button>`)}
     else if(t.st==='rev')btn.push(`<button class="ib" data-tra="cor" id="trCor">Corregir</button>`,`<button class="ib" data-tra="qrev" id="trQrev">Quitar revisado</button>`,`<button class="ib" id="toReab" data-tra="reab">Reabrir al capataz</button>`)}
   return`<div class="tr-wh1"><button class="ib tr-back" data-trw="close" id="trBack" title="Volver a la lista de tareos del día (Esc)" aria-label="Volver a la lista">←<span class="tr-hl"> Volver a la lista</span></button>
-    <div class="tr-wt"><b class="tr-wn">Tareo de ${esc(t.capN||tCapName(t.cap))}</b><span class="note">${esc(toDia(t.date))}</span>${toChip(t)}${trProdChip(t)}${TR.ed&&!TR.ed.g?'<span class="tr-edt">Corrigiendo</span>':''}</div>
-    <nav class="tr-nav" aria-label="Otros tareos del día"><button class="ib" data-trw="prev" id="trPrev"${prev?` title="Anterior: ${esc(trCapOf(prev))} (←)"`:' disabled'}>◀<span class="tr-hl"> Anterior</span></button><span class="note mono" id="trPos">${pos>=0&&L.length>1?`${pos+1} de ${L.length}`:''}</span><button class="ib" data-trw="next" id="trNext"${next?` title="Siguiente: ${esc(trCapOf(next))} (→)"`:' disabled'}><span class="tr-hl">Siguiente </span>▶</button></nav><button class="ib tr-x" data-trw="close" id="trX" title="Cerrar la revisión (Esc)" aria-label="Cerrar la revisión">✕<span class="tr-hl"> Cerrar</span></button></div>
+    <div class="tr-wt"><b class="tr-wn">Tareo</b><span class="note">${esc(toDia(t.date))}</span>${toChip(t)}${trProdChip(t)}${TR.ed&&!TR.ed.g?'<span class="tr-edt">Corrigiendo</span>':''}</div>
+    <nav class="tr-nav" aria-label="Otros tareos del día"><button class="ib" data-trw="prev" id="trPrev"${prev?` title="Anterior: ${esc(trCapOf(prev))} (←)"`:' disabled'} aria-label="Capataz anterior">◀</button>${trCapSel(t)}<span class="note mono" id="trPos">${pos>=0&&L.length>1?`${pos+1} de ${L.length}`:''}</span><button class="ib" data-trw="next" id="trNext"${next?` title="Siguiente: ${esc(trCapOf(next))} (→)"`:' disabled'} aria-label="Capataz siguiente">▶</button></nav>${trGx(t)?`<button class="ib tr-fo${TR.pfo?' on':''}" data-trw="pfo" id="trPfo" aria-pressed="${!!TR.pfo}" title="Muestra u oculta la foto del formato firmado">${TR.pfo?'Ocultar foto':'Ver foto'}</button>`:''}<button class="ib tr-x" data-trw="close" id="trX" title="Cerrar la revisión (Esc)" aria-label="Cerrar la revisión">✕<span class="tr-hl"> Cerrar</span></button></div>
    <div class="tr-wh2"><div class="tr-kpis" id="trKpi">${kp(s.pres,s.pres===1?'vino':'vinieron')}${kp(s.fal,'no '+(s.fal===1?'vino':'vinieron'),s.fal?' tr-kb':'')}${s.sm?kp(s.sm,'sin marcar',' tr-ksm'):''}${kp(toH(s.hh),'HH')}${kp(toH(s.he),'HE',s.he?' tr-kw':'')}${s.alt?kp(s.alt,'en altura'):''}${kp(nObs,nObs===1?'observación':'observaciones',nObs?' tr-kw':' tr-kok')}</div>
    ${btn.length?`<div class="tr-acts">${btn.join('')}</div>`:''}</div>`}
 /* fotos del detalle (A7): se cargan las que falten (también si llegan nuevas con el detalle abierto); estado de la foto elegida:
@@ -427,7 +434,7 @@ function trFotoLoad(t){const miss=(t.foto||[]).filter(f=>!TD.fotos.has(f)&&!TD.f
 function trFotoSync(){if(TR.id&&$('#trWs'))trDraw()}
 /* visor: foto grande con zoom (botones, rueda), rotar y arrastrar */
 function trFotoHtml(t){const fotos=t.foto||[];const fi=Math.min(TR.fi,Math.max(0,fotos.length-1));const st=trFotoSt(fotos[fi]);
-  return`<div class="tr-vbar"><b>Formato firmado</b>${fotos.length>1?`<span class="tr-vbtn"><button class="ib" data-trv="prev" aria-label="Foto anterior">‹</button><span class="note">${fi+1} de ${fotos.length}</span><button class="ib" data-trv="next" aria-label="Foto siguiente">›</button></span>`:''}
+  return`<div class="tr-vbar"><b>Formato firmado</b>${trGx(t)?'<button class="ib tr-fohide" data-trw="pfo" title="Ocultar la foto (vuelve con «Ver foto» arriba)">Ocultar</button>':''}${fotos.length>1?`<span class="tr-vbtn"><button class="ib" data-trv="prev" aria-label="Foto anterior">‹</button><span class="note">${fi+1} de ${fotos.length}</span><button class="ib" data-trv="next" aria-label="Foto siguiente">›</button></span>`:''}
     ${fotos.length?`<span class="tr-vbtn"><button class="ib" data-trv="zo" aria-label="Alejar" title="Alejar">−</button><span class="note mono tr-zl" id="trZl">100%</span><button class="ib" data-trv="zi" aria-label="Acercar" title="Acercar">+</button><button class="ib" data-trv="fitw" title="Ajustar al ancho">Ancho</button><button class="ib" data-trv="fit" title="Ver la hoja entera">Entera</button><button class="ib" data-trv="rot" aria-label="Rotar" title="Rotar 90°">⟳</button><button class="ib" data-trv="full" aria-label="Pantalla completa" title="Pantalla completa">⛶</button></span>`:''}</div>
    <div class="tr-view" id="trView">${!fotos.length?'<span class="note tr-nof">Sin foto del formato.</span>'
      :st==='o'?`<div class="tr-pz" id="trPz"><img id="trImg" alt="Formato firmado" draggable="false"></div>`
@@ -478,7 +485,7 @@ document.addEventListener('keydown',e=>{if(e.altKey||e.ctrlKey||e.metaKey)return
 /* aviso de conflicto con «Recargar versión actual» (A3) y de cotejo descartado porque cambió la evidencia (A2) */
 const trAvisos=()=>`${TR.conf?`<div class="callout t-warn tr-confl" id="trConfl" role="alert"><span>Otro usuario cambió este tareo mientras ${TR.conf==='ed'?'corregías':'cotejabas'}: no se guardó nada. Carga la versión actual para seguir${TR.conf==='ed'?' (tendrás que repetir la corrección)':''}.</span><button class="ib pri" data-tra="reload" id="trReload">Recargar versión actual</button></div>`:''}
    ${TR.nota?`<div class="callout t-warn" id="trCycV" role="alert">${esc(TR.nota)}</div>`:''}`;
-function trRightHtml(t,M){const{c,cot,P,F,oDni,pend,vis,fok}=M;const s=M.s;
+function trRightHtml(t,M){const{c,P,F,oDni,vis}=M;const s=M.s;
   const pcL=pc=>{const p=S.tpc.get(pc);return p?{cod:p.cod,nom:p.nom}:{cod:pc,nom:'(partida no encontrada)'}};
   const hrs=trHrs(t);
   /* modo:'hrs': las partidas en el orden en que las puso el capataz (pcs); por bloques: por código */
@@ -488,38 +495,32 @@ function trRightHtml(t,M){const{c,cot,P,F,oDni,pend,vis,fok}=M;const s=M.s;
   const hor=r=>hrs?(r.fin?`<small>${r.sal?'sale':'sale ~'} ${esc(r.fin)}</small>`:''):r.ini?`<small>${esc(r.ini)}–${esc(r.fin)}</small>`:'';
   const rn=dni=>{const r=c.rows[dni];return r?(r.ape||dni):dni};
   const hist=(Array.isArray(t.hist)?t.hist:[]).slice().sort((a,b)=>(a.t||0)-(b.t||0));
-  const nCot=P.filter(r=>r.fir===true||r.fir===false).length;
-  const dis=fok?'':' disabled title="Espera a que cargue la foto del formato"';
-  const firCell=r=>{if(cot)return`<span class="seg tr-fir"><button data-tra="fir" data-v="1" class="${r.fir===true?'on':''}" aria-pressed="${r.fir===true}"${dis}>Sí</button><button data-tra="fir" data-v="0" class="${r.fir===false?'on':''}" aria-pressed="${r.fir===false}"${dis}>No</button></span>`;
-    return r.fir===true?'<span class="tr-si">Sí</span>':r.fir===false?'<span class="tr-no">No firmó</span>':'<span class="note">—</span>'};
-  const garCell=r=>cot?`<input class="tin tr-gar" type="time" step="60" id="trg_${esc(r.dni)}" data-trg="${esc(r.dni)}" value="${esc(r.gar||'')}" aria-label="Salida en garita">`:`<span class="mono">${esc(r.gar||'')}</span>`;
   const tags=d=>(oDni.get(d)||[]).map(o=>`<span class="tr-tg${o.bl?' tr-tgb':''}" data-k="${esc(o.k)}" title="${esc(o.msg)}">${esc(TR_TAG[o.k]||'Revisar')}</span>`).join('');
   const pas=d=>M.pas?`<button class="ib tr-pas" data-tra="pas" data-v="${esc(d)}" title="Pasar a otro capataz…" aria-label="Pasar a otro capataz">⇄</button>`:'';
   const obc=d=>`<td class="tr-tgs"><div class="tr-oc"><span>${tags(d)}</span>${pas(d)}</div></td>`;
   const who=r=>`<td class="tr-nmc"><b>${esc(r.ape||r.dni)}</b> <small class="note">${esc(r.nom||'')} · <span class="mono">${esc(r.dni)}</span></small></td><td>${esc(r.cat||'')}</td>`;
-  const ncol=pcs.length+8;
-  const body=P.map(r=>{const k=(oDni.get(r.dni)||[]).map(o=>o.k);return`<tr data-trd="${esc(r.dni)}" data-dni="${esc(r.dni)}" class="${k.includes('nofir')?'tr-bad':''}${k.includes('gar')?' tr-wgar':''}">${who(r)}
+  const ncol=pcs.length+6;
+  const body=P.map(r=>`<tr data-trd="${esc(r.dni)}" data-dni="${esc(r.dni)}">${who(r)}
       ${pcs.map(pc=>`<td class="mono t-r">${r.h&&r.h[pc]?toH(r.h[pc]):''}</td>`).join('')}<td class="mono t-r tr-tot"><b>${toH(r.trab)}</b>${hor(r)}</td><td class="mono t-r">${r.ext?toH(r.ext):''}</td><td>${r.alt?'(A)':''}</td>
-      <td>${firCell(r)}</td><td class="tr-gc">${garCell(r)}</td>${obc(r.dni)}</tr>`}).join('')
-    +F.map(r=>`<tr class="tr-frow${r.as===false?'':' tr-smrow'}" data-dni="${esc(r.dni)}" data-as="${r.as===false?'no':'sm'}">${who(r)}<td colspan="${pcs.length+3}" class="tr-fx">${r.as===false?`No vino${r.mot?` · <b>${esc(r.mot)}</b>${TO_MOT[r.mot]?' '+esc(TO_MOT[r.mot]):''}`:''}`:'<span class="tr-sm">Sin marcar</span> <span class="note">el capataz no marcó si vino</span>'}</td><td></td><td></td>${obc(r.dni)}</tr>`).join('')
+      ${obc(r.dni)}</tr>`).join('')
+    +F.map(r=>`<tr class="tr-frow${r.as===false?'':' tr-smrow'}" data-dni="${esc(r.dni)}" data-as="${r.as===false?'no':'sm'}">${who(r)}<td colspan="${pcs.length+3}" class="tr-fx">${r.as===false?`No vino${r.mot?` · <b>${esc(r.mot)}</b>${TO_MOT[r.mot]?' '+esc(TO_MOT[r.mot]):''}`:''}`:'<span class="tr-sm">Sin marcar</span> <span class="note">el capataz no marcó si vino</span>'}</td>${obc(r.dni)}</tr>`).join('')
     ||`<tr><td colspan="${ncol}" class="note">No hay obreros en este tareo.</td></tr>`;
   const blq=t.blq||[];
   return`${trAvisos()}${t.st==='reab'&&t.reab?`<div class="callout t-warn">Reabierto por ${esc(toWho(t.reab.by))} a las ${esc(tHm(t.reab.t))}: ${esc(t.reab.mot||'')}</div>`:''}
    ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
-   ${t.prod&&t.prod.t?`<div class="callout tr-okc tr-prodn" id="trProdV">Revisado por producción: ${esc(t.prod.byN||toWho(t.prod.by))} · ${esc(fmtD(ldt(t.prod.t)))} ${esc(tHm(t.prod.t))}.</div>`:''}
-   ${tCotVieja(t)?`<div class="callout t-warn" id="trCotV">El capataz cambió las fotos después del cotejo: vuelve a cotejar las firmas con el formato nuevo.</div>`:''}
+
    ${vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
-   <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b><span class="note" id="trCotN">${nCot} de ${P.length} cotejados</span>${cot&&pend?`<span class="note tr-pend">Falta cotejar ${pend} ${pend===1?'firma':'firmas'}.</span>`:''}${cot&&P.length&&!fok&&(t.foto||[]).length?'<span class="note tr-pend" id="trFWait">Para cotejar, espera a que cargue la foto.</span>':''}${cot&&P.length?`<button class="ib" data-tra="all" id="trAll"${dis}>Todos firmaron</button>`:''}</div>
-    <div class="tr-mtw"><table class="t tr-mt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r" title="Horas trabajadas y horario">Total</th><th class="t-r" title="Horas extra">HE</th><th title="Trabajo en altura (bono)">A</th><th>Firmó</th><th title="Hora de salida en garita (opcional)">Garita</th><th title="Observaciones${M.pas?' · ⇄ pasar a otro capataz':''}">Obs.</th></tr></thead>
+   <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b></div>
+    <div class="tr-mtw"><table class="t tr-mt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r" title="Horas trabajadas y horario">Total</th><th class="t-r" title="Horas extra">HE</th><th title="Trabajo en altura (bono)">A</th><th title="Observaciones${M.pas?' · ⇄ pasar a otro capataz':''}">Obs.</th></tr></thead>
      <tbody>${body}</tbody>
-     ${P.length?`<tfoot><tr><td colspan="2"><b>Total</b></td>${pcs.map(pc=>`<td class="mono t-r"><b>${toH(tot[pc])}</b></td>`).join('')}<td class="mono t-r"><b>${toH(s.hh)}</b></td><td class="mono t-r"><b>${toH(s.he)}</b></td><td colspan="4"></td></tr></tfoot>`:''}</table></div></section>
+     ${P.length?`<tfoot><tr><td colspan="2"><b>Total</b></td>${pcs.map(pc=>`<td class="mono t-r"><b>${toH(tot[pc])}</b></td>`).join('')}<td class="mono t-r"><b>${toH(s.hh)}</b></td><td class="mono t-r"><b>${toH(s.he)}</b></td><td colspan="2"></td></tr></tfoot>`:''}</table></div></section>
    ${hrs?'':`<details class="card tr-dt" id="trBlqD" data-trop="blq"${TR.op.blq?' open':''}><summary><b>Bloques</b> <span class="note">${blq.length}</span></summary>
     ${blq.length?`<ul class="t-list to-blq">${blq.map(b=>{b=b||{};const p=b.pc?pcL(b.pc):null;const n=Array.isArray(b.dnis)?b.dnis:[];
      return`<li><span class="mono">${esc(b.ini||'?')}–${esc(b.fin||'?')}</span> · ${p?`<b class="mono">${esc(p.cod)}</b> ${esc(p.nom)}`:'<i>sin partida</i>'} · ${n.length} ${n.length===1?'obrero':'obreros'}${tBlqOk(b)?` · ${toH(tBlqH(t.date,b.ini,b.fin,t.cfg||undefined))} h`:''}<div class="t-chg">${n.map(d=>esc(rn(d))).join(', ')}</div></li>`}).join('')}</ul>`:'<p class="note">Sin bloques.</p>'}</details>`}
    <details class="card tr-dt" id="trHistD" data-trop="hist"${TR.op.hist?' open':''}><summary><b>Historial</b> <span class="note">${hist.length}</span></summary>
     ${hist.length?`<ul class="t-list to-hist" id="trHist">${hist.map(x=>`<li data-a="${esc(x.a||'')}"><span class="mono">${esc(fmtD(ldt(x.t||0)))} ${esc(tHm(x.t))}</span> · <b>${esc(TO_HA[x.a]||x.a||'')}</b> · ${esc(toWho(x.by))}${x.mot?': '+esc(x.mot):''}${x.cam?`<div class="t-chg">${esc(x.cam)}</div>`:''}</li>`).join('')}</ul>`:'<p class="note">Sin movimientos.</p>'}</details>`}
 
-function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.closest('[data-trw]');if(w&&!w.disabled){const a=w.dataset.trw;if(a==='close')trLeave(trClose);else trGo(a==='next'?1:-1);return}
+function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.closest('[data-trw]');if(w&&!w.disabled){const a=w.dataset.trw;if(a==='close')trLeave(trClose);else if(a==='pfo')trFoSet(!TR.pfo);else trGo(a==='next'?1:-1);return}
   const v=e.target.closest('[data-trv]');if(v){const t=TD.docs.get(id);const n=(t&&t.foto||[]).length;const a=v.dataset.trv;
     if(a==='zi')trZoomTo(TR.z+0.5);else if(a==='zo')trZoomTo(TR.z-0.5);else if(a==='fitw')trZoomTo(1);else if(a==='fit')trZoomTo(trFitZ());
     else if(a==='rot'){TR.rot=(TR.rot+90)%360;trView()}
@@ -530,11 +531,6 @@ function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.clo
   const b=e.target.closest('[data-tra]');if(!b||b.disabled)return;const a=b.dataset.tra;
   if(a==='reload')return trReload(id);
   if(TR.ed&&TR.ed.g&&txAct(a,b,id))return;
-  if((a==='fir'||a==='all')&&!trFotosOk(TD.docs.get(id))){toast('Espera a que cargue la foto del formato para cotejar.');return}
-  if(a==='fir'){const tr=b.closest('[data-trd]');if(!tr)return;TR.nota='';const d=tr.dataset.trd;const val=b.dataset.v==='1';
-    if(TR.fir[d]===val)delete TR.fir[d];else TR.fir[d]=val;trDirty();trDraw();return}
-  if(a==='all'){TR.nota='';const t=TD.docs.get(id);if(TR.ed&&TR.ed.g)txSnapPush();for(const[d,r]of Object.entries(t.rows||{}))if(r&&r.as)TR.fir[d]=true;trDirty();trDraw();return}
-  if(a==='save')return trSaveCot(id);
   if(a==='rev')return trRevisar(id);
   if(a==='qrev')return trQuitarRev(id);
   if(a==='reab')return toReabrir(id);
@@ -542,8 +538,7 @@ function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.clo
   if(a==='cor'){trEdOpen(TD.docs.get(id));TR.conf='';trDraw(true);return}
   if(TR.ed)return trEdClick(a,b,id)}
 function trChange(e,id){if(e.target.closest&&e.target.closest('#txMenu')){txMenuChg(e);return}
-  if(TR.ed&&TR.ed.g&&e.target.id==='trPcAdd'){txPcAdd(e.target);return}
-  const g=e.target.closest('[data-trg]');if(g){const v=/^\d{2}:\d{2}/.test(g.value)?g.value.slice(0,5):'';if(v)TR.gar[g.dataset.trg]=v;else delete TR.gar[g.dataset.trg];trDirty();trDraw();return}
+  if(e.target.id==='trCapSel'){const v=e.target.value;e.target.value=id;if(v&&v!==id&&TD.docs.has(v))trLeave(()=>toDetalle(v,true));return}
   if(TR.ed)trEdChange(e,id)}
 
 /* guardar cotejo (firmas y garita): solo lo que cambió el asistente */
@@ -553,15 +548,13 @@ async function trSaveCot(id){if(!trEdOk()||TR.busy)return false;TR.busy=true;let
       return{...up,hist:trAU(trHist('fir',cam?{cam}:{})),by:me.email||'',ts:NOW()}});
     TR.b={fir:{...TR.fir},gar:{...TR.gar}};TR.dirty=false;if(sig&&TR.id===id)TR.sig=sig;toast('Cotejo guardado.');return true}
   catch(err){if(err&&err.cyc&&TR.id===id){trCycDrop();toast(TR_CYC)}else trErr('No se pudo guardar el cotejo: ',err);return false}finally{TR.busy=false;trSync()}}
-/* marcar revisado: dentro de la transacción vuelve a revisar el documento actual (con el cotejo en edición aplicado) y los
-   conflictos del día; no marca si hay observaciones que bloquean o si otro usuario cambió el tareo desde que se abrió.
-   Si alguien no firmó, con confirmación (queda en el historial). */
+/* marcar revisado: dentro de la transacción vuelve a revisar el documento actual y los conflictos del día; no marca si hay
+   observaciones que bloquean o si otro usuario cambió el tareo desde que se abrió. Sin cotejo de firmas (20-10-2026: la firma es
+   implícita). Al terminar pasa solo al siguiente capataz «Enviado» (por revisar) del día, si queda alguno. */
 async function trRevisar(id){const t=TD.docs.get(id);if(!t||t.st!=='env'||!trEdOk()||TR.busy)return;
   const dv={...t,rows:trRows(t.rows)};const ob=tObsRev(dv);const blk=ob.filter(o=>o.bl);
   if(blk.length){toast(blk[0].msg);return}
-  const nof=ob.filter(o=>o.k==='nofir'),gar=ob.filter(o=>o.k==='gar'),wn=ob.filter(o=>!o.bl&&!['nofir','gar','firp'].includes(o.k));
-  if(nof.length&&!await uiAsk({title:'¿Marcar revisado con observaciones?',text:`${nof.length===1?'Un obrero vino pero no firmó':nof.length+' obreros vinieron pero no firmaron'} el formato. Quedará anotado en el historial.`,list:nof.map(o=>o.msg),ok:'Marcar revisado',tone:'warn'}))return;
-  const obs=[...nof,...gar,...wn].map(o=>o.msg).join(' ');const sig0=TR.sig,cyc0=TR.cyc;TR.busy=true;
+  const obs=ob.filter(o=>!o.bl).map(o=>o.msg).join(' ');const sig0=TR.sig,cyc0=TR.cyc;TR.busy=true;
   try{await trTx(id,cur=>{if(trCyc(cur)!==cyc0)throw trCycErr();if(cur.st!=='env')throw new Error('El tareo cambió de estado.');if(trSig(cur,true)!==sig0)throw new Error(TR_CHG);
       /* A1: un revisado nunca queda sin su jornada congelada (tareos enviados antes de guardar cfg) */
       const cfg=!cur.cfg&&typeof tCfgDia==='function'?tCfgDia(cur.date):null;
@@ -570,7 +563,9 @@ async function trRevisar(id){const t=TD.docs.get(id);if(!t||t.st!=='env'||!trEdO
       if(bl.length)throw new Error(bl[0].msg);
       const cam=[trCotCam(cur.rows||{},trCotCh()),obs?'Observaciones: '+obs:''].filter(Boolean).join(' · ');const t2=NOW();
       return{...up,...(cfg?{cfg}:{}),st:'rev',revAt:t2,revBy:me.email||'',hist:trAU(trHist('rev',cam?{cam:cam.length>400?cam.slice(0,397)+'…':cam}:{})),by:me.email||'',ts:t2}});
-    TR.b={fir:{...TR.fir},gar:{...TR.gar}};TR.dirty=false;toast('Tareo revisado ✓')}
+    TR.b={fir:{...TR.fir},gar:{...TR.gar}};TR.dirty=false;
+    const nx=TR.id===id?trNextPend(id):'';if(nx){toast(`Tareo revisado ✓ · sigue ${trCapOf(nx)}`);TR.busy=false;toDetalle(nx,true)}
+    else toast(TR.id===id?'Tareo revisado ✓ · no quedan tareos por revisar':'Tareo revisado ✓')}
   catch(err){if(err&&err.cyc&&TR.id===id){trCycDrop();toast(TR_CYC)}else{if(err&&err.message===TR_CHG&&TR.id===id)TR.conf='cot';trErr('No se pudo marcar revisado: ',err)}}finally{TR.busy=false;trSync()}}
 async function trQuitarRev(id){const t=TD.docs.get(id);if(!t||t.st!=='rev'||!trEdOk())return;
   const mot=await uiAsk({title:'¿Quitar «revisado»?',text:'El tareo vuelve a «Enviado» para revisarlo de nuevo.',input:{label:'Motivo',required:true},ok:'Quitar revisado',tone:'warn'});
@@ -583,7 +578,7 @@ async function trQuitarRev(id){const t=TD.docs.get(id);if(!t||t.st!=='rev'||!trE
    de nuevo con el formato que mande); la hora de garita se conserva en `cot` (no depende de la foto). En un tareo antiguo
    (cotejo en rows) se pasa la garita a `cot` y se quitan fir/gar de las filas. */
 async function toReabrir(id){const t=TD.docs.get(id);if(!t||!['env','rev'].includes(t.st)||!toReabOk())return;const name=t.capN||tCapName(t.cap);
-  const mot=await uiAsk({title:'¿Reabrir el tareo al capataz?',text:`${name} podrá corregirlo y volver a enviarlo. Verá el motivo que escribas.${t.st==='rev'?' Se quita la marca de revisado.':''} Las firmas se cotejan de nuevo cuando lo reenvíe.`,input:{label:'Motivo',required:true},ok:'Reabrir',tone:'warn'});
+  const mot=await uiAsk({title:'¿Reabrir el tareo al capataz?',text:`${name} podrá corregirlo y volver a enviarlo. Verá el motivo que escribas.${t.st==='rev'?' Se quita la marca de revisado.':''}`,input:{label:'Motivo',required:true},ok:'Reabrir',tone:'warn'});
   const m=typeof mot==='string'?mot.trim():'';if(!m)return;
   const r={t:NOW(),by:me.email||me.id||'',mot:m};const FV={delete:trDel,arrayUnion:trAU};
   try{await trTx(id,cur=>{if(!['env','rev'].includes(cur.st))throw new Error('El tareo cambió de estado: ya no se puede reabrir.');
@@ -761,7 +756,7 @@ function trPasarDlg(id,dni){const t=TD.docs.get(id);if(!t||!toReabOk()||!['env',
   lqModal(`<div class="lqtop"><b>Pasar a otro capataz</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
    <p class="lqmsg"><b>${esc(nm)}</b> <span class="mono note">${esc(dni)}</span> sale del tareo de <b>${esc(t.capN||tCapName(t.cap))}</b> y entra al del capataz que elijas, ${r.as===false?`con su falta (${esc(r.mot||'sin motivo')})`:'con sus mismas horas y partidas'}.</p>
    <div class="tr-dst" id="trPd" role="radiogroup" aria-label="Capataz destino">${L.map(x=>`<label class="tr-dso${x.why?' off':''}"><input type="radio" name="trPd" value="${esc(x.id)}" data-cap="${esc(x.cap)}"${x.why?' disabled':''}${ok.length===1&&x===ok[0]?' checked':''}><span><b>${esc(x.name)}</b> <span class="note">${esc((TO_ST[x.st]||[x.st])[0])}${x.why?' · '+esc(x.why):''}</span></span></label>`).join('')||'<p class="note">No hay otros capataces.</p>'}</div>
-   <p class="note">Solo a un tareo «Enviado» o «Revisado»: si el capataz aún lo está llenando, su celular guardaría encima. La firma se coteja de nuevo en el tareo de destino; un tareo revisado vuelve a «Enviado».</p>
+   <p class="note">Solo a un tareo «Enviado» o «Revisado»: si el capataz aún lo está llenando, su celular guardaría encima. Un tareo revisado vuelve a «Enviado».</p>
    <label>Motivo (queda en el historial de los dos tareos)<input id="trPm" type="text" maxlength="200" placeholder="Ej. trabajó toda la jornada con otra cuadrilla"></label>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="trPok"${ok.length?'':' disabled'}>Pasar</button></div>`,
    e=>{if(!e.target.closest('#trPok'))return;const sel=$('#lqm input[name="trPd"]:checked');const m=($('#trPm').value||'').trim();
@@ -780,7 +775,7 @@ async function trPasar(oid,dni,did,m){if(!toReabOk()||TR.busy||!did)return;TR.bu
       const ape=r.ape||dni;const t2=NOW(),by=me.email||'';const hrs=trHrs(A);
       const upA={[`rows.${dni}`]:FV.delete(),...(hrs?{}:{blq:x.a.blq}),...trCorExtra(A),hist:FV.arrayUnion(trHist('cor',{mot:m,cam:`${A.st==='rev'?'Quita revisado. ':''}Pasado al tareo de ${nB}: ${ape} (${trAsTx(r)})`,det:tDet(A,x.a)})),by,ts:t2};
       if(A.cot&&typeof A.cot==='object'&&A.cot[dni])upA[`cot.${dni}`]=FV.delete();
-      const upB={[`rows.${dni}`]:trClean({[dni]:x.row})[dni],...(hrs?{pcs:x.b.pcs}:{blq:x.b.blq}),...trCorExtra(B),hist:FV.arrayUnion(trHist('cor',{mot:m,cam:`${B.st==='rev'?'Quita revisado. ':''}Recibido del tareo de ${nA}: ${ape} (${trAsTx(r)}); su firma se coteja en este tareo`,det:tDet(B,x.b)})),by,ts:t2};
+      const upB={[`rows.${dni}`]:trClean({[dni]:x.row})[dni],...(hrs?{pcs:x.b.pcs}:{blq:x.b.blq}),...trCorExtra(B),hist:FV.arrayUnion(trHist('cor',{mot:m,cam:`${B.st==='rev'?'Quita revisado. ':''}Recibido del tareo de ${nA}: ${ape} (${trAsTx(r)})`,det:tDet(B,x.b)})),by,ts:t2};
       tx.update(rA,upA);tx.update(rB,upB);msg=`${ape} pasó al tareo de ${nB}.`;loc=[[oid,A,upA],[did,B,upB]]});
     for(const[i,c,u]of loc)trLocal(i,c,u);toast(msg)}
   catch(err){trErr('No se pudo pasar: ',err)}finally{TR.busy=false;trSync()}}
@@ -794,7 +789,8 @@ async function trPasar(oid,dni,did,m){if(!toReabOk()||TR.busy||!did)return;TR.bu
 const trProdOk=()=>typeof tpPubOk==='function'&&tpPubOk();
 const trProdMark=()=>{const by=me.email||me.id||'';const n=toWho(by);return{t:NOW(),by,...(n&&n!==by?{byN:n}:{})}};
 /** chip «Producción ✓» (lista del día, encabezado de la revisión) */
-function trProdChip(t){const p=t&&t.prod;if(!p||!p.t)return'';const w=p.byN||toWho(p.by)||'';
+function trProdChip(t){return'';/* ya no se muestra (20-10-2026, decisión del dueño); la marca prod sigue guardándose */
+  /* eslint-disable-next-line no-unreachable */const p=t&&t.prod;if(!p||!p.t)return'';const w=p.byN||toWho(p.by)||'';
   return` <span class="tr-prodc" data-prod="1" title="Revisado por producción${w?': '+esc(w):''} · ${esc(fmtD(ldt(p.t)))} ${esc(tHm(p.t))}">Producción ✓</span>`}
 /** obreros presentes (que ya estaban en el tareo) cuyo total de HH cambia de a → b: [{dni, nom, a, b}] */
 function trPrTotCh(a,b){const o=[];const ra=(a&&a.rows)||{},rb=(b&&b.rows)||{};
@@ -803,40 +799,15 @@ function trPrTotCh(a,b){const o=[];const ra=(a&&a.rows)||{},rb=(b&&b.rows)||{};
 /* aviso de HH totales cambiadas: una línea; la lista se despliega (con muchos obreros no tapa la hoja) */
 const trPrTotHtml=ch=>ch.length?`<details class="callout t-warn tr-ptot" id="trPrTot" role="status"${ch.length<=2?' open':''}><summary><b>Cambiaste las HH totales de ${ch.length} ${ch.length===1?'obrero':'obreros'}</b>: ya no coinciden con lo que firmaron en el formato. <span class="note">Filas en ámbar.</span></summary><span>${ch.map(x=>`${esc(x.nom)} ${tHtxt(x.a)} → ${tHtxt(x.b)} h`).join(' · ')}</span></details>`:'';
 /* partidas a las que se pueden mover horas: las de la hoja (menos from) y las activas no bloqueadas */
-function trMvOpts(e,from){const cols=trEdCols(e).filter(pc=>pc!==from);
-  const more=[...S.tpc.values()].filter(x=>x&&x.id&&!x.arch&&x.act!==false&&x.bloq!==true&&x.id!==from&&!cols.includes(x.id)).sort((a,b)=>tCmpCod(a.cod,b.cod));
-  return{cols,more}}
-const trMvSel=(id,more,lbl)=>`<label class="tr-mvo">${lbl}<select class="tin" id="${id}"><option value="">—</option>${more.map(x=>`<option value="${esc(x.id)}">${esc(x.cod)} · ${esc(x.nom)}</option>`).join('')}</select></label>`;
-/** «Mover horas…»: horas de la celda s = {dni, pc} a otra partida (por defecto todas). Se deshace con Ctrl+Z. */
-function trMvDlg(id,s){const e=TR.ed;const x=e&&s&&e.rows[s.dni];if(!x)return;if(x.as!==true){toast('No vino: no tiene horas que mover.');return}const v=x.h[s.pc]||0;if(!v){toast('Esa celda no tiene horas.');return}
-  const r=(e.base.rows||{})[s.dni]||x.nw||{};const p=trPcL(s.pc);const{cols,more}=trMvOpts(e,s.pc);
-  lqModal(`<div class="lqtop"><b>Mover horas a otra partida</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-   <p class="lqmsg"><b>${esc(trNm(r)||s.dni)}</b>: <b class="mono">${toH(v)} h</b> en <b class="mono">${esc(p.cod)}</b> ${esc(p.nom)}. Su total del día no cambia.</p>
-   ${cols.length?`<div class="tr-dst" id="trMvL" role="radiogroup" aria-label="Partida destino">${cols.map((pc,i)=>{const q=trPcL(pc);return`<label class="tr-dso"><input type="radio" name="trMvP" value="${esc(pc)}"${i===0?' checked':''}><span><b class="mono">${esc(q.cod)}</b> ${esc(q.nom)} <span class="note">${toH(x.h[pc]||0)} h ahora</span></span></label>`}).join('')}</div>`:''}
-   ${trMvSel('trMvO',more,cols.length?'O a otra partida (se agrega al día)':'Partida destino (se agrega al día)')}
-   <label>Horas a mover <input class="tin" id="trMvN" type="text" inputmode="decimal" autocomplete="off" value="${esc(trHFmt(v))}"></label>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="trMvOk">Mover</button></div>`,
-   ev=>{if(!ev.target.closest('#trMvOk'))return;const o=$('#trMvO').value;const rb=$('#lqm input[name="trMvP"]:checked');const to=o||(rb&&rb.value)||'';
-     if(!to){toast('Elige la partida destino.');return}let n=trHParse($('#trMvN').value);
-     if(!Number.isFinite(n)||n<=0){toast('Escribe cuántas horas mover (por ejemplo 4 o 4,5).');$('#trMvN').focus();return}
-     n=Math.round(n*2)/2;if(n>v){toast(`Solo hay ${tHtxt(v)} h en esa celda.`);$('#trMvN').focus();return}
-     if(TR.ed!==e||e.rows[s.dni]!==x){lqClose();return}
-     txSnapPush();const left=tR2(v-n);if(left)x.h[s.pc]=left;else delete x.h[s.pc];x.h[to]=tR2((x.h[to]||0)+n);if(!e.pcs.includes(to))e.pcs.push(to);
-     lqClose();TX.a=TX.f={d:s.dni,k:'h:'+to};trDraw(true);txFocus();toast(`Se movieron ${tHtxt(n)} h de ${p.cod} a ${trPcL(to).cod}.`)})}
-/** quitar una partida del día: sin horas se quita; con horas, moverlas a otra partida o borrarlas. Se deshace con Ctrl+Z. */
-function trPcDelDlg(id,pc){const e=TR.ed;if(!e)return;const p=trPcL(pc);const W=Object.entries(e.rows).filter(([,x])=>x.h&&x.h[pc]);
-  const quitar=mv=>{if(TR.ed!==e)return;txSnapPush();for(const[,x]of W){const v=x.h[pc]||0;delete x.h[pc];if(mv&&v)x.h[mv]=tR2((x.h[mv]||0)+v)}
-    if(mv&&!e.pcs.includes(mv))e.pcs.push(mv);e.pcs=e.pcs.filter(y=>y!==pc);delete TX.flt['h:'+pc];if(TX.sort&&TX.sort.k==='h:'+pc)TX.sort=null;trDraw(true);txFocus()};
-  if(!W.length){quitar('');return}
-  const hh=tR2(W.reduce((s2,[,x])=>s2+(x.h[pc]||0),0));const{cols,more}=trMvOpts(e,pc);
-  lqModal(`<div class="lqtop"><b>Quitar la partida ${esc(p.cod)}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-   <p class="lqmsg">${esc(p.nom)} tiene <b class="mono">${toH(hh)} h</b> de ${W.length} ${W.length===1?'obrero':'obreros'}. ¿Qué hago con esas horas?</p>
-   <div class="tr-dst" id="trPdL" role="radiogroup" aria-label="Horas de la partida">${cols.map((q,i)=>{const z=trPcL(q);return`<label class="tr-dso"><input type="radio" name="trPdP" value="${esc(q)}"${i===0?' checked':''}><span>Moverlas a <b class="mono">${esc(z.cod)}</b> ${esc(z.nom)}</span></label>`}).join('')}
-    <label class="tr-dso"><input type="radio" name="trPdP" value="__del"${cols.length?'':' checked'}><span><b>Borrarlas</b> <span class="note">los totales de esos obreros bajan</span></span></label></div>
-   ${trMvSel('trPdO',more,'O moverlas a otra partida (se agrega al día)')}
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="trPdOk">Quitar partida</button></div>`,
-   ev=>{if(!ev.target.closest('#trPdOk'))return;const o=$('#trPdO').value;const rb=$('#lqm input[name="trPdP"]:checked');const v=o||(rb&&rb.value)||'';
-     if(!v){toast('Elige qué hacer con las horas.');return}lqClose();quitar(v==='__del'?'':v)})}
+/** quitar una partida del día (✕ de su encabezado): sin horas se quita; con horas pide confirmar y las borra (los totales de esos
+    obreros bajan). Ya no se mueven horas desde aquí (20-10-2026: se escriben a mano). Se deshace con Ctrl+Z. */
+async function trPcDelDlg(id,pc){const e=TR.ed;if(!e)return;const p=trPcL(pc);const W=Object.entries(e.rows).filter(([,x])=>x.h&&x.h[pc]);
+  const quitar=()=>{if(TR.ed!==e)return;txSnapPush();for(const[,x]of W)delete x.h[pc];
+    e.pcs=e.pcs.filter(y=>y!==pc);delete TX.flt['h:'+pc];if(TX.sort&&TX.sort.k==='h:'+pc)TX.sort=null;trDraw(true);txFocus()};
+  if(!W.length){quitar();return}
+  const hh=tR2(W.reduce((s2,[,x])=>s2+(x.h[pc]||0),0));
+  if(!await uiAsk({title:`¿Quitar la partida ${p.cod}?`,text:`${p.nom} tiene ${tHtxt(hh)} h de ${W.length} ${W.length===1?'obrero':'obreros'}: se borran y sus totales bajan. Ctrl+Z lo deshace mientras no guardes.`,ok:'Quitar partida',tone:'warn'}))return;
+  quitar();toast(`Se quitó ${p.cod} (${tHtxt(hh)} h).`)}
 /** guardar los cambios de la hoja → true si se guardó. Base propia del editor (trEdPatch), transacción que comprueba que el tareo
     siga como al abrir (si no: «Recargar versión actual», que conserva los cambios) y aplica solo los cambios sobre el documento actual.
     Solo horas y partidas, del jefe o el admin → revisión de producción (a:'prod', el estado no cambia, motivo opcional salvo que
@@ -852,10 +823,11 @@ async function trGxSave(id){const t=TD.docs.get(id);const e=TR.ed;if(!t||!e||!e.
   if(E.length&&!await uiAsk({title:'Los cambios dejan problemas',text:'¿Guardar igual? No se podrá marcar revisado hasta resolverlos.',list:E.map(o=>o.msg),ok:'Guardar igual',tone:'warn'}))return false;
   if(ch.length&&!await uiAsk({title:`Cambiaste las HH totales de ${ch.length} ${ch.length===1?'obrero':'obreros'}`,tone:'warn',
     text:'Ya no coinciden con lo que firmaron en el formato. Queda en el historial del tareo con tu nombre y el motivo.',list:ch.map(x=>`${x.nom}: ${tHtxt(x.a)} → ${tHtxt(x.b)} h`),ok:'Sí, cambiar los totales',cancel:'Revisar de nuevo'}))return false;
-  const req=!pr||ch.length>0;
-  const mot=await uiAsk({title:pr?'Guardar revisión de producción':'Guardar cambios',text:`Cambios: ${cam}${!pr&&t.st==='rev'?' · El tareo vuelve a «Enviado» (hay que revisarlo de nuevo).':''}`,
-    input:{label:req?(ch.length?'Motivo (obligatorio: cambiaste HH totales)':'Motivo'):'Motivo (opcional)',required:req},ok:'Guardar',tone:'info'});
-  if(mot==null||mot===false||TR.ed!==e)return false;const m=String(mot).trim();if(req&&!m)return false;
+  /* motivo solo si cambian las HH totales de algún obrero (20-10-2026, decisión del dueño); si no, se guarda directo */
+  let m='';if(ch.length){const mot=await uiAsk({title:'Motivo del cambio de HH totales',text:`Cambios: ${cam}${!pr&&t.st==='rev'?' · El tareo vuelve a «Enviado» (hay que revisarlo de nuevo).':''}`,
+      input:{label:'Motivo (obligatorio: cambiaste HH totales)',required:true},ok:'Guardar',tone:'info'});
+    if(mot==null||mot===false||TR.ed!==e)return false;m=String(mot).trim();if(!m)return false}
+  if(TR.ed!==e)return false;
   TR.busy=true;
   try{await trTx(id,cur=>{if(!['env','rev'].includes(cur.st))throw new Error('El tareo cambió de estado.');if(trSig(cur,false)!==e.sig)throw new Error(TR_CHG);
       const n2=trEdApply(cur,P);const c=trCalc(n2);const ch2=trPrTotCh(cur,n2);
@@ -863,7 +835,7 @@ async function trGxSave(id){const t=TD.docs.get(id);const e=TR.ed;if(!t||!e||!e.
       const cut=s=>s.length>400?s.slice(0,397)+'…':s;
       if(pr)return{rows:trClean(c.rows),pcs:n2.pcs||[],prod:trProdMark(),hist:trAU(trHist('prod',{...(m?{mot:m}:{}),cam:cut(cm),det:tDet(cur,n2),tot:ch2.length>0})),by:me.email||'',ts:NOW()};
       cm=(cur.st==='rev'?'Quita revisado. ':'')+cm;
-      const up={rows:trClean(c.rows),pcs:n2.pcs||[],...trCorExtra(cur),...(trProdOk()?{prod:trProdMark()}:{}),hist:trAU(trHist('cor',{mot:m,cam:cut(cm),det:tDet(cur,n2),...(ch2.length?{tot:true}:{})})),by:me.email||'',ts:NOW()};
+      const up={rows:trClean(c.rows),pcs:n2.pcs||[],...trCorExtra(cur),...(trProdOk()?{prod:trProdMark()}:{}),hist:trAU(trHist('cor',{...(m?{mot:m}:{}),cam:cut(cm),det:tDet(cur,n2),...(ch2.length?{tot:true}:{})})),by:me.email||'',ts:NOW()};
       /* obrero quitado: también su cotejo */
       for(const p of P)if(p.k==='rd'&&cur.cot&&typeof cur.cot==='object'&&cur.cot[p.d])up[`cot.${p.d}`]=trDel();
       return up});
@@ -891,64 +863,63 @@ async function trProdConf(id){const t=TD.docs.get(id);if(!t||!['env','rev'].incl
    (fotos del estado editable), ing = celda en edición {d, k, rep}, drag, menu = filtro abierto {k}, X = lo último dibujado, seq =
    orden de los obreros agregados. */
 const TX={a:null,f:null,flt:{},q:'',sort:null,fx:new Set(),un:[],re:[],ing:null,drag:false,menu:null,X:null,seq:0};
+/* cuadrilla y categoría: ocultas por omisión (casi no se usan al revisar horas); se recuerda en el equipo */
+function txCcLs(){try{return localStorage.getItem('lps.txcc')==='1'}catch(e){return false}}
+TX.cc=txCcLs();
 function txReset(){Object.assign(TX,{a:null,f:null,flt:{},q:'',sort:null,fx:new Set(),un:[],re:[],ing:null,drag:false,X:null});txMenuX()}
-/* anchos de las columnas fijas (N°, DNI, apellidos y nombres, cuadrilla, categoría): los mismos que en app.css (.tx-t .tx-fz) */
-const TX_FZW=[40,82,200,100,58];
+/* ancho total de las columnas fijas a la izquierda (N°, DNI, apellidos y nombres y, si están a la vista, cuadrilla y categoría) */
+const txFzW=X=>X.cols.filter(c=>c.fz).reduce((s2,c)=>s2+c.w,0);
 const TX_EMPTY='(vacías)';
 const TX_IC={dn:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>',flt:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11L9.2 8.6v4.2l-2.4 1.1V8.6z"/></svg>',
   q:'<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.3"/><path d="m10.2 10.2 3.3 3.3"/></svg>'};
 const txNorm=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
-/* Firmó / Garita se editan en un tareo «Enviado» (como el cotejo de siempre) */
-const txCot=t=>trEdOk()&&!!t&&t.st==='env';
 const txFocus=()=>{const W=$('#txW');if(W&&document.activeElement!==W)try{W.focus({preventScroll:true})}catch(e){}};
 /* sí/no escrito a mano: S, Sí, V, 1, X → true · N, No, 0 → false (alt: también A o (A)) */
 const txBool=(s,alt)=>{s=txNorm(s).trim();if(/^(s|si|v|vino|1|x|y|ok|true)$/.test(s)||(alt&&/^\(?a\)?$/.test(s)))return true;if(/^(n|no|no vino|0|f|false)$/.test(s))return false;return null};
-/* hora escrita a mano → 'HH:MM' ('' vacía; null no válida): 15:30, 15.30, 1530, 7:5 no; 7 → 07:00 */
-const txHm=s=>{s=String(s==null?'':s).trim();if(!s)return'';let m=s.match(/^(\d{1,2})[:.h]?(\d{2})$/);if(!m){const n=s.match(/^(\d{1,2})$/);if(n)m=[0,n[1],'00']}
-  if(!m)return null;const h=+m[1],mi=+m[2];if(h>23||mi>59)return null;return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0')};
-/** columnas de la hoja: fijas, asistencia, una por partida (pcs + las que tengan horas), totales, altura, salida, cotejo, obs. y acciones */
-function txColsOf(e,cot){const C=[{k:'n',l:'N°',fz:1,num:1,nof:1,t:'Número de fila (clic: elige la fila)'},{k:'dni',l:'DNI',fz:1},{k:'nm',l:'Apellidos y nombres',fz:1},{k:'cua',l:'Cuadrilla',fz:1},{k:'cat',l:'Cat.',fz:1,t:'Categoría'},
-  {k:'as',l:'Vino',w:64,ed:1,t:'Asistencia: escribe S o N (espacio cambia)'},{k:'mot',l:'Motivo',w:76,ed:1,t:'Motivo si no vino: '+Object.entries(TO_MOT).map(([k,l])=>k+' '+l).join(', ')}];
+/** columnas de la hoja (20-10-2026): fijas (N°, DNI, nombre y, si se piden, cuadrilla y categoría), Asistencia (vino o el motivo
+    si no vino, en una sola columna), una por partida, «+» para agregar partida, totales, altura, observaciones y acciones. Sin
+    Firmó, Salida ni Garita: la firma es implícita y no se coteja. */
+function txColsOf(e){const C=[{k:'n',l:'N°',fz:1,w:40,num:1,nof:1,t:'Número de fila (clic: elige la fila)'},{k:'dni',l:'DNI',fz:1,w:82},{k:'nm',l:'Apellidos y nombres',fz:1,w:200}];
+  if(TX.cc)C.push({k:'cua',l:'Cuadrilla',fz:1,w:100},{k:'cat',l:'Cat.',fz:1,w:58,t:'Categoría'});
+  C.push({k:'as',l:'Asistencia',w:104,ed:1,t:'Escribe S si vino, N si no vino o el motivo ('+Object.entries(TO_MOT).map(([k,l])=>k+' '+l).join(', ')+'). Espacio cambia vino / no vino.'});
   for(const pc of trEdCols(e)){const p=trPcL(pc);C.push({k:'h:'+pc,pc,l:p.cod,sub:p.nom,w:78,ed:1,num:1,bloq:p.bloq,t:p.cod+' · '+p.nom+(p.bloq?' · BLOQUEADA por costos':'')})}
-  C.push({k:'tot',l:'Total',w:70,num:1,t:'Horas trabajadas en el día (verde = jornada completa)'},{k:'he',l:'HE',w:56,num:1,t:'Horas extra'},
+  C.push({k:'padd',l:'',w:44,nof:1,t:'Agregar una partida del día'},
+    {k:'tot',l:'Total',w:70,num:1,t:'Horas trabajadas en el día (verde = jornada completa)'},{k:'he',l:'HE',w:56,num:1,t:'Horas extra'},
     {k:'fdo',l:'Firmado',w:86,num:1,t:'Total al abrir: lo que firmó en el formato'},{k:'alt',l:'Altura',w:72,ed:1,t:'Trabajo en altura, bono (A): escribe A o espacio'},
-    {k:'sal',l:'Salida',w:72,ed:1,t:'Hora de salida, solo si salió antes o después de lo normal'},
-    {k:'fir',l:'Firmó',w:86,ed:cot?1:0,t:cot?'Cotejo con la foto: S o N (espacio cambia)':'Cotejo de firmas (se marca en un tareo «Enviado»)'},
-    {k:'gar',l:'Garita',w:74,ed:cot?1:0,t:'Hora de salida en garita (opcional)'},{k:'obs',l:'Observaciones',w:190},{k:'x',l:'',w:66,nof:1,t:'⇄ pasar a otro capataz · ✕ quitar del tareo'});
+    {k:'obs',l:'Observaciones',w:190},{k:'x',l:'',w:66,nof:1,t:'⇄ pasar a otro capataz · ✕ quitar del tareo'});
+  let left=0,last=null;for(const c of C)if(c.fz){c.left=left;left+=c.w;last=c}if(last)last.fzl=1;
   return C}
 /* orden de las filas: los que vinieron (al abrir) por apellido, luego los que no, y al final los agregados en la hoja */
 const txOrd=(B,e)=>(p,q)=>{const k=d=>B[d]?(B[d].as===true?0:1):2;const a=k(p),b=k(q);if(a!==b)return a-b;
   if(a===2)return(((e.rows[p].nw||{}).i||0)-((e.rows[q].nw||{}).i||0))||p.localeCompare(q);return(B[p].ape||'').localeCompare(B[q].ape||'')||p.localeCompare(q)};
 /** todo lo que se dibuja: filas (con su cálculo, su base y sus observaciones), columnas, filas visibles (filtros y orden) */
 function txCtx(t){const e=TR.ed;const nd=trEdCur();const dv={...nd,rows:trRows(nd.rows)};const c=trCalc(dv);
-  const D=tDia(nd.date||todayIso(),nd.cfg);const B=e.base.rows||{};const bs=trEdState(e.base).rows;const cot=txCot(t);
-  const ob=tObsRev(dv,c);const oD=new Map();for(const o of ob)if(o.dni&&o.k!=='firp')oD.set(o.dni,(oD.get(o.dni)||[]).concat(o));
+  const D=tDia(nd.date||todayIso(),nd.cfg);const B=e.base.rows||{};const bs=trEdState(e.base).rows;
+  const ob=tObsRev(dv,c);const oD=new Map();for(const o of ob)if(o.dni)oD.set(o.dni,(oD.get(o.dni)||[]).concat(o));
   const all=Object.keys(e.rows).sort(txOrd(B,e)).map((d,i)=>({d,i:i+1,x:e.rows[d],r:dv.rows[d]||{},c:c.rows[d]||{},b:B[d]||null,bs:bs[d]||null,ob:oD.get(d)||[]}));
-  const X={t,e,nd,c,D,cot,fok:trFotosOk(t),cols:txColsOf(e,cot),all,ob,pas:['env','rev'].includes(t.st)};
+  const X={t,e,nd,c,D,cols:txColsOf(e),all,ob,pas:['env','rev'].includes(t.st)};
   for(const R of all){R.ch=txRowCh(R);R.tch=R.x.as===true&&!!R.b&&trHrsTot(R.b)!==(R.c.trab||0)}
   X.rows=all.filter(R=>txPass(R,X,null));
   if(TX.sort){const col=X.cols.find(z=>z.k===TX.sort.k);if(col){const dir=TX.sort.dir;
     X.rows.sort((p,q)=>{const a=txVal(p,col),b=txVal(q,col);const ea=a===''||a==null,eb=b===''||b==null;if(ea!==eb)return ea?1:-1;if(ea)return p.i-q.i;
       const r=typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'es',{numeric:true});return r?r*dir:p.i-q.i})}else TX.sort=null}
   return X}
-function txRowCh(R){if(!R.bs)return true;const{x,bs,d}=R;if(x.as!==bs.as||(x.mot||'')!==(bs.mot||'')||!!x.alt!==!!bs.alt||(x.sal||'')!==(bs.sal||''))return true;
+function txRowCh(R){if(!R.bs)return true;const{x,bs}=R;if(x.as!==bs.as||(x.mot||'')!==(bs.mot||'')||!!x.alt!==!!bs.alt||(x.sal||'')!==(bs.sal||''))return true;
   for(const pc of new Set([...Object.keys(x.h||{}),...Object.keys(bs.h||{})]))if((x.h[pc]||0)!==(bs.h[pc]||0))return true;
-  return TR.fir[d]!==TR.b.fir[d]||(TR.gar[d]||'')!==(TR.b.gar[d]||'')}
-function txCellCh(R,col){if(!col.ed&&!col.pc&&col.k!=='fir'&&col.k!=='gar')return false;if(!R.bs)return!!(col.ed||col.pc);const{x,bs,d}=R;
+  return false}
+function txCellCh(R,col){if(!col.ed&&!col.pc)return false;if(!R.bs)return true;const{x,bs}=R;
   if(col.pc)return(x.h[col.pc]||0)!==(bs.h[col.pc]||0);
-  switch(col.k){case'as':return x.as!==bs.as;case'mot':return(x.mot||'')!==(bs.mot||'');case'alt':return!!x.alt!==!!bs.alt;case'sal':return(x.sal||'')!==(bs.sal||'');
-    case'fir':return TR.fir[d]!==TR.b.fir[d];case'gar':return(TR.gar[d]||'')!==(TR.b.gar[d]||'')}return false}
+  switch(col.k){case'as':return x.as!==bs.as||(x.mot||'')!==(bs.mot||'');case'alt':return!!x.alt!==!!bs.alt}return false}
 /** valor de una celda (número o texto; '' vacía): lo que se copia, se ordena y se suma */
 function txVal(R,col){const{x,r,c}=R;const pres=x.as===true;if(col.pc)return x.h[col.pc]||'';
   switch(col.k){case'n':return R.i;case'dni':return R.d;case'nm':return trNm(r)||R.d;case'cua':return r.cua||'';case'cat':return r.cat||'';
-    case'as':return x.as===true?'Sí':x.as===false?'No':'';case'mot':return x.as===false?(x.mot||''):'';
+    case'as':return x.as===true?'Vino':x.as===false?(x.mot||'No vino'):'';
     case'tot':return pres?(c.trab||0):'';case'he':return pres&&c.ext?c.ext:'';case'fdo':return R.b&&R.b.as===true?trHrsTot(R.b):'';
-    case'alt':return pres&&x.alt?'A':'';case'sal':return pres?(x.sal||''):'';
-    case'fir':return pres?(r.fir===true?'Sí':r.fir===false?'No':''):'';case'gar':return pres?(r.gar||''):'';
+    case'alt':return pres&&x.alt?'A':'';
     case'obs':return R.ob.map(o=>TR_TAG[o.k]||'Revisar').join(', ')}return''}
 const txRaw=(R,col)=>{const v=txVal(R,col);return v==null?'':String(v)};
 /* valor para los filtros (lo que se ve en la lista del menú) */
-function txFv(R,col){if(col.k==='as')return R.x.as===true?'Vino':R.x.as===false?'No vino':'Sin marcar';const v=txVal(R,col);if(v===''||v==null)return TX_EMPTY;return typeof v==='number'?toH(v):String(v)}
+function txFv(R,col){if(col.k==='as')return R.x.as===true?'Vino':R.x.as===false?(R.x.mot?'No vino · '+R.x.mot:'No vino'):'Sin marcar';const v=txVal(R,col);if(v===''||v==null)return TX_EMPTY;return typeof v==='number'?toH(v):String(v)}
 const txFvCmp=col=>(a,b)=>a===b?0:a===TX_EMPTY?1:b===TX_EMPTY?-1:col.num?(parseFloat(a.replace(/,/g,''))-parseFloat(b.replace(/,/g,''))):a.localeCompare(b,'es',{numeric:true});
 /** ¿la fila pasa los filtros? (skip: la columna cuyo menú se arma, para ofrecer sus valores como en Excel) */
 function txPass(R,X,skip){if(TX.q){const q=txNorm(TX.q).trim();if(q&&!txNorm([R.d,trNm(R.r),R.r.cua,R.r.cat].join(' ')).includes(q))return false}
@@ -958,76 +929,71 @@ function txPass(R,X,skip){if(TX.q){const q=txNorm(TX.q).trim();if(q&&!txNorm([R.
   return true}
 /** ¿se puede escribir en esa celda? */
 function txEd(R,col,X){if(!col.ed||!TR.ed||!TR.ed.g)return false;const pres=R.x.as===true;
-  if(col.k==='as')return true;if(col.k==='mot')return R.x.as===false;if(col.pc||col.k==='alt'||col.k==='sal')return pres;
-  if(col.k==='fir')return X.cot&&pres&&!!R.b&&X.fok;if(col.k==='gar')return X.cot&&pres&&!!R.b;return false}
+  if(col.k==='as')return true;if(col.pc||col.k==='alt')return pres;return false}
 function txWhy(R,col,X){const pres=R.x.as===true;
   if(['n','dni','nm','cua','cat'].includes(col.k))return'Los datos del obrero vienen del máster de Personal.';
+  if(col.k==='padd')return'Usa «+» de su encabezado para agregar una partida.';
   if(['tot','he','fdo','obs','x'].includes(col.k))return'Esta columna se calcula: no se escribe.';
-  if(col.k==='mot')return'El motivo es solo para los que no vinieron.';
-  if(col.k==='fir'||col.k==='gar'){if(!X.cot)return X.t.st==='rev'?'Revisado: usa «Quitar revisado» para cambiar el cotejo.':'El cotejo se hace en un tareo «Enviado».';
-    if(!pres)return'Solo se coteja a los que vinieron.';if(!R.b)return'Guarda primero: el obrero recién agregado se coteja después.';return'Espera a que cargue la foto del formato para cotejar.'}
-  if(!pres)return'No vino: pon «Sí» en «Vino» para ponerle horas.';return'Esta celda no se edita.'}
+  if(!pres)return'No vino: escribe S en «Asistencia» para ponerle horas.';return'Esta celda no se edita.'}
 const txTotK=(R,X)=>{const v=R.c.trab||0;if(v<=0||v>16)return'bad';if(X.D.nl||!(X.D.jh>0))return'wn';return v===X.D.jh?'ok':'wn'};
-function txTd(R,col,X){const{x,r,c,d}=R;const pres=x.as===true;const v=txVal(R,col);let cls='tx-c'+(col.fz?' tx-fz':'')+(col.num?' tx-n':'');let h='',id='';
-  if(col.ed||col.pc||col.k==='fir'||col.k==='gar')cls+=txEd(R,col,X)?' tx-e':' tx-ro';if(txCellCh(R,col))cls+=' tx-ch';
+const txFzA=col=>col.fz?` style="left:${col.left}px"`:'';
+const txFzC=col=>(col.fz?' tx-fz':'')+(col.fzl?' tx-fzl':'');
+function txTd(R,col,X){const{x,r,c,d}=R;const pres=x.as===true;const v=txVal(R,col);let cls='tx-c'+txFzC(col)+(col.num?' tx-n':'');let h='',id='';
+  if(col.ed||col.pc)cls+=txEd(R,col,X)?' tx-e':' tx-ro';if(txCellCh(R,col))cls+=' tx-ch';
   if(col.pc){id=` id="trh_${esc(d)}_${esc(col.pc)}"`;h=v?toH(v):'';if(!pres&&v)cls+=' tx-x';if(col.bloq&&v&&pres)cls+=' tx-bad'}
   else switch(col.k){
     case'n':h=String(R.i);break;case'dni':h=esc(d);break;
     case'nm':{const aj=r.ajeno||(x.nw&&x.nw.ajeno);h=`<b>${esc(r.ape||d)}</b>${r.nom?` <span class="tx-nom">${esc(r.nom)}</span>`:''}${R.bs?'':' <span class="tx-tag tx-tnw">nuevo</span>'}${aj?' <span class="tx-tag" title="No es de la cuadrilla de este capataz">otra cuadrilla</span>':''}`;cls+=' tx-nm';break}
     case'cua':h=esc(r.cua||'');break;case'cat':h=esc(r.cat||'');break;
-    case'as':h=x.as===true?'<span class="tx-si">Sí</span>':x.as===false?'<span class="tx-no">No</span>':'<span class="tx-smk">Sin marcar</span>';break;
-    case'mot':h=x.as===false&&x.mot?`<span title="${esc(TO_MOT[x.mot]||'')}">${esc(x.mot)}</span>`:'';break;
+    case'as':h=x.as===true?'<span class="tx-si">Vino</span>':x.as===false?`<span class="tx-no">No vino</span>${x.mot?` · <b title="${esc(TO_MOT[x.mot]||'')}">${esc(x.mot)}</b>`:''}`:'<span class="tx-smk">Sin marcar</span>';break;
+    case'padd':cls+=' tx-pac';break;
     case'tot':id=` id="trht_${esc(d)}"`;if(pres){cls+=' tx-'+txTotK(R,X);h=toH(c.trab||0)}break;
     case'he':id=` id="trhe_${esc(d)}"`;h=pres&&c.ext?toH(c.ext):'';break;
     case'fdo':h=v===''?'':toH(v);cls+=R.tch?' tx-fdc':' tx-mu';break;
-    case'alt':h=pres&&x.alt?'<b>(A)</b>':'';break;case'sal':h=pres&&x.sal?esc(x.sal):'';break;
-    case'fir':h=!pres?'':r.fir===true?'<span class="tx-si">Sí</span>':r.fir===false?'<span class="tx-no">No firmó</span>':X.cot&&R.b?'<span class="tx-pend">Por cotejar</span>':'';break;
-    case'gar':h=pres&&r.gar?esc(r.gar):'';if(R.ob.some(o=>o.k==='gar'))cls+=' tx-wn';break;
+    case'alt':h=pres&&x.alt?'<b>(A)</b>':'';break;
     case'obs':h=R.ob.map(o=>`<span class="tr-tg${o.bl?' tr-tgb':''}" data-k="${esc(o.k)}" title="${esc(o.msg)}">${esc(TR_TAG[o.k]||'Revisar')}</span>`).join('');cls+=' tx-ob';break;
     case'x':{const nm=esc(r.ape||d);h=`${R.bs&&X.pas?`<button class="tx-rb" data-tra="pas" data-v="${esc(d)}" title="Pasar a otro capataz…" aria-label="Pasar a ${nm} a otro capataz" tabindex="-1">⇄</button>`:''}<button class="tx-rb tx-rbx" data-txa="rm" data-v="${esc(d)}" title="Quitar del tareo (Ctrl+Z deshace)" aria-label="Quitar a ${nm} del tareo" tabindex="-1">✕</button>`;cls+=' tx-xc';break}}
-  return`<td class="${cls}"${id}>${h}</td>`}
-function txTable(X){const{cols,rows}=X;const wd=(c,j)=>c.fz?TX_FZW[j]:c.w;const W=cols.reduce((s,c,j)=>s+wd(c,j),0);
+  return`<td class="${cls}"${id}${txFzA(col)}>${h}</td>`}
+function txTable(X){const{cols,rows}=X;const W=cols.reduce((s2,c)=>s2+c.w,0);
   const th=cols.map((c,j)=>{const f=!!TX.flt[c.k]||(c.k==='tot'&&TX.fx.has('nej'));const so=TX.sort&&TX.sort.k===c.k?TX.sort.dir:0;
-    return`<th class="tx-h${c.fz?' tx-fz':''}${c.num?' tx-n':''}${c.pc?' tx-hp':''}${c.bloq?' tx-hb':''}${f?' tx-hf':''}" data-k="${esc(c.k)}"${c.pc?` data-pc="${esc(c.pc)}"`:''} scope="col"${c.t?` title="${esc(c.t)}"`:''}${so?` aria-sort="${so>0?'ascending':'descending'}"`:''}><span class="tx-hl"><b>${esc(c.l)}${so?`<i class="tx-so" aria-hidden="true">${so>0?'↑':'↓'}</i>`:''}</b>${c.sub?`<small>${esc(c.sub)}</small>`:''}</span>${c.nof?'':`<button class="tx-fb${f?' on':''}" data-txf="${esc(c.k)}" aria-label="Filtrar y ordenar: ${esc(c.l)}" aria-haspopup="dialog" tabindex="-1">${f?TX_IC.flt:TX_IC.dn}</button>`}${c.pc?`<button class="tx-fb tx-hx" data-tra="pcdel" data-v="${esc(c.pc)}" aria-label="Quitar la partida ${esc(c.l)}" title="Quitar la partida del día" tabindex="-1">✕</button>`:''}</th>`}).join('');
+    if(c.k==='padd')return`<th class="tx-h tx-hpa" data-k="padd" scope="col"><button class="tx-pab" data-txa="addp" id="txAddP" title="Agregar una partida del día" aria-label="Agregar una partida del día" tabindex="-1">+</button></th>`;
+    return`<th class="tx-h${txFzC(c)}${c.num?' tx-n':''}${c.pc?' tx-hp':''}${c.bloq?' tx-hb':''}${f?' tx-hf':''}" data-k="${esc(c.k)}"${c.pc?` data-pc="${esc(c.pc)}"`:''}${txFzA(c)} scope="col"${c.t?` title="${esc(c.t)}"`:''}${so?` aria-sort="${so>0?'ascending':'descending'}"`:''}><span class="tx-hl"><b>${esc(c.l)}${so?`<i class="tx-so" aria-hidden="true">${so>0?'↑':'↓'}</i>`:''}</b>${c.sub?`<small>${esc(c.sub)}</small>`:''}</span>${c.nof?'':`<button class="tx-fb${f?' on':''}" data-txf="${esc(c.k)}" aria-label="Filtrar y ordenar: ${esc(c.l)}" aria-haspopup="dialog" tabindex="-1">${f?TX_IC.flt:TX_IC.dn}</button>`}${c.pc?`<button class="tx-fb tx-hx" data-tra="pcdel" data-v="${esc(c.pc)}" aria-label="Quitar la partida ${esc(c.l)}" title="Quitar la partida del día" tabindex="-1">✕</button>`:''}</th>`}).join('');
   const body=rows.map((R,i)=>{const{x}=R;const cl=[x.as===true?'':x.as===false?'tx-no':'tx-sm',R.tch?'tx-tch':'',R.bs?'':'tx-new',R.ob.some(o=>o.bl)?'tx-bl':''].filter(Boolean).join(' ');
       return`<tr data-dni="${esc(R.d)}"${cl?` class="${cl}"`:''}>${cols.map(c=>txTd(R,c,X)).join('')}<td class="tx-fill"></td></tr>`}).join('')
-    ||`<tr class="tx-empty"><td colspan="${cols.length+1}">${X.all.length?'Ningún obrero cumple los filtros. <button class="ib" data-txa="clr">Limpiar filtros</button>':'No hay obreros en este tareo: usa «+ Obrero».'}</td></tr>`;
+    ||`<tr class="tx-empty"><td colspan="${cols.length+1}">${X.all.length?'Ningún obrero cumple los filtros. <button class="ib" data-txa="clr">Limpiar filtros</button>':'No hay obreros en este tareo: usa «+ Agregar obrero».'}</td></tr>`;
+  /* última fila: «+ Agregar obrero» (pedido del dueño, 20-10-2026); va en un tbody aparte para no mezclarse con la selección */
+  const add=`<tbody class="tx-addb"><tr><td colspan="${cols.length+1}"><button class="tx-addo" data-txa="addo" id="txAddO" title="Agrega un obrero del máster a este tareo">+ Agregar obrero</button></td></tr></tbody>`;
   const P=rows.filter(R=>R.x.as===true);const sm=f=>toH(tR2(P.reduce((s,R)=>s+(+f(R)||0),0)));
   const ft=cols.map(c=>{let h='',id='';
     if(c.k==='nm')h=`<b>Total</b> <span class="note">${P.length} ${P.length===1?'vino':'vinieron'}${rows.length<X.all.length?' · filtrado':''}</span>`;
     else if(c.pc){id=` id="trhc_${esc(c.pc)}"`;h=sm(R=>R.x.h[c.pc])}else if(c.k==='tot'){id=' id="trhg"';h=sm(R=>R.c.trab)}else if(c.k==='he'){id=' id="trhx"';h=sm(R=>R.c.ext)}
     else if(c.k==='fdo')h=sm(R=>R.b&&R.b.as===true?trHrsTot(R.b):0);
-    return`<td class="tx-c${c.fz?' tx-fz':''}${c.num?' tx-n':''}"${id}>${h}</td>`}).join('');
+    return`<td class="tx-c${txFzC(c)}${c.num?' tx-n':''}"${id}${txFzA(c)}>${h}</td>`}).join('');
   /* la última columna (sin ancho) se queda con el sobrante: las demás miden siempre lo mismo (las fijas no se corren) */
-  return`<table class="tx-t" id="txT" style="min-width:${W+24}px"><colgroup>${cols.map((c,j)=>`<col style="width:${wd(c,j)}px">`).join('')}<col></colgroup><thead><tr>${th}<th class="tx-fill" aria-hidden="true"></th></tr></thead><tbody>${body}</tbody><tfoot><tr>${ft}<td class="tx-fill"></td></tr></tfoot></table>`}
+  return`<table class="tx-t" id="txT" style="min-width:${W+24}px"><colgroup>${cols.map((c,j)=>`<col style="width:${c.w}px">`).join('')}<col></colgroup><thead><tr>${th}<th class="tx-fill" aria-hidden="true"></th></tr></thead><tbody>${body}</tbody>${add}<tfoot><tr>${ft}<td class="tx-fill"></td></tr></tfoot></table>`}
 const txAny=()=>!!(Object.keys(TX.flt).length||TX.q.trim()||TX.fx.size);
 const txCntTxt=X=>X.rows.length===X.all.length?`${X.all.length} ${X.all.length===1?'obrero':'obreros'}`:`Mostrando ${X.rows.length} de ${X.all.length}`;
 function txBarHtml(X){const chips=Object.entries(TX.flt).map(([k,S2])=>{const c=X.cols.find(z=>z.k===k);if(!c)return'';const L=S2.hon?['con horas']:[...S2];
     return`<span class="tx-chip" data-k="${esc(k)}"><span><b>${esc(c.l)}</b> ${esc(L.slice(0,2).join(', '))}${L.length>2?` +${L.length-2}`:''}</span><button data-txcx="${esc(k)}" aria-label="Quitar el filtro de ${esc(c.l)}" title="Quitar este filtro">✕</button></span>`}).join('');
-  const cols=trEdCols(X.e);const opts=[...S.tpc.values()].filter(x=>x&&x.id&&!x.arch&&x.act!==false&&x.bloq!==true&&!cols.includes(x.id)).sort((a,b)=>tCmpCod(a.cod,b.cod));
-  const P=X.all.filter(R=>R.x.as===true&&R.b);const nCot=P.filter(R=>R.r.fir===true||R.r.fir===false).length;
   return`<div class="tx-bar" id="txBar"><div class="tx-tools" role="toolbar" aria-label="Herramientas de la hoja">
-    <button class="ib tx-fo${TR.pfo?' on':''}" data-tra="pfo" id="trPfo" aria-pressed="${!!TR.pfo}" title="Muestra u oculta la foto del formato (arrastra su borde para cambiar el ancho)">${TR.pfo?'Ocultar foto':'Ver foto'}</button>
     <span class="tx-grp"><button class="ib tx-ic" data-txa="un" id="txUn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${TX.un.length?'':' disabled'}>↶</button><button class="ib tx-ic" data-txa="re" id="txRe" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${TX.re.length?'':' disabled'}>↷</button></span>
-    <span class="tx-grp"><button class="ib" data-txa="fill" id="txFill" title="Pone un mismo valor en las celdas elegidas · Ctrl+D copia la primera fila hacia abajo">Rellenar con…</button><button class="ib" data-tra="mv" id="trMv" title="Pasa horas de la celda elegida a otra partida (su total no cambia)">Mover horas…</button>${X.cot&&P.length?`<button class="ib" data-tra="all" id="trAll"${X.fok?'':' disabled title="Espera a que cargue la foto del formato"'}>Todos firmaron</button>`:''}</span>
-    <span class="tx-grp"><button class="ib" data-txa="addo" id="txAddO" title="Agrega un obrero del máster a este tareo">+ Obrero</button><select class="tin tx-pcadd" id="trPcAdd" aria-label="Agregar una partida del día"><option value="">+ Partida…</option>${opts.map(x=>`<option value="${esc(x.id)}">${esc(x.cod)} · ${esc(x.nom)}</option>`).join('')}</select></span>
+        <span class="tx-grp"><button class="tx-tg" data-txa="cc" id="txCc" aria-pressed="${!!TX.cc}" title="Muestra u oculta las columnas Cuadrilla y Categoría">Cuadrilla y categoría</button></span>
 </div>
    <div class="tx-flts"><label class="tx-q">${TX_IC.q}<input class="tin" id="txQ" type="search" placeholder="Buscar obrero, DNI o cuadrilla" value="${esc(TX.q)}" aria-label="Buscar en la hoja" autocomplete="off"></label>
     <button class="tx-tg" data-txfx="chg" aria-pressed="${TX.fx.has('chg')}" title="Solo las filas que cambiaste">Solo cambiados</button>
     <button class="tx-tg" data-txfx="nej" aria-pressed="${TX.fx.has('nej')}" title="Solo los que vinieron y no suman la jornada del día">Total ≠ jornada</button>
     <span class="tx-chips" id="txChips">${chips}</span>
     <button class="ib tx-clr" data-txa="clr" id="txClr"${txAny()?'':' hidden'}>Limpiar filtros</button>
-    <span class="note tx-cnt"><span id="txCnt">${txCntTxt(X)}</span> · ${X.D.nl?'día no laborable: todo es extra':`jornada ${toH(X.D.jh)} h`}${X.cot?` · <span id="trCotN">${nCot} de ${P.length} cotejados</span>`:''}</span></div></div>`}
+    <span class="note tx-cnt"><span id="txCnt">${txCntTxt(X)}</span> · ${X.D.nl?'día no laborable: todo es extra':`jornada ${toH(X.D.jh)} h`}</span></div></div>`}
 function trHistHtml(t){const hist=(Array.isArray(t.hist)?t.hist:[]).slice().sort((a,b)=>(a.t||0)-(b.t||0));
   return`<details class="card tr-dt" id="trHistD" data-trop="hist"${TR.op.hist?' open':''}><summary><b>Historial</b> <span class="note">${hist.length}</span></summary>
     ${hist.length?`<ul class="t-list to-hist" id="trHist">${hist.map(x=>`<li data-a="${esc(x.a||'')}"><span class="mono">${esc(fmtD(ldt(x.t||0)))} ${esc(tHm(x.t))}</span> · <b>${esc(TO_HA[x.a]||x.a||'')}</b> · ${esc(toWho(x.by))}${x.mot?': '+esc(x.mot):''}${x.cam?`<div class="t-chg">${esc(x.cam)}</div>`:''}</li>`).join('')}</ul>`:'<p class="note">Sin movimientos.</p>'}</details>`}
 /** panel derecho en la hoja: avisos, observaciones (plegables), herramientas y filtros, la hoja, la barra de suma e historial */
-function txPanel(t,M){const X=txCtx(t);TX.X=X;txFix(X);const ch=trPrTotCh(X.e.base,X.nd);const vis=X.ob.filter(o=>o.k!=='firp');const nb=vis.filter(o=>o.bl).length;
+function txPanel(t,M){const X=txCtx(t);TX.X=X;txFix(X);const ch=trPrTotCh(X.e.base,X.nd);const vis=X.ob;const nb=vis.filter(o=>o.bl).length;
   const oo=!!TR.op.obs;/* plegadas: cada fila lleva sus etiquetas en «Observaciones» */
   return`<div id="trAv">${trAvisos()}</div>
    ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
-   ${t.prod&&t.prod.t?`<div class="callout tr-okc tr-prodn" id="trProdV">Revisado por producción: ${esc(t.prod.byN||toWho(t.prod.by))} · ${esc(fmtD(ldt(t.prod.t)))} ${esc(tHm(t.prod.t))}.</div>`:''}
-   ${tCotVieja(t)?`<div class="callout t-warn" id="trCotV">El capataz cambió las fotos después del cotejo: vuelve a cotejar las firmas con el formato nuevo.</div>`:''}
+
    <div id="trPrTotW">${trPrTotHtml(ch)}</div>
    ${vis.length?`<details class="callout t-warn to-obs tx-obs" id="trObs" data-trop="obs"${oo?' open':''}><summary><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b>${nb?` <span class="tx-obn">${nb} ${nb===1?'impide':'impiden'} marcar revisado</span>`:''}</summary><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></details>`:''}
    <section class="card tx-card" aria-label="Hoja del tareo">${txBarHtml(X)}
@@ -1044,11 +1010,11 @@ function txRect(X){const a=txPos(X);if(!a)return null;let f=txIx(X,TX.f);if(!f||
 const txCell=(r,c)=>{const T=$('#txT');const tr=T&&T.tBodies[0].rows[r];return tr&&!tr.classList.contains('tx-empty')?tr.cells[c]:null};
 /** barra de abajo: celda o rango elegido, Suma, Promedio y Cuenta (como Excel) */
 function txSumHtml(X){const s=txRect(X);if(!s)return'<span class="note">Elige una celda.</span>';let n=0,sum=0,cnt=0;
-  for(let r=s.r0;r<=s.r1;r++)for(let c=s.c0;c<=s.c1;c++){const col=X.cols[c],R=X.rows[r];if(col.k==='x')continue;const v=txVal(R,col);if(v!==''&&v!=null)cnt++;
+  for(let r=s.r0;r<=s.r1;r++)for(let c=s.c0;c<=s.c1;c++){const col=X.cols[c],R=X.rows[r];if(col.k==='x'||col.k==='padd')continue;const v=txVal(R,col);if(v!==''&&v!=null)cnt++;
     if(typeof v==='number'&&col.k!=='n'&&!(col.pc&&R.x.as!==true)){sum+=v;n++}}
   const R=X.rows[s.ar],col=X.cols[s.ac];const one=s.r0===s.r1&&s.c0===s.c1;
   const adr=one?`${R.r.ape||R.d} · ${col.l||'Acciones'}`:`${s.r1-s.r0+1} ${s.r1>s.r0?'filas':'fila'} × ${s.c1-s.c0+1} ${s.c1>s.c0?'columnas':'columna'}`;
-  return`<span class="tx-adr" id="txAdr">${esc(adr)}</span>${n?`<span>Suma <b id="txSs">${toH(tR2(sum))}</b></span><span>Promedio <b id="txSp">${toH(tR2(sum/n))}</b></span>`:''}<span>Cuenta <b id="txSc">${cnt}</b></span><span class="tx-kh">F2 edita · Ctrl+C / Ctrl+V · Ctrl+D rellena · Ctrl+Z deshace</span>`}
+  return`<span class="tx-adr" id="txAdr">${esc(adr)}</span>${n?`<span>Suma <b id="txSs">${toH(tR2(sum))}</b></span><span>Promedio <b id="txSp">${toH(tR2(sum/n))}</b></span>`:''}<span>Cuenta <b id="txSc">${cnt}</b></span><span class="tx-kh">Elige celdas, escribe y Ctrl+Enter rellena todas · Ctrl+C / Ctrl+V · Ctrl+Z deshace</span>`}
 /** pinta la selección (sin redibujar la tabla) y actualiza la barra de suma */
 function txPaint(){const X=TX.X;const T=$('#txT');if(!X||!T)return;
   T.querySelectorAll('.tx-sel,.tx-act,.tx-hs').forEach(z=>z.classList.remove('tx-sel','tx-act','tx-hs'));
@@ -1061,7 +1027,7 @@ function txPaint(){const X=TX.X;const T=$('#txT');if(!X||!T)return;
 /* lleva la celda activa a la vista (descontando encabezado, totales y columnas fijos) */
 function txReveal(){const W=$('#txW');const s=TX.X&&txRect(TX.X);const a=s&&txCell(s.ar,s.ac);if(!W||!a)return;
   const wr=W.getBoundingClientRect(),r=a.getBoundingClientRect();const T=$('#txT');const th=T.tHead.getBoundingClientRect().height,tf=T.tFoot?T.tFoot.getBoundingClientRect().height:0;
-  const fzw=a.classList.contains('tx-fz')?0:TX_FZW.reduce((x,y)=>x+y,0);const top=wr.top+th,bot=wr.top+W.clientHeight-tf,lft=wr.left+fzw,rgt=wr.left+W.clientWidth;
+  const fzw=a.classList.contains('tx-fz')?0:txFzW(TX.X);const top=wr.top+th,bot=wr.top+W.clientHeight-tf,lft=wr.left+fzw,rgt=wr.left+W.clientWidth;
   if(r.top<top)W.scrollTop-=top-r.top;else if(r.bottom>bot)W.scrollTop+=r.bottom-bot;
   if(r.left<lft)W.scrollLeft-=lft-r.left;else if(r.right>rgt)W.scrollLeft+=r.right-rgt}
 function txGo(r,c,ext){const X=TX.X;if(!X||!X.rows.length)return;r=Math.max(0,Math.min(X.rows.length-1,r));c=Math.max(0,Math.min(X.cols.length-1,c));
@@ -1077,33 +1043,41 @@ function txDo(fn){if(!TR.ed)return;const s0=txSnap();const j0=JSON.stringify(s0)
 function txRestore(s){TR.ed.rows=clone(s.rows);TR.ed.pcs=s.pcs.slice();TR.fir={...s.fir};TR.gar={...s.gar};trDirty();trDraw(true);txFocus()}
 function txUndo(){if(!TR.ed||!TX.un.length){toast('No hay nada que deshacer.');return}TX.re.push(txSnap());txRestore(TX.un.pop())}
 function txRedo(){if(!TR.ed||!TX.re.length){toast('No hay nada que rehacer.');return}TX.un.push(txSnap());txRestore(TX.re.pop())}
+/* motivo de falta escrito en «Asistencia»: «FA», «No vino · DM», «dm» → código; '' si no es un motivo */
+const txMotOf=s=>{const w=String(s||'').toUpperCase().split(/[\s·,]+/).filter(Boolean);for(const x of w.reverse())if(TO_MOT[x])return x;return''};
 /** escribe un valor en la celda (d, k) → {s:'ok'|'skip'|'bad', msg?, rnd? (horas redondeadas a media hora)} */
 function txSet(d,k,raw){const X=TX.X;const e=TR.ed;const R=X&&X.all.find(z=>z.d===d);const col=X&&X.cols.find(z=>z.k===k);if(!e||!R||!col||!e.rows[d])return{s:'skip'};
   if(!txEd(R,col,X))return{s:'skip'};const x=e.rows[d];const s=String(raw==null?'':raw).trim();
   if(col.pc){const n=trHParse(s);if(Number.isNaN(n)||n<0)return{s:'bad',msg:'Escribe las horas con números (por ejemplo 8 o 4,5).'};const r=Math.min(24,Math.round(n*2)/2);if(r)x.h[col.pc]=r;else delete x.h[col.pc];return{s:'ok',rnd:r!==n?r:null}}
   switch(k){
-    case'as':{if(!s)return{s:'skip'};const v=txBool(s);if(v==null)return{s:'bad',msg:'«Vino»: escribe Sí o No.'};x.as=v;if(v)x.mot='';else x.alt=false;return{s:'ok'}}
-    case'mot':{const m=s.toUpperCase().split(/[\s·]/)[0]||'';if(m&&!TO_MOT[m])return{s:'bad',msg:`Motivo no válido: usa ${Object.keys(TO_MOT).join(', ')}.`};x.mot=m;return{s:'ok'}}
-    case'alt':{const v=s?txBool(s,true):false;if(v==null)return{s:'bad',msg:'«Altura»: escribe A o déjala vacía.'};x.alt=v;return{s:'ok'}}
-    case'sal':{const h=txHm(s);if(h==null)return{s:'bad',msg:'Escribe la hora como 15:30.'};x.sal=h;return{s:'ok'}}
-    case'fir':{const v=s?txBool(s):null;if(s&&v==null)return{s:'bad',msg:'«Firmó»: escribe Sí o No.'};TR.nota='';if(v==null)delete TR.fir[d];else TR.fir[d]=v;trDirty();return{s:'ok'}}
-    case'gar':{const h=txHm(s);if(h==null)return{s:'bad',msg:'Escribe la hora como 17:05.'};if(h)TR.gar[d]=h;else delete TR.gar[d];trDirty();return{s:'ok'}}}
+    case'as':{if(!s)return{s:'skip'};const m=txMotOf(s);
+      if(m){x.as=false;x.mot=m;x.alt=false;return{s:'ok'}}
+      const v=txBool(s);if(v==null)return{s:'bad',msg:`«Asistencia»: escribe S (vino), N (no vino) o el motivo: ${Object.keys(TO_MOT).join(', ')}.`};
+      if(v){x.as=true;x.mot=''}else{if(x.as!==false)x.mot='';x.as=false;x.alt=false}return{s:'ok'}}
+    case'alt':{const v=s?txBool(s,true):false;if(v==null)return{s:'bad',msg:'«Altura»: escribe A o déjala vacía.'};x.alt=v;return{s:'ok'}}}
   return{s:'skip'}}
 /* --- edición de una celda: un campo encima de la celda (F2, doble clic o escribir directo, que reemplaza) --- */
 function txEdit(init){const X=TX.X;const s=X&&txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];
   if(!txEd(R,col,X)){toast(txWhy(R,col,X));return}
-  TX.f=TX.a;txPaint();txReveal();const td=txCell(s.ar,s.ac);if(!td)return;const cur=init!=null?init:txRaw(R,col);
-  TX.ing={d:R.d,k:col.k,rep:init!=null};td.classList.add('tx-ing');
-  td.innerHTML=`<input id="txIn" class="tx-in${col.num?' tx-n':''}" autocomplete="off" spellcheck="false"${col.pc?' inputmode="decimal"':''}${col.k==='mot'?' list="txMotL"':''} aria-label="${esc((R.r.ape||R.d)+' · '+col.l)}" value="${esc(cur)}">${col.k==='mot'?`<datalist id="txMotL">${Object.entries(TO_MOT).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</datalist>`:''}`;
+  /* la selección se conserva mientras se escribe: Ctrl+Enter pone el valor en todas las celdas elegidas (como Excel) */
+  txPaint();txReveal();const td=txCell(s.ar,s.ac);if(!td)return;const cur=init!=null?init:txRaw(R,col);
+  TX.ing={d:R.d,k:col.k,rep:init!=null,multi:s.r0!==s.r1||s.c0!==s.c1};td.classList.add('tx-ing');
+  td.innerHTML=`<input id="txIn" class="tx-in${col.num?' tx-n':''}" autocomplete="off" spellcheck="false"${col.pc?' inputmode="decimal"':''}${col.k==='as'?' list="txMotL"':''} aria-label="${esc((R.r.ape||R.d)+' · '+col.l)}" value="${esc(cur)}">${col.k==='as'?`<datalist id="txMotL"><option value="Vino">S</option><option value="No vino">N</option>${Object.entries(TO_MOT).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</datalist>`:''}`;
   const i=$('#txIn');i.focus();if(init!=null)i.setSelectionRange(cur.length,cur.length);else i.select()}
 /** termina la edición y guarda el valor (mv: 'u'|'d'|'l'|'r' mueve la celda activa, como Enter o Tab en Excel) */
-function txCommit(mv){const ing=TX.ing;if(!ing)return;const i=$('#txIn');const v=i?i.value:'';TX.ing=null;txFocus();let o={s:'skip'};
+function txCommit(mv){const ing=TX.ing;if(!ing)return;const i=$('#txIn');const v=i?i.value:'';TX.ing=null;if(ing.multi)TX.f=TX.a;txFocus();let o={s:'skip'};
   txDo(()=>{o=txSet(ing.d,ing.k,v)});trDraw(true);
   if(o.s==='bad')toast(o.msg);else if(o.rnd!=null)toast(`Las horas van de media en media: quedó ${trHFmt(o.rnd)||'0'}.`);
   if(mv){const X=TX.X;const p=X&&txPos(X);if(p){const d={u:[-1,0],d:[1,0],l:[0,-1],r:[0,1]}[mv];txGo(p.r+d[0],p.c+d[1])}}}
 function txCancel(){TX.ing=null;txFocus();trDraw(true)}
+/** Ctrl+Enter con la celda en edición: el valor escrito va a todas las celdas elegidas que se pueden editar (las demás se saltan) */
+function txCommitFill(){const ing=TX.ing;if(!ing)return;const X=TX.X;const s=X&&txRect(X);const i=$('#txIn');const v=i?i.value:'';TX.ing=null;txFocus();
+  if(!s){trDraw(true);return}let n=0,bad='';
+  txDo(()=>{for(let r=s.r0;r<=s.r1;r++)for(let c=s.c0;c<=s.c1;c++){const R=X.rows[r],col=X.cols[c];if(!R||!col)continue;const o=txSet(R.d,col.k,v);if(o.s==='ok')n++;else if(o.s==='bad')bad=bad||o.msg}});
+  trDraw(true);const tot=(s.r1-s.r0+1)*(s.c1-s.c0+1);
+  toast(n?(tot>1?`Se ${n===1?'rellenó 1 celda':'rellenaron '+n+' celdas'}${n<tot?` · ${tot-n} no se editan`:''}.${bad?' '+bad:''}`:'Listo.'):(bad||'Nada que rellenar: esas celdas no se editan.'))}
 function txToggle(){const X=TX.X;const s=txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];if(!txEd(R,col,X)){toast(txWhy(R,col,X));return}
-  const v=col.k==='as'?(R.x.as===true?'No':'Sí'):col.k==='alt'?(R.x.alt?'':'A'):(R.r.fir===true?'No':R.r.fir===false?'':'Sí');
+  const v=col.k==='as'?(R.x.as===true?'No':'Sí'):(R.x.alt?'':'A');
   txDo(()=>txSet(R.d,col.k,v));trDraw(true)}
 /** Supr: vacía las celdas elegidas que se pueden editar (la asistencia no se vacía) */
 function txClear(){const X=TX.X;const s=txRect(X);if(!s)return;let n=0;
@@ -1115,7 +1089,7 @@ function txFillDown(){const X=TX.X;const s=txRect(X);if(!s)return;let src=s.r0,f
   trDraw(true);toast(n?`Se ${n===1?'rellenó 1 celda':'rellenaron '+n+' celdas'}.`:'Nada que rellenar: esas celdas no se editan.')}
 /** «Rellenar con…»: un mismo valor en todas las celdas elegidas que se pueden editar */
 async function txFillWith(){const X=TX.X;const s=X&&txRect(X);if(!s)return;const n0=(s.r1-s.r0+1)*(s.c1-s.c0+1);const e=TR.ed;
-  const v=await uiAsk({title:'Rellenar con…',text:`Escribe el valor para ${n0===1?'la celda elegida':`las ${n0} celdas elegidas`} (horas como 8 o 4,5; Vino: Sí o No; Altura: A; horas del día como 15:30). Las celdas que no se editan se saltan.`,input:{label:'Valor',required:false},ok:'Rellenar',tone:'info'});
+  const v=await uiAsk({title:'Rellenar con…',text:`Escribe el valor para ${n0===1?'la celda elegida':`las ${n0} celdas elegidas`} (horas como 8 o 4,5; Asistencia: S, N o el motivo; Altura: A). Las celdas que no se editan se saltan.`,input:{label:'Valor',required:false},ok:'Rellenar',tone:'info'});
   if(v==null||v===false||TR.ed!==e||!TX.X)return;let n=0,bad='';
   txDo(()=>{for(let r=s.r0;r<=s.r1;r++)for(let c=s.c0;c<=s.c1;c++){const R=TX.X.rows[r],col=TX.X.cols[c];if(!R||!col)continue;const o=txSet(R.d,col.k,v);if(o.s==='ok')n++;else if(o.s==='bad')bad=bad||o.msg}});
   trDraw(true);txFocus();toast(n?`Se ${n===1?'rellenó 1 celda':'rellenaron '+n+' celdas'}.${bad?' '+bad:''}`:(bad||'Nada que rellenar: esas celdas no se editan.'))}
@@ -1150,13 +1124,14 @@ function txDown(e){if(TX.menu&&!e.target.closest('#txMenu')&&!e.target.closest('
 function txOver(e){if(!TX.drag||!TX.X)return;const td=e.target.closest&&e.target.closest('#txT tbody td');if(!td)return;const d=td.parentElement.dataset.dni;const c=TX.X.cols[td.cellIndex];
   if(!d||!c||(TX.f&&TX.f.d===d&&TX.f.k===c.k))return;TX.f={d,k:c.k};txPaint()}
 document.addEventListener('mouseup',()=>{TX.drag=false});
-function txDbl(e){const td=e.target.closest&&e.target.closest('#txT tbody td');if(!td||e.target.closest('button')||!TX.X)return;const col=TX.X.cols[td.cellIndex];if(!col)return;
-  if(['as','alt','fir'].includes(col.k))txToggle();else txEdit(null)}
+function txDbl(e){const td=e.target.closest&&e.target.closest('#txT tbody td');if(!td||td.closest('.tx-addb,.tx-empty')||e.target.closest('button')||!TX.X)return;const col=TX.X.cols[td.cellIndex];if(!col)return;
+  if(col.k==='alt')txToggle();else txEdit(null)}
 /* --- teclado --- */
 function txKeyR(e){const tg=e.target;if(!tg)return;if(tg.id==='trSplit')return trSplitKey(e);if(!TR.ed||!TR.ed.g)return;
   if(tg.id==='txIn')return txInKey(e);if(tg.closest&&tg.closest('#txMenu'))return txMenuKey(e);if(tg.id==='txW')return txKey(e)}
 function txKey(e){const X=TX.X;if(!X||$('.uask'))return;const k=e.key,ctrl=e.ctrlKey||e.metaKey;const stop=()=>{e.preventDefault();e.stopPropagation()};const s=txRect(X);
   if(ctrl&&!e.altKey){const l=k.toLowerCase();
+    if(k==='Enter'){stop();txEdit('');return}
     if(l==='z'){stop();if(e.shiftKey)txRedo();else txUndo();return}if(l==='y'){stop();txRedo();return}if(l==='d'){stop();txFillDown();return}
     if(l==='a'){stop();if(X.rows.length){TX.a={d:X.rows[0].d,k:X.cols[0].k};TX.f={d:X.rows[X.rows.length-1].d,k:X.cols[X.cols.length-1].k};txPaint()}return}
     if(k.startsWith('Arrow')){stop();txMove(k,e.shiftKey,true);return}if(k==='Home'){stop();txGo(0,0,e.shiftKey);return}if(k==='End'){stop();txGo(X.rows.length-1,X.cols.length-1,e.shiftKey);return}
@@ -1169,10 +1144,11 @@ function txKey(e){const X=TX.X;if(!X||$('.uask'))return;const k=e.key,ctrl=e.ctr
   if(k==='PageDown'||k==='PageUp'){stop();txGo(s.ar+(k==='PageDown'?12:-12),s.ac,e.shiftKey);return}
   if(k==='F2'){stop();txEdit(null);return}
   if(k==='Delete'||k==='Backspace'){stop();txClear();return}
-  if(k===' '&&['as','alt','fir'].includes((X.cols[s.ac]||{}).k)){stop();txToggle();return}
+  if(k===' '&&['as','alt'].includes((X.cols[s.ac]||{}).k)){stop();txToggle();return}
   if(k.length===1&&k!==' '){stop();txEdit(k);return}}
 function txInKey(e){const k=e.key;e.stopPropagation();const ing=TX.ing;if(!ing)return;
-  if(k==='Enter'||k==='Tab'){e.preventDefault();txCommit(k==='Enter'?(e.shiftKey?'u':'d'):(e.shiftKey?'l':'r'));return}
+  if(k==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();txCommitFill();return}
+  if(k==='Enter'||k==='Tab'){e.preventDefault();if(ing.multi)TX.f=TX.a;txCommit(k==='Enter'?(e.shiftKey?'u':'d'):(e.shiftKey?'l':'r'));return}
   if(k==='Escape'){e.preventDefault();txCancel();return}
   const A={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r'}[k];
   if(A&&(ing.rep||A==='u'||A==='d')){e.preventDefault();txCommit(A)}}
@@ -1189,22 +1165,34 @@ function txClick(e){const f=e.target.closest('[data-txf]');if(f){if(TX.menu&&TX.
   const cx=e.target.closest('[data-txcx]');if(cx){delete TX.flt[cx.dataset.txcx];trDraw(true);txFocus();return true}
   const fx=e.target.closest('[data-txfx]');if(fx){const k=fx.dataset.txfx;if(TX.fx.has(k))TX.fx.delete(k);else TX.fx.add(k);trDraw(true);return true}
   const b=e.target.closest('[data-txa]');if(!b||b.disabled)return false;const a=b.dataset.txa;
-  if(a==='un'){txUndo();return true}if(a==='re'){txRedo();return true}if(a==='fill'){txFillWith();return true}if(a==='addo'){txAddDlg(TR.id);return true}
+  if(a==='un'){txUndo();return true}if(a==='re'){txRedo();return true}if(a==='fill'){txFillWith();return true}if(a==='addo'){txAddDlg(TR.id);return true}if(a==='addp'){txAddPDlg(TR.id);return true}
+  if(a==='cc'){TX.cc=!TX.cc;try{localStorage.setItem('lps.txcc',TX.cc?'1':'0')}catch(err){}trDraw(true);txFocus();return true}
   if(a==='clr'){TX.flt={};TX.q='';TX.fx.clear();trDraw(true);txFocus();return true}
   if(a==='rm'){const d=b.dataset.v;const e2=TR.ed;const x=e2&&e2.rows[d];if(!x)return true;const nm=(x.nw&&x.nw.ape)||d;
     txDo(()=>{delete e2.rows[d]});trDraw(true);txFocus();toast(`${nm} sale del tareo al guardar (Ctrl+Z deshace).`);return true}
   return false}
 /* acciones data-tra de la hoja (→ true si las tomó) */
 function txAct(a,b,id){
-  if(a==='pfo'){TR.pfo=!TR.pfo;try{localStorage.setItem('lps.trfo',TR.pfo?'1':'0')}catch(e){}trDraw(true);return true}
   if(a==='prconf'){trProdConf(id);return true}
-  if(a==='mv'){const X=TX.X;const s=X&&txRect(X);const col=s&&X.cols[s.ac];if(!col||!col.pc){toast('Elige una celda de horas (un obrero en una partida) y luego «Mover horas…».');return true}trMvDlg(id,{dni:X.rows[s.ar].d,pc:col.pc});return true}
   if(a==='pcdel'){trPcDelDlg(id,b.dataset.v);return true}
   if((a==='pas'||a==='rev'||a==='reab'||a==='qrev')&&trEdN()){toast('Guarda o descarta tus cambios primero.');return true}
   return false}
 /* agregar una partida del día desde la hoja: la columna aparece y queda elegida su primera celda */
-function txPcAdd(el){const pc=el.value;const e=TR.ed;if(!pc||!e)return;if(!e.pcs.includes(pc))txDo(()=>{e.pcs.push(pc)});
+function txPcAdd(pc){const e=TR.ed;if(!pc||!e)return;if(!e.pcs.includes(pc))txDo(()=>{e.pcs.push(pc)});
   const X=TX.X;const R=X&&(X.rows.find(z=>z.x.as===true)||X.rows[0]);if(R)TX.a=TX.f={d:R.d,k:'h:'+pc};trDraw(true);txFocus();txReveal()}
+/* «+» del encabezado: elegir la partida (buscador por código o nombre; activas, no bloqueadas y que aún no están en la hoja) */
+function txAddPDlg(id){const e=TR.ed;if(!e||!TD.docs.get(id))return;const cols=trEdCols(e);
+  const L0=[...S.tpc.values()].filter(x=>x&&x.id&&!x.arch&&x.act!==false&&x.bloq!==true&&!cols.includes(x.id)).sort((a,b)=>tCmpCod(a.cod,b.cod));
+  const draw=q0=>{const q=txNorm(q0).trim();const L=L0.filter(x=>!q||txNorm(x.cod+' '+x.nom).includes(q)).slice(0,60);
+    return L.map(x=>`<button class="tx-ao" data-txpc="${esc(x.id)}"><span><b class="mono">${esc(x.cod)}</b> ${esc(x.nom)}</span>${x.grpN?`<span class="note">${esc(x.grpN)}</span>`:''}</button>`).join('')
+      ||'<p class="note">Ninguna partida coincide (salen las activas que aún no están en la hoja).</p>'};
+  lqModal(`<div class="lqtop"><b>Agregar partida</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
+   <label>Buscar por código o nombre<input class="tin" id="txPq" type="search" autocomplete="off"></label>
+   <div class="tx-al" id="txPl">${draw('')}</div>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button></div>`,
+   ev=>{const b=ev.target.closest('[data-txpc]');if(!b)return;const pc=b.dataset.txpc;lqClose();if(TR.ed===e)txPcAdd(pc)});
+  const q=$('#txPq');if(q){q.focus();q.addEventListener('input',()=>{const l=$('#txPl');if(l)l.innerHTML=draw(q.value)});
+    q.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();const f=$('#txPl [data-txpc]');if(f)f.click()}})}}
 /* --- menú de filtro de una columna (como el autofiltro de Excel): ordenar, filtros rápidos, buscar y elegir valores --- */
 function txMenu(k,btn){txMenuX();const X=TX.X;const col=X&&X.cols.find(z=>z.k===k);if(!col)return;
   const cnt=new Map();for(const R of X.all){if(!txPass(R,X,k))continue;const v=txFv(R,col);cnt.set(v,(cnt.get(v)||0)+1)}
@@ -1269,5 +1257,7 @@ function trSplitInit(ws){const sp=ws.querySelector('#trSplit');if(!sp)return;let
   sp.addEventListener('pointerdown',e=>{if(e.button!==0)return;const f=$('#trFoto').getBoundingClientRect();P={x:e.clientX,w:f.width};try{sp.setPointerCapture(e.pointerId)}catch(err){}ws.classList.add('tr-sizing');e.preventDefault()});
   sp.addEventListener('pointermove',e=>{if(P)trFwSet(P.w+e.clientX-P.x)});
   const end=()=>{if(!P)return;P=null;ws.classList.remove('tr-sizing');trView()};sp.addEventListener('pointerup',end);sp.addEventListener('pointercancel',end);
-  sp.addEventListener('dblclick',()=>{TR.pfo=false;try{localStorage.setItem('lps.trfo','0')}catch(e){}trDraw(true)})}
+  sp.addEventListener('dblclick',()=>trFoSet(false))}
+/* muestra u oculta la foto del formato (botón del encabezado, «Ocultar» del panel o doble clic en el borde); se recuerda en el equipo */
+function trFoSet(on){TR.pfo=!!on;try{localStorage.setItem('lps.trfo',TR.pfo?'1':'0')}catch(e){}trDraw(true);if(TR.pfo)setTimeout(trView,0)}
 function trSplitKey(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();e.stopPropagation();const f=$('#trFoto');trFwSet((f?f.getBoundingClientRect().width:400)+(e.key==='ArrowLeft'?-32:32));trView()}

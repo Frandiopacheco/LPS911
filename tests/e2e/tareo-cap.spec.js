@@ -65,12 +65,8 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect(dan.locator('[data-tca="motT"]')).toContainText('Motivo: Descanso médico');
   await root.locator('[data-tca="todos"]').click();
   await expect(root.locator('#tcCnt')).toHaveText('Marcados 4 de 4');
-  // Carlos salió a otra hora (plegable) y Ana trabajó en altura
-  const car = root.locator('.tc-ob[data-dni="40000003"]');
-  await car.locator('[data-tca="salT"]').click();
-  await car.locator('input[data-tca="sal"]').fill('15:00');
-  await expect(car.locator('[data-tca="salT"]')).toContainText('Salió a las 15:00');
-  await expect(car.locator('input[data-tca="sal"]')).toHaveCount(0);
+  // ya no se pide la hora de salida (20-10-2026); Ana trabajó en altura
+  await expect(root.locator('[data-tca="salT"]')).toHaveCount(0);
   await root.locator('.tc-ob[data-dni="40000001"] input[data-tca="alt"]').check();
   await expect.poll(async () => (await dbDoc(page)).st).toBe('bor');
   expect((await dbDoc(page)).modo).toBe('hrs');
@@ -158,7 +154,7 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   const r = doc.rows;
   expect(r['40000001']).toMatchObject({ as: true, alt: true, h: { p10_05: 8.5 }, trab: 8.5, ext: 0, ini: '07:30', fin: '17:00' });
   expect(r['40000002']).toMatchObject({ as: true, h: { p10_05: 8.5, p20_01: 2 }, trab: 10.5, ext: 2, fin: '19:00' });
-  expect(r['40000003']).toMatchObject({ as: true, sal: '15:00', h: { p10_05: 4, p20_01: 4.5 }, trab: 8.5, ext: 0, fin: '15:00' });
+  expect(r['40000003']).toMatchObject({ as: true, h: { p10_05: 4, p20_01: 4.5 }, trab: 8.5, ext: 0 });
   expect(r['40000004']).toMatchObject({ as: false, mot: 'DM', trab: 0, ext: 0 });
   expect(doc.foto).toEqual([`${ID}_1`]);
   // enviado: solo lectura, sin pasos ni pie
@@ -647,4 +643,29 @@ test('capataz: errores de horas llevan a la columna del obrero; partida bloquead
   await root.locator('.tc-foot [data-tcs="4"]').click();
   await expect(root.locator('#tcSend')).toContainText('Falta la foto');
   noErrors(errors, 'errores de horas');
+});
+
+test('grilla de horas: «+» agrega una partida sin volver a Trabajos y abre la primera casilla (20-10-2026)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await expect(root.locator('th.tc-gp')).toHaveCount(2);
+  await root.locator('#tcPcPlus').click();
+  const sh = root.locator('#tcPcSh');
+  await expect(sh).toBeVisible();
+  // las ya agregadas y las bloqueadas no se ofrecen
+  await expect(sh.locator('[data-tca="pc"][data-v="p10_05"]')).toHaveCount(0);
+  await expect(sh.locator('[data-tca="pc"][data-v="p30_01"]')).toHaveCount(0);
+  await sh.locator('#tcPcQ').fill('vaciado');
+  await sh.locator('[data-tca="pc"][data-v="p10_06"]').click();
+  await expect(sh).toHaveCount(0);
+  await expect(root.locator('th.tc-gp[data-pc="p10_06"]')).toBeVisible();
+  await expect(root.locator('#tcCell')).toBeVisible();
+  await expect.poll(async () => (await dbDoc(page)).pcs).toEqual(['p10_05', 'p20_01', 'p10_06']);
+  // el paso de Trabajos sigue con la lista completa
+  await root.locator('[data-tca="cellX"]').first().click();
+  await root.locator('.tc-steps [data-tcs="2"]').click();
+  await expect(root.locator('.tc-pcr')).toHaveCount(3);
+  noErrors(errors, 'grilla +');
 });

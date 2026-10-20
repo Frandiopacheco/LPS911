@@ -249,8 +249,9 @@ function lkGhostAsk(btn,key){const[amb,cid]=key.split('|');const c=MX.cat.get(ci
   const g0=((lkGhosts()||new Map()).get(amb)||[]).find(g=>g.c.id===cid);const past=!!(g0&&g0.past);const ed=mxEd();const scm=!ed&&SCK()&&typeof mxScCan==='function'&&mxScCan(c);const mx=ed||scm;
   const nx=wshift(todayIso(),1);
   const set=v=>{if(scm){mxScSet(amb,cid,v);return}const prev=((MX.amb.get(amb)||{}).c||{})[cid];mxWrite(new Map([[amb,{[cid]:v}]]),`${c.name}: ${MXS[v].toLowerCase()} en ${a.code} (Matriz)`,new Map([[amb,{[cid]:prev===undefined?mxFV().delete():prev}]]))};
-  const bt={yes:mx?'<button data-do="yes">✓ Sí, ya terminó <small class="mu">(Matriz: Terminado)</small></button>':'',
-    prog:`<button data-do="prog">📅 No, programar el ${esc(fmtD(nx))}</button>`,na:mx?'<button data-do="na">– No aplica en este ambiente</button>':''};
+  /* textos según el caso (19/10): «¿Terminó?» es una pregunta (Sí / No, falta); «Falta» no pregunta nada, así que las opciones son acciones */
+  const bt={yes:mx?(past?'<button data-do="yes">✓ Sí, ya terminó <small class="mu">(Matriz: Terminado)</small></button>':'<button data-do="yes">✓ Ya está terminada <small class="mu">(Matriz: Terminado)</small></button>'):'',
+    prog:past?`<button data-do="prog">📅 No, falta: programar el ${esc(fmtD(nx))}</button>`:`<button data-do="prog">📅 Programar el ${esc(fmtD(nx))}</button>`,na:mx?'<button data-do="na">– No aplica en este ambiente</button>':''};
   openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">${past?'Tuvo días programados que ya pasaron y nadie la cerró. ¿Ya terminó?':'La Matriz la tiene pendiente y no está programada.'}</div>
    ${past?bt.yes+bt.prog:bt.prog+bt.yes}${bt.na}<div class="ptx mu">Para otro día, toca ese día en la fila.</div><hr><button data-do="mat">Ver en la Matriz</button>`,
    {yes:()=>set('t'),na:()=>set('n'),prog:()=>lkGhostDay(key,nx),mat:()=>mxGoCell(amb,cid)})}

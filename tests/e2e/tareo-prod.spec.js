@@ -45,7 +45,11 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   const m = await abrir(page, T1);
   // un solo espacio: sin el interruptor oficina/producción; el jefe tiene las acciones de la oficina; la foto va plegada al empezar
   await expect(m.locator('.tr-mode')).toHaveCount(0);
-  for (const s of ['#trRev', '#toReab', '#trPrConf', '#txAddO', '#trPcAdd']) await expect(m.locator(s)).toBeVisible();
+  for (const s of ['#trRev', '#toReab', '#txAddO', '#txAddP', '#trCapSel']) await expect(m.locator(s)).toBeVisible();
+  await expect(m.locator('#trPrConf')).toHaveCount(0); // sin «Conforme sin cambios» (20-10-2026)
+  // sin cotejo, salida, garita ni «Mover horas» (20-10-2026); cuadrilla y categoría ocultas por omisión
+  for (const k of ['fir', 'gar', 'sal', 'mot', 'cua', 'cat']) await expect(m.locator(`th[data-k="${k}"]`)).toHaveCount(0);
+  await expect(m.locator('#trMv')).toHaveCount(0);
   await expect(m.locator('#trFoto')).toBeHidden();
   await m.locator('#trPfo').click();
   await expect(m.locator('#trFoto')).toBeVisible();
@@ -53,14 +57,11 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   await expect(m.locator('#trFoto')).toBeHidden();
   // GAMMA no vino: su fila está, atenuada; sus horas no se editan
   await expect(m.locator('tr[data-dni="33333333"]')).toHaveClass(/tx-no/);
-  // ALFA: mover 2 de sus 4 h de 10.10 a 10.05 (por defecto propone todo)
+  // ALFA: pasa 2 de sus 4 h de 10.10 a 10.05 escribiéndolas a mano (ya no hay «Mover horas»)
   await cell(m, '11111111', 'p10_10').click();
   await expect(m.locator('#txAdr')).toHaveText('ALFA · 10.10');
-  await m.locator('#trMv').click();
-  await expect(page.locator('#trMvN')).toHaveValue('4');
-  await expect(page.locator('#lqm input[name="trMvP"][value="p10_05"]')).toBeChecked();
-  await page.locator('#trMvN').fill('2');
-  await page.locator('#trMvOk').click();
+  await page.keyboard.type('2'); await page.keyboard.press('Tab');
+  await page.keyboard.type('6,5'); await page.keyboard.press('Enter');
   await expect(cell(m, '11111111', 'p10_10')).toHaveText('2');
   await expect(cell(m, '11111111', 'p10_05')).toHaveText('6.5');
   await expect(cell(m, '11111111', 'p10_05')).toHaveClass(/tx-ch/);
@@ -84,7 +85,9 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   await expect(m.locator('#txIn')).toHaveCount(0);
   await expect(page.locator('#toast')).toContainText('No vino');
   // agregar una partida del día: la columna aparece y queda elegida su primera celda
-  await m.locator('#trPcAdd').selectOption('p10_20');
+  await m.locator('#txAddP').click();
+  await page.locator('#txPq').fill('acero');
+  await page.locator('[data-txpc="p10_20"]').click();
   await expect(m.locator('th[data-pc="p10_20"]')).toBeVisible();
   await expect(m.locator('#txAdr')).toHaveText('ALFA · 10.20');
   // guardar: confirmación (lista) y motivo obligatorio
@@ -106,13 +109,12 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   const h = d.hist[d.hist.length - 1];
   expect(h).toMatchObject({ a: 'prod', by: 'jefe@obra.pe', tot: true, mot: 'BETA se quedó 30 min más en pedestales' });
   expect(h.det).toEqual(expect.arrayContaining([{ dni: '22222222', pc: 'p10_05', campo: 'h', antes: 8.5, despues: 9 }, { pc: 'p10_20', campo: 'pcs', antes: false, despues: true }]));
-  // la hoja sigue abierta con lo guardado; la lista del día muestra el chip
-  await expect(m.locator('#trPrConf')).toHaveText('Conforme otra vez');
-  await expect(m.locator('#trHead .tr-prodc')).toHaveText('Producción ✓');
+  // la hoja sigue abierta con lo guardado; ya no se muestra «Producción ✓» (20-10-2026)
+  await expect(m.locator('.tr-prodc')).toHaveCount(0);
   await expect(m.locator('#trEdN')).toHaveCount(0);
   await expect(cell(m, '22222222', 'p10_05')).not.toHaveClass(/tx-ch/);
   await m.locator('#trBack').click();
-  await expect(page.locator(`tr[data-to="${T1}"] .tr-prodc`)).toHaveText('Producción ✓');
+  await expect(page.locator(`tr[data-to="${T1}"]`)).toBeVisible();
   noErrors(errors, 'hoja jefe');
 });
 
@@ -125,6 +127,10 @@ test('hoja: autofiltro por columna (cuadrilla, «con horas en esta partida», to
   const m = await abrir(page, T1);
   await expect(rowsVis(m)).toHaveCount(5);
   await expect(m.locator('#txCnt')).toHaveText('5 obreros');
+  // cuadrilla y categoría están ocultas por omisión: se muestran con su botón (y se recuerda)
+  await expect(m.locator('th[data-k="cua"]')).toHaveCount(0);
+  await m.locator('#txCc').click();
+  await expect(m.locator('#txCc')).toHaveAttribute('aria-pressed', 'true');
   // Cuadrilla: el menú lista los valores con su cantidad; se desmarca CARPINTEROS
   await m.locator('th[data-k="cua"] [data-txf]').click();
   const mn = page.locator('#txMenu');
@@ -224,11 +230,22 @@ test('hoja: pegar un rango (de Excel), copiar, Ctrl+D, Supr, Ctrl+Z / Ctrl+Y y b
   await cell(m, '22222222', 'p10_05').click({ modifiers: ['Shift'] });
   await page.keyboard.press('Control+d');
   await expect(cell(m, '22222222', 'p10_05')).toHaveText('4.5');
-  // «Rellenar con…» pone un valor en la selección
-  page.once('dialog', dg => dg.accept('8,5'));
-  await m.locator('#txFill').click();
+  // como Excel: con la selección hecha se escribe y Ctrl+Enter pone el valor en todas (20-10-2026)
+  await expect(m.locator('#txFill')).toHaveCount(0);
+  await expect(m.locator('#txT td.tx-sel')).toHaveCount(2);
+  await page.keyboard.type('8,5');
+  await expect(m.locator('#txIn')).toHaveValue('8,5');
+  await page.keyboard.press('Control+Enter');
   await expect(cell(m, '11111111', 'p10_05')).toHaveText('8.5');
   await expect(cell(m, '22222222', 'p10_05')).toHaveText('8.5');
+  await expect(page.locator('#toast')).toContainText('Se rellenaron 2 celdas');
+  // con Enter solo se escribe la celda activa
+  await cell(m, '11111111', 'p10_10').click();
+  await cell(m, '22222222', 'p10_10').click({ modifiers: ['Shift'] });
+  await page.keyboard.type('1'); await page.keyboard.press('Enter');
+  await expect(cell(m, '11111111', 'p10_10')).toHaveText('1');
+  await expect(cell(m, '22222222', 'p10_10')).toHaveText('');
+  await page.keyboard.press('Control+z');
   // los botones de deshacer y rehacer también funcionan
   await m.locator('#txUn').click();
   await expect(cell(m, '11111111', 'p10_05')).toHaveText('4.5');
@@ -242,37 +259,56 @@ test('hoja: pegar un rango (de Excel), copiar, Ctrl+D, Supr, Ctrl+Z / Ctrl+Y y b
   noErrors(errors, 'pegar');
 });
 
-test('hoja: el jefe coteja una firma, marca revisado y reabre al capataz (la marca de producción se borra)', async ({ page }) => {
+test('hoja: el jefe marca revisado sin cotejar firmas y reabre al capataz (la marca de producción se borra)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: base({ cot: { 11111111: COT[11111111] }, prod: { t: ENV + 50, by: 'jefe@obra.pe', byN: 'Jaime Jefe' } }) });
   const m = await abrir(page, T1);
-  await expect(m.locator('#trCotN')).toHaveText('1 de 2 cotejados');
-  await expect(m.locator('#trRev')).toBeDisabled();
-  // Firmó de BETA: «s» en su celda; queda «Guardar cotejo» y se puede marcar revisado
-  await m.locator('tr[data-dni="22222222"] td').nth(m === null ? 0 : await m.locator('th[data-k="fir"]').evaluate(th => th.cellIndex)).click();
-  await page.keyboard.type('s');
-  await page.keyboard.press('Enter');
-  await expect(m.locator('#trCotN')).toHaveText('2 de 2 cotejados');
-  await expect(m.locator('#trSave')).toBeVisible();
+  // sin cotejo de firmas (20-10-2026): BETA no está cotejado y aun así se puede marcar revisado
+  await expect(m.locator('#trCotN')).toHaveCount(0);
   await expect(m.locator('#trRev')).toBeEnabled();
   await m.locator('#trRev').click();
   await expect.poll(async () => (await dbT(page, T1)).st).toBe('rev');
   let d = await dbT(page, T1);
   expect(d.revBy).toBe('jefe@obra.pe');
-  expect(d.cot['22222222']).toMatchObject({ fir: true, by: 'jefe@obra.pe' });
   expect(d.hist[d.hist.length - 1]).toMatchObject({ a: 'rev', by: 'jefe@obra.pe' });
+  // no queda otro tareo «Enviado» del día: se queda en este y lo avisa
+  await expect(page.locator('#toast')).toContainText('no quedan tareos por revisar');
   await expect(m.locator('#trQrev')).toBeVisible();
-  // reabrir al capataz (motivo): se quitan las firmas y la marca de producción
+  // reabrir al capataz (motivo): se quita la marca de producción
   page.once('dialog', dg => dg.accept('Falta la hoja 2 del formato'));
   await m.locator('#toReab').click();
   await expect.poll(async () => (await dbT(page, T1)).st).toBe('reab');
   d = await dbT(page, T1);
   expect(d.reab).toMatchObject({ by: 'jefe@obra.pe', mot: 'Falta la hoja 2 del formato' });
   expect(d.prod).toBeUndefined();
-  expect(d.cot).toBeUndefined();
   // reabierto: solo lectura (sin la hoja)
   await expect(m.locator('#txW')).toHaveCount(0);
   noErrors(errors, 'revisado y reabrir');
+});
+
+test('hoja: «Marcar revisado» pasa solo al siguiente capataz por revisar; el selector de arriba cambia de capataz sin volver a la lista', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors = await openApp(page, { as: 'jefe', editar: false, extra: base({}, { st: 'env', revAt: null, revBy: null }) });
+  const m = await abrir(page, T2);
+  await expect(m.locator('#trCapSel')).toHaveValue(T2);
+  // elegir otro capataz en el selector abre su tareo
+  await m.locator('#trCapSel').selectOption(T1);
+  await expect(m.locator('#trCapSel')).toHaveValue(T1);
+  await expect(m.locator('tr[data-dni="11111111"]')).toBeVisible();
+  // con cambios sin guardar, cambiar de capataz pregunta (y «Seguir editando» se queda)
+  await cell(m, '11111111', 'p10_10').click();
+  await page.keyboard.type('5'); await page.keyboard.press('Enter');
+  await m.locator('#trCapSel').selectOption(T2);
+  await page.locator('#trAsk3 [data-l3="stay"]').click();
+  await expect(m.locator('#trCapSel')).toHaveValue(T1);
+  page.once('dialog', dg => dg.accept());
+  await m.locator('#trEdX').click();
+  // marcar revisado: pasa al otro tareo «Enviado»
+  await m.locator('#trRev').click();
+  await expect.poll(async () => (await dbT(page, T1)).st).toBe('rev');
+  await expect(m.locator('#trCapSel')).toHaveValue(T2);
+  await expect(page.locator('#toast')).toContainText('sigue Bruno Segundo');
+  noErrors(errors, 'revisado y siguiente');
 });
 
 test('hoja: el jefe agrega un obrero (de otra cuadrilla, con aviso), le pone horas y quita a otro; se guarda como corrección', async ({ page }) => {
@@ -314,25 +350,19 @@ test('hoja: el jefe agrega un obrero (de otra cuadrilla, con aviso), le pone hor
   expect(d.rows['33333333']).toBeUndefined();
   expect(d.st).toBe('env');
   const h = d.hist[d.hist.length - 1];
-  expect(h).toMatchObject({ a: 'cor', by: 'jefe@obra.pe', mot: 'Trabajó con esta cuadrilla todo el día' });
+  // sin HH totales cambiadas de quien ya estaba: se guarda sin pedir motivo (20-10-2026)
+  expect(h).toMatchObject({ a: 'cor', by: 'jefe@obra.pe' });
+  expect(h.mot).toBeUndefined();
+  expect(asked.length).toBe(1);
   expect(h.det).toEqual(expect.arrayContaining([{ dni: '55555555', campo: 'fila', antes: false, despues: true }, { dni: '33333333', campo: 'fila', antes: true, despues: false }]));
   expect(d.prod).toMatchObject({ by: 'jefe@obra.pe' });
   noErrors(errors, 'agregar obrero');
 });
 
-test('hoja: «Conforme sin cambios» del admin; si otro usuario cambia el tareo, «Recargar versión actual» conserva lo cambiado; captura 1440×900', async ({ page }) => {
+test('hoja: si otro usuario cambia el tareo, «Recargar versión actual» conserva lo cambiado; captura 1440×900', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'admin', editar: false, extra: base() });
-  let m = await abrir(page, T2);
-  await expect(m.locator('#trQrev')).toBeVisible();
-  page.once('dialog', dg => dg.accept());
-  await m.locator('#trPrConf').click();
-  await expect.poll(async () => !!(await dbT(page, T2)).prod).toBe(true);
-  const d = await dbT(page, T2);
-  expect(d.st).toBe('rev');
-  expect(d.hist[d.hist.length - 1]).toMatchObject({ a: 'prod', cam: 'Conforme sin cambios', by: 'frandiopacheco@gmail.com' });
-  await m.locator('#trBack').click();
-  m = await abrir(page, T1);
+  const m = await abrir(page, T1);
   await cell(m, '11111111', 'p10_10').dblclick();
   await expect(m.locator('#txIn')).toHaveValue('4');
   await m.locator('#txIn').fill('4.5');
@@ -394,6 +424,7 @@ test('hoja: 60 obreros × 15 partidas se mueve con fluidez (teclear, pegar, filt
   await pegar(page, Array.from({ length: 10 }, () => '1\t2\t3\t4\t5').join('\n'));
   await expect(page.locator('#toast')).toContainText('Se pegaron');
   const msP = Date.now() - t1;
+  await m.locator('#txCc').click();
   await m.locator('th[data-k="cua"] [data-txf]').click();
   await page.locator('#txMenu input[data-txv="__all"]').uncheck();
   await page.locator('#txMenu input[data-txv="FIERREROS"]').check();

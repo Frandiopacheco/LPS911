@@ -42,7 +42,8 @@ for (const as of ['tcap', 'tasis', 'tcos']) {
     const home = as === 'tcos' ? 'tcos' : 'tdia';
     await expect(page.locator('#main')).toHaveAttribute('data-view', home);
     await expect(page.locator('#modsel')).toBeHidden();
-    expect(await tabsVisibles(page)).toEqual([home, 'tper', 'tpc']);
+    /* el capataz no ve Partidas como pestaña (las elige dentro del tareo, 20-10-2026) */
+    expect(await tabsVisibles(page)).toEqual(as === 'tcap' ? [home, 'tper'] : [home, 'tper', 'tpc']);
     for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
     const st = await page.evaluate(() => ({ mod: U.mod, act: S.act.size, lps: S.loaded.act, only: TAR_ONLY(), ed: tarEdit(), ok: tabAllowed('look') }));
     expect(st).toEqual({ mod: 'tar', act: 0, lps: undefined, only: true, ed: as === 'tasis', ok: false });
@@ -57,7 +58,8 @@ test('tcap en el celular: barra inferior del Tareo, sin selector de módulo', as
   await page.setViewportSize({ width: 390, height: 800 });
   const errors = await openApp(page, { as: 'tcap', editar: false });
   const items = await page.$$eval('#bnav [data-bt]', bs => bs.map(b => b.dataset.bt));
-  expect(items).toEqual(['tdia', 'tper', 'tpc', 'more']);
+  expect(items).toEqual(['tdia', 'tper', 'more']);
+  await expect(page.locator('#bnav [data-bt="tper"]')).toContainText('Mi cuadrilla');
   await page.click('#bnav [data-bt="more"]');
   await expect(page.locator('#msheet [data-mod]')).toHaveCount(0);
   noErrors(errors, 'tcap celular');

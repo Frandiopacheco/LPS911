@@ -16,7 +16,7 @@ function tabAllowed(t){if(!me)return false;
   if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!canPla())return false;return t==='pcar'?plaEd():t==='p3d'?me.role==='admin':true}
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin';
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
-    if(t==='tdia')return me.role!=='tcos';if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
+    if(t==='tdia')return me.role!=='tcos';if(t==='tpc'&&me.role==='tcap')return false;/* el capataz elige las partidas dentro del tareo (20-10-2026) */if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
   if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='pull')return pulEd();if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}

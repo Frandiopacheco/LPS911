@@ -9,7 +9,7 @@
 
 const TF_PV=1200;      /* lado mayor de la copia de trabajo (pantalla de esquinas, lupa y vista previa) */
 const TF_FULL=3000;    /* lado mayor de la fuente al pulsar «Listo» (una foto de 12 MP se reduce antes de muestrear) */
-const TF_OUT=2000;     /* lado mayor del resultado */
+const TF_OUT=2400;     /* lado mayor del resultado (20-10-2026: antes 2000; más detalle en números chicos) */
 const TF_DET=400;      /* lado mayor para detectar el contorno */
 const TF_A4=Math.SQRT2;
 let TFE=null;
@@ -170,14 +170,28 @@ async function tfFilter(c,f,slow){
   sd.data.set(pass(pass(a,'max',2),'avg',2));sg.putImageData(sd,0,0);
   const bg=tfCanvas(W,H),bgx=bg.getContext('2d',{willReadFrequently:true});bgx.imageSmoothingQuality='high';bgx.drawImage(sm,0,0,W,H);
   const b=bgx.getImageData(0,0,W,H).data;
-  const LUT=new Uint8ClampedArray(1025);for(let i=0;i<=1024;i++){const t=i/1024;LUT[i]=t>=.9?255:255*Math.pow(t/.9,1.7);}
+  /* «Documento»: blanco ≥ 88 % y tinta más oscura (curva 1,9); «B/N»: gris con curva más fuerte (formatos muy grises o lápiz) */
+  const bn=f==='bn',th=bn?.85:.88,ex=bn?2.4:1.9;
+  const LUT=new Uint8ClampedArray(1025);for(let i=0;i<=1024;i++){const t=i/1024;LUT[i]=t>=th?255:255*Math.pow(t/th,ex);}
   const step=W*4*128;
   for(let i=0;i<d.length;i+=4){
     let r=LUT[Math.min(1024,(d[i]*1024/(b[i]||1))|0)],gg=LUT[Math.min(1024,(d[i+1]*1024/(b[i+1]||1))|0)],bb=LUT[Math.min(1024,(d[i+2]*1024/(b[i+2]||1))|0)];
-    const m=(r+gg+bb)/3;d[i]=m+(r-m)*1.25;d[i+1]=m+(gg-m)*1.25;d[i+2]=m+(bb-m)*1.25;
+    const m=(r+gg+bb)/3;if(bn){d[i]=d[i+1]=d[i+2]=Math.min(r,gg,bb)*.6+m*.4}else{d[i]=m+(r-m)*1.3;d[i+1]=m+(gg-m)*1.3;d[i+2]=m+(bb-m)*1.3;}
     if(slow&&i%step===0&&i)await tfTick();
   }
+  await tfSharpen(d,W,H,bn?1:.8,slow);
   g.putImageData(id,0,0);return c;
+}
+/** realce de nitidez (máscara de enfoque sobre la luminancia, desenfoque 3×3): los números y las firmas se leen mejor.
+    amt: cuánto se realza. Va por franjas con pausas si slow. */
+async function tfSharpen(d,W,H,amt,slow){
+  const Y=new Float32Array(W*H);for(let p=0,i=0;p<Y.length;p++,i+=4)Y[p]=d[i]*.299+d[i+1]*.587+d[i+2]*.114;
+  const T=new Float32Array(W*H);
+  for(let y=0;y<H;y++){const o=y*W;for(let x=0;x<W;x++){const a=x?x-1:0,b=x<W-1?x+1:x;T[o+x]=(Y[o+a]+Y[o+x]+Y[o+b])/3}}
+  const rows=Math.max(1,Math.floor(400000/W));
+  for(let y=0;y<H;y++){const u=(y?y-1:0)*W,o=y*W,dn=(y<H-1?y+1:y)*W;
+    for(let x=0;x<W;x++){const bl=(T[u+x]+T[o+x]+T[dn+x])/3;const k=amt*(Y[o+x]-bl);if(k>-1&&k<1)continue;const i=(o+x)*4;d[i]+=k;d[i+1]+=k;d[i+2]+=k}
+    if(slow&&y%rows===0&&y)await tfTick()}
 }
 function tfRot(c,rot){
   if(!rot)return c;const o=rot%2?tfCanvas(c.height,c.width):tfCanvas(c.width,c.height),g=o.getContext('2d');
@@ -186,7 +200,7 @@ function tfRot(c,rot){
 
 /* ---------- pantalla ---------- */
 const TF_CN=['Esquina superior izquierda','Esquina superior derecha','Esquina inferior derecha','Esquina inferior izquierda'];
-const TF_FL=[['doc','Documento'],['color','Color'],['orig','Original']];
+const TF_FL=[['doc','Documento'],['bn','B/N'],['color','Color'],['orig','Original']];
 function tfHtml(){
   return `<div class="tf-top"><div class="tf-tt"><b id="tfT">Ajusta las esquinas</b><span id="tfSub" class="tf-sub"></span></div>
     <div class="tf-ta"><button type="button" class="ib" data-tf="retake">Repetir foto</button><button type="button" class="ib" data-tf="orig">Usar original</button></div></div>

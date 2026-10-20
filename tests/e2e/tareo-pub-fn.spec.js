@@ -58,30 +58,55 @@ test('publicarTareo (falso): solo admin o editor con tpub', async ({ page }) => 
   expect(r.code).toBe('functions/permission-denied');
 });
 
-test('Publicación con la función (falso): carga sola, se actualiza cuando cambia un tareo, motivo y publicar', async ({ page }) => {
+test('Publicación con la función (falso): carga sola, se actualiza cuando cambia un tareo, motivo guardado al tocar y publicar', async ({ page }) => {
   await openApp(page, { as: 'jefe', extra, editar: false });
   page.on('dialog', d => d.accept());
   await page.evaluate(() => { U.mod = 'tar'; goTab('tpub'); });
   const st = page.locator('#tpbSt');
   await expect(st).toContainText('Falta 1 cosa');                                     // GAMA sin tareo
-  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bok\b/);
-  await expect(page.locator('#tpbProd tr[data-tpbp]')).toHaveCount(1);
-  await expect(page.locator('#tpbRes')).toContainText('18.5');
-  // la oficina reabre el tareo (vuelve a «Enviado»): la lista se actualiza sola
+  await expect(page.locator('#tpbCt tr[data-tpbp]')).toHaveCount(1);
+  await expect(page.locator('#tpbCapN')).toHaveText('1 de 1 revisados');
+  await expect(page.locator('#tpbTot')).toContainText('18.5 HH');
+  // la oficina quita el revisado (vuelve a «Enviado»): la tabla se actualiza sola
   const id = HOY + '_tcap@obra.pe';
   await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'env', ts: 5 }), id);
-  await expect(page.locator('#tpbChk [data-tpbs="rev"]')).toHaveClass(/\bno\b/, { timeout: 6000 });
+  await expect(page.locator(`#tpbCt tr[data-tpbp="${id}"]`)).toHaveClass(/warn/, { timeout: 6000 });
+  await expect(page.locator(`#tpbCt tr[data-tpbp="${id}"] [data-tpbt]`)).toHaveText('Revisar');
   await expect(st).toContainText('Faltan 2 cosas');
   await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'rev', ts: 6 }), id);
   await expect(st).toContainText('Falta 1 cosa', { timeout: 6000 });
-  // motivo para GAMA y publicar
-  await page.check('#tpbSin [data-tpbx="33333333"]');
-  await page.click('#tpbSin [data-tpbm="Vacaciones"]');
+  // motivo de GAMA con un toque: se guarda al momento (tpexc) y pasa a «Resueltos»
+  await page.click('#tpbPor [data-tpbm="Vacaciones"][data-dni="33333333"]');
   await expect(st).toContainText('Listo para publicar');
+  await expect(page.locator('#tpbRes')).toContainText('Vacaciones');
+  expect((await page.evaluate(f => window.__dbGet('tpexc', f), HOY)).exc).toEqual({ 33333333: 'Vacaciones' });
   await page.click('#tpbPub');
   await expect(st).toContainText('Publicado v1');
   await expect(page.locator('#tpbRect')).toBeVisible();
-  await expect(page.locator(`#tpbDays [data-tpbf="${HOY}"]`)).toContainText('✓ v1');
+  await expect(page.locator(`#tpbDays [data-tpbf="${HOY}"]`)).toContainText('✓');
   await expect(page.locator('#tpbHist li[data-tpbv="1"]')).toContainText('v1 · vigente');
   expect((await page.evaluate(f => window.__dbGet('tpub', f + '_v1'), HOY)).exc).toEqual({ 33333333: { motivo: 'Vacaciones', ape: 'GAMA', nom: 'JUAN' } });
+});
+
+test('Publicación: obrero en dos tareos se resuelve con «Dejar en…»; el motivo guardado lo usa el servidor sin mandarlo', async ({ page }) => {
+  const id2 = HOY + '_tcap2@obra.pe';
+  const ext = [...extra, ['members', 'tcap2@obra.pe', { role: 'tcap', name: 'Bruno Segundo' }],
+    ['tareo', id2, { date: HOY, cap: 'tcap2@obra.pe', capN: 'Bruno Segundo', st: 'rev', modo: 'hrs', pcs: ['p10_05'], cfg: CFG, foto: ['f1'], envN: 1, revBy: 'tasis@obra.pe', revAt: 1, hist: [],
+      rows: { 22222222: { ape: 'BETA', nom: 'JUAN', as: true, h: { p10_05: 8.5 } } } }],
+    ['tpexc', HOY, { exc: { 33333333: 'Otra obra' }, by: 'jefe@obra.pe', ts: 1 }]];
+  await openApp(page, { as: 'jefe', extra: ext, editar: false });
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => { U.mod = 'tar'; goTab('tpub'); });
+  const st = page.locator('#tpbSt');
+  await expect(st).toContainText('Falta 1 cosa');                                     // BETA en dos tareos (GAMA ya tiene motivo guardado)
+  await expect(page.locator('#tpbPor [data-tpbdup="22222222"]')).toContainText('Teodoro Capataz y Bruno Segundo');
+  await page.click(`#tpbPor [data-tpbk="${HOY}_tcap@obra.pe"][data-dni="22222222"]`);
+  await expect.poll(async () => !!(await page.evaluate(i => window.__dbGet('tareo', i), id2)).rows['22222222']).toBe(false);
+  const b = await page.evaluate(i => window.__dbGet('tareo', i), id2);
+  expect(b.st).toBe('env');                                                          // revisado vuelve a «Enviado»
+  expect(b.hist[b.hist.length - 1]).toMatchObject({ a: 'cor', by: 'jefe@obra.pe' });
+  /* el servidor (falso) suma el motivo guardado aunque la página no lo mande */
+  const r = await call(page, { accion: 'previa', fecha: HOY });
+  expect(r.data.bloqueos.map(x => x.k)).toEqual([]);                                // el de Bruno quedó sin obreros: ya no cuenta; GAMA tiene motivo
+  await expect(st).toContainText('Listo para publicar', { timeout: 6000 });
 });

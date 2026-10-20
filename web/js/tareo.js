@@ -9,7 +9,9 @@ for(const k of Object.keys(TCOLS))if(!(S[k] instanceof Map))S[k]=new Map();
 /* jornada por día de semana: {ini, fin, ref (min de refrigerio), refIni (inicio del refrigerio; si falta, el global refIni)}; null = no laborable.
    refNoLab: refrigerio en domingo o feriado (todo es extra, pero se descuenta la intersección con esa ventana). fer: feriados del tareo ('YYYY-MM-DD'). */
 const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'2':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'3':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'4':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'5':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'6':{ini:'07:30',fin:'13:00',ref:0,refIni:'12:00'},'0':null},
-  refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},fer:[],limEnv:'18:00',tolGar:15};
+  refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},fer:[],limEnv:'18:00',tolGar:15,
+  /* semana del proyecto: el dueño dijo el 20-10-2026 que la semana del lunes 19-10-2026 es la 61 (se cambia en Jornada) */
+  sem:{n:61,lun:'2026-10-19'}};
 const TCAT={OP:'Operario',OF:'Oficial',PE:'Peón',CA:'Capataz',OT:'Otro'};
 const TDOW=[['1','Lunes'],['2','Martes'],['3','Miércoles'],['4','Jueves'],['5','Viernes'],['6','Sábado'],['0','Domingo']];
 /** configuración del tareo con sus valores por defecto (como P()). jor[k].refIni siempre viene resuelto. */
@@ -17,7 +19,10 @@ function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};const gri=/^
   for(const[k]of TDOW){const v=c.jor&&Object.prototype.hasOwnProperty.call(c.jor,k)?c.jor[k]:TCFG_DEF.jor[k];jor[k]=v&&v.ini&&v.fin?{ini:v.ini,fin:v.fin,ref:Math.max(0,+v.ref||0),refIni:v.refIni||gri}:null}
   const rn=c.refNoLab;const refNoLab=typeof rn==='number'?{ref:Math.max(0,rn),refIni:gri}:rn&&typeof rn==='object'?{ref:rn.ref!=null&&rn.ref!==''?Math.max(0,+rn.ref||0):TCFG_DEF.refNoLab.ref,refIni:rn.refIni||gri}:{...TCFG_DEF.refNoLab};
   const fer=[...new Set((Array.isArray(c.fer)?c.fer:[]).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
-  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar}}
+  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar,
+    /* publicación automática (20-10-2026): la hace el servidor (publicarTareoAuto); por omisión apagada, a las 21:00 */
+    sem:c.sem&&+c.sem.n>0&&/^\d{4}-\d{2}-\d{2}$/.test(c.sem.lun||'')?{n:Math.round(+c.sem.n),lun:c.sem.lun}:{...TCFG_DEF.sem},
+    pubAuto:{on:!!(c.pubAuto&&c.pubAuto.on===true),hh:/^\d{2}:\d{2}$/.test((c.pubAuto&&c.pubAuto.hh)||'')?c.pubAuto.hh:'21:00'}}}
 const tMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(s||''));return m?+m[1]*60+ +m[2]:null};
 const tR2=v=>Math.round(v*100)/100;
 const tFold=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
@@ -126,6 +131,17 @@ const tEdit=()=>typeof tarEdit==='function'&&tarEdit();
 const tCaps=()=>[...MEM.entries()].filter(([,m])=>m&&m.role==='tcap'&&!m.off).map(([id,m])=>({id,name:m.name||id})).sort((a,b)=>a.name.localeCompare(b.name));
 const tCapName=id=>{if(!id)return'';const m=MEM.get(id);return m?(m.name||id):'(capataz retirado)'};
 const tName=p=>[p.ape,p.nom].filter(Boolean).join(', ');
+/* apellido paterno y materno (20-10-2026: costos los quiere en columnas separadas). Si la ficha los tiene (apP/apM, del formulario)
+   y siguen coincidiendo con «ape» (una importación de RR.HH. pudo cambiarlo), se usan; si no, se parte «ape»: el paterno es la
+   primera palabra junto con sus partículas («DE LA CRUZ PEREZ» → «DE LA CRUZ» y «PEREZ»). */
+const T_APART=new Set(['DE','DEL','LA','LAS','LOS','Y','SAN','SANTA','DA','DI','VON','VAN','MC']);
+function tApes(p){const ape=String(p&&p.ape||'').replace(/,/g,' ').trim().replace(/\s+/g,' ');
+  if(p&&p.apP&&[p.apP,p.apM].filter(Boolean).join(' ')===ape)return[p.apP,p.apM||''];
+  const w=ape?ape.split(' '):[];const pat=[];let i=0;while(i<w.length){const x=w[i++];pat.push(x);if(!(T_APART.has(x)&&i<w.length))break}
+  return[pat.join(' '),w.slice(i).join(' ')]}
+/* semana del proyecto (como «Semana 61» del archivo de costos): sem={n, lun} = la semana n empieza el lunes lun */
+const tLunes=f=>{const d=pd(f);const k=(d.getUTCDay()+6)%7;return iso(new Date(d.getTime()-k*864e5))};
+function tSemN(f){const s=TC().sem;if(!s||!s.lun||!(s.n>0))return null;return s.n+Math.round((pd(tLunes(f))-pd(s.lun))/(7*864e5))}
 const tLive=()=>[...S.tper.values()].filter(p=>!p.arch);
 
 /* ---------- Cálculo del tareo (F1; contrato en docs/ia/tareo.md) ---------- */
@@ -225,7 +241,7 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
 const TO_MOT={DM:'Descanso médico',DA:'Descanso por accidente',SU:'Suspensión',SM:'Subsidio por maternidad',SE:'Subsidio por enfermedad',VA:'Vacaciones',FA:'Falta',LS:'Licencia sin goce',L:'Liquidado'};
 const TO_ST={sin:['Sin empezar','to-sin'],bor:['Borrador','to-bor'],env:['Enviado','to-env'],reab:['Reabierto','to-reab'],rev:['Revisado','to-rev'],pub:['Publicado','to-pub']};
 const TO_ORD={env:0,reab:1,bor:2,sin:3,rev:4,pub:5};
-const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
+const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas (antiguo)',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
@@ -284,7 +300,8 @@ const toSinTxt=(f,g)=>`Obreros sin tareo · ${fmtD(f)} · ${g.name}\n`+g.L.map(p
 function toAccion(x){const ofi=toReabOk(),pr=!ofi&&typeof trProdOk==='function'&&trProdOk();const st=x.t?x.t.st||'bor':'sin';
   if(['sin','bor','reab'].includes(st))return['rec','Recordar',false];
   if(st==='env'&&ofi)return['open','Revisar',true];
-  if(['env','rev'].includes(st)&&pr&&!toProd(x))return['open','Revisar horas',true];
+  /* «Revisado por producción» ya no se muestra (20-10-2026): el jefe revisa en la misma hoja que la oficina */
+  if(st==='env'&&pr)return['open','Revisar',true];
   return['open','Abrir',false]}
 
 function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]=toAccion(x);
@@ -292,18 +309,17 @@ function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]
   const cua=x.cuas.length?`<small class="td-cua" title="${esc(x.cuas.join(', '))}">${esc(x.cuas.slice(0,2).join(' · '))}${x.cuas.length>2?` +${x.cuas.length-2}`:''}</small>`:'';
   const act=`<td class="td-act"><button class="ib${ap?' pri':''}" data-toa="${ak}" data-id="${esc(x.id)}" data-cap="${esc(x.cap)}">${esc(al)}</button></td>`;
   if(!x.t)return`<tr class="td-r t-off${late?' td-late':''}" data-tcap="${esc(x.cap)}" data-stg="sin"><td class="td-cap" data-l="Capataz"><span class="td-nm">${esc(x.name)}</span>${cua}</td>
-    <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="5"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
+    <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="4"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
   const s=x.s;const tot=s.pres+s.fal+s.sm||1;const env=['env','rev','pub'].includes(x.t.st);
   const bar=`<span class="td-ab" aria-hidden="true"><i class="ok" style="flex:${s.pres}"></i><i class="bad" style="flex:${s.fal}"></i><i class="sm" style="flex:${s.sm}"></i>${s.pres+s.fal+s.sm?'':'<i class="nil" style="flex:1"></i>'}</span>`;
   const asis=`${bar}<span class="td-an"><span class="td-ok"><b data-l="Vinieron">${s.pres}</b> ${s.pres===1?'vino':'vinieron'}</span>${s.fal?`<span class="td-bad" title="${esc(Object.entries(s.mot).map(([k,n])=>`${TO_MOT[k]||k}: ${n}`).join('\n'))}"><b data-l="No vinieron">${s.fal}</b> no ${s.fal===1?'vino':'vinieron'}</span>`:''}${s.sm?`<span class="td-sm" title="El capataz aún no marca si vinieron"><b data-l="Sin marcar">${s.sm}</b> sin marcar</span>`:''}</span>`;
-  const fir=!env?'<span class="note">—</span>':s.nof?`<span class="tr-no">${s.nof} sin firma</span>`:s.cot>=s.pres?'<span class="tr-si" title="Todas las firmas cotejadas">✓</span>':`<span class="note">${s.cot} de ${s.pres}</span>`;
   const obs=s.obs.length?`<button class="td-obs${TD.ox&&TD.ox.has(x.id)?' on':''}" data-tox="${esc(x.id)}" aria-expanded="${TD.ox&&TD.ox.has(x.id)?'true':'false'}" title="${esc(s.obs.map(o=>o.msg).join('\n'))}">${s.obs.length}</button>`:'';
   const hr=x.t.st==='env'&&x.t.envAt?'':x.t.envAt&&env?`<small class="td-hr">enviado ${esc(tHm(x.t.envAt))}</small>`:'';
   const row=`<tr class="td-r${late?' td-late':''}" data-to="${esc(x.id)}" data-stg="${st}"><td class="td-cap" data-l="Capataz"><button class="t-lnk td-nm" data-to="${esc(x.id)}">${esc(x.name)}</button>${cua}</td>
     <td class="td-st" data-l="Estado">${toChip(x.t)}${lateT}${hr}${typeof trProdChip==='function'?trProdChip(x.t):''}</td>
     <td class="td-as" data-l="Asistencia">${asis}</td><td class="mono t-r td-hh" data-l="HH">${toH(s.hh)}</td><td class="mono t-r td-he" data-l="HE">${s.he?toH(s.he):''}</td>
-    <td class="t-r td-fi" data-l="Firmas">${fir}</td><td class="t-r td-ob" data-l="Observ.">${obs}</td>${act}</tr>`;
-  return row+(s.obs.length&&TD.ox&&TD.ox.has(x.id)?`<tr class="td-ox" data-tox-of="${esc(x.id)}"><td colspan="8"><ul>${s.obs.map(o=>`<li class="${o.bl?'bl':''}">${esc(o.msg)}</li>`).join('')}</ul></td></tr>`:'')}
+    <td class="t-r td-ob" data-l="Observ.">${obs}</td>${act}</tr>`;
+  return row+(s.obs.length&&TD.ox&&TD.ox.has(x.id)?`<tr class="td-ox" data-tox-of="${esc(x.id)}"><td colspan="7"><ul>${s.obs.map(o=>`<li class="${o.bl?'bl':''}">${esc(o.msg)}</li>`).join('')}</ul></td></tr>`:'')}
 
 /* avisos compactos arriba del tablero: obreros en dos tareos (bloquea revisar) y no enviados a la hora límite */
 function toAvisos(f,L){const docs=[...TD.docs.values()];const ed=toReabOk();let h='';
@@ -348,7 +364,7 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
   let env=0,pres=0,hh=0,he=0,fal=0,sm=0;const mot={};const C={sin:0,bor:0,rev:0,ok:0,pub:0};
   for(const x of L){C[toStg(x)]++;if(!x.t)continue;if(['env','rev','pub'].includes(x.t.st))env++;pres+=x.s.pres;hh+=x.s.hh;he+=x.s.he;fal+=x.s.fal;sm+=x.s.sm;for(const[k,n]of Object.entries(x.s.mot))mot[k]=(mot[k]||0)+n}
   const nObs=L.filter(x=>x.t&&x.s.obs.length).length,nProd=L.filter(toProd).length,nPr=L.filter(x=>x.t&&['env','rev','pub'].includes(x.t.st)).length,nLate=L.filter(x=>toLate(x,f)).length;
-  if(!['all','obs','prod','late',...TO_STG.map(s=>s[0])].includes(TD.flt))TD.flt='all';
+  if(!['all','obs','late',...TO_STG.map(s=>s[0])].includes(TD.flt))TD.flt='all';
   const vis=L.filter(toFltOk);
   const nl=tNoLab(f);const docs=[...TD.docs.values()];const G=TD.ok&&!nl?tSinTareo(f,docs):[];const nSin=G.reduce((s,g)=>s+g.L.length,0);
   const fb=(k,l,n,cls)=>`<button data-trflt="${k}" class="td-f${cls?' '+cls:''}${TD.flt===k?' on':''}" aria-pressed="${TD.flt===k}">${l} <b>${n}</b></button>`;
@@ -361,12 +377,12 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
      <div class="td-dh"><div class="td-big"><b id="toEnv">${env}<small> de ${L.length}</small></b><span>${L.length===1?'tareo enviado':'tareos enviados'}</span></div>
       <dl class="td-kp"><div><dt>Vinieron</dt><dd id="toPres">${pres}</dd></div><div title="${esc(motT)}"><dt>No vinieron</dt><dd id="toFal" class="${fal?'bad':''}">${fal}</dd></div>${sm?`<div title="El capataz aún no marca si vinieron"><dt>Sin marcar</dt><dd id="toSm" class="warn">${sm}</dd></div>`:''}<div><dt>HH</dt><dd id="toHH">${toH(hh)}</dd></div><div><dt>HE</dt><dd id="toHE">${toH(he)}</dd></div></dl></div>
      <div class="td-bar" aria-hidden="true">${TO_STG.map(([k])=>C[k]?`<i class="s-${k}" style="flex:${C[k]}"></i>`:'').join('')||'<i class="s-nil"></i>'}</div>
-     <div class="td-fl" id="trFlt" role="group" aria-label="Filtrar por estado">${fb('all','Todos',L.length)}${TO_STG.map(([k,l])=>fb(k,l,C[k],'s-'+k)).join('')}<span class="td-fsep" aria-hidden="true"></span>${fb('prod','Producción ✓',`${nProd}<small> de ${nPr}</small>`,'s-prod')}${fb('obs','Con observaciones',nObs,'s-obs')}${TD.flt==='late'?fb('late','No enviados a la hora',nLate,'s-late'):''}</div>
+     <div class="td-fl" id="trFlt" role="group" aria-label="Filtrar por estado">${fb('all','Todos',L.length)}${TO_STG.map(([k,l])=>fb(k,l,C[k],'s-'+k)).join('')}<span class="td-fsep" aria-hidden="true"></span>${fb('obs','Con observaciones',nObs,'s-obs')}${TD.flt==='late'?fb('late','No enviados a la hora',nLate,'s-late'):''}</div>
     </section>
     ${TD.ok?toAvisos(f,L):''}
     <section class="card td-board"><div class="td-bh"><input class="tin td-q" id="toQ" type="search" placeholder="Buscar capataz o cuadrilla" value="${esc(TD.q||'')}" aria-label="Buscar capataz o cuadrilla"><span class="note">${vis.length===L.length?`${L.length} ${L.length===1?'capataz':'capataces'}`:`${vis.length} de ${L.length} capataces`} · por revisar primero</span></div>
-     <div class="tscroll"><table class="t t-tbl td-tbl"><thead><tr><th>Capataz</th><th>Estado</th><th>Asistencia</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r">Firmas</th><th class="t-r" title="Observaciones">Obs.</th><th aria-label="Acción"></th></tr></thead>
-     <tbody id="toBody">${vis.map(x=>toRowHtml(x,f)).join('')||`<tr><td colspan="8" class="note td-empty">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></section>
+     <div class="tscroll"><table class="t t-tbl td-tbl"><thead><tr><th>Capataz</th><th>Estado</th><th>Asistencia</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r" title="Observaciones">Obs.</th><th aria-label="Acción"></th></tr></thead>
+     <tbody id="toBody">${vis.map(x=>toRowHtml(x,f)).join('')||`<tr><td colspan="7" class="note td-empty">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></section>
    </div>${nSin?`<aside class="td-side">${toSinHtml(f,G,nSin)}</aside>`:''}</div>
   </div></div>`;
   const go=d=>{TD.f=d>hoy?hoy:d;TD.sel.clear();requestRender()};
@@ -438,19 +454,33 @@ function tPerSelects(){const F=tPerFacets();const n=x=>` (${x})`;const tot=m=>[.
   const cl=$('#tperClr');if(cl)cl.disabled=!tPerFiltOn()}
 /* «Hacer capataz»: la cuenta (usuario y contraseña) la crea tareo-cuentas.js con tCapCuenta(dni); aquí solo el botón y el chip */
 const tCtaFn=()=>typeof tCapCuenta==='function';
-function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&tCtaFn();
+function tPerRows(L){const ed=tEdit(),hoy=todayIso();const max=600;const cf=ed&&tCtaFn();/* 20-10-2026: «Editar» en cada fila (antes había que abrir la ficha) */
   return L.slice(0,max).map((p,i)=>{const a=tActivo(p,hoy);const dni=p.dni||p.id;return`<tr class="${a?'':'t-off'}" data-tp="${esc(p.id)}">${ed?`<td class="t-ck"><input type="checkbox" data-tsel="${esc(p.id)}"${TU.sel.has(p.id)?' checked':''} aria-label="Elegir"></td>`:''}
    <td class="mono t-r t-num" data-l="N°">${i+1}</td><td class="mono" data-l="DNI">${esc(dni)}</td><td data-l="Nombre"><button class="t-lnk" data-tfi="${esc(p.id)}">${esc(p.ape||'')}<span>${esc(p.nom||'')}${p.cta?' <i class="lqt t-capc">Capataz</i>':''}</span></button></td>
    <td data-l="Puesto">${esc(p.pue||'')} <i class="t-cat">${esc(p.cat||'OT')}</i></td><td data-l="Cuadrilla">${esc(p.cua||'')}</td><td data-l="Capataz">${esc(tCapName(p.cap))||'<span class="note">—</span>'}</td>
-   <td class="mono" data-l="Ingreso">${esc(tFmt(p.ing))}</td><td class="mono" data-l="Cese">${esc(tFmt(p.ces))}${p.ces&&a?' <span class="note">(próximo)</span>':''}</td><td data-l="Motivo">${esc(p.mot||'')}</td>${cf?`<td class="t-acts"><button class="ib" data-tcta="${esc(dni)}">${p.cta?'Cuenta de capataz…':'Hacer capataz'}</button></td>`:''}</tr>`}).join('')
+   <td class="mono" data-l="Ingreso">${esc(tFmt(p.ing))}</td><td class="mono" data-l="Cese">${esc(tFmt(p.ces))}${p.ces&&a?' <span class="note">(próximo)</span>':''}</td><td data-l="Motivo">${esc(p.mot||'')}</td>${ed?`<td class="t-acts">${p.arch?'':`<button class="ib" data-tfe="${esc(p.id)}">Editar</button>`}${cf?`<button class="ib" data-tcta="${esc(dni)}">${p.cta?'Cuenta de capataz…':'Hacer capataz'}</button>`:''}</td>`:''}</tr>`}).join('')
    +(L.length>max?`<tr><td colspan="12" class="note">Se muestran ${max} de ${L.length}: usa el buscador o los filtros.</td></tr>`:'')}
 function tPerDraw(){const b=$('#tperBody');if(!b)return;const L=tPerList();b.innerHTML=tPerRows(L);tPerSelects();const n=$('#tperN');if(n){const hoy=todayIso();n.textContent=`Mostrando ${L.length} de ${tLive().length} · ${L.filter(p=>tActivo(p,hoy)).length} activos`}
   const s=$('#tselBar');if(s){s.hidden=!TU.sel.size;const c=$('#tselN');if(c)c.textContent=TU.sel.size}}
-function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
+/* «Mi cuadrilla» (20-10-2026): el capataz solo ve a sus obreros activos (nombre, DNI y categoría) con un buscador; sin máster,
+   filtros, cesados ni Excel. El buscador redibuja solo la lista. */
+let TCW_Q='';
+function tcwList(){const hoy=todayIso();const me1=typeof tcMe==='function'?tcMe():'';const q=tFold(TCW_Q);
+  const L=tLive().filter(p=>p.cap===me1&&tActivo(p,hoy)).sort((a,b)=>(a.ape||'').localeCompare(b.ape||'')||(a.dni||'').localeCompare(b.dni||''));
+  const V=L.filter(p=>!q||(p.dni||p.id||'').includes(q)||tFold(tName(p)).includes(q));
+  return{n:L.length,html:V.map((p,i)=>`<li class="tcw-r"><span class="tc-n">${i+1}</span><div><b>${esc(p.ape||'')}</b> <span>${esc(p.nom||'')}</span><small>DNI <span class="mono">${esc(p.dni||p.id||'')}</span>${p.cat?' · '+esc(p.cat):''}${p.cua?' · '+esc(p.cua):''}</small></div></li>`).join('')
+    ||`<li class="tc-empty">${L.length?`Nadie con «${esc(TCW_Q)}».`:'Aún no tienes obreros asignados: pide a la oficina que te los asigne.'}</li>`}}
+function renderTCrew(main){const x=tcwList();
+  main.innerHTML=`<div class="scroll"><div class="wrap tcw">${pageHead('Mi cuadrilla',`${x.n} ${x.n===1?'obrero activo':'obreros activos'}`)}
+   <input class="tin tcw-q" id="tcwQ" type="search" autocomplete="off" placeholder="Buscar: nombre o DNI" aria-label="Buscar en tu cuadrilla" value="${esc(TCW_Q)}">
+   <ol class="tcw-l" id="tcwL">${x.html}</ol>
+   <p class="note">Si falta alguien o sobra, avisa al asistente de tareo: él mantiene el máster.</p></div></div>`;
+  $('#tcwQ',main).addEventListener('input',e=>{TCW_Q=e.target.value;const l=$('#tcwL');if(l)l.innerHTML=tcwList().html})}
+function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
   const caps=tCaps();
   for(const id of[...TU.sel])if(!S.tper.has(id))TU.sel.delete(id);
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Personal',`${nAct} activos · ${all.length} en el máster`,`<button class="ib" id="tperXls">Exportar Excel</button>${ed?`<button class="ib" id="tperImp">Importar Excel de RR.HH.</button><button class="ib pri" id="tperAdd">+ Obrero</button>`:''}`)}
-   ${helpBox('¿Cómo se mantiene el máster?',`<p>Importa el Excel de RR.HH. (hoja «Datos del personal»): verás qué personas son nuevas, cuáles cambian y cuáles siguen igual antes de confirmar. La importación <b>no</b> borra a nadie ni cambia el capataz asignado.</p><p>Un reingreso agrega un periodo nuevo a la misma ficha (por DNI). «Archivar» la oculta sin borrarla.</p>`)}
+   ${helpBox('¿Cómo se mantiene el máster?',`<p>Agrega a alguien con «+ Obrero» y corrige sus datos con «Editar» en su fila; para cambiar a varios a la vez (capataz, cuadrilla, categoría o puesto), elígelos y usa «Editar elegidos». El cese y el reingreso se marcan en la ficha (clic en el nombre).</p><p>También puedes importar el Excel de RR.HH. (hoja «Datos del personal»): verás qué personas son nuevas, cuáles cambian y cuáles siguen igual antes de confirmar. La importación <b>no</b> borra a nadie ni cambia el capataz asignado.</p><p>Un reingreso agrega un periodo nuevo a la misma ficha (por DNI). «Archivar» la oculta sin borrarla.</p>`)}
    ${ed?'':`<div class="callout">Solo lectura: el máster lo mantiene el asistente de tareo.</div>`}
    ${ed&&!caps.length?`<div class="callout t-warn">No hay capataces de tareo en el equipo (rol «Capataz (tareo)»)${MEM.size<2?' o tu rol no puede ver la lista del equipo':''}: agrégalos en Equipo para poder asignarles obreros.</div>`:''}
    <div class="card"><div class="pad t-bar">
@@ -461,8 +491,8 @@ function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso(
     <select class="tin" id="tperCap" aria-label="Capataz"></select>
     <button class="ib" id="tperClr" title="Quitar la búsqueda y los filtros (vuelve a «Activos»)">Limpiar filtros</button>
     <span class="note" id="tperN"></span></div>
-    ${ed?`<div class="pad t-selbar" id="tselBar" hidden><b><span id="tselN">0</span> elegidos</b><button class="ib pri" id="tselCap">Asignar capataz</button><button class="ib" id="tselNone">Quitar selección</button></div>`:''}
-    <div class="tscroll"><table class="t t-tbl"><thead><tr>${ed?'<th class="t-ck"><input type="checkbox" id="tselAll" aria-label="Elegir todos los visibles"></th>':''}<th class="t-r t-num">N°</th><th>DNI</th><th>Apellidos y nombres</th><th>Puesto</th><th>Cuadrilla</th><th>Capataz</th><th>Ingreso</th><th>Cese</th><th>Motivo</th>${ed&&tCtaFn()?'<th></th>':''}</tr></thead><tbody id="tperBody"></tbody></table></div></div>
+    ${ed?`<div class="pad t-selbar" id="tselBar" hidden><b><span id="tselN">0</span> elegidos</b><button class="ib pri" id="tselEd">Editar elegidos</button><button class="ib" id="tselNone">Quitar selección</button></div>`:''}
+    <div class="tscroll"><table class="t t-tbl"><thead><tr>${ed?'<th class="t-ck"><input type="checkbox" id="tselAll" aria-label="Elegir todos los visibles"></th>':''}<th class="t-r t-num">N°</th><th>DNI</th><th>Apellidos y nombres</th><th>Puesto</th><th>Cuadrilla</th><th>Capataz</th><th>Ingreso</th><th>Cese</th><th>Motivo</th>${ed?'<th></th>':''}</tr></thead><tbody id="tperBody"></tbody></table></div></div>
   </div></div>`;
   tPerDraw();
   const q=$('#tperQ');q.oninput=()=>{TU.q=q.value;tPerDraw()};
@@ -470,12 +500,12 @@ function renderTPer(main){const ed=tEdit();const all=tLive();const hoy=todayIso(
   $('#tperClr').onclick=()=>{Object.assign(TU,{q:'',est:'act',cua:'',cat:'',cap:''});q.value='';tPerDraw()};
   $('#tperCua').onchange=e=>{TU.cua=e.target.value;tPerDraw()};$('#tperCat').onchange=e=>{TU.cat=e.target.value;tPerDraw()};$('#tperCap').onchange=e=>{TU.cap=e.target.value;tPerDraw()};
   $('#tperXls').onclick=tPerExport;
-  const body=$('#tperBody');body.onclick=e=>{const c=e.target.closest('[data-tcta]');if(c){if(tEdit()&&tCtaFn())tCapCuenta(c.dataset.tcta);return}const b=e.target.closest('[data-tfi]');if(b)tFicha(b.dataset.tfi)};
+  const body=$('#tperBody');body.onclick=e=>{const fe=e.target.closest('[data-tfe]');if(fe){if(tEdit())tPerForm(fe.dataset.tfe);return}const c=e.target.closest('[data-tcta]');if(c){if(tEdit()&&tCtaFn())tCapCuenta(c.dataset.tcta);return}const b=e.target.closest('[data-tfi]');if(b)tFicha(b.dataset.tfi)};
   if(!ed)return;
   body.onchange=e=>{const c=e.target.closest('[data-tsel]');if(!c)return;if(c.checked)TU.sel.add(c.dataset.tsel);else TU.sel.delete(c.dataset.tsel);tPerDraw()};
   $('#tselAll').onchange=e=>{const L=tPerList().slice(0,600);if(e.target.checked)L.forEach(p=>TU.sel.add(p.id));else L.forEach(p=>TU.sel.delete(p.id));tPerDraw()};
   $('#tselNone').onclick=()=>{TU.sel.clear();const a=$('#tselAll');if(a)a.checked=false;tPerDraw()};
-  $('#tselCap').onclick=tAsignarCap;$('#tperAdd').onclick=()=>tPerForm(null);$('#tperImp').onclick=tImportMaster}
+  $('#tselEd').onclick=tEditarSel;$('#tperAdd').onclick=()=>tPerForm(null);$('#tperImp').onclick=tImportMaster}
 
 function tFicha(id){const p=S.tper.get(id);if(!p)return;const ed=tEdit();const a=tActivo(p);const per=(Array.isArray(p.per)&&p.per.length?p.per:[{ing:p.ing,ces:p.ces,mot:p.mot}]).slice().reverse();
   lqModal(`<div class="lqtop"><b>${esc(p.ape||'')}${p.nom?', '+esc(p.nom):''}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
@@ -487,12 +517,13 @@ function tFicha(id){const p=S.tper.get(id);if(!p)return;const ed=tEdit();const a
    e=>{const b=e.target.closest('[data-tfa]');if(!b)return;const k=b.dataset.tfa;if(k==='edit')tPerForm(id);else if(k==='ces')tCese(id);else if(k==='rein')tReingreso(id);else if(k==='arch')tArchivar(id);else if(k==='unarch')tRestaurar(id)})}
 
 function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cuas=[...new Set(tLive().map(x=>x.cua).filter(Boolean))].sort();
-  const v=p||{dni:'',ape:'',nom:'',pue:'',cat:'',cua:'',cap:'',ing:todayIso()};
+  const v=p||{dni:'',ape:'',nom:'',pue:'',cat:'',cua:'',cap:'',ing:todayIso()};const ap=tApes(v);
   lqModal(`<div class="lqtop"><b>${p?'Editar obrero':'Nuevo obrero'}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
    <div class="t-form">
     <label class="lqlab">DNI<input class="tin" id="tfDni" value="${esc(v.dni)}" inputmode="numeric" maxlength="12"${p?' readonly':''}></label>
     <label class="lqlab">Fecha de ingreso<input class="tin" id="tfIng" type="date" value="${esc(v.ing||'')}"></label>
-    <label class="lqlab">Apellidos<input class="tin" id="tfApe" value="${esc(v.ape)}"></label>
+    <label class="lqlab">Apellido paterno<input class="tin" id="tfApP" value="${esc(ap[0])}"></label>
+    <label class="lqlab">Apellido materno<input class="tin" id="tfApM" value="${esc(ap[1])}"></label>
     <label class="lqlab">Nombres<input class="tin" id="tfNom" value="${esc(v.nom)}"></label>
     <label class="lqlab">Puesto<input class="tin" id="tfPue" value="${esc(v.pue)}" placeholder="OPERARIO ALBAÑIL"></label>
     <label class="lqlab">Categoría<select class="tin" id="tfCat"><option value="">Según el puesto</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}"${p&&v.cat===k?' selected':''}>${l}</option>`).join('')}</select></label>
@@ -503,9 +534,10 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
    async e=>{if(!e.target.closest('#tfOk'))return;const msg=t=>{$('#tfMsg').textContent=t};
      const dni=p?p.id:tDni($('#tfDni').value);if(!dni)return msg('El DNI no es válido: 8 dígitos (o carné de extranjería de 9 a 12 caracteres).');
      if(!p&&S.tper.has(dni)){const o=S.tper.get(dni);return msg(`Ya existe una ficha con el DNI ${dni}${o.arch?' (archivada: restáurala desde «Archivados»)':` (${tName(o)})`}.`)}
-     const ape=$('#tfApe').value.trim().replace(/\s+/g,' ').toUpperCase(),nom=$('#tfNom').value.trim().replace(/\s+/g,' ').toUpperCase();if(!ape)return msg('Escribe los apellidos.');
+     const up=id=>$(id).value.replace(/,/g,' ').trim().replace(/\s+/g,' ').toUpperCase();const apP=up('#tfApP'),apM=up('#tfApM'),nom=up('#tfNom');
+     if(!apP)return msg('Escribe el apellido paterno.');const ape=[apP,apM].filter(Boolean).join(' ');
      const ing=$('#tfIng').value;const pue=$('#tfPue').value.trim().replace(/\s+/g,' ').toUpperCase();const cat=$('#tfCat').value||tCatDe(pue);
-     const d={dni,ape,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};
+     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};
      if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d})}
      else{Object.assign(d,{ces:'',mot:'',per:[{ing,ces:'',mot:''}]});d.act=tActivo(d)}
      try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});lqClose();toast(p?'Ficha actualizada.':'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
@@ -534,17 +566,29 @@ async function tArchivar(id){const p=S.tper.get(id);if(!p)return;lqClose();
   try{await fcol(TCOLS.tper).doc(id).update({arch:{t:NOW(),by:me.email,n:tName(p)},act:false,...tStamp()});toast('Ficha archivada.')}catch(err){toast('No se pudo archivar: '+(err.code||err.message))}}
 async function tRestaurar(id){const p=S.tper.get(id);if(!p)return;lqClose();
   try{await fcol(TCOLS.tper).doc(id).update({arch:firebase.firestore.FieldValue.delete(),act:tActivo({...p,arch:null}),...tStamp()});toast('Ficha restaurada.')}catch(err){toast('No se pudo restaurar: '+(err.code||err.message))}}
-function tAsignarCap(){const ids=[...TU.sel].filter(id=>S.tper.has(id));if(!ids.length)return;const caps=tCaps();
-  if(!caps.length){toast('No hay capataces de tareo en el equipo: agrégalos en Equipo con el rol «Capataz (tareo)».');return}
-  lqModal(`<div class="lqtop"><b>Asignar capataz</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><p class="lqmsg">${ids.length} ${ids.length===1?'obrero elegido':'obreros elegidos'}.</p>
-   <label class="lqlab">Capataz<select class="tin" id="tacSel"><option value="">Sin capataz (quitar)</option>${caps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tacOk">Asignar</button></div>`,
-   async e=>{if(!e.target.closest('#tacOk'))return;const cap=$('#tacSel').value;const st=tStamp();
-     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{cap,...st},{merge:true}]));lqClose();TU.sel.clear();toast(`${ids.length} ${ids.length===1?'obrero asignado':'obreros asignados'}${cap?' a '+tCapName(cap):' sin capataz'}.`);requestRender()}catch(err){toast('No se pudo asignar: '+(err.code||err.message))}})}
+/* «Editar elegidos» (20-10-2026; antes solo «Asignar capataz»): cambia a la vez capataz, cuadrilla, categoría o puesto de los
+   elegidos. Lo que se deja en «no cambiar» (o vacío) no se toca. */
+function tEditarSel(){const ids=[...TU.sel].filter(id=>S.tper.has(id));if(!ids.length)return;const caps=tCaps();
+  const cuas=[...new Set(tLive().map(x=>x.cua).filter(Boolean))].sort();const NO='=';
+  lqModal(`<div class="lqtop"><b>Editar elegidos</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><p class="lqmsg">${ids.length} ${ids.length===1?'obrero elegido':'obreros elegidos'}. Solo cambia lo que elijas.</p>
+   <div class="t-form">
+    <label class="lqlab">Capataz<select class="tin" id="tacSel"><option value="${NO}">— no cambiar —</option><option value="">Sin capataz (quitar)</option>${caps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>
+    <label class="lqlab">Cuadrilla<input class="tin" id="tacCua" list="tacCuaL" placeholder="— no cambiar —"><datalist id="tacCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+    <label class="lqlab">Categoría<select class="tin" id="tacCat"><option value="${NO}">— no cambiar —</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label>
+    <label class="lqlab">Puesto<input class="tin" id="tacPue" placeholder="— no cambiar —"></label>
+   </div>${caps.length?'':'<p class="note">No hay capataces de tareo en el equipo: agrégalos en Equipo con el rol «Capataz (tareo)».</p>'}
+   <p class="lqmsg bad" id="tacMsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tacOk">Guardar</button></div>`,
+   async e=>{if(!e.target.closest('#tacOk'))return;const d={};const cap=$('#tacSel').value,cat=$('#tacCat').value;
+     const cua=$('#tacCua').value.trim().replace(/\s+/g,' ').toUpperCase(),pue=$('#tacPue').value.trim().replace(/\s+/g,' ').toUpperCase();
+     if(cap!==NO)d.cap=cap;if(cua)d.cua=cua;if(pue)d.pue=pue;if(cat!==NO)d.cat=cat;else if(pue)d.cat=tCatDe(pue);
+     if(!Object.keys(d).length)return $('#tacMsg').textContent='Elige qué cambiar.';const st=tStamp();
+     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{...d,...st},{merge:true}]));lqClose();TU.sel.clear();
+       const what=[d.cap!=null?(d.cap?'capataz '+tCapName(d.cap):'sin capataz'):'',d.cua?'cuadrilla '+d.cua:'',d.pue?'puesto '+d.pue:'',cat!==NO?'categoría '+TCAT[cat]:''].filter(Boolean).join(', ');
+       toast(`${ids.length} ${ids.length===1?'obrero actualizado':'obreros actualizados'}: ${what}.`);requestRender()}catch(err){$('#tacMsg').textContent='No se pudo guardar: '+(err.code||err.message)}})}
 async function tPerExport(){try{await loadXlsx();const X=window.XLSX;const L=tPerList();
-  const aoa=[['DNI','Apellidos','Nombres','Puesto','Categoría','Cuadrilla','Capataz','Ingreso','Cese','Motivo','Estado']];const hoy=todayIso();
-  for(const p of L)aoa.push([p.dni||p.id,p.ape||'',p.nom||'',p.pue||'',TCAT[p.cat]||'Otro',p.cua||'',tCapName(p.cap),tFmt(p.ing),tFmt(p.ces),p.mot||'',p.arch?'Archivado':tActivo(p,hoy)?'Activo':'Cesado']);
-  const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=[10,24,22,26,10,16,22,11,11,22,10].map(w=>({wch:w}));for(let c=0;c<11;c++){const k=X.utils.encode_cell({r:0,c});if(ws[k])ws[k].s={font:{bold:true}}}
+  const aoa=[['DNI','Apellido paterno','Apellido materno','Nombres','Puesto','Categoría','Cuadrilla','Capataz','Ingreso','Cese','Motivo','Estado']];const hoy=todayIso();
+  for(const p of L)aoa.push([p.dni||p.id,...tApes(p),p.nom||'',p.pue||'',TCAT[p.cat]||'Otro',p.cua||'',tCapName(p.cap),tFmt(p.ing),tFmt(p.ces),p.mot||'',p.arch?'Archivado':tActivo(p,hoy)?'Activo':'Cesado']);
+  const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=[10,18,18,22,26,10,16,22,11,11,22,10].map(w=>({wch:w}));for(let c=0;c<12;c++){const k=X.utils.encode_cell({r:0,c});if(ws[k])ws[k].s={font:{bold:true}}}
   for(let r=1;r<aoa.length;r++){const k=X.utils.encode_cell({r,c:0});if(ws[k])ws[k].t='s'}
   const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Personal');saveBlob(`Personal obrero ${hoy}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/octet-stream'}))}
   catch(err){toast('No se pudo exportar: '+(err.message||err))}}
@@ -687,7 +731,10 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
     <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
    <div class="card"><div class="pad t-form">
     <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label>
-    <label class="lqlab">Tolerancia de garita (min)<input class="tin t-n" type="number" min="0" max="120" id="tjTol" value="${c.tolGar}"${dis}></label></div>
+    <label class="chk tj-auto"><input type="checkbox" id="tjAuto"${c.pubAuto.on?' checked':''}${dis}> Publicar el día automáticamente</label>
+    <label class="lqlab">A partir de las<input class="tin" type="time" id="tjAutoH" value="${esc(c.pubAuto.hh)}"${dis}></label>
+    <label class="lqlab">Semana del proyecto (esta semana, del lunes ${esc(tFmt(tLunes(todayIso())))})<input class="tin t-n" type="number" min="1" max="999" step="1" id="tjSem" value="${tSemN(todayIso())||''}"${dis}></label>
+    <p class="note t-cfgn">Pasada esa hora, el servidor publica el día de hoy si todos los capataces están revisados, nadie figura en dos tareos y el personal sin tareo tiene su motivo. Si falta algo no publica y lo avisa en Publicación; vuelve a intentarlo cada 15 minutos.</p></div>
     ${ed?`<div class="pad"><button class="ib pri" id="tjSave">Guardar configuración</button></div>`:''}</div>
    <div class="card" id="tferCard"><h2>Feriados del tareo <span class="sub">Días no laborables para el tareo (todas las horas son extra). Son propios del tareo: todos los roles calculan igual.</span></h2>
     ${ed?`<div class="pad t-bar t-ferAdd"><input class="tin" type="date" id="tferD" aria-label="Fecha del feriado"><input class="tin" id="tferNm" placeholder="Nombre (opcional)" aria-label="Nombre del feriado" maxlength="60"><button class="ib pri" id="tferAdd">Agregar</button>${lps.length?`<button class="ib" id="tferLps" title="${lps.length} feriados en el calendario de Last Planner">Copiar feriados de Last Planner${fal?` (${fal})`:''}</button>`:''}</div>`:''}
@@ -700,7 +747,7 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
       const r=main.querySelector(`[data-tjd="${k}"]`);r.querySelectorAll('[data-tj]:not([data-tj="on"])').forEach(x=>x.disabled=!j)}$('#tjTot').textContent=t.toFixed(1)};
   main.querySelector('.t-jor').oninput=upd;main.querySelector('.t-jor').onchange=upd;
   $('#tjSave').onclick=async()=>{const jor=read();for(const[k,j]of Object.entries(jor))if(j&&!(tJorH(j)>0)){toast(`Revisa la jornada del ${TDOW.find(x=>x[0]===k)[1].toLowerCase()}: el fin debe ser posterior al inicio.`);return}
-    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:Math.max(0,Math.round(+$('#tjTol').value||0)),...tStamp()};
+    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,pubAuto:{on:$('#tjAuto').checked,hh:/^\d{2}:\d{2}$/.test($('#tjAutoH').value)?$('#tjAutoH').value:'21:00'},sem:+$('#tjSem').value>0?{n:Math.round(+$('#tjSem').value),lun:tLunes(todayIso())}:c.sem,tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
   $('#tferAdd').onclick=()=>{const f=$('#tferD').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Elige la fecha del feriado.');return}const n=$('#tferNm').value.trim().replace(/\s+/g,' ');
     const C=TC();if(C.fer.includes(f)&&(C.ferN[f]||'')===n){toast('Ese feriado ya está.');return}
