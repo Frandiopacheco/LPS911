@@ -524,7 +524,12 @@ async function lkNewSc(x,t){t.value=x.sc;
   if(cur.sc&&actHist(cur).length){if(ops.length)apply(ops,`Subcontratista ${name} agregado`);histGate(cur,'sc',id);return}
   const nx={...cur,sc:id};if(nx.obs){delete nx.obs;delete nx.obsSug}ops.push(op('acts',cur.id,nx));
   apply(ops,ex?`Asignado a ${name} (ya existía en la lista)`:`${name} agregado y asignado. Su especialidad y color se ajustan en Configuración › Subcontratistas.`)}
-function wireGrid(tbl){
+/* fila y columna bajo el puntero (19/10, como en la Matriz; solo con mouse): la fila con CSS (tr:hover), el día con una regla que cambia */
+let LKHK=null;
+function lkHov(e){if(!(typeof mxPC==='function'&&mxPC()))return;const c=e.target&&e.target.closest?e.target.closest('td.d,th.dh'):null;const d=c?(c.dataset.d||c.dataset.dh||''):'';if(LKHK===d)return;LKHK=d;
+  let st=document.getElementById('lkhovst');if(!st){st=document.createElement('style');st.id='lkhovst';document.head.appendChild(st)}
+  st.textContent=d?`#grid td.d[data-d="${d}"]{box-shadow:inset 0 0 0 999px var(--lkhov)}#grid th.dh[data-dh="${d}"]{box-shadow:inset 0 0 0 999px var(--lkhov)}`:''}
+function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventListener('pointerleave',()=>{LKHK=null;const st=document.getElementById('lkhovst');if(st)st.textContent=''});
   const lz=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.lz)scFill(t)};tbl.addEventListener('mousedown',lz,true);tbl.addEventListener('touchstart',lz,{capture:true,passive:true});tbl.addEventListener('focusin',lz,true);
   tbl.addEventListener('focusin',e=>{const t=e.target;if(t.classList.contains('ci'))t.dataset.o=t.value;if(t.tagName==='INPUT'&&t.dataset.a&&t.dataset.f==='name'&&!t.readOnly)actSuggest(t);const a=t.dataset&&t.dataset.a||null;if(a!==myAct){myAct=a;sendPresence()}});
   tbl.addEventListener('focusout',e=>{const t=e.target;if(t.classList.contains('ci')){commitField(t);delete t.dataset.o;setTimeout(()=>{if(!tbl.contains(document.activeElement)&&myAct){myAct=null;sendPresence()}flushDeferred()},0)}});

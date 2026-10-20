@@ -212,7 +212,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
         h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
   h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
-   </div></div>${ed?mxSelBar():''}`;
+   </div></div>`;
   const sc=$('#mxbox');const keep=sc?{l:sc.scrollLeft,t:sc.scrollTop}:null;
   main.innerHTML=h;MX.view={rows,cols};
   /* el alto de la caja se fija antes de devolver el desplazamiento: sin él (max-height:none) el scroll quedaba en 0 y cada cambio llevaba arriba */
@@ -225,11 +225,11 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   MX.hk=null;{const st=document.getElementById('mxhovst');if(st)st.textContent='';const el=MX.hp&&document.elementFromPoint(MX.hp.x,MX.hp.y);if(el&&el.closest('#mxt'))mxHov({target:el})}}
 
 /* barra de la selección (abajo) */
-function mxSelBar(){const n=MX.sel.size;if(!n)return'';
-  return`<div class="mxsb" id="mxsb" role="toolbar" aria-label="Celdas seleccionadas"><b>${n} ${n===1?'celda':'celdas'}</b>
-   ${['p','c','t','n'].map((s,i)=>`<button class="ib" data-mxset="${s}" title="Tecla ${['1','2','3','0'][i]}"><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}
-   <button class="ib pri" data-mxset="ok" title="Confirma lo que propone el sistema (Enter)">✓ Validar</button><button class="ab" data-mxclr aria-label="Quitar la selección" title="Quitar la selección (Esc)">&times;</button></div>`}
-
+/* varias celdas elegidas (19/10, el dueño quitó la barra fija de abajo): al terminar de elegir sale un menú junto a la selección
+   con los estados y «Validar» (las teclas 1/2/3/0/Enter siguen funcionando) */
+function mxSelPop(el){const n=MX.sel.size;if(!el||n<2||!mxEdG())return;
+  openPop(el,`<div class="ph mxselp">${n} celdas elegidas</div>${['p','c','t','n'].map(s=>`<button data-do="s${s}"><i class="mc s-${s}">${MXI[s]}</i> ${MXS[s]}</button>`).join('')}<button data-do="ok">✓ Validar lo propuesto</button><hr><button data-do="clr">Quitar la selección</button>`,
+    {sp:()=>mxApply('p'),sc:()=>mxApply('c'),st:()=>mxApply('t'),sn:()=>mxApply('n'),ok:()=>mxApply('ok'),clr:()=>{MX.sel.clear();mxPaintSel()}})}
 /* nombres del lookahead (pisos a la vista) que no están en el catálogo */
 function mxUnmapped(){const ali=mxAli();const vp=new Set(visPisos().map(p=>p.id));const m=new Map();
   for(const x of S.act.values()){const k=mnk(x.name);if(!k||ali.has(k)||!vp.has(pisoOfAmb(x.ambId)))continue;let e=m.get(k);if(!e)m.set(k,e={k,name:String(x.name).trim(),sc:x.sc,ids:[]});e.ids.push(x.id)}
@@ -244,7 +244,7 @@ function mxScMismatch(){const vp=new Set(visPisos().map(p=>p.id));const m=new Ma
 function mxScMisDlg(){if(!mxEd())return;const L=mxScMismatch();if(!L.length){lqClose();return}
   lqModal(`<div class="lqtop"><b>Filas con otro subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. <b>Si los dos SC hacen esa actividad</b>, súmalo a la actividad (queda de los dos). Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo.</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button></span></div>`).join('')}</div>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button>${mxLkBtn(u.c.name,mxLkPiso(u.ids),'Ver en el Lookahead')}</span></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
    async e=>{const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
      const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
@@ -267,9 +267,7 @@ function mxSelIx(t){if(MX.ix&&MX.ix.t===t)return MX.ix;const m=new Map(),on=new 
 function mxPaintSel(){const t=$('#mxt');if(!t)return;const ix=mxSelIx(t);
   for(const k of ix.on)if(!MX.sel.has(k)){const td=ix.m.get(k);if(td)td.classList.remove('sl');ix.on.delete(k)}
   for(const k of MX.sel)if(!ix.on.has(k)){const td=ix.m.get(k);if(td){td.classList.add('sl');ix.on.add(k)}}
-  const old=$('#mxsb');const n=MX.sel.size;if(old&&n&&old.firstElementChild){old.firstElementChild.textContent=`${n} ${n===1?'celda':'celdas'}`;return}
-  const html=mxSelBar();if(old)old.remove();if(html)document.querySelector('#main').insertAdjacentHTML('beforeend',html);mxWireBar()}
-function mxWireBar(){const b=$('#mxsb');if(!b)return;b.onclick=e=>{const s=e.target.closest('[data-mxset]');if(s){mxApply(s.dataset.mxset);return}if(e.target.closest('[data-mxclr]')){MX.sel.clear();mxPaintSel()}}}
+  const old=$('#mxsb');if(old)old.remove()}
 /* vista de escritorio (oct 2026): tamaño de celda (U.mxZ 0/1/2), tabla del alto de la pantalla, saltar a un SC, ayuda y SC en menús */
 const mxZ=()=>{const z=+U.mxZ;return z>=0&&z<=2?z:1};
 function mxFit(){const b=$('#mxbox');if(!b||!b.isConnected)return;const top=b.getBoundingClientRect().top;b.style.maxHeight=Math.max(240,innerHeight-top-14)+'px'}
@@ -307,16 +305,15 @@ function mxWire(main){mxWireV(main);
   const fl=$('#mxfalta');if(fl)fl.onchange=()=>{U.mxFalta=fl.checked;saveUI();MX.sel.clear();render()};
   const cm=$('#mxcmp');if(cm)cm.onchange=e=>{MX.cmp=e.target.value;render()};
   main.querySelectorAll('[data-mxtipo]').forEach(s=>s.onchange=()=>mxSetTipo(s.dataset.mxtipo,s.value));
-  mxWireBar();
   const t=$('#mxt');if(!t)return;
   t.onclick=e=>{const np=e.target.closest('[data-mxnew]');if(np){e.stopPropagation();mxAddFlow(np.dataset.mxnew);return}const go=e.target.closest('th[data-mxgo]');if(go){mxGoCol(+go.dataset.mxgo);return}const ch=e.target.closest('th[data-mxcol]'),rh=e.target.closest('th[data-mxrow]');if(!mxEdG()&&(ch||rh))return;
     if(!mxEdG()){const td=e.target.closest('td.mc');const c=td&&mxCellAt(td);if(c)mxInfo(td,c);return}
-    if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);return}
-    if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);return}};
+    if(ch){const ci=+ch.dataset.mxcol;const cat=MX.view.cols[ci].id;const cells=mxCells();const add=[];MX.view.rows.forEach(r=>r.ambs.forEach(a=>{if((cells.get(a.id)||{})[cat])add.push(a.id+'|'+cat)}));mxToggle(add,e);mxSelPop(ch);return}
+    if(rh){const tr=rh.closest('tr[data-amb]');const C=mxCells().get(tr.dataset.amb)||{};mxToggle(MX.view.cols.filter(c=>C[c.id]).map(c=>tr.dataset.amb+'|'+c.id),e);mxSelPop(rh);return}};
   t.onpointerdown=e=>{const td=e.target.closest('td.mc');if(!td||e.button!==0)return;const c=mxCellAt(td);if(!c)return;
     if(!mxEdG())return; // consulta: el toque se atiende en onclick (así se puede desplazar)
     e.preventDefault();
-    if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();return}
+    if(e.shiftKey&&MX.anchor){MX.sel=mxRect(MX.anchor,c);mxPaintSel();mxSelPop(td);return}
     MX.drag={a:c,add:e.ctrlKey||e.metaKey,base:new Set(MX.sel)};MX.moved=false;MX.anchor=c;DRAGGING=true};
   t.onpointerleave=()=>{MX.hk=null;const st=document.getElementById('mxhovst');if(st)st.textContent=''};
   t.onpointerover=e=>{mxHov(e);if(!MX.drag)return;const td=e.target.closest('td.mc');if(!td)return;const c=mxCellAt(td);if(!c)return;
@@ -324,9 +321,10 @@ function mxWire(main){mxWireV(main);
 document.addEventListener('pointerup',e=>{if(!MX.drag)return;const d=MX.drag;MX.drag=null;DRAGGING=false;
   if(!MX.moved){const k=d.a.amb+'|'+d.a.cat;if(d.add){if(MX.sel.has(k))MX.sel.delete(k);else MX.sel.add(k);mxPaintSel();return}
     const td=document.querySelector(`#mxt tr[data-amb="${CSS.escape(d.a.amb)}"] td[data-k="${d.a.ci}"]`);MX.sel=new Set([k]);mxPaintSel();if(td)mxInfo(td,d.a);return}
+  const el=e.target&&e.target.closest?e.target.closest('#mxt td.mc'):null;mxSelPop(el||document.querySelector('#mxt td.mc.sl'));
   if(ready)requestRender()});
 function mxToggle(keys,e){if(e.ctrlKey||e.metaKey||e.shiftKey)keys.forEach(k=>MX.sel.add(k));else{const all=keys.length&&keys.every(k=>MX.sel.has(k));MX.sel=all?new Set():new Set(keys)}mxPaintSel()}
-document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape')return;
+document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG())return;const a=document.activeElement;if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))return;if(!$('#pop').hidden&&e.key!=='Escape'&&!document.querySelector('#pop .mxselp'))return;
   const m={'1':'p','2':'c','3':'t','0':'n',Enter:'ok'}[e.key];if(m){e.preventDefault();closePop();mxApply(m);return}if(e.key==='Escape'){MX.sel.clear();mxPaintSel()}});
 
 /* ficha de una celda: de dónde sale, qué hay en el lookahead y (si edita) cambiar su estado */
@@ -465,7 +463,7 @@ function mxMapDlg(){if(!mxEd())return;const L=mxUnmapped();if(!L.length)return;
   const opts=sc=>{const mine=cats.filter(c=>c.sc===sc),oth=cats.filter(c=>c.sc!==sc);return`<option value="">— elegir —</option>${mine.length?`<optgroup label="${esc(conOf(sc).name)}">${mine.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`:''}<optgroup label="Otros subcontratistas">${oth.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} · ${esc(conOf(c.sc).name)}</option>`).join('')}</optgroup>`};
   lqModal(`<div class="lqtop"><b>Nombres sin catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Elige a qué actividad del catálogo corresponde cada nombre. Desde ese momento esas filas del lookahead salen en la matriz. No cambia nada del lookahead.</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.name)}</b><small>${esc(conOf(u.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'}</small></span><select data-mxm="${i}">${opts(u.sc)}</select></div>`).join('')}</div>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.name)}</b><small>${esc(conOf(u.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'}</small>${mxLkBtn(u.name,mxLkPiso(u.ids),'Ver en el Lookahead')}</span><select data-mxm="${i}">${opts(u.sc)}</select></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxmok">Guardar</button></div>`,
    async e=>{if(!e.target.closest('#mxmok'))return;const AU=firebase.firestore.FieldValue.arrayUnion;const by=new Map();
      document.querySelectorAll('[data-mxm]').forEach(s=>{if(!s.value)return;const u=L[+s.dataset.mxm];if(!by.has(s.value))by.set(s.value,[]);by.get(s.value).push(u.k)});
@@ -495,3 +493,15 @@ function mxFocusPaint(){const f=MX.focus;if(!f)return;const left=f.until-perform
 function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.clientY};const td=e.target&&e.target.closest?e.target.closest('td.mc,th.mxc'):null;const k=td?(td.dataset.k||td.dataset.mxcol||''):'';if(MX.hk===k)return;MX.hk=k;
   let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}
   st.textContent=k===''?'':`#mxt td.mc[data-k="${k}"]{background-image:linear-gradient(var(--mxhov),var(--mxhov))}#mxt th.mxc[data-mxcol="${k}"]{background-color:var(--mxhovh)}`}
+
+/* «↗ Lookahead» en todo lo que se revisa del catálogo (19/10, pedido del dueño): abre el Lookahead con la búsqueda puesta (varios
+   nombres separados por coma), sin filtros de sector, SC ni actividades; en un piso si se sabe, si no en todos */
+function mxLookGo(q,piso){U.q=q;U.sector='';U.sc='';U.acts=[];U.day='';U.wkF=0;U.piso=piso&&S.pis.has(piso)?piso:'';gridRows=null;saveUI();goTab('look');
+  setTimeout(()=>{const f=$('#fq');if(f&&f.value!==U.q){f.value=U.q;gridRows=null;requestRender()}},0);toast(`Lookahead: buscando «${q.length>60?q.slice(0,60)+'…':q}»`)}
+/** nombres con que aparece una actividad del catálogo en el lookahead (su nombre y las variantes de sus filas), para buscarla */
+function mxLkTerms(catId){const c=MX.cat.get(catId);const N=new Map();if(c)N.set(c.name.toLowerCase().trim(),c.name);
+  for(const x of S.act.values())if(x.name&&!x._del&&mxCatOfN(x)===catId&&!N.has(x.name.toLowerCase().trim()))N.set(x.name.toLowerCase().trim(),x.name);return[...N.values()].slice(0,8).join(', ')}
+/** piso común de unas filas (o de unos ambientes); '' si son de varios */
+function mxLkPiso(ids,amb){const ps=new Set((ids||[]).map(id=>{const x=S.act.get(id);return x?pisoOfAmb(x.ambId):''}).concat(amb?[pisoOfAmb(amb)]:[]).filter(Boolean));return ps.size===1?[...ps][0]:''}
+const mxLkBtn=(q,piso,lbl)=>`<button type="button" class="ib mxlkb" data-mxlk="${esc(q)}" data-mxlkp="${esc(piso||'')}" title="Abre el Lookahead buscando «${esc(q)}»">↗ ${lbl||'Lookahead'}</button>`;
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mxlk]');if(!b)return;e.preventDefault();e.stopPropagation();lqClose();closePop();mxLookGo(b.dataset.mxlk,b.dataset.mxlkp)},true);

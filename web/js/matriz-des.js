@@ -37,7 +37,7 @@ function mxDesListDlg(){const L=mxDesCands();const can=mxdCan();
    <p class="note">Actividades que parecen agrupar varios trabajos: nombre general, marcadas «Por desglosar» o mucho más largas que lo común. Revisa cada una: «Desglosar…» la divide en toda la obra; «Está bien así» la quita de esta lista.${can?'':' Solo el administrador las desglosa.'}</p>
    <div class="tscroll"><table class="t rt"><tbody>${L.map(({c,why,rows})=>`<tr><td data-l="Actividad"><b>${esc(c.name)}</b><small class="note" style="display:block">${why.map(esc).join(' · ')}</small></td>
      <td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td><td class="mono" data-l="Filas">${rows} fila${rows===1?'':'s'}</td>
-     <td class="mxrb">${can?`<button class="ib" data-mxdok="${esc(c.id)}">Está bien así</button><button class="ib pri" data-mxdgo="${esc(c.id)}">Desglosar…</button>`:''}</td></tr>`).join('')||'<tr><td class="note">No hay actividades que parezcan genéricas.</td></tr>'}</tbody></table></div>
+     <td class="mxrb">${mxLkBtn(mxLkTerms(c.id),'')}${can?`<button class="ib" data-mxdok="${esc(c.id)}">Está bien así</button><button class="ib pri" data-mxdgo="${esc(c.id)}">Desglosar…</button>`:''}</td></tr>`).join('')||'<tr><td class="note">No hay actividades que parezcan genéricas.</td></tr>'}</tbody></table></div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
    e=>{const g=e.target.closest('[data-mxdgo]');if(g){mxDesDlg(g.dataset.mxdgo);return}
      const k=e.target.closest('[data-mxdok]');if(k&&mxdCan()){const id=k.dataset.mxdok;const c=MX.cat.get(id);const up={okd:{t:NOW(),by:me.email,n:me.name||''},...mxNow()};if(c&&c.cl==='d')up.cl='t';
@@ -129,3 +129,62 @@ async function mxDesRestore(genId,quiet){if(!mxdCan()){toast('Solo el administra
   for(const id of r.add||[]){const o=arc('acts',id);if(o)ops.push(o)}
   if(ops.length)apply(ops,`Restaurar «${G.name}»: lookahead`);
   toast(quiet?'Desglose deshecho':`«${G.name}» restaurada`)}
+
+/* ---------- Separar por subcontratista (19/10, pedido del dueño) ----------
+   Una actividad que hacen varios SC por su cuenta (p. ej. «Limpieza»: cada uno limpia lo suyo) tiene un solo estado por ambiente,
+   así que no sirve compartida. Esto crea una actividad por SC («Limpieza CANOVAS MC»), les pasa las filas del lookahead de ese SC
+   (solo cambia el nombre; semanas congeladas, PPC y planes publicados conservan el anterior), copia el estado confirmado de la Matriz
+   en los ambientes de ese SC y quita al SC de «Otros subcontratistas que la hacen». La original queda con su SC principal.
+   Solo el administrador (renombra filas con historial). Deshacer en el aviso. */
+function mxSplitInfo(id){const c=MX.cat.get(id);if(!c)return[];const by=new Map();
+  for(const x of S.act.values()){if(!x.name||x._del||!x.sc||x.sc===c.sc||mxCatOfN(x)!==id)continue;if(!by.has(x.sc))by.set(x.sc,{sc:x.sc,rows:[],ambs:new Set()});const g=by.get(x.sc);g.rows.push(x.id);g.ambs.add(x.ambId)}
+  for(const s of(Array.isArray(c.scs)?c.scs:[]))if(s&&s!==c.sc&&!by.has(s))by.set(s,{sc:s,rows:[],ambs:new Set()});
+  return[...by.values()].sort((a,b)=>conOf(a.sc).name.localeCompare(conOf(b.sc).name))}
+function mxSplitDlg(id){if(!isAdmin){toast('Solo el administrador separa actividades por subcontratista.');return}const c=MX.cat.get(id);if(!c||c.arch)return;
+  const G=mxSplitInfo(id);if(!G.length){toast(`«${c.name}» no tiene filas ni subcontratistas aparte de ${conOf(c.sc).name}.`);return}
+  const tps=[...MX.tipo.values()].filter(t=>!t.arch&&(t.acts||[]).includes(id));
+  const names=[...MX.cat.values()].filter(x=>!x.arch&&x.id!==id).map(x=>x.name).sort((a,b)=>a.localeCompare(b));
+  lqModal(`<div class="lqtop"><b>Separar «${esc(c.name)}» por subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   <p class="note">Cada subcontratista marcado pasa a tener su propia actividad, con su propio estado en la Matriz. Sus filas del lookahead cambian de nombre (las semanas congeladas, el PPC y los planes publicados conservan el anterior) y se copia el estado que la Matriz tenía en sus ambientes. «${esc(c.name)}» queda solo de <b>${esc(conOf(c.sc).name)}</b>.</p>
+   <div class="mxml">${G.map((g,i)=>`<div class="mxmr mxspr"><label class="chk"><input type="checkbox" data-sps="${i}" checked> <span><b>${esc(conOf(g.sc).name)}</b><small>${g.rows.length} ${g.rows.length===1?'fila':'filas'} · ${g.ambs.size} ${g.ambs.size===1?'ambiente':'ambientes'}</small></span></label>
+     <input class="tin" data-spn="${i}" list="mxspl" value="${esc(c.name+' '+conOf(g.sc).name)}" aria-label="Nombre de la actividad de ${esc(conOf(g.sc).name)}"></div>`).join('')}</div>
+   <datalist id="mxspl">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+   ${tps.length?`<label class="chk mxur"><input type="checkbox" id="mxsptp"> <span><b>Agregar las nuevas a los tipos de ambiente donde está «${esc(c.name)}»</b><small>${tps.map(t=>esc(t.name)).join(', ')}. Si no, cada una queda solo donde ese SC tiene filas.</small></span></label>`:''}
+   <p class="note" id="mxspmsg">Si escribes el nombre de una actividad que ya existe, se usa esa en vez de crear otra.</p>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxspok">Separar</button></div>`,
+   async e=>{const ok=e.target.closest('#mxspok');if(!ok)return;const msg=$('#mxspmsg');
+     const sel=G.map((g,i)=>({...g,on:$(`[data-sps="${i}"]`).checked,name:($(`[data-spn="${i}"]`).value||'').replace(/\s+/g,' ').trim()})).filter(g=>g.on);
+     if(!sel.length){msg.textContent='Marca al menos un subcontratista.';return}
+     if(sel.some(g=>!g.name)){msg.textContent='Escribe el nombre de cada actividad nueva.';return}
+     const ks=sel.map(g=>mnk(g.name));if(new Set(ks).size!==ks.length){msg.textContent='Dos subcontratistas no pueden quedar con el mismo nombre.';return}
+     for(const g of sel){const t=MX.cat.get(mxAli().get(mnk(g.name))||'');if(t&&!t.arch&&(t.id===id||!mxScsOf(t).includes(g.sc))){msg.textContent=t.id===id?`«${g.name}» es la misma actividad: ponle otro nombre.`:`«${t.name}» ya existe y es de ${conOf(t.sc).name}, no de ${conOf(g.sc).name}: elige otro nombre.`;return}}
+     ok.disabled=true;const np=await mxScPendN(id);if(np){ok.disabled=false;msg.textContent=`«${c.name}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar en la Matriz: revísalos primero («✓ Visto» o «↶ Revertir»).`;return}
+     try{await mxSplitApply(id,sel,!!($('#mxsptp')||{}).checked);lqClose()}catch(err){ok.disabled=false;mxErr(err)}})}
+async function mxSplitApply(id,sel,toTipo){const c=MX.cat.get(id);const pend=await mxPendProp();const FV=mxFV();const meta=mxNow();const DEL=FV.delete();
+  const W=[];const U2={made:[],scs:[],ren:[],cells:[],tipos:[]};let skip=0;let k=0;
+  for(const g of sel){let tid=mxAli().get(mnk(g.name));const t=tid&&MX.cat.get(tid);
+    if(!t||t.arch){tid='k'+NOW().toString(36)+(k++);const nc={name:g.name,sc:g.sc,cl:c.cl||'t',al:[mnk(g.name)],ord:(c.ord||0)+0.01*k,spl:id,...meta};if(c.tr!=null)nc.tr=c.tr;W.push([fcol('mcat').doc(tid),nc]);U2.made.push(tid)}
+    g.tid=tid;U2.scs.push(g.sc);
+    for(const rid of g.rows){const x=S.act.get(rid);if(!x)continue;if(pend.has(rid)){skip++;continue}U2.ren.push({id:rid,from:x.name,to:g.name})}}
+  /* Matriz: el estado confirmado de la original pasa a la nueva en los ambientes del SC; donde ya nadie más tiene la original (ni la
+     da el tipo), se quita para que no quede una celda de otro SC */
+  const renIds=new Set(U2.ren.map(r=>r.id));const keepAmb=new Set();for(const x of S.act.values())if(x.name&&!x._del&&mxCatOfN(x)===id&&!renIds.has(x.id))keepAmb.add(x.ambId);
+  const ambs=new Map();for(const g of sel)for(const a of g.ambs){if(!ambs.has(a))ambs.set(a,[]);ambs.get(a).push(g.tid)}
+  for(const[a,tids]of ambs){const m=MX.amb.get(a)||{};const v=(m.c||{})[id];if(v===undefined)continue;const tp=m.tipo&&MX.tipo.get(m.tipo);const inT=!!(tp&&!tp.arch&&(tp.acts||[]).includes(id));
+    const c2={},m2={};for(const tid of tids){U2.cells.push({amb:a,cat:tid,prev:(m.c||{})[tid],v});c2[tid]=v;m2[tid]={...((m.m||{})[id]||{}),...mxCM(false)}}
+    if(!keepAmb.has(a)&&!inT){U2.cells.push({amb:a,cat:id,prev:v,v:undefined,mo:(m.m||{})[id]||null});c2[id]=DEL;m2[id]=DEL}
+    W.push([fcol('mamb').doc(a),{c:c2,m:m2,...meta},{merge:true}])}
+  W.push([fcol('mcat').doc(id),{scs:FV.arrayRemove(...U2.scs),...meta},{merge:true}]);
+  if(toTipo)for(const t of MX.tipo.values()){if(t.arch||!(t.acts||[]).includes(id))continue;const add=sel.map(g=>g.tid).filter(x=>!(t.acts||[]).includes(x));if(!add.length)continue;U2.tipos.push({id:t.id,add});W.push([fcol('mtipo').doc(t.id),{acts:FV.arrayUnion(...add),...meta},{merge:true}])}
+  for(let i=0;i<W.length;i+=400){const b=db.batch();W.slice(i,i+400).forEach(([r,d,o])=>o?b.set(r,d,o):b.set(r,d));await b.commit()}
+  if(U2.ren.length)apply(U2.ren.map(r=>op('acts',r.id,{...S.act.get(r.id),name:r.to})),`«${c.name}» separada por subcontratista (${U2.ren.length} filas)`);
+  toast(`«${c.name}» separada: ${sel.map(g=>g.name).join(', ')}${skip?` · ${skip} ${skip===1?'fila tiene':'filas tienen'} una propuesta del SC pendiente y no cambió`:''}`,'Deshacer',()=>mxSplitUndo(id,U2))}
+async function mxSplitUndo(id,U2){const FV=mxFV();const meta=mxNow();const DEL=FV.delete();const W=[];
+  const byA=new Map();for(const x of U2.cells){const cur=((MX.amb.get(x.amb)||{}).c||{})[x.cat];if(cur!==x.v)continue;if(!byA.has(x.amb))byA.set(x.amb,{c:{},m:{}});const o=byA.get(x.amb);
+    o.c[x.cat]=x.prev===undefined?DEL:x.prev;o.m[x.cat]=x.prev===undefined?DEL:(x.mo||mxCM(false))}
+  for(const[a,o]of byA)W.push([fcol('mamb').doc(a),{...o,...meta},{merge:true}]);
+  for(const tid of U2.made)W.push([fcol('mcat').doc(tid),{arch:{t:NOW(),by:me.email,n:me.name||'',spl:true},...meta},{merge:true}]);
+  W.push([fcol('mcat').doc(id),{scs:FV.arrayUnion(...U2.scs),...meta},{merge:true}]);
+  for(const t of U2.tipos)W.push([fcol('mtipo').doc(t.id),{acts:FV.arrayRemove(...t.add),...meta},{merge:true}]);
+  try{for(let i=0;i<W.length;i+=400){const b=db.batch();W.slice(i,i+400).forEach(([r,d,o])=>b.set(r,d,o));await b.commit()}
+    const ops=U2.ren.map(r=>{const x=S.act.get(r.id);return x&&x.name===r.to?op('acts',r.id,{...x,name:r.from}):null}).filter(Boolean);if(ops.length)apply(ops,'Deshecha la separación por subcontratista');toast('Deshecho')}catch(e){mxErr(e)}}
