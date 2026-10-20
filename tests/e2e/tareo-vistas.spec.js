@@ -89,16 +89,26 @@ test('Personal: alta manual, DNI duplicado, cese, asignar capataz e importar el 
   // alta manual
   await page.click('#tperAdd');
   await page.fill('#tfDni', '7654321');
-  await page.fill('#tfApe', 'nuevo  manual');
+  await page.fill('#tfApP', 'nuevo ');
+  await page.fill('#tfApM', ' manual');
   await page.fill('#tfNom', 'eva');
   await page.fill('#tfPue', 'Oficial fierrero');
   await page.click('#tfOk');
   await expect(page.locator('#lqm')).toHaveCount(0);
-  expect(await page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ dni: '07654321', ape: 'NUEVO MANUAL', nom: 'EVA', cat: 'OF', act: true, by: 'frandiopacheco@gmail.com' });
+  expect(await page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ dni: '07654321', ape: 'NUEVO MANUAL', apP: 'NUEVO', apM: 'MANUAL', nom: 'EVA', cat: 'OF', act: true, by: 'frandiopacheco@gmail.com' });
+  // apellidos partidos cuando la ficha no los trae separados (importación de RR.HH.)
+  expect(await page.evaluate(() => [tApes({ ape: 'DE LA CRUZ PEREZ' }), tApes({ ape: 'ZEVALLOS POMA,' }), tApes({ ape: 'QUISPE' }), tApes({ ape: 'A B', apP: 'X', apM: 'Y' })]))
+    .toEqual([['DE LA CRUZ', 'PEREZ'], ['ZEVALLOS', 'POMA'], ['QUISPE', ''], ['A', 'B']]);
+  // «Editar» en la fila
+  await page.click('[data-tfe="07654321"]');
+  await expect(page.locator('#tfApP')).toHaveValue('NUEVO');
+  await page.fill('#tfApM', 'MANUAL RIOS');
+  await page.click('#tfOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321').ape)).toBe('NUEVO MANUAL RIOS');
   // duplicado rechazado
   await page.click('#tperAdd');
   await page.fill('#tfDni', '01234567');
-  await page.fill('#tfApe', 'OTRO');
+  await page.fill('#tfApP', 'OTRO');
   await page.click('#tfOk');
   await expect(page.locator('#tfMsg')).toContainText('Ya existe');
   await page.click('#lqm [data-lqx]');
@@ -106,12 +116,20 @@ test('Personal: alta manual, DNI duplicado, cese, asignar capataz e importar el 
   await page.fill('#tperQ', 'manual');
   await expect(page.locator('#tperBody tr')).toHaveCount(1);
   await page.fill('#tperQ', '');
-  // asignar capataz en bloque
+  // editar en bloque: capataz y cuadrilla; la categoría queda igual
   await page.check('#tselAll');
-  await page.click('#tselCap');
+  await page.click('#tselEd');
+  await page.click('#tacOk');
+  await expect(page.locator('#tacMsg')).toContainText('Elige qué cambiar');
   await page.selectOption('#tacSel', 'tcap1@obra.pe');
   await page.click('#tacOk');
   await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321').cap)).toBe('tcap1@obra.pe');
+  await page.check('[data-tsel="07654321"]');
+  await page.click('#tselEd');
+  await page.fill('#tacCua', 'fierreros');
+  await page.click('#tacOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ cap: 'tcap1@obra.pe', cua: 'FIERREROS', cat: 'OF' });
+  expect(await page.evaluate(() => window.__dbGet('tper', '01234567').cua || '')).not.toBe('FIERREROS');
   // cese
   await page.click('[data-tfi="07654321"]');
   await page.click('[data-tfa="ces"]');
@@ -191,7 +209,11 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   // publicación automática (20-10-2026): apagada por omisión; se activa con su hora
   await expect(page.locator('#tjAuto')).not.toBeChecked();
   await page.check('#tjAuto'); await page.fill('#tjAutoH', '20:30');
+  // semana del proyecto (20-10-2026): se guarda como «la semana n empieza el lunes de esta semana»
+  await page.fill('#tjSem', '70');
   await page.click('#tjSave');
+  await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sem).toEqual(await page.evaluate(() => ({ n: 70, lun: tLunes(todayIso()) })));
+  expect(await page.evaluate(() => [tSemN(tLunes(todayIso())), tSemN(iso(new Date(pd(tLunes(todayIso())).getTime() - 7 * 864e5)))])).toEqual([70, 69]);
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).pubAuto).toEqual({ on: true, hh: '20:30' });
   await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:30', fin: '13:30', ref: 0 }, '0': null }, refIni: '12:00' });
   await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:30', '13:30'))).toEqual({ trab: 6, ext: 0 });
