@@ -9,13 +9,14 @@
 // - emitirCliente: el sábado a las 23:00 (Lima) emite la versión cliente de la semana siguiente si el administrador no la emitió.
 // - cuentaCapataz (la llama la página): crea y administra las cuentas DNI + contraseña de los capataces del tareo.
 // - publicarTareo (la llama la página): previa, publicación y rectificación del tareo del día (F3).
+// - publicarTareoAuto: cada 15 min, pasada la hora de Configuración del tareo, publica el día si está todo listo (o deja la constancia).
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -281,10 +282,17 @@ exports.publicarTareo = onCall({ timeoutSeconds: 120 }, async req => {
   if (!tpPuede(email, tk.email_verified === true, mem)) throw new HttpsError('permission-denied', 'Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
   const P = tpPedido(req.data, limaToday());
   if (P.error) throw new HttpsError('invalid-argument', P.error);
-  const byN = (mem && mem.name) || email;
-  /* máster, partidas y configuración: fuera de la transacción (no son lo que se publica; se leen en el momento) */
-  const [personal, partidas, cs] = await Promise.all([all('tper'), all('tpc'), db().collection('tcfg').doc('main').get()]);
+  const res = await tpCorrer(P, email, (mem && mem.name) || email);
+  logger.info(`publicarTareo ${P.accion} ${P.fecha} por ${email}${res.bloqueos && res.bloqueos.length ? ` · ${res.bloqueos.length} bloqueo(s)` : P.accion === 'publicar' ? ` · publicada v${res.v}` : ` · v${res.v}`}`);
+  return res;
+});
+/** lee lo necesario, corre tpEjecutar (previa sin transacción; publicar y rectificar en una) y escribe. Los motivos de los obreros sin
+    tareo guardados en la pantalla (tpexc/{fecha}) se suman a los del pedido (20-10-2026). Lo usan la página y la publicación automática. */
+async function tpCorrer(P, email, byN) {
+  /* máster, partidas, configuración y motivos guardados: fuera de la transacción (no son lo que se publica; se leen en el momento) */
+  const [personal, partidas, cs, xs] = await Promise.all([all('tper'), all('tpc'), db().collection('tcfg').doc('main').get(), db().collection('tpexc').doc(P.fecha).get()]);
   const tcfg = cs.exists ? cs.data() : {};
+  P = { ...P, excepciones: tpExcUnir(xs.exists ? (xs.data() || {}).exc : null, P.excepciones) };
   const idxRef = db().collection('tpubidx').doc(P.fecha);
   const q = db().collection('tareo').where('date', '==', P.fecha);
   const FV = admin.firestore.FieldValue;
@@ -304,14 +312,27 @@ exports.publicarTareo = onCall({ timeoutSeconds: 120 }, async req => {
     }
     return R.res;
   };
-  let res;
-  try { res = P.accion === 'previa' ? await corre(null) : await db().runTransaction(corre); }
+  try { return P.accion === 'previa' ? await corre(null) : await db().runTransaction(corre); }
   catch (e) {
     if (e instanceof HttpsError) throw e;
     logger.error(`publicarTareo ${P.accion} ${P.fecha}`, e);
     if (e && (e.code === 6 || /already exists/i.test(e.message || ''))) throw new HttpsError('aborted', 'Otra persona publicó ese día al mismo tiempo: vuelve a abrir la previa.');
     throw new HttpsError('internal', 'No se pudo completar en el servidor: ' + ((e && e.message) || e));
   }
-  logger.info(`publicarTareo ${P.accion} ${P.fecha} por ${email}${res.bloqueos && res.bloqueos.length ? ` · ${res.bloqueos.length} bloqueo(s)` : P.accion === 'publicar' ? ` · publicada v${res.v}` : ` · v${res.v}`}`);
-  return res;
+}
+/* Publicación automática del tareo (20-10-2026, decisión del dueño): cada 15 min, pasada la hora de Configuración del tareo
+   (tcfg/main.pubAuto = {on, hh}), publica el día de hoy si no está publicado y no tiene bloqueos (todos los capataces revisados,
+   nadie en dos tareos y el personal sin tareo con su motivo guardado). Si falta algo no publica: deja la constancia en
+   tpauto/{fecha} (la pantalla la muestra) y vuelve a intentar en la siguiente pasada. Nunca rectifica. */
+exports.publicarTareoAuto = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+  const cs = await db().collection('tcfg').doc('main').get();
+  const due = tpAutoDue(cs.exists ? cs.data() : {}, Date.now()); if (!due) return;
+  const is = await db().collection('tpubidx').doc(due.fecha).get();
+  if (is.exists && +(is.data() || {}).v > 0) return;
+  const nref = db().collection('tpauto').doc(due.fecha);
+  let res;
+  try { res = await tpCorrer({ accion: 'publicar', fecha: due.fecha, excepciones: {}, motivo: '', firma: '' }, 'auto@lps911', 'Publicación automática'); }
+  catch (e) { logger.error(`publicarTareoAuto ${due.fecha}`, e); await nref.set({ t: Date.now(), ok: false, n: 0, msgs: [String((e && e.message) || e)] }); return; }
+  await nref.set(tpAutoNota(res, Date.now()));
+  logger.info(`publicarTareoAuto ${due.fecha}: ${res.ok ? `publicada v${res.v}` : `no se publicó (${(res.bloqueos || []).length} pendiente(s))`}`);
 });

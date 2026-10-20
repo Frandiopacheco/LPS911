@@ -285,6 +285,26 @@
     return { res: limpio({ ...base, ok: true, id, tot: snap.tot, dif: snap.dif, n: snap.fuentes.length }), escr };
   }
 
+  /* ---------- publicación automática y motivos guardados (20-10-2026) ---------- */
+  const TP_AUTO_HH = '21:00';
+  /** configuración de la publicación automática (tcfg/main.pubAuto = {on, hh}); por omisión apagada, a las 21:00 */
+  function tpAutoCfg(tcfg) { const a = (tcfg && tcfg.pubAuto) || {}; return { on: a.on === true, hh: /^\d{2}:\d{2}$/.test(a.hh || '') ? a.hh : TP_AUTO_HH }; }
+  /** ¿toca intentar publicar sola? Solo el día de hoy (Lima) y pasada la hora → {fecha, hh} | null. Si ya está publicado o abierto
+      para rectificar lo decide quien llama (necesita tpubidx). */
+  function tpAutoDue(tcfg, now) {
+    const c = tpAutoCfg(tcfg); if (!c.on) return null;
+    const s = new Date(now - 5 * 36e5).toISOString(); if (s.slice(11, 16) < c.hh) return null;
+    return { fecha: s.slice(0, 10), hh: c.hh };
+  }
+  /** motivos de los obreros sin tareo: los guardados en la pantalla (tpexc/{fecha}.exc) y, encima, los que manda el pedido */
+  const tpExcUnir = (guardados, pedidas) => excLimpias({ ...((guardados && typeof guardados === 'object' && !Array.isArray(guardados)) ? guardados : {}), ...(pedidas || {}) });
+  /** constancia del intento automático (tpauto/{fecha}) a partir de la respuesta de tpEjecutar */
+  function tpAutoNota(res, now) {
+    if (res && res.ok) return { t: now, ok: true, v: res.v || 1 };
+    const B = (res && Array.isArray(res.bloqueos)) ? res.bloqueos : [];
+    return { t: now, ok: false, n: B.length, msgs: B.slice(0, 5).map(b => String((b && b.msg) || '')) };
+  }
+
   /** Productividad F2 (docs/ia/productividad.md): resumen de HH por partida de control de la versión publicada, sin datos de
       personas, para que los ingenieros calculen el IP. → {fecha, v, at, hh, pcs: {<pcId>: {hh, cod, nom, und}}} */
   function tpResumenHH(snap) {
@@ -299,5 +319,5 @@
     return { fecha: snap.fecha, v: snap.v, at: snap.at, hh: r2(hh), pcs };
   }
 
-  return { TP_HMAX: HMAX, tpResumenHH, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
+  return { TP_HMAX: HMAX, TP_AUTO_HH, tpAutoCfg, tpAutoDue, tpExcUnir, tpAutoNota, tpResumenHH, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
 });

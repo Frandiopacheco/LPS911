@@ -321,3 +321,18 @@ test('las escrituras no llevan undefined (Firestore no lo acepta)', () => {
   const hay = v => v === undefined || (v && typeof v === 'object' && Object.values(v).some(hay));
   assert.ok(!R.escr.some(w => hay(w.datos) || (w.hist && hay(w.hist))));
 });
+
+test('publicación automática: hora, apagada por omisión y motivos guardados (20-10-2026)', () => {
+  const TP = require('../lib');
+  const at = h => Date.parse(`2026-10-20T${h}:00-05:00`);
+  assert.strictEqual(TP.tpAutoDue({}, at('22:00')), null);
+  assert.strictEqual(TP.tpAutoDue({ pubAuto: { on: true } }, at('20:59')), null);
+  assert.deepStrictEqual(TP.tpAutoDue({ pubAuto: { on: true } }, at('21:00')), { fecha: '2026-10-20', hh: '21:00' });
+  assert.deepStrictEqual(TP.tpAutoDue({ pubAuto: { on: true, hh: '19:30' } }, at('19:45')), { fecha: '2026-10-20', hh: '19:30' });
+  assert.strictEqual(TP.tpAutoDue({ pubAuto: { on: true, hh: '19:30' } }, at('19:00')), null);
+  assert.deepStrictEqual(TP.tpExcUnir({ 1: 'Vacaciones', 2: '' }, { 3: 'Otra obra', 1: 'Descanso médico' }), { 1: 'Descanso médico', 3: 'Otra obra' });
+  assert.deepStrictEqual(TP.tpExcUnir(null, {}), {});
+  assert.deepStrictEqual(TP.tpAutoNota({ ok: true, v: 1 }, 5), { t: 5, ok: true, v: 1 });
+  const n = TP.tpAutoNota({ ok: false, bloqueos: [{ msg: 'a' }, { msg: 'b' }] }, 6);
+  assert.deepStrictEqual(n, { t: 6, ok: false, n: 2, msgs: ['a', 'b'] });
+});
