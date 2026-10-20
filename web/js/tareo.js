@@ -529,7 +529,10 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
     <label class="lqlab">Categoría<select class="tin" id="tfCat"><option value="">Según el puesto</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}"${p&&v.cat===k?' selected':''}>${l}</option>`).join('')}</select></label>
     <label class="lqlab">Cuadrilla<input class="tin" id="tfCua" value="${esc(v.cua)}" list="tfCuaL"><datalist id="tfCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="lqlab">Capataz<select class="tin" id="tfCap"><option value="">Sin capataz</option>${caps.map(c=>`<option value="${esc(c.id)}"${c.id===v.cap?' selected':''}>${esc(c.name)}</option>`).join('')}${v.cap&&!caps.some(c=>c.id===v.cap)?`<option value="${esc(v.cap)}" selected>${esc(tCapName(v.cap))}</option>`:''}</select></label>
-   </div><p class="lqmsg bad" id="tfMsg"></p>
+   </div>${p&&!p.ces?`<details class="t-cesd"><summary>Marcar cese</summary><div class="t-form">
+    <label class="lqlab">Fecha de cese<input class="tin" id="tfCesF" type="date"></label>
+    <label class="lqlab">Motivo<input class="tin" id="tfCesM" list="tfCesL" placeholder="Renuncia, Termino de partida…"><datalist id="tfCesL">${TMOT.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></label></div>
+    <p class="note">Déjalo vacío si no cesa. El día del cese cuenta como trabajado.</p></details>`:''}<p class="lqmsg bad" id="tfMsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tfOk">Guardar</button></div>`,
    async e=>{if(!e.target.closest('#tfOk'))return;const msg=t=>{$('#tfMsg').textContent=t};
      const dni=p?p.id:tDni($('#tfDni').value);if(!dni)return msg('El DNI no es válido: 8 dígitos (o carné de extranjería de 9 a 12 caracteres).');
@@ -538,11 +541,15 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
      if(!apP)return msg('Escribe el apellido paterno.');const ape=[apP,apM].filter(Boolean).join(' ');
      const ing=$('#tfIng').value;const pue=$('#tfPue').value.trim().replace(/\s+/g,' ').toUpperCase();const cat=$('#tfCat').value||tCatDe(pue);
      const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};
-     if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d})}
+     if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d});
+       const cf=$('#tfCesF')?$('#tfCesF').value:'';if(cf){if(ing&&cf<ing)return msg('El cese no puede ser anterior al ingreso ('+tFmt(ing)+').');Object.assign(d,tCeseData({...p,...d},cf,$('#tfCesM').value.trim()))}}
      else{Object.assign(d,{ces:'',mot:'',per:[{ing,ces:'',mot:''}]});d.act=tActivo(d)}
-     try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});lqClose();toast(p?'Ficha actualizada.':'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
+     try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});lqClose();toast(p?(d.ces&&d.ces!==p.ces?'Ficha actualizada y cese registrado.':'Ficha actualizada.'):'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
 
 const TMOT=['Renuncia','Termino de partida','Termino total de partida','Abandono de trabajo','Faltas injustificadas'];
+/* datos del cese (fecha f, motivo m) para una ficha: cierra el periodo vigente. Lo usan «Marcar cese», «Editar» y «Editar elegidos». */
+function tCeseData(p,f,m){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:'',mot:''}];Object.assign(per[per.length-1],{ces:f,mot:m});
+  const d={ces:f,mot:m,per};d.act=tActivo({...p,...d});return d}
 function tCese(id){const p=S.tper.get(id);if(!p)return;
   lqModal(`<div class="lqtop"><b>Marcar cese</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><div class="lqh"><b>${esc(tName(p))}</b><span class="mono">DNI ${esc(p.dni||id)}</span></div>
    <div class="t-form"><label class="lqlab">Fecha de cese<input class="tin" id="tcF" type="date" value="${esc(todayIso())}"></label>
@@ -550,8 +557,7 @@ function tCese(id){const p=S.tper.get(id);if(!p)return;
    <p class="lqmsg bad" id="tcMsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tcOk">Guardar cese</button></div>`,
    async e=>{if(!e.target.closest('#tcOk'))return;const f=$('#tcF').value,m=$('#tcM').value.trim();if(!f)return $('#tcMsg').textContent='Elige la fecha de cese.';
      if(p.ing&&f<p.ing)return $('#tcMsg').textContent='El cese no puede ser anterior al ingreso ('+tFmt(p.ing)+').';
-     const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:'',mot:''}];Object.assign(per[per.length-1],{ces:f,mot:m});
-     const d={ces:f,mot:m,per,...tStamp()};d.act=tActivo({...p,...d});
+     const d={...tCeseData(p,f,m),...tStamp()};
      try{await fcol(TCOLS.tper).doc(id).set(d,{merge:true});lqClose();toast('Cese registrado.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}})}
 function tReingreso(id){const p=S.tper.get(id);if(!p)return;
   lqModal(`<div class="lqtop"><b>Reingreso</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div><div class="lqh"><b>${esc(tName(p))}</b><span>Cesó el ${esc(tFmt(p.ces))}${p.mot?' · '+esc(p.mot):''}</span></div>
@@ -576,14 +582,22 @@ function tEditarSel(){const ids=[...TU.sel].filter(id=>S.tper.has(id));if(!ids.l
     <label class="lqlab">Cuadrilla<input class="tin" id="tacCua" list="tacCuaL" placeholder="— no cambiar —"><datalist id="tacCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="lqlab">Categoría<select class="tin" id="tacCat"><option value="${NO}">— no cambiar —</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label>
     <label class="lqlab">Puesto<input class="tin" id="tacPue" placeholder="— no cambiar —"></label>
-   </div>${caps.length?'':'<p class="note">No hay capataces de tareo en el equipo: agrégalos en Equipo con el rol «Capataz (tareo)».</p>'}
+   </div><details class="t-cesd"><summary>Marcar cese</summary><div class="t-form">
+    <label class="lqlab">Fecha de cese<input class="tin" id="tacCesF" type="date"></label>
+    <label class="lqlab">Motivo<input class="tin" id="tacCesM" list="tacCesL" placeholder="Renuncia, Termino de partida…"><datalist id="tacCesL">${TMOT.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></label></div>
+    <p class="note">Cesa a todos los elegidos que siguen activos en esa fecha. El día del cese cuenta como trabajado.</p></details>${caps.length?'':'<p class="note">No hay capataces de tareo en el equipo: agrégalos en Equipo con el rol «Capataz (tareo)».</p>'}
    <p class="lqmsg bad" id="tacMsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tacOk">Guardar</button></div>`,
    async e=>{if(!e.target.closest('#tacOk'))return;const d={};const cap=$('#tacSel').value,cat=$('#tacCat').value;
      const cua=$('#tacCua').value.trim().replace(/\s+/g,' ').toUpperCase(),pue=$('#tacPue').value.trim().replace(/\s+/g,' ').toUpperCase();
      if(cap!==NO)d.cap=cap;if(cua)d.cua=cua;if(pue)d.pue=pue;if(cat!==NO)d.cat=cat;else if(pue)d.cat=tCatDe(pue);
-     if(!Object.keys(d).length)return $('#tacMsg').textContent='Elige qué cambiar.';const st=tStamp();
-     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{...d,...st},{merge:true}]));lqClose();TU.sel.clear();
-       const what=[d.cap!=null?(d.cap?'capataz '+tCapName(d.cap):'sin capataz'):'',d.cua?'cuadrilla '+d.cua:'',d.pue?'puesto '+d.pue:'',cat!==NO?'categoría '+TCAT[cat]:''].filter(Boolean).join(', ');
+     const cf=$('#tacCesF').value,cm=$('#tacCesM').value.trim();
+     if(!Object.keys(d).length&&!cf)return $('#tacMsg').textContent='Elige qué cambiar.';const st=tStamp();
+     /* cese: solo a quien no tiene un cese anterior a esa fecha y no ingresó después */
+     const ces=new Map(),noCes=[];if(cf)for(const id of ids){const p=S.tper.get(id);if(p.ces&&p.ces<=cf||p.ing&&cf<p.ing){noCes.push(tName(p));continue}ces.set(id,tCeseData(p,cf,cm))}
+     if(cf&&!ces.size)return $('#tacMsg').textContent='Ninguno de los elegidos puede cesar en esa fecha (ya cesó antes o ingresó después).';
+     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{...d,...(ces.get(id)||{}),...st},{merge:true}]));lqClose();TU.sel.clear();
+       const what=[d.cap!=null?(d.cap?'capataz '+tCapName(d.cap):'sin capataz'):'',d.cua?'cuadrilla '+d.cua:'',d.pue?'puesto '+d.pue:'',cat!==NO?'categoría '+TCAT[cat]:'',ces.size?`cese el ${tFmt(cf)} (${ces.size})`:''].filter(Boolean).join(', ');
+       if(noCes.length)toast(`Sin cese (ya cesó antes o ingresó después): ${noCes.slice(0,5).join(' · ')}${noCes.length>5?` y ${noCes.length-5} más`:''}.`);
        toast(`${ids.length} ${ids.length===1?'obrero actualizado':'obreros actualizados'}: ${what}.`);requestRender()}catch(err){$('#tacMsg').textContent='No se pudo guardar: '+(err.code||err.message)}})}
 async function tPerExport(){try{await loadXlsx();const X=window.XLSX;const L=tPerList();
   const aoa=[['DNI','Apellido paterno','Apellido materno','Nombres','Puesto','Categoría','Cuadrilla','Capataz','Ingreso','Cese','Motivo','Estado']];const hoy=todayIso();
@@ -714,7 +728,7 @@ async function tImportPc(){const f=await tPickFile();if(!f)return;let wb;try{wb=
 /* feriados del calendario de Last Planner (S.meta project cal.hol: [{d,n}]); solo los tiene quien carga los datos de LPS */
 const tLpsHol=()=>{const p=S.meta&&S.meta.get('project');const h=p&&p.cal&&Array.isArray(p.cal.hol)?p.cal.hol:[];return h.filter(o=>o&&/^\d{4}-\d{2}-\d{2}$/.test(o.d||''))};
 async function tFerSave(fer,ferN,txt){try{await fcol(TCOLS.tcfg).doc('main').set({fer:[...new Set(fer)].sort(),ferN,...tStamp()},{merge:true});toast(txt)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
-function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disabled';const hoy=todayIso();
+function renderTCfg(main){const c=TC();const ed=!!isAdmin||me.role==='tasis';const dis=ed?'':' disabled';const hoy=todayIso();
   const lps=ed?tLpsHol():[];const fal=lps.filter(o=>!c.fer.includes(o.d)).length;
   const dow=f=>{const w=TDOW.find(([k])=>k===String(pd(f).getUTCDay()));return w?w[1]:''};
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración del tareo','Jornada, refrigerio, feriados, hora límite de envío y tolerancia de garita')}

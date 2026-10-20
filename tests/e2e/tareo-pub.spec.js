@@ -279,7 +279,7 @@ test('Publicación: rectificar pide motivo; rectificación abierta publica la v2
 
 test('quién ve Publicación y Costos', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false });
-  const t = await page.evaluate(() => ({ pub: tabAllowed('tpub'), cos: tabAllowed('tcos'), dia: tabAllowed('tdia') }));
-  expect(t).toEqual({ pub: false, cos: false, dia: true });
+  const t = await page.evaluate(() => ({ pub: tabAllowed('tpub'), cos: tabAllowed('tcos'), dia: tabAllowed('tdia'), cfg: tabAllowed('tcfg') }));
+  expect(t).toEqual({ pub: true, cos: true, dia: true, cfg: true }); // 20-10-2026: el asistente tiene todo el tareo
   noErrors(errors, 'tasis');
 });

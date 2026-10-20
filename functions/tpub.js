@@ -204,11 +204,11 @@
   }
 
   /* ---------- pedido, permisos y firma ---------- */
-  /** quién publica: el dueño; admin; editor con tpub. Con correo confirmado y sin `off`. */
+  /** quién publica: el dueño; admin; asistente de tareo (tasis, 20-10-2026); editor con tpub. Con correo confirmado y sin `off`. */
   function tpPuede(email, verified, member) {
     if (!verified || !email) return false;
     if (String(email).toLowerCase() === OWNER) return true;
-    return !!member && member.off !== true && (member.role === 'admin' || (member.role === 'editor' && member.tpub === true));
+    return !!member && member.off !== true && (member.role === 'admin' || member.role === 'tasis' || (member.role === 'editor' && member.tpub === true));
   }
   /** valida lo que manda la página → {accion, fecha, excepciones, motivo, firma} o {error} (mensaje en español). hoy = fecha de Lima. */
   function tpPedido(data, hoy) {
