@@ -7,6 +7,8 @@
 
 const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
   sel:new Set(),anchor:null,drag:null,moved:false,cmp:'',ali:null,aliV:-1,mc:null,mcK:''};
+/* matriz en el celular: más celdas que esto (unos 60 ambientes × 66 columnas) piden elegir un piso; MXBUSY marca un dibujo en curso */
+const MX_PHONE_MAX=4500,MXBUSY='lps911.mxbusy';
 const MXS={p:'Pendiente',c:'En curso',t:'Terminado',n:'No aplica'};
 const MXI={p:'',c:'◐',t:'✓',n:'–'};
 const MXCL={t:'Típica',e:'Específica',d:'Por desglosar'};
@@ -177,6 +179,18 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   const PSC=typeof mxLogKeys==='function'?mxLogKeys():null;
   const grp=[];cols.forEach(c=>{const g=grp[grp.length-1];if(g&&g.sc===c.sc)g.n++;else grp.push({sc:c.sc,n:1})});
   const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
+  /* celular (19/10, la obra real colgaba Safari en el iPhone): con todos los pisos la tabla pasa de 60 000 elementos. En pantallas
+     angostas, si son muchas celdas, o si la vez anterior la matriz no terminó de dibujarse en este equipo (MXBUSY quedó guardado),
+     se muestra una pantalla liviana para elegir un piso o «Por actividad» en vez de la tabla. */
+  {const nCells=rows.reduce((n,r)=>n+r.ambs.length,0)*cols.length;let crashed=false;try{crashed=!!localStorage.getItem(MXBUSY)}catch(e){}
+    if((innerWidth<=760&&nCells>MX_PHONE_MAX)||crashed){try{localStorage.removeItem(MXBUSY)}catch(e){}
+      const ps=visPisos().length>1?visPisos():[...S.pis.values()].sort((a,b)=>(a.order||0)-(b.order||0));
+      h+=`<div class="callout mxlite"><div><b>${crashed?'La última vez la matriz no terminó de cargar en este equipo.':'La matriz completa es demasiado grande para el celular.'}</b>
+        <p class="note">Elige un piso${SCK()?'':' o un subcontratista'}, o usa «Por actividad», que es más cómoda en el celular.</p>
+        <div class="kchips">${ps.map(p=>`<button class="chip" data-mxlp="${esc(p.id)}">${esc(p.code)} · ${esc(p.name)}</button>`).join('')}</div>
+        <div class="btns"><button class="ib pri" data-mxv="act">Ver «Por actividad»</button></div></div></div></div></div>`;
+      main.innerHTML=h;mxWire(main);main.querySelectorAll('[data-mxlp]').forEach(b=>b.onclick=()=>{U.piso=b.dataset.mxlp;saveUI();render()});return}}
+  try{localStorage.setItem(MXBUSY,String(NOW()))}catch(e){}
   const multi=visPisos().length>1;const NC=cols.length+3;
   /* pocas columnas (un SC o unos cuantos elegidos): nombres en horizontal si caben a lo ancho; si no, en vertical (oct 2026) */
   const hz=(()=>{const W=[84,110,136][mxZ()];const fx=innerWidth<=760?190:380;return cols.length*W<=Math.max(0,(main.clientWidth||innerWidth)-fx-40)})();
@@ -204,6 +218,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   /* el alto de la caja se fija antes de devolver el desplazamiento: sin él (max-height:none) el scroll quedaba en 0 y cada cambio llevaba arriba */
   mxFit();
   if(keep){const b=$('#mxbox');if(b){b.scrollLeft=keep.l;b.scrollTop=keep.t}}
+  try{localStorage.removeItem(MXBUSY)}catch(e){}
   mxFocusPaint()
   mxWire(main);
   /* auditoría 19/10 (punto 4): tras redibujar, el resaltado de columna se recalcula con lo que está bajo el puntero (antes quedaba la anterior) */
