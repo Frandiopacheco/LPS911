@@ -4053,3 +4053,9 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .tc-pcd>summary b{color:var(--accent)}
 .tc-pcd .tc-pcg{border:0;border-top:1px solid var(--line);border-radius:0}
 .tc-res>*{flex-shrink:0}
+/* tareo: «+» de la grilla de horas del capataz (agregar partida sin volver a Trabajos) */
+.tc-g .tc-gpa{width:48px;min-width:48px;max-width:48px;background:var(--panel2)}
+.tc-g thead th.tc-gpa{vertical-align:middle;padding:4px}
+.tc-gpab{width:40px;height:40px;border:1px dashed var(--accent);border-radius:var(--r-ctl);background:var(--panel);color:var(--accent);font:700 22px/1 var(--f-ui);cursor:pointer}
+.tc-gpab:active{background:var(--accent-soft)}
+#tcPcSh .tc-res{max-height:60vh}
