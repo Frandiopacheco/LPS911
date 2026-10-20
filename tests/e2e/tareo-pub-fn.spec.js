@@ -52,8 +52,8 @@ test('publicarTareo (falso): previa, publicar, rectificar y v2 con la lógica de
   expect((await page.evaluate(f => window.__dbGet('tpubidx', f), HOY)).vers.map(x => x.v)).toEqual([1, 2]);
 });
 
-test('publicarTareo (falso): solo admin o editor con tpub', async ({ page }) => {
-  await openApp(page, { as: 'tasis', extra, editar: false });
+test('publicarTareo (falso): solo admin, asistente o editor con tpub', async ({ page }) => {
+  await openApp(page, { as: 'tcos', extra, editar: false });
   const r = await call(page, { accion: 'previa', fecha: HOY });
   expect(r.code).toBe('functions/permission-denied');
 });
