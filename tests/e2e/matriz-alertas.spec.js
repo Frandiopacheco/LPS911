@@ -172,3 +172,25 @@ test('auditoría 4-5-9: con búsqueda el botón queda apagado y explica; hoy se 
   await expect(page.locator('#toast')).toContainText('Quita la búsqueda');
   noErrors(errors, 'botón apagado');
 });
+
+/* 19/10: «¿Terminó?» / «Falta» se responden tocándolos */
+test('tocar «¿Terminó?»: «Sí» la deja Terminado en la Matriz y la fila gris desaparece', async ({ page }) => {
+  const extra = [...CAT, ['acts', 'z9', { ambId: 'a3', sc: 'c3', name: 'Pintura', und: '', metrado: null, days: ['2026-09-21'], order: 90 }], ['mamb', 'a3', { tipo: 'tp1', c: { k3: 'p' }, by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; U.showPast = false; render(); });
+  await gh(page).locator('[data-ghq]').click();
+  await expect(page.locator('#pop')).toContainText('¿Ya terminó?');
+  await page.click('#pop [data-do="yes"]');
+  await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a3').c.k3)).toBe('t');
+  await expect(gh(page)).toHaveCount(0);
+  noErrors(errors, 'terminó sí');
+});
+test('tocar «Falta»: programa el próximo día hábil', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.lkGh = true; render(); });
+  await gh(page).locator('[data-ghq]').click();
+  await page.click('#pop [data-do="prog"]');
+  const nx = await page.evaluate(() => wshift(todayIso(), 1));
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3').map(x => x.days))).toEqual([[nx]]);
+  noErrors(errors, 'falta programar');
+});
