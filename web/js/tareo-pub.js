@@ -128,7 +128,7 @@ function tpbSteps(st){const P=st.P,R=(P&&P.resumen)||{};const T=Array.isArray(R.
   const cob=take(TPB_REQ.sin);const ns=st.sin.length;
   S.push({k:'sin',t:'Obreros sin tareo con motivo',ok:!st.pend.length&&!cob.length,n:ns?`${ns-st.pend.length} de ${ns}`:'Todos tienen tareo',cases:cases(cob),
     act:st.pend.length?`<button class="ib" data-tpbgo="sin">Poner motivo a ${st.pend.length===1?'1 obrero':st.pend.length+' obreros'}</button>`:''});
-  const cot=take(TPB_REQ.cot);S.push({k:'cot',t:'Cotejo de firmas y jornada',ok:!cot.length,n:cot.length?nc(cot):'Completo',cases:cases(cot)});
+  const cot=take(TPB_REQ.cot);S.push({k:'cot',t:'Foto del formato y jornada',ok:!cot.length,n:cot.length?nc(cot):'Completo',cases:cases(cot)});
   const hrs=take(TPB_REQ.hrs);S.push({k:'hrs',t:'Asistencia y horas completas',ok:!hrs.length,n:hrs.length?nc(hrs):'Completo',cases:cases(hrs)});
   const otr=st.Bot.filter(b=>!used.has(b));if(otr.length)S.push({k:'otr',t:'Otras observaciones del servidor',ok:false,n:nc(otr),cases:cases(otr)});
   return S}

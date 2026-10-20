@@ -22,7 +22,6 @@ test('A1: «Marcar revisado» congela la jornada (cfg) de un enviado antiguo; ca
   const { envN, ...viejo } = DOC; // enviado antes de que existieran cfg y envN
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: seed(viejo) });
   await open(page);
-  await page.locator('#trAll').click();
   await page.locator('#trRev').click();
   await expect.poll(async () => (await get(page)).st).toBe('rev');
   const d = await get(page);
@@ -35,50 +34,13 @@ test('A1: «Marcar revisado» congela la jornada (cfg) de un enviado antiguo; ca
   noErrors(errors, 'A1');
 });
 
-test('A2: el cotejo sin guardar queda atado a la foto y al envío: si el capataz reenvía, se descarta y hay que cotejar de nuevo', async ({ page }) => {
-  const errors = await openApp(page, { as: 'tasis', editar: false, extra: seed() });
-  await page.evaluate(img => fcol('tfot').doc('f2').set({ date: '2026-10-01', cap: 'tcap@obra.pe', n: 2, d: img }), FOTO);
-  await open(page);
-  await page.locator('#trAll').click(); // coteja f1 y no guarda
-  await expect(page.locator('#trSave')).toBeVisible();
-  // la oficina lo reabre y el capataz manda otra foto y lo reenvía (llega por la suscripción con el detalle abierto)
-  await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'reab', reab: { t: 2, by: 'admin@obra.pe', mot: 'Otra foto' } }), ID);
-  await expect(page.locator('#trWs')).toContainText('Reabierto');
-  await page.evaluate(id => fcol('tareo').doc(id).update({ st: 'env', foto: ['f2'], envN: 2, envAt: 3 }), ID);
-  await expect(page.locator('#trCycV')).toContainText('vuelve a cotejar', { ignoreCase: true });
-  await expect(page.locator('#trSave')).toHaveCount(0);
-  await expect(page.locator('#trCotN')).toHaveText('0 de 1 cotejados');
-  await expect(page.locator('#trRev')).toBeDisabled();
-  let d = await get(page);
-  expect(d.cot).toBeUndefined();
-  expect(d.st).toBe('env');
-  // ahora sí coteja la foto nueva y lo marca revisado
-  await expect(page.locator('#trImg')).toHaveAttribute('src', FOTO);
-  await page.locator('#trAll').click();
-  await expect(page.locator('#trCycV')).toHaveCount(0);
-  await page.locator('#trRev').click();
-  await expect.poll(async () => (await get(page)).st).toBe('rev');
-  d = await get(page);
-  expect(d.cotFot).toEqual(['f2']);
-  noErrors(errors, 'A2');
-});
-
-test('A2: dentro de la transacción, «Guardar cotejo» y «Marcar revisado» rechazan un reenvío que la vista aún no recibió (aunque traiga la misma foto)', async ({ page }) => {
+test('A2: dentro de la transacción, «Marcar revisado» rechaza un reenvío que la vista aún no recibió (aunque traiga la misma foto)', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: seed() });
   await open(page);
-  await page.locator('#trAll').click();
-  // el reenvío llega a la base justo antes del clic (misma foto, otro envío)
-  await page.evaluate(id => { fcol('tareo').doc(id).update({ envN: 2, envAt: 5 }); return trSaveCot(id); }, ID);
-  await expect(page.locator('#trCycV')).toBeVisible();
-  let d = await get(page);
-  expect(d.cot).toBeUndefined();
-  expect(await page.evaluate(() => TR.dirty)).toBe(false);
-  await expect(page.locator('#trCotN')).toHaveText('0 de 1 cotejados');
-  // vuelve a cotejar: ahora con «Marcar revisado» y otro reenvío entre medio
-  await page.locator('#trAll').click();
+  // el reenvío llega a la base justo antes del clic (misma foto, otro envío): no marca revisado y avisa
   await page.evaluate(id => { fcol('tareo').doc(id).update({ envN: 3, envAt: 9 }); return trRevisar(id); }, ID);
-  await expect(page.locator('#trCycV')).toBeVisible();
-  d = await get(page);
+  await expect(page.locator('#trCycV')).toContainText('reenvió');
+  const d = await get(page);
   expect(d.st).toBe('env');
   expect(d.cot).toBeUndefined();
   // sin envN (tareo de antes): el ciclo es envAt
@@ -128,20 +90,7 @@ test('A3: tras un conflicto, «Recargar versión actual» trae los datos nuevos 
   noErrors(errors, 'A3');
 });
 
-test('A4: firmas del formato antiguo (rows.fir + historial) ya no cuentan como cotejo', async ({ page }) => {
-  const forged = { ...DOC, rows: { [DNI]: { ...R, fir: true, gar: '17:00' } }, hist: [{ a: 'fir', by: 'tasis@obra.pe', t: 1 }], revBy: 'tasis@obra.pe' };
-  const errors = await openApp(page, { as: 'tasis', editar: false, extra: seed(forged) });
-  await tab(page);
-  await expect(page.locator(`tr[data-to="${ID}"] [data-l="Firmas"]`)).toHaveText('0 de 1');
-  await page.locator(`tr[data-to="${ID}"] button[data-to]`).click();
-  await expect(page.locator('#trCotN')).toHaveText('0 de 1 cotejados');
-  await expect(page.locator('#trRev')).toBeDisabled();
-  await expect(page.locator('#trg_11111111')).toHaveValue('');
-  expect(await page.evaluate(id => tCotDe(TD.docs.get(id)), ID)).toEqual({});
-  noErrors(errors, 'A4');
-});
-
-test('A7: una foto que llega con el detalle abierto se carga; si no se puede, error con «Reintentar» y no se marcan firmas', async ({ page }) => {
+test('A7: una foto que llega con el detalle abierto se carga; si no se puede, error con «Reintentar»', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: seed() });
   await open(page);
   await expect(page.locator('#trImg')).toHaveAttribute('src', FOTO);
@@ -149,18 +98,14 @@ test('A7: una foto que llega con el detalle abierto se carga; si no se puede, er
   await page.evaluate(id => fcol('tareo').doc(id).update({ foto: ['f2'] }), ID);
   await expect(page.locator('#trImg')).toHaveAttribute('src', FOTO);
   expect(await page.evaluate(() => TD.fotos.has('f2'))).toBe(true);
-  // una foto que aún no está en la base: error claro, sin cotejo hasta que cargue
+  // una foto que aún no está en la base: error claro
   await page.evaluate(id => fcol('tareo').doc(id).update({ foto: ['f3'] }), ID);
   await expect(page.locator('#trFErr')).toBeVisible();
   await expect(page.locator('#trImg')).toHaveCount(0);
-  await expect(page.locator('#trAll')).toBeDisabled();
-  await expect(page.locator('tr[data-trd="11111111"] [data-tra="fir"]').first()).toBeDisabled();
-  await expect(page.locator('#trFWait')).toBeVisible();
   // llega la foto y «Reintentar» la muestra
   await page.evaluate(img => fcol('tfot').doc('f3').set({ date: '2026-10-01', cap: 'tcap@obra.pe', n: 3, d: img }), FOTO);
   await page.locator('#trFRe').click();
   await expect(page.locator('#trImg')).toHaveAttribute('src', FOTO);
-  await expect(page.locator('#trAll')).toBeEnabled();
   noErrors(errors, 'A7');
 });
 
@@ -206,8 +151,9 @@ test('UX5: con Tab el foco no sale de la revisión ni de su ventana; Esc respeta
   await expect(page.locator('#lqm')).toHaveCount(0);
   await expect(page.locator('#trWs')).toBeVisible();
   expect(await page.evaluate(() => !!document.activeElement.closest('#trWs'))).toBe(true);
-  // cotejo sin guardar: Esc pregunta (guardar, descartar o seguir editando); «Seguir editando» (o Esc) no cierra
-  await page.locator('#trAll').click();
+  // corrección sin guardar: Esc pregunta (guardar, descartar o seguir editando); «Seguir editando» (o Esc) no cierra
+  await page.locator('#trCor').click();
+  await page.locator('[data-tre="fin"]').fill('16:00');
   await page.locator('#trBack').focus();
   await page.keyboard.press('Escape');
   await expect(page.locator('#trAsk3')).toBeVisible();

@@ -74,8 +74,10 @@
       excepciones {dni: motivo} para los activos sin tareo; cfgAct = configuración actual del día (solo para mostrar horas de un tareo sin cfg);
       rect = ya hay una versión publicada (se aceptan tareos en «pub»).
       → {bloqueos:[{k, msg, tareo?, tareos?, dni?, pc?}], resumen, sinTareo:[…], exc:{dni:{motivo, ape, nom}}}
-      k: nada · estado · cfg · cot (sin foto o cotejo de otra foto) · marca (sin marcar) · hval · sinh (vino con 0 h) · hmax (> 16 h) ·
-         pc (partida inexistente) · firp (presente sin firma cotejada) · dup (DNI en dos o más tareos) · cob (activo sin tareo ni excepción) */
+      k: nada · estado · cfg · cot (sin foto del formato firmado) · marca (sin marcar) · hval · sinh (vino con 0 h) · hmax (> 16 h) ·
+         pc (partida inexistente) · dup (DNI en dos o más tareos) · cob (activo sin tareo ni excepción).
+      Desde el 20-10-2026 (decisión del dueño) no se exige el cotejo de firmas: la firma es implícita en el formato físico, y basta
+      con que el tareo tenga la foto del formato (ya no salen 'firp' ni «cotejo de otra foto»). */
   function tpValidarDia({ fecha, tareos, personal, partidas, excepciones, cfgAct, rect }) {
     const T = tareosDia(tareos, fecha); const B = []; const E = excLimpias(excepciones);
     const PC = new Map(vals(partidas).filter(Boolean).map(p => [p.id, p]));
@@ -83,13 +85,13 @@
     const pcMal = new Set(); const porDni = new Map();
     const R = { fecha, tareos: [], porEstado: {}, obreros: 0, pres: 0, aus: 0, sm: 0, porMot: {}, sinTareo: 0, exc: 0, hh: 0, he: 0, alt: 0, porPc: {}, prod: 0 };
     for (const t of T) {
-      const st = t.st || 'bor'; const cap = capDe(t); const cfg = cfgOk(t.cfg) ? t.cfg : cfgAct; const vig = tpCotVig(t); const hrs = t.modo === 'hrs';
+      const st = t.st || 'bor'; const cap = capDe(t); const cfg = cfgOk(t.cfg) ? t.cfg : cfgAct; const hrs = t.modo === 'hrs';
       const tr = { id: t.id || '', cap: t.cap || '', capN: t.capN || '', st, n: 0, pres: 0, aus: 0, sm: 0, hh: 0, he: 0, bloq: 0, prod: !!(t.prod && typeof t.prod === 'object' && t.prod.t) }; const nb = B.length;
       if (tr.prod) R.prod++; /* revisado por el jefe de producción (informativo, no bloquea) */
       R.porEstado[st] = (R.porEstado[st] || 0) + 1;
       if (!(st === 'rev' || (rect && st === 'pub'))) B.push({ k: 'estado', tareo: tr.id, msg: `El tareo de ${cap} está ${ST[st] || st}: debe estar revisado para publicar.` });
       if (!cfgOk(t.cfg)) B.push({ k: 'cfg', tareo: tr.id, msg: `El tareo de ${cap} no tiene guardada la jornada del día: quítale el revisado y vuelve a marcarlo revisado.` });
-      if (!vig) B.push({ k: 'cot', tareo: tr.id, msg: Array.isArray(t.foto) && t.foto.length ? `El cotejo de firmas del tareo de ${cap} no corresponde a la foto actual: vuelve a cotejarlo.` : `El tareo de ${cap} no tiene la foto del formato firmado.` });
+      if (!(Array.isArray(t.foto) && t.foto.length)) B.push({ k: 'cot', tareo: tr.id, msg: `El tareo de ${cap} no tiene la foto del formato firmado.` });
       for (const [dni, r] of Object.entries(t.rows)) {
         if (!r) continue; tr.n++;
         const L = porDni.get(dni) || []; L.push(t); porDni.set(dni, L);
@@ -105,7 +107,6 @@
           R.porPc[pc] = r2((R.porPc[pc] || 0) + h);
           if (!PC.has(pc) && !pcMal.has(pc)) { pcMal.add(pc); B.push({ k: 'pc', tareo: tr.id, pc, msg: `La partida «${pc}» (con horas en el tareo de ${cap}) no existe en Partidas de control.` }); }
         }
-        if (vig) { const x = t.cot[dni]; if (!(x && (x.fir === true || x.fir === false))) B.push({ k: 'firp', tareo: tr.id, dni, msg: `${nm} (tareo de ${cap}): falta cotejar su firma.` }); }
         tr.hh = r2(tr.hh + c.trab); tr.he = r2(tr.he + c.ext);
       }
       tr.bloq = B.length - nb;

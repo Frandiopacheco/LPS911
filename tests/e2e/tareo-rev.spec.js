@@ -33,60 +33,41 @@ const conT1 = (o, base = SOLO) => base.map(x => x[0] === 'tareo' && x[1] === T1 
 const tab = (page, t) => page.evaluate(t => { U.mod = 'tar'; U.tab = t; render(); }, t);
 const dbT = (page, id) => page.evaluate(id => window.__dbGet('tareo', id), id);
 
-test('revisión: cotejo de firmas, garita distinta, marcar y quitar revisado', async ({ page }) => {
+test('revisión (sin cotejo de firmas, 20-10-2026): visor, marcar revisado pasa al siguiente y quitar revisado', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: SOLO });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   const m = page.locator('#trWs');
   await expect(m).toContainText('Obreros y horas por partida');
-  await expect(m.locator('#trCotN')).toHaveText('0 de 2 cotejados');
-  // sin cotejar no se puede marcar revisado
-  await expect(m.locator('#trRev')).toBeDisabled();
+  // sin cotejo: ni «Todos firmaron», ni columnas Firmó / Garita; se puede marcar revisado de una vez
+  await expect(m.locator('#trCotN')).toHaveCount(0);
+  await expect(m.locator('#trAll')).toHaveCount(0);
+  await expect(m.locator('.tr-mt thead')).not.toContainText('Firmó');
+  await expect(m.locator('.tr-mt thead')).not.toContainText('Garita');
+  await expect(page.locator('.td-tbl thead')).not.toContainText('Firmas');
+  await expect(m.locator('#trRev')).toBeEnabled();
   // visor: acercar y rotar
   await m.locator('[data-trv="zi"]').click();
   await m.locator('[data-trv="rot"]').click();
   await expect(m.locator('#trImg')).toHaveAttribute('data-z', '1.5');
   await expect(m.locator('#trImg')).toHaveAttribute('data-rot', '90');
-  // todos firmaron, menos BETA; ALFA salió por garita 40 min después
-  await m.locator('#trAll').click();
-  await expect(m.locator('#trCotN')).toHaveText('2 de 2 cotejados');
-  await m.locator('tr[data-trd="22222222"] [data-tra="fir"][data-v="0"]').click();
-  await expect(m.locator('tr[data-trd="22222222"]')).toHaveClass(/tr-bad/);
-  await m.locator('#trg_11111111').fill('17:40');
-  await expect(m.locator('#trObs')).toContainText('BETA, X: vino pero no firmó');
-  await expect(m.locator('#trObs')).toContainText('salida en garita distinta (garita 17:40, tareo 17:00)');
-  await expect(m.locator('#trRev')).toBeEnabled();
-  // guardar cotejo
-  await m.locator('#trSave').click();
-  // el cotejo va aparte (cot), con quién y cuándo, y las fotos cotejadas (cotFot); las filas del capataz no cambian
-  await expect.poll(async () => ((await dbT(page, T1)).cot || {})['11111111']).toMatchObject({ fir: true, gar: '17:40', by: 'tasis@obra.pe' });
-  let d = await dbT(page, T1);
-  expect(d.cot['22222222'].fir).toBe(false);
-  expect(d.cotFot).toEqual(['f1']);
-  expect(d.rows['11111111'].fir).toBeUndefined();
-  expect(d.st).toBe('env');
-  expect(d.hist.map(x => x.a)).toEqual(['env', 'fir']);
-  expect(d.hist[1].cam).toContain('no firmó: BETA');
-  // marcar revisado: pide confirmar porque BETA no firmó; queda en el historial
-  let asked = '';
-  page.once('dialog', dg => { asked = dg.message(); dg.accept(); });
+  // marcar revisado: sin preguntar nada; pasa solo al siguiente tareo «Enviado» (Bruno) y conserva el zoom de la foto
   await m.locator('#trRev').click();
   await expect.poll(async () => (await dbT(page, T1)).st).toBe('rev');
-  expect(asked).toContain('no firmó');
-  d = await dbT(page, T1);
+  let d = await dbT(page, T1);
   expect(d.revBy).toBe('tasis@obra.pe');
-  expect(d.hist.map(x => x.a)).toEqual(['env', 'fir', 'rev']);
-  expect(d.hist[2].cam).toContain('no firmó');
+  expect(d.hist.map(x => x.a)).toEqual(['env', 'rev']);
+  await expect(m.locator('#trCapSel')).toHaveValue(T2);
+  await expect(page.locator('#toast')).toContainText('sigue Bruno Segundo');
+  await expect(m.locator('#trImg')).toHaveAttribute('data-z', '1.5');
+  // volver a Teodoro con el selector y quitar revisado con motivo
+  await m.locator('#trCapSel').selectOption(T1);
   await expect(m.locator('#trHist')).toContainText('Revisado');
-  await expect(m.locator('#trAll')).toHaveCount(0); // revisado: el cotejo queda de solo lectura
-  await expect(page.locator(`tr[data-to="${T1}"]`)).toContainText('Revisado');
-  await expect(page.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('1 sin firma');
-  // quitar revisado con motivo
-  page.once('dialog', dg => dg.accept('Revisar de nuevo la garita'));
+  page.once('dialog', dg => dg.accept('Revisar de nuevo las horas'));
   await m.locator('#trQrev').click();
   await expect.poll(async () => (await dbT(page, T1)).st).toBe('env');
   d = await dbT(page, T1);
-  expect(d.hist[3]).toMatchObject({ a: 'qrev', mot: 'Revisar de nuevo la garita' });
+  expect(d.hist[2]).toMatchObject({ a: 'qrev', mot: 'Revisar de nuevo las horas' });
   expect(d.revBy).toBeUndefined();
   noErrors(errors, 'revisión');
 });
@@ -102,7 +83,6 @@ test('revisión: conflicto (un obrero en dos tareos), corrección con motivo y �
   const m = page.locator('#trWs');
   // bloquea marcar revisado y nombra al otro capataz
   await expect(m.locator('#trObs li.tr-obl[data-k="dup"]')).toContainText('también figura en el tareo de Teodoro Capataz');
-  await m.locator('#trAll').click();
   await expect(m.locator('#trRev')).toBeDisabled();
   await m.locator('#trCor').click();
   await expect(m).toContainText('Corregir el tareo');
@@ -128,10 +108,9 @@ test('revisión: conflicto (un obrero en dos tareos), corrección con motivo y �
   await expect(m.locator('#trHist')).toContainText('Corregido');
   // presente en uno y con falta en otro sigue siendo conflicto
   await expect(cf.locator(`[data-trqt="${T2}"]`)).toContainText('falta FA');
-  // «Todos firmaron» quedó sin guardar: Esc ofrece guardar, descartar o seguir; se descarta
+  // nada sin guardar: Esc vuelve a la lista sin preguntar
   await page.keyboard.press('Escape');
-  await expect(page.locator('#trAsk3')).toContainText('cotejo de firmas sin guardar');
-  await page.locator('#trAsk3 [data-l3="discard"]').click();
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
   await expect(page.locator('#trWs')).toHaveCount(0);
   page.once('dialog', dg => dg.accept('Trabajó con Teodoro'));
   await cf.locator(`[data-trq="${T2}"]`).click();
@@ -174,40 +153,24 @@ test('auditoría F2: corregir un revisado lo devuelve a «Enviado»; concurrenci
   expect(d.cot).toEqual(cot); // la corrección no toca el cotejo
   // «Marcar revisado» con la vista vieja: otro usuario quitó los bloques entre medio → no marca
   await expect(m.locator('#trRev')).toBeEnabled();
-  await m.locator('#trg_11111111').fill('12:05'); // cotejo en edición (se guarda junto con «Marcar revisado»)
   // el cambio llega a la base justo antes del clic (la vista aún no se enteró)
   await page.evaluate(id => { fcol('tareo').doc(id).update({ blq: [] }); return trRevisar(id); }, T1);
   await expect(page.locator('#toast')).toContainText('Otro usuario cambió este tareo');
   d = await dbT(page, T1);
   expect(d.st).toBe('env');
-  // «Guardar cotejo» solo escribe lo que cambió (la garita de ALFA): no pisa la firma que otro marcó en BETA
-  await page.evaluate(id => fcol('tareo').doc(id).update({ 'cot.22222222.fir': false }), T1);
-  await m.locator('#trSave').click();
-  await expect.poll(async () => ((await dbT(page, T1)).cot['11111111'] || {}).gar).toBe('12:05');
-  d = await dbT(page, T1);
-  expect(d.cot['22222222'].fir).toBe(false);
-  expect(d.cot['11111111'].fir).toBe(true);
   // ya con los datos al día: el tareo sin bloques tiene observaciones que bloquean
   await expect(m.locator('#trRev')).toBeDisabled();
   noErrors(errors, 'concurrencia');
 });
 
-test('auditoría F2: reabrir borra las firmas y conserva la garita; fotos nuevas invalidan el cotejo; lectura del cotejo antiguo', async ({ page }) => {
+test('auditoría F2: reabrir borra las firmas antiguas y conserva la garita guardada', async ({ page }) => {
   const cot = { 11111111: { fir: true, gar: '17:10', by: 'tasis@obra.pe', t: 1 }, 22222222: { fir: false, by: 'tasis@obra.pe', t: 1 } };
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conT1({ cot, cotFot: ['f1'] }) });
   await tab(page, 'tdia');
-  await expect(page.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('1 sin firma');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   const m = page.locator('#trWs');
-  await expect(m.locator('#trCotN')).toHaveText('2 de 2 cotejados');
-  // el capataz mandó otra foto: las firmas no valen (la garita sí)
-  await page.evaluate(id => fcol('tareo').doc(id).update({ foto: ['f1', 'f2'] }), T1);
-  await expect(m.locator('#trCotN')).toHaveText('0 de 2 cotejados');
-  await expect(m.locator('#trCotV')).toBeVisible();
-  await expect(m.locator('#trg_11111111')).toHaveValue('17:10');
-  await page.evaluate(id => fcol('tareo').doc(id).update({ foto: ['f1'] }), T1);
-  await expect(m.locator('#trCotN')).toHaveText('2 de 2 cotejados');
-  // reabrir: sin firmas ni cotFot; la garita queda
+  // un «no firmó» de un cotejo antiguo ya no es observación (20-10-2026)
+  await expect(m.locator('#trObs')).toHaveCount(0);
   page.once('dialog', dg => dg.accept('Falta una firma'));
   await m.locator('#toReab').click();
   await expect.poll(async () => (await dbT(page, T1)).st).toBe('reab');
@@ -215,19 +178,6 @@ test('auditoría F2: reabrir borra las firmas y conserva la garita; fotos nuevas
   expect(d.cot).toEqual({ 11111111: { gar: '17:10', by: 'tasis@obra.pe', t: 1 } });
   expect(d.cotFot).toBeUndefined();
   noErrors(errors, 'reabrir');
-  // formato antiguo (cotejo en rows, aunque esté revisado): ya no se lee (segunda auditoría, A4): pide cotejar
-  const leg = conT1({ st: 'rev', revBy: 'tasis@obra.pe', revAt: ENV, rows: { 11111111: row('ALFA', { fir: true, gar: '17:00' }), 22222222: row('BETA', { fir: true }), 33333333: row('GAMMA', { as: false, mot: 'DM' }) } });
-  const p2 = await page.context().newPage();
-  const e2 = await openApp(p2, { as: 'tasis', editar: false, extra: leg });
-  await tab(p2, 'tdia');
-  await expect(p2.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('0 de 2');
-  noErrors(e2, 'antiguo');
-  const forj = conT1({ rows: { 11111111: row('ALFA', { fir: true }), 22222222: row('BETA', { fir: true }) } });
-  const p3 = await page.context().newPage();
-  const e3 = await openApp(p3, { as: 'tasis', editar: false, extra: forj });
-  await tab(p3, 'tdia');
-  await expect(p3.locator(`tr[data-to="${T1}"] [data-l="Firmas"]`)).toHaveText('0 de 2');
-  noErrors(e3, 'fir del capataz');
 });
 
 test('auditoría F2: el respaldo incluye los tareos y sus fotos', async ({ page }) => {
@@ -298,12 +248,11 @@ test('Tareos del día: sin tareo (registrar falta), no enviados a la hora límit
   noErrors(errors, 'sin tareo');
 });
 
-test('revisión: el jefe de producción coteja y corrige como la oficina (06-10-2026); el capataz ve «Revisado por la oficina»', async ({ page }) => {
+test('revisión: el jefe de producción corrige como la oficina (06-10-2026); el capataz ve «Revisado por la oficina»', async ({ page }) => {
   const errors = await openApp(page, { as: 'jefe', editar: false, extra: EXTRA });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
-  await expect(page.locator('#trCotN')).toHaveText('0 de 2 cotejados');
-  await expect(page.locator('#trAll')).toBeVisible();
+  await expect(page.locator('#trCotN')).toHaveCount(0);
   await expect(page.locator('#trCor')).toBeVisible();
   await expect(page.locator('[data-tra="pas"]')).toHaveCount(3);
   await expect(page.locator('.tr-mode')).toHaveCount(0);
@@ -317,13 +266,13 @@ test('revisión: el jefe de producción coteja y corrige como la oficina (06-10-
   noErrors(e2, 'capataz');
 });
 
-test('revisión en laptop: espacio a pantalla completa, foto a la izquierda, anterior/siguiente con teclado y redibujo sin perder el cotejo', async ({ page }) => {
+test('revisión en laptop: espacio a pantalla completa, foto a la izquierda, anterior/siguiente con teclado y redibujo', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: SOLO });
   await tab(page, 'tdia');
   await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
   const ws = page.locator('#trWs');
-  await expect(ws).toContainText('Tareo de Teodoro Capataz');
+  await expect(page.locator('#trCapSel')).toHaveValue(T1);
   // ocupa toda la pantalla; la foto a la izquierda (~45 %) y la tabla a la derecha
   const W = await ws.boundingBox(), F = await page.locator('#trFoto').boundingBox(), R = await page.locator('#trRight').boundingBox();
   expect(W.width).toBe(1440);
@@ -336,24 +285,18 @@ test('revisión en laptop: espacio a pantalla completa, foto a la izquierda, ant
   // la lista va por estado y nombre: Bruno, Teodoro
   await expect(page.locator('#trPos')).toHaveText('2 de 2');
   await expect(page.locator('#trNext')).toBeDisabled();
-  // cotejo sin guardar + llega un cambio de otro usuario y se redibuja la app: la revisión sigue abierta y no pierde el cotejo
-  await page.locator('#trAll').click();
-  await expect(page.locator('#trCotN')).toHaveText('2 de 2 cotejados');
+  // llega un cambio de otro usuario y se redibuja la app: la revisión sigue abierta
   await page.evaluate(id => fcol('tareo').doc(id).update({ ts: 99 }), T1);
   await page.evaluate(() => render());
   await expect(ws).toBeVisible();
-  await expect(page.locator('#trCotN')).toHaveText('2 de 2 cotejados');
-  await expect(page.locator('#trSave')).toBeVisible();
-  // ← al anterior: pregunta por el cotejo sin guardar (guardar, descartar o seguir editando)
+  // ← al anterior: sin nada sin guardar no pregunta
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('#trAsk3')).toContainText('cotejo');
-  await page.locator('#trAsk3 [data-l3="discard"]').click();
-  await expect(ws).toContainText('Tareo de Bruno Segundo');
+  await expect(page.locator('#trAsk3')).toHaveCount(0);
+  await expect(page.locator('#trCapSel')).toHaveValue(T2);
   await expect(page.locator('#trPos')).toHaveText('1 de 2');
   await expect(page.locator('#trPrev')).toBeDisabled();
   await page.keyboard.press('ArrowRight');
-  await expect(ws).toContainText('Tareo de Teodoro Capataz');
-  await expect(page.locator('#trCotN')).toHaveText('0 de 2 cotejados');
+  await expect(page.locator('#trCapSel')).toHaveValue(T1);
   // corregir dentro del mismo espacio: la foto sigue a la izquierda
   await page.locator('#trCor').click();
   await expect(page.locator('#trRight')).toContainText('Corregir el tareo');
@@ -407,7 +350,6 @@ test('revisión: pasar un obrero al tareo de otro capataz (con sus bloques, moti
   expect(b.hist[b.hist.length - 1].cam).toContain('Recibido del tareo de Teodoro Capataz');
   // la revisión abierta se actualiza
   await expect(page.locator('#trWs tr[data-trd="22222222"]')).toHaveCount(0);
-  await expect(page.locator('#trCotN')).toHaveText('1 de 1 cotejados');
   // el tareo en borrador del capataz no se toca
   expect((await dbT(page, T3)).rows).toEqual({ 55555555: row('EPSILON') });
   noErrors(errors, 'pasar obrero');
@@ -484,10 +426,10 @@ const HRS = { modo: 'hrs', pcs: ['p10_10', 'p10_05'],
   rows: { 11111111: row('ALFA', { h: { p10_10: 4, p10_05: 4.5 } }), 22222222: row('BETA', { h: { p10_05: 8.5 } }), 33333333: row('GAMMA', { as: false, mot: 'DM', h: {} }) } };
 const conH = () => conT1({ ...HRS, envN: 1 }).concat([HPC]).map(x => { if (x[0] !== 'tareo' || x[1] !== T1) return x; const { blq, ...o } = x[2]; return ['tareo', T1, o]; });
 const cell = (m, d, pc) => m.locator(`#trh_${d}_${pc}`);
-/* celda de una columna que no es de partida (Vino, Salida, Firmó…): por la posición de su encabezado */
+/* celda de una columna que no es de partida (Asistencia, Altura…): por la posición de su encabezado */
 const celk = async (m, d, k) => m.locator(`tr[data-dni="${d}"] > td`).nth(await m.locator(`th[data-k="${k}"]`).evaluate(th => th.cellIndex));
 
-test('corrección en la hoja (modo horas, asistente): teclado como Excel, totales, agregar/quitar partida, vino/no vino, salida, historial', async ({ page }) => {
+test('corrección en la hoja (modo horas, asistente): teclado como Excel, totales, agregar/quitar partida, asistencia, historial', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
   await tab(page, 'tdia');
@@ -525,17 +467,19 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   await expect(m.locator('#trht_22222222')).toHaveClass(/tx-ok/);
   await expect(m.locator('#trhc_p10_10')).toHaveText('7.5');
   await expect(m.locator('#trEdN')).toHaveText('3 cambios sin guardar');
-  // agregar una partida del día: la columna aparece y queda elegida su primera celda
-  await m.locator('#trPcAdd').selectOption('p10_20');
+  // agregar una partida del día con el «+» de su encabezado: la columna aparece y queda elegida su primera celda
+  await m.locator('#txAddP').click();
+  await expect(page.locator('#txPl [data-txpc="p10_05"]')).toHaveCount(0); // las que ya están no se ofrecen
+  await page.locator('#txPl [data-txpc="p10_20"]').click();
   await expect(m.locator('#txAdr')).toHaveText('ALFA · 10.20');
   await page.keyboard.type('1');
   await page.keyboard.press('Enter');
-  // quitar 10.05 (tiene horas): mover o borrar → borrarlas
+  // quitar 10.05 (tiene horas): confirma y se borran (ya no se mueven a otra partida)
+  let pdq = '';
+  page.once('dialog', dg => { pdq = dg.message(); dg.accept(); });
   await m.locator('th[data-pc="p10_05"] [data-tra="pcdel"]').click();
-  await expect(page.locator('#lqm')).toContainText('de 2 obreros');
-  await page.locator('#lqm input[name="trPdP"][value="__del"]').check();
-  await page.locator('#trPdOk').click();
   await expect(cell(m, '11111111', 'p10_05')).toHaveCount(0);
+  expect(pdq).toContain('de 2 obreros');
   await expect(m.locator('#trht_22222222')).toHaveText('4.5');
   // GAMMA sí vino («s» en Vino): sin horas es un problema; con 8,5 se resuelve
   await (await celk(m, '33333333', 'as')).click();
@@ -546,11 +490,10 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   await page.keyboard.type('8,5');
   await page.keyboard.press('Enter');
   await expect(m.locator('#trObs')).not.toContainText('GAMMA, X: vino pero no tiene horas');
-  // BETA salió a las 15:00 (opcional)
-  await (await celk(m, '22222222', 'sal')).click();
-  await page.keyboard.type('1500');
-  await page.keyboard.press('Enter');
-  await expect(await celk(m, '22222222', 'sal')).toHaveText('15:00');
+  // Asistencia en una sola columna: S/N o el motivo («fa», «No vino · DM»…)
+  expect(await page.evaluate(() => [txMotOf('fa'), txMotOf('No vino · DM'), txMotOf('si'), txMotOf('Vino')])).toEqual(['FA', 'DM', '', '']);
+  await expect(await celk(m, '33333333', 'as')).toHaveText('Vino');
+  await expect(m.locator('th[data-k="sal"], th[data-k="mot"], th[data-k="fir"], th[data-k="gar"]')).toHaveCount(0);
   // guardar: aviso de HH totales cambiadas y motivo
   const asked = [];
   page.on('dialog', dg => { asked.push(dg.message()); dg.type() === 'prompt' ? dg.accept('Ajuste de horas según el formato') : dg.accept(); });
@@ -561,7 +504,7 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   expect(d.modo).toBe('hrs');
   expect(d.blq).toBeUndefined();
   expect(d.rows['11111111']).toMatchObject({ h: { p10_10: 3, p10_20: 1 }, trab: 4 });
-  expect(d.rows['22222222']).toMatchObject({ h: { p10_10: 4.5 }, sal: '15:00', trab: 4.5, fin: '15:00' });
+  expect(d.rows['22222222']).toMatchObject({ h: { p10_10: 4.5 }, trab: 4.5 });
   expect(d.rows['33333333']).toMatchObject({ as: true, mot: '', h: { p10_10: 8.5 }, trab: 8.5, ext: 0 });
   expect(d.prod).toBeUndefined(); // el asistente no deja la marca de producción
   const h = d.hist[d.hist.length - 1];
@@ -569,7 +512,7 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   expect(h.cam).toContain('− partida 10.05');
   expect(h.cam).toContain('ALFA 10.10: 4 → 3 h');
   expect(h.det).toEqual(expect.arrayContaining([{ pc: 'p10_20', campo: 'pcs', antes: false, despues: true }, { pc: 'p10_05', campo: 'pcs', antes: true, despues: false },
-    { dni: '11111111', pc: 'p10_10', campo: 'h', antes: 4, despues: 3 }, { dni: '22222222', campo: 'sal', antes: null, despues: '15:00' }, { dni: '33333333', campo: 'as', antes: false, despues: true }]));
+    { dni: '11111111', pc: 'p10_10', campo: 'h', antes: 4, despues: 3 }, { dni: '33333333', campo: 'as', antes: false, despues: true }]));
   // la hoja muestra lo guardado al momento, sin cambios pendientes
   await expect(m.locator('#trht_33333333')).toHaveText('8.5');
   await expect(m.locator('th.tx-hp').nth(1)).toContainText('10.20');
