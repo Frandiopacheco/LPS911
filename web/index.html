@@ -83,7 +83,7 @@
     <h2 id="ltitle">Ingresar</h2>
     <p class="lmsg" id="lmsg" role="alert"></p>
     <p class="lhint" id="lhint" hidden>Solo funciona si el administrador ya agregó tu correo al equipo. Luego te llegará un correo para confirmar tu cuenta.</p>
-    <label for="lemail">Correo</label><input id="lemail" type="email" autocomplete="username" required>
+    <label for="lemail">Correo <small>(capataz del tareo: tu DNI)</small></label><input id="lemail" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" required>
     <label for="lpass">Contraseña</label><input id="lpass" type="password" autocomplete="current-password" minlength="6" required>
     <button class="ib pri" id="lsubmit" type="submit">Ingresar</button>
     <button class="ib" id="lverify" type="button" hidden>Ya confirmé mi correo</button>

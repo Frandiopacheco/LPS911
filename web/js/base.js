@@ -660,6 +660,8 @@ function onData(){
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
+/* enlace que manda la oficina al capataz (?dni=…): abre directo «Soy capataz» con su DNI escrito */
+const LCAP_DNI=(()=>{try{const sp=new URLSearchParams(location.search),d=sp.get('dni');if(d){localStorage.setItem('lps.lcap','1');sp.delete('dni');history.replaceState(null,'',location.pathname+(sp.toString()?'?'+sp:'')+location.hash)}return d||''}catch(e){return''}})();
 let invCode=(()=>{try{const sp=new URLSearchParams(location.search),q=sp.get('inv');if(q){localStorage.setItem('lps.inv',q);localStorage.setItem('lps.invm',sp.get('m')||'');history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
 /* el enlace de un capataz del tareo lleva &m=tar: antes de entrar no se puede leer la invitación, así que el texto sale del enlace */
 const invTar=()=>{try{return!!invCode&&localStorage.getItem('lps.invm')==='tar'}catch(e){return false}};
@@ -677,6 +679,7 @@ function authMsg(e){const c=e&&e.code||'';return({'auth/invalid-email':'El corre
 function setupLogin(){
   $('#jcancel').onclick=()=>{clearInv();lcapSet(false);showLogin('')};
   $('#jcap').onclick=()=>{clearInv();lcapSet(true);showLogin('')};
+  if(LCAP_DNI){const c=$('#cdni');if(c&&!c.value)c.value=LCAP_DNI}
   $('#lcapgo').onclick=()=>{lcapSet(true);showLogin('');setTimeout(()=>$('#cdni').focus(),30)};
   $('#cback').onclick=()=>{lcapSet(false);showLogin('')};
   $('#lcap').onsubmit=async ev=>{ev.preventDefault();const d=tCtaDni($('#cdni').value),p=$('#cpass').value;
@@ -695,6 +698,8 @@ function setupLogin(){
     try{await u.reload();if(auth.currentUser.emailVerified){await auth.currentUser.getIdToken(true);startSession(auth.currentUser,firebase.firestore())}else $('#lmsg').textContent='Tu correo aún no figura como confirmado. Abre el enlace del correo que te enviamos y vuelve a pulsar.'}catch(err){$('#lmsg').textContent=authMsg(err)}};
   $('#lresend').onclick=async()=>{const u=auth.currentUser;if(!u)return;try{await u.sendEmailVerification();$('#lmsg').textContent='Correo de confirmación reenviado a '+u.email+'.'}catch(err){$('#lmsg').textContent=authMsg(err)}};
   $('#lform').onsubmit=async ev=>{ev.preventDefault();const e=$('#lemail').value.trim().toLowerCase(),p=$('#lpass').value;if(!e||!p){$('#lmsg').textContent='Escribe tu correo y tu contraseña.';return}
+    /* 20-10-2026: los capataces escribían su DNI aquí («El correo no es válido»): un DNI sin @ entra como cuenta de capataz */
+    if(lmode!=='up'&&!e.includes('@')&&typeof tCtaDni==='function'&&tCtaDni(e)){$('#cdni').value=tCtaDni(e);$('#cpass').value=p;lcapSet(true);showLogin('');$('#lcap').requestSubmit();return}
     $('#lsubmit').disabled=true;$('#lmsg').textContent='';
     try{if(lmode==='up'){const cr=await auth.createUserWithEmailAndPassword(e,p);try{await cr.user.sendEmailVerification()}catch(x){}lmode='in'}else await auth.signInWithEmailAndPassword(e,p)}
     catch(err){$('#lmsg').textContent=authMsg(err)}finally{$('#lsubmit').disabled=false}};

@@ -18,8 +18,9 @@ const TCTA_ST={sin:'SIN CUENTA',act:'CUENTA ACTIVA',off:'DESACTIVADA'};
 /* capataces del tareo que entran con enlace (sesión anónima u_…): se les puede pasar sus obreros a la cuenta nueva */
 function tCtaAnon(){const L=typeof tLive==='function'?tLive():[];return[...MEM.entries()].filter(([id,m])=>id.startsWith('u_')&&m&&m.role==='tcap'&&!m.off)
   .map(([id,m])=>({id,name:m.name||id,n:L.filter(p=>p.cap===id).length})).sort((a,b)=>b.n-a.n||a.name.localeCompare(b.name))}
-const tCtaUrl=()=>location.origin+location.pathname;
-const tCtaTexto=(dni,clave)=>`Usuario: ${dni} · Contraseña: ${clave} · Entra a ${tCtaUrl()}`;
+/* el enlace abre directo «Soy capataz» con su DNI (?dni=, base.js LCAP_DNI) */
+const tCtaUrl=dni=>location.origin+location.pathname+(dni?'?dni='+encodeURIComponent(dni):'');
+const tCtaTexto=(dni,clave)=>`Usuario (DNI): ${dni} · Contraseña: ${clave} · Entra a ${tCtaUrl(dni)} y toca «Entrar» (pantalla «Soy capataz»)`;
 async function tCtaCall(data){if(!firebase.functions)throw Object.assign(new Error('No se cargó Firebase Functions: recarga la página.'),{code:'unavailable'});
   const r=await firebase.functions().httpsCallable('cuentaCapataz')(data);return(r&&r.data)||{}}
 function tCtaErr(e){const c=String(e&&e.code||'').replace(/^functions\//,'');const m=String(e&&e.message||'');

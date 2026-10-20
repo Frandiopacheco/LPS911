@@ -710,3 +710,7 @@ Pedido del dueño: lo principal es el estado de cada capataz; «Sin tareo / sin 
 - **Servidor:** `publicarTareo` ahora usa `tpCorrer(P, email, byN)`, que suma los motivos guardados (`tpExcUnir(tpexc.exc, pedido)`). **`publicarTareoAuto`** (cada 15 min, Lima): `tpAutoDue(tcfg, now)` → `{fecha (hoy), hh}` si `tcfg.main.pubAuto = {on: true, hh}` y ya pasó la hora; si el día no tiene versión, corre `publicar` como «Publicación automática» (`by: auto@lps911`) y deja `tpauto/{fecha}` con `tpAutoNota` (`{t, ok, v}` o `{t, ok:false, n, msgs}`). Nunca rectifica; vuelve a intentar en cada pasada mientras falte algo. El Firebase falso suma `tpexc` igual.
 - **Configuración del tareo:** «Publicar el día automáticamente» (`#tjAuto`) y «A partir de las» (`#tjAutoH`, por omisión 21:00) → `tcfg.main.pubAuto`. `TC().pubAuto = {on, hh}`.
 - **Reglas:** `tpexc/{fecha}`: leen la oficina del tareo; crean/cambian admin o jefe con `tpub` (`by == mid()`, solo `exc`/`by`/`ts`, fecha válida); nadie borra. `tpauto/{fecha}`: lee la oficina; escribe solo la función.
+
+### Ingreso del capataz con DNI (20-10-2026)
+- Si el capataz escribe su **DNI en «Correo»** del ingreso normal (sin @), la página lo pasa a «Soy capataz» y entra igual (antes salía «El correo no es válido»).
+- El texto que manda la oficina (WhatsApp/Copiar) dice «Usuario (DNI)» y su enlace lleva `?dni=<dni>`: abre directo «Soy capataz» con el DNI escrito (`LCAP_DNI` en base.js; el parámetro se quita de la dirección).
