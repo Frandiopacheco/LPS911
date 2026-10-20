@@ -119,3 +119,43 @@ test('Por actividad › SC: si una escritura falla, dice cuántas no se guardaro
   await expect.poll(() => page.evaluate(() => __dbGet('mamb', 'a1').c.k1)).toBe('c');
   noErrors(errors, 'falla parcial');
 });
+
+test('filas con otro SC: «Ver en el Lookahead» abre la búsqueda de esa actividad', async ({ page }) => {
+  const extra = [...CAT, ['acts', 'cross', { ambId: 'a1', sc: 'c3', name: 'Redes empotradas', und: 'pto', days: [], order: 40 }]];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
+  await page.click('#mxsmis');
+  await page.click('#lqm [data-mxlk]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q])).toEqual(['look', 'Redes empotradas']);
+  await expect(page.locator('#fq')).toHaveValue('Redes empotradas');
+  await expect(page.locator('#grid tr[data-a="cross"]')).toHaveCount(1);
+  noErrors(errors, 'ver en lookahead');
+});
+
+test('«↗ Lookahead» también en Catálogo (⋮) y en los cambios de los SC', async ({ page }) => {
+  const extra = [...CAT, ['mamb', 'a2', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
+    ['mlog', 'l1', { amb: 'a2', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
+  await page.click('#mxlog');
+  await page.click('#lqm [data-mxlk]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q.includes('Redes empotradas'), U.piso])).toEqual(['look', true, 'p1']);
+  await page.evaluate(() => { U.mxV = 'cat'; goTab('mat'); });
+  await page.locator('[data-mcm="k1"]').click();
+  await page.click('#pop [data-do="lk"]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q.toLowerCase().includes('redes empotradas'), U.piso])).toEqual(['look', true, '']);
+  noErrors(errors, 'lookahead desde la revisión');
+});
+
+test('varias celdas: menú junto a la selección (sin barra fija abajo)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: CAT });
+  await page.evaluate(() => { U.piso = ''; U.mxSc = ['c1']; U.mxV = 'mat'; render(); });
+  const ci = await page.evaluate(() => MX.view.cols.findIndex(c => c.id === 'k1'));
+  const a = page.locator(`#mxt tr[data-amb="a1"] td[data-k="${ci}"]`), b = page.locator(`#mxt tr[data-amb="a2"] td[data-k="${ci}"]`);
+  await a.hover(); await page.mouse.down(); await b.hover(); await page.mouse.up();
+  await expect(page.locator('#mxsb')).toHaveCount(0);
+  await expect(page.locator('#pop')).toContainText('2 celdas elegidas');
+  await page.click('#pop [data-do="sc"]');
+  await expect.poll(() => page.evaluate(() => [__dbGet('mamb', 'a1').c.k1, __dbGet('mamb', 'a2').c.k1])).toEqual(['c', 'c']);
+  noErrors(errors, 'menú de selección');
+});
