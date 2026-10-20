@@ -41,7 +41,7 @@ function mxLogDlg(){const L=mxLogPend();if(!L.length){lqClose();return}const by=
    <p class="note">Ya están aplicados. «✓ Visto» los da por buenos; «↶ Revertir» vuelve la celda a como estaba. En rojo: cambiaron algo que un ingeniero ya había confirmado.</p>
    <div class="mxul">${[...by].map(([sc,ls])=>`<div class="mxpg"><span class="mxsw" style="--c:${esc(conOf(sc).color)}"></span><b>${esc(conOf(sc).name)}</b> · ${ls.length} <button class="lnkb" data-mxlall="${esc(sc)}">✓ Todo visto</button></div>
      ${ls.map(l=>{const a=S.amb.get(l.amb);const c=MX.cat.get(l.cat);return`<div class="mxlr${l.conf?' conf':''}"><span><b>${esc(c.name)}</b> · ${a?esc(a.code+' '+a.name):''}<small>${esc(l.n||l.by||'')} · ${esc(fmtD(ldt(l.t||0)))} · ${esc(mxLogFrom(l))} → <b>${MXS[l.to]||l.to}</b>${l.conf?` · ⚠ lo había confirmado ${esc(l.confN||'un ingeniero')}`:''}</small></span>
-       <span class="mxlb"><button class="ib" data-mxlrev="${esc(l.id)}">↶ Revertir</button><button class="ib pri" data-mxlok="${esc(l.id)}">✓ Visto</button></span></div>`}).join('')}`).join('')}</div>
+       <span class="mxlb">${mxLkBtn(mxLkTerms(l.cat),mxLkPiso(null,l.amb))}<button class="ib" data-mxlrev="${esc(l.id)}">↶ Revertir</button><button class="ib pri" data-mxlok="${esc(l.id)}">✓ Visto</button></span></div>`}).join('')}`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
    async e=>{const ok=e.target.closest('[data-mxlok]'),rv=e.target.closest('[data-mxlrev]'),all=e.target.closest('[data-mxlall]');
      const done={by:me.email,n:me.name||'',t:NOW()};

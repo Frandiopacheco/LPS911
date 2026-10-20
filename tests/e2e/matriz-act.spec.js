@@ -125,9 +125,24 @@ test('filas con otro SC: «Ver en el Lookahead» abre la búsqueda de esa activi
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
   await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
   await page.click('#mxsmis');
-  await page.click('[data-mxslk="0"]');
+  await page.click('#lqm [data-mxlk]');
   await expect.poll(() => page.evaluate(() => [U.tab, U.q])).toEqual(['look', 'Redes empotradas']);
   await expect(page.locator('#fq')).toHaveValue('Redes empotradas');
   await expect(page.locator('#grid tr[data-a="cross"]')).toHaveCount(1);
   noErrors(errors, 'ver en lookahead');
+});
+
+test('«↗ Lookahead» también en Catálogo (⋮) y en los cambios de los SC', async ({ page }) => {
+  const extra = [...CAT, ['mamb', 'a2', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
+    ['mlog', 'l1', { amb: 'a2', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }]];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra });
+  await page.evaluate(() => { U.piso = ''; U.mxV = 'mat'; render(); });
+  await page.click('#mxlog');
+  await page.click('#lqm [data-mxlk]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q.includes('Redes empotradas'), U.piso])).toEqual(['look', true, 'p1']);
+  await page.evaluate(() => { U.mxV = 'cat'; goTab('mat'); });
+  await page.locator('[data-mcm="k1"]').click();
+  await page.click('#pop [data-do="lk"]');
+  await expect.poll(() => page.evaluate(() => [U.tab, U.q.toLowerCase().includes('redes empotradas'), U.piso])).toEqual(['look', true, '']);
+  noErrors(errors, 'lookahead desde la revisión');
 });

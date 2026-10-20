@@ -3972,3 +3972,7 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .mxml .mxmr .tbtns{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;justify-content:flex-end;min-width:0}
 .mxml .mxmr .tbtns .ib{white-space:normal;text-align:center}
 @media (max-width:760px){.mxml .mxmr{grid-template-columns:minmax(0,1fr)}.mxml .mxmr .tbtns{justify-content:flex-start}}
+.mxlkb{align-self:flex-start;white-space:nowrap}.mxml .mxmr span .mxlkb{margin-top:4px;min-height:32px;padding:0 10px;font-size:12px}
+/* Lookahead: fila y columna bajo el puntero (19/10) */
+#grid{--lkhov:color-mix(in srgb,var(--ink) 8%,transparent)}
+@media (hover:hover) and (pointer:fine){#grid tbody tr[data-a]:hover>td.d,#grid tbody tr[data-gh]:hover>td.d{box-shadow:inset 0 0 0 999px var(--lkhov)}}

@@ -244,10 +244,9 @@ function mxScMismatch(){const vp=new Set(visPisos().map(p=>p.id));const m=new Ma
 function mxScMisDlg(){if(!mxEd())return;const L=mxScMismatch();if(!L.length){lqClose();return}
   lqModal(`<div class="lqtop"><b>Filas con otro subcontratista</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">En el catálogo cada actividad es de un solo subcontratista. Estas filas del lookahead tienen el nombre de una actividad de otro SC, así que <b>no salen en la matriz</b>. <b>Si los dos SC hacen esa actividad</b>, súmalo a la actividad (queda de los dos). Si la fila está mal, pásala al SC del catálogo; si el catálogo está mal, cambia su subcontratista en Catálogo.</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button><button class="ib" data-mxslk="${i}" title="Abre el Lookahead buscando «${esc(u.c.name)}» (todas sus filas, de cualquier SC)">↗ Ver en el Lookahead</button></span></div>`).join('')}</div>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.c.name)}</b><small>catálogo: ${esc(conOf(u.c.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'} de ${esc(conOf(u.sc).name)}</small></span><span class="tbtns"><button class="ib pri" data-mxsadd="${i}" title="La actividad queda de ${esc(conOf(u.c.sc).name)} y de ${esc(conOf(u.sc).name)}">Sumar ${esc(conOf(u.sc).name)} a la actividad</button><button class="ib" data-mxsm="${i}">Pasar filas a ${esc(conOf(u.c.sc).name)}</button>${mxLkBtn(u.c.name,mxLkPiso(u.ids),'Ver en el Lookahead')}</span></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
-   async e=>{const lk=e.target.closest('[data-mxslk]');if(lk){const u=L[+lk.dataset.mxslk];lqClose();mxLookSearch(u.c.name,u.ids);return}
-     const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
+   async e=>{const sa=e.target.closest('[data-mxsadd]');if(sa){const u=L[+sa.dataset.mxsadd];try{await mxCatScsAdd(u.c.id,u.sc);toast(`«${u.c.name}»: ahora también de ${conOf(u.sc).name}`)}catch(err){mxErr(err)}mxScMisDlg();return}
      const b=e.target.closest('[data-mxsm]');if(!b)return;const u=L[+b.dataset.mxsm];const pend=await mxPendProp();
      const ops=u.ids.map(id=>S.act.get(id)).filter(x=>x&&!pend.has(x.id)&&x.sc===u.sc).map(x=>op('acts',x.id,{...x,sc:u.c.sc}));
      const sk=u.ids.length-ops.length;if(ops.length)apply(ops,`«${u.c.name}»: ${ops.length} ${ops.length===1?'fila pasa':'filas pasan'} a ${conOf(u.c.sc).name}`);
@@ -466,7 +465,7 @@ function mxMapDlg(){if(!mxEd())return;const L=mxUnmapped();if(!L.length)return;
   const opts=sc=>{const mine=cats.filter(c=>c.sc===sc),oth=cats.filter(c=>c.sc!==sc);return`<option value="">— elegir —</option>${mine.length?`<optgroup label="${esc(conOf(sc).name)}">${mine.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`:''}<optgroup label="Otros subcontratistas">${oth.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} · ${esc(conOf(c.sc).name)}</option>`).join('')}</optgroup>`};
   lqModal(`<div class="lqtop"><b>Nombres sin catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Elige a qué actividad del catálogo corresponde cada nombre. Desde ese momento esas filas del lookahead salen en la matriz. No cambia nada del lookahead.</p>
-   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.name)}</b><small>${esc(conOf(u.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'}</small></span><select data-mxm="${i}">${opts(u.sc)}</select></div>`).join('')}</div>
+   <div class="mxml">${L.map((u,i)=>`<div class="mxmr"><span><b>${esc(u.name)}</b><small>${esc(conOf(u.sc).name)} · ${u.ids.length} ${u.ids.length===1?'fila':'filas'}</small>${mxLkBtn(u.name,mxLkPiso(u.ids),'Ver en el Lookahead')}</span><select data-mxm="${i}">${opts(u.sc)}</select></div>`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxmok">Guardar</button></div>`,
    async e=>{if(!e.target.closest('#mxmok'))return;const AU=firebase.firestore.FieldValue.arrayUnion;const by=new Map();
      document.querySelectorAll('[data-mxm]').forEach(s=>{if(!s.value)return;const u=L[+s.dataset.mxm];if(!by.has(s.value))by.set(s.value,[]);by.get(s.value).push(u.k)});
@@ -497,8 +496,14 @@ function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.cl
   let st=document.getElementById('mxhovst');if(!st){st=document.createElement('style');st.id='mxhovst';document.head.appendChild(st)}
   st.textContent=k===''?'':`#mxt td.mc[data-k="${k}"]{background-image:linear-gradient(var(--mxhov),var(--mxhov))}#mxt th.mxc[data-mxcol="${k}"]{background-color:var(--mxhovh)}`}
 
-/** abre el Lookahead buscando un nombre (para revisar el catálogo frente a las filas reales): quita sector, SC y actividades elegidas;
-    si todas las filas son de un piso, va a ese piso; si no, a todos (19/10, pedido del dueño) */
-function mxLookSearch(name,ids){const ps=new Set((ids||[]).map(id=>{const x=S.act.get(id);return x?pisoOfAmb(x.ambId):''}).filter(Boolean));
-  U.q=name;U.sector='';U.sc='';U.acts=[];U.day='';U.wkF=0;U.piso=ps.size===1?[...ps][0]:'';gridRows=null;saveUI();goTab('look');
-  setTimeout(()=>{const q=$('#fq');if(q&&q.value!==U.q){q.value=U.q;gridRows=null;requestRender()}},0);toast(`Lookahead: buscando «${name}»`)}
+/* «↗ Lookahead» en todo lo que se revisa del catálogo (19/10, pedido del dueño): abre el Lookahead con la búsqueda puesta (varios
+   nombres separados por coma), sin filtros de sector, SC ni actividades; en un piso si se sabe, si no en todos */
+function mxLookGo(q,piso){U.q=q;U.sector='';U.sc='';U.acts=[];U.day='';U.wkF=0;U.piso=piso&&S.pis.has(piso)?piso:'';gridRows=null;saveUI();goTab('look');
+  setTimeout(()=>{const f=$('#fq');if(f&&f.value!==U.q){f.value=U.q;gridRows=null;requestRender()}},0);toast(`Lookahead: buscando «${q.length>60?q.slice(0,60)+'…':q}»`)}
+/** nombres con que aparece una actividad del catálogo en el lookahead (su nombre y las variantes de sus filas), para buscarla */
+function mxLkTerms(catId){const c=MX.cat.get(catId);const N=new Map();if(c)N.set(c.name.toLowerCase().trim(),c.name);
+  for(const x of S.act.values())if(x.name&&!x._del&&mxCatOfN(x)===catId&&!N.has(x.name.toLowerCase().trim()))N.set(x.name.toLowerCase().trim(),x.name);return[...N.values()].slice(0,8).join(', ')}
+/** piso común de unas filas (o de unos ambientes); '' si son de varios */
+function mxLkPiso(ids,amb){const ps=new Set((ids||[]).map(id=>{const x=S.act.get(id);return x?pisoOfAmb(x.ambId):''}).concat(amb?[pisoOfAmb(amb)]:[]).filter(Boolean));return ps.size===1?[...ps][0]:''}
+const mxLkBtn=(q,piso,lbl)=>`<button type="button" class="ib mxlkb" data-mxlk="${esc(q)}" data-mxlkp="${esc(piso||'')}" title="Abre el Lookahead buscando «${esc(q)}»">↗ ${lbl||'Lookahead'}</button>`;
+document.addEventListener('click',e=>{const b=e.target.closest('[data-mxlk]');if(!b)return;e.preventDefault();e.stopPropagation();lqClose();closePop();mxLookGo(b.dataset.mxlk,b.dataset.mxlkp)},true);

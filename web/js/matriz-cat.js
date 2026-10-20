@@ -125,8 +125,8 @@ function mxCatNew(sc0,fromMx){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;
        lqClose();toast(ed?(tsel.length?`Actividad creada y agregada a ${tsel.length} tipo${tsel.length===1?'':'s'} de ambiente`:'Actividad creada'):'Actividad creada · el ingeniero la revisará')}catch(err){mxErr(err)}},)}
 
 function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
-  openPop(btn,`<div class="ph">${esc(c.name)}</div>${mxdCan()?'<button data-do="des">Desglosar en varias actividades…</button>':''}<button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
-   {des:()=>mxDesDlg(id),fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
+  openPop(btn,`<div class="ph">${esc(c.name)}</div>${mxdCan()?'<button data-do="des">Desglosar en varias actividades…</button>':''}<button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button><button data-do="lk">↗ Ver en el Lookahead</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
+   {lk:()=>mxLookGo(mxLkTerms(id),''),des:()=>mxDesDlg(id),fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
 /* otros SC que también hacen la actividad (c.scs): sus filas del lookahead alimentan la Matriz y su SC puede llenarla */
 function mxCatScsAdd(id,sc){return fcol('mcat').doc(id).set({scs:mxFV().arrayUnion(sc),...mxNow()},{merge:true})}
 function mxCatScsDlg(id){const c=MX.cat.get(id);if(!c||!mxEd()){lqClose();return}const L=(c.scs||[]).filter(i=>i!==c.sc);const rest=[...S.con.values()].filter(x=>x.id!==c.sc&&!L.includes(x.id)).sort((a,b)=>a.name.localeCompare(b.name));

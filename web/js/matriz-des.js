@@ -37,7 +37,7 @@ function mxDesListDlg(){const L=mxDesCands();const can=mxdCan();
    <p class="note">Actividades que parecen agrupar varios trabajos: nombre general, marcadas «Por desglosar» o mucho más largas que lo común. Revisa cada una: «Desglosar…» la divide en toda la obra; «Está bien así» la quita de esta lista.${can?'':' Solo el administrador las desglosa.'}</p>
    <div class="tscroll"><table class="t rt"><tbody>${L.map(({c,why,rows})=>`<tr><td data-l="Actividad"><b>${esc(c.name)}</b><small class="note" style="display:block">${why.map(esc).join(' · ')}</small></td>
      <td data-l="SC"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}</td><td class="mono" data-l="Filas">${rows} fila${rows===1?'':'s'}</td>
-     <td class="mxrb">${can?`<button class="ib" data-mxdok="${esc(c.id)}">Está bien así</button><button class="ib pri" data-mxdgo="${esc(c.id)}">Desglosar…</button>`:''}</td></tr>`).join('')||'<tr><td class="note">No hay actividades que parezcan genéricas.</td></tr>'}</tbody></table></div>
+     <td class="mxrb">${mxLkBtn(mxLkTerms(c.id),'')}${can?`<button class="ib" data-mxdok="${esc(c.id)}">Está bien así</button><button class="ib pri" data-mxdgo="${esc(c.id)}">Desglosar…</button>`:''}</td></tr>`).join('')||'<tr><td class="note">No hay actividades que parezcan genéricas.</td></tr>'}</tbody></table></div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
    e=>{const g=e.target.closest('[data-mxdgo]');if(g){mxDesDlg(g.dataset.mxdgo);return}
      const k=e.target.closest('[data-mxdok]');if(k&&mxdCan()){const id=k.dataset.mxdok;const c=MX.cat.get(id);const up={okd:{t:NOW(),by:me.email,n:me.name||''},...mxNow()};if(c&&c.cl==='d')up.cl='t';

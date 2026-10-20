@@ -63,3 +63,5 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 - Prueba: `tests/e2e/lookahead-flujo.spec.js`.
 
 - **Sin anclaje de desplazamiento** (oct 2026): `#gw{overflow-anchor:none}`. Con miles de filas, al filtrar estando abajo el navegador corregía el desplazamiento cada vez que cambiaba el relleno de arriba de la grilla virtual (`virtPaint`) y la grilla rebotaba sin parar (parpadeo, pantalla en blanco). Prueba: `lookahead-filtro-parpadeo.spec.js`.
+
+- **Fila y columna bajo el puntero** (19/10, como en la Matriz; solo con mouse, `mxPC()`): la fila con `tr:hover`, el día con la regla `#lkhovst` (`lkHov` en `wireGrid`), usando `box-shadow` inset para no tapar los colores de las barras.
