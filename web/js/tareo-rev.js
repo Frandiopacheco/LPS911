@@ -976,8 +976,7 @@ function txBarHtml(X){const chips=Object.entries(TX.flt).map(([k,S2])=>{const c=
     return`<span class="tx-chip" data-k="${esc(k)}"><span><b>${esc(c.l)}</b> ${esc(L.slice(0,2).join(', '))}${L.length>2?` +${L.length-2}`:''}</span><button data-txcx="${esc(k)}" aria-label="Quitar el filtro de ${esc(c.l)}" title="Quitar este filtro">✕</button></span>`}).join('');
   return`<div class="tx-bar" id="txBar"><div class="tx-tools" role="toolbar" aria-label="Herramientas de la hoja">
     <span class="tx-grp"><button class="ib tx-ic" data-txa="un" id="txUn" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${TX.un.length?'':' disabled'}>↶</button><button class="ib tx-ic" data-txa="re" id="txRe" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${TX.re.length?'':' disabled'}>↷</button></span>
-    <span class="tx-grp"><button class="ib" data-txa="fill" id="txFill" title="Pone un mismo valor en las celdas elegidas · Ctrl+D copia la primera fila hacia abajo">Rellenar con…</button></span>
-    <span class="tx-grp"><button class="tx-tg" data-txa="cc" id="txCc" aria-pressed="${!!TX.cc}" title="Muestra u oculta las columnas Cuadrilla y Categoría">Cuadrilla y categoría</button></span>
+        <span class="tx-grp"><button class="tx-tg" data-txa="cc" id="txCc" aria-pressed="${!!TX.cc}" title="Muestra u oculta las columnas Cuadrilla y Categoría">Cuadrilla y categoría</button></span>
 </div>
    <div class="tx-flts"><label class="tx-q">${TX_IC.q}<input class="tin" id="txQ" type="search" placeholder="Buscar obrero, DNI o cuadrilla" value="${esc(TX.q)}" aria-label="Buscar en la hoja" autocomplete="off"></label>
     <button class="tx-tg" data-txfx="chg" aria-pressed="${TX.fx.has('chg')}" title="Solo las filas que cambiaste">Solo cambiados</button>
@@ -1014,7 +1013,7 @@ function txSumHtml(X){const s=txRect(X);if(!s)return'<span class="note">Elige un
     if(typeof v==='number'&&col.k!=='n'&&!(col.pc&&R.x.as!==true)){sum+=v;n++}}
   const R=X.rows[s.ar],col=X.cols[s.ac];const one=s.r0===s.r1&&s.c0===s.c1;
   const adr=one?`${R.r.ape||R.d} · ${col.l||'Acciones'}`:`${s.r1-s.r0+1} ${s.r1>s.r0?'filas':'fila'} × ${s.c1-s.c0+1} ${s.c1>s.c0?'columnas':'columna'}`;
-  return`<span class="tx-adr" id="txAdr">${esc(adr)}</span>${n?`<span>Suma <b id="txSs">${toH(tR2(sum))}</b></span><span>Promedio <b id="txSp">${toH(tR2(sum/n))}</b></span>`:''}<span>Cuenta <b id="txSc">${cnt}</b></span><span class="tx-kh">F2 edita · Ctrl+C / Ctrl+V · Ctrl+D rellena · Ctrl+Z deshace</span>`}
+  return`<span class="tx-adr" id="txAdr">${esc(adr)}</span>${n?`<span>Suma <b id="txSs">${toH(tR2(sum))}</b></span><span>Promedio <b id="txSp">${toH(tR2(sum/n))}</b></span>`:''}<span>Cuenta <b id="txSc">${cnt}</b></span><span class="tx-kh">Elige celdas, escribe y Ctrl+Enter rellena todas · Ctrl+C / Ctrl+V · Ctrl+Z deshace</span>`}
 /** pinta la selección (sin redibujar la tabla) y actualiza la barra de suma */
 function txPaint(){const X=TX.X;const T=$('#txT');if(!X||!T)return;
   T.querySelectorAll('.tx-sel,.tx-act,.tx-hs').forEach(z=>z.classList.remove('tx-sel','tx-act','tx-hs'));
@@ -1059,16 +1058,23 @@ function txSet(d,k,raw){const X=TX.X;const e=TR.ed;const R=X&&X.all.find(z=>z.d=
 /* --- edición de una celda: un campo encima de la celda (F2, doble clic o escribir directo, que reemplaza) --- */
 function txEdit(init){const X=TX.X;const s=X&&txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];
   if(!txEd(R,col,X)){toast(txWhy(R,col,X));return}
-  TX.f=TX.a;txPaint();txReveal();const td=txCell(s.ar,s.ac);if(!td)return;const cur=init!=null?init:txRaw(R,col);
-  TX.ing={d:R.d,k:col.k,rep:init!=null};td.classList.add('tx-ing');
+  /* la selección se conserva mientras se escribe: Ctrl+Enter pone el valor en todas las celdas elegidas (como Excel) */
+  txPaint();txReveal();const td=txCell(s.ar,s.ac);if(!td)return;const cur=init!=null?init:txRaw(R,col);
+  TX.ing={d:R.d,k:col.k,rep:init!=null,multi:s.r0!==s.r1||s.c0!==s.c1};td.classList.add('tx-ing');
   td.innerHTML=`<input id="txIn" class="tx-in${col.num?' tx-n':''}" autocomplete="off" spellcheck="false"${col.pc?' inputmode="decimal"':''}${col.k==='as'?' list="txMotL"':''} aria-label="${esc((R.r.ape||R.d)+' · '+col.l)}" value="${esc(cur)}">${col.k==='as'?`<datalist id="txMotL"><option value="Vino">S</option><option value="No vino">N</option>${Object.entries(TO_MOT).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</datalist>`:''}`;
   const i=$('#txIn');i.focus();if(init!=null)i.setSelectionRange(cur.length,cur.length);else i.select()}
 /** termina la edición y guarda el valor (mv: 'u'|'d'|'l'|'r' mueve la celda activa, como Enter o Tab en Excel) */
-function txCommit(mv){const ing=TX.ing;if(!ing)return;const i=$('#txIn');const v=i?i.value:'';TX.ing=null;txFocus();let o={s:'skip'};
+function txCommit(mv){const ing=TX.ing;if(!ing)return;const i=$('#txIn');const v=i?i.value:'';TX.ing=null;if(ing.multi)TX.f=TX.a;txFocus();let o={s:'skip'};
   txDo(()=>{o=txSet(ing.d,ing.k,v)});trDraw(true);
   if(o.s==='bad')toast(o.msg);else if(o.rnd!=null)toast(`Las horas van de media en media: quedó ${trHFmt(o.rnd)||'0'}.`);
   if(mv){const X=TX.X;const p=X&&txPos(X);if(p){const d={u:[-1,0],d:[1,0],l:[0,-1],r:[0,1]}[mv];txGo(p.r+d[0],p.c+d[1])}}}
 function txCancel(){TX.ing=null;txFocus();trDraw(true)}
+/** Ctrl+Enter con la celda en edición: el valor escrito va a todas las celdas elegidas que se pueden editar (las demás se saltan) */
+function txCommitFill(){const ing=TX.ing;if(!ing)return;const X=TX.X;const s=X&&txRect(X);const i=$('#txIn');const v=i?i.value:'';TX.ing=null;txFocus();
+  if(!s){trDraw(true);return}let n=0,bad='';
+  txDo(()=>{for(let r=s.r0;r<=s.r1;r++)for(let c=s.c0;c<=s.c1;c++){const R=X.rows[r],col=X.cols[c];if(!R||!col)continue;const o=txSet(R.d,col.k,v);if(o.s==='ok')n++;else if(o.s==='bad')bad=bad||o.msg}});
+  trDraw(true);const tot=(s.r1-s.r0+1)*(s.c1-s.c0+1);
+  toast(n?(tot>1?`Se ${n===1?'rellenó 1 celda':'rellenaron '+n+' celdas'}${n<tot?` · ${tot-n} no se editan`:''}.${bad?' '+bad:''}`:'Listo.'):(bad||'Nada que rellenar: esas celdas no se editan.'))}
 function txToggle(){const X=TX.X;const s=txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];if(!txEd(R,col,X)){toast(txWhy(R,col,X));return}
   const v=col.k==='as'?(R.x.as===true?'No':'Sí'):(R.x.alt?'':'A');
   txDo(()=>txSet(R.d,col.k,v));trDraw(true)}
@@ -1124,6 +1130,7 @@ function txKeyR(e){const tg=e.target;if(!tg)return;if(tg.id==='trSplit')return t
   if(tg.id==='txIn')return txInKey(e);if(tg.closest&&tg.closest('#txMenu'))return txMenuKey(e);if(tg.id==='txW')return txKey(e)}
 function txKey(e){const X=TX.X;if(!X||$('.uask'))return;const k=e.key,ctrl=e.ctrlKey||e.metaKey;const stop=()=>{e.preventDefault();e.stopPropagation()};const s=txRect(X);
   if(ctrl&&!e.altKey){const l=k.toLowerCase();
+    if(k==='Enter'){stop();txEdit('');return}
     if(l==='z'){stop();if(e.shiftKey)txRedo();else txUndo();return}if(l==='y'){stop();txRedo();return}if(l==='d'){stop();txFillDown();return}
     if(l==='a'){stop();if(X.rows.length){TX.a={d:X.rows[0].d,k:X.cols[0].k};TX.f={d:X.rows[X.rows.length-1].d,k:X.cols[X.cols.length-1].k};txPaint()}return}
     if(k.startsWith('Arrow')){stop();txMove(k,e.shiftKey,true);return}if(k==='Home'){stop();txGo(0,0,e.shiftKey);return}if(k==='End'){stop();txGo(X.rows.length-1,X.cols.length-1,e.shiftKey);return}
@@ -1139,7 +1146,8 @@ function txKey(e){const X=TX.X;if(!X||$('.uask'))return;const k=e.key,ctrl=e.ctr
   if(k===' '&&['as','alt'].includes((X.cols[s.ac]||{}).k)){stop();txToggle();return}
   if(k.length===1&&k!==' '){stop();txEdit(k);return}}
 function txInKey(e){const k=e.key;e.stopPropagation();const ing=TX.ing;if(!ing)return;
-  if(k==='Enter'||k==='Tab'){e.preventDefault();txCommit(k==='Enter'?(e.shiftKey?'u':'d'):(e.shiftKey?'l':'r'));return}
+  if(k==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();txCommitFill();return}
+  if(k==='Enter'||k==='Tab'){e.preventDefault();if(ing.multi)TX.f=TX.a;txCommit(k==='Enter'?(e.shiftKey?'u':'d'):(e.shiftKey?'l':'r'));return}
   if(k==='Escape'){e.preventDefault();txCancel();return}
   const A={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r'}[k];
   if(A&&(ing.rep||A==='u'||A==='d')){e.preventDefault();txCommit(A)}}

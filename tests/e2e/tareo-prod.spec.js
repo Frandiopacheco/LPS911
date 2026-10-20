@@ -230,11 +230,22 @@ test('hoja: pegar un rango (de Excel), copiar, Ctrl+D, Supr, Ctrl+Z / Ctrl+Y y b
   await cell(m, '22222222', 'p10_05').click({ modifiers: ['Shift'] });
   await page.keyboard.press('Control+d');
   await expect(cell(m, '22222222', 'p10_05')).toHaveText('4.5');
-  // «Rellenar con…» pone un valor en la selección
-  page.once('dialog', dg => dg.accept('8,5'));
-  await m.locator('#txFill').click();
+  // como Excel: con la selección hecha se escribe y Ctrl+Enter pone el valor en todas (20-10-2026)
+  await expect(m.locator('#txFill')).toHaveCount(0);
+  await expect(m.locator('#txT td.tx-sel')).toHaveCount(2);
+  await page.keyboard.type('8,5');
+  await expect(m.locator('#txIn')).toHaveValue('8,5');
+  await page.keyboard.press('Control+Enter');
   await expect(cell(m, '11111111', 'p10_05')).toHaveText('8.5');
   await expect(cell(m, '22222222', 'p10_05')).toHaveText('8.5');
+  await expect(page.locator('#toast')).toContainText('Se rellenaron 2 celdas');
+  // con Enter solo se escribe la celda activa
+  await cell(m, '11111111', 'p10_10').click();
+  await cell(m, '22222222', 'p10_10').click({ modifiers: ['Shift'] });
+  await page.keyboard.type('1'); await page.keyboard.press('Enter');
+  await expect(cell(m, '11111111', 'p10_10')).toHaveText('1');
+  await expect(cell(m, '22222222', 'p10_10')).toHaveText('');
+  await page.keyboard.press('Control+z');
   // los botones de deshacer y rehacer también funcionan
   await m.locator('#txUn').click();
   await expect(cell(m, '11111111', 'p10_05')).toHaveText('4.5');
