@@ -644,3 +644,28 @@ test('capataz: errores de horas llevan a la columna del obrero; partida bloquead
   await expect(root.locator('#tcSend')).toContainText('Falta la foto');
   noErrors(errors, 'errores de horas');
 });
+
+test('grilla de horas: «+» agrega una partida sin volver a Trabajos y abre la primera casilla (20-10-2026)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY)]] });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await expect(root.locator('th.tc-gp')).toHaveCount(2);
+  await root.locator('#tcPcPlus').click();
+  const sh = root.locator('#tcPcSh');
+  await expect(sh).toBeVisible();
+  // las ya agregadas y las bloqueadas no se ofrecen
+  await expect(sh.locator('[data-tca="pc"][data-v="p10_05"]')).toHaveCount(0);
+  await expect(sh.locator('[data-tca="pc"][data-v="p30_01"]')).toHaveCount(0);
+  await sh.locator('#tcPcQ').fill('vaciado');
+  await sh.locator('[data-tca="pc"][data-v="p10_06"]').click();
+  await expect(sh).toHaveCount(0);
+  await expect(root.locator('th.tc-gp[data-pc="p10_06"]')).toBeVisible();
+  await expect(root.locator('#tcCell')).toBeVisible();
+  await expect.poll(async () => (await dbDoc(page)).pcs).toEqual(['p10_05', 'p20_01', 'p10_06']);
+  // el paso de Trabajos sigue con la lista completa
+  await root.locator('[data-tca="cellX"]').first().click();
+  await root.locator('.tc-steps [data-tcs="2"]').click();
+  await expect(root.locator('.tc-pcr')).toHaveCount(3);
+  noErrors(errors, 'grilla +');
+});

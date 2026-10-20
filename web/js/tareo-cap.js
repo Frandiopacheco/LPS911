@@ -28,7 +28,7 @@ const TCS={date:'',cap:'',unsub:null,doc:null,loaded:false,exists:false,step:1,d
   q1:'',f1:'all',lbl:null,fotoHi:false,
   /* plegables del paso 1 (dni con el motivo / la hora de salida abiertos), buscador de partidas (paso 2), celda abierta (paso 3)
      y aviso «Gira el celular» descartado (null = aún no leído de localStorage) */
-  motO:'',salO:'',pcOn:false,pcQ:'',cell:null,rotX:null};
+  motO:'',salO:'',pcOn:false,pcSh:false,pcQ:'',cell:null,rotX:null};
 /* el servidor rechaza fotos de más de 1 000 000 de caracteres (firestore.rules); se mide igual, con margen */
 const TC_FMAX=950000;
 /* horas rápidas del editor de celda */
@@ -118,7 +118,7 @@ const TC_K1=['asis','vacio'],TC_K2=['pcs','bloq'],TC_K3=['sinh','hval','hmax'];
 const tcWarns=D=>tcLegacy(D)?[]:tValida(tcCalc(D)).filter(e=>e.warn);
 
 /* ---------- datos: suscripción y guardado ---------- */
-function tcOpen(date){tcClose();clearTimeout(TCS.slowT);clearTimeout(TCS.sendT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',addOn:false,addQ:'',prev:null,need:false,foc:'',fp:{},sendSt:'',srvPend:false,q1:'',f1:'all',fotoHi:false,motO:'',salO:'',pcOn:false,pcQ:'',cell:null});
+function tcOpen(date){tcClose();clearTimeout(TCS.slowT);clearTimeout(TCS.sendT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',addOn:false,addQ:'',prev:null,need:false,foc:'',fp:{},sendSt:'',srvPend:false,q1:'',f1:'all',fotoHi:false,motO:'',salO:'',pcOn:false,pcSh:false,pcSh:false,pcQ:'',cell:null});
   const id=tcId(date,TCS.cap);TCS.fpL=false;
   /* includeMetadataChanges: avisa también cuando una escritura pendiente (sin señal) queda confirmada por el servidor */
   TCS.unsub=fcol('tareo').doc(id).onSnapshot({includeMetadataChanges:true},s=>{if(!$('#tcRoot')){tcClose();return}tcSnap(s)},err=>{TCS.err=err&&err.code==='permission-denied'?'Tu cuenta no puede abrir este tareo.':'Sin conexión con la base de datos.';TCS.loaded=true;tcDraw()});
@@ -242,7 +242,7 @@ function tcHtml(){const D=TCS.doc,hoy=todayIso();TCS.lbl=D?tcLabels(D.rows):null
       foot=`<button type="button" class="ib tc-big" data-tcs="3">← Atrás</button>`+(nf.length?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="fix">Faltan ${nf.length} ${nf.length===1?'dato':'datos'}: ver →</button>`
         :sinF&&!TCS.busy?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="foto">📷 Falta la foto: tomarla</button>`
         :`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="send"${E.length||TCS.busy?' disabled':''}>${fp?'Foto sin subir':TCS.busy?'Procesando foto…':'Enviar tareo'}</button>`)}}
-  const sheet=TCS.step===3&&TCS.cell&&!ro&&!old?tcCellSheet(D):'';
+  const sheet=TCS.step===3&&!ro&&!old?(TCS.pcSh?tcPcSheet():TCS.cell?tcCellSheet(D):''):'';
   return head+bar+`</div>${rb}<div class="tc-st" id="tcSt" aria-live="polite"></div></div><div class="tc-body" id="tcBody">${ban}${nl}${body}</div>${foot?`<div class="tc-foot">${foot}</div>`:''}${sheet}`}
 
 /** aviso del enviado: «Enviando…», «Se enviará al tener señal» (ámbar) o «Enviado ✓ hh:mm» (solo confirmado por el servidor) */
@@ -347,13 +347,18 @@ function tcStep3(D,E){const P=D.pcs||[];const pres=tcPres();const J=tcJor(TCS.da
     return`<tr data-dni="${esc(d)}"><th class="tc-gn${bad.has(d)?' bad':''}${cur.dni===d?' sel':''}" scope="row" data-dni="${esc(d)}"><span class="tc-gnn">${N.get(d)||''}</span>${tcNmT(d)}</th>
       ${P.map(pc=>{const v=tcHv(r,pc);const s=cur.dni===d&&cur.pc===pc;
         return`<td><button type="button" class="tc-gcell${v?' v':''}${s?' sel':''}" data-tca="cell" data-dni="${esc(d)}" data-pc="${esc(pc)}"${tcBloq(pc)&&!v?' disabled':''} aria-label="${esc(tcSN(d))}, ${esc(tcPcCod(pc))}: ${v?esc(tHtxt(v))+' horas':'sin horas'}">${v?esc(tHtxt(v)):''}</button></td>`}).join('')}
-      <td class="tc-gt ${k}" data-dni="${esc(d)}"><b>${esc(tHtxt(t))}</b><small>${esc(sub)}</small></td></tr>`}).join('');
+      <td class="tc-gpa"></td><td class="tc-gt ${k}" data-dni="${esc(d)}"><b>${esc(tHtxt(t))}</b><small>${esc(sub)}</small></td></tr>`}).join('');
   const all=tR2(pres.reduce((s,[,r])=>s+tHrsTot(r),0));
   const foot=P.map(pc=>{const h=tR2(pres.reduce((s,[,r])=>s+tcHv(r,pc),0));return`<td class="tc-gs" data-pc="${esc(pc)}">${h?esc(tHtxt(h)):'—'}</td>`}).join('');
   return hd+rot+(pv?`<button type="button" class="ib tc-big tc-w" data-tca="copyH">Copiar horas del ${esc(TC_DN[pd(pv.date).getUTCDay()].toLowerCase())} ${esc(fmtD(pv.date))}</button>`:'')
-   +`<div class="tc-gw" id="tcGrid"><table class="tc-g"><thead><tr><th class="tc-gc" scope="col">N° · Obrero</th>${th}<th class="tc-gtc" scope="col">Total</th></tr></thead><tbody>${rows}</tbody>
-     <tfoot><tr><th class="tc-gtl" scope="row">Total partida</th>${foot}<td class="tc-gs tc-gss">${esc(tHtxt(all))}</td></tr></tfoot></table></div>
+   +`<div class="tc-gw" id="tcGrid"><table class="tc-g"><thead><tr><th class="tc-gc" scope="col">N° · Obrero</th>${th}<th class="tc-gpa" scope="col"><button type="button" class="tc-gpab" data-tca="pcSh" id="tcPcPlus" aria-label="Agregar una partida" title="Agregar una partida">+</button></th><th class="tc-gtc" scope="col">Total</th></tr></thead><tbody>${rows}</tbody>
+     <tfoot><tr><th class="tc-gtl" scope="row">Total partida</th>${foot}<td class="tc-gpa"></td><td class="tc-gs tc-gss">${esc(tHtxt(all))}</td></tr></tfoot></table></div>
    <p class="tc-hint tc-ghint">Toca una casilla para poner las horas. Total: verde = jornada completa · ámbar = menos o con horas extra.</p>`}
+/** «+» de la grilla de horas (20-10-2026): agrega una partida sin volver a «Trabajos» (la misma lista y buscador) */
+function tcPcSheet(){return`<div class="tc-csb" data-tca="pcShX"></div><div class="tc-cs" id="tcPcSh" role="dialog" aria-label="Agregar partida">
+   <div class="tc-csh"><div class="tc-wn"><b>Agregar partida</b><span>Aparece como una columna nueva en la grilla.</span></div><button type="button" class="kx" data-tca="pcShX" aria-label="Cerrar">&times;</button></div>
+   <input class="tin tc-in" id="tcPcQ" data-fk="tcPcQ" type="search" autocomplete="off" value="${esc(TCS.pcQ)}" placeholder="Código (10.05) o nombre (encofrado)" aria-label="Buscar partida">
+   <div id="tcPcL" class="tc-res">${tcPcList()}</div></div>`}
 /** editor rápido de una celda (hoja abajo): −/+ ½ hora, horas rápidas, «Resto de su jornada», borrar y listo */
 function tcCellSheet(D){const c=TCS.cell;const r=(D.rows||{})[c.dni];if(!r||!tcVino(r)||!(D.pcs||[]).includes(c.pc)){TCS.cell=null;return''}
   const v=tcHv(r,c.pc);const t=tHrsTot(r);const J=tcJor(TCS.date);const resto=tR2(Math.max(0,J.full-t));const bq=tcBloq(c.pc);
@@ -492,7 +497,8 @@ function tcBind(root){
   root.addEventListener('input',e=>{const t=e.target;if(t.id==='tcPcQ'){TCS.pcQ=t.value;const l=$('#tcPcL');if(l)l.innerHTML=tcPcList()}
     else if(t.id==='tcAddQ'){TCS.addQ=t.value;const l=$('#tcAddL');if(l)l.innerHTML=tcAddList()}
     else if(t.id==='tcQ1'){TCS.q1=t.value;tcDraw()}});
-  root.addEventListener('keydown',e=>{if(e.key==='Escape'&&TCS.cell){e.preventDefault();TCS.cell=null;tcDraw();return}
+  root.addEventListener('keydown',e=>{if(e.key==='Escape'&&TCS.pcSh){e.preventDefault();TCS.pcSh=false;tcDraw();return}
+    if(e.key==='Escape'&&TCS.cell){e.preventDefault();TCS.cell=null;tcDraw();return}
     if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcnm){e.preventDefault();tcNmToast(e.target.dataset.tcnm);return}
     if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcpc){e.preventDefault();toast(tcPcName(e.target.dataset.tcpc));return}
     if(e.key==='Enter'&&e.target.id==='tcPcQ'){const f=$('#tcPcL [data-tca="pc"]');if(f){e.preventDefault();f.click()}}})}
@@ -507,7 +513,7 @@ function tcFix(E){const D=TCS.doc;if(!D)return false;E=E||tcErrs(D);TCS.cell=nul
   if(e3){TCS.step=3;TCS.foc=e3.dni?`.tc-gn[data-dni="${CSS.escape(e3.dni)}"]`:'';tcDraw();toast(tcErrMsg(e3));return true}
   if(E.length){TCS.step=4;TCS.foc='#tcFotoC';if(E.some(e=>e.k==='foto'))TCS.fotoHi=true;tcDraw();toast(tcErrMsg(E[0]));return true}
   return false}
-function tcGo(n,foot){TCS.cell=null;n=Math.max(1,Math.min(4,n));const D=TCS.doc;
+function tcGo(n,foot){TCS.cell=null;TCS.pcSh=false;n=Math.max(1,Math.min(4,n));const D=TCS.doc;
   if(D&&!tcRO()&&!tcLegacy(D)&&n>1){const E=tcErrs(D);
     /* no se pasa del paso 1 sin marcar a todos */
     if(E.some(e=>TC_K1.includes(e.k))){tcFix(E);return}
@@ -551,6 +557,11 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
   /* paso 2: trabajos del día */
   if(a==='pcOn'){TCS.pcOn=true;TCS.pcQ='';tcDraw();const i=$('#tcPcQ');if(i)i.focus();return}
   if(a==='pcOff'){TCS.pcOn=false;TCS.pcQ='';tcDraw();return}
+  if(a==='pcSh'){TCS.cell=null;TCS.pcQ='';TCS.pcSh=true;tcDraw();const i=$('#tcPcQ');if(i)i.focus({preventScroll:true});return}
+  if(a==='pcShX'){TCS.pcSh=false;TCS.pcQ='';tcDraw();return}
+  if(a==='pc'&&TCS.pcSh){const id=b.dataset.v;const P=D.pcs=Array.isArray(D.pcs)?D.pcs:[];if(!id||P.includes(id)||tcBloq(id))return;
+    P.push(id);tcUseAdd(id);TCS.pcQ='';TCS.pcSh=false;const f=tcPres()[0];TCS.cell=f?{dni:f[0],pc:id}:null;tcChg();toast(`Agregado: ${tcPcCod(id)}`);
+    const g=$('#tcGrid');if(g)g.scrollLeft=g.scrollWidth;return}
   if(a==='pc'){const id=b.dataset.v;const P=D.pcs=Array.isArray(D.pcs)?D.pcs:[];if(!id||P.includes(id)||tcBloq(id))return;
     P.push(id);tcUseAdd(id);TCS.pcQ='';TCS.pcOn=true;tcChg();toast(`Agregado: ${tcPcCod(id)}`);const i=$('#tcPcQ');if(i)i.focus({preventScroll:true});return}
   if(a==='pcUp'||a==='pcDn'){const pc=pcOf();const P=D.pcs||[];const i=P.indexOf(pc);const j=a==='pcUp'?i-1:i+1;if(i<0||j<0||j>=P.length)return;[P[i],P[j]]=[P[j],P[i]];tcChg();return}
