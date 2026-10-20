@@ -7,7 +7,8 @@
    (clases tp-). Ids del DOM con prefijo tpb/tpk (tareo.js ya usa #tpOk, #tpMsg… en Partidas). */
 
 /* quién publica (admin o editor con «Publica tareo») y quién ve Costos (además, costos) */
-const tpPubOk=()=>!!me&&(me.role==='admin'||(me.role==='editor'&&me.tpub===true));
+/* publica: admin, asistente de tareo (20-10-2026: el dueño le dio acceso a todo el tareo) y jefe de producción con «Publica tareo» */
+const tpPubOk=()=>!!me&&(me.role==='admin'||me.role==='tasis'||(me.role==='editor'&&me.tpub===true));
 const tpCosOk=()=>!!me&&(tpPubOk()||me.role==='tcos');
 /* caché de publicaciones leídas (id → doc): son inmutables */
 const TPUB=new Map();

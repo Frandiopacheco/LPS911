@@ -786,7 +786,8 @@ async function trPasar(oid,dni,did,m){if(!toReabOk()||TR.busy||!did)return;TR.bu
    marca o quita revisado, reabre y pasa obreros. Lo propio de producción que queda: «Conforme sin cambios» (marca prod) y, en la hoja,
    guardar cambios que SOLO tocan horas y partidas sin cambiar el estado (hist a:'prod'; lo hacen el jefe y el admin). Si cambia el
    total de HH de un obrero que estaba en el tareo (ya no coincide con lo que firmó), aviso en ámbar, confirmación y motivo obligatorio. */
-const trProdOk=()=>typeof tpPubOk==='function'&&tpPubOk();
+/* la marca de producción es del jefe y del admin (el asistente publica desde el 20-10-2026, pero su corrección sigue siendo la de oficina) */
+const trProdOk=()=>!!me&&(me.role==='admin'||(me.role==='editor'&&me.tpub===true));
 const trProdMark=()=>{const by=me.email||me.id||'';const n=toWho(by);return{t:NOW(),by,...(n&&n!==by?{byN:n}:{})}};
 /** chip «Producción ✓» (lista del día, encabezado de la revisión) */
 function trProdChip(t){return'';/* ya no se muestra (20-10-2026, decisión del dueño); la marca prod sigue guardándose */

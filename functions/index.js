@@ -279,7 +279,7 @@ exports.publicarTareo = onCall({ timeoutSeconds: 120 }, async req => {
   const email = String(tk.email || '').toLowerCase();
   const caller = email ? await db().collection('members').doc(email).get() : null;
   const mem = caller && caller.exists ? caller.data() : null;
-  if (!tpPuede(email, tk.email_verified === true, mem)) throw new HttpsError('permission-denied', 'Solo el administrador o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
+  if (!tpPuede(email, tk.email_verified === true, mem)) throw new HttpsError('permission-denied', 'Solo el administrador, el asistente de tareo o el jefe de producción con «Publica tareo» pueden publicar el tareo.');
   const P = tpPedido(req.data, limaToday());
   if (P.error) throw new HttpsError('invalid-argument', P.error);
   const res = await tpCorrer(P, email, (mem && mem.name) || email);

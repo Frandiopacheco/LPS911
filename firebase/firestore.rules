@@ -405,9 +405,10 @@ service cloud.firestore {
       allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
+    // configuración del tareo: el administrador y el asistente de tareo (20-10-2026)
     match /tcfg/{id} {
       allow read: if isTar();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || tarEd();
     }
     // Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto (los archivos van en Firebase Storage, planos/…).
     // Lee el equipo de Last Planner salvo el capataz de un SC; cargan y editan el administrador y los editores. Nadie borra: se archiva.
@@ -536,7 +537,7 @@ service cloud.firestore {
     // «Publica tareo») y guardado al tocarlo; el servidor lo usa al publicar (también en la publicación automática). No se borra.
     match /tpexc/{f} {
       allow read: if isTar() && tarRole() == 'ofi';
-      allow create, update: if (isAdmin() || tpubEd()) && f.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+      allow create, update: if (isAdmin() || tarEd() || tpubEd()) && f.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
         && request.resource.data.keys().hasOnly(['exc', 'by', 'ts']) && request.resource.data.exc is map
         && request.resource.data.by == mid();
       allow delete: if false;

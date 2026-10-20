@@ -130,6 +130,15 @@ test('Personal: alta manual, DNI duplicado, cese, asignar capataz e importar el 
   await page.click('#tacOk');
   await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ cap: 'tcap1@obra.pe', cua: 'FIERREROS', cat: 'OF' });
   expect(await page.evaluate(() => window.__dbGet('tper', '01234567').cua || '')).not.toBe('FIERREROS');
+  // cese desde «Editar elegidos» (20-10-2026)
+  await page.check('[data-tsel="07654321"]');
+  await page.click('#tselEd');
+  await page.click('.t-cesd summary');
+  await page.fill('#tacCesF', '2026-10-15');
+  await page.fill('#tacCesM', 'Termino de partida');
+  await page.click('#tacOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '07654321'))).toMatchObject({ ces: '2026-10-15', mot: 'Termino de partida', cap: 'tcap1@obra.pe' });
+  expect(await page.evaluate(() => { const p = window.__dbGet('tper', '07654321'); return p.per[p.per.length - 1]; })).toMatchObject({ ces: '2026-10-15', mot: 'Termino de partida' });
   // cese
   await page.click('[data-tfi="07654321"]');
   await page.click('[data-tfa="ces"]');
