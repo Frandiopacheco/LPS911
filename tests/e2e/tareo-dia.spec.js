@@ -92,7 +92,7 @@ test('Tareos del día: lista, detalle de solo lectura y reabrir al capataz', asy
   // detalle
   await env.locator('button[data-to]').click();
   const m = page.locator('#trWs');
-  await expect(m).toContainText('Tareo de Teodoro Capataz');
+  await expect(m.locator('#trCapSel option:checked')).toContainText('Teodoro Capataz');
   await expect(m.locator('th[title="Encofrado de pedestales"]')).toHaveText('10.05');
   await expect(m.locator('tr[data-dni="11111111"]')).toContainText('(A)');
   await expect(m.locator('tr[data-dni="11111111"]')).toContainText('07:30–19:00');

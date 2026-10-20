@@ -91,21 +91,19 @@ test('sin cfg (jornada congelada) bloquea', () => {
   const r = V(T); assert.deepStrictEqual(ks(r), ['cfg']); assert.strictEqual(r.bloqueos[0].tareo, F + '_c1');
 });
 
-test('cotejo no vigente, sin foto y firma sin cotejar', () => {
+test('sin cotejo de firmas (20-10-2026): solo se exige la foto del formato', () => {
+  /* la foto cambió después del cotejo, sin cot o con firmas sin cotejar: ya no bloquea */
   const T = base(); T[0].foto = ['f2'];
-  assert.deepStrictEqual(ks(V(T)), ['cot']);
+  assert.deepStrictEqual(V(T).bloqueos, []);
+  const T3 = base(); delete T3[0].cot; delete T3[0].cotFot;
+  assert.deepStrictEqual(V(T3).bloqueos, []);
+  const T4 = base(); delete T4[0].cot['22222222'];
+  assert.deepStrictEqual(V(T4).bloqueos, []);
+  /* sin foto del formato firmado: bloquea */
   const T2 = base(); T2[0].foto = []; T2[0].cotFot = [];
   const r2 = V(T2); assert.deepStrictEqual(ks(r2), ['cot']); assert.match(r2.bloqueos[0].msg, /foto/);
-  const T3 = base(); delete T3[0].cot;
-  assert.deepStrictEqual(ks(V(T3)), ['cot']);
-  const T4 = base(); delete T4[0].cot['22222222'];
-  const r4 = V(T4); assert.deepStrictEqual(ks(r4), ['firp']); assert.strictEqual(r4.bloqueos[0].dni, '22222222');
-  /* no firmó (fir:false) está cotejado: no bloquea; el ausente no necesita firma */
-  const T5 = base(); T5[0].cot['22222222'].fir = false; T5[0].rows['11111111'] = row('ALFA', { as: false }); delete T5[0].cot['11111111'];
-  assert.deepStrictEqual(V(T5).bloqueos, []);
-  /* fotos en otro orden: vigente */
-  const T6 = base(); T6[0].foto = ['a', 'b']; T6[0].cotFot = ['b', 'a'];
-  assert.deepStrictEqual(V(T6).bloqueos, []);
+  const T5 = base(); delete T5[0].foto;
+  assert.deepStrictEqual(ks(V(T5)), ['cot']);
 });
 
 test('partida con horas que no existe en tpc', () => {

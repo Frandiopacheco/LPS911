@@ -183,9 +183,9 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect(page.locator('#tjTot')).toHaveText('48.0');
   await page.fill('[data-tjd="6"] [data-tj="fin"]', '13:30');
   await expect(page.locator('#tjTot')).toHaveText('48.5');
-  await page.fill('#tjTol', '10');
+  await expect(page.locator('#tjTol')).toHaveCount(0); // sin garita (20-10-2026)
   await page.click('#tjSave');
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:30', fin: '13:30', ref: 0 }, '0': null }, tolGar: 10, refIni: '12:00' });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:30', fin: '13:30', ref: 0 }, '0': null }, refIni: '12:00' });
   await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:30', '13:30'))).toEqual({ trab: 6, ext: 0 });
   noErrors(errors, 'partidas y jornada');
 });

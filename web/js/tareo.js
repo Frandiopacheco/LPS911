@@ -225,7 +225,7 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
 const TO_MOT={DM:'Descanso médico',DA:'Descanso por accidente',SU:'Suspensión',SM:'Subsidio por maternidad',SE:'Subsidio por enfermedad',VA:'Vacaciones',FA:'Falta',LS:'Licencia sin goce',L:'Liquidado'};
 const TO_ST={sin:['Sin empezar','to-sin'],bor:['Borrador','to-bor'],env:['Enviado','to-env'],reab:['Reabierto','to-reab'],rev:['Revisado','to-rev'],pub:['Publicado','to-pub']};
 const TO_ORD={env:0,reab:1,bor:2,sin:3,rev:4,pub:5};
-const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
+const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firmas (antiguo)',rev:'Revisado',qrev:'Quitó revisado',pub:'Publicado',rect:'Abierto para rectificar',prod:'Revisión de producción'};
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
@@ -292,18 +292,17 @@ function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]
   const cua=x.cuas.length?`<small class="td-cua" title="${esc(x.cuas.join(', '))}">${esc(x.cuas.slice(0,2).join(' · '))}${x.cuas.length>2?` +${x.cuas.length-2}`:''}</small>`:'';
   const act=`<td class="td-act"><button class="ib${ap?' pri':''}" data-toa="${ak}" data-id="${esc(x.id)}" data-cap="${esc(x.cap)}">${esc(al)}</button></td>`;
   if(!x.t)return`<tr class="td-r t-off${late?' td-late':''}" data-tcap="${esc(x.cap)}" data-stg="sin"><td class="td-cap" data-l="Capataz"><span class="td-nm">${esc(x.name)}</span>${cua}</td>
-    <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="5"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
+    <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="4"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
   const s=x.s;const tot=s.pres+s.fal+s.sm||1;const env=['env','rev','pub'].includes(x.t.st);
   const bar=`<span class="td-ab" aria-hidden="true"><i class="ok" style="flex:${s.pres}"></i><i class="bad" style="flex:${s.fal}"></i><i class="sm" style="flex:${s.sm}"></i>${s.pres+s.fal+s.sm?'':'<i class="nil" style="flex:1"></i>'}</span>`;
   const asis=`${bar}<span class="td-an"><span class="td-ok"><b data-l="Vinieron">${s.pres}</b> ${s.pres===1?'vino':'vinieron'}</span>${s.fal?`<span class="td-bad" title="${esc(Object.entries(s.mot).map(([k,n])=>`${TO_MOT[k]||k}: ${n}`).join('\n'))}"><b data-l="No vinieron">${s.fal}</b> no ${s.fal===1?'vino':'vinieron'}</span>`:''}${s.sm?`<span class="td-sm" title="El capataz aún no marca si vinieron"><b data-l="Sin marcar">${s.sm}</b> sin marcar</span>`:''}</span>`;
-  const fir=!env?'<span class="note">—</span>':s.nof?`<span class="tr-no">${s.nof} sin firma</span>`:s.cot>=s.pres?'<span class="tr-si" title="Todas las firmas cotejadas">✓</span>':`<span class="note">${s.cot} de ${s.pres}</span>`;
   const obs=s.obs.length?`<button class="td-obs${TD.ox&&TD.ox.has(x.id)?' on':''}" data-tox="${esc(x.id)}" aria-expanded="${TD.ox&&TD.ox.has(x.id)?'true':'false'}" title="${esc(s.obs.map(o=>o.msg).join('\n'))}">${s.obs.length}</button>`:'';
   const hr=x.t.st==='env'&&x.t.envAt?'':x.t.envAt&&env?`<small class="td-hr">enviado ${esc(tHm(x.t.envAt))}</small>`:'';
   const row=`<tr class="td-r${late?' td-late':''}" data-to="${esc(x.id)}" data-stg="${st}"><td class="td-cap" data-l="Capataz"><button class="t-lnk td-nm" data-to="${esc(x.id)}">${esc(x.name)}</button>${cua}</td>
     <td class="td-st" data-l="Estado">${toChip(x.t)}${lateT}${hr}${typeof trProdChip==='function'?trProdChip(x.t):''}</td>
     <td class="td-as" data-l="Asistencia">${asis}</td><td class="mono t-r td-hh" data-l="HH">${toH(s.hh)}</td><td class="mono t-r td-he" data-l="HE">${s.he?toH(s.he):''}</td>
-    <td class="t-r td-fi" data-l="Firmas">${fir}</td><td class="t-r td-ob" data-l="Observ.">${obs}</td>${act}</tr>`;
-  return row+(s.obs.length&&TD.ox&&TD.ox.has(x.id)?`<tr class="td-ox" data-tox-of="${esc(x.id)}"><td colspan="8"><ul>${s.obs.map(o=>`<li class="${o.bl?'bl':''}">${esc(o.msg)}</li>`).join('')}</ul></td></tr>`:'')}
+    <td class="t-r td-ob" data-l="Observ.">${obs}</td>${act}</tr>`;
+  return row+(s.obs.length&&TD.ox&&TD.ox.has(x.id)?`<tr class="td-ox" data-tox-of="${esc(x.id)}"><td colspan="7"><ul>${s.obs.map(o=>`<li class="${o.bl?'bl':''}">${esc(o.msg)}</li>`).join('')}</ul></td></tr>`:'')}
 
 /* avisos compactos arriba del tablero: obreros en dos tareos (bloquea revisar) y no enviados a la hora límite */
 function toAvisos(f,L){const docs=[...TD.docs.values()];const ed=toReabOk();let h='';
@@ -365,8 +364,8 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
     </section>
     ${TD.ok?toAvisos(f,L):''}
     <section class="card td-board"><div class="td-bh"><input class="tin td-q" id="toQ" type="search" placeholder="Buscar capataz o cuadrilla" value="${esc(TD.q||'')}" aria-label="Buscar capataz o cuadrilla"><span class="note">${vis.length===L.length?`${L.length} ${L.length===1?'capataz':'capataces'}`:`${vis.length} de ${L.length} capataces`} · por revisar primero</span></div>
-     <div class="tscroll"><table class="t t-tbl td-tbl"><thead><tr><th>Capataz</th><th>Estado</th><th>Asistencia</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r">Firmas</th><th class="t-r" title="Observaciones">Obs.</th><th aria-label="Acción"></th></tr></thead>
-     <tbody id="toBody">${vis.map(x=>toRowHtml(x,f)).join('')||`<tr><td colspan="8" class="note td-empty">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></section>
+     <div class="tscroll"><table class="t t-tbl td-tbl"><thead><tr><th>Capataz</th><th>Estado</th><th>Asistencia</th><th class="t-r">HH</th><th class="t-r">HE</th><th class="t-r" title="Observaciones">Obs.</th><th aria-label="Acción"></th></tr></thead>
+     <tbody id="toBody">${vis.map(x=>toRowHtml(x,f)).join('')||`<tr><td colspan="7" class="note td-empty">${!(TD.ok||TD.err)?'Cargando tareos…':L.length?'Ningún tareo con este filtro.':'No hay tareos ni capataces con obreros asignados este día.'}</td></tr>`}</tbody></table></div></section>
    </div>${nSin?`<aside class="td-side">${toSinHtml(f,G,nSin)}</aside>`:''}</div>
   </div></div>`;
   const go=d=>{TD.f=d>hoy?hoy:d;TD.sel.clear();requestRender()};
@@ -686,8 +685,7 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
      <label class="lqlab">Refrigerio en domingo o feriado (min)<input class="tin t-n" type="number" min="0" max="180" step="5" id="tjNlRef" value="${c.refNoLab.ref}"${dis}></label></div>
     <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
    <div class="card"><div class="pad t-form">
-    <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label>
-    <label class="lqlab">Tolerancia de garita (min)<input class="tin t-n" type="number" min="0" max="120" id="tjTol" value="${c.tolGar}"${dis}></label></div>
+    <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label></div>
     ${ed?`<div class="pad"><button class="ib pri" id="tjSave">Guardar configuración</button></div>`:''}</div>
    <div class="card" id="tferCard"><h2>Feriados del tareo <span class="sub">Días no laborables para el tareo (todas las horas son extra). Son propios del tareo: todos los roles calculan igual.</span></h2>
     ${ed?`<div class="pad t-bar t-ferAdd"><input class="tin" type="date" id="tferD" aria-label="Fecha del feriado"><input class="tin" id="tferNm" placeholder="Nombre (opcional)" aria-label="Nombre del feriado" maxlength="60"><button class="ib pri" id="tferAdd">Agregar</button>${lps.length?`<button class="ib" id="tferLps" title="${lps.length} feriados en el calendario de Last Planner">Copiar feriados de Last Planner${fal?` (${fal})`:''}</button>`:''}</div>`:''}
@@ -700,7 +698,7 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin;const dis=ed?'':' disa
       const r=main.querySelector(`[data-tjd="${k}"]`);r.querySelectorAll('[data-tj]:not([data-tj="on"])').forEach(x=>x.disabled=!j)}$('#tjTot').textContent=t.toFixed(1)};
   main.querySelector('.t-jor').oninput=upd;main.querySelector('.t-jor').onchange=upd;
   $('#tjSave').onclick=async()=>{const jor=read();for(const[k,j]of Object.entries(jor))if(j&&!(tJorH(j)>0)){toast(`Revisa la jornada del ${TDOW.find(x=>x[0]===k)[1].toLowerCase()}: el fin debe ser posterior al inicio.`);return}
-    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:Math.max(0,Math.round(+$('#tjTol').value||0)),...tStamp()};
+    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
   $('#tferAdd').onclick=()=>{const f=$('#tferD').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Elige la fecha del feriado.');return}const n=$('#tferNm').value.trim().replace(/\s+/g,' ');
     const C=TC();if(C.fer.includes(f)&&(C.ferN[f]||'')===n){toast('Ese feriado ya está.');return}

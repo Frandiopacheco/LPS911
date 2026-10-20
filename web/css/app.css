@@ -2360,7 +2360,17 @@ body.tr-on .toast{z-index:160}
 .tx-ic{min-width:32px;padding:0;font-size:16px;line-height:1}
 .tx-pcadd{max-width:170px}
 .tx-grow{flex:1}
-.tx-fo.on{border-color:var(--accent);color:var(--accent)}
+.tx-fo.on,.tr-fo.on{border-color:var(--accent);color:var(--accent)}
+/* revisión (20-10-2026): selector de capataz, «Ocultar» en el panel de la foto, «+» para agregar partida y fila «+ Agregar obrero» */
+.tr-capsel{height:var(--h-ctl,34px);max-width:340px;min-width:200px;font-weight:600}
+.tr-vbar .tr-fohide{margin-left:auto;height:28px;font-size:12px}
+.tx-t thead th.tx-hpa{padding:0;text-align:center;vertical-align:middle;cursor:default}
+.tx-pab{width:30px;height:30px;border:1px dashed var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--accent);font:600 18px/1 var(--f-ui);cursor:pointer}
+.tx-pab:hover,.tx-pab:focus-visible{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}
+.tx-t td.tx-pac{background:var(--panel2)}
+.tx-t tbody.tx-addb td{padding:0;height:34px;text-align:left;background:var(--panel);border-bottom:1px solid var(--line2)}
+.tx-addo{position:sticky;left:0;height:34px;padding:0 14px 0 48px;border:0;background:none;color:var(--accent);font:600 12.5px var(--f-ui);cursor:pointer;white-space:nowrap}
+.tx-addo:hover,.tx-addo:focus-visible{text-decoration:underline}
 .tx-q{position:relative;display:inline-flex;align-items:center;margin:0}
 .tx-q svg{position:absolute;left:9px;width:14px;height:14px;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;pointer-events:none}
 .tx-q input{height:30px;width:250px;padding-left:28px;font-size:12.5px}
@@ -2375,7 +2385,7 @@ body.tr-on .toast{z-index:160}
 .tx-clr{height:28px;font-size:12px}
 .tx-clr[hidden]{display:none}
 .tx-cnt{margin-left:auto;white-space:nowrap;font-size:12px}
-/* la hoja: encabezado, 5 columnas (anchos de TX_FZW en tareo-rev.js) y totales fijos */
+/* la hoja: encabezado, columnas de la izquierda (txColsOf en tareo-rev.js) y totales fijos */
 .tx-w{flex:1;min-height:0;overflow:auto;position:relative;outline:none;background:var(--panel2);overscroll-behavior:contain}
 .tx-w:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .tx-t{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:12.5px;line-height:1.2;color:var(--ink);user-select:none}
@@ -2384,11 +2394,8 @@ body.tr-on .toast{z-index:160}
 .tx-t tfoot td{position:sticky;bottom:0;z-index:3;height:30px;background:var(--panel2);border-top:2px solid var(--line);border-bottom:0;font-weight:700}
 .tx-t .tx-fz{position:sticky;z-index:2}
 .tx-t thead .tx-fz,.tx-t tfoot .tx-fz{z-index:4}
-.tx-t .tx-fz:nth-child(1){left:0}
-.tx-t .tx-fz:nth-child(2){left:40px}
-.tx-t .tx-fz:nth-child(3){left:122px}
-.tx-t .tx-fz:nth-child(4){left:322px}
-.tx-t .tx-fz:nth-child(5){left:422px;border-right:2px solid var(--line)}
+/* el «left» de cada columna fija va en línea (txColsOf): cuadrilla y categoría pueden estar ocultas */
+.tx-t .tx-fzl{border-right:2px solid var(--line)}
 .tx-t tbody td:first-child{background:var(--panel2);color:var(--muted);text-align:center;font:500 11px var(--f-mono);cursor:e-resize;padding:0 2px}
 .tx-t .tx-n{text-align:right}
 .tx-t td.tx-n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
@@ -2495,6 +2502,7 @@ body.tr-on .toast{z-index:160}
 }
 @media (max-width:760px){
   .tr-wh{padding:6px 10px}
+  .tr-capsel{min-width:0;max-width:56vw}
   .tr-hl{display:none}
   .tr-wn{font-size:15px}
   .tr-wb{padding:8px 10px}
