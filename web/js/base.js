@@ -53,9 +53,12 @@ const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratis
 const TAR_ROLES=['tcap','tasis','tcos'];
 const TAR_TABS=['tdia','tpub','tcos','tper','tpc','tcfg'];
 const TAR_ONLY=()=>!!me&&TAR_ROLES.includes(me.role);
-const canTar=()=>!!me&&(TAR_ONLY()||me.role==='admin'||(me.role==='editor'&&me.tpub===true));
+/* asistente de tareo: el rol tasis o un ingeniero de campo con la casilla «Asistente de tareo» (members.tasis, 20-10-2026: así también
+   reporta en Campo de Last Planner). Todo lo del tareo que era del asistente pregunta TASIS(), no me.role==='tasis'. */
+const TASIS=()=>!!me&&(me.role==='tasis'||(me.role==='campo'&&me.tasis===true));
+const canTar=()=>!!me&&(TAR_ONLY()||TASIS()||me.role==='admin'||(me.role==='editor'&&me.tpub===true));
 const canLps=()=>!!me&&!TAR_ONLY();
-const tarEdit=()=>!!me&&(me.role==='admin'||me.role==='tasis');
+const tarEdit=()=>!!me&&(me.role==='admin'||TASIS());
 /* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner (no el capataz de un SC,
    que solo usa «En obra»); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar','p3d'];
@@ -79,8 +82,8 @@ const isOwnerEmail=e=>!!OWNER()&&String(e||'').toLowerCase()===OWNER();
 /* "Ver como": el administrador prueba la app con otro rol (solo en la copia de prueba; lo que guarde se guarda con su usuario) */
 const VA_OK=()=>window.LPS_ENV==='pruebas';
 let VA=(()=>{try{return VA_OK()?JSON.parse(sessionStorage.getItem('lps.va')||'null'):null}catch(e){return null}})();
-const roleSig=m=>[m.role||'',m.sc||'',memScs(m).join(),m.area||'',m.cli===true?'c':'',m.tpub===true?'t':''].join('|');
-function vaApply(md){if(!VA||!me||!(md.role==='admin'||isOwnerEmail(me.email)))return md;return{...md,role:VA.role,sc:VA.sc||'',scs:VA.sc?[VA.sc]:[],area:VA.area||'',cli:!!VA.cli,tpub:!!VA.tpub}}
+const roleSig=m=>[m.role||'',m.sc||'',memScs(m).join(),m.area||'',m.cli===true?'c':'',m.tpub===true?'t':'',m.tasis===true?'a':''].join('|');
+function vaApply(md){if(!VA||!me||!(md.role==='admin'||isOwnerEmail(me.email)))return md;return{...md,role:VA.role,sc:VA.sc||'',scs:VA.sc?[VA.sc]:[],area:VA.area||'',cli:!!VA.cli,tpub:!!VA.tpub,tasis:!!VA.tasis}}
 function vaSet(v){try{if(v)sessionStorage.setItem('lps.va',JSON.stringify(v));else sessionStorage.removeItem('lps.va')}catch(e){}location.reload()}
 const PALETTE=['#1f5f7a','#b5651d','#6a4c93','#2e7d4f','#c0392b','#00838f','#8d6e00','#ad1457'];
 const hashStr=s=>{let h=5381;for(const c of String(s))h=((h*33)^c.charCodeAt(0))>>>0;return h.toString(36)};
@@ -469,25 +472,25 @@ async function startSession(u,fdb){
   if(!m||!m.exists){const em=me.email;me=null;pendingMsg=tCtaEs(em)?`Tu usuario ${em.split('@')[0]} ya no tiene acceso. Habla con la oficina.`:`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
   /* cuenta desactivada (members.off) o enlace de capataz pasado a una cuenta con DNI (movTo): docs/ia/tareo.md */
   if(m.data().off===true&&!isOwnerEmail(me.email)){const d=m.data();me=null;pendingMsg=memOffMsg(d);if(d.movTo)lcapSet(true);await auth.signOut();return}
-  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
+  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;me.tasis=md.tasis===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
   /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
   if(TAR_ONLY())U.mod='tar';else if(!offLps()||!modOk(U.mod))U.mod='lps';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
   db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
-  $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role);
+  $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role)+(me.role==='campo'&&me.tasis?' y asistente de tareo':'');
   /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
   if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
   ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();}
   if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS))subCol(col,k,false);
   /* el asistente de tareo necesita la lista del equipo (asignar obreros a capataces) */
-  const memQ=canDaily||me.role==='tasis'?fcol('members'):fcol('members').doc(me.email);
+  const memQ=canDaily||TASIS()?fcol('members'):fcol('members').doc(me.email);
   const memCb=snap=>{snapOk('members');MEM.clear();let rch=false;(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
     const mine=me&&MEM.get(me.email);
     if(mine){if(mine.name&&mine.name!==me.name){me.name=mine.name;lastPres='';sendPresence(true)}
-    if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis');const sk0=me.role==='sc'?scList().join():'-';me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.role=v.role;
+    if(roleSig(mine)!==me.rsig){const tk=TAR_ONLY()+'|'+canTar()+'|'+TASIS();const sk0=me.role==='sc'?scList().join():'-';me.rsig=roleSig(mine);me.realAdmin=mine.role==='admin'||isOwnerEmail(me.email);const v=vaApply(mine);me.area=v.area||'';me.cli=v.cli===true;me.tpub=v.tpub===true;me.tasis=v.tasis===true;me.role=v.role;
     /* si cambia lo que hay que cargar (solo tareo, ve el Tareo, lista del equipo), se vuelve a abrir con las suscripciones correctas */
     /* SEG-05: las suscripciones del SC van por partida (scSubs): si entra o sale del rol sc, o cambian sus partidas, se reabre todo */
     const sk1=v.role==='sc'?memScs(v).filter(Boolean).join():'-';
-    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+(me.role==='tasis')||sk0!==sk1){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;rch=true;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
+    if(tk!==TAR_ONLY()+'|'+canTar()+'|'+TASIS()||sk0!==sk1){toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'. Recargando…');setTimeout(()=>location.reload(),1200);return}me.sc=v.sc||'';me.scs=memScs(v);isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';$('#meBox').textContent=(mine.name||me.email)+' · '+(ROLE[me.role]||me.role);if(typeof cliStop==='function'&&!canCli())cliStop();gridRows=null;rch=true;if(!VA)toast('Tu rol cambió a '+(ROLE[me.role]||me.role)+'.')}}
     else if(me&&!isOwnerEmail(me.email)){pendingMsg='Tu acceso fue retirado por el administrador.';auth.signOut();return}
     if(mine&&mine.off===true&&me&&!isOwnerEmail(me.email)){pendingMsg=memOffMsg(mine);if(mine.movTo)lcapSet(true);auth.signOut();return}
     /* cambio de rol: al momento; lo demás (nombres, responsables de otros) se agrupa como los otros cambios ajenos (auditoría REN-02) */

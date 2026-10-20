@@ -21,7 +21,7 @@ Fases: F0 base (selector de módulo, roles, máster, partidas de control, jornad
 | Rol | Etiqueta (`ROLE`) | Módulos | Notas |
 | --- | --- | --- | --- |
 | `tcap` | Capataz (tareo) | solo Tareo, celular | Distinto de `capataz` (que es de un SC). Entra con DNI y contraseña (cuenta `<dni>@tareo.lps911.pe`, ver «Cuentas de capataz»), con correo o con enlace de invitación anónimo (`u_<uid>`) como el capataz de SC. |
-| `tasis` | Asistente de tareo | solo Tareo | Todo el tareo (20-10-2026, decisión del dueño): máster, partidas, revisión, **Publicación** (publica y rectifica: `tpPubOk`, `tpPuede` del servidor), **Costos** y **Configuración** (`tcfg` lo escriben admin y `tarEd()`; `tpexc` también). |
+| `tasis` | Asistente de tareo | solo Tareo (o **campo + `members.tasis`**: también Last Planner como ingeniero de campo, 20-10-2026; en Equipo «También reporta en Campo» / «Asistente de tareo»; cliente `TASIS()`, reglas `campoTasis()`, servidor `tpPuede`/`ctaPuede`) | Todo el tareo (20-10-2026, decisión del dueño): máster, partidas, revisión, **Publicación** (publica y rectifica: `tpPubOk`, `tpPuede` del servidor), **Costos** y **Configuración** (`tcfg` lo escriben admin y `tarEd()`; `tpexc` también). |
 | `tcos` | Costos | solo Tareo, lectura | En F3 verá solo días publicados. |
 | `admin` | — | ambos | Edita también la configuración del tareo. |
 | `editor` con `members.tpub == true` | marca «Publica tareo» | ambos | Jefe de producción: ve todo el Tareo; en F3 publica. |

@@ -128,6 +128,11 @@ function scCell(em,m){const L=memScs(m);const all=[...S.con.values()].sort((a,b)
 /* buscador y filtros del equipo; borrador del formulario "Agregar" (sobrevive a las actualizaciones automáticas de la pantalla) */
 /* «Publica tareo» (members.tpub): el editor que es jefe de producción ve el módulo Tareo y, en la fase 3, publica el consolidado */
 const tpubCell=(em,m)=>`<label class="chk tpubc" title="Ve el módulo Tareo y publica el consolidado del día (jefe de producción)"><input type="checkbox" data-mem="${esc(em)}" data-f="tpub"${m.tpub===true?' checked':''}> Publica tareo</label>`;
+/* asistente de tareo que además reporta en Campo (20-10-2026): se guarda como rol campo + members.tasis. En el asistente, la casilla
+   «También reporta en Campo» lo pasa a campo con tasis; en un campo asistente, quitarla lo devuelve a asistente de tareo. */
+const tasisCell=(em,m)=>m.role==='tasis'?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="tasisCampo"> También reporta en Campo <small class="mu">(entra a Last Planner como ingeniero de campo)</small></label>`
+  :m.role==='campo'?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="tasis"${m.tasis===true?' checked':''}> Asistente de tareo <small class="mu">(además maneja todo el Tareo)</small></label>`
+   +(m.tasis===true?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="tasisCampo" checked> Reporta en Campo <small class="mu">(quítala para que quede solo en el Tareo)</small></label>`:''):'';
 const TQ={q:'',role:'',sc:''};const TF={em:'',nm:'',rl:'editor',sc:'',ar:''};
 const TROLES=['admin','editor','planner','campo','sc','capataz','area','veedor','lector','tasis','tcap','tcos'];
 const TGRP={admin:'Administradores',editor:'Editores (ingenieros de producción)',planner:'Planner (plan maestro retirado: ve como lector)',campo:'Campo (ingenieros de campo)',sc:'Subcontratistas',capataz:'Capataces',area:'Áreas de apoyo (Oficina Técnica, Calidad…)',veedor:'Veedores',lector:'Lectores',tasis:'Tareo · asistentes de tareo',tcap:'Tareo · capataces del consorcio',tcos:'Tareo · costos'};
@@ -148,7 +153,7 @@ const teamV=()=>isAdmin&&TEAMV.some(([k])=>k===U.teamV)?U.teamV:'per';
 let TEDIT=null;
 const TEAM_HELP=`<p><b>Para sumar a alguien:</b> agrégalo con su correo, envíale el enlace de esta página y pídele que pulse <b>«¿Primera vez? Crear mi cuenta»</b> con ese mismo correo y confirme el correo que le llegará. Solo los correos de la lista pueden entrar.</p>
  <p><b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; con <b>pisos a cargo</b> resuelve las propuestas de los SC de esos pisos (piso sin responsable: cualquier editor). <b>Campo</b>: registra el avance diario, sin modificar el lookahead. <b>Subcontratista</b>: propone y dibuja el plan del día de su empresa (si tiene varias partidas, agrégalas todas). <b>Área de apoyo</b> (Oficina Técnica, Calidad…): ve todo y resuelve las restricciones de su área. <b>Veedor</b>: registra en Campo › Plano el trabajo no programado. <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p>
- <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> mantiene el personal y las partidas, <b>Costos</b> consulta; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
+ <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> maneja todo el Tareo (si además reporta en Campo, márcale <b>También reporta en Campo</b>), <b>Costos</b> consulta; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
 /* chips de alcance y píldoras de permisos de una persona (solo lectura; se cambian en la ficha) */
 function teamScope(em,m){const r=roleOfM(em,m);const L=[];
   if(r==='sc'||r==='capataz'){const S_=memScs(m).filter(i=>S.con.has(i));S_.forEach(i=>L.push(`<span class="scchip ro" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}</span>`));if(!S_.length)L.push('<span class="pill bad">Falta la empresa</span>')}
@@ -159,6 +164,7 @@ function teamPerms(em,m){const r=roleOfM(em,m);if(r==='admin')return'<span class
   if(r!=='capataz'&&!TAR_ROLES.includes(r)&&dashOn(m))L.push('<span class="pill neu">Tablero</span>');
   if(!CLI_OFF&&CLI_ROLES.includes(r)&&m.cli===true)L.push('<span class="pill neu">Versión cliente</span>');
   if(r==='editor'&&m.tpub===true)L.push('<span class="pill neu">Publica tareo</span>');
+  if(r==='campo'&&m.tasis===true)L.push('<span class="pill neu">Asistente de tareo</span>');
   return L.join(' ')}
 /* ficha de una persona: todo lo editable (mismos data-mem/data-f que antes, así sirven los mismos manejadores) */
 function teamEdit(em){const m=MEM.get(em);if(!m||!isAdmin){TEDIT=null;lqClose();return}TEDIT=em;const self=me&&em===me.email;const own=isOwnerEmail(em);const lock=self||own;const r=roleOfM(em,m);
@@ -173,7 +179,7 @@ function teamEdit(em){const m=MEM.get(em);if(!m||!isAdmin){TEDIT=null;lqClose();
     ${r==='admin'?'':`<div class="tedp"><span class="fgl">Permisos</span>
       ${m.role==='capataz'||TAR_ROLES.includes(m.role)?'':`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="dash"${dashOn(m)?' checked':''}> Ve el Tablero</label>`}
       ${!CLI_OFF&&CLI_ROLES.includes(m.role)?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="cli"${m.cli===true?' checked':''}> Versión cliente <small class="mu">(holguras, versiones emitidas, PPC del cliente)</small></label>`:''}
-      ${m.role==='editor'?tpubCell(em,m):''}</div>`}
+      ${m.role==='editor'?tpubCell(em,m):''}${tasisCell(em,m)}</div>`}
    </div>
    <div class="lqbtns">${lock?'':`<button class="ib danger" data-mdel="${esc(em)}">Quitar acceso</button>`}<span class="fsp"></span><button class="ib pri" data-lqx>Listo</button></div>`,
    e=>teamClick(e),e=>teamChange(e))}
@@ -184,6 +190,8 @@ async function teamChange(e){const t=e.target;if(!t.dataset.mem||!isAdmin)return
     try{await fcol('members').doc(em).update({scs:L,sc:L[0]});toast(`${conOf(t.value).name} agregada`)}catch(err){fail(err)}return}
   if(t.dataset.f==='pisoadd'){if(!t.value)return;const m=MEM.get(em)||{};const L=[...new Set([...memPisos(m),t.value])];const p=S.pis.get(t.value);
     try{await fcol('members').doc(em).update({pisos:L});toast(`${p?p.name:'Piso'} a cargo de ${m.name||em}`)}catch(err){fail(err)}return}
+  if(t.dataset.f==='tasisCampo'){const m=MEM.get(em)||{};const d=t.checked?{role:'campo',tasis:true}:{role:'tasis',tasis:firebase.firestore.FieldValue.delete()};
+    try{await fcol('members').doc(em).update(d);toast(t.checked?`${m.name||em} ahora reporta en Campo y sigue como asistente de tareo`:`${m.name||em} queda solo como asistente de tareo`)}catch(err){fail(err)}return}
   try{await fcol('members').doc(em).update({[t.dataset.f]:t.type==='checkbox'?t.checked:t.dataset.f==='name'?t.value.trim():t.value})}catch(err){fail(err)}}
 async function teamClick(e){const rm=e.target.closest('[data-scrm]');if(rm&&isAdmin){const[em,id]=rm.dataset.scrm.split('|');const m=MEM.get(em)||{};const L=memScs(m).filter(i=>i!==id);
     try{await fcol('members').doc(em).update({scs:L,sc:L[0]||''});toast(`${conOf(id).name} quitada`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}return true}
