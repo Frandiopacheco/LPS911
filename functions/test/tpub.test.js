@@ -213,7 +213,8 @@ test('quién publica', () => {
   assert.ok(!tpPuede('j@o.pe', true, { role: 'editor', tpub: true, off: true }));
   assert.ok(!tpPuede('j@o.pe', false, { role: 'editor', tpub: true }));
   assert.ok(!tpPuede('e@o.pe', true, { role: 'editor' }));
-  for (const role of ['tasis', 'tcos', 'tcap', 'campo', 'lector']) assert.ok(!tpPuede('x@o.pe', true, { role, tpub: true }), role);
+  assert.ok(tpPuede('t@o.pe', true, { role: 'tasis' })); // 20-10-2026: el asistente tiene todo el tareo
+  for (const role of ['tcos', 'tcap', 'campo', 'lector']) assert.ok(!tpPuede('x@o.pe', true, { role, tpub: true }), role);
   assert.ok(!tpPuede('', true, { role: 'admin' }));
 });
 

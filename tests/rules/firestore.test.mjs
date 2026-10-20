@@ -699,9 +699,10 @@ test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no 
   for (const db of [user('editor@obra.pe'), user('campo@obra.pe')]) await assertSucceeds(getDoc(doc(db, 'tpc/10.05')));
   for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), cap('cap1'), user('veedor@obra.pe'), user('extrano@x.pe')]) await assertFails(getDoc(doc(db, 'tpc/10.05')));
 });
-test('tareo: la configuración la cambia solo el administrador', async () => {
+test('tareo: la configuración la cambian el administrador y el asistente de tareo', async () => {
   await assertSucceeds(setDoc(doc(user(OWNER), 'tcfg/main'), { refIni: '12:30', limEnv: '18:00', tolGar: 10 }));
-  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/main'), { tolGar: 5 }, { merge: true }));
+  await assertFails(setDoc(doc(user('tcos@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
   await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
 });
 test('tareo: los roles de solo tareo no leen ni escriben nada de LPS', async () => {
@@ -1001,9 +1002,9 @@ test('tareo F3: tpub y tpubidx los lee el módulo Tareo (también costos) y nadi
   await tSeed('members/jefe@obra.pe', { role: 'editor', name: 'Jefe', tpub: true, off: true });
   await assertFails(getDoc(doc(user('jefe@obra.pe'), `tpub/${f}_v1`)));
 });
-test('tareo publicación (20-10-2026): tpexc lo escriben admin y jefe con tpub; tpauto solo la función', async () => {
+test('tareo publicación (20-10-2026): tpexc lo escriben admin, asistente y jefe con tpub; tpauto solo la función', async () => {
   const f = limaDay(0);
-  for (const [em, ok] of [[OWNER, true], ['jefe@obra.pe', true], ['tasis@obra.pe', false], ['tcos@obra.pe', false], ['editor@obra.pe', false], ['tcapm@obra.pe', false]]) {
+  for (const [em, ok] of [[OWNER, true], ['jefe@obra.pe', true], ['tasis@obra.pe', true], ['tcos@obra.pe', false], ['editor@obra.pe', false], ['tcapm@obra.pe', false]]) {
     const db = user(em); const w = setDoc(doc(db, `tpexc/${f}`), { exc: { '11111111': 'Vacaciones' }, by: em, ts: 1 }, { merge: true });
     await (ok ? assertSucceeds(w) : assertFails(w));
   }

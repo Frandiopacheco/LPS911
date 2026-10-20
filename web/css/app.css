@@ -1788,6 +1788,9 @@ body.mod-pla #fpiso,body.mod-pla .wk,body.mod-pla #bundo,body.mod-pla #bredo,bod
 .t-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .t-form .t-wide{grid-column:1/-1}
 .t-form .tin{width:100%;height:var(--h-ctl,36px)}
+.t-cesd{margin-top:12px;border:1px solid var(--line,#ddd);border-radius:var(--r-ctl,8px);padding:8px 10px}
+.t-cesd>summary{cursor:pointer;font-weight:600;min-height:28px;display:list-item}
+.t-cesd[open]>summary{margin-bottom:8px}
 .t-n{width:84px}
 .t-h3{display:block;font-size:13px;margin:4px 0 6px}
 .t-per td,.t-per th{padding:5px 8px}

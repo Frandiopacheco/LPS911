@@ -43,7 +43,7 @@ for (const as of ['tcap', 'tasis', 'tcos']) {
     await expect(page.locator('#main')).toHaveAttribute('data-view', home);
     await expect(page.locator('#modsel')).toBeHidden();
     /* el capataz no ve Partidas como pestaña (las elige dentro del tareo, 20-10-2026) */
-    expect(await tabsVisibles(page)).toEqual(as === 'tcap' ? [home, 'tper'] : [home, 'tper', 'tpc']);
+    expect(await tabsVisibles(page)).toEqual(as === 'tcap' ? [home, 'tper'] : as === 'tasis' ? [home, 'tpub', 'tcos', 'tper', 'tpc', 'tcfg'] : [home, 'tper', 'tpc']);
     for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
     const st = await page.evaluate(() => ({ mod: U.mod, act: S.act.size, lps: S.loaded.act, only: TAR_ONLY(), ed: tarEdit(), ok: tabAllowed('look') }));
     expect(st).toEqual({ mod: 'tar', act: 0, lps: undefined, only: true, ed: as === 'tasis', ok: false });
