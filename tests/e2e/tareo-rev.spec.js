@@ -618,3 +618,19 @@ test('corrección en la hoja: si otro usuario cambia el tareo, avisa y «Recarga
   expect(d.rows['22222222'].h).toEqual({ p10_05: 8 });
   noErrors(errors, 'hoja conflicto');
 });
+
+test('auditoría 21-10: la fila agregada guarda en el historial lo que trae; Entrada y Salida del no laborable se ven en la hoja', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: EXTRA });
+  const r = await page.evaluate(() => {
+    const a = { modo: 'hrs', pcs: ['p10_05'], rows: { '11111111': { ape: 'ALFA', as: true, h: { p10_05: 8.5 } } } };
+    const b = { ...a, rows: { ...a.rows, '22222222': { ape: 'BETA', as: true, h: { p10_05: 4, p10_10: 0 }, sal: '15:00', ent: '', cor: true } } };
+    const c = { ...a, rows: {} };
+    const dom = { v: 1, jor: null, fer: false, rnl: { ref: 60, refIni: '12:00' } };
+    return { add: tDetAll(a, b).filter(x => x.campo === 'fila'), rm: tDetAll(a, c).filter(x => x.campo === 'fila'),
+      dom: (x => x && [x.ent, x.sal, x.h])(tHorRow({ sal: '15:00' }, '2026-10-04', dom)) };
+  });
+  expect(r.add).toEqual([{ dni: '22222222', campo: 'fila', antes: false, despues: { as: true, h: { p10_05: 4 }, ent: null, sal: '15:00', cor: true } }]);
+  expect(r.rm).toEqual([{ dni: '11111111', campo: 'fila', antes: true, despues: false }]);
+  expect(r.dom).toEqual(['07:30', '15:00', 6.5]); // la hoja de la oficina ya tiene horario que mostrar y comparar
+  noErrors(errors, 'historial fila agregada');
+});

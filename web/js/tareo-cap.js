@@ -416,7 +416,7 @@ function tcCellSheet(D){const c=TCS.cell;const r=(D.rows||{})[c.dni];if(!r||!tcV
    ${bq?`<div class="tc-err">Partida bloqueada por costos: solo puedes borrar sus horas.</div>`:`<div class="tc-csv"><button type="button" class="ib tc-big" data-tca="cellAdj" data-v="-0.5"${v>0?'':' disabled'} aria-label="Media hora menos">−½</button><output id="tcCv">${esc(tcH(v))}</output><button type="button" class="ib tc-big" data-tca="cellAdj" data-v="0.5"${v<TC_HTOP?'':' disabled'} aria-label="Media hora más">+½</button></div>
    <label class="tc-cin">Escribe las horas<input class="tin tc-in" id="tcCin" data-fk="tcCin" type="text" inputmode="decimal" autocomplete="off" data-tca="cellIn" value="${v?esc(tHtxt(v)):''}" placeholder="0" aria-label="Horas de ${esc(tcSN(c.dni))} en ${esc(tcPcCod(c.pc))}"></label>
    <div class="tc-csq">${qh.map(n=>`<button type="button" class="tc-qh${v===n?' on':''}" data-tca="cellSet" data-v="${n}">${esc(tHtxt(n))}</button>`).join('')}</div>`}
-   <div class="tc-csa">${!bq?`<button type="button" class="ib pri tc-big" id="tcCellR" data-tca="cellSet" data-v="${all}"${resto>0?'':' hidden'}>El resto de su horario → ${esc(tcH(all))}</button>`:''}<button type="button" class="ib tc-big" id="tcCellB" data-tca="cellSet" data-v="0"${v?'':' hidden'}>Borrar</button><button type="button" class="ib tc-big" data-tca="cellX">Listo</button></div></div>`}
+   <div class="tc-csa">${!bq?`<button type="button" class="ib pri tc-big" id="tcCellR" data-tca="cellSet" data-r="${all}"${resto>0?'':' hidden'}>El resto de su horario → ${esc(tcH(all))}</button>`:''}<button type="button" class="ib tc-big" id="tcCellB" data-tca="cellSet" data-v="0"${v?'':' hidden'}>Borrar</button><button type="button" class="ib tc-big" data-tca="cellX">Listo</button></div></div>`}
 
 /** en un día no laborable, al poner la salida o marcar corrido se guarda también la entrada que se ve (si no, tHorRow tomaría la de
     referencia igual, pero así queda escrita como la vio el capataz; auditoría 21-10-2026) */
@@ -495,7 +495,7 @@ function tcLive(){const D=TCS.doc;if(!D)return;const R=D.rows||{};const J=tcJor(
     const o=$('#tcCv');if(o)o.textContent=tcH(v);const dd=$('#tcCellD');if(dd)dd.textContent=tcCellDTxt(t,tot,J);
     for(const q of $$('#tcCell .tc-csq [data-tca="cellSet"]'))q.classList.toggle('on',+q.dataset.v===v);
     const mn=$('#tcCell [data-tca="cellAdj"][data-v="-0.5"]'),pl=$('#tcCell [data-tca="cellAdj"][data-v="0.5"]');if(mn)mn.disabled=!(v>0);if(pl)pl.disabled=!(v<TC_HTOP);
-    const rb=$('#tcCellR');if(rb){rb.hidden=!(resto>0);rb.dataset.v=String(all);rb.textContent=`El resto de su horario → ${tcH(all)}`}const bb=$('#tcCellB');if(bb)bb.hidden=!v;
+    const rb=$('#tcCellR');if(rb){rb.hidden=!(resto>0);rb.dataset.r=String(all);rb.textContent=`El resto de su horario → ${tcH(all)}`}const bb=$('#tcCellB');if(bb)bb.hidden=!v;
     const g=$(`#tcGrid .tc-gcell[data-dni="${CSS.escape(c.dni)}"][data-pc="${CSS.escape(c.pc)}"]`);if(g){g.textContent=v?tHtxt(v):'';g.classList.toggle('v',!!v)}}
   const w=TCS.wk&&$('#tcWk')&&R[TCS.wk];if(w){const tot=tcHorH(w),t=tHrsTot(w),dif=tR2(tot-t);
     const T=$('#tcWkT');if(T){T.className='tc-wkt '+(Math.abs(dif)<0.01?'ok':'warn');T.innerHTML=tcWkTxt(tot,dif)}
@@ -729,8 +729,9 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
   if(a==='cell'){TCS.cell={dni:b.dataset.dni,pc:b.dataset.pc};tcDraw();return}
   if(a==='cellX'){TCS.cell=null;tcDraw();return}
   if(a==='cellAdj'||a==='cellSet'){const c=TCS.cell;const r=c&&R[c.dni];if(!r||!tcVino(r))return;
-    if(tcBloq(c.pc)&&!(a==='cellSet'&&+b.dataset.v===0))return;
-    tcSetH(r,c.pc,a==='cellAdj'?tcHv(r,c.pc)+(+b.dataset.v||0):+b.dataset.v);if(a==='cellSet')TCS.cell=null;tcChg();return}
+    if(tcBloq(c.pc)&&!(a==='cellSet'&&b.dataset.r==null&&+b.dataset.v===0))return;
+    /* «El resto de su horario» (#tcCellR, siempre en la hoja y oculto si no le falta nada) lleva su valor en data-r */
+    tcSetH(r,c.pc,a==='cellAdj'?tcHv(r,c.pc)+(+b.dataset.v||0):+(b.dataset.r!=null?b.dataset.r:b.dataset.v));if(a==='cellSet')TCS.cell=null;tcChg();return}
   /* paso 4: tocar una celda lleva al paso 3 con esa celda abierta */
   if(a==='go3'){const dni=b.dataset.dni,pc=b.dataset.pc;if(!dni||!pc)return;TCS.step=3;TCS.cell=tcVino(R[dni])&&(D.pcs||[]).includes(pc)?{dni,pc}:null;
     TCS.foc=`.tc-gcell[data-dni="${CSS.escape(dni)}"][data-pc="${CSS.escape(pc)}"]`;tcDraw();return}
