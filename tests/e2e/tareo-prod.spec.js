@@ -354,7 +354,7 @@ test('hoja: el jefe agrega un obrero (de otra cuadrilla, con aviso), le pone hor
   expect(h).toMatchObject({ a: 'cor', by: 'jefe@obra.pe' });
   expect(h.mot).toBeUndefined();
   expect(asked.length).toBe(1);
-  expect(h.det).toEqual(expect.arrayContaining([{ dni: '55555555', campo: 'fila', antes: false, despues: true }, { dni: '33333333', campo: 'fila', antes: true, despues: false }]));
+  expect(h.det).toEqual(expect.arrayContaining([{ dni: '55555555', campo: 'fila', antes: false, despues: { as: true, h: { p10_10: 8.5 }, ent: null, sal: null, cor: false } }, { dni: '33333333', campo: 'fila', antes: true, despues: false }]));
   expect(d.prod).toMatchObject({ by: 'jefe@obra.pe' });
   noErrors(errors, 'agregar obrero');
 });

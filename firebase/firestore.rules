@@ -386,7 +386,20 @@ service cloud.firestore {
     }
     match /tper/{id} {
       allow read: if isTar();
-      allow create, update: if tarEd() && tperOk(id);
+      allow create, update: if tarEd() && tperOk(id) && (tperSinPriv() || isAdmin());
+    }
+    // AFP y N.° de hijos ya no van en tper (los lee el capataz): se pueden conservar o borrar, no poner ni cambiar (auditoría 21-10-2026)
+    function tperSinPriv() {
+      let d = request.resource.data;
+      return (!('afp' in d) || (resource != null && 'afp' in resource.data && d.afp == resource.data.afp))
+        && (!('hij' in d) || (resource != null && 'hij' in resource.data && d.hij == resource.data.hij));
+    }
+    // datos privados de la ficha (tperp/{dni}): AFP y N.° de hijos. Leen admin, asistente y RR.HH.; escriben admin y asistente
+    match /tperp/{id} {
+      allow read: if isMember() && notOff() && (role() in ['admin', 'trh'] || tarEd());
+      allow create, update: if tarEd() && id.matches('[A-Za-z0-9]{8,12}')
+        && (!('hij' in request.resource.data) || request.resource.data.hij == null || (request.resource.data.hij is int && request.resource.data.hij >= 0 && request.resource.data.hij <= 20))
+        && (!('afp' in request.resource.data) || request.resource.data.afp in ['', 'ONP', 'AFP Habitat', 'AFP Integra', 'AFP Prima', 'AFP Profuturo']);
     }
     // Partidas de control
     function tpcOk() {
@@ -408,9 +421,19 @@ service cloud.firestore {
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
     // configuración del tareo: el administrador y el asistente de tareo (20-10-2026)
+    // auditoría 21-10-2026: solo los documentos main y pla; los parámetros de planilla (pla) con números en rangos razonables
+    function numIn(d, k, lo, hi) { return !(k in d) || d[k] == null || ((d[k] is int || d[k] is float) && d[k] >= lo && d[k] <= hi); }
+    function plaOk() {
+      let d = request.resource.data;
+      return (!('vig' in d) || (d.vig is list && d.vig.size() <= 30))
+        && numIn(d, 'he60h', 0, 12) && numIn(d, 'sob1', 0, 300) && numIn(d, 'sob2', 0, 300) && numIn(d, 'alt', 0, 100)
+        && numIn(d, 'mov', 0, 200) && numIn(d, 'dmEmp', 0, 366) && numIn(d, 'dmTope', 0, 366) && numIn(d, 'ae', 0, 366)
+        && numIn(d, 'aeEdad', 0, 30) && numIn(d, 'leyes', 0, 300)
+        && (!('soles' in d) || d.soles in ['cos', 'ofi']);
+    }
     match /tcfg/{id} {
       allow read: if isTar();
-      allow write: if isAdmin() || tarEd();
+      allow write: if (isAdmin() || tarEd()) && id in ['main', 'pla'] && (id != 'pla' || plaOk());
     }
     // Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto (los archivos van en Firebase Storage, planos/…).
     // Lee el equipo de Last Planner salvo el capataz de un SC; cargan y editan el administrador y los editores. Nadie borra: se archiva.
@@ -528,8 +551,9 @@ service cloud.firestore {
     }
     // Publicación del tareo (F3): tpub/{fecha}_v{n} (versión inmutable) y tpubidx/{fecha} (índice del día). Los lee todo el módulo
     // Tareo (también costos, tcos); solo los escribe la función publicarTareo con el Admin SDK.
+    // el capataz del tareo no lee las publicaciones (traen las filas de todas las cuadrillas: motivos, DM, horas); auditoría 21-10-2026
     match /tpub/{id} {
-      allow read: if isTar();
+      allow read: if isTar() && tarRole() != 'tcap';
       allow write: if false;
     }
     match /tpubidx/{id} {

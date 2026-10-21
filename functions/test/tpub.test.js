@@ -339,3 +339,13 @@ test('publicación automática: hora, apagada por omisión y motivos guardados (
   const n = TP.tpAutoNota({ ok: false, bloqueos: [{ msg: 'a' }, { msg: 'b' }] }, 6);
   assert.deepStrictEqual(n, { t: 6, ok: false, n: 2, msgs: ['a', 'b'] });
 });
+
+test('dif: un cambio solo de horario (entrada, salida, corrido) también cuenta; horas inválidas no se publican', () => {
+  const a = tpArmarPublicacion({ fecha: F, tareos: base(), personal: PER, partidas: PCS, v: 1, at: 1, by: 'x' });
+  const T = base(); Object.assign(T[0].rows['11111111'], { sal: '18:00', cor: true, ent: '99:99' });
+  const b = tpArmarPublicacion({ fecha: F, tareos: T, personal: PER, partidas: PCS, v: 2, at: 2, by: 'x', anterior: a });
+  const r = b.rows.find(x => x.dni === '11111111');
+  assert.strictEqual(r.sal, '18:00'); assert.strictEqual(r.ent, undefined); assert.strictEqual(r.cor, true);
+  assert.deepStrictEqual(b.dif.cambios.map(x => [x.campo, x.antes, x.despues]), [['sal', '', '18:00'], ['cor', false, true]]);
+  assert.strictEqual(b.dif.n, 2);
+});

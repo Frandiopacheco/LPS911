@@ -985,10 +985,12 @@ test('tareo F3: tpub y tpubidx los lee el módulo Tareo (también costos) y nadi
   await tSeed(`tpub/${f}_v1`, { fecha: f, v: 1, rows: [], tot: { hh: 0 } });
   await tSeed(`tpubidx/${f}`, { fecha: f, v: 1, vers: [{ v: 1, at: 1, by: OWNER, motivo: '' }], abierto: null });
   for (const db of [user('tcos@obra.pe'), user('tasis@obra.pe'), user('jefe@obra.pe'), user(OWNER), user('tcapm@obra.pe')]) {
-    await assertSucceeds(getDoc(doc(db, `tpub/${f}_v1`)));
     await assertSucceeds(getDoc(doc(db, `tpubidx/${f}`)));
     await assertSucceeds(getDocs(collection(db, 'tpubidx')));
   }
+  for (const db of [user('tcos@obra.pe'), user('tasis@obra.pe'), user('jefe@obra.pe'), user(OWNER)]) await assertSucceeds(getDoc(doc(db, `tpub/${f}_v1`)));
+  // auditoría 21-10-2026: el capataz del tareo no lee las publicaciones (filas de todas las cuadrillas)
+  await assertFails(getDoc(doc(user('tcapm@obra.pe'), `tpub/${f}_v1`)));
   for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('campo@obra.pe'), cap('cap1'), user('extrano@x.pe')]) {
     await assertFails(getDoc(doc(db, `tpub/${f}_v1`)));
     await assertFails(getDoc(doc(db, `tpubidx/${f}`)));
@@ -1446,4 +1448,23 @@ test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros
   await assertFails(getDocs(collection(r, 'tareo')));       // como costos: no ve los tareos sin publicar
   await assertFails(getDoc(doc(r, 'acts/x1')));             // no ve Last Planner
   await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, vig: [] }));
+  // auditoría 21-10-2026: solo main y pla, y parámetros con números razonables
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/otro'), { x: 1 }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: -5 }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { he60h: 99 }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { mov: 'mucho' }));
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: 60, sob2: 100, he60h: 2, leyes: null, soles: 'cos', vig: [{ desde: '2026-01-01' }] }));
+});
+
+test('tareo (auditoría 21-10-2026): AFP e hijos en tperp, que no lee el capataz; tper ya no acepta esos datos nuevos', async () => {
+  const t = user('tasis@obra.pe');
+  await assertSucceeds(setDoc(doc(t, 'tperp/12345678'), { afp: 'AFP Prima', hij: 2, by: 'tasis@obra.pe', ts: 1 }));
+  await assertFails(setDoc(doc(t, 'tperp/12345678'), { hij: 50 }));
+  await assertFails(setDoc(doc(t, 'tperp/12345678'), { afp: 'Banco X' }));
+  for (const db of [user(OWNER), t, user('trh@obra.pe')]) await assertSucceeds(getDoc(doc(db, 'tperp/12345678')));
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe'), user('campo@obra.pe')]) await assertFails(getDoc(doc(db, 'tperp/12345678')));
+  await assertFails(setDoc(doc(user('trh@obra.pe'), 'tperp/12345678'), { hij: 1 }));
+  // el asistente ya no pone AFP ni hijos en tper (el administrador sí, para restaurar respaldos antiguos)
+  await assertFails(setDoc(doc(t, 'tper/87654321'), { ...PER('87654321'), afp: 'ONP' }));
+  await assertSucceeds(setDoc(doc(t, 'tper/87654321'), PER('87654321')));
 });

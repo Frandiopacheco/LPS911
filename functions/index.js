@@ -281,6 +281,8 @@ exports.cuentaCapataz = onCall({ timeoutSeconds: 60 }, async req => {
     res.re = !!m0;
   } else if (accion === 'clave') {
     if (!au) throw new HttpsError('not-found', 'Ese capataz todavía no tiene cuenta.');
+    /* solo cuentas que siguen siendo de capataz (auditoría 21-10-2026): si el administrador le dio otro rol, la oficina ya no cambia su clave */
+    if (!ms.exists || ms.data().role !== 'tcap') throw new HttpsError('failed-precondition', 'Esa cuenta ya no es de capataz del tareo: su contraseña la cambia el administrador.');
     await admin.auth().updateUser(au.uid, { password: P.clave });
   } else if (accion === 'desactivar') {
     if (au) { await admin.auth().updateUser(au.uid, { disabled: true }); await admin.auth().revokeRefreshTokens(au.uid); }

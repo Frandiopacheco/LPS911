@@ -65,6 +65,8 @@ const tsSum=(a,b)=>tR2((a||0)+(b||0));
 /** periodos de la ficha (ingreso/cese) → ¿activo el día f?, ¿ingresó / cesó ese día? */
 function tsFicha(dni){const f=(S.tper&&S.tper.get(dni))||null;const per=f?(Array.isArray(f.per)&&f.per.length?f.per:[{ing:f.ing,ces:f.ces}]):[];
   return{f,act:d=>!f?true:per.some(x=>(!x.ing||x.ing<=d)&&(!x.ces||d<=x.ces)),ing:d=>per.some(x=>x.ing===d),ces:d=>per.some(x=>x.ces===d)}}
+/** ¿el día cuenta para el dominical? laborado de lunes a sábado (también el feriado trabajado) o feriado no laborado; el domingo no */
+const tsDomOk=c=>c.dow!==0&&((c.h>0&&(!c.nl||c.fer))||c.code==='FE');
 /** asistencia, horas y HH por partida del periodo a..b con las publicaciones PB (Map fecha → pub). Solo valores; nada se escribe. */
 function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso();const fer=new Set((TC().fer)||[]);
   /* gente: quien figura en alguna publicación + los activos del máster en el periodo */
@@ -83,30 +85,40 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
   const W=[];const T={cost:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,mov:0,dsc:0,obreros:0,nov:0,sinTareo:0};
   for(const g of [...G.values()].sort(tpxCmp)){const F=tsFicha(g.dni);const cat=tsCat(g.cat);const d=[];
     const w={...g,cat,catN:tpxCat(g.cat)||'Otro',d,cost:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,dLab:0,mov:0,nov:false,altas:[]};
-    for(const f of days){const p=PB.get(f);const nl=p?!!p.nl:tNoLab(f);const c={f,code:'',h:0,hn:0,h60:0,h100:0,df:0,alt:false,pcs:[],mot:''};
+    for(const f of days){const p=PB.get(f);const nl=p?!!p.nl:tNoLab(f);const dow=pd(f).getUTCDay();
+      /* feriado: el de la configuración o el congelado en la publicación (cfg.fer); el día sin trabajo es FE (feriado) o D (descanso) */
+      const isF=fer.has(f)||!!(p&&p.cfg&&p.cfg.fer===true);const dsc=isF?'FE':'D';
+      const c={f,code:'',h:0,hn:0,h60:0,h100:0,df:0,alt:false,pcs:[],mot:'',nl,fer:isF,dow};
       if(!F.act(f)&&!(p&&RI.get(f).has(g.dni)))c.code='—';
-      else if(!p){c.code=f>hoy?'':nl?(fer.has(f)?'FE':'D'):'·'}
+      else if(!p){c.code=f>hoy?'':nl?dsc:'·'}
       else{const r=RI.get(f).get(g.dni);const ex=p.exc&&p.exc[g.dni];
         if(r&&r.as===true){const t=tpNum(r.trab),e=Math.min(t,tpNum(r.ext));c.h=t;c.alt=!!r.alt;
+          /* categoría y cuadrilla de ESE día (la fila publicada); el resumen del obrero muestra la última */
+          const rc=tsCat(r.cat||g.cat);c.cat=rc;c.catN=tpxCat(r.cat||g.cat)||'Otro';c.cua=r.cua||g.cua||'';
           if(nl&&P.df100){c.df=t}else{const h6=Math.min(P.he60h,e);c.h60=tR2(h6);c.h100=tR2(e-h6);c.hn=tR2(t-e)}
-          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(cat,f,c):0;c.hor=r.ent||r.sal||r.cor?`${r.ent?'entró '+r.ent:''}${r.sal?(r.ent?' · ':'')+'salió '+r.sal:''}${r.cor?' · corrido':''}`:'';
-          for(const[k,v]of Object.entries(r.h||{})){const h=tpNum(v);if(h>0){c.pcs.push([k,h]);pcAdd(k,cat,f,h,t>0?tR2(h*e/t):0,g.cua||'(sin cuadrilla)',t>0?c.cost*h/t:0);const m=(p.pcs||{})[k];if(m&&!pcsMeta[k])pcsMeta[k]=m}}}
-        else if(r){const m=r.mot||'';c.code=TS_MOT[m]||m;c.mot=m}
-        else if(ex){c.code=tpxExcCod(ex.motivo);c.mot=ex.motivo||''}
-        else c.code=nl?(fer.has(f)?'FE':'D'):'?'}
+          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(rc,f,c):0;c.hor=r.ent||r.sal||r.cor?`${r.ent?'entró '+r.ent:''}${r.sal?(r.ent?' · ':'')+'salió '+r.sal:''}${r.cor?' · corrido':''}`:'';
+          /* HE repartidas en proporción a las horas; el residuo del redondeo va a la última partida (la suma da exactamente e) */
+          const hs=Object.entries(r.h||{}).map(([k,v])=>[k,tpNum(v)]).filter(([,h])=>h>0);let eAc=0;
+          hs.forEach(([k,h],i)=>{const he=t>0?(i===hs.length-1?tR2(e-eAc):tR2(h*e/t)):0;eAc=tR2(eAc+he);c.pcs.push([k,h,he]);
+            pcAdd(k,rc,f,h,he,c.cua||'(sin cuadrilla)',t>0?c.cost*h/t:0);const m=(p.pcs||{})[k];if(m&&!pcsMeta[k])pcsMeta[k]=m})}
+        else if(r){const m=r.mot||'';c.code=TS_MOT[m]||m;c.mot=m;
+          /* en domingo o feriado, «no vino» sin motivo (o «Falta») no es falta: es su descanso o el feriado */
+          if(nl&&c.code==='F'){c.code=dsc;c.mot=''}}
+        else if(ex){c.code=tpxExcCod(ex.motivo);c.mot=ex.motivo||'';if(nl&&(c.code==='EX'||c.code==='F')){c.code=dsc;c.mot=''}}
+        else c.code=nl?dsc:'?'}
       d.push(c);
       w.hh=tsSum(w.hh,c.h);w.cost+=c.cost||0;w.hn=tsSum(w.hn,c.hn);w.h60=tsSum(w.h60,c.h60);w.h100=tsSum(w.h100,c.h100);w.df=tsSum(w.df,c.df);
       if(c.alt)w.alt++;if(c.code==='DM'||c.code==='DA')w.dm++;if(c.code==='F')w.f++;
-      if(c.h>0){w.dias++;w.mov++;if(!nl)w.dLab++}if(c.code==='FE')w.dLab++;
+      if(c.h>0){w.dias++;w.mov++}if(tsDomOk(c))w.dLab++;
       if(c.code==='IN'||c.code==='CE')w.altas.push([c.code,f]);
-      if(c.h>0&&g.cua){cuaM.set(g.cua,tsSum(cuaM.get(g.cua),c.h))}}
-    /* dominical: por semana, días laborados (lunes a sábado, con feriados no laborados) ÷ 6, tope 1 jornal */
-    const wk=new Map();d.forEach(c=>{if(c.h>0&&!(PB.get(c.f)||{}).nl||c.code==='FE'){const m=tpMon(c.f);wk.set(m,(wk.get(m)||0)+1)}});
-    w.dsc=tR2([...wk.values()].reduce((s,n)=>s+Math.min(6,n)/6,0));w.dscTxt=wk.size<=1?`${Math.min(6,[...wk.values()][0]||0)}/6`:toH(w.dsc);
+      if(c.h>0&&c.cua){cuaM.set(c.cua,tsSum(cuaM.get(c.cua),c.h))}}
+    /* dominical: por semana, días laborados de lunes a sábado (el feriado trabajado o no laborado cuenta; el domingo no) ÷ 6, tope 1 jornal */
+    const wk=new Map();d.forEach(c=>{if(tsDomOk(c)){const m=tpMon(c.f);wk.set(m,(wk.get(m)||0)+1)}});
+    w.dsc=Math.round([...wk.values()].reduce((s,n)=>s+Math.min(6,n)/6,0)*1e4)/1e4;w.dscTxt=wk.size<=1?`${Math.min(6,[...wk.values()][0]||0)}/6`:toH(w.dsc);
     w.nov=w.f>0||w.dm>0||w.h60+w.h100+w.df>0||w.alt>0||w.altas.length>0||d.some(c=>c.code&&!['A','D','·','','—'].includes(c.code));
     if(d.some(c=>c.code==='?'))w.sinT=true;
     W.push(w);
-    for(const k of['hh','hn','h60','h100','df'])T[k]=tsSum(T[k],w[k]);T.cost+=w.cost;T.alt+=w.alt;T.dm+=w.dm;T.f+=w.f;T.dias+=w.dias;T.mov+=w.mov;T.dsc=tR2(T.dsc+w.dsc);
+    for(const k of['hh','hn','h60','h100','df'])T[k]=tsSum(T[k],w[k]);T.cost+=w.cost;T.alt+=w.alt;T.dm+=w.dm;T.f+=w.f;T.dias+=w.dias;T.mov+=w.mov;T.dsc=Math.round((T.dsc+w.dsc)*1e4)/1e4;
     if(w.hh>0||d.some(c=>c.code&&!['·','','—','?','D'].includes(c.code)))T.obreros++;if(w.nov)T.nov++;if(w.sinT)T.sinTareo++}
   const pub=days.filter(f=>PB.has(f));
   return{a,b,days,pub,W,T,PC,pcsMeta,cua:cuaM,P}}
@@ -121,7 +133,10 @@ function tsPerBar(st,pre){const hoy=todayIso();const tipos=[['sem','Semana'],['q
   return`<div class="ts-per"><span class="seg" id="${pre}Tipo">${tipos.map(([k,l])=>`<button data-tst="${k}" class="${st.tipo===k?'on':''}">${l}</button>`).join('')}</span>
     ${st.tipo==='ran'?`<input class="tin" type="date" id="${pre}A" value="${esc(st.ref)}" max="${esc(hoy)}" aria-label="Desde"><span class="note">al</span><input class="tin" type="date" id="${pre}B" value="${esc(st.b2||st.ref)}" max="${esc(hoy)}" aria-label="Hasta">`
      :`<button class="ib" id="${pre}Prev" aria-label="Periodo anterior">‹</button><input class="tin" type="date" id="${pre}Ref" value="${esc(st.ref)}" max="${esc(hoy)}" aria-label="Un día del periodo"><button class="ib" id="${pre}Next" aria-label="Periodo siguiente">›</button>`}
-    <button class="ib" id="${pre}Par" title="Jornales, sobretasas, bonificaciones y códigos del régimen de construcción civil">⚙ Parámetros</button></div>`}
+    <button class="ib" id="${pre}Par" title="Jornales, sobretasas, bonificaciones y códigos del régimen de construcción civil">⚙ Parámetros</button></div>${tsCorte(st,pre)}`}
+/** aviso visible cuando el rango pasa el tope de tsAB (no se corta en silencio) */
+function tsCorte(st,pre){const[a,b0]=tsPeriodo(st.tipo,st.ref,st.b2);const n=tpDates(a,b0).length;if(n<=TS_MAXD)return'';const[,b]=tsAB(st);
+  return`<div class="callout t-warn" id="${pre}Corte">El rango elegido tiene ${n} días y se pueden ver hasta ${TS_MAXD} a la vez: se muestra del ${esc(fmtD(a))} al ${esc(fmtD(b))}. Para ver el resto, elige otro rango.</div>`}
 function tsPerBind(st,pre){const hoy=todayIso();const go=r=>{st.ref=r>hoy?hoy:r;requestRender()};
   const t=$('#'+pre+'Tipo');if(t)t.onclick=e=>{const b=e.target.closest('[data-tst]');if(!b)return;st.tipo=b.dataset.tst;if(st.tipo==='ran'&&!st.b2)st.b2=st.ref;requestRender()};
   const stp=d=>{const[a,b]=tsPeriodo(st.tipo,st.ref,st.b2);go(d<0?addD(a,-1):addD(b,1))};
@@ -131,5 +146,6 @@ function tsPerBind(st,pre){const hoy=todayIso();const go=r=>{st.ref=r>hoy?hoy:r;
   if(A)A.onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){st.ref=e.target.value;requestRender()}};
   if(B)B.onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){st.b2=e.target.value;requestRender()}};
   const par=$('#'+pre+'Par');if(par)par.onclick=()=>{TPLA.on=true;TPLA.from=U.tab;requestRender()}}
-/** periodo vigente del estado st (tope 93 días en rango) */
-function tsAB(st){let[a,b]=tsPeriodo(st.tipo,st.ref,st.b2);if(tpDates(a,b).length>93)b=addD(a,92);return[a,b]}
+/** periodo vigente del estado st (tope TS_MAXD días en rango; el mismo tope tiene el Excel formato anterior, tpxBajar) */
+const TS_MAXD=93;
+function tsAB(st){let[a,b]=tsPeriodo(st.tipo,st.ref,st.b2);if(tpDates(a,b).length>TS_MAXD)b=addD(a,TS_MAXD-1);return[a,b]}
