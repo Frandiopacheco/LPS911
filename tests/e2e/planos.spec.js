@@ -544,6 +544,11 @@ test('vínculos: propuestas desde un archivo (Claude): se cargan sin crear vínc
     ] },
     { archivo: 'OTRA-LAMINA', vinculos: [{ r: [1, 1, 2, 2], a: 'IS06' }] },
   ] };
+  // el nombre del PDF que usó Claude no es el de la lámina cargada, pero el código sí: se ubica igual (antes: «no encontrada»)
+  const Jcod = { formato: 'lps911-vinculos', v: 1, origen: 'Claude', laminas: [
+    { archivo: 'AG03_PLANTA_PRIMER_PISO_rev00-Model', cod: 'AG03', esp: 'ARQ', pt: [1191, 842],
+      vinculos: [{ r: [400, 300, 430, 330], a: 'IS06', t: 'Por código', c: 0.8 }] },
+  ] };
   const carga = () => page.setInputFiles('#plkpf', { name: 'propuestas.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(J)) });
   page.once('dialog', d => d.accept());
   await carga();
@@ -620,6 +625,11 @@ test('vínculos: propuestas desde un archivo (Claude): se cargan sin crear vínc
   await expect.poll(() => page.evaluate(() => plkLinks(PLB.get('ARQ_AG03')).length)).toBe(3);
   expect(await page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).length)).toBe(0);
   await expect(page.locator('#plkpall')).toBeDisabled();
+
+  // la lámina se ubica por su código cuando el nombre del archivo del JSON no es el de la lámina cargada
+  page.once('dialog', d => d.accept());
+  await page.setInputFiles('#plkpf', { name: 'cod.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(Jcod)) });
+  await expect.poll(() => page.evaluate(() => plkpList(PLB.get('ARQ_AG03')).map(x => x.t))).toEqual(['Por código']);
   noErrors(errors, 'propuestas de vínculos');
 });
 
