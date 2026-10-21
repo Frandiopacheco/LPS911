@@ -38,6 +38,27 @@ R_LAM = re.compile(r'L[AÁ]M(?:INA)?\.?\s*([A-Z]{1,3})\s*-?\s*(\d{1,3})')
 R_ESC = re.compile(r'^ESCALERA\s+(\d{1,2})$')
 R_BUB = re.compile(r'^([A-Z]|\d{1,2})$')
 
+# --- ambientes: rótulo de la planta → lámina de detalle de ese ambiente (oct 2026) ---
+R_UNID = re.compile(r'^(\d{1,2})\s*UNID\.?$')          # «1 unid.» debajo del título del ambiente en las láminas de detalle
+R_SH = re.compile(r'^(?:SS?\.?\s?HH?\.?|BA[NÑ]O)\s*\.?\s*'   # SH / S.H. / SSHH / BAÑO
+                  r'(H|M|V|HOM(?:BRES?)?|MUJ(?:ERES?)?|VAR(?:ONES?)?|DISC(?:APACITADOS?)?|MIXTO)?'
+                  r'\.?\s*(\d{1,2})?\.?$')
+PISOS = [('SOTANO', 'S'), ('1ER PISO', '1'), ('PRIMER PISO', '1'), ('2DO PISO', '2'), ('SEGUNDO PISO', '2'),
+         ('3ER PISO', '3'), ('TERCER PISO', '3'), ('4TO PISO', '4'), ('CUARTO PISO', '4'), ('AZOTEA', 'A')]
+GEN = {'H': 'H', 'HOM': 'H', 'HOMBRE': 'H', 'HOMBRES': 'H', 'V': 'H', 'VAR': 'H', 'VARON': 'H', 'VARONES': 'H',
+       'M': 'M', 'MUJ': 'M', 'MUJER': 'M', 'MUJERES': 'M', 'DISC': 'D', 'DISCAPACITADO': 'D', 'DISCAPACITADOS': 'D'}
+# palabras que no distinguen un ambiente (no sirven para emparejar por nombre)
+STOP = {'SH', 'SSHH', 'BANO', 'BANOS', 'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'Y', 'EN', 'PISO', 'PISOS', 'SOTANO',
+        'AZOTEA', 'UNID', 'PLANTA', 'CORTE', 'ELEVACION', 'DETALLE', 'DET', 'ESC', 'NIVEL', 'TIPO', 'AREA', 'CTO',
+        'CUARTO', 'SALA', 'HALL', 'CIRCULACION', 'DUCTO', 'ESCALERA', 'LOBBY', 'PLAZA', 'CORREDOR', 'ESCLUSA'}
+
+def floors_in(t):
+    """pisos nombrados en un texto («1ER PISO, 2DO PISO Y 3ER PISO» → {1,2,3})"""
+    return {c for w, c in PISOS if w in t}
+
+def words_of(t):
+    return {w for w in re.split(r'[^A-Z0-9]+', t) if len(w) > 2 and w not in STOP and not w.isdigit()}
+
 def key_of(t):
     t = norm(t)
     m = R_CORTE.match(t)
@@ -96,7 +117,7 @@ def sheet_data(path):
     W, H = p.rect.width, p.rect.height
     return doc, p, lines, W, H
 
-def drawing_zone(p, tl, W, H, cache):
+def drawing_zone(p, tl, W, H, cache, up=15):
     """el dibujo encima del título: componentes conexos de la hoja rasterizada. La resolución sigue al tamaño del título
     (≈ 18 dpi con títulos de 18 pt; más fina en láminas de dibujos chicos, p. ej. baños con títulos de 6 pt, para no unirlos)"""
     title = tl['r']; sc = round(0.25 * max(1.0, min(4.0, 18.0 / max(tl.get('gs', 18), 1))), 3)
@@ -109,7 +130,7 @@ def drawing_zone(p, tl, W, H, cache):
         cache[key] = (lab, ndimage.find_objects(lab), ink.shape)
     lab, objs, (h, w) = cache[key]
     tx0, ty0, tx1, ty1 = [int(v * sc) for v in (title.x0, title.y0, title.x1, title.y1)]
-    band = lab[max(0, ty0 - 15):max(1, ty0 + 1), max(0, tx0 - 4):min(w, tx1 + 30)]
+    band = lab[max(0, ty0 - up):max(1, ty0 + 1), max(0, tx0 - 4):min(w, tx1 + 30)]
     ids = set(np.unique(band)) - {0}
     box = None
     for i in ids:
@@ -122,6 +143,133 @@ def drawing_zone(p, tl, W, H, cache):
         return [title.x0 - 120, title.y0 - 500, title.x1 + 500, title.y1 + 30], False
     z = [box[0] / sc, box[1] / sc, box[2] / sc, max(box[3] / sc, title.y1 + 10)]
     return [max(0, z[0]), max(0, z[1]), min(W, z[2]), min(H, z[3])], True
+
+def blocks_of(lines, sel, gap=1.6):
+    """junta en un bloque las líneas de `sel` que van una debajo de otra, en la misma columna y del mismo tamaño
+    (los rótulos de las plantas vienen partidos: «SALA DE» / «CONTROL Y» / «MONITOREO»)"""
+    L = sorted(sel, key=lambda l: (round(l['r'].y0, 1), l['r'].x0))
+    B, used = [], set()
+    for l in L:
+        if id(l) in used: continue
+        used.add(id(l)); grp = [l]
+        while True:
+            last = grp[-1]; h = max(last['r'].height, 1)
+            nxt = [o for o in L if id(o) not in used and abs(o['size'] - last['size']) < 0.2 * last['size']
+                   and 0 <= o['r'].y0 - last['r'].y1 < gap * h
+                   and abs((o['r'].x0 + o['r'].x1) / 2 - (last['r'].x0 + last['r'].x1) / 2) < 0.75 * max(last['r'].width, o['r'].width)]
+            if not nxt: break
+            nxt.sort(key=lambda o: o['r'].y0); used.add(id(nxt[0])); grp.append(nxt[0])
+        r = grp[0]['r'].__class__(min(g['r'].x0 for g in grp), min(g['r'].y0 for g in grp),
+                                 max(g['r'].x1 for g in grp), max(g['r'].y1 for g in grp))
+        B.append({'t': ' '.join(g['t'] for g in grp), 'n': norm(' '.join(g['t'] for g in grp)),
+                  'size': grp[0]['size'], 'gs': grp[0].get('gs', grp[0]['size']), 'r': r, 'top': grp[0], 'ls': grp})
+    return B
+
+def amb_zone(s, tl):
+    """zona del ambiente en su lámina de detalle: el dibujo (la planta del baño) que está sobre el título.
+    Si el dibujo toca el marco de la lámina, su componente conexo abarca la hoja entera y `drawing_zone` lo descarta:
+    queda solo el propio rótulo. `amb_zones_fix` lo detecta y lo arregla (o propone la lámina entera)."""
+    best = None
+    for up in (15, 45):
+        z, ok = drawing_zone(s['p'], tl, s['W'], s['H'], s['cache'], up=up)
+        if not ok: continue
+        if best is None or z[1] < best[0][1]: best = (z, ok)
+        if zone_ok(z, tl): return z, ok
+    return best if best else drawing_zone(s['p'], tl, s['W'], s['H'], s['cache'])
+
+def zone_ok(z, tl):
+    """la zona abarca el dibujo (sube bastante por encima del título), no solo el rótulo"""
+    return tl['r'].y0 - z[1] >= 1.5 * max(tl['r'].height, 1)
+
+GENW = {'HOMBRE': 'H', 'HOMBRES': 'H', 'VARONES': 'H', 'MUJER': 'M', 'MUJERES': 'M', 'DISCAPACITADOS': 'D', 'DISC': 'D'}
+
+def owned_labels(s, a, T):
+    """rótulos que están dentro del dibujo de este ambiente: en estas láminas cada dibujo lleva su título debajo,
+    así que un texto pertenece al dibujo cuyo título es el primero que aparece debajo de él, en su misma columna."""
+    out = []
+    for l in s['lines']:
+        if l.get('title') or l['size'] < 4: continue
+        W = {w for w in re.split(r'[^A-Z]+', l['n']) if len(w) > 2}
+        if not (W & a['words']) and not ({GENW[w] for w in W if w in GENW} & a['gens']): continue
+        if l['r'].y1 >= a['tl']['r'].y0: continue
+        below = [t for t in T if t['r'].y0 > l['r'].y1 and t['r'].x0 < l['r'].x1 + 20 and t['r'].x1 > l['r'].x0 - 20]
+        if not below: continue
+        if min(below, key=lambda t: t['r'].y0) in a['tls']: out.append(l)
+    return out
+
+def has_label(z, L):
+    return any(l['r'].x0 >= z[0] - 2 and l['r'].x1 <= z[2] + 2 and l['r'].y0 >= z[1] - 2 and l['r'].y1 <= z[3] + 2 for l in L)
+
+def amb_zones_fix(A, S):
+    """revisa la zona de cada ambiente. Es buena si abarca el dibujo y contiene algún rótulo del propio dibujo
+    («SH MUJERES» dentro de la planta). Si no, se usa el tamaño típico de los demás ambientes de esa lámina
+    (todos los baños de una lámina van a la misma escala) y, si tampoco se puede, se propone la lámina entera."""
+    for cod in {a['cod'] for a in A}:
+        s = S[cod]; G = [a for a in A if a['cod'] == cod]
+        T = [l for l in s['lines'] if l.get('title')]
+        good = []
+        for a in G:
+            a['lbls'] = owned_labels(s, a, T)
+            if a['zok'] and zone_ok(a['zone'], a['tl']) and has_label(a['zone'], a['lbls']): good.append(a)
+        med = lambda v: sorted(v)[len(v) // 2]
+        if good:
+            bw = med([a['zone'][2] - a['zone'][0] for a in good]); bh = med([a['zone'][3] - a['zone'][1] for a in good])
+        for a in G:
+            if a in good: continue
+            z = None
+            if good:
+                r = a['tl']['r']; cx = (r.x0 + r.x1) / 2
+                z = [max(0, cx - bw / 2), max(0, r.y1 + 10 - bh), min(s['W'], cx + bw / 2), min(s['H'], r.y1 + 10)]
+                if a['lbls'] and not has_label(z, a['lbls']): z = None
+            if z is None or (z[2] - z[0]) * (z[3] - z[1]) > 0.45 * s['W'] * s['H']:
+                a['zone'], a['zok'], a['zfix'] = None, False, True    # sin zona confiable: la lámina entera
+            else:
+                a['zone'], a['zok'], a['zfix'] = z, True, True
+
+def amb_index(S):
+    """ambientes dibujados en las láminas de detalle: el título que lleva «N unid.» debajo. De
+    «SH HOMBRE MUJERES Y DISCAPACITADOS 1 - 1ER PISO, 2DO PISO Y 3ER PISO» saca pisos {1,2,3}, grupo 1 y géneros {H,M,D}."""
+    A = []
+    for s in S.values():
+        if 'PLANTA' in s['tit']: continue
+        for u in s['lines']:
+            if not R_UNID.match(u['n']): continue
+            sl = max(30.0, 3 * u['r'].height)   # el «1 unid.» va corrido respecto al título: basta que se solapen en x
+            up = [l for l in s['lines'] if l is not u and l.get('title') and l['size'] >= 11
+                  and not key_of(l['t'])[0] and l['r'].x0 < u['r'].x1 + sl and l['r'].x1 > u['r'].x0 - sl
+                  and 0 < u['r'].y0 - l['r'].y0 < 5 * max(u['r'].height, 1)]
+            if not up: continue
+            up.sort(key=lambda l: l['r'].y0)
+            name = norm(' '.join(l['t'] for l in up))
+            if not re.search(r'\bS\.?S?\.?HH?\.?\b|\bBA[NÑ]O', name): continue   # por ahora solo baños
+            head = re.split(r'\s+-\s+|\s-\s|,', name)[0]
+            mg = re.search(r'\b(\d{1,2})\s*$', head)
+            gens = {GEN[w] for w in re.split(r'[^A-Z]+', name) if w in GEN}
+            A.append({'cod': s['cod'], 'name': name, 'head': head, 'pis': floors_in(name), 'num': mg.group(1) if mg else None,
+                      'gens': gens, 'words': words_of(head), 'tl': up[0], 'tls': up, 'n': int(R_UNID.match(u['n']).group(1))})
+    for a in A:
+        a['zone'], a['zok'] = amb_zone(S[a['cod']], a['tl'])
+    amb_zones_fix(A, S)
+    return A
+
+def amb_match(lbl, pis, A):
+    """a qué ambiente de detalle remite un rótulo de la planta. Devuelve (ambiente, confianza, motivo) o None."""
+    C = [a for a in A if not a['pis'] or not pis or (pis & a['pis'])]
+    if not C: return None
+    m = R_SH.match(lbl)
+    if m:   # «SH H. 1», «SH M. 2», «SH DISC.»
+        g = GEN.get((m.group(1) or '').rstrip('.'), None); num = m.group(2)
+        H = [a for a in C if (not g or g in a['gens']) and (not num or a['num'] == num)]
+        if len(H) == 1:
+            return H[0], (0.85 if num and g else 0.75), f"baño {('grupo ' + num + ' ') if num else ''}en «{H[0]['name'][:46]}»"
+        return None
+    W = words_of(lbl)   # rótulo con nombre propio: «LACTARIO», «GARITA 2», «SALA DE CONTROL Y MONITOREO»
+    if not W: return None
+    H = [a for a in C if W <= a['words']]
+    nm = re.search(r'\b(\d{1,2})\b', lbl)   # «GARITA 1» y «GARITA 2» se distinguen por el número
+    if nm: H = [a for a in H if re.search(r'\b' + nm.group(1) + r'\b', a['head'])]
+    if len(H) != 1: return None
+    return H[0], 0.8, f"el baño de «{H[0]['name'][:46]}»"
 
 def main():
     ap = argparse.ArgumentParser()
@@ -157,6 +305,8 @@ def main():
         for l in s['lines']:
             m = R_ESC.match(l['n'])
             if m: ESC.setdefault(m.group(1), set()).add(s['cod'])
+    # ambientes con lámina de detalle propia (hoy: baños)
+    AMB = amb_index(S)
 
     def best_of(C, s, r):
         """varios títulos iguales en la lámina («CORTE 4 - SH LACTARIO», «CORTE 4 - SH SALA DE CONTROL»): gana el que comparte
@@ -211,6 +361,20 @@ def main():
         def add(r, to, ar, t, c, m):
             L.append({'r': [round(v, 1) for v in r], 'a': to, **({'ar': [round(v, 1) for v in ar]} if ar else {}), 't': t, 'c': c, 'm': m})
             rows.append([s['cod'], t, to, c, m])
+        # rótulo de ambiente en una planta → su lámina de detalle (hoy: baños). El rótulo puede venir partido en varias líneas.
+        if 'PLANTA' in s['tit'] and AMB:
+            pis = floors_in(s['tit'].replace('_', ' '))
+            lbl = [l for l in s['lines'] if not l.get('title') and 4 < l['size'] < 13 and len(l['n']) > 1
+                   and re.match(r'^[A-Z0-9][A-Z0-9 .\'/-]*$', l['n']) and not re.match(r'^[\d .,\'/-]+$', l['n'])]
+            for b in blocks_of(s['lines'], lbl):
+                res = amb_match(b['n'], pis, AMB)
+                if not res: continue
+                a, c, why = res
+                if a['cod'] == s['cod']: continue
+                pad = max(2.0, 0.35 * b['r'].height)
+                cz = 1 if a['zok'] and not a.get('zfix') else 0.9
+                add([b['r'].x0 - pad, b['r'].y0 - pad, b['r'].x1 + pad, b['r'].y1 + pad], a['cod'], a['zone'],
+                    b['t'][:40], round(c * cz, 2), 'rótulo ' + b['t'][:28] + ' → ' + why + (' (zona aproximada)' if a.get('zfix') else ''))
         for l in s['lines']:
             r = l['r']
             # burbuja de corte
