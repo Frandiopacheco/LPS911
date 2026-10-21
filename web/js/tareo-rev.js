@@ -92,8 +92,9 @@ function trValidaH(d){d=d||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg
 /** cálculo y validación para la oficina: tCalc/tValida (tareo.js); para modo:'hrs', el respaldo local si tareo.js aún no lo sabe */
 const trOwnH=d=>trHrs(d)&&typeof tHrsTot!=='function';
 const trCalc=d=>trOwnH(d)?trCalcH(d):tCalc(d);
-/* el horario que no cuadra (k 'hor', 20-10-2026) bloquea el envío del capataz; en la oficina es un aviso: la oficina corrige con criterio */
-const trValida=d=>(trOwnH(d)?trValidaH(d):tValida(d)).map(e=>e.k==='hor'?{...e,warn:true}:e);
+/* el horario que no cuadra (k 'hor', 20-10-2026) bloquea el envío del capataz; en la oficina es un aviso: la oficina corrige con criterio.
+   Una hora no válida o la salida igual a la entrada (e.bad, auditoría 21-10-2026) bloquea también en la oficina. */
+const trValida=d=>(trOwnH(d)?trValidaH(d):tValida(d)).map(e=>e.k==='hor'&&!e.bad?{...e,warn:true}:e);
 const trAsW=v=>v===true?'vino':v===false?'faltó':'sin marcar';
 /** resumen corto de lo que cambió una corrección (para hist.cam). Vale para los dos modos (bloques y horas). */
 function tCam(a,b){const o=[];const pc=x=>{const p=x&&S.tpc.get(x);return p?p.cod:(x||'sin partida')};
@@ -131,7 +132,9 @@ function tDetAll(a,b){const o=[];const ra=a.rows||{},rb=b.rows||{};const nv=x=>x
     for(const d of ya)if(!xa.has(d))o.push({blq:id||'',dni:d,campo:'obrero',antes:true,despues:false})}
   for(const[id,y]of A)if(!B.has(id))o.push({blq:id||'',campo:'bloque',antes:bs(y),despues:null});
   for(const d of new Set([...Object.keys(ra),...Object.keys(rb)])){const x=rb[d],y=ra[d];
-    if(!x||!y){o.push({dni:d,campo:'fila',antes:!!y,despues:!!x});continue}
+    /* fila agregada (auditoría 21-10-2026): despues guarda lo que trae (asistencia, horas, horario) para que el historial sirva de respaldo */
+    if(!x||!y){const H={};for(const[p,v]of Object.entries((x&&x.h)||{})){const n=trHv(v);if(n)H[p]=n}
+      o.push({dni:d,campo:'fila',antes:!!y,despues:x?{as:x.as===true?true:x.as===false?false:null,h:H,ent:nv(x.ent),sal:nv(x.sal),cor:x.cor===true}:false});continue}
     const as=v=>v===true?true:v===false?false:null;if(as(y.as)!==as(x.as))o.push({dni:d,campo:'as',antes:as(y.as),despues:as(x.as)});
     if(nv(y.mot)!==nv(x.mot))o.push({dni:d,campo:'mot',antes:nv(y.mot),despues:nv(x.mot)});
     if(!!y.alt!==!!x.alt)o.push({dni:d,campo:'alt',antes:!!y.alt,despues:!!x.alt});
@@ -928,7 +931,7 @@ function txVal(R,col){const{x,r,c}=R;const pres=x.as===true;if(col.pc)return x.h
     case'as':return x.as===true?'Vino':x.as===false?(x.mot||'No vino'):'';
     case'tot':return pres?(c.trab||0):'';case'he':return pres&&c.ext?c.ext:'';case'fdo':return R.b&&R.b.as===true?trHrsTot(R.b):'';
     case'alt':return pres&&x.alt?'A':'';
-    case'ent':case'sal':return pres&&R.hr?R.hr[col.k]:'';case'cor':return pres&&x.cor?'Sí':'';
+    case'ent':case'sal':return pres?(R.hr?R.hr[col.k]:x[col.k]||''):'';case'cor':return pres&&x.cor?'Sí':'';
     case'hes':return pres&&R.hx&&R.hx.sal?R.hx.sal:'';case'hec':return pres&&R.hx&&R.hx.cor?R.hx.cor:'';
     case'obs':return R.ob.map(o=>TR_TAG[o.k]||'Revisar').join(', ')}return''}
 const txRaw=(R,col)=>{const v=txVal(R,col);return v==null?'':String(v)};
@@ -965,7 +968,9 @@ function txTd(R,col,X){const{x,r,c,d}=R;const pres=x.as===true;const v=txVal(R,c
     case'he':id=` id="trhe_${esc(d)}"`;h=pres&&c.ext?toH(c.ext):'';break;
     case'fdo':h=v===''?'':toH(v);cls+=R.tch?' tx-fdc':' tx-mu';break;
     case'alt':h=pres&&x.alt?'<b>(A)</b>':'';break;
-    case'ent':case'sal':if(pres&&R.hr){h=esc(R.hr[col.k]);if(!x[col.k])cls+=' tx-mu';if(R.hr.bad)cls+=' tx-bad'}break;
+    case'ent':case'sal':if(pres&&R.hr){h=esc(R.hr[col.k]);if(!x[col.k])cls+=' tx-mu';if(R.hr.bad)cls+=' tx-bad'}
+      /* sin horario que comparar (no laborable sin las dos horas): se muestra lo escrito tal cual */
+      else if(pres&&x[col.k])h=esc(x[col.k]);break;
     case'cor':h=pres&&x.cor?'<b>Sí</b>':'';break;
     case'hes':case'hec':h=v?toH(v):'';if(v)cls+=' tx-hx';break;
     case'obs':h=R.ob.map(o=>`<span class="tr-tg${o.bl?' tr-tgb':''}" data-k="${esc(o.k)}" title="${esc(o.msg)}">${esc(TR_TAG[o.k]||'Revisar')}</span>`).join('');cls+=' tx-ob';break;

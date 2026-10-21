@@ -728,6 +728,8 @@ Pedido del dueño: Costos y RR.HH. ven toda la información en la app, en vivo (
 - **Ficha**: `afp` (ONP / AFP …) y `hij` (N.° de hijos) en el formulario de Personal.
 - Pruebas: `tareo-rrhh.spec.js` (datos en `tareo-datos.js`, compartidos con `tareo-pub.spec.js`); reglas: trh y `tcfg/pla`.
 
+**Auditoría (21-10-2026):** en domingo/feriado publicado (`p.nl`, feriado = `TC().fer` o `p.cfg.fer`) quien no trabajó sin motivo real (no vino, «Falta», excepción, no figura) sale D/FE, no F/EX/?; `tpxExcCod('Falta…')`='F'. Dominical (`tsDomOk`): lunes–sábado laborado, feriado trabajado o FE; domingo no; se guarda con 4 decimales. Categoría y cuadrilla **del día** (`c.cat`/`c.cua`) para HH por partida, costo y cuadrilla; HE por partida con el residuo en la última (suma exacta, `c.pcs` = `[id,h,he]`). DM del año (`trhDmAnio(y,hasta)`): filas + excepciones DM, año del inicio del periodo, hasta el fin del periodo (`trhDmRango`); `dmTope` marca cuándo dejan de contar para beneficios; `avisoUA` apaga los controles de UA (Costos y Excel). UA: la congelada en la publicación (`tcoPc`), `tpxUaP` quita solo `-n`/`-nn`. Rango: tope común `TS_MAXD` (93) en pantalla y `tpxBajar`, con aviso `#trhCorte`/`#tcoCorte`. Excel formato anterior: H60 = `he60h` de Parámetros y 0 en no laborable; «D» solo en día pasado y activo; fila/columna «Otros» en la hoja del día si hay horas sin OP/OF/PE. Asignación escolar sin categoría de jornal: la del peón.
+
 **Transición (21-10-2026, dueño):** RR.HH. y Costos tienen también «Excel formato anterior» (`#trhXo`/`#tcoXo` → `tpxBajar`: semana o rango de los días publicados) junto a «Exportar Excel», hasta que se defina el formato nuevo.
 
 ## Capataz: horario y carga rápida (20-10-2026)

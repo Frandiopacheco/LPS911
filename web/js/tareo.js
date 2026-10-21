@@ -231,16 +231,19 @@ function tHrsIni(d,D){const j=D.j||(d.cfg&&d.cfg.v===1&&d.cfg.jor&&d.cfg.jor.ini
 /** salida estimada: inicio + horas trabajadas, saltando la ventana de refrigerio del día si el tramo la cruza (solo para cotejar con garita) */
 function tHrsFin(ini,trab,rw){const s=tMin(ini);if(s==null||!(trab>0))return'';let e=s+Math.round(trab*60);
   if(rw){if(s<rw[0]&&e>rw[0])e+=rw[1]-rw[0];else if(s>=rw[0]&&s<rw[1])e+=rw[1]-s}
-  e=Math.min(e,1439);return String(Math.floor(e/60)).padStart(2,'0')+':'+String(e%60).padStart(2,'0')}
-/** tCalc de modo:'hrs': presente → trab = suma de h, ext = max(0, trab − jornada) (no laborable: todo extra), ini = inicio de la
-    jornada, fin = sal o la estimada. No vino / sin marcar: 0 h, pero conserva h (si vuelve a «vino» recupera sus horas). */
-function tCalcHrs(d){const f=d.date||todayIso();const D=tDia(f,d.cfg);const rows={};const ini=tHrsIni(d,D);
+  /* pasada la medianoche es la hora del día siguiente (auditoría 21-10-2026: antes se cortaba en 23:59) */
+  e%=1440;return String(Math.floor(e/60)).padStart(2,'0')+':'+String(e%60).padStart(2,'0')}
+/** tCalc de modo:'hrs': presente → trab = suma de h, ext = max(0, trab − jornada) (no laborable: todo extra). ini = su entrada (tHorRow;
+    sin horario, el inicio de la jornada de referencia); fin = su salida si la escribió o si sus horas cuadran con su horario; si no, la
+    estimada desde su entrada (sin refrigerio si fue corrido). No vino / sin marcar: 0 h, pero conserva h (si vuelve a «vino» las recupera). */
+function tCalcHrs(d){const f=d.date||todayIso();const D=tDia(f,d.cfg);const rows={};const ini0=tHrsIni(d,D);
   for(const[dni,r0]of Object.entries(d.rows||{})){const r={...r0};const h={};
     for(const[k,v]of Object.entries(r.h||{})){const n=tHv(v);if(n)h[k]=tR2(n)}
     r.h=h;
     if(r.as!==true){Object.assign(r,{ini:'',fin:'',trab:0,ext:0});rows[dni]=r;continue}
-    const trab=tHrsTot(r);const sal=/^\d{1,2}:\d{2}$/.test(r.sal||'')?r.sal:'';
-    Object.assign(r,{ini:trab?ini:'',fin:trab?(sal||tHrsFin(ini,trab,D.rw)):'',trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))});rows[dni]=r}
+    const trab=tHrsTot(r);const HR=tHorRow(r,f,d.cfg);const ok=HR&&!HR.bad;const ini=ok?HR.ent:ini0;
+    const fin=!trab?'':ok&&(tHmOk(r.sal)||Math.abs(HR.h-trab)<=0.01)?HR.sal:tHmOk(r.sal)?r.sal:tHrsFin(ini,trab,ok&&HR.cor?null:D.rw);
+    Object.assign(r,{ini:trab?ini:'',fin,trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))});rows[dni]=r}
   return{...d,rows}}
 /** tValida de modo:'hrs' → [{dni|null, k, msg, warn?}]. k: vacio · pcs (presentes sin trabajos del día) · marca · sinh (vino con 0 h) ·
     hval (valor no válido) · hmax (> 16 h: error de digitación) · bloq (partida bloqueada con horas) · foto; parcial (warn, no bloquea). */
@@ -262,7 +265,8 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
     if(t>T_HMAX){out.push({dni,k:'hmax',msg:`${nm(dni)}: ${tHtxt(t)} h en el día. Revisa las horas (máximo ${T_HMAX}).`});continue}
     /* horario (20-10-2026): las horas en partidas tienen que ser las que da su horario (entrada a salida, menos refrigerio salvo corrido) */
     const HR=tHorRow(r,d.date||todayIso(),d.cfg);
-    if(HR&&HR.bad){out.push({dni,k:'hor',msg:`${nm(dni)}: la salida (${HR.sal}) tiene que ser después de la entrada (${HR.ent}).`});continue}
+    /* bad: hora no válida o salida igual a la entrada (bloquea también en la oficina: trValida) */
+    if(HR&&HR.bad){out.push({dni,k:'hor',bad:true,msg:HR.inv?`${nm(dni)}: la hora de entrada o de salida no es válida (${HR.ent}–${HR.sal}).`:`${nm(dni)}: la salida (${HR.sal}) no puede ser igual a la entrada (${HR.ent}).`});continue}
     if(HR&&Math.abs(HR.h-t)>0.01){out.push({dni,k:'hor',hor:HR.h,msg:`${nm(dni)}: en partidas ${tHtxt(t)} h, su horario (${HR.ent}–${HR.sal}${HR.cor?', corrido':''}) da ${tHtxt(HR.h)} h. Corrige las horas o su hora de salida.`});continue}
     if(!D.nl&&D.jh>0&&t<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(t)} h de ${tHtxt(D.jh)}`})}
   if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});

@@ -37,7 +37,7 @@ function renderTRh(main){if(TPLA.on)return renderTPla(main);
   $('#trhX').onclick=()=>{if(typeof tsxBajar==='function')tsxBajar('rrhh',a,b,TRH.tipo);else toast('El Excel nuevo llega en la próxima versión.')};
   const q=$('#trhQ');if(q){q.oninput=()=>{TRH.q=q.value;trhFiltrar()};$('#trhCua').onchange=e=>{TRH.cua=e.target.value;requestRender()};$('#trhCat').onchange=e=>{TRH.cat=e.target.value;requestRender()};$('#trhNov').onchange=e=>{TRH.nov=e.target.checked;requestRender()}}
   const tb=$('#trhTb');if(tb)tb.onclick=e=>{const r=e.target.closest('[data-trhd]');if(r){TRH.sel=TRH.sel===r.dataset.trhd?'':r.dataset.trhd;requestRender()}};
-  const dmb=$('#trhDmY');if(dmb)dmb.onclick=()=>trhDmAnio(b.slice(0,4));
+  const dmb=$('#trhDmY');if(dmb)dmb.onclick=()=>{const K=trhDmRango(R);trhDmAnio(K.y,K.hasta)};
   const cx=$('#trhDetX');if(cx)cx.onclick=()=>{TRH.sel='';requestRender()}}
 
 /* búsqueda sin redibujar (no pierde el foco) */
@@ -67,7 +67,7 @@ function trhAlertas(R){const T=R.T,P=R.P,hoy=todayIso();const L=[];const dot=c=>
   if(T.f)L.push([dot('var(--bad)'),`${T.f} ${T.f===1?'falta':'faltas'} sin motivo`,'Si hay sustento (descanso médico, permiso…), cambia el motivo en el tareo del día y vuelve a publicar.']);
   if(T.sinTareo)L.push([dot('var(--bad)'),`${T.sinTareo} activos sin tareo algún día`,'Figuran «?»: están en el máster pero no en la publicación. Revisa si cesaron o falta su motivo.']);
   if(T.dm){let s='Para saber si alguno pasó los '+P.dmEmp+' días del año (desde el siguiente paga EsSalud), abre «Descansos médicos».';
-    if(TRH.dmY){const cerca=R.W.filter(w=>w.dm&&(TRH.dmY.m.get(w.dni)||0)>=P.dmEmp-2);if(cerca.length)s=cerca.map(w=>`${w.ape||w.dni}: ${TRH.dmY.m.get(w.dni)} de ${P.dmEmp}`).join(' · ')}
+    if(trhDmVal(R)){const cerca=R.W.filter(w=>w.dm&&(TRH.dmY.m.get(w.dni)||0)>=P.dmEmp-2);if(cerca.length)s=cerca.map(w=>`${w.ape||w.dni}: ${TRH.dmY.m.get(w.dni)} de ${P.dmEmp}`).join(' · ')}
     L.push([dot('var(--accent)'),`${T.dm} ${T.dm===1?'día':'días'} de descanso médico`,s])}
   if(T.df)L.push([dot('var(--warn)'),`${toH(T.df)} h en domingo o feriado`,P.df100?'Van todas al 100 % (doble jornal).':'']);
   const hhPc=tR2([...R.PC.values()].reduce((s,o)=>s+o.tot,0));
@@ -76,7 +76,7 @@ function trhAlertas(R){const T=R.T,P=R.P,hoy=todayIso();const L=[];const dot=c=>
 
 function trhDet(R){const w=TRH.sel&&R.W.find(x=>x.dni===TRH.sel);if(!w)return'';const t=S.tper&&S.tper.get(w.dni)||{};const PB=tsePB('rh');
   const pn=(f,k)=>{const p=PB.get(f);const m=p&&(p.pcs||{})[k];return m?`${m.cod} ${m.nom}`:(S.tpc&&S.tpc.get(k)?`${S.tpc.get(k).cod} ${S.tpc.get(k).nom}`:k)};
-  const fi=[w.catN,w.cua,w.capN?('Capataz '+w.capN):'',t.ing?'ingresó '+tFmt(t.ing):'',t.hij!=null&&t.hij!==''?`${t.hij} ${+t.hij===1?'hijo':'hijos'}`:'',t.afp||''].filter(Boolean).join(' · ');
+  const fi=[w.catN,w.cua,w.capN?('Capataz '+w.capN):'',t.ing?'ingresó '+tFmt(t.ing):'',(q=>q.hij!=null?`${q.hij} ${+q.hij===1?'hijo':'hijos'}`:'')(tPriv(w.dni)),tPriv(w.dni).afp||''].filter(Boolean).join(' · ');
   return`<div class="card ts-det" id="trhDet"><div class="tp-bh"><b>${esc([w.ape,w.nom].filter(Boolean).join(', '))}</b><button class="kx" id="trhDetX" aria-label="Cerrar detalle">&times;</button></div>
     <div class="note">DNI <span class="mono">${esc(w.dni)}</span>${fi?' · '+esc(fi):''}</div>
     <ul class="ts-ul ts-dl">${w.d.filter(c=>c.code&&c.code!=='—').map(c=>`<li><b>${esc(tsDiaL(c.f))}</b><span>${c.pcs.length?c.pcs.map(([k,h])=>`${esc(pn(c.f,k))} · ${toH(h)} h`).join('<br>'):esc(c.code==='·'?'Sin publicar':c.mot?(TO_MOT[c.mot]||c.mot):c.code==='D'?'Descanso':c.code==='?'?'No figura en la publicación':c.code)}${c.alt?' · ▲ altura':''}${c.hor?`<br><span class="note">${esc(c.hor)}</span>`:''}${c.h60||c.h100||c.df?`<br><span class="note">HE ${toH(c.h60+c.h100)}${c.df?` · dom/fer ${toH(c.df)}`:''}</span>`:''}</span><span class="mono">${c.h?toH(c.h):''}</span></li>`).join('')}
@@ -91,24 +91,30 @@ function trhAltas(R){const L=[];if(S.tper)for(const t of S.tper.values()){if(t.a
     <p class="pad note">Salen del máster de Personal (fecha de ingreso y de cese de cada periodo). Para corregir una fecha, edita la ficha.</p>`}
 
 /* descansos médicos del periodo y, a pedido, los días acumulados en el año (lee las publicaciones del año: tarda unos segundos) */
-function trhDM(R){const P=R.P;const L=R.W.filter(w=>w.dm).map(w=>({w,dias:w.d.filter(c=>c.code==='DM'||c.code==='DA').map(c=>tsDiaL(c.f))}));const Y=TRH.dmY&&TRH.dmY.y===R.b.slice(0,4)?TRH.dmY:null;
-  return`<div class="pad t-bar"><span class="note">La empresa paga los primeros ${P.dmEmp} días de descanso médico del año; desde el siguiente, el subsidio lo reconoce EsSalud. Hasta ${P.dmTope} días al año cuentan para gratificaciones, CTS, vacaciones y asignación escolar.</span>
-    <button class="ib" id="trhDmY"${TRH.dmBusy?' disabled':''}>${TRH.dmBusy?'Contando…':Y?`Volver a contar ${esc(R.b.slice(0,4))}`:`Contar los días del año ${esc(R.b.slice(0,4))}`}</button></div>
+function trhDM(R){const P=R.P;const L=R.W.filter(w=>w.dm).map(w=>({w,dias:w.d.filter(c=>c.code==='DM'||c.code==='DA').map(c=>tsDiaL(c.f))}));const Y=trhDmVal(R);const K=trhDmRango(R);
+  return`<div class="pad t-bar"><span class="note">La empresa paga los primeros ${P.dmEmp} días de descanso médico del año; desde el siguiente, el subsidio lo reconoce EsSalud. Hasta ${P.dmTope} días al año cuentan para gratificaciones, CTS, vacaciones y asignación escolar. «En el año» cuenta del 01/01 al ${esc(fmtD(K.hasta))} (fin del periodo).</span>
+    <button class="ib" id="trhDmY"${TRH.dmBusy?' disabled':''}>${TRH.dmBusy?'Contando…':Y?`Volver a contar ${esc(K.y)}`:`Contar los días del año ${esc(K.y)}`}</button></div>
     <div class="tscroll"><table class="t t-tbl" id="trhDmT"><thead><tr><th>Obrero</th><th>DNI</th><th>Días en el periodo</th><th class="t-r">N.°</th><th class="t-r">En el año</th><th>Situación</th></tr></thead><tbody>
-    ${L.map(({w,dias})=>{const y=Y?Y.m.get(w.dni)||0:null;const s=y==null?'':y>P.dmEmp?`<b class="ts-b">Pasó los ${P.dmEmp}: desde el día ${P.dmEmp+1} paga EsSalud</b>`:y>=P.dmEmp-2?`<b class="ts-w">Cerca del límite</b>`:'Paga la empresa';
+    ${L.map(({w,dias})=>{const y=Y?Y.m.get(w.dni)||0:null;const s=y==null?'':y>P.dmTope?`<b class="ts-b">Pasó los ${P.dmTope}: paga EsSalud y los días desde el ${P.dmTope+1} ya no cuentan para beneficios</b>`:y>P.dmEmp?`<b class="ts-b">Pasó los ${P.dmEmp}: desde el día ${P.dmEmp+1} paga EsSalud</b>`:y>=P.dmEmp-2?`<b class="ts-w">Cerca del límite</b>`:'Paga la empresa';
       return`<tr><td>${esc([w.ape,w.nom].filter(Boolean).join(', '))}</td><td class="mono">${esc(w.dni)}</td><td>${esc(dias.join(', '))}</td><td class="mono t-r">${w.dm}</td><td class="mono t-r">${y==null?'<span class="note">—</span>':y}</td><td>${s}</td></tr>`}).join('')||'<tr><td colspan="6" class="note">Sin descansos médicos en este periodo.</td></tr>'}</tbody></table></div>`}
-async function trhDmAnio(y){if(TRH.dmBusy)return;TRH.dmBusy=true;requestRender();
-  try{const a=y+'-01-01',b=todayIso()<y+'-12-31'?todayIso():y+'-12-31';const sn=await fcol('tpubidx').where('fecha','>=',a).where('fecha','<=',b).get();const m=new Map();
+/* año y fin del conteo: el año del INICIO del periodo (una semana que cruza el año cuenta en el suyo) y hasta el fin del periodo visto */
+function trhDmRango(R){const y=R.a.slice(0,4);const fin=y+'-12-31';return{y,hasta:R.b<fin?R.b:fin}}
+const trhDmVal=R=>{const K=trhDmRango(R),Y=TRH.dmY;return Y&&Y.y===K.y&&Y.hasta===K.hasta?Y:null};
+async function trhDmAnio(y,hasta){if(TRH.dmBusy)return;TRH.dmBusy=true;requestRender();
+  try{const a=y+'-01-01',fin=y+'-12-31',b=hasta&&hasta<fin?hasta:fin;const sn=await fcol('tpubidx').where('fecha','>=',a).where('fecha','<=',b).get();const m=new Map();
     const ids=sn.docs.map(x=>{const d=x.data()||{};return d.v!=null?tpId(d.fecha||x.id,d.v):null}).filter(Boolean);
     for(let i=0;i<ids.length;i+=20){const ps=await Promise.all(ids.slice(i,i+20).map(id=>tpGet(id).catch(()=>null)));
-      for(const p of ps)if(p)for(const r of tpRows(p))if(r.as!==true&&(r.mot==='DM'||r.mot==='DA'))m.set(r.dni,(m.get(r.dni)||0)+1)}
-    TRH.dmY={y,m,n:ids.length}}
+      for(const p of ps)if(p){const en=new Set();for(const r of tpRows(p)){en.add(r.dni);if(r.as!==true&&(r.mot==='DM'||r.mot==='DA'))m.set(r.dni,(m.get(r.dni)||0)+1)}
+        /* también las excepciones (sin tareo) con motivo de descanso médico */
+        for(const[dni,x]of Object.entries(p.exc||{}))if(!en.has(dni)&&tpxExcCod(x&&x.motivo)==='DM')m.set(dni,(m.get(dni)||0)+1)}}
+    TRH.dmY={y,hasta:b,m,n:ids.length}}
   catch(e){toast('No se pudieron contar: '+(e.code||e.message||e))}finally{TRH.dmBusy=false;requestRender()}}
 
 /* asignación escolar del mes: N.° de hijos de la ficha × jornales al año ÷ 12 × jornal de su categoría (se paga la última semana) */
 function trhAE(R){const P=R.P;const m=R.b.slice(0,7);const fin=addD(tpkMesAdd(m,1)+'-01',-1);const V=tplVig(fin,P);const soles=tplSoles();
-  const L=[];if(S.tper)for(const t of S.tper.values()){if(t.arch)continue;const h=+t.hij||0;if(!h)continue;const F=tsFicha(t.dni||t.id);if(!tpDates(m+'-01',fin).some(d=>F.act(d)))continue;
-    const c=tsCat(t.cat);const jb=V.jb[c]||0;L.push({t,h,c,jb,mes:tR2(h*jb*P.ae/12)})}
+  const L=[];if(S.tper)for(const t of S.tper.values()){if(t.arch)continue;const h=+tPriv(t.dni||t.id).hij||0;if(!h)continue;const F=tsFicha(t.dni||t.id);if(!tpDates(m+'-01',fin).some(d=>F.act(d)))continue;
+    /* sin categoría de jornal (capataz, «Otro»): el del peón, como el costo */
+    const c=tsCat(t.cat);const jb=V.jb[V.jb[c]?c:'PE']||0;L.push({t,h,c,jb,mes:tR2(h*jb*P.ae/12)})}
   L.sort((a,b)=>tName(a.t).localeCompare(tName(b.t)));const tot=tR2(L.reduce((s,x)=>s+x.mes,0));
   return`<div class="pad note">Mes de ${esc(tpkMesN(m))}: ${P.ae} jornales al año por hijo (hasta ${P.aeEdad} años, con constancia de estudios), pagados en la última semana de cada mes. El N.° de hijos se registra en la ficha (Personal).</div>
     <div class="tscroll"><table class="t t-tbl" id="trhAeT"><thead><tr><th>Obrero</th><th>DNI</th><th>Categoría</th><th class="t-r">Hijos</th>${soles?'<th class="t-r">Jornal</th><th class="t-r">Monto del mes (S/)</th>':''}</tr></thead><tbody>
@@ -147,7 +153,7 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
         <p class="pad note">Costo HH = (jornal + BUC) ÷ 8 × (1 + leyes sociales) + recargo de las horas extra. Sin leyes sociales, el costo sale sin ellas y se avisa.</p></div>
     </div>
     <div class="card"><h2>Códigos de asistencia</h2><div class="tscroll"><table class="t t-tbl" id="tplCod"><thead><tr><th>Código</th><th>Significado</th><th>Se paga</th><th>Cuenta para dominical</th><th>Cuenta para BUC y movilidad</th></tr></thead><tbody>
-      ${TPLA_COD.map(([k,n,p,d,b])=>`<tr><td><b class="mono ${TS_COD_CL[k]||''}">${esc(k)}</b></td><td>${esc(n)}</td><td>${esc(p)}</td><td>${esc(d)}</td><td>${esc(b)}</td></tr>`).join('')}</tbody></table></div></div>
+      ${TPLA_COD.map(([k,n,p,d,b])=>`<tr><td><b class="mono ${TS_COD_CL[k]||''}">${esc(k)}</b></td><td>${esc(k==='DM'?n.replace(/día \d+/,'día '+D.dmEmp):n)}</td><td>${esc(p)}</td><td>${esc(d)}</td><td>${esc(b)}</td></tr>`).join('')}</tbody></table></div></div>
     ${P.ts?`<p class="note">Último cambio: ${esc(toWho(P.by)||P.by)} · ${esc(tpAt(P.ts))}</p>`:''}
   </div></div>`;
   $('#tplBack').onclick=()=>{TPLA.on=false;TPLA.draft=null;requestRender()};
@@ -162,6 +168,11 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
   const nv=$('#tplNueva');if(nv)nv.onclick=()=>{rd();const u=D.vig[D.vig.length-1];D.vig.push({desde:todayIso(),nota:'',jb:{...u.jb},buc:{...u.buc}});requestRender()};
   $('#tplSave').onclick=async()=>{rd();const ds=D.vig.map(v=>v.desde);if(new Set(ds).size!==ds.length){toast('Dos tablas de jornales no pueden regir desde la misma fecha.');return}
     if(D.vig.some(v=>TPLA_CAT.some(([c])=>!(+v.jb[c]>0)))){toast('Escribe el jornal de las tres categorías.');return}
+    /* rangos razonables (los mismos que exigen las reglas de tcfg/pla; auditoría 21-10-2026) */
+    const R0=[['he60h','Horas al 60 %',0,12],['sob1','Recargo de las primeras HE',0,300],['sob2','Recargo de las demás HE',0,300],['alt','Bono por altura',0,100],['mov','Movilidad',0,200],
+      ['dmEmp','Días de DM que paga la empresa',0,366],['dmTope','Tope de días de DM',0,366],['ae','Asignación escolar',0,366],['aeEdad','Edad tope de los hijos',0,30],['leyes','Leyes sociales',0,300]];
+    for(const[k,l,lo,hi]of R0){const v=D[k];if(v!=null&&!(Number.isFinite(+v)&&+v>=lo&&+v<=hi)){toast(`${l}: escribe un número entre ${lo} y ${hi}.`);return}}
+    if(D.vig.some(v=>TPLA_CAT.some(([c])=>+v.jb[c]>2000||+v.buc[c]<0||+v.buc[c]>200))){toast('Revisa los jornales (hasta S/ 2000) y el BUC (0 a 200 %).');return}
     const vig=D.vig.map(v=>({desde:v.desde,nota:v.nota||'',jb:{...v.jb},buc:{...v.buc}})).sort((a,b)=>a.desde<b.desde?-1:1);
     const d={vig,he60h:D.he60h,sob1:D.sob1,sob2:D.sob2,df100:D.df100,alt:D.alt,mov:D.mov,dmEmp:D.dmEmp,dmTope:D.dmTope,ae:D.ae,aeEdad:D.aeEdad,leyes:D.leyes,soles:D.soles,avisoUA:D.avisoUA,...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('pla').set(d);TPLA.draft=null;toast('Parámetros guardados.');requestRender()}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}
