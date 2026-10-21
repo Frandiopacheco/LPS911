@@ -70,6 +70,11 @@ function trhAlertas(R){const T=R.T,P=R.P,hoy=todayIso();const L=[];const dot=c=>
     if(trhDmVal(R)){const cerca=R.W.filter(w=>w.dm&&(TRH.dmY.m.get(w.dni)||0)>=P.dmEmp-2);if(cerca.length)s=cerca.map(w=>`${w.ape||w.dni}: ${TRH.dmY.m.get(w.dni)} de ${P.dmEmp}`).join(' · ')}
     L.push([dot('var(--accent)'),`${T.dm} ${T.dm===1?'día':'días'} de descanso médico`,s])}
   if(T.df)L.push([dot('var(--warn)'),`${toH(T.df)} h en domingo o feriado`,P.df100?'Van todas al 100 % (doble jornal).':'']);
+  if(T.feT)L.push([dot('var(--accent)'),`${T.feT} ${T.feT===1?'día':'días'} de feriado trabajado`,`Además del 100 %, el convenio paga una asignación del ${P.feA} % de la BUC por cada uno (ya va en el costo).`]);
+  /* el refrigerio (mín. 45 min) es irrenunciable (D.S. 007-2002-TR art. 7; SUNAFIL Res. 024-2024-TFL): el corrido no debe ser costumbre */
+  const corr=R.W.filter(w=>w.corMax>=3);
+  if(corr.length)L.push([dot('var(--warn)'),`${corr.length} ${corr.length===1?'obrero trabajó':'obreros trabajaron'} corrido 3 o más días en una semana`,
+    `${corr.slice(0,6).map(w=>w.ape||w.dni).join(', ')}${corr.length>6?'…':''}. El refrigerio (mínimo 45 min) es irrenunciable: el corrido debe ser excepcional.`]);
   const hhPc=tR2([...R.PC.values()].reduce((s,o)=>s+o.tot,0));
   L.push([dot(Math.abs(hhPc-T.hh)<0.01?'var(--ok)':'var(--bad)'),`Cuadre con Costos: ${toH(T.hh)} HH = ${toH(hhPc)} HH`,Math.abs(hhPc-T.hh)<0.01?'Todas las horas pagadas están asignadas a una partida.':'Hay horas sin partida: revisa los tareos.']);
   return`<div class="card ts-al" id="trhAl"><div class="tp-bh"><b>Para revisar antes de la planilla</b></div><ul class="ts-ul">${L.map(([d,t,s])=>`<li>${d}<span><b>${esc(t)}</b><br><span class="note">${esc(s)}</span></span></li>`).join('')}</ul></div>`}
@@ -114,12 +119,15 @@ async function trhDmAnio(y,hasta){if(TRH.dmBusy)return;TRH.dmBusy=true;requestRe
 function trhAE(R){const P=R.P;const m=R.b.slice(0,7);const fin=addD(tpkMesAdd(m,1)+'-01',-1);const V=tplVig(fin,P);const soles=tplSoles();
   const L=[];if(S.tper)for(const t of S.tper.values()){if(t.arch)continue;const h=+tPriv(t.dni||t.id).hij||0;if(!h)continue;const F=tsFicha(t.dni||t.id);if(!tpDates(m+'-01',fin).some(d=>F.act(d)))continue;
     /* sin categoría de jornal (capataz, «Otro»): el del peón, como el costo */
-    const c=tsCat(t.cat);const jb=V.jb[V.jb[c]?c:'PE']||0;L.push({t,h,c,jb,mes:tR2(h*jb*P.ae/12)})}
-  L.sort((a,b)=>tName(a.t).localeCompare(tName(b.t)));const tot=tR2(L.reduce((s,x)=>s+x.mes,0));
-  return`<div class="pad note">Mes de ${esc(tpkMesN(m))}: ${P.ae} jornales al año por hijo (hasta ${P.aeEdad} años, con constancia de estudios), pagados en la última semana de cada mes. El N.° de hijos se registra en la ficha (Personal).</div>
-    <div class="tscroll"><table class="t t-tbl" id="trhAeT"><thead><tr><th>Obrero</th><th>DNI</th><th>Categoría</th><th class="t-r">Hijos</th>${soles?'<th class="t-r">Jornal</th><th class="t-r">Monto del mes (S/)</th>':''}</tr></thead><tbody>
-    ${L.map(x=>`<tr><td>${esc(tName(x.t))}</td><td class="mono">${esc(x.t.dni||x.t.id)}</td><td>${esc(tpxCat(x.t.cat)||'Otro')}</td><td class="mono t-r">${x.h}</td>${soles?`<td class="mono t-r">${x.jb.toFixed(2)}</td><td class="mono t-r">${x.mes.toFixed(2)}</td>`:''}</tr>`).join('')||`<tr><td colspan="6" class="note">Nadie activo este mes tiene hijos registrados en su ficha.</td></tr>`}</tbody>
-    ${L.length&&soles?`<tfoot><tr><td colspan="5"><b>Total del mes</b></td><td class="mono t-r"><b>${tot.toFixed(2)}</b></td></tr></tfoot>`:''}</table></div>`}
+    const c=tsCat(t.cat);const jb=V.jb[V.jb[c]?c:'PE']||0;
+    /* proporcional a los días del mes en planilla (quien ingresa o cesa a mitad de mes); constancia de estudios del año (ficha) */
+    const dm=tpDates(m+'-01',fin);const act=dm.filter(d=>F.act(d)).length;const pv=tPriv(t.dni||t.id);const ok=String(pv.aeY||'')===m.slice(0,4);
+    L.push({t,h,c,jb,act,nd:dm.length,ok,mes:tR2(h*jb*P.ae/12*act/dm.length)})}
+  L.sort((a,b)=>tName(a.t).localeCompare(tName(b.t)));const tot=tR2(L.filter(x=>x.ok).reduce((s,x)=>s+x.mes,0));const sinC=L.filter(x=>!x.ok).length;
+  return`<div class="pad note">Mes de ${esc(tpkMesN(m))}: ${P.ae} jornales al año por hijo (hasta ${P.aeEdad} años, con constancia de estudios), pagados en la última semana de cada mes, en proporción a los días del mes en planilla. El N.° de hijos y la constancia de estudios del año se registran en la ficha (Personal).${sinC?` <b>${sinC} sin constancia de ${esc(m.slice(0,4))}</b>: no entran en el total hasta que la presenten.`:''}</div>
+    <div class="tscroll"><table class="t t-tbl" id="trhAeT"><thead><tr><th>Obrero</th><th>DNI</th><th>Categoría</th><th class="t-r">Hijos</th><th class="t-r">Días</th><th>Constancia</th>${soles?'<th class="t-r">Jornal</th><th class="t-r">Monto del mes (S/)</th>':''}</tr></thead><tbody>
+    ${L.map(x=>`<tr><td>${esc(tName(x.t))}</td><td class="mono">${esc(x.t.dni||x.t.id)}</td><td>${esc(tpxCat(x.t.cat)||'Otro')}</td><td class="mono t-r">${x.h}</td><td class="mono t-r">${x.act}/${x.nd}</td><td>${x.ok?'✓':'<span class="t-bad">falta</span>'}</td>${soles?`<td class="mono t-r">${x.jb.toFixed(2)}</td><td class="mono t-r">${x.ok?x.mes.toFixed(2):`<s>${x.mes.toFixed(2)}</s>`}</td>`:''}</tr>`).join('')||`<tr><td colspan="8" class="note">Nadie activo este mes tiene hijos registrados en su ficha.</td></tr>`}</tbody>
+    ${L.length&&soles?`<tfoot><tr><td colspan="7"><b>Total del mes${sinC?' (con constancia)':''}</b></td><td class="mono t-r"><b>${tot.toFixed(2)}</b></td></tr></tfoot>`:''}</table></div>`}
 
 /* ======================================================================
    Parámetros de planilla y costos (tcfg/pla): editan admin y asistente de tareo; los demás los ven
@@ -142,13 +150,13 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
         ${inp('tplH60',D.he60h,'Horas al primer recargo (desde la jornada del día)','h')}${inp('tplS1',D.sob1,'Primer recargo','%')}${inp('tplS2',D.sob2,'Recargo desde la siguiente hora','%')}
         <label class="chk t-wide"><input type="checkbox" id="tplDf"${D.df100?' checked':''}${dis}> Domingo y feriado trabajados: todas las horas al ${D.sob2} %</label></div>
         <p class="pad note">La jornada de cada día y los feriados están en Configuración del tareo (convenio: 9.ª y 10.ª hora al 60 %, desde la 11.ª al 100 %).</p></div>
-      <div class="card"><h2>Bonificaciones</h2><div class="pad t-form">${inp('tplAlt',D.alt,'Bono por altura (solo con riesgo de caída libre)','%')}${inp('tplMov',D.mov,'Movilidad por día laborado','S/')}</div>
+      <div class="card"><h2>Bonificaciones</h2><div class="pad t-form">${inp('tplAlt',D.alt,'Bono por altura (solo con riesgo de caída libre)','%')}${inp('tplMov',D.mov,'Movilidad por día laborado','S/')}${inp('tplFeA',D.feA,'Asignación por feriado trabajado (sobre la BUC)','%')}</div>
         <p class="pad note">El capataz marca la altura en el tareo de cada día (▲).</p></div>
       <div class="card"><h2>Descanso médico y asignación escolar</h2><div class="pad t-form">${inp('tplDmE',D.dmEmp,'Días de DM que paga la empresa al año','d')}${inp('tplDmT',D.dmTope,'Tope de DM que cuenta para beneficios','d')}
         ${inp('tplAe',D.ae,'Asignación escolar: jornales al año por hijo','j')}${inp('tplAeE',D.aeEdad,'Edad máxima del hijo','años')}</div>
         <p class="pad note">El N.° de hijos y el sistema de pensiones (AFP u ONP) se registran en la ficha de cada obrero (Personal).</p></div>
       <div class="card"><h2>Costos</h2><div class="pad t-form">${inp('tplLey',D.leyes,'Leyes sociales y beneficios sobre el jornal (lo define costos)','%')}
-        <label class="lqlab">Quién ve los soles<select class="tin" id="tplSol"${dis}><option value="cos"${D.soles!=='ofi'?' selected':''}>Costos y administrador</option><option value="ofi"${D.soles==='ofi'?' selected':''}>Toda la oficina que ve Costos</option></select></label>
+        <p class="note" id="tplSol">Los montos en soles los ven solo Costos y el administrador.</p>
         <label class="chk t-wide"><input type="checkbox" id="tplUa"${D.avisoUA?' checked':''}${dis}> Avisar si una partida con horas no tiene UA de Powers</label></div>
         <p class="pad note">Costo HH = (jornal + BUC) ÷ 8 × (1 + leyes sociales) + recargo de las horas extra. Sin leyes sociales, el costo sale sin ellas y se avisa.</p></div>
     </div>
@@ -160,7 +168,7 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
   if(!ed)return;
   const rd=()=>{const g=id=>{const v=$(id).value;return v===''?null:+v};const v=D.vig[D.vig.length-1];v.desde=$('#tplDesde').value||v.desde;v.nota=$('#tplNota').value.trim();
     $$('[data-tpj]').forEach(i=>{v.jb[i.dataset.tpj]=i.value===''?0:+i.value});$$('[data-tpb]').forEach(i=>{v.buc[i.dataset.tpb]=i.value===''?0:+i.value});
-    Object.assign(D,{he60h:g('#tplH60')??2,sob1:g('#tplS1')??60,sob2:g('#tplS2')??100,df100:$('#tplDf').checked,alt:g('#tplAlt')??0,mov:g('#tplMov')??0,dmEmp:g('#tplDmE')??20,dmTope:g('#tplDmT')??60,ae:g('#tplAe')??30,aeEdad:g('#tplAeE')??24,leyes:g('#tplLey'),soles:$('#tplSol').value,avisoUA:$('#tplUa').checked})};
+    Object.assign(D,{he60h:g('#tplH60')??2,sob1:g('#tplS1')??60,sob2:g('#tplS2')??100,df100:$('#tplDf').checked,alt:g('#tplAlt')??0,mov:g('#tplMov')??0,feA:g('#tplFeA')??10,dmEmp:g('#tplDmE')??20,dmTope:g('#tplDmT')??60,ae:g('#tplAe')??30,aeEdad:g('#tplAeE')??24,leyes:g('#tplLey'),soles:'cos',avisoUA:$('#tplUa').checked})};
   /* los valores calculados se actualizan en su lugar: redibujar mientras se escribe borraría lo que se está tecleando */
   const calc=()=>{const v=D.vig[D.vig.length-1];$$('#tplJor tbody tr').forEach((tr,i)=>{const c=TPLA_CAT[i][0];const jb=+v.jb[c]||0;const td=tr.querySelectorAll('td.mono');
     if(td.length===4){td[0].textContent=f2(jb/8);td[1].textContent=f2(jb/8*(1+D.sob1/100));td[2].textContent=f2(jb/8*(1+D.sob2/100));td[3].textContent=f2(jb/6)}})};
@@ -169,10 +177,10 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
   $('#tplSave').onclick=async()=>{rd();const ds=D.vig.map(v=>v.desde);if(new Set(ds).size!==ds.length){toast('Dos tablas de jornales no pueden regir desde la misma fecha.');return}
     if(D.vig.some(v=>TPLA_CAT.some(([c])=>!(+v.jb[c]>0)))){toast('Escribe el jornal de las tres categorías.');return}
     /* rangos razonables (los mismos que exigen las reglas de tcfg/pla; auditoría 21-10-2026) */
-    const R0=[['he60h','Horas al 60 %',0,12],['sob1','Recargo de las primeras HE',0,300],['sob2','Recargo de las demás HE',0,300],['alt','Bono por altura',0,100],['mov','Movilidad',0,200],
+    const R0=[['he60h','Horas al 60 %',0,12],['sob1','Recargo de las primeras HE',0,300],['sob2','Recargo de las demás HE',0,300],['alt','Bono por altura',0,100],['mov','Movilidad',0,200],['feA','Asignación por feriado trabajado',0,100],
       ['dmEmp','Días de DM que paga la empresa',0,366],['dmTope','Tope de días de DM',0,366],['ae','Asignación escolar',0,366],['aeEdad','Edad tope de los hijos',0,30],['leyes','Leyes sociales',0,300]];
     for(const[k,l,lo,hi]of R0){const v=D[k];if(v!=null&&!(Number.isFinite(+v)&&+v>=lo&&+v<=hi)){toast(`${l}: escribe un número entre ${lo} y ${hi}.`);return}}
     if(D.vig.some(v=>TPLA_CAT.some(([c])=>+v.jb[c]>2000||+v.buc[c]<0||+v.buc[c]>200))){toast('Revisa los jornales (hasta S/ 2000) y el BUC (0 a 200 %).');return}
     const vig=D.vig.map(v=>({desde:v.desde,nota:v.nota||'',jb:{...v.jb},buc:{...v.buc}})).sort((a,b)=>a.desde<b.desde?-1:1);
-    const d={vig,he60h:D.he60h,sob1:D.sob1,sob2:D.sob2,df100:D.df100,alt:D.alt,mov:D.mov,dmEmp:D.dmEmp,dmTope:D.dmTope,ae:D.ae,aeEdad:D.aeEdad,leyes:D.leyes,soles:D.soles,avisoUA:D.avisoUA,...tStamp()};
+    const d={vig,he60h:D.he60h,sob1:D.sob1,sob2:D.sob2,df100:D.df100,alt:D.alt,mov:D.mov,dmEmp:D.dmEmp,dmTope:D.dmTope,ae:D.ae,aeEdad:D.aeEdad,feA:D.feA,leyes:D.leyes,soles:D.soles,avisoUA:D.avisoUA,...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('pla').set(d);TPLA.draft=null;toast('Parámetros guardados.');requestRender()}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}

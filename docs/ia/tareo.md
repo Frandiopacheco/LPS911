@@ -754,3 +754,12 @@ Decisión del dueño: horas por partida (como antes) **más el horario** de cada
 - `tcfg`: solo los documentos `main` y `pla`; `pla` con números en rango (`plaOk`), y la pantalla de Parámetros valida los mismos rangos.
 - `cuentaCapataz` `clave`: solo si la cuenta sigue con rol `tcap`.
 - Publicación: `hm` exige HH 0–23 y MM 0–59; `tpDif` compara `ent`/`sal`/`cor`.
+
+## Normativa aplicada (21-10-2026, decisiones del dueño con la cartilla FTCCP y el D.S. 007-2002-TR)
+
+- **Dominical** (cartilla 3.5): un jornal si labora 6 días **o 48 horas** en la semana (horas ordinarias de lunes a sábado; el feriado, laborado o no, vale su jornada); si no, días ÷ 6. El sexto que falta cuando la semana se completa por horas va a `w.costNP` (sin partida).
+- **Refrigerio del sábado**: por omisión 45 min desde las 13:00 (`TCFG_DEF.jor['6']`), así un sábado normal no pierde nada y a quien se queda se le descuenta. `tJorH` resta solo la parte del refrigerio que cae dentro de la jornada. RR.HH. alerta a quien trabajó corrido 3+ días en una semana (`w.corMax`; el refrigerio es irrenunciable).
+- **Feriado trabajado**: asignación del `feA` % (10 % por omisión, Parámetros) de la BUC; alerta en RR.HH. (`T.feT`).
+- **Costo MO estimado** (`tsCalc`): además de horas, BUC y HE, incluye altura, movilidad, el dominical que se gana cada día (1/6), la asignación del feriado trabajado y, sin partida (`costNP`), el feriado no laborado y el dominical de las semanas completas por horas.
+- **Soles**: solo Costos (`tcos`) y el administrador (`tplSoles`); el selector de Parámetros se quitó.
+- **Asignación escolar**: mensual (última semana del mes), en proporción a los días del mes en planilla; solo entra al total quien tiene la constancia de estudios del año (`tperp.aeY`, casilla en la ficha).
