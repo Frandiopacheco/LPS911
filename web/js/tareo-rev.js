@@ -112,7 +112,9 @@ function tCam(a,b){const o=[];const pc=x=>{const p=x&&S.tpc.get(x);return p?p.co
     if(xa!==ya)o.push(`${nm(d)}: ${xa===false?'faltó ('+(x.mot||'sin motivo')+')':trAsW(xa)}`);else if(xa===false&&(x.mot||'')!==(y.mot||''))o.push(`${nm(d)}: motivo ${y.mot||'—'} → ${x.mot||'—'}`);
     if(xa===true&&!!x.alt!==!!y.alt)o.push(`${nm(d)}: altura ${x.alt?'sí':'no'}`);
     if(hrs){for(const p of new Set([...Object.keys(y.h||{}),...Object.keys(x.h||{})])){const va=trHv((y.h||{})[p]),vb=trHv((x.h||{})[p]);if(va!==vb)o.push(`${nm(d)} ${pc(p)}: ${tHtxt(va)} → ${tHtxt(vb)} h`)}
-      if((x.sal||'')!==(y.sal||''))o.push(`${nm(d)}: salida ${y.sal||'—'} → ${x.sal||'—'}`)}}
+      if((x.sal||'')!==(y.sal||''))o.push(`${nm(d)}: salida ${y.sal||'—'} → ${x.sal||'—'}`);
+      if((x.ent||'')!==(y.ent||''))o.push(`${nm(d)}: entrada ${y.ent||'—'} → ${x.ent||'—'}`);
+      if((x.cor===true)!==(y.cor===true))o.push(`${nm(d)}: ${x.cor===true?'corrido':'no corrido'}`)}}
   for(const d of Object.keys(ra))if(!rb[d])o.push(`− ${nm(d)} (quitado del tareo)`);
   const s=o.join('; ');return s.length>400?s.slice(0,397)+'…':s}
 /** detalle estructurado de una corrección (hist.det): [{dni?|blq?|pc?, campo, antes, despues}], máx. 50 (tDetAll: todos).
@@ -134,7 +136,9 @@ function tDetAll(a,b){const o=[];const ra=a.rows||{},rb=b.rows||{};const nv=x=>x
     if(nv(y.mot)!==nv(x.mot))o.push({dni:d,campo:'mot',antes:nv(y.mot),despues:nv(x.mot)});
     if(!!y.alt!==!!x.alt)o.push({dni:d,campo:'alt',antes:!!y.alt,despues:!!x.alt});
     if(hrs){for(const p of new Set([...Object.keys(y.h||{}),...Object.keys(x.h||{})])){const va=trHv((y.h||{})[p]),vb=trHv((x.h||{})[p]);if(va!==vb)o.push({dni:d,pc:p,campo:'h',antes:va||null,despues:vb||null})}
-      if(nv(y.sal)!==nv(x.sal))o.push({dni:d,campo:'sal',antes:nv(y.sal),despues:nv(x.sal)})}}
+      if(nv(y.sal)!==nv(x.sal))o.push({dni:d,campo:'sal',antes:nv(y.sal),despues:nv(x.sal)});
+      if(nv(y.ent)!==nv(x.ent))o.push({dni:d,campo:'ent',antes:nv(y.ent),despues:nv(x.ent)});
+      if((y.cor===true)!==(x.cor===true))o.push({dni:d,campo:'cor',antes:y.cor===true,despues:x.cor===true})}}
   return o}
 /* quita los undefined (Firestore no los acepta) */
 function trClean(rows){const o={};for(const[d,r]of Object.entries(rows||{})){const x={};for(const[k,v]of Object.entries(r||{}))if(v!==undefined)x[k]=v;o[d]=x}return o}
@@ -142,7 +146,7 @@ function trClean(rows){const o={};for(const[d,r]of Object.entries(rows||{})){con
     fotos y, con cc, el cotejo vigente. No cuenta hist, by, ts ni lo calculado. */
 function trSig(d,cc){d=d||{};const hrs=trHrs(d);const R={};for(const[k,r]of Object.entries(d.rows||{})){R[k]=[r&&r.as===true?1:r&&r.as===false?0:null,(r&&r.mot)||'',!!(r&&r.alt)];
     /* modo:'hrs': las horas por partida y la salida las escribe el capataz (no son calculadas) */
-    if(hrs)R[k].push((r&&typeof r.sal==='string'&&r.sal)||'',Object.entries((r&&r.h)||{}).map(([p,v])=>[p,trHv(v)]).filter(x=>x[1]).sort((x,y)=>x[0].localeCompare(y[0])))}
+    if(hrs)R[k].push((r&&typeof r.sal==='string'&&r.sal)||'',(r&&typeof r.ent==='string'&&r.ent)||'',!!(r&&r.cor===true),Object.entries((r&&r.h)||{}).map(([p,v])=>[p,trHv(v)]).filter(x=>x[1]).sort((x,y)=>x[0].localeCompare(y[0])))}
   const o={st:d.st||'bor',rows:R,blq:(Array.isArray(d.blq)?d.blq:[]).map(b=>b?[b.id||'',b.pc||'',b.ini||'',b.fin||'',Array.isArray(b.dnis)?b.dnis:[]]:null),foto:Array.isArray(d.foto)?d.foto:[]};
   if(hrs){o.modo='hrs';o.pcs=Array.isArray(d.pcs)?d.pcs:[]}
   if(cc)o.cot=tCotDe(d);return trStr(o)}
@@ -189,7 +193,7 @@ function trCycDrop(t){trInit(t||TD.docs.get(TR.id)||{});TR.nota=TR_CYC}
 /** estado editable de un tareo: {hrs, rows:{dni:{as, mot, alt, sal?, h?}}, blq? | pcs?} (ids de bloque estables: los sin id → 'i'+n) */
 function trEdState(t){t=t||{};const hrs=trHrs(t);const rows={};
   for(const[d,r]of Object.entries(t.rows||{})){if(!r)continue;const x={as:trAs(r.as),mot:r.mot||'',alt:!!r.alt,nw:trNw(r)};
-    if(hrs){x.sal=typeof r.sal==='string'?r.sal:'';x.h={};for(const[pc,v]of Object.entries(r.h||{})){const n=trHv(v);if(n)x.h[pc]=n}}rows[d]=x}
+    if(hrs){x.sal=typeof r.sal==='string'?r.sal:'';x.ent=typeof r.ent==='string'?r.ent:'';x.cor=r.cor===true;x.h={};for(const[pc,v]of Object.entries(r.h||{})){const n=trHv(v);if(n)x.h[pc]=n}}rows[d]=x}
   const o={hrs,rows};
   if(hrs)o.pcs=[...new Set((Array.isArray(t.pcs)?t.pcs:[]).filter(Boolean))];
   else o.blq=(Array.isArray(t.blq)?t.blq:[]).map((x,i)=>x?{id:x.id||'i'+i,pc:x.pc||'',ini:x.ini||'',fin:x.fin||'',dnis:Array.isArray(x.dnis)?x.dnis.slice():[]}:null).filter(Boolean);
@@ -205,8 +209,8 @@ function trEdOpen(t,g){const base=clone(t)||{};TR.edSig=trSig(base,false);TR.ed=
 function trEdPatch(e){e=e||TR.ed;if(!e)return[];const B=trEdState(e.base);const P=[];
   for(const d of Object.keys(B.rows))if(!e.rows[d])P.push({k:'rd',d});
   for(const[d,x]of Object.entries(e.rows)){const y=B.rows[d];
-    if(!y){const row={...(x.nw||{}),as:x.as,mot:x.mot||'',alt:!!x.alt,h:{...(x.h||{})}};delete row.i;if(x.sal)row.sal=x.sal;P.push({k:'ra',d,row});continue}
-    for(const f of e.hrs?['as','mot','alt','sal']:['as','mot','alt'])if(x[f]!==y[f])P.push({k:'r',d,f,v:x[f]});
+    if(!y){const row={...(x.nw||{}),as:x.as,mot:x.mot||'',alt:!!x.alt,h:{...(x.h||{})}};delete row.i;if(x.sal)row.sal=x.sal;if(x.ent)row.ent=x.ent;if(x.cor)row.cor=true;P.push({k:'ra',d,row});continue}
+    for(const f of e.hrs?['as','mot','alt','sal','ent','cor']:['as','mot','alt'])if(x[f]!==y[f])P.push({k:'r',d,f,v:x[f]});
     if(e.hrs)for(const pc of new Set([...Object.keys(y.h),...Object.keys(x.h)]))if((x.h[pc]||0)!==(y.h[pc]||0))P.push({k:'h',d,pc,v:x.h[pc]||0})}
   if(e.hrs){for(const pc of e.pcs)if(!B.pcs.includes(pc))P.push({k:'pa',pc});for(const pc of B.pcs)if(!e.pcs.includes(pc))P.push({k:'pd',pc})}
   else{const A=new Map(B.blq.map(b=>[b.id,b]));const ids=new Set(e.blq.map(b=>b.id));
@@ -221,7 +225,7 @@ function trEdApply(t,P){t=t||{};const hrs=trHrs(t);const rows={};for(const[d,r]o
   let blq=(Array.isArray(t.blq)?t.blq:[]).map((b,i)=>b?{...b,id:b.id||'i'+i,dnis:Array.isArray(b.dnis)?b.dnis.slice():[]}:null).filter(Boolean);
   for(const p of P||[]){if(p.k==='ra'){if(!rows[p.d])rows[p.d]=clone(p.row);continue}if(p.k==='rd'){delete rows[p.d];continue}
     const r=p.d!=null?rows[p.d]:null;
-    if(p.k==='r'){if(!r)continue;if(p.f==='sal'&&!p.v)delete r.sal;else r[p.f]=p.v}
+    if(p.k==='r'){if(!r)continue;if(['sal','ent','cor'].includes(p.f)&&!p.v)delete r[p.f];else r[p.f]=p.v}
     else if(p.k==='h'){if(!r)continue;const h=r.h=r.h&&typeof r.h==='object'?r.h:{};if(p.v)h[p.pc]=p.v;else delete h[p.pc]}
     else if(p.k==='pa'){if(pcs&&!pcs.includes(p.pc))pcs.push(p.pc)}
     else if(p.k==='pd'){if(pcs)pcs=pcs.filter(x=>x!==p.pc)}
@@ -404,7 +408,7 @@ function trModel(t){const ed=trEdOk();const cot=ed&&t.st==='env'&&(!TR.ed||TR.ed
   const oDni=new Map();for(const o of vis)if(o.dni)oDni.set(o.dni,(oDni.get(o.dni)||[]).concat(o));
   return{ed,cot,c,s,ob,vis,pend,R,P:R.filter(r=>r.as),F:R.filter(r=>!r.as).sort((a,b)=>(a.as===false)-(b.as===false)),oDni,blk:ob.filter(o=>o.bl),nofir:ob.filter(o=>o.k==='nofir'),pas:ed&&(!TR.ed||TR.ed.g)&&['env','rev'].includes(t.st),fok:trFotosOk(t)}}
 /* etiqueta corta de cada observación en su fila (el texto completo va en el title y arriba en la lista) */
-const TR_TAG={nofir:'No firmó',gar:'Garita',dup:'En otro tareo',marca:'Sin marcar',mot:'Sin motivo',sinh:'Sin horas',cruce:'Cruce',parcial:'Parcial',quien:'Sin bloque',max:'Revisar horas',hmax:'Más de 16 h',hval:'Horas no válidas',bloq:'Bloqueada'};
+const TR_TAG={nofir:'No firmó',gar:'Garita',dup:'En otro tareo',marca:'Sin marcar',mot:'Sin motivo',sinh:'Sin horas',cruce:'Cruce',parcial:'Parcial',quien:'Sin bloque',max:'Revisar horas',hmax:'Más de 16 h',hval:'Horas no válidas',bloq:'Bloqueada',hor:'No cuadra horario'};
 function trHeadHtml(t,M){const s=M.s;const prev=trNb(-1),next=trNb(1);const L=TR.ord.filter(x=>x===t.id||TD.docs.has(x));const pos=L.indexOf(t.id);
   const kp=(v,l,c='')=>`<span class="tr-k${c}"><b>${v}</b> ${l}</span>`;const nObs=M.vis.length;
   const btn=[];
@@ -884,9 +888,13 @@ const txBool=(s,alt)=>{s=txNorm(s).trim();if(/^(s|si|v|vino|1|x|y|ok|true)$/.tes
 function txColsOf(e){const C=[{k:'n',l:'N°',fz:1,w:40,num:1,nof:1,t:'Número de fila (clic: elige la fila)'},{k:'dni',l:'DNI',fz:1,w:82},{k:'nm',l:'Apellidos y nombres',fz:1,w:200}];
   if(TX.cc)C.push({k:'cua',l:'Cuadrilla',fz:1,w:100},{k:'cat',l:'Cat.',fz:1,w:58,t:'Categoría'});
   C.push({k:'as',l:'Asistencia',w:104,ed:1,t:'Escribe S si vino, N si no vino o el motivo ('+Object.entries(TO_MOT).map(([k,l])=>k+' '+l).join(', ')+'). Espacio cambia vino / no vino.'});
+  if(e.hrs)C.push({k:'ent',l:'Entrada',w:84,ed:1,num:1,t:'Hora de entrada (gris = la de la jornada). Escribe 7:30 o 730; vacía vuelve a la jornada.'},
+    {k:'sal',l:'Salida',w:78,ed:1,num:1,t:'Hora de salida (gris = la de la jornada). Escribe 18:30 o 1830; vacía vuelve a la jornada.'},
+    {k:'cor',l:'Corrido',w:84,ed:1,t:'Corrido: trabajó su refrigerio (no se descuenta). Escribe S o N; espacio cambia.'});
   for(const pc of trEdCols(e)){const p=trPcL(pc);C.push({k:'h:'+pc,pc,l:p.cod,sub:p.nom,w:78,ed:1,num:1,bloq:p.bloq,t:p.cod+' · '+p.nom+(p.bloq?' · BLOQUEADA por costos':'')})}
   C.push({k:'padd',l:'',w:44,nof:1,t:'Agregar una partida del día'},
-    {k:'tot',l:'Total',w:70,num:1,t:'Horas trabajadas en el día (verde = jornada completa)'},{k:'he',l:'HE',w:56,num:1,t:'Horas extra'},
+    {k:'tot',l:'Total',w:70,num:1,t:'Horas trabajadas en el día (verde = jornada completa)'},{k:'he',l:'HE',w:56,num:1,t:'Horas extra del día (total)'},
+    ...(e.hrs?[{k:'hes',l:'HE salida',sub:'por salida',w:96,num:1,t:'HE por quedarse después de su hora de salida (o entrar antes)'},{k:'hec',l:'HE corrido',sub:'refrigerio',w:100,num:1,t:'HE por trabajar el refrigerio (corrido)'}]:[]),
     {k:'fdo',l:'Firmado',w:86,num:1,t:'Total al abrir: lo que firmó en el formato'},{k:'alt',l:'Altura',w:72,ed:1,t:'Trabajo en altura, bono (A): escribe A o espacio'},
     {k:'obs',l:'Observaciones',w:190},{k:'x',l:'',w:66,nof:1,t:'⇄ pasar a otro capataz · ✕ quitar del tareo'});
   let left=0,last=null;for(const c of C)if(c.fz){c.left=left;left+=c.w;last=c}if(last)last.fzl=1;
@@ -900,24 +908,26 @@ function txCtx(t){const e=TR.ed;const nd=trEdCur();const dv={...nd,rows:trRows(n
   const ob=tObsRev(dv,c);const oD=new Map();for(const o of ob)if(o.dni)oD.set(o.dni,(oD.get(o.dni)||[]).concat(o));
   const all=Object.keys(e.rows).sort(txOrd(B,e)).map((d,i)=>({d,i:i+1,x:e.rows[d],r:dv.rows[d]||{},c:c.rows[d]||{},b:B[d]||null,bs:bs[d]||null,ob:oD.get(d)||[]}));
   const X={t,e,nd,c,D,cols:txColsOf(e),all,ob,pas:['env','rev'].includes(t.st)};
-  for(const R of all){R.ch=txRowCh(R);R.tch=R.x.as===true&&!!R.b&&trHrsTot(R.b)!==(R.c.trab||0)}
+  for(const R of all){if(e.hrs){R.hr=tHorRow(R.r,nd.date||todayIso(),nd.cfg);R.hx=tHeSplit(R.r,nd.date||todayIso(),nd.cfg,R.c.ext)}R.ch=txRowCh(R);R.tch=R.x.as===true&&!!R.b&&trHrsTot(R.b)!==(R.c.trab||0)}
   X.rows=all.filter(R=>txPass(R,X,null));
   if(TX.sort){const col=X.cols.find(z=>z.k===TX.sort.k);if(col){const dir=TX.sort.dir;
     X.rows.sort((p,q)=>{const a=txVal(p,col),b=txVal(q,col);const ea=a===''||a==null,eb=b===''||b==null;if(ea!==eb)return ea?1:-1;if(ea)return p.i-q.i;
       const r=typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'es',{numeric:true});return r?r*dir:p.i-q.i})}else TX.sort=null}
   return X}
-function txRowCh(R){if(!R.bs)return true;const{x,bs}=R;if(x.as!==bs.as||(x.mot||'')!==(bs.mot||'')||!!x.alt!==!!bs.alt||(x.sal||'')!==(bs.sal||''))return true;
+function txRowCh(R){if(!R.bs)return true;const{x,bs}=R;if(x.as!==bs.as||(x.mot||'')!==(bs.mot||'')||!!x.alt!==!!bs.alt||(x.sal||'')!==(bs.sal||'')||(x.ent||'')!==(bs.ent||'')||!!x.cor!==!!bs.cor)return true;
   for(const pc of new Set([...Object.keys(x.h||{}),...Object.keys(bs.h||{})]))if((x.h[pc]||0)!==(bs.h[pc]||0))return true;
   return false}
 function txCellCh(R,col){if(!col.ed&&!col.pc)return false;if(!R.bs)return true;const{x,bs}=R;
   if(col.pc)return(x.h[col.pc]||0)!==(bs.h[col.pc]||0);
-  switch(col.k){case'as':return x.as!==bs.as||(x.mot||'')!==(bs.mot||'');case'alt':return!!x.alt!==!!bs.alt}return false}
+  switch(col.k){case'as':return x.as!==bs.as||(x.mot||'')!==(bs.mot||'');case'alt':return!!x.alt!==!!bs.alt;case'ent':case'sal':return(x[col.k]||'')!==(bs[col.k]||'');case'cor':return!!x.cor!==!!bs.cor}return false}
 /** valor de una celda (número o texto; '' vacía): lo que se copia, se ordena y se suma */
 function txVal(R,col){const{x,r,c}=R;const pres=x.as===true;if(col.pc)return x.h[col.pc]||'';
   switch(col.k){case'n':return R.i;case'dni':return R.d;case'nm':return trNm(r)||R.d;case'cua':return r.cua||'';case'cat':return r.cat||'';
     case'as':return x.as===true?'Vino':x.as===false?(x.mot||'No vino'):'';
     case'tot':return pres?(c.trab||0):'';case'he':return pres&&c.ext?c.ext:'';case'fdo':return R.b&&R.b.as===true?trHrsTot(R.b):'';
     case'alt':return pres&&x.alt?'A':'';
+    case'ent':case'sal':return pres&&R.hr?R.hr[col.k]:'';case'cor':return pres&&x.cor?'Sí':'';
+    case'hes':return pres&&R.hx&&R.hx.sal?R.hx.sal:'';case'hec':return pres&&R.hx&&R.hx.cor?R.hx.cor:'';
     case'obs':return R.ob.map(o=>TR_TAG[o.k]||'Revisar').join(', ')}return''}
 const txRaw=(R,col)=>{const v=txVal(R,col);return v==null?'':String(v)};
 /* valor para los filtros (lo que se ve en la lista del menú) */
@@ -931,13 +941,13 @@ function txPass(R,X,skip){if(TX.q){const q=txNorm(TX.q).trim();if(q&&!txNorm([R.
   return true}
 /** ¿se puede escribir en esa celda? */
 function txEd(R,col,X){if(!col.ed||!TR.ed||!TR.ed.g)return false;const pres=R.x.as===true;
-  if(col.k==='as')return true;if(col.pc||col.k==='alt')return pres;return false}
+  if(col.k==='as')return true;if(col.pc||['alt','ent','sal','cor'].includes(col.k))return pres;return false}
 function txWhy(R,col,X){const pres=R.x.as===true;
   if(['n','dni','nm','cua','cat'].includes(col.k))return'Los datos del obrero vienen del máster de Personal.';
   if(col.k==='padd')return'Usa «+» de su encabezado para agregar una partida.';
-  if(['tot','he','fdo','obs','x'].includes(col.k))return'Esta columna se calcula: no se escribe.';
+  if(['tot','he','hes','hec','fdo','obs','x'].includes(col.k))return'Esta columna se calcula: no se escribe.';
   if(!pres)return'No vino: escribe S en «Asistencia» para ponerle horas.';return'Esta celda no se edita.'}
-const txTotK=(R,X)=>{const v=R.c.trab||0;if(v<=0||v>16)return'bad';if(X.D.nl||!(X.D.jh>0))return'wn';return v===X.D.jh?'ok':'wn'};
+const txTotK=(R,X)=>{const v=R.c.trab||0;if(v<=0||v>16)return'bad';if(R.hr&&!R.hr.bad)return Math.abs(v-R.hr.h)<0.01?'ok':'wn';if(X.D.nl||!(X.D.jh>0))return'wn';return v===X.D.jh?'ok':'wn'};
 const txFzA=col=>col.fz?` style="left:${col.left}px"`:'';
 const txFzC=col=>(col.fz?' tx-fz':'')+(col.fzl?' tx-fzl':'');
 function txTd(R,col,X){const{x,r,c,d}=R;const pres=x.as===true;const v=txVal(R,col);let cls='tx-c'+txFzC(col)+(col.num?' tx-n':'');let h='',id='';
@@ -953,6 +963,9 @@ function txTd(R,col,X){const{x,r,c,d}=R;const pres=x.as===true;const v=txVal(R,c
     case'he':id=` id="trhe_${esc(d)}"`;h=pres&&c.ext?toH(c.ext):'';break;
     case'fdo':h=v===''?'':toH(v);cls+=R.tch?' tx-fdc':' tx-mu';break;
     case'alt':h=pres&&x.alt?'<b>(A)</b>':'';break;
+    case'ent':case'sal':if(pres&&R.hr){h=esc(R.hr[col.k]);if(!x[col.k])cls+=' tx-mu';if(R.hr.bad)cls+=' tx-bad'}break;
+    case'cor':h=pres&&x.cor?'<b>Sí</b>':'';break;
+    case'hes':case'hec':h=v?toH(v):'';if(v)cls+=' tx-hx';break;
     case'obs':h=R.ob.map(o=>`<span class="tr-tg${o.bl?' tr-tgb':''}" data-k="${esc(o.k)}" title="${esc(o.msg)}">${esc(TR_TAG[o.k]||'Revisar')}</span>`).join('');cls+=' tx-ob';break;
     case'x':{const nm=esc(r.ape||d);h=`${R.bs&&X.pas?`<button class="tx-rb" data-tra="pas" data-v="${esc(d)}" title="Pasar a otro capataz…" aria-label="Pasar a ${nm} a otro capataz" tabindex="-1">⇄</button>`:''}<button class="tx-rb tx-rbx" data-txa="rm" data-v="${esc(d)}" title="Quitar del tareo (Ctrl+Z deshace)" aria-label="Quitar a ${nm} del tareo" tabindex="-1">✕</button>`;cls+=' tx-xc';break}}
   return`<td class="${cls}"${id}${txFzA(col)}>${h}</td>`}
@@ -969,6 +982,7 @@ function txTable(X){const{cols,rows}=X;const W=cols.reduce((s2,c)=>s2+c.w,0);
   const ft=cols.map(c=>{let h='',id='';
     if(c.k==='nm')h=`<b>Total</b> <span class="note">${P.length} ${P.length===1?'vino':'vinieron'}${rows.length<X.all.length?' · filtrado':''}</span>`;
     else if(c.pc){id=` id="trhc_${esc(c.pc)}"`;h=sm(R=>R.x.h[c.pc])}else if(c.k==='tot'){id=' id="trhg"';h=sm(R=>R.c.trab)}else if(c.k==='he'){id=' id="trhx"';h=sm(R=>R.c.ext)}
+    else if(c.k==='hes'||c.k==='hec')h=sm(R=>R.hx?(c.k==='hes'?R.hx.sal:R.hx.cor):0);
     else if(c.k==='fdo')h=sm(R=>R.b&&R.b.as===true?trHrsTot(R.b):0);
     return`<td class="tx-c${txFzC(c)}${c.num?' tx-n':''}"${id}${txFzA(c)}>${h}</td>`}).join('');
   /* la última columna (sin ancho) se queda con el sobrante: las demás miden siempre lo mismo (las fijas no se corren) */
@@ -1056,7 +1070,10 @@ function txSet(d,k,raw){const X=TX.X;const e=TR.ed;const R=X&&X.all.find(z=>z.d=
       if(m){x.as=false;x.mot=m;x.alt=false;return{s:'ok'}}
       const v=txBool(s);if(v==null)return{s:'bad',msg:`«Asistencia»: escribe S (vino), N (no vino) o el motivo: ${Object.keys(TO_MOT).join(', ')}.`};
       if(v){x.as=true;x.mot=''}else{if(x.as!==false)x.mot='';x.as=false;x.alt=false}return{s:'ok'}}
-    case'alt':{const v=s?txBool(s,true):false;if(v==null)return{s:'bad',msg:'«Altura»: escribe A o déjala vacía.'};x.alt=v;return{s:'ok'}}}
+    case'alt':{const v=s?txBool(s,true):false;if(v==null)return{s:'bad',msg:'«Altura»: escribe A o déjala vacía.'};x.alt=v;return{s:'ok'}}
+    case'ent':case'sal':{const v=tHmIn(s);if(v==null)return{s:'bad',msg:`«${col.l}»: escribe la hora, por ejemplo 18:30 o 1830.`};const j=X.D.j||{};
+      /* igual a la de la jornada = se borra (vuelve a la jornada) */x[k]=v&&tMin(v)===tMin(k==='ent'?j.ini:j.fin)?'':v;return{s:'ok'}}
+    case'cor':{const v=s?txBool(s):false;if(v==null)return{s:'bad',msg:'«Corrido»: escribe S (trabajó el refrigerio) o N.'};x.cor=v;return{s:'ok'}}}
   return{s:'skip'}}
 /* --- edición de una celda: un campo encima de la celda (F2, doble clic o escribir directo, que reemplaza) --- */
 function txEdit(init){const X=TX.X;const s=X&&txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];
@@ -1079,7 +1096,7 @@ function txCommitFill(){const ing=TX.ing;if(!ing)return;const X=TX.X;const s=X&&
   trDraw(true);const tot=(s.r1-s.r0+1)*(s.c1-s.c0+1);
   toast(n?(tot>1?`Se ${n===1?'rellenó 1 celda':'rellenaron '+n+' celdas'}${n<tot?` · ${tot-n} no se editan`:''}.${bad?' '+bad:''}`:'Listo.'):(bad||'Nada que rellenar: esas celdas no se editan.'))}
 function txToggle(){const X=TX.X;const s=txRect(X);if(!s)return;const R=X.rows[s.ar],col=X.cols[s.ac];if(!txEd(R,col,X)){toast(txWhy(R,col,X));return}
-  const v=col.k==='as'?(R.x.as===true?'No':'Sí'):(R.x.alt?'':'A');
+  const v=col.k==='as'?(R.x.as===true?'No':'Sí'):col.k==='cor'?(R.x.cor?'':'Sí'):(R.x.alt?'':'A');
   txDo(()=>txSet(R.d,col.k,v));trDraw(true)}
 /** Supr: vacía las celdas elegidas que se pueden editar (la asistencia no se vacía) */
 function txClear(){const X=TX.X;const s=txRect(X);if(!s)return;let n=0;
@@ -1127,7 +1144,7 @@ function txOver(e){if(!TX.drag||!TX.X)return;const td=e.target.closest&&e.target
   if(!d||!c||(TX.f&&TX.f.d===d&&TX.f.k===c.k))return;TX.f={d,k:c.k};txPaint()}
 document.addEventListener('mouseup',()=>{TX.drag=false});
 function txDbl(e){const td=e.target.closest&&e.target.closest('#txT tbody td');if(!td||td.closest('.tx-addb,.tx-empty')||e.target.closest('button')||!TX.X)return;const col=TX.X.cols[td.cellIndex];if(!col)return;
-  if(col.k==='alt')txToggle();else txEdit(null)}
+  if(col.k==='alt'||col.k==='cor')txToggle();else txEdit(null)}
 /* --- teclado --- */
 function txKeyR(e){const tg=e.target;if(!tg)return;if(tg.id==='trSplit')return trSplitKey(e);if(!TR.ed||!TR.ed.g)return;
   if(tg.id==='txIn')return txInKey(e);if(tg.closest&&tg.closest('#txMenu'))return txMenuKey(e);if(tg.id==='txW')return txKey(e)}
@@ -1146,7 +1163,7 @@ function txKey(e){const X=TX.X;if(!X||$('.uask'))return;const k=e.key,ctrl=e.ctr
   if(k==='PageDown'||k==='PageUp'){stop();txGo(s.ar+(k==='PageDown'?12:-12),s.ac,e.shiftKey);return}
   if(k==='F2'){stop();txEdit(null);return}
   if(k==='Delete'||k==='Backspace'){stop();txClear();return}
-  if(k===' '&&['as','alt'].includes((X.cols[s.ac]||{}).k)){stop();txToggle();return}
+  if(k===' '&&['as','alt','cor'].includes((X.cols[s.ac]||{}).k)){stop();txToggle();return}
   if(k.length===1&&k!==' '){stop();txEdit(k);return}}
 function txInKey(e){const k=e.key;e.stopPropagation();const ing=TX.ing;if(!ing)return;
   if(k==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();txCommitFill();return}
