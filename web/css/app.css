@@ -4164,3 +4164,32 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .ts .ts-tiles{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
 .ts-side{flex:1 1 280px;max-width:380px}
 @media (max-width:1200px){.ts-side{max-width:none}}
+/* tareo: capataz — horario y carga rápida (tareo-cap.js, 20-10-2026). Solo variables existentes */
+.tc-hf.mod b{color:var(--warn)}.tc-hf.bad b{color:var(--bad)}
+.tc-hor{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.tc-hr2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tc-hr2 label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.tc-hr2 .tin{height:44px;font:500 16px var(--f-mono)}
+.tc-hr2 .tin.mod{border-color:var(--warn);border-width:2px}
+.tc-hq,.tc-qbar,.tc-mbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tc-qbar{margin:0 0 8px}.tc-qbar .ib{flex:1 1 140px}
+.tc-mbar{margin:0 0 8px;padding:8px;border-radius:var(--r-card);background:var(--accent-soft)}
+.tc-cor{display:flex;gap:8px;align-items:center;min-height:40px;font-size:14px}
+.tc-cor input{width:20px;height:20px}
+.tc-hres{font-size:13.5px;font-weight:600;color:var(--muted)}.tc-hres.bad{color:var(--bad)}
+.tc-rep{margin:0 0 8px;font-size:13.5px}
+.tc-gnb{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;min-height:28px}
+.tc-mck input{width:20px;height:20px;margin:0 6px 0 0;vertical-align:middle}
+.tc-g tr.msel th,.tc-g tr.msel td{background:var(--accent-soft)}
+.tc-cin{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);margin:8px 0}
+.tc-cin .tin,.tc-asgr .tin{height:46px;font:600 18px var(--f-mono);text-align:center}
+.tc-asg{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.tc-asgr{display:grid;grid-template-columns:56px minmax(0,1fr) 76px auto;gap:8px;align-items:center;font-size:14px}
+.tc-asgr .tin{width:76px}
+.tc-asgp{font-size:13px;color:var(--muted);background:var(--panel2);border-radius:8px;padding:8px 10px;margin:6px 0;line-height:1.4}
+.tc-wkt{padding:9px 11px;border-radius:10px;font-size:14px;background:var(--panel2)}
+.tc-wkt.warn{color:var(--warn)}.tc-wkt.ok{color:var(--ok)}
+.tc-qr{border-color:var(--ok);color:var(--ok);font-weight:600}
+.tc-qh.tc-qs{min-height:42px;padding:0 12px;font:600 14px var(--f-ui)}
+.tc-hr2 .tin{width:100%;min-width:0;box-sizing:border-box}
+.tc-asgr .tc-qs{white-space:nowrap}

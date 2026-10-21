@@ -727,3 +727,12 @@ Pedido del dueño: Costos y RR.HH. ven toda la información en la app, en vivo (
 - **Rol `trh` (RR.HH.)**: solo tareo, lee como costos (`tarRole()` → 'tcos' en reglas), inicio en RR.HH.; no ve Tareos del día.
 - **Ficha**: `afp` (ONP / AFP …) y `hij` (N.° de hijos) en el formulario de Personal.
 - Pruebas: `tareo-rrhh.spec.js` (datos en `tareo-datos.js`, compartidos con `tareo-pub.spec.js`); reglas: trh y `tcfg/pla`.
+
+## Capataz: horario y carga rápida (20-10-2026)
+
+Decisión del dueño: horas por partida (como antes) **más el horario** de cada obrero, ya puesto con la jornada.
+- **Fila** (modo horas): `ent`, `sal` ('HH:MM', solo si difieren de la jornada; igual a la jornada = se borra) y `cor` (corrido: almorzó trabajando, no se descuenta el refrigerio). `tHorRow(r,fecha,cfg)` (tareo.js) → `{ent,sal,cor,h,mod,bad}`; null en no laborable/feriado sin horario escrito.
+- **Validación** (`tValidaHrs`, k `hor`): las horas en partidas deben ser las que da el horario (±0,01) y la salida posterior a la entrada. Bloquea el envío del capataz (`TC_K3`); en la oficina es aviso (`trValida` lo marca `warn`).
+- **Paso 1**: «✓ Todos vinieron en horario normal»; por obrero que vino, plegable «Horario» (`salT`) con entrada, salida, atajos «Salió» +1/+2/+3 h del fin de la jornada (`salQ`), «Horario normal» (`horX`), corrido y lo que da con las HE (`tcHeTxt`, con TPL()).
+- **Paso 3**: «↻ Repetir <ayer>» (`rep`, siempre que haya tareo anterior por horas; agrega sus partidas activas y copia a quien hoy no tiene horas; aviso `#tcRep` con a cuántos y a quién falta), «☐ Elegir varios» (`multi`; atajos Todos/cuadrilla/Sin horas/Ninguno) → «Asignar a N» (`tcAsgSheet`: horas por partida, «el resto» según el horario de cada uno, «Todo en X», «Mitad y mitad»; vista previa). Tocar el nombre abre **su día** (`tcWkSheet`: horas escritas por partida, «el resto: X» en las vacías, + otra partida, corrido, anterior/siguiente). La casilla tiene campo para escribir (`#tcCin`, «6,5») y botones según lo que le queda («El resto de su horario»). Totales: verde si cuadra con el horario, ámbar «faltan/sobran».
+- Tareo antiguo por bloques → al pasarlo a horas, su inicio/fin pasan a `ent`/`sal`. La publicación guarda `ent`/`sal`/`cor` si se cambiaron (respaldo para RR.HH.; el detalle del obrero en RR.HH. los muestra).

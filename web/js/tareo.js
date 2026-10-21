@@ -58,6 +58,14 @@ const tBlqMin=(a,b,rw)=>a==null||b==null||b<=a?0:Math.max(0,b-a-(rw?Math.max(0,M
     domingo/feriado `refNoLab`); ext = max(0, trab − jornada del día); domingo o feriado: todo es extra. cfg opcional (doc.cfg). */
 function tHoras(fecha,ini,fin,cfg){const D=tDia(fecha,cfg);const trab=tR2(tBlqMin(tMin(ini),tMin(fin),D.rw)/60);
   return{trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))}}
+/** horario de un obrero en el tareo por horas (20-10-2026): entrada r.ent y salida r.sal ('HH:MM'; si faltan, las de la jornada) y
+    r.cor (corrido: almorzó trabajando, no se descuenta el refrigerio). → {ent, sal, cor, h (horas que da), mod (se cambió algo), bad
+    (salida no posterior a la entrada)}; null en un día no laborable o feriado sin horario escrito (no hay jornada con qué comparar). */
+const tHmOk=s=>/^\d{1,2}:\d{2}$/.test(s||'');
+function tHorRow(r,fecha,cfg){r=r||{};const D=tDia(fecha,cfg);const mod=tHmOk(r.ent)||tHmOk(r.sal)||r.cor===true;
+  if(D.nl&&!mod)return null;const j=D.j||{};const ent=tHmOk(r.ent)?r.ent:j.ini,sal=tHmOk(r.sal)?r.sal:j.fin;
+  const a=tMin(ent),b=tMin(sal);if(a==null||b==null)return null;if(b<=a)return{ent,sal,cor:r.cor===true,h:0,mod,bad:true};
+  return{ent,sal,cor:r.cor===true,h:tR2(tBlqMin(a,b,r.cor===true?null:D.rw)/60),mod,bad:false}}
 
 /* fechas de Excel: número de serie, Date, 'dd/mm/aaaa' o 'aaaa-mm-dd' → 'aaaa-mm-dd' ('' si no es fecha) */
 function tFecha(v){if(v==null||v==='')return'';
@@ -233,6 +241,10 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
     const t=tHrsTot(r);
     if(!t){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponle sus horas o márcalo como que no vino.`});continue}
     if(t>T_HMAX){out.push({dni,k:'hmax',msg:`${nm(dni)}: ${tHtxt(t)} h en el día. Revisa las horas (máximo ${T_HMAX}).`});continue}
+    /* horario (20-10-2026): las horas en partidas tienen que ser las que da su horario (entrada a salida, menos refrigerio salvo corrido) */
+    const HR=tHorRow(r,d.date||todayIso(),d.cfg);
+    if(HR&&HR.bad){out.push({dni,k:'hor',msg:`${nm(dni)}: la salida (${HR.sal}) tiene que ser después de la entrada (${HR.ent}).`});continue}
+    if(HR&&Math.abs(HR.h-t)>0.01){out.push({dni,k:'hor',hor:HR.h,msg:`${nm(dni)}: en partidas ${tHtxt(t)} h, su horario (${HR.ent}–${HR.sal}${HR.cor?', corrido':''}) da ${tHtxt(HR.h)} h. Corrige las horas o su hora de salida.`});continue}
     if(!D.nl&&D.jh>0&&t<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(t)} h de ${tHtxt(D.jh)}`})}
   if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});
   return out}

@@ -92,7 +92,8 @@ function trValidaH(d){d=d||{};const out=[];const D=tDia(d.date||todayIso(),d.cfg
 /** cálculo y validación para la oficina: tCalc/tValida (tareo.js); para modo:'hrs', el respaldo local si tareo.js aún no lo sabe */
 const trOwnH=d=>trHrs(d)&&typeof tHrsTot!=='function';
 const trCalc=d=>trOwnH(d)?trCalcH(d):tCalc(d);
-const trValida=d=>trOwnH(d)?trValidaH(d):tValida(d);
+/* el horario que no cuadra (k 'hor', 20-10-2026) bloquea el envío del capataz; en la oficina es un aviso: la oficina corrige con criterio */
+const trValida=d=>(trOwnH(d)?trValidaH(d):tValida(d)).map(e=>e.k==='hor'?{...e,warn:true}:e);
 const trAsW=v=>v===true?'vino':v===false?'faltó':'sin marcar';
 /** resumen corto de lo que cambió una corrección (para hist.cam). Vale para los dos modos (bloques y horas). */
 function tCam(a,b){const o=[];const pc=x=>{const p=x&&S.tpc.get(x);return p?p.cod:(x||'sin partida')};

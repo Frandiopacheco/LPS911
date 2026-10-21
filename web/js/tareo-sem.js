@@ -89,7 +89,7 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
       else{const r=RI.get(f).get(g.dni);const ex=p.exc&&p.exc[g.dni];
         if(r&&r.as===true){const t=tpNum(r.trab),e=Math.min(t,tpNum(r.ext));c.h=t;c.alt=!!r.alt;
           if(nl&&P.df100){c.df=t}else{const h6=Math.min(P.he60h,e);c.h60=tR2(h6);c.h100=tR2(e-h6);c.hn=tR2(t-e)}
-          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(cat,f,c):0;
+          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(cat,f,c):0;c.hor=r.ent||r.sal||r.cor?`${r.ent?'entró '+r.ent:''}${r.sal?(r.ent?' · ':'')+'salió '+r.sal:''}${r.cor?' · corrido':''}`:'';
           for(const[k,v]of Object.entries(r.h||{})){const h=tpNum(v);if(h>0){c.pcs.push([k,h]);pcAdd(k,cat,f,h,t>0?tR2(h*e/t):0,g.cua||'(sin cuadrilla)',t>0?c.cost*h/t:0);const m=(p.pcs||{})[k];if(m&&!pcsMeta[k])pcsMeta[k]=m}}}
         else if(r){const m=r.mot||'';c.code=TS_MOT[m]||m;c.mot=m}
         else if(ex){c.code=tpxExcCod(ex.motivo);c.mot=ex.motivo||''}
