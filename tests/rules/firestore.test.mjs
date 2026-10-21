@@ -63,6 +63,7 @@ test.beforeEach(async () => {
     await S('members/u_tcap1', { role: 'tcap', name: 'Pedro' });
     await S('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
     await S('members/campotar@obra.pe', { role: 'campo', name: 'Campo y asistente de tareo', tasis: true });
+    await S('members/trh@obra.pe', { role: 'trh', name: 'RR.HH.' });
     await S('tper/03684337', { dni: '03684337', ape: 'QUISPE MAMANI', nom: 'JUAN', pue: 'OPERARIO ALBAÑIL', cat: 'OP', cua: 'ALBAÑILES', cap: '', act: true });
     await S('tpc/10.05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true });
     await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
@@ -1433,4 +1434,16 @@ test('tareo (20-10-2026): el ingeniero de campo con tasis edita el tareo como el
   await assertFails(setDoc(doc(c, 'tcfg/main'), { tolGar: 5 }, { merge: true }));
   // nadie se pone la casilla a sí mismo
   await assertFails(updateDoc(doc(c, 'members/campo@obra.pe'), { tasis: true }));
+});
+
+test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros tcfg/pla los cambian admin y asistente', async () => {
+  const r = user('trh@obra.pe');
+  await assertSucceeds(getDoc(doc(r, 'tper/03684337')));
+  await assertSucceeds(getDoc(doc(r, 'tcfg/main')));
+  await assertSucceeds(getDocs(collection(r, 'tpubidx')));
+  await assertFails(setDoc(doc(r, 'tcfg/pla'), { alt: 9 }));
+  await assertFails(setDoc(doc(r, 'tper/12345678'), PER('12345678')));
+  await assertFails(getDocs(collection(r, 'tareo')));       // como costos: no ve los tareos sin publicar
+  await assertFails(getDoc(doc(r, 'acts/x1')));             // no ve Last Planner
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, vig: [] }));
 });

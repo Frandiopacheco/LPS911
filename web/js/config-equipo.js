@@ -134,8 +134,8 @@ const tasisCell=(em,m)=>m.role==='tasis'?`<label class="chk"><input type="checkb
   :m.role==='campo'?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="tasis"${m.tasis===true?' checked':''}> Asistente de tareo <small class="mu">(además maneja todo el Tareo)</small></label>`
    +(m.tasis===true?`<label class="chk"><input type="checkbox" data-mem="${esc(em)}" data-f="tasisCampo" checked> Reporta en Campo <small class="mu">(quítala para que quede solo en el Tareo)</small></label>`:''):'';
 const TQ={q:'',role:'',sc:''};const TF={em:'',nm:'',rl:'editor',sc:'',ar:''};
-const TROLES=['admin','editor','planner','campo','sc','capataz','area','veedor','lector','tasis','tcap','tcos'];
-const TGRP={admin:'Administradores',editor:'Editores (ingenieros de producción)',planner:'Planner (plan maestro retirado: ve como lector)',campo:'Campo (ingenieros de campo)',sc:'Subcontratistas',capataz:'Capataces',area:'Áreas de apoyo (Oficina Técnica, Calidad…)',veedor:'Veedores',lector:'Lectores',tasis:'Tareo · asistentes de tareo',tcap:'Tareo · capataces del consorcio',tcos:'Tareo · costos'};
+const TROLES=['admin','editor','planner','campo','sc','capataz','area','veedor','lector','tasis','tcap','tcos','trh'];
+const TGRP={admin:'Administradores',editor:'Editores (ingenieros de producción)',planner:'Planner (plan maestro retirado: ve como lector)',campo:'Campo (ingenieros de campo)',sc:'Subcontratistas',capataz:'Capataces',area:'Áreas de apoyo (Oficina Técnica, Calidad…)',veedor:'Veedores',lector:'Lectores',tasis:'Tareo · asistentes de tareo',tcap:'Tareo · capataces del consorcio',tcos:'Tareo · costos',trh:'Tareo · RR.HH.'};
 const fold=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const roleOfM=(em,m)=>isOwnerEmail(em)?'admin':(m&&m.role)||'lector';
 function teamRows(list,online){const q=fold(TQ.q).trim();const words=q?q.split(/\s+/):[];
@@ -153,7 +153,7 @@ const teamV=()=>isAdmin&&TEAMV.some(([k])=>k===U.teamV)?U.teamV:'per';
 let TEDIT=null;
 const TEAM_HELP=`<p><b>Para sumar a alguien:</b> agrégalo con su correo, envíale el enlace de esta página y pídele que pulse <b>«¿Primera vez? Crear mi cuenta»</b> con ese mismo correo y confirme el correo que le llegará. Solo los correos de la lista pueden entrar.</p>
  <p><b>Editor</b>: edita el lookahead, el plan semanal y las restricciones; con <b>pisos a cargo</b> resuelve las propuestas de los SC de esos pisos (piso sin responsable: cualquier editor). <b>Campo</b>: registra el avance diario, sin modificar el lookahead. <b>Subcontratista</b>: propone y dibuja el plan del día de su empresa (si tiene varias partidas, agrégalas todas). <b>Área de apoyo</b> (Oficina Técnica, Calidad…): ve todo y resuelve las restricciones de su área. <b>Veedor</b>: registra en Campo › Plano el trabajo no programado. <b>Lector</b>: solo consulta. <b>Administrador</b>: además gestiona el equipo y los datos.</p>
- <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> maneja todo el Tareo (si además reporta en Campo, márcale <b>También reporta en Campo</b>), <b>Costos</b> consulta; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
+ <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> maneja todo el Tareo (si además reporta en Campo, márcale <b>También reporta en Campo</b>), <b>Costos</b> y <b>RR.HH.</b> consultan; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
 /* chips de alcance y píldoras de permisos de una persona (solo lectura; se cambian en la ficha) */
 function teamScope(em,m){const r=roleOfM(em,m);const L=[];
   if(r==='sc'||r==='capataz'){const S_=memScs(m).filter(i=>S.con.has(i));S_.forEach(i=>L.push(`<span class="scchip ro" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}</span>`));if(!S_.length)L.push('<span class="pill bad">Falta la empresa</span>')}

@@ -4099,3 +4099,68 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .pb-hist .tp-tl{margin:0}
 @media (max-width:1180px){.pb-bar{grid-template-columns:1fr auto;grid-template-areas:"t b" "d s" "w w"}.pb-days{justify-self:start}.pb-cols{grid-template-columns:1fr}.pb-r{position:static}}
 @media (max-width:760px){.pb-bar{position:static;grid-template-columns:1fr;grid-template-areas:"t" "s" "d" "b" "w"}.pb-st{align-items:flex-start}.pb-go{width:100%}.pb-t h2{white-space:normal}}
+/* tareo: rrhh y costos en vivo (tareo-rrhh.js, tareo-costos.js, tareo-sem.js; 20-10-2026). Solo variables existentes: el modo oscuro sale de ellas */
+.ts .ts-per{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.ts .ts-per .tin{width:auto}
+.ts-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;font-size:13px}
+.ts-chip{padding:2px 9px;border-radius:999px;border:1px dashed var(--line);color:var(--muted);background:var(--panel2);font:500 12px var(--f-ui)}
+.ts-chip.on{border-style:solid;border-color:var(--ok);color:var(--ok);background:var(--panel)}
+.ts-chip.nl{opacity:.7}
+.ts .ts-tiles{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin:0 0 12px}
+.ts .ts-tiles b{font:600 20px var(--f-mono)}
+.ts-two{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.ts-main{flex:999 1 760px;min-width:0}
+.ts-side{flex:1 1 300px;min-width:280px;display:flex;flex-direction:column;gap:12px}
+.ts-vbar{margin:0 0 10px}
+.ts-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.ts-tbl th{white-space:nowrap;position:sticky;top:0;background:var(--panel2);z-index:1}
+.ts-tbl td{white-space:nowrap}
+.ts-tbl tbody tr[data-trhd],.ts-tbl tbody tr[data-tcop]{cursor:pointer}
+.ts-tbl tbody tr.sel td{background:var(--accent-soft)}
+.ts-tbl tfoot td{font-weight:700;background:var(--panel2)}
+.ts-nm b{display:block;font-weight:600}
+.ts-nm small{color:var(--muted);font-size:11.5px}
+.ts-dh{text-align:center;font-size:11.5px}
+.ts-dh.off{opacity:.55}
+.ts-dh.nl{background:var(--panel2)}
+.ts-d{text-align:center;border-left:1px solid var(--line);padding:3px 4px;min-width:38px}
+.ts-d b{display:block;font:600 12.5px var(--f-mono)}
+.ts-d small{display:block;font:11px var(--f-mono);color:var(--muted)}
+.ts-p b,.ts-w,.ts-ex b{color:var(--warn)}
+.ts-f b,.ts-ce b,.ts-b{color:var(--bad)}
+.ts-dm b,.ts-va b{color:var(--accent)}
+.ts-in b,.ts-ok{color:var(--ok)}
+.ts-dd b,.ts-x b{color:var(--muted);font-weight:400}
+.ts-d.ts-dd{background:var(--panel2)}
+.ts-alt{font-style:normal;font-size:9px;margin-left:2px;color:var(--warn)}
+.ts-leg{font-size:12px;line-height:1.5}
+.ts-ul{list-style:none;margin:0;padding:4px 12px 10px}
+.ts-ul li{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:8px;align-items:start;padding:6px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.35}
+.ts-ul li:first-child{border-top:0}
+.ts-dot{width:10px;height:10px;border-radius:50%;margin-top:4px}
+.ts-ck{font-weight:700}
+.ts-ck.ok{color:var(--ok)}.ts-ck.no{color:var(--warn)}
+.ts-dl li{grid-template-columns:62px minmax(0,1fr) auto}
+.ts-det .tp-bh,.ts-al .tp-bh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ts-det>.note{padding:0 12px}
+.ts-grp td{background:var(--panel2);font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.03em}
+.ts-grp td .mono{text-transform:none;margin-left:6px;color:var(--muted);font-weight:500}
+.ts-sp{display:inline-flex;gap:2px;align-items:flex-end;height:24px}
+.ts-sp i{display:inline-block;width:7px;border-radius:2px 2px 0 0;background:var(--accent)}
+.ts-pc{white-space:nowrap}
+.ts-bar{display:inline-block;width:80px;height:8px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;vertical-align:middle;margin-right:6px}
+.ts-bar i{display:block;height:100%;background:var(--ok)}
+.ts-bar i.w{background:var(--warn)}.ts-bar i.no{background:var(--bad)}
+.ts-sub td{background:var(--panel2)}
+.ts-subg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:6px 4px;white-space:normal}
+.ts-subg div div{font-size:12.5px;padding:2px 0}
+.ts-mini{width:100%;font-size:12.5px}
+.ts-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.ts-in{display:inline-flex;align-items:center;gap:6px}
+.ts-in i{font-style:normal;color:var(--muted);font-size:12px}
+.ts .ts-w2{min-width:260px}
+@media (max-width:760px){.ts-g2,.ts-subg{grid-template-columns:minmax(0,1fr)}.ts-side{min-width:0}}
+.wrap.ts{max-width:1680px}
+.ts .ts-tiles{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+.ts-side{flex:1 1 280px;max-width:380px}
+@media (max-width:1200px){.ts-side{max-width:none}}

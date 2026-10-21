@@ -6,7 +6,7 @@
 const TAB_ORDER=['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','cli','planos','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
 const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',pull:'Sesión pull',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',prod:'Productividad',cli:'Cliente',planos:'Sectorización',cfg:'Configuración',team:'Equipo',
-  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D'};
+  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',trh:'RR.HH.',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
 const tabOrder=()=>U.mod==='tar'?TAR_TABS:U.mod==='pla'?PLA_TABS:TAB_ORDER;
@@ -16,7 +16,7 @@ function tabAllowed(t){if(!me)return false;
   if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!canPla())return false;return t==='pcar'?plaEd():t==='p3d'?me.role==='admin':true}
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin'||TASIS();
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
-    if(t==='tdia')return me.role!=='tcos';if(t==='tpc'&&me.role==='tcap')return false;/* el capataz elige las partidas dentro del tareo (20-10-2026) */if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
+    if(t==='tdia')return me.role!=='tcos'&&me.role!=='trh';if(t==='trh')return typeof trhOk==='function'&&trhOk();if(t==='tpc'&&me.role==='tcap')return false;/* el capataz elige las partidas dentro del tareo (20-10-2026) */if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
   if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
   if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='pull')return pulEd();if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
@@ -28,7 +28,7 @@ function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAl
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}
-function tabHome(){return tabPrimary()[0]||(U.mod==='lps'?'look':modHome(U.mod))}
+function tabHome(){if(me&&me.role==='trh'&&U.mod==='tar')return'trh';return tabPrimary()[0]||(U.mod==='lps'?'look':modHome(U.mod))}
 
 /** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
@@ -60,6 +60,7 @@ Object.assign(BNI,{
   tper:SVG('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 14.4c1.8.8 3 2.6 3 4.6"/>'),
   tpc:SVG('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M8 10v4M8 16v4"/>'),
   tpub:SVG('<path d="M12 3.5v11"/><path d="M7.5 8L12 3.5 16.5 8"/><path d="M4.5 14.5v4a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/>'),
+  trh:SVG('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><path d="M15 5.5h5.5M15 9.5h5.5M17 13.5h3.5"/>'),
   tcos:SVG('<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 9h16M4 14.5h16M10 3.5v17"/>'),
   tcfg:SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8"/>')});
 
