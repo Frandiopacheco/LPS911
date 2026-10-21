@@ -241,11 +241,13 @@ def amb_index(S):
             if not up: continue
             up.sort(key=lambda l: l['r'].y0)
             name = norm(' '.join(l['t'] for l in up))
-            if not re.search(r'\bS\.?S?\.?HH?\.?\b|\bBA[NÑ]O', name): continue   # por ahora solo baños
+            # por ahora solo baños (y los camerinos/vestuarios, que van en las mismas láminas de detalle)
+            if not re.search(r'\bS\.?S?\.?HH?\.?\b|\bBA[NÑ]O|\bCAMERIN|\bVESTUARIO', name): continue
             head = re.split(r'\s+-\s+|\s-\s|,', name)[0]
             mg = re.search(r'\b(\d{1,2})\s*$', head)
             gens = {GEN[w] for w in re.split(r'[^A-Z]+', name) if w in GEN}
             A.append({'cod': s['cod'], 'name': name, 'head': head, 'pis': floors_in(name), 'num': mg.group(1) if mg else None,
+                      'sh': bool(re.search(r'\bS\.?S?\.?HH?\.?\b|\bBA[NÑ]O', name)),
                       'gens': gens, 'words': words_of(head), 'tl': up[0], 'tls': up, 'n': int(R_UNID.match(u['n']).group(1))})
     for a in A:
         a['zone'], a['zok'] = amb_zone(S[a['cod']], a['tl'])
@@ -260,6 +262,10 @@ def amb_match(lbl, pis, A):
     if m:   # «SH H. 1», «SH M. 2», «SH DISC.»
         g = GEN.get((m.group(1) or '').rstrip('.'), None); num = m.group(2)
         H = [a for a in C if (not g or g in a['gens']) and (not num or a['num'] == num)]
+        if len(H) > 1 and any(a['sh'] for a in H): H = [a for a in H if a['sh']]   # «SH H» es un baño, no el camerino de al lado
+        if len(H) > 1 and not num:   # «SH H.» sin número no es el grupo «SH H. 1»: gana el ambiente sin número de grupo
+            H2 = [a for a in H if not a['num']]
+            if len(H2) == 1: return H2[0], 0.7, f"baño sin número de grupo en «{H2[0]['name'][:46]}»"
         if len(H) == 1:
             return H[0], (0.85 if num and g else 0.75), f"baño {('grupo ' + num + ' ') if num else ''}en «{H[0]['name'][:46]}»"
         return None
