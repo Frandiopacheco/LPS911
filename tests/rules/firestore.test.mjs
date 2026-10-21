@@ -416,7 +416,7 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; s√≠ lo dem√
     await setDoc(doc(c.firestore(), 'meta/project'), { name: 'Obra', refWeek: 58, refDate: '2026-09-28', propCutDow: 6, propCutHH: '13:00', planCutHH: '21:00', cal: { sat: true }, esps: [] });
   });
   const ed = user('editor@obra.pe');
-  for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' },
+  for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' }, { closeCutHH: '18:00' },
     { frzCutDow: 6 }, { frzCutHH: '20:00' }, { finObra: '2027-06-30' }, { refWeek: 58, frzCutDow: null }])
     await assertFails(updateDoc(doc(ed, 'meta/project'), ch));
   await assertFails(setDoc(doc(ed, 'meta/project'), { name: 'Obra', cal: { sat: false } })); // reemplazar entero borra refWeek‚Ä¶
@@ -430,7 +430,7 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; s√≠ lo dem√
   for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')])
     await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: false } }));
   const adm = user(OWNER);
-  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
+  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', closeCutHH: '17:30', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
   await assertFails(deleteDoc(doc(ed, 'meta/project')));
 });
 

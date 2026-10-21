@@ -3702,6 +3702,9 @@ body:has(#plv) #pop{z-index:440}
 .ixd-tag{display:inline-block;padding:.1em .7em;border-radius:999px;font-size:.82em;font-weight:600;white-space:nowrap}
 .ixd-tag.imp{background:var(--bad-soft);color:var(--bad)}
 .ixd-tag.nimp{background:var(--panel2);color:var(--ink2);border:1px dashed var(--line2)}
+.ixd-tag.dk-ok{background:var(--panel2);color:var(--ink2)}
+.ixd-tag.dk-late{background:var(--warn-soft);color:var(--warn);border:1px dashed var(--warn)}
+.ixd-tag.dk-none{background:var(--bad-soft);color:var(--bad)}
 .ixd-split{display:flex;gap:3px;height:2.6em;border-radius:var(--r-ctl);overflow:hidden}
 .ixd-split span{display:flex;align-items:center;justify-content:center;min-width:2.4em;color:var(--panel);font-size:1.2em}
 .ixd-split .i{background:var(--bad)}

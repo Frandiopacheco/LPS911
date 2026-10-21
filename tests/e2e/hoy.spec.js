@@ -26,7 +26,7 @@ test('el subcontratista ve su avance de hoy y sus restricciones', async ({ page 
   const errors = await openApp(page, { as: 'sc' });
   const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan'));
   expect(k).toEqual(['obra', 'lib', 'restr']);
-  await expect(page.locator('[data-hoy="obra"]')).toContainText('sin iniciar');
+  await expect(page.locator('[data-hoy="obra"]')).toContainText('por cerrar');
   noErrors(errors, 'hoy sc');
 });
 
