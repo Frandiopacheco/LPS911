@@ -4201,3 +4201,6 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .tc-gtb small{text-decoration:underline}
 .tc-mx{margin-left:auto}
 .tc-csv2{flex-direction:column;align-items:stretch}
+
+/* casilla dentro de un formulario del tareo (constancia de estudios) */
+.t-form .lqlab.t-chk{flex-direction:row;align-items:center;gap:8px}

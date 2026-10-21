@@ -1453,6 +1453,7 @@ test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: -5 }));
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { he60h: 99 }));
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { mov: 'mucho' }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { feA: 500 }));
   await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: 60, sob2: 100, he60h: 2, leyes: null, soles: 'cos', vig: [{ desde: '2026-01-01' }] }));
 });
 
@@ -1461,6 +1462,8 @@ test('tareo (auditoría 21-10-2026): AFP e hijos en tperp, que no lee el capataz
   await assertSucceeds(setDoc(doc(t, 'tperp/12345678'), { afp: 'AFP Prima', hij: 2, by: 'tasis@obra.pe', ts: 1 }));
   await assertFails(setDoc(doc(t, 'tperp/12345678'), { hij: 50 }));
   await assertFails(setDoc(doc(t, 'tperp/12345678'), { afp: 'Banco X' }));
+  await assertSucceeds(setDoc(doc(t, 'tperp/12345678'), { aeY: '2026' }, { merge: true }));
+  await assertFails(setDoc(doc(t, 'tperp/12345678'), { aeY: 'sí' }, { merge: true }));
   for (const db of [user(OWNER), t, user('trh@obra.pe')]) await assertSucceeds(getDoc(doc(db, 'tperp/12345678')));
   for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe'), user('campo@obra.pe')]) await assertFails(getDoc(doc(db, 'tperp/12345678')));
   await assertFails(setDoc(doc(user('trh@obra.pe'), 'tperp/12345678'), { hij: 1 }));

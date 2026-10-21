@@ -399,7 +399,8 @@ service cloud.firestore {
       allow read: if isMember() && notOff() && (role() in ['admin', 'trh'] || tarEd());
       allow create, update: if tarEd() && id.matches('[A-Za-z0-9]{8,12}')
         && (!('hij' in request.resource.data) || request.resource.data.hij == null || (request.resource.data.hij is int && request.resource.data.hij >= 0 && request.resource.data.hij <= 20))
-        && (!('afp' in request.resource.data) || request.resource.data.afp in ['', 'ONP', 'AFP Habitat', 'AFP Integra', 'AFP Prima', 'AFP Profuturo']);
+        && (!('afp' in request.resource.data) || request.resource.data.afp in ['', 'ONP', 'AFP Habitat', 'AFP Integra', 'AFP Prima', 'AFP Profuturo'])
+        && (!('aeY' in request.resource.data) || request.resource.data.aeY == '' || (request.resource.data.aeY is string && request.resource.data.aeY.matches('[0-9]{4}')));
     }
     // Partidas de control
     function tpcOk() {
@@ -427,7 +428,7 @@ service cloud.firestore {
       let d = request.resource.data;
       return (!('vig' in d) || (d.vig is list && d.vig.size() <= 30))
         && numIn(d, 'he60h', 0, 12) && numIn(d, 'sob1', 0, 300) && numIn(d, 'sob2', 0, 300) && numIn(d, 'alt', 0, 100)
-        && numIn(d, 'mov', 0, 200) && numIn(d, 'dmEmp', 0, 366) && numIn(d, 'dmTope', 0, 366) && numIn(d, 'ae', 0, 366)
+        && numIn(d, 'mov', 0, 200) && numIn(d, 'feA', 0, 100) && numIn(d, 'dmEmp', 0, 366) && numIn(d, 'dmTope', 0, 366) && numIn(d, 'ae', 0, 366)
         && numIn(d, 'aeEdad', 0, 30) && numIn(d, 'leyes', 0, 300)
         && (!('soles' in d) || d.soles in ['cos', 'ofi']);
     }

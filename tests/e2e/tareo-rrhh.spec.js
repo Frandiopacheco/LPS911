@@ -138,3 +138,37 @@ test('RR.HH.: un rango de más de 93 días avisa que se cortó', async ({ page }
   await expect(page.locator('#trhCorte')).toContainText('se pueden ver hasta 93');
   noErrors(errors, 'rrhh corte');
 });
+
+test('normativa (21-10-2026): dominical con 48 h en 5 días, corrido repetido, feriado trabajado, costo completo y asignación escolar', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false, extra: [
+    ['tper', '40000001', { dni: '40000001', ape: 'ALFA ROJAS', nom: 'JUAN', cat: 'OP', cua: 'X', cap: '', ing: '2026-01-05', ces: '', per: [{ ing: '2026-01-05', ces: '' }], act: true }],
+    ['tper', '40000009', { dni: '40000009', ape: 'NUEVO', nom: 'ANA', cat: 'PE', cua: 'X', cap: '', ing: '2026-09-16', ces: '', per: [{ ing: '2026-09-16', ces: '' }], act: true }],
+    ['tperp', '40000001', { hij: 2, aeY: '2026' }], ['tperp', '40000009', { hij: 1 }]] });
+  const r = await page.evaluate(() => {
+    const row = (dni, cat, o) => ({ dni, ape: dni, nom: 'X', cat, cua: 'X', cap: '', capN: '', as: true, mot: '', alt: false, h: { p1: o.t }, trab: o.t, ext: o.e || 0, ...(o.cor ? { cor: true } : {}) });
+    const PB = new Map();
+    // lunes 05.10 a viernes 09.10: A trabaja 9,6 h ordinarias (48 h en 5 días, 3 corrido); B 8,5 h de lunes a jueves y el sábado 10.10,
+    // feriado, trabaja 4 h (cuenta como día: 5/6)
+    ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10'].forEach((f, i) => {
+      const fer = f === '2026-10-10';const rows = [];
+      if (!fer) rows.push(row('40000001', 'OP', { t: 9.6, cor: i < 3 })); if (i < 4 || fer) rows.push(row('40000002', 'PE', fer ? { t: 4, e: 4 } : { t: 8.5 }));
+      PB.set(f, { fecha: f, v: 1, rows, exc: {}, pcs: { p1: { cod: '1', nom: 'P', ua: 'U' } }, ...(fer ? { nl: true, cfg: { v: 1, jor: null, fer: true } } : {}) });
+    });
+    const R = tsCalc('2026-10-05', '2026-10-11', PB);const W = id => R.W.find(w => w.dni === id);
+    const A = W('40000001'), B = W('40000002');
+    const ae = trhAE({ P: R.P, b: '2026-09-30' });
+    return { aD: A.dsc, aT: A.dscTxt, bD: B.dsc, cor: A.corMax, feT: R.T.feT, al: trhAlertas(R), np: tR2(A.costNP), costA: tR2(A.cost), ae,
+      soles: (() => { const o = me.role; me.role = 'trh'; const s1 = tplSoles(); me.role = 'tcos'; const s2 = tplSoles(); me.role = o; return [s1, s2]; })() };
+  });
+  expect([r.aD, r.aT, r.bD]).toEqual([1, '6/6', 0.8333]); // 48 h en 5 días = semana completa; B: 4 días + feriado trabajado = 5/6
+  expect(r.cor).toBe(3);
+  expect(r.al).toContain('corrido 3 o más días');
+  expect(r.feT).toBe(1);
+  expect(r.al).toContain('feriado trabajado');
+  expect(r.np).toBeCloseTo(89.30 + 89.30 / 6, 2); // el sábado feriado que no trabajó: jornal pagado y su dominical, sin partida
+  expect(r.soles).toEqual([false, true]); // RR.HH. ya no ve los soles; Costos sí
+  // asignación escolar de setiembre: ALFA 2 hijos con constancia, mes completo; NUEVO ingresó el 16.09 (15 de 30 días) y sin constancia
+  expect(r.ae).toContain('1 sin constancia de 2026');
+  expect(r.ae).toMatch(/30\/30/); expect(r.ae).toMatch(/15\/30/);
+  noErrors(errors, 'normativa');
+});

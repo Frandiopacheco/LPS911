@@ -57,7 +57,7 @@ test('utilidades: horas, DNI, categoría y parsers', async ({ page }) => {
   expect(r.lv).toEqual({ trab: 8.5, ext: 0 });
   expect(r.lvx).toEqual({ trab: 10.5, ext: 2 });
   expect(r.sa).toEqual({ trab: 5.5, ext: 0 });
-  expect(r.sax).toEqual({ trab: 9.5, ext: 4 }); // sábado: sin refrigerio aunque pase de la jornada (auditoría F2)
+  expect(r.sax).toEqual({ trab: 8.75, ext: 3.25 }); // sábado: el refrigerio (45 min desde las 13:00) se descuenta a quien se queda (21-10-2026)
   expect(r.corto.trab).toBe(4);
   expect(r.dom).toEqual({ trab: 4.5, ext: 4.5 });
   expect(r.dni).toEqual(['03684337', '03684337', '', '', '', '12345678', '001234567']);
@@ -205,13 +205,13 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await tab(page, 'tdia');
   await expect(page.locator('tr[data-tcap="tcap1@obra.pe"]')).toContainText('Tito Capataz'); // con obreros y sin tareo (detalle en tareo-dia.spec.js)
   await expect(page.locator('tr[data-tcap="tcap1@obra.pe"]')).toContainText('Sin empezar');
-  // jornada: sábado hasta las 13:30 y guardar
+  // jornada: sábado desde las 07:00 y guardar
   await tab(page, 'tcfg');
   await expect(page.locator('#tjTot')).toHaveText('48.0');
   /* si la página se redibuja justo al escribir (llega la configuración), se vuelve a escribir */
   await expect(async () => {
-    await page.fill('[data-tjd="6"] [data-tj="fin"]', '13:30');
-    await page.locator('[data-tjd="6"] [data-tj="fin"]').blur();
+    await page.fill('[data-tjd="6"] [data-tj="ini"]', '07:00');
+    await page.locator('[data-tjd="6"] [data-tj="ini"]').blur();
     await expect(page.locator('#tjTot')).toHaveText('48.5', { timeout: 1000 });
   }).toPass({ timeout: 8000 });
   await expect(page.locator('#tjTol')).toHaveCount(0); // sin garita (20-10-2026)
@@ -224,8 +224,8 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sem).toEqual(await page.evaluate(() => ({ n: 70, lun: tLunes(todayIso()) })));
   expect(await page.evaluate(() => [tSemN(tLunes(todayIso())), tSemN(iso(new Date(pd(tLunes(todayIso())).getTime() - 7 * 864e5)))])).toEqual([70, 69]);
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).pubAuto).toEqual({ on: true, hh: '20:30' });
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:30', fin: '13:30', ref: 0 }, '0': null }, refIni: '12:00' });
-  await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:30', '13:30'))).toEqual({ trab: 6, ext: 0 });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:00', fin: '13:00', ref: 45, refIni: '13:00' }, '0': null }, refIni: '12:00' });
+  await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:00', '13:00'))).toEqual({ trab: 6, ext: 0 });
   noErrors(errors, 'partidas y jornada');
 });
 
