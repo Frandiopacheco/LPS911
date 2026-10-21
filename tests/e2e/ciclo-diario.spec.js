@@ -271,9 +271,9 @@ test('16b · reporte por excepción: sin «Iniciado»; «Detenido» guarda la ho
   noErrors(errors, 'detenido');
 });
 
-test('16c · corte de las 4 pm: el SC ya no cierra; detenido tardío; el ingeniero verifica No cumplido imputable al SC', async ({ page }) => {
+test('16c · corte del cierre (por defecto 5 pm): el SC ya no cierra; detenido tardío; el ingeniero verifica No cumplido imputable al SC', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'cap' });
-  await page.clock.setFixedTime(new Date(HOY + 'T16:10:00-05:00'));
+  await page.clock.setFixedTime(new Date(HOY + 'T17:10:00-05:00'));
   await page.evaluate(d => liveWrite(d, 'i0', { st: 'stop', mot: 'Materiales' }, { s: 'stop', m: 'Materiales' }), HOY);
   expect(await page.evaluate(d => stopLate(d, 'i0'), HOY)).toBe(true);
   expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('reportado al cierre');
@@ -286,13 +286,15 @@ test('16c · corte de las 4 pm: el SC ya no cierra; detenido tardío; el ingenie
 
 test('16d · el ingeniero verifica después del corte lo que el SC no cerró: por defecto No cumplido, causa SC', async ({ page }) => {
   const errors = await openApp(page, { tab: 'campo' });
-  await page.clock.setFixedTime(new Date(HOY + 'T16:30:00-05:00'));
+  await page.clock.setFixedTime(new Date(HOY + 'T17:30:00-05:00'));
   await page.evaluate(d => capSheet('i0', d, 'close'), HOY);
   await expect(page.locator('#ksheet [data-kcs="no"]')).toHaveClass(/on/);
   const c = await page.evaluate(() => cncSinDet());
   expect(c).toBeTruthy();
   await expect(page.locator(`#ksheet [data-kcnc="${c}"]`)).toHaveClass(/on/);
-  await expect(page.locator('#ksheet')).toContainText('no cerró antes de las 4 pm');
+  await expect(page.locator('#ksheet')).toContainText('no cerró antes de las 5 pm');
+  expect(await page.evaluate(() => [closeCutHH(), cutT(), hhLabel('16:30')])).toEqual(['17:00', '5 pm', '4:30 pm']);
+  expect(await page.evaluate(d => detKind(d, 'i0', { sinCierre: true }), HOY)).toBe('sinc');
   noErrors(errors, 'corte ingeniero');
 });
 

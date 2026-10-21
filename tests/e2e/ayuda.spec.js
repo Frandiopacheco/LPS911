@@ -87,7 +87,7 @@ test('tutorial por rol: lecciones con pasos y ejemplo; cada rol ve las suyas', a
   expect(await page.locator('#lqm [data-ayt]').evaluateAll(bs => bs.map(b => b.dataset.ayt))).toEqual(['hoy', 'pdSc', 'obraSc', 'propSc', 'restr', 'libSol']);
   await expect(page.locator('.aytl.open .ayej')).toContainText('Ejemplo en obra');
   await page.click('[data-ayt="obraSc"]');
-  await expect(page.locator('.aytl.open .aytlh b')).toHaveText('En obra: iniciar, detener y cerrar (SC)');
+  await expect(page.locator('.aytl.open .aytlh b')).toHaveText('En obra: detenidos y cierre (SC)');
   await page.locator('.aytl.open [data-aygo="cap"]').click();
   await expect(page.locator('#lqm')).toHaveCount(0);
   noErrors(errors, 'tutorial sc');

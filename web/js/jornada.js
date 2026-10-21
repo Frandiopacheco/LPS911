@@ -39,7 +39,7 @@ function iprdJornada(d){const R=jorData(d);if(!R.rows.length)return'<div class="
 let JOR=null;
 function jorOpen(){JOR={d:todayIso()};jorDraw()}
 function jorDraw(){if(!JOR)return;const R=jorData(JOR.d);
-  const h=`<div class="ksh"><i class="kn" style="--k:#2563eb">📊</i><div><b>Estado de la jornada</b><span>${fmtD(R.d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span><span>Detenidos reportados y quién ya cerró el día (corte ${CLOSE_CUT_T})</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
+  const h=`<div class="ksh"><i class="kn" style="--k:#2563eb">📊</i><div><b>Estado de la jornada</b><span>${fmtD(R.d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span><span>Detenidos reportados y quién ya cerró el día (corte ${cutT()})</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
     ${R.rows.length?`<div class="jor-w">${jorBlock(R,'det')}${jorBlock(R,'cer')}</div>
     <div class="kbtns two"><button class="kbig pri" data-jor="share" data-jd="${R.d}">📷 Compartir imagen</button><button class="kbig ghost" data-jor="dl" data-jd="${R.d}">⬇ Descargar</button></div>
     <div class="kbtns"><button class="kbig ghost" data-jor="ref">↻ Actualizar</button></div>

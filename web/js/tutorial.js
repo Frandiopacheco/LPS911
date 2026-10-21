@@ -52,8 +52,8 @@ const AY_TUT={
     s:[{x:'Abre el Plan diario: se abre en el día hábil siguiente con tus actividades.',tab:'mapa'},'Para cada actividad: «Va», o «No va» / «Culminado» con la causa.','En «Equipos del día» pon el personal por cuadrilla y el horario.','Asigna cada cuadrilla a su actividad (en el celular: toca la cuadrilla y luego el número de la actividad).'],
     e:'Mañana no llega el yeso: marcas «No va» en el empaste del Dpto 104 con causa «Materiales». En la reunión el ingeniero decide si se reprograma o se libera temprano.'},
 
-  obraSc:{t:'En obra: detenidos y cierre (SC)',g:'Reporta solo lo que no puedes ejecutar y cierra el día antes de las 4 pm.',
-    s:[{x:'Abre En obra: tus actividades de hoy, por piso. Todas están «En curso»: no marques el inicio.',tab:'cap'},'«⏸ Detenido…» con el motivo en el momento en que encuentres la restricción, a cualquier hora.','Antes de las 4 pm cierra cada actividad: Cumplido o No cumplido con causa. Lo que no cierres a esa hora cuenta como No cumplido.'],
+  obraSc:{t:'En obra: detenidos y cierre (SC)',g:'Reporta solo lo que no puedes ejecutar y cierra el día antes de la hora de corte (por defecto 5 pm).',
+    s:[{x:'Abre En obra: tus actividades de hoy, por piso. Todas están «En curso»: no marques el inicio.',tab:'cap'},'«⏸ Detenido…» con el motivo en el momento en que encuentres la restricción, a cualquier hora.','Antes de la hora de corte (por defecto 5 pm) cierra cada actividad: Cumplido o No cumplido con causa. Lo que no cierres a esa hora cuenta como No cumplido.'],
     e:'A las 11 am se corta el agua y la cuadrilla de sanitarias para: tocas «Detenido…» y eliges el motivo. A las 2 pm vuelve y tocas «Reanudado».'},
 
   cap:{t:'Reportar desde el celular (capataz)',g:'Contar en vivo el avance de tu cuadrilla.',

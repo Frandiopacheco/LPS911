@@ -20,7 +20,7 @@ const AY_FLOWS={
     {q:'¿Se congeló la semana a mano?',y:[{p:'Semana congelada',d:'El compromiso queda fijo para medir el PPC semanal.'}],n:[{p:'Congelado automático',d:'El servidor la congela en el corte (sábado 13:00 por defecto).'}]},
     {p:'Reunión diaria: plan del día siguiente',d:'Va / No va, cruces entre partidas y cuadrillas.',tab:'mapa',w:'Producción y SC'},
     {q:'¿Se publicó el plan al terminar la reunión?',y:[{p:'Plan publicado y cerrado'}],n:[{p:'Publicación automática (por defecto 21:00)',d:'Se aplican los cambios de la reunión; las propuestas del SC sin revisar se rechazan (va lo programado).'}]},
-    {p:'Ejecución en obra',d:'El SC y sus capataces inician y detienen; al final del día (≈ 4 pm) proponen el cierre.',tab:'cap',w:'SC y capataces'},
+    {p:'Ejecución en obra',d:'El SC y sus capataces solo reportan «Detenido»; antes de la hora de corte (por defecto 5 pm) proponen el cierre.',tab:'cap',w:'SC y capataces'},
     {p:'Registro de cumplimiento',d:'El ingeniero confirma lo propuesto o, si nadie lo propuso, registra Cumplido / No cumplido con su causa.',tab:'campo',w:'Campo'},
     {p:'PPC diario y semanal',d:'Se mide contra lo comprometido; los no cumplidos llevan causa e imputabilidad.',tab:'ind',w:'Producción'},
     {o:'Se actualiza el lookahead y empieza otra semana'}]},
@@ -113,7 +113,7 @@ const AY_FLOWS={
     {o:'Abrir En obra'},
     {p:'Actividades de hoy',d:'Las de tu partida, por piso.',tab:'cap'},
     {p:'«Iniciar» / «Detener…»',d:'Tú o tus capataces (desde su celular). Detener pide el motivo.'},
-    {p:'Cierre del día (≈ 4 pm)',d:'Tú o tus capataces proponen Cumplido / No cumplido con su causa. Si nadie lo propone, el ingeniero lo registra igual.'},
+    {p:'Cierre del día (antes de la hora de corte)',d:'Tú o tus capataces proponen Cumplido / No cumplido con su causa. Si nadie lo propone, el ingeniero lo registra igual.'},
     {q:'¿El ingeniero verificó el cierre?',y:[{p:'Confirmado en Campo'}],n:[{p:'Se acepta solo a las 23:30'}]},
     {o:'Cuenta en el PPC'}]},
 

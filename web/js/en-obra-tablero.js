@@ -8,20 +8,25 @@ const KST={none:{t:'En curso',c:'#8C959F'},seq:{t:'En secuencia',c:'#7E57C2'},ru
 /* REPORTE POR EXCEPCIÓN (oct 2026, decidido con el dueño): ya no se marca «Iniciado». Toda actividad del plan publicado
    queda por defecto «En curso» (o por iniciar más tarde, tren de trabajo); el SC/capataz solo reporta «Detenido» con su motivo,
    a cualquier hora del día (el sistema guarda la hora). Un detenido reportado a la hora de corte o después, o junto con el cierre,
-   es «reportado al cierre» (stopLate) y no sugiere una causa ajena. Hora de corte del cierre: CLOSE_CUT_HH (4 pm): después el
+   es «reportado al cierre» (stopLate) y no sugiere una causa ajena. Hora de corte del cierre: closeCutHH() (Configuración › Proyecto, por defecto 5 pm): después el
    SC/capataz ya no propone el cierre, y lo que quedó sin cierre lo registra el servidor como No cumplido (aceptarCierres, sinCierre). */
 const STOP_MOT=['Actividad predecesora','Seguridad','Materiales','Calidad','Otros'];
 /* motivo antiguo del tren de trabajo: queda solo para leer los reportes viejos */
 const STOP_INFO='Inicia después';
-const CLOSE_CUT_HH='16:00';
-const CLOSE_CUT_T='4 pm';
+/* hora de corte del cierre (base.js closeCutHH) y su texto («5 pm») */
+const cutT=()=>hhLabel(closeCutHH());
 /* ya pasó la hora de corte del cierre de ese día (días pasados: sí) */
-const closeCut=d=>d<todayIso()||(d===todayIso()&&nowHM()>=CLOSE_CUT_HH);
+const closeCut=d=>d<todayIso()||(d===todayIso()&&nowHM()>=closeCutHH());
 /* último «Detenido» del día (evento del historial) */
 function lastStop(d,aid){const lv=liveOf(d,aid);if(!lv)return null;for(const e of [...(lv.log||[])].reverse())if(e&&e.s==='stop')return e;return null}
 /* detenido reportado al cierre: a la hora de corte o después, o en el momento del cierre o después */
 function stopLate(d,aid){const e=lastStop(d,aid);if(!e)return false;const lv=liveOf(d,aid);const ct=lv&&lv.close&&lv.close.t;
-  return hhmm(e.t)>=CLOSE_CUT_HH||(!!ct&&e.t>=ct-60000)}
+  return hhmm(e.t)>=closeCutHH()||(!!ct&&e.t>=ct-60000)}
+/* cómo se reportó un incumplimiento (Indicadores): «Detenido» a tiempo, reportado al cierre, sin detenido, o sin cierre (lo registró el
+   servidor a la hora de corte). Sale de los reportes en vivo del día (live). */
+const DETK={ok:{t:'Detenido a tiempo',c:'dk-ok'},late:{t:'Reportado al cierre',c:'dk-late'},none:{t:'Sin detenido',c:'dk-none'},sinc:{t:'Sin cierre',c:'dk-none'}};
+function detKind(d,aid,rc){if(rc&&rc.sinCierre)return'sinc';const e=lastStop(d,aid);return e?(stopLate(d,aid)?'late':'ok'):'none'}
+const detTag=(d,aid,rc)=>{const k=detKind(d,aid,rc);return`<span class="ixd-tag ${DETK[k].c}">${DETK[k].t}</span>`};
 /* causa imputable al SC que se sugiere cuando no se cumplió y no hubo «Detenido» a tiempo */
 function cncSinDet(){const L=P().cnc||[];return L.find(n=>cncCode(n)==='SC')||''}
 /* causa de no cumplimiento que sugiere el motivo de «Detenido» (oct 2026, pedido del dueño): al verificar el cumplimiento, el motivo de la
@@ -139,7 +144,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
   if(mode==='close'&&KS.cs==='no'&&!KS.cnc){const sg=stopCnc(d,aid);if(sg){KS.cnc=sg.cnc;KS.imp=null;KS.sg=sg.mot;if(!KS.note.trim()&&sg.note)KS.note=sg.note}
     else if(!(lastStop(d,aid)&&!stopLate(d,aid))){const c=cncSinDet();if(c){KS.cnc=c;KS.imp=null;KS.sg='__sindet'}}}
   /* el ingeniero verifica después de la hora de corte lo que el SC no cerró: por defecto No cumplido, imputable al SC */
-  if(mode==='close'&&!keep&&E&&!KS.cs&&closeCut(d)&&!recOf(d,aid)){KS.cs='no';const c=cncSinDet();if(c){KS.cnc=c;KS.imp=null;KS.sg='__sincierre'}if(!KS.note)KS.note=`Sin cierre del SC antes de las ${CLOSE_CUT_T}`}
+  if(mode==='close'&&!keep&&E&&!KS.cs&&closeCut(d)&&!recOf(d,aid)){KS.cs='no';const c=cncSinDet();if(c){KS.cnc=c;KS.imp=null;KS.sg='__sincierre'}if(!KS.note)KS.note=`Sin cierre del SC antes de las ${cutT()}`}
   const cnc=P().cnc||[];const later=(x.days||[]).filter(y=>y>d).length;
   let h=`<div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${n||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}${past?' · <b>'+fmtD(d)+'</b>':''}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}`;
@@ -148,7 +153,7 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
       <input class="kin" id="kmott" placeholder="${KS.mot==='Otros'?'Detalle (obligatorio)':'Detalle (opcional)'}" value="${esc(KS.note)}"><label class="kph">📷 Foto (opcional)<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn"></span>
       <div class="kbtns"><button class="kbig warn" data-ka="stopsave">⏸ Guardar «Detenido»</button><button class="kbig ghost" data-ka="back">Volver</button></div>`}
   else if(mode==='close'){h+=`<div class="ksl">¿Se cumplió lo programado para ${past?'ese día':'hoy'}?</div><div class="kbtns two"><button class="kbig ok${KS.cs==='ok'?' on':''}" data-kcs="ok">✓ Cumplido</button><button class="kbig no${KS.cs==='no'?' on':''}" data-kcs="no">✗ No cumplido</button></div>
-      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>${KS.sg&&KS.cnc&&(stopCnc(d,aid)||{}).cnc===KS.cnc?`<p class="knote">Causa tomada del motivo de detención («${esc(KS.sg)}»). Puedes cambiarla.</p>`:KS.sg==='__sindet'&&KS.cnc===cncSinDet()?`<p class="knote">No hubo «Detenido» reportado a tiempo: se sugiere causa imputable al SC. Puedes cambiarla.</p>`:KS.sg==='__sincierre'&&KS.cnc===cncSinDet()?`<p class="knote">El SC no cerró antes de las ${CLOSE_CUT_T}: por defecto No cumplido imputable al SC. Puedes cambiarlo.</p>`:''}`:''}
+      ${KS.cs==='no'?`<div class="ksl">Causa</div><div class="kchips kw">${cnc.map(c=>`<button class="${KS.cnc===c?'on':''}" data-kcnc="${esc(c)}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}</div>${KS.sg&&KS.cnc&&(stopCnc(d,aid)||{}).cnc===KS.cnc?`<p class="knote">Causa tomada del motivo de detención («${esc(KS.sg)}»). Puedes cambiarla.</p>`:KS.sg==='__sindet'&&KS.cnc===cncSinDet()?`<p class="knote">No hubo «Detenido» reportado a tiempo: se sugiere causa imputable al SC. Puedes cambiarla.</p>`:KS.sg==='__sincierre'&&KS.cnc===cncSinDet()?`<p class="knote">El SC no cerró antes de las ${cutT()}: por defecto No cumplido imputable al SC. Puedes cambiarlo.</p>`:''}`:''}
       ${E&&KS.cs==='no'&&KS.cnc?`<div class="ksl">¿Imputable a ${esc(conOf(x.sc).name)}?</div><span class="seg kseg"><button class="${(KS.imp??cncImp(KS.cnc))?'on':''}" data-kimp="1">Sí</button><button class="${(KS.imp??cncImp(KS.cnc))?'':'on'}" data-kimp="0">No</button></span><p class="knote">${KS.imp!=null?'Cambiado a mano.':'Según la causa.'} Igual que en las tarjetas: lo no imputable no le baja el PPC del SC.</p>`:''}
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
@@ -161,12 +166,12 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
     else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='stop'?`<div class="kbtns two"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Ya ingresó'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button></div>`:'<button class="kbig warn" data-ka="stopf">⏸ Detenido…</button>'):''}</div>`}
   else if(SCK()){if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<p class="knote">Solo puedes marcar el avance del día de hoy.</p>`;
-    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${CLOSE_CUT_T}) sin tu cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
+    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${cutT()}) sin tu cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
     else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">Cierre enviado: el ingeniero lo confirma.</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
     else h+=kMainBtns(s,lv);
-    h+=`<p class="knote">No necesitas marcar el inicio: todo lo programado está «En curso». Solo reporta «Detenido» si no puedes ejecutar. Cierra antes de las ${CLOSE_CUT_T} (cumplido o no cumplido); sin cierre, cuenta como No cumplido.</p>`}
+    h+=`<p class="knote">No necesitas marcar el inicio: todo lo programado está «En curso». Solo reporta «Detenido» si no puedes ejecutar. Cierra antes de las ${cutT()} (cumplido o no cumplido); sin cierre, cuenta como No cumplido.</p>`}
   else{if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
-    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${CLOSE_CUT_T}) sin cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
+    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${cutT()}) sin cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
     else if(s.k==='ok'||s.k==='no')h+=`<div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
     else h+=kMainBtns(s,lv)}
   if(typeof canNP==='function'&&((canNP()&&(ENG()||VEED()))||(SCK()&&npSC()))&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
@@ -187,7 +192,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.close
   if(k==='np'){const x=S.act.get(aid);const pt=KS.pt||null;kClose();if(x)npNew({d,pid:pisoOfAct(aid),ambId:x.ambId,pt});return}
   if(k==='back'){capSheet(aid,d,'main',true);return}
   if(k==='stopf'){KS.note='';KS.mot='';capSheet(aid,d,'stop',true);return}
-  if(k==='closef'){if(!ENG()&&closeCut(d)){toast(`Pasó la hora de corte (${CLOSE_CUT_T}): el cierre lo registra el ingeniero.`);return}capSheet(aid,d,'close');return}
+  if(k==='closef'){if(!ENG()&&closeCut(d)){toast(`Pasó la hora de corte (${cutT()}): el cierre lo registra el ingeniero.`);return}capSheet(aid,d,'close');return}
   if(k==='run'||k==='res'){kAct(aid,d,k);kClose();return}
   if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}if(mot==='Otros'&&!KS.note.trim()){toast('Escribe el detalle del motivo.');$('#kmott')&&$('#kmott').focus();return}
     const lv=liveOf(d,aid);let extra=null;
@@ -196,7 +201,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.close
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});toast('Verificación guardada');kClose();return}
-  if(k==='closesave'){if(closeCut(d)){toast(`Pasó la hora de corte (${CLOSE_CUT_T}): el cierre lo registra el ingeniero.`);kClose();return}if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
+  if(k==='closesave'){if(closeCut(d)){toast(`Pasó la hora de corte (${cutT()}): el cierre lo registra el ingeniero.`);kClose();return}if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
     const lv0=liveOf(d,aid);const fid=kPhotoSave(d,aid,true);liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs},fid?{photos:[...(lv0&&lv0.photos||[]),fid]}:null);toast('Cierre enviado. El ingeniero lo confirmará.');kClose();return}}
 
 /* ---------- Reporte «sin inicio marcado» para WhatsApp (oct 2026) ----------

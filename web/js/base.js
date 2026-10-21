@@ -120,6 +120,11 @@ const CNC_STD_V=1;
 /* tipo de restricción según la causa (código del cuadro): el de la lista del proyecto que le corresponde, o vacío.
    Misma tabla que el servidor (functions/lib.js RT_RX). */
 /* hora de la publicación automática del plan del día siguiente (Configuración › Proyecto; como el servidor: por defecto 21:00, máx. 23:30) */
+/* hora de corte del cierre de jornada (Configuración › Proyecto, closeCutHH; por defecto 17:00, entre 12:00 y 21:00 porque el servidor
+   registra lo no cerrado a las 23:30). Misma regla que functions/lib.js closeCutHH */
+function closeCutHH(){const v=P().closeCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v>='12:00'&&v<='21:00'?v:'17:00'}
+/* «17:00» → «5 pm», «16:30» → «4:30 pm» */
+function hhLabel(v){const[h,m]=String(v).split(':').map(Number);const h12=h%12||12;return`${h12}${m?':'+String(m).padStart(2,'0'):''} ${h<12?'am':'pm'}`}
 function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v<='23:30'?v:'21:00'}
 const RT_RX=[['PROG',/program/i],['MAT',/materi/i],['QA/QC',/calidad|qa|qc/i],['EXT',/extern|clim/i],['CLI',/client|supervis/i],['EQ',/equipo|herramient/i],['DIS',/dise[ñn]o|ingenier/i],['SC',/subcontrat|personal|mano de obra/i],['ADM',/administr|permis/i],['EJEC',/ejecuci/i],['OT',/otro/i]];
 function restrTypeFor(code,types){const rx=(RT_RX.find(([c])=>c===code)||[])[1];if(!rx)return'';return(types||(typeof P==='function'?P().restrTypes:[])||[]).find(t=>typeof t==='string'&&rx.test(t))||''}
@@ -131,8 +136,8 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
 /* campos de meta/project que solo cambia el administrador (SEG-01; los mismos en firebase/firestore.rules) */
-const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','finObra'];
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00'};let P_SRC=null,P_VAL=P_DEF;
+const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','closeCutHH','finObra'];
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00',closeCutHH:'17:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */
