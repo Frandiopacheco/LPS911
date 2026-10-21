@@ -140,6 +140,7 @@
   const cmpCod = (a, b) => { const A = String(a || '').split('.'), B = String(b || '').split('.'); for (let i = 0; i < Math.max(A.length, B.length); i++) { const x = parseInt(A[i], 10), y = parseInt(B[i], 10); if ((x || 0) !== (y || 0)) return (x || 0) - (y || 0); } return 0; };
   /** snapshot inmutable tpub/{fecha}_v{v} (forma en «Contrato de F3»). Solo se llama sin bloqueos.
       pcs = catálogo congelado: todas las partidas activas más las que tienen horas. anterior = snapshot vigente (para dif) o null. */
+  const hm = v => typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v);
   function tpArmarPublicacion({ fecha, tareos, personal, partidas, excepciones, v, at, by, byN, motivo, anterior }) {
     const T = tareosDia(tareos, fecha); const E = excLimpias(excepciones);
     const F = new Map(vals(personal).filter(Boolean).map(p => [String(p.dni || p.id || ''), p]));
@@ -153,7 +154,9 @@
         Object.keys(c.h).forEach(pc => { usados.add(pc); tot.porPc[pc] = r2((tot.porPc[pc] || 0) + c.h[pc]); });
         const as = r.as === true; const alt = as && r.alt === true;
         rows.push({ dni, ape: String(f.ape || r.ape || ''), nom: String(f.nom || r.nom || ''), cat: String(f.cat || r.cat || ''), cua: String(f.cua || r.cua || ''),
-          cap: t.cap || '', capN: t.capN || '', as, mot: as ? '' : String(r.mot || ''), alt, h: c.h, trab: c.trab, ext: c.ext });
+          cap: t.cap || '', capN: t.capN || '', as, mot: as ? '' : String(r.mot || ''), alt, h: c.h, trab: c.trab, ext: c.ext,
+          /* horario del capataz (20-10-2026): solo si lo cambió; respaldo para RR.HH. */
+          ...(as && hm(r.ent) ? { ent: r.ent } : {}), ...(as && hm(r.sal) ? { sal: r.sal } : {}), ...(as && r.cor === true ? { cor: true } : {}) });
         if (as) { tot.pres++; if (alt) tot.alt++; } else { tot.aus++; const m = r.mot || '_'; tot.porMot[m] = (tot.porMot[m] || 0) + 1; }
         tot.hh = r2(tot.hh + c.trab); tot.he = r2(tot.he + c.ext);
       }
