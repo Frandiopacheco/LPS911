@@ -16,7 +16,7 @@ function renderTRh(main){if(TPLA.on)return renderTPla(main);
   const vistas=[['sem','Asistencia y horas'],['alt',`Altas y bajas`],['dm','Descansos médicos'],['ae','Asignación escolar']];
   const T=R.T;const k=(l,v,s,c)=>`<div class="lqtile"${c?` style="--c:${c}"`:''}><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
   const body=TRH.vista==='alt'?trhAltas(R):TRH.vista==='dm'?trhDM(R):TRH.vista==='ae'?trhAE(R):trhSemana(R);
-  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('RR.HH.',esc(tsPerTxt(TRH.tipo,a,b))+' · se actualiza con cada publicación',`<button class="ib pri" id="trhX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
+  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('RR.HH.',esc(tsPerTxt(TRH.tipo,a,b))+' · se actualiza con cada publicación',`<button class="ib" id="trhXo"${TPK.busy?' disabled':''} title="El Excel de antes (una hoja por día, Resumen HH y Tareo Semana), mientras dura la transición">Excel formato anterior</button><button class="ib pri" id="trhX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
     ${tsPerBar(TRH,'trh')}
     <div class="ts-chips" id="trhDias"><span class="note">Días:</span>${tsDiasChips(R,o&&o.idx)}${lo?'<span class="note">Cargando publicaciones…</span>':''}</div>
     ${o&&o.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(o.err)}).</div>`:''}
@@ -33,6 +33,7 @@ function renderTRh(main){if(TPLA.on)return renderTPla(main);
   </div></div>`;
   tsPerBind(TRH,'trh');
   $('#trhV').onclick=e=>{const x=e.target.closest('[data-trhv]');if(x){TRH.vista=x.dataset.trhv;requestRender()}};
+  $('#trhXo').onclick=()=>tpxBajar(TRH.tipo==='sem'?'semana':a===b?'dia':'rango',a,b);
   $('#trhX').onclick=()=>{if(typeof tsxBajar==='function')tsxBajar('rrhh',a,b,TRH.tipo);else toast('El Excel nuevo llega en la próxima versión.')};
   const q=$('#trhQ');if(q){q.oninput=()=>{TRH.q=q.value;trhFiltrar()};$('#trhCua').onchange=e=>{TRH.cua=e.target.value;requestRender()};$('#trhCat').onchange=e=>{TRH.cat=e.target.value;requestRender()};$('#trhNov').onchange=e=>{TRH.nov=e.target.checked;requestRender()}}
   const tb=$('#trhTb');if(tb)tb.onclick=e=>{const r=e.target.closest('[data-trhd]');if(r){TRH.sel=TRH.sel===r.dataset.trhd?'':r.dataset.trhd;requestRender()}};
