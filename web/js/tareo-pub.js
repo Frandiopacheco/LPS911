@@ -366,8 +366,9 @@ const tpxCat=c=>TPX_CAT[c]||c||'';
 const tpxApes=o=>{const f=(S.tper&&S.tper.get(o.dni))||{};const ape=o.ape||f.ape||'';return typeof tApes==='function'?tApes({...f,ape}):[ape,'']};
 /* «Semana 61 (del 19.10.2026 a 25.10.2026)» como el archivo de costos; sin número de semana configurado, solo el rango */
 const tpxSemT=(a,b)=>{const n=typeof tSemN==='function'?tSemN(a):null;return`${n?'Semana '+n+' ':''}(del ${tpxDmy(a)} a ${tpxDmy(b)})`};
-const tpxUaP=ua=>String(ua||'').replace(/-\d+$/,'');
-const tpxExcCod=m=>/vacaci/i.test(m||'')?'VA':/m[eé]dic/i.test(m||'')?'DM':'EX';
+/* solo un sufijo de 1–2 dígitos («CD1010010-01»); «OC-2045» queda igual */
+const tpxUaP=ua=>String(ua||'').trim().replace(/-\d{1,2}$/,'');
+const tpxExcCod=m=>/^\s*falta/i.test(m||'')?'F':/vacaci/i.test(m||'')?'VA':/m[eé]dic/i.test(m||'')?'DM':'EX';
 function tpxSt(){const bd={style:'thin',color:{rgb:'A6A6A6'}};const B={top:bd,bottom:bd,left:bd,right:bd};const c={horizontal:'center',vertical:'center',wrapText:true};
   return{tit:{font:{bold:true,sz:14}},sub:{font:{bold:true}},hdr:{font:{bold:true},fill:{fgColor:{rgb:'92D050'}},alignment:c,border:B},
     pcn:{font:{sz:8},alignment:c,border:B},cod:{font:{bold:true,sz:9},alignment:{horizontal:'center'},border:B},yel:{font:{bold:true},fill:{fgColor:{rgb:'FFFF00'}}},
@@ -404,26 +405,28 @@ function tpxWsDia(X,p,G0){const S0=tpxSt(),sh=tpxSheet(X),f=p.fecha||String(p.id
   sh.set(5,cT,'hrs',S0.hdr);sh.set(5,cE,'hrs',S0.hdr);sh.set(5,cB,'(A)',S0.hdr);sh.set(5,cO,'',S0.hdr);
   ['N°','Personal Obrero','CUADRILLA','DNI','Categoría'].forEach((l,c)=>sh.set(5,c,l,S0.hdr));
   sh.h(3,64);sh.h(2,30);
-  const CATS=['Operario','Oficial','Peon'];const tot=pcs.map(()=>0);const byC=CATS.map(()=>pcs.map(()=>0));let tT=0,tE=0,tA=0;
-  G.forEach((r,n)=>{const R=6+n;const pres=r.as===true;const cat=tpxCat(r.cat);const ci=CATS.indexOf(cat);
+  /* «Otros» (capataz, sin categoría…): fila y columna propias solo si tienen horas, para que las categorías cuadren con el total */
+  const CAT0=['Operario','Oficial','Peon','Otros'];const tot=pcs.map(()=>0);const byC=CAT0.map(()=>pcs.map(()=>0));let tT=0,tE=0,tA=0;
+  G.forEach((r,n)=>{const R=6+n;const pres=r.as===true;const cat=tpxCat(r.cat);const ci=CAT0.indexOf(cat)>=0&&CAT0.indexOf(cat)<3?CAT0.indexOf(cat):3;
     sh.set(R,0,n+1,S0.num);sh.set(R,1,[r.ape,r.nom].filter(Boolean).join(' '),S0.txt);sh.set(R,2,r.cua||'',S0.txt);sh.set(R,3,String(r.dni),S0.num);sh.set(R,4,cat,S0.num);
-    pcs.forEach((x,k)=>{const h=pres?tpNum((r.h||{})[x.id]):0;sh.set(R,c0+k,h||'',S0.numB);if(h){tot[k]+=h;if(ci>=0)byC[ci][k]+=h}});
+    pcs.forEach((x,k)=>{const h=pres?tpNum((r.h||{})[x.id]):0;sh.set(R,c0+k,h||'',S0.numB);if(h){tot[k]+=h;byC[ci][k]+=h}});
     const tr=pres?tpNum(r.trab!=null?r.trab:tHrsSum(r.h)):0,te=pres?tpNum(r.ext):0;tT+=tr;tE+=te;if(pres&&r.alt)tA++;
     sh.set(R,cT,pres?tR2(tr):'',S0.numB);sh.set(R,cE,pres?tR2(te):'',S0.num);sh.set(R,cB,pres&&r.alt?'(A)':'',pres&&r.alt?{...S0.num,...S0.yel}:S0.num);
     sh.set(R,cO,r.fuera?'No figura este día':r.exc?`Sin tareo: ${r.exc}`:pres?'':r.mot?`${r.mot} · ${TO_MOT[r.mot]||''}`.replace(/ · $/,''):r.as===false?'No vino':'Sin marcar',S0.txt)});
   const RT=6+G.length;sh.set(RT,1,'TOTAL',S0.tot);for(let c=0;c<5;c++)if(c!==1)sh.set(RT,c,'',S0.tot);pcs.forEach((x,k)=>sh.set(RT,c0+k,tot[k]?tR2(tot[k]):'',S0.tot));
   sh.set(RT,cT,tR2(tT),S0.tot);sh.set(RT,cE,tR2(tE),S0.tot);sh.set(RT,cB,tA||'',S0.tot);sh.set(RT,cO,'',S0.tot);
   /* HH por categoría, UA y UA POWERS de cada partida */
+  const CATS=byC[3].some(v=>v)?CAT0:CAT0.slice(0,3);const nC=CATS.length;
   CATS.forEach((c,ci)=>{const R=RT+1+ci;sh.set(R,4,c,S0.sub);pcs.forEach((x,k)=>sh.set(R,c0+k,byC[ci][k]?tR2(byC[ci][k]):'',S0.num));sh.set(R,cT,tR2(byC[ci].reduce((a,b)=>a+b,0)),S0.numB)});
-  const RU=RT+4;sh.set(RU,4,'UA',S0.sub);sh.set(RU+1,4,'UA POWERS',S0.sub);
+  const RU=RT+1+nC;sh.set(RU,4,'UA',S0.sub);sh.set(RU+1,4,'UA POWERS',S0.sub);
   pcs.forEach((x,k)=>{sh.set(RU,c0+k,x.ua||'',S0.pcn);sh.set(RU+1,c0+k,tpxUaP(x.ua),S0.pcn)});
   const sC=tR2(byC.flat().reduce((a,b)=>a+b,0));sh.set(RU,cT,sC===tR2(tT)?'ok':`revisar: categorías ${sC} ≠ total ${tR2(tT)}`,S0.sub);
   /* HH por UA POWERS y categoría (lo que costos arma con SUMIF debajo de la hoja) */
   const UA=new Map();pcs.forEach((x,k)=>{const u=tpxUaP(x.ua)||'(sin UA)';const o=UA.get(u)||{u,cod:[],h:CATS.map(()=>0)};o.cod.push(x.cod);CATS.forEach((c,ci)=>{o.h[ci]+=byC[ci][k]});UA.set(u,o)});
-  const RA=RU+3;sh.set(RA,0,"UA'S",S0.hdr);sh.set(RA,1,'PARTIDAS',S0.hdr);CATS.forEach((c,ci)=>sh.set(RA,2+ci,c,S0.hdr));sh.set(RA,5,'TOTAL',S0.hdr);
+  const RA=RU+3;sh.set(RA,0,"UA'S",S0.hdr);sh.set(RA,1,'PARTIDAS',S0.hdr);CATS.forEach((c,ci)=>sh.set(RA,2+ci,c,S0.hdr));sh.set(RA,2+nC,'TOTAL',S0.hdr);
   const UL=[...UA.values()].filter(o=>o.h.some(v=>v)).sort((a,b)=>a.u.localeCompare(b.u));
-  UL.forEach((o,n)=>{const R=RA+1+n;sh.set(R,0,o.u,S0.txt);sh.set(R,1,o.cod.join(', '),S0.txt);o.h.forEach((v,ci)=>sh.set(R,2+ci,v?tR2(v):'',S0.num));sh.set(R,5,tR2(o.h.reduce((a,b)=>a+b,0)),S0.numB)});
-  const RS=RA+1+UL.length;sh.set(RS,0,'TOTAL',S0.tot);sh.set(RS,1,'',S0.tot);CATS.forEach((c,ci)=>sh.set(RS,2+ci,tR2(byC[ci].reduce((a,b)=>a+b,0)),S0.tot));sh.set(RS,5,sC,S0.tot);
+  UL.forEach((o,n)=>{const R=RA+1+n;sh.set(R,0,o.u,S0.txt);sh.set(R,1,o.cod.join(', '),S0.txt);o.h.forEach((v,ci)=>sh.set(R,2+ci,v?tR2(v):'',S0.num));sh.set(R,2+nC,tR2(o.h.reduce((a,b)=>a+b,0)),S0.numB)});
+  const RS=RA+1+UL.length;sh.set(RS,0,'TOTAL',S0.tot);sh.set(RS,1,'',S0.tot);CATS.forEach((c,ci)=>sh.set(RS,2+ci,tR2(byC[ci].reduce((a,b)=>a+b,0)),S0.tot));sh.set(RS,2+nC,sC,S0.tot);
   sh.set(RS+2,1,tpxPie(p),S0.pie);
   return sh.done([5,34,15,11,10,...pcs.map(()=>7),9,11,7,26],{xSplit:5,ySplit:6})}
 const tHrsSum=h=>tR2(Object.values(h||{}).reduce((s,v)=>s+(tpNum(v)>0?tpNum(v):0),0));
@@ -432,7 +435,8 @@ function tpxUnion(days,PB){const M=new Map();for(const f of days){const p=PB.get
 const tpxRango=(a,b)=>a===b?tpxDmy(a):`del ${tpxDmy(a)} al ${tpxDmy(b)}`;
 /* «Resumen HH»: HH y HE por obrero y día; TOTAL HH, HN y HE */
 /* H60 / H100 (20-10-2026, el dueño): por día, las 2 primeras horas extra al 60 % y el resto al 100 % (construcción civil) */
-const tpxH60=e=>Math.min(2,Math.max(0,e));
+/* 21-10-2026 (auditoría): las primeras «he60h» de Parámetros (no 2 fijas); en domingo o feriado (p.nl) todas al 100 %, como RR.HH. */
+const tpxH60=(e,nl)=>nl&&TPL().df100?0:Math.min(TPL().he60h,Math.max(0,e));
 function tpxWsRes(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length,cTot=4+2*n;
   sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,sem?tpxSemT(days[0],days[n-1]):`Resumen de HH ${tpxRango(days[0],days[n-1])}`,S0.sub);
   days.forEach((f,i)=>{const c=4+2*i;const p=PB.get(f);sh.set(2,c,TPX_DIA[pd(f).getUTCDay()]+(p?'':' (sin publicar)'),S0.hdr);sh.set(2,c+1,'',S0.hdr);sh.merge(2,c,2,c+1);sh.set(3,c,tpxDm(f),S0.hdr);sh.set(3,c+1,'HE',S0.hdr)});
@@ -440,15 +444,15 @@ function tpxWsRes(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnio
   const TD0=days.map(()=>[0,0]);let A=0,B=0,A6=0,A1=0;
   G.forEach((o,j)=>{const R=4+j;let hh=0,he=0,h6=0;sh.set(R,0,j+1,S0.num);sh.set(R,1,[o.ape,o.nom].filter(Boolean).join(' '),S0.txt);sh.set(R,2,String(o.dni),S0.num);sh.set(R,3,tpxCat(o.cat),S0.num);
     days.forEach((f,i)=>{const p=PB.get(f);const r=p?tpRows(p).find(x=>x.dni===o.dni):null;const ok=r&&r.as===true;const t=ok?tpNum(r.trab):0,e=ok?tpNum(r.ext):0;
-      sh.set(R,4+2*i,p?(ok?tR2(t):0):'',S0.num);sh.set(R,5+2*i,p?(ok?tR2(e):0):'',S0.num);hh+=t;he+=e;h6+=tpxH60(e);TD0[i][0]+=t;TD0[i][1]+=e});
+      sh.set(R,4+2*i,p?(ok?tR2(t):0):'',S0.num);sh.set(R,5+2*i,p?(ok?tR2(e):0):'',S0.num);hh+=t;he+=e;h6+=tpxH60(e,p&&(p.nl!=null?!!p.nl:tNoLab(f)));TD0[i][0]+=t;TD0[i][1]+=e});
     sh.set(R,cTot,tR2(hh),S0.numB);sh.set(R,cTot+1,tR2(hh-he),S0.num);sh.set(R,cTot+2,tR2(he),S0.num);sh.set(R,cTot+3,tR2(h6),S0.num);sh.set(R,cTot+4,tR2(he-h6),S0.num);A+=hh;B+=he;A6+=h6;A1+=he-h6});
   const RT=4+G.length;sh.set(RT,1,'TOTAL',S0.tot);[0,2,3].forEach(c=>sh.set(RT,c,'',S0.tot));days.forEach((f,i)=>{sh.set(RT,4+2*i,tR2(TD0[i][0]),S0.tot);sh.set(RT,5+2*i,tR2(TD0[i][1]),S0.tot)});
   sh.set(RT,cTot,tR2(A),S0.tot);sh.set(RT,cTot+1,tR2(A-B),S0.tot);sh.set(RT,cTot+2,tR2(B),S0.tot);sh.set(RT,cTot+3,tR2(A6),S0.tot);sh.set(RT,cTot+4,tR2(A1),S0.tot);
-  sh.set(RT+1,1,'H60 = las 2 primeras horas extra de cada día (al 60 %) · H100 = las siguientes (al 100 %)',S0.pie);
+  sh.set(RT+1,1,`H60 = las ${String(TPL().he60h).replace('.',',')} primeras horas extra de cada día laborable (al 60 %) · H100 = las siguientes${TPL().df100?' y todas las de domingo o feriado':''} (al 100 %)`,S0.pie);
   sh.set(RT+2,1,'Versiones publicadas: '+days.filter(f=>PB.get(f)).map(f=>{const p=PB.get(f);return`${tpxDm(f)} v${p.v} (${tpWho(p.by,p.byN)} · ${tpAt(p.at)})`}).join(' · '),S0.pie);
   return sh.done([5,36,11,10,...days.flatMap(()=>[8,6]),10,9,9,9,9],{xSplit:4,ySplit:4})}
 /* «Tareo Semana»: asistencia (A / I / código), horas extra y horas de descanso médico (DM = jornada del día) por día */
-function tpxWsAsis(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length;const cA=7,cH=cA+n+1,cD=cH+n+2;
+function tpxWsAsis(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUnion(days,PB);const n=days.length;const hoy=todayIso();const cA=7,cH=cA+n+1,cD=cH+n+2;
   sh.set(0,1,tpProj().toUpperCase(),S0.tit);sh.set(1,1,sem?'Tareo '+tpxSemT(days[0],days[n-1]):`Tareo ${tpxRango(days[0],days[n-1])}`,S0.sub);
   [[cA,'ASISTENCIA',n],[cH,'HORAS EXTRAS',n+1],[cD,'HORAS DESCANSO MÉDICO',n+1]].forEach(([c,l,k])=>{for(let i=0;i<k;i++)sh.set(2,c+i,i?'':l,S0.hdr);sh.merge(2,c,2,c+k-1)});
   days.forEach((f,i)=>{const l=TPX_L[pd(f).getUTCDay()];[cA,cH,cD].forEach(c=>{sh.set(3,c+i,l,S0.hdr);sh.set(4,c+i,tpxDm(f),S0.hdr)})});
@@ -456,14 +460,17 @@ function tpxWsAsis(X,days,PB,sem){const S0=tpxSt(),sh=tpxSheet(X);const G=tpxUni
   ['N°','DNI','Apellido Paterno','Apellido Materno','Nombres','Categoría','Cuadrilla'].forEach((l,c)=>{sh.set(3,c,'',S0.hdr);sh.set(4,c,l,S0.hdr)});
   G.forEach((o,j)=>{const R=5+j;let sh1=0,sd=0;const ap=tpxApes(o);sh.set(R,0,j+1,S0.num);sh.set(R,1,String(o.dni),S0.num);sh.set(R,2,ap[0],S0.txt);sh.set(R,3,ap[1],S0.txt);sh.set(R,4,o.nom||'',S0.txt);sh.set(R,5,tpxCat(o.cat),S0.num);sh.set(R,6,o.cua||'',S0.txt);
     days.forEach((f,i)=>{const p=PB.get(f);let cod='',he='',dm='';
+      /* «D» (descanso) solo en un día no laborable ya pasado y si la persona estaba activa (ficha) ese día */
+      const nl=p&&p.nl!=null?!!p.nl:tNoLab(f);const dOk=nl&&f<=hoy&&tsFicha(o.dni).act(f);
       if(p){const jor=tpxJor(p,f);const r=tpRows(p).find(x=>x.dni===o.dni);const ex=!r&&p.exc&&p.exc[o.dni];
         if(r&&r.as===true){const t=tpNum(r.trab);cod=jor>0&&t<jor?'I':'A';he=tR2(tpNum(r.ext))}else if(r){cod=r.mot||(r.as===false?'NV':'?');he=0}else if(ex){cod=tpxExcCod(ex.motivo);he=0}
+        else if(dOk)cod='D';
         if(cod==='DM'){dm=jor}else if(cod)dm=0}
-      else if(tNoLab(f))cod='D';/* día no laborable sin tareo: descanso (como el archivo de costos) */
+      else if(dOk)cod='D';/* día no laborable sin tareo: descanso (como el archivo de costos) */
       sh.set(R,cA+i,cod,cod&&cod!=='A'?{...S0.numB,font:{bold:true,color:{rgb:'C00000'}}}:S0.numB);sh.set(R,cH+i,he,S0.num);sh.set(R,cD+i,dm,S0.num);sh1+=tpNum(he);sd+=tpNum(dm)});
     sh.set(R,cH+n,tR2(sh1),S0.numB);sh.set(R,cD+n,tR2(sd),S0.numB)});
   const RL=5+G.length+1;
-  sh.set(RL,1,'A = asistió la jornada completa · I = asistió menos que la jornada · DM = descanso médico · DA = descanso por accidente · VA = vacaciones · FA = falta · SU = suspensión · SM = subsidio por maternidad · SE = subsidio por enfermedad · LS = licencia sin goce · L = liquidado · NV = no vino (sin motivo) · EX = sin tareo con excepción (ver motivo en la hoja del día) · D = descanso (día no laborable)',S0.pie);
+  sh.set(RL,1,'A = asistió la jornada completa · I = asistió menos que la jornada · DM = descanso médico · DA = descanso por accidente · VA = vacaciones · FA = falta · F = falta (excepción «Falta») · SU = suspensión · SM = subsidio por maternidad · SE = subsidio por enfermedad · LS = licencia sin goce · L = liquidado · NV = no vino (sin motivo) · EX = sin tareo con excepción (ver motivo en la hoja del día) · D = descanso (día no laborable)',S0.pie);
   sh.set(RL+1,1,'Horas de descanso médico = jornada del día (lunes a viernes y sábado según la configuración del tareo).',S0.pie);
   return sh.done([5,11,16,16,22,9,15,...days.map(()=>5),2,...days.map(()=>5),8,2,...days.map(()=>5),8],{xSplit:7,ySplit:5})}
 /* «Personal Obrero»: la gente del periodo con su ficha (como la hoja de costos): N°, apellidos, nombres, cuadrilla, categoría, DNI,
@@ -490,7 +497,7 @@ async function tpxVigentes(a,b){const sn=await fcol('tpubidx').where('fecha','>=
   const R=await Promise.all(sn.docs.map(async x=>{const I=x.data()||{};const f=I.fecha||x.id;if(f<a||f>b||I.v==null)return null;const p=await tpGet(tpId(f,I.v));return p?{...p,fecha:p.fecha||f}:null}));
   return new Map(R.filter(Boolean).map(p=>[p.fecha,p]))}
 /* arma y descarga el Excel: 'dia' (una hoja), 'semana' o 'rango' (Resumen HH + Tareo Semana + una hoja por día publicado). doc: versión elegida */
-async function tpxBajar(tipo,a,b,doc){if(TPK.busy)return;if(tipo==='rango'&&tpDates(a,b).length>62){toast('Elige un rango de hasta 62 días.');return}
+async function tpxBajar(tipo,a,b,doc){if(TPK.busy)return;if(tipo==='rango'&&tpDates(a,b).length>TS_MAXD){toast(`Elige un rango de hasta ${TS_MAXD} días.`);return}
   TPK.busy='x';requestRender();
   try{await loadXlsx();const X=window.XLSX;const PB=doc?new Map([[a,doc]]):await tpxVigentes(a,b);
     if(!PB.size){toast(tipo==='dia'?`El ${fmtD(a)} no tiene tareo publicado.`:'No hay días publicados en ese periodo.');return}

@@ -749,3 +749,105 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await expect(root.locator('.tc-mck')).toHaveCount(0);
   noErrors(errors, 'capataz rápido');
 });
+
+// ── Auditoría del capataz (21-10-2026): repetir con el horario de hoy, asignar sin borrar, primer toque, medianoche, no laborable ──
+test('auditoría 21-10: «Repetir» ajusta las horas al horario de hoy, «Ajustar» en la hoja que no cuadra, «Asignar» no borra lo que no se llenó y el primer toque no se pierde', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  page.on('dialog', d => d.accept());
+  const AYER = '2026-09-30';
+  const extra = [...EXTRA, ['tareo', `${AYER}_${CAP}`, { date: AYER, cap: CAP, st: 'env', modo: 'hrs', pcs: ['p10_05', 'p20_01'], foto: [], hist: [],
+    rows: { '40000001': fullRow('ALVA ROJAS', 'ANA', { p10_05: 8.5, p20_01: 2 }, { sal: '19:00' }), '40000002': fullRow('BRAVO DIAZ', 'BETO', { p10_05: 8.5 }),
+      '40000003': fullRow('CASTRO PAZ', 'CARLOS', { p20_01: 8.5 }) } }],
+    ['tareo', ID, readyDoc(HOY, { rows: { '40000001': fullRow('ALVA ROJAS', 'ANA'), '40000002': fullRow('BRAVO DIAZ', 'BETO', { p20_01: 8.5 }),
+      '40000003': fullRow('CASTRO PAZ', 'CARLOS'), '40000004': fullRow('DAVILA SOTO', 'DANIEL') } })]];
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra });
+  const root = page.locator('#tcRoot');
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await root.locator('[data-tca="rep"]').click();
+  // Ana ayer 10,5 h (salió 19:00) → hoy 8,5 h en la misma proporción (cuartos de hora, el residuo a la mayor); su salida no se copia
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000001']?.h).toEqual({ p10_05: 7, p20_01: 1.5 });
+  expect(((await dbDoc(page)).rows['40000001']).sal).toBeUndefined();
+  await expect(total(root, '40000001')).toHaveClass(/ok/);
+  // el aviso cuenta aparte a quien ya tenía horas (Beto) y no lo cambia
+  await expect(root.locator('#tcRep')).toContainText('2 de 3 sin horas');
+  await expect(root.locator('#tcRep')).toContainText('1 ajustado a su horario de hoy');
+  await expect(root.locator('#tcRep')).toContainText('1 ya tenía horas');
+  await expect(root.locator('#tcRep')).toContainText('Falta: ');
+  expect(((await dbDoc(page)).rows['40000002']).h).toEqual({ p20_01: 8.5 });
+  // si después cambia su horario, la hoja «no cuadra» ofrece primero ajustar las horas copiadas (no inventar HE con la salida)
+  await page.evaluate(() => { TCS.doc.rows['40000001'].sal = '16:00'; tcChg(); });
+  await total(root, '40000001').locator('[data-tca="hfx"]').click();
+  await expect(root.locator('#tcHfx .tc-csa .ib').first()).toHaveAttribute('data-tca', 'hfxAdj');
+  await expect(root.locator('#tcHfx [data-tca="hfxAdj"]')).toHaveClass(/pri/);
+  await expect(root.locator('#tcHfx [data-tca="hfxSal"]')).not.toHaveClass(/pri/);
+  await root.locator('#tcHfx [data-tca="hfxAdj"]').click();
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000001']?.h).toEqual({ p10_05: 6.25, p20_01: 1.25 });
+  await expect(total(root, '40000001')).toHaveClass(/ok/);
+  // «Asignar a 1» sin escribir nada: «Aplicar» deshabilitado; con 3 h en 10.05 (sin soltar el campo) el primer toque aplica y 20.01 no se toca
+  await root.locator('[data-tca="multi"]').click();
+  await root.locator('.tc-gn[data-dni="40000002"] [data-tca="mtog"]').click();
+  await root.locator('.tc-foot [data-tca="asgOn"]').click();
+  await expect(root.locator('#tcAsgOk')).toBeDisabled();
+  await root.locator('#tcAsg input[data-pc="p10_05"]').fill('3');
+  await expect(root.locator('#tcAsgP')).toContainText('3 + 8,5');
+  await expect(root.locator('#tcAsgOk')).toBeEnabled();
+  await root.locator('#tcAsgOk').click();
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000002']?.h).toEqual({ p20_01: 8.5, p10_05: 3 });
+  // casilla: escribir 2 y tocar «El resto de su horario» sin soltar el campo → el toque no se pierde (8,5)
+  await cell(root, '40000004', 'p10_05').click();
+  await root.locator('#tcCin').fill('2');
+  await expect(root.locator('#tcCv')).toHaveText('2 h');
+  await root.locator('#tcCellR').click();
+  await expect(root.locator('#tcCell')).toHaveCount(0);
+  await expect(cell(root, '40000004', 'p10_05')).toHaveText('8,5');
+  // las horas escritas se guardan con dos decimales (antes se redondeaban a ¼ sin avisar)
+  await cell(root, '40000003', 'p10_05').click();
+  await root.locator('#tcCin').fill('2,33');
+  await root.locator('#tcCin').press('Enter');
+  await expect(cell(root, '40000003', 'p10_05')).toHaveText('2,33');
+  // «Su día»: escribir y tocar «Anterior» sin soltar el campo
+  await root.locator('.tc-gn[data-dni="40000004"] [data-tca="wk"]').click();
+  await root.locator('#tcWk input[data-pc="p10_05"]').fill('6');
+  await expect(root.locator('#tcWkT')).toContainText('faltan 2,5');
+  await expect(root.locator('#tcWk [data-tca="wkSet"][data-pc="p20_01"]')).toBeVisible();
+  await root.locator('#tcWk [data-tca="wkSet"][data-pc="p20_01"]').click();
+  await expect(root.locator('#tcWkT')).toContainText('completo');
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000004']?.h).toEqual({ p10_05: 6, p20_01: 2.5 });
+  await root.locator('#tcWk [data-tca="wkX"]').last().click();
+  // «No vino» por error conserva su horario (como sus horas)
+  await page.evaluate(() => { const r = TCS.doc.rows['40000004']; r.sal = '18:00'; r.cor = true; tcChg(); });
+  await root.locator('.tc-steps [data-tcs="1"]').click();
+  await root.locator('.tc-ob[data-dni="40000004"] [data-tca="novino"]').click();
+  await expect.poll(async () => { const r = ((await dbDoc(page)).rows || {})['40000004'] || {}; return [r.as, r.sal, r.cor]; }).toEqual([false, '18:00', true]);
+  noErrors(errors, 'auditoría 21-10 repetir/asignar');
+});
+
+test('auditoría 21-10: turno que pasa de medianoche se puede enviar y en un no laborable la salida sola guarda la entrada', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY, { rows: { '40000001': fullRow('ALVA ROJAS', 'ANA', { p10_05: 8, p20_01: 8 }) } })]] });
+  const root = page.locator('#tcRoot');
+  const ana = root.locator('.tc-ob[data-dni="40000001"]');
+  // 7:30 a 0:30 del día siguiente: 17 h menos el refrigerio = 16 h (el límite de 16 h sigue)
+  await ana.locator('[data-tca="salT"]').click();
+  await ana.locator('input[data-tca="sal"]').fill('00:30');
+  await expect(ana.locator('.tc-hres')).toContainText('16 h trabajadas (sale al día siguiente)');
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000001']?.sal).toBe('00:30');
+  expect(await page.evaluate(() => tcErrs(TCS.doc).filter(e => e.dni).map(e => e.k))).toEqual([]);
+  // con 15 h en partidas, «Se quedó / Salió antes» propone 23:30 (no 23:59) y de verdad cuadra
+  await page.evaluate(() => { TCS.doc.rows['40000001'].h = { p10_05: 8, p20_01: 7 }; tcChg(); });
+  await root.locator('.tc-steps [data-tcs="2"]').click();
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await total(root, '40000001').locator('[data-tca="hfx"]').click();
+  await expect(root.locator('#tcHfx [data-tca="hfxSal"]')).toHaveAttribute('data-v', '23:30');
+  await root.locator('#tcHfx [data-tca="hfxSal"]').click();
+  await expect(page.locator('#toast')).toContainText('ya cuadra');
+  await expect(total(root, '40000001')).toHaveClass(/ok/);
+  // no laborable (domingo congelado): escribir solo la salida guarda también la entrada que se ve, y se compara con sus horas
+  await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: null, fer: false, rnl: { ref: 60, refIni: '12:00' } }; const r = TCS.doc.rows['40000001']; delete r.sal; delete r.ent; r.h = { p10_05: 8.5 }; tcChg(); });
+  await root.locator('.tc-steps [data-tcs="1"]').click(); // su «Horario» sigue abierto
+  await ana.locator('input[data-tca="sal"]').fill('15:00');
+  await expect.poll(async () => { const r = ((await dbDoc(page)).rows || {})['40000001'] || {}; return [r.ent, r.sal]; }).toEqual(['07:30', '15:00']);
+  await expect(ana.locator('.tc-hres')).toContainText('6,5 h trabajadas');
+  expect(await page.evaluate(() => tcErrs(TCS.doc).filter(e => e.dni).map(e => e.k))).toEqual(['hor']);
+  noErrors(errors, 'auditoría 21-10 medianoche y no laborable');
+});

@@ -140,7 +140,7 @@
   const cmpCod = (a, b) => { const A = String(a || '').split('.'), B = String(b || '').split('.'); for (let i = 0; i < Math.max(A.length, B.length); i++) { const x = parseInt(A[i], 10), y = parseInt(B[i], 10); if ((x || 0) !== (y || 0)) return (x || 0) - (y || 0); } return 0; };
   /** snapshot inmutable tpub/{fecha}_v{v} (forma en «Contrato de F3»). Solo se llama sin bloqueos.
       pcs = catálogo congelado: todas las partidas activas más las que tienen horas. anterior = snapshot vigente (para dif) o null. */
-  const hm = v => typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v);
+  const hm = v => typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v);
   function tpArmarPublicacion({ fecha, tareos, personal, partidas, excepciones, v, at, by, byN, motivo, anterior }) {
     const T = tareosDia(tareos, fecha); const E = excLimpias(excepciones);
     const F = new Map(vals(personal).filter(Boolean).map(p => [String(p.dni || p.id || ''), p]));
@@ -177,7 +177,7 @@
   }
 
   /** diferencias entre dos publicaciones del mismo día (para el historial y la rectificación):
-      {agregados:[{dni,nom,capN}], quitados:[…], cambios:[{dni, nom, campo:'as'|'mot'|'alt'|'cap'|'h'|'ext', pc?, antes, despues}],
+      {agregados:[{dni,nom,capN}], quitados:[…], cambios:[{dni, nom, campo:'as'|'mot'|'alt'|'cap'|'h'|'ext'|'ent'|'sal'|'cor', pc?, antes, despues}],
        excAgregadas:[dni], excQuitadas:[dni], tot:{obreros|pres|aus|hh|he|alt: {antes, despues}}, n, mas}
       n = n.º total de diferencias; las listas se cortan en 300 (mas = cuántas quedaron fuera). anterior null → null. */
   function tpDif(anterior, nueva) {
@@ -196,6 +196,8 @@
       const pcs = [...new Set([...Object.keys(a.h || {}), ...Object.keys(b.h || {})])].sort();
       for (const pc of pcs) { const x = r2(+(a.h || {})[pc] || 0), y = r2(+(b.h || {})[pc] || 0); if (x !== y) ca.push({ dni, nom: n, campo: 'h', pc, antes: x, despues: y }); }
       if (r2(+a.ext || 0) !== r2(+b.ext || 0)) ca.push({ dni, nom: n, campo: 'ext', antes: r2(+a.ext || 0), despues: r2(+b.ext || 0) });
+      for (const f of ['ent', 'sal']) if ((a[f] || '') !== (b[f] || '')) ca.push({ dni, nom: n, campo: f, antes: a[f] || '', despues: b[f] || '' });
+      if (!!a.cor !== !!b.cor) ca.push({ dni, nom: n, campo: 'cor', antes: !!a.cor, despues: !!b.cor });
     }
     const ea = Object.keys((nueva && nueva.exc) || {}).filter(d => !has(anterior.exc, d)).sort();
     const eq = Object.keys(anterior.exc || {}).filter(d => !has(nueva && nueva.exc, d)).sort();

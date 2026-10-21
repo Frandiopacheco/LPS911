@@ -42,7 +42,7 @@ function tsxResumen(X,R,per,L,PB){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(
   if(tplSoles())kv.push(['Costo de mano de obra estimado (S/)',tR2(T.cost)]);
   for(const[k,v]of kv){sh.set(r,0,k,S0.txt);sh.set(r,1,v,S0.num);r++}
   r++;sh.set(r,0,'Controles de cuadre',S0.h2);r++;
-  const ck=[[Math.abs(hhPc-T.hh)<0.01,'HH por partida = HH de RR.HH.',`${hhPc} = ${T.hh}`],[!sinUA.length,'Todas las partidas con horas tienen UA de Powers',sinUA.map(x=>`${x.cod} ${x.nom} (${x.tot} HH)`).join('; ')||'sí'],
+  const ck=[[Math.abs(hhPc-T.hh)<0.01,'HH por partida = HH de RR.HH.',`${hhPc} = ${T.hh}`],...(R.P.avisoUA?[[!sinUA.length,'Todas las partidas con horas tienen UA de Powers',sinUA.map(x=>`${x.cod} ${x.nom} (${x.tot} HH)`).join('; ')||'sí']]:[]),
     [R.T.sinTareo===0,'Todos los activos figuran en las publicaciones',R.T.sinTareo?`${R.T.sinTareo} con días «?»`:'sí'],[lab.every(f=>R.pub.includes(f)),'Días laborables publicados',`${lab.filter(f=>R.pub.includes(f)).length} de ${lab.length}`]];
   for(const[ok,t,v]of ck){sh.set(r,0,t,S0.txt);sh.set(r,1,ok?'OK':'REVISAR',ok?S0.ok:S0.no);sh.set(r,2,v,S0.txt);r++}
   r++;sh.set(r,0,'Versiones publicadas',S0.h2);r++;['Fecha','Versión','Publicó','Cuándo','Motivo'].forEach((h,c)=>sh.set(r,c,h,S0.hdr));r++;
@@ -64,9 +64,11 @@ function tsxHoras(X,R,per){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'
   H.forEach((h,c)=>sh.set(r,c,h,S0.hdr));const r0=r;r++;const nd=R.days.length;
   R.W.forEach((w,i)=>{[i+1,String(w.dni),[w.ape,w.nom].filter(Boolean).join(' '),w.catN].forEach((v,c)=>sh.set(r,c,v,c===0?S0.ctr:S0.txt));
     w.d.forEach((c,j)=>sh.set(r,4+j,c.h||'',c.h?S0.num:S0.cod(c.code)));[w.hn,w.h60,w.h100,w.df,w.hh,w.dias,w.mov,w.dsc].forEach((v,k)=>sh.set(r,4+nd+k,v,S0.num));r++});
-  sh.set(r,2,'Total',S0.totL);const T=R.T;[T.hn,T.h60,T.h100,T.df,T.hh,T.dias,T.mov,T.dsc].forEach((v,k)=>sh.set(r,4+nd+k,v,S0.tot));r+=2;
-  sh.set(r,0,`HE: las ${P.he60h} primeras horas después de la jornada del día al ${P.sob1} %; desde la siguiente al ${P.sob2} %. Domingo y feriado trabajados: todas las horas al ${P.sob2} %. Dominical: días laborados de lunes a sábado ÷ 6 por semana (tope 1 jornal).`,S0.pie);
-  const ws=sh.done([5,11,34,10,...R.days.map(()=>7),8,8,8,10,9,9,9,9],{xSplit:3,ySplit:r0+1});tsxFil(ws,X,r0,0,H.length-1,R.W.length);return ws}
+  sh.set(r,2,'Total',S0.totL);const T=R.T;[T.hn,T.h60,T.h100,T.df,T.hh,T.dias,T.mov,T.dsc].forEach((v,k)=>sh.set(r,4+nd+k,v,S0.tot));const rT=r;r+=2;
+  sh.set(r,0,`HE: las ${P.he60h} primeras horas después de la jornada del día al ${P.sob1} %; desde la siguiente al ${P.sob2} %. Domingo y feriado trabajados: todas las horas al ${P.sob2} %. Dominical: días laborados de lunes a sábado (el feriado trabajado o no laborado cuenta) ÷ 6 por semana (tope 1 jornal), con 4 decimales.`,S0.pie);
+  const ws=sh.done([5,11,34,10,...R.days.map(()=>7),8,8,8,10,9,9,9,9],{xSplit:3,ySplit:r0+1});tsxFil(ws,X,r0,0,H.length-1,R.W.length);
+  /* dominical con 4 decimales (1/6 = 0,1667), no redondeado a 2 */
+  const cD=4+nd+7;for(let i=r0+1;i<=rT;i++){const c=ws[X.utils.encode_cell({r:i,c:cD})];if(c&&c.t==='n')c.z='0.0###'}return ws}
 
 function tsxAltas(X,R,per){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'RR.HH. · altas y bajas',per);const L=[];
   if(S.tper)for(const t of S.tper.values()){if(t.arch)continue;const pr=Array.isArray(t.per)&&t.per.length?t.per:[{ing:t.ing,ces:t.ces,mot:t.mot}];
@@ -101,13 +103,13 @@ function tsxMeta(X,R,per,A){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,
 
 function tsxDet(X,R,per,PB){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'Detalle · una fila por obrero, día y partida (para filtros y tablas dinámicas)',per);
   const H=['Fecha','DNI','Apellidos y nombres','Categoría','Cuadrilla','Capataz','Código','Partida','UA tareo','UA Powers','HH','HE (prorrateo)','Bono altura','Versión'];H.forEach((h,c)=>sh.set(r,c,h,S0.hdr));const r0=r;r++;let n=0;
-  for(const w of R.W)for(const c of w.d)for(const[k,h]of c.pcs){const p=PB.get(c.f);const m=(p&&p.pcs||{})[k]||tcoPc(k,R);const e=c.h?tR2(h*(c.h60+c.h100+c.df)/c.h):0;
-    [tFmt(c.f),String(w.dni),[w.ape,w.nom].filter(Boolean).join(' '),w.catN,w.cua||'',w.capN||'',m.cod||k,m.nom||'',m.ua||'',tpxUaP(m.ua)||'',h,e,c.alt?'Sí':'',p?'v'+p.v:''].forEach((v,j)=>sh.set(r,j,v,j===10||j===11?S0.num:S0.txt));r++;n++}
+  for(const w of R.W)for(const c of w.d)for(const[k,h,x3]of c.pcs){const p=PB.get(c.f);const m=(p&&p.pcs||{})[k]||tcoPc(k,R);const e=x3!=null?x3:c.h?tR2(h*(c.h60+c.h100+c.df)/c.h):0;
+    [tFmt(c.f),String(w.dni),[w.ape,w.nom].filter(Boolean).join(' '),c.catN||w.catN,c.cua||w.cua||'',w.capN||'',m.cod||k,m.nom||'',m.ua||'',tpxUaP(m.ua)||'',h,e,c.alt?'Sí':'',p?'v'+p.v:''].forEach((v,j)=>sh.set(r,j,v,j===10||j===11?S0.num:S0.txt));r++;n++}
   const ws=sh.done([11,11,32,10,15,20,8,36,15,12,7,9,8,8],{xSplit:0,ySplit:r0+1});tsxFil(ws,X,r0,0,H.length-1,n);return ws}
 
 function tsxPer(X,R){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'Personal obrero del periodo','Ficha del máster (Personal)');
   ['N°','DNI','Apellido paterno','Apellido materno','Nombres','Categoría','Puesto','Cuadrilla','Capataz','Ingreso','Cese','Pensiones','N.° hijos'].forEach((h,c)=>sh.set(r,c,h,S0.hdr));const r0=r;r++;
-  R.W.forEach((w,i)=>{const t=(S.tper&&S.tper.get(w.dni))||{};const ap=tpxApes(w);[i+1,String(w.dni),ap[0],ap[1],w.nom||'',w.catN,t.pue||'',w.cua||'',w.capN||(t.cap?tCapName(t.cap):''),tFmt(t.ing)||'',tFmt(t.ces)||'',t.afp||'',t.hij!=null&&t.hij!==''?+t.hij:''].forEach((v,c)=>sh.set(r,c,v,c===0||c===12?S0.ctr:S0.txt));r++});
+  R.W.forEach((w,i)=>{const t={...((S.tper&&S.tper.get(w.dni))||{}),...tPriv(w.dni)};const ap=tpxApes(w);[i+1,String(w.dni),ap[0],ap[1],w.nom||'',w.catN,t.pue||'',w.cua||'',w.capN||(t.cap?tCapName(t.cap):''),tFmt(t.ing)||'',tFmt(t.ces)||'',t.afp||'',t.hij!=null&&t.hij!==''?+t.hij:''].forEach((v,c)=>sh.set(r,c,v,c===0||c===12?S0.ctr:S0.txt));r++});
   const ws=sh.done([5,11,16,16,22,10,24,15,22,11,11,14,8],{xSplit:0,ySplit:r0+1});tsxFil(ws,X,r0,0,12,R.W.length);return ws}
 
 function tsxCat(X,R){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'Partidas de control','Presupuesto meta');

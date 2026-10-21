@@ -487,6 +487,7 @@ async function startSession(u,fdb){
   if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
   ensureDaily(addD(todayIso(),me.role==='capataz'?-7:-14));ensureDoneIdx();if(me.role!=='capataz')ensureLib();}
   if(canTar()&&typeof TCOLS!=='undefined')for(const[col,k]of Object.entries(TCOLS))subCol(col,k,false);
+  if(canTar()&&typeof tPrivOk==='function'&&tPrivOk())subCol('tperp','tperp',false);/* AFP e hijos: no los lee el capataz (auditoría 21-10-2026) */
   /* el asistente de tareo necesita la lista del equipo (asignar obreros a capataces) */
   const memQ=canDaily||TASIS()?fcol('members'):fcol('members').doc(me.email);
   const memCb=snap=>{snapOk('members');MEM.clear();let rch=false;(snap.docs||(snap.exists?[snap]:[])).forEach(d=>MEM.set(d.id,d.data()));
@@ -656,7 +657,7 @@ function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toas
     if(!(e&&e.code==='unavailable'))throw e;const now=DAY.get(id)||{};const rr={};for(const aid of Object.keys(obj.recs||{}))if(now.recs&&aid in now.recs)rr[aid]=now.recs[aid];
     return fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(obj.recs?{recs:rr}:{})},{merge:true}))}))}
 function stopSession(){snapReset();for(const k in QK){clearTimeout(QK[k].t);delete QK[k]}unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];try{if(presRef)presRef.remove();if(conRef)conRef.off();if(presAll)presAll.off()}catch(e){}presRef=conRef=presAll=null;ready=false;db=null;me=me&&me.uid?me:null;
-  for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
+  for(const k of Object.values(COLS))S[k]=new Map();if(typeof TCOLS!=='undefined')for(const k of Object.values(TCOLS))S[k]=new Map();S.tperp=new Map();for(const m of Object.values(ARCH))m.clear();S.loaded={};PRES.clear();MEM.clear();lastPres='';gridRows=null;undoS.length=0;redoS.length=0;
   const m=$('#main');m.dataset.view='';m.innerHTML='<div class="loading" id="loading"><b>Conectando…</b></div>';$('#who').innerHTML='';$('#meBox').textContent='';$('#blogout').hidden=true;$('#tabTeam').hidden=true;me=null;setStatus()}
 function onData(){
   if(!ready&&TAR_ONLY()){/* solo tareo: listo cuando cargan sus colecciones (nada de Last Planner) */

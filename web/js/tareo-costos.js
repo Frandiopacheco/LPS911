@@ -10,9 +10,10 @@ const tcoAct=()=>U.mod==='tar'&&U.tab==='tcos'&&tpCosOk();
 /* HH acumuladas por partida desde el inicio (hhpc/{fecha}: resumen de la publicación vigente de cada día, sin datos de personas) */
 function tcoHhpc(){tpSub('chh','all',fcol('hhpc'),(sn,err)=>{if(err){TCO.hok=true;return}const M=new Map();sn.docs.forEach(x=>M.set(x.id,x.data()||{}));TCO.hhpc=M;TCO.hok=true},tcoAct)}
 function tcoAcum(b){const A=new Map();for(const[f,d]of TCO.hhpc){if(f>b)continue;for(const[k,o]of Object.entries(d.pcs||{}))A.set(k,tR2((A.get(k)||0)+tpNum(o&&o.hh)))}return A}
-/* ficha de una partida: la del catálogo vigente (S.tpc) o la congelada en una publicación */
+/* ficha de una partida: la del catálogo vigente (S.tpc) o la congelada en una publicación; la UA, la congelada en la publicación
+   (como Detalle y el Excel formato anterior), y si no la trae, la del catálogo */
 function tcoPc(id,R){const t=S.tpc&&S.tpc.get(id);const m=R.pcsMeta[id]||{};const o=t||m;
-  return{id,cod:o.cod||m.cod||id,nom:o.nom||m.nom||'',grp:o.grp||m.grp||String(o.cod||'').split('.')[0],grpN:o.grpN||m.grpN||'',und:o.und||m.und||'',ua:o.ua||m.ua||'',met:tpNum(t&&t.met),hhp:tpNum(t&&t.hhp)}}
+  return{id,cod:o.cod||m.cod||id,nom:o.nom||m.nom||'',grp:o.grp||m.grp||String(o.cod||'').split('.')[0],grpN:o.grpN||m.grpN||'',und:o.und||m.und||'',ua:m.ua||o.ua||'',met:tpNum(t&&t.met),hhp:tpNum(t&&t.hhp)}}
 const tcoS=v=>'S/ '+Math.round(v).toLocaleString('es-PE');
 
 function renderTCos(main){if(TPLA.on)return renderTPla(main);
@@ -27,13 +28,13 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
   const sinUA=L.filter(x=>!tpxUaP(x.ua));const hhUA=tR2(hhPc-sinUA.reduce((s,x)=>s+x.tot,0));const he=tR2(L.reduce((s,x)=>s+x.he,0));
   const sobre=L.filter(x=>x.hhp>0&&(A.get(x.id)||0)>x.hhp);const lab=R.days.filter(f=>!tNoLab(f)&&f<=todayIso());const pubLab=lab.filter(f=>R.pub.includes(f));
   const checks=[[Math.abs(hhPc-T.hh)<0.01,'HH por partida = HH de RR.HH.','lo asignado es lo que se paga',`${toH(hhPc)} / ${toH(T.hh)}`],
-    [!sinUA.length,'HH por UA Powers = HH por partida',sinUA.length?`faltan ${toH(hhPc-hhUA)} HH sin UA`:'nada se pierde al cargar a Powers',toH(hhUA)],
-    [!sinUA.length,sinUA.length?`${sinUA.length} ${sinUA.length===1?'partida':'partidas'} con horas sin UA`:'Todas las partidas con horas tienen UA',sinUA.map(x=>`${x.cod} ${x.nom}`).join(' · ')||'—',''],
+    ...(P.avisoUA?[[!sinUA.length,'HH por UA Powers = HH por partida',sinUA.length?`faltan ${toH(hhPc-hhUA)} HH sin UA`:'nada se pierde al cargar a Powers',toH(hhUA)],
+    [!sinUA.length,sinUA.length?`${sinUA.length} ${sinUA.length===1?'partida':'partidas'} con horas sin UA`:'Todas las partidas con horas tienen UA',sinUA.map(x=>`${x.cod} ${x.nom}`).join(' · ')||'—','']]:[]),/* Parámetros › «Avisar si una partida con horas no tiene UA» */
     [pubLab.length===lab.length,'Días laborables publicados',lab.length>pubLab.length?`faltan: ${lab.filter(f=>!R.pub.includes(f)).map(tsDiaL).join(', ')}`:'todos',`${pubLab.length}/${lab.length}`]];
   const nOk=checks.filter(c=>c[0]).length;
   const k=(l,v,s,c)=>`<div class="lqtile"${c?` style="--c:${c}"`:''}><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
   const body=TCO.vista==='ua'?tcoUA(R,L):TCO.vista==='cua'?tcoCua(R):TCO.vista==='meta'?tcoMeta(R,A):TCO.vista==='det'?tcoDet(R,PB):tcoPartidas(R,L,A,soles);
-  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('Costos',esc(tsPerTxt(TCO.tipo,a,b))+' · HH de mano de obra de casa · en vivo',`<button class="ib pri" id="tcoX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
+  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('Costos',esc(tsPerTxt(TCO.tipo,a,b))+' · HH de mano de obra de casa · en vivo',`<button class="ib" id="tcoXo"${TPK.busy?' disabled':''} title="El Excel de antes (una hoja por día, Resumen HH y Tareo Semana), mientras dura la transición">Excel formato anterior</button><button class="ib pri" id="tcoX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
     ${tsPerBar(TCO,'tco')}
     <div class="ts-chips"><span class="note">Días:</span>${tsDiasChips(R,o&&o.idx)}${tseCargando('co')?'<span class="note">Cargando publicaciones…</span>':''}</div>
     ${o&&o.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(o.err)}).</div>`:''}
@@ -45,6 +46,7 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
       ${tcoPowers(R,L)}</aside></div>
   </div></div>`;
   bindV();tsPerBind(TCO,'tco');
+  $('#tcoXo').onclick=()=>tpxBajar(TCO.tipo==='sem'?'semana':a===b?'dia':'rango',a,b);
   $('#tcoX').onclick=()=>{if(typeof tsxBajar==='function')tsxBajar('costos',a,b,TCO.tipo);else toast('El Excel nuevo llega en la próxima versión.')};
   const q=$('#tcoQ');if(q)q.oninput=()=>{TCO.q=q.value;const f=tFold(TCO.q);document.querySelectorAll('[data-tcok]').forEach(tr=>{tr.hidden=!!f&&!tFold(tr.dataset.tcok).includes(f)})};
   const tb=$('#tcoPcT');if(tb)tb.onclick=e=>{const r=e.target.closest('[data-tcop]');if(r){TCO.sel=TCO.sel===r.dataset.tcop?'':r.dataset.tcop;requestRender()}};
@@ -84,7 +86,8 @@ function tcoPowers(R,L){const U2=tcoUAagg(L).slice(0,8);return`<div class="card 
   ${tcoUAagg(L).length>8?`<button class="t-lnk" id="tcoUaAll">Ver todas las cuentas ›</button>`:''}</div>`}
 
 function tcoCua(R){const C=[...R.cua.entries()].sort((a,b)=>b[1]-a[1]);const tot=tR2(C.reduce((s,[,h])=>s+h,0));const he=new Map(),ob=new Map();
-  for(const w of R.W){if(!w.cua||!w.hh)continue;he.set(w.cua,tsSum(he.get(w.cua),w.h60+w.h100+w.df));ob.set(w.cua,(ob.get(w.cua)||0)+1)}
+  /* por la cuadrilla de cada día (quien cambió de cuadrilla cuenta en las dos) */
+  for(const w of R.W){const en=new Set();for(const c of w.d){if(!c.cua||!(c.h>0))continue;he.set(c.cua,tsSum(he.get(c.cua),c.h60+c.h100+c.df));en.add(c.cua)}for(const k of en)ob.set(k,(ob.get(k)||0)+1)}
   return`<div class="tscroll"><table class="t ts-tbl" id="tcoCuT"><thead><tr><th>Cuadrilla</th><th class="t-r">Obreros</th><th class="t-r">HH</th><th class="t-r">de ellas HE</th><th>Participación</th></tr></thead><tbody>
     ${C.map(([c,h])=>`<tr><td><b>${esc(c)}</b></td><td class="mono t-r">${ob.get(c)||0}</td><td class="mono t-r">${toH(h)}</td><td class="mono t-r ts-w">${toH(he.get(c)||0)}</td><td class="ts-pc"><span class="ts-bar"><i style="width:${tot?Math.round(h/tot*100):0}%"></i></span><span class="mono">${tot?Math.round(h/tot*100):0} %</span></td></tr>`).join('')||'<tr><td colspan="5" class="note">Sin horas en este periodo.</td></tr>'}</tbody></table></div>`}
 
@@ -99,7 +102,7 @@ function tcoMeta(R,A){const L=(S.tpc?[...S.tpc.values()]:[]).filter(x=>!x.arch&&
 /* base de datos larga: una fila por obrero, día y partida (para filtrar o hacer tablas dinámicas) */
 function tcoDet(R,PB){const q=tFold(TCO.q);const L=[];for(const w of R.W)for(const c of w.d)for(const[k,h]of c.pcs){const p=PB.get(c.f);const m=(p&&p.pcs||{})[k]||tcoPc(k,R);L.push({w,c,k,h,m})}
   L.sort((a,b)=>a.c.f<b.c.f?-1:a.c.f>b.c.f?1:tpxCmp(a.w,b.w));const max=800;let n=0;
-  const rows=L.map(x=>{const key=[x.w.ape,x.w.nom,x.w.dni,x.m.cod,x.m.nom,x.m.ua,x.w.cua].join(' ');if(q&&!tFold(key).includes(q))return'';if(++n>max)return'';
-    return`<tr data-tcok="${esc(key)}"><td class="mono">${esc(fmtD(x.c.f))}</td><td class="mono">${esc(x.w.dni)}</td><td>${esc([x.w.ape,x.w.nom].filter(Boolean).join(', '))}</td><td>${esc(x.w.catN)}</td><td>${esc(x.w.cua||'')}</td><td>${esc(x.w.capN||'')}</td><td class="mono">${esc(x.m.cod||x.k)}</td><td>${esc(x.m.nom||'')}</td><td class="mono">${esc(tpxUaP(x.m.ua)||'')}</td><td class="mono t-r">${toH(x.h)}</td><td>${x.c.alt?'▲':''}</td></tr>`}).join('');
+  const rows=L.map(x=>{const key=[x.w.ape,x.w.nom,x.w.dni,x.m.cod,x.m.nom,x.m.ua,x.c.cua||x.w.cua].join(' ');if(q&&!tFold(key).includes(q))return'';if(++n>max)return'';
+    return`<tr data-tcok="${esc(key)}"><td class="mono">${esc(fmtD(x.c.f))}</td><td class="mono">${esc(x.w.dni)}</td><td>${esc([x.w.ape,x.w.nom].filter(Boolean).join(', '))}</td><td>${esc(x.c.catN||x.w.catN)}</td><td>${esc(x.c.cua||x.w.cua||'')}</td><td>${esc(x.w.capN||'')}</td><td class="mono">${esc(x.m.cod||x.k)}</td><td>${esc(x.m.nom||'')}</td><td class="mono">${esc(tpxUaP(x.m.ua)||'')}</td><td class="mono t-r">${toH(x.h)}</td><td>${x.c.alt?'▲':''}</td></tr>`}).join('');
   return`<div class="tscroll"><table class="t ts-tbl" id="tcoDeT"><thead><tr><th>Fecha</th><th>DNI</th><th>Obrero</th><th>Cat.</th><th>Cuadrilla</th><th>Capataz</th><th>Código</th><th>Partida</th><th>UA Powers</th><th class="t-r">HH</th><th>Altura</th></tr></thead><tbody>${rows||'<tr><td colspan="11" class="note">Sin horas en este periodo.</td></tr>'}</tbody></table></div>
     <p class="pad note">${L.length} filas${n>max?` · se muestran ${max}: usa el buscador o «Exportar Excel» para verlas todas`:''}.</p>`}

@@ -3,7 +3,7 @@
 // Datos inventados: los mismos de tareo-pub.spec.js (semana 28.09–04.10, hoy 01.10).
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors } from './helpers.js';
-import { DATOS } from './tareo-datos.js';
+import { DATOS, SEM2 } from './tareo-datos.js';
 
 test('RR.HH.: semana en vivo por obrero (códigos, HN, HE, altura, DM), detalle y cálculo', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: DATOS });
@@ -74,6 +74,10 @@ test('Excel nuevo de RR.HH. y Costos: hojas, horas por obrero, UA y cuadre', asy
   await expect(page.locator('#trhTb tr[data-trhd="40000001"]')).toBeVisible();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#trhX')]);
   const wb = XLSX.read(readFileSync(await dl.path()));
+  // transición: el Excel de antes sigue disponible
+  const [dlo] = await Promise.all([page.waitForEvent('download'), page.click('#trhXo')]);
+  expect(dlo.suggestedFilename()).toMatch(/Tareo_semana_2026-09-28_al_2026-10-04\.xlsx$/);
+  expect(XLSX.read(readFileSync(await dlo.path())).SheetNames.slice(0, 4)).toEqual(['Personal Obrero', 'Lista de partidas', 'Tareo Semana', 'Resumen HH']);
   expect(dl.suggestedFilename()).toMatch(/Tareo_S\d+_28\.09-04\.10\.xlsx$/);
   expect(wb.SheetNames).toEqual(['0 Resumen', '1 RRHH Asistencia', '2 RRHH Horas', '3 RRHH Altas y bajas', '4 Costos por partida', '5 Costos por UA', '6 Costos vs meta', '7 Detalle', '8 Personal', '9 Partidas']);
   const aoa = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true });
@@ -87,4 +91,50 @@ test('Excel nuevo de RR.HH. y Costos: hojas, horas por obrero, UA y cuadre', asy
   const Rs = aoa('0 Resumen'); expect(Rs.find(r => r[0] === 'HH por partida = HH de RR.HH.')[1]).toBe('OK');
   expect(aoa('7 Detalle').filter(r => /^\d{2}\/\d{2}\/\d{4}$/.test(r[0])).length).toBe(7);
   noErrors(errors, 'excel rrhh');
+});
+
+test('RR.HH. (auditoría 21-10): feriado y domingo, dominical, «Falta», categoría por día, HE por partida y DM del año', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: [...DATOS, ...SEM2] });
+  await page.evaluate(() => { TRH.ref = '2026-09-23'; goTab('trh'); });
+  await expect(page.locator('#trhTb tr[data-trhd="40000001"]')).toBeVisible();
+  const r = await page.evaluate(() => { const R = tsCalc('2026-09-21', '2026-09-27', tsePB('rh')); const w = dni => R.W.find(x => x.dni === dni);
+    const a = w('40000001'), b = w('40000002'), g = w('40000003'); const pc = id => { const o = R.PC.get(id); return [o.c.OP, o.c.OF, o.he]; };
+    return { a: [a.d[1].code, a.d[3].code, a.d[6].code, a.hn, a.h60, a.df, a.dscTxt, a.dsc, a.cat, a.cua], b: [b.d[1].code, b.d[3].code, b.d[6].code, b.f, b.dscTxt],
+      g: [g.d[2].code, g.d[3].code, g.d[6].code, g.f], pc: [pc('p02_01'), pc('p10_05'), pc('p10_10')],
+      he: Math.round([...R.PC.values()].reduce((s, o) => s + o.he, 0) * 100) / 100, cua: [...R.cua.entries()].sort(), T: R.T.f,
+      exc: [tpxExcCod('Falta'), tpxExcCod('falta injustificada'), tpxExcCod('Vacaciones'), tpxExcCod('Descanso médico'), tpxExcCod('Permiso')],
+      ua: [tpxUaP(' CD1010010-01 '), tpxUaP('OC-2045'), tpxUaP('CD2-3')], rng: trhDmRango({ a: '2026-12-28', b: '2027-01-03' }) }; });
+  // 1. feriado (24.09) y domingo (27.09) con publicación: quien no trabajó sale FE / D, no falta; «Falta» por excepción también
+  expect(r.b).toEqual(['DM', 'FE', 'D', 0, '1/6']);
+  expect(r.g).toEqual(['F', 'FE', 'D', 1]);               // 4. excepción «Falta» en día laborable = F
+  expect(r.T).toBe(1);
+  // 2. dominical: 22, 23 y el feriado trabajado (24) cuentan; el domingo trabajado no → 3/6
+  expect(r.a).toEqual(['A', 'A', 'A', 16.5, 1, 10, '3/6', 0.5, 'OP', 'CARPINTEROS']);
+  // 6. categoría y cuadrilla de cada día: el 22.09 fue oficial en ENCOFRADORES; 8. las HE repartidas suman exacto (0,33 + 0,33 + 0,34)
+  expect(r.pc).toEqual([[4, 3, 4.33], [14.5, 3, 6.33], [0, 3, 0.34]]);
+  expect(r.he).toBe(11);
+  expect(r.cua).toEqual([['CARPINTEROS', 18.5], ['ENCOFRADORES', 9]]);
+  expect(r.exc).toEqual(['F', 'F', 'VA', 'DM', 'EX']);
+  expect(r.ua).toEqual(['CD1010010', 'OC-2045', 'CD2']);  // 7. solo un sufijo -n o -nn
+  expect(r.rng).toEqual({ y: '2026', hasta: '2026-12-31' }); // 3. semana que cruza el año: el del inicio
+  // pantalla: BETA el feriado y el domingo
+  const beta = await page.locator('#trhTb tr[data-trhd="40000002"] td.ts-d b').allTextContents();
+  expect([beta[3], beta[6]]).toEqual(['FE', 'D']);
+  // 3. DM del año: suma la excepción «Descanso médico» (22.09) y cuenta hasta el fin del periodo (no el DM del 28.09)
+  await page.click('#trhV [data-trhv="dm"]');
+  await page.click('#trhDmY');
+  await expect.poll(() => page.evaluate(() => TRH.dmY && [TRH.dmY.hasta, TRH.dmY.m.get('40000002')])).toEqual(['2026-09-27', 1]);
+  await expect(page.locator('#trhDmT tr', { hasText: 'BETA SOTO' })).toContainText('Paga la empresa');
+  await page.evaluate(() => { TRH.ref = '2026-09-30'; requestRender(); });
+  await expect(page.locator('#trhDmY')).toContainText('Contar los días del año 2026');
+  await page.click('#trhDmY');
+  await expect.poll(() => page.evaluate(() => TRH.dmY && [TRH.dmY.hasta, TRH.dmY.m.get('40000002')])).toEqual(['2026-10-04', 2]);
+  noErrors(errors, 'rrhh auditoria');
+});
+
+test('RR.HH.: un rango de más de 93 días avisa que se cortó', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: DATOS });
+  await page.evaluate(() => { TRH.tipo = 'ran'; TRH.ref = '2026-05-01'; TRH.b2 = '2026-09-30'; goTab('trh'); });
+  await expect(page.locator('#trhCorte')).toContainText('se pueden ver hasta 93');
+  noErrors(errors, 'rrhh corte');
 });

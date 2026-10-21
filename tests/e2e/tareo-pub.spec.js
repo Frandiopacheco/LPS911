@@ -123,7 +123,7 @@ test('Costos: lista por mes, sustituida, detalle y Excel del día y de la semana
   expect(sb[24]).toBe(8.5);                                              // DM del lunes = 8,5 h
   expect(sb[31]).toBe(8.5);                                              // PARCIAL de descanso médico
   expect(sg[7]).toBe('VA');
-  expect(sa[13]).toBe('D');                                              // domingo sin tareo: descanso
+  expect(sa[13]).toBe('');                                               // domingo aún no llega (04.10 > hoy): sin «D»
   // Excel de un día desde la lista: una sola hoja
   const d = await bajar(page, '#tpkList [data-tpkx="2026-09-30"]');
   expect(d.wb.SheetNames).toEqual(['30.09']);

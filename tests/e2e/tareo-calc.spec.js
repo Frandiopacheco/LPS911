@@ -203,3 +203,51 @@ test('horas por cantidad: extra, feriado, ausente, salida, errores y avisos; los
   expect(r.blqH).toEqual({ p1: 8.5 });
   noErrors(errors, 'horas por cantidad');
 });
+
+// ── Auditoría del capataz (21-10-2026): medianoche, no laborable, entrada y corrido en el cálculo, horas no válidas ──
+test('horario: turno que pasa de medianoche, no laborable con una sola hora, ini/fin con entrada y corrido, salida igual a la entrada bloquea también en la oficina', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(([LUN, DOM]) => {
+    const R = (h, o = {}) => ({ ape: 'APE', nom: 'NOM', as: true, mot: '', h, ...o });
+    const H = (date, rows, x = {}) => ({ date, modo: 'hrs', pcs: ['p1', 'p2'], rows, foto: ['f'], ...x });
+    const cfgDom = { v: 1, jor: null, fer: false, rnl: { ref: 60, refIni: '12:00' } };
+    const hr = x => x && { ent: x.ent, sal: x.sal, h: x.h, bad: x.bad };
+    return {
+      noche: hr(tHorRow({ sal: '00:30' }, LUN)), nocheCor: tHorRow({ sal: '00:30', cor: true }, LUN).h, tarde: tHorRow({ ent: '14:00', sal: '02:00' }, LUN).h,
+      igual: hr(tHorRow({ sal: '07:30' }, LUN)), inval: tHorRow({ sal: '25:00' }, LUN).bad,
+      fin: [tHrsFin('07:30', 16, [720, 780]), tHrsFin('22:00', 4, null)],
+      split: tHeSplit({ sal: '00:30', cor: true }, LUN, null, 8.5),
+      vNoche: tValida(H(LUN, { d: R({ p1: 8, p2: 8 }, { sal: '00:30' }) })).map(e => e.k),
+      vIgual: tValida(H(LUN, { d: R({ p1: 8.5 }, { sal: '07:30' }) })).map(e => [e.k, !!e.bad]),
+      ofIgual: trValida(H(LUN, { d: R({ p1: 8.5 }, { sal: '07:30' }) })).filter(e => !e.warn).map(e => e.k),
+      ofNoCuadra: trValida(H(LUN, { d: R({ p1: 4 }) })).filter(e => !e.warn).map(e => e.k),
+      /* no laborable: con una sola hora (o solo corrido) la otra sale de la jornada de referencia (lunes) */
+      domSal: hr(tHorRow({ sal: '15:00' }, DOM, cfgDom)), domEnt: tHorRow({ ent: '08:00' }, DOM, cfgDom).h, domCor: tHorRow({ cor: true }, DOM, cfgDom).h,
+      domNada: tHorRow({}, DOM, cfgDom), vDom: tValida(H(DOM, { d: R({ p1: 8.5 }, { sal: '15:00' }) }, { cfg: cfgDom })).map(e => e.k),
+      /* tCalcHrs: ini = su entrada; fin = su salida si cuadra, si no la estimada desde su entrada (corrido: sin refrigerio) */
+      cEnt: (x => [x.ini, x.fin])(tCalc(H(LUN, { d: R({ p1: 9 }, { ent: '08:00', cor: true }) })).rows.d),
+      cEst: (x => [x.ini, x.fin])(tCalc(H(LUN, { d: R({ p1: 8.5 }, { ent: '08:00', cor: true }) })).rows.d),
+      cNoche: (x => [x.ini, x.fin])(tCalc(H(LUN, { d: R({ p1: 8, p2: 8 }, { sal: '00:30' }) })).rows.d),
+      hm: [tHmIn('18h'), tHmIn('18H'), tHmIn('7h30'), tHmIn('7:5'), tHmIn('18:30')],
+    };
+  }, [LUN, DOM]);
+  expect(r.noche).toEqual({ ent: '07:30', sal: '00:30', h: 16, bad: false }); // 17 h menos el refrigerio
+  expect(r.nocheCor).toBe(17);
+  expect(r.tarde).toBe(12); // 14:00 a 02:00: el refrigerio de mediodía no se cruza
+  expect(r.igual).toMatchObject({ h: 0, bad: true });
+  expect(r.inval).toBe(true);
+  expect(r.fin).toEqual(['00:30', '02:00']); // ya no se corta en 23:59
+  expect(r.split).toEqual({ cor: 1, sal: 7.5 });
+  expect(r.vNoche).toEqual([]); // 16 h: se puede enviar (el límite de 16 sigue)
+  expect(r.vIgual).toEqual([['hor', true]]);
+  expect(r.ofIgual).toEqual(['hor']); // bloquea también en la oficina
+  expect(r.ofNoCuadra).toEqual([]); // no cuadrar sigue siendo aviso en la oficina
+  expect(r.domSal).toEqual({ ent: '07:30', sal: '15:00', h: 6.5, bad: false });
+  expect([r.domEnt, r.domCor, r.domNada]).toEqual([8, 9.5, null]);
+  expect(r.vDom).toEqual(['hor']); // 8,5 h en partidas y su horario da 6,5: ya no se ignora
+  expect(r.cEnt).toEqual(['08:00', '17:00']);
+  expect(r.cEst).toEqual(['08:00', '16:30']);
+  expect(r.cNoche).toEqual(['07:30', '00:30']);
+  expect(r.hm).toEqual(['18:00', '18:00', '07:30', null, '18:30']);
+  noErrors(errors, 'horario auditoría 21-10');
+});
