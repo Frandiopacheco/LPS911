@@ -156,7 +156,10 @@ test('horas por cantidad: extra, feriado, ausente, salida, errores y avisos; los
       vOk: tValida(H(LUN, { d: R({ p1: 4.5, p2: 4 }) })),
       v0: tValida(H(LUN, { d: R({}) })).map(o => [o.dni, o.k]),
       v16: tValida(H(LUN, { d: R({ p1: 10, p2: 6.5 }) })).map(o => [o.dni, o.k]),
-      vParc: tValida(H(LUN, { d: R({ p1: 4 }) })),
+      vParc: tValida(H(LUN, { d: R({ p1: 4 }, { sal: '11:30' }) })),
+      /* horario (20-10-2026): sin salida, 4 h no cuadran con la jornada (error que bloquea al capataz); corrido no descuenta refrigerio */
+      vHor: tValida(H(LUN, { d: R({ p1: 4 }) })).map(e => e.k),
+      vCor: [tHorRow({ sal: '19:00', cor: true }, LUN).h, tHorRow({ sal: '19:00' }, LUN).h, tHorRow({ ent: '08:00' }, LUN).h, tHorRow({}, '2026-10-04')],
       vParcFer: tValida(H(FER, { d: R({ p1: 4 }) }, { cfg: cfgFer })),
       vAus: tValida(H(LUN, { d: R({ p1: 8 }, { as: false }) })),
       vSinM: tValida(H(LUN, { d: R({ p1: 8 }, { as: null }) })).map(o => o.k),
@@ -187,6 +190,8 @@ test('horas por cantidad: extra, feriado, ausente, salida, errores y avisos; los
   expect(r.v16).toEqual([['d', 'hmax']]); // más de 16 h: error de digitación
   expect(r.vParc).toEqual([{ dni: 'd', k: 'parcial', warn: true, msg: 'Jornada parcial: APE 4 h de 8,5' }]); // aviso, no bloquea
   expect(r.vParcFer).toEqual([]);
+  expect(r.vHor).toEqual(['hor']);
+  expect(r.vCor).toEqual([11.5, 10.5, 8, null]); // corrido 7:30–19:00 · con refrigerio · entró 8:00 · domingo sin horario: no se compara
   expect(r.vAus).toEqual([]);
   expect(r.vSinM).toEqual(['marca']);
   expect(r.vPcs).toEqual(['pcs']);

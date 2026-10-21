@@ -9,7 +9,7 @@
 /* quién publica (admin o editor con «Publica tareo») y quién ve Costos (además, costos) */
 /* publica: admin, asistente de tareo (20-10-2026: el dueño le dio acceso a todo el tareo) y jefe de producción con «Publica tareo» */
 const tpPubOk=()=>!!me&&(me.role==='admin'||TASIS()||(me.role==='editor'&&me.tpub===true));
-const tpCosOk=()=>!!me&&(tpPubOk()||me.role==='tcos');
+const tpCosOk=()=>!!me&&(tpPubOk()||me.role==='tcos'||me.role==='trh');
 /* caché de publicaciones leídas (id → doc): son inmutables */
 const TPUB=new Map();
 const tpMs=v=>typeof v==='number'?v:v&&typeof v.toMillis==='function'?v.toMillis():v&&typeof v.seconds==='number'?v.seconds*1000:typeof v==='string'?(Date.parse(v)||0):0;
@@ -275,7 +275,8 @@ function tpkDias(){const F=new Map();
   return[...F.values()].map(x=>{x.vs.sort((a,b)=>b.v-a.v);x.vig=x.idx&&x.idx.v!=null?+x.idx.v:(x.vs[0]?+x.vs[0].v:null);x.doc=x.vs.find(d=>+d.v===x.vig)||null;
     const iv=x.idx&&Array.isArray(x.idx.vers)?x.idx.vers:[];x.vers=[...new Set([...iv.map(o=>+o.v),...x.vs.map(d=>+d.v)])].filter(v=>Number.isFinite(v)).sort((a,b)=>b-a);x.iv=iv;return x}).sort((a,b)=>a.f<b.f?1:-1)}
 
-function renderTCos(main){if(!tpCosOk()){main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Costos','')}<div class="callout">Sin acceso.</div></div></div>`;return}
+/* lista de días publicados, detalle y descargas: desde el 20-10-2026 es la vista «Publicaciones» de Costos (tareo-costos.js la monta en main) */
+function tpkPublicaciones(main){
   const hoy=todayIso();if(!TPK.mes)TPK.mes=hoy.slice(0,7);const m=TPK.mes;tpkSub(m);
   if(TPK.det)return tpkDetalle(main);
   const D=tpkDias();const ult=D.find(x=>x.vig)?.f||hoy;
@@ -290,7 +291,7 @@ function renderTCos(main){if(!tpCosOk()){main.innerHTML=`<div class="scroll"><di
       ${num(t?t.obreros:'…','Obreros')}${num(t?t.pres:'…','Vinieron')}${num(t?toH(t.hh):'…','HH')}${num(t?toH(t.he):'…','HE')}
       <td data-l="Publicó" class="note">${d?esc(tpWho(d.by,d.byN))+' · '+esc(tpAt(d.at)):''}</td>
       <td class="t-r" data-l=""><button class="ib" data-tpkv="${esc(tpId(x.f,x.vig))}">Ver</button> <button class="ib" data-tpkx="${esc(x.f)}"${busy?' disabled':''}>Excel</button></td></tr>${old}`}).join('');
-  main.innerHTML=`<div class="scroll"><div class="wrap tp">${pageHead('Costos · tareo publicado',esc(tpkMesN(m)),`<span class="to-date"><button class="ib" id="tpkPrev" aria-label="Mes anterior">‹</button><input class="tin" type="month" id="tpkMes" value="${esc(m)}" max="${esc(hoy.slice(0,7))}" aria-label="Mes"><button class="ib" id="tpkNext" aria-label="Mes siguiente"${m>=hoy.slice(0,7)?' disabled':''}>›</button></span>`)}
+  main.innerHTML=`<div class="wrap tp">${pageHead('Publicaciones del tareo',esc(tpkMesN(m)),`<span class="to-date"><button class="ib" id="tpkPrev" aria-label="Mes anterior">‹</button><input class="tin" type="month" id="tpkMes" value="${esc(m)}" max="${esc(hoy.slice(0,7))}" aria-label="Mes"><button class="ib" id="tpkNext" aria-label="Mes siguiente"${m>=hoy.slice(0,7)?' disabled':''}>›</button></span>`)}
     <div class="card tp-x" id="tpkX"><div class="tp-bh"><b>Descargar Excel</b><span class="note">Formato del tareo semanal (una hoja por día, «Resumen HH» y «Tareo Semana»), siempre de la versión vigente de cada día.</span></div>
       <div class="tp-xg">
         <div class="tp-xi"><span class="tp-xl">Un día</span><input class="tin" type="date" id="tpkXd" data-fk="tpk:xd" value="${esc(TPK.xd)}" max="${esc(hoy)}" aria-label="Día"><button class="ib pri" id="tpkXdB"${busy?' disabled':''}>Excel del día</button></div>
@@ -300,7 +301,7 @@ function renderTCos(main){if(!tpCosOk()){main.innerHTML=`<div class="scroll"><di
     ${TPK.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(TPK.err)}).</div>`:''}
     <div class="card"><div class="tscroll"><table class="t t-tbl tp-list" id="tpkList"><thead><tr><th>Fecha</th><th>Versión</th><th class="t-r">Obreros</th><th class="t-r">Vinieron</th><th class="t-r">HH</th><th class="t-r">HE</th><th>Publicó</th><th></th></tr></thead>
       <tbody>${rows||`<tr><td colspan="8" class="note">${TPK.ok?`No hay días publicados en ${esc(tpkMesN(m))}.`:'Cargando…'}</td></tr>`}</tbody></table></div></div>
-  </div></div>`;
+  </div>`;
   const goM=x=>{if(!/^\d{4}-\d{2}$/.test(x))return;TPK.mes=x>hoy.slice(0,7)?hoy.slice(0,7):x;TPK.idx=new Map();TPK.pubs=new Map();TPK.ok=false;requestRender()};
   $('#tpkPrev').onclick=()=>goM(tpkMesAdd(m,-1));$('#tpkNext').onclick=()=>goM(tpkMesAdd(m,1));$('#tpkMes').onchange=e=>goM(e.target.value);
   const keep=(id,k)=>{$(id).onchange=e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){TPK[k]=e.target.value;requestRender()}}};
@@ -313,7 +314,7 @@ function renderTCos(main){if(!tpCosOk()){main.innerHTML=`<div class="scroll"><di
 /* detalle de una publicación (cualquier versión) */
 function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split('_v')[0];
   const back=`<button class="ib" id="tpkBack">← Días publicados</button>`;
-  if(!d){main.innerHTML=`<div class="scroll"><div class="wrap tp">${pageHead('Publicación',esc(toDia(f)),back)}<div class="callout" id="tpkLd">Cargando la publicación…</div></div></div>`;
+  if(!d){main.innerHTML=`<div class="wrap tp">${pageHead('Publicación',esc(toDia(f)),back)}<div class="callout" id="tpkLd">Cargando la publicación…</div></div>`;
     $('#tpkBack').onclick=()=>{TPK.det='';requestRender()};
     tpGet(id).then(x=>{if(TPK.det!==id)return;if(!x){TPK.det='';toast('No se encontró esa publicación.')}requestRender()}).catch(e=>{if(TPK.det===id){TPK.det='';toast('No se pudo leer la publicación: '+(e.code||e.message||e))}requestRender()});return}
   const I=TPK.idx.get(f)||(TPB.f===f?TPB.idx:null);const D=tpkDias().find(x=>x.f===f);const vig=I&&I.v!=null?+I.v:D?D.vig:+d.v;
@@ -326,7 +327,7 @@ function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split
   const am=new Map();for(const r of aus){const k=r.mot||'';if(!am.has(k))am.set(k,[]);am.get(k).push(r)}
   const exc=Object.entries(d.exc||{});
   const fu=Array.isArray(d.fuentes)?d.fuentes:[];
-  main.innerHTML=`<div class="scroll"><div class="wrap tp">${pageHead(`Publicación del ${fmtD(f)}`,esc(toDia(f)),back)}
+  main.innerHTML=`<div class="wrap tp">${pageHead(`Publicación del ${fmtD(f)}`,esc(toDia(f)),back)}
     <div class="tp-bar"><div class="tp-st"><span class="tp-vs" id="tpkVs">${vs.map(v=>`<button class="tp-ch${v===+d.v?' on':''}" data-tpkdv="${esc(tpId(f,v))}">v${v}${v===vig?' · vigente':' · sustituida'}</button>`).join('')}</span></div>
       <div class="tp-acts"><button class="ib pri" id="tpkXv"${TPK.busy?' disabled':''}>Excel de esta versión (v${esc(String(d.v))})</button></div></div>
     <div class="note tp-at" id="tpkMeta">Versión ${esc(String(d.v))}${+d.v===vig?' (vigente)':' (sustituida)'} · publicó ${esc(tpWho(d.by,d.byN))} · ${esc(tpAt(d.at))}${d.motivo?` · motivo: «${esc(d.motivo)}»`:''}${fu.length?` · ${fu.length} ${fu.length===1?'tareo':'tareos'}: ${esc(fu.map(x=>x.capN||tCapName(x.cap)||x.cap).join(', '))}`:''}</div>
@@ -340,7 +341,7 @@ function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split
     <div class="tp-two">
       <div class="card tp-aus" id="tpkAus"><div class="tp-bh"><b>No vinieron · ${aus.length}</b></div>${aus.length?`<ul class="tp-ul">${[...am].map(([k,L])=>`<li><b>${esc(k?k+' · '+(TO_MOT[k]||k):'Sin motivo')}</b> <span class="tp-n">${L.length}</span><div class="note">${L.map(r=>esc(nm(r))).join(', ')}</div></li>`).join('')}</ul>`:'<div class="note">Todos vinieron.</div>'}</div>
       <div class="card tp-exc" id="tpkExc"><div class="tp-bh"><b>Sin tareo con excepción · ${exc.length}</b></div>${exc.length?`<ul class="tp-ul">${exc.map(([dni,x])=>`<li><b>${esc([x&&x.ape,x&&x.nom].filter(Boolean).join(' ')||dni)}</b> <span class="mono note">${esc(dni)}</span><div class="note">${esc(x&&x.motivo||'')}</div></li>`).join('')}</ul>`:'<div class="note">Ninguno.</div>'}</div>
-    </div></div></div>`;
+    </div></div>`;
   $('#tpkBack').onclick=()=>{TPK.det='';requestRender()};
   $('#tpkVs').onclick=e=>{const b=e.target.closest('[data-tpkdv]');if(b){TPK.det=b.dataset.tpkdv;requestRender()}};
   $('#tpkXv').onclick=()=>tpxBajar('dia',f,f,d)}

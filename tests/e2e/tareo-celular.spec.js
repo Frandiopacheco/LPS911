@@ -12,7 +12,7 @@ const EXTRA = [
     rows: { '02000001': { ape: 'ALFA', nom: 'X', cat: 'OP', cua: 'ALBAÑILES', as: true, mot: '', alt: false } },
     blq: [{ id: 'b1', pc: 'p10_05', ini: '07:30', fin: '12:00', dnis: ['02000001'] }], hist: [], by: 'tcap@obra.pe', ts: 1 }],
 ];
-const TAR = ['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg'];
+const TAR = ['tdia', 'tpub', 'tcos', 'trh', 'tper', 'tpc', 'tcfg'];
 
 /* el marco de «📱 Vista celular» ya con la app dibujada */
 const marco = async page => {

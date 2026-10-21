@@ -63,6 +63,7 @@ test.beforeEach(async () => {
     await S('members/u_tcap1', { role: 'tcap', name: 'Pedro' });
     await S('members/jefe@obra.pe', { role: 'editor', name: 'Jefe de producción', tpub: true });
     await S('members/campotar@obra.pe', { role: 'campo', name: 'Campo y asistente de tareo', tasis: true });
+    await S('members/trh@obra.pe', { role: 'trh', name: 'RR.HH.' });
     await S('tper/03684337', { dni: '03684337', ape: 'QUISPE MAMANI', nom: 'JUAN', pue: 'OPERARIO ALBAÑIL', cat: 'OP', cua: 'ALBAÑILES', cap: '', act: true });
     await S('tpc/10.05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado de muros', und: 'm2', act: true });
     await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
@@ -415,7 +416,7 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
     await setDoc(doc(c.firestore(), 'meta/project'), { name: 'Obra', refWeek: 58, refDate: '2026-09-28', propCutDow: 6, propCutHH: '13:00', planCutHH: '21:00', cal: { sat: true }, esps: [] });
   });
   const ed = user('editor@obra.pe');
-  for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' },
+  for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' }, { closeCutHH: '18:00' },
     { frzCutDow: 6 }, { frzCutHH: '20:00' }, { finObra: '2027-06-30' }, { refWeek: 58, frzCutDow: null }])
     await assertFails(updateDoc(doc(ed, 'meta/project'), ch));
   await assertFails(setDoc(doc(ed, 'meta/project'), { name: 'Obra', cal: { sat: false } })); // reemplazar entero borra refWeek…
@@ -429,7 +430,7 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
   for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')])
     await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: false } }));
   const adm = user(OWNER);
-  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
+  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', closeCutHH: '17:30', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
   await assertFails(deleteDoc(doc(ed, 'meta/project')));
 });
 
@@ -1433,4 +1434,16 @@ test('tareo (20-10-2026): el ingeniero de campo con tasis edita el tareo como el
   await assertFails(setDoc(doc(c, 'tcfg/main'), { tolGar: 5 }, { merge: true }));
   // nadie se pone la casilla a sí mismo
   await assertFails(updateDoc(doc(c, 'members/campo@obra.pe'), { tasis: true }));
+});
+
+test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros tcfg/pla los cambian admin y asistente', async () => {
+  const r = user('trh@obra.pe');
+  await assertSucceeds(getDoc(doc(r, 'tper/03684337')));
+  await assertSucceeds(getDoc(doc(r, 'tcfg/main')));
+  await assertSucceeds(getDocs(collection(r, 'tpubidx')));
+  await assertFails(setDoc(doc(r, 'tcfg/pla'), { alt: 9 }));
+  await assertFails(setDoc(doc(r, 'tper/12345678'), PER('12345678')));
+  await assertFails(getDocs(collection(r, 'tareo')));       // como costos: no ve los tareos sin publicar
+  await assertFails(getDoc(doc(r, 'acts/x1')));             // no ve Last Planner
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, vig: [] }));
 });

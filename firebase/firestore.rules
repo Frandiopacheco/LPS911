@@ -21,14 +21,14 @@ service cloud.firestore {
     function role() { return isOwner() ? 'admin' : get(memberPath()).data.role; }
     // Roles de solo Tareo (docs/ia/tareo.md): no leen ni escriben nada de LPS. Se lee con get('role') para no fallar
     // si un registro no tiene rol (antes isMember() bastaba para leer).
-    function tarOnly() { return !isOwner() && get(memberPath()).data.get('role', '') in ['tcap', 'tasis', 'tcos']; }
+    function tarOnly() { return !isOwner() && get(memberPath()).data.get('role', '') in ['tcap', 'tasis', 'tcos', 'trh']; }
     // Miembro de LPS: todo el equipo menos los roles de solo Tareo (lectura de las colecciones de LPS)
     function lpsMember() { return isMember() && !tarOnly(); }
     // Asistente de tareo con Campo (20-10-2026): un ingeniero de campo con members.tasis tiene además todo lo del asistente de tareo
     function campoTasis() { return role() == 'campo' && get(memberPath()).data.get('tasis', false) == true; }
     // Tareo: ven el módulo los roles de tareo, el administrador, el campo asistente y el editor marcado «Publica tareo» (members.tpub)
     function isTar() {
-      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'admin'] || campoTasis()
+      return isMember() && notOff() && (role() in ['tcap', 'tasis', 'tcos', 'trh', 'admin'] || campoTasis()
         || (role() == 'editor' && get(memberPath()).data.get('tpub', false) == true));
     }
     // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo (o campo con tasis)
@@ -440,7 +440,8 @@ service cloud.firestore {
       allow create, update: if (canEdit() || isOT()) && p3dOk(id) && (!('del' in request.resource.data) || isAdmin());
     }
     // Tareo del día: tareo/{fecha}_{capId}. El capataz del tareo (tcap) solo ve y llena los suyos; tcos no ve nada (hasta F3).
-    function tarRole() { return role() in ['tcap', 'tcos'] ? role() : 'ofi'; }
+    // RR.HH. (trh, 20-10-2026) lee como costos
+    function tarRole() { return role() in ['tcap', 'tcos'] ? role() : role() == 'trh' ? 'tcos' : 'ofi'; }
     // fecha YYYY-MM-DD entre hace 3 días y hoy (hora de Lima, UTC-5; tolera un día por el reloj y la zona)
     function tDateOk(d) {
       return d is string && d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
@@ -661,7 +662,7 @@ service cloud.firestore {
     match /meta/{id} {
       allow create, update: if isAdmin() || (canEdit() && (id != 'project'
         || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
-          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'finObra'])));
+          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'finObra'])));
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);

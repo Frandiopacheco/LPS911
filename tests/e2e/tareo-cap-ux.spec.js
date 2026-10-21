@@ -59,7 +59,7 @@ test('A5: un reabierto con jornada congelada (doc.cfg) se muestra con esa jornad
   await root.locator('.tc-steps [data-tcs="3"]').click();
   await expect(root.locator('#tcJorH')).toContainText('Día no laborable');
   // y al revés: congelado laborable con otra jornada mientras la configuración actual lo marca feriado
-  await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: { ini: '08:00', fin: '16:00', ref: 30, refIni: '12:30' }, fer: false, rnl: { ref: 60, refIni: '12:00' } }; S.tcfg.set('main', { fer: [TCS.date] }); tcDraw(); });
+  await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: { ini: '08:00', fin: '16:00', ref: 30, refIni: '12:30' }, fer: false, rnl: { ref: 60, refIni: '12:00' } }; S.tcfg.set('main', { fer: [TCS.date] }); TCS.doc.rows['41000000'].sal = '17:00'; tcDraw(); });
   await expect(root.locator('#tcJorH')).toHaveText('Jornada del día: 7,5 h');
   await expect(root.locator('.tc-gt[data-dni="41000000"]')).toContainText('+1 HE');
   await root.locator('.tc-steps [data-tcs="1"]').click();
@@ -125,9 +125,10 @@ test('UX2: dos «Juan Quispe» se distinguen en asistencia, columnas de la grill
   expect(names).toContain('Juan Quispe Huamani');
   expect(names).toContain('Juan Quispe Mamani ·DNI 000');
   expect(names).toContain('Juan Quispe Mamani ·DNI 099');
-  // la columna: tocar el nombre muestra el nombre completo con DNI
+  // la columna: tocar el nombre abre su día completo (20-10-2026), con el nombre completo y el DNI si se repite
   await root.locator('.tc-gn[data-dni="41000099"] [data-tcnm]').click();
-  await expect(page.locator('#toast')).toContainText('QUISPE MAMANI, JUAN CARLOS · DNI 41000099');
+  await expect(root.locator('#tcWk .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 099');
+  await root.locator('#tcWk [data-tca="wkX"]').last().click();
   // el editor de la celda lleva el nombre completo (con DNI si se repite)
   await root.locator('.tc-gcell[data-dni="41000000"][data-pc="p10_05"]').click();
   await expect(root.locator('#tcCell .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 000');

@@ -83,6 +83,58 @@ function closesToAccept(lives, dailyById, acts, today, dplanById) {
   return out;
 }
 
+/* Sin cierre a la hora de corte (reporte por excepción, decidido con el dueño, oct 2026): lo comprometido en el plan publicado
+   del día (dplan.ids) que a la hora de corte (Configuración › Proyecto closeCutHH, por defecto 17:00 Lima) nadie cerró —ni el SC/capataz propuso cierre antes del corte, ni el
+   ingeniero lo verificó— entra como No cumplido, causa del cuadro con código SC (o «Subcontratas»), imputable al SC, sin terminada.
+   Se excluye lo reprogramado ese día («No va», pdz kind nova, o acts.rpl[día]), lo archivado y lo que cambió de partida.
+   Corre en aceptarCierres (23:30) para el día de hoy; el ingeniero lo puede corregir después en Campo. */
+/* misma regla que la página (base.js closeCutHH): entre 12:00 y 21:00, por defecto 17:00 */
+function closeCutHH(p) { const v = p && p.closeCutHH; return typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= '12:00' && v <= '21:00' ? v : '17:00'; }
+const hhLabel = v => { const [h, m] = String(v).split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''} ${h < 12 ? 'am' : 'pm'}`; };
+const sinCierreNote = hh => `Sin cierre del SC antes de las ${hhLabel(hh)} (registrado automáticamente)`;
+/* hora de corte del día en milisegundos (Lima, UTC−5, sin horario de verano) */
+const closeCutTs = (d, hh) => Date.parse(d + 'T' + (hh || '17:00') + ':00-05:00');
+function cncSinCierre(cnc) {
+  const L = Array.isArray(cnc) ? cnc : [];
+  return L.find(n => /subcontrat|mano de obra|\bsc\b/i.test(String(n))) || 'Subcontratas';
+}
+function sinCierre(day, dplans, lives, dailyById, acts, novaIds, cnc, hh) {
+  hh = closeCutHH({ closeCutHH: hh });
+  const cut = closeCutTs(day, hh);
+  const liveBy = new Map(lives.filter(l => l.date === day).map(l => [l.actId, l]));
+  const cause = cncSinCierre(cnc);
+  const out = [];
+  for (const dp of dplans) {
+    if (!dp || dp.date !== day || !dp.pisoId || !dp.ids) continue;
+    const doc = dailyById.get(day + '_' + dp.pisoId);
+    for (const aid of Object.keys(dp.ids)) {
+      const r = doc && doc.recs && doc.recs[aid];
+      if (r && (r.status || r.clr)) continue;
+      if (novaIds && novaIds.has(aid)) continue;
+      const x = acts.get(aid);
+      if (!x || x.arch || (x.rpl && x.rpl[day])) continue;
+      const who = dp.who && dp.who[aid];
+      if (who && who.sc && (x.sc || '') !== who.sc) continue;
+      const lv = liveBy.get(aid);
+      const c = lv && lv.close;
+      if (c && c.status && (c.t || 0) <= cut && (lv.sc || '') === (x.sc || '')) continue; // cerró a tiempo: lo acepta closesToAccept
+      const hasM = typeof x.metrado === 'number' && x.metrado > 0;
+      const q = hasM ? (typeof dp.ids[aid] === 'number' ? dp.ids[aid] : ((x.qty || {})[day] ?? null)) : null;
+      out.push({
+        date: day, pisoId: dp.pisoId, actId: aid,
+        rec: {
+          status: 'no', prog: q, und: x.und || '', exec: null, cnc: cause, imp: true, note: sinCierreNote(hh),
+          late: false, done: false, photos: (lv && lv.photos) || [], sinCierre: true,
+          ...(c && c.status ? { prop: { status: c.status, cnc: c.cnc || '', done: !!c.done, by: c.by || '', byName: c.n || '', ts: c.t || 0 } } : {}),
+          sc: x.sc || '', nm: x.name || '', ambId: x.ambId || '',
+          auto: true, autoSrv: true, by: 'servidor', byName: 'Corte ' + hhLabel(hh), ts: cut
+        }
+      });
+    }
+  }
+  return out;
+}
+
 /* Escribe los cierres de closesToAccept uno por uno, cada uno en una transacción que vuelve a leer el registro del día:
    si mientras tanto un ingeniero lo verificó (o lo quitó a propósito), no se toca. Antes un lote escribía con la lectura
    del inicio y podía cambiar un «No cumplido» recién verificado por «Cumplido» y borrar su comentario. */
@@ -601,7 +653,7 @@ function cliDue(p, versions, now = Date.now()) {
 }
 
 module.exports = {
-  CNC_SIN_CONF, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
+  CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };

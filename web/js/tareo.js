@@ -58,6 +58,22 @@ const tBlqMin=(a,b,rw)=>a==null||b==null||b<=a?0:Math.max(0,b-a-(rw?Math.max(0,M
     domingo/feriado `refNoLab`); ext = max(0, trab − jornada del día); domingo o feriado: todo es extra. cfg opcional (doc.cfg). */
 function tHoras(fecha,ini,fin,cfg){const D=tDia(fecha,cfg);const trab=tR2(tBlqMin(tMin(ini),tMin(fin),D.rw)/60);
   return{trab,ext:D.nl?trab:tR2(Math.max(0,trab-D.jh))}}
+/** horario de un obrero en el tareo por horas (20-10-2026): entrada r.ent y salida r.sal ('HH:MM'; si faltan, las de la jornada) y
+    r.cor (corrido: almorzó trabajando, no se descuenta el refrigerio). → {ent, sal, cor, h (horas que da), mod (se cambió algo), bad
+    (salida no posterior a la entrada)}; null en un día no laborable o feriado sin horario escrito (no hay jornada con qué comparar). */
+const tHmOk=s=>/^\d{1,2}:\d{2}$/.test(s||'');
+function tHorRow(r,fecha,cfg){r=r||{};const D=tDia(fecha,cfg);const mod=tHmOk(r.ent)||tHmOk(r.sal)||r.cor===true;
+  if(D.nl&&!mod)return null;const j=D.j||{};const ent=tHmOk(r.ent)?r.ent:j.ini,sal=tHmOk(r.sal)?r.sal:j.fin;
+  const a=tMin(ent),b=tMin(sal);if(a==null||b==null)return null;if(b<=a)return{ent,sal,cor:r.cor===true,h:0,mod,bad:true};
+  return{ent,sal,cor:r.cor===true,h:tR2(tBlqMin(a,b,r.cor===true?null:D.rw)/60),mod,bad:false}}
+/** HE de un obrero separadas (20-10-2026, pedido del dueño): cor = las que salen de trabajar el refrigerio (corrido), sal = el resto
+    (por quedarse después de su hora de salida, o entrar antes). ext: sus HE del día. → {cor, sal} */
+function tHeSplit(r,fecha,cfg,ext){ext=+ext||0;if(ext<=0)return{cor:0,sal:0};const HR=tHorRow(r,fecha,cfg);const D=tDia(fecha,cfg);let cor=0;
+  if(HR&&HR.cor&&!HR.bad&&D.rw){const a=tMin(HR.ent),b=tMin(HR.sal);cor=Math.max(0,Math.min(b,D.rw[1])-Math.max(a,D.rw[0]))/60}
+  cor=tR2(Math.min(ext,cor));return{cor,sal:tR2(ext-cor)}}
+/** hora escrita a mano («18», «1830», «18.30», «18:30») → 'HH:MM', '' si está vacía o null si no es hora */
+function tHmIn(v){const s=String(v==null?'':v).trim().replace(/[.,h]/,':');if(!s)return'';const m=/^(\d{1,2})(?::?(\d{2}))?$/.exec(s);if(!m)return null;
+  const h=+m[1],mi=+(m[2]||0);if(h>23||mi>59)return null;return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0')}
 
 /* fechas de Excel: número de serie, Date, 'dd/mm/aaaa' o 'aaaa-mm-dd' → 'aaaa-mm-dd' ('' si no es fecha) */
 function tFecha(v){if(v==null||v==='')return'';
@@ -233,6 +249,10 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
     const t=tHrsTot(r);
     if(!t){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponle sus horas o márcalo como que no vino.`});continue}
     if(t>T_HMAX){out.push({dni,k:'hmax',msg:`${nm(dni)}: ${tHtxt(t)} h en el día. Revisa las horas (máximo ${T_HMAX}).`});continue}
+    /* horario (20-10-2026): las horas en partidas tienen que ser las que da su horario (entrada a salida, menos refrigerio salvo corrido) */
+    const HR=tHorRow(r,d.date||todayIso(),d.cfg);
+    if(HR&&HR.bad){out.push({dni,k:'hor',msg:`${nm(dni)}: la salida (${HR.sal}) tiene que ser después de la entrada (${HR.ent}).`});continue}
+    if(HR&&Math.abs(HR.h-t)>0.01){out.push({dni,k:'hor',hor:HR.h,msg:`${nm(dni)}: en partidas ${tHtxt(t)} h, su horario (${HR.ent}–${HR.sal}${HR.cor?', corrido':''}) da ${tHtxt(HR.h)} h. Corrige las horas o su hora de salida.`});continue}
     if(!D.nl&&D.jh>0&&t<D.jh)out.push({dni,k:'parcial',warn:true,msg:`Jornada parcial: ${(r&&r.ape)||nm(dni)} ${tHtxt(t)} h de ${tHtxt(D.jh)}`})}
   if(!(Array.isArray(d.foto)&&d.foto.length))out.push({dni:null,k:'foto',msg:'Falta la foto del formato firmado.'});
   return out}
@@ -245,7 +265,7 @@ const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firma
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
-const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos';
+const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos'&&me.role!=='trh';
 /* edita la oficina (coteja, corrige, revisa, reabre, pasa obreros): asistente, administrador y jefe de producción (editor con tpub) */
 const toReabOk=()=>!!me&&(isAdmin||TASIS()||(me.role==='editor'&&me.tpub===true));
 const toH=v=>(+v||0).toLocaleString('es-PE',{maximumFractionDigits:2});
@@ -509,7 +529,7 @@ function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);const
 
 function tFicha(id){const p=S.tper.get(id);if(!p)return;const ed=tEdit();const a=tActivo(p);const per=(Array.isArray(p.per)&&p.per.length?p.per:[{ing:p.ing,ces:p.ces,mot:p.mot}]).slice().reverse();
   lqModal(`<div class="lqtop"><b>${esc(p.ape||'')}${p.nom?', '+esc(p.nom):''}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-   <div class="lqh"><span class="mono">DNI ${esc(p.dni||p.id)}</span><span>${esc(p.pue||'')} · ${esc(TCAT[p.cat]||'Otro')} · ${esc(p.cua||'sin cuadrilla')}</span><span>Capataz: ${esc(tCapName(p.cap)||'sin asignar')}</span>
+   <div class="lqh"><span class="mono">DNI ${esc(p.dni||p.id)}</span><span>${esc(p.pue||'')} · ${esc(TCAT[p.cat]||'Otro')} · ${esc(p.cua||'sin cuadrilla')}</span><span>Capataz: ${esc(tCapName(p.cap)||'sin asignar')}</span>${p.afp||p.hij!=null&&p.hij!==''?`<span>${esc([p.afp,p.hij!=null&&p.hij!==''?`${p.hij} ${+p.hij===1?'hijo':'hijos'}`:''].filter(Boolean).join(' · '))}</span>`:''}
     <span class="lqtags"><i class="lqt ${a?'t-ok':''}">${p.arch?'ARCHIVADO':a?'ACTIVO':'CESADO'}</i></span></div>
    <div><b class="t-h3">Historial de periodos</b><table class="t t-per"><thead><tr><th>Ingreso</th><th>Cese</th><th>Motivo</th></tr></thead><tbody>${per.map(x=>`<tr><td class="mono">${esc(tFmt(x.ing))||'—'}</td><td class="mono">${esc(tFmt(x.ces))||'<span class="note">vigente</span>'}</td><td>${esc(x.mot||'')}</td></tr>`).join('')}</tbody></table></div>
    ${p.ts?`<p class="note">Último cambio: ${esc(p.by||'')} · ${esc(fmtD(ldt(p.ts)))}</p>`:''}
@@ -528,6 +548,8 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
     <label class="lqlab">Puesto<input class="tin" id="tfPue" value="${esc(v.pue)}" placeholder="OPERARIO ALBAÑIL"></label>
     <label class="lqlab">Categoría<select class="tin" id="tfCat"><option value="">Según el puesto</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}"${p&&v.cat===k?' selected':''}>${l}</option>`).join('')}</select></label>
     <label class="lqlab">Cuadrilla<input class="tin" id="tfCua" value="${esc(v.cua)}" list="tfCuaL"><datalist id="tfCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+    <label class="lqlab">Pensiones<select class="tin" id="tfAfp"><option value="">Sin dato</option>${T_AFP.map(a=>`<option${v.afp===a?' selected':''}>${a}</option>`).join('')}</select></label>
+    <label class="lqlab">N.° de hijos (asignación escolar)<input class="tin" id="tfHij" type="number" min="0" max="20" step="1" value="${v.hij!=null&&v.hij!==''?esc(String(v.hij)):''}"></label>
     <label class="lqlab">Capataz<select class="tin" id="tfCap"><option value="">Sin capataz</option>${caps.map(c=>`<option value="${esc(c.id)}"${c.id===v.cap?' selected':''}>${esc(c.name)}</option>`).join('')}${v.cap&&!caps.some(c=>c.id===v.cap)?`<option value="${esc(v.cap)}" selected>${esc(tCapName(v.cap))}</option>`:''}</select></label>
    </div>${p&&!p.ces?`<details class="t-cesd"><summary>Marcar cese</summary><div class="t-form">
     <label class="lqlab">Fecha de cese<input class="tin" id="tfCesF" type="date"></label>
@@ -540,12 +562,15 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
      const up=id=>$(id).value.replace(/,/g,' ').trim().replace(/\s+/g,' ').toUpperCase();const apP=up('#tfApP'),apM=up('#tfApM'),nom=up('#tfNom');
      if(!apP)return msg('Escribe el apellido paterno.');const ape=[apP,apM].filter(Boolean).join(' ');
      const ing=$('#tfIng').value;const pue=$('#tfPue').value.trim().replace(/\s+/g,' ').toUpperCase();const cat=$('#tfCat').value||tCatDe(pue);
-     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};
+     const hv=$('#tfHij').value;if(hv!==''&&!(Number.isInteger(+hv)&&+hv>=0&&+hv<=20))return msg('El N.° de hijos debe ser un número entero de 0 a 20.');
+     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,afp:$('#tfAfp').value,hij:hv===''?null:+hv,...tStamp()};
      if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d});
        const cf=$('#tfCesF')?$('#tfCesF').value:'';if(cf){if(ing&&cf<ing)return msg('El cese no puede ser anterior al ingreso ('+tFmt(ing)+').');Object.assign(d,tCeseData({...p,...d},cf,$('#tfCesM').value.trim()))}}
      else{Object.assign(d,{ces:'',mot:'',per:[{ing,ces:'',mot:''}]});d.act=tActivo(d)}
      try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});lqClose();toast(p?(d.ces&&d.ces!==p.ces?'Ficha actualizada y cese registrado.':'Ficha actualizada.'):'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
 
+/* sistema de pensiones de la ficha (RR.HH., 20-10-2026) */
+const T_AFP=['ONP','AFP Habitat','AFP Integra','AFP Prima','AFP Profuturo'];
 const TMOT=['Renuncia','Termino de partida','Termino total de partida','Abandono de trabajo','Faltas injustificadas'];
 /* datos del cese (fecha f, motivo m) para una ficha: cierra el periodo vigente. Lo usan «Marcar cese», «Editar» y «Editar elegidos». */
 function tCeseData(p,f,m){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:'',mot:''}];Object.assign(per[per.length-1],{ces:f,mot:m});

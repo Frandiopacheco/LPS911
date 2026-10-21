@@ -65,6 +65,7 @@
     <button role="tab" data-tab="tdia" hidden>Tareos del día</button>
     <button role="tab" data-tab="tpub" hidden>Publicación</button>
     <button role="tab" data-tab="tcos" hidden>Costos</button>
+    <button role="tab" data-tab="trh" hidden>RR.HH.</button>
     <button role="tab" data-tab="tper" hidden>Personal</button>
     <button role="tab" data-tab="tpc" hidden>Partidas de control</button>
     <button role="tab" data-tab="tcfg" hidden>Configuración</button>
@@ -83,7 +84,7 @@
     <h2 id="ltitle">Ingresar</h2>
     <p class="lmsg" id="lmsg" role="alert"></p>
     <p class="lhint" id="lhint" hidden>Solo funciona si el administrador ya agregó tu correo al equipo. Luego te llegará un correo para confirmar tu cuenta.</p>
-    <label for="lemail">Correo</label><input id="lemail" type="email" autocomplete="username" required>
+    <label for="lemail">Correo <small>(capataz del tareo: tu DNI)</small></label><input id="lemail" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" required>
     <label for="lpass">Contraseña</label><input id="lpass" type="password" autocomplete="current-password" minlength="6" required>
     <button class="ib pri" id="lsubmit" type="submit">Ingresar</button>
     <button class="ib" id="lverify" type="button" hidden>Ya confirmé mi correo</button>
@@ -141,6 +142,10 @@
 <script src="js/tareo-rev.js?v=33"></script>
 <script src="js/tareo-cuentas.js?v=33"></script>
 <script src="js/tareo-pub.js?v=33"></script>
+<script src="js/tareo-sem.js?v=33"></script>
+<script src="js/tareo-rrhh.js?v=33"></script>
+<script src="js/tareo-costos.js?v=33"></script>
+<script src="js/tareo-excel.js?v=33"></script>
 <script src="js/matriz.js?v=33"></script>
 <script src="js/matriz-cat.js?v=33"></script>
 <script src="js/matriz-look.js?v=33"></script>

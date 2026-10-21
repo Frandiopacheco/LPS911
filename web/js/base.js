@@ -48,10 +48,11 @@ const wkId=(n,p)=>n+'_'+p;
 let db=null,auth=null,rtdb=null,presRef=null,conRef=null,presAll=null,me=null,isAdmin=false,canWrite=false,ready=false,myAct=null,peerEdits=[],unsubs=[],lastPres='';
 const PRES=new Map(),MEM=new Map();
 const memScs=m=>Array.isArray(m&&m.scs)&&m.scs.length?m.scs:(m&&m.sc?[m.sc]:[]);
-const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',veedor:'Veedor',planner:'Planner',lector:'Lector',tcap:'Capataz (tareo)',tasis:'Asistente de tareo',tcos:'Costos'};
+const ROLE={admin:'Administrador',editor:'Editor',campo:'Campo',sc:'Subcontratista',capataz:'Capataz',area:'Área de apoyo',veedor:'Veedor',planner:'Planner',lector:'Lector',tcap:'Capataz (tareo)',tasis:'Asistente de tareo',tcos:'Costos',trh:'RR.HH.'};
 /* Módulo Tareo (docs/ia/tareo.md): roles que solo usan el Tareo (no cargan nada de Last Planner), quién ve el módulo y quién lo edita */
-const TAR_ROLES=['tcap','tasis','tcos'];
-const TAR_TABS=['tdia','tpub','tcos','tper','tpc','tcfg'];
+/* trh (RR.HH., 20-10-2026): como costos, solo lee; su inicio es la pestaña RR.HH. */
+const TAR_ROLES=['tcap','tasis','tcos','trh'];
+const TAR_TABS=['tdia','tpub','tcos','trh','tper','tpc','tcfg'];
 const TAR_ONLY=()=>!!me&&TAR_ROLES.includes(me.role);
 /* asistente de tareo: el rol tasis o un ingeniero de campo con la casilla «Asistente de tareo» (members.tasis, 20-10-2026: así también
    reporta en Campo de Last Planner). Todo lo del tareo que era del asistente pregunta TASIS(), no me.role==='tasis'. */
@@ -119,6 +120,11 @@ const CNC_STD_V=1;
 /* tipo de restricción según la causa (código del cuadro): el de la lista del proyecto que le corresponde, o vacío.
    Misma tabla que el servidor (functions/lib.js RT_RX). */
 /* hora de la publicación automática del plan del día siguiente (Configuración › Proyecto; como el servidor: por defecto 21:00, máx. 23:30) */
+/* hora de corte del cierre de jornada (Configuración › Proyecto, closeCutHH; por defecto 17:00, entre 12:00 y 21:00 porque el servidor
+   registra lo no cerrado a las 23:30). Misma regla que functions/lib.js closeCutHH */
+function closeCutHH(){const v=P().closeCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v>='12:00'&&v<='21:00'?v:'17:00'}
+/* «17:00» → «5 pm», «16:30» → «4:30 pm» */
+function hhLabel(v){const[h,m]=String(v).split(':').map(Number);const h12=h%12||12;return`${h12}${m?':'+String(m).padStart(2,'0'):''} ${h<12?'am':'pm'}`}
 function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v<='23:30'?v:'21:00'}
 const RT_RX=[['PROG',/program/i],['MAT',/materi/i],['QA/QC',/calidad|qa|qc/i],['EXT',/extern|clim/i],['CLI',/client|supervis/i],['EQ',/equipo|herramient/i],['DIS',/dise[ñn]o|ingenier/i],['SC',/subcontrat|personal|mano de obra/i],['ADM',/administr|permis/i],['EJEC',/ejecuci/i],['OT',/otro/i]];
 function restrTypeFor(code,types){const rx=(RT_RX.find(([c])=>c===code)||[])[1];if(!rx)return'';return(types||(typeof P==='function'?P().restrTypes:[])||[]).find(t=>typeof t==='string'&&rx.test(t))||''}
@@ -130,8 +136,8 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
 /* campos de meta/project que solo cambia el administrador (SEG-01; los mismos en firebase/firestore.rules) */
-const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','finObra'];
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00'};let P_SRC=null,P_VAL=P_DEF;
+const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','closeCutHH','finObra'];
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00',closeCutHH:'17:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */
@@ -660,6 +666,8 @@ function onData(){
 }
 /* ---------- login ---------- */
 let lmode='in',pendingMsg='';
+/* enlace que manda la oficina al capataz (?dni=…): abre directo «Soy capataz» con su DNI escrito */
+const LCAP_DNI=(()=>{try{const sp=new URLSearchParams(location.search),d=sp.get('dni');if(d){localStorage.setItem('lps.lcap','1');sp.delete('dni');history.replaceState(null,'',location.pathname+(sp.toString()?'?'+sp:'')+location.hash)}return d||''}catch(e){return''}})();
 let invCode=(()=>{try{const sp=new URLSearchParams(location.search),q=sp.get('inv');if(q){localStorage.setItem('lps.inv',q);localStorage.setItem('lps.invm',sp.get('m')||'');history.replaceState(null,'',location.pathname+location.hash)}return localStorage.getItem('lps.inv')||''}catch(e){return''}})();
 /* el enlace de un capataz del tareo lleva &m=tar: antes de entrar no se puede leer la invitación, así que el texto sale del enlace */
 const invTar=()=>{try{return!!invCode&&localStorage.getItem('lps.invm')==='tar'}catch(e){return false}};
@@ -677,6 +685,7 @@ function authMsg(e){const c=e&&e.code||'';return({'auth/invalid-email':'El corre
 function setupLogin(){
   $('#jcancel').onclick=()=>{clearInv();lcapSet(false);showLogin('')};
   $('#jcap').onclick=()=>{clearInv();lcapSet(true);showLogin('')};
+  if(LCAP_DNI){const c=$('#cdni');if(c&&!c.value)c.value=LCAP_DNI}
   $('#lcapgo').onclick=()=>{lcapSet(true);showLogin('');setTimeout(()=>$('#cdni').focus(),30)};
   $('#cback').onclick=()=>{lcapSet(false);showLogin('')};
   $('#lcap').onsubmit=async ev=>{ev.preventDefault();const d=tCtaDni($('#cdni').value),p=$('#cpass').value;
@@ -695,6 +704,8 @@ function setupLogin(){
     try{await u.reload();if(auth.currentUser.emailVerified){await auth.currentUser.getIdToken(true);startSession(auth.currentUser,firebase.firestore())}else $('#lmsg').textContent='Tu correo aún no figura como confirmado. Abre el enlace del correo que te enviamos y vuelve a pulsar.'}catch(err){$('#lmsg').textContent=authMsg(err)}};
   $('#lresend').onclick=async()=>{const u=auth.currentUser;if(!u)return;try{await u.sendEmailVerification();$('#lmsg').textContent='Correo de confirmación reenviado a '+u.email+'.'}catch(err){$('#lmsg').textContent=authMsg(err)}};
   $('#lform').onsubmit=async ev=>{ev.preventDefault();const e=$('#lemail').value.trim().toLowerCase(),p=$('#lpass').value;if(!e||!p){$('#lmsg').textContent='Escribe tu correo y tu contraseña.';return}
+    /* 20-10-2026: los capataces escribían su DNI aquí («El correo no es válido»): un DNI sin @ entra como cuenta de capataz */
+    if(lmode!=='up'&&!e.includes('@')&&typeof tCtaDni==='function'&&tCtaDni(e)){$('#cdni').value=tCtaDni(e);$('#cpass').value=p;lcapSet(true);showLogin('');$('#lcap').requestSubmit();return}
     $('#lsubmit').disabled=true;$('#lmsg').textContent='';
     try{if(lmode==='up'){const cr=await auth.createUserWithEmailAndPassword(e,p);try{await cr.user.sendEmailVerification()}catch(x){}lmode='in'}else await auth.signInWithEmailAndPassword(e,p)}
     catch(err){$('#lmsg').textContent=authMsg(err)}finally{$('#lsubmit').disabled=false}};
@@ -806,7 +817,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='lps'?'look':modHome(U.mod);
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='lps'?'look':modHome(U.mod);
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}
