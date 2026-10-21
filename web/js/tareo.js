@@ -66,6 +66,14 @@ function tHorRow(r,fecha,cfg){r=r||{};const D=tDia(fecha,cfg);const mod=tHmOk(r.
   if(D.nl&&!mod)return null;const j=D.j||{};const ent=tHmOk(r.ent)?r.ent:j.ini,sal=tHmOk(r.sal)?r.sal:j.fin;
   const a=tMin(ent),b=tMin(sal);if(a==null||b==null)return null;if(b<=a)return{ent,sal,cor:r.cor===true,h:0,mod,bad:true};
   return{ent,sal,cor:r.cor===true,h:tR2(tBlqMin(a,b,r.cor===true?null:D.rw)/60),mod,bad:false}}
+/** HE de un obrero separadas (20-10-2026, pedido del dueño): cor = las que salen de trabajar el refrigerio (corrido), sal = el resto
+    (por quedarse después de su hora de salida, o entrar antes). ext: sus HE del día. → {cor, sal} */
+function tHeSplit(r,fecha,cfg,ext){ext=+ext||0;if(ext<=0)return{cor:0,sal:0};const HR=tHorRow(r,fecha,cfg);const D=tDia(fecha,cfg);let cor=0;
+  if(HR&&HR.cor&&!HR.bad&&D.rw){const a=tMin(HR.ent),b=tMin(HR.sal);cor=Math.max(0,Math.min(b,D.rw[1])-Math.max(a,D.rw[0]))/60}
+  cor=tR2(Math.min(ext,cor));return{cor,sal:tR2(ext-cor)}}
+/** hora escrita a mano («18», «1830», «18.30», «18:30») → 'HH:MM', '' si está vacía o null si no es hora */
+function tHmIn(v){const s=String(v==null?'':v).trim().replace(/[.,h]/,':');if(!s)return'';const m=/^(\d{1,2})(?::?(\d{2}))?$/.exec(s);if(!m)return null;
+  const h=+m[1],mi=+(m[2]||0);if(h>23||mi>59)return null;return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0')}
 
 /* fechas de Excel: número de serie, Date, 'dd/mm/aaaa' o 'aaaa-mm-dd' → 'aaaa-mm-dd' ('' si no es fecha) */
 function tFecha(v){if(v==null||v==='')return'';
