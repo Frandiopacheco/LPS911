@@ -2469,6 +2469,7 @@ body.tr-on .toast{z-index:160}
 .tx-t .tx-wn{color:var(--warn);font-weight:700}
 .tx-t .tx-bad{color:var(--bad);font-weight:700}
 .tx-t .tx-mu{color:var(--muted)}
+.tx-t .tx-hx{color:var(--warn);font-weight:600}
 .tx-t .tx-fdc{color:var(--warn)}
 .tx-si{color:var(--ok);font-weight:600}
 .tx-no{color:var(--bad);font-weight:600}

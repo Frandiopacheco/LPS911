@@ -493,7 +493,7 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   // Asistencia en una sola columna: S/N o el motivo («fa», «No vino · DM»…)
   expect(await page.evaluate(() => [txMotOf('fa'), txMotOf('No vino · DM'), txMotOf('si'), txMotOf('Vino')])).toEqual(['FA', 'DM', '', '']);
   await expect(await celk(m, '33333333', 'as')).toHaveText('Vino');
-  await expect(m.locator('th[data-k="sal"], th[data-k="mot"], th[data-k="fir"], th[data-k="gar"]')).toHaveCount(0);
+  await expect(m.locator('th[data-k="mot"], th[data-k="fir"], th[data-k="gar"]')).toHaveCount(0);
   // guardar: aviso de HH totales cambiadas y motivo
   const asked = [];
   page.on('dialog', dg => { asked.push(dg.message()); dg.type() === 'prompt' ? dg.accept('Ajuste de horas según el formato') : dg.accept(); });
@@ -518,6 +518,71 @@ test('corrección en la hoja (modo horas, asistente): teclado como Excel, totale
   await expect(m.locator('th.tx-hp').nth(1)).toContainText('10.20');
   await expect(m.locator('#trEdN')).toHaveCount(0);
   noErrors(errors, 'hoja');
+});
+
+test('revisión en la hoja: entrada, salida y corrido del capataz; HE por salida y por corrido; corregir la salida', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const ex = conH().map(x => x[0] === 'tareo' && x[1] === T1 ? ['tareo', T1, { ...x[2], pcs: ['p10_10', 'p10_05'], rows: {
+    11111111: row('ALFA', { sal: '19:00', cor: true, h: { p10_10: 11.5 } }), 22222222: row('BETA', { h: { p10_05: 8.5 } }) } }] : x);
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: ex });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  await expect(m.locator('#txW')).toBeVisible();
+  // ALFA: 7:30 (jornada, en gris) a 19:00 corrido = 11,5 h → 3 HE: 2 por quedarse y 1 por el refrigerio
+  await expect(await celk(m, '11111111', 'ent')).toHaveText('07:30');
+  await expect(await celk(m, '11111111', 'ent')).toHaveClass(/tx-mu/);
+  await expect(await celk(m, '11111111', 'sal')).toHaveText('19:00');
+  await expect(await celk(m, '11111111', 'cor')).toHaveText('Sí');
+  await expect(m.locator('#trhe_11111111')).toHaveText('3');
+  await expect(await celk(m, '11111111', 'hes')).toHaveText('2');
+  await expect(await celk(m, '11111111', 'hec')).toHaveText('1');
+  await expect(m.locator('#trht_11111111')).toHaveClass(/tx-ok/);
+  await expect(await celk(m, '22222222', 'sal')).toHaveText('17:00');
+  await expect(await celk(m, '22222222', 'hes')).toHaveText('');
+  // quitar el corrido (espacio): su horario da 10,5 y ya no cuadra; volver a ponerlo
+  await (await celk(m, '11111111', 'cor')).click();
+  await page.keyboard.press(' ');
+  await expect(await celk(m, '11111111', 'cor')).toHaveText('');
+  await expect(m.locator('#trht_11111111')).toHaveClass(/tx-wn/);
+  await expect(m.locator('#trObs')).toContainText('su horario');
+  await (await celk(m, '11111111', 'cor')).click();
+  await page.keyboard.press(' ');
+  await expect(await celk(m, '11111111', 'hec')).toHaveText('1');
+  // BETA se quedó hasta las 18:30: se escribe «1830» y sus horas 10
+  await (await celk(m, '22222222', 'sal')).click();
+  await page.keyboard.type('1830');
+  await page.keyboard.press('Enter');
+  await expect(await celk(m, '22222222', 'sal')).toHaveText('18:30');
+  await expect(await celk(m, '22222222', 'sal')).not.toHaveClass(/tx-mu/);
+  await cell(m, '22222222', 'p10_05').click();
+  await page.keyboard.type('10');
+  await page.keyboard.press('Enter');
+  await expect(await celk(m, '22222222', 'hes')).toHaveText('1.5');
+  await expect(m.locator('#trht_22222222')).toHaveClass(/tx-ok/);
+  // horas escritas a mano
+  expect(await page.evaluate(() => [tHmIn('18.30'), tHmIn('730'), tHmIn('18'), tHmIn('25:00'), tHmIn('')])).toEqual(['18:30', '07:30', '18:00', null, '']);
+  page.on('dialog', dg => { dg.type() === 'prompt' ? dg.accept('Se quedó hasta las 18:30') : dg.accept(); });
+  await m.locator('#trEdOk').click();
+  await expect.poll(async () => ((await dbT(page, T1)).rows['22222222'] || {}).sal).toBe('18:30');
+  const d = await dbT(page, T1);
+  expect(d.rows['11111111']).toMatchObject({ sal: '19:00', cor: true });
+  expect(d.rows['11111111'].ent).toBeUndefined();
+  expect(d.hist[d.hist.length - 1].cam).toContain('BETA: salida — → 18:30');
+  noErrors(errors, 'horario en la revisión');
+});
+
+test('revisión: un tareo publicado avisa que se corrige con «Rectificar» y lleva a Publicación', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const ex = conH().map(x => x[0] === 'tareo' && x[1] === T1 ? ['tareo', T1, { ...x[2], st: 'pub', pubV: 1 }] : x);
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: ex });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  await expect(m.locator('#trPubC')).toContainText('Publicado (v1)');
+  await m.locator('#trRect').click();
+  await expect.poll(() => page.evaluate(() => [U.tab, TPB.f])).toEqual(['tpub', HOY]);
+  noErrors(errors, 'publicado');
 });
 
 test('corrección en la hoja: si otro usuario cambia el tareo, avisa y «Recargar versión actual» conserva lo corregido; Esc en una celda no sale', async ({ page }) => {

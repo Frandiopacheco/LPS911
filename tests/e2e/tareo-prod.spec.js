@@ -48,7 +48,7 @@ test('hoja: el jefe edita con el teclado, mueve horas, agrega partida y cambia u
   for (const s of ['#trRev', '#toReab', '#txAddO', '#txAddP', '#trCapSel']) await expect(m.locator(s)).toBeVisible();
   await expect(m.locator('#trPrConf')).toHaveCount(0); // sin «Conforme sin cambios» (20-10-2026)
   // sin cotejo, salida, garita ni «Mover horas» (20-10-2026); cuadrilla y categoría ocultas por omisión
-  for (const k of ['fir', 'gar', 'sal', 'mot', 'cua', 'cat']) await expect(m.locator(`th[data-k="${k}"]`)).toHaveCount(0);
+  for (const k of ['fir', 'gar', 'mot', 'cua', 'cat']) await expect(m.locator(`th[data-k="${k}"]`)).toHaveCount(0);
   await expect(m.locator('#trMv')).toHaveCount(0);
   await expect(m.locator('#trFoto')).toBeHidden();
   await m.locator('#trPfo').click();
