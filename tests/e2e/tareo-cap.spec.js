@@ -733,5 +733,19 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await expect(total(root, '40000001')).toContainText('sobran 1,5');
   const E = await page.evaluate(() => tcErrs(TCS.doc).filter(e => e.k === 'hor').map(e => e.dni));
   expect(E).toEqual(['40000001']);
+  // atajo (20-10-2026): tocar el total que no cuadra → «Se quedó: salida 18:30» (7:30 + 10 h + refrigerio) y ya cuadra
+  await total(root, '40000001').locator('[data-tca="hfx"]').click();
+  await expect(root.locator('#tcHfx')).toContainText('1,5 h más');
+  await root.locator('#tcHfx [data-tca="hfxSal"]').click();
+  await expect(total(root, '40000001')).toHaveClass(/ok/);
+  await expect.poll(async () => (((await dbDoc(page)).rows || {})['40000001'] || {}).sal).toBe('18:30');
+  // elegir varios + «Elegidos aquí» en una partida: todo su día va ahí (reemplaza) y la selección termina sola
+  await root.locator('[data-tca="multi"]').click();
+  await root.locator('.tc-gn[data-dni="40000004"] [data-tca="mtog"]').click();
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await expect(cell(root, '40000004', 'p10_05')).toHaveText('8,5');
+  await expect(cell(root, '40000004', 'p20_01')).toHaveText('');
+  await expect(root.locator('#tcMBar')).toHaveCount(0);
+  await expect(root.locator('.tc-mck')).toHaveCount(0);
   noErrors(errors, 'capataz rápido');
 });
