@@ -245,7 +245,7 @@ const TO_HA={env:'Enviado',reab:'Reabierto',cor:'Corregido',fir:'Cotejo de firma
 /* estado de la vista: fecha elegida y suscripción temporal a los tareos de esa fecha (solo mientras la pestaña está abierta) */
 /* fotos: dataURL por id de tfot · fLd: leyéndose · fErr: no se pudo leer (id → motivo; la revisión ofrece «Reintentar») */
 const TD={f:'',d:'',sub:null,docs:new Map(),ok:false,err:null,fotos:new Map(),fLd:new Set(),fErr:new Map(),flt:'all',q:''};
-const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos';
+const toAct=()=>U.mod==='tar'&&U.tab==='tdia'&&!!me&&me.role!=='tcap'&&me.role!=='tcos'&&me.role!=='trh';
 /* edita la oficina (coteja, corrige, revisa, reabre, pasa obreros): asistente, administrador y jefe de producción (editor con tpub) */
 const toReabOk=()=>!!me&&(isAdmin||TASIS()||(me.role==='editor'&&me.tpub===true));
 const toH=v=>(+v||0).toLocaleString('es-PE',{maximumFractionDigits:2});
@@ -509,7 +509,7 @@ function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);const
 
 function tFicha(id){const p=S.tper.get(id);if(!p)return;const ed=tEdit();const a=tActivo(p);const per=(Array.isArray(p.per)&&p.per.length?p.per:[{ing:p.ing,ces:p.ces,mot:p.mot}]).slice().reverse();
   lqModal(`<div class="lqtop"><b>${esc(p.ape||'')}${p.nom?', '+esc(p.nom):''}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-   <div class="lqh"><span class="mono">DNI ${esc(p.dni||p.id)}</span><span>${esc(p.pue||'')} · ${esc(TCAT[p.cat]||'Otro')} · ${esc(p.cua||'sin cuadrilla')}</span><span>Capataz: ${esc(tCapName(p.cap)||'sin asignar')}</span>
+   <div class="lqh"><span class="mono">DNI ${esc(p.dni||p.id)}</span><span>${esc(p.pue||'')} · ${esc(TCAT[p.cat]||'Otro')} · ${esc(p.cua||'sin cuadrilla')}</span><span>Capataz: ${esc(tCapName(p.cap)||'sin asignar')}</span>${p.afp||p.hij!=null&&p.hij!==''?`<span>${esc([p.afp,p.hij!=null&&p.hij!==''?`${p.hij} ${+p.hij===1?'hijo':'hijos'}`:''].filter(Boolean).join(' · '))}</span>`:''}
     <span class="lqtags"><i class="lqt ${a?'t-ok':''}">${p.arch?'ARCHIVADO':a?'ACTIVO':'CESADO'}</i></span></div>
    <div><b class="t-h3">Historial de periodos</b><table class="t t-per"><thead><tr><th>Ingreso</th><th>Cese</th><th>Motivo</th></tr></thead><tbody>${per.map(x=>`<tr><td class="mono">${esc(tFmt(x.ing))||'—'}</td><td class="mono">${esc(tFmt(x.ces))||'<span class="note">vigente</span>'}</td><td>${esc(x.mot||'')}</td></tr>`).join('')}</tbody></table></div>
    ${p.ts?`<p class="note">Último cambio: ${esc(p.by||'')} · ${esc(fmtD(ldt(p.ts)))}</p>`:''}
@@ -528,6 +528,8 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
     <label class="lqlab">Puesto<input class="tin" id="tfPue" value="${esc(v.pue)}" placeholder="OPERARIO ALBAÑIL"></label>
     <label class="lqlab">Categoría<select class="tin" id="tfCat"><option value="">Según el puesto</option>${Object.entries(TCAT).map(([k,l])=>`<option value="${k}"${p&&v.cat===k?' selected':''}>${l}</option>`).join('')}</select></label>
     <label class="lqlab">Cuadrilla<input class="tin" id="tfCua" value="${esc(v.cua)}" list="tfCuaL"><datalist id="tfCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+    <label class="lqlab">Pensiones<select class="tin" id="tfAfp"><option value="">Sin dato</option>${T_AFP.map(a=>`<option${v.afp===a?' selected':''}>${a}</option>`).join('')}</select></label>
+    <label class="lqlab">N.° de hijos (asignación escolar)<input class="tin" id="tfHij" type="number" min="0" max="20" step="1" value="${v.hij!=null&&v.hij!==''?esc(String(v.hij)):''}"></label>
     <label class="lqlab">Capataz<select class="tin" id="tfCap"><option value="">Sin capataz</option>${caps.map(c=>`<option value="${esc(c.id)}"${c.id===v.cap?' selected':''}>${esc(c.name)}</option>`).join('')}${v.cap&&!caps.some(c=>c.id===v.cap)?`<option value="${esc(v.cap)}" selected>${esc(tCapName(v.cap))}</option>`:''}</select></label>
    </div>${p&&!p.ces?`<details class="t-cesd"><summary>Marcar cese</summary><div class="t-form">
     <label class="lqlab">Fecha de cese<input class="tin" id="tfCesF" type="date"></label>
@@ -540,12 +542,15 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
      const up=id=>$(id).value.replace(/,/g,' ').trim().replace(/\s+/g,' ').toUpperCase();const apP=up('#tfApP'),apM=up('#tfApM'),nom=up('#tfNom');
      if(!apP)return msg('Escribe el apellido paterno.');const ape=[apP,apM].filter(Boolean).join(' ');
      const ing=$('#tfIng').value;const pue=$('#tfPue').value.trim().replace(/\s+/g,' ').toUpperCase();const cat=$('#tfCat').value||tCatDe(pue);
-     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};
+     const hv=$('#tfHij').value;if(hv!==''&&!(Number.isInteger(+hv)&&+hv>=0&&+hv<=20))return msg('El N.° de hijos debe ser un número entero de 0 a 20.');
+     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,afp:$('#tfAfp').value,hij:hv===''?null:+hv,...tStamp()};
      if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d});
        const cf=$('#tfCesF')?$('#tfCesF').value:'';if(cf){if(ing&&cf<ing)return msg('El cese no puede ser anterior al ingreso ('+tFmt(ing)+').');Object.assign(d,tCeseData({...p,...d},cf,$('#tfCesM').value.trim()))}}
      else{Object.assign(d,{ces:'',mot:'',per:[{ing,ces:'',mot:''}]});d.act=tActivo(d)}
      try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});lqClose();toast(p?(d.ces&&d.ces!==p.ces?'Ficha actualizada y cese registrado.':'Ficha actualizada.'):'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
 
+/* sistema de pensiones de la ficha (RR.HH., 20-10-2026) */
+const T_AFP=['ONP','AFP Habitat','AFP Integra','AFP Prima','AFP Profuturo'];
 const TMOT=['Renuncia','Termino de partida','Termino total de partida','Abandono de trabajo','Faltas injustificadas'];
 /* datos del cese (fecha f, motivo m) para una ficha: cierra el periodo vigente. Lo usan «Marcar cese», «Editar» y «Editar elegidos». */
 function tCeseData(p,f,m){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:'',mot:''}];Object.assign(per[per.length-1],{ces:f,mot:m});

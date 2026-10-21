@@ -11,7 +11,7 @@ test('admin: ve el selector y cambia de módulo (pestañas y barra cambian)', as
   expect(await tabsVisibles(page)).toContain('look');
   await page.click('#modsel [data-mod="tar"]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg']);
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'trh', 'tper', 'tpc', 'tcfg']);
   for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
   await expect(page.locator('#pname')).toHaveText('Tareo de personal obrero');
   await page.click('#tabs [data-tab="tper"]');
@@ -43,7 +43,7 @@ for (const as of ['tcap', 'tasis', 'tcos']) {
     await expect(page.locator('#main')).toHaveAttribute('data-view', home);
     await expect(page.locator('#modsel')).toBeHidden();
     /* el capataz no ve Partidas como pestaña (las elige dentro del tareo, 20-10-2026) */
-    expect(await tabsVisibles(page)).toEqual(as === 'tcap' ? [home, 'tper'] : as === 'tasis' ? [home, 'tpub', 'tcos', 'tper', 'tpc', 'tcfg'] : [home, 'tper', 'tpc']);
+    expect(await tabsVisibles(page)).toEqual(as === 'tcap' ? [home, 'tper'] : as === 'tasis' ? [home, 'tpub', 'tcos', 'trh', 'tper', 'tpc', 'tcfg'] : [home, 'trh', 'tper', 'tpc']);
     for (const s of LPS_TOP) await expect(page.locator(s), s).toBeHidden();
     const st = await page.evaluate(() => ({ mod: U.mod, act: S.act.size, lps: S.loaded.act, only: TAR_ONLY(), ed: tarEdit(), ok: tabAllowed('look') }));
     expect(st).toEqual({ mod: 'tar', act: 0, lps: undefined, only: true, ed: as === 'tasis', ok: false });
@@ -74,7 +74,7 @@ test('admin en el celular: cambia de módulo desde «Más»', async ({ page }) =
   expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(40);
   await b.click();
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(x => x.dataset.bt))).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'more']);
+  expect(await page.$$eval('#bnav [data-bt]', bs => bs.map(x => x.dataset.bt))).toEqual(['tdia', 'tpub', 'tcos', 'trh', 'more']);
   noErrors(errors, 'admin celular');
 });
 
@@ -96,7 +96,7 @@ test('editor con «Publica tareo» ve el selector y el Tareo (sin Configuración
   const errors = await openApp(page, { as: 'jefe', editar: false });
   await expect(page.locator('#modsel')).toBeVisible();
   await page.click('#modsel [data-mod="tar"]');
-  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc']);
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'trh', 'tper', 'tpc']);
   noErrors(errors, 'jefe');
 });
 
@@ -140,7 +140,7 @@ test('campo con «Asistente de tareo» (members.tasis): reporta en Campo y adem�
   expect(st).toEqual({ campo: true, daily: true, only: false, as: true, ed: true });
   await page.click('#modsel [data-mod="tar"]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'tdia');
-  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'tper', 'tpc', 'tcfg']);
+  expect(await tabsVisibles(page)).toEqual(['tdia', 'tpub', 'tcos', 'trh', 'tper', 'tpc', 'tcfg']);
   noErrors(errors, 'campo asistente');
 });
 
