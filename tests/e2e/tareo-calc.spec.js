@@ -31,13 +31,13 @@ test('refrigerio por intersección: partir un bloque no cambia el total', async 
     };
   }, [LUN, SAB, DOM]);
   expect(r.inv[LUN]).toEqual({ base: [8.5, 0], malos: [] });
-  expect(r.inv[SAB]).toEqual({ base: [9.5, 4], malos: [] });
+  expect(r.inv[SAB]).toEqual({ base: [8.75, 3.25], malos: [] }); // sábado: refrigerio de 45 min desde las 13:00 (21-10-2026)
   expect(r.inv[DOM]).toEqual({ base: [8.5, 8.5], malos: [] }); // domingo: refrigerio de no laborables (60 min desde 12:00), todo extra
   expect(r.lv).toEqual({ trab: 8.5, ext: 0 });
   expect(r.lv2).toEqual([8.5, 0]);
   expect(r.dentro).toBe(0);
   expect(r.borde).toBe(0.5);
-  expect(r.sa).toEqual({ trab: 9.5, ext: 4 });
+  expect(r.sa).toEqual({ trab: 8.75, ext: 3.25 });
   expect(r.sa2).toEqual({ trab: 5.5, ext: 0 });
   expect(r.lvx).toEqual({ trab: 10.5, ext: 2 });
   expect(r.dom).toEqual({ trab: 8.5, ext: 8.5 });
@@ -177,7 +177,7 @@ test('horas por cantidad: extra, feriado, ausente, salida, errores y avisos; los
   }, [LUN, SAB, DOM, FER]);
   expect(r.lv).toEqual({ trab: 8.5, ext: 0, ini: '07:30', fin: '17:00' }); // L–V 8,5 h: sin extra; la salida estimada salta el refrigerio
   expect(r.lv105).toEqual({ trab: 10.5, ext: 2, ini: '07:30', fin: '19:00' });
-  expect(r.sab8).toEqual({ trab: 8, ext: 2.5, ini: '07:30', fin: '15:30' }); // sábado: jornada 5,5 h, sin refrigerio
+  expect(r.sab8).toEqual({ trab: 8, ext: 2.5, ini: '07:30', fin: '16:15' }); // sábado: jornada 5,5 h; quien se queda tiene 45 min de refrigerio desde las 13:00
   expect(r.fer).toMatchObject({ trab: 8.5, ext: 8.5 }); // feriado: todo extra
   expect(r.dom).toMatchObject({ trab: 6, ext: 6, ini: '07:30' }); // domingo: todo extra; inicio de referencia (lunes)
   expect([r.sal, r.sal2]).toEqual(['14:30', '16:00']); // estimada (7:30 + 6 h + refrigerio) o la que puso el capataz

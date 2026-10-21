@@ -8,7 +8,7 @@ const TCOLS={tper:'tper',tpc:'tpc',tcfg:'tcfg'};
 for(const k of Object.keys(TCOLS))if(!(S[k] instanceof Map))S[k]=new Map();
 /* jornada por día de semana: {ini, fin, ref (min de refrigerio), refIni (inicio del refrigerio; si falta, el global refIni)}; null = no laborable.
    refNoLab: refrigerio en domingo o feriado (todo es extra, pero se descuenta la intersección con esa ventana). fer: feriados del tareo ('YYYY-MM-DD'). */
-const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'2':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'3':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'4':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'5':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'6':{ini:'07:30',fin:'13:00',ref:0,refIni:'12:00'},'0':null},
+const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'2':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'3':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'4':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'5':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'6':{ini:'07:30',fin:'13:00',ref:45,refIni:'13:00'},'0':null},
   refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},fer:[],limEnv:'18:00',tolGar:15,
   /* semana del proyecto: el dueño dijo el 20-10-2026 que la semana del lunes 19-10-2026 es la 61 (se cambia en Jornada) */
   sem:{n:61,lun:'2026-10-19'}};
@@ -27,7 +27,10 @@ const tMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(s||''));return m?+m[1]*6
 const tR2=v=>Math.round(v*100)/100;
 const tFold=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
 /** horas de la jornada de un día (objeto {ini,fin,ref} o null): fin − inicio − refrigerio */
-const tJorH=j=>{if(!j)return 0;const a=tMin(j.ini),b=tMin(j.fin);return a==null||b==null||b<=a?0:tR2(Math.max(0,b-a-(+j.ref||0))/60)};
+/* horas de la jornada: de inicio a fin menos lo que el refrigerio cae dentro (un refrigerio puesto después del fin, como el del
+   sábado de 13:00, no acorta la jornada: solo se descuenta a quien se queda; 21-10-2026). Sin hora de refrigerio: se resta entero. */
+const tJorH=j=>{if(!j)return 0;const a=tMin(j.ini),b=tMin(j.fin);if(a==null||b==null||b<=a)return 0;const rf=+j.ref||0;const ri=tMin(j.refIni);
+  const sub=ri==null?rf:Math.max(0,Math.min(b,ri+rf)-Math.max(a,ri));return tR2(Math.max(0,b-a-sub)/60)};
 /** DNI normalizado: 8 dígitos con ceros a la izquierda; carné de extranjería 9–12 alfanuméricos. '' si no es válido (no adivina). */
 function tDni(v){if(v==null)return'';
   if(typeof v==='number'){if(!Number.isFinite(v)||v<=0||!Number.isInteger(v))return'';const s=String(v);return s.length<=8?s.padStart(8,'0'):s.length<=12?s:''}
@@ -565,6 +568,7 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
     <label class="lqlab">Cuadrilla<input class="tin" id="tfCua" value="${esc(v.cua)}" list="tfCuaL"><datalist id="tfCuaL">${cuas.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="lqlab">Pensiones<select class="tin" id="tfAfp"><option value="">Sin dato</option>${T_AFP.map(a=>`<option${v.afp===a?' selected':''}>${a}</option>`).join('')}</select></label>
     <label class="lqlab">N.° de hijos (asignación escolar)<input class="tin" id="tfHij" type="number" min="0" max="20" step="1" value="${v.hij!=null&&v.hij!==''?esc(String(v.hij)):''}"></label>
+    <label class="lqlab t-chk"><input type="checkbox" id="tfAeY"${String(v.aeY||'')===todayIso().slice(0,4)?' checked':''}> Presentó la constancia de estudios de sus hijos de ${todayIso().slice(0,4)}</label>
     <label class="lqlab">Capataz<select class="tin" id="tfCap"><option value="">Sin capataz</option>${caps.map(c=>`<option value="${esc(c.id)}"${c.id===v.cap?' selected':''}>${esc(c.name)}</option>`).join('')}${v.cap&&!caps.some(c=>c.id===v.cap)?`<option value="${esc(v.cap)}" selected>${esc(tCapName(v.cap))}</option>`:''}</select></label>
    </div>${p&&!p.ces?`<details class="t-cesd"><summary>Marcar cese</summary><div class="t-form">
     <label class="lqlab">Fecha de cese<input class="tin" id="tfCesF" type="date"></label>
@@ -578,13 +582,13 @@ function tPerForm(id){const p=id?S.tper.get(id):null;const caps=tCaps();const cu
      if(!apP)return msg('Escribe el apellido paterno.');const ape=[apP,apM].filter(Boolean).join(' ');
      const ing=$('#tfIng').value;const pue=$('#tfPue').value.trim().replace(/\s+/g,' ').toUpperCase();const cat=$('#tfCat').value||tCatDe(pue);
      const hv=$('#tfHij').value;if(hv!==''&&!(Number.isInteger(+hv)&&+hv>=0&&+hv<=20))return msg('El N.° de hijos debe ser un número entero de 0 a 20.');
-     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};const pv={afp:$('#tfAfp').value,hij:hv===''?null:+hv};
+     const d={dni,ape,apP,apM,nom,pue,cat,cua:$('#tfCua').value.trim().toUpperCase(),cap:$('#tfCap').value,ing,...tStamp()};const o0=tPriv(dni);const y=todayIso().slice(0,4);const pv={afp:$('#tfAfp').value,hij:hv===''?null:+hv,aeY:$('#tfAeY').checked?y:(String(o0.aeY||'')===y?'':(o0.aeY||''))};
      if(p){const per=Array.isArray(p.per)&&p.per.length?p.per.map(x=>({...x})):[{ing:p.ing||'',ces:p.ces||'',mot:p.mot||''}];per[per.length-1].ing=ing;d.per=per;d.act=tActivo({...p,...d});
        const cf=$('#tfCesF')?$('#tfCesF').value:'';if(cf){if(ing&&cf<ing)return msg('El cese no puede ser anterior al ingreso ('+tFmt(ing)+').');Object.assign(d,tCeseData({...p,...d},cf,$('#tfCesM').value.trim()))}}
      else{Object.assign(d,{ces:'',mot:'',per:[{ing,ces:'',mot:''}]});d.act=tActivo(d)}
      /* AFP e hijos van aparte (tperp): el capataz lee el máster y no debe ver esos datos (auditoría 21-10-2026) */
      if(p&&('afp' in p||'hij' in p)){d.afp=firebase.firestore.FieldValue.delete();d.hij=firebase.firestore.FieldValue.delete()}
-     const o=tPriv(dni);const pvCh=(o.afp||'')!==pv.afp||(o.hij??null)!==pv.hij;
+     const o=o0;const pvCh=(o.afp||'')!==pv.afp||(o.hij??null)!==pv.hij||(o.aeY||'')!==pv.aeY;
      try{await fcol(TCOLS.tper).doc(dni).set(d,{merge:true});if(pvCh)await fcol('tperp').doc(dni).set({...pv,...tStamp()},{merge:true});lqClose();toast(p?(d.ces&&d.ces!==p.ces?'Ficha actualizada y cese registrado.':'Ficha actualizada.'):'Obrero agregado.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
 
 /* sistema de pensiones de la ficha (RR.HH., 20-10-2026) */
@@ -594,7 +598,7 @@ const T_AFP=['ONP','AFP Habitat','AFP Integra','AFP Prima','AFP Profuturo'];
 if(!(S.tperp instanceof Map))S.tperp=new Map();
 const tPrivOk=()=>!!me&&(me.role==='admin'||TASIS()||me.role==='trh'||isOwnerEmail(me.email));
 function tPriv(dni){const q=S.tperp.get(dni)||{};const t=S.tper.get(dni)||{};const o={};
-  const afp=q.afp!=null?q.afp:t.afp;const hij=q.hij!==undefined?q.hij:t.hij;if(afp)o.afp=afp;if(hij!=null&&hij!=='')o.hij=hij;return o}
+  const afp=q.afp!=null?q.afp:t.afp;const hij=q.hij!==undefined?q.hij:t.hij;if(afp)o.afp=afp;if(hij!=null&&hij!=='')o.hij=hij;if(q.aeY)o.aeY=q.aeY;return o}
 /** pasa a tperp el AFP y los hijos que aún estén en tper (una vez por sesión, quien edita el máster) */
 let tPrivMig=false;
 async function tPrivMigrar(){if(tPrivMig||!tarEdit()||!S.loaded||!S.loaded.tper||!S.loaded.tperp)return;tPrivMig=true;

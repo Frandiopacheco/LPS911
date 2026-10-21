@@ -12,7 +12,7 @@
 const TPLA_DEF={
   vig:[{desde:'2025-06-01',jb:{OP:87.30,OF:68.50,PE:61.65},buc:{OP:32,OF:30,PE:30},nota:'Convenio 2024–2025 (desde el 01/06/2025)'},
        {desde:'2026-01-01',jb:{OP:89.30,OF:69.75,PE:62.80},buc:{OP:32,OF:30,PE:30},nota:'Convenio CAPECO–FTCCP 2026'}],
-  he60h:2,sob1:60,sob2:100,df100:true,alt:8,mov:8.6,dmEmp:20,dmTope:60,ae:30,aeEdad:24,leyes:null,soles:'cos',avisoUA:true};
+  he60h:2,sob1:60,sob2:100,df100:true,alt:8,mov:8.6,feA:10,dmEmp:20,dmTope:60,ae:30,aeEdad:24,leyes:null,soles:'cos',avisoUA:true};
 /* códigos de asistencia por día: qué significa, si se paga, si cuenta para el dominical y para BUC/movilidad (días laborados) */
 const TPLA_COD=[
   ['A','Asistió la jornada completa','Sí','Sí','Sí'],['P','Jornada parcial (menos horas que la jornada)','Las horas trabajadas','Sí','Sí'],
@@ -29,12 +29,13 @@ function TPL(){const c=(S.tcfg&&S.tcfg.get('pla'))||{};const D=TPLA_DEF;
   const vig=(Array.isArray(c.vig)&&c.vig.length?c.vig:D.vig).filter(v=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v.desde||'')).map(v=>({desde:v.desde,nota:v.nota||'',
     jb:Object.fromEntries(TPLA_CAT.map(([k])=>[k,tplNum(v.jb&&v.jb[k],0)])),buc:Object.fromEntries(TPLA_CAT.map(([k])=>[k,tplNum(v.buc&&v.buc[k],0)]))})).sort((a,b)=>a.desde<b.desde?-1:1);
   const n=k=>tplNum(c[k],D[k]);
-  return{vig:vig.length?vig:D.vig,he60h:Math.max(0,n('he60h')),sob1:n('sob1'),sob2:n('sob2'),df100:c.df100!==false,alt:n('alt'),mov:n('mov'),dmEmp:n('dmEmp'),dmTope:n('dmTope'),
+  return{vig:vig.length?vig:D.vig,he60h:Math.max(0,n('he60h')),sob1:n('sob1'),sob2:n('sob2'),df100:c.df100!==false,alt:n('alt'),mov:n('mov'),feA:n('feA'),dmEmp:n('dmEmp'),dmTope:n('dmTope'),
     ae:n('ae'),aeEdad:n('aeEdad'),leyes:c.leyes===''||c.leyes==null||!Number.isFinite(+c.leyes)?null:+c.leyes,soles:c.soles==='ofi'?'ofi':'cos',avisoUA:c.avisoUA!==false,ts:c.ts||0,by:c.by||''}}
 /** tabla de jornales que rige en la fecha f (la última con desde ≤ f; antes de todas, la primera) */
 function tplVig(f,P0){const P=P0||TPL();let v=P.vig[0];for(const x of P.vig)if(x.desde<=f)v=x;return v}
 /** ¿quién ve los soles? costos y el administrador (o toda la oficina si Parámetros lo dice) */
-const tplSoles=()=>!!me&&(me.role==='admin'||me.role==='tcos'||isOwnerEmail(me.email)||(TPL().soles==='ofi'&&tpCosOk()));
+/* decisión del dueño (21-10-2026): los soles los ven solo Costos y el administrador */
+const tplSoles=()=>!!me&&(me.role==='admin'||me.role==='tcos'||isOwnerEmail(me.email));
 const tplEd=()=>!!me&&(me.role==='admin'||TASIS());
 
 /* ---------- periodo ---------- */
@@ -82,9 +83,14 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
   /* costo de un día de un obrero: (jornal + BUC) ÷ 8 por hora × (1 + leyes sociales) + recargo de las horas extra (sin categoría: el del peón) */
   const costo=(cat,f,c)=>{const V=tplVig(f,P);const k=V.jb[cat]?cat:'PE';const jh=(V.jb[k]||0)/8;const base=jh*(1+(V.buc[k]||0)/100)*(1+(P.leyes||0)/100);
     return c.h*base+c.h60*jh*P.sob1/100+(c.h100+c.df)*jh*P.sob2/100};
-  const W=[];const T={cost:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,mov:0,dsc:0,obreros:0,nov:0,sinTareo:0};
+  /* lo que paga el convenio además de las horas (decisión del dueño, 21-10-2026: el costo los incluye): bono por altura, movilidad,
+     dominical que se gana ese día (1/6 de jornal) y la asignación del feriado trabajado (% de la BUC) */
+  const jbDe=(cat,f)=>{const V=tplVig(f,P);const k=V.jb[cat]?cat:'PE';return{jb:V.jb[k]||0,buc:V.buc[k]||0}};
+  const tsExtra=(cat,f,c,isF)=>{const{jb,buc}=jbDe(cat,f);let x=0;if(c.alt)x+=jb*P.alt/100;if(c.h>0)x+=P.mov;
+    if(c.dow!==0&&(!c.nl||isF))x+=jb/6;if(isF&&c.h>0)x+=jb*buc/100*P.feA/100;return x};
+  const W=[];const T={cost:0,costNP:0,feT:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,mov:0,dsc:0,obreros:0,nov:0,sinTareo:0};
   for(const g of [...G.values()].sort(tpxCmp)){const F=tsFicha(g.dni);const cat=tsCat(g.cat);const d=[];
-    const w={...g,cat,catN:tpxCat(g.cat)||'Otro',d,cost:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,dLab:0,mov:0,nov:false,altas:[]};
+    const w={...g,cat,catN:tpxCat(g.cat)||'Otro',d,cost:0,costNP:0,feT:0,cor:0,corMax:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,dLab:0,mov:0,nov:false,altas:[]};
     for(const f of days){const p=PB.get(f);const nl=p?!!p.nl:tNoLab(f);const dow=pd(f).getUTCDay();
       /* feriado: el de la configuración o el congelado en la publicación (cfg.fer); el día sin trabajo es FE (feriado) o D (descanso) */
       const isF=fer.has(f)||!!(p&&p.cfg&&p.cfg.fer===true);const dsc=isF?'FE':'D';
@@ -96,7 +102,7 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
           /* categoría y cuadrilla de ESE día (la fila publicada); el resumen del obrero muestra la última */
           const rc=tsCat(r.cat||g.cat);c.cat=rc;c.catN=tpxCat(r.cat||g.cat)||'Otro';c.cua=r.cua||g.cua||'';
           if(nl&&P.df100){c.df=t}else{const h6=Math.min(P.he60h,e);c.h60=tR2(h6);c.h100=tR2(e-h6);c.hn=tR2(t-e)}
-          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(rc,f,c):0;c.hor=r.ent||r.sal||r.cor?`${r.ent?'entró '+r.ent:''}${r.sal?(r.ent?' · ':'')+'salió '+r.sal:''}${r.cor?' · corrido':''}`:'';
+          const jor=tpxJor(p,f);c.code=F.ing(f)?'IN':F.ces(f)?'CE':(!nl&&jor>0&&t<jor)?'P':'A';c.cost=t>0?costo(rc,f,c)+tsExtra(rc,f,c,isF):0;c.cor=!!r.cor;c.hor=r.ent||r.sal||r.cor?`${r.ent?'entró '+r.ent:''}${r.sal?(r.ent?' · ':'')+'salió '+r.sal:''}${r.cor?' · corrido':''}`:'';
           /* HE repartidas en proporción a las horas; el residuo del redondeo va a la última partida (la suma da exactamente e) */
           const hs=Object.entries(r.h||{}).map(([k,v])=>[k,tpNum(v)]).filter(([,h])=>h>0);let eAc=0;
           hs.forEach(([k,h],i)=>{const he=t>0?(i===hs.length-1?tR2(e-eAc):tR2(h*e/t)):0;eAc=tR2(eAc+he);c.pcs.push([k,h,he]);
@@ -109,16 +115,27 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
       d.push(c);
       w.hh=tsSum(w.hh,c.h);w.cost+=c.cost||0;w.hn=tsSum(w.hn,c.hn);w.h60=tsSum(w.h60,c.h60);w.h100=tsSum(w.h100,c.h100);w.df=tsSum(w.df,c.df);
       if(c.alt)w.alt++;if(c.code==='DM'||c.code==='DA')w.dm++;if(c.code==='F')w.f++;
-      if(c.h>0){w.dias++;w.mov++}if(tsDomOk(c))w.dLab++;
+      if(c.h>0){w.dias++;w.mov++}if(tsDomOk(c))w.dLab++;if(c.h>0&&c.fer)w.feT++;if(c.cor)w.cor++;
+      /* feriado no laborado: se paga el jornal y gana su dominical; no tiene partida (costo no asignable) */
+      if(c.code==='FE'&&F.act(f)){const{jb}=jbDe(cat,f);w.costNP+=jb+(c.dow!==0?jb/6:0)}
       if(c.code==='IN'||c.code==='CE')w.altas.push([c.code,f]);
       if(c.h>0&&c.cua){cuaM.set(c.cua,tsSum(cuaM.get(c.cua),c.h))}}
     /* dominical: por semana, días laborados de lunes a sábado (el feriado trabajado o no laborado cuenta; el domingo no) ÷ 6, tope 1 jornal */
-    const wk=new Map();d.forEach(c=>{if(tsDomOk(c)){const m=tpMon(c.f);wk.set(m,(wk.get(m)||0)+1)}});
-    w.dsc=Math.round([...wk.values()].reduce((s,n)=>s+Math.min(6,n)/6,0)*1e4)/1e4;w.dscTxt=wk.size<=1?`${Math.min(6,[...wk.values()][0]||0)}/6`:toH(w.dsc);
+    /* convenio (cartilla FTCCP 3.5): un jornal a quien labora 6 días o 48 horas en la semana; si no, en proporción a los días.
+       Horas de la semana: las ordinarias de lunes a sábado más la jornada de los feriados no laborados (21-10-2026) */
+    const wk=new Map();d.forEach(c=>{if(!tsDomOk(c))return;const m=tpMon(c.f);const o=wk.get(m)||{n:0,h:0,c:[]};o.n++;
+      o.h+=c.code==='FE'||c.fer?((TC().jor||{})[String(c.dow)]?tJorH(TC().jor[String(c.dow)]):8):(c.hn||0);/* el feriado (laborado o no) vale su jornada */o.cor=(o.cor||0)+(c.cor?1:0);wk.set(m,o)});
+    const fr=o=>o.n>=6||o.h>=48-0.01?1:Math.min(6,o.n)/6;
+    w.dsc=Math.round([...wk.values()].reduce((s,o)=>s+fr(o),0)*1e4)/1e4;
+    w.dscTxt=wk.size<=1?([...wk.values()][0]&&fr([...wk.values()][0])===1?'6/6':`${Math.min(6,([...wk.values()][0]||{n:0}).n)}/6`):toH(w.dsc);
+    /* semanas completas por 48 horas en menos de 6 días: el dominical que falta no tiene partida */
+    for(const[m,o]of wk)if(fr(o)===1&&o.n<6){const{jb}=jbDe(cat,m);w.costNP+=jb*(6-o.n)/6}
+    w.corMax=Math.max(0,...[...wk.values()].map(o=>o.cor||0));
+    w.cost+=w.costNP;
     w.nov=w.f>0||w.dm>0||w.h60+w.h100+w.df>0||w.alt>0||w.altas.length>0||d.some(c=>c.code&&!['A','D','·','','—'].includes(c.code));
     if(d.some(c=>c.code==='?'))w.sinT=true;
     W.push(w);
-    for(const k of['hh','hn','h60','h100','df'])T[k]=tsSum(T[k],w[k]);T.cost+=w.cost;T.alt+=w.alt;T.dm+=w.dm;T.f+=w.f;T.dias+=w.dias;T.mov+=w.mov;T.dsc=Math.round((T.dsc+w.dsc)*1e4)/1e4;
+    for(const k of['hh','hn','h60','h100','df'])T[k]=tsSum(T[k],w[k]);T.cost+=w.cost;T.costNP+=w.costNP;T.feT+=w.feT;T.alt+=w.alt;T.dm+=w.dm;T.f+=w.f;T.dias+=w.dias;T.mov+=w.mov;T.dsc=Math.round((T.dsc+w.dsc)*1e4)/1e4;
     if(w.hh>0||d.some(c=>c.code&&!['·','','—','?','D'].includes(c.code)))T.obreros++;if(w.nov)T.nov++;if(w.sinT)T.sinTareo++}
   const pub=days.filter(f=>PB.has(f));
   return{a,b,days,pub,W,T,PC,pcsMeta,cua:cuaM,P}}
