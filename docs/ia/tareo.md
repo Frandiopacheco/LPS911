@@ -728,6 +728,8 @@ Pedido del dueño: Costos y RR.HH. ven toda la información en la app, en vivo (
 - **Ficha**: `afp` (ONP / AFP …) y `hij` (N.° de hijos) en el formulario de Personal.
 - Pruebas: `tareo-rrhh.spec.js` (datos en `tareo-datos.js`, compartidos con `tareo-pub.spec.js`); reglas: trh y `tcfg/pla`.
 
+**Transición (21-10-2026, dueño):** RR.HH. y Costos tienen también «Excel formato anterior» (`#trhXo`/`#tcoXo` → `tpxBajar`: semana o rango de los días publicados) junto a «Exportar Excel», hasta que se defina el formato nuevo.
+
 ## Capataz: horario y carga rápida (20-10-2026)
 
 Decisión del dueño: horas por partida (como antes) **más el horario** de cada obrero, ya puesto con la jornada.

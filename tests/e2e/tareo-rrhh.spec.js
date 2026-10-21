@@ -74,6 +74,10 @@ test('Excel nuevo de RR.HH. y Costos: hojas, horas por obrero, UA y cuadre', asy
   await expect(page.locator('#trhTb tr[data-trhd="40000001"]')).toBeVisible();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#trhX')]);
   const wb = XLSX.read(readFileSync(await dl.path()));
+  // transición: el Excel de antes sigue disponible
+  const [dlo] = await Promise.all([page.waitForEvent('download'), page.click('#trhXo')]);
+  expect(dlo.suggestedFilename()).toMatch(/Tareo_semana_2026-09-28_al_2026-10-04\.xlsx$/);
+  expect(XLSX.read(readFileSync(await dlo.path())).SheetNames.slice(0, 4)).toEqual(['Personal Obrero', 'Lista de partidas', 'Tareo Semana', 'Resumen HH']);
   expect(dl.suggestedFilename()).toMatch(/Tareo_S\d+_28\.09-04\.10\.xlsx$/);
   expect(wb.SheetNames).toEqual(['0 Resumen', '1 RRHH Asistencia', '2 RRHH Horas', '3 RRHH Altas y bajas', '4 Costos por partida', '5 Costos por UA', '6 Costos vs meta', '7 Detalle', '8 Personal', '9 Partidas']);
   const aoa = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true });

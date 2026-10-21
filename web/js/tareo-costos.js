@@ -33,7 +33,7 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
   const nOk=checks.filter(c=>c[0]).length;
   const k=(l,v,s,c)=>`<div class="lqtile"${c?` style="--c:${c}"`:''}><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
   const body=TCO.vista==='ua'?tcoUA(R,L):TCO.vista==='cua'?tcoCua(R):TCO.vista==='meta'?tcoMeta(R,A):TCO.vista==='det'?tcoDet(R,PB):tcoPartidas(R,L,A,soles);
-  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('Costos',esc(tsPerTxt(TCO.tipo,a,b))+' · HH de mano de obra de casa · en vivo',`<button class="ib pri" id="tcoX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
+  main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('Costos',esc(tsPerTxt(TCO.tipo,a,b))+' · HH de mano de obra de casa · en vivo',`<button class="ib" id="tcoXo"${TPK.busy?' disabled':''} title="El Excel de antes (una hoja por día, Resumen HH y Tareo Semana), mientras dura la transición">Excel formato anterior</button><button class="ib pri" id="tcoX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
     ${tsPerBar(TCO,'tco')}
     <div class="ts-chips"><span class="note">Días:</span>${tsDiasChips(R,o&&o.idx)}${tseCargando('co')?'<span class="note">Cargando publicaciones…</span>':''}</div>
     ${o&&o.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(o.err)}).</div>`:''}
@@ -45,6 +45,7 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
       ${tcoPowers(R,L)}</aside></div>
   </div></div>`;
   bindV();tsPerBind(TCO,'tco');
+  $('#tcoXo').onclick=()=>tpxBajar(TCO.tipo==='sem'?'semana':a===b?'dia':'rango',a,b);
   $('#tcoX').onclick=()=>{if(typeof tsxBajar==='function')tsxBajar('costos',a,b,TCO.tipo);else toast('El Excel nuevo llega en la próxima versión.')};
   const q=$('#tcoQ');if(q)q.oninput=()=>{TCO.q=q.value;const f=tFold(TCO.q);document.querySelectorAll('[data-tcok]').forEach(tr=>{tr.hidden=!!f&&!tFold(tr.dataset.tcok).includes(f)})};
   const tb=$('#tcoPcT');if(tb)tb.onclick=e=>{const r=e.target.closest('[data-tcop]');if(r){TCO.sel=TCO.sel===r.dataset.tcop?'':r.dataset.tcop;requestRender()}};
