@@ -248,25 +248,52 @@ test('16 · el SC propone el cierre del día; el ingeniero lo confirma', async (
   noErrors(errors, 'sc cierra');
 });
 
-test('16b · «Detenido · Inicia después» (tren de trabajo) y luego «Iniciado» pasa a en ejecución', async ({ page }) => {
+test('16b · reporte por excepción: sin «Iniciado»; «Detenido» guarda la hora y «Ya ingresó» lo quita', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'cap' });
+  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('En curso');
   await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
-  await expect(page.locator('#ksheet [data-ka="seqf"]')).toHaveCount(0);
+  await expect(page.locator('#ksheet [data-ka="run"]')).toHaveCount(0); // ya no se marca el inicio
   await page.locator('#ksheet [data-ka="stopf"]').click();
-  await expect(page.locator('#ksheet [data-kmot]')).toHaveText(['Inicia después', 'Actividad predecesora', 'Seguridad', 'Materiales', 'Calidad', 'Otros']);
+  await expect(page.locator('#ksheet [data-kmot]')).toHaveText(['Actividad predecesora', 'Seguridad', 'Materiales', 'Calidad', 'Otros']);
   await page.locator('#ksheet [data-kmot="Otros"]').click();
   await page.locator('#ksheet [data-ka="stopsave"]').click(); // «Otros» pide detalle
   await expect(page.locator('#ksheet')).toHaveCount(1);
-  await page.locator('#ksheet [data-kmot="Inicia después"]').click();
+  await page.locator('#ksheet [data-kmot="Materiales"]').click();
   await page.locator('#ksheet [data-ka="stopsave"]').click();
-  await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).mot, HOY)).toBe('Inicia después');
-  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('Detenido: Inicia después');
+  await expect.poll(() => page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).mot, HOY)).toBe('Materiales');
+  const tx = await page.evaluate(d => kText(d, 'i0'), HOY);
+  expect(tx).toContain('Detenido 09:30: Materiales'); // con la hora del reporte
+  expect(tx).not.toContain('reportado al cierre');
   await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
-  await expect(page.locator('#ksheet [data-ka="res"]')).toHaveText('▶ Iniciado'); // nunca había iniciado
+  await expect(page.locator('#ksheet [data-ka="res"]')).toHaveText('▶ Ya ingresó');
   await page.locator('#ksheet [data-ka="res"]').click();
   await expect.poll(() => page.evaluate(d => kState(d, 'i0').k, HOY)).toBe('run');
-  expect(await page.evaluate(d => (window.__dbGet('live', d + '_i0') || {}).log.at(-1).s, HOY)).toBe('run');
   noErrors(errors, 'detenido');
+});
+
+test('16c · corte de las 4 pm: el SC ya no cierra; detenido tardío; el ingeniero verifica No cumplido imputable al SC', async ({ page }) => {
+  const errors = await openApp(page, { as: 'sc', tab: 'cap' });
+  await page.clock.setFixedTime(new Date(HOY + 'T16:10:00-05:00'));
+  await page.evaluate(d => liveWrite(d, 'i0', { st: 'stop', mot: 'Materiales' }, { s: 'stop', m: 'Materiales' }), HOY);
+  expect(await page.evaluate(d => stopLate(d, 'i0'), HOY)).toBe(true);
+  expect(await page.evaluate(d => kText(d, 'i0'), HOY)).toContain('reportado al cierre');
+  expect(await page.evaluate(d => stopCnc(d, 'i0'), HOY)).toBeNull(); // un detenido tardío no sugiere causa ajena
+  await page.evaluate(d => capSheet('i0', d, 'main'), HOY);
+  await expect(page.locator('#ksheet [data-ka="closef"]')).toHaveCount(0);
+  await expect(page.locator('#ksheet')).toContainText('Pasó la hora de corte');
+  noErrors(errors, 'corte sc');
+});
+
+test('16d · el ingeniero verifica después del corte lo que el SC no cerró: por defecto No cumplido, causa SC', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'campo' });
+  await page.clock.setFixedTime(new Date(HOY + 'T16:30:00-05:00'));
+  await page.evaluate(d => capSheet('i0', d, 'close'), HOY);
+  await expect(page.locator('#ksheet [data-kcs="no"]')).toHaveClass(/on/);
+  const c = await page.evaluate(() => cncSinDet());
+  expect(c).toBeTruthy();
+  await expect(page.locator(`#ksheet [data-kcnc="${c}"]`)).toHaveClass(/on/);
+  await expect(page.locator('#ksheet')).toContainText('no cerró antes de las 4 pm');
+  noErrors(errors, 'corte ingeniero');
 });
 
 test('17 · el administrador mantiene en cada piso la lista de sus responsables (la usan las reglas)', async ({ page }) => {
@@ -378,20 +405,6 @@ test('20c · si ninguna propuesta se ve en la grilla, explica por qué y se pued
   const lh = await page.evaluate(() => window.__dbGet('lhprop', 'c3').items);
   expect(Object.keys(lh).filter(k => lh[k])).toEqual([]);
   noErrors(errors, 'rechazar ocultas');
-});
-
-test('reporte «sin inicio marcado» para WhatsApp: consolidado y por SC', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'dash' });
-  await page.locator('[data-sini]').click();
-  const tx = page.locator('#sisheet #sitx');
-  await expect(tx).toHaveValue(/Sin inicio marcado/);
-  await expect(page.locator('#sisheet [data-sis]').nth(1)).toBeVisible();
-  const n = await page.locator('#sisheet [data-sis]').count();
-  expect(n).toBeGreaterThan(1);
-  await page.locator('#sisheet [data-sis]').nth(1).click();
-  await expect(tx).toHaveValue(/Hola, \*/);
-  expect(await page.locator('#sisheet a[href^="https://wa.me/?text="]').getAttribute('href')).toContain('Iniciado');
-  noErrors(errors, 'sin iniciar');
 });
 
 /* «No va → reprogramar» con el plan ya publicado (día reabierto por el administrador): id fijo nv_<fecha>_<actividad> en una

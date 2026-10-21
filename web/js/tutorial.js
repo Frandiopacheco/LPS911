@@ -35,10 +35,10 @@ const AY_TUT={
     e:'En el recorrido de las 10 am ves a SC Eléctricas cableando en el Dpto 203, que no estaba programado. Lo registras con foto: aparece en el Plan diario como «Visto en obra» y en Indicadores.',
     tip:'Un solo toque no registra nada: puedes moverte por el plano con el dedo sin abrir la ficha por error.'},
 
-  seq:{t:'Tren de trabajo: «Detenido · Inicia después»',g:'Cuando una cuadrilla hace un ambiente tras otro en el día, los que aún no le tocan se marcan como detenidos con el motivo «Inicia después».',
-    s:[{x:'En Campo (o En obra) toca la actividad del ambiente que todavía no empieza.',tab:'campo'},'Toca «⏸ Detenido…» y elige el motivo «Inicia después».','Cuando la cuadrilla llegue, «▶ Iniciado» la pasa a En ejecución.'],
-    e:'SC Pinturas tiene hoy Dpto 101, 102 y 103. A las 9 am solo está en el 101: marcas el 102 y el 103 «Detenido · Inicia después».',
-    tip:'Otros motivos: actividad predecesora, seguridad, materiales, calidad u otros (con detalle).'},
+  seq:{t:'Tren de trabajo y «Detenido»',g:'No se marca el inicio: todo lo programado está «En curso». Si un ambiente va más tarde en el tren de trabajo, no hagas nada; solo reporta «Detenido» cuando encuentres una restricción.',
+    s:[{x:'En Campo (o En obra) toca la actividad del ambiente donde no puedes trabajar.',tab:'campo'},'Toca «⏸ Detenido…», elige el motivo y, si quieres, toma una foto. Queda la hora del reporte.','Si luego sí se puede, «▶ Ya ingresó» quita el detenido.'],
+    e:'SC Pinturas tiene hoy Dpto 101, 102 y 103. A la 1 pm llega al 103 y no hay frente: marca el 103 «Detenido · Actividad predecesora» en ese momento.',
+    tip:'Repórtalo cuando encuentres la restricción: un detenido reportado recién al cierre se ve como «reportado al cierre» y no justifica el incumplimiento.'},
 
   restr:{t:'Restricciones',g:'Registrar lo que impide trabajar y seguirlo hasta liberarlo.',
     s:[{x:'Abre Restricciones y toca «+ Nueva restricción».',tab:'restr'},'Amárrala a su actividad del lookahead, elige el tipo y escribe qué falta.','Pon el responsable y la fecha requerida (cuándo debe estar resuelta).','Cuando se resuelva, márcala Liberada («Liberar hoy» en el celular). Mientras siga pendiente, la actividad lleva una «R» en el lookahead.','Si la actividad ya pasó sin ejecutarse, sale «Actividad no ejecutada»: reprográmala o libera la restricción.'],
@@ -52,9 +52,9 @@ const AY_TUT={
     s:[{x:'Abre el Plan diario: se abre en el día hábil siguiente con tus actividades.',tab:'mapa'},'Para cada actividad: «Va», o «No va» / «Culminado» con la causa.','En «Equipos del día» pon el personal por cuadrilla y el horario.','Asigna cada cuadrilla a su actividad (en el celular: toca la cuadrilla y luego el número de la actividad).'],
     e:'Mañana no llega el yeso: marcas «No va» en el empaste del Dpto 104 con causa «Materiales». En la reunión el ingeniero decide si se reprograma o se libera temprano.'},
 
-  obraSc:{t:'En obra: iniciar, detener y cerrar (SC)',g:'Avisar en vivo cómo va tu partida durante el día.',
-    s:[{x:'Abre En obra: tus actividades de hoy, por piso.',tab:'cap'},'«▶ Iniciado» cuando la cuadrilla empieza; «⏸ Detenido…» con el motivo si no empieza o para.','Si un ambiente va más tarde (tren de trabajo), «⏸ Detenido» con el motivo «Inicia después».','A las 4 pm propón el cierre: Cumplido o No cumplido con causa.'],
-    e:'A las 11 am se corta el agua y la cuadrilla de sanitarias para: tocas «Detener…» y eliges el motivo. A las 2 pm vuelve y tocas «Reanudar».'},
+  obraSc:{t:'En obra: detenidos y cierre (SC)',g:'Reporta solo lo que no puedes ejecutar y cierra el día antes de las 4 pm.',
+    s:[{x:'Abre En obra: tus actividades de hoy, por piso. Todas están «En curso»: no marques el inicio.',tab:'cap'},'«⏸ Detenido…» con el motivo en el momento en que encuentres la restricción, a cualquier hora.','Antes de las 4 pm cierra cada actividad: Cumplido o No cumplido con causa. Lo que no cierres a esa hora cuenta como No cumplido.'],
+    e:'A las 11 am se corta el agua y la cuadrilla de sanitarias para: tocas «Detenido…» y eliges el motivo. A las 2 pm vuelve y tocas «Reanudado».'},
 
   cap:{t:'Reportar desde el celular (capataz)',g:'Contar en vivo el avance de tu cuadrilla.',
     s:['Entra con el enlace o QR que te dio el ingeniero (la primera vez escribe tu nombre).','Ves solo las actividades de hoy de tu partida, en el plano o en tarjetas.','Toca el número de la actividad: «▶ Iniciar» al empezar.','Si hay que parar, «⏸ Detener…» con el motivo; luego «Reanudar».','Al final del día, «Cerrar el día…» con avance y foto.'],

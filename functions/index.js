@@ -1,7 +1,8 @@
 // Tareas automáticas en el servidor (Cloud Functions, se instalan solas desde GitHub).
 // - versionDominical: cada domingo 12:00 (Lima) guarda la versión automática del lookahead,
 //   aunque nadie tenga la página abierta.
-// - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días.
+// - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días y, del día de hoy,
+//   lo que a la hora de corte (4 pm) nadie cerró: No cumplido imputable al SC (sinCierre).
 // - congelarSemana: en el corte semanal (por defecto sábado 13:00 de Lima) congela la semana siguiente en los pisos que
 //   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
 // - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
@@ -16,7 +17,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -66,6 +67,7 @@ exports.emitirCliente = onSchedule({ schedule: '1,16,31,46 23 * * 6', timeZone: 
 exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'America/Lima', retryCount: 2 }, async () => {
   const today = limaToday();
   const from = addD(today, -30);
+  try { await sinCierreHoy(today); } catch (e) { logger.error('Sin cierre a las 4 pm: falló', e); }
   const lives = (await db().collection('live').where('date', '>=', from).where('date', '<=', addD(today, -2)).get()).docs.map(d => ({ ...d.data(), id: d.id }));
   if (!lives.length) { logger.info('Sin reportes en vivo pendientes'); return; }
   const daily = new Map((await db().collection('daily').where('date', '>=', from).get()).docs.map(d => [d.id, d.data()]));
@@ -81,6 +83,27 @@ exports.aceptarCierres = onSchedule({ schedule: '30 23 * * *', timeZone: 'Americ
   const { n, skip } = await acceptCloses(db(), L);
   logger.info(`Cierres registrados automáticamente: ${n}${skip ? ` (${skip} ya revisados por un ingeniero, sin cambios)` : ''}`);
 });
+
+/* Lo comprometido hoy en el plan publicado que a las 4 pm nadie cerró → No cumplido imputable al SC (lib.js sinCierre).
+   Cada registro se escribe releyéndolo (acceptCloses): si un ingeniero lo verificó mientras tanto, no se toca. */
+async function sinCierreHoy(today) {
+  const dplans = (await db().collection('dplan').where('date', '==', today).get()).docs.map(d => d.data());
+  if (!dplans.length) { logger.info('Sin plan publicado hoy: nada que cerrar a las 4 pm'); return; }
+  const lives = (await db().collection('live').where('date', '==', today).get()).docs.map(d => ({ ...d.data(), id: d.id }));
+  const daily = new Map((await db().collection('daily').where('date', '==', today).get()).docs.map(d => [d.id, d.data()]));
+  const nova = new Set();
+  (await db().collection('pdz').where('date', '==', today).get()).docs.forEach(d => { const v = d.data() || {}; if (v.kind === 'nova' && !v.arch) (v.ids || [v.actId]).forEach(id => id && nova.add(id)); });
+  const need = [...new Set(dplans.flatMap(p => Object.keys(p.ids || {})))];
+  const acts = new Map();
+  for (let i = 0; i < need.length; i += 100) {
+    const refs = need.slice(i, i + 100).map(id => db().collection('acts').doc(id));
+    (await db().getAll(...refs)).forEach(d => { if (d.exists) acts.set(d.id, d.data()); });
+  }
+  const meta = await db().collection('meta').doc('project').get();
+  const L = sinCierre(today, dplans, lives, daily, acts, nova, ((meta.exists && meta.data()) || {}).cnc);
+  const { n, skip } = await acceptCloses(db(), L);
+  logger.info(`Sin cierre a las 4 pm: ${n} registrados como No cumplido${skip ? ` (${skip} ya verificados, sin cambios)` : ''}`);
+}
 
 /* Cada 15 minutos mira si ya pasó el corte de la semana que viene; fuera de esa ventana solo lee meta/project.
    De paso mueve, por partes, la foto del lookahead (snap) de weeks a wsnap (migración M1; cuando termina solo lee frz/_wsnap). */

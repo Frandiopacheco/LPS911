@@ -54,9 +54,10 @@ function hoyCards(){const d=todayIso(),tm=wshift(d,1),r=me.role,cal=isCal(),out=
     out.campo={k:'campo',title:'Campo de hoy',n:pend.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${sin.length} sin registrar${prop.length?` · ${prop.length} por confirmar (las cerró el capataz)`:''}`,
       items:[...prop,...sin].map(x=>({t:x.name,s:`${conOf(x.sc).name} · ${hoyLoc(x)}`})),go:'campo',goLabel:'Registrar en Campo',empty:A.length?'Todo lo de hoy ya está registrado':'No hay actividades programadas hoy'}}
   /* subcontratista: su avance en obra */
-  if(SCK()){const A=hoyActs(d);const st=A.map(x=>({x,k:kState(d,x.id).k}));const no=st.filter(o=>o.k==='none');
-    out.obra={k:'obra',title:'Tu avance de hoy',n:no.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${st.filter(o=>o.k==='run').length} en ejecución · ${no.length} sin iniciar`,
-      items:no.map(o=>({t:o.x.name,s:hoyLoc(o.x)})),go:'cap',goLabel:'Ir a En obra',empty:A.length?'Todo lo de hoy ya empezó':'No tienes actividades programadas hoy'}}
+  /* reporte por excepción (oct 2026): lo programado ya está «En curso»; lo pendiente es cerrar el día antes de las 4 pm */
+  if(SCK()){const A=hoyActs(d);const st=A.map(x=>({x,k:kState(d,x.id).k}));const no=st.filter(o=>o.k!=='ok'&&o.k!=='no');const det=st.filter(o=>o.k==='stop').length;
+    out.obra={k:'obra',title:'Tu avance de hoy',n:no.length,tone:'',sub:`${A.length} programada${A.length===1?'':'s'} · ${det} detenida${det===1?'':'s'} · ${no.length} por cerrar (antes de las ${CLOSE_CUT_T})`,
+      items:no.map(o=>({t:o.x.name,s:hoyLoc(o.x)+(o.k==='stop'?' · ⏸ detenida':'')})),go:'cap',goLabel:'Ir a En obra',empty:A.length?'Ya cerraste todo lo de hoy':'No tienes actividades programadas hoy'}}
   /* restricciones: las de mi área (Calidad/OT), las de mi partida (SC) o todas */
   {let R=restrInScope().filter(rOpenC);/* restrInScope ya deja a cada rol solo lo suyo */
     const lim=wshift(d,3);const late=R.filter(x=>x.need&&x.need<d),soon=R.filter(x=>x.need&&x.need>=d&&x.need<=lim);const L=[...late,...soon].sort((a,b)=>a.need.localeCompare(b.need));

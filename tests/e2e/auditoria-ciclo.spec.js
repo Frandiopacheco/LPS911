@@ -329,7 +329,7 @@ test('6. verificación en base y pantalla de lo decidido en la reunión', async 
 });
 
 /* ---------- 7. día siguiente: «En obra» (iniciar / detener) ---------- */
-const FRI_AM = MANANA + 'T07:30:00-05:00', FRI_PM = MANANA + 'T16:00:00-05:00';
+const FRI_AM = MANANA + 'T07:30:00-05:00', FRI_PM = MANANA + 'T15:30:00-05:00'; // el cierre del SC/capataz es antes del corte de las 4 pm
 let CAP;
 test('7. viernes 07:30 · SC inician y detienen en «En obra»; no tocan otra partida', async ({ browser }) => {
   await fijarHora(ALL, FRI_AM);
@@ -346,7 +346,8 @@ test('7. viernes 07:30 · SC inician y detienen en «En obra»; no tocan otra pa
   const t0 = Date.now();
   await Promise.all(SC.map(async (p, i) => {
     const id = propia['c' + (i + 1)]; if (!id) return;
-    await tiempo('SC inicia una actividad (En obra)', async () => { await p.locator(`article[data-k="${id}"] [data-kq="run"]`).click({ timeout: 10_000 }); await expect(p.locator(`article[data-k="${id}"]`)).toHaveClass(/k-run/, { timeout: 10_000 }); });
+    /* reporte por excepción (oct 2026): la interfaz ya no tiene «Iniciado»; el estado en vivo «run» se escribe igual (kAct), como «Ya ingresó» */
+    await tiempo('SC reporta en vivo (En obra)', async () => { await p.evaluate(([id, d]) => kAct(id, d, 'run'), [id, MANANA]); await expect(p.locator(`article[data-k="${id}"]`)).toHaveClass(/k-run/, { timeout: 10_000 }); });
   }));
   TM.push({ que: `paso 7 · ${SC.length} SC inician a la vez`, ms: Date.now() - t0 });
   const live = async () => Object.fromEntries(Object.entries(await ED.ed1.evaluate(() => window.__dbAll('live'))).map(([k, v]) => [k, v.st]));
@@ -446,13 +447,13 @@ test('7b+8b. sábado 03 oct: iniciar y cerrar (lo reprogramado llegó a hoy)', a
   await Promise.all(SC.map(p => p.evaluate(() => { goTab('cap'); CP.v = 'list'; render(); })));
   const mias = await Promise.all(SC.map((p, i) => ED.ed1.evaluate(([d, sc]) => Object.entries(window.__dbAll('acts')).filter(([, a]) => !a.arch && a.sc === sc && (a.days || []).includes(d) && !((window.__dbGet('doneidx', 'p1') || {}).d || {})[a.id || '']).map(([id]) => id)[0], [SAT, 'c' + (i + 1)])));
   log('sábado, actividad por SC:', JSON.stringify(mias));
-  await Promise.all(SC.map(async (p, i) => { const id = mias[i]; if (!id) return; await tiempo('SC inicia (sábado)', async () => { await p.locator(`article[data-k="${id}"] [data-kq="run"]`).click({ timeout: 10_000 }); await expect(p.locator(`article[data-k="${id}"]`)).toHaveClass(/k-run/, { timeout: 10_000 }); }); }));
+  await Promise.all(SC.map(async (p, i) => { const id = mias[i]; if (!id) return; await tiempo('SC reporta en vivo (sábado)', async () => { await p.evaluate(([id, d]) => kAct(id, d, 'run'), [id, SAT]); await expect(p.locator(`article[data-k="${id}"]`)).toHaveClass(/k-run/, { timeout: 10_000 }); }); }));
   /* lo escrito por cada SC tarda en llegar al ingeniero (base compartida): esperar a que lleguen todos antes de comparar */
   const nEsp = mias.filter(Boolean).length;
   await expect.poll(async () => Object.keys(await ED.ed1.evaluate(() => window.__dbAll('live'))).filter(k => k.startsWith(SAT)).length, { timeout: 15_000 }).toBeGreaterThanOrEqual(nEsp).catch(() => {});
   const live = Object.entries(await ED.ed1.evaluate(() => window.__dbAll('live'))).filter(([k, v]) => k.startsWith(SAT)).map(([k, v]) => v.st);
   await chk(7, 'sábado: cada SC con actividad inició la suya', mias.filter(Boolean).map(() => 'run'), live, SC[0]);
-  await cierre(SAT, 'sábado', SAT + 'T16:00:00-05:00');
+  await cierre(SAT, 'sábado', SAT + 'T15:30:00-05:00');
 });
 
 /* ---------- resumen: todas las comprobaciones de los pasos deben salir bien (si no, el detalle queda en auditoria-ciclo.json) ---------- */
