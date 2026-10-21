@@ -43,6 +43,13 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Si estaba detenido sin haber iniciado (`t0` vacío), el botón dice «▶ Iniciado» (evento `run`); si ya había iniciado, «▶ Reanudado» (`res`).
 - El estado antiguo `seq` (datos previos) se sigue leyendo (`kState`, `seqText`) pero ya no se puede marcar; iniciar o detener lo apaga (`seq.on=false`).
 
+## Colores de estado: un solo «En curso» (oct 2026, pedido del dueño)
+- Como ya no se marca el inicio de las actividades (reporte por excepción), el gris «En curso» y el azul «En ejecución» querían decir lo mismo en el plano. Ahora **«En curso» es azul** (`#1565C0`) y los estados antiguos `run` («En ejecución») y `seq` («En secuencia») comparten ese mismo color.
+- `kMain(k)` (en-obra-tablero.js) devuelve `none` para `run` y `seq`: se usa en **todos** los conteos (contador `kcnt` de Campo, «Estado de hoy» y «Avance de hoy por SC» del Tablero), así que esos reportes viejos se suman a «En curso» en vez de abrir una franja aparte.
+- `KSHOW` = `['none','stop','ok','no']` es la lista única para el contador y las leyendas (`kleg`, `dleg`): cuatro colores, uno por estado. Si agregas un estado nuevo, ponlo en `KSHOW` y en `kMain`.
+- `kText` no cambió: la ficha de un reporte antiguo sigue diciendo «▶ En ejecución desde …» o «⏭ En secuencia…». Solo se unificó el color y el conteo.
+- El botón de la tarjeta (`.kgo`) toma el color del estado (`--k`); se quitaron las reglas `.kc.k-none .kgo` y `.kc.k-run .kgo` de `app.css`.
+
 ## Tablero gerencial (`dash`, oct 2026)
 - Solo informa: no registra nada. Sin alertas ni «Actividad reciente». La ficha de un ambiente del plano en vivo (`dashPop`) es de solo lectura (estado, días de la semana, metrado, liberación, restricciones y lo demás programado hoy en ese ambiente).
 - Filtros propios (no se guardan): subcontratistas (`DB_.sc`, varios) y tipo de actividad (`DB_.ty` = nombre normalizado con `an()`); `dashOk(sc,nombre)` se aplica a todo. El piso sigue siendo el selector principal.

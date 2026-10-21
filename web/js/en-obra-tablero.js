@@ -4,7 +4,14 @@
 /* =====================================================================
    ETAPA 26 · Capataces: estado en vivo (iniciar / detener / cerrar) y confirmación
    ===================================================================== */
-const KST={none:{t:'En curso',c:'#8C959F'},seq:{t:'En secuencia',c:'#7E57C2'},run:{t:'En ejecución',c:'#1565C0'},stop:{t:'Detenido',c:'#EF6C00'},ok:{t:'Cumplido',c:'#2E7D4F'},no:{t:'No cumplido',c:'#C62828'}};
+/* COLORES DE ESTADO (oct 2026): como ya no se marca el inicio, «En curso» es el estado normal del día y va en azul.
+   Los estados antiguos «En ejecución» (run) y «En secuencia» (seq) solo se leen en reportes viejos: comparten el mismo
+   color y se cuentan como «En curso» (kMain), así que en el plano, el contador y las leyendas hay un solo color por estado. */
+const KST={none:{t:'En curso',c:'#1565C0'},seq:{t:'En secuencia',c:'#1565C0'},run:{t:'En ejecución',c:'#1565C0'},stop:{t:'Detenido',c:'#EF6C00'},ok:{t:'Cumplido',c:'#2E7D4F'},no:{t:'No cumplido',c:'#C62828'}};
+/* estado para contar y para las leyendas: los antiguos run/seq cuentan como «En curso» */
+const kMain=k=>(k==='run'||k==='seq')?'none':k;
+/* los cuatro estados que se muestran al usuario, en orden */
+const KSHOW=['none','stop','ok','no'];
 /* REPORTE POR EXCEPCIÓN (oct 2026, decidido con el dueño): ya no se marca «Iniciado». Toda actividad del plan publicado
    queda por defecto «En curso» (o por iniciar más tarde, tren de trabajo); el SC/capataz solo reporta «Detenido» con su motivo,
    a cualquier hora del día (el sistema guarda la hora). Un detenido reportado a la hora de corte o después, o junto con el cierre,
@@ -93,13 +100,13 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP()||(SCK()&&npSC(
   /* quien recorre la obra ve todos los pisos (también los que hoy no tienen nada programado: ahí se registra lo no programado) */
   const ps=(E||SCK())&&NPon?visPisos():pisos().filter(p=>byP.has(p.id));if((!E&&CP.pud!==d)||!ps.some(p=>p.id===CP.pid)){const zp=API?ps.find(p=>{const z=API.zonedSet(p.id);return(byP.get(p.id)||[]).some(o=>z.has(o.x.id))}):null;CP.pid=((zp||ps.find(p=>byP.has(p.id))||ps[0])||{}).id||''}
   const items=byP.get(CP.pid)||[];const nums=API?API.nums(CP.pid):new Map();const zoned=API?API.zonedSet(CP.pid):new Set();
-  const cnt={none:0,seq:0,run:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kState(d,o.x.id).k]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
+  const cnt={none:0,stop:0,ok:0,no:0};allF.forEach(o=>cnt[kMain(kState(d,o.x.id).k)]++);const pend=capPend(d).filter(l=>!CP.sc||l.sc===CP.sc);
   if(!main.dataset.built){main.innerHTML=`<div class="kap"><div class="khd" id="khd"></div><div class="kbody"><div class="kplanw" id="kplanw"><div class="kplan" id="kplan"></div></div><div id="klist"></div></div></div>`;main.dataset.built='1';main.onclick=capClick}
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
   let hh=E?`<div class="khi"><div><b>Campo</b><span>${dw} ${fmtD(d)}${d===todayIso()?' · hoy':''} · ${my.length} partida${my.length===1?'':'s'}</span></div>${d===todayIso()&&!VEED()?`<button class="ib" data-jor="open" title="Gráfico: detenidos reportados y quién ya cerró el día; para WhatsApp como imagen" aria-label="Estado de la jornada">📊<span> Jornada</span></button>`:''}<button class="ib" data-kd="-1" aria-label="Día anterior">&#8249;</button>${d!==todayIso()?'<button class="ib" data-kd="0">Hoy</button>':''}<button class="ib" data-kd="1" aria-label="Día siguiente">&#8250;</button></div>`:`<div class="khi"><div><b>Hola, ${esc((me.name||'').split(' ')[0]||(SCK()?'':'capataz'))}</b><span>${dw} ${fmtD(d)} · ${esc(my.map(c=>conOf(c).name).join(', '))}</span></div>${SCK()?'':'<button class="ib" data-kmenu aria-label="Menú">⋯</button>'}</div>`;
   if(my.length>1)hh+=`<div class="kchips"><button class="${!CP.sc?'on':''}" data-ksc="">Todas</button>${my.map(c=>`<button class="${CP.sc===c?'on':''}" data-ksc="${c}" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}</div>`;
   if(ps.length)hh+=`<div class="kchips">${ps.map(p=>`<button class="${CP.pid===p.id?'on':''}" data-kp="${p.id}">${esc(p.code)} · ${esc(p.name)} <b>${(byP.get(p.id)||[]).length}</b>${(()=>{const n=NPon?npItems([d],new Set([p.id])).filter(i=>!CP.sc||i.e.sc===CP.sc).length:0;return n?`<b class="knp" title="Trabajo no programado registrado">+${n}</b>`:''})()}</button>`).join('')}</div>`;
-  hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${['none','seq','run','stop','ok','no'].map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
+  hh+=`<div class="ktog">${E?'<span class="seg"><button data-kv="list">Tarjetas</button><button class="on" data-kv="plan">Plano</button></span>':`<span class="seg"><button class="${CP.v==='plan'?'on':''}" data-kv="plan">Plano</button><button class="${CP.v==='list'?'on':''}" data-kv="list">Tarjetas</button></span>`}<span class="kcnt">${KSHOW.map(k=>cnt[k]?`<span style="--k:${KST[k].c}"><i></i>${cnt[k]}</span>`:'').join('')}</span></div>`;
   const khd=$('#khd',main);if(khd.dataset.h!==hh){khd.innerHTML=hh;khd.dataset.h=hh}
   const npOn=NPon&&(E||SCK())&&!!CP.pid&&d<=todayIso();const npArm=npOn&&!!NPA&&NPA.pid===CP.pid&&NPA.d===d;if(!npArm)NPA=null;const pw=$('#kplanw',main);pw.hidden=V!=='plan'||(!items.length&&!npOn);pw.classList.toggle('knparm',npArm);
   if(V==='plan'&&(items.length||npOn)&&API){const colors=new Map(items.map(o=>[o.x.id,KST[kState(d,o.x.id).k].c]));API.capPlan($('#kplan',main),{empty:npOn?'Usa el botón <b>+ No programado</b>.':'Usa la vista <b>Tarjetas</b>.',pid:CP.pid,colors,nums,bs:E&&items.length>8?30:40,onPick:(aid,z,pt)=>{capSheet(aid,d,'main');if(KS)KS.pt=pt||null},
@@ -111,7 +118,7 @@ function renderCap(main){const E=ENG()||VEED();const NPon=canNP()||(SCK()&&npSC(
   if(npOn)lh+=npArm?`<div class="knpbar knpon"><div class="knparmt"><b>Toca en el plano</b> el lugar donde ves trabajando a la cuadrilla.</div><div class="knpbtns"><button class="ib" data-knpl>Elegir de la lista</button><button class="ib" data-knpx>Cancelar</button></div></div>`:`<div class="knpbar"><button class="kbig ghost knpadd" data-knp>＋ No programado</button><span class="knote">${items.length?'Toca un número para '+(VEED()?'ver':'verificar')+'. Trabajo no programado: <b>dos toques rápidos</b> en cualquier lugar del plano, o <b>＋ No programado</b> y luego el lugar.':'Dos toques rápidos en el lugar del plano donde ves trabajando a una cuadrilla, o <b>＋ No programado</b> y luego el lugar.'}</span></div>`;
   if(!all.length&&!npOn)lh+=`<div class="kemp">${nwReason(d)?esc(nwReason(d))+': día no laborable, no hay actividades programadas.':(E?'No hay actividades programadas este día.':'No tienes actividades programadas para hoy.')}</div>`;
   else if(V==='plan'){const un=items.filter(o=>!zoned.has(o.x.id));
-    lh+=`<div class="kleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':'reportar «Detenido» o cerrar el día'}.</p>`}`;
+    lh+=`<div class="kleg">${KSHOW.map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}${npOn?'<span class="knpl"><i>+</i>No programado</span>':''}</div>${npOn?'':`<p class="knote">Toca un número para ${E?'verificar':'reportar «Detenido» o cerrar el día'}.</p>`}`;
     if(un.length)lh+=`<div class="ksec">Sin ubicar en el plano (${un.length})</div>${un.map(o=>kCard(d,o,nums.get(o.x.id))).join('')}`}
   else lh+=items.map(o=>kCard(d,o,nums.get(o.x.id))).join('');
   if(npOn)lh+=npListHtml(d,new Set([CP.pid]),i=>!CP.sc||i.e.sc===CP.sc);
@@ -311,7 +318,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const d=todayIso();ensureDaily(addD(d,-31));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(!DB_.tick)DB_.tick=setInterval(()=>{if(U.tab==='dash'&&ready)requestRender();else{clearInterval(DB_.tick);DB_.tick=null}},60000);
   const vsP=new Set(visPisos().map(p=>p.id));const items=dashData(d);const act=items.filter(i=>!i.nova);
-  const c={none:0,seq:0,run:0,stop:0,ok:0,no:0};act.forEach(i=>c[i.st.k]++);const closed=c.ok+c.no;
+  const c={none:0,stop:0,ok:0,no:0};act.forEach(i=>c[kMain(i.st.k)]++);const closed=c.ok+c.no;
   const stopL=act.filter(i=>i.st.k==='stop');const stopMot={};let later=0;stopL.forEach(i=>{const m=String(i.st.lv&&i.st.lv.mot||'Sin motivo').split(' — ')[0];if(m===STOP_INFO){later++;return}stopMot[m]=(stopMot[m]||0)+1});
   /* PPC diario de hoy con los filtros (misma base que Indicadores › Diario) */
   const dRows0=dayData([d],vsP).rows;const dRows=dRows0.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
@@ -333,7 +340,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const AV=dashAvance(cw,vsP,d);const AVall=DB_.sc.size?noSc(()=>dashAvance(cw,vsP,d)):AV;
   /* por subcontratista, hoy */
   const actAll=DB_.sc.size?noSc(()=>dashData(d)).filter(i=>!i.nova):act;
-  const bySc=new Map();actAll.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,seq:0,run:0,stop:0,ok:0,no:0,n:0};o[i.st.k]++;o.n++;bySc.set(i.x.sc,o)});
+  const bySc=new Map();actAll.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,stop:0,ok:0,no:0,n:0};o[kMain(i.st.k)]++;o.n++;bySc.set(i.x.sc,o)});
   const scs=[...bySc.entries()].sort((a,b)=>b[1].n-a[1].n||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
   /* --- html --- */
   const pc=v=>v==null?'—':Math.round(v*100)+'%';
@@ -345,9 +352,9 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
    <div class="dflt"><button class="ib dscdd${DB_.sc.size?' on':''}" id="dscdd" aria-haspopup="menu" title="Elegir subcontratista (también puedes tocar su fila en cualquier gráfico)">Subcontratista: <b>${DB_.sc.size?(DB_.sc.size===1?esc(conOf([...DB_.sc][0]).name):DB_.sc.size+' elegidos'):'Todos'}</b> ▾</button>${[...DB_.sc].map(k=>`<button class="chip dfon" data-dscx="${k}" style="--c:${conOf(k).color}" title="Quitar"><i></i>${esc(conOf(k).name)} ×</button>`).join('')}
     <label class="dfty"><span>Tipo de actividad</span><select class="tin" id="dty"><option value="">Todas</option>${tys.map(t=>`<option value="${esc(t.k)}"${DB_.ty===t.k?' selected':''}>${esc(t.t)}</option>`).join('')}</select></label>${fil?'<button class="lnkb" data-dclr>Quitar filtros</button>':''}</div>`;
   const K=(lab,v,sub,cls,k)=>`<div class="dk${cls?' '+cls:''}"${k?` style="--k:${k}"`:''}><span class="dkl">${lab}</span><b>${v}</b>${sub?`<span class="dks">${sub}</span>`:''}</div>`;
-  const sbar=o=>`<span class="dbar">${['ok','no','run','stop','seq','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
-  const kp=`<div class="dkpi">${K('Programadas hoy',act.length,`${closed} cerradas · ${c.run} en ejecución`,'','#8C959F')}
-    <div class="dk dkst" style="--k:${KST.run.c}"><span class="dkl">Estado de hoy</span>${!act.length?'<b>—</b>':c.none===act.length?`<b class="dkt">${c.none} en curso</b>`:sbar(c)}<span class="dks">${c.none===act.length&&act.length?'sin detenidos ni cierres todavía':['ok','no','run','stop','none'].filter(k=>c[k]).map(k=>`${KST[k].t.toLowerCase()} ${c[k]}`).join(' · ')||'sin actividades'}</span></div>
+  const sbar=o=>`<span class="dbar">${['ok','no','stop','none'].map(k=>o[k]?`<i style="--k:${KST[k].c};flex:${o[k]}" title="${KST[k].t}: ${o[k]}"></i>`:'').join('')}</span>`;
+  const kp=`<div class="dkpi">${K('Programadas hoy',act.length,`${closed} cerradas · ${c.none} en curso`,'','#8C959F')}
+    <div class="dk dkst" style="--k:${KST.none.c}"><span class="dkl">Estado de hoy</span>${!act.length?'<b>—</b>':c.none===act.length?`<b class="dkt">${c.none} en curso</b>`:sbar(c)}<span class="dks">${c.none===act.length&&act.length?'sin detenidos ni cierres todavía':['ok','no','stop','none'].filter(k=>c[k]).map(k=>`${KST[k].t.toLowerCase()} ${c[k]}`).join(' · ')||'sin actividades'}</span></div>
     ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
     ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
     ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].w}–${full[full.length-1].w}`:'sin semanas cerradas','dkppc')}
@@ -361,7 +368,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const dseg=(attr,cur,L)=>`<span class="seg dseg">${L.map(([k,t])=>`<button ${attr}="${k}" class="${cur===k?'on':''}">${t}</button>`).join('')}</span>`;
   const ppcSc=`<div class="dcard"><div class="dch">PPC por subcontratista · 4 semanas ${scRows.length>8?dseg('data-dpm',DB_.scM,[['lo','Más bajos'],['hi','Más altos'],['all',`Todos (${scRows.length})`]]):''}</div>${scRows.length?`<div class="dav">${scV.map(r=>`<div class="dpr dsgo${scCls(r.dsc)}" data-dsc="${r.dsc}" title="${esc(r.sub)} · clic: filtrar el tablero por este SC"><span class="dsn" style="--c:${r.color}"><i></i>${esc(r.label)}</span><span class="davb"><i class="davr" style="width:${Math.round(r.v*100)}%;background:${r.color}"></i></span><span class="dsval">${pc(r.v)}</span></div>`).join('')}</div>`:'<p class="mu">Sin compromisos evaluados.</p>'}</div>`;
   const sc=`<div class="dcard" id="dsc"><div class="dch">Avance de hoy por subcontratista <span>${scs.length}</span></div><div class="dsc">${scs.map(([s,o])=>`<div class="dsr dsgo${scCls(s)}" data-dsc="${s}" title="Clic: filtrar el tablero por este SC"><span class="dsn" style="--c:${conOf(s).color}"><i></i>${esc(conOf(s).name)}</span>${sbar(o)}<span class="dsval">${o.ok+o.no}/${o.n}</span><span class="dsw">${o.stop?`⏸ ${o.stop}`:''}</span></div>`).join('')||'<p class="mu">Sin actividades programadas hoy.</p>'}</div>
-    <div class="dleg">${['none','run','stop','ok','no'].map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div>
+    <div class="dleg">${KSHOW.map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div>
     ${Object.keys(stopMot).length||later?`<div class="dmot"><b>Detenidas hoy:</b> ${Object.entries(stopMot).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}${later?`<span class="chip mu">Inicia después (tren) <b>${later}</b></span>`:''}</div>`:''}</div>`;
   const avRow=(lab,o,color,sc)=>{const m=o.meta||1;return`<div class="dar${sc?' dsgo'+scCls(sc):''}"${sc?` data-dsc="${sc}" title="Clic: filtrar el tablero por este SC"`:''}><span class="dsn"${color?` style="--c:${color}"`:''}>${color?'<i></i>':''}${lab}</span><span class="davb" title="${o.real} de ${o.meta} · a hoy debía llevar ${o.esp}"><i class="dave" style="width:${Math.min(100,o.esp/m*100)}%"></i><i class="davr" style="width:${Math.min(100,o.real/m*100)}%${color?';background:'+color:''}"></i></span><span class="dsval">${o.meta?Math.round(o.real/m*100)+'%':'—'}</span><span class="dsw">${o.real}/${o.meta}</span></div>`};
   const avSc=Object.entries(AVall.sc).filter(([,v])=>v.meta).sort((a,b)=>a[1].real/a[1].meta-b[1].real/b[1].meta||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
