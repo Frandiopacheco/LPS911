@@ -572,6 +572,19 @@ test('revisión en la hoja: entrada, salida y corrido del capataz; HE por salida
   noErrors(errors, 'horario en la revisión');
 });
 
+test('revisión: un tareo publicado avisa que se corrige con «Rectificar» y lleva a Publicación', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const ex = conH().map(x => x[0] === 'tareo' && x[1] === T1 ? ['tareo', T1, { ...x[2], st: 'pub', pubV: 1 }] : x);
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: ex });
+  await tab(page, 'tdia');
+  await page.locator(`tr[data-to="${T1}"] button[data-to]`).click();
+  const m = page.locator('#trWs');
+  await expect(m.locator('#trPubC')).toContainText('Publicado (v1)');
+  await m.locator('#trRect').click();
+  await expect.poll(() => page.evaluate(() => [U.tab, TPB.f])).toEqual(['tpub', HOY]);
+  noErrors(errors, 'publicado');
+});
+
 test('corrección en la hoja: si otro usuario cambia el tareo, avisa y «Recargar versión actual» conserva lo corregido; Esc en una celda no sale', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: conH() });
   await tab(page, 'tdia');

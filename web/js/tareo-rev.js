@@ -513,6 +513,7 @@ function trRightHtml(t,M){const{c,P,F,oDni,vis}=M;const s=M.s;
   const blq=t.blq||[];
   return`${trAvisos()}${t.st==='reab'&&t.reab?`<div class="callout t-warn">Reabierto por ${esc(toWho(t.reab.by))} a las ${esc(tHm(t.reab.t))}: ${esc(t.reab.mot||'')}</div>`:''}
    ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
+   ${t.st==='pub'?`<div class="callout t-warn" id="trPubC"><b>Publicado${t.pubV?' (v'+esc(String(t.pubV))+')':''}</b>: costos y RR.HH. ya lo ven. Para corregirlo hay que rectificar el día.${typeof tpPubOk==='function'&&tpPubOk()?' <button class="ib" data-tra="rect" id="trRect">Rectificar en Publicación…</button>':''}</div>`:''}
 
    ${vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
    <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b></div>
@@ -538,6 +539,7 @@ function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.clo
   if(TR.ed&&TR.ed.g&&txAct(a,b,id))return;
   if(a==='rev')return trRevisar(id);
   if(a==='qrev')return trQuitarRev(id);
+  if(a==='rect'){const t=TD.docs.get(id);if(t)trLeave(()=>{trClose();tpbSetF(t.date);U.tab='tpub';saveUI();render()});return}
   if(a==='reab')return toReabrir(id);
   if(a==='pas')return trPasarDlg(id,b.dataset.v);
   if(a==='cor'){trEdOpen(TD.docs.get(id));TR.conf='';trDraw(true);return}
@@ -1008,7 +1010,8 @@ function trHistHtml(t){const hist=(Array.isArray(t.hist)?t.hist:[]).slice().sort
 function txPanel(t,M){const X=txCtx(t);TX.X=X;txFix(X);const ch=trPrTotCh(X.e.base,X.nd);const vis=X.ob;const nb=vis.filter(o=>o.bl).length;
   const oo=!!TR.op.obs;/* plegadas: cada fila lleva sus etiquetas en «Observaciones» */
   return`<div id="trAv">${trAvisos()}</div>
-   ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}.</div>`:''}
+   ${t.st==='rev'&&t.revBy?`<div class="callout tr-okc">Revisado por ${esc(toWho(t.revBy))}${t.revAt?' a las '+esc(tHm(t.revAt)):''}. <span class="note">Aún no está publicado: si algo está mal, corrígelo aquí (vuelve a «Enviado» y se revisa de nuevo).</span></div>`:''}
+   ${t.st==='pub'?`<div class="callout t-warn" id="trPubC"><b>Publicado${t.pubV?' (v'+esc(String(t.pubV))+')':''}</b>: costos y RR.HH. ya lo ven. Para corregirlo hay que rectificar el día.${typeof tpPubOk==='function'&&tpPubOk()?' <button class="ib" data-tra="rect" id="trRect">Rectificar en Publicación…</button>':''}</div>`:''}
 
    <div id="trPrTotW">${trPrTotHtml(ch)}</div>
    ${vis.length?`<details class="callout t-warn to-obs tx-obs" id="trObs" data-trop="obs"${oo?' open':''}><summary><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b>${nb?` <span class="tx-obn">${nb} ${nb===1?'impide':'impiden'} marcar revisado</span>`:''}</summary><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></details>`:''}
