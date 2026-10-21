@@ -92,15 +92,19 @@ const plkpKey=s=>plUp(String(s||'').replace(/\.pdf$/i,'')).replace(/\s+/g,' ').t
 /** ubica una lámina por nombre de archivo, id (`ARQ_AG03`) o código (si hay varias con el código, la de la especialidad sugerida) */
 function plkpFind(ref,disc){if(!ref)return null;const k=plkpKey(ref),A=plAct();
   return A.find(p=>plkpKey(p.fname)===k)||A.find(p=>plUp(p.id)===k)||(()=>{const L=A.filter(p=>plUp(p.cod)===k);return L.length===1?L[0]:L.find(p=>p.disc===disc)||null})()}
+/** la lámina de una entrada del archivo: por nombre de archivo y, si ese no está en la biblioteca, por código.
+    El nombre del PDF que usó Claude casi nunca es el del archivo cargado (revisiones, nombre completo del proyecto),
+    así que sin este respaldo la lámina salía como «no encontrada» aunque su código sí estuviera. */
+const plkpOf=L=>L?(plkpFind(L.archivo,L.esp)||plkpFind(L.cod,L.esp)):null;
 /** puntos del PDF (origen arriba a la izquierda, escala 1) → fracción de la hoja que muestra el visor (recortada o completa) */
 function plkpNorm(p,pt,x,y){const c=p.crop;let ox=0,oy=0,w,h;
   if(c){ox=c.x0;oy=c.y0;w=c.x1-c.x0;h=c.y1-c.y0}else if(pt&&pt[0]){w=pt[0];h=pt[1]}else if(p.mm&&p.mm[0]){w=p.mm[0]/25.4*72;h=p.mm[1]/25.4*72}else return null;
   return[plkClamp((x-ox)/w),plkClamp((y-oy)/h)]}
 /** lee el JSON y arma, por lámina, la lista de propuestas ya normalizadas (sin escribir nada) */
 function plkpParse(J){if(!J||J.formato!=='lps911-vinculos'||!Array.isArray(J.laminas))throw new Error('No es un archivo de propuestas de vínculos de LPS 911.');
-  const PT=new Map();for(const L of J.laminas){const p=plkpFind(L.archivo||L.cod,L.esp);if(p&&Array.isArray(L.pt))PT.set(p.id,L.pt)}
+  const PT=new Map();for(const L of J.laminas){const p=plkpOf(L);if(p&&Array.isArray(L.pt))PT.set(p.id,L.pt)}
   const out=new Map(),miss=[],missTo=new Set();let n=0,dup=0,old=0,bad=0;
-  for(const L of J.laminas){const p=plkpFind(L.archivo||L.cod,L.esp);if(!p){miss.push(L.archivo||L.cod||'?');continue}
+  for(const L of J.laminas){const p=plkpOf(L);if(!p){miss.push(L.archivo||L.cod||'?');continue}
     const have=plkLinks(p),gone=(p.lkp||[]).filter(x=>x&&x.no),arr=out.get(p.id)||[];
     for(const r of L.vinculos||[]){const q=plkpFind(r.a,p.disc);if(!q){missTo.add(String(r.a||'?'));bad++;continue}
       if(!Array.isArray(r.r)||r.r.length!==4){bad++;continue}
