@@ -92,3 +92,22 @@ test('catálogo del SC: solo su partida, sin Tipos de ambiente; agrega una activ
   await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).find(c => c.name === 'Instalación de rejillas'))).toMatchObject({ sc: 'c1', rev: { by: 'sc@obra.pe' } });
   noErrors(errors, 'catálogo del SC');
 });
+
+test('ingeniero: «Todo visto» guarda todos los cambios del SC, confirma con el servidor y quita las filas sin redibujar', async ({ page }) => {
+  const extra = [...CAT,
+    ['mamb', 'a1', { c: { k1: 't' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 2, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 2 }],
+    ['mamb', 'a3', { c: { k1: 'c' }, m: { k1: { by: 'sc@obra.pe', n: 'Sandra', t: 3, sc: true } }, k: 'k1', by: 'sc@obra.pe', t: 3 }],
+    ['mlog', 'l1', { amb: 'a1', cat: 'k1', sc: 'c1', from: 'p', to: 't', conf: true, confN: 'Elena', st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 2 }],
+    ['mlog', 'l2', { amb: 'a3', cat: 'k1', sc: 'c1', from: null, sugFrom: 'p', to: 'c', conf: false, st: 'pend', by: 'sc@obra.pe', n: 'Sandra', t: 3 }]];
+  const errors = await openApp(page, { as: 'editor', tab: 'hoy', extra });
+  await page.click('[data-hoy="mlog"] [data-hgo]');
+  await expect(page.locator('#lqm [data-mxrow]')).toHaveCount(2);
+  await page.click('[data-mxlok="l1"]'); // una sola fila: sale de la lista y el conteo baja
+  await expect(page.locator('#lqm [data-mxrow]')).toHaveCount(1);
+  await expect(page.locator('#lqm .mxpg .mxn')).toHaveText('1');
+  await page.click('[data-mxlall="c1"]');
+  await expect(page.locator('#mxlres')).toContainText('1 de 1 marcados como vistos');
+  await expect.poll(() => page.evaluate(() => ['l1', 'l2'].map(id => __dbGet('mlog', id).st))).toEqual(['ok', 'ok']);
+  expect(await page.evaluate(() => __dbGet('mamb', 'a3').m.k1.ok)).toBeTruthy(); // el visto queda en la celda
+  noErrors(errors, 'Todo visto');
+});
