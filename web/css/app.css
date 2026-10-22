@@ -3080,6 +3080,11 @@ table.mxct tr.mxarch td{color:var(--muted)}
 .mxth{display:flex;align-items:center;gap:8px}.mxth .note{white-space:nowrap}.mxth .tin{flex:1;font-weight:600}.mxth b{flex:1}
 .mxtl{display:flex;flex-wrap:wrap;gap:6px}
 .mxtl .chip{padding-right:4px}
+/* aviso de coherencia del tipo: actividad de un SC que no trabaja en esos ambientes (oct 2026).
+   Usa --warn/--warn-soft, que ya tienen su valor en modo oscuro. */
+.mxtl .chip.mxtcw{border-color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+.mxtw{border:1px solid var(--warn);background:var(--warn-soft);border-radius:var(--r-card,12px);padding:8px 10px;font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.mxtw .note{margin:0}
 .mxtx{border:0;background:none;color:var(--muted);font-size:14px;line-height:1;padding:0 4px;cursor:pointer;border-radius:4px}
 .mxtx:hover{color:var(--bad);background:var(--bad-soft)}
 .mxtc select{height:30px;border:1px dashed var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2)}

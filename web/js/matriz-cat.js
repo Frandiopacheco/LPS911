@@ -199,6 +199,24 @@ function mxAliasPop(btn,id){const c=MX.cat.get(id);if(!c)return;const ed=mxEd()&
    {rm:d=>fcol('mcat').doc(id).set({al:mxFV().arrayRemove(d.k),...mxNow()},{merge:true}).then(()=>toast('Nombre quitado','Deshacer',()=>fcol('mcat').doc(id).set({al:mxFV().arrayUnion(d.k),...mxNow()},{merge:true}))).catch(mxErr)})}
 
 /* ---------- Tipos de ambiente ---------- */
+/* ---------- Coherencia de un tipo (oct 2026, pedido del dueño) ----------
+   Una plantilla mal armada se multiplica en silencio por decenas de ambientes: el tipo «Fachada (cara)» proponía las
+   actividades de APM FB también en las caras de microperforado, donde ese SC no pisa, y eso llenó la Matriz de
+   pendientes falsos. La señal fiable: ambientes del tipo que **ya tienen trabajo programado de otros** y ninguna fila
+   del SC de esa actividad. Que una actividad no esté programada todavía es normal (es justo lo que el tipo descubre);
+   que no lo esté en ambientes activos, y en varios, quiere decir que no pertenece a ese tipo. */
+function mxTipoScMiss(t){
+  const ambs=[...MX.amb.values()].filter(m=>m.tipo===t.id&&S.amb.has(m.id)).map(m=>m.id);
+  if(ambs.length<2)return[];
+  const by=new Map(ambs.map(id=>[id,new Set()]));
+  for(const x of S.act.values()){if(!x.sc)continue;const s=by.get(x.ambId);if(s)s.add(x.sc)}
+  const act=ambs.filter(id=>by.get(id).size);          // solo los ambientes donde ya se programó algo
+  if(act.length<2)return[];
+  const out=[];
+  for(const cid of(t.acts||[])){const c=MX.cat.get(cid);if(!c||c.arch)continue;
+    const n=act.filter(id=>!mxScsOf(c).some(s=>by.get(id).has(s))).length;
+    if(n>=3&&n*4>act.length)out.push({c,n,tot:act.length})}
+  return out}
 function renderMxTipo(main,head){const ed=mxEd();const tipos=[...MX.tipo.values()].filter(t=>!t.arch).sort((a,b)=>(a.order||0)-(b.order||0)||a.name.localeCompare(b.name));
   const nAmb={};for(const m of MX.amb.values())if(m.tipo&&S.amb.has(m.id))nAmb[m.tipo]=(nAmb[m.tipo]||0)+1;
   const sinTipo=[...S.amb.keys()].filter(id=>{const m=MX.amb.get(id);return!m||!m.tipo||!MX.tipo.has(m.tipo)||MX.tipo.get(m.tipo).arch}).length;
@@ -208,8 +226,10 @@ function renderMxTipo(main,head){const ed=mxEd();const tipos=[...MX.tipo.values(
    ${helpBox('Qué es un tipo de ambiente',`<p>Un tipo (SS.HH., Oficina, Dormitorio…) dice qué actividades tiene un ambiente aunque todavía no estén en el lookahead. Al agregar o quitar una actividad del tipo, cambia en todos los ambientes de ese tipo; lo ya marcado en cada ambiente se conserva.</p><p>El tipo de cada ambiente se elige en la Matriz (columna «Tipo»).</p>`)}
    <div class="fbar"><span class="note">${tipos.length} tipos · ${sinTipo} ambientes sin tipo</span><span class="fsp"></span>${ed?'<button class="ib pri" id="mxtnew">+ Tipo</button>':''}</div>
    <div class="mxtg">${tipos.map(t=>{const acts=(t.acts||[]).map(id=>MX.cat.get(id)).filter(c=>c&&!c.arch);
+     const miss=mxTipoScMiss(t);const mids=new Set(miss.map(m=>m.c.id));
      return`<div class="card mxtc" data-mtid="${esc(t.id)}"><div class="mxth">${ed?`<input class="tin" data-mtf="name" value="${esc(t.name)}" aria-label="Nombre del tipo">`:`<b>${esc(t.name)}</b>`}<span class="note">${nAmb[t.id]||0} amb.</span>${ed?`<button class="ab" data-mtarc="${esc(t.id)}" aria-label="Archivar tipo" title="Archivar tipo">&times;</button>`:''}</div>
-      <div class="mxtl">${acts.map(c=>`<span class="chip" style="--c:${esc(conOf(c.sc).color)}" title="${esc(conOf(c.sc).name)}"><i></i>${esc(c.name)}${ed?`<button class="mxtx" data-mtrm="${esc(c.id)}" aria-label="Quitar ${esc(c.name)}">×</button>`:''}</span>`).join('')||'<span class="note">Sin actividades.</span>'}</div>
+      <div class="mxtl">${acts.map(c=>`<span class="chip${mids.has(c.id)?' mxtcw':''}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(conOf(c.sc).name)}${mids.has(c.id)?' · revisa si esta actividad pertenece a este tipo':''}"><i></i>${mids.has(c.id)?'⚠ ':''}${esc(c.name)}${ed?`<button class="mxtx" data-mtrm="${esc(c.id)}" aria-label="Quitar ${esc(c.name)}">×</button>`:''}</span>`).join('')||'<span class="note">Sin actividades.</span>'}</div>
+      ${miss.length?`<div class="mxtw"><b>¿Estas actividades son de este tipo?</b>${miss.map(m=>`<div>«${esc(m.c.name)}» es de <b>${esc(conOf(m.c.sc).name)}</b>, que no tiene ninguna actividad programada en <b>${m.n} de ${m.tot}</b> ambientes de este tipo donde otros sí trabajan.</div>`).join('')}<div class="note">Si no le corresponden, quítalas del tipo: se dejan de proponer y lo ya marcado en cada ambiente se conserva.</div></div>`:''}
       ${ed?`<select data-mtadd aria-label="Agregar actividad"><option value="">+ Agregar actividad…</option>${cats.filter(c=>!(t.acts||[]).includes(c.id)).map(c=>`<option value="${esc(c.id)}">${esc(c.name)} · ${esc(conOf(c.sc).name)}</option>`).join('')}</select>`:''}</div>`}).join('')}</div>
    ${arch.length&&ed?`<div class="note">Archivados: ${arch.map(t=>`${esc(t.name)} <button class="lnkb" data-mtres="${esc(t.id)}">restaurar</button>`).join(' · ')}</div>`:''}
    </div></div>`;
