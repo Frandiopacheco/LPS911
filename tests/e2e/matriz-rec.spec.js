@@ -74,6 +74,7 @@ test('recorrido: «+ Otra actividad» crea una actividad nueva en el catálogo y
   await page.click('#mxrpick');
   await page.fill('#mxpq', 'pintura');
   await page.click('[data-mxpknew]');
+  await page.selectOption('#mxrnsc', await page.evaluate(() => MX.cat.get('k3').sc)); // la del mismo SC se reutiliza
   await page.click('#mxrnok');
   await expect.poll(() => page.evaluate(() => (__dbGet('mamb', 'a1').c || {}).k3)).toBe('p');
   expect(await page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => /pintura/i.test(c.name)).length)).toBe(1);

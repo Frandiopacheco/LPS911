@@ -43,7 +43,9 @@ test('exigir catálogo: el nombre del catálogo se impone y lo que no está se a
   await expect.poll(async () => (await get(page, 'meta', 'project')).catReq).toBe(true);
   await page.evaluate(() => goTab('look'));
   await sinLib(page);
-  // variante → nombre del catálogo
+  // variante → nombre del catálogo (de una actividad del mismo SC de la fila)
+  const sc0 = await page.evaluate(() => S.act.get('e0').sc);
+  await page.evaluate(sc => { MX.cat.get('k2').sc = sc; MX.v++; }, sc0);
   await nameIn(page, 'e0').fill('tarrajeo de muros');
   await nameIn(page, 'e0').press('Enter');
   await expect.poll(async () => (await get(page, 'acts', 'e0')).name).toBe('Tarrajeo de muros');
@@ -184,4 +186,29 @@ test('rechazar: se archiva si no se usa; si ya tiene filas pide combinarla', asy
   await expect(page.locator('#mxfb')).toBeVisible();
   expect((await get(page, 'mcat', 'k6')).arch).toBeUndefined();
   noErrors(errors, 'rechazar');
+});
+
+test('mismo nombre en otro SC: se crea aparte para el SC de la fila (no se comparte) y cada fila va a su actividad', async ({ page }) => {
+  const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }]];
+  const errors = await openApp(page, { tab: 'look', extra });
+  await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
+  // «Tarrajeo de muros» es de c3 en el catálogo; la fila i0 es de c1
+  await nameIn(page, 'i0').fill('Tarrajeo de muros');
+  await nameIn(page, 'i0').press('Enter');
+  await expect(page.locator('#lqm')).toContainText('la hace otro subcontratista');
+  await expect(page.locator('#lqm [data-mxuse]')).toHaveCount(0); // no ofrece la de c3
+  await page.click('#mxaok');
+  await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => c.name === 'Tarrajeo de muros').map(c => c.sc).sort())).toEqual(['c1', 'c3']);
+  await expect.poll(async () => (await get(page, 'acts', 'i0')).name).toBe('Tarrajeo de muros');
+  const r = await page.evaluate(() => {
+    const nw = [...MX.cat.values()].find(c => c.name === 'Tarrajeo de muros' && c.sc === 'c1');
+    return { nw: nw && nw.id, of: mxCatOf(S.act.get('i0')), k2scs: MX.cat.get('k2').scs || [],
+      ownC1: (mxNameOwner('Tarrajeo de muros', '', ['c1']) || {}).id, ownC2: mxNameOwner('Tarrajeo de muros', '', ['c2']), badge: mxRowCat(S.act.get('i0')) };
+  });
+  expect(r.of).toBe(r.nw);          // la fila de c1 va a la actividad de c1
+  expect(r.k2scs).toEqual([]);      // la de c3 no se compartió
+  expect(r.ownC1).toBe(r.nw);       // en c1 el nombre ya está tomado
+  expect(r.ownC2).toBe(null);       // en otro SC sí se puede usar
+  expect(r.badge).toBe(null);       // sin aviso de «otro SC»
+  noErrors(errors, 'mismo nombre en otro SC');
 });
