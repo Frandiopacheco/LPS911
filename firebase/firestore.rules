@@ -687,7 +687,21 @@ service cloud.firestore {
     match /meta/{id} {
       allow create, update: if isAdmin() || (canEdit() && (id != 'project'
         || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
-          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'finObra'])));
+          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
+    }
+    // Avisos de detenciones (push, oct 2026; docs/ia/avisos.md). push/<sha256 del token>: un equipo con los avisos activados;
+    // cada administrador o editor registra y quita solo los suyos (em = su correo). Los lee y envía el servidor.
+    match /push/{id} {
+      allow read: if canEdit() && resource.data.get('em', '') == mid();
+      allow create, update: if canEdit() && request.resource.data.get('em', '') == mid() && request.resource.data.get('tok', '') is string
+        && request.resource.data.keys().hasOnly(['em', 'tok', 'dev', 't']) && (resource == null || resource.data.get('em', '') == mid());
+      allow delete: if canEdit() && resource.data.get('em', '') == mid();
+    }
+    // pushp/<correo>: pisos de los que quiere avisos un administrador (vacío = todos). Solo el propio.
+    match /pushp/{em} {
+      allow read: if canEdit() && em == mid();
+      allow create, update: if isAdmin() && em == mid() && request.resource.data.keys().hasOnly(['pisos', 't']) && request.resource.data.get('pisos', []) is list;
+      allow delete: if isAdmin() && em == mid();
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);

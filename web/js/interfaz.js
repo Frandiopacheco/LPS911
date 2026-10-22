@@ -102,7 +102,7 @@ function topToolsApply(){const t=U.tab;
   /* Ver como / Vista celular arriba a la derecha (solo el administrador real en la copia de prueba) */
   {const ok=!!(me&&me.realAdmin&&typeof VA_OK==='function'&&VA_OK()&&!IN_FRAME);const a=$('#bvat'),b=$('#bpht');
     if(a){a.hidden=!ok||innerWidth<=760;if(ok&&!a.onclick)a.onclick=()=>vaDialog(a)}if(b){b.hidden=!ok||innerWidth<=760;if(ok&&!b.onclick)b.onclick=()=>phonePreview('iphone')}}if(t!=='look'&&$('#mvbar'))selBar();const ex=$('#bexport');if(ex){ex.hidden=t!=='look';ex.classList.remove('pri')}
-  ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)})}
+  ['#bundo','#bredo'].forEach(s=>{const e=$(s);if(e)e.hidden=!UNDO_TABS.includes(t)});if(typeof pushTop==='function')pushTop()}
 
 /* ---------- plantilla común de página (P5) ----------
    Dos tipos de pantalla: «herramienta» a todo el ancho (Lookahead, Plan diario) y «página» centrada con este encabezado:

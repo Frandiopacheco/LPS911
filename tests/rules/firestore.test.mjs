@@ -1471,3 +1471,25 @@ test('tareo (auditoría 21-10-2026): AFP e hijos en tperp, que no lee el capataz
   await assertFails(setDoc(doc(t, 'tper/87654321'), { ...PER('87654321'), afp: 'ONP' }));
   await assertSucceeds(setDoc(doc(t, 'tper/87654321'), PER('87654321')));
 });
+
+test('avisos de detenciones (oct 2026): cada responsable registra y quita solo sus equipos; los pisos de aviso solo el administrador', async () => {
+  const ed = user('editor@obra.pe'), ow = user(OWNER);
+  const T = em => ({ em, tok: 'tok-' + em, dev: 'Android · Chrome', t: 1 });
+  await assertSucceeds(setDoc(doc(ed, 'push/h1'), T('editor@obra.pe')));
+  await assertSucceeds(getDoc(doc(ed, 'push/h1')));
+  await assertFails(setDoc(doc(ed, 'push/h2'), T('editor2@obra.pe')));            // a nombre de otro
+  await assertFails(setDoc(doc(ed, 'push/h3'), { ...T('editor@obra.pe'), x: 1 })); // campos de más
+  await assertFails(getDoc(doc(user('editor2@obra.pe'), 'push/h1')));               // no ve los equipos de otro
+  await assertFails(setDoc(doc(user('editor2@obra.pe'), 'push/h1'), T('editor2@obra.pe'))); // ni se los apropia
+  await assertFails(deleteDoc(doc(user('editor2@obra.pe'), 'push/h1')));
+  for (const db of [user('sc@obra.pe'), user('campo@obra.pe'), user('lector@obra.pe')]) await assertFails(setDoc(doc(db, 'push/z'), T('x@obra.pe')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'push/z'), T('sc@obra.pe')));
+  await assertSucceeds(deleteDoc(doc(ed, 'push/h1')));
+  // pisos de aviso: el administrador, solo los suyos
+  await assertSucceeds(setDoc(doc(ow, 'pushp/' + OWNER), { pisos: ['p1'], t: 1 }));
+  await assertFails(setDoc(doc(ow, 'pushp/editor@obra.pe'), { pisos: [], t: 1 }));
+  await assertFails(setDoc(doc(ed, 'pushp/editor@obra.pe'), { pisos: [], t: 1 }));
+  // horario de avisos: solo el administrador
+  await assertFails(setDoc(doc(ed, 'meta/project'), { pushIni: '06:00' }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ow, 'meta/project'), { pushIni: '06:00', pushFin: '18:00' }, { merge: true }));
+});

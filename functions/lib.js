@@ -652,7 +652,66 @@ function cliDue(p, versions, now = Date.now()) {
   return versions.some(v => cliForW(p, v) === n) ? null : n;
 }
 
+/* ---------- Avisos de detenciones al celular y a la computadora (push, oct 2026; docs/ia/avisos.md) ----------
+   Cuando un SC/capataz/ingeniero marca «Detenido» (evento nuevo en live.log), se avisa a los responsables de ese piso
+   (editores con el piso a cargo, sin baja) y a los administradores (que pueden limitar sus pisos en pushp/<correo>.pisos),
+   menos a quien lo reportó. Solo en días hábiles y dentro del horario de Configuración › Proyecto (pushIni–pushFin,
+   por defecto 07:00–18:00). No se avisa lo reportado al cierre (a la hora de corte o después, o junto con el cierre). */
+const STOP_INFO_L = 'Inicia después';
+const limaHM = t => new Date(t - LIMA).toISOString().slice(11, 16);
+const hmOk = v => typeof v === 'string' && /^\d\d:\d\d$/.test(v);
+function pushHorario(p) { const ini = hmOk(p && p.pushIni) ? p.pushIni : '07:00'; let fin = hmOk(p && p.pushFin) ? p.pushFin : '18:00'; if (fin <= ini) fin = '18:00'; return { ini, fin }; }
+/* el «Detenido» nuevo de esta escritura (el último que no estaba antes), o null */
+function nuevoDetenido(before, after) {
+  if (!after) return null;
+  const key = e => `${e.t}|${e.by || ''}|${e.s}`;
+  const B = new Set(((before && before.log) || []).filter(Boolean).map(key));
+  const L = (after.log || []).filter(e => e && e.s === 'stop' && e.m !== STOP_INFO_L && !B.has(key(e)));
+  return L.length ? L[L.length - 1] : null;
+}
+/* por qué NO se avisa ('' = sí se avisa) */
+function avisoNo(p, live, e, now = Date.now()) {
+  if (!e || !e.t) return 'sin detenido';
+  if (p && p.pushOff === true) return 'avisos apagados';
+  const d = new Date(e.t - LIMA).toISOString().slice(0, 10);
+  if (!live || live.date !== d || d !== limaToday(now)) return 'no es de hoy';
+  if (now - e.t > 6 * 3600e3) return 'llegó con más de 6 h de atraso';
+  if (!isWork(p, d)) return 'día no laborable';
+  const hm = limaHM(e.t), H = pushHorario(p);
+  if (hm < H.ini || hm >= H.fin) return 'fuera del horario de avisos';
+  if (hm >= closeCutHH(p)) return 'reportado al cierre';
+  if (live.close && live.close.t && e.t >= live.close.t - 60000) return 'reportado al cierre';
+  return '';
+}
+/* a quién: members [{id, role, pisos, off}], prefs { correo: { pisos: [] } } (solo administradores) */
+function avisoDestinos(members, pid, by, prefs = {}) {
+  const out = new Set(); const seen = new Set();
+  const admOk = em => { const f = prefs[em] && Array.isArray(prefs[em].pisos) && prefs[em].pisos.length ? prefs[em].pisos : null; return !f || f.includes(pid); };
+  for (const m of members || []) {
+    if (!m || !m.id) continue; const em = String(m.id).toLowerCase(); seen.add(em);
+    if (m.off === true && em !== OWNER) continue;
+    if (m.role === 'admin' || em === OWNER) { if (admOk(em)) out.add(em); continue; }
+    if (m.role === 'editor' && Array.isArray(m.pisos) && m.pisos.includes(pid)) out.add(em);
+  }
+  if (!seen.has(OWNER) && admOk(OWNER)) out.add(OWNER);
+  out.delete(String(by || '').toLowerCase());
+  return [...out].filter(em => em.includes('@'));
+}
+/* texto del aviso (los datos de un push web van como texto) */
+function avisoTexto({ aid, date, e, act, amb, piso, con, lvMot }) {
+  const mot = String(e.m || 'Detenido');
+  let note = String(e.x || '');
+  if (!note && lvMot && String(lvMot).indexOf(' — ') > 0) note = String(lvMot).slice(String(lvMot).indexOf(' — ') + 3).trim();
+  const pl = piso ? (piso.code || piso.name || '') : '';
+  return {
+    title: `⏸ Detenido${pl ? ' · ' + pl : ''} · ${(con && con.name) || '—'}`,
+    body: `${(act && act.name) || 'Actividad'} · ${(amb && amb.name) || ''}\n${mot}${note ? ' — ' + note : ''} · ${limaHM(e.t)}`,
+    tag: 'det-' + aid, aid: String(aid), d: String(date), url: `./?det=${encodeURIComponent(aid)}&d=${date}`
+  };
+}
+
 module.exports = {
+  pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
