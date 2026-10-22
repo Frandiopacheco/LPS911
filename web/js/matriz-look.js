@@ -15,10 +15,12 @@ function mxCatAct0(){if(MXCAC.v!==MX.v||!MXCAC.L){MXCAC.L=[...MX.cat.values()].f
 const mxCatAct=()=>mxCatAct0().slice();
 
 /** al escribir el nombre de una actividad del lookahead: el nombre del catálogo (texto), false si se bloqueó, null si no aplica */
-function mxNameGate(v,x,t){if(!mxCatReq()||!v)return null;const id=mxAli().get(mnk(v));const c=id&&MX.cat.get(id);
-  if(c&&!c.arch){if(x&&x.sc&&!mxScsOf(c).includes(x.sc))setTimeout(()=>toast(`Ojo: «${c.name}» es de ${conOf(c.sc).name} en el catálogo y esta fila es de ${conOf(x.sc).name}: no saldrá en la Matriz hasta que coincidan.`),60);
-    else if(c.name!==v)toast(`Se escribió «${c.name}», como está en el catálogo.`);return c.name}
-  t.value=t.dataset.o!=null?t.dataset.o:(x.name||'');setTimeout(()=>mxNoCatDlg(v,x),0);return false}
+/* el nombre existe solo en otro SC (oct 2026, decidido con el dueño): no se usa la de ese SC; se ofrece crearla aparte para el SC de la fila */
+function mxNameGate(v,x,t){if(!mxCatReq()||!v)return null;const id=mxPick(mnk(v),x&&x.sc);const c=id&&MX.cat.get(id);
+  const back=()=>{t.value=t.dataset.o!=null?t.dataset.o:(x.name||'')};
+  if(c&&!c.arch){if(x&&x.sc&&!mxScsOf(c).includes(x.sc)){back();setTimeout(()=>mxNoCatDlg(v,x,c),0);return false}
+    if(c.name!==v)toast(`Se escribió «${c.name}», como está en el catálogo.`);return c.name}
+  back();setTimeout(()=>mxNoCatDlg(v,x),0);return false}
 
 /* lista de sugerencias del campo «Actividad»: el catálogo, primero las del subcontratista de la fila */
 function mxSuggest(inp,dl){const x=S.act.get(inp.dataset.a);const sc=x&&x.sc;
@@ -44,22 +46,25 @@ const mxTipoTxt=tp=>`Agregar también al tipo «${esc(tp.name)}»${tp.n!=null?` 
    Ingeniero y SC agregan directo (el SC no espera aprobación: sigue con su propuesta de programación). Por defecto solo en ese
    ambiente; «Agregar a todos los ambientes del tipo…» es opcional. Lo que agrega un SC queda marcado `rev` («por revisar»):
    el ingeniero recibe el aviso (Hoy y Matriz › Catálogo), la corrige y al renombrarla se actualiza el lookahead. */
-async function mxNoCatDlg(v,x){const sim=mxSimilar(v,x.sc);const ed=mxEd();const sc=PM();const can=ed||sc;const tp=can?await mxAmbTipo(x.ambId):null;
+/* other: actividad del catálogo con ese nombre pero de otro SC (caja 19 de la pizarra): se crea aparte para el SC de la fila */
+async function mxNoCatDlg(v,x,other){const sim=mxSimilar(v,x.sc).filter(c=>!other||mxScsOf(c).includes(x.sc));const ed=mxEd();const sc=PM();const can=ed||sc;const tp=can?await mxAmbTipo(x.ambId):null;
   const useName=c=>{const cur=S.act.get(x.id);if(!cur)return;apply([op('acts',x.id,{...cur,name:c.name})])};
   const scs=sc?myScsI():null;const scOpts=sc?scs.map(id=>`<option value="${esc(id)}"${id===x.sc?' selected':''}>${esc(conOf(id).name)}</option>`).join(''):mxScOpts(x.sc);
-  lqModal(`<div class="lqtop"><b>«${esc(v)}» no está en el catálogo</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
-   <p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>
-   ${sim.length?`<div class="ph">¿Es alguna de estas?</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
-   ${can?`<div class="ph">O agrégala al catálogo</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${scOpts}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label></div>
+  const oN=other&&conOf(other.sc).name,xN=other&&conOf(x.sc).name;
+  lqModal(`<div class="lqtop"><b>${other?`«${esc(other.name)}» la hace otro subcontratista`:`«${esc(v)}» no está en el catálogo`}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   ${other?`<p class="note">En el catálogo, «${esc(other.name)}» es de <b>${esc(oN)}</b>. Para ${esc(xN)} se crea como una actividad aparte, con su propia columna en la Matriz, aunque se llame igual. Puedes dejar el nombre o hacerlo más claro (p. ej. «${esc(other.name)} de vidrios»).</p>`
+    :'<p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>'}
+   ${sim.length?`<div class="ph">${other?`¿Es alguna de estas de ${esc(xN)}?`:'¿Es alguna de estas?'}</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
+   ${can?`<div class="ph">${other?`Crear para ${esc(xN)}`:'O agrégala al catálogo'}</div><div class="mxform"><label>Nombre<input class="tin" id="mxan" value="${esc(v)}"></label><label>Subcontratista<select id="mxasc">${scOpts}</select></label><label>Clase<select id="mxacl">${mxClOpts('t')}</select></label></div>
      <p class="note">Se agrega solo a este ambiente.${sc?' El ingeniero la revisará (nombre, clase, tipo) y si la corrige, el lookahead se actualiza solo.':''}</p>
      ${tp?`<label class="mxur"><input type="checkbox" id="mxatp"><span><b>Agregar a todos los ambientes del tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n})`:''}</b><small>${sc?'El ingeniero lo confirma al revisarla.':'Sale en todos los ambientes de ese tipo.'}</small></span></label>`:''}`:''}
    <p class="note" id="mxamsg"></p>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${can?'<button class="ib pri" id="mxaok">Agregar al catálogo y usarla</button>':''}</div>`,
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${can?`<button class="ib pri" id="mxaok">${other?`Crear para ${esc(xN)} y usarla`:'Agregar al catálogo y usarla'}</button>`:''}</div>`,
    async e=>{const u=e.target.closest('[data-mxuse]');if(u){const c=MX.cat.get(u.dataset.mxuse);lqClose();if(c)useName(c);return}
      if(!e.target.closest('#mxaok'))return;const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
-     const dup=mxAli().get(mnk(name));if(dup){lqClose();useName(MX.cat.get(dup));return}
+     const nsc=$('#mxasc').value;const dup=mxPickSc(mnk(name),nsc);if(dup){lqClose();useName(MX.cat.get(dup));return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&$('#mxatp')&&$('#mxatp').checked);
-     const c={id,name,sc:$('#mxasc').value,cl:$('#mxacl').value,al:[mnk(name)],ord};
+     const c={id,name,sc:nsc,cl:$('#mxacl').value,al:[mnk(name)],ord};
      if(sc)c.rev={by:me.email,n:me.name||'',t:NOW(),amb:x.ambId||'',tipo:toT?tp.id:null};
      try{await fcol('mcat').doc(id).set({...c,...mxNow()});if(toT&&ed)await mxTipoAdd(tp.id,id);MX.cat.set(id,c);MX.v++;lqClose();useName(c);
        toast(sc?'Agregada al catálogo: el ingeniero la revisará':toT?`Agregada al catálogo y al tipo «${tp.name}»`:'Agregada al catálogo (solo este ambiente)')}catch(err){mxErr(err)}},
@@ -111,7 +116,7 @@ function mxWireCatTools(main){
   main.querySelectorAll('[data-mxrtp]').forEach(b=>b.onclick=()=>{const c=MX.cat.get(b.dataset.mxrtp);const tp=c&&mxRevTipo(c);if(!tp)return;mxTipoAdd(tp.id,c.id).then(()=>toast(`Agregada al tipo «${tp.name}»`)).catch(mxErr)})}
 /* propuestas antiguas (mcatp): desde oct 2026 el SC agrega directo; estas se siguen pudiendo resolver */
 async function mxPropDecide(id,ok){const p=MX.prop.get(id);if(!p||!mxEd())return;const meta={dec:ok?'ok':'rej',decBy:me.email,decN:me.name||'',decT:NOW()};
-  try{if(ok){const dup=mxAli().get(mnk(p.name));let cid=dup;
+  try{if(ok){const dup=p.sc?mxPickSc(mnk(p.name),p.sc):mxAli().get(mnk(p.name));let cid=dup;
       if(!dup){cid='k'+NOW().toString(36);const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;await fcol('mcat').doc(cid).set({name:p.name,sc:p.sc||'',cl:'t',al:[mnk(p.name)],ord,...mxNow()})}
       await fcol('mcatp').doc(id).set({st:'ok',catId:cid,...meta},{merge:true});toast(dup?`Ya existía «${MX.cat.get(dup).name}»: se marcó aprobada`:`«${p.name}» agregada al catálogo`);
       /* el ambiente para el que la pidió tiene tipo: ¿la trae todo ese tipo? */
@@ -271,8 +276,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-mxc]');if(
   if(w==='off'){closePop();if(mxEd()||PM())mxNoCatDlg(x.name,x);else openPop(b,`<div class="ph">∉ ${esc(x.name)}</div><div class="ptx">No está en el catálogo de actividades, así que no sale en la Matriz. Un ingeniero puede asignarla.</div>`,{});return}
   const c=MX.cat.get(mxCatOfN(x));const ed=mxEd();
   openPop(b,`<div class="ph">SC distinto · ${esc(x.name)}</div><div class="ptx">En el catálogo es de <b>${esc(conOf(c.sc).name)}</b>${(c.scs||[]).length?' (y '+(c.scs||[]).map(i=>esc(conOf(i).name)).join(', ')+')':''}; esta fila es de <b>${esc(conOf(x.sc).name)}</b>. Mientras no coincidan, no sale en la Matriz.</div>
-   ${ed?`<button data-do="add">Sumar ${esc(conOf(x.sc).name)} a la actividad (la hacen los dos)</button><button data-do="mov">Pasar esta fila a ${esc(conOf(c.sc).name)}</button>`:''}`,
-   {add:async()=>{try{await mxCatScsAdd(c.id,x.sc);toast(`«${c.name}»: ahora también de ${conOf(x.sc).name}`);requestRender()}catch(err){mxErr(err)}},
+   ${ed||PM()?`<button data-do="new">Es otra actividad: crearla para ${esc(conOf(x.sc).name)}</button>`:''}${ed?`<button data-do="mov">Pasar esta fila a ${esc(conOf(c.sc).name)}</button><button data-do="add">Es la misma: la hacen los dos (compartir)</button>`:''}`,
+   {new:()=>{closePop();mxNoCatDlg(x.name,x,c)},add:async()=>{try{await mxCatScsAdd(c.id,x.sc);toast(`«${c.name}»: ahora también de ${conOf(x.sc).name}`);requestRender()}catch(err){mxErr(err)}},
     mov:()=>{const cur=S.act.get(x.id);if(cur)apply([op('acts',x.id,{...cur,sc:c.sc})],`«${x.name}» pasa a ${conOf(c.sc).name}`)}})},true);
 
 /* clic en ✓?: confirmar Terminado en la Matriz (la fila se oculta) o reabrir la actividad (no estaba terminada) */

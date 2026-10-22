@@ -7,7 +7,7 @@
 const MXC={q:'',cl:'',arch:false};
 const mxNow=()=>({by:me.email,n:me.name||'',t:NOW()});
 const mxFV=()=>firebase.firestore.FieldValue;
-const mxErr=e=>toast('No se pudo guardar: '+(e&&e.code||e));
+const mxErr=e=>toast(typeof e==='string'?e:'No se pudo guardar: '+(e&&e.code||e));
 
 /** pestañas internas de la matriz */
 function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['act','Por actividad'],['pla','Gráfico'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente'],['tren','Tren']].filter(([k])=>!((k==='tipo'||k==='tren')&&SCK()))
@@ -70,13 +70,15 @@ function mxWireCat(main){
   main.querySelectorAll('[data-mcal]').forEach(b=>b.onclick=()=>mxAliasPop(b,b.dataset.mcal))}
 
 /* MOD-02: ¿de qué otra actividad activa es ya este nombre? Mira nombres y alias (nombres del lookahead), igual que mxAli */
-function mxNameOwner(name,self){const i=mxAli().get(mnk(name));return i&&i!==self?MX.cat.get(i)||null:null}
+/* otra actividad con ese nombre que comparte algún SC con scs (sin scs: cualquiera). El mismo nombre en otro SC sí se permite (oct 2026) */
+function mxNameOwner(name,self,scs){for(const i of mxAliAll().get(mnk(name))||[]){const o=MX.cat.get(i);if(o&&i!==self&&(!scs||mxScsOf(o).some(s=>scs.includes(s))))return o}return null}
 const mxNameDupTxt=(name,o)=>mnk(o.name)===mnk(name)?`Ya existe «${o.name}» (${conOf(o.sc).name}).`:`«${name}» ya es un nombre del lookahead de «${o.name}» (${conOf(o.sc).name}).`;
 /* cambio de un campo (con Deshacer) */
 function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;v=f==='name'?String(v).replace(/\s+/g,' ').trim():v;
   if(f==='name'&&!v){toast('El nombre no puede quedar vacío.');render();return}
   /* MOD-02: un nombre (o nombre del lookahead) que ya es de otra actividad no se aplica: si son la misma, se fusionan */
-  if(f==='name'){const o=mxNameOwner(v,id);if(o){render();uiAsk({title:'Ese nombre ya existe',text:`${mxNameDupTxt(v,o)} Si son la misma actividad, fusiónalas; si no, usa otro nombre.`,ok:'Fusionar…',cancel:'Cancelar',tone:'warn'}).then(go=>{if(go)mxMergeDlg(id,o.id)});return}}
+  if(f==='sc'){const o=mxNameOwner(c.name,id,[v]);if(o){render();toast(`${conOf(v).name} ya tiene «${o.name}» en el catálogo. Si son la misma actividad, combínalas (⋮ › Fusionar).`);return}}
+  if(f==='name'){const o=mxNameOwner(v,id,mxScsOf(c));if(o){render();uiAsk({title:'Ese nombre ya existe',text:`${mxNameDupTxt(v,o)} Si son la misma actividad, fusiónalas; si no, usa otro nombre.`,ok:'Fusionar…',cancel:'Cancelar',tone:'warn'}).then(go=>{if(go)mxMergeDlg(id,o.id)});return}}
   const prev=c[f]??'';if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
   if(f==='sc'){mxCatScSet(id,prev,v);return}
@@ -117,7 +119,7 @@ function mxCatNew(sc0,fromMx){const ed=mxEd();if(!ed&&!(SCK()&&!verRO()))return;
    ${ed?'':'<p class="note">Queda en el catálogo de tu partida; el ingeniero la revisará (nombre, clase, tipo de ambiente).</p>'}<p class="note" id="mxnmsg"></p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxnok">Crear</button></div>`,
    async e=>{if(!e.target.closest('#mxnok'))return;const name=$('#mxnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxnmsg').textContent='Escribe el nombre.';return}
-     const k=mnk(name);const dup=mxNameOwner(name,'');if(dup){$('#mxnmsg').textContent=mxNameDupTxt(name,dup);return}
+     const k=mnk(name);const dup=mxNameOwner(name,'',[$('#mxnsc').value]);if(dup){$('#mxnmsg').textContent=mxNameDupTxt(name,dup);return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);
      const tsel=[...document.querySelectorAll('[data-mxntp]:checked')].map(i=>i.dataset.mxntp);
      try{await fcol('mcat').doc(id).set({name,sc:$('#mxnsc').value,cl:$('#mxncl').value,al:[k],ord,...mxNow(),...(ed?{}:{rev:{by:me.email,n:me.name||'',t:NOW(),amb:null,tipo:null}})});
@@ -128,7 +130,9 @@ function mxCatMenu(btn,id){const c=MX.cat.get(id);if(!c)return;
   openPop(btn,`<div class="ph">${esc(c.name)}</div>${mxdCan()?'<button data-do="des">Desglosar en varias actividades…</button>':''}<button data-do="fus">Fusionar con otra actividad…</button><button data-do="al">Nombres del lookahead…</button><button data-do="lk">↗ Ver en el Lookahead</button>${mxEd()?'<button data-do="scs">Otros subcontratistas que la hacen…</button>':''}${isAdmin&&typeof mxSplitInfo==='function'&&mxSplitInfo(id).length?'<button data-do="spl">Separar por subcontratista…</button>':''}<hr><button data-do="arc" class="danger">Archivar</button>`,
    {spl:()=>mxSplitDlg(id),lk:()=>mxLookGo(mxLkTerms(id),''),des:()=>mxDesDlg(id),fus:()=>mxMergeDlg(id),al:()=>mxAliasPop(btn,id),arc:()=>mxCatArchive(id),scs:()=>mxCatScsDlg(id)})}
 /* otros SC que también hacen la actividad (c.scs): sus filas del lookahead alimentan la Matriz y su SC puede llenarla */
-function mxCatScsAdd(id,sc){return fcol('mcat').doc(id).set({scs:mxFV().arrayUnion(sc),...mxNow()},{merge:true})}
+function mxCatScsAdd(id,sc){const c=MX.cat.get(id);const o=c&&mxNameOwner(c.name,id,[sc]);
+  if(o)return Promise.reject(`${conOf(sc).name} ya tiene su propia «${o.name}» en el catálogo. Si son la misma actividad, combínalas (⋮ › Fusionar); si no, no hace falta compartirla.`);
+  return fcol('mcat').doc(id).set({scs:mxFV().arrayUnion(sc),...mxNow()},{merge:true})}
 function mxCatScsDlg(id){const c=MX.cat.get(id);if(!c||!mxEd()){lqClose();return}const L=(c.scs||[]).filter(i=>i!==c.sc);const rest=[...S.con.values()].filter(x=>x.id!==c.sc&&!L.includes(x.id)).sort((a,b)=>a.name.localeCompare(b.name));
   lqModal(`<div class="lqtop"><b>${esc(c.name)} · subcontratistas</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Principal: <b>${esc(conOf(c.sc).name)}</b> (su columna en la Matriz). Si otros SC también la hacen, súmalos: sus filas del lookahead con este nombre salen en la Matriz y pueden llenarla.</p>

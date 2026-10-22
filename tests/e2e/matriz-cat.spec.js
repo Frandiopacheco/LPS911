@@ -91,25 +91,26 @@ test('nombres repetidos: «+ Actividad» mira los alias y renombrar a un nombre 
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
   await page.click('[data-mxv="cat"]');
   await page.click('#mxcnew');
-  await page.fill('#mxnn', 'Redes dup'); // alias de k9
+  await page.fill('#mxnn', 'Redes dup'); // alias de k9 (de c1)
+  await page.selectOption('#mxnsc', 'c1');
   await page.click('#mxnok');
   await expect(page.locator('#mxnmsg')).toContainText('ya es un nombre del lookahead de «Redes (duplicada)»');
   expect(Object.values(await page.evaluate(() => window.__dbAll('mcat'))).filter(c => c.name === 'Redes dup')).toHaveLength(0);
   await page.click('#lqm [data-lqx]');
-  // renombrar k2 al nombre de k1: pregunta; «Cancelar» no cambia nada
+  // renombrar k9 al nombre de k1 (mismo SC c1; en otro SC sí se permite, oct 2026): pregunta; «Cancelar» no cambia nada
   let msg = '';
   page.once('dialog', d => { msg = d.message(); d.dismiss(); });
-  await row(page, 'k2').locator('[data-mcf="name"]').fill('redes empotradas');
-  await row(page, 'k2').locator('[data-mcf="name"]').press('Enter');
+  await row(page, 'k9').locator('[data-mcf="name"]').fill('redes empotradas');
+  await row(page, 'k9').locator('[data-mcf="name"]').press('Enter');
   await expect.poll(() => msg).toContain('Ya existe «Redes empotradas»');
-  expect((await get(page, 'mcat', 'k2')).name).toBe('Tarrajeo de muros');
-  await expect(row(page, 'k2').locator('[data-mcf="name"]')).toHaveValue('Tarrajeo de muros');
+  expect((await get(page, 'mcat', 'k9')).name).toBe('Redes (duplicada)');
+  await expect(row(page, 'k9').locator('[data-mcf="name"]')).toHaveValue('Redes (duplicada)');
   // «Fusionar…» abre la fusión con la otra ya elegida (sin renombrar)
   page.once('dialog', d => d.accept());
-  await row(page, 'k2').locator('[data-mcf="name"]').fill('Redes empotradas');
-  await row(page, 'k2').locator('[data-mcf="name"]').press('Enter');
+  await row(page, 'k9').locator('[data-mcf="name"]').fill('Redes empotradas');
+  await row(page, 'k9').locator('[data-mcf="name"]').press('Enter');
   await expect(page.locator('#mxfb')).toHaveValue('k1');
-  expect((await get(page, 'mcat', 'k2')).name).toBe('Tarrajeo de muros');
+  expect((await get(page, 'mcat', 'k9')).name).toBe('Redes (duplicada)');
   noErrors(errors, 'nombres repetidos');
 });
 
