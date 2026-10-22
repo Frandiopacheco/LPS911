@@ -27,3 +27,14 @@ test('una actividad: pendiente y en curso; toda la partida suma las actividades 
   expect(await page.evaluate(() => JSON.stringify(window.__dbAll('mamb')))).toBe(before);
   noErrors(errors, 'plano de la matriz');
 });
+
+test('la lista de actividades del Gráfico trae solo las que existen en el piso elegido', async ({ page }) => {
+  const extra = [...CAT, ['mcat', 'k3', { name: 'Remasillado', sc: 'c3', cl: 't', al: ['remasillado'], ord: 30 }], ['mamb', 'a3', { c: { k1: 't', k2: 'p', k3: 'p' }, by: 'x', t: 1 }]];
+  const errors = await openApp(page, { tab: 'mat', extra });
+  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'pla'; U.mxPlSc = 'c3'; U.mxPlCat = 'k1'; render(); });
+  const opts = () => page.locator('#mxplcat option').allTextContents();
+  expect(await opts()).toEqual(['Segunda mano', 'Lijado']); // Remasillado solo existe en el piso 2
+  await page.evaluate(() => { U.piso = 'p2'; render(); });
+  expect(await opts()).toEqual(['Segunda mano', 'Lijado', 'Remasillado']);
+  noErrors(errors, 'filtro de actividades del gráfico por piso');
+});

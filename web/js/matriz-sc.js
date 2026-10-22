@@ -36,18 +36,43 @@ function mxWhoHtml(amb,cat){const m=((MX.amb.get(amb)||{}).m||{})[cat];if(!m)ret
   return`<div class="ptx">Último cambio: ${esc(m.n||m.by||'')}${m.sc?' (subcontratista)':''} · ${esc(fmtD(ldt(m.t||0)))}${pl?` · <b>por revisar</b>, antes: ${pl.from?MXS[pl.from]:'sin confirmar'}`:''}</div>`}
 const mxLogFrom=l=>l.from?MXS[l.from]:l.sugFrom?`sin confirmar (${MXS[l.sugFrom]})`:'no estaba';
 
-function mxLogDlg(){const L=mxLogPend();if(!L.length){lqClose();return}const by=new Map();L.forEach(l=>{if(!by.has(l.sc))by.set(l.sc,[]);by.get(l.sc).push(l)});
+/* msg: resultado del último «Todo visto» (queda en la ventana, no en un aviso que desaparece) */
+const mxLogWhen=t=>t?esc(fmtD(ldt(t))+' '+hhmm(t)):'';
+function mxLogDlg(msg){const L=mxLogPend();if(!L.length&&!msg){lqClose();return}const by=new Map();L.forEach(l=>{if(!by.has(l.sc))by.set(l.sc,[]);by.get(l.sc).push(l)});
   lqModal(`<div class="lqtop"><b>Cambios de los subcontratistas en la matriz</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Ya están aplicados. «✓ Visto» los da por buenos; «↶ Revertir» vuelve la celda a como estaba. En rojo: cambiaron algo que un ingeniero ya había confirmado.</p>
-   <div class="mxul">${[...by].map(([sc,ls])=>`<div class="mxpg"><span class="mxsw" style="--c:${esc(conOf(sc).color)}"></span><b>${esc(conOf(sc).name)}</b> · ${ls.length} <button class="lnkb" data-mxlall="${esc(sc)}">✓ Todo visto</button></div>
-     ${ls.map(l=>{const a=S.amb.get(l.amb);const c=MX.cat.get(l.cat);return`<div class="mxlr${l.conf?' conf':''}"><span><b>${esc(c.name)}</b> · ${a?esc(a.code+' '+a.name):''}<small>${esc(l.n||l.by||'')} · ${esc(fmtD(ldt(l.t||0)))} · ${esc(mxLogFrom(l))} → <b>${MXS[l.to]||l.to}</b>${l.conf?` · ⚠ lo había confirmado ${esc(l.confN||'un ingeniero')}`:''}</small></span>
+   ${msg?`<div class="callout" id="mxlres" role="status">${esc(msg)}</div>`:''}
+   <div class="mxul">${[...by].map(([sc,ls])=>`<div class="mxpg" data-mxpg="${esc(sc)}"><span class="mxsw" style="--c:${esc(conOf(sc).color)}"></span><b>${esc(conOf(sc).name)}</b> · <span class="mxn">${ls.length}</span> <button class="lnkb" data-mxlall="${esc(sc)}">✓ Todo visto</button></div>
+     ${ls.map(l=>{const a=S.amb.get(l.amb);const c=MX.cat.get(l.cat);return`<div class="mxlr${l.conf?' conf':''}" data-mxrow="${esc(l.id)}" data-mxrsc="${esc(sc)}"><span><b>${esc(c.name)}</b> · ${a?esc(a.code+' '+a.name):''}<small>${esc(l.n||l.by||'')} · ${mxLogWhen(l.t)} · ${esc(mxLogFrom(l))} → <b>${MXS[l.to]||l.to}</b>${l.conf?` · ⚠ lo había confirmado ${esc(l.confN||'un ingeniero')}`:''}</small></span>
        <span class="mxlb">${mxLkBtn(mxLkTerms(l.cat),mxLkPiso(null,l.amb))}<button class="ib" data-mxlrev="${esc(l.id)}">↶ Revertir</button><button class="ib pri" data-mxlok="${esc(l.id)}">✓ Visto</button></span></div>`}).join('')}`).join('')}</div>
    <div class="lqbtns"><button class="ib" data-lqx>Cerrar</button></div>`,
    async e=>{const ok=e.target.closest('[data-mxlok]'),rv=e.target.closest('[data-mxlrev]'),all=e.target.closest('[data-mxlall]');
      const done={by:me.email,n:me.name||'',t:NOW()};
-     try{if(ok){const l=MX.log.get(ok.dataset.mxlok);const b=db.batch();mxLogOk(b,l,done);await b.commit();MX.log.delete(l.id);mxLogDlg();return}
-       if(all){const ls=mxLogPend().filter(l=>l.sc===all.dataset.mxlall);for(let i=0;i<ls.length;i+=200){const b=db.batch();ls.slice(i,i+200).forEach(l=>mxLogOk(b,l,done));await b.commit()}ls.forEach(l=>MX.log.delete(l.id));mxLogDlg();return}
-       if(rv){await mxLogRevert(MX.log.get(rv.dataset.mxlrev));mxLogDlg()}}catch(err){toast('No se pudo guardar: '+(err&&err.code||err))}})}
+     try{if(ok){const l=MX.log.get(ok.dataset.mxlok);if(!l)return;const b=db.batch();mxLogOk(b,l,done);ok.disabled=true;try{await b.commit()}catch(err){ok.disabled=false;throw err}MX.log.delete(l.id);mxLogRowGone(l.id);return}
+       if(all){await mxLogAll(all.dataset.mxlall,done);return}
+       if(rv){const id=rv.dataset.mxlrev;await mxLogRevert(MX.log.get(id));if(!MX.log.has(id))mxLogRowGone(id)}}catch(err){toast('No se pudo guardar: '+(err&&err.code||err))}})}
+/* quita la fila ya revisada sin redibujar toda la lista (con cientos de filas el redibujo era lo lento) y deja bien el conteo del SC */
+function mxLogRowGone(id){const root=document.getElementById('lqm');if(!root)return;const row=root.querySelector(`[data-mxrow="${CSS.escape(id)}"]`);if(!row)return;const sc=row.dataset.mxrsc;row.remove();
+  const left=[...root.querySelectorAll('[data-mxrow]')].filter(r=>r.dataset.mxrsc===sc).length;const hd=[...root.querySelectorAll('[data-mxpg]')].find(h=>h.dataset.mxpg===sc);
+  if(hd){if(left)hd.querySelector('.mxn').textContent=left;else hd.remove()}
+  if(!root.querySelector('[data-mxrow]')&&!root.querySelector('#mxlres'))lqClose()}
+/* guarda los «✓ Visto» en lotes de 150 celdas (300 escrituras), 3 lotes a la vez; devuelve qué ids quedaron guardados y cuántos fallaron */
+async function mxLogOkMany(ls,done,pg){const okIds=new Set();let bad=0,err='';const ch=[];for(let i=0;i<ls.length;i+=150)ch.push(ls.slice(i,i+150));let ix=0;
+  const worker=async()=>{while(ix<ch.length){const c=ch[ix++];const b=db.batch();c.forEach(l=>mxLogOk(b,l,done));
+    try{await b.commit();c.forEach(l=>okIds.add(l.id))}catch(e){bad+=c.length;err=e&&e.code||String(e)}
+    pg(`Guardando ${okIds.size+bad} de ${ls.length}…`)}};
+  await Promise.all(Array.from({length:Math.min(3,ch.length)},worker));return{okIds,bad,err}}
+/* «✓ Todo visto» de un SC. Al terminar consulta al servidor cuántos cambios de ese SC siguen por revisar: los que no eran de la lista
+   son cambios NUEVOS que el SC hizo mientras tanto (no un error de guardado); los de la lista que siguen sí serían un error */
+async function mxLogAll(sc,done){const ls=mxLogPend().filter(l=>l.sc===sc);if(!ls.length)return;if(MX.logBusy)return;MX.logBusy=true;
+  const pg=mxActProg(`Guardando 0 de ${ls.length}…`);let r;
+  try{r=await mxLogOkMany(ls,done,pg)}finally{pg(null);MX.logBusy=false}
+  r.okIds.forEach(id=>MX.log.delete(id));
+  let nuevos=0,sin=0,chk=true;try{const ids=new Set(ls.map(l=>l.id));const sn=await fcol('mlog').where('st','==','pend').where('sc','==',sc).get({source:'server'});sn.docs.forEach(d=>ids.has(d.id)?sin++:nuevos++)}catch(e){chk=false}
+  const nm=conOf(sc).name;
+  const msg=`${nm}: ${r.okIds.size} de ${ls.length} marcados como vistos.`+(r.bad?` ${r.bad} NO se guardaron (${r.err}); vuelve a tocar «Todo visto».`:'')
+    +(chk?(sin?` ${sin} siguen pendientes en el servidor.`:'')+(nuevos?` Hay ${nuevos} cambios nuevos que el subcontratista hizo después de abrir esta lista.`:(!r.bad&&!sin?' No quedó ninguno pendiente.':'')):' No se pudo confirmar con el servidor cuántos quedan.');
+  mxLogDlg(msg)}
 /* «✓ Visto»: la constancia queda vista y, si la celda sigue como la dejó ese cambio del SC, el visto queda en la celda (m.<cat>.ok):
    así el próximo cambio del SC sobre lo que el ingeniero dio por bueno sale destacado (M04) y su «Terminado» ya oculta la fila (M05) */
 function mxLogOk(b,l,done){if(!l)return;b.set(fcol('mlog').doc(l.id),{st:'ok',ok:done},{merge:true});
