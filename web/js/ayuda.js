@@ -37,7 +37,7 @@ const AY_FLOWS={
     {o:'Llega una propuesta'},
     {p:'Tarjeta «Propuestas por revisar»',d:'En Hoy, con el número de cambios por SC.',tab:'hoy'},
     {q:'¿El piso está a tu cargo?',y:[{p:'Revisión en el Lookahead',d:'La grilla muestra la propuesta; al pasar el mouse dice el cambio en palabras.',tab:'look'}],n:[{p:'La decide el responsable del piso',d:'Si el piso no tiene responsable, cualquier editor o el administrador.'},{r:'Fin para ti'}]},
-    {q:'¿Llegó fuera de plazo (después del corte)?',y:[{p:'Marcada «FUERA DE PLAZO»',d:'Para aceptarla se pide el motivo.'}],n:[{p:'Dentro del plazo'}]},
+    {q:'¿Llegó fuera de plazo (después del corte)?',y:[{p:'Marcada «FUERA DE PLAZO»',d:'Se puede aceptar igual (sin motivo); queda marcada en el historial.'}],n:[{p:'Dentro del plazo'}]},
     {q:'¿Choca con un cambio oficial posterior?',y:[{p:'El sistema pregunta qué hacer',d:'«Aceptar todo» deja esas pendientes.'}],n:[{p:'Sin conflicto'}]},
     {q:'¿Aceptar?',y:[{p:'Aceptar',d:'Pasa al lookahead oficial; se puede deshacer con Ctrl+Z.'}],n:[{p:'Rechazar',d:'No pide motivo.'}]},
     {o:'El SC ve la respuesta en «Respuestas»'}]},

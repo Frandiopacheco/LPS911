@@ -48,3 +48,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Tablet:** en revisión, con pantalla < 1280 px el panel arranca plegado (`rvFold(true)`; luego vale lo que elija el usuario); en `pointer:coarse` ✓ ✗ miden 28 px con zona de toque de 44 px.
 - `respOf` ignora editores dados de baja (`m.off`).
 - Pruebas: `propuestas-editar.spec.js`, `propuestas-vivo.spec.js` (SC e ingenieros a la vez; `mundo-compartido.js` ahora repite las escrituras con `FieldPath`).
+
+## Ajustes del dueño tras probar en obra (22 oct 2026, pizarra «Propuestas», cajas 15 y 18)
+
+- **📅 Otra fecha ya no acepta:** `revAct('date')` mueve el bloque a la fecha elegida (`revShiftBy` desde los días actuales de la fila, también si ya estaban editados), lo muestra en la grilla y se acepta después con ✓ en la fila. Solo fechas desde mañana.
+- **Tardías sin motivo:** aceptar una propuesta fuera de plazo (una o en bloque) **ya no pide motivo**; sigue marcada «FUERA DE PLAZO»/«TARDÍA» y queda `late` en `lhphist` (`lateNote` vacío). El motivo solo se pide al rechazar (botones o comentario).
+- **Bloquear siempre a mano:** con la ventana abierta y **sin pendientes**, el panel derecho muestra la pestaña plegada «🔒 Bloquear propuestas» (antes no aparecía en ningún lado: la barra superior se había quitado). En la revisión también está al pie del panel.
+- Pruebas: `propuestas-editar.spec.js` (otra fecha con vista previa; bloquear sin pendientes), `propuestas-tardias.spec.js`.

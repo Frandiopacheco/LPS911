@@ -140,3 +140,26 @@ test('aceptar y deshacer casi seguidos: el deshacer espera a que se guarde y la 
   await expect.poll(() => page.evaluate(() => __dbGet('acts', 'r1').days)).toEqual([D[0]]);
   noErrors(errors, 'aceptar y deshacer');
 });
+
+test('📅 Otra fecha: elegir la fecha solo mueve y se ve en la grilla; se acepta después con ✓', async ({ page }) => {
+  const errors = await review(page);
+  await page.locator('#grid tr[data-a="r1"] td.act').click();
+  await page.locator('#rvpanel [data-rvmv="date"]').click();
+  await page.fill('#pst', D[5]);
+  await page.locator('#pop [data-do="go"]').click();
+  expect(await page.evaluate(() => revEd('r1'))).toEqual([D[5], D[6]]);
+  expect((await page.evaluate(() => __dbGet('acts', 'r1'))).days).toEqual([D[0]]); // todavía no se aceptó
+  expect(await page.evaluate(() => !!__dbGet('lhprop', 'c1').items.r1)).toBe(true);
+  await page.locator('#grid tr[data-a="r1"] [data-rva="ok"]').click();
+  await expect.poll(() => page.evaluate(() => __dbGet('acts', 'r1').days)).toEqual([D[5], D[6]]);
+  noErrors(errors, 'otra fecha con vista previa');
+});
+
+test('ventana abierta sin propuestas pendientes: «Bloquear propuestas» se ve igual', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'look' });
+  page.on('dialog', d => d.accept());
+  await page.locator('#rvpanel [data-pp="close"]').click();
+  await expect.poll(() => page.evaluate(() => !!(__dbGet('meta', 'propwin') || {}).man)).toBe(true);
+  await expect(page.locator('#rvpanel [data-pp="open"]')).toBeVisible();
+  noErrors(errors, 'bloquear sin pendientes');
+});
