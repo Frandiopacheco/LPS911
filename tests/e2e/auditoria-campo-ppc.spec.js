@@ -190,6 +190,13 @@ test('12 · Indicadores › Semanal muestra solo el plan semanal congelado, no l
   const row = main.locator('.ixd-grp [data-ixsc="c1"]').first();
   await expect(row).toContainText('33%');
   expect(await page.evaluate(() => (wkScStats([S.wk.get('58_p1')]).c1 || {}).n)).toBe(3);
+  // «Sin asignar» (POR DEFINIR) no es un subcontratista: sale del PPC por SC, pero NO cambia el PPC del piso
+  const antes = await page.evaluate(() => ({ ppc: ppcOf(S.wk.get('58_p1')).ppc, n: ppcOf(S.wk.get('58_p1')).n, sc: Object.keys(wkScStats([S.wk.get('58_p1')])).length }));
+  await page.evaluate(() => { const c = S.con.get('c1'); S.con.set('c1', { ...c, tbd: true }); });
+  const luego = await page.evaluate(() => ({ ppc: ppcOf(S.wk.get('58_p1')).ppc, n: ppcOf(S.wk.get('58_p1')).n, sc: Object.keys(wkScStats([S.wk.get('58_p1')])).length, c1: wkScStats([S.wk.get('58_p1')]).c1 }));
+  expect(luego.ppc).toBeCloseTo(antes.ppc, 6); expect(luego.n).toBe(antes.n); // el PPC del piso no se mueve
+  expect(luego.c1).toBeUndefined(); expect(luego.sc).toBe(antes.sc - 1);      // y deja de medirse como SC
+  await page.evaluate(() => { const c = S.con.get('c1'); delete c.tbd; S.con.set('c1', { ...c }); });
   noErrors(errors, 'semanal congelado');
 });
 

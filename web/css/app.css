@@ -3080,6 +3080,11 @@ table.mxct tr.mxarch td{color:var(--muted)}
 .mxth{display:flex;align-items:center;gap:8px}.mxth .note{white-space:nowrap}.mxth .tin{flex:1;font-weight:600}.mxth b{flex:1}
 .mxtl{display:flex;flex-wrap:wrap;gap:6px}
 .mxtl .chip{padding-right:4px}
+/* aviso de coherencia del tipo: actividad de un SC que no trabaja en esos ambientes (oct 2026).
+   Usa --warn/--warn-soft, que ya tienen su valor en modo oscuro. */
+.mxtl .chip.mxtcw{border-color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+.mxtw{border:1px solid var(--warn);background:var(--warn-soft);border-radius:var(--r-card,12px);padding:8px 10px;font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.mxtw .note{margin:0}
 .mxtx{border:0;background:none;color:var(--muted);font-size:14px;line-height:1;padding:0 4px;cursor:pointer;border-radius:4px}
 .mxtx:hover{color:var(--bad);background:var(--bad-soft)}
 .mxtc select{height:30px;border:1px dashed var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2)}
@@ -3304,13 +3309,17 @@ table.mx td.mc.x{background:transparent}
 table.mx td.mc.s-p{background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line)}
 table.mx td.mc.s-c{background:#F2C14E;color:#5A3E00}
 table.mx td.mc.s-t{background:var(--ok);color:#fff}
-table.mx td.mc.s-n{background:transparent;color:var(--muted)}
-/* sin validar (lo propone el sistema): mismo color, más claro; sin borde punteado */
+/* No aplica, Pendiente y Sin validar tienen que distinguirse de un vistazo (oct 2026, pedido del dueño): «No aplica»
+   era transparente y Pendiente un gris muy claro, casi iguales, y la propuesta sin validar era un Pendiente más tenue.
+   Ahora: Pendiente = casilla por llenar, Sin validar = punteada con «·», No aplica = apagada y sólida. */
+table.mx td.mc.s-n{background:color-mix(in srgb,var(--ink2) 18%,var(--panel));color:var(--ink2);font-weight:700}
 table.mx td.mc.sug{outline:none;opacity:1}
-table.mx td.mc.s-p.sug{background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+table.mx td.mc.s-p.sug{background:transparent;box-shadow:none;color:var(--muted);
+  outline:1.5px dashed var(--line2);outline-offset:-4px}
 table.mx td.mc.s-c.sug{background:color-mix(in srgb,#F2C14E 38%,var(--panel));color:#7A5A10}
 table.mx td.mc.s-t.sug{background:var(--ok-soft);color:var(--ok)}
-.mxleg .mc.sug{outline:none;background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+.mxleg .mc.sug{outline:1.5px dashed var(--line2);outline-offset:-3px;background:transparent;box-shadow:none;color:var(--muted)}
+.mxleg .mc.s-n{background:color-mix(in srgb,var(--ink2) 18%,var(--panel));color:var(--ink2)}
 .mxleg .mc.s-p{background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line)}.mxleg .mc.s-c{background:#F2C14E;color:#5A3E00}.mxleg .mc.s-t{background:var(--ok);color:#fff}
 table.mx td.mc.sl{box-shadow:inset 0 0 0 2px var(--accent)}
 table.mx th,table.mx td{border-right-color:transparent}
