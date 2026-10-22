@@ -98,3 +98,22 @@ self.addEventListener('fetch', e => {
     e.respondWith(cdnFetch(req).catch(() => fetch(req)));
   }
 });
+
+// Avisos de detenciones (avisos.js / functions avisoDetenido; docs/ia/avisos.md). Llegan como mensaje de datos de Firebase Cloud
+// Messaging y se muestran aquí (siempre se muestra uno por mensaje: Safari lo exige). Mismo tag = reemplaza al anterior de esa actividad.
+self.addEventListener('push', e => {
+  let p = {}; try { p = e.data ? e.data.json() : {}; } catch (x) { p = {}; }
+  const d = p.data || {}, n = p.notification || {};
+  const title = d.title || n.title || 'LPS 911';
+  const opt = { body: d.body || n.body || '', icon: 'icon-192.png', badge: 'icon-192.png', data: { url: d.url || './', aid: d.aid || '', d: d.d || '' } };
+  if (d.tag) { opt.tag = d.tag; opt.renotify = true; }
+  e.waitUntil(self.registration.showNotification(title, opt));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close(); const dt = e.notification.data || {};
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+    const c = cs.find(x => { try { return new URL(x.url).origin === self.location.origin; } catch (y) { return false; } });
+    if (c) { if (dt.aid) c.postMessage({ t: 'det', aid: dt.aid, d: dt.d }); return c.focus(); }
+    return self.clients.openWindow(dt.url || './');
+  }));
+});

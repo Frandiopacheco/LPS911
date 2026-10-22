@@ -2100,6 +2100,25 @@ label.tc-lab{flex-direction:column;align-items:stretch;gap:6px}
 .tc-pcl{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .tc-pcb{min-height:44px;height:auto;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 12px;text-align:left}.tc-pcb span{font-size:12.5px;font-weight:400;color:var(--muted)}
 .tc-pcb.on{border-color:var(--warn)}
+/* avisos compactos (22-10-2026): «Por corregir» en una fila de chips y «Reabierto» en una línea plegable, para no quitarle alto a la grilla */
+.tc-pc{flex-direction:row;align-items:center;gap:8px;margin-top:2px;padding:0;border:0;background:none;font-size:13px}
+.tc-pc>b{flex:none;font-size:13px}
+.tc-pcl{flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;margin-top:0;scrollbar-width:none}
+.tc-pcl::-webkit-scrollbar{display:none}
+.tc-pcb{flex:none;min-height:40px;max-width:210px;border-color:var(--warn);background:var(--warn-soft);padding:3px 10px}
+.tc-pcb b{font-size:13px;white-space:nowrap}.tc-pcb span{max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.tc-reab{display:block;flex-shrink:0;border:1px solid var(--warn);border-radius:var(--r-ctl);background:var(--warn-soft);padding:0}
+.tc-reab summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:40px;padding:2px 10px;cursor:pointer}
+.tc-reab summary::-webkit-details-marker{display:none}
+.tc-reab summary b{flex:none;font-size:14px}
+.tc-reab summary span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+.tc-reab summary::after{content:'▾';flex:none;color:var(--warn)}
+.tc-reab[open] summary span{display:none}.tc-reab[open] summary::after{content:'▴'}
+.tc-reab p{margin:0;padding:0 10px 8px;font-size:14px;line-height:1.35}
+/* grilla de solo lectura (enviado, paso 4): en el celular no se podía bajar para revisar lo enviado (la grilla, que se desplaza de lado,
+   se quedaba con el gesto). Ahora ocupa el alto que queda y se desplaza por dentro en ambos sentidos, como la grilla de horas
+   (encabezado, nombres y totales fijos); al llegar al borde el gesto pasa a la pantalla (22-10-2026). */
+.tc-body>.tc-gw.tc-gwr{flex:1 1 auto;min-height:260px;overscroll-behavior:auto;overscroll-behavior-x:contain}
 /* observaciones del dueño (oct 2026): motivo opcional, obrero de otra cuadrilla, quiénes con su ocupación en otros trabajos */
 
 .tc-aj{align-self:flex-start;margin-top:2px;font-style:normal;font-size:12.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:1px 8px}
@@ -2260,6 +2279,22 @@ button.tc-rc{cursor:pointer}button.tc-rc:focus-visible{outline:none;box-shadow:i
   .tc-cs{max-width:680px;gap:8px;padding-top:8px}
   .tc-csq{grid-template-columns:repeat(11,minmax(0,1fr))}
   .tc .tc-csv .ib.tc-big{height:46px}
+}
+/* celular echado en cualquier paso del tareo (22-10-2026): antes solo la grilla editable estaba preparada; en los demás pasos, con 844 px
+   de ancho la app pasaba al diseño de PC (barra superior y pestañas) y quedaba una franja de 480 px. Ahora todo el tareo usa la pantalla. */
+@media (orientation:landscape) and (max-height:500px){
+  body:has(#tcRoot) .top,body:has(#tcRoot) #bnav{display:none!important}
+  #tcRoot{max-width:none;border-left:0;border-right:0}
+  #tcRoot .tc-head{padding:4px 8px;gap:4px}
+  #tcRoot .tc-hrow .tc-date,#tcRoot .tc-step{min-height:36px}
+  #tcRoot .tc-body{padding:6px 10px 10px;gap:6px}
+  #tcRoot .tc-foot{padding:4px 8px calc(4px + env(safe-area-inset-bottom))}
+  #tcRoot .tc-foot .ib.tc-big{height:40px;font-size:14.5px}
+  #tcRoot.g3 .tc-reab,#tcRoot.g3 .tc-rot{display:none}
+  #tcRoot.g3 .tc-gh{display:none}
+  #tcRoot.g3 .tc-qbar .ib.tc-big{height:36px;font-size:14px}
+  #tcRoot.g3 .tc-mbar{padding:2px 4px;gap:4px}#tcRoot.g3 .tc-mbar .tc-qs{min-height:34px}
+  #tcRoot .tc-sent{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:6px 10px}
 }
 @media (min-width:761px){.tc{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 /* tareo: revisión (F2, tareo-rev.js). Solo variables existentes: el modo oscuro sale de ellas */
@@ -4220,6 +4255,10 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 .tc-g tr.msel th,.tc-g tr.msel td{background:var(--accent-soft)}
 .tc-cin{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);margin:8px 0}
 .tc-cin .tin,.tc-asgr .tin{height:46px;font:600 18px var(--f-mono);text-align:center}
+/* las hojas no deben ser más anchas que la pantalla (el campo de horas se salía por la derecha en el iPhone) */
+.tc-cs .tin{box-sizing:border-box;max-width:100%;min-width:0}.tc-cin .tin{width:100%}.tc-cs{box-sizing:border-box;overflow-x:hidden}
+/* «Elegir varios» → horas en una partida (22-10-2026): campo y botón «Poner» en una fila */
+.tc-mpci{display:flex;align-items:flex-end;gap:8px}.tc-mpci .tc-cin{flex:1;margin:0}.tc-mpci .ib{flex:1}
 .tc-asg{display:flex;flex-direction:column;gap:8px;margin:8px 0}
 .tc-asgr{display:grid;grid-template-columns:56px minmax(0,1fr) 76px auto;gap:8px;align-items:center;font-size:14px}
 .tc-asgr .tin{width:76px}
@@ -4237,3 +4276,8 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 
 /* casilla dentro de un formulario del tareo (constancia de estudios) */
 .t-form .lqlab.t-chk{flex-direction:row;align-items:center;gap:8px}
+
+/* Avisos de detenciones (avisos.js) */
+#bpush.on{color:var(--ok);border-color:var(--ok)}
+.pushok{font-weight:700;color:var(--ok);background:var(--ok-soft);border-radius:var(--r-ctl,8px);padding:.55em .8em;margin:.3em 0}
+.pushol{margin:.4em 0 0;padding-left:1.3em;display:flex;flex-direction:column;gap:.25em}

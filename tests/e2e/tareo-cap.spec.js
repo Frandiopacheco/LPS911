@@ -739,14 +739,36 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await root.locator('#tcHfx [data-tca="hfxSal"]').click();
   await expect(total(root, '40000001')).toHaveClass(/ok/);
   await expect.poll(async () => (((await dbDoc(page)).rows || {})['40000001'] || {}).sal).toBe('18:30');
-  // elegir varios + «Elegidos aquí» en una partida: todo su día va ahí (reemplaza) y la selección termina sola
+  // elegir varios + tocar una partida (22-10-2026): se abre la hoja «¿Cuántas horas?»; «Todo el día aquí» reemplaza su día y termina
   await root.locator('[data-tca="multi"]').click();
   await root.locator('.tc-gn[data-dni="40000004"] [data-tca="mtog"]').click();
   await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await expect(root.locator('#tcMpc')).toContainText('10.05');
+  await root.locator('#tcMpc [data-tca="mpcSet"][data-m="all"]').click();
   await expect(cell(root, '40000004', 'p10_05')).toHaveText('8,5');
   await expect(cell(root, '40000004', 'p20_01')).toHaveText('');
   await expect(root.locator('#tcMBar')).toHaveCount(0);
   await expect(root.locator('.tc-mck')).toHaveCount(0);
+  // 3 h en 20.01: sus otras partidas no se tocan y la selección sigue; luego «el resto de su horario» en 10.05 completa y termina
+  // (22-10-2026) tocar la casilla ☑ también elige (antes se marcaba pero quedaba «0 elegidos»)
+  await root.locator('[data-tca="multi"]').click();
+  await root.locator('.tc-gn[data-dni="40000004"] input[data-tca="msel"]').click();
+  await expect(root.locator('#tcMBar')).toContainText('1 elegido');
+  await root.locator('th.tc-gp[data-pc="p20_01"] [data-tca="pcAll"]').click();
+  await root.locator('#tcMpc [data-tca="mpcSet"][data-v="3"]').click();
+  await expect(cell(root, '40000004', 'p20_01')).toHaveText('3');
+  await expect(cell(root, '40000004', 'p10_05')).toHaveText('8,5');
+  await expect(root.locator('#tcMBar')).toContainText('1 elegido');
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await expect(root.locator('#tcMpc [data-m="resto"]')).toContainText('5,5');
+  // otra cantidad escrita: «Poner» se habilita al escribir; se usa «el resto»
+  await root.locator('#tcMpcIn').fill('2,5');
+  await expect(root.locator('#tcMpcOk')).toContainText('2,5');
+  await root.locator('#tcMpc [data-tca="mpcSet"][data-m="resto"]').click();
+  await expect(cell(root, '40000004', 'p10_05')).toHaveText('5,5');
+  await expect(total(root, '40000004')).toHaveClass(/ok/);
+  await expect(root.locator('#tcMBar')).toHaveCount(0);
+  await expect.poll(async () => (((await dbDoc(page)).rows || {})['40000004'] || {}).h).toEqual({ p10_05: 5.5, p20_01: 3 });
   noErrors(errors, 'capataz rápido');
 });
 

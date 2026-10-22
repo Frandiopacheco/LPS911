@@ -40,7 +40,7 @@ function cncSinDet(){const L=P().cnc||[];return L.find(n=>cncCode(n)==='SC')||''
    detención pasa por defecto a la causa del «No cumplido» (se puede cambiar). «Inicia después» es informativo: no sugiere nada. */
 const STOP_CNC={'Actividad predecesora':'PROG','Materiales':'MAT','Calidad':'QA/QC','Seguridad':'OT','Otros':'OT'};
 function stopCnc(d,aid){const lv=liveOf(d,aid);if(!lv||stopLate(d,aid))return null;let raw=lv.st==='stop'&&lv.mot?String(lv.mot):'';
-  if(!raw)for(const e of [...(lv.log||[])].reverse()){if(e&&e.s==='stop'&&e.m&&e.m!==STOP_INFO){raw=String(e.m);break}}
+  if(!raw)for(const e of [...(lv.log||[])].reverse()){if(e&&e.s==='stop'&&e.m&&e.m!==STOP_INFO){raw=String(e.m)+(e.x?' — '+String(e.x):'');break}}
   if(!raw)return null;const i=raw.indexOf(' — ');const mot=i<0?raw:raw.slice(0,i),note=i<0?'':raw.slice(i+3).trim();const code=STOP_CNC[mot];if(!code)return null;
   const L=P().cnc||[];const c=L.find(n=>cncCode(n)===code);return c?{cnc:c,mot,note}:null}
 const liveOf=(d,aid)=>LIVE.get(d+'_'+aid)||null;
@@ -204,7 +204,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.close
   if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}if(mot==='Otros'&&!KS.note.trim()){toast('Escribe el detalle del motivo.');$('#kmott')&&$('#kmott').focus();return}
     const lv=liveOf(d,aid);let extra=null;
     {const fid=kPhotoSave(d,aid,true);if(fid)extra={photos:[...(lv&&lv.photos||[]),fid]}}
-    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot,...(KS.note.trim()?{x:KS.note.trim().slice(0,300)}:{})},extra);toast('Marcada «Detenido»');kClose();return}
+    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot,...(KS.note.trim()?{x:KS.note.trim().slice(0,300)}:{})},extra);if(typeof pushNotify==='function')pushNotify(d,aid);toast('Marcada «Detenido»');kClose();return}
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});toast('Verificación guardada');kClose();return}
@@ -401,7 +401,8 @@ function dashScMenu(btn){const vs=new Set(visPisos().map(p=>p.id));const d=today
     if(!add)closePop();dashRe();if(add){const nb=$('#dscdd');if(nb)dashScMenu(nb)}}}
 function dashRe(){const h=$('#dplan');if(h)h._fk='';render()}
 /* ficha del ambiente en el Tablero: solo información (nada se registra desde aquí) */
-function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
+/* foot: botones al pie (el aviso de detención agrega «Ver todas las detenciones») */
+function dashPop(aid,d,foot){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
   const wk=weekDays(weekOf(d));const dd=(x.days||[]).filter(z=>wk.includes(z)).sort();const rc=recOf(d,aid);const lib=typeof libOf==='function'?libOf(aid):null;
   const others=[...S.act.values()].filter(y=>y.ambId===x.ambId&&y.id!==aid&&schedOrSnap(y,d));
   const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
@@ -409,7 +410,7 @@ function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}
     <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
-    ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}</div>`;
+    ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}${foot||''}</div>`;
   /* una sola ficha: un toque puede llegar dos veces (toque + clic) y quedaban dos fichas encimadas que había que cerrar dos veces */
   document.querySelectorAll('#dpsheet').forEach(o=>o.remove());
   const lb=document.createElement('div');lb.className='ksheet';lb.id='dpsheet';lb.innerHTML=h;const t0=NOW();

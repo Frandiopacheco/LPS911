@@ -740,7 +740,7 @@ function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
   sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
     ${MODS().length>1?`<div class="msmod"><span>Módulo</span>${modSegHtml()}</div>`:''}
     ${offLps()?'<hr>':`<p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
-    <button data-act="xls">Exportar Excel del lookahead</button><button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
+    <button data-act="xls">Exportar Excel del lookahead</button>${typeof pushRole==='function'&&pushRole()?'<button data-push="open">🔔 Avisos de detenciones</button>':''}<button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
   sh.onclick=e=>{if(e.target===sh){sh.remove();return}const b=e.target.closest('button');if(!b)return;if(b.dataset.mod){goMod(b.dataset.mod);return}sh.remove();if(b.dataset.bt)goTab(b.dataset.bt);else if(b.dataset.act==='xls'){if(ready)exportXlsx()}else if(b.dataset.act==='help')ayOpen();else if(b.dataset.act==='out')$('#blogout').click()};
   document.body.appendChild(sh)}
 $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.dataset.bt==='more'){moreSheet();return}const sh=$('#msheet');if(sh)sh.remove();goTab(b.dataset.bt)};
@@ -835,3 +835,12 @@ function render(){
   RLAST=performance.now();RCOST[U.tab]=RLAST-rt0;
 }
 
+
+/* iPhone (22-10-2026): la app ocupa la pantalla con body sin desplazamiento, pero Safari corre igual la página entera (al abrir el teclado,
+   con scrollIntoView, etc.) y no siempre la devuelve. Con la página corrida, los toques sobre lo fijo (hojas, menú «Más», barra de abajo)
+   caen en otro lugar: «Listo» sumaba ½, la ✕ no cerraba y «Salir» no respondía. Se la devuelve a su sitio cuando no se está escribiendo. */
+const isTyping=()=>{const a=document.activeElement;return!!a&&(a.isContentEditable||(a.tagName==='INPUT'&&!/^(checkbox|radio|button|submit|range|color|file)$/i.test(a.type))||a.tagName==='TEXTAREA'||a.tagName==='SELECT')};
+function pageHome(){if((window.scrollY||window.scrollX)&&!isTyping())window.scrollTo(0,0)}
+window.addEventListener('scroll',pageHome,{passive:true});
+document.addEventListener('focusout',()=>setTimeout(pageHome,120));
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(pageHome,120));
