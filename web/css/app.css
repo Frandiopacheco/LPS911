@@ -3309,13 +3309,17 @@ table.mx td.mc.x{background:transparent}
 table.mx td.mc.s-p{background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line)}
 table.mx td.mc.s-c{background:#F2C14E;color:#5A3E00}
 table.mx td.mc.s-t{background:var(--ok);color:#fff}
-table.mx td.mc.s-n{background:transparent;color:var(--muted)}
-/* sin validar (lo propone el sistema): mismo color, más claro; sin borde punteado */
+/* No aplica, Pendiente y Sin validar tienen que distinguirse de un vistazo (oct 2026, pedido del dueño): «No aplica»
+   era transparente y Pendiente un gris muy claro, casi iguales, y la propuesta sin validar era un Pendiente más tenue.
+   Ahora: Pendiente = casilla por llenar, Sin validar = punteada con «·», No aplica = apagada y sólida. */
+table.mx td.mc.s-n{background:color-mix(in srgb,var(--ink2) 18%,var(--panel));color:var(--ink2);font-weight:700}
 table.mx td.mc.sug{outline:none;opacity:1}
-table.mx td.mc.s-p.sug{background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+table.mx td.mc.s-p.sug{background:transparent;box-shadow:none;color:var(--muted);
+  outline:1.5px dashed var(--line2);outline-offset:-4px}
 table.mx td.mc.s-c.sug{background:color-mix(in srgb,#F2C14E 38%,var(--panel));color:#7A5A10}
 table.mx td.mc.s-t.sug{background:var(--ok-soft);color:var(--ok)}
-.mxleg .mc.sug{outline:none;background:transparent;box-shadow:inset 0 0 0 1px var(--line2)}
+.mxleg .mc.sug{outline:1.5px dashed var(--line2);outline-offset:-3px;background:transparent;box-shadow:none;color:var(--muted)}
+.mxleg .mc.s-n{background:color-mix(in srgb,var(--ink2) 18%,var(--panel));color:var(--ink2)}
 .mxleg .mc.s-p{background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line)}.mxleg .mc.s-c{background:#F2C14E;color:#5A3E00}.mxleg .mc.s-t{background:var(--ok);color:#fff}
 table.mx td.mc.sl{box-shadow:inset 0 0 0 2px var(--accent)}
 table.mx th,table.mx td{border-right-color:transparent}
