@@ -750,8 +750,10 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await expect(root.locator('#tcMBar')).toHaveCount(0);
   await expect(root.locator('.tc-mck')).toHaveCount(0);
   // 3 h en 20.01: sus otras partidas no se tocan y la selección sigue; luego «el resto de su horario» en 10.05 completa y termina
+  // (22-10-2026) tocar la casilla ☑ también elige (antes se marcaba pero quedaba «0 elegidos»)
   await root.locator('[data-tca="multi"]').click();
-  await root.locator('.tc-gn[data-dni="40000004"] [data-tca="mtog"]').click();
+  await root.locator('.tc-gn[data-dni="40000004"] input[data-tca="msel"]').click();
+  await expect(root.locator('#tcMBar')).toContainText('1 elegido');
   await root.locator('th.tc-gp[data-pc="p20_01"] [data-tca="pcAll"]').click();
   await root.locator('#tcMpc [data-tca="mpcSet"][data-v="3"]').click();
   await expect(cell(root, '40000004', 'p20_01')).toHaveText('3');

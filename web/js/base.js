@@ -835,3 +835,12 @@ function render(){
   RLAST=performance.now();RCOST[U.tab]=RLAST-rt0;
 }
 
+
+/* iPhone (22-10-2026): la app ocupa la pantalla con body sin desplazamiento, pero Safari corre igual la página entera (al abrir el teclado,
+   con scrollIntoView, etc.) y no siempre la devuelve. Con la página corrida, los toques sobre lo fijo (hojas, menú «Más», barra de abajo)
+   caen en otro lugar: «Listo» sumaba ½, la ✕ no cerraba y «Salir» no respondía. Se la devuelve a su sitio cuando no se está escribiendo. */
+const isTyping=()=>{const a=document.activeElement;return!!a&&(a.isContentEditable||(a.tagName==='INPUT'&&!/^(checkbox|radio|button|submit|range|color|file)$/i.test(a.type))||a.tagName==='TEXTAREA'||a.tagName==='SELECT')};
+function pageHome(){if((window.scrollY||window.scrollX)&&!isTyping())window.scrollTo(0,0)}
+window.addEventListener('scroll',pageHome,{passive:true});
+document.addEventListener('focusout',()=>setTimeout(pageHome,120));
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(pageHome,120));

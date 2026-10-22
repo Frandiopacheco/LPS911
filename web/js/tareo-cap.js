@@ -660,6 +660,8 @@ function tcBind(root){
     const b=e.target.closest('[data-tca]');if(!b||b.tagName==='INPUT')return;tcAct(b.dataset.tca,b,e)});
   root.addEventListener('change',e=>{const t=e.target;if(t.id==='tcFile'){const f=t.files&&t.files[0];t.value='';if(f)tcAddFoto(f);return}
     const a=t.dataset.tca;if(!a||tcRO())return;const D=TCS.doc;if(!D)return;const w=t.closest('[data-dni]');const r=w&&D.rows&&D.rows[w.dataset.dni];
+    /* «Elegir varios»: tocar la casilla ☑ (no solo el nombre) elige o quita al obrero (22-10-2026: la casilla se marcaba pero no contaba) */
+    if(a==='msel'){const M=TCS.multi;const d=w&&w.dataset.dni;if(M&&d){if(t.checked)M.add(d);else M.delete(d)}tcDraw();return}
     if(a==='alt'&&r){r.alt=t.checked;tcChg(false);return}
     /* horario: una hora igual a la de la jornada no se guarda (queda «horario normal»). En un no laborable, al escribir la salida o
        marcar corrido se guarda también la entrada que se ve (auditoría 21-10-2026: antes quedaba sin horario y no se comparaba). */
