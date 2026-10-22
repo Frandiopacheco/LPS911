@@ -36,38 +36,32 @@ test('1 · cada propuesta muestra su hora de envío y si llegó fuera de plazo (
   noErrors(errors, 'hora de envío por propuesta');
 });
 
-test('1 · aceptar una propuesta fuera de plazo pide el motivo y queda registrado con la hora de envío', async ({ page }) => {
+test('1 · aceptar una propuesta fuera de plazo NO pide motivo y queda marcada como tardía con la hora de envío', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q1: P1() })] });
-  /* sin motivo no se acepta */
-  page.once('dialog', d => d.dismiss());
-  expect(await page.evaluate(() => decideProp('c1', 'q1', 'ok'))).toBe('late');
-  expect((await page.evaluate(() => __dbGet('acts', 'q1'))).days).toEqual(A1.days);
-  let msg = '';
-  page.once('dialog', d => { msg = d.message(); d.accept('Acordado en la reunión del domingo'); });
+  let n = 0;
+  page.on('dialog', d => { n++; d.accept(); });
   expect(await page.evaluate(() => decideProp('c1', 'q1', 'ok'))).toBe('ok');
-  expect(msg).toContain('fuera de plazo');
+  expect(n).toBe(0); // oct 2026, decidido con el dueño: el motivo solo se pide al rechazar
   expect((await page.evaluate(() => __dbGet('acts', 'q1'))).days).toEqual(['2026-10-06', '2026-10-07']);
   const h = Object.values(await page.evaluate(() => __dbAll('lhphist')));
   expect(h).toHaveLength(1);
-  expect(h[0]).toMatchObject({ sc: 'c1', actId: 'q1', st: 'ok', sentAt: SUN1600, lateNote: 'Acordado en la reunión del domingo', by: 'frandiopacheco@gmail.com' });
+  expect(h[0]).toMatchObject({ sc: 'c1', actId: 'q1', st: 'ok', sentAt: SUN1600, lateNote: '', by: 'frandiopacheco@gmail.com' });
   expect(h[0].late.w).toBe(59);
-  /* rechazar una tardía no pide motivo de aceptación */
-  noErrors(errors, 'motivo de tardía');
+  noErrors(errors, 'tardía sin motivo');
 });
 
-test('1 · aceptar varias pide un solo motivo para las que llegaron fuera de plazo', async ({ page }) => {
+test('1 · aceptar varias con tardías: no pregunta nada y todas se aceptan', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...ACTS, props({ q0: P0(), q1: P1() })] });
   let n = 0;
-  page.on('dialog', d => { n++; d.accept('Reunión semanal'); });
+  page.on('dialog', d => { n++; d.accept(); });
   await page.evaluate(() => decideMany([{ sc: 'c1', id: 'q0' }, { sc: 'c1', id: 'q1' }]));
   await expect.poll(() => page.evaluate(() => Object.keys(__dbAll('lhphist')).length)).toBe(2);
-  expect(n).toBe(1);
+  expect(n).toBe(0);
   const h = Object.values(await page.evaluate(() => __dbAll('lhphist')));
   const byId = Object.fromEntries(h.map(x => [x.actId, x]));
-  expect(byId.q1.lateNote).toBe('Reunión semanal');
+  expect(byId.q1.late.w).toBe(59);
   expect(byId.q0.late).toBeNull();
-  expect(byId.q0.lateNote).toBe('');
-  noErrors(errors, 'motivo en lote');
+  noErrors(errors, 'lote con tardías');
 });
 
 test('1 · el SC: editar el domingo lo enviado el sábado guarda el primer envío; si vuelve a lo mismo conserva la hora', async ({ page }) => {

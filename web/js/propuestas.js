@@ -278,11 +278,8 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const r
   const FZ=fz&&!opt.noFz&&st!=='shift'?fz:null;
   const off=S.act.get(id)||null;const base=it.base||off;let ops=[];let finalDays=null;
   const say=m=>{if(!opt.bulk)toast(m)};
-  /* fuera de plazo: se puede aceptar, pero con motivo (queda en el historial con quién y cuándo) */
+  /* fuera de plazo (oct 2026, decidido con el dueño): se acepta sin pedir motivo; queda marcada como tardía en el historial */
   const late=propLate(itS,off);
-  if(late&&st!=='rej'&&!opt.lateNote){if(opt.bulk)return'late';
-    const m=await uiAsk({title:'Propuesta fuera de plazo',html:`<b>${esc((it.after||off||{}).name||'La propuesta')}</b> se envió el ${esc(fmtT(it.sentAt))}, después del corte de la semana ${late.w} (${esc(fmtT(late.cut))}).`,input:{label:'¿Por qué se acepta? Queda registrado con tu nombre.',placeholder:'Ej.: se coordinó en obra con el residente',required:true},ok:'Aceptar con este motivo',tone:'warn'});
-    if(m==null)return'late';if(!m.trim()){say('Escribe el motivo para aceptar una propuesta fuera de plazo. No se cambió nada.');return'late'}opt.lateNote=m.trim()}
   if(st!=='rej'){
     if(!it.after){if(off)ops=[arc('acts',id)]}
     else{let a=clone(it.after);
@@ -390,10 +387,7 @@ async function rejectMany(L){let ok=0;const why={};const add=(k,n=1)=>{why[k]=(w
   toast(`${ok} propuesta${ok===1?'':'s'} rechazada${ok===1?'':'s'}`+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''));REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /** aceptar varias seguidas (todo lo visible, todo un SC): un solo aviso al final */
 async function decideMany(L){let ok=0;const why={};
-  /* las que llegaron fuera de plazo piden un solo motivo para todo el lote; sin motivo no se acepta ninguna */
-  const nl=L.filter(o=>propLate(propSentOf(((PROP.get(o.sc)||{}).items||{})[o.id]),S.act.get(o.id))).length;let lateNote='';
-  if(nl){const m=await uiAsk({title:`${nl} propuesta${nl>1?'s':''} fuera de plazo`,text:`${nl} de ${L.length===1?'esta propuesta':'estas '+L.length+' propuestas'} llegó${nl>1?'ron':''} después del corte (${propCutTxt()}).`,input:{label:'¿Por qué se aceptan? El motivo queda registrado con tu nombre en cada una.',required:true},ok:'Aceptar con este motivo',tone:'warn'});
-    if(m==null||!m.trim()){toast(m==null?'No se aceptó ninguna.':'Escribe el motivo para aceptar las que llegaron fuera de plazo. No se aceptó ninguna.');return}lateNote=m.trim()}
+  const lateNote='';
   /* rápido (oct 2026): antes era una transacción por propuesta, una tras otra y todas sobre el mismo documento lhprop/{sc}
      (≈ medio segundo cada una). Ahora se preparan todas y se guarda UNA transacción por subcontratista (en partes de 120):
      relee lhprop/{sc} y las actividades; las que el SC o alguien cambió mientras tanto se saltan (quedan pendientes). */
@@ -418,7 +412,7 @@ async function decideMany(L){let ok=0;const why={};
       done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++;if(P_.opt.kept&&P_.opt.kept.length)kept++});part.forEach(P_=>PDBUSY.delete(P_.key0));
       for(const[k,n]of Object.entries(done.skip))add(k,n)}
     catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));rbs.forEach(f=>f());add('err',part.length);console.warn('aceptar',e)}}}));GRP.done=true;finAll();
-  const W={closed:'solo cambian días con el plan ya cerrado',late:'llegaron fuera de plazo y falta el motivo',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
+  const W={closed:'solo cambian días con el plan ya cerrado',late:'llegaron fuera de plazo',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
   toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(kept&&ok?` (en ${kept===1?'una':kept} quedaron como estaban los días pasados o con el plan cerrado)`:'')+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''),GRP.props.length?'Deshacer':null,GRP.props.length?undo:null);REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
@@ -562,9 +556,9 @@ function revBarHtml(){const cnt=revCounts();const L=revItems();const tot=L.lengt
     :REVSEL&&REVSEL.k?(()=>{const x=S.act.get(REVSEL.id);const k=REVSEL.k;return`<div class="rvpsel"><span class="pill warn">${esc(x&&x.name||'Actividad')}: movida ${Math.abs(k)} día${Math.abs(k)>1?'s':''} hábil${Math.abs(k)>1?'es':''} ${k>0?'después':'antes'} · ✓ en la fila para aceptar así</span><button class="ib" data-rvk0>Volver a lo propuesto</button></div>`})():'';
   return`<div class="rvhd"><b>Propuestas pendientes <span class="rvpn">${tot}</span></b><button class="ib" data-rvfold title="Plegar el panel (sigues en la revisión)" aria-label="Plegar panel">›</button></div>
     <div class="rvbody"><div class="rvchips">${chips}</div>
-    <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}: para aceptarlas se pide el motivo">${nl} fuera de plazo</span>`:''}
+    <label class="chk"><input type="checkbox" id="rvctx"${U.revCtx?' checked':''}> Ver todo el contexto</label>${nl?`<span class="pill bad" title="Enviadas después del ${esc(propCutTxt())}">${nl} fuera de plazo</span>`:''}
     <div class="rvnav"><button class="ib" data-rvnav="-1"${tot?'':' disabled'}>‹ Anterior</button><span class="rvpos">${tot?(idx>=0?idx+1:'–')+' de '+tot:'Sin propuestas'}</span><button class="ib" data-rvnav="1"${tot?'':' disabled'}>Siguiente ›</button></div>
-    <div class="rvmv"><button class="ib" data-rvmv="l"${d||' title="Mover lo propuesto un día hábil antes"'} aria-label="Un día antes">‹</button><button class="ib" data-rvmv="r"${d||' title="Mover lo propuesto un día hábil después"'} aria-label="Un día después">›</button><button class="ib" data-rvmv="date"${d||' title="Aceptar con otra fecha de inicio…"'}>📅 Otra fecha</button></div>${edit}
+    <div class="rvmv"><button class="ib" data-rvmv="l"${d||' title="Mover lo propuesto un día hábil antes"'} aria-label="Un día antes">‹</button><button class="ib" data-rvmv="r"${d||' title="Mover lo propuesto un día hábil después"'} aria-label="Un día después">›</button><button class="ib" data-rvmv="date"${d||' title="Mover a otra fecha de inicio (se ve antes de aceptar)"'}>📅 Otra fecha</button></div>${edit}${propClosed()?'':'<div class="rvall"><button class="ib" data-pp="close" title="Los SC quedan en solo lectura ya, sin esperar al corte">🔒 Bloquear propuestas</button></div>'}
     <div class="rvall"><button class="ib pri" data-rvall${nv?'':' disabled'} title="Acepta, tal como las envió el subcontratista, solo las propuestas que muestra la grilla con los filtros actuales (lo movido con ‹ › no cuenta: eso se acepta con ✓ en la fila)">✓ Aceptar todo lo visible (${nv}${nv!==tot?' de '+tot:''})</button>${nv||!tot?`<button class="ib" data-rvrej${nv?'':' disabled'} title="Rechaza las propuestas que muestra la grilla con los filtros actuales: el lookahead no cambia">✗ Rechazar todo lo visible (${nv})</button>`:`<button class="ib" data-rvrej title="Ninguna se ve en la grilla (${esc(revHiddenWhy(L).join('; '))}). Rechazarlas no cambia el lookahead">✗ Rechazar las ${tot} (no se ven)</button>`}</div>
     <div class="rvft"><button class="ib" data-pp="list">Lista</button><button class="ib" data-rvexit>Salir de la revisión</button></div>
     <div class="mu rvhelp">Tenue = vigente · intenso = propuesto · toca un día para agregarlo o quitarlo · mueve la fila elegida con <b>‹ ›</b> · ✓ acepta · ✗ rechaza</div></div>`}
@@ -588,7 +582,8 @@ function rvPanelSync(){let el=document.getElementById('rvpanel');
       :`<div class="rvhd"><b>Propuestas pendientes <span class="rvpn">${tot||oth}</span></b><button class="ib" data-rvfold title="Plegar el panel" aria-label="Plegar panel">›</button></div>
         <div class="rvbody">${by.size?`<div class="rvchips">${[...by.entries()].sort((x,y)=>conOf(x[0]).name.localeCompare(conOf(y[0]).name)).map(([sc,n])=>`<span class="ppsc" style="--c:${conOf(sc).color}"><i></i>${esc(conOf(sc).name)} <b>${n}</b></span>`).join('')}</div>`:'<span class="mu">Ninguna en tus pisos</span>'}${oth?`<span class="mu">${oth} de pisos a cargo de otros (solo las ves)</span>`:''}${cl?`<span class="mu">🔒 Cerradas a los SC${propNever()?' (aún no las habilitas)':propManual()?' (las bloqueaste)':' desde el corte'}</span>`:''}
         <div class="rvall">${by.size?'<button class="ib pri" data-pp="rev">Revisar propuestas</button>':'<button class="ib" data-pp="list">Ver propuestas</button>'}${cl?'<button class="ib" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>':'<button class="ib" data-pp="close" title="Los SC quedan en solo lectura ya, sin esperar al corte">🔒 Bloquear propuestas</button>'}</div></div>`}
-    else if(cl){/* sin pendientes y cerradas: solo queda el acceso para habilitarlas (si no, no habría cómo abrirlas) */mode='open';cls+=' fold';h='<button class="rvtab" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>'}}
+    else if(cl){/* sin pendientes y cerradas: solo queda el acceso para habilitarlas (si no, no habría cómo abrirlas) */mode='open';cls+=' fold';h='<button class="rvtab" data-pp="open" title="Los SC vuelven a proponer hasta el próximo corte">🔓 Habilitar propuestas</button>'}
+    else{/* oct 2026: abiertas y sin pendientes: antes no se veía «Bloquear» en ningún lado */mode='open';cls+=' fold';h=`<button class="rvtab" data-pp="close" title="Abiertas hasta el ${esc(fmtCut(propCloseAt()))}. Los SC quedan en solo lectura ya, sin esperar al corte">🔒 Bloquear propuestas</button>`}}
   if(!mode){gone();return}
   if(!el){el=document.createElement('aside');el.id='rvpanel';el.onclick=e=>{if(e.target.closest('[data-rvfold]')){try{localStorage.setItem('lps.rvfold',el.classList.contains('fold')?'0':'1')}catch(er){}rvPanelSync();return}propBarClick(e)};
     el.onchange=e=>{if(e.target.id==='rvctx'){U.revCtx=e.target.checked;requestRender()}};document.body.appendChild(el)}
@@ -609,8 +604,10 @@ function revDecide(id,st,opt){const o=revItems().find(q=>q.id===id)||[...PROP.va
 function revAct(k,id,b){const it=revItems().find(q=>q.id===id);if(!it)return;
   if(k==='l'||k==='r'){if(!REVSEL||REVSEL.id!==id)REVSEL={sc:it.sc,id,k:0};revStep(k==='r'?1:-1);requestRender();return}
   if(k==='date'){if(!it.it.after)return;const e=revEdGet(id,it.it);const ds=e.days;if(!ds.length){toast('La fila no tiene días: elige los días en la grilla.');return}
-    openPop(b,`<div class="ph">Aceptar con otra fecha</div><div class="ptx">Propuesto: ${esc(rngTxt(ds))}. Elige el nuevo día de inicio: se mueve todo el bloque (días hábiles, lunes a sábado).</div><div class="qrow"><input type="date" id="pst" value="${ds[0]}"><button data-do="go">Aceptar</button></div>`,
-      {go:()=>{const v=($('#pst')||{}).value;if(!v){toast('Elige una fecha.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}revShiftBy(id,it.it,wdist(ds[0],v));const a=revAcc(id);revDecide(id,a[0],a[1])}});setTimeout(()=>{const i=$('#pst');if(i)i.focus()},30)}}
+    /* oct 2026 (probado en obra): elegir la fecha ya no acepta; mueve el bloque y se ve en la grilla. Se acepta después con ✓ */
+    openPop(b,`<div class="ph">Mover a otra fecha</div><div class="ptx">Ahora: ${esc(rngTxt(ds))}. Elige el nuevo día de inicio: se mueve todo el bloque (días hábiles, lunes a sábado). Lo verás en la grilla antes de aceptar.</div><div class="qrow"><input type="date" id="pst" value="${ds[0]}" min="${esc(wshift(todayIso(),1))}"><button data-do="go">Ver cómo queda</button></div>`,
+      {go:()=>{const v=($('#pst')||{}).value;if(!v){toast('Elige una fecha.');return}if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}if(v<=todayIso()){toast('Elige un día desde mañana.');return}
+        const cur=revEdGet(id,it.it).days;revShiftBy(id,it.it,wdist(cur[0],v));REVSEL={sc:it.sc,id,k:0};closePop();requestRender();toast('Así quedaría: revisa la grilla y acepta con ✓ en la fila.')}});setTimeout(()=>{const i=$('#pst');if(i)i.focus()},30)}}
 /** mueve los días de una fila k días hábiles, con sus cantidades (antes se perdían las cantidades al mover) */
 function revShiftBy(id,it,k){const e=revEdGet(id,it);if(!k)return;const mp=d=>wshift(d,k);let q;if(e.qty){q={};for(const[d,n]of Object.entries(e.qty)){const m=mp(d);q[m]=r2((+q[m]||0)+(+n||0))}}
   revEdSet(id,it,e.days.map(mp),q)}
