@@ -43,9 +43,16 @@ test('Sesión pull: crear, mover, enlazar con hito, revisar y aplicar al lookahe
   await expect.poll(() => page.evaluate(id => Object.keys(window.__dbGet('pull', id).ln), sid)).toContain('e0>t0');
 
   // con t0 seleccionado (tocar un pósit lo selecciona o lo suelta), el hito de entrega se vincula con un toque
-  if (await page.evaluate(() => PU.sel) !== 't0') await page.locator('.pup[data-pid="t0"]').click();
-  await page.locator('[data-puhc="t0>H:ent"]').click();
-  await expect.poll(() => page.evaluate(id => Object.keys(window.__dbGet('pull', id).ln), sid)).toContain('t0>H:ent');
+  // en GitHub (más lento) el tablero a veces se redibujaba justo al tocar y el toque no llegaba: se reintenta sin volver a tocar
+  // si el vínculo ya está (tocarlo de nuevo lo quitaría)
+  await expect(async () => {
+    const has = () => page.evaluate(id => Object.keys(window.__dbGet('pull', id).ln).includes('t0>H:ent'), sid);
+    if (!(await has())) {
+      if (await page.evaluate(() => PU.sel) !== 't0') await page.locator('.pup[data-pid="t0"]').click();
+      await page.locator('[data-puhc="t0>H:ent"]').click({ timeout: 3000 });
+      await expect.poll(has, { timeout: 3000 }).toBe(true);
+    }
+  }).toPass({ timeout: 20000 });
 
   // revisar: muestra el cambio de t0 y aplicar lo pasa al lookahead en un solo paso
   await page.locator('[data-pu="rev"]').click();

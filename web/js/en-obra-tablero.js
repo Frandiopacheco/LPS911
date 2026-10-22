@@ -401,7 +401,8 @@ function dashScMenu(btn){const vs=new Set(visPisos().map(p=>p.id));const d=today
     if(!add)closePop();dashRe();if(add){const nb=$('#dscdd');if(nb)dashScMenu(nb)}}}
 function dashRe(){const h=$('#dplan');if(h)h._fk='';render()}
 /* ficha del ambiente en el Tablero: solo información (nada se registra desde aquí) */
-function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
+/* foot: botones al pie (el aviso de detención agrega «Ver todas las detenciones») */
+function dashPop(aid,d,foot){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
   const wk=weekDays(weekOf(d));const dd=(x.days||[]).filter(z=>wk.includes(z)).sort();const rc=recOf(d,aid);const lib=typeof libOf==='function'?libOf(aid):null;
   const others=[...S.act.values()].filter(y=>y.ambId===x.ambId&&y.id!==aid&&schedOrSnap(y,d));
   const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
@@ -409,7 +410,7 @@ function dashPop(aid,d){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.
     <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}
     <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
-    ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}</div>`;
+    ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}${foot||''}</div>`;
   /* una sola ficha: un toque puede llegar dos veces (toque + clic) y quedaban dos fichas encimadas que había que cerrar dos veces */
   document.querySelectorAll('#dpsheet').forEach(o=>o.remove());
   const lb=document.createElement('div');lb.className='ksheet';lb.id='dpsheet';lb.innerHTML=h;const t0=NOW();

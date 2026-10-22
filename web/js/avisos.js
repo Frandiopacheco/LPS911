@@ -83,11 +83,13 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   else if(k==='pis'&&PUSHUI.pisos){const id=b.dataset.pp;const cur=new Set(PUSHUI.pisos);cur.has(id)?cur.delete(id):cur.add(id);pushPisos(pisos().map(p=>p.id).filter(x=>cur.has(x)))}});
 
 /* ---------- tocar un aviso: abre la ficha de la actividad en Campo ---------- */
+/* tocar un aviso: abre el resumen de la actividad en solo lectura (decisión del dueño: el aviso solo informa; reanudar y
+   verificar se hacen en Campo), con un botón a la hoja de Detenciones del día */
 function pushGo(aid,d){if(!aid)return;let n=0;
   const go=()=>{if(!ready||!me){if(++n<100)setTimeout(go,300);return}
     if(!S.act.get(aid)){toast('Esa actividad ya no está en el lookahead.');return}
-    if(typeof goMod==='function'&&U.mod!=='lps')goMod('lps');if(U.tab!=='campo'&&U.tab!=='cap')goTab('campo');
-    setTimeout(()=>{if(typeof capSheet==='function')capSheet(aid,d||todayIso(),'main')},250)};
+    if(typeof goMod==='function'&&U.mod!=='lps')goMod('lps');
+    setTimeout(()=>{if(typeof dashPop==='function')dashPop(aid,d||todayIso(),'<div class="kbtns"><button class="kbig ghost" data-jor="opendet">📊 Ver todas las detenciones de hoy</button></div>')},150)};
   go()}
 {const q=new URLSearchParams(location.search);const aid=q.get('det');if(aid){const d=q.get('d')||'';try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}pushGo(aid,/^\d{4}-\d\d-\d\d$/.test(d)?d:'')}}
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};if(m.t==='det')pushGo(m.aid,m.d)});

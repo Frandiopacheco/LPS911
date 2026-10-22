@@ -19,9 +19,10 @@ Oct 2026, pedido del dueño. Archivos: `web/js/avisos.js`, `web/sw.js` (eventos 
 - **No se avisa al reanudar** (decisión del dueño: el celular solo suena cuando hay algo que resolver).
 - Texto: título `⏸ Detenido · P3 · <SC>`; cuerpo `<actividad> · <ambiente>` y `<motivo> — <detalle> · <hora>`.
   `tag = det-<actId>`: si la misma actividad se vuelve a detener, el aviso nuevo reemplaza al anterior.
-- **Tocar el aviso** abre la ficha de la actividad en Campo (`pushGo`: por `?det=<act>&d=<fecha>` o por mensaje del
-  service worker `{t:'det'}` si la app ya está abierta). La ficha **no reprograma**: reanudar, cambiar motivo o verificar el
-  cumplimiento. La reprogramación sigue solo en el Plan diario.
+- **Tocar el aviso** abre el resumen de la actividad **en solo lectura** (`dashPop`, el mismo del Tablero) sin cambiar de
+  pestaña, con el botón «📊 Ver todas las detenciones de hoy» (hoja de Jornada › Detenciones). Decisión del dueño (22 oct 2026):
+  el aviso solo informa; reanudar o verificar el cumplimiento se hace en Campo. `pushGo` llega por `?det=<act>&d=<fecha>` o
+  por mensaje del service worker `{t:'det'}` si la app ya está abierta.
 
 ## Datos y reglas
 
