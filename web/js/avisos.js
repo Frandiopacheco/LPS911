@@ -1,6 +1,6 @@
 "use strict";
 /* LPS 911 · Avisos de detenciones al celular y a la computadora (oct 2026, pedido del dueño; docs/ia/avisos.md).
-   Cuando un SC/capataz/ingeniero marca «Detenido» en campo, el servidor (functions: avisoDetenido) avisa a los responsables de
+   Cuando un SC/capataz/ingeniero marca «Detenido» en campo, la página pide al servidor (functions: avisoDetenido) que avise a los responsables de
    ese piso (editores con el piso a cargo) y a los administradores, menos a quien lo reportó, en días hábiles y dentro del
    horario de Configuración › Proyecto (pushIni–pushFin, por defecto 7:00–18:00). No avisa lo reportado al cierre.
    Aquí: activar / desactivar los avisos en cada equipo (Firebase Cloud Messaging, token en push/<sha256>), los pisos de los
@@ -95,3 +95,22 @@ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message
 function pushTop(){const b=$('#bpush');if(!b)return;const ok=pushRole()&&!(typeof IN_FRAME!=='undefined'&&IN_FRAME);if(b.hidden!==!ok)b.hidden=!ok;b.classList.toggle('on',ok&&pushActive());
   if(ok&&!PUSH_REF){PUSH_REF=true;setTimeout(pushRefresh,4000)}}
 let PUSH_REF=false;
+
+/* ---------- pedir el aviso al guardar un «Detenido» ----------
+   Cola en el equipo (lps.pushq): se pide cuando el reporte ya llegó a la base; sin señal, se reintenta al volver la conexión
+   (el servidor no avisa lo que llegó con más de 6 h de atraso ni lo que ya avisó). */
+const PUSHQ='lps.pushq';
+const pushQ=v=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(PUSHQ)||'[]');localStorage.setItem(PUSHQ,JSON.stringify(v))}catch(e){return[]}};
+function pushNotify(d,aid){const lv=liveOf(d,aid);const e=lv&&[...(lv.log||[])].reverse().find(x=>x&&x.s==='stop');if(!e)return;
+  const q=pushQ()||[];if(!q.some(o=>o.id===d+'_'+aid&&o.t===e.t))q.push({id:d+'_'+aid,t:e.t});pushQ(q.slice(-30));pushFlush()}
+let PUSHF=false;
+async function pushFlush(){if(PUSHF||!db||!me)return;let q=pushQ()||[];if(!q.length||navigator.onLine===false)return;PUSHF=true;
+  try{try{await db.waitForPendingWrites()}catch(e){}
+    q=pushQ()||[];const rest=[];
+    for(const it of q){if(NOW()-it.t>6*3600e3)continue;
+      try{await firebase.functions().httpsCallable('avisoDetenido')(it)}
+      catch(err){const c=String(err&&err.code||'');if(/unavailable|deadline|internal|unknown|resource/.test(c))rest.push(it);else console.warn('aviso de detenido',err)}}
+    const now=pushQ()||[];pushQ([...rest,...now.filter(o=>!q.some(x=>x.id===o.id&&x.t===o.t))])}
+  finally{PUSHF=false}}
+addEventListener('online',()=>setTimeout(pushFlush,2000));
+setInterval(()=>{if(ready&&me&&(pushQ()||[]).length)pushFlush()},120000);

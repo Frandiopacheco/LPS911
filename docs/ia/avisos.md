@@ -1,13 +1,15 @@
 # Avisos de detenciones (push al celular y la computadora)
 
 Oct 2026, pedido del dueño. Archivos: `web/js/avisos.js`, `web/sw.js` (eventos `push` y `notificationclick`),
-`functions/index.js` (`avisoDetenido`, `avisoPrueba`, `pushTokens`, `pushSend`), `functions/lib.js` (`nuevoDetenido`,
+`functions/index.js` (`avisoDetenido` y `avisoPrueba`, ambos onCall; `avisoPrueba`, `pushTokens`, `pushSend`), `functions/lib.js` (`nuevoDetenido`,
 `avisoNo`, `avisoDestinos`, `avisoTexto`, `pushHorario`; pruebas en `functions/test/avisos.test.js`).
 
 ## Qué hace
 
 - Cuando alguien marca **«Detenido»** en campo (evento nuevo `s:'stop'` en `live/<fecha>_<act>.log`, sin el antiguo
-  «Inicia después»), la función `avisoDetenido` (disparada por la escritura en `live`) avisa a:
+  «Inicia después»), la página (`pushNotify` → cola `lps.pushq` → `pushFlush`, cuando el reporte ya llegó a la base; sin
+  señal reintenta al volver la conexión) llama a la función `avisoDetenido` (onCall). El servidor lee el reporte de `live`
+  (no confía en la página), lo envía una sola vez por evento (`pushlog/<live>_<hora>`, solo el servidor) y avisa a:
   - los **editores responsables de ese piso** (`members.pisos`, sin `off`) y
   - los **administradores** (y el dueño), que pueden limitar sus pisos en `pushp/<correo>.pisos` (vacío = todos),
   - menos a quien lo reportó (`log[].by`).
@@ -38,3 +40,9 @@ Oct 2026, pedido del dueño. Archivos: `web/js/avisos.js`, `web/sw.js` (eventos 
 - El registro del equipo se guarda en `localStorage` `lps.push` y se renueva al entrar cada 3 días (`pushRefresh`).
 - **iPhone/iPad:** solo con la app agregada a la pantalla de inicio (iOS 16.4+); la hoja da los pasos.
 - En las pruebas e2e no hay service worker (`NO_SW`); `tests/e2e/avisos.spec.js` revisa la hoja, los pisos, el horario y `pushGo`.
+
+## Por qué no es un disparador de Firestore
+
+La primera versión era `onDocumentWritten('live/{id}')`, pero la instalación automática desde GitHub falló: un disparador de
+Firestore (Eventarc) necesita roles de IAM para los agentes de servicio de Google Cloud y la cuenta de servicio de GitHub no
+puede darlos (oct 2026). Por eso la página pide el aviso con un onCall, como `publicarTareo`.
