@@ -467,7 +467,7 @@ function propBarClick(e){const t=e.target;let r;
   const b=t.closest('[data-pp]');if(!b)return;const k=b.dataset.pp;
   if(k==='open'){propOpenWin();return}
   if(k==='close'){propCloseWin();return}
-  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){if(U.revSc&&!revCounts().has(U.revSc))U.revSc='';if(!U.rev)REVED.clear();U.rev=true;REVSEL=null;requestRender();setTimeout(()=>revGo(1),200)}else if(k==='list')propModal('rev')}
+  if(k==='send')sendProp();else if(k==='mine')propModal('mine');else if(k==='hist'){try{localStorage.setItem('lps.pseen',String(NOW()))}catch(er){}propModal('hist');requestRender()}else if(k==='rev'){if(U.revSc&&!revCounts().has(U.revSc))U.revSc='';if(!U.rev)REVED.clear();U.rev=true;REVSEL=null;requestRender();/* elige la primera fila solo si en esos 200 ms no se eligió una a mano (antes saltaba a la fila siguiente) */setTimeout(()=>{if(!REVSEL)revGo(1)},200)}else if(k==='list')propModal('rev')}
 let PMOD=null;
 function propModal(mode){PMOD={mode};let el=$('#ppm');if(!el){el=document.createElement('div');el.id='ppm';el.className='ppm';el.innerHTML='<div class="ppc"></div>';document.body.appendChild(el);el.onclick=propModalClick}propModalRender()}
 function propModalRender(){const el=$('#ppm');if(!el||!PMOD)return;const mode=PMOD.mode;let h='';
