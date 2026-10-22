@@ -14,4 +14,4 @@ window.FIREBASE_CONFIG = {
 window.ADMIN_EMAIL = "frandiopacheco@gmail.com";
 // Clave pública «Web Push» para los avisos de detenciones (Firebase › Configuración del proyecto › Cloud Messaging ›
 // Configuración web › Certificados web push › Generar par de claves). No es secreta. Vacía: los avisos no se pueden activar.
-window.FCM_VAPID = "";
+window.FCM_VAPID = "BFve5Mp0EWLwJH9etcIhGTUaV1w2jauhsIBht_nt5CyQjYziCUoSxZlHIV-GW_jjgcdePLQ6S4zB0ArPLt3ca8E";
