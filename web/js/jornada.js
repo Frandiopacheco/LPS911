@@ -166,7 +166,8 @@ async function jorShare(d,mode,f){f=f==='det'?'det':'cer';let blob=null;try{blob
 document.addEventListener('click',e=>{const t=e.target;if(!t.closest)return;
   const ln=t.closest('#jsheet [data-jdt]');if(ln){jdtOpen(ln.dataset.jdt);return}
   const b=t.closest('[data-jor]');if(!b)return;const k=b.dataset.jor;
-  if(k==='open'){jorOpen();return}if(k==='ref'){jorDraw();return}
+  if(k==='open'){jorOpen();return}
+  if(k==='opendet'){document.querySelectorAll('#dpsheet').forEach(o=>o.remove());JOR={d:todayIso(),tab:'det'};jorDraw();return}if(k==='ref'){jorDraw();return}
   if(k==='tab'){if(JOR){JOR.tab=b.dataset.jt==='cer'?'cer':'det';jorDraw()}return}
   if(k==='mot'){JOR_MOT=b.dataset.jm||'';if(b.closest('#ipr')){if(typeof iprDraw==='function')iprDraw()}else jorDraw();return}
   if(k==='share'||k==='dl')jorShare(b.dataset.jd||todayIso(),k,b.dataset.jf)});

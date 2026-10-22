@@ -1,5 +1,5 @@
 // Avisos de detenciones (js/avisos.js, oct 2026): botón 🔔 y hoja para activar en cada equipo, pisos del administrador,
-// horario en Configuración y abrir la ficha en Campo al tocar un aviso (?det=… o mensaje del service worker).
+// horario en Configuración y, al tocar un aviso, el resumen en solo lectura (?det=… o mensaje del service worker).
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
 
@@ -37,7 +37,12 @@ test('Avisos: hoja con estado del equipo, pisos del administrador y ficha al toc
   // tocar un aviso: abre Campo y la ficha de la actividad
   const aid = await page.evaluate(() => { const d = todayIso(); const x = [...S.act.values()].find(x => schedOrSnap(x, d)); return x && x.id; });
   await page.evaluate(([a, d]) => pushGo(a, d), [aid, HOY]);
-  await expect(page.locator('#tabs [data-tab="campo"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('.ksheet .ksh')).toBeVisible();
+  // tocar un aviso: resumen en solo lectura (sin reanudar ni verificar) y botón a las detenciones del día
+  const pop = page.locator('#dpsheet');
+  await expect(pop.locator('.ksh')).toBeVisible();
+  await expect(pop.locator('[data-ka]')).toHaveCount(0);
+  await pop.locator('[data-jor="opendet"]').click();
+  await expect(page.locator('#dpsheet')).toHaveCount(0);
+  await expect(page.locator('#jsheet .jor-tabs button.on')).toHaveText('Detenciones');
   noErrors(errors, 'avisos');
 });
