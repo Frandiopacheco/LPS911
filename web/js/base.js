@@ -740,7 +740,7 @@ function moreSheet(){const ex=$('#msheet');if(ex){ex.remove();return}
   sh.innerHTML=`<div class="msc" role="dialog" aria-label="Más secciones"><div class="msh">Más secciones</div>${items.map(t=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}">${esc(tabName(t))}</button>`).join('')}
     ${MODS().length>1?`<div class="msmod"><span>Módulo</span>${modSegHtml()}</div>`:''}
     ${offLps()?'<hr>':`<p class="note" style="margin:2px 10px 4px">El lookahead y el plan semanal se editan mejor desde una PC.</p><hr>
-    <button data-act="xls">Exportar Excel del lookahead</button><button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
+    <button data-act="xls">Exportar Excel del lookahead</button>${typeof pushRole==='function'&&pushRole()?'<button data-push="open">🔔 Avisos de detenciones</button>':''}<button data-act="help">? Ayuda: cómo funciona</button>`}<div class="msme">${esc($('#meBox').textContent||'')}</div><button data-act="out">Salir</button></div>`;
   sh.onclick=e=>{if(e.target===sh){sh.remove();return}const b=e.target.closest('button');if(!b)return;if(b.dataset.mod){goMod(b.dataset.mod);return}sh.remove();if(b.dataset.bt)goTab(b.dataset.bt);else if(b.dataset.act==='xls'){if(ready)exportXlsx()}else if(b.dataset.act==='help')ayOpen();else if(b.dataset.act==='out')$('#blogout').click()};
   document.body.appendChild(sh)}
 $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.dataset.bt==='more'){moreSheet();return}const sh=$('#msheet');if(sh)sh.remove();goTab(b.dataset.bt)};

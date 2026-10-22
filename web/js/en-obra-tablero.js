@@ -40,7 +40,7 @@ function cncSinDet(){const L=P().cnc||[];return L.find(n=>cncCode(n)==='SC')||''
    detención pasa por defecto a la causa del «No cumplido» (se puede cambiar). «Inicia después» es informativo: no sugiere nada. */
 const STOP_CNC={'Actividad predecesora':'PROG','Materiales':'MAT','Calidad':'QA/QC','Seguridad':'OT','Otros':'OT'};
 function stopCnc(d,aid){const lv=liveOf(d,aid);if(!lv||stopLate(d,aid))return null;let raw=lv.st==='stop'&&lv.mot?String(lv.mot):'';
-  if(!raw)for(const e of [...(lv.log||[])].reverse()){if(e&&e.s==='stop'&&e.m&&e.m!==STOP_INFO){raw=String(e.m);break}}
+  if(!raw)for(const e of [...(lv.log||[])].reverse()){if(e&&e.s==='stop'&&e.m&&e.m!==STOP_INFO){raw=String(e.m)+(e.x?' — '+String(e.x):'');break}}
   if(!raw)return null;const i=raw.indexOf(' — ');const mot=i<0?raw:raw.slice(0,i),note=i<0?'':raw.slice(i+3).trim();const code=STOP_CNC[mot];if(!code)return null;
   const L=P().cnc||[];const c=L.find(n=>cncCode(n)===code);return c?{cnc:c,mot,note}:null}
 const liveOf=(d,aid)=>LIVE.get(d+'_'+aid)||null;

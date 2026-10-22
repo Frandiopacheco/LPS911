@@ -4237,3 +4237,8 @@ table.mx.mxhz td.mc,table.mx.mxhz .mxa{height:var(--ch)}
 
 /* casilla dentro de un formulario del tareo (constancia de estudios) */
 .t-form .lqlab.t-chk{flex-direction:row;align-items:center;gap:8px}
+
+/* Avisos de detenciones (avisos.js) */
+#bpush.on{color:var(--ok);border-color:var(--ok)}
+.pushok{font-weight:700;color:var(--ok);background:var(--ok-soft);border-radius:var(--r-ctl,8px);padding:.55em .8em;margin:.3em 0}
+.pushol{margin:.4em 0 0;padding-left:1.3em;display:flex;flex-direction:column;gap:.25em}

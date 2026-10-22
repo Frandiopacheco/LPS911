@@ -10,14 +10,17 @@
 // - emitirCliente: el sábado a las 23:00 (Lima) emite la versión cliente de la semana siguiente si el administrador no la emitió.
 // - cuentaCapataz (la llama la página): crea y administra las cuentas DNI + contraseña de los capataces del tareo.
 // - publicarTareo (la llama la página): previa, publicación y rectificación del tareo del día (F3).
+// - avisoDetenido: cuando alguien marca «Detenido» en campo, avisa al celular y la computadora de los responsables del piso y
+//   del administrador (Firebase Cloud Messaging; docs/ia/avisos.md). avisoPrueba (la llama la página): aviso de prueba a uno mismo.
 // - publicarTareoAuto: cada 15 min, pasada la hora de Configuración del tareo, publica el día si está todo listo (o deja la constancia).
 'use strict';
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -361,4 +364,57 @@ exports.publicarTareoAuto = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Am
   catch (e) { logger.error(`publicarTareoAuto ${due.fecha}`, e); await nref.set({ t: Date.now(), ok: false, n: 0, msgs: [String((e && e.message) || e)] }); return; }
   await nref.set(tpAutoNota(res, Date.now()));
   logger.info(`publicarTareoAuto ${due.fecha}: ${res.ok ? `publicada v${res.v}` : `no se publicó (${(res.bloqueos || []).length} pendiente(s))`}`);
+});
+
+/* ---------- Avisos de detenciones (push; docs/ia/avisos.md) ---------- */
+/* tokens (push/<sha256>) de una lista de correos; Firestore admite hasta 30 valores en un «in» */
+async function pushTokens(ems) {
+  const out = [];
+  for (let i = 0; i < ems.length; i += 30) {
+    const q = await db().collection('push').where('em', 'in', ems.slice(i, i + 30)).get();
+    q.docs.forEach(d => { const v = d.data(); if (v && v.tok) out.push({ id: d.id, tok: v.tok, em: v.em }); });
+  }
+  return out;
+}
+/* envía y borra los tokens que ya no existen (se desinstaló, se borraron los datos del navegador…) */
+async function pushSend(list, data) {
+  if (!list.length) return { ok: 0, fail: 0 };
+  const r = await admin.messaging().sendEachForMulticast({ tokens: list.map(x => x.tok), data, webpush: { headers: { Urgency: 'high', TTL: '21600' } } });
+  const dead = [];
+  r.responses.forEach((x, i) => { const c = x.error && x.error.code; if (c === 'messaging/registration-token-not-registered' || c === 'messaging/invalid-registration-token' || c === 'messaging/invalid-argument') dead.push(list[i].id); });
+  await Promise.all(dead.map(id => db().collection('push').doc(id).delete().catch(() => {})));
+  return { ok: r.successCount, fail: r.failureCount, dead: dead.length };
+}
+exports.avisoDetenido = onDocumentWritten({ document: 'live/{id}', retry: false, timeoutSeconds: 60 }, async ev => {
+  const before = ev.data && ev.data.before && ev.data.before.exists ? ev.data.before.data() : null;
+  const after = ev.data && ev.data.after && ev.data.after.exists ? ev.data.after.data() : null;
+  const e = nuevoDetenido(before, after); if (!e) return;
+  const project = (await db().collection('meta').doc('project').get()).data() || {};
+  const no = avisoNo(project, after, e, Date.now());
+  if (no) { logger.info(`Detenido ${ev.params.id}: sin aviso (${no})`); return; }
+  const aid = after.actId, pid = after.pisoId;
+  const [mem, prefs, as] = await Promise.all([db().collection('members').get(), db().collection('pushp').get(), db().collection('acts').doc(String(aid)).get()]);
+  const act = as.exists ? as.data() : null;
+  const [ams, ps, cs] = await Promise.all([act && act.ambId ? db().collection('ambientes').doc(String(act.ambId)).get() : null, pid ? db().collection('pisos').doc(String(pid)).get() : null,
+    (act && act.sc) || after.sc ? db().collection('contractors').doc(String((act && act.sc) || after.sc)).get() : null]);
+  const P = {}; prefs.docs.forEach(d => { P[d.id.toLowerCase()] = d.data(); });
+  const dest = avisoDestinos(mem.docs.map(d => ({ ...d.data(), id: d.id })), pid, e.by, P);
+  if (!dest.length) { logger.info(`Detenido ${ev.params.id}: nadie a quien avisar en el piso ${pid}`); return; }
+  const list = await pushTokens(dest);
+  const data = avisoTexto({ aid, date: after.date, e, act, amb: ams && ams.exists ? ams.data() : null, piso: ps && ps.exists ? ps.data() : null, con: cs && cs.exists ? cs.data() : null, lvMot: after.mot });
+  const r = await pushSend(list, data);
+  logger.info(`Detenido ${ev.params.id}: aviso a ${dest.length} persona(s), ${list.length} equipo(s) · enviados ${r.ok} · fallidos ${r.fail}`);
+});
+/* aviso de prueba a los equipos de quien lo pide (administrador o editor) */
+exports.avisoPrueba = onCall({ timeoutSeconds: 30 }, async req => {
+  const tk = (req.auth && req.auth.token) || {};
+  const email = String(tk.email || '').toLowerCase();
+  if (!email || tk.email_verified !== true) throw new HttpsError('permission-denied', 'Inicia sesión con tu correo.');
+  const m = await db().collection('members').doc(email).get();
+  const role = email === 'frandiopacheco@gmail.com' ? 'admin' : (m.exists ? m.data().role : '');
+  if (!['admin', 'editor'].includes(role)) throw new HttpsError('permission-denied', 'Los avisos son para los responsables de piso y el administrador.');
+  const list = await pushTokens([email]);
+  if (!list.length) throw new HttpsError('failed-precondition', 'No tienes ningún equipo con los avisos activados.');
+  const r = await pushSend(list, { title: '🔔 Aviso de prueba · LPS 911', body: 'Así te llegará un aviso cuando un subcontratista marque «Detenido» en tu piso.', tag: 'prueba', aid: '', d: '', url: './' });
+  return { equipos: list.length, ok: r.ok, fail: r.fail };
 });
