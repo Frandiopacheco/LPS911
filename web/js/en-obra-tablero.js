@@ -299,6 +299,12 @@ function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,ext:0,sc:{}};const byS=DB_
    cumplimiento diario, aunque se haya cumplido otro día de la semana (tope: sus días comprometidos). Parcial y No cuentan 0.
    Lo cumplido que no estaba en lo congelado (o por encima de lo comprometido) va aparte como «extra» y no suma a la meta.
    Atribución por el SC de la foto (it.sc). Solo pisos con la semana congelada. */
+/* Trabajo que todavía no tiene dueño (oct 2026): en vez de calcularle un PPC a «POR DEFINIR», el Tablero avisa cuánto
+   queda sin asignar. Son las filas vivas de un subcontratista marcado «sin asignar» (scTBD) en los pisos a la vista. */
+function dashSinSc(vs,d){let n=0,pron=0;const lim=addD(d,21);
+  for(const x of S.act.values()){if(!scTBD(x.sc))continue;const pid=pisoOfAct(x.id);if(!vs.has(pid))continue;
+    n++;if((x.days||[]).some(z=>z>=d&&z<=lim))pron++}
+  return{n,pron}}
 function dashAvance(n,vs,d){const wd=weekDays(n).filter(z=>z<=d);const o={meta:0,esp:0,real:0,extra:0,pis:0,sc:{}};const g=sc=>o.sc[sc]=o.sc[sc]||{meta:0,esp:0,real:0,extra:0};const inW=new Set();
   for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;o.pis++;
     for(const[id,it]of Object.entries(w.items||{})){inW.add(id);if(!dashOk(it.sc,it.act))continue;const ds=it.days||[];if(!ds.length)continue;const so=g(it.sc);
@@ -327,7 +333,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   /* PPC por subcontratista: últimas 4 semanas congeladas */
   const Wall=DB_.sc.size?noSc(()=>{const L=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)L.push({w,...o})}return L}):W;
   const scAgg={};Wall.slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev}));
-  const scRows=Object.entries(scAgg)/* oct 2026: «Por definir» no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&!/por\s*definir/i.test(conOf(sc).name||'')).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
+  const scRows=Object.entries(scAgg)/* «Sin asignar» (scTBD) no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&scReal(sc)).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
   /* causas de no cumplimiento · 30 días (registros verificados, con los filtros) */
   /* los 29 días anteriores y hoy por separado (auditoría de código 08/10, M5): dayData tiene memoria y hoy ya se calculó arriba */
   const cn={};[...dayData(Array.from({length:29},(_,k)=>addD(d,-29+k)),vsP).rows,...dRows0].forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
@@ -341,7 +347,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   /* por subcontratista, hoy */
   const actAll=DB_.sc.size?noSc(()=>dashData(d)).filter(i=>!i.nova):act;
   const bySc=new Map();actAll.forEach(i=>{const o=bySc.get(i.x.sc)||{none:0,stop:0,ok:0,no:0,n:0};o[kMain(i.st.k)]++;o.n++;bySc.set(i.x.sc,o)});
-  const scs=[...bySc.entries()].sort((a,b)=>b[1].n-a[1].n||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  const scs=[...bySc.entries()].filter(([sc])=>scReal(sc)).sort((a,b)=>b[1].n-a[1].n||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
   /* --- html --- */
   const pc=v=>v==null?'—':Math.round(v*100)+'%';
   const dw=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][pd(d).getUTCDay()];
@@ -358,7 +364,8 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
     ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
     ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].w}–${full[full.length-1].w}`:'sin semanas cerradas','dkppc')}
-    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}</div>`;
+    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}
+    ${(()=>{const u=dashSinSc(vsP,d);return u.n?K('Sin subcontratista',u.n,`${u.pron} programadas en 3 semanas`,'','#9AA0A6'):''})()}</div>`;
   const trend=W.length?`${linesLegend()}<div class="dsv chart">${svgLines(W.map(o=>({label:'S'+o.w,a:o.ppc,b:o.ppcSc??o.ppc,part:o.ev<o.n,sub:`${o.ok} de ${o.n} compromisos`})),{h:220,minW:760})}</div>`:'<p class="mu">Aún no hay semanas congeladas.</p>';
   /* oct 2026 (opción A elegida por el dueño): fila 1 = PPC semanal ancho + causas; fila 2 = PPC por SC + avance de la semana (misma altura,
      color de cada SC, 8 por defecto); luego el plano a todo lo ancho y al final avance de hoy por SC + restricciones */
@@ -371,7 +378,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     <div class="dleg">${KSHOW.map(k=>`<span style="--k:${KST[k].c}"><i></i>${KST[k].t}</span>`).join('')}</div>
     ${Object.keys(stopMot).length||later?`<div class="dmot"><b>Detenidas hoy:</b> ${Object.entries(stopMot).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('')}${later?`<span class="chip mu">Inicia después (tren) <b>${later}</b></span>`:''}</div>`:''}</div>`;
   const avRow=(lab,o,color,sc)=>{const m=o.meta||1;return`<div class="dar${sc?' dsgo'+scCls(sc):''}"${sc?` data-dsc="${sc}" title="Clic: filtrar el tablero por este SC"`:''}><span class="dsn"${color?` style="--c:${color}"`:''}>${color?'<i></i>':''}${lab}</span><span class="davb" title="${o.real} de ${o.meta} · a hoy debía llevar ${o.esp}"><i class="dave" style="width:${Math.min(100,o.esp/m*100)}%"></i><i class="davr" style="width:${Math.min(100,o.real/m*100)}%${color?';background:'+color:''}"></i></span><span class="dsval">${o.meta?Math.round(o.real/m*100)+'%':'—'}</span><span class="dsw">${o.real}/${o.meta}</span></div>`};
-  const avSc=Object.entries(AVall.sc).filter(([,v])=>v.meta).sort((a,b)=>a[1].real/a[1].meta-b[1].real/b[1].meta||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
+  const avSc=Object.entries(AVall.sc).filter(([sc,v])=>v.meta&&scReal(sc)).sort((a,b)=>a[1].real/a[1].meta-b[1].real/b[1].meta||conOf(a[0]).name.localeCompare(conOf(b[0]).name));
   const avV=DB_.avAll?avSc:avSc.slice(0,8);
   const gav=`<div class="dcard" id="dav"><div class="dch">Avance de la semana ${cw} contra lo congelado ${avSc.length>8?`<button class="lnkb" data-davall>${DB_.avAll?'Ver menos':`Ver todos (${avSc.length})`}</button>`:''}</div>${AV.meta?`<p class="dnote" title="Días-actividad con «Cumplido» de todos los comprometidos en la semana congelada (Parcial y No cuentan 0; vale si se cumplió otro día de la semana)">La franja clara marca dónde debería estar a hoy · de menor a mayor avance.</p>
     <div class="dav">${avRow('<b>Total</b>',AV)}${avV.map(([sc,v])=>avRow(esc(conOf(sc).name),v,conOf(sc).color,sc)).join('')}</div>${AV.extra?`<p class="dnote">Además, ${AV.extra} cumplido${AV.extra>1?'s':''} fuera de lo congelado (no suman al avance).</p>`:''}`:`<p class="mu">${AV.pis?'Sin compromisos congelados con estos filtros.':'La semana '+cw+' aún no está congelada en estos pisos.'}</p>`}</div>`;

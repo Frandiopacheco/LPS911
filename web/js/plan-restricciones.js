@@ -15,8 +15,9 @@ function ppcOf(w){if(!w||!w.frozenAt)return null;const ids=Object.keys(w.items||
   /* en el total del piso, un «frente no entregado» que el ingeniero hizo contar al SC predecesor sí es imputable (a otra partida) */
   const nimp=ids.filter(i=>resNimp(r[i])&&!(r[i].rsc&&r[i].pc)).length;return{ppc:ok/ids.length,ok,ev,n:ids.length,nimp,ppcSc:ppcScOf(ok,ids.length,nimp)}}
 /** por subcontratista en un conjunto de semanas congeladas: n, ok, no, nimp (no imputables a él) y ext (fallas de otras partidas que le cuentan) */
+/* «Sin asignar» (scTBD) queda fuera: no se le mide cumplimiento a un subcontratista que todavía no existe (oct 2026) */
 function wkScStats(docs){const m={};const g=sc=>m[sc]=m[sc]||{n:0,ok:0,no:0,nimp:0,ext:0,ev:0};
-  for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
+  for(const w of docs){if(!w||!w.frozenAt)continue;for(const[id,it]of Object.entries(w.items||{})){if(!scReal(it.sc))continue;const o=g(it.sc);o.n++;const r=(w.res||{})[id];if(r&&r.ok===true){o.ok++;o.ev++}else if(r&&r.ok===false){o.no++;o.ev++;if(resNimp(r))o.nimp++;if(r.rsc&&r.pc&&r.rsc!==it.sc)g(r.rsc).ext++}}}
   for(const o of Object.values(m)){o.ppc=o.n?o.ok/o.n:null;o.ppcSc=ppcScOf(o.ok,o.n,o.nimp,o.ext)}return m}
 /* Plan semanal: vista por subcontratista o por ambiente (U.planV) y buscador (PLQ, solo en esta sesión). Las dos son solo
    presentación sobre los mismos compromisos: no escriben en la semana congelada ni cambian el PPC. */

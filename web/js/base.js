@@ -151,6 +151,12 @@ const weekDays=n=>{const a=weekStart(n);return[0,1,2,3,4,5].map(i=>addD(a,i))};
 const curWeek=()=>weekOf(addD(todayIso(),1));
 const winDays=()=>{const o=[];for(let w=U.week;w<U.week+U.win;w++)weekDays(w).forEach((d,i)=>o.push({d,w,i}));return o};
 const conOf=id=>S.con.get(id)||{name:'—',color:'#9AA0A6'};
+/* «Sin asignar» (oct 2026, pedido del dueño): «POR DEFINIR» no es un subcontratista, es que todavía no se sabe quién
+   hará el trabajo. Marcado con `tbd` en Configuración › Subcontratistas, se programa y se ve como siempre, pero queda
+   fuera de todo lo que mide a un SC (PPC por subcontratista, rankings y avance del Tablero): no se le puede exigir
+   cumplimiento a nadie. En su lugar, el Tablero avisa cuánto trabajo sigue sin dueño. */
+const scTBD=id=>!!(S.con.get(id)||{}).tbd;
+const scReal=id=>!!id&&!scTBD(id);
 const r2=v=>Math.round((+v||0)*100)/100;
 const hasM=x=>typeof x.metrado==='number'&&x.metrado>0;
 const progSum=x=>r2(Object.values(x.qty||{}).reduce((s,v)=>s+(+v||0),0));
