@@ -10,7 +10,9 @@ const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(
 /* matriz en el celular: más celdas que esto (unos 60 ambientes × 66 columnas) piden elegir un piso; MXBUSY marca un dibujo en curso */
 const MX_PHONE_MAX=4500,MXBUSY='lps911.mxbusy';
 const MXS={p:'Pendiente',c:'En curso',t:'Terminado',n:'No aplica'};
-const MXI={p:'',c:'◐',t:'✓',n:'–'};
+/* «sug» no es un estado guardado: es la propuesta del tipo que nadie validó. Antes se pintaba igual que Pendiente
+   (recuadro en blanco) y parecía un compromiso; ahora tiene glifo y color propios (oct 2026, pedido del dueño). */
+const MXI={p:'',c:'◐',t:'✓',n:'–',sug:'·'};
 const MXCL={t:'Típica',e:'Específica',d:'Por desglosar'};
 let mxSubs=null;
 
@@ -172,7 +174,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
     <button class="ib${document.body.classList.contains('mxfs')?' on':''}" id="mxfs" title="Pantalla completa: oculta la barra superior y las pestañas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
     <button class="ib" id="mxxls" title="Exportar a Excel lo que está a la vista (piso, filtros y orden)">⬇ Excel</button>
     <button class="ib" id="mxhelp" title="Cómo se usa la matriz" aria-label="Ayuda">ⓘ</button>
-    <span class="mxleg">${['p','c','t','n'].map(s=>`<span><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</span>`).join('')}<span><i class="mc s-p sug"></i>Sin validar</span>${cmp?'<span><i class="mc s-t chg">✓</i>Cambió</span>':''}</span>
+    <span class="mxleg">${['p','c','t','n'].map(s=>`<span><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</span>`).join('')}<span><i class="mc s-p sug">${MXI.sug}</i>Sin validar</span>${cmp?'<span><i class="mc s-t chg">✓</i>Cambió</span>':''}</span>
    </div>`;
   if(!cols.length){h+=`<p class="note">No hay actividades del catálogo en ${U.piso?'este piso':'los pisos'} con este filtro.</p></div></div>`;main.innerHTML=h;mxWire(main);return}
   /* grupos de columnas por subcontratista */
@@ -209,7 +211,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
         if(!o){h+=`<td class="mc x${sel}" data-k="${ci}"></td>`;return}
         let cl=`mc s-${o.s}${o.sug?' sug':''}${o.dsc?' dsc':''}${PSC&&PSC.has(k)?' scp':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'')+(o.dsc?' · Campo la marcó terminada':'');
         if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){cl+=' chg';tt+=` · antes: ${b?MXS[b]:'no estaba'}`}}
-        h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${MXI[o.s]}</td>`});
+        h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${o.sug?MXI.sug:MXI[o.s]}</td>`});
       h+='</tr>';ri++}}
   h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
    </div></div>`;
