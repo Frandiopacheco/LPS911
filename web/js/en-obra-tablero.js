@@ -204,7 +204,7 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.close
   if(k==='stopsave'){const mot=KS.mot||'';if(!mot){toast('Elige el motivo.');return}if(mot==='Otros'&&!KS.note.trim()){toast('Escribe el detalle del motivo.');$('#kmott')&&$('#kmott').focus();return}
     const lv=liveOf(d,aid);let extra=null;
     {const fid=kPhotoSave(d,aid,true);if(fid)extra={photos:[...(lv&&lv.photos||[]),fid]}}
-    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot,...(KS.note.trim()?{x:KS.note.trim().slice(0,300)}:{})},extra);toast('Marcada «Detenido»');kClose();return}
+    liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot,...(KS.note.trim()?{x:KS.note.trim().slice(0,300)}:{})},extra);if(typeof pushNotify==='function')pushNotify(d,aid);toast('Marcada «Detenido»');kClose();return}
   if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
     const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});toast('Verificación guardada');kClose();return}
