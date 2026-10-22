@@ -722,7 +722,7 @@ function commitField(t){
     if((f==='name'||f==='sc')&&x[f]&&!cliOn()&&!actSameName(x,f,v)&&actHist(x).length){t.value=t.dataset.o;histGate(x,f,v);return}
     const nx={...x,[f]:v};if(und0)nx.und=und0;
     /* fila nueva: toma el SC de la actividad del catálogo elegida */
-    if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v}));if(cc&&cc.sc&&cc.sc!==x.sc&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);
+    if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v,sc:x.sc}));if(cc&&cc.sc&&!mxScsOf(cc).includes(x.sc)&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);
     /* R1 (oct 2026): la Matriz la da por terminada en este ambiente → la fila se ocultaría; se ofrece volverla a Pendiente */
     if(f==='name'&&typeof mxReopenAsk==='function'&&!cliOn())mxReopenAsk(nx);}
   else if(t.dataset.amb){const x=S.amb.get(t.dataset.amb);if(!x)return;v=f==='code'?v.trim():v.replace(/\s+/g,' ').trim();if(x[f]===v)return;apply([op('ambientes',x.id,{...x,[f]:v})])}
@@ -743,7 +743,7 @@ function actHist(x){const r=[];const t=todayIso();
   return r}
 /* el nombre nuevo es la misma actividad (solo cambia la escritura o es otro nombre de la misma actividad del catálogo) */
 function actSameName(x,f,v){if(f!=='name')return false;if(mnk(x.name)===mnk(v))return true;
-  if(typeof mxCatOfN!=='function')return false;const a=mxCatOfN(x),b=mxCatOfN({name:v});return!!a&&a===b}
+  if(typeof mxCatOfN!=='function')return false;const a=mxCatOfN(x),b=mxCatOfN({name:v,sc:x.sc});return!!a&&a===b}
 async function histGate(x,f,v){const why=actHist(x);const what=f==='name'?`el nombre a «${v}»`:`el subcontratista a ${conOf(v).name}`;
   const list=[...why,'Esos datos están ligados a esta fila: si cambias '+(f==='name'?'su nombre':'su subcontratista')+', pasarían a la otra actividad.'];
   const nw=await uiAsk({title:`«${x.name||'Actividad'}» ya tiene historial`,text:`Para programar otra actividad en este ambiente, créala como fila nueva; esta queda como está.`,list,ok:'Crear actividad nueva',cancel:isAdmin?'Corregir esta fila…':'Cancelar',tone:'warn'});
@@ -757,7 +757,7 @@ function histNewRow(x,f,v){const sib=siblings('acts','ambId',x.ambId);const id=u
   const mv=dn?(x.days||[]).filter(d=>d>t&&d>dn):[];
   const name=f==='name'?v:x.name,sc=f==='sc'?v:x.sc;const c=f==='name'?actCanon(v,x.id):null;
   const n={id,ambId:x.ambId,sc,name,und:f==='sc'?(x.und||''):((c&&c.und)||''),metrado:null,days:mv,order:orderAfter(sib,x)};
-  if(f==='name'&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v}));if(cc&&cc.sc&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))n.sc=cc.sc}
+  if(f==='name'&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v,sc:n.sc}));if(cc&&cc.sc&&!mxScsOf(cc).includes(n.sc)&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))n.sc=cc.sc}
   const ops=[op('acts',id,n)];if(mv.length){const q={...(x.qty||{})};mv.forEach(d=>delete q[d]);ops.push(op('acts',x.id,{...x,days:(x.days||[]).filter(d=>!mv.includes(d)),qty:q}))}
   apply(ops,`Actividad nueva «${name}» en ${(S.amb.get(x.ambId)||{}).code||'el ambiente'}${mv.length?` (con ${mv.length} ${mv.length===1?'día':'días'} que estaban en «${x.name}»)`:''}`);
   focusLater(`#grid .ci[data-a="${id}"][data-f="name"]`)}

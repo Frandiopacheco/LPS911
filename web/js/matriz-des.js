@@ -46,7 +46,7 @@ function mxDesListDlg(){const L=mxDesCands();const can=mxdCan();
 /* ---------- desglosar ---------- */
 function mxDesParts(){const seen=new Set();const G=MX.cat.get(MXD.gen);const out=[];
   for(const p of MXD.parts){const name=String(p.name||'').replace(/\s+/g,' ').trim();const k=mnk(name);if(!k||seen.has(k))continue;seen.add(k);
-    const ex=mxAli().get(k);const E=ex&&ex!==MXD.gen?MX.cat.get(ex):null;out.push({name:E?E.name:name,sc:E?E.sc:(p.sc||(G&&G.sc)||''),id:E?E.id:'',ex:!!E})}
+    const ex=mxPickSc(k,p.sc||(G&&G.sc)||'')||(p.sc?'':mxAli().get(k));const E=ex&&ex!==MXD.gen?MX.cat.get(ex):null;out.push({name:E?E.name:name,sc:E?E.sc:(p.sc||(G&&G.sc)||''),id:E?E.id:'',ex:!!E})}
   return out}
 /** qué pasaría (sin escribir nada) */
 function mxDesPlan(genId,parts,pend){const G=MX.cat.get(genId);const rows=[];let skip=0,done=0;
@@ -157,12 +157,12 @@ function mxSplitDlg(id){if(!isAdmin){toast('Solo el administrador separa activid
      if(!sel.length){msg.textContent='Marca al menos un subcontratista.';return}
      if(sel.some(g=>!g.name)){msg.textContent='Escribe el nombre de cada actividad nueva.';return}
      const ks=sel.map(g=>mnk(g.name));if(new Set(ks).size!==ks.length){msg.textContent='Dos subcontratistas no pueden quedar con el mismo nombre.';return}
-     for(const g of sel){const t=MX.cat.get(mxAli().get(mnk(g.name))||'');if(t&&!t.arch&&(t.id===id||!mxScsOf(t).includes(g.sc))){msg.textContent=t.id===id?`«${g.name}» es la misma actividad: ponle otro nombre.`:`«${t.name}» ya existe y es de ${conOf(t.sc).name}, no de ${conOf(g.sc).name}: elige otro nombre.`;return}}
+     for(const g of sel){const t=MX.cat.get(mxPickSc(mnk(g.name),g.sc)||'');if(t&&!t.arch&&t.id===id){msg.textContent=`«${g.name}» es la misma actividad: ponle otro nombre.`;return}}
      ok.disabled=true;const np=await mxScPendN(id);if(np){ok.disabled=false;msg.textContent=`«${c.name}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar en la Matriz: revísalos primero («✓ Visto» o «↶ Revertir»).`;return}
      try{await mxSplitApply(id,sel,!!($('#mxsptp')||{}).checked);lqClose()}catch(err){ok.disabled=false;mxErr(err)}})}
 async function mxSplitApply(id,sel,toTipo){const c=MX.cat.get(id);const pend=await mxPendProp();const FV=mxFV();const meta=mxNow();const DEL=FV.delete();
   const W=[];const U2={made:[],scs:[],ren:[],cells:[],tipos:[]};let skip=0;let k=0;
-  for(const g of sel){let tid=mxAli().get(mnk(g.name));const t=tid&&MX.cat.get(tid);
+  for(const g of sel){let tid=mxPickSc(mnk(g.name),g.sc);const t=tid&&MX.cat.get(tid);
     if(!t||t.arch){tid='k'+NOW().toString(36)+(k++);const nc={name:g.name,sc:g.sc,cl:c.cl||'t',al:[mnk(g.name)],ord:(c.ord||0)+0.01*k,spl:id,...meta};if(c.tr!=null)nc.tr=c.tr;W.push([fcol('mcat').doc(tid),nc]);U2.made.push(tid)}
     g.tid=tid;U2.scs.push(g.sc);
     for(const rid of g.rows){const x=S.act.get(rid);if(!x)continue;if(pend.has(rid)){skip++;continue}U2.ren.push({id:rid,from:x.name,to:g.name})}}

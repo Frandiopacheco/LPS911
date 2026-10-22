@@ -9,7 +9,7 @@ const MXR={amb:null,only:false,showDone:false};
 /* secuencia de obra de cada actividad: cuándo se programa normalmente (mediana del primer día de sus filas en el lookahead);
    sin fechas, al final en el orden del catálogo */
 function mxSeq(){const k=MX.v+'|'+DV;if(MXR.seq&&MXR.seqK===k)return MXR.seq;const ali=mxAli();const F=new Map();
-  for(const x of S.act.values()){const d=(x.days||[]).length?[...x.days].sort()[0]:null;if(!d)continue;const c=ali.get(mnk(x.name));if(!c)continue;if(!F.has(c))F.set(c,[]);F.get(c).push(d)}
+  for(const x of S.act.values()){const d=(x.days||[]).length?[...x.days].sort()[0]:null;if(!d)continue;const c=mxCatOfN(x);if(!c)continue;if(!F.has(c))F.set(c,[]);F.get(c).push(d)}
   const seq=new Map();for(const[c,L]of F){L.sort();seq.set(c,L[Math.floor(L.length/2)])}MXR.seq=seq;MXR.seqK=k;return seq}
 function mxSeqCmp(a,b){/* tren de trabajo (matriz-tren.js) primero; lo que no está en el tren, después y por fechas del lookahead */
   const ta=typeof a.tr==='number'?a.tr:null,tb=typeof b.tr==='number'?b.tr:null;if(ta!=null||tb!=null){if(ta==null)return 1;if(tb==null)return-1;if(ta!==tb)return ta-tb}
@@ -76,7 +76,10 @@ async function mxRecNew(amb,ed,v,add,pre){const tp=await mxAmbTipo(amb);const sc
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="mxrnok">Crear y agregar</button></div>`,
    async e=>{const u=e.target.closest('[data-mxuse]');if(u&&!u.disabled){lqClose();add(u.dataset.mxuse);return}
      const ok=e.target.closest('#mxrnok');if(!ok)return;const name=$('#mxrnn').value.replace(/\s+/g,' ').trim();if(!name){$('#mxrnmsg').textContent='Escribe el nombre.';return}
-     const dup=mxAli().get(mnk(name));if(dup&&MX.cat.has(dup)&&!MX.cat.get(dup).arch){const d=MX.cat.get(dup);if(have[dup]){$('#mxrnmsg').textContent=`«${d.name}» ya existe y ya está en este ambiente.`;return}lqClose();add(dup);toast(`Ya existía «${d.name}»: agregada a este ambiente`);return}
+     const nsc=$('#mxrnsc').value;const dup=mxPickSc(mnk(name),nsc);
+     /* el nombre es de otro SC (oct 2026): se avisa una vez; si confirman, se crea aparte para este SC */
+     if(!dup){const o=mxNameOwner(name,'');const kk=mnk(name)+'|'+nsc;if(o&&ok.dataset.conf!==kk){ok.dataset.conf=kk;$('#mxrnmsg').textContent=`«${o.name}» ya existe, pero es de ${conOf(o.sc).name}. Si es la misma, elígela en la lista; si es otro trabajo de ${conOf(nsc).name}, toca otra vez «Crear y agregar» y se crea aparte (puedes hacer el nombre más claro).`;return}}
+     if(dup&&MX.cat.has(dup)&&!MX.cat.get(dup).arch){const d=MX.cat.get(dup);if(have[dup]){$('#mxrnmsg').textContent=`«${d.name}» ya existe y ya está en este ambiente.`;return}lqClose();add(dup);toast(`Ya existía «${d.name}»: agregada a este ambiente`);return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&ed&&$('#mxrntp')&&$('#mxrntp').checked);
      const c={id,name,sc:$('#mxrnsc').value,cl:$('#mxrncl').value,al:[mnk(name)],ord};
      if(!ed)c.rev={by:me.email,n:me.name||'',t:NOW(),amb,tipo:null};ok.disabled=true;

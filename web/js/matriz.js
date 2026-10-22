@@ -59,11 +59,20 @@ const mxEdG=()=>mxEd()&&!!MX.edit;
 const mxPC=()=>{if(window.__mxTouch)return false;try{return matchMedia('(hover:hover) and (pointer:fine)').matches}catch(e){return false}};
 
 /* alias → actividad del catálogo */
-function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();
-  for(const c of MX.cat.values()){if(c.arch)continue;(c.al||[]).forEach(k=>{if(!m.has(k))m.set(k,c.id)});const k=mnk(c.name);if(k&&!m.has(k))m.set(k,c.id)}
-  MX.ali=m;MX.aliV=MX.v;return m}
+/* Un mismo nombre puede ser de varias actividades si son de SC distintos (oct 2026, decidido con el dueño: «Limpieza» de Canovas
+   = limpieza de vidrios; «Limpieza» de otro SC = limpieza previa al enchape). mxAli() da la primera (para «¿existe?»);
+   MX.aliAll todas, y mxPick/mxPickSc eligen la del SC de la fila. */
+function mxAli(){if(MX.ali&&MX.aliV===MX.v)return MX.ali;const m=new Map();const all=new Map();
+  const put=(k,id)=>{if(!k)return;if(!m.has(k))m.set(k,id);let L=all.get(k);if(!L)all.set(k,L=[]);if(!L.includes(id))L.push(id)};
+  for(const c of MX.cat.values()){if(c.arch)continue;(c.al||[]).forEach(k=>put(k,c.id));put(mnk(c.name),c.id)}
+  MX.ali=m;MX.aliAll=all;MX.aliV=MX.v;return m}
+const mxAliAll=()=>{mxAli();return MX.aliAll};
+/** actividad para un nombre normalizado: la que hace el SC dado; si ninguna, la primera ('' si el nombre no está) */
+function mxPick(k,sc){const L=mxAliAll().get(k);if(!L)return'';if(sc){const f=L.find(id=>mxScsOf(MX.cat.get(id)).includes(sc));if(f)return f}return L[0]}
+/** solo la que hace ese SC ('' si el nombre es únicamente de otros SC) */
+function mxPickSc(k,sc){const L=mxAliAll().get(k);return(L&&sc&&L.find(id=>mxScsOf(MX.cat.get(id)).includes(sc)))||''}
 /* por nombre (renombrar, fusionar, unificar: el nombre se unifica sea cual sea el SC de la fila) */
-const mxCatOfN=x=>mxAli().get(mnk(x&&x.name))||'';
+const mxCatOfN=x=>mxPick(mnk(x&&x.name),x&&x.sc);
 /* vínculo con la matriz (auditoría 08/10, M02): una fila solo alimenta la actividad del catálogo si es del mismo SC
    (una actividad del catálogo = un SC, decidido con el dueño). Las que no coinciden salen en el aviso «otro SC» (mxScMismatch). */
 /* una actividad puede ser de varios SC (oct 2026, decidido con el dueño: p. ej. «Instalación de flashing» de APM FB y APM MP):
@@ -76,7 +85,7 @@ const mxCatOf=x=>{const id=mxCatOfN(x);return id&&mxScOk(x,MX.cat.get(id))?id:''
 /** celdas de cada ambiente: {catId:{s,sug,src,acts}}. s = estado; sug = lo propone el sistema (aún nadie lo confirmó);
     src = de dónde sale (tipo, lookahead o agregada a mano). Se recalcula cuando cambian los datos (MX.v, DV, DONEV). */
 function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(MX.mc&&MX.mcK===k)return MX.mc;const ali=mxAli();const look=new Map();
-  for(const x of S.act.values()){const c=ali.get(mnk(x.name));if(!c||!mxScOk(x,MX.cat.get(c)))continue;let a=look.get(x.ambId);if(!a)look.set(x.ambId,a=new Map());let l=a.get(c);if(!l)a.set(c,l=[]);l.push(x.id)}
+  for(const x of S.act.values()){const c=mxCatOfN(x);if(!c||!mxScOk(x,MX.cat.get(c)))continue;let a=look.get(x.ambId);if(!a)look.set(x.ambId,a=new Map());let l=a.get(c);if(!l)a.set(c,l=[]);l.push(x.id)}
   const out=new Map();
   for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
