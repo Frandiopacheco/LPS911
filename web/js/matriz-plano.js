@@ -6,10 +6,15 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 const MXPL={sel:'',vista:''};
 const MXPL_C={p:'#D64545',c:'#E0A01B',x:'#9AA3A8'};
-/* SC que tienen actividades en el catálogo (el SC: solo los suyos) */
-function mxPlScs(){const mine=SCK()?new Set(myScsI()):null;const s=new Set();for(const c of MX.cat.values()){if(c.arch)continue;for(const x of mxScsOf(c))if(!mine||mine.has(x))s.add(x)}
+/* actividades que existen en los ambientes del piso (oct 2026, pedido del dueño: la lista del Gráfico solo trae las del piso elegido);
+   null = sin piso elegido: no se filtra */
+function mxPlFloor(pid){if(!pid)return null;const cells=mxCells();const s=new Set();
+  for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id);if(C)for(const k in C)if(C[k])s.add(k)}
+  return s}
+/* SC que tienen actividades en el catálogo (el SC: solo los suyos); con `on` (mxPlFloor) solo los que tienen alguna en el piso */
+function mxPlScs(on){const mine=SCK()?new Set(myScsI()):null;const s=new Set();for(const c of MX.cat.values()){if(c.arch||(on&&!on.has(c.id)))continue;for(const x of mxScsOf(c))if(!mine||mine.has(x))s.add(x)}
   return[...s].filter(x=>S.con.has(x)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))}
-const mxPlCats=sc=>[...MX.cat.values()].filter(c=>!c.arch&&mxScsOf(c).includes(sc)).sort((a,b)=>(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name));
+const mxPlCats=(sc,on)=>[...MX.cat.values()].filter(c=>!c.arch&&mxScsOf(c).includes(sc)&&(!on||on.has(c.id))).sort((a,b)=>(a.ord||0)-(b.ord||0)||a.name.localeCompare(b.name));
 /* lámina: la base del piso con más ambientes dibujados (o la elegida) */
 function mxPlBase(pid){const API=window.__plano;const bs=API&&API.basesOf?API.basesOf(pid):[];if(!bs.length)return{bs,v:''};if(bs.some(b=>b.id===MXPL.vista))return{bs,v:MXPL.vista};
   const n=b=>{let k=0;for(const t of szTree(pid))for(const{a}of t.ambs)if(szGeo(a,b.id))k++;return k};const best=bs.slice().sort((x,y)=>n(y)-n(x))[0];return{bs,v:best.id}}
@@ -18,8 +23,8 @@ function mxPlState(pid,sc,cat){const cells=mxCells();const cats=cat==='*'?mxPlCa
   for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id)||{};const p=[],c=[];for(const k of cats){const o=C[k];if(!o)continue;if(o.s==='p')p.push(k);else if(o.s==='c')c.push(k)}
     out.set(a.id,{a,s:t.s,k:p.length?'p':c.length?'c':'',p,c})}
   return out}
-function renderMxPla(main,head){const pid=U.piso;const scs=mxPlScs();
-  if(!scs.includes(U.mxPlSc))U.mxPlSc=scs[0]||'';const sc=U.mxPlSc;const cats=sc?mxPlCats(sc):[];
+function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const scs=mxPlScs(onF);
+  if(!scs.includes(U.mxPlSc))U.mxPlSc=scs[0]||'';const sc=U.mxPlSc;const cats=sc?mxPlCats(sc,onF):[];
   if(U.mxPlCat!=='*'&&!cats.some(c=>c.id===U.mxPlCat))U.mxPlCat=(cats[0]||{}).id||'';
   if(!$('#mxplmap',main)){main.innerHTML=`<div class="scroll"><div class="wrap mxwrap"><div id="mxplh"></div><div id="mxplf" class="fbar mxplf"></div><div id="mxplmsg"></div>
      <div class="mxplb" id="mxplb"><section class="mxplmw"><div class="szmap mxplmap" id="mxplmap"></div></section><aside class="mxpls" id="mxpls"></aside></div></div></div>`;
@@ -36,7 +41,7 @@ function renderMxPla(main,head){const pid=U.piso;const scs=mxPlScs();
     ${bs.length>1?`<label class="mxord"><span class="fgl">Lámina</span><select id="mxplv" aria-label="Lámina">${bs.map(b=>`<option value="${esc(b.id)}"${b.id===v?' selected':''}>${esc(b.esp||b.name||'Lámina')}</option>`).join('')}</select></label>`:''}
     <span class="fsp"></span><span class="mxleg"><span><i class="mxplsw" style="--c:${MXPL_C.p}"></i>Pendiente</span><span><i class="mxplsw" style="--c:${MXPL_C.c}"></i>En curso</span><span><i class="mxplsw o"></i>Sin pendientes</span></span>`;
   const fe=$('#mxplf',main);if(fe.dataset.h!==fh){fe.innerHTML=fh;fe.dataset.h=fh}
-  const msg=!pid?'Elige un piso arriba (selector de piso) para ver su plano.':!sc?'No hay actividades en el catálogo.':!API?'Cargando láminas…':'';
+  const msg=!pid?'Elige un piso arriba (selector de piso) para ver su plano.':!sc?(onF?'Este piso no tiene actividades en la Matriz.':'No hay actividades en el catálogo.'):!API?'Cargando láminas…':'';
   const me_=$('#mxplmsg',main);const mh=msg?`<div class="callout">${msg}</div>`:'';if(me_.innerHTML!==mh)me_.innerHTML=mh;$('#mxplb',main).hidden=!!msg;if(msg)return;
   const ST=mxPlState(pid,sc,all?'*':U.mxPlCat);const L=[...ST.values()];
   const shapes=[];for(const o of L){const g=szGeo(o.a,v);if(!g)continue;
