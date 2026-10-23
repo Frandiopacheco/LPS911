@@ -75,8 +75,9 @@ test.describe('celular (390 px)', () => {
         // ni sobre el botón fijo del capataz («Siguiente…»), que se puede tocar
         const fb = await page.locator('.tc-foot').boundingBox();
         expect(pb.y + pb.height, 'la pastilla queda sobre el botón del capataz').toBeLessThanOrEqual(fb.y);
-        await page.locator('.tc-foot [data-tcs="2"]').click();
-        await expect(page.locator('#tcRoot .tc-ob.need').first()).toBeVisible(); // el toque llegó al botón: sin marcar, señala a quién falta
+        // (rediseño 22-10-2026) el botón del paso 1 marca como «vino» a los que faltan
+        await page.locator('.tc-foot [data-tca="todos"]').click();
+        await expect(page.locator('#tcRoot .tc-ob.si').first()).toBeVisible(); // el toque llegó al botón
       }
       noErrors(errors, 'ver como ' + role);
     });
