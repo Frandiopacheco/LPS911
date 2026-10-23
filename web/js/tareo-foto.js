@@ -170,6 +170,8 @@ async function tfFilter(c,f,slow){
   sd.data.set(pass(pass(a,'max',2),'avg',2));sg.putImageData(sd,0,0);
   const bg=tfCanvas(W,H),bgx=bg.getContext('2d',{willReadFrequently:true});bgx.imageSmoothingQuality='high';bgx.drawImage(sm,0,0,W,H);
   const b=bgx.getImageData(0,0,W,H).data;
+  /* los lienzos auxiliares se liberan ya (memoria del iPhone; auditoría 22-10-2026) */
+  bg.width=bg.height=0;sm.width=sm.height=0;
   /* «Documento»: blanco ≥ 88 % y tinta más oscura (curva 1,9); «B/N»: gris con curva más fuerte (formatos muy grises o lápiz) */
   const bn=f==='bn',th=bn?.85:.88,ex=bn?2.4:1.9;
   const LUT=new Uint8ClampedArray(1025);for(let i=0;i<=1024;i++){const t=i/1024;LUT[i]=t>=th?255:255*Math.pow(t/th,ex);}
@@ -256,8 +258,10 @@ async function tfFinal(){
     const full=TFE.img?tfScaled(TFE.img,TF_FULL):TFE.pv,sd=full.getContext('2d',{willReadFrequently:true}).getImageData(0,0,full.width,full.height);
     if(full!==TFE.pv)full.width=full.height=1;  /* libera memoria antes de muestrear */
     let c=await tfWarp(sd,TFE.q,TF_OUT,true);if(!TFE)return;
-    c=await tfFilter(c,TFE.f,true);c=tfRot(c,TFE.rot);
-    const url=c.toDataURL('image/jpeg',.8);TFE.ms=Math.round(performance.now()-t0);window.__tfMs=TFE.ms;
+    c=await tfFilter(c,TFE.f,true);const r=tfRot(c,TFE.rot);
+    const url=r.toDataURL('image/jpeg',.8);if(r!==c)c.width=c.height=0;r.width=r.height=0;
+    /* sin memoria el navegador devuelve una imagen vacía («data:,»): no se entrega */
+    if(!/^data:image\/jpeg/.test(url)||url.length<100)throw new Error('la imagen salió vacía');TFE.ms=Math.round(performance.now()-t0);window.__tfMs=TFE.ms;
     tfEnd(url);
   }catch(e){tfBusy(false);const s=document.getElementById('tfSub');if(s)s.textContent='No se pudo procesar la foto: '+(e&&e.message||e)+'. Usa «Usar original».';}
 }

@@ -60,7 +60,8 @@ test('A5: un reabierto con jornada congelada (doc.cfg) se muestra con esa jornad
   await expect(root.locator('#tcJorH')).toContainText('Día no laborable');
   // y al revés: congelado laborable con otra jornada mientras la configuración actual lo marca feriado
   await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: { ini: '08:00', fin: '16:00', ref: 30, refIni: '12:30' }, fer: false, rnl: { ref: 60, refIni: '12:00' } }; S.tcfg.set('main', { fer: [TCS.date] }); TCS.doc.rows['41000000'].sal = '17:00'; tcDraw(); });
-  await expect(root.locator('#tcJorH')).toHaveText('Jornada del día: 7,5 h');
+  // (rediseño 22-10-2026) la grilla ya no repite la jornada: solo avisa si el día es no laborable
+  await expect(root.locator('#tcJorH')).toHaveCount(0);
   await expect(root.locator('.tc-gt[data-dni="41000000"]')).toContainText('+1 HE');
   await root.locator('.tc-steps [data-tcs="1"]').click();
   await expect(root.locator('#tcNoLab')).toHaveCount(0);
@@ -96,11 +97,12 @@ test('UX1: contadores Vinieron / No vinieron / Sin marcar (sin marcar no cuenta 
     '41000000': row('QUISPE MAMANI', 'JUAN CARLOS', true), '41000001': row('QUISPE HUAMANI', 'JUAN JOSE', false), '41000002': row('ALVA ROJAS', 'ANA MARIA', null) } };
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...crew(3), ...PC, ['tareo', ID, D]] });
   await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
-  const k = page.locator('#tcK3');
-  await expect(k).toContainText('1 vinieron');
-  await expect(k).toContainText('1 no vinieron');
-  await expect(k).toContainText('1 sin marcar');
-  await expect(page.locator('#tcCnt')).toHaveText('Marcados 2 de 3');
+  // (rediseño 22-10-2026) los contadores van en el filtro, junto al buscador
+  const k = page.locator('#tcF1');
+  await expect(k).toContainText('Vinieron (1)');
+  await expect(k).toContainText('No vinieron (1)');
+  await expect(k).toContainText('Sin marcar (1)');
+  await expect(page.locator('#tcRoot .tc-foot [data-tca="todos"]')).toContainText('El que falta vino');
   // la misma clasificación que la oficina: as true / false / null
   const same = await page.evaluate(() => { const R = Object.values(TCS.doc.rows); return [R.filter(r => r.as === true).length, R.filter(r => r.as === false).length, R.filter(r => r.as !== true && r.as !== false).length]; });
   expect(same).toEqual([1, 1, 1]);
@@ -119,21 +121,22 @@ test('UX2: dos «Juan Quispe» se distinguen en asistencia, columnas de la grill
   await root.locator('#tcPcQ').fill('encof');
   await root.locator('[data-tca="pc"][data-v="p10_05"]').click();
   await root.locator('.tc-foot [data-tcs="3"]').click();
-  const names = await root.locator('.tc-gn .tc-nmt').allTextContents();
+  const names = await root.locator('.tc-gn .tc-gnt').allTextContents();
   // antes: dos «Juan Quispe»
   expect(new Set(names).size).toBe(3);
   expect(names).toContain('Juan Quispe Huamani');
   expect(names).toContain('Juan Quispe Mamani ·DNI 000');
   expect(names).toContain('Juan Quispe Mamani ·DNI 099');
   // la columna: tocar el nombre abre su día completo (20-10-2026), con el nombre completo y el DNI si se repite
-  await root.locator('.tc-gn[data-dni="41000099"] [data-tcnm]').click();
+  await root.locator('.tc-gn[data-dni="41000099"] .tc-gnb').click();
   await expect(root.locator('#tcWk .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 099');
   await root.locator('#tcWk [data-tca="wkX"]').last().click();
   // el editor de la celda lleva el nombre completo (con DNI si se repite)
   await root.locator('.tc-gcell[data-dni="41000000"][data-pc="p10_05"]').click();
   await expect(root.locator('#tcCell .tc-csh b').first()).toHaveText('QUISPE MAMANI, JUAN CARLOS ·DNI 000');
   await root.locator('#tcCell [data-tca="cellX"]').last().click();
-  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcMenu"]').click();
+  await root.locator('#tcPcM [data-tca="pcAll"]').click();
   // resumen
   await root.locator('.tc-foot [data-tcs="4"]').click();
   const sum = await root.locator('.tc-rr .tc-gn .tc-nmt').allTextContents();
@@ -157,13 +160,13 @@ test('UX3: buscador y filtros en la cuadrilla; filtrar no cambia la asistencia',
   await root.locator('.tc-ob [data-tca="novino"]').click();
   await root.locator('#tcQ1').fill('');
   // filtros: Sin marcar / No vinieron / Todos
-  await root.locator('[data-tcf1="no"]').click();
+  await root.locator('#tcF1').selectOption('no');
   await expect(root.locator('.tc-ob')).toHaveCount(1);
-  await root.locator('[data-tcf1="sin"]').click();
+  await root.locator('#tcF1').selectOption('sin');
   await expect(root.locator('.tc-ob')).toHaveCount(19);
   await root.locator('.tc-ob[data-dni="41000005"] [data-tca="vino"]').click();
   await expect(root.locator('.tc-ob')).toHaveCount(18);
-  await root.locator('[data-tcf1="all"]').click();
+  await root.locator('#tcF1').selectOption('all');
   await expect(root.locator('.tc-ob')).toHaveCount(20);
   const as = await page.evaluate(() => Object.values(TCS.doc.rows).map(r => r.as));
   expect(as.filter(x => x === true)).toHaveLength(1);
@@ -171,11 +174,11 @@ test('UX3: buscador y filtros en la cuadrilla; filtrar no cambia la asistencia',
   expect(as.filter(x => x === null)).toHaveLength(18);
   // el contador de pendientes queda a la vista al bajar hasta el final
   await root.locator('#tcBody').evaluate(el => { el.scrollTop = el.scrollHeight; });
-  const box = await root.locator('#tcK3').boundingBox();
+  const box = await root.locator('#tcF1').boundingBox();
   const body = await root.locator('#tcBody').boundingBox();
   expect(box.y).toBeGreaterThanOrEqual(body.y - 1);
   expect(box.y).toBeLessThan(body.y + 150);
-  await expect(root.locator('#tcK3')).toContainText('18 sin marcar');
+  await expect(root.locator('#tcF1')).toContainText('Sin marcar (18)');
   noErrors(errors, 'UX3');
 });
 
@@ -203,7 +206,7 @@ test('UX4: en el paso 4 la foto va arriba; «Falta la foto» abre la cámara y a
   // si el celular recarga la página al volver de la cámara: mismo día y mismo paso
   await page.reload();
   await expect(page.locator('#tcRoot .tc-step.on')).toContainText('Enviar');
-  await expect(page.locator('#tcRoot .tc-date.on')).toContainText('Hoy');
+  await expect(page.locator('#tcRoot .tc-dayb')).toContainText('Hoy');
   noErrors(errors, 'UX4');
 });
 
@@ -214,6 +217,8 @@ test('UX6: ayer y anteayer enviados/revisados se abren en solo lectura', async (
   await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
   const ay = root.locator(`[data-tcd="${AYER}"]`), an = root.locator(`[data-tcd="${ANTE}"]`);
+  // (rediseño 22-10-2026) los días están en el menú «Hoy 22 ▾» de la barra
+  await root.locator('[data-tcm="day"]').click();
   // antes: botón deshabilitado
   await expect(ay).toBeEnabled();
   await expect(ay).toContainText('Enviado ✓');
@@ -230,6 +235,7 @@ test('UX6: ayer y anteayer enviados/revisados se abren en solo lectura', async (
   await page.evaluate(() => { tcChg(); });
   await page.waitForTimeout(1300);
   expect((await dbDoc(page, `${AYER}_${CAP}`)).st).toBe('env');
+  await root.locator('[data-tcm="day"]').click();
   await an.click();
   await expect(root.locator('#tcSentB')).toContainText('Revisado por la oficina');
   noErrors(errors, 'UX6');
