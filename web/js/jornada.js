@@ -82,24 +82,48 @@ function iprdJornada(d,f){f=f==='det'?'det':'cer';const btn=`<div class="jor-bt"
   const R=jorData(d);if(!R.rows.length)return'<div class="iprempty">Sin actividades programadas este día.</div>';
   return`<div class="jor-p">${btn}${jorBlock(R,'cer')}</div>`}
 
-/* ---------- hoja (En obra / Tablero) ---------- */
+/* ---------- hoja (En obra / Tablero) y sección de «Hoy» ---------- */
 let JOR=null;
+/* sección «Estado de la jornada» de la pestaña Hoy (admin y editores): su propio día y pestaña */
+let JORH=null;
+/* historial: se puede ir hacia atrás hasta JOR_BACK días (lo que se baja del registro diario) */
+const JOR_BACK=60;
+const jorTab0=d=>d<todayIso()||nowHM()>='14:00'?'cer':'det';
 /* abre en Detenciones; desde las 2 pm (cuando empiezan los cierres), en Cierre del día */
-function jorOpen(){JOR={d:todayIso(),tab:nowHM()>='14:00'?'cer':'det'};jorDraw()}
-function jorDraw(){if(!JOR)return;const f=JOR.tab;const R=jorData(JOR.d);const tap=U.tab==='dash'||((U.tab==='cap'||U.tab==='campo')&&canDaily);
+function jorOpen(){JOR={d:todayIso(),tab:jorTab0(todayIso())};jorDraw()}
+/* día anterior / siguiente (sin domingos, como Campo); nunca después de hoy */
+function jorShift(o,dir){const t=todayIso(),lim=addD(t,-JOR_BACK);let x=dir===0?t:shiftDay(o.d,dir);if(x>t)x=t;if(x<lim)x=lim;if(x===o.d)return false;
+  o.d=x;if(x<t){const p=ensureDaily(x);if(p&&p.then)p.then(()=>{if(o===JOR)jorDraw();else requestRender()})}return true}
+function jorNav(o){const t=todayIso(),lim=addD(t,-JOR_BACK);const dw=DOW_L[(pd(o.d).getUTCDay()+6)%7];
+  return`<span class="jor-nav"><button class="ib" data-jor="day" data-jdd="-1" aria-label="Día anterior"${o.d<=lim?' disabled':''}>&#8249;</button><b>${dw} ${fmtD(o.d)}${o.d===t?' · hoy':''}</b><button class="ib" data-jor="day" data-jdd="1" aria-label="Día siguiente"${o.d>=t?' disabled':''}>&#8250;</button>${o.d!==t?'<button class="ib" data-jor="day" data-jdd="0">Hoy</button>':''}</span>`}
+/* pestañas + días + contenido + compartir: lo mismo en la hoja y en Hoy */
+function jorView(o,tap){const f=o.tab,R=jorData(o.d);const hoy=o.d===todayIso();
   const tabs=`<span class="seg jor-tabs"><button data-jor="tab" data-jt="det" class="${f==='det'?'on':''}">Detenciones</button><button data-jor="tab" data-jt="cer" class="${f==='cer'?'on':''}">Cierre del día</button></span>`;
-  const body=f==='det'?jorDetBlock(jorDet(JOR.d),tap):R.rows.length?jorBlock(R,'cer'):'<p class="knote">No hay actividades programadas hoy en estos pisos.</p>';
-  const h=`<div class="ksh"><i class="kn" style="--k:#2563eb">📊</i><div><b>Estado de la jornada</b><span>${fmtD(R.d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span><span>${f==='det'?'Lo que los subcontratistas reportaron como «Detenido»':'Quién ya cerró el día (corte '+cutT()+')'}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
-    ${tabs}<div class="jor-w">${body}</div>
-    <div class="kbtns two"><button class="kbig pri" data-jor="share" data-jd="${R.d}" data-jf="${f}">📷 Compartir imagen</button><button class="kbig ghost" data-jor="dl" data-jd="${R.d}" data-jf="${f}">⬇ Descargar</button></div>
+  const body=f==='det'?jorDetBlock(jorDet(o.d),tap):R.rows.length?jorBlock(R,'cer'):`<p class="knote">No hay actividades programadas ${hoy?'hoy':'ese día'} en estos pisos.</p>`;
+  return{R,html:`<div class="jor-top">${tabs}${jorNav(o)}</div><div class="jor-w">${body}</div>`,
+    share:`<button class="kbig pri" data-jor="share" data-jd="${R.d}" data-jf="${f}">📷 Compartir imagen</button><button class="kbig ghost" data-jor="dl" data-jd="${R.d}" data-jf="${f}">⬇ Descargar</button>`}}
+function jorDraw(){if(!JOR)return;const f=JOR.tab;const tap=U.tab==='dash'||U.tab==='hoy'||((U.tab==='cap'||U.tab==='campo')&&canDaily);const V=jorView(JOR,tap);
+  const h=`<div class="ksh"><i class="kn" style="--k:#2563eb">📊</i><div><b>Estado de la jornada</b><span>${fmtD(V.R.d)} · ${nowHM()} · ${U.piso?esc(S.pis.get(U.piso)?.name||''):'todos los pisos'}</span><span>${f==='det'?'Lo que los subcontratistas reportaron como «Detenido»':'Quién ya cerró el día (corte '+cutT()+')'}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
+    ${V.html}
+    <div class="kbtns two">${V.share}</div>
     <div class="kbtns"><button class="kbig ghost" data-jor="ref">↻ Actualizar</button></div>
-    <p class="knote">${tap?'Toca una detención para ver su ficha. ':''}En el celular y la tablet «Compartir» abre WhatsApp; en la computadora copia la imagen para pegarla (Ctrl+V) en WhatsApp Web.</p>`;
+    <p class="knote">${tap?'Toca una detención para ver su ficha; al cerrarla vuelves aquí. ':''}En el celular y la tablet «Compartir» abre WhatsApp; en la computadora copia la imagen para pegarla (Ctrl+V) en WhatsApp Web.</p>`;
   let sh=$('#jsheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='jsheet';sh.innerHTML='<div class="ksc"></div>';document.body.appendChild(sh);const t0=NOW();
     sh.onclick=e=>{const t=e.target;if((t===sh&&NOW()-t0>400)||t.closest('[data-kx]')){sh.remove();JOR=null}}}
   const sc=sh.firstChild;if(sc.dataset.h!==h){sc.innerHTML=h;sc.dataset.h=h}}
-/* tocar una detención (hoja): en el Tablero su resumen; en Campo su ficha */
-function jdtOpen(aid){const d=JOR?JOR.d:todayIso();const sh=$('#jsheet');if(sh)sh.remove();JOR=null;
-  if(U.tab==='dash'&&typeof dashPop==='function')dashPop(aid,d);else if(canDaily&&typeof capSheet==='function')capSheet(aid,d,'main')}
+/* sección de la pestaña Hoy (admin y editores): el detalle completo, con historial; tocar una detención abre su ficha encima */
+const jorHoyOk=()=>!!me&&canWrite&&me.role!=='sc';
+function jorHoySec(){if(!jorHoyOk())return'';if(!JORH)JORH={d:todayIso(),tab:jorTab0(todayIso())};const V=jorView(JORH,canDaily);
+  return`<section class="card jorhoy" id="hoyjor"><h2>📊 Estado de la jornada <span class="sub">${JORH.tab==='det'?'lo que los SC reportaron como «Detenido»':'quién ya cerró el día (corte '+cutT()+')'} · ${pisoLabel()}</span></h2>
+    <div class="pad">${V.html}<div class="jor-bt">${V.share.replace(/kbig pri/,'ib pri').replace(/kbig ghost/,'ib')}</div></div></section>`}
+const FICHA_SEL='#ksheet,#dpsheet';
+/* tocar una detención: en el Tablero su resumen; en Campo y Hoy su ficha. Desde la hoja, la hoja se aparta mientras
+   la ficha está abierta y vuelve (actualizada) al cerrarla: así se revisan una tras otra sin perder la lista */
+function jdtOpen(aid,d,fromSheet){d=d||(JOR?JOR.d:todayIso());const sh=fromSheet?$('#jsheet'):null;
+  if(U.tab==='dash'&&typeof dashPop==='function')dashPop(aid,d);else if(canDaily&&typeof capSheet==='function')capSheet(aid,d,'main');
+  if(!sh||!document.querySelector(FICHA_SEL))return;sh.style.display='none';
+  const mo=new MutationObserver(()=>{if(document.querySelector(FICHA_SEL))return;mo.disconnect();if(!sh.isConnected||!JOR)return;sh.style.display='';jorDraw()});
+  mo.observe(document.body,{childList:true})}
 
 /* ---------- imagen para WhatsApp (siempre con fondo blanco y colores claros, se vea como se vea la app) ---------- */
 const JOR_C={ok:'#2E7D4F',warn:'#9A6A12',bad:'#B83A2E',track:'#E4E7E2',line:'#CDD3CC',ink:'#1B211E',mu:'#737C76',acc:'#1F5F7A'};
@@ -164,11 +188,13 @@ async function jorShare(d,mode,f){f=f==='det'?'det':'cer';let blob=null;try{blob
     try{if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Imagen copiada: pégala en WhatsApp (Ctrl+V)');return}}catch(err){}}
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Imagen descargada: adjúntala en WhatsApp')}
 document.addEventListener('click',e=>{const t=e.target;if(!t.closest)return;
-  const ln=t.closest('#jsheet [data-jdt]');if(ln){jdtOpen(ln.dataset.jdt);return}
+  const ln=t.closest('#jsheet [data-jdt],#hoyjor [data-jdt]');if(ln){const inS=!!ln.closest('#jsheet');jdtOpen(ln.dataset.jdt,inS?null:JORH&&JORH.d,inS);return}
   const b=t.closest('[data-jor]');if(!b)return;const k=b.dataset.jor;
   if(k==='open'){jorOpen();return}
   if(k==='opendet'){document.querySelectorAll('#dpsheet').forEach(o=>o.remove());JOR={d:todayIso(),tab:'det'};jorDraw();return}if(k==='ref'){jorDraw();return}
-  if(k==='tab'){if(JOR){JOR.tab=b.dataset.jt==='cer'?'cer':'det';jorDraw()}return}
-  if(k==='mot'){JOR_MOT=b.dataset.jm||'';if(b.closest('#ipr')){if(typeof iprDraw==='function')iprDraw()}else jorDraw();return}
+  const inH=!!b.closest('#hoyjor'),st=inH?JORH:JOR;const redraw=()=>{if(inH)requestRender();else jorDraw()};
+  if(k==='tab'){if(st){st.tab=b.dataset.jt==='cer'?'cer':'det';redraw()}return}
+  if(k==='day'){if(st&&jorShift(st,+b.dataset.jdd))redraw();return}
+  if(k==='mot'){JOR_MOT=b.dataset.jm||'';if(b.closest('#ipr')){if(typeof iprDraw==='function')iprDraw()}else{if(JOR)jorDraw();if(U.tab==='hoy')requestRender()}return}
   if(k==='share'||k==='dl')jorShare(b.dataset.jd||todayIso(),k,b.dataset.jf)});
-document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.closest&&e.target.closest('#jsheet [data-jdt]')){e.preventDefault();jdtOpen(e.target.closest('[data-jdt]').dataset.jdt)}});
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.closest&&e.target.closest('#jsheet [data-jdt],#hoyjor [data-jdt]')){e.preventDefault();e.target.closest('[data-jdt]').click()}});

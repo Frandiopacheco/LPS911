@@ -3775,6 +3775,9 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .jor-2{display:grid;grid-template-columns:1fr 1fr;gap:2.2em;align-items:start}
 @media (max-width:900px){.jor-2{grid-template-columns:1fr}}
 /* Jornada › Detenciones (jornada.js): resumen, motivos (filtran), tarjeta por SC con 2 o más y una línea para los de una sola */
+.jor-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;margin:4px 0 2px}.jor-top .jor-tabs{margin:0}
+.jor-nav{display:inline-flex;align-items:center;gap:6px}.jor-nav b{min-width:9.5em;text-align:center;font-variant-numeric:tabular-nums}.jor-nav .ib:disabled{opacity:.4}
+.jorhoy{margin-top:18px}.jorhoy .jor-bt{margin-top:4px}
 .jor-tabs{align-self:flex-start;margin:4px 0 2px}.jor-tabs button{height:34px;padding:0 14px;font-weight:600}
 .jdt{display:flex;flex-direction:column;gap:14px}
 .jdt-ks{display:flex;flex-wrap:wrap;gap:8px 26px;padding:10px 14px;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--r-card,10px)}

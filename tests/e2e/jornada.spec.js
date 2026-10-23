@@ -69,13 +69,23 @@ test('Jornada: pestañas Detenciones y Cierre del día, filtro por motivo, imág
   dl = page.waitForEvent('download');
   await sh.locator('[data-jor="dl"]').click();
   expect((await dl).suggestedFilename()).toBe('cierre_' + HOY + '.png');
-  // en el Tablero, tocar una detención abre su resumen (solo lectura)
+  // en el Tablero, tocar una detención abre su resumen (solo lectura); la hoja se aparta y vuelve al cerrarlo
   await sh.locator('[data-jor="tab"][data-jt="det"]').click();
   await sh.locator('.jdt-c [data-jdt]').first().click();
-  await expect(page.locator('#jsheet')).toHaveCount(0);
-  const pop = page.locator('.ksheet').last();
+  await expect(page.locator('#jsheet')).toBeHidden();
+  const pop = page.locator('#dpsheet');
   await expect(pop).toBeVisible();
   await pop.locator('[data-kx]').first().click();
+  await expect(pop).toHaveCount(0);
+  await expect(page.locator('#jsheet')).toBeVisible();
+  // historial: día anterior y de vuelta a hoy
+  await sh.locator('[data-jor="day"][data-jdd="-1"]').click();
+  await expect(sh.locator('.jor-nav b')).not.toContainText('hoy');
+  await expect(sh.locator('[data-jor="day"][data-jdd="1"]')).toBeEnabled();
+  await sh.locator('[data-jor="day"][data-jdd="0"]').click();
+  await expect(sh.locator('.jor-nav b')).toContainText('hoy');
+  await expect(sh.locator('[data-jor="day"][data-jdd="1"]')).toBeDisabled();
+  await sh.locator('[data-kx]').first().click();
   await expect(page.locator('.ksheet')).toHaveCount(0);
   // láminas de Presentar del día
   await page.evaluate(() => { U.tab = 'ind'; U.indMode = 'dia'; render(); });
@@ -90,4 +100,25 @@ test('Jornada: pestañas Detenciones y Cierre del día, filtro por motivo, imág
   await expect(page.locator('#ipr .jdt-i, #ipr .jdt-ln')).toHaveCount(seed.n === 3 ? 1 : 0);
   await expect(page.locator('#ipr [data-jor="share"]')).toBeVisible();
   noErrors(errors, 'jornada');
+});
+
+test('Jornada en Hoy: el admin la ve con historial y la ficha se abre encima sin cerrar la sección', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const errors = await openApp(page, { tab: 'hoy' });
+  const seed = await seedStops(page);
+  expect(seed).not.toBeNull();
+  await page.evaluate(() => { JORH = { d: todayIso(), tab: 'det' }; render(); });
+  const sec = page.locator('#hoyjor');
+  await expect(sec).toBeVisible();
+  await expect(sec.locator('.jdt-i, .jdt-ln')).toHaveCount(seed.n);
+  await sec.locator('[data-jdt]').first().click();
+  await expect(page.locator('#ksheet')).toBeVisible();
+  await page.locator('#ksheet [data-kx]').first().click();
+  await expect(page.locator('#ksheet')).toHaveCount(0);
+  await expect(page.locator('#hoyjor')).toBeVisible();
+  await page.locator('#hoyjor [data-jor="tab"][data-jt="cer"]').click();
+  await expect(page.locator('#hoyjor .jor-tabs button.on')).toHaveText('Cierre del día');
+  await page.locator('#hoyjor [data-jor="day"][data-jdd="-1"]').click();
+  await expect(page.locator('#hoyjor .jor-nav b')).not.toContainText('hoy');
+  noErrors(errors, 'jornada hoy');
 });
