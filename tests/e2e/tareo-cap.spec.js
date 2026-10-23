@@ -47,28 +47,33 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect(root.locator('.tc-ob')).toHaveCount(4);
   await expect(root).not.toContainText('ZEGARRA');
   await expect(root.locator('.tc-ob.sin')).toHaveCount(4);
-  await expect(root.locator('#tcCnt')).toHaveText('Marcados 0 de 4');
+  await expect(root.locator('#tcF1')).toContainText('Sin marcar (4)');
   expect((await root.locator('.tc-v').first().boundingBox()).height).toBeGreaterThanOrEqual(44);
-  await root.locator('.tc-foot [data-tcs="2"]').click();
-  await expect(root.locator('.tc-step.on')).toContainText('¿Quién vino?');
+  // (rediseño 22-10-2026) sin la barra de la app; la barra inferior sigue en el paso 1
+  await expect(page.locator('.top')).toBeHidden();
+  await expect(page.locator('#bnav')).toBeVisible();
+  await root.locator('.tc-steps [data-tcs="2"]').click();
+  await expect(root.locator('.tc-step.on')).toContainText('Asistencia');
   await expect(root.locator('.tc-ob.need')).toHaveCount(4);
-  // «No vino» marca la ausencia sin desplegar los motivos; el enlace pequeño los despliega y se pliega al elegir
+  // «No vino» marca la ausencia; el motivo (opcional) se pone tocando el nombre (hoja del obrero) y queda como etiqueta
   const dan = root.locator('.tc-ob[data-dni="40000004"]');
   await dan.locator('[data-tca="novino"]').click();
   await expect(dan).toHaveClass(/off/);
-  await expect(dan.locator('.tc-mot')).toHaveCount(0);
-  await expect(dan.locator('[data-tca="motT"]')).toHaveText(/Motivo \(opcional\)/);
-  await dan.locator('[data-tca="motT"]').click();
-  await expect(dan.locator('.tc-mot')).toHaveCount(9);
-  await dan.locator('[data-tca="mot"][data-v="DM"]').click();
-  await expect(dan.locator('.tc-mot')).toHaveCount(0);
-  await expect(dan.locator('[data-tca="motT"]')).toContainText('Motivo: Descanso médico');
-  await root.locator('[data-tca="todos"]').click();
-  await expect(root.locator('#tcCnt')).toHaveText('Marcados 4 de 4');
-  // horario de cada uno que vino (20-10-2026): plegable con la jornada; Ana trabajó en altura
-  await expect(root.locator('[data-tca="salT"]')).toHaveCount(3);
-  await expect(root.locator('.tc-ob[data-dni="40000001"] [data-tca="salT"]')).toContainText('7:30–17:00');
-  await root.locator('.tc-ob[data-dni="40000001"] input[data-tca="alt"]').check();
+  await dan.locator('[data-tca="ob"]').click();
+  await expect(root.locator('#tcOb .tc-mot')).toHaveCount(9);
+  await root.locator('#tcOb [data-tca="mot"][data-v="DM"]').click();
+  await root.locator('#tcOb [data-tca="obX"]').last().click();
+  await expect(dan).toContainText('Descanso médico');
+  // el botón principal del paso 1 marca a los que faltan
+  await expect(root.locator('.tc-foot [data-tca="todos"]')).toContainText('Los 3 que faltan vinieron en horario normal');
+  await root.locator('.tc-foot [data-tca="todos"]').click();
+  await expect(root.locator('#tcF1')).toContainText('Sin marcar (0)');
+  // altura y horario en la hoja del obrero: Ana trabajó en altura (queda la etiqueta en su fila)
+  await root.locator('.tc-ob[data-dni="40000001"] [data-tca="ob"]').click();
+  await expect(root.locator('#tcOb [data-tca="salQ"]').first()).toBeVisible();
+  await root.locator('#tcOb input[data-tca="alt"]').check();
+  await root.locator('#tcOb [data-tca="obX"]').last().click();
+  await expect(root.locator('.tc-ob[data-dni="40000001"]')).toContainText('Altura');
   await expect.poll(async () => (await dbDoc(page)).st).toBe('bor');
   expect((await dbDoc(page)).modo).toBe('hrs');
   await shot(page, '1-asistencia');
@@ -76,6 +81,7 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   // paso 2: trabajos del día con buscador (la bloqueada no sale), reordenar y quitar
   await root.locator('.tc-foot [data-tcs="2"]').click();
   await expect(root.locator('.tc-h h2')).toHaveText('Trabajos del día');
+  await expect(page.locator('#bnav')).toBeHidden();
   // sin trabajos, «Siguiente» no pasa a la grilla
   await root.locator('.tc-foot [data-tcs="3"]').click();
   await expect(root.locator('.tc-step.on')).toContainText('Trabajos');
@@ -99,9 +105,9 @@ test('capataz (390×844): asistencia con motivo plegable, trabajos, grilla con �
   await expect(root.locator('.tc-gn[data-dni="40000004"]')).toHaveCount(0);
   await expect(root.locator('.tc-g tbody tr')).toHaveCount(3);
   expect(await root.locator('.tc-g thead .tc-gp').evaluateAll(t => t.map(x => x.dataset.pc))).toEqual(['p20_01', 'p10_05']);
-  await expect(root.locator('#tcJorH')).toHaveText('Jornada del día: 8,5 h');
-  // «Toda la jornada» en el encabezado de encofrado: a cada uno lo que le falta → todos en verde; total de la partida abajo
-  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  // «Toda la jornada» (menú de la cabecera de encofrado): a cada uno lo que le falta → todos en verde; total de la partida abajo
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcMenu"]').click();
+  await root.locator('#tcPcM [data-tca="pcAll"]').click();
   await expect(root.locator('.tc-gs[data-pc="p10_05"]')).toHaveText('25,5');
   await expect(cell(root, '40000001', 'p10_05')).toHaveText('8,5');
   await expect(root.locator('.tc-gt.ok')).toHaveCount(3);
@@ -183,25 +189,32 @@ test('capataz (844×390, echado): la grilla ocupa toda la pantalla, nombres y pa
   const root = page.locator('#tcRoot');
   await root.locator('.tc-steps [data-tcs="3"]').click();
   await expect(root.locator('#tcGrid')).toBeVisible();
-  // pantalla completa: sin barra superior, pestañas, encabezado del tareo ni barra inferior
+  // pantalla completa: sin barra superior ni barra inferior; el encabezado del tareo es el riel de la derecha (rediseño 22-10-2026)
   await expect(page.locator('.top')).toBeHidden();
   await expect(page.locator('#bnav')).toBeHidden();
-  await expect(root.locator('.tc-head')).toBeHidden();
+  const rail = await root.locator('.tc-head').boundingBox();
+  expect(rail.x).toBeGreaterThan(700);
+  expect(rail.width).toBeLessThan(100);
   await expect(root.locator('#tcRot')).toBeHidden(); // el aviso de girar solo sale en vertical
   const gb = await root.locator('#tcGrid').boundingBox();
-  expect(gb.width).toBeGreaterThan(800);
-  expect(gb.height).toBeGreaterThan(220);
+  expect(gb.width).toBeGreaterThan(720);
+  expect(gb.height).toBeGreaterThan(340);
   await expect(root.locator('.tc-foot')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
   // llenar: «Toda la jornada» en encofrado y 2 h de tarrajeo a Hugo
-  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
+  await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcMenu"]').click();
+  await root.locator('#tcPcM [data-tca="pcAll"]').click();
   await expect(root.locator('.tc-gt.ok')).toHaveCount(10);
   await shot(page, '6-grilla-echado');
   await cell(root, '40000108', 'p20_01').click();
-  await page.waitForTimeout(400); // la hoja entra desde abajo
+  await page.waitForTimeout(400); // la hoja entra
+  // echado, la hoja se abre al costado derecho a todo el alto, con «Listo» a la vista; la grilla sigue visible a la izquierda
   const cs = await root.locator('#tcCell').boundingBox();
   expect(cs.y).toBeGreaterThanOrEqual(0);
   expect(cs.y + cs.height).toBeLessThanOrEqual(391);
+  expect(cs.x).toBeGreaterThan(300);
+  const ok = await root.locator('#tcCell [data-tca="cellX"]').last().boundingBox();
+  expect(ok.y + ok.height).toBeLessThanOrEqual(391);
   await shot(page, '7-celda-echado');
   await root.locator('#tcCell [data-tca="cellSet"][data-v="2"]').click();
   await page.evaluate(() => { TCS.doc.rows['40000108'].sal = '19:00'; tcChg(); });
@@ -264,9 +277,10 @@ test('grilla como el formato (12 obreros × 6 partidas): obreros en filas, parti
   await root.locator('[data-tca="rotX"]').click();
   await expect(root.locator('#tcRot')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('lps.tcrot'))).toBe('1');
-  // tocar el código de una partida muestra su nombre completo
-  await root.locator('th.tc-gp[data-pc="p20_02"] [data-tcpc]').click();
-  await expect(page.locator('#toast')).toContainText('20.02 · Asentado de ladrillo');
+  // tocar la cabecera de una partida abre su menú con el nombre completo (rediseño 22-10-2026)
+  await root.locator('th.tc-gp[data-pc="p20_02"] [data-tca="pcMenu"]').click();
+  await expect(root.locator('#tcPcM')).toContainText('Asentado de ladrillo');
+  await root.locator('#tcPcM [data-tca="pcmX"]').last().click();
 
   // paso 4: la misma grilla en solo lectura; el que no vino al final, atenuado y con su motivo; altura (A); totales
   await root.locator('.tc-steps [data-tcs="4"]').click();
@@ -296,7 +310,7 @@ test('grilla como el formato (12 obreros × 6 partidas): obreros en filas, parti
 
   // echado: la grilla a pantalla completa con más partidas a la vista; revisar también se lee
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect(root.locator('.tc-head')).toBeHidden();
+  await expect(page.locator('.top')).toBeHidden();
   expect(await visCols(root)).toBeGreaterThanOrEqual(5);
   await shot(page, '10-grilla-12x6-echado');
   await root.locator('.tc-foot [data-tcs="4"]').click();
@@ -333,7 +347,8 @@ test('compatibilidad: un tareo antiguo por horarios se ve en solo lectura y se p
   await expect(total(root, '40000001')).toContainText('+1 HE');
   await expect.poll(async () => { const d = await dbDoc(page); return [d.modo, d.pcs, d.blq, d.rows['40000001'].h, d.rows['40000002'].h, d.rows['40000002'].trab]; })
     .toEqual(['hrs', ['p10_05', 'p20_01'], [], { p10_05: 4.5, p20_01: 5 }, { p10_05: 4.5 }, 0]);
-  // ayer (antiguo, enviado): solo lectura con su horario
+  // ayer (antiguo, enviado): solo lectura con su horario (los días están en el menú «Hoy ▾» de la barra)
+  await root.locator('[data-tcm="day"]').click();
   await root.locator(`[data-tcd="${AYER}"]`).click();
   await expect(root.locator('#tcSentB')).toContainText('Enviado ✓');
   await expect(root.locator('#tcOld')).toHaveCount(0);
@@ -362,7 +377,9 @@ test('capataz: copia los trabajos y las horas de ayer (sin la bloqueada) y agreg
   const errors = await openApp(page, { as: 'tcap', editar: false, extra });
   await page.evaluate(() => { window.tFotoEditor = async u => u; }); // sin el editor de mejora (se prueba aparte)
   const root = page.locator('#tcRoot');
+  await root.locator('[data-tcm="day"]').click();
   await expect(root.locator(`[data-tcd="${AYER}"]`)).toContainText('Enviado ✓');
+  await root.locator('#tcMenu [data-tcm="x"]').last().click();
   await root.locator('[data-tca="todos"]').click();
   await root.locator('.tc-foot [data-tcs="2"]').click();
   await expect(root.locator('[data-tca="copy"]')).toContainText('(2)');
@@ -371,7 +388,7 @@ test('capataz: copia los trabajos y las horas de ayer (sin la bloqueada) y agreg
   await root.locator('.tc-foot [data-tcs="3"]').click();
   await root.locator('[data-tca="rep"]').click(); // «Repetir ayer» (20-10-2026)
   await expect(cell(root, '40000002', 'p10_06')).toHaveText('6');
-  await expect(root.locator('#tcRep')).toContainText('4 de 4');
+  await expect(page.locator('#toast')).toContainText('4 de 4');
   await expect(root.locator('.tc-gt.ok')).toHaveCount(4); // 6 + 2,5 = 8,5 h (las de andamios no se copian)
   await expect.poll(async () => (await dbDoc(page)).rows['40000003'].h).toEqual({ p10_06: 6, p20_01: 2.5 });
   // con un obrero que ayer no estuvo, ya no se ofrece copiar las horas
@@ -383,7 +400,7 @@ test('capataz: copia los trabajos y las horas de ayer (sin la bloqueada) y agreg
   await expect(root.locator('.tc-gn')).toHaveCount(5);
   // «Repetir ayer» sigue disponible: copia a quien no tiene horas y dice a quién falta (el nuevo no estuvo ayer)
   await root.locator('[data-tca="rep"]').click();
-  await expect(root.locator('#tcRep')).toContainText('Falta');
+  await expect(page.locator('#toast')).toContainText('Falta');
   noErrors(errors, 'copiar trabajos');
 });
 
@@ -529,11 +546,14 @@ test('F2 capataz: «Por corregir» lista los reabiertos de cualquier fecha; se c
     ['tfot', `${VID}_1`, { date: V, cap: CAP, n: 1, d: 'data:image/png;base64,iVBORw0KGgo=' }],
     ['tareo', '2026-09-20_otro@obra.pe', { date: '2026-09-20', cap: 'otro@obra.pe', st: 'reab', rows: {}, blq: [] }]] });
   const root = page.locator('#tcRoot');
-  const pc = root.locator('#tcPorCor');
+  // (rediseño 22-10-2026) «Por corregir» va en el menú del día: la barra muestra un globo con cuántos hay
+  await expect(root.locator('.tc-dayb .tc-badge')).toHaveText('1');
+  await root.locator('[data-tcm="day"]').click();
+  const pc = root.locator('#tcMenu');
   await expect(pc).toContainText('Por corregir (1)');
   await expect(pc).toContainText('La tarde fue en 10.06');
   await pc.locator(`[data-tcd="${V}"]`).click();
-  await expect(root.locator(`.tc-date.on[data-tcd="${V}"]`)).toBeVisible();
+  await expect(root.locator('.tc-dayb')).toContainText('Mié 23');
   await expect(root.locator('.tc-reab')).toContainText('La tarde fue en 10.06');
   // corrige: agrega 10.06 y le pasa las 4 h de la tarde
   await root.locator('.tc-steps [data-tcs="2"]').click();
@@ -556,7 +576,7 @@ test('F2 capataz: «Por corregir» lista los reabiertos de cualquier fecha; se c
   expect(d.st).toBe('env');
   expect(d.cot).toEqual(cot);
   expect(d.hist.map(h => h.a)).toEqual(['env', 'reab', 'env']);
-  await expect(root.locator('#tcPorCor')).toHaveCount(0);
+  await expect(root.locator('.tc-dayb .tc-badge')).toHaveCount(0);
   noErrors(errors, 'por corregir');
 });
 
@@ -590,29 +610,29 @@ test('capataz: «no vino» sin motivo deja seguir; obrero de otra cuadrilla con 
   const root = page.locator('#tcRoot');
   const dan = root.locator('.tc-ob[data-dni="40000004"]');
   await dan.locator('[data-tca="novino"]').click();
-  await expect(dan).toContainText('Motivo (opcional)');
   await expect(dan.locator('.tc-err')).toHaveCount(0);
-  // tocar el motivo elegido lo quita
-  await dan.locator('[data-tca="motT"]').click();
-  await dan.locator('[data-tca="mot"][data-v="VA"]').click();
-  await expect(dan.locator('[data-tca="motT"]')).toContainText('Vacaciones');
-  await dan.locator('[data-tca="motT"]').click();
-  await dan.locator('[data-tca="mot"][data-v="VA"]').click();
-  await expect(dan.locator('[data-tca="motT"]')).toHaveText(/Motivo \(opcional\)/);
+  // motivo opcional en la hoja del obrero (tocar su nombre); tocar el motivo elegido lo quita
+  await dan.locator('[data-tca="ob"]').click();
+  await expect(root.locator('#tcOb')).toContainText('Motivo (opcional)');
+  await root.locator('#tcOb [data-tca="mot"][data-v="VA"]').click();
+  await expect(dan).toContainText('Vacaciones');
+  await root.locator('#tcOb [data-tca="mot"][data-v="VA"]').click();
+  await expect(dan).not.toContainText('Vacaciones');
+  await root.locator('#tcOb [data-tca="obX"]').last().click();
   // de otro capataz: confirmación clara y etiqueta ámbar
   await root.locator('[data-tca="addOn"]').click();
   await root.locator('#tcAddQ').fill('zega');
   await expect(root.locator('#tcAddL')).toContainText('de ');
   await root.locator('[data-tca="add"][data-v="40000009"]').click();
   expect(msgs.pop()).toMatch(/ZEGARRA LUNA, ZOE no es de tu cuadrilla \(es de .+\)\. ¿Lo tareas igual\?/);
-  await expect(root.locator('.tc-ob[data-dni="40000009"] .tc-aj')).toHaveText('No es de tu cuadrilla');
+  await expect(root.locator('.tc-ob[data-dni="40000009"] .tc-tag.bad')).toHaveText('No es de tu cuadrilla');
   // sin capataz
   await root.locator('[data-tca="addOn"]').click();
   await root.locator('#tcAddQ').fill('solis');
   await expect(root.locator('#tcAddL')).toContainText('sin capataz');
   await root.locator('[data-tca="add"][data-v="40000010"]').click();
   expect(msgs.pop()).toContain('no es de tu cuadrilla (es sin capataz)');
-  await expect(root.locator('.tc-aj')).toHaveCount(2);
+  await expect(root.locator('.tc-tag.bad')).toHaveCount(2);
   // pasa al paso 2 aunque Daniel no tenga motivo
   await root.locator('[data-tca="todos"]').click();
   await root.locator('.tc-foot [data-tcs="2"]').click();
@@ -690,18 +710,19 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   const root = page.locator('#tcRoot');
   await root.locator('[data-tca="todos"]').click();
   // horario de Carlos: salió 19:00 y corrido → 11,5 h (3 extra: 2 al 60 %, 1 al 100 %)
-  const carlos = root.locator('.tc-ob[data-dni="40000003"]');
-  await carlos.locator('[data-tca="salT"]').click();
+  await root.locator('.tc-ob[data-dni="40000003"] [data-tca="ob"]').click();
+  const carlos = root.locator('#tcOb');
   await carlos.locator('[data-tca="salQ"][data-v="19:00"]').click();
   await carlos.locator('input[data-tca="cor"]').check();
   await expect(carlos.locator('.tc-hres')).toContainText('11,5 h trabajadas');
   await expect(carlos.locator('.tc-hres')).toContainText('2 al 60 %, 1 al 100 %');
   await expect.poll(async () => { const r = ((await dbDoc(page)).rows || {})['40000003'] || {}; return [r.sal, r.cor, r.ent]; }).toEqual(['19:00', true, undefined]);
+  await carlos.locator('[data-tca="obX"]').last().click();
   // paso 3: «Repetir ayer» trae las partidas de ayer y copia a Ana y Beto; Carlos y Daniel faltan
   await root.locator('.tc-foot [data-tcs="2"]').click();
   await root.locator('.tc-steps [data-tcs="3"]').click();
   await root.locator('[data-tca="rep"]').click();
-  await expect(root.locator('#tcRep')).toContainText('2 de 4');
+  await expect(page.locator('#toast')).toContainText('2 de 4');
   await expect(cell(root, '40000001', 'p20_01')).toHaveText('4');
   await expect.poll(async () => (await dbDoc(page)).pcs).toEqual(['p10_05', 'p20_01']);
   // elegir varios (Carlos y Daniel): 4 h en 10.05 y el resto en 20.01, según el horario de cada uno
@@ -728,6 +749,7 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await expect.poll(async () => (((await dbDoc(page)).rows || {})['40000002'] || {}).h).toEqual({ p10_05: 6, p20_01: 2.5 });
   // escribir en la casilla: Ana 10.05 = 6 → no cuadra con su horario (sobran 1,5) y no deja pasar a enviar
   await cell(root, '40000001', 'p10_05').click();
+  if (!(await root.locator('#tcCin').count())) await root.locator('#tcCell [data-tca="cellW"]').click();
   await root.locator('#tcCin').fill('6');
   await root.locator('#tcCin').press('Enter');
   await expect(total(root, '40000001')).toContainText('sobran 1,5');
@@ -752,7 +774,7 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   // 3 h en 20.01: sus otras partidas no se tocan y la selección sigue; luego «el resto de su horario» en 10.05 completa y termina
   // (22-10-2026) tocar la casilla ☑ también elige (antes se marcaba pero quedaba «0 elegidos»)
   await root.locator('[data-tca="multi"]').click();
-  await root.locator('.tc-gn[data-dni="40000004"] input[data-tca="msel"]').click();
+  await root.locator('.tc-gn[data-dni="40000004"] .tc-mck').click();
   await expect(root.locator('#tcMBar')).toContainText('1 elegido');
   await root.locator('th.tc-gp[data-pc="p20_01"] [data-tca="pcAll"]').click();
   await root.locator('#tcMpc [data-tca="mpcSet"][data-v="3"]').click();
@@ -762,6 +784,7 @@ test('capataz más rápido (20-10-2026): horario con salida y corrido, repetir a
   await root.locator('th.tc-gp[data-pc="p10_05"] [data-tca="pcAll"]').click();
   await expect(root.locator('#tcMpc [data-m="resto"]')).toContainText('5,5');
   // otra cantidad escrita: «Poner» se habilita al escribir; se usa «el resto»
+  await root.locator('#tcMpc [data-tca="mpcW"]').click();
   await root.locator('#tcMpcIn').fill('2,5');
   await expect(root.locator('#tcMpcOk')).toContainText('2,5');
   await root.locator('#tcMpc [data-tca="mpcSet"][data-m="resto"]').click();
@@ -791,10 +814,10 @@ test('auditoría 21-10: «Repetir» ajusta las horas al horario de hoy, «Ajusta
   expect(((await dbDoc(page)).rows['40000001']).sal).toBeUndefined();
   await expect(total(root, '40000001')).toHaveClass(/ok/);
   // el aviso cuenta aparte a quien ya tenía horas (Beto) y no lo cambia
-  await expect(root.locator('#tcRep')).toContainText('2 de 3 sin horas');
-  await expect(root.locator('#tcRep')).toContainText('1 ajustado a su horario de hoy');
-  await expect(root.locator('#tcRep')).toContainText('1 ya tenía horas');
-  await expect(root.locator('#tcRep')).toContainText('Falta: ');
+  await expect(page.locator('#toast')).toContainText('2 de 3 sin horas');
+  await expect(page.locator('#toast')).toContainText('1 ajustado a su horario de hoy');
+  await expect(page.locator('#toast')).toContainText('1 ya tenía horas');
+  await expect(page.locator('#toast')).toContainText('Falta: ');
   expect(((await dbDoc(page)).rows['40000002']).h).toEqual({ p20_01: 8.5 });
   // si después cambia su horario, la hoja «no cuadra» ofrece primero ajustar las horas copiadas (no inventar HE con la salida)
   await page.evaluate(() => { TCS.doc.rows['40000001'].sal = '16:00'; tcChg(); });
@@ -817,6 +840,7 @@ test('auditoría 21-10: «Repetir» ajusta las horas al horario de hoy, «Ajusta
   await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000002']?.h).toEqual({ p20_01: 8.5, p10_05: 3 });
   // casilla: escribir 2 y tocar «El resto de su horario» sin soltar el campo → el toque no se pierde (8,5)
   await cell(root, '40000004', 'p10_05').click();
+  if (!(await root.locator('#tcCin').count())) await root.locator('#tcCell [data-tca="cellW"]').click();
   await root.locator('#tcCin').fill('2');
   await expect(root.locator('#tcCv')).toHaveText('2 h');
   await root.locator('#tcCellR').click();
@@ -824,6 +848,7 @@ test('auditoría 21-10: «Repetir» ajusta las horas al horario de hoy, «Ajusta
   await expect(cell(root, '40000004', 'p10_05')).toHaveText('8,5');
   // las horas escritas se guardan con dos decimales (antes se redondeaban a ¼ sin avisar)
   await cell(root, '40000003', 'p10_05').click();
+  if (!(await root.locator('#tcCin').count())) await root.locator('#tcCell [data-tca="cellW"]').click();
   await root.locator('#tcCin').fill('2,33');
   await root.locator('#tcCin').press('Enter');
   await expect(cell(root, '40000003', 'p10_05')).toHaveText('2,33');
@@ -848,13 +873,14 @@ test('auditoría 21-10: turno que pasa de medianoche se puede enviar y en un no 
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...oneCrew(), ['tareo', ID, readyDoc(HOY, { rows: { '40000001': fullRow('ALVA ROJAS', 'ANA', { p10_05: 8, p20_01: 8 }) } })]] });
   const root = page.locator('#tcRoot');
-  const ana = root.locator('.tc-ob[data-dni="40000001"]');
+  const ana = root.locator('#tcOb');
   // 7:30 a 0:30 del día siguiente: 17 h menos el refrigerio = 16 h (el límite de 16 h sigue)
-  await ana.locator('[data-tca="salT"]').click();
+  await root.locator('.tc-ob[data-dni="40000001"] [data-tca="ob"]').click();
   await ana.locator('input[data-tca="sal"]').fill('00:30');
   await expect(ana.locator('.tc-hres')).toContainText('16 h trabajadas (sale al día siguiente)');
   await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000001']?.sal).toBe('00:30');
   expect(await page.evaluate(() => tcErrs(TCS.doc).filter(e => e.dni).map(e => e.k))).toEqual([]);
+  await root.locator('#tcOb [data-tca="obX"]').last().click();
   // con 15 h en partidas, «Se quedó / Salió antes» propone 23:30 (no 23:59) y de verdad cuadra
   await page.evaluate(() => { TCS.doc.rows['40000001'].h = { p10_05: 8, p20_01: 7 }; tcChg(); });
   await root.locator('.tc-steps [data-tcs="2"]').click();
@@ -866,10 +892,55 @@ test('auditoría 21-10: turno que pasa de medianoche se puede enviar y en un no 
   await expect(total(root, '40000001')).toHaveClass(/ok/);
   // no laborable (domingo congelado): escribir solo la salida guarda también la entrada que se ve, y se compara con sus horas
   await page.evaluate(() => { TCS.doc.cfg = { v: 1, jor: null, fer: false, rnl: { ref: 60, refIni: '12:00' } }; const r = TCS.doc.rows['40000001']; delete r.sal; delete r.ent; r.h = { p10_05: 8.5 }; tcChg(); });
-  await root.locator('.tc-steps [data-tcs="1"]').click(); // su «Horario» sigue abierto
+  await root.locator('.tc-steps [data-tcs="1"]').click();
+  await root.locator('.tc-ob[data-dni="40000001"] [data-tca="ob"]').click();
   await ana.locator('input[data-tca="sal"]').fill('15:00');
   await expect.poll(async () => { const r = ((await dbDoc(page)).rows || {})['40000001'] || {}; return [r.ent, r.sal]; }).toEqual(['07:30', '15:00']);
   await expect(ana.locator('.tc-hres')).toContainText('6,5 h trabajadas');
   expect(await page.evaluate(() => tcErrs(TCS.doc).filter(e => e.dni).map(e => e.k))).toEqual(['hor']);
   noErrors(errors, 'auditoría 21-10 medianoche y no laborable');
+});
+
+// ── Rediseño del celular del capataz (22-10-2026): barra única, reabierto, confirmaciones que evitan perder datos ──
+test('rediseño 22-10: reabierto completo hasta «Entendido», quitar foto y «Todo el día aquí» piden confirmar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let accept = false;
+  const msgs = [];
+  page.on('dialog', d => { msgs.push(d.message()); accept ? d.accept() : d.dismiss(); });
+  const errors = await openApp(page, { as: 'tcap', editar: false, extra: [...EXTRA, ['tfot', `${ID}_1`, { date: HOY, cap: CAP, n: 1, d: 'data:image/png;base64,iVBORw0KGgo=' }],
+    ['tareo', ID, readyDoc(HOY, { st: 'reab', foto: [`${ID}_1`], reab: { t: 7, by: 'tasis@obra.pe', mot: 'Revisa las horas de Ana' },
+      rows: { '40000001': fullRow('ALVA ROJAS', 'ANA', { p10_05: 4.5, p20_01: 4 }), '40000002': fullRow('BRAVO DIAZ', 'BETO') } })]] });
+  const root = page.locator('#tcRoot');
+  // barra única: sin la barra de la app; el día lleva ⚠ por estar reabierto
+  await expect(page.locator('.top')).toBeHidden();
+  await expect(root.locator('.tc-dayb')).toContainText('⚠');
+  // el aviso se lee completo hasta «Entendido»; después el motivo sigue en el menú del día
+  await expect(root.locator('#tcReab')).toContainText('Revisa las horas de Ana');
+  await root.locator('[data-tcm="reabOk"]').click();
+  await expect(root.locator('#tcReab')).toHaveCount(0);
+  await root.locator('[data-tcm="day"]').click();
+  await expect(root.locator('#tcMenu')).toContainText('Revisa las horas de Ana');
+  await root.locator('#tcMenu [data-tcm="x"]').last().click();
+  // pasos 2 a 4: sin la barra inferior de la app
+  await root.locator('.tc-foot [data-tca="todos"]').click();
+  await root.locator('.tc-steps [data-tcs="4"]').click();
+  await expect(page.locator('#bnav')).toBeHidden();
+  // quitar la foto pide confirmar: cancelar la deja
+  await root.locator('[data-tca="fx"]').click();
+  expect(msgs.pop()).toContain('¿Quitar esta foto?');
+  await page.waitForTimeout(300);
+  expect((await dbDoc(page)).foto).toEqual([`${ID}_1`]);
+  // «Todo el día aquí» con alguien que ya tiene horas en otra partida: confirma; cancelar no cambia nada
+  await root.locator('.tc-steps [data-tcs="3"]').click();
+  await root.locator('[data-tca="multi"]').click();
+  await root.locator('.tc-gnb[data-dni="40000001"]').click();
+  await root.locator('th.tc-gp[data-pc="p20_01"] [data-tca="pcAll"]').click();
+  await root.locator('#tcMpc [data-tca="mpcSet"][data-m="all"]').click();
+  expect(msgs.pop()).toContain('ya tiene horas en otras partidas');
+  expect(await page.evaluate(() => TCS.doc.rows['40000001'].h)).toEqual({ p10_05: 4.5, p20_01: 4 });
+  accept = true;
+  await root.locator('#tcMpc [data-tca="mpcSet"][data-m="all"]').click();
+  await expect.poll(async () => ((await dbDoc(page)).rows || {})['40000001']?.h).toEqual({ p20_01: 8.5 });
+  await expect(root.locator('#tcMBar')).toHaveCount(0);
+  noErrors(errors, 'rediseño 22-10');
 });
