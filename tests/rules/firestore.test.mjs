@@ -1318,22 +1318,24 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
 // ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
 const L = async (k, p) => { try { await p; } catch (e) { throw new Error('not ok ETO ' + k + ' :: ' + String(e.message).replace(/\s+/g, ' ').slice(0, 250)); } };
 const testE = (n, fn) => test(n, async () => { try { await fn(); } catch (e) { throw new Error('Expected ETO ' + String(e && e.message).replace(/\s+/g, ' ').slice(0, 300) + ' @ ' + String(e && e.stack).split('\n').find(l => l.includes('firestore.test.mjs'))); } });
+const U = e => { try { return user(e); } catch (x) { throw new Error('ctx ' + e + ' ' + x.message); } };
+const UC = e => { try { return cap(e); } catch (x) { throw new Error('ctx cap ' + e + ' ' + x.message); } };
 const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
 testE('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
   await env.withSecurityRulesDisabled(async c => {
     await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO());
     await setDoc(doc(c.firestore(), 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
   });
-  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER)]) {
+  for (const db of [U('editor@obra.pe'), U('lector@obra.pe'), U('ot@obra.pe'), U('campo@obra.pe'), U(OWNER)]) {
     await L('assertSucceeds#1', assertSucceeds(getDoc(doc(db, 'eto/ETO_c-otro_A1'))));
     await L('assertSucceeds#2', assertSucceeds(getDocs(collection(db, 'eto'))));
   }
-  const sc = user('sc@obra.pe');
+  const sc = U('sc@obra.pe');
   await L('assertSucceeds#3', assertSucceeds(getDoc(doc(sc, 'eto/ETO_c-gabel_M02'))));
 });
 testE('ETO: el SC consulta los de su partida', async () => {
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO()); });
-  const sc = user('sc@obra.pe');
+  const sc = U('sc@obra.pe');
   await L('assertSucceeds#4', assertSucceeds(getDocs(query(collection(sc, 'eto'), where('sc', '==', 'c-gabel')))));
 });
 testE('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
@@ -1341,16 +1343,16 @@ testE('ETO: el SC no ve los de otro SC; solo el administrador escribe', async ()
     await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO());
     await setDoc(doc(c.firestore(), 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
   });
-  const sc = user('sc@obra.pe');
+  const sc = U('sc@obra.pe');
   await L('assertFails#5', assertFails(getDoc(doc(sc, 'eto/ETO_c-otro_A1'))));
   await L('assertFails#6', assertFails(getDocs(collection(sc, 'eto'))));
-  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await L('assertFails#7', assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02'))));
-  for (const db of [user('editor@obra.pe'), user('ot@obra.pe'), sc, user('lector@obra.pe')]) {
+  for (const db of [UC('cap1'), U('tasis@obra.pe')]) await L('assertFails#7', assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02'))));
+  for (const db of [U('editor@obra.pe'), U('ot@obra.pe'), sc, U('lector@obra.pe')]) {
     await L('assertFails#8', assertFails(setDoc(doc(db, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' }))));
     await L('assertFails#9', assertFails(updateDoc(doc(db, 'eto/ETO_c-gabel_M02'), { tit: 'otro' })));
     await L('assertFails#10', assertFails(deleteDoc(doc(db, 'eto/ETO_c-gabel_M02'))));
   }
-  const ad = user(OWNER);
+  const ad = U(OWNER);
   await L('assertSucceeds#11', assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' }))));
   await L('assertSucceeds#12', assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_S1'), ETO({ cod: '' }))));
   await L('assertFails#13', assertFails(setDoc(doc(ad, 'eto/x1'), ETO({ sc: '' }))));
