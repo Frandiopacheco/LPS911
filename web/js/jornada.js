@@ -3,7 +3,7 @@
    · «Detenciones»: qué reportó cada SC como «Detenido» en campo (reporte por excepción): actividad, piso y ambiente, motivo con su
      detalle, hora y estado (sigue detenido, reanudado o reportado al cierre). Resumen por motivo, que filtra. Los SC con 2 o más
      detenciones van en tarjeta; los de una sola, en una línea. Es lo que el SC reportó, no la conclusión: esa queda en «Causas».
-   · «Cierre del día»: quién ya cerró el día (cumplido o no cumplido, propuesto por el SC/capataz o verificado por el ingeniero).
+   · «Cierre del día»: quién ya cerró el día (cumplido o no cumplido, marcado por el SC/capataz —cuenta al instante— o registrado por el ingeniero).
    Se ven en una hoja con dos pestañas (botón «📊 Jornada» de Campo y del Tablero; abre en Detenciones y, desde las 2 pm, en Cierre),
    se mandan por WhatsApp como imagen (PNG dibujado en un lienzo, sin librerías) y son dos láminas de «▶ Presentar» del día
    (Indicadores › Diario). En Campo, tocar una detención abre su ficha; en el Tablero, su resumen (solo lectura).

@@ -623,14 +623,14 @@ function zcRender(){if(!ZC)return;const x=S.act.get(ZC.aid);if(!x){zcClose();ret
   const future=M.date>todayIso();const can=typeof canDaily!=='undefined'&&canDaily&&!future&&!ZC.ro;const N=nbMap();const lv=typeof liveOf==='function'?liveOf(M.date,x.id):null;
   const phs=[...new Set([...(r&&r.photos||[]),...(lv&&lv.photos||[])])];phs.forEach(id=>typeof loadFoto==='function'&&loadFoto(id));
   let h=`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
-    <div class="zcst" style="--c:${STC[st]}"><b>${STI[st]} ${STT[st]}</b>${r&&r.cnc?`<span>Causa: ${esc(r.cnc)}</span>`:''}${r&&r._prop?'<span>Cierre del capataz · por confirmar</span>':''}</div>
+    <div class="zcst" style="--c:${STC[st]}"><b>${STI[st]} ${STT[st]}</b>${r&&r.cnc?`<span>Causa: ${esc(r.cnc)}</span>`:''}${r&&r._prop?'<span>Cierre del SC/capataz · ya cuenta así</span>':''}</div>
     ${r&&r.note?`<p class="zcn">“${esc(r.note)}”</p>`:''}
     ${r?`<p class="zcm">${r._prop?'Lo reportó':'Lo registró'} ${esc(r.byName||r.by||'—')}${r.ts?' · '+fmtD(ldt(r.ts))+' '+hhmm(r.ts):''}${r.corr?` · <b>corregido en ${esc(r.corr.via)}</b>`:''}</p>`:'<p class="zcm">Nadie registró el cumplimiento de este día.</p>'}
     ${r&&(r.hist||[]).length?`<ul class="zchi">${r.hist.slice().reverse().map(o=>`<li>Antes: ${STI[o.st]||''} ${esc(STT[o.st]||o.st)}${o.cnc?' · '+esc(o.cnc):''} · ${esc(o.n||'')}${o.t?' · '+fmtD(ldt(o.t))+' '+hhmm(o.t):''}</li>`).join('')}</ul>`:''}
     ${lv&&lv.mot?`<p class="zcm">Detención reportada: ${esc(lv.mot)}</p>`:''}
     ${phs.length?`<div class="zcph">${phs.map(id=>`<img data-ph="${id}" src="${FOTO.get(id)||''}" alt="Foto del registro"${FOTO.get(id)?'':' style="opacity:.3"'}>`).join('')}</div>`:''}
     ${ZC.ro&&typeof canDaily!=='undefined'&&canDaily&&!future?'<p class="zcm">Solo consulta: el cumplimiento se registra en Campo.</p>':''}
-    ${can?`<div class="zcb">${r&&r._prop?'<button class="ib pri" data-zcs="conf">✓ Confirmar lo reportado</button>':''}${(st==='partial'?['ok','partial','no']:['ok','no']).map(k=>`<button class="ib zcb-${k}${(ZC.ask?ZC.ask===k:st===k&&!(r&&r._prop))?' on':''}" data-zcs="${k}">${k==='ok'?'✓ Cumplido':k==='no'?'✗ No':STI[k]+' '+STT[k]}</button>`).join('')}</div>
+    ${can?`<div class="zcb">${r&&r._prop?'<button class="ib pri" data-zcs="conf">✓ Revisado (queda así)</button>':''}${(st==='partial'?['ok','partial','no']:['ok','no']).map(k=>`<button class="ib zcb-${k}${(ZC.ask?ZC.ask===k:st===k&&!(r&&r._prop))?' on':''}" data-zcs="${k}">${k==='ok'?'✓ Cumplido':k==='no'?'✗ No':STI[k]+' '+STT[k]}</button>`).join('')}</div>
     ${ZC.ask?`<div class="zcq"><b>¿Por qué no se cumplió?</b>${(P().cnc||[]).map((c,i)=>`<button class="chip" data-zcc="${i}" title="${esc(cncTip(c))}">${esc(cncLabel(c))}</button>`).join('')}<button class="chip" data-zcc="-1">Sin causa</button></div>`:''}${r&&r.status&&!r._prop?'<p class="zcm">Si lo cambias, queda registrado quién lo corrigió y qué decía antes.</p>':''}`:future?'<p class="zcm">Día futuro: aún no se registra el cumplimiento.</p>':''}`;
   zcShow(h)}
 function zcShow(h){let el=document.getElementById('mzc');if(!el){el=document.createElement('div');el.id='mzc';el.className='mzc';el.setAttribute('role','dialog');document.body.appendChild(el);el.onclick=zcClick}
@@ -663,7 +663,7 @@ function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();retur
   const im=t.closest('img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')&&typeof lightbox==='function'){lightbox(im.src);return}
   {const c=t.closest('[data-zcc]');if(c&&ZC){zcCause(+c.dataset.zcc);return}}
   const b=t.closest('[data-zcs]');if(!b||!ZC)return;const k=b.dataset.zcs;const x=S.act.get(ZC.aid);if(!x)return;const z={actId:x.id};
-  if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Confirmado');setTimeout(zcRender,60)}return}
+  if(k==='conf'){if(typeof confirmProp==='function'){confirmProp(M.date,x.id);toast('Registrado como revisado');setTimeout(zcRender,60)}return}
   if(k==='ok'){ZC.ask=null;setRec(z,'ok');setTimeout(zcRender,60);return}
   /* la causa se elige dentro de la misma ficha (una ventanita aparte quedaba detrás) */
   ZC.ask=ZC.ask===k?null:k;zcRender()}

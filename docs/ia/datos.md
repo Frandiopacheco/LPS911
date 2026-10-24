@@ -4,6 +4,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 ## Datos (Firestore)
 
+- **Calendario** (`meta/project.cal`): `sat` (sábado laborable), `hol:[{d,n}]` feriados, `work:[{d,n}]` fechas que **se trabajan** aunque sean domingo/feriado/sábado no laborable (C-08, tanda 1; `isWork` de página y servidor), `holPre:[años]` constancia de la precarga automática de feriados de Perú (servidor). Horas de `meta/project` solo del administrador (`META_ADM` y reglas): `closeCutHH` (corte del SC), `engCutHH` (Cierre del ingeniero), `planCutHH`, `rstHasta` (ms; ventana para restaurar un respaldo con días cerrados).
 - **Estructura:** `meta/project`, `pisos`, `sectors`, `ambientes`, `acts`, `weeks`, `restr`, `contractors`. Se cargan enteras al entrar (`COLS`). Sectores y ambientes pueden tener `geo:{vistaId:[x,y,…]}`: su forma en la lámina base del piso (Sectorización).
 - **Lookahead:**
   - `acts`: `{ambId, sc, name, und, metrado, days:[YYYY-MM-DD], qty:{fecha:n}, order, arch?}`.
@@ -11,8 +12,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - `lhprop/{sc}`: propuestas de subcontratistas. Cada elemento: `{after, base, ts, by, n, sent, sentAt, sent0?, sig?, sentPrev?}` (`sent0` = primer envío, `sig` = firma del contenido enviado, `sentPrev` = último envío mientras es borrador). Su `hist` es el historial **antiguo** (solo se lee).
   - `lhphist/{sc}_{actId}_{t}`: una decisión por documento `{sc, actId, sk, st, kind, from, to, note, t, by, n, sentAt, sent0, late:{w,cut}|null, lateNote, prop:{campo:[antes,después]}, chg:{…}|null, undone?}` (`prop` = lo que pidió el SC, `chg` = lo que se aplicó; `sk` = `sc|t` con ceros para leer por rango sin índice compuesto). Reglas: crea quien decide (`canEdit`), después solo cambia `undone`, no se borra.
 - **Campo:**
-  - `daily/{fecha}_{pisoId}`: `{date, pisoId, recs:{actId:{status:'ok'|'no'|'partial', cnc, note, done, photos, prop, sc, nm, ambId, by, ts}}, extra:{}}`.
-  - `live/{fecha}_{actId}`: reportes en vivo del capataz (`st` run/stop, `close`, `log`, `sat` = hora del servidor).
+  - `daily/{fecha}_{pisoId}`: `{date, pisoId, recs:{actId:{status:'ok'|'no'|'partial', cnc, note, done, photos, prop, sc, nm, ambId, by, ts, bySc?, sinCierre?, autoSrv?}}, extra:{}}`. `bySc:true` = cierre del SC/capataz escrito tal como lo marcó por el servidor a la hora del Cierre del ingeniero (tanda 1); `sinCierre:true` = «Sin cierre» del servidor. **Cerrado** (reglas `dayShut`): pasado el Cierre del ingeniero de esa fecha (`meta/project.engCutHH`, por defecto 21:00) nadie lo escribe, ni el administrador; solo el servidor (Admin SDK) o una restauración de respaldo con la ventana `meta/project.rstHasta`.
+  - `live/{fecha}_{actId}`: reportes en vivo del capataz (`st` run/stop, `close`, `log`, `sat` = hora del servidor). Mismo cierre que `daily`; además el SC/capataz solo escribe `close` hasta su hora de corte (`closeCutHH`) + 10 min (PER-1).
+  - `jcl/{fecha}`: constancia del cierre de la jornada (`aceptarCierres`), solo el servidor (sin acceso de la página).
   - `doneidx/{pisoId}`: `{d:{actId:fecha}}`, índice de actividades terminadas.
   - `nprog/{id}`: trabajo **no programado** visto en obra `{date, pisoId, ambId, sc, desc, und, exec, note, photos, pt:{x,y,v}|null, by, byName, ts, del?, actId?, ed?}` (`pt` = punto en la lámina `v`; `actId` si se pasó al lookahead). Los antiguos están en `daily.extra`: léelos siempre juntos con `npItems(fechas, pisos)`.
   - `fotos`: imágenes base64 (se pasarán a Cloud Storage).
