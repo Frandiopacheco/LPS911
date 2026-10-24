@@ -180,10 +180,11 @@ async function congelar() {
     const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
     if (mine.length && skip.size === snaps.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'todos los pisos ya estaban congelados' }, [], [], { k: 0 })); continue; }
     const today = limaToday(now);
-    const [sectors, ambientes, acts, didx, daily, lives, props, contractors] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
-      db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop'), all('contractors')]);
+    const [sectors, ambientes, acts, didx, daily, lives, props, contractors, restr, libs] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+      db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop'), all('contractors'),
+      all('restr'), all('lib')]);
     const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(d => d.data()), lives: lives.docs.map(d => d.data()), acts });
-    const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()], contractors }, n, new Date(now).toISOString());
+    const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()], contractors, restr, libs }, n, new Date(now).toISOString());
     const todo = L.filter(o => !skip.has(o.id) && (!plan.only || plan.only.has(o.doc.pisoId)));
     const byPiso = new Map(todo.map(o => [o.doc.pisoId, o]));
     /* cada piso en su propia transacción y con su propio try/catch: si uno falla, los demás se congelan igual */
@@ -279,9 +280,10 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   }
   if (!plan) return;
   const d = (plan.only && prev && prev.d) || nextWork(project, today);
-  const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+  const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay, restr, libs] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
     db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('contractors'),
-    db().collection('pdz').where('date', '==', d).get()]);
+    db().collection('pdz').where('date', '==', d).get(),
+    all('restr'), all('lib')]);
   const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(x => x.data()), lives: lives.docs.map(x => x.data()), acts });
   const zs = pdzDay.docs.map(x => ({ ...x.data(), id: x.id }));
   const vivos = [...pisos.values()].filter(p => !p.arch && (!plan.only || plan.only.has(p.id)));
@@ -291,7 +293,7 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
     const drafts = zs.filter(z => ((z.kind === 'nova' && z.draft) || (z.kind === 'padd' && z.draft && z.st === 'ok')) && z.pisoId === pid);
     const props = pendProps(zs, d, pid);
     const zones = zs.filter(z => z.kind === 'zona' && z.paId && z.pisoId === pid);
-    const res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, zones, piso: p, logger }, d, now);
+    const res = await closePlanPiso(db(), { project, pisos, sectors, ambientes, acts, done, contractors, drafts, props, zones, piso: p, logger, restr, libs }, d, now);
     if (res.skip) { if (res.has) cerr.add(pid); return; }
     if (Object.keys(res.ids).length) { k++; cerr.add(pid); } else cerr.delete(pid); // sin nada que comprometer: no se vuelve a mirar
     if (res.R) { np += res.R.novas.length; if (res.R.log.length) logger.warn(`Plan del ${d} piso ${pid}: ${res.R.log.join(' · ')}`); if (res.R.skipped.length) logger.info(`Plan del ${d} piso ${pid}: ya no estaban ese día: ${res.R.skipped.join(', ')}`); }

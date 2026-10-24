@@ -355,8 +355,10 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const top=Object.entries(cn).sort((a,b)=>b[1]-a[1]).slice(0,6);
   /* restricciones abiertas (afectan a actividades que pasan los filtros) */
   const RS=restrInScope().filter(rOpenC).filter(r=>{const x=r.actId&&S.act.get(r.actId);if(!DB_.sc.size&&!DB_.ty)return true;if(!x)return!DB_.ty&&(!r.sc||!DB_.sc.size||DB_.sc.has(r.sc));return dashOk(x.sc,x.name)});
-  const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
-  const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d)o.late++});
+  /* C-23: las de un «No va» cuya actividad ya se ejecutó se muestran aparte (no inflan «vencidas») */
+  const rPS=new Set(RS.filter(r=>typeof rPosLib==='function'&&rPosLib(r)).map(r=>r.id));const rPos=rPS.size;
+  const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d&&!rPS.has(r.id)).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
+  const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d&&!rPS.has(r.id))o.late++});
   const rRows=Object.entries(rBy).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>({label:k,v:o.n,sub:o.late?o.late+' vencidas':''}));
   const AV=dashAvance(cw,vsP,d);const AVall=DB_.sc.size?noSc(()=>dashAvance(cw,vsP,d)):AV;
   /* por subcontratista, hoy */
@@ -379,7 +381,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
     ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
     ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].wk}–${full[full.length-1].wk}`:'sin semanas cerradas','dkppc')}
-    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}
+    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas${rPos?` · ${rPos} posiblemente liberada${rPos>1?'s':''}`:''} · ${rNext} para los próximos 7 días`,'','#B26A00')}
     ${(()=>{const u=dashSinSc(vsP,d);return u.n?K('Sin subcontratista',u.n,`${u.pron} programadas en 3 semanas`,'','#9AA0A6'):''})()}</div>`;
   const trend=W.length?`${linesLegend()}<div class="dsv chart">${svgLines(W.map(o=>({label:'S'+o.w,a:o.ppc,b:o.ppcSc??o.ppc,part:o.ev<o.n,sub:`${o.ok} de ${o.n} compromisos`})),{h:220,minW:760})}</div>`:'<p class="mu">Aún no hay semanas congeladas.</p>';
   /* oct 2026 (opción A elegida por el dueño): fila 1 = PPC semanal ancho + causas; fila 2 = PPC por SC + avance de la semana (misma altura,

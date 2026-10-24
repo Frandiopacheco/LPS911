@@ -283,12 +283,43 @@ function propTouch(b, a) {
   if ((a.und || '') !== (b.und || '') || (a.metrado ?? null) !== (b.metrado ?? null) || (a.name || '') !== (b.name || '')) ad.forEach(d => T.add(d));
   return [...T].sort();
 }
+/* C-17 (tanda 2, LPS-9): compromisos que entran (al congelar la semana o al publicar el plan del día) con restricciones abiertas o con
+   una liberación CRÍTICA de Calidad sin liberar. Devuelve {actId: [restrId | 'lib:'+libId]} solo para las actividades de ids (vacío = {}).
+   Restricción abierta: con esa actId, no liberada (status != 'lib') y no archivada. Liberación crítica pendiente: crit y en estado
+   distinto de lib/libm/anu; restringe a la actividad del mismo ambiente que se llama como «rest» o, sin «rest», a la primera de otra
+   partida después de la liberada (como libNextAct de la página). Misma lógica que restrInOf de web/js/plan-restricciones.js. */
+const nrmName = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]+/g, ' ').trim();
+function critLibMap(libs = [], acts = new Map()) {
+  const out = new Map(); const L = (libs instanceof Map ? [...libs.values()] : libs).filter(l => l && l.crit && !['lib', 'libm', 'anu'].includes(l.st));
+  if (!L.length) return out;
+  const X = (acts instanceof Map ? [...acts.values()] : Object.values(acts)).filter(x => x && !x.arch);
+  const byAmb = new Map(); for (const x of X) { let a = byAmb.get(x.ambId); if (!a) byAmb.set(x.ambId, a = []); a.push(x); }
+  for (const a of byAmb.values()) a.sort(byOrder);
+  for (const l of L) {
+    const own = (l.actId && X.find(x => x.id === l.actId)) || { ambId: l.ambId, sc: l.sc };
+    const A = byAmb.get(own.ambId) || []; let T = [];
+    const rest = nrmName(l.rest);
+    if (rest) T = A.filter(y => y.id !== l.actId && nrmName(y.name) === rest);
+    else { const i = own.id ? A.findIndex(y => y.id === own.id) : -1; for (let j = i + 1; j < A.length; j++) if (A[j].sc && A[j].sc !== own.sc) { T = [A[j]]; break; } }
+    for (const y of T) { const o = out.get(y.id); if (o) o.push(l.id); else out.set(y.id, [l.id]); }
+  }
+  return out;
+}
+function restrInOf(ids, { restr = [], libs = [], acts = new Map() } = {}) {
+  const want = new Set(ids); const o = {};
+  for (const r of (restr instanceof Map ? [...restr.values()] : restr)) {
+    if (!r || !r.actId || !want.has(r.actId) || r.status === 'lib' || r.arch) continue;
+    (o[r.actId] = o[r.actId] || []).push(r.id);
+  }
+  for (const [aid, L] of critLibMap(libs, acts)) if (want.has(aid)) (o[aid] = o[aid] || []).push(...L.map(id => 'lib:' + id));
+  return o;
+}
 /* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, propOut } como «Congelar», y aparte
    la foto del lookahead del piso (snap: días de todas sus actividades), que va a wsnap/<n>_<piso> (auditoría de datos M1: dentro de
    weeks la descargaba todo el mundo al entrar y crecía con cada semana). Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
 /* C-29 (tanda 1, DAT-02): cada compromiso guarda también el nombre del SC de ese momento (scn), como la página; contractors (Map
    opcional) = la colección contractors. */
-function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [], contractors = null }, n, nowIso) {
+function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [], contractors = null, restr = null, libs = null }, n, nowIso) {
   const scnOf = sc => { const c = sc && contractors && (contractors instanceof Map ? contractors.get(sc) : contractors[sc]); return c && c.name ? { scn: c.name } : {}; };
   const live = m => [...m.values()].filter(x => !x.arch);
   const P = live(pisos).sort(byOrder); if (!P.length) return [];
@@ -327,7 +358,9 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
       if (propTouch(off, pa).some(z => days.has(z))) { const k = (d.sc || d.id) + '/' + id; propOut.push(k); propOutT[k] = it.sentAt || 0; }
     }
     /* propOutT (oct 2026): hora de envío de cada propuesta que quedó fuera, para poder ver en el Plan semanal cuándo llegó */
-    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut, propOutT } : {}) },
+    /* C-17: qué compromisos entraron con restricciones abiertas o liberación crítica pendiente (para analizar después) */
+    const restrIn = restr || libs ? restrInOf(Object.keys(items), { restr: restr || [], libs: libs || [], acts }) : {};
+    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut, propOutT } : {}), ...(Object.keys(restrIn).length ? { restrIn } : {}) },
       wsnap: { snap, n, pisoId: p.id, t: nowIso } });
   }
   return out;
@@ -503,7 +536,7 @@ const pendProps = (docs, date, pisoId) => docs.filter(z => z && (z.kind === 'dpr
    reabierto, no hace nada. Si no: relee el aviso de publicado, cada borrador, sus actividades y los planes cerrados de las fechas
    que tocarían; publica los borradores (publishDrafts), rechaza las propuestas del SC aún pendientes y guarda la foto del plan
    (buildDayPlan con las actividades ya corridas). ctx.drafts / ctx.props: los docs pdz del día y piso (leídos antes). */
-async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts, done = new Map(), contractors = new Map(), drafts = [], props = [], zones = [], piso, logger = null }, d, now = Date.now()) {
+async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts, done = new Map(), contractors = new Map(), drafts = [], props = [], zones = [], piso, logger = null, restr = null, libs = null }, d, now = Date.now()) {
   const pid = piso.id; const col = c => db.collection(c);
   const dref = col('dplan').doc(d + '_' + pid); const PID = 'pub_' + d + '_' + pid; const pref = col('pdz').doc(PID);
   return db.runTransaction(async tx => {
@@ -556,7 +589,9 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const P2 = P;
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
     const pub = !!(R && R.pub);
-    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, who, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}) });
+    /* C-17: compromisos del día que entran con restricciones abiertas o liberación crítica pendiente (sin aviso en el servidor) */
+    const restrIn = restr || libs ? restrInOf(Object.keys(ids), { restr: restr || [], libs: libs || [], acts: Acts }) : {};
+    if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, who, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}), ...(Object.keys(restrIn).length ? { restrIn } : {}) });
     return { R, P: P2, ids };
   });
 }
@@ -797,6 +832,6 @@ module.exports = {
   CLOSE_GRACE, engCutHH, engCutTs, jornadaDays, holPeru, holPreload, easter,
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };
