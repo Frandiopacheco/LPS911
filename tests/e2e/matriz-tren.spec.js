@@ -35,7 +35,6 @@ test('tren: la fantasma va después de su predecesora y antes de su sucesora; si
 
 test('tren: la vista lista el orden, mueve con ↑ y deshace', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mat', extra: CAT });
-  await expect(page.locator('#toast')).toContainText('respaldo', { timeout: 8000 }); // aviso del arranque: que no tape el «Deshacer»
   await page.evaluate(() => { U.mxV = 'tren'; render(); });
   await expect(page.locator('#mxtrl li')).toHaveCount(3);
   await expect(page.locator('#mxtrl li').nth(1)).toContainText('Pintura');

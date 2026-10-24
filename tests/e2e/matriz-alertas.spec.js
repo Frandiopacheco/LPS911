@@ -64,8 +64,6 @@ test('faltan programar: el interruptor muestra la fila fantasma y tocar un día 
 test('faltan programar: apagado no hay chips ni filas; encendido el chip pliega ese ambiente; ⋮ agrega sin días o marca «No aplica»', async ({ page }) => {
   page.on('dialog', d => d.accept());
   const errors = await openApp(page, { tab: 'look', extra: CAT });
-  /* el aviso de respaldo sale a los 4 s del arranque y tapaba el «Deshacer» de «No aplica»: se espera a que pase */
-  await expect(page.locator('#toast')).toContainText('respaldo', { timeout: 8000 });
   await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
   await expect(page.locator('[data-ghamb]')).toHaveCount(0);
   await expect(gh(page)).toHaveCount(0);
