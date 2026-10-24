@@ -1317,8 +1317,9 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
 
 // ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
 const L = async (k, p) => { try { await p; } catch (e) { throw new Error('not ok ETO ' + k + ' :: ' + String(e.message).replace(/\s+/g, ' ').slice(0, 250)); } };
+const testE = (n, fn) => test(n, async () => { try { await fn(); } catch (e) { throw new Error('Expected ETO ' + String(e && e.message).replace(/\s+/g, ' ').slice(0, 300) + ' @ ' + String(e && e.stack).split('\n').find(l => l.includes('firestore.test.mjs'))); } });
 const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
-test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
+testE('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
   await env.withSecurityRulesDisabled(async c => {
     await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO());
     await setDoc(doc(c.firestore(), 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
@@ -1330,12 +1331,12 @@ test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y
   const sc = user('sc@obra.pe');
   await L('assertSucceeds#3', assertSucceeds(getDoc(doc(sc, 'eto/ETO_c-gabel_M02'))));
 });
-test('ETO: el SC consulta los de su partida', async () => {
+testE('ETO: el SC consulta los de su partida', async () => {
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO()); });
   const sc = user('sc@obra.pe');
   await L('assertSucceeds#4', assertSucceeds(getDocs(query(collection(sc, 'eto'), where('sc', '==', 'c-gabel')))));
 });
-test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
+testE('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
   await env.withSecurityRulesDisabled(async c => {
     await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO());
     await setDoc(doc(c.firestore(), 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
