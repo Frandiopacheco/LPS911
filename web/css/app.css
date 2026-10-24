@@ -4509,3 +4509,17 @@ p.smline{display:block;border-left-color:var(--line)}
 .ppk.why{margin-left:4px;background:var(--warn-soft);color:var(--warn)}.ppk.why.obra{background:var(--ok-soft);color:var(--ok)}
 .advb{display:inline-block;margin-left:6px;vertical-align:1px;font-size:11.5px;font-weight:600;border-radius:4px;padding:0 5px;border:1px solid var(--warn);color:var(--warn);background:var(--warn-soft)}
 .advb.obra{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+/* ---------- P4 · Revisión de flujos por ambiente (js/flujos.js, oct 2026) ---------- */
+.fstrip{display:inline-flex;gap:2px;align-items:center;margin:2px 0 0;padding:3px 4px;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer}
+.fstrip i{width:7px;height:7px;border-radius:50%;background:var(--line2)}
+.fstrip i.fs-ok{background:var(--ok)}.fstrip i.fs-sug{background:var(--warn)}.fstrip i.fs-res{background:var(--bad)}.fstrip i.fs-none{background:var(--line2)}
+.fstrip:hover{border-color:var(--accent)}
+.frvd{width:min(720px,100%)}
+.frvr.done{opacity:.75}.frvr em{font-style:normal;font-weight:600}.frvr em.ok{color:var(--ok)}.frvr em.warn{color:var(--warn)}.frvr em.bad{color:var(--bad)}
+.frvb{display:flex;gap:6px;flex:none}
+.frdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}
+.frf{border-left:4px solid var(--line2)}.frf.fs-ok{border-left-color:var(--ok)}.frf.fs-sug{border-left-color:var(--warn)}.frf.fs-res{border-left-color:var(--bad)}
+.frf small.frsug{color:var(--warn);font-weight:600}.frf small.frred{color:var(--bad);font-weight:600}
+.frseg{flex:none}.frseg button{min-height:36px}
+.frst{flex:none;font-size:12.5px;color:var(--muted)}
+@media (max-width:760px){.frvb{width:100%}.frvb .ib{flex:1}}
