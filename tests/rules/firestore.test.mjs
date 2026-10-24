@@ -1327,7 +1327,18 @@ test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y
   }
   const sc = user('sc@obra.pe');
   await assertSucceeds(getDoc(doc(sc, 'eto/ETO_c-gabel_M02')));
+});
+test('ETO: el SC consulta los de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO()); });
+  const sc = user('sc@obra.pe');
   await assertSucceeds(getDocs(query(collection(sc, 'eto'), where('sc', '==', 'c-gabel'))));
+});
+test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO());
+    await setDoc(doc(c.firestore(), 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
+  });
+  const sc = user('sc@obra.pe');
   await assertFails(getDoc(doc(sc, 'eto/ETO_c-otro_A1')));
   await assertFails(getDocs(collection(sc, 'eto')));
   for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02')));
