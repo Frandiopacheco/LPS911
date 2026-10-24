@@ -4,6 +4,8 @@
 /* ================= LOOKAHEAD ================= */
 /** ficha corta de las restricciones pendientes de una actividad (al pasar el mouse por la «R» del lookahead) */
 function restrTip(aid){const L=typeof restrPend==='function'?restrPend(aid):[];const t=todayIso();if(!L.length)return'Restricción pendiente';
+  /* PER-7 (tanda 3): en filas de otras partidas el SC ve solo el tipo, para cuándo se necesita liberar y si está vencida */
+  if(L.some(rOther))return L.map((r,i)=>`${L.length>1?(i+1)+'. ':''}⛔ ${rOther(r)?`${r.type||'Restricción'}${r.need?` · liberar para el ${fmtD(r.need)}`:''} · ${r.need&&r.need<t?'VENCIDA':'pendiente'}`:`${r.desc||r.type||'Restricción'}${r.need?` · requerida ${fmtD(r.need)}${r.need<t?' (VENCIDA)':''}`:''}`}`).join('\n')+'\n\nDe otra partida: el detalle lo ve el ingeniero';
   return L.map((r,i)=>`${L.length>1?(i+1)+'. ':''}⛔ ${r.desc||r.type||'Restricción'}${r.cnc?' · causa '+(cncCode(r.cnc)||r.cnc):r.type?' · '+r.type:''}\n   La libera: ${r.resp||(grpOf(r)==='area'&&r.area?r.area:'—')}${r.need?` · requerida ${fmtD(r.need)}${r.need<t?' (VENCIDA)':''}`:''}${r.byName?' · registró '+r.byName:''}`).join('\n')+'\n\nToca para verlas en Restricciones'}
 function tree(){
   const secBy={},ambBy={},actBy={};
@@ -863,10 +865,19 @@ function addSector(pid){if(pmNoStruct())return;pid=pid||U.piso||firstPiso();if(!
 function conByName(n){n=String(n||'').trim().toUpperCase();if(!n)return null;for(const c of S.con.values())if(c.name.toUpperCase()===n)return c.id;return null}
 function pasteActs(aid,lines){const x=S.act.get(aid);if(!x)return;const sib=siblings('acts','ambId',x.ambId);const i=sib.findIndex(a=>a.id===x.id);const nxt=sib[i+1];
   const parse=l=>{const c=l.split('\t').map(v=>v.trim());if(c.length>=2){const sc=conByName(c[0]);if(sc)return{sc,name:c.slice(1).join(' ').trim()};}return{sc:null,name:c.filter(Boolean).join(' ')}};
-  const items=lines.map(parse);const ops=[];const f=items[0];ops.push(op('acts',x.id,{...x,name:f.name,sc:f.sc||x.sc}));
-  const step=nxt?(nxt.order-x.order)/(items.length+1):10;let lastSc=f.sc||x.sc;
-  items.slice(1).forEach((it,k)=>{const id=uid('act')+k;lastSc=it.sc||lastSc;ops.push(op('acts',id,{id,ambId:x.ambId,sc:lastSc,name:it.name,und:'',metrado:null,days:[],order:x.order+step*(k+1)}))});
-  apply(ops,`${items.length} actividades pegadas`)}
+  const items=lines.map(parse);const ops=[];const f=items[0];
+  /* C-31 (tanda 3, PER-3): la primera línea renombra esta fila solo si no tiene historial (o es la misma actividad); si lo tiene,
+     solo el administrador la cambia (con motivo, histGate). Para los demás la fila queda como está y todas las líneas van como filas nuevas. */
+  const nm=f.name,ns=f.sc||x.sc;const chN=x.name&&!actSameName(x,'name',nm),chS=x.sc&&ns!==x.sc;
+  const hist=(chN||chS)&&!cliOn()&&actHist(x).length;const skip=hist&&!isAdmin;
+  const rest=skip?items:items.slice(1);
+  if(!skip&&!hist)ops.push(op('acts',x.id,{...x,name:nm,sc:ns}));
+  const step=nxt?(nxt.order-x.order)/(rest.length+1):10;let lastSc=skip?x.sc:ns;
+  rest.forEach((it,k)=>{const id=uid('act')+k;lastSc=it.sc||lastSc;ops.push(op('acts',id,{id,ambId:x.ambId,sc:lastSc,name:it.name,und:'',metrado:null,days:[],order:x.order+step*(k+1)}))});
+  const k=ops.length;
+  if(skip)apply(ops,`«${x.name}» tiene historial: no se renombró (1 fila saltada: solo el administrador puede hacerlo). ${k} ${k===1?'línea pegada como fila nueva':'líneas pegadas como filas nuevas'} debajo.`);
+  else if(k)apply(ops,`${k} ${k===1?'actividad pegada':'actividades pegadas'}`);
+  if(hist&&!skip)histGate(x,chN?'name':'sc',chN?nm:ns)}
 function pasteAmbs(ambId,lines){if(U.cliv){toast('En la versión cliente los ambientes no se cambian: vienen del lookahead interno.');return}const a=S.amb.get(ambId);if(!a)return;const sib=siblings('ambientes','sectorId',a.sectorId);const i=sib.findIndex(z=>z.id===a.id);const nxt=sib[i+1];
   const s=S.sec.get(a.sectorId);let n=sib.length;const parse=l=>{const c=l.split('\t').map(v=>v.trim()).filter(Boolean);return c.length>=2?{code:c[0],name:c.slice(1).join(' ')}:{code:null,name:c.join(' ')}};
   const items=lines.map(parse);const ops=[op('ambientes',a.id,{...a,name:items[0].name.toUpperCase(),code:items[0].code||a.code})];

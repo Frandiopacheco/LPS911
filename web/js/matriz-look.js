@@ -47,11 +47,19 @@ const mxTipoTxt=tp=>`Agregar también al tipo «${esc(tp.name)}»${tp.n!=null?` 
    ambiente; «Agregar a todos los ambientes del tipo…» es opcional. Lo que agrega un SC queda marcado `rev` («por revisar»):
    el ingeniero recibe el aviso (Hoy y Matriz › Catálogo), la corrige y al renombrarla se actualiza el lookahead. */
 /* other: actividad del catálogo con ese nombre pero de otro SC (caja 19 de la pizarra): se crea aparte para el SC de la fila */
-async function mxNoCatDlg(v,x,other){const sim=mxSimilar(v,x.sc).filter(c=>!other||mxScsOf(c).includes(x.sc));const ed=mxEd();const sc=PM();const can=ed||sc;const tp=can?await mxAmbTipo(x.ambId):null;
-  const useName=c=>{const cur=S.act.get(x.id);if(!cur)return;apply([op('acts',x.id,{...cur,name:c.name})])};
+/* o (opcional, CON-11): {done(c), title, note, free} para usarlo fuera de una fila (p. ej. «Pasarlo al lookahead» de un no programado):
+   done recibe la actividad del catálogo elegida o agregada; free = texto libre que se puede usar tal cual si el catálogo no se exige */
+async function mxNoCatDlg(v,x,other,o){o=o||{};const sim=mxSimilar(v,x.sc).filter(c=>!other||mxScsOf(c).includes(x.sc));const ed=mxEd();const sc=PM();const can=ed||sc;const tp=can?await mxAmbTipo(x.ambId):null;
+  /* C-31 (tanda 3, PER-3): en una fila con historial, otro nombre la convertiría en otra actividad: el editor no la renombra aquí
+     (se crea una fila nueva con ese nombre); el administrador pasa por histGate (fila nueva o corregir con motivo) */
+  const hx=!o.done&&x.id&&x.name&&!cliOn()&&actHist(x).length?x:null;const hNew=hx&&!isAdmin;
+  const useName=c=>{if(o.done){o.done(c);return}const cur=S.act.get(x.id);if(!cur)return;
+    if(hx&&!actSameName(cur,'name',c.name)&&actHist(cur).length){if(isAdmin)histGate(cur,'name',c.name);else histNewRow(cur,'name',c.name);return}
+    apply([op('acts',x.id,{...cur,name:c.name})])};
   const scs=sc?myScsI():null;const scOpts=sc?scs.map(id=>`<option value="${esc(id)}"${id===x.sc?' selected':''}>${esc(conOf(id).name)}</option>`).join(''):mxScOpts(x.sc);
   const oN=other&&conOf(other.sc).name,xN=other&&conOf(x.sc).name;
-  lqModal(`<div class="lqtop"><b>${other?`«${esc(other.name)}» la hace otro subcontratista`:`«${esc(v)}» no está en el catálogo`}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+  lqModal(`<div class="lqtop"><b>${o.title?esc(o.title):other?`«${esc(other.name)}» la hace otro subcontratista`:`«${esc(v)}» no está en el catálogo`}</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
+   ${o.note?`<p class="note">${o.note}</p>`:''}${hNew?`<div class="callout warnc"><span><b>«${esc(x.name)}» ya tiene historial</b> (${esc(actHist(x).join(', '))}). Esta fila no cambia de nombre: lo que elijas se agrega como <b>fila nueva</b> en el ambiente. Solo el administrador puede corregir la fila.</span></div>`:''}
    ${other?`<p class="note">En el catálogo, «${esc(other.name)}» es de <b>${esc(oN)}</b>. Para ${esc(xN)} se crea como una actividad aparte, con su propia columna en la Matriz, aunque se llame igual. Puedes dejar el nombre o hacerlo más claro (p. ej. «${esc(other.name)} de vidrios»).</p>`
     :'<p class="note">En el lookahead solo se usan actividades del catálogo, para que cada una tenga un solo nombre en toda la obra.</p>'}
    ${sim.length?`<div class="ph">${other?`¿Es alguna de estas de ${esc(xN)}?`:'¿Es alguna de estas?'}</div><div class="mxsim">${sim.map(c=>`<button class="ib" data-mxuse="${esc(c.id)}"><span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(c.name)} <small class="note">${esc(conOf(c.sc).name)}</small></button>`).join('')}</div>`:''}
@@ -59,8 +67,9 @@ async function mxNoCatDlg(v,x,other){const sim=mxSimilar(v,x.sc).filter(c=>!othe
      <p class="note">Se agrega solo a este ambiente.${sc?' El ingeniero la revisará (nombre, clase, tipo) y si la corrige, el lookahead se actualiza solo.':''}</p>
      ${tp?`<label class="mxur"><input type="checkbox" id="mxatp"><span><b>Agregar a todos los ambientes del tipo «${esc(tp.name)}»${tp.n!=null?` (${tp.n})`:''}</b><small>${sc?'El ingeniero lo confirma al revisarla.':'Sale en todos los ambientes de ese tipo.'}</small></span></label>`:''}`:''}
    <p class="note" id="mxamsg"></p>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${can?`<button class="ib pri" id="mxaok">${other?`Crear para ${esc(xN)} y usarla`:'Agregar al catálogo y usarla'}</button>`:''}</div>`,
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button>${o.free&&!mxCatReq()?`<button class="ib" id="mxafree">Usar «${esc(o.free)}» sin catálogo</button>`:''}${can?`<button class="ib pri" id="mxaok">${other?`Crear para ${esc(xN)} y usarla`:hNew?'Agregar al catálogo (fila nueva)':'Agregar al catálogo y usarla'}</button>`:''}</div>`,
    async e=>{const u=e.target.closest('[data-mxuse]');if(u){const c=MX.cat.get(u.dataset.mxuse);lqClose();if(c)useName(c);return}
+     if(e.target.closest('#mxafree')){lqClose();useName({name:o.free,free:1});return}
      if(!e.target.closest('#mxaok'))return;const name=$('#mxan').value.replace(/\s+/g,' ').trim();if(!name){$('#mxamsg').textContent='Escribe el nombre.';return}
      const nsc=$('#mxasc').value;const dup=mxPickSc(mnk(name),nsc);if(dup){lqClose();useName(MX.cat.get(dup));return}
      const ord=Math.max(0,...[...MX.cat.values()].map(c=>c.ord||0))+10;const id='k'+NOW().toString(36);const toT=!!(tp&&$('#mxatp')&&$('#mxatp').checked);

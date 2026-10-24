@@ -82,14 +82,20 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','pcrit','pav','pull'];
+  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','pcrit','pav','pull',
+  /* C-36 (tanda 3, DAT-12): metrado de casa (pmet), HH por partida (hhpc), excepciones y publicaciones del tareo (tpexc, tpub, tpubidx).
+     Fuera a propósito: plan maestro retirado (mp, mpav, mpl, mpcfg, mpver), avisos push (push, pushp: tokens de cada equipo), planos
+     (plb: sus archivos están en Storage) y lo que solo usa el servidor (frz, pcl, jcl, tpauto, clock). */
+  'pmet','hhpc','tpexc','tpub','tpubidx'];
+/* lo publica solo el servidor (reglas: nadie lo escribe desde la página): va en el respaldo, pero «Cargar datos desde archivo» lo salta */
+const BK_SRV=new Set(['tpub','tpubidx']);
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
   /* la versión cliente solo la lee quien tiene acceso: los demás no los piden (no es un error) */
-  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||isAdmin||(typeof canCli==='function'&&canCli()));/* la versión cliente está retirada, pero su historial sigue en el respaldo del administrador */
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>(!/^cli/.test(c)||isAdmin||(typeof canCli==='function'&&canCli()))&&(!/^tp(ub|exc)/.test(c)||isAdmin||(typeof canTar==='function'&&canTar())));/* la versión cliente está retirada, pero su historial sigue en el respaldo del administrador */
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;
@@ -99,7 +105,7 @@ async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');c
   finally{const b=$(withImg?'#bbackup2':'#bbackup');if(b){b.disabled=false;b.textContent=bt}}}
 function bkAgo(){const b=P().lastBk;if(!b||!b.t)return null;return Math.floor((NOW()-b.t)/864e5)}
 function bkNote(){const d=bkAgo();if(d==null)return'<span class="pill warn">Aún no hay respaldo registrado</span>';const b=P().lastBk;
-  return`<span class="${d>7?'pill warn':'note'}">Último respaldo: ${new Date(b.t).toLocaleDateString('es-PE')} (${d===0?'hoy':'hace '+d+' día'+(d>1?'s':'')})${b.img?' con imágenes':''}</span>`}
+  return`<span class="${d>7?'pill warn':'note'}">Último respaldo: ${new Date(b.t).toLocaleDateString('es-PE',LIMA_TZ)} (${d===0?'hoy':'hace '+d+' día'+(d>1?'s':'')})${b.img?' con imágenes':''}</span>`}
 function bkRemind(){if(!isAdmin)return;const d=bkAgo();const last=+store.get('bkr',0)||0;if(NOW()-last<7*864e5)return;if(d==null||d>7){store.set('bkr',NOW());setTimeout(()=>toast(d==null?'Aún no hay ningún respaldo descargado del proyecto.':`El último respaldo tiene ${d} días.`,'Ir a Equipo',()=>{U.tab='team';requestRender()}),4000)}}
 /* escritura por lotes que respeta el tamaño máximo de Firestore (imágenes grandes) */
 async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){const b=db.batch();let sz=0,k=0;
@@ -148,7 +154,9 @@ const pisOf=id=>S.pis.get(id)||ARCH.pis.get(id)||null;
 function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
   const ctx=x=>{const a=ambOf(x.ambId);if(!a)return null;const s=secOf(a.sectorId);const pid=pisoOfAmb(x.ambId);const p=pisOf(pid);return p&&s?{p,s,a}:null};
   for(const x of ARCH.act.values()){const c=ctx(x);if(!c||!vset.has(c.p.id))continue;const ad=ldt(x.arch.t||0);
-    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);const rc=recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:scAt(rc,x),arch:true});seen.add(x.id+'|'+d)}}}
+    for(const d of dates){if(seen.has(x.id+'|'+d))continue;const sched=(x.days||[]).includes(d)&&d<ad&&!libDay(x,d);
+      /* DAT-10: archivada antes del Cierre del ingeniero de ese día: el cierre del SC no cuenta (el servidor no lo registra); solo daily */
+      const rc=archCut(x,d)?recReal(d,x.id):recOf(d,x.id);if(sched||(rc&&!rc.late)){rows.push({...c,x,d,rc,sched,sc:scAt(rc,x),arch:true});seen.add(x.id+'|'+d)}}}
   const ds=new Set(dates);
   for(const doc of DAY.values()){if(!ds.has(doc.date)||!vset.has(doc.pisoId))continue;
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
@@ -182,6 +190,11 @@ function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const 
   const ambIds=new Set(ops.filter(o=>o.col==='ambientes').map(o=>o.id));if(col==='ambientes')ambIds.add(id);
   for(const x of ARCH.act.values())if(ambIds.has(x.ambId)&&same(x)&&!(col==='acts'&&x.id===id))un('acts',x);
   const seen=new Set();apply(ops.filter(o=>{const k=o.col+'/'+o.id;if(seen.has(k))return false;seen.add(k);return true}),`${ARCN[col]} restaurad${col==='acts'||col==='restr'?'a':'o'}`)}
+/* DAT-11 (tanda 3): lo que contiene a una actividad (ambiente, sector, piso) y está en la Papelera: ops para sacarlo (la parte
+   «hacia arriba» de archRestore). Lo usa Ctrl+Z al devolver una actividad cuyo ambiente se eliminó después. */
+function archUpOps(x){const ops=[];if(!x)return ops;const un=(c,v)=>{const n={...strip(v),id:v.id};delete n.arch;ops.push(op(c,v.id,n))};
+  const a=ARCH.amb.get(x.ambId);if(a)un('ambientes',a);const amb=ambOf(x.ambId);const sec=amb?secOf(amb.sectorId):null;
+  if(sec&&ARCH.sec.has(sec.id))un('sectors',sec);const pid=sec?sec.pisoId:null;if(pid&&ARCH.pis.has(pid))un('pisos',ARCH.pis.get(pid));return ops}
 
 /* ---- calendario de la obra: sábado laborable y feriados ---- */
 let CALP=undefined,CALS=null;
@@ -219,11 +232,17 @@ function calWire(main){if(main._calw)return;main._calw=1;main.addEventListener('
 /* ---- hora del servidor: corrige el reloj del celular si está desfasado ---- */
 async function clockSync(){if(!db||!me||!me.uid||navigator.onLine===false)return;try{const FV=firebase.firestore.FieldValue;const ref=fcol('clock').doc(me.uid);
     const t1=Date.now();await ref.set({t:FV.serverTimestamp()});const t2=Date.now();const s=await ref.get({source:'server'});const v=s.exists&&s.data().t;if(!v)return;
-    const ms=typeof v==='number'?v:v.toMillis?v.toMillis():0;if(!ms)return;let k=Math.round(ms-(t1+t2)/2);if(Math.abs(k)<30000)k=0;
+    const ms=typeof v==='number'?v:v.toMillis?v.toMillis():0;if(!ms)return;let k=Math.round(ms-(t1+t2)/2);CLK_AT=Date.now();
+    SKEWP=k;try{localStorage.setItem('lps.skewp',String(k))}catch(e){}if(Math.abs(k)<30000)k=0;
     const was=SKEW;SKEW=k;try{localStorage.setItem('lps.skew',String(k))}catch(e){}
     if(Math.abs(k)>=5*60000&&Math.abs(k-was)>60000)toast(`La hora de este equipo está desfasada ${Math.round(Math.abs(k)/60000)} min. La app usa la hora del servidor para los reportes.`);
     if(k!==was&&ready)requestRender()}catch(e){}}
 addEventListener('online',()=>setTimeout(clockSync,1500));
+/* TMP-12 (tanda 3): si el equipo corrige su reloj con la app abierta, el desfase guardado quedaba viejo hasta recargar: se vuelve a
+   medir cada 30 min y al volver a la pestaña (si pasaron más de 5 min desde la última medición) */
+let CLK_AT=0;
+setInterval(()=>{if(ready)clockSync()},30*60e3);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ready&&Date.now()-CLK_AT>5*60e3)clockSync()});
 
 /* ---- nombre de la obra en la pestaña y en el ingreso ---- */
 function brandSync(){const p=P();const n=(p.name||'').trim();if(!n)return;document.title=(window.LPS_ENV==='pruebas'?'[PRUEBAS] ':'')+n+' · Last Planner';try{localStorage.setItem('lps.pname',n)}catch(e){}}

@@ -90,10 +90,14 @@ async function mxPendProp(){try{const S2=new Set();(await fcol('lhprop').get()).
 const mxRowsOf=(catId,pend)=>[...S.act.values()].filter(x=>!pend.has(x.id)&&mxCatOfN(x)===catId);
 function mxRenameRows(rows,name,label){const ren={};const ops=[];for(const x of rows){if(x.name===name)continue;ren[x.id]=x.name;ops.push(op('acts',x.id,{...x,name}))}if(ops.length)apply(ops,label);return ren}
 function mxUnrename(ren,cur,label){const ops=[];for(const[id,old]of Object.entries(ren||{})){const x=S.act.get(id);if(x&&x.name===cur)ops.push(op('acts',id,{...x,name:old}))}if(ops.length)apply(ops,label);return ops.length}
-async function mxCatRename(id,prev,v){const rows=mxRowsOf(id,await mxPendProp());
+/* C-37 (tanda 3, H11): filas de la actividad que se saltan por tener una propuesta del SC pendiente (quedan con el nombre viejo
+   hasta que se acepte la propuesta, que entonces toma el nombre del catálogo, o hasta «Unificar nombres») */
+const mxPendRowsN=(catId,pend)=>[...S.act.values()].filter(x=>pend.has(x.id)&&mxCatOfN(x)===catId).length;
+const mxPendTxt=n=>n?`${n} ${n===1?'fila con propuesta del SC pendiente queda':'filas con propuesta del SC pendiente quedan'} con el nombre anterior: al aceptar la propuesta toma${n===1?'':'n'} el nombre del catálogo (o usa «Unificar nombres»).`:'';
+async function mxCatRename(id,prev,v){const pend=await mxPendProp();const rows=mxRowsOf(id,pend);const nP=mxPendRowsN(id,pend);
   try{await fcol('mcat').doc(id).set({name:v,al:mxFV().arrayUnion(...[mnk(prev),mnk(v)].filter(Boolean)),...mxNow()},{merge:true})}catch(e){mxErr(e);return}
   const ren=mxRenameRows(rows,v,`Catálogo: «${prev}» → «${v}»`);const n=Object.keys(ren).length;
-  toast(`Nombre guardado${n?` · ${n} ${n===1?'fila del lookahead actualizada':'filas del lookahead actualizadas'}`:''}`,'Deshacer',async()=>{try{await fcol('mcat').doc(id).set({name:prev,...mxNow()},{merge:true})}catch(e){mxErr(e)}mxUnrename(ren,v,`Deshacer: «${v}» → «${prev}»`)})}
+  toast(`Nombre guardado${n?` · ${n} ${n===1?'fila del lookahead actualizada':'filas del lookahead actualizadas'}`:''}${nP?' · '+mxPendTxt(nP):''}`,'Deshacer',async()=>{try{await fcol('mcat').doc(id).set({name:prev,...mxNow()},{merge:true})}catch(e){mxErr(e)}mxUnrename(ren,v,`Deshacer: «${v}» → «${prev}»`)})}
 
 /* cambiar el SC de una actividad (auditoría 08/10, M03): ofrece pasar también sus filas del lookahead que eran del SC anterior
    (un apply: historial y Deshacer; se saltan las filas con propuesta del SC pendiente; semanas congeladas y PPC no cambian) */
@@ -152,9 +156,11 @@ const MXRANK={t:4,c:3,p:2,n:1};const mxMaxSt=(x,y)=>(MXRANK[y]||0)>(MXRANK[x]||0
 function mxMergeDlg(a,pre){const A=MX.cat.get(a);if(!A)return;const cats=[...MX.cat.values()].filter(c=>!c.arch&&c.id!==a);
   const mine=cats.filter(c=>c.sc===A.sc).sort((x,y)=>x.name.localeCompare(y.name)),oth=cats.filter(c=>c.sc!==A.sc).sort((x,y)=>conOf(x.sc).name.localeCompare(conOf(y.sc).name)||x.name.localeCompare(y.name));
   const info=b=>{let mv=0;const cf=[];for(const m of MX.amb.values()){const c=m.c||{};if(!(a in c))continue;mv++;if(b&&b in c&&c[b]!==c[a])cf.push({m,va:c[a],vb:c[b]})}return{mv,cf}};
-  const nm=v=>esc(MXS[v]||v);const nRows=mxRowsOf(a,new Set()).length;
+  const nm=v=>esc(MXS[v]||v);const nRows=mxRowsOf(a,new Set()).length;let PEND=null;
   const txt=b=>{const i=info(b);const B=b&&MX.cat.get(b);const amb=m=>{const x=S.amb.get(m.id);return x?esc(x.code+' '+x.name):esc(m.id)};
-    return`${i.mv?`Se trasladan ${i.mv} estados marcados.`:'No tiene estados marcados.'}${nRows?` ${nRows} ${nRows===1?'fila':'filas'} del lookahead pasan a llamarse ${B?'«'+esc(B.name)+'»':'como la elegida'}.`:''} «${esc(A.name)}» queda archivada; «Restaurar» deshace todo.
+    const nP=PEND?mxPendRowsN(a,PEND):0;const oSc=B&&A.sc&&!mxScsOf(B).includes(A.sc)&&nRows;
+    return`${i.mv?`Se trasladan ${i.mv} estados marcados.`:'No tiene estados marcados.'}${nRows?` ${nRows-nP} ${nRows-nP===1?'fila':'filas'} del lookahead pasan a llamarse ${B?'«'+esc(B.name)+'»':'como la elegida'}.`:''} «${esc(A.name)}» queda archivada; «Restaurar» deshace todo.${nP?` <b>${esc(mxPendTxt(nP))}</b>`:''}
+    ${oSc?`<div class="callout warnc"><span><b>«${esc(B.name)}» es de ${esc(conOf(B.sc).name)} y estas filas son de ${esc(conOf(A.sc).name)}.</b> Para que sigan saliendo en la Matriz, al fusionar se suma ${esc(conOf(A.sc).name)} a «${esc(B.name)}» (Otros subcontratistas que la hacen). Las filas no cambian de subcontratista.</span></div>`:''}
     ${i.cf.length?`<div class="callout mxcf"><b>${i.cf.length} ${i.cf.length===1?'ambiente tiene':'ambientes tienen'} estados distintos:</b> queda el más avanzado (Terminado › En curso › Pendiente › No aplica).<ul>${i.cf.slice(0,12).map(o=>`<li>${amb(o.m)}: ${nm(o.va)} / ${nm(o.vb)} → <b>${nm(mxMaxSt(o.vb,o.va))}</b></li>`).join('')}${i.cf.length>12?`<li>… y ${i.cf.length-12} más</li>`:''}</ul></div>`:''}`};
   lqModal(`<div class="lqtop"><b>Fusionar «${esc(A.name)}»</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <div class="mxform"><label>Es la misma actividad que<select id="mxfb"><option value="">— elegir —</option>${mine.length?`<optgroup label="${esc(conOf(A.sc).name)}">${mine.map(c=>`<option value="${esc(c.id)}"${c.id===pre?' selected':''}>${esc(c.name)}</option>`).join('')}</optgroup>`:''}<optgroup label="Otros subcontratistas">${oth.map(c=>`<option value="${esc(c.id)}"${c.id===pre?' selected':''}>${esc(c.name)} · ${esc(conOf(c.sc).name)}</option>`).join('')}</optgroup></select></label></div>
@@ -165,8 +171,13 @@ function mxMergeDlg(a,pre){const A=MX.cat.get(a);if(!A)return;const cats=[...MX.
      /* MOD-01: con cambios del SC sin revisar en «a» no se fusiona (sus constancias quedarían en la archivada y su «Terminado» ocultaría filas sin «✓ Visto») */
      const np=await mxScPendN(a);if(np){bt.disabled=false;$('#mxfi').innerHTML=`<div class="callout warnc"><span><b>«${esc(A.name)}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar.</b> Revísalos primero (Hoy › Cambios de los SC en la matriz, «✓ Visto» o «↶ Revertir») y vuelve a fusionar.</span></div>`;return}
      try{await mxMerge(a,b);lqClose();toast(`Fusionada con «${MX.cat.get(b).name}»`,'Deshacer',()=>mxCatRestore(a,true))}catch(err){bt.disabled=false;mxErr(err)}},
-   e=>{if(e.target.id==='mxfb')$('#mxfi').innerHTML=txt(e.target.value)})}
+   e=>{if(e.target.id==='mxfb')$('#mxfi').innerHTML=txt(e.target.value)});
+  mxPendProp().then(p=>{PEND=p;const sel=$('#mxfb');if(sel&&$('#mxfi')&&sel.value)$('#mxfi').innerHTML=txt(sel.value)})}
 async function mxMerge(a,b){const A=MX.cat.get(a),B=MX.cat.get(b);if(!A||!B||a===b)return;const FV=mxFV();const DEL=FV.delete();const meta=mxNow();const rows=mxRowsOf(a,await mxPendProp());
+  /* CON-08 (tanda 3): fusionar con una actividad de OTRO SC: las filas conservan su SC, así que el SC de «a» se suma a los de «b»
+     (scs); si no, la Matriz dejaba de reconocerlas (y aparecía «Falta» al lado de una fila programada). Restaurar lo quita. */
+  const scAdd=A.sc&&!mxScsOf(B).includes(A.sc)&&mxRowsOf(a,new Set()).some(x=>x.sc===A.sc)?A.sc:'';
+  if(scAdd){const o=mxNameOwner(B.name,b,[scAdd]);if(o&&o.id!==a)throw`${conOf(scAdd).name} ya tiene su propia «${o.name}» en el catálogo: fusiona primero con esa.`}
   const moved={},added=[],tp={};const ops=[];
   const bset={};
   /* el estado que pasa de a → b lleva su metadato (quién lo cambió, si fue un SC y si un ingeniero lo vio: MOD-01); bm guarda el de b para restaurar */
@@ -177,8 +188,8 @@ async function mxMerge(a,b){const A=MX.cat.get(a),B=MX.cat.get(b);if(!A||!B||a==
     ops.push(['mamb',m.id,{c:up,...(mu?{m:mu}:{}),...meta}])}
   for(const t of MX.tipo.values()){const L=t.acts||[];if(!L.includes(a))continue;tp[t.id]=L.includes(b);ops.push(['mtipo',t.id,{acts:[...new Set(L.map(x=>x===a?b:x))],...meta}])}
   const bal=new Set(B.al||[]);const al=[...new Set([...(A.al||[]),mnk(A.name)])].filter(k=>k&&!bal.has(k));
-  if(al.length)ops.push(['mcat',b,{al:FV.arrayUnion(...al),...meta}]);
-  ops.push(['mcat',a,{rev:DEL,arch:{t:NOW(),by:me.email,n:me.name||'',fus:b,moved,added,bset,bm,tp,al},...meta}]);
+  if(al.length||scAdd)ops.push(['mcat',b,{...(al.length?{al:FV.arrayUnion(...al)}:{}),...(scAdd?{scs:FV.arrayUnion(scAdd)}:{}),...meta}]);
+  ops.push(['mcat',a,{rev:DEL,arch:{t:NOW(),by:me.email,n:me.name||'',fus:b,moved,added,bset,bm,tp,al,...(scAdd?{scAdd}:{})},...meta}]);
   for(let i=0;i<ops.length;i+=450){const bt=db.batch();ops.slice(i,i+450).forEach(([c,id,v])=>bt.set(fcol(c).doc(id),v,{merge:true}));await bt.commit()}
   /* sus filas del lookahead pasan a llamarse como la que queda (se guarda cómo se llamaban para restaurar) */
   const ren=mxRenameRows(rows,B.name,`Fusión: «${A.name}» → «${B.name}»`);if(Object.keys(ren).length)await fcol('mcat').doc(a).set({arch:{ren}},{merge:true})}
@@ -191,7 +202,7 @@ async function mxCatRestore(id,quiet){if(!mxEd())return;const A=MX.cat.get(id);i
       const bs=(r.bset||{})[amb];if(bs&&c[b]===bs[1]){up[b]=bs[0];if(r.bm&&amb in r.bm){const o=r.bm[amb];mu={[b]:o?{...o,sc:o.sc??DEL,ok:o.ok??DEL,bk:o.bk??DEL}:DEL}}}
       ops.push(['mamb',amb,{c:up,...(mu?{m:mu}:{}),...meta}])}
     for(const[t,hadB]of Object.entries(r.tp||{})){const T=MX.tipo.get(t);if(!T)continue;let L=[...(T.acts||[])];const i=L.indexOf(b);if(!hadB&&i>=0)L[i]=id;else if(!L.includes(id))L.push(id);ops.push(['mtipo',t,{acts:[...new Set(L)],...meta}])}
-    if(B&&(r.al||[]).length)ops.push(['mcat',b,{al:FV.arrayRemove(...r.al),...meta}]);
+    if(B&&((r.al||[]).length||r.scAdd))ops.push(['mcat',b,{...((r.al||[]).length?{al:FV.arrayRemove(...r.al)}:{}),...(r.scAdd?{scs:FV.arrayRemove(r.scAdd)}:{}),...meta}]);
     if(B&&r.ren)mxUnrename(r.ren,B.name,`Restaurar «${A.name}»: nombres del lookahead`)}
   ops.push(['mcat',id,{arch:DEL,...meta}]);
   try{for(let i=0;i<ops.length;i+=450){const bt=db.batch();ops.slice(i,i+450).forEach(([c,d,v])=>bt.set(fcol(c).doc(d),v,{merge:true}));await bt.commit()}toast(quiet?'Deshecho':`«${A.name}» restaurada`)}catch(e){mxErr(e)}}

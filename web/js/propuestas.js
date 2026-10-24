@@ -79,13 +79,15 @@ function sendPropNow(){const now=NOW();let n=0,nl=0;
    después del corte de alguna semana cuyos días toca (días o cantidades que agrega o quita; si cambia unidad, metrado o
    nombre, todos sus días). Recibirla no la bloquea: el ingeniero decide y, si la acepta, deja el motivo (queda en lhphist). */
 const DOW_N=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
+function propCutCfg(p=P()){const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
 const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
 /* Corte del congelado del plan semanal (oct 2026, decidido con el dueño: independiente del de las propuestas; si no se configuró, el mismo) */
-function frzCutCfg(){const p=P();const d=parseInt(p.frzCutDow,10);if(!(d>=0&&d<=6)||!/^\d\d:\d\d$/.test(p.frzCutHH||''))return{...propCutCfg(),same:true};return{dow:d,hh:p.frzCutHH,same:false}}
-function frzCut(n){const c=frzCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function frzCutCfg(p=P()){const d=parseInt(p.frzCutDow,10);if(!(d>=0&&d<=6)||!/^\d\d:\d\d$/.test(p.frzCutHH||''))return{...propCutCfg(p),same:true};return{dow:d,hh:p.frzCutHH,same:false}}
+/* hora (ms) del corte {dow, hh} de la semana n: el último <día> a la <hora> antes de su lunes */
+function cutTsOf(c,n){const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function frzCut(n,p){return cutTsOf(frzCutCfg(p),n)}
 /** hora (ms) del corte para entregar propuestas de la semana n */
-function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function propCut(n,p){return cutTsOf(propCutCfg(p),n)}
 /* ---- ventana de propuestas (oct 2026, decidido con el dueño): primero el ingeniero programa el lookahead; recién cuando un
    ingeniero (admin/editor) toca «Habilitar propuestas» los SC pueden proponer, hasta el corte configurado (Configuración ›
    Proyecto); al corte se bloquea solo. meta/propwin.closeAt = hora (ms) del corte de la ventana abierta; sin documento
@@ -289,7 +291,15 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const r
         if(!S.amb.has(a.ambId)){say('El ambiente de esa actividad ya no existe.');return'amb'}
         delete a.arch;a=propProtect(a,null,FZ);ops=[op('acts',id,{...a,id})]}
       else{/* oct 2026: sin pregunta de choque: lo que el ingeniero cambió en lo oficial se respeta (propMerge) */
-        a=propProtect(propMerge(a,base,off,st==='shift'||ED),off,FZ);ops=[op('acts',id,a)]}
+        a=propProtect(propMerge(a,base,off,st==='shift'||ED),off,FZ);
+        /* C-31 (tanda 3, PER-3): el nombre o el SC de una fila con historial solo los cambia el administrador; el editor acepta los
+           días y lo demás, y el cambio de nombre/SC se descarta con aviso */
+        if(!isAdmin){const hk=[];for(const f of['name','sc'])if(off[f]&&canon(a[f]??null)!==canon(off[f]??null)&&!actSameName(off,f,a[f])&&actHist(off).length){a[f]=off[f];hk.push(f)}
+          if(hk.length)opt.histKept=hk}
+        /* C-37 (tanda 3, H11): la fila se saltó al renombrar/fusionar en el catálogo porque tenía esta propuesta pendiente: si la
+           propuesta no cambia el nombre, entra con el nombre actual del catálogo */
+        if(it.after&&base&&mnk(it.after.name||'')===mnk(base.name||'')&&a.name===off.name){const cn=propCatName(a);if(cn)a.name=cn}
+        ops=[op('acts',id,a)]}
       finalDays=a.days||[]}}
   const x=it.after||base||{};const am=S.amb.get(x.ambId);const t=NOW();const key=sc+'_'+id+'_'+t;
   const o=ops[0]||null;
@@ -297,6 +307,11 @@ async function propPrep(sc,id,st,opt){opt=opt||{};const doc=PROP.get(sc);const r
     sc,actId:id,sk:lhhSk(sc,t),sentAt:it.sentAt||null,sent0:it.sent0||it.sentAt||null,late:late?{w:late.w,cut:late.cut}:null,lateNote:st!=='rej'&&late?opt.lateNote||'':'',
     prop:propDiff(base,itS.after),chg:o?(o.after.arch?{arch:[false,true]}:propDiff(o.before,o.after)):null};
   return{sc,id,st,it:itS,raw,o,h,key,key0,opt}}
+/** C-31: aviso de lo que no se aceptó por ser una fila con historial */
+const propHistTxt=hk=>`no cambió ${hk.map(f=>f==='name'?'el nombre':'el subcontratista').join(' ni ')}: la fila tiene historial y solo el administrador puede hacerlo (para otra actividad, crea una fila nueva)`;
+/** nombre del catálogo para la fila si hoy se llama distinto (renombrada o fusionada en el catálogo); '' si no aplica */
+function propCatName(x){if(typeof MX==='undefined'||!MX.ld||!MX.ld.cat||typeof mxCatOfN!=='function')return'';const id=mxCatOfN(x);const c=id&&MX.cat.get(id);
+  return c&&!c.arch&&c.name&&c.name!==x.name&&mxScsOf(c).includes(x.sc)?c.name:''}
 /** días que quedaron como en el programa oficial al aceptar (pasados o con el plan cerrado) */
 function propKeptTxt(L){const t=todayIso();const c=L.filter(d=>d>=t);return c.length?`${c.length>1?'los días':'el'} ${c.map(fmtD).join(', ')} quedó${c.length>1?'ron':''} como estaba${c.length>1?'n':''} (plan cerrado)`:'los días ya pasados quedaron como estaban'}
 /** después de guardar: reflejar al momento (llega igual por la base), Deshacer y aviso */
@@ -325,7 +340,7 @@ function propLocal(P_,grp){const{sc,id,st,it,o,h,key,opt}=P_;const doc=PROP.get(
     if(grp){grp.push(o);grp.props.push(pr);if(!undoS.includes(grp)){undoS.push(grp);if(undoS.length>150)undoS.shift();redoS.length=0}updUndo()}
     else{const g=[o];g.prop=pr;P_.g=g;undoS.push(g);if(undoS.length>150)undoS.shift();redoS.length=0;updUndo()}}
   LHH.set(key,{...h,id:key});const d2=PROP.get(sc)||doc||{sc,items:{}};PROP.set(sc,{...d2,items:{...(d2.items||{}),[id]:propAfterDecide(P_.raw)}});requestRender();
-  if(!opt.bulk)toast((st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada')+(st!=='rej'&&opt.kept&&opt.kept.length?` · ${propKeptTxt(opt.kept)}`:''),o?'Deshacer':null,o?undo:null);
+  if(!opt.bulk)toast((st==='ok'?'Propuesta aceptada':st==='shift'?`Aceptada desplazando al ${fmtD(opt.start)}`+(opt.merged?` · ${opt.merged} día${opt.merged>1?'s':''} no laborable${opt.merged>1?'s':''} se juntó con el día hábil siguiente (se sumaron sus cantidades)`:''):'Propuesta rechazada')+(st!=='rej'&&opt.kept&&opt.kept.length?` · ${propKeptTxt(opt.kept)}`:'')+(st!=='rej'&&opt.histKept?` · ${propHistTxt(opt.histKept)}`:''),o?'Deshacer':null,o?undo:null);
   return'ok'}
 /** devuelve una promesa con 'ok' o el motivo por el que no se aplicó; opt.bulk: sin preguntas ni avisos sueltos */
 async function decideProp(sc,id,st,opt){const P_=await propPrep(sc,id,st,opt);if(typeof P_==='string')return P_;const{it,o,h,key,key0}=P_;opt=P_.opt;
@@ -392,7 +407,7 @@ async function decideMany(L){let ok=0;const why={};
      (≈ medio segundo cada una). Ahora se preparan todas y se guarda UNA transacción por subcontratista (en partes de 120):
      relee lhprop/{sc} y las actividades; las que el SC o alguien cambió mientras tanto se saltan (quedan pendientes). */
   const add=(k,n=1)=>{why[k]=(why[k]||0)+n};const by=new Map();
-  let kept=0;
+  let kept=0,hkN=0;
   const take=P_=>{if(PDBUSY.has(P_.key0)){add('busy');return}if(!by.has(P_.sc))by.set(P_.sc,[]);by.get(P_.sc).push(P_)};
   /* o.st/o.opt: la fila que el ingeniero ajustó (días editados) se acepta con sus cambios en la misma transacción; o.ver: la versión vista */
   for(const o of L){const op_={...(o.opt||{}),bulk:true,lateNote,ver:o.ver};const P_=await propPrep(o.sc,o.id,o.st||'ok',op_);if(typeof P_==='string'){add(P_);continue}take(P_)}
@@ -409,12 +424,12 @@ async function decideMany(L){let ok=0;const why={};
           if(P_.o){const body=strip(clone(P_.o.after));if(P_.cur){const d=fsDiff(strip(P_.cur),body,'acts',true);if(d.length)tx.update(aref,...d)}else tx.set(aref,body)}
           args.push(new FP('items',P_.id),propAfterDecide(srvI[P_.id]));tx.set(fcol('lhphist').doc(P_.key),P_.h)}
         if(args.length)tx.update(pref,...args);return{go,skip,sk}});
-      done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++;if(P_.opt.kept&&P_.opt.kept.length)kept++});part.forEach(P_=>PDBUSY.delete(P_.key0));
+      done.sk.forEach(P_=>rbs.get(P_)());done.go.forEach(P_=>{PDBUSY.delete(P_.key0);ok++;if(P_.opt.kept&&P_.opt.kept.length)kept++;if(P_.opt.histKept)hkN++});part.forEach(P_=>PDBUSY.delete(P_.key0));
       for(const[k,n]of Object.entries(done.skip))add(k,n)}
     catch(e){part.forEach(P_=>PDBUSY.delete(P_.key0));rbs.forEach(f=>f());add('err',part.length);console.warn('aceptar',e)}}}));GRP.done=true;finAll();
   const W={closed:'solo cambian días con el plan ya cerrado',late:'llegaron fuera de plazo',arch:'la actividad está en la Papelera',ver:'el SC las cambió mientras tanto',act:'la actividad cambió en ese momento',amb:'su ambiente ya no existe',perm:'no te corresponde decidirlas',err:'no se pudo guardar'};
   const rest=Object.entries(why).filter(([k])=>k!=='gone'&&k!=='busy');
-  toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(kept&&ok?` (en ${kept===1?'una':kept} quedaron como estaban los días pasados o con el plan cerrado)`:'')+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''),GRP.props.length?'Deshacer':null,GRP.props.length?undo:null);REVSEL=null;requestRender();if(PMOD)propModalRender()}
+  toast(`${ok} propuesta${ok===1?'':'s'} aceptada${ok===1?'':'s'}`+(kept&&ok?` (en ${kept===1?'una':kept} quedaron como estaban los días pasados o con el plan cerrado)`:'')+(hkN?` · en ${hkN===1?'una':hkN} no cambió el nombre ni el subcontratista: la fila tiene historial (solo el administrador)`:'')+(rest.length?' · siguen pendientes: '+rest.map(([k,n])=>`${n} porque ${W[k]||k}`).join('; '):''),GRP.props.length?'Deshacer':null,GRP.props.length?undo:null);REVSEL=null;requestRender();if(PMOD)propModalRender()}
 /* superposición en la grilla (lo que proponen, sobre lo vigente) */
 function propOverlay(){if(PM()||!canWrite)return null;const m=new Map();
   for(const doc of PROP.values())for(const[id,it0]of Object.entries(doc.items||{})){const it=propSentOf(it0);if(!it)continue;const off=S.act.get(id);if(!off)continue;const od=new Set(off.days||[]);const nd=new Set(it.after?propMerge(it.after,it.base||off,off,false).days||[]:[]);

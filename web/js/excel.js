@@ -146,4 +146,7 @@ async function xSector(wb,pids){const J=wb.addWorksheet('Sectorización');J.getC
 /** guarda el libro */
 async function xSave(wb,name){const buf=await wb.xlsx.writeBuffer();saveBlob(name,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))}
 /** restricciones del piso o pisos visibles, en el orden del análisis (las más antiguas primero) */
-const arList=()=>restrInScope().filter(q=>!rArch(q)).sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id)));
+/* C-34 (tanda 3, DAT-06): una sola regla para el AR (Lookahead y Restricciones): sin las restricciones de actividades en la Papelera
+   (rArch), como la pantalla (rOpenC), ordenadas por fecha de registro */
+const arRows=L=>L.filter(q=>!rArch(q)).sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id)));
+const arList=()=>arRows(restrInScope());

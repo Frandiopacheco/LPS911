@@ -44,7 +44,7 @@ function npNew(o){if(!canNPx())return;const d=o.d||campoDate();
   NS={mode:'new',id:'',d,pid:o.pid||(ambId?pisoOfAmb(ambId):(visPisos()[0]||{}).id||''),pt:o.pt||null,ambId,auto:!!ambId,sc:npSC()&&(me.scs||[]).length===1?me.scs[0]:'',desc:'',exec:'',und:'',note:'',photos:[],newPh:[],more:false};npDraw();
   if(!ambId&&o.pt&&API&&API.ambAtP){const ns=NS;API.ambAtP(ns.pid,o.pt).then(a=>{if(NS===ns&&!NS.ambId&&a){NS.ambId=a;NS.auto=true;npDraw()}})}}
 function npOpen(id){const n=NPM.get(id);if(!n)return;
-  NS={mode:'edit',id,d:n.date,pid:n.pisoId,pt:n.pt||null,ambId:n.ambId||'',auto:false,sc:n.sc||'',desc:n.desc||'',exec:n.exec??'',und:n.und||'',note:n.note||'',photos:[...(n.photos||[])],newPh:[],more:!!(n.exec!=null||n.note),ro:!npMine(n)};npDraw()}
+  NS={mode:'edit',id,d:n.date,pid:n.pisoId,pt:n.pt||null,ambId:n.ambId||'',auto:false,sc:n.sc||'',desc:n.desc||'',exec:n.exec??'',und:n.und||'',note:n.note||'',photos:[...(n.photos||[])],newPh:[],more:!!(n.exec!=null||n.note),ro:!npMine(n)||(!!n.ver&&!canDaily),roVer:npMine(n)&&!!n.ver&&!canDaily};npDraw()}
 function npClose(){const sh=$('#npsheet');if(sh)sh.remove();NS=null}
 function npAmbOpts(pid){const out=[];for(const{p,secs}of tree()){if(p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a}of ambs)out.push({s,a})}return out}
 function npScs(pid,ambId){const inA=new Set(),inP=new Set();for(const x of S.act.values()){if(x.ambId===ambId)inA.add(x.sc);else if(pisoOfAct(x.id)===pid)inP.add(x.sc)}
@@ -70,7 +70,8 @@ function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;con
   else h+=`<button class="lnkb npmore" data-npmore>+ Cantidad y comentario</button>`;
   if(linked)h+=`<p class="knote">Ya está en el lookahead: <b>${esc(linked.name)}</b>.</p>`;
   if(n&&n.scProp)h+=n.ver?`<p class="knote">✓ Verificado por ${esc(n.ver.n||'')} · ${hhmm(n.ver.t)}</p>`:`<p class="knote"><b>Por verificar:</b> lo registró el subcontratista.</p>${canDaily?'<div class="kbtns"><button class="kbig ok" data-npa="ver">✓ Verificar (lo vi en obra)</button></div>':''}`;
-  if(ro)h+=`<p class="knote">Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
+  /* PER-5 (tanda 3): lo que ya verificó el ingeniero, el SC lo ve en solo lectura (las reglas no le dejan cambiarlo) */
+  if(ro)h+=`<p class="knote">${NS.roVer?'Ya lo verificó el ingeniero: para corregirlo o anularlo, pídeselo al ingeniero de campo.':'Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.'}</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
   else h+=`<div class="kbtns"><button class="kbig pri" data-npa="save"${NS.busy?' disabled':''}>${NS.mode==='edit'?'Guardar cambios':'Guardar'}</button><button class="kbig ghost" data-npx>Cancelar</button>
     ${n&&canWrite&&!linked?'<button class="kbig ghost" data-npa="look">Pasarlo al lookahead (este día)</button>':''}
     ${n?'<button class="kbig ghost npdel" data-npa="del">Anular este registro</button>':''}</div>
@@ -99,11 +100,12 @@ function npSave(){if(!NS||!db)return;const desc=NS.desc.trim();
   const ex=NS.exec===''||NS.exec==null?null:parseNum(String(NS.exec));if(Number.isNaN(ex)){toast('La cantidad debe ser un número.');return}
   const id=NS.id||uid('np');const pid=NS.ambId?pisoOfAmb(NS.ambId)||NS.pid:NS.pid;const old=NPM.get(id);
   const fids=NS.newPh.map(data=>{const fid=uid('f');FOTO.set(fid,data);fcol('fotos').doc(fid).set({data,date:NS.d,pisoId:pid,npId:id,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));return fid});
-  const gone=old?(old.photos||[]).filter(f=>!NS.photos.includes(f)):[];
-  const doc={...(old||{}),date:NS.d,pisoId:pid,ambId:NS.ambId||'',sc:NS.sc,desc,exec:ex,und:NS.und.trim().toUpperCase(),note:NS.note.trim(),photos:[...NS.photos,...fids],pt:NS.pt||null,
+  /* C-35 (tanda 3, DAT-09): las fotos quitadas son evidencia: no se borran de «fotos», pasan a phQ (fotos quitadas), como en Campo */
+  const gone=old?(old.photos||[]).filter(f=>!NS.photos.includes(f)):[];const keep=new Set([...NS.photos,...fids]);
+  const phQ=[...new Set([...((old&&old.phQ)||[]),...gone])].filter(f=>!keep.has(f));
+  const doc={...(old||{}),date:NS.d,pisoId:pid,ambId:NS.ambId||'',sc:NS.sc,desc,exec:ex,und:NS.und.trim().toUpperCase(),note:NS.note.trim(),photos:[...NS.photos,...fids],pt:NS.pt||null,...(phQ.length?{phQ}:{}),
     by:old?old.by:me.email,byName:old?old.byName:(me.name||me.email),ts:old?old.ts:NOW(),...(!old&&npSC()?{scProp:true}:{}),...(old?{ed:{by:me.email,n:me.name||me.email,t:NOW()}}:{})};delete doc.id;
   NPM.set(id,{...doc,id});fcol('nprog').doc(id).set(doc).catch(err=>{toast('No se pudo guardar: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message)))});
-  gone.forEach(f=>{if(canDaily)fcol('fotos').doc(f).delete().catch(()=>{})});
   toast(old?'Cambios guardados':`No programado registrado${fids.length?' con foto':''}`);npClose();requestRender()}
 /** el ingeniero de campo confirma lo que registró el SC */
 function npVer(){const n=NS&&NPM.get(NS.id);if(!n||!canDaily)return;const doc={...n,ver:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
@@ -112,12 +114,25 @@ async function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!await uiAsk({
   const doc={...n,del:true,ed:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
   fcol('nprog').doc(n.id).set(doc).catch(err=>toast('No se pudo anular: '+(err.code||err.message)));toast('Registro anulado');npClose();requestRender()}
 /** El ingeniero lo pasa al lookahead: una actividad nueva en ese ambiente con ese día marcado. */
+/* CON-11 (tanda 3): la fila nace con un nombre del catálogo (vínculo con la Matriz). Si el texto del registro coincide con una
+   actividad del catálogo de ese SC, se usa; si no, se abre el selector del catálogo (mxNoCatDlg) con las parecidas primero y la opción
+   de agregarla ahí mismo (solo ese ambiente o todos los del tipo). El texto libre original queda como nota de la fila (obs). */
 function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.ambId){toast('Primero elige el ambiente.');return}
-  const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
-  /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
-  apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead',()=>{if(!S.act.has(aid))return;
-  const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
-  toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code);npClose()})}
+  const desc=String(n.desc||'').replace(/\s+/g,' ').trim();
+  const go=(name,c)=>{const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
+    const row={id:aid,ambId:n.ambId,sc:n.sc,name,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10};
+    if(c&&c.sc&&!mxScsOf(c).includes(n.sc)&&S.con.has(c.sc))row.sc=c.sc;
+    if(desc&&mnk(desc)!==mnk(name))row.obs=`No programado del ${fmtD(n.date)}: «${desc}»`;
+    /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
+    apply([op('acts',aid,row)],'Trabajo no programado pasado al lookahead',()=>{if(!S.act.has(aid))return;
+    const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
+    toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code+(name!==desc?` como «${name}»`:''));npClose()})};
+  if(typeof ensureMcat==='function')ensureMcat();
+  const hasCat=typeof MX!=='undefined'&&MX.ld&&MX.ld.cat&&typeof mxCatAct0==='function'&&mxCatAct0().length;
+  if(!hasCat){go(desc);return}
+  const id=mxPickSc(mnk(desc),n.sc);const c=id&&MX.cat.get(id);if(c&&!c.arch){go(c.name,c);return}
+  mxNoCatDlg(desc,{id:null,name:'',sc:n.sc,ambId:n.ambId},null,{done:c=>go(c.name,c.free?null:c),free:desc,title:'Pasar al lookahead: ¿qué actividad del catálogo es?',
+    note:`Registrado en obra como «${esc(desc)}» (${esc(conOf(n.sc).name)}). Elige la actividad del catálogo o agrégala; el texto original queda como nota de la fila.`})}
 
 /* ---------- lista del día (Campo › Tarjetas y debajo del plano) ---------- */
 function npCard(i){const e=i.e;const c=conOf(e.sc);const am=i.a;const legacy=i.src==='dx';

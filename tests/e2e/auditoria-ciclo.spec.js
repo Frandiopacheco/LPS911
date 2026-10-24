@@ -118,15 +118,9 @@ test('2. revisión por los ingenieros del piso (en paralelo) y bloqueo al no res
   const info = await e3.evaluate(() => ({ resp: isPisoResp('p1'), dec: canDecide('x1'), piso: window.__plano.M.piso }));
   await chk(2, 'ed3 (a cargo de P2) no es responsable de P1', { resp: false, dec: false, piso: 'p1' }, info, e3);
   await chk(2, 'ed3 no ve el botón Revisar', 0, await e3.locator('#mpanel [data-dpa]').count(), e3);
-  // los botones Va/No va existen (un editor ajeno al piso actúa como SC: solo propone); no debe poder decidir
-  await row(e3, 'z2').locator('[data-dv^="no"]').click();
-  await e3.locator('#pop [data-nk="mat"]').click();
-  await chk(2, 'ed3 en «No va»: no ofrece reprogramar/decidir (solo proponer)', { nolib: 0, lib: 0, prop: 1 }, { nolib: await e3.locator('#pop [data-nv="nolib"]').count(), lib: await e3.locator('#pop [data-nv="lib"]').count(), prop: await e3.locator('#pop [data-nv="prop"]').count() }, e3);
-  await e3.keyboard.press('Escape');
-  await row(e3, 'z2').locator('[data-dv^="fin"]').click();
-  await e3.waitForTimeout(500);
-  await chk(2, 'ed3 «Culminado» solo propone: la actividad no se marca terminada', { done: false, prop: 'fin' }, { done: await e3.evaluate(() => !!(window.__dbGet('doneidx', 'p1') || {}).d?.z2), prop: ((await pdz(e3)).find(z => z.kind === 'dprop' && z.actId === 'z2') || {}).k }, e3);
-  await row(e3, 'z2').locator('[data-dv^="va"]').click(); // retira su propuesta
+  // tanda 3 (PER-4): el editor ajeno al piso no ve Va / No va / Culminado (las reglas se los rechazaban); ve quién es el responsable
+  await chk(2, 'ed3 no ve Va / No va / Culminado', 0, await row(e3, 'z2').locator('[data-dv]').count(), e3);
+  await chk(2, 'ed3 ve quién es el responsable del piso', true, (await e3.locator('#mpanel .dzresp').count()) > 0, e3);
   await chk(2, 'ed3 no ve «Publicar plan»', 0, await e3.locator('#mpanel [data-pub]').count(), e3);
   // si fuerza la decisión por código tampoco se aplica (la regla del servidor real es otra capa: aquí solo la interfaz)
   const forz = await e3.evaluate(() => { try { return decideProp ? 'existe' : '' } catch (e) { return 'n/a' } });

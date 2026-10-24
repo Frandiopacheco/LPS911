@@ -30,7 +30,7 @@ function makeDb() {
     collection: n => query(n),
     getAll: async (...refs) => refs.map(r => snap(r._n, r.id)),
     batch: () => { const L = []; return { set: (r, d, o) => L.push(() => r.set(d, o)), update: (r, d) => L.push(() => r.update(d)), delete: r => L.push(() => r.delete()), commit: async () => { for (const f of L) await f(); } }; },
-    runTransaction: async fn => { const W = []; const out = await fn({ get: r => r.get(), set: (r, d, o) => W.push(() => r.set(d, o)), update: (r, d) => W.push(() => r.update(d)), delete: r => W.push(() => r.delete()) }); for (const f of W) await f(); return out; },
+    runTransaction: async fn => { const W = []; const out = await fn({ get: r => r.get(), set: (r, d, o) => W.push(() => r.set(d, o)), update: (r, d) => W.push(() => r.update(d)), delete: r => W.push(() => r.delete()), create: (r, d) => W.push(async () => { if ((await r.get()).exists) throw new Error('ya existe ' + r.path); await r.set(d); }) }); for (const f of W) await f(); return out; },
   };
   return db;
 }
@@ -189,4 +189,32 @@ test('C-08 · el servidor precarga los feriados del año siguiente sin pisar lo 
   assert.ok(!cal.hol.some(o => o.d === '2026-12-08'), '2026 ya tenía feriados: no se completa');
   assert.ok(cal.hol.some(o => o.d === '2027-07-28'));
   assert.strictEqual(cal.sat, true);
+});
+
+/* ---------- tanda 3 (frente I) ---------- */
+test('C-26 · si ninguna pasada cerró el plan antes de medianoche, la de madrugada lo cierra (no se pierde el día)', async () => {
+  const db = obra({ cal: { sat: true, hol: [] }, days: ['2026-10-22'] });
+  at('2026-10-22T05:15:00Z'); // jue 22-oct 00:15 Lima: no hay pcl/2026-10-21 (todas las pasadas del miércoles fallaron)
+  await idx.cerrarPlan({});
+  assert.ok(db.peek('dplan', '2026-10-22_p1') && db.peek('dplan', '2026-10-22_p1').ids, 'el plan del jueves quedó sin cerrar');
+  assert.strictEqual(db.peek('pcl', '2026-10-21').d, '2026-10-22');
+  /* ya empezada la jornada (06:00 en adelante) no se cierra tarde */
+  const db2 = obra({ cal: { sat: true, hol: [] }, days: ['2026-10-22'] });
+  at('2026-10-22T12:00:00Z'); // 07:00 Lima
+  await idx.cerrarPlan({});
+  assert.deepStrictEqual(Object.keys(db2.all('dplan')), []);
+});
+
+test('TMP-11 · la versión cliente automática no se duplica si el administrador emite mientras se guarda', async () => {
+  const db = obra({ cal: { sat: true, hol: [] }, days: ['2026-10-27'] });
+  const b0 = db.batch; let once = false;
+  db.batch = () => { const b = b0(); const c = b.commit; b.commit = async () => { await c(); if (!once) { once = true; db.put('clidx', 'c-manual', { kind: 'manual', forW: 62, ts: 1 }); } }; return b; };
+  at('2026-10-25T04:01:00Z'); // sáb 24-oct 23:01 Lima
+  await idx.emitirCliente({});
+  assert.deepStrictEqual(Object.keys(db.all('clidx')), ['c-manual'], 'quedaron dos versiones de la semana 62');
+  /* control: sin emisión manual, la automática se emite */
+  const db2 = obra({ cal: { sat: true, hol: [] }, days: ['2026-10-27'] });
+  at('2026-10-25T04:01:00Z');
+  await idx.emitirCliente({});
+  assert.deepStrictEqual(Object.keys(db2.all('clidx')), ['auto-c62']);
 });

@@ -167,7 +167,10 @@ test('restricciones: el SC registra las de su partida y edita solo las suyas pen
   await assertFails(updateDoc(doc(sc, 'restr/r-sc'), { status: 'lib' }));
   await assertFails(updateDoc(doc(sc, 'restr/r-ed'), { desc: 'x' }));
   await assertFails(deleteDoc(doc(sc, 'restr/r-ed')));
-  await assertSucceeds(deleteDoc(doc(sc, 'restr/r-sc')));
+  // PER-8 (tanda 3): «Eliminar» archiva (arch); el SC no borra de verdad ni las suyas
+  await assertFails(deleteDoc(doc(sc, 'restr/r-sc')));
+  await assertSucceeds(updateDoc(doc(sc, 'restr/r-sc'), { arch: { t: 1, by: 'sc@obra.pe', n: 'SC Gabel' } }));
+  await assertSucceeds(deleteDoc(doc(user('editor@obra.pe'), 'restr/r-sc'))); // el editor sigue deshaciendo
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'restr/n8'), { ...base, by: 'lector@obra.pe' }));
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'restr/r-ed'), { status: 'lib', freed: '2026-10-01' }));
 });
@@ -266,6 +269,14 @@ test('no programado: el SC registra lo de su partida, por verificar; no se verif
   await assertFails(setDoc(doc(sc, 'nprog/n-sc3'), { ...base, scProp: false })); // tiene que quedar por verificar
   await assertFails(setDoc(doc(sc, 'nprog/n-sc1'), { ...base, ver: { by: 'sc@obra.pe' } })); // no se verifica solo
   await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'nprog/n-sc1'), { ...base, ver: { by: 'campo@obra.pe' } }));
+  // PER-5 (tanda 3): ya verificado, el SC no lo cambia, no lo anula ni le quita la verificación
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc1'), { ...base, desc: 'Resane y pintura' }));
+  await assertFails(setDoc(doc(sc, 'nprog/n-sc1'), { ...base, del: true }));
+  await assertFails(updateDoc(doc(sc, 'nprog/n-sc1'), { ver: deleteField() }));
+  await assertSucceeds(updateDoc(doc(user('campo@obra.pe'), 'nprog/n-sc1'), { desc: 'Resane de muro' }));
+  // sin verificar, sí corrige lo suyo
+  await assertSucceeds(setDoc(doc(sc, 'nprog/n-sc4'), base));
+  await assertSucceeds(setDoc(doc(sc, 'nprog/n-sc4'), { ...base, desc: 'Resane de vano' }));
 });
 test('propuestas: el SC solo escribe la de su partida', async () => {
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} }));
@@ -364,7 +375,11 @@ test('última zona (pzon): el SC solo la de sus actividades', async () => {
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'pzon/x1'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'pzon/x2'), { sc: 'c-gabel', pts: [1] }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x5'), { sc: 'c-otro', pts: [1] }));
-  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pzon/x6'), { sc: 'c-gabel', pts: [1] }));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'pzon/x4'), { sc: 'c-gabel', pts: [1] }));
+  // H10a (tanda 3): solo de una actividad de su partida (id = actividad)
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x9'), { sc: 'c-gabel', pts: [1] })); // actividad de otra partida
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'pzon/x6'), { sc: 'c-gabel', pts: [1] })); // actividad que no existe
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'pzon/x9'), { sc: 'c-otro', pts: [1] }));
 });
 test('agregar al plan (padd): el SC solo propone, de su partida', async () => {
   const sc = user('sc@obra.pe');
@@ -1124,7 +1139,7 @@ test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, re
   await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
 });
 
-test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no se borra; la foto semanal no cambia', async () => {
+test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; solo el administrador borra (Limpieza); la foto semanal no cambia', async () => {
   const ed = user('editor@obra.pe'), ow = user(OWNER), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
   await assertSucceeds(setDoc(doc(ow, 'mcat/k001'), { name: 'Espejos', sc: 'c-gabel', cl: 't', al: ['espejos'], ord: 10 }));
   await assertSucceeds(setDoc(doc(ed, 'mtipo/tp01'), { name: 'SS.HH.', acts: ['k001'], order: 10 }));
@@ -1139,7 +1154,11 @@ test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no
   await assertFails(setDoc(doc(user('campo@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'campo@obra.pe', t: 2 }, { merge: true }));
   await assertFails(setDoc(doc(sc, 'mamb/a2'), { c: { k001: 'p' }, by: 'sc@obra.pe', t: 2 }));
   await assertSucceeds(getDoc(doc(lec, 'mamb/a1')));
-  await assertFails(deleteDoc(doc(ow, 'mamb/a1')));
+  // H12b (tanda 3): solo Equipo › Limpieza (administrador, pide BORRAR) lo borra junto con su ambiente; nadie más
+  await assertFails(deleteDoc(doc(ed, 'mamb/a1')));
+  await assertFails(deleteDoc(doc(sc, 'mamb/a1')));
+  await assertSucceeds(setDoc(doc(ed, 'mamb/a8'), { tipo: 'tp01', by: 'editor@obra.pe', t: 1 }));
+  await assertSucceeds(deleteDoc(doc(ow, 'mamb/a8')));
   // foto semanal
   await assertSucceeds(setDoc(doc(ed, 'mver/f1'), { t: 1, d: '2026-10-08', by: 'editor@obra.pe', a: { a1: 'k001:t' } }));
   await assertFails(setDoc(doc(ed, 'mver/f2'), { t: 1, by: 'otro@obra.pe', a: {} }));
@@ -1275,8 +1294,47 @@ test('plan semanal: la evaluación la cambia el responsable del piso o el admin;
   await assertSucceeds(updateDoc(doc(user(OWNER), 'weeks/91_pr1'), { 'res.x1.ok': false }));
   await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr2'), { 'res.x1.ok': true })); // piso sin responsable
   await assertSucceeds(setDoc(doc(ed, 'weeks/92_pr1'), { n: 92, pisoId: 'pr1', frozenAt: 'y', items: {}, res: {} })); // congelar
-  await assertSucceeds(updateDoc(doc(ed, 'weeks/91_pr1'), { frozenAt: 'z' }));
+  // PER-2 (tanda 3): la semana congelada de un piso ajeno no la cambia (frozenAt, items) ni la descongela
+  await assertFails(updateDoc(doc(ed, 'weeks/91_pr1'), { frozenAt: 'z' }));
+  await assertSucceeds(updateDoc(doc(ed2, 'weeks/91_pr1'), { frozenAt: 'z' }));
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'weeks/91_pr1'), { 'res.x1.ok': true }));
+});
+test('PER-2: compromisos congelados (items, frozenAt) y su foto (wsnap) solo el responsable del piso o el admin', async () => {
+  await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    await setDoc(doc(db, 'pisos/pq1'), { code: 'PQ1', resp: ['editor2@obra.pe'] });
+    await setDoc(doc(db, 'weeks/71_pq1'), { n: 71, pisoId: 'pq1', frozenAt: 'x', items: { x1: { days: ['d1'] } }, res: {}, propOut: [] });
+    await setDoc(doc(db, 'wsnap/71_pq1'), { snap: { x1: ['d1'] }, n: 71, pisoId: 'pq1', t: 'x' });
+    await setDoc(doc(db, 'weeks/72_pq1'), { n: 72, pisoId: 'pq1', unfrozenAt: 'u' });
+    await setDoc(doc(db, 'wsnap/72_pq1'), { snap: { x1: ['d0'] }, n: 72, pisoId: 'pq1', t: 'w' }); });
+  const ed = user('editor@obra.pe'), ed2 = user('editor2@obra.pe');
+  const UF = { frozenAt: deleteField(), items: deleteField(), res: deleteField(), propOut: deleteField(), unfrozenAt: 'z' };
+  // editor de otro piso: no quita ni agrega compromisos, no cambia frozenAt ni otros campos, no descongela
+  await assertFails(updateDoc(doc(ed, 'weeks/71_pq1'), { 'items.x1': deleteField() }));
+  await assertFails(updateDoc(doc(ed, 'weeks/71_pq1'), { 'items.x9': { days: ['d2'] } }));
+  await assertFails(updateDoc(doc(ed, 'weeks/71_pq1'), { frozenAt: deleteField() }));
+  await assertFails(updateDoc(doc(ed, 'weeks/71_pq1'), { propOut: ['c/x'] }));
+  await assertFails(updateDoc(doc(ed, 'weeks/71_pq1'), UF));
+  await assertFails(setDoc(doc(ed, 'wsnap/71_pq1'), { snap: {}, n: 71, pisoId: 'pq1', t: 'x' }));
+  await assertFails(updateDoc(doc(ed, 'weeks/72_pq1'), { unfrozenAt: 'v' })); // no atrasa el re-congelado de las 2 h
+  // congelar una semana sin congelar: cualquier editor, con su foto en la misma escritura (también re-congelar)
+  { const b = writeBatch(ed);
+    b.set(doc(ed, 'weeks/72_pq1'), { n: 72, pisoId: 'pq1', frozenAt: 'y', items: {}, res: {} });
+    b.set(doc(ed, 'wsnap/72_pq1'), { snap: {}, n: 72, pisoId: 'pq1', t: 'y' });
+    await assertSucceeds(b.commit()); }
+  // la foto de una semana que no se está congelando no la cambia otro editor
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'weeks/73_pq1'), { n: 73, pisoId: 'pq1', unfrozenAt: 'u' });
+    await setDoc(doc(c.firestore(), 'wsnap/73_pq1'), { snap: { x1: ['d0'] }, n: 73, pisoId: 'pq1' }); });
+  await assertFails(setDoc(doc(ed, 'wsnap/73_pq1'), { snap: {}, n: 73, pisoId: 'pq1' }));
+  // el responsable y el admin: descongelan (copia __h + foto __h) y cambian la foto
+  { const b = writeBatch(ed2);
+    b.update(doc(ed2, 'weeks/71_pq1'), UF);
+    b.set(doc(ed2, 'weeks/71_pq1__h1'), { histOf: '71_pq1', n: 71, pisoId: 'pq1', v: { frozenAt: 'x', items: {}, res: {} }, unAt: 'z' });
+    b.set(doc(ed2, 'wsnap/71_pq1__h1'), { snap: {}, n: 71, pisoId: 'pq1', histOf: '71_pq1' });
+    await assertSucceeds(b.commit()); }
+  await assertSucceeds(setDoc(doc(ed2, 'wsnap/73_pq1'), { snap: {}, n: 73, pisoId: 'pq1' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'wsnap/73_pq1'), { snap: { x1: [] }, n: 73, pisoId: 'pq1' }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'weeks/72_pq1'), { 'items.x1': { days: ['d1'] } }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'weeks/72_pq1'), { 'items.x9': {} }));
 });
 test('plan semanal: congelar desde una versión (fromVer) solo el admin; el editor evalúa y descongela igual', async () => {
   await env.withSecurityRulesDisabled(async c => { const db = c.firestore();

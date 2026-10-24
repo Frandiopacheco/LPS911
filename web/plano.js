@@ -650,7 +650,7 @@ function zcPlanHtml(x,a){const N=nbMap();const nv=shapesOf(M.piso).find(z=>z.kin
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${(()=>{try{computeCross()}catch(e){}const ids=shapesV(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).map(z=>z.id);return cxInfoHtml(cxOfIds(ids),'data-zcx2')})()}
     ${nv?`<div class="zcst" style="--c:#c62828"><b>✗ No va</b><span>${esc(nv.motivo||'')}${nv.repTo?' · → '+fmtD(nv.repTo):''}</span></div>${(nv.k||nv.eng?dzEng():can)?`<button class="lnkb" data-undo="${nv.id}">Vuelve a ir</button>`:''}`
-      :`<div class="zcpl">${dvHtml(x,can)||'<span class="mu">Solo el ingeniero o el subcontratista deciden si va.</span>'}</div>`}
+      :`<div class="zcpl">${dvHtml(x,can)||`<span class="mu dzresp">${dzNotResp()?dzRespNote():'Solo el ingeniero o el subcontratista deciden si va.'}</span>`}</div>`}
     ${paddCan()&&pubDraft()&&a?`<button class="ib zcpa" data-zpa="${a.id}">＋ Trabajo no programado en ${esc(a.code)}</button>`:''}`}
 function zcClick(e){const t=e.target;if(t.closest('[data-zcx]')){zcClose();return}{const pb=t.closest('[data-zpa]');if(pb){const r=pb.getBoundingClientRect();const an=anchorAt(r.left,r.bottom-1);const am=pb.dataset.zpa;zcClose();setTimeout(()=>paddDialog(an,am),0);return}}if(lockStop(t))return;
   /* botones del plan (Va · No va · Culminado, aceptar/rechazar): la ventanita se ancla a un punto fijo para no perderse si la ficha se redibuja */
@@ -1342,6 +1342,7 @@ function renderPlan(main,cur,base){
     box('mchb',chHtml(M.meet?M.meetSc:sc));box('mfzb',fzBoxHtml(role,M.meet?M.meetSc:SF.join(',')));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
   h+=fzCardHtml(role,sc);
   const dcan=dzCan;let lastS='';
+  if(dzNotResp()&&!PHONE()&&!dayLk()&&L.length)h+=`<p class="mu dzresp">${dzRespNote()}</p>`;
   h+=`<div class="mp-list dzl">${L.map(({x,a,s})=>{const zs=zBy[x.id],nv=nBy[x.id];const can=dcan(x);const geoOk=a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6);
       let hh='';if(s.id!==lastS){lastS=s.id;hh=`<div class="dzs">${esc(s.code)} · ${esc(s.name)}</div>`}
       return hh+`<div class="mp-it dz ${nv?'nv':dpPend(x.id)?'wait':zs?'ok':''}" data-act="${x.id}" style="--c:${conOf(x.sc).color}"><div class="t"><span class="mono">${esc(a.code)}</span> ${esc(x.name)}<small>${esc(conOf(x.sc).name)} · ${esc(a.name)}${hasQ(x)?` · ${fq((x.qty||{})[M.date])} ${esc(x.und||'')}`:''}</small>${(typeof restrPend==='function'?restrPend(x.id):[]).map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}</div>
@@ -1381,7 +1382,12 @@ function renderPlan(main,cur,base){
 const hasQ=x=>x&&x.metrado>0&&(x.qty||{})[M.date]!=null;
 const fq=v=>(Math.round((+v||0)*100)/100).toLocaleString('es-PE');
 /* ---------- decidir el plan del día: va / mañana / terminada / restricción ---------- */
-const dzCan=x=>!!x&&!PHONE()&&!dayLk()&&((typeof canWrite!=='undefined'&&canWrite)||(myRole()==='sc'&&myScs().includes(x.sc)));
+/* PER-4 (tanda 3): el ingeniero que no es responsable del piso no ve Va / No va / Culminado (las reglas de pdz se los rechazan):
+   lo decide el responsable (dzRespNote lo explica) */
+const dzCan=x=>!!x&&!PHONE()&&!dayLk()&&((typeof canWrite!=='undefined'&&canWrite&&dzEng())||(myRole()==='sc'&&myScs().includes(x.sc)));
+const dzNotResp=()=>typeof canWrite!=='undefined'&&canWrite&&!dzEng();
+function dzRespNote(){const R=typeof respOf==='function'?respOf(M.piso):[];const nm=R.map(r=>r.name).join(', ')||'el responsable del piso';
+  return`Este piso lo decide ${esc(nm)} (responsable del piso) o el administrador: tú ves el plan del día sin «Va / No va / Culminado».`}
 /* día cerrado (publicado, cerrado solo a la hora de cierre, hoy o pasado): no se decide ni se reprograma; las cuadrillas sí */
 const dayLk=()=>typeof planLocked==='function'&&planLocked(M.date,M.piso);
 const LOCKSEL='[data-dv],[data-dpa],[data-undo],[data-chu],[data-avx],[data-dpr],#dzadd';
@@ -2023,7 +2029,10 @@ function dzLog(t){const k=M.date+'|'+M.piso;if(!M.dzlog||M.dzlog.d!==k)M.dzlog={
 /* el ingeniero cambia el lookahead; el subcontratista lo deja como propuesta (se envía desde el Lookahead) */
 /* fx: lo que va después (anotar en «Cambios del plan», reabrir); solo corre si el cambio se aplicó o quedó como propuesta (auditoría LOG-01) */
 function dzWrite(x,after,label,fx){if(typeof canWrite!=='undefined'&&canWrite){apply([op('acts',x.id,after)],label,fx);return}
-  if(myRole()!=='sc'||typeof savePropItem!=='function')return;if(typeof ensureProp==='function')ensureProp();
+  if(myRole()!=='sc'||typeof savePropItem!=='function')return;
+  /* PER-9 (tanda 3): con las propuestas cerradas no se guarda nada ni se anota en «Cambios del plan»: se explica, como en el Lookahead */
+  if(typeof propClosed==='function'&&propClosed()){toast('Las propuestas están cerradas: el ingeniero está programando el lookahead. Podrás proponer cuando lo habilite.');return}
+  if(typeof ensureProp==='function')ensureProp();
   const c=a=>{const o={...a};delete o.id;delete o._del;return o};savePropItem(x.sc,x.id,{after:c(after),base:c(x)});
   toast(label+' · quedó como propuesta: envíala desde el Lookahead para que el ingeniero la apruebe');if(fx)fx()}
 function dzShift(x,from,cascade){const to=wshift(from,1);const map=d=>cascade?(d>=from?wshift(d,1):d):(d===from?to:d);

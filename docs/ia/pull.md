@@ -31,3 +31,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Pósits nuevos con «exigir catálogo» y nombre fuera del catálogo: no se crean (aviso).
 - Choques que quedan: casilla para crear restricciones `pend` (TAREA PREDECESORA; MATERIALES si es un hito de ingreso) amarradas a la actividad que depende.
 - Después de aplicar, la sesión se re-alinea (`base`, `d0/dur`, los nuevos pasan a `src`) para usarla la semana siguiente.
+
+## Auditoría tanda 3 · frente H (24/10/2026)
+- **CON-09:** una fila culminada en Campo (`DONE`) que recibiría días posteriores a la terminada sale en la revisión («culminada en Campo el …», `X.dn`) y por defecto **no se toca**; con la casilla `PU.apDn` se aplica y se reabre (`reopenAfter` en el `after`).
+- **CON-10:** los choques de enlace cuya sucesora es un **pósit nuevo** también se listan y crean su restricción con el id de la fila que se crea en el mismo `apply` (`'act-'+…+'p'`); si el pósit no se crea (fuera del catálogo) se lista sin restricción.
+- **DAT-08:** `PU_ORD` ordena las franjas por el lugar del SC en el tren de la Matriz (menor `mcat.tr` de sus actividades, por id); `PU_SEQ` (nombres) queda solo de respaldo.

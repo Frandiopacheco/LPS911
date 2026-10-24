@@ -52,3 +52,5 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Versión guardada y sesión de Netlify (10/10/2026)
 - `sw.js` sirve la página con «lo guardado primero» (`staleWhileRevalidate`). En la copia de prueba (protegida por Netlify) una sesión vencida hacía que el servidor respondiera 401/redirección y la app seguía mostrando la versión vieja en silencio, sin aviso de «Actualizar».
 - Ahora, si la página del servidor no llega bien, el service worker avisa (`postMessage {t:'nav-bad'}`) y la app muestra «Tu sesión de Netlify… venció» con **Volver a entrar** (`?fresh=1`: esa dirección no pasa por el service worker, así aparece el login de Netlify). Abrir `/sw.js` ya no devuelve la app.
+
+- **Hoy › Pisos sin responsable** (PER-10, tanda 3, ya existía): solo el administrador; `pisosSinResp()`, enlace a Equipo. En esos pisos decide cualquier editor (`isPisoResp`). Prueba en `auditoria-tanda3-look.spec.js`.

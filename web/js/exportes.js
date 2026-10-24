@@ -211,8 +211,10 @@ async function ppcSemXlsx(n){const btn=$('#bppcx');const bt=btn?btn.textContent:
     await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);xHeader(xToJ(J,'PPC',ws,X,5),'ppc',LG);{const w2=ppcScWs(X,n);if(w2)xToJ(J,'PPC del SC',w2,X,0)}
     await xSave(J,`${p.code||'LPS'}_PPC_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}Sem${n}.xlsx`);
   }catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
+/* PER-6 (tanda 3): el subcontratista exporta las hojas del PPC («PPC semanal», «PPC del SC») solo con su partida; null = todas */
+const xScOnly=()=>typeof SCK==='function'&&SCK()?new Set((me&&me.scs)||[]):null;
 /** hoja «PPC semanal» en el formato de la empresa (la usan el Excel del PPC y el del Lookahead); null si no hay compromisos */
-function ppcSemWs(X,n,src){{const p=P();const wd=weekDays(n);const vp=histPisos().filter(pp=>S.pis.has(pp.id)||(S.wk.get(wkId(n,pp.id))||{}).frozenAt);
+function ppcSemWs(X,n,src){{const ONLY=xScOnly();const p=P();const wd=weekDays(n);const vp=histPisos().filter(pp=>S.pis.has(pp.id)||(S.wk.get(wkId(n,pp.id))||{}).frozenAt);
     const B={style:'thin',color:{rgb:'000000'}};const bd={top:B,bottom:B,left:B,right:B};
     const F=(o={})=>({name:o.name||'Arial',sz:o.sz||9,bold:!!o.b,color:{rgb:o.c||'000000'}});
     const st=(o={})=>{const r={border:o.nb?undefined:bd,font:F(o),alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.fmt)r.numFmt=o.fmt;return r};
@@ -242,7 +244,7 @@ function ppcSemWs(X,n,src){{const p=P();const wd=weekDays(n);const vp=histPisos(
     const SI=st({b:true,h:'center',c:'00B050'}),NO=st({b:true,h:'center',c:'FF0000'});
     let tSi=0,tNo=0,tN=0,tOk=0;
     for(const pp of vp){const w=src?src.get(pp.id):S.wk.get(wkId(n,pp.id));if(src&&!w)continue;const fz=!!(w&&w.frozenAt);const items=fz?w.items||{}:liveItems(n,pp.id);const res=fz?w.res||{}:{};
-      const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
+      const ids=Object.keys(items).filter(k=>!ONLY||ONLY.has(items[k].sc)).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));if(!ids.length)continue;
       set(r,1,pp.code||'',flC);set(r,2,(pp.name||'').toUpperCase()+(fz?'':'  (borrador: aún no congelado)'),fl);for(let c=3;c<20;c++)set(r,c,'',fl);set(r,20,pp.code||'',fx);set(r,21,'',fx);set(r,22,'',fx);r++;
       for(let i=0;i<ids.length;){const it0=items[ids[i]];let j=i;while(j<ids.length&&items[ids[j]].code===it0.code&&items[ids[j]].amb===it0.amb)j++;
         /* ambiente: fila de grupo */
@@ -285,13 +287,14 @@ function restrWs(X,list,sub){const p=P();const today=todayIso();
   const H=['N.º','ESTADO','PISO','CÓDIGO','AMBIENTE','ACTIVIDAD','AFECTA A','TIPO','CLASE / ÁREA','DESCRIPCIÓN','RESPONSABLE','REGISTRÓ','F. REGISTRO','REQUERIDA','LIBERADA','LIBERÓ','DÍAS DE ATRASO'];const nc=H.length;
   set(0,0,'RESTRICCIONES',st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,sub||'',st({nb:true,sz:10,c:'555555'}));
   [['PROYECTO',p.fullName||p.name||''],['FECHA',fmtD(today)+' '+today.slice(0,4)]].forEach(([k,v],i)=>{set(i,6,k,st({nb:true,b:true,sz:9,c:'6B7785',h:'right'}));set(i,7,v,st({nb:true,sz:10,b:i===0}))});
-  const pend=list.filter(r=>r.status!=='lib'),late=pend.filter(r=>r.need&&r.need<today);
-  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.length-pend.length} liberadas`,st({nb:true,sz:10,b:true}));
+  /* C-34 (DAT-06): las de actividades en la Papelera no cuentan como pendientes ni vencidas (rOpenC, como la pantalla y el AR) */
+  const pend=list.filter(rOpenC),late=pend.filter(r=>r.need&&r.need<today),nArch=list.filter(r=>r.status!=='lib'&&rArch(r)).length;
+  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.filter(r=>r.status==='lib').length} liberadas${nArch?` · ${nArch} de actividades eliminadas (no cuentan)`:''}`,st({nb:true,sz:10,b:true}));
   const hr=4;const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});H.forEach((t,c)=>set(hr,c,t,hs));
-  let r=hr+1;list.forEach((q,i)=>{const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);const pp=S.pis.get(restrPiso(q));const lib=q.status==='lib';const vl=!lib&&q.need&&q.need<today;
-    const est=lib?'Liberada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':vl?'C62828':'7A5200';
+  let r=hr+1;list.forEach((q,i)=>{const ar=rArch(q);const x=ar?actOf(q.actId):S.act.get(q.actId);const a=x&&ambOf(x.ambId);const pp=pisOf(ar?pisoOfAmb(x.ambId):restrPiso(q));const lib=q.status==='lib';const vl=!lib&&!ar&&q.need&&q.need<today;
+    const est=lib?'Liberada':ar?'Actividad eliminada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':ar?'EEEEEE':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':ar?'666666':vl?'C62828':'7A5200';
     const atr=vl?wdist(q.need,today):lib&&q.need&&q.freed&&q.freed>q.need?wdist(q.need,q.freed):'';
-    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name:(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
+    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name+(ar?' (en la Papelera)':''):(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
     row.forEach((v,c)=>set(r,c,v,c===1?st({b:true,h:'center',fill:ef,c:ec}):c===0||c===2||c===3||c>=12?st({h:'center'}):c===9?st({w:true}):st()));r++});
   if(!list.length){set(r,0,'Sin restricciones en este filtro.',st({nb:true,c:'777777'}));r++}
   ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(r-1,hr),c:nc-1}});ws['!merges']=M;
@@ -300,7 +303,7 @@ function restrWs(X,list,sub){const p=P();const today=todayIso();
   ws['!rows']=[{hpt:22}];ws['!views']=[{state:'frozen',xSplit:0,ySplit:hr+1}];return ws}
 /** hoja «PPC del SC» (semana congelada n, pisos visibles): por subcontratista el PPC bruto y el PPC del SC (sin lo que no
     dependía de él) y el detalle de cada no cumplido con su causa y quién responde. La hoja del formato de la empresa no cambia. */
-function ppcScWs(X,n,docs0){const docs=docs0||histPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();
+function ppcScWs(X,n,docs0){const docs=docs0||histPisos().map(p=>S.wk.get(wkId(n,p.id))).filter(w=>w&&w.frozenAt);if(!docs.length)return null;const p=P();const ONLY=xScOnly();
   const B={style:'thin',color:{rgb:'BFBFBF'}};const bd={top:B,bottom:B,left:B,right:B};
   const st=(o={})=>{const r={border:o.nb?undefined:bd,font:{name:'Calibri',sz:o.sz||10,bold:!!o.b,color:{rgb:o.c||'000000'}},alignment:{horizontal:o.h||'left',vertical:'center',wrapText:!!o.w}};if(o.fill)r.fill={patternType:'solid',fgColor:{rgb:o.fill}};if(o.z)r.numFmt=o.z;return r};
   const ws={};const set=(r,c,v,s)=>{ws[X.utils.encode_cell({r,c})]={v:v??'',t:typeof v==='number'?'n':'s',s:s||st()}};
@@ -309,11 +312,13 @@ function ppcScWs(X,n,docs0){const docs=docs0||histPisos().map(p=>S.wk.get(wkId(n
   const H=['SUBCONTRATISTA','COMPROMISOS','CUMPLIDOS','NO CUMPLIDOS','NO IMPUTABLES','DE OTRAS PARTIDAS','PPC BRUTO','PPC DEL SC'];const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});
   let r=4;H.forEach((t,c)=>set(r,c,t,hs));r++;const M=wkScStats(docs);const pc=st({h:'center',z:'0%'});
   const nmS=sc=>(M[sc]&&M[sc].nm)||conOf(sc).name;
-  for(const[sc,o]of Object.entries(M).sort((a,b)=>nmS(a[0]).localeCompare(nmS(b[0])))){if(!o.n&&!o.ext)continue;
+  for(const[sc,o]of Object.entries(M).sort((a,b)=>nmS(a[0]).localeCompare(nmS(b[0])))){if(!o.n&&!o.ext)continue;if(ONLY&&!ONLY.has(sc))continue;
     [nmS(sc),o.n,o.ok,o.no,o.nimp,o.ext].forEach((v,c)=>set(r,c,v,c?st({h:'center'}):st({b:true})));set(r,6,o.n?o.ok/o.n:'—',pc);set(r,7,o.ppcSc??'—',st({h:'center',z:'0%',b:true}));r++}
   r++;set(r,0,'NO CUMPLIDOS',st({nb:true,b:true,sz:12,c:'1F3A4D'}));r++;
   const H2=['PISO','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','CAUSA','¿IMPUTABLE AL SC?','RESPONDE','¿LE CUENTA?','DETALLE','MITIGACIÓN'];const r0=r;H2.forEach((t,c)=>set(r,c,t,hs));r++;
   for(const w of docs){const pp=S.pis.get(w.pisoId)||ARCH.pis.get(w.pisoId);for(const[id,it]of Object.entries(w.items||{}).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0))){const q=(w.res||{})[id];if(!q||q.ok!==false)continue;
+    /* el SC: los no cumplidos de su partida y las fallas de otras partidas que le cuentan (rsc = la suya) */
+    if(ONLY&&!ONLY.has(it.sc)&&!(q.rsc&&ONLY.has(q.rsc)))continue;
     const imp=!resNimp(q);const rs=q.rsc&&q.rsc!==it.sc?conOf(q.rsc).name:imp?scnOf(it):'Obra (no imputable)';
     [pp?pp.code:'',(it.code||'')+' '+(it.amb||''),it.act||'',scnOf(it),q.cnc?cncLabel(q.cnc):'',imp?'Sí':'No',rs,q.rsc&&q.rsc!==it.sc?(q.pc?'Sí':'No'):'',q.note||'',q.mit||''].forEach((v,c)=>set(r,c,v,c>=8||c===2?st({w:true}):c===5||c===7?st({h:'center'}):st()));r++}}
   if(r===r0+1){set(r,0,'Sin no cumplidos en esta semana.',st({nb:true,c:'777777'}));r++}
@@ -322,6 +327,6 @@ function ppcScWs(X,n,docs0){const docs=docs0||histPisos().map(p=>S.wk.get(wkId(n
 async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   /* formato de la empresa (AR: análisis de restricciones, 4 semanas desde la semana elegida) y el detalle de la pantalla */
   try{await loadXlsx();const X=window.XLSX;const p=P();await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
-    await xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
+    await xAR(J,arRows(list),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
     await xSave(J,`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`)}
   catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}
