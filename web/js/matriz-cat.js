@@ -44,7 +44,7 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
     <span class="seg" role="group" aria-label="Clase"><button data-mxcl="" class="${MXC.cl?'':'on'}">Todas</button>${Object.entries(MXCL).map(([k,l])=>`<button data-mxcl="${k}" class="${MXC.cl===k?'on':''}">${l}</button>`).join('')}</span>
     <span class="seg" role="group" aria-label="Archivadas"><button data-mxarch="0" class="${MXC.arch?'':'on'}">Activas</button><button data-mxarch="1" class="${MXC.arch?'on':''}">Archivadas${nArch?` (${nArch})`:''}</button></span>
     <span class="fsp"></span><span class="note">${L.length} de ${all.filter(c=>!!c.arch===MXC.arch).length}</span>${(ed||(SCK()&&!verRO()))&&!MXC.arch?'<button class="ib pri" id="mxcnew">+ Actividad</button>':''}</div>
-   <div class="card"><div class="tscroll"><table class="t rt mxct"><thead><tr><th>Actividad</th><th>Subcontratista</th><th>Clase</th><th>Especialidad</th><th title="Ambientes donde aparece">Amb.</th><th title="Celdas con estado confirmado">Marcadas</th><th title="Nombres del lookahead que corresponden a esta actividad">Nombres</th><th></th></tr></thead><tbody>
+   <div class="card"><div class="tscroll"><table class="t rt mxct"><thead><tr><th>Actividad</th><th>Subcontratista</th><th>Clase</th><th>Especialidad</th><th title="Rendimiento por persona al día (en la unidad de la actividad): lo heredan las filas del lookahead para calcular el personal necesario">Rend.</th><th title="Ambientes donde aparece">Amb.</th><th title="Celdas con estado confirmado">Marcadas</th><th title="Nombres del lookahead que corresponden a esta actividad">Nombres</th><th></th></tr></thead><tbody>
    ${L.map(c=>{const u=use.get(c.id)||{amb:0,st:0};const ro=!ed||c.arch;
      const fus=c.arch&&c.arch.fus?MX.cat.get(c.arch.fus):null;const des=c.arch&&c.arch.des;
      return`<tr data-mcid="${esc(c.id)}"${c.arch?' class="mxarch"':''}>
@@ -52,9 +52,10 @@ function renderMxCat(main,head){const ed=mxEd();const use=mxCatUse();const scs=m
       <td data-l="Subcontratista">${ro?`<span class="mxsw" style="--c:${esc(conOf(c.sc).color)}"></span>${esc(conOf(c.sc).name)}`:`<select data-mcf="sc" aria-label="Subcontratista">${mxScOpts(c.sc)}</select>`}${(c.scs||[]).length?`<small class="mxscs" title="También la hacen">+ ${(c.scs||[]).map(i=>esc(conOf(i).name)).join(', ')}</small>`:''}</td>
       <td data-l="Clase">${ro?esc(MXCL[c.cl]||''):`<select data-mcf="cl" aria-label="Clase">${mxClOpts(c.cl)}</select>`}</td>
       <td data-l="Especialidad" class="mu" title="Es la del subcontratista: se cambia en Configuración › Especialidades / Subcontratistas">${esc(espOfSc(c.sc))||'—'}</td>
+      <td data-l="Rendimiento">${ro?(c.rend>0?fq(c.rend):'<span class="mu">—</span>'):`<input class="tin mxrend" data-mcf="rend" inputmode="decimal" value="${c.rend>0?c.rend:''}" placeholder="—" aria-label="Rendimiento por persona al día">`}</td>
       <td class="mono" data-l="Ambientes">${c.arch?'—':u.amb}</td><td class="mono" data-l="Marcadas">${u.st}</td>
       <td data-l="Nombres"><button class="lnkb" data-mcal="${esc(c.id)}" title="Ver los nombres del lookahead">${(c.al||[]).length}</button></td>
-      <td>${ed?(c.arch?`<button class="ib" data-mcres="${esc(c.id)}">Restaurar</button>`:`<button class="ab" data-mcm="${esc(c.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`):''}</td></tr>`}).join('')||`<tr><td colspan="8" class="note">No hay actividades con este filtro.</td></tr>`}
+      <td>${ed?(c.arch?`<button class="ib" data-mcres="${esc(c.id)}">Restaurar</button>`:`<button class="ab" data-mcm="${esc(c.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`):''}</td></tr>`}).join('')||`<tr><td colspan="9" class="note">No hay actividades con este filtro.</td></tr>`}
    </tbody></table></div></div></div></div>`;
   main.innerHTML=h;mxWireV(main);mxWireCat(main);mxWireCatTools(main)}
 
@@ -79,10 +80,11 @@ function mxCatSet(id,f,v){if(!mxEd())return;const c=MX.cat.get(id);if(!c)return;
   /* MOD-02: un nombre (o nombre del lookahead) que ya es de otra actividad no se aplica: si son la misma, se fusionan */
   if(f==='sc'){const o=mxNameOwner(c.name,id,[v]);if(o){render();toast(`${conOf(v).name} ya tiene «${o.name}» en el catálogo. Si son la misma actividad, combínalas (⋮ › Fusionar).`);return}}
   if(f==='name'){const o=mxNameOwner(v,id,mxScsOf(c));if(o){render();uiAsk({title:'Ese nombre ya existe',text:`${mxNameDupTxt(v,o)} Si son la misma actividad, fusiónalas; si no, usa otro nombre.`,ok:'Fusionar…',cancel:'Cancelar',tone:'warn'}).then(go=>{if(go)mxMergeDlg(id,o.id)});return}}
-  const prev=c[f]??'';if(prev===v)return;
+  if(f==='rend'){v=parseNum(v);if(Number.isNaN(v)||(v!=null&&v<0)){toast('El rendimiento debe ser un número positivo (por persona al día).');render();return}v=v?r2(v):null}
+  const prev=c[f]??(f==='rend'?null:'');if(prev===v)return;
   if(f==='name'){mxCatRename(id,prev,v);return}
   if(f==='sc'){mxCatScSet(id,prev,v);return}
-  fcol('mcat').doc(id).set({[f]:v,...mxNow()},{merge:true}).then(()=>toast(`${{name:'Nombre',sc:'Subcontratista',cl:'Clase'}[f]} guardado`,'Deshacer',()=>fcol('mcat').doc(id).set({[f]:prev,...mxNow()},{merge:true}))).catch(mxErr)}
+  fcol('mcat').doc(id).set({[f]:v,...mxNow()},{merge:true}).then(()=>toast(`${{name:'Nombre',sc:'Subcontratista',cl:'Clase',rend:'Rendimiento'}[f]} guardado`,'Deshacer',()=>fcol('mcat').doc(id).set({[f]:prev,...mxNow()},{merge:true}))).catch(mxErr)}
 
 /* ---- el lookahead sigue al catálogo: renombrar o fusionar una actividad cambia el nombre de sus filas ----
    (por nombre/alias; se saltan las filas con propuesta del SC pendiente; un solo apply → historial y Deshacer) */
