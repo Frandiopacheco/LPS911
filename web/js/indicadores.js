@@ -75,6 +75,20 @@ function restrCauseCard(n,vset,M){const wd=new Set(weekDays(n));const today=toda
     ${svgBarsH(Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,v})),v=>v+'')}
     <div class="tscroll"><table class="t rt"><thead><tr><th>Subcontratista</th><th class="r">Registradas</th><th class="r">Liberadas</th><th class="r">Pendientes</th><th class="r" title="Liberadas después de la fecha requerida o pendientes ya vencidas">Fuera de fecha</th></tr></thead><tbody>
     ${rows.map(([sc,o])=>`<tr><td data-l="Subcontratista">${sc?`<span class="chip" style="--c:${conOf(sc).color};border:0;background:none;padding-left:0"><i></i>${esc(conOf(sc).name)}</span>`:'<span class="mu">Sin partida</span>'}</td><td class="r" data-l="Registradas">${o.n}</td><td class="r ok" data-l="Liberadas">${o.lib||''}</td><td class="r" data-l="Pendientes">${o.pend||''}</td><td class="r${o.late?' no':''}" data-l="Fuera de fecha">${o.late||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
+/* Confiabilidad de las áreas de soporte (oct 2026, revisión de conformidad con el Last Planner): el mismo principio del PPC aplicado
+   a quien libera. De las restricciones cuyo Compromiso AS cae en la semana n (y ya llegó), cuántas se liberaron en esa fecha o antes.
+   Por responsable (el nombre actual de la empresa si es un SC). «Compromiso tardío» = se comprometió después de la fecha requerida. */
+function asRelData(n,vset,M){const wd=new Set(weekDays(n));const today=todayIso();const by={};const T={n:0,ok:0,late:0,pend:0,cl:0};
+  for(const r of S.res.values()){if(!r.comp||!wd.has(r.comp)||r.comp>today||!vset.has(restrPiso(r)))continue;if(M&&!M.has(r.sc||((S.act.get(r.actId)||{}).sc)||''))continue;
+    const k=(typeof rRespN==='function'?rRespN(r):r.resp)||'Sin responsable';const o=by[k]=by[k]||{n:0,ok:0,late:0,pend:0,cl:0};
+    const lib=r.status==='lib'&&r.freed;const st=lib&&r.freed<=r.comp?'ok':lib?'late':'pend';
+    for(const z of[o,T]){z.n++;z[st]++;if(r.need&&r.comp>r.need)z.cl++}}
+  return{T,rows:Object.entries(by).sort((a,b)=>(a[1].ok/a[1].n)-(b[1].ok/b[1].n)||b[1].n-a[1].n)}}
+function asRelCard(n,vset,M){const D=asRelData(n,vset,M);if(!D.T.n)return'';const pc=v=>Math.round(v*100)+' %';
+  return`<div class="card chart"><h2>Confiabilidad de las áreas de soporte <span class="sub">semana ${n} · restricciones con compromiso en la semana: ¿se liberaron a tiempo?</span></h2><div class="pad">
+    <p class="note" style="margin-top:0"><b>${pc(D.T.ok/D.T.n)}</b> liberadas en su fecha de compromiso o antes (${D.T.ok} de ${D.T.n})${D.T.cl?` · <span class="no">${D.T.cl} con compromiso después de lo requerido</span>`:''}.</p>
+    <div class="tscroll"><table class="t rt"><thead><tr><th>Responsable</th><th class="r">Con compromiso</th><th class="r">A tiempo</th><th class="r">Tarde</th><th class="r" title="Pasó la fecha de compromiso y sigue pendiente">Vencidas</th><th class="r" title="Se comprometió a liberarla después de la fecha requerida">Compromiso tardío</th><th class="r">% a tiempo</th></tr></thead><tbody>
+    ${D.rows.map(([k,o])=>`<tr><td data-l="Responsable">${esc(k)}</td><td class="r" data-l="Con compromiso">${o.n}</td><td class="r ok" data-l="A tiempo">${o.ok||''}</td><td class="r${o.late?' no':''}" data-l="Tarde">${o.late||''}</td><td class="r${o.pend?' no':''}" data-l="Vencidas">${o.pend||''}</td><td class="r" data-l="Compromiso tardío">${o.cl||''}</td><td class="r" data-l="% a tiempo"><b>${pc(o.ok/o.n)}</b></td></tr>`).join('')}</tbody></table></div></div></div>`}
 function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
   const rowH=26,W=380,L=122,R=44,h=data.length*rowH+8;const mx=Math.max(1,...data.map(d=>d.max??d.v));
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
@@ -327,7 +341,7 @@ function renderInd(main){
   h+=`<div class="card chart"><h2>PPC semanal histórico <span class="sub">anteriores al sistema: cargadas a mano · desde que se congela: el plan semanal</span>${isAdmin?' <button class="ib" id="bppch">✎ Cargar PPC histórico</button>':''}</h2><div class="pad tscroll">${histP.length?linesLegend()+svgLines(histP)+(histP.some(p=>p.man)?'<p class="note">Las semanas cargadas a mano no tienen PPC del SC.</p>':''):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>`;
   {const nmS=sc=>(scP[sc]&&scP[sc].nm)||conOf(sc).name;const e=Object.entries(scP).sort((a,b)=>nmS(a[0]).localeCompare(nmS(b[0])));
    if(e.length)h+=`<details class="card ixd-det"><summary>Tabla detallada por subcontratista <span class="sub">semana ${U.week}</span></summary><div class="pad">${wkScTable(e,sc=>scLabel(sc,nmS(sc)))}</div></details>`}
-  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M);
+  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M)+asRelCard(U.week,vset,M);
   const days=winDays();const load={};
   for(const x of S.act.values()){if(!vset.has(pisoOfAmb(x.ambId)))continue;for(const d of x.days||[])(load[x.sc]=load[x.sc]||{})[d]=(load[x.sc][d]||0)+1}
   const scs=Object.keys(load).filter(sc=>(!M||M.has(sc))&&days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
