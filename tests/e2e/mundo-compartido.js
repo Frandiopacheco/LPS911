@@ -105,6 +105,7 @@ export async function abrir(browser, hub, { as, tab = 'mapa', extra, hora = HOY 
   if (par) { const dump = await par.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(window.__DB).map(([k, m]) => [k, [...m.entries()]])))); await page.addInitScript(d => { try { if (d && !sessionStorage.getItem('e2e.db')) sessionStorage.setItem('e2e.db', d); } catch (e) {} }, dump); }
   await hub.attach(page);
   await page.addInitScript(({ user, tab, extra, HOY, MANANA, va }) => {
+    try { if (localStorage.getItem('lps911.bkr') == null) localStorage.setItem('lps911.bkr', JSON.stringify(Date.now() + 864e8)); } catch (e) {}
     window.__E2E = { user, today: HOY, tomorrow: MANANA, extra };
     try {
       if (va) { sessionStorage.setItem('lps.va', JSON.stringify(va)); }

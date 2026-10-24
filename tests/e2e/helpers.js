@@ -41,6 +41,8 @@ export async function openApp(page, { as = 'admin', theme, va, tab, extra, edita
     body: 'window.FIREBASE_CONFIG={apiKey:"e2e",projectId:"demo-lps"};window.LPS_ENV="pruebas";window.NO_SW=true;' }));
   await page.addInitScript(({ user, va, tab, extra, HOY, MANANA }) => {
     window.__E2E = { user, today: HOY, tomorrow: MANANA, extra };
+    /* el aviso «Aún no hay ningún respaldo…» sale a los 4 s y tapaba el aviso con «Deshacer» (clics que caían en él): pruebas inestables */
+    try { if (localStorage.getItem('lps911.bkr') == null) localStorage.setItem('lps911.bkr', JSON.stringify(Date.now() + 864e8)); } catch (e) {}
     try {
       if (va && !sessionStorage.getItem('e2e.va')) { sessionStorage.setItem('lps.va', JSON.stringify(va)); sessionStorage.setItem('e2e.va', '1'); }
       if (tab && !sessionStorage.getItem('e2e.tab')) { const k = 'lps911.ui'; const u = JSON.parse(localStorage.getItem(k) || '{}'); u.tab = tab; localStorage.setItem(k, JSON.stringify(u)); sessionStorage.setItem('e2e.tab', '1'); }

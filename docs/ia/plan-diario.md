@@ -55,6 +55,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - **Visibilidad del no programado (oct 2026, decidido con el dueño):** el SC y el capataz solo ven lo de su partida (`npVis` dentro de `npItems`: vale para Campo, En obra, plano, Plan diario e Indicadores); ingenieros, áreas y veedor ven todo. En En obra el contador por piso y los puntos del plano siguen el filtro de SC (`CP.sc`; `npMarks(d,pid,f)`). Campo › Tarjetas: botón «No programado» en `#cshow` (`CU.show='np'`: solo lo no programado; «Por confirmar» muestra además lo del SC por verificar). **Cruce** (`npCross`): la tarjeta avisa al ingeniero (`canDaily`) si en ese ambiente ese día otro SC tiene algo programado (`.npcx`).
 
+- **Tanda 2 (frente E, 23 oct 2026, decidido con el dueño):**
+  - **C-11 · «Todo el tren» sigue el tren del catálogo** (`trenOf`, `trPos` = `mxTrOf(mxCatOf(x))`, Matriz › Tren): si la actividad está en el tren, se mueven las del mismo ambiente que van **después según el tren** (no terminadas, con días desde la fecha del plan), en ese orden; las filas sin actividad de catálogo (o fuera del tren) siguen el orden visual como respaldo; sin tren en la actividad, todo por el orden visual (como antes). **Antes de confirmar** el paso «¿Qué se mueve?» lista cada actividad con su SC y su primer día → el nuevo (`ol.nvtl`). «Frente no entregado»: `predOf` preselecciona la partida de la predecesora más cercana según el tren (de otra partida); si no hay, la fila anterior de otra partida. `renderMapa` llama `ensureMcat()` (el catálogo no se cargaba si se entraba directo al Plan diario).
+  - **C-17 · Publicar con restricciones abiertas** avisa con `uiAsk` y guarda `dplan.restrIn` (ver `ppc-campo.md` «Tanda 2»). El cierre automático (`closePlanPiso`) lo guarda sin aviso.
 - `capPlan`: si el piso tiene varias láminas (fachadas), barra de chips `.pvlams` para elegirla (`CPB`).
 
 ## Distribución de la pantalla (oct 2026, pedido del dueño)

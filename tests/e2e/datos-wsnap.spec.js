@@ -32,6 +32,7 @@ test('M1 · semana congelada sin foto en ningún lado: como antes (base vacía, 
 
 test('M1 · congelar desde la página escribe la foto en wsnap y no en weeks; descongelar y recuperar no la pierden', async ({ page }) => {
   const errors = await openApp(page, { tab: 'plan' });
+  page.on('dialog', d => d.accept()); // aviso de restricciones abiertas (C-17, tanda 2: Tarrajeo con r1)
   await page.evaluate(() => freezeWeek(59, 'p1'));
   const w = await page.evaluate(() => window.__dbGet('weeks', '59_p1'));
   expect(w.frozenAt).toBeTruthy();

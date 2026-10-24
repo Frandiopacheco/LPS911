@@ -118,7 +118,7 @@ const PFOLD={get l(){try{return localStorage.getItem('lps.mpfold')==='1'}catch(e
   get r(){try{return localStorage.getItem('lps.mrfold')==='1'}catch(e){return false}},set r(v){try{localStorage.setItem('lps.mrfold',v?'1':'0')}catch(e){}},
   get b(){try{return localStorage.getItem('lps.mfzfold')==='1'}catch(e){return false}},set b(v){try{localStorage.setItem('lps.mfzfold',v?'1':'0')}catch(e){}}};
 /* ---------- vista principal ---------- */
-function renderMapa(main){mdotsWire();ensureLam();
+function renderMapa(main){mdotsWire();ensureLam();/* C-11: el tren del catálogo (trenOf/predOf) */if(typeof ensureMcat==='function')ensureMcat();
   const ps=pisos();if(U.piso)M.piso=U.piso;if(!M.piso||!S.pis.has(M.piso)){const withL=ps.find(p=>lamsOf(p.id).length);M.piso=(withL||ps[0]||{}).id||''}
   if(M.lpiso!==M.piso){if(M.lpiso!=null){M.sel='';M.vista='';M.selId=null;M.tmp=null;M.pend=null;M.rvx=false}M.lpiso=M.piso}
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
@@ -1496,7 +1496,14 @@ function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso
     openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pend.length} propuesta${pend.length>1?'s':''} del SC por revisar.</b> Para publicar el plan hay que revisarlas todas (Revisar en «Por decidir»).${adm?`<br>Como administrador puedes decidirlas todas de una vez: aceptar = ${pend.length-nf?`los «no va» pasan al día hábil siguiente (solo esa actividad)`:''}${pend.length-nf&&nf?' y ':''}${nf?'las culminadas se dan por culminadas':''}; rechazar = van según lo programado.`:''}</div>
       <button data-do="ver" class="pri">Ir a revisar</button>${adm?`<button data-do="acc">✓ Aceptar todas (${pend.length})</button><button data-do="rej">✗ Rechazar todas (${pend.length})</button>`:''}<button data-do="no">Cerrar</button>`,
       {ver:()=>{M.pdOpen=true;requestRender()},acc:()=>dpAll(true),rej:()=>dpAll(false),no:()=>{}});return}
-  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} Al publicar se cierra el plan de ese día. La semana congelada del Plan semanal no cambia.${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:pubPlan,no:()=>{}})}
+  /* C-17: compromisos del día que entran con restricciones abiertas o liberación crítica pendiente (sin lo que no va) */
+  const rin=pubRin();const nri=Object.keys(rin).length;
+  const go=async()=>{if(nri&&!await uiAsk({title:`${nri} compromiso${nri>1?'s':''} con restricciones abiertas`,text:`Plan del ${dvLbl(M.date)}: entran al plan con restricciones sin liberar o una liberación crítica de Calidad pendiente:`,list:restrInList(rin),
+      note:'Si publicas, se guarda cuáles entraron así (para analizarlo después). Para que no entren, libéralas antes o marca «No va».',ok:'Publicar igual',tone:'warn'}))return;pubPlan()};
+  openPop(btn,`<div class="ph">Publicar el plan del ${dvLbl(M.date)}</div><div class="ptx">${D.length?`Se aplican al lookahead <b>${D.length}</b> reprogramación${D.length>1?'es':''} (${n} actividad${n>1?'es':''})${nr?` y se registran <b>${nr}</b> restricción${nr>1?'es':''}`:''}.`:'No hay reprogramaciones pendientes.'} Al publicar se cierra el plan de ese día. La semana congelada del Plan semanal no cambia.${cx?`<br><b class="bad">Hay ${cx} cruce${cx>1?'s':''} sin decidir.</b>`:''}${nri?`<br><b class="bad">${nri} compromiso${nri>1?'s':''} con restricciones abiertas.</b>`:''}</div><button data-do="si" class="pri">📣 Publicar</button><button data-do="no">Seguir revisando</button>`,{si:go,no:()=>{}})}
+/** C-17: restricciones abiertas de lo que queda comprometido ese día y piso (lo programado, sin lo que sale con un «no va» en borrador) */
+function pubRin(){if(typeof restrInOf!=='function')return{};const out=new Set(draftsOf().flatMap(z=>z.ids||[z.actId]));
+  return restrInOf(Object.keys(dplanIds(M.date,M.piso)).filter(id=>!out.has(id)))}
 /** solo el administrador: aceptar o rechazar todas las propuestas pendientes del día y piso. Aceptar un «no va» lo deja como
     borrador al día hábil siguiente (solo esa actividad, con la causa que puso el SC); una culminada se da por culminada. */
 let DPALL=false;
@@ -1563,7 +1570,8 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
     /* foto del plan comprometido (contra ella se mide el PPC diario), con las actividades releídas del servidor;
        un día que ya llegó conserva la que tenía (o la de antes de publicar) */
     let snapIds=null;if(date>todayIso()||!sn0){const Acts=new Map(S.act);for(const[id,y]of A)Acts.set(id,y);if(date>todayIso()){for(const[id,y]of W)Acts.set(id,{...(Acts.get(id)||{}),...y});for(const na of newActs)Acts.set(na.id,{...na.doc,id:na.id})}
-      snapIds=dplanIds(date,pid,Acts);tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,who:dplanWho(snapIds,Acts),at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null})}
+      snapIds=dplanIds(date,pid,Acts);/* C-17: qué entró con restricciones abiertas o liberación crítica pendiente */const rin=typeof restrInOf==='function'?restrInOf(Object.keys(snapIds)):{};
+      tx.set(dref,{...(sn0||{}),date,pisoId:pid,ids:snapIds,who:dplanWho(snapIds,Acts),at:NOW(),by:me.email,byName:me.name||me.email,pub:PID,auto:false,reo:null,restrIn:rin})}
     return{out,skipped,held,W,restrs:restrs.filter(r=>!RLIB.has(r.id)),doc,was:pubD,snapIds,paOut,newActs}})}
   catch(e){PUBBUSY=false;toast('No se pudo publicar: '+(e&&(e.code||e.message)||'error'));return}
   PUBBUSY=false;
@@ -1627,9 +1635,18 @@ async function unpubPlan(PID,R_){if(UNPUBBUSY||!db)return;const d0=PID.slice(4,1
   if(!R_.was){PD.delete(PID);if(dropSnap&&DPL.has(dk))DPL.delete(dk)}DV++;PDV++;
   for(const o of R_.out)if(o.lr){const x=S.act.get(o.aid);const rc=recReal(o.date,o.aid);if(x&&rc&&rc.viaNova&&rc.status==='no')writeDaily(o.date,pisoOfAct(o.aid),{recs:{[o.aid]:{...baseRec(o.date,x,rc),status:null,exec:null,cnc:'',imp:null,note:'',viaNova:false}}})}
   toast('Publicación deshecha: los cambios vuelven a borrador');requestRender()}
-/** las actividades que siguen a x en su ambiente (el «tren») y tienen días desde la fecha del plan */
-function trenOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);
-  return L.slice(i+1).filter(y=>!(typeof DONE!=='undefined'&&DONE.has(y.id))&&(y.days||[]).some(d=>d>=M.date))}
+/* posición de una actividad en el tren del catálogo (Matriz › Tren, matriz-tren.js); null = sin actividad de catálogo o fuera del tren */
+function trPos(y){try{return typeof mxTrOf==='function'&&typeof mxCatOf==='function'?mxTrOf(mxCatOf(y)):null}catch(e){return null}}
+/** las actividades que siguen a x en su ambiente (el «tren») y tienen días desde la fecha del plan.
+    C-11 (tanda 2, CON-03): si x está en el tren del catálogo, las sucesoras son las que van después según ese tren (no el orden de
+    las filas); las filas sin actividad de catálogo (o fuera del tren) siguen el orden visual como respaldo. Sin tren en x: orden visual.
+    Devuelve en el orden del tren (y luego el de las filas). */
+function trenOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);const tx=trPos(x);
+  const R=[];L.forEach((y,j)=>{if(y.id===x.id)return;const t=tx==null?null:trPos(y);if(t!=null?(t>tx||(t===tx&&j>i)):j>i)R.push({y,j,t})});
+  if(tx!=null)R.sort((a,b)=>(a.t==null)-(b.t==null)||(a.t??0)-(b.t??0)||a.j-b.j);
+  return R.map(r=>r.y).filter(y=>!(typeof DONE!=='undefined'&&DONE.has(y.id))&&(y.days||[]).some(d=>d>=M.date))}
+/** ¿las sucesoras de x salen del tren del catálogo? (para el texto del diálogo) */
+const trenCat=x=>trPos(x)!=null;
 function shiftDays(y,n,from){const map=d=>d>=from?wshift(d,n):d;const days=[...new Set((y.days||[]).map(map))].sort();const qty={};for(const[d,v]of Object.entries(y.qty||{})){const k=map(d);qty[k]=(qty[k]||0)+(+v||0)}return{...y,days,qty}}
 function shiftOp(y,n,from){return op('acts',y.id,shiftDays(y,n,from))}
 function dvClick(btn,x,k){const eng=dzEng();const p=dpOf(x.id);
@@ -1692,8 +1709,11 @@ function nvAttr(x,st){const k=st.k;let c,imp,rsc='',pc=false;
   const o=nvcOf(k);return{c,cnc:nvCnc(c),imp,rsc,pc,rt:(o&&o.rt)||''}}
 /** texto del motivo (lo que se ve en el plan, el lookahead y la restricción) */
 function nvMot(st){const d=(st.desc||'').trim();const l=nvLbl(st.k);const pr=st.k==='fre'&&st.pred?' ('+conOf(st.pred).name+')':'';return l+pr+(d&&d!==l?': '+d:'')}
-/** SC de la actividad anterior en el ambiente (la que debía entregar el frente) */
-function predOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);for(let j=i-1;j>=0;j--)if(L[j].sc&&L[j].sc!==x.sc)return L[j].sc;return''}
+/** SC de la actividad anterior en el ambiente (la que debía entregar el frente). C-11: según el tren del catálogo (la predecesora
+    más cercana de otra partida); si no hay, por el orden de las filas. Solo preselecciona: el ingeniero la puede cambiar. */
+function predOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort(byOrder);const i=L.findIndex(y=>y.id===x.id);const tx=trPos(x);
+  if(tx!=null){let b=null;L.forEach((y,j)=>{if(y.id===x.id||!y.sc||y.sc===x.sc)return;const t=trPos(y);if(t==null||!(t<tx||(t===tx&&j<i)))return;if(!b||t>b.t||(t===b.t&&j>b.j))b={t,j,y}});if(b)return b.y.sc}
+  for(let j=i-1;j>=0;j--)if(L[j].sc&&L[j].sc!==x.sc)return L[j].sc;return''}
 /** registro en Restricciones de lo que no va (toda reprogramación queda registrada) */
 function nvRestr(x,st,need,rid0){const rid=rid0||uid('res');const A=nvAttr(x,st);const resp=A.rsc?conOf(A.rsc).name:'';
   return{rid,doc:{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:A.rt||restrTypeFor(A.c),desc:(st.desc||'').trim()||nvMot(st),resp,need,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario',cnc:A.cnc,ccode:A.c,imp:A.imp,rsc:A.rsc,pc:A.pc}}}
@@ -1724,7 +1744,8 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
     return`${tagHtml()}${st.desc&&st.k!=='int'?`<div class="ptx" style="padding-top:0">${esc(st.desc)} · se registra en Restricciones</div>`:st.k==='int'?`<div class="ptx" style="padding-top:0">${esc(st.desc||'Interferencia con otra partida')}</div>`:''}
     <div class="nvl">¿A qué fecha?</div><div class="nvd">${opts.map(d=>`<button data-to="${d}" class="${st.to===d?'on':''}">${dvLbl(d)}</button>`).join('')}<input type="date" id="nvdt" min="${addD(M.date,1)}" value="${opts.includes(st.to)?'':st.to}" aria-label="Otra fecha" title="Otra fecha"></div>
     <div class="nvl">¿Qué se mueve?</div><div class="nvgo"><button data-tr="0" class="${st.tren?'':'on'}"><b>Solo esta</b><small>las demás del ambiente no cambian</small></button><button data-tr="1" class="${st.tren?'on':''}"${T.length?'':' disabled'}><b>Todo el tren${T.length?' ('+(T.length+1)+')':''}</b><small>${T.length?'también '+esc(T.slice(0,3).map(y=>short(y.name,18)).join(', '))+(T.length>3?'…':''):'no hay más en el ambiente'}</small></button></div>
-    <div class="ptx">Se ${moved.length>1?'mueven':'mueve'} ${n} día${n>1?'s':''} hábil${n>1?'es':''}: ${esc(moved.map(y=>short(y.name,22)).join(' · '))}.${late.length?` <b class="bad">⚑ Pasa el hito ${esc(am.hitoLabel||'')} (${fmtD(am.hito)}).</b>`:''}</div>
+    ${moved.length>1?`<div class="nvl">Se ${moved.length>1?'mueven':'mueve'} ${n} día${n>1?'s':''} hábil${n>1?'es':''} (${moved.length})${trenCat(x)?' · orden del tren del catálogo':''}:</div><ol class="nvtl">${moved.map(y=>{const d0=(y.days||[]).filter(d=>d>=M.date).sort()[0];return`<li><i class="zcsc" style="--c:${conOf(y.sc).color}"></i><span><b>${esc(short(y.name,40))}</b><small>${esc(conOf(y.sc).name)}${d0?` · ${fmtD(d0)} → ${fmtD(wshift(d0,n))}`:''}</small></span></li>`}).join('')}</ol>${late.length?`<div class="ptx"><b class="bad">⚑ Pasa el hito ${esc(am.hitoLabel||'')} (${fmtD(am.hito)}).</b></div>`:''}`
+    :`<div class="ptx">Se mueve ${n} día${n>1?'s':''} hábil${n>1?'es':''}: ${esc(short(x.name,40))}.${late.length?` <b class="bad">⚑ Pasa el hito ${esc(am.hitoLabel||'')} (${fmtD(am.hito)}).</b>`:''}</div>`}
     <button data-nv="go" class="pri nvok">Reprogramar al ${dvLbl(st.to)}</button>`};
   const step=s=>{st.s=s;show(s==='mot'?motHtml():s==='det'?detHtml():repHtml())};
   const progDef=()=>{if(st.k!=='prg'||!eng||st.who)return;nvProgDef(x).then(w=>{if(st.who)return;st.who=w;st.whoAuto=w;if(st.s==='det'&&pop&&pop.isConnected)step('det')})};

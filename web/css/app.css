@@ -643,6 +643,8 @@ tr.ar.first>td{border-top:1px solid var(--line)}
 td.sc{border-left:4px solid var(--c)}
 td.sc select.ci{padding:0 2px 0 5px;font-size:12px;font-weight:500;appearance:none;-webkit-appearance:none;cursor:pointer;text-overflow:ellipsis}
 td.act .ci{padding-right:22px;box-sizing:border-box;text-overflow:ellipsis}
+/* C-17: chapita R del Plan semanal (entró con restricciones abiertas); mismos colores que .rbadge, en línea */
+.rinb{display:inline-block;margin-left:6px;vertical-align:1px;font:600 10px var(--f-mono);background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 3px;cursor:help}
 .rbadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);font:600 10px var(--f-mono);background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 3px;pointer-events:auto;cursor:help}
 .obadge{position:absolute;right:4px;top:50%;transform:translateY(-50%);font:700 10px var(--f-mono);background:#fff4d6;color:#8a5a00;border:1px solid #d99a00;border-radius:4px;padding:0 4px;cursor:pointer;line-height:14px}
 .obadge.sh{right:26px}
@@ -1377,6 +1379,10 @@ td.act .lqbadge.sh{right:26px}
 .pop .nvgo button:disabled{opacity:.45;cursor:not-allowed}
 .nvq{padding:6px 10px}.nvq input{width:100%;box-sizing:border-box;text-align:left}
 .nvl{padding:8px 10px 2px;font:600 12px var(--f-ui);color:var(--muted)}
+/* C-11: lista de lo que se mueve con «Todo el tren», antes de confirmar */
+.nvtl{margin:2px 10px 6px;padding:0;list-style:none;max-height:180px;overflow:auto;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--panel2)}
+.nvtl li{display:flex;gap:8px;align-items:center;padding:5px 8px;border-top:1px solid var(--line2);font-size:12.5px}.nvtl li:first-child{border-top:0}
+.nvtl li span{display:flex;flex-direction:column;min-width:0}.nvtl li small{color:var(--muted);font-size:11.5px}
 .nvd{display:flex;gap:6px;flex-wrap:wrap;padding:4px 10px}
 .pop .nvd button{height:32px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);font-size:12.5px}
 .pop .nvd button.on{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
@@ -3523,6 +3529,9 @@ body.ipr-on{overflow:hidden}
 :root[data-theme="dark"]{--mxt-st:rgba(18,20,22,.6)}
 td.d.on.mxt::after{background-image:repeating-linear-gradient(135deg,var(--mxt-st) 0 2px,transparent 2px 6px)}
 .ghchip.mxtc{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent);background:var(--bad-soft)}
+/* tren invertido (C-16, tanda 2): esquina de color en los días adelantados a la predecesora; --warn ya tiene su versión oscura */
+td.d.on.tinv::before{content:"";position:absolute;z-index:2;top:1px;right:1px;width:0;height:0;border-style:solid;border-width:0 9px 9px 0;border-color:transparent var(--warn) transparent transparent;pointer-events:none}
+.ghchip.tinvc{cursor:help;border-style:solid;background:var(--warn-soft)}
 .mxtrl{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px;max-width:760px}
 .mxtr{display:grid;grid-template-columns:32px 6px minmax(0,1fr) auto;align-items:center;gap:10px;padding:6px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-ctl)}
 .mxtr.dg{cursor:grab}.mxtr.drg{opacity:.4}.mxtr.ovr{box-shadow:var(--ring)}

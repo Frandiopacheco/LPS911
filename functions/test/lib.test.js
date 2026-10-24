@@ -329,3 +329,39 @@ test('versión cliente: un sector de un piso archivado no se emite (como la pág
   const acts = JSON.parse(v.docs[0][1].json).acts;
   assert.deepStrictEqual(Object.keys(acts), ['x1']);
 });
+
+/* C-17 (tanda 2, LPS-9): qué compromisos entran congelados con restricciones abiertas o liberación crítica pendiente */
+const { restrInOf } = require('../lib');
+test('restrInOf: restricciones abiertas y liberación crítica pendiente (por «rest» o la partida siguiente)', () => {
+  const acts = M({
+    a: { ambId: 'm1', sc: 'c1', name: 'Tarrajeo', order: 1 },
+    b: { ambId: 'm1', sc: 'c1', name: 'Solaqueo', order: 2 },
+    c: { ambId: 'm1', sc: 'c2', name: 'Pintura de muros', order: 3 },
+    d: { ambId: 'm1', sc: 'c3', name: 'Piso', order: 4 },
+    e: { ambId: 'm2', sc: 'c2', name: 'Pintura de muros', order: 1 }
+  });
+  const restr = [
+    { id: 'r1', actId: 'a', status: 'pend' }, { id: 'r2', actId: 'a', status: 'lib' }, { id: 'r3', actId: 'b', status: 'pend', arch: { t: 1 } },
+    { id: 'r4', actId: 'zz', status: 'pend' }
+  ];
+  const libs = [
+    { id: 'L1', actId: 'b', crit: true, st: 'pro', rest: '' }, // sin «rest»: la primera de otra partida después de b → c
+    { id: 'L2', actId: 'a', crit: true, st: 'obs', rest: 'Piso' }, // «rest» por nombre en el mismo ambiente → d
+    { id: 'L3', actId: 'a', crit: true, st: 'lib', rest: 'Piso' }, // ya liberada
+    { id: 'L4', actId: 'a', crit: false, st: 'sol', rest: '' }, // no es crítica
+    { id: 'L5', actId: 'e', crit: true, st: 'anu' } // anulada
+  ];
+  assert.deepStrictEqual(restrInOf(['a', 'b', 'c', 'd', 'e'], { restr, libs, acts }), { a: ['r1'], c: ['lib:L1'], d: ['lib:L2'] });
+  assert.deepStrictEqual(restrInOf(['b'], { restr, libs, acts }), {});
+});
+test('congelado automático: guarda restrIn (C-17)', () => {
+  const base = {
+    project: PROJ, pisos: M({ p1: { code: 'P1', order: 1 } }), sectors: M({ s1: { pisoId: 'p1', code: 'S1', order: 1 } }),
+    ambientes: M({ a1: { sectorId: 's1', code: 'A1', name: 'Oficina', order: 1 } }),
+    acts: M({ x1: { ambId: 'a1', sc: 'c1', name: 'Pintura', order: 1, days: ['2026-10-12'] }, x2: { ambId: 'a1', sc: 'c2', name: 'Piso', order: 2, days: ['2026-10-13'] } })
+  };
+  const L = buildFreeze({ ...base, restr: [{ id: 'r1', actId: 'x1', status: 'pend' }], libs: [{ id: 'L1', actId: 'x1', crit: true, st: 'pro' }] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.deepStrictEqual(L[0].doc.restrIn, { x1: ['r1'], x2: ['lib:L1'] });
+  const L2 = buildFreeze({ ...base, restr: [{ id: 'r1', actId: 'x1', status: 'lib' }], libs: [] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.strictEqual('restrIn' in L2[0].doc, false);
+});

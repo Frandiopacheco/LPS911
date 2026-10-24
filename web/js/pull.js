@@ -180,7 +180,13 @@ function puPlan(s){const t=todayIso();const R=[],ops=[],moved=[],cat=[];let nNew
     const sh=bf.length&&fut.length?wdist(bf[0],fut[0]):0;
     const chg=p.del?'Se quitan los días desde mañana':[sh?(sh>0?'+':'')+sh+' d':'',dur!==bf.length?'dura '+dur+' d':''].filter(Boolean).join(' · ')||'reprogramada';
     const row={pid,p,am,x,was:bf.length?puShort(bf[0])+' → '+puShort(bf[bf.length-1]):'—',now:fut.length?puShort(fut[0])+' → '+puShort(fut[fut.length-1]):'—',chg,k:p.del?'del':sh>0?'late':'early',lk:changedLk};
-    R.push(row);if(changedLk){moved.push(row);if(!PU.apOv)continue}ops.push(op('acts',x.id,{...x,days:nd}))}
+    R.push(row);if(changedLk){moved.push(row);if(!PU.apOv)continue}
+    /* C-19 (CON-06): el metrado por día se mueve con sus días (el i-ésimo día futuro pasa al i-ésimo nuevo; si la actividad se acorta,
+       lo que sobra se suma al último día, así no se pierde metrado; los días agregados quedan «sin cantidad», como al pintar) */
+    const nx={...x,days:nd};if(x.qty){const cf=cur.filter(d=>d>t),fs=[...new Set(fut)].sort();const nq={};
+      for(const[d,v]of Object.entries(x.qty)){if(d<=t){nq[d]=v;continue}const i=cf.indexOf(d);if(i<0||!fs.length)continue;const k=fs[Math.min(i,fs.length-1)];nq[k]=r2((+nq[k]||0)+(+v||0))}
+      nx.qty=nq}
+    ops.push(op('acts',x.id,nx))}
   /* choques sin resolver → restricciones (tarea predecesora) */
   const D=puDays(s);const IX=new Map(D.map((d,i)=>[d,i]));const N=puNodes(s,IX);const rs=[];
   puBad(s,N).forEach(l=>{const bp=(s.ps||{})[l.b];if(!bp||puIsH(l.b))return;const act=bp.nw?null:bp.src;if(!act||!S.act.get(act))return;
