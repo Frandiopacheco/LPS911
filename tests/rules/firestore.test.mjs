@@ -1525,6 +1525,9 @@ test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { mov: 'mucho' }));
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { feA: 500 }));
   await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: 60, sob2: 100, he60h: 2, leyes: null, soles: 'cos', vig: [{ desde: '2026-01-01' }] }));
+  // tarifas de descuento a SC (24-10-2026): lista de vigencias
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, vig: [{ desde: '2026-01-01' }], dtar: [{ desde: '2026-10-01', t: { OP: 30, OF: null, PE: 20 } }] }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, dtar: 'mucho' }));
 });
 
 test('tareo (auditoría 21-10-2026): AFP e hijos en tperp, que no lee el capataz; tper ya no acepta esos datos nuevos', async () => {

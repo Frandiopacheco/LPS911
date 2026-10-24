@@ -28,6 +28,7 @@ async function tsxBajar(origen,a,b,tipo){if(TPK.busy)return;TPK.busy='x';request
     add(tsxResumen(X,R,per,L,PB),'0 Resumen');add(tsxAsis(X,R,per),'1 RRHH Asistencia');add(tsxHoras(X,R,per),'2 RRHH Horas');add(tsxAltas(X,R,per),'3 RRHH Altas y bajas');
     add(tsxPart(X,R,per,L,A),'4 Costos por partida');add(tsxUA(X,R,per,L),'5 Costos por UA');add(tsxMeta(X,R,per,A),'6 Costos vs meta');add(tsxDet(X,R,per,PB),'7 Detalle');
     add(tsxPer(X,R),'8 Personal');add(tsxCat(X,R),'9 Partidas');
+    if(R.DC&&R.DC.length)add(tsxDct(X,R,per,PB),'10 Descuentos a SC');
     const n=typeof tSemN==='function'?tSemN(a):null;const pre=(P().code||'').trim();
     const name=tipo==='sem'?`Tareo_${n?'S'+n+'_':''}${tpxDm(a)}-${tpxDm(b)}.xlsx`:`Tareo_${a}_al_${b}.xlsx`;
     saveBlob((pre?pre+'_':'')+name,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel generado')}
@@ -118,3 +119,22 @@ function tsxCat(X,R){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'Partid
   for(const x of L){if(x.grp!==g){g=x.grp;sh.set(r,0,g,S0.grp);sh.set(r,1,(x.grpN||'').toUpperCase(),S0.grp);for(let c=2;c<8;c++)sh.set(r,c,'',S0.grp);r++}
     [x.cod,x.nom,x.und,x.met||'',x.hhp||'',x.met&&x.hhp?tR2(x.hhp/x.met):'',x.ua||'',tpxUaP(x.ua)||''].forEach((v,c)=>sh.set(r,c,v,c===7&&!x.ua?S0.no:c>2&&c<6?S0.num:S0.txt));r++}
   return sh.done([8,44,7,10,10,9,16,13],{xSplit:2,ySplit:r0+1})}
+
+/* descuentos a SC (24-10-2026): una fila por obrero, día, partida descontable y SC, con subtotal por SC y total. Montos solo para quien
+   ve los soles (tplSoles), como el costo en «4 Costos por partida». */
+function tsxDct(X,R,per,PB){const S0=tsxSt(),sh=tpxSheet(X);const soles=tplSoles();let r=tsxHead(sh,S0,'Descuentos a subcontratistas',per+(soles?` · HE con recargo de ${R.P.sob1} % y ${R.P.sob2} %`:''));
+  const H=['Subcontratista','Fecha','Capataz','DNI','Apellidos y nombres','Categoría','Código','Partida','HH normales',`HE ${R.P.sob1} %`,`HE ${R.P.sob2} % / dom. y feriado`,'Total HH',...(soles?['Tarifa S/ por HH','Origen de la tarifa','Monto S/']:[]),'Versión'];
+  H.forEach((h,c)=>sh.set(r,c,h,S0.hdr));const r0=r;r++;let n=0;const nc=H.length;const iM=soles?14:-1;
+  const G=new Map();for(const x of R.DC){const o=G.get(x.sc)||{n:x.scN,L:[]};o.L.push(x);G.set(x.sc,o)}const T={hn:0,h60:0,h100:0,h:0,m:0};
+  for(const g of [...G.values()].sort((a,b)=>a.n.localeCompare(b.n))){const t={hn:0,h60:0,h100:0,h:0,m:0};
+    for(const x of g.L){const pc=tcoPc(x.pc,R);const v=[g.n,tFmt(x.f),x.capN||'',String(x.dni),[x.ape,x.nom].filter(Boolean).join(' '),x.catN||'',pc.cod||x.pc,pc.nom||'',x.hn,x.h60,x.h100,x.h,
+        ...(soles?[Math.round(x.tar*100)/100,x.src==='planilla'?'Costo HH planilla':'Tarifa de descuento',Math.round(x.monto*100)/100]:[]),'v'+(x.v||'')];
+      v.forEach((val,j)=>sh.set(r,j,val,j>=8&&j<=11||j===12&&soles||j===iM?S0.num:S0.txt));r++;n++;
+      for(const k of['hn','h60','h100','h'])t[k]=tR2(t[k]+x[k]);t.m+=x.monto}
+    sh.set(r,0,`Subtotal ${g.n}`,S0.totL);for(let c=1;c<8;c++)sh.set(r,c,'',S0.totL);[t.hn,t.h60,t.h100,t.h].forEach((v,j)=>sh.set(r,8+j,v,S0.tot));
+    if(soles){sh.set(r,12,'',S0.tot);sh.set(r,13,'',S0.tot);sh.set(r,14,Math.round(t.m*100)/100,S0.tot)}sh.set(r,nc-1,'',S0.tot);r++;
+    for(const k of['hn','h60','h100','h'])T[k]=tR2(T[k]+t[k]);T.m+=t.m}
+  sh.set(r,0,'TOTAL',S0.totL);for(let c=1;c<8;c++)sh.set(r,c,'',S0.totL);[T.hn,T.h60,T.h100,T.h].forEach((v,j)=>sh.set(r,8+j,v,S0.tot));
+  if(soles){sh.set(r,12,'',S0.tot);sh.set(r,13,'',S0.tot);sh.set(r,14,Math.round(T.m*100)/100,S0.tot)}sh.set(r,nc-1,'',S0.tot);r+=2;
+  sh.set(r,0,'Las HE de la partida descontable de cada obrero se reparten entre los SC en proporción a sus horas. Los días salen de la versión publicada vigente.',S0.pie);
+  return sh.done([16,11,22,11,32,10,8,30,9,9,11,9,...(soles?[10,16,12]:[]),8],{xSplit:0,ySplit:r0+1})}

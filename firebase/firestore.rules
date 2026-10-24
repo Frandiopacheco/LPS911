@@ -471,6 +471,8 @@ service cloud.firestore {
     function plaOk() {
       let d = request.resource.data;
       return (!('vig' in d) || (d.vig is list && d.vig.size() <= 30))
+        // tarifas de descuento a SC (24-10-2026): vigencias como los jornales
+        && (!('dtar' in d) || (d.dtar is list && d.dtar.size() <= 30))
         && numIn(d, 'he60h', 0, 12) && numIn(d, 'sob1', 0, 300) && numIn(d, 'sob2', 0, 300) && numIn(d, 'alt', 0, 100)
         && numIn(d, 'mov', 0, 200) && numIn(d, 'feA', 0, 100) && numIn(d, 'dmEmp', 0, 366) && numIn(d, 'dmTope', 0, 366) && numIn(d, 'ae', 0, 366)
         && numIn(d, 'aeEdad', 0, 30) && numIn(d, 'leyes', 0, 300)

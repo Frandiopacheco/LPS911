@@ -149,7 +149,9 @@ function trClean(rows){const o={};for(const[d,r]of Object.entries(rows||{})){con
     fotos y, con cc, el cotejo vigente. No cuenta hist, by, ts ni lo calculado. */
 function trSig(d,cc){d=d||{};const hrs=trHrs(d);const R={};for(const[k,r]of Object.entries(d.rows||{})){R[k]=[r&&r.as===true?1:r&&r.as===false?0:null,(r&&r.mot)||'',!!(r&&r.alt)];
     /* modo:'hrs': las horas por partida y la salida las escribe el capataz (no son calculadas) */
-    if(hrs)R[k].push((r&&typeof r.sal==='string'&&r.sal)||'',(r&&typeof r.ent==='string'&&r.ent)||'',!!(r&&r.cor===true),Object.entries((r&&r.h)||{}).map(([p,v])=>[p,trHv(v)]).filter(x=>x[1]).sort((x,y)=>x[0].localeCompare(y[0])))}
+    if(hrs)R[k].push((r&&typeof r.sal==='string'&&r.sal)||'',(r&&typeof r.ent==='string'&&r.ent)||'',!!(r&&r.cor===true),Object.entries((r&&r.h)||{}).map(([p,v])=>[p,trHv(v)]).filter(x=>x[1]).sort((x,y)=>x[0].localeCompare(y[0])));
+    /* reparto de las partidas descontables entre SC (24-10-2026): solo si hay, así la firma de los tareos sin descuentos no cambia */
+    if(hrs&&r&&r.dct&&typeof r.dct==='object'){const D=Object.keys(r.dct).sort().map(pc=>[pc,Object.entries(tDctOf(r,pc)).sort((x,y)=>x[0].localeCompare(y[0]))]).filter(x=>x[1].length);if(D.length)R[k].push(D)}}
   const o={st:d.st||'bor',rows:R,blq:(Array.isArray(d.blq)?d.blq:[]).map(b=>b?[b.id||'',b.pc||'',b.ini||'',b.fin||'',Array.isArray(b.dnis)?b.dnis:[]]:null),foto:Array.isArray(d.foto)?d.foto:[]};
   if(hrs){o.modo='hrs';o.pcs=Array.isArray(d.pcs)?d.pcs:[]}
   if(cc)o.cot=tCotDe(d);return trStr(o)}
@@ -411,7 +413,7 @@ function trModel(t){const ed=trEdOk();const cot=ed&&t.st==='env'&&(!TR.ed||TR.ed
   const oDni=new Map();for(const o of vis)if(o.dni)oDni.set(o.dni,(oDni.get(o.dni)||[]).concat(o));
   return{ed,cot,c,s,ob,vis,pend,R,P:R.filter(r=>r.as),F:R.filter(r=>!r.as).sort((a,b)=>(a.as===false)-(b.as===false)),oDni,blk:ob.filter(o=>o.bl),nofir:ob.filter(o=>o.k==='nofir'),pas:ed&&(!TR.ed||TR.ed.g)&&['env','rev'].includes(t.st),fok:trFotosOk(t)}}
 /* etiqueta corta de cada observación en su fila (el texto completo va en el title y arriba en la lista) */
-const TR_TAG={nofir:'No firmó',gar:'Garita',dup:'En otro tareo',marca:'Sin marcar',mot:'Sin motivo',sinh:'Sin horas',cruce:'Cruce',parcial:'Parcial',quien:'Sin bloque',max:'Revisar horas',hmax:'Más de 16 h',hval:'Horas no válidas',bloq:'Bloqueada',hor:'No cuadra horario'};
+const TR_TAG={nofir:'No firmó',gar:'Garita',dup:'En otro tareo',marca:'Sin marcar',mot:'Sin motivo',sinh:'Sin horas',cruce:'Cruce',parcial:'Parcial',quien:'Sin bloque',max:'Revisar horas',hmax:'Más de 16 h',hval:'Horas no válidas',bloq:'Bloqueada',hor:'No cuadra horario',dct:'Descuento SC'};
 function trHeadHtml(t,M){const s=M.s;const prev=trNb(-1),next=trNb(1);const L=TR.ord.filter(x=>x===t.id||TD.docs.has(x));const pos=L.indexOf(t.id);
   const kp=(v,l,c='')=>`<span class="tr-k${c}"><b>${v}</b> ${l}</span>`;const nObs=M.vis.length;
   const btn=[];
@@ -519,6 +521,7 @@ function trRightHtml(t,M){const{c,P,F,oDni,vis}=M;const s=M.s;
    ${t.st==='pub'?`<div class="callout t-warn" id="trPubC"><b>Publicado${t.pubV?' (v'+esc(String(t.pubV))+')':''}</b>: costos y RR.HH. ya lo ven. Para corregirlo hay que rectificar el día.${typeof tpPubOk==='function'&&tpPubOk()?' <button class="ib" data-tra="rect" id="trRect">Rectificar en Publicación…</button>':''}</div>`:''}
 
    ${vis.length?`<div class="callout t-warn to-obs" id="trObs"><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></div>`:''}
+   ${trDctCard(t)}
    <section class="card tr-mtc"><div class="tr-vbar"><b>Obreros y horas por partida</b></div>
     <div class="tr-mtw"><table class="t tr-mt"><thead><tr><th>Obrero</th><th>Cat.</th>${pcs.map(pc=>{const p=pcL(pc);return`<th class="t-r" title="${esc(p.nom)}">${esc(p.cod)}</th>`}).join('')}<th class="t-r" title="Horas trabajadas y horario">Total</th><th class="t-r" title="Horas extra">HE</th><th title="Trabajo en altura (bono)">A</th><th title="Observaciones${M.pas?' · ⇄ pasar a otro capataz':''}">Obs.</th></tr></thead>
      <tbody>${body}</tbody>
@@ -545,6 +548,7 @@ function trClick(e,id){if(TR.ed&&TR.ed.g&&txClick(e))return;const w=e.target.clo
   if(a==='rect'){const t=TD.docs.get(id);if(t)trLeave(()=>{trClose();tpbSetF(t.date);U.tab='tpub';saveUI();render()});return}
   if(a==='reab')return toReabrir(id);
   if(a==='pas')return trPasarDlg(id,b.dataset.v);
+  if(a==='dct')return trDctDlg(id);
   if(a==='cor'){trEdOpen(TD.docs.get(id));TR.conf='';trDraw(true);return}
   if(TR.ed)return trEdClick(a,b,id)}
 function trChange(e,id){if(e.target.closest&&e.target.closest('#txMenu')){txMenuChg(e);return}
@@ -1019,6 +1023,7 @@ function txPanel(t,M){const X=txCtx(t);TX.X=X;txFix(X);const ch=trPrTotCh(X.e.ba
    ${t.st==='pub'?`<div class="callout t-warn" id="trPubC"><b>Publicado${t.pubV?' (v'+esc(String(t.pubV))+')':''}</b>: costos y RR.HH. ya lo ven. Para corregirlo hay que rectificar el día.${typeof tpPubOk==='function'&&tpPubOk()?' <button class="ib" data-tra="rect" id="trRect">Rectificar en Publicación…</button>':''}</div>`:''}
 
    <div id="trPrTotW">${trPrTotHtml(ch)}</div>
+   ${trDctCard(t)}
    ${vis.length?`<details class="callout t-warn to-obs tx-obs" id="trObs" data-trop="obs"${oo?' open':''}><summary><b>${vis.length} ${vis.length===1?'observación':'observaciones'}</b>${nb?` <span class="tx-obn">${nb} ${nb===1?'impide':'impiden'} marcar revisado</span>`:''}</summary><ul>${vis.map(o=>`<li data-k="${esc(o.k)}"${o.bl?' class="tr-obl"':''}>${esc(o.msg)}</li>`).join('')}</ul></details>`:''}
    <section class="card tx-card" aria-label="Hoja del tareo">${txBarHtml(X)}
     <div class="tx-w tr-ks" id="txW" tabindex="0" role="grid" aria-label="Hoja del tareo: obreros y horas por partida" aria-multiselectable="true">${txTable(X)}</div>
@@ -1288,3 +1293,52 @@ function trSplitInit(ws){const sp=ws.querySelector('#trSplit');if(!sp)return;let
 /* muestra u oculta la foto del formato (botón del encabezado, «Ocultar» del panel o doble clic en el borde); se recuerda en el equipo */
 function trFoSet(on){TR.pfo=!!on;try{localStorage.setItem('lps.trfo',TR.pfo?'1':'0')}catch(e){}trDraw(true);if(TR.pfo)setTimeout(trView,0)}
 function trSplitKey(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();e.stopPropagation();const f=$('#trFoto');trFwSet((f?f.getBoundingClientRect().width:400)+(e.key==='ArrowLeft'?-32:32));trView()}
+
+/* ======================================================================
+   Descuentos a SC en la revisión (24-10-2026): resumen por partida descontable y «Editar reparto» (oficina y jefe, en «Enviado» o
+   «Revisado»). Guarda solo rows.<dni>.dct en una transacción aparte de la hoja (con cambios sin guardar en la hoja pide guardarlos
+   primero); no cambia el estado: el reparto no toca horas ni firmas. Queda en el historial como corrección con el detalle.
+   ====================================================================== */
+function trDctPcs(t){const R=Object.values((t&&t.rows)||{}).filter(r=>r&&r.as===true);
+  return[...new Set([...(Array.isArray(t.pcs)?t.pcs:[]),...R.flatMap(r=>Object.keys(r.h||{}))])].filter(pc=>tDctPc(pc)&&R.some(r=>trHv((r.h||{})[pc])>0)).sort((a,b)=>tCmpCod((S.tpc.get(a)||{}).cod||a,(S.tpc.get(b)||{}).cod||b))}
+const trDctEd=t=>!!t&&trEdOk()&&['env','rev'].includes(t.st);
+function trDctCard(t){if(!trHrs(t))return'';const P=trDctPcs(t);if(!P.length)return'';
+  const L=P.map(pc=>{const p=S.tpc.get(pc)||{};let tot=0,rep=0;const by={};let sin=0;
+    for(const r of Object.values(t.rows||{})){if(!r||r.as!==true)continue;const h=trHv((r.h||{})[pc]);if(!h)continue;tot=tR2(tot+h);const o=tDctOf(r,pc);const sm=tDctSum(o);
+      if(Math.abs(sm-h)>0.01)sin++;rep=tR2(rep+Math.min(h,sm));for(const[k,v]of Object.entries(o))by[k]=tR2((by[k]||0)+v)}
+    return`<li data-pc="${esc(pc)}"><b class="mono">${esc(p.cod||pc)}</b> <span class="note">${esc(p.nom||'')} · ${toH(tot)} h</span><div>${Object.entries(by).map(([k,v])=>`<span class="tr-dsc">${esc(tScN(k))} <b class="mono">${toH(v)}</b></span>`).join('')||'<i class="note">sin repartir</i>'}${sin?` <span class="tr-dbad">${sin} ${sin===1?'obrero':'obreros'} sin repartir completo</span>`:''}</div></li>`}).join('');
+  return`<section class="card tr-dct" id="trDct"><div class="tr-vbar"><b>Descuentos a SC</b>${trDctEd(t)?'<button class="ib" data-tra="dct" id="trDctEd">Editar reparto…</button>':''}</div><ul class="t-list">${L}</ul></section>`}
+function trDctDlg(id){const t=TD.docs.get(id);if(!t||!trDctEd(t))return;if(trEdN()){toast('Guarda o descarta tus cambios de la hoja primero.');return}
+  const P=trDctPcs(t);if(!P.length)return;const scAll=TC().scd;const base={};const W={};
+  for(const[d,r]of Object.entries(t.rows||{})){if(!r||r.as!==true)continue;for(const pc of P){const h=trHv((r.h||{})[pc]);if(!h)continue;(base[d]=base[d]||{})[pc]=h;(W[d]=W[d]||{})[pc]=tDctOf(r,pc)}}
+  const rows=Object.keys(W).sort((a,b)=>trNm(t.rows[a]).localeCompare(trNm(t.rows[b]))||a.localeCompare(b));
+  const opts=pc=>{const used=new Set(rows.flatMap(d=>Object.keys((W[d]||{})[pc]||{})));return scAll.filter(x=>x.act||used.has(x.id)).concat([...used].filter(k=>!scAll.some(x=>x.id===k)).map(k=>({id:k,n:k,act:false})))};
+  const st=(d,pc)=>{const h=base[d][pc],sm=tDctSum(W[d][pc]);return Math.abs(sm-h)<=0.01&&sm?['ok','✓']:[sm>h?'bad':'w',sm>h?`sobran ${toH(tR2(sm-h))}`:`faltan ${toH(tR2(h-sm))}`]};
+  const html=()=>`<div class="lqtop"><b>Descuentos a SC · ${esc(t.capN||'')}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
+    ${scAll.some(x=>x.act)?'':'<div class="callout t-warn">No hay subcontratistas activos: agrégalos en Configuración del tareo.</div>'}
+    ${P.map(pc=>{const p=S.tpc.get(pc)||{};const O=opts(pc);const L=rows.filter(d=>base[d][pc]);return`<div class="tr-dgrp" data-pc="${esc(pc)}"><div class="t-bar"><b class="mono">${esc(p.cod||pc)}</b> <span class="note">${esc(p.nom||'')}</span>
+      <span class="note">Todo a:</span>${O.filter(x=>x.act).map(x=>`<button class="ib" data-trdall="${esc(x.id)}" data-pc="${esc(pc)}">${esc(x.n)}</button>`).join('')}</div>
+      <div class="tscroll"><table class="t tr-dtb"><thead><tr><th>Obrero</th><th class="t-r">Horas</th>${O.map(x=>`<th class="t-r">${esc(x.n)}${x.act?'':' <span class="note">(inactivo)</span>'}</th>`).join('')}<th></th></tr></thead><tbody>
+      ${L.map(d=>{const[k,txt]=st(d,pc);return`<tr data-dni="${esc(d)}"><td>${esc(trNm(t.rows[d])||d)}</td><td class="mono t-r">${toH(base[d][pc])}</td>${O.map(x=>{const v=(W[d][pc]||{})[x.id];return`<td class="t-r"><input class="tin t-n tr-din" inputmode="decimal" data-trdi="1" data-dni="${esc(d)}" data-pc="${esc(pc)}" data-sc="${esc(x.id)}" value="${v?esc(String(v)):''}" aria-label="${esc((trNm(t.rows[d])||d)+' · '+x.n)}"></td>`}).join('')}<td class="tr-dst ${k}" id="trdS_${esc(d)}_${esc(pc)}">${esc(txt)}</td></tr>`}).join('')}</tbody></table></div></div>`}).join('')}
+    <p class="lqmsg bad" id="trdMsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="trdOk">Guardar reparto</button></div>`;
+  const onClick=async e=>{const al=e.target.closest('[data-trdall]');if(al){const pc=al.dataset.pc,sc=al.dataset.trdall;for(const d of rows)if(base[d][pc])W[d][pc]={[sc]:base[d][pc]};lqModal(html(),onClick);return}
+    if(!e.target.closest('#trdOk'))return;const msg=$('#trdMsg');
+    for(const d of rows)for(const pc of P)if(base[d][pc]&&st(d,pc)[0]!=='ok'){if(msg)msg.textContent=`${trNm(t.rows[d])||d}: ${st(d,pc)[1]} en la ${(S.tpc.get(pc)||{}).cod||pc}. Lo repartido debe sumar sus horas.`;return}
+    /* solo las filas que cambiaron, con el detalle para el historial */
+    const ch=[];for(const d of rows){const r=t.rows[d];const nw={...(r.dct&&typeof r.dct==='object'?r.dct:{})};let dif=false;const cam=[];
+      for(const pc of P){if(!base[d][pc])continue;const a=tDctOf(r,pc),b=W[d][pc];const ja=JSON.stringify(Object.entries(a).sort()),jb=JSON.stringify(Object.entries(b).sort());
+        if(ja!==jb){dif=true;nw[pc]=b;cam.push(`${(S.tpc.get(pc)||{}).cod||pc}: ${Object.entries(a).map(([k,v])=>tScN(k)+' '+toH(v)).join(', ')||'sin SC'} → ${Object.entries(b).map(([k,v])=>tScN(k)+' '+toH(v)).join(', ')}`)}}
+      if(dif)ch.push({d,nw,cam:`${(r&&r.ape)||d} ${cam.join('; ')}`})}
+    if(!ch.length){lqClose();toast('No cambiaste el reparto.');return}
+    const b=$('#trdOk');if(b)b.disabled=true;
+    try{await trTx(id,cur=>{if(!['env','rev'].includes(cur.st))throw new Error('El tareo cambió de estado.');
+        for(const x of ch){const r=(cur.rows||{})[x.d];if(!r||r.as!==true)throw new Error('El tareo cambió: vuelve a abrir el reparto.');for(const pc of P)if(base[x.d][pc]&&trHv((r.h||{})[pc])!==base[x.d][pc])throw new Error('Las horas cambiaron: vuelve a abrir el reparto.')}
+        const up={};for(const x of ch)up[`rows.${x.d}.dct`]=x.nw;const cam='Descuento a SC: '+ch.map(x=>x.cam).join(' · ');
+        return{...up,hist:trAU(trHist('cor',{cam:cam.length>400?cam.slice(0,397)+'…':cam})),by:me.email||'',ts:NOW()}});
+      lqClose();toast('Reparto guardado.')}
+    catch(err){if(b)b.disabled=false;if(msg)msg.textContent='No se pudo guardar: '+(err&&(err.message||err.code)||err)}};
+  lqModal(html(),onClick);
+  const m=$('#lqm');if(m)m.oninput=e=>{const i=e.target.closest('[data-trdi]');if(!i)return;const{dni:d,pc,sc}=i.dataset;const v=trDctNum(i.value);const o={...(W[d][pc]||{})};if(v>0)o[sc]=v;else delete o[sc];W[d][pc]=o;
+    const c=document.getElementById(`trdS_${d}_${pc}`);if(c){const[k,txt]=st(d,pc);c.className='tr-dst '+k;c.textContent=txt}}}
+/* número escrito en la oficina («4,5» o «4.5»): horas a 0,01 (vacío o no válido = 0) */
+const trDctNum=v=>{const n=+String(v==null?'':v).trim().replace(',','.');return Number.isFinite(n)&&n>0?tR2(n):0};

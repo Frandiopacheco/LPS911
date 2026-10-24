@@ -137,12 +137,12 @@ function tcErrs(D){if(tcLegacy(D))return[{dni:null,k:'legacy',msg:'Este tareo es
   for(const pc of D.pcs||[])if(tcBloq(pc)&&!E.some(e=>e.k==='bloq'&&e.pc===pc))E.push({dni:null,k:'bloq',pc,msg:`La partida ${tcPcCod(pc)} está bloqueada por costos: quítala.`});
   return[...pre,...E.filter(e=>e.k!=='marca')]}
 /* a qué paso lleva cada problema */
-const TC_K1=['asis','vacio'],TC_K2=['pcs','bloq'],TC_K3=['sinh','hval','hmax','hor'];
+const TC_K1=['asis','vacio'],TC_K2=['pcs','bloq'],TC_K3=['sinh','hval','hmax','hor'],TC_K5=['dct'];
 /** avisos de tValida que no impiden enviar (warn: jornada parcial…) */
 const tcWarns=D=>tcLegacy(D)?[]:tValida(tcCalc(D)).filter(e=>e.warn);
 
 /* ---------- datos: suscripción y guardado ---------- */
-function tcOpen(date){tcClose();clearTimeout(TCS.slowT);clearTimeout(TCS.sendT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',addOn:false,addQ:'',prev:null,need:false,foc:'',fp:{},sendSt:'',srvPend:false,q1:'',f1:'all',fotoHi:false,motO:'',salO:'',pcOn:false,pcSh:false,pcQ:'',cell:null,multi:null,asg:null,wk:'',rep:null,hfx:'',repD:null,mpc:'',mpcV:null,reabO:false,menu:'',ob:'',pcm:'',cellW:false,prevDone:false});
+function tcOpen(date){tcClose();clearTimeout(TCS.slowT);clearTimeout(TCS.sendT);Object.assign(TCS,{date,cap:tcMe(),doc:null,loaded:false,exists:false,step:1,dirty:false,inflight:0,busy:false,pend:false,err:'',addOn:false,addQ:'',prev:null,need:false,foc:'',fp:{},sendSt:'',srvPend:false,q1:'',f1:'all',fotoHi:false,motO:'',salO:'',pcOn:false,pcSh:false,pcQ:'',cell:null,multi:null,asg:null,wk:'',rep:null,hfx:'',repD:null,mpc:'',mpcV:null,reabO:false,menu:'',ob:'',pcm:'',cellW:false,prevDone:false,dct:null,dctNeed:false});
   const id=tcId(date,TCS.cap);TCS.fpL=false;
   /* includeMetadataChanges: avisa también cuando una escritura pendiente (sin señal) queda confirmada por el servidor */
   TCS.unsub=fcol('tareo').doc(id).onSnapshot({includeMetadataChanges:true},s=>{if(!$('#tcRoot')){tcClose();return}tcSnap(s)},err=>{TCS.err=err&&err.code==='permission-denied'?'Tu cuenta no puede abrir este tareo.':'Sin conexión con la base de datos.';TCS.loaded=true;tcDraw()});
@@ -200,7 +200,7 @@ function renderTCap(main){let want=TCS.date&&TCS.unsub?TCS.date:todayIso(),st=0;
   /* al volver a cargar la página (p. ej. el celular la cerró mientras estaba la cámara) se vuelve al mismo día y paso */
   if(!TCS.unsub){const v=tcVLoad();if(v){want=v.date;st=v.step}}
   if(!$('#tcRoot',main)){main.innerHTML=`<div class="tc" id="tcRoot"></div>`;tcBind($('#tcRoot',main))}
-  if(!TCS.unsub||TCS.date!==want||TCS.cap!==tcMe()){tcOpen(want);if(st>=1&&st<=4)TCS.step=st}
+  if(!TCS.unsub||TCS.date!==want||TCS.cap!==tcMe()){tcOpen(want);if(st>=1&&st<=5)TCS.step=st}
   else if(TCS.doc&&!tcRO()&&!TCS.dirty)tcSyncCrew();
   tcReabSub();
   tcDraw()}
@@ -249,8 +249,10 @@ function tcHeadHtml(D,E){const ro=D?tcRO():false,old=D?tcLegacy(D):false;const R
   let mid='';
   if(D&&!ro&&!old){const P=D.pcs||[];const npres=tcPres().length;
     const s1=!E.some(e=>TC_K1.includes(e.k)),s2=s1&&!E.some(e=>TC_K2.includes(e.k))&&P.length>0,s3=s2&&npres>0&&!E.some(e=>TC_K3.includes(e.k));
-    const steps=[[1,'Asistencia',s1],[2,'Trabajos',s2],[3,'Horas',s3],[4,'Enviar',false]];
-    mid=`<div class="tc-steps" role="tablist" aria-label="Pasos">${steps.map(([n,l,ok])=>`<button type="button" role="tab" class="tc-step${TCS.step===n?' on':''}${ok&&TCS.step!==n?' ok':''}" data-tcs="${n}" aria-selected="${TCS.step===n}" title="${esc(l)}"><i>${ok&&TCS.step!==n?'✓':n}</i><span>${l}</span></button>`).join('')}</div>`}
+    /* «Descuentos» (paso 5 por dentro) sale entre Horas y Enviar solo si alguien tiene horas en una partida descontable */
+    const s5=s3&&!E.some(e=>TC_K5.includes(e.k));
+    const steps=[[1,'Asistencia',s1],[2,'Trabajos',s2],[3,'Horas',s3],...(tcDctOn(D)?[[5,'Descuentos',s5]]:[]),[4,'Enviar',false]];
+    mid=`<div class="tc-steps" role="tablist" aria-label="Pasos">${steps.map(([n,l,ok],i)=>`<button type="button" role="tab" class="tc-step${TCS.step===n?' on':''}${ok&&TCS.step!==n?' ok':''}" data-tcs="${n}" aria-selected="${TCS.step===n}" title="${esc(l)}"><i>${ok&&TCS.step!==n?'✓':i+1}</i><span>${l}</span></button>`).join('')}</div>`}
   else mid=`<span class="tc-stl">${esc(D?(old?'Formato anterior':tcStLab(D.st)):'')}</span>`;
   return`<div class="tc-head"><div class="tc-hrow">${day}${mid}<span class="tc-st" id="tcSt" aria-live="polite"></span><button type="button" class="tc-moreb" data-tcm="more" aria-haspopup="dialog" aria-label="Más opciones">⋯</button></div></div>`}
 function tcHtml(){const D=TCS.doc;TCS.lbl=D?tcLabels(D.rows):null;
@@ -265,10 +267,10 @@ function tcHtml(){const D=TCS.doc;TCS.lbl=D?tcLabels(D.rows):null;
   const mot=D.reab&&D.reab.mot;
   const ban=D.st==='reab'?(tcReabSeen(D)?'':`<div class="callout tc-reab" id="tcReab" role="note"><div><b>⚠ Te reabrieron este tareo</b><span>${mot?esc(mot)+'. ':''}Corrige y vuelve a enviarlo.</span></div><button type="button" class="ib tc-big" data-tcm="reabOk">Entendido</button></div>`)
     :ro?tcSentBan(D):'';
-  let body='';
+  let body='';if(TCS.step===5&&!tcDctOn(D))TCS.step=4;
   if(ro)body=tcStep4(D,[],true);
   else if(old)body=tcOldHtml(D);
-  else if(TCS.step===1)body=tcStep1(D);else if(TCS.step===2)body=tcStep2(D);else if(TCS.step===3)body=tcStep3(D,E);else body=tcStep4(D,E,false);
+  else if(TCS.step===1)body=tcStep1(D);else if(TCS.step===2)body=tcStep2(D);else if(TCS.step===3)body=tcStep3(D,E);else if(TCS.step===5&&tcDctOn(D))body=tcStep5(D,E);else body=tcStep4(D,E,false);
   /* pie: data-sh = texto corto para el riel del celular echado */
   const fb=(cls,attr,txt,sh)=>`<button type="button" class="ib tc-big${cls?' '+cls:''}" ${attr} data-sh="${esc(sh)}">${txt}</button>`;
   let foot='';
@@ -279,14 +281,15 @@ function tcHtml(){const D=TCS.doc;TCS.lbl=D?tcLabels(D.rows):null;
         :fb('pri tc-w','data-tcs="2"','Siguiente: trabajos del día →','Siguiente →')}
     else if(TCS.step===2)foot=fb('','data-tcs="1"','← Atrás','← Atrás')+fb('pri','data-tcs="3"','Siguiente: horas →','Horas →');
     else if(TCS.step===3)foot=TCS.multi?fb('','data-tca="multiX"','Cancelar','Cancelar')+`<button type="button" class="ib pri tc-big" data-tca="asgOn" data-sh="Asignar a ${TCS.multi.size}"${TCS.multi.size?'':' disabled'}>Asignar a ${TCS.multi.size} →</button>`
-      :fb('','data-tcs="2"','← Trabajos','← Trabajos')+fb('pri','data-tcs="4"','Revisar y enviar →','Revisar →');
+      :fb('','data-tcs="2"','← Trabajos','← Trabajos')+(tcDctOn(D)?fb('pri','data-tcs="5"','Siguiente: descuentos a SC →','Descuentos →'):fb('pri','data-tcs="4"','Revisar y enviar →','Revisar →'));
+    else if(TCS.step===5&&tcDctOn(D))foot=fb('','data-tcs="3"','← Horas','← Horas')+fb('pri','data-tcs="4"','Revisar y enviar →','Revisar →');
     else{const nf=E.filter(e=>e.k!=='foto'&&e.k!=='fotp');const fp=E.some(e=>e.k==='fotp');const sinF=!fp&&E.some(e=>e.k==='foto');
       /* «Falta la foto» lleva a la tarjeta de la foto y abre la cámara (auditoría 2, UX4) */
-      foot=fb('','data-tcs="3"','← Atrás','← Atrás')+(nf.length?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="fix" data-sh="Faltan ${nf.length}">Faltan ${nf.length} ${nf.length===1?'dato':'datos'}: ver →</button>`
+      foot=fb('',`data-tcs="${tcDctOn(D)?5:3}"`,'← Atrás','← Atrás')+(nf.length?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="fix" data-sh="Faltan ${nf.length}">Faltan ${nf.length} ${nf.length===1?'dato':'datos'}: ver →</button>`
         :sinF&&!TCS.busy?`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="foto" data-sh="📷 Foto">📷 Falta la foto: tomarla</button>`
         :`<button type="button" class="ib pri tc-big" id="tcSend" data-tca="send" data-sh="${fp?'Foto sin subir':TCS.busy?'Procesando…':'Enviar ✓'}"${E.length||TCS.busy?' disabled':''}>${fp?'Foto sin subir':TCS.busy?'Procesando foto…':'Enviar tareo'}</button>`)}}
   const ed=!ro&&!old;
-  const sheet=menu||(ed&&TCS.step===1&&TCS.ob?tcObSheet(D):'')||(ed&&TCS.step===3?(TCS.pcSh?tcPcSheet():TCS.pcm?tcPcMSheet(D):TCS.mpc?tcMpcSheet(D):TCS.cell?tcCellSheet(D):TCS.asg?tcAsgSheet(D):TCS.wk?tcWkSheet(D):TCS.hfx?tcHfxSheet(D):''):'');
+  const sheet=menu||(ed&&TCS.step===1&&TCS.ob?tcObSheet(D):'')||(ed&&TCS.step===3?(TCS.pcSh?tcPcSheet():TCS.pcm?tcPcMSheet(D):TCS.mpc?tcMpcSheet(D):TCS.cell?tcCellSheet(D):TCS.asg?tcAsgSheet(D):TCS.wk?tcWkSheet(D):TCS.hfx?tcHfxSheet(D):''):'')||(ed&&TCS.step===5&&TCS.dct?tcDctSheet(D):'');
   return tcHeadHtml(D,E)+`<div class="tc-body" id="tcBody">${ban}${nl}${body}</div>${foot?`<div class="tc-foot">${foot}</div>`:''}${sheet}`}
 /** menús de la barra: «Hoy 22 ▾» (días y tareos por corregir) y «⋯» (Mi cuadrilla, Salir) */
 function tcMenuSheet(D){const hoy=todayIso();const RL=TCS.reabL.filter(x=>x.date!==TCS.date);
@@ -584,6 +587,58 @@ function tcLive(){const D=TCS.doc;if(!D)return;const R=D.rows||{};const J=tcJor(
     const sb=$('#tcWkSal');if(sb){const ns=tcSalPara(w,t);sb.hidden=!(Math.abs(dif)>0.01&&t>0&&ns);sb.dataset.v=ns;sb.textContent=ns?tcWkSalTxt(dif,ns,t):''}}
   if(TCS.asg&&$('#tcAsg')){const p=$('#tcAsgP');if(p)p.textContent='Queda: '+tcAsgPre(D);const ok=$('#tcAsgOk');if(ok)ok.disabled=!tcAsgAny(D);const h=$('#tcAsgH');if(h)h.classList.toggle('on',!!TCS.asg.half)}}
 
+/* ---------- paso «Descuentos a SC» (24-10-2026, pedido del dueño) ----------
+   Va entre Horas y Enviar (por dentro es el paso 5) solo si alguien que vino tiene horas en una partida descontable (tDctPc).
+   Por obrero se elige el SC (un toque = todas sus horas de esa partida) o se divide entre varios («Dividir…»): rows[dni].dct =
+   {pcId: {scId: horas}}. No se pasa a Enviar hasta que lo repartido sume las horas de cada uno (tValidaHrs, k 'dct'). */
+/** partidas descontables del día con horas de alguien que vino (en el orden del día) */
+function tcDctPcs(D){D=D||TCS.doc;if(!D)return[];const R=Object.values(D.rows||{}).filter(r=>r&&r.as===true);
+  return[...new Set((D.pcs||[]).concat(...R.map(r=>Object.keys(r.h||{}))))].filter(pc=>tDctPc(pc)&&R.some(r=>tcHv(r,pc)>0))}
+const tcDctOn=D=>!!D&&!tcLegacy(D)&&tcDctPcs(D).length>0;
+/** SC activos de Configuración (los que el capataz puede elegir) */
+const tcScs=()=>TC().scd.filter(x=>x.act);
+/** guarda el reparto de una fila en una partida (solo valores > 0; vacío = sin reparto) */
+function tcDctSet(r,pc,o){const x={};for(const[k,v]of Object.entries(o||{})){const n=tR2(+v||0);if(n>0)x[k]=n}
+  const m=r.dct&&typeof r.dct==='object'?{...r.dct}:{};if(Object.keys(x).length)m[pc]=x;else delete m[pc];if(Object.keys(m).length)r.dct=m;else delete r.dct}
+/** al entrar al paso: quita repartos de partidas que ya no son descontables o sin horas, y si alguien tenía un solo SC y cambiaron
+    sus horas, le pone las nuevas (así cambiar horas no obliga a repetir el reparto) */
+function tcDctSync(D){let ch=false;for(const r of Object.values(D.rows||{})){if(!r||!r.dct||typeof r.dct!=='object')continue;
+    for(const pc of Object.keys(r.dct)){const h=tcHv(r,pc);if(!tDctPc(pc)||!(h>0)){tcDctSet(r,pc,{});ch=true;continue}
+      const o=tDctOf(r,pc);const ks=Object.keys(o);if(ks.length===1&&Math.abs(o[ks[0]]-h)>0.001){tcDctSet(r,pc,{[ks[0]]:h});ch=true}}}
+  if(ch)tcChg(false);return ch}
+function tcStep5(D,E){const P=tcDctPcs(D);const scs=tcScs();const N=tcNum();const bad=new Set(TCS.dctNeed?E.filter(e=>e.k==='dct'&&e.dni).map(e=>e.dni+'|'+e.pc):[]);
+  const head=`<div class="tc-h"><h2>Descuentos a SC</h2><span>Las horas de ${P.map(pc=>esc(tcPcCod(pc))).join(' y ')} se descuentan a un subcontratista. Indica a cuál, por obrero.</span></div>`;
+  const warn=scs.length?'':`<div class="callout warnc" id="tcDctNo">La oficina aún no registró subcontratistas para descuentos. Pídele que los agregue en Configuración del tareo; mientras tanto no podrás enviar.</div>`;
+  const cards=P.map(pc=>{const L=tcPres().filter(([,r])=>tcHv(r,pc)>0);const tot=tR2(L.reduce((a,[,r])=>a+tcHv(r,pc),0));const by={};let rep=0;
+    for(const[,r]of L){const o=tDctOf(r,pc);for(const[k,v]of Object.entries(o))by[k]=tR2((by[k]||0)+v);rep=tR2(rep+Math.min(tcHv(r,pc),tDctSum(o)))}
+    const falt=tR2(tot-rep);const ex=k=>scs.some(x=>x.id===k);
+    const all=scs.length?`<div class="tc-dall"><span>Todo a</span>${scs.map(x=>`<button type="button" class="tc-chip" data-tca="dctAll" data-pc="${esc(pc)}" data-sc="${esc(x.id)}">${esc(x.n)}</button>`).join('')}</div>`:'';
+    const rows=L.map(([d,r])=>{const h=tcHv(r,pc);const o=tDctOf(r,pc);const sm=tDctSum(o);const ks=Object.keys(o);const ok=ks.length>0&&Math.abs(sm-h)<=0.01;
+      const lst=ks.map(k=>`${tScN(k)} ${tHtxt(o[k])}`).join(' · ');
+      const st=ok?(ks.length===1?`✓ ${tScN(ks[0])}`:`✓ ${lst}`):sm?`${lst} · ${sm<h?'faltan '+tHtxt(tR2(h-sm)):'sobran '+tHtxt(tR2(sm-h))} h`:'Elige el SC';
+      const opts=[...scs,...ks.filter(k=>!ex(k)).map(k=>({id:k,n:tScN(k)}))];
+      return`<div class="tc-dob${ok?' ok':bad.has(d+'|'+pc)?' need':''}" data-dni="${esc(d)}" data-pc="${esc(pc)}"><div class="tc-dnm"><span class="tc-gnn">${N.get(d)||''}</span><b>${tcNmT(d)}</b><span class="mono">${esc(tcH(h))}</span></div>
+        <div class="tc-dst">${esc(st)}</div>
+        <div class="tc-dch">${opts.map(x=>{const on=ok&&ks.length===1&&ks[0]===x.id;const part=!on&&o[x.id]>0;return`<button type="button" class="tc-chip${on?' on':part?' part':''}" data-tca="dctOne" data-pc="${esc(pc)}" data-sc="${esc(x.id)}" aria-pressed="${on}">${esc(x.n)}${part?` · ${esc(tHtxt(o[x.id]))}`:''}</button>`}).join('')}${opts.length>1?`<button type="button" class="tc-chip tc-dsp" data-tca="dctSplit" data-pc="${esc(pc)}">Dividir…</button>`:''}</div></div>`}).join('');
+    return`<section class="tc-card tc-dct" data-pc="${esc(pc)}"><div class="tc-lab tc-dlab"><span><b class="mono">${esc(tcPcCod(pc))}</b> ${esc(tcPcNom(pc))}</span><span class="${falt>0.001?'tc-dwarn':'tc-dok'}">${esc(tcH(tot))}${falt>0.001?` · faltan ${esc(tcH(falt))}`:' · repartido ✓'}</span></div>
+      ${all}<div class="tc-dl">${rows}</div>
+      ${Object.keys(by).length?`<p class="tc-hint tc-dsum" id="tcDctSum">${Object.entries(by).map(([k,v])=>`<b>${esc(tScN(k))}</b> ${esc(tcH(v))}`).join(' · ')}</p>`:''}</section>`}).join('');
+  return head+warn+cards}
+/** hoja «Dividir…»: horas de un obrero en una partida descontable repartidas entre varios SC */
+function tcDctSheet(D){const c=TCS.dct;const r=(D.rows||{})[c.dni];const h=r?tcHv(r,c.pc):0;if(!r||!tcVino(r)||!(h>0)||!tDctPc(c.pc)){TCS.dct=null;return''}
+  const o=tDctOf(r,c.pc);const sm=tDctSum(o);const scs=tcScs();const opts=[...scs,...Object.keys(o).filter(k=>!scs.some(x=>x.id===k)).map(k=>({id:k,n:tScN(k)}))];const resto=tR2(h-sm);
+  const a=(x,act,v,lab,dis,txt)=>`<button type="button" class="ib" data-tca="${act}" data-pc="${esc(c.pc)}" data-sc="${esc(x.id)}"${v!=null?` data-v="${v}"`:''}${dis?' disabled':''} aria-label="${esc(lab)}">${txt}</button>`;
+  return`<div class="tc-csb" data-tca="dctX"></div><div class="tc-cs" id="tcDct" role="dialog" aria-label="Descuento de ${esc(tcFN(c.dni))}" data-dni="${esc(c.dni)}" data-pc="${esc(c.pc)}">
+   <div class="tc-csh"><div class="tc-wn"><b>${esc(tcFN(c.dni))}</b><span><b class="mono">${esc(tcPcCod(c.pc))}</b> ${esc(tcPcNom(c.pc))} · ${esc(tcH(h))}</span><span id="tcDctD" class="${Math.abs(resto)<=0.01?'tc-dok':'tc-dwarn'}">${Math.abs(resto)<=0.01?'Repartido completo ✓':resto>0?`Faltan ${esc(tcH(resto))} por repartir`:`Sobran ${esc(tcH(-resto))}`}</span></div>
+    <button type="button" class="kx" data-tca="dctX" aria-label="Cerrar">&times;</button></div>
+   <div class="tc-dsl">${opts.map(x=>{const v=o[x.id]||0;return`<div class="tc-dsr" data-sc="${esc(x.id)}"><b>${esc(x.n)}</b>${a(x,'dctAdj',-0.5,'Media hora menos a '+x.n,!(v>0),'−½')}<output>${esc(tcH(v))}</output>${a(x,'dctAdj',0.5,'Media hora más a '+x.n,!(resto>0.001),'+½')}${a(x,'dctRest',null,'El resto a '+x.n,!(resto>0.001),'El resto')}</div>`}).join('')}</div>
+   <div class="tc-csa"><button type="button" class="ib tc-big" data-tca="dctClr" data-pc="${esc(c.pc)}"${sm?'':' disabled'}>Borrar</button><button type="button" class="ib pri tc-big" data-tca="dctX">Listo</button></div></div>`}
+/** resumen del descuento (paso 4 y tareo enviado): horas por SC de cada partida descontable; editable lleva al paso 5 */
+function tcDctRes(D,ro){const P=tcDctPcs(D);if(!P.length)return'';
+  const L=P.map(pc=>{const by={};let tot=0;for(const r of Object.values(D.rows||{})){if(!r||r.as!==true)continue;const h=tcHv(r,pc);if(!(h>0))continue;tot=tR2(tot+h);for(const[k,v]of Object.entries(tDctOf(r,pc)))by[k]=tR2((by[k]||0)+v)}
+    const rep=tDctSum(by);return`<li><b class="mono">${esc(tcPcCod(pc))}</b> ${Object.entries(by).map(([k,v])=>`${esc(tScN(k))} ${esc(tcH(v))}`).join(' · ')||'<i>sin repartir</i>'}${Math.abs(rep-tot)>0.01?` <span class="tc-dwarn">(faltan ${esc(tcH(tR2(tot-rep)))})</span>`:''}</li>`}).join('');
+  return`<div class="tc-card tc-dres" id="tcDctRes"><div class="tc-lab">Descuentos a SC${ro?'':` <button type="button" class="t-lnk" data-tcs="5">Cambiar</button>`}</div><ul>${L}</ul></div>`}
+
 /* paso 4: revisar y enviar (y vista de solo lectura, también de los tareos antiguos). La misma grilla que el paso 3, en solo lectura:
    los que vinieron arriba con sus horas, los que no vinieron (o sin marcar) al final atenuados con su motivo. Editable: tocar una
    celda lleva al paso 3 en esa celda. */
@@ -597,7 +652,7 @@ function tcStep4(D,E,ro){const C=tcCalc(D);const R=C.rows||{};const rows=tcRows(
   const FPL={up:'Subiendo…',pend:'Pendiente de subir',err:'No se subió'};
   /* la foto va arriba, antes de la grilla (auditoría 2, UX4): «Falta la foto» lleva aquí y abre la cámara */
   return`${ro?'':`<div class="tc-h"><h2>Revisar y enviar</h2><span id="tcTot3">${tot.v} vinieron · ${tot.f} no vinieron${tot.s?` · ${tot.s} sin marcar`:''} · ${esc(tcH(tot.h))}${tot.e?' · '+esc(tcH(tot.e))+' extra':''}</span></div>`}
-   ${errs}${warns}
+   ${errs}${warns}${ro?'':tcDctRes(D,false)}
    <div class="tc-card${TCS.fotoHi&&!ro?' tc-hi':''}" id="tcFotoC"><div class="tc-lab">Foto del formato firmado${ro?'':' <span>obligatoria</span>'}</div>
     <div class="tc-fotos">${fotos.map(id=>`<div class="tc-th" data-fid="${esc(id)}"><img alt="Foto del formato" data-img="${esc(id)}">${ro?'':`<button type="button" data-tca="fx" aria-label="Quitar foto">✕</button>`}</div>`).join('')}
      ${FP.map(([id,P])=>`<div class="tc-th tc-fp ${P.st}" data-fpid="${esc(id)}"><img alt="Foto sin subir" data-img="${esc(id)}"><button type="button" data-tca="fpX" aria-label="Descartar foto">✕</button>
@@ -606,7 +661,7 @@ function tcStep4(D,E,ro){const C=tcCalc(D);const R=C.rows||{};const rows=tcRows(
     ${FP.some(([,P])=>P.st==='pend')?`<div class="tc-note" id="tcFpNote">Sin señal: la foto ${FP.some(([,P])=>P.mem)?'está solo en la memoria de la app; si la cierras, tendrás que tomarla de nuevo':'quedó guardada en el celular'}. Se subirá sola al volver la señal; recién entonces podrás enviar.</div>`:''}
     ${FP.some(([,P])=>P.st==='err')?`<div class="tc-err">${esc((FP.find(([,P])=>P.st==='err')[1].msg)||'La foto no se pudo subir.')} Toca «Reintentar» o tómala de nuevo.</div>`:''}
     ${!ro&&!fotos.length&&!FP.length?`<div class="tc-err">Toma una foto del formato con las firmas de todos.</div>`:''}</div>
-   ${tcGridRO(D,C,bad,ro)}`}
+   ${tcGridRO(D,C,bad,ro)}${ro?tcDctRes(D,true):''}`}
 /** grilla de solo lectura (paso 4 y tareos enviados o antiguos): obreros en filas, partidas en columnas, total y HE por obrero,
     total por partida; (A) = altura. Si se puede editar, cada celda de un presente es un botón que lleva a esa celda del paso 3. */
 function tcGridRO(D,C,bad,ro){const R=C.rows||{};const old=!tEsHrs(D);const J=tcJor(TCS.date);const N=tcNum();const edit=!ro&&!old;
@@ -743,6 +798,7 @@ function tcBind(root){
     if(e.key==='Escape'&&TCS.mpc){e.preventDefault();TCS.mpc='';TCS.mpcV=null;tcDraw();return}
     if(e.key==='Enter'&&e.target.id==='tcMpcIn'){e.preventDefault();const n=TCS.mpcV;if(n>0)tcMpcApply(n);else toast('Escribe cuántas horas (por ejemplo 4 o 4,5).');return}
     if(e.key==='Escape'&&TCS.cell){e.preventDefault();TCS.cell=null;tcDraw();return}
+    if(e.key==='Escape'&&TCS.dct){e.preventDefault();TCS.dct=null;tcDraw();return}
     if(e.key==='Escape'&&(TCS.asg||TCS.wk||TCS.hfx)){e.preventDefault();TCS.asg=null;TCS.wk='';TCS.hfx='';tcDraw();return}
     /* Enter en la casilla: aplica y cierra; en «Su día» y «Asignar», solo deja de escribir */
     if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.tca==='cellIn'){e.preventDefault();if(tcLiveIn(e.target)===null){toast('Escribe un número de horas (por ejemplo 6,5).');return}TCS.cell=null;TCS.cellW=false;tcDraw();return}
@@ -766,15 +822,19 @@ function tcFix(E){const D=TCS.doc;if(!D)return false;E=E||tcErrs(D);TCS.cell=nul
   if(e2){TCS.step=2;TCS.pcOn=e2.k==='pcs';TCS.foc=e2.pc?`.tc-pcr[data-pc="${CSS.escape(e2.pc)}"]`:e2.k==='pcs'?'#tcPcAdd':'';tcDraw();toast(tcErrMsg(e2));return true}
   const e3=E.find(e=>TC_K3.includes(e.k));
   if(e3){TCS.step=3;TCS.foc=e3.dni?`.tc-gn[data-dni="${CSS.escape(e3.dni)}"]`:'';if(e3.k==='hor'&&e3.dni)TCS.hfx=e3.dni;tcDraw();if(e3.k!=='hor')toast(tcErrMsg(e3));return true}
+  const e5=E.find(e=>TC_K5.includes(e.k));
+  if(e5){tcDctSync(D);TCS.dctNeed=true;TCS.step=5;TCS.foc=e5.dni?`.tc-dob[data-dni="${CSS.escape(e5.dni)}"]`:'';tcDraw();toast(tcErrMsg(e5));return true}
   if(E.length){TCS.step=4;TCS.foc='#tcFotoC';if(E.some(e=>e.k==='foto'))TCS.fotoHi=true;tcDraw();toast(tcErrMsg(E[0]));return true}
   return false}
-function tcGo(n,foot){TCS.cell=null;TCS.pcSh=false;TCS.asg=null;TCS.mpc='';TCS.menu='';TCS.ob='';TCS.pcm='';TCS.cellW=false;TCS.wk='';TCS.hfx='';TCS.multi=null;if(n!==3)TCS.rep=null;n=Math.max(1,Math.min(4,n));const D=TCS.doc;
+function tcGo(n,foot){TCS.cell=null;TCS.pcSh=false;TCS.asg=null;TCS.mpc='';TCS.menu='';TCS.ob='';TCS.pcm='';TCS.cellW=false;TCS.wk='';TCS.hfx='';TCS.multi=null;if(n!==3)TCS.rep=null;TCS.dct=null;n=Math.max(1,Math.min(5,n));const D=TCS.doc;if(n===5&&D&&!tcDctOn(D))n=4;
   if(D&&!tcRO()&&!tcLegacy(D)&&n>1){const E=tcErrs(D);
     /* no se pasa del paso 1 sin marcar a todos */
     if(E.some(e=>TC_K1.includes(e.k))){tcFix(E);return}
     /* los botones de abajo no avanzan sin trabajos (a la grilla) ni con horas por corregir (a revisar) */
     if(foot&&n>=3&&E.some(e=>TC_K2.includes(e.k))){tcFix(E.filter(e=>TC_K2.includes(e.k)));return}
-    if(foot&&n===4&&E.some(e=>TC_K3.includes(e.k))){tcFix(E.filter(e=>TC_K3.includes(e.k)));return}}
+    if(foot&&(n===4||n===5)&&E.some(e=>TC_K3.includes(e.k))){tcFix(E.filter(e=>TC_K3.includes(e.k)));return}
+    if(foot&&n===4&&E.some(e=>TC_K5.includes(e.k))){tcFix(E.filter(e=>TC_K5.includes(e.k)));return}}
+  if(n===5&&D&&!tcRO())tcDctSync(D);
   TCS.step=n;tcDraw();const b=$('#tcBody');if(b)b.scrollTop=0}
 async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=D.rows=D.rows||{};const dniOf=()=>{const w=b.closest('[data-dni]');return w&&w.dataset.dni};
   const pcOf=()=>{const w=b.closest('[data-pc]');return w&&w.dataset.pc};
@@ -798,6 +858,18 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
         if(HR&&!HR.bad&&Math.abs(HR.h-(+c.trab||0))<=0.01){if(J.nl||c.ini!==J.j.ini)r.ent=c.ini;if(J.nl||c.fin!==J.j.fin)r.sal=c.fin}else hue.push(tcShort(r)||k)}}
     D.modo='hrs';D.pcs=pcs;D.blq=[];TCS.step=3;tcChg();
     toast(hue.length?`Listo: ahora el tareo es por horas. ${hue.length===1?`${hue[0]} tenía huecos entre bloques: quedó`:`${hue.length} obreros tenían huecos entre bloques: quedaron`} con el horario de la jornada; revisa su salida.`:'Listo: ahora el tareo es por horas. Revisa la grilla.');return}
+  /* descuentos a SC (paso 5) */
+  if(a.startsWith('dct')){const pc=b.dataset.pc,sc=b.dataset.sc;
+    if(a==='dctX'){TCS.dct=null;tcDraw();return}
+    if(a==='dctAll'){if(!pc||!sc)return;let n=0;for(const[,r]of tcPres()){const h=tcHv(r,pc);if(h>0){tcDctSet(r,pc,{[sc]:h});n++}}tcChg();toast(`${n===1?'1 obrero':n+' obreros'}: todo a ${tScN(sc)}.`);return}
+    const d=dniOf();const r=d&&R[d];if(!r||!pc)return;const h=tcHv(r,pc);
+    if(a==='dctSplit'){TCS.dct={dni:d,pc};tcDraw();return}
+    if(a==='dctOne'){if(sc){tcDctSet(r,pc,{[sc]:h});tcChg()}return}
+    if(a==='dctClr'){tcDctSet(r,pc,{});tcChg();return}
+    const o=tDctOf(r,pc);const otros=tR2(tDctSum(o)-(o[sc]||0));if(!sc)return;
+    if(a==='dctAdj'){o[sc]=tR2(Math.max(0,Math.min(h-otros,(o[sc]||0)+(+b.dataset.v||0))));tcDctSet(r,pc,o);tcChg();return}
+    if(a==='dctRest'){o[sc]=tR2(Math.max(0,h-otros));tcDctSet(r,pc,o);tcChg();return}
+    return}
   /* asistencia: el que no vino conserva sus horas (tCalc le da 0 h); al volver a «vino» las recupera */
   if(a==='vino'||a==='novino'){const dni=dniOf();const r=R[dni];if(!r)return;
     if(a==='vino'){if(r.as===true)return;r.as=true;r.mot='';if(TCS.motO===dni)TCS.motO=''}else{if(r.as===false)return;r.as=false;r.alt=false;if(TCS.salO===dni)TCS.salO=''}/* conserva ent/sal/cor como conserva h (auditoría 21-10-2026) */tcChg();return}
