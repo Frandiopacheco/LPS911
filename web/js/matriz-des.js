@@ -6,11 +6,11 @@
    - Tipos de ambiente: la genérica se reemplaza por sus partes.
    - Matriz: cada parte hereda el estado confirmado de la genérica en cada ambiente (y el propuesto donde el ambiente no
      recibiría la parte por otro lado).
-   - Lookahead: por fila de la genérica (todos los pisos), los días que todavía se pueden reprogramar (no pasados, no hoy, no
-     publicados: `planLocked`) pasan a las partes, con las mismas fechas. Si la fila no tiene días cerrados se renombra a la
-     primera parte (conserva su id: restricciones, liberaciones) y se agregan las demás; si tiene días cerrados, conserva esos
-     días con su nombre antiguo (historial, PPC) y las partes se agregan debajo. Las filas terminadas no se tocan; las que
-     tienen propuesta del SC pendiente se saltan. Semanas congeladas, PPC y planes publicados no cambian.
+   - Lookahead (tanda 2, C-22, decidido con el dueño): si alguna fila de la genérica tiene días en una semana CONGELADA o en un
+     plan diario PUBLICADO, no se desglosa (se avisa cuál semana/plan): cambiaría lo ya comprometido. Si no, por fila (todos
+     los pisos) la PRIMERA parte conserva la fila (mismo id, días y metrado: solo cambian nombre y SC) y las demás partes se
+     agregan SIN días (por programar, en el orden del tren). Las filas terminadas no se tocan; las que tienen propuesta del SC
+     pendiente se saltan.
    «Posibles por desglosar»: lista de actividades con nombre general, marcadas «Por desglosar» o muy largas, para revisarlas.
    Ver docs/ia/matriz.md. */
 
@@ -48,27 +48,40 @@ function mxDesParts(){const seen=new Set();const G=MX.cat.get(MXD.gen);const out
   for(const p of MXD.parts){const name=String(p.name||'').replace(/\s+/g,' ').trim();const k=mnk(name);if(!k||seen.has(k))continue;seen.add(k);
     const ex=mxPickSc(k,p.sc||(G&&G.sc)||'')||(p.sc?'':mxAli().get(k));const E=ex&&ex!==MXD.gen?MX.cat.get(ex):null;out.push({name:E?E.name:name,sc:E?E.sc:(p.sc||(G&&G.sc)||''),id:E?E.id:'',ex:!!E})}
   return out}
+/** C-22: semanas congeladas y planes diarios publicados donde la fila tiene días (no se desglosa) */
+function mxDesLock(x){const pid=pisoOfAmb(x.ambId);const wk=new Set(),pub=[];
+  for(const d of (x.days||[])){const w=S.wk.get(wkId(weekOf(d),pid));if(w&&w.frozenAt)wk.add(weekOf(d));const o=dplanOf(d,pid);if(o&&o.ids&&!o.reo)pub.push(d)}
+  return{pid,wk:[...wk].sort((a,b)=>a-b),pub:pub.sort()}}
 /** qué pasaría (sin escribir nada) */
-function mxDesPlan(genId,parts,pend){const G=MX.cat.get(genId);const rows=[];let skip=0,done=0;
+function mxDesPlan(genId,parts,pend){const G=MX.cat.get(genId);const rows=[],blk=[];let skip=0,done=0;
   for(const x of S.act.values()){if(mxCatOfN(x)!==genId)continue;if(pend.has(x.id)){skip++;continue}if(DONE.has(x.id)){done++;continue}
-    const pid=pisoOfAmb(x.ambId);const lk=[],fr=[];for(const d of (x.days||[]))(planLocked(d,pid)?lk:fr).push(d);rows.push({x,mode:lk.length?'split':'ren',lk,fr})}
+    const L=mxDesLock(x);if(L.wk.length||L.pub.length){blk.push({x,...L});continue}rows.push({x,mode:'ren'})}
   const tipos=[...MX.tipo.values()].filter(t=>(t.acts||[]).includes(genId));
   let st=0;for(const m of MX.amb.values())if(genId in (m.c||{}))st++;
-  return{G,parts,rows,skip,done,tipos,st}}
-function mxDesTxt(pl){const n=pl.parts.length;const nw=pl.parts.filter(p=>!p.ex).length;const ren=pl.rows.filter(r=>r.mode==='ren').length,spl=pl.rows.length-ren;
+  return{G,parts,rows,blk,skip,done,tipos,st}}
+/** por qué no se puede desglosar (C-22) */
+function mxDesBlkTxt(pl){const n=pl.blk.length;if(!n)return'';
+  const one=b=>{const a=S.amb.get(b.x.ambId)||{};const p=S.pis.get(b.pid)||{};const w=[];
+    if(b.wk.length)w.push(`semana${b.wk.length===1?'':'s'} ${b.wk.join(', ')} congelada${b.wk.length===1?'':'s'}`);
+    if(b.pub.length)w.push(`plan diario publicado del ${b.pub.slice(0,3).map(fmtD).join(', ')}${b.pub.length>3?'…':''}`);
+    return`${a.name||'Ambiente'}${p.code||p.name?' ('+(p.code||p.name)+')':''}: ${w.join(' y ')}`};
+  return`No se puede desglosar: ${n} fila${n===1?'':'s'} de «${pl.G.name}» tiene${n===1?'':'n'} días en una semana congelada o en un plan diario publicado, y dividirla${n===1?'':'s'} cambiaría lo que ya se comprometió (${pl.blk.slice(0,5).map(one).join(' · ')}${n>5?` · y ${n-5} más`:''}). Crea las partes a mano en el lookahead o desglosa cuando esas filas estén terminadas.`}
+function mxDesTxt(pl){const n=pl.parts.length;const nw=pl.parts.filter(p=>!p.ex).length;
   const amb=new Set(pl.rows.map(r=>r.x.ambId)).size;const pis=new Set(pl.rows.map(r=>pisoOfAmb(r.x.ambId))).size;
   return[`Catálogo: ${n} actividad${n===1?'':'es'}${nw<n?` (${n-nw} ya existía${n-nw===1?'':'n'}: se usa${n-nw===1?'':'n'} esa${n-nw===1?'':'s'})`:''}; «${pl.G.name}» queda archivada como desglosada (se puede restaurar).`,
     pl.tipos.length?`Tipos de ambiente: se reemplaza en ${pl.tipos.map(t=>'«'+t.name+'»').join(', ')}.`:'',
     pl.st?`Matriz: ${pl.st} estado${pl.st===1?'':'s'} marcado${pl.st===1?'':'s'} pasa${pl.st===1?'':'n'} a cada parte.`:'',
-    pl.rows.length?`Lookahead: ${pl.rows.length} fila${pl.rows.length===1?'':'s'} en ${amb} ambiente${amb===1?'':'s'} (${pis} piso${pis===1?'':'s'}) se dividen con las mismas fechas.${spl?` ${spl} tiene${spl===1?'':'n'} días pasados o ya publicados: esos días quedan con el nombre antiguo y las partes toman solo los días siguientes.`:''}`:'Lookahead: no tiene filas por cambiar.',
+    pl.rows.length?`Lookahead: ${pl.rows.length} fila${pl.rows.length===1?'':'s'} en ${amb} ambiente${amb===1?'':'s'} (${pis} piso${pis===1?'':'s'}): la primera parte conserva cada fila (sus días y su metrado; solo cambia el nombre) y ${n>2?'las demás partes se agregan':'la otra parte se agrega'} sin días, para programar${n>2?'las':'la'} en el orden del tren.`:'Lookahead: no tiene filas por cambiar.',
     pl.done?`${pl.done} fila${pl.done===1?'':'s'} terminada${pl.done===1?'':'s'} no se toca${pl.done===1?'':'n'}.`:'',
     pl.skip?`${pl.skip} fila${pl.skip===1?'':'s'} con propuesta del SC pendiente se salta${pl.skip===1?'':'n'} (resuélvela y vuelve a desglosar desde el lookahead).`:'',
     'Semanas congeladas, PPC y planes publicados no cambian.'].filter(Boolean)}
 async function mxDesDlg(genId){if(!mxdCan()){toast('Solo el administrador desglosa actividades del catálogo.');return}const G=MX.cat.get(genId);if(!G||G.arch)return;
   MXD.gen=genId;MXD.parts=[{name:'',sc:G.sc},{name:'',sc:G.sc},{name:'',sc:G.sc}];MXD.pend=await mxPendProp();
+  /* C-22: los planes publicados de los días de sus filas (los anteriores a la ventana viva se leen aparte) */
+  {let f='';for(const x of S.act.values())if(mxCatOfN(x)===genId)for(const d of (x.days||[]))if(!f||d<f)f=d;if(f)ensureDplan(f)}
   const names=[...MX.cat.values()].filter(c=>!c.arch&&c.id!==genId).map(c=>c.name).sort((a,b)=>a.localeCompare(b));
   const prow=(p,i)=>`<div class="mxdp"><input class="tin" data-dpn="${i}" list="mxdl" value="${esc(p.name)}" placeholder="Parte ${i+1} (p. ej. Bajada para rociadores)" aria-label="Nombre de la parte ${i+1}"><select data-dps="${i}" aria-label="Subcontratista de la parte ${i+1}">${mxScOpts(p.sc)}</select><button class="ab" data-dpx="${i}" aria-label="Quitar parte ${i+1}">&times;</button></div>`;
-  const prev=()=>{const pl=mxDesPlan(genId,mxDesParts(),MXD.pend);const el=$('#mxdpv');if(el)el.innerHTML=pl.parts.length<2?'<p class="note">Escribe al menos dos partes.</p>':`<ul class="note">${mxDesTxt(pl).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`};
+  const prev=()=>{const pl=mxDesPlan(genId,mxDesParts(),MXD.pend);const el=$('#mxdpv');if(el)el.innerHTML=pl.blk.length?`<div class="callout warn">${esc(mxDesBlkTxt(pl))}</div>`:pl.parts.length<2?'<p class="note">Escribe al menos dos partes.</p>':`<ul class="note">${mxDesTxt(pl).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;const b=$('#mxdok');if(b)b.disabled=!!pl.blk.length};
   const draw=()=>{const b=$('#mxdps');if(b)b.innerHTML=MXD.parts.map(prow).join('');prev()};
   lqModal(`<div class="lqtop"><b>Desglosar «${esc(G.name)}»</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Escribe en qué actividades se divide. Se aplica en toda la obra: catálogo, tipos de ambiente, Matriz y lookahead. Por defecto cada parte queda con el mismo subcontratista de la fila.</p>
@@ -79,6 +92,7 @@ async function mxDesDlg(genId){if(!mxdCan()){toast('Solo el administrador desglo
    async e=>{if(e.target.closest('#mxdadd')){MXD.parts.push({name:'',sc:G.sc});draw();const L=$$('[data-dpn]');if(L.length)L[L.length-1].focus();return}
      const x=e.target.closest('[data-dpx]');if(x){MXD.parts.splice(+x.dataset.dpx,1);if(!MXD.parts.length)MXD.parts.push({name:'',sc:G.sc});draw();return}
      const ok=e.target.closest('#mxdok');if(!ok)return;const parts=mxDesParts();if(parts.length<2){$('#mxdmsg').textContent='Escribe al menos dos partes distintas.';return}
+     {const bl=mxDesBlkTxt(mxDesPlan(genId,parts,MXD.pend));if(bl){$('#mxdmsg').textContent=bl;return}}
      ok.disabled=true;
      /* MOD-01: con cambios del SC sin revisar en la genérica no se desglosa (sus constancias quedarían en la archivada) */
      const np=await mxScPendN(genId);if(np){ok.disabled=false;$('#mxdmsg').textContent=`«${G.name}» tiene ${np} ${np===1?'cambio':'cambios'} de subcontratistas sin revisar en la Matriz: revísalos primero («✓ Visto» o «↶ Revertir») y vuelve a desglosar.`;return}
@@ -88,7 +102,8 @@ async function mxDesDlg(genId){if(!mxdCan()){toast('Solo el administrador desglo
   draw();const box=$('#mxdps');if(box)box.addEventListener('input',e=>{if(e.target.dataset.dpn!=null){MXD.parts[+e.target.dataset.dpn].name=e.target.value;prev()}});
   setTimeout(()=>{const f=$('[data-dpn="0"]');if(f)f.focus()},50)}
 
-async function mxDesApply(genId,parts){const pend=await mxPendProp();const pl=mxDesPlan(genId,parts,pend);const G=pl.G;const FV=mxFV();const meta=mxNow();const W=[];
+async function mxDesApply(genId,parts){const pend=await mxPendProp();const pl=mxDesPlan(genId,parts,pend);const G=pl.G;
+  if(pl.blk.length)throw new Error(mxDesBlkTxt(pl));const FV=mxFV();const meta=mxNow();const W=[];
   /* 1) catálogo: partes nuevas */
   const created=[];let k=0;const base=G.ord||0;
   for(const p of parts){if(p.id)continue;const id='k'+NOW().toString(36)+'d'+(k++);p.id=id;created.push(id);W.push(['mcat',id,{name:p.name,sc:p.sc||G.sc,cl:'t',al:[mnk(p.name)],ord:base+k/100,des:genId,...meta}])}
@@ -98,10 +113,11 @@ async function mxDesApply(genId,parts){const pend=await mxPendProp();const pl=mx
   /* 3) lookahead (se arma antes para saber en qué ambientes habrá partes nuevas) */
   const ops=[];const ren={},cut={},addR=[];const ambNew=new Set();
   for(const r of pl.rows){const x=r.x;const sib=siblings('acts','ambId',x.ambId);const nxt=sib.find(a=>(a.order||0)>(x.order||0));const step=nxt?((nxt.order||0)-(x.order||0))/(parts.length+1):10;
-    const scOf=p=>p.sc&&p.sc!==G.sc?p.sc:(x.sc||p.sc||G.sc);let from=0;
-    if(r.mode==='ren'){const p=parts[0];ren[x.id]={n:x.name,sc:x.sc||'',m:x.metrado??null,...(x.qty?{q:x.qty}:{})};const nx={...x,name:p.name,sc:scOf(p),metrado:null};delete nx.qty;ops.push(op('acts',x.id,nx));from=1}
-    else{cut[x.id]=r.fr;if(r.fr.length){const q={...(x.qty||{})};r.fr.forEach(d=>delete q[d]);const nx={...x,days:r.lk};if(x.qty)nx.qty=q;ops.push(op('acts',x.id,nx))}}
-    parts.slice(from).forEach((p,i)=>{const id=uid('act')+'d'+i;addR.push(id);ops.push(op('acts',id,{id,ambId:x.ambId,sc:scOf(p),name:p.name,und:x.und||'',metrado:null,days:r.mode==='ren'?(x.days||[]).slice():r.fr.slice(),order:(x.order||0)+step*(i+1)}))});
+    const scOf=p=>p.sc&&p.sc!==G.sc?p.sc:(x.sc||p.sc||G.sc);
+    /* C-22: la primera parte conserva la fila (id, días, metrado y cantidades por día); solo cambian nombre y SC */
+    const p0=parts[0];ren[x.id]={n:x.name,sc:x.sc||'',keep:1};ops.push(op('acts',x.id,{...x,name:p0.name,sc:scOf(p0)}));
+    /* las demás, sin días: el ingeniero las programa en el orden del tren */
+    parts.slice(1).forEach((p,i)=>{const id=uid('act')+'d'+i;addR.push(id);ops.push(op('acts',id,{id,ambId:x.ambId,sc:scOf(p),name:p.name,und:x.und||'',metrado:null,days:[],order:(x.order||0)+step*(i+1)}))});
     ambNew.add(x.ambId)}
   /* 4) matriz: cada parte hereda el estado confirmado; donde el ambiente no recibiría la parte por otro lado, el propuesto */
   const cells={};const C=mxCells();const tipoHas=amb=>{const m=MX.amb.get(amb);return!!(m&&m.tipo&&pl.tipos.some(t=>t.id===m.tipo&&!t.arch))};
@@ -124,7 +140,7 @@ async function mxDesRestore(genId,quiet){if(!mxdCan()){toast('Solo el administra
   W.push(['mcat',genId,{arch:DEL,...meta}]);
   try{for(let i=0;i<W.length;i+=400){const bt=db.batch();W.slice(i,i+400).forEach(([c,id,v])=>bt.set(fcol(c).doc(id),v,{merge:true}));await bt.commit()}}catch(e){mxErr(e);return}
   const ops=[];
-  for(const[id,o]of Object.entries(r.ren||{})){const x=S.act.get(id);if(x&&names.has(mnk(x.name))){const nx={...x,name:o.n,sc:o.sc||x.sc,metrado:o.m??null};if(o.q)nx.qty=o.q;ops.push(op('acts',id,nx))}}
+  for(const[id,o]of Object.entries(r.ren||{})){const x=S.act.get(id);if(x&&names.has(mnk(x.name))){const nx={...x,name:o.n,sc:o.sc||x.sc};if(!o.keep){nx.metrado=o.m??null;if(o.q)nx.qty=o.q}/* keep (C-22): el metrado no se tocó */ops.push(op('acts',id,nx))}}
   for(const[id,ds]of Object.entries(r.cut||{})){const x=S.act.get(id);if(!x||!(ds||[]).length)continue;ops.push(op('acts',id,{...x,days:[...new Set([...(x.days||[]),...ds])].sort()}))}
   for(const id of r.add||[]){const o=arc('acts',id);if(o)ops.push(o)}
   if(ops.length)apply(ops,`Restaurar «${G.name}»: lookahead`);
