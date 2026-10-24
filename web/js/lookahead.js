@@ -45,7 +45,7 @@ function buildLookShell(main){
     <span class="seg" id="fview" aria-label="Vista" title="Grilla: editar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura)."><button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span>
     <input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar">
     <select id="fsec" aria-label="Sector"></select>
-    <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button></span>
+    <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día. Por personal: personas necesarias por día (metrado del día ÷ rendimiento, o la cuadrilla fija)."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button><button data-m="personal">Por personal</button></span>
     <select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select>
     <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Mostrar lo oculto, filtrar y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
@@ -191,6 +191,30 @@ const LKBADW=new Set();function lkBadRow(x,err){const id=x&&x.id;if(LKBADW.has(i
 /* (auditoría de código 08/10, L12) caché del texto de búsqueda por fila (se vacía cuando cambia DV) */
 const LKQT={v:-1,m:new WeakMap()};
 let LK_PAST=0,LK_DONE=0,LK_GHN=0,LK_GHOK=true,LK_MXT=0,MXT_ON=false;let RVVIS=null; /* en revisión: propuestas que la grilla muestra con los filtros (aunque estén fuera de pantalla) */
+/* ---------- P10 · Personal necesario y metrado repartido solo (oct 2026, decidido con el dueño) ----------
+   Rendimiento por persona-día: el de la fila (acts.rend) o, si no tiene, el del catálogo (mcat.rend). Filas sin metrado: cuadrilla
+   fija opcional (acts.cuad). Personas del día = metrado del día ÷ rendimiento, redondeado hacia arriba (o la cuadrilla fija). */
+function persCatRend(x){if(typeof mxCatOfN!=='function'||typeof MX==='undefined')return null;const c=MX.cat.get(mxCatOfN(x));return c&&c.rend>0?+c.rend:null}
+const persRend=x=>x&&x.rend>0?+x.rend:persCatRend(x);
+function persOf(x,d,rd){if(!x||!(x.days||[]).includes(d))return 0;if(hasM(x)){const q=+(x.qty||{})[d];return q>0&&rd>0?Math.ceil(q/rd-1e-9):0}return x.cuad>0?Math.round(+x.cuad):0}
+/* histograma teórico: fila fija al pie de la grilla (tfoot), solo en «Por personal» y con un SC elegido */
+let LKHIST='';
+function lkHistHtml(days,H1,HIS,HNR){if(!H1)return`<tr class="lkhist"><td class="fx hcap" colspan="11">Elige un subcontratista en la leyenda para ver su histograma de personal.</td><td colspan="${days.length}"></td></tr>`;
+  const vals=days.map(x=>HIS.get(x.d)||0);const mx=Math.max(0,...vals);const iM=vals.indexOf(mx);
+  return`<tr class="lkhist"><td class="fx hcap" colspan="11"><b>Personal necesario · ${esc(conOf(H1).name)}</b><span>${mx?`pico ${mx} persona${mx===1?'':'s'} el ${fmtD(days[iM].d)}`:'sin personas calculadas'}${HNR?` · ${HNR} fila${HNR===1?'':'s'} sin rendimiento`:''}</span></td>${days.map((x,i)=>{const v=vals[i];return`<td class="hcol${isWork(x.d)?'':' hol'}${i===iM&&mx?' hmax':''}" title="${fmtD(x.d)}: ${v} persona${v===1?'':'s'}"><span style="--h:${mx?Math.round(v/mx*100):0}%"></span><b>${v||''}</b></td>`}).join('')}</tr>`}
+/** pone (o quita) el pie del histograma en la tabla; se llama después de cada pintado (también al desplazarse en la grilla grande) */
+function lkHistSync(tbl){if(!tbl)return;let f=tbl.tFoot;if(!LKHIST){if(f)f.remove();return}if(!f){f=tbl.createTFoot()}if(f.dataset.h!==LKHIST){f.innerHTML=LKHIST;f.dataset.h=LKHIST}}
+/* reparto automático: Configuración › Calendario «Repartir el metrado solo en los días programados» (cal.qauto, activado por defecto).
+   Una fila con metrado está en reparto automático si qa===true, o si nunca tuvo cantidades (qa sin definir y sin qty). Editar la cantidad
+   de un día la pasa a manual (qa:false). Solo se reparte el saldo en los días desde mañana que no estén cerrados (publicados): lo pasado,
+   hoy y lo publicado conservan su cantidad. No corre en modo propuesta del SC ni en la versión cliente. */
+const qAutoOn=()=>(P().cal||{}).qauto!==false;
+function qAutoElig(x){return qAutoOn()&&!PM()&&!cliOn()&&!!x&&hasM(x)&&(x.qa===true||(x.qa==null&&!Object.values(x.qty||{}).some(v=>v!=null&&+v>0)))}
+function qAutoFill(x){const pid=pisoOfAct(x.id);const t=todayIso();const ds=[...new Set(x.days||[])].sort();const open=ds.filter(d=>d>t&&!dayLocked(d,pid));const os=new Set(open);
+  const q={};for(const d of ds){if(os.has(d))continue;const v=(x.qty||{})[d];if(v!=null)q[d]=v}
+  const sal=r2(x.metrado-Object.values(q).reduce((a,v)=>a+(+v||0),0));
+  if(open.length&&sal>0){const each=Math.floor(sal/open.length*100)/100;open.forEach((d,i)=>{const v=i===open.length-1?r2(sal-each*(open.length-1)):each;if(v>0)q[d]=v})}
+  return{...x,qty:q,qa:true}}
 function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
@@ -202,12 +226,12 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
   const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':'')+(typeof hitDayCls==='function'?hitDayCls(x2.d):''),f:fmtD(x2.d),past:x2.d<=today}));
-  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';
+  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';const PERS=U.qmode==='personal'&&!CV;const H1=PERS&&scSel().length===1?scSel()[0]:'';const HIS=H1?new Map(days.map(x=>[x.d,0])):null;let HNR=0;
   /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
      las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
   const ctx=lkCtx();
   let head='<colgroup><col class="s0"><col class="s1"><col class="s2"><col class="s3"><col class="s4"><col class="cU"><col class="cM"><col class="cS"><col class="cN"><col class="cI"><col class="cF">'+'<col>'.repeat(nd)+'</colgroup>';
-  head+='<thead><tr><th class="fx s0" rowspan="2">Ítem</th><th class="fx s1" rowspan="2">Código</th><th class="fx s2" rowspan="2">Ambiente</th><th class="fx s3" rowspan="2">Subcontratista</th><th class="fx s4" rowspan="2">Actividad</th><th class="fx cU" rowspan="2">Und</th><th class="fx cM" rowspan="2">Metrado</th><th class="fx cS" rowspan="2" title="Metrado total menos lo programado">Saldo</th><th class="fx cN" rowspan="2" title="Días programados">Días</th><th class="fx cI" rowspan="2">Inicio</th><th class="fx cF" rowspan="2">Fin</th>';
+  head+='<thead><tr><th class="fx s0" rowspan="2">Ítem</th><th class="fx s1" rowspan="2">Código</th><th class="fx s2" rowspan="2">Ambiente</th><th class="fx s3" rowspan="2">Subcontratista</th><th class="fx s4" rowspan="2">Actividad</th><th class="fx cU" rowspan="2">Und</th><th class="fx cM" rowspan="2">Metrado</th>'+(PERS?'<th class="fx cS" rowspan="2" title="Con metrado: rendimiento por persona al día (vacío = el del catálogo). Sin metrado: cuadrilla fija (personas)">Rend.</th>':'<th class="fx cS" rowspan="2" title="Metrado total menos lo programado">Saldo</th>')+'<th class="fx cN" rowspan="2" title="Días programados">Días</th><th class="fx cI" rowspan="2">Inicio</th><th class="fx cF" rowspan="2">Fin</th>';
   for(let w=U.week;w<U.week+U.win;w++){const wd=weekDays(w);head+=`<th class="wkh${U.wkF===w?' wsel':''}" colspan="6" data-wkh="${w}" title="${U.wkF===w?'Clic para ver todas las semanas':'Clic para ver solo las actividades de la semana '+w}"><b>Sem ${w}</b><span>${fmtD(wd[0])} – ${fmtD(wd[5])}</span></th>`}
   head+='</tr><tr>';
   days.forEach(x=>{const nw=nwReason(x.d);head+=`<th class="dh${x.i===0?' wk0':''}${x.d===today?' tdy':''}${x.d===U.day?' dsel':''}${nw?' hol':''}" data-dh="${x.d}" title="${nw?esc(nw)+' · ':''}${x.d===U.day?'Clic para ver todas las actividades':'Clic para ver solo las actividades del '+fmtD(x.d)}"><b>${DL[x.i]}</b>${x.d.slice(8)}${typeof hitMark==='function'?hitMark(x.d):''}</th>`});
@@ -238,6 +262,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           if(aset&&!aset.has(an(x.name)))return false;
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
+        if(HIS)for(const x of vis){if(x.sc!==H1)continue;const rd=persRend(x);if(hasM(x)&&!rd&&(x.days||[]).some(d=>HIS.has(d)))HNR++;for(const d of x.days||[])if(HIS.has(d))HIS.set(d,HIS.get(d)+persOf(x,d,rd))}
         LK_PAST+=nPast;LK_DONE+=nDone;
         /* opción B (11/10): terminadas en la Matriz y aún programadas desde mañana; con «Faltan programar» encendido */
         /* C-15 (tanda 2): también lo «No aplica» de la Matriz (mxRowWarn 'n'); el chip dice cuántas de cada una */
@@ -292,6 +317,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           const mq=hasM(x),ps=mq?progSum(x):0,sal=mq?r2(x.metrado-ps):null;const qmode=QM;
           /* modo metrado: si hay días marcados sin cantidad y queda saldo, el saldo se vuelve un botón que lo reparte en esos días */
           const nq=qmode&&mq&&sal>0&&!roA&&canWrite?(x.days||[]).filter(d=>(x.qty||{})[d]==null).length:0;
+          if(PERS){const rd=persRend(x),rc=x.rend>0?null:persCatRend(x);h+=mq?`<td class="cS cP" title="Rendimiento en ${esc(x.und||'und')} por persona al día${rc?' · del catálogo: '+fq(rc)+' (escribe otro para esta fila)':''}"><input class="ci num" inputmode="decimal" data-a="${x.id}" data-f="rend" value="${x.rend??''}" placeholder="${rc?fq(rc):'rend.'}" aria-label="Rendimiento por persona al día"${roA}></td>`:`<td class="cS cP" title="Sin metrado: escribe la cuadrilla fija (personas por día) si quieres que cuente en el histograma"><input class="ci num" inputmode="numeric" data-a="${x.id}" data-f="cuad" value="${x.cuad??''}" placeholder="pers." aria-label="Cuadrilla fija (personas por día)"${roA}></td>`}else
           h+=mq?`<td class="cS${sal<0?' neg':sal===0?' zero':''}" title="Programado ${fq(ps)} de ${fq(x.metrado)} ${esc(x.und||'')}${sal<0?' · excede en '+fq(-sal):''}">${nq?`<button type="button" class="qrep" data-qrep="${x.id}" title="Repartir el saldo (${fq(sal)} ${esc(x.und||'')}) en partes iguales en los ${nq} día${nq>1?'s':''} sin cantidad">⇢ ${fq(sal)}</button>`:sal<0?'−'+fq(-sal):fq(sal)}</td>`:qmode&&!roA&&canWrite?'<td class="cS qno" title="Escribe primero el metrado total para programar por cantidades">—</td>':'<td class="cS"></td>';
           h+=`<td class="ro cN">${st.n||''}</td><td class="ro cI">${fmtS(st.ini)}</td><td class="ro cF">${fmtS(st.fin)}</td>`;
           const ptip=(x._rv||pv||PM())?propRowTip(x,pv):'';const ptt=ptip?' · Propuesta: '+esc(ptip):'';
@@ -308,7 +334,8 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
             /* (auditoría de código 08/10, L6) estado de Campo desconocido: se muestra como «No cumplido» en vez de romper la grilla */
             const rc=di.past?recOf(x2.d,x.id):null;const rst=rc?ST[rc.status]||ST.no:null;const mk=(rc?`<i class="dm ${rst.c}">${rst.i}</i>`:'')+(rp&&!rc?'<i class="dm rp">↷</i>':'');const mt=ptt+(tiD?tiT:'')+(mxtD?mxT:'')+(rp?` · No fue (plan diario): ${esc(rp.m||'')} → ${rp.to?fmtD(rp.to):''}`:'')+(rvC&&rvC.has(x2.d)?' · Mismo ambiente: '+esc(rvC.get(x2.d).join(', ')):'')+(rc?` · Campo: ${rst.t}${rc.exec!=null?' '+fq(rc.exec)+' '+esc(rc.und||x.und||''):''}${rc.cnc?' ('+esc(rc.cnc)+')':''}`:'');
             /* modo metrado: un día marcado sin cantidad se ve como barra hueca (no como 0): falta escribir cuánto */
-            if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}${v!=null?'':' qz'}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'día programado sin cantidad · toca para escribirla'}${mt}">${v!=null?`<span class="qv">${fq(v)}</span>`:''}${mk}</td>`}
+            if(PERS&&on){const pr=persRend(x);const v=persOf(x,x2.d,pr);const why=v?`${v} persona${v===1?'':'s'}`:hasM(x)?((x.qty||{})[x2.d]==null?'día sin cantidad':'falta el rendimiento'):'sin metrado ni cuadrilla fija';h+=`<td class="${cl}${v?'':' pz'}" data-d="${x2.d}" title="${di.f}: ${why}${mt}">${v?`<span class="qv">${v}</span>`:''}${mk}</td>`}
+            else if(qmode&&mq&&on){const v=(x.qty||{})[x2.d];h+=`<td class="${cl}${v!=null?'':' qz'}" data-d="${x2.d}" title="${di.f}: ${v!=null?fq(v)+' '+esc(x.und||''):'día programado sin cantidad · toca para escribirla'}${mt}">${v!=null?`<span class="qv">${fq(v)}</span>`:''}${mk}</td>`}
             else h+=`<td class="${cl}" data-d="${x2.d}"${lbd?` title="${di.f} · liberado: la actividad se marcó terminada el ${fmtD(DONE.get(x.id))} · toca para reabrirla"`:mt?` title="${di.f}${mt}"`:''}>${mk}</td>`}
           return h+'</tr>';
           }catch(err){lkBadRow(x,err);return`<tr class="ar${i===0?' first':''} lkbad" data-a="${esc(x.id)}"><td class="s0"></td>${i===0?ambCells():''}<td class="s3"></td><td class="s4 act" title="Esta fila tiene un dato que la app no entiende. Avísale al administrador.">⚠ dato inválido</td><td colspan="${6+nd}"></td></tr>`}
@@ -320,6 +347,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   if(!shown&&filt)rows.push({k:'empty',h:`<tr><td colspan="${11+nd}"><div class="empty">Ninguna actividad coincide con los filtros. <button class="ib" data-clearf="1">Quitar filtros</button></div></td></tr>`});
   if(!S.pis.size)rows.push({k:'nopiso',h:`<tr><td colspan="${11+nd}"><div class="empty">Todavía no hay datos. ${isAdmin?'Carga <b>datos-iniciales.json</b> desde la pestaña <b>Equipo</b>, o crea un piso con el botón de abajo.':'Pide al administrador que cargue los datos del proyecto.'}</div></td></tr>`});
   if(canWrite&&!filt&&!U.sector&&!U.piso)rows.push({k:'addpiso',h:`<tr class="addrow"><td colspan="5" style="position:sticky;left:0"><div style="padding:0 8px"><button class="ib" data-addpiso="1">+ Nuevo piso</button></div></td><td colspan="${6+nd}"></td></tr>`});
+  LKHIST=PERS?lkHistHtml(days,H1,HIS,HNR):'';
   const keep=document.activeElement&&tbl.contains(document.activeElement)?focusKey(document.activeElement):null;
   if(rows.length>=VIRT_MIN){GV={tbl,head,rows,ctx,nd,blocks:gridBlocks(rows),r0:-1,r1:-1};virtPaint(true,keep);markPeers();return}
   GV=null;const tb=tbl.tBodies[0];
@@ -331,7 +359,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   else tbl.innerHTML=head+'<tbody>'+rows.map(r=>r.h).join('')+'</tbody>';
   gridHead=head;gridRows=rows;
   if(keep){const a=document.activeElement;if(!a||!tbl.contains(a))restoreFocus(tbl,keep)}
-  markPeers();
+  lkHistSync(tbl);markPeers();
 }
 /* ---------- Lookahead grande: solo se dibujan las filas que se ven (y un margen) ----------
    Con cientos o miles de actividades, dibujar todas las filas hacía lenta la pestaña. Las filas se agrupan en bloques
@@ -402,7 +430,7 @@ function virtPaint(force,keep){const g=GV;if(!g)return;const tbl=g.tbl;if(!tbl.i
       if(top0.cells[0].style.height!==hT)top0.cells[0].style.height=hT;if(bot.cells[0].style.height!==hB)bot.cells[0].style.height=hB}
     else{const nb=document.createElement('tbody');nb.innerHTML=vsp(padT,nd)+win.map(r=>r.h).join('')+vsp(padB,nd);tb.replaceWith(nb)}}
   else tbl.innerHTML=g.head+'<tbody>'+vsp(padT,nd)+win.map(r=>r.h).join('')+vsp(padB,nd)+'</tbody>';
-  gridHead=g.head;gridRows=win;g.r0=r0;g.r1=r1;
+  gridHead=g.head;gridRows=win;g.r0=r0;g.r1=r1;lkHistSync(tbl);
   /* medir (después) los bloques nuevos, cambiados o sin alto conocido: así las alturas de lo que no se ve son cada vez más exactas */
   const tb2=tbl.tBodies[0];
   for(let bi=b0;bi<=b1;bi++){const bk=g.blocks[bi];const i0=bk.i0-r0;let need=!fresh||!BH.has(bk.k);if(!need)for(let j=0;j<bk.n;j++)if(fresh.has(i0+j)){need=true;break}
@@ -656,7 +684,7 @@ function distribute(aid,ds,per){if(per!=null&&!(Number.isFinite(per)&&per>0))ret
   if(avail<=0){toast(`Ya está programado todo el metrado (${fq(S.act.get(aid).metrado)} ${und}).`);requestRender();return}
   let vals;if(per==null){const each=Math.floor(avail/ds.length*100)/100;vals=ds.map((d,i)=>i===ds.length-1?r2(avail-each*(ds.length-1)):each)}
   else{vals=[];let left=avail;for(const d of ds){const v=Math.min(per,left);vals.push(r2(v));left=r2(left-v)}}
-  let cut=per!=null&&per*ds.length>avail+1e-9;ds.forEach((d,i)=>{x=withQty(x,d,vals[i]>0?vals[i]:null)});
+  let cut=per!=null&&per*ds.length>avail+1e-9;ds.forEach((d,i)=>{x=withQty(x,d,vals[i]>0?vals[i]:null)});if(!PM())x={...x,qa:false};
   apply([op('acts',aid,x)],cut?`Se programó hasta completar el saldo (${fq(avail)} ${und}); los últimos días quedaron sin cantidad.`:`Programado ${fq(vals.reduce((s,v)=>s+v,0))} ${und} en ${vals.filter(v=>v>0).length} días`,()=>reopenAfter(aid,ds.filter((d,i)=>vals[i]>0)))}
 /* editor de la cantidad DENTRO de la celda (oct 2026, pedido del dueño): antes era un recuadro flotante más grande que la celda,
    con la fecha y el máximo debajo. Ahora la celda misma se vuelve el campo y el saldo de la fila (columna Saldo) muestra en vivo
@@ -688,7 +716,7 @@ function commitQ(aid,d,raw){const x=S.act.get(aid);if(!x)return;let v=parseNum(r
   const cur=+(x.qty||{})[d]||0;const max=r2(x.metrado-(progSum(x)-cur));
   if(v!=null&&v>max+1e-9){if(max<=0){toast(`Ya está programado todo el metrado (${fq(x.metrado)} ${und}). Aumenta el metrado total o reduce otro día.`);requestRender();return}
     toast(`Se ajustó a ${fq(max)} ${und}: es el saldo disponible de ${fq(x.metrado)} ${und}.`);v=max}
-  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}apply([op('acts',aid,nx)],undefined,v?()=>reopenAfter(aid,[d]):null)}
+  const nx=withQty(x,d,v);if(canon(nx)===canon(x)){requestRender();return}if(hasM(nx)&&!PM())nx.qa=false;apply([op('acts',aid,nx)],undefined,v?()=>reopenAfter(aid,[d]):null)}
 /* C-21 (tanda 2, CON-05): al pintar días se saltan los no laborables (domingo, feriado, sábado no laborable), salvo que
    Configuración › Calendario lo desactive (cal.pskip=false). Borrar días no se salta. Un día marcado «se trabaja» es laborable. */
 const lkPaintSkip=()=>((P().cal||{}).pskip!==false);
@@ -699,7 +727,7 @@ function endPaint(){
   const p=paint;paint=null;const by={};
   if(p.sk&&p.sk.size){const L=[...p.sk].sort((a,b)=>a[0].localeCompare(b[0]));toast(`No se programó ${L.length===1?'el '+fmtD(L[0][0])+' ('+L[0][1]+')':L.length+' días no laborables ('+L.map(([d])=>fmtD(d)).join(', ')+')'}. ${lkCalOk()?'Para programarlo: clic derecho en la cabecera del día (en tablet, mantenla presionada) › «Trabajar este día», o desactiva «Al pintar días, saltar no laborables» en Configuración › Calendario.':'Si ese día se va a trabajar, pide al ingeniero que lo marque como día que se trabaja.'}`)}for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);
   const ops=[];for(const[a,ds]of Object.entries(by)){const x=S.act.get(a);if(!x)continue;const set=new Set(x.days||[]);ds.forEach(d=>p.on?set.add(d):set.delete(d));
-    const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,nx))}}
+    const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,qAutoElig(nx)?qAutoFill(nx):nx))}}
   /* si se programan días después de la fecha en que se marcó terminada, se reabre sola: seguir programándola no debe estar bloqueado.
      Solo si el cambio se aplicó: con un día cerrado (lockGuard) no se reabre nada (auditoría LOG-01) */
   const ro=p.on?()=>{for(const[a,ds]of Object.entries(by))reopenAfter(a,ds)}:null;
@@ -764,6 +792,7 @@ function commitField(t){
     if(f==='metrado'){v=parseNum(v);if(Number.isNaN(v)||(v!=null&&v<0)){t.value=t.dataset.o;toast('El metrado debe ser un número positivo.');return}
       const ps=progSum(x);if(v!=null&&ps>v+1e-9)toast(`Ojo: ya hay ${fq(ps)} ${x.und||''} programados y el nuevo total es ${fq(v)}. El saldo queda en rojo (−${fq(ps-v)}); reduce algunos días.`);
       else if((v==null||v===0)&&ps>0)toast('La actividad quedó sin metrado total: sus cantidades por día se conservan, pero se programa por días hasta que vuelvas a poner un total.')}
+    if(f==='rend'||f==='cuad'){v=parseNum(v);if(Number.isNaN(v)||(v!=null&&v<0)){t.value=t.dataset.o;toast(f==='rend'?'El rendimiento debe ser un número positivo (por persona al día).':'La cuadrilla debe ser un número de personas.');return}if(!v)v=null;else if(f==='cuad')v=Math.round(v);else v=r2(v)}
     if(f==='und')v=v.trim().toUpperCase();
     let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();
       /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
@@ -774,7 +803,9 @@ function commitField(t){
     if((f==='name'||f==='sc')&&x[f]&&!cliOn()&&!actSameName(x,f,v)&&actHist(x).length){t.value=t.dataset.o;histGate(x,f,v);return}
     const nx={...x,[f]:v};if(und0)nx.und=und0;
     /* fila nueva: toma el SC de la actividad del catálogo elegida */
-    if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v,sc:x.sc}));if(cc&&cc.sc&&!mxScsOf(cc).includes(x.sc)&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}apply([op('acts',x.id,nx)]);
+    if(f==='name'&&!x.name&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'){const cc=MX.cat.get(mxCatOfN({name:v,sc:x.sc}));if(cc&&cc.sc&&!mxScsOf(cc).includes(x.sc)&&S.con.has(cc.sc)&&(!PM()||myScsI().includes(cc.sc)))nx.sc=cc.sc}if((f==='sc'||f==='name')&&nx.obs){delete nx.obs;delete nx.obsSug}
+    /* P10: al poner o cambiar el metrado total, se reparte solo en los días programados (si la fila está en reparto automático) */
+    const nx2=f==='metrado'&&qAutoElig(nx)&&(nx.days||[]).length?qAutoFill(nx):nx;apply([op('acts',x.id,nx2)],nx2!==nx?`Metrado ${fq(nx.metrado)} ${nx.und||''} repartido en los días programados`:undefined);
     /* R1 (oct 2026): la Matriz la da por terminada en este ambiente → la fila se ocultaría; se ofrece volverla a Pendiente */
     if(f==='name'&&typeof mxReopenAsk==='function'&&!cliOn())mxReopenAsk(nx);}
   else if(t.dataset.amb){const x=S.amb.get(t.dataset.amb);if(!x)return;v=f==='code'?v.trim():v.replace(/\s+/g,' ').trim();if(x[f]===v)return;apply([op('ambientes',x.id,{...x,[f]:v})])}
@@ -831,9 +862,9 @@ function reorderAct(x,y,after){const sib=siblings('acts','ambId',x.ambId).filter
 function moveItem(col,field,x,dir){const sib=siblings(col,field,x[field]);const i=sib.findIndex(s=>s.id===x.id);const j=i+dir;if(j<0||j>=sib.length)return;const y=sib[j];
   let oa=y.order,ob=x.order;if(oa===ob){ob=oa+dir}apply([op(col,x.id,{...x,order:oa}),op(col,y.id,{...y,order:ob})])}
 function actMenu(btn,aid){if(cliOn()){cliActMenu(btn,aid);return}const x=S.act.get(aid);if(!x)return;
-  openPop(btn,`<div class="ph">Actividad</div><button data-do="sel">Seleccionar para mover en bloque<kbd>Ctrl+clic</kbd></button><button data-do="mvb">Mover sus días…</button>${typeof canAmbMove==='function'&&canAmbMove()?'<button data-do="amb">Cambiar de ambiente…</button>':''}<hr><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}</button>`:''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
+  openPop(btn,`<div class="ph">Actividad</div><button data-do="sel">Seleccionar para mover en bloque<kbd>Ctrl+clic</kbd></button><button data-do="mvb">Mover sus días…</button>${typeof canAmbMove==='function'&&canAmbMove()?'<button data-do="amb">Cambiar de ambiente…</button>':''}<hr><button data-do="ins">Insertar actividad debajo<kbd>Ctrl+Enter</kbd></button><button data-do="dup">Duplicar con sus días</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr>${hasM(x)&&(x.days||[]).length?(PM()||cliOn()?`<button data-do="rep">Repartir el metrado en los días marcados<kbd>${(x.days||[]).length} días</kbd></button>`:`<button data-do="qauto">Repartir el metrado parejo desde mañana<kbd>${x.qa===true?'automático':'manual'}</kbd></button>`):''}${doneOf(x)?'<button data-do="reo">Reabrir actividad (quitar “terminada”)</button>':''}<button data-do="clr">Borrar días programados</button><button data-do="rst">Agregar restricción</button>${canLibAsk(x)?`<button data-do="lib">◆ ${libOf(aid)&&!libDone(libOf(aid).st)?'Ver liberación':'Solicitar liberación…'}</button>`:''}<hr><button data-do="del" class="danger">Eliminar actividad</button>`,
   {sel:()=>selToggle(aid),amb:()=>setTimeout(()=>ambMoveDialog(btn,[aid]),0),buf:()=>setTimeout(()=>bufDialog(btn,'x',aid,'la actividad '+(x.name||'')),0),mvb:()=>setTimeout(()=>blockMoveDialog(btn,[aid],x.name||'la actividad'),0),reo:()=>reopenDone(aid),ins:()=>insertAct(aid),dup:()=>insertAct(aid,true),up:()=>moveItem('acts','ambId',x,-1),dn:()=>moveItem('acts','ambId',x,1),
-   clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),lib:()=>setTimeout(()=>libAsk(aid),0),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),
+   clr:()=>apply([op('acts',aid,{...x,days:[],qty:{}})],'Días borrados'),rst:()=>newRestr(aid),lib:()=>setTimeout(()=>libAsk(aid),0),rep:()=>distribute(aid,(x.days||[]).slice().sort(),null),qauto:()=>{const y=S.act.get(aid);if(y)apply([op('acts',aid,qAutoFill(y))],'Metrado repartido parejo desde mañana (la fila vuelve a reparto automático)')},
    del:()=>apply([arc('acts',aid)],PM()?`Pedido de quitar “${x.name||'sin nombre'}” (queda en tu propuesta)`:`Actividad “${x.name||'sin nombre'}” eliminada (queda en la Papelera de Configuración)`)})}
 function ambMenu(btn,ambId){if(cliOn()){cliAmbMenu(btn,ambId);return}const a=S.amb.get(ambId);if(!a)return;
   if(PM()){const mine=actsOfAmb(ambId).filter(x=>myScsI().includes(x.sc));openPop(btn,`<div class="ph">Ambiente ${esc(a.code)}</div><button data-do="act">+ Actividad al final</button>${mine.length?'<button data-do="mvd">Mover mis actividades en días…</button>':''}<div class="ptx">Crear, duplicar o mover ambientes lo hace el ingeniero de producción.</div>`,
