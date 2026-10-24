@@ -291,7 +291,7 @@ function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.
 function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,ext:0,sc:{}};const byS=DB_.sc.size>0;for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
     for(const[id,it]of Object.entries(w.items||{})){const q=r[id];
       if(byS&&q&&q.ok===false&&q.rsc&&q.pc&&q.rsc!==it.sc&&DB_.sc.has(q.rsc)&&(!DB_.ty||an(it.act)===DB_.ty))o.ext++;
-      if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
+      if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};if(it.scn)so.nm=it.scn;o.n++;so.n++;
       if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q)&&(byS||!(q.rsc&&q.pc)))o.nimp++}}}
   o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp,o.ext):null;return o}
 /* Avance de la semana contra lo congelado (oct 2026, decidido con el dueño): cada día de cada actividad de la semana congelada
@@ -328,12 +328,18 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const stopL=act.filter(i=>i.st.k==='stop');const stopMot={};let later=0;stopL.forEach(i=>{const m=String(i.st.lv&&i.st.lv.mot||'Sin motivo').split(' — ')[0];if(m===STOP_INFO){later++;return}stopMot[m]=(stopMot[m]||0)+1});
   /* PPC diario de hoy con los filtros (misma base que Indicadores › Diario) */
   const dRows0=dayData([d],vsP).rows;const dRows=dRows0.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
-  const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)W.push({w,...o})}
-  const PW=W.find(o=>o.w===cw)||null;const full=W.filter(o=>o.w<cw&&o.ppc!=null&&o.ev>=o.n).slice(-4);const avg4=full.length?full.reduce((t,o)=>t+o.ok,0)/Math.max(1,full.reduce((t,o)=>t+o.n,0)):null;
+  /* PPC semanal: con los pisos archivados, como Plan semanal, Indicadores y Presentar (LPS-14/DAT-07); lo de hoy sigue con los pisos activos */
+  const vsH=histPisoSet();
+  const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsH);if(o.n)W.push({w,...o})}
+  /* C-01 (tanda 1, LPS-4): el promedio con la misma fórmula que Indicadores y Presentar (ppcAvg: promedio simple de las semanas evaluadas
+     por completo; sin filtros, con las cargadas a mano), aquí de las 4 últimas */
+  const PW=W.find(o=>o.w===cw)||null;const wPts=W.map(o=>({wk:o.w,ppc:o.ppc,ppcSc:o.ppcSc,ok:o.ok,n:o.n,ev:o.ev,nimp:o.nimp}));
+  const{avg:avg4,L:full}=ppcAvg(DB_.sc.size||DB_.ty?wPts.map(x=>({wk:x.wk,...ppcHistPts([x])[0]})):ppcHistAll(wPts.filter(x=>x.ppc!=null),cw),4);
   /* PPC por subcontratista: últimas 4 semanas congeladas */
-  const Wall=DB_.sc.size?noSc(()=>{const L=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)L.push({w,...o})}return L}):W;
-  const scAgg={};Wall.slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev}));
-  const scRows=Object.entries(scAgg)/* «Sin asignar» (scTBD) no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&scReal(sc)).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
+  const Wall=DB_.sc.size?noSc(()=>{const L=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsH);if(o.n)L.push({w,...o})}return L}):W;
+  /* C-02 (tanda 1, LPS-3): solo las semanas ya evaluadas por completo (la semana en curso sin evaluar no castiga a nadie), como el promedio */
+  const scAgg={};Wall.filter(o=>o.ev>=o.n).slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev;if(v.nm)a.nm=v.nm}));
+  const scRows=Object.entries(scAgg)/* «Sin asignar» (scTBD) no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&scReal(sc)).map(([sc,v])=>({label:v.nm||conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
   /* causas de no cumplimiento · 30 días (registros verificados, con los filtros) */
   /* los 29 días anteriores y hoy por separado (auditoría de código 08/10, M5): dayData tiene memoria y hoy ya se calculó arriba */
   const cn={};[...dayData(Array.from({length:29},(_,k)=>addD(d,-29+k)),vsP).rows,...dRows0].forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
@@ -363,7 +369,7 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     <div class="dk dkst" style="--k:${KST.none.c}"><span class="dkl">Estado de hoy</span>${!act.length?'<b>—</b>':c.none===act.length?`<b class="dkt">${c.none} en curso</b>`:sbar(c)}<span class="dks">${c.none===act.length&&act.length?'sin detenidos ni cierres todavía':['ok','no','stop','none'].filter(k=>c[k]).map(k=>`${KST[k].t.toLowerCase()} ${c[k]}`).join(' · ')||'sin actividades'}</span></div>
     ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
     ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
-    ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].w}–${full[full.length-1].w}`:'sin semanas cerradas','dkppc')}
+    ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].wk}–${full[full.length-1].wk}`:'sin semanas cerradas','dkppc')}
     ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}
     ${(()=>{const u=dashSinSc(vsP,d);return u.n?K('Sin subcontratista',u.n,`${u.pron} programadas en 3 semanas`,'','#9AA0A6'):''})()}</div>`;
   const trend=W.length?`${linesLegend()}<div class="dsv chart">${svgLines(W.map(o=>({label:'S'+o.w,a:o.ppc,b:o.ppcSc??o.ppc,part:o.ev<o.n,sub:`${o.ok} de ${o.n} compromisos`})),{h:220,minW:760})}</div>`:'<p class="mu">Aún no hay semanas congeladas.</p>';

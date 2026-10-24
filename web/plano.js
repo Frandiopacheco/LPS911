@@ -573,7 +573,7 @@ function readyHtml(){const t=todayIso();const k=(M.rdyOpen?'o':'c')+'|'+t+'|'+M.
     if(age<RDY_MIN){if(!RDY.tm)RDY.tm=setTimeout(()=>{RDY.tm=0;if(U.tab==='mapa')requestRender()},Math.min(RDY_MIN,Math.max(0,RDY_MIN-age))+50);return RDY.h}}
   if(RDY.tm){clearTimeout(RDY.tm);RDY.tm=0}
   const rows=[];for(const p of(typeof visPisos==='function'?visPisos():pisos())){const acts=dayActs(p.id,M.date).length;
-    let ver=0;try{ver=dayData([t],new Set([p.id])).rows.filter(r=>!r.rc||r.rc._prop).length}catch(e){}
+    let ver=0;try{ver=dayData([t],new Set([p.id])).rows.filter(r=>!r.rc).length /* C-06: el cierre del SC/capataz ya cuenta */}catch(e){}
     let cx=0;try{cx=crossOf(p.id).length}catch(e){}const pr=[...PD.values()].filter(z=>z.kind==='dprop'&&z.st==='pend'&&z.pisoId===p.id&&z.date===M.date).length;
     if(!acts&&!ver)continue;rows.push({p,ver,cx,pr,ok:!ver&&!cx&&!pr})}
   const c=(n,l)=>n?`<span class="rdn" title="${l}">${n}</span>`:'<span class="rdk">✓</span>';

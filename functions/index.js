@@ -4,7 +4,8 @@
 // - aceptarCierres: cada noche registra los cierres de capataces que nadie revisó en 2 días y, del día de hoy,
 //   lo que a la hora de corte (Configuración, por defecto 5 pm) nadie cerró: No cumplido imputable al SC (sinCierre).
 // - congelarSemana: en el corte semanal (por defecto sábado 13:00 de Lima) congela la semana siguiente en los pisos que
-//   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes.
+//   nadie congeló a mano; si la tarea se atrasa, lo intenta hasta el lunes. Además, una semana que alguien descongeló y nadie volvió
+//   a congelar se re-congela sola a las 2 horas, tal como estaba (desde su copia __h; tanda 1, C-03).
 // - cerrarPlan: a la hora de Configuración (por defecto 21:00, Lima), en los pisos donde nadie publicó el plan del día hábil siguiente, publica los borradores de la
 //   reunión, rechaza las propuestas del SC sin revisar y cierra el plan (dplan).
 // - emitirCliente: el sábado a las 23:00 (Lima) emite la versión cliente de la semana siguiente si el administrador no la emitió.
@@ -19,7 +20,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, limaToday, addD, weeksToFreeze, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota, avisoNo, avisoDestinos, avisoTexto } = require('./lib');
+const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, limaToday, addD, weeksToFreeze, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota, avisoNo, avisoDestinos, avisoTexto } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -112,8 +113,40 @@ async function sinCierreHoy(today) {
    De paso mueve, por partes, la foto del lookahead (snap) de weeks a wsnap (migración M1; cuando termina solo lee frz/_wsnap). */
 exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
   try { await congelar(); }
-  finally { try { await migrarWsnap(); } catch (e) { logger.error('Migración de fotos del lookahead (wsnap): falló esta pasada, se reintenta en 15 minutos', e); } }
+  finally {
+    try { await recongelar(); } catch (e) { logger.error('Re-congelar semanas descongeladas: falló esta pasada, se reintenta en 15 minutos', e); }
+    try { await migrarWsnap(); } catch (e) { logger.error('Migración de fotos del lookahead (wsnap): falló esta pasada, se reintenta en 15 minutos', e); }
+  }
 });
+/* C-03 (tanda 1, LPS-1): semanas descongeladas (unfrozenAt, sin frozenAt) que nadie volvió a congelar en 2 horas: se reponen tal como
+   estaban desde la última copia __h, como «Recuperar» de la página (restoreWeek), cada una en su propia transacción que relee todo:
+   si alguien la congeló o la recuperó mientras tanto, no se toca. La copia queda con restAt/restBy:'servidor' y la semana con refrz. */
+async function recongelar() {
+  const now = Date.now(); const at = new Date(now).toISOString();
+  const q = await db().collection('weeks').where('unfrozenAt', '>', '').get();
+  const weeks = q.docs.map(d => ({ ...d.data(), id: d.id })).filter(w => !w.frozenAt && !w.histOf);
+  if (!weeks.length) return;
+  const hist = [];
+  for (const w of weeks) (await db().collection('weeks').where('histOf', '==', w.id).get()).docs.forEach(d => hist.push({ ...d.data(), id: d.id }));
+  const L = weeksToRefreeze(weeks, hist, now);
+  let k = 0;
+  for (const o of L) {
+    try {
+      const ok = await db().runTransaction(async tx => {
+        const ref = db().collection('weeks').doc(o.id), href = db().collection('weeks').doc(o.hid), hw = db().collection('wsnap').doc(o.hid);
+        const [sn, hs, ws] = [await tx.get(ref), await tx.get(href), await tx.get(hw)];
+        const r = refreezeDoc(sn.exists ? sn.data() : null, hs.exists ? { ...hs.data(), id: o.hid } : null, ws.exists ? (ws.data() || {}).snap : undefined, o.unAt, at);
+        if (!r) return false;
+        tx.set(ref, { ...r.week, unfrozenAt: admin.firestore.FieldValue.delete() }, { merge: true });
+        if (r.snap != null) tx.set(db().collection('wsnap').doc(o.id), { snap: r.snap, n: r.week.n, pisoId: r.week.pisoId, t: r.week.frozenAt || null });
+        tx.update(href, { restAt: at, restBy: 'servidor' });
+        return true;
+      });
+      if (ok) k++;
+    } catch (e) { logger.error(`No se pudo re-congelar ${o.id}`, e); }
+  }
+  if (k) logger.info(`${k} semana(s) descongelada(s) re-congelada(s) tal como estaban (nadie las volvió a congelar en 2 horas)`);
+}
 async function congelar() {
   const project = (await db().collection('meta').doc('project').get()).data() || {};
   const now = Date.now();
@@ -138,10 +171,10 @@ async function congelar() {
     const skip = new Set(snaps.filter(d => d.exists && held(d.data())).map(d => d.id));
     if (mine.length && skip.size === snaps.length) { await fref.set(retryRecord(prev, plan, { at, n, nota: 'todos los pisos ya estaban congelados' }, [], [], { k: 0 })); continue; }
     const today = limaToday(now);
-    const [sectors, ambientes, acts, didx, daily, lives, props] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
-      db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop')]);
+    const [sectors, ambientes, acts, didx, daily, lives, props, contractors] = await Promise.all([all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
+      db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('lhprop'), all('contractors')]);
     const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(d => d.data()), lives: lives.docs.map(d => d.data()), acts });
-    const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()] }, n, new Date(now).toISOString());
+    const L = buildFreeze({ project, pisos, sectors, ambientes, acts, done, props: [...props.values()], contractors }, n, new Date(now).toISOString());
     const todo = L.filter(o => !skip.has(o.id) && (!plan.only || plan.only.has(o.doc.pisoId)));
     const byPiso = new Map(todo.map(o => [o.doc.pisoId, o]));
     /* cada piso en su propia transacción y con su propio try/catch: si uno falla, los demás se congelan igual */
