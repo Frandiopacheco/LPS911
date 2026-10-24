@@ -195,7 +195,7 @@ function dismissRep(aid,fd){const x=S.act.get(aid);if(x&&canWrite)apply([op('act
 function withQty(x,d,v){const q={...(x.qty||{})};const days=new Set(x.days||[]);if(v!=null&&v>0){q[d]=r2(v);days.add(d)}else{delete q[d];days.delete(d)}return{...x,qty:q,days:[...days].sort()}}
 function actStats(a){const ds=(a.days||[]).slice().sort();return{n:ds.length,ini:ds[0]||'',fin:ds[ds.length-1]||''}}
 const GRP_AREA=/dise[nñ]o|plano|informaci|rfi|permis|contrat|compra|log[ií]st|adquisi|calidad|ssoma|cliente|supervis|aprobaci|ingenier|\bot\b|presupuest|administr/i;
-const restrAreasL=()=>{const a=P().restrAreas;return a&&a.length?a:['OT','Ingeniería','Logística','Calidad','SSOMA','Cliente / Supervisión','Administración']};
+const restrAreasL=()=>{const a=P().restrAreas;return a&&a.length?a:['OT','Ingeniería','Logística','Calidad','SSOMA','Planificación','Cliente / Supervisión','Administración']};
 const typeGrp=t=>{const m=P().restrGrp||{};return t in m?m[t]:(GRP_AREA.test(t||'')?'area':'campo')};
 const grpOf=r=>r.grp||typeGrp(r.type);
 const GRPN={campo:'Operativa de campo',area:'Otras áreas'};

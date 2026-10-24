@@ -35,6 +35,7 @@ test.beforeEach(async () => {
     await S('members/sc2@obra.pe', { role: 'sc', name: 'SC con marca', sc: 'c-gabel', scs: ['c-gabel'], cli: true });
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
     await S('members/planner@obra.pe', { role: 'planner', name: 'Planner' });
+    await S('members/plan@obra.pe', { role: 'area', name: 'Planner de obra', area: 'Planificación' });
     await S('mp/n1', { tipo: 'part', name: 'Tabiquería', ini: '2026-10-05', fin: '2026-11-20' });
     await S('mpver/1', { n: 1, st: 'pend', by: 'planner@obra.pe', items: {} });
     await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
@@ -1609,4 +1610,18 @@ test('PER-1: el SC y el capataz escriben su cierre (live.close) solo hasta su ho
   // un día que no llega a su corte: sí (y sin tocar el cierre, el SC sigue reportando «Detenido» hasta el Cierre del ingeniero)
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), `live/${DV}_x4`), { date: DV, actId: 'x4', sc: 'c-gabel', close: { status: 'ok' } }));
   await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x4`), { st: 'stop', mot: 'Materiales', sc: 'c-gabel' }));
+});
+
+// Hitos de inicio y fin (oct 2026): admin, editores y el área Planificación los crean y editan; todos los de LPS los ven
+test('hitos: admin, editores y Planificación los gestionan; el resto solo los ve', async () => {
+  const H = { n: 'Llegan las UMA', tipo: 'ini', d: '2099-11-12', d0: '2099-11-12', piso: '', h: [], st: 'open' };
+  for (const who of [OWNER, 'editor@obra.pe', 'plan@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'hitos/h-' + who.replace(/\W/g, '')), H));
+  for (const who of ['campo@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'calidad@obra.pe', 'planner@obra.pe']) await assertFails(setDoc(doc(user(who), 'hitos/h-x'), H));
+  await assertSucceeds(updateDoc(doc(user('plan@obra.pe'), 'hitos/h-editorobrape'), { d: '2099-11-19' }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'hitos/h-mal'), { ...H, tipo: 'otro' }));
+  await assertFails(deleteDoc(doc(user('plan@obra.pe'), 'hitos/h-planobrape')));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'hitos/h-planobrape')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), 'hitos/h-planobrape')));
+  // el área Planificación no edita el lookahead
+  await assertFails(setDoc(doc(user('plan@obra.pe'), 'acts/x-plan'), { name: 'x', ambId: 'a1', sc: 'c1', days: [] }));
 });

@@ -53,6 +53,8 @@ service cloud.firestore {
     function areaOf() { return get(memberPath()).data.get('area', ''); }
     // Calidad: un área de apoyo cuyo nombre contiene "calidad"
     function isCal() { return isArea() && areaOf().lower().matches('.*calidad.*'); }
+    // Planificación (oct 2026): área de apoyo del planner; gestiona los hitos, no edita el lookahead
+    function isPlan() { return isArea() && areaOf().lower().matches('.*planific.*'); }
     // Veedor: recorre la obra y registra lo que se ejecuta sin estar programado (no cambia nada más)
     function isVeedor() { return isMember() && !isOwner() && role() == 'veedor'; }
     // Trabajo no programado visto en obra: campo, editores, administrador, Calidad y veedores
@@ -320,6 +322,14 @@ service cloud.firestore {
     }
     // Sesión pull (oct 2026, docs/ia/pull.md): borrador de planificación con pósits. La ven todos los de LPS;
     // la crean y editan el administrador y los ingenieros de producción (canEdit). Se archiva; borrar, solo el administrador.
+    // Hitos de inicio y fin (oct 2026, js/hitos.js): los ve todo LPS; los crean y editan el administrador, los ingenieros de
+    // producción (canEdit) y el área Planificación. Se archivan; borrar, solo el administrador.
+    match /hitos/{id} {
+      allow read: if lpsMember();
+      allow create, update: if (canEdit() || isPlan()) && request.resource.data.tipo in ['ini', 'fin']
+        && request.resource.data.d is string && request.resource.data.n is string;
+      allow delete: if isAdmin();
+    }
     match /pull/{id} {
       allow read: if lpsMember();
       allow create, update: if canEdit() && request.resource.data.ps is map && request.resource.data.piso is string;

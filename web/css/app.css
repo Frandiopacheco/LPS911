@@ -4467,3 +4467,19 @@ p.smline{display:block;border-left-color:var(--line)}
 .smdot{display:inline-block;width:.7em;height:.7em;border-radius:50%;background:var(--c);margin-right:.5em}
 .smbar{display:inline-block;width:6em;height:.55em;border-radius:99px;background:var(--panel2);overflow:hidden;vertical-align:middle;margin-right:.5em}.smbar i{display:block;height:100%;background:var(--accent)}
 .rdl.rcl input{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--panel))}
+/* ---------- P1 · Hitos de inicio y fin en el Lookahead (js/hitos.js, oct 2026) ---------- */
+/* línea en la columna del día: inicio a la izquierda (verde), fin a la derecha (rojo); colores opacos (la grilla no admite translúcidos) */
+#grid td.d.hli{box-shadow:inset 2px 0 0 var(--ok)}#grid td.d.hlf{box-shadow:inset -2px 0 0 var(--bad)}#grid td.d.hli.hlf{box-shadow:inset 2px 0 0 var(--ok),inset -2px 0 0 var(--bad)}
+.hmk{display:flex;justify-content:center;gap:2px;margin-top:1px;cursor:pointer;padding:1px 0}
+.hmk i,.hdot{display:inline-block;width:8px;height:8px;transform:rotate(45deg);border-radius:1px;background:var(--bad)}
+.hmk i.hini,.hdot.hini{background:var(--ok)}.hmk i.hfin,.hdot.hfin{background:var(--bad)}.hmk i.hdone{background:var(--muted)}
+.hpill b{font-variant-numeric:tabular-nums;margin-left:2px}
+.hlist{display:flex;flex-direction:column;gap:2px;max-height:min(60vh,420px);overflow:auto}
+.hrow{display:flex;align-items:center;gap:10px;padding:6px 4px}.hrow.done{opacity:.7}
+.hrow .hdot{flex:none;margin:0 3px}.hrt{flex:1;min-width:0;display:flex;flex-direction:column}.hrt b{font-size:13.5px}.hrt small{color:var(--muted);font-size:12px}
+.hrow button{flex:none;width:auto}
+.pop button.hed{font-size:12.5px;color:var(--muted);padding-left:28px}
+.hhist{font-size:12px;color:var(--muted)}
+.hform{display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px;min-width:min(320px,80vw)}
+.hform label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}.hform .tin{width:100%;color:var(--ink)}
+.puhlk{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}

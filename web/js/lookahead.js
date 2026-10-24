@@ -51,6 +51,7 @@ function buildLookShell(main){
     <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
     <span id="fmxp"></span>
     <span id="fday"></span>
+    <span id="fhit"></span>
     <span class="sp" style="flex:1"></span>
     <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
     <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
@@ -81,7 +82,7 @@ function buildLookShell(main){
   <div class="legend" id="legend"></div>
   <div class="gridwrap" id="gw"><table class="g" id="grid"></table></div><div class="flwrap" id="flw" hidden></div></div>`;
   /* (auditoría de código 08/10, L12) la búsqueda redibuja la grilla cuando dejas de escribir (~180 ms), no con cada tecla */
-  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);{const fp=$('#fplano');if(fp)fp.onclick=()=>lkPlano()}$('#fedit').onclick=()=>lkEdit(!LKED);
+  $('#fq').oninput=e=>{U.q=e.target.value;clearTimeout(lkQTimer);lkQTimer=setTimeout(()=>{lkQTimer=0;requestRender()},180)};$('#ffs').onclick=()=>lkFs(!LKFS);{const fp=$('#fplano');if(fp)fp.onclick=()=>lkPlano()}$('#fedit').onclick=()=>lkEdit(!LKED);{const fh=$('#fhit');if(fh)fh.onclick=e=>{const b=e.target.closest('[data-hitlist]');if(b)hitListPop(b)}}
   $('#fview').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='flujo'&&!lkFlowOk()){toast('Durante la revisión de propuestas se usa la grilla.');return}U.lkV=b.dataset.v;closePop();saveUI();requestRender()};
   $('#fmore').onclick=()=>{U.lbMore=!U.lbMore;U.lbDots=false;moreSync()};
   $('#fdots').onclick=()=>{U.lbDots=!U.lbDots;U.lbMore=false;moreSync()};
@@ -115,7 +116,7 @@ function buildLookShell(main){
   main.dataset.built='1';
 }
 let gridRows=null,gridHead='',lkQTimer=0;
-function renderLook(main){if(typeof ensureMx==='function')ensureMx();
+function renderLook(main){if(typeof ensureMx==='function')ensureMx();if(typeof ensureHitos==='function')ensureHitos();
   /* la pestaña Cliente siempre con la tabla (la vista de celular no tiene la capa del cliente) */
   if(isMob()&&!U.lookFull&&!U.cliv){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
@@ -168,6 +169,7 @@ function renderLookInner(main){
   {let no=0;for(const a of S.act.values())if(a.obs&&vset.has(pisoOfAmb(a.ambId)))no++;if(!no&&U.onlyObs)U.onlyObs=false;$('#lobs').hidden=!no;$('#nobs').textContent=no||'';$('#fobs').checked=U.onlyObs}$('#fchg').checked=U.changes;
   $('#gw').classList.toggle('meet',U.meeting);$('#gw').classList.toggle('ro-mode',!canWrite);
   const days=winDays();const dset=new Set(days.map(x=>x.d));
+  {const fh=$('#fhit');if(fh&&typeof hitPillHtml==='function'){const hh=U.cliv?'':hitPillHtml();if(fh.dataset.h!==hh){fh.innerHTML=hh;fh.dataset.h=hh}}}
   {const fd=$('#fday');const wIn=U.wkF&&U.wkF>=U.week&&U.wkF<U.week+U.win;const hv=U.day&&days.some(x=>x.d===U.day)?`<span class="dpill">Solo ${DOWN[(pd(U.day).getUTCDay()+6)%7].toLowerCase()} ${fmtD(U.day)}<button id="fdayx" aria-label="Ver todos los días" title="Ver todos los días">&times;</button></span>`:wIn?`<span class="dpill">Solo semana ${U.wkF} (${fmtD(weekDays(U.wkF)[0])} – ${fmtD(weekDays(U.wkF)[5])})<button id="fdayx" aria-label="Ver todas las semanas" title="Ver todas las semanas">&times;</button></span>`:'';if(fd.innerHTML!==hv){fd.innerHTML=hv;const bx=$('#fdayx');if(bx)bx.onclick=()=>{U.day='';U.wkF=0;requestRender()}}}
   /* (auditoría de código 08/10, L5) los días de «Solo semana N» se calculan una vez, no por día de cada actividad */
   const cnt={};{const wkS=U.wkF?new Set(weekDays(U.wkF)):null;for(const a of S.act.values()){const ad=Array.isArray(a.days)?a.days:[];if(vset.has(pisoOfAmb(a.ambId))&&(U.day?ad.includes(U.day):wkS?ad.some(d=>wkS.has(d)):ad.some(d=>dset.has(d))))cnt[a.sc]=(cnt[a.sc]||0)+1}}
@@ -199,7 +201,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   /* (auditoría de código 08/10, L12) texto de búsqueda de cada fila: se arma una vez por versión de los datos (DV) */
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
-  const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':''),f:fmtD(x2.d),past:x2.d<=today}));
+  const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':'')+(typeof hitDayCls==='function'?hitDayCls(x2.d):''),f:fmtD(x2.d),past:x2.d<=today}));
   const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';
   /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
      las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
@@ -208,7 +210,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   head+='<thead><tr><th class="fx s0" rowspan="2">Ítem</th><th class="fx s1" rowspan="2">Código</th><th class="fx s2" rowspan="2">Ambiente</th><th class="fx s3" rowspan="2">Subcontratista</th><th class="fx s4" rowspan="2">Actividad</th><th class="fx cU" rowspan="2">Und</th><th class="fx cM" rowspan="2">Metrado</th><th class="fx cS" rowspan="2" title="Metrado total menos lo programado">Saldo</th><th class="fx cN" rowspan="2" title="Días programados">Días</th><th class="fx cI" rowspan="2">Inicio</th><th class="fx cF" rowspan="2">Fin</th>';
   for(let w=U.week;w<U.week+U.win;w++){const wd=weekDays(w);head+=`<th class="wkh${U.wkF===w?' wsel':''}" colspan="6" data-wkh="${w}" title="${U.wkF===w?'Clic para ver todas las semanas':'Clic para ver solo las actividades de la semana '+w}"><b>Sem ${w}</b><span>${fmtD(wd[0])} – ${fmtD(wd[5])}</span></th>`}
   head+='</tr><tr>';
-  days.forEach(x=>{const nw=nwReason(x.d);head+=`<th class="dh${x.i===0?' wk0':''}${x.d===today?' tdy':''}${x.d===U.day?' dsel':''}${nw?' hol':''}" data-dh="${x.d}" title="${nw?esc(nw)+' · ':''}${x.d===U.day?'Clic para ver todas las actividades':'Clic para ver solo las actividades del '+fmtD(x.d)}"><b>${DL[x.i]}</b>${x.d.slice(8)}</th>`});
+  days.forEach(x=>{const nw=nwReason(x.d);head+=`<th class="dh${x.i===0?' wk0':''}${x.d===today?' tdy':''}${x.d===U.day?' dsel':''}${nw?' hol':''}" data-dh="${x.d}" title="${nw?esc(nw)+' · ':''}${x.d===U.day?'Clic para ver todas las actividades':'Clic para ver solo las actividades del '+fmtD(x.d)}"><b>${DL[x.i]}</b>${x.d.slice(8)}${typeof hitMark==='function'?hitMark(x.d):''}</th>`});
   head+='</tr></thead>';
   const rows=[];let shown=0;
   /* faltan programar (Matriz): filas fantasma dentro de cada ambiente; solo con los filtros de piso/sector/SC */
@@ -553,6 +555,7 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
     if(up||down||(e.key==='Enter'&&e.shiftKey)){e.preventDefault();commitField(t);t.dataset.o=t.value;moveFocus(t,up||(e.key==='Enter'&&e.shiftKey)?-1:1)}
   });
   tbl.addEventListener('click',e=>{
+    {const hm=e.target.closest('[data-hito]');if(hm){hitDayPop(hm,hm.dataset.hito);return}}
     const dh=e.target.closest('th[data-dh]');if(dh){if(performance.now()-LKDH_LP<900)return;U.day=U.day===dh.dataset.dh?'':dh.dataset.dh;U.wkF=0;requestRender();return}
     const wh=e.target.closest('th[data-wkh]');if(wh){const w=+wh.dataset.wkh;U.wkF=U.wkF===w?0:w;U.day='';requestRender();return}
     const b=e.target.closest('button,[data-goto-restr],[data-obs]');if(!b)return;
@@ -571,8 +574,8 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
     else if(b.dataset.gotoRestr){U.tab='restr';U.rfilter='pend';U.rAct=b.dataset.gotoRestr;render()}
   });
   /* C-21 (tanda 2): clic derecho en la cabecera de un día (en tablet, mantenerla presionada) → menú del calendario (admin y editores) */
-  tbl.addEventListener('contextmenu',e=>{const th=e.target.closest('th[data-dh]');if(!th||!lkCalOk())return;e.preventDefault();if(performance.now()-LKDH_LP<900)return;LKDH_CM=performance.now();lkDayMenu(th,th.dataset.dh)});
-  tbl.addEventListener('pointerdown',e=>{const th=e.target.closest('th[data-dh]');if(!th||e.pointerType!=='touch'||!lkCalOk())return;const x0=e.clientX,y0=e.clientY;
+  tbl.addEventListener('contextmenu',e=>{const th=e.target.closest('th[data-dh]');if(!th||!lkDayMenuOk())return;e.preventDefault();if(performance.now()-LKDH_LP<900)return;LKDH_CM=performance.now();lkDayMenu(th,th.dataset.dh)});
+  tbl.addEventListener('pointerdown',e=>{const th=e.target.closest('th[data-dh]');if(!th||e.pointerType!=='touch'||!lkDayMenuOk())return;const x0=e.clientX,y0=e.clientY;
     const t=setTimeout(()=>{off();LKDH_LP=performance.now();if(LKDH_LP-LKDH_CM<900)return;lkDayMenu(th,th.dataset.dh)},550);
     const mv=ev=>{if(Math.hypot(ev.clientX-x0,ev.clientY-y0)>10)off()};
     const off=()=>{clearTimeout(t);removeEventListener('pointermove',mv);removeEventListener('pointerup',off);removeEventListener('pointercancel',off)};
@@ -709,10 +712,13 @@ function endPaint(){
 let LKDH_LP=-1e9,LKDH_CM=-1e9; /* hora del último «mantener presionado» (el clic que le sigue no filtra el día) y del último clic derecho */
 const lkCalOk=()=>!!me&&(isAdmin||me.role==='editor')&&!PM()&&!U.cliv&&!(U.ver&&U.verMode==='ver');
 function lkCalSave(fn,label){const c={...(P().cal||{})};fn(c);apply([op('meta','project',{...P(),cal:c})],label)}
-function lkDayMenu(th,d){if(!d||!lkCalOk())return;const c=calInfo();const dw=pd(d).getUTCDay();
+/* P1 (oct 2026): el mismo menú ofrece los hitos (admin, editores y Planificación); el calendario sigue solo para admin y editores */
+const lkDayMenuOk=()=>lkCalOk()||(typeof canHito==='function'&&canHito());
+function lkDayMenu(th,d){if(!d||!lkDayMenuOk())return;const c=calInfo();const dw=pd(d).getUTCDay();const CAL=lkCalOk();
   const base=dw===0?'Domingo':c.hol.has(d)?'Feriado: '+c.hol.get(d):dw===6&&!c.sat?'Sábado no laborable':'';/* sin contar «se trabaja» */
   const nAct=[...S.act.values()].filter(x=>!x._del&&Array.isArray(x.days)&&x.days.includes(d)).length;
   const H={},B=[];
+  if(CAL){
   if(c.work.has(d)){B.push(`<button data-do="nowork">${base?'Volver a no laborable':'Quitar de «días que se trabajan»'}</button>`);
     H.nowork=()=>lkCalSave(k=>{k.work=(k.work||[]).filter(o=>o&&o.d!==d)},`${fmtD(d)}: ${base?'vuelve a ser no laborable':'quitado de los días que se trabajan'}`)}
   else if(base){B.push(`<button data-do="work">Trabajar este día</button>`);
@@ -722,6 +728,9 @@ function lkDayMenu(th,d){if(!d||!lkCalOk())return;const c=calInfo();const dw=pd(
       note:nAct?`${nAct} actividad${nAct>1?'es tienen':' tiene'} ese día programado: no se mueve${nAct>1?'n':''} solas; revísala${nAct>1?'s':''} en el Lookahead.`:'',input:{label:'Nombre (por ejemplo, Feriado regional o Paro)',required:true},ok:'Marcar no laborable',cancel:'Cancelar',tone:'warn'});
       if(!n)return;const nm=String(n).trim().slice(0,60)||'Feriado';lkCalSave(k=>{k.hol=[...(k.hol||[]).filter(o=>o&&o.d!==d),{d,n:nm}].sort((a,b)=>a.d.localeCompare(b.d))},`${fmtD(d)}: no laborable (${nm})`)}}
   if(c.hol.has(d)&&!c.work.has(d)){B.push(`<button data-do="unhol">Quitar el feriado</button>`);H.unhol=()=>lkCalSave(k=>{k.hol=(k.hol||[]).filter(o=>o&&o.d!==d)},`${fmtD(d)}: feriado quitado`)}
+  }
+  if(typeof canHito==='function'&&canHito()){const HL=hitByDay().get(d)||[];if(B.length)B.push('<hr>');B.push('<button data-do="hadd">◆ Agregar hito…</button>');H.hadd=()=>hitEdit(th,null,d);
+    HL.forEach(h=>{B.push(`<button data-do="hed_${esc(h.id)}">Editar hito «${esc(h.n||'')}»…</button>`);H['hed_'+h.id]=()=>hitEdit(th,h.id)})}
   openPop(th,`<div class="ph">${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][(dw+6)%7]} ${fmtD(d)}${base?' · '+esc(base):''}${c.work.has(d)?' · se trabaja':''}</div>${nAct?`<div class="ptx">${nAct} actividad${nAct>1?'es':''} programada${nAct>1?'s':''} ese día.</div>`:''}${B.join('')}`,H)}
 /** Toque en un día «liberado» (la actividad está marcada terminada): reabrirla para que sus días vuelvan a contar */
 function lkReopen(x){const dn=DONE.get(x.id);if(!dn)return;if(cliOn()){toast(`“${x.name}” está terminada en obra (${fmtD(dn)}): eso no se cambia desde la versión cliente.`);return}
