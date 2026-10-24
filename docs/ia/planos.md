@@ -152,3 +152,13 @@ Para ver el plano mientras se edita el lookahead sin salir de él. Se eligió ac
 - **Sigue al piso:** `plDockFollow()` (desde `renderLook`): si cambia `U.piso`, salta a la lámina de la misma especialidad y tipo del piso nuevo (`plPickFor(piso, actual)`, título más parecido) conservando zona y zoom (`plJump(id, true)`).
 - Se cierra al salir de la pestaña Lookahead (`render` en base.js). En celular no se acopla.
 - Prueba: `lookahead-metrado.spec.js` › «plano del piso al lado del lookahead…».
+
+## ETO de subcontratistas (oct 2026, decidido con el dueño)
+
+Planos de taller **aprobados** de los SC (p. ej. elevaciones de mamparas de Cánovas). Formatos muy diversos: no se lee nomenclatura del proyecto ni se vinculan; se organizan **por SC**.
+- **Interruptor «Proyecto / ETO de subcontratistas»** (`.plsrc`, `PLF.src`) en la biblioteca y en Cargar planos (este último solo admin). En ETO: filtros SC + piso + buscador; lista agrupada por SC (`etoScName`, color del SC).
+- **Datos:** Firestore `eto/{id}`, `id = ETO_<sc>_<cod>` (sin código: `S<hash del archivo>`); mismos campos de mosaicos que `plb` + `sc`, `disc:'ETO'`, `tipo:'ETO'`; sin `lk`. Storage `etos/<sc>/<id>.<marca>/r<rev>/`. En memoria van en `PLB` con `eto:true`; `plAct()` los **excluye** (dock del lookahead, Mismo punto, ▲▼, vínculos y propuestas siguen solo con el proyecto); `etoAct()` los lista. `plCol(p)` / `plEdOf(p)` eligen colección y permiso de escritura (editar, archivar, calibrar, eliminar).
+- **Quién:** carga, edita, calibra y borra solo el admin (reglas `etoOk`, `isAdmin()`). Leen todos los que ven Planos; el **SC solo los de su partida** (`resource.data.sc in scsOf()`; la app los pide con `scSubs('eto')`; Storage `etos/{sc}/…` con `sc in scsSt()`).
+- **Carga:** `etoParse(fname)` saca piso (`N3`, `P03`, `PISO 3`), un código corto al final (`M02`) y un título; el SC se elige arriba (`#etosc`, `PQ.sc`) y se aplica a los pendientes; todo se corrige en la tabla. Mismo SC + código = nueva revisión. Recorte al marco igual que el proyecto; no se fuerza 1200 × 900 ni escala nominal 1/100 (`plmNominal` devuelve 0).
+- Visor: sin ☰ Planos, sin Mismo punto ni vínculos; ‹ › recorren la lista filtrada.
+- Pruebas: `planos.spec.js` › «ETO: …» (carga y agrupado; el SC solo ve los suyos) y reglas «ETO: …».
