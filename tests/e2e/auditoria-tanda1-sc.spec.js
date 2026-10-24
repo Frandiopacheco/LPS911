@@ -51,7 +51,7 @@ test('C-28 · restaurar una actividad cuyo SC está en la Papelera recupera tamb
 });
 
 /* C-30 / DAT-04 (a) */
-test('C-30a · pasar una fila a otro SC no hace desaparecer el cierre (y el «Culminado») que su capataz reportó días antes', async ({ page }) => {
+test('C-30a · pasar una fila a otro SC no hace desaparecer el cierre que su capataz reportó días antes (su «Culminado» no cuenta como terminada: tanda 1)', async ({ page }) => {
   const D0 = '2026-09-29';
   const Z4 = ['acts', 'z4', { ambId: 'a1', sc: 'c1', name: 'Detección de incendio', und: 'pto', days: [D0, '2026-09-30', HOY, MANANA], order: 50 }];
   const LV = ['live', `${D0}_z4`, { date: D0, pisoId: 'p1', actId: 'z4', sc: 'c1', close: { status: 'ok', done: true, by: 'u_cap1', n: 'Capataz SANITARIAS', t: Date.parse(D0 + 'T16:30:00-05:00') } }];
@@ -62,12 +62,12 @@ test('C-30a · pasar una fila a otro SC no hace desaparecer el cierre (y el «Cu
   await expect.poll(() => page.evaluate(d => LIVE.has(d + '_z4'), D0)).toBe(true);
   await page.evaluate(() => doneRebuild());
   const antes = await page.evaluate(d => ({ rec: !!recOf(d, 'z4'), done: DONE.get('z4') || null }), D0);
-  expect(antes, 'control').toEqual({ rec: true, done: D0 });
+  expect(antes, 'control: el cierre cuenta; el «Culminado» del capataz no es terminada').toEqual({ rec: true, done: null });
   await page.evaluate(() => apply([op('acts', 'z4', { ...S.act.get('z4'), sc: 'c2' })]));
   await expect.poll(() => page.evaluate(() => S.act.get('z4').sc)).toBe('c2');
   await page.evaluate(() => doneRebuild());
   const despues = await page.evaluate(([d, h]) => ({ rec: !!recOf(d, 'z4'), sc: (recOf(d, 'z4') || {}).sc, done: DONE.get('z4') || null, hoy: !!recOf(h, 'z4') }), [D0, HOY]);
-  expect(despues, 'el cierre del 29-sep sigue contando, a nombre del SC de ese día; el de hoy (otro SC, sin plan) no').toEqual({ rec: true, sc: 'c1', done: D0, hoy: false });
+  expect(despues, 'el cierre del 29-sep sigue contando, a nombre del SC de ese día; el de hoy (otro SC, sin plan) no').toEqual({ rec: true, sc: 'c1', done: null, hoy: false });
   // con el plan de hoy publicado a nombre de c1 (dplan.who), el cierre de hoy también es de su SC
   await page.evaluate(h => { DPL.set(h + '_p1', { date: h, pisoId: 'p1', ids: { z4: null }, who: { z4: { sc: 'c1', amb: 'a1' } } }); }, HOY);
   expect(await page.evaluate(h => !!recOf(h, 'z4'), HOY)).toBe(true);
