@@ -31,3 +31,5 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Pósits nuevos con «exigir catálogo» y nombre fuera del catálogo: no se crean (aviso).
 - Choques que quedan: casilla para crear restricciones `pend` (TAREA PREDECESORA; MATERIALES si es un hito de ingreso) amarradas a la actividad que depende.
 - Después de aplicar, la sesión se re-alinea (`base`, `d0/dur`, los nuevos pasan a `src`) para usarla la semana siguiente.
+
+- **Hitos del lookahead** (oct 2026): el panel de hitos ofrece los hitos de `hitos` abiertos del piso de la sesión o de toda la obra (`hitForPull`); tocar uno lo copia a `h` con `ref` (inicio → ingreso, fin → entrega). Ver `lookahead.md` «Hitos».

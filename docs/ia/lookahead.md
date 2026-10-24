@@ -71,3 +71,13 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 - Prueba: `tests/e2e/auditoria-tanda2-look.spec.js`.
 
 - **Fila y columna bajo el puntero** (19/10, como en la Matriz; solo con mouse, `mxPC()`): la fila con `tr:hover`, el día con la regla `#lkhovst` (`lkHov` en `wireGrid`), usando `box-shadow` inset para no tapar los colores de las barras.
+
+## Hitos de inicio y fin (P1, `js/hitos.js`, oct 2026, decidido con el dueño)
+- Colección `hitos/{id}` `{n, tipo:'ini'|'fin', d, d0, piso ('' = toda la obra), h:[{from,to,by,n,t}], st:'open'|'done', real, by, bn, t, arch?}` (ver `datos.md`). Suscripción propia y perezosa `ensureHitos()` (Lookahead, Cliente, Sesión pull); mapa `HIT`, versión `HITV`.
+- **Sin vinculación a actividades** (decisión del dueño): la revisión contra el hito es manual. Inicio = desde ahí recién se puede empezar (p. ej. llegada de importados); fin = fecha necesaria o contractual.
+- **Quién:** `canHito()` = admin, editor o área «Planificación» (`isPlanArea()`: rol `area` con área que contiene «Planificación»), fuera de modo propuesta, versión cliente y versión guardada. Los demás (SC incluidos) los ven. Reglas `match /hitos/{id}`: leer `lpsMember()`; crear/editar `canEdit() || isPlan()` con `tipo` en `ini|fin`, `d` y `n` texto; borrar solo admin (la app archiva).
+- **Crear:** clic derecho en la cabecera del día (en tablet, mantener) → `lkDayMenu`, que ahora abre con `lkDayMenuOk()` = `lkCalOk() || canHito()`; las opciones del calendario siguen solo con `lkCalOk()` (Planificación ve solo las de hitos). Formulario en `openPop` (`hitEdit`/`hitSave`): nombre, tipo, alcance (obra o piso; por defecto `U.piso`) y fecha.
+- **Ver:** rombo en la cabecera (`hitMark`, `.hmk`, verde inicio, rojo fin, gris cerrado); tocarlo abre `hitDayPop` (editar, cerrar con fecha real, archivar); la línea de la columna va en `DI.post` (`hitDayCls` → `td.d.hli`/`hlf`, `box-shadow` opaco). Píldora `#fhit` «◆ Hitos N» (`hitPillHtml`, `hitListPop`: lista con días hábiles que faltan, cambios de fecha e «Ir» a la semana). Índice por día `hitByDay()` con caché por `HITV|U.piso`.
+- **Cambiar la fecha** agrega `{from,to}` a `h` y conserva `d0`. El hito corto por ambiente («FC», `ambientes.hito`) es otra cosa (hitos internos de los ingenieros) y no cambió.
+- Sesión pull: «Hitos del lookahead» en el panel de hitos (`hitForPull`, `data-puhl`) copia el hito a la sesión (`ini` → ingreso, `fin` → entrega, `ref` = id).
+- Pruebas: `tests/e2e/hitos.spec.js` y reglas «hitos: …».

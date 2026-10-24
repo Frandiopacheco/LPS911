@@ -11,7 +11,7 @@ const PUL=new Map();let pulUn=null,pulErr=null;
 const PU={sid:'',amb:'',sel:'',selL:'',ghost:false,fs:false,drag:null,rev:false,add:null,hitos:false,newS:null,undo:[],pend:false,apOv:false,apRs:true};
 const pulEd=()=>!!me&&(me.role==='admin'||me.role==='editor');
 const PU_W=()=>PU.fs?64:56, PU_LW=180, PU_HH=50;
-function ensurePull(){if(!db||pulUn||!pulEd())return;
+function ensurePull(){if(typeof ensureHitos==='function')ensureHitos();if(!db||pulUn||!pulEd())return;
   pulUn=fcol('pull').onSnapshot(sn=>{PUL.clear();sn.docs.forEach(d=>PUL.set(d.id,{...d.data(),id:d.id}));pulErr=null;if(U.tab==='pull'){if(PU.drag)PU.pend=true;else requestRender()}},
     e=>{pulErr=e&&e.code||'error';if(U.tab==='pull')requestRender()});
   unsubs.push(()=>{if(pulUn)pulUn();pulUn=null;PUL.clear()})}
@@ -155,7 +155,10 @@ function puHitosPop(s){const H=Object.entries(s.h||{}).sort((a,b)=>String(a[1].d
     ${H.map(([hid,h])=>`<div class="puhr"><i class="pudm ${h.tipo}" aria-hidden="true"></i><label class="pusr" for="puhn-${esc(hid)}">Nombre del hito</label><input id="puhn-${esc(hid)}" class="tin" data-puhn="${esc(hid)}" value="${esc(h.n||'')}">
       <span class="seg"><button type="button" class="${h.tipo==='ingreso'?'on':''}" data-puht="${esc(hid)}|ingreso">Ingreso</button><button type="button" class="${h.tipo==='entrega'?'on':''}" data-puht="${esc(hid)}|entrega">Entrega</button></span>
       <label class="pusr" for="puhd-${esc(hid)}">Fecha</label><input id="puhd-${esc(hid)}" type="date" class="tin" data-puhdt="${esc(hid)}" value="${esc(h.d||'')}"><button class="ib dng" data-puhx="${esc(hid)}" aria-label="Quitar hito">×</button></div>`).join('')||'<div class="mu">Sin hitos todavía.</div>'}
-    <div class="purw"><button class="ib" data-pu="addh">+ Hito</button><span class="mu">Ingreso = no se puede empezar antes (llegada de equipos). Entrega = hay que terminar antes (fecha contractual).</span></div></div>`}
+    <div class="purw"><button class="ib" data-pu="addh">+ Hito</button><span class="mu">Ingreso = no se puede empezar antes (llegada de equipos). Entrega = hay que terminar antes (fecha contractual).</span></div>
+    ${(()=>{/* P1 (oct 2026): los hitos del lookahead (inicio = ingreso, fin = entrega) se traen con un toque; queda una copia en la sesión (ref) */
+      if(typeof hitForPull!=='function')return'';const used=new Set(Object.values(s.h||{}).map(h=>h&&h.ref).filter(Boolean));const L=hitForPull(s.piso,used);
+      return L.length?`<div class="puhlk"><span class="pulb">Hitos del lookahead</span>${L.map(h=>`<button class="ib" data-puhl="${esc(h.id)}" title="Agregar a la sesión como hito de ${h.tipo==='ini'?'ingreso':'entrega'}"><i class="pudm ${h.tipo==='ini'?'ingreso':'entrega'}" aria-hidden="true"></i> ${esc(h.n||'')} · ${fmtD(h.d)}</button>`).join('')}</div>`:''})()}</div>`}
 function puAddDlg(s){const A=PU.add;const scs=[...S.con.values()].filter(c=>!c.arch&&c.name).sort((a,b)=>PU_ORD(a.id)-PU_ORD(b.id)||a.name.localeCompare(b.name,'es'));
   const live=Object.values(s.ps||{}).filter(p=>!p.del&&p.amb===PU.amb);
   const sug=A.sc&&typeof mxCatAct==='function'?mxCatAct().filter(c=>(typeof mxScsOf==='function'?mxScsOf(c):[c.sc]).includes(A.sc)).map(c=>c.name).filter(n=>!live.some(p=>p.sc===A.sc&&mnk(p.n)===mnk(n))).sort((a,b)=>a.localeCompare(b,'es')).slice(0,24):[];
@@ -237,6 +240,7 @@ function puWire(main){
     if((b=t.closest('[data-puhc]'))&&ed&&s){const k=b.dataset.puhc;if((s.ln||{})[k]){puWrite({['ln.'+k]:undefined});toast('Se quitó el vínculo con el hito.')}else{const i=k.indexOf('>');puLink(k.slice(0,i),k.slice(i+1))}return}
     if((b=t.closest('[data-puht]'))&&ed){const[hid,tp]=b.dataset.puht.split('|');puWrite({['h.'+hid+'.tipo']:tp});return}
     if((b=t.closest('[data-puhx]'))&&ed&&s){const hid=b.dataset.puhx;const upd={['h.'+hid]:undefined};puLinks(s).forEach(l=>{if(l.a==='H:'+hid||l.b==='H:'+hid)upd['ln.'+l.k]=undefined});puWrite(upd);toast('Hito quitado (Deshacer lo devuelve).');return}
+    if((b=t.closest('[data-puhl]'))&&ed&&s){const h=typeof HIT!=='undefined'&&HIT.get(b.dataset.puhl);if(h){const hid=uid('h').replace(/-/g,'');puWrite({['h.'+hid]:{n:h.n||'Hito',tipo:h.tipo==='ini'?'ingreso':'entrega',d:h.d,ref:h.id}});toast(`Hito «${h.n}» agregado a la sesión`)}return}
     if((b=t.closest('[data-pusc]'))){PU.add.sc=b.dataset.pusc;requestRender();return}
     if((b=t.closest('[data-pusg]'))){PU.add.n=b.dataset.pusg;requestRender();return}
     if((b=t.closest('[data-puadd]'))&&ed){PU.add={sc:b.dataset.puadd,n:''};requestRender();return}
