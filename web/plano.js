@@ -124,7 +124,7 @@ function renderMapa(main){mdotsWire();ensureLam();/* C-11: el tren del catálogo
   const L0=lamsOf(M.piso);const BS=basesOf(M.piso);if(!BS.some(b=>b.id===M.vista)){const sl=LAM.get(M.sel);M.vista=(sl&&sl.pisoId===M.piso&&vistaOf(sl))||(BS[0]||{}).id||''}
   const base=(LAM.get(M.vista)||{}).pisoId===M.piso?LAM.get(M.vista):null;const L=base?L0.filter(l=>vistaOf(l)===base.id):L0;if(!L.some(l=>l.id===M.sel))M.sel=(base||L[0]||{}).id||'';const cur=LAM.get(M.sel);
   {const sd=typeof curDay==='function'?curDay():todayIso();if(!M.date)M.date=sd;else if(M.date!==sd&&pd(sd).getUTCDay()!==0){zcClose();M.date=sd;M.selId=null;M.tmp=null;M.pend=null}}ensurePlan();hSync();if(typeof ensureDaily==='function')ensureDaily(addD(M.date,-11));pmSync();
-  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mscrow" id="msc" hidden></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';main.addEventListener('toggle',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('mrdy'))M.rdyOpen=t.open},true);M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
+  if(!main.dataset.built){main.innerHTML=`<div class="view mapa"><div class="bar" id="mbar"></div><div class="mscrow" id="msc" hidden></div><div class="mnote" id="mnote"></div><div class="mbody"><aside class="mpanel" id="mpanel"></aside><div class="mwrap"><div class="mstage" id="mstage"></div><div class="mtools" id="mtools"></div><div class="mhint" id="mhint"></div><div class="mprops" id="mprops" hidden></div><div class="mmbar" id="mmbar" hidden></div><aside class="mcard" id="mcard" hidden></aside><div class="mrs" id="mrs"><aside class="mpdb" id="mpdb" hidden></aside><aside class="mfzb" id="mfzb" hidden></aside><aside class="mcxb" id="mcxb" hidden></aside><aside class="mchb" id="mchb" hidden></aside><aside class="msemb" id="msemb" hidden></aside></div><div class="mcqb" id="mcqb" hidden></div><div class="mlgd" id="mleg" hidden></div><div class="mcleg" id="mcleg" hidden></div><div class="mempty" id="mempty"></div></div></div></div>`;main.dataset.built='1';main.addEventListener('toggle',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('mrdy'))M.rdyOpen=t.open},true);M.view=null;M.vpiso=null;if(M.panel==null)M.panel=innerWidth>=900}
   const bar=$('#mbar');
   const today=todayIso();const dw=DOWN_[(pd(M.date).getUTCDay()+6)%7];
   const hb=`<span class="dnav"><button class="ib" data-mdd="-1" aria-label="Día anterior">&#8249;</button><b>${dw} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" aria-label="Día siguiente">&#8250;</button>${M.date!==today?'<button class="ib" data-mdd="0">Hoy</button>':''}</span>${U.piso?'':`<select id="mpiso" aria-label="Piso">${ps.map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>`}
@@ -647,6 +647,7 @@ function zcPlanHtml(x,a){const N=nbMap();const nv=shapesOf(M.piso).find(z=>z.kin
   const rs=typeof restrPend==='function'?restrPend(x.id):[];
   return`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
     <p class="zcm">${dvLbl(M.date)}${hasQ(x)?` · ${fq((x.qty||{})[M.date])} ${esc(x.und||'')}`:''}${CQ?` · cuadrilla <b>${esc(CQ.t)}</b>`:''}</p>
+    ${typeof semActLine==='function'?semActLine(x.id,M.piso,M.date):''}
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${(()=>{try{computeCross()}catch(e){}const ids=shapesV(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).map(z=>z.id);return cxInfoHtml(cxOfIds(ids),'data-zcx2')})()}
     ${nv?`<div class="zcst" style="--c:#c62828"><b>✗ No va</b><span>${esc(nv.motivo||'')}${nv.repTo?' · → '+fmtD(nv.repTo):''}</span></div>${(nv.k||nv.eng?dzEng():can)?`<button class="lnkb" data-undo="${nv.id}">Vuelve a ir</button>`:''}`
@@ -951,7 +952,7 @@ function mrsFit(){const rs=$('#mrs'),lg=$('#mleg'),w=rs&&rs.parentElement;if(!rs
    acoplado a la derecha (PC y tablet: el plano se achica, nada flota encima) o como hoja inferior en el celular ---------- */
 M.cxOpen=true;M.pdOpen=true;M.chOpen=true;
 /* oct 2026: el panel derecho solo lleva lo que se decide (Por decidir, Cambios y «Listo para la reunión»). Los cruces se ven en el plano (modo Interferencias), Equipos va en la franja de abajo y la leyenda se quitó (los SC están en la fila de arriba) */
-const DOCK0=[['mpdb','Por decidir'],['mcxb','Cruces'],['mchb','Cambios']];
+const DOCK0=[['mpdb','Por decidir'],['mcxb','Cruces'],['mchb','Cambios'],['msemb','Semana']];
 /* Cruces solo mientras se revisan: modo Interferencias, la reunión (Plan) o el subcontratista (que no tiene modos) */
 const cxDock=()=>!pmEng()||pmode()==='cx'||(!!M.meet&&M.mmode==='plan')||!!M.rvx;
 let DOCK=DOCK0;
@@ -1339,7 +1340,7 @@ function renderPlan(main,cur,base){
         return`<div class="mpdi" style="--c:${conOf(p.sc).color}"><button class="mpdt" data-see="${(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===y.id)||{}).id||''}"><span class="mono">${esc(ay?ay.code:'')}</span> ${esc(short(y.name,30))}<small>${esc(conOf(p.sc).name)} · ${esc(dpText(p))}</small></button>${eng?`<span class="dzpb"><button class="ib pri" data-dpa="${p.id}" title="Decidir: aceptar lo propuesto o mantener que va">Revisar</button></span>`:''}</div>`}).join('')}</div>`}
     const pb=$('#mpdb');if(pb){if(pb.dataset.h!==ph){pb.innerHTML=ph;pb.dataset.h=ph}pb.hidden=!ph}}
   {const box=(id,h_)=>{const el=$('#'+id);if(!el)return;if(el.dataset.h!==h_){el.innerHTML=h_;el.dataset.h=h_}el.hidden=!h_};
-    box('mchb',chHtml(M.meet?M.meetSc:sc));box('mfzb',fzBoxHtml(role,M.meet?M.meetSc:SF.join(',')));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
+    box('mchb',chHtml(M.meet?M.meetSc:sc));box('msemb',typeof semDockHtml==='function'?semDockHtml(M.piso,M.date,M.meet?M.meetSc:SF.join(','),aid=>(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===aid)||{}).id||''):'');if(typeof semPresRefresh==='function')semPresRefresh();box('mfzb',fzBoxHtml(role,M.meet?M.meetSc:SF.join(',')));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
   h+=fzCardHtml(role,sc);
   const dcan=dzCan;let lastS='';
   h+=`<div class="mp-list dzl">${L.map(({x,a,s})=>{const zs=zBy[x.id],nv=nBy[x.id];const can=dcan(x);const geoOk=a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6);
@@ -2057,7 +2058,10 @@ function dzAdd(btn){const sc=M.scDraw;const mine=myRole()==='sc'?myScs():null;
   const MAXB=150;const list=q=>{const F=L.map((o,i)=>[o,i]).filter(([o])=>!q||o.q.includes(q));return F.slice(0,MAXB).map(([o,i])=>`<button data-do="a${i}" data-q="${esc(o.q)}"><b>${esc(o.a.code)}</b> ${esc(short(o.x.name,34))} <kbd>${esc(conOf(o.x.sc).name)}${nx(o.x)}</kbd></button>`).join('')+(F.length>MAXB?`<div class="ptx">… y ${F.length-MAXB} más: escribe para afinar la búsqueda</div>`:F.length?'':'<div class="ptx">Nada coincide.</div>')};
   openPop(btn,`<div class="ph">Programar el ${fmtD(M.date)}</div><div class="qrow"><input id="dzq" placeholder="Buscar ambiente o actividad" style="width:260px;text-align:left" aria-label="Buscar"></div><div class="dzpl">${list('')}</div>`,h);
   setTimeout(()=>{const i=$('#dzq');if(i){i.focus();i.oninput=()=>{const el=$('#pop .dzpl');if(el)el.innerHTML=list(i.value.trim().toLowerCase())}}},0)}
-function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;if(lockStop(t))return true;
+function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
+  /* P23: presentación de «Semana» (solo lectura: va antes del candado del plan cerrado) */
+  if((b=g('[data-semp]'))){if(typeof semPresOpen==='function')semPresOpen(M.piso,M.date,M.meet?M.meetSc:scSel_().join(','));return true}
+  if(lockStop(t))return true;
   if((b=g('[data-dzsc]'))){const c=b.dataset.dzsc;
     if((e.ctrlKey||e.metaKey)&&c&&myRole()!=='sc'){const L=scSel_();const n=L.includes(c)?L.filter(x=>x!==c):[...L,c];M.scDraw=n[0]||'';M.scX=n.slice(1)}
     else{M.scDraw=c;M.scX=[]}
