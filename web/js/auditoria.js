@@ -154,22 +154,23 @@ function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
       const x={id,ambId:rc.ambId,sc:rc.sc||'',name:rc.nm||'(actividad borrada)',und:rc.und||'',days:[doc.date],gone:true};const c=ctx(x);if(!c)continue;
       rows.push({...c,x,d:doc.date,rc:{...rc},sched:true,sc:x.sc,arch:true});seen.add(id+'|'+doc.date)}}}
-const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción'};
+const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción',contractors:'Subcontratista'};
 let ARCQ='';
-function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
+function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res'],['contractors','con']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
 function archLabel(col,v){if(col==='acts'){const a=ambOf(v.ambId);return`${esc(v.name||'sin nombre')} <span class="mu">· ${esc(conOf(v.sc).name)} · ${esc(a?a.code:'')}${(v.days||[]).length?' · '+esc(rngTxt(v.days)):''}</span>`}
   if(col==='restr'){const x=actOf(v.actId);return`${esc(v.type||'')}${v.desc?' · '+esc(v.desc):''} <span class="mu">· ${esc(x?x.name:'sin actividad')}${v.resp?' · '+esc(v.resp):''}</span>`}
+  if(col==='contractors')return`${esc(v.name||'sin nombre')}${v.partida?` <span class="mu">· ${esc(v.partida)}</span>`:''}`;
   if(col==='ambientes')return`${esc(v.code||'')} ${esc(v.name||'')}`;return`${esc(v.code||'')} · ${esc(v.name||'')}`}
 function archCard(){if(!canWrite||PM())return'';const L=archList();const q=ARCQ.trim().toLowerCase();const F=q?L.filter(o=>(String(o.v.name||'')+' '+String(o.v.code||'')+' '+(o.col==='acts'?conOf(o.v.sc).name:'')+(o.col==='restr'?' '+(o.v.type||'')+' '+(o.v.desc||'')+' '+(o.v.resp||''):'')).toLowerCase().includes(q)):L;
   return`<div class="card" id="arccard"><h2>Papelera <span class="sub">${L.length} elemento${L.length===1?'':'s'} eliminado${L.length===1?'':'s'}</span></h2><div class="pad">
-   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
+   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead (y los subcontratistas que quitas en Configuración) queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
    ${L.length?`<input class="tin" id="arcq" placeholder="Buscar por nombre, código o subcontratista" value="${esc(ARCQ)}" style="width:min(420px,100%);margin-bottom:8px">
    <div class="tscroll"><table class="t"><thead><tr><th>Tipo</th><th>Elemento</th><th>Eliminado</th><th></th></tr></thead><tbody>
    ${F.slice(0,150).map(({col,v})=>`<tr><td>${ARCN[col]}</td><td>${archLabel(col,v)}</td><td class="mu">${esc(fmtD(ldt(v.arch.t)))} ${hhmm(v.arch.t)} · ${esc((v.arch.n||v.arch.by||'').split(' ')[0])}</td><td><button class="ib" data-arcr="${col}|${esc(v.id)}" style="height:26px;font-size:12px">Restaurar</button></td></tr>`).join('')}
    </tbody></table></div>${F.length>150?`<p class="note">Se muestran 150 de ${F.length}. Usa el buscador.</p>`:''}`:'<p class="note">Vacía.</p>'}</div></div>`}
 function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const t=v.arch.t;const ops=[];const un=(c,x)=>{const n={...strip(x),id:x.id};delete n.arch;ops.push(op(c,x.id,n))};
   // hacia arriba: lo que lo contiene
-  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a)}
+  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a);const c=ARCH.con.get(v.sc);if(c)un('contractors',c)/* su SC, si está en la Papelera (C-28) */}
   const amb=col==='ambientes'?v:col==='acts'?ambOf(v.ambId):null;const sec=col==='sectors'?v:amb?secOf(amb.sectorId):null;
   if(sec&&col!=='sectors'&&ARCH.sec.has(sec.id))un('sectors',sec);const pid=col==='pisos'?id:sec?sec.pisoId:null;if(pid&&col!=='pisos'&&ARCH.pis.has(pid))un('pisos',ARCH.pis.get(pid));
   un(col,v);

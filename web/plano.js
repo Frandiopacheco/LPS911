@@ -612,7 +612,7 @@ function restrQuick(anchor,x){const types=P().restrTypes||[];const need=M.date;
     <label class="chk" style="padding:2px 10px 6px"><input type="checkbox" id="rqno" checked> Además: no se hará hoy</label>
     <button data-do="ok" class="pri">Registrar</button><button data-do="no">Cancelar</button>`,
    {no:()=>{},ok:()=>{const desc=($('#rqd')||{}).value||'';if(!desc.trim()){toast('Describe qué falta liberar.');return}const id=uid('res');const nov=!!($('#rqno')||{}).checked;
-     apply([op('restr',id,{id,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#rqt')||{}).value||'',desc:desc.trim(),resp:conOf(x.sc).name,need:($('#rqn')||{}).value||'',freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción registrada');
+     apply([op('restr',id,{id,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#rqt')||{}).value||'',desc:desc.trim(),resp:conOf(x.sc).name,...(x.sc?{respSc:x.sc}:{}),need:($('#rqn')||{}).value||'',freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción registrada');
      if(nov)setTimeout(()=>M.date>todayIso()?noVa(anchor,x,{k:'int',desc:'Restricción registrada: '+desc.trim()}):novaDialog(anchor,x,{motivo:'Restricción',title:'Restricción · no se hará hoy'}),0)}});
   setTimeout(()=>{const i=$('#rqd');if(i)i.focus()},30)}
 /* ---------- ventana de detalle de cumplimiento (modo Cumplimiento y modo reunión) ---------- */
@@ -1543,7 +1543,7 @@ async function pubPlan(){if(PUBBUSY||!db)return;const D=draftsOf();const PA=padd
         if(rk)nx.rpl={...(y.rpl||{}),[rk]:{to:j===0?zz.repTo:wshift(rk,n),m:zz.motivo||'',...ca,...(j?{tr:zz.actId}:{})}};W.set(id,nx)}
       if(hold)return{held,blocked:true};
       /* toda reprogramación queda registrada en Restricciones con su causa (el tipo sale de la causa, no del primero de la lista) */
-      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid='res-'+zz.id;/* id fijo por borrador: dos publicaciones del mismo cambio nunca crean dos restricciones */restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:zz.rt||restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
+      let rid='';if(zz.k&&Object.keys(mv).length){const x=A.get(zz.actId);rid='res-'+zz.id;/* id fijo por borrador: dos publicaciones del mismo cambio nunca crean dos restricciones */restrs.push({id:rid,actId:zz.actId,pisoId:pisoOfAct(zz.actId),type:zz.rt||restrTypeFor(zz.c||''),desc:zz.rdesc||zz.motivo||'',resp:zz.rsc?conOf(zz.rsc).name:'',...(zz.rsc?{respSc:zz.rsc}:{}),need:zz.repTo,freed:'',status:'pend',created:todayIso(),sc:x?x.sc:zz.sc,by:me.email,byName:me.name||'',via:'plan diario',...(zz.c?{cnc:zz.cnc||'',ccode:zz.c,imp:zz.imp!==false,rsc:zz.rsc||'',pc:!!zz.pc}:{})})}
       out.push({id:zz.id,mv,rid,date:zz.date,aid:zz.actId,k:zz.k||''})}
     /* lo agregado al plan (padd): reprogramar / adelantar a este día o actividad nueva */
     const paOut=[],newActs=[];for(const zz of Pz){
@@ -2022,7 +2022,7 @@ function dzRes(btn,x){const types=P().restrTypes||[];
     <div class="qrow"><select id="dzrr" style="width:170px" aria-label="Responsable">${typeof respOpts==='function'?respOpts(conOf(x.sc).name):''}</select><input type="date" id="dzrn" value="${M.date}" aria-label="Para cuándo"></div>
     <button data-do="ok" class="pri">Guardar · no va</button>`,
     {ok:()=>{const desc=($('#dzrd')||{}).value?.trim()||'';if(!desc){toast('Escribe qué falta.');return}const rid=uid('res');
-      apply([op('restr',rid,{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#dzrt')||{}).value||'',desc,resp:($('#dzrr')||{}).value||'',need:($('#dzrn')||{}).value||M.date,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción creada');
+      apply([op('restr',rid,{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:($('#dzrt')||{}).value||'',desc,resp:($('#dzrr')||{}).value||'',...(respScOf(($('#dzrr')||{}).value)?{respSc:respScOf(($('#dzrr')||{}).value)}:{}),need:($('#dzrn')||{}).value||M.date,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||''})],'Restricción creada');
       const id=uid('pz');rec([addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'nova',actId:x.id,ambId:x.ambId,motivo:'Restricción: '+desc,repTo:'',by:me.email,byName:me.name||me.email,ts:NOW()})]);dzLog(`⛔ ${x.name}: ${desc}`);requestRender()}});
   setTimeout(()=>{const i=$('#dzrd');if(i)i.focus()},0)}
 /* programar en este día una actividad del lookahead que no estaba programada */

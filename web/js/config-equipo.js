@@ -107,7 +107,11 @@ function renderCfg(main){
     else if(t.dataset.c&&t.dataset.f==='esp'){const c=S.con.get(t.dataset.c);espPick(t,c.esp).then(v=>{if(v==null||v===(c.esp||''))return;const cur=S.con.get(c.id);if(cur)apply([op('contractors',c.id,{...cur,esp:v})],`${cur.name}: especialidad «${espN(v)||'—'}»`)})}
     else if(t.dataset.c&&t.dataset.f==='tbd'){const c=S.con.get(t.dataset.c);if(!c)return;const on=!!t.checked;const n={...c};if(on)n.tbd=true;else delete n.tbd;
       apply([op('contractors',c.id,n)],`${c.name}: ${on?'sin asignar (no se le mide cumplimiento)':'vuelve a contar como subcontratista'}`)}
-    else if(t.dataset.c){const c=S.con.get(t.dataset.c);let v=t.value;if(t.dataset.f==='name'){v=v.trim().toUpperCase();if(!v){t.value=c.name;return}}apply([op('contractors',c.id,{...c,[t.dataset.f]:v})])}
+    else if(t.dataset.c){const c=S.con.get(t.dataset.c);let v=t.value;if(t.dataset.f==='name'){v=v.trim().toUpperCase();if(!v){t.value=c.name;return}}
+      /* C-30/DAT-04 (b): al renombrar, las restricciones a cargo de esa empresa (por id `respSc`, o las antiguas por su nombre) pasan al
+         nombre nuevo, para que su SC las siga viendo como suyas y los filtros no las separen */
+      const ro=t.dataset.f==='name'&&v!==c.name?restrRespRename(c.id,c.name,v):[];
+      apply([op('contractors',c.id,{...c,[t.dataset.f]:v}),...ro],ro.length?`${c.name} → ${v} (y ${ro.length} restricci${ro.length===1?'ón':'ones'} a su cargo)`:undefined)}
     else if(t.dataset.l){saveP({[t.dataset.l]:t.value.split('\n').map(x=>x.trim()).filter(Boolean)})}
     else if(t.dataset.tname!=null){saveT(a=>{a[+t.dataset.tname].name=t.value.trim()||'Plantilla'})}
     else if(t.dataset.tsc){const[i,j]=t.dataset.tsc.split(':').map(Number);saveT(a=>{a[i].acts[j].sc=t.value})}
@@ -117,7 +121,9 @@ function renderCfg(main){
     if(b.dataset.cncstd){saveP({cnc:CNC_STD.map(o=>o.n),cncStd:CNC_STD_V});toast('Causas: cuadro de la empresa (los registros anteriores conservan su causa).');return}
     if(b.dataset.cimpc!=null){saveP({cncImp:{...(P().cncImp||{}),[b.dataset.cimpc]:b.dataset.v==='1'}});return}
     if(b.dataset.tuse!=null){const ta=b.closest('[data-ta]');if(ta){const[i,j]=ta.dataset.ta.split(':').map(Number);saveT(a=>{a[i].acts[j].name=b.dataset.tuse})}return}
-    if(b.dataset.cdel)apply([op('contractors',b.dataset.cdel,null)],'Subcontratista eliminado');
+    /* C-28/DAT-01 (oct 2026): «×» archiva el SC (Papelera), nunca lo borra: semanas congeladas, Campo, restricciones, liberaciones
+       y usuarios siguen mostrando su nombre, y se puede restaurar */
+    if(b.dataset.cdel){const c=S.con.get(b.dataset.cdel);const o=c&&arc('contractors',c.id);if(o)apply([o],`Subcontratista ${c.name} eliminado (queda en Configuración › Papelera; su historial no cambia)`)}
     else if(b.id==='cadd'){const id=uid('c');apply([op('contractors',id,{id,name:'NUEVO',partida:'',color:'#5A7D9A'})]);focusLater(`[data-c="${id}"][data-f="name"]`)}
     else if(b.id==='tnew')saveT(a=>a.push({name:'Nueva plantilla',acts:[{sc:(cons[0]||{}).id||'',name:''}]}));
     else if(b.dataset.tdel!=null)saveT(a=>a.splice(+b.dataset.tdel,1));
@@ -161,7 +167,7 @@ const TEAM_HELP=`<p><b>Para sumar a alguien:</b> agrégalo con su correo, envía
  <p><b>Tareo</b> (módulo aparte): <b>Capataz (tareo)</b> llena el tareo de su cuadrilla, <b>Asistente de tareo</b> maneja todo el Tareo (si además reporta en Campo, márcale <b>También reporta en Campo</b>), <b>Costos</b> y <b>RR.HH.</b> consultan; al editor jefe de producción márcale <b>Publica tareo</b>.</p>`;
 /* chips de alcance y píldoras de permisos de una persona (solo lectura; se cambian en la ficha) */
 function teamScope(em,m){const r=roleOfM(em,m);const L=[];
-  if(r==='sc'||r==='capataz'){const S_=memScs(m).filter(i=>S.con.has(i));S_.forEach(i=>L.push(`<span class="scchip ro" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}</span>`));if(!S_.length)L.push('<span class="pill bad">Falta la empresa</span>')}
+  if(r==='sc'||r==='capataz'){const S_=memScs(m).filter(conHas);S_.forEach(i=>L.push(`<span class="scchip ro" style="--c:${esc(conOf(i).color)}"><i></i>${esc(conOf(i).name)}</span>`));if(!S_.length)L.push('<span class="pill bad">Falta la empresa</span>')}
   if(r==='editor'){const P_=memPisos(m).filter(id=>S.pis.has(id));P_.forEach(id=>L.push(`<span class="pill neu" title="${esc(S.pis.get(id).name)}">${esc(S.pis.get(id).code)}</span>`));if(!P_.length)L.push('<span class="mu">sin pisos a cargo</span>')}
   if(r==='area')L.push(m.area?`<span class="pill neu">${esc(m.area)}</span>`:'<span class="pill bad">Falta el área</span>');
   return L.join(' ')}
@@ -350,7 +356,7 @@ async function importJson(file){
   try{const skip=await importWrites(writes,n=>{done=n;IMPMSG=`Cargados ${done} de ${writes.length} registros…`;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG});
     await batchWrites(dels.map(([c,id])=>[c,id,null]));
     dels.forEach(([c,id])=>S[COLS[c]].delete(id));if(dels.length)requestRender();
-    const newCon=new Set(Object.keys(cols.contractors||{}));const miss=new Set();Object.values(cols.acts||{}).forEach(a=>{if(a&&a.sc&&!S.con.has(a.sc)&&!newCon.has(a.sc))miss.add(a.sc)});
+    const newCon=new Set(Object.keys(cols.contractors||{}));const miss=new Set();Object.values(cols.acts||{}).forEach(a=>{if(a&&a.sc&&!conHas(a.sc)&&!newCon.has(a.sc))miss.add(a.sc)});
     const nObs=Object.values(cols.acts||{}).filter(a=>a&&a.obs).length;
     const extra=(miss.size?` Ojo: ${miss.size} subcontratista(s) no existen en Configuración (${[...miss].join(', ')}); esas actividades se verán sin color hasta que los crees.`:'')+(nObs?` Hay ${nObs} actividades con observaciones para revisar: en el Lookahead marca “Con observaciones”.`:'');
     const nSk=[...skip.values()].reduce((a,b)=>a+b,0);const skMsg=nSk?` No se cargaron ${nSk} registros que las reglas no permiten escribir con tu usuario (${[...skip].map(([c,n])=>`${c}: ${n}`).join(', ')}); son historiales de otras personas o versiones ya emitidas al cliente, y no afectan el lookahead.`:'';const cliMsg=nCli?` Las versiones ya emitidas al cliente (${nCli} registros) se dejaron como estaban: no se reemplazan.`:'';

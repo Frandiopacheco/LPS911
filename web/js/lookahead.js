@@ -506,7 +506,8 @@ let paint=null,tap=null;
 /* la lista de subcontratistas de cada fila se arma recién al abrirla: con miles de filas y decenas de empresas
    eran decenas de miles de opciones en la página (lo más pesado del Lookahead) */
 function scFill(sel){if(!sel||!sel.dataset.lz)return;delete sel.dataset.lz;const v=sel.value;
-  sel.innerHTML=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('')
+  /* un SC en la Papelera (C-28) ya no se ofrece, pero la fila que aún lo tiene lo sigue mostrando */
+  sel.innerHTML=(v&&!S.con.has(v)&&ARCH.con.has(v)?`<option value="${esc(v)}" selected>${esc(conOf(v).name)} (en la Papelera)</option>`:'')+[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${esc(o.name)}</option>`).join('')
     +(canWrite&&!PM()&&!cliOn()?'<option disabled>──────────</option><option value="__new">+ Nuevo subcontratista…</option>':'');sel.value=v}
 /* subcontratista nuevo desde la fila (oct 2026): un SC que aún no llega a la obra no necesita usuario ni correo para programarlo.
    Se crea en Configuración › Subcontratistas (misma lista de siempre) y se asigna a la fila. Cuando llegue, en Equipo se le invita
@@ -517,8 +518,10 @@ async function lkNewSc(x,t){t.value=x.sc;
   const name=String(v||'').replace(/\s+/g,' ').trim().toUpperCase();if(!name)return;
   const cur=S.act.get(x.id);if(!cur)return;
   const ex=[...S.con.values()].find(c=>String(c.name||'').trim().toUpperCase()===name);
+  /* el mismo nombre en la Papelera (C-28): se recupera ese SC (con su historial) en vez de crear otro */
+  const exA=!ex&&[...ARCH.con.values()].find(c=>String(c.name||'').trim().toUpperCase()===name);
   const used=new Set([...S.con.values()].map(c=>String(c.color||'').toUpperCase()));const color=SC_PAL.find(c=>!used.has(c))||SC_PAL[S.con.size%SC_PAL.length];
-  const id=ex?ex.id:uid('c');const ops=ex?[]:[op('contractors',id,{id,name,partida:'',color})];
+  const id=ex?ex.id:exA?exA.id:uid('c');const ops=ex?[]:exA?[op('contractors',id,(({arch,...o})=>({...o,id}))(exA))]:[op('contractors',id,{id,name,partida:'',color})];
   if(cur.sc===id){if(ex)toast(`${name} ya está asignado a esta actividad.`);return}
   /* fila con historial: el cambio de SC pasa por la misma revisión de siempre */
   if(cur.sc&&actHist(cur).length){if(ops.length)apply(ops,`Subcontratista ${name} agregado`);histGate(cur,'sc',id);return}

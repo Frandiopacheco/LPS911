@@ -30,7 +30,7 @@ const store={get(k,d){try{const v=localStorage.getItem('lps911.'+k);return v==nu
 let FDB=null;/* todas las rutas de datos pasan por aquí (preparación multiempresa: luego será obras/<id>/<colección>) */
 const fcol=n=>(db||FDB).collection(n);
 const PLANO_SRC='plano.js?v=33';
-const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map()};
+const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map(),con:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
@@ -150,12 +150,15 @@ const weekOf=s=>P().refWeek+Math.floor((pd(s)-pd(P().refDate))/864e5/7);
 const weekDays=n=>{const a=weekStart(n);return[0,1,2,3,4,5].map(i=>addD(a,i))};
 const curWeek=()=>weekOf(addD(todayIso(),1));
 const winDays=()=>{const o=[];for(let w=U.week;w<U.week+U.win;w++)weekDays(w).forEach((d,i)=>o.push({d,w,i}));return o};
-const conOf=id=>S.con.get(id)||{name:'—',color:'#9AA0A6'};
+/* SC archivado (C-28/DAT-01, oct 2026): «×» en Configuración lo manda a la Papelera (ARCH.con); sale de las listas para elegir
+   (S.con), pero conOf/conHas lo siguen resolviendo para el historial (semanas congeladas, Campo, restricciones…) */
+const conOf=id=>S.con.get(id)||ARCH.con.get(id)||{name:'—',color:'#9AA0A6'};
+const conHas=id=>!!id&&(S.con.has(id)||ARCH.con.has(id));
 /* «Sin asignar» (oct 2026, pedido del dueño): «POR DEFINIR» no es un subcontratista, es que todavía no se sabe quién
    hará el trabajo. Marcado con `tbd` en Configuración › Subcontratistas, se programa y se ve como siempre, pero queda
    fuera de todo lo que mide a un SC (PPC por subcontratista, rankings y avance del Tablero): no se le puede exigir
    cumplimiento a nadie. En su lugar, el Tablero avisa cuánto trabajo sigue sin dueño. */
-const scTBD=id=>!!(S.con.get(id)||{}).tbd;
+const scTBD=id=>!!(S.con.get(id)||ARCH.con.get(id)||{}).tbd;
 const scReal=id=>!!id&&!scTBD(id);
 const r2=v=>Math.round((+v||0)*100)/100;
 const hasM=x=>typeof x.metrado==='number'&&x.metrado>0;
@@ -524,7 +527,13 @@ function doneRebuild0(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?R
 /** el ingeniero quitó el registro de ese día («Quitar registro»): el cierre del capataz o del SC ya no cuenta, tampoco como terminada */
 function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return!!(r&&r.clr)}
 /** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
-function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
+/* C-30/DAT-04 (oct 2026): se compara con el SC de ESE día, no con el actual de la fila. Si después se pasó la fila a otro SC,
+   el cierre sigue contando cuando lv.sc era su SC ese día: el del plan publicado (dplan.who) o, en un día pasado sin plan, el
+   propio lv.sc (las reglas solo dejan al capataz/SC escribir con el SC que la actividad tenía en ese momento, liveActOk).
+   Ojo: el servidor (aceptarCierres → closesToAccept) aún compara con el SC actual. */
+function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x)return false;const p=pisoOfAmb(x.ambId);if(lv.pisoId&&p&&p!==lv.pisoId)return false;
+  const ls=lv.sc||'';if((x.sc||'')===ls)return true;if(!ls||!lv.date)return false;
+  const dp=dplanOf(lv.date,lv.pisoId||p);const w=dp&&dp.who&&dp.who[lv.actId];if(w)return(w.sc||'')===ls;return lv.date<todayIso()}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
   /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
@@ -636,7 +645,7 @@ function recOf(d,aid){const r=recReal(d,aid);if(r)return r;
   /* «Quitar registro» deja una marca: el cierre del capataz ya no vuelve a contar */
   {const doc=DAY.get(dayId(d,pisoOfAct(aid)));const rr=doc&&doc.recs&&doc.recs[aid];if(rr&&rr.clr)return null}
   const lv=LIVE.get(d+'_'+aid);const c=lv&&lv.close;if(!c||!c.status||!liveOwn(lv))return null;
-  return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:!!c.done,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,prop:{status:c.status,cnc:c.cnc||'',by:c.by||'',byName:c.n||'',ts:c.t||0}}}
+  return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:!!c.done,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,...(lv.sc?{sc:lv.sc}:{}),prop:{status:c.status,cnc:c.cnc||'',by:c.by||'',byName:c.n||'',ts:c.t||0}}}
 const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},no:{t:'No cumplido',i:'✗',c:'no'}};
 /* solo se envían los campos que cambian de cada registro: si otro ingeniero cambió otro campo (foto, nota, estado),
    una copia local atrasada no lo pisa */

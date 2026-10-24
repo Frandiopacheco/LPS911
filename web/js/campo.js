@@ -20,7 +20,7 @@ function loadFoto(id){if(FOTO.has(id)||!db)return;FOTO.set(id,null);fotoDoc(id).
    conserva el compromiso original */
 /** cantidad comprometida del día: la del plan cerrado (dplan.ids) si el día tiene foto; si no, la vigente del lookahead */
 function progOf(d,x){if(!hasM(x))return null;const dp=dplanOf(d,pisoOfAmb(x.ambId));const q=dp&&dp.ids?dp.ids[x.id]:undefined;return typeof q==='number'?q:((x.qty||{})[d]??null)}
-function baseRec(d,x,cur){const q0=progOf(d,x);const prog=cur&&!cur._prop&&cur.prog!=null&&(q0==null||+q0<+cur.prog)?cur.prog:q0;return{status:cur?.status||null,prog,und:x.und||'',exec:cur?.exec??null,cnc:cur?.cnc||'',imp:cur?.imp??null,note:cur?.note||'',late:!!(cur&&cur.late),done:!!(cur&&cur.done),photos:cur?.photos||[],...(cur&&cur.phQ?{phQ:cur.phQ}:{}),exc:cur?.exc||'',prop:cur?.prop||null,sc:x.sc||'',nm:x.name||'',ambId:x.ambId||'',by:me?me.email:'',byName:me?(me.name||me.email):'',ts:NOW()}}
+function baseRec(d,x,cur){const q0=progOf(d,x);const prog=cur&&!cur._prop&&cur.prog!=null&&(q0==null||+q0<+cur.prog)?cur.prog:q0;return{status:cur?.status||null,prog,und:x.und||'',exec:cur?.exec??null,cnc:cur?.cnc||'',imp:cur?.imp??null,note:cur?.note||'',late:!!(cur&&cur.late),done:!!(cur&&cur.done),photos:cur?.photos||[],...(cur&&cur.phQ?{phQ:cur.phQ}:{}),exc:cur?.exc||'',prop:cur?.prop||null,sc:(cur&&cur._prop&&cur.sc)||x.sc||''/* C-30: al confirmar el cierre del capataz queda el SC de ese día */,nm:x.name||'',ambId:x.ambId||'',by:me?me.email:'',byName:me?(me.name||me.email):'',ts:NOW()}}
 /* lo ejecutado no llega a lo programado */
 const shortOf=r=>r&&r.prog!=null&&r.exec!=null&&+r.exec<+r.prog-1e-9;
 /* «Cumplido» con menos de lo programado: excepción con motivo (queda en «exc» y el PPC semanal la respeta), o se corrige.

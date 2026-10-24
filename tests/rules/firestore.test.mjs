@@ -84,6 +84,17 @@ test('dueño y editor editan el lookahead; SC y lector no', async () => {
   await assertFails(updateDoc(doc(user('lector@obra.pe'), 'acts/x1'), { name: 'c' }));
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'acts/x1'), { name: 'c' }));
 });
+test('subcontratistas (C-28): el editor los archiva (arch) y los restaura; SC, campo y lector no', async () => {
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'contractors/c-gabel'), { name: 'GABEL', color: '#336699' }));
+  const arch = { t: Date.now(), by: 'editor@obra.pe', n: 'Editor' };
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertFails(updateDoc(doc(user('lector@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'contractors/c-gabel'), { arch: deleteField() }));
+  // restricciones con el id de la empresa responsable (respSc, C-30): el SC las registra como antes
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'restr/r-resp'), { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '', resp: 'GABEL', respSc: 'c-gabel' }));
+});
 test('lista del equipo: personal interno sí; SC, lector y capataz solo su propio registro', async () => {
   await assertSucceeds(getDocs(collection(user('editor@obra.pe'), 'members')));
   await assertSucceeds(getDocs(collection(user('campo@obra.pe'), 'members')));
