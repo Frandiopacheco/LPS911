@@ -26,9 +26,9 @@ const AY_TUT={
     e:'La semana 59 tuvo 40 compromisos y 32 cumplidos: PPC 80 %. De los 8 fallos, 3 fueron por «frente no entregado» por otra partida: no le bajan el PPC al SC afectado.'},
 
   campo:{t:'Verificar el cumplimiento en Campo',g:'Registrar si lo programado del día se cumplió. Esto alimenta el PPC.',
-    s:[{x:'Abre Campo: muestra lo programado hoy en tu piso.',tab:'campo'},'Si el SC o el capataz ya propuso el cierre, toca «✓ Confirmar».','Si nadie lo propuso, marca «Cumplido» o «No» y elige la causa.','Si la actividad terminó del todo, usa «Terminada»: se raya en el lookahead.','Puedes agregar foto y nota.'],
-    e:'4:30 pm: el capataz de Tarrajeo cerró «Cumplido» en el Dpto 101. Lo ves en obra, coincide, y tocas «Confirmar». En el Dpto 102 no avanzaron por falta de andamio: marcas «No» con causa «Equipos».',
-    tip:'Lo que nadie verifica se acepta solo a las 23:30 con lo que propuso el capataz.'},
+    s:[{x:'Abre Campo: muestra lo programado hoy en tu piso.',tab:'campo'},'Si el SC o el capataz ya cerró, ya cuenta tal como lo marcó: revísalo y corrige si no corresponde.','Si nadie lo cerró, marca «Cumplido» o «No» y elige la causa.','Si la actividad terminó del todo, usa «Terminada»: se raya en el lookahead.','Puedes agregar foto y nota.'],
+    e:'4:30 pm: el capataz de Tarrajeo cerró «Cumplido» en el Dpto 101. Lo ves en obra y coincide: ya cuenta, no tienes que hacer nada (puedes tocar «Confirmar»). En el Dpto 102 no avanzaron por falta de andamio: marcas «No» con causa «Equipos».',
+    tip:'A la hora del Cierre del ingeniero (por defecto 9 pm) el día se cierra para todos: lo que marcó el SC queda registrado tal cual y lo que nadie cerró, como No cumplido «Sin cierre».'},
 
   np:{t:'Registrar trabajo no programado',g:'Dejar constancia de lo que se ejecuta en obra sin estar en el plan del día (no cambia el PPC).',
     s:[{x:'Abre Campo › Plano y elige el piso.',tab:'campo'},'Toca dos veces rápido el lugar del plano donde ves a la cuadrilla, en cualquier ambiente (aunque ahí haya otra actividad programada). El ambiente sale solo.','También puedes tocar «＋ No programado» y luego el lugar.','Elige el subcontratista, qué hacen y toma una foto. Guarda.','Si debe quedar programado, el ingeniero toca «Pasarlo al lookahead».'],

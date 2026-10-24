@@ -66,3 +66,55 @@ test('otro día o sin plan publicado: nada', () => {
   assert.deepStrictEqual(sinCierre('2026-10-21', dplans, [], new Map(), acts(), new Set(), CNC), []);
   assert.deepStrictEqual(sinCierre(D, [], [], new Map(), acts(), new Set(), CNC), []);
 });
+
+/* ---------- tanda 1 (23/10/2026): Cierre del ingeniero, TMP-5, H03a, feriados y «se trabaja» ---------- */
+const { engCutHH, jornadaDays, isWork, nextWork, holPreload, holPeru } = require('../lib');
+
+test('Cierre del ingeniero: por defecto 21:00, entre 18:00 y 23:00 y siempre después del corte del SC', () => {
+  assert.strictEqual(engCutHH({}), '21:00');
+  assert.strictEqual(engCutHH({ engCutHH: '22:30' }), '22:30');
+  assert.strictEqual(engCutHH({ engCutHH: '17:30' }), '21:00'); // antes de las 18:00 no vale
+  assert.strictEqual(engCutHH({ engCutHH: '23:15' }), '21:00'); // después de las 23:00 no vale
+  assert.strictEqual(engCutHH({ engCutHH: '18:00', closeCutHH: '18:00' }), '21:00'); // no después del corte del SC
+  assert.strictEqual(engCutHH({ closeCutHH: '21:00' }), '22:00');
+});
+
+test('jornada: ayer siempre; hoy recién a la hora del Cierre del ingeniero', () => {
+  assert.deepStrictEqual(jornadaDays({}, Date.parse('2026-10-20T20:59:00-05:00')), ['2026-10-19']);
+  assert.deepStrictEqual(jornadaDays({}, Date.parse('2026-10-20T21:00:00-05:00')), ['2026-10-19', '2026-10-20']);
+  assert.deepStrictEqual(jornadaDays({ engCutHH: '22:00' }, Date.parse('2026-10-20T21:30:00-05:00')), ['2026-10-19']);
+});
+
+test('TMP-5: «Sin cierre» no se registra antes de la hora de corte aunque alguien fuerce la tarea', () => {
+  const dp = [{ date: D, pisoId: 'p1', ids: { a1: null } }];
+  assert.deepStrictEqual(sinCierre(D, dp, [], new Map(), acts(), new Set(), CNC, '17:00', { now: Date.parse(D + 'T10:15:00-05:00') }), []);
+  assert.strictEqual(sinCierre(D, dp, [], new Map(), acts(), new Set(), CNC, '17:00', { now: Date.parse(D + 'T21:00:00-05:00') }).length, 1);
+});
+
+test('H03a: lo terminado antes de ese día no recibe «Sin cierre»; lo terminado ese mismo día sí se mide', () => {
+  const dp = [{ date: D, pisoId: 'p1', ids: { a1: null, a3: null } }];
+  const done = new Map([['a1', '2026-10-19'], ['a3', D]]);
+  assert.deepStrictEqual(sinCierre(D, dp, [], new Map(), acts(), new Set(), CNC, '17:00', { done }).map(o => o.actId), ['a3']);
+});
+
+test('C-08: «se trabaja» vuelve laborable un domingo o feriado (cal.work)', () => {
+  const p = { cal: { sat: false, hol: [{ d: '2026-12-08', n: 'Inmaculada' }], work: [{ d: '2026-12-08' }, { d: '2026-10-25' }] } };
+  assert.strictEqual(isWork(p, '2026-12-08'), true);
+  assert.strictEqual(isWork(p, '2026-10-25'), true); // domingo trabajado
+  assert.strictEqual(isWork(p, '2026-11-01'), false); // otro domingo
+  assert.strictEqual(isWork(p, '2026-10-24'), false); // sábado no laborable
+  assert.strictEqual(nextWork(p, '2026-10-23'), '2026-10-25');
+});
+
+test('C-08: precarga de feriados de Perú: agrega el año que no tiene ninguno, no toca el que ya se cargó, una vez por año', () => {
+  const cal = { hol: [{ d: '2026-01-01', n: 'Año Nuevo' }, { d: '2026-11-15', n: 'Día de la obra' }] }; // 2026 cargado a mano (sin el 08-dic)
+  const r = holPreload(cal, [2026, 2027]);
+  assert.deepStrictEqual(r.holPre, [2026, 2027]);
+  assert.ok(!r.hol.some(o => o.d === '2026-12-08'), 'no se repone un feriado del año ya cargado');
+  assert.ok(r.hol.some(o => o.d === '2026-11-15'), 'lo cargado a mano sigue');
+  assert.strictEqual(r.add.length, holPeru(2027).length);
+  assert.ok(r.hol.some(o => o.d === '2027-01-01') && r.hol.some(o => o.d === '2027-03-26')); // Año Nuevo y Viernes Santo 2027
+  assert.strictEqual(holPreload({ ...cal, hol: r.hol, holPre: r.holPre }, [2026, 2027]), null); // ya hecho: nada
+  // si el administrador quita un feriado de 2027 después, no vuelve
+  assert.strictEqual(holPreload({ hol: r.hol.filter(o => o.d !== '2027-07-23'), holPre: r.holPre }, [2026, 2027]), null);
+});

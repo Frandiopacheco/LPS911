@@ -14,7 +14,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - **Foto del plan con lo del servidor:** `pubPlan` espera las escrituras propias (`waitForPendingWrites`) y relee en la transacción las actividades candidatas (las del piso ese día, las de la foto anterior y las que se mueven).
   - **Deshacer publicación = todo o nada** (`unpubPlan`, transacción): si alguna actividad cambió después, no toca nada (ni foto ni aviso). Una republicación (`R_.was`) no borra foto ni aviso.
   - **Mismo universo del día:** con foto, la reunión (`cuRows`), Campo y En obra (`schedOrSnap`/`inSnap`) incluyen lo publicado que salió del día; lo terminado antes del día (`doneBefore`) no cuenta como «salió del plan» en el PPC diario.
-  - **La página ya no acepta sola los cierres del capataz/SC** (se quitó `autoAccept`): lo hace solo el servidor (`aceptarCierres`, 23:30, transacción que relee el registro).
+  - **La página ya no acepta sola los cierres del capataz/SC** (se quitó `autoAccept`): lo hace solo el servidor (`aceptarCierres`, a la hora del Cierre del ingeniero, transacción que relee el registro; ver `ppc-campo.md` «Jornada»).
   - «Quitar registro» (`clr`) también anula la «terminada» del cierre en vivo (`recClr` en `doneRebuild`/`doneDates`; servidor `doneMap`), y pone `done:false`.
   - Historial y fotos en vivo con `arrayUnion` (`liveWrite`); fotos del registro diario que solo se agregan, también (`dailyPatch`).
   - Mover días (quitar y poner a la vez): `fsDiff` manda `arrayRemove` y `arrayUnion` en dos escrituras encoladas a la vez (`args.then`, las lanza `put`; sin señal quedan las dos en la cola); dentro de una transacción (`fsDiff(...,true)`) sí manda la lista final.
