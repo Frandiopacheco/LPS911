@@ -186,6 +186,33 @@ function weeksToFreeze(p, now = Date.now()) {
   const today = limaToday(now); const w0 = weekOf(p, today);
   return [w0, w0 + 1].filter(n => now >= frzCutTs(p, n) && today <= weekStart(p, n));
 }
+/* C-03 (tanda 1, LPS-1, decidido con el dueño): una semana descongelada (weeks.unfrozenAt, sin frozenAt) que nadie volvió a congelar
+   se re-congela sola REFRZ_MS (2 h) después de descongelarla, TAL COMO ESTABA: desde la última copia del descongelado
+   (weeks/<id>__h<hora>, histOf = id, sin restAt), no rearmando desde el lookahead vivo.
+   weeks = documentos de weeks con unfrozenAt [{id, …}]; hist = copias __h [{id, histOf, unAt, restAt?, v}].
+   Devuelve [{id, hid, unAt}]: las semanas que hay que re-congelar ahora y de qué copia. */
+const REFRZ_MS = 2 * 3600e3;
+function weeksToRefreeze(weeks, hist, now = Date.now()) {
+  const out = [];
+  for (const w of weeks) {
+    if (!w || w.frozenAt || w.histOf || !w.unfrozenAt) continue;
+    const t = Date.parse(w.unfrozenAt); if (!(t > 0) || t + REFRZ_MS > now) continue;
+    const L = hist.filter(h => h && h.histOf === w.id && !h.restAt && h.v && h.v.frozenAt).sort((a, b) => String(a.unAt).localeCompare(String(b.unAt)));
+    const h = L[L.length - 1]; if (!h) continue;
+    out.push({ id: w.id, hid: h.id, unAt: w.unfrozenAt });
+  }
+  return out;
+}
+/* lo que se escribe al re-congelar (dentro de la transacción, con lo que hay en ese momento): ex = weeks/<id>, hd = la copia __h,
+   hsnap = wsnap/<hid>.snap (o undefined). null = ya no corresponde (alguien la congeló, la copia ya se recuperó o la volvieron a
+   descongelar después: otro unfrozenAt). → {week, snap} (week va con merge; snap → wsnap/<id>) */
+function refreezeDoc(ex, hd, hsnap, unAt, nowIso) {
+  if (!ex || ex.frozenAt || !hd || hd.restAt || !hd.v || !hd.v.frozenAt) return null;
+  if (unAt && ex.unfrozenAt !== unAt) return null;
+  const { snap: vs, ...v0 } = hd.v;
+  const snap = vs !== undefined ? vs : hsnap;
+  return { week: { n: ex.n != null ? ex.n : hd.n, pisoId: ex.pisoId || hd.pisoId, ...v0, refrz: { at: nowIso, unAt: ex.unfrozenAt, hid: hd.id || null } }, snap: snap != null ? snap : null };
+}
 /* Fecha de terminada por actividad (igual que la página: índice, registros con «terminada» y cierres del capataz; respeta reaperturas) */
 /* acts (opcional, Map o {id: act}): el cierre solo cuenta si lo declaró la partida de la actividad (como liveOwn de la página);
    pisoOf (opcional): piso de la actividad, para descartar un cierre con otro piso. «Quitar registro» (clr) anula el cierre del capataz. */
@@ -225,7 +252,10 @@ function propTouch(b, a) {
 /* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, propOut } como «Congelar», y aparte
    la foto del lookahead del piso (snap: días de todas sus actividades), que va a wsnap/<n>_<piso> (auditoría de datos M1: dentro de
    weeks la descargaba todo el mundo al entrar y crecía con cada semana). Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
-function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [] }, n, nowIso) {
+/* C-29 (tanda 1, DAT-02): cada compromiso guarda también el nombre del SC de ese momento (scn), como la página; contractors (Map
+   opcional) = la colección contractors. */
+function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [], contractors = null }, n, nowIso) {
+  const scnOf = sc => { const c = sc && contractors && (contractors instanceof Map ? contractors.get(sc) : contractors[sc]); return c && c.name ? { scn: c.name } : {}; };
   const live = m => [...m.values()].filter(x => !x.arch);
   const P = live(pisos).sort(byOrder); if (!P.length) return [];
   const pids = new Set(P.map(p => p.id)); const first = P[0].id;
@@ -246,7 +276,7 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
           if (x.ambId !== a.id) continue;
           const d = (x.days || []).filter(z => days.has(z) && !libDay(x, z)).sort();
           if (!d.length) continue;
-          const it = { sc: x.sc || '', sector: s.code || '', code: a.code || '', amb: a.name || '', act: x.name || '', days: d, ord: (s.order || 0) * 1e6 + (a.order || 0) * 1e3 + (x.order || 0) };
+          const it = { sc: x.sc || '', ...scnOf(x.sc), sector: s.code || '', code: a.code || '', amb: a.name || '', act: x.name || '', days: d, ord: (s.order || 0) * 1e6 + (a.order || 0) * 1e3 + (x.order || 0) };
           if (typeof x.metrado === 'number' && x.metrado > 0) { const qd = {}; let q = 0; d.forEach(z => { const v = (x.qty || {})[z]; if (v != null) { qd[z] = v; q += +v; } }); if (q > 0) { it.q = r2(q); it.qd = qd; it.und = x.und || ''; } }
           items[x.id] = it;
         }
@@ -713,6 +743,6 @@ function avisoTexto({ aid, date, e, act, amb, piso, con, lvMot }) {
 module.exports = {
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };

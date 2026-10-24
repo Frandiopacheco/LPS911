@@ -1,4 +1,4 @@
-// Auditoría con los datos reales (09/10): eliminar restricción = archivar, sugerencia de campo sin cierres sin confirmar,
+// Auditoría con los datos reales (09/10): eliminar restricción = archivar, sugerencia de campo (desde la tanda 1 cuenta el cierre del SC),
 // PPC del SC con una sola fórmula y Plan semanal sin redibujar con cada cambio ajeno.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
@@ -25,18 +25,15 @@ test('2 · eliminar una restricción la manda a la Papelera y se puede restaurar
   noErrors(errors, 'papelera restricción');
 });
 
-test('10 · un cierre del capataz sin confirmar no se aplica como Sí: sale «por confirmar»', async ({ page }) => {
+test('10 · (tanda 1, C-06) el cierre del capataz/SC cuenta al instante, sin confirmación: el Plan semanal sugiere Sí', async ({ page }) => {
   const LV = ['live', HOY + '_x1', { date: HOY, actId: 'x1', pisoId: 'p1', sc: 'c1', close: { status: 'ok', by: 'u_cap1', n: 'Pedro', t: 1 } }];
   const errors = await openApp(page, { tab: 'plan', extra: [['acts', 'x1', X1], week(), LV] });
   const tr = page.locator('section[data-pid="p1"] tr[data-id="x1"]');
-  await expect(tr.locator('.fsug')).toContainText('1 por confirmar');
-  await expect(page.locator('section[data-pid="p1"] [data-applyfield]')).toHaveCount(0);
-  expect(await page.evaluate(() => fieldSug('x1', S.wk.get('58_p1').items.x1).ok)).toBe(null);
-  // confirmado por el ingeniero en Campo: ahora sí sugiere Sí
-  await page.evaluate(d => writeDaily(d, 'p1', { recs: { x1: { ...baseRec(d, S.act.get('x1'), null), status: 'ok' } } }), HOY);
+  await expect(tr.locator('.fsug')).toContainText('1/1 días');
   await expect(tr.locator('.fsug')).not.toContainText('por confirmar');
+  await expect(page.locator('section[data-pid="p1"] [data-applyfield]')).toHaveCount(1);
   expect(await page.evaluate(() => fieldSug('x1', S.wk.get('58_p1').items.x1).ok)).toBe(true);
-  noErrors(errors, 'por confirmar');
+  noErrors(errors, 'cierre del SC directo');
 });
 
 test('5 · el Tablero calcula el PPC del SC igual que el Plan semanal (frente no entregado que le cuenta al anterior)', async ({ page }) => {

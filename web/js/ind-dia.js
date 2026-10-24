@@ -12,7 +12,7 @@ const IXD_OK=.8, IXD_WARN=.5; // ≥ 80 % cumplió · 50–80 % parcial · < 50 
 const ixdBand=v=>v==null?'none':v>=IXD_OK?'ok':v>=IXD_WARN?'warn':'bad';
 const IXD_G={bad:{t:'Crítico',h:'menos de 50 % · verificar el cumplimiento a detalle'},warn:{t:'Parcial',h:'entre 50 % y 80 %'},ok:{t:'Cumplieron',h:'80 % o más'},none:{t:'Sin verificar',h:'nadie registró su cumplimiento'}};
 const ixdName=sc=>conOf(sc).name;
-const ixdNm=r=>r.pi?r.pi.code+' · '+r.pi.name:ixdName(r.sc);
+const ixdNm=r=>r.pi?r.pi.code+' · '+r.pi.name:(r.nm||ixdName(r.sc)); /* r.nm: nombre del SC guardado al congelar (C-29) */
 let IPRF={sc:'',pi:''}; // filtros cruzados de la presentación (tocar una barra): subcontratista y piso
 
 /** una fila por SC con su PPC bruto y del SC; `v`/`band` según la clasificación elegida (IXD_M) */
@@ -23,7 +23,7 @@ function ixdGroups(R){const g={bad:[],warn:[],ok:[],none:[]};R.forEach(r=>g[r.ba
   g.bad.sort((a,b)=>a.v-b.v||byN(a,b));g.warn.sort((a,b)=>a.v-b.v||byN(a,b));g.ok.sort((a,b)=>b.v-a.v||byN(a,b));g.none.sort(byN);return g}
 
 /** barra de un SC: relleno = cumplidos / verificados (color del semáforo), rayado = no cumplido por causa ajena al SC */
-function ixdRow(r,click,sel){const c=r.pi?{name:ixdNm(r),color:'var(--accent,#2563eb)'}:conOf(r.sc),o=r.o;const at=r.pi?'data-ixpi':'data-ixsc',key=r.pi?r.pi.id:r.sc;
+function ixdRow(r,click,sel){const c=r.pi?{name:ixdNm(r),color:'var(--accent,#2563eb)'}:{...conOf(r.sc),name:ixdNm(r)},o=r.o;const at=r.pi?'data-ixpi':'data-ixsc',key=r.pi?r.pi.id:r.sc;
   const f=o.ver?100*o.ok/o.ver:0,h=o.ver?100*r.nimp/o.ver:0;
   const alt=IXD_M==='sc'?(r.br==null?'':` · bruto ${pct(r.br)}`):(r.nimp&&r.ps!=null?` · del SC ${pct(r.ps)}`:'');
   const tip=`${c.name}: ${o.ok} cumplidas, ${o.partial} parciales y ${o.no} no cumplidas de ${o.ver} verificadas (${o.prog} programadas)${r.nimp?` · ${r.nimp} no imputable${r.nimp===1?'':'s'} al SC`:''}`;
