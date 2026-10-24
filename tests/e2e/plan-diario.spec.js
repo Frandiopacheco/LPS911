@@ -35,6 +35,8 @@ test('se arma para mañana, todo ubicado en su ambiente, y se decide por excepci
   await page.locator('#pop .dzpl button:not([hidden])').first().click();
   await expect.poll(async () => (await act(page, 't0')).days).toContain(MANANA);
   await expect(row(page, 't0')).toBeVisible();
+  /* C-17 (tanda 2): Tarrajeo entra con restricción abierta (r1) y liberación crítica pendiente: se avisa y se publica igual */
+  page.once('dialog', d => d.accept());
   await publicar(page);
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, sig]);
   await expect(row(page, 'e0')).toHaveCount(0);

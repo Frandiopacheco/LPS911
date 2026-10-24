@@ -117,6 +117,8 @@ function renderPlan(main){
     const ids=Object.keys(items).sort((a,b)=>(items[a].ord||0)-(items[b].ord||0));
     /* sugerencias de campo: una sola vez por fila (antes se calculaban dos veces) */
     const SUG=new Map();for(const id of ids)SUG.set(id,fieldSug(id,items[id]));
+    /* C-17: chapita R = entró con restricciones abiertas (congelada: lo guardado al congelar; borrador: lo de ahora) */
+    const RIN=frozen?(w.restrIn||{}):restrInOf(ids);
     /* PPC del cliente (solo admin): compromisos donde el cliente esperaba distinto y hay que marcarlo a mano */
     const CEV=frozen&&typeof cliPlanEval==='function'?cliPlanEval(n,p.id):null;
     const cOut=CEV?[...CEV.values()].filter(i=>i.how==='man'&&!i.it):[];
@@ -144,7 +146,7 @@ function renderPlan(main){
       <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div><div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista (causa no imputable u otra partida que no entregó el frente)"><span class="k">PPC del SC</span><span class="v">${st&&st.ppcSc!=null?pct(st.ppcSc):'—'}${st&&st.nimp?` <small>${st.nimp} no imput.</small>`:''}</span></div></div></div>
      <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>${byAmb?'Subcontratista':'Descripción'}</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead>`;
     const rowH=id=>{const it=items[id];const r=res[id]||{};const ds=new Set(it.days);const c={...conOf(it.sc),name:scnOf(it)};
-      return`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
+      return`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${rinBadge(RIN[id])}${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&ED?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
@@ -292,6 +294,31 @@ function frzCutTxt(n){const t=frzCut(n);const d=ldt(t);return`${DOW_N[pd(d).getU
    congelado»). Va en wsnap/<semana>_<piso> {snap, n, pisoId, t}, no dentro de weeks: weeks lo descarga todo el mundo al entrar y la
    foto crecía con cada semana (auditoría de datos M1). Datos antiguos: weeks.snap (lo mueve el servidor, migración en congelarSemana).
    wsnapOf(w) → la foto, null si no hay, undefined mientras se lee (una lectura suelta por semana congelada; al llegar, redibuja). */
+/* ---- C-17 (tanda 2, LPS-9): compromisos que entran con restricciones abiertas o liberación crítica de Calidad pendiente ----
+   Al congelar la semana y al publicar el plan del día se avisa (uiAsk con la lista) y se guarda cuáles entraron así:
+   weeks.restrIn / dplan.restrIn = {actId: [restrId | 'lib:'+libId]}. Misma lógica que restrInOf de functions/lib.js (congelado y
+   cierre automáticos, sin aviso). Liberación crítica pendiente: crit y no lib/libm/anu; restringe a la actividad del mismo ambiente
+   que se llama como «rest» o, sin «rest», a la primera de otra partida después de la liberada (libNextAct). */
+const CLM={k:'',m:null};
+function critLibMap(){const k=(typeof libVer!=='undefined'?libVer:0)+'|'+DV;if(CLM.k===k&&CLM.m)return CLM.m;const out=new Map();CLM.k=k;CLM.m=out;
+  if(typeof LIB==='undefined')return out;const L=[...LIB.values()].filter(l=>l&&l.crit&&!['lib','libm','anu'].includes(l.st));if(!L.length)return out;
+  const nm=v=>(typeof nrm==='function'?nrm(v):String(v||'').toLowerCase().trim());const byA=new Map();
+  for(const l of L){const own=(l.actId&&S.act.get(l.actId))||{ambId:l.ambId,sc:l.sc};if(!own.ambId)continue;
+    let A=byA.get(own.ambId);if(!A){A=[...S.act.values()].filter(y=>y.ambId===own.ambId).sort(byOrder);byA.set(own.ambId,A)}
+    const rest=nm(l.rest);let T=[];if(rest)T=A.filter(y=>y.id!==l.actId&&nm(y.name)===rest);
+    else{const i=own.id?A.findIndex(y=>y.id===own.id):-1;for(let j=i+1;j<A.length;j++)if(A[j].sc&&A[j].sc!==own.sc){T=[A[j]];break}}
+    for(const y of T){const o=out.get(y.id);if(o)o.push(l.id);else out.set(y.id,[l.id])}}
+  return out}
+function restrInOf(ids){const o={};const C=critLibMap();
+  for(const id of ids){const r=restrPend(id).filter(r=>!r.arch).map(r=>r.id);const l=(C.get(id)||[]).map(i=>'lib:'+i);if(r.length||l.length)o[id]=[...r,...l]}return o}
+/* texto de cada entrada de restrIn (para avisos y la chapita R) */
+function restrInTxt(k){if(String(k).startsWith('lib:')){const l=typeof LIB!=='undefined'&&LIB.get(k.slice(4));const x=l&&S.act.get(l.actId);return`Liberación crítica de Calidad pendiente${x?' ('+x.name+')':l&&l.nm?' ('+l.nm+')':''}`}
+  const r=S.res.get(k)||ARCH.res.get(k);return r?`${r.type||'Restricción'}${r.desc?': '+r.desc:''}${r.status==='lib'?' (ya liberada)':''}`:'Restricción'}
+/* lista para el aviso: «Actividad · ambiente — motivo» (como mucho 15 y «…y N más») */
+function restrInList(rin,items){const E=Object.entries(rin);const L=E.slice(0,15).map(([id,ks])=>{const x=S.act.get(id);const it=items&&items[id];const nm=(it&&it.act)||(x&&x.name)||id;const am=(it&&it.code)||(x&&S.amb.get(x.ambId)&&S.amb.get(x.ambId).code)||'';
+  return`${am?am+' · ':''}${nm} — ${ks.map(restrInTxt).join(' · ')}`});if(E.length>15)L.push(`…y ${E.length-15} más`);return L}
+/* chapita R (Plan semanal): entró con restricciones abiertas o liberación crítica pendiente */
+const rinBadge=ks=>ks&&ks.length?`<span class="rinb" title="${esc('Entró con '+ks.length+' restricción'+(ks.length>1?'es':'')+' abierta'+(ks.length>1?'s':'')+': '+ks.map(restrInTxt).join(' · '))}">R${ks.length>1?ks.length:''}</span>`:'';
 const WSN=new Map(),WSNP=new Set(),WSNE=new Map();
 const wsnKey=w=>w.id+'|'+(w.frozenAt||'');
 function wsnapOf(w){if(!w)return null;if(w.snap)return w.snap;const k=wsnKey(w);if(WSN.has(k))return WSN.get(k);if(!db)return null;
@@ -323,6 +350,14 @@ async function freezeWeek(n,pid,res,src,o){o=o||{};const res0=res;let items=src?
         note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return'no';
       doc.propOut=pend.map(q=>q.sc+'/'+q.id);doc.propOutT=Object.fromEntries(pend.map(q=>[q.sc+'/'+q.id,q.t||0]))}}
   if(keep&&(keep.propOut||[]).length){doc.propOut=[...new Set([...keep.propOut,...(doc.propOut||[])])];doc.propOutT={...(keep.propOutT||{}),...(doc.propOutT||{})}}
+  /* C-17: compromisos con restricciones abiertas o liberación crítica pendiente: se avisa y se guarda cuáles (los conservados al
+     volver a congelar mantienen lo que se guardó la primera vez) */
+  {const nw=keep?Object.keys(items).filter(k=>!(k in keep.items)):Object.keys(items);const rin={...restrInOf(nw),...((keep&&keep.restrIn)||{})};
+    const nNew=Object.keys(restrInOf(nw)).length;
+    if(nNew&&canWrite&&!o.rinOk){const L=restrInList(restrInOf(nw),items);
+      if(!await uiAsk({title:`${nNew} compromiso${nNew>1?'s':''} con restricciones abiertas`,text:`Para ${code}, semana ${n}, entran al compromiso con restricciones sin liberar o una liberación crítica de Calidad pendiente:`,list:L,
+        note:'Si congelas ahora, quedan marcados con la chapita R en el Plan semanal (se guarda cuáles entraron así). Para que no entren, libéralas antes o reprograma esas actividades.',ok:'Congelar igual',tone:'warn'}))return'no'}
+    if(Object.keys(rin).length)doc.restrIn=rin}
   if(!db){const w0=S.wk.get(id);if(w0&&w0.frozenAt)return'ex';S.wk.set(id,{...doc,id});WSN.set(wsnKey({id,frozenAt:doc.frozenAt}),snap);requestRender();return'ok'}
   if(!canWrite)return'no';const ref=fcol('weeks').doc(id);
   let out;try{out=await db.runTransaction(async tx=>{const sn=await tx.get(ref);const ex=sn.exists?sn.data():null;if(ex&&ex.frozenAt)return{ex};
@@ -341,12 +376,15 @@ function freezeAllTargets(n){return pisos().filter(p=>{const w=S.wk.get(wkId(n,p
 async function freezeAll(n){if(!canWrite)return;const T=freezeAllTargets(n);if(!T.length){toast(`No queda ningún piso por congelar en la semana ${n}.`);return}
   let docs=null;try{docs=db?(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id})):null}catch(e){docs=null}if(!docs)docs=[...PROP.values()];
   const PD=new Map(T.map(p=>[p.id,propPendWeek(n,p.id,docs)]));const np=[...PD.values()].reduce((a,L)=>a+L.length,0);
-  const C=new Map(T.map(p=>[p.id,Object.keys(liveItems(n,p.id)).length]));const k=[...C.values()].reduce((a,b)=>a+b,0);const pl=(x,s,p)=>`${x} ${x===1?s:p}`;
-  const list=T.map(p=>{const q=PD.get(p.id).length;return`${p.code} · ${p.name}: ${pl(C.get(p.id),'compromiso','compromisos')}${q?` · ${pl(q,'propuesta sin decidir','propuestas sin decidir')}`:''}`});
+  const LI=new Map(T.map(p=>[p.id,liveItems(n,p.id)]));const C=new Map(T.map(p=>[p.id,Object.keys(LI.get(p.id)).length]));const k=[...C.values()].reduce((a,b)=>a+b,0);const pl=(x,s,p)=>`${x} ${x===1?s:p}`;
+  /* C-17: compromisos con restricciones abiertas o liberación crítica pendiente, de todos los pisos (un solo aviso) */
+  const RI=new Map(T.map(p=>[p.id,restrInOf(Object.keys(LI.get(p.id)))]));const nr=[...RI.values()].reduce((a,o)=>a+Object.keys(o).length,0);
+  const list=T.map(p=>{const q=PD.get(p.id).length;const r=Object.keys(RI.get(p.id)).length;return`${p.code} · ${p.name}: ${pl(C.get(p.id),'compromiso','compromisos')}${q?` · ${pl(q,'propuesta sin decidir','propuestas sin decidir')}`:''}${r?` · ${pl(r,'con restricción abierta','con restricciones abiertas')}`:''}`});
+  if(nr){const all={},its={};for(const p of T){Object.assign(all,RI.get(p.id));Object.assign(its,LI.get(p.id))}list.push(...restrInList(all,its).map(t=>'R · '+t))}
   if(!await uiAsk({title:`¿Congelar la semana ${n} en ${pl(T.length,'piso','pisos')}?`,text:`Quedan fijados ${pl(k,'compromiso','compromisos')}:`,list,
-    note:(np?`Hay ${pl(np,'propuesta','propuestas')} de subcontratistas sin decidir: si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes (Lookahead › Revisar propuestas). `:'')+'Los pisos ya congelados no se tocan.',
-    ok:np?'Congelar igual':'Congelar todo',tone:np?'warn':'info'}))return;
-  const R={ok:0,ex:0,err:0};for(const p of T){const r=await freezeWeek(n,p.id,null,null,{pend:PD.get(p.id),quiet:true});if(r in R)R[r]++}
+    note:(np?`Hay ${pl(np,'propuesta','propuestas')} de subcontratistas sin decidir: si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes (Lookahead › Revisar propuestas). `:'')+(nr?`${pl(nr,'compromiso entra','compromisos entran')} con restricciones sin liberar o una liberación crítica pendiente: quedan marcados con la chapita R (se guarda cuáles). `:'')+'Los pisos ya congelados no se tocan.',
+    ok:np||nr?'Congelar igual':'Congelar todo',tone:np||nr?'warn':'info'}))return;
+  const R={ok:0,ex:0,err:0};for(const p of T){const r=await freezeWeek(n,p.id,null,null,{pend:PD.get(p.id),quiet:true,rinOk:true});if(r in R)R[r]++}
   toast(`Semana ${n}: ${pl(R.ok,'piso congelado','pisos congelados')}`+(R.ex?` · ${R.ex} ya ${R.ex===1?'estaba congelado':'estaban congelados'} por otra persona`:'')+(R.err?` · ${R.err} no se ${R.err===1?'pudo':'pudieron'} congelar (revisa la conexión y vuelve a intentar)`:''))}
 /* ---- «N propuestas fuera al congelar»: cuáles eran y qué pasó después (oct 2026) ----
    La lista weeks.propOut es una foto del momento de congelar: al tocar la píldora se ve cada propuesta con su hora de envío
@@ -379,11 +417,11 @@ async function propOutShow(n,pid){const w=S.wk.get(wkId(n,pid));if(!w||!(w.propO
 /* C-03 (tanda 1, LPS-1): una semana descongelada que nadie vuelve a congelar la re-congela el servidor (congelarSemana) a las 2 horas,
    tal como estaba (desde la copia __h). Mientras tanto, Hoy y el Plan semanal lo avisan. */
 const REFRZ_MS=2*3600e3;const refrzAt=w=>(Date.parse(w.unfrozenAt)||0)+REFRZ_MS;
-const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','propOutT','auto','fromVer','refrz'];
+const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','propOutT','auto','fromVer','refrz','restrIn'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 /** C-04: lo que hay que conservar al volver a congelar la semana n del piso: la última versión descongelada, si la semana ya empezó → {items, res, cres, propOut, propOutT} o null */
 function wkKeepOf(n,pid){if(weekDays(n)[0]>todayIso())return null;const L=wkHist(wkId(n,pid));const h=L[L.length-1];const v=h&&h.v;if(!v||!v.items||!Object.keys(v.items).length)return null;
-  return{items:v.items,res:v.res||{},cres:v.cres||null,propOut:v.propOut||[],propOutT:v.propOutT||{}}}
+  return{items:v.items,res:v.res||{},cres:v.cres||null,propOut:v.propOut||[],propOutT:v.propOutT||{},restrIn:v.restrIn||{}}}
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
   const pack=o=>{const v={};WK_VF.forEach(k=>{if(o[k]!==undefined)v[k]=o[k]});return{histOf:id,n,pisoId:pid,v,unAt:at,unBy:me?me.email:'',unN:me?(me.name||me.email):''}};
@@ -493,6 +531,15 @@ let RVEN=false;
 /** la actividad de la restricción ya pasó: todos sus días son anteriores a hoy y no está terminada (no se ejecutó y no se reprogramó) */
 function actVenc(aid){const x=aid&&S.act.get(aid);if(!x||!(x.days||[]).length||(typeof DONE!=='undefined'&&DONE.has(aid)))return false;const t=todayIso();return!(x.days||[]).some(d=>d>=t)}
 const AVTIP='Sus días ya pasaron y no se ejecutó: reprograma la actividad en el lookahead o levanta la restricción.';
+/* C-23 (tanda 2, LPS-10): una restricción de un «No va» (via:'plan diario') no se libera sola. Si su actividad ya tiene un registro
+   Cumplido o Parcial en un día POSTERIOR a la creación (registro del ingeniero o cierre del SC/capataz, recOf), es «posiblemente
+   liberada»: se lista aparte en Restricciones con «Liberar» (fecha propuesta = la de esa ejecución) y en el Tablero no suma a
+   «vencidas». Devuelve {d, st} (el primer día ejecutado) o null. Solo mira los registros ya cargados (ensureDaily). */
+function rPosLib(r){if(!r||r.status==='lib'||r.arch||r.via!=='plan diario'||!r.actId)return null;const x=S.act.get(r.actId);if(!x)return null;const t=todayIso(),c=r.created||'';
+  for(const d of[...new Set(x.days||[])].filter(d=>d>c&&d<=t).sort()){const rc=recOf(d,x.id);if(rc&&(rc.status==='ok'||rc.status==='partial'))return{d,st:rc.status}}return null}
+function rPosLibHtml(L){if(!L.length)return'';
+  return`<div class="card rposl"><div class="hd">Posiblemente liberadas: la actividad ya se ejecutó <span class="pill warn">${L.length}</span></div><div class="pad note" style="padding-top:0">Restricciones de un «No va» del plan diario que siguen pendientes, pero su actividad ya tiene un registro Cumplido o Parcial después de crearlas. Revísalas y libéralas con la fecha de esa ejecución.</div>
+  <div class="tscroll"><table class="t"><tbody>${L.map(({r,p})=>{const x=S.act.get(r.actId);return`<tr data-rpos="${r.id}"><td><b style="font-weight:500">${esc(x?x.name:'')}</b><div class="rloc">${esc(actLoc(r.actId))}</div></td><td>${esc(r.type||'')}${r.desc?' · '+esc(r.desc):''}<div class="rloc">Registrada el ${fmtD(r.created)}</div></td><td style="white-space:nowrap">${p.st==='ok'?'Cumplido':'Parcial'} el ${fmtD(p.d)}</td><td style="white-space:nowrap">${rCanLib(r)?`<button class="ib pri" data-rposlib="${r.id}" data-d="${p.d}">Liberar al ${fmtD(p.d)}</button>`:''}</td></tr>`}).join('')}</tbody></table></div></div>`}
 function actLoc(aid){const x=S.act.get(aid);if(!x)return'';const a=S.amb.get(x.ambId);const sc=a&&S.sec.get(a.sectorId);const p=S.pis.get(pisoOfAct(aid));
   return[p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · ')+' · '+conOf(x.sc).name}
 /* resaltado de toda la fila en el Lookahead (oct 2026, pedido del dueño: ~3 s). Es un estado (LK_HL), no solo una clase en el
@@ -588,15 +635,20 @@ function renderRestr(main){
   const nAV=list.filter(r=>r.status!=='lib'&&actVenc(r.actId)).length;if(RVEN&&!nAV)RVEN=false;if(RVEN)list=list.filter(r=>r.status!=='lib'&&actVenc(r.actId));
   if(U.rgrp)list=list.filter(r=>grpOf(r)===U.rgrp);
   list.sort((a,b)=>(a.need||'9').localeCompare(b.need||'9')||String(a.created).localeCompare(String(b.created)));
-  const pend=all.filter(rOpenC);const late=pend.filter(r=>r.need&&r.need<today);
+  const pend=all.filter(rOpenC);
+  /* C-23: las de un «No va» cuya actividad ya se ejecutó van aparte (no cuentan como vencidas) */
+  {const c0=pend.filter(r=>r.via==='plan diario'&&r.created).map(r=>r.created).sort()[0];if(c0)ensureDaily(c0<addD(today,-60)?addD(today,-60):c0)}
+  const POS=new Map();for(const r of pend){const p=rPosLib(r);if(p)POS.set(r.id,p)}
+  const late=pend.filter(r=>r.need&&r.need<today&&!POS.has(r.id));
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
   const libW=all.filter(r=>r.status==='lib'&&r.freed&&weekOf(r.freed)===U.week).length;
   const showP=!U.piso&&S.pis.size>1;const mob=isNarrow();
   let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,'<button class="ib" id="rxls" title="Exportar a Excel la lista con los filtros de abajo">Exportar Excel</button>'+(rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':''))}<div class="tiles">
    <div class="tile"><span class="k">Pendientes</span><span class="v">${pend.length}<small> · ${pend.filter(r=>grpOf(r)==='campo').length} campo · ${pend.filter(r=>grpOf(r)==='area').length} otras áreas</small></span></div>
-   <div class="tile"><span class="k">Vencidas</span><span class="v" style="color:${late.length?'var(--bad)':'inherit'}">${late.length}</span></div>
+   <div class="tile"><span class="k">Vencidas</span><span class="v" style="color:${late.length?'var(--bad)':'inherit'}">${late.length}${POS.size?`<small> · ${POS.size} posiblemente liberada${POS.size>1?'s':''}</small>`:''}</span></div>
    <div class="tile"><span class="k">Afectan la ventana</span><span class="v">${inWin.length}<small> · sem ${U.week}–${U.week+U.win-1}</small></span></div>
    <div class="tile"><span class="k">Liberadas sem ${U.week}</span><span class="v">${libW}</span></div></div>
+  ${U.rfilter!=='lib'?rPosLibHtml(pend.filter(r=>POS.has(r.id)&&(!U.rgrp||grpOf(r)===U.rgrp)&&(!U.rAct||r.actId===U.rAct)).map(r=>({r,p:POS.get(r.id)}))):''}
   <div class="card"><div class="hd">Lista
    <span class="seg" id="rf"><button data-f="pend" class="${U.rfilter==='pend'?'on':''}">Pendientes</button><button data-f="lib" class="${U.rfilter==='lib'?'on':''}">Liberadas</button><button data-f="all" class="${U.rfilter==='all'?'on':''}">Todas</button></span>
    <span class="seg" id="rg" title="Operativas de campo vs. las que dependen de otras áreas (OT, Ingeniería, etc.)"><button data-g="" class="${U.rgrp?'':'on'}">Todas</button><button data-g="campo" class="${U.rgrp==='campo'?'on':''}">Campo</button><button data-g="area" class="${U.rgrp==='area'?'on':''}">Otras áreas</button></span>
@@ -649,6 +701,8 @@ function renderRestr(main){
     const im=e.target.closest('.rph img[data-ph]');if(im&&im.src&&im.src.startsWith('data:')){lightbox(im.src);return}
     const pdl=e.target.closest('[data-rphdel]');if(pdl){const[rid,fid]=pdl.dataset.rphdel.split('|');const r=S.res.get(rid);if(r&&rCanEd(r)){apply([op('restr',rid,{...r,photos:(r.photos||[]).filter(i=>i!==fid)})],'Foto quitada')}return} /* la foto queda guardada: deshacer la recupera */
     const b=e.target.closest('[data-rdel]');if(b){const r=S.res.get(b.dataset.rdel);if(!r||!rCanDel(r))return;(async()=>{if(!await uiAsk({title:'¿Eliminar esta restricción?',text:canWrite&&!PM()?'Va a la Papelera (Configuración): desde ahí se puede restaurar.':'',ok:'Eliminar',tone:'danger'}))return;apply([arc('restr',r.id)],'Restricción eliminada')})();return} /* auditoría 09/10: eliminar = archivar (Papelera), nunca borrar; sus fotos se conservan */
+    const pl_=e.target.closest('[data-rposlib]');if(pl_){const r=S.res.get(pl_.dataset.rposlib);if(!r||!rCanLib(r)||r.status==='lib')return;const d=pl_.dataset.d||todayIso();
+      apply([op('restr',r.id,{...r,status:'lib',freed:d,libBy:me.email,libN:me.name||me.email})],`Restricción liberada al ${fmtD(d)}`);return}
     const tg=e.target.closest('[data-rtog]');if(tg){const r=S.res.get(tg.dataset.rtog);if(!r||!rCanLib(r))return;const lib=r.status==='lib';apply([op('restr',r.id,{...r,status:lib?'pend':'lib',freed:lib?'':todayIso(),libBy:lib?'':me.email,libN:lib?'':(me.name||me.email)})],lib?'Restricción reabierta':'Restricción liberada');return}
     const rg=e.target.closest('[data-rgo]');if(rg){gotoAct(rg.dataset.rgo);return}
     const rm=e.target.closest('[data-rmap]');if(rm){gotoPlano(rm.dataset.rmap);return}
