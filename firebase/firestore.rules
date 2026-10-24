@@ -87,7 +87,8 @@ service cloud.firestore {
     }
     function noResp(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
     function edPiso(d) { return isAdmin() || (canEdit() && respOk(d.get('pisoId', ''))); }
-    // wsnap/<semana>_<piso>: foto del lookahead al congelar (antes weeks.snap; auditoría de datos M1): mismas reglas que weeks
+    // wsnap/<semana>_<piso>: foto del lookahead al congelar (antes weeks.snap; auditoría de datos M1): lectura y borrado por la
+    // regla general; crear y cambiar en match /wsnap (PER-2)
     function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
 
     match /members/{mail} {
@@ -226,7 +227,7 @@ service cloud.firestore {
       allow update: if canEdit() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undone']);
     }
     // Restricciones: editor/admin todo (regla general de abajo). El subcontratista crea las de actividades de su partida
-    // y edita o borra solo las que él registró, mientras estén pendientes (liberarlas es del ingeniero).
+    // y edita o archiva solo las que él registró, mientras estén pendientes (liberarlas es del ingeniero).
     function scRestrOk(d) {
       return d.get('sc', '') in scsOf() && d.get('by', '') == mid()
         && d.get('status', 'pend') != 'lib' && d.get('freed', '') == ''
@@ -238,7 +239,7 @@ service cloud.firestore {
         || (isArea() && areaRestrOk(request.resource.data));
       allow update: if (isSC() && scRestrOk(resource.data) && scRestrOk(request.resource.data))
         || (isArea() && areaRestrOk(resource.data) && areaRestrOk(request.resource.data));
-      allow delete: if isSC() && scRestrOk(resource.data);
+      // PER-8 (tanda 3): el SC no borra de verdad (la interfaz archiva con arch); deshacer/borrar queda para editor y admin
     }
     // Liberaciones de calidad: las solicita el SC (de su partida), el ingeniero de producción o Calidad;
     // las programa y decide Calidad (o el editor / administrador). El SC solo pide, levanta observaciones o anula las suyas.
@@ -315,7 +316,8 @@ service cloud.firestore {
       allow read: if lpsMember();
       allow create: if (canNP() && request.resource.data.by == mid()) || scNpOk(request.resource.data);
       allow update: if canDaily() || (canNP() && resource.data.by == mid() && request.resource.data.by == mid())
-        || (resource.data.by == mid() && scNpOk(request.resource.data));
+        // PER-5 (tanda 3): lo ya verificado por el ingeniero el SC no lo cambia ni le quita la verificación
+        || (resource.data.by == mid() && !('ver' in resource.data) && scNpOk(request.resource.data));
       allow delete: if isAdmin();
     }
     // Sesión pull (oct 2026, docs/ia/pull.md): borrador de planificación con pósits. La ven todos los de LPS;
@@ -377,11 +379,11 @@ service cloud.firestore {
             && scPdzShape(id, request.resource.data) && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
       allow delete: if edPiso(resource.data) || (isSC() && scPdzOld(resource.data) && scDpropFrom(resource.data));
     }
-    // Última zona usada por cada actividad (para "Como antes")
+    // Última zona usada por cada actividad (para "Como antes"); id = actividad. H10a (tanda 3): el SC, solo de una actividad de su partida
     match /pzon/{id} {
       allow read: if lpsMember();
-      allow create: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf());
-      allow update: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()
+      allow create: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf() && actMine(id));
+      allow update: if canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf() && actMine(id)
         && (!('sc' in resource.data) || resource.data.sc in scsOf()));
       allow delete: if canEdit();
     }
@@ -702,7 +704,23 @@ service cloud.firestore {
         // cres: evaluación del PPC del cliente (oct 2026). Solo el administrador la marca; el editor solo la mueve al
         // descongelar o recuperar la semana (pasa de congelada a borrador o al revés)
         && (isAdmin() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cres'])
-          || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null);
+          || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null)
+        // PER-2 (tanda 3): una semana congelada (compromisos items, frozenAt, todo) solo la cambia el responsable del piso o el
+        // administrador (evaluar, descongelar). Una semana sin congelar la congela cualquier editor; su unfrozenAt (re-congelado
+        // a las 2 h) no lo toca otro editor salvo al congelarla (congelar lo quita).
+        && (edPiso(resource.data) || (resource.data.get('frozenAt', null) == null
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unfrozenAt'])
+            || (request.resource.data.get('frozenAt', null) != null && !('unfrozenAt' in request.resource.data)))));
+    }
+    // wsnap/<semana>_<piso>: foto del lookahead al congelar (PER-2, tanda 3). La lee LPS (regla general). La crea un editor si la
+    // semana no está congelada (congelar, copia __h al descongelar); la cambia el responsable del piso, el administrador o quien
+    // congela en esa misma escritura (la semana pasa de borrador a congelada: re-congelar, recuperar). Borrar: solo el administrador.
+    function wkDoc(id) { return /databases/$(database)/documents/weeks/$(id); }
+    function wkOpen(id) { return !exists(wkDoc(id)) || get(wkDoc(id)).data.get('frozenAt', null) == null; }
+    function wkFrozenAfter(id) { return existsAfter(wkDoc(id)) && getAfter(wkDoc(id)).data.get('frozenAt', null) != null; }
+    match /wsnap/{id} {
+      allow create: if canEdit() && (edPiso(request.resource.data) || wkOpen(id));
+      allow update: if canEdit() && (edPiso(resource.data) || (wkOpen(id) && wkFrozenAfter(id)));
     }
     // SEG-01: Configuración › Proyecto. La numeración de semanas, los cortes (propuestas y congelado), la publicación automática del
     // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia (también engCutHH, Cierre del
@@ -730,7 +748,7 @@ service cloud.firestore {
     }
     match /{col}/{id} {
       allow read: if lpsMember() && dataCol(col);
-      allow create, update: if canEdit() && dataCol(col) && !(col in ['pisos', 'weeks', 'meta'])
+      allow create, update: if canEdit() && dataCol(col) && !(col in ['pisos', 'weeks', 'wsnap', 'meta'])
         // imágenes de sectorización anteriores: solo el administrador las archiva (decisión del dueño, oct 2026)
         && (col != 'planos' || isAdmin() || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['arch']));
       // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador

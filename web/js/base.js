@@ -202,7 +202,10 @@ const GRPN={campo:'Operativa de campo',area:'Otras áreas'};
 /* restricciones pendientes por actividad: índice que se rehace solo cuando cambian los datos (DV) */
 let RPK=-1,RPM=new Map();
 const restrPend=aid=>{if(RPK!==DV){RPK=DV;RPM=new Map();for(const r of S.res.values())if(r.actId&&r.status!=='lib'){const L=RPM.get(r.actId);if(L)L.push(r);else RPM.set(r.actId,[r])}}return RPM.get(aid)||[]};
-const rTxt=r=>`${GRPN[grpOf(r)]}${grpOf(r)==='area'&&r.area?' · '+r.area:''} — ${r.type||'Restricción'}${r.desc?': '+r.desc:''}${r.resp?' (resp. '+r.resp+')':''}`;
+/* PER-7 (tanda 3): restricción de una actividad de otra partida vista por un SC: solo tipo, para cuándo y estado (sin descripción ni responsable)
+   (las que él registró o donde es responsable, restrVis, las ve completas) */
+const rOther=r=>typeof SCK==='function'&&SCK()&&!!me&&!(me.scs||[]).includes((S.act.get(r.actId)||{}).sc||r.sc)&&!(typeof restrVis==='function'&&restrVis(r));
+const rTxt=r=>rOther(r)?`${r.type||'Restricción'}${r.need?' · liberar para el '+fmtD(r.need)+(r.need<todayIso()?' (vencida)':''):''} · de otra partida`:`${GRPN[grpOf(r)]}${grpOf(r)==='area'&&r.area?' · '+r.area:''} — ${r.type||'Restricción'}${r.desc?': '+r.desc:''}${r.resp?' (resp. '+r.resp+')':''}`;
 const doneOf=x=>DONE.get(x.id)||null;
 const libDay=(x,d)=>{const dn=DONE.get(x.id);return!!(dn&&d>dn&&(x.days||[]).includes(d))};
 const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);

@@ -44,7 +44,7 @@ function npNew(o){if(!canNPx())return;const d=o.d||campoDate();
   NS={mode:'new',id:'',d,pid:o.pid||(ambId?pisoOfAmb(ambId):(visPisos()[0]||{}).id||''),pt:o.pt||null,ambId,auto:!!ambId,sc:npSC()&&(me.scs||[]).length===1?me.scs[0]:'',desc:'',exec:'',und:'',note:'',photos:[],newPh:[],more:false};npDraw();
   if(!ambId&&o.pt&&API&&API.ambAtP){const ns=NS;API.ambAtP(ns.pid,o.pt).then(a=>{if(NS===ns&&!NS.ambId&&a){NS.ambId=a;NS.auto=true;npDraw()}})}}
 function npOpen(id){const n=NPM.get(id);if(!n)return;
-  NS={mode:'edit',id,d:n.date,pid:n.pisoId,pt:n.pt||null,ambId:n.ambId||'',auto:false,sc:n.sc||'',desc:n.desc||'',exec:n.exec??'',und:n.und||'',note:n.note||'',photos:[...(n.photos||[])],newPh:[],more:!!(n.exec!=null||n.note),ro:!npMine(n)};npDraw()}
+  NS={mode:'edit',id,d:n.date,pid:n.pisoId,pt:n.pt||null,ambId:n.ambId||'',auto:false,sc:n.sc||'',desc:n.desc||'',exec:n.exec??'',und:n.und||'',note:n.note||'',photos:[...(n.photos||[])],newPh:[],more:!!(n.exec!=null||n.note),ro:!npMine(n)||(!!n.ver&&!canDaily),roVer:npMine(n)&&!!n.ver&&!canDaily};npDraw()}
 function npClose(){const sh=$('#npsheet');if(sh)sh.remove();NS=null}
 function npAmbOpts(pid){const out=[];for(const{p,secs}of tree()){if(p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a}of ambs)out.push({s,a})}return out}
 function npScs(pid,ambId){const inA=new Set(),inP=new Set();for(const x of S.act.values()){if(x.ambId===ambId)inA.add(x.sc);else if(pisoOfAct(x.id)===pid)inP.add(x.sc)}
@@ -70,7 +70,8 @@ function npDraw(){if(!NS)return;const n=NS.mode==='edit'?NPM.get(NS.id):null;con
   else h+=`<button class="lnkb npmore" data-npmore>+ Cantidad y comentario</button>`;
   if(linked)h+=`<p class="knote">Ya está en el lookahead: <b>${esc(linked.name)}</b>.</p>`;
   if(n&&n.scProp)h+=n.ver?`<p class="knote">✓ Verificado por ${esc(n.ver.n||'')} · ${hhmm(n.ver.t)}</p>`:`<p class="knote"><b>Por verificar:</b> lo registró el subcontratista.</p>${canDaily?'<div class="kbtns"><button class="kbig ok" data-npa="ver">✓ Verificar (lo vi en obra)</button></div>':''}`;
-  if(ro)h+=`<p class="knote">Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
+  /* PER-5 (tanda 3): lo que ya verificó el ingeniero, el SC lo ve en solo lectura (las reglas no le dejan cambiarlo) */
+  if(ro)h+=`<p class="knote">${NS.roVer?'Ya lo verificó el ingeniero: para corregirlo o anularlo, pídeselo al ingeniero de campo.':'Lo registró otra persona: solo quien lo registró o el ingeniero de campo lo pueden cambiar.'}</p><div class="kbtns"><button class="kbig ghost" data-npx>Cerrar</button></div>`;
   else h+=`<div class="kbtns"><button class="kbig pri" data-npa="save"${NS.busy?' disabled':''}>${NS.mode==='edit'?'Guardar cambios':'Guardar'}</button><button class="kbig ghost" data-npx>Cancelar</button>
     ${n&&canWrite&&!linked?'<button class="kbig ghost" data-npa="look">Pasarlo al lookahead (este día)</button>':''}
     ${n?'<button class="kbig ghost npdel" data-npa="del">Anular este registro</button>':''}</div>

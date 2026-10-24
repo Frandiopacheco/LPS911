@@ -4,6 +4,8 @@
 /* ================= LOOKAHEAD ================= */
 /** ficha corta de las restricciones pendientes de una actividad (al pasar el mouse por la «R» del lookahead) */
 function restrTip(aid){const L=typeof restrPend==='function'?restrPend(aid):[];const t=todayIso();if(!L.length)return'Restricción pendiente';
+  /* PER-7 (tanda 3): en filas de otras partidas el SC ve solo el tipo, para cuándo se necesita liberar y si está vencida */
+  if(L.some(rOther))return L.map((r,i)=>`${L.length>1?(i+1)+'. ':''}⛔ ${rOther(r)?`${r.type||'Restricción'}${r.need?` · liberar para el ${fmtD(r.need)}`:''} · ${r.need&&r.need<t?'VENCIDA':'pendiente'}`:`${r.desc||r.type||'Restricción'}${r.need?` · requerida ${fmtD(r.need)}${r.need<t?' (VENCIDA)':''}`:''}`}`).join('\n')+'\n\nDe otra partida: el detalle lo ve el ingeniero';
   return L.map((r,i)=>`${L.length>1?(i+1)+'. ':''}⛔ ${r.desc||r.type||'Restricción'}${r.cnc?' · causa '+(cncCode(r.cnc)||r.cnc):r.type?' · '+r.type:''}\n   La libera: ${r.resp||(grpOf(r)==='area'&&r.area?r.area:'—')}${r.need?` · requerida ${fmtD(r.need)}${r.need<t?' (VENCIDA)':''}`:''}${r.byName?' · registró '+r.byName:''}`).join('\n')+'\n\nToca para verlas en Restricciones'}
 function tree(){
   const secBy={},ambBy={},actBy={};

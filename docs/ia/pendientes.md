@@ -40,3 +40,11 @@ Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan l
 - `lhprop/{sc}` acumula claves `id:null` de cada decisión; vigilar el límite de 1 MB en obras largas.
 - Dos usuarios SC de la misma partida comparten `lhprop/{sc}`: «Enviar» de uno envía también los borradores del otro (¿por diseño?).
 - Duda del informe externo: confirmar que al entrar a la revisión se limpie la selección en bloque (`SELA`, mover.js).
+
+## Tanda 3 · C-27 (TMP-7): bloqueo de hoy/días pasados del Lookahead en reglas — evaluado, NO se hizo (24 oct 2026)
+- Hoy el bloqueo (no admin no cambia hoy ni días pasados ni días con plan publicado/cerrado) es solo de la interfaz (`lockGuard`/`lockHits`/`dayLocked`). Las reglas de `acts` (regla general, `canEdit`) no miran la fecha.
+- Por qué no se pasa a reglas:
+  - Las reglas no recorren listas: no hay forma de exigir «todo día agregado o quitado de `days` (y toda clave de `qty`) es posterior a hoy». Solo hay `hasAny`/`hasAll`/`difference`; habría que armar en la regla la lista de fechas prohibidas (p. ej. hoy y los 14 días anteriores en hora de Lima, cadenas `YYYY-MM-DD` construidas desde `request.time`) y además leer `dplan/<fecha>_<piso>` por cada día futuro publicado (el piso sale de ambiente → sector: dos lecturas más). Se pasa del límite de lecturas y acerca el de 1000 expresiones.
+  - Hay flujos legítimos del editor que sí cambian hoy: «No va» de hoy en el Plan diario (reprograma desde hoy; `lockGuard` lo deja si hay registro de campo, `recReal`), aceptar propuestas del SC, mover en bloque con el admin que confirma «Cambiarlo igual», deshacer, «Pasarlo al lookahead» de un no programado (día pasado), restaurar respaldos. Bloquearlos en reglas rompería esos flujos o exigiría marcas extra difíciles de validar.
+  - Lo que sí protege lo medido: el PPC diario se mide contra la foto `dplan` (sus `ids/who` ya están protegidos en reglas) y el semanal contra `weeks` congelada (PER-2), no contra el lookahead vivo; `daily`/`live` de un día cerrado ya se rechazan (`dayShut`).
+- Si algún día se quiere: registrar cada cambio a días cerrados en `lhlog` desde una Cloud Function (`onWrite` de `acts`) que compare con `dplan` y avise, en vez de validarlo en reglas.

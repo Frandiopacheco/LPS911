@@ -23,6 +23,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - C-17 (aviso al congelar/publicar con restricciones abiertas y chapita R del Plan semanal): ver `ppc-campo.md` «Tanda 2».
 - Prueba: `auditoria-tanda2-plan.spec.js`.
 
+## Tanda 3 (frente G, permisos)
+- PER-8: el SC ya no puede borrar de verdad sus restricciones en las reglas (solo archivar, como la interfaz).
+- PER-7: el SC ve las restricciones de filas de otras partidas que no registró ni tiene a cargo solo con tipo, fecha para liberar y estado (`rOther`/`rTxt` en base.js, `restrTip`). Ver `seguridad.md` «Tanda 3».
+
 ## Otros
 - Filtro «Registró»: `rReg` unifica por persona (correo→nombre) para que no haya etiquetas duplicadas de la misma persona (`rByNames`).
 - **Responsable que es una empresa (C-30/DAT-04 b, oct 2026):** además de `resp` (nombre, lo leen exportes, Excel y avisos) se guarda `respSc` (id del SC) al crear desde una actividad (`newRestr`, plan diario, cumplimiento del plano, sesión pull) y al elegir una empresa en el selector (`respScOf`; elegir una persona o un área lo quita). `rRespN(r)` da el nombre actual de esa empresa (selector, ficha, filtro «La libera»/`rWho`); `restrMine` también acepta `respSc` entre las partidas del SC. Las antiguas (solo nombre) se comparan por nombre como antes, y al **renombrar** el SC en Configuración `restrRespRename` pasa a su nombre nuevo (con `respSc`) todas las que tenía a cargo, activas y en la Papelera. Pasar una fila a otro SC no cambia el responsable. Prueba: `auditoria-tanda1-sc.spec.js`.
