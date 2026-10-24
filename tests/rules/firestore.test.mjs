@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField, writeBatch, setLogLevel } from 'firebase/firestore';
+setLogLevel('silent');
 
 const OWNER = 'frandiopacheco@gmail.com';
 let env;
