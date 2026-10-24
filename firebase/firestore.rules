@@ -665,7 +665,8 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
             && request.resource.data.get('m', {}).diff(resource.data.get('m', {})).affectedKeys().hasOnly([request.resource.data.k]));
-      allow delete: if false;
+      // H12b (tanda 3): borrar de verdad solo el administrador, en Equipo › Limpieza (pide BORRAR) junto con el ambiente del piso
+      allow delete: if isAdmin();
     }
     // Constancia de cada cambio de un SC en la matriz: la crea quien cambia; la revisa (visto / revertido) un editor;
     // el SC solo la marca «deshecha» si la deshizo él mismo. No se borra.

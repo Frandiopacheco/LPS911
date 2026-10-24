@@ -13,6 +13,9 @@ const pd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(Date.UTC(y,m-
 const iso=d=>d.toISOString().slice(0,10);
 const addD=(s,n)=>{const d=pd(s);d.setUTCDate(d.getUTCDate()+n);return iso(d)};
 let SKEW=(()=>{try{return +localStorage.getItem('lps.skew')||0}catch(e){return 0}})();const NOW=()=>Date.now()+SKEW;
+/* TMP-9/TMP-11 (tanda 3): NOW() deja en 0 los desfases de menos de 30 s (para no mover la pantalla); para las horas que deciden un corte
+   del servidor (descongelar, emitir la versión cliente) se usa el desfase medido tal cual (SKEWP, clockSync) */
+let SKEWP=(()=>{try{const v=localStorage.getItem('lps.skewp');return v==null?SKEW:(+v||0)}catch(e){return SKEW}})();const SNOW=()=>Date.now()+SKEWP;
 /* fechas en hora de Lima (UTC−5, sin horario de verano), como el servidor: un equipo con otra zona horaria no cambia de día antes de tiempo */
 const LIMA_OFF=5*3600e3;
 const ldt=t=>iso(new Date(t-LIMA_OFF));
@@ -135,7 +138,16 @@ function dayShut(d){if(!d)return false;const t=todayIso();return d<t||(d===t&&no
 const shutMsg=d=>`El registro del ${d===todayIso()?'día de hoy':fmtD(d)} ya cerró (Cierre del ingeniero, ${hhLabel(engCutHH())}): no se puede cambiar.`
 /* «17:00» → «5 pm», «16:30» → «4:30 pm» */
 function hhLabel(v){const[h,m]=String(v).split(':').map(Number);const h12=h%12||12;return`${h12}${m?':'+String(m).padStart(2,'0'):''} ${h<12?'am':'pm'}`}
-function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v<='23:30'?v:'21:00'}
+/* C-26 (tanda 3): publicación automática del plan entre 18:00 y 23:00 (antes hasta 23:30: solo 2 pasadas del servidor antes de
+   medianoche; y una hora de la mañana cerraba el plan de mañana antes de la reunión). Misma regla que functions/lib.js planCutHH. */
+const PLAN_CUT_MIN='18:00',PLAN_CUT_MAX='23:00';
+function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v>=PLAN_CUT_MIN&&v<=PLAN_CUT_MAX?v:'21:00'}
+/* DAT-10 (tanda 3): una actividad comprometida en el plan del día d y archivada antes del Cierre del ingeniero de ese día queda fuera
+   del PPC diario (el servidor no le registra el cierre del SC ni el «Sin cierre»: archCut en functions/lib.js). Lo que un ingeniero
+   ya registró en daily sí cuenta. Archivada después del cierre, el día ya estaba cerrado: cuenta como cualquiera. */
+function archCut(x,d){return!!(x&&x.arch)&&(+x.arch.t||0)<Date.parse(d+'T'+engCutHH()+':00Z')+LIMA_OFF}
+/* TMP-10 (tanda 3): fechas y horas mostradas con toLocale…String van siempre en hora de Lima, no en la zona del equipo */
+const LIMA_TZ={timeZone:'America/Lima'};
 const RT_RX=[['PROG',/program/i],['MAT',/materi/i],['QA/QC',/calidad|qa|qc/i],['EXT',/extern|clim/i],['CLI',/client|supervis/i],['EQ',/equipo|herramient/i],['DIS',/dise[ñn]o|ingenier/i],['SC',/subcontrat|personal|mano de obra/i],['ADM',/administr|permis/i],['EJEC',/ejecuci/i],['OT',/otro/i]];
 function restrTypeFor(code,types){const rx=(RT_RX.find(([c])=>c===code)||[])[1];if(!rx)return'';return(types||(typeof P==='function'?P().restrTypes:[])||[]).find(t=>typeof t==='string'&&rx.test(t))||''}
 /* código de una causa: la del cuadro por nombre; las antiguas, por parecido */

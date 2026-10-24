@@ -92,7 +92,7 @@ function renderCfg(main){
    <label for="p_ecl">Cierre del ingeniero</label><input id="p_ecl" data-p="engCutHH" type="time" min="18:00" max="23:00" step="900" value="${esc(engCutHH())}"${isAdmin?'':' readonly'} title="Hasta esta hora los ingenieros registran o corrigen el día. A esta hora se registran los cierres del SC tal como los marcó y lo que nadie cerró queda No cumplido imputable al SC («Sin cierre»); desde entonces el registro de ese día queda cerrado para todos, también para el administrador (el Plan semanal sigue editable). Entre 18:00 y 23:00, después del corte del SC.">
    <label for="p_pui">Avisos de detenciones: desde</label><input id="p_pui" data-p="pushIni" type="time" step="900" value="${esc(pushHor().ini)}"${isAdmin?'':' readonly'} title="Los responsables de piso y el administrador reciben en su celular y computadora un aviso cuando un SC marca «Detenido», de lunes a sábado (días hábiles) dentro de este horario">
    <label for="p_puf">Avisos de detenciones: hasta</label><input id="p_puf" data-p="pushFin" type="time" step="900" value="${esc(pushHor().fin)}"${isAdmin?'':' readonly'} title="Después de esta hora no se envían avisos; las detenciones se siguen viendo en «📊 Jornada › Detenciones»">
-   <label for="p_plc">Plan diario: publicación automática (si nadie publicó)</label><input id="p_plc" data-p="planCutHH" type="time" max="23:30" step="900" value="${esc(planCutHH())}"${isAdmin?'':' readonly'} title="El plan del día hábil siguiente se publica solo a esta hora (hasta las 23:30): se aplican los cambios de la reunión y las propuestas sin revisar se rechazan">
+   <label for="p_plc">Plan diario: publicación automática (si nadie publicó)</label><input id="p_plc" data-p="planCutHH" type="time" min="${PLAN_CUT_MIN}" max="${PLAN_CUT_MAX}" step="900" value="${esc(planCutHH())}"${isAdmin?'':' readonly'} title="El plan del día hábil siguiente se publica solo a esta hora (entre las 6 pm y las 11 pm): se aplican los cambios de la reunión y las propuestas sin revisar se rechazan. Si esa noche falla, el servidor lo sigue intentando hasta las 6 am">
    <label>Logo de la empresa (Excel)</label><span class="logoc">${logoPrev('logoE')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoE" hidden>Subir…</label>':''}</span>
    <label>Logo del cliente (Excel)</label><span class="logoc">${logoPrev('logoC')}${isAdmin?'<label class="ib"><input type="file" accept="image/png,image/jpeg" data-logo="logoC" hidden>Subir…</label>':''}</span>
   </div><p class="pad note" style="padding-top:0">La numeración de semanas se calcula desde la semana y el lunes de referencia (hoy: semana ${P().refWeek} = ${fmtD(P().refDate)}). Las propuestas que tocan una semana y se envían después de su corte (hora de Lima) se marcan «fuera de plazo»: llegan igual, y para aceptarlas se pide el motivo.</p></div>`:''}
@@ -101,10 +101,12 @@ function renderCfg(main){
   calWire(main);espWire(main);
   const saveP=ch=>apply([op('meta','project',{...P(),...ch})]);
   const saveT=fn=>{const t=clone(tpls);fn(t);saveP({templates:t})};
+  /* C-26/TMP-8: un corte movido a una hora que ya pasó actúa en la próxima pasada del servidor: se avisa antes de guardar */
+  const saveCut=ch=>{cutChangeOk(ch).then(ok=>{if(ok)saveP(ch);else requestRender()})};
   main.onfocusin=e=>{if(e.target.classList.contains('ci'))e.target.dataset.o=e.target.value};
   main.onchange=e=>{const t=e.target;if(t.id==='cfgInsp'){if(canLibCfg()){const L=[...new Set(t.value.split('\n').map(x=>x.trim()).filter(Boolean))];libmPut({insp:L},`${L.length} inspector(es) guardados`)}return}if(!canWrite)return;
     if(t.dataset.logo&&t.files&&t.files[0]){logoUpload(t.dataset.logo,t.files[0]);return}
-    if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='propCutDow')v=parseInt(v,10);if(t.dataset.p==='frzCutDow'){if(v===''){saveP({frzCutDow:null,frzCutHH:null});return}v=parseInt(v,10);const hh=/^\d\d:\d\d$/.test(P().frzCutHH||'')?P().frzCutHH:propCutCfg().hh;saveP({frzCutDow:v,frzCutHH:hh});return}if(t.dataset.p==='frzCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=frzCutCfg().hh;return}if(t.dataset.p==='propCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=propCutCfg().hh;return}if(t.dataset.p==='planCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v<='23:30')){toast('Elige una hora hasta las 23:30.');t.value=planCutHH();return}if((t.dataset.p==='pushIni'||t.dataset.p==='pushFin')){const H=pushHor(),ini=t.dataset.p==='pushIni'?v:H.ini,fin=t.dataset.p==='pushFin'?v:H.fin;if(!(/^\d\d:\d\d$/.test(v)&&fin>ini)){toast('El fin de los avisos debe ser después del inicio.');t.value=t.dataset.p==='pushIni'?H.ini:H.fin;return}}if(t.dataset.p==='closeCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v>='12:00'&&v<='21:00'&&v<engCutHH())){toast(`Elige una hora entre las 12:00 y las 21:00, antes del Cierre del ingeniero (${engCutHH()}).`);t.value=closeCutHH();return}if(t.dataset.p==='engCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v>='18:00'&&v<='23:00'&&v>closeCutHH())){toast(`El Cierre del ingeniero va entre las 18:00 y las 23:00, después del corte del SC (${closeCutHH()}).`);t.value=engCutHH();return}if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}saveP({[t.dataset.p]:v})}
+    if(t.dataset.p){if(!isAdmin)return;let v=t.value;if(t.dataset.p==='refWeek')v=parseInt(v,10)||P().refWeek;if(t.dataset.p==='propCutDow')v=parseInt(v,10);if(t.dataset.p==='frzCutDow'){if(v===''){saveCut({frzCutDow:null,frzCutHH:null});return}v=parseInt(v,10);const hh=/^\d\d:\d\d$/.test(P().frzCutHH||'')?P().frzCutHH:propCutCfg().hh;saveCut({frzCutDow:v,frzCutHH:hh});return}if(t.dataset.p==='frzCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=frzCutCfg().hh;return}if(t.dataset.p==='propCutHH'&&!/^\d\d:\d\d$/.test(v)){t.value=propCutCfg().hh;return}if(t.dataset.p==='planCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v>=PLAN_CUT_MIN&&v<=PLAN_CUT_MAX)){toast('Elige una hora entre las 6 pm y las 11 pm (el servidor la revisa cada 15 minutos).');t.value=planCutHH();return}if((t.dataset.p==='pushIni'||t.dataset.p==='pushFin')){const H=pushHor(),ini=t.dataset.p==='pushIni'?v:H.ini,fin=t.dataset.p==='pushFin'?v:H.fin;if(!(/^\d\d:\d\d$/.test(v)&&fin>ini)){toast('El fin de los avisos debe ser después del inicio.');t.value=t.dataset.p==='pushIni'?H.ini:H.fin;return}}if(t.dataset.p==='closeCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v>='12:00'&&v<='21:00'&&v<engCutHH())){toast(`Elige una hora entre las 12:00 y las 21:00, antes del Cierre del ingeniero (${engCutHH()}).`);t.value=closeCutHH();return}if(t.dataset.p==='engCutHH'&&!(/^\d\d:\d\d$/.test(v)&&v>='18:00'&&v<='23:00'&&v>closeCutHH())){toast(`El Cierre del ingeniero va entre las 18:00 y las 23:00, después del corte del SC (${closeCutHH()}).`);t.value=engCutHH();return}if(t.dataset.p==='refDate'&&pd(v).getUTCDay()!==1){toast('La fecha de referencia debe ser un lunes.');t.value=P().refDate;return}if(CUT_KEYS.has(t.dataset.p)){saveCut({[t.dataset.p]:v});return}saveP({[t.dataset.p]:v})}
     else if(t.dataset.c&&t.dataset.f==='esp'){const c=S.con.get(t.dataset.c);espPick(t,c.esp).then(v=>{if(v==null||v===(c.esp||''))return;const cur=S.con.get(c.id);if(cur)apply([op('contractors',c.id,{...cur,esp:v})],`${cur.name}: especialidad «${espN(v)||'—'}»`)})}
     else if(t.dataset.c&&t.dataset.f==='tbd'){const c=S.con.get(t.dataset.c);if(!c)return;const on=!!t.checked;const n={...c};if(on)n.tbd=true;else delete n.tbd;
       apply([op('contractors',c.id,n)],`${c.name}: ${on?'sin asignar (no se le mide cumplimiento)':'vuelve a contar como subcontratista'}`)}
@@ -283,6 +285,20 @@ function renderTeam(main){
     if(e.target.id==='bbackup')backupJson(false);if(e.target.id==='bbackup2')backupJson(true)};
   const fi=$('#fimport',main);if(fi)fi.onchange=async()=>{const file=fi.files[0];fi.value='';if(file)await importJson(file)};
 }
+/* ---------- C-26 / TMP-8 (tanda 3): cambiar un corte a una hora que ya pasó ---------- */
+/* Las tareas del servidor leen la configuración en cada pasada (cada 15 min): adelantar el corte del congelado o de la publicación del
+   plan a una hora que ya pasó congela/publica en la próxima pasada; el de las propuestas deja «fuera de plazo» lo que llegue desde ya.
+   Se avisa con uiAsk antes de guardar (Cancelar deja el corte como estaba). ch = cambios de meta/project. */
+const CUT_KEYS=new Set(['propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH']);
+function cutChangeWarn(ch,now=NOW()){const p0=P(),p1={...p0,...ch};const n=weekOf(todayIso())+1;const L=[];
+  const pass=(a,b)=>b<=now&&a>now;
+  if(['frzCutDow','frzCutHH','propCutDow','propCutHH'].some(k=>k in ch)){
+    if(pass(frzCut(n,p0),frzCut(n,p1)))L.push(`La semana ${n} se congelará sola en la próxima pasada del servidor (en 15 minutos o menos), en los pisos que nadie haya congelado.`);
+    if(pass(propCut(n,p0),propCut(n,p1)))L.push(`Las propuestas de los SC para la semana ${n} que lleguen desde ahora quedarán «fuera de plazo».`)}
+  if('planCutHH' in ch){const h=new Date(now-LIMA_OFF).toISOString().slice(11,16);if(ch.planCutHH<=h&&planCutHH()>h)L.push(`El plan del ${fmtD(wshift(todayIso(),1))} se publicará solo en la próxima pasada del servidor (en 15 minutos o menos), en los pisos donde nadie lo haya publicado: se aplican los borradores de la reunión y las propuestas sin revisar se rechazan.`)}
+  return L}
+async function cutChangeOk(ch){const L=cutChangeWarn(ch);if(!L.length)return true;
+  return!!await uiAsk({title:'Ese corte ya pasó',text:'La nueva hora ya pasó en el día o la semana en curso:',list:L,note:'Si querías que valga desde la próxima semana o mañana, cancela y cámbialo después del corte de hoy.',ok:'Guardar igual',cancel:'Cancelar',tone:'warn'})}
 /* ---------- limpieza de datos de prueba ---------- */
 const CL={sel:null,seen:new Set(),weeks:true,daily:true,restr:true,planos:false,plan:null,busy:false,msg:''};
 const isFach=p=>p&&(p.id==='piso-fach'||/fachad/i.test(p.name||'')||/fachad/i.test(p.code||''));
@@ -294,11 +310,11 @@ function cleanCard(){
   const pl=CL.plan;
   return `<div class="card"><div class="hd">Limpiar datos <span class="sub">borra pisos completos y lo que depende de ellos</span></div>
   <div class="pad clean" id="clean">
-   <p class="note" style="margin:0 0 4px">Marca los pisos que quieres eliminar (con sus sectores, ambientes y actividades). Los pisos sin marcar no se tocan. <b>Antes descarga el respaldo completo</b> (botón de arriba): es la única forma de recuperar lo borrado.</p>
+   <p class="note" style="margin:0 0 4px">Marca los pisos que quieres eliminar (con sus sectores, ambientes y actividades, también los de la Papelera, y lo que depende de ellos: plan del día, liberaciones, zonas, estados de la matriz y propuestas de esas actividades). Los pisos sin marcar no se tocan. <b>Antes descarga el respaldo completo</b> (botón de arriba): es la única forma de recuperar lo borrado.</p>
    ${rows||'<span class="note">No hay pisos.</span>'}
    <hr style="border:0;border-top:1px solid var(--line);margin:6px 0">
-   <label><input type="checkbox" data-clo="weeks"${CL.weeks?' checked':''}${CL.busy?' disabled':''}><span>Planes semanales congelados y evaluaciones PPC de esos pisos</span></label>
-   <label><input type="checkbox" data-clo="daily"${CL.daily?' checked':''}${CL.busy?' disabled':''}><span>Avance diario (Campo) y sus fotos de esos pisos</span></label>
+   <label><input type="checkbox" data-clo="weeks"${CL.weeks?' checked':''}${CL.busy?' disabled':''}><span>Planes semanales congelados, evaluaciones PPC y fotos del lookahead congelado de esos pisos</span></label>
+   <label><input type="checkbox" data-clo="daily"${CL.daily?' checked':''}${CL.busy?' disabled':''}><span>Avance diario (Campo), reportes en vivo y no programados de esos pisos, con sus fotos</span></label>
    <label><input type="checkbox" data-clo="restr"${CL.restr?' checked':''}${CL.busy?' disabled':''}><span>Restricciones de esos pisos (de las actividades borradas y las que ya no tienen actividad)</span></label>
    <label><input type="checkbox" data-clo="planos"${CL.planos?' checked':''}${CL.busy?' disabled':''}><span>Planos asignados a esos pisos</span></label>
    <p class="note" style="margin:2px 0">El equipo, los subcontratistas, la configuración del proyecto y los demás pisos se conservan.</p>
@@ -306,20 +322,51 @@ function cleanCard(){
    `<div><button class="ib" id="clprep"${CL.sel.length&&!CL.busy?'':' disabled'}>Revisar qué se borrará…</button></div>`}
    <span class="note" id="clmsg">${esc(CL.msg)}</span>
   </div></div>`}
+/* H12b (tanda 3): además de pisos, sectores, ambientes y actividades (también los que están en la Papelera de ese piso), borra lo que
+   quedaba huérfano de esos pisos: plan del día (dplan), terminadas (doneidx/<piso>), zonas y propuestas del día (pdz), última zona
+   (pzon), liberaciones (lib, con sus archivos en fotos), estado en la matriz (mamb), capa del cliente (clia) y, en las propuestas de
+   los SC (lhprop), solo los elementos de esas actividades. Con «Planes semanales» también sus fotos del lookahead (wsnap); con «Avance
+   diario», los reportes en vivo (live) y el trabajo no programado (nprog) con sus fotos. Solo documentos de los pisos elegidos. */
 async function cleanPlan(){
-  const sel=new Set(CL.sel);const del=[];const actIds=new Set();let nS=0,nA=0,nX=0;
-  for(const pid of sel){const c=cleanPisoCounts(pid);c.secs.forEach(x=>del.push(['sectors',x.id]));c.ambs.forEach(x=>del.push(['ambientes',x.id]));c.acts.forEach(x=>{del.push(['acts',x.id]);actIds.add(x.id)});del.push(['pisos',pid]);nS+=c.secs.length;nA+=c.ambs.length;nX+=c.acts.length}
-  let nW=0,nD=0,nF=0,nR=0,nP=0;
-  if(CL.weeks)for(const w of S.wk.values()){const pid=w.pisoId||String(w.id).split('_').slice(1).join('_');if(sel.has(pid)){del.push(['weeks',w.id]);nW++}}
+  const sel=new Set(CL.sel);const del=[],upd=[];const actIds=new Set(),ambIds=new Set();let nS=0,nA=0,nX=0,nPap=0;
+  for(const pid of sel){const c=cleanPisoCounts(pid);
+    const ss=new Set(c.secs.map(x=>x.id));for(const s of ARCH.sec.values())if(s.pisoId===pid&&!ss.has(s.id)){c.secs.push(s);ss.add(s.id);nPap++}
+    const as=new Set(c.ambs.map(x=>x.id));for(const a of ARCH.amb.values())if(ss.has(a.sectorId)&&!as.has(a.id)){c.ambs.push(a);as.add(a.id);nPap++}
+    const xs=new Set(c.acts.map(x=>x.id));for(const x of ARCH.act.values())if(as.has(x.ambId)&&!xs.has(x.id)){c.acts.push(x);xs.add(x.id);nPap++}
+    c.secs.forEach(x=>del.push(['sectors',x.id]));c.ambs.forEach(x=>{del.push(['ambientes',x.id]);ambIds.add(x.id)});c.acts.forEach(x=>{del.push(['acts',x.id]);actIds.add(x.id)});del.push(['pisos',pid]);nS+=c.secs.length;nA+=c.ambs.length;nX+=c.acts.length}
+  let nW=0,nD=0,nF=0,nR=0,nP=0;const fotos=new Set();const phOf=o=>{if(o){(o.photos||[]).forEach(f=>fotos.add(f));(o.phQ||[]).forEach(f=>fotos.add(f));(o.proto||[]).forEach(f=>fotos.add(f))}};
+  const pidOf=(v,id)=>(v&&v.pisoId)||String(id).split('__')[0].split('_').slice(1).join('_');
+  const byPiso=async col=>{const out=[];for(const pid of sel){const sn=await fcol(col).where('pisoId','==',pid).get();sn.docs.forEach(d=>out.push(d))}return out};
+  const N={};const add=(col,id,k)=>{del.push([col,id]);N[k]=(N[k]||0)+1};
+  if(CL.weeks){for(const w of S.wk.values()){const pid=w.pisoId||String(w.id).split('_').slice(1).join('_');if(sel.has(pid)){del.push(['weeks',w.id]);nW++}}
+    (await fcol('wsnap').get()).docs.forEach(d=>{if(sel.has(pidOf(d.data(),d.id)))add('wsnap',d.id,'fotos del lookahead congelado')})}
   /* solo las restricciones de los pisos elegidos (antes también borraba las de otros pisos sin actividad activa) */
-  if(CL.restr)for(const q of S.res.values()){if(actIds.has(q.actId)||(sel.has(restrPiso(q))&&!S.act.has(q.actId))){del.push(['restr',q.id]);nR++}}
+  if(CL.restr)for(const q of [...S.res.values(),...ARCH.res.values()]){if(actIds.has(q.actId)||(sel.has(restrPiso(q))&&!S.act.has(q.actId))){del.push(['restr',q.id]);nR++}}
   if(CL.daily){const sn=await fcol('daily').get();sn.docs.forEach(d=>{const v=d.data();const pid=v.pisoId||d.id.split('_').slice(1).join('_');if(!sel.has(pid))return;del.push(['daily',d.id]);nD++;
-    const ph=new Set();Object.values(v.recs||{}).forEach(r=>(r&&r.photos||[]).forEach(f=>ph.add(f)));Object.values(v.extra||{}).forEach(r=>(r&&r.photos||[]).forEach(f=>ph.add(f)));ph.forEach(f=>{del.push(['fotos',f]);nF++})})}
+      Object.values(v.recs||{}).forEach(phOf);Object.values(v.extra||{}).forEach(phOf)});
+    (await byPiso('live')).forEach(d=>{phOf(d.data());add('live',d.id,'reportes en vivo')});
+    (await byPiso('nprog')).forEach(d=>{phOf(d.data());add('nprog',d.id,'no programados')})}
   if(CL.planos){ensurePlanos();const sn=await fcol('planos').get();sn.docs.forEach(d=>{if(sel.has(d.data().pisoId)){del.push(['planos',d.id]);nP++}})}
-  return{del,total:del.length,fach:[...sel].some(id=>isFach(S.pis.get(id))),parts:[['pisos',sel.size],['sectores',nS],['ambientes',nA],['actividades',nX],['semanas',nW],['restricciones',nR],['días de avance',nD],['fotos',nF],['planos',nP]]}}
+  /* lo que siempre depende del piso o de sus actividades y ambientes */
+  (await byPiso('dplan')).forEach(d=>add('dplan',d.id,'planes del día'));
+  (await byPiso('pdz')).forEach(d=>add('pdz',d.id,'zonas y propuestas del plan diario'));
+  for(const pid of sel)if((await fcol('doneidx').doc(pid).get()).exists)add('doneidx',pid,'índices de terminadas');
+  (await fcol('pzon').get()).docs.forEach(d=>{if(actIds.has(d.id))add('pzon',d.id,'últimas zonas')});
+  (await fcol('lib').get()).docs.forEach(d=>{const v=d.data()||{};if(sel.has(v.pisoId)||actIds.has(v.actId)||ambIds.has(v.ambId)){phOf(v);add('lib',d.id,'liberaciones')}});
+  (await fcol('mamb').get()).docs.forEach(d=>{if(ambIds.has(d.id))add('mamb',d.id,'estados de la matriz')});
+  if(typeof canCli==='function'&&canCli())(await fcol('clia').get()).docs.forEach(d=>{if(actIds.has(d.id))add('clia',d.id,'cambios del cliente')});
+  const DEL=firebase.firestore.FieldValue.delete();let nL=0;
+  (await fcol('lhprop').get()).docs.forEach(d=>{const its=(d.data()||{}).items||{};const ch={};
+    for(const[k,v]of Object.entries(its)){const af=v&&v.after;if(actIds.has(k)||(af&&ambIds.has(af.ambId)))ch['items.'+k]=DEL}
+    const n=Object.keys(ch).length;if(n){upd.push(['lhprop',d.id,ch]);nL+=n}});
+  fotos.forEach(f=>{del.push(['fotos',f]);nF++});
+  const extra=Object.entries(N);
+  return{del,upd,total:del.length+nL,fach:[...sel].some(id=>isFach(S.pis.get(id))),parts:[['pisos',sel.size],['sectores',nS],['ambientes',nA],['actividades',nX],['de ellos en la Papelera',nPap],['semanas',nW],['restricciones',nR],['días de avance',nD],['fotos',nF],['planos',nP],...extra,['propuestas de SC de esas actividades',nL]]}}
 async function cleanRun(){
   const pl=CL.plan;if(!pl)return;CL.busy=true;CL.msg='Borrando…';render();let done=0;
-  try{for(let i=0;i<pl.del.length;i+=400){const b=db.batch();pl.del.slice(i,i+400).forEach(([c,id])=>b.delete(fcol(c).doc(id)));await b.commit();done+=Math.min(400,pl.del.length-i);CL.msg=`Borrados ${done} de ${pl.total}…`;const m=$('#clmsg');if(m)m.textContent=CL.msg}
+  /* las propuestas de los SC no se borran: solo se quitan los elementos de las actividades borradas (update) */
+  const W=[...pl.del,...(pl.upd||[])];
+  try{for(let i=0;i<W.length;i+=400){const b=db.batch();W.slice(i,i+400).forEach(([c,id,ch])=>ch?b.update(fcol(c).doc(id),ch):b.delete(fcol(c).doc(id)));await b.commit();done+=Math.min(400,W.length-i);CL.msg=`Borrados ${done} de ${pl.total}…`;const m=$('#clmsg');if(m)m.textContent=CL.msg}
     for(const[c,id]of pl.del){const k=COLS[c];if(k){S[k].delete(id);if(ARCH[k])ARCH[k].delete(id)}if(c==='daily')DAY.delete(id)}doneRebuild();
     if(U.piso&&!S.pis.has(U.piso)){U.piso='';saveUI()}
     CL.msg=`Listo: ${pl.total} registros borrados. Ahora puedes cargar el archivo nuevo con “Cargar datos desde archivo…”.`;toast('Limpieza terminada');undoS.length=0;redoS.length=0;updUndo()}
@@ -341,7 +388,7 @@ async function importJson(file){
   /* lo emitido al cliente no se reemplaza (las reglas lo impiden): las versiones que ya existen se saltan */
   let CLE=new Set();if((cols.clidx||cols.cliver)&&typeof canCli==='function'&&canCli())try{CLE=new Set((await fcol('clidx').get()).docs.map(d=>d.id))}catch(e){}
   const cliHas=(col,id)=>(col==='clidx'&&CLE.has(id))||(col==='cliver'&&CLE.has(String(id).split('__')[0]));let nCli=0;
-  const writes=[];for(const[col,docs]of Object.entries(cols)){if(!(col in COLS||BK_ALL.includes(col))||!docs)continue;if((col==='members'||col==='inv')&&!isAdmin)continue;for(const[id,doc]of Object.entries(docs)){if(cliHas(col,id)){nCli++;continue}writes.push([col,id,fixDoc(col,doc)])}}
+  const writes=[];for(const[col,docs]of Object.entries(cols)){if(!(col in COLS||BK_ALL.includes(col))||!docs||BK_SRV.has(col))continue;if((col==='members'||col==='inv')&&!isAdmin)continue;for(const[id,doc]of Object.entries(docs)){if(cliHas(col,id)){nCli++;continue}writes.push([col,id,fixDoc(col,doc)])}}
   const dels=[];for(const[col,ids]of Object.entries(data.eliminar||{})){if(!(col in COLS)||!Array.isArray(ids))continue;ids.forEach(id=>dels.push([col,id]))}
   if(!writes.length&&!dels.length){toast('El archivo no contiene registros.');return}
   if(data.tipo==='actualizacion'){const falta=((data.requiere||{}).pisos||[]).filter(id=>!S.pis.has(id));

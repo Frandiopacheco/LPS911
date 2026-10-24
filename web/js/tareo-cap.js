@@ -305,7 +305,7 @@ function tcMenuSheet(D){const hoy=todayIso();const RL=TCS.reabL.filter(x=>x.date
 function tcSentBan(D){const q=tcSendQ();
   if(q==='sending')return`<div class="callout tc-sent tc-sending" id="tcSentB"><b>Enviando…</b><span>Esperando la confirmación del servidor.</span></div>`;
   if(q==='queued')return`<div class="callout tc-sent tc-queued" id="tcSentB" role="status"><b>⚠ Se enviará al tener señal</b><span>Está guardado en este celular. No cierres sesión ni borres los datos de la app; se enviará solo cuando vuelva la señal.</span></div>`;
-  const t=D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})):'';
+  const t=D.envAt?' · '+esc(new Date(D.envAt).toLocaleTimeString('es-PE',{...LIMA_TZ,hour:'2-digit',minute:'2-digit'})):'';
   return`<div class="callout tc-sent${D.st==='rev'?' tc-rev':''}" id="tcSentB"><b>Enviado ✓${t}</b><span>${D.st==='env'?'Ya no se puede cambiar. Si hay un error, pide al asistente de tareo que lo reabra.':D.st==='rev'?'Revisado por la oficina.':'Publicado.'}</span></div>`}
 /** tareo antiguo (por horarios) que aún se puede editar: se pasa a horas por partida con un botón; mientras, se ve como está */
 function tcOldHtml(D){return`<div class="callout tc-old" id="tcOld"><b>Este tareo se llenó con el formato anterior (por horarios).</b>

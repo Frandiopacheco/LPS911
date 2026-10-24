@@ -287,13 +287,14 @@ function restrWs(X,list,sub){const p=P();const today=todayIso();
   const H=['N.º','ESTADO','PISO','CÓDIGO','AMBIENTE','ACTIVIDAD','AFECTA A','TIPO','CLASE / ÁREA','DESCRIPCIÓN','RESPONSABLE','REGISTRÓ','F. REGISTRO','REQUERIDA','LIBERADA','LIBERÓ','DÍAS DE ATRASO'];const nc=H.length;
   set(0,0,'RESTRICCIONES',st({nb:true,b:true,sz:16,c:'1F3A4D'}));set(1,0,sub||'',st({nb:true,sz:10,c:'555555'}));
   [['PROYECTO',p.fullName||p.name||''],['FECHA',fmtD(today)+' '+today.slice(0,4)]].forEach(([k,v],i)=>{set(i,6,k,st({nb:true,b:true,sz:9,c:'6B7785',h:'right'}));set(i,7,v,st({nb:true,sz:10,b:i===0}))});
-  const pend=list.filter(r=>r.status!=='lib'),late=pend.filter(r=>r.need&&r.need<today);
-  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.length-pend.length} liberadas`,st({nb:true,sz:10,b:true}));
+  /* C-34 (DAT-06): las de actividades en la Papelera no cuentan como pendientes ni vencidas (rOpenC, como la pantalla y el AR) */
+  const pend=list.filter(rOpenC),late=pend.filter(r=>r.need&&r.need<today),nArch=list.filter(r=>r.status!=='lib'&&rArch(r)).length;
+  set(2,0,`${list.length} restricciones · ${pend.length} pendientes · ${late.length} vencidas · ${list.filter(r=>r.status==='lib').length} liberadas${nArch?` · ${nArch} de actividades eliminadas (no cuentan)`:''}`,st({nb:true,sz:10,b:true}));
   const hr=4;const hs=st({b:true,c:'FFFFFF',fill:'1F3A4D',h:'center',w:true});H.forEach((t,c)=>set(hr,c,t,hs));
-  let r=hr+1;list.forEach((q,i)=>{const x=S.act.get(q.actId);const a=x&&S.amb.get(x.ambId);const pp=S.pis.get(restrPiso(q));const lib=q.status==='lib';const vl=!lib&&q.need&&q.need<today;
-    const est=lib?'Liberada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':vl?'C62828':'7A5200';
+  let r=hr+1;list.forEach((q,i)=>{const ar=rArch(q);const x=ar?actOf(q.actId):S.act.get(q.actId);const a=x&&ambOf(x.ambId);const pp=pisOf(ar?pisoOfAmb(x.ambId):restrPiso(q));const lib=q.status==='lib';const vl=!lib&&!ar&&q.need&&q.need<today;
+    const est=lib?'Liberada':ar?'Actividad eliminada':vl?'Vencida':'Pendiente';const ef=lib?'E2EFDA':ar?'EEEEEE':vl?'FCE4E4':'FFF2CC',ec=lib?'2E7D32':ar?'666666':vl?'C62828':'7A5200';
     const atr=vl?wdist(q.need,today):lib&&q.need&&q.freed&&q.freed>q.need?wdist(q.need,q.freed):'';
-    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name:(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
+    const row=[i+1,est,pp?pp.code:'',a?a.code:'',a?a.name:'',x?x.name+(ar?' (en la Papelera)':''):(q.actId?'(ya no está en el lookahead)':''),rAff(q),q.type||'',grpOf(q)==='area'?('Otras áreas'+(q.area?' · '+q.area:'')):'Campo',q.desc||'',q.resp||'',rReg(q),q.created?fmtD(q.created):'',q.need?fmtD(q.need):'',q.freed?fmtD(q.freed):'',q.libN||'',atr];
     row.forEach((v,c)=>set(r,c,v,c===1?st({b:true,h:'center',fill:ef,c:ec}):c===0||c===2||c===3||c>=12?st({h:'center'}):c===9?st({w:true}):st()));r++});
   if(!list.length){set(r,0,'Sin restricciones en este filtro.',st({nb:true,c:'777777'}));r++}
   ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(r-1,hr),c:nc-1}});ws['!merges']=M;
@@ -326,6 +327,6 @@ function ppcScWs(X,n,docs0){const docs=docs0||histPisos().map(p=>S.wk.get(wkId(n
 async function restrXlsx(list,sub){const btn=$('#rxls');const bt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='Generando…'}
   /* formato de la empresa (AR: análisis de restricciones, 4 semanas desde la semana elegida) y el detalle de la pantalla */
   try{await loadXlsx();const X=window.XLSX;const p=P();await loadExcelJS();const J=new ExcelJS.Workbook();const LG=await xLogos(J);
-    await xAR(J,[...list].sort((a,b)=>(a.created||'').localeCompare(b.created||'')||String(a.id).localeCompare(String(b.id))),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
+    await xAR(J,arRows(list),U.week,LG);xToJ(J,'Detalle',restrWs(X,list,sub),X,0);
     await xSave(J,`${p.code||'LPS'}_Restricciones_${U.piso?(S.pis.get(U.piso)?.code||'')+'_':''}${todayIso()}.xlsx`)}
   catch(e){toast(e&&e.message?e.message:'No se pudo generar el Excel.')}finally{if(btn){btn.disabled=false;btn.textContent=bt}}}

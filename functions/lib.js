@@ -75,7 +75,7 @@ function closesToAccept(lives, dailyById, acts, upTo, dplanById, project) {
     const r = doc && doc.recs && doc.recs[lv.actId];
     if (r && (r.status || r.clr)) continue; // ya registrado, o el ingeniero lo quitó a propósito
     const x = acts.get(lv.actId);
-    if (!x) continue;
+    if (!x || archCut(x, lv.date, project)) continue; // DAT-10: archivada antes del cierre de ese día, como sinCierre
     const dp = dplanById && dplanById.get(lv.date + '_' + lv.pisoId);
     if (!liveScOk(lv, x, dp)) continue;
     const hasM = typeof x.metrado === 'number' && x.metrado > 0;
@@ -118,6 +118,10 @@ const closeCutTs = (d, hh) => Date.parse(d + 'T' + (hh || '17:00') + ':00-05:00'
 const hhIn = (v, lo, hi) => typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= lo && v <= hi;
 function engCutHH(p) { const c = closeCutHH(p); const v = p && p.engCutHH; return hhIn(v, '18:00', '23:00') && v > c ? v : (c < '21:00' ? '21:00' : '22:00'); }
 const engCutTs = (d, p) => closeCutTs(d, engCutHH(p));
+/* DAT-10 (tanda 3): una actividad comprometida y archivada antes del Cierre del ingeniero de ese día queda fuera de la jornada: ni se
+   registra el cierre del SC ni se marca «Sin cierre» (la página la saca igual del PPC diario: archCut en base.js). Archivada después,
+   el día ya estaba cerrado: cuenta como cualquier otra. Sin hora de archivado (antiguas): archivada. */
+const archCut = (x, d, p) => !!(x && x.arch) && (+(x.arch.t) || 0) < engCutTs(d, p || {});
 /* días cuyo registro hay que cerrar ahora: ayer (por si una pasada falló o la tarea se atrasó) y hoy si ya pasó el Cierre del
    ingeniero. La constancia jcl/<fecha> evita repetirlo (index.js). */
 function jornadaDays(p, now = Date.now()) {
@@ -145,7 +149,8 @@ function sinCierre(day, dplans, lives, dailyById, acts, novaIds, cnc, hh, opt = 
       if (r && (r.status || r.clr)) continue;
       if (novaIds && novaIds.has(aid)) continue;
       const x = acts.get(aid);
-      if (!x || x.arch || (x.rpl && x.rpl[day])) continue;
+      /* DAT-10: lo archivado antes del Cierre del ingeniero de ese día no se marca (como closesToAccept); archivado después, sí */
+      if (!x || archCut(x, day, opt.project || { closeCutHH: hh }) || (x.rpl && x.rpl[day])) continue;
       const dn = doneAt && doneAt.get(aid);
       if (dn && dn < day) continue; // H03a: ya estaba terminada antes de ese día: no se le pide cierre
       const who = dp.who && dp.who[aid];
@@ -367,10 +372,19 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
 }
 
 /* ---------- Cierre automático del plan del día (a la hora de Configuración, por defecto 21:00 del día anterior) ---------- */
-/* hora de la publicación automática (Configuración › Proyecto, planCutHH; por defecto 21:00; como mucho 23:30: la tarea corre cada 15 min) */
-function planCutHH(p) { const v = p && p.planCutHH; return typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= '00:00' && v <= '23:30' ? v : '21:00'; }
+/* hora de la publicación automática (Configuración › Proyecto, planCutHH; por defecto 21:00). C-26 (tanda 3, TMP-4): entre 18:00 y
+   23:00 (antes 00:00–23:30: con 23:30 solo había 2 pasadas antes de medianoche, y una hora de la mañana cerraba el plan de mañana
+   antes de la reunión). Fuera de rango, 21:00. Misma regla en base.js planCutHH. No se ata al Cierre del ingeniero (engCutHH): el
+   plan de mañana se publica en la reunión de la tarde, antes de ese cierre, y la publicación automática solo reemplaza esa acción. */
+const PLAN_CUT_MIN = '18:00', PLAN_CUT_MAX = '23:00';
+function planCutHH(p) { const v = p && p.planCutHH; return hhIn(v, PLAN_CUT_MIN, PLAN_CUT_MAX) ? v : '21:00'; }
+const limaHHMM = now => new Date(now - LIMA).toISOString().slice(11, 16);
 /* ¿ya pasó hoy (hora de Lima) la hora de la publicación automática? */
-function planCutDue(p, now = Date.now()) { const t = new Date(now - LIMA).toISOString().slice(11, 16); return t >= planCutHH(p); }
+function planCutDue(p, now = Date.now()) { return limaHHMM(now) >= planCutHH(p); }
+/* C-26: si todas las pasadas de un día fallaron (o quedaron pisos por reintentar), después de medianoche se sigue intentando el plan
+   del día anterior hasta las 06:00 (antes de empezar la jornada): devuelve esa fecha (la de la constancia pcl/<fecha>) o null. */
+const PLAN_LATE_HH = '06:00';
+function planCatchUp(p, now = Date.now()) { return !planCutDue(p, now) && limaHHMM(now) < PLAN_LATE_HH ? addD(limaToday(now), -1) : null; }
 /* día hábil (como la página: domingo no; feriados y sábado según Configuración › Calendario). C-08 (tanda 1): una fecha marcada
    «se trabaja» (cal.work: [{d, n}]) es laborable aunque sea domingo, feriado o sábado no laborable */
 function isWork(p, d) { const c = (p && p.cal) || {}; if ((c.work || []).some(o => o && o.d === d)) return true; const dw = pd(d).getUTCDay(); if (dw === 0) return false; if ((c.hol || []).some(o => o && o.d === d)) return false; if (dw === 6 && c.sat === false) return false; return true; }
@@ -832,6 +846,6 @@ module.exports = {
   CLOSE_GRACE, engCutHH, engCutTs, jornadaDays, holPeru, holPreload, easter,
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, planCatchUp, PLAN_CUT_MIN, PLAN_CUT_MAX, archCut, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };

@@ -211,11 +211,13 @@ test('terminadas: el «Terminada» del capataz/SC ya no cuenta (tanda 1), ni qui
   assert.deepStrictEqual([...D2.keys()], []);
 });
 
-test('hora de la publicación automática: por defecto 21:00, editable (máx. 23:30) y en hora de Lima', () => {
+test('hora de la publicación automática: por defecto 21:00, editable (18:00–23:00, C-26) y en hora de Lima', () => {
   const { planCutHH, planCutDue } = require('../lib');
   assert.equal(planCutHH({}), '21:00');
   assert.equal(planCutHH({ planCutHH: '19:30' }), '19:30');
   assert.equal(planCutHH({ planCutHH: '23:45' }), '21:00');
+  assert.equal(planCutHH({ planCutHH: '23:30' }), '21:00'); // C-26: antes valía y dejaba solo 2 pasadas
+  assert.equal(planCutHH({ planCutHH: '07:00' }), '21:00'); // C-26: cerraba el plan de mañana antes de la reunión
   assert.equal(planCutHH({ planCutHH: 'x' }), '21:00');
   const at = h => Date.parse(`2026-10-05T${h}:00-05:00`);
   assert.equal(planCutDue({}, at('20:59')), false);
