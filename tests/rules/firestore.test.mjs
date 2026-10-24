@@ -1390,6 +1390,49 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
   await assertFails(setDoc(doc(ed, 'plb/x4'), PLB({ W: '100' })));
 });
 
+// ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
+const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
+test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'eto/ETO_c-gabel_M02'), ETO());
+    await setDoc(doc(db, 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
+  });
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER)]) {
+    await assertSucceeds(getDoc(doc(db, 'eto/ETO_c-otro_A1')));
+    await assertSucceeds(getDocs(collection(db, 'eto')));
+  }
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(getDoc(doc(sc, 'eto/ETO_c-gabel_M02')));
+});
+test('ETO: el SC consulta los de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO()); });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(getDocs(query(collection(sc, 'eto'), where('sc', '==', 'c-gabel'))));
+});
+test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'eto/ETO_c-gabel_M02'), ETO());
+    await setDoc(doc(db, 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
+  });
+  const sc = user('sc@obra.pe');
+  await assertFails(getDoc(doc(sc, 'eto/ETO_c-otro_A1')));
+  await assertFails(getDocs(collection(sc, 'eto')));
+  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02')));
+  for (const db of [user('editor@obra.pe'), user('ot@obra.pe'), sc, user('lector@obra.pe')]) {
+    await assertFails(setDoc(doc(db, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
+    await assertFails(updateDoc(doc(db, 'eto/ETO_c-gabel_M02'), { tit: 'otro' }));
+    await assertFails(deleteDoc(doc(db, 'eto/ETO_c-gabel_M02')));
+  }
+  const ad = user(OWNER);
+  await assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
+  await assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_S1'), ETO({ cod: '' })));
+  await assertFails(setDoc(doc(ad, 'eto/x1'), ETO({ sc: '' })));
+  await assertFails(setDoc(doc(ad, 'eto/x2'), ETO({ base: 'planos/ARQ_AG03/r1' })));
+  await assertSucceeds(deleteDoc(doc(ad, 'eto/ETO_c-gabel_M03')));
+});
+
 // ── Modelo 3D (beta) ──
 test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínima', async () => {
   const D = x => ({ disc: 'ARQ', rev: 1, path: 'modelos/ARQ/r1.frag', ...x });

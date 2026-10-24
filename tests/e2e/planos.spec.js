@@ -173,6 +173,69 @@ test.describe('sin conexión (tablet)', () => {
   });
 });
 
+test('ETO: el admin carga el plano de taller de un SC (colección y carpeta aparte) y se ve agrupado por SC', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.click('.plsrc [data-src="eto"]');
+  await page.selectOption('#etosc', 'c2');
+  await page.setInputFiles('#plfile', { name: '260021-182-26_ETO911_N2_ELEVACION_Y_DETALLE_-_MAMPARAS_M02.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await expect(page.locator('#plqtab tbody tr select[data-f="sc"]')).toHaveValue('c2');
+  await expect(page.locator('#plqtab tbody tr input[data-f="cod"]')).toHaveValue('M02');
+  await expect(page.locator('#plqtab tbody tr select[data-f="pisoId"]')).toHaveValue('p2');
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  const d = await page.evaluate(() => window.__dbGet('eto', 'ETO_c2_M02'));
+  expect(d).toMatchObject({ sc: 'c2', cod: 'M02', disc: 'ETO', rev: 1, pisoId: 'p2' });
+  expect(d.base).toMatch(/^etos\/c2\/ETO_c2_M02\.[a-z0-9]+\/r1$/);
+  expect(await page.evaluate(() => window.__dbGet('plb', 'ETO_c2_M02'))).toBeFalsy();
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plsrc [data-src="eto"]');
+  await expect(page.locator('h3.plg')).toContainText('SC ELECTRICAS');
+  await page.click('.plc[data-pl="ETO_c2_M02"]');
+  await expect(page.locator('#plv .plvt')).toContainText('ETO · SC ELECTRICAS');
+  await expect(page.locator('#plv [data-pv="menu"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.click('.plsrc [data-src=""]');
+  await expect(page.locator('.plc[data-pl="ETO_c2_M02"]')).toHaveCount(0);
+  noErrors(errors);
+});
+
+test('carga: 👁 abre la lámina en grande con los datos de la fila al lado; ‹ › guardan y pasan de fila', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.click('.plsrc [data-src="eto"]');
+  await page.setInputFiles('#plfile', [{ name: 'A_PRIMERO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() }, { name: 'B_SEGUNDO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() }]);
+  await page.click('#plqtab [data-vw="0"]');
+  await expect(page.locator('.plpv .plpst canvas')).toBeVisible();
+  await page.locator('.plpv [data-f="sc"]').selectOption('c3');
+  await page.locator('.plpv [data-f="cod"]').fill('m05');
+  await page.locator('.plpv [data-f="cod"]').press('Enter');
+  await expect(page.locator('.plpv .plpn')).toHaveText('B_SEGUNDO.pdf');
+  await page.mouse.wheel(0, -400);
+  await page.click('.plpv [data-pp="x"]');
+  await expect(page.locator('.plpv')).toHaveCount(0);
+  await expect(page.locator('#plqtab tbody tr').first().locator('select[data-f="sc"]')).toHaveValue('c3');
+  await expect(page.locator('#plqtab tbody tr').first().locator('input[data-f="cod"]')).toHaveValue('M05');
+  noErrors(errors);
+});
+
+test('ETO: el SC solo ve los de su partida y no carga', async ({ page }) => {
+  const E = (sc, cod) => ['eto', `ETO_${sc}_${cod}`, { sc, cod, disc: 'ETO', tipo: 'ETO', tit: 'Lámina ' + cod, rev: 1, base: `etos/${sc}/ETO_${sc}_${cod}.k/r1`, W: 2000, H: 1400, Z: 2, T: 1024, pisoId: '', ts: 1 }];
+  const errors = await openApp(page, { as: 'sc', editar: false, extra: [E('c1', 'A1'), E('c2', 'B1')] });
+  await page.evaluate(() => goMod('pla'));
+  await page.click('.plsrc [data-src="eto"]');
+  await expect(page.locator('.plc[data-pl="ETO_c1_A1"]')).toBeVisible();
+  await expect(page.locator('.plc[data-pl="ETO_c2_B1"]')).toHaveCount(0);
+  await expect(page.locator('#plgocar')).toHaveCount(0);
+  noErrors(errors);
+});
+
 test('visor: panel ☰ Planos, otra especialidad en la misma zona y ▲▼ de piso sin salir', async ({ page }) => {
   test.setTimeout(150_000);
   const errors = await openApp(page, { as: 'admin', editar: false });

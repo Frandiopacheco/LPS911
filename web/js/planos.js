@@ -25,15 +25,29 @@ const PL_DTOK={ARQ:'ARQ',EST:'EST',ES:'EST',AFC:'IS',DES:'IS',AGDES:'IS',IS:'IS'
 const PL_TIPOS=['Planta','Corte','Elevación','Detalle','Esquema','Ubicación','Otro'];
 
 const PLB=new Map();let plbReady=false,plbUn=null;
-const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false},store.get('plf',{}));PLF.q='';
-const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo});
+const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false,src:'',sc:''},store.get('plf',{}));PLF.q='';
+const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src:PLF.src,sc:PLF.sc});
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
   const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla')requestRender()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
-  open();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;PLB.clear();plbReady=false})}
-const plAct=()=>[...PLB.values()].filter(p=>!p.arch);
+  open();etoSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;PLB.clear();plbReady=false})}
+/* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
+   Colección aparte `eto` (no `plb`) y carpeta de Storage `etos/<sc>/…`: el SC solo puede leer los de su partida (reglas), el resto
+   del equipo ve todos; carga y edita solo el administrador; solo aprobados. Formatos muy diversos: sin lectura de nomenclatura ni
+   vínculos; se organizan por SC. En memoria van en el mismo PLB (ids `ETO_…`, nunca chocan con `plb`) con `eto:true`. */
+let etoUn=null;
+function etoSub(){if(etoUn)return;
+  const put=L=>{for(const k of [...PLB.keys()])if(PLB.get(k).eto)PLB.delete(k);L.forEach(d=>PLB.set(d.id,{...d,eto:true}));if(U.mod==='pla')requestRender()};
+  const fail=err=>{console.error('eto',err);etoUn=null};
+  if(me.role==='sc')etoUn=scSubs('eto',null,null,L=>put(L),fail);
+  else etoUn=fcol('eto').onSnapshot(sn=>put(sn.docs.map(d=>({...d.data(),id:d.id}))),fail)}
+const plCol=p=>fcol(p&&p.eto?'eto':'plb');
+const plEdOf=p=>p&&p.eto?plAdm():plaEd();
+const etoRoot=sc=>'etos/'+String(sc||'x').replace(/[^A-Za-z0-9_-]/g,'');
+const plAct=()=>[...PLB.values()].filter(p=>!p.arch&&!p.eto);
+const etoAct=()=>[...PLB.values()].filter(p=>p.eto&&!p.arch);
 const plUp=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
 const plCodCmp=(a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true});
 const plPisoName=id=>{const p=id&&(S.pis.get(id)||ARCH.pis.get(id));return p?`${p.code} · ${p.name}`:''};
@@ -96,7 +110,7 @@ function plParse(fname){
   const disc=PL_DTOK[dTok]||plDiscOfCod(cod)||'';const nv=plNivOf(nTok,tit);
   return{cod:cod.replace('-',''),disc,niv:nv.niv,pisoId:plPisoOf(nv.cand),tipo:plTipoOf(tit),tit,eta}}
 const plLkN=p=>Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch).length:0;
-const plIdOf=m=>((m.disc||'X')+'_'+(m.cod||('S'+plHash(m.fname||'')))).replace(/[^A-Za-z0-9_.-]/g,'');
+const plIdOf=m=>(m.eto?'ETO_'+(m.sc||'X')+'_'+(m.cod||('S'+plHash(m.fname||''))):(m.disc||'X')+'_'+(m.cod||('S'+plHash(m.fname||'')))).replace(/[^A-Za-z0-9_.-]/g,'');
 function plHash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(36)}
 
 /* ---------- lector de PDF ---------- */
@@ -160,7 +174,8 @@ async function plProcess(it,say){
   const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;const pg=await pdf.getPage(1);
   try{const rot=plRotulo((await pg.getTextContent()).items||[]);it.rot=rot;
     if(!it.m.cod&&rot.cod)it.m.cod=rot.cod;if(!it.m.disc&&rot.disc)it.m.disc=rot.disc}catch(e){it.rot={cod:'',disc:''}}
-  if(!it.m.cod)throw new Error('Sin código de lámina: escríbelo en la tabla.');if(!it.m.disc)throw new Error('Sin especialidad: elígela en la tabla.');
+  const eto=!!it.m.eto;if(eto){if(!it.m.sc)throw new Error('Elige el subcontratista en la tabla.')}
+  else{if(!it.m.cod)throw new Error('Sin código de lámina: escríbelo en la tabla.');if(!it.m.disc)throw new Error('Sin especialidad: elígela en la tabla.')}
   const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);
   /* «Empezar en Rev. 1» (solo admin): la lámina ya existía (cargas de prueba) y se reemplaza sin historial, vínculos ni calibración.
      Carpeta nueva (las rutas de Storage nunca se reutilizan: la caché de los equipos se guía por ellas); la anterior no se borra. */
@@ -168,7 +183,7 @@ async function plProcess(it,say){
   /* carpeta ÚNICA por carga (`planos/<id>.<marca>/r<rev>`): la caché de cada equipo (Cache API `lps-planos`) se guía por la ruta y
      da por hecho que nunca cambia. Antes era `planos/<id>/r<rev>`: al eliminar una lámina y volver a cargarla (otra vez Rev. 1) la
      ruta se repetía y los equipos mostraban los mosaicos y el PDF viejos (sin recortar; la capa nítida salía corrida). */
-  const base=`planos/${id}.${NOW().toString(36)}${Math.random().toString(36).slice(2,6)}/r${rev}`;
+  const base=`${eto?etoRoot(it.m.sc):'planos'}/${id}.${NOW().toString(36)}${Math.random().toString(36).slice(2,6)}/r${rev}`;
   const v1=pg.getViewport({scale:1});
   /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
   let crop=null;if(it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
@@ -179,7 +194,7 @@ async function plProcess(it,say){
   let mm=[Math.round(cwp/72*25.4),Math.round(chp/72*25.4)];
   /* marco con proporción del formato del proyecto (120 × 90): su tamaño real es 1200 × 900 mm aunque «Ajustar al papel» lo haya encogido
      (p. ej. 1178 mm) o la lámina ocupara poco de la hoja; así la escala de referencia de Medir (plmNominal) queda en 1/100 exacta */
-  if(crop&&Math.abs(cwp/chp-4/3)<0.02)mm=[1200,900];
+  if(crop&&!eto&&Math.abs(cwp/chp-4/3)<0.02)mm=[1200,900];
   /* subidas en paralelo (máx. 6) mientras se siguen cortando mosaicos */
   const pend=new Set();let up=0,total=0,fail=null;
   let bytes=0;const send=(path,blob,type)=>{total++;bytes+=blob.size||0;const p=plPut(path,blob,type).then(()=>{up++},e=>{fail=fail||e}).finally(()=>pend.delete(p));pend.add(p);return p};
@@ -216,8 +231,9 @@ async function plProcess(it,say){
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};
   /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
-  if(old&&!fresh&&Array.isArray(old.lk)&&old.lk.length)doc.lk=plLkCarry(old,crop,v1);
-  await fcol('plb').doc(id).set(doc);
+  if(old&&!fresh&&!eto&&Array.isArray(old.lk)&&old.lk.length)doc.lk=plLkCarry(old,crop,v1);
+  if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
+  await fcol(eto?'eto':'plb').doc(id).set(doc);
   return{id,rev,fresh,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
 /** vínculos de la revisión anterior en coordenadas de la nueva: van normalizados a la hoja o al recorte de cada una. Si cambió el
    recorte (p. ej. la anterior era hoja completa y la nueva viene recortada al marco), se pasan por puntos del PDF; solo si las hojas
@@ -232,21 +248,28 @@ function plLkCarry(old,crop,v1){const L=old.lk.map(l=>({...l}));
   return L.map(l=>({...l,x0:fx(l.x0),x1:fx(l.x1),y0:fy(l.y0),y1:fy(l.y1)}))}
 
 /* ---------- Biblioteca ---------- */
+const etoOn=()=>PLF.src==='eto';
+const etoScName=sc=>conOf(sc).name;
 function plFiltered(){const q=plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
-  return [...PLB.values()].filter(p=>(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
+  if(etoOn())return [...PLB.values()].filter(p=>p.eto&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.sc||p.sc===PLF.sc)&&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))
+      &&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,etoScName(p.sc)].join(' ')).includes(w))))
+    .sort((a,b)=>etoScName(a.sc).localeCompare(etoScName(b.sc),'es')||plCodCmp(a,b)||String(a.tit).localeCompare(String(b.tit),'es',{numeric:true}));
+  return [...PLB.values()].filter(p=>!p.eto).filter(p=>(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
     &&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
     .sort((a,b)=>PL_DISC.findIndex(d=>d[0]===a.disc)-PL_DISC.findIndex(d=>d[0]===b.disc)||plCodCmp(a,b))}
-function renderPBib(main){plSub();
-  if(main.dataset.built!=='pbib'){main.dataset.built='pbib';
-    main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,plaEd()?'<button class="ib pri" id="plgocar">Cargar planos…</button>':'')}
-      <div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="Buscar: código, título, archivo…" autocomplete="off" aria-label="Buscar planos">
-        <select class="tin" id="plfp" aria-label="Piso"></select><select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>
+function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'');
+  if(main.dataset.built!==bk){main.dataset.built=bk;
+    const seg=`<div class="seg plsrc" role="tablist" aria-label="Origen de los planos"><button type="button" data-src=""${eo?'':' class="on"'} aria-selected="${!eo}">Proyecto</button><button type="button" data-src="eto"${eo?' class="on"':''} aria-selected="${eo}">ETO de subcontratistas</button></div>`;
+    main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',eo?(me.role==='sc'?'Los ETO (planos de taller) aprobados de tu partida.':'ETO (planos de taller) aprobados de los subcontratistas, ordenados por SC.'):`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,(eo?plAdm():plaEd())?'<button class="ib pri" id="plgocar">'+(eo?'Cargar ETO…':'Cargar planos…')+'</button>':'')}
+      ${seg}<div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="Buscar: código, título, archivo…" autocomplete="off" aria-label="Buscar planos">
+        ${eo?'<select class="tin" id="plfs" aria-label="Subcontratista"></select>':''}<select class="tin" id="plfp" aria-label="Piso"></select>${eo?'':'<select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>'}
         ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<span class="plcnt" id="plcnt"></span></div>
       <div id="pllist"></div></div></div>`;
     $('#plq',main).oninput=e=>{PLF.q=e.target.value;plList(main)};
-    const ch=(sel,k)=>{$(sel,main).onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');
+    const ch=(sel,k)=>{const el=$(sel,main);if(el)el.onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');ch('#plfs','sc');
+    $('.plsrc',main).onclick=e=>{const b=e.target.closest('[data-src]');if(!b||b.dataset.src===PLF.src)return;PLF.src=b.dataset.src;plfSave();renderPBib(main)};
     const fa=$('#plfa',main);if(fa)fa.onchange=e=>{PLF.arch=e.target.checked;plList(main)};
-    const gc=$('#plgocar',main);if(gc)gc.onclick=()=>goTab('pcar');
+    const gc=$('#plgocar',main);if(gc)gc.onclick=()=>{PQ.eto=eo;goTab('pcar')};
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
     $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(b)plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
@@ -254,18 +277,21 @@ function renderPBib(main){plSub();
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
   const opt=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
   shx($('#plfp',main),opt('','Todos los pisos',PLF.piso)+pisos().map(p=>opt(p.id,p.code+' · '+p.name,PLF.piso)).join('')+opt('-','Generales (sin piso)',PLF.piso));
-  shx($('#plfd',main),opt('','Todas las especialidades',PLF.disc)+ds.map(d=>opt(d[0],d[1],PLF.disc)).join(''));
-  shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''));
+  if(eo){const scs=[...new Set(etoAct().map(p=>p.sc))].sort((a,b)=>etoScName(a).localeCompare(etoScName(b),'es'));if(PLF.sc&&!scs.includes(PLF.sc))scs.push(PLF.sc);
+    shx($('#plfs',main),(scs.length>1||!scs.length?opt('','Todos los SC',PLF.sc):'')+scs.map(c=>opt(c,etoScName(c),PLF.sc)).join(''))}
+  else{shx($('#plfd',main),opt('','Todas las especialidades',PLF.disc)+ds.map(d=>opt(d[0],d[1],PLF.disc)).join(''));
+  shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''))}
   plList(main)}
 function plList(main){const host=$('#pllist',main);if(!host)return;
   if(!plbReady){shx(host,'<div class="loading"><b>Cargando planos…</b></div>');return}
   const L=plFiltered();stx($('#plcnt',main),L.length===1?'1 plano':L.length+' planos');
+  if(etoOn()&&!etoAct().length&&!PLF.arch){shx(host,`<div class="callout"><b>Aún no hay ETO cargados${me.role==='sc'?' de tu partida':''}.</b> ${plAdm()?'Usa <b>Cargar ETO…</b> para subir los PDF aprobados de cada subcontratista.':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   if(!PLB.size){shx(host,`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   if(!L.length){shx(host,'<p class="note">Ningún plano coincide con los filtros.</p>');return}
-  const g=new Map();L.forEach(p=>{if(!g.has(p.disc))g.set(p.disc,[]);g.get(p.disc).push(p)});
-  const h=[...g].map(([d,ps])=>`<h3 class="plg">${esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
+  const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
+  const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
-      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}</small></span></button>`).join('')}</div>`).join('');
+      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}</small></span></button>`).join('')}</div>`).join('');
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}}
 function plThumbs(host){if(host._io)host._io.disconnect();
   const load=img=>{const p=img.dataset.th;if(!p||img.dataset.ld)return;img.dataset.ld='1';plThumb(p).then(u=>{img.src=u;img.classList.add('ok')},()=>{img.dataset.ld='';img.closest('.plth').classList.add('err')})};
@@ -495,21 +521,21 @@ function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
   const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()];
-  const sib=plSameSpot(p),up=plFloorStep(p,1),dn=plFloorStep(p,-1);const pc=id=>esc((S.pis.get(id)||ARCH.pis.get(id)||{}).code||'');
+  const sib=p.eto?[]:plSameSpot(p),up=p.eto?null:plFloorStep(p,1),dn=p.eto?null:plFloorStep(p,-1);const pc=id=>esc((S.pis.get(id)||ARCH.pis.get(id)||{}).code||'');
   PLV.box.innerHTML=`<div class="plvh">
-    <button class="ib plvmenu${PLV.panel?' on':''}" data-pv="menu" aria-expanded="${PLV.panel}" title="Buscar y filtrar planos sin salir">☰ Planos</button>
+    ${p.eto?'':`<button class="ib plvmenu${PLV.panel?' on':''}" data-pv="menu" aria-expanded="${PLV.panel}" title="Buscar y filtrar planos sin salir">☰ Planos</button>`}
     ${plkBackBtn()}
     <button class="ib" data-pv="prev" aria-label="Plano anterior"${n<2?' disabled':''}>‹</button>
-    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||p.niv||'General'].filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
+    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plPisoName(p.pisoId)||p.niv||'General']).filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
     <button class="ib" data-pv="next" aria-label="Plano siguiente"${n<2?' disabled':''}>›</button>
     <span class="plvsp"></span>
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
     <button class="ib${PLM.on?' on':''}" data-pv="med" title="Medir distancias y áreas sobre el plano">📏 Medir</button>
-    ${plkHdrBtn(p)}
+    ${p.eto?'':plkHdrBtn(p)}
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
     ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
-    ${plaEd()?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
+    ${plEdOf(p)?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
     ${PLV.canDock&&!isMob()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado del lookahead'}">${PLV.dock?'⛶':'◧'}</button>`:''}
     <button class="ib" data-pv="x" aria-label="Cerrar">✕</button></div>
     ${sp.cur&&(sib.length>1||up||dn)?`<div class="plvq">${sib.length>1?`<span class="plvql" title="Abre otra especialidad del mismo piso en la misma zona y con el mismo zoom">Mismo punto</span>${sib.map(q=>`<button type="button" class="plchip${q.id===p.id?' on':''}" data-pj="${esc(q.id)}" title="${esc(q.cod+' · '+(q.tit||''))}"><b>${esc(q.disc)}</b> ${esc(q.cod)}</button>`).join('')}`:''}
@@ -614,13 +640,13 @@ function plEdit(p,btn){
   openPop(btn,`<div class="ph">${esc(p.cod)} · datos del plano</div><div class="plef">
     <label>Título<input class="tin" id="pleT" value="${esc(p.tit||'')}" maxlength="160"></label>
     <label>Piso<select class="tin" id="pleP"><option value="">General (sin piso)</option>${pisos().map(x=>`<option value="${x.id}"${x.id===p.pisoId?' selected':''}>${esc(x.code+' · '+x.name)}</option>`).join('')}</select></label>
-    <label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>
-    <p class="note">El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.</p>
+    ${p.eto?'':`<label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>`}
+    <p class="note">${p.eto?'El subcontratista y el código identifican el ETO (las revisiones se reconocen por ellos); no se cambian aquí.':'El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.'}</p>
     <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
-    {sv:async()=>{const d={tit:$('#pleT').value.trim(),pisoId:$('#pleP').value,tipo:$('#pleK').value};try{await fcol('plb').doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
+    {sv:async()=>{const d={tit:$('#pleT').value.trim(),pisoId:$('#pleP').value};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
-       try{await fcol('plb').doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
-     ua:async()=>{try{await fcol('plb').doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
+       try{await plCol(p).doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
+     ua:async()=>{try{await plCol(p).doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
      del:()=>plDelete([p])})}
 
 /* ---------- Eliminar planos (solo el administrador; docs/ia/planos.md › Eliminar) ----------
@@ -644,24 +670,38 @@ async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean)
   if(PLV&&list.some(p=>p.id===PLV.id))plClose(true);
   let ok=0,files=0,fail=0;toast(`Eliminando ${list.length} plano${list.length===1?'':'s'}…`);
   for(const p of list){
-    try{await fcol('plb').doc(p.id).delete();ok++}catch(e){fail++;console.error('eliminar plano',p.id,e);continue}
+    try{await plCol(p).doc(p.id).delete();ok++}catch(e){fail++;console.error('eliminar plano',p.id,e);continue}
     /* archivos: primero el registro (desaparece al instante para todos); luego Storage, que puede tardar */
-    try{const names=[...await plStList(`planos/${p.id}/`),...await plStList(`planos/${p.id}.`)];
+    const rt=p.eto?etoRoot(p.sc):'planos';
+    try{const names=[...await plStList(`${rt}/${p.id}/`),...await plStList(`${rt}/${p.id}.`)];
       for(let i=0;i<names.length;i+=8)await Promise.all(names.slice(i,i+8).map(n=>plStDel(n).then(()=>files++)))}
     catch(e){console.error('eliminar archivos',p.id,e)}
     if(PLOFF[p.id]){delete PLOFF[p.id];plOffPut()}
-    await plCacheDrop(p.id);PLPDF.forEach((v,k)=>{if(k.startsWith(`planos/${p.id}/`)||k.startsWith(`planos/${p.id}.`))PLPDF.delete(k)})}
+    await plCacheDrop(p.id);PLPDF.forEach((v,k)=>{if(k.startsWith(`${rt}/${p.id}/`)||k.startsWith(`${rt}/${p.id}.`))PLPDF.delete(k)})}
   toast(fail?`Se eliminaron ${ok} de ${list.length} (${fail} con error).`:`Eliminado${one?'':'s'}: ${ok} plano${ok===1?'':'s'} y ${files} archivo${files===1?'':'s'}.`);requestRender()}
 
 /* ---------- Carga masiva ---------- */
 const PQ={items:[],run:false,stop:false,t0:0,done:0,secs:[]};
-function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scroll"><div class="wrap"><p class="note">Solo el administrador y los editores cargan planos.</p></div></div>';return}
-  if(main.dataset.built!=='pcar'){main.dataset.built='pcar';
-    main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Cargar planos','Arrastra los PDF (uno por lámina). El sistema lee el código, la especialidad y el piso del nombre del archivo y del rótulo; revisa la tabla y pulsa <b>Procesar</b>.')}
-      ${helpBox('Cómo exportar los PDF desde AutoCAD',`<ul><li>Impresora <b>DWG To PDF.pc3</b>, papel del tamaño real de la lámina (p. ej. 1200 × 900 mm), <b>Extensión</b>, <b>Ajustar al papel</b>, centrado, con el CTB del proyecto.</li><li>Una lámina por archivo y con el mismo nombre del DWG (el «-Model» que agrega AutoCAD se quita solo).</li><li>Si subes otra vez una lámina con el mismo código, queda como <b>nueva revisión</b> y la anterior se guarda en el historial.</li><li>El proceso corre en esta PC (unos 20–60 s por lámina): usa una PC con Chrome o Edge y deja la pestaña <b>visible</b> hasta que termine (minimizada o tapada, el navegador la frena). Puedes trabajar en otra pantalla o dejar esta ventana a un lado. El avance se ve en el título de la pestaña.</li><li>En Edge: Configuración › Sistema y rendimiento › «No suspender nunca estos sitios» → agrega la dirección de LPS 911.</li></ul>`)}
+/** ETO: del nombre solo se intenta sacar el piso (N3, P03, PISO 3), un código corto al final (M02) y un título legible; todo se corrige en la tabla */
+function etoParse(fname){const n=fname.replace(/\.pdf$/i,'').replace(/-Model$/i,'');const toks=n.split(/[_\s]+|\s-\s/).filter(Boolean);
+  let pisoId='';const pm=plUp(n).match(/(?:^|[^A-Z0-9])(?:N|P|PISO|NIVEL)\s*0?(\d{1,2})(?![0-9])/);
+  if(pm){const k=+pm[1];const p=pisos().find(x=>{const c=plUp(x.code).match(/(\d+)$/);return c&&+c[1]===k&&!/^S/.test(plUp(x.code))});if(p)pisoId=p.id}
+  let cod='';for(let i=toks.length-1;i>=0;i--){const t=plUp(toks[i]).replace(/[^A-Z0-9-]/g,'');if(/^[A-Z]{1,3}-?\d{1,3}[A-Z]?$/.test(t)&&!/^(N|P)\d{1,2}$/.test(t)){cod=t;break}}
+  const tit=toks.filter(t=>!/^\d[\d-]*$/.test(t)&&plUp(t)!==cod&&!/^ETO\d*$/i.test(t)&&!/^(N|P)\d{1,2}$/i.test(t)&&t!=='-').join(' ').replace(/\s+-\s*$/,'').trim();
+  return{eto:true,sc:PQ.sc||'',cod,pisoId,tit:tit||n}}
+function renderPCar(main){plSub();if(PQ.eto&&!plAdm())PQ.eto=false;if(!plaEd()){main.innerHTML='<div class="scroll"><div class="wrap"><p class="note">Solo el administrador y los editores cargan planos.</p></div></div>';return}
+  const eo=!!PQ.eto,bk='pcar'+(eo?'e':'');
+  if(main.dataset.built!==bk){main.dataset.built=bk;
+    const seg=plAdm()?`<div class="seg plsrc" role="tablist" aria-label="Qué cargar"><button type="button" data-src=""${eo?'':' class="on"'}>Planos del proyecto</button><button type="button" data-src="eto"${eo?' class="on"':''}>ETO de subcontratistas</button></div>`:'';
+    main.innerHTML=`<div class="scroll"><div class="wrap plw">${eo?pageHead('Cargar ETO','Planos de taller <b>aprobados</b> de los subcontratistas. Elige el SC, arrastra los PDF (los formatos varían: revisa piso, código y título en la tabla) y pulsa <b>Procesar</b>. Los SC solo ven los de su partida.'):pageHead('Cargar planos','Arrastra los PDF (uno por lámina). El sistema lee el código, la especialidad y el piso del nombre del archivo y del rótulo; revisa la tabla y pulsa <b>Procesar</b>.')}
+      ${seg}${eo?'':helpBox('Cómo exportar los PDF desde AutoCAD',`<ul><li>Impresora <b>DWG To PDF.pc3</b>, papel del tamaño real de la lámina (p. ej. 1200 × 900 mm), <b>Extensión</b>, <b>Ajustar al papel</b>, centrado, con el CTB del proyecto.</li><li>Una lámina por archivo y con el mismo nombre del DWG (el «-Model» que agrega AutoCAD se quita solo).</li><li>Si subes otra vez una lámina con el mismo código, queda como <b>nueva revisión</b> y la anterior se guarda en el historial.</li><li>El proceso corre en esta PC (unos 20–60 s por lámina): usa una PC con Chrome o Edge y deja la pestaña <b>visible</b> hasta que termine (minimizada o tapada, el navegador la frena). Puedes trabajar en otra pantalla o dejar esta ventana a un lado. El avance se ve en el título de la pestaña.</li><li>En Edge: Configuración › Sistema y rendimiento › «No suspender nunca estos sitios» → agrega la dirección de LPS 911.</li></ul>`)}
+      ${eo?`<div class="plbar"><label class="plchk">Subcontratista <select class="tin" id="etosc"><option value="">— Elige el SC —</option>${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>`<option value="${esc(c.id)}"${c.id===PQ.sc?' selected':''}>${esc(c.name)}</option>`).join('')}</select></label><span class="note">Se aplica a los PDF que agregues y a los pendientes de la lista.</span></div>`:''}
       <label class="pldrop" id="pldrop"><input type="file" id="plfile" accept="application/pdf,.pdf" multiple hidden><b>Arrastra aquí los PDF</b><span>o toca para elegirlos (puedes elegir muchos a la vez)</span></label>
-      <div id="plqbar" class="plbar"></div><div id="plqtab"></div>${plkpSecHtml()}</div></div>`;
-    plkpSecBind(main);
+      <div id="plqbar" class="plbar"></div><div id="plqtab"></div>${eo?'':plkpSecHtml()}</div></div>`;
+    if(!eo)plkpSecBind(main);
+    const sw=$('.plsrc',main);if(sw)sw.onclick=e=>{const b=e.target.closest('[data-src]');if(!b||PQ.run)return;const v=b.dataset.src==='eto';if(v===!!PQ.eto)return;
+      if(PQ.items.some(x=>x.st!=='ok'&&x.st!=='skip')){toast('Primero procesa o vacía la lista actual.');return}PQ.items=[];PQ.eto=v;renderPCar(main)};
+    const es=$('#etosc',main);if(es)es.onchange=()=>{PQ.sc=es.value;PQ.items.forEach(x=>{if(x.m.eto&&(x.st==='pend'||x.st==='bad'))x.m.sc=PQ.sc});plqCheck();plqDraw(true)};
     const inp=$('#plfile',main),dz=$('#pldrop',main);inp.onchange=()=>{plAdd([...inp.files]);inp.value=''};
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('on')});dz.addEventListener('dragleave',()=>dz.classList.remove('on'));
     dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('on');plAdd([...e.dataTransfer.files])});
@@ -671,28 +711,29 @@ function renderPCar(main){plSub();if(!plaEd()){main.innerHTML='<div class="scrol
       else if(a==='clrok'){PQ.items=PQ.items.filter(x=>x.st!=='ok'&&x.st!=='skip');plqDraw(true)}};
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
       it.m[el.dataset.f]=el.value.trim();if(el.dataset.f==='cod')it.m.cod=it.m.cod.toUpperCase().replace(/\s+/g,'');plqCheck();plqDraw(true)});
-    $('#plqtab',main).addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
-  plqDraw(false);plkpSecUpd()}
+    $('#plqtab',main).addEventListener('click',e=>{const v=e.target.closest('[data-vw]');if(v){plqPrev(+v.dataset.vw);return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
+  plqDraw(false);if(!eo)plkpSecUpd()}
 function plAdd(files){const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');const no=files.length-pdfs.length;
   const have=new Set(PQ.items.map(x=>x.file.name+'|'+x.file.size));let n=0;
-  for(const f of pdfs){if(have.has(f.name+'|'+f.size))continue;PQ.items.push({file:f,m:plParse(f.name),st:'pend',msg:''});n++}
+  for(const f of pdfs){if(have.has(f.name+'|'+f.size))continue;PQ.items.push({file:f,m:PQ.eto?etoParse(f.name):plParse(f.name),st:'pend',msg:''});n++}
   plqCheck();plqDraw(true);if(no)toast(`${no} archivo(s) no son PDF y se omitieron.`);else if(n)toast(`${n} plano(s) agregados a la lista.`)}
 /** estado de cada fila antes de procesar: nuevo, nueva revisión, ya cargado (mismo archivo) o falta un dato */
 function plqCheck(){const seen=new Map();
   PQ.items.forEach((it,i)=>{if(it.st==='run'||it.st==='ok'||it.st==='err')return;const m=it.m;it.warn='';
-    if(!m.cod||!m.disc){it.st='bad';it.msg=!m.cod?'Falta el código de lámina':'Falta la especialidad';return}
+    if(m.eto){if(!m.sc){it.st='bad';it.msg='Falta el subcontratista';return}}
+    else if(!m.cod||!m.disc){it.st='bad';it.msg=!m.cod?'Falta el código de lámina':'Falta la especialidad';return}
     const id=plIdOf({...m,fname:it.file.name});const old=PLB.get(id);
     if(old&&!old.arch&&old.fname===it.file.name.replace(/\.pdf$/i,'')&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
     it.st='pend';it.msg=old?`Nueva revisión (vigente: rev. ${old.rev||1})`:'Nuevo';
     if(seen.has(id))it.warn=`Mismo código que la fila ${seen.get(id)+1}: se cargará como la revisión siguiente.`;else seen.set(id,i);
-    if(!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+'Planta sin piso: elige el piso si corresponde.'})}
+    if(!m.eto&&!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+'Planta sin piso: elige el piso si corresponde.'})}
 let plqT=0;
 function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)return;
   const I=PQ.items,cnt=k=>I.filter(x=>x.st===k).length;const pend=cnt('pend'),ok=cnt('ok'),err=cnt('err'),bad=cnt('bad'),skip=cnt('skip');
   const avg=PQ.secs.length?PQ.secs.reduce((a,b)=>a+b,0)/PQ.secs.length:45;const left=pend+(PQ.run?1:0);
   shx(bar,!I.length?'':`${PQ.run?`<button class="ib" data-q="stop">Detener</button>`:`<button class="ib pri" data-q="go"${pend?'':' disabled'}>Procesar ${pend} plano${pend===1?'':'s'}</button>`}
     ${PQ.run?'<span class="plbusy">⏳ Procesando en esta PC: deja esta pestaña <b>visible</b> (no la minimices ni la tapes con otra ventana). Si quedó oculta, sigue al volver.</span>':''}<span class="plcnt">${[ok?`✓ ${ok} listos`:'',err?`✕ ${err} con error`:'',bad?`${bad} por completar`:'',skip?`${skip} ya cargados`:''].filter(Boolean).join(' · ')}${PQ.run&&left?` · faltan ~${Math.max(1,Math.round(left*avg/60))} min`:''}</span>
-    ${!PQ.run?`<label class="plcrop" title="Quita lo que está fuera del marco de la lámina (texto «FORMATO…», objetos invisibles que la achican)"><input type="checkbox" data-q="crop"${store.get('plcrop',true)!==false?' checked':''}> Recortar al marco</label>${me&&me.role==='admin'?`<label class="plcrop" title="Para reemplazar cargas de prueba: las láminas que ya existen quedan como Rev. 1, sin su historial, vínculos ni calibración"><input type="checkbox" data-q="fresh"${PQ.fresh?' checked':''}> Empezar en Rev. 1</label>`:''}<button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
+    ${!PQ.run?`<label class="plcrop" title="Quita lo que está fuera del marco de la lámina (texto «FORMATO…», objetos invisibles que la achican)"><input type="checkbox" data-q="crop"${store.get('plcrop',true)!==false?' checked':''}> Recortar al marco</label>${me&&me.role==='admin'&&!PQ.eto?`<label class="plcrop" title="Para reemplazar cargas de prueba: las láminas que ya existen quedan como Rev. 1, sin su historial, vínculos ni calibración"><input type="checkbox" data-q="fresh"${PQ.fresh?' checked':''}> Empezar en Rev. 1</label>`:''}<button class="ib" data-q="clrok"${ok+skip?'':' disabled'}>Quitar los listos</button><button class="ib" data-q="clr">Vaciar lista</button>`:''}`);
   if(!force&&tab.dataset.n===String(I.length)&&PQ.run)return;
   clearTimeout(plqT);plqT=setTimeout(()=>plqTable(tab),force?0:200)}
 function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
@@ -701,14 +742,87 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
   const psel=v=>`<option value="">General</option>`+pisos().map(p=>`<option value="${p.id}"${p.id===v?' selected':''}>${esc(p.code)}</option>`).join('');
   const tsel=v=>PL_TIPOS.map(t=>`<option${t===v?' selected':''}>${t}</option>`).join('');
   const ST={pend:'',run:'run',ok:'ok',err:'err',bad:'bad',skip:'skip'};
+  const csel=v=>`<option value="">—</option>`+[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>`<option value="${esc(c.id)}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');
+  const eo=I.some(x=>x.m.eto);
   const rows=I.map((it,i)=>{const m=it.m,lock=it.st==='run'||it.st==='ok';const dis=lock?' disabled':'';
+    if(m.eto)return`<tr data-i="${i}" class="${ST[it.st]||''}"><td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>
+      <td><select class="tin" data-f="sc"${dis}>${csel(m.sc)}</select></td><td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td>
+      <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
+      <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
     return`<tr data-i="${i}" class="${ST[it.st]||''}"><td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>
       <td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td><td><select class="tin" data-f="disc"${dis}>${dsel(m.disc)}</select></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><select class="tin" data-f="tipo"${dis}>${tsel(m.tipo)}</select></td>
       <td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
-      <td>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
-  shx(tab,`<div class="pltw"><table class="plt"><thead><tr><th>Archivo</th><th>Código</th><th>Especialidad</th><th>Piso</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`)}
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
+  const hd=eo?'<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>Piso</th><th>Título</th><th>Estado</th><th></th>':'<th>Archivo</th><th>Código</th><th>Especialidad</th><th>Piso</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>';
+  shx(tab,`<div class="pltw"><table class="plt"><thead><tr>${hd}</tr></thead><tbody>${rows}</tbody></table></div>`)}
+/* ---------- Vista previa en la carga (oct 2026, pedido del dueño) ----------
+   👁 en cada fila: la lámina se dibuja desde el PDF en esta PC (sin subir nada) con zoom y desplazamiento, y al lado los datos de
+   esa fila para llenarlos mirando el rótulo. ‹ › guardan y pasan a la otra fila conservando zona y zoom (los rótulos de un mismo
+   SC o especialidad suelen estar en el mismo sitio). */
+const PLP={i:-1,box:null,v:null,cv:null,tok:0};
+const PLP_PX=4200;   /* lado mayor del dibujo de la vista previa: se lee el rótulo sin cargar la PC */
+async function plqPrevPage(it){if(it._pv)return it._pv;await plPdfJs();const buf=await it.file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;const pg=await pdf.getPage(1);const v1=pg.getViewport({scale:1});
+  const sc=PLP_PX/Math.max(v1.width,v1.height);const vp=pg.getViewport({scale:sc});const c=plCanvas(Math.floor(vp.width),Math.floor(vp.height));const g=c.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:vp}).promise;try{pdf.destroy()}catch(e){}
+  it._pv=c;return c}
+function plqPrev(i){const it=PQ.items[i];if(!it)return;PLP.i=i;
+  if(!PLP.box){const b=document.createElement('div');b.className='plv plpv';b.setAttribute('role','dialog');b.setAttribute('aria-modal','true');b.tabIndex=-1;
+    b.innerHTML=`<div class="plvh"><button class="ib" data-pp="prev" aria-label="Fila anterior">‹</button><div class="plvt"><b class="plpn"></b><small class="plpc"></small></div><button class="ib" data-pp="next" aria-label="Fila siguiente">›</button><span class="plvsp"></span>
+      <button class="ib" data-pp="zout" aria-label="Alejar">−</button><button class="ib" data-pp="fit">Ajustar</button><button class="ib" data-pp="zin" aria-label="Acercar">+</button><button class="ib" data-pp="x" aria-label="Cerrar">✕</button></div>
+      <div class="plpb"><div class="plpvw"><div class="plpst"></div><p class="plpld">Dibujando la lámina…</p></div><form class="plpf" autocomplete="off"></form></div>`;
+    document.body.appendChild(b);PLP.box=b;
+    b.onclick=e=>{const k=e.target.closest('[data-pp]');if(!k)return;const a=k.dataset.pp;
+      if(a==='x')plqPrevClose();else if(a==='prev')plqPrevGo(-1);else if(a==='next')plqPrevGo(1);else if(a==='fit')plqFit();else if(a==='zin')plqZoom(1.5);else if(a==='zout')plqZoom(1/1.5)};
+    b.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();plqPrevClose();return}
+      if(e.target.closest('input,select,textarea')){if(e.key==='Enter'){e.preventDefault();plqPrevGo(1)}return}
+      if(e.key==='ArrowRight')plqPrevGo(1);else if(e.key==='ArrowLeft')plqPrevGo(-1);else if(e.key==='+'||e.key==='=')plqZoom(1.5);else if(e.key==='-')plqZoom(1/1.5);else if(e.key==='0')plqFit()});
+    b.querySelector('.plpf').addEventListener('input',e=>{const el=e.target.closest('[data-f]');const t=PQ.items[PLP.i];if(!el||!t||t.st==='run'||t.st==='ok')return;
+      t.m[el.dataset.f]=el.dataset.f==='cod'?el.value.trim().toUpperCase().replace(/\s+/g,''):el.value.trim();if(e.type==='input'&&el.tagName==='INPUT')return;plqSync()});
+    b.querySelector('.plpf').addEventListener('change',()=>plqSync());
+    plqPan(b.querySelector('.plpvw'));b.focus()}
+  plqPrevDraw()}
+function plqSync(){plqCheck();plqDraw(true);const t=PQ.items[PLP.i];if(t&&PLP.box)stx(PLP.box.querySelector('.plpc'),plqPrevSub(t))}
+const plqPrevSub=t=>`Fila ${PLP.i+1} de ${PQ.items.length} · ${t.msg||''}${t.warn?' · '+t.warn:''}`;
+function plqPrevForm(it){const m=it.m,dis=it.st==='run'||it.st==='ok'?' disabled':'';
+  const o=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
+  const piso=`<label>Piso<select class="tin" data-f="pisoId"${dis}>${o('','General (sin piso)',m.pisoId)}${pisos().map(p=>o(p.id,p.code+' · '+p.name,m.pisoId)).join('')}</select></label>`;
+  const cod=`<label>Código<input class="tin mono" data-f="cod" value="${esc(m.cod||'')}"${dis}></label>`,tit=`<label>Título<textarea class="tin" data-f="tit" rows="3"${dis}>${esc(m.tit||'')}</textarea></label>`;
+  if(m.eto)return`<label>Subcontratista<select class="tin" data-f="sc"${dis}>${o('','—',m.sc)}${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>o(c.id,c.name,m.sc)).join('')}</select></label>${cod}${piso}${tit}`;
+  return`${cod}<label>Especialidad<select class="tin" data-f="disc"${dis}>${o('','—',m.disc)}${PL_DISC.map(d=>o(d[0],d[1],m.disc)).join('')}</select></label>${piso}<label>Tipo<select class="tin" data-f="tipo"${dis}>${PL_TIPOS.map(t=>o(t,t,m.tipo)).join('')}</select></label>${tit}`}
+async function plqPrevDraw(){const it=PQ.items[PLP.i];if(!it||!PLP.box)return;const b=PLP.box,tok=++PLP.tok;
+  stx(b.querySelector('.plpn'),it.file.name);stx(b.querySelector('.plpc'),plqPrevSub(it));
+  b.querySelector('[data-pp="prev"]').disabled=PLP.i<=0;b.querySelector('[data-pp="next"]').disabled=PLP.i>=PQ.items.length-1;
+  b.querySelector('.plpf').innerHTML=plqPrevForm(it)+'<p class="note">Enter o › guarda y pasa a la siguiente. La lámina se dibuja en esta PC; no se sube nada hasta «Procesar».</p>';
+  const st=b.querySelector('.plpst'),ld=b.querySelector('.plpld');ld.hidden=false;ld.textContent='Dibujando la lámina…';if(!it._pv){st.innerHTML='';PLP.cv=null}
+  let c;try{c=await plqPrevPage(it)}catch(e){if(tok===PLP.tok)ld.textContent='No se pudo leer el PDF: '+(e.message||e);return}
+  if(tok!==PLP.tok||!PLP.box)return;ld.hidden=true;st.innerHTML='';st.appendChild(c);PLP.cv=c;
+  if(!PLP.v)plqFit();else plqApply();
+  const f=b.querySelector('.plpf [data-f]:not([disabled])');if(f&&!plTablet())f.focus({preventScroll:true})}
+/* vista en coordenadas normalizadas de la hoja (cx, cy) y k = zoom relativo a «ajustar»: se conserva al pasar de fila aunque cambie el tamaño */
+function plqBase(){const w=PLP.box.querySelector('.plpvw'),c=PLP.cv;return{w,c,fit:Math.min(w.clientWidth/c.width,w.clientHeight/c.height)||1}}
+function plqApply(){if(!PLP.cv||!PLP.box)return;const{w,c,fit}=plqBase(),v=PLP.v,s=fit*v.k;
+  const x=w.clientWidth/2-v.cx*c.width*s,y=w.clientHeight/2-v.cy*c.height*s;const st=PLP.box.querySelector('.plpst');
+  st.style.transform=`translate(${x}px,${y}px) scale(${s})`}
+function plqFit(){PLP.v={cx:.5,cy:.5,k:1};plqApply()}
+function plqZoom(f,px,py){if(!PLP.cv)return;const{w,c,fit}=plqBase(),v=PLP.v;const r=w.getBoundingClientRect();px=px==null?w.clientWidth/2:px-r.left;py=py==null?w.clientHeight/2:py-r.top;
+  const s0=fit*v.k,k=Math.max(0.5,Math.min(40,v.k*f)),s1=fit*k;
+  const ux=v.cx+(px-w.clientWidth/2)/(c.width*s0),uy=v.cy+(py-w.clientHeight/2)/(c.height*s0);/* punto bajo el cursor: queda fijo */
+  v.cx=ux-(px-w.clientWidth/2)/(c.width*s1);v.cy=uy-(py-w.clientHeight/2)/(c.height*s1);v.k=k;plqApply()}
+function plqPan(w){const P=new Map();let d0=0,k0=1;
+  w.addEventListener('wheel',e=>{e.preventDefault();plqZoom(Math.exp(-e.deltaY*0.0018),e.clientX,e.clientY)},{passive:false});
+  w.addEventListener('dblclick',e=>plqZoom(2,e.clientX,e.clientY));
+  w.addEventListener('pointerdown',e=>{if(!PLP.cv)return;w.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(P.size===2){const[a,b]=[...P.values()];d0=Math.hypot(a.x-b.x,a.y-b.y);k0=PLP.v.k}});
+  w.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p||!PLP.cv)return;
+    if(P.size===1){const{c,fit}=plqBase(),s=fit*PLP.v.k;PLP.v.cx-=(e.clientX-p.x)/(c.width*s);PLP.v.cy-=(e.clientY-p.y)/(c.height*s);p.x=e.clientX;p.y=e.clientY;plqApply();return}
+    p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(d0>0)plqZoom(k0*d/d0/PLP.v.k,(a.x+b.x)/2,(a.y+b.y)/2)});
+  const up=e=>{P.delete(e.pointerId);if(P.size<2)d0=0};w.addEventListener('pointerup',up);w.addEventListener('pointercancel',up);
+  addEventListener('resize',()=>{if(PLP.box)plqApply()})}
+function plqPrevGo(d){const n=PLP.i+d;if(n<0||n>=PQ.items.length)return;plqSync();PLP.i=n;plqPrevDraw()}
+function plqPrevClose(){if(!PLP.box)return;plqSync();PLP.box.remove();PLP.box=null;PLP.cv=null;PLP.i=-1;PQ.items.forEach(x=>{if(x._pv){x._pv.width=x._pv.height=0;delete x._pv}})}
 function plRowSay(i,t){const c=document.getElementById('plst'+i);if(c)c.textContent=t;const it=PQ.items[i];if(it)it.msg=t}
 const plUnload=e=>{e.preventDefault();e.returnValue=''};
 async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='pend'))return;

@@ -14,6 +14,15 @@ service firebase.storage {
     function role() { return firestore.get(memPath()).data.get('role', ''); }
     // Oficina Técnica (área «OT» u «Oficina Técnica») también sube planos
     function isOT() { let d = firestore.get(memPath()).data; return d.get('role', '') == 'area' && d.get('area', '').lower().trim().matches('o\\.? ?t\\.?|oficina t[eé]cnica.*'); }
+    // ETO de subcontratistas: etos/<sc>/… — el SC solo lee su carpeta; sube y borra solo el administrador
+    function scsSt() { let d = firestore.get(memPath()).data; return d.get('scs', [d.get('sc', '')]); }
+    match /etos/{sc}/{rest=**} {
+      allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']) && (role() != 'sc' || sc in scsSt()));
+      allow create, update: if (isOwner() || (verified() && isMember() && role() == 'admin'))
+        && request.resource.size < 80 * 1024 * 1024
+        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
+      allow delete: if isOwner() || (verified() && isMember() && role() == 'admin');
+    }
     match /planos/{rest=**} {
       allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']));
       // create y update (reintentar una subida a medias)
