@@ -12,7 +12,9 @@ test('tocar un día liberado ofrece reabrir la actividad', async ({ page }) => {
   await expect(lib.first()).toBeVisible();
   await lib.first().click();
   await expect(page.locator('tr[data-a="e0"] td.d.lib')).toHaveCount(0);
-  expect(await page.evaluate(d => window.__dbGet('daily', d + '_p1').recs.e0.done, AYER)).toBe(false);
+  /* tanda 1: el registro de ayer ya está cerrado (Cierre del ingeniero): no se reescribe; la reapertura queda en doneidx (r) */
+  expect(await page.evaluate(d => window.__dbGet('daily', d + '_p1').recs.e0.done, AYER)).toBe(true);
+  expect(await page.evaluate(() => (window.__dbGet('doneidx', 'p1') || {}).r || {})).toMatchObject({ e0: AYER });
   noErrors(errors, 'reabrir');
 });
 
@@ -25,18 +27,13 @@ test('programar un día después de la fecha de terminada la reabre sola', async
   noErrors(errors, 'reabrir pintando');
 });
 
-test('reabrir también vale si la terminó el capataz y se puede deshacer', async ({ page }) => {
+test('tanda 1: el «Terminada» que marcó el capataz/SC ya no termina la actividad (solo la del ingeniero)', async ({ page }) => {
   const LV = ['live', AYER + '_e0', { date: AYER, actId: 'e0', pisoId: 'p1', sc: 'c2', st: 'stop', close: { done: true, status: 'ok', by: 'u_cap', ts: 1 }, log: [] }];
   const errors = await openApp(page, { tab: 'look', extra: [LV] });
-  const lib = page.locator('tr[data-a="e0"] td.d.lib');
-  await expect(lib.first()).toBeVisible();
-  await lib.first().click(); // sin preguntar: se reabre y avisa con «Deshacer»
-  await expect(lib).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => (window.__dbGet('doneidx', 'p1') || {}).r)).toEqual({ e0: AYER });
-  // el cierre del capataz ya no la vuelve a terminar aunque se recalcule
-  expect(await page.evaluate(() => { doneRebuild(); return DONE.has('e0'); })).toBe(false);
-  await page.locator('#toast button', { hasText: 'Deshacer' }).click();
-  await expect(lib.first()).toBeVisible();
-  await expect.poll(() => page.evaluate(() => (window.__dbGet('doneidx', 'p1') || {}).r || {})).toEqual({});
-  noErrors(errors, 'reabrir capataz');
+  await expect(page.locator('tr[data-a="e0"]')).toBeVisible();
+  await expect(page.locator('tr[data-a="e0"] td.d.lib')).toHaveCount(0);
+  expect(await page.evaluate(() => { doneRebuild(); return [DONE.has('e0'), doneDates('e0')]; })).toEqual([false, []]);
+  // su cierre sí cuenta como Cumplido del día (sin terminada; lo marcado queda en prop.done)
+  expect(await page.evaluate(d => { const r = recOf(d, 'e0'); return [r.status, r.done, r.prop.done]; }, AYER)).toEqual(['ok', false, true]);
+  noErrors(errors, 'terminada del capataz');
 });

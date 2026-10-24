@@ -197,7 +197,7 @@ function puRevDlg(s){const X=puPlan(s);const ap=isAdmin||isPisoResp(s.piso);cons
     <div class="pudf"><span class="mu">Se cambian solo días desde mañana, todo en un solo paso (Deshacer lo revierte).${ap?'':' Solo el responsable del piso o un administrador puede aplicarla.'}</span><button class="ib" data-pu="revx">Volver al tablero</button><button class="ib pri" data-pu="apply"${ap&&nOps?'':' disabled'}>Aplicar al lookahead</button></div></div></div>`}
 function puApply(){const s=puCur();if(!s)return;if(!(isAdmin||isPisoResp(s.piso))){toast('Solo el responsable del piso o un administrador puede aplicar la sesión.');return}
   const X=puPlan(s);const ops=X.ops.slice();const tp=P().restrTypes||[];const typ=n=>tp.includes(n)?n:(tp[0]||n);
-  if(PU.apRs)X.rs.forEach(r=>{const id=uid('restr');ops.push(op('restr',id,{id,actId:r.act,pisoId:s.piso,type:typ(r.typ),desc:r.desc,resp:r.resp,need:r.need,freed:'',status:'pend',created:todayIso(),sc:r.sc,by:me.email,byName:me.name||''}))});
+  if(PU.apRs)X.rs.forEach(r=>{const id=uid('restr');ops.push(op('restr',id,{id,actId:r.act,pisoId:s.piso,type:typ(r.typ),desc:r.desc,resp:r.resp,...(respScOf(r.resp)?{respSc:respScOf(r.resp)}:{}),need:r.need,freed:'',status:'pend',created:todayIso(),sc:r.sc,by:me.email,byName:me.name||''}))});
   if(!ops.length){toast('No hay cambios para aplicar.');return}
   const nA=X.ops.length,nR=ops.length-nA;
   const ok=apply(ops,`Sesión pull aplicada: ${nA} actividad(es)${nR?` y ${nR} restricción(es)`:''}`,()=>{

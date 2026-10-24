@@ -44,38 +44,53 @@ function buildVersion({ project, pisos, sectors, ambientes, acts }, now = Date.n
   return { id, idx, docs };
 }
 
-/* Cierres del capataz que nadie revisó en 2 días → registro diario.
-   Un «Cumplido» que ningún ingeniero confirmó entra como No cumplido, causa «Sin confirmación», no imputable al SC
-   y sin «terminada» (la actividad sigue pendiente para reprogramar); lo que propuso el SC queda en prop.
-   Un Parcial o No cumplido propuesto entra tal cual (decidido con el dueño, oct 2026). */
-const CNC_SIN_CONF = 'Sin confirmación';
-/* dplanById (opcional): planes del día cerrados; si el día tiene foto, lo comprometido es su cantidad, no la vigente.
+/* Cierres del SC/capataz → registro diario (tanda 1, 23/10/2026, decidido con el dueño; revierte la «opción B» del 09/10).
+   El Cumplido/Parcial/No que el SC o el capataz marcó antes de su hora de corte (closeCutHH) CUENTA TAL COMO LO MARCÓ, sin
+   confirmación del ingeniero. A la hora del Cierre del ingeniero (engCutHH) el servidor lo escribe en daily con su estado, causa
+   y nota, marcado como reportado por el SC (bySc:true; lo propuesto queda también en prop). El check «Terminada» del SC NO se
+   aplica (done:false; queda en prop.done para consulta). Un cierre enviado después del corte no se registra aquí (las reglas ya
+   no lo dejan escribir; uno antiguo así lo cubre sinCierre).
+   lives: reportes en vivo con fecha <= upTo; project (opcional): para la hora de corte de cada día.
+   dplanById (opcional): planes del día cerrados; si el día tiene foto, lo comprometido es su cantidad, no la vigente.
    Un cierre cuya partida no es la de la actividad no se acepta (lo pudo escribir otra partida). */
-function closesToAccept(lives, dailyById, acts, today, dplanById) {
-  const lim = addD(today, -2);
+const CNC_SIN_CONF = 'Sin confirmación'; // causa antigua (registros del 09/10 al 23/10/2026); ya no se escribe
+/* margen para el cierre del SC después de su hora de corte (latencia y reloj del equipo); el mismo de las reglas (live) */
+const CLOSE_GRACE = 10 * 60e3;
+/* ¿el cierre lo declaró la partida de la actividad? (igual que liveOwn de la página, frente C de la tanda 1): la partida actual de la
+   fila, o la de ese día según el plan publicado (dplan.who[actId].sc). Sin plan publicado, solo la actual (auditoría N01; la página
+   además acepta la del propio reporte en días pasados sin plan: ese cierre sigue contando allí, pero el servidor no lo escribe). */
+function liveScOk(lv, x, dp) {
+  const s = lv.sc || ''; if ((x.sc || '') === s) return true;
+  const w = dp && dp.who && dp.who[lv.actId];
+  return !!(w && w.sc && w.sc === s);
+}
+function closesToAccept(lives, dailyById, acts, upTo, dplanById, project) {
+  const hh = closeCutHH(project || {});
   const out = [];
   for (const lv of lives) {
     const c = lv.close;
-    if (!c || !c.status || !lv.date || lv.date > lim) continue;
+    if (!c || !c.status || !lv.date || lv.date > upTo) continue;
+    if ((c.t || 0) > closeCutTs(lv.date, hh) + CLOSE_GRACE) continue; // cerrado después del corte: no cuenta como cierre del SC
     const doc = dailyById.get(lv.date + '_' + lv.pisoId);
     const r = doc && doc.recs && doc.recs[lv.actId];
     if (r && (r.status || r.clr)) continue; // ya registrado, o el ingeniero lo quitó a propósito
     const x = acts.get(lv.actId);
     if (!x) continue;
-    if ((x.sc || '') !== (lv.sc || '')) continue;
-    const hasM = typeof x.metrado === 'number' && x.metrado > 0;
     const dp = dplanById && dplanById.get(lv.date + '_' + lv.pisoId);
+    if (!liveScOk(lv, x, dp)) continue;
+    const hasM = typeof x.metrado === 'number' && x.metrado > 0;
     const dq = dp && dp.ids && Object.prototype.hasOwnProperty.call(dp.ids, lv.actId) ? dp.ids[lv.actId] : undefined;
     const q = hasM ? (typeof dq === 'number' ? dq : ((x.qty || {})[lv.date] ?? null)) : null;
     const ok = c.status === 'ok';
     out.push({
       date: lv.date, pisoId: lv.pisoId, actId: lv.actId,
       rec: {
-        status: ok ? 'no' : c.status, prog: q, und: x.und || '',
-        exec: null,
-        cnc: ok ? CNC_SIN_CONF : (c.cnc || ''), imp: ok ? false : null, note: c.note || '', late: false, done: false, photos: lv.photos || [],
+        status: c.status, prog: q, und: x.und || '',
+        exec: ok ? q : null, // Cumplido sin cantidad = lo programado (como writeDaily de la página)
+        cnc: ok ? '' : (c.cnc || ''), imp: null, note: c.note || '', late: false, done: false, photos: lv.photos || [],
         prop: { status: c.status, cnc: c.cnc || '', done: !!c.done, by: c.by || '', byName: c.n || '', ts: c.t || 0 },
-        sc: x.sc || '', nm: x.name || '', ambId: x.ambId || '',
+        bySc: true,
+        sc: lv.sc || x.sc || '', nm: x.name || '', ambId: x.ambId || '', // el SC de ese día (frente C: la fila pudo cambiar de partida)
         auto: true, autoSrv: true, by: c.by || '', byName: c.n || '', ts: c.t || Date.now()
       }
     });
@@ -83,24 +98,42 @@ function closesToAccept(lives, dailyById, acts, today, dplanById) {
   return out;
 }
 
-/* Sin cierre a la hora de corte (reporte por excepción, decidido con el dueño, oct 2026): lo comprometido en el plan publicado
-   del día (dplan.ids) que a la hora de corte (Configuración › Proyecto closeCutHH, por defecto 17:00 Lima) nadie cerró —ni el SC/capataz propuso cierre antes del corte, ni el
-   ingeniero lo verificó— entra como No cumplido, causa del cuadro con código SC (o «Subcontratas»), imputable al SC, sin terminada.
-   Se excluye lo reprogramado ese día («No va», pdz kind nova, o acts.rpl[día]), lo archivado y lo que cambió de partida.
-   Corre en aceptarCierres (23:30) para el día de hoy; el ingeniero lo puede corregir después en Campo. */
+/* Sin cierre (reporte por excepción, decidido con el dueño, oct 2026): lo comprometido en el plan publicado del día (dplan.ids)
+   que a la hora de corte del SC (Configuración › Proyecto closeCutHH, por defecto 17:00 Lima) nadie cerró —ni el SC/capataz
+   cerró antes del corte, ni el ingeniero lo registró— entra como No cumplido, causa del cuadro con código SC (o «Subcontratas»),
+   imputable al SC, sin terminada. Se excluye lo reprogramado ese día («No va», pdz kind nova, o acts.rpl[día]), lo archivado,
+   lo que cambió de partida y (H03a) lo que ya estaba terminado antes de ese día (opt.done: Map actId → fecha de terminada).
+   Desde la tanda 1 (23/10/2026) corre a la hora del Cierre del ingeniero (engCutHH, por defecto 21:00), nunca antes, y solo en
+   días laborables (lo decide quien llama: cerrarJornada en index.js). opt.now: si se pasa y aún no llega el corte del SC, nada. */
 /* misma regla que la página (base.js closeCutHH): entre 12:00 y 21:00, por defecto 17:00 */
 function closeCutHH(p) { const v = p && p.closeCutHH; return typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= '12:00' && v <= '21:00' ? v : '17:00'; }
 const hhLabel = v => { const [h, m] = String(v).split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''} ${h < 12 ? 'am' : 'pm'}`; };
 const sinCierreNote = hh => `Sin cierre del SC antes de las ${hhLabel(hh)} (registrado automáticamente)`;
 /* hora de corte del día en milisegundos (Lima, UTC−5, sin horario de verano) */
 const closeCutTs = (d, hh) => Date.parse(d + 'T' + (hh || '17:00') + ':00-05:00');
+/* Cierre del ingeniero (tanda 1, 23/10/2026; Configuración › Proyecto engCutHH, solo el administrador): desde el corte del SC hasta
+   esta hora solo los ingenieros registran o corrigen; a esta hora el servidor registra los cierres del SC y el «Sin cierre», y el
+   registro diario de ese día queda cerrado para todos (reglas de daily y live). Entre 18:00 y 23:00 y siempre después del corte
+   del SC; si no, 21:00 (o 22:00 si el corte del SC es 21:00). Misma regla en base.js engCutHH y en firestore.rules (engHH). */
+const hhIn = (v, lo, hi) => typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= lo && v <= hi;
+function engCutHH(p) { const c = closeCutHH(p); const v = p && p.engCutHH; return hhIn(v, '18:00', '23:00') && v > c ? v : (c < '21:00' ? '21:00' : '22:00'); }
+const engCutTs = (d, p) => closeCutTs(d, engCutHH(p));
+/* días cuyo registro hay que cerrar ahora: ayer (por si una pasada falló o la tarea se atrasó) y hoy si ya pasó el Cierre del
+   ingeniero. La constancia jcl/<fecha> evita repetirlo (index.js). */
+function jornadaDays(p, now = Date.now()) {
+  const today = limaToday(now); const out = [addD(today, -1)];
+  if (now >= engCutTs(today, p)) out.push(today);
+  return out;
+}
 function cncSinCierre(cnc) {
   const L = Array.isArray(cnc) ? cnc : [];
   return L.find(n => /subcontrat|mano de obra|\bsc\b/i.test(String(n))) || 'Subcontratas';
 }
-function sinCierre(day, dplans, lives, dailyById, acts, novaIds, cnc, hh) {
+function sinCierre(day, dplans, lives, dailyById, acts, novaIds, cnc, hh, opt = {}) {
   hh = closeCutHH({ closeCutHH: hh });
   const cut = closeCutTs(day, hh);
+  if (opt.now != null && opt.now < cut) return []; // TMP-5: nunca antes de la hora de corte
+  const doneAt = opt.done || null;
   const liveBy = new Map(lives.filter(l => l.date === day).map(l => [l.actId, l]));
   const cause = cncSinCierre(cnc);
   const out = [];
@@ -113,11 +146,13 @@ function sinCierre(day, dplans, lives, dailyById, acts, novaIds, cnc, hh) {
       if (novaIds && novaIds.has(aid)) continue;
       const x = acts.get(aid);
       if (!x || x.arch || (x.rpl && x.rpl[day])) continue;
+      const dn = doneAt && doneAt.get(aid);
+      if (dn && dn < day) continue; // H03a: ya estaba terminada antes de ese día: no se le pide cierre
       const who = dp.who && dp.who[aid];
       if (who && who.sc && (x.sc || '') !== who.sc) continue;
       const lv = liveBy.get(aid);
       const c = lv && lv.close;
-      if (c && c.status && (c.t || 0) <= cut && (lv.sc || '') === (x.sc || '')) continue; // cerró a tiempo: lo acepta closesToAccept
+      if (c && c.status && (c.t || 0) <= cut + CLOSE_GRACE && liveScOk(lv, x, dp)) continue; // cerró a tiempo: lo registra closesToAccept
       const hasM = typeof x.metrado === 'number' && x.metrado > 0;
       const q = hasM ? (typeof dp.ids[aid] === 'number' ? dp.ids[aid] : ((x.qty || {})[day] ?? null)) : null;
       out.push({
@@ -186,7 +221,35 @@ function weeksToFreeze(p, now = Date.now()) {
   const today = limaToday(now); const w0 = weekOf(p, today);
   return [w0, w0 + 1].filter(n => now >= frzCutTs(p, n) && today <= weekStart(p, n));
 }
-/* Fecha de terminada por actividad (igual que la página: índice, registros con «terminada» y cierres del capataz; respeta reaperturas) */
+/* C-03 (tanda 1, LPS-1, decidido con el dueño): una semana descongelada (weeks.unfrozenAt, sin frozenAt) que nadie volvió a congelar
+   se re-congela sola REFRZ_MS (2 h) después de descongelarla, TAL COMO ESTABA: desde la última copia del descongelado
+   (weeks/<id>__h<hora>, histOf = id, sin restAt), no rearmando desde el lookahead vivo.
+   weeks = documentos de weeks con unfrozenAt [{id, …}]; hist = copias __h [{id, histOf, unAt, restAt?, v}].
+   Devuelve [{id, hid, unAt}]: las semanas que hay que re-congelar ahora y de qué copia. */
+const REFRZ_MS = 2 * 3600e3;
+function weeksToRefreeze(weeks, hist, now = Date.now()) {
+  const out = [];
+  for (const w of weeks) {
+    if (!w || w.frozenAt || w.histOf || !w.unfrozenAt) continue;
+    const t = Date.parse(w.unfrozenAt); if (!(t > 0) || t + REFRZ_MS > now) continue;
+    const L = hist.filter(h => h && h.histOf === w.id && !h.restAt && h.v && h.v.frozenAt).sort((a, b) => String(a.unAt).localeCompare(String(b.unAt)));
+    const h = L[L.length - 1]; if (!h) continue;
+    out.push({ id: w.id, hid: h.id, unAt: w.unfrozenAt });
+  }
+  return out;
+}
+/* lo que se escribe al re-congelar (dentro de la transacción, con lo que hay en ese momento): ex = weeks/<id>, hd = la copia __h,
+   hsnap = wsnap/<hid>.snap (o undefined). null = ya no corresponde (alguien la congeló, la copia ya se recuperó o la volvieron a
+   descongelar después: otro unfrozenAt). → {week, snap} (week va con merge; snap → wsnap/<id>) */
+function refreezeDoc(ex, hd, hsnap, unAt, nowIso) {
+  if (!ex || ex.frozenAt || !hd || hd.restAt || !hd.v || !hd.v.frozenAt) return null;
+  if (unAt && ex.unfrozenAt !== unAt) return null;
+  const { snap: vs, ...v0 } = hd.v;
+  const snap = vs !== undefined ? vs : hsnap;
+  return { week: { n: ex.n != null ? ex.n : hd.n, pisoId: ex.pisoId || hd.pisoId, ...v0, refrz: { at: nowIso, unAt: ex.unfrozenAt, hid: hd.id || null } }, snap: snap != null ? snap : null };
+}
+/* Fecha de terminada por actividad (igual que la página: índice y registros con «terminada»; respeta reaperturas). Desde la tanda 1 el
+   cierre del capataz/SC con «terminada» ya no cuenta. */
 /* acts (opcional, Map o {id: act}): el cierre solo cuenta si lo declaró la partida de la actividad (como liveOwn de la página);
    pisoOf (opcional): piso de la actividad, para descartar un cierre con otro piso. «Quitar registro» (clr) anula el cierre del capataz. */
 function doneMap({ doneidx = [], daily = [], lives = [], acts = null, pisoOf = null }) {
@@ -196,11 +259,9 @@ function doneMap({ doneidx = [], daily = [], lives = [], acts = null, pisoOf = n
   const add = (id, d) => { const z = R.get(id); if (z && d <= z) return; const c = D.get(id); if (!c || d < c) D.set(id, d); };
   for (const d of doneidx) for (const [a, v] of Object.entries(d.d || {})) if (v) add(a, v);
   for (const doc of daily) for (const [id, r] of Object.entries(doc.recs || {})) { if (!r) continue; if (r.status || r.clr) real.add(doc.date + '|' + id); if (r.done) add(id, doc.date); }
-  for (const lv of lives) {
-    const c = lv.close; if (!c || !c.done || c.status !== 'ok' || real.has(lv.date + '|' + lv.actId)) continue;
-    if (acts) { const x = actOf(lv.actId); if (!x || (x.sc || '') !== (lv.sc || '')) continue; const p = pisoOf ? pisoOf(x) : ''; if (lv.pisoId && p && p !== lv.pisoId) continue; }
-    add(lv.actId, lv.date);
-  }
+  /* tanda 1 (23/10/2026, decisión del dueño): el check «Terminada» del SC/capataz (live.close.done) ya NO cuenta como terminada; solo la
+     que registra un ingeniero en daily (o el índice). lives, acts y pisoOf se aceptan por compatibilidad y no se usan. */
+  void lives; void actOf; void real; void pisoOf;
   return D;
 }
 const PFIELDS = ['days', 'qty', 'metrado', 'und', 'name', 'order'];
@@ -225,7 +286,10 @@ function propTouch(b, a) {
 /* Documentos weeks/<n>_<piso> de los pisos que tienen compromisos en la semana n: { items, propOut } como «Congelar», y aparte
    la foto del lookahead del piso (snap: días de todas sus actividades), que va a wsnap/<n>_<piso> (auditoría de datos M1: dentro de
    weeks la descargaba todo el mundo al entrar y crecía con cada semana). Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
-function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [] }, n, nowIso) {
+/* C-29 (tanda 1, DAT-02): cada compromiso guarda también el nombre del SC de ese momento (scn), como la página; contractors (Map
+   opcional) = la colección contractors. */
+function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [], contractors = null }, n, nowIso) {
+  const scnOf = sc => { const c = sc && contractors && (contractors instanceof Map ? contractors.get(sc) : contractors[sc]); return c && c.name ? { scn: c.name } : {}; };
   const live = m => [...m.values()].filter(x => !x.arch);
   const P = live(pisos).sort(byOrder); if (!P.length) return [];
   const pids = new Set(P.map(p => p.id)); const first = P[0].id;
@@ -246,7 +310,7 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
           if (x.ambId !== a.id) continue;
           const d = (x.days || []).filter(z => days.has(z) && !libDay(x, z)).sort();
           if (!d.length) continue;
-          const it = { sc: x.sc || '', sector: s.code || '', code: a.code || '', amb: a.name || '', act: x.name || '', days: d, ord: (s.order || 0) * 1e6 + (a.order || 0) * 1e3 + (x.order || 0) };
+          const it = { sc: x.sc || '', ...scnOf(x.sc), sector: s.code || '', code: a.code || '', amb: a.name || '', act: x.name || '', days: d, ord: (s.order || 0) * 1e6 + (a.order || 0) * 1e3 + (x.order || 0) };
           if (typeof x.metrado === 'number' && x.metrado > 0) { const qd = {}; let q = 0; d.forEach(z => { const v = (x.qty || {})[z]; if (v != null) { qd[z] = v; q += +v; } }); if (q > 0) { it.q = r2(q); it.qd = qd; it.und = x.und || ''; } }
           items[x.id] = it;
         }
@@ -274,8 +338,27 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
 function planCutHH(p) { const v = p && p.planCutHH; return typeof v === 'string' && /^\d\d:\d\d$/.test(v) && v >= '00:00' && v <= '23:30' ? v : '21:00'; }
 /* ¿ya pasó hoy (hora de Lima) la hora de la publicación automática? */
 function planCutDue(p, now = Date.now()) { const t = new Date(now - LIMA).toISOString().slice(11, 16); return t >= planCutHH(p); }
-/* día hábil (como la página: domingo no; feriados y sábado según Configuración › Calendario) */
-function isWork(p, d) { const dw = pd(d).getUTCDay(); if (dw === 0) return false; const c = (p && p.cal) || {}; if ((c.hol || []).some(o => o && o.d === d)) return false; if (dw === 6 && c.sat === false) return false; return true; }
+/* día hábil (como la página: domingo no; feriados y sábado según Configuración › Calendario). C-08 (tanda 1): una fecha marcada
+   «se trabaja» (cal.work: [{d, n}]) es laborable aunque sea domingo, feriado o sábado no laborable */
+function isWork(p, d) { const c = (p && p.cal) || {}; if ((c.work || []).some(o => o && o.d === d)) return true; const dw = pd(d).getUTCDay(); if (dw === 0) return false; if ((c.hol || []).some(o => o && o.d === d)) return false; if (dw === 6 && c.sat === false) return false; return true; }
+/* Feriados nacionales de Perú (misma lista que holPeru de web/js/auditoria.js, botón «+ Feriados nacionales de Perú AAAA») */
+function easter(y) { const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1; return y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0'); }
+function holPeru(y) {
+  const e = easter(y);
+  const F = [['01-01', 'Año Nuevo'], ['05-01', 'Día del Trabajo'], ['06-07', 'Batalla de Arica y Día de la Bandera'], ['06-29', 'San Pedro y San Pablo'], ['07-23', 'Día de la Fuerza Aérea'], ['07-28', 'Fiestas Patrias'], ['07-29', 'Fiestas Patrias'], ['08-06', 'Batalla de Junín'], ['08-30', 'Santa Rosa de Lima'], ['10-08', 'Combate de Angamos'], ['11-01', 'Todos los Santos'], ['12-08', 'Inmaculada Concepción'], ['12-09', 'Batalla de Ayacucho'], ['12-25', 'Navidad']];
+  return [...F.map(([md, n]) => ({ d: y + '-' + md, n })), { d: addD(e, -3), n: 'Jueves Santo' }, { d: addD(e, -2), n: 'Viernes Santo' }].sort((a, b) => a.d.localeCompare(b.d));
+}
+/* C-08 (tanda 1): precarga de los feriados nacionales del año actual y el siguiente, una vez por año (constancia cal.holPre).
+   Nunca borra ni pisa: si el año ya tiene alguno de los feriados nacionales (el administrador los cargó con el botón y quizá
+   corrigió o quitó alguno), solo deja la constancia; si no, agrega los que faltan. → null si no hay nada que hacer, o
+   {hol, holPre, add} con la lista completa nueva. */
+function holPreload(cal, years) {
+  const c = cal || {}; const pre0 = Array.isArray(c.holPre) ? c.holPre.map(Number) : [];
+  const todo = years.filter(y => !pre0.includes(y)); if (!todo.length) return null;
+  const hol = (Array.isArray(c.hol) ? c.hol : []).filter(o => o && o.d); const have = new Set(hol.map(o => o.d)); const add = [];
+  for (const y of todo) { const L = holPeru(y); if (L.some(o => have.has(o.d))) continue; for (const o of L) { add.push(o); have.add(o.d); } }
+  return { hol: [...hol, ...add].sort((a, b) => a.d.localeCompare(b.d)), holPre: [...new Set([...pre0, ...todo])].sort(), add };
+}
 function nextWork(p, d) { let x = addD(d, 1); for (let i = 0; i < 30 && !isWork(p, x); i++) x = addD(x, 1); return x; }
 /* foto del plan del día por piso: {actId: cantidad | null} de lo programado ese día y no terminado (sin lo archivado) */
 function buildDayPlan({ pisos, sectors, ambientes, acts, done = new Map() }, d) {
@@ -425,7 +508,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
   const dref = col('dplan').doc(d + '_' + pid); const PID = 'pub_' + d + '_' + pid; const pref = col('pdz').doc(PID);
   return db.runTransaction(async tx => {
     const cur = await tx.get(dref); const c0 = cur.exists ? cur.data() : null;
-    if (c0 && (c0.ids || c0.reo)) return { skip: true };
+    if (c0 && (c0.ids || c0.reo)) return { skip: true, has: !!c0.ids };
     const ps = await tx.get(pref);
     const D = [];
     for (const z of drafts) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists) D.push({ ...s.data(), id: z.id }); }
@@ -711,8 +794,9 @@ function avisoTexto({ aid, date, e, act, amb, piso, con, lvMot }) {
 }
 
 module.exports = {
+  CLOSE_GRACE, engCutHH, engCutTs, jornadaDays, holPeru, holPreload, easter,
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };

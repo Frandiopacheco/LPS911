@@ -40,7 +40,8 @@ function iprData(n){const vset=histPisoSet();
   const docs=[...S.wk.values()].filter(w=>w.frozenAt&&w.pisoId&&vset.has(w.pisoId));
   const wSel=docs.filter(w=>w.n===n);
   const ppcs=[...new Set(docs.map(w=>w.n))].map(k=>{const o=ppcWeekAgg(k,vset);return o?{...o,wk:+k}:null}).filter(Boolean).sort((a,b)=>a.wk-b.wk);
-  const full=ppcs.filter(x=>x.ev>=x.n);const avg=full.length?full.reduce((s,x)=>s+x.ppc,0)/full.length:null;
+  /* C-01 (tanda 1, LPS-4): el promedio es el de Indicadores (ppcAvg sobre ppcHistAll: con las semanas cargadas a mano), el mismo que dibuja el gráfico */
+  const{avg,L:full}=ppcAvg(ppcHistAll(ppcs));
   const cur=ppcWeekAgg(n,vset);const prev=ppcWeekAgg(n-1,vset);
   let tot={n:0,ok:0,no:0,ev:0};for(const w of wSel){const st=ppcOf(w);if(!st)continue;tot.n+=st.n;tot.ok+=st.ok;tot.ev+=st.ev}tot.no=tot.ev-tot.ok;
   const scP=wkScStats(wSel);for(const k of Object.keys(scP))if(!scP[k].n)delete scP[k];
@@ -100,7 +101,7 @@ function iprResumen(n,D){const c=D.cur,t=D.tot;const dlt=c&&D.prev?Math.round((c
   return h}
 
 function iprSc(n,D){const e=Object.entries(D.scP).sort((a,b)=>(b[1].ppc??0)-(a[1].ppc??0)||b[1].n-a[1].n);
-  const rows=e.map(([sc,o])=>({label:conOf(sc).name,color:conOf(sc).color,v:o.ppc??0,max:1,fmt:pct,tone:iprTone(o.ppc),
+  const rows=e.map(([sc,o])=>({label:o.nm||conOf(sc).name,color:conOf(sc).color,v:o.ppc??0,max:1,fmt:pct,tone:iprTone(o.ppc),
     sub:`${o.ok} de ${o.n}${o.no?` · ${o.no} No`:''}${o.n-o.ev?` · ${o.n-o.ev} sin evaluar`:''}${o.nimp||o.ext?` · del SC ${pct(o.ppcSc)}`:''}`}));
   const half=rows.length>12?Math.ceil(rows.length/2):rows.length;
   return`<section class="iprcard"><h3>PPC por subcontratista <small>semana ${n} · ${rows.length} subcontratistas · de mayor a menor</small></h3>
@@ -109,9 +110,9 @@ function iprSc(n,D){const e=Object.entries(D.scP).sort((a,b)=>(b[1].ppc??0)-(a[1
 
 function iprCausas(n,D){const cl=Object.entries(D.cnc).sort((a,b)=>b[1].n-a[1].n);
   if(!cl.length)return`<div class="iprempty">Sin no cumplidos en la semana ${n}.<small>${D.tot.ev<D.tot.n?`Quedan ${D.tot.n-D.tot.ev} compromisos sin evaluar.`:'Todos los compromisos evaluados se cumplieron.'}</small></div>`;
-  const by={};D.nc.forEach(x=>(by[x.it.sc]=by[x.it.sc]||[]).push(x));
-  const scs=Object.keys(by).sort((a,b)=>by[b].length-by[a].length||conOf(a).name.localeCompare(conOf(b).name));
+  const by={};D.nc.forEach(x=>(by[x.it.sc]=by[x.it.sc]||[]).push(x));const nmS=sc=>scnOf(by[sc][0].it);
+  const scs=Object.keys(by).sort((a,b)=>by[b].length-by[a].length||nmS(a).localeCompare(nmS(b)));
   return`<div class="iprgrid">
     <section class="iprcard"><h3>Causas de no cumplimiento <small>semana ${n} · ${D.nc.length} no cumplidos</small></h3>${iprBars(cl.map(([k,o])=>({label:k,v:o.n,tone:'bad',sub:o.nimp?`${o.nimp} no imputable${o.nimp===1?'':'s'} al SC`:''})))}</section>
-    <section class="iprcard"><h3>No cumplidos por subcontratista <small>actividad · ambiente · causa</small></h3><div class="iprnc">${scs.map(sc=>`<div class="iprncg"><h4><i style="background:${esc(conOf(sc).color)}"></i>${esc(conOf(sc).name)} <small>${by[sc].length}</small></h4><ul>${by[sc].map(x=>`<li><b>${esc(x.it.act||'')}</b><span>${esc(x.it.amb||x.it.code||'')}${!U.piso&&x.p?' · '+esc(x.p.code):''}</span><em>${esc(x.k)}${x.r.note?' — '+esc(x.r.note):''}</em></li>`).join('')}</ul></div>`).join('')}</div></section>
+    <section class="iprcard"><h3>No cumplidos por subcontratista <small>actividad · ambiente · causa</small></h3><div class="iprnc">${scs.map(sc=>`<div class="iprncg"><h4><i style="background:${esc(conOf(sc).color)}"></i>${esc(nmS(sc))} <small>${by[sc].length}</small></h4><ul>${by[sc].map(x=>`<li><b>${esc(x.it.act||'')}</b><span>${esc(x.it.amb||x.it.code||'')}${!U.piso&&x.p?' · '+esc(x.p.code):''}</span><em>${esc(x.k)}${x.r.note?' — '+esc(x.r.note):''}</em></li>`).join('')}</ul></div>`).join('')}</div></section>
   </div>`}

@@ -154,22 +154,23 @@ function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
       const x={id,ambId:rc.ambId,sc:rc.sc||'',name:rc.nm||'(actividad borrada)',und:rc.und||'',days:[doc.date],gone:true};const c=ctx(x);if(!c)continue;
       rows.push({...c,x,d:doc.date,rc:{...rc},sched:true,sc:x.sc,arch:true});seen.add(id+'|'+doc.date)}}}
-const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción'};
+const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción',contractors:'Subcontratista'};
 let ARCQ='';
-function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
+function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res'],['contractors','con']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
 function archLabel(col,v){if(col==='acts'){const a=ambOf(v.ambId);return`${esc(v.name||'sin nombre')} <span class="mu">· ${esc(conOf(v.sc).name)} · ${esc(a?a.code:'')}${(v.days||[]).length?' · '+esc(rngTxt(v.days)):''}</span>`}
   if(col==='restr'){const x=actOf(v.actId);return`${esc(v.type||'')}${v.desc?' · '+esc(v.desc):''} <span class="mu">· ${esc(x?x.name:'sin actividad')}${v.resp?' · '+esc(v.resp):''}</span>`}
+  if(col==='contractors')return`${esc(v.name||'sin nombre')}${v.partida?` <span class="mu">· ${esc(v.partida)}</span>`:''}`;
   if(col==='ambientes')return`${esc(v.code||'')} ${esc(v.name||'')}`;return`${esc(v.code||'')} · ${esc(v.name||'')}`}
 function archCard(){if(!canWrite||PM())return'';const L=archList();const q=ARCQ.trim().toLowerCase();const F=q?L.filter(o=>(String(o.v.name||'')+' '+String(o.v.code||'')+' '+(o.col==='acts'?conOf(o.v.sc).name:'')+(o.col==='restr'?' '+(o.v.type||'')+' '+(o.v.desc||'')+' '+(o.v.resp||''):'')).toLowerCase().includes(q)):L;
   return`<div class="card" id="arccard"><h2>Papelera <span class="sub">${L.length} elemento${L.length===1?'':'s'} eliminado${L.length===1?'':'s'}</span></h2><div class="pad">
-   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
+   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead (y los subcontratistas que quitas en Configuración) queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
    ${L.length?`<input class="tin" id="arcq" placeholder="Buscar por nombre, código o subcontratista" value="${esc(ARCQ)}" style="width:min(420px,100%);margin-bottom:8px">
    <div class="tscroll"><table class="t"><thead><tr><th>Tipo</th><th>Elemento</th><th>Eliminado</th><th></th></tr></thead><tbody>
    ${F.slice(0,150).map(({col,v})=>`<tr><td>${ARCN[col]}</td><td>${archLabel(col,v)}</td><td class="mu">${esc(fmtD(ldt(v.arch.t)))} ${hhmm(v.arch.t)} · ${esc((v.arch.n||v.arch.by||'').split(' ')[0])}</td><td><button class="ib" data-arcr="${col}|${esc(v.id)}" style="height:26px;font-size:12px">Restaurar</button></td></tr>`).join('')}
    </tbody></table></div>${F.length>150?`<p class="note">Se muestran 150 de ${F.length}. Usa el buscador.</p>`:''}`:'<p class="note">Vacía.</p>'}</div></div>`}
 function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const t=v.arch.t;const ops=[];const un=(c,x)=>{const n={...strip(x),id:x.id};delete n.arch;ops.push(op(c,x.id,n))};
   // hacia arriba: lo que lo contiene
-  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a)}
+  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a);const c=ARCH.con.get(v.sc);if(c)un('contractors',c)/* su SC, si está en la Papelera (C-28) */}
   const amb=col==='ambientes'?v:col==='acts'?ambOf(v.ambId):null;const sec=col==='sectors'?v:amb?secOf(amb.sectorId):null;
   if(sec&&col!=='sectors'&&ARCH.sec.has(sec.id))un('sectors',sec);const pid=col==='pisos'?id:sec?sec.pisoId:null;if(pid&&col!=='pisos'&&ARCH.pis.has(pid))un('pisos',ARCH.pis.get(pid));
   un(col,v);
@@ -184,8 +185,10 @@ function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const 
 
 /* ---- calendario de la obra: sábado laborable y feriados ---- */
 let CALP=undefined,CALS=null;
-function calInfo(){const p=S.meta.get('project');if(p!==CALP||!CALS){CALP=p;const c=(p&&p.cal)||{};CALS={sat:c.sat!==false,hol:new Map((c.hol||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Feriado']))}}return CALS}
-function nwReason(d){if(!d)return'';const dw=pd(d).getUTCDay();if(dw===0)return'Domingo';const c=calInfo();if(c.hol.has(d))return'Feriado: '+c.hol.get(d);if(dw===6&&!c.sat)return'Sábado no laborable';return''}
+/* C-08 (tanda 1): cal.work = fechas que «se trabajan» aunque sean domingo, feriado o sábado no laborable ([{d, n}]): son laborables para
+   todo (se publica el plan, se mide el cierre, cuentan en el PPC). Misma regla que isWork de functions/lib.js */
+function calInfo(){const p=S.meta.get('project');if(p!==CALP||!CALS){CALP=p;const c=(p&&p.cal)||{};CALS={sat:c.sat!==false,hol:new Map((c.hol||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Feriado'])),work:new Map((c.work||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Se trabaja']))}}return CALS}
+function nwReason(d){if(!d)return'';if(calInfo().work.has(d))return'';const dw=pd(d).getUTCDay();if(dw===0)return'Domingo';const c=calInfo();if(c.hol.has(d))return'Feriado: '+c.hol.get(d);if(dw===6&&!c.sat)return'Sábado no laborable';return''}
 const isWork=d=>!nwReason(d);
 function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return y+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0')}
 function holPeru(y){const e=easter(y);const F=[['01-01','Año Nuevo'],['05-01','Día del Trabajo'],['06-07','Batalla de Arica y Día de la Bandera'],['06-29','San Pedro y San Pablo'],['07-23','Día de la Fuerza Aérea'],['07-28','Fiestas Patrias'],['07-29','Fiestas Patrias'],['08-06','Batalla de Junín'],['08-30','Santa Rosa de Lima'],['10-08','Combate de Angamos'],['11-01','Todos los Santos'],['12-08','Inmaculada Concepción'],['12-09','Batalla de Ayacucho'],['12-25','Navidad']];
@@ -200,10 +203,12 @@ function calCard(){const c=P().cal||{};const ro=canWrite&&!PM()?'':' disabled';c
    <label class="chk"><input type="checkbox" data-cal="sat"${c.sat!==false?' checked':''}${ro}> El sábado es día laborable</label>
    <p class="note">Feriados y días no laborables de la obra (uno por línea: <b>AAAA-MM-DD Nombre</b>). Se ven rayados en el Lookahead y se saltan al desplazar, reprogramar o contar días hábiles. Si un feriado se va a trabajar, igual puedes programarlo.</p>
    <textarea class="box" data-cal="hol" rows="6" aria-label="Feriados, uno por línea"${ro} placeholder="2026-10-08 Combate de Angamos">${esc(holTxt(c.hol))}</textarea>
+   <p class="note"><b>Días que se trabajan</b> aunque sean feriado, domingo o sábado no laborable (uno por línea: <b>AAAA-MM-DD Motivo</b>). Ese día cuenta como laborable: se publica el plan, se mide el cierre y entra en el PPC.</p>
+   <textarea class="box" data-cal="work" rows="3" aria-label="Días que se trabajan, uno por línea"${ro} placeholder="2026-12-08 Se trabaja (frente atrasado)">${esc(holTxt(c.work))}</textarea>
    ${ro?'':`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="ib" data-calpe="${y}">+ Feriados nacionales de Perú ${y}</button><button class="ib" data-calpe="${y+1}">+ Feriados nacionales de Perú ${y+1}</button></div>`}
-   <p class="note">${up.length?'Próximos: '+up.map(o=>esc(fmtD(o.d)+' '+o.n)).join(' · ')+'. ':''}Los feriados nacionales se cargan según la ley vigente; si el Gobierno traslada alguno (por ejemplo, a lunes), corrígelo aquí.</p></div></div>`}
+   <p class="note">${up.length?'Próximos: '+up.map(o=>esc(fmtD(o.d)+' '+o.n)).join(' · ')+'. ':''}Los feriados nacionales del año actual y del siguiente se cargan solos (una vez por año, sin tocar lo que ya cargaste) según la ley vigente; si el Gobierno traslada alguno (por ejemplo, a lunes), corrígelo aquí.</p></div></div>`}
 function calWire(main){if(main._calw)return;main._calw=1;main.addEventListener('change',e=>{const t=e.target;if(!t.dataset||!t.dataset.cal||!canWrite||PM())return;const c={...(P().cal||{})};
-    if(t.dataset.cal==='sat')c.sat=t.checked;else{const r=holParse(t.value);c.hol=r.list;if(r.bad.length)toast(`No entendí ${r.bad.length} línea(s): ${r.bad.slice(0,2).join(' | ')}. Usa AAAA-MM-DD Nombre.`)}
+    if(t.dataset.cal==='sat')c.sat=t.checked;else{const r=holParse(t.value);if(t.dataset.cal==='work'){c.work=r.list.map(o=>({d:o.d,n:o.n==='Feriado'?'Se trabaja':o.n}))}else c.hol=r.list;if(r.bad.length)toast(`No entendí ${r.bad.length} línea(s): ${r.bad.slice(0,2).join(' | ')}. Usa AAAA-MM-DD Nombre.`)}
     apply([op('meta','project',{...P(),cal:c})],'Calendario guardado')});
   main.addEventListener('click',e=>{const b=e.target.closest('[data-calpe]');if(b&&canWrite&&!PM()){const c={...(P().cal||{})};const r=holParse(holTxt([...(c.hol||[]),...holPeru(+b.dataset.calpe)]));c.hol=r.list;apply([op('meta','project',{...P(),cal:c})],`Feriados de Perú ${b.dataset.calpe} agregados`)}
     const a=e.target.closest('[data-arcr]');if(a&&canWrite){const[col,id]=a.dataset.arcr.split('|');archRestore(col,id)}});

@@ -68,7 +68,7 @@ const AY_FLOWS={
   campo:{t:'Registro diario en Campo',s:'Cumplimiento de las actividades programadas del día.',n:[
     {o:'Abrir Campo (día de hoy)'},
     {p:'Lista de actividades programadas',d:'Filtradas por piso; incluye lo que reportaron los capataces.',tab:'campo'},
-    {q:'¿El capataz ya cerró la actividad?',y:[{p:'«Confirmar» su cierre',d:'Si nadie lo verifica, se acepta solo a las 23:30.'}],n:[{p:'Registrar a mano'}]},
+    {q:'¿El SC o el capataz ya cerró la actividad?',y:[{p:'Ya cuenta tal como la marcó',d:'Revísala y corrige si no corresponde, hasta el Cierre del ingeniero (por defecto 9 pm). Después el día queda cerrado.'}],n:[{p:'Registrar a mano',d:'Si nadie la registra, a la hora del Cierre del ingeniero queda No cumplido (Sin cierre, imputable al SC).'}]},
     {q:'¿Se cumplió?',y:[
       {q:'¿Con menos de lo programado?',yl:'Sí',nl:'No',y:[{p:'Excepción con motivo o pasa a No cumplido'}],n:[{p:'Cumplido'}]}],
      n:[{p:'Parcial / No cumplido',d:'Elegir la causa; se puede reprogramar el saldo.'}]},
@@ -113,8 +113,8 @@ const AY_FLOWS={
     {o:'Abrir En obra'},
     {p:'Actividades de hoy',d:'Las de tu partida, por piso.',tab:'cap'},
     {p:'«Iniciar» / «Detener…»',d:'Tú o tus capataces (desde su celular). Detener pide el motivo.'},
-    {p:'Cierre del día (antes de la hora de corte)',d:'Tú o tus capataces proponen Cumplido / No cumplido con su causa. Si nadie lo propone, el ingeniero lo registra igual.'},
-    {q:'¿El ingeniero verificó el cierre?',y:[{p:'Confirmado en Campo'}],n:[{p:'Se acepta solo a las 23:30'}]},
+    {p:'Cierre del día (antes de la hora de corte)',d:'Tú o tus capataces marcan Cumplido / No cumplido con su causa: cuenta al instante, sin confirmación. Sin cierre, queda No cumplido imputable a tu partida.'},
+    {q:'¿El ingeniero lo corrigió?',y:[{p:'Vale lo del ingeniero',d:'Puede corregirlo hasta el Cierre del ingeniero (por defecto 9 pm).'}],n:[{p:'Queda tal como lo marcaste'}]},
     {o:'Cuenta en el PPC'}]},
 
   libSol:{t:'Solicitar una liberación de calidad',s:'El SC la pide cuando la necesita; el lookahead solo sugiere actividades.',n:[
@@ -142,7 +142,7 @@ const AY_FLOWS={
     {p:'«Iniciar» al empezar'},
     {q:'¿Hubo que parar?',y:[{p:'«Detener…» con el motivo'},{r:'Vuelve a «Iniciar» cuando se retome'}],n:[{p:'Sigue en marcha'}]},
     {p:'«Cerrar el día…»',d:'Avance y fotos.'},
-    {o:'El ingeniero lo verifica (o se acepta solo a las 23:30)'}]},
+    {o:'Cuenta tal como lo marcaste (el ingeniero puede corregirlo hasta el Cierre del ingeniero)'}]},
 
   area:{t:'Restricciones de tu área',s:'Oficina Técnica, Calidad u otra área de apoyo.',n:[
     {o:'Abrir Hoy o Restricciones'},
