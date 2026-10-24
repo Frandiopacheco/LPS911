@@ -1315,7 +1315,7 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
 });
 
 // ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
-const L = async (k, p) => { try { await p; } catch (e) { throw new Error('Expected ETO ' + k + ' :: ' + String(e.message).slice(0, 200)); } };
+const L = async (k, p) => { try { await p; } catch (e) { console.log('::error::ETO ' + k + ' :: ' + String(e.message).replace(/\s+/g, ' ').slice(0, 300)); throw e; } };
 const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
 test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
   await env.withSecurityRulesDisabled(async c => {
