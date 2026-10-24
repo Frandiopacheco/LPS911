@@ -71,3 +71,9 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 - Prueba: `tests/e2e/auditoria-tanda2-look.spec.js`.
 
 - **Fila y columna bajo el puntero** (19/10, como en la Matriz; solo con mouse, `mxPC()`): la fila con `tr:hover`, el día con la regla `#lkhovst` (`lkHov` en `wireGrid`), usando `box-shadow` inset para no tapar los colores de las barras.
+
+## Auditoría tanda 3 · frente H (24/10/2026)
+- **C-31 filas con historial por otros caminos** (misma `actHist`/`actSameName` que `histGate`): (1) **Pegar** varias líneas en el nombre (`pasteActs`): si la fila tiene historial y el usuario no es administrador, no se renombra (el aviso dice «1 fila saltada: solo el administrador puede hacerlo») y todas las líneas van como filas nuevas debajo; el administrador pasa por `histGate`. (2) **«No está en el catálogo»** (`mxNoCatDlg`): en una fila con historial el editor no tiene «usar este nombre» sobre esa fila (aviso arriba; lo elegido o agregado sale como **fila nueva**, `histNewRow`); el administrador pasa por `histGate`. (3) Propuestas: ver `propuestas.md`.
+- **C-33 eliminar con el plan cerrado:** `lockHits` trata el archivado de una actividad (`a.arch && !b.arch`) como si le quitaran sus días desde hoy: eliminar una actividad (o su ambiente, sector, piso) comprometida hoy o en un día publicado pasa por `lockGuard` igual que mover sus días (el administrador confirma y queda en `dplan.log`).
+- **DAT-11 Ctrl+Z bajo un ambiente eliminado:** si `undo` devuelve una actividad archivada y mientras tanto se eliminó su ambiente (o sector, piso), restaura también lo que la contiene (`archUpOps`, auditoria.js; la parte «hacia arriba» de `archRestore`) con `put` directo (no entra al deshacer ni borra el rehacer) y el aviso «también se restauró el ambiente …».
+- Prueba: `tests/e2e/auditoria-tanda3-look.spec.js`.

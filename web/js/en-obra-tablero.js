@@ -289,7 +289,10 @@ const DB_={pid:'',tv:false,tick:null,sc:new Set(),ty:'',scM:'lo',avAll:false};
 const nowHM=()=>{const n=new Date(NOW()-LIMA_OFF);return String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')};
 /* Tablero gerencial (oct 2026): solo informa (no registra nada). Filtros por subcontratista (varios) y tipo de actividad
    (el nombre de la actividad, normalizado con an()); todo lo que muestra respeta los filtros y el piso elegido arriba. */
-const dashOk=(sc,name)=>(!DB_.sc.size||DB_.sc.has(sc))&&(!DB_.ty||an(name)===DB_.ty);
+/* DAT-08 (tanda 3): el filtro «Tipo» va por la actividad del catálogo (id; reconoce los nombres antiguos por sus alias), así un
+   renombre no saca del PPC semanal las semanas congeladas con el nombre anterior. Sin catálogo, por el nombre como antes. */
+const dashTyK=(name,sc)=>{if(typeof MX!=='undefined'&&MX.ld&&MX.ld.cat&&typeof mxCatOfN==='function'){const id=mxCatOfN({name,sc});if(id)return'k:'+id}return an(name)};
+const dashOk=(sc,name)=>(!DB_.sc.size||DB_.sc.has(sc))&&(!DB_.ty||dashTyK(name,sc)===DB_.ty);
 function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.__plano&&window.__plano.novaSet?window.__plano:null;const nv=API?API.novaSet(d):new Set();
   const items=[];for(const x of S.act.values()){if(!schedOrSnap(x,d))continue;const pid=pisoOfAct(x.id);if(!pid||!vs.has(pid))continue;if(!dashOk(x.sc,x.name))continue;const a=S.amb.get(x.ambId);if(!a)continue;items.push({x,a,pid,nova:nv.has(x.id),st:nv.has(x.id)?null:kState(d,x.id)})}
   return items}
@@ -299,7 +302,7 @@ function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.
    de otras partidas que el ingeniero le hizo contar a los SC elegidos) */
 function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,ext:0,sc:{}};const byS=DB_.sc.size>0;for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
     for(const[id,it]of Object.entries(w.items||{})){const q=r[id];
-      if(byS&&q&&q.ok===false&&q.rsc&&q.pc&&q.rsc!==it.sc&&DB_.sc.has(q.rsc)&&(!DB_.ty||an(it.act)===DB_.ty))o.ext++;
+      if(byS&&q&&q.ok===false&&q.rsc&&q.pc&&q.rsc!==it.sc&&DB_.sc.has(q.rsc)&&(!DB_.ty||dashTyK(it.act,it.sc)===DB_.ty))o.ext++;
       if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};if(it.scn)so.nm=it.scn;o.n++;so.n++;
       if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q)&&(byS||!(q.rsc&&q.pc)))o.nimp++}}}
   o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp,o.ext):null;return o}
@@ -327,10 +330,10 @@ function dashAvance(n,vs,d){const wd=weekDays(n).filter(z=>z<=d);const o={meta:0
 function noSc(fn){const k=DB_.sc;DB_.sc=new Set();try{return fn()}finally{DB_.sc=k}}
 const scCls=sc=>DB_.sc.size?(DB_.sc.has(sc)?' dsel':' ddim'):'';
 /* tipos de actividad para el filtro: nombres de lo programado en las últimas 6 semanas y las 2 siguientes */
-function dashTypes(d){const a=addD(d,-42),b=addD(d,14);const m=new Map();for(const x of S.act.values()){if(!(x.days||[]).some(z=>z>=a&&z<=b))continue;if(DB_.sc.size&&!DB_.sc.has(x.sc))continue;const k=an(x.name);if(!k)continue;const o=m.get(k);if(o)o.n++;else m.set(k,{k,t:String(x.name).trim(),n:1})}
+function dashTypes(d){const a=addD(d,-42),b=addD(d,14);const m=new Map();for(const x of S.act.values()){if(!(x.days||[]).some(z=>z>=a&&z<=b))continue;if(DB_.sc.size&&!DB_.sc.has(x.sc))continue;const k=dashTyK(x.name,x.sc);if(!k)continue;const o=m.get(k);if(o)o.n++;else{const c=k.startsWith('k:')&&MX.cat.get(k.slice(2));m.set(k,{k,t:c?c.name:String(x.name).trim(),n:1})}}
   return[...m.values()].sort((p,q)=>p.t.localeCompare(q.t))}
 function renderDash(main){if(!canDash()){U.tab='look';render();return}
-  const d=todayIso();ensureDaily(addD(d,-31));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
+  if(typeof ensureMcat==='function')ensureMcat();const d=todayIso();ensureDaily(addD(d,-31));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(!DB_.tick)DB_.tick=setInterval(()=>{if(U.tab==='dash'&&ready)requestRender();else{clearInterval(DB_.tick);DB_.tick=null}},60000);
   const vsP=new Set(visPisos().map(p=>p.id));const items=dashData(d);const act=items.filter(i=>!i.nova);
   const c={none:0,stop:0,ok:0,no:0};act.forEach(i=>c[kMain(i.st.k)]++);const closed=c.ok+c.no;
