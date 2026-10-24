@@ -21,7 +21,7 @@ function plmCentro(pts){let x=0,y=0;for(const p of pts){x+=p.x;y+=p.y}return{x:x
 const plmFmtL=m=>m<1?(m*100).toFixed(1)+' cm':m.toFixed(2)+' m';
 const plmFmtA=m2=>m2.toFixed(2)+' m²';
 /* escala nominal 1/100 de la hoja (m por píxel) para avisar si la calibración se aleja demasiado de lo esperado */
-const plmNominal=(p,sp)=>sp.cur&&p.mm&&p.mm[0]&&sp.W?(p.mm[0]/sp.W)*0.1:0;
+const plmNominal=(p,sp)=>!p.eto&&sp.cur&&p.mm&&p.mm[0]&&sp.W?(p.mm[0]/sp.W)*0.1:0;
 
 /* ---------- estado ---------- */
 const plmList=()=>PLM.L[PLM.tool];
@@ -120,8 +120,8 @@ async function plmCalSave(){if(!PLV||PLM.L.cal.length<2)return;const inp=documen
   if(nom&&Math.abs(mpp/nom-1)>0.05&&!await uiAsk({title:'La escala se aleja de 1/100',text:`Con esa medida la escala sale ${(Math.abs(mpp/nom-1)*100).toFixed(0)} % distinta de la nominal 1/100. Revisa que la medida real y los dos puntos sean los correctos.`,ok:'Calibrar igual',cancel:'Revisar',tone:'warn'}))return;
   const ya=plmMpp();
   if(ya&&ya.src==='oficial'&&Math.abs(mpp/ya.mpp-1)>0.02&&!await uiAsk({title:'¿Reemplazar la calibración?',text:`Esta lámina ya estaba calibrada por ${ya.cal.byN||'otra persona'} y la nueva difiere ${(Math.abs(mpp/ya.mpp-1)*100).toFixed(1)} %. La nueva la verá todo el equipo.`,ok:'Reemplazar',cancel:'Cancelar',tone:'warn'}))return;
-  if(plaEd()&&sp.cur){
-    try{await fcol('plb').doc(p.id).update({cal:{mpp,rev:p.rev||1,L:real,px,by:me.email,byN:me.name||me.email,ts:NOW()}});
+  if(plEdOf(p)&&sp.cur){
+    try{await plCol(p).doc(p.id).update({cal:{mpp,rev:p.rev||1,L:real,px,by:me.email,byN:me.name||me.email,ts:NOW()}});
       toast('Lámina calibrada para todo el equipo')}
     catch(e){toast('No se pudo guardar la calibración: '+(e.code||e.message));return}
     /* la lámina ya cambió en PLB solo cuando llega la foto de Firestore; mientras tanto vale también en este equipo */

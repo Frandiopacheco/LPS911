@@ -476,6 +476,18 @@ service cloud.firestore {
       // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
       allow delete: if isAdmin();
     }
+    // ETO: planos de taller aprobados de los subcontratistas (docs/ia/planos.md › ETO). El SC solo lee los de su partida;
+    // el resto del equipo que ve Planos, todos. Carga, edita y borra solo el administrador.
+    function etoOk() {
+      let d = request.resource.data;
+      return d.sc is string && d.sc.size() > 0 && d.cod is string && d.cod.size() <= 40 && d.rev is int && d.rev >= 1
+        && d.base is string && d.base.matches('etos/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    match /eto/{id} {
+      allow read: if plaRead() && (role() != 'sc' || resource.data.sc in scsOf());
+      allow create, update: if isAdmin() && etoOk();
+      allow delete: if isAdmin();
+    }
     // Modelo 3D (beta, docs/ia/planos.md): un documento por especialidad con la ruta del modelo convertido (.frag) en Storage
     function p3dOk(id) {
       let d = request.resource.data;
