@@ -48,7 +48,7 @@ const tpDates=(a,b)=>{const L=[];for(let d=a;d<=b&&L.length<400;d=addD(d,1))L.pu
 const tpMon=f=>addD(f,-((pd(f).getUTCDay()+6)%7));
 /* diferencias contra la versión anterior (dif): texto, lista o resumen; forma libre (la arma el servidor) */
 function tpDif(d){if(d==null||d==='')return'';if(typeof d==='string')return`<div class="tp-dif">${esc(d)}</div>`;
-  const it=x=>typeof x==='string'?esc(x):x&&typeof x==='object'?esc(x.msg||x.txt||[x.dni,x.nom||[x.ape,x.nomb].filter(Boolean).join(' '),x.campo||x.k,x.antes!=null||x.despues!=null?`${x.antes??'—'} → ${x.despues??'—'}`:''].filter(v=>v!=null&&v!=='').join(' · ')):esc(String(x));
+  const it=x=>typeof x==='string'?esc(x):x&&typeof x==='object'?esc(x.msg||x.txt||[x.dni,x.nom||[x.ape,x.nomb].filter(Boolean).join(' '),x.campo==='dct'?`descuento ${(S.tpc&&S.tpc.get(x.pc)||{}).cod||x.pc||''} a ${typeof tScN==='function'?tScN(x.sc):x.sc}`:x.campo||x.k,x.antes!=null||x.despues!=null?`${x.antes??'—'} → ${x.despues??'—'}`:''].filter(v=>v!=null&&v!=='').join(' · ')):esc(String(x));
   if(Array.isArray(d))return d.length?`<ul class="tp-dif">${d.slice(0,60).map(x=>`<li>${it(x)}</li>`).join('')}${d.length>60?`<li class="note">… y ${d.length-60} más</li>`:''}</ul>`:'<div class="tp-dif note">Sin cambios.</div>';
   if(typeof d==='object'){const E=Object.entries(d).filter(([,v])=>v!=null&&!(Array.isArray(v)&&!v.length));if(!E.length)return'<div class="tp-dif note">Sin cambios.</div>';
     return`<ul class="tp-dif">${E.map(([k,v])=>`<li><b>${esc(k)}:</b> ${Array.isArray(v)?v.slice(0,30).map(it).join('; ')+(v.length>30?` … (${v.length})`:''):typeof v==='object'?esc(Object.entries(v).map(([a,b])=>`${a} ${typeof b==='object'?JSON.stringify(b):b}`).join(' · ')):esc(String(v))}</li>`).join('')}</ul>`}

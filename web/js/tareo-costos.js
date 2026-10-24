@@ -5,7 +5,7 @@
    «Publicaciones» (la lista de días publicados, versiones y descargas de antes: tpkPublicaciones de tareo-pub.js).
    Globales: TCO/tco*. Datos: tsCalc (tareo-sem.js) sobre las publicaciones vigentes del periodo. */
 
-const TCO={tipo:'sem',ref:'',b2:'',vista:'pc',q:'',solo:true,sel:'',hhpc:new Map(),hok:false};
+const TCO={tipo:'sem',ref:'',b2:'',vista:'pc',q:'',solo:true,sel:'',hhpc:new Map(),hok:false,dOpen:new Set()};
 const tcoAct=()=>U.mod==='tar'&&U.tab==='tcos'&&tpCosOk();
 /* HH acumuladas por partida desde el inicio (hhpc/{fecha}: resumen de la publicación vigente de cada día, sin datos de personas) */
 function tcoHhpc(){tpSub('chh','all',fcol('hhpc'),(sn,err)=>{if(err){TCO.hok=true;return}const M=new Map();sn.docs.forEach(x=>M.set(x.id,x.data()||{}));TCO.hhpc=M;TCO.hok=true},tcoAct)}
@@ -19,7 +19,7 @@ const tcoS=v=>'S/ '+Math.round(v).toLocaleString('es-PE');
 function renderTCos(main){if(TPLA.on)return renderTPla(main);
   if(!tpCosOk()){main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Costos','')}<div class="callout">Sin acceso.</div></div></div>`;return}
   if(TPK.det&&TCO.vista!=='pub')TCO.vista='pub';
-  const vistas=[['pc','Por partida'],['ua','Por UA Powers'],['cua','Por cuadrilla'],['meta','Avance vs meta'],['det','Detalle'],['pub','Publicaciones y versiones']];
+  const vistas=[['pc','Por partida'],['ua','Por UA Powers'],['cua','Por cuadrilla'],['meta','Avance vs meta'],['dct','Descuentos a SC'],['det','Detalle'],['pub','Publicaciones y versiones']];
   const seg=`<span class="seg" id="tcoV">${vistas.map(([v,l])=>`<button data-tcov="${v}" class="${TCO.vista===v?'on':''}">${l}</button>`).join('')}</span>`;
   if(TCO.vista==='pub'){main.innerHTML=`<div class="scroll"><div class="wrap ts"><div class="ts-vbar">${seg}</div><div id="tcoPub"></div></div></div>`;bindV();tpkPublicaciones($('#tcoPub'));return}
   if(!TCO.ref)TCO.ref=todayIso();const[a,b]=tsAB(TCO);tseSub('co',a,b,tcoAct);tcoHhpc();const PB=tsePB('co');const R=tsCalc(a,b,PB);const o=TSE.co;const P=R.P;
@@ -33,13 +33,14 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
     [pubLab.length===lab.length,'Días laborables publicados',lab.length>pubLab.length?`faltan: ${lab.filter(f=>!R.pub.includes(f)).map(tsDiaL).join(', ')}`:'todos',`${pubLab.length}/${lab.length}`]];
   const nOk=checks.filter(c=>c[0]).length;
   const k=(l,v,s,c)=>`<div class="lqtile"${c?` style="--c:${c}"`:''}><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=TCO.vista==='ua'?tcoUA(R,L):TCO.vista==='cua'?tcoCua(R):TCO.vista==='meta'?tcoMeta(R,A):TCO.vista==='det'?tcoDet(R,PB):tcoPartidas(R,L,A,soles);
+  const body=TCO.vista==='ua'?tcoUA(R,L):TCO.vista==='cua'?tcoCua(R):TCO.vista==='meta'?tcoMeta(R,A):TCO.vista==='dct'?tcoDct(R,soles):TCO.vista==='det'?tcoDet(R,PB):tcoPartidas(R,L,A,soles);
   main.innerHTML=`<div class="scroll"><div class="wrap ts">${pageHead('Costos',esc(tsPerTxt(TCO.tipo,a,b))+' · HH de mano de obra de casa · en vivo',`<button class="ib" id="tcoXo"${TPK.busy?' disabled':''} title="El Excel de antes (una hoja por día, Resumen HH y Tareo Semana), mientras dura la transición">Excel formato anterior</button><button class="ib pri" id="tcoX"${TPK.busy?' disabled':''}>Exportar Excel</button>`)}
     ${tsPerBar(TCO,'tco')}
     <div class="ts-chips"><span class="note">Días:</span>${tsDiasChips(R,o&&o.idx)}${tseCargando('co')?'<span class="note">Cargando publicaciones…</span>':''}</div>
     ${o&&o.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(o.err)}).</div>`:''}
     <div class="lqtiles ts-tiles" id="tcoTot">${k('HH del periodo',toH(hhPc),`${R.pub.length} ${R.pub.length===1?'día publicado':'días publicados'}`,'var(--accent)')}${k('Horas extra',toH(he),hhPc?`${(he/hhPc*100).toFixed(1)} % de las HH`:'','var(--warn)')}
       ${soles?k('Costo MO estimado',tcoS(T.cost),`horas, BUC, HE, altura, movilidad, dominical y feriados${P.leyes==null?' · sin leyes sociales (Parámetros)':` · con ${P.leyes} % de leyes sociales`}${T.costNP>0.005?` · ${tcoS(T.costNP)} sin partida (feriados no laborados y dominical)`:''}`):''}${k('Partidas con horas',L.length,S.tpc&&S.tpc.size?`de ${[...S.tpc.values()].filter(x=>x.act!==false&&!x.arch).length} activas`:'')}
+      ${T.dctH>0||R.DC.length?`<div class="lqtile ts-tbtn" id="tcoDctT" role="button" tabindex="0" style="--c:var(--accent2,var(--accent))"><span>Descuentos a SC</span><b>${soles?tcoS(T.dctM):toH(T.dctH)+' HH'}</b><small>${toH(T.dctH)} HH · ${new Set(R.DC.map(x=>x.sc)).size} ${new Set(R.DC.map(x=>x.sc)).size===1?'subcontratista':'subcontratistas'}</small></div>`:''}
       ${k('Sobre la meta',sobre.length,'HH acumuladas > HH meta',sobre.length?'var(--bad)':'')}${k('Cuadre',`${nOk} de ${checks.length}`,nOk===checks.length?'todo cuadra':'revisa abajo',nOk===checks.length?'var(--ok)':'var(--warn)')}</div>
     <div class="ts-two"><div class="card ts-main"><div class="pad t-bar">${seg}${['pc','ua','det'].includes(TCO.vista)?`<input class="tin t-q" id="tcoQ" type="search" placeholder="Buscar partida, código o UA${TCO.vista==='det'?', obrero':''}" value="${esc(TCO.q)}" aria-label="Buscar">`:''}</div>${body}</div>
       <aside class="ts-side"><div class="card ts-al" id="tcoChk"><div class="tp-bh"><b>Cuadre del periodo</b></div><ul class="ts-ul">${checks.map(([ok,t,s,v])=>`<li><span class="ts-ck ${ok?'ok':'no'}" aria-hidden="true">${ok?'✓':'!'}</span><span><b>${esc(t)}</b><br><span class="note">${esc(s)}</span></span><span class="mono">${esc(v)}</span></li>`).join('')}</ul></div>
@@ -51,6 +52,8 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
   const q=$('#tcoQ');if(q)q.oninput=()=>{TCO.q=q.value;const f=tFold(TCO.q);document.querySelectorAll('[data-tcok]').forEach(tr=>{tr.hidden=!!f&&!tFold(tr.dataset.tcok).includes(f)})};
   const tb=$('#tcoPcT');if(tb)tb.onclick=e=>{const r=e.target.closest('[data-tcop]');if(r){TCO.sel=TCO.sel===r.dataset.tcop?'':r.dataset.tcop;requestRender()}};
   const ua=$('#tcoUaAll');if(ua)ua.onclick=()=>{TCO.vista='ua';requestRender()};
+  const dt=$('#tcoDctT');if(dt)dt.onclick=()=>{TCO.vista='dct';requestRender()};
+  const dtb=$('#tcoDcT');if(dtb)dtb.onclick=e=>{const g=e.target.closest('[data-tcods]');if(g){const k=g.dataset.tcods;if(TCO.dOpen.has(k))TCO.dOpen.delete(k);else TCO.dOpen.add(k);requestRender()}};
   const cp=$('#tcoCopy');if(cp)cp.onclick=async()=>{const t=tcoUATsv(R,L);try{await navigator.clipboard.writeText(t);toast('Tabla copiada: pégala en Excel o en Powers.')}catch(e){toast('No se pudo copiar: usa «Exportar Excel».')}};
   function bindV(){$('#tcoV').onclick=e=>{const x=e.target.closest('[data-tcov]');if(!x)return;TCO.vista=x.dataset.tcov;if(TCO.vista!=='pub')TPK.det='';requestRender()}}}
 
@@ -106,3 +109,18 @@ function tcoDet(R,PB){const q=tFold(TCO.q);const L=[];for(const w of R.W)for(con
     return`<tr data-tcok="${esc(key)}"><td class="mono">${esc(fmtD(x.c.f))}</td><td class="mono">${esc(x.w.dni)}</td><td>${esc([x.w.ape,x.w.nom].filter(Boolean).join(', '))}</td><td>${esc(x.c.catN||x.w.catN)}</td><td>${esc(x.c.cua||x.w.cua||'')}</td><td>${esc(x.w.capN||'')}</td><td class="mono">${esc(x.m.cod||x.k)}</td><td>${esc(x.m.nom||'')}</td><td class="mono">${esc(tpxUaP(x.m.ua)||'')}</td><td class="mono t-r">${toH(x.h)}</td><td>${x.c.alt?'▲':''}</td></tr>`}).join('');
   return`<div class="tscroll"><table class="t ts-tbl" id="tcoDeT"><thead><tr><th>Fecha</th><th>DNI</th><th>Obrero</th><th>Cat.</th><th>Cuadrilla</th><th>Capataz</th><th>Código</th><th>Partida</th><th>UA Powers</th><th class="t-r">HH</th><th>Altura</th></tr></thead><tbody>${rows||'<tr><td colspan="11" class="note">Sin horas en este periodo.</td></tr>'}</tbody></table></div>
     <p class="pad note">${L.length} filas${n>max?` · se muestran ${max}: usa el buscador o «Exportar Excel» para verlas todas`:''}.</p>`}
+
+/* descuentos a SC del periodo (24-10-2026): por subcontratista, con su detalle (fecha, obrero, partida, HH normales y extra, tarifa y
+   monto). Se calcula de las publicaciones vigentes: si un día se rectifica y se vuelve a publicar, cambia solo. Soles: tplSoles(). */
+function tcoDct(R,soles){const G=new Map();for(const x of R.DC){const o=G.get(x.sc)||{sc:x.sc,n:x.scN,L:[],h:0,hn:0,he:0,m:0};o.L.push(x);o.h=tsSum(o.h,x.h);o.hn=tsSum(o.hn,x.hn);o.he=tsSum(o.he,tR2(x.h60+x.h100));o.m+=x.monto;G.set(x.sc,o)}
+  const L=[...G.values()].sort((a,b)=>a.n.localeCompare(b.n));const pl=R.DC.some(x=>x.src==='planilla');
+  const dpc=[...S.tpc.values()].filter(x=>x&&!x.arch&&x.dct===true);
+  if(!L.length)return`<p class="pad note" id="tcoDcNo">${R.pub.length?'No hay horas descontadas a subcontratistas en este periodo.':'Aún no hay días publicados en este periodo.'}${dpc.length?'':' Para descontar horas, marca la partida como «Descontable» en Partidas de control y agrega los subcontratistas en Configuración del tareo.'}</p>`;
+  const rows=L.map(g=>{const op=TCO.dOpen.has(g.sc);return`<tr class="ts-grp tco-dg" data-tcods="${esc(g.sc)}"><td colspan="3"><button class="t-lnk" aria-expanded="${op}">${op?'▾':'▸'} <b>${esc(g.n)}</b></button> <span class="note">${g.L.length} ${g.L.length===1?'registro':'registros'}</span></td>
+      <td class="mono t-r">${toH(g.hn)}</td><td class="mono t-r">${g.he?toH(g.he):''}</td><td class="mono t-r"><b>${toH(g.h)}</b></td>${soles?`<td></td><td class="mono t-r"><b>${tcoS(g.m)}</b></td>`:''}<td></td></tr>`+(op?g.L.map(x=>{const pc=tcoPc(x.pc,R);
+      return`<tr class="tco-dr"><td class="mono">${esc(fmtD(x.f))}</td><td>${esc([x.ape,x.nom].filter(Boolean).join(', '))} <span class="note">${esc(x.catN||'')}</span></td><td><span class="mono">${esc(pc.cod)}</span> <span class="note">${esc(x.capN||'')}</span></td>
+        <td class="mono t-r">${toH(x.hn)}</td><td class="mono t-r">${x.h60+x.h100?toH(tR2(x.h60+x.h100)):''}</td><td class="mono t-r">${toH(x.h)}</td>${soles?`<td class="mono t-r" title="${x.src==='planilla'?'Costo HH de la planilla (no hay tarifa de descuento para esta categoría)':'Tarifa de descuento'}">${x.tar.toFixed(2)}${x.src==='planilla'?'*':''}</td><td class="mono t-r">${tcoS(x.monto)}</td>`:''}<td class="note">v${esc(String(x.v||''))}</td></tr>`}).join(''):'')}).join('');
+  const tot=k=>tR2(L.reduce((a,g)=>a+g[k],0));
+  return`<div class="tscroll"><table class="t ts-tbl" id="tcoDcT"><thead><tr><th>Fecha</th><th>Obrero</th><th>Partida · capataz</th><th class="t-r">HH normales</th><th class="t-r">HH extra</th><th class="t-r">Total HH</th>${soles?'<th class="t-r">Tarifa S/ HH</th><th class="t-r">Monto</th>':''}<th></th></tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td colspan="3"><b>Total · ${L.length} ${L.length===1?'subcontratista':'subcontratistas'}</b></td><td class="mono t-r">${toH(tot('hn'))}</td><td class="mono t-r">${toH(tot('he'))}</td><td class="mono t-r"><b>${toH(tot('h'))}</b></td>${soles?`<td></td><td class="mono t-r"><b>${tcoS(L.reduce((a,g)=>a+g.m,0))}</b></td>`:''}<td></td></tr></tfoot></table></div>
+    <p class="pad note">Clic en un subcontratista para ver el detalle. Las horas extra de la partida se reparten entre los SC en proporción y llevan el recargo de Parámetros (${R.P.sob1} % y ${R.P.sob2} %).${soles?` Tarifa por HH: la de «Tarifas de descuento a SC» en Parámetros${pl?'; * = sin tarifa para esa categoría, se usó el costo HH de la planilla':''}.`:''} Los montos se recalculan solos si un día se rectifica.</p>`}

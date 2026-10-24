@@ -22,7 +22,9 @@ function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};const gri=/^
   return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar,
     /* publicación automática (20-10-2026): la hace el servidor (publicarTareoAuto); por omisión apagada, a las 21:00 */
     sem:c.sem&&+c.sem.n>0&&/^\d{4}-\d{2}-\d{2}$/.test(c.sem.lun||'')?{n:Math.round(+c.sem.n),lun:c.sem.lun}:{...TCFG_DEF.sem},
-    pubAuto:{on:!!(c.pubAuto&&c.pubAuto.on===true),hh:/^\d{2}:\d{2}$/.test((c.pubAuto&&c.pubAuto.hh)||'')?c.pubAuto.hh:'21:00'}}}
+    pubAuto:{on:!!(c.pubAuto&&c.pubAuto.on===true),hh:/^\d{2}:\d{2}$/.test((c.pubAuto&&c.pubAuto.hh)||'')?c.pubAuto.hh:'21:00'},
+    /* subcontratistas a los que se descuentan horas (24-10-2026): lista propia del tareo, independiente de los SC de Last Planner */
+    scd:(Array.isArray(c.scd)?c.scd:[]).filter(x=>x&&x.id&&String(x.n||'').trim()).map(x=>({id:String(x.id),n:String(x.n).trim(),act:x.act!==false}))}}
 const tMin=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(s||''));return m?+m[1]*60+ +m[2]:null};
 const tR2=v=>Math.round(v*100)/100;
 const tFold=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
@@ -251,7 +253,25 @@ function tCalcHrs(d){const f=d.date||todayIso();const D=tDia(f,d.cfg);const rows
 /** tValida de modo:'hrs' → [{dni|null, k, msg, warn?}]. k: vacio · pcs (presentes sin trabajos del día) · marca · sinh (vino con 0 h) ·
     hval (valor no válido) · hmax (> 16 h: error de digitación) · bloq (partida bloqueada con horas) · foto; parcial (warn, no bloquea). */
 const T_HMAX=16;
-function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const pcs=Array.isArray(d.pcs)?d.pcs:[];
+/* ---------- descuentos a subcontratistas (24-10-2026, pedido del dueño) ----------
+   Una partida de control «descontable» (tpc.dct === true, p. ej. 13.08) lleva, por obrero, a qué SC se descuentan sus horas:
+   rows[dni].dct = {pcId: {scId: horas}}; lo repartido debe sumar las horas de esa partida. Los SC son los de Configuración (TC().scd). */
+/** ¿la partida es descontable? */
+const tDctPc=id=>{const p=id&&S.tpc&&S.tpc.get(id);return!!(p&&p.dct===true)};
+/** nombre corto del SC de descuentos (si ya no está en la lista, su id) */
+const tScN=id=>{const s=TC().scd.find(x=>x.id===id);return s?s.n:id};
+/** reparto de una fila en una partida: {scId: horas} (solo las mayores que 0) */
+function tDctOf(r,pc){const o={};const m=r&&r.dct&&r.dct[pc];if(m&&typeof m==='object')for(const[k,v]of Object.entries(m)){const n=tHv(v);if(n)o[k]=tR2(n)}return o}
+const tDctSum=o=>tR2(Object.values(o||{}).reduce((s,v)=>s+(+v||0),0));
+/** partidas descontables con horas de un obrero que vino */
+const tDctPcs=r=>r&&r.as===true?Object.keys(r.h||{}).filter(pc=>tHv(r.h[pc])>0&&tDctPc(pc)):[];
+/** problemas del reparto de una fila → [{k:'dct', pc, msg}] (nm = nombre para el mensaje) */
+function tDctErrs(r,nm,ids){const out=[];ids=ids||new Set(TC().scd.map(x=>x.id));
+  for(const pc of tDctPcs(r)){const h=tR2(tHv(r.h[pc]));const o=tDctOf(r,pc);const s=tDctSum(o);const cod=(S.tpc.get(pc)||{}).cod||pc;
+    if(Object.keys(o).some(k=>!ids.has(k)))out.push({k:'dct',pc,msg:`${nm}: el descuento de la ${cod} va a un subcontratista que ya no está en la lista.`});
+    else if(Math.abs(s-h)>0.01)out.push({k:'dct',pc,msg:s?`${nm}: en la ${cod} tiene ${tHtxt(h)} h y se repartieron ${tHtxt(s)} h entre los subcontratistas.`:`${nm}: falta indicar a qué subcontratista se descuentan sus ${tHtxt(h)} h de la ${cod}.`})}
+  return out}
+function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const rows=d.rows||{};const pcs=Array.isArray(d.pcs)?d.pcs:[];const scIds=new Set(TC().scd.map(x=>x.id));
   const nm=dni=>{const r=rows[dni];return r&&(r.ape||r.nom)?[r.ape,r.nom].filter(Boolean).join(', '):dni};
   if(!Object.keys(rows).length)out.push({dni:null,k:'vacio',msg:'No hay obreros en el tareo: agrega a tu cuadrilla.'});
   const pres=Object.entries(rows).filter(([,r])=>r&&r.as===true);
@@ -263,6 +283,7 @@ function tValidaHrs(d){const out=[];const D=tDia(d.date||todayIso(),d.cfg);const
     const H=r.h||{};const mal=Object.values(H).filter(v=>v!==''&&v!=null&&!(Number.isFinite(+v)&&+v>=0));
     if(mal.length)out.push({dni,k:'hval',msg:`${nm(dni)}: hay horas no válidas.`});
     for(const[pc,v]of Object.entries(H)){if(!tHv(v)||bloqs.has(pc))continue;const p=S.tpc.get(pc);if(p&&p.bloq===true){bloqs.add(pc);out.push({dni:null,k:'bloq',pc,msg:`La partida ${p.cod} está bloqueada por costos.`})}}
+    for(const e of tDctErrs(r,nm(dni),scIds))out.push({dni,...e});
     const t=tHrsTot(r);
     if(!t){out.push({dni,k:'sinh',msg:`${nm(dni)}: vino pero no tiene horas. Ponle sus horas o márcalo como que no vino.`});continue}
     if(t>T_HMAX){out.push({dni,k:'hmax',msg:`${nm(dni)}: ${tHtxt(t)} h en el día. Revisa las horas (máximo ${T_HMAX}).`});continue}
@@ -724,7 +745,7 @@ function tPcDraw(){const b=$('#tpcBody');if(!b)return;const ed=tEdit(),bq=tBloqO
     g.L.map(x=>{const off=x.act===false,lk=x.bloq===true;
       return`<tr class="tpc-r${off?' t-off':''}${lk?' tpc-lk':''}" data-tpc="${esc(x.id)}"><td class="mono" data-l="Código">${esc(x.cod)}</td><td class="tpc-nom" data-l="Descripción">${lk?'<span class="tpc-lock" title="Bloqueada por costos" aria-label="Bloqueada">🔒</span> ':''}${esc(x.nom)}</td>
        <td data-l="Und">${esc(x.und||'')}</td><td class="mono t-r" data-l="Metrado">${tF2(x.met)}</td><td class="mono t-r" data-l="HH ppto">${tF2(x.hhp)}</td><td class="mono t-r" data-l="HH/und">${tRatio(x)}</td><td class="mono" data-l="Cuenta UA">${esc(x.ua||'')}</td>
-       <td data-l="Estado"><span class="tpc-st">${off?'<i class="lqt">INACTIVA</i>':'<i class="lqt t-ok">ACTIVA</i>'}${lk?`<i class="lqt tpc-bq" title="${esc(x.bloqBy?'Por '+x.bloqBy:'')}">BLOQUEADA</i>`:''}</span></td>
+       <td data-l="Estado"><span class="tpc-st">${off?'<i class="lqt">INACTIVA</i>':'<i class="lqt t-ok">ACTIVA</i>'}${lk?`<i class="lqt tpc-bq" title="${esc(x.bloqBy?'Por '+x.bloqBy:'')}">BLOQUEADA</i>`:''}${x.dct===true?'<i class="lqt tpc-dct" title="Sus horas se descuentan a subcontratistas: el capataz indica a cuál">DESCONTABLE</i>':''}</span></td>
        ${ed||bq?`<td class="t-acts">${bq?`<button class="ib" data-tpb="${esc(x.id)}">${lk?'Desbloquear':'Bloquear para carga'}</button>`:''}${ed?`<button class="ib" data-tpe="${esc(x.id)}">Editar</button><button class="ib" data-tpt="${esc(x.id)}">${off?'Activar':'Desactivar'}</button>`:''}</td>`:''}</tr>`}).join('')}).join('')
    ||`<tr><td colspan="${nc}" class="note">${S.tpc.size?'Ninguna partida con este filtro.':'Aún no hay partidas de control.'}</td></tr>`;
   const n=$('#tpcN');if(n){const L=G.reduce((s,g)=>s+g.L.length,0);n.textContent=`${L} ${L===1?'partida':'partidas'} en ${G.length} ${G.length===1?'grupo':'grupos'}`}}
@@ -734,7 +755,7 @@ async function tPcBloq(id){const x=S.tpc.get(id);if(!x||!tBloqOk())return;const 
 function renderTPc(main){const ed=tEdit(),bq=tBloqOk();const all=[...S.tpc.values()].filter(x=>x&&!x.arch);
   const nA=all.filter(x=>x.act!==false).length,nB=all.filter(x=>x.bloq===true).length,nG=tPcGroups(all).length;
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Partidas de control',`${nA} activas · ${nG} grupos${nB?` · ${nB} bloqueadas`:''}`,ed?`<button class="ib" id="tpcImp">Importar Excel de costos</button><button class="ib pri" id="tpcAdd">+ Partida</button>`:'')}
-   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Importa la hoja «Lista de partidas» del Excel que hoy recibe costos para cargarlas o actualizarlas. Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan).</p><p><b>Bloquear para carga</b> (costos, asistente o administrador): la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar.</p>`)}
+   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Importa la hoja «Lista de partidas» del Excel que hoy recibe costos para cargarlas o actualizarlas. Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan).</p><p><b>Bloquear para carga</b> (costos, asistente o administrador): la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar.</p><p><b>Descontable</b> (en «Editar»): las horas de esa partida se descuentan a subcontratistas. Antes de la foto, el capataz reparte las horas de cada obrero entre los SC de Configuración › Subcontratistas para descuentos; Costos muestra lo descontado a cada SC con su monto.</p>`)}
    ${ed?'':bq?`<div class="callout">Puedes bloquear o desbloquear partidas para la carga; el resto lo mantiene el asistente de tareo.</div>`:`<div class="callout">Solo lectura: las partidas las mantiene el asistente de tareo.</div>`}
    ${all.length?'':`<div class="callout">Aún no hay partidas de control.${ed?' Impórtalas del Excel de costos o agrégalas una por una.':''}</div>`}
    <div class="card"><div class="pad t-bar"><input class="tin t-q" id="tpcQ" data-fk="tpcQ" type="search" placeholder="Buscar código, partida o cuenta" value="${esc(TPU.q)}" aria-label="Buscar partida">
@@ -759,12 +780,13 @@ function tPcForm(id){const x=id?S.tpc.get(id):null;const v=x||{cod:'',grpN:'',no
     <label class="lqlab">Grupo<input class="tin" id="tpGrp" value="${esc(v.grpN||'')}" placeholder="ESTRUCTURAS"></label>
     <label class="lqlab t-wide">Partida<input class="tin" id="tpNom" value="${esc(v.nom)}"></label>
     <label class="lqlab">Unidad<input class="tin" id="tpUnd" value="${esc(v.und||'')}" placeholder="m2"></label><label class="lqlab">Metrado meta<input class="tin" id="tpMet" value="${esc(v.met??'')}" inputmode="decimal"></label>
-    <label class="lqlab">HH presupuestadas<input class="tin" id="tpHh" value="${esc(v.hhp??'')}" inputmode="decimal"></label><label class="lqlab">Cuenta UA<input class="tin" id="tpUa" value="${esc(v.ua||'')}" placeholder="CD1030001-06"></label></div>
+    <label class="lqlab">HH presupuestadas<input class="tin" id="tpHh" value="${esc(v.hhp??'')}" inputmode="decimal"></label><label class="lqlab">Cuenta UA<input class="tin" id="tpUa" value="${esc(v.ua||'')}" placeholder="CD1030001-06"></label>
+    <label class="chk t-wide"><input type="checkbox" id="tpDct"${v.dct===true?' checked':''}> Descontable: sus horas se descuentan a subcontratistas (el capataz indica a cuál, antes de la foto)</label></div>
    <p class="lqmsg bad" id="tpMsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tpOk">Guardar</button></div>`,
    async e=>{if(!e.target.closest('#tpOk'))return;const msg=t=>{$('#tpMsg').textContent=t};const cod=x?x.cod:tCod($('#tpCod').value);
      if(!cod||!/^\d+\.\d{2}$/.test(cod)||cod.endsWith('.00'))return msg('El código debe tener la forma grupo.número (p. ej. 10.05).');const pid=x?x.id:tPcId(cod);
      if(!x&&S.tpc.has(pid))return msg(`Ya existe la partida ${cod}.`);const nom=$('#tpNom').value.trim().replace(/\s+/g,' ');if(!nom)return msg('Escribe el nombre de la partida.');
-     const grp=cod.split('.')[0];const d={cod,grp,grpN:$('#tpGrp').value.trim()||grpN(grp),nom,und:$('#tpUnd').value.trim(),met:tNum($('#tpMet').value),hhp:tNum($('#tpHh').value),ua:$('#tpUa').value.trim(),...tStamp()};
+     const grp=cod.split('.')[0];const d={cod,grp,grpN:$('#tpGrp').value.trim()||grpN(grp),nom,und:$('#tpUnd').value.trim(),met:tNum($('#tpMet').value),hhp:tNum($('#tpHh').value),ua:$('#tpUa').value.trim(),dct:$('#tpDct').checked,...tStamp()};
      if(!x){d.act=true;d.ord=S.tpc.size+1}
      try{await fcol(TCOLS.tpc).doc(pid).set(d,{merge:true});lqClose();toast(x?'Partida actualizada.':'Partida agregada.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
 const TPC_CMP=[['nom','Nombre'],['grpN','Grupo'],['und','Unidad'],['met','Metrado'],['hhp','HH'],['ua','UA']];
@@ -816,7 +838,9 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?
    <div class="card" id="tferCard"><h2>Feriados del tareo <span class="sub">Días no laborables para el tareo (todas las horas son extra). Son propios del tareo: todos los roles calculan igual.</span></h2>
     ${ed?`<div class="pad t-bar t-ferAdd"><input class="tin" type="date" id="tferD" aria-label="Fecha del feriado"><input class="tin" id="tferNm" placeholder="Nombre (opcional)" aria-label="Nombre del feriado" maxlength="60"><button class="ib pri" id="tferAdd">Agregar</button>${lps.length?`<button class="ib" id="tferLps" title="${lps.length} feriados en el calendario de Last Planner">Copiar feriados de Last Planner${fal?` (${fal})`:''}</button>`:''}</div>`:''}
     <ul class="t-ferl" id="tferL">${c.fer.map(f=>`<li data-tfer="${esc(f)}"${f<hoy?' class="t-off"':''}><span class="mono">${esc(tFmt(f))}</span> <span class="note">${esc(dow(f))}</span> ${esc(c.ferN[f]||'')}${ed?`<button class="ib" data-tferx="${esc(f)}" aria-label="Quitar ${esc(tFmt(f))}">Quitar</button>`:''}</li>`).join('')||'<li class="note">No hay feriados registrados.</li>'}</ul></div>
+   ${tScdCard(c,ed)}
   </div></div>`;
+  tScdBind(ed);
   if(!ed)return;
   const read=()=>{const jor={};$$('[data-tjd]').forEach(r=>{const k=r.dataset.tjd;const on=r.querySelector('[data-tj="on"]').checked;const g=n=>r.querySelector(`[data-tj="${n}"]`).value;
     jor[k]=on?{ini:g('ini'),fin:g('fin'),ref:Math.max(0,Math.round(+g('ref')||0)),refIni:g('ri')||c.refIni}:null});return jor};
@@ -834,3 +858,24 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?
     tFerSave(C.fer.filter(x=>x!==f),C.ferN,`Feriado ${tFmt(f)} quitado.`)};
   const cp=$('#tferLps');if(cp)cp.onclick=()=>{const C=TC();const L=tLpsHol().filter(o=>!C.fer.includes(o.d));if(!L.length){toast('Ya están todos los feriados de Last Planner.');return}
     const ferN={...C.ferN};for(const o of L)ferN[o.d]=o.n||'Feriado';tFerSave([...C.fer,...L.map(o=>o.d)],ferN,`${L.length} ${L.length===1?'feriado copiado':'feriados copiados'} de Last Planner.`)}}
+
+/* ---------- Subcontratistas para descuentos (tcfg/main.scd, 24-10-2026) ----------
+   Lista simple con un nombre corto por SC, propia del tareo (no son los SC de Last Planner). No se borran: se desactivan, así lo ya
+   repartido y publicado conserva su nombre. Los activos salen en el celular del capataz al repartir una partida descontable. */
+function tScdCard(c,ed){const L=c.scd;const dp=[...S.tpc.values()].filter(x=>x&&!x.arch&&x.dct===true).sort((a,b)=>tCmpCod(a.cod,b.cod));
+  return`<div class="card" id="tscdCard"><h2>Subcontratistas para descuentos <span class="sub">Las horas de las partidas descontables${dp.length?` (${dp.map(x=>esc(x.cod)).join(', ')})`:''} se reparten entre estos SC. Usa un nombre corto: el capataz lo ve en el celular.</span></h2>
+    ${dp.length?'':`<p class="pad note">Aún no hay partidas descontables: márcalas en Partidas de control › Editar › «Descontable».</p>`}
+    ${ed?`<div class="pad t-bar"><input class="tin" id="tscdN" placeholder="Nombre corto del SC (p. ej. DRYWALL)" maxlength="30" aria-label="Nombre corto del subcontratista"><button class="ib pri" id="tscdAdd">Agregar</button></div>`:''}
+    <ul class="t-ferl" id="tscdL">${L.map(x=>`<li data-tscd="${esc(x.id)}"${x.act?'':' class="t-off"'}><b>${esc(x.n)}</b>${x.act?'':' <span class="note">inactivo</span>'}${ed?`<button class="ib" data-tscdr="${esc(x.id)}">Cambiar nombre</button><button class="ib" data-tscdt="${esc(x.id)}">${x.act?'Desactivar':'Activar'}</button>`:''}</li>`).join('')||'<li class="note">No hay subcontratistas registrados.</li>'}</ul></div>`}
+async function tScdSave(L,txt){try{await fcol(TCOLS.tcfg).doc('main').set({scd:L,...tStamp()},{merge:true});toast(txt)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
+const tScdNorm=n=>String(n||'').trim().replace(/\s+/g,' ').toUpperCase().slice(0,30);
+function tScdBind(ed){if(!ed)return;const raw=()=>TC().scd.map(x=>({id:x.id,n:x.n,act:x.act}));
+  const add=$('#tscdAdd'),inp=$('#tscdN');
+  const go=()=>{const n=tScdNorm(inp.value);if(!n){toast('Escribe el nombre corto del subcontratista.');inp.focus();return}const L=raw();
+    if(L.some(x=>tFold(x.n)===tFold(n))){toast(`«${n}» ya está en la lista.`);return}
+    L.push({id:'s'+NOW().toString(36)+Math.random().toString(36).slice(2,6),n,act:true});inp.value='';tScdSave(L,`«${n}» agregado.`)};
+  if(add)add.onclick=go;if(inp)inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();go()}};
+  const ul=$('#tscdL');if(ul)ul.onclick=async e=>{const r=e.target.closest('[data-tscdr]'),t=e.target.closest('[data-tscdt]');const L=raw();
+    if(t){const x=L.find(y=>y.id===t.dataset.tscdt);if(!x)return;x.act=!x.act;tScdSave(L,`«${x.n}» ${x.act?'activado':'desactivado'}.`);return}
+    if(r){const x=L.find(y=>y.id===r.dataset.tscdr);if(!x)return;const v=await uiAsk({title:'Cambiar nombre',text:'El nombre nuevo se verá en el celular y en Costos (también en lo ya publicado).',input:{label:'Nombre corto',required:true,value:x.n},ok:'Guardar',tone:'info'});
+      if(!v)return;const n=tScdNorm(v);if(!n)return;if(L.some(y=>y.id!==x.id&&tFold(y.n)===tFold(n))){toast(`«${n}» ya está en la lista.`);return}x.n=n;tScdSave(L,'Nombre guardado.')}}}

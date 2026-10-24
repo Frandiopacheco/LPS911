@@ -67,6 +67,32 @@
   /** cotejo vigente: hay foto y cotFot son las mismas fotos (sin orden), como tCotDe de la app */
   const tpCotVig = t => !!t && Array.isArray(t.foto) && t.foto.length > 0 && !!t.cot && typeof t.cot === 'object' && sameSet(t.cotFot, t.foto);
 
+  /* ---------- descuentos a subcontratistas (24-10-2026) ----------
+     Partida descontable (tpc.dct === true): por obrero, rows[dni].dct = {pcId: {scId: horas}}, y lo repartido suma sus horas de
+     esa partida. Los SC son los de tcfg/main.scd ([{id, n, act}]). Igual que tDctErrs de web/js/tareo.js. */
+  const scdDe = tcfg => (Array.isArray(tcfg && tcfg.scd) ? tcfg.scd : []).filter(x => x && x.id && String(x.n || '').trim());
+  /** reparto limpio de una fila: {pcId: {scId: horas}} solo de partidas descontables con horas (c = tpCalcRow de la fila) */
+  function tpDctRow(row, c, PC) {
+    const o = {}; if (!row || row.as !== true) return o;
+    for (const pc of Object.keys(c.h || {})) {
+      const p = PC.get(pc); if (!p || p.dct !== true) continue;
+      const m = row.dct && row.dct[pc]; const x = {};
+      if (m && typeof m === 'object') for (const [k, v] of Object.entries(m)) { const n = hv(v); if (n) x[k] = r2(n); }
+      o[pc] = x;
+    }
+    return o;
+  }
+  /** problemas del reparto: [{pc, msg}] */
+  function tpDctProb(row, c, PC, ids, nm, cap) {
+    const out = []; const D = tpDctRow(row, c, PC);
+    for (const [pc, x] of Object.entries(D)) {
+      const cod = (PC.get(pc) || {}).cod || pc; const h = r2(c.h[pc] || 0); const s = r2(Object.values(x).reduce((a, v) => a + v, 0));
+      if (Object.keys(x).some(k => !ids.has(k))) out.push({ pc, msg: `${nm} (tareo de ${cap}): el descuento de la ${cod} va a un subcontratista que ya no está en la lista.` });
+      else if (Math.abs(s - h) > 0.01) out.push({ pc, msg: s ? `${nm} (tareo de ${cap}): en la ${cod} tiene ${String(h).replace('.', ',')} h y se repartieron ${String(s).replace('.', ',')} h entre los subcontratistas.` : `${nm} (tareo de ${cap}): falta indicar a qué subcontratista se descuentan sus ${String(h).replace('.', ',')} h de la ${cod}.` });
+    }
+    return out;
+  }
+
   /* ---------- validación del día ---------- */
   const tareosDia = (tareos, fecha) => vals(tareos).filter(t => t && !t.arch && (!fecha || !t.date || t.date === fecha) && t.rows && typeof t.rows === 'object' && Object.keys(t.rows).length);
   const excLimpias = e => { const o = {}; for (const [k, v] of Object.entries(e || {})) { const m = typeof v === 'string' ? v.trim().slice(0, 200) : ''; if (k && m) o[k] = m; } return o; };
@@ -75,11 +101,12 @@
       rect = ya hay una versión publicada (se aceptan tareos en «pub»).
       → {bloqueos:[{k, msg, tareo?, tareos?, dni?, pc?}], resumen, sinTareo:[…], exc:{dni:{motivo, ape, nom}}}
       k: nada · estado · cfg · cot (sin foto del formato firmado) · marca (sin marcar) · hval · sinh (vino con 0 h) · hmax (> 16 h) ·
-         pc (partida inexistente) · dup (DNI en dos o más tareos) · cob (activo sin tareo ni excepción).
+         pc (partida inexistente) · dct (reparto de una partida descontable entre los SC incompleto o con un SC que no está en
+         tcfg.scd) · dup (DNI en dos o más tareos) · cob (activo sin tareo ni excepción).
       Desde el 20-10-2026 (decisión del dueño) no se exige el cotejo de firmas: la firma es implícita en el formato físico, y basta
       con que el tareo tenga la foto del formato (ya no salen 'firp' ni «cotejo de otra foto»). */
-  function tpValidarDia({ fecha, tareos, personal, partidas, excepciones, cfgAct, rect }) {
-    const T = tareosDia(tareos, fecha); const B = []; const E = excLimpias(excepciones);
+  function tpValidarDia({ fecha, tareos, personal, partidas, excepciones, cfgAct, rect, tcfg }) {
+    const T = tareosDia(tareos, fecha); const B = []; const E = excLimpias(excepciones); const scIds = new Set(scdDe(tcfg).map(x => String(x.id)));
     const PC = new Map(vals(partidas).filter(Boolean).map(p => [p.id, p]));
     const per = vals(personal).filter(Boolean);
     const pcMal = new Set(); const porDni = new Map();
@@ -107,6 +134,7 @@
           R.porPc[pc] = r2((R.porPc[pc] || 0) + h);
           if (!PC.has(pc) && !pcMal.has(pc)) { pcMal.add(pc); B.push({ k: 'pc', tareo: tr.id, pc, msg: `La partida «${pc}» (con horas en el tareo de ${cap}) no existe en Partidas de control.` }); }
         }
+        if (hrs) for (const x of tpDctProb(r, c, PC, scIds, nm, cap)) B.push({ k: 'dct', tareo: tr.id, dni, pc: x.pc, msg: x.msg });
         tr.hh = r2(tr.hh + c.trab); tr.he = r2(tr.he + c.ext);
       }
       tr.bloq = B.length - nb;
@@ -136,15 +164,15 @@
   }
 
   /* ---------- publicación ---------- */
-  const pcFicha = p => ({ cod: String(p.cod || ''), nom: String(p.nom || ''), und: String(p.und || ''), grp: String(p.grp || ''), grpN: String(p.grpN || ''), ua: String(p.ua || '') });
+  const pcFicha = p => ({ cod: String(p.cod || ''), nom: String(p.nom || ''), und: String(p.und || ''), grp: String(p.grp || ''), grpN: String(p.grpN || ''), ua: String(p.ua || ''), ...(p.dct === true ? { dct: true } : {}) });
   const cmpCod = (a, b) => { const A = String(a || '').split('.'), B = String(b || '').split('.'); for (let i = 0; i < Math.max(A.length, B.length); i++) { const x = parseInt(A[i], 10), y = parseInt(B[i], 10); if ((x || 0) !== (y || 0)) return (x || 0) - (y || 0); } return 0; };
   /** snapshot inmutable tpub/{fecha}_v{v} (forma en «Contrato de F3»). Solo se llama sin bloqueos.
       pcs = catálogo congelado: todas las partidas activas más las que tienen horas. anterior = snapshot vigente (para dif) o null. */
   const hm = v => typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v);
-  function tpArmarPublicacion({ fecha, tareos, personal, partidas, excepciones, v, at, by, byN, motivo, anterior }) {
+  function tpArmarPublicacion({ fecha, tareos, personal, partidas, excepciones, v, at, by, byN, motivo, anterior, tcfg }) {
     const T = tareosDia(tareos, fecha); const E = excLimpias(excepciones);
     const F = new Map(vals(personal).filter(Boolean).map(p => [String(p.dni || p.id || ''), p]));
-    const PC = vals(partidas).filter(Boolean);
+    const PC = vals(partidas).filter(Boolean); const PCm = new Map(PC.map(p => [p.id, p])); const scUsados = new Set();
     const rows = []; const usados = new Set(); const dentro = new Set();
     const tot = { obreros: 0, pres: 0, aus: 0, porMot: {}, hh: 0, he: 0, alt: 0, exc: 0, porPc: {} };
     for (const t of T) {
@@ -153,7 +181,9 @@
         const f = F.get(dni) || {}; const c = tpCalcRow(r, t.cfg, t.modo === 'hrs' ? 'hrs' : '');
         Object.keys(c.h).forEach(pc => { usados.add(pc); tot.porPc[pc] = r2((tot.porPc[pc] || 0) + c.h[pc]); });
         const as = r.as === true; const alt = as && r.alt === true;
-        rows.push({ dni, ape: String(f.ape || r.ape || ''), nom: String(f.nom || r.nom || ''), cat: String(f.cat || r.cat || ''), cua: String(f.cua || r.cua || ''),
+        /* descuentos a SC: solo partidas descontables con horas, y solo lo que tiene horas */
+        const dct = {}; if (t.modo === 'hrs') for (const [pc, x] of Object.entries(tpDctRow(r, c, PCm))) if (Object.keys(x).length) { dct[pc] = x; Object.keys(x).forEach(k => scUsados.add(k)); }
+        rows.push({ ...(Object.keys(dct).length ? { dct } : {}), dni, ape: String(f.ape || r.ape || ''), nom: String(f.nom || r.nom || ''), cat: String(f.cat || r.cat || ''), cua: String(f.cua || r.cua || ''),
           cap: t.cap || '', capN: t.capN || '', as, mot: as ? '' : String(r.mot || ''), alt, h: c.h, trab: c.trab, ext: c.ext,
           /* horario del capataz (20-10-2026): solo si lo cambió; respaldo para RR.HH. */
           ...(as && hm(r.ent) ? { ent: r.ent } : {}), ...(as && hm(r.sal) ? { sal: r.sal } : {}), ...(as && r.cor === true ? { cor: true } : {}) });
@@ -172,6 +202,8 @@
     /* jornada del día congelada en la publicación (para el Excel: asistencia A/I y horas de descanso médico) */
     const cfgP = (T.find(x => cfgOk(x.cfg)) || {}).cfg || null; const dP = tpDia(cfgP);
     const snap = { fecha, v, at, by: by || '', byN: byN || '', motivo: motivo || '', ant: v > 1 ? v - 1 : null, fuentes, pcs, rows, exc, tot, dif: null, cfg: cfgP, jor: dP.jh, nl: dP.nl };
+    /* nombres de los SC con descuento ese día (por si después se quitan de la lista) */
+    if (scUsados.size) { const N = new Map(scdDe(tcfg).map(x => [String(x.id), String(x.n).trim()])); snap.scd = {}; for (const k of [...scUsados].sort()) snap.scd[k] = N.get(k) || k; }
     snap.dif = anterior ? tpDif(anterior, snap) : null;
     return snap;
   }
@@ -198,6 +230,12 @@
       if (r2(+a.ext || 0) !== r2(+b.ext || 0)) ca.push({ dni, nom: n, campo: 'ext', antes: r2(+a.ext || 0), despues: r2(+b.ext || 0) });
       for (const f of ['ent', 'sal']) if ((a[f] || '') !== (b[f] || '')) ca.push({ dni, nom: n, campo: f, antes: a[f] || '', despues: b[f] || '' });
       if (!!a.cor !== !!b.cor) ca.push({ dni, nom: n, campo: 'cor', antes: !!a.cor, despues: !!b.cor });
+      /* descuentos a SC: por partida y SC */
+      const da = a.dct || {}, db = b.dct || {};
+      for (const pc of [...new Set([...Object.keys(da), ...Object.keys(db)])].sort()) {
+        const xa = da[pc] || {}, xb = db[pc] || {};
+        for (const sc of [...new Set([...Object.keys(xa), ...Object.keys(xb)])].sort()) { const x = r2(+xa[sc] || 0), y = r2(+xb[sc] || 0); if (x !== y) ca.push({ dni, nom: n, campo: 'dct', pc, sc, antes: x, despues: y }); }
+      }
     }
     const ea = Object.keys((nueva && nueva.exc) || {}).filter(d => !has(anterior.exc, d)).sort();
     const eq = Object.keys(anterior.exc || {}).filter(d => !has(nueva && nueva.exc, d)).sort();
@@ -267,13 +305,13 @@
       return { res: { ok: true, fecha, v: +idx.v, abierto, n: pubs.length }, escr };
     }
     const cfgAct = tpCfgDia(tcfg, fecha);
-    const V = tpValidarDia({ fecha, tareos: T, personal, partidas, excepciones: P.excepciones, cfgAct, rect: hayV });
+    const V = tpValidarDia({ fecha, tareos: T, personal, partidas, excepciones: P.excepciones, cfgAct, rect: hayV, tcfg });
     const firma = tpFirma(T);
     const vN = hayV ? Math.max(+idx.v || 0, ...((idx.vers || []).map(x => +x.v || 0))) + 1 : 1;
     const base = { fecha, bloqueos: V.bloqueos, resumen: V.resumen, sinTareo: V.sinTareo, firma, rect: hayV, v: vN, motivoReq: hayV,
       vigente: hayV ? { v: +idx.v, at: (vigente && vigente.at) || 0, by: (vigente && vigente.by) || '', byN: (vigente && vigente.byN) || '', motivo: (vigente && vigente.motivo) || '' } : null,
       abierto: (idx && idx.abierto) || null };
-    const armar = () => tpArmarPublicacion({ fecha, tareos: T, personal, partidas, excepciones: P.excepciones, v: vN, at: now, by, byN, motivo: P.motivo, anterior: hayV ? vigente : null });
+    const armar = () => tpArmarPublicacion({ fecha, tareos: T, personal, partidas, excepciones: P.excepciones, v: vN, at: now, by, byN, motivo: P.motivo, anterior: hayV ? vigente : null, tcfg });
     if (accion === 'previa') return { res: limpio({ ...base, ok: !V.bloqueos.length, dif: hayV && vigente && !V.bloqueos.length ? armar().dif : null }), escr: [] };
     /* publicar */
     if (P.firma && P.firma !== firma) return err('aborted', 'Un tareo del día cambió desde que abriste la previa: vuelve a revisar.');
@@ -324,5 +362,5 @@
     return { fecha: snap.fecha, v: snap.v, at: snap.at, hh: r2(hh), pcs };
   }
 
-  return { TP_HMAX: HMAX, TP_AUTO_HH, tpAutoCfg, tpAutoDue, tpExcUnir, tpAutoNota, tpResumenHH, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
+  return { TP_HMAX: HMAX, TP_AUTO_HH, tpAutoCfg, tpAutoDue, tpExcUnir, tpAutoNota, tpResumenHH, tpCfgDia, tpDia, tpCalcRow, tpActivo, tpCotVig, tpValidarDia, tpArmarPublicacion, tpDctRow, tpDif, tpPuede, tpPedido, tpFirma, tpEjecutar };
 });
