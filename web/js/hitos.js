@@ -11,7 +11,7 @@
    Eliminar = archivar. El hito corto por ambiente («FC», ambientes.hito) es otra cosa: hitos internos de los ingenieros, sin cambios. */
 const HIT=new Map();let hitUn=null,HITV=0;
 function ensureHitos(){if(typeof db==='undefined'||!db||hitUn||(typeof TAR_ONLY==='function'&&TAR_ONLY()))return;
-  hitUn=fcol('hitos').onSnapshot(sn=>{HIT.clear();sn.docs.forEach(d=>HIT.set(d.id,{...d.data(),id:d.id}));HITV++;if(U.tab==='look'||U.tab==='cli'||U.tab==='pull')requestRender()},
+  hitUn=fcol('hitos').onSnapshot(sn=>{HIT.clear();sn.docs.forEach(d=>HIT.set(d.id,{...d.data(),id:d.id}));HITV++;/* en la Sesión pull solo si el panel de hitos está abierto y nadie arrastra (redibujar a media sesión estorba) */if(U.tab==='look'||U.tab==='cli'||(U.tab==='pull'&&typeof PU!=='undefined'&&PU.hitos&&!PU.drag))requestRender()},
     e=>{console.warn('hitos',e&&e.code);hitUn=null})}
 /** área de apoyo «Planificación» (el planner): gestiona hitos; no edita el lookahead */
 const isPlanArea=()=>!!me&&me.role==='area'&&/planific/i.test(me.area||'');

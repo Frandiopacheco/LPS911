@@ -1719,9 +1719,13 @@ function predOf(x){const L=[...S.act.values()].filter(y=>y.ambId===x.ambId).sort
 function nvRestr(x,st,need,rid0){const rid=rid0||uid('res');const A=nvAttr(x,st);const resp=A.rsc?conOf(A.rsc).name:'';
   return{rid,doc:{id:rid,actId:x.id,pisoId:pisoOfAct(x.id),type:A.rt||restrTypeFor(A.c),desc:(st.desc||'').trim()||nvMot(st),resp,need,freed:'',status:'pend',created:todayIso(),sc:x.sc,by:me.email,byName:me.name||'',via:'plan diario',cnc:A.cnc,ccode:A.c,imp:A.imp,rsc:A.rsc,pc:A.pc}}}
 /** por defecto en «Programación»: si el SC había propuesto cambiar esa actividad y se le rechazó (o sigue sin decidir), es de obra */
-async function nvProgDef(x){try{const P_=typeof PROP!=='undefined'?PROP.get(x.sc):null;const leg=Object.values((P_&&P_.hist)||{}).some(h=>h&&h.id===x.id&&h.st==='rej'&&!h.undone);
-    const pend=!!(P_&&P_.items&&P_.items[x.id]&&P_.items[x.id].sent);if(leg||pend)return'obra';if(!db)return'sc';
-    const sn=await fcol('lhphist').where('actId','==',x.id).get();return sn.docs.some(d=>{const h=d.data();return h.st==='rej'&&!h.undone})?'obra':'sc'}catch(e){return'sc'}}
+/* P9 (oct 2026): si el SC advirtió con «causa propia» (personal, equipos, rendimiento), la meta no bajó: es del SC aunque se le haya rechazado */
+async function nvProgDef(x){try{const P_=typeof PROP!=='undefined'?PROP.get(x.sc):null;const it=P_&&P_.items&&P_.items[x.id];const av=P_&&P_.adv&&P_.adv[x.id];
+    const own=w=>!!(w&&w.k&&w.g==='p');if(own(av)||(it&&it.sent&&own(it.why)))return'sc';
+    const leg=Object.values((P_&&P_.hist)||{}).some(h=>h&&h.id===x.id&&h.st==='rej'&&!h.undone);
+    const pend=!!(it&&it.sent);if(leg||pend||av)return'obra';if(!db)return'sc';
+    const sn=await fcol('lhphist').where('actId','==',x.id).get();const R=sn.docs.map(d=>d.data()).filter(h=>h.st==='rej'&&!h.undone).sort((a,b)=>(b.t||0)-(a.t||0));
+    return R.length?(own(R[0].swhy)?'sc':'obra'):'sc'}catch(e){return'sc'}}
 /** «No va»: causa → detalle (y quién responde) → ¿se libera a primera hora? → reprogramar. El subcontratista solo propone. */
 function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está cerrado (${lockWhy(M.date,M.piso)}): no se saca a nadie del día. ${M.date>todayIso()?'Para corregirlo, deshaz la publicación.':'Ordénalas o deja que trabajen a la vez; lo que no se haga se registra en el cumplimiento.'}`);return}const eng=dzEng();const today=M.date<=todayIso();const k0=o.k||'';
   const st={k:k0==='res'&&o.prop?'':k0,desc:o.desc||'',prop:o.prop||null,to:wshift(M.date,1),tren:false,pred:(o.prop&&o.prop.pred)||predOf(x),pc:false,who:'',whoAuto:''};

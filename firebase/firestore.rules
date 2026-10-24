@@ -174,9 +174,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
+    // adv (oct 2026, P9): advertencias del SC que el ingeniero rechazó (motivo); las escribe solo quien decide, como hist
     function lhpHistOk() {
-      return (resource == null && !('hist' in request.resource.data))
-        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {}));
+      return (resource == null && !('hist' in request.resource.data) && !('adv' in request.resource.data))
+        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {})
+            && request.resource.data.get('adv', {}) == resource.data.get('adv', {}));
     }
     // ventana de propuestas (meta/propwin.closeAt, ms): pasado el corte, el SC queda en solo lectura hasta que un ingeniero la habilite
     // de nuevo (pone el próximo corte). Sin documento: abierta (la app ya muestra el bloqueo desde el primer corte).

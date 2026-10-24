@@ -5,6 +5,12 @@
    restricción DESPUÉS de la fecha requerida. Solo se avisa (no se bloquea): es la brecha que debe verse con anticipación. */
 const rCompLate=r=>!!r&&r.status!=='lib'&&!!r.comp&&!!r.need&&r.comp>r.need;
 const RCLTIP='El área se comprometió a liberarla después de la fecha requerida: la actividad podría no tener frente a tiempo.';
+/* P9 (oct 2026): advertencias del SC para los compromisos ids: lo que el ingeniero rechazó con motivo (lhprop.adv) y lo enviado
+   con motivo que sigue sin decidir. Misma lógica en el servidor (functions/lib.js › advOfProps). → {actId:{k,g,t,src}} */
+function advOfProps(docs,ids){const S_=new Set(ids);const o={};for(const d of docs||[]){
+    for(const[id,a]of Object.entries(d.adv||{}))if(S_.has(id)&&a&&a.k)o[id]={k:a.k,g:a.g||'',t:a.t||'',src:'rej'};
+    for(const[id,it0]of Object.entries(d.items||{})){const it=it0&&(it0.sent?it0:it0.sentV?{...it0.sentV,sent:true}:null);if(it&&it.why&&it.why.k&&S_.has(id))o[id]={k:it.why.k,g:it.why.g||'',t:it.why.t||'',src:'pend'}}}
+  return o}
 /* ================= PLAN SEMANAL ================= */
 function liveItems(n,pid){const days=new Set(weekDays(n));const o={};
   for(const{p,secs}of tree()){if(pid&&p.id!==pid)continue;for(const{s,ambs}of secs)for(const{a,acts}of ambs)for(const x of acts){const d=(x.days||[]).filter(z=>days.has(z)&&!libDay(x,z)).sort(); /* lo ya terminado no es compromiso */if(d.length){const it={sc:x.sc,...scnAt(x.sc),sector:s.code,code:a.code,amb:a.name,act:x.name,days:d,ord:s.order*1e6+a.order*1e3+x.order};if(hasM(x)){const qd={};let q=0;d.forEach(z=>{const v=(x.qty||{})[z];if(v!=null){qd[z]=v;q+=+v}});if(q>0){it.q=r2(q);it.qd=qd;it.und=x.und||''}}o[x.id]=it}}}
@@ -122,7 +128,7 @@ function renderPlan(main){
     /* sugerencias de campo: una sola vez por fila (antes se calculaban dos veces) */
     const SUG=new Map();for(const id of ids)SUG.set(id,fieldSug(id,items[id]));
     /* C-17: chapita R = entró con restricciones abiertas (congelada: lo guardado al congelar; borrador: lo de ahora) */
-    const RIN=frozen?(w.restrIn||{}):restrInOf(ids);
+    const RIN=frozen?(w.restrIn||{}):restrInOf(ids);const ADV=frozen?(w.adv||{}):{};
     /* PPC del cliente (solo admin): compromisos donde el cliente esperaba distinto y hay que marcarlo a mano */
     const CEV=frozen&&typeof cliPlanEval==='function'?cliPlanEval(n,p.id):null;
     const cOut=CEV?[...CEV.values()].filter(i=>i.how==='man'&&!i.it):[];
@@ -150,7 +156,7 @@ function renderPlan(main){
       <div class="tile hl"><span class="k">PPC ${esc(p.code)}</span><span class="v">${st?pct(st.ppc):'—'}${st&&st.ev<st.n?' <small>parcial</small>':''}</span></div><div class="tile" title="Sin contar los no cumplidos que no dependían del subcontratista (causa no imputable u otra partida que no entregó el frente)"><span class="k">PPC del SC</span><span class="v">${st&&st.ppcSc!=null?pct(st.ppcSc):'—'}${st&&st.nimp?` <small>${st.nimp} no imput.</small>`:''}</span></div></div></div>
      <div class="tscroll"><table class="t rt ppcs"><thead><tr><th title="N.º de la actividad dentro de su ambiente (el mismo del lookahead)">Ítem</th><th>${byAmb?'Subcontratista':'Descripción'}</th><th>Actividad</th><th>Días</th><th style="text-align:right">Metrado</th><th style="text-align:right">Ejecutado</th><th>Cumplido</th><th style="min-width:130px">Tipo de causa</th><th style="min-width:140px">Causa (detalle)</th><th style="min-width:140px">Mitigación</th></tr></thead>`;
     const rowH=id=>{const it=items[id];const r=res[id]||{};const ds=new Set(it.days);const c={...conOf(it.sc),name:scnOf(it)};
-      return`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${rinBadge(RIN[id])}${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
+      return`<tr data-id="${id}"><td class="mono inum" data-l="Ítem">${actNum(id)||''}</td><td data-l="${byAmb?'Subcontratista':'Descripción'}">${byAmb?`<span class="chip" style="--c:${c.color};border:0;background:none;padding-left:0"><i></i>${esc(c.name)}</span>`:`<span class="mono">${esc(it.code)}</span><div class="note" style="font-size:12px">${esc(it.amb)}</div>`}</td><td class="lead"><b style="font-weight:500">${esc(it.act)}</b>${rinBadge(RIN[id])}${advBadge(ADV[id])}${frozen&&!S.act.has(id)?' <span class="pill neu">eliminada del lookahead</span>':''}</td>
         <td data-l="Días"><span class="mini" style="--c:${c.color}">${wd.map((d,i)=>`<i class="${ds.has(d)?'on':''}" title="${fmtD(d)}${it.qd&&it.qd[d]!=null?': '+fq(it.qd[d])+' '+esc(it.und||''):''}">${DL[i]}</i>`).join('')}</span></td>
         <td class="mono" style="text-align:right;white-space:nowrap" data-l="Metrado sem.">${it.q?fq(it.q)+' '+esc(it.und||''):'—'}</td>
         <td style="text-align:right;white-space:nowrap" data-l="Ejecutado">${it.q?`<input class="ci qexec" data-exec data-fk="ex:${p.id}:${id}" inputmode="decimal" value="${r.exec??''}" placeholder="${frozen?'0':''}"${frozen&&ED?'':' disabled'} aria-label="Metrado ejecutado">${r.exec!=null&&it.q?`<div class="note" style="font-size:11px">${Math.round(r.exec/it.q*100)}%</div>`:''}`:''}</td>
@@ -232,11 +238,15 @@ ${(()=>{const ci=CEV&&CEV.get(id);if(!ci||ci.how!=='man')return'';return`<div cl
     {const rb=e.target.closest('[data-wkrest]');if(rb){restoreWeek(n,pid,rb.dataset.wkrest);return}}
     const b=e.target.closest('[data-yn]');if(!b||b.disabled)return;const id=b.closest('tr').dataset.id;const ok=b.dataset.yn==='1';const wk=S.wk.get(wkId(n,pid));
     if(!wk||!wk.frozenAt){freezeWeek(n,pid,{[id]:{ok,cnc:'',note:''}});return}
-    const cur=(wk.res||{})[id]||{};const nv=cur.ok===ok?null:ok;setRes(n,pid,id,{...cur,ok:nv,cnc:nv===false?(cur.cnc||''):'',note:cur.note||''})};
+    const cur=(wk.res||{})[id]||{};const nv=cur.ok===ok?null:ok;const av=(wk.adv||{})[id];
+    /* P9: si el SC advirtió con motivo, al marcar «No» se sugiere la imputabilidad (causa de obra = no imputable; propia = imputable); el ingeniero la cambia con «Responde»/imputable */
+    const imp=nv===false&&av&&av.k&&cur.imp==null&&!cur.rsc?{imp:av.g!=='o'}:{};
+    setRes(n,pid,id,{...cur,ok:nv,cnc:nv===false?(cur.cnc||''):'',note:cur.note||(nv===false&&av&&av.k?'El SC advirtió: '+(av.t||av.k):''),...imp});if(imp.imp!=null)toast(`El SC había advertido «${av.t||av.k}» (${av.g==='o'?'causa de obra':'causa propia'}): se marcó ${imp.imp?'imputable':'no imputable'} al SC. Puedes cambiarlo.`)};
   main.onchange=e=>{const t=e.target;const tr=t.closest('tr[data-id]');const sec=t.closest('section[data-pid]');if(!tr||!sec)return;const pid=sec.dataset.pid,id=tr.dataset.id;if(!(canWrite&&isPisoResp(pid)))return;const wk=S.wk.get(wkId(n,pid));if(!wk)return;const cur=(wk.res||{})[id]||{};
     if(t.hasAttribute('data-exec')){const it=(wk.items||{})[id]||{};const v=parseNum(t.value);if(Number.isNaN(v)||(v!=null&&v<0)){toast('El ejecutado debe ser un número positivo.');t.value=cur.exec??'';return}t.dataset.o=t.value;
       const nv={...cur,exec:v};if(v!=null&&it.q){nv.ok=v>=it.q-1e-9;if(nv.ok)nv.cnc='';else nv.cnc=cur.cnc||''}setRes(n,pid,id,nv);if(v!=null&&it.q)toast(nv.ok?'Cumplido: se ejecutó todo lo programado.':`No cumplido: ${fq(v)} de ${fq(it.q)} ${it.und||''}. Elige la causa.`);return}
-    if(t.hasAttribute('data-cnc'))setRes(n,pid,id,{...cur,cnc:t.value,...(cur.rsc?{}:{imp:null})});
+    /* P9: con advertencia del SC (weeks.adv) la imputabilidad sugerida se mantiene al elegir la causa; se cambia con «Responde» */
+    if(t.hasAttribute('data-cnc')){const av=(wk.adv||{})[id];setRes(n,pid,id,{...cur,cnc:t.value,...(cur.rsc?{}:av&&av.k?{imp:av.g!=='o'}:{imp:null})})}
     if(t.hasAttribute('data-resp')){const v=t.value;setRes(n,pid,id,{...cur,...(v==='d'?{imp:null,rsc:'',pc:false}:v==='y'?{imp:true,rsc:'',pc:false}:v==='n'?{imp:false,rsc:'',pc:false}:{imp:false,rsc:v.slice(2),pc:!!cur.pc})});return}
     if(t.hasAttribute('data-rpc')){setRes(n,pid,id,{...cur,pc:t.checked});return}if(t.hasAttribute('data-note')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,note:t.value})}
     if(t.hasAttribute('data-mit')){t.dataset.o=t.value;setRes(n,pid,id,{...cur,mit:t.value.trim()})}};
@@ -322,6 +332,8 @@ function restrInTxt(k){if(String(k).startsWith('lib:')){const l=typeof LIB!=='un
 function restrInList(rin,items){const E=Object.entries(rin);const L=E.slice(0,15).map(([id,ks])=>{const x=S.act.get(id);const it=items&&items[id];const nm=(it&&it.act)||(x&&x.name)||id;const am=(it&&it.code)||(x&&S.amb.get(x.ambId)&&S.amb.get(x.ambId).code)||'';
   return`${am?am+' · ':''}${nm} — ${ks.map(restrInTxt).join(' · ')}`});if(E.length>15)L.push(`…y ${E.length-15} más`);return L}
 /* chapita R (Plan semanal): entró con restricciones abiertas o liberación crítica pendiente */
+/* P9: el SC advirtió con motivo antes de congelar (propuesta rechazada o sin decidir) */
+const advBadge=a=>a&&a.k?`<span class="advb ${a.g==='o'?'obra':'propia'}" title="${esc('El SC advirtió antes de congelar: '+(a.t||a.k)+' ('+(a.g==='o'?'causa de obra: si no se cumple, se sugiere no imputable al SC':'causa propia: la meta no cambió, se sugiere imputable')+')'+(a.src==='pend'?' · su propuesta seguía sin decidir':' · el ingeniero la rechazó'))}">⚑ ${esc(a.t||'')}</span>`:'';
 const rinBadge=ks=>ks&&ks.length?`<span class="rinb" title="${esc('Entró con '+ks.length+' restricción'+(ks.length>1?'es':'')+' abierta'+(ks.length>1?'s':'')+': '+ks.map(restrInTxt).join(' · '))}">R${ks.length>1?ks.length:''}</span>`:'';
 const WSN=new Map(),WSNP=new Set(),WSNE=new Map();
 const wsnKey=w=>w.id+'|'+(w.frozenAt||'');
@@ -347,13 +359,16 @@ async function freezeWeek(n,pid,res,src,o){o=o||{};const res0=res;let items=src?
     items={...Object.fromEntries(Object.entries(items).filter(([k])=>!(k in keep.items))),...keep.items};res={...keep.res,...(res||{})}}
   const doc={n,pisoId:pid,frozenAt:new Date(NOW()).toISOString(),items,res:res||(src&&src.res)||{},frozenBy:me?me.email:'',...(src&&src.ver?{fromVer:src.ver}:{}),...(keep&&keep.cres?{cres:keep.cres}:{})};
   /* propuestas de SC enviadas y sin decidir para este piso y semana: se avisa antes de cerrar y se guarda cuáles quedaron fuera */
-  if(canWrite){let pend=o.pend||null;const ask=!pend;if(!pend){try{pend=db?propPendWeek(n,pid,(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id}))):null}catch(e){pend=null}
+  let pdocs=null;
+  if(canWrite){let pend=o.pend||null;const ask=!pend;if(!pend){try{pdocs=db?(await fcol('lhprop').get()).docs.map(d=>({...d.data(),id:d.id})):null;pend=pdocs?propPendWeek(n,pid,pdocs):null}catch(e){pend=null}
     if(!pend)pend=propPendWeek(n,pid,[...PROP.values()])}
     if(pend.length){const c={new:0,mod:0,del:0};pend.forEach(q=>c[q.kind]++);const pl=(k,s,p)=>k?`${k} ${k>1?p:s}`:'';
       if(ask&&!await uiAsk({title:`${pend.length} propuesta${pend.length>1?'s':''} sin decidir`,text:`Para ${code}, semana ${n}:`,list:[pl(c.new,'actividad nueva','actividades nuevas'),pl(c.mod,'cambio','cambios'),pl(c.del,'retiro','retiros')].filter(Boolean),
         note:'Si congelas ahora quedan fuera del compromiso (se guarda cuáles). Para que cuenten, acéptalas antes de congelar (Lookahead › Revisar propuestas).',ok:'Congelar igual',tone:'warn'}))return'no';
       doc.propOut=pend.map(q=>q.sc+'/'+q.id);doc.propOutT=Object.fromEntries(pend.map(q=>[q.sc+'/'+q.id,q.t||0]))}}
   if(keep&&(keep.propOut||[]).length){doc.propOut=[...new Set([...keep.propOut,...(doc.propOut||[])])];doc.propOutT={...(keep.propOutT||{}),...(doc.propOutT||{})}}
+  /* P9: compromisos en los que el SC advirtió con motivo (propuesta rechazada o aún sin decidir) */
+  {const adv={...advOfProps(pdocs||[...PROP.values()],Object.keys(items)),...((keep&&keep.adv)||{})};if(Object.keys(adv).length)doc.adv=adv}
   /* C-17: compromisos con restricciones abiertas o liberación crítica pendiente: se avisa y se guarda cuáles (los conservados al
      volver a congelar mantienen lo que se guardó la primera vez) */
   {const nw=keep?Object.keys(items).filter(k=>!(k in keep.items)):Object.keys(items);const rin={...restrInOf(nw),...((keep&&keep.restrIn)||{})};
@@ -421,11 +436,11 @@ async function propOutShow(n,pid){const w=S.wk.get(wkId(n,pid));if(!w||!(w.propO
 /* C-03 (tanda 1, LPS-1): una semana descongelada que nadie vuelve a congelar la re-congela el servidor (congelarSemana) a las 2 horas,
    tal como estaba (desde la copia __h). Mientras tanto, Hoy y el Plan semanal lo avisan. */
 const REFRZ_MS=2*3600e3;const refrzAt=w=>(Date.parse(w.unfrozenAt)||0)+REFRZ_MS;
-const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','propOutT','auto','fromVer','refrz','restrIn'];
+const WK_VF=['frozenAt','items','res','cres','frozenBy','propOut','propOutT','auto','fromVer','refrz','restrIn','adv'];
 const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,b)=>String(a.unAt).localeCompare(String(b.unAt)));
 /** C-04: lo que hay que conservar al volver a congelar la semana n del piso: la última versión descongelada, si la semana ya empezó → {items, res, cres, propOut, propOutT} o null */
 function wkKeepOf(n,pid){if(weekDays(n)[0]>todayIso())return null;const L=wkHist(wkId(n,pid));const h=L[L.length-1];const v=h&&h.v;if(!v||!v.items||!Object.keys(v.items).length)return null;
-  return{items:v.items,res:v.res||{},cres:v.cres||null,propOut:v.propOut||[],propOutT:v.propOutT||{},restrIn:v.restrIn||{}}}
+  return{items:v.items,res:v.res||{},cres:v.cres||null,propOut:v.propOut||[],propOutT:v.propOutT||{},restrIn:v.restrIn||{},adv:v.adv||{}}}
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
   const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
   const pack=o=>{const v={};WK_VF.forEach(k=>{if(o[k]!==undefined)v[k]=o[k]});return{histOf:id,n,pisoId:pid,v,unAt:at,unBy:me?me.email:'',unN:me?(me.name||me.email):''}};

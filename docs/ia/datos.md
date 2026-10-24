@@ -67,3 +67,4 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Reportes en vivo y Lookahead** (`liveSig`): cada inicio/pausa del capataz llega por `live`; en la pestaña Lookahead solo se redibuja si cambió lo que la grilla usa (los cierres `close` y de quién es el reporte). Las demás pestañas se redibujan siempre.
 
 - **Hitos** (`hitos/{id}`, oct 2026): hitos de inicio y fin del Lookahead; campos y reglas en `lookahead.md` «Hitos». En el respaldo (`BK_DATA`).
+- **Advertencias del SC** (oct 2026, P9): `lhprop/{sc}.items.<id>.why`, `lhprop/{sc}.adv.<actId>` (solo quien decide), `lhphist.swhy` y `weeks.adv`. Detalle en `propuestas.md` «Motivo obligatorio».
