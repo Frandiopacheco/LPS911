@@ -20,11 +20,10 @@ test('C-19 · aplicar una sesión pull mueve el metrado junto con los días (sin
   await page.locator('[data-puamb="a1"]').click();
   await page.locator('[data-pu="create"]').click();
   await expect(page.locator('.pup[data-pid="t0"]')).toHaveCount(1);
-  const box = await page.locator('.pup[data-pid="t0"]').boundingBox();
-  await page.mouse.move(box.x + 10, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 10 + 2 * 56, box.y + box.height / 2, { steps: 8 });
-  await page.mouse.up();
+  /* mover el pósit 2 días con los botones del panel (antes se arrastraba con el puntero y en GitHub fallaba a veces bajo carga) */
+  await page.locator('.pup[data-pid="t0"]').click();
+  await page.locator('[data-pud="1"]').click();
+  await page.locator('[data-pud="1"]').click();
   const sid = await page.evaluate(() => PU.sid);
   await expect.poll(() => page.evaluate(id => window.__dbGet('pull', id).ps.t0.d0, sid)).not.toBe('2026-10-06');
   await page.locator('[data-pu="rev"]').click();
