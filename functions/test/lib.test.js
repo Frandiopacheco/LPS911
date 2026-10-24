@@ -365,3 +365,15 @@ test('congelado automático: guarda restrIn (C-17)', () => {
   const L2 = buildFreeze({ ...base, restr: [{ id: 'r1', actId: 'x1', status: 'lib' }], libs: [] }, 60, '2026-10-10T18:00:00.000Z');
   assert.strictEqual('restrIn' in L2[0].doc, false);
 });
+test('congelado automático: guarda adv (el SC advirtió con motivo, P9)', () => {
+  const base = {
+    project: PROJ, pisos: M({ p1: { code: 'P1', order: 1 } }), sectors: M({ s1: { pisoId: 'p1', code: 'S1', order: 1 } }),
+    ambientes: M({ a1: { sectorId: 's1', code: 'A1', name: 'Oficina', order: 1 } }),
+    acts: M({ x1: { ambId: 'a1', sc: 'c1', name: 'Pintura', order: 1, days: ['2026-10-12'] }, x2: { ambId: 'a1', sc: 'c1', name: 'Piso', order: 2, days: ['2026-10-13'] } })
+  };
+  const props = [{ id: 'c1', sc: 'c1', adv: { x1: { k: 'fre', g: 'o', t: 'Frente no entregado' }, x9: { k: 'mat', g: 'o' } }, items: { x2: null } }];
+  const L = buildFreeze({ ...base, props }, 60, '2026-10-10T18:00:00.000Z');
+  assert.deepStrictEqual(L[0].doc.adv, { x1: { k: 'fre', g: 'o', t: 'Frente no entregado', src: 'rej' } });
+  const L2 = buildFreeze({ ...base, props: [] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.strictEqual('adv' in L2[0].doc, false);
+});

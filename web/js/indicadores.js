@@ -89,6 +89,18 @@ function asRelCard(n,vset,M){const D=asRelData(n,vset,M);if(!D.T.n)return'';cons
     <p class="note" style="margin-top:0"><b>${pc(D.T.ok/D.T.n)}</b> liberadas en su fecha de compromiso o antes (${D.T.ok} de ${D.T.n})${D.T.cl?` · <span class="no">${D.T.cl} con compromiso después de lo requerido</span>`:''}.</p>
     <div class="tscroll"><table class="t rt"><thead><tr><th>Responsable</th><th class="r">Con compromiso</th><th class="r">A tiempo</th><th class="r">Tarde</th><th class="r" title="Pasó la fecha de compromiso y sigue pendiente">Vencidas</th><th class="r" title="Se comprometió a liberarla después de la fecha requerida">Compromiso tardío</th><th class="r">% a tiempo</th></tr></thead><tbody>
     ${D.rows.map(([k,o])=>`<tr><td data-l="Responsable">${esc(k)}</td><td class="r" data-l="Con compromiso">${o.n}</td><td class="r ok" data-l="A tiempo">${o.ok||''}</td><td class="r${o.late?' no':''}" data-l="Tarde">${o.late||''}</td><td class="r${o.pend?' no':''}" data-l="Vencidas">${o.pend||''}</td><td class="r" data-l="Compromiso tardío">${o.cl||''}</td><td class="r" data-l="% a tiempo"><b>${pc(o.ok/o.n)}</b></td></tr>`).join('')}</tbody></table></div></div></div>`}
+/* P9 (oct 2026): propuestas de los SC por motivo (decididas en la semana n, desde lhphist.swhy). Solo ingenieros y administrador
+   (el SC lee lhphist por partida). Si muchas son «frente no entregado», el problema es la liberación de la obra, no el SC. */
+const LHW=new Map();
+function lhwLoad(n){const o=LHW.get(n);if(o&&(o.st==='ok'||o.st==='load'))return o;const a=Date.parse(weekDays(n)[0]+'T05:00:00Z'),b=a+7*864e5;const e={st:'load',L:[]};LHW.set(n,e);
+  fcol('lhphist').where('t','>=',a).where('t','<',b).get().then(sn=>{e.L=sn.docs.map(d=>d.data()).filter(h=>h&&h.swhy&&h.swhy.k&&!h.undone);e.st='ok';if(U.tab==='ind')requestRender()}).catch(()=>{e.st='err'});return e}
+function propWhyCard(n,M){if(typeof SCK==='function'&&SCK()||!(isAdmin||canWrite))return'';const e=lhwLoad(n);if(e.st!=='ok')return'';const L=e.L.filter(h=>!M||M.has(h.sc));if(!L.length)return'';
+  const by={};for(const h of L){const k=h.swhy.k;const o=by[k]=by[k]||{t:h.swhy.t||k,g:h.swhy.g||'',n:0,acc:0,rej:0};o.n++;if(h.st==='rej')o.rej++;else o.acc++}
+  const rows=Object.values(by).sort((a,b)=>(a.g===b.g?0:a.g==='o'?-1:1)||b.n-a.n);const nO=L.filter(h=>h.swhy.g==='o').length;
+  return`<div class="card chart"><h2>Propuestas de los SC por motivo <span class="sub">semana ${n} · al alargar, atrasar o quitar actividades</span></h2><div class="pad">
+    <p class="note" style="margin-top:0"><b>${nO} de ${L.length}</b> por causa de obra (frente, material de obra, restricción, consulta): son problemas de liberación, no del SC.</p>
+    <div class="tscroll"><table class="t rt"><thead><tr><th>Motivo</th><th>Grupo</th><th class="r">Propuestas</th><th class="r">Aceptadas</th><th class="r">Rechazadas</th></tr></thead><tbody>
+    ${rows.map(o=>`<tr><td data-l="Motivo">${esc(o.t)}</td><td data-l="Grupo">${o.g==='o'?'Causa de obra':'Causa propia'}</td><td class="r" data-l="Propuestas">${o.n}</td><td class="r ok" data-l="Aceptadas">${o.acc||''}</td><td class="r" data-l="Rechazadas">${o.rej||''}</td></tr>`).join('')}</tbody></table></div></div></div>`}
 function svgBarsH(data,fmt){ // [{label,v,max,color?,sub}]
   const rowH=26,W=380,L=122,R=44,h=data.length*rowH+8;const mx=Math.max(1,...data.map(d=>d.max??d.v));
   let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
@@ -341,7 +353,7 @@ function renderInd(main){
   h+=`<div class="card chart"><h2>PPC semanal histórico <span class="sub">anteriores al sistema: cargadas a mano · desde que se congela: el plan semanal</span>${isAdmin?' <button class="ib" id="bppch">✎ Cargar PPC histórico</button>':''}</h2><div class="pad tscroll">${histP.length?linesLegend()+svgLines(histP)+(histP.some(p=>p.man)?'<p class="note">Las semanas cargadas a mano no tienen PPC del SC.</p>':''):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>`;
   {const nmS=sc=>(scP[sc]&&scP[sc].nm)||conOf(sc).name;const e=Object.entries(scP).sort((a,b)=>nmS(a[0]).localeCompare(nmS(b[0])));
    if(e.length)h+=`<details class="card ixd-det"><summary>Tabla detallada por subcontratista <span class="sub">semana ${U.week}</span></summary><div class="pad">${wkScTable(e,sc=>scLabel(sc,nmS(sc)))}</div></details>`}
-  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M)+asRelCard(U.week,vset,M);
+  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M)+asRelCard(U.week,vset,M)+propWhyCard(U.week,M);
   const days=winDays();const load={};
   for(const x of S.act.values()){if(!vset.has(pisoOfAmb(x.ambId)))continue;for(const d of x.days||[])(load[x.sc]=load[x.sc]||{})[d]=(load[x.sc][d]||0)+1}
   const scs=Object.keys(load).filter(sc=>(!M||M.has(sc))&&days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));

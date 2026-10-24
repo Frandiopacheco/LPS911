@@ -4493,3 +4493,19 @@ p.smline{display:block;border-left-color:var(--line)}
 .g tfoot td.hcol.hmax span{background:var(--warn)}
 .g tfoot td.hcol b{position:absolute;top:3px;left:0;right:0;text-align:center;font:600 10px/1 var(--f-mono,ui-monospace,monospace);color:var(--ink);font-variant-numeric:tabular-nums}
 .mxrend{width:72px;text-align:right}
+/* ---------- P9 · Motivo obligatorio en las propuestas del SC (propuestas.js, oct 2026) ---------- */
+.pwov{position:fixed;inset:0;z-index:80;background:var(--backdrop);display:flex;align-items:center;justify-content:center;padding:16px;animation:lps-fade var(--t) var(--ease)}
+.pwdlg{background:var(--panel);color:var(--ink);border-radius:var(--r-dlg);box-shadow:var(--sh-2);width:min(640px,100%);max-height:calc(100vh - 32px);display:flex;flex-direction:column;gap:10px;padding:18px;animation:lps-pop var(--t) var(--ease)}
+.pwdlg h3{margin:0;font-size:17px}.pwdlg .note{margin:0}
+.pwall{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}.pwall select{flex:1}
+.pwl{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0}
+.pwr{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.pwr>span{flex:1;min-width:0;display:flex;flex-direction:column}.pwr b{font-size:13.5px}.pwr small{color:var(--muted);font-size:12px}
+.pwr select{flex:0 0 46%;min-width:0}.pwr select.bad{border-color:var(--bad)}
+.pwerr{margin:0;color:var(--bad);font-size:13px}
+.pwb{display:flex;justify-content:flex-end;gap:8px}
+@media (max-width:760px){.pwr{flex-direction:column;align-items:stretch}.pwr select{flex:none;width:100%}}
+.rvtag.why{background:var(--accent)}.rvtag.why.obra{background:var(--ok)}.rvtag.why.propia{background:var(--warn)}
+.ppk.why{margin-left:4px;background:var(--warn-soft);color:var(--warn)}.ppk.why.obra{background:var(--ok-soft);color:var(--ok)}
+.advb{display:inline-block;margin-left:6px;vertical-align:1px;font-size:11.5px;font-weight:600;border-radius:4px;padding:0 5px;border:1px solid var(--warn);color:var(--warn);background:var(--warn-soft)}
+.advb.obra{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}

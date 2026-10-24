@@ -298,6 +298,14 @@ test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async ()
   await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // reemplazar el documento borra hist
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'items.x1': null, 'hist.k3': { ...h, st: 'ok' } }));
 });
+test('propuestas: la advertencia del SC rechazada (adv) solo la escribe quien decide', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x1: null }, adv: { x1: { k: 'fre', g: 'o', t: 'Frente no entregado' } } }); });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'items.x1': { after: { days: ['2026-10-05'] }, sent: false, why: { k: 'fre', g: 'o', t: 'Frente no entregado' } } })); // su motivo va en su elemento
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'adv.x2': { k: 'mat', g: 'o' } }));
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'adv.x1.g': 'p' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'adv.x3': { k: 'per', g: 'p' } }));
+});
 test('propuestas: historial de decisiones (lhphist) solo lo escribe quien decide y no se borra', async () => {
   const h = { sc: 'c-gabel', actId: 'x1', st: 'ok', by: 'editor@obra.pe', n: 'Elena', t: 1, sk: 'c-gabel|000000000000001', late: { w: 59, cut: 0 }, lateNote: 'Acordado en la reunión' };
   const ed = user('editor@obra.pe'), sc = user('sc@obra.pe');

@@ -319,6 +319,16 @@ function restrInOf(ids, { restr = [], libs = [], acts = new Map() } = {}) {
    weeks la descargaba todo el mundo al entrar y crecía con cada semana). Lo terminado antes no es compromiso; propOut = propuestas de SC enviadas y sin decidir que tocaban ese piso y semana. */
 /* C-29 (tanda 1, DAT-02): cada compromiso guarda también el nombre del SC de ese momento (scn), como la página; contractors (Map
    opcional) = la colección contractors. */
+/* P9 (oct 2026): advertencias del SC para los compromisos ids → {actId:{k,g,t,src}}: lo rechazado con motivo (lhprop.adv) y lo
+   enviado con motivo aún sin decidir (items[id].why, o su versión enviada sentV). Copia de advOfProps en web/js/plan-restricciones.js. */
+function advOfProps(docs, ids) {
+  const S_ = new Set(ids); const o = {};
+  for (const d of docs || []) {
+    for (const [id, a] of Object.entries(d.adv || {})) if (S_.has(id) && a && a.k) o[id] = { k: a.k, g: a.g || '', t: a.t || '', src: 'rej' };
+    for (const [id, it0] of Object.entries(d.items || {})) { const it = it0 && (it0.sent ? it0 : it0.sentV ? { ...it0.sentV, sent: true } : null); if (it && it.why && it.why.k && S_.has(id)) o[id] = { k: it.why.k, g: it.why.g || '', t: it.why.t || '', src: 'pend' }; }
+  }
+  return o;
+}
 function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(), props = [], contractors = null, restr = null, libs = null }, n, nowIso) {
   const scnOf = sc => { const c = sc && contractors && (contractors instanceof Map ? contractors.get(sc) : contractors[sc]); return c && c.name ? { scn: c.name } : {}; };
   const live = m => [...m.values()].filter(x => !x.arch);
@@ -358,9 +368,11 @@ function buildFreeze({ project, pisos, sectors, ambientes, acts, done = new Map(
       if (propTouch(off, pa).some(z => days.has(z))) { const k = (d.sc || d.id) + '/' + id; propOut.push(k); propOutT[k] = it.sentAt || 0; }
     }
     /* propOutT (oct 2026): hora de envío de cada propuesta que quedó fuera, para poder ver en el Plan semanal cuándo llegó */
+    /* P9 (oct 2026): compromisos en los que el SC advirtió con motivo (igual que la página: advOfProps en plan-restricciones.js) */
+    const adv = advOfProps(props, Object.keys(items));
     /* C-17: qué compromisos entraron con restricciones abiertas o liberación crítica pendiente (para analizar después) */
     const restrIn = restr || libs ? restrInOf(Object.keys(items), { restr: restr || [], libs: libs || [], acts }) : {};
-    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut, propOutT } : {}), ...(Object.keys(restrIn).length ? { restrIn } : {}) },
+    out.push({ id: n + '_' + p.id, doc: { n, pisoId: p.id, frozenAt: nowIso, items, res: {}, frozenBy: 'servidor', auto: true, ...(propOut.length ? { propOut, propOutT } : {}), ...(Object.keys(restrIn).length ? { restrIn } : {}), ...(Object.keys(adv).length ? { adv } : {}) },
       wsnap: { snap, n, pisoId: p.id, t: nowIso } });
   }
   return out;
@@ -832,6 +844,6 @@ module.exports = {
   CLOSE_GRACE, engCutHH, engCutTs, jornadaDays, holPeru, holPreload, easter,
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
-   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
+   planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, advOfProps, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
   wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };
