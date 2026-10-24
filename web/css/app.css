@@ -4407,3 +4407,17 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 /* Planos › Proyecto / ETO de subcontratistas */
 .plsrc{margin:0 0 10px}
 .plg .etosw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+/* Planos › Cargar › 👁 vista previa para completar los datos */
+.plra{white-space:nowrap}
+.plpb{flex:1;min-height:0;display:flex}
+.plpvw{position:relative;flex:1;min-width:0;overflow:hidden;background:#e9e9e6;touch-action:none;cursor:grab}
+.plpvw:active{cursor:grabbing}
+.plpst{position:absolute;left:0;top:0;transform-origin:0 0}
+.plpst canvas{display:block;box-shadow:var(--sh-1)}
+.plpld{position:absolute;inset:0;margin:auto;height:1.5em;text-align:center;color:#555}
+.plpf{width:300px;flex:none;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--panel,#fff);color:var(--ink,inherit);border-left:1px solid var(--line,#ddd)}
+.plpf label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.plpf textarea{resize:vertical;font:inherit}
+@media (max-width:760px){.plpb{flex-direction:column}.plpf{width:auto;max-height:45%;border-left:0;border-top:1px solid var(--line,#ddd)}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .plpvw{background:#2a2a28}:root:not([data-theme="light"]) .plpld{color:#bbb}}
+:root[data-theme="dark"] .plpvw{background:#2a2a28}:root[data-theme="dark"] .plpld{color:#bbb}

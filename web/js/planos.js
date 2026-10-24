@@ -711,7 +711,7 @@ function renderPCar(main){plSub();if(PQ.eto&&!plAdm())PQ.eto=false;if(!plaEd()){
       else if(a==='clrok'){PQ.items=PQ.items.filter(x=>x.st!=='ok'&&x.st!=='skip');plqDraw(true)}};
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
       it.m[el.dataset.f]=el.value.trim();if(el.dataset.f==='cod')it.m.cod=it.m.cod.toUpperCase().replace(/\s+/g,'');plqCheck();plqDraw(true)});
-    $('#plqtab',main).addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
+    $('#plqtab',main).addEventListener('click',e=>{const v=e.target.closest('[data-vw]');if(v){plqPrev(+v.dataset.vw);return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
   plqDraw(false);if(!eo)plkpSecUpd()}
 function plAdd(files){const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');const no=files.length-pdfs.length;
   const have=new Set(PQ.items.map(x=>x.file.name+'|'+x.file.size));let n=0;
@@ -749,15 +749,80 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
       <td><select class="tin" data-f="sc"${dis}>${csel(m.sc)}</select></td><td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
-      <td>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
     return`<tr data-i="${i}" class="${ST[it.st]||''}"><td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>
       <td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td><td><select class="tin" data-f="disc"${dis}>${dsel(m.disc)}</select></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><select class="tin" data-f="tipo"${dis}>${tsel(m.tipo)}</select></td>
       <td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
-      <td>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
   const hd=eo?'<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>Piso</th><th>Título</th><th>Estado</th><th></th>':'<th>Archivo</th><th>Código</th><th>Especialidad</th><th>Piso</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>';
   shx(tab,`<div class="pltw"><table class="plt"><thead><tr>${hd}</tr></thead><tbody>${rows}</tbody></table></div>`)}
+/* ---------- Vista previa en la carga (oct 2026, pedido del dueño) ----------
+   👁 en cada fila: la lámina se dibuja desde el PDF en esta PC (sin subir nada) con zoom y desplazamiento, y al lado los datos de
+   esa fila para llenarlos mirando el rótulo. ‹ › guardan y pasan a la otra fila conservando zona y zoom (los rótulos de un mismo
+   SC o especialidad suelen estar en el mismo sitio). */
+const PLP={i:-1,box:null,v:null,cv:null,tok:0};
+const PLP_PX=4200;   /* lado mayor del dibujo de la vista previa: se lee el rótulo sin cargar la PC */
+async function plqPrevPage(it){if(it._pv)return it._pv;await plPdfJs();const buf=await it.file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;const pg=await pdf.getPage(1);const v1=pg.getViewport({scale:1});
+  const sc=PLP_PX/Math.max(v1.width,v1.height);const vp=pg.getViewport({scale:sc});const c=plCanvas(Math.floor(vp.width),Math.floor(vp.height));const g=c.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:vp}).promise;try{pdf.destroy()}catch(e){}
+  it._pv=c;return c}
+function plqPrev(i){const it=PQ.items[i];if(!it)return;PLP.i=i;
+  if(!PLP.box){const b=document.createElement('div');b.className='plv plpv';b.setAttribute('role','dialog');b.setAttribute('aria-modal','true');b.tabIndex=-1;
+    b.innerHTML=`<div class="plvh"><button class="ib" data-pp="prev" aria-label="Fila anterior">‹</button><div class="plvt"><b class="plpn"></b><small class="plpc"></small></div><button class="ib" data-pp="next" aria-label="Fila siguiente">›</button><span class="plvsp"></span>
+      <button class="ib" data-pp="zout" aria-label="Alejar">−</button><button class="ib" data-pp="fit">Ajustar</button><button class="ib" data-pp="zin" aria-label="Acercar">+</button><button class="ib" data-pp="x" aria-label="Cerrar">✕</button></div>
+      <div class="plpb"><div class="plpvw"><div class="plpst"></div><p class="plpld">Dibujando la lámina…</p></div><form class="plpf" autocomplete="off"></form></div>`;
+    document.body.appendChild(b);PLP.box=b;
+    b.onclick=e=>{const k=e.target.closest('[data-pp]');if(!k)return;const a=k.dataset.pp;
+      if(a==='x')plqPrevClose();else if(a==='prev')plqPrevGo(-1);else if(a==='next')plqPrevGo(1);else if(a==='fit')plqFit();else if(a==='zin')plqZoom(1.5);else if(a==='zout')plqZoom(1/1.5)};
+    b.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();plqPrevClose();return}
+      if(e.target.closest('input,select,textarea')){if(e.key==='Enter'){e.preventDefault();plqPrevGo(1)}return}
+      if(e.key==='ArrowRight')plqPrevGo(1);else if(e.key==='ArrowLeft')plqPrevGo(-1);else if(e.key==='+'||e.key==='=')plqZoom(1.5);else if(e.key==='-')plqZoom(1/1.5);else if(e.key==='0')plqFit()});
+    b.querySelector('.plpf').addEventListener('input',e=>{const el=e.target.closest('[data-f]');const t=PQ.items[PLP.i];if(!el||!t||t.st==='run'||t.st==='ok')return;
+      t.m[el.dataset.f]=el.dataset.f==='cod'?el.value.trim().toUpperCase().replace(/\s+/g,''):el.value.trim();if(e.type==='input'&&el.tagName==='INPUT')return;plqSync()});
+    b.querySelector('.plpf').addEventListener('change',()=>plqSync());
+    plqPan(b.querySelector('.plpvw'));b.focus()}
+  plqPrevDraw()}
+function plqSync(){plqCheck();plqDraw(true);const t=PQ.items[PLP.i];if(t&&PLP.box)stx(PLP.box.querySelector('.plpc'),plqPrevSub(t))}
+const plqPrevSub=t=>`Fila ${PLP.i+1} de ${PQ.items.length} · ${t.msg||''}${t.warn?' · '+t.warn:''}`;
+function plqPrevForm(it){const m=it.m,dis=it.st==='run'||it.st==='ok'?' disabled':'';
+  const o=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
+  const piso=`<label>Piso<select class="tin" data-f="pisoId"${dis}>${o('','General (sin piso)',m.pisoId)}${pisos().map(p=>o(p.id,p.code+' · '+p.name,m.pisoId)).join('')}</select></label>`;
+  const cod=`<label>Código<input class="tin mono" data-f="cod" value="${esc(m.cod||'')}"${dis}></label>`,tit=`<label>Título<textarea class="tin" data-f="tit" rows="3"${dis}>${esc(m.tit||'')}</textarea></label>`;
+  if(m.eto)return`<label>Subcontratista<select class="tin" data-f="sc"${dis}>${o('','—',m.sc)}${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>o(c.id,c.name,m.sc)).join('')}</select></label>${cod}${piso}${tit}`;
+  return`${cod}<label>Especialidad<select class="tin" data-f="disc"${dis}>${o('','—',m.disc)}${PL_DISC.map(d=>o(d[0],d[1],m.disc)).join('')}</select></label>${piso}<label>Tipo<select class="tin" data-f="tipo"${dis}>${PL_TIPOS.map(t=>o(t,t,m.tipo)).join('')}</select></label>${tit}`}
+async function plqPrevDraw(){const it=PQ.items[PLP.i];if(!it||!PLP.box)return;const b=PLP.box,tok=++PLP.tok;
+  stx(b.querySelector('.plpn'),it.file.name);stx(b.querySelector('.plpc'),plqPrevSub(it));
+  b.querySelector('[data-pp="prev"]').disabled=PLP.i<=0;b.querySelector('[data-pp="next"]').disabled=PLP.i>=PQ.items.length-1;
+  b.querySelector('.plpf').innerHTML=plqPrevForm(it)+'<p class="note">Enter o › guarda y pasa a la siguiente. La lámina se dibuja en esta PC; no se sube nada hasta «Procesar».</p>';
+  const st=b.querySelector('.plpst'),ld=b.querySelector('.plpld');ld.hidden=false;ld.textContent='Dibujando la lámina…';if(!it._pv){st.innerHTML='';PLP.cv=null}
+  let c;try{c=await plqPrevPage(it)}catch(e){if(tok===PLP.tok)ld.textContent='No se pudo leer el PDF: '+(e.message||e);return}
+  if(tok!==PLP.tok||!PLP.box)return;ld.hidden=true;st.innerHTML='';st.appendChild(c);PLP.cv=c;
+  if(!PLP.v)plqFit();else plqApply();
+  const f=b.querySelector('.plpf [data-f]:not([disabled])');if(f&&!plTablet())f.focus({preventScroll:true})}
+/* vista en coordenadas normalizadas de la hoja (cx, cy) y k = zoom relativo a «ajustar»: se conserva al pasar de fila aunque cambie el tamaño */
+function plqBase(){const w=PLP.box.querySelector('.plpvw'),c=PLP.cv;return{w,c,fit:Math.min(w.clientWidth/c.width,w.clientHeight/c.height)||1}}
+function plqApply(){if(!PLP.cv||!PLP.box)return;const{w,c,fit}=plqBase(),v=PLP.v,s=fit*v.k;
+  const x=w.clientWidth/2-v.cx*c.width*s,y=w.clientHeight/2-v.cy*c.height*s;const st=PLP.box.querySelector('.plpst');
+  st.style.transform=`translate(${x}px,${y}px) scale(${s})`}
+function plqFit(){PLP.v={cx:.5,cy:.5,k:1};plqApply()}
+function plqZoom(f,px,py){if(!PLP.cv)return;const{w,c,fit}=plqBase(),v=PLP.v;const r=w.getBoundingClientRect();px=px==null?w.clientWidth/2:px-r.left;py=py==null?w.clientHeight/2:py-r.top;
+  const s0=fit*v.k,k=Math.max(0.5,Math.min(40,v.k*f)),s1=fit*k;
+  const ux=v.cx+(px-w.clientWidth/2)/(c.width*s0),uy=v.cy+(py-w.clientHeight/2)/(c.height*s0);/* punto bajo el cursor: queda fijo */
+  v.cx=ux-(px-w.clientWidth/2)/(c.width*s1);v.cy=uy-(py-w.clientHeight/2)/(c.height*s1);v.k=k;plqApply()}
+function plqPan(w){const P=new Map();let d0=0,k0=1;
+  w.addEventListener('wheel',e=>{e.preventDefault();plqZoom(Math.exp(-e.deltaY*0.0018),e.clientX,e.clientY)},{passive:false});
+  w.addEventListener('dblclick',e=>plqZoom(2,e.clientX,e.clientY));
+  w.addEventListener('pointerdown',e=>{if(!PLP.cv)return;w.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(P.size===2){const[a,b]=[...P.values()];d0=Math.hypot(a.x-b.x,a.y-b.y);k0=PLP.v.k}});
+  w.addEventListener('pointermove',e=>{const p=P.get(e.pointerId);if(!p||!PLP.cv)return;
+    if(P.size===1){const{c,fit}=plqBase(),s=fit*PLP.v.k;PLP.v.cx-=(e.clientX-p.x)/(c.width*s);PLP.v.cy-=(e.clientY-p.y)/(c.height*s);p.x=e.clientX;p.y=e.clientY;plqApply();return}
+    p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(d0>0)plqZoom(k0*d/d0/PLP.v.k,(a.x+b.x)/2,(a.y+b.y)/2)});
+  const up=e=>{P.delete(e.pointerId);if(P.size<2)d0=0};w.addEventListener('pointerup',up);w.addEventListener('pointercancel',up);
+  addEventListener('resize',()=>{if(PLP.box)plqApply()})}
+function plqPrevGo(d){const n=PLP.i+d;if(n<0||n>=PQ.items.length)return;plqSync();PLP.i=n;plqPrevDraw()}
+function plqPrevClose(){if(!PLP.box)return;plqSync();PLP.box.remove();PLP.box=null;PLP.cv=null;PLP.i=-1;PQ.items.forEach(x=>{if(x._pv){x._pv.width=x._pv.height=0;delete x._pv}})}
 function plRowSay(i,t){const c=document.getElementById('plst'+i);if(c)c.textContent=t;const it=PQ.items[i];if(it)it.msg=t}
 const plUnload=e=>{e.preventDefault();e.returnValue=''};
 async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='pend'))return;
