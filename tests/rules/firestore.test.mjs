@@ -439,10 +439,14 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
   await assertSucceeds(setDoc(doc(ed, 'meta/project'), { lastBk: { t: 1, by: 'editor@obra.pe', img: false } }, { merge: true }));
   await assertSucceeds(setDoc(doc(ed, 'meta/project'), { doneIdx: 1 }, { merge: true }));
   await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { refWeek: 58, cal: { sat: true } })); // mismo valor: no cambia
+  // tanda 2, C-21: el editor marca desde el Lookahead «Trabajar este día» (cal.work), un feriado (cal.hol) y la opción de pintar (cal.pskip)
+  await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { cal: { sat: true, work: [{ d: '2026-12-08', n: 'Se trabaja' }], hol: [{ d: '2026-10-09', n: 'Paro' }], pskip: false } }));
   await assertSucceeds(setDoc(doc(ed, 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
   await assertSucceeds(setDoc(doc(ed, 'meta/otro'), { x: 1 }));
-  for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')])
+  for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')]) {
     await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: false } }));
+    await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: true, work: [{ d: '2026-12-08', n: 'Se trabaja' }] } }));
+  }
   const adm = user(OWNER);
   await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', closeCutHH: '17:30', engCutHH: '22:00', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
   await assertFails(deleteDoc(doc(ed, 'meta/project')));

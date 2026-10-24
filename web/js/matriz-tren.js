@@ -95,3 +95,24 @@ function lkMxtPop(btn,ambId){const a=S.amb.get(ambId);if(!a)return;const L=[...S
    ${L.map((x,i)=>`<button data-do="v${i}">${esc(x.name)} · ${esc(conOf(x.sc).name)}</button>`).join('')}`,
    Object.fromEntries(L.flatMap((x,i)=>[['v'+i,()=>{const r=document.querySelector(`#grid tr[data-a="${CSS.escape(x.id)}"] [data-mxw]`);if(r)r.click();else gotoAct(x.id)}]])))}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-mxtamb]');if(!b)return;e.stopPropagation();lkMxtPop(b,b.dataset.mxtamb)},true);
+
+/* ---------- Lookahead: tren invertido (auditoría tanda 2, C-16 / CON-02) ----------
+   Dentro de un mismo ambiente, una actividad que EMPIEZA ANTES que su predecesora según el tren (mcat.tr) lleva una marca discreta
+   en sus días «adelantados» (td.tinv, los anteriores al inicio de la predecesora) y el ambiente muestra «⚠ N fuera de secuencia».
+   Empezar el mismo día no cuenta (trabajo en paralelo). No avisa si la predecesora está terminada (Campo, o Matriz Terminado /
+   No aplica) o no tiene días. No compara entre ambientes. Solo avisa: no bloquea ni mueve nada.
+   lkTrInv(ambId, acts) → Map actId → {y: predecesora, ps: su inicio} | null. Caché por ambiente mientras no cambien los datos. */
+const LKTI={k:'',src:null,any:false,m:new Map()};
+function lkTrInv(ambId,acts){if(!MX.ld.cat)return null;
+  const k=[DV,DONEV,MX.v,typeof revOn==='function'&&revOn()?1:0,U.revCtx?1:0,PM()?1:0].join('|');
+  if(LKTI.k!==k||LKTI.src!==S.act){LKTI.k=k;LKTI.src=S.act;LKTI.m=new Map();LKTI.any=false;for(const c of MX.cat.values())if(mxTrOn(c)){LKTI.any=true;break}}
+  if(!LKTI.any)return null;let r=LKTI.m.get(ambId);if(r!==undefined)return r;
+  const st=(MX.amb.get(ambId)||{}).c||{};const L=[];
+  for(const x of acts){if(!x||x._del)continue;const ds=Array.isArray(x.days)?x.days:[];if(!ds.length)continue;const c=mxCatOf(x);const t=c?mxTrOf(c):null;if(t==null)continue;
+    let s=ds[0];for(const d of ds)if(d<s)s=d;L.push({x,t,s,done:DONE.has(x.id)||st[c]==='t'||st[c]==='n'})}
+  r=null;
+  for(const e of L){if(e.done)continue;let p=null;
+    for(const f of L)if(f!==e&&!f.done&&f.t<e.t&&f.s>e.s&&(!p||f.t>p.t||(f.t===p.t&&f.s>p.s)))p=f;
+    if(p){if(!r)r=new Map();r.set(e.x.id,{y:p.x,ps:p.s})}}
+  LKTI.m.set(ambId,r);return r}
+const lkTrInvTip=v=>`Va antes que su predecesora: ${v.y.name} (empieza el ${fmtD(v.ps)})`;
