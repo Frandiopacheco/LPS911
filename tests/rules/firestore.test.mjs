@@ -1124,7 +1124,7 @@ test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, re
   await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
 });
 
-test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no se borra; la foto semanal no cambia', async () => {
+test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; solo el administrador borra (Limpieza); la foto semanal no cambia', async () => {
   const ed = user('editor@obra.pe'), ow = user(OWNER), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
   await assertSucceeds(setDoc(doc(ow, 'mcat/k001'), { name: 'Espejos', sc: 'c-gabel', cl: 't', al: ['espejos'], ord: 10 }));
   await assertSucceeds(setDoc(doc(ed, 'mtipo/tp01'), { name: 'SS.HH.', acts: ['k001'], order: 10 }));
@@ -1139,7 +1139,11 @@ test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no
   await assertFails(setDoc(doc(user('campo@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'campo@obra.pe', t: 2 }, { merge: true }));
   await assertFails(setDoc(doc(sc, 'mamb/a2'), { c: { k001: 'p' }, by: 'sc@obra.pe', t: 2 }));
   await assertSucceeds(getDoc(doc(lec, 'mamb/a1')));
-  await assertFails(deleteDoc(doc(ow, 'mamb/a1')));
+  // H12b (tanda 3): solo Equipo › Limpieza (administrador, pide BORRAR) lo borra junto con su ambiente; nadie más
+  await assertFails(deleteDoc(doc(ed, 'mamb/a1')));
+  await assertFails(deleteDoc(doc(sc, 'mamb/a1')));
+  await assertSucceeds(setDoc(doc(ed, 'mamb/a8'), { tipo: 'tp01', by: 'editor@obra.pe', t: 1 }));
+  await assertSucceeds(deleteDoc(doc(ow, 'mamb/a8')));
   // foto semanal
   await assertSucceeds(setDoc(doc(ed, 'mver/f1'), { t: 1, d: '2026-10-08', by: 'editor@obra.pe', a: { a1: 'k001:t' } }));
   await assertFails(setDoc(doc(ed, 'mver/f2'), { t: 1, by: 'otro@obra.pe', a: {} }));

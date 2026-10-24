@@ -124,14 +124,19 @@ async function cliEmit(){if(!canCli())return;const pis=pisos();if(!pis.length)re
   const lab=`Semana ${n} · emitida el ${fmtD(todayIso())} ${hhmm(NOW())}`;const prev=[...CLX.values()].filter(v=>cliForW(v)===n);
   if(!await uiAsk({title:`¿Emitir la versión cliente de la semana ${n}?`,html:`Se guarda tal como se ve ahora: <b>${esc(lab)}</b>.`,
     note:`Contra esta versión se medirá el PPC del cliente de la semana ${n}. ${prev.length?'Reemplaza a la emitida antes para esa semana (vale la última). ':''}Puedes volver a emitir hasta el sábado ${fmtD(addD(weekStart(n),-2))} a las 11:00 p. m.; si no emites, se emite sola a esa hora.`,ok:'Emitir'}))return;
-  if(NOW()>=cut){toast('Pasó el corte del sábado 11:00 p. m.: vuelve a emitir (ahora vale para la semana siguiente).');return}
-  const id='c-'+NOW().toString(36);const M=cliActs();const idx={label:lab,ts:NOW(),date:todayIso(),week:curWeek(),forW:n,kind:'manual',by:me.email,byName:me.name||me.email,buf:CLIB||{},pisos:{}};const docs=[];
+  /* TMP-11 (tanda 3): el corte se compara con la hora del servidor (desfase medido tal cual, SNOW) */
+  if(SNOW()>=cut){toast('Pasó el corte del sábado 11:00 p. m.: vuelve a emitir (ahora vale para la semana siguiente).');return}
+  const id='c-'+NOW().toString(36);const M=cliActs();const idx={label:lab,ts:SNOW(),date:todayIso(),week:curWeek(),forW:n,kind:'manual',by:me.email,byName:me.name||me.email,buf:CLIB||{},pisos:{}};const docs=[];
   for(const p of pis){const sn=snapPiso(p.id,M);for(const k of Object.keys(sn.acts)){const o=CLIA.get(k);if(o&&o.own)sn.acts[k].own=true}
     idx.pisos[p.id]={code:p.code,name:p.name,order:p.order||0,acts:Object.keys(sn.acts).length};docs.push([id+'__'+p.id,{verId:id,pisoId:p.id,piso:strip(p),json:JSON.stringify(sn)}])}
   toast('Emitiendo la versión del cliente…');
   try{for(let i=0;i<docs.length;i+=8){const b=db.batch();docs.slice(i,i+8).forEach(([k,v])=>b.set(fcol('cliver').doc(k),v));await b.commit()}
-    if(NOW()>=cut){toast('Pasó el corte del sábado 11:00 p. m. mientras se guardaba: no se emitió. Vuelve a emitir (valdrá para la semana siguiente).');return}
-    await fcol('clidx').doc(id).set(idx);toast(`Versión de la semana ${n} emitida. Ya puedes exportar su Excel.`)}
+    /* TMP-11: el índice va en una transacción que mira la automática de esa semana (auto-c<n>, la del servidor, que a su vez busca
+       en su transacción una versión con ese forW): en el borde de las 23:00 no quedan dos versiones para la misma semana */
+    const r=await db.runTransaction(async tx=>{const a=await tx.get(fcol('clidx').doc('auto-c'+n));if(a.exists)return'auto';if(SNOW()>=cut)return'cut';tx.set(fcol('clidx').doc(id),idx);return'ok'});
+    if(r==='auto'){toast(`La versión de la semana ${n} ya se emitió sola (11:00 p. m.): vale esa. No se emitió otra.`);return}
+    if(r==='cut'){toast('Pasó el corte del sábado 11:00 p. m. mientras se guardaba: no se emitió. Vuelve a emitir (valdrá para la semana siguiente).');return}
+    toast(`Versión de la semana ${n} emitida. Ya puedes exportar su Excel.`)}
   catch(err){toast('No se pudo emitir: '+(err.code==='permission-denied'?'solo el administrador puede emitir':(err.code||err.message)))}}
 
 /* ---------- holgura consumida: la interna ya termina después de lo comunicado al cliente ---------- */

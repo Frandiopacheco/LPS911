@@ -21,7 +21,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
-const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCierre, engCutHH, jornadaDays, isWork, holPreload, limaToday, addD, weeksToFreeze, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota, avisoNo, avisoDestinos, avisoTexto } = require('./lib');
+const { planCutHH, planCutDue, planCatchUp, buildVersion, closesToAccept, acceptCloses, sinCierre, engCutHH, jornadaDays, isWork, holPreload, limaToday, addD, weeksToFreeze, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, frzCutTs, nextWork, buildDayPlan, pendProps, closePlanPiso, RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, buildCliVersion, cliDue, ctaPedido, ctaPuede, ctaNombre, ctaMigrables, tpPuede, tpPedido, tpEjecutar, tpAutoDue, tpExcUnir, tpAutoNota, avisoNo, avisoDestinos, avisoTexto } = require('./lib');
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
@@ -64,7 +64,14 @@ exports.emitirCliente = onSchedule({ schedule: '1,16,31,46 23 * * 6', timeZone: 
     v.docs.slice(i, i + 8).forEach(([k, d]) => b.set(db().collection('cliver').doc(k), d));
     await b.commit();
   }
-  await idxRef.set(v.idx);
+  /* TMP-11 (tanda 3): el índice se crea en una transacción que vuelve a buscar una versión para esa semana: si el administrador emitió
+     en el borde de las 23:00 (su emisión también va en transacción contra auto-c<n>), no quedan dos versiones de la misma semana */
+  const ok = await db().runTransaction(async tx => {
+    const q = await tx.get(db().collection('clidx').where('forW', '==', n));
+    if (!q.empty) return false;
+    tx.create(idxRef, v.idx); return true;
+  });
+  if (!ok) { logger.info('Versión cliente: el administrador la emitió mientras se guardaba la automática; queda la suya'); return; }
   logger.info(`Versión cliente ${v.id} emitida (semana ${n}): ${v.docs.length} pisos`);
 });
 
@@ -113,7 +120,7 @@ async function cerrarJornada(d, project, now) {
   if (!nw && today.length) {
     const dd = new Map((await db().collection('daily').where('date', '==', d).get()).docs.map(x => [x.id, x.data()]));
     const done = doneMap({ doneidx: [...(await all('doneidx')).values()], daily: [...daily.values()].filter(v => v.date < d) });
-    S = await acceptCloses(db(), sinCierre(d, today, lives, dd, acts, nova, project.cnc, project.closeCutHH, { now, done }));
+    S = await acceptCloses(db(), sinCierre(d, today, lives, dd, acts, nova, project.cnc, project.closeCutHH, { now, done, project }));
   }
   return { sc: A.n, sin: S.n, skip: A.skip + S.skip, nw };
 }
@@ -263,23 +270,27 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   const now = Date.now();
   /* C-08: feriados nacionales del año actual y el siguiente, precargados una vez por año (antes de calcular el día hábil) */
   try { await precargarFeriados(project, now); } catch (e) { logger.error('Precarga de feriados: falló, se reintenta en 15 minutos', e); }
-  if (!planCutDue(project, now)) return;
-  const today = limaToday(now); const cref = db().collection('pcl').doc(today);
-  /* hecho hoy (pcl/<fecha>) = no se vuelve a hacer. Si un piso falló, las pasadas siguientes reintentan solo ese piso,
+  /* C-26 (tanda 3): el día de la constancia (key) es hoy pasada la hora; entre medianoche y las 06:00, ayer, por si sus pasadas
+     fallaron (no se pierde el día aunque ya cambió la fecha). */
+  const late = planCutDue(project, now) ? null : planCatchUp(project, now);
+  if (!planCutDue(project, now) && !late) return;
+  const today = limaToday(now); const key = late || today; const cref = db().collection('pcl').doc(key);
+  /* hecho ese día (pcl/<fecha>) = no se vuelve a hacer. Si un piso falló, las pasadas siguientes reintentan solo ese piso,
      hasta RETRY_MAX veces (auditoría de código 08/10, M3); un piso que ya tiene foto se salta solo (closePlanPiso) */
   const cs = await cref.get(); let prev = cs.exists ? cs.data() : null;
   let plan = retryPlan(prev);
+  if (late && plan) logger.warn(`Plan del ${(prev && prev.d) || nextWork(project, key)}: no se terminó de cerrar ayer (${prev ? 'quedaron pisos por reintentar' : 'ninguna pasada lo hizo'}); se intenta ahora`);
   /* TMP-3: ya hecho, pero un piso que se cerró con foto la perdió después («↶ Deshacer publicación» pasada la hora): se vuelve
-     a cerrar en la pasada siguiente (solo se leen las fotos de los pisos que la tenían, cerr) */
+     a cerrar en la pasada siguiente (solo se leen las fotos de los pisos que la tenían, cerr). No en la recuperación de madrugada. */
   /* constancias anteriores a este cambio (sin cerr): se miran los pisos hechos (done) una vez */
   const cerr0 = prev ? (Array.isArray(prev.cerr) ? prev.cerr : Array.isArray(prev.done) ? prev.done : []) : [];
-  if (!plan && cerr0.length && prev.d) {
+  if (!plan && !late && cerr0.length && prev.d) {
     const snaps = await db().getAll(...cerr0.map(pid => db().collection('dplan').doc(prev.d + '_' + pid)));
     const lost = snaps.filter(x => !x.exists || !((x.data() || {}).ids || (x.data() || {}).reo)).map(x => x.id.slice(prev.d.length + 1));
     if (lost.length) { plan = { only: new Set(lost), tries: 0, again: true }; logger.warn(`Plan del ${prev.d}: sin foto después del cierre en ${lost.join(', ')}; se vuelve a cerrar`); }
   }
   if (!plan) return;
-  const d = (plan.only && prev && prev.d) || nextWork(project, today);
+  const d = (plan.only && prev && prev.d) || nextWork(project, key);
   const [pisos, sectors, ambientes, acts, didx, daily, lives, contractors, pdzDay, restr, libs] = await Promise.all([all('pisos'), all('sectors'), all('ambientes'), all('acts'), all('doneidx'),
     db().collection('daily').where('date', '>=', addD(today, -120)).get(), db().collection('live').where('date', '>=', addD(today, -30)).get(), all('contractors'),
     db().collection('pdz').where('date', '==', d).get(),

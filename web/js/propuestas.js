@@ -79,13 +79,15 @@ function sendPropNow(){const now=NOW();let n=0,nl=0;
    después del corte de alguna semana cuyos días toca (días o cantidades que agrega o quita; si cambia unidad, metrado o
    nombre, todos sus días). Recibirla no la bloquea: el ingeniero decide y, si la acepta, deja el motivo (queda en lhphist). */
 const DOW_N=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-function propCutCfg(){const p=P();const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
+function propCutCfg(p=P()){const d=parseInt(p.propCutDow,10);return{dow:d>=0&&d<=6?d:6,hh:/^\d\d:\d\d$/.test(p.propCutHH||'')?p.propCutHH:'13:00'}}
 const propCutTxt=()=>{const c=propCutCfg();return`corte: ${DOW_N[c.dow]} ${c.hh}`};
 /* Corte del congelado del plan semanal (oct 2026, decidido con el dueño: independiente del de las propuestas; si no se configuró, el mismo) */
-function frzCutCfg(){const p=P();const d=parseInt(p.frzCutDow,10);if(!(d>=0&&d<=6)||!/^\d\d:\d\d$/.test(p.frzCutHH||''))return{...propCutCfg(),same:true};return{dow:d,hh:p.frzCutHH,same:false}}
-function frzCut(n){const c=frzCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function frzCutCfg(p=P()){const d=parseInt(p.frzCutDow,10);if(!(d>=0&&d<=6)||!/^\d\d:\d\d$/.test(p.frzCutHH||''))return{...propCutCfg(p),same:true};return{dow:d,hh:p.frzCutHH,same:false}}
+/* hora (ms) del corte {dow, hh} de la semana n: el último <día> a la <hora> antes de su lunes */
+function cutTsOf(c,n){const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function frzCut(n,p){return cutTsOf(frzCutCfg(p),n)}
 /** hora (ms) del corte para entregar propuestas de la semana n */
-function propCut(n){const c=propCutCfg();const back=((1-c.dow)+7)%7||7;return Date.parse(addD(weekStart(n),-back)+'T'+c.hh+':00Z')+LIMA_OFF}
+function propCut(n,p){return cutTsOf(propCutCfg(p),n)}
 /* ---- ventana de propuestas (oct 2026, decidido con el dueño): primero el ingeniero programa el lookahead; recién cuando un
    ingeniero (admin/editor) toca «Habilitar propuestas» los SC pueden proponer, hasta el corte configurado (Configuración ›
    Proyecto); al corte se bloquea solo. meta/propwin.closeAt = hora (ms) del corte de la ventana abierta; sin documento

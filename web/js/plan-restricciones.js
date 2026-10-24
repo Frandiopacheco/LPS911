@@ -124,7 +124,7 @@ function renderPlan(main){
     const cOut=CEV?[...CEV.values()].filter(i=>i.how==='man'&&!i.it):[];
     /* semana descongelada: la versión congelada quedó guardada (Recuperar) y, si nadie la vuelve a congelar, se congela sola (C-03) */
     const histH=!frozen?(()=>{const L=wkHist(wkId(n,p.id));if(!L.length)return'';const hv=L[L.length-1];const ev=Object.values((hv.v||{}).res||{}).filter(r=>r&&(r.ok===true||r.ok===false)).length;
-       return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''}${w&&w.unfrozenAt?` Si nadie la vuelve a congelar, se congela sola tal como estaba a las ${hhmm(refrzAt(w))}.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():'';
+       return`<div class="pad"><div class="callout">Esta semana se descongeló el ${new Date(hv.unAt).toLocaleString('es-PE',{...LIMA_TZ,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${hv.unN?' ('+esc(hv.unN)+')':''}: la versión congelada${ev?` con ${ev} compromiso${ev>1?'s':''} evaluado${ev>1?'s':''}`:''} quedó guardada.${L.length>1?` Hay ${L.length} versiones guardadas.`:''}${w&&w.unfrozenAt?` Si nadie la vuelve a congelar, se congela sola tal como estaba a las ${hhmm(refrzAt(w))}.`:''} ${ED?`<button class="ib" data-wkrest="${esc(hv.id)}">↺ Recuperar la versión congelada</button>`:''}</div></div>`})():'';
     if(!ids.length&&!frozen){parts.push(`<section class="card" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">Sin actividades programadas en la semana ${n}</span></div>${histH}</section>`);continue}
     const nOk=ids.filter(i=>res[i]&&res[i].ok===true).length,nNo=ids.filter(i=>res[i]&&res[i].ok===false).length;
     if(frozen){fz++;tN+=ids.length;tOk+=nOk;tNo+=nNo}
@@ -132,7 +132,7 @@ function renderPlan(main){
     const extra=frozen?Object.entries(liveItems(n,p.id)).filter(([id])=>!(id in items)):[];
     const bySc={};ids.forEach(id=>(bySc[items[id].sc]=bySc[items[id].sc]||[]).push(id));
     let h=`<section class="card plsecv" data-pid="${p.id}"><div class="hd"><span class="p-code">${esc(p.code)}</span>${esc(p.name)}<span class="sub">${ids.length} compromisos</span><span style="flex:1"></span>
-     ${frozen?`<span class="pill ok"${w.refrz?' title="Lo descongelaron y nadie lo volvió a congelar: a las 2 horas el servidor lo volvió a congelar tal como estaba"':w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.refrz?'Congelado otra vez solo':w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
+     ${frozen?`<span class="pill ok"${w.refrz?' title="Lo descongelaron y nadie lo volvió a congelar: a las 2 horas el servidor lo volvió a congelar tal como estaba"':w.auto?' title="Nadie lo congeló a mano antes del corte: lo congeló el servidor"':w.fromVer?` title="Compromisos tomados de la versión «${esc(w.fromVer.label||'')}» del lookahead"`:''}>${w.refrz?'Congelado otra vez solo':w.auto?'Congelado automáticamente':w.fromVer?'Congelado desde versión':'Congelado'} ${new Date(w.frozenAt).toLocaleString('es-PE',{...LIMA_TZ,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:`<span class="pill warn" title="Si nadie lo congela antes, se congela solo el ${frzCutTxt(n)}">Borrador en vivo · se congela solo el ${frzCutTxt(n)}</span>`}
      ${canWrite&&!ED?`<span class="pill neu" title="El plan semanal de este piso lo evalúa su responsable o el administrador">Evalúa ${esc(respOf(p.id).map(r=>r.name).join(', ')||'el responsable')}</span>`:''}
      ${frozen&&(w.propOut||[]).length?`<button class="pill neu" data-propout title="Propuestas de subcontratistas enviadas y sin decidir al congelar: no entraron al compromiso de esta semana. Toca para ver cuáles y qué pasó con ellas">${w.propOut.length} propuesta${w.propOut.length>1?'s':''} fuera al congelar ›</button>`:''}
      ${ED&&frozen?(()=>{const k=ids.filter(id=>{const r=res[id]||{};const sg=SUG.get(id);return sg&&sg.ok!=null&&r.ok==null}).length;return k?`<button class="ib" data-applyfield="1" title="Llena Sí/No, causa y ejecutado de los compromisos aún sin evaluar, según los registros de campo">Aplicar registros de campo (${k})</button>`:''})():''}
@@ -394,7 +394,7 @@ async function propOutShow(n,pid){const w=S.wk.get(wkId(n,pid));if(!w||!(w.propO
   let docs=null,H=[];if(db){const ts=Object.values(T).filter(x=>x>0);const t0=Math.min(fz,...ts)-864e5;
     try{const[a,b]=await Promise.all([fcol('lhprop').get(),fcol('lhphist').where('t','>=',t0).get()]);docs=new Map(a.docs.map(d=>[d.id,d.data()]));const want=new Set(keys.map(o=>o.id));H=b.docs.map(d=>d.data()).filter(h=>h&&want.has(h.actId))}catch(e){docs=null}}
   if(!docs)docs=new Map([...PROP.entries()]);
-  const fdt=t=>t?new Date(t).toLocaleString('es-PE',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
+  const fdt=t=>t?new Date(t).toLocaleString('es-PE',{...LIMA_TZ,weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
   const ST={ok:'Aceptada',shift:'Aceptada con otra fecha',rej:'Rechazada'};let nAfter=0,nPend=0,nLate=0;
   const rows=keys.map(o=>{const raw=((docs.get(o.sc)||{}).items||{})[o.id];const pend=propSentOf(raw);const sent=T[o.k]||0;if(sent&&sent>fz)nLate++;
     const x=S.act.get(o.id)||ARCH.act.get(o.id)||(pend&&(pend.after||pend.base))||(raw&&(raw.after||raw.base))||null;
@@ -423,7 +423,8 @@ const wkHist=id=>[...S.wk.values()].filter(h=>h.histOf===id&&!h.restAt).sort((a,
 function wkKeepOf(n,pid){if(weekDays(n)[0]>todayIso())return null;const L=wkHist(wkId(n,pid));const h=L[L.length-1];const v=h&&h.v;if(!v||!v.items||!Object.keys(v.items).length)return null;
   return{items:v.items,res:v.res||{},cres:v.cres||null,propOut:v.propOut||[],propOutT:v.propOutT||{},restrIn:v.restrIn||{}}}
 async function unfreezeWeek(n,pid){const id=wkId(n,pid);const code=S.pis.get(pid)?.code||'';const w=S.wk.get(id);if(!w||!w.frozenAt||!canWrite)return;
-  const at=new Date(NOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
+  /* TMP-9: la hora del descongelado decide si el congelado automático la respeta (unfrozenAt >= corte): con el desfase medido tal cual */
+  const at=new Date(SNOW()).toISOString();const hid=id+'__h'+at.replace(/\D/g,'').slice(0,14);
   const pack=o=>{const v={};WK_VF.forEach(k=>{if(o[k]!==undefined)v[k]=o[k]});return{histOf:id,n,pisoId:pid,v,unAt:at,unBy:me?me.email:'',unN:me?(me.name||me.email):''}};
   const local=()=>{S.wk.set(hid,{...pack(w),id:hid});S.wk.set(id,{id,n,pisoId:pid,unfrozenAt:at});requestRender()};
   if(!db){local();return}

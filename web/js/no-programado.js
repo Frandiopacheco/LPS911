@@ -99,11 +99,12 @@ function npSave(){if(!NS||!db)return;const desc=NS.desc.trim();
   const ex=NS.exec===''||NS.exec==null?null:parseNum(String(NS.exec));if(Number.isNaN(ex)){toast('La cantidad debe ser un número.');return}
   const id=NS.id||uid('np');const pid=NS.ambId?pisoOfAmb(NS.ambId)||NS.pid:NS.pid;const old=NPM.get(id);
   const fids=NS.newPh.map(data=>{const fid=uid('f');FOTO.set(fid,data);fcol('fotos').doc(fid).set({data,date:NS.d,pisoId:pid,npId:id,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));return fid});
-  const gone=old?(old.photos||[]).filter(f=>!NS.photos.includes(f)):[];
-  const doc={...(old||{}),date:NS.d,pisoId:pid,ambId:NS.ambId||'',sc:NS.sc,desc,exec:ex,und:NS.und.trim().toUpperCase(),note:NS.note.trim(),photos:[...NS.photos,...fids],pt:NS.pt||null,
+  /* C-35 (tanda 3, DAT-09): las fotos quitadas son evidencia: no se borran de «fotos», pasan a phQ (fotos quitadas), como en Campo */
+  const gone=old?(old.photos||[]).filter(f=>!NS.photos.includes(f)):[];const keep=new Set([...NS.photos,...fids]);
+  const phQ=[...new Set([...((old&&old.phQ)||[]),...gone])].filter(f=>!keep.has(f));
+  const doc={...(old||{}),date:NS.d,pisoId:pid,ambId:NS.ambId||'',sc:NS.sc,desc,exec:ex,und:NS.und.trim().toUpperCase(),note:NS.note.trim(),photos:[...NS.photos,...fids],pt:NS.pt||null,...(phQ.length?{phQ}:{}),
     by:old?old.by:me.email,byName:old?old.byName:(me.name||me.email),ts:old?old.ts:NOW(),...(!old&&npSC()?{scProp:true}:{}),...(old?{ed:{by:me.email,n:me.name||me.email,t:NOW()}}:{})};delete doc.id;
   NPM.set(id,{...doc,id});fcol('nprog').doc(id).set(doc).catch(err=>{toast('No se pudo guardar: '+(err.code==='permission-denied'?'falta publicar las reglas nuevas de Firestore':(err.code||err.message)))});
-  gone.forEach(f=>{if(canDaily)fcol('fotos').doc(f).delete().catch(()=>{})});
   toast(old?'Cambios guardados':`No programado registrado${fids.length?' con foto':''}`);npClose();requestRender()}
 /** el ingeniero de campo confirma lo que registró el SC */
 function npVer(){const n=NS&&NPM.get(NS.id);if(!n||!canDaily)return;const doc={...n,ver:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});

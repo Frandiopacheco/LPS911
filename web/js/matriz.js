@@ -406,7 +406,7 @@ async function mxFoto(){if(!mxEd())return;const{a,n}=mxFotoData();
 function mxFotoSum(f){let n=0,t=0,ap=0,sug=0;for(const s of Object.values(f.a||{}))for(const p of String(s).split(',')){const[c,v0]=p.split(':');if(!c||!v0)continue;const v=v0.replace('?','');if(v0.endsWith('?'))sug++;n++;if(v!=='n'){ap++;if(v==='t')t++}}
   return{n,t,ap,sug,old:!(f.v>=2)}}
 function mxFotoHist(nuevo){const L=[...MX.ver.values()].sort((a,b)=>(b.t||0)-(a.t||0));
-  const row=f=>{const s=mxFotoSum(f);return`<div class="mxfh${f.id===nuevo?' nw':''}"><div><b>${esc(fmtD(f.d))}</b> · semana ${esc(String(f.w??''))}${f.id===nuevo?' <span class="pill ok">recién guardada</span>':''}${f.nota?` <span class="pill">${esc(f.nota)}</span>`:''}<br><small class="note">${esc(f.n||f.by||'')} · ${new Date(f.t).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})} · ${s.n} celdas · terminado ${s.ap?Math.round(100*s.t/s.ap):0}%${s.sug?` · ${s.sug} sin validar`:''}</small></div>
+  const row=f=>{const s=mxFotoSum(f);return`<div class="mxfh${f.id===nuevo?' nw':''}"><div><b>${esc(fmtD(f.d))}</b> · semana ${esc(String(f.w??''))}${f.id===nuevo?' <span class="pill ok">recién guardada</span>':''}${f.nota?` <span class="pill">${esc(f.nota)}</span>`:''}<br><small class="note">${esc(f.n||f.by||'')} · ${new Date(f.t).toLocaleTimeString('es-PE',{...LIMA_TZ,hour:'2-digit',minute:'2-digit'})} · ${s.n} celdas · terminado ${s.ap?Math.round(100*s.t/s.ap):0}%${s.sug?` · ${s.sug} sin validar`:''}</small></div>
     <div class="mxfhb"><button class="ib" data-mxfc="${esc(f.id)}"${MX.cmp===f.id?' disabled':''}>${MX.cmp===f.id?'Comparando':'Comparar'}</button>${isAdmin?`<button class="ib" data-mxfr="${esc(f.id)}" title="Solo el administrador">Restablecer…</button>`:''}</div></div>`};
   lqModal(`<div class="lqtop"><b>Fotos semanales de la matriz</b><button class="kx" data-lqx aria-label="Cerrar">×</button></div>
    <p class="note">Las últimas ${L.length} fotos. «Comparar» muestra qué cambió desde esa foto.${isAdmin?' «Restablecer» vuelve la matriz a como estaba en la foto (antes se guarda una foto del estado actual, así se puede volver).':''}</p>
@@ -446,7 +446,7 @@ async function mxExport(){const V=MX.view;if(!V||!V.cols||!V.cols.length){toast(
       const line=[r.p.code,r.s.code+' · '+r.s.name,a.code,a.name,tp?tp.name:'',null];const rs=[];
       cols.forEach((c,i)=>{const o=C[c.id];if(!o){line.push('');rs.push(null);return}line.push(IC[o.s]||'');rs.push(o);
         if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
-        const who=(m.m||{})[c.id];lista.push([r.p.code,r.s.code+' · '+r.s.name,a.code,a.name,tp?tp.name:'',conOf(c.sc).name,c.name,MXS[o.s],o.sug?'No (propuesta del sistema)':'Sí',who?`${who.n||who.by||''} ${who.t?new Date(who.t).toLocaleDateString('es-PE'):''}`.trim():''])});
+        const who=(m.m||{})[c.id];lista.push([r.p.code,r.s.code+' · '+r.s.name,a.code,a.name,tp?tp.name:'',conOf(c.sc).name,c.name,MXS[o.s],o.sug?'No (propuesta del sistema)':'Sí',who?`${who.n||who.by||''} ${who.t?new Date(who.t).toLocaleDateString('es-PE',LIMA_TZ):''}`.trim():''])});
       line[5]=ap?tt/ap:null;aoa.push(line);st.push(rs)}
     aoa.push(['Terminado','','','','',null,...colT.map(t=>t.a?t.t/t.a:null)]);
     const ws=X.utils.aoa_to_sheet(aoa);ws['!merges']=merges;

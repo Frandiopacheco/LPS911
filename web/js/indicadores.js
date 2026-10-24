@@ -123,7 +123,8 @@ function whoFix(r,sn){const w=sn&&sn.who&&sn.who[r.x.id];if(!w)return;if(!(r.rc&
 function dayDataSnap(dates,vset,rows){const adds=[];const seen=new Set(rows.map(r=>r.x.id+'|'+r.d));
   for(let i=rows.length-1;i>=0;i--){const r=rows[i];const sn=dplanOf(r.d,r.p.id);if(!sn||!sn.ids)continue;if(r.x.id in sn.ids){r.sched=true;r.snap=true;whoFix(r,sn)}else{adds.push(r);rows.splice(i,1)}}
   for(const d of dates)for(const pid of vset){const sn=dplanOf(d,pid);if(!sn||!sn.ids)continue;
-    for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;if(doneBefore(id,d)&&!recOf(d,id))continue; /* terminada antes: no se le pide ese día */const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
+    for(const id of Object.keys(sn.ids)){if(seen.has(id+'|'+d))continue;const x=S.act.get(id)||(ARCH.act&&ARCH.act.get(id));if(!x)continue;if(doneBefore(id,d)&&!recOf(d,id))continue;
+      /* DAT-10: archivada antes del Cierre del ingeniero de ese día y sin registro de un ingeniero: fuera (como el servidor) */if(!S.act.has(id)&&archCut(x,d)&&!recReal(d,id))continue; /* terminada antes: no se le pide ese día */const a=ambOf(x.ambId);const sc_=a&&secOf(a.sectorId);const p=pisOf(pid);if(!a||!sc_||!p)continue;
       const nv=recOf(d,id)?null:nvRec(x,d);if(nv==='out')continue;
       const rc=recOf(d,id)||nv||null;
       const r={p,s:sc_,a,x,d,rc,sched:true,snap:true,sc:scAt(rc,x),arch:!S.act.has(id)};whoFix(r,sn);rows.push(r);seen.add(id+'|'+d)}}
