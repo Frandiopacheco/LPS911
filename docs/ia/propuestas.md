@@ -55,3 +55,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Tardías sin motivo:** aceptar una propuesta fuera de plazo (una o en bloque) **ya no pide motivo**; sigue marcada «FUERA DE PLAZO»/«TARDÍA» y queda `late` en `lhphist` (`lateNote` vacío). El motivo solo se pide al rechazar (botones o comentario).
 - **Bloquear siempre a mano:** con la ventana abierta y **sin pendientes**, el panel derecho muestra la pestaña plegada «🔒 Bloquear propuestas» (antes no aparecía en ningún lado: la barra superior se había quitado). En la revisión también está al pie del panel.
 - Pruebas: `propuestas-editar.spec.js` (otra fecha con vista previa; bloquear sin pendientes), `propuestas-tardias.spec.js`.
+
+## Auditoría tanda 3 · frente H (24/10/2026)
+- **C-31 (PER-3):** al aceptar (`propPrep`), si la propuesta cambia el nombre o el SC de una fila con historial (`actHist`, sin contar `actSameName`) y quien decide no es administrador, se aceptan los días y lo demás y el nombre/SC queda como estaba (`opt.histKept`; aviso `propHistTxt`; en «Aceptar todo» se cuenta). El administrador acepta todo. La vista previa de la revisión (`revSwap`) no lo refleja: el aviso sale al aceptar.
+- **C-37 (H11):** si la fila se saltó al renombrar o fusionar en el catálogo (tenía esta propuesta pendiente) y la propuesta no cambia el nombre, al aceptarla entra con el nombre actual del catálogo (`propCatName`: `mxCatOfN` por alias, mismo SC).

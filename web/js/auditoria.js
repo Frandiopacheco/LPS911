@@ -182,6 +182,11 @@ function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const 
   const ambIds=new Set(ops.filter(o=>o.col==='ambientes').map(o=>o.id));if(col==='ambientes')ambIds.add(id);
   for(const x of ARCH.act.values())if(ambIds.has(x.ambId)&&same(x)&&!(col==='acts'&&x.id===id))un('acts',x);
   const seen=new Set();apply(ops.filter(o=>{const k=o.col+'/'+o.id;if(seen.has(k))return false;seen.add(k);return true}),`${ARCN[col]} restaurad${col==='acts'||col==='restr'?'a':'o'}`)}
+/* DAT-11 (tanda 3): lo que contiene a una actividad (ambiente, sector, piso) y está en la Papelera: ops para sacarlo (la parte
+   «hacia arriba» de archRestore). Lo usa Ctrl+Z al devolver una actividad cuyo ambiente se eliminó después. */
+function archUpOps(x){const ops=[];if(!x)return ops;const un=(c,v)=>{const n={...strip(v),id:v.id};delete n.arch;ops.push(op(c,v.id,n))};
+  const a=ARCH.amb.get(x.ambId);if(a)un('ambientes',a);const amb=ambOf(x.ambId);const sec=amb?secOf(amb.sectorId):null;
+  if(sec&&ARCH.sec.has(sec.id))un('sectors',sec);const pid=sec?sec.pisoId:null;if(pid&&ARCH.pis.has(pid))un('pisos',ARCH.pis.get(pid));return ops}
 
 /* ---- calendario de la obra: sábado laborable y feriados ---- */
 let CALP=undefined,CALS=null;

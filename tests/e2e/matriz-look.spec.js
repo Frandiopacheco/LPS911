@@ -72,16 +72,17 @@ test('SC con catálogo exigido: agrega la actividad directo (por revisar) y sigu
   const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }]];
   const errors = await openApp(page, { as: 'sc', tab: 'look', extra });
   await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
-  await nameIn(page, 'i0').fill('Pruebas de presión');
-  await nameIn(page, 'i0').press('Enter');
+  // z1 no tiene historial (i0 sí: tanda 3, C-31, en esa fila se agregaría una fila nueva)
+  await nameIn(page, 'z1').fill('Pruebas de presión');
+  await nameIn(page, 'z1').press('Enter');
   await expect(page.locator('#lqm')).toContainText('Se agrega solo a este ambiente');
   await page.click('#mxaok');
   await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => c.name === 'Pruebas de presión').length)).toBe(1);
   const c = await page.evaluate(() => Object.values(__dbAll('mcat')).find(c => c.name === 'Pruebas de presión'));
   expect(c).toMatchObject({ sc: 'c1', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe', amb: 'a1', tipo: null } });
   // su programación sigue como propuesta (no cambia el lookahead directo)
-  await expect.poll(() => page.evaluate(() => (((__dbGet('lhprop', 'c1') || {}).items || {}).i0 || {}).after?.name)).toBe('Pruebas de presión');
-  expect((await get(page, 'acts', 'i0')).name).toBe('Redes empotradas');
+  await expect.poll(() => page.evaluate(() => (((__dbGet('lhprop', 'c1') || {}).items || {}).z1 || {}).after?.name)).toBe('Pruebas de presión');
+  expect((await get(page, 'acts', 'z1')).name).toBe('Redes emp.');
   noErrors(errors, 'SC agrega');
 });
 
@@ -192,18 +193,18 @@ test('mismo nombre en otro SC: se crea aparte para el SC de la fila (no se compa
   const extra = [...CAT, ['meta', 'project', { ...PROJ, catReq: true }]];
   const errors = await openApp(page, { tab: 'look', extra });
   await expect.poll(() => page.evaluate(() => mxCatReq())).toBe(true);
-  // «Tarrajeo de muros» es de c3 en el catálogo; la fila i0 es de c1
-  await nameIn(page, 'i0').fill('Tarrajeo de muros');
-  await nameIn(page, 'i0').press('Enter');
+  // «Tarrajeo de muros» es de c3 en el catálogo; la fila z1 es de c1 (sin historial: tanda 3, C-31)
+  await nameIn(page, 'z1').fill('Tarrajeo de muros');
+  await nameIn(page, 'z1').press('Enter');
   await expect(page.locator('#lqm')).toContainText('la hace otro subcontratista');
   await expect(page.locator('#lqm [data-mxuse]')).toHaveCount(0); // no ofrece la de c3
   await page.click('#mxaok');
   await expect.poll(() => page.evaluate(() => Object.values(__dbAll('mcat')).filter(c => c.name === 'Tarrajeo de muros').map(c => c.sc).sort())).toEqual(['c1', 'c3']);
-  await expect.poll(async () => (await get(page, 'acts', 'i0')).name).toBe('Tarrajeo de muros');
+  await expect.poll(async () => (await get(page, 'acts', 'z1')).name).toBe('Tarrajeo de muros');
   const r = await page.evaluate(() => {
     const nw = [...MX.cat.values()].find(c => c.name === 'Tarrajeo de muros' && c.sc === 'c1');
-    return { nw: nw && nw.id, of: mxCatOf(S.act.get('i0')), k2scs: MX.cat.get('k2').scs || [],
-      ownC1: (mxNameOwner('Tarrajeo de muros', '', ['c1']) || {}).id, ownC2: mxNameOwner('Tarrajeo de muros', '', ['c2']), badge: mxRowCat(S.act.get('i0')) };
+    return { nw: nw && nw.id, of: mxCatOf(S.act.get('z1')), k2scs: MX.cat.get('k2').scs || [],
+      ownC1: (mxNameOwner('Tarrajeo de muros', '', ['c1']) || {}).id, ownC2: mxNameOwner('Tarrajeo de muros', '', ['c2']), badge: mxRowCat(S.act.get('z1')) };
   });
   expect(r.of).toBe(r.nw);          // la fila de c1 va a la actividad de c1
   expect(r.k2scs).toEqual([]);      // la de c3 no se compartió

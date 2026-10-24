@@ -378,7 +378,13 @@ function undo(){if(!canWrite){toast('No puedes deshacer aquí: la edición está
   if(g.wait&&!g.done){undoS.push(g);g.wait.then(()=>{g.done=true;if(undoS[undoS.length-1]===g)undo()});return}
   /* deshacer tampoco cambia un día ya cerrado (publicado) sin aviso: pasa por el mismo control que cualquier cambio */
   if(typeof lockGuard==='function'&&!lockGuard(g.map(o=>({col:o.col,id:o.id,before:o.after,after:o.before})),()=>undo())){undoS.push(g);return}const dn=[];const sk=replay(g.slice().reverse(),'after','before',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,true);redoS.push(g);updUndo();requestRender();
-  toast(sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho','Rehacer',redo);
+  /* DAT-11 (tanda 3): si vuelve una actividad eliminada y mientras tanto se eliminó su ambiente (o sector, piso), se restaura también
+     lo que la contiene; si no, quedaría activa pero invisible (no se dibuja bajo un ambiente archivado) */
+  let up=[];if(typeof archUpOps==='function'&&!(typeof cliTabOn==='function'&&cliTabOn())){const seen=new Set();for(const o of dn){if(o.col!=='acts'||!o.after||o.after.arch||!o.before||!o.before.arch)continue;
+      for(const u of archUpOps(o.after)){const k=u.col+'/'+u.id;if(!seen.has(k)){seen.add(k);up.push(u)}}}}
+  if(up.length){up.forEach(u=>put(u.col,u.id,u.after));if(typeof lhLog==='function')lhLog(up,'Deshacer: se restauró también lo que contenía la actividad');requestRender()}
+  const upTxt=up.length?` · también se restauró ${up.map(u=>`${u.col==='ambientes'?'el ambiente':u.col==='sectors'?'el sector':'el piso'} ${u.after.code||u.after.name||''}`).join(', ')} (estaba en la Papelera)`:'';
+  toast((sk?`Deshecho en parte: ${sk} cambio(s) no se revirtieron porque otra persona los modificó después`:'Cambio deshecho')+upTxt,'Rehacer',redo);
   /* una propuesta aceptada vuelve a pendientes al deshacer (propuestas.js) */
   if((g.prop||g.props)&&!sk&&typeof propUndoHook==='function')propUndoHook(g,true)}
 function redo(){if(!canWrite)return;const g=redoS.pop();if(!g)return;if(typeof lockGuard==='function'&&!lockGuard(g,()=>redo())){redoS.push(g);return}const dn=[];const sk=replay(g,'before','after',dn);if(!(typeof cliTabOn==='function'&&cliTabOn()))replayLog(g,dn,false);undoS.push(g);updUndo();requestRender();if(sk)toast(`${sk} cambio(s) no se rehicieron porque otra persona los modificó`);if((g.prop||g.props)&&!sk&&typeof propUndoHook==='function')propUndoHook(g,false)}
@@ -651,6 +657,8 @@ function lockWhy(d,pid){const o=dplanOf(d,pid);if(d<todayIso())return'ya pasó';
 function lockHits(ops,strict){const H=[];const t=todayIso();for(const o of ops){if(!o||o.col!=='acts')continue;const b=o.before||{},a=o.after||{};const pid=pisoOfAmb(a.ambId||b.ambId);if(!pid)continue;
     const bd=new Set(b.days||[]),ad=new Set(a.days||[]);const T=new Set();ad.forEach(d=>{if(!bd.has(d))T.add(d)});bd.forEach(d=>{if(!ad.has(d))T.add(d)});
     const bq=b.qty||{},aq=a.qty||{};new Set([...Object.keys(bq),...Object.keys(aq)]).forEach(d=>{if(canon(bq[d]??null)!==canon(aq[d]??null))T.add(d)});
+    /* C-33 (tanda 3, DAT-05): eliminar (archivar) una actividad saca del plan sus días desde hoy, como si se los quitaran */
+    if(a.arch&&!b.arch)(b.days||[]).forEach(d=>{if(d>=t)T.add(d)});
     for(const d of T)if((strict&&d<=t)||(dayLocked(d,pid)&&!recReal(d,o.id)))H.push({d,pid,id:o.id})}return H}
 /* se llama desde apply: false = no se aplica. El administrador puede seguir (queda registrado en el día). */
 let LKOK=false;

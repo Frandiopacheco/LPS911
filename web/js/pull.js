@@ -8,7 +8,7 @@
      (ps.<pid>.d0…), así dos personas no se pisan; mientras alguien arrastra un pósit queda bloqueado para el resto (lk).
    - Enlaces: a>b = «a termina antes de que empiece b». Hitos: ingreso (no empezar antes de) y entrega (terminar a más tardar). */
 const PUL=new Map();let pulUn=null,pulErr=null;
-const PU={sid:'',amb:'',sel:'',selL:'',ghost:false,fs:false,drag:null,rev:false,add:null,hitos:false,newS:null,undo:[],pend:false,apOv:false,apRs:true};
+const PU={sid:'',amb:'',sel:'',selL:'',ghost:false,fs:false,drag:null,rev:false,add:null,hitos:false,newS:null,undo:[],pend:false,apOv:false,apRs:true,apDn:false};
 const pulEd=()=>!!me&&(me.role==='admin'||me.role==='editor');
 const PU_W=()=>PU.fs?64:56, PU_LW=180, PU_HH=50;
 function ensurePull(){if(!db||pulUn||!pulEd())return;
@@ -136,7 +136,12 @@ function puBoard(s){const D=puDays(s);const IX=new Map(D.map((d,i)=>[d,i]));cons
     <div class="pufoot">${sel?puSelPanel(s,sel,N,B):`<div class="puhint"><b>Arrastra un pósit para cambiar su día. Para enlazar, jala desde su círculo → hasta lo que va después (u otro hito).</b><span>Desde un hito de ingreso (◆ arriba) jala hasta una actividad para que no empiece antes. Toca una flecha para quitarla. Rojo = choque. «+» en cada franja agrega una actividad.</span></div>`}</div></div>`;
   if(PU.add)h+=puAddDlg(s);if(PU.rev)h+=puRevDlg(s);return h}
 const PU_SEQ=['CPP911','GABEL ESTRUCTURAS','GECODEM','MWF','TECNIFLOOR','CANOVAS VM','CHITR','JV','GABEL PINTURA','CYM','ICR-ACI','ICR-DACI','DECORLUX','ILLAPAY','FORGA'];
-function PU_ORD(sc){const n=String(conOf(sc).name||'').toUpperCase();const i=PU_SEQ.indexOf(n);return i<0?50:i}
+/* DAT-08 (tanda 3): orden por id, no por nombre: primero el lugar del SC en el tren de la Matriz (el menor mcat.tr de sus
+   actividades); PU_SEQ (nombres) queda solo como respaldo para SC sin actividades en el tren */
+let PUOC=null;
+function PU_ORD(sc){if(typeof MX!=='undefined'&&MX.ld&&MX.ld.cat){if(!PUOC||PUOC.v!==MX.v){const m=new Map();for(const c of MX.cat.values()){if(c.arch||typeof c.tr!=='number')continue;for(const s of mxScsOf(c))if(!m.has(s)||c.tr<m.get(s))m.set(s,c.tr)}PUOC={v:MX.v,m}}
+    const tr=PUOC.m.get(sc);if(tr!=null)return tr}
+  const n=String(conOf(sc).name||'').toUpperCase();const i=PU_SEQ.indexOf(n);return 1e6+(i<0?50:i)}
 function puTint(hex){const m=/^#?([0-9a-f]{6})$/i.exec(hex||'');if(!m)return'#eef1ee';const n=parseInt(m[1],16);const f=c=>Math.round(c+(255-c)*.74);return`rgb(${f(n>>16)},${f((n>>8)&255)},${f(n&255)})`}
 function puSelLBox(s){if(!PU.selL||!PU._selPos||!(s.ln||{})[PU.selL])return'';const i=PU.selL.indexOf('>');const a=PU.selL.slice(0,i),b=PU.selL.slice(i+1);const p=PU._selPos;
   return`<div class="pusl" style="left:${Math.max(PU_LW+4,p.x-150)}px;top:${p.y-54}px"><span>${esc(puName(s,a))} → ${esc(puName(s,b))}</span>${pulEd()?'<button class="ib dng" data-pu="rmlink">× Quitar enlace</button>':''}<button class="ib" data-pu="clrl" aria-label="Cerrar">×</button></div>`}
@@ -165,12 +170,12 @@ function puAddDlg(s){const A=PU.add;const scs=[...S.con.values()].filter(c=>!c.a
     <div class="puchs">${sug.map(n=>`<button type="button" class="puch sug" data-pusg="${esc(n)}">${esc(n)}</button>`).join('')}</div>
     <div class="pudf"><span class="mu">Aparece en su franja; arrástrala a su día y enlázala jalando desde su borde.</span><button class="ib" data-pu="addx">Cancelar</button><button class="ib pri" data-pu="addok">Agregar</button></div></div></div>`}
 /* ---------- revisión y aplicación al lookahead ---------- */
-function puPlan(s){const t=todayIso();const R=[],ops=[],moved=[],cat=[];let nNew=0;
+function puPlan(s){const t=todayIso();const R=[],ops=[],moved=[],cat=[],dn=[];let nNew=0;const nid={};
   const run=(d0,n)=>{const L=[];let d=d0,g=0;if(!isWork(d))d=wshift(d,1);while(L.length<n&&g++<500){if(d>t&&isWork(d))L.push(d);d=addD(d,1)}return L};
   const orderOf=amb=>{const sib=[...S.act.values()].filter(x=>x.ambId===amb);return sib.reduce((m,x)=>Math.max(m,+x.order||0),0)};const ordAdd={};
   for(const[pid,p]of Object.entries(s.ps||{})){const am=S.amb.get(p.amb);if(!am)continue;const dur=Math.max(1,+p.dur||1);
     if(p.nw){if(p.del)continue;if(typeof mxCatReq==='function'&&mxCatReq()&&!mxAli().get(mnk(p.n))){cat.push(p);continue}const nd=run(p.d0,dur);const id='act-'+pid.replace(/^[^-]*-/,'')+'p';ordAdd[p.amb]=(ordAdd[p.amb]||orderOf(p.amb))+10;
-      ops.push(op('acts',id,{id,ambId:p.amb,sc:p.sc,name:p.n,und:'',metrado:null,days:nd,order:ordAdd[p.amb]}));R.push({pid,p,am,was:'—',now:puShort(nd[0])+' → '+puShort(nd[nd.length-1]),chg:'Nueva',k:'new'});nNew++;continue}
+      nid[pid]=id;ops.push(op('acts',id,{id,ambId:p.amb,sc:p.sc,name:p.n,und:'',metrado:null,days:nd,order:ordAdd[p.amb]}));R.push({pid,p,am,was:'—',now:puShort(nd[0])+' → '+puShort(nd[nd.length-1]),chg:'Nueva',k:'new'});nNew++;continue}
     const x=p.src&&S.act.get(p.src);if(!x)continue;const b=(s.base||{})[p.src]||{days:x.days||[]};const bf=(b.days||[]).filter(d=>d>t);const cur=(x.days||[]).slice().sort();
     const changedLk=JSON.stringify(cur)!==JSON.stringify((b.days||[]).slice().sort());let fut;
     if(p.del)fut=[];else if(bf.length&&p.d0===bf[0]&&dur===bf.length)continue;
@@ -180,7 +185,11 @@ function puPlan(s){const t=todayIso();const R=[],ops=[],moved=[],cat=[];let nNew
     const sh=bf.length&&fut.length?wdist(bf[0],fut[0]):0;
     const chg=p.del?'Se quitan los días desde mañana':[sh?(sh>0?'+':'')+sh+' d':'',dur!==bf.length?'dura '+dur+' d':''].filter(Boolean).join(' · ')||'reprogramada';
     const row={pid,p,am,x,was:bf.length?puShort(bf[0])+' → '+puShort(bf[bf.length-1]):'—',now:fut.length?puShort(fut[0])+' → '+puShort(fut[fut.length-1]):'—',chg,k:p.del?'del':sh>0?'late':'early',lk:changedLk};
+    /* CON-09 (tanda 3): culminada en Campo (quizá después de abrir la sesión): los días nuevos después de la fecha de terminada
+       quedarían «liberados» (rayados) y fuera del plan. Se avisa; por defecto no se tocan; si se aplican, la actividad se reabre */
+    const dnx=!p.del&&DONE.get(x.id);if(dnx&&fut.some(d=>d>dnx)){row.dn=dnx;row.fut=fut}
     R.push(row);if(changedLk){moved.push(row);if(!PU.apOv)continue}
+    if(row.dn){dn.push(row);if(!PU.apDn)continue}
     /* C-19 (CON-06): el metrado por día se mueve con sus días (el i-ésimo día futuro pasa al i-ésimo nuevo; si la actividad se acorta,
        lo que sobra se suma al último día, así no se pierde metrado; los días agregados quedan «sin cantidad», como al pintar) */
     const nx={...x,days:nd};if(x.qty){const cf=cur.filter(d=>d>t),fs=[...new Set(fut)].sort();const nq={};
@@ -189,21 +198,24 @@ function puPlan(s){const t=todayIso();const R=[],ops=[],moved=[],cat=[];let nNew
     ops.push(op('acts',x.id,nx))}
   /* choques sin resolver → restricciones (tarea predecesora) */
   const D=puDays(s);const IX=new Map(D.map((d,i)=>[d,i]));const N=puNodes(s,IX);const rs=[];
-  puBad(s,N).forEach(l=>{const bp=(s.ps||{})[l.b];if(!bp||puIsH(l.b))return;const act=bp.nw?null:bp.src;if(!act||!S.act.get(act))return;
+  /* CON-10 (tanda 3): también los choques con un pósit nuevo (su fila se crea en este mismo paso: id de nid); si no se crea
+     (fuera del catálogo), el choque se lista igual, sin restricción */
+  puBad(s,N).forEach(l=>{const bp=(s.ps||{})[l.b];if(!bp||puIsH(l.b)||bp.del)return;const act=bp.nw?(nid[l.b]||null):bp.src;if(!bp.nw&&(!act||!S.act.get(act)))return;
     const an=puName(s,l.a);const asc=puIsH(l.a)?'':conOf(((s.ps||{})[l.a]||{}).sc).name;
     rs.push({act,txt:`«${bp.n}» (${conOf(bp.sc).name}) necesita antes «${an}»${asc?' ('+asc+')':''}`,desc:`Sesión pull «${s.nom||''}»: necesita terminado antes «${an}»${asc?' de '+asc:''}`,resp:puIsH(l.a)?'':asc,sc:bp.sc,need:bp.d0,typ:puIsH(l.a)?'MATERIALES':'TAREA PREDECESORA'})});
-  return{R,ops,moved,cat,rs,nNew}}
-function puRevDlg(s){const X=puPlan(s);const ap=isAdmin||isPisoResp(s.piso);const nOps=X.ops.length+(PU.apRs?X.rs.length:0);
-  const rows=X.R.map(r=>`<tr class="${r.lk?'pulk':''}"><td>${esc(r.am.name||'')}</td><td>${esc(r.p.n)}</td><td>${esc(conOf(r.p.sc).name)}</td><td class="mono">${r.was}</td><td class="mono">${r.now}</td><td class="puk ${r.k}">${esc(r.chg)}${r.lk?' · <b>cambió en el lookahead</b>':''}</td></tr>`).join('');
+  return{R,ops,moved,cat,rs,nNew,dn}}
+function puRevDlg(s){const X=puPlan(s);const ap=isAdmin||isPisoResp(s.piso);const nOps=X.ops.length+(PU.apRs?X.rs.filter(r=>r.act).length:0);
+  const rows=X.R.map(r=>`<tr class="${r.lk?'pulk':''}"><td>${esc(r.am.name||'')}</td><td>${esc(r.p.n)}</td><td>${esc(conOf(r.p.sc).name)}</td><td class="mono">${r.was}</td><td class="mono">${r.now}</td><td class="puk ${r.k}">${esc(r.chg)}${r.lk?' · <b>cambió en el lookahead</b>':''}${r.dn?` · <b>culminada en Campo el ${fmtD(r.dn)}</b>`:''}</td></tr>`).join('');
   return`<div class="pumod" data-purevx="1"><div class="pudlg wide" role="dialog" aria-modal="true" aria-label="Revisar la sesión"><span class="pulb">Borrador de la sesión · revisión antes de aplicar</span><h3>${X.R.length} cambio${X.R.length===1?'':'s'} frente al lookahead</h3>
     ${X.moved.length?`<div class="callout warn"><b>${X.moved.length} actividad(es) cambiaron en el lookahead desde que se abrió la sesión</b> (otra persona las movió). Por defecto no se tocan.<label class="puck"><input type="checkbox" data-puov="1"${PU.apOv?' checked':''}> Aplicar también esas (la sesión pisa lo que cambiaron)</label></div>`:`<div class="callout ok">Nadie cambió estas actividades en el lookahead desde que se abrió la sesión.</div>`}
+    ${X.dn.length?`<div class="callout warn"><b>${X.dn.length} actividad(es) ya están culminadas en Campo</b> (${esc(X.dn.map(r=>`${r.p.n} el ${fmtD(r.dn)}`).join(' · '))}): los días nuevos quedarían liberados (rayados) y fuera del plan. Por defecto no se tocan.<label class="puck"><input type="checkbox" data-pudn="1"${PU.apDn?' checked':''}> Aplicarlas igual y reabrirlas (falta una parte del trabajo)</label></div>`:''}
     ${X.cat.length?`<div class="callout warn">No se crean porque no están en el catálogo (Matriz › Catálogo exige catálogo): ${esc(X.cat.map(p=>p.n).join(' · '))}. Agrégalas al catálogo o cámbiales el nombre.</div>`:''}
     <div class="purvt"><table class="t"><thead><tr><th>Ambiente</th><th>Actividad</th><th>Subcontratista</th><th>Lookahead</th><th>Sesión</th><th>Cambio</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="mu">Sin cambios de fechas.</td></tr>'}</tbody></table></div>
-    ${X.rs.length?`<div class="purs"><label class="puck"><input type="checkbox" data-pursk="1"${PU.apRs?' checked':''}> Crear ${X.rs.length} restricción(es) por los choques que quedan sin resolver</label><ul>${X.rs.map(r=>`<li>${esc(r.txt)}</li>`).join('')}</ul></div>`:''}
+    ${X.rs.length?`<div class="purs"><label class="puck"><input type="checkbox" data-pursk="1"${PU.apRs?' checked':''}> Crear ${X.rs.length} restricción(es) por los choques que quedan sin resolver</label><ul>${X.rs.map(r=>`<li>${esc(r.txt)}${r.act?'':' <span class="mu">(sin restricción: ese pósit no se crea)</span>'}</li>`).join('')}</ul></div>`:''}
     <div class="pudf"><span class="mu">Se cambian solo días desde mañana, todo en un solo paso (Deshacer lo revierte).${ap?'':' Solo el responsable del piso o un administrador puede aplicarla.'}</span><button class="ib" data-pu="revx">Volver al tablero</button><button class="ib pri" data-pu="apply"${ap&&nOps?'':' disabled'}>Aplicar al lookahead</button></div></div></div>`}
 function puApply(){const s=puCur();if(!s)return;if(!(isAdmin||isPisoResp(s.piso))){toast('Solo el responsable del piso o un administrador puede aplicar la sesión.');return}
   const X=puPlan(s);const ops=X.ops.slice();const tp=P().restrTypes||[];const typ=n=>tp.includes(n)?n:(tp[0]||n);
-  if(PU.apRs)X.rs.forEach(r=>{const id=uid('restr');ops.push(op('restr',id,{id,actId:r.act,pisoId:s.piso,type:typ(r.typ),desc:r.desc,resp:r.resp,...(respScOf(r.resp)?{respSc:respScOf(r.resp)}:{}),need:r.need,freed:'',status:'pend',created:todayIso(),sc:r.sc,by:me.email,byName:me.name||''}))});
+  if(PU.apRs)X.rs.filter(r=>r.act).forEach(r=>{const id=uid('restr');ops.push(op('restr',id,{id,actId:r.act,pisoId:s.piso,type:typ(r.typ),desc:r.desc,resp:r.resp,...(respScOf(r.resp)?{respSc:respScOf(r.resp)}:{}),need:r.need,freed:'',status:'pend',created:todayIso(),sc:r.sc,by:me.email,byName:me.name||''}))});
   if(!ops.length){toast('No hay cambios para aplicar.');return}
   const nA=X.ops.length,nR=ops.length-nA;
   const ok=apply(ops,`Sesión pull aplicada: ${nA} actividad(es)${nR?` y ${nR} restricción(es)`:''}`,()=>{
@@ -212,7 +224,9 @@ function puApply(){const s=puCur();if(!s)return;if(!(isAdmin||isPisoResp(s.piso)
     X.ops.forEach(o=>{if(o.col!=='acts'||!o.after)return;const a=o.after;const pid=Object.keys(s.ps||{}).find(k=>{const p=s.ps[k];return p.src===a.id||(p.nw&&('act-'+k.replace(/^[^-]*-/,'')+'p')===a.id)});
       upd['base.'+a.id]={days:a.days,name:a.name||'',sc:a.sc||''};if(!pid)return;const fut=a.days.filter(d=>d>t);
       if(!fut.length){upd['ps.'+pid]=undefined;return}upd['ps.'+pid+'.d0']=fut[0];upd['ps.'+pid+'.dur']=fut.length;upd['ps.'+pid+'.src']=a.id;upd['ps.'+pid+'.nw']=undefined});
-    puWrite(upd,false);PU.rev=false;PU.undo=[];requestRender()});
+    puWrite(upd,false);PU.rev=false;PU.undo=[];
+    /* CON-09: las culminadas que se aplicaron igual se reabren (como al programar un día rayado en el lookahead) */
+    X.dn.forEach(r=>{if(X.ops.some(o=>o.id===r.x.id))reopenAfter(r.x.id,r.fut)});requestRender()});
   if(ok===false)return}
 /* ---------- planos y pantalla completa ---------- */
 function puPlanos(){const s=puCur();if(!s)return;if(!canPla()){toast('No tienes acceso a los planos.');return}plSub();
@@ -248,7 +262,7 @@ function puWire(main){
     else if(k==='back'){if(PU.fs)puFs(false);PU.sid='';PU.sel='';PU.selL='';requestRender()}
     else if(k==='planos')puPlanos();
     else if(k==='fs')puFs(!PU.fs);
-    else if(k==='rev'){PU.rev=true;PU.apOv=false;PU.apRs=true;requestRender()}
+    else if(k==='rev'){PU.rev=true;PU.apOv=false;PU.apRs=true;PU.apDn=false;requestRender()}
     else if(k==='revx'){PU.rev=false;requestRender()}
     else if(k==='apply')puApply();
     else if(k==='hitos'){PU.hitos=!PU.hitos;requestRender()}
@@ -273,7 +287,8 @@ function puWire(main){
     else if(t.dataset.puhn&&s){const v=t.value.trim();if(v)puWrite({['h.'+t.dataset.puhn+'.n']:v})}
     else if(t.dataset.puhdt&&s&&t.value){puWrite({['h.'+t.dataset.puhdt+'.d']:t.value})}
     else if(t.dataset.puov){PU.apOv=t.checked;requestRender()}
-    else if(t.dataset.pursk){PU.apRs=t.checked;requestRender()}});
+    else if(t.dataset.pursk){PU.apRs=t.checked;requestRender()}
+    else if(t.dataset.pudn){PU.apDn=t.checked;requestRender()}});
   /* arrastre: cuerpo del pósit = mover de día; círculo → (o un hito de arriba) = enlazar */
   main.addEventListener('pointerdown',e=>{if(U.tab!=='pull'||!pulEd()||e.button>0)return;const s=puCur();if(!s)return;const t=e.target;
     const hd=t.closest('[data-puh]'),hh=t.closest('[data-puhd]'),pp=t.closest('.pup');

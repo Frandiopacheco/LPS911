@@ -112,12 +112,25 @@ async function npDel(){const n=NS&&NPM.get(NS.id);if(!n)return;if(!await uiAsk({
   const doc={...n,del:true,ed:{by:me.email,n:me.name||me.email,t:NOW()}};delete doc.id;NPM.set(n.id,{...doc,id:n.id});
   fcol('nprog').doc(n.id).set(doc).catch(err=>toast('No se pudo anular: '+(err.code||err.message)));toast('Registro anulado');npClose();requestRender()}
 /** El ingeniero lo pasa al lookahead: una actividad nueva en ese ambiente con ese día marcado. */
+/* CON-11 (tanda 3): la fila nace con un nombre del catálogo (vínculo con la Matriz). Si el texto del registro coincide con una
+   actividad del catálogo de ese SC, se usa; si no, se abre el selector del catálogo (mxNoCatDlg) con las parecidas primero y la opción
+   de agregarla ahí mismo (solo ese ambiente o todos los del tipo). El texto libre original queda como nota de la fila (obs). */
 function npToLook(){const n=NS&&NPM.get(NS.id);if(!n||!canWrite)return;if(!n.ambId){toast('Primero elige el ambiente.');return}
-  const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
-  /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
-  apply([op('acts',aid,{id:aid,ambId:n.ambId,sc:n.sc,name:n.desc,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10})],'Trabajo no programado pasado al lookahead',()=>{if(!S.act.has(aid))return;
-  const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
-  toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code);npClose()})}
+  const desc=String(n.desc||'').replace(/\s+/g,' ').trim();
+  const go=(name,c)=>{const sib=siblings('acts','ambId',n.ambId);const last=sib[sib.length-1];const aid=uid('act');
+    const row={id:aid,ambId:n.ambId,sc:n.sc,name,und:n.und||'',metrado:null,days:[n.date],order:last?last.order+10:10};
+    if(c&&c.sc&&!mxScsOf(c).includes(n.sc)&&S.con.has(c.sc))row.sc=c.sc;
+    if(desc&&mnk(desc)!==mnk(name))row.obs=`No programado del ${fmtD(n.date)}: «${desc}»`;
+    /* si el día está cerrado (lockGuard) no se crea nada: el registro queda sin enlace y sin aviso de éxito */
+    apply([op('acts',aid,row)],'Trabajo no programado pasado al lookahead',()=>{if(!S.act.has(aid))return;
+    const doc={...n,actId:aid};delete doc.id;NPM.set(n.id,{...doc,id:n.id});fcol('nprog').doc(n.id).set(doc).catch(()=>{});
+    toast('Agregado al lookahead en '+(S.amb.get(n.ambId)||{}).code+(name!==desc?` como «${name}»`:''));npClose()})};
+  if(typeof ensureMcat==='function')ensureMcat();
+  const hasCat=typeof MX!=='undefined'&&MX.ld&&MX.ld.cat&&typeof mxCatAct0==='function'&&mxCatAct0().length;
+  if(!hasCat){go(desc);return}
+  const id=mxPickSc(mnk(desc),n.sc);const c=id&&MX.cat.get(id);if(c&&!c.arch){go(c.name,c);return}
+  mxNoCatDlg(desc,{id:null,name:'',sc:n.sc,ambId:n.ambId},null,{done:c=>go(c.name,c.free?null:c),free:desc,title:'Pasar al lookahead: ¿qué actividad del catálogo es?',
+    note:`Registrado en obra como «${esc(desc)}» (${esc(conOf(n.sc).name)}). Elige la actividad del catálogo o agrégala; el texto original queda como nota de la fila.`})}
 
 /* ---------- lista del día (Campo › Tarjetas y debajo del plano) ---------- */
 function npCard(i){const e=i.e;const c=conOf(e.sc);const am=i.a;const legacy=i.src==='dx';
