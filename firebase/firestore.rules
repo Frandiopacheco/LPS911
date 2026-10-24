@@ -332,6 +332,14 @@ service cloud.firestore {
         && request.resource.data.d is string && request.resource.data.n is string;
       allow delete: if isAdmin();
     }
+    // Revisión de flujos por ambiente (oct 2026, js/flujos.js): la ven todos los de LPS; la escriben el SC (de su partida) y los
+    // ingenieros (admin, editor, campo). No se borra (borrar, solo el administrador).
+    match /frev/{id} {
+      allow read: if lpsMember();
+      allow create, update: if (canDaily() || (isSC() && request.resource.data.get('sc', '') in scsOf()))
+        && request.resource.data.f is map && request.resource.data.n is number;
+      allow delete: if isAdmin();
+    }
     match /pull/{id} {
       allow read: if lpsMember();
       allow create, update: if canEdit() && request.resource.data.ps is map && request.resource.data.piso is string;

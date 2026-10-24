@@ -1633,3 +1633,15 @@ test('hitos: admin, editores y Planificación los gestionan; el resto solo los v
   // el área Planificación no edita el lookahead
   await assertFails(setDoc(doc(user('plan@obra.pe'), 'acts/x-plan'), { name: 'x', ambId: 'a1', sc: 'c1', days: [] }));
 });
+
+// Revisión de flujos por ambiente (oct 2026): la escriben el SC (de su partida) y los ingenieros; todos la ven
+test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se borra', async () => {
+  const R = sc => ({ n: 59, amb: 'a1', sc, pid: 'p1', f: { mat: 'ok' }, st: 'ok', by: 'x', t: 1 });
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'frev/59_a1_c-gabel'), R('c-gabel')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'frev/59_a1_c-otro'), R('c-otro')));
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER]) await assertSucceeds(setDoc(doc(user(who), 'frev/59_a2_c-otro'), R('c-otro')));
+  for (const who of ['lector@obra.pe', 'ot@obra.pe']) await assertFails(setDoc(doc(user(who), 'frev/59_a3_c-otro'), R('c-otro')));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'frev/59_a4_c-otro'), { ...R('c-otro'), f: 'mal' }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frev/59_a1_c-gabel')));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'frev/59_a1_c-gabel')));
+});

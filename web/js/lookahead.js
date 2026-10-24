@@ -116,7 +116,7 @@ function buildLookShell(main){
   main.dataset.built='1';
 }
 let gridRows=null,gridHead='',lkQTimer=0;
-function renderLook(main){if(typeof ensureMx==='function')ensureMx();if(typeof ensureHitos==='function')ensureHitos();
+function renderLook(main){if(typeof ensureMx==='function')ensureMx();if(typeof ensureHitos==='function')ensureHitos();if(typeof ensureFrev==='function')ensureFrev();
   /* la pestaña Cliente siempre con la tabla (la vista de celular no tiene la capa del cliente) */
   if(isMob()&&!U.lookFull&&!U.cliv){main.dataset.built='';renderLookMob(main);return}
   ensureDaily(addD(weekStart(U.week),-7));ensureVers();
@@ -226,7 +226,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
   const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':'')+(typeof hitDayCls==='function'?hitDayCls(x2.d):''),f:fmtD(x2.d),past:x2.d<=today}));
-  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';const PERS=U.qmode==='personal'&&!CV;const H1=PERS&&scSel().length===1?scSel()[0]:'';const HIS=H1?new Map(days.map(x=>[x.d,0])):null;let HNR=0;
+  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';const FSTRIP=!CV&&!(U.ver&&U.verMode==='ver')&&typeof frevStripMap==='function'?frevStripMap():null;const PERS=U.qmode==='personal'&&!CV;const H1=PERS&&scSel().length===1?scSel()[0]:'';const HIS=H1?new Map(days.map(x=>[x.d,0])):null;let HNR=0;
   /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
      las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
   const ctx=lkCtx();
@@ -290,7 +290,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
         const rs=Math.max(1,vis.length+gh.length);
-        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${roS}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${roS}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${nT?`<button class="ghchip mxtc" data-mxtamb="${a.id}" title="La Matriz las da como ${nTn===nT?'«No aplica»':nTn?'terminadas o «No aplica»':'terminadas'}, pero siguen programadas desde mañana (días rayados). Clic: ver cuáles">${nTn===0?nT+' ✓':nTn===nT?nT+' no aplica':(nT-nTn)+' ✓ · '+nTn+' no aplica'} en Matriz</button>`:''}${nI?`<span class="ghchip tinvc" title="${esc(vis.filter(x=>TI.has(x.id)).map(x=>x.name+': '+lkTrInvTip(TI.get(x.id))).join('\n'))}">⚠ ${nI} fuera de secuencia</span>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
+        const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${roS}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${roS}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${nT?`<button class="ghchip mxtc" data-mxtamb="${a.id}" title="La Matriz las da como ${nTn===nT?'«No aplica»':nTn?'terminadas o «No aplica»':'terminadas'}, pero siguen programadas desde mañana (días rayados). Clic: ver cuáles">${nTn===0?nT+' ✓':nTn===nT?nT+' no aplica':(nT-nTn)+' ✓ · '+nTn+' no aplica'} en Matriz</button>`:''}${FSTRIP&&FSTRIP.has(a.id)?fstripHtml(FSTRIP.get(a.id),a.id):''}${nI?`<span class="ghchip tinvc" title="${esc(vis.filter(x=>TI.has(x.id)).map(x=>x.name+': '+lkTrInvTip(TI.get(x.id))).join('\n'))}">⚠ ${nI} fuera de secuencia</span>`:''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length&&!gh.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         /* las fantasmas se ubican según el tren de trabajo (matriz-tren.js); las filas reales no cambian de orden */
         const MS=gh.length&&typeof lkGhMerge==='function'?lkGhMerge(vis,gh):vis.map(x=>({x})).concat(gh.map(g=>({g})));
@@ -584,6 +584,7 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
   });
   tbl.addEventListener('click',e=>{
     {const hm=e.target.closest('[data-hito]');if(hm){hitDayPop(hm,hm.dataset.hito);return}}
+    {const fs=e.target.closest('[data-fstrip]');if(fs){frevOpen({amb:fs.dataset.fstrip});return}}
     const dh=e.target.closest('th[data-dh]');if(dh){if(performance.now()-LKDH_LP<900)return;U.day=U.day===dh.dataset.dh?'':dh.dataset.dh;U.wkF=0;requestRender();return}
     const wh=e.target.closest('th[data-wkh]');if(wh){const w=+wh.dataset.wkh;U.wkF=U.wkF===w?0:w;U.day='';requestRender();return}
     const b=e.target.closest('button,[data-goto-restr],[data-obs]');if(!b)return;

@@ -353,7 +353,7 @@ function renderInd(main){
   h+=`<div class="card chart"><h2>PPC semanal histórico <span class="sub">anteriores al sistema: cargadas a mano · desde que se congela: el plan semanal</span>${isAdmin?' <button class="ib" id="bppch">✎ Cargar PPC histórico</button>':''}</h2><div class="pad tscroll">${histP.length?linesLegend()+svgLines(histP)+(histP.some(p=>p.man)?'<p class="note">Las semanas cargadas a mano no tienen PPC del SC.</p>':''):'<div class="empty">Sin semanas evaluadas.</div>'}</div></div>`;
   {const nmS=sc=>(scP[sc]&&scP[sc].nm)||conOf(sc).name;const e=Object.entries(scP).sort((a,b)=>nmS(a[0]).localeCompare(nmS(b[0])));
    if(e.length)h+=`<details class="card ixd-det"><summary>Tabla detallada por subcontratista <span class="sub">semana ${U.week}</span></summary><div class="pad">${wkScTable(e,sc=>scLabel(sc,nmS(sc)))}</div></details>`}
-  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M)+asRelCard(U.week,vset,M)+propWhyCard(U.week,M);
+  h+=reproCard(U.week,vset,M)+restrCauseCard(U.week,vset,M)+(typeof flujCard==='function'?flujCard(U.week,vset,M):'')+asRelCard(U.week,vset,M)+propWhyCard(U.week,M);
   const days=winDays();const load={};
   for(const x of S.act.values()){if(!vset.has(pisoOfAmb(x.ambId)))continue;for(const d of x.days||[])(load[x.sc]=load[x.sc]||{})[d]=(load[x.sc][d]||0)+1}
   const scs=Object.keys(load).filter(sc=>(!M||M.has(sc))&&days.some(x=>load[sc][x.d])).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));
