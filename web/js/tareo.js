@@ -100,7 +100,7 @@ function tFecha(v){if(v==null||v==='')return'';
   m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);return m?m[0]:''}
 const tFmt=s=>s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'';
 /* columnas del máster de RR.HH. por su encabezado */
-const TM_FIELDS=[['nom','Nombre',/^NOMBRE/],['ing','Fecha de ingreso',/INGRESO/],['pue','Título puesto',/PUESTO/],['cua','Categoría (cuadrilla)',/^CATEGORIA/],['dni','DNI',/^(DNI|DOC)/],['ces','Comentarios / cese',/COMENTARIO|CESE/],['mot','Motivo de cese',/MOTIVO/]];
+const TM_FIELDS=[['nom','Nombre',/^NOMBRE/],['ing','Fecha de ingreso',/INGRESO/],['pue','Título puesto',/PUESTO/],['cua','Categoría (cuadrilla)',/^CATEGORIA/],['dni','DNI',/^(DNI|DOC)/],['ces','Comentarios / cese',/COMENTARIO|CESE/],['mot','Motivo de cese',/MOTIVO/],['cat','Cat. obrero (opcional)',/^CAT\.? ?OBRERO/]];
 function tMasterCols(rows){for(let i=0;i<Math.min(rows.length,40);i++){const r=(rows[i]||[]).map(tFold);if(!r.some(x=>/^DNI$/.test(x))||!r.some(x=>/^NOMBRE/.test(x)))continue;
     const m={hdr:i};for(const[k,,re]of TM_FIELDS){const j=r.findIndex(x=>re.test(x));if(j>=0)m[k]=j}
     if(m.mot==null&&m.ces!=null&&!r[m.ces+1])m.mot=m.ces+1;/* 9.ª columna sin encabezado */return m}
@@ -117,10 +117,12 @@ function tParseMaster(rows,cols,hoy){rows=rows||[];const c=cols&&cols.dni!=null?
     const cv=g(r,'ces');const ces=tFecha(cv);const mot=ces?String(g(r,'mot')??'').trim().replace(/\s+/g,' '):'';
     const ing=tFecha(g(r,'ing'));if(!ing)errores.push({fila:i+1,txt:'Sin fecha de ingreso (se importa igual)',nom:nm,warn:true});
     const pue=String(g(r,'pue')??'').trim().replace(/\s+/g,' ').toUpperCase(),cua=String(g(r,'cua')??'').trim().replace(/\s+/g,' ').toUpperCase();
-    const L=by.get(dni)||[];L.push({ing,ces,mot,ape,nom,pue,cua,fila:i+1});by.set(dni,L)});
+    /* «Cat. obrero» (Exportar para editar, 25-10-2026): si viene, manda sobre la que sale del puesto */
+    const cx=tFold(g(r,'cat'));const catX=!cx?'':cx.startsWith('OPER')?'OP':cx.startsWith('OFIC')?'OF':cx.startsWith('PEON')?'PE':cx.startsWith('CAPA')?'CA':cx.startsWith('OTRO')?'OT':'';
+    const L=by.get(dni)||[];L.push({ing,ces,mot,ape,nom,pue,cua,catX,fila:i+1});by.set(dni,L)});
   const fichas=[];for(const[dni,L]of by){L.sort((a,b)=>(a.ing||'').localeCompare(b.ing||'')||a.fila-b.fila);
     const per=[];for(const x of L){const p=per[per.length-1];if(p&&p.ing===x.ing){if(!p.ces&&x.ces){p.ces=x.ces;p.mot=x.mot}continue}per.push({ing:x.ing,ces:x.ces,mot:x.mot})}
-    const u=L[L.length-1],lp=per[per.length-1];const f={dni,ape:u.ape,nom:u.nom,pue:u.pue,cat:tCatDe(u.pue),cua:u.cua,ing:lp.ing,ces:lp.ces,mot:lp.mot,per};f.act=tActivo(f,hoy);fichas.push(f)}
+    const u=L[L.length-1],lp=per[per.length-1];const cx=[...L].reverse().find(x=>x.catX);const f={dni,ape:u.ape,nom:u.nom,pue:u.pue,cat:cx?cx.catX:tCatDe(u.pue),catX:cx?cx.catX:'',cua:u.cua,ing:lp.ing,ces:lp.ces,mot:lp.mot,per};f.act=tActivo(f,hoy);fichas.push(f)}
   fichas.sort((a,b)=>a.ape.localeCompare(b.ape)||a.dni.localeCompare(b.dni));return{fichas,errores,cols:c}}
 /* código de partida: número o texto ('2.0199999' → '2.02') */
 const tCod=v=>{if(v==null||v==='')return'';const n=typeof v==='number'?v:+String(v).trim().replace(',','.');return Number.isFinite(n)&&n>0?n.toFixed(2):''};
@@ -541,7 +543,7 @@ function renderTCrew(main){const x=tcwList();
 function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);tPrivMigrar();const ed=tEdit();const all=tLive();const hoy=todayIso();const nAct=all.filter(p=>tActivo(p,hoy)).length;
   const caps=tCaps();
   for(const id of[...TU.sel])if(!S.tper.has(id))TU.sel.delete(id);
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Personal',`${nAct} activos · ${all.length} en el máster`,`<button class="ib" id="tperXls">Exportar Excel</button>${ed?`<button class="ib" id="tperImp">Importar Excel de RR.HH.</button><button class="ib pri" id="tperAdd">+ Obrero</button>`:''}`)}
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Personal',`${nAct} activos · ${all.length} en el máster`,`<button class="ib" id="tperXls" title="La lista que ves, con sus filtros">Exportar lista</button>${ed?`<button class="ib" id="tperUndo" hidden>Deshacer última importación</button><button class="ib" id="tperXed">Exportar para editar</button><button class="ib" id="tperImp">Importar Excel</button><button class="ib pri" id="tperAdd">+ Obrero</button>`:''}`)}
    ${helpBox('¿Cómo se mantiene el máster?',`<p>Agrega a alguien con «+ Obrero» y corrige sus datos con «Editar» en su fila; para cambiar a varios a la vez (capataz, cuadrilla, categoría o puesto), elígelos y usa «Editar elegidos». El cese y el reingreso se marcan en la ficha (clic en el nombre).</p><p>También puedes importar el Excel de RR.HH. (hoja «Datos del personal»): verás qué personas son nuevas, cuáles cambian y cuáles siguen igual antes de confirmar. La importación <b>no</b> borra a nadie ni cambia el capataz asignado.</p><p>Un reingreso agrega un periodo nuevo a la misma ficha (por DNI). «Archivar» la oculta sin borrarla.</p>`)}
    ${ed?'':`<div class="callout">Solo lectura: el máster lo mantiene el asistente de tareo.</div>`}
    ${ed&&!caps.length?`<div class="callout t-warn">No hay capataces de tareo en el equipo (rol «Capataz (tareo)»)${MEM.size<2?' o tu rol no puede ver la lista del equipo':''}: agrégalos en Equipo para poder asignarles obreros.</div>`:''}
@@ -567,7 +569,7 @@ function renderTPer(main){if(me&&me.role==='tcap')return renderTCrew(main);tPriv
   body.onchange=e=>{const c=e.target.closest('[data-tsel]');if(!c)return;if(c.checked)TU.sel.add(c.dataset.tsel);else TU.sel.delete(c.dataset.tsel);tPerDraw()};
   $('#tselAll').onchange=e=>{const L=tPerList().slice(0,600);if(e.target.checked)L.forEach(p=>TU.sel.add(p.id));else L.forEach(p=>TU.sel.delete(p.id));tPerDraw()};
   $('#tselNone').onclick=()=>{TU.sel.clear();const a=$('#tselAll');if(a)a.checked=false;tPerDraw()};
-  $('#tselEd').onclick=tEditarSel;$('#tperAdd').onclick=()=>tPerForm(null);$('#tperImp').onclick=tImportMaster}
+  $('#tselEd').onclick=tEditarSel;$('#tperAdd').onclick=()=>tPerForm(null);$('#tperImp').onclick=tImportMaster;$('#tperXed').onclick=tPerExportEd;$('#tperUndo').onclick=tPerUndo;tPerBkLoad()}
 
 function tFicha(id){const p=S.tper.get(id);if(!p)return;const ed=tEdit();const a=tActivo(p);const per=(Array.isArray(p.per)&&p.per.length?p.per:[{ing:p.ing,ces:p.ces,mot:p.mot}]).slice().reverse();
   lqModal(`<div class="lqtop"><b>${esc(p.ape||'')}${p.nom?', '+esc(p.nom):''}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
@@ -694,41 +696,107 @@ async function tPerExport(){try{await loadXlsx();const X=window.XLSX;const L=tPe
   const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Personal');saveBlob(`Personal obrero ${hoy}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/octet-stream'}))}
   catch(err){toast('No se pudo exportar: '+(err.message||err))}}
 
-/* importación del máster de RR.HH. */
-const TP_CMP=[['ape','Apellidos'],['nom','Nombres'],['pue','Puesto'],['cua','Cuadrilla'],['ing','Ingreso'],['ces','Cese'],['mot','Motivo']];
-function tMasterDiff(fichas){const nuevos=[],cambios=[],iguales=[];const inFile=new Set();
+/* importación del máster de RR.HH. (y del «Exportar para editar»), a prueba de errores (25-10-2026, como Partidas):
+   nadie se borra ni archiva por faltar en el archivo; celda vacía = no cambia (puesto, cuadrilla, ingreso, cese, motivo); el capataz nunca;
+   los periodos se suman (un periodo de la app que no está en el archivo se conserva); el DNI es la llave; cambio de nombre con confirmación;
+   antes de guardar, foto en tperbk para «Deshacer última importación». */
+const TP_CMP=[['ape','Apellidos'],['nom','Nombres'],['pue','Puesto'],['cua','Cuadrilla'],['cat','Categoría']];
+const tPerOf=o=>(Array.isArray(o.per)&&o.per.length?o.per:[{ing:o.ing||'',ces:o.ces||'',mot:o.mot||''}]).map(x=>({ing:x.ing||'',ces:x.ces||'',mot:x.mot||''})).filter(x=>x.ing||x.ces);
+function tPerMerge(o,f){const M=tPerOf(o);const out=M.map(x=>({...x}));const pc=[];
+  for(const x of f.per){let y=x.ing?out.find(z=>z.ing===x.ing):out[out.length-1];
+    if(!y){out.push({ing:x.ing,ces:x.ces||'',mot:x.ces?x.mot||'':''});pc.push(`Periodo nuevo: ingreso ${tFmt(x.ing)}${x.ces?', cese '+tFmt(x.ces):''}`);continue}
+    if(x.ces&&x.ces!==y.ces){pc.push(`Cese: ${tFmt(y.ces)||'—'} → ${tFmt(x.ces)}`);y.ces=x.ces}
+    if(x.ces&&x.mot&&x.mot!==y.mot){pc.push(`Motivo: ${y.mot||'—'} → ${x.mot}`);y.mot=x.mot}}
+  out.sort((p,q)=>(p.ing||'').localeCompare(q.ing||''));return{per:out,pc}}
+function tMasterDiff(fichas){const nuevos=[],cambios=[],iguales=[];const inFile=new Set();const hoy=todayIso();
   for(const f of fichas){inFile.add(f.dni);const o=S.tper.get(f.dni);if(!o){nuevos.push(f);continue}
-    const ch=[];for(const[k,l]of TP_CMP)if((o[k]||'')!==(f[k]||''))ch.push(`${l}: ${k==='ing'||k==='ces'?tFmt(o[k])||'—':o[k]||'—'} → ${k==='ing'||k==='ces'?tFmt(f[k])||'—':f[k]||'—'}`);
-    const op=JSON.stringify((o.per||[]).map(x=>[x.ing||'',x.ces||'',x.mot||''])),fp=JSON.stringify(f.per.map(x=>[x.ing,x.ces,x.mot]));if(op!==fp&&!ch.length)ch.push(`Periodos: ${(o.per||[]).length} → ${f.per.length}`);
-    if(ch.length)cambios.push({f,o,ch});else iguales.push(f)}
-  const fuera=tLive().filter(p=>!inFile.has(p.id)&&!inFile.has(p.dni));const hoy=todayIso();
-  let act=0;for(const f of fichas){const o=S.tper.get(f.dni);if(!(o&&o.arch)&&tActivo(f,hoy))act++}for(const p of fuera)if(tActivo(p,hoy))act++;
-  return{nuevos,cambios,iguales,fuera,act}}
-async function tImportMaster(){const f=await tPickFile();if(!f)return;let wb;try{wb=await tReadBook(f)}catch(err){toast('No se pudo leer el archivo: '+(err.message||err));return}
-  const sh=await tSheetOf(wb,'Datos del personal');if(!sh)return;const rows=tRows(wb.Sheets[sh]);tImportMasterRows(rows,sh,null)}
-function tImportMasterRows(rows,sh,cols){const R=tParseMaster(rows,cols);const D=tMasterDiff(R.fichas);const c=R.cols;const hdr=c.hdr>=0?rows[c.hdr]||[]:rows[0]||[];
+    const set={},ch=[];const tx=(k,v)=>{if(v&&v!==(o[k]||'')){set[k]=v;ch.push(`${TP_CMP.find(x=>x[0]===k)[1]}: ${o[k]||'—'} → ${v}`)}};
+    tx('ape',f.ape);tx('nom',f.nom);tx('pue',f.pue);tx('cua',f.cua);
+    const cat=f.catX||(set.pue?tCatDe(f.pue):'');if(cat&&cat!==o.cat){set.cat=cat;ch.push(`Categoría: ${TCAT[o.cat]||'—'} → ${TCAT[cat]}`)}
+    const m=tPerMerge(o,f);if(m.pc.length){const lp=m.per[m.per.length-1]||{};set.per=m.per;set.ing=lp.ing||'';set.ces=lp.ces||'';set.mot=lp.mot||'';ch.push(...m.pc)}
+    if(ch.length){const act=o.arch?false:tActivo({...o,...set},hoy);if(act!==o.act)set.act=act;cambios.push({f,o,set,ch,ren:'ape' in set||'nom' in set})}else iguales.push(f)}
+  const fuera=tLive().filter(p=>!inFile.has(p.id)&&!inFile.has(p.dni));
+  for(const f of nuevos){const fx=fuera.find(p=>tFold(tName(p))===tFold(tName(f)));if(fx)f._antes=fx.dni||fx.id}
+  let act=0;for(const f of nuevos)if(tActivo(f,hoy))act++;for(const x of cambios)if(x.o.arch?false:('act' in x.set?x.set.act:x.o.act!==false&&tActivo(x.o,hoy)))act++;
+  for(const f of iguales){const o=S.tper.get(f.dni);if(o&&!o.arch&&tActivo(o,hoy))act++}for(const p of fuera)if(tActivo(p,hoy))act++;
+  return{nuevos,cambios,iguales,fuera,act,ren:cambios.filter(x=>x.ren)}}
+async function tImportMaster(){if(!tEdit())return;const f=await tPickFile();if(!f)return;let wb;try{wb=await tReadBook(f)}catch(err){toast('No se pudo leer el archivo: '+(err.message||err));return}
+  const sh=await tSheetOf(wb,'Datos del personal');if(!sh)return;const rows=tRows(wb.Sheets[sh]);tImportMasterRows(rows,sh,null,f.name)}
+function tImportMasterRows(rows,sh,cols,fname){const R=tParseMaster(rows,cols);const D=tMasterDiff(R.fichas);const c=R.cols;const hdr=c.hdr>=0?rows[c.hdr]||[]:rows[0]||[];
   const ncol=Math.max(...rows.slice(0,50).map(r=>(r||[]).length),hdr.length);const X=window.XLSX;const letter=i=>X?X.utils.encode_col(i):String(i+1);
   const colSel=(k,l)=>`<label class="lqlab t-map">${esc(l)}<select class="tin" data-tmap="${k}"><option value="">—</option>${Array.from({length:ncol},(_,i)=>`<option value="${i}"${c[k]===i?' selected':''}>${letter(i)}${hdr[i]?' · '+esc(String(hdr[i]).replace(/\s+/g,' ').slice(0,24)):''}</option>`).join('')}</select></label>`;
   const errs=R.errores.filter(e=>!e.warn),warns=R.errores.filter(e=>e.warn);const lim=(L,fn)=>L.slice(0,150).map(fn).join('')+(L.length>150?`<li class="note">… y ${L.length-150} más</li>`:'');
-  const sec=(id,t,n,body,open)=>`<details class="t-sec" id="${id}"${open?' open':''}><summary><b>${n}</b> ${t}</summary><ul class="t-list">${body}</ul></details>`;
+  const sec=(id,t,n,body,open)=>`<details class="t-sec" id="${id}"${open?' open':''}><summary><b>${n}</b> ${t}</summary><ul class="t-list">${body}</ul></details>`;const n=D.nuevos.length+D.cambios.length;
   lqModal(`<div class="lqtop"><b>Importar personal</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
    <p class="lqmsg">Hoja «${esc(sh)}» · ${R.fichas.length} personas (por DNI) en el archivo.</p>
    <details class="t-sec"><summary>Columnas detectadas</summary><div class="t-maps">${TM_FIELDS.map(([k,l])=>colSel(k,l)).join('')}</div></details>
    <div class="lqtiles t-imptiles"><div class="lqtile" style="--c:var(--ok)"><span>Nuevos</span><b id="timpNew">${D.nuevos.length}</b></div><div class="lqtile" style="--c:var(--accent)"><span>Con cambios</span><b id="timpChg">${D.cambios.length}</b></div>
     <div class="lqtile" style="--c:var(--line2)"><span>Sin cambios</span><b id="timpEq">${D.iguales.length}</b></div><div class="lqtile" style="--c:var(--bad)"><span>Errores</span><b id="timpErr">${errs.length}</b></div></div>
    <p class="lqmsg ok">Quedarían <b id="timpAct">${D.act}</b> obreros activos.</p>
-   ${sec('timpLN','nuevos',D.nuevos.length,lim(D.nuevos,x=>`<li><span class="mono">${esc(x.dni)}</span> ${esc(tName(x))} · ${esc(x.pue)}${x.act?'':' <i class="note">(cesado)</i>'}</li>`),false)}
+   ${D.ren.length?`<div class="callout tpi-ren" id="timpRen"><b>⚠ ${D.ren.length} ${D.ren.length===1?'ficha cambia':'fichas cambian'} de nombre</b><ul class="t-list">${D.ren.map(x=>`<li><span class="mono">${esc(x.f.dni)}</span> ${esc(tName(x.o))} → <b>${esc(tName({...x.o,...x.set}))}</b></li>`).join('')}</ul>
+     <label class="chk"><input type="checkbox" id="timpRenOk"> Revisé que cada DNI corresponde a la persona correcta (los tareos de ese DNI se leerán con el nombre nuevo)</label></div>`:''}
+   ${sec('timpLN','nuevos',D.nuevos.length,lim(D.nuevos,x=>`<li><span class="mono">${esc(x.dni)}</span> ${esc(tName(x))} · ${esc(x.pue)}${x.act?'':' <i class="note">(cesado)</i>'}${x._antes?`<div class="t-chg">¿Cambió el DNI? Ya hay una ficha con ese nombre (DNI ${esc(x._antes)}): se conserva; archívala si era un error.</div>`:''}</li>`),false)}
    ${sec('timpLC','con cambios',D.cambios.length,lim(D.cambios,x=>`<li><span class="mono">${esc(x.f.dni)}</span> ${esc(tName(x.f))}<div class="t-chg">${x.ch.map(esc).join('<br>')}</div></li>`),false)}
    ${errs.length?sec('timpLE','con errores (no se importan)',errs.length,lim(errs,x=>`<li>Fila ${x.fila}: ${esc(x.txt)}${x.nom?' · '+esc(x.nom):''}</li>`),true):''}
    ${warns.length?sec('timpLW','avisos',warns.length,lim(warns,x=>`<li>Fila ${x.fila}: ${esc(x.txt)}${x.nom?' · '+esc(x.nom):''}</li>`),false):''}
    ${D.fuera.length?sec('timpLF','en el máster pero no en el archivo (no se tocan)',D.fuera.length,lim(D.fuera,x=>`<li><span class="mono">${esc(x.dni||x.id)}</span> ${esc(tName(x))}</li>`),false):''}
-   <p class="note">No se borra ni archiva a nadie y no se cambia el capataz asignado.</p>
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="timpOk"${D.nuevos.length+D.cambios.length?'':' disabled'}>Importar ${D.nuevos.length+D.cambios.length} ${D.nuevos.length+D.cambios.length===1?'ficha':'fichas'}</button></div>`,
-   async e=>{const b=e.target.closest('#timpOk');if(!b)return;b.disabled=true;b.textContent='Importando…';const st=tStamp();const W=[];
+   <p class="note">No se borra ni archiva a nadie y no se cambia el capataz. Una celda vacía no cambia nada y los periodos anteriores se conservan. Podrás deshacer esta importación.</p>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="timpOk"${n&&!D.ren.length?'':' disabled'}>Importar ${n} ${n===1?'ficha':'fichas'}</button></div>`,
+   async e=>{const b=e.target.closest('#timpOk');if(!b||b.disabled)return;if(D.ren.length&&!($('#timpRenOk')||{}).checked)return;b.disabled=true;b.textContent='Importando…';const st=tStamp();const W=[];const prev={};
      for(const x of D.nuevos)W.push([fcol(TCOLS.tper).doc(x.dni),{dni:x.dni,ape:x.ape,nom:x.nom,pue:x.pue,cat:x.cat,cua:x.cua,cap:'',ing:x.ing,ces:x.ces,mot:x.mot,per:x.per,act:x.act,...st},{merge:true}]);
-     for(const{f,o}of D.cambios){const d={dni:f.dni,ape:f.ape,nom:f.nom,pue:f.pue,cua:f.cua,ing:f.ing,ces:f.ces,mot:f.mot,per:f.per,act:o.arch?false:f.act,...st};d.cat=f.pue===o.pue&&o.cat?o.cat:f.cat;W.push([fcol(TCOLS.tper).doc(f.dni),d,{merge:true}])}
-     try{await tBatch(W);lqClose();toast(`Importación lista: ${D.nuevos.length} nuevos, ${D.cambios.length} actualizados.`)}catch(err){b.disabled=false;b.textContent='Reintentar';toast('No se pudo importar: '+(err.code||err.message))}},
-   e=>{const s=e.target.closest('[data-tmap]');if(!s)return;const nc={...c};$$('[data-tmap]').forEach(x=>{nc[x.dataset.tmap]=x.value===''?null:+x.value});tImportMasterRows(rows,sh,nc)})}
+     for(const{f,o,set}of D.cambios){const pv={ts:o.ts||0};for(const k of Object.keys(set))pv[k]=o[k]??null;prev[f.dni]=pv;W.push([fcol(TCOLS.tper).doc(f.dni),{dni:f.dni,...set,...st},{merge:true}])}
+     W.unshift([fcol('tperbk').doc('b'+st.ts),{t:st.ts,by:st.by,file:String(fname||'').slice(0,120),nuevos:D.nuevos.map(x=>x.dni),prev,nN:D.nuevos.length,nC:D.cambios.length}]);
+     try{await tBatch(W);lqClose();tPerBkLoad();toast(`Importación lista: ${D.nuevos.length} nuevos, ${D.cambios.length} actualizados.`)}catch(err){b.disabled=false;b.textContent='Reintentar';toast('No se pudo importar: '+(err.code||err.message))}},
+   e=>{if(e.target.id==='timpRenOk'){const b=$('#timpOk');if(b)b.disabled=!e.target.checked||!n;return}const s=e.target.closest('[data-tmap]');if(!s)return;const nc={...c};$$('[data-tmap]').forEach(x=>{nc[x.dataset.tmap]=x.value===''?null:+x.value});tImportMasterRows(rows,sh,nc,fname)})}
+/* deshacer la última importación de personal: los campos vuelven a como estaban; los nuevos se archivan (no se borran) */
+let TPBK=null;
+async function tPerBkLoad(){try{const s=await fcol('tperbk').get();const L=[];s.forEach(d=>L.push({id:d.id,...d.data()}));L.sort((a,b)=>(b.t||0)-(a.t||0));TPBK=L[0]||null}catch(e){TPBK=null}
+  const u=$('#tperUndo');if(u){const ok=!!(TPBK&&!TPBK.undo);u.hidden=!ok;if(ok)u.title=`Importación del ${new Date(TPBK.t).toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'})}${TPBK.by?' por '+TPBK.by:''}`}}
+async function tPerUndo(){if(!tEdit())return;const bk=TPBK;if(!bk||bk.undo)return;const back=[],off=[],skip=[];
+  for(const[id,pv]of Object.entries(bk.prev||{})){const x=S.tper.get(id);if(!x)continue;if((x.ts||0)>bk.t){skip.push(x);continue}back.push([x,pv])}
+  for(const id of bk.nuevos||[]){const x=S.tper.get(id);if(!x||x.arch)continue;if((x.ts||0)>bk.t){skip.push(x);continue}off.push(x)}
+  if(!back.length&&!off.length){toast('No hay nada que deshacer: esas fichas se cambiaron después.');return}
+  const L=[...back.map(([x])=>`${tName(x)} vuelve a como estaba`),...off.map(x=>`${tName(x)} (nuevo) se archiva`),...skip.map(x=>`${tName(x)}: se cambió después, no se toca`)];
+  if(!await uiAsk({title:'¿Deshacer la última importación de personal?',text:'Las fichas vuelven a como estaban antes de importar. Los obreros nuevos no se borran: se archivan, así conservan sus tareos.',list:L.slice(0,60),ok:'Deshacer',tone:'warn'}))return;
+  const st=tStamp();const W=[];
+  for(const[x,pv]of back){const d={dni:x.dni||x.id};for(const[k,v]of Object.entries(pv)){if(k!=='ts')d[k]=v}W.push([fcol(TCOLS.tper).doc(x.id),{...d,...st},{merge:true}])}
+  for(const x of off)W.push([fcol(TCOLS.tper).doc(x.id),{dni:x.dni||x.id,arch:{t:st.ts,by:st.by,n:'Deshacer importación'},act:false,...st},{merge:true}]);
+  W.push([fcol('tperbk').doc(bk.id),{undo:{t:st.ts,by:st.by}},{merge:true}]);
+  try{await tBatch(W);toast('Importación deshecha.');tPerBkLoad()}catch(err){toast('No se pudo deshacer: '+(err.code||err.message))}}
+/* exportar para editar: hoja «Datos del personal» con los encabezados del máster de RR.HH. (se vuelve a importar tal cual), una fila por periodo */
+async function tPerExportEd(){try{const L=tLive().slice().sort((a,b)=>tName(a).localeCompare(tName(b)));const rows=[];let n=0;
+  for(const p of L){n++;const per=tPerOf(p);(per.length?per:[{ing:'',ces:'',mot:''}]).forEach(x=>rows.push([n,String(p.dni||p.id),[p.ape,p.nom].filter(Boolean).join(', '),p.pue||'',p.cua||'',x.ing,x.ces,x.mot||'',TCAT[p.cat]||'Otro',p.cap?tCapName(p.cap):'']))}
+  await tXlsEdit(`Personal obrero (para editar) ${todayIso()}.xlsx`,'Datos del personal',`Personal obrero · exportado el ${tFmt(todayIso())}`,
+    [{h:'N°',w:5,t:'n',ref:true},{h:'DNI',w:12,t:'s'},{h:'Nombre (APELLIDOS, NOMBRES)',w:36},{h:'Título puesto',w:26},{h:'Categoría (cuadrilla)',w:18},{h:'Fecha de ingreso',w:13,t:'d'},{h:'Comentarios / cese',w:13,t:'d'},{h:'Motivo de cese',w:22},{h:'Cat. obrero',w:12,list:['Operario','Oficial','Peón','Capataz','Otro']},{h:'Capataz (no se importa)',w:24,ref:true}],
+    rows,['Cómo editar el personal',
+     'Una fila por periodo: quien reingresó tiene una fila por cada ingreso con el mismo DNI. El DNI es la llave: un DNI nuevo es una persona nueva.',
+     'Nombre: APELLIDOS, NOMBRES (con coma). Corrige puesto, cuadrilla, fechas o motivo en su fila. Las fechas van como fecha (dd/mm/aaaa).',
+     'Para registrar un cese escribe la fecha en «Comentarios / cese» y su motivo. Para un reingreso agrega otra fila con el mismo DNI y la nueva fecha de ingreso.',
+     'Borrar una fila no borra ni archiva a nadie, y una celda vacía no cambia nada (no quita un cese ya registrado). Para archivar a alguien hazlo en la app.',
+     'Cat. obrero solo acepta los valores de su lista; si la dejas vacía se deduce del puesto. N° y Capataz (en gris) son solo referencia: el capataz se asigna en la app.',
+     'Al importar verás qué cambia antes de guardar; un cambio de nombre pide confirmación. Se puede deshacer la última importación.'])}
+  catch(err){toast('No se pudo exportar: '+(err.message||err))}}
+
+/* ---------- Excel para editar y volver a importar (25-10-2026) ----------
+   ExcelJS (loadExcelJS de excel.js): listas desplegables que no dejan escribir otro valor, fechas como fecha, textos como texto
+   (DNI y códigos sin perder ceros) y hoja «Instrucciones». C: [{h, w, t:'s'|'n'|'d', list:[...], ref:true}] (ref = solo referencia, en gris). */
+const tXD=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3])):null};
+async function tXlsEdit(file,sheet,title,C,rows,instr,opt){opt=opt||{};await loadExcelJS();const J=new ExcelJS.Workbook();const ws=J.addWorksheet(sheet,{views:[{state:'frozen',ySplit:3}]});
+  const AZ='FF1F5F7A',bd={style:'thin',color:{argb:'FFCDD3CC'}},B={top:bd,bottom:bd,left:bd,right:bd};
+  ws.getCell(1,1).value=title;ws.getCell(1,1).font={bold:true,size:13,color:{argb:AZ}};
+  C.forEach((c,i)=>{const h=ws.getCell(3,i+1);h.value=c.h;h.font={bold:true,color:{argb:'FFFFFFFF'}};h.fill={type:'pattern',pattern:'solid',fgColor:{argb:c.ref?'FF8A938D':AZ}};h.alignment={horizontal:'center',vertical:'middle',wrapText:true};h.border=B;ws.getColumn(i+1).width=c.w||12});
+  ws.getRow(3).height=30;
+  rows.forEach((R,j)=>{const r=4+j;const g=opt.grp&&opt.grp(j);R.forEach((v,i)=>{const c=ws.getCell(r,i+1),k=C[i];
+      if(k.t==='d'&&v){const d=tXD(v);c.value=d||v;if(d)c.numFmt='dd/mm/yyyy'}else if(k.t==='n'&&v!==''&&v!=null&&Number.isFinite(+v)&&typeof v!=='string')c.value=+v;else c.value=v==null?'':(k.t==='s'?String(v):v);
+      c.border=B;if(g){c.font={bold:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4E9E2'}}}else if(k.ref)c.font={color:{argb:'FF646D67'}};if(k.t==='n')c.alignment={horizontal:'right'}})});
+  /* listas y fechas: también en filas vacías de abajo, para las que se agreguen */
+  const last=4+rows.length+300;C.forEach((k,i)=>{if(!k.list&&k.t!=='d')return;
+    const dv=k.list?{type:'list',allowBlank:true,formulae:['"'+k.list.join(',')+'"'],showErrorMessage:true,errorStyle:'stop',errorTitle:'Valor no válido',error:'Elige un valor de la lista: '+k.list.join(', ')+'.'}
+      :{type:'date',operator:'greaterThan',allowBlank:true,formulae:[new Date(Date.UTC(1990,0,1))],showErrorMessage:true,errorStyle:'stop',errorTitle:'Fecha no válida',error:'Escribe una fecha (dd/mm/aaaa).'};
+    for(let r=4;r<=last;r++){if(opt.grp&&r-4<rows.length&&opt.grp(r-4))continue;const c=ws.getCell(r,i+1);c.dataValidation=dv;if(k.t==='d'&&!c.numFmt)c.numFmt='dd/mm/yyyy'}});
+  const ins=J.addWorksheet('Instrucciones');ins.getColumn(1).width=118;ins.getCell(1,1).value=instr[0];ins.getCell(1,1).font={bold:true,size:13,color:{argb:AZ}};
+  instr.slice(1).forEach((t,i)=>{const c=ins.getCell(3+i,1);c.value='• '+t;c.alignment={wrapText:true,vertical:'top'}});
+  const buf=await J.xlsx.writeBuffer();saveBlob(file,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))}
 
 /* ---------- Partidas de control ---------- */
 /* una sola tabla (columnas alineadas entre grupos) con fila de encabezado por grupo, como la hoja «Lista de partidas» */
@@ -847,23 +915,18 @@ async function tPcUndo(){if(!tPcEd())return;const bk=TPU.bk;if(!bk||bk.undo)retu
   for(const x of off)W.push([fcol(TCOLS.tpc).doc(x.id),{act:false,...st},{merge:true}]);
   W.push([fcol('tpcbk').doc(bk.id),{undo:{t:st.ts,by:st.by}},{merge:true}]);
   try{await tBatch(W);toast('Importación deshecha.');tPcBkLoad()}catch(err){toast('No se pudo deshacer: '+(err.code||err.message))}}
-/* exportar para editar: mismo formato que la hoja «Lista de partidas» (se vuelve a importar tal cual) + Estado y Descontable */
-async function tPcExport(){try{await loadXlsx();const X=window.XLSX;const G=tPcGroups([...S.tpc.values()].filter(x=>x&&!x.arch));
-  const aoa=[[`LISTA DE PARTIDAS DE CONTROL · exportada el ${tFmt(todayIso())}`],[],['','CÓDIGO','DESCRIPCIÓN','UND','METRADO','HH PPTO','HH/UND','UA - TAREO','ESTADO','DESCONTABLE']];const codR=[];
-  for(const g of G){aoa.push(['',Number(g.k)||g.k,g.n||'','','','','','','','']);
-    for(const x of g.L){codR.push(aoa.length);aoa.push(['',x.cod,x.nom||'',x.und||'',x.met??'',x.hhp??'',+x.met>0&&+x.hhp>0?Math.round(x.hhp/x.met*1e4)/1e4:'',x.ua||'',x.act===false?'Inactiva':'Activa',x.dct===true?'Sí':'No'])}}
-  const ws=X.utils.aoa_to_sheet(aoa);for(const r of codR){const c=ws[X.utils.encode_cell({r,c:1})];if(c){c.t='s';c.v=String(c.v)}}/* «10.10» como texto (no 10.1) */
-  ws['!cols']=[{wch:2},{wch:9},{wch:52},{wch:7},{wch:11},{wch:11},{wch:9},{wch:16},{wch:10},{wch:12}];
-  const B={font:{bold:true}};for(let c=1;c<10;c++){const k=X.utils.encode_cell({r:2,c});if(ws[k])ws[k].s={...B,fill:{fgColor:{rgb:'DDEBF7'}}}}
-  for(let r=3;r<aoa.length;r++)if(!codR.includes(r)){for(let c=1;c<3;c++){const k=X.utils.encode_cell({r,c});if(ws[k])ws[k].s=B}}
-  const ins=X.utils.aoa_to_sheet([['Cómo editar las partidas'],[],
-    ['• Agrega filas nuevas con su código (grupo.número, p. ej. 10.39) y su descripción. Un código nuevo es una partida nueva.'],
-    ['• Corrige descripción, unidad, metrado, HH o cuenta UA en su fila. No cambies el código de una partida existente: se crearía otra.'],
-    ['• Para quitar una partida pon ESTADO = Inactiva. Borrar la fila no hace nada (la partida y sus horas se conservan).'],
-    ['• Una celda vacía no cambia nada. DESCONTABLE: Sí o No. HH/UND es solo referencia (no se importa).'],
-    ['• Al importar verás qué cambia antes de guardar; un cambio de nombre pide confirmación. Se puede deshacer la última importación.']]);ins['!cols']=[{wch:110}];
-  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lista de partidas');X.utils.book_append_sheet(wb,ins,'Instrucciones');
-  saveBlob(`Partidas de control ${todayIso()}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/octet-stream'}))}
+/* exportar para editar: mismo formato que la hoja «Lista de partidas» (se vuelve a importar tal cual) + Estado y Descontable con lista desplegable */
+async function tPcExport(){try{const G=tPcGroups([...S.tpc.values()].filter(x=>x&&!x.arch));const rows=[],grp=new Set();
+  for(const g of G){grp.add(rows.length);rows.push(['',Number(g.k)||g.k,g.n||'','','','','','','',''])
+    for(const x of g.L)rows.push(['',x.cod,x.nom||'',x.und||'',x.met??'',x.hhp??'',+x.met>0&&+x.hhp>0?Math.round(x.hhp/x.met*1e4)/1e4:'',x.ua||'',x.act===false?'Inactiva':'Activa',x.dct===true?'Sí':'No'])}
+  await tXlsEdit(`Partidas de control ${todayIso()}.xlsx`,'Lista de partidas',`Lista de partidas de control · exportada el ${tFmt(todayIso())}`,
+    [{h:'',w:2},{h:'CÓDIGO',w:9,t:'s'},{h:'DESCRIPCIÓN',w:52},{h:'UND',w:7},{h:'METRADO',w:11,t:'n'},{h:'HH PPTO',w:11,t:'n'},{h:'HH/UND',w:9,t:'n',ref:true},{h:'UA - TAREO',w:16},{h:'ESTADO',w:11,list:['Activa','Inactiva']},{h:'DESCONTABLE',w:13,list:['Sí','No']}],
+    rows,['Cómo editar las partidas',
+     'Agrega filas nuevas con su código (grupo.número, p. ej. 10.39) y su descripción. Un código nuevo es una partida nueva.',
+     'Corrige descripción, unidad, metrado, HH o cuenta UA en su fila. No cambies el código de una partida existente: se crearía otra.',
+     'Para quitar una partida elige ESTADO = Inactiva. Borrar la fila no hace nada (la partida y sus horas se conservan).',
+     'ESTADO y DESCONTABLE solo aceptan los valores de su lista. Una celda vacía no cambia nada. HH/UND (en gris) es solo referencia: no se importa.',
+     'Al importar verás qué cambia antes de guardar; un cambio de nombre pide confirmación. Se puede deshacer la última importación.'],{grp:j=>grp.has(j)})}
   catch(err){toast('No se pudo exportar: '+(err.message||err))}}
 
 /* ---------- Configuración del tareo (admin) ---------- */

@@ -720,6 +720,20 @@ test('tareo: solo costos y el administrador mantienen las partidas (bloquear inc
     await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
   }
 });
+test('tareo: foto de la importación de personal (tperbk): asistente/admin la crean y la marcan deshecha; nadie la cambia ni la borra', async () => {
+  const a = user('tasis@obra.pe');
+  const BK = { t: 1, by: 'tasis@obra.pe', nuevos: ['12345678'], prev: { '03684337': { cua: 'ALBAÑILES', ts: 0 } } };
+  await assertSucceeds(setDoc(doc(a, 'tperbk/b1'), BK));
+  await assertSucceeds(getDoc(doc(a, 'tperbk/b1')));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tperbk/b1'), { undo: { t: 2, by: OWNER } }));
+  await assertFails(updateDoc(doc(a, 'tperbk/b1'), { prev: {} }));
+  await assertFails(deleteDoc(doc(a, 'tperbk/b1')));
+  await assertFails(setDoc(doc(a, 'tperbk/b2'), { t: 1 }));
+  for (const db of [user('tcos@obra.pe'), user('jefe@obra.pe'), user('editor@obra.pe'), cap('tcap1')]) {
+    await assertFails(getDoc(doc(db, 'tperbk/b1')));
+    await assertFails(setDoc(doc(db, 'tperbk/b3'), BK));
+  }
+});
 test('tareo: foto de la importación de partidas (tpcbk): costos/admin la crean y la marcan deshecha; nadie la cambia ni la borra', async () => {
   const c = user('tcos@obra.pe');
   const BK = { t: 1, by: 'tcos@obra.pe', nuevas: ['p20_01'], prev: { p10_05: { nom: 'Encofrado', ts: 0 } } };
