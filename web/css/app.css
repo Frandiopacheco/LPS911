@@ -1779,6 +1779,8 @@ body.mod-pla #fpiso,body.mod-pla .wk,body.mod-pla #bundo,body.mod-pla #bredo,bod
 .t-selbar[hidden]{display:none}
 .t-tbl td{vertical-align:middle}
 .t-tbl .t-r,.t-r{text-align:right}
+/* el título de una columna numérica va alineado con sus datos (25-10-2026: en Costos quedaba a la izquierda porque «.t th» pesaba más) */
+.t th.t-r{text-align:right}.t th.t-c,.t td.t-c{text-align:center}
 .t-ck{width:34px}
 .t-ck input{width:18px;height:18px}
 .t-off td{color:var(--muted)}
@@ -2638,6 +2640,7 @@ div.tp-dif{padding-left:0}
 .tp-xi{display:flex;align-items:center;align-content:flex-start;gap:8px;flex-wrap:wrap;padding:10px 14px;border-right:1px solid var(--line2)}
 .tp-xi:last-child{border-right:0}
 .tp-xi .tin{height:var(--h-ctl,34px)}
+.tp-xb{display:inline-flex;gap:6px;flex-wrap:wrap}
 .tp-xl{font:700 11.5px var(--f-ui);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);width:100%}
 .tp-list .tp-day td{border-top:1px solid var(--line)}
 .tp-list .tp-old td{color:var(--muted);font-size:12.5px;padding-top:2px;padding-bottom:2px}
@@ -4546,6 +4549,7 @@ p.smline{display:block;border-left-color:var(--line)}
 .tc-dsl{display:flex;flex-direction:column;gap:8px;padding:4px 0}
 .tc-dsr{display:grid;grid-template-columns:1fr 48px 64px 48px auto;gap:6px;align-items:center}
 .tc-dsr .ib{min-height:44px}.tc-dsr output{text-align:center;font:600 15px var(--f-mono,monospace)}
+.tc-dsr .tc-dhin{width:100%;min-height:44px;padding:0 4px;text-align:center;font:600 16px var(--f-mono,monospace)}
 .tc-dres ul{margin:4px 0 0;padding-left:18px}.tc-dres li{margin:2px 0}
 /* oficina: revisión y partidas */
 .tr-dct .tr-vbar{display:flex;justify-content:space-between;align-items:center;gap:8px}

@@ -637,8 +637,19 @@ function tcDctSheet(D){const c=TCS.dct;const r=(D.rows||{})[c.dni];const h=r?tcH
   return`<div class="tc-csb" data-tca="dctX"></div><div class="tc-cs" id="tcDct" role="dialog" aria-label="Descuento de ${esc(tcFN(c.dni))}" data-dni="${esc(c.dni)}" data-pc="${esc(c.pc)}">
    <div class="tc-csh"><div class="tc-wn"><b>${esc(tcFN(c.dni))}</b><span><b class="mono">${esc(tcPcCod(c.pc))}</b> ${esc(tcPcNom(c.pc))} · ${esc(tcH(h))}</span><span id="tcDctD" class="${Math.abs(resto)<=0.01?'tc-dok':'tc-dwarn'}">${Math.abs(resto)<=0.01?'Repartido completo ✓':resto>0?`Faltan ${esc(tcH(resto))} por repartir`:`Sobran ${esc(tcH(-resto))}`}</span></div>
     <button type="button" class="kx" data-tca="dctX" aria-label="Cerrar">&times;</button></div>
-   <div class="tc-dsl">${opts.map(x=>{const v=o[x.id]||0;return`<div class="tc-dsr" data-sc="${esc(x.id)}"><b>${esc(x.n)}</b>${a(x,'dctAdj',-0.5,'Media hora menos a '+x.n,!(v>0),'−½')}<output>${esc(tcH(v))}</output>${a(x,'dctAdj',0.5,'Media hora más a '+x.n,!(resto>0.001),'+½')}${a(x,'dctRest',null,'El resto a '+x.n,!(resto>0.001),'El resto')}</div>`}).join('')}</div>
+   <div class="tc-dsl">${opts.map(x=>{const v=o[x.id]||0;return`<div class="tc-dsr" data-sc="${esc(x.id)}"><b>${esc(x.n)}</b>${a(x,'dctAdj',-0.5,'Media hora menos a '+x.n,!(v>0),'−½')}<input class="tin tc-dhin" type="text" inputmode="decimal" autocomplete="off" data-dcin="${esc(x.id)}" value="${v?esc(String(v)):''}" placeholder="0" aria-label="Horas a ${esc(x.n)}">${a(x,'dctAdj',0.5,'Media hora más a '+x.n,!(resto>0.001),'+½')}${a(x,'dctRest',null,'El resto a '+x.n,!(resto>0.001),'El resto')}</div>`}).join('')}</div>
    <div class="tc-csa"><button type="button" class="ib tc-big" data-tca="dctClr" data-pc="${esc(c.pc)}"${sm?'':' disabled'}>Borrar</button><button type="button" class="ib pri tc-big" data-tca="dctX">Listo</button></div></div>`}
+/** reparto (25-10-2026): ½, «El resto», «Borrar» y lo escrito actualizan la hoja en su sitio, sin rearmar la pantalla (parpadeaba y no dejaba escribir) */
+function tcDctPatch(){const el=$('#tcDct');if(!el||!TCS.dct){tcDraw();return}const tp=document.createElement('template');tp.innerHTML=tcDctSheet(TCS.doc);const nw=tp.content.querySelector('#tcDct');if(!nw){tcDraw();return}
+  const st=el.querySelector('#tcDctD'),ns=nw.querySelector('#tcDctD');if(st&&ns){st.className=ns.className;st.textContent=ns.textContent}
+  nw.querySelectorAll('[data-tca]').forEach(b=>{const k=`[data-tca="${b.dataset.tca}"]${b.dataset.sc?`[data-sc="${CSS.escape(b.dataset.sc)}"]`:''}${b.dataset.v?`[data-v="${b.dataset.v}"]`:''}`;const o=el.querySelector('.tc-dsl '+k+',.tc-csa '+k);if(o&&'disabled' in o)o.disabled=b.disabled});
+  nw.querySelectorAll('[data-dcin]').forEach(i=>{const o=el.querySelector(`[data-dcin="${CSS.escape(i.dataset.dcin)}"]`);if(o&&o!==document.activeElement)o.value=i.value});
+  $('#tcRoot').__tch=''}
+/** horas escritas a un SC; fin: al salir del campo se ajusta a lo que queda por repartir */
+function tcDctIn(t,fin){const c=TCS.dct;const D=TCS.doc;if(!c||!D||tcRO())return;const r=(D.rows||{})[c.dni];if(!r)return;const h=tcHv(r,c.pc);const sc=t.dataset.dcin;
+  const o=tDctOf(r,c.pc);const otros=tR2(tDctSum(o)-(o[sc]||0));let n=+String(t.value).trim().replace(',','.');if(!Number.isFinite(n)||n<0)n=0;n=tR2(n);
+  if(fin){n=Math.min(n,tR2(Math.max(0,h-otros)));t.value=n?String(n):''}
+  o[sc]=n;tcDctSet(r,c.pc,o);tcChg(false);tcDctPatch()}
 /** resumen del descuento (paso 4 y tareo enviado): horas por SC de cada partida descontable; editable lleva al paso 5 */
 function tcDctRes(D,ro){const P=tcDctPcs(D);if(!P.length)return'';
   const L=P.map(pc=>{const by={};let tot=0;for(const r of Object.values(D.rows||{})){if(!r||r.as!==true)continue;const h=tcHv(r,pc);if(!(h>0))continue;tot=tR2(tot+h);for(const[k,v]of Object.entries(tDctOf(r,pc)))by[k]=tR2((by[k]||0)+v)}
@@ -782,7 +793,7 @@ function tcBind(root){
     const d=e.target.closest('[data-tcd]');if(d&&!d.disabled){if(d.dataset.tcd!==TCS.date)tcOpen(d.dataset.tcd);TCS.menu='';tcDraw();return}
     const s=e.target.closest('[data-tcs]');if(s){tcGo(+s.dataset.tcs,!!s.closest('.tc-foot'));return}
     const b=e.target.closest('[data-tca]');if(!b||b.tagName==='INPUT')return;tcAct(b.dataset.tca,b,e)});
-  root.addEventListener('change',e=>{const t=e.target;if(t.id==='tcF1'){TCS.f1=t.value;tcDraw();return}if(t.id==='tcFile'){const f=t.files&&t.files[0];t.value='';if(f)tcAddFoto(f);return}
+  root.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.dcin!=null){tcDctIn(t,true);return}if(t.id==='tcF1'){TCS.f1=t.value;tcDraw();return}if(t.id==='tcFile'){const f=t.files&&t.files[0];t.value='';if(f)tcAddFoto(f);return}
     const a=t.dataset.tca;if(!a||tcRO())return;const D=TCS.doc;if(!D)return;const w=t.closest('[data-dni]');const r=w&&D.rows&&D.rows[w.dataset.dni];
     /* «Elegir varios»: tocar la casilla ☑ (no solo el nombre) elige o quita al obrero (22-10-2026: la casilla se marcaba pero no contaba) */
     if(a==='msel'){const M=TCS.multi;const d=w&&w.dataset.dni;if(M&&d){if(t.checked)M.add(d);else M.delete(d)}tcDraw();return}
@@ -794,7 +805,7 @@ function tcBind(root){
     /* horas escritas en las hojas: ya se aplicaron al escribir (tcLiveIn); aquí solo se avisa si no es un número */
     if(a==='wkIn'||a==='cellIn'||a==='asgIn'){if(tcLiveIn(t)===null)toast(a==='asgIn'?'Escribe un número de horas.':'Escribe un número de horas (por ejemplo 6,5).');return}
 });
-  root.addEventListener('input',e=>{const t=e.target;if(t.id==='tcMpcIn'){tcMpcLive(t.value);return}if(t.id==='tcPcQ'){TCS.pcQ=t.value;const l=$('#tcPcL');if(l)l.innerHTML=tcPcList()}
+  root.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.dcin!=null){tcDctIn(t,false);return}if(t.id==='tcMpcIn'){tcMpcLive(t.value);return}if(t.id==='tcPcQ'){TCS.pcQ=t.value;const l=$('#tcPcL');if(l)l.innerHTML=tcPcList()}
     else if(t.id==='tcAddQ'){TCS.addQ=t.value;const l=$('#tcAddL');if(l)l.innerHTML=tcAddList()}
     /* buscador del paso 1: solo cambia la lista (rearmar la pantalla en cada letra cerraba o hacía parpadear el teclado del iPhone) */
     else if(t.id==='tcQ1'){TCS.q1=t.value;const l=$('#tcL1');if(l){l.innerHTML=tcL1Html();root.__tch=''}else tcDraw()}
@@ -809,6 +820,7 @@ function tcBind(root){
     /* Enter en la casilla: aplica y cierra; en «Su día» y «Asignar», solo deja de escribir */
     if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.tca==='cellIn'){e.preventDefault();if(tcLiveIn(e.target)===null){toast('Escribe un número de horas (por ejemplo 6,5).');return}TCS.cell=null;TCS.cellW=false;tcDraw();return}
     if(e.key==='Enter'&&e.target.dataset&&['wkIn','asgIn'].includes(e.target.dataset.tca)){e.preventDefault();e.target.blur();return}
+    if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.dcin!=null){e.preventDefault();e.target.blur();return}
     if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcnm){e.preventDefault();tcNmToast(e.target.dataset.tcnm);return}
     if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.tcpc){e.preventDefault();toast(tcPcName(e.target.dataset.tcpc));return}
     if(e.key==='Enter'&&e.target.id==='tcPcQ'){const f=$('#tcPcL [data-tca="pc"]');if(f){e.preventDefault();f.click()}}})}
@@ -873,10 +885,10 @@ async function tcAct(a,b){if(tcRO())return;const D=TCS.doc;if(!D)return;const R=
     const d=dniOf();const r=d&&R[d];if(!r||!pc)return;const h=tcHv(r,pc);
     if(a==='dctSplit'){TCS.dct={dni:d,pc};tcDraw();return}
     if(a==='dctOne'){if(sc){tcDctSet(r,pc,{[sc]:h});tcChg()}return}
-    if(a==='dctClr'){tcDctSet(r,pc,{});tcChg();return}
+    if(a==='dctClr'){tcDctSet(r,pc,{});tcChg(false);if(TCS.dct)tcDctPatch();else tcDraw();return}
     const o=tDctOf(r,pc);const otros=tR2(tDctSum(o)-(o[sc]||0));if(!sc)return;
-    if(a==='dctAdj'){o[sc]=tR2(Math.max(0,Math.min(h-otros,(o[sc]||0)+(+b.dataset.v||0))));tcDctSet(r,pc,o);tcChg();return}
-    if(a==='dctRest'){o[sc]=tR2(Math.max(0,h-otros));tcDctSet(r,pc,o);tcChg();return}
+    if(a==='dctAdj'){o[sc]=tR2(Math.max(0,Math.min(h-otros,(o[sc]||0)+(+b.dataset.v||0))));tcDctSet(r,pc,o);tcChg(false);tcDctPatch();return}
+    if(a==='dctRest'){o[sc]=tR2(Math.max(0,h-otros));tcDctSet(r,pc,o);tcChg(false);tcDctPatch();return}
     return}
   /* asistencia: el que no vino conserva sus horas (tCalc le da 0 h); al volver a «vino» las recupera */
   if(a==='vino'||a==='novino'){const dni=dniOf();const r=R[dni];if(!r)return;

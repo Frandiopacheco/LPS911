@@ -60,7 +60,7 @@ function renderTCos(main){if(TPLA.on)return renderTPla(main);
 /* filas de grupo + partidas con horas; al hacer clic, la partida muestra quién trabajó (por cuadrilla y obrero) */
 function tcoPartidas(R,L,A,soles){const q=tFold(TCO.q);const days=R.days.filter(f=>R.pub.includes(f));const mx=Math.max(1,...L.flatMap(x=>days.map(f=>x.dia[f]||0)));
   const G=new Map();for(const x of L.sort((a,b)=>tCmpCod(a.cod,b.cod))){const g=x.grp||'—';if(!G.has(g))G.set(g,{g,n:x.grpN,L:[]});G.get(g).L.push(x)}
-  const ot=L.some(x=>x.c.OT>0);const col=10+(ot?1:0)+(soles?1:0);
+  const ot=L.some(x=>x.c.OT>0);const col=11+(ot?1:0)+(soles?1:0);/* 11 columnas fijas (la banda del grupo llega hasta «Consumido») */
   const sp=x=>`<span class="ts-sp" aria-hidden="true">${days.map(f=>`<i style="height:${Math.max(2,Math.round((x.dia[f]||0)/mx*22))}px" title="${esc(tsDiaL(f))}: ${toH(x.dia[f]||0)} HH"></i>`).join('')}</span>`;
   const pct=x=>{const ac=A.get(x.id)||0;if(!x.hhp)return'<span class="note">sin meta</span>';const p=Math.round(ac/x.hhp*100);return`<span class="ts-bar"><i class="${p>100?'no':p>85?'w':''}" style="width:${Math.min(100,p)}%"></i></span><span class="mono${p>100?' ts-b':''}">${p} %</span>`};
   const det=x=>{const by=new Map();for(const w of R.W)for(const c of w.d)for(const[k,h]of c.pcs)if(k===x.id){const o=by.get(w.dni)||{w,h:0};o.h+=h;by.set(w.dni,o)}

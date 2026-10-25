@@ -53,6 +53,16 @@ test('capataz: paso «Descuentos» solo con partida descontable; no deja seguir 
   await expect(sh.locator('#tcDctD')).toContainText('Faltan 1 h');
   await sh.locator('.tc-dsr[data-sc="sB"] [data-tca="dctRest"]').click();
   await expect(sh.locator('#tcDctD')).toContainText('Repartido completo');
+  // 25-10-2026: se escriben las horas y la hoja no se rearma (antes cada ½ parpadeaba y no se podía escribir)
+  await sh.evaluate(el => { el.__mismo = true; });
+  await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').fill('2,5');
+  await expect(sh.locator('#tcDctD')).toContainText('Faltan 0,5 h');
+  await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').fill('9');
+  await expect(sh.locator('#tcDctD')).toContainText('Sobran');
+  await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').press('Enter'); // al salir se ajusta a lo que queda (3 h)
+  await expect(sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]')).toHaveValue('3');
+  await expect(sh.locator('#tcDctD')).toContainText('Repartido completo');
+  expect(await sh.evaluate(el => el.__mismo === true)).toBe(true);
   await sh.locator('.tc-csa [data-tca="dctX"]').click();
   await expect(root.locator('#tcDctSum')).toContainText('DRYWALL 3 h');
   await expect(root.locator('#tcDctSum')).toContainText('ELECTRICAS 9,5 h');

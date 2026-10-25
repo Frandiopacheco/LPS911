@@ -35,21 +35,58 @@ async function tsxBajar(origen,a,b,tipo){if(TPK.busy)return;TPK.busy='x';request
   catch(e){console.error(e);toast('No se pudo armar el Excel: '+(e&&(e.code||e.message)||e))}
   finally{TPK.busy='';requestRender()}}
 
-function tsxResumen(X,R,per,L,PB){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'Tareo · resumen del periodo',per);const T=R.T;
+/* Resumen (rediseño 25-10-2026: se veía pobre): banda de título, 4 indicadores grandes, tabla de totales por grupo con unidad,
+   controles con estado en color y versiones con filas alternas. Columnas A–F. La etiqueta de cada control sigue en A y su estado en B. */
+function tsxResumen(X,R,per,L,PB){const S0=tsxSt(),sh=tpxSheet(X);const T=R.T;const bd={style:'thin',color:{rgb:'CDD3CC'}};const B={top:bd,bottom:bd,left:bd,right:bd};
+  const AZ='1F5F7A',CL='EAF2F5',ZB='F7F9F6',ctr={horizontal:'center',vertical:'center',wrapText:true};
+  const st={ban:{font:{bold:true,sz:16,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:AZ}},alignment:{vertical:'center',indent:1}},
+    per:{font:{sz:11,color:{rgb:AZ},bold:true},fill:{fgColor:{rgb:CL}},alignment:{vertical:'center',indent:1}},
+    sec:{font:{bold:true,sz:12,color:{rgb:AZ}},border:{bottom:{style:'medium',color:{rgb:AZ}}}},
+    kl:{font:{sz:9,bold:true,color:{rgb:'646D67'}},fill:{fgColor:{rgb:CL}},alignment:ctr,border:{top:bd,left:bd,right:bd}},
+    kv:{font:{sz:20,bold:true,color:{rgb:AZ}},fill:{fgColor:{rgb:CL}},alignment:ctr,border:{bottom:bd,left:bd,right:bd}},
+    grp:{font:{bold:true,color:{rgb:'1B211E'}},fill:{fgColor:{rgb:'E4E9E2'}},border:B},
+    t:z=>({border:B,...(z?{fill:{fgColor:{rgb:ZB}}}:{}),alignment:{vertical:'center',wrapText:true}}),
+    n:z=>({border:B,...(z?{fill:{fgColor:{rgb:ZB}}}:{}),alignment:{horizontal:'right',vertical:'center'}}),
+    u:z=>({border:B,...(z?{fill:{fgColor:{rgb:ZB}}}:{}),font:{color:{rgb:'646D67'}},alignment:{vertical:'center',indent:1}}),
+    tl:{font:{bold:true},fill:{fgColor:{rgb:'DCE8EE'}},border:B},tn:{font:{bold:true},fill:{fgColor:{rgb:'DCE8EE'}},border:B,alignment:{horizontal:'right'}},
+    ok:{font:{bold:true,color:{rgb:'2E7D4F'}},fill:{fgColor:{rgb:'E3F2E8'}},border:B,alignment:ctr},no:{font:{bold:true,color:{rgb:'B83A2E'}},fill:{fgColor:{rgb:'FBE5E2'}},border:B,alignment:ctr},
+    nl:{font:{italic:true,color:{rgb:'646D67'}},fill:{fgColor:{rgb:'F0F1EE'}},border:B,alignment:ctr}};
+  const full=(r,v,s,h)=>{for(let c=0;c<6;c++)sh.set(r,c,c?'':v,s);sh.merge(r,0,r,5);if(h)sh.h(r,h)};
+  const Z=[];/* celdas con formato propio [r,c,z] */
+  let r=0;full(r,tpProj(),S0.sub);r++;full(r,'Tareo · resumen del periodo',st.ban,30);r++;full(r,per,st.per,20);r+=2;
+  /* indicadores */
+  const he=tR2((+T.h60||0)+(+T.h100||0)+(+T.df||0));const k4=tplSoles()?['COSTO ESTIMADO (S/)',tR2(T.cost),'#,##0']:['FALTAS',T.f,'0'];
+  const K=[[0,0,'OBREROS',T.obreros,'0'],[1,2,'TOTAL HH',T.hh,'#,##0.0'],[3,4,'HORAS EXTRA',he,'#,##0.0'],[5,5,...k4]];
+  for(const[c1,c2,l,v,z]of K){for(let c=c1;c<=c2;c++){sh.set(r,c,c===c1?l:'',st.kl);sh.set(r+1,c,c===c1?v:'',st.kv)}sh.merge(r,c1,r,c2);sh.merge(r+1,c1,r+1,c2);Z.push([r+1,c1,z])}
+  sh.h(r,18);sh.h(r+1,36);r+=3;
+  /* totales por grupo */
+  sh.set(r,0,'Totales',st.sec);for(let c=1;c<6;c++)sh.set(r,c,'',st.sec);r++;
+  const hdr=(L)=>{L.forEach((h,c)=>sh.set(r,c,h,S0.hdr));r++};hdr(['Concepto','Valor','Unidad']);
+  const G=[['Personal',[['Obreros',T.obreros,'personas'],['Días laborados',T.mov,'días'],['Faltas',T.f,'días'],['Días de descanso médico',T.dm,'días']]],
+    ['Horas',[['Horas normales (HN)',T.hn,'HH'],[`HE al ${R.P.sob1} %`,T.h60,'HH'],[`HE al ${R.P.sob2} %`,T.h100,'HH'],['Domingo y feriado (al 100 %)',T.df,'HH']],['Total HH',T.hh,'HH']],
+    ['Bonos y beneficios',[['Días con bono por altura',T.alt,'días'],['Dominical',T.dsc,'jornales'],...(tplSoles()?[['Costo de mano de obra estimado',tR2(T.cost),'S/']]:[])]]];
+  for(const[g,rows,tot]of G){for(let c=0;c<3;c++)sh.set(r,c,c?'':g,st.grp);sh.merge(r,0,r,2);r++;
+    rows.forEach(([k,v,u],i)=>{const z=i%2===1;sh.set(r,0,k,st.t(z));sh.set(r,1,v,st.n(z));sh.set(r,2,u,st.u(z));if(u==='S/')Z.push([r,1,'#,##0.00']);if(k==='Dominical')Z.push([r,1,'0.0###']);r++});
+    if(tot){sh.set(r,0,tot[0],st.tl);sh.set(r,1,tot[1],st.tn);sh.set(r,2,tot[2],st.tl);r++}}
+  r++;
+  /* controles de cuadre */
   const hhPc=tR2(L.reduce((s,x)=>s+x.tot,0));const sinUA=L.filter(x=>!tpxUaP(x.ua));const lab=R.days.filter(f=>!tNoLab(f)&&f<=todayIso());
-  sh.set(r,0,'Totales',S0.h2);r++;
-  const kv=[['Obreros',T.obreros],['Horas normales (HN)',T.hn],[`HE al ${R.P.sob1} %`,T.h60],[`HE al ${R.P.sob2} %`,T.h100],['Domingo y feriado (al 100 %)',T.df],['Total HH',T.hh],
-    ['Días con bono por altura',T.alt],['Días de descanso médico',T.dm],['Faltas',T.f],['Días laborados (movilidad)',T.mov],['Dominical (jornales)',T.dsc]];
-  if(tplSoles())kv.push(['Costo de mano de obra estimado (S/)',tR2(T.cost)]);
-  for(const[k,v]of kv){sh.set(r,0,k,S0.txt);sh.set(r,1,v,S0.num);r++}
-  r++;sh.set(r,0,'Controles de cuadre',S0.h2);r++;
-  const ck=[[Math.abs(hhPc-T.hh)<0.01,'HH por partida = HH de RR.HH.',`${hhPc} = ${T.hh}`],...(R.P.avisoUA?[[!sinUA.length,'Todas las partidas con horas tienen UA de Powers',sinUA.map(x=>`${x.cod} ${x.nom} (${x.tot} HH)`).join('; ')||'sí']]:[]),
-    [R.T.sinTareo===0,'Todos los activos figuran en las publicaciones',R.T.sinTareo?`${R.T.sinTareo} con días «?»`:'sí'],[lab.every(f=>R.pub.includes(f)),'Días laborables publicados',`${lab.filter(f=>R.pub.includes(f)).length} de ${lab.length}`]];
-  for(const[ok,t,v]of ck){sh.set(r,0,t,S0.txt);sh.set(r,1,ok?'OK':'REVISAR',ok?S0.ok:S0.no);sh.set(r,2,v,S0.txt);r++}
-  r++;sh.set(r,0,'Versiones publicadas',S0.h2);r++;['Fecha','Versión','Publicó','Cuándo','Motivo'].forEach((h,c)=>sh.set(r,c,h,S0.hdr));r++;
-  for(const f of R.days){const p=PB.get(f);[toDia(f),p?'v'+p.v:tNoLab(f)?'no laborable':'sin publicar',p?tpWho(p.by,p.byN):'',p?tpAt(p.at):'',p&&p.motivo||''].forEach((v,c)=>sh.set(r,c,v,c===1&&!p&&!tNoLab(f)?S0.no:S0.txt));r++}
+  sh.set(r,0,'Controles de cuadre',st.sec);for(let c=1;c<6;c++)sh.set(r,c,'',st.sec);r++;
+  ['Control','Estado','Detalle','','',''].forEach((h,c)=>sh.set(r,c,h,S0.hdr));sh.merge(r,2,r,5);r++;
+  const ck=[[Math.abs(hhPc-T.hh)<0.01,'HH por partida = HH de RR.HH.',`${hhPc} = ${T.hh}`],...(R.P.avisoUA?[[!sinUA.length,'Todas las partidas con horas tienen UA de Powers',sinUA.map(x=>`${x.cod} ${x.nom} (${x.tot} HH)`).join('; ')||'Sí']]:[]),
+    [R.T.sinTareo===0,'Todos los activos figuran en las publicaciones',R.T.sinTareo?`${R.T.sinTareo} con días «?»`:'Sí'],[lab.every(f=>R.pub.includes(f)),'Días laborables publicados',`${lab.filter(f=>R.pub.includes(f)).length} de ${lab.length}`]];
+  ck.forEach(([ok,t,v],i)=>{const z=i%2===1;sh.set(r,0,t,st.t(z));sh.set(r,1,ok?'OK':'REVISAR',ok?st.ok:st.no);for(let c=2;c<6;c++)sh.set(r,c,c===2?v:'',st.t(z));sh.merge(r,2,r,5);
+    if(String(v).length>70)sh.h(r,Math.min(90,15*Math.ceil(String(v).length/70)));r++});
+  r++;
+  /* versiones */
+  sh.set(r,0,'Versiones publicadas',st.sec);for(let c=1;c<6;c++)sh.set(r,c,'',st.sec);r++;
+  ['Fecha','Versión','Publicó','','Cuándo','Motivo'].forEach((h,c)=>sh.set(r,c,h,S0.hdr));sh.merge(r,2,r,3);r++;
+  R.days.forEach((f,i)=>{const p=PB.get(f);const z=i%2===1;const nl=!p&&tNoLab(f);
+    sh.set(r,0,toDia(f),st.t(z));sh.set(r,1,p?'v'+p.v:nl?'no laborable':'sin publicar',p?{...st.t(z),alignment:ctr}:nl?st.nl:st.no);
+    sh.set(r,2,p?tpWho(p.by,p.byN):'',st.t(z));sh.set(r,3,'',st.t(z));sh.merge(r,2,r,3);sh.set(r,4,p?tpAt(p.at):'',st.t(z));sh.set(r,5,p&&p.motivo||'',st.t(z));r++});
   r++;sh.set(r,0,`Generado el ${tpAt(NOW())} desde la app (cifras de las publicaciones vigentes).`,S0.pie);
-  return sh.done([44,16,30,18,30])}
+  const ws=sh.done([38,13,13,13,15,28]);for(const[rr,cc,z]of Z){const c=ws[X.utils.encode_cell({r:rr,c:cc})];if(c&&c.t==='n')c.z=z}
+  ws['!margins']={left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3};return ws}
 
 function tsxAsis(X,R,per){const S0=tsxSt(),sh=tpxSheet(X);let r=tsxHead(sh,S0,'RR.HH. · asistencia por día',per);
   const H=['N°','DNI','Apellido paterno','Apellido materno','Nombres','Categoría','Cuadrilla',...R.days.map(f=>tsDiaL(f)),'Días laborados','Días con altura','Días DM','Faltas'];
