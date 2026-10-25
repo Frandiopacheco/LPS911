@@ -665,18 +665,23 @@ test('ciclo diario: el SC propone el cierre del día solo de las actividades de 
 // ── Tareo (fase 0, docs/ia/tareo.md) ──
 const PER = (dni, x) => ({ dni, ape: 'PEREZ', nom: 'ANA', pue: 'PEON', cat: 'PE', cua: 'ALBAÑILES', cap: '', act: true, ...x });
 const PC = (cod, x) => ({ cod, grp: cod.split('.')[0], grpN: 'ESTRUCTURAS', nom: 'Partida ' + cod, und: 'm2', act: true, ...x });
-test('tareo: el asistente y el administrador editan el máster y las partidas; nadie las borra', async () => {
+test('tareo: el asistente y el administrador editan el máster; costos y el administrador las partidas; nadie las borra', async () => {
   for (const db of [user('tasis@obra.pe'), user(OWNER)]) {
     await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
     await assertSucceeds(getDocs(collection(db, 'tper')));
     await assertSucceeds(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
     await assertSucceeds(updateDoc(doc(db, 'tper/03684337'), { cap: 'u_tcap1', arch: { t: 1, by: 'x', n: 'x' } }));
     await assertSucceeds(setDoc(doc(db, 'tper/CE0012345AB'), PER('CE0012345AB'))); // carné de extranjería
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+  }
+  for (const db of [user('tcos@obra.pe'), user(OWNER)]) {
     await assertSucceeds(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
     await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { act: false }));
-    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
     await assertFails(deleteDoc(doc(db, 'tpc/10.05')));
   }
+  // el asistente de tareo ya no edita partidas (25-10-2026)
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tpc/20.03'), PC('20.03')));
+  await assertFails(updateDoc(doc(user('tasis@obra.pe'), 'tpc/10.05'), { nom: 'x' }));
 });
 test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom texto)', async () => {
   const t = user('tasis@obra.pe');
@@ -687,33 +692,46 @@ test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom t
   await assertFails(setDoc(doc(t, 'tper/43241048'), PER(43241048))); // número, no texto
   await assertFails(setDoc(doc(t, 'tper/43241049'), { ape: 'X', nom: 'Y' })); // sin DNI
   await assertFails(updateDoc(doc(t, 'tper/03684337'), { dni: '03684338' })); // no cambia el DNI de la ficha
-  await assertFails(setDoc(doc(t, 'tpc/x1'), PC('10.06', { nom: null })));
-  await assertFails(setDoc(doc(t, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
-  await assertFails(setDoc(doc(t, 'tpc/x3'), { grp: '10', und: 'm2' }));
+  const c = user('tcos@obra.pe');
+  await assertFails(setDoc(doc(c, 'tpc/x1'), PC('10.06', { nom: null })));
+  await assertFails(setDoc(doc(c, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
+  await assertFails(setDoc(doc(c, 'tpc/x3'), { grp: '10', und: 'm2' }));
 });
-test('tareo: capataz, costos y jefe de producción leen; no editan', async () => {
+test('tareo: capataz, costos y jefe de producción leen; no editan (costos sí las partidas)', async () => {
   for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe')]) {
     await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
     await assertSucceeds(getDocs(collection(db, 'tpc')));
     await assertSucceeds(getDoc(doc(db, 'tcfg/main')));
     await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
-    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
     await assertFails(setDoc(doc(db, 'tcfg/main'), { tolGar: 5 }));
     await assertFails(deleteDoc(doc(db, 'tper/03684337')));
   }
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe')]) await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
 });
-test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el resto de lectores no', async () => {
+test('tareo: solo costos y el administrador mantienen las partidas (bloquear incluido); los demás lectores no', async () => {
   const c = user('tcos@obra.pe');
   await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 }));
-  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: false, bloqBy: 'tcos@obra.pe', bloqAt: 2 }));
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 3, act: false })); // otro campo
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'otro@obra.pe', bloqAt: 3 })); // a nombre de otro
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: 'si', bloqBy: 'tcos@obra.pe', bloqAt: 3 })); // no booleano
-  await assertFails(setDoc(doc(c, 'tpc/20.02'), { ...PC('20.02'), bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 })); // no crea
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { nom: 'Encofrado de muros y placas', act: true }));
+  await assertSucceeds(setDoc(doc(c, 'tpc/20.02'), PC('20.02')));
   await assertFails(deleteDoc(doc(c, 'tpc/10.05')));
-  for (const db of [user('tasis@obra.pe'), user(OWNER)]) await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 4 }));
-  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 4 }));
+  for (const db of [user('tasis@obra.pe'), user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
     await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
+  }
+});
+test('tareo: foto de la importación de partidas (tpcbk): costos/admin la crean y la marcan deshecha; nadie la cambia ni la borra', async () => {
+  const c = user('tcos@obra.pe');
+  const BK = { t: 1, by: 'tcos@obra.pe', nuevas: ['p20_01'], prev: { p10_05: { nom: 'Encofrado', ts: 0 } } };
+  await assertSucceeds(setDoc(doc(c, 'tpcbk/b1'), BK));
+  await assertSucceeds(getDoc(doc(c, 'tpcbk/b1')));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tpcbk/b1'), { undo: { t: 2, by: OWNER } }));
+  await assertFails(updateDoc(doc(c, 'tpcbk/b1'), { prev: {} })); // no se reescribe la foto
+  await assertFails(deleteDoc(doc(c, 'tpcbk/b1')));
+  await assertFails(setDoc(doc(c, 'tpcbk/b2'), { t: 1 })); // sin prev ni nuevas
+  for (const db of [user('tasis@obra.pe'), user('jefe@obra.pe'), user('editor@obra.pe'), cap('tcap1')]) {
+    await assertFails(getDoc(doc(db, 'tpcbk/b1')));
+    await assertFails(setDoc(doc(db, 'tpcbk/b3'), BK));
   }
 });
 test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo (salvo las partidas, los ingenieros)', async () => {

@@ -451,18 +451,19 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.get('cod', null) is string && d.get('nom', null) is string;
     }
-    // Costos (tcos) solo bloquea o desbloquea una partida para la carga: cambia bloq/bloqBy/bloqAt y nada más
-    function tpcBloqOk() {
-      let d = request.resource.data;
-      return isMember() && role() == 'tcos'
-        && d.diff(resource.data).affectedKeys().hasOnly(['bloq', 'bloqBy', 'bloqAt'])
-        && d.get('bloq', false) is bool && d.get('bloqBy', '') == email();
-    }
+    // Partidas de control: las mantienen solo Costos (tcos) y el administrador (crear, editar, activar, bloquear, importar; 25-10-2026, dueño).
+    // Nadie las borra: las horas ya cargadas siempre encuentran su partida.
+    function tpcEd() { return isMember() && notOff() && role() in ['admin', 'tcos']; }
     match /tpc/{id} {
       // los ingenieros también las leen (Productividad › Casa: IP por partida; no tienen datos de personas)
       allow read: if isTar() || canDaily();
-      allow create: if tarEd() && tpcOk();
-      allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
+      allow create, update: if tpcEd() && tpcOk();
+    }
+    // Foto de la lista antes de cada importación de partidas (para «Deshacer última importación»): se crea y solo se marca como deshecha
+    match /tpcbk/{id} {
+      allow read: if tpcEd();
+      allow create: if tpcEd() && request.resource.data.get('prev', null) is map && request.resource.data.get('nuevas', null) is list;
+      allow update: if tpcEd() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undo']);
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
     // configuración del tareo: el administrador y el asistente de tareo (20-10-2026)

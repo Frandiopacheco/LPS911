@@ -254,25 +254,72 @@ test('Mejoras de oficina: Personal numerado con contador y «Hacer capataz»; pa
   expect(await page.locator('tr.tpc-r').evaluateAll(L => L.map(x => x.dataset.tpc))).toEqual(['p1_01', 'p2_01', 'p10_02', 'p10_10', 'p13_01']);
   await expect(page.locator('table.tpc-tbl')).toHaveCount(1);
   await expect(page.locator('tr[data-tpc="p10_02"] [data-l="HH/und"]')).toHaveText('2.5');
-  // el asistente bloquea: queda con candado
-  page.once('dialog', d => d.accept());
-  await page.click('[data-tpb="p10_02"]');
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_02'))).toMatchObject({ bloq: true, bloqBy: 'tasis@obra.pe' });
-  await expect(page.locator('tr[data-tpc="p10_02"]')).toContainText('BLOQUEADA');
+  // el asistente ya no mantiene las partidas (25-10-2026): solo lectura
+  await expect(page.locator('#tpcRO')).toContainText('Costos y el administrador');
+  await expect(page.locator('[data-tpb], [data-tpe], #tpcAdd, #tpcImp, #tpcExp')).toHaveCount(0);
   noErrors(errors, 'mejoras de oficina');
 });
 
-test('Partidas: costos (tcos) solo bloquea o desbloquea para la carga', async ({ page }) => {
-  const errors = await openApp(page, { as: 'tcos', editar: false, extra: [['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado', und: 'm2', act: true, bloq: true, bloqBy: 'x@obra.pe', bloqAt: 1 }]] });
+test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e importar sin perder nada; deshacer la importación', async ({ page }) => {
+  const PC = (cod, nom, x) => ['tpc', 'p' + cod.replace('.', '_'), { cod, grp: cod.split('.')[0], grpN: cod.startsWith('2.') ? 'PROVISIONALES' : 'ESTRUCTURAS', nom, und: 'm2', met: 10, hhp: 25, ua: 'CD-' + cod, act: true, ts: 0, ...x }];
+  const errors = await openApp(page, { as: 'tcos', editar: false, extra: [
+    PC('2.01', 'Agua provisional'), PC('2.02', 'Energía provisional'),
+    PC('10.05', 'Encofrado', { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 1 }), PC('10.10', 'Encofrado de escaleras', { dct: true }), PC('10.38', 'Concreto de solado'),
+  ] });
+  await conExcel(page);
   await tab(page, 'tpc');
-  await expect(page.locator('#tpcAdd')).toHaveCount(0);
-  await expect(page.locator('[data-tpe]')).toHaveCount(0);
-  await expect(page.locator('tr[data-tpc="p10_05"] .tpc-lock')).toHaveCount(1);
+  await expect(page.locator('#tpcAdd')).toBeVisible();
+  await expect(page.locator('[data-tpe="p10_05"]')).toBeVisible();
+  // bloquear/desbloquear sigue igual
   page.once('dialog', d => d.accept());
   await page.click('[data-tpb="p10_05"]');
   await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_05'))).toMatchObject({ bloq: false, bloqBy: 'tcos@obra.pe' });
-  await expect(page.locator('[data-tpb="p10_05"]')).toHaveText('Bloquear para carga');
-  noErrors(errors, 'costos bloquea');
+  // exportar y volver a importar el mismo archivo: nada cambia
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tpcExp')]);
+  const buf = readFileSync(await dl.path());
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  expect(wb.SheetNames).toEqual(['Lista de partidas', 'Instrucciones']);
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets['Lista de partidas'], { header: 1, defval: '' });
+  const fila = cod => aoa.findIndex(r => r[1] === cod);
+  expect(aoa[fila('10.10')]).toEqual(['', '10.10', 'Encofrado de escaleras', 'm2', 10, 25, 2.5, 'CD-10.10', 'Activa', 'Sí']);
+  let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
+  await fc.setFiles({ name: 'partidas.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf });
+  await expect(page.locator('#tpiEq')).toHaveText('5');
+  await expect(page.locator('#tpiOk')).toBeDisabled();
+  await page.click('#lqm [data-lqx]');
+  // editar en el Excel: metrado de 10.05, HH de 2.01 vacía (no cambia), 2.02 inactiva, 10.10 cambia de nombre, se borra la fila 10.38 y se agrega 10.39
+  const E = aoa.map(r => r.slice());
+  E[fila('10.05')][4] = 400; E[fila('2.01')][5] = ''; E[fila('2.02')][8] = 'Inactiva'; E[fila('10.10')][2] = 'Encofrado de escaleras y rampas';
+  E.splice(fila('10.38'), 1, ['', '10.39', 'Curado de losas', 'm2', 50, '', '', '', '', 'No']);
+  [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
+  await fc.setFiles({ name: 'partidas2.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: xlsxBuf('Lista de partidas', E) });
+  await expect(page.locator('#tpiNew')).toHaveText('1');
+  await expect(page.locator('#tpiChg')).toHaveText('3');
+  await expect(page.locator('#tpiRen')).toContainText('Encofrado de escaleras → Encofrado de escaleras y rampas');
+  await expect(page.locator('#tpiFuera')).toContainText('10.38');
+  await expect(page.locator('#tpiOk')).toBeDisabled(); // falta confirmar el cambio de nombre
+  await page.check('#tpiRenOk');
+  await page.click('#tpiOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_39'))).toMatchObject({ cod: '10.39', nom: 'Curado de losas', act: true, dct: false, grpN: 'ESTRUCTURAS' });
+  const db1 = await page.evaluate(() => window.__dbAll('tpc'));
+  expect(db1.p10_05).toMatchObject({ met: 400, bloq: false });
+  expect(db1.p2_01).toMatchObject({ hhp: 25 }); // la celda vacía no borró las HH
+  expect(db1.p2_02.act).toBe(false);
+  expect(db1.p10_10).toMatchObject({ nom: 'Encofrado de escaleras y rampas', dct: true });
+  expect(db1.p10_38).toMatchObject({ act: true, nom: 'Concreto de solado' }); // la fila borrada no toca la partida
+  expect(Object.values(await page.evaluate(() => window.__dbAll('tpcbk')))).toHaveLength(1);
+  // deshacer: todo vuelve a como estaba y la nueva queda inactiva (no se borra)
+  await expect(page.locator('#tpcUndo')).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.click('#tpcUndo');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_39').act)).toBe(false);
+  const db2 = await page.evaluate(() => window.__dbAll('tpc'));
+  expect(db2.p10_05.met).toBe(10);
+  expect(db2.p2_02.act).toBe(true);
+  expect(db2.p10_10.nom).toBe('Encofrado de escaleras');
+  expect(Object.values(await page.evaluate(() => window.__dbAll('tpcbk')))[0].undo).toMatchObject({ by: 'tcos@obra.pe' });
+  await expect(page.locator('#tpcUndo')).toBeHidden();
+  noErrors(errors, 'costos mantiene las partidas');
 });
 
 test('Personal: filtros encadenados (cada lista ofrece solo lo que queda con los otros filtros, con su conteo) y «Limpiar filtros»', async ({ page }) => {

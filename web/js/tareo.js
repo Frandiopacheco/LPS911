@@ -127,8 +127,10 @@ const tCod=v=>{if(v==null||v==='')return'';const n=typeof v==='number'?v:+String
 const tPcId=cod=>'p'+String(cod).replace('.','_');
 const tNum=v=>{if(v===''||v==null)return null;const n=typeof v==='number'?v:+String(v).replace(',','.');return Number.isFinite(n)?tR2(n):null};
 /** hoja «Lista de partidas» (filas como arrays) → {partidas, grupos, errores} */
-function tParsePartidas(rows){rows=rows||[];let C=2,UA=7;
-  for(let i=0;i<Math.min(rows.length,30);i++){const r=(rows[i]||[]).map(tFold);const d=r.findIndex(x=>/^DESCRIPCI/.test(x));if(d>0){C=d;const u=r.findIndex(x=>/^UA\s*-\s*TAREO/.test(x));UA=u>=0?u:d+5;break}}
+function tParsePartidas(rows){rows=rows||[];let C=2,UA=7,E=-1,DC=-1;
+  for(let i=0;i<Math.min(rows.length,30);i++){const r=(rows[i]||[]).map(tFold);const d=r.findIndex(x=>/^DESCRIPCI/.test(x));if(d>0){C=d;const u=r.findIndex(x=>/^UA\s*-\s*TAREO/.test(x));UA=u>=0?u:d+5;
+    /* columnas opcionales del «Exportar para editar» (25-10-2026): vacías = no cambian */
+    E=r.findIndex(x=>/^ESTADO/.test(x));DC=r.findIndex(x=>/^DESCONTABLE/.test(x));break}}
   const B=C-1;const partidas=[],grupos=[],errores=[],seen=new Set();let cur=null;
   rows.forEach((r,i)=>{if(!r)return;const t=String(r[C]??'').trim().replace(/\s+/g,' ');const raw=r[B];if(raw===''||raw==null){return}
     if(/^TOTAL/.test(tFold(t)))return;const cod=tCod(raw);if(!cod){if(t&&!/^DESCRIPCI/.test(tFold(t)))errores.push({fila:i+1,txt:`Código no válido («${String(raw).trim()}»)`,nom:t});return}
@@ -138,7 +140,8 @@ function tParsePartidas(rows){rows=rows||[];let C=2,UA=7;
     if(!t){errores.push({fila:i+1,txt:`Partida ${cod} sin descripción`});return}
     if(seen.has(cod)){errores.push({fila:i+1,txt:`Código ${cod} repetido (se toma el primero)`,nom:t});return}seen.add(cod);
     const grp=cod.split('.')[0];const gN=cur&&cur.grp===grp?cur.grpN:((grupos.find(x=>x.grp===grp)||{}).grpN||'');
-    partidas.push({id:tPcId(cod),cod,grp,grpN:gN,nom:t,und,met:tNum(r[C+2]),hhp:tNum(r[C+3]),ua,ord:partidas.length+1})});
+    const es=E>=0?tFold(r[E]):'',dc=DC>=0?tFold(r[DC]):'';const act=/^INACT/.test(es)?false:/^ACT/.test(es)?true:undefined;const dct=/^(SI|X|1)$/.test(dc)?true:/^(NO|0)$/.test(dc)?false:undefined;
+    partidas.push({id:tPcId(cod),cod,grp,grpN:gN,nom:t,und,met:tNum(r[C+2]),hhp:tNum(r[C+3]),ua,ord:partidas.length+1,...(act!==undefined?{act}:{}),...(dct!==undefined?{dct}:{})})});
   return{partidas,grupos,errores}}
 /** orden de códigos por partes enteras: 2 antes de 10; 10.02 antes de 10.10 (no como texto) */
 const tCmpCod=(a,b)=>{const A=String(a??'').split('.'),B=String(b??'').split('.');for(let i=0;i<Math.max(A.length,B.length);i++){const x=parseInt(A[i],10),y=parseInt(B[i],10);
@@ -729,8 +732,10 @@ function tImportMasterRows(rows,sh,cols){const R=tParseMaster(rows,cols);const D
 
 /* ---------- Partidas de control ---------- */
 /* una sola tabla (columnas alineadas entre grupos) con fila de encabezado por grupo, como la hoja «Lista de partidas» */
-const TPU={q:'',est:'all'};
-const tBloqOk=()=>!!me&&(!!isAdmin||TASIS()||me.role==='tcos');
+/* las mantienen solo Costos (tcos) y el administrador (25-10-2026, dueño): crear, editar, activar, bloquear, importar y deshacer; el resto solo lee */
+const TPU={q:'',est:'all',bk:null};
+const tPcEd=()=>!!me&&(!!isAdmin||me.role==='tcos');
+const tBloqOk=tPcEd;
 const tF2=v=>v==null||v===''?'':Number(v).toLocaleString('es-PE',{maximumFractionDigits:2});
 /* ratio HH/und (columna «Ratio» del Excel): HH presupuestadas entre metrado */
 const tRatio=x=>{const m=+x.met,h=+x.hhp;return m>0&&h>0?(h/m).toLocaleString('es-PE',{maximumFractionDigits:4}):''};
@@ -739,7 +744,7 @@ function tPcGroups(L){const G=new Map();for(const x of L){const k=String(x.grp||
 function tPcVis(){const q=tFold(TPU.q);return[...S.tpc.values()].filter(x=>{if(!x||x.arch)return false;
   if(TPU.est==='act'&&x.act===false)return false;if(TPU.est==='bloq'&&x.bloq!==true)return false;if(TPU.est==='ina'&&x.act!==false)return false;
   return!q||String(x.cod||'').includes(q)||tFold(x.nom).includes(q)||tFold(x.ua).includes(q)||tFold(x.grpN).includes(q)})}
-function tPcDraw(){const b=$('#tpcBody');if(!b)return;const ed=tEdit(),bq=tBloqOk();const G=tPcGroups(tPcVis());const nc=8+(ed||bq?1:0);
+function tPcDraw(){const b=$('#tpcBody');if(!b)return;const ed=tPcEd(),bq=ed;const G=tPcGroups(tPcVis());const nc=8+(ed||bq?1:0);
   b.innerHTML=G.map(g=>{const hh=g.L.reduce((s,x)=>s+(+x.hhp||0),0);
     return`<tr class="tpc-gh" data-tpg="${esc(g.k)}"><th colspan="${nc}"><span class="mono">${esc(g.k)}</span> ${esc(g.n||'(sin grupo)')}<span class="sub">${g.L.length} ${g.L.length===1?'partida':'partidas'}${hh?` · ${tF2(hh)} HH ppto`:''}</span></th></tr>`+
     g.L.map(x=>{const off=x.act===false,lk=x.bloq===true;
@@ -752,28 +757,28 @@ function tPcDraw(){const b=$('#tpcBody');if(!b)return;const ed=tEdit(),bq=tBloqO
 async function tPcBloq(id){const x=S.tpc.get(id);if(!x||!tBloqOk())return;const on=x.bloq!==true;
   if(!await uiAsk({title:on?`¿Bloquear la partida ${x.cod}?`:`¿Desbloquear la partida ${x.cod}?`,text:on?`«${x.nom}» deja de aparecer en el celular de los capataces y un tareo que la use no se podrá enviar hasta cambiarla.`:`«${x.nom}» vuelve a estar disponible para cargar horas.`,ok:on?'Bloquear':'Desbloquear',tone:on?'warn':'info'}))return;
   try{await fcol(TCOLS.tpc).doc(id).update({bloq:on,bloqBy:(me.email||'').toLowerCase(),bloqAt:NOW()});toast(`Partida ${x.cod} ${on?'bloqueada para carga':'desbloqueada'}.`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
-function renderTPc(main){const ed=tEdit(),bq=tBloqOk();const all=[...S.tpc.values()].filter(x=>x&&!x.arch);
+function renderTPc(main){const ed=tPcEd(),bq=ed;const all=[...S.tpc.values()].filter(x=>x&&!x.arch);
   const nA=all.filter(x=>x.act!==false).length,nB=all.filter(x=>x.bloq===true).length,nG=tPcGroups(all).length;
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Partidas de control',`${nA} activas · ${nG} grupos${nB?` · ${nB} bloqueadas`:''}`,ed?`<button class="ib" id="tpcImp">Importar Excel de costos</button><button class="ib pri" id="tpcAdd">+ Partida</button>`:'')}
-   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Importa la hoja «Lista de partidas» del Excel que hoy recibe costos para cargarlas o actualizarlas. Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan).</p><p><b>Bloquear para carga</b> (costos, asistente o administrador): la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar.</p><p><b>Descontable</b> (en «Editar»): las horas de esa partida se descuentan a subcontratistas. Antes de la foto, el capataz reparte las horas de cada obrero entre los SC de Configuración › Subcontratistas para descuentos; Costos muestra lo descontado a cada SC con su monto.</p>`)}
-   ${ed?'':bq?`<div class="callout">Puedes bloquear o desbloquear partidas para la carga; el resto lo mantiene el asistente de tareo.</div>`:`<div class="callout">Solo lectura: las partidas las mantiene el asistente de tareo.</div>`}
-   ${all.length?'':`<div class="callout">Aún no hay partidas de control.${ed?' Impórtalas del Excel de costos o agrégalas una por una.':''}</div>`}
+  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Partidas de control',`${nA} activas · ${nG} grupos${nB?` · ${nB} bloqueadas`:''}`,ed?`<button class="ib" id="tpcUndo" hidden>Deshacer última importación</button><button class="ib" id="tpcExp">Exportar para editar</button><button class="ib" id="tpcImp">Importar Excel</button><button class="ib pri" id="tpcAdd">+ Partida</button>`:'')}
+   ${helpBox('¿Para qué sirven?',`<p>Son las partidas en las que el capataz reparte las horas de su cuadrilla. Las mantienen <b>Costos y el administrador</b>.</p><p><b>Editar en Excel:</b> «Exportar para editar» baja la lista; agrega o corrige partidas en el Excel y vuelve a importarlo (también sirve la hoja «Lista de partidas» del Excel de costos). Antes de guardar se ve qué cambia. <b>Las HH ya cargadas nunca se pierden</b>: borrar una fila del Excel no borra ni desactiva la partida (para quitarla, pon Estado = Inactiva), una celda vacía no cambia nada y el código no se cambia (un código nuevo es una partida nueva). Un cambio de nombre pide confirmación, porque las horas ya cargadas se leerán con el nombre nuevo. «Deshacer última importación» devuelve la lista como estaba (las partidas nuevas quedan inactivas, no se borran).</p><p>Desactivar una partida la quita de los tareos nuevos (los antiguos la conservan). <b>Bloquear para carga</b>: la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar.</p><p><b>Descontable</b>: las horas de esa partida se descuentan a subcontratistas; el capataz las reparte entre los SC de Configuración › Subcontratistas para descuentos.</p>`)}
+   ${ed?'':`<div class="callout" id="tpcRO">Solo lectura: las partidas las mantienen Costos y el administrador.</div>`}
+   ${all.length?'':`<div class="callout">Aún no hay partidas de control.${ed?' Impórtalas de un Excel o agrégalas una por una.':''}</div>`}
    <div class="card"><div class="pad t-bar"><input class="tin t-q" id="tpcQ" data-fk="tpcQ" type="search" placeholder="Buscar código, partida o cuenta" value="${esc(TPU.q)}" aria-label="Buscar partida">
     <span class="seg" id="tpcEst">${[['all','Todas'],['act','Activas'],['bloq','Bloqueadas'],['ina','Inactivas']].map(([k,l])=>`<button data-tpest="${k}" class="${TPU.est===k?'on':''}">${l}</button>`).join('')}</span><span class="note" id="tpcN"></span></div>
-    <div class="tscroll"><table class="t t-tbl tpc-tbl${ed||bq?' tpc-ed':''}"><colgroup><col class="tpc-c-cod"><col><col class="tpc-c-und"><col class="tpc-c-num"><col class="tpc-c-num"><col class="tpc-c-rat"><col class="tpc-c-ua"><col class="tpc-c-st">${ed||bq?`<col class="tpc-c-acts${ed&&bq?' w2':''}">`:''}</colgroup>
-     <thead><tr><th>Código</th><th>Descripción</th><th>Und</th><th class="t-r">Metrado</th><th class="t-r">HH ppto</th><th class="t-r">HH/und</th><th>Cuenta UA</th><th>Estado</th>${ed||bq?'<th></th>':''}</tr></thead>
+    <div class="tscroll"><table class="t t-tbl tpc-tbl${ed?' tpc-ed':''}"><colgroup><col class="tpc-c-cod"><col><col class="tpc-c-und"><col class="tpc-c-num"><col class="tpc-c-num"><col class="tpc-c-rat"><col class="tpc-c-ua"><col class="tpc-c-st">${ed?`<col class="tpc-c-acts w2">`:''}</colgroup>
+     <thead><tr><th>Código</th><th>Descripción</th><th>Und</th><th class="t-r">Metrado</th><th class="t-r">HH ppto</th><th class="t-r">HH/und</th><th>Cuenta UA</th><th>Estado</th>${ed?'<th></th>':''}</tr></thead>
      <tbody id="tpcBody"></tbody></table></div></div>
   </div></div>`;
   tPcDraw();
   const q=$('#tpcQ');q.oninput=()=>{TPU.q=q.value;tPcDraw()};
   $('#tpcEst').onclick=e=>{const b=e.target.closest('[data-tpest]');if(!b)return;TPU.est=b.dataset.tpest;$$('#tpcEst button').forEach(x=>x.classList.toggle('on',x===b));tPcDraw()};
-  if(ed){$('#tpcAdd').onclick=()=>tPcForm(null);$('#tpcImp').onclick=tImportPc}
-  if(!ed&&!bq)return;
-  $('#tpcBody').onclick=async e=>{let b;if((b=e.target.closest('[data-tpb]')))return tPcBloq(b.dataset.tpb);if(!ed)return;
+  if(!ed)return;
+  $('#tpcAdd').onclick=()=>tPcForm(null);$('#tpcImp').onclick=tImportPc;$('#tpcExp').onclick=tPcExport;$('#tpcUndo').onclick=tPcUndo;tPcBkLoad();
+  $('#tpcBody').onclick=async e=>{let b;if((b=e.target.closest('[data-tpb]')))return tPcBloq(b.dataset.tpb);
     if((b=e.target.closest('[data-tpe]')))tPcForm(b.dataset.tpe);
     else if((b=e.target.closest('[data-tpt]'))){const x=S.tpc.get(b.dataset.tpt);if(!x)return;const on=x.act===false;
       try{await fcol(TCOLS.tpc).doc(x.id).set({act:on,...tStamp()},{merge:true});toast(`Partida ${x.cod} ${on?'activada':'desactivada'}.`)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}}
-function tPcForm(id){const x=id?S.tpc.get(id):null;const v=x||{cod:'',grpN:'',nom:'',und:'',met:'',hhp:'',ua:''};
+function tPcForm(id){if(!tPcEd())return;const x=id?S.tpc.get(id):null;const v=x||{cod:'',grpN:'',nom:'',und:'',met:'',hhp:'',ua:''};
   const grpN=g=>{for(const p of S.tpc.values())if(p.grp===g&&p.grpN)return p.grpN;return''};
   lqModal(`<div class="lqtop"><b>${x?'Editar partida':'Nueva partida de control'}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
    <div class="t-form"><label class="lqlab">Código<input class="tin" id="tpCod" value="${esc(v.cod)}" placeholder="10.05" inputmode="decimal"${x?' readonly':''}></label>
@@ -789,25 +794,77 @@ function tPcForm(id){const x=id?S.tpc.get(id):null;const v=x||{cod:'',grpN:'',no
      const grp=cod.split('.')[0];const d={cod,grp,grpN:$('#tpGrp').value.trim()||grpN(grp),nom,und:$('#tpUnd').value.trim(),met:tNum($('#tpMet').value),hhp:tNum($('#tpHh').value),ua:$('#tpUa').value.trim(),dct:$('#tpDct').checked,...tStamp()};
      if(!x){d.act=true;d.ord=S.tpc.size+1}
      try{await fcol(TCOLS.tpc).doc(pid).set(d,{merge:true});lqClose();toast(x?'Partida actualizada.':'Partida agregada.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
-const TPC_CMP=[['nom','Nombre'],['grpN','Grupo'],['und','Unidad'],['met','Metrado'],['hhp','HH'],['ua','UA']];
-async function tImportPc(){const f=await tPickFile();if(!f)return;let wb;try{wb=await tReadBook(f)}catch(err){toast('No se pudo leer el archivo: '+(err.message||err));return}
-  const sh=await tSheetOf(wb,'Lista de partidas');if(!sh)return;const R=tParsePartidas(tRows(wb.Sheets[sh]));
-  const nuevas=[],cambios=[],iguales=[];const inF=new Set();
-  for(const p of R.partidas){inF.add(p.id);const o=S.tpc.get(p.id);if(!o){nuevas.push(p);continue}const ch=[];for(const[k,l]of TPC_CMP){const a=o[k]??'',b=p[k]??'';if(String(a)!==String(b))ch.push(`${l}: ${a===''?'—':a} → ${b===''?'—':b}`)}if(ch.length)cambios.push({p,ch});else iguales.push(p)}
-  const fuera=[...S.tpc.values()].filter(x=>!x.arch&&!inF.has(x.id));const lim=L=>L.slice(0,200);
+/* importar (25-10-2026, a prueba de errores): nada se borra ni se desactiva por faltar en el archivo; celda vacía = no cambia; nunca toca «Bloqueada»;
+   el código es la llave (uno nuevo = partida nueva); cambios de nombre con confirmación; antes de guardar se guarda una foto en tpcbk para deshacer */
+const TPC_CMP=[['nom','Nombre'],['grpN','Grupo'],['und','Unidad'],['met','Metrado'],['hhp','HH'],['ua','UA'],['act','Estado'],['dct','Descontable']];
+const tPcCur=(o,k)=>k==='act'?o.act!==false:k==='dct'?o.dct===true:(o[k]??null);
+const tPcVal=(k,v)=>k==='act'?(v===false?'Inactiva':'Activa'):k==='dct'?(v===true?'Sí':'No'):v==null||v===''?'—':String(v);
+function tPcDiff(partidas){const nuevas=[],cambios=[],iguales=[],arch=[];const inF=new Set();
+  for(const p of partidas){inF.add(p.id);const o=S.tpc.get(p.id);if(!o){nuevas.push(p);continue}if(o.arch){arch.push(p);continue}
+    const set={},ch=[];for(const[k,l]of TPC_CMP){const v=p[k];if(v===undefined||v===null||v==='')continue;const a=tPcCur(o,k);if(String(a??'')!==String(v)){set[k]=v;ch.push(`${l}: ${tPcVal(k,a)} → ${tPcVal(k,v)}`)}}
+    if(ch.length)cambios.push({p,o,set,ch,ren:'nom' in set});else iguales.push(p)}
+  const fuera=[...S.tpc.values()].filter(x=>x&&!x.arch&&!inF.has(x.id));
+  /* ¿cambió el código? misma descripción que una partida que no está en el archivo: la anterior se conserva con sus horas */
+  for(const p of nuevas){const fx=fuera.find(x=>tFold(x.nom)===tFold(p.nom));if(fx)p._antes=fx.cod}
+  return{nuevas,cambios,iguales,arch,fuera,ren:cambios.filter(x=>x.ren)}}
+async function tImportPc(){if(!tPcEd())return;const f=await tPickFile();if(!f)return;let wb;try{wb=await tReadBook(f)}catch(err){toast('No se pudo leer el archivo: '+(err.message||err));return}
+  const sh=await tSheetOf(wb,'Lista de partidas');if(!sh)return;const R=tParsePartidas(tRows(wb.Sheets[sh]));const D=tPcDiff(R.partidas);const{nuevas,cambios,iguales,fuera}=D;
+  const n=nuevas.length+cambios.length;const lim=L=>L.slice(0,200);
   lqModal(`<div class="lqtop"><b>Importar partidas de control</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
    <p class="lqmsg">Hoja «${esc(sh)}» · ${R.partidas.length} partidas en ${R.grupos.length} grupos.</p>
    <div class="lqtiles t-imptiles"><div class="lqtile" style="--c:var(--ok)"><span>Nuevas</span><b id="tpiNew">${nuevas.length}</b></div><div class="lqtile" style="--c:var(--accent)"><span>Con cambios</span><b id="tpiChg">${cambios.length}</b></div>
     <div class="lqtile" style="--c:var(--line2)"><span>Sin cambios</span><b id="tpiEq">${iguales.length}</b></div><div class="lqtile" style="--c:var(--bad)"><span>Errores</span><b>${R.errores.length}</b></div></div>
-   <details class="t-sec"><summary><b>${nuevas.length}</b> nuevas</summary><ul class="t-list">${lim(nuevas).map(p=>`<li><span class="mono">${esc(p.cod)}</span> ${esc(p.nom)} <span class="note">${esc(p.grpN)}</span></li>`).join('')}</ul></details>
-   <details class="t-sec"><summary><b>${cambios.length}</b> con cambios</summary><ul class="t-list">${lim(cambios).map(x=>`<li><span class="mono">${esc(x.p.cod)}</span> ${esc(x.p.nom)}<div class="t-chg">${x.ch.map(esc).join('<br>')}</div></li>`).join('')}</ul></details>
+   ${D.ren.length?`<div class="callout tpi-ren" id="tpiRen"><b>⚠ ${D.ren.length} ${D.ren.length===1?'partida cambia':'partidas cambian'} de nombre</b><ul class="t-list">${D.ren.map(x=>`<li><span class="mono">${esc(x.p.cod)}</span> ${esc(x.o.nom)} → <b>${esc(x.p.nom)}</b></li>`).join('')}</ul>
+     <label class="chk"><input type="checkbox" id="tpiRenOk"> Entiendo que las horas ya cargadas en ${D.ren.length===1?'esta partida':'estas partidas'} se leerán con el nombre nuevo</label></div>`:''}
+   <details class="t-sec"><summary><b>${nuevas.length}</b> nuevas</summary><ul class="t-list" id="tpiLN">${lim(nuevas).map(p=>`<li><span class="mono">${esc(p.cod)}</span> ${esc(p.nom)} <span class="note">${esc(p.grpN)}</span>${p._antes?`<div class="t-chg">¿Antes era la ${esc(p._antes)}? Esa se conserva con sus horas; desactívala si ya no va.</div>`:''}</li>`).join('')}</ul></details>
+   <details class="t-sec"><summary><b>${cambios.length}</b> con cambios</summary><ul class="t-list" id="tpiLC">${lim(cambios).map(x=>`<li><span class="mono">${esc(x.p.cod)}</span> ${esc(x.p.nom)}<div class="t-chg">${x.ch.map(esc).join('<br>')}</div></li>`).join('')}</ul></details>
    ${R.errores.length?`<details class="t-sec" open><summary><b>${R.errores.length}</b> con errores (no se importan)</summary><ul class="t-list">${R.errores.map(x=>`<li>Fila ${x.fila}: ${esc(x.txt)}${x.nom?' · '+esc(x.nom):''}</li>`).join('')}</ul></details>`:''}
-   ${fuera.length?`<details class="t-sec"><summary><b>${fuera.length}</b> en la app pero no en el archivo (no se tocan)</summary><ul class="t-list">${fuera.map(x=>`<li><span class="mono">${esc(x.cod)}</span> ${esc(x.nom)}</li>`).join('')}</ul></details>`:''}
-   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tpiOk"${nuevas.length+cambios.length?'':' disabled'}>Importar ${nuevas.length+cambios.length}</button></div>`,
-   async e=>{const b=e.target.closest('#tpiOk');if(!b)return;b.disabled=true;const st=tStamp();const W=[];
-     for(const p of nuevas){const{id,...d}=p;W.push([fcol(TCOLS.tpc).doc(id),{...d,act:true,...st},{merge:true}])}
-     for(const{p}of cambios){const{id,...d}=p;W.push([fcol(TCOLS.tpc).doc(id),{...d,...st},{merge:true}])}
-     try{await tBatch(W);lqClose();toast(`Partidas importadas: ${nuevas.length} nuevas, ${cambios.length} actualizadas.`)}catch(err){b.disabled=false;toast('No se pudo importar: '+(err.code||err.message))}})}
+   ${fuera.length?`<details class="t-sec" id="tpiFuera"><summary><b>${fuera.length}</b> en la app pero no en el archivo (no se borran ni se desactivan)</summary><p class="note">Para quitar una partida, ponle Estado = Inactiva en el Excel o desactívala aquí.</p><ul class="t-list">${fuera.map(x=>`<li><span class="mono">${esc(x.cod)}</span> ${esc(x.nom)}</li>`).join('')}</ul></details>`:''}
+   ${D.arch.length?`<details class="t-sec"><summary><b>${D.arch.length}</b> archivadas (no se tocan)</summary><ul class="t-list">${D.arch.map(p=>`<li><span class="mono">${esc(p.cod)}</span> ${esc(p.nom)}</li>`).join('')}</ul></details>`:''}
+   <p class="note">Las celdas vacías no cambian nada y «Bloqueada» no se toca. Podrás deshacer esta importación.</p>
+   <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tpiOk"${n&&!D.ren.length?'':' disabled'}>Importar ${n}</button></div>`,
+   async e=>{const b=e.target.closest('#tpiOk');if(!b||b.disabled)return;if(D.ren.length&&!($('#tpiRenOk')||{}).checked)return;b.disabled=true;b.textContent='Importando…';
+     const st=tStamp();const prev={};const W=[];
+     for(const{p,o,set}of cambios){const pv={ts:o.ts||0};for(const k of Object.keys(set))pv[k]=tPcCur(o,k);prev[p.id]=pv;W.push([fcol(TCOLS.tpc).doc(p.id),{...set,...st},{merge:true}])}
+     for(const p of nuevas){const{id,_antes,act,dct,...d}=p;if(!d.grpN){for(const x of S.tpc.values())if(x.grp===d.grp&&x.grpN){d.grpN=x.grpN;break}}
+       W.push([fcol(TCOLS.tpc).doc(id),{...d,act:act!==false,...(dct!==undefined?{dct}:{}),...st},{merge:true}])}
+     /* la foto va primero y en el mismo lote: si no se guarda, no se importa nada */
+     W.unshift([fcol('tpcbk').doc('b'+st.ts),{t:st.ts,by:st.by,file:String(f.name||'').slice(0,120),nuevas:nuevas.map(p=>p.id),prev,nN:nuevas.length,nC:cambios.length}]);
+     try{await tBatch(W);lqClose();TPU.bk=null;tPcBkLoad();toast(`Partidas importadas: ${nuevas.length} nuevas, ${cambios.length} actualizadas.`)}catch(err){b.disabled=false;b.textContent='Reintentar';toast('No se pudo importar: '+(err.code||err.message))}},
+   e=>{if(e.target.id==='tpiRenOk'){const b=$('#tpiOk');if(b)b.disabled=!e.target.checked||!n}})}
+/* última importación (tpcbk): el botón «Deshacer» aparece si no se deshizo */
+async function tPcBkLoad(){try{const s=await fcol('tpcbk').get();const L=[];s.forEach(d=>L.push({id:d.id,...d.data()}));L.sort((a,b)=>(b.t||0)-(a.t||0));TPU.bk=L[0]||null}catch(e){TPU.bk=null}
+  const u=$('#tpcUndo');if(u){const ok=!!(TPU.bk&&!TPU.bk.undo);u.hidden=!ok;if(ok)u.title=`Importación del ${new Date(TPU.bk.t).toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'})}${TPU.bk.by?' por '+TPU.bk.by:''}`}}
+async function tPcUndo(){if(!tPcEd())return;const bk=TPU.bk;if(!bk||bk.undo)return;
+  const back=[],off=[],skip=[];
+  for(const[id,pv]of Object.entries(bk.prev||{})){const x=S.tpc.get(id);if(!x)continue;if((x.ts||0)>bk.t){skip.push(x);continue}back.push([x,pv])}
+  for(const id of bk.nuevas||[]){const x=S.tpc.get(id);if(!x)continue;if((x.ts||0)>bk.t){skip.push(x);continue}if(x.act!==false)off.push(x)}
+  if(!back.length&&!off.length){toast('No hay nada que deshacer: esas partidas se cambiaron después.');return}
+  const L=[...back.map(([x])=>`${x.cod} vuelve a como estaba`),...off.map(x=>`${x.cod} (nueva) queda inactiva`),...skip.map(x=>`${x.cod}: se cambió después, no se toca`)];
+  if(!await uiAsk({title:'¿Deshacer la última importación?',text:'La lista de partidas vuelve a como estaba antes de importar. Las partidas nuevas no se borran: quedan inactivas, así conservan las horas que ya tengan.',list:L.slice(0,60),ok:'Deshacer',tone:'warn'}))return;
+  const st=tStamp();const W=[];
+  for(const[x,pv]of back){const d={};for(const[k,v]of Object.entries(pv)){if(k==='ts')continue;d[k]=v}W.push([fcol(TCOLS.tpc).doc(x.id),{...d,...st},{merge:true}])}
+  for(const x of off)W.push([fcol(TCOLS.tpc).doc(x.id),{act:false,...st},{merge:true}]);
+  W.push([fcol('tpcbk').doc(bk.id),{undo:{t:st.ts,by:st.by}},{merge:true}]);
+  try{await tBatch(W);toast('Importación deshecha.');tPcBkLoad()}catch(err){toast('No se pudo deshacer: '+(err.code||err.message))}}
+/* exportar para editar: mismo formato que la hoja «Lista de partidas» (se vuelve a importar tal cual) + Estado y Descontable */
+async function tPcExport(){try{await loadXlsx();const X=window.XLSX;const G=tPcGroups([...S.tpc.values()].filter(x=>x&&!x.arch));
+  const aoa=[[`LISTA DE PARTIDAS DE CONTROL · exportada el ${tFmt(todayIso())}`],[],['','CÓDIGO','DESCRIPCIÓN','UND','METRADO','HH PPTO','HH/UND','UA - TAREO','ESTADO','DESCONTABLE']];const codR=[];
+  for(const g of G){aoa.push(['',Number(g.k)||g.k,g.n||'','','','','','','','']);
+    for(const x of g.L){codR.push(aoa.length);aoa.push(['',x.cod,x.nom||'',x.und||'',x.met??'',x.hhp??'',+x.met>0&&+x.hhp>0?Math.round(x.hhp/x.met*1e4)/1e4:'',x.ua||'',x.act===false?'Inactiva':'Activa',x.dct===true?'Sí':'No'])}}
+  const ws=X.utils.aoa_to_sheet(aoa);for(const r of codR){const c=ws[X.utils.encode_cell({r,c:1})];if(c){c.t='s';c.v=String(c.v)}}/* «10.10» como texto (no 10.1) */
+  ws['!cols']=[{wch:2},{wch:9},{wch:52},{wch:7},{wch:11},{wch:11},{wch:9},{wch:16},{wch:10},{wch:12}];
+  const B={font:{bold:true}};for(let c=1;c<10;c++){const k=X.utils.encode_cell({r:2,c});if(ws[k])ws[k].s={...B,fill:{fgColor:{rgb:'DDEBF7'}}}}
+  for(let r=3;r<aoa.length;r++)if(!codR.includes(r)){for(let c=1;c<3;c++){const k=X.utils.encode_cell({r,c});if(ws[k])ws[k].s=B}}
+  const ins=X.utils.aoa_to_sheet([['Cómo editar las partidas'],[],
+    ['• Agrega filas nuevas con su código (grupo.número, p. ej. 10.39) y su descripción. Un código nuevo es una partida nueva.'],
+    ['• Corrige descripción, unidad, metrado, HH o cuenta UA en su fila. No cambies el código de una partida existente: se crearía otra.'],
+    ['• Para quitar una partida pon ESTADO = Inactiva. Borrar la fila no hace nada (la partida y sus horas se conservan).'],
+    ['• Una celda vacía no cambia nada. DESCONTABLE: Sí o No. HH/UND es solo referencia (no se importa).'],
+    ['• Al importar verás qué cambia antes de guardar; un cambio de nombre pide confirmación. Se puede deshacer la última importación.']]);ins['!cols']=[{wch:110}];
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Lista de partidas');X.utils.book_append_sheet(wb,ins,'Instrucciones');
+  saveBlob(`Partidas de control ${todayIso()}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/octet-stream'}))}
+  catch(err){toast('No se pudo exportar: '+(err.message||err))}}
 
 /* ---------- Configuración del tareo (admin) ---------- */
 /* feriados del calendario de Last Planner (S.meta project cal.hol: [{d,n}]); solo los tiene quien carga los datos de LPS */
