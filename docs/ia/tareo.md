@@ -84,6 +84,7 @@ Colecciones nuevas, todas por `fcol()`:
 - `tarEd()`: rol en `['admin','tasis']`.
 - `tper`: leen `isTar()`; escribe `tarEd()` (sin `delete`: se archiva).
 - `tpc`: leen `isTar()` (y los ingenieros); **crean y editan solo Costos (`tcos`) y el administrador** (`tpcEd()`, 25-10-2026, dueño: el asistente de tareo ya no); nadie borra.
+- `tperbk/{id}` (id `b<ms>`): igual que `tpcbk` pero del personal: `{t, by, file, nuevos:[dni], prev:{dni:{campo:valor anterior, ts}}, nN, nC, undo?}`; la leen y crean `tarEd()`; solo se actualiza `undo`. Va en el respaldo.
 - `tpcbk/{id}` (id `b<ms>`): foto antes de cada importación de partidas `{t, by, file, nuevas:[ids], prev:{id:{campo:valor anterior, ts}}, nN, nC, undo?:{t,by}}`; la leen y crean `tpcEd()`; solo se actualiza `undo`; no se borra. Va en el respaldo.
 - `tcfg`: leen `isTar()`; escribe solo `isAdmin()`.
 - Los roles de solo tareo (`tcap`, `tasis`, `tcos`) **no** leen las colecciones de LPS ni escriben en ellas (las funciones de lectura existentes que usan `isMember()` deben excluirlos).
@@ -201,7 +202,9 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 - `body.mod-tar` oculta los controles de LPS de la barra; Ctrl+Z no hace nada en el tareo.
 - Si cambia el rol de forma que cambia lo que se carga (solo tareo, acceso al tareo, lista de miembros del asistente), la app avisa y recarga.
 - `tHoras`: ~~sábado pasado de la jornada descuenta 60 min~~ (eliminado en la auditoría F2: refrigerio por intersección, ver «Correcciones de la auditoría F2 — cálculo»).
-- Importar el máster nunca toca `cap`, nunca archiva; solo informa a quienes no están en el archivo. Una categoría editada a mano se respeta salvo que cambie el puesto.
+- Importar el máster nunca toca `cap`, nunca archiva; solo informa a quienes no están en el archivo. Una categoría editada a mano se respeta salvo que cambie el puesto (o que el archivo traiga «Cat. obrero»).
+- **Personal a prueba de errores (25-10-2026, como Partidas):** «Exportar para editar» (`tPerExportEd`, `#tperXed`) arma la hoja «Datos del personal» con los encabezados del máster (`TM_FIELDS`), una fila por periodo, DNI como texto, fechas como fecha, «Cat. obrero» con lista (columna opcional que lee `tParseMaster` → `catX`) y «Capataz (no se importa)»; «Exportar lista» (`#tperXls`) sigue siendo la lista filtrada. `tMasterDiff` escribe solo lo que cambia (`set`): celda vacía = no cambia (tampoco quita un cese), los periodos se suman (`tPerMerge`: el de la app que no está en el archivo se conserva; mismo ingreso → actualiza cese/motivo; ingreso vacío → el último periodo), DNI nuevo con el mismo nombre que una ficha ausente avisa «¿Cambió el DNI?», cambio de nombre exige `#timpRenOk`. Foto `tperbk` primero en el lote; «Deshacer última importación» (`#tperUndo`, `tPerUndo`): campos anteriores y los nuevos se archivan.
+- **Listas desplegables (25-10-2026):** los «Exportar para editar» (Partidas y Personal) se arman con ExcelJS (`tXlsEdit`): ESTADO (Activa/Inactiva), DESCONTABLE (Sí/No) y Cat. obrero solo aceptan su lista (validación con error «stop», también en 300 filas vacías debajo); fechas con validación de fecha; columnas de referencia en gris.
 - Ids de partidas: `p10_05` (`tPcId`).
 
 ## Decisiones tomadas al implementar F1 (oficina y cálculo)

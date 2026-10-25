@@ -432,6 +432,12 @@ service cloud.firestore {
       allow read: if isTar();
       allow create, update: if tarEd() && tperOk(id) && (tperSinPriv() || isAdmin());
     }
+    // Foto antes de cada importación del personal (para «Deshacer última importación»): se crea y solo se marca como deshecha
+    match /tperbk/{id} {
+      allow read: if tarEd();
+      allow create: if tarEd() && request.resource.data.get('prev', null) is map && request.resource.data.get('nuevos', null) is list;
+      allow update: if tarEd() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undo']);
+    }
     // AFP y N.° de hijos ya no van en tper (los lee el capataz): se pueden conservar o borrar, no poner ni cambiar (auditoría 21-10-2026)
     function tperSinPriv() {
       let d = request.resource.data;
