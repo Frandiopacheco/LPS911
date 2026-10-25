@@ -236,6 +236,10 @@ const tcStLab=st=>st==='env'?'Enviado ✓':st==='rev'?'Revisado':st==='pub'?'Pub
 /** reabierto ya leído en este celular (se guarda la marca de la reapertura: una nueva reapertura vuelve a mostrar el aviso completo) */
 const tcRbK=()=>'lps.tcrb.'+tcId(TCS.date,TCS.cap);
 function tcReabSeen(D){try{return!!(D&&D.reab)&&localStorage.getItem(tcRbK())===String(D.reab.t||'1')}catch(e){return false}}
+/** aviso de día no laborable cerrado en este celular (por fecha) */
+const tcNlK=()=>'lps.tcnl.'+TCS.date;
+function tcNlSeen(){try{return localStorage.getItem(tcNlK())==='1'}catch(e){return false}}
+function tcNlSet(on){try{if(on)localStorage.setItem(tcNlK(),'1');else localStorage.removeItem(tcNlK())}catch(e){}}
 function tcReabSet(D,on){try{if(on)localStorage.setItem(tcRbK(),String((D&&D.reab&&D.reab.t)||'1'));else localStorage.removeItem(tcRbK())}catch(e){}}
 /* barra única (rediseño 22-10-2026, caja 1): día (menú con «Por corregir»), pasos con el nombre del actual, estado («Guardado» como punto)
    y «⋯». Con «Elegir varios» la barra pasa a ser la de los elegidos (caja 9). Echado, es el riel de la derecha (CSS). */
@@ -244,8 +248,8 @@ function tcHeadHtml(D,E){const ro=D?tcRO():false,old=D?tcLegacy(D):false;const R
     const ch=(a,l,v)=>`<button type="button" class="tc-chip" data-tca="${a}"${v!=null?` data-v="${esc(v)}"`:''}>${esc(l)}</button>`;
     return`<div class="tc-head tc-headm"><div class="tc-mbar" id="tcMBar" role="toolbar" aria-label="Elegir varios"><button type="button" class="tc-mx" data-tca="multiX" aria-label="Terminar de elegir">✕</button><b>${M.size} ${M.size===1?'elegido':'elegidos'}</b>
       <div class="tc-mch">${ch('mAll','Todos')}${cuas.length>1?cuas.map(c=>ch('mCua',tcCap1(c),c)).join(''):''}${ch('mSin','Sin horas')}${ch('mNone','Ninguno')}</div></div></div>`}
-  const rb=D&&D.st==='reab';
-  const day=`<button type="button" class="tc-dayb${rb?' reab':''}" data-tcm="day" aria-haspopup="dialog" title="${esc(TC_DN[pd(TCS.date).getUTCDay()])} ${esc(fmtD(TCS.date))}"><b>${rb?'⚠ ':''}${esc(tcDLab(TCS.date))} ${esc(String(+TCS.date.slice(8)))}</b><i aria-hidden="true">▾</i>${RL.length?`<sup class="tc-badge" aria-label="${RL.length} por corregir">${RL.length}</sup>`:''}</button>`;
+  const rb=D&&D.st==='reab',nlD=!!(D&&!rb&&tcJor(TCS.date).nl);
+  const day=`<button type="button" class="tc-dayb${rb?' reab':nlD?' nl':''}" data-tcm="day" aria-haspopup="dialog" title="${esc(TC_DN[pd(TCS.date).getUTCDay()])} ${esc(fmtD(TCS.date))}${nlD?' · día no laborable: todo es extra':''}"><b>${rb?'⚠ ':''}${esc(tcDLab(TCS.date))} ${esc(String(+TCS.date.slice(8)))}</b><i aria-hidden="true">▾</i>${RL.length?`<sup class="tc-badge" aria-label="${RL.length} por corregir">${RL.length}</sup>`:''}</button>`;
   let mid='';
   if(D&&!ro&&!old){const P=D.pcs||[];const npres=tcPres().length;
     const s1=!E.some(e=>TC_K1.includes(e.k)),s2=s1&&!E.some(e=>TC_K2.includes(e.k))&&P.length>0,s3=s2&&npres>0&&!E.some(e=>TC_K3.includes(e.k));
@@ -262,7 +266,8 @@ function tcHtml(){const D=TCS.doc;TCS.lbl=D?tcLabels(D.rows):null;
   if(!D)return tcHeadHtml(null,[])+`<div class="tc-body" id="tcBody"><div class="callout warnc">${esc(TCS.err||'No se pudo abrir el tareo.')}</div></div>${menu}`;
   /* feriado o domingo (con la configuración del tareo o la congelada en él): todo es extra (auditoría 2, A5). En la grilla va en una línea. */
   const J=tcJor(TCS.date);
-  const nl=J.nl&&!(TCS.step===3&&!ro&&!old)?`<div class="callout tc-nolab" id="tcNoLab" role="note"><b>Día no laborable: todas las horas cuentan como extra.</b><span>${esc(tcNlWhy(TCS.date))} No hay jornada ordinaria; «Toda la jornada» pone ${esc(tcH(J.full))} solo como referencia.</span></div>`:'';
+  /* se puede cerrar (✕) para no quitar pantalla: queda cerrado para ese día en este celular; el día va en ámbar y el menú del día lo vuelve a mostrar (25-10-2026) */
+  const nl=J.nl&&!(TCS.step===3&&!ro&&!old)&&!tcNlSeen()?`<div class="callout tc-nolab" id="tcNoLab" role="note"><b>Día no laborable: todas las horas cuentan como extra.</b><span>${esc(tcNlWhy(TCS.date))} No hay jornada ordinaria; «Toda la jornada» pone ${esc(tcH(J.full))} solo como referencia.</span><button type="button" class="kx tc-nlx" data-tcm="nlX" aria-label="Cerrar aviso">&times;</button></div>`:'';
   /* reabierto (caja 19): completo la primera vez, hasta «Entendido»; después queda el ⚠ en la barra, que lo vuelve a mostrar */
   const mot=D.reab&&D.reab.mot;
   const ban=D.st==='reab'?(tcReabSeen(D)?'':`<div class="callout tc-reab" id="tcReab" role="note"><div><b>⚠ Te reabrieron este tareo</b><span>${mot?esc(mot)+'. ':''}Corrige y vuelve a enviarlo.</span></div><button type="button" class="ib tc-big" data-tcm="reabOk">Entendido</button></div>`)
@@ -298,7 +303,8 @@ function tcMenuSheet(D){const hoy=todayIso();const RL=TCS.reabL.filter(x=>x.date
     const st=d=>d===TCS.date&&D?D.st:TCS.past[d]||'';
     /* tareo reabierto: el motivo se ve aquí (el día va en ámbar con ⚠ en la barra) */
     const mot=D&&D.st==='reab'?(D.reab&&D.reab.mot)||'':null;
-    return hd('Día del tareo','')+(mot!=null?`<div class="callout tc-reab tc-reabm"><div><b>⚠ Te reabrieron este tareo</b><span>${mot?esc(mot)+'. ':''}Corrige y vuelve a enviarlo.</span></div></div>`:'')+`<div class="tc-mlist">${ds.map(d=>`<button type="button" class="tc-mi${d===TCS.date?' on':''}" data-tcd="${d}"><b>${esc(tcDLab(d))} ${esc(String(+d.slice(8)))}</b><span>${esc(TC_DN[pd(d).getUTCDay()])} ${esc(fmtD(d))}${tcStLab(st(d))?' · '+esc(tcStLab(st(d))):''}</span></button>`).join('')}</div>
+    const nlm=D&&tcJor(TCS.date).nl?`<div class="callout tc-nolab tc-nlm"><b>Día no laborable: todas las horas son extra.</b><span>${esc(tcNlWhy(TCS.date))}</span>${tcNlSeen()?`<button type="button" class="tc-lnk" data-tcm="nlOn">Ver el aviso arriba</button>`:''}</div>`:'';
+    return hd('Día del tareo','')+nlm+(mot!=null?`<div class="callout tc-reab tc-reabm"><div><b>⚠ Te reabrieron este tareo</b><span>${mot?esc(mot)+'. ':''}Corrige y vuelve a enviarlo.</span></div></div>`:'')+`<div class="tc-mlist">${ds.map(d=>`<button type="button" class="tc-mi${d===TCS.date?' on':''}" data-tcd="${d}"><b>${esc(tcDLab(d))} ${esc(String(+d.slice(8)))}</b><span>${esc(TC_DN[pd(d).getUTCDay()])} ${esc(fmtD(d))}${tcStLab(st(d))?' · '+esc(tcStLab(st(d))):''}</span></button>`).join('')}</div>
       ${RL.length?`<div class="tc-mh" id="tcPorCor">⚠ Por corregir (${RL.length})</div><div class="tc-mlist">${RL.map(x=>`<button type="button" class="tc-mi warn" data-tcd="${esc(x.date)}"><b>${esc(TC_DN[pd(x.date).getUTCDay()])} ${esc(fmtD(x.date))}</b><span>${x.mot?esc(x.mot):'La oficina lo reabrió: corrígelo y vuelve a enviarlo.'}</span></button>`).join('')}</div>`:''}</div>`}
   const nm=(typeof me!=='undefined'&&me&&(me.name||me.email))||'';
   return hd('Más opciones',nm)+`<div class="tc-mlist"><button type="button" class="tc-mi" data-tcm="cuad"><b>Mi cuadrilla</b><span>Tus obreros, con su DNI y categoría</span></button>
@@ -810,6 +816,8 @@ function tcMenuAct(a){const D=TCS.doc;
   if(a==='day'||a==='more'){TCS.menu=TCS.menu===a?'':a;tcDraw();return}
   if(a==='x'){TCS.menu='';tcDraw();return}
   if(a==='reabOk'){tcReabSet(D,true);tcDraw();return}
+  if(a==='nlX'){tcNlSet(true);tcDraw();return}
+  if(a==='nlOn'){tcNlSet(false);TCS.menu='';tcDraw();const b=$('#tcBody');if(b)b.scrollTop=0;return}
   if(a==='reab'){tcReabSet(D,false);tcDraw();const b=$('#tcBody');if(b)b.scrollTop=0;return}
   if(a==='cuad'){TCS.menu='';if(typeof goTab==='function')goTab('tper');return}
   if(a==='out'){TCS.menu='';tcDraw();const o=$('#blogout');if(o)o.click();return}}

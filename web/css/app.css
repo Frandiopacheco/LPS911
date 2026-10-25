@@ -2129,7 +2129,7 @@ details.tc-reab{display:block;flex-shrink:0;border:1px solid var(--warn);border-
 
 .tc-aj{align-self:flex-start;margin-top:2px;font-style:normal;font-size:12.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:1px 8px}
 /* segunda auditoría (oct 2026): no laborable, contadores fijos, buscador y filtros, nombres identificables, foto arriba, días enviados */
-.tc-nolab{display:flex;flex-direction:column;gap:3px;border:2px solid var(--warn);background:var(--warn-soft);color:var(--ink);font-size:14px}.tc-nolab b{color:var(--warn);font-size:15.5px}
+.tc-nolab{position:relative;display:flex;flex-direction:column;gap:3px;padding-right:48px;border:2px solid var(--warn);background:var(--warn-soft);color:var(--ink);font-size:14px}.tc-nolab b{color:var(--warn);font-size:15.5px}
 .tc-stk{position:sticky;top:-12px;z-index:3;margin:-12px -10px 0;padding:12px 10px 8px;background:var(--bg);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .tc-stk .tc-h{flex-direction:row;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:2px 10px}
 .tc-k3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
@@ -4266,6 +4266,9 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 .tc .tc-hrow{display:flex;align-items:center;gap:6px;min-height:48px}
 .tc-dayb{position:relative;flex:none;display:inline-flex;align-items:center;gap:4px;height:44px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);font-size:15px;cursor:pointer}
 .tc-dayb b{white-space:nowrap}.tc-dayb i{font-style:normal;color:var(--muted);font-size:12px}
+.tc-nolab .tc-nlx{position:absolute;top:4px;right:4px;width:40px;height:40px;color:var(--warn)}
+.tc-nlm{padding-right:12px;margin:0 12px 8px}.tc-nlm .tc-lnk{align-self:flex-start}
+.tc-dayb.nl{border-color:var(--warn);color:var(--tc-warn-ink)}
 .tc-dayb.reab{border-color:var(--warn);background:var(--warn-soft);color:var(--tc-warn-ink)}
 .tc-badge{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;border-radius:10px;background:var(--warn);color:var(--panel);font:700 12px/20px var(--f-ui);text-align:center;padding:0 5px}
 .tc .tc-hrow .tc-steps{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px}
