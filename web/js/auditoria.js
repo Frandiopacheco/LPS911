@@ -113,9 +113,39 @@ async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){
    por registro en paralelo (20 a la vez) y se saltan solo los rechazados. */
 const IMP_AUTHOR={lhlog:0,mlog:1,mcatp:1};/* 1: además debe venir pendiente (st:'pend') para poder crearse */
 const IMP_ONCE=new Set(['lhlog','mver']);
+/* oct 2026: la carga va por la API REST de Firestore (documents:batchWrite) con el token del usuario, no por el SDK. Con el SDK cada
+   lote pasaba por la caché local (IndexedDB, sincronizada entre pestañas) y por todas las suscripciones abiertas, uno tras otro:
+   ~30 000 registros tardaban decenas de minutos. batchWrite aplica las reglas registro por registro (un rechazo no tumba el lote,
+   ya no hace falta reintentar de a uno) y se envían varios lotes a la vez. Las suscripciones reciben los cambios del servidor
+   como cualquier cambio de otro usuario. Si la API REST no responde, se sigue con el SDK como antes. */
+function fsVal(v){if(v===null||v===undefined)return{nullValue:null};const t=typeof v;
+  if(t==='boolean')return{booleanValue:v};if(t==='string')return{stringValue:v};
+  if(t==='number')return Number.isSafeInteger(v)&&!Object.is(v,-0)?{integerValue:String(v)}:{doubleValue:v};
+  if(Array.isArray(v))return{arrayValue:v.length?{values:v.map(fsVal)}:{}};
+  if(t==='object'){const f={};for(const k in v)if(v[k]!==undefined)f[k]=fsVal(v[k]);return{mapValue:{fields:f}}}
+  return{nullValue:null}}
+const restOk=()=>typeof window.__E2E==='undefined'&&!!(auth&&auth.currentUser&&!auth.currentUser.isAnonymous&&window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.projectId);
+async function restWrites(ws,onDone,onSkip){const pid=window.FIREBASE_CONFIG.projectId;const base=`projects/${pid}/databases/(default)/documents`;
+  const url=`https://firestore.googleapis.com/v1/${base}:batchWrite`;
+  /* lotes de hasta 500 registros y ~5 MB */
+  const lots=[];let cur=[],sz=0;for(const w of ws){const body={update:{name:`${base}/${w[0]}/${w[1]}`,fields:fsVal(w[2]).mapValue.fields}};const s=JSON.stringify(body).length;
+    if(cur.length&&(cur.length>=500||sz+s>5e6)){lots.push(cur);cur=[];sz=0}cur.push([w,body]);sz+=s}if(cur.length)lots.push(cur);
+  const send=async lot=>{let todo=lot;for(let tr=0;todo.length;tr++){
+      const tok=await auth.currentUser.getIdToken();let r;
+      try{r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify({writes:todo.map(x=>x[1])})})}catch(e){r=null}
+      if(!r||r.status===429||r.status>=500){if(tr>=5)throw new Error('sin respuesta de Firestore');await new Promise(ok=>setTimeout(ok,800*2**tr));continue}
+      if(!r.ok){const e=new Error('Firestore '+r.status);e.http=r.status;throw e}
+      const st=((await r.json()).status)||[];const again=[];
+      todo.forEach((x,i)=>{const c=(st[i]&&st[i].code)||0;if(!c)onDone(1);else if(c===7){onSkip(x[0][0]);onDone(1)}else again.push(x)});
+      if(again.length&&tr>=5)throw new Error('Firestore no aceptó '+again.length+' registros');
+      if(again.length)await new Promise(ok=>setTimeout(ok,800*2**tr));todo=again}};
+  let k=0;const worker=async()=>{while(k<lots.length)await send(lots[k++])};
+  await Promise.all(Array.from({length:Math.min(6,lots.length)},worker))}
 async function importWrites(writes,onProg){const skip=new Map();const sk=(c,n)=>skip.set(c,(skip.get(c)||0)+(n||1));
   const my=String(me&&me.email||'').toLowerCase();let done=0;const prog=n=>{done+=n;onProg&&onProg(done)};
   const by=new Map();writes.forEach(w=>{if(!by.has(w[0]))by.set(w[0],[]);by.get(w[0]).push(w)});
+  /* 1) se descartan antes lo que las reglas no dejarán escribir (historiales de otros autores, lo que solo se crea una vez) */
+  const go=[];
   for(const[col,ws0]of by){let ws=ws0;
     if(col in IMP_AUTHOR||IMP_ONCE.has(col)){let have=null;
       const mine=w=>{const d=w[2]||{};return String(d.by||'').toLowerCase()===my&&(!IMP_AUTHOR[col]||d.st==='pend')};
@@ -123,6 +153,15 @@ async function importWrites(writes,onProg){const skip=new Map();const sk=(c,n)=>
       if(col==='lhlog'){const k=ws.filter(mine);sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}
       if(ws.length){try{have=new Set((await fcol(col).get()).docs.map(d=>d.id))}catch(e){have=null}}
       if(have){const k=ws.filter(w=>have.has(w[1])?!IMP_ONCE.has(col):(col in IMP_AUTHOR?mine(w):true));sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}}
+    go.push(...ws)}
+  if(!go.length)return skip;
+  /* 2) todo junto por la API REST (varios lotes a la vez) */
+  if(restOk()){let sent=0;const rs=new Map();
+    try{await restWrites(go,n=>{sent+=n;prog(n)},c=>rs.set(c,(rs.get(c)||0)+1));rs.forEach((n,c)=>sk(c,n));return skip}
+    catch(e){/* la API REST falló: todo va otra vez por el SDK (reescribir lo ya cargado no duplica nada) */prog(-sent)}}
+  /* 3) por el SDK, como antes */
+  const by2=new Map();go.forEach(w=>{if(!by2.has(w[0]))by2.set(w[0],[]);by2.get(w[0]).push(w)});
+  for(const[col,ws]of by2){
     for(let i=0;i<ws.length;i+=400){const part=ws.slice(i,i+400);
       try{await batchWrites(part);prog(part.length)}
       catch(e){if(!/permission/i.test(String(e&&(e.code||e.message)||e)))throw e;

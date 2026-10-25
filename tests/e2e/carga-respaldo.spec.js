@@ -47,3 +47,26 @@ test('los historiales que las reglas rechazarían se descartan antes de escribir
   await expect(page.locator('#impmsg')).toContainText('lhlog: 2');
   noErrors(errors, 'carga sin reintentos');
 });
+
+test('copia de prueba: un tareo publicado del respaldo se carga como revisado (sin pubV); en producción no se toca', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'team' });
+  await page.click('[data-teamv="dat"]');
+  page.on('dialog', d => d.type() === 'prompt' ? d.accept('PRODUCCIÓN') : d.accept());
+  const load = env => page.evaluate(async env => {
+    window.LPS_ENV = env;
+    const data = { formato: 'lps911-v2', colecciones: { tareo: {
+      ['2026-10-20_c1_' + env]: { date: '2026-10-20', cap: 'c1', st: 'pub', pubV: 2, rows: {}, hist: [] },
+      ['2026-10-21_c1_' + env]: { date: '2026-10-21', cap: 'c1', st: 'env', rows: {}, hist: [] } } } };
+    await importJson({ text: async () => JSON.stringify(data) });
+  }, env);
+  await load('pruebas');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tareo', '2026-10-20_c1_pruebas'))).toBeTruthy();
+  const t = await page.evaluate(() => window.__dbGet('tareo', '2026-10-20_c1_pruebas'));
+  expect(t.st).toBe('rev'); expect('pubV' in t).toBe(false);
+  expect((await page.evaluate(() => window.__dbGet('tareo', '2026-10-21_c1_pruebas'))).st).toBe('env');
+  await expect(page.locator('#impmsg')).toContainText('1 tareos que estaban publicados');
+  await load('produccion');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tareo', '2026-10-20_c1_produccion'))).toBeTruthy();
+  expect((await page.evaluate(() => window.__dbGet('tareo', '2026-10-20_c1_produccion'))).st).toBe('pub');
+  noErrors(errors, 'tareo publicado en prueba');
+});

@@ -339,14 +339,17 @@ function wireClean(main){const box=$('#clean',main);if(!box)return;
   box.onkeydown=e=>{if(e.target.id==='clconf'&&e.key==='Enter'){e.preventDefault();$('#clgo').click()}};
 }
 let IMPMSG='';
-function fixDoc(col,d){d=clone(d);delete d.id;if(col==='meta'&&Array.isArray(d.templates))d.templates=d.templates.map(t=>({...t,acts:(t.acts||[]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a)}));return d}
+/* copia de prueba: un tareo publicado no se puede crear (st 'pub' y pubV solo los pone la función publicarTareo, reglas tOfiNew) y
+   las publicaciones (tpub) no van en el respaldo; vuelve como «revisado», listo para volver a publicarlo y probar (nunca en producción) */
+const impTarPub=(col,d)=>col==='tareo'&&window.LPS_ENV==='pruebas'&&d&&d.st==='pub';
+function fixDoc(col,d){d=clone(d);delete d.id;if(impTarPub(col,d)){d.st='rev';delete d.pubV}if(col==='meta'&&Array.isArray(d.templates))d.templates=d.templates.map(t=>({...t,acts:(t.acts||[]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a)}));return d}
 async function importJson(file){
   let data;try{data=JSON.parse(await file.text())}catch(e){toast('El archivo no es un JSON válido.');return}
   const cols=data&&data.colecciones;if(!cols||typeof cols!=='object'){toast('El archivo no tiene el formato esperado (datos-iniciales.json o un respaldo de esta página).');return}
   /* lo emitido al cliente no se reemplaza (las reglas lo impiden): las versiones que ya existen se saltan */
   let CLE=new Set();if((cols.clidx||cols.cliver)&&typeof canCli==='function'&&canCli())try{CLE=new Set((await fcol('clidx').get()).docs.map(d=>d.id))}catch(e){}
   const cliHas=(col,id)=>(col==='clidx'&&CLE.has(id))||(col==='cliver'&&CLE.has(String(id).split('__')[0]));let nCli=0;
-  const writes=[];for(const[col,docs]of Object.entries(cols)){if(!(col in COLS||BK_ALL.includes(col))||!docs)continue;if((col==='members'||col==='inv')&&!isAdmin)continue;for(const[id,doc]of Object.entries(docs)){if(cliHas(col,id)){nCli++;continue}writes.push([col,id,fixDoc(col,doc)])}}
+  let nTarPub=0;const writes=[];for(const[col,docs]of Object.entries(cols)){if(!(col in COLS||BK_ALL.includes(col))||!docs)continue;if((col==='members'||col==='inv')&&!isAdmin)continue;for(const[id,doc]of Object.entries(docs)){if(cliHas(col,id)){nCli++;continue}if(impTarPub(col,doc))nTarPub++;writes.push([col,id,fixDoc(col,doc)])}}
   const dels=[];for(const[col,ids]of Object.entries(data.eliminar||{})){if(!(col in COLS)||!Array.isArray(ids))continue;ids.forEach(id=>dels.push([col,id]))}
   if(!writes.length&&!dels.length){toast('El archivo no contiene registros.');return}
   if(data.tipo==='actualizacion'){const falta=((data.requiere||{}).pisos||[]).filter(id=>!S.pis.has(id));
@@ -371,7 +374,7 @@ async function importJson(file){
     const nObs=Object.values(cols.acts||{}).filter(a=>a&&a.obs).length;
     const extra=(miss.size?` Ojo: ${miss.size} subcontratista(s) no existen en Configuración (${[...miss].join(', ')}); esas actividades se verán sin color hasta que los crees.`:'')+(nObs?` Hay ${nObs} actividades con observaciones para revisar: en el Lookahead marca “Con observaciones”.`:'');
     const nSk=[...skip.values()].reduce((a,b)=>a+b,0);const skMsg=nSk?` No se cargaron ${nSk} registros que las reglas no permiten escribir con tu usuario (${[...skip].map(([c,n])=>`${c}: ${n}`).join(', ')}); son historiales de otras personas o versiones ya emitidas al cliente, y no afectan el lookahead.`:'';const cliMsg=nCli?` Las versiones ya emitidas al cliente (${nCli} registros) se dejaron como estaban: no se reemplazan.`:'';
-    toast(`Datos cargados: ${writes.length-nSk} registros.`);IMPMSG=`Listo: ${writes.length-nSk} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+skMsg+cliMsg+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
+    toast(`Datos cargados: ${writes.length-nSk} registros.`);const tpMsg=nTarPub?` Copia de prueba: ${nTarPub} tareos que estaban publicados se cargaron como «revisados» (las publicaciones no van en el respaldo); puedes volver a publicarlos para probar.`:'';IMPMSG=`Listo: ${writes.length-nSk} registros cargados${dels.length?` y ${dels.length} eliminados`:''}.`+skMsg+cliMsg+tpMsg+extra;const m2=$('#impmsg');if(m2)m2.textContent=IMPMSG}
   catch(err){IMPMSG='';toast('La carga se detuvo: '+(err.code||err.message)+'. Puedes volver a intentarlo; no se duplican registros.')}
   finally{IMPORTING=false;if(rstRef)rstRef.set({rstHasta:0},{merge:true}).catch(()=>{});requestRender()}
 }
