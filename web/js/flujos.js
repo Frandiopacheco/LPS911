@@ -18,9 +18,10 @@ const FLUJ_RX={info:/inform|plano|consult|rfi|dise|ingenier|eto|t[eé]cnic/i,mat
 function flujOfType(t){const m=P().restrFlow||{};if(t&&m[t])return m[t];for(const[k,rx]of Object.entries(FLUJ_RX))if(rx.test(t||''))return k;return'ext'}
 /** tipo de restricción para un flujo (el primero de la lista que le corresponde) */
 function typeOfFlujo(f){const L=P().restrTypes||[];return L.find(t=>flujOfType(t)===f)||L[0]||''}
-const frevW=()=>{const v=+P().frevW;return v>=2&&v<=4?v:2};
-/* semanas que se revisan: de la siguiente a la de la ventana (frevW=2 → solo la siguiente) */
-const frevWeeks=()=>{const c=weekOf(todayIso());const L=[];for(let w=c+1;w<=c+frevW()-1;w++)L.push(w);return L};
+const frevW=()=>{const v=+P().frevW;return v>=2&&v<=4?v:3};
+/* semana que se revisa (25-10-2026, decidido con el dueño): solo la semana N del lookahead, contando la actual como 1
+   (por defecto la 3: en la semana 62 se revisa la 64) */
+const frevWeeks=()=>[weekOf(todayIso())+frevW()-1];
 const FREV=new Map();let frevUn=null,FREVV=0;
 function ensureFrev(){if(typeof db==='undefined'||!db||frevUn||(typeof TAR_ONLY==='function'&&TAR_ONLY()))return;
   frevUn=fcol('frev').where('n','>=',weekOf(todayIso())).onSnapshot(sn=>{FREV.clear();sn.docs.forEach(d=>FREV.set(d.id,{...d.data(),id:d.id}));FREVV++;if(['look','restr','hoy'].includes(U.tab))requestRender();if(FRV)frevDraw()},
@@ -65,6 +66,8 @@ function frevSug(e){const o={};const add=(f,t)=>{(o[f]=o[f]||[]).push(t)};const 
   return o}
 /** estado de cada flujo de una entrada: 'res' (restricción abierta o marcada), 'ok', 'sug' (posible), 'none' (sin revisar) */
 function frevSt(e,f){if(e.red[f])return'res';const v=e.rec&&e.rec.f&&e.rec.f[f];if(v==='res')return'res';if(v==='ok')return'ok';if(e.sug[f])return'sug';return e.doc?'ok':'none'}
+/* en la ventana de revisión, todo arranca en «Bien» (también con posibles restricciones, que se ven como aviso): se marca solo lo que falta */
+const frevStDlg=(e,f)=>{const s=frevSt(e,f);return s==='res'?'res':'ok'};
 const frevPend=()=>frevList().filter(e=>!e.doc&&canFrev(e.sc));
 /* ---------- tira de 8 puntos en la cabecera del ambiente (Lookahead) ---------- */
 let FRS={k:'',m:null};
@@ -79,20 +82,21 @@ function frevOpen(o){ensureFrev();if(typeof ensureMx==='function')ensureMx();FRV
 function frevClose(){FRV=null;const el=document.getElementById('frv');if(el)el.remove()}
 const frevKey=e=>frevId(e.n,e.amb,e.sc);
 function frevDraw(){if(!FRV)return;let el=document.getElementById('frv');if(!el){el=document.createElement('div');el.id='frv';el.className='pwov';document.body.appendChild(el);el.onclick=frevClick;el.addEventListener('keydown',ev=>{if(ev.key==='Escape'){ev.stopPropagation();frevClose()}})}
+  else el.classList.add('frdrawn');/* al redibujar no se repite la animación de entrada (se veía como parpadeo) */
   const L=frevList().filter(e=>(!FRV.amb||e.amb===FRV.amb)&&(canFrev(e.sc)||!(typeof SCK==='function'&&SCK())));const e=FRV.sel&&L.find(x=>frevKey(x)===FRV.sel);
   const loc=e=>{const a=S.amb.get(e.amb);const p=S.pis.get(e.pid);return`${p?esc(p.code)+' · ':''}${a?esc(a.code)+' · '+esc(a.name):''}`};
   let h;
   if(!e){const pend=L.filter(x=>!x.doc);
     h=`<div class="pwdlg frvd" role="dialog" aria-modal="true" aria-labelledby="frvt"><h3 id="frvt">Revisión de flujos${FRV.amb?' · '+loc(L[0]||{amb:FRV.amb,pid:pisoOfAmb(FRV.amb)}):''}</h3>
-      <p class="note">Ambientes con trabajo en la semana ${frevWeeks().join(' y ')}. «Listo» si nada falta; si algo falta, ábrelo y marca el flujo: se crea la restricción.</p>
+      <p class="note">Ambientes con trabajo en la semana ${frevWeeks().join(' y ')}. Todo está «Bien» por defecto: «✓ Listo» si nada falta; si algo falta, ábrelo y toca «Falta…» en ese flujo (se crea la restricción).</p>
       ${L.length?`<div class="pwl">${L.map(x=>{const ns=Object.keys(x.sug).length,nr=Object.keys(x.red).length;const can=canFrev(x.sc);
         return`<div class="pwr frvr${x.doc?' done':''}"><span><b>${loc(x)}</b><small><i class="frdot" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · sem ${x.n} · ${x.acts.length} actividad${x.acts.length===1?'':'es'}${x.doc?` · <em class="ok">${x.doc.st==='res'?'revisado con restricciones':'listo'} (${esc(x.doc.bn||'')})</em>`:''}${ns&&!x.doc?` · <em class="warn">${ns} posible${ns===1?'':'s'}</em>`:''}${nr?` · <em class="bad">${nr} con restricción</em>`:''}</small></span>
-          <span class="frvb">${!x.doc&&can&&!ns?`<button class="ib pri" data-frok="${esc(frevKey(x))}">✓ Listo</button>`:''}<button class="ib" data-frsel="${esc(frevKey(x))}">${x.doc||!can?'Ver':'Revisar'}</button></span></div>`}).join('')}</div>`:'<p class="mu">No hay ambientes por revisar en estas semanas.</p>'}
+          <span class="frvb">${!x.doc&&can?`<button class="ib pri" data-frok="${esc(frevKey(x))}">✓ Listo</button>`:''}<button class="ib" data-frsel="${esc(frevKey(x))}">${x.doc||!can?'Ver':'Revisar'}</button></span></div>`}).join('')}</div>`:'<p class="mu">No hay ambientes por revisar en estas semanas.</p>'}
       <div class="pwb"><span class="mu" style="margin-right:auto">${pend.length} por revisar</span><button class="ib" data-frx>Cerrar</button></div></div>`}
   else{const can=canFrev(e.sc);
     h=`<div class="pwdlg frvd" role="dialog" aria-modal="true" aria-labelledby="frvt"><h3 id="frvt">${loc(e)}</h3><p class="note"><i class="frdot" style="--c:${conOf(e.sc).color}"></i>${esc(conOf(e.sc).name)} · semana ${e.n} · ${e.acts.map(x=>esc(x.name)).join(', ')}</p>
-      <div class="pwl">${FLUJ.map(([f,n,q])=>{const s=FRV.dec[f]||frevSt(e,f);const sg=e.sug[f]||[];const rd=e.red[f]||[];
-        return`<div class="pwr frf fs-${s}"><span><b>${n}</b><small>${q}</small>${sg.map(t=>`<small class="frsug">⚠ Posible: ${esc(t)}</small>`).join('')}${rd.map(r=>`<small class="frred">⛔ ${esc(r.desc||r.type||'Restricción')}${r.need?' · requerida '+fmtD(r.need):''}</small>`).join('')}</span>
+      <div class="pwl">${FLUJ.map(([f,n,q])=>{const s=FRV.dec[f]||frevStDlg(e,f);const sg=e.sug[f]||[];const rd=e.red[f]||[];
+        return`<div class="pwr frf fs-${s}" data-frrow="${f}"><span><b>${n}</b><small>${q}</small>${sg.map(t=>`<small class="frsug">⚠ Posible: ${esc(t)}</small>`).join('')}${rd.map(r=>`<small class="frred">⛔ ${esc(r.desc||r.type||'Restricción')}${r.need?' · requerida '+fmtD(r.need):''}</small>`).join('')}</span>
           ${can?`<span class="seg frseg"><button class="${s==='ok'?'on':''}" data-frf="${f}|ok">Bien</button><button class="${s==='res'?'on':''}" data-frf="${f}|res"${rd.length?' disabled':''}>Falta…</button></span>`:`<span class="frst">${{ok:'Bien',res:'Falta',sug:'Posible',none:'Sin revisar'}[s]}</span>`}</div>`}).join('')}</div>
       <div class="pwb"><button class="ib" data-frback>‹ Volver</button>${can?'<button class="ib pri" data-frsave>Listo: guardar revisión</button>':''}</div></div>`}
   el.innerHTML=h}
@@ -101,12 +105,12 @@ function frevClick(ev){const t=ev.target;if(t===ev.currentTarget||t.closest('[da
   if((b=t.closest('[data-frsel]'))){FRV.sel=b.dataset.frsel;FRV.dec={};frevDraw();return}
   if((b=t.closest('[data-frok]'))){const e=frevList().find(x=>frevKey(x)===b.dataset.frok);if(e)frevSave(e,{});return}
   if((b=t.closest('[data-frf]'))){const[f,v]=b.dataset.frf.split('|');const e=frevList().find(x=>frevKey(x)===FRV.sel);if(!e)return;
-    if(v==='res'){frevRestr(e,f);return}FRV.dec[f]='ok';frevDraw();return}
+    if(v==='res'){frevRestr(e,f);return}FRV.dec[f]='ok';
+    /* sin redibujar la ventana (parpadeaba): solo cambia la fila */
+    const row=b.closest('[data-frrow]');if(row){row.className=row.className.replace(/\bfs-\w+/,'fs-ok');row.querySelectorAll('[data-frf]').forEach(x=>x.classList.toggle('on',x===b))}return}
   if((b=t.closest('[data-frsave]'))){const e=frevList().find(x=>frevKey(x)===FRV.sel);if(e)frevSave(e,FRV.dec)}}
 /** guarda la revisión: lo marcado + lo que tiene restricción abierta; lo demás queda «bien» (las posibles sin decidir se preguntan) */
 async function frevSave(e,dec){if(!canFrev(e.sc))return;const f={};
-  const und=FLUJ.filter(([k])=>e.sug[k]&&!dec[k]&&!e.red[k]).map(([k,n])=>n);
-  if(und.length&&!await uiAsk({title:'Posibles restricciones sin decidir',text:'Para estos flujos el sistema ve una posible restricción:',list:und,note:'Si las das por bien, se guardan como «Bien». Si falta algo, vuelve y toca «Falta…».',ok:'Darlas por bien',cancel:'Volver',tone:'warn'}))return;
   for(const[k]of FLUJ)f[k]=e.red[k]?'res':dec[k]||'ok';const st=Object.values(f).includes('res')?'res':'ok';
   const doc={n:e.n,amb:e.amb,sc:e.sc,pid:e.pid,f,st,by:me.email||'',bn:me.name||me.email||'',t:NOW()};
   FREV.set(frevKey(e),{...doc,id:frevKey(e)});FREVV++;FRV&&(FRV.sel=null,FRV.dec={});frevDraw();requestRender();

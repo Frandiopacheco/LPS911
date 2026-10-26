@@ -14,9 +14,12 @@ const EXTRA = [
   A('f3', { name: 'Pruebas', ambId: 'a9', days: [M6] }),        // a9 · c1 sin sugerencias → «Listo» directo
 ];
 const doc = (page, id) => page.evaluate(i => window.__dbGet('frev', i), id);
+/* estas pruebas usan la semana 2 (la siguiente); por defecto se revisa la 3 (25-10-2026) */
+const sem2 = async page => { await page.evaluate(() => { const p = S.meta.get('project'); S.meta.set('project', { ...p, frevW: 2 }); requestRender(); }); await expect.poll(() => page.evaluate(() => frevW())).toBe(2); };
 
 test('revisión de flujos: listo con un toque, decidir lo posible y crear la restricción del flujo que falla', async ({ page }) => {
   const errors = await openApp(page, { tab: 'restr', extra: EXTRA });
+  await sem2(page);
   await expect.poll(() => page.evaluate(() => typeof frevList === 'function' && frevList().some(e => e.amb === 'a1' && e.sc === 'c1'))).toBe(true);
   const e = await page.evaluate(() => { const x = frevList().find(e => e.amb === 'a1' && e.sc === 'c1'); return { n: x.n, sug: x.sug }; });
   expect(e.n).toBe(59);
@@ -28,8 +31,13 @@ test('revisión de flujos: listo con un toque, decidir lo posible y crear la res
   await expect.poll(() => doc(page, '59_a9_c1')).toMatchObject({ st: 'ok', n: 59, sc: 'c1' });
   // a1 · c1: tiene una posible → se abre, se da por bien el frente y se guarda
   await page.locator('#frv [data-frsel="59_a1_c1"]').click();
-  await expect(page.locator('#frv .frf.fs-sug')).toHaveCount(1);
+  // todo arranca en «Bien» (25-10-2026): la posible se ve como aviso en su flujo
+  await expect(page.locator('#frv .frf.fs-sug')).toHaveCount(0);
+  await expect(page.locator('#frv [data-frrow="fre"] .frsug', { hasText: 'mismo ambiente' }).first()).toBeVisible();
+  await expect(page.locator('#frv [data-frrow="fre"] [data-frf="fre|ok"]')).toHaveClass(/on/);
+  await page.locator('#frv').evaluate(el => { el.__mismo = el.querySelector('.pwdlg'); });
   await page.locator('#frv [data-frf="fre|ok"]').click();
+  expect(await page.locator('#frv').evaluate(el => el.__mismo === el.querySelector('.pwdlg'))).toBe(true); // «Bien» no redibuja la ventana
   await page.locator('#frv [data-frsave]').click();
   await expect.poll(() => (doc(page, '59_a1_c1'))).toMatchObject({ st: 'ok' });
   expect((await doc(page, '59_a1_c1')).f.fre).toBe('ok');
@@ -46,6 +54,11 @@ test('revisión de flujos: listo con un toque, decidir lo posible y crear la res
 
 test('revisión de flujos: el SC ve solo lo suyo; la tira aparece en el Lookahead', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc', tab: 'look', extra: EXTRA });
+  await sem2(page);
+  // la tira solo se ve con el «Asistente de prog.» encendido
+  await page.evaluate(() => { U.lkGh = false; requestRender(); });
+  await expect(page.locator('#grid [data-fstrip="a1"]')).toHaveCount(0);
+  await page.evaluate(() => { U.lkGh = true; requestRender(); });
   await expect.poll(() => page.evaluate(() => typeof frevPend === 'function' && frevPend().length)).toBeGreaterThanOrEqual(2);
   expect(await page.evaluate(() => frevPend().every(e => e.sc === 'c1'))).toBe(true);
   expect(await page.evaluate(() => canFrev('c2'))).toBe(false);
@@ -53,4 +66,10 @@ test('revisión de flujos: el SC ve solo lo suyo; la tira aparece en el Lookahea
   await page.locator('#grid [data-fstrip="a1"]').first().click();
   await expect(page.locator('#frv')).toBeVisible();
   noErrors(errors, 'revisión de flujos SC');
+});
+
+test('revisión de flujos: por defecto se revisa la semana 3 del lookahead (en la 58, la 60)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'restr', extra: EXTRA });
+  expect(await page.evaluate(() => [frevW(), frevWeeks()])).toEqual([3, [60]]);
+  noErrors(errors, 'semana de revisión');
 });
