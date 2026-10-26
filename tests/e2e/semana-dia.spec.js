@@ -1,5 +1,4 @@
-// P23 (oct 2026): la semana congelada vista desde el Plan diario. Estado de cada compromiso (cumplida, va bien, en riesgo,
-// ya no llega) con la misma regla del avance del Tablero, la línea de la ficha, la pestaña «Semana» y su presentación.
+// P23 (oct 2026; rediseño 25 oct): la semana congelada vista desde el Plan diario como recordatorio de solo consulta.
 // HOY = jueves 1 oct (semana 58: lun 28 sep – sáb 3 oct); quedan 2 días hábiles (vie y sáb).
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
@@ -22,23 +21,31 @@ const EXTRA = [
   ['daily', X + '_p1', { date: X, pisoId: 'p1', recs: { s5: ok(10) } }],
 ];
 
-test('Semana en el Plan diario: estados y pestaña (sin línea en la ficha ni Presentar)', async ({ page }) => {
+test('Semana en el Plan diario: recordatorio de solo consulta (día / semana, por SC y plegado)', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: EXTRA });
   await expect.poll(() => page.evaluate(() => typeof semData === 'function' && semData('p1', todayIso()).frozen)).toBe(true);
-  const st = await page.evaluate(() => Object.fromEntries(semData('p1', todayIso()).rows.map(r => [r.id, [r.st, r.falta, r.rem]])));
-  expect(st).toEqual({ s1: ['ok', 0, 2], s2: ['risk', 2, 2], s3: ['no', 3, 2], s4: ['good', 1, 2], s5: ['ok', 0, 2] });
-  // la evaluación del Plan semanal manda: un «Sí» la da por cumplida
-  expect(await page.evaluate(() => { const w = S.wk.get('58_p1'); w.res = { s3: { ok: true } }; const r = semData('p1', todayIso()).rows.find(o => o.id === 's3'); w.res = {}; return r.st; })).toBe('ok');
-  // oct 2026: la ficha ya no muestra la línea del plan semanal (los SC van en tren)
-  // pestaña «Semana» del panel derecho: resumen por SC y, al elegir un SC, sus compromisos
+  expect(await page.evaluate(() => semData('p1', todayIso()).rows.length)).toBe(5);
   await page.locator('#mrst [data-rtab="msemb"]').click();
   const box = page.locator('#msemb');
   await expect(box).toBeVisible();
+  // por defecto: solo lo comprometido para el día que se programa (mañana, viernes: s2 de c1). Un solo SC → abierto
+  await expect(box.locator('.smh b')).toContainText('Compromisos del');
+  await expect(box.locator('.smsc')).toHaveCount(1);
+  await expect(box.locator('.smsc[data-semo="c1"] .smn')).toHaveText('1');
+  await expect(box.locator('.smr')).toHaveCount(1);
+  await expect(box.locator('.smr .smstrip i.cur')).toHaveCount(1);
+  // sin estados de cumplimiento
+  await expect(box.locator('.smr.bad, .smr.warn, .smr.ok, .smk')).toHaveCount(0);
+  // Semana: los dos SC, plegados; abrir c2 muestra sus 3 compromisos
+  await box.locator('[data-semv="sem"]').click();
   await expect(box.locator('.smsc')).toHaveCount(2);
-  await box.locator('.smsc[data-dzsc="c2"]').click();
+  await expect(box.locator('.smr')).toHaveCount(0);
+  await expect(box.locator('.smsc[data-semo="c2"] .smn')).toHaveText('3');
+  await box.locator('.smsc[data-semo="c2"]').click();
   await expect(box.locator('.smr')).toHaveCount(3);
-  await expect(box.locator('.smr').first()).toHaveClass(/bad/);
-  await expect(box.locator('[data-semp]')).toHaveCount(0);
+  await expect(box.locator('.smr').filter({ hasText: 'Enchape' }).locator('.smstrip i.on')).toHaveCount(4);
+  await box.locator('.smsc[data-semo="c2"]').click();
+  await expect(box.locator('.smr')).toHaveCount(0);
   // nada se escribió en la semana congelada
   expect((await page.evaluate(() => window.__dbGet('weeks', '58_p1'))).items).toEqual(items);
   noErrors(errors, 'semana en el plan diario');

@@ -4444,26 +4444,23 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 
 /* ---------- P23 · La semana vista desde el Plan diario (js/semana-dia.js, oct 2026) ---------- */
 .smd{display:flex;flex-direction:column;gap:8px;padding:10px;width:100%;min-width:0}
-.smh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.smh b{font-size:15px}.smh .ib{margin-left:auto}
-.smtip{margin:0;font-size:12.5px}
-.smk{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12.5px}
-.smk .bad,.sml em.bad,.smpt .bad{color:var(--bad)}.smk .warn,.sml em.warn,.smpt .warn{color:var(--warn)}.smk .ok,.sml em.ok,.smpt .ok{color:var(--ok)}.smk .good,.sml em.good{color:var(--accent)}
+.smh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.smh b{font-size:15px;flex:1;min-width:0}
+.smtip{margin:-4px 0 0;font-size:12px}
+.smsw button{min-height:32px}
 .sml{display:flex;flex-direction:column;gap:4px}
-.smsc,.smr{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink);font:inherit;cursor:pointer;min-height:40px}
-.smsc:hover,.smr:not([disabled]):hover{border-color:var(--accent)}
-.smr[disabled]{cursor:default;opacity:1}
+.smg{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);overflow:hidden}
+.smsc{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;min-height:40px}
+.smsc:hover{background:var(--panel2)}
 .smsc i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}.smsc b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-.smsc span{display:flex;gap:8px;font-size:12.5px}.smsc em{font-style:normal;font-weight:600}
-.smr{border-left:4px solid var(--muted)}.smr.ok{border-left-color:var(--ok)}.smr.warn{border-left-color:var(--warn)}.smr.bad{border-left-color:var(--bad)}.smr.good{border-left-color:var(--accent)}
-.smi{flex:none;width:18px;text-align:center;font-weight:700}.smr.bad .smi{color:var(--bad)}.smr.warn .smi{color:var(--warn)}.smr.ok .smi{color:var(--ok)}.smr.good .smi{color:var(--accent)}
-.smt{flex:1;min-width:0;display:flex;flex-direction:column}.smt b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.smt small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.smf{flex:none;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.smn{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}.smchev{color:var(--muted);width:12px;text-align:center}
+.smrs{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.smr{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer;min-height:40px}
+.smr:last-child{border-bottom:0}.smr[data-see]:hover{background:var(--panel2)}.smr:not([data-see]){cursor:default}
+.smt{flex:1;min-width:0;display:flex;flex-direction:column}.smt b{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.smt small{color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .smstrip{display:inline-flex;gap:2px;flex:none}
-.smstrip i{width:17px;height:17px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font:600 10px var(--f-mono,ui-monospace,monospace);font-style:normal;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
-.smstrip i.k-ok{background:var(--ok);color:#fff;border-color:transparent}.smstrip i.k-partial{background:var(--warn);color:#fff;border-color:transparent}
-.smstrip i.k-no{background:var(--bad);color:#fff;border-color:transparent}.smstrip i.k-fut{background:transparent;border-style:dashed}
-.smdot{display:inline-block;width:.7em;height:.7em;border-radius:50%;background:var(--c);margin-right:.5em}
-.smbar{display:inline-block;width:6em;height:.55em;border-radius:99px;background:var(--panel2);overflow:hidden;vertical-align:middle;margin-right:.5em}.smbar i{display:block;height:100%;background:var(--accent)}
+.smstrip i{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font:600 10px var(--f-mono,ui-monospace,monospace);font-style:normal;color:var(--muted);border:1px solid transparent}
+.smstrip i.on{background:var(--accent);color:#fff}
+.smstrip i.cur{border-color:var(--ink)}
 .rdl.rcl input{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--panel))}
 /* ---------- P1 · Hitos de inicio y fin en el Lookahead (js/hitos.js, oct 2026) ---------- */
 /* línea en la columna del día: inicio a la izquierda (verde), fin a la derecha (rojo); colores opacos (la grilla no admite translúcidos) */
