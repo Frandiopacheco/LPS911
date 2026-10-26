@@ -13,7 +13,8 @@ const PL_T=1024;              /* lado del mosaico (px) */
 const PL_DPI=300;             /* resolución objetivo en el tamaño real de la hoja */
 const PL_MAXPX=16000;         /* lado mayor máximo del nivel de detalle */
 const PL_Q=0.82;              /* calidad WebP */
-const PL_PDFJS=window.PLANO_PDFJS||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+/* pdf.js propio (vendor/pdfjs, 3.11.174 con el arreglo de degradados de tamaño cero); el worker sigue del CDN, misma versión */
+const PL_PDFJS=window.PLANO_PDFJS||new URL('vendor/pdfjs/pdf.min.js',location.href).href;
 const PL_PDFJS_W=window.PLANO_PDFJS_WORKER||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 /* especialidades de los planos (no son las partidas de los SC de Configuración): código → nombre */
 const PL_DISC=[['ARQ','Arquitectura'],['EST','Estructuras'],['IS','Instalaciones sanitarias'],['IE','Instalaciones eléctricas'],['IM','Instalaciones mecánicas'],
