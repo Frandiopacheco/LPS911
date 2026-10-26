@@ -33,6 +33,12 @@ test('Por personal: personas por día, cuadrilla fija e histograma del SC elegid
   await expect.poll(() => page.evaluate(() => window.__dbGet('acts', 'x3').rend)).toBe(8);
   await expect(cell('x3', MANANA)).toHaveText('4');
   await expect.poll(nSin).toBe(n0 - 1);
+  // solo muestra: tocar un día no lo programa (se programa en Por días o Por metrado)
+  const d3 = '2026-10-05';
+  const before = await page.evaluate(() => (window.__dbGet('acts', 'x1').days || []).slice());
+  await cell('x1', d3).click();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__dbGet('acts', 'x1').days)).toEqual(before);
   // con dos SC elegidos no hay histograma: pide elegir uno
   await page.evaluate(() => { U.sc = 'c1,c2'; requestRender(); });
   await expect(foot.locator('td.hcap')).toContainText('Elige un subcontratista');

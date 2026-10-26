@@ -4571,3 +4571,9 @@ p.smline{display:block;border-left-color:var(--line)}
 #grid th.hflash{box-shadow:inset 0 0 0 3px var(--warn);transition:box-shadow var(--t) var(--ease)}
 .lkqtip{position:fixed;z-index:60;transform:translate(-50%,-100%);background:var(--ink);color:var(--panel);font:600 11px var(--f-ui);padding:2px 7px;border-radius:var(--r-ctl);pointer-events:none;white-space:nowrap}
 .pwov.frdrawn,.pwov.frdrawn .pwdlg{animation:none}
+/* «Por personal» solo muestra (no se pinta): sin cursor de pincel */
+#gw.qp td.d{cursor:default}
+/* arrastre hacia la izquierda = quitar (25-10-2026): en rojo antes de soltar */
+#grid td.d.pdel{background:var(--bad-soft)!important}
+#gw.qm td.d.sel.qdel{background:var(--bad-soft)!important;box-shadow:inset 0 2px 0 var(--bad),inset 0 -2px 0 var(--bad)}
+.lkqtip.del{background:var(--bad)}

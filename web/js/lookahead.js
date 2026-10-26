@@ -166,7 +166,7 @@ function renderLookInner(main){
   {const fa=$('#fact');if(fa){fa.textContent=actBtnLabel();fa.classList.toggle('on',U.acts.length>0)}}
   $('#fsec').innerHTML='<option value="">Todos los sectores'+(U.piso?' del piso':'')+'</option>'+secs.map(s=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${U.piso?'':esc((S.pis.get(pisoOfSecObj(s))||{}).code||'')+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('');
   {const fw=$('#fwin');if(fw.value!==String(U.win)){if(![...fw.options].some(o=>o.value===String(U.win)))fw.insertAdjacentHTML('beforeend',`<option value="${U.win}">${U.win} sem</option>`);fw.value=String(U.win)}}
-  $$('#fmode button').forEach(b=>b.classList.toggle('on',b.dataset.m===U.qmode));$('#gw').classList.toggle('qm',U.qmode==='metrado');
+  $$('#fmode button').forEach(b=>b.classList.toggle('on',b.dataset.m===U.qmode));$('#gw').classList.toggle('qm',U.qmode==='metrado');$('#gw').classList.toggle('qp',U.qmode==='personal');
   $('#fonly').checked=U.onlyWin;$('#fpastc').checked=!!U.showPast;$('#frestr').checked=U.onlyRestr;
   {let no=0;for(const a of S.act.values())if(a.obs&&vset.has(pisoOfAmb(a.ambId)))no++;if(!no&&U.onlyObs)U.onlyObs=false;$('#lobs').hidden=!no;$('#nobs').textContent=no||'';$('#fobs').checked=U.onlyObs}$('#fchg').checked=U.changes;
   $('#gw').classList.toggle('meet',U.meeting);$('#gw').classList.toggle('ro-mode',!canWrite);
@@ -630,12 +630,16 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
     const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'Es una versión emitida al cliente (solo lectura). Elige «Actual (editable)» para editar.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    /* «Por personal» solo muestra las personas que hacen falta según lo programado (25-10-2026, decidido con el dueño: no duplicar funciones);
+       los días y cantidades se programan en «Por días» o «Por metrado» */
+    if(U.qmode==='personal'){if(!lkPersTipT||NOW()-lkPersTipT>4000){lkPersTipT=NOW();toast('«Por personal» solo muestra las personas por día según lo programado. Para programar usa «Por días» o «Por metrado».')}return}
     if(U.qmode==='metrado'){const x=S.act.get(td.parentElement.dataset.a);if(x&&hasM(x)){closeQEditor(false);if(e.pointerType==='touch'){qtap={td,x:e.clientX,y:e.clientY};return}if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();qsel={a:x.id,start:td.dataset.d,cells:new Map([[td.dataset.d,td]])};td.classList.add('sel');return}}
     if(e.pointerType==='touch'){tap={td,x:e.clientX,y:e.clientY};return}
     if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
     const a=S.act.get(td.parentElement.dataset.a);if(!a)return;
     if(td.classList.contains('lib')){lkReopen(a);return}
-    paint={on:!(a.days||[]).includes(td.dataset.d),cells:new Map()};paintCell(td);
+    /* arrastrar a la derecha agrega días, a la izquierda los quita (25-10-2026, igual en «Por días» y «Por metrado»); un toque alterna */
+    paint={on:!(a.days||[]).includes(td.dataset.d),cells:new Map(),d0:td.dataset.d,dir:0};paintCell(td);
   });
   /* arrastrar el número de la actividad (a la izquierda del nombre) para cambiar su orden dentro del ambiente */
   /* faltan programar: tocar un día de la fila fantasma la programa; ⋮ y el chip del ambiente */
@@ -656,18 +660,22 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
     addEventListener('pointermove',mv);addEventListener('pointerup',up);addEventListener('pointercancel',up)},true);
   tbl.addEventListener('pointerup',e=>{if(qtap){const td=e.target.closest('td.d');if(td===qtap.td&&Math.hypot(e.clientX-qtap.x,e.clientY-qtap.y)<10)openQEditor(td);qtap=null;return}if(!tap)return;const td=e.target.closest('td.d');if(td===tap.td&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<10){const a=S.act.get(td.parentElement.dataset.a);if(a&&td.classList.contains('lib')){tap=null;lkReopen(a);return}if(a){paint={on:!(a.days||[]).includes(td.dataset.d),cells:new Map()};paintCell(td);endPaint()}}tap=null});
 }
-window.addEventListener('pointermove',e=>{if(qsel){const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(td&&td.parentElement.dataset.a===qsel.a&&!qsel.cells.has(td.dataset.d)){const tr=td.parentElement;const all=[...tr.querySelectorAll('td.d')];const i0=all.findIndex(t=>t.dataset.d===qsel.start),i1=all.indexOf(td);qsel.cells.forEach(t=>t.classList.remove('sel','qs0','qs1'));qsel.cells=new Map();const R=all.slice(Math.min(i0,i1),Math.max(i0,i1)+1);R.forEach((t,k)=>{t.classList.add('sel');t.classList.toggle('qs0',k===0);t.classList.toggle('qs1',k===R.length-1);qsel.cells.set(t.dataset.d,t)});lkQSelTip(R)}return}
-  if(!paint)return;const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(td)paintCell(td)});
+window.addEventListener('pointermove',e=>{if(qsel){const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(td&&td.parentElement.dataset.a===qsel.a&&!qsel.cells.has(td.dataset.d)){const tr=td.parentElement;const all=[...tr.querySelectorAll('td.d')];const i0=all.findIndex(t=>t.dataset.d===qsel.start),i1=all.indexOf(td);qsel.cells.forEach(t=>t.classList.remove('sel','qs0','qs1','qdel'));qsel.cells=new Map();
+    /* hacia la izquierda: borrar esos días (se ve en rojo); hacia la derecha: repartir (menú al soltar) */
+    qsel.del=i1<i0;const R=all.slice(Math.min(i0,i1),Math.max(i0,i1)+1);R.forEach((t,k)=>{t.classList.add('sel');t.classList.toggle('qdel',qsel.del);t.classList.toggle('qs0',k===0);t.classList.toggle('qs1',k===R.length-1);qsel.cells.set(t.dataset.d,t)});lkQSelTip(R,qsel.del)}return}
+  if(!paint)return;const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#grid td.d');if(!td)return;
+  if(paint.d0&&td.dataset.d!==paint.d0){const dir=td.dataset.d>paint.d0?1:-1;if(dir!==paint.dir){paint.dir=dir;paintDir(dir>0)}}paintCell(td)});
 window.addEventListener('pointerup',()=>{if(paint)endPaint();if(qsel)endQSel()});
 /* (auditoría de código 08/10, L7) si el puntero se cancela (lápiz, gesto del sistema) o la ventana pierde el foco a medio pintar,
    no llega el pointerup: se descarta lo pintado SIN guardar y la grilla vuelve a mostrar lo que hay (antes el pincel quedaba pegado) */
-function lkPaintAbort(){if(!paint&&!qsel)return;paint=null;if(qsel){qsel.cells.forEach(t=>t.classList.remove('sel','qs0','qs1'));qsel=null;lkQSelTip(null)}gridRows=null;requestRender()}
+function lkPaintAbort(){if(!paint&&!qsel)return;paint=null;if(qsel){qsel.cells.forEach(t=>t.classList.remove('sel','qs0','qs1','qdel'));qsel=null;lkQSelTip(null)}gridRows=null;requestRender()}
 window.addEventListener('pointercancel',lkPaintAbort);window.addEventListener('blur',lkPaintAbort);
-let qsel=null,qtap=null,qed=null;
+let qsel=null,qtap=null,qed=null,lkPersTipT=0;
 /* mientras se arrastra en «Por metrado»: etiqueta «N días» sobre el último día (se quita al soltar) */
-function lkQSelTip(R){let el=document.getElementById('lkqtip');if(!R||R.length<2){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='lkqtip';el.className='lkqtip';document.body.appendChild(el)}
-  const b=R[R.length-1].getBoundingClientRect();el.textContent=`${R.length} días`;el.style.left=Math.round(b.left+b.width/2)+'px';el.style.top=Math.round(b.top-6)+'px'}
-function endQSel(){const q=qsel;qsel=null;lkQSelTip(null);const cells=[...q.cells.values()];cells.forEach(t=>t.classList.remove('qs0','qs1'));if(cells.length===1){cells[0].classList.remove('sel');openQEditor(cells[0]);return}
+function lkQSelTip(R,del){let el=document.getElementById('lkqtip');if(!R||R.length<2){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='lkqtip';el.className='lkqtip';document.body.appendChild(el)}
+  const b=(del?R[0]:R[R.length-1]).getBoundingClientRect();el.classList.toggle('del',!!del);el.textContent=del?`Borrar ${R.length} días`:`${R.length} días`;el.style.left=Math.round(b.left+b.width/2)+'px';el.style.top=Math.round(b.top-6)+'px'}
+function endQSel(){const q=qsel;qsel=null;lkQSelTip(null);const cells=[...q.cells.values()];cells.forEach(t=>t.classList.remove('qs0','qs1','qdel'));if(cells.length===1){cells[0].classList.remove('sel');openQEditor(cells[0]);return}
+  if(q.del){let y=S.act.get(q.a);if(!y){requestRender();return}const ds2=[...q.cells.keys()].sort();ds2.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],`${ds2.length} días borrados`);return}
   const x=S.act.get(q.a);if(!x){requestRender();return}const ds=[...q.cells.keys()].sort();const inRange=ds.reduce((s,d)=>s+(+(x.qty||{})[d]||0),0);const avail=r2(x.metrado-(progSum(x)-inRange));const und=esc(x.und||'');
   const anchor=cells[cells.length-1];
   openPop(anchor,`<div class="ph">${ds.length} días · ${fmtD(ds[0])} – ${fmtD(ds[ds.length-1])}</div>
@@ -729,9 +737,13 @@ function commitQ(aid,d,raw){const x=S.act.get(aid);if(!x)return;let v=parseNum(r
 const lkPaintSkip=()=>((P().cal||{}).pskip!==false);
 function paintCell(td){const a=td.parentElement.dataset.a;if(!a)return;const d=td.dataset.d;const k=a+'|'+d;if(paint.cells.has(k)||(paint.sk&&paint.sk.has(d)))return;
   if(paint.on&&lkPaintSkip()&&!isWork(d)){(paint.sk||(paint.sk=new Map())).set(d,nwReason(d));return}
-  paint.cells.set(k,{a,d});td.classList.toggle('on',paint.on);td.classList.add('rs','re')}
+  paint.cells.set(k,{a,d,td,o:td.classList.contains('on')});td.classList.toggle('on',paint.on);td.classList.toggle('pdel',!paint.on);td.classList.add('rs','re')}
+/* cambia el sentido del arrastre: a la derecha agrega, a la izquierda quita; lo ya recorrido se vuelve a mostrar así */
+function paintDir(on){if(!paint||paint.on===on)return;paint.on=on;if(!on&&paint.sk)paint.sk=null;
+  for(const[k,c]of [...paint.cells]){if(on&&lkPaintSkip()&&!isWork(c.d)){c.td.classList.toggle('on',c.o);c.td.classList.remove('pdel');paint.cells.delete(k);(paint.sk||(paint.sk=new Map())).set(c.d,nwReason(c.d));continue}
+    c.td.classList.toggle('on',on);c.td.classList.toggle('pdel',!on)}}
 function endPaint(){
-  const p=paint;paint=null;const by={};
+  const p=paint;paint=null;const by={};for(const c of p.cells.values())if(c.td)c.td.classList.remove('pdel');
   if(p.sk&&p.sk.size){const L=[...p.sk].sort((a,b)=>a[0].localeCompare(b[0]));toast(`No se programó ${L.length===1?'el '+fmtD(L[0][0])+' ('+L[0][1]+')':L.length+' días no laborables ('+L.map(([d])=>fmtD(d)).join(', ')+')'}. ${lkCalOk()?'Para programarlo: clic derecho en la cabecera del día (en tablet, mantenla presionada) › «Trabajar este día», o desactiva «Al pintar días, saltar no laborables» en Configuración › Calendario.':'Si ese día se va a trabajar, pide al ingeniero que lo marque como día que se trabaja.'}`)}for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);
   const ops=[];for(const[a,ds]of Object.entries(by)){const x=S.act.get(a);if(!x)continue;const set=new Set(x.days||[]);ds.forEach(d=>p.on?set.add(d):set.delete(d));
     const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,qAutoElig(nx)?qAutoFill(nx):nx))}}
@@ -805,7 +817,8 @@ function commitField(t){
     if(f==='rend'&&v!=null&&!PM()&&!cliOn()&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'&&typeof mxEd==='function'&&mxEd()){const cid=mxCatOfN(x);const c=cid&&MX.cat.get(cid);
       if(c){const n=[...S.act.values()].filter(y=>!y._del&&mxCatOfN(y)===cid).length;const prev=c.rend??null;
         fcol('mcat').doc(cid).set({rend:v,...mxNow()},{merge:true}).then(()=>toast(`Rendimiento ${fq(v)} ${x.und||''}/persona-día guardado en el catálogo («${c.name}»): lo usan ${n} fila${n===1?'':'s'}.`,'Deshacer',()=>fcol('mcat').doc(cid).set({rend:prev,...mxNow()},{merge:true}))).catch(mxErr);
-        t.dataset.o=String(v);if(x.rend!=null)apply([op('acts',x.id,{...x,rend:null})]);return}}
+        t.dataset.o=String(v);MX.cat.set(cid,{...c,rend:v});MX.v++;gridRows=null;/* al instante en todas las filas de la actividad */
+        if(x.rend!=null)apply([op('acts',x.id,{...x,rend:null})]);else requestRender();return}}
     if(f==='und')v=v.trim().toUpperCase();
     let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();
       /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
