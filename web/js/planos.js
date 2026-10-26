@@ -31,7 +31,7 @@ const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
-  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla')requestRender()},
+  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas'))requestRender()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
   open();etoSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;PLB.clear();plbReady=false})}
 /* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
