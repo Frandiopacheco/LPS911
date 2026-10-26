@@ -493,6 +493,76 @@ test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina pa
   noErrors(errors, 'medir');
 });
 
+test('marcar: resaltar, flecha y texto temporales; dos dedos cancelan el trazo; imagen para compartir; se borran al cerrar', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { U.tab = 'pbib'; render(); });
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await page.waitForTimeout(400);
+  await page.click('#plv [data-pv="mark"]');
+  await expect(page.locator('#plv .pldbar')).toBeVisible();
+  await expect(page.locator('.plvc')).toHaveClass(/marcar/);
+  const ev = (type, wx, wy, o = {}) => page.evaluate(([type, wx, wy, o]) => {
+    const host = document.querySelector('.plvc'), r = host.getBoundingClientRect(), s = PLV.tv.toScreen(wx, wy);
+    host.dispatchEvent(new PointerEvent(type, { pointerId: o.id || 7, clientX: r.left + s.x, clientY: r.top + s.y, pointerType: o.pt || 'mouse', isPrimary: o.prim !== false, button: 0, bubbles: true }));
+  }, [type, wx, wy, o]);
+  const drag = async (a, b, o) => { await ev('pointerdown', a[0], a[1], o); for (let i = 1; i <= 5; i++) await ev('pointermove', a[0] + (b[0] - a[0]) * i / 5, a[1] + (b[1] - a[1]) * i / 5, o); await ev('pointerup', b[0], b[1], o); };
+  // resaltador (por defecto) y flecha
+  await drag([300, 300], [900, 320]);
+  await page.click('#plv .pldbar [data-pd="arr"]');
+  await page.click('#plv .pldbar [data-pd="c:#1c7ed6"]');
+  await drag([1200, 900], [800, 500]);
+  let L = await page.evaluate(() => pldList().map(m => ({ t: m.t, c: m.c, n: (m.p || []).length })));
+  expect(L.map(m => m.t)).toEqual(['hl', 'arr']);
+  expect(L[0].n).toBeGreaterThan(2); expect(L[1].c).toBe('#1c7ed6');
+  // un toque suelto no deja marca; el plano no se movió al dibujar
+  const v0 = await page.evaluate(() => PLV.tv.getView());
+  await ev('pointerdown', 500, 500); await ev('pointerup', 500, 500);
+  expect(await page.evaluate(() => pldList().length)).toBe(2);
+  expect(await page.evaluate(() => PLV.tv.getView())).toEqual(v0);
+  // táctil: un dedo empieza a dibujar y al llegar el segundo se descarta el trazo (pasa a pellizco)
+  await page.click('#plv .pldbar [data-pd="pen"]');
+  await ev('pointerdown', 400, 400, { pt: 'touch', id: 21 }); await ev('pointermove', 450, 420, { pt: 'touch', id: 21 });
+  await ev('pointerdown', 700, 700, { pt: 'touch', id: 22, prim: false });
+  await ev('pointerup', 450, 420, { pt: 'touch', id: 21 }); await ev('pointerup', 700, 700, { pt: 'touch', id: 22, prim: false });
+  expect(await page.evaluate(() => [pldList().length, !!PLD.cur])).toEqual([2, false]);
+  // texto: un toque y se escribe
+  await page.click('#plv .pldbar [data-pd="txt"]');
+  page.once('dialog', d => d.accept('Falta sello'));
+  await ev('pointerdown', 1000, 300); await ev('pointerup', 1000, 300);
+  await expect.poll(() => page.evaluate(() => pldList().map(m => m.txt).filter(Boolean))).toEqual(['Falta sello']);
+  await expect(page.locator('#plv [data-pv="mark"] .pldn')).toHaveText('3');
+  // nada se guardó en la base
+  expect(await page.evaluate(() => Object.keys(PLB.get('ARQ_AG03')).some(k => /mark|pld/i.test(k)))).toBe(false);
+  // deshacer y limpiar (con deshacer)
+  await page.click('#plv .pldbar [data-pd="undo"]');
+  expect(await page.evaluate(() => pldList().length)).toBe(2);
+  await page.click('#plv .pldbar [data-pd="clear"]');
+  expect(await page.evaluate(() => pldList().length)).toBe(0);
+  await page.click('#plv .pldbar [data-pd="undo"]');
+  expect(await page.evaluate(() => pldList().length)).toBe(2);
+  // imagen: lo que se ve + rótulo abajo
+  const img = await page.evaluate(async () => { const r = await pldImage(); const bm = await createImageBitmap(r.blob); return { name: r.name, w: bm.width, h: bm.height, cw: PLV.tv.cv.width, ch: PLV.tv.cv.height }; });
+  expect(img.w).toBe(img.cw); expect(img.h).toBeGreaterThan(img.ch); expect(img.name).toMatch(/^AG03_marcado_\d{8}-\d{4}\.png$/);
+  // Medir y Marcar no conviven; al salir de Marcar las marcas siguen visibles
+  await page.click('#plv [data-pv="med"]');
+  await expect(page.locator('#plv .pldbar')).toHaveCount(0);
+  await expect(page.locator('#plv .plmbar')).toBeVisible();
+  expect(await page.evaluate(() => [PLD.on, pldList().length, typeof PLV.tv.marks])).toEqual([false, 2, 'function']);
+  await page.keyboard.press('Escape');
+  // al cerrar el visor se borra todo
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#plv')).toHaveCount(0);
+  expect(await page.evaluate(() => PLD.by.size)).toBe(0);
+  noErrors(errors, 'marcar');
+});
+
 test('vínculos: crear en el visor (zona, lámina destino y zona del destino), seguirlo con un toque, ← Volver y quitarlo', async ({ page }) => {
   test.setTimeout(150_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
