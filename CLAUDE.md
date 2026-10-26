@@ -149,6 +149,15 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
 
+## Casco en prueba: correcciones a producción una por una (desde el 26-10-2026, decidido con el dueño)
+
+`main` tiene el módulo Casco (#466) y las láminas desde el módulo Planos (#467), que **todavía no van a la obra**. Mientras el dueño no lo apruebe:
+- **No se hace el pase completo `main → produccion`** (arrastraría Casco).
+- Una corrección de Last Planner, Tareo o Planos sigue el flujo normal hacia `main` (PR con `auto-unir`) y el dueño la **prueba en la copia de prueba**.
+- Cuando el dueño la apruebe para la obra: rama nueva **desde `produccion`** (`git fetch origin produccion && git checkout -b fix-… origin/produccion`), `git cherry-pick` del commit que se unió a `main` (resolver conflictos sin traer nada de Casco), PR **a `produccion`** y unir con *merge* cuando pase «Revisar». Nunca se escribe directo en `produccion`.
+- Si la corrección toca reglas: en `produccion` no existe la sección CASCO ni `scripts/reglas-casco.mjs`; no los agregues allí.
+- Cuando el dueño apruebe Casco, se borra esta sección y vuelve el pase normal.
+
 ## Modo rápido (por defecto, decidido con el dueño, oct 2026)
 
 El dueño prioriza ver los cambios pronto en la copia de prueba. Salvo que pida lo contrario o el cambio sea delicado:
