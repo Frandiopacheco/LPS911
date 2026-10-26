@@ -77,6 +77,12 @@ Los mosaicos son 300 dpi en WebP con pérdida (`PL_Q` 0,82): pasado ~1 px de pan
 
 `plTablet()` (pantalla táctil y lado menor ≥ 600 px; no celular ni PC). Botón «⤓ Sin conexión» en la biblioteca (guarda los planos de la lista filtrada, actualiza los de revisión nueva, quita) y en el visor (un plano). Baja **todos** los mosaicos (`plPaths(p)`) con `plGet` a la caché `lps-planos`, pide `navigator.storage.persist()` y revisa el espacio. Lo guardado se anota por equipo en `localStorage` `lps911.ploff` `{id:{rev,base,t,mb}}`; revisión nueva → «⟳ actualizar» y, al guardarla, se borra la carpeta de la anterior (`plOffDrop`). `plb.sz` = bytes subidos (para estimar MB; si falta, 7 MB).
 
+## Lector de PDF (pdf.js propio, oct 2026)
+
+- `planos.js` (`PL_PDFJS`) y `plano.js` (`PDFJS`) cargan `web/vendor/pdfjs/pdf.min.js`: pdfjs-dist **3.11.174 con un parche** (el mismo que trae pdf.js desde la v4 en `_createMeshCanvas`: `||1` en ancho/alto y escala 1 si el borde mide 0). El worker sigue del CDN (misma versión; el parche es solo del dibujo).
+- Por qué: algunos ETO exportados de AutoCAD (p. ej. mamparas M02 de Cánovas) traen degradados (sombreado de malla tipo 4) aplastados a una línea, de alto 0; pdf.js 3.11 fallaba con «createImageData… The source height is zero» y no se podía ver ni cargar la lámina.
+- Si se actualiza pdf.js, comprobar que la versión nueva ya trae el arreglo y borrar `vendor/pdfjs/`. Las pruebas (`planos*.spec.js`) siguen interceptando solo el worker del CDN.
+
 ## Lector de nombres (`plParse`)
 
 Nomenclatura `2459243-PTSA-XXX-<NIVEL>-P2D-<ESP>-E05-<COD>_<TÍTULO>`. Se ubica el token de etapa (`E05`, también `EO5`) y desde él: código (siguiente), especialidad (anterior; `AFC`/`DES`/`AGDES` → IS) y nivel (dos antes, saltando `P2D`/`P3D`/`M3D`). `ZZZ`/`XXX` → piso por el título («PLANTA SEGUNDO PISO», «SÓTANO», «AZOTEA»…). Se quitan `-Model`, fechas finales (`22.10.25`) y `_RAPM_220524`. El piso se busca por código en `S.pis` (P01→P1, S01→S1/S0, AZO→AZ). Todo se puede corregir en la tabla antes de procesar.
