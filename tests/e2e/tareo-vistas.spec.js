@@ -224,11 +224,16 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect(page.locator('#tjAuto')).not.toBeChecked();
   await page.check('#tjAuto'); await page.fill('#tjAutoH', '20:30');
   // semana del proyecto (20-10-2026): se guarda como «la semana n empieza el lunes de esta semana»
+  // horario sugerido en domingo o feriado (25-10-2026): por defecto 07:30–13:00; se ve cuántas horas da con el refrigerio
+  await expect(page.locator('#tjSgH')).toHaveText('= 4,5 h, todas extra');
+  await page.fill('#tjNlIni', '13:00');
+  await expect(page.locator('#tjSgH')).toHaveText('= 5,5 h, todas extra');
   await page.fill('#tjSem', '70');
   await page.click('#tjSave');
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sem).toEqual(await page.evaluate(() => ({ n: 70, lun: tLunes(todayIso()) })));
   expect(await page.evaluate(() => [tSemN(tLunes(todayIso())), tSemN(iso(new Date(pd(tLunes(todayIso())).getTime() - 7 * 864e5)))])).toEqual([70, 69]);
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).pubAuto).toEqual({ on: true, hh: '20:30' });
+  expect((await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sugNoLab).toEqual({ ini: '07:30', fin: '13:00' });
   await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:00', fin: '13:00', ref: 45, refIni: '13:00' }, '0': null }, refIni: '12:00' });
   await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:00', '13:00'))).toEqual({ trab: 6, ext: 0 });
   noErrors(errors, 'partidas y jornada');

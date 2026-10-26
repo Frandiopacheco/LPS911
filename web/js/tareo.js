@@ -9,7 +9,7 @@ for(const k of Object.keys(TCOLS))if(!(S[k] instanceof Map))S[k]=new Map();
 /* jornada por día de semana: {ini, fin, ref (min de refrigerio), refIni (inicio del refrigerio; si falta, el global refIni)}; null = no laborable.
    refNoLab: refrigerio en domingo o feriado (todo es extra, pero se descuenta la intersección con esa ventana). fer: feriados del tareo ('YYYY-MM-DD'). */
 const TCFG_DEF={jor:{'1':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'2':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'3':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'4':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'5':{ini:'07:30',fin:'17:00',ref:60,refIni:'12:00'},'6':{ini:'07:30',fin:'13:00',ref:45,refIni:'13:00'},'0':null},
-  refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},fer:[],limEnv:'18:00',tolGar:15,
+  refIni:'12:00',refNoLab:{ref:60,refIni:'12:00'},sugNoLab:{ini:'07:30',fin:'13:00'},fer:[],limEnv:'18:00',tolGar:15,
   /* semana del proyecto: el dueño dijo el 20-10-2026 que la semana del lunes 19-10-2026 es la 61 (se cambia en Jornada) */
   sem:{n:61,lun:'2026-10-19'}};
 const TCAT={OP:'Operario',OF:'Oficial',PE:'Peón',CA:'Capataz',OT:'Otro'};
@@ -19,7 +19,9 @@ function TC(){const c=(S.tcfg&&S.tcfg.get('main'))||{};const jor={};const gri=/^
   for(const[k]of TDOW){const v=c.jor&&Object.prototype.hasOwnProperty.call(c.jor,k)?c.jor[k]:TCFG_DEF.jor[k];jor[k]=v&&v.ini&&v.fin?{ini:v.ini,fin:v.fin,ref:Math.max(0,+v.ref||0),refIni:v.refIni||gri}:null}
   const rn=c.refNoLab;const refNoLab=typeof rn==='number'?{ref:Math.max(0,rn),refIni:gri}:rn&&typeof rn==='object'?{ref:rn.ref!=null&&rn.ref!==''?Math.max(0,+rn.ref||0):TCFG_DEF.refNoLab.ref,refIni:rn.refIni||gri}:{...TCFG_DEF.refNoLab};
   const fer=[...new Set((Array.isArray(c.fer)?c.fer:[]).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
-  return{jor,refIni:gri,refNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar,
+  /* horario sugerido en domingo o feriado (25-10-2026): lo que proponen «Toda la jornada», «El resto» y los atajos; solo sugerencia (todo es extra) */
+  const sg=c.sugNoLab||{};const sugNoLab=/^\d{2}:\d{2}$/.test(sg.ini||'')&&/^\d{2}:\d{2}$/.test(sg.fin||'')&&sg.fin>sg.ini?{ini:sg.ini,fin:sg.fin}:{...TCFG_DEF.sugNoLab};
+  return{jor,refIni:gri,refNoLab,sugNoLab,fer,ferN:c.ferN&&typeof c.ferN==='object'?c.ferN:{},limEnv:c.limEnv||TCFG_DEF.limEnv,tolGar:c.tolGar!=null&&c.tolGar!==''?+c.tolGar:TCFG_DEF.tolGar,
     /* publicación automática (20-10-2026): la hace el servidor (publicarTareoAuto); por omisión apagada, a las 21:00 */
     sem:c.sem&&+c.sem.n>0&&/^\d{4}-\d{2}-\d{2}$/.test(c.sem.lun||'')?{n:Math.round(+c.sem.n),lun:c.sem.lun}:{...TCFG_DEF.sem},
     pubAuto:{on:!!(c.pubAuto&&c.pubAuto.on===true),hh:/^\d{2}:\d{2}$/.test((c.pubAuto&&c.pubAuto.hh)||'')?c.pubAuto.hh:'21:00'},
@@ -947,6 +949,8 @@ async function tPcExport(){try{const G=tPcGroups([...S.tpc.values()].filter(x=>x
 /* feriados del calendario de Last Planner (S.meta project cal.hol: [{d,n}]); solo los tiene quien carga los datos de LPS */
 const tLpsHol=()=>{const p=S.meta&&S.meta.get('project');const h=p&&p.cal&&Array.isArray(p.cal.hol)?p.cal.hol:[];return h.filter(o=>o&&/^\d{4}-\d{2}-\d{2}$/.test(o.d||''))};
 async function tFerSave(fer,ferN,txt){try{await fcol(TCOLS.tcfg).doc('main').set({fer:[...new Set(fer)].sort(),ferN,...tStamp()},{merge:true});toast(txt)}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}
+/** «= 5,5 h» del horario sugerido de no laborables, descontando su refrigerio */
+function tSugTxt(sg,rn){const a=tMin(sg.ini),b=tMin(sg.fin),ri=tMin(rn.refIni),rf=+rn.ref||0;const h=tR2(tBlqMin(a,b,ri!=null&&rf>0?[ri,ri+rf]:null)/60);return h>0?`= ${tHtxt(h)} h, todas extra`:''}
 function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?'':' disabled';const hoy=todayIso();
   const lps=ed?tLpsHol():[];const fal=lps.filter(o=>!c.fer.includes(o.d)).length;
   const dow=f=>{const w=TDOW.find(([k])=>k===String(pd(f).getUTCDay()));return w?w[1]:''};
@@ -960,8 +964,11 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?
      <td data-l="Refrigerio (min)"><input class="tin t-n" type="number" min="0" max="180" step="5" data-tj="ref" value="${+d.ref||0}"${off}${dis} aria-label="${l}: minutos de refrigerio"></td><td class="mono t-r" data-l="Horas" data-tjh="${k}">${j?tJorH(j).toFixed(1):'No laborable'}</td></tr>`}).join('')}
     </tbody><tfoot><tr><td colspan="6"><b>Total semanal</b></td><td class="mono t-r"><b id="tjTot">${TDOW.reduce((s,[k])=>s+tJorH(c.jor[k]),0).toFixed(1)}</b></td></tr></tfoot></table></div>
     <div class="pad t-form"><label class="lqlab">Refrigerio en domingo o feriado: desde<input class="tin" type="time" id="tjNlIni" value="${esc(c.refNoLab.refIni)}"${dis}></label>
-     <label class="lqlab">Refrigerio en domingo o feriado (min)<input class="tin t-n" type="number" min="0" max="180" step="5" id="tjNlRef" value="${c.refNoLab.ref}"${dis}></label></div>
-    <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
+     <label class="lqlab">Refrigerio en domingo o feriado (min)<input class="tin t-n" type="number" min="0" max="180" step="5" id="tjNlRef" value="${c.refNoLab.ref}"${dis}></label>
+     <label class="lqlab">Horario sugerido en domingo o feriado: desde<input class="tin" type="time" id="tjSgIni" value="${esc(c.sugNoLab.ini)}"${dis}></label>
+     <label class="lqlab">hasta<input class="tin" type="time" id="tjSgFin" value="${esc(c.sugNoLab.fin)}"${dis}></label>
+     <span class="note" id="tjSgH">${esc(tSugTxt(c.sugNoLab,c.refNoLab))}</span></div>
+    <p class="pad note t-cfgn">Un día no laborable o feriado: todas las horas son extra (se descuenta el refrigerio de arriba si el bloque lo cruza). El horario sugerido es lo que el celular del capataz propone ese día («Toda la jornada», «El resto»); cada obrero puede tener otro. El sábado sin refrigerio no descuenta nada aunque se quede pasada la jornada.</p></div>
    <div class="card"><div class="pad t-form">
     <label class="lqlab">Hora límite de envío del tareo<input class="tin" type="time" id="tjLim" value="${esc(c.limEnv)}"${dis}></label>
     <label class="chk tj-auto"><input type="checkbox" id="tjAuto"${c.pubAuto.on?' checked':''}${dis}> Publicar el día automáticamente</label>
@@ -981,8 +988,10 @@ function renderTCfg(main){const c=TC();const ed=!!isAdmin||TASIS();const dis=ed?
   const upd=()=>{const jor=read();let t=0;for(const[k,j]of Object.entries(jor)){const h=tJorH(j);t+=h;const cell=main.querySelector(`[data-tjh="${k}"]`);if(cell)cell.textContent=j?h.toFixed(1):'No laborable';
       const r=main.querySelector(`[data-tjd="${k}"]`);r.querySelectorAll('[data-tj]:not([data-tj="on"])').forEach(x=>x.disabled=!j)}$('#tjTot').textContent=t.toFixed(1)};
   main.querySelector('.t-jor').oninput=upd;main.querySelector('.t-jor').onchange=upd;
+  const sgU=()=>{const t=$('#tjSgH');if(t)t.textContent=tSugTxt({ini:$('#tjSgIni').value,fin:$('#tjSgFin').value},{ref:+$('#tjNlRef').value||0,refIni:$('#tjNlIni').value})};['#tjSgIni','#tjSgFin','#tjNlRef','#tjNlIni'].forEach(k=>{const e=$(k);if(e)e.oninput=sgU});
   $('#tjSave').onclick=async()=>{const jor=read();for(const[k,j]of Object.entries(jor))if(j&&!(tJorH(j)>0)){toast(`Revisa la jornada del ${TDOW.find(x=>x[0]===k)[1].toLowerCase()}: el fin debe ser posterior al inicio.`);return}
-    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,pubAuto:{on:$('#tjAuto').checked,hh:/^\d{2}:\d{2}$/.test($('#tjAutoH').value)?$('#tjAutoH').value:'21:00'},sem:+$('#tjSem').value>0?{n:Math.round(+$('#tjSem').value),lun:tLunes(todayIso())}:c.sem,tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
+    const sgI=$('#tjSgIni').value,sgF=$('#tjSgFin').value;if(!(/^\d{2}:\d{2}$/.test(sgI)&&/^\d{2}:\d{2}$/.test(sgF)&&sgF>sgI)){toast('Revisa el horario sugerido en domingo o feriado: el fin debe ser posterior al inicio.');return}
+    const d={jor,refIni:c.refIni,refNoLab:{ref:Math.max(0,Math.round(+$('#tjNlRef').value||0)),refIni:$('#tjNlIni').value||c.refIni},sugNoLab:{ini:sgI,fin:sgF},limEnv:$('#tjLim').value||TCFG_DEF.limEnv,pubAuto:{on:$('#tjAuto').checked,hh:/^\d{2}:\d{2}$/.test($('#tjAutoH').value)?$('#tjAutoH').value:'21:00'},sem:+$('#tjSem').value>0?{n:Math.round(+$('#tjSem').value),lun:tLunes(todayIso())}:c.sem,tolGar:c.tolGar,/* garita: ya no se usa (20-10-2026), se conserva el valor */...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('main').set(d,{merge:true});toast('Configuración del tareo guardada.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}};
   $('#tferAdd').onclick=()=>{const f=$('#tferD').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Elige la fecha del feriado.');return}const n=$('#tferNm').value.trim().replace(/\s+/g,' ');
     const C=TC();if(C.fer.includes(f)&&(C.ferN[f]||'')===n){toast('Ese feriado ya está.');return}
