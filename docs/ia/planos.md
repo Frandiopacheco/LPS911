@@ -8,7 +8,7 @@ Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia e
 
 - **PDF, no DWG.** Exportados desde AutoCAD con `DWG To PDF.pc3`, papel del tamaño real (el formato del proyecto es 1200 × 900 mm, escala 1/100), Extensión + Ajustar al papel, CTB de cada especialidad, una lámina por archivo, mismo nombre del DWG.
 - **Alta definición con mosaicos**: el PDF se dibuja **en la PC de quien carga** a 300 dpi del tamaño real (máx. 16 000 px por lado) y se corta en mosaicos de 1024 px por niveles (cada nivel la mitad del anterior). El visor carga primero el nivel grueso y, al acercar, solo los mosaicos visibles del nivel que corresponde. Medido con la AG03 real (120 × 90 cm): 14 175 × 10 629 px, 5 niveles, 215 archivos, 6,5 MB, ~18 s de proceso.
-- **Fase 1 (esta):** biblioteca, carga masiva y visor. **Después:** que la Sectorización y el Plan diario tomen su lámina base de aquí (alineación por puntos ya existe en `plano.js`), anotaciones.
+- **Fase 1 (esta):** biblioteca, carga masiva y visor. **Después:** que la Sectorización y el Plan diario tomen su lámina base de aquí (alineación por puntos ya existe en `plano.js`). Las anotaciones temporales ya existen: ver «Marcar».
 
 ## Pestañas (`PLA_TABS`)
 
@@ -123,6 +123,17 @@ Botón **📏 Medir** en la barra del visor: distancia, poligonal y área sobre 
 - **Precisión:** a 300 dpi y 1/100, un píxel del plano ≈ 8,5 mm reales; con buen zoom se mide a ±1–2 cm. Es una medida a mano alzada sobre una imagen (sin imán a las líneas del DWG): sirve para chequeos de obra, no para metrados formales. Posible mejora: imán a líneas leyendo `orig.pdf`.
 - **Táctil:** al arrastrar un punto aparece una lupa 3× sobre el dedo (`plmLupa`).
 - **Cursor (mouse):** en modo medir el visor lleva la clase `.medir` y el cursor es una cruz fina con el centro libre (SVG en CSS, punto activo en el centro) en vez de la manito de mover el plano; sobre un punto ya puesto pasa a «mover» (`.sobre`, `plmHover`). Al salir de medir vuelve la manito.
+
+## Marcar (`web/js/planos-marcar.js`, oct 2026, pedido del dueño)
+
+Botón **✏️ Marcar** en la barra del visor: resaltar y dibujar cosas básicas sobre la lámina para sacar una imagen y mandarla (WhatsApp). Decidido con el dueño:
+- **Temporal, nunca se guarda** (ni Firestore ni el equipo): `PLD.by` = `Map(base de la revisión → marcas)` en memoria. Se conservan **por lámina mientras el visor está abierto** (se puede marcar AG03, pasar a IS-03 y volver) y se borran al cerrar el visor (`pldReset` en `plClose`). Sin reglas ni permisos: **lo usan todos los que ven Planos**.
+- **Herramientas** (`PLD_TOOLS`): resaltador (trazo libre, `multiply` y 42 % de opacidad), lápiz, flecha, recuadro, círculo y texto corto (máx. 80, con `uiAsk` input). 4 colores (`PLD_COLS`), uno recordado por herramienta (`PLD.col`). Deshacer (también Ctrl+Z), Limpiar (con «Deshacer» en el aviso: `PLD.clr`) y ✓ Listo.
+- **Coordenadas del plano** como Medir; el grosor (`PLD_W`, px de pantalla) y el tamaño del texto (`PLD_FS`) se fijan al dibujar (`w`, `s` en px del plano): de lejos se ven más finos, como tinta.
+- **Capa propia** `V.marks` (en `plTiles` se dibuja antes de `V.over`): las marcas siguen visibles al salir de Marcar y dentro de Medir/Vínculos. Los toques usan los ganchos compartidos (`onTap/onDown/onDrag/onUp`), así que **Marcar, Medir y Vincular no conviven** (`pldToggle`, `plmToggle`, `plkEdit`; `plkSync` no toca nada mientras `PLD.on`).
+- **Gestos:** `V.onDown(cx,cy,e)` recibe el evento. Táctil: un dedo dibuja; si llega un segundo dedo con un trazo en curso, `plTiles` llama `V.onCancel` (se descarta el trazo) y pasa a pellizco con los dos dedos. Lápiz óptico: tras el primer toque con lápiz (`PLD.pen`), el lápiz dibuja y el dedo mueve. Ratón: izquierdo dibuja, rueda acerca, Espacio + arrastrar (`PLD.space`, cursor de mano) o el botón de la rueda mueven. Con la herramienta Texto un dedo mueve y un toque pone el texto. Un toque suelto o un arrastre < 8 px no deja marca.
+- **📷 Compartir / Copiar imagen** (`pldImage`, `pldShare`): copia el lienzo del visor tal como se ve (mosaicos + capa nítida + marcas; espera ≤ 700 ms si la capa nítida se está dibujando, para no perder el toque que exige el menú de compartir) y agrega un rótulo abajo (código · título; Rev. · fecha y hora de Lima · nombre · LPS 911). Táctil (`pointer:coarse`): menú de compartir → copiar → descargar; PC: copiar al portapapeles → compartir → descargar. **⤓** descarga `<cod>_marcado_AAAAMMDD-HHMM.png`. El lienzo no queda «contaminado» porque mosaicos y PDF llegan como blobs.
+- **Prueba:** `planos.spec.js` › «marcar» (resaltar y flecha, toque suelto, dos dedos cancelan, texto, nada en la base, deshacer/limpiar, imagen con rótulo, exclusión con Medir, se borra al cerrar).
 
 ## Vínculos (`web/js/planos-vinculos.js`, oct 2026)
 
