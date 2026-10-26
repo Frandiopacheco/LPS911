@@ -647,7 +647,6 @@ function zcPlanHtml(x,a){const N=nbMap();const nv=shapesOf(M.piso).find(z=>z.kin
   const rs=typeof restrPend==='function'?restrPend(x.id):[];
   return`<div class="zch"><div class="zct">${nbHtml(N,x.id)}<div><b>${esc(x.name||'(sin nombre)')}</b><span><i class="zcsc" style="--c:${conOf(x.sc).color}"></i>${esc(conOf(x.sc).name)} · ${esc(a?a.code+' · '+a.name:'')}</span></div></div><button class="kx" data-zcx aria-label="Cerrar">&times;</button></div>
     <p class="zcm">${dvLbl(M.date)}${hasQ(x)?` · ${fq((x.qty||{})[M.date])} ${esc(x.und||'')}`:''}${CQ?` · cuadrilla <b>${esc(CQ.t)}</b>`:''}</p>
-    ${typeof semActLine==='function'?semActLine(x.id,M.piso,M.date):''}
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${(()=>{try{computeCross()}catch(e){}const ids=shapesV(M.piso).filter(z=>z.kind==='zona'&&z.actId===x.id).map(z=>z.id);return cxInfoHtml(cxOfIds(ids),'data-zcx2')})()}
     ${nv?`<div class="zcst" style="--c:#c62828"><b>✗ No va</b><span>${esc(nv.motivo||'')}${nv.repTo?' · → '+fmtD(nv.repTo):''}</span></div>${(nv.k||nv.eng?dzEng():can)?`<button class="lnkb" data-undo="${nv.id}">Vuelve a ir</button>`:''}`
@@ -1340,7 +1339,7 @@ function renderPlan(main,cur,base){
         return`<div class="mpdi" style="--c:${conOf(p.sc).color}"><button class="mpdt" data-see="${(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===y.id)||{}).id||''}"><span class="mono">${esc(ay?ay.code:'')}</span> ${esc(short(y.name,30))}<small>${esc(conOf(p.sc).name)} · ${esc(dpText(p))}</small></button>${eng?`<span class="dzpb"><button class="ib pri" data-dpa="${p.id}" title="Decidir: aceptar lo propuesto o mantener que va">Revisar</button></span>`:''}</div>`}).join('')}</div>`}
     const pb=$('#mpdb');if(pb){if(pb.dataset.h!==ph){pb.innerHTML=ph;pb.dataset.h=ph}pb.hidden=!ph}}
   {const box=(id,h_)=>{const el=$('#'+id);if(!el)return;if(el.dataset.h!==h_){el.innerHTML=h_;el.dataset.h=h_}el.hidden=!h_};
-    box('mchb',chHtml(M.meet?M.meetSc:sc));box('msemb',typeof semDockHtml==='function'?semDockHtml(M.piso,M.date,M.meet?M.meetSc:SF.join(','),aid=>(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===aid)||{}).id||''):'');if(typeof semPresRefresh==='function')semPresRefresh();box('mfzb',fzBoxHtml(role,M.meet?M.meetSc:SF.join(',')));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
+    box('mchb',chHtml(M.meet?M.meetSc:sc));box('msemb',typeof semDockHtml==='function'?semDockHtml(M.piso,M.date,M.meet?M.meetSc:SF.join(','),aid=>(shapesOf(M.piso).find(z=>z.kind==='zona'&&z.actId===aid)||{}).id||''):'');box('mfzb',fzBoxHtml(role,M.meet?M.meetSc:SF.join(',')));const cq=$('#mcqb');if(cq){const qh=cqBarHtml(role);if(cq.dataset.h!==qh){cq.innerHTML=qh;cq.dataset.h=qh}cq.hidden=!qh||!!M.meet}}
   h+=fzCardHtml(role,sc);
   const dcan=dzCan;let lastS='';
   h+=`<div class="mp-list dzl">${L.map(({x,a,s})=>{const zs=zBy[x.id],nv=nBy[x.id];const can=dcan(x);const geoOk=a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6);
@@ -2064,7 +2063,6 @@ function dzAdd(btn){const sc=M.scDraw;const mine=myRole()==='sc'?myScs():null;
   setTimeout(()=>{const i=$('#dzq');if(i){i.focus();i.oninput=()=>{const el=$('#pop .dzpl');if(el)el.innerHTML=list(i.value.trim().toLowerCase())}}},0)}
 function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   /* P23: presentación de «Semana» (solo lectura: va antes del candado del plan cerrado) */
-  if((b=g('[data-semp]'))){if(typeof semPresOpen==='function')semPresOpen(M.piso,M.date,M.meet?M.meetSc:scSel_().join(','));return true}
   if(lockStop(t))return true;
   if((b=g('[data-dzsc]'))){const c=b.dataset.dzsc;
     if((e.ctrlKey||e.metaKey)&&c&&myRole()!=='sc'){const L=scSel_();const n=L.includes(c)?L.filter(x=>x!==c):[...L,c];M.scDraw=n[0]||'';M.scX=n.slice(1)}

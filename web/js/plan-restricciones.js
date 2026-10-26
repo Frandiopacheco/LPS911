@@ -662,7 +662,7 @@ function renderRestr(main){
   const winEnd=weekDays(U.week+U.win-1)[5];const inWin=pend.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(d=>d>=weekStart(U.week)&&d<=winEnd)});
   const libW=all.filter(r=>r.status==='lib'&&r.freed&&weekOf(r.freed)===U.week).length;
   const showP=!U.piso&&S.pis.size>1;const mob=isNarrow();
-  let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,(typeof frevPend==='function'&&(SCK()||canDaily)?(()=>{ensureFrev();const n=frevPend().length;return`<button class="ib${n?' pri':''}" id="rfrev" title="Revisar los flujos (información, materiales, personal, equipos, frente, calidad, seguridad, externos) de los ambientes que entran a la ventana">◇ Revisión de flujos${n?` <b>${n}</b>`:''}</button>`})():'')+'<button class="ib" id="rxls" title="Exportar a Excel la lista con los filtros de abajo">Exportar Excel</button>'+(rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':''))}<div class="tiles">
+  let h=`<div class="scroll"><div class="wrap">${pageHead('Restricciones',`${pisoLabel()} · ${pend.length} pendiente${pend.length===1?'':'s'}${late.length?` · <b class="bad">${late.length} vencida${late.length===1?'':'s'}</b>`:''}`,'<button class="ib" id="rxls" title="Exportar a Excel la lista con los filtros de abajo">Exportar Excel</button>'+(rCanAdd()?'<button class="ib pri" id="radd">+ Nueva restricción</button>':''))}<div class="tiles">
    <div class="tile"><span class="k">Pendientes</span><span class="v">${pend.length}<small> · ${pend.filter(r=>grpOf(r)==='campo').length} campo · ${pend.filter(r=>grpOf(r)==='area').length} otras áreas</small></span></div>
    <div class="tile"><span class="k">Vencidas</span><span class="v" style="color:${late.length?'var(--bad)':'inherit'}">${late.length}${POS.size?`<small> · ${POS.size} posiblemente liberada${POS.size>1?'s':''}</small>`:''}</span></div>
    <div class="tile"><span class="k">Afectan la ventana</span><span class="v">${inWin.length}<small> · sem ${U.week}–${U.week+U.win-1}</small></span></div>
@@ -714,7 +714,6 @@ function renderRestr(main){
   {const xb=$('#rxls',main);if(xb)xb.onclick=()=>{const F=U.rF||{};const fs=[U.rfilter==='pend'?'Pendientes':U.rfilter==='lib'?'Liberadas':'Todas',F.aff&&'Afecta a '+F.aff,F.reg&&'Registró '+F.reg,F.who&&'La libera '+F.who,(F.c1||F.c2)&&`Registrada ${F.c1?fmtD(F.c1):'…'}–${F.c2?fmtD(F.c2):'…'}`,(F.l1||F.l2)&&`Liberada ${F.l1?fmtD(F.l1):'…'}–${F.l2?fmtD(F.l2):'…'}`].filter(Boolean).join(' · ');restrXlsx(list,`${U.piso?(S.pis.get(U.piso)?.name||''):'Todos los pisos'} · ${fs}`)}}
   {const fc=$('#rfclr',main);if(fc)fc.onclick=()=>{U.rF={};U.rLim=0;render()}}
   {const mm=$('#rmore',main);if(mm)mm.onclick=()=>{U.rLim=(U.rLim||150)+300;render()}}
-  {const fb=$('#rfrev',main);if(fb)fb.onclick=()=>frevOpen()}
   const rc=$('#rclr',main);if(rc)rc.onclick=()=>{U.rAct=null;render()};
   const rv=$('#rven',main);if(rv)rv.onclick=()=>{RVEN=!RVEN;render()};
   main.onclick=e=>{
