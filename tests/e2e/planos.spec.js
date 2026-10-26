@@ -562,7 +562,7 @@ test('medir: las cuentas (distancia, poligonal, área) y calibrar una lámina pa
   noErrors(errors, 'medir');
 });
 
-test('marcar: resaltar, flecha y texto temporales; dos dedos cancelan el trazo; imagen para compartir; se borran al cerrar', async ({ page }) => {
+test('marcar: resaltar (suavizado), flecha, texto sobre el plano y borrador; dos dedos cancelan el trazo; imagen; se borran al cerrar', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
   await preparar(page);
@@ -589,7 +589,13 @@ test('marcar: resaltar, flecha y texto temporales; dos dedos cancelan el trazo; 
   await drag([1200, 900], [800, 500]);
   let L = await page.evaluate(() => pldList().map(m => ({ t: m.t, c: m.c, n: (m.p || []).length })));
   expect(L.map(m => m.t)).toEqual(['hl', 'arr']);
-  expect(L[0].n).toBeGreaterThan(2); expect(L[1].c).toBe('#1c7ed6');
+  expect(L[0].n).toBe(2); expect(L[1].c).toBe('#1c7ed6'); // resaltado casi recto: queda recto
+  // suavizado: un trazo tembloroso sale con menos quiebres (curvatura total menor) y conserva los extremos
+  expect(await page.evaluate(() => {
+    const P = []; for (let i = 0; i <= 40; i++) P.push({ x: i * 10, y: i * 4 + (i % 2 ? 3 : -3) });
+    const Q = pldSmooth(P, 'pen', 1), turn = A => { let t = 0; for (let i = 2; i < A.length; i++) { const a = Math.atan2(A[i - 1].y - A[i - 2].y, A[i - 1].x - A[i - 2].x), b = Math.atan2(A[i].y - A[i - 1].y, A[i].x - A[i - 1].x); t += Math.abs(b - a); } return t; };
+    return [turn(Q) < turn(P) / 3, Q[0].x === 0 && Q[Q.length - 1].x === 400];
+  })).toEqual([true, true]);
   // un toque suelto no deja marca; el plano no se movió al dibujar
   const v0 = await page.evaluate(() => PLV.tv.getView());
   await ev('pointerdown', 500, 500); await ev('pointerup', 500, 500);
@@ -603,12 +609,37 @@ test('marcar: resaltar, flecha y texto temporales; dos dedos cancelan el trazo; 
   expect(await page.evaluate(() => [pldList().length, !!PLD.cur])).toEqual([2, false]);
   // texto: un toque y se escribe
   await page.click('#plv .pldbar [data-pd="txt"]');
-  page.once('dialog', d => d.accept('Falta sello'));
   await ev('pointerdown', 1000, 300); await ev('pointerup', 1000, 300);
-  await expect.poll(() => page.evaluate(() => pldList().map(m => m.txt).filter(Boolean))).toEqual(['Falta sello']);
+  await expect(page.locator('.plvc .pldin')).toBeFocused(); // cuadro sobre el plano, sin formulario
+  await page.keyboard.type('Falta sello');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.plvc .pldin')).toHaveCount(0);
+  expect(await page.evaluate(() => pldList().map(m => m.txt).filter(Boolean))).toEqual(['Falta sello']);
+  // tocar el texto lo edita; Esc lo deja como estaba
+  const tp = await page.evaluate(() => { const m = pldList().find(x => x.t === 'txt'); return [m.x + 20 / PLV.tv.s, m.y]; });
+  await ev('pointerdown', tp[0], tp[1]); await ev('pointerup', tp[0], tp[1]);
+  await expect(page.locator('.plvc .pldin')).toHaveText('Falta sello');
+  await page.keyboard.type(' X'); await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => pldList().map(m => m.txt).filter(Boolean))).toEqual(['Falta sello']);
+  await expect(page.locator('#plv')).toHaveCount(1); // Esc cerró el cuadro, no el visor
   await expect(page.locator('#plv [data-pv="mark"] .pldn')).toHaveText('3');
   // nada se guardó en la base
   expect(await page.evaluate(() => Object.keys(PLB.get('ARQ_AG03')).some(k => /mark|pld/i.test(k)))).toBe(false);
+  // tocar fuera del cuadro pone el texto y no abre otro
+  { const pos = async (wx, wy) => page.evaluate(([wx, wy]) => { const r = document.querySelector('.plvc').getBoundingClientRect(), t = PLV.tv.toScreen(wx, wy); return [r.left + t.x, r.top + t.y]; }, [wx, wy]);
+    let [x, y] = await pos(1500, 1100); await page.mouse.click(x, y); await page.keyboard.type('Revisar junta');
+    await page.screenshot({ path: '/tmp/claude-0/-home-claude/76f56b65-c776-5f25-a630-e06ff603e00c/scratchpad/ed.png' });
+    [x, y] = await pos(300, 1300); await page.mouse.click(x, y);
+    await expect(page.locator('.plvc .pldin')).toHaveCount(0);
+    expect(await page.evaluate(() => pldList().map(m => m.txt).filter(Boolean))).toEqual(['Falta sello', 'Revisar junta']);
+    await page.screenshot({ path: '/tmp/claude-0/-home-claude/76f56b65-c776-5f25-a630-e06ff603e00c/scratchpad/ed2.png' });
+    await page.click('#plv .pldbar [data-pd="undo"]'); }
+  // borrador: pasar sobre la flecha la quita; deshacer la devuelve
+  await page.click('#plv .pldbar [data-pd="del"]');
+  await drag([950, 750], [1050, 650]);
+  expect(await page.evaluate(() => pldList().map(m => m.t))).toEqual(['hl', 'txt']);
+  await page.click('#plv .pldbar [data-pd="undo"]');
+  expect(await page.evaluate(() => pldList().map(m => m.t).sort())).toEqual(['arr', 'hl', 'txt']);
   // deshacer y limpiar (con deshacer)
   await page.click('#plv .pldbar [data-pd="undo"]');
   expect(await page.evaluate(() => pldList().length)).toBe(2);
