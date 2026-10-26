@@ -119,6 +119,30 @@ let plPdfP=null;
 function plPdfJs(){if(window.pdfjsLib)return Promise.resolve();if(plPdfP)return plPdfP;
   plPdfP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=PL_PDFJS;s.onload=()=>{if(!window.pdfjsLib){plPdfP=null;ko(new Error('No se pudo cargar el lector de PDF.'));return}window.pdfjsLib.GlobalWorkerOptions.workerSrc=PL_PDFJS_W;ok()};
     s.onerror=()=>{plPdfP=null;ko(new Error('No se pudo cargar el lector de PDF. Revisa tu conexión.'))};document.head.appendChild(s)});return plPdfP}
+/* pdf-lib (solo al dividir hojas o girar): extrae una hoja a su propio PDF y le pone la rotación (/Rotate). Así orig.pdf siempre es
+   de una hoja y ya girada: mosaicos, capa nítida, medir, vínculos y «PDF» la ven igual sin saber nada del giro. */
+const PL_PDFLIB=window.PLANO_PDFLIB||'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+let plLibP=null;
+function plPdfLib(){if(window.PDFLib)return Promise.resolve();if(plLibP)return plLibP;
+  plLibP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src=PL_PDFLIB;s.onload=()=>window.PDFLib?ok():(plLibP=null,ko(new Error('No se pudo cargar el editor de PDF.')));
+    s.onerror=()=>{plLibP=null;ko(new Error('No se pudo cargar el editor de PDF. Revisa tu conexión.'))};document.head.appendChild(s)});return plLibP}
+/** PDF de una sola hoja (la n.º pg, desde 1) girada q cuartos de vuelta a la derecha */
+async function plOnePage(buf,pg,q){await plPdfLib();const L=window.PDFLib;
+  let src;try{src=await L.PDFDocument.load(buf,{ignoreEncryption:true})}catch(e){throw new Error('No se pudo leer el PDF para separar o girar la hoja.')}
+  const out=await L.PDFDocument.create();const[p]=await out.copyPages(src,[Math.max(0,(pg||1)-1)]);
+  p.setRotation(L.degrees(((p.getRotation().angle||0)+90*(q||0))%360));out.addPage(p);return out.save()}
+/** cuántas hojas tiene un PDF (0 si no se pudo leer) */
+async function plPages(file){try{await plPdfJs();const d=await window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const n=d.numPages;try{d.destroy()}catch(e){}return n}catch(e){return 0}}
+/* giro a la derecha, en coordenadas normalizadas de la hoja (0–1): (x, y) → (1 − y, x) por cada cuarto de vuelta */
+function plRotPt(x,y,q){for(let i=0;i<((q%4)+4)%4;i++)[x,y]=[1-y,x];return[x,y]}
+function plRotRect(l,q){const a=plRotPt(l.x0,l.y0,q),b=plRotPt(l.x1,l.y1,q);return{...l,x0:Math.min(a[0],b[0]),x1:Math.max(a[0],b[0]),y0:Math.min(a[1],b[1]),y1:Math.max(a[1],b[1])}}
+const plRotV=(v,q)=>{if(!v||v.nx==null)return v;const[nx,ny]=plRotPt(v.nx,v.ny,q);return{...v,nx,ny}};
+/** recorte en puntos del PDF (vista con origen arriba a la izquierda, hoja W×H) tras girar q cuartos a la derecha */
+function plRotCrop(c,W,H,q){for(let i=0;i<((q%4)+4)%4;i++){c={x0:H-c.y1,x1:H-c.y0,y0:c.x0,y1:c.x1};[W,H]=[H,W]}return c}
+/** nombre con el que se registra una fila de la carga (con «hoja k de n» si el PDF se dividió) */
+/** clave del nombre para el id de una lámina sin código (igual que antes para un PDF de una hoja) */
+const plItKey=it=>(it.pgs||1)>1?plItName(it):it.file.name;
+const plItName=it=>it.file.name.replace(/\.pdf$/i,'')+((it.pgs||1)>1?` (hoja ${it.pg} de ${it.pgs})`:'');
 const plCanvas=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
 /** ¿el navegador puede de verdad dibujar un lienzo de w×h? (si es muy grande, falla en silencio) */
 function plCanvasOk(w,h){if(w*h>130e6)return null;try{const c=plCanvas(w,h);const g=c.getContext('2d');if(!g||c.width!==w)return null;g.fillStyle='#f00';g.fillRect(w-1,h-1,1,1);
@@ -171,23 +195,25 @@ function plFrameFind(dark,w,h,a,v1){const GAP=2,MIN=0.12,TOL=Math.max(3,Math.rou
 /** procesa un PDF: dibuja en alta definición, corta mosaicos por niveles, sube todo y registra el plano */
 async function plProcess(it,say){
   await plPdfJs();const t0=performance.now();
-  say('Leyendo PDF…');const buf=await it.file.arrayBuffer();
+  say('Leyendo PDF…');let buf=await it.file.arrayBuffer();
+  /* hoja de un PDF de varias (ETO dividido) o girada: se arma su propio PDF de una hoja, ya girado */
+  if((it.pgs||1)>1||it.q){say((it.pgs||1)>1?`Separando la hoja ${it.pg} de ${it.pgs}…`:'Girando la lámina…');buf=await plOnePage(buf,it.pg||1,it.q||0)}
   const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;const pg=await pdf.getPage(1);
   try{const rot=plRotulo((await pg.getTextContent()).items||[]);it.rot=rot;
     if(!it.m.cod&&rot.cod)it.m.cod=rot.cod;if(!it.m.disc&&rot.disc)it.m.disc=rot.disc}catch(e){it.rot={cod:'',disc:''}}
   const eto=!!it.m.eto;if(eto){if(!it.m.sc)throw new Error('Elige el subcontratista en la tabla.')}
   else{if(!it.m.cod)throw new Error('Sin código de lámina: escríbelo en la tabla.');if(!it.m.disc)throw new Error('Sin especialidad: elígela en la tabla.')}
-  const id=plIdOf({...it.m,fname:it.file.name});const old=PLB.get(id);
+  const id=it.id||plIdOf({...it.m,fname:plItKey(it)});const old=PLB.get(id);const keep=!!(it.keep&&old);
   /* «Empezar en Rev. 1» (solo admin): la lámina ya existía (cargas de prueba) y se reemplaza sin historial, vínculos ni calibración.
      Carpeta nueva (las rutas de Storage nunca se reutilizan: la caché de los equipos se guía por ellas); la anterior no se borra. */
-  const fresh=!!(it.fresh&&old);const rev=fresh?1:old?(old.rev||1)+1:1;
+  const fresh=!!(it.fresh&&old);const rev=keep?(old.rev||1):fresh?1:old?(old.rev||1)+1:1;
   /* carpeta ÚNICA por carga (`planos/<id>.<marca>/r<rev>`): la caché de cada equipo (Cache API `lps-planos`) se guía por la ruta y
      da por hecho que nunca cambia. Antes era `planos/<id>/r<rev>`: al eliminar una lámina y volver a cargarla (otra vez Rev. 1) la
      ruta se repetía y los equipos mostraban los mosaicos y el PDF viejos (sin recortar; la capa nítida salía corrida). */
   const base=`${eto?etoRoot(it.m.sc):'planos'}/${id}.${NOW().toString(36)}${Math.random().toString(36).slice(2,6)}/r${rev}`;
   const v1=pg.getViewport({scale:1});
   /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
-  let crop=null;if(it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
+  let crop=it.cropAt||null;if(!crop&&it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
   it.cropped=!!crop;const cx0=crop?crop.x0:0,cy0=crop?crop.y0:0,cwp=crop?crop.x1-crop.x0:v1.width,chp=crop?crop.y1-crop.y0:v1.height;
   const lp=Math.max(cwp,chp);const px=Math.min(PL_MAXPX,Math.round(lp/72*PL_DPI));const sc=px/lp;const vp=pg.getViewport({scale:sc});
   const W=Math.floor(cwp*sc),H=Math.floor(chp*sc);let Z=1;while(Math.max(W,H)/2**(Z-1)>PL_T)Z++;
@@ -195,7 +221,7 @@ async function plProcess(it,say){
   let mm=[Math.round(cwp/72*25.4),Math.round(chp/72*25.4)];
   /* marco con proporción del formato del proyecto (120 × 90): su tamaño real es 1200 × 900 mm aunque «Ajustar al papel» lo haya encogido
      (p. ej. 1178 mm) o la lámina ocupara poco de la hoja; así la escala de referencia de Medir (plmNominal) queda en 1/100 exacta */
-  if(crop&&!eto&&Math.abs(cwp/chp-4/3)<0.02)mm=[1200,900];
+  if(crop&&!eto&&Math.abs(cwp/chp-4/3)<0.02)mm=[1200,900];else if(crop&&!eto&&Math.abs(chp/cwp-4/3)<0.02)mm=[900,1200];   /* girada */
   /* subidas en paralelo (máx. 6) mientras se siguen cortando mosaicos */
   const pend=new Set();let up=0,total=0,fail=null;
   let bytes=0;const send=(path,blob,type)=>{total++;bytes+=blob.size||0;const p=plPut(path,blob,type).then(()=>{up++},e=>{fail=fail||e}).finally(()=>pend.delete(p));pend.add(p);return p};
@@ -226,9 +252,19 @@ async function plProcess(it,say){
   if(L)L.width=L.height=0;if(thumbSrc)thumbSrc.width=thumbSrc.height=0;
   say('Subiendo el PDF original…');await room();send(`${base}/orig.pdf`,new Blob([buf],{type:'application/pdf'}),'application/pdf');
   while(pend.size)await Promise.race(pend);if(fail)throw fail;try{pdf.destroy()}catch(e){}
+  /* girar una lámina ya cargada (plRotate): misma revisión, carpeta nueva; los vínculos de la lámina y sus propuestas se giran en la
+     MISMA transacción (si alguien vinculaba a la vez no se pierde); la calibración vale igual (misma resolución). La carpeta anterior no se borra. */
+  if(keep){const q=it.q||0,ref=plCol(old).doc(id),g0=(old.giro&&old.giro.q)||0;let res=null;
+    await db.runTransaction(async tx=>{const sn=await tx.get(ref);if(!sn.exists)throw new Error('La lámina ya no existe');const d=sn.data();
+      if(d.base!==old.base)throw new Error('Alguien cargó otra versión de esta lámina mientras tanto: vuelve a intentarlo.');
+      const self=l=>{const r=plRotRect(l,q);return r.to===id?{...r,v:plRotV(r.v,q)}:r};
+      res={base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,
+        giro:{q:(g0+q)%4,t:NOW(),by:me.email,byN:me.name||me.email}};
+      if(Array.isArray(d.lk))res.lk=d.lk.map(self);if(Array.isArray(d.lkp))res.lkp=d.lkp.map(self);tx.update(ref,res)});
+    Object.assign(old,res);return{id,rev,keep:true,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
   const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
-  const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:it.file.name.replace(/\.pdf$/i,''),fsize:it.file.size,
+  const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};
   /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
@@ -643,12 +679,36 @@ function plEdit(p,btn){
     <label>Piso<select class="tin" id="pleP"><option value="">General (sin piso)</option>${pisos().map(x=>`<option value="${x.id}"${x.id===p.pisoId?' selected':''}>${esc(x.code+' · '+x.name)}</option>`).join('')}</select></label>
     ${p.eto?'':`<label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>`}
     <p class="note">${p.eto?'El subcontratista y el código identifican el ETO (las revisiones se reconocen por ellos); no se cambian aquí.':'El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.'}</p>
+    ${p.arch?'':`<div class="plea plrot"><span>Girar la lámina</span><button class="ib" data-do="rl" title="Girar 90° a la izquierda">⟲ Izquierda</button><button class="ib" data-do="rr" title="Girar 90° a la derecha">⟳ Derecha</button></div>`}
     <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
     {sv:async()=>{const d={tit:$('#pleT').value.trim(),pisoId:$('#pleP').value};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
        try{await plCol(p).doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
      ua:async()=>{try{await plCol(p).doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
-     del:()=>plDelete([p])})}
+     del:()=>plDelete([p]),rl:()=>plRotate(p,3),rr:()=>plRotate(p,1)})}
+
+/* ---------- Girar una lámina ya cargada (oct 2026, pedido del dueño) ----------
+   Se baja su orig.pdf, se gira con pdf-lib y se vuelve a procesar EN ESTA PC (mosaicos en una carpeta nueva; la anterior no se borra).
+   Queda en la MISMA revisión: sus vínculos y propuestas se giran con ella (plProcess, `keep`), los que llegan desde otras láminas a una
+   zona de esta también (v), y la calibración sigue valiendo (misma resolución). El recorte al marco se gira (no se vuelve a buscar).
+   Si la usa una lámina del Plan diario o de Sectorización, no se gira (sus zonas quedarían corridas): primero se desvincula. */
+let plRotBusy=false;
+async function plRotate(p,q){if(!plEdOf(p)||plRotBusy)return;
+  if(!p.eto&&typeof plUsos==='function'){const us=await plUsos([p.id]);if(us.length){await uiAsk({title:'No se puede girar',tone:'warn',text:'Esta lámina la usa el Plan diario o la Sectorización: sus zonas quedarían corridas. Primero desvincúlala (menú de la lámina › «Desvincular del módulo Planos»).',
+    list:us.slice(0,8).map(u=>`${u.mod}${u.mod==='Last Planner'&&S.pis.get(u.pisoId)?' · '+S.pis.get(u.pisoId).name:''} · ${u.nm}${u.base?' (lámina base)':''}`),ok:'Entendido',cancel:''});return}}
+  if(!await uiAsk({title:`¿Girar ${p.cod||'la lámina'} 90° a la ${q===1?'derecha':'izquierda'}?`,tone:'info',text:'La lámina se vuelve a procesar en esta PC (unos 20–60 s): deja la pestaña visible. Sigue en la misma revisión; sus vínculos y su calibración se conservan. Todo el equipo la verá girada.',ok:'Girar',cancel:'Cancelar'}))return;
+  plRotBusy=true;const bar=document.createElement('div');bar.className='swupd ploffbar';bar.innerHTML='<span></span>';document.body.appendChild(bar);const say=t=>{bar.firstChild.textContent=`Girando ${p.cod||''}: ${t}`};
+  try{say('bajando el PDF…');const blob=await plGet(p.base+'/orig.pdf');await plPdfJs();
+    let cropAt=null;if(p.crop){const d=await window.pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;const v=(await d.getPage(1)).getViewport({scale:1});try{d.destroy()}catch(e){}cropAt=plRotCrop(p.crop,v.width,v.height,q)}
+    const it={id:p.id,keep:true,q,pg:1,pgs:1,crop:!!p.crop,cropAt,file:new File([blob],(p.fname||p.cod||'lamina')+'.pdf',{type:'application/pdf'}),
+      m:{eto:!!p.eto,sc:p.sc||'',cod:p.cod||'',disc:p.disc||'',niv:p.niv||'',pisoId:p.pisoId||'',tipo:p.tipo||'Otro',tit:p.tit||'',eta:p.eta||''}};
+    const r=await plProcess(it,say);
+    /* vínculos de OTRAS láminas que abren una zona de esta: la zona también gira */
+    if(!p.eto){say('ajustando los vínculos que llegan a esta lámina…');const fx=L=>(L||[]).map(l=>l&&l.to===p.id&&l.v?{...l,v:plRotV(l.v,q)}:l);
+      for(const o of plAct())if(o.id!==p.id&&[...(o.lk||[]),...(o.lkp||[])].some(l=>l&&l.to===p.id&&l.v)){try{await plkpSave(o.id,(lk,lkp)=>({lk:fx(lk),lkp:fx(lkp)}))}catch(e){console.error('girar: vínculos de',o.id,e)}}}
+    toast(`Lámina girada (${r.secs} s).${PLOFF[p.id]?' En esta tablet, vuelve a guardarla sin conexión (⟳ Actualizar).':''}`);if(PLV&&PLV.id===p.id){PLV.view=null;plvDraw()}}
+  catch(e){console.error('girar',p.id,e);toast('No se pudo girar: '+(e.message||e))}
+  finally{plRotBusy=false;bar.remove()}}
 
 /* ---------- Eliminar planos (solo el administrador; docs/ia/planos.md › Eliminar) ----------
    A diferencia de «Archivar», borra de verdad: el documento `plb/<id>` y todos sus archivos de Storage (todas las revisiones, también
@@ -712,21 +772,31 @@ function renderPCar(main){plSub();if(PQ.eto&&!plAdm())PQ.eto=false;if(!plaEd()){
       else if(a==='clrok'){PQ.items=PQ.items.filter(x=>x.st!=='ok'&&x.st!=='skip');plqDraw(true)}};
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
       it.m[el.dataset.f]=el.value.trim();if(el.dataset.f==='cod')it.m.cod=it.m.cod.toUpperCase().replace(/\s+/g,'');plqCheck();plqDraw(true)});
-    $('#plqtab',main).addEventListener('click',e=>{const v=e.target.closest('[data-vw]');if(v){plqPrev(+v.dataset.vw);return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
+    $('#plqtab',main).addEventListener('click',e=>{const v=e.target.closest('[data-vw]');if(v){plqPrev(+v.dataset.vw);return}
+      const ro=e.target.closest('[data-rot]');if(ro){plqRot(+ro.dataset.rot,1);return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
   plqDraw(false);if(!eo)plkpSecUpd()}
-function plAdd(files){const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');const no=files.length-pdfs.length;
-  const have=new Set(PQ.items.map(x=>x.file.name+'|'+x.file.size));let n=0;
-  for(const f of pdfs){if(have.has(f.name+'|'+f.size))continue;PQ.items.push({file:f,m:PQ.eto?etoParse(f.name):plParse(f.name),st:'pend',msg:''});n++}
-  plqCheck();plqDraw(true);if(no)toast(`${no} archivo(s) no son PDF y se omitieron.`);else if(n)toast(`${n} plano(s) agregados a la lista.`)}
+/* PDF de varias hojas (oct 2026, pedido del dueño): un ETO se divide en una lámina por hoja (código «M02-1», «M02-2»…, título
+   «· hoja k de n»); cada hoja se extrae a su propio PDF al procesar (plOnePage). En los planos del proyecto (una lámina por archivo)
+   solo se avisa que se cargará la primera hoja. */
+async function plAdd(files){const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');const no=files.length-pdfs.length;
+  const have=new Set(PQ.items.map(x=>x.file.name+'|'+x.file.size));let n=0,split=0;const eto=!!PQ.eto;
+  const nw=pdfs.filter(f=>!have.has(f.name+'|'+f.size));if(nw.length>3)toast(`Leyendo ${nw.length} PDF…`);
+  for(const f of nw){const pgs=await plPages(f);
+    if(eto&&pgs>1){const m0=etoParse(f.name);split++;
+      for(let k=1;k<=pgs;k++){PQ.items.push({file:f,pg:k,pgs,q:0,m:{...m0,cod:m0.cod?`${m0.cod}-${k}`:'',tit:`${m0.tit} · hoja ${k} de ${pgs}`},st:'pend',msg:''});n++}}
+    else{PQ.items.push({file:f,pg:1,pgs:1,pdfPgs:pgs,q:0,m:eto?etoParse(f.name):plParse(f.name),st:'pend',msg:''});n++}}
+  plqCheck();plqDraw(true);if(no)toast(`${no} archivo(s) no son PDF y se omitieron.`);
+  else if(n)toast(split?`${n} lámina(s) agregadas: ${split} PDF de varias hojas se dividieron en una lámina por hoja.`:`${n} plano(s) agregados a la lista.`)}
 /** estado de cada fila antes de procesar: nuevo, nueva revisión, ya cargado (mismo archivo) o falta un dato */
 function plqCheck(){const seen=new Map();
   PQ.items.forEach((it,i)=>{if(it.st==='run'||it.st==='ok'||it.st==='err')return;const m=it.m;it.warn='';
     if(m.eto){if(!m.sc){it.st='bad';it.msg='Falta el subcontratista';return}}
     else if(!m.cod||!m.disc){it.st='bad';it.msg=!m.cod?'Falta el código de lámina':'Falta la especialidad';return}
-    const id=plIdOf({...m,fname:it.file.name});const old=PLB.get(id);
-    if(old&&!old.arch&&old.fname===it.file.name.replace(/\.pdf$/i,'')&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
+    const id=plIdOf({...m,fname:plItKey(it)});const old=PLB.get(id);
+    if(!it.q&&old&&!old.arch&&old.fname===plItName(it)&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
     it.st='pend';it.msg=old?`Nueva revisión (vigente: rev. ${old.rev||1})`:'Nuevo';
     if(seen.has(id))it.warn=`Mismo código que la fila ${seen.get(id)+1}: se cargará como la revisión siguiente.`;else seen.set(id,i);
+    if(!m.eto&&it.pdfPgs>1)it.warn=(it.warn?it.warn+' ':'')+`El PDF tiene ${it.pdfPgs} hojas: solo se carga la primera (exporta una lámina por archivo).`;
     if(!m.eto&&!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+'Planta sin piso: elige el piso si corresponde.'})}
 let plqT=0;
 function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)return;
@@ -745,18 +815,21 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
   const ST={pend:'',run:'run',ok:'ok',err:'err',bad:'bad',skip:'skip'};
   const csel=v=>`<option value="">—</option>`+[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>`<option value="${esc(c.id)}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');
   const eo=I.some(x=>x.m.eto);
+  const fn=it=>`<td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}${(it.pgs||1)>1?` <b class="plhoja">hoja ${it.pg} de ${it.pgs}</b>`:''}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>`;
+  /* ⟳ gira la lámina 90° a la derecha antes de subirla (cada toque suma un cuarto de vuelta) */
+  const rb=(it,i,lock)=>`<button class="ib${it.q?' on':''}" data-rot="${i}" aria-label="Girar 90° a la derecha" title="Girar la lámina 90° a la derecha antes de subirla"${lock?' disabled':''}>⟳${it.q?` ${it.q*90}°`:''}</button>`;
   const rows=I.map((it,i)=>{const m=it.m,lock=it.st==='run'||it.st==='ok';const dis=lock?' disabled':'';
-    if(m.eto)return`<tr data-i="${i}" class="${ST[it.st]||''}"><td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>
+    if(m.eto)return`<tr data-i="${i}" class="${ST[it.st]||''}">${fn(it)}
       <td><select class="tin" data-f="sc"${dis}>${csel(m.sc)}</select></td><td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
-      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
-    return`<tr data-i="${i}" class="${ST[it.st]||''}"><td class="plfn" title="${esc(it.file.name)}">${esc(it.file.name)}<small>${(it.file.size/1048576).toFixed(1)} MB</small></td>
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${rb(it,i,lock)}${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
+    return`<tr data-i="${i}" class="${ST[it.st]||''}">${fn(it)}
       <td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td><td><select class="tin" data-f="disc"${dis}>${dsel(m.disc)}</select></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><select class="tin" data-f="tipo"${dis}>${tsel(m.tipo)}</select></td>
       <td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
-      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
+      <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${rb(it,i,lock)}${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
   const hd=eo?'<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>Piso</th><th>Título</th><th>Estado</th><th></th>':'<th>Archivo</th><th>Código</th><th>Especialidad</th><th>Piso</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>';
   shx(tab,`<div class="pltw"><table class="plt"><thead><tr>${hd}</tr></thead><tbody>${rows}</tbody></table></div>`)}
 /* ---------- Vista previa en la carga (oct 2026, pedido del dueño) ----------
@@ -765,19 +838,23 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
    SC o especialidad suelen estar en el mismo sitio). */
 const PLP={i:-1,box:null,v:null,cv:null,tok:0};
 const PLP_PX=4200;   /* lado mayor del dibujo de la vista previa: se lee el rótulo sin cargar la PC */
-async function plqPrevPage(it){if(it._pv)return it._pv;await plPdfJs();const buf=await it.file.arrayBuffer();
-  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;const pg=await pdf.getPage(1);const v1=pg.getViewport({scale:1});
-  const sc=PLP_PX/Math.max(v1.width,v1.height);const vp=pg.getViewport({scale:sc});const c=plCanvas(Math.floor(vp.width),Math.floor(vp.height));const g=c.getContext('2d');
+async function plqPrevPage(it){const q=it.q||0;if(it._pv&&it._pvq===q)return it._pv;if(it._pv){it._pv.width=it._pv.height=0;delete it._pv}await plPdfJs();const buf=await it.file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;const pg=await pdf.getPage(it.pg||1);const rot=(pg.rotate+90*q)%360;const v1=pg.getViewport({scale:1,rotation:rot});
+  const sc=PLP_PX/Math.max(v1.width,v1.height);const vp=pg.getViewport({scale:sc,rotation:rot});it._pvq=q;const c=plCanvas(Math.floor(vp.width),Math.floor(vp.height));const g=c.getContext('2d');
   g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:vp}).promise;try{pdf.destroy()}catch(e){}
   it._pv=c;return c}
+/** girar una fila de la carga d cuartos de vuelta (1 = derecha, 3 = izquierda); la vista previa se redibuja girada */
+function plqRot(i,d){const it=PQ.items[i];if(!it||it.st==='run'||it.st==='ok')return;it.q=((it.q||0)+d)%4;plqCheck();plqDraw(true);
+  if(PLP.box&&PLP.i===i){PLP.v=null;plqPrevDraw()}}
 function plqPrev(i){const it=PQ.items[i];if(!it)return;PLP.i=i;
   if(!PLP.box){const b=document.createElement('div');b.className='plv plpv';b.setAttribute('role','dialog');b.setAttribute('aria-modal','true');b.tabIndex=-1;
     b.innerHTML=`<div class="plvh"><button class="ib" data-pp="prev" aria-label="Fila anterior">‹</button><div class="plvt"><b class="plpn"></b><small class="plpc"></small></div><button class="ib" data-pp="next" aria-label="Fila siguiente">›</button><span class="plvsp"></span>
+      <button class="ib" data-pp="rl" aria-label="Girar a la izquierda" title="Girar 90° a la izquierda">⟲</button><button class="ib" data-pp="rr" aria-label="Girar a la derecha" title="Girar 90° a la derecha">⟳</button>
       <button class="ib" data-pp="zout" aria-label="Alejar">−</button><button class="ib" data-pp="fit">Ajustar</button><button class="ib" data-pp="zin" aria-label="Acercar">+</button><button class="ib" data-pp="x" aria-label="Cerrar">✕</button></div>
       <div class="plpb"><div class="plpvw"><div class="plpst"></div><p class="plpld">Dibujando la lámina…</p></div><form class="plpf" autocomplete="off"></form></div>`;
     document.body.appendChild(b);PLP.box=b;
     b.onclick=e=>{const k=e.target.closest('[data-pp]');if(!k)return;const a=k.dataset.pp;
-      if(a==='x')plqPrevClose();else if(a==='prev')plqPrevGo(-1);else if(a==='next')plqPrevGo(1);else if(a==='fit')plqFit();else if(a==='zin')plqZoom(1.5);else if(a==='zout')plqZoom(1/1.5)};
+      if(a==='x')plqPrevClose();else if(a==='prev')plqPrevGo(-1);else if(a==='next')plqPrevGo(1);else if(a==='fit')plqFit();else if(a==='rr')plqRot(PLP.i,1);else if(a==='rl')plqRot(PLP.i,3);else if(a==='zin')plqZoom(1.5);else if(a==='zout')plqZoom(1/1.5)};
     b.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();plqPrevClose();return}
       if(e.target.closest('input,select,textarea')){if(e.key==='Enter'){e.preventDefault();plqPrevGo(1)}return}
       if(e.key==='ArrowRight')plqPrevGo(1);else if(e.key==='ArrowLeft')plqPrevGo(-1);else if(e.key==='+'||e.key==='=')plqZoom(1.5);else if(e.key==='-')plqZoom(1/1.5);else if(e.key==='0')plqFit()});
@@ -795,7 +872,7 @@ function plqPrevForm(it){const m=it.m,dis=it.st==='run'||it.st==='ok'?' disabled
   if(m.eto)return`<label>Subcontratista<select class="tin" data-f="sc"${dis}>${o('','—',m.sc)}${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>o(c.id,c.name,m.sc)).join('')}</select></label>${cod}${piso}${tit}`;
   return`${cod}<label>Especialidad<select class="tin" data-f="disc"${dis}>${o('','—',m.disc)}${PL_DISC.map(d=>o(d[0],d[1],m.disc)).join('')}</select></label>${piso}<label>Tipo<select class="tin" data-f="tipo"${dis}>${PL_TIPOS.map(t=>o(t,t,m.tipo)).join('')}</select></label>${tit}`}
 async function plqPrevDraw(){const it=PQ.items[PLP.i];if(!it||!PLP.box)return;const b=PLP.box,tok=++PLP.tok;
-  stx(b.querySelector('.plpn'),it.file.name);stx(b.querySelector('.plpc'),plqPrevSub(it));
+  stx(b.querySelector('.plpn'),it.file.name+((it.pgs||1)>1?` · hoja ${it.pg} de ${it.pgs}`:'')+(it.q?` · girada ${it.q*90}°`:''));stx(b.querySelector('.plpc'),plqPrevSub(it));
   b.querySelector('[data-pp="prev"]').disabled=PLP.i<=0;b.querySelector('[data-pp="next"]').disabled=PLP.i>=PQ.items.length-1;
   b.querySelector('.plpf').innerHTML=plqPrevForm(it)+'<p class="note">Enter o › guarda y pasa a la siguiente. La lámina se dibuja en esta PC; no se sube nada hasta «Procesar».</p>';
   const st=b.querySelector('.plpst'),ld=b.querySelector('.plpld');ld.hidden=false;ld.textContent='Dibujando la lámina…';if(!it._pv){st.innerHTML='';PLP.cv=null}
@@ -827,7 +904,7 @@ function plqPrevClose(){if(!PLP.box)return;plqSync();PLP.box.remove();PLP.box=nu
 function plRowSay(i,t){const c=document.getElementById('plst'+i);if(c)c.textContent=t;const it=PQ.items[i];if(it)it.msg=t}
 const plUnload=e=>{e.preventDefault();e.returnValue=''};
 async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='pend'))return;
-  if(PQ.fresh){const rep=PQ.items.filter(x=>x.st==='pend'&&PLB.has(plIdOf({...x.m,fname:x.file.name}))).map(x=>{const p=PLB.get(plIdOf({...x.m,fname:x.file.name}));return`${p.cod} · rev. ${p.rev||1}${p.revs&&p.revs.length?` (+${p.revs.length} anteriores)`:''}${plLkN(p)?` · ${plLkN(p)} vínculo${plLkN(p)===1?'':'s'}`:''}`});
+  if(PQ.fresh){const rep=PQ.items.filter(x=>x.st==='pend'&&PLB.has(plIdOf({...x.m,fname:plItKey(x)}))).map(x=>{const p=PLB.get(plIdOf({...x.m,fname:plItKey(x)}));return`${p.cod} · rev. ${p.rev||1}${p.revs&&p.revs.length?` (+${p.revs.length} anteriores)`:''}${plLkN(p)?` · ${plLkN(p)} vínculo${plLkN(p)===1?'':'s'}`:''}`});
     if(rep.length&&!await uiAsk({title:`¿Reemplazar ${rep.length} lámina${rep.length===1?'':'s'} y empezar en Rev. 1?`,text:'Quedarán como Rev. 1: se descarta su historial de revisiones, sus vínculos y su calibración (eran cargas de prueba). Los archivos anteriores no se borran.',list:rep.slice(0,12).concat(rep.length>12?[`… y ${rep.length-12} más`]:[]),ok:'Reemplazar',cancel:'Cancelar',tone:'warn'}))return}
   PQ.run=true;PQ.stop=false;window.addEventListener('beforeunload',plUnload);let wl=null;const wlGet=async()=>{try{if(navigator.wakeLock&&document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen')}catch(e){}};await wlGet();
   /* la pantalla de bloqueo suelta el «mantener encendida»: se pide de nuevo al volver a la pestaña */

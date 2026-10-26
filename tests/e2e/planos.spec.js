@@ -25,12 +25,31 @@ function pdfDemo() {
   return Buffer.from(out, 'latin1');
 }
 
+/** PDF de n hojas iguales (para los ETO de varias hojas) */
+function pdfHojas(n) {
+  const W = 842, H = 595, objs = ['<< /Type /Catalog /Pages 2 0 R >>', null];const kids = [];
+  for (let i = 0; i < n; i++) {
+    const c = `2 w 10 10 ${W - 20} ${H - 20} re S\nBT /F1 40 Tf 300 300 Td (HOJA ${i + 1}) Tj ET`;
+    kids.push(`${objs.length + 1} 0 R`);
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents ${objs.length + 2} 0 R /Resources << /Font << /F1 ${2 + 2 * n + 1} 0 R >> >> >>`);
+    objs.push(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+  }
+  objs[1] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${n} >>`;
+  objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let out = '%PDF-1.4\n';const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(out, 'latin1');
+}
+
 /** Storage en memoria y pdf.js local */
 async function preparar(page) {
   await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => {
     const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1];
     return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) });
-  });
+  });  await page.route(/cdn\.jsdelivr\.net\/npm\/pdf-lib@[^/]+\/dist\/pdf-lib\.min\.js/, r => r.fulfill({ status: 200, contentType: 'text/javascript',
+    body: fs.readFileSync(path.join(NM, '..', '..', 'pdf-lib', 'dist', 'pdf-lib.min.js')) }));
 }
 const memStorage = () => {
   window.__ST = new Map(); window.__GETS = [];
@@ -1079,4 +1098,80 @@ test('eliminar planos: un editor no ve la opción', async ({ page }) => {
   await expect(page.locator('#pldel')).toHaveCount(0);
   expect(await page.evaluate(() => plAdm())).toBe(false);
   noErrors(errors, 'editor');
+});
+
+test('ETO de varias hojas: se divide en una lámina por hoja; ⟳ gira una antes de subirla', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.click('.plsrc [data-src="eto"]');
+  await page.selectOption('#etosc', 'c2');
+  await page.setInputFiles('#plfile', { name: 'ETO911_N2_MAMPARAS_M02.pdf', mimeType: 'application/pdf', buffer: pdfHojas(2) });
+  const rows = page.locator('#plqtab tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator('input[data-f="cod"]')).toHaveValue('M02-1');
+  await expect(rows.nth(1).locator('input[data-f="cod"]')).toHaveValue('M02-2');
+  await expect(rows.nth(1)).toContainText('hoja 2 de 2');
+  await rows.nth(1).locator('[data-rot]').click();
+  await expect(rows.nth(1).locator('[data-rot]')).toContainText('90°');
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst1')).toContainText('Listo', { timeout: 120_000 });
+  await expect(page.locator('#plst0')).toContainText('Listo');
+  const [a, b] = await page.evaluate(() => [window.__dbGet('eto', 'ETO_c2_M02-1'), window.__dbGet('eto', 'ETO_c2_M02-2')]);
+  expect(a).toMatchObject({ sc: 'c2', cod: 'M02-1', rev: 1 });expect(b).toMatchObject({ sc: 'c2', cod: 'M02-2', rev: 1 });
+  expect(a.fname).toContain('(hoja 1 de 2)');
+  expect(a.W).toBeGreaterThan(a.H); // hoja apaisada
+  expect(b.H).toBeGreaterThan(b.W); // girada 90°
+  // cada lámina guarda un PDF de UNA hoja: la suya (y la 2 con /Rotate 90)
+  const pdfs = await page.evaluate(async ([ba, bb]) => {
+    const one = async base => { const d = await pdfjsLib.getDocument({ data: new Uint8Array(await (await window.plGet(base + '/orig.pdf')).arrayBuffer()) }).promise;
+      const pg = await d.getPage(1); const t = (await pg.getTextContent()).items.map(i => i.str).join(' '); return { n: d.numPages, rot: pg.rotate, t }; };
+    return [await one(ba), await one(bb)];
+  }, [a.base, b.base]);
+  expect(pdfs[0]).toMatchObject({ n: 1, rot: 0 });expect(pdfs[0].t).toContain('HOJA 1');
+  expect(pdfs[1]).toMatchObject({ n: 1, rot: 90 });expect(pdfs[1].t).toContain('HOJA 2');
+  noErrors(errors);
+});
+
+test('girar una lámina ya cargada: misma revisión, carpeta nueva, vínculos y calibración girados con ella', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: 'A-P01-ARQ-E01-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  const id = await page.evaluate(() => [...PLB.keys()].find(k => !k.startsWith('ETO_')));
+  const d0 = await page.evaluate(i => window.__dbGet('plb', i), id);
+  // un vínculo en la esquina superior izquierda (a sí misma, con zona) y una calibración
+  await page.evaluate(async i => { await fcol('plb').doc(i).update({ lk: [{ id: 'k1', x0: 0.1, y0: 0.2, x1: 0.2, y1: 0.3, to: i, v: { nx: 0.25, ny: 0.75, k: 2 } }], cal: { mpp: 0.01, rev: 1 } });
+    PLB.get(i).lk = [{ id: 'k1', x0: 0.1, y0: 0.2, x1: 0.2, y1: 0.3, to: i, v: { nx: 0.25, ny: 0.75, k: 2 } }]; }, id);
+  await page.evaluate(i => plRotate(PLB.get(i), 1), id);
+  await expect.poll(() => page.evaluate(i => (window.__dbGet('plb', i).giro || {}).q, id), { timeout: 120_000 }).toBe(1);
+  const d1 = await page.evaluate(i => window.__dbGet('plb', i), id);
+  expect(d1.rev).toBe(d0.rev);
+  expect(d1.base).not.toBe(d0.base);
+  expect(d1.revs || []).toEqual(d0.revs || []);
+  expect([d1.W, d1.H]).toEqual([d0.H, d0.W]);
+  expect(d1.cal).toMatchObject({ mpp: 0.01, rev: 1 });
+  const l = d1.lk[0];
+  // (x, y) → (1 − y, x): el rectángulo 0,1–0,2 × 0,2–0,3 pasa a 0,7–0,8 × 0,1–0,2
+  expect(l.x0).toBeCloseTo(0.7);expect(l.x1).toBeCloseTo(0.8);expect(l.y0).toBeCloseTo(0.1);expect(l.y1).toBeCloseTo(0.2);
+  expect(l.v.nx).toBeCloseTo(0.25);expect(l.v.ny).toBeCloseTo(0.25);
+  // el PDF guardado ya va girado; los archivos de la carpeta anterior siguen ahí
+  const r = await page.evaluate(async ([b1, b0]) => { const d = await pdfjsLib.getDocument({ data: new Uint8Array(await (await window.plGet(b1 + '/orig.pdf')).arrayBuffer()) }).promise;
+    return { rot: (await d.getPage(1)).rotate, old: window.__ST.has(b0 + '/orig.pdf') }; }, [d1.base, d0.base]);
+  expect(r).toEqual({ rot: 90, old: true });
+  // y otra vez a la izquierda: vuelve a como estaba
+  await page.evaluate(i => plRotate(PLB.get(i), 3), id);
+  await expect.poll(() => page.evaluate(i => (window.__dbGet('plb', i).giro || {}).q, id), { timeout: 120_000 }).toBe(0);
+  const d2 = await page.evaluate(i => window.__dbGet('plb', i), id);
+  expect([d2.W, d2.H]).toEqual([d0.W, d0.H]);expect(d2.lk[0].x0).toBeCloseTo(0.1);expect(d2.lk[0].y0).toBeCloseTo(0.2);
+  noErrors(errors);
 });
