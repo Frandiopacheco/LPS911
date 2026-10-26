@@ -819,7 +819,8 @@ function commitField(t){
     /* «Por personal» (25-10-2026, pedido del dueño): el rendimiento que se escribe va al catálogo de la Matriz (lo heredan todas las filas
        de esa actividad) y la fila deja de tener uno propio; sin actividad del catálogo, queda solo en la fila */
     if(f==='rend'&&v!=null&&!PM()&&!cliOn()&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'&&typeof mxEd==='function'&&mxEd()){const cid=mxCatOfN(x);const c=cid&&MX.cat.get(cid);
-      if(c){const rows=[...S.act.values()].filter(y=>!y._del&&mxCatOfN(y)===cid);const n=rows.length;const prev=c.rend??null;
+      /* todas las filas de la actividad: las que el catálogo reconoce y, por si acaso, las del mismo nombre y SC (25-10-2026) */
+      if(c){const nk=mnk(x.name);const rows=[...S.act.values()].filter(y=>!y._del&&(mxCatOfN(y)===cid||(y.sc===x.sc&&mnk(y.name)===nk)));const n=rows.length;const prev=c.rend??null;
         fcol('mcat').doc(cid).set({rend:v,...mxNow()},{merge:true}).then(()=>toast(`Rendimiento ${fq(v)} ${x.und||''}/persona-día guardado en el catálogo («${c.name}»): lo usan ${n} fila${n===1?'':'s'}.`,'Deshacer',()=>fcol('mcat').doc(cid).set({rend:prev,...mxNow()},{merge:true}))).catch(mxErr);
         t.dataset.o=String(v);MX.cat.set(cid,{...c,rend:v});MX.v++;gridRows=null;/* al instante en todas las filas de la actividad */
         /* 25-10-2026: todas las filas de la actividad quedan con el del catálogo (antes cada fila podía tener uno propio y se veían varios) */
