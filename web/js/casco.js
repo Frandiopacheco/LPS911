@@ -59,10 +59,12 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
   /* niveles y entrega */
   const LP=csLpPisos();
-  h+=`<div class="card"><h2>Niveles y entrega a Arquitectura <span class="sub">Cuando un sector termina el tarrajeo, su entrega se publica como hito de inicio en el piso de Last Planner</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Nivel</th><th>Techo</th><th>Piso</th><th>Sectores</th><th>Piso en Last Planner</th></tr></thead><tbody>
-    ${P_.map(p=>{const nE=csAmbs(p.id,'E').length,nA=csAmbs(p.id,'A').length;return`<tr><td><b>${esc(p.name)}</b></td><td class="mono">${esc(p.tc||'')}</td><td class="mono">${esc(p.pc||'')}</td><td>${nE} de estructura${nA?` · ${nA} de albañilería`:''}</td>
-      <td><select data-cs="lp" data-id="${p.id}"${dis} aria-label="Piso de Last Planner de ${esc(p.name)}"><option value="">Sin vincular</option>${LP.map(l=>`<option value="${l.id}"${p.lp===l.id?' selected':''}>${esc(l.name||l.code)}</option>`).join('')}</select></td></tr>`}).join('')||'<tr><td colspan="5" class="mu" style="padding:12px">Sin niveles.</td></tr>'}
-    </tbody></table></div>${ed&&P_.length?`<div class="pad csrow"><button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button><span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span></div>`:''}</div>`;
+  h+=`<div class="card"><h2>Niveles y entrega a Arquitectura <span class="sub">Cuando un sector termina el tarrajeo, su entrega se publica como hito de inicio en el piso de Last Planner</span></h2><div class="tscroll"><table class="t cslv"><thead><tr><th>Nivel</th><th title="Código corto del selector de niveles">Código</th><th title="Así sale en las celdas de estructura del tren (planta de encofrado del techo)">Techo</th><th title="Así sale en las celdas de albañilería del tren (planta de arquitectura del piso)">Piso</th><th>Sectores</th><th>Piso en Last Planner</th>${ed?'<th></th>':''}</tr></thead><tbody>
+    ${P_.map((p,i)=>{const nE=csAmbs(p.id,'E').length,nA=csAmbs(p.id,'A').length;const fi=(f,w,l)=>`<input class="ci" data-cslv="${f}" data-id="${p.id}" value="${esc(p[f]||'')}" style="width:${w}"${dis} aria-label="${l} de ${esc(p.name)}">`;
+      return`<tr><td>${fi('name','140px','Nombre')}</td><td>${fi('code','64px','Código')}</td><td>${fi('tc','64px','Techo')}</td><td>${fi('pc','64px','Piso')}</td><td>${nE} de estructura${nA?` · ${nA} de albañilería`:''}</td>
+      <td><select data-cs="lp" data-id="${p.id}"${dis} aria-label="Piso de Last Planner de ${esc(p.name)}"><option value="">Sin vincular</option>${LP.map(l=>`<option value="${l.id}"${p.lp===l.id?' selected':''}>${esc(l.name||l.code)}</option>`).join('')}</select></td>
+      ${ed?`<td class="csrow cslva"><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="-1" title="Subir en la lista"${i?'':' disabled'} aria-label="Subir ${esc(p.name)}">▲</button><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="1" title="Bajar en la lista"${i<P_.length-1?'':' disabled'} aria-label="Bajar ${esc(p.name)}">▼</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="0" title="Agregar un nivel antes (debajo: p. ej. otro sótano)">+↑</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="1" title="Agregar un nivel después (encima: p. ej. azotea)">+↓</button><button class="ab" data-cs="lvdel" data-id="${p.id}" title="Eliminar (se archiva; con Deshacer)" aria-label="Eliminar ${esc(p.name)}">&times;</button></td>`:''}</tr>`}).join('')||`<tr><td colspan="${ed?7:6}" class="mu" style="padding:12px">Sin niveles.</td></tr>`}
+    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="lvnew">+ Niveles al final</button>${P_.length?'<button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button>':''}${P_.length?`<span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span>`:''}</div>`:''}<p class="note pad" style="margin-top:0">El orden va de abajo hacia arriba (sótanos primero). Los códigos se guardan al salir de la casilla.</p></div>`;
   h+=csSecCard();
   return h}
 
@@ -269,7 +271,7 @@ function csSecCard(){const ed=csEd(),L=pisos();const V=[...KSEC.values()].sort((
   return `<div class="card"><h2>Asistente de sectorización <span class="sub">Versiones por rango de niveles: cambiar desde un nivel no toca lo ya programado ni lo congelado</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Versión</th><th>Grupo</th><th>Niveles</th><th>Sectores</th><th title="Mayor desviación de la carga (persona-días) de un sector respecto del promedio">Balance</th><th></th></tr></thead><tbody>
     ${V.map(v=>{const b=csBal(v);return`<tr><td><b>${esc(v.n||v.id)}</b>${v.note?`<div class="mu">${esc(v.note)}</div>`:''}</td><td>${esc(CSG[v.grp]||v.grp)}</td><td>${esc(nm(v.from))} a ${esc(nm(v.to))}</td><td>${v.k}</td><td><span class="csbal ${csBalCls(b.mx)}">±${Math.round(b.mx*100)}%</span></td>
       <td class="csrow"><button class="ib" data-cs="secv" data-id="${esc(v.id)}">${ed?'Abrir':'Ver'}</button></td></tr>`}).join('')||`<tr><td colspan="6" class="mu" style="padding:12px">Sin versiones. ${ed?'Crea la primera: define cuántos sectores y sus metrados, revisa el balance y aplícala a un rango de niveles.':''}</td></tr>`}
-    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="secnew">+ Nueva versión</button>${isAdmin?'<button class="ib" data-cs="lvnew">+ Niveles</button>':''}<span class="note">Luego dibuja cada sector sobre la lámina del nivel en Sectorización.</span></div>`:''}</div>`}
+    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="secnew">+ Nueva versión</button><span class="note">Luego dibuja cada sector sobre la lámina del nivel en Sectorización.</span></div>`:''}</div>`}
 /* ratios por defecto (metrado por m² de planta; elegidos para un edificio típico de concreto armado en Lima, 26-10-2026): estructura por m²
    de techo (planta de encofrado), albañilería por m² de piso (planta de arquitectura). Se ajustan en el catálogo. */
 const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
@@ -359,20 +361,39 @@ async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.fr
     for(const a of cur.slice(v.k)){if(used.has(a.id)){keep++;continue}const o={...a};delete o.id;ops.push(op('ambientes',a.id,{...o,arch:{t,by:me.email,n:me.name||me.email}}))}}
   if(!ops.length){toast('Los niveles ya tenían esta sectorización.');return}
   apply(ops,`Sectorización «${v.n}» aplicada`);toast(`Sectorización aplicada: ${nw} sector(es) nuevos, ${mod} actualizados${geoN?` · ${geoN} con su dibujo en la lámina`:''}${keep?` · ${keep} sobrante(s) con actividades quedan: mueve sus actividades y vuelve a aplicar`:''}`,'Deshacer',undo)}
-/** agrega niveles (sótano o pisos) al final: nombre, techo y piso */
-async function csLevelsAdd(){if(!isAdmin)return;const n=await uiAsk({title:'Agregar niveles',input:{label:'¿Cuántos niveles agregar al final?',placeholder:'Ej.: 8',required:true},ok:'Agregar'});const k=Math.min(60,Math.max(0,parseInt(n,10)||0));if(!k)return;
-  const L=pisos();let base=L.length;const ops=[];for(let i=0;i<k;i++){const num=base+i+(L.some(p=>/s[oó]t/i.test(p.name))?0:1);const id=uid('n');
-    ops.push(op('pisos',id,{name:'Nivel '+num,code:'N'+num,tc:'T'+num,pc:'P'+num,order:base+i}));
-    ops.push(op('sectors',id+'-f',{pisoId:id,code:'F',name:'Frentes sueltos',grp:'S',order:2}));ops.push(op('ambientes',id+'-esc',{sectorId:id+'-f',code:'ESC',name:'Escalera',order:1}))}
-  apply(ops,`${k} nivel(es) agregados`);toast(`${k} nivel(es) agregados: aplícales una versión de sectorización`)}
+/* ---------- niveles (Configuración › Casco › Niveles; admin y editores) ---------- */
+const csLvOps=(L)=>L.map((p,i)=>{const o={...p};delete o.id;return(p.order===i)?null:op('pisos',p.id,{...o,order:i})}).filter(Boolean);
+/** nivel nuevo con su frente suelto de escalera */
+function csLvNew(name,code,tc,pc){const id=uid('n');return{id,ops:[op('pisos',id,{name,code,tc,pc,order:0}),op('sectors',id+'-f',{pisoId:id,code:'F',name:'Frentes sueltos',grp:'S',order:2}),op('ambientes',id+'-esc',{sectorId:id+'-f',code:'ESC',name:'Escalera',order:1})]}}
+async function csLevelsAdd(){if(!csEd())return;const n=await uiAsk({title:'Agregar niveles al final',input:{label:'¿Cuántos niveles?',placeholder:'Ej.: 8',required:true},ok:'Agregar'});const k=Math.min(60,Math.max(0,parseInt(n,10)||0));if(!k)return;
+  const L=pisos();const nums=L.map(p=>+(String(p.code||'').match(/(\d+)$/)||[])[1]||0).filter(x=>x>0);let num=nums.length?Math.max(...nums):0;const ops=[];const NL=L.slice();
+  for(let i=0;i<k;i++){num++;const nv=csLvNew('Nivel '+num,'N'+num,'T'+num,'P'+num);ops.push(...nv.ops);NL.push({id:nv.id,order:-1})}
+  const ord=csLvOrd(ops,NL);apply([...ops,...ord],`${k} nivel(es) agregados`);toast(`${k} nivel(es) agregados: aplícales una versión de sectorización`,'Deshacer',undo)}
+/** los pisos nuevos de ops reciben su orden en la lista NL; los existentes que cambian de lugar, un op aparte */
+function csLvOrd(ops,NL){const out=[];NL.forEach((p,i)=>{const o=ops.find(x=>x.col==='pisos'&&x.id===p.id&&!x.before);if(o){o.after.order=i;return}if(p.order!==i){const c={...p};delete c.id;out.push(op('pisos',p.id,{...c,order:i}))}});return out}
+async function csLvAdd(id,after){if(!csEd())return;const L=pisos();const i=L.findIndex(p=>p.id===id);if(i<0)return;const ref=L[i];
+  const n=await uiAsk({title:`Agregar un nivel ${after?'después de':'antes de'} ${ref.name}`,text:after?'Queda encima (p. ej. la azotea).':'Queda debajo (p. ej. otro sótano).',input:{label:'Nombre',placeholder:after?'Ej.: Azotea':'Ej.: Sótano 2',required:true},ok:'Agregar'});if(!n)return;
+  const nm=String(n).trim();const ab=nm.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]/g,'').split(/\s+/).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,4)||'N';
+  const nv=csLvNew(nm,ab,'T'+ab,'P'+ab);const NL=L.slice();NL.splice(after?i+1:i,0,{id:nv.id});
+  apply([...nv.ops,...csLvOrd(nv.ops,NL)],`Nivel «${nm}» agregado`);toast(`Nivel «${nm}» agregado: revisa sus códigos de techo y piso`,'Deshacer',undo)}
+function csLvMove(id,d){if(!csEd())return;const L=pisos();const i=L.findIndex(p=>p.id===id),j=i+d;if(i<0||j<0||j>=L.length)return;const NL=L.slice();[NL[i],NL[j]]=[NL[j],NL[i]];
+  const ops=csLvOps(NL);if(ops.length)apply(ops,`${L[i].name}: ${d<0?'sube':'baja'} en la lista`)}
+function csLvSet(id,f,v){if(!csEd())return;const p=S.pis.get(id);if(!p)return;v=String(v||'').trim();if(!v&&f!=='pc'&&f!=='tc'){toast('No puede quedar vacío.');requestRender();return}if((p[f]||'')===v)return;
+  if(f==='code'&&pisos().some(x=>x.id!==id&&String(x.code||'').toUpperCase()===v.toUpperCase())){toast(`Ya hay un nivel con el código ${v}.`);requestRender();return}
+  const o={...p};delete o.id;apply([op('pisos',id,{...o,[f]:v})],`${p.name}: ${f==='name'?'nombre':f==='code'?'código':f==='tc'?'código de techo':'código de piso'}`)}
+async function csLvDel(id){if(!csEd())return;const p=S.pis.get(id);if(!p)return;const secs=[...S.sec.values()].filter(s=>s.pisoId===id);const ambs=[...S.amb.values()].filter(a=>secs.some(s=>s.id===a.sectorId));const acts=[...S.act.values()].filter(x=>!x._del&&ambs.some(a=>a.id===x.ambId));
+  if(!(await uiAsk({title:`¿Eliminar ${p.name}?`,tone:acts.length?'warn':'info',text:'Se archiva (no se borra): se recupera en Configuración › Papelera y se puede deshacer.',list:[`${ambs.length} sector(es)`,...(acts.length?[`${acts.length} actividad(es) programadas: también se archivan`]:[])],ok:'Eliminar',cancel:'Cancelar'})))return;
+  const ops=[];for(const x of acts)ops.push(arc('acts',x.id));for(const a of ambs)ops.push(arc('ambientes',a.id));for(const s0 of secs)ops.push(arc('sectors',s0.id));ops.push(arc('pisos',id));
+  if(U.piso===id){U.piso='';saveUI()}apply(ops,`${p.name} eliminado`);toast(`${p.name} eliminado`,'Deshacer',undo)}
 
 /* ---------- eventos (delegados: funcionan en Configuración y en el Lookahead) ---------- */
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
   if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
-  else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd()});
+  else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id)});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
+  if(t.dataset&&t.dataset.cslv){csLvSet(t.dataset.id,t.dataset.cslv,t.value);return}
   const f=t.dataset&&t.dataset.csf;if(f){const r=t.closest('[data-csc]');if(r&&csEd())csCatSet(r.dataset.csc,f,t.type==='checkbox'?t.checked:t.value);return}
   const k=t.dataset&&t.dataset.cs;if(!k||!csEd())return;
   if(k==='casa'){const c=S.con.get(t.dataset.id);if(c){const o={...c};delete o.id;apply([op('contractors',c.id,{...o,casa:t.checked})],`${c.name}: ${t.checked?'cuadrilla de casa':'subcontratista'}`)}}

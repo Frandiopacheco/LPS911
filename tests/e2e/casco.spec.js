@@ -160,3 +160,31 @@ test('casco: el asistente dibuja un sector sobre la lámina, da su área con la 
   expect(await page.evaluate(() => (S.amb.get('n3-e1').geo || {}).lamT4)).toBeUndefined();
   expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
 });
+
+test('casco: niveles en Configuración: editar códigos, agregar antes y después, reordenar y eliminar (archiva, con Deshacer)', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  const t3 = page.locator('[data-cslv="tc"][data-id="n3"]');
+  await t3.fill('T-3'); await t3.blur();
+  await expect.poll(() => page.evaluate(() => S.pis.get('n3').tc)).toBe('T-3');
+  page.once('dialog', d => d.accept('Sótano 2'));
+  await page.locator('[data-cs="lvadd"][data-id="n0"][data-d="0"]').click();
+  await expect.poll(() => page.evaluate(() => pisos()[0].name)).toBe('Sótano 2');
+  expect(await page.evaluate(() => pisos().map(p => p.order).join())).toBe([...Array(10).keys()].join());
+  expect(await page.evaluate(() => csAmbs(pisos()[0].id, 'S').length)).toBe(1);
+  page.once('dialog', d => d.accept('Azotea'));
+  await page.locator('[data-cs="lvadd"][data-id="n8"][data-d="1"]').click();
+  await expect.poll(() => page.evaluate(() => pisos().at(-1).name)).toBe('Azotea');
+  await page.locator('[data-cs="lvmv"][data-id="n2"][data-d="-1"]').click();
+  await expect.poll(() => page.evaluate(() => pisos().findIndex(p => p.id === 'n2') < pisos().findIndex(p => p.id === 'n1'))).toBe(true);
+  const n5acts = await page.evaluate(() => [...S.act.values()].filter(x => csAmbs('n5', 'E').some(a => a.id === x.ambId)).length);
+  expect(n5acts).toBeGreaterThan(0);
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-cs="lvdel"][data-id="n5"]').click();
+  await expect.poll(() => page.evaluate(() => S.pis.has('n5'))).toBe(false);
+  expect(await page.evaluate(() => !!(window.__dbGet('cs_pisos', 'n5') || {}).arch)).toBe(true);
+  await page.evaluate(() => undo());
+  await expect.poll(() => page.evaluate(() => S.pis.has('n5') && csAmbs('n5', 'E').length)).toBe(3);
+  expect(errors).toEqual([]);
+});

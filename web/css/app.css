@@ -4677,6 +4677,7 @@ tr.cssum td.lab{font-family:var(--f-ui);font-size:12px}
 .csrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .cscat input.ci{min-width:0}.cscat td{white-space:nowrap}
 .csn{width:72px}
+.cslva{gap:2px;flex-wrap:nowrap}.cslva .ab{min-width:30px}.cslva .ab:disabled{opacity:.35}
 .csexl{display:flex;flex-wrap:wrap;gap:6px 18px}
 .csdot{display:inline-block;width:10px;height:10px;border-radius:5px;background:var(--c);margin-right:2px}
 .csgen{width:min(760px,100%)}
