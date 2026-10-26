@@ -660,7 +660,16 @@ async function plStList(prefix){const out=[];let tok='';
   return out}
 async function plStDel(path){const r=await fetch(plApi()+'/o/'+encodeURIComponent(path),{method:'DELETE',headers:{Authorization:'Firebase '+await plTok()}});
   if(!r.ok&&r.status!==404)throw new Error(r.status===403?'Sin permiso para borrar en Storage (¿reglas de Storage instaladas?).':'Storage respondió '+r.status)}
+/** láminas del Plan diario y de Sectorización (Last Planner y Casco) que usan estos planos (plb.id) y no están archivadas */
+async function plUsos(ids){const want=new Set(ids),out=[];
+  for(const[col,mod]of[['laminas','Last Planner'],['cs_laminas','Casco']]){let sn;try{sn=await(db||FDB).collection(col).get()}catch(e){continue}
+    sn.docs.forEach(d=>{const l=d.data()||{};if(!l.arch&&l.plb&&want.has(l.plb.id))out.push({plb:l.plb.id,mod,nm:l.name||l.esp||'',pisoId:l.pisoId,base:!!l.base})})}
+  return out}
 async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean);if(!list.length){toast('No hay planos en la lista.');return}
+  /* un plano que usa una lámina del Plan diario o de Sectorización no se elimina (decidido con el dueño, oct 2026): primero se desvincula */
+  {const us=await plUsos(list.filter(p=>!p.eto).map(p=>p.id));if(us.length){const by=id=>(PLB.get(id)||{}).cod||id;
+    await uiAsk({title:'No se puede eliminar',tone:'warn',text:`${us.length===1?'Este plano lo usa una lámina':'Estos planos los usan láminas'} del Plan diario o de Sectorización. Primero desvincúlalas (menú de la lámina › «Desvincular del módulo Planos») o reemplázalas por otro plano.`,
+      list:us.slice(0,12).map(u=>`${by(u.plb)} · ${u.mod}${u.mod==='Last Planner'&&S.pis.get(u.pisoId)?' · '+S.pis.get(u.pisoId).name:''} · ${u.nm}${u.base?' (lámina base)':''}`).concat(us.length>12?[`… y ${us.length-12} más`]:[]),ok:'Entendido',cancel:''});return}}
   const one=list.length===1,lk=list.reduce((a,p)=>a+plLkN(p),0);
   const v=await uiAsk({title:one?`¿Eliminar ${list[0].cod}?`:`¿Eliminar ${list.length} planos?`,tone:'danger',
     text:`Se borran de verdad${one?'':' los planos que muestra la lista'}: la lámina, todas sus revisiones y sus archivos${lk?` (y ${lk} vínculo${lk===1?'':'s'})`:''}. No se puede deshacer. Si solo quieres ocultarla, usa «Archivar».`,

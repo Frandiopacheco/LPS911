@@ -51,12 +51,21 @@ Decidido con el dueño (26-10-2026). La etapa de casco se programa distinto que 
 - La partida con «Entrega» (`ent`) del catálogo (en el ejemplo, después del tarrajeo) marca cuándo el sector queda listo para acabados.
 - Configuración › Casco › Niveles: cada nivel elige su **piso de Last Planner** (`pisos.lp`). «◆ Publicar entregas en Last Planner» (`csEntPublish`) crea o actualiza `hitos/cs_<actId>` **en Last Planner** (sin prefijo) `{n:'Entrega de Casco · P1 A2', tipo:'ini', d, d0, piso, st, real?, h, cs:true, csAct}`: aparece como rombo de inicio en el Lookahead de arquitectura. Si cambió la fecha, la agrega a `h`. Si el día de la entrega se marcó Cumplido, el hito queda cerrado.
 
+## Flujo para empezar una obra desde cero (decidido con el dueño, 26-10-2026)
+1. Cargar los planos en el **módulo Planos** (encofrado de cada techo y arquitectura de cada piso) y calibrar una lámina típica.
+2. Crear Casco (Configuración › Casco) y los niveles (**+ Niveles**); en **Sectorización** agregar a cada nivel su lámina base **del módulo Planos** (encofrado del techo; en otra vista, la arquitectura del piso).
+3. Catálogo: «Cargar catálogo típico» y ajustar ejecutores, rendimientos y **ratios**.
+4. **Asistente de sectorización:** dibujar sectores de prueba (rectángulo o polígono) sobre la lámina de un nivel, ver áreas, metrados y carga; comparar alternativas (cada versión es un borrador hasta aplicarla).
+5. Aplicar la versión elegida a un rango de niveles (crea los sectores con su dibujo) y lanzar el **generador del tren**.
+
 ## Asistente de sectorización (`cs_ksec`, Configuración › Casco)
-- Versiones por rango de niveles `{n, grp:'E'|'A', from, to (ids de nivel), k (sectores), names, met:{catId:[metrado por sector]}, note}`.
-- La ventana muestra la **carga** de cada sector en persona-días (Σ metrado ÷ rendimiento) y su desviación del promedio (verde ±10 %, ámbar ±20 %, rojo más), por partida y total.
-- «Guardar y aplicar a los niveles» (`csSecApply`): en cada nivel del rango deja el grupo con esos sectores (crea los que faltan, renombra y pone `met`); los que sobran se archivan solo si no tienen actividades (si tienen, se avisa y quedan: primero se mueven sus actividades). Cambiar desde un nivel no toca lo programado ni lo congelado de otros niveles. Con Deshacer.
+- Versiones por rango de niveles `{n, grp:'E'|'A', from, to (ids de nivel), k (sectores, máx. 8), names, met:{catId:[metrado por sector]}, note, ref (nivel donde se dibujó), vista (lámina base), geo:{i:[x,y,…]} (en píxeles de esa lámina), area:[m²]}`.
+- **Plano** (izquierda, `__plano.ambMap` de plano.js): nivel y lámina base, chips por sector (con su área), **▭ Rectángulo** (arrastrar) y **⬠ Polígono** (tocar esquinas; cerrar en la primera, doble clic o Enter); el sector elegido muestra esquinas para ajustarlo; «Borrar el dibujo».
+- **Área** = área del polígono × `mpp²` de la lámina (`laminas.plb.mpp`, solo si la lámina viene del módulo Planos: con su calibración o la escala nominal 1/100). Sin eso avisa «Lámina sin escala».
+- **Ratios** (`mcat.rat`, metrado por m² de planta; columna «Ratio/m²» del catálogo): con dibujo, cada partida con ratio calcula su metrado = área × ratio (casillas en gris, solo lectura); las demás se escriben. Ratios por defecto (`CS_RAT`, elegidos por Claude para un edificio típico de concreto armado, el dueño los ajusta): por m² de techo acero de verticales 12 kg, encofrado de verticales 0,8 m², concreto de verticales 0,10 m³, desencofrado 0,8 m², encofrado de vigas y losa 1,15 m², acero de vigas y losa 16 kg, instalaciones en losa 0,25 pto, concreto de vigas y losa 0,20 m³; por m² de piso asentado de bloqueta 0,9 m², instalaciones en muros 0,2 pto, tabique 1.ª y 2.ª cara 0,5 m² cada una, instalaciones en tabiques 0,1 pto, tarrajeo 1,8 m². «Completar ratios por defecto» los pone donde falten (por partida típica).
+- La tabla muestra área (con desviación entre los sectores dibujados), metrados por partida y la **carga** de cada sector en persona-días (Σ metrado ÷ rendimiento) con su desviación del promedio (verde ±10 %, ámbar ±20 %, rojo más).
+- «Guardar y aplicar a los niveles» (`csSecApply`): en cada nivel del rango deja el grupo con esos sectores (crea los que faltan, renombra y pone `met`); los que sobran se archivan solo si no tienen actividades. **El dibujo pasa a la lámina base de cada nivel** que use el mismo plano del módulo Planos (`csGeoTarget`, escalado si la lámina mide distinto); los niveles con otro plano quedan sin dibujo (se dibujan en Sectorización). Cambiar desde un nivel no toca lo programado ni lo congelado de otros niveles. Con Deshacer.
 - «+ Niveles» (administrador): agrega niveles al final con su frente suelto de escalera.
-- Los sectores se dibujan sobre la lámina de cada nivel en **Sectorización** (como los ambientes).
 
 ## Obra de ejemplo (solo copia de prueba, administrador, Casco vacío)
 - Configuración › Casco › «Cargar obra de ejemplo» (`csDemo`): `cs_meta/project` copiado de Last Planner (semanas, calendario, horas de corte, causas), 5 ejecutores (Cuadrilla Ramos y Cuadrilla Quispe de casa; Aceros Andinos, Instalaciones Pacífico y Tabiques Lima), 18 partidas, sótano y 8 niveles (4 sectores de estructura hasta el techo 4 y 3 desde el 5; escalera; 3 sectores de albañilería por piso), 3 versiones de sectorización con metrados algo desbalanceados a propósito, y el tren desde mañana a partir del techo 3 (los techos del sótano al 2 se dan por hechos).
@@ -67,6 +76,5 @@ Decidido con el dueño (26-10-2026). La etapa de casco se programa distinto que 
 
 ## Pendiente / ideas
 - Textos de la interfaz que aún dicen «piso» o «ambiente» en Casco (solo el selector principal dice «niveles»).
-- Copiar el dibujo de los sectores de un nivel a los demás de la misma versión (hoy cada lámina se dibuja aparte).
 - Propuestas del SC por partida, si algún proyecto las pide (hoy no se ofrecen en Casco).
 - Calcular metrados por sector desde el plano o el modelo (hoy se escriben en el asistente).

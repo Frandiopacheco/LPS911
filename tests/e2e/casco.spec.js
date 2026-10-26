@@ -132,3 +132,31 @@ test('casco: todas las pestañas se dibujan sin errores con la obra de ejemplo (
   if (SHOT) await page.screenshot({ path: SHOT + '/tren-oscuro.png' });
   expect(errors).toEqual([]);
 });
+
+test('casco: el asistente dibuja un sector sobre la lámina, da su área con la escala del módulo Planos y calcula metrados con los ratios', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    const L = (id, pid) => fcol('laminas').doc(id).set({ pisoId: pid, base: true, esp: 'Estructura', name: 'Encofrado techo típico', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
+    await L('lamT3', 'n3'); await L('lamT4', 'n4');
+  });
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await page.locator('[data-cs="secv"][data-id="v1"]').click();
+  await page.locator('#css_ref').selectOption('n3');
+  await expect(page.locator('#cssmap .pvs')).toHaveCount(1, { timeout: 15000 });
+  await page.locator('[data-csst="0"]').click();
+  await page.locator('[data-cstool="rect"]').click();
+  const bx = await page.locator('#cssmap').boundingBox();
+  await page.mouse.move(bx.x + 60, bx.y + 60); await page.mouse.down();
+  await page.mouse.move(bx.x + 160, bx.y + 120, { steps: 5 }); await page.mouse.move(bx.x + 220, bx.y + 180, { steps: 5 }); await page.mouse.up();
+  await expect(page.locator('[data-csst="0"] b')).toContainText('m²');
+  const r = await page.evaluate(() => { const a = +document.querySelector('[data-csst="0"] b').textContent.replace(/[^\d.]/g, ''); const vl = +document.querySelector('[data-cssm="k-VL:0"]').value; return { a, vl }; });
+  expect(r.a).toBeGreaterThan(0);
+  expect(r.vl).toBeCloseTo(Math.round(r.a * 0.2 * 10) / 10, 1);
+  if (SHOT) await page.screenshot({ path: SHOT + '/asistente-plano.png' });
+  await page.locator('#cssm [data-css="apply"]').click();
+  await expect.poll(() => page.evaluate(() => !!(S.amb.get('n3-e1').geo || {}).lamT3)).toBe(true);
+  expect(await page.evaluate(() => !!(S.amb.get('n4-e1').geo || {}).lamT4)).toBe(true);
+  expect(await page.evaluate(() => (S.amb.get('n3-e1').geo || {}).lamT4)).toBeUndefined();
+  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
+});

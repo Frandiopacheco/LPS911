@@ -2174,13 +2174,17 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
 async function doAlign(l){const base=baseOfL(l);if(base&&base.id===l.id)return;if(!base)return;try{M.busy='Cargando imágenes para alinear…';requestRender();const[ru,tu]=await Promise.all([imgURL(base,'f'),imgURL(l,'f')]);M.busy='';requestRender();
   alignDialog({ref:base,refURL:ru,tgt:{w:l.w,h:l.h,url:tu},title:`Alinear ${lname(l)} con ${lname(base)}`,init:l.pts||null,onSave:async(T,pts)=>{await fcol('laminas').doc(l.id).update({T,aligned:true,pts});toast('Lámina alineada. Si quedó mal, usa “Corregir alineación”.')}})}catch(err){M.busy='';requestRender();toast(err.message)}}
 function lamMenu(btn,l){const base=baseOfL(l);const specs=lamsOf(l.pisoId).filter(x=>!x.base&&vistaOf(x)===l.id);
-  openPop(btn,`<div class="ph">${esc(lname(l))}${l.base?' · plano base':' · '+esc(EN(l.esp))}</div><div class="ptx">${l.w} × ${l.h} px · subida por ${esc(l.byName||l.by||'')}${l.src?' · '+esc(l.src):''}</div>
+  const pp=l.plb&&typeof PLB!=='undefined'?PLB.get(l.plb.id):null;const nv=pp&&(pp.rev||1)>l.plb.rev?(pp.rev||1):0;
+  openPop(btn,`<div class="ph">${esc(lname(l))}${l.base?' · plano base':' · '+esc(EN(l.esp))}</div><div class="ptx">${l.w} × ${l.h} px · subida por ${esc(l.byName||l.by||'')}${l.src?' · '+esc(l.src):''}${l.plb?`<br>Del módulo Planos: <b>${esc(l.plb.cod||l.plb.id)}</b> · Rev. ${l.plb.rev}${nv?` · <b>hay Rev. ${nv}</b>`:''}`:''}</div>
    ${!l.base&&base?`<button data-do="align">${l.aligned?'Revisar / afinar alineación…':'Alinear con '+esc(lname(base))+'…'}</button>`:''}
-   <button data-do="ren">Cambiar nombre / especialidad…</button><button data-do="repl">Reemplazar por nueva revisión…</button>
+   <button data-do="ren">Cambiar nombre / especialidad…</button><button data-do="repl">${nv?`Cambiar a la Rev. ${nv} del módulo Planos…`:'Reemplazar por nueva revisión…'}</button>
+   ${l.plb?'<button data-do="unl">Desvincular del módulo Planos…</button>':''}
    ${!l.base?'<button data-do="mkbase">Convertir en plano base propio (otra vista)…</button>':''}
    <hr><button data-do="del" class="danger">Eliminar lámina</button>`,{
    align:()=>doAlign(l),
-   repl:()=>uploadDialog(btn,l),
+   repl:()=>{if(typeof plSub==='function')plSub();uploadDialog(btn,l)},
+   unl:()=>setTimeout(()=>openPop(btn,`<div class="ph">Desvincular “${esc(lname(l))}”</div><div class="ptx">La lámina sigue igual en el piso, pero deja de estar ligada a ${esc(l.plb.cod||'su plano')} del módulo Planos: ese plano ya se podrá eliminar allá.</div><button data-do="yes">Sí, desvincular</button><button data-do="no">Cancelar</button>`,
+     {no:()=>{},yes:async()=>{try{await fcol('laminas').doc(l.id).update({plb:null});toast('Lámina desvinculada del módulo Planos')}catch(err){toast('No se pudo: '+(err.code||err.message))}}}),0),
    ren:()=>renameDialog(btn,l),
    mkbase:()=>setTimeout(()=>openPop(btn,`<div class="ph">Convertir “${esc(lname(l))}” en plano base</div><div class="ptx">Pasará a ser una vista propia del piso (por ejemplo, otra fachada), con su propio plan del día. Deja de superponerse sobre ${esc(lname(base))}.</div><button data-do="yes">Sí, convertir en plano base</button><button data-do="no">Cancelar</button>`,
      {no:()=>{},yes:async()=>{try{await fcol('laminas').doc(l.id).update({base:true,baseId:null,T:I,aligned:true});M.vista=l.id;M.sel=l.id;toast('Ahora es un plano base propio')}catch(err){toast('No se pudo cambiar: '+(err.code||err.message))}}}),0),
@@ -2200,6 +2204,10 @@ async function lamRestore(id){try{await fcol('laminas').doc(id).update({arch:fir
 async function delChunks(l,rev){const b=db.batch();for(let i=0;i<(l.nf||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_f_${i}`));for(let i=0;i<(l.nl||0);i++)b.delete(fcol('lamimg').doc(`${l.id}_${rev}_l_${i}`));await b.commit()}
 
 /* ---------- subir / reemplazar ---------- */
+/* ¿se puede tomar la lámina del módulo Planos? (quien ve el módulo; planos.js) */
+const PLBOK=()=>typeof PLB!=='undefined'&&typeof plGet==='function'&&typeof canPla==='function'&&canPla();
+/** metros por píxel de la lámina: con la calibración de Planos (de esa revisión) o, si no tiene, la escala nominal 1/100 del formato */
+function plbMpp(r,w){if(!r||!(w>0))return null;if(r.calMpp>0&&r.W>0)return r.calMpp*r.W/w;if(r.mm&&r.mm[0]>0)return r.mm[0]/10/w;return null}
 function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(p=>p.id===opt.pid):pisos();
   const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true">
    <h3>${repl?'Reemplazar lámina: '+esc(lname(repl)):opt.mode==='base'?'Subir lámina base del piso':opt.mode==='spec'?'Subir especialidad':'Subir lámina'}</h3>
@@ -2208,7 +2216,9 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
    <label id="ubw">Se superpone sobre<select id="ubase"></select></label>
    <label>Nombre (así aparecerá en los botones)<input id="uname" placeholder="Ej.: Fachada Norte, IIEE · Alumbrado" maxlength="60"></label>
    <label>Especialidad<select id="uesp">${ESPO('')}</select></label>`}
-   <label>Archivo (PDF de AutoCAD, PNG o JPG)<input type="file" id="ufile" accept="application/pdf,image/png,image/jpeg,image/webp"></label>
+   ${PLBOK()?`<label>Origen<select id="usrc"><option value="plb">Del módulo Planos</option><option value="file">Archivo de la computadora</option></select></label>
+   <div id="uplbw" class="uplbw"><label>Plano<select id="uplb"></select></label><label>Revisión<select id="uprev"></select></label><p class="note" id="uplbn"></p></div>`:''}
+   <label id="ufilew">Archivo (PDF de AutoCAD, PNG o JPG)<input type="file" id="ufile" accept="application/pdf,image/png,image/jpeg,image/webp"></label>
    <p class="note" id="uinfo"></p>
    <div class="uprog" id="uprog"></div>
    <div class="mdlgb"><button class="ib" id="ucancel">Cancelar</button><button class="ib pri" id="ugo">Procesar</button></div></div>`;
@@ -2219,27 +2229,48 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     const bsel=$('#ubase',box);const cur=bsel.value||(pid===M.piso?M.vista:'');bsel.innerHTML=B.map(b=>`<option value="${b.id}"${b.id===cur?' selected':''}>${esc(lname(b))}</option>`).join('');
     const isB=tsel.value==='base';$('#ubw',box).hidden=isB||!B.length;const esp=$('#uesp',box);if(isB&&!esp.value&&!B.length){const ar=typeof espFind==='function'?espFind('Arquitectura'):null;const v=ar&&!ar.arch?ar.id:'Arquitectura';if([...esp.options].some(o=>o.value===v))esp.value=v}
     info.innerHTML=(isB?(B.length?'Será <b>otro plano base</b> de este piso, con su propio plan del día (útil para cada fachada o una zona que no entra en la misma lámina). No se alinea con los demás.':'Será el <b>plano base</b> del piso (normalmente la arquitectura). Las demás especialidades se alinean sobre él.'):'Después de procesarla marcarás puntos para alinearla con el plano base elegido.')+' Súbelo desde una PC con Chrome o Edge.'};
-  if(!repl){$('#upiso',box).onchange=sync;$('#utipo',box).onchange=sync;$('#uesp',box).onchange=e=>espPickL(e.target,'')}sync();
+  if(!repl){$('#upiso',box).onchange=()=>{sync();plbSync()};$('#utipo',box).onchange=sync;$('#uesp',box).onchange=e=>espPickL(e.target,'')}sync();
+  /* módulo Planos (oct 2026, decidido con el dueño): la lámina se toma de la biblioteca de planos, en la revisión elegida, y queda
+     fija en esa revisión hasta que alguien la cambie (Reemplazar). El plano usado no se puede eliminar del módulo Planos. */
+  const src=$('#usrc',box),plbSel=$('#uplb',box),revSel=$('#uprev',box);
+  function plbSync(){if(!src)return;const usePlb=src.value==='plb';$('#uplbw',box).hidden=!usePlb;$('#ufilew',box).hidden=usePlb;if(!usePlb)return;
+    if(typeof plbReady!=='undefined'&&!plbReady){plbSel.innerHTML='<option value="">Cargando planos…</option>';setTimeout(()=>{if(box.isConnected)plbSync()},400);return}
+    const pid=repl?repl.pisoId:$('#upiso',box).value;const cur=plbSel.value||(repl&&repl.plb?repl.plb.id:'');
+    const L=[...PLB.values()].filter(x=>!x.eto&&!x.arch).sort((a,b)=>String(a.disc).localeCompare(b.disc)||String(a.cod).localeCompare(b.cod,'es',{numeric:true}));
+    if(!L.length&&!(repl&&repl.plb)&&!plbSel.dataset.auto){plbSel.dataset.auto='1';src.value='file';plbSync();return}
+    const mine=L.filter(x=>x.pisoId===pid),oth=L.filter(x=>x.pisoId!==pid);const o=x=>`<option value="${esc(x.id)}"${x.id===cur?' selected':''}>${esc(x.cod||x.id)} · ${esc(x.tit||'')} (Rev. ${x.rev||1})</option>`;
+    plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía</option>';
+    revSync()}
+  function revSync(){const p=PLB.get(plbSel.value);if(!p){revSel.innerHTML='';$('#uplbn',box).textContent='';return}
+    const R=[p.rev||1,...(p.revs||[]).map(r=>r.rev).reverse()];revSel.innerHTML=R.map((r,i)=>`<option value="${r}">Rev. ${r}${i===0?' (vigente)':''}</option>`).join('');
+    $('#uplbn',box).textContent=`${p.cal&&p.cal.rev===(p.rev||1)?'Calibrado en Planos: las áreas usan su escala.':'Sin calibrar en Planos: las áreas usan la escala nominal 1/100.'} La lámina queda fija en la revisión elegida hasta que la cambies.`}
+  if(src){src.value=repl&&!repl.plb?'file':'plb';src.onchange=plbSync;plbSel.onchange=revSync;if(typeof plSub==='function')plSub();plbSync()}
   $('#ucancel',box).onclick=close;
-  $('#ugo',box).onclick=async()=>{const f=$('#ufile',box).files[0];if(!f){toast('Elige el archivo.');return}
+  $('#ugo',box).onclick=async()=>{let f=null,plbRef=null,crop=null;
+    if(src&&src.value==='plb'){const p=PLB.get(plbSel.value);if(!p){toast('Elige el plano.');return}const sp=plSpecOf(p,+revSel.value);$('#ugo',box).disabled=true;$('#uprog',box).textContent='Descargando el plano del módulo Planos…';
+      try{const bl=await plGet(sp.base+'/orig.pdf');f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'})}catch(err){$('#ugo',box).disabled=false;$('#uprog',box).textContent='';toast('No se pudo descargar el plano: '+(err.message||err));return}
+      crop=sp.crop||null;const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;
+      plbRef={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
+      if(!repl&&!$('#uname',box).value.trim()&&!$('#uesp',box).value)$('#uname',box).value=(p.cod||'')+(p.tit?' · '+p.tit:'');$('#ugo',box).disabled=false}
+    else{f=$('#ufile',box).files[0];if(!f){toast('Elige el archivo.');return}}
     const pid=repl?repl.pisoId:$('#upiso',box).value;const esp=repl?repl.esp:(($('#uesp',box).value||'').trim().replace(/^__new$/,''));const name=repl?(repl.name||''):($('#uname',box).value||'').trim();
     if(!esp&&!name){toast('Escribe el nombre o la especialidad.');return}
     const B=basesOf(pid);const newBase=!repl&&(!B.length||$('#utipo',box).value==='base');const target=repl?baseOfL(repl):(newBase?null:LAM.get($('#ubase',box).value)||B[0]);
     const prog=$('#uprog',box);const say=t=>{prog.textContent=t};$('#ugo',box).disabled=true;
     if(opt.mode==='spec'&&newBase){toast('La lámina base se sube en Sectorización.');return}
-    try{const out=await processFile(f,say);close();
-      if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true},out);toast(opt.mode==='base'?'Lámina base guardada. Ahora ubica sus sectores y ambientes.':'Plano base guardado');M.piso=pid;if(opt.onBase)opt.onBase(M.vista);requestRender();return}
+    try{const out=await processFile(f,say,{crop});if(plbRef){plbRef.mpp=plbMpp(plbRef,out.w);delete plbRef.W}close();
+      if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true,plb:plbRef},out);toast(opt.mode==='base'?'Lámina base guardada. Ahora ubica sus sectores y ambientes.':'Plano base guardado');M.piso=pid;if(opt.onBase)opt.onBase(M.vista);requestRender();return}
       const ref=repl&&repl.base?repl:target;M.busy='Cargando la referencia para alinear…';requestRender();const refURL=await imgURL(ref,'f');M.busy='';requestRender();
       const nm=name||EN(esp);
       alignDialog({ref,refURL,tgt:{w:out.w,h:out.h,url:out.fullURL},title:repl?`Alinear la nueva revisión de ${lname(repl)}`:`Alinear ${nm} con ${lname(ref)}`,allowSkip:!(repl&&repl.base),
-        onSave:async(T,pts)=>{await saveLam(repl?{...repl,T,aligned:true,pts}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T,aligned:true,pts},out,repl);toast('Lámina guardada y alineada')},
-        onSkip:async()=>{await saveLam(repl?{...repl,aligned:false}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T:I,aligned:false},out,repl);toast('Lámina guardada sin alinear')}})}
+        onSave:async(T,pts)=>{await saveLam(repl?{...repl,T,aligned:true,pts,plb:plbRef}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T,aligned:true,pts,plb:plbRef},out,repl);toast('Lámina guardada y alineada')},
+        onSkip:async()=>{await saveLam(repl?{...repl,aligned:false,plb:plbRef}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T:I,aligned:false,plb:plbRef},out,repl);toast('Lámina guardada sin alinear')}})}
     catch(err){$('#ugo',box).disabled=false;say('');toast(err.message||'No se pudo procesar el archivo.')}}}
 async function saveLam(meta,out,repl){const id=repl?repl.id:uid('lam');const rev=repl?(repl.rev||1)+1:1;M.busy='Guardando lámina…';requestRender();
   try{const w=async(q,b64)=>{const n=Math.ceil(b64.length/CHUNK);for(let i=0;i<n;i++){M.busy=`Guardando lámina… ${q==='f'?'alta':'liviana'} ${i+1}/${n}`;requestRender();await fcol('lamimg').doc(`${id}_${rev}_${q}_${i}`).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)})}return n};
     const nf=await w('f',out.full64),nl=await w('l',out.lite64);
     const prevRev=repl?{rev:repl.rev||1,nf:repl.nf||0,nl:repl.nl||0,w:repl.w,h:repl.h,lw:repl.lw||null,lh:repl.lh||null,fmt:repl.fmt||'',T:repl.T||I,ts:repl.ts||0,by:repl.by||''}:null;
-    const doc={...(prevRev?{revs:[...(repl.revs||[]),prevRev]}:{}),pisoId:meta.pisoId,esp:meta.esp,name:meta.name||'',baseId:meta.base?null:(meta.baseId||null),base:!!meta.base,T:meta.T||I,aligned:!!meta.aligned,w:out.w,h:out.h,lw:out.lw,lh:out.lh,fmt:out.fmt,nf,nl,rev,src:out.src,order:meta.order??NOW(),ts:NOW(),by:me.email,byName:me.name||me.email};if(meta.pts)doc.pts=meta.pts;
+    const doc={...(prevRev?{revs:[...(repl.revs||[]),prevRev]}:{}),pisoId:meta.pisoId,esp:meta.esp,name:meta.name||'',baseId:meta.base?null:(meta.baseId||null),base:!!meta.base,T:meta.T||I,aligned:!!meta.aligned,plb:meta.plb||null,w:out.w,h:out.h,lw:out.lw,lh:out.lh,fmt:out.fmt,nf,nl,rev,src:out.src,order:meta.order??NOW(),ts:NOW(),by:me.email,byName:me.name||me.email};if(meta.pts)doc.pts=meta.pts;
     await fcol('laminas').doc(id).set(doc);
     IMG.set(id+'|'+rev+'|f',{url:out.fullURL,promise:Promise.resolve(out.fullURL)});
     /* la revisión anterior ya no se borra: queda en revs con sus imágenes */M.sel=id;M.piso=meta.pisoId;M.lpiso=meta.pisoId;if(U.piso&&U.piso!==meta.pisoId){U.piso=meta.pisoId;const fp=document.getElementById('fpiso');if(fp)fp.value=meta.pisoId}M.vista=meta.base?id:(meta.baseId||M.vista)}
@@ -2257,10 +2288,11 @@ async function encode(cv,q){let b=await toBlob(cv,q);if(!b||b.type!=='image/webp
 const b64=blob=>new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=()=>ko(new Error('No se pudo leer la imagen'));r.readAsDataURL(blob)});
 function fitDims(w,h,max,up){let s=max/Math.max(w,h);if(!up)s=Math.min(1,s);if(w*s*h*s>MAXPX)s=Math.sqrt(MAXPX/(w*h));return{w:Math.round(w*s),h:Math.round(h*s),s}}
 function mkCanvas(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);return c}
-async function processFile(f,say){let full;const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
+/* o.crop: recorte en puntos del PDF (el marco que detectó el módulo Planos, plb.crop); sin él, el área con dibujo */
+async function processFile(f,say,o){o=o||{};let full;const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
   if(isPdf){say('Cargando lector de PDF…');await loadPdfJs();say('Leyendo PDF…');const pdf=await window.pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;const pg=await pdf.getPage(1);
     const v1=pg.getViewport({scale:1});const ls=1400/Math.max(v1.width,v1.height);const vl=pg.getViewport({scale:ls});const lc=mkCanvas(Math.ceil(vl.width),Math.ceil(vl.height));
-    say('Detectando el área del dibujo…');await pg.render({canvasContext:lc.getContext('2d'),viewport:vl}).promise;const bx=inkBox(lc);
+    say('Detectando el área del dibujo…');await pg.render({canvasContext:lc.getContext('2d'),viewport:vl}).promise;const cr=o.crop;const bx=cr&&cr.x1>cr.x0&&cr.y1>cr.y0?{x:cr.x0*ls,y:cr.y0*ls,w:(cr.x1-cr.x0)*ls,h:(cr.y1-cr.y0)*ls}:inkBox(lc);
     const bw=bx.w/ls,bh=bx.h/ls;let dm=fitDims(bw,bh,FULL,1);let tries=0;
     while(true){full=mkCanvas(dm.w,dm.h);const g=full.getContext('2d');if(g&&full.width===dm.w){break}if(++tries>3)throw new Error('La lámina es demasiado grande para este navegador.');dm=fitDims(bw,bh,Math.round(Math.max(dm.w,dm.h)*.7),1)}
     say(`Dibujando en alta resolución (${dm.w} × ${dm.h} px)… puede tardar unos segundos`);await tick();
