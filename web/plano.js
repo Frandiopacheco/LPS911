@@ -5,7 +5,7 @@
    index.html (db, S, U, $, esc, toast, pisos, isAdmin, canWrite, me…).
    ===================================================================== */
 (function(){
-const PDFJS=window.PLANO_PDFJS||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS=window.PLANO_PDFJS||new URL('vendor/pdfjs/pdf.min.js',location.href).href;   /* propio: arreglo de degradados de tamaño cero (planos.js) */
 const PDFJS_WORKER=window.PLANO_PDFJS_WORKER||'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 const FULL=8000,LITE=3000,CHUNK=800000,MAXPX=40e6;
 const ESPS=['Arquitectura','Estructuras','Instalaciones eléctricas','Instalaciones sanitarias','Agua contra incendio','Aire acondicionado','Comunicaciones','Cielo raso','Enchapes','Carpintería','Fachada'];
