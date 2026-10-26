@@ -332,35 +332,37 @@ test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e imp
   noErrors(errors, 'costos mantiene las partidas');
 });
 
-test('Personal: exportar para editar e importar sin perder nada (periodos, celdas vacías, capataz); nombre con confirmación; deshacer', async ({ page }) => {
+test('Personal: exportar la lista, editarla e importarla sin perder nada (periodos, celdas vacías, capataz); nombre con confirmación; deshacer', async ({ page }) => {
   const errors = await openApp(page, { as: 'tasis', editar: false, extra: [...EXTRA,
     ['tper', '03684337', { dni: '03684337', ape: 'FICTICIO DOS', nom: 'BETO', pue: 'OFICIAL CARPINTERO', cat: 'OF', cua: 'CARPINTEROS', cap: '', ing: '2026-05-04', ces: '', mot: '', per: [{ ing: '2026-02-10', ces: '2026-03-15', mot: 'Renuncia' }, { ing: '2026-05-04', ces: '', mot: '' }], act: true, ts: 0 }],
     ['tper', '45678901', { dni: '45678901', ape: 'INVENTADO TRES', nom: 'CARLA', pue: 'RIGGER', cat: 'OT', cua: 'ANDAMIEROS', cap: 'tcap1@obra.pe', ing: '2026-03-01', ces: '', mot: '', per: [{ ing: '2026-03-01', ces: '', mot: '' }], act: true, ts: 0 }],
   ] });
   await conExcel(page);
   await tab(page, 'tper');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tperXed')]);
+  // «Exportar Excel» (la lista, con el filtro «Todos») se edita y se vuelve a importar
+  await page.click('#tperEst [data-test="all"]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tperXls')]);
   const buf = readFileSync(await dl.path());
-  const J = new ExcelJS.Workbook(); await J.xlsx.load(buf); const ws = J.getWorksheet('Datos del personal');
-  expect(J.worksheets.map(w => w.name)).toEqual(['Datos del personal', 'Instrucciones']);
-  const filas = []; ws.eachRow((r, i) => { if (i >= 4) filas.push(r); });
-  expect(filas.map(r => r.getCell(2).value)).toEqual(['03684337', '03684337', '45678901', '01234567']); // un periodo por fila; DNI como texto
-  expect(ws.getCell('I4').dataValidation).toMatchObject({ type: 'list', formulae: ['"Operario,Oficial,Peón,Capataz,Otro"'] });
-  expect(ws.getCell('F4').dataValidation.type).toBe('date');
+  const J = new ExcelJS.Workbook(); await J.xlsx.load(buf); const ws = J.getWorksheet('Personal');
+  expect(J.worksheets.map(w => w.name)).toEqual(['Personal', 'Instrucciones']);
+  expect(ws.getRow(1).values.slice(1)).toEqual(['DNI', 'Apellido paterno', 'Apellido materno', 'Nombres', 'Puesto', 'Categoría', 'Cuadrilla', 'Capataz', 'Ingreso', 'Cese', 'Motivo', 'Estado']);
+  const filas = []; ws.eachRow((r, i) => { if (i >= 2) filas.push(r); });
+  const row = dni => filas.find(r => r.getCell(1).value === dni);
+  expect(row('01234567')).toBeTruthy(); // DNI como texto (con su cero)
+  expect(ws.getCell('F2').dataValidation).toMatchObject({ type: 'list', formulae: ['"Operario,Oficial,Peón,Capataz,Otro"'] });
+  expect(ws.getCell('I2').dataValidation.type).toBe('date');
   // el mismo archivo no cambia nada
   let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tperImp')]);
   await fc.setFiles({ name: 'personal.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf });
   await expect(page.locator('#timpEq')).toHaveText('3');
   await expect(page.locator('#timpOk')).toBeDisabled();
   await page.click('#lqm [data-lqx]');
-  // editar: Ana cambia de cuadrilla y queda «Oficial»; Beto: se borra la fila de su primer periodo (no se pierde) y su puesto vacío (no cambia);
+  // editar: Ana cambia de cuadrilla y queda «Oficial»; Beto con el puesto vacío (no cambia) y sin perder su primer periodo;
   // Carla cambia de nombre (pide confirmación) y cesa; se agrega un obrero nuevo
-  const row = (dni, n = 0) => filas.filter(r => r.getCell(2).value === dni)[n];
-  row('01234567').getCell(5).value = 'FIERREROS'; row('01234567').getCell(9).value = 'Oficial';
-  row('03684337', 1).getCell(4).value = '';
-  row('45678901').getCell(3).value = 'INVENTADO TRES, KARLA'; row('45678901').getCell(7).value = new Date(Date.UTC(2026, 9, 20)); row('45678901').getCell(8).value = 'Termino de obra';
-  ws.spliceRows(row('03684337', 0).number, 1);
-  const nr = ws.getRow(9); [5, '87654321', 'NUEVO CINCO, ELSA', 'PEON', 'ALBAÑILES', new Date(Date.UTC(2026, 8, 1)), '', '', '', ''].forEach((v, i) => { nr.getCell(i + 1).value = v; });
+  row('01234567').getCell(7).value = 'FIERREROS'; row('01234567').getCell(6).value = 'Oficial';
+  row('03684337').getCell(5).value = '';
+  row('45678901').getCell(4).value = 'KARLA'; row('45678901').getCell(10).value = new Date(Date.UTC(2026, 9, 20)); row('45678901').getCell(11).value = 'Termino de obra';
+  const nr = ws.getRow(filas.length + 2); ['87654321', 'NUEVO', 'CINCO', 'ELSA', 'PEON', '', 'ALBAÑILES', '', new Date(Date.UTC(2026, 8, 1)), '', '', ''].forEach((v, i) => { nr.getCell(i + 1).value = v; });
   const buf2 = Buffer.from(await J.xlsx.writeBuffer());
   [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tperImp')]);
   await fc.setFiles({ name: 'personal2.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf2 });
@@ -370,10 +372,10 @@ test('Personal: exportar para editar e importar sin perder nada (periodos, celda
   await expect(page.locator('#timpOk')).toBeDisabled();
   await page.check('#timpRenOk');
   await page.click('#timpOk');
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '87654321'))).toMatchObject({ ape: 'NUEVO CINCO', nom: 'ELSA', ing: '2026-09-01', act: true });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '87654321'))).toMatchObject({ ape: 'NUEVO CINCO', apP: 'NUEVO', apM: 'CINCO', nom: 'ELSA', cat: 'PE', ing: '2026-09-01', act: true });
   const db1 = await page.evaluate(() => window.__dbAll('tper'));
   expect(db1['01234567']).toMatchObject({ cua: 'FIERREROS', cat: 'OF', cap: 'tcap1@obra.pe' });
-  expect(db1['03684337'].per).toHaveLength(2); // la fila borrada no borra el periodo
+  expect(db1['03684337'].per).toHaveLength(2); // una fila por persona no borra los periodos anteriores
   expect(db1['03684337'].pue).toBe('OFICIAL CARPINTERO'); // la celda vacía no cambia
   expect(db1['45678901']).toMatchObject({ nom: 'KARLA', ces: '2026-10-20', mot: 'Termino de obra', cap: 'tcap1@obra.pe' });
   // deshacer: vuelve todo y el nuevo se archiva
