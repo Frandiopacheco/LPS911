@@ -145,10 +145,10 @@ const tCod=v=>{if(v==null||v==='')return'';const n=typeof v==='number'?v:+String
 const tPcId=cod=>'p'+String(cod).replace('.','_');
 const tNum=v=>{if(v===''||v==null)return null;const n=typeof v==='number'?v:+String(v).replace(',','.');return Number.isFinite(n)?tR2(n):null};
 /** hoja «Lista de partidas» (filas como arrays) → {partidas, grupos, errores} */
-function tParsePartidas(rows){rows=rows||[];let C=2,UA=7,E=-1,DC=-1;
+function tParsePartidas(rows){rows=rows||[];let C=2,UA=7,E=-1,DC=-1,BQ=-1;
   for(let i=0;i<Math.min(rows.length,30);i++){const r=(rows[i]||[]).map(tFold);const d=r.findIndex(x=>/^DESCRIPCI/.test(x));if(d>0){C=d;const u=r.findIndex(x=>/^UA\s*-\s*TAREO/.test(x));UA=u>=0?u:d+5;
     /* columnas opcionales del «Exportar para editar» (25-10-2026): vacías = no cambian */
-    E=r.findIndex(x=>/^ESTADO/.test(x));DC=r.findIndex(x=>/^DESCONTABLE/.test(x));break}}
+    E=r.findIndex(x=>/^ESTADO/.test(x));DC=r.findIndex(x=>/^DESCONTABLE/.test(x));BQ=r.findIndex(x=>/^BLOQUEADA/.test(x));break}}
   const B=C-1;const partidas=[],grupos=[],errores=[],seen=new Set();let cur=null;
   rows.forEach((r,i)=>{if(!r)return;const t=String(r[C]??'').trim().replace(/\s+/g,' ');const raw=r[B];if(raw===''||raw==null){return}
     if(/^TOTAL/.test(tFold(t)))return;const cod=tCod(raw);if(!cod){if(t&&!/^DESCRIPCI/.test(tFold(t)))errores.push({fila:i+1,txt:`Código no válido («${String(raw).trim()}»)`,nom:t});return}
@@ -158,8 +158,8 @@ function tParsePartidas(rows){rows=rows||[];let C=2,UA=7,E=-1,DC=-1;
     if(!t){errores.push({fila:i+1,txt:`Partida ${cod} sin descripción`});return}
     if(seen.has(cod)){errores.push({fila:i+1,txt:`Código ${cod} repetido (se toma el primero)`,nom:t});return}seen.add(cod);
     const grp=cod.split('.')[0];const gN=cur&&cur.grp===grp?cur.grpN:((grupos.find(x=>x.grp===grp)||{}).grpN||'');
-    const es=E>=0?tFold(r[E]):'',dc=DC>=0?tFold(r[DC]):'';const act=/^INACT/.test(es)?false:/^ACT/.test(es)?true:undefined;const dct=/^(SI|X|1)$/.test(dc)?true:/^(NO|0)$/.test(dc)?false:undefined;
-    partidas.push({id:tPcId(cod),cod,grp,grpN:gN,nom:t,und,met:tNum(r[C+2]),hhp:tNum(r[C+3]),ua,ord:partidas.length+1,...(act!==undefined?{act}:{}),...(dct!==undefined?{dct}:{})})});
+    const es=E>=0?tFold(r[E]):'',dc=DC>=0?tFold(r[DC]):'';const act=/^INACT/.test(es)?false:/^ACT/.test(es)?true:undefined;const dct=/^(SI|X|1)$/.test(dc)?true:/^(NO|0)$/.test(dc)?false:undefined;const bq=BQ>=0?tFold(r[BQ]):'';const bloq=/^(SI|X|1)$/.test(bq)?true:/^(NO|0)$/.test(bq)?false:undefined;
+    partidas.push({id:tPcId(cod),cod,grp,grpN:gN,nom:t,und,met:tNum(r[C+2]),hhp:tNum(r[C+3]),ua,ord:partidas.length+1,...(act!==undefined?{act}:{}),...(dct!==undefined?{dct}:{}),...(bloq!==undefined?{bloq}:{})})});
   return{partidas,grupos,errores}}
 /** orden de códigos por partes enteras: 2 antes de 10; 10.02 antes de 10.10 (no como texto) */
 const tCmpCod=(a,b)=>{const A=String(a??'').split('.'),B=String(b??'').split('.');for(let i=0;i<Math.max(A.length,B.length);i++){const x=parseInt(A[i],10),y=parseInt(B[i],10);
@@ -875,11 +875,11 @@ function tPcForm(id){if(!tPcEd())return;const x=id?S.tpc.get(id):null;const v=x|
      const grp=cod.split('.')[0];const d={cod,grp,grpN:$('#tpGrp').value.trim()||grpN(grp),nom,und:$('#tpUnd').value.trim(),met:tNum($('#tpMet').value),hhp:tNum($('#tpHh').value),ua:$('#tpUa').value.trim(),dct:$('#tpDct').checked,...tStamp()};
      if(!x){d.act=true;d.ord=S.tpc.size+1}
      try{await fcol(TCOLS.tpc).doc(pid).set(d,{merge:true});lqClose();toast(x?'Partida actualizada.':'Partida agregada.')}catch(err){msg('No se pudo guardar: '+(err.code||err.message))}})}
-/* importar (25-10-2026, a prueba de errores): nada se borra ni se desactiva por faltar en el archivo; celda vacía = no cambia; nunca toca «Bloqueada»;
+/* importar (25-10-2026, a prueba de errores): nada se borra ni se desactiva por faltar en el archivo; celda vacía = no cambia; «Bloqueada» se cambia con su columna (25-10-2026: solo Costos y el admin importan; antes no se tocaba);
    el código es la llave (uno nuevo = partida nueva); cambios de nombre con confirmación; antes de guardar se guarda una foto en tpcbk para deshacer */
-const TPC_CMP=[['nom','Nombre'],['grpN','Grupo'],['und','Unidad'],['met','Metrado'],['hhp','HH'],['ua','UA'],['act','Estado'],['dct','Descontable']];
-const tPcCur=(o,k)=>k==='act'?o.act!==false:k==='dct'?o.dct===true:(o[k]??null);
-const tPcVal=(k,v)=>k==='act'?(v===false?'Inactiva':'Activa'):k==='dct'?(v===true?'Sí':'No'):v==null||v===''?'—':String(v);
+const TPC_CMP=[['nom','Nombre'],['grpN','Grupo'],['und','Unidad'],['met','Metrado'],['hhp','HH'],['ua','UA'],['act','Estado'],['dct','Descontable'],['bloq','Bloqueada']];
+const tPcCur=(o,k)=>k==='act'?o.act!==false:k==='dct'||k==='bloq'?o[k]===true:(o[k]??null);
+const tPcVal=(k,v)=>k==='act'?(v===false?'Inactiva':'Activa'):k==='dct'||k==='bloq'?(v===true?'Sí':'No'):v==null||v===''?'—':String(v);
 function tPcDiff(partidas){const nuevas=[],cambios=[],iguales=[],arch=[];const inF=new Set();
   for(const p of partidas){inF.add(p.id);const o=S.tpc.get(p.id);if(!o){nuevas.push(p);continue}if(o.arch){arch.push(p);continue}
     const set={},ch=[];for(const[k,l]of TPC_CMP){const v=p[k];if(v===undefined||v===null||v==='')continue;const a=tPcCur(o,k);if(String(a??'')!==String(v)){set[k]=v;ch.push(`${l}: ${tPcVal(k,a)} → ${tPcVal(k,v)}`)}}
@@ -902,13 +902,14 @@ async function tImportPc(){if(!tPcEd())return;const f=await tPickFile();if(!f)re
    ${R.errores.length?`<details class="t-sec" open><summary><b>${R.errores.length}</b> con errores (no se importan)</summary><ul class="t-list">${R.errores.map(x=>`<li>Fila ${x.fila}: ${esc(x.txt)}${x.nom?' · '+esc(x.nom):''}</li>`).join('')}</ul></details>`:''}
    ${fuera.length?`<details class="t-sec" id="tpiFuera"><summary><b>${fuera.length}</b> en la app pero no en el archivo (no se borran ni se desactivan)</summary><p class="note">Para quitar una partida, ponle Estado = Inactiva en el Excel o desactívala aquí.</p><ul class="t-list">${fuera.map(x=>`<li><span class="mono">${esc(x.cod)}</span> ${esc(x.nom)}</li>`).join('')}</ul></details>`:''}
    ${D.arch.length?`<details class="t-sec"><summary><b>${D.arch.length}</b> archivadas (no se tocan)</summary><ul class="t-list">${D.arch.map(p=>`<li><span class="mono">${esc(p.cod)}</span> ${esc(p.nom)}</li>`).join('')}</ul></details>`:''}
-   <p class="note">Las celdas vacías no cambian nada y «Bloqueada» no se toca. Podrás deshacer esta importación.</p>
+   <p class="note">Las celdas vacías no cambian nada. Podrás deshacer esta importación.</p>
    <div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="tpiOk"${n&&!D.ren.length?'':' disabled'}>Importar ${n}</button></div>`,
    async e=>{const b=e.target.closest('#tpiOk');if(!b||b.disabled)return;if(D.ren.length&&!($('#tpiRenOk')||{}).checked)return;b.disabled=true;b.textContent='Importando…';
      const st=tStamp();const prev={};const W=[];
-     for(const{p,o,set}of cambios){const pv={ts:o.ts||0};for(const k of Object.keys(set))pv[k]=tPcCur(o,k);prev[p.id]=pv;W.push([fcol(TCOLS.tpc).doc(p.id),{...set,...st},{merge:true}])}
-     for(const p of nuevas){const{id,_antes,act,dct,...d}=p;if(!d.grpN){for(const x of S.tpc.values())if(x.grp===d.grp&&x.grpN){d.grpN=x.grpN;break}}
-       W.push([fcol(TCOLS.tpc).doc(id),{...d,act:act!==false,...(dct!==undefined?{dct}:{}),...st},{merge:true}])}
+     for(const{p,o,set}of cambios){const pv={ts:o.ts||0};for(const k of Object.keys(set))pv[k]=tPcCur(o,k);const d={...set};
+       if('bloq' in set){pv.bloqBy=o.bloqBy??null;pv.bloqAt=o.bloqAt??null;d.bloqBy=(me.email||'').toLowerCase();d.bloqAt=st.ts}prev[p.id]=pv;W.push([fcol(TCOLS.tpc).doc(p.id),{...d,...st},{merge:true}])}
+     for(const p of nuevas){const{id,_antes,act,dct,bloq,...d}=p;if(!d.grpN){for(const x of S.tpc.values())if(x.grp===d.grp&&x.grpN){d.grpN=x.grpN;break}}
+       W.push([fcol(TCOLS.tpc).doc(id),{...d,act:act!==false,...(dct!==undefined?{dct}:{}),...(bloq===true?{bloq:true,bloqBy:(me.email||'').toLowerCase(),bloqAt:st.ts}:{}),...st},{merge:true}])}
      /* la foto va primero y en el mismo lote: si no se guarda, no se importa nada */
      W.unshift([fcol('tpcbk').doc('b'+st.ts),{t:st.ts,by:st.by,file:String(f.name||'').slice(0,120),nuevas:nuevas.map(p=>p.id),prev,nN:nuevas.length,nC:cambios.length}]);
      try{await tBatch(W);lqClose();TPU.bk=null;tPcBkLoad();toast(`Partidas importadas: ${nuevas.length} nuevas, ${cambios.length} actualizadas.`)}catch(err){b.disabled=false;b.textContent='Reintentar';toast('No se pudo importar: '+(err.code||err.message))}},
@@ -930,15 +931,15 @@ async function tPcUndo(){if(!tPcEd())return;const bk=TPU.bk;if(!bk||bk.undo)retu
   try{await tBatch(W);toast('Importación deshecha.');tPcBkLoad()}catch(err){toast('No se pudo deshacer: '+(err.code||err.message))}}
 /* exportar para editar: mismo formato que la hoja «Lista de partidas» (se vuelve a importar tal cual) + Estado y Descontable con lista desplegable */
 async function tPcExport(){try{const G=tPcGroups([...S.tpc.values()].filter(x=>x&&!x.arch));const rows=[],grp=new Set();
-  for(const g of G){grp.add(rows.length);rows.push(['',Number(g.k)||g.k,g.n||'','','','','','','',''])
-    for(const x of g.L)rows.push(['',x.cod,x.nom||'',x.und||'',x.met??'',x.hhp??'',+x.met>0&&+x.hhp>0?Math.round(x.hhp/x.met*1e4)/1e4:'',x.ua||'',x.act===false?'Inactiva':'Activa',x.dct===true?'Sí':'No'])}
+  for(const g of G){grp.add(rows.length);rows.push(['',Number(g.k)||g.k,g.n||'','','','','','','','',''])
+    for(const x of g.L)rows.push(['',x.cod,x.nom||'',x.und||'',x.met??'',x.hhp??'',+x.met>0&&+x.hhp>0?Math.round(x.hhp/x.met*1e4)/1e4:'',x.ua||'',x.act===false?'Inactiva':'Activa',x.dct===true?'Sí':'No',x.bloq===true?'Sí':'No'])}
   await tXlsEdit(`Partidas de control ${todayIso()}.xlsx`,'Lista de partidas',`Lista de partidas de control · exportada el ${tFmt(todayIso())}`,
-    [{h:'',w:2},{h:'CÓDIGO',w:9,t:'s'},{h:'DESCRIPCIÓN',w:52},{h:'UND',w:7},{h:'METRADO',w:11,t:'n'},{h:'HH PPTO',w:11,t:'n'},{h:'HH/UND',w:9,t:'n',ref:true},{h:'UA - TAREO',w:16},{h:'ESTADO',w:11,list:['Activa','Inactiva']},{h:'DESCONTABLE',w:13,list:['Sí','No']}],
+    [{h:'',w:2},{h:'CÓDIGO',w:9,t:'s'},{h:'DESCRIPCIÓN',w:52},{h:'UND',w:7},{h:'METRADO',w:11,t:'n'},{h:'HH PPTO',w:11,t:'n'},{h:'HH/UND',w:9,t:'n',ref:true},{h:'UA - TAREO',w:16},{h:'ESTADO',w:11,list:['Activa','Inactiva']},{h:'DESCONTABLE',w:13,list:['Sí','No']},{h:'BLOQUEADA',w:12,list:['Sí','No']}],
     rows,['Cómo editar las partidas',
      'Agrega filas nuevas con su código (grupo.número, p. ej. 10.39) y su descripción. Un código nuevo es una partida nueva.',
      'Corrige descripción, unidad, metrado, HH o cuenta UA en su fila. No cambies el código de una partida existente: se crearía otra.',
      'Para quitar una partida elige ESTADO = Inactiva. Borrar la fila no hace nada (la partida y sus horas se conservan).',
-     'ESTADO y DESCONTABLE solo aceptan los valores de su lista. Una celda vacía no cambia nada. HH/UND (en gris) es solo referencia: no se importa.',
+     'BLOQUEADA = Sí: la partida no aparece en el celular del capataz y un tareo que la use no se puede enviar. ESTADO, DESCONTABLE y BLOQUEADA solo aceptan los valores de su lista. Una celda vacía no cambia nada. HH/UND (en gris) es solo referencia: no se importa.',
      'Al importar verás qué cambia antes de guardar; un cambio de nombre pide confirmación. Se puede deshacer la última importación.'],{grp:j=>grp.has(j)})}
   catch(err){toast('No se pudo exportar: '+(err.message||err))}}
 
