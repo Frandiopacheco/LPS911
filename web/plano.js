@@ -2245,9 +2245,8 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     if(typeof plbReady!=='undefined'&&!plbReady){plbSel.innerHTML='<option value="">Cargando planos…</option>';setTimeout(()=>{if(box.isConnected)plbSync()},400);return}
     const pid=repl?repl.pisoId:$('#upiso',box).value;const cur=plbSel.value||(repl&&repl.plb?repl.plb.id:'');
     const L=[...PLB.values()].filter(x=>!x.eto&&!x.arch).sort((a,b)=>String(a.disc).localeCompare(b.disc)||String(a.cod).localeCompare(b.cod,'es',{numeric:true}));
-    if(!L.length&&!(repl&&repl.plb)&&!plbSel.dataset.auto){plbSel.dataset.auto='1';src.value='file';plbSync();return}
     const mine=L.filter(x=>x.pisoId===pid),oth=L.filter(x=>x.pisoId!==pid);const o=x=>`<option value="${esc(x.id)}"${x.id===cur?' selected':''}>${esc(x.cod||x.id)} · ${esc(x.tit||'')} (Rev. ${x.rev||1})</option>`;
-    plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía</option>';
+    plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía: elige «Archivo de la computadora»</option>';
     revSync()}
   function revSync(){const p=PLB.get(plbSel.value);if(!p){revSel.innerHTML='';$('#uplbn',box).textContent='';return}
     const R=[p.rev||1,...(p.revs||[]).map(r=>r.rev).reverse()];revSel.innerHTML=R.map((r,i)=>`<option value="${r}">Rev. ${r}${i===0?' (vigente)':''}</option>`).join('');
