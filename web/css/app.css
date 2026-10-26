@@ -833,6 +833,11 @@ section.card{scroll-margin-top:12px}
 td.d .qv{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;font:600 10px/1 var(--f-mono);color:var(--qc,#fff);pointer-events:none;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .meet td.d .qv{font-size:12px}
 td.d.sel{box-shadow:inset 0 0 0 2px var(--ink)}
+/* «Por metrado»: lo que se va arrastrando se ve como una barra antes de soltar (25-10-2026: antes casi no se notaba) */
+#gw.qm td.d.sel{background:var(--accent-soft)!important;box-shadow:inset 0 2px 0 var(--accent),inset 0 -2px 0 var(--accent)}
+#gw.qm td.d.sel.qs0{box-shadow:inset 0 2px 0 var(--accent),inset 0 -2px 0 var(--accent),inset 2px 0 0 var(--accent)}
+#gw.qm td.d.sel.qs1{box-shadow:inset 0 2px 0 var(--accent),inset 0 -2px 0 var(--accent),inset -2px 0 0 var(--accent)}
+#gw.qm td.d.sel.qs0.qs1{box-shadow:inset 0 0 0 2px var(--accent)}
 .cS{width:62px;min-width:62px}
 td.cS{font:12px var(--f-mono);text-align:right;padding-right:6px;color:var(--ink2);font-variant-numeric:tabular-nums}
 td.cS.neg{color:var(--bad);font-weight:600;background:var(--bad-soft)}
@@ -4561,3 +4566,7 @@ p.smline{display:block;border-left-color:var(--line)}
 .ts-tbtn{cursor:pointer}.ts-tbtn:focus-visible{outline:none;box-shadow:var(--ring)}
 .tco-dg button{font-weight:600}
 .tco-dg .t-lnk{display:inline}
+
+/* hitos: «Ver» resalta la cabecera del día (25-10-2026) */
+#grid th.hflash{box-shadow:inset 0 0 0 3px var(--warn);transition:box-shadow var(--t) var(--ease)}
+.lkqtip{position:fixed;z-index:60;transform:translate(-50%,-100%);background:var(--ink);color:var(--panel);font:600 11px var(--f-ui);padding:2px 7px;border-radius:var(--r-ctl);pointer-events:none;white-space:nowrap}

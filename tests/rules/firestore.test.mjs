@@ -36,6 +36,7 @@ test.beforeEach(async () => {
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
     await S('members/planner@obra.pe', { role: 'planner', name: 'Planner' });
     await S('members/plan@obra.pe', { role: 'area', name: 'Planner de obra', area: 'Planificación' });
+    await S('members/cproy@obra.pe', { role: 'area', name: 'Control de proyecto', area: 'Control de Proyecto' });
     await S('mp/n1', { tipo: 'part', name: 'Tabiquería', ini: '2026-10-05', fin: '2026-11-20' });
     await S('mpver/1', { n: 1, st: 'pend', by: 'planner@obra.pe', items: {} });
     await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
@@ -1658,7 +1659,7 @@ test('PER-1: el SC y el capataz escriben su cierre (live.close) solo hasta su ho
 // Hitos de inicio y fin (oct 2026): admin, editores y el área Planificación los crean y editan; todos los de LPS los ven
 test('hitos: admin, editores y Planificación los gestionan; el resto solo los ve', async () => {
   const H = { n: 'Llegan las UMA', tipo: 'ini', d: '2099-11-12', d0: '2099-11-12', piso: '', h: [], st: 'open' };
-  for (const who of [OWNER, 'editor@obra.pe', 'plan@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'hitos/h-' + who.replace(/\W/g, '')), H));
+  for (const who of [OWNER, 'editor@obra.pe', 'plan@obra.pe', 'cproy@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'hitos/h-' + who.replace(/\W/g, '')), H)); // «Control de proyecto» = Planificación (25-10-2026)
   for (const who of ['campo@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'calidad@obra.pe', 'planner@obra.pe']) await assertFails(setDoc(doc(user(who), 'hitos/h-x'), H));
   await assertSucceeds(updateDoc(doc(user('plan@obra.pe'), 'hitos/h-editorobrape'), { d: '2099-11-19' }));
   await assertFails(setDoc(doc(user('editor@obra.pe'), 'hitos/h-mal'), { ...H, tipo: 'otro' }));

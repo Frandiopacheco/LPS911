@@ -54,7 +54,8 @@ service cloud.firestore {
     // Calidad: un área de apoyo cuyo nombre contiene "calidad"
     function isCal() { return isArea() && areaOf().lower().matches('.*calidad.*'); }
     // Planificación (oct 2026): área de apoyo del planner; gestiona los hitos, no edita el lookahead
-    function isPlan() { return isArea() && areaOf().lower().matches('.*planific.*'); }
+    // área de planificación: «Planificación» o «Control de proyecto(s)» (así se llama en la obra, 25-10-2026)
+    function isPlan() { return isArea() && areaOf().lower().matches('.*(planific|control de proyecto).*'); }
     // Veedor: recorre la obra y registra lo que se ejecuta sin estar programado (no cambia nada más)
     function isVeedor() { return isMember() && !isOwner() && role() == 'veedor'; }
     // Trabajo no programado visto en obra: campo, editores, administrador, Calidad y veedores

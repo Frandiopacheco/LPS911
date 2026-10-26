@@ -14,7 +14,8 @@ function ensureHitos(){if(typeof db==='undefined'||!db||hitUn||(typeof TAR_ONLY=
   hitUn=fcol('hitos').onSnapshot(sn=>{HIT.clear();sn.docs.forEach(d=>HIT.set(d.id,{...d.data(),id:d.id}));HITV++;/* en la Sesión pull solo si el panel de hitos está abierto y nadie arrastra (redibujar a media sesión estorba) */if(U.tab==='look'||U.tab==='cli'||(U.tab==='pull'&&typeof PU!=='undefined'&&PU.hitos&&!PU.drag))requestRender()},
     e=>{console.warn('hitos',e&&e.code);hitUn=null})}
 /** área de apoyo «Planificación» (el planner): gestiona hitos; no edita el lookahead */
-const isPlanArea=()=>!!me&&me.role==='area'&&/planific/i.test(me.area||'');
+/* área de apoyo de planificación: «Planificación» o «Control de proyecto(s)» (25-10-2026: en la obra el área se llama así) */
+const isPlanArea=()=>!!me&&me.role==='area'&&/planific|control de proyecto/i.test(me.area||'');
 /** ¿puede crear o editar hitos aquí? (no en modo propuesta del SC, versión cliente ni versión guardada) */
 const canHito=()=>!!me&&(isAdmin||me.role==='editor'||isPlanArea())&&!(typeof PM==='function'&&PM())&&!U.cliv&&!(U.ver&&U.verMode==='ver');
 const HIT_T={ini:{t:'Inicio',l:'desde aquí recién se puede empezar',c:'hini'},fin:{t:'Fin',l:'hay que terminar antes',c:'hfin'}};
@@ -33,13 +34,21 @@ function hitMark(d){const L=hitByDay().get(d);if(!L)return'';const T=L.map(h=>`$
 function hitPillHtml(){const L=hitVis();const op=L.filter(h=>h.st!=='done');return L.length||canHito()?`<button class="ib hpill" data-hitlist="1" title="Hitos de inicio y de fin">◆ Hitos${op.length?` <b>${op.length}</b>`:''}</button>`:''}
 const hitDays=d=>{const t=todayIso();if(d===t)return'hoy';const n=typeof wdist==='function'?(d>t?wdist(t,d):-wdist(d,t)):0;return d>t?`faltan ${n} día${n===1?'':'s'} hábil${n===1?'':'es'}`:`hace ${-n} día${n===-1?'':'s'} hábil${n===-1?'':'es'}`};
 function hitRowHtml(h,go){const T=HIT_T[h.tipo]||HIT_T.fin;const mv=(h.h||[]).length;
-  return`<div class="hrow${h.st==='done'?' done':''}"><i class="hdot ${T.c}"></i><div class="hrt"><b>${esc(h.n||'(sin nombre)')}</b><small>${T.t} · ${fmtD(h.d)} · ${esc(hitPiso(h))}${h.st==='done'?` · cerrado${h.real?' el '+fmtD(h.real):''}`:' · '+hitDays(h.d)}${mv?` · movido ${mv} vez${mv>1?'es':''} (original ${fmtD(h.d0)})`:''}</small></div>${go?`<button data-do="go_${esc(h.id)}" title="Ir a la semana del hito">Ir</button>`:''}</div>`}
+  return`<div class="hrow${h.st==='done'?' done':''}"><i class="hdot ${T.c}"></i><div class="hrt"><b>${esc(h.n||'(sin nombre)')}</b><small>${T.t} · ${fmtD(h.d)} · ${esc(hitPiso(h))}${h.st==='done'?` · cerrado${h.real?' el '+fmtD(h.real):''}`:' · '+hitDays(h.d)}${mv?` · movido ${mv} vez${mv>1?'es':''} (original ${fmtD(h.d0)})`:''}</small></div>${go?`<button data-do="go_${esc(h.id)}" title="Llevar la grilla al día del hito">Ver</button>`:''}</div>`}
+/** «Ver» (25-10-2026: «Ir» cambiaba la primera semana de la vista y parecía que la grilla quedaba en blanco): si el día está en la ventana,
+    solo desplaza la grilla hasta él y lo resalta; si no, mueve la ventana lo justo para que el hito quede a la vista (al final si es futuro)
+    y avisa que «Hoy» vuelve. */
+function hitGo(h){const w=weekOf(h.d);const inWin=w>=U.week&&w<U.week+U.win;
+  if(!inWin){U.week=w<U.week?w:Math.max(curWeek(),w-U.win+1);saveUI();if(typeof gridRows!=='undefined')gridRows=null;
+    toast(`La vista llega ahora hasta la semana ${w} (hito «${h.n||''}»). Toca «Hoy» arriba para volver a la semana actual.`)}
+  requestRender();let n=0;const show=()=>{const th=$(`#grid th[data-dh="${h.d}"]`);if(!th){if(++n<20)setTimeout(show,60);return}
+    th.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});th.classList.add('hflash');setTimeout(()=>th.classList.remove('hflash'),2000)};setTimeout(show,60)}
 /** lista de hitos (píldora de la barra) */
 function hitListPop(btn){ensureHitos();const L=hitVis();const H={};
-  L.forEach(h=>{H['go_'+h.id]=()=>{U.week=weekOf(h.d);U.wkF=0;saveUI();requestRender()};if(canHito())H['ed_'+h.id]=()=>hitEdit(btn,h.id)});
+  L.forEach(h=>{H['go_'+h.id]=()=>hitGo(h);if(canHito())H['ed_'+h.id]=()=>hitEdit(btn,h.id)});
   if(canHito())H.add=()=>hitEdit(btn,null,todayIso());
   openPop(btn,`<div class="ph">Hitos${U.piso?' · '+esc(S.pis.get(U.piso)?.code||''):''}</div>${L.length?`<div class="hlist">${L.map(h=>hitRowHtml(h,true)+(canHito()?`<button class="hed" data-do="ed_${esc(h.id)}">Editar «${esc(h.n||'')}»…</button>`:'')).join('')}</div>`:'<div class="ptx">Todavía no hay hitos. Agrega uno con clic derecho en la cabecera de un día (en tablet, mantenla presionada).</div>'}
-    <div class="ptx">La revisión contra cada hito es manual: el rombo y la línea en la grilla marcan el día.</div>${canHito()?'<button data-do="add">◆ Agregar hito…</button>':''}`,H)}
+    <div class="ptx">«Ver» lleva la grilla al día del hito. La revisión contra cada hito es manual: el rombo y la línea en la grilla marcan el día.</div>${canHito()?'<button data-do="add">◆ Agregar hito…</button>':''}`,H)}
 /** ficha de los hitos de un día (tocar el rombo de la cabecera) */
 function hitDayPop(anchor,d){const L=hitByDay().get(d)||[];if(!L.length)return;const ed=canHito();const H={};
   L.forEach(h=>{if(!ed)return;H['ed_'+h.id]=()=>hitEdit(anchor,h.id);H['st_'+h.id]=()=>hitSetSt(h.id,h.st==='done'?'open':'done');H['ar_'+h.id]=()=>hitArch(h.id)});
