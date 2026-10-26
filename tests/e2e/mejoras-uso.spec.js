@@ -190,7 +190,7 @@ test('Lookahead: se abre en modo consulta; «Editar» habilita la edición', asy
   expect(await page.locator('#gw').evaluate(g => g.scrollLeft)).toBeGreaterThan(sl0);
   // Editar
   await page.click('#fedit');
-  await expect(page.locator('#fedit')).toContainText('Terminar edición');
+  await expect(page.locator('#fedit')).toContainText('Listo');
   await expect(name).not.toHaveAttribute('readonly', '');
   await page.locator('#gw').evaluate(g => { g.scrollLeft = 0; });
   await page.locator(`tr[data-a="e0"] td.d[data-d="${d}"]`).click();

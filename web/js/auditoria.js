@@ -282,7 +282,10 @@ function pickPiso(){if(U.piso&&S.pis.has(U.piso))return;if(U.pisoAll||S.pis.size
 /* Lookahead: panel "Filtros y vista" */
 function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidden=!U.lbMore;b.setAttribute('aria-expanded',U.lbMore?'true':'false');b.classList.toggle('on',!!U.lbMore);
   /* oct 2026: el globo cuenta también lo oculto que se está mostrando (vencidas, terminadas, faltan programar) */
-  const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf+[U.showPast,U.showDone,U.lkGh].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf-(U.changes?1:0)+[U.showPast,U.showDone].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  /* Control ▾: punto si se está viendo una versión o los cambios frente al congelado */
+  {const d=$('#fdn');if(d)d.hidden=!(U.ver||U.changes)}
+  {const fv=$('#fver'),fh=$('#fvh');if(fh&&fv)fh.hidden=fv.hidden&&(($('#fvsave')||{}).hidden!==false)}
   {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc)}
   {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML)}
   const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff);

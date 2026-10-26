@@ -7,6 +7,7 @@ test('Flujo: pisos, SC elegidos, sectores y clic a la grilla', async ({ page }) 
   await page.setViewportSize({ width: 1500, height: 850 });
   const errors = await openApp(page, { tab: 'look' });
   await page.evaluate(() => { U.piso = ''; U.sc = ''; render(); });
+  await page.click('#fmore'); // 25-10-2026: Grilla / Flujo va en Vista ▾
   await page.locator('#fview button[data-v="flujo"]').click();
   await expect(page.locator('#flw')).toBeVisible();
   await expect(page.locator('#gw')).toBeHidden();
@@ -44,6 +45,7 @@ test('Flujo: el SC también lo ve', async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1500, height: 850 });
   const errors = await openApp(page, { as: 'sc', tab: 'look' });
+  await page.click('#fmore'); // 25-10-2026: Grilla / Flujo va en Vista ▾
   await page.locator('#fview button[data-v="flujo"]').click();
   await expect(page.locator('#flw table.flt')).toBeVisible();
   noErrors(errors, 'flujo sc');
