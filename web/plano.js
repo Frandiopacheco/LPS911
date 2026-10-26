@@ -2062,7 +2062,8 @@ function dzAdd(btn){const sc=M.scDraw;const mine=myRole()==='sc'?myScs():null;
   openPop(btn,`<div class="ph">Programar el ${fmtD(M.date)}</div><div class="qrow"><input id="dzq" placeholder="Buscar ambiente o actividad" style="width:260px;text-align:left" aria-label="Buscar"></div><div class="dzpl">${list('')}</div>`,h);
   setTimeout(()=>{const i=$('#dzq');if(i){i.focus();i.oninput=()=>{const el=$('#pop .dzpl');if(el)el.innerHTML=list(i.value.trim().toLowerCase())}}},0)}
 function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
-  /* P23: presentación de «Semana» (solo lectura: va antes del candado del plan cerrado) */
+  /* «Semana» del panel derecho: solo lectura, va antes del candado del plan cerrado */
+  if(typeof semClick==='function'&&semClick(t))return true;
   if(lockStop(t))return true;
   if((b=g('[data-dzsc]'))){const c=b.dataset.dzsc;
     if((e.ctrlKey||e.metaKey)&&c&&myRole()!=='sc'){const L=scSel_();const n=L.includes(c)?L.filter(x=>x!==c):[...L,c];M.scDraw=n[0]||'';M.scX=n.slice(1)}
