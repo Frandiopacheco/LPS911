@@ -92,3 +92,7 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 
 ## Asistente de programación (25-10-2026, decidido con el dueño)
 - La píldora `#fmxp` («Faltan programar» hasta el 25-10-2026) ahora es **«Asistente de prog.»** (`U.lkGh`) y se ve siempre (salvo en la vista cliente), con «· N por programar» y, encendido, «· N ✓ en Matriz». **Apagado no se ve nada**: ni filas fantasma, ni chips de la Matriz, ni la tira de flujos (`FSTRIP` solo con `U.lkGh`). Con búsqueda o filtros se enciende igual (se ve la tira) y avisa que las filas fantasma necesitan quitar los filtros (`LK_GHOK`).
+## Sentido del arrastre (25-10-2026, decidido con el dueño)
+- **Por días:** arrastrar hacia la derecha agrega días y hacia la izquierda los quita (`paint.d0`/`paint.dir`, `paintDir`), en cualquier fila que se recorra; lo que se va a quitar se ve en rojo (`td.d.pdel`). Un toque sin arrastrar sigue alternando el día. Al agregar se siguen saltando los no laborables.
+- **Por metrado:** a la derecha abre el menú de reparto (como antes); a la izquierda borra directo esos días con su cantidad (`qsel.del`, `td.qdel` en rojo y etiqueta «Borrar N días»), con Deshacer.
+- **Rendimiento al catálogo:** al escribirlo en «Por personal» se pone al instante en `MX.cat` y se rehace la grilla (`gridRows=null`); el snapshot de `mcat` también redibuja el Lookahead en «Por personal» solo si cambió algún rendimiento (`mxRendSig`).

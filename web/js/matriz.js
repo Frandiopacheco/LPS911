@@ -26,8 +26,11 @@ const mnk=s=>{const k=String(s||'');let r=MNK.get(k);if(r!==undefined)return r;
 /* se carga al abrir la pestaña (no pesa en el arranque de los demás) */
 /* el catálogo también lo usa el lookahead (nombres de actividad): se carga aparte y antes que el resto de la matriz */
 let mcatSub=null;
+const mxRendSig=()=>{let s='';for(const[id,c]of MX.cat)if(c&&c.rend>0)s+=id+':'+c.rend+';';return s};
 function ensureMcat(){if(mcatSub||!db)return;
-  mcatSub=fcol('mcat').onSnapshot(sn=>{MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn)},
+  mcatSub=fcol('mcat').onSnapshot(sn=>{const rs0=mxRendSig();MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn);
+    /* rendimientos del catálogo (25-10-2026): el Lookahead en «Por personal» los usa en todas sus filas; solo se redibuja si cambió alguno */
+    else if(ready&&U.tab==='look'&&U.qmode==='personal'&&mxRendSig()!==rs0){if(typeof gridRows!=='undefined')gridRows=null;requestRender()}},
     err=>{MX.err=err&&err.code||'error';MX.ld.cat=true;if(ready&&U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(mcatSub)mcatSub();mcatSub=null;MX.cat.clear();MX.ld.cat=false;MX.v++})}
 /* estados por ambiente: también los usa el Lookahead (alertas de lo terminado que sigue programado) */
