@@ -309,7 +309,7 @@ function cliPpcAoa(){const vset=new Set(visPisos().map(p=>p.id));const{W}=cliPpc
   for(const o of W)sum.push(['S'+o.w+(o.cur?' (en curso)':''),o.ver.label||'',o.n,o.ok,o.ppc==null?'—':Math.round(o.ppc*1000)/10+'%']);
   sum.push([],['DETALLE']);hdr.push(sum.length);sum.push(['SEMANA','PISO','ÍTEM','AMBIENTE','ACTIVIDAD','SUBCONTRATISTA','DÍAS EN LA SEMANA','CUMPLIDO']);
   for(const o of W){const v=CLVD.get(o.ver.id);for(const i of o.items.slice().sort((a,b)=>(a.pid>b.pid?1:a.pid<b.pid?-1:0))){const a=v&&v.amb.get(i.x.ambId);const pi=v&&v.pis.get(i.pid);
-    sum.push(['S'+o.w,pi?pi.code:'',a?a.code:'',a?a.name:'',i.x.name||'',conOf(i.x.sc).name,i.days.map(fmtS).join(' '),i.ok?'Sí':'No'])}}
+    sum.push(['S'+o.w,pi?pi.code:'',a?a.code:'',a?a.name:'',i.x.name||'',conOf(i.x.sc).name,i.days.map(fmtS).join(' '),i.st==='ok'?'Sí':i.st==='no'?'No':'Pendiente'])}} /* C-05 (tanda 1, H04b): lo aún sin evaluar sale «Pendiente», no «No» */
   return{sum,hdr,cols:[{wch:12},{wch:30},{wch:12},{wch:26},{wch:32},{wch:16},{wch:22},{wch:10}]}}
 async function cliPpcXlsx(){try{await loadXlsx();const X=window.XLSX;const hs={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3A4D'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}};
   const pc=cliPpcAoa();const ws=X.utils.aoa_to_sheet(pc.sum);ws['!cols']=pc.cols;pc.hdr.forEach(r=>{for(let c=0;c<pc.sum[r].length;c++){const k=X.utils.encode_cell({r,c});if(ws[k])ws[k].s=hs}});

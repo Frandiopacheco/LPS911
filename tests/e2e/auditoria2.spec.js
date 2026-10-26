@@ -49,7 +49,7 @@ test('al publicar, el lookahead mueve la actividad y marca el dÃ­a que no fue (â
   await page.locator('#pop [data-nk="per"]').click();
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
-  await page.locator('#mpanel [data-pub]').click(); await page.locator('#pop [data-do="si"]').click();
+  await page.locator('#mbar [data-pub]').click(); await page.locator('#pop [data-do="si"]').click();
   await expect.poll(() => page.evaluate(d => (window.__dbGet('acts', 'e0').rpl || {})[d]?.m, MANANA)).toBe('Falta de personal');
   await page.evaluate(() => goTab('look'));
   const cell = page.locator(`#grid tr[data-a="e0"] td.d[data-d="${MANANA}"]`);

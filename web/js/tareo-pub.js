@@ -48,7 +48,7 @@ const tpDates=(a,b)=>{const L=[];for(let d=a;d<=b&&L.length<400;d=addD(d,1))L.pu
 const tpMon=f=>addD(f,-((pd(f).getUTCDay()+6)%7));
 /* diferencias contra la versión anterior (dif): texto, lista o resumen; forma libre (la arma el servidor) */
 function tpDif(d){if(d==null||d==='')return'';if(typeof d==='string')return`<div class="tp-dif">${esc(d)}</div>`;
-  const it=x=>typeof x==='string'?esc(x):x&&typeof x==='object'?esc(x.msg||x.txt||[x.dni,x.nom||[x.ape,x.nomb].filter(Boolean).join(' '),x.campo||x.k,x.antes!=null||x.despues!=null?`${x.antes??'—'} → ${x.despues??'—'}`:''].filter(v=>v!=null&&v!=='').join(' · ')):esc(String(x));
+  const it=x=>typeof x==='string'?esc(x):x&&typeof x==='object'?esc(x.msg||x.txt||[x.dni,x.nom||[x.ape,x.nomb].filter(Boolean).join(' '),x.campo==='dct'?`descuento ${(S.tpc&&S.tpc.get(x.pc)||{}).cod||x.pc||''} a ${typeof tScN==='function'?tScN(x.sc):x.sc}`:x.campo||x.k,x.antes!=null||x.despues!=null?`${x.antes??'—'} → ${x.despues??'—'}`:''].filter(v=>v!=null&&v!=='').join(' · ')):esc(String(x));
   if(Array.isArray(d))return d.length?`<ul class="tp-dif">${d.slice(0,60).map(x=>`<li>${it(x)}</li>`).join('')}${d.length>60?`<li class="note">… y ${d.length-60} más</li>`:''}</ul>`:'<div class="tp-dif note">Sin cambios.</div>';
   if(typeof d==='object'){const E=Object.entries(d).filter(([,v])=>v!=null&&!(Array.isArray(v)&&!v.length));if(!E.length)return'<div class="tp-dif note">Sin cambios.</div>';
     return`<ul class="tp-dif">${E.map(([k,v])=>`<li><b>${esc(k)}:</b> ${Array.isArray(v)?v.slice(0,30).map(it).join('; ')+(v.length>30?` … (${v.length})`:''):typeof v==='object'?esc(Object.entries(v).map(([a,b])=>`${a} ${typeof b==='object'?JSON.stringify(b):b}`).join(' · ')):esc(String(v))}</li>`).join('')}</ul>`}
@@ -290,13 +290,13 @@ function tpkPublicaciones(main){
       <td data-l="Versión">${x.vig?tpVChip(x.vig,x.vig):''}${ab?` <span class="tp-v warn" title="${esc(ab.motivo||'')}">En rectificación</span>`:''}</td>
       ${num(t?t.obreros:'…','Obreros')}${num(t?t.pres:'…','Vinieron')}${num(t?toH(t.hh):'…','HH')}${num(t?toH(t.he):'…','HE')}
       <td data-l="Publicó" class="note">${d?esc(tpWho(d.by,d.byN))+' · '+esc(tpAt(d.at)):''}</td>
-      <td class="t-r" data-l=""><button class="ib" data-tpkv="${esc(tpId(x.f,x.vig))}">Ver</button> <button class="ib" data-tpkx="${esc(x.f)}"${busy?' disabled':''}>Excel</button></td></tr>${old}`}).join('');
+      <td class="t-r" data-l=""><button class="ib" data-tpkv="${esc(tpId(x.f,x.vig))}">Ver</button> <button class="ib" data-tpkn="${esc(x.f)}"${busy?' disabled':''} title="Formato nuevo">Excel</button> <button class="ib" data-tpkx="${esc(x.f)}"${busy?' disabled':''} title="Tareo semanal de antes">Anterior</button></td></tr>${old}`}).join('');
   main.innerHTML=`<div class="wrap tp">${pageHead('Publicaciones del tareo',esc(tpkMesN(m)),`<span class="to-date"><button class="ib" id="tpkPrev" aria-label="Mes anterior">‹</button><input class="tin" type="month" id="tpkMes" value="${esc(m)}" max="${esc(hoy.slice(0,7))}" aria-label="Mes"><button class="ib" id="tpkNext" aria-label="Mes siguiente"${m>=hoy.slice(0,7)?' disabled':''}>›</button></span>`)}
-    <div class="card tp-x" id="tpkX"><div class="tp-bh"><b>Descargar Excel</b><span class="note">Formato del tareo semanal (una hoja por día, «Resumen HH» y «Tareo Semana»), siempre de la versión vigente de cada día.</span></div>
+    <div class="card tp-x" id="tpkX"><div class="tp-bh"><b>Descargar Excel</b><span class="note">Siempre de la versión vigente de cada día. «Excel» es el formato nuevo (Resumen, RR.HH., Costos, Detalle…); «Formato anterior» es el tareo semanal de antes (una hoja por día, «Resumen HH» y «Tareo Semana»).</span></div>
       <div class="tp-xg">
-        <div class="tp-xi"><span class="tp-xl">Un día</span><input class="tin" type="date" id="tpkXd" data-fk="tpk:xd" value="${esc(TPK.xd)}" max="${esc(hoy)}" aria-label="Día"><button class="ib pri" id="tpkXdB"${busy?' disabled':''}>Excel del día</button></div>
-        <div class="tp-xi"><span class="tp-xl">Semana</span><input class="tin" type="date" id="tpkXs" data-fk="tpk:xs" value="${esc(TPK.xs)}" max="${esc(hoy)}" aria-label="Un día de la semana"><span class="note" id="tpkXsR">${esc(fmtD(ws))} – ${esc(fmtD(we))}</span><button class="ib pri" id="tpkXsB"${busy?' disabled':''}>Excel de la semana</button></div>
-        <div class="tp-xi"><span class="tp-xl">Rango</span><input class="tin" type="date" id="tpkXa" data-fk="tpk:xa" value="${esc(TPK.xa)}" max="${esc(hoy)}" aria-label="Desde"><span class="note">a</span><input class="tin" type="date" id="tpkXb" data-fk="tpk:xb" value="${esc(TPK.xb)}" max="${esc(hoy)}" aria-label="Hasta"><button class="ib pri" id="tpkXrB"${busy?' disabled':''}>Excel del rango</button></div>
+        <div class="tp-xi"><span class="tp-xl">Un día</span><input class="tin" type="date" id="tpkXd" data-fk="tpk:xd" value="${esc(TPK.xd)}" max="${esc(hoy)}" aria-label="Día"><span class="tp-xb"><button class="ib pri" id="tpkXdN"${busy?' disabled':''}>Excel</button><button class="ib" id="tpkXdB"${busy?' disabled':''}>Formato anterior</button></span></div>
+        <div class="tp-xi"><span class="tp-xl">Semana</span><input class="tin" type="date" id="tpkXs" data-fk="tpk:xs" value="${esc(TPK.xs)}" max="${esc(hoy)}" aria-label="Un día de la semana"><span class="note" id="tpkXsR">${esc(fmtD(ws))} – ${esc(fmtD(we))}</span><span class="tp-xb"><button class="ib pri" id="tpkXsN"${busy?' disabled':''}>Excel</button><button class="ib" id="tpkXsB"${busy?' disabled':''}>Formato anterior</button></span></div>
+        <div class="tp-xi"><span class="tp-xl">Rango</span><input class="tin" type="date" id="tpkXa" data-fk="tpk:xa" value="${esc(TPK.xa)}" max="${esc(hoy)}" aria-label="Desde"><span class="note">a</span><input class="tin" type="date" id="tpkXb" data-fk="tpk:xb" value="${esc(TPK.xb)}" max="${esc(hoy)}" aria-label="Hasta"><span class="tp-xb"><button class="ib pri" id="tpkXrN"${busy?' disabled':''}>Excel</button><button class="ib" id="tpkXrB"${busy?' disabled':''}>Formato anterior</button></span></div>
       </div>${busy?'<div class="note">Armando el Excel…</div>':''}</div>
     ${TPK.err?`<div class="callout t-warn">No se pudieron leer las publicaciones (${esc(TPK.err)}).</div>`:''}
     <div class="card"><div class="tscroll"><table class="t t-tbl tp-list" id="tpkList"><thead><tr><th>Fecha</th><th>Versión</th><th class="t-r">Obreros</th><th class="t-r">Vinieron</th><th class="t-r">HH</th><th class="t-r">HE</th><th>Publicó</th><th></th></tr></thead>
@@ -309,7 +309,10 @@ function tpkPublicaciones(main){
   $('#tpkXdB').onclick=()=>tpxBajar('dia',TPK.xd,TPK.xd);
   $('#tpkXsB').onclick=()=>tpxBajar('semana',ws,we);
   $('#tpkXrB').onclick=()=>{const a=TPK.xa<=TPK.xb?TPK.xa:TPK.xb,b=TPK.xa<=TPK.xb?TPK.xb:TPK.xa;tpxBajar('rango',a,b)};
-  $('#tpkList').onclick=e=>{const v=e.target.closest('[data-tpkv]');if(v){TPK.det=v.dataset.tpkv;requestRender();return}const x=e.target.closest('[data-tpkx]');if(x)tpxBajar('dia',x.dataset.tpkx,x.dataset.tpkx)}}
+  /* formato nuevo (25-10-2026): el mismo Excel de RR.HH. y Costos */
+  const rng=()=>[TPK.xa<=TPK.xb?TPK.xa:TPK.xb,TPK.xa<=TPK.xb?TPK.xb:TPK.xa];
+  $('#tpkXdN').onclick=()=>tsxBajar('pub',TPK.xd,TPK.xd,'dia');$('#tpkXsN').onclick=()=>tsxBajar('pub',ws,we,'sem');$('#tpkXrN').onclick=()=>{const[a,b]=rng();tsxBajar('pub',a,b,'rango')};
+  $('#tpkList').onclick=e=>{const v=e.target.closest('[data-tpkv]');if(v){TPK.det=v.dataset.tpkv;requestRender();return}const x=e.target.closest('[data-tpkx]');if(x){tpxBajar('dia',x.dataset.tpkx,x.dataset.tpkx);return}const n=e.target.closest('[data-tpkn]');if(n)tsxBajar('pub',n.dataset.tpkn,n.dataset.tpkn,'dia')}}
 
 /* detalle de una publicación (cualquier versión) */
 function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split('_v')[0];
@@ -329,7 +332,7 @@ function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split
   const fu=Array.isArray(d.fuentes)?d.fuentes:[];
   main.innerHTML=`<div class="wrap tp">${pageHead(`Publicación del ${fmtD(f)}`,esc(toDia(f)),back)}
     <div class="tp-bar"><div class="tp-st"><span class="tp-vs" id="tpkVs">${vs.map(v=>`<button class="tp-ch${v===+d.v?' on':''}" data-tpkdv="${esc(tpId(f,v))}">v${v}${v===vig?' · vigente':' · sustituida'}</button>`).join('')}</span></div>
-      <div class="tp-acts"><button class="ib pri" id="tpkXv"${TPK.busy?' disabled':''}>Excel de esta versión (v${esc(String(d.v))})</button></div></div>
+      <div class="tp-acts">${+d.v===vig?`<button class="ib pri" id="tpkXvN"${TPK.busy?' disabled':''}>Excel</button>`:''}<button class="ib${+d.v===vig?'':' pri'}" id="tpkXv"${TPK.busy?' disabled':''}>${+d.v===vig?'Formato anterior':`Excel de esta versión (v${esc(String(d.v))}, formato anterior)`}</button></div></div>
     <div class="note tp-at" id="tpkMeta">Versión ${esc(String(d.v))}${+d.v===vig?' (vigente)':' (sustituida)'} · publicó ${esc(tpWho(d.by,d.byN))} · ${esc(tpAt(d.at))}${d.motivo?` · motivo: «${esc(d.motivo)}»`:''}${fu.length?` · ${fu.length} ${fu.length===1?'tareo':'tareos'}: ${esc(fu.map(x=>x.capN||tCapName(x.cap)||x.cap).join(', '))}`:''}</div>
     <div class="lqtiles tp-tiles"><div class="lqtile"><span>Obreros</span><b>${t.obreros}</b></div><div class="lqtile" style="--c:var(--ok)"><span>Vinieron</span><b>${t.pres}</b></div>
       <div class="lqtile" style="--c:var(--bad)"><span>No vinieron</span><b>${t.aus}</b><small>${tpPorMot(t.porMot)}</small></div><div class="lqtile" style="--c:var(--accent)"><span>HH</span><b>${toH(t.hh)}</b></div>
@@ -344,7 +347,7 @@ function tpkDetalle(main){const id=TPK.det;const d=TPUB.get(id);const f=id.split
     </div></div>`;
   $('#tpkBack').onclick=()=>{TPK.det='';requestRender()};
   $('#tpkVs').onclick=e=>{const b=e.target.closest('[data-tpkdv]');if(b){TPK.det=b.dataset.tpkdv;requestRender()}};
-  $('#tpkXv').onclick=()=>tpxBajar('dia',f,f,d)}
+  $('#tpkXv').onclick=()=>tpxBajar('dia',f,f,d);const xn=$('#tpkXvN');if(xn)xn.onclick=()=>tsxBajar('pub',f,f,'dia')}
 
 /* ======================================================================
    Excel de costos (xlsx-js-style, loadXlsx de exportes.js). Imita el archivo que hoy recibe costos (docs/ia/tareo.md):

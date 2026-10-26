@@ -82,7 +82,7 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tpc','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','pcrit','pav','pull'];
+  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tperbk','tpc','tpcbk','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','pcrit','pav','pull','hitos','frev'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
@@ -113,9 +113,39 @@ async function batchWrites(writes,onProg){let i=0,done=0;while(i<writes.length){
    por registro en paralelo (20 a la vez) y se saltan solo los rechazados. */
 const IMP_AUTHOR={lhlog:0,mlog:1,mcatp:1};/* 1: además debe venir pendiente (st:'pend') para poder crearse */
 const IMP_ONCE=new Set(['lhlog','mver']);
+/* oct 2026: la carga va por la API REST de Firestore (documents:batchWrite) con el token del usuario, no por el SDK. Con el SDK cada
+   lote pasaba por la caché local (IndexedDB, sincronizada entre pestañas) y por todas las suscripciones abiertas, uno tras otro:
+   ~30 000 registros tardaban decenas de minutos. batchWrite aplica las reglas registro por registro (un rechazo no tumba el lote,
+   ya no hace falta reintentar de a uno) y se envían varios lotes a la vez. Las suscripciones reciben los cambios del servidor
+   como cualquier cambio de otro usuario. Si la API REST no responde, se sigue con el SDK como antes. */
+function fsVal(v){if(v===null||v===undefined)return{nullValue:null};const t=typeof v;
+  if(t==='boolean')return{booleanValue:v};if(t==='string')return{stringValue:v};
+  if(t==='number')return Number.isSafeInteger(v)&&!Object.is(v,-0)?{integerValue:String(v)}:{doubleValue:v};
+  if(Array.isArray(v))return{arrayValue:v.length?{values:v.map(fsVal)}:{}};
+  if(t==='object'){const f={};for(const k in v)if(v[k]!==undefined)f[k]=fsVal(v[k]);return{mapValue:{fields:f}}}
+  return{nullValue:null}}
+const restOk=()=>typeof window.__E2E==='undefined'&&!!(auth&&auth.currentUser&&!auth.currentUser.isAnonymous&&window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.projectId);
+async function restWrites(ws,onDone,onSkip){const pid=window.FIREBASE_CONFIG.projectId;const base=`projects/${pid}/databases/(default)/documents`;
+  const url=`https://firestore.googleapis.com/v1/${base}:batchWrite`;
+  /* lotes de hasta 500 registros y ~5 MB */
+  const lots=[];let cur=[],sz=0;for(const w of ws){const body={update:{name:`${base}/${w[0]}/${w[1]}`,fields:fsVal(w[2]).mapValue.fields}};const s=JSON.stringify(body).length;
+    if(cur.length&&(cur.length>=500||sz+s>5e6)){lots.push(cur);cur=[];sz=0}cur.push([w,body]);sz+=s}if(cur.length)lots.push(cur);
+  const send=async lot=>{let todo=lot;for(let tr=0;todo.length;tr++){
+      const tok=await auth.currentUser.getIdToken();let r;
+      try{r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify({writes:todo.map(x=>x[1])})})}catch(e){r=null}
+      if(!r||r.status===429||r.status>=500){if(tr>=5)throw new Error('sin respuesta de Firestore');await new Promise(ok=>setTimeout(ok,800*2**tr));continue}
+      if(!r.ok){const e=new Error('Firestore '+r.status);e.http=r.status;throw e}
+      const st=((await r.json()).status)||[];const again=[];
+      todo.forEach((x,i)=>{const c=(st[i]&&st[i].code)||0;if(!c)onDone(1);else if(c===7){onSkip(x[0][0]);onDone(1)}else again.push(x)});
+      if(again.length&&tr>=5)throw new Error('Firestore no aceptó '+again.length+' registros');
+      if(again.length)await new Promise(ok=>setTimeout(ok,800*2**tr));todo=again}};
+  let k=0;const worker=async()=>{while(k<lots.length)await send(lots[k++])};
+  await Promise.all(Array.from({length:Math.min(6,lots.length)},worker))}
 async function importWrites(writes,onProg){const skip=new Map();const sk=(c,n)=>skip.set(c,(skip.get(c)||0)+(n||1));
   const my=String(me&&me.email||'').toLowerCase();let done=0;const prog=n=>{done+=n;onProg&&onProg(done)};
   const by=new Map();writes.forEach(w=>{if(!by.has(w[0]))by.set(w[0],[]);by.get(w[0]).push(w)});
+  /* 1) se descartan antes lo que las reglas no dejarán escribir (historiales de otros autores, lo que solo se crea una vez) */
+  const go=[];
   for(const[col,ws0]of by){let ws=ws0;
     if(col in IMP_AUTHOR||IMP_ONCE.has(col)){let have=null;
       const mine=w=>{const d=w[2]||{};return String(d.by||'').toLowerCase()===my&&(!IMP_AUTHOR[col]||d.st==='pend')};
@@ -123,6 +153,15 @@ async function importWrites(writes,onProg){const skip=new Map();const sk=(c,n)=>
       if(col==='lhlog'){const k=ws.filter(mine);sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}
       if(ws.length){try{have=new Set((await fcol(col).get()).docs.map(d=>d.id))}catch(e){have=null}}
       if(have){const k=ws.filter(w=>have.has(w[1])?!IMP_ONCE.has(col):(col in IMP_AUTHOR?mine(w):true));sk(col,ws.length-k.length);prog(ws.length-k.length);ws=k}}
+    go.push(...ws)}
+  if(!go.length)return skip;
+  /* 2) todo junto por la API REST (varios lotes a la vez) */
+  if(restOk()){let sent=0;const rs=new Map();
+    try{await restWrites(go,n=>{sent+=n;prog(n)},c=>rs.set(c,(rs.get(c)||0)+1));rs.forEach((n,c)=>sk(c,n));return skip}
+    catch(e){/* la API REST falló: todo va otra vez por el SDK (reescribir lo ya cargado no duplica nada) */prog(-sent)}}
+  /* 3) por el SDK, como antes */
+  const by2=new Map();go.forEach(w=>{if(!by2.has(w[0]))by2.set(w[0],[]);by2.get(w[0]).push(w)});
+  for(const[col,ws]of by2){
     for(let i=0;i<ws.length;i+=400){const part=ws.slice(i,i+400);
       try{await batchWrites(part);prog(part.length)}
       catch(e){if(!/permission/i.test(String(e&&(e.code||e.message)||e)))throw e;
@@ -154,22 +193,23 @@ function dayDataArch(dates,vset,rows){const seen=new Set(rows.map(r=>r.x.id+'|'+
     for(const[id,rc]of Object.entries(doc.recs||{})){if(!rc||!rc.status||rc.late||actOf(id)||seen.has(id+'|'+doc.date)||!rc.ambId)continue;
       const x={id,ambId:rc.ambId,sc:rc.sc||'',name:rc.nm||'(actividad borrada)',und:rc.und||'',days:[doc.date],gone:true};const c=ctx(x);if(!c)continue;
       rows.push({...c,x,d:doc.date,rc:{...rc},sched:true,sc:x.sc,arch:true});seen.add(id+'|'+doc.date)}}}
-const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción'};
+const ARCN={pisos:'Piso',sectors:'Sector',ambientes:'Ambiente',acts:'Actividad',restr:'Restricción',contractors:'Subcontratista'};
 let ARCQ='';
-function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
+function archList(){const L=[];for(const[col,k]of[['pisos','pis'],['sectors','sec'],['ambientes','amb'],['acts','act'],['restr','res'],['contractors','con']])for(const v of ARCH[k].values())L.push({col,v});return L.sort((a,b)=>(b.v.arch.t||0)-(a.v.arch.t||0))}
 function archLabel(col,v){if(col==='acts'){const a=ambOf(v.ambId);return`${esc(v.name||'sin nombre')} <span class="mu">· ${esc(conOf(v.sc).name)} · ${esc(a?a.code:'')}${(v.days||[]).length?' · '+esc(rngTxt(v.days)):''}</span>`}
   if(col==='restr'){const x=actOf(v.actId);return`${esc(v.type||'')}${v.desc?' · '+esc(v.desc):''} <span class="mu">· ${esc(x?x.name:'sin actividad')}${v.resp?' · '+esc(v.resp):''}</span>`}
+  if(col==='contractors')return`${esc(v.name||'sin nombre')}${v.partida?` <span class="mu">· ${esc(v.partida)}</span>`:''}`;
   if(col==='ambientes')return`${esc(v.code||'')} ${esc(v.name||'')}`;return`${esc(v.code||'')} · ${esc(v.name||'')}`}
 function archCard(){if(!canWrite||PM())return'';const L=archList();const q=ARCQ.trim().toLowerCase();const F=q?L.filter(o=>(String(o.v.name||'')+' '+String(o.v.code||'')+' '+(o.col==='acts'?conOf(o.v.sc).name:'')+(o.col==='restr'?' '+(o.v.type||'')+' '+(o.v.desc||'')+' '+(o.v.resp||''):'')).toLowerCase().includes(q)):L;
   return`<div class="card" id="arccard"><h2>Papelera <span class="sub">${L.length} elemento${L.length===1?'':'s'} eliminado${L.length===1?'':'s'}</span></h2><div class="pad">
-   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
+   <p class="note" style="margin-top:0">Lo que eliminas del Lookahead (y los subcontratistas que quitas en Configuración) queda aquí: no se pierde su historial (PPC, registros, fotos) y puedes restaurarlo. Restaurar un ambiente, sector o piso trae también lo que se eliminó junto con él.</p>
    ${L.length?`<input class="tin" id="arcq" placeholder="Buscar por nombre, código o subcontratista" value="${esc(ARCQ)}" style="width:min(420px,100%);margin-bottom:8px">
    <div class="tscroll"><table class="t"><thead><tr><th>Tipo</th><th>Elemento</th><th>Eliminado</th><th></th></tr></thead><tbody>
    ${F.slice(0,150).map(({col,v})=>`<tr><td>${ARCN[col]}</td><td>${archLabel(col,v)}</td><td class="mu">${esc(fmtD(ldt(v.arch.t)))} ${hhmm(v.arch.t)} · ${esc((v.arch.n||v.arch.by||'').split(' ')[0])}</td><td><button class="ib" data-arcr="${col}|${esc(v.id)}" style="height:26px;font-size:12px">Restaurar</button></td></tr>`).join('')}
    </tbody></table></div>${F.length>150?`<p class="note">Se muestran 150 de ${F.length}. Usa el buscador.</p>`:''}`:'<p class="note">Vacía.</p>'}</div></div>`}
 function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const t=v.arch.t;const ops=[];const un=(c,x)=>{const n={...strip(x),id:x.id};delete n.arch;ops.push(op(c,x.id,n))};
   // hacia arriba: lo que lo contiene
-  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a)}
+  if(col==='acts'){const a=ARCH.amb.get(v.ambId);if(a)un('ambientes',a);const c=ARCH.con.get(v.sc);if(c)un('contractors',c)/* su SC, si está en la Papelera (C-28) */}
   const amb=col==='ambientes'?v:col==='acts'?ambOf(v.ambId):null;const sec=col==='sectors'?v:amb?secOf(amb.sectorId):null;
   if(sec&&col!=='sectors'&&ARCH.sec.has(sec.id))un('sectors',sec);const pid=col==='pisos'?id:sec?sec.pisoId:null;if(pid&&col!=='pisos'&&ARCH.pis.has(pid))un('pisos',ARCH.pis.get(pid));
   un(col,v);
@@ -184,8 +224,10 @@ function archRestore(col,id){const v=getDoc(col,id);if(!v||!v.arch)return;const 
 
 /* ---- calendario de la obra: sábado laborable y feriados ---- */
 let CALP=undefined,CALS=null;
-function calInfo(){const p=S.meta.get('project');if(p!==CALP||!CALS){CALP=p;const c=(p&&p.cal)||{};CALS={sat:c.sat!==false,hol:new Map((c.hol||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Feriado']))}}return CALS}
-function nwReason(d){if(!d)return'';const dw=pd(d).getUTCDay();if(dw===0)return'Domingo';const c=calInfo();if(c.hol.has(d))return'Feriado: '+c.hol.get(d);if(dw===6&&!c.sat)return'Sábado no laborable';return''}
+/* C-08 (tanda 1): cal.work = fechas que «se trabajan» aunque sean domingo, feriado o sábado no laborable ([{d, n}]): son laborables para
+   todo (se publica el plan, se mide el cierre, cuentan en el PPC). Misma regla que isWork de functions/lib.js */
+function calInfo(){const p=S.meta.get('project');if(p!==CALP||!CALS){CALP=p;const c=(p&&p.cal)||{};CALS={sat:c.sat!==false,hol:new Map((c.hol||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Feriado'])),work:new Map((c.work||[]).filter(o=>o&&o.d).map(o=>[o.d,o.n||'Se trabaja']))}}return CALS}
+function nwReason(d){if(!d)return'';if(calInfo().work.has(d))return'';const dw=pd(d).getUTCDay();if(dw===0)return'Domingo';const c=calInfo();if(c.hol.has(d))return'Feriado: '+c.hol.get(d);if(dw===6&&!c.sat)return'Sábado no laborable';return''}
 const isWork=d=>!nwReason(d);
 function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return y+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0')}
 function holPeru(y){const e=easter(y);const F=[['01-01','Año Nuevo'],['05-01','Día del Trabajo'],['06-07','Batalla de Arica y Día de la Bandera'],['06-29','San Pedro y San Pablo'],['07-23','Día de la Fuerza Aérea'],['07-28','Fiestas Patrias'],['07-29','Fiestas Patrias'],['08-06','Batalla de Junín'],['08-30','Santa Rosa de Lima'],['10-08','Combate de Angamos'],['11-01','Todos los Santos'],['12-08','Inmaculada Concepción'],['12-09','Batalla de Ayacucho'],['12-25','Navidad']];
@@ -198,12 +240,17 @@ function holParse(txt){const out=[],bad=[];String(txt||'').split('\n').map(s=>s.
 function calCard(){const c=P().cal||{};const ro=canWrite&&!PM()?'':' disabled';const y=+todayIso().slice(0,4);const up=(c.hol||[]).filter(o=>o.d>=todayIso()).slice(0,3);
   return`<div class="card"><h2>Calendario de la obra</h2><div class="pad">
    <label class="chk"><input type="checkbox" data-cal="sat"${c.sat!==false?' checked':''}${ro}> El sábado es día laborable</label>
-   <p class="note">Feriados y días no laborables de la obra (uno por línea: <b>AAAA-MM-DD Nombre</b>). Se ven rayados en el Lookahead y se saltan al desplazar, reprogramar o contar días hábiles. Si un feriado se va a trabajar, igual puedes programarlo.</p>
+   <label class="chk"><input type="checkbox" data-cal="pskip"${c.pskip!==false?' checked':''}${ro}> Al pintar días, saltar no laborables</label>
+   <label class="chk" title="Al poner el metrado total de una actividad (o cambiar sus días), se reparte parejo en los días programados desde mañana. Si editas la cantidad de un día, esa fila pasa a reparto manual."><input type="checkbox" data-cal="qauto"${c.qauto!==false?' checked':''}${ro}> Repartir el metrado solo en los días programados</label>
+   <p class="note">Al marcar días con el mouse o el dedo en el Lookahead, los domingos, feriados y sábados no laborables quedan sin programar. Para trabajar uno: clic derecho en la cabecera del día (en tablet, mantenla presionada) › «Trabajar este día».</p>
+   <p class="note">Feriados y días no laborables de la obra (uno por línea: <b>AAAA-MM-DD Nombre</b>). Se ven rayados en el Lookahead y se saltan al desplazar, reprogramar o contar días hábiles. Si un feriado se va a trabajar, anótalo abajo en «Días que se trabajan».</p>
    <textarea class="box" data-cal="hol" rows="6" aria-label="Feriados, uno por línea"${ro} placeholder="2026-10-08 Combate de Angamos">${esc(holTxt(c.hol))}</textarea>
+   <p class="note"><b>Días que se trabajan</b> aunque sean feriado, domingo o sábado no laborable (uno por línea: <b>AAAA-MM-DD Motivo</b>). Ese día cuenta como laborable: se publica el plan, se mide el cierre y entra en el PPC.</p>
+   <textarea class="box" data-cal="work" rows="3" aria-label="Días que se trabajan, uno por línea"${ro} placeholder="2026-12-08 Se trabaja (frente atrasado)">${esc(holTxt(c.work))}</textarea>
    ${ro?'':`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="ib" data-calpe="${y}">+ Feriados nacionales de Perú ${y}</button><button class="ib" data-calpe="${y+1}">+ Feriados nacionales de Perú ${y+1}</button></div>`}
-   <p class="note">${up.length?'Próximos: '+up.map(o=>esc(fmtD(o.d)+' '+o.n)).join(' · ')+'. ':''}Los feriados nacionales se cargan según la ley vigente; si el Gobierno traslada alguno (por ejemplo, a lunes), corrígelo aquí.</p></div></div>`}
+   <p class="note">${up.length?'Próximos: '+up.map(o=>esc(fmtD(o.d)+' '+o.n)).join(' · ')+'. ':''}Los feriados nacionales del año actual y del siguiente se cargan solos (una vez por año, sin tocar lo que ya cargaste) según la ley vigente; si el Gobierno traslada alguno (por ejemplo, a lunes), corrígelo aquí.</p></div></div>`}
 function calWire(main){if(main._calw)return;main._calw=1;main.addEventListener('change',e=>{const t=e.target;if(!t.dataset||!t.dataset.cal||!canWrite||PM())return;const c={...(P().cal||{})};
-    if(t.dataset.cal==='sat')c.sat=t.checked;else{const r=holParse(t.value);c.hol=r.list;if(r.bad.length)toast(`No entendí ${r.bad.length} línea(s): ${r.bad.slice(0,2).join(' | ')}. Usa AAAA-MM-DD Nombre.`)}
+    if(t.dataset.cal==='sat')c.sat=t.checked;else if(t.dataset.cal==='pskip')c.pskip=t.checked;else if(t.dataset.cal==='qauto')c.qauto=t.checked;else{const r=holParse(t.value);if(t.dataset.cal==='work'){c.work=r.list.map(o=>({d:o.d,n:o.n==='Feriado'?'Se trabaja':o.n}))}else c.hol=r.list;if(r.bad.length)toast(`No entendí ${r.bad.length} línea(s): ${r.bad.slice(0,2).join(' | ')}. Usa AAAA-MM-DD Nombre.`)}
     apply([op('meta','project',{...P(),cal:c})],'Calendario guardado')});
   main.addEventListener('click',e=>{const b=e.target.closest('[data-calpe]');if(b&&canWrite&&!PM()){const c={...(P().cal||{})};const r=holParse(holTxt([...(c.hol||[]),...holPeru(+b.dataset.calpe)]));c.hol=r.list;apply([op('meta','project',{...P(),cal:c})],`Feriados de Perú ${b.dataset.calpe} agregados`)}
     const a=e.target.closest('[data-arcr]');if(a&&canWrite){const[col,id]=a.dataset.arcr.split('|');archRestore(col,id)}});
@@ -235,7 +282,10 @@ function pickPiso(){if(U.piso&&S.pis.has(U.piso))return;if(U.pisoAll||S.pis.size
 /* Lookahead: panel "Filtros y vista" */
 function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidden=!U.lbMore;b.setAttribute('aria-expanded',U.lbMore?'true':'false');b.classList.toggle('on',!!U.lbMore);
   /* oct 2026: el globo cuenta también lo oculto que se está mostrando (vencidas, terminadas, faltan programar) */
-  const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf+[U.showPast,U.showDone,U.lkGh].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  const nf=[U.onlyWin,U.onlyRestr,U.onlyObs,U.changes,(U.acts||[]).length>0].filter(Boolean).length;const n=nf-(U.changes?1:0)+[U.showPast,U.showDone].filter(Boolean).length;const m=$('#fmn');if(m){m.hidden=!n;m.textContent=n}
+  /* Control ▾: punto si se está viendo una versión o los cambios frente al congelado */
+  {const d=$('#fdn');if(d)d.hidden=!(U.ver||U.changes)}
+  {const fv=$('#fver'),fh=$('#fvh');if(fh&&fv)fh.hidden=fv.hidden&&(($('#fvsave')||{}).hidden!==false)}
   {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc)}
   {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML)}
   const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff);

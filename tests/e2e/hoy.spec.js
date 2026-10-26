@@ -6,7 +6,8 @@ test('el administrador entra a Hoy: primero lo pendiente, lo que está al día a
   const errors = await openApp(page);
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'hoy');
   // lo que está al día va al final
-  await expect.poll(() => page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan'))).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'prop', 'np']);
+  await expect.poll(() => page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan' && k !== 'frev'))).toEqual(['campo', 'restr', 'lib', 'plan', 'resp', 'prop', 'np']);
+  await expect(page.locator('[data-hoy="frev"]')).toContainText('Revisión de flujos'); // P4: ambientes de la semana siguiente por revisar
   await expect(page.locator('[data-hoy="campo"]')).toContainText('sin registrar');
   await page.click('[data-hoy="campo"] [data-hgo]');
   await expect(page.locator('#main')).toHaveAttribute('data-view', 'campo');
@@ -24,8 +25,9 @@ test('Calidad ve primero sus inspecciones y lo que falta programar', async ({ pa
 
 test('el subcontratista ve su avance de hoy y sus restricciones', async ({ page }) => {
   const errors = await openApp(page, { as: 'sc' });
-  const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan'));
+  const k = await page.locator('.hoyc').evaluateAll(cs => cs.map(c => c.dataset.hoy).filter(k => k !== 'cplan' && k !== 'frev'));
   expect(k).toEqual(['obra', 'lib', 'restr']);
+  await expect(page.locator('[data-hoy="frev"]')).toBeVisible();
   await expect(page.locator('[data-hoy="obra"]')).toContainText('por cerrar');
   noErrors(errors, 'hoy sc');
 });

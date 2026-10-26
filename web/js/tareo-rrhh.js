@@ -160,6 +160,7 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
         <label class="chk t-wide"><input type="checkbox" id="tplUa"${D.avisoUA?' checked':''}${dis}> Avisar si una partida con horas no tiene UA de Powers</label></div>
         <p class="pad note">Costo HH = (jornal + BUC) ÷ 8 × (1 + leyes sociales) + recargo de las horas extra. Sin leyes sociales, el costo sale sin ellas y se avisa.</p></div>
     </div>
+    ${tplDctCard(D,ed)}
     <div class="card"><h2>Códigos de asistencia</h2><div class="tscroll"><table class="t t-tbl" id="tplCod"><thead><tr><th>Código</th><th>Significado</th><th>Se paga</th><th>Cuenta para dominical</th><th>Cuenta para BUC y movilidad</th></tr></thead><tbody>
       ${TPLA_COD.map(([k,n,p,d,b])=>`<tr><td><b class="mono ${TS_COD_CL[k]||''}">${esc(k)}</b></td><td>${esc(k==='DM'?n.replace(/día \d+/,'día '+D.dmEmp):n)}</td><td>${esc(p)}</td><td>${esc(d)}</td><td>${esc(b)}</td></tr>`).join('')}</tbody></table></div></div>
     ${P.ts?`<p class="note">Último cambio: ${esc(toWho(P.by)||P.by)} · ${esc(tpAt(P.ts))}</p>`:''}
@@ -168,11 +169,13 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
   if(!ed)return;
   const rd=()=>{const g=id=>{const v=$(id).value;return v===''?null:+v};const v=D.vig[D.vig.length-1];v.desde=$('#tplDesde').value||v.desde;v.nota=$('#tplNota').value.trim();
     $$('[data-tpj]').forEach(i=>{v.jb[i.dataset.tpj]=i.value===''?0:+i.value});$$('[data-tpb]').forEach(i=>{v.buc[i.dataset.tpb]=i.value===''?0:+i.value});
+    const dv=D.dtar[D.dtar.length-1];if(dv&&$('#tplDtDesde')){dv.desde=$('#tplDtDesde').value||dv.desde;dv.nota=$('#tplDtNota').value.trim();$$('[data-tpdt]').forEach(i=>{const x=i.value.trim().replace(',','.');dv.t[i.dataset.tpdt]=x===''||!(+x>0)?null:+x})}
     Object.assign(D,{he60h:g('#tplH60')??2,sob1:g('#tplS1')??60,sob2:g('#tplS2')??100,df100:$('#tplDf').checked,alt:g('#tplAlt')??0,mov:g('#tplMov')??0,feA:g('#tplFeA')??10,dmEmp:g('#tplDmE')??20,dmTope:g('#tplDmT')??60,ae:g('#tplAe')??30,aeEdad:g('#tplAeE')??24,leyes:g('#tplLey'),soles:'cos',avisoUA:$('#tplUa').checked})};
   /* los valores calculados se actualizan en su lugar: redibujar mientras se escribe borraría lo que se está tecleando */
   const calc=()=>{const v=D.vig[D.vig.length-1];$$('#tplJor tbody tr').forEach((tr,i)=>{const c=TPLA_CAT[i][0];const jb=+v.jb[c]||0;const td=tr.querySelectorAll('td.mono');
     if(td.length===4){td[0].textContent=f2(jb/8);td[1].textContent=f2(jb/8*(1+D.sob1/100));td[2].textContent=f2(jb/8*(1+D.sob2/100));td[3].textContent=f2(jb/6)}})};
   main.querySelector('.ts').addEventListener('input',e=>{if(e.target.closest('input,select')){rd();calc()}});
+  const dn=$('#tplDtNueva');if(dn)dn.onclick=()=>{rd();const u=D.dtar[D.dtar.length-1];D.dtar.push({desde:todayIso(),nota:'',t:u?{...u.t}:{OP:null,OF:null,PE:null}});requestRender()};
   const nv=$('#tplNueva');if(nv)nv.onclick=()=>{rd();const u=D.vig[D.vig.length-1];D.vig.push({desde:todayIso(),nota:'',jb:{...u.jb},buc:{...u.buc}});requestRender()};
   $('#tplSave').onclick=async()=>{rd();const ds=D.vig.map(v=>v.desde);if(new Set(ds).size!==ds.length){toast('Dos tablas de jornales no pueden regir desde la misma fecha.');return}
     if(D.vig.some(v=>TPLA_CAT.some(([c])=>!(+v.jb[c]>0)))){toast('Escribe el jornal de las tres categorías.');return}
@@ -182,5 +185,21 @@ function renderTPla(main){const P=TPL();const ed=tplEd();const dis=ed?'':' disab
     for(const[k,l,lo,hi]of R0){const v=D[k];if(v!=null&&!(Number.isFinite(+v)&&+v>=lo&&+v<=hi)){toast(`${l}: escribe un número entre ${lo} y ${hi}.`);return}}
     if(D.vig.some(v=>TPLA_CAT.some(([c])=>+v.jb[c]>2000||+v.buc[c]<0||+v.buc[c]>200))){toast('Revisa los jornales (hasta S/ 2000) y el BUC (0 a 200 %).');return}
     const vig=D.vig.map(v=>({desde:v.desde,nota:v.nota||'',jb:{...v.jb},buc:{...v.buc}})).sort((a,b)=>a.desde<b.desde?-1:1);
-    const d={vig,he60h:D.he60h,sob1:D.sob1,sob2:D.sob2,df100:D.df100,alt:D.alt,mov:D.mov,dmEmp:D.dmEmp,dmTope:D.dmTope,ae:D.ae,aeEdad:D.aeEdad,feA:D.feA,leyes:D.leyes,soles:D.soles,avisoUA:D.avisoUA,...tStamp()};
+    const dds=D.dtar.map(v=>v.desde);if(new Set(dds).size!==dds.length){toast('Dos tablas de tarifas de descuento no pueden regir desde la misma fecha.');return}
+    if(D.dtar.some(v=>TPLA_CAT.some(([c])=>v.t[c]!=null&&!(+v.t[c]>0&&+v.t[c]<=1000)))){toast('Revisa las tarifas de descuento (S/ por HH, hasta 1000; vacío = costo de la planilla).');return}
+    const dtar=D.dtar.map(v=>({desde:v.desde,nota:v.nota||'',t:{...v.t}})).sort((a,b)=>a.desde<b.desde?-1:1);
+    const d={vig,dtar,he60h:D.he60h,sob1:D.sob1,sob2:D.sob2,df100:D.df100,alt:D.alt,mov:D.mov,dmEmp:D.dmEmp,dmTope:D.dmTope,ae:D.ae,aeEdad:D.aeEdad,feA:D.feA,leyes:D.leyes,soles:D.soles,avisoUA:D.avisoUA,...tStamp()};
     try{await fcol(TCOLS.tcfg).doc('pla').set(d);TPLA.draft=null;toast('Parámetros guardados.');requestRender()}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}}}
+
+/* tarifas de descuento a SC (24-10-2026): S/ por HH normal por categoría, con vigencias como los jornales (cambiar la tarifa no altera
+   los días anteriores a su «Rige desde»). Vacío = costo HH de la planilla (tplHH). Las HE llevan el recargo de arriba. */
+function tplDctCard(D,ed){const dis=ed?'':' disabled';const V=D.dtar[D.dtar.length-1];const hoy=todayIso();const f=V?V.desde:hoy;
+  const P0={...D,leyes:D.leyes};const pl=c=>{try{return tplHH(c,f,P0)}catch(e){return 0}};
+  return`<div class="card" id="tplDct"><h2>Tarifas de descuento a SC <span class="sub">Lo que se descuenta a un subcontratista por cada HH de una partida descontable. Las horas extra llevan el recargo de arriba (${D.sob1} % y ${D.sob2} %).</span></h2>
+    ${V?`<div class="pad t-bar"><label class="lqlab">Rige desde<input class="tin" type="date" id="tplDtDesde" value="${esc(V.desde)}"${dis}></label><label class="lqlab ts-w2">Nota<input class="tin" id="tplDtNota" value="${esc(V.nota||'')}"${dis}></label>
+      ${ed?'<button class="ib" id="tplDtNueva">+ Nueva vigencia</button>':''}<span class="note">${D.dtar.length>1?'Anteriores: '+D.dtar.slice(0,-1).map(v=>`${esc(tFmt(v.desde))}${v.nota?' ('+esc(v.nota)+')':''}`).join(' · '):''}</span></div>
+    <div class="tscroll"><table class="t t-tbl" id="tplDtT"><thead><tr><th>Categoría</th><th>Tarifa (S/ por HH)</th><th class="t-r">Costo HH de la planilla</th><th class="t-r">HE ${D.sob1} %</th><th class="t-r">HE ${D.sob2} %</th></tr></thead><tbody>
+      ${TPLA_CAT.map(([c,l])=>{const t=V.t[c];const b=t>0?t:pl(c);return`<tr><td><b>${l}</b></td><td><input class="tin t-n" data-tpdt="${c}" inputmode="decimal" value="${t>0?esc(String(t)):''}" placeholder="${esc(pl(c).toFixed(2))}" aria-label="Tarifa de descuento ${l}"${dis}></td>
+        <td class="mono t-r">${pl(c).toFixed(2)}</td><td class="mono t-r">${(b*(1+D.sob1/100)).toFixed(2)}</td><td class="mono t-r">${(b*(1+D.sob2/100)).toFixed(2)}</td></tr>`}).join('')}</tbody></table></div>`
+    :`<p class="pad note">Sin tarifas propias: se descuenta el costo HH de la planilla de cada categoría (jornal + BUC ÷ 8 × leyes sociales).</p>${ed?'<div class="pad"><button class="ib" id="tplDtNueva">+ Poner tarifas de descuento</button></div>':''}`}
+    <p class="pad note">Vacío = costo HH de la planilla. Cada tabla rige desde su fecha: los días anteriores conservan su tarifa.</p></div>`}

@@ -16,7 +16,9 @@ const KSHOW=['none','stop','ok','no'];
    queda por defecto «En curso» (o por iniciar más tarde, tren de trabajo); el SC/capataz solo reporta «Detenido» con su motivo,
    a cualquier hora del día (el sistema guarda la hora). Un detenido reportado a la hora de corte o después, o junto con el cierre,
    es «reportado al cierre» (stopLate) y no sugiere una causa ajena. Hora de corte del cierre: closeCutHH() (Configuración › Proyecto, por defecto 5 pm): después el
-   SC/capataz ya no propone el cierre, y lo que quedó sin cierre lo registra el servidor como No cumplido (aceptarCierres, sinCierre). */
+   SC/capataz ya no marca el cierre (su Cumplido/No cuenta al instante, sin confirmación: tanda 1); a la hora del Cierre del ingeniero
+   (engCutHH) el servidor registra esos cierres tal como se marcaron y lo que quedó sin cierre como No cumplido (aceptarCierres, sinCierre),
+   y el día queda cerrado para todos (dayShut). */
 const STOP_MOT=['Actividad predecesora','Seguridad','Materiales','Calidad','Otros'];
 /* motivo antiguo del tren de trabajo: queda solo para leer los reportes viejos */
 const STOP_INFO='Inicia después';
@@ -51,7 +53,7 @@ function seqText(d,lv){const pa=lv.seq.after&&S.act.get(lv.seq.after);if(!pa)ret
   return`⏭ En secuencia: sigue después de ${am?am.code:pa.name}${k==='run'?' (en ejecución)':k==='ok'||k==='no'?' (ya terminó: le toca)':k==='stop'?' (detenida)':k==='seq'?' (también en secuencia)':' (sin iniciar)'}`}
 function kText(d,aid){const s=kState(d,aid);const lv=s.lv||liveOf(d,aid);let t='';
   if(s.conf)t=`${s.k==='ok'?'✓ Cumplido':'✗ No cumplido'}${s.r.cnc?' · '+s.r.cnc:''} · confirmado`;
-  else if(s.k==='ok'||s.k==='no')t=`${s.k==='ok'?'✓ Cumplido':'✗ No cumplido'}${lv.close.cnc?' · '+lv.close.cnc:''} · por confirmar`;
+  else if(s.k==='ok'||s.k==='no')t=`${s.k==='ok'?'✓ Cumplido':'✗ No cumplido'}${lv.close.cnc?' · '+lv.close.cnc:''} · marcado por el SC`;
   else if(s.k==='run')t=`▶ En ejecución desde ${hhmm(lv.t0||lv.log?.[0]?.t)}`;
   else if(s.k==='stop'){const e=lastStop(d,aid);t=`⏸ Detenido${e?' '+hhmm(e.t):''}${lv.mot?': '+lv.mot:''}${stopLate(d,aid)?' · reportado al cierre':''}`}
   else if(s.k==='seq')t=seqText(d,lv);
@@ -63,16 +65,22 @@ function liveLine(d,aid){const lv=liveOf(d,aid);if(!lv||!(lv.log||[]).length)ret
 /* fotos de la actividad ese día (detención, cierre del capataz/SC o registro del ingeniero): se ven en la ficha y se amplían al tocarlas */
 function actPhotos(d,aid){const lv=liveOf(d,aid);const r=recOf(d,aid);const ids=[...new Set([...((lv&&lv.photos)||[]),...((r&&r.photos)||[])])];if(!ids.length)return'';
   return`<div class="kphs">${ids.map(id=>{if(typeof loadFoto==='function')loadFoto(id);const src=FOTO.get(id)||'';return`<img data-ph="${id}" src="${src}" alt="Foto"${src?'':' style="opacity:.3"'}>`}).join('')}</div>`}
-function liveWrite(d,aid,patch,ev,extra){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!db)return;const id=d+'_'+aid;const cur=LIVE.get(id)||{};
+function liveWrite(d,aid,patch,ev,extra){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!db)return;
+  /* tanda 1: día cerrado (Cierre del ingeniero) para todos; las reglas también lo rechazan con la hora del servidor */
+  if(dayShut(d)){toast(shutMsg(d));return}const id=d+'_'+aid;const cur=LIVE.get(id)||{};
   const e={...ev,t:NOW(),by:me.email,n:me.name||''};
   const doc={date:d,actId:aid,pisoId:pisoOfAct(aid),sc:x.sc,...patch,log:[...(cur.log||[]),e].slice(-40),...(extra||{})};
   LIVE.set(id,{...cur,...doc,id,_pend:true});const FVs=firebase.firestore.FieldValue;
   /* el historial y las fotos se agregan (arrayUnion), no se reemplazan: si el capataz sin señal y el ingeniero escriben a la vez, no se pierde nada */
   const send={...doc};if(FVs&&FVs.arrayUnion){send.log=FVs.arrayUnion(e);if(Array.isArray(doc.photos)){const add=doc.photos.filter(f=>!(cur.photos||[]).includes(f));if(add.length&&(cur.photos||[]).every(f=>doc.photos.includes(f)))send.photos=FVs.arrayUnion(...add)}}
   if(FVs&&FVs.serverTimestamp)send.sat=FVs.serverTimestamp();doneRebuild();requestRender();
-  fcol('live').doc(id).set(send,{merge:true}).catch(err=>toast('No se pudo guardar: '+(err&&err.code==='permission-denied'?'sin permiso (¿se publicaron las reglas nuevas?)':(err&&(err.code||err.message)))))}
-/* lo que el capataz (o el SC) propuso y nadie confirmó en 2 días lo registra el servidor (aceptarCierres, 23:30, en una transacción
-   que relee el registro): la página ya no lo hace, porque con su copia local podía pisar lo que un ingeniero corrigió. */
+  /* rechazo de las reglas: si el día cerró (Cierre del ingeniero) o, para el SC/capataz, si su cierre llegó después de su hora de corte
+     (sin señal), se avisa con claridad; la base vuelve a lo que tenía */
+  fcol('live').doc(id).set(send,{merge:true}).catch(err=>{const den=err&&err.code==='permission-denied';const L=LIVE.get(id);if(den&&L&&L._pend){if(cur&&cur.date)LIVE.set(id,{...cur,id});else LIVE.delete(id);requestRender()}
+    toast('No se pudo guardar: '+(den?(dayShut(d)?shutMsg(d)+' Lo que marcaste sin señal llegó tarde.':patch&&patch.close&&!ENG()&&closeCut(d)?`tu cierre llegó después de la hora de corte (${cutT()}), sin señal. Avísale al ingeniero para que lo registre.`:'sin permiso (¿se publicaron las reglas nuevas?)'):(err&&(err.code||err.message))))})}
+/* el cierre del capataz (o del SC) cuenta desde que lo marca (recOf lo devuelve con _prop); el servidor lo escribe en daily tal como lo
+   marcó a la hora del Cierre del ingeniero (aceptarCierres, en una transacción que relee el registro: no pisa lo que un ingeniero
+   corrigió). Confirmarlo aquí solo lo deja registrado antes, como verificado por el ingeniero. */
 function confirmProp(d,aid){const x=S.act.get(aid);const cur=recOf(d,aid);if(!x||!cur||!cur._prop)return;writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:cur.status}}})}
 
 /* ---------- pantalla del capataz ---------- */
@@ -92,7 +100,7 @@ function capPend(d){if(ENG()||VEED()||SCK())return[];const my=me&&me.scs||[];ret
 function kCard(d,o,n,pend){const aid=o.x.id;const s=kState(d,aid);const E=ENG()||VEED();/* SC y capataz (reporte por excepción): por la mañana el atajo es «Detenido»; desde las 2 pm, «Cerrar día»; pasada la hora de corte, nada */
   const late2=nowHM()>='14:00';
   const q=VEED()?'':E?(s.conf?'':(s.k==='ok'||s.k==='no')?'conf':'closef'):(s.conf||closeCut(d))?'':s.k==='stop'?'res':(s.k==='none'||s.k==='seq'||s.k==='run')?(late2?'closef':'stop'):'';
-  const ql={stop:'⏸ Detenido',res:liveOf(d,aid)&&liveOf(d,aid).t0?'▶ Reanudado':'▶ Ya ingresó',closef:E?'Verificar':'Cerrar día',conf:'✓ Confirmar'}[q]||'';
+  const ql={stop:'⏸ Detenido',res:liveOf(d,aid)&&liveOf(d,aid).t0?'▶ Reanudado':'▶ Ya ingresó',closef:E?'Verificar':'Cerrar día',conf:'✓ Revisado'}[q]||'';
   return`<article class="kc k-${s.k}${s.conf?' conf':''}" data-k="${aid}" data-d="${d}" style="--k:${KST[s.k].c}"><i class="kn">${n||'·'}</i><div class="kt"><b>${esc(o.x.name)}</b><span>${esc(o.a.code)} · ${esc(o.a.name)}${pend?' · '+fmtD(d):''}${E||(me.scs||[]).length>1?' · '+esc(conOf(o.x.sc).name):''}</span><em>${esc(kText(d,aid))}</em></div>${q?`<button class="kgo" data-kq="${q}">${ql}</button>`:s.conf?'<span class="kok">✓</span>':''}</article>`}
 function renderCap(main){const E=ENG()||VEED();const NPon=canNP()||(SCK()&&npSC());const d=E?campoDate():todayIso();ensureDaily(addD(d,-7));const API=window.__plano&&window.__plano.capPlan?window.__plano:null;if(!API)loadPlanoMod().catch(()=>{});else API.capInit(d);
   if(CP.v!=='plan'&&CP.v!=='list')CP.v='plan';const V=E?'plan':CP.v;
@@ -138,7 +146,7 @@ function capClick(e){const t=e.target;let b;if(t.closest('[data-sini]')){sinIniO
     name:async()=>{const v=await uiAsk({title:'Cambiar mi nombre',input:{label:'Nombre y apellido',value:me.name||'',required:true},ok:'Guardar'});if(v&&v.trim()&&db)fcol('members').doc(me.email).update({name:v.trim().slice(0,60)}).then(()=>toast('Nombre actualizado')).catch(err=>toast('No se pudo: '+(err.code||err.message)))},
     out:async()=>{if(await uiAsk({title:'¿Salir de este celular?',text:'Para volver a entrar necesitarás un enlace nuevo del ingeniero.',ok:'Salir',tone:'danger'}))$('#blogout').click()}});return}
   const card=t.closest('article[data-k]');if(!card)return;const aid=card.dataset.k,d=card.dataset.d;
-  const q=t.closest('[data-kq]');if(q){const k=q.dataset.kq;if(k==='run'||k==='res'){kAct(aid,d,k)}else if(k==='stop'){capSheet(aid,d,'stop')}else if(k==='conf'){confirmProp(d,aid);toast('Confirmado')}else capSheet(aid,d,'close');return}
+  const q=t.closest('[data-kq]');if(q){const k=q.dataset.kq;if(k==='run'||k==='res'){kAct(aid,d,k)}else if(k==='stop'){capSheet(aid,d,'stop')}else if(k==='conf'){confirmProp(d,aid);toast('Registrado como revisado')}else capSheet(aid,d,'close');return}
   capSheet(aid,d,'main')}
 function kAct(aid,d,k){const lv=liveOf(d,aid);const re=!!(lv&&lv.st==='stop'&&lv.t0);if(k==='run'||k==='res'){liveWrite(d,aid,{st:'run',t0:lv&&lv.t0||NOW(),mot:'',seq:{on:false,after:''}},{s:re?'res':'run'});toast(re?'Marcada reanudada':'Quitado el «Detenido»: sigue en curso')}}
 /* botones del SC/capataz antes de la hora de corte: solo «Detenido» (o quitarlo) y el cierre */
@@ -165,20 +173,21 @@ function capSheet(aid,d,mode,keep){const x=S.act.get(aid);if(!x)return;const a=S
       ${KS.cs==='ok'&&later?`<label class="kchk"><input type="checkbox" id="kdone"${KS.done?' checked':''}> La actividad quedó <b>terminada</b> (no volverá los ${later} día${later>1?'s':''} que faltan)</label>`:''}
       <input class="kin" id="knote" placeholder="Comentario (opcional)" value="${esc(KS.note)}">
       <label class="kph">📷 Foto${KS.photo?' (lista)':' (opcional)'}<input type="file" accept="image/*" capture="environment" id="kphoto" hidden></label><span class="knote" id="kphn">${(recOf(d,aid)?.photos||[]).length?(recOf(d,aid).photos.length)+' foto(s) ya registradas':''}</span>
-      <div class="kbtns"><button class="kbig pri" data-ka="closesave"${KS.cs&&(KS.cs==='ok'||KS.cnc)?'':' disabled'}>${E?'Guardar verificación':'Enviar cierre'}</button><button class="kbig ghost" data-ka="back">Volver</button></div><p class="knote">${E?'Queda registrado como verificado por ti (cuenta para el PPC).':'El ingeniero de campo lo revisará y confirmará.'}</p>`}
+      <div class="kbtns"><button class="kbig pri" data-ka="closesave"${KS.cs&&(KS.cs==='ok'||KS.cnc)?'':' disabled'}>${E?'Guardar verificación':'Enviar cierre'}</button><button class="kbig ghost" data-ka="back">Volver</button></div><p class="knote">${E?'Queda registrado como verificado por ti (cuenta para el PPC).':`Cuenta al instante tal como lo marcas. Hasta las ${hhLabel(engCutHH())} el ingeniero puede corregirlo; después el día queda cerrado.`}</p>`}
   else if(VEED()){const r=recOf(d,aid);h+=`<p class="knote">${r?`Verificado por ${esc(r.byName||'')} · ${hhmm(r.ts)}`:'El avance lo verifica el ingeniero de campo.'}</p><div class="kbtns"><button class="kbig ghost" data-kx>Cerrar</button></div>`}
+  else if(E&&dayShut(d)){const r=recOf(d,aid);h+=`<p class="knote">🔒 ${esc(shutMsg(d))}${r?` Registrado: ${esc(ST[r.status]?ST[r.status].t:'')}${r.byName?' · '+esc(r.byName):''}.`:''}</p><div class="kbtns"><button class="kbig ghost" data-kx>Cerrar</button></div>`}
   else if(E){const r=recOf(d,aid);const live=d===todayIso()&&!s.conf&&!(s.k==='ok'||s.k==='no');
     if(s.conf)h+=`<p class="knote">Verificado por ${esc(r&&r.byName||'')} · ${hhmm(r&&r.ts)}${r&&r.prop&&r.prop.status!==r.status?' · el capataz había marcado '+(r.prop.status==='ok'?'✓':'✗'):''}</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar verificación</button></div>`;
-    else if(r&&r._prop)h+=`<p class="knote">Propuesto por <b>${esc(r.byName||'el capataz')}</b> · ${hhmm(r.ts)}</p><div class="kbtns"><button class="kbig pri" data-ka="confp">✓ Confirmar lo propuesto</button><button class="kbig ghost" data-ka="closef">Corregir…</button></div>`;
+    else if(r&&r._prop)h+=`<p class="knote">Marcado por <b>${esc(r.byName||'el capataz')}</b> · ${hhmm(r.ts)} · ya cuenta así</p><div class="kbtns"><button class="kbig pri" data-ka="confp">✓ Revisado (queda así)</button><button class="kbig ghost" data-ka="closef">Corregir…</button></div>`;
     else h+=`<div class="kbtns"><button class="kbig pri" data-ka="closef">✓ Verificar cumplimiento…</button>${live?(s.k==='stop'?`<div class="kbtns two"><button class="kbig run" data-ka="res">${lv&&lv.t0?'▶ Reanudado':'▶ Ya ingresó'}</button><button class="kbig ghost" data-ka="stopf">Cambiar motivo…</button></div>`:'<button class="kbig warn" data-ka="stopf">⏸ Detenido…</button>'):''}</div>`}
   else if(SCK()){if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
     else if(past)h+=`<p class="knote">Solo puedes marcar el avance del día de hoy.</p>`;
-    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${cutT()}) sin tu cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
-    else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">Cierre enviado: el ingeniero lo confirma.</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
+    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre registrado: cuenta tal como lo marcaste.':`Pasó la hora de corte (${cutT()}) sin tu cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo hasta las ${hhLabel(engCutHH())}.`}</p>`;
+    else if(s.k==='ok'||s.k==='no')h+=`<p class="knote">Cierre registrado: cuenta tal como lo marcaste.</p><div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
     else h+=kMainBtns(s,lv);
-    h+=`<p class="knote">No necesitas marcar el inicio: todo lo programado está «En curso». Solo reporta «Detenido» si no puedes ejecutar. Cierra antes de las ${cutT()} (cumplido o no cumplido); sin cierre, cuenta como No cumplido.</p>`}
+    h+=`<p class="knote">No necesitas marcar el inicio: todo lo programado está «En curso». Solo reporta «Detenido» si no puedes ejecutar. Cierra antes de las ${cutT()} (cumplido o no cumplido): cuenta al instante. Sin cierre, cuenta como No cumplido.</p>`}
   else{if(s.conf)h+=`<p class="knote">El ingeniero ya confirmó este registro.</p>`;
-    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre enviado: el ingeniero lo confirma.':`Pasó la hora de corte (${cutT()}) sin cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo.`}</p>`;
+    else if(closeCut(d))h+=`<p class="knote">${s.k==='ok'||s.k==='no'?'Cierre registrado: cuenta tal como lo marcaste.':`Pasó la hora de corte (${cutT()}) sin cierre: cuenta como <b>No cumplido</b>. El ingeniero puede corregirlo hasta las ${hhLabel(engCutHH())}.`}</p>`;
     else if(s.k==='ok'||s.k==='no')h+=`<div class="kbtns"><button class="kbig ghost" data-ka="closef">Cambiar cierre</button></div>`;
     else h+=kMainBtns(s,lv)}
   if(typeof canNP==='function'&&((canNP()&&(ENG()||VEED()))||(SCK()&&npSC()))&&d<=todayIso())h+=`<button class="kbig ghost knpadd" data-ka="np">＋ Otro trabajo aquí (no programado)</button>`;
@@ -205,11 +214,11 @@ function kSheetClick(e){const t=e.target;const sh=$('#ksheet');{const im=t.close
     const lv=liveOf(d,aid);let extra=null;
     {const fid=kPhotoSave(d,aid,true);if(fid)extra={photos:[...(lv&&lv.photos||[]),fid]}}
     liveWrite(d,aid,{st:'stop',mot:mot+(KS.note.trim()?' — '+KS.note.trim():''),t0:lv&&lv.t0||null,seq:{on:false,after:''}},{s:'stop',m:mot,...(KS.note.trim()?{x:KS.note.trim().slice(0,300)}:{})},extra);if(typeof pushNotify==='function')pushNotify(d,aid);toast('Marcada «Detenido»');kClose();return}
-  if(k==='confp'){confirmProp(d,aid);toast('Confirmado');kClose();return}
+  if(k==='confp'){confirmProp(d,aid);toast('Registrado como revisado');kClose();return}
   if(k==='closesave'&&ENG()){if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}const x=S.act.get(aid);const cur=recOf(d,aid);
-    const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});toast('Verificación guardada');kClose();return}
+    const fid=kPhotoSave(d,aid,false);writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur),status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',imp:KS.cs==='no'?KS.imp:null,note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,photos:[...((cur&&cur.photos)||[]),...(fid?[fid]:[])]}}});const dn_=KS.cs==='ok'&&!!KS.done;toast('Verificación guardada');kClose();if(dn_)doneGuard(aid,d);return}
   if(k==='closesave'){if(closeCut(d)){toast(`Pasó la hora de corte (${cutT()}): el cierre lo registra el ingeniero.`);kClose();return}if(!KS.cs||(KS.cs==='no'&&!KS.cnc)){toast(KS.cs?'Elige la causa.':'Elige Cumplido o No cumplido.');return}
-    const lv0=liveOf(d,aid);const fid=kPhotoSave(d,aid,true);liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs},fid?{photos:[...(lv0&&lv0.photos||[]),fid]}:null);toast('Cierre enviado. El ingeniero lo confirmará.');kClose();return}}
+    const lv0=liveOf(d,aid);const fid=kPhotoSave(d,aid,true);liveWrite(d,aid,{close:{status:KS.cs,cnc:KS.cs==='no'?KS.cnc:'',note:KS.note.trim(),done:KS.cs==='ok'&&!!KS.done,by:me.email,n:me.name||'',t:NOW()}},{s:'close',m:KS.cs},fid?{photos:[...(lv0&&lv0.photos||[]),fid]}:null);toast('Cierre registrado: cuenta tal como lo marcaste.');kClose();return}}
 
 /* ---------- Reporte «sin inicio marcado» para WhatsApp (oct 2026) ----------
    Lo programado hoy (sin «No va») que a esta hora nadie marcó: ni iniciado, ni detenido, ni cerrado. Consolidado y por SC. */
@@ -291,7 +300,7 @@ function dashData(d){const vs=new Set(visPisos().map(p=>p.id));const API=window.
 function dashWeek(n,vs){const o={n:0,ok:0,ev:0,nimp:0,ext:0,sc:{}};const byS=DB_.sc.size>0;for(const w of S.wk.values()){if(w.n!==n||!w.frozenAt||!w.pisoId||!vs.has(w.pisoId))continue;const r=w.res||{};
     for(const[id,it]of Object.entries(w.items||{})){const q=r[id];
       if(byS&&q&&q.ok===false&&q.rsc&&q.pc&&q.rsc!==it.sc&&DB_.sc.has(q.rsc)&&(!DB_.ty||an(it.act)===DB_.ty))o.ext++;
-      if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};o.n++;so.n++;
+      if(!dashOk(it.sc,it.act))continue;const so=o.sc[it.sc]=o.sc[it.sc]||{n:0,ok:0,ev:0};if(it.scn)so.nm=it.scn;o.n++;so.n++;
       if(q&&q.ok===true){o.ok++;o.ev++;so.ok++;so.ev++}else if(q&&q.ok===false){o.ev++;so.ev++;if(resNimp(q)&&(byS||!(q.rsc&&q.pc)))o.nimp++}}}
   o.ppc=o.n&&o.ev?o.ok/o.n:null;o.ppcSc=o.ev?ppcScOf(o.ok,o.n,o.nimp,o.ext):null;return o}
 /* Avance de la semana contra lo congelado (oct 2026, decidido con el dueño): cada día de cada actividad de la semana congelada
@@ -328,20 +337,28 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
   const stopL=act.filter(i=>i.st.k==='stop');const stopMot={};let later=0;stopL.forEach(i=>{const m=String(i.st.lv&&i.st.lv.mot||'Sin motivo').split(' — ')[0];if(m===STOP_INFO){later++;return}stopMot[m]=(stopMot[m]||0)+1});
   /* PPC diario de hoy con los filtros (misma base que Indicadores › Diario) */
   const dRows0=dayData([d],vsP).rows;const dRows=dRows0.filter(r=>dashOk(r.sc,r.x.name));const dv=dRows.filter(r=>r.rc).length,dok=dRows.filter(r=>r.rc&&r.rc.status==='ok').length;const ppcD=dv?dok/dv:null;
-  const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)W.push({w,...o})}
-  const PW=W.find(o=>o.w===cw)||null;const full=W.filter(o=>o.w<cw&&o.ppc!=null&&o.ev>=o.n).slice(-4);const avg4=full.length?full.reduce((t,o)=>t+o.ok,0)/Math.max(1,full.reduce((t,o)=>t+o.n,0)):null;
+  /* PPC semanal: con los pisos archivados, como Plan semanal, Indicadores y Presentar (LPS-14/DAT-07); lo de hoy sigue con los pisos activos */
+  const vsH=histPisoSet();
+  const cw=weekOf(d);const W=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsH);if(o.n)W.push({w,...o})}
+  /* C-01 (tanda 1, LPS-4): el promedio con la misma fórmula que Indicadores y Presentar (ppcAvg: promedio simple de las semanas evaluadas
+     por completo; sin filtros, con las cargadas a mano), aquí de las 4 últimas */
+  const PW=W.find(o=>o.w===cw)||null;const wPts=W.map(o=>({wk:o.w,ppc:o.ppc,ppcSc:o.ppcSc,ok:o.ok,n:o.n,ev:o.ev,nimp:o.nimp}));
+  const{avg:avg4,L:full}=ppcAvg(DB_.sc.size||DB_.ty?wPts.map(x=>({wk:x.wk,...ppcHistPts([x])[0]})):ppcHistAll(wPts.filter(x=>x.ppc!=null),cw),4);
   /* PPC por subcontratista: últimas 4 semanas congeladas */
-  const Wall=DB_.sc.size?noSc(()=>{const L=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsP);if(o.n)L.push({w,...o})}return L}):W;
-  const scAgg={};Wall.slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev}));
-  const scRows=Object.entries(scAgg)/* «Sin asignar» (scTBD) no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&scReal(sc)).map(([sc,v])=>({label:conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
+  const Wall=DB_.sc.size?noSc(()=>{const L=[];for(let w=cw-7;w<=cw;w++){const o=dashWeek(w,vsH);if(o.n)L.push({w,...o})}return L}):W;
+  /* C-02 (tanda 1, LPS-3): solo las semanas ya evaluadas por completo (la semana en curso sin evaluar no castiga a nadie), como el promedio */
+  const scAgg={};Wall.filter(o=>o.ev>=o.n).slice(-4).forEach(o=>Object.entries(o.sc).forEach(([sc,v])=>{const a=scAgg[sc]=scAgg[sc]||{n:0,ok:0,ev:0};a.n+=v.n;a.ok+=v.ok;a.ev+=v.ev;if(v.nm)a.nm=v.nm}));
+  const scRows=Object.entries(scAgg)/* «Sin asignar» (scTBD) no es un subcontratista: no entra al ranking */.filter(([sc,v])=>v.ev&&scReal(sc)).map(([sc,v])=>({label:v.nm||conOf(sc).name,v:v.ok/v.n,max:1,color:conOf(sc).color,dsc:sc,sub:`${v.ok} de ${v.n} compromisos`})).sort((a,b)=>a.v-b.v);
   /* causas de no cumplimiento · 30 días (registros verificados, con los filtros) */
   /* los 29 días anteriores y hoy por separado (auditoría de código 08/10, M5): dayData tiene memoria y hoy ya se calculó arriba */
   const cn={};[...dayData(Array.from({length:29},(_,k)=>addD(d,-29+k)),vsP).rows,...dRows0].forEach(r=>{if(!r.rc||r.rc.status==='ok'||!dashOk(r.sc,r.x.name))return;const k=cncKey(r.rc.cnc);cn[k]=(cn[k]||0)+1});
   const top=Object.entries(cn).sort((a,b)=>b[1]-a[1]).slice(0,6);
   /* restricciones abiertas (afectan a actividades que pasan los filtros) */
   const RS=restrInScope().filter(rOpenC).filter(r=>{const x=r.actId&&S.act.get(r.actId);if(!DB_.sc.size&&!DB_.ty)return true;if(!x)return!DB_.ty&&(!r.sc||!DB_.sc.size||DB_.sc.has(r.sc));return dashOk(x.sc,x.name)});
-  const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
-  const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d)o.late++});
+  /* C-23: las de un «No va» cuya actividad ya se ejecutó se muestran aparte (no inflan «vencidas») */
+  const rPS=new Set(RS.filter(r=>typeof rPosLib==='function'&&rPosLib(r)).map(r=>r.id));const rPos=rPS.size;
+  const d7=addD(d,7);const rLate=RS.filter(r=>r.need&&r.need<d&&!rPS.has(r.id)).length;const rNext=RS.filter(r=>{const x=S.act.get(r.actId);return x&&(x.days||[]).some(z=>z>=d&&z<=d7)}).length;
+  const rBy={};RS.forEach(r=>{const k=grpOf(r)==='area'?(r.area||'Otras áreas'):'Campo';const o=rBy[k]=rBy[k]||{n:0,late:0};o.n++;if(r.need&&r.need<d&&!rPS.has(r.id))o.late++});
   const rRows=Object.entries(rBy).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>({label:k,v:o.n,sub:o.late?o.late+' vencidas':''}));
   const AV=dashAvance(cw,vsP,d);const AVall=DB_.sc.size?noSc(()=>dashAvance(cw,vsP,d)):AV;
   /* por subcontratista, hoy */
@@ -363,8 +380,8 @@ function renderDash(main){if(!canDash()){U.tab='look';render();return}
     <div class="dk dkst" style="--k:${KST.none.c}"><span class="dkl">Estado de hoy</span>${!act.length?'<b>—</b>':c.none===act.length?`<b class="dkt">${c.none} en curso</b>`:sbar(c)}<span class="dks">${c.none===act.length&&act.length?'sin detenidos ni cierres todavía':['ok','no','stop','none'].filter(k=>c[k]).map(k=>`${KST[k].t.toLowerCase()} ${c[k]}`).join(' · ')||'sin actividades'}</span></div>
     ${K('PPC diario hoy',pc(ppcD),dv?`${dok} de ${dv} verificadas`:'aún sin cierres','dkppc')}
     ${K('PPC semana '+cw,pc(PW&&PW.ppc),PW?`${PW.ok} de ${PW.n} compromisos${PW.ev<PW.n?` · ${PW.n-PW.ev} sin evaluar`:''}`:'semana aún sin congelar','dkppc')}
-    ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].w}–${full[full.length-1].w}`:'sin semanas cerradas','dkppc')}
-    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas · ${rNext} para los próximos 7 días`,'','#B26A00')}
+    ${K('PPC promedio 4 semanas',pc(avg4),full.length?`semanas ${full[0].wk}–${full[full.length-1].wk}`:'sin semanas cerradas','dkppc')}
+    ${K('Restricciones abiertas',RS.length,`${rLate} vencidas${rPos?` · ${rPos} posiblemente liberada${rPos>1?'s':''}`:''} · ${rNext} para los próximos 7 días`,'','#B26A00')}
     ${(()=>{const u=dashSinSc(vsP,d);return u.n?K('Sin subcontratista',u.n,`${u.pron} programadas en 3 semanas`,'','#9AA0A6'):''})()}</div>`;
   const trend=W.length?`${linesLegend()}<div class="dsv chart">${svgLines(W.map(o=>({label:'S'+o.w,a:o.ppc,b:o.ppcSc??o.ppc,part:o.ev<o.n,sub:`${o.ok} de ${o.n} compromisos`})),{h:220,minW:760})}</div>`:'<p class="mu">Aún no hay semanas congeladas.</p>';
   /* oct 2026 (opción A elegida por el dueño): fila 1 = PPC semanal ancho + causas; fila 2 = PPC por SC + avance de la semana (misma altura,

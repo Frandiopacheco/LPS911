@@ -31,41 +31,67 @@ test('versión automática: por piso y sin lo archivado', () => {
   assert.strictEqual(snap.acts.x1.obs, undefined);
 });
 
-test('cierres sin revisar: solo los de hace 2 días o más y sin registro', () => {
+/* tanda 1 (23/10/2026): el cierre del SC/capataz cuenta tal como lo marcó; el servidor lo escribe a la hora del Cierre del ingeniero */
+const T = (d, hh) => Date.parse(d + 'T' + hh + ':00-05:00');
+test('cierres del SC: hasta el día indicado, sin registro y tal como los marcó (sin terminada)', () => {
   const lives = [
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok', done: true, by: 'u_1', n: 'Juan', t: 5 } },
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'no', cnc: 'Clima' } },
-    { date: '2026-09-29', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok', done: true, by: 'u_1', n: 'Juan', t: T('2026-09-27', '16:00') } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'no', cnc: 'Clima', t: T('2026-09-27', '16:00') } },
+    { date: '2026-09-29', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok', t: T('2026-09-29', '16:00') } },
     { date: '2026-09-27', pisoId: 'p1', actId: 'x3', st: 'run' }
   ];
   const daily = new Map([['2026-09-27_p1', { recs: { x2: { status: 'ok' } } }]]);
   const acts = new Map([['x1', { sc: 'c1', name: 'Pintura', ambId: 'a1', metrado: 10, qty: { '2026-09-27': 4 }, und: 'm2' }], ['x2', { sc: 'c1' }]]);
-  const L = closesToAccept(lives, daily, acts, '2026-09-30');
+  const L = closesToAccept(lives, daily, acts, '2026-09-28');
   assert.strictEqual(L.length, 1);
   assert.strictEqual(L[0].actId, 'x1');
   assert.strictEqual(L[0].rec.prog, 4);
-  // Cumplido sin confirmar → No cumplido «Sin confirmación», no imputable y sin terminada; lo propuesto queda en prop
-  assert.strictEqual(L[0].rec.status, 'no');
-  assert.strictEqual(L[0].rec.cnc, 'Sin confirmación');
-  assert.strictEqual(L[0].rec.imp, false);
+  // Cumplido del SC → Cumplido, con lo programado como ejecutado; reportado por el SC; su «Terminada» no se aplica
+  assert.strictEqual(L[0].rec.status, 'ok');
+  assert.strictEqual(L[0].rec.cnc, '');
+  assert.strictEqual(L[0].rec.exec, 4);
   assert.strictEqual(L[0].rec.done, false);
-  assert.strictEqual(L[0].rec.exec, null);
+  assert.strictEqual(L[0].rec.bySc, true);
   assert.deepStrictEqual([L[0].rec.prop.status, L[0].rec.prop.done], ['ok', true]);
   assert.strictEqual(L[0].rec.sc, 'c1');
   assert.strictEqual(L[0].rec.byName, 'Juan');
+  assert.notStrictEqual(L[0].rec.cnc, 'Sin confirmación');
+  // el mismo día de hoy también (corre a la hora del Cierre del ingeniero, no 2 días después)
+  assert.deepStrictEqual(closesToAccept(lives, daily, acts, '2026-09-29').map(o => o.date + o.actId), ['2026-09-27x1', '2026-09-29x1']);
 });
 
-test('cierres sin revisar: un cumplido sin confirmar no lleva ejecutado; lo quitado por el ingeniero no vuelve', () => {
+test('cierres del SC: lo quitado por el ingeniero no vuelve; un cierre después del corte (con margen de 10 min) no cuenta', () => {
   const lives = [
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok' } },
-    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'ok' } }
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'ok', t: T('2026-09-27', '17:09') } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'ok', t: T('2026-09-27', '12:00') } },
+    { date: '2026-09-27', pisoId: 'p1', actId: 'x3', sc: 'c1', close: { status: 'ok', t: T('2026-09-27', '17:11') } }
   ];
   const daily = new Map([['2026-09-27_p1', { recs: { x2: { status: null, clr: true } } }]]);
-  const acts = new Map([['x1', { sc: 'c1', metrado: 10, qty: { '2026-09-27': 4 } }], ['x2', { sc: 'c1' }]]);
+  const acts = new Map([['x1', { sc: 'c1', metrado: 10, qty: { '2026-09-27': 4 } }], ['x2', { sc: 'c1' }], ['x3', { sc: 'c1' }]]);
   const L = closesToAccept(lives, daily, acts, '2026-09-30');
   assert.deepStrictEqual(L.map(o => o.actId), ['x1']);
-  assert.strictEqual(L[0].rec.prog, 4);
-  assert.strictEqual(L[0].rec.exec, null);
+  assert.strictEqual(L[0].rec.exec, 4);
+  // con el corte del SC configurado a las 16:00, el de las 17:09 ya es tardío
+  assert.deepStrictEqual(closesToAccept(lives, daily, acts, '2026-09-30', null, { closeCutHH: '16:00' }).map(o => o.actId), []);
+});
+
+test('frente C: la fila cambió de SC después de publicar → el cierre del SC de ese día cuenta (con su SC) y no recibe «Sin cierre»', () => {
+  const D0 = '2026-10-20', T0 = Date.parse(D0 + 'T16:00:00-05:00');
+  const lives = [
+    { date: D0, pisoId: 'p1', actId: 'x1', sc: 'c-viejo', close: { status: 'ok', t: T0 } },
+    { date: D0, pisoId: 'p1', actId: 'x2', sc: 'c-intruso', close: { status: 'ok', t: T0 } }
+  ];
+  const acts = new Map([['x1', { sc: 'c-nuevo', name: 'Pintura' }], ['x2', { sc: 'c-nuevo', name: 'Empaste' }]]);
+  const dp = { date: D0, pisoId: 'p1', ids: { x1: null, x2: null }, who: { x1: { sc: 'c-viejo' }, x2: { sc: 'c-viejo' } } };
+  const L = closesToAccept(lives, new Map(), acts, D0, new Map([[D0 + '_p1', dp]]));
+  assert.deepStrictEqual(L.map(o => [o.actId, o.rec.sc, o.rec.status]), [['x1', 'c-viejo', 'ok']]);
+  // sin plan publicado, solo la partida actual (auditoría N01)
+  assert.deepStrictEqual(closesToAccept(lives, new Map(), acts, D0, new Map()), []);
+  // sinCierre: la fila que cambió de partida no se castiga
+  const { sinCierre } = require('../lib');
+  const acts2 = new Map([['x1', { sc: 'c-viejo', name: 'Pintura' }], ['x2', { sc: 'c-viejo', name: 'Empaste' }]]);
+  const S = sinCierre(D0, [dp], lives, new Map(), acts2, new Set(), ['Subcontratas'], '17:00');
+  assert.deepStrictEqual(S.map(o => o.actId), ['x2']); // x1 cerró a tiempo; x2 lo «cerró» otra partida: Sin cierre
 });
 
 /* Firestore mínimo en memoria: set con merge mezcla mapas anidados, como el real */
@@ -85,6 +111,7 @@ function memDb(init) {
 test('cierre automático: no pisa lo que un ingeniero verificó después de la lectura (informe 4)', async () => {
   const { acceptCloses } = require('../lib');
   const lives = [{ id: '2026-09-28_x1', actId: 'x1', pisoId: 'p1', date: '2026-09-28', sc: 'c1', close: { status: 'ok', by: 'cap', n: 'Capataz', t: 1 } }];
+  /* lectura del inicio: sin registro → el cierre del capataz se registra */
   const acts = M({ x1: { ambId: 'a1', sc: 'c1', name: 'Tarrajeo', und: 'm2', metrado: 10, qty: { '2026-09-28': 10 } } });
   /* lectura del inicio: sin registro → el cierre del capataz se acepta */
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30');
@@ -110,10 +137,10 @@ test('cierre automático: tampoco vuelve si el ingeniero quitó el registro; sí
   const db = memDb({ 'daily/2026-09-28_p1': { date: '2026-09-28', pisoId: 'p1', recs: { x2: { status: null, clr: true } } } });
   const r = await acceptCloses(db, L);
   const recs = db.st.get('daily/2026-09-28_p1').recs;
-  assert.strictEqual(recs.x1.status, 'no');
-  assert.strictEqual(recs.x1.cnc, 'Sin confirmación');
+  assert.strictEqual(recs.x1.status, 'ok'); // tal como lo marcó el SC
+  assert.strictEqual(recs.x1.bySc, true);
   assert.strictEqual(recs.x2.status, null);
-  assert.strictEqual(db.st.get('doneidx/p1'), undefined); // sin confirmar no queda como terminada
+  assert.strictEqual(db.st.get('doneidx/p1'), undefined); // el check «Terminada» del SC no la termina
   assert.deepStrictEqual(r, { n: 1, skip: 1 });
 });
 
@@ -133,7 +160,7 @@ test('congelado automático: corte del sábado 13:00 de Lima y ventana hasta el 
   assert.deepStrictEqual(weeksToFreeze({}, Date.now()), []);
 });
 
-test('congelado automático: terminadas, reaperturas y cierres del capataz', () => {
+test('congelado automático: terminadas y reaperturas; el «Terminada» del capataz/SC ya no cuenta (tanda 1)', () => {
   const D = doneMap({
     doneidx: [{ d: { a: '2026-10-05', b: '2026-10-01' }, r: { b: '2026-10-02' } }],
     daily: [{ date: '2026-10-07', recs: { c: { status: 'ok', done: true } } }, { date: '2026-10-08', recs: { e: { status: 'no' } } }],
@@ -142,8 +169,8 @@ test('congelado automático: terminadas, reaperturas y cierres del capataz', () 
   assert.strictEqual(D.get('a'), '2026-10-05');
   assert.strictEqual(D.has('b'), false); // reabierta después de terminar
   assert.strictEqual(D.get('c'), '2026-10-07');
-  assert.strictEqual(D.get('d'), '2026-10-06');
-  assert.strictEqual(D.has('e'), false); // el ingeniero registró ese día: el cierre del capataz no cuenta
+  assert.strictEqual(D.has('d'), false); // solo lo marcó el capataz: no la termina
+  assert.strictEqual(D.has('e'), false);
 });
 
 test('congelado automático: compromisos de la semana por piso, como «Congelar»', () => {
@@ -210,13 +237,13 @@ test('auditoría N04: con plan del día cerrado, lo comprometido es la cantidad 
   const dplans = new Map([['2026-09-27_p1', { ids: { x1: 20 } }]]);
   const L = closesToAccept(lives, new Map(), acts, '2026-09-30', dplans);
   assert.strictEqual(L[0].rec.prog, 20);
-  assert.strictEqual(L[0].rec.exec, null); // Cumplido sin confirmar: no se da por ejecutado
+  assert.strictEqual(L[0].rec.exec, 20); // Cumplido del SC: lo comprometido en la foto
   // sin foto, como antes
   const L2 = closesToAccept(lives, new Map(), acts, '2026-09-30', new Map());
   assert.strictEqual(L2[0].rec.prog, 10);
 });
 
-test('cierres sin revisar: un Parcial o No cumplido propuesto entra tal cual, con su causa', () => {
+test('cierres del SC: un Parcial o No cumplido entra tal cual, con su causa', () => {
   const lives = [
     { date: '2026-09-27', pisoId: 'p1', actId: 'x1', sc: 'c1', close: { status: 'no', cnc: 'Materiales' } },
     { date: '2026-09-27', pisoId: 'p1', actId: 'x2', sc: 'c1', close: { status: 'partial', cnc: 'Subcontratas' } }
@@ -301,4 +328,52 @@ test('versión cliente: un sector de un piso archivado no se emite (como la pág
   const v = buildCliVersion(d, 60, Date.UTC(2026, 9, 11, 4, 1));
   const acts = JSON.parse(v.docs[0][1].json).acts;
   assert.deepStrictEqual(Object.keys(acts), ['x1']);
+});
+
+/* C-17 (tanda 2, LPS-9): qué compromisos entran congelados con restricciones abiertas o liberación crítica pendiente */
+const { restrInOf } = require('../lib');
+test('restrInOf: restricciones abiertas y liberación crítica pendiente (por «rest» o la partida siguiente)', () => {
+  const acts = M({
+    a: { ambId: 'm1', sc: 'c1', name: 'Tarrajeo', order: 1 },
+    b: { ambId: 'm1', sc: 'c1', name: 'Solaqueo', order: 2 },
+    c: { ambId: 'm1', sc: 'c2', name: 'Pintura de muros', order: 3 },
+    d: { ambId: 'm1', sc: 'c3', name: 'Piso', order: 4 },
+    e: { ambId: 'm2', sc: 'c2', name: 'Pintura de muros', order: 1 }
+  });
+  const restr = [
+    { id: 'r1', actId: 'a', status: 'pend' }, { id: 'r2', actId: 'a', status: 'lib' }, { id: 'r3', actId: 'b', status: 'pend', arch: { t: 1 } },
+    { id: 'r4', actId: 'zz', status: 'pend' }
+  ];
+  const libs = [
+    { id: 'L1', actId: 'b', crit: true, st: 'pro', rest: '' }, // sin «rest»: la primera de otra partida después de b → c
+    { id: 'L2', actId: 'a', crit: true, st: 'obs', rest: 'Piso' }, // «rest» por nombre en el mismo ambiente → d
+    { id: 'L3', actId: 'a', crit: true, st: 'lib', rest: 'Piso' }, // ya liberada
+    { id: 'L4', actId: 'a', crit: false, st: 'sol', rest: '' }, // no es crítica
+    { id: 'L5', actId: 'e', crit: true, st: 'anu' } // anulada
+  ];
+  assert.deepStrictEqual(restrInOf(['a', 'b', 'c', 'd', 'e'], { restr, libs, acts }), { a: ['r1'], c: ['lib:L1'], d: ['lib:L2'] });
+  assert.deepStrictEqual(restrInOf(['b'], { restr, libs, acts }), {});
+});
+test('congelado automático: guarda restrIn (C-17)', () => {
+  const base = {
+    project: PROJ, pisos: M({ p1: { code: 'P1', order: 1 } }), sectors: M({ s1: { pisoId: 'p1', code: 'S1', order: 1 } }),
+    ambientes: M({ a1: { sectorId: 's1', code: 'A1', name: 'Oficina', order: 1 } }),
+    acts: M({ x1: { ambId: 'a1', sc: 'c1', name: 'Pintura', order: 1, days: ['2026-10-12'] }, x2: { ambId: 'a1', sc: 'c2', name: 'Piso', order: 2, days: ['2026-10-13'] } })
+  };
+  const L = buildFreeze({ ...base, restr: [{ id: 'r1', actId: 'x1', status: 'pend' }], libs: [{ id: 'L1', actId: 'x1', crit: true, st: 'pro' }] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.deepStrictEqual(L[0].doc.restrIn, { x1: ['r1'], x2: ['lib:L1'] });
+  const L2 = buildFreeze({ ...base, restr: [{ id: 'r1', actId: 'x1', status: 'lib' }], libs: [] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.strictEqual('restrIn' in L2[0].doc, false);
+});
+test('congelado automático: guarda adv (el SC advirtió con motivo, P9)', () => {
+  const base = {
+    project: PROJ, pisos: M({ p1: { code: 'P1', order: 1 } }), sectors: M({ s1: { pisoId: 'p1', code: 'S1', order: 1 } }),
+    ambientes: M({ a1: { sectorId: 's1', code: 'A1', name: 'Oficina', order: 1 } }),
+    acts: M({ x1: { ambId: 'a1', sc: 'c1', name: 'Pintura', order: 1, days: ['2026-10-12'] }, x2: { ambId: 'a1', sc: 'c1', name: 'Piso', order: 2, days: ['2026-10-13'] } })
+  };
+  const props = [{ id: 'c1', sc: 'c1', adv: { x1: { k: 'fre', g: 'o', t: 'Frente no entregado' }, x9: { k: 'mat', g: 'o' } }, items: { x2: null } }];
+  const L = buildFreeze({ ...base, props }, 60, '2026-10-10T18:00:00.000Z');
+  assert.deepStrictEqual(L[0].doc.adv, { x1: { k: 'fre', g: 'o', t: 'Frente no entregado', src: 'rej' } });
+  const L2 = buildFreeze({ ...base, props: [] }, 60, '2026-10-10T18:00:00.000Z');
+  assert.strictEqual('adv' in L2[0].doc, false);
 });

@@ -30,7 +30,7 @@ const store={get(k,d){try{const v=localStorage.getItem('lps911.'+k);return v==nu
 let FDB=null;/* todas las rutas de datos pasan por aquí (preparación multiempresa: luego será obras/<id>/<colección>) */
 const fcol=n=>(db||FDB).collection(n);
 const PLANO_SRC='plano.js?v=33';
-const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map()};
+const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map(),con:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
@@ -120,9 +120,19 @@ const CNC_STD_V=1;
 /* tipo de restricción según la causa (código del cuadro): el de la lista del proyecto que le corresponde, o vacío.
    Misma tabla que el servidor (functions/lib.js RT_RX). */
 /* hora de la publicación automática del plan del día siguiente (Configuración › Proyecto; como el servidor: por defecto 21:00, máx. 23:30) */
-/* hora de corte del cierre de jornada (Configuración › Proyecto, closeCutHH; por defecto 17:00, entre 12:00 y 21:00 porque el servidor
-   registra lo no cerrado a las 23:30). Misma regla que functions/lib.js closeCutHH */
+/* hora de corte del cierre de jornada del SC/capataz (Configuración › Proyecto, closeCutHH; por defecto 17:00, entre 12:00 y 21:00).
+   Misma regla que functions/lib.js closeCutHH */
 function closeCutHH(){const v=P().closeCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v>='12:00'&&v<='21:00'?v:'17:00'}
+/* Cierre del ingeniero (tanda 1, 23/10/2026; Configuración › Proyecto engCutHH, solo el administrador): del corte del SC hasta esta hora
+   solo los ingenieros registran o corrigen; a esta hora el servidor registra los cierres del SC y el «Sin cierre», y el registro diario
+   de ese día (y de los pasados) queda cerrado para todos, también para el administrador (reglas de daily y live con la hora del
+   servidor). Entre 18:00 y 23:00 y después del corte del SC; si no, 21:00 (22:00 si el corte del SC es 21:00). Misma regla en
+   functions/lib.js engCutHH y firestore.rules engHH. */
+function engCutHH(){const c=closeCutHH();const v=P().engCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v>='18:00'&&v<='23:00'&&v>c?v:(c<'21:00'?'21:00':'22:00')}
+/* ¿el registro diario del día d ya cerró? (días pasados: siempre; hoy: desde el Cierre del ingeniero). Hora corregida (NOW). */
+function nowHHMM(){const n=new Date(NOW()-LIMA_OFF);return String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')}
+function dayShut(d){if(!d)return false;const t=todayIso();return d<t||(d===t&&nowHHMM()>=engCutHH())}
+const shutMsg=d=>`El registro del ${d===todayIso()?'día de hoy':fmtD(d)} ya cerró (Cierre del ingeniero, ${hhLabel(engCutHH())}): no se puede cambiar.`
 /* «17:00» → «5 pm», «16:30» → «4:30 pm» */
 function hhLabel(v){const[h,m]=String(v).split(':').map(Number);const h12=h%12||12;return`${h12}${m?':'+String(m).padStart(2,'0'):''} ${h<12?'am':'pm'}`}
 function planCutHH(){const v=P().planCutHH;return typeof v==='string'&&/^\d\d:\d\d$/.test(v)&&v<='23:30'?v:'21:00'}
@@ -136,8 +146,8 @@ function cncCode(c){if(!c)return'';const o=cncStd(c);if(o)return o.c;const g=CNC
 const cncLabel=c=>{const o=cncStd(c);return o?o.c+' · '+o.n:c};
 const cncTip=c=>{const o=cncStd(c);return o?o.d.join(' '):''};
 /* campos de meta/project que solo cambia el administrador (SEG-01; los mismos en firebase/firestore.rules) */
-const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','closeCutHH','finObra'];
-const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00',closeCutHH:'17:00'};let P_SRC=null,P_VAL=P_DEF;
+const META_ADM=['refWeek','refDate','propCutDow','propCutHH','frzCutDow','frzCutHH','planCutHH','closeCutHH','engCutHH','rstHasta','finObra'];
+const P_DEF={refWeek:58,refDate:'2026-09-28',cnc:CNC_STD.map(o=>o.n),restrTypes:[],templates:[],propCutDow:6,propCutHH:'13:00',planCutHH:'21:00',closeCutHH:'17:00',engCutHH:'21:00'};let P_SRC=null,P_VAL=P_DEF;
 /* siempre con los datos mínimos (un proyecto nuevo puede tener meta/project a medias) */
 const P=()=>{const s=S.meta.get('project');if(s!==P_SRC){P_SRC=s;P_VAL=s?{...P_DEF,...s}:P_DEF;if(!P_VAL.refDate||!P_VAL.refWeek)P_VAL={...P_VAL,refDate:P_VAL.refDate||P_DEF.refDate,refWeek:P_VAL.refWeek||P_DEF.refWeek}}return P_VAL};
 /* imputabilidad de la causa al subcontratista: editable en Configuración; por defecto según el nombre */
@@ -150,12 +160,15 @@ const weekOf=s=>P().refWeek+Math.floor((pd(s)-pd(P().refDate))/864e5/7);
 const weekDays=n=>{const a=weekStart(n);return[0,1,2,3,4,5].map(i=>addD(a,i))};
 const curWeek=()=>weekOf(addD(todayIso(),1));
 const winDays=()=>{const o=[];for(let w=U.week;w<U.week+U.win;w++)weekDays(w).forEach((d,i)=>o.push({d,w,i}));return o};
-const conOf=id=>S.con.get(id)||{name:'—',color:'#9AA0A6'};
+/* SC archivado (C-28/DAT-01, oct 2026): «×» en Configuración lo manda a la Papelera (ARCH.con); sale de las listas para elegir
+   (S.con), pero conOf/conHas lo siguen resolviendo para el historial (semanas congeladas, Campo, restricciones…) */
+const conOf=id=>S.con.get(id)||ARCH.con.get(id)||{name:'—',color:'#9AA0A6'};
+const conHas=id=>!!id&&(S.con.has(id)||ARCH.con.has(id));
 /* «Sin asignar» (oct 2026, pedido del dueño): «POR DEFINIR» no es un subcontratista, es que todavía no se sabe quién
    hará el trabajo. Marcado con `tbd` en Configuración › Subcontratistas, se programa y se ve como siempre, pero queda
    fuera de todo lo que mide a un SC (PPC por subcontratista, rankings y avance del Tablero): no se le puede exigir
    cumplimiento a nadie. En su lugar, el Tablero avisa cuánto trabajo sigue sin dueño. */
-const scTBD=id=>!!(S.con.get(id)||{}).tbd;
+const scTBD=id=>!!(S.con.get(id)||ARCH.con.get(id)||{}).tbd;
 const scReal=id=>!!id&&!scTBD(id);
 const r2=v=>Math.round((+v||0)*100)/100;
 const hasM=x=>typeof x.metrado==='number'&&x.metrado>0;
@@ -182,7 +195,7 @@ function dismissRep(aid,fd){const x=S.act.get(aid);if(x&&canWrite)apply([op('act
 function withQty(x,d,v){const q={...(x.qty||{})};const days=new Set(x.days||[]);if(v!=null&&v>0){q[d]=r2(v);days.add(d)}else{delete q[d];days.delete(d)}return{...x,qty:q,days:[...days].sort()}}
 function actStats(a){const ds=(a.days||[]).slice().sort();return{n:ds.length,ini:ds[0]||'',fin:ds[ds.length-1]||''}}
 const GRP_AREA=/dise[nñ]o|plano|informaci|rfi|permis|contrat|compra|log[ií]st|adquisi|calidad|ssoma|cliente|supervis|aprobaci|ingenier|\bot\b|presupuest|administr/i;
-const restrAreasL=()=>{const a=P().restrAreas;return a&&a.length?a:['OT','Ingeniería','Logística','Calidad','SSOMA','Cliente / Supervisión','Administración']};
+const restrAreasL=()=>{const a=P().restrAreas;return a&&a.length?a:['OT','Ingeniería','Logística','Calidad','SSOMA','Planificación','Cliente / Supervisión','Administración']};
 const typeGrp=t=>{const m=P().restrGrp||{};return t in m?m[t]:(GRP_AREA.test(t||'')?'area':'campo')};
 const grpOf=r=>r.grp||typeGrp(r.type);
 const GRPN={campo:'Operativa de campo',area:'Otras áreas'};
@@ -196,23 +209,40 @@ const schedOn=(x,d)=>(x.days||[]).includes(d)&&!libDay(x,d);
 /* «Terminada» pide confirmar (oct 2026): un error aquí libera los días que faltan; en la Matriz queda por validar */
 const DONE_TXT='Revisa que no falte nada en el ambiente (por ejemplo, una luminaria). Se liberan los días que le quedan en el lookahead; en la Matriz queda como aviso para que un ingeniero lo confirme (el estado de la obra lo dice la Matriz).';
 async function askDone(aid,d){const x=S.act.get(aid);if(!x||!canDaily)return false;const a=S.amb.get(x.ambId);
-  const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok)markDone(aid,d);return!!ok}
+  const ok=await uiAsk({title:`¿«${x.name}» está terminada en todo el ambiente${a?' '+a.code:''}?`,text:DONE_TXT,ok:'Sí, terminada',tone:'ok'});if(ok){markDone(aid,d);await doneGuard(aid,d)}return!!ok}
+/* C-09 (tanda 1, resguardo): al marcar «Terminada» (Campo, En obra, Plan diario) una actividad que ya está en un plan diario publicado
+   (dplan) de un día posterior, se avisa y se ofrece sacarla de ese plan como «No va · terminada»: pdz kind:'nova' con id fijo
+   nv_<fecha>_<actId>, sin reprogramar, causa no imputable (fin:true). Decidida antes de ese día, no cuenta en el PPC diario (nvRec 'out')
+   y el servidor no le registra «Sin cierre». Quien marca decide; sacarla la puede quien publica el plan del piso (administrador o
+   editor responsable, reglas de pdz); a los demás solo se les avisa. */
+async function doneGuard(aid,d){const x=S.act.get(aid);if(!x||!db)return;const pid=pisoOfAct(aid);const L=[];
+  for(const[k,v]of DPL){if(!v||!v.ids||!(aid in v.ids))continue;const dd=v.date||k.slice(0,10);if(dd>d&&(v.pisoId||k.slice(11))===pid)L.push(dd)}
+  if(!L.length)return;L.sort();const fl=L.map(fmtD).join(', ');
+  if(!(canWrite&&typeof isPisoResp==='function'&&isPisoResp(pid))){toast(`«${x.name}» sigue en el plan publicado del ${fl}: avisa al ingeniero de producción del piso para sacarla como «No va · terminada».`);return}
+  const ok=await uiAsk({title:'¿Sacarla del plan ya publicado?',text:`«${x.name}» está en el plan diario publicado del ${fl}. Si ya está terminada, sácala de ese plan como «No va · terminada»: no se le pide cierre ese día y no cuenta en el PPC diario (no es imputable al SC).`,ok:'Sí, sacarla del plan',cancel:'Dejarla',tone:'warn'});
+  if(!ok)return;const cnc=(P().cnc||[]).find(c=>cncCode(c)==='PROG')||'Programación';let n=0;
+  for(const dd of L){const ref=fcol('pdz').doc('nv_'+dd+'_'+aid);
+    try{const w=await db.runTransaction(async tx=>{const s0=await tx.get(ref);if(s0.exists&&!(s0.data()||{}).arch)return false;
+        tx.set(ref,{date:dd,pisoId:pid,sc:x.sc||'',kind:'nova',actId:aid,ambId:x.ambId||'',motivo:`Terminada el ${fmtD(d)}`,repTo:'',fin:true,cnc,imp:false,eng:true,by:me.email,byName:me.name||me.email,ts:NOW()});return true});if(w)n++}
+    catch(e){toast('No se pudo sacar del plan del '+fmtD(dd)+': '+(e.code==='permission-denied'?'solo el responsable del piso o el administrador.':(e.code||e.message)));return}}
+  toast(n?`«${x.name}» salió del plan del ${fl} (No va · terminada).`:'Ya estaba fuera de ese plan.')}
 function markDone(aid,d,keepR){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const cur=DAY.get(dayId(d,pisoOfAct(aid)))?.recs?.[aid]||null;
   const left=(x.days||[]).filter(y=>y>d).length;
   /* las marcas de «terminada» anteriores a la reapertura siguen sin contar: solo se baja la reapertura si la nueva fecha es anterior */
   if(!keepR&&REOP.has(aid)&&d<=REOP.get(aid)){const nr=addD(d,-1);REOP.set(aid,nr);didxWrite(pisoOfAct(aid),{[aid]:nr},'r')}
   writeDaily(d,pisoOfAct(aid),{recs:{[aid]:{...baseRec(d,x,cur&&cur.status?cur:null),status:(cur&&cur.status)||'ok',done:true,note:(cur&&cur.note)||''}}});
   toast(`“${x.name}” terminada el ${fmtD(d)}${left?` · se liberan ${left} día${left>1?'s':''} programado${left>1?'s':''}`:''}`)}
-/** fechas en que alguna fuente (índice, registro diario o cierre del capataz) la marca terminada */
+/** fechas en que alguna fuente (índice o registro diario) la marca terminada (el cierre del capataz/SC ya no: tanda 1) */
 function doneDates(aid){const o=[];const a=DIDX.get(aid);if(a)o.push(a);for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)o.push(doc.date)}
-  for(const lv of LIVE.values())if(lv.actId===aid&&lv.close&&lv.close.done&&liveOwn(lv)&&!recClr(lv.date,aid))o.push(lv.date);return o}
+  return o}
 /** Reabre una actividad marcada terminada: sus días siguientes vuelven a contar. Lo puede hacer quien registra el avance
  *  (administrador, editor o campo) y queda registrado como reapertura, para que ni el cierre del capataz la vuelva a terminar. */
 function reopenDone(aid,quiet){if(typeof cliTabOn==='function'&&cliTabOn())return;const x=S.act.get(aid);if(!x||!canDaily)return;const dn=DONE.get(aid);
   const ds=doneDates(aid);const upto=ds.length?ds.reduce((m,d)=>d>m?d:m):dn;const pid=pisoOfAct(aid);const prevR=REOP.get(aid)||null;
   if(upto){REOP.set(aid,upto);didxWrite(pid,{[aid]:upto},'r')}
   if(DIDX.has(aid)){DIDX.delete(aid);didxWrite(pid,{[aid]:null})}
-  for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done)writeDaily(doc.date,doc.pisoId,{recs:{[aid]:{...r,done:false}}})}
+  /* tanda 1: un día ya cerrado (Cierre del ingeniero) no se reescribe; la reapertura (doneidx r) ya anula esa «terminada» */
+  for(const doc of DAY.values()){const r=doc.recs&&doc.recs[aid];if(r&&r.done&&!dayShut(doc.date))writeDaily(doc.date,doc.pisoId,{recs:{[aid]:{...r,done:false}}})}
   doneRebuild();requestRender();
   if(!quiet)toast(`“${x.name}” reabierta: puedes seguir programándola`,dn?'Deshacer':'',dn?()=>{/* deshacer: vuelve la reapertura que había antes (o ninguna) */if(prevR){REOP.set(aid,prevR);didxWrite(pid,{[aid]:prevR},'r')}else{REOP.delete(aid);didxWrite(pid,{[aid]:null},'r')}markDone(aid,dn,true)}:null)}
 function pendRestr(){const m=new Map();for(const r of S.res.values())if(r.status!=='lib'&&r.actId){m.set(r.actId,(m.get(r.actId)||0)+1)}return m}
@@ -282,7 +312,9 @@ function patch(col,id,partial,localApply){
   qkMark(col,id);bgWrite(fsNow(()=>fcol(col).doc(id).update(...fsArgs(partial))));
 }
 function handleWriteErr(e){const c=e&&e.code;
-  if(c==='permission-denied'&&typeof AREA==='function'&&AREA()){lastErr='Sin permiso';toast('No se pudo guardar: solo puedes registrar y resolver las restricciones de '+(me.area||'tu área')+'.')}
+  /* tanda 1: el registro de un día ya cerrado (Cierre del ingeniero) no se guardó: la página vuelve a lo que tiene la base */
+  if(e&&e.shut){lastErr='Día cerrado';toast(`No se guardó: ${shutMsg(e.shut)} Lo que marcaste sin señal llegó tarde.`);if(typeof requestRender==='function')requestRender()}
+  else if(c==='permission-denied'&&typeof AREA==='function'&&AREA()){lastErr='Sin permiso';toast('No se pudo guardar: solo puedes registrar y resolver las restricciones de '+(me.area||'tu área')+'.')}
   else if(c==='permission-denied'&&typeof SCK==='function'&&SCK()&&U.tab==='restr'){lastErr='Sin permiso';toast('No se pudo guardar la restricción: solo puedes crear o cambiar las tuyas, de actividades de tu partida y sin liberar.')}
   /* un rechazo suelto no quita la edición de toda la sesión (antes dejaba todo en solo lectura por un solo documento):
      si el rol de verdad cambió, lo corrige la suscripción a members (startSession) */
@@ -520,11 +552,17 @@ let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
 function doneRebuild(){if(typeof withInt==='function'&&S.act&&S.act._cli)return withInt(doneRebuild0);return doneRebuild0()}
 function doneRebuild0(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
   for(const[a,dt]of DIDX)add(a,dt);for(const doc of DAY.values())for(const[id,r]of Object.entries(doc.recs||{}))if(r&&r.done)add(id,doc.date);
-  for(const lv of LIVE.values()){const c=lv.close;if(!c||!c.done||c.status!=='ok'||!liveOwn(lv)||recReal(lv.date,lv.actId)||recClr(lv.date,lv.actId))continue;add(lv.actId,lv.date)}}
+  /* tanda 1 (decisión del dueño): el check «Terminada» del SC/capataz (live.close.done) ya no cuenta como terminada; solo la del ingeniero */}
 /** el ingeniero quitó el registro de ese día («Quitar registro»): el cierre del capataz o del SC ya no cuenta, tampoco como terminada */
 function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return!!(r&&r.clr)}
 /** el reporte en vivo es de la partida (y el piso) de su actividad: si no, no cuenta (lo pudo escribir otra partida) */
-function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x||(x.sc||'')!==(lv.sc||''))return false;const p=pisoOfAmb(x.ambId);return!lv.pisoId||!p||p===lv.pisoId}let daySub=null,dayFrom=null,dayErr=null;
+/* C-30/DAT-04 (oct 2026): se compara con el SC de ESE día, no con el actual de la fila. Si después se pasó la fila a otro SC,
+   el cierre sigue contando cuando lv.sc era su SC ese día: el del plan publicado (dplan.who) o, en un día pasado sin plan, el
+   propio lv.sc (las reglas solo dejan al capataz/SC escribir con el SC que la actividad tenía en ese momento, liveActOk).
+   Ojo: el servidor (aceptarCierres → closesToAccept) aún compara con el SC actual. */
+function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x)return false;const p=pisoOfAmb(x.ambId);if(lv.pisoId&&p&&p!==lv.pisoId)return false;
+  const ls=lv.sc||'';if((x.sc||'')===ls)return true;if(!ls||!lv.date)return false;
+  const dp=dplanOf(lv.date,lv.pisoId||p);const w=dp&&dp.who&&dp.who[lv.actId];if(w)return(w.sc||'')===ls;return lv.date<todayIso()}let daySub=null,dayFrom=null,dayErr=null;
 function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
   /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
@@ -631,12 +669,13 @@ const schedOrSnap=(x,d)=>schedOn(x,d)||inSnap(x,d);
 function dplanWho(ids,acts){const o={};const M=acts||S.act;for(const id of Object.keys(ids||{})){const x=M.get(id);if(x)o[id]={sc:x.sc||'',amb:x.ambId||''}}return o}
 function dplanIds(d,pid,acts){const o={};for(const x of(acts||S.act).values()){if(!(x.days||[]).includes(d)||libDay(x,d)||pisoOfAmb(x.ambId)!==pid)continue;const q=(x.qty||{})[d];o[x.id]=q!=null?+q:null}return o}
 function recReal(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&doc.recs&&doc.recs[aid];return r&&r.status?r:null}
-/* registro del día: el del ingeniero; si no hay, el cierre propuesto por el capataz (cuenta mientras nadie lo corrija) */
+/* registro del día: el del ingeniero; si no hay, el cierre del SC/capataz (cuenta tal como lo marcó, tanda 1; su «Terminada» no se
+   aplica: done:false, queda en prop.done) */
 function recOf(d,aid){const r=recReal(d,aid);if(r)return r;
   /* «Quitar registro» deja una marca: el cierre del capataz ya no vuelve a contar */
   {const doc=DAY.get(dayId(d,pisoOfAct(aid)));const rr=doc&&doc.recs&&doc.recs[aid];if(rr&&rr.clr)return null}
   const lv=LIVE.get(d+'_'+aid);const c=lv&&lv.close;if(!c||!c.status||!liveOwn(lv))return null;
-  return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:!!c.done,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,prop:{status:c.status,cnc:c.cnc||'',by:c.by||'',byName:c.n||'',ts:c.t||0}}}
+  return{status:c.status,cnc:c.cnc||'',note:c.note||'',exec:null,prog:null,und:'',imp:null,photos:lv.photos||[],done:false,late:false,by:c.by||'',byName:c.n||'',ts:c.t||0,_prop:true,...(lv.sc?{sc:lv.sc}:{}),prop:{status:c.status,cnc:c.cnc||'',done:!!c.done,by:c.by||'',byName:c.n||'',ts:c.t||0}}}
 const ST={ok:{t:'Cumplido',i:'✓',c:'ok'},partial:{t:'Parcial',i:'½',c:'pa'},no:{t:'No cumplido',i:'✗',c:'no'}};
 /* solo se envían los campos que cambian de cada registro: si otro ingeniero cambió otro campo (foto, nota, estado),
    una copia local atrasada no lo pisa */
@@ -648,7 +687,9 @@ function dailyPatch(cur,recs){const out={};for(const[aid,r]of Object.entries(rec
   if(Object.keys(p).length)out[aid]=p}return out}
 /* el avance de un día que aún no llega no se registra (se puede consultar; lo que no irá se maneja en el Plan diario) */
 function futRec(d,obj){if(d<=todayIso())return false;return Object.values(obj.recs||{}).some(r=>r&&typeof r==='object'&&(r.status||r.exec!=null||r.done))}
-function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
+function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toast('En la versión cliente no se registra avance: hazlo en Campo.');return false}if(futRec(d,obj)){toast('No se puede registrar avance de un día que aún no llega.');return false}
+  /* tanda 1: pasado el Cierre del ingeniero el día queda cerrado para todos (las reglas lo rechazan con la hora del servidor) */
+  if(dayShut(d)){toast(shutMsg(d));return false}const id=dayId(d,pid);DAYW.set(id,++DAYWN);const cur=DAY.get(id)||{date:d,pisoId:pid,recs:{},extra:{}};
   /* cumplido sin cantidad ejecutada = lo programado (si no, el PPC semanal lo sugería como no cumplido); un registro nuevo borra la marca de «quitado» */
   for(const[aid,r]of Object.entries(obj.recs||{})){if(!r||typeof r!=='object')continue;if(r.status==='ok'&&r.exec==null&&r.prog!=null)r.exec=r.prog;if(r.status&&(cur.recs||{})[aid]&&cur.recs[aid].clr)r.clr=false;
     /* registro reescrito por una pantalla que no conoce la marca de la «no va» (Campo, En obra…): deja de ser «de la no va» también en la base
@@ -659,6 +700,8 @@ function writeDaily(d,pid,obj){if(typeof cliTabOn==='function'&&cliTabOn()){toas
   /* al SDK en este mismo instante (C1): sin señal queda en la cola local de Firestore y no se pierde al cerrar la página */
   if(!db||!canDaily)return;const ref=fcol('daily').doc(id);
   bgWrite(fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(sendRecs?{recs:sendRecs}:{})},{merge:true})).catch(e=>{
+    /* escritura que llegó tarde (sin señal) a un día ya cerrado: aviso claro (handleWriteErr) */
+    if(e&&e.code==='permission-denied'&&dayShut(d)){e.shut=d;throw e}
     /* fallo de red raro: se reenvían completos los registros tocados, como están ahora en este equipo (no una versión intermedia) */
     if(!(e&&e.code==='unavailable'))throw e;const now=DAY.get(id)||{};const rr={};for(const aid of Object.keys(obj.recs||{}))if(now.recs&&aid in now.recs)rr[aid]=now.recs[aid];
     return fsNow(()=>ref.set({date:d,pisoId:pid,...obj,...(obj.recs?{recs:rr}:{})},{merge:true}))}))}
@@ -730,7 +773,7 @@ const BNI={campo:SVG('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6
 const tabName=t=>{const b=$(`#tabs [data-tab="${t}"]`);return b?b.firstChild.textContent.trim():t};
 /* «Cliente» es el Lookahead con la capa del cliente (U.cliv): la pestaña cli no tiene vista propia */
 const tabKey=()=>U.tab==='look'&&U.cliv?'cli':U.tab;
-function goTab(t){if(t==='cli'){U.tab='look';U.cliv=true;U.cliVer='';U.ver=''}else{if(t==='look'||U.cliv)U.cliv=false;U.tab=t}if(U.tab==='look')gridRows=null;saveUI();sendPresence();render()}
+function goTab(t){if(t==='mapa'&&U.tab!=='mapa'&&window.__plano&&window.__plano.pfReset)window.__plano.pfReset();if(t==='cli'){U.tab='look';U.cliv=true;U.cliVer='';U.ver=''}else{if(t==='look'||U.cliv)U.cliv=false;U.tab=t}if(U.tab==='look')gridRows=null;saveUI();sendPresence();render()}
 function renderBnav(){const b=$('#bnav');if(!b)return;const pr=offLps()?0:restrInScope().filter(rOpenC).length;const BNT=bnavItems().map(t=>[t,t==='tper'&&me&&me.role==='tcap'?'Mi cuadrilla':t==='tdia'&&me&&me.role==='tcap'?'Tareo':TAB_SHORT[t]]);const more=!BNT.some(x=>x[0]===tabKey());
   const h=BNT.map(([t,l])=>`<button data-bt="${t}" class="${tabKey()===t?'on':''}" aria-label="${esc(tabName(t))}">${BNI[t]||BNI.more}<span>${l}${t==='restr'&&pr?` <b class="bc">${pr}</b>`:''}</span></button>`).join('')+`<button data-bt="more" class="${more?'on':''}">${BNI.more}<span>${more?esc(TAB_SHORT[tabKey()]||tabName(tabKey())):'Más'}</span></button>`;
   if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}

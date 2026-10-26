@@ -53,6 +53,9 @@ service cloud.firestore {
     function areaOf() { return get(memberPath()).data.get('area', ''); }
     // Calidad: un área de apoyo cuyo nombre contiene "calidad"
     function isCal() { return isArea() && areaOf().lower().matches('.*calidad.*'); }
+    // Planificación (oct 2026): área de apoyo del planner; gestiona los hitos, no edita el lookahead
+    // área de planificación: «Planificación» o «Control de proyecto(s)» (así se llama en la obra, 25-10-2026)
+    function isPlan() { return isArea() && areaOf().lower().matches('.*(planific|control de proyecto).*'); }
     // Veedor: recorre la obra y registra lo que se ejecuta sin estar programado (no cambia nada más)
     function isVeedor() { return isMember() && !isOwner() && role() == 'veedor'; }
     // Trabajo no programado visto en obra: campo, editores, administrador, Calidad y veedores
@@ -138,20 +141,45 @@ service cloud.firestore {
       let sp = /databases/$(database)/documents/sectors/$(exists(am) ? get(am).data.get('sectorId', '-') : '-');
       return !exists(sp) || get(sp).data.get('pisoId', '') == '' || get(sp).data.pisoId == pid;
     }
+    // ---- Cierre del ingeniero (tanda 1, 23/10/2026; docs/ia/ppc-campo.md «Jornada») ----
+    // Hora en Configuración › Proyecto (meta/project.engCutHH, solo el administrador). Misma regla que engCutHH de web/js/base.js y
+    // functions/lib.js: entre 18:00 y 23:00 y después del corte del SC (closeCutHH, 12:00–21:00, por defecto 17:00); si no, 21:00
+    // (22:00 si el corte del SC es 21:00). Pasada esa hora, el registro diario de ese día (daily) y sus reportes en vivo (live) quedan
+    // cerrados para todos, incluido el administrador; solo el servidor (Admin SDK) escribe. La hora es la del servidor (request.time).
+    function projData() { let mp = /databases/$(database)/documents/meta/project; return exists(mp) ? get(mp).data : {}; }
+    function hhIn(v, lo, hi) { return v is string && v.matches('[0-9]{2}:[0-9]{2}') && v >= lo && v <= hi; }
+    function ccHH(p) { return hhIn(p.get('closeCutHH', ''), '12:00', '21:00') ? p.closeCutHH : '17:00'; }
+    function engHH(p) { let c = ccHH(p); let v = p.get('engCutHH', ''); return hhIn(v, '18:00', '23:00') && v > c ? v : (c < '21:00' ? '21:00' : '22:00'); }
+    function isDay(d) { return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}'); }
+    // hh:mm de Lima (UTC-5) del día d
+    function limaTs(d, hh) { return timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) + duration.value(5, 'h') + duration.value(int(hh[0:2]) * 60 + int(hh[3:5]), 'm'); }
+    // día d cerrado. Excepción: Equipo › Cargar datos desde archivo abre una ventana corta (meta/project.rstHasta, ms, solo el
+    // administrador la escribe) para restaurar un respaldo con los registros de días pasados.
+    function dayShut(d) { let p = projData(); return isDay(d) && request.time > limaTs(d, engHH(p)) && !(isAdmin() && p.get('rstHasta', 0) > request.time.toMillis()); }
+    // PER-1: el SC/capataz escribe o cambia su cierre (live.close) solo hasta su hora de corte de ese día, con 10 min de margen
+    // (señal y reloj del equipo); el servidor ya no confía en la hora que pone el equipo (close.t)
+    function liveCloseOk(id) {
+      let d = request.resource.data;
+      let ch = resource == null ? d.keys().hasAny(['close']) : d.diff(resource.data).affectedKeys().hasAny(['close']);
+      return !ch || (isDay(id[0:10]) && request.time <= limaTs(id[0:10], ccHH(projData())) + duration.value(10, 'm'));
+    }
     match /live/{id} {
       allow read: if lpsMember();
-      allow create: if canDaily() || (crew() && request.resource.data.sc in scsOf() && liveActOk(id))
-        || (isVeedor() && liveActOk(id) && request.resource.data.keys().hasOnly(['date', 'actId', 'pisoId', 'sc', 'seq', 'log', 'sat']));
+      // tanda 1: nadie escribe los reportes en vivo de un día ya cerrado (Cierre del ingeniero, dayShut)
+      allow create: if !dayShut(id[0:10]) && (canDaily() || (crew() && request.resource.data.sc in scsOf() && liveActOk(id) && liveCloseOk(id))
+        || (isVeedor() && liveActOk(id) && request.resource.data.keys().hasOnly(['date', 'actId', 'pisoId', 'sc', 'seq', 'log', 'sat'])));
       // el veedor solo marca o quita «en secuencia» (tren de trabajo): no inicia, no detiene ni cierra
-      allow update: if canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id))
-        || (isVeedor() && liveActOk(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq', 'log', 'sat']));
+      allow update: if !dayShut(id[0:10]) && (canDaily() || (crew() && resource.data.sc in scsOf() && request.resource.data.sc in scsOf() && liveActOk(id) && liveCloseOk(id))
+        || (isVeedor() && liveActOk(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq', 'log', 'sat'])));
       // SEG-02: la app nunca borra reportes en vivo (cierres del capataz/SC): solo el administrador (Limpieza)
       allow delete: if isAdmin();
     }
     // Propuestas del lookahead: el subcontratista edita la de su partida; el editor (ingeniero de producción) las resuelve
+    // adv (oct 2026, P9): advertencias del SC que el ingeniero rechazó (motivo); las escribe solo quien decide, como hist
     function lhpHistOk() {
-      return (resource == null && !('hist' in request.resource.data))
-        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {}));
+      return (resource == null && !('hist' in request.resource.data) && !('adv' in request.resource.data))
+        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {})
+            && request.resource.data.get('adv', {}) == resource.data.get('adv', {}));
     }
     // ventana de propuestas (meta/propwin.closeAt, ms): pasado el corte, el SC queda en solo lectura hasta que un ingeniero la habilite
     // de nuevo (pone el próximo corte). Sin documento: abierta (la app ya muestra el bloqueo desde el primer corte).
@@ -279,7 +307,8 @@ service cloud.firestore {
     }
     match /daily/{id} {
       allow read: if lpsMember();
-      allow create, update: if canDaily();
+      // tanda 1: id = <fecha>_<piso>; pasado el Cierre del ingeniero de esa fecha, nadie lo cambia (dayShut), tampoco el administrador
+      allow create, update: if canDaily() && !dayShut(id[0:10]);
       // SEG-02: el registro diario (base del PPC) no lo borra campo ni el editor; solo el administrador (Equipo › Limpieza)
       allow delete: if isAdmin();
     }
@@ -296,6 +325,22 @@ service cloud.firestore {
     }
     // Sesión pull (oct 2026, docs/ia/pull.md): borrador de planificación con pósits. La ven todos los de LPS;
     // la crean y editan el administrador y los ingenieros de producción (canEdit). Se archiva; borrar, solo el administrador.
+    // Hitos de inicio y fin (oct 2026, js/hitos.js): los ve todo LPS; los crean y editan el administrador, los ingenieros de
+    // producción (canEdit) y el área Planificación. Se archivan; borrar, solo el administrador.
+    match /hitos/{id} {
+      allow read: if lpsMember();
+      allow create, update: if (canEdit() || isPlan()) && request.resource.data.tipo in ['ini', 'fin']
+        && request.resource.data.d is string && request.resource.data.n is string;
+      allow delete: if isAdmin();
+    }
+    // Revisión de flujos por ambiente (oct 2026, js/flujos.js): la ven todos los de LPS; la escriben el SC (de su partida) y los
+    // ingenieros (admin, editor, campo). No se borra (borrar, solo el administrador).
+    match /frev/{id} {
+      allow read: if lpsMember();
+      allow create, update: if (canDaily() || (isSC() && request.resource.data.get('sc', '') in scsOf()))
+        && request.resource.data.f is map && request.resource.data.n is number;
+      allow delete: if isAdmin();
+    }
     match /pull/{id} {
       allow read: if lpsMember();
       allow create, update: if canEdit() && request.resource.data.ps is map && request.resource.data.piso is string;
@@ -388,6 +433,12 @@ service cloud.firestore {
       allow read: if isTar();
       allow create, update: if tarEd() && tperOk(id) && (tperSinPriv() || isAdmin());
     }
+    // Foto antes de cada importación del personal (para «Deshacer última importación»): se crea y solo se marca como deshecha
+    match /tperbk/{id} {
+      allow read: if tarEd();
+      allow create: if tarEd() && request.resource.data.get('prev', null) is map && request.resource.data.get('nuevos', null) is list;
+      allow update: if tarEd() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undo']);
+    }
     // AFP y N.° de hijos ya no van en tper (los lee el capataz): se pueden conservar o borrar, no poner ni cambiar (auditoría 21-10-2026)
     function tperSinPriv() {
       let d = request.resource.data;
@@ -407,18 +458,19 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.get('cod', null) is string && d.get('nom', null) is string;
     }
-    // Costos (tcos) solo bloquea o desbloquea una partida para la carga: cambia bloq/bloqBy/bloqAt y nada más
-    function tpcBloqOk() {
-      let d = request.resource.data;
-      return isMember() && role() == 'tcos'
-        && d.diff(resource.data).affectedKeys().hasOnly(['bloq', 'bloqBy', 'bloqAt'])
-        && d.get('bloq', false) is bool && d.get('bloqBy', '') == email();
-    }
+    // Partidas de control: las mantienen solo Costos (tcos) y el administrador (crear, editar, activar, bloquear, importar; 25-10-2026, dueño).
+    // Nadie las borra: las horas ya cargadas siempre encuentran su partida.
+    function tpcEd() { return isMember() && notOff() && role() in ['admin', 'tcos']; }
     match /tpc/{id} {
       // los ingenieros también las leen (Productividad › Casa: IP por partida; no tienen datos de personas)
       allow read: if isTar() || canDaily();
-      allow create: if tarEd() && tpcOk();
-      allow update: if (tarEd() && tpcOk()) || tpcBloqOk();
+      allow create, update: if tpcEd() && tpcOk();
+    }
+    // Foto de la lista antes de cada importación de partidas (para «Deshacer última importación»): se crea y solo se marca como deshecha
+    match /tpcbk/{id} {
+      allow read: if tpcEd();
+      allow create: if tpcEd() && request.resource.data.get('prev', null) is map && request.resource.data.get('nuevas', null) is list;
+      allow update: if tpcEd() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undo']);
     }
     // Configuración del tareo (jornada, refrigerio, límites): la cambia solo el administrador
     // configuración del tareo: el administrador y el asistente de tareo (20-10-2026)
@@ -427,6 +479,8 @@ service cloud.firestore {
     function plaOk() {
       let d = request.resource.data;
       return (!('vig' in d) || (d.vig is list && d.vig.size() <= 30))
+        // tarifas de descuento a SC (24-10-2026): vigencias como los jornales
+        && (!('dtar' in d) || (d.dtar is list && d.dtar.size() <= 30))
         && numIn(d, 'he60h', 0, 12) && numIn(d, 'sob1', 0, 300) && numIn(d, 'sob2', 0, 300) && numIn(d, 'alt', 0, 100)
         && numIn(d, 'mov', 0, 200) && numIn(d, 'feA', 0, 100) && numIn(d, 'dmEmp', 0, 366) && numIn(d, 'dmTope', 0, 366) && numIn(d, 'ae', 0, 366)
         && numIn(d, 'aeEdad', 0, 30) && numIn(d, 'leyes', 0, 300)
@@ -450,6 +504,18 @@ service cloud.firestore {
       allow read: if plaRead();
       allow create, update: if (canEdit() || isOT()) && plbOk();
       // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
+      allow delete: if isAdmin();
+    }
+    // ETO: planos de taller aprobados de los subcontratistas (docs/ia/planos.md › ETO). El SC solo lee los de su partida;
+    // el resto del equipo que ve Planos, todos. Carga, edita y borra solo el administrador.
+    function etoOk() {
+      let d = request.resource.data;
+      return d.sc is string && d.sc.size() > 0 && d.cod is string && d.cod.size() <= 40 && d.rev is int && d.rev >= 1
+        && d.base is string && d.base.matches('etos/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    match /eto/{id} {
+      allow read: if plaRead() && (role() != 'sc' || resource.data.sc in scsOf());
+      allow create, update: if isAdmin() && etoOk();
       allow delete: if isAdmin();
     }
     // Modelo 3D (beta, docs/ia/planos.md): un documento por especialidad con la ruta del modelo convertido (.frag) en Storage
@@ -681,13 +747,14 @@ service cloud.firestore {
           || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null);
     }
     // SEG-01: Configuración › Proyecto. La numeración de semanas, los cortes (propuestas y congelado), la publicación automática del
-    // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia. El editor sigue guardando
+    // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia (también engCutHH, Cierre del
+    // ingeniero, y rstHasta, ventana para restaurar un respaldo). El editor sigue guardando
     // lo demás de meta/project (calendario, especialidades, plantillas, causas, encabezado, PPC histórico…) y meta/propwin.
     // Lectura y borrado: regla general de abajo (borrar meta, solo el administrador).
     match /meta/{id} {
       allow create, update: if isAdmin() || (canEdit() && (id != 'project'
         || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
-          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
+          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'engCutHH', 'rstHasta', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
     }
     // Avisos de detenciones (push, oct 2026; docs/ia/avisos.md). push/<sha256 del token>: un equipo con los avisos activados;
     // cada administrador o editor registra y quita solo los suyos (em = su correo). Los lee y envía el servidor.

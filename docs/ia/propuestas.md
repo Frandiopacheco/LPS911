@@ -55,3 +55,12 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Tardías sin motivo:** aceptar una propuesta fuera de plazo (una o en bloque) **ya no pide motivo**; sigue marcada «FUERA DE PLAZO»/«TARDÍA» y queda `late` en `lhphist` (`lateNote` vacío). El motivo solo se pide al rechazar (botones o comentario).
 - **Bloquear siempre a mano:** con la ventana abierta y **sin pendientes**, el panel derecho muestra la pestaña plegada «🔒 Bloquear propuestas» (antes no aparecía en ningún lado: la barra superior se había quitado). En la revisión también está al pie del panel.
 - Pruebas: `propuestas-editar.spec.js` (otra fecha con vista previa; bloquear sin pendientes), `propuestas-tardias.spec.js`.
+
+## Motivo obligatorio del SC (P9, oct 2026, decidido con el dueño)
+- El lookahead sigue siendo el mandato (el ingeniero programa y decide); lo nuevo es el **porqué** del SC. `propNeedsWhy(it, off)` → `'atrasa'` (empieza después), `'alarga'` (termina después o más días) o `'quita'` (retira o deja sin días); adelantar, acortar o agregar no lo piden.
+- `sendProp` junta los elementos sin enviar que lo necesitan y sin `why` y abre `pwhyAsk` (ventana `#pwhy`: un `<select>` por fila con grupos Causa propia / Causa de obra y «Para todas»; sin motivo no envía). `sendPropNow(W)` guarda `items.<id>.why = {k, g:'p'|'o', t}` (`PWHY`: per, equ, ren = propia; fre, mat, res, dis = obra). Editar un borrador conserva `why` (también en `sentV`).
+- El ingeniero lo ve en la lista (`.ppk.why`) y en la fila elegida de la revisión (`.rvtag.why`, `x._rv.why`). Cada decisión copia el motivo a `lhphist.swhy`.
+- **Advertencia:** rechazar una propuesta con motivo escribe `lhprop/{sc}.adv.<actId> = {k,g,t,ts,by,n}` en la misma transacción (`propAdvArgs`, en `decideProp`, `rejectMany` y `decideMany`); aceptarla la borra. Reglas: el SC no cambia `adv` (como `hist`, `lhpHistOk`).
+- **Al congelar** (página `freezeWeek` y servidor `buildFreeze`, misma función `advOfProps`): `weeks.adv.<actId> = {k,g,t,src:'rej'|'pend'}` con lo rechazado con motivo y lo enviado con motivo aún sin decidir; se conserva al re-congelar (`wkKeepOf().adv`) y pasa al historial al descongelar (`WK_VF`). Ver `ppc-campo.md`.
+- «No va» por error de programación (`nvProgDef`, plano.js): con motivo de **causa propia** queda del SC aunque se le haya rechazado.
+- Pruebas: `tests/e2e/propuestas-motivo.spec.js`, reglas «la advertencia del SC rechazada (adv)…», servidor «guarda adv».

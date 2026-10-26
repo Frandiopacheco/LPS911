@@ -112,7 +112,7 @@ async function xAR(wb,list0,n0,L){const J=wb.addWorksheet('AR');wb.calcPropertie
     cell('B'+r,i+1,{font:f10});cell('C'+r,x?x.name:(q.actId?'(ya no está en el lookahead)':''),{font:f10,wrap:true}).alignment={horizontal:'left',vertical:'middle',wrapText:true};
     cell('D'+r,q.desc||q.type||'',{font:f10,wrap:true}).alignment={horizontal:'left',vertical:'middle',wrapText:true};
     d(q.created,'E');d(q.need,'F');cell('G'+r,q.resp||'',{font:f10,wrap:true});cell('H'+r,grpOf(q)==='area'?(q.area||'Otras áreas').toUpperCase():'PRODUCCIÓN',{font:f10,wrap:true});
-    d(q.comp,'I');d(q.status==='lib'?q.freed:'','J');cell('K'+r,sc?(espOfSc(sc)||conOf(sc).partida||''):'',{font:f10,wrap:true});
+    {const ci=d(q.comp,'I');if(rCompLate(q)){ci.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFDE2B3'}};ci.note='Compromiso después de la fecha requerida'}}d(q.status==='lib'?q.freed:'','J');cell('K'+r,sc?(espOfSc(sc)||conOf(sc).partida||''):'',{font:f10,wrap:true});
     for(let k=0;k<D;k++){const col=XCOL(C0-1+k);cell(col+r,{formula:`IF($J${r}="",IF($I${r}="",IF($F${r}=${col}$11,"X",""),IF($I${r}=${col}$11,"X","")),IF($J${r}=${col}$11,"O",""))`,result:dayRes(q,DAYS[k])},{font:f10})}
     cell('AN'+r,q.obsAs||'',{font:f10,wrap:true})}
   if(list.length)J.addConditionalFormatting({ref:`L13:AM${last}`,rules:[
@@ -133,7 +133,7 @@ async function xArArch(wb,list,d0){const J=wb.addWorksheet('Liberadas (archivo)'
     const pp=S.pis.get(restrPiso(q))||(ARCH.pis&&ARCH.pis.get(restrPiso(q)));const sc=q.sc||(x&&x.sc)||'';
     const v=[i+1,x?x.name:(q.actId?'(ya no está en el lookahead)':''),[pp&&pp.code,a&&(a.code+' '+(a.name||''))].filter(Boolean).join(' · '),q.type||'',q.desc||'',q.resp||'',grpOf(q)==='area'?(q.area||'Otras áreas').toUpperCase():'PRODUCCIÓN',sc?(espOfSc(sc)||conOf(sc).partida||''):'',
       q.created?xDate(q.created):null,q.need?xDate(q.need):null,q.comp?xDate(q.comp):null,q.freed?xDate(q.freed):null,q.libN||'',q.obsAs||''];
-    v.forEach((val,c)=>{const cell=J.getCell(hr+1+i,c+1);cell.value=val;cell.font=f10;cell.border=B;cell.alignment=c===0||(c>=8&&c<=11)?alc:al;if(c>=8&&c<=11)cell.numFmt='d-mmm-yy'})}
+    v.forEach((val,c)=>{const cell=J.getCell(hr+1+i,c+1);cell.value=val;cell.font=f10;cell.border=B;cell.alignment=c===0||(c>=8&&c<=11)?alc:al;if(c>=8&&c<=11)cell.numFmt='d-mmm-yy';if(c===10&&rCompLate(q)){cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFDE2B3'}};cell.note='Compromiso después de la fecha requerida'}})}
   J.autoFilter={from:{row:hr,column:1},to:{row:hr+Math.max(1,list.length),column:H.length}};
   J.views=[{state:'frozen',xSplit:0,ySplit:hr}];return J}
 /* ---- hoja Sectorización: la lámina base de cada piso con sus sectores y ambientes ---- */

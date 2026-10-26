@@ -137,7 +137,7 @@ test('ex-3 · congelar con propuestas sin decidir avisa y guarda cuáles quedaro
   await expect.poll(() => msg).toContain('sin decidir');
   expect(msg).toContain('1 cambio');
   expect(await page.evaluate(() => __dbGet('weeks', '59_p1'))).toBeUndefined();
-  page.once('dialog', d => d.accept());
+  page.on('dialog', d => d.accept()); // también el aviso de restricciones abiertas (C-17, tanda 2: Tarrajeo con r1)
   await btn.click();
   await expect.poll(() => page.evaluate(() => (__dbGet('weeks', '59_p1') || {}).frozenAt || null)).not.toBeNull();
   expect((await page.evaluate(() => __dbGet('weeks', '59_p1'))).propOut).toEqual(['c1/q1']);

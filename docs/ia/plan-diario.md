@@ -14,7 +14,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
   - **Foto del plan con lo del servidor:** `pubPlan` espera las escrituras propias (`waitForPendingWrites`) y relee en la transacción las actividades candidatas (las del piso ese día, las de la foto anterior y las que se mueven).
   - **Deshacer publicación = todo o nada** (`unpubPlan`, transacción): si alguna actividad cambió después, no toca nada (ni foto ni aviso). Una republicación (`R_.was`) no borra foto ni aviso.
   - **Mismo universo del día:** con foto, la reunión (`cuRows`), Campo y En obra (`schedOrSnap`/`inSnap`) incluyen lo publicado que salió del día; lo terminado antes del día (`doneBefore`) no cuenta como «salió del plan» en el PPC diario.
-  - **La página ya no acepta sola los cierres del capataz/SC** (se quitó `autoAccept`): lo hace solo el servidor (`aceptarCierres`, 23:30, transacción que relee el registro).
+  - **La página ya no acepta sola los cierres del capataz/SC** (se quitó `autoAccept`): lo hace solo el servidor (`aceptarCierres`, a la hora del Cierre del ingeniero, transacción que relee el registro; ver `ppc-campo.md` «Jornada»).
   - «Quitar registro» (`clr`) también anula la «terminada» del cierre en vivo (`recClr` en `doneRebuild`/`doneDates`; servidor `doneMap`), y pone `done:false`.
   - Historial y fotos en vivo con `arrayUnion` (`liveWrite`); fotos del registro diario que solo se agregan, también (`dailyPatch`).
   - Mover días (quitar y poner a la vez): `fsDiff` manda `arrayRemove` y `arrayUnion` en dos escrituras encoladas a la vez (`args.then`, las lanza `put`; sin señal quedan las dos en la cola); dentro de una transacción (`fsDiff(...,true)`) sí manda la lista final.
@@ -55,6 +55,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - **Visibilidad del no programado (oct 2026, decidido con el dueño):** el SC y el capataz solo ven lo de su partida (`npVis` dentro de `npItems`: vale para Campo, En obra, plano, Plan diario e Indicadores); ingenieros, áreas y veedor ven todo. En En obra el contador por piso y los puntos del plano siguen el filtro de SC (`CP.sc`; `npMarks(d,pid,f)`). Campo › Tarjetas: botón «No programado» en `#cshow` (`CU.show='np'`: solo lo no programado; «Por confirmar» muestra además lo del SC por verificar). **Cruce** (`npCross`): la tarjeta avisa al ingeniero (`canDaily`) si en ese ambiente ese día otro SC tiene algo programado (`.npcx`).
 
+- **Tanda 2 (frente E, 23 oct 2026, decidido con el dueño):**
+  - **C-11 · «Todo el tren» sigue el tren del catálogo** (`trenOf`, `trPos` = `mxTrOf(mxCatOf(x))`, Matriz › Tren): si la actividad está en el tren, se mueven las del mismo ambiente que van **después según el tren** (no terminadas, con días desde la fecha del plan), en ese orden; las filas sin actividad de catálogo (o fuera del tren) siguen el orden visual como respaldo; sin tren en la actividad, todo por el orden visual (como antes). **Antes de confirmar** el paso «¿Qué se mueve?» lista cada actividad con su SC y su primer día → el nuevo (`ol.nvtl`). «Frente no entregado»: `predOf` preselecciona la partida de la predecesora más cercana según el tren (de otra partida); si no hay, la fila anterior de otra partida. `renderMapa` llama `ensureMcat()` (el catálogo no se cargaba si se entraba directo al Plan diario).
+  - **C-17 · Publicar con restricciones abiertas** avisa con `uiAsk` y guarda `dplan.restrIn` (ver `ppc-campo.md` «Tanda 2»). El cierre automático (`closePlanPiso`) lo guarda sin aviso.
 - `capPlan`: si el piso tiene varias láminas (fachadas), barra de chips `.pvlams` para elegirla (`CPB`).
 
 ## Distribución de la pantalla (oct 2026, pedido del dueño)
@@ -66,3 +69,19 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - La franja de Equipos es una sola fila (cada SC en una línea) y se pliega con su cabecera (`PFOLD.b`, `lps.mfzfold`; en el celular sigue `M.fzOpen`).
 - El visor vuelve a encuadrar el plano cuando cambia su tamaño (paneles que se abren o pliegan) mientras el usuario no lo haya movido (`v.touched`, lo marcan arrastrar, pellizcar, la rueda y `zoomTo`; `fit()` lo reinicia).
 - **Imágenes de sectorización anteriores** (`planos`, Sectorización › «Imágenes de sectorización anteriores», `config-equipo.js`): «Eliminar» es **solo del administrador**, pide confirmación (`uiAsk`) y **archiva** (`arch:{t,by,n}`), no borra; las archivadas no se muestran. Reglas: solo el admin cambia `arch` y borra `planos` (Equipo › Limpieza). Decisión del dueño, oct 2026.
+
+## La semana vista desde el Plan diario (P23, `js/semana-dia.js`; rediseño 25 oct 2026, decidido con el dueño)
+
+- **Recordatorio de solo consulta** del Plan semanal congelado del piso, para no ir a la pestaña Plan semanal al programar. Sin estados ni cumplimiento: eso se mide en Plan semanal e Indicadores (el «Sin cierre» automático no debe leerse aquí como atraso). No escribe nada.
+- `semData(pid, d)`: compromisos de `S.wk` `wkId(weekOf(d), pid)` → `{n, frozen, wd, rows:[{id, it, sc, days}]}` ordenados por ítem; `wd` = `semWorkDays(n)` (lun–sáb según el calendario, más el domingo marcado «se trabaja»).
+- **Pestaña «Semana»** del panel derecho acoplado (`DOCK0`, `#msemb`, `semDockHtml`): interruptor **Día / Semana** (`SEMV.mode`, por defecto `dia` = lo comprometido para `M.date`); agrupado por SC y **plegado** (`SEMV.open`; un solo SC o un SC elegido arriba → abierto); cada compromiso en una línea con la regla de días (`semStrip`: comprometidos rellenos, día elegido con borde); tocarlo va a su zona (`data-see`). El SC solo ve lo suyo (`semFilter`). Clics en `semClick` (lo llama `planClick` antes del candado del plan cerrado).
+- Retirado (oct 2026): estados «va bien / en riesgo / ya no llega», la línea de la ficha (`semActLine`: los SC trabajan en tren) y «▶ Presentar» (`semPres*`).
+- Prueba: `tests/e2e/semana-dia.spec.js`.
+
+## Paneles plegados y barra por momentos (26-10-2026, decidido con el dueño)
+- **Paneles laterales plegados por defecto** cada vez que se entra al Plan diario (`PFOLD` en memoria, ya no en `localStorage`; `pfReset()` exportado en `window.__plano` y llamado por `goTab('mapa')`). Las pruebas los abren con `window.__pfOpen=true` (fake-firebase.js); la prueba «paneles plegados por defecto» lo apaga.
+- **Izquierda:** franja `#mpan` con el nombre vertical «Plan del día · N»; al tocarla se despliega; el ‹ de su cabecera la pliega.
+- **Derecha (PC y tablet):** `#mrs.dock.rail` con una columna `#mrst > .mrail` de pestañas verticales (`.mrtab`, `data-rtab`), una por panel (Por decidir, Cruces, Cambios, Semana) con su contador. Tocar una abre ese panel acoplado (el plano se achica: `.mapa.docked`, 376 px; 338 px entre 900 y 1279); tocar la abierta lo pliega (`!PFOLD.r&&M.rst===id&&M.rstMan`). Plegado: `.mapa.dockmin`, 38 px. En el celular sigue la hoja inferior de antes.
+- El modo reunión baja el panel con `rs.style.top` (sin `!important` en `top`).
+- **Barra:** Ver todo `#mfit` como icono ⤢, **Exportar** `#mpdf` fuera del ⋯ (el ⋯ queda con Vista, resolución y láminas), y la zona del día `.mday`: **«Listo N de M»** (`rdyChipHtml`, `#mrdyb`, abre el detalle `rdyPop` con `readyHtml`; `RDY.s` guarda el resumen), **«📣 Publicar plan»** (`pubChipHtml`: botón `data-pub` o estado «🔒 Publicado / Plan cerrado / 🔓 Reabierto») y **«▶ Reunión»** (`#mmeetb`). La tarjeta del panel (`pubBarHtml`) ya no tiene botón de publicar (solo explica, Descartar, Deshacer, Reabrir).
+- Herramientas de dibujo solo con iconos en PC/tablet (el nombre va en el globo).

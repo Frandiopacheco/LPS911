@@ -8,7 +8,12 @@ import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx-js-style');
 const XLSX_JS = require.resolve('xlsx-js-style/dist/xlsx.bundle.js');
-const conExcel = page => page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+const EXCELJS = require.resolve('exceljs/dist/exceljs.min.js');
+const ExcelJS = require('exceljs');
+const conExcel = async page => {
+  await page.route(/cdn\.jsdelivr\.net\/npm\/xlsx-js-style/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(XLSX_JS, 'utf8') }));
+  await page.route(/cdn\.jsdelivr\.net\/npm\/exceljs/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: readFileSync(EXCELJS, 'utf8') }));
+};
 
 const EXTRA = [
   ['members', 'tcap1@obra.pe', { role: 'tcap', name: 'Tito Capataz' }],
@@ -219,11 +224,16 @@ test('Partidas de control: importar, agregar y desactivar; Tareos del día; jorn
   await expect(page.locator('#tjAuto')).not.toBeChecked();
   await page.check('#tjAuto'); await page.fill('#tjAutoH', '20:30');
   // semana del proyecto (20-10-2026): se guarda como «la semana n empieza el lunes de esta semana»
+  // horario sugerido en domingo o feriado (25-10-2026): por defecto 07:30–13:00; se ve cuántas horas da con el refrigerio
+  await expect(page.locator('#tjSgH')).toHaveText('= 4,5 h, todas extra');
+  await page.fill('#tjNlIni', '13:00');
+  await expect(page.locator('#tjSgH')).toHaveText('= 5,5 h, todas extra');
   await page.fill('#tjSem', '70');
   await page.click('#tjSave');
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sem).toEqual(await page.evaluate(() => ({ n: 70, lun: tLunes(todayIso()) })));
   expect(await page.evaluate(() => [tSemN(tLunes(todayIso())), tSemN(iso(new Date(pd(tLunes(todayIso())).getTime() - 7 * 864e5)))])).toEqual([70, 69]);
   await expect.poll(async () => (await page.evaluate(() => window.__dbGet('tcfg', 'main'))).pubAuto).toEqual({ on: true, hh: '20:30' });
+  expect((await page.evaluate(() => window.__dbGet('tcfg', 'main'))).sugNoLab).toEqual({ ini: '07:30', fin: '13:00' });
   await expect.poll(() => page.evaluate(() => window.__dbGet('tcfg', 'main'))).toMatchObject({ jor: { '6': { ini: '07:00', fin: '13:00', ref: 45, refIni: '13:00' }, '0': null }, refIni: '12:00' });
   await expect.poll(() => page.evaluate(() => tHoras('2026-10-03', '07:00', '13:00'))).toEqual({ trab: 6, ext: 0 });
   noErrors(errors, 'partidas y jornada');
@@ -254,25 +264,137 @@ test('Mejoras de oficina: Personal numerado con contador y «Hacer capataz»; pa
   expect(await page.locator('tr.tpc-r').evaluateAll(L => L.map(x => x.dataset.tpc))).toEqual(['p1_01', 'p2_01', 'p10_02', 'p10_10', 'p13_01']);
   await expect(page.locator('table.tpc-tbl')).toHaveCount(1);
   await expect(page.locator('tr[data-tpc="p10_02"] [data-l="HH/und"]')).toHaveText('2.5');
-  // el asistente bloquea: queda con candado
-  page.once('dialog', d => d.accept());
-  await page.click('[data-tpb="p10_02"]');
-  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_02'))).toMatchObject({ bloq: true, bloqBy: 'tasis@obra.pe' });
-  await expect(page.locator('tr[data-tpc="p10_02"]')).toContainText('BLOQUEADA');
+  // el asistente ya no mantiene las partidas (25-10-2026): solo lectura
+  await expect(page.locator('#tpcRO')).toContainText('Costos y el administrador');
+  await expect(page.locator('[data-tpb], [data-tpe], #tpcAdd, #tpcImp, #tpcExp')).toHaveCount(0);
   noErrors(errors, 'mejoras de oficina');
 });
 
-test('Partidas: costos (tcos) solo bloquea o desbloquea para la carga', async ({ page }) => {
-  const errors = await openApp(page, { as: 'tcos', editar: false, extra: [['tpc', 'p10_05', { cod: '10.05', grp: '10', grpN: 'ESTRUCTURAS', nom: 'Encofrado', und: 'm2', act: true, bloq: true, bloqBy: 'x@obra.pe', bloqAt: 1 }]] });
+test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e importar sin perder nada; deshacer la importación', async ({ page }) => {
+  const PC = (cod, nom, x) => ['tpc', 'p' + cod.replace('.', '_'), { cod, grp: cod.split('.')[0], grpN: cod.startsWith('2.') ? 'PROVISIONALES' : 'ESTRUCTURAS', nom, und: 'm2', met: 10, hhp: 25, ua: 'CD-' + cod, act: true, ts: 0, ...x }];
+  const errors = await openApp(page, { as: 'tcos', editar: false, extra: [
+    PC('2.01', 'Agua provisional'), PC('2.02', 'Energía provisional'),
+    PC('10.05', 'Encofrado', { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 1 }), PC('10.10', 'Encofrado de escaleras', { dct: true }), PC('10.38', 'Concreto de solado'),
+  ] });
+  await conExcel(page);
   await tab(page, 'tpc');
-  await expect(page.locator('#tpcAdd')).toHaveCount(0);
-  await expect(page.locator('[data-tpe]')).toHaveCount(0);
-  await expect(page.locator('tr[data-tpc="p10_05"] .tpc-lock')).toHaveCount(1);
+  await expect(page.locator('#tpcAdd')).toBeVisible();
+  await expect(page.locator('[data-tpe="p10_05"]')).toBeVisible();
+  // bloquear/desbloquear sigue igual
   page.once('dialog', d => d.accept());
   await page.click('[data-tpb="p10_05"]');
   await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_05'))).toMatchObject({ bloq: false, bloqBy: 'tcos@obra.pe' });
-  await expect(page.locator('[data-tpb="p10_05"]')).toHaveText('Bloquear para carga');
-  noErrors(errors, 'costos bloquea');
+  // exportar y volver a importar el mismo archivo: nada cambia
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tpcExp')]);
+  const buf = readFileSync(await dl.path());
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  expect(wb.SheetNames).toEqual(['Lista de partidas', 'Instrucciones']);
+  // Estado y Descontable con lista desplegable (no dejan escribir otro valor)
+  const J = new ExcelJS.Workbook(); await J.xlsx.load(buf); const jw = J.getWorksheet('Lista de partidas');
+  const est = jw.getCell('I5').dataValidation; expect(est).toMatchObject({ type: 'list', formulae: ['"Activa,Inactiva"'], showErrorMessage: true });
+  expect(jw.getCell('J5').dataValidation.formulae).toEqual(['"Sí,No"']);
+  expect(jw.getCell('I300').dataValidation.type).toBe('list'); // también en filas nuevas
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets['Lista de partidas'], { header: 1, defval: '' });
+  const fila = cod => aoa.findIndex(r => r[1] === cod);
+  const J0 = new ExcelJS.Workbook(); await J0.xlsx.load(buf); const jw0 = J0.getWorksheet('Lista de partidas');
+  expect(aoa[fila('10.10')]).toEqual(['', '10.10', 'Encofrado de escaleras', 'm2', 10, 25, 2.5, 'CD-10.10', 'Activa', 'Sí', 'No']);
+  expect(jw0.getCell('K5').dataValidation.formulae).toEqual(['"Sí,No"']); // BLOQUEADA con lista
+  let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
+  await fc.setFiles({ name: 'partidas.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf });
+  await expect(page.locator('#tpiEq')).toHaveText('5');
+  await expect(page.locator('#tpiOk')).toBeDisabled();
+  await page.click('#lqm [data-lqx]');
+  // editar en el Excel: metrado de 10.05, HH de 2.01 vacía (no cambia), 2.02 inactiva, 10.10 cambia de nombre, se borra la fila 10.38 y se agrega 10.39
+  const E = aoa.map(r => r.slice());
+  E[fila('10.05')][4] = 400; E[fila('2.01')][5] = ''; E[fila('2.01')][10] = 'Sí'; E[fila('2.02')][8] = 'Inactiva'; E[fila('10.10')][2] = 'Encofrado de escaleras y rampas';
+  E.splice(fila('10.38'), 1, ['', '10.39', 'Curado de losas', 'm2', 50, '', '', '', '', 'No']);
+  [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
+  await fc.setFiles({ name: 'partidas2.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: xlsxBuf('Lista de partidas', E) });
+  await expect(page.locator('#tpiNew')).toHaveText('1');
+  await expect(page.locator('#tpiChg')).toHaveText('4');
+  await expect(page.locator('#tpiRen')).toContainText('Encofrado de escaleras → Encofrado de escaleras y rampas');
+  await expect(page.locator('#tpiFuera')).toContainText('10.38');
+  await expect(page.locator('#tpiOk')).toBeDisabled(); // falta confirmar el cambio de nombre
+  await page.check('#tpiRenOk');
+  await page.click('#tpiOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_39'))).toMatchObject({ cod: '10.39', nom: 'Curado de losas', act: true, dct: false, grpN: 'ESTRUCTURAS' });
+  const db1 = await page.evaluate(() => window.__dbAll('tpc'));
+  expect(db1.p10_05).toMatchObject({ met: 400, bloq: false });
+  expect(db1.p2_01).toMatchObject({ hhp: 25, bloq: true, bloqBy: 'tcos@obra.pe' }); // la celda vacía no borró las HH; bloqueada desde el Excel
+  expect(db1.p2_02.act).toBe(false);
+  expect(db1.p10_10).toMatchObject({ nom: 'Encofrado de escaleras y rampas', dct: true });
+  expect(db1.p10_38).toMatchObject({ act: true, nom: 'Concreto de solado' }); // la fila borrada no toca la partida
+  expect(Object.values(await page.evaluate(() => window.__dbAll('tpcbk')))).toHaveLength(1);
+  // deshacer: todo vuelve a como estaba y la nueva queda inactiva (no se borra)
+  await expect(page.locator('#tpcUndo')).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.click('#tpcUndo');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_39').act)).toBe(false);
+  const db2 = await page.evaluate(() => window.__dbAll('tpc'));
+  expect(db2.p10_05.met).toBe(10);
+  expect(db2.p2_02.act).toBe(true);
+  expect(db2.p2_01.bloq).toBe(false); // deshacer también desbloquea
+  expect(db2.p10_10.nom).toBe('Encofrado de escaleras');
+  expect(Object.values(await page.evaluate(() => window.__dbAll('tpcbk')))[0].undo).toMatchObject({ by: 'tcos@obra.pe' });
+  await expect(page.locator('#tpcUndo')).toBeHidden();
+  noErrors(errors, 'costos mantiene las partidas');
+});
+
+test('Personal: exportar la lista, editarla e importarla sin perder nada (periodos, celdas vacías, capataz); nombre con confirmación; deshacer', async ({ page }) => {
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra: [...EXTRA,
+    ['tper', '03684337', { dni: '03684337', ape: 'FICTICIO DOS', nom: 'BETO', pue: 'OFICIAL CARPINTERO', cat: 'OF', cua: 'CARPINTEROS', cap: '', ing: '2026-05-04', ces: '', mot: '', per: [{ ing: '2026-02-10', ces: '2026-03-15', mot: 'Renuncia' }, { ing: '2026-05-04', ces: '', mot: '' }], act: true, ts: 0 }],
+    ['tper', '45678901', { dni: '45678901', ape: 'INVENTADO TRES', nom: 'CARLA', pue: 'RIGGER', cat: 'OT', cua: 'ANDAMIEROS', cap: 'tcap1@obra.pe', ing: '2026-03-01', ces: '', mot: '', per: [{ ing: '2026-03-01', ces: '', mot: '' }], act: true, ts: 0 }],
+  ] });
+  await conExcel(page);
+  await tab(page, 'tper');
+  // «Exportar Excel» (la lista, con el filtro «Todos») se edita y se vuelve a importar
+  await page.click('#tperEst [data-test="all"]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tperXls')]);
+  const buf = readFileSync(await dl.path());
+  const J = new ExcelJS.Workbook(); await J.xlsx.load(buf); const ws = J.getWorksheet('Personal');
+  expect(J.worksheets.map(w => w.name)).toEqual(['Personal', 'Instrucciones']);
+  expect(ws.getRow(1).values.slice(1)).toEqual(['DNI', 'Apellido paterno', 'Apellido materno', 'Nombres', 'Puesto', 'Categoría', 'Cuadrilla', 'Capataz', 'Ingreso', 'Cese', 'Motivo', 'Estado']);
+  const filas = []; ws.eachRow((r, i) => { if (i >= 2) filas.push(r); });
+  const row = dni => filas.find(r => r.getCell(1).value === dni);
+  expect(row('01234567')).toBeTruthy(); // DNI como texto (con su cero)
+  expect(ws.getCell('F2').dataValidation).toMatchObject({ type: 'list', formulae: ['"Operario,Oficial,Peón,Capataz,Otro"'] });
+  expect(ws.getCell('I2').dataValidation.type).toBe('date');
+  // el mismo archivo no cambia nada
+  let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tperImp')]);
+  await fc.setFiles({ name: 'personal.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf });
+  await expect(page.locator('#timpEq')).toHaveText('3');
+  await expect(page.locator('#timpOk')).toBeDisabled();
+  await page.click('#lqm [data-lqx]');
+  // editar: Ana cambia de cuadrilla y queda «Oficial»; Beto con el puesto vacío (no cambia) y sin perder su primer periodo;
+  // Carla cambia de nombre (pide confirmación) y cesa; se agrega un obrero nuevo
+  row('01234567').getCell(7).value = 'FIERREROS'; row('01234567').getCell(6).value = 'Oficial';
+  row('03684337').getCell(5).value = '';
+  row('45678901').getCell(4).value = 'KARLA'; row('45678901').getCell(10).value = new Date(Date.UTC(2026, 9, 20)); row('45678901').getCell(11).value = 'Termino de obra';
+  const nr = ws.getRow(filas.length + 2); ['87654321', 'NUEVO', 'CINCO', 'ELSA', 'PEON', '', 'ALBAÑILES', '', new Date(Date.UTC(2026, 8, 1)), '', '', ''].forEach((v, i) => { nr.getCell(i + 1).value = v; });
+  const buf2 = Buffer.from(await J.xlsx.writeBuffer());
+  [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tperImp')]);
+  await fc.setFiles({ name: 'personal2.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf2 });
+  await expect(page.locator('#timpNew')).toHaveText('1');
+  await expect(page.locator('#timpChg')).toHaveText('2');
+  await expect(page.locator('#timpRen')).toContainText('INVENTADO TRES, CARLA → INVENTADO TRES, KARLA');
+  await expect(page.locator('#timpOk')).toBeDisabled();
+  await page.check('#timpRenOk');
+  await page.click('#timpOk');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('tper', '87654321'))).toMatchObject({ ape: 'NUEVO CINCO', apP: 'NUEVO', apM: 'CINCO', nom: 'ELSA', cat: 'PE', ing: '2026-09-01', act: true });
+  const db1 = await page.evaluate(() => window.__dbAll('tper'));
+  expect(db1['01234567']).toMatchObject({ cua: 'FIERREROS', cat: 'OF', cap: 'tcap1@obra.pe' });
+  expect(db1['03684337'].per).toHaveLength(2); // una fila por persona no borra los periodos anteriores
+  expect(db1['03684337'].pue).toBe('OFICIAL CARPINTERO'); // la celda vacía no cambia
+  expect(db1['45678901']).toMatchObject({ nom: 'KARLA', ces: '2026-10-20', mot: 'Termino de obra', cap: 'tcap1@obra.pe' });
+  // deshacer: vuelve todo y el nuevo se archiva
+  await expect(page.locator('#tperUndo')).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.click('#tperUndo');
+  await expect.poll(() => page.evaluate(() => !!window.__dbGet('tper', '87654321').arch)).toBe(true);
+  const db2 = await page.evaluate(() => window.__dbAll('tper'));
+  expect(db2['01234567']).toMatchObject({ cua: 'ALBAÑILES', cat: 'OP' });
+  expect(db2['45678901']).toMatchObject({ nom: 'CARLA', ces: '' });
+  noErrors(errors, 'personal ida y vuelta');
 });
 
 test('Personal: filtros encadenados (cada lista ofrece solo lo que queda con los otros filtros, con su conteo) y «Limpiar filtros»', async ({ page }) => {

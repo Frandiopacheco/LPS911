@@ -196,7 +196,7 @@ test('cierre de las 20:00: no corre una actividad comprometida en un día ya cer
   assert.deepStrictEqual(db.st.get('acts/x2').days, ['2026-10-07', '2026-10-08']); // no se movió
 });
 
-test('terminadas: «Quitar registro» anula el cierre del capataz y solo cuenta el de la partida de la actividad', () => {
+test('terminadas: el «Terminada» del capataz/SC ya no cuenta (tanda 1), ni quitado ni de otra partida ni de la suya', () => {
   const acts = new Map([['a', { sc: 'c1' }], ['b', { sc: 'c1' }], ['c', { sc: 'c1' }]]);
   const D2 = doneMap({
     daily: [{ date: '2026-10-05', recs: { a: { status: null, clr: true } } }],
@@ -208,7 +208,7 @@ test('terminadas: «Quitar registro» anula el cierre del capataz y solo cuenta 
     ],
     acts
   });
-  assert.deepStrictEqual([...D2.keys()], ['c']);
+  assert.deepStrictEqual([...D2.keys()], []);
 });
 
 test('hora de la publicación automática: por defecto 21:00, editable (máx. 23:30) y en hora de Lima', () => {

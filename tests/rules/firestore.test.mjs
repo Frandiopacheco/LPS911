@@ -6,6 +6,9 @@ import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebas
 import { doc, getDoc, setDoc, getDocs, collection, updateDoc, deleteDoc, query, where, arrayUnion, deleteField, writeBatch } from 'firebase/firestore';
 
 const OWNER = 'frandiopacheco@gmail.com';
+/* tanda 1: el registro diario (daily) y los reportes en vivo (live) de un día se cierran a la hora del Cierre del ingeniero
+   (request.time). Las pruebas que escriben en un día abierto usan fechas futuras; las del cierre, fechas de hoy y pasadas. */
+const DV = '2099-10-01', DV2 = '2099-10-02';
 let env;
 const user = (email, uid = email.replace(/\W/g, '_')) => env.authenticatedContext(uid, { email, email_verified: true }).firestore();
 const unverified = email => env.authenticatedContext('nv_' + email.replace(/\W/g, '_'), { email, email_verified: false }).firestore();
@@ -32,6 +35,8 @@ test.beforeEach(async () => {
     await S('members/sc2@obra.pe', { role: 'sc', name: 'SC con marca', sc: 'c-gabel', scs: ['c-gabel'], cli: true });
     await S('members/calidad@obra.pe', { role: 'area', name: 'Ing. Calidad', area: 'Calidad' });
     await S('members/planner@obra.pe', { role: 'planner', name: 'Planner' });
+    await S('members/plan@obra.pe', { role: 'area', name: 'Planner de obra', area: 'Planificación' });
+    await S('members/cproy@obra.pe', { role: 'area', name: 'Control de proyecto', area: 'Control de Proyecto' });
     await S('mp/n1', { tipo: 'part', name: 'Tabiquería', ini: '2026-10-05', fin: '2026-11-20' });
     await S('mpver/1', { n: 1, st: 'pend', by: 'planner@obra.pe', items: {} });
     await S('lib/l-sol', { actId: 'x1', sc: 'c-gabel', st: 'sol', by: 'sc@obra.pe' });
@@ -54,8 +59,8 @@ test.beforeEach(async () => {
     await S('restr/r-sc', { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '' });
     await S('pzon/x1', { pisoId: 'p1', sc: 'c-gabel', pts: [] });
     await S('pzon/x2', { pisoId: 'p1', sc: 'c-otro', pts: [] });
-    await S('live/2026-10-01_x1', { date: '2026-10-01', actId: 'x1', sc: 'c-gabel' });
-    await S('live/2026-10-01_x9', { date: '2026-10-01', actId: 'x9', sc: 'c-otro' });
+    await S(`live/${DV}_x1`, { date: DV, actId: 'x1', sc: 'c-gabel' });
+    await S(`live/${DV}_x9`, { date: DV, actId: 'x9', sc: 'c-otro' });
     // Tareo
     await S('members/tasis@obra.pe', { role: 'tasis', name: 'Asistente de tareo' });
     await S('members/tcos@obra.pe', { role: 'tcos', name: 'Costos' });
@@ -69,7 +74,7 @@ test.beforeEach(async () => {
     await S('tcfg/main', { refIni: '12:00', limEnv: '18:00', tolGar: 15 });
     await S('meta/main', { name: 'Obra' });
     await S('pisos/p1', { code: 'P1', name: 'Piso 1' });
-    await S('daily/2026-10-01_p1', { recs: {} });
+    await S(`daily/${DV}_p1`, { recs: {} });
   });
 });
 
@@ -83,6 +88,17 @@ test('dueño y editor editan el lookahead; SC y lector no', async () => {
   await assertFails(updateDoc(doc(user('sc@obra.pe'), 'acts/x1'), { name: 'c' }));
   await assertFails(updateDoc(doc(user('lector@obra.pe'), 'acts/x1'), { name: 'c' }));
   await assertFails(updateDoc(doc(user('campo@obra.pe'), 'acts/x1'), { name: 'c' }));
+});
+test('subcontratistas (C-28): el editor los archiva (arch) y los restaura; SC, campo y lector no', async () => {
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'contractors/c-gabel'), { name: 'GABEL', color: '#336699' }));
+  const arch = { t: Date.now(), by: 'editor@obra.pe', n: 'Editor' };
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertFails(updateDoc(doc(user('campo@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertFails(updateDoc(doc(user('lector@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'contractors/c-gabel'), { arch }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'contractors/c-gabel'), { arch: deleteField() }));
+  // restricciones con el id de la empresa responsable (respSc, C-30): el SC las registra como antes
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'restr/r-resp'), { actId: 'x1', sc: 'c-gabel', by: 'sc@obra.pe', status: 'pend', freed: '', resp: 'GABEL', respSc: 'c-gabel' }));
 });
 test('lista del equipo: personal interno sí; SC, lector y capataz solo su propio registro', async () => {
   await assertSucceeds(getDocs(collection(user('editor@obra.pe'), 'members')));
@@ -108,36 +124,36 @@ test('capataz: se registra solo con enlace vigente y para la partida del enlace'
   await assertFails(updateDoc(doc(cap('cap1'), 'members/u_cap1'), { scs: ['c-otro'] }));
 });
 test('capataz: reporta en vivo solo su partida y no toca el lookahead ni el registro', async () => {
-  await assertSucceeds(updateDoc(doc(cap('cap1'), 'live/2026-10-01_x1'), { st: 'run', sc: 'c-gabel' }));
-  await assertFails(updateDoc(doc(cap('cap1'), 'live/2026-10-01_x9'), { st: 'run' }));
-  await assertFails(setDoc(doc(cap('cap1'), 'live/2026-10-01_x3'), { sc: 'c-otro', st: 'run' }));
+  await assertSucceeds(updateDoc(doc(cap('cap1'), `live/${DV}_x1`), { st: 'run', sc: 'c-gabel' }));
+  await assertFails(updateDoc(doc(cap('cap1'), `live/${DV}_x9`), { st: 'run' }));
+  await assertFails(setDoc(doc(cap('cap1'), `live/${DV}_x3`), { sc: 'c-otro', st: 'run' }));
   await assertFails(updateDoc(doc(cap('cap1'), 'acts/x1'), { name: 'x' }));
-  await assertFails(setDoc(doc(cap('cap1'), 'daily/2026-10-01_p1'), { recs: {} }));
-  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'daily/2026-10-01_p1'), { recs: {} }));
+  await assertFails(setDoc(doc(cap('cap1'), `daily/${DV}_p1`), { recs: {} }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), `daily/${DV}_p1`), { recs: {} }));
 });
 test('subcontratista: inicia y detiene sus actividades y propone el cierre del día (no escribe el registro)', async () => {
-  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { st: 'run', sc: 'c-gabel' }));
-  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { st: 'stop', mot: 'Falta material', sc: 'c-gabel' }));
-  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x4'), { date: '2026-10-01', actId: 'x4', sc: 'c-gabel', st: 'run' }));
-  await assertFails(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x9'), { st: 'run' }));
-  await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x5'), { sc: 'c-otro', st: 'run' }));
-  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1'), { close: { status: 'ok', done: true } }));
-  await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x6'), { sc: 'c-gabel', close: { status: 'ok' } })); // sin actividad real
-  await assertFails(setDoc(doc(user('sc@obra.pe'), 'daily/2026-10-01_p1'), { recs: {} }));
-  await assertFails(deleteDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_x1')));
+  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x1`), { st: 'run', sc: 'c-gabel' }));
+  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x1`), { st: 'stop', mot: 'Falta material', sc: 'c-gabel' }));
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), `live/${DV}_x4`), { date: DV, actId: 'x4', sc: 'c-gabel', st: 'run' }));
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x9`), { st: 'run' }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), `live/${DV}_x5`), { sc: 'c-otro', st: 'run' }));
+  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x1`), { close: { status: 'ok', done: true } }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), `live/${DV}_x6`), { sc: 'c-gabel', close: { status: 'ok' } })); // sin actividad real
+  await assertFails(setDoc(doc(user('sc@obra.pe'), `daily/${DV}_p1`), { recs: {} }));
+  await assertFails(deleteDoc(doc(user('sc@obra.pe'), `live/${DV}_x1`)));
   await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'fotos/fsc'), { data: 'x'.repeat(1000), by: 'sc@obra.pe' }));
-  await assertFails(setDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x7'), { sc: 'c-gabel', st: 'run' }));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), `live/${DV}_x7`), { sc: 'c-gabel', st: 'run' }));
 });
 test('veedor: en vivo solo marca o quita «en secuencia»', async () => {
   const v = user('veedor@obra.pe');
-  await assertSucceeds(updateDoc(doc(v, 'live/2026-10-01_x1'), { seq: { on: true, after: 'x4' } }));
-  await assertSucceeds(setDoc(doc(v, 'live/2026-10-01_x4'), { date: '2026-10-01', actId: 'x4', sc: 'c-gabel', seq: { on: true, after: '' } }));
-  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x1'), { st: 'run' }));
-  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x1'), { close: { status: 'ok' } }));
-  await assertFails(setDoc(doc(v, 'live/2026-10-01_x5'), { date: '2026-10-01', actId: 'x5', sc: 'c-gabel', st: 'run' }));
-  await assertFails(updateDoc(doc(v, 'live/2026-10-01_x9'), { sc: 'c-gabel', seq: { on: true } })); // no cambia la partida
-  await assertFails(deleteDoc(doc(v, 'live/2026-10-01_x1')));
-  await assertFails(updateDoc(doc(user('lector@obra.pe'), 'live/2026-10-01_x1'), { seq: { on: true } }));
+  await assertSucceeds(updateDoc(doc(v, `live/${DV}_x1`), { seq: { on: true, after: 'x4' } }));
+  await assertSucceeds(setDoc(doc(v, `live/${DV}_x4`), { date: DV, actId: 'x4', sc: 'c-gabel', seq: { on: true, after: '' } }));
+  await assertFails(updateDoc(doc(v, `live/${DV}_x1`), { st: 'run' }));
+  await assertFails(updateDoc(doc(v, `live/${DV}_x1`), { close: { status: 'ok' } }));
+  await assertFails(setDoc(doc(v, `live/${DV}_x5`), { date: DV, actId: 'x5', sc: 'c-gabel', st: 'run' }));
+  await assertFails(updateDoc(doc(v, `live/${DV}_x9`), { sc: 'c-gabel', seq: { on: true } })); // no cambia la partida
+  await assertFails(deleteDoc(doc(v, `live/${DV}_x1`)));
+  await assertFails(updateDoc(doc(user('lector@obra.pe'), `live/${DV}_x1`), { seq: { on: true } }));
 });
 test('restricciones: el SC registra las de su partida y edita solo las suyas pendientes', async () => {
   const sc = user('sc@obra.pe');
@@ -160,9 +176,9 @@ test('restricciones: el SC registra las de su partida y edita solo las suyas pen
 test('áreas de apoyo (OT, Calidad): ven todo y gestionan solo las restricciones de su área', async () => {
   const ot = user('ot@obra.pe');
   await assertSucceeds(getDoc(doc(ot, 'acts/x1')));
-  await assertSucceeds(getDoc(doc(ot, 'live/2026-10-01_x1')));
+  await assertSucceeds(getDoc(doc(ot, `live/${DV}_x1`)));
   await assertFails(updateDoc(doc(ot, 'acts/x1'), { name: 'x' }));
-  await assertFails(setDoc(doc(ot, 'daily/2026-10-01_p1'), { recs: {} }));
+  await assertFails(setDoc(doc(ot, `daily/${DV}_p1`), { recs: {} }));
   await assertFails(getDocs(collection(ot, 'members')));
   await assertSucceeds(updateDoc(doc(ot, 'restr/r-ot'), { status: 'lib', freed: '2026-10-01', desc: 'Plano entregado' }));
   await assertFails(updateDoc(doc(ot, 'restr/r-cal'), { status: 'lib' }));
@@ -242,7 +258,7 @@ test('trabajo no programado: lo registran campo, Calidad y veedores; cada uno co
   await assertFails(deleteDoc(doc(user('campo@obra.pe'), 'nprog/n-veedor@obra.pe')));
   // el veedor sube fotos pero no escribe el registro diario
   await assertSucceeds(setDoc(doc(user('veedor@obra.pe'), 'fotos/f-v'), { data: 'abc', date: '2026-10-01', by: 'veedor@obra.pe' }));
-  await assertFails(setDoc(doc(user('veedor@obra.pe'), 'daily/2026-10-01_p1'), { date: '2026-10-01', pisoId: 'p1', recs: {} }));
+  await assertFails(setDoc(doc(user('veedor@obra.pe'), `daily/${DV}_p1`), { date: DV, pisoId: 'p1', recs: {} }));
 });
 test('no programado: el SC registra lo de su partida, por verificar; no se verifica solo', async () => {
   const sc = user('sc@obra.pe');
@@ -282,6 +298,14 @@ test('propuestas: el SC no altera las respuestas del ingeniero (hist)', async ()
   await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'hist.k2': { ...h, st: 'ok' } }));
   await assertFails(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // reemplazar el documento borra hist
   await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'items.x1': null, 'hist.k3': { ...h, st: 'ok' } }));
+});
+test('propuestas: la advertencia del SC rechazada (adv) solo la escribe quien decide', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x1: null }, adv: { x1: { k: 'fre', g: 'o', t: 'Frente no entregado' } } }); });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'items.x1': { after: { days: ['2026-10-05'] }, sent: false, why: { k: 'fre', g: 'o', t: 'Frente no entregado' } } })); // su motivo va en su elemento
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'adv.x2': { k: 'mat', g: 'o' } }));
+  await assertFails(updateDoc(doc(sc, 'lhprop/c-gabel'), { 'adv.x1.g': 'p' }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { 'adv.x3': { k: 'per', g: 'p' } }));
 });
 test('propuestas: historial de decisiones (lhphist) solo lo escribe quien decide y no se borra', async () => {
   const h = { sc: 'c-gabel', actId: 'x1', st: 'ok', by: 'editor@obra.pe', n: 'Elena', t: 1, sk: 'c-gabel|000000000000001', late: { w: 59, cut: 0 }, lateNote: 'Acordado en la reunión' };
@@ -396,17 +420,17 @@ test('reloj e índice de terminadas', async () => {
 test('SEG-02: daily, live y doneidx solo los borra el administrador; campo y editores siguen escribiendo', async () => {
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'doneidx/p1'), { d: { x1: '2026-10-01' } }); });
   for (const db of [user('campo@obra.pe'), user('editor@obra.pe'), user('sc@obra.pe'), cap('cap1')]) {
-    await assertFails(deleteDoc(doc(db, 'daily/2026-10-01_p1')));
-    await assertFails(deleteDoc(doc(db, 'live/2026-10-01_x1')));
+    await assertFails(deleteDoc(doc(db, `daily/${DV}_p1`)));
+    await assertFails(deleteDoc(doc(db, `live/${DV}_x1`)));
     await assertFails(deleteDoc(doc(db, 'doneidx/p1')));
   }
-  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'daily/2026-10-01_p1'), { recs: { x1: { status: 'ok' } } }));
-  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'daily/2026-10-01_p1'), { 'recs.x1.status': 'partial' }));
-  await assertSucceeds(updateDoc(doc(user('campo@obra.pe'), 'live/2026-10-01_x1'), { close: { status: 'ok' } }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), `daily/${DV}_p1`), { recs: { x1: { status: 'ok' } } }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), `daily/${DV}_p1`), { 'recs.x1.status': 'partial' }));
+  await assertSucceeds(updateDoc(doc(user('campo@obra.pe'), `live/${DV}_x1`), { close: { status: 'ok' } }));
   await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'doneidx/p1'), { d: { x4: '2026-10-01' } }, { merge: true }));
   const adm = user(OWNER);
-  await assertSucceeds(deleteDoc(doc(adm, 'daily/2026-10-01_p1')));
-  await assertSucceeds(deleteDoc(doc(adm, 'live/2026-10-01_x1')));
+  await assertSucceeds(deleteDoc(doc(adm, `daily/${DV}_p1`)));
+  await assertSucceeds(deleteDoc(doc(adm, `live/${DV}_x1`)));
   await assertSucceeds(deleteDoc(doc(adm, 'doneidx/p1')));
 });
 
@@ -417,7 +441,7 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
   });
   const ed = user('editor@obra.pe');
   for (const ch of [{ refWeek: 1 }, { refDate: '2026-01-05' }, { propCutDow: 5 }, { propCutHH: '18:00' }, { planCutHH: '23:30' }, { closeCutHH: '18:00' },
-    { frzCutDow: 6 }, { frzCutHH: '20:00' }, { finObra: '2027-06-30' }, { refWeek: 58, frzCutDow: null }])
+    { frzCutDow: 6 }, { frzCutHH: '20:00' }, { finObra: '2027-06-30' }, { refWeek: 58, frzCutDow: null }, { engCutHH: '22:00' }, { rstHasta: Date.now() + 6e5 }])
     await assertFails(updateDoc(doc(ed, 'meta/project'), ch));
   await assertFails(setDoc(doc(ed, 'meta/project'), { name: 'Obra', cal: { sat: false } })); // reemplazar entero borra refWeek…
   await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { cal: { sat: false } }));
@@ -425,12 +449,16 @@ test('SEG-01: el editor no cambia semanas ni cortes de meta/project; sí lo dem�
   await assertSucceeds(setDoc(doc(ed, 'meta/project'), { lastBk: { t: 1, by: 'editor@obra.pe', img: false } }, { merge: true }));
   await assertSucceeds(setDoc(doc(ed, 'meta/project'), { doneIdx: 1 }, { merge: true }));
   await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { refWeek: 58, cal: { sat: true } })); // mismo valor: no cambia
+  // tanda 2, C-21: el editor marca desde el Lookahead «Trabajar este día» (cal.work), un feriado (cal.hol) y la opción de pintar (cal.pskip)
+  await assertSucceeds(updateDoc(doc(ed, 'meta/project'), { cal: { sat: true, work: [{ d: '2026-12-08', n: 'Se trabaja' }], hol: [{ d: '2026-10-09', n: 'Paro' }], pskip: false } }));
   await assertSucceeds(setDoc(doc(ed, 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
   await assertSucceeds(setDoc(doc(ed, 'meta/otro'), { x: 1 }));
-  for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')])
+  for (const db of [user('campo@obra.pe'), user('sc@obra.pe'), user('lector@obra.pe')]) {
     await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: false } }));
+    await assertFails(updateDoc(doc(db, 'meta/project'), { cal: { sat: true, work: [{ d: '2026-12-08', n: 'Se trabaja' }] } }));
+  }
   const adm = user(OWNER);
-  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', closeCutHH: '17:30', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
+  await assertSucceeds(updateDoc(doc(adm, 'meta/project'), { refWeek: 60, refDate: '2026-10-12', planCutHH: '22:00', closeCutHH: '17:30', engCutHH: '22:00', frzCutDow: 6, frzCutHH: '20:00', finObra: '2027-06-30' }));
   await assertFails(deleteDoc(doc(ed, 'meta/project')));
 });
 
@@ -462,19 +490,19 @@ test('fotos: límite de tamaño', async () => {
 test('auditoría N01: el SC o capataz no cierra ni reporta una actividad de otra partida declarando la suya', async () => {
   const c = cap('cap1');
   // la actividad xe es de Eléctricas: el documento dice c-gabel, pero la actividad no
-  await assertFails(setDoc(doc(c, 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
-  await assertFails(setDoc(doc(user('sc@obra.pe'), 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
+  await assertFails(setDoc(doc(c, `live/${DV}_xe`), { date: DV, actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), `live/${DV}_xe`), { date: DV, actId: 'xe', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
   // id que no corresponde a la actividad declarada
-  await assertFails(setDoc(doc(c, 'live/2026-10-01_xe'), { date: '2026-10-01', actId: 'x1', sc: 'c-gabel', st: 'run' }));
+  await assertFails(setDoc(doc(c, `live/${DV}_xe`), { date: DV, actId: 'x1', sc: 'c-gabel', st: 'run' }));
   // actividad que no existe
-  await assertFails(setDoc(doc(c, 'live/2026-10-01_zz'), { date: '2026-10-01', actId: 'zz', sc: 'c-gabel', st: 'run' }));
+  await assertFails(setDoc(doc(c, `live/${DV}_zz`), { date: DV, actId: 'zz', sc: 'c-gabel', st: 'run' }));
   // la suya sí
-  await assertSucceeds(setDoc(doc(c, 'live/2026-10-02_x1'), { date: '2026-10-02', actId: 'x1', sc: 'c-gabel', close: { status: 'ok' } }));
+  await assertSucceeds(setDoc(doc(c, `live/${DV2}_x1`), { date: DV2, actId: 'x1', sc: 'c-gabel', close: { status: 'ok' } }));
 });
 test('auditoría N01: el piso del reporte debe ser el de la actividad (si su sector lo indica)', async () => {
   await env.withSecurityRulesDisabled(async x => { await setDoc(doc(x.firestore(), 'acts/xg'), { name: 'Pintura 2', sc: 'c-gabel', ambId: 'a2' }); });
-  await assertFails(setDoc(doc(cap('cap1'), 'live/2026-10-01_xg'), { date: '2026-10-01', actId: 'xg', pisoId: 'p1', sc: 'c-gabel', st: 'run' }));
-  await assertSucceeds(setDoc(doc(cap('cap1'), 'live/2026-10-01_xg'), { date: '2026-10-01', actId: 'xg', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
+  await assertFails(setDoc(doc(cap('cap1'), `live/${DV}_xg`), { date: DV, actId: 'xg', pisoId: 'p1', sc: 'c-gabel', st: 'run' }));
+  await assertSucceeds(setDoc(doc(cap('cap1'), `live/${DV}_xg`), { date: DV, actId: 'xg', pisoId: 'p2', sc: 'c-gabel', st: 'run' }));
 });
 test('auditoría N02: una foto guardada no la reemplaza otro usuario; queda a nombre de quien la sube', async () => {
   await env.withSecurityRulesDisabled(async x => { await setDoc(doc(x.firestore(), 'fotos/fe'), { data: 'original', by: 'campo@obra.pe' }); });
@@ -532,7 +560,7 @@ test('plan maestro: el planner no toca el lookahead ni nada fuera del maestro', 
   await assertSucceeds(getDoc(doc(pl, 'acts/x1')));
   await assertFails(updateDoc(doc(pl, 'acts/x1'), { name: 'otro' }));
   await assertFails(setDoc(doc(pl, 'restr/r9'), { actId: 'x1', status: 'pend' }));
-  await assertFails(setDoc(doc(pl, 'daily/2026-10-01_p1'), { recs: {} }));
+  await assertFails(setDoc(doc(pl, `daily/${DV}_p1`), { recs: {} }));
   await assertFails(setDoc(doc(pl, 'members/otro@obra.pe'), { role: 'admin' }));
   await assertFails(getDocs(collection(pl, 'members')));
 });
@@ -630,26 +658,31 @@ test('ciclo diario: el editor escribe el plan diario y su foto solo en los pisos
 });
 test('ciclo diario: el SC propone el cierre del día solo de las actividades de su partida', async () => {
   const sc = user('sc@obra.pe');
-  await assertSucceeds(setDoc(doc(sc, 'live/2026-10-02_x4'), { date: '2026-10-02', actId: 'x4', sc: 'c-gabel', close: { status: 'no', cnc: 'Materiales' } }));
-  await assertFails(setDoc(doc(sc, 'live/2026-10-02_xe'), { date: '2026-10-02', actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
-  await assertFails(updateDoc(doc(sc, 'live/2026-10-01_x9'), { close: { status: 'ok' } }));
+  await assertSucceeds(setDoc(doc(sc, `live/${DV2}_x4`), { date: DV2, actId: 'x4', sc: 'c-gabel', close: { status: 'no', cnc: 'Materiales' } }));
+  await assertFails(setDoc(doc(sc, `live/${DV2}_xe`), { date: DV2, actId: 'xe', pisoId: 'p2', sc: 'c-gabel', close: { status: 'ok', done: true } }));
+  await assertFails(updateDoc(doc(sc, `live/${DV}_x9`), { close: { status: 'ok' } }));
 });
 
 // ── Tareo (fase 0, docs/ia/tareo.md) ──
 const PER = (dni, x) => ({ dni, ape: 'PEREZ', nom: 'ANA', pue: 'PEON', cat: 'PE', cua: 'ALBAÑILES', cap: '', act: true, ...x });
 const PC = (cod, x) => ({ cod, grp: cod.split('.')[0], grpN: 'ESTRUCTURAS', nom: 'Partida ' + cod, und: 'm2', act: true, ...x });
-test('tareo: el asistente y el administrador editan el máster y las partidas; nadie las borra', async () => {
+test('tareo: el asistente y el administrador editan el máster; costos y el administrador las partidas; nadie las borra', async () => {
   for (const db of [user('tasis@obra.pe'), user(OWNER)]) {
     await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
     await assertSucceeds(getDocs(collection(db, 'tper')));
     await assertSucceeds(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
     await assertSucceeds(updateDoc(doc(db, 'tper/03684337'), { cap: 'u_tcap1', arch: { t: 1, by: 'x', n: 'x' } }));
     await assertSucceeds(setDoc(doc(db, 'tper/CE0012345AB'), PER('CE0012345AB'))); // carné de extranjería
+    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
+  }
+  for (const db of [user('tcos@obra.pe'), user(OWNER)]) {
     await assertSucceeds(setDoc(doc(db, 'tpc/20.01'), PC('20.01')));
     await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { act: false }));
-    await assertFails(deleteDoc(doc(db, 'tper/03684337')));
     await assertFails(deleteDoc(doc(db, 'tpc/10.05')));
   }
+  // el asistente de tareo ya no edita partidas (25-10-2026)
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tpc/20.03'), PC('20.03')));
+  await assertFails(updateDoc(doc(user('tasis@obra.pe'), 'tpc/10.05'), { nom: 'x' }));
 });
 test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom texto)', async () => {
   const t = user('tasis@obra.pe');
@@ -660,33 +693,60 @@ test('tareo: forma mínima del máster (id = DNI) y de las partidas (cod y nom t
   await assertFails(setDoc(doc(t, 'tper/43241048'), PER(43241048))); // número, no texto
   await assertFails(setDoc(doc(t, 'tper/43241049'), { ape: 'X', nom: 'Y' })); // sin DNI
   await assertFails(updateDoc(doc(t, 'tper/03684337'), { dni: '03684338' })); // no cambia el DNI de la ficha
-  await assertFails(setDoc(doc(t, 'tpc/x1'), PC('10.06', { nom: null })));
-  await assertFails(setDoc(doc(t, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
-  await assertFails(setDoc(doc(t, 'tpc/x3'), { grp: '10', und: 'm2' }));
+  const c = user('tcos@obra.pe');
+  await assertFails(setDoc(doc(c, 'tpc/x1'), PC('10.06', { nom: null })));
+  await assertFails(setDoc(doc(c, 'tpc/x2'), { ...PC('10.07'), cod: 10.07 }));
+  await assertFails(setDoc(doc(c, 'tpc/x3'), { grp: '10', und: 'm2' }));
 });
-test('tareo: capataz, costos y jefe de producción leen; no editan', async () => {
+test('tareo: capataz, costos y jefe de producción leen; no editan (costos sí las partidas)', async () => {
   for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('tcos@obra.pe'), user('jefe@obra.pe')]) {
     await assertSucceeds(getDoc(doc(db, 'tper/03684337')));
     await assertSucceeds(getDocs(collection(db, 'tpc')));
     await assertSucceeds(getDoc(doc(db, 'tcfg/main')));
     await assertFails(setDoc(doc(db, 'tper/12345678'), PER('12345678')));
-    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
     await assertFails(setDoc(doc(db, 'tcfg/main'), { tolGar: 5 }));
     await assertFails(deleteDoc(doc(db, 'tper/03684337')));
   }
+  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe')]) await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
 });
-test('tareo: costos bloquea y desbloquea partidas (solo bloq/bloqBy/bloqAt); el resto de lectores no', async () => {
+test('tareo: solo costos y el administrador mantienen las partidas (bloquear incluido); los demás lectores no', async () => {
   const c = user('tcos@obra.pe');
   await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 }));
-  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { bloq: false, bloqBy: 'tcos@obra.pe', bloqAt: 2 }));
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 3, act: false })); // otro campo
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: true, bloqBy: 'otro@obra.pe', bloqAt: 3 })); // a nombre de otro
-  await assertFails(updateDoc(doc(c, 'tpc/10.05'), { bloq: 'si', bloqBy: 'tcos@obra.pe', bloqAt: 3 })); // no booleano
-  await assertFails(setDoc(doc(c, 'tpc/20.02'), { ...PC('20.02'), bloq: true, bloqBy: 'tcos@obra.pe', bloqAt: 1 })); // no crea
+  await assertSucceeds(updateDoc(doc(c, 'tpc/10.05'), { nom: 'Encofrado de muros y placas', act: true }));
+  await assertSucceeds(setDoc(doc(c, 'tpc/20.02'), PC('20.02')));
   await assertFails(deleteDoc(doc(c, 'tpc/10.05')));
-  for (const db of [user('tasis@obra.pe'), user(OWNER)]) await assertSucceeds(updateDoc(doc(db, 'tpc/10.05'), { bloq: true, bloqBy: 'x@obra.pe', bloqAt: 4 }));
-  for (const db of [user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 4 }));
+  for (const db of [user('tasis@obra.pe'), user('tcapm@obra.pe'), cap('tcap1'), user('jefe@obra.pe'), user('editor@obra.pe')]) {
     await assertFails(updateDoc(doc(db, 'tpc/10.05'), { bloq: false, bloqBy: 'x@obra.pe', bloqAt: 5 }));
+    await assertFails(updateDoc(doc(db, 'tpc/10.05'), { nom: 'x' }));
+  }
+});
+test('tareo: foto de la importación de personal (tperbk): asistente/admin la crean y la marcan deshecha; nadie la cambia ni la borra', async () => {
+  const a = user('tasis@obra.pe');
+  const BK = { t: 1, by: 'tasis@obra.pe', nuevos: ['12345678'], prev: { '03684337': { cua: 'ALBAÑILES', ts: 0 } } };
+  await assertSucceeds(setDoc(doc(a, 'tperbk/b1'), BK));
+  await assertSucceeds(getDoc(doc(a, 'tperbk/b1')));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tperbk/b1'), { undo: { t: 2, by: OWNER } }));
+  await assertFails(updateDoc(doc(a, 'tperbk/b1'), { prev: {} }));
+  await assertFails(deleteDoc(doc(a, 'tperbk/b1')));
+  await assertFails(setDoc(doc(a, 'tperbk/b2'), { t: 1 }));
+  for (const db of [user('tcos@obra.pe'), user('jefe@obra.pe'), user('editor@obra.pe'), cap('tcap1')]) {
+    await assertFails(getDoc(doc(db, 'tperbk/b1')));
+    await assertFails(setDoc(doc(db, 'tperbk/b3'), BK));
+  }
+});
+test('tareo: foto de la importación de partidas (tpcbk): costos/admin la crean y la marcan deshecha; nadie la cambia ni la borra', async () => {
+  const c = user('tcos@obra.pe');
+  const BK = { t: 1, by: 'tcos@obra.pe', nuevas: ['p20_01'], prev: { p10_05: { nom: 'Encofrado', ts: 0 } } };
+  await assertSucceeds(setDoc(doc(c, 'tpcbk/b1'), BK));
+  await assertSucceeds(getDoc(doc(c, 'tpcbk/b1')));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'tpcbk/b1'), { undo: { t: 2, by: OWNER } }));
+  await assertFails(updateDoc(doc(c, 'tpcbk/b1'), { prev: {} })); // no se reescribe la foto
+  await assertFails(deleteDoc(doc(c, 'tpcbk/b1')));
+  await assertFails(setDoc(doc(c, 'tpcbk/b2'), { t: 1 })); // sin prev ni nuevas
+  for (const db of [user('tasis@obra.pe'), user('jefe@obra.pe'), user('editor@obra.pe'), cap('tcap1')]) {
+    await assertFails(getDoc(doc(db, 'tpcbk/b1')));
+    await assertFails(setDoc(doc(db, 'tpcbk/b3'), BK));
   }
 });
 test('tareo: editor sin «Publica tareo», lector, SC, capataz de SC y campo no ven el tareo (salvo las partidas, los ingenieros)', async () => {
@@ -708,13 +768,13 @@ test('tareo: la configuración la cambian el administrador y el asistente de tar
   await assertFails(setDoc(doc(user('jefe@obra.pe'), 'tcfg/main'), { tolGar: 5 }));
 });
 test('tareo: los roles de solo tareo no leen ni escriben nada de LPS', async () => {
-  const lps = ['acts/x1', 'meta/main', 'pisos/p1', 'daily/2026-10-01_p1', 'restr/r-ot', 'live/2026-10-01_x1', 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'wsnap/60_p1', 'mp/n1', 'cli/buf'];
+  const lps = ['acts/x1', 'meta/main', 'pisos/p1', `daily/${DV}_p1`, 'restr/r-ot', `live/${DV}_x1`, 'lib/l-sol', 'pzon/x1', 'lhlog/1', 'dplan/2026-10-01_p1', 'fotos/f1', 'nprog/n1', 'pdz/z1', 'doneidx/p1', 'libm/main', 'lhprop/c-gabel', 'lhphist/h1', 'frz/60', 'wsnap/60_p1', 'mp/n1', 'cli/buf'];
   for (const db of [user('tasis@obra.pe'), user('tcos@obra.pe'), user('tcapm@obra.pe'), cap('tcap1')]) {
     for (const p of lps) await assertFails(getDoc(doc(db, p)));
     for (const c of ['acts', 'restr', 'daily', 'live']) await assertFails(getDocs(collection(db, c)));
     await assertFails(updateDoc(doc(db, 'acts/x1'), { name: 'x' }));
-    await assertFails(setDoc(doc(db, 'daily/2026-10-02_p1'), { recs: {} }));
-    await assertFails(updateDoc(doc(db, 'live/2026-10-01_x1'), { st: 'run' }));
+    await assertFails(setDoc(doc(db, `daily/${DV2}_p1`), { recs: {} }));
+    await assertFails(updateDoc(doc(db, `live/${DV}_x1`), { st: 'run' }));
     await assertFails(setDoc(doc(db, 'restr/rt'), { actId: 'x1', status: 'pend' }));
     await assertFails(setDoc(doc(db, 'fotos/ft'), { data: 'x', by: 'tasis@obra.pe' }));
     await assertFails(setDoc(doc(db, 'nprog/nt'), { date: '2026-10-01', by: 'tasis@obra.pe' }));
@@ -738,7 +798,7 @@ test('tareo: el jefe de producción (editor con tpub) sigue siendo editor en LPS
   await assertSucceeds(updateDoc(doc(j, 'acts/x1'), { name: 'b' }));
   await assertSucceeds(getDocs(collection(j, 'members')));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'acts/x1'))); // los demás roles no cambian
-  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), 'daily/2026-10-01_p1')));
+  await assertSucceeds(getDoc(doc(user('sc@obra.pe'), `daily/${DV}_p1`)));
 });
 
 // ── Tareo F1: tareo del capataz (tcap) e invitaciones del tareo ──
@@ -1314,6 +1374,49 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
   await assertFails(setDoc(doc(ed, 'plb/x4'), PLB({ W: '100' })));
 });
 
+// ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
+const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
+test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'eto/ETO_c-gabel_M02'), ETO());
+    await setDoc(doc(db, 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
+  });
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER)]) {
+    await assertSucceeds(getDoc(doc(db, 'eto/ETO_c-otro_A1')));
+    await assertSucceeds(getDocs(collection(db, 'eto')));
+  }
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(getDoc(doc(sc, 'eto/ETO_c-gabel_M02')));
+});
+test('ETO: el SC consulta los de su partida', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'eto/ETO_c-gabel_M02'), ETO()); });
+  const sc = user('sc@obra.pe');
+  await assertSucceeds(getDocs(query(collection(sc, 'eto'), where('sc', '==', 'c-gabel'))));
+});
+test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () => {
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'eto/ETO_c-gabel_M02'), ETO());
+    await setDoc(doc(db, 'eto/ETO_c-otro_A1'), ETO({ sc: 'c-otro', cod: 'A1', base: 'etos/c-otro/ETO_c-otro_A1.k1/r1' }));
+  });
+  const sc = user('sc@obra.pe');
+  await assertFails(getDoc(doc(sc, 'eto/ETO_c-otro_A1')));
+  await assertFails(getDocs(collection(sc, 'eto')));
+  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02')));
+  for (const db of [user('editor@obra.pe'), user('ot@obra.pe'), sc, user('lector@obra.pe')]) {
+    await assertFails(setDoc(doc(db, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
+    await assertFails(updateDoc(doc(db, 'eto/ETO_c-gabel_M02'), { tit: 'otro' }));
+    await assertFails(deleteDoc(doc(db, 'eto/ETO_c-gabel_M02')));
+  }
+  const ad = user(OWNER);
+  await assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
+  await assertSucceeds(setDoc(doc(ad, 'eto/ETO_c-gabel_S1'), ETO({ cod: '' })));
+  await assertFails(setDoc(doc(ad, 'eto/x1'), ETO({ sc: '' })));
+  await assertFails(setDoc(doc(ad, 'eto/x2'), ETO({ base: 'planos/ARQ_AG03/r1' })));
+  await assertSucceeds(deleteDoc(doc(ad, 'eto/ETO_c-gabel_M03')));
+});
+
 // ── Modelo 3D (beta) ──
 test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínima', async () => {
   const D = x => ({ disc: 'ARQ', rev: 1, path: 'modelos/ARQ/r1.frag', ...x });
@@ -1455,6 +1558,9 @@ test('tareo (20-10-2026): RR.HH. (trh) lee como costos y no escribe; parámetros
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { mov: 'mucho' }));
   await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { feA: 500 }));
   await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, sob1: 60, sob2: 100, he60h: 2, leyes: null, soles: 'cos', vig: [{ desde: '2026-01-01' }] }));
+  // tarifas de descuento a SC (24-10-2026): lista de vigencias
+  await assertSucceeds(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, vig: [{ desde: '2026-01-01' }], dtar: [{ desde: '2026-10-01', t: { OP: 30, OF: null, PE: 20 } }] }));
+  await assertFails(setDoc(doc(user('tasis@obra.pe'), 'tcfg/pla'), { alt: 8, dtar: 'mucho' }));
 });
 
 test('tareo (auditoría 21-10-2026): AFP e hijos en tperp, que no lee el capataz; tper ya no acepta esos datos nuevos', async () => {
@@ -1492,4 +1598,86 @@ test('avisos de detenciones (oct 2026): cada responsable registra y quita solo s
   // horario de avisos: solo el administrador
   await assertFails(setDoc(doc(ed, 'meta/project'), { pushIni: '06:00' }, { merge: true }));
   await assertSucceeds(setDoc(doc(ow, 'meta/project'), { pushIni: '06:00', pushFin: '18:00' }, { merge: true }));
+});
+
+// ── Tanda 1 (23/10/2026): Cierre del ingeniero — el registro diario de un día cerrado no lo cambia nadie ──
+test('tanda 1: pasado el Cierre del ingeniero, daily y live de ese día se rechazan para todos (también el administrador)', async () => {
+  const AY = limaDay(-1), PAS = '2026-10-01';
+  await env.withSecurityRulesDisabled(async c => {
+    const db = c.firestore();
+    await setDoc(doc(db, 'meta/project'), { name: 'Obra', closeCutHH: '17:00', engCutHH: '21:00' });
+    await setDoc(doc(db, `daily/${AY}_p1`), { date: AY, pisoId: 'p1', recs: {} });
+    await setDoc(doc(db, `live/${AY}_x1`), { date: AY, actId: 'x1', sc: 'c-gabel' });
+  });
+  for (const em of [OWNER, 'editor@obra.pe', 'campo@obra.pe']) {
+    const db = user(em);
+    await assertFails(updateDoc(doc(db, `daily/${AY}_p1`), { 'recs.x1': { status: 'ok' } }));
+    await assertFails(setDoc(doc(db, `daily/${PAS}_p1`), { date: PAS, pisoId: 'p1', recs: { x1: { status: 'no' } } }, { merge: true }));
+    await assertFails(updateDoc(doc(db, `live/${AY}_x1`), { st: 'stop', sc: 'c-gabel' }));
+    // un día que aún no cierra sí
+    await assertSucceeds(setDoc(doc(db, `daily/${DV}_p1`), { date: DV, pisoId: 'p1', recs: { x1: { status: 'ok' } } }, { merge: true }));
+  }
+  // el SC, el capataz y el veedor tampoco escriben en vivo un día cerrado
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), `live/${AY}_x1`), { st: 'stop', sc: 'c-gabel' }));
+  await assertFails(updateDoc(doc(cap('cap1'), `live/${AY}_x1`), { st: 'stop', sc: 'c-gabel' }));
+  await assertFails(updateDoc(doc(user('veedor@obra.pe'), `live/${AY}_x1`), { seq: { on: true } }));
+  // el plan semanal (weeks.res) no es registro diario: sigue editable a mano
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'weeks/60_p1'), { n: 60, pisoId: 'p1', frozenAt: '2026-10-10', items: { x1: {} }, res: {} }); });
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'weeks/60_p1'), { 'res.x1': { ok: true } }));
+  // borrar sigue siendo solo del administrador (Equipo › Limpieza), sin cambio
+  await assertSucceeds(deleteDoc(doc(user(OWNER), `daily/${AY}_p1`)));
+});
+test('tanda 1: el Cierre del ingeniero se lee de meta/project (por defecto 21:00) y nunca antes del corte del SC', async () => {
+  // con el cierre configurado a las 23:00, el día de ayer igual está cerrado (todos los días pasados lo están)
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'meta/project'), { engCutHH: '23:00' }); });
+  await assertFails(setDoc(doc(user('campo@obra.pe'), `daily/${limaDay(-1)}_p1`), { recs: {} }, { merge: true }));
+  // sin meta/project: valores por defecto (no falla la regla)
+  await env.withSecurityRulesDisabled(async c => { await deleteDoc(doc(c.firestore(), 'meta/project')); });
+  await assertFails(setDoc(doc(user('campo@obra.pe'), `daily/${limaDay(-2)}_p1`), { recs: {} }, { merge: true }));
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), `daily/${DV2}_p1`), { recs: {} }, { merge: true }));
+});
+test('tanda 1: restaurar un respaldo — el administrador abre una ventana corta (rstHasta) y solo él escribe días pasados', async () => {
+  const PAS = '2026-10-01';
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'meta/project'), { rstHasta: Date.now() + 10 * 60e3 }); });
+  await assertSucceeds(setDoc(doc(user(OWNER), `daily/${PAS}_p1`), { date: PAS, pisoId: 'p1', recs: { x1: { status: 'ok' } } }));
+  await assertSucceeds(setDoc(doc(user(OWNER), `live/${PAS}_x1`), { date: PAS, actId: 'x1', sc: 'c-gabel' }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), `daily/${PAS}_p1`), { date: PAS, pisoId: 'p1', recs: {} }));
+  // ventana vencida: cerrado otra vez
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'meta/project'), { rstHasta: Date.now() - 1000 }); });
+  await assertFails(setDoc(doc(user(OWNER), `daily/${PAS}_p1`), { date: PAS, pisoId: 'p1', recs: {} }));
+});
+test('PER-1: el SC y el capataz escriben su cierre (live.close) solo hasta su hora de corte de ese día', async () => {
+  const AY = limaDay(-1);
+  // ayer: aunque el registro estuviera abierto (ventana de restauración no aplica al SC), el corte del SC ya pasó
+  await assertFails(setDoc(doc(user('sc@obra.pe'), `live/${AY}_x4`), { date: AY, actId: 'x4', sc: 'c-gabel', close: { status: 'ok', t: 1 } }));
+  await assertFails(setDoc(doc(cap('cap1'), `live/${AY}_x4`), { date: AY, actId: 'x4', sc: 'c-gabel', close: { status: 'no', cnc: 'Clima' } }));
+  // un día que no llega a su corte: sí (y sin tocar el cierre, el SC sigue reportando «Detenido» hasta el Cierre del ingeniero)
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), `live/${DV}_x4`), { date: DV, actId: 'x4', sc: 'c-gabel', close: { status: 'ok' } }));
+  await assertSucceeds(updateDoc(doc(user('sc@obra.pe'), `live/${DV}_x4`), { st: 'stop', mot: 'Materiales', sc: 'c-gabel' }));
+});
+
+// Hitos de inicio y fin (oct 2026): admin, editores y el área Planificación los crean y editan; todos los de LPS los ven
+test('hitos: admin, editores y Planificación los gestionan; el resto solo los ve', async () => {
+  const H = { n: 'Llegan las UMA', tipo: 'ini', d: '2099-11-12', d0: '2099-11-12', piso: '', h: [], st: 'open' };
+  for (const who of [OWNER, 'editor@obra.pe', 'plan@obra.pe', 'cproy@obra.pe']) await assertSucceeds(setDoc(doc(user(who), 'hitos/h-' + who.replace(/\W/g, '')), H)); // «Control de proyecto» = Planificación (25-10-2026)
+  for (const who of ['campo@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'calidad@obra.pe', 'planner@obra.pe']) await assertFails(setDoc(doc(user(who), 'hitos/h-x'), H));
+  await assertSucceeds(updateDoc(doc(user('plan@obra.pe'), 'hitos/h-editorobrape'), { d: '2099-11-19' }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'hitos/h-mal'), { ...H, tipo: 'otro' }));
+  await assertFails(deleteDoc(doc(user('plan@obra.pe'), 'hitos/h-planobrape')));
+  for (const who of ['sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'hitos/h-planobrape')));
+  await assertFails(getDoc(doc(user('tcos@obra.pe'), 'hitos/h-planobrape')));
+  // el área Planificación no edita el lookahead
+  await assertFails(setDoc(doc(user('plan@obra.pe'), 'acts/x-plan'), { name: 'x', ambId: 'a1', sc: 'c1', days: [] }));
+});
+
+// Revisión de flujos por ambiente (oct 2026): la escriben el SC (de su partida) y los ingenieros; todos la ven
+test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se borra', async () => {
+  const R = sc => ({ n: 59, amb: 'a1', sc, pid: 'p1', f: { mat: 'ok' }, st: 'ok', by: 'x', t: 1 });
+  await assertSucceeds(setDoc(doc(user('sc@obra.pe'), 'frev/59_a1_c-gabel'), R('c-gabel')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'frev/59_a1_c-otro'), R('c-otro')));
+  for (const who of ['editor@obra.pe', 'campo@obra.pe', OWNER]) await assertSucceeds(setDoc(doc(user(who), 'frev/59_a2_c-otro'), R('c-otro')));
+  for (const who of ['lector@obra.pe', 'ot@obra.pe']) await assertFails(setDoc(doc(user(who), 'frev/59_a3_c-otro'), R('c-otro')));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'frev/59_a4_c-otro'), { ...R('c-otro'), f: 'mal' }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frev/59_a1_c-gabel')));
+  await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'frev/59_a1_c-gabel')));
 });

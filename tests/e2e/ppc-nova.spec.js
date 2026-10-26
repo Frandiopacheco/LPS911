@@ -12,7 +12,7 @@ const act = (page, id) => page.evaluate(id => window.__dbGet('acts', id), id);
 const row = (page, id) => page.locator(`#mpanel .mp-it[data-act="${id}"]`);
 const restrs = (page, aid) => page.evaluate(aid => Object.values(window.__dbAll('restr')).filter(r => r.actId === aid && !r.arch), aid);
 async function publicar(page) {
-  await page.locator('#mpanel [data-pub]').click();
+  await page.locator('#mbar [data-pub]').click();
   await page.locator('#pop [data-do="si"]').click();
   await expect(page.locator('#mpanel .pubb.ok')).toBeVisible();
 }
@@ -99,7 +99,7 @@ for (const [pisos, n] of [[['p2'], 0], [['p1'], 1]]) {
   test(`quién decide: «Ver como» editor a cargo de ${pisos} ${n ? 'publica' : 'no publica'} en P1 (responsable Elena)`, async ({ page }) => {
     const errors = await openApp(page, { tab: 'mapa', va: { role: 'editor', pisos }, extra: [...LAMINA, ...AMB] });
     await expect(page.locator('#mpanel .mp-h')).toBeVisible();
-    await expect(page.locator('#mpanel [data-pub]')).toHaveCount(n);
+    await expect(page.locator('#mbar [data-pub]')).toHaveCount(n);
     noErrors(errors, 'ver como');
   });
 }
@@ -107,7 +107,7 @@ for (const [pisos, n] of [[['p2'], 0], [['p1'], 1]]) {
 test('piso sin responsable: decide cualquier editor', async ({ page }) => {
   const SINRESP = ['members', 'editor@obra.pe', { role: 'editor', name: 'Elena Editora', pisos: [] }];
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, SINRESP] });
-  await expect(page.locator('#mpanel [data-pub]')).toHaveCount(1);
+  await expect(page.locator('#mbar [data-pub]')).toHaveCount(1);
   expect(await page.evaluate(() => isPisoResp('p1'))).toBe(true);
   noErrors(errors, 'sin responsable');
 });

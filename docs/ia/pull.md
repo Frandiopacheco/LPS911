@@ -26,7 +26,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Aplicar al lookahead (`puPlan` / `puApply`)
 - Solo admin o responsable del piso (`isPisoResp`). Un solo `apply` (Deshacer del aviso lo revierte; queda en el historial).
 - Solo días **posteriores a hoy**; lo pasado y hoy no se tocan. Si solo se movió (misma duración) se corren los días originales con sus huecos (`wshift`); si cambió la duración, queda un tramo seguido desde `d0`.
+- **El metrado por día (`qty`) se mueve con sus días** (tanda 2, C-19/CON-06): el i-ésimo día futuro pasa al i-ésimo día nuevo; si se acorta, lo que sobra se suma al último día (no se pierde metrado); los días agregados quedan «sin cantidad», como al pintar; quitar el pósit (`del`) borra el `qty` de los días quitados. Nunca queda `qty` en fechas que no están en `days`. Prueba: `auditoria-tanda2-pull-des.spec.js`.
 - Filas que cambiaron en el lookahead desde que se abrió la sesión (`base` ≠ actual): por defecto **no se tocan**; casilla para pisarlas.
 - Pósits nuevos con «exigir catálogo» y nombre fuera del catálogo: no se crean (aviso).
 - Choques que quedan: casilla para crear restricciones `pend` (TAREA PREDECESORA; MATERIALES si es un hito de ingreso) amarradas a la actividad que depende.
 - Después de aplicar, la sesión se re-alinea (`base`, `d0/dur`, los nuevos pasan a `src`) para usarla la semana siguiente.
+
+- **Hitos del lookahead** (oct 2026): el panel de hitos ofrece los hitos de `hitos` abiertos del piso de la sesión o de toda la obra (`hitForPull`); tocar uno lo copia a `h` con `ref` (inicio → ingreso, fin → entrega). Ver `lookahead.md` «Hitos».

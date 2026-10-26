@@ -179,7 +179,10 @@ test('6 · quitar un día del borrador también quita su cantidad guardada', asy
   await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.after.days)).toEqual([...d0, '2026-10-06']);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.after.qty).toEqual({ '2026-10-06': 20 });
   /* enviar tampoco mezcla: el elemento queda igual, ahora enviado */
-  await page.evaluate(() => sendProp());
+  await page.evaluate(() => { sendProp(); });
+  /* P9: alarga la actividad → pide el motivo */
+  await page.selectOption('#pwhy [data-pwall]', 'per');
+  await page.locator('#pwhy [data-pwok]').click();
   await expect.poll(() => page.evaluate(() => __dbGet('lhprop', 'c1').items.i0.sent)).toBe(true);
   expect((await page.evaluate(() => __dbGet('lhprop', 'c1'))).items.i0.after.qty).toEqual({ '2026-10-06': 20 });
   noErrors(errors, 'borrador sin restos');

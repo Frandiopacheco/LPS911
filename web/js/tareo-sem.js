@@ -30,9 +30,19 @@ function TPL(){const c=(S.tcfg&&S.tcfg.get('pla'))||{};const D=TPLA_DEF;
     jb:Object.fromEntries(TPLA_CAT.map(([k])=>[k,tplNum(v.jb&&v.jb[k],0)])),buc:Object.fromEntries(TPLA_CAT.map(([k])=>[k,tplNum(v.buc&&v.buc[k],0)]))})).sort((a,b)=>a.desde<b.desde?-1:1);
   const n=k=>tplNum(c[k],D[k]);
   return{vig:vig.length?vig:D.vig,he60h:Math.max(0,n('he60h')),sob1:n('sob1'),sob2:n('sob2'),df100:c.df100!==false,alt:n('alt'),mov:n('mov'),feA:n('feA'),dmEmp:n('dmEmp'),dmTope:n('dmTope'),
-    ae:n('ae'),aeEdad:n('aeEdad'),leyes:c.leyes===''||c.leyes==null||!Number.isFinite(+c.leyes)?null:+c.leyes,soles:c.soles==='ofi'?'ofi':'cos',avisoUA:c.avisoUA!==false,ts:c.ts||0,by:c.by||''}}
+    ae:n('ae'),aeEdad:n('aeEdad'),leyes:c.leyes===''||c.leyes==null||!Number.isFinite(+c.leyes)?null:+c.leyes,soles:c.soles==='ofi'?'ofi':'cos',avisoUA:c.avisoUA!==false,ts:c.ts||0,by:c.by||'',
+    /* tarifas de descuento a SC por HH (24-10-2026): vigencias {desde, t:{OP,OF,PE}}; null en una categoría = costo HH de la planilla */
+    dtar:(Array.isArray(c.dtar)?c.dtar:[]).filter(v=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v.desde||'')).map(v=>({desde:v.desde,nota:v.nota||'',t:Object.fromEntries(TPLA_CAT.map(([k])=>{const x=v.t&&v.t[k];return[k,x===''||x==null||!Number.isFinite(+x)||+x<=0?null:+x]}))})).sort((a,b)=>a.desde<b.desde?-1:1)}}
 /** tabla de jornales que rige en la fecha f (la última con desde ≤ f; antes de todas, la primera) */
 function tplVig(f,P0){const P=P0||TPL();let v=P.vig[0];for(const x of P.vig)if(x.desde<=f)v=x;return v}
+/** costo HH ordinario de la planilla para la categoría el día f: (jornal + BUC) ÷ 8 × (1 + leyes sociales); sin categoría, el del peón */
+function tplHH(cat,f,P0){const P=P0||TPL();const V=tplVig(f,P);const k=V.jb[cat]?cat:'PE';return(V.jb[k]||0)/8*(1+(V.buc[k]||0)/100)*(1+(P.leyes||0)/100)}
+/** tarifa de descuento a SC por HH normal el día f → {tar, src:'tabla'|'planilla'}: la de la vigencia de «Tarifas de descuento» que rige
+    (la última con desde ≤ f) para la categoría; si no hay o está vacía, el costo HH de la planilla. Sin categoría: la del peón. */
+function tsDctTar(cat,f,P0){const P=P0||TPL();let v=null;for(const x of P.dtar)if(x.desde<=f)v=x;const k=cat==='OP'||cat==='OF'||cat==='PE'?cat:'PE';
+  const t=v&&v.t[k];return t>0?{tar:t,src:'tabla'}:{tar:tplHH(k,f,P),src:'planilla'}}
+/** nombre del SC de descuentos: el de la lista actual (Configuración) o el guardado en la publicación */
+const tsScN=(sc,p)=>{const x=TC().scd.find(y=>y.id===sc);return x?x.n:(p&&p.scd&&p.scd[sc])||sc};
 /** ¿quién ve los soles? costos y el administrador (o toda la oficina si Parámetros lo dice) */
 /* decisión del dueño (21-10-2026): los soles los ven solo Costos y el administrador */
 const tplSoles=()=>!!me&&(me.role==='admin'||me.role==='tcos'||isOwnerEmail(me.email));
@@ -40,11 +50,12 @@ const tplEd=()=>!!me&&(me.role==='admin'||TASIS());
 
 /* ---------- periodo ---------- */
 /** periodo de tipo 'sem' (lunes–domingo), 'qui' (1–15 o 16–fin), 'mes' o 'ran' (a..b) que contiene ref */
-function tsPeriodo(tipo,ref,b2){if(tipo==='ran'){const a=ref<=b2?ref:b2,b=ref<=b2?b2:ref;return[a,b]}
+function tsPeriodo(tipo,ref,b2){if(tipo==='dia')return[ref,ref];if(tipo==='ran'){const a=ref<=b2?ref:b2,b=ref<=b2?b2:ref;return[a,b]}
   if(tipo==='mes'){const a=ref.slice(0,8)+'01';return[a,addD(tpkMesAdd(ref.slice(0,7),1)+'-01',-1)]}
   if(tipo==='qui'){const d=+ref.slice(8,10);const a=ref.slice(0,8)+(d<=15?'01':'16');return[a,d<=15?ref.slice(0,8)+'15':addD(tpkMesAdd(ref.slice(0,7),1)+'-01',-1)]}
   const a=tpMon(ref);return[a,addD(a,6)]}
 function tsPerTxt(tipo,a,b){const n=typeof tSemN==='function'?tSemN(a):null;
+  if(tipo==='dia')return`${TDOW.find(([k])=>k===String(pd(a).getUTCDay()))[1]} ${fmtD(a)}${n?' · semana '+n:''}`;
   if(tipo==='sem')return`${n?'Semana '+n+' · ':''}${fmtD(a)} al ${fmtD(b)}`;if(tipo==='mes')return tpkMesN(a.slice(0,7));
   return`${fmtD(a)} al ${fmtD(b)}`}
 
@@ -88,7 +99,11 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
   const jbDe=(cat,f)=>{const V=tplVig(f,P);const k=V.jb[cat]?cat:'PE';return{jb:V.jb[k]||0,buc:V.buc[k]||0}};
   const tsExtra=(cat,f,c,isF)=>{const{jb,buc}=jbDe(cat,f);let x=0;if(c.alt)x+=jb*P.alt/100;if(c.h>0)x+=P.mov;
     if(c.dow!==0&&(!c.nl||isF))x+=jb/6;if(isF&&c.h>0)x+=jb*buc/100*P.feA/100;return x};
-  const W=[];const T={cost:0,costNP:0,feT:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,mov:0,dsc:0,obreros:0,nov:0,sinTareo:0};
+  const W=[];const T={cost:0,costNP:0,feT:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,mov:0,dsc:0,obreros:0,nov:0,sinTareo:0,dctH:0,dctM:0};
+  /* descuentos a SC (24-10-2026): una fila por obrero, día, partida descontable y SC. Las HE de esa partida (las mismas del prorrateo
+     de abajo) se reparten entre los SC en proporción y llevan el recargo de Parámetros (primeras al sob1 %, el resto y domingo o
+     feriado al sob2 %); la tarifa por HH es la de «Tarifas de descuento» o el costo HH de la planilla (tsDctTar) */
+  const DC=[];
   for(const g of [...G.values()].sort(tpxCmp)){const F=tsFicha(g.dni);const cat=tsCat(g.cat);const d=[];
     const w={...g,cat,catN:tpxCat(g.cat)||'Otro',d,cost:0,costNP:0,feT:0,cor:0,corMax:0,hh:0,hn:0,h60:0,h100:0,df:0,alt:0,dm:0,f:0,dias:0,dLab:0,mov:0,nov:false,altas:[]};
     for(const f of days){const p=PB.get(f);const nl=p?!!p.nl:tNoLab(f);const dow=pd(f).getUTCDay();
@@ -106,7 +121,13 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
           /* HE repartidas en proporción a las horas; el residuo del redondeo va a la última partida (la suma da exactamente e) */
           const hs=Object.entries(r.h||{}).map(([k,v])=>[k,tpNum(v)]).filter(([,h])=>h>0);let eAc=0;
           hs.forEach(([k,h],i)=>{const he=t>0?(i===hs.length-1?tR2(e-eAc):tR2(h*e/t)):0;eAc=tR2(eAc+he);c.pcs.push([k,h,he]);
-            pcAdd(k,rc,f,h,he,c.cua||'(sin cuadrilla)',t>0?c.cost*h/t:0);const m=(p.pcs||{})[k];if(m&&!pcsMeta[k])pcsMeta[k]=m})}
+            pcAdd(k,rc,f,h,he,c.cua||'(sin cuadrilla)',t>0?c.cost*h/t:0);const m=(p.pcs||{})[k];if(m&&!pcsMeta[k])pcsMeta[k]=m});
+          if(r.dct&&typeof r.dct==='object')for(const[pc,m]of Object.entries(r.dct)){const x=c.pcs.find(y=>y[0]===pc);if(!x||!m||typeof m!=='object')continue;
+            const[,hp,hep]=x;const den=c.h60+c.h100+c.df;const f60=den>0?c.h60/den:0;const Tf=tsDctTar(rc,f,P);
+            for(const[sc,v]of Object.entries(m)){const hs2=tpNum(v);if(!(hs2>0))continue;const he=tR2(hep*hs2/hp);const h60=tR2(he*f60),h100=tR2(he-h60),hn=tR2(hs2-he);
+              const monto=Tf.tar*(hn+h60*(1+P.sob1/100)+h100*(1+P.sob2/100));
+              DC.push({f,dni:g.dni,ape:g.ape,nom:g.nom,cat:rc,catN:c.catN,cap:r.cap||g.cap||'',capN:r.capN||g.capN||'',cua:c.cua,pc,sc,scN:tsScN(sc,p),h:hs2,hn,h60,h100,tar:Tf.tar,src:Tf.src,monto,v:p.v});
+              T.dctH=tsSum(T.dctH,hs2);T.dctM+=monto}}}
         else if(r){const m=r.mot||'';c.code=TS_MOT[m]||m;c.mot=m;
           /* en domingo o feriado, «no vino» sin motivo (o «Falta») no es falta: es su descanso o el feriado */
           if(nl&&c.code==='F'){c.code=dsc;c.mot=''}}
@@ -138,7 +159,8 @@ function tsCalc(a,b,PB){const P=TPL();const days=tpDates(a,b);const hoy=todayIso
     for(const k of['hh','hn','h60','h100','df'])T[k]=tsSum(T[k],w[k]);T.cost+=w.cost;T.costNP+=w.costNP;T.feT+=w.feT;T.alt+=w.alt;T.dm+=w.dm;T.f+=w.f;T.dias+=w.dias;T.mov+=w.mov;T.dsc=Math.round((T.dsc+w.dsc)*1e4)/1e4;
     if(w.hh>0||d.some(c=>c.code&&!['·','','—','?','D'].includes(c.code)))T.obreros++;if(w.nov)T.nov++;if(w.sinT)T.sinTareo++}
   const pub=days.filter(f=>PB.has(f));
-  return{a,b,days,pub,W,T,PC,pcsMeta,cua:cuaM,P}}
+  DC.sort((x,y)=>x.scN.localeCompare(y.scN)||(x.f<y.f?-1:x.f>y.f?1:0)||tpxCmp(x,y));
+  return{a,b,days,pub,W,T,PC,pcsMeta,cua:cuaM,P,DC}}
 
 /* ---------- presentación compartida ---------- */
 const TS_COD_CL={A:'ts-a',P:'ts-p',F:'ts-f',DM:'ts-dm',DA:'ts-dm',VA:'ts-va',SM:'ts-va',SE:'ts-va',SU:'ts-f',LS:'ts-f',L:'ts-f',EX:'ts-p',FE:'ts-dd',D:'ts-dd','·':'ts-x','?':'ts-f',IN:'ts-in',CE:'ts-ce','—':'ts-x'};
@@ -146,7 +168,7 @@ const tsDiaL=f=>['D','L','M','Mi','J','V','S'][pd(f).getUTCDay()]+' '+f.slice(8,
 function tsDiasChips(R,idx){return R.days.map(f=>{const I=idx&&idx.get(f);const p=R.pub.includes(f);const nl=tNoLab(f);
   return`<span class="ts-chip${p?' on':''}${nl&&!p?' nl':''}" title="${p?'Publicado':f>todayIso()?'Aún no llega':nl?'No laborable':'Sin publicar'}">${esc(tsDiaL(f))}${p&&I&&I.v?` · v${esc(String(I.v))}`:p?'':nl?' · desc.':f>todayIso()?'':' · pendiente'}</span>`}).join('')}
 /** barra del periodo común a RR.HH. y Costos: tipo (semana/quincena/mes/rango), ‹ fecha ›, Parámetros, Exportar */
-function tsPerBar(st,pre){const hoy=todayIso();const tipos=[['sem','Semana'],['qui','Quincena'],['mes','Mes'],['ran','Rango']];
+function tsPerBar(st,pre){const hoy=todayIso();const tipos=[['dia','Día'],['sem','Semana'],['qui','Quincena'],['mes','Mes'],['ran','Rango']];
   return`<div class="ts-per"><span class="seg" id="${pre}Tipo">${tipos.map(([k,l])=>`<button data-tst="${k}" class="${st.tipo===k?'on':''}">${l}</button>`).join('')}</span>
     ${st.tipo==='ran'?`<input class="tin" type="date" id="${pre}A" value="${esc(st.ref)}" max="${esc(hoy)}" aria-label="Desde"><span class="note">al</span><input class="tin" type="date" id="${pre}B" value="${esc(st.b2||st.ref)}" max="${esc(hoy)}" aria-label="Hasta">`
      :`<button class="ib" id="${pre}Prev" aria-label="Periodo anterior">‹</button><input class="tin" type="date" id="${pre}Ref" value="${esc(st.ref)}" max="${esc(hoy)}" aria-label="Un día del periodo"><button class="ib" id="${pre}Next" aria-label="Periodo siguiente">›</button>`}
