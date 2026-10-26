@@ -4583,3 +4583,7 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 .lkasis .lkast{font-size:12px;color:var(--muted);font-weight:500}
 @media (max-width:1100px){.view>.bar.lkbar{gap:5px;padding-left:10px;padding-right:10px}.lkprog{gap:4px;padding:3px 4px}.lkprog .seg button{padding:0 8px}.lkz1 #fsec{max-width:120px}.lkbar .ib{padding:0 9px}}
 @media (max-width:760px){.lkbar{flex-wrap:wrap}}
+/* menús de ambiente y actividad por momento (25-10-2026): dos acciones hermanas en una fila (Subir/Bajar, Duplicar) */
+.pop .pmr{display:flex;gap:6px;padding:2px 8px 4px}
+.pop .pmr button{flex:1;justify-content:center;text-align:center;border:1px solid var(--line);padding:6px 8px}
+.pop .pmr button:hover{border-color:var(--accent)}

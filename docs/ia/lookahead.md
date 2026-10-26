@@ -98,3 +98,9 @@ Botón `#fplano` en la barra (si `canPla()` y no es celular) → `lkPlano()` (pl
 - **Rendimiento al catálogo:** al escribirlo en «Por personal» se pone al instante en `MX.cat` y se rehace la grilla (`gridRows=null`); el snapshot de `mcat` también redibuja el Lookahead en «Por personal» solo si cambió algún rendimiento (`mxRendSig`).
 - **Rendimiento en todas las filas (25-10-2026):** al escribirlo en «Por personal» se limpian los rendimientos propios de **todas** las filas de esa actividad del catálogo (antes cada fila podía conservar el suyo y se veían varios); sin actividad del catálogo, el valor se pone en todas las filas con el mismo nombre y SC.
 - **Filas en edición (`LK_KEEP`, 25-10-2026):** las filas a las que se les pintan o quitan días (pintar, borrar en «Por metrado», «Borrar estos días») siguen a la vista aunque queden vencidas, terminadas en la Matriz o fuera de «Solo ventana», día o semana filtrados, hasta «Terminar edición» (`lkEdit(false)` limpia el conjunto).
+
+## Menús ⋯ de actividad y ambiente por momento (25-10-2026, decidido con el dueño)
+- **Actividad** (`actMenu`): *Programar* (mover sus días, repartir metrado, borrar días, reabrir) → *Preparar* (restricción, liberación) → *Organizar* (insertar debajo, duplicar, cambiar de ambiente, seleccionar para mover en bloque, ↑ Subir / ↓ Bajar en una fila) → Eliminar.
+- **Ambiente** (`ambMenu`, ingeniero): *Programar* (+ actividad, mover todo en días, seleccionar sus actividades) → *Organizar* (nuevo debajo, Duplicar con actividades / sin días en una fila, mover a otro sector, ↑ / ↓) → *Ubicar* (Sectorización) → Eliminar. El menú del SC no cambió.
+- Fila de dos botones hermanos: `.pop .pmr`. Títulos de grupo con `.ph`.
+- Se retiró del menú el **«Hito del ambiente»** (`a.hito`/`a.hitoLabel`): los hitos se crean en ◆ Hitos (clic derecho en el día). Los que ya tenían algunos ambientes se siguen viendo en su celda (`.hbadge`); no se borraron.
