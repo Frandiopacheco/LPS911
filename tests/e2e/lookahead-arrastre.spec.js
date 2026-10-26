@@ -40,3 +40,14 @@ test('Por metrado: a la derecha abre el reparto, a la izquierda borra los días'
   await expect(page.locator('#pop [data-do="dist"]')).toBeVisible();
   noErrors(errors, 'arrastre por metrado');
 });
+
+test('Despintar todos los días futuros no hace desaparecer la fila hasta terminar la edición', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [A('k1', { name: 'Zócalo', days: ['2026-09-15', L5, M6] })] });
+  await drag(page, 'k1', M6, L5); // quita los futuros: solo le queda un día pasado (sería «vencida» y se ocultaría)
+  await expect.poll(() => days(page, 'k1')).toEqual(['2026-09-15']);
+  await expect(page.locator('#grid tr[data-a="k1"]')).toHaveCount(1);
+  // se vuelve a pintar en otro lado
+  await drag(page, 'k1', X7, J8);
+  await expect.poll(() => days(page, 'k1')).toEqual(['2026-09-15', X7, J8]);
+  noErrors(errors, 'fila se mantiene');
+});

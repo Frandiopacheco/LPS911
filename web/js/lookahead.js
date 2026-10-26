@@ -253,15 +253,16 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
         const vis=acts.filter(x=>{
           if(RVF&&!x._rv)return false;
           const xd=DY(x);
-          if(hidePast&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&xd.length&&!xd.some(d=>d>=w0)){nPast++;return false}
+          const kp=LK_KEEP.has(x.id);
+          if(hidePast&&!kp&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&xd.length&&!xd.some(d=>d>=w0)){nPast++;return false}
           /* terminada y confirmada en la Matriz: el ambiente queda limpio para programar («Ver terminadas» las muestra) */
-          if(hideDone&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&mxDoneSt(x)==='ok'){nDone++;return false}
+          if(hideDone&&!kp&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&mxDoneSt(x)==='ok'){nDone++;return false}
           if(!scOk(x.sc))return false;
-          if(U.onlyWin&&!xd.some(d=>dset.has(d)))return false;
+          if(U.onlyWin&&!kp&&!xd.some(d=>dset.has(d)))return false;
           if(U.onlyRestr&&!pr.get(x.id))return false;
           if(U.onlyObs&&!x.obs)return false;
-          if(U.day&&!xd.includes(U.day)&&!recOf(U.day,x.id))return false;
-          if(wkSet&&!xd.some(d=>wkSet.has(d)))return false;
+          if(U.day&&!kp&&!xd.includes(U.day)&&!recOf(U.day,x.id))return false;
+          if(wkSet&&!kp&&!xd.some(d=>wkSet.has(d)))return false;
           if(aset&&!aset.has(an(x.name)))return false;
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
           return true});
@@ -444,6 +445,9 @@ function virtScroll(){if(!GV||vRaf)return;vRaf=requestAnimationFrame(()=>{vRaf=0
 /** Lleva a la vista la fila de una actividad aunque todavía no esté dibujada (Lookahead grande). */
 /* actividades que «Ver en el lookahead» pidió mostrar aunque estén vencidas (sus días ya pasaron) */
 const LK_SHOW=new Set();
+/* filas tocadas al pintar/borrar días en esta edición (25-10-2026): siguen a la vista aunque queden vencidas, terminadas o fuera del filtro,
+   hasta «Terminar edición» (antes, al despintar una actividad para volver a pintarla en otro lado, desaparecía) */
+const LK_KEEP=new Set();
 function gridReveal(aid){const g=GV;if(!g||!g.tbl.isConnected)return;if(g.tbl.querySelector(`tr[data-a="${CSS.escape(aid)}"]`))return;
   const i=g.rows.findIndex(r=>r.k==='x:'+aid||r.k.startsWith('x:'+aid+':'));if(i<0)return;let y=0;for(const b of g.blocks){if(i>=b.i0&&i<b.i0+b.n)break;y+=blockH(b)}
   const gw=g.tbl.parentElement;gw.scrollTop=Math.max(0,y+lkThH(g)-gw.clientHeight/2);virtPaint(true)}
@@ -466,7 +470,7 @@ const verRO=()=>!!(U.tab==='look'&&((U.ver&&U.verMode==='ver')||(U.cliv&&U.cliVe
 let LKED=false,LK_CAN=false;
 const lkLocked=()=>U.tab==='look'&&!LKED&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.verMode==='ver')&&!(typeof revOn==='function'&&revOn());
 const lkLockOn=()=>LK_CAN&&lkLocked();
-function lkEdit(on){LKED=on;gridRows=null;closePop();if(!on&&typeof selClear==='function'&&SELA.size)selClear();requestRender();toast(on?'Edición activada: ya puedes cambiar el lookahead.':'Modo consulta: arrastra para desplazarte; nada se modifica.')}
+function lkEdit(on){LKED=on;gridRows=null;if(!on)LK_KEEP.clear();closePop();if(!on&&typeof selClear==='function'&&SELA.size)selClear();requestRender();toast(on?'Edición activada: ya puedes cambiar el lookahead.':'Modo consulta: arrastra para desplazarte; nada se modifica.')}
 function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.verMode==='ver');if(b.hidden!==!show)b.hidden=!show;
   b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Terminar edición':'✎ Editar';b.title=LKED?'Volver al modo consulta (solo ver y desplazarse)':'Habilitar la edición del lookahead';
   const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn())}
@@ -675,7 +679,7 @@ let qsel=null,qtap=null,qed=null,lkPersTipT=0;
 function lkQSelTip(R,del){let el=document.getElementById('lkqtip');if(!R||R.length<2){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='lkqtip';el.className='lkqtip';document.body.appendChild(el)}
   const b=(del?R[0]:R[R.length-1]).getBoundingClientRect();el.classList.toggle('del',!!del);el.textContent=del?`Borrar ${R.length} días`:`${R.length} días`;el.style.left=Math.round(b.left+b.width/2)+'px';el.style.top=Math.round(b.top-6)+'px'}
 function endQSel(){const q=qsel;qsel=null;lkQSelTip(null);const cells=[...q.cells.values()];cells.forEach(t=>t.classList.remove('qs0','qs1','qdel'));if(cells.length===1){cells[0].classList.remove('sel');openQEditor(cells[0]);return}
-  if(q.del){let y=S.act.get(q.a);if(!y){requestRender();return}const ds2=[...q.cells.keys()].sort();ds2.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],`${ds2.length} días borrados`);return}
+  if(q.del){LK_KEEP.add(q.a);let y=S.act.get(q.a);if(!y){requestRender();return}const ds2=[...q.cells.keys()].sort();ds2.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],`${ds2.length} días borrados`);return}
   const x=S.act.get(q.a);if(!x){requestRender();return}const ds=[...q.cells.keys()].sort();const inRange=ds.reduce((s,d)=>s+(+(x.qty||{})[d]||0),0);const avail=r2(x.metrado-(progSum(x)-inRange));const und=esc(x.und||'');
   const anchor=cells[cells.length-1];
   openPop(anchor,`<div class="ph">${ds.length} días · ${fmtD(ds[0])} – ${fmtD(ds[ds.length-1])}</div>
@@ -684,7 +688,7 @@ function endQSel(){const q=qsel;qsel=null;lkQSelTip(null);const cells=[...q.cell
    <hr><button data-do="mark">Solo marcar días (sin cantidad)</button><button data-do="clr" class="danger">Borrar estos días</button>`,
   {dist:()=>distribute(q.a,ds,null),per:()=>{const v=parseNum($('#qper').value);if(v==null||!Number.isFinite(v)||v<=0){toast(Number.isNaN(v)?'Escribe solo números (por ejemplo 30 o 12.5). No se cambió nada.':'Escribe una cantidad mayor que cero.');requestRender();return}distribute(q.a,ds,v)},
    mark:()=>{const y=S.act.get(q.a);const days=new Set(y.days||[]);ds.forEach(d=>days.add(d));apply([op('acts',y.id,{...y,days:[...days].sort()})],undefined,()=>reopenAfter(y.id,ds))},
-   clr:()=>{let y=S.act.get(q.a);ds.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],'Días borrados')}});
+   clr:()=>{LK_KEEP.add(q.a);let y=S.act.get(q.a);ds.forEach(d=>{y=withQty(y,d,null)});apply([op('acts',y.id,y)],'Días borrados')}});
   const qp=$('#qper');if(qp){qp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();pop.querySelector('[data-do=per]').click()}});setTimeout(()=>qp.focus(),0)}
   requestRender()}
 /* al pasar a «Por metrado»: qué esperar de lo que ya estaba programado por días (los días se conservan, solo les falta la cantidad) */
@@ -744,7 +748,7 @@ function paintDir(on){if(!paint||paint.on===on)return;paint.on=on;if(!on&&paint.
     c.td.classList.toggle('on',on);c.td.classList.toggle('pdel',!on)}}
 function endPaint(){
   const p=paint;paint=null;const by={};for(const c of p.cells.values())if(c.td)c.td.classList.remove('pdel');
-  if(p.sk&&p.sk.size){const L=[...p.sk].sort((a,b)=>a[0].localeCompare(b[0]));toast(`No se programó ${L.length===1?'el '+fmtD(L[0][0])+' ('+L[0][1]+')':L.length+' días no laborables ('+L.map(([d])=>fmtD(d)).join(', ')+')'}. ${lkCalOk()?'Para programarlo: clic derecho en la cabecera del día (en tablet, mantenla presionada) › «Trabajar este día», o desactiva «Al pintar días, saltar no laborables» en Configuración › Calendario.':'Si ese día se va a trabajar, pide al ingeniero que lo marque como día que se trabaja.'}`)}for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);
+  if(p.sk&&p.sk.size){const L=[...p.sk].sort((a,b)=>a[0].localeCompare(b[0]));toast(`No se programó ${L.length===1?'el '+fmtD(L[0][0])+' ('+L[0][1]+')':L.length+' días no laborables ('+L.map(([d])=>fmtD(d)).join(', ')+')'}. ${lkCalOk()?'Para programarlo: clic derecho en la cabecera del día (en tablet, mantenla presionada) › «Trabajar este día», o desactiva «Al pintar días, saltar no laborables» en Configuración › Calendario.':'Si ese día se va a trabajar, pide al ingeniero que lo marque como día que se trabaja.'}`)}for(const{a,d}of p.cells.values())(by[a]=by[a]||[]).push(d);for(const a of Object.keys(by))LK_KEEP.add(a);
   const ops=[];for(const[a,ds]of Object.entries(by)){const x=S.act.get(a);if(!x)continue;const set=new Set(x.days||[]);ds.forEach(d=>p.on?set.add(d):set.delete(d));
     const nd=[...set].sort();if(nd.join()!==(x.days||[]).slice().sort().join()){const q={...(x.qty||{})};if(!p.on)ds.forEach(d=>delete q[d]);const nx={...x,days:nd};if(x.qty)nx.qty=q;ops.push(op('acts',a,qAutoElig(nx)?qAutoFill(nx):nx))}}
   /* si se programan días después de la fecha en que se marcó terminada, se reabre sola: seguir programándola no debe estar bloqueado.
@@ -815,10 +819,14 @@ function commitField(t){
     /* «Por personal» (25-10-2026, pedido del dueño): el rendimiento que se escribe va al catálogo de la Matriz (lo heredan todas las filas
        de esa actividad) y la fila deja de tener uno propio; sin actividad del catálogo, queda solo en la fila */
     if(f==='rend'&&v!=null&&!PM()&&!cliOn()&&typeof mxCatOfN==='function'&&typeof MX!=='undefined'&&typeof mxEd==='function'&&mxEd()){const cid=mxCatOfN(x);const c=cid&&MX.cat.get(cid);
-      if(c){const n=[...S.act.values()].filter(y=>!y._del&&mxCatOfN(y)===cid).length;const prev=c.rend??null;
+      if(c){const rows=[...S.act.values()].filter(y=>!y._del&&mxCatOfN(y)===cid);const n=rows.length;const prev=c.rend??null;
         fcol('mcat').doc(cid).set({rend:v,...mxNow()},{merge:true}).then(()=>toast(`Rendimiento ${fq(v)} ${x.und||''}/persona-día guardado en el catálogo («${c.name}»): lo usan ${n} fila${n===1?'':'s'}.`,'Deshacer',()=>fcol('mcat').doc(cid).set({rend:prev,...mxNow()},{merge:true}))).catch(mxErr);
         t.dataset.o=String(v);MX.cat.set(cid,{...c,rend:v});MX.v++;gridRows=null;/* al instante en todas las filas de la actividad */
-        if(x.rend!=null)apply([op('acts',x.id,{...x,rend:null})]);else requestRender();return}}
+        /* 25-10-2026: todas las filas de la actividad quedan con el del catálogo (antes cada fila podía tener uno propio y se veían varios) */
+        const ops=rows.filter(y=>y.rend!=null).map(y=>op('acts',y.id,{...y,rend:null}));if(ops.length)apply(ops);else requestRender();return}}
+    /* sin actividad del catálogo: el mismo rendimiento en todas las filas con el mismo nombre y subcontratista */
+    if(f==='rend'&&!PM()&&!cliOn()){const k=an(x.name);const rows=[...S.act.values()].filter(y=>!y._del&&y.sc===x.sc&&an(y.name)===k&&(y.rend??null)!==v);
+      if(rows.length>1){t.dataset.o=String(v??'');apply(rows.map(y=>op('acts',y.id,{...y,rend:v})),`Rendimiento ${v==null?'quitado':fq(v)} en ${rows.length} filas de «${x.name}»`);return}}
     if(f==='und')v=v.trim().toUpperCase();
     let und0=null;if(f==='name'){v=v.replace(/\s+/g,' ').trim();
       /* catálogo exigido (Matriz › Catálogo): solo nombres del catálogo; si no está, se ofrece agregarlo (ingeniero) o proponerlo (SC) */
