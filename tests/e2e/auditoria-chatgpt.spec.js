@@ -72,7 +72,7 @@ test('duda 1 · en un piso con responsable, otro ingeniero no publica ni decide'
   const ED = ['members', 'editor@obra.pe', { role: 'editor', name: 'Elena Editora', pisos: ['p2'] }]; // ella está a cargo de otro piso
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, R, ED] });
   await expect(page.locator('#mpanel .mp-h')).toBeVisible();
-  await expect(page.locator('#mpanel [data-pub]')).toHaveCount(0);
+  await expect(page.locator('#mbar [data-pub]')).toHaveCount(0);
   noErrors(errors, 'responsable');
 });
 
@@ -80,7 +80,7 @@ test('duda 2 · publicar tarde deja el día como no cumplido', async ({ page }) 
   const D = ['pdz', 'pzD', { date: HOY, pisoId: 'p1', sc: 'c2', kind: 'nova', actId: 'e0', ambId: 'a1', motivo: 'Sin personal', k: 'per', repTo: MANANA, tren: 0, draft: true, ids: ['e0'], shift: 1, by: 'admin', ts: 1 }];
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, D] });
   await page.click('#wtoday');
-  await page.locator('#mpanel [data-pub]').click(); await page.locator('#pop [data-do="si"]').click();
+  await page.locator('#mbar [data-pub]').click(); await page.locator('#pop [data-do="si"]').click();
   await expect.poll(async () => (await rec(page, HOY, 'e0'))?.status).toBe('no');
   noErrors(errors, 'publicar tarde');
 });

@@ -16,7 +16,7 @@ const pdzDoc = (page, id) => page.evaluate(id => window.__dbGet('pdz', id), id);
 const row = (page, id) => page.locator(`#mpanel .mp-it[data-act="${id}"]`);
 const sorted = L => [...(L || [])].sort();
 async function publicar(page) {
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await page.locator('#pop [data-do="si"]').click();
   await expect(page.locator('#mpanel .pubb.ok')).toBeVisible();
 }
@@ -39,7 +39,7 @@ test('1 · la página ya no acepta sola los cierres del capataz: no pisa lo que 
 
 test('2 · para publicar hay que revisar todas las propuestas; el editor no ve «aceptar/rechazar todas»', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB, T1, prop('s9', 'per')] });
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await expect(page.locator('#pop')).toContainText('Quedan 1 propuesta');
   await expect(page.locator('#pop [data-do="si"]')).toHaveCount(0);
   await expect(page.locator('#pop [data-do="acc"]')).toHaveCount(0);
@@ -51,7 +51,7 @@ test('2 · para publicar hay que revisar todas las propuestas; el editor no ve �
 test('3 · el administrador acepta todas (no va → borrador al día siguiente, culminada) o rechaza todas', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, prop('s9', 'per'), prop('e0', 'fin', { sc: 'c2' })] });
   page.on('dialog', d => d.accept());
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await page.locator('#pop [data-do="acc"]').click();
   await expect.poll(async () => (await pdzDoc(page, `dp_${MANANA}_s9`)).st).toBe('ok');
   await expect.poll(async () => (await pdzDoc(page, `dp_${MANANA}_e0`)).st).toBe('ok');
@@ -68,7 +68,7 @@ test('3 · el administrador acepta todas (no va → borrador al día siguiente, 
 test('3b · rechazar todas: van según lo programado', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, prop('s9', 'per')] });
   page.on('dialog', d => d.accept());
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await page.locator('#pop [data-do="rej"]').click();
   await expect.poll(async () => (await pdzDoc(page, `dp_${MANANA}_s9`)).st).toBe('rej');
   expect((await act(page, 's9')).days).toEqual([MANANA]);
@@ -165,7 +165,7 @@ test('8 · deshacer la publicación es todo o nada: si algo cambió después, no
 
 test('9 · la foto del plan se arma con lo del servidor, no con la copia local atrasada', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor', tab: 'mapa', extra: [...LAMINA, ...AMB] });
-  await expect(page.locator('#mpanel [data-pub]').first()).toBeVisible();
+  await expect(page.locator('#mbar [data-pub]').first()).toBeVisible();
   await enSilencio(page, 'acts', 'e0', { qty: { [MANANA]: 7 } });
   await publicar(page);
   await expect.poll(() => page.evaluate(d => (window.__dbGet('dplan', d + '_p1') || {}).ids, MANANA)).toMatchObject({ e0: 7 });
@@ -314,7 +314,7 @@ test('7b · si la actividad principal tocaría otro día ya publicado, no se pub
   await page.locator('#pop [data-nk="per"]').click();
   await page.locator('#pop [data-nv="nolib"]').click();
   await page.locator('#pop .nvok').click();
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await page.locator('#pop [data-do="si"]').click();
   await expect(page.locator('#toast')).toContainText('No se publicó');
   expect((await act(page, 'e0')).days).toEqual([HOY, MANANA, X]);

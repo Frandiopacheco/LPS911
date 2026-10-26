@@ -5,6 +5,8 @@
    La base se guarda en sessionStorage para sobrevivir a una recarga (por ejemplo, "Ver como"). */
 /* la app usa ventanas propias (uiAsk); en las pruebas pasan por confirm/prompt del navegador para contestarlas con page.on('dialog') (ver uiask.spec.js para la ventana real) */
 window.__uiAskNative = true;
+/* 26-10-2026: el Plan diario arranca con los paneles plegados; las pruebas antiguas los esperan abiertos (la prueba nueva lo apaga) */
+window.__pfOpen = true;
 (function () {
   const E = window.__E2E || {};
   const T = E.today || '2026-10-01', TM = E.tomorrow || '2026-10-02';

@@ -3841,7 +3841,7 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .mfzbar .mfzi small{white-space:nowrap}
 .mfzbar .mfzq{white-space:nowrap}
 @media (min-width:900px){
-  .mrs.dock.shut{top:0!important;bottom:0;right:0!important;width:30px!important;max-width:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0}
+  .mrs.dock.shut{top:0;bottom:0;right:0!important;width:30px!important;max-width:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0}
   .mrs.dock.shut .mrst{height:100%;border:0}
   .mapa.dockmin .mwrap>.mstage{right:30px}
   .mapa.dockmin .mcqb{right:40px}
@@ -4587,3 +4587,38 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 .pop .pmr{display:flex;gap:6px;padding:2px 8px 4px}
 .pop .pmr button{flex:1;justify-content:center;text-align:center;border:1px solid var(--line);padding:6px 8px}
 .pop .pmr button:hover{border-color:var(--accent)}
+/* ---------- Plan diario (26-10-2026, dueño): paneles plegados por defecto como columnas con el nombre del panel ---------- */
+@media (min-width:900px){
+  .mrs.dock.rail{top:0;right:0!important;bottom:0;width:376px!important;max-width:none;max-height:none!important;flex-direction:row-reverse;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0}
+  .mrs.dock.rail.shut{width:38px!important}
+  .mrs.dock.rail>.mrst{flex:none;width:38px;height:100%;border:0;border-left:1px solid var(--line);background:var(--panel2);overflow-y:auto;scrollbar-width:none}
+  .mrs.dock.rail.shut>.mrst{border-left:0}
+  .mrs.dock.rail>.on:not([hidden]){min-width:0}
+  .mapa.docked .mwrap>.mstage{right:376px}.mapa.docked .mcqb{right:386px}
+  .mapa.dockmin .mwrap>.mstage{right:38px}.mapa.dockmin .mcqb{right:48px}
+  .mpanel.fold{width:38px;padding:0;background:var(--panel2)}
+}
+@media (min-width:900px) and (max-width:1279px){.mrs.dock.rail{width:338px!important}.mapa.docked .mwrap>.mstage{right:338px}.mapa.docked .mcqb{right:348px}}
+.mrail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
+.mrtab{writing-mode:vertical-rl;display:flex;align-items:center;gap:6px;width:28px;padding:12px 0;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2);font:600 12.5px var(--f-ui);cursor:pointer;white-space:nowrap}
+.mrtab:hover{border-color:var(--accent);color:var(--accent)}
+.mrtab.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.mrtab b{writing-mode:horizontal-tb;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--panel2);color:var(--ink);font-size:11px;line-height:18px;text-align:center}
+.mrtab.bad b{background:var(--bad);color:#fff}
+/* franja izquierda plegada con el mismo aspecto de pestaña */
+.mpanel.fold .mstrip{background:transparent;padding:8px 0;justify-content:flex-start}
+.mpanel.fold .mstrip-t{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);padding:12px 5px}
+.mpanel.fold .mstrip:hover .mstrip-t{border-color:var(--accent)}
+.mpanel.fold .mstrip-a{display:none}
+/* barra: estado del día (Listo · Publicar · Reunión) */
+.mday{display:inline-flex;align-items:center;gap:6px}
+.ib.mrdyb{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 45%,var(--line));color:var(--ink)}
+.ib.mrdyb.ok{background:var(--ok-soft,var(--panel2));border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.pubchip{display:inline-flex;align-items:center;height:var(--h-ctl);padding:0 10px;border-radius:var(--r-ctl);background:var(--panel2);color:var(--ink2);font-size:13px;font-weight:600;white-space:nowrap}
+.pubchip.ok{color:var(--ok)}
+.ib.mfiti{font-size:16px;padding:0 9px}
+.pop .mrdyp{border:0;margin:0;padding:4px 6px}.pop .mrdys{font-weight:600;padding:4px 4px 8px}
+.pop .mrdyp table{width:100%;border-collapse:collapse;font-size:13px}.pop .mrdyp th,.pop .mrdyp td{padding:4px 6px;text-align:left;border-bottom:1px solid var(--line2)}
+.pop .mrdyp td button{width:auto;padding:2px 4px;text-decoration:underline}
+/* herramientas de dibujo: solo iconos (el nombre va en el globo al pasar el puntero) */
+@media (min-width:701px){.mt{width:40px;height:38px}.mt small{display:none}}

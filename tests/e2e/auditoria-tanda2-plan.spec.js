@@ -95,7 +95,7 @@ test('C-17 · publicar el plan del día con restricciones abiertas avisa y lo gu
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, ...RIN] });
   const msgs = [];
   page.on('dialog', d => { msgs.push(d.message()); d.accept(); });
-  await page.locator('#mpanel [data-pub]').first().click();
+  await page.locator('#mbar [data-pub]').first().click();
   await expect(page.locator('#pop')).toContainText('con restricciones abiertas');
   await page.locator('#pop [data-do="si"]').click();
   await expect.poll(() => msgs.some(m => /restricciones abiertas/.test(m))).toBe(true);

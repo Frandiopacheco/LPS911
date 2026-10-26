@@ -42,6 +42,8 @@ async function enPop(p, loc, sel, pasos) {
   throw new Error('la ventanita no se pudo completar tras 5 intentos: ' + sel);
 }
 const dp = id => `dp_${MANANA}_${id}`;
+/* 26-10-2026: tocar la pestaña abierta del panel derecho lo pliega; solo se toca si no está abierta */
+async function abrirTab(p, id) { const t = p.locator(`#mrst [data-rtab="${id}"]`); if (!/\bon\b/.test((await t.getAttribute('class')) || '')) await t.click(); }
 
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
@@ -127,7 +129,7 @@ test('2. revisión por los ingenieros del piso (en paralelo) y bloqueo al no res
   await e3.waitForTimeout(500);
   await chk(2, 'ed3 «Culminado» solo propone: la actividad no se marca terminada', { done: false, prop: 'fin' }, { done: await e3.evaluate(() => !!(window.__dbGet('doneidx', 'p1') || {}).d?.z2), prop: ((await pdz(e3)).find(z => z.kind === 'dprop' && z.actId === 'z2') || {}).k }, e3);
   await row(e3, 'z2').locator('[data-dv^="va"]').click(); // retira su propuesta
-  await chk(2, 'ed3 no ve «Publicar plan»', 0, await e3.locator('#mpanel [data-pub]').count(), e3);
+  await chk(2, 'ed3 no ve «Publicar plan»', 0, await e3.locator('#mbar [data-pub]').count(), e3);
   // si fuerza la decisión por código tampoco se aplica (la regla del servidor real es otra capa: aquí solo la interfaz)
   const forz = await e3.evaluate(() => { try { return decideProp ? 'existe' : '' } catch (e) { return 'n/a' } });
   // reparto: ed1 atiende k=1..mitad, ed2 el resto, a la vez
@@ -216,7 +218,7 @@ test('5. plan e interferencias: cruce entre dos SC + reprogramar un No va (ed1 y
   const nCx = await p.locator('#mcxb .mp-cx').count().catch(() => 0);
   log('cruces visibles antes de abrir:', nCx, (await p.locator('#mcxb').innerText().catch(() => '')).replace(/\n+/g, ' | ').slice(0, 300));
   const cruce = async () => {
-    if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) { await p.locator('#mbar [data-pm="cx"]').click({ timeout: 3000 }).catch(() => {}); await p.locator('#mrst [data-rtab="mcxb"]').click(); }
+    if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) { await p.locator('#mbar [data-pm="cx"]').click({ timeout: 3000 }).catch(() => {}); await abrirTab(p, 'mcxb'); }
     await enPop(p, p.locator('#mcxb .mp-cx').first(), '#pop .xo', async () => {
       const n = await p.locator('#pop .xo').count();
       const quien = p.locator('#pop .xo', { hasText: 'Cruce · SC2' });
@@ -238,7 +240,7 @@ test('5. plan e interferencias: cruce entre dos SC + reprogramar un No va (ed1 y
   const porAct = Object.fromEntries(nova.map(z => [z.actId, z.k]));
   await chk(5, 'borrador por interferencia (z2) y por personal (e0) junto con los aceptados', true, porAct.z2 === 'int' && porAct.e0 === 'per' && !!porAct.x1, p, JSON.stringify(porAct));
   // el cruce restante (z1 con e1) → «pueden trabajar a la vez»
-  if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) { await p.locator('#mbar [data-pm="cx"]').click({ timeout: 3000 }).catch(() => {}); await p.locator('#mrst [data-rtab="mcxb"]').click().catch(() => {}); }
+  if (!(await p.locator('#mcxb .mp-cx').first().isVisible().catch(() => false))) { await p.locator('#mbar [data-pm="cx"]').click({ timeout: 3000 }).catch(() => {}); await abrirTab(p, 'mcxb').catch(() => {}); }
   if (await p.locator('#mcxb .mp-cx').count()) {
     await enPop(p, p.locator('#mcxb .mp-cx').first(), '#pop [data-x="ok"]', () => p.locator('#pop [data-x="ok"]').click({ timeout: 4000 }));
     await expect.poll(async () => (await pdz(p)).filter(z => z.kind === 'xok').length, { timeout: 8000 }).toBe(1);
@@ -263,7 +265,7 @@ test('3. publicar el plan (ed1 y ed2 a la vez): las fechas no se corren dos vece
     return 'falló';
   };
   const t0 = Date.now();
-  const rs = await Promise.all([pub(p, '#mmbar [data-pub]'), pub(q, '#mpanel [data-pub]')]);
+  const rs = await Promise.all([pub(p, '#mmbar [data-pub]'), pub(q, '#mbar [data-pub]')]);
   TM.push({ que: 'publicar el plan (2 ingenieros a la vez)', ms: Date.now() - t0 });
   log('publicar →', rs);
   await expect.poll(async () => (await pdz(p)).filter(z => z.kind === 'nova' && z.draft).length, { timeout: 15_000 }).toBe(0);
