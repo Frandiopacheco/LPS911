@@ -24,7 +24,7 @@ const M={vista:'',piso:'',sel:'',under:true,op:0.7,hi:null,view:null,busy:'',dat
 
 /* ---------- datos ---------- */
 function ensureLam(){if(lamSub||!db)return;
-  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));imgPrune();lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat')snapRender(sn)},
+  lamSub=fcol('laminas').onSnapshot(sn=>{LAM.clear();sn.docs.forEach(d=>LAM.set(d.id,{...d.data(),id:d.id}));imgPrune();lamErr=null;lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat'||(U.tab==='cfg'&&U.cfgV==='cas'))snapRender(sn)},
     err=>{lamErr=err&&err.code||'error';lamReady=true;if(U.tab==='mapa'||U.tab==='cap'||U.tab==='dash'||U.tab==='campo'||U.tab==='lib'||U.tab==='planos'||U.tab==='mat')requestRender()});
   unsubs.push(()=>{if(lamSub)lamSub();lamSub=null;LAM.clear();lamReady=false;IMG.forEach(v=>{if(v.url)URL.revokeObjectURL(v.url)});IMG.clear();M.view=null})}
 const lamsOf=pid=>[...LAM.values()].filter(l=>l.pisoId===pid&&!l.arch).sort((a,b)=>(b.base?1:0)-(a.base?1:0)||(a.order||0)-(b.order||0)||EN(a.esp).localeCompare(EN(b.esp)));
@@ -2208,6 +2208,14 @@ async function delChunks(l,rev){const b=db.batch();for(let i=0;i<(l.nf||0);i++)b
 const PLBOK=()=>typeof PLB!=='undefined'&&typeof plGet==='function'&&typeof canPla==='function'&&canPla();
 /** metros por píxel de la lámina: con la calibración de Planos (de esa revisión) o, si no tiene, la escala nominal 1/100 del formato */
 function plbMpp(r,w){if(!r||!(w>0))return null;if(r.calMpp>0&&r.W>0)return r.calMpp*r.W/w;if(r.mm&&r.mm[0]>0)return r.mm[0]/10/w;return null}
+/** crea una lámina base del piso pid desde un plano del módulo Planos (sin diálogo; lo usa Configuración › Casco › Niveles).
+    o: {rev (por defecto la vigente), name, esp, say}. La lámina queda fija en esa revisión (laminas.plb). */
+async function lamFromPlb(pid,plbId,o){o=o||{};const p=PLB.get(plbId);if(!p)throw new Error('No se encontró el plano '+plbId);const sp=plSpecOf(p,o.rev||p.rev||1);
+  const say=o.say||(()=>{});const bl=await plGet(sp.base+'/orig.pdf');const f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'});
+  const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;
+  const ref={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
+  const out=await processFile(f,say,{crop:sp.crop||null});ref.mpp=plbMpp(ref,out.w);delete ref.W;
+  await saveLam({pisoId:pid,esp:o.esp||'Plano base',name:o.name||((p.cod||'')+(p.tit?' · '+p.tit:'')),base:true,T:I,aligned:true,plb:ref,order:o.order},out);return true}
 function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(p=>p.id===opt.pid):pisos();
   const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true">
    <h3>${repl?'Reemplazar lámina: '+esc(lname(repl)):opt.mode==='base'?'Subir lámina base del piso':opt.mode==='spec'?'Subir especialidad':'Subir lámina'}</h3>
@@ -2237,9 +2245,8 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     if(typeof plbReady!=='undefined'&&!plbReady){plbSel.innerHTML='<option value="">Cargando planos…</option>';setTimeout(()=>{if(box.isConnected)plbSync()},400);return}
     const pid=repl?repl.pisoId:$('#upiso',box).value;const cur=plbSel.value||(repl&&repl.plb?repl.plb.id:'');
     const L=[...PLB.values()].filter(x=>!x.eto&&!x.arch).sort((a,b)=>String(a.disc).localeCompare(b.disc)||String(a.cod).localeCompare(b.cod,'es',{numeric:true}));
-    if(!L.length&&!(repl&&repl.plb)&&!plbSel.dataset.auto){plbSel.dataset.auto='1';src.value='file';plbSync();return}
     const mine=L.filter(x=>x.pisoId===pid),oth=L.filter(x=>x.pisoId!==pid);const o=x=>`<option value="${esc(x.id)}"${x.id===cur?' selected':''}>${esc(x.cod||x.id)} · ${esc(x.tit||'')} (Rev. ${x.rev||1})</option>`;
-    plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía</option>';
+    plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía: elige «Archivo de la computadora»</option>';
     revSync()}
   function revSync(){const p=PLB.get(plbSel.value);if(!p){revSel.innerHTML='';$('#uplbn',box).textContent='';return}
     const R=[p.rev||1,...(p.revs||[]).map(r=>r.rev).reverse()];revSel.innerHTML=R.map((r,i)=>`<option value="${r}">Rev. ${r}${i===0?' (vigente)':''}</option>`).join('');
@@ -2359,5 +2366,5 @@ function alignDialog(o){const box=document.createElement('div');box.className='m
   requestAnimationFrame(()=>{vr.fit();vt.fit();upd();if(T)showPrev()})}
 
 window.renderMapaImpl=renderMapa;
-window.__plano={pfReset,imgURL,ensureLam,focusAct,fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,lamUpload:uploadDialog,nums:capNums,novaSet,novaOf,zonedSet,crossOf,zcClose,cuRows,dpPendAll,draftsOf};
+window.__plano={lamFromPlb,pfReset,imgURL,ensureLam,focusAct,fromPts,ap,LAM,M,processFile,capInit,capPlan,capDraw,zoneFor,ambAt,ambAtP,znLoad,ambMap,ambFocus,ambSuggest,basesOf,lamUpload:uploadDialog,nums:capNums,novaSet,novaOf,zonedSet,crossOf,zcClose,cuRows,dpPendAll,draftsOf};
 })();

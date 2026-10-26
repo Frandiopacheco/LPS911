@@ -28,7 +28,7 @@ const csTomorrow=()=>csNextWork(addD(todayIso(),1));
 /* ---------- Configuración › Casco ---------- */
 let CS_LP=null;/* pisos de Last Planner (para el vínculo de la entrega); se leen una vez */
 function csLpPisos(){if(CS_LP||!db)return CS_LP||[];CS_LP=[];fcolLp('pisos').get().then(sn=>{CS_LP=sn.docs.map(d=>({...d.data(),id:d.id})).filter(p=>!p.arch).sort(byOrder);if(U.tab==='cfg')requestRender()}).catch(()=>{});return CS_LP}
-function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure();
+function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure();if(typeof plSub==='function')plSub();if(typeof loadPlanoMod==='function'&&!(window.__plano&&window.__plano.LAM))loadPlanoMod().then(()=>{window.__plano.ensureLam&&window.__plano.ensureLam();setTimeout(()=>{if(U.tab==='cfg')requestRender()},600)}).catch(()=>{});
   const ed=csEd(),dis=ed?'':' disabled',P_=pisos();
   const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const empty=!csHasData();
@@ -59,12 +59,12 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
   /* niveles y entrega */
   const LP=csLpPisos();
-  h+=`<div class="card"><h2>Niveles y entrega a Arquitectura <span class="sub">Cuando un sector termina el tarrajeo, su entrega se publica como hito de inicio en el piso de Last Planner</span></h2><div class="tscroll"><table class="t cslv"><thead><tr><th>Nivel</th><th title="Código corto del selector de niveles">Código</th><th title="Así sale en las celdas de estructura del tren (planta de encofrado del techo)">Techo</th><th title="Así sale en las celdas de albañilería del tren (planta de arquitectura del piso)">Piso</th><th>Sectores</th><th>Piso en Last Planner</th>${ed?'<th></th>':''}</tr></thead><tbody>
+  h+=`<div class="card"><h2>Niveles y entrega a Arquitectura <span class="sub">Cuando un sector termina el tarrajeo, su entrega se publica como hito de inicio en el piso de Last Planner</span></h2><div class="tscroll"><table class="t cslv"><thead><tr><th>Nivel</th><th title="Código corto del selector de niveles">Código</th><th title="Así sale en las celdas de estructura del tren (planta de encofrado del techo)">Techo</th><th title="Así sale en las celdas de albañilería del tren (planta de arquitectura del piso)">Piso</th><th>Sectores</th><th title="Lámina base del nivel tomada del módulo Planos (planta de encofrado del techo)">Encofrado (techo)</th><th title="Segunda lámina base del nivel: planta de arquitectura del piso">Arquitectura (piso)</th><th>Piso en Last Planner</th>${ed?'<th></th>':''}</tr></thead><tbody>
     ${P_.map((p,i)=>{const nE=csAmbs(p.id,'E').length,nA=csAmbs(p.id,'A').length;const fi=(f,w,l)=>`<input class="ci" data-cslv="${f}" data-id="${p.id}" value="${esc(p[f]||'')}" style="width:${w}"${dis} aria-label="${l} de ${esc(p.name)}">`;
-      return`<tr><td>${fi('name','140px','Nombre')}</td><td>${fi('code','64px','Código')}</td><td>${fi('tc','64px','Techo')}</td><td>${fi('pc','64px','Piso')}</td><td>${nE} de estructura${nA?` · ${nA} de albañilería`:''}</td>
+      return`<tr><td>${fi('name','140px','Nombre')}</td><td>${fi('code','64px','Código')}</td><td>${fi('tc','64px','Techo')}</td><td>${fi('pc','64px','Piso')}</td><td>${nE} de estructura${nA?` · ${nA} de albañilería`:''}</td>${csLvLamTd(p,'EST',ed)}${csLvLamTd(p,'ARQ',ed)}
       <td><select data-cs="lp" data-id="${p.id}"${dis} aria-label="Piso de Last Planner de ${esc(p.name)}"><option value="">Sin vincular</option>${LP.map(l=>`<option value="${l.id}"${p.lp===l.id?' selected':''}>${esc(l.name||l.code)}</option>`).join('')}</select></td>
-      ${ed?`<td class="csrow cslva"><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="-1" title="Subir en la lista"${i?'':' disabled'} aria-label="Subir ${esc(p.name)}">▲</button><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="1" title="Bajar en la lista"${i<P_.length-1?'':' disabled'} aria-label="Bajar ${esc(p.name)}">▼</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="0" title="Agregar un nivel antes (debajo: p. ej. otro sótano)">+↑</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="1" title="Agregar un nivel después (encima: p. ej. azotea)">+↓</button><button class="ab" data-cs="lvdel" data-id="${p.id}" title="Eliminar (se archiva; con Deshacer)" aria-label="Eliminar ${esc(p.name)}">&times;</button></td>`:''}</tr>`}).join('')||`<tr><td colspan="${ed?7:6}" class="mu" style="padding:12px">Sin niveles.</td></tr>`}
-    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="lvnew">+ Niveles al final</button>${P_.length?'<button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button>':''}${P_.length?`<span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span>`:''}</div>`:''}<p class="note pad" style="margin-top:0">El orden va de abajo hacia arriba (sótanos primero). Los códigos se guardan al salir de la casilla.</p></div>`;
+      ${ed?`<td class="csrow cslva"><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="-1" title="Subir en la lista"${i?'':' disabled'} aria-label="Subir ${esc(p.name)}">▲</button><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="1" title="Bajar en la lista"${i<P_.length-1?'':' disabled'} aria-label="Bajar ${esc(p.name)}">▼</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="0" title="Agregar un nivel antes (debajo: p. ej. otro sótano)">+↑</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="1" title="Agregar un nivel después (encima: p. ej. azotea)">+↓</button><button class="ab" data-cs="lvdel" data-id="${p.id}" title="Eliminar (se archiva; con Deshacer)" aria-label="Eliminar ${esc(p.name)}">&times;</button></td>`:''}</tr>`}).join('')||`<tr><td colspan="${ed?9:8}" class="mu" style="padding:12px">Sin niveles.</td></tr>`}
+    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="lvnew">+ Niveles al final</button>${P_.length&&csLvSugAll().length?`<button class="ib pri" data-cs="lvsug">Vincular sugeridos (${csLvSugAll().length})</button>`:''}${P_.length?'<button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button>':''}${P_.length?`<span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span>`:''}</div>`:''}<p class="note pad" style="margin-top:0">El orden va de abajo hacia arriba (sótanos primero). Los códigos se guardan al salir de la casilla.</p></div>`;
   h+=csSecCard();
   return h}
 
@@ -361,6 +361,30 @@ async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.fr
     for(const a of cur.slice(v.k)){if(used.has(a.id)){keep++;continue}const o={...a};delete o.id;ops.push(op('ambientes',a.id,{...o,arch:{t,by:me.email,n:me.name||me.email}}))}}
   if(!ops.length){toast('Los niveles ya tenían esta sectorización.');return}
   apply(ops,`Sectorización «${v.n}» aplicada`);toast(`Sectorización aplicada: ${nw} sector(es) nuevos, ${mod} actualizados${geoN?` · ${geoN} con su dibujo en la lámina`:''}${keep?` · ${keep} sobrante(s) con actividades quedan: mueve sus actividades y vuelve a aplicar`:''}`,'Deshacer',undo)}
+/* ---------- láminas del módulo Planos por nivel (columnas Encofrado / Arquitectura) ----------
+   Encofrado = plano EST, Arquitectura = plano ARQ, del mismo nivel (plb.niv: P3, S1, AZ…). Cada uno es una lámina base del nivel
+   (dos vistas) tomada del módulo Planos y fija en su revisión (plano.js lamFromPlb); se reconoce por laminas.plb.disc. */
+const csLvNum=p=>{const m=String(p.tc||p.code||'').match(/(\d+)\s*$/);return m?+m[1]:null};
+const csLvNiv=p=>{const t=String(p.tc||p.code||p.name||'').toUpperCase();if(/S[OÓ]T|^TS|^S\d|^PS/.test(t)||/s[oó]tano/i.test(p.name||'')){const n=(String(p.name||'').match(/(\d+)/)||[])[1];return'S'+(n||1)}
+  if(/AZ/.test(t)||/azotea/i.test(p.name||''))return'AZ';const n=csLvNum(p);return n!=null?'P'+n:''};
+const csLvLams=pid=>{const API=window.__plano;return API&&API.LAM?[...API.LAM.values()].filter(l=>l.pisoId===pid&&l.base&&!l.arch):[]};
+const csLvLamOf=(pid,disc)=>csLvLams(pid).find(l=>l.plb&&(l.plb.disc===disc||(disc==='EST'&&/encof|estruct/i.test(l.plb.tit||''))));
+function csLvSug(p,disc){if(typeof PLB==='undefined')return null;const nv=csLvNiv(p);if(!nv)return null;
+  const L=[...PLB.values()].filter(x=>!x.eto&&!x.arch&&x.disc===disc&&String(x.niv||'').toUpperCase()===nv);
+  if(!L.length)return null;const sc=x=>(/planta/i.test(x.tipo||'')?2:0)+(disc==='EST'&&/encof/i.test(x.tit||'')?3:0)+(disc==='ARQ'&&/distrib|planta/i.test(x.tit||'')?1:0);
+  return L.sort((a,b)=>sc(b)-sc(a)||String(a.cod).localeCompare(b.cod,'es',{numeric:true}))[0]}
+function csLvSugAll(){const out=[];for(const p of pisos())for(const d of['EST','ARQ'])if(!csLvLamOf(p.id,d)){const x=csLvSug(p,d);if(x)out.push({p,d,x})}return out}
+function csLvLamTd(p,disc,ed){const l=csLvLamOf(p.id,disc);
+  if(l){const pp=typeof PLB!=='undefined'?PLB.get(l.plb.id):null;const nv=pp&&(pp.rev||1)>l.plb.rev;return`<td class="cslam"><span class="mono">${esc(l.plb.cod||l.plb.id)}</span> <span class="mu">Rev. ${l.plb.rev}</span>${nv?` <span class="csbal warn" title="En el módulo Planos hay una revisión más nueva: cámbiala en Sectorización (menú de la lámina)">Rev. ${pp.rev} nueva</span>`:''}</td>`}
+  const sg=csLvSug(p,disc);
+  return`<td class="cslam">${ed&&typeof PLB!=='undefined'&&PLB.size?`<select data-cs="lvlam" data-id="${p.id}" data-disc="${disc}" aria-label="${disc==='EST'?'Encofrado':'Arquitectura'} de ${esc(p.name)}"><option value="">${sg?'Sugerido: '+esc(sg.cod):'Elegir…'}</option>${[...PLB.values()].filter(x=>!x.eto&&!x.arch&&(x.disc===disc||!['EST','ARQ'].includes(x.disc))).sort((a,b)=>String(a.cod).localeCompare(b.cod,'es',{numeric:true})).map(x=>`<option value="${esc(x.id)}">${esc(x.cod)} · ${esc((x.tit||'').slice(0,40))}${x.niv?' ('+esc(x.niv)+')':''}</option>`).join('')}</select>${sg?`<button class="ab" data-cs="lvok" data-id="${p.id}" data-disc="${disc}" data-plb="${esc(sg.id)}" title="Vincular ${esc(sg.cod)}">✓</button>`:''}`:'<span class="mu">—</span>'}</td>`}
+let CS_LAMBUSY=false;
+async function csLvLink(items){if(!csEd()||CS_LAMBUSY||!items.length)return;CS_LAMBUSY=true;
+  try{if(typeof loadPlanoMod==='function')await loadPlanoMod();const API=window.__plano;if(API.ensureLam)API.ensureLam();let ok=0;
+    for(const it of items){const p=S.pis.get(it.pid);if(!p||csLvLamOf(it.pid,it.disc))continue;toast(`Vinculando ${PLB.get(it.plb)?.cod||''} a ${p.name} (${ok+1} de ${items.length})…`);
+      try{await API.lamFromPlb(it.pid,it.plb,{esp:it.disc==='EST'?'Estructuras':'Arquitectura',order:it.disc==='EST'?1:2});ok++}catch(e){toast('No se pudo vincular: '+(e.message||e));break}}
+    toast(`${ok} lámina(s) vinculadas desde el módulo Planos`)}finally{CS_LAMBUSY=false;requestRender()}}
+
 /* ---------- niveles (Configuración › Casco › Niveles; admin y editores) ---------- */
 const csLvOps=(L)=>L.map((p,i)=>{const o={...p};delete o.id;return(p.order===i)?null:op('pisos',p.id,{...o,order:i})}).filter(Boolean);
 /** nivel nuevo con su frente suelto de escalera */
@@ -391,8 +415,9 @@ document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
   if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
-  else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id)});
+  else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
+  if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}
   if(t.dataset&&t.dataset.cslv){csLvSet(t.dataset.id,t.dataset.cslv,t.value);return}
   const f=t.dataset&&t.dataset.csf;if(f){const r=t.closest('[data-csc]');if(r&&csEd())csCatSet(r.dataset.csc,f,t.type==='checkbox'?t.checked:t.value);return}
   const k=t.dataset&&t.dataset.cs;if(!k||!csEd())return;
