@@ -164,7 +164,7 @@ function renderLookInner(main){
   {const fa=$('#fact');if(fa){fa.textContent=actBtnLabel();fa.classList.toggle('on',U.acts.length>0)}}
   $('#fsec').innerHTML='<option value="">Todos los sectores'+(U.piso?' del piso':'')+'</option>'+secs.map(s=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${U.piso?'':esc((S.pis.get(pisoOfSecObj(s))||{}).code||'')+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('');
   {const fw=$('#fwin');if(fw.value!==String(U.win)){if(![...fw.options].some(o=>o.value===String(U.win)))fw.insertAdjacentHTML('beforeend',`<option value="${U.win}">${U.win} sem</option>`);fw.value=String(U.win)}}
-  $$('#fmode button').forEach(b=>b.classList.toggle('on',b.dataset.m===U.qmode));$('#gw').classList.toggle('qm',U.qmode==='metrado');
+  $$('#fmode button').forEach(b=>b.classList.toggle('on',b.dataset.m===U.qmode));$('#gw').classList.toggle('qm',U.qmode==='metrado');$('#gw').classList.toggle('qp',U.qmode==='personal');
   $('#fonly').checked=U.onlyWin;$('#fpastc').checked=!!U.showPast;$('#frestr').checked=U.onlyRestr;
   {let no=0;for(const a of S.act.values())if(a.obs&&vset.has(pisoOfAmb(a.ambId)))no++;if(!no&&U.onlyObs)U.onlyObs=false;$('#lobs').hidden=!no;$('#nobs').textContent=no||'';$('#fobs').checked=U.onlyObs}$('#fchg').checked=U.changes;
   $('#gw').classList.toggle('meet',U.meeting);$('#gw').classList.toggle('ro-mode',!canWrite);
@@ -627,6 +627,9 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
     const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'Es una versión emitida al cliente (solo lectura). Elige «Actual (editable)» para editar.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    /* «Por personal» solo muestra las personas que hacen falta según lo programado (25-10-2026, decidido con el dueño: no duplicar funciones);
+       los días y cantidades se programan en «Por días» o «Por metrado» */
+    if(U.qmode==='personal'){if(!lkPersTipT||NOW()-lkPersTipT>4000){lkPersTipT=NOW();toast('«Por personal» solo muestra las personas por día según lo programado. Para programar usa «Por días» o «Por metrado».')}return}
     if(U.qmode==='metrado'){const x=S.act.get(td.parentElement.dataset.a);if(x&&hasM(x)){closeQEditor(false);if(e.pointerType==='touch'){qtap={td,x:e.clientX,y:e.clientY};return}if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();qsel={a:x.id,start:td.dataset.d,cells:new Map([[td.dataset.d,td]])};td.classList.add('sel');return}}
     if(e.pointerType==='touch'){tap={td,x:e.clientX,y:e.clientY};return}
     if(e.button!==0)return;e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
@@ -660,7 +663,7 @@ window.addEventListener('pointerup',()=>{if(paint)endPaint();if(qsel)endQSel()})
    no llega el pointerup: se descarta lo pintado SIN guardar y la grilla vuelve a mostrar lo que hay (antes el pincel quedaba pegado) */
 function lkPaintAbort(){if(!paint&&!qsel)return;paint=null;if(qsel){qsel.cells.forEach(t=>t.classList.remove('sel'));qsel=null}gridRows=null;requestRender()}
 window.addEventListener('pointercancel',lkPaintAbort);window.addEventListener('blur',lkPaintAbort);
-let qsel=null,qtap=null,qed=null;
+let qsel=null,qtap=null,qed=null,lkPersTipT=0;
 function endQSel(){const q=qsel;qsel=null;const cells=[...q.cells.values()];if(cells.length===1){cells[0].classList.remove('sel');openQEditor(cells[0]);return}
   const x=S.act.get(q.a);if(!x){requestRender();return}const ds=[...q.cells.keys()].sort();const inRange=ds.reduce((s,d)=>s+(+(x.qty||{})[d]||0),0);const avail=r2(x.metrado-(progSum(x)-inRange));const und=esc(x.und||'');
   const anchor=cells[cells.length-1];

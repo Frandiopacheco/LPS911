@@ -4561,3 +4561,5 @@ p.smline{display:block;border-left-color:var(--line)}
 .ts-tbtn{cursor:pointer}.ts-tbtn:focus-visible{outline:none;box-shadow:var(--ring)}
 .tco-dg button{font-weight:600}
 .tco-dg .t-lnk{display:inline}
+/* «Por personal» solo muestra (no se pinta): sin cursor de pincel */
+#gw.qp td.d{cursor:default}
