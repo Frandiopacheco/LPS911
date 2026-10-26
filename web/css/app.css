@@ -4706,7 +4706,7 @@ tr.cssarea td{background:var(--accent-soft)}
 .csmet .csn{width:84px}
 @media (max-width:760px){.cstr .lab{width:150px;min-width:150px;max-width:150px}.trw{padding:6px}}
 /* Marcar sobre los planos (planos-marcar.js): marcas temporales para mandar una imagen */
-.pldbar{width:min(96vw,640px)}
+.pldbar{width:min(96vw,740px)}
 .pldbar .plmt .ib{padding-inline:9px}
 .plvc.marcar,.plvc.marcar.drag{cursor:crosshair}
 .plvc.marcar.pan{cursor:grab}.plvc.marcar.pan.drag{cursor:grabbing}
@@ -4715,3 +4715,7 @@ tr.cssarea td{background:var(--accent-soft)}
 .pldsw.on{box-shadow:0 0 0 2px var(--accent)}
 .pldn{display:inline-block;min-width:18px;padding:0 5px;margin-left:2px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;line-height:18px;text-align:center}
 @media (max-width:760px){.pldsw{width:36px;height:36px}.pldbar .plmt .ib{padding-inline:7px}}
+.plvc.marcar.borrar,.plvc.marcar.borrar.drag{cursor:cell}
+.pldin{position:absolute;z-index:3;transform:translateY(-50%);background:rgba(255,255,255,.94);border:2px solid;font-family:system-ui,sans-serif;font-weight:700;line-height:1.25;white-space:pre;outline:none;cursor:text;user-select:text;-webkit-user-select:text;box-shadow:0 0 0 3px rgba(28,126,214,.25);max-width:80vw;overflow:hidden}
+.pldin:empty::before{content:'Escribe…';opacity:.45}
+
