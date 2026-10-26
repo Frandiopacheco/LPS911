@@ -4561,3 +4561,5 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 #grid td.d.pdel{background:var(--bad-soft)!important}
 #gw.qm td.d.sel.qdel{background:var(--bad-soft)!important;box-shadow:inset 0 2px 0 var(--bad),inset 0 -2px 0 var(--bad)}
 .lkqtip.del{background:var(--bad)}
+/* «Por personal», filas sin metrado (25-10-2026): el número de la columna Rend. es la cuadrilla fija, no un rendimiento; se distingue */
+.g td.cQ{background:var(--panel2)}.g td.cQ .cqw{display:flex;align-items:center;gap:2px}.g td.cQ input{color:var(--accent);font-style:italic}.g td.cQ i{font-style:normal;font-size:10px;color:var(--muted);flex:none;padding-right:2px}
