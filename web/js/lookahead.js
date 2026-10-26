@@ -41,25 +41,20 @@ function buildLookShell(main){
   U.lbMore=false;U.lbDots=false;if(!(typeof LKP!=='undefined'&&LKP))U.meeting=false;
   gridRows=null;gridHead='';
   main.innerHTML=`<div class="view">
-  <div class="bar">
-    <span class="seg" id="fview" aria-label="Vista" title="Grilla: editar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura)."><button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span>
-    <input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar">
-    <select id="fsec" aria-label="Sector"></select>
-    <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día. Por personal: personas necesarias por día (metrado del día ÷ rendimiento, o la cuadrilla fija)."><button data-m="dias">Por días</button><button data-m="metrado">Por metrado</button><button data-m="personal">Por personal</button></span>
-    <select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select>
-    <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Mostrar lo oculto, filtrar y opciones de vista">Filtros y vista <span class="fmn" id="fmn" hidden></span> ▾</button>
-    <button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button>
-    <span id="fmxp"></span>
-    <span id="fday"></span>
-    <span id="fhit"></span>
+  <div class="bar lkbar">
+    <span class="lkz lkz1"><input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar"><select id="fsec" aria-label="Sector"></select><span id="fday"></span><button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button></span>
+    <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Grilla o flujo, semanas visibles, lo oculto, filtros y plegar">Vista <span class="fmn" id="fmn" hidden></span> ▾</button>
+    <span class="lkz lkprog" id="lkprog" hidden aria-label="Herramientas para programar"></span>
     <span class="sp" style="flex:1"></span>
-    <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
-    <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
-    <button class="ib" id="fdots" aria-expanded="false" aria-haspopup="true" aria-label="Más opciones" title="Historial, versiones y plegar">⋯</button>
-    ${typeof canPla==='function'&&canPla()&&!isMob()?'<button class="ib" id="fplano" title="Ver el plano del piso al lado del lookahead (se puede agrandar a pantalla completa)">▦ Plano</button>':''}
-    <button class="ib" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
-    <button class="ib pri" id="fedit" hidden>✎ Editar</button>
-    <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Filtros y vista">
+    <button class="ib" id="fdots" aria-expanded="false" aria-haspopup="true" title="Versiones, historial, cambios e hitos">Control <span class="fmn" id="fdn" hidden>●</span> ▾</button>
+    ${typeof canPla==='function'&&canPla()&&!isMob()?'<button class="ib lkic" id="fplano" title="Ver el plano del piso al lado del lookahead (se puede agrandar a pantalla completa)" aria-label="Plano">▦</button>':''}
+    <button class="ib lkic" id="ffs" title="Pantalla completa: oculta la barra superior y las pestañas para ver más filas (otra vez para salir)" aria-label="Pantalla completa">⛶</button>
+    <button class="ib pri" id="fedit" hidden>✎ Programar</button>
+    <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Vista">
+      <div class="lkph">Vista</div>
+      <div class="lkprow"><span class="seg" id="fview" aria-label="Vista" title="Grilla: programar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura)."><button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span><select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select><button class="ib" id="fcoll">Plegar todo</button></div>
+      <div class="lkprow" id="lkhome"><span class="mu lkhl">Mostrar en</span></div>
+      <label class="chk"><input type="checkbox" id="fleg"> Mostrar subcontratistas</label>
       <div class="lkph">Mostrar</div>
       <div class="lkprow"><span id="fpast"></span><span id="fdone"></span><span class="mu lkpnone" id="fshn">No hay nada oculto en esta vista.</span></div>
       <div class="lkph">Filtrar</div>
@@ -67,16 +62,21 @@ function buildLookShell(main){
       <label class="chk"><input type="checkbox" id="fonly"> Solo con días en la ventana</label>
       <label class="chk"><input type="checkbox" id="frestr"> Con restricciones</label>
       <label class="chk" id="lobs" hidden title="Actividades marcadas al importar el Excel para revisar el subcontratista"><input type="checkbox" id="fobs"> Con observaciones <b id="nobs"></b></label>
-      <div class="lkph">Vista</div>
-      <label class="chk"><input type="checkbox" id="fchg"> Ver cambios</label>
-      <label class="chk"><input type="checkbox" id="fleg"> Mostrar subcontratistas</label>
       <input type="checkbox" id="fpastc" hidden>
     </div>
-    <div class="lkpop lkmenu" id="bdots" hidden role="menu" aria-label="Más opciones">
-      <button class="ib" id="fhist" title="Quién cambió qué y cuándo: cambios del lookahead y decisiones sobre propuestas, por fecha">🕑 Historial</button>
+    <div class="lkpop lkmenu" id="bdots" hidden role="menu" aria-label="Control">
+      <div class="lkph" id="fvh">Versiones</div>
+      <select id="fver" aria-label="Versión del lookahead" title="Versiones guardadas del lookahead"><option value="">Lookahead actual</option></select>
+      <span class="seg" id="fvm" hidden><button data-v="ver">Ver versión</button><button data-v="cmp">Comparar con actual</button></span>
       <button class="ib" id="fvsave" hidden>Guardar versión…</button><button class="ib" id="fvdel" hidden>Eliminar versión</button>
-      <button class="ib" id="fcoll">Plegar todo</button>
+      <div class="lkph">Revisar</div>
+      <button class="ib" id="fhist" title="Quién cambió qué y cuándo: cambios del lookahead y decisiones sobre propuestas, por fecha">🕑 Historial</button>
+      <label class="chk" title="Marca en la grilla lo que cambió respecto del último plan congelado"><input type="checkbox" id="fchg"> Ver cambios frente al congelado</label>
+      <div class="lkprow" id="lkhomeh"></div>
     </div>
+    <span class="seg" id="fmode" aria-label="Forma de programar" title="Por días: pinta celdas. Por metrado: escribe la cantidad de cada día. Por personal: personas necesarias por día (metrado del día ÷ rendimiento, o la cuadrilla fija)."><button data-m="dias" title="Por días: pinta celdas">Días</button><button data-m="metrado" title="Por metrado: escribe la cantidad de cada día">Metrado</button><button data-m="personal" title="Por personal: personas necesarias por día">Personal</button></span>
+    <span id="fmxp"></span>
+    <span id="fhit"></span>
   </div>
   <div id="verban"></div><div id="cliban"></div>
   <div class="legend" id="legend"></div>
@@ -184,7 +184,7 @@ function renderLookInner(main){
   {const fl=U.lkV==='flujo'&&lkFlowOk();$('#gw').hidden=fl;$('#flw').hidden=!fl;$$('#fview button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fl?'flujo':'grid')));
     if(fl){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;flowRender($('#flw'),days)}else renderGrid($('#grid'),days,dset)}
   {const fm=$('#fmxp');if(fm){const n=LK_GHN;/* «Asistente de programación» (25-10-2026, antes «Faltan programar»): encendido muestra las filas fantasma de la Matriz y la revisión de flujos; apagado, nada */
-    const hv=!(U.cliv&&U.tab==='look')?`<button class="dpill mxpp${U.lkGh?' on':''}" aria-pressed="${!!U.lkGh}" title="${U.lkGh?'Encendido: se ven las actividades que faltan programar (filas fantasma de la Matriz) y la revisión de flujos de cada ambiente. Clic para apagarlo.':'Clic para ver dentro de cada ambiente lo que falta programar según la Matriz y la revisión de flujos.'}${LK_GHOK?'':'\nCon búsqueda o filtros de semana, día, actividades, restricciones u observaciones no se ven las filas fantasma.'}">${U.lkGh?'✓ ':''}Asistente de prog.${n?` · <b>${n}</b> por programar`:''}${U.lkGh&&LK_MXT?` · <b>${LK_MXT}</b> ✓ en Matriz`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
+    const hv=!(U.cliv&&U.tab==='look')?`<button class="ib lkasis${U.lkGh?' on':''}" role="switch" aria-checked="${!!U.lkGh}" title="Asistente de programación: ${U.lkGh?'encendido. Se ven las actividades que faltan programar (filas fantasma de la Matriz) y la revisión de flujos de cada ambiente. Clic para apagarlo.':'apagado. Clic para ver dentro de cada ambiente lo que falta programar según la Matriz y la revisión de flujos.'}${n?`\n${n} por programar.`:''}${LK_GHOK?'':'\nCon búsqueda o filtros de semana, día, actividades, restricciones u observaciones no se ven las filas fantasma.'}"><span class="lkasw" aria-hidden="true"></span>Asistente${n?`<b class="lkasn" title="${n} por programar">${n}</b>`:''}${U.lkGh&&LK_MXT?`<span class="lkast">${LK_MXT} ✓ en Matriz</span>`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="La Matriz las tiene confirmadas como Terminado o No aplica y no tienen días de hoy en adelante. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
   moreSync();
@@ -472,8 +472,14 @@ const lkLocked=()=>U.tab==='look'&&!LKED&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.
 const lkLockOn=()=>LK_CAN&&lkLocked();
 function lkEdit(on){LKED=on;gridRows=null;if(!on)LK_KEEP.clear();closePop();if(!on&&typeof selClear==='function'&&SELA.size)selClear();requestRender();toast(on?'Edición activada: ya puedes cambiar el lookahead.':'Modo consulta: arrastra para desplazarte; nada se modifica.')}
 function lkEditSync(){const b=$('#fedit');if(!b)return;const show=LK_CAN&&!LKP&&!(U.cliv&&U.cliVer)&&!(U.ver&&U.verMode==='ver');if(b.hidden!==!show)b.hidden=!show;
-  b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Terminar edición':'✎ Editar';b.title=LKED?'Volver al modo consulta (solo ver y desplazarse)':'Habilitar la edición del lookahead';
-  const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn())}
+  b.classList.toggle('pri',!LKED);b.classList.toggle('on',LKED);b.textContent=LKED?'✓ Listo':PM()?'✎ Proponer':'✎ Programar';b.title=LKED?'Terminar de programar y volver al modo consulta (solo ver y desplazarse)':'Programar: habilita la edición del lookahead y muestra sus herramientas';
+  const gw=$('#gw');if(gw)gw.classList.toggle('lkro',lkLockOn());lkZoneSync()}
+/* barra por momentos (25-10-2026, decidido con el dueño): consultar (buscar, sector, Vista ▾, Control ▾) y programar (zona #lkprog:
+   forma de programar, Asistente de programación e Hitos). Fuera de la edición esas tres piezas viven en sus menús: la forma y el
+   Asistente en Vista ▾ (#lkhome), los Hitos en Control ▾ (#lkhomeh). Se mueven los mismos nodos: sus eventos siguen igual. */
+function lkZoneSync(){const z=$('#lkprog');if(!z)return;const prog=LK_CAN&&LKED&&!(U.ver&&U.verMode==='ver')&&!(U.cliv&&U.cliVer);
+  const put=(id,home)=>{const el=$('#'+id),dst=prog?z:$('#'+home);if(el&&dst&&el.parentElement!==dst)dst.appendChild(el)};
+  put('fmode','lkhome');put('fmxp','lkhome');put('fhit','lkhomeh');if(z.hidden!==!prog)z.hidden=!prog;{const h=$('#lkhome');if(h)h.hidden=prog}}
 function ensureVers(){if(lhiSub||!db)return;
   lhiSub=fcol('lhidx').onSnapshot(sn=>{LHI.clear();sn.docs.forEach(d=>LHI.set(d.id,{...d.data(),id:d.id}));lhiErr=null;if(U.ver&&!LHI.has(U.ver))U.ver='';if(ready&&U.tab==='look')snapRender(sn)},
     err=>{lhiErr=err&&err.code||'error';if(ready&&U.tab==='look')requestRender()});

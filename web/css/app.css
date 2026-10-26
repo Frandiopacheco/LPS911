@@ -4561,3 +4561,25 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
 #grid td.d.pdel{background:var(--bad-soft)!important}
 #gw.qm td.d.sel.qdel{background:var(--bad-soft)!important;box-shadow:inset 0 2px 0 var(--bad),inset 0 -2px 0 var(--bad)}
 .lkqtip.del{background:var(--bad)}
+/* ---------- Lookahead: barra por momentos (25-10-2026): consultar · programar · control ---------- */
+.lkbar .sp{min-width:4px}
+.lkz{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.lkz1{flex:0 1 auto}.lkz1 #fq{width:clamp(120px,15vw,240px)}.lkz1 #fsec{max-width:160px}
+.lkprog{padding:3px 6px;margin-left:2px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:calc(var(--r-ctl) + 3px);background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
+.lkprog[hidden]{display:none}
+.lkprog>*,.lkz1>*{flex:none}.lkz1>#fq{flex:0 1 auto}
+.lkprog .seg button{white-space:nowrap}
+.ib.lkic{min-width:var(--h-ctl);justify-content:center;padding:0 8px;font-size:15px}
+#fdn{min-width:10px;height:10px;padding:0;font-size:0;margin-left:4px}
+#bdots #fver{width:100%}#bdots .lkph{padding:0 6px}#bdots .chk{padding:4px 6px}
+#lkhomeh:empty,#lkhome[hidden]{display:none}
+#lkhome{gap:8px}.lkhl{font-size:12.5px}
+/* Asistente de programación: interruptor con contador (antes un texto suelto) */
+.ib.lkasis{gap:7px;white-space:nowrap}
+.lkasis .lkasw{position:relative;width:28px;height:16px;border-radius:8px;background:var(--line);flex:none;transition:background var(--t-fast) var(--ease)}
+.lkasis .lkasw::after{content:'';position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--panel);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform var(--t-fast) var(--ease)}
+.lkasis.on .lkasw{background:var(--ok)}.lkasis.on .lkasw::after{transform:translateX(12px)}
+.lkasis .lkasn{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--warn);color:#fff;font:700 11px/1 var(--f-ui)}
+.lkasis .lkast{font-size:12px;color:var(--muted);font-weight:500}
+@media (max-width:1100px){.view>.bar.lkbar{gap:5px;padding-left:10px;padding-right:10px}.lkprog{gap:4px;padding:3px 4px}.lkprog .seg button{padding:0 8px}.lkz1 #fsec{max-width:120px}.lkbar .ib{padding:0 9px}}
+@media (max-width:760px){.lkbar{flex-wrap:wrap}}
