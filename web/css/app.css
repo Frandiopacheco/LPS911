@@ -3650,15 +3650,15 @@ td.d.on.tinv::before{content:"";position:absolute;z-index:2;top:1px;right:1px;wi
 
 /* Planos › Medir (planos-medir.js): barra flotante sobre el visor */
 .plcrop{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-right:4px}
-.plmbar{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:15;width:min(94vw,560px);display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
+.plmbar,.pldbar{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:15;width:min(94vw,560px);display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
 .plmt,.plmx,.plmc{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.plmbar .ib.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.plmbar .ib:disabled{opacity:.45}
+.plmbar .ib.on,.pldbar .ib.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plmbar .ib:disabled,.pldbar .ib:disabled{opacity:.45}
 .plmv{font-size:13.5px;line-height:1.3;min-height:20px}
 .plmv b{font-size:16px}
 .plmc .tin{flex:1;min-width:150px;height:var(--h-ctl,34px)}
 .plms{font-size:11px;color:var(--muted)}
-@media (max-width:760px){.plmbar{bottom:34px;width:calc(100vw - 16px)}.plmbar .ib{min-height:40px}}
+@media (max-width:760px){.plmbar,.pldbar{bottom:34px;width:calc(100vw - 16px)}.plmbar .ib,.pldbar .ib{min-height:40px}}
 /* Medir: cursor de cruz fina con el centro libre (el punto activo es el del centro, 25 × 25 px) en vez de la manito */
 .plvc.medir,.plvc.medir.drag{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='25' height='25' viewBox='0 0 25 25'><g fill='none' stroke-linecap='square'><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='white' stroke-width='3.4'/><path d='M12.5 1v8M12.5 16v8M1 12.5h8M16 12.5h8' stroke='%23d6336c' stroke-width='1.4'/></g></svg>") 12 12,crosshair}
 .plvc.medir.sobre,.plvc.medir.sobre.drag{cursor:move}
@@ -4689,3 +4689,13 @@ small.pltxs b{color:var(--pltx-ink)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pltx-bg:#4a3d10;--pltx-ink:#ffd666}}
 :root[data-theme="dark"]{--pltx-bg:#4a3d10;--pltx-ink:#ffd666}
 @media (max-width:760px){.pltxb{left:8px;right:8px;max-width:none}.pltxb .pltxq{max-width:40vw}}
+/* Marcar sobre los planos (planos-marcar.js): marcas temporales para mandar una imagen */
+.pldbar{width:min(96vw,640px)}
+.pldbar .plmt .ib{padding-inline:9px}
+.plvc.marcar,.plvc.marcar.drag{cursor:crosshair}
+.plvc.marcar.pan{cursor:grab}.plvc.marcar.pan.drag{cursor:grabbing}
+.pldcs{display:inline-flex;gap:4px;align-items:center}
+.pldsw{width:30px;height:30px;border-radius:50%;border:2px solid var(--panel);background:var(--sw);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.pldsw.on{box-shadow:0 0 0 2px var(--accent)}
+.pldn{display:inline-block;min-width:18px;padding:0 5px;margin-left:2px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;line-height:18px;text-align:center}
+@media (max-width:760px){.pldsw{width:36px;height:36px}.pldbar .plmt .ib{padding-inline:7px}}
