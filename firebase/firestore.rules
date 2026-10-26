@@ -91,7 +91,7 @@ service cloud.firestore {
     function noResp(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
     function edPiso(d) { return isAdmin() || (canEdit() && respOk(d.get('pisoId', ''))); }
     // wsnap/<semana>_<piso>: foto del lookahead al congelar (antes weeks.snap; auditoría de datos M1): mismas reglas que weeks
-    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg']; }
+    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg', 'kcat', 'ksec']; }
 
     match /members/{mail} {
       // la lista completa (con correos) solo la ve el personal interno; cada uno siempre puede leer su propio registro
@@ -779,5 +779,475 @@ service cloud.firestore {
       // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
       allow delete: if canEdit() && dataCol(col) && col != 'pisos' && (isAdmin() || !(col in ['weeks', 'wsnap', 'meta', 'lhver', 'lhidx', 'planos']));
     }
+    // ==== CASCO: generado por scripts/reglas-casco.mjs a partir de las reglas de arriba. No lo edites a mano ====
+    function verified_cs() { return request.auth != null && request.auth.token.get('email_verified', false) == true; }
+    function anon_cs() { return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function signedIn_cs() { return verified_cs() || anon_cs(); }
+    function email_cs() { return request.auth.token.email.lower(); }
+    function mid_cs() { return anon_cs() ? 'u_' + request.auth.uid : email_cs(); }
+    function isOwner_cs() { return verified_cs() && email_cs() == 'frandiopacheco@gmail.com'; }
+    function memberPath_cs() { return /databases/$(database)/documents/members/$(mid_cs()); }
+    function isMember_cs() { return signedIn_cs() && (isOwner_cs() || exists(memberPath_cs())); }
+    function notOff_cs() { return isOwner_cs() || get(memberPath_cs()).data.get('off', false) != true; }
+    function role_cs() { return isOwner_cs() ? 'admin' : get(memberPath_cs()).data.role; }
+    function tarOnly_cs() { return !isOwner_cs() && get(memberPath_cs()).data.get('role', '') in ['tcap', 'tasis', 'tcos', 'trh']; }
+    function lpsMember_cs() { return isMember_cs() && !tarOnly_cs(); }
+    function campoTasis_cs() { return role_cs() == 'campo' && get(memberPath_cs()).data.get('tasis', false) == true; }
+    function isTar_cs() {
+      return isMember_cs() && notOff_cs() && (role_cs() in ['tcap', 'tasis', 'tcos', 'trh', 'admin'] || campoTasis_cs()
+        || (role_cs() == 'editor' && get(memberPath_cs()).data.get('tpub', false) == true));
+    }
+    function tarEd_cs() { return isMember_cs() && notOff_cs() && (role_cs() in ['admin', 'tasis'] || campoTasis_cs()); }
+    function canEdit_cs() { return isMember_cs() && role_cs() in ['admin', 'editor']; }
+    function isAdmin_cs() { return isMember_cs() && role_cs() == 'admin'; }
+    function canCli_cs() { return isAdmin_cs(); }
+    function canMP_cs() { return isMember_cs() && role_cs() in ['admin', 'planner']; }
+    function canDaily_cs() { return isMember_cs() && role_cs() in ['admin', 'editor', 'campo']; }
+    function scOf_cs() { return get(memberPath_cs()).data.get('sc', ''); }
+    function scsOf_cs() { let d = get(memberPath_cs()).data; return d.get('scs', [d.get('sc', '')]); }
+    function isSC_cs() { return isMember_cs() && !isOwner_cs() && role_cs() == 'sc'; }
+    function isCap_cs() { return isMember_cs() && !isOwner_cs() && role_cs() == 'capataz'; }
+    function crew_cs() { return isMember_cs() && !isOwner_cs() && role_cs() in ['capataz', 'sc']; }
+    function isArea_cs() { return isMember_cs() && !isOwner_cs() && role_cs() == 'area'; }
+    function areaOf_cs() { return get(memberPath_cs()).data.get('area', ''); }
+    function isCal_cs() { return isArea_cs() && areaOf_cs().lower().matches('.*calidad.*'); }
+    function isPlan_cs() { return isArea_cs() && areaOf_cs().lower().matches('.*(planific|control de proyecto).*'); }
+    function isVeedor_cs() { return isMember_cs() && !isOwner_cs() && role_cs() == 'veedor'; }
+    function canNP_cs() { return canDaily_cs() || isVeedor_cs() || isCal_cs(); }
+    function areaRestrOk_cs(d) { return areaOf_cs() != '' && d.get('area', '') == areaOf_cs() && d.get('grp', 'area') == 'area'; }
+    function invDoc_cs(c) { return get(/databases/$(database)/documents/inv/$(c)).data; }
+    function invOk_cs(c) { let i = get(/databases/$(database)/documents/inv/$(c)).data; return i.active == true && i.exp > request.time.toMillis(); }
+    function scPdzOld_cs(d) { return d.get('sc', '') in scsOf_cs() && !(d.get('kind', '') in ['xok', 'aviso', 'pub'])
+      && !(d.get('kind', '') == 'nova' && (d.get('k', '') != '' || d.get('ids', null) != null || d.get('draft', false) == true || d.get('eng', false) == true)); }
+    function scPdzNew_cs(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') == 'pend'; }
+    function actMine_cs(aid) { let ap = /databases/$(database)/documents/cs_acts/$(aid == '' ? '-' : aid); return exists(ap) && get(ap).data.get('sc', '') in scsOf_cs(); }
+    function scPdzShape_cs(id, d) {
+      let k = d.get('kind', '');
+      return (k != 'dprop' || (id == 'dp_' + d.get('date', '') + '_' + d.get('actId', '') && actMine_cs(d.get('actId', ''))))
+        && (k != 'fza' || id == 'fz_' + d.get('date', '') + '_' + d.get('sc', ''))
+        && (k != 'fzl' || id == 'fzl_' + d.get('sc', ''))
+        && (k != 'nova' || (!dplanFuture_cs(d.get('date', '')) && actMine_cs(d.get('actId', '')) && !d.keys().hasAny(['mv', 'pub', 'rid'])))
+        // agregar al plan (reprogramar / adelantar / nueva): el SC solo lo propone (pend), de su partida, y no lo publica
+        && (k != 'padd' || (d.get('st', '') == 'pend' && d.get('draft', false) == true && !d.keys().hasAny(['pub', 'decBy'])
+             && (d.get('t', '') == 'new' || actMine_cs(d.get('actId', '')))));
+    }
+    function scDpropFrom_cs(d) { return d.get('kind', '') != 'dprop' || d.get('st', 'pend') in ['pend', 'rej']; }
+    function respOk_cs(pid) {
+      let pp = /databases/$(database)/documents/cs_pisos/$(pid == '' ? '-' : pid);
+      return !exists(pp) || noResp_cs(get(pp).data) || email_cs() in get(pp).data.resp;
+    }
+    function noResp_cs(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
+    function edPiso_cs(d) { return isAdmin_cs() || (canEdit_cs() && respOk_cs(d.get('pisoId', ''))); }
+    function dataCol_cs(c) { return c in ['cs_meta', 'cs_pisos', 'cs_contractors', 'cs_sectors', 'cs_ambientes', 'cs_acts', 'cs_weeks', 'cs_wsnap', 'cs_restr', 'cs_planos', 'cs_lhidx', 'cs_lhver', 'cs_laminas', 'cs_lamimg', 'cs_kcat', 'cs_ksec']; }
+    function liveActOk_cs(id) {
+      let d = request.resource.data;
+      let ap = /databases/$(database)/documents/cs_acts/$(d.get('actId', '-'));
+      return id == d.get('date', '') + '_' + d.get('actId', '') && exists(ap)
+        && get(ap).data.get('sc', '') == d.get('sc', '') && livePisoOk_cs(get(ap).data.get('ambId', '-'), d.get('pisoId', ''));
+    }
+    function livePisoOk_cs(ambId, pid) {
+      let am = /databases/$(database)/documents/cs_ambientes/$(ambId);
+      let sp = /databases/$(database)/documents/cs_sectors/$(exists(am) ? get(am).data.get('sectorId', '-') : '-');
+      return !exists(sp) || get(sp).data.get('pisoId', '') == '' || get(sp).data.pisoId == pid;
+    }
+    function projData_cs() { let mp = /databases/$(database)/documents/cs_meta/project; return exists(mp) ? get(mp).data : {}; }
+    function hhIn_cs(v, lo, hi) { return v is string && v.matches('[0-9]{2}:[0-9]{2}') && v >= lo && v <= hi; }
+    function ccHH_cs(p) { return hhIn_cs(p.get('closeCutHH', ''), '12:00', '21:00') ? p.closeCutHH : '17:00'; }
+    function engHH_cs(p) { let c = ccHH_cs(p); let v = p.get('engCutHH', ''); return hhIn_cs(v, '18:00', '23:00') && v > c ? v : (c < '21:00' ? '21:00' : '22:00'); }
+    function isDay_cs(d) { return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}'); }
+    function limaTs_cs(d, hh) { return timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) + duration.value(5, 'h') + duration.value(int(hh[0:2]) * 60 + int(hh[3:5]), 'm'); }
+    function dayShut_cs(d) { let p = projData_cs(); return isDay_cs(d) && request.time > limaTs_cs(d, engHH_cs(p)) && !(isAdmin_cs() && p.get('rstHasta', 0) > request.time.toMillis()); }
+    function liveCloseOk_cs(id) {
+      let d = request.resource.data;
+      let ch = resource == null ? d.keys().hasAny(['close']) : d.diff(resource.data).affectedKeys().hasAny(['close']);
+      return !ch || (isDay_cs(id[0:10]) && request.time <= limaTs_cs(id[0:10], ccHH_cs(projData_cs())) + duration.value(10, 'm'));
+    }
+    match /cs_live/{id} {
+      allow read: if lpsMember_cs();
+      // tanda 1: nadie escribe los reportes en vivo de un día ya cerrado (Cierre del ingeniero, dayShut)
+      allow create: if !dayShut_cs(id[0:10]) && (canDaily_cs() || (crew_cs() && request.resource.data.sc in scsOf_cs() && liveActOk_cs(id) && liveCloseOk_cs(id))
+        || (isVeedor_cs() && liveActOk_cs(id) && request.resource.data.keys().hasOnly(['date', 'actId', 'pisoId', 'sc', 'seq', 'log', 'sat'])));
+      // el veedor solo marca o quita «en secuencia» (tren de trabajo): no inicia, no detiene ni cierra
+      allow update: if !dayShut_cs(id[0:10]) && (canDaily_cs() || (crew_cs() && resource.data.sc in scsOf_cs() && request.resource.data.sc in scsOf_cs() && liveActOk_cs(id) && liveCloseOk_cs(id))
+        || (isVeedor_cs() && liveActOk_cs(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seq', 'log', 'sat'])));
+      // SEG-02: la app nunca borra reportes en vivo (cierres del capataz/SC): solo el administrador (Limpieza)
+      allow delete: if isAdmin_cs();
+    }
+    function lhpHistOk_cs() {
+      return (resource == null && !('hist' in request.resource.data) && !('adv' in request.resource.data))
+        || (resource != null && request.resource.data.get('hist', {}) == resource.data.get('hist', {})
+            && request.resource.data.get('adv', {}) == resource.data.get('adv', {}));
+    }
+    function propOpen_cs() {
+      return exists(/databases/$(database)/documents/cs_meta/propwin)
+        && get(/databases/$(database)/documents/cs_meta/propwin).data.get('closeAt', 0) > request.time.toMillis();
+    }
+    match /cs_lhprop/{sc} {
+      allow read: if lpsMember_cs();
+      // el SC cambia sus borradores y envíos, pero no las «Respuestas del ingeniero» (hist): esas solo las escribe quien decide
+      allow write: if canEdit_cs() || (isSC_cs() && sc in scsOf_cs() && request.resource.data.get('sc', sc) == sc && lhpHistOk_cs() && propOpen_cs());
+    }
+    function dplanFuture_cs(d) {
+      return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) > request.time - duration.value(5, 'h');
+    }
+    match /cs_dplan/{id} {
+      allow read: if lpsMember_cs();
+      // Cerrado (con ids y sin reabrir), el editor no cambia lo comprometido ni el registro: solo el administrador (reabrir con motivo).
+      // El editor publica de nuevo un día reabierto o que aún no tenía foto. «Deshacer publicación»: el editor solo en días futuros.
+      // además, el editor solo en los pisos a su cargo (respOk)
+      allow create: if isAdmin_cs() || (edPiso_cs(request.resource.data) && request.resource.data.get('reo', null) == null);
+      allow update: if isAdmin_cs() || (edPiso_cs(resource.data) && edPiso_cs(request.resource.data)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['reo']) || request.resource.data.get('reo', null) == null)
+        && (resource.data.get('reo', null) != null || resource.data.get('ids', null) == null
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ids', 'who', 'log', 'date', 'pisoId'])));
+      allow delete: if isAdmin_cs() || (edPiso_cs(resource.data) && dplanFuture_cs(resource.data.get('date', '')));
+    }
+    match /cs_lhlog/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if canEdit_cs() && request.resource.data.get('by', '') == mid_cs();
+      allow update, delete: if false;
+    }
+    match /cs_frz/{id} {
+      allow read: if lpsMember_cs();
+      allow write: if false;
+    }
+    match /cs_lhphist/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if canEdit_cs();
+      allow update: if canEdit_cs() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undone']);
+    }
+    function scRestrOk_cs(d) {
+      return d.get('sc', '') in scsOf_cs() && d.get('by', '') == mid_cs()
+        && d.get('status', 'pend') != 'lib' && d.get('freed', '') == ''
+        && d.get('actId', '') != ''
+        && get(/databases/$(database)/documents/cs_acts/$(d.actId)).data.get('sc', '') == d.sc;
+    }
+    match /cs_restr/{id} {
+      allow create: if (isSC_cs() && scRestrOk_cs(request.resource.data))
+        || (isArea_cs() && areaRestrOk_cs(request.resource.data));
+      allow update: if (isSC_cs() && scRestrOk_cs(resource.data) && scRestrOk_cs(request.resource.data))
+        || (isArea_cs() && areaRestrOk_cs(resource.data) && areaRestrOk_cs(request.resource.data));
+      allow delete: if isSC_cs() && scRestrOk_cs(resource.data);
+    }
+    match /cs_lib/{id} {
+      allow read: if lpsMember_cs();
+      // crítica, supervisión y «restringe a» las marca Calidad al programar (ya no hay matriz): el SC no las pone ni las cambia
+      allow create: if canEdit_cs() || isCal_cs()
+        || (isSC_cs() && request.resource.data.sc in scsOf_cs() && request.resource.data.st == 'sol' && request.resource.data.by == mid_cs()
+            && request.resource.data.get('crit', false) == false && request.resource.data.get('sup', false) == false
+            && request.resource.data.get('rest', '') == '');
+      allow update: if canEdit_cs() || isCal_cs()
+        || (isSC_cs() && resource.data.sc in scsOf_cs() && request.resource.data.sc == resource.data.sc
+            && resource.data.st in ['sol', 'obs', 'lev'] && request.resource.data.st in ['sol', 'obs', 'lev', 'anu']
+            // auditoría 09/10: el SC no programa (prog), no cambia quién la pidió ni de qué actividad es, y no borra
+            // observaciones de Calidad ni el historial (solo pueden crecer)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['crit', 'sup', 'rest', 'prog', 'by', 'actId', 'done'])
+            && request.resource.data.get('obs', []).size() >= resource.data.get('obs', []).size()
+            && request.resource.data.get('hist', []).size() >= resource.data.get('hist', []).size());
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_cli/{id} {
+      allow read, write: if canCli_cs();
+    }
+    match /cs_clia/{id} {
+      allow read, write: if canCli_cs();
+    }
+    match /cs_clidx/{id} {
+      allow read, create: if canCli_cs();
+    }
+    match /cs_cliver/{id} {
+      allow read, create: if canCli_cs();
+    }
+    match /cs_libm/{id} {
+      allow read: if lpsMember_cs();
+      allow write: if isAdmin_cs() || isCal_cs();
+    }
+    match /cs_mp/{id} {
+      allow read, write: if canMP_cs();
+    }
+    match /cs_mpav/{id} {
+      allow read, write: if canMP_cs();
+    }
+    match /cs_mpl/{id} {
+      allow read, write: if canMP_cs();
+    }
+    match /cs_mpcfg/{id} {
+      allow read, write: if canMP_cs();
+    }
+    match /cs_mpver/{id} {
+      allow read: if canMP_cs();
+      allow create: if isAdmin_cs() || (canMP_cs() && request.resource.data.get('st', '') == 'pend');
+      allow update: if isAdmin_cs();
+      allow delete: if false;
+    }
+    match /cs_daily/{id} {
+      allow read: if lpsMember_cs();
+      // tanda 1: id = <fecha>_<piso>; pasado el Cierre del ingeniero de esa fecha, nadie lo cambia (dayShut), tampoco el administrador
+      allow create, update: if canDaily_cs() && !dayShut_cs(id[0:10]);
+      // SEG-02: el registro diario (base del PPC) no lo borra campo ni el editor; solo el administrador (Equipo › Limpieza)
+      allow delete: if isAdmin_cs();
+    }
+    function scNpOk_cs(d) { return isSC_cs() && d.by == mid_cs() && d.sc in scsOf_cs() && d.get('scProp', false) == true && !('ver' in d); }
+    match /cs_nprog/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if (canNP_cs() && request.resource.data.by == mid_cs()) || scNpOk_cs(request.resource.data);
+      allow update: if canDaily_cs() || (canNP_cs() && resource.data.by == mid_cs() && request.resource.data.by == mid_cs())
+        || (resource.data.by == mid_cs() && scNpOk_cs(request.resource.data));
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_hitos/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if (canEdit_cs() || isPlan_cs()) && request.resource.data.tipo in ['ini', 'fin']
+        && request.resource.data.d is string && request.resource.data.n is string;
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_frev/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if (canDaily_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()))
+        && request.resource.data.f is map && request.resource.data.n is number;
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_pull/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if canEdit_cs() && request.resource.data.ps is map && request.resource.data.piso is string;
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_pcrit/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if canDaily_cs() && request.resource.data.sc is string && request.resource.data.met is number;
+      allow delete: if isAdmin_cs();
+    }
+    function pavDocOk_cs(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
+    function pavScOk_cs(d) {
+      return isSC_cs() && d.by == mid_cs() && d.sc in scsOf_cs() && d.get('ini', false) != true
+        && get(/databases/$(database)/documents/cs_pcrit/$(d.pc)).data.sc == d.sc;
+    }
+    match /cs_pav/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if pavDocOk_cs(request.resource.data) && (canDaily_cs() || pavScOk_cs(request.resource.data));
+      allow update: if pavDocOk_cs(request.resource.data) && (canDaily_cs()
+        || (pavScOk_cs(request.resource.data) && resource.data.sc in scsOf_cs() && resource.data.pc == request.resource.data.pc
+          && resource.data.get('ini', false) != true));
+      allow delete: if isAdmin_cs();
+    }
+    function fotoNewOk_cs() {
+      let d = request.resource.data;
+      let r = isMember_cs() ? role_cs() : '';
+      return d.data.size() < 400000
+        && (r == 'admin' || (r in ['editor', 'campo', 'capataz', 'sc', 'area', 'veedor'] && d.get('by', '') == mid_cs()));
+    }
+    match /cs_fotos/{id} {
+      allow read: if lpsMember_cs();
+      // una foto queda a nombre de quien la sube (by); ya guardada, nadie la reemplaza (evidencia): solo el administrador
+      allow create: if fotoNewOk_cs();
+      allow update: if isAdmin_cs() && request.resource.data.data.size() < 400000;
+      allow delete: if canDaily_cs();
+    }
+    match /cs_pdz/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if edPiso_cs(request.resource.data)
+        || (isSC_cs() && scPdzOld_cs(request.resource.data) && scPdzNew_cs(request.resource.data) && scPdzShape_cs(id, request.resource.data)
+            && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
+      allow update: if (edPiso_cs(resource.data) && edPiso_cs(request.resource.data))
+        || (isSC_cs() && scPdzOld_cs(resource.data) && scDpropFrom_cs(resource.data) && scPdzOld_cs(request.resource.data) && scPdzNew_cs(request.resource.data)
+            && scPdzShape_cs(id, request.resource.data) && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
+      allow delete: if edPiso_cs(resource.data) || (isSC_cs() && scPdzOld_cs(resource.data) && scDpropFrom_cs(resource.data));
+    }
+    match /cs_pzon/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs());
+      allow update: if canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()
+        && (!('sc' in resource.data) || resource.data.sc in scsOf_cs()));
+      allow delete: if canEdit_cs();
+    }
+    match /cs_doneidx/{p} {
+      allow read: if lpsMember_cs();
+      allow create, update: if canDaily_cs();
+      allow delete: if isAdmin_cs(); // SEG-02
+    }
+    match /cs_pisos/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if isAdmin_cs() || (canEdit_cs() && noResp_cs(request.resource.data));
+      allow update: if isAdmin_cs() || (canEdit_cs() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['resp']));
+      allow delete: if isAdmin_cs() || (canEdit_cs() && noResp_cs(resource.data));
+    }
+    function tperOk_cs(id) {
+      let d = request.resource.data;
+      return d.get('dni', null) is string && d.dni == id && d.dni.matches('[A-Za-z0-9]{8,12}');
+    }
+    function tperSinPriv_cs() {
+      let d = request.resource.data;
+      return (!('afp' in d) || (resource != null && 'afp' in resource.data && d.afp == resource.data.afp))
+        && (!('hij' in d) || (resource != null && 'hij' in resource.data && d.hij == resource.data.hij));
+    }
+    function tpcOk_cs() {
+      let d = request.resource.data;
+      return d.get('cod', null) is string && d.get('nom', null) is string;
+    }
+    function tpcEd_cs() { return isMember_cs() && notOff_cs() && role_cs() in ['admin', 'tcos']; }
+    function numIn_cs(d, k, lo, hi) { return !(k in d) || d[k] == null || ((d[k] is int || d[k] is float) && d[k] >= lo && d[k] <= hi); }
+    function plaOk_cs() {
+      let d = request.resource.data;
+      return (!('vig' in d) || (d.vig is list && d.vig.size() <= 30))
+        // tarifas de descuento a SC (24-10-2026): vigencias como los jornales
+        && (!('dtar' in d) || (d.dtar is list && d.dtar.size() <= 30))
+        && numIn_cs(d, 'he60h', 0, 12) && numIn_cs(d, 'sob1', 0, 300) && numIn_cs(d, 'sob2', 0, 300) && numIn_cs(d, 'alt', 0, 100)
+        && numIn_cs(d, 'mov', 0, 200) && numIn_cs(d, 'feA', 0, 100) && numIn_cs(d, 'dmEmp', 0, 366) && numIn_cs(d, 'dmTope', 0, 366) && numIn_cs(d, 'ae', 0, 366)
+        && numIn_cs(d, 'aeEdad', 0, 30) && numIn_cs(d, 'leyes', 0, 300)
+        && (!('soles' in d) || d.soles in ['cos', 'ofi']);
+    }
+    function plaRead_cs() { return lpsMember_cs() && role_cs() != 'capataz'; }
+    function isOT_cs() { return isArea_cs() && areaOf_cs().lower().trim().matches('o\\.? ?t\\.?|oficina t[eé]cnica.*'); }
+    function plbOk_cs() {
+      let d = request.resource.data;
+      return d.cod is string && d.cod.size() > 0 && d.cod.size() <= 40 && d.disc is string && d.rev is int && d.rev >= 1
+        && d.base is string && d.base.matches('planos/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    function etoOk_cs() {
+      let d = request.resource.data;
+      return d.sc is string && d.sc.size() > 0 && d.cod is string && d.cod.size() <= 40 && d.rev is int && d.rev >= 1
+        && d.base is string && d.base.matches('etos/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    function p3dOk_cs(id) {
+      let d = request.resource.data;
+      return d.disc is string && d.disc == id && d.disc.size() <= 20 && d.rev is int && d.rev >= 1
+        && d.path is string && d.path.matches('modelos/[A-Za-z0-9_.-]+/r[0-9]+[.]frag');
+    }
+    function tarRole_cs() { return role_cs() in ['tcap', 'tcos'] ? role_cs() : role_cs() == 'trh' ? 'tcos' : 'ofi'; }
+    function tDateOk_cs(d) {
+      return d is string && d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) <= request.time - duration.value(5, 'h') + duration.value(1, 'd')
+        && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) >= request.time - duration.value(5, 'h') - duration.value(4, 'd');
+    }
+    function idMine_cs(id) { return id.size() > 11 && id[11:id.size()] == mid_cs() && id[10:11] == '_'; }
+    function tcapOwn_cs(id) {
+      let d = request.resource.data;
+      return d.get('cap', '') == mid_cs() && d.get('date', null) is string && id == d.date + '_' + mid_cs();
+    }
+    function tcapNew_cs(id) { return tcapOwn_cs(id) && tDateOk_cs(request.resource.data.date); }
+    function tReab_cs(d) {
+      let p = /databases/$(database)/documents/tareo/$(d + '_' + mid_cs());
+      return d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && exists(p) && get(p).data.get('st', '') == 'reab';
+    }
+    function tHistOk_cs() {
+      let o = resource.data.get('hist', []);
+      let n = request.resource.data.get('hist', []);
+      return n is list && n.size() >= o.size() && n.size() <= o.size() + 1 && (o.size() == 0 || n[0:o.size()] == o)
+        && (n.size() == o.size() || (!(n[n.size() - 1].get('a', '') in ['fir', 'rev', 'qrev', 'cor', 'reab', 'pub', 'rect', 'prod'])
+          && n[n.size() - 1].get('by', '') == mid_cs()));
+    }
+    function tHistNew_cs() {
+      let n = request.resource.data.get('hist', []);
+      return n is list && (n.size() == 0
+        || (n.size() == 1 && n[0] is map && n[0].get('a', '') == 'env' && n[0].get('by', '') == mid_cs()));
+    }
+    function tOfiNew_cs() {
+      return request.resource.data.get('st', 'bor') != 'pub' && !request.resource.data.keys().hasAny(['pubV']);
+    }
+    function tOfiUpd_cs() {
+      return resource.data.get('st', 'bor') != 'pub' && request.resource.data.get('st', 'bor') != 'pub'
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pubV']);
+    }
+    function tpubEd_cs() { return isMember_cs() && notOff_cs() && role_cs() == 'editor' && get(memberPath_cs()).data.get('tpub', false) == true; }
+    function tOfiEd_cs() { return tarEd_cs() || tpubEd_cs(); }
+    function pmetOk_cs(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
+    match /cs_pmet/{id} {
+      allow read: if isTar_cs() || canDaily_cs();
+      allow create, update: if canDaily_cs() && pmetOk_cs(request.resource.data);
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_mcat/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if canEdit_cs() || (isSC_cs() && request.resource.data.get('by', '') == mid_cs()
+        && request.resource.data.get('sc', '') in scsOf_cs() && request.resource.data.get('rev', null) is map
+        && request.resource.data.rev.get('by', '') == mid_cs() && !request.resource.data.keys().hasAny(['arch', 'revOk', 'scs']));
+      allow update: if canEdit_cs();
+      allow delete: if false;
+    }
+    match /cs_mtipo/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if canEdit_cs();
+      allow delete: if false;
+    }
+    function scCellVal_cs(d, k) { return !(k in d.get('c', {})) || d.c[k] in ['p', 'c', 't', 'n']; }
+    function scMetaOk_cs(d, k, undo) {
+      let m = d.get('m', {}).get(k, null);
+      return m is map && m.get('by', '') == mid_cs() && m.get('sc', false) == true
+        && m.keys().hasOnly(undo ? ['by', 'n', 't', 'sc', 'bk'] : ['by', 'n', 't', 'sc']);
+    }
+    function scLogOk_cs(id, d, k, l) {
+      let p = /databases/$(database)/documents/cs_mlog/$(l);
+      let a = getAfter(p).data;
+      return a.get('amb', '') == id && a.get('cat', '') == k && a.get('by', '') == mid_cs()
+        && ((!exists(p) && a.get('st', '') == 'pend' && a.get('to', '') == d.c[k] && scMetaOk_cs(d, k, false))
+          || (exists(p) && get(p).data.get('st', '') == 'pend' && a.get('st', '') == 'undo' && scMetaOk_cs(d, k, true)));
+    }
+    function scCellOk_cs(id, d) {
+      let k = d.get('k', '');
+      let l = d.get('l', '');
+      return isSC_cs() && d.get('by', '') == mid_cs() && k != '' && l is string && l != '' && exists(/databases/$(database)/documents/cs_mcat/$(k))
+        && (get(/databases/$(database)/documents/cs_mcat/$(k)).data.get('sc', '') in scsOf_cs()
+          || get(/databases/$(database)/documents/cs_mcat/$(k)).data.get('scs', []).hasAny(scsOf_cs())) && scCellVal_cs(d, k)
+        && existsAfter(/databases/$(database)/documents/cs_mlog/$(l)) && scLogOk_cs(id, d, k, l);
+    }
+    match /cs_mamb/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if (canEdit_cs() && request.resource.data.get('by', '') == mid_cs())
+        || (scCellOk_cs(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
+      allow update: if (canEdit_cs() && request.resource.data.get('by', '') == mid_cs())
+        || (scCellOk_cs(id, request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
+            && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
+            && request.resource.data.get('m', {}).diff(resource.data.get('m', {})).affectedKeys().hasOnly([request.resource.data.k]));
+      allow delete: if false;
+    }
+    match /cs_mlog/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if request.resource.data.get('by', '') == mid_cs() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()));
+      allow update: if canEdit_cs() || (isSC_cs() && resource.data.get('by', '') == mid_cs()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st']) && request.resource.data.st == 'undo');
+      allow delete: if false;
+    }
+    match /cs_mcatp/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if request.resource.data.get('by', '') == mid_cs() && request.resource.data.get('st', '') == 'pend'
+        && (canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()));
+      allow update: if canEdit_cs();
+      allow delete: if false;
+    }
+    match /cs_mver/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if canEdit_cs() && request.resource.data.get('by', '') == mid_cs();
+      allow update, delete: if false;
+    }
+    match /cs_weeks/{id} {
+      allow create: if canEdit_cs() && (isAdmin_cs() || !('fromVer' in request.resource.data));
+      allow update: if canEdit_cs() && (edPiso_cs(resource.data)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['res'])
+        || (resource.data.get('frozenAt', null) == null && request.resource.data.get('res', {}).size() == 0))
+        && (isAdmin_cs() || !('fromVer' in request.resource.data) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['fromVer']))
+        // cres: evaluación del PPC del cliente (oct 2026). Solo el administrador la marca; el editor solo la mueve al
+        // descongelar o recuperar la semana (pasa de congelada a borrador o al revés)
+        && (isAdmin_cs() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cres'])
+          || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null);
+    }
+    match /cs_meta/{id} {
+      allow create, update: if isAdmin_cs() || (canEdit_cs() && (id != 'project'
+        || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
+          .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'engCutHH', 'rstHasta', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
+    }
+    match /{col}/{id} {
+      allow read: if lpsMember_cs() && dataCol_cs(col);
+      allow create, update: if canEdit_cs() && dataCol_cs(col) && !(col in ['cs_pisos', 'cs_weeks', 'cs_meta'])
+        // imágenes de sectorización anteriores: solo el administrador las archiva (decisión del dueño, oct 2026)
+        && (col != 'cs_planos' || isAdmin_cs() || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['arch']));
+      // auditoría 09/10: semanas congeladas, fotos, configuración y versiones del lookahead solo las borra el administrador
+      // (el editor sigue pudiendo deshacer lo que crea en el lookahead: actividades, ambientes, sectores, restricciones)
+      allow delete: if canEdit_cs() && dataCol_cs(col) && col != 'cs_pisos' && (isAdmin_cs() || !(col in ['cs_weeks', 'cs_wsnap', 'cs_meta', 'cs_lhver', 'cs_lhidx', 'cs_planos']));
+    }
+    // ==== FIN CASCO ====
   }
 }

@@ -25,10 +25,21 @@ const { planCutHH, planCutDue, buildVersion, closesToAccept, acceptCloses, sinCi
 
 admin.initializeApp();
 setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', timeoutSeconds: 300 });
-const db = () => admin.firestore();
+/* Módulo Casco (docs/ia/casco.md): las tareas programadas corren también en el espacio de Casco (colecciones cs_) cuando existe
+   cs_meta/project. db() devuelve la base del espacio en curso (AsyncLocalStorage): las colecciones compartidas (equipo, tareo,
+   planos, avisos) no llevan prefijo. La misma lista está en web/js/base.js y scripts/reglas-casco.mjs. */
+const { AsyncLocalStorage } = require('node:async_hooks');
+const NSC = new AsyncLocalStorage();
+const SHARED = new Set(['members', 'inv', 'clock', 'push', 'pushp', 'pushlog', 'plb', 'eto', 'p3d', 'hhpc',
+  'tareo', 'tfot', 'tpub', 'tpubidx', 'tpexc', 'tpauto', 'tper', 'tperbk', 'tperp', 'tpc', 'tpcbk', 'tcfg']);
+const nsWrap = (fs, ns) => new Proxy(fs, { get(t, p) { if (p === 'collection') return n => t.collection(SHARED.has(n) ? n : ns + n); const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } });
+const db = () => { const ns = NSC.getStore() || ''; return ns ? nsWrap(admin.firestore(), ns) : admin.firestore(); };
+async function spaces() { const out = ['']; try { if ((await admin.firestore().collection('cs_meta').doc('project').get()).exists) out.push('cs_'); } catch (e) { logger.warn('No se pudo revisar si hay Casco', e); } return out; }
+/** corre la tarea en Last Planner y, si existe, en Casco; un error en uno no impide el otro (al final se relanza para el reintento) */
+async function eachSpace(name, fn) { let err = null; for (const ns of await spaces()) { try { await NSC.run(ns, fn); } catch (e) { logger.error(`${name}${ns ? ' (Casco)' : ''}: falló`, e); err = err || e; } } if (err) throw err; }
 const all = async name => { const m = new Map(); (await db().collection(name).get()).docs.forEach(d => m.set(d.id, { ...d.data(), id: d.id })); return m; };
 
-exports.versionDominical = onSchedule({ schedule: '5 12 * * 0', timeZone: 'America/Lima', retryCount: 2 }, async () => {
+exports.versionDominical = onSchedule({ schedule: '5 12 * * 0', timeZone: 'America/Lima', retryCount: 2 }, async () => eachSpace('versionDominical', async () => {
   const project = (await db().collection('meta').doc('project').get()).data() || {};
   if (!project.refDate) { logger.warn('Sin meta/project.refDate: no se guarda versión'); return; }
   const v = buildVersion({ project, pisos: await all('pisos'), sectors: await all('sectors'), ambientes: await all('ambientes'), acts: await all('acts') });
@@ -42,7 +53,7 @@ exports.versionDominical = onSchedule({ schedule: '5 12 * * 0', timeZone: 'Ameri
   }
   await idxRef.set(v.idx);
   logger.info(`Versión ${v.id} guardada: ${v.docs.length} pisos`);
-});
+}));
 
 /* Versión cliente: si a las 23:00 del sábado nadie emitió la de la semana siguiente, se emite sola tal como está (decidido con el
    dueño, oct 2026). Corre varias veces esa hora por si una pasada falla; cliDue evita emitir dos veces. */
@@ -78,7 +89,7 @@ exports.emitirCliente = onSchedule({ schedule: '1,16,31,46 23 * * 6', timeZone: 
    Cada registro se escribe releyéndolo (acceptCloses): lo que un ingeniero registró mientras tanto no se pisa. Desde esa hora las
    reglas de daily/live rechazan cualquier escritura de la página para ese día (el servidor escribe con el Admin SDK).
    El nombre aceptarCierres se conserva para que la instalación reemplace la tarea en vez de crear otra. */
-exports.aceptarCierres = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+exports.aceptarCierres = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => eachSpace('aceptarCierres', async () => {
   const meta = await db().collection('meta').doc('project').get();
   const project = (meta.exists && meta.data()) || {};
   const now = Date.now();
@@ -89,7 +100,7 @@ exports.aceptarCierres = onSchedule({ schedule: '*/15 * * * *', timeZone: 'Ameri
     await ref.set({ at: new Date(now).toISOString(), d, hh: engCutHH(project), ...r });
     logger.info(`Jornada del ${d} cerrada: ${r.sc} cierre(s) del SC registrados, ${r.sin} «Sin cierre»${r.skip ? `, ${r.skip} ya registrados por un ingeniero` : ''}${r.nw ? ' (día no laborable: sin «Sin cierre»)' : ''}`);
   }
-});
+}));
 
 async function cerrarJornada(d, project, now) {
   const from = addD(d, -7);
@@ -120,13 +131,13 @@ async function cerrarJornada(d, project, now) {
 
 /* Cada 15 minutos mira si ya pasó el corte de la semana que viene; fuera de esa ventana solo lee meta/project.
    De paso mueve, por partes, la foto del lookahead (snap) de weeks a wsnap (migración M1; cuando termina solo lee frz/_wsnap). */
-exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+exports.congelarSemana = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => eachSpace('congelarSemana', async () => {
   try { await congelar(); }
   finally {
     try { await recongelar(); } catch (e) { logger.error('Re-congelar semanas descongeladas: falló esta pasada, se reintenta en 15 minutos', e); }
     try { await migrarWsnap(); } catch (e) { logger.error('Migración de fotos del lookahead (wsnap): falló esta pasada, se reintenta en 15 minutos', e); }
   }
-});
+}));
 /* C-03 (tanda 1, LPS-1): semanas descongeladas (unfrozenAt, sin frozenAt) que nadie volvió a congelar en 2 horas: se reponen tal como
    estaban desde la última copia __h, como «Recuperar» de la página (restoreWeek), cada una en su propia transacción que relee todo:
    si alguien la congeló o la recuperó mientras tanto, no se toca. La copia queda con restAt/restBy:'servidor' y la semana con refrz. */
@@ -258,7 +269,7 @@ async function precargarFeriados(project, now) {
   if (out) { project.cal = { ...(project.cal || {}), hol: out.hol, holPre: out.holPre }; logger.info(`Feriados precargados: ${out.add.length} (${out.holPre.join(', ')})`); }
 }
 
-exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => {
+exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/Lima', retryCount: 1 }, async () => eachSpace('cerrarPlan', async () => {
   const project = (await db().collection('meta').doc('project').get()).data() || {};
   const now = Date.now();
   /* C-08: feriados nacionales del año actual y el siguiente, precargados una vez por año (antes de calcular el día hábil) */
@@ -305,7 +316,7 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   await cref.set(rec);
   logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)${plan.only ? ` (reintento ${rec.tries})` : ''}`);
   if (R.fail.length) logger.error(`Plan del ${d}: ${R.fail.length} piso(s) sin cerrar (${R.fail.join(', ')}); ${rec.tries >= RETRY_MAX ? 'se agotaron los reintentos: publícalo a mano en el Plan diario' : 'se reintentan en 15 minutos'}`);
-});
+}));
 
 /* Cuentas de capataz del tareo (docs/ia/tareo.md, «Cuentas de capataz»): usuario = DNI, contraseña; por debajo, correo sintético
    <dni>@tareo.lps911.pe con el correo ya confirmado. Solo el administrador (o el dueño) y el asistente de tareo.
@@ -462,7 +473,8 @@ async function pushSend(list, data) {
    de la base (no se confía en lo que manda la página) y se envía una sola vez por evento (pushlog/<live>_<hora>).
    Es un onCall y no un disparador de Firestore: el disparador necesitaba permisos de Google Cloud que la instalación automática
    no tiene (oct 2026). */
-exports.avisoDetenido = onCall({ timeoutSeconds: 60 }, async req => {
+exports.avisoDetenido = onCall({ timeoutSeconds: 60 }, async req => NSC.run(req.data && req.data.ns === 'cs_' ? 'cs_' : '', () => avisoDetenidoNs(req)));
+async function avisoDetenidoNs(req) {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Inicia sesión.');
   const id = String((req.data && req.data.id) || ''), t = Number(req.data && req.data.t);
   if (!/^\d{4}-\d\d-\d\d_[^/]{1,200}$/.test(id) || !(t > 0)) throw new HttpsError('invalid-argument', 'Detención no válida.');
@@ -488,7 +500,7 @@ exports.avisoDetenido = onCall({ timeoutSeconds: 60 }, async req => {
   const r = await pushSend(list, data);
   logger.info(`Detenido ${id}: aviso a ${dest.length} persona(s), ${list.length} equipo(s) · enviados ${r.ok} · fallidos ${r.fail}`);
   return { enviado: true, personas: dest.length, equipos: list.length, ok: r.ok };
-});
+}
 /* aviso de prueba a los equipos de quien lo pide (administrador o editor) */
 exports.avisoPrueba = onCall({ timeoutSeconds: 30 }, async req => {
   const tk = (req.auth && req.auth.token) || {};

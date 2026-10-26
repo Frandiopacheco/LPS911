@@ -52,7 +52,7 @@ function buildLookShell(main){
     <button class="ib pri" id="fedit" hidden>✎ Programar</button>
     <div class="bmore lkpop" id="bmore" hidden role="dialog" aria-label="Vista">
       <div class="lkph">Vista</div>
-      <div class="lkprow"><span class="seg" id="fview" aria-label="Vista" title="Grilla: programar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura)."><button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span><select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select><button class="ib" id="fcoll">Plegar todo</button></div>
+      <div class="lkprow"><span class="seg" id="fview" aria-label="Vista" title="Grilla: programar. Flujo: ver por dónde va cada subcontratista en todos los pisos (solo lectura).">${CS()?'<button data-v="tren">Tren</button>':''}<button data-v="grid">Grilla</button><button data-v="flujo">Flujo</button></span><select id="fwin" aria-label="Semanas visibles" title="Semanas visibles"><option value="3">3 sem</option><option value="6">6 sem</option><option value="12">12 sem</option></select><button class="ib" id="fcoll">Plegar todo</button></div>
       <div class="lkprow" id="lkhome"><span class="mu lkhl">Mostrar en</span></div>
       <label class="chk"><input type="checkbox" id="fleg"> Mostrar subcontratistas</label>
       <div class="lkph">Mostrar</div>
@@ -181,8 +181,10 @@ function renderLookInner(main){
   const lge=$('#legend');if(lge.dataset.h!==lg){lge.innerHTML=lg;lge.dataset.h=lg}
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
-  {const fl=U.lkV==='flujo'&&lkFlowOk();$('#gw').hidden=fl;$('#flw').hidden=!fl;$$('#fview button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fl?'flujo':'grid')));
-    if(fl){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;flowRender($('#flw'),days)}else renderGrid($('#grid'),days,dset)}
+  /* Casco (casco.js): vista Tren (partidas en filas, la celda dice techo/piso y sector); durante la revisión de propuestas, la grilla */
+  {const tr=CS()&&U.lkV==='tren'&&lkFlowOk()&&typeof csTrenRender==='function';const fl=!tr&&U.lkV==='flujo'&&lkFlowOk();let tw=$('#trw');if(tr&&!tw){tw=document.createElement('div');tw.id='trw';tw.className='trw';$('#flw').after(tw)}
+    $('#gw').hidden=fl||tr;$('#flw').hidden=!fl;if(tw)tw.hidden=!tr;$$('#fview button').forEach(b=>b.classList.toggle('on',b.dataset.v===(tr?'tren':fl?'flujo':'grid')));
+    if(tr){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;csTrenRender(tw,days)}else if(fl){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;flowRender($('#flw'),days)}else renderGrid($('#grid'),days,dset)}
   {const fm=$('#fmxp');if(fm){const n=LK_GHN;/* «Asistente de programación» (25-10-2026, antes «Faltan programar»): encendido muestra las filas fantasma de la Matriz y la revisión de flujos; apagado, nada */
     const hv=!(U.cliv&&U.tab==='look')?`<button class="ib lkasis${U.lkGh?' on':''}" role="switch" aria-checked="${!!U.lkGh}" title="Asistente de programación: ${U.lkGh?'encendido. Se ven las actividades que faltan programar (filas fantasma de la Matriz) y la revisión de flujos de cada ambiente. Clic para apagarlo.':'apagado. Clic para ver dentro de cada ambiente lo que falta programar según la Matriz y la revisión de flujos.'}${n?`\n${n} por programar.`:''}${LK_GHOK?'':'\nCon búsqueda o filtros de semana, día, actividades, restricciones u observaciones no se ven las filas fantasma.'}"><span class="lkasw" aria-hidden="true"></span>Asistente${n?`<b class="lkasn" title="${n} por programar">${n}</b>`:''}${U.lkGh&&LK_MXT?`<span class="lkast">${LK_MXT} ✓ en Matriz</span>`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}

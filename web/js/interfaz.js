@@ -17,7 +17,7 @@ function tabAllowed(t){if(!me)return false;
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin'||TASIS();
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
     if(t==='tdia')return me.role!=='tcos'&&me.role!=='trh';if(t==='trh')return typeof trhOk==='function'&&trhOk();if(t==='tpc'&&me.role==='tcap')return false;/* el capataz elige las partidas dentro del tareo (20-10-2026) */if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}
-  if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(me.role==='capataz')return t==='cap';
+  if(offLps()||!canLps()||!TAB_ORDER.includes(t))return false;if(CS()&&(t==='mat'||t==='cli'))return false;/* Casco: sin Matriz de ambientes ni versión cliente (docs/ia/casco.md) */if(me.role==='capataz')return t==='cap';
   if(t==='cli')return typeof canCli==='function'&&canCli();if(t==='hoy')return typeof renderHoy==='function';if(t==='dash')return canDash();if(t==='cap')return SCK();
   if(t==='pull')return pulEd();if(t==='team')return !SCK()&&me.role!=='lector'&&me.role!=='veedor';return true}
 
@@ -28,7 +28,7 @@ function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAl
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}
-function tabHome(){if(me&&me.role==='trh'&&U.mod==='tar')return'trh';return tabPrimary()[0]||(U.mod==='lps'?'look':modHome(U.mod))}
+function tabHome(){if(me&&me.role==='trh'&&U.mod==='tar')return'trh';return tabPrimary()[0]||(!offLps()?'look':modHome(U.mod))}
 
 /** Ordena la barra de pestañas y arma el botón "Más" (se llama en cada dibujo de la barra superior) */
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
@@ -108,7 +108,7 @@ function topToolsApply(){const t=U.tab;
    Dos tipos de pantalla: «herramienta» a todo el ancho (Lookahead, Plan diario) y «página» centrada con este encabezado:
    título · periodo/contexto · acciones a la derecha (la principal con .ib.pri). Debajo, la barra de filtros .fbar. */
 function pageHead(title,sub,actions){return`<header class="phd"><div class="pht"><h2>${esc(title)}</h2>${sub?`<span>${sub}</span>`:''}</div>${actions?`<div class="pha">${actions}</div>`:''}</header>`}
-const pisoLabel=()=>U.piso?esc(S.pis.get(U.piso)?.name||''):'Todos los pisos';
+const pisoLabel=()=>U.piso?esc(S.pis.get(U.piso)?.name||''):CS()?'Todos los niveles':'Todos los pisos';
 /* ayuda que se abre con «?» en lugar de párrafos fijos (P13) */
 function helpBox(summary,html,open){return`<details class="hlp"${open?' open':''}><summary><i aria-hidden="true">?</i>${esc(summary)}</summary><div class="hlpb">${html}</div></details>`}
 

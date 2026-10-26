@@ -1681,3 +1681,34 @@ test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se 
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frev/59_a1_c-gabel')));
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'frev/59_a1_c-gabel')));
 });
+
+/* Módulo Casco (docs/ia/casco.md): las reglas de cs_ son la copia generada de las de Last Planner (scripts/reglas-casco.mjs) */
+test('casco: el editor edita cs_acts y cs_mcat; SC y lector no; quien no está en el equipo no lee', async () => {
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'cs_acts/k1'), { name: 'Encofrado de losa', sc: 'c-casa', ambId: 'n1-e1', days: ['2099-10-01'] }); });
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_acts/k2'), { name: 'Acero de losa', sc: 'c-sc', ambId: 'n1-e1', days: [] }));
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'cs_acts/k1'), { days: ['2099-10-02'] }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_mcat/k-AV'), { name: 'Acero de verticales', grp: 'E', tr: 1 }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_ksec/v1'), { n: 'Versión 1', grp: 'E', k: 4 }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_acts/k3'), { name: 'x', sc: 'c-gabel', ambId: 'n1-e1' }));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'cs_acts/k3'), { name: 'x' }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'cs_acts/k1')));
+  await assertFails(getDoc(doc(user('nadie@obra.pe'), 'cs_acts/k1')));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'cs_cualquiera/x'), { a: 1 }));
+});
+test('casco: cs_meta/project y cs_pisos los crea el administrador; el editor no cambia las horas de corte', async () => {
+  await assertSucceeds(setDoc(doc(user(OWNER), 'cs_meta/project'), { name: 'Obra · Casco', casco: true, closeCutHH: '17:00' }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'cs_pisos/n1'), { name: 'Nivel 1', code: 'N1', tc: 'T1', pc: 'P1', order: 1 }));
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'cs_meta/project'), { closeCutHH: '18:00' }));
+  await assertSucceeds(getDoc(doc(user('editor@obra.pe'), 'cs_meta/project')));
+});
+test('casco: el registro diario y los reportes en vivo de Casco siguen las reglas de Last Planner', async () => {
+  await env.withSecurityRulesDisabled(async c => { const d = c.firestore(); await setDoc(doc(d, 'cs_acts/k1'), { name: 'Encofrado de losa', sc: 'c-gabel', ambId: 'n1-e1' }); });
+  await assertSucceeds(setDoc(doc(user('campo@obra.pe'), 'cs_daily/' + DV + '_n1'), { date: DV, pisoId: 'n1', recs: {}, extra: {} }));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'cs_daily/' + DV + '_n1'), { date: DV, pisoId: 'n1', recs: {}, extra: {} }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'cs_daily/' + DV + '_n1')));
+});
+test('casco: la entrega de un sector se publica como hito de Last Planner (colección compartida de hitos sin prefijo)', async () => {
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'hitos/cs_k1'), { n: 'Entrega de Casco · P1 A1', tipo: 'ini', d: '2099-11-02', piso: 'p1', cs: true }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_hitos/h1'), { n: 'Hito de casco', tipo: 'fin', d: '2099-11-02' }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'hitos/cs_k2'), { n: 'x', tipo: 'ini', d: '2099-11-02' }));
+});
