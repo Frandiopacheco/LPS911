@@ -63,6 +63,29 @@ test('Por personal: el rendimiento escrito va al catálogo de la Matriz y lo her
   noErrors(errors, 'rendimiento al catálogo');
 });
 
+test('Por personal: con filas que tenían su propio rendimiento, cambiarlo en cualquiera lo cambia en todas (25-10-2026)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [
+    ['mcat', 'kb', { name: 'Baldosas', sc: 'c1', cl: 't', al: ['baldosas'], ord: 10 }],
+    A('b1', { name: 'Baldosas', metrado: 40, days: [MANANA], qty: { [MANANA]: 40 }, rend: 8 }),
+    A('b2', { name: 'Baldosas', metrado: 30, days: [MANANA], qty: { [MANANA]: 30 }, rend: 6 }),
+    A('b3', { name: 'Baldosas', metrado: 20, days: [MANANA], qty: { [MANANA]: 20 }, rend: 4 }),
+  ] });
+  await page.locator('#fmode [data-m="personal"]').click();
+  const rend = a => page.locator(`#grid tr[data-a="${a}"] td.cS input[data-f="rend"]`);
+  const cell = a => page.locator(`#grid tr[data-a="${a}"] td.d[data-d="${MANANA}"]`);
+  // se cambia en la del medio: las de arriba y abajo también
+  await rend('b2').fill('10'); await rend('b2').press('Enter');
+  await expect.poll(() => page.evaluate(() => ['b1', 'b2', 'b3'].map(i => window.__dbGet('acts', i).rend))).toEqual([null, null, null]);
+  for (const a of ['b1', 'b2', 'b3']) await expect(rend(a)).toHaveValue('10');
+  await expect(cell('b1')).toHaveText('4'); await expect(cell('b3')).toHaveText('2');
+  // y otra vez desde la de arriba
+  await rend('b1').fill('5'); await rend('b1').press('Enter');
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('mcat', 'kb') || {}).rend)).toBe(5);
+  for (const a of ['b1', 'b2', 'b3']) await expect(rend(a)).toHaveValue('5');
+  await expect(cell('b2')).toHaveText('6');
+  noErrors(errors, 'rendimiento en todas las filas');
+});
+
 test('Metrado repartido solo: automático hasta editar un día; lo de hoy no se toca', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...EXTRA,
     A('x5', { name: 'Sellado', metrado: 50, days: [HOY, MANANA, D2], qty: { [HOY]: 10 }, qa: true }),
