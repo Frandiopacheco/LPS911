@@ -206,7 +206,9 @@ function renderTCap(main){let want=TCS.date&&TCS.unsub?TCS.date:todayIso(),st=0;
   tcDraw()}
 /** ¿se está en la grilla de horas (paso 3, editable)? Con el celular echado ocupa toda la pantalla (CSS #tcRoot.g3). */
 const tcG3=()=>TCS.step===3&&!!TCS.doc&&!tcRO()&&!tcLegacy(TCS.doc);
-function tcDraw(){const root=$('#tcRoot');if(!root)return;root.classList.toggle('g3',tcG3());
+function tcDraw(){const root=$('#tcRoot');if(!root)return;
+  /* con la hoja «Dividir…» abierta solo se actualiza la hoja (al guardar o llegar la base se rearmaba todo: parpadeaba y se perdía lo que se escribía) */
+  if(TCS.dct&&TCS.doc&&root.querySelector('#tcDct')){tcDctPatch();tcStatus();return}root.classList.toggle('g3',tcG3());
   /* con la grilla de solo lectura (paso 4, enviado o antiguo), echado usa todo el ancho (CSS #tcRoot.g4) */
   root.classList.toggle('g4',!!TCS.doc&&(TCS.step===4||tcRO()||tcLegacy(TCS.doc)));
   /* barra inferior de la app (Tareo · Mi cuadrilla · Más): solo en el paso 1 y en lo enviado; mientras se llena, el pie es la única barra */
@@ -805,6 +807,8 @@ function tcBind(root){
     /* horas escritas en las hojas: ya se aplicaron al escribir (tcLiveIn); aquí solo se avisa si no es un número */
     if(a==='wkIn'||a==='cellIn'||a==='asgIn'){if(tcLiveIn(t)===null)toast(a==='asgIn'?'Escribe un número de horas.':'Escribe un número de horas (por ejemplo 6,5).');return}
 });
+  /* al tocar las horas de un SC se selecciona el número: se escribe encima, sin mover el cursor (25-10-2026) */
+  root.addEventListener('focusin',e=>{const t=e.target;if(t&&t.dataset&&t.dataset.dcin!=null){const sel=()=>{try{t.setSelectionRange(0,t.value.length)}catch(x){t.select()}};sel();setTimeout(sel,0)}});
   root.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.dcin!=null){tcDctIn(t,false);return}if(t.id==='tcMpcIn'){tcMpcLive(t.value);return}if(t.id==='tcPcQ'){TCS.pcQ=t.value;const l=$('#tcPcL');if(l)l.innerHTML=tcPcList()}
     else if(t.id==='tcAddQ'){TCS.addQ=t.value;const l=$('#tcAddL');if(l)l.innerHTML=tcAddList()}
     /* buscador del paso 1: solo cambia la lista (rearmar la pantalla en cada letra cerraba o hacía parpadear el teclado del iPhone) */

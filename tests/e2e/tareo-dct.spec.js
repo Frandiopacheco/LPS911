@@ -55,6 +55,14 @@ test('capataz: paso «Descuentos» solo con partida descontable; no deja seguir 
   await expect(sh.locator('#tcDctD')).toContainText('Repartido completo');
   // 25-10-2026: se escriben las horas y la hoja no se rearma (antes cada ½ parpadeaba y no se podía escribir)
   await sh.evaluate(el => { el.__mismo = true; });
+  // al tocar el campo el número queda seleccionado (se escribe encima)
+  await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').click();
+  expect(await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').evaluate(i => [i.selectionStart, i.selectionEnd, i.value.length])).toEqual([0, 1, 1]);
+  await page.keyboard.type('2,5');
+  await expect(sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]')).toHaveValue('2,5');
+  // ni el guardado (1 s después) ni la respuesta de la base rearman la hoja ni le quitan el foco
+  await page.waitForTimeout(1600);
+  expect(await sh.evaluate(el => el.__mismo === true && document.activeElement && document.activeElement.dataset.dcin === 'sA')).toBe(true);
   await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').fill('2,5');
   await expect(sh.locator('#tcDctD')).toContainText('Faltan 0,5 h');
   await sh.locator('.tc-dsr[data-sc="sA"] [data-dcin]').fill('9');
