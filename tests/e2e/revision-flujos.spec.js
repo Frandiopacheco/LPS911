@@ -21,7 +21,8 @@ test('revisión de flujos: listo con un toque, decidir lo posible y crear la res
   const e = await page.evaluate(() => { const x = frevList().find(e => e.amb === 'a1' && e.sc === 'c1'); return { n: x.n, sug: x.sug }; });
   expect(e.n).toBe(59);
   expect(e.sug.fre.join(' ')).toContain('mismo ambiente');
-  await page.locator('#rfrev').click();
+  await expect(page.locator('#rfrev')).toHaveCount(0); // oct 2026: ya no está en Restricciones
+  await page.evaluate(() => frevOpen());
   await expect(page.locator('#frv')).toBeVisible();
   // a9 · c1: sin sugerencias → «Listo» directo
   await page.locator('#frv [data-frok="59_a9_c1"]').click();
