@@ -41,7 +41,7 @@ test('A5: en feriado la pantalla del capataz dice «Día no laborable» y no pre
   const c = await page.evaluate(() => ({ ui: tcJor(TCS.date), real: tCalc(TCS.doc).rows['41000000'], jd: tJorDia(TCS.doc) }));
   expect(c.ui.h).toBe(0);
   expect(c.ui.nl).toBe(true);
-  expect(c.ui.full).toBe(8.5); // «Toda la jornada» usa la jornada de ese día de semana como referencia
+  expect(c.ui.full).toBe(4.5); // «Toda la jornada» usa el horario sugerido de no laborables (07:30–13:00 menos el refrigerio 12:00–13:00; 25-10-2026)
   expect(c.jd).toBe(0);
   expect(c.real.ext).toBe(8.5);
   noErrors(errors, 'A5 feriado');

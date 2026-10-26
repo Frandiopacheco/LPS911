@@ -80,9 +80,12 @@ const tcSinM=r=>!!r&&r.as!==true&&r.as!==false;
 /** configuración del día: la congelada en el tareo (doc.cfg) si la tiene; si no, la actual (tCfgDia). Es la misma que usa tCalc. */
 function tcCfg(date){const D=TCS.doc;return D&&date===TCS.date&&D.cfg&&D.cfg.v===1?D.cfg:tCfgDia(date)}
 /** jornada del día (auditoría 2, A5: la misma configuración que tCalc). h = horas de jornada (0 en no laborable: todo es extra);
-    full = las horas que pone «Toda la jornada» (en no laborable, la jornada de ese día de semana o la del lunes, como referencia). */
+    full = las horas que pone «Toda la jornada» (en no laborable, el horario sugerido de Configuración, como referencia). */
 function tcJor(date){const c=tcCfg(date);const Dd=tDia(date,c);const T=TC();
-  const j=Dd.j||(c.jor&&c.jor.ini&&c.jor.fin?c.jor:null)||T.jor['1']||{ini:'07:30',fin:'17:00',ref:60};
+  /* no laborable (25-10-2026): el horario sugerido de Configuración (por defecto 07:30–13:00); sus horas descuentan el refrigerio de no laborables */
+  if(Dd.nl){const sg=T.sugNoLab||{ini:'07:30',fin:'13:00'};const rn=c.rnl||T.refNoLab;const j={ini:sg.ini,fin:sg.fin,ref:+rn.ref||0,refIni:rn.refIni||T.refIni};
+    return{j,h:0,nl:true,full:tHoras(date,sg.ini,sg.fin,c).trab||tJorH(j)||5.5}}
+  const j=Dd.j||T.jor['1']||{ini:'07:30',fin:'17:00',ref:60};
   return{j,h:Dd.jh,nl:Dd.nl,full:Dd.jh||tJorH(j)||8.5}}
 /** por qué el día es no laborable: feriado (con su nombre) o día sin jornada (domingo) */
 function tcNlWhy(date){const c=tcCfg(date);if(c.fer){const n=(TC().ferN||{})[date];return`Feriado${n?': '+n:''}.`}
