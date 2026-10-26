@@ -39,6 +39,24 @@ test('Por personal: personas por día, cuadrilla fija e histograma del SC elegid
   noErrors(errors, 'por personal');
 });
 
+test('Por personal: el rendimiento escrito va al catálogo de la Matriz y lo heredan todas sus filas (25-10-2026)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'look', extra: [...EXTRA,
+    ['mcat', 'kp', { name: 'Pintura', sc: 'c1', cl: 't', al: ['pintura'], ord: 10 }],
+    A('x7', { name: 'Pintura', metrado: 40, days: [MANANA], qty: { [MANANA]: 40 } }),
+  ] });
+  await page.locator('#fmode [data-m="personal"]').click();
+  const cell = (a, d) => page.locator(`#grid tr[data-a="${a}"] td.d[data-d="${d}"]`);
+  await expect(cell('x7', MANANA)).toHaveClass(/pz/); // sin rendimiento todavía
+  const inp = page.locator('#grid tr[data-a="x1"] td.cS input[data-f="rend"]');
+  await inp.fill('10'); await inp.press('Enter');
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('mcat', 'kp') || {}).rend)).toBe(10);
+  await expect.poll(() => page.evaluate(() => window.__dbGet('acts', 'x1').rend)).toBe(null); // la fila hereda del catálogo
+  await expect(cell('x1', MANANA)).toHaveText('5'); // 50 ÷ 10
+  await expect(cell('x7', MANANA)).toHaveText('4'); // la otra fila de «Pintura» también: 40 ÷ 10
+  await expect(page.locator('#grid tr[data-a="x7"] td.cS input[data-f="rend"]')).toHaveValue('10');
+  noErrors(errors, 'rendimiento al catálogo');
+});
+
 test('Metrado repartido solo: automático hasta editar un día; lo de hoy no se toca', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: [...EXTRA,
     A('x5', { name: 'Sellado', metrado: 50, days: [HOY, MANANA, D2], qty: { [HOY]: 10 }, qa: true }),
