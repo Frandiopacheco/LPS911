@@ -88,7 +88,7 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 function pushGo(aid,d){if(!aid)return;let n=0;
   const go=()=>{if(!ready||!me){if(++n<100)setTimeout(go,300);return}
     if(!S.act.get(aid)){toast('Esa actividad ya no está en el lookahead.');return}
-    if(typeof goMod==='function'&&U.mod!=='lps')goMod('lps');
+    if(typeof goMod==='function'&&offLps())goMod(LPM());
     setTimeout(()=>{if(typeof dashPop==='function')dashPop(aid,d||todayIso(),'<div class="kbtns"><button class="kbig ghost" data-jor="opendet">📊 Ver todas las detenciones de hoy</button></div>')},150)};
   go()}
 {const q=new URLSearchParams(location.search);const aid=q.get('det');if(aid){const d=q.get('d')||'';try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}pushGo(aid,/^\d{4}-\d\d-\d\d$/.test(d)?d:'')}}
@@ -104,13 +104,13 @@ let PUSH_REF=false;
 const PUSHQ='lps.pushq';
 const pushQ=v=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(PUSHQ)||'[]');localStorage.setItem(PUSHQ,JSON.stringify(v))}catch(e){return[]}};
 function pushNotify(d,aid){const lv=liveOf(d,aid);const e=lv&&[...(lv.log||[])].reverse().find(x=>x&&x.s==='stop');if(!e)return;
-  const q=pushQ()||[];if(!q.some(o=>o.id===d+'_'+aid&&o.t===e.t))q.push({id:d+'_'+aid,t:e.t});pushQ(q.slice(-30));pushFlush()}
+  const q=pushQ()||[];if(!q.some(o=>o.id===d+'_'+aid&&o.t===e.t))q.push({id:d+'_'+aid,t:e.t,ns:DNS});/* ns: Last Planner o Casco (cs_), por si se reintenta después de cambiar de módulo */pushQ(q.slice(-30));pushFlush()}
 let PUSHF=false;
 async function pushFlush(){if(PUSHF||!db||!me)return;let q=pushQ()||[];if(!q.length||navigator.onLine===false)return;PUSHF=true;
   try{try{await db.waitForPendingWrites()}catch(e){}
     q=pushQ()||[];const rest=[];
     for(const it of q){if(NOW()-it.t>6*3600e3)continue;
-      try{await firebase.functions().httpsCallable('avisoDetenido')(it)}
+      try{await firebase.functions().httpsCallable('avisoDetenido')({id:it.id,t:it.t,ns:it.ns||''})}
       catch(err){const c=String(err&&err.code||'');if(/unavailable|deadline|internal|unknown|resource/.test(c))rest.push(it);else console.warn('aviso de detenido',err)}}
     const now=pushQ()||[];pushQ([...rest,...now.filter(o=>!q.some(x=>x.id===o.id&&x.t===o.t))])}
   finally{PUSHF=false}}

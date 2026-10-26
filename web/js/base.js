@@ -24,18 +24,27 @@ const uid=p=>p+'-'+NOW().toString(36)+Math.random().toString(36).slice(2,6);
 const byOrder=(a,b)=>(a.order??0)-(b.order??0)||String(a.id).localeCompare(String(b.id));
 const pct=v=>v==null?'—':Math.round(v*100)+'%';
 function lum(hex){const h=(hex||'#888').replace('#','');const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255;return .2126*r+.7152*g+.0722*b}
-const store={get(k,d){try{const v=localStorage.getItem('lps911.'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('lps911.'+k,JSON.stringify(v))}catch(e){}}};
+/* Módulo Casco (docs/ia/casco.md): el mismo motor de Last Planner con sus propias colecciones (prefijo cs_). Se elige con el
+   selector de módulos; cambiar entre Last Planner y Casco recarga la página (goMod), así nunca se mezclan los datos de ambos */
+const DNS=(()=>{try{return localStorage.getItem('lps.ns')==='cs'?'cs_':''}catch(e){return''}})();
+const CS=()=>DNS==='cs_';
+/* compartidas entre módulos (mismo nombre en Last Planner y Casco): equipo, tareo, módulo Planos y avisos. La misma lista está en
+   scripts/reglas-casco.mjs (reglas) y functions/index.js (servidor) */
+const DSHARED=new Set(['members','inv','clock','push','pushp','pushlog','plb','eto','p3d','hhpc','tareo','tfot','tpub','tpubidx','tpexc','tpauto','tper','tperbk','tperp','tpc','tpcbk','tcfg']);
+const store={get(k,d){try{const v=localStorage.getItem('lps911.'+(CS()?'cs.':'')+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('lps911.'+(CS()?'cs.':'')+k,JSON.stringify(v))}catch(e){}}};
 
 /* ---------- estado ---------- */
 let FDB=null;/* todas las rutas de datos pasan por aquí (preparación multiempresa: luego será obras/<id>/<colección>) */
-const fcol=n=>(db||FDB).collection(n);
+const fcol=n=>(db||FDB).collection(DNS&&!DSHARED.has(n)?DNS+n:n);
+/** colección de Last Planner (sin prefijo) aunque se esté en Casco: la entrega de un sector a Arquitectura escribe sus hitos */
+const fcolLp=n=>(db||FDB).collection(n);
 const PLANO_SRC='plano.js?v=33';
 const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map(),con:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
-U.q='';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'?U.mod:'lps',pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'?'flujo':'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv});
+U.q='';if(CS()&&!U.lkV)U.lkV='tren';if(CS()&&U.mod==='lps')U.mod='cas';if(!CS()&&U.mod==='cas')U.mod='lps';
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'?U.mod:LPM(),pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'||U.lkV==='tren'?U.lkV:'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -68,14 +77,19 @@ const canPla=()=>canLps()&&me.role!=='capataz';
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
 /* módulos de la app: [id, nombre] de los que este usuario puede abrir (el selector aparece si hay más de uno) */
-const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():canLps();
-const MODS=()=>[['lps','Last Planner'],['tar','Tareo'],['pla','Planos']].filter(x=>modOk(x[0]));
-const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':'lps';
+/* Casco: lo ve quien ve Last Planner (menos el capataz) cuando la obra ya tiene Casco (cs_meta/project, CASCO_ON); el administrador siempre, para crearlo */
+let CASCO_ON=CS();
+const LPM=()=>CS()?'cas':'lps';
+const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():m==='cas'?canLps()&&me.role!=='capataz'&&(CASCO_ON||me.role==='admin'):canLps();
+const MODS=()=>[['lps','Last Planner'],['cas','Casco'],['tar','Tareo'],['pla','Planos']].filter(x=>modOk(x[0]));
+const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':LPM();
 const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':'hoy';
 /** ¿se está en un módulo distinto de Last Planner? (sin piso, semana, deshacer ni exportes de LPS) */
 const offLps=()=>U.mod==='tar'||U.mod==='pla';
 /** cambia de módulo (selector de la barra o «Más» del celular): lleva a la pestaña inicial del módulo */
 function goMod(m){if(!modOk(m))return;closePop();const sh=$('#msheet');if(sh)sh.remove();
+  /* Last Planner ↔ Casco: otro juego de datos; se recarga la página en el otro espacio (cs_) */
+  if((m==='cas'&&!CS())||(m==='lps'&&CS())){try{localStorage.setItem('lps.ns',m==='cas'?'cs':'');const k='lps911.'+(m==='cas'?'cs.':'')+'ui';let o={};try{o=JSON.parse(localStorage.getItem(k)||'{}')||{}}catch(e){}localStorage.setItem(k,JSON.stringify({...o,mod:m,tab:'hoy'}))}catch(e){}location.reload();return}
   if(U.mod===m&&tabMod(U.tab)===m)return;U.mod=m;U.tab=modHome(m);U.tab=tabAllowed(U.tab)?U.tab:tabHome();saveUI();sendPresence();render()}
 let canDaily=false;
 const OWNER=()=>String(window.ADMIN_EMAIL||'').trim().toLowerCase();
@@ -91,9 +105,9 @@ const hashStr=s=>{let h=5381;for(const c of String(s))h=((h*33)^c.charCodeAt(0))
 const colorOf=s=>{let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length]};
 const nameOf=e=>{const m=MEM.get(e);return(m&&m.name)||String(e||'').split('@')[0]||'Alguien'};
 const safeColor=c=>c;
-function sendPresence(force){if(!presRef||!me)return;const d={name:me.name||'',eh:hashStr(me.email),piso:U.piso||'',tab:U.tab,act:myAct||''};const k=JSON.stringify(d);if(!force&&k===lastPres)return;lastPres=k;presRef.set({...d,ts:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{})}
+function sendPresence(force){if(!presRef||!me)return;const d={name:me.name||'',eh:hashStr(me.email),piso:U.piso||'',tab:U.tab,act:myAct||'',ns:DNS};const k=JSON.stringify(d);if(!force&&k===lastPres)return;lastPres=k;presRef.set({...d,ts:firebase.database.ServerValue.TIMESTAMP}).catch(()=>{})}
 function renderWho(){
-  const list=[...PRES.entries()].filter(([,p])=>p&&typeof p==='object').map(([uid,p])=>({...p,uid,isMe:!!me&&uid===me.uid})).sort((a,b)=>(b.isMe?1:0)-(a.isMe?1:0));
+  const list=[...PRES.entries()].filter(([,p])=>p&&typeof p==='object'&&(p.ns||'')===DNS).map(([uid,p])=>({...p,uid,isMe:!!me&&uid===me.uid})).sort((a,b)=>(b.isMe?1:0)-(a.isMe?1:0));
   const el=$('#who');
   if(el)el.innerHTML=list.slice(0,6).map(p=>{const full=String(p.name||'Alguien');const nm=p.isMe?'Tú':full;const pc=S.pis.get(p.piso)?.code||'Todos';
     return `<span class="who-c" title="${esc(full)} · ${esc(S.pis.get(p.piso)?.name||'Todos los pisos')}" style="--pc:${colorOf(p.uid)}"><span>${esc(nm.split(' ')[0])}</span><b>${esc(pc)}</b></span>`}).join('')+(list.length>6?`<span class="who-c">+${list.length-6}</span>`:'');
@@ -516,10 +530,10 @@ async function startSession(u,fdb){
   if(!m||!m.exists){const em=me.email;me=null;pendingMsg=tCtaEs(em)?`Tu usuario ${em.split('@')[0]} ya no tiene acceso. Habla con la oficina.`:`El correo ${em} todavía no está autorizado. Pide al administrador que te agregue en la pestaña Equipo y vuelve a ingresar.`;await auth.signOut();return}
   /* cuenta desactivada (members.off) o enlace de capataz pasado a una cuenta con DNI (movTo): docs/ia/tareo.md */
   if(m.data().off===true&&!isOwnerEmail(me.email)){const d=m.data();me=null;pendingMsg=memOffMsg(d);if(d.movTo)lcapSet(true);await auth.signOut();return}
-  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;me.tasis=md.tasis===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
+  me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;me.tasis=md.tasis===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod=LPM()}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
   /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
-  if(TAR_ONLY())U.mod='tar';else if(!offLps()||!modOk(U.mod))U.mod='lps';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
-  db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
+  if(TAR_ONLY())U.mod='tar';else if(!offLps()||!modOk(U.mod))U.mod=LPM();isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
+  db=fdb;hideLogin();if(!CS()&&canLps()&&me.role!=='capataz')fcolLp('cs_meta').doc('project').get().then(d=>{CASCO_ON=!!(d&&d.exists);modselApply()}).catch(()=>{});$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role)+(me.role==='campo'&&me.tasis?' y asistente de tareo':'');
   /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
   if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
@@ -791,7 +805,7 @@ $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.d
 /* ---------- barra superior ---------- */
 /** selector de módulo (barra superior y «Más» del celular): solo para quien usa los dos */
 const modSegHtml=()=>`<span class="seg modseg" role="group" aria-label="Módulo">${MODS().map(([m,l])=>`<button type="button" data-mod="${m}" class="${U.mod===m?'on':''}" aria-pressed="${U.mod===m}">${l}</button>`).join('')}</span>`;
-function modselApply(){const el=$('#modsel');document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
+function modselApply(){const el=$('#modsel');document.body.classList.toggle('ns-cs',CS());document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
   if(!show)return;const sig=ms.map(x=>x[0]).join();if(el.dataset.sig!==sig){el.dataset.sig=sig;el.innerHTML=ms.map(([m,l])=>`<button type="button" data-mod="${m}">${l}</button>`).join('')}
   el.querySelectorAll('[data-mod]').forEach(b=>{const on=b.dataset.mod===U.mod;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
 $('#modsel').onclick=e=>{const b=e.target.closest('[data-mod]');if(b)goMod(b.dataset.mod)};
@@ -807,7 +821,7 @@ function renderTop(){
   const wd=weekDays(U.week);if(typeof dateMode!=='function'||dateMode()==='week'){stx('#wnum','Semana '+U.week);stx('#wdates',fmtD(wd[0])+' – '+fmtD(wd[5]))}
   $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
   const ps=pisos();if(U.piso&&!S.pis.has(U.piso))U.piso='';
-  shx('#fpiso','<option value="">Todos los pisos</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join(''));
+  shx('#fpiso','<option value="">'+(CS()?'Todos los niveles':'Todos los pisos')+'</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join(''));
   const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;stx(rc,String(pr));
   {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));/* Calidad: lo que debe programar; el SC: sus observadas por levantar */const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:SCK()?[...LIB.values()].filter(l=>l.st==='obs'&&vs.has(l.pisoId)&&myScsI().includes(l.sc)).length:0;lc.hidden=!n;stx(lc,String(n))}}
   $('#wtoday').disabled=U.week===curWeek();
@@ -856,7 +870,7 @@ const RERR=new Set();
 function rSafe(tag,fn){try{fn()}catch(err){if(!RERR.has(tag)){RERR.add(tag);console.error('render › '+tag,err)}}}
 function render(){
   if(!ready)return;
-  if(me&&TAR_ONLY())U.mod='tar';else if(me&&offLps()&&!modOk(U.mod))U.mod='lps';
+  if(me&&TAR_ONLY())U.mod='tar';else if(me&&offLps()&&!modOk(U.mod))U.mod=LPM();
   /* cada módulo tiene sus pestañas: una de otro módulo lleva a la inicial del actual */
   if(me&&tabMod(U.tab)!==U.mod)U.tab=modHome(U.mod);
   if(me&&!tabAllowed(U.tab))U.tab=tabHome();
@@ -867,7 +881,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='lps'?'look':modHome(U.mod);
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=!offLps()?'look':modHome(U.mod);
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}

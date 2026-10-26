@@ -42,7 +42,7 @@ async function planosOldChange(e){const t=e.target;
 
 /* ================= CONFIGURACIÓN ================= */
 /* Configuración por secciones (oct 2026, como Equipo): U.cfgV */
-const CFGV=()=>[['sc','Subcontratistas'],['esp','Especialidades'],['tpl','Plantillas'],['rst','Causas y restricciones'],['cal','Calendario'],['cld','Calidad'],['pry','Proyecto'],...(canWrite&&!PM()?[['arc','Papelera']]:[])];
+const CFGV=()=>[...(CS()?[['cas','Casco']]:[]),['sc',CS()?'Ejecutores':'Subcontratistas'],['esp','Especialidades'],['tpl','Plantillas'],['rst','Causas y restricciones'],['cal','Calendario'],['cld','Calidad'],['pry','Proyecto'],...(canWrite&&!PM()?[['arc','Papelera']]:[])];
 const cfgV=()=>CFGV().some(([k])=>k===U.cfgV)?U.cfgV:'sc';
 function cfgSeg(){const v=cfgV();return`<span class="seg tseg" role="tablist" aria-label="Secciones de Configuración">${CFGV().map(([k,l])=>`<button type="button" role="tab" data-cfgv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${l}</button>`).join('')}</span>`}
 function renderCfg(main){
@@ -75,6 +75,7 @@ function renderCfg(main){
      <div class="cimpl">${(p.restrTypes||[]).map(k=>`<div class="cimpr"><span>${esc(k)}</span><select class="tin" data-rflow="${esc(k)}" style="width:auto"${dis}>${FLUJ.map(([f,n])=>`<option value="${f}"${flujOfType(k)===f?' selected':''}>${n}</option>`).join('')}</select></div>`).join('')}</div></div></div>`:''}
    <div class="card"><h2>Áreas de apoyo</h2><div class="pad"><textarea class="box" data-l="restrAreas" aria-label="Áreas, una por línea"${ro}>${esc(restrAreasL().join('\n'))}</textarea><p class="note">Una por línea (OT, Ingeniería…). Se ofrecen al marcar una restricción como “Otras áreas”.</p></div></div>
   </div>`:''}
+  ${cv==='cas'&&typeof csCfgCard==='function'?csCfgCard():''}
   ${cv==='cal'?calCard():''}
   ${cv==='cld'?`<div class="cfg">   <div class="card"><h2>Inspectores de calidad</h2><div class="pad"><textarea class="box" id="cfgInsp" aria-label="Inspectores, uno por línea"${canLibCfg()?'':' disabled'}>${esc(libInsp().join('\n'))}</textarea><p class="note">Uno por línea. Se eligen al programar una liberación y sirven para filtrar la agenda de cada uno. La editan Calidad y el administrador.</p></div></div></div>`:''}
   ${cv==='pry'?`  <div class="card"><h2>Proyecto ${isAdmin?'':'<span class="sub">Solo el administrador puede cambiar estos datos</span>'}</h2><div class="pad frm">

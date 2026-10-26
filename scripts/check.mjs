@@ -90,6 +90,12 @@ export function checkCI(file) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const web = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'web');
   const errs = [...checkWeb(web), ...checkCI(path.resolve(web, '..', '.github', 'workflows', 'ci.yml'))];
+  /* reglas del módulo Casco: la sección generada debe estar al día con las de Last Planner (scripts/reglas-casco.mjs) */
+  {
+    const { generate } = await import('./reglas-casco.mjs');
+    const rf = path.resolve(web, '..', 'firebase', 'firestore.rules'), cur = fs.readFileSync(rf, 'utf8');
+    if (generate(cur) !== cur) errs.push('✗ firestore.rules: la sección CASCO no está al día. Corre: node scripts/reglas-casco.mjs');
+  }
   if (errs.length) { console.error(errs.join('\n')); process.exit(1); }
   const { js, css } = appFiles(web);
   console.log(`✓ web sin errores de sintaxis (${js.length} archivos de js/, ${css.length} de css/)`);
