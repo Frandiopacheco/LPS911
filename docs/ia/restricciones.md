@@ -40,3 +40,9 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Datos:** `frev/{n}_{amb}_{sc}` `{n, amb, sc, pid, f:{flujo:'ok'|'res'}, st, by, bn, t, parcial?}` (suscripción `ensureFrev`, desde la semana actual). Reglas: leer `lpsMember()`; escribir `canDaily()` o el SC de esa partida, con `f` mapa y `n` número; borrar solo admin. En el respaldo.
 - **Dónde se ve:** botón «◇ Revisión de flujos N» en Restricciones (`#rfrev`); tarjeta `frev` en Hoy (SC, campo e ingenieros); tira de 8 puntos en la celda del ambiente del Lookahead (`fstripHtml`, `.fstrip`: gris sin revisar, verde listo, ámbar posible, rojo restricción), solo en los ambientes con trabajo en la ventana (lo de semanas más lejanas aún no se revisa); tocarla abre la revisión de ese ambiente. Indicadores › Semanal: «Restricciones por flujo» (`flujCard`).
 - Pruebas: `tests/e2e/revision-flujos.spec.js` y reglas «revisión de flujos…».
+
+## Revisión de flujos: ajustes del 25-10-2026 (dueño)
+- Se revisa **solo la semana N** del lookahead contando la actual como 1 (`frevWeeks() = [actual + frevW − 1]`), por defecto **la 3** (`frevW` 2–4 en Configuración › Restricciones; en la semana 62 se revisa la 64). Antes era «de la siguiente a la N», por defecto la 2.
+- En la ventana todo arranca en **«Bien»** (`frevStDlg`), también con posibles restricciones (se ven como aviso ⚠ en su flujo); se marca solo lo que falta. «✓ Listo» sale aunque haya posibles y guardar ya no pregunta por ellas.
+- «Bien» no redibuja la ventana (cambia la fila `[data-frrow]`); al redibujar no se repite la animación de entrada (`.pwov.frdrawn`).
+- En el Lookahead la tira de 8 puntos solo se ve con el «Asistente de prog.» encendido.

@@ -43,7 +43,7 @@ const gh = page => page.locator('#grid tr[data-gh="a3|k3"]');
 test('faltan programar: el interruptor muestra la fila fantasma y tocar un día la programa', async ({ page }) => {
   const errors = await openApp(page, { tab: 'look', extra: CAT });
   await page.evaluate(() => { U.piso = ''; U.lkGh = false; render(); });
-  await expect(page.locator('#fmxp')).toContainText('Faltan programar 1');
+  await expect(page.locator('#fmxp')).toContainText('Asistente de prog. · 1 por programar');
   await expect(gh(page)).toHaveCount(0);
   await page.click('#fmore');
   await page.click('#fmxp button');
@@ -55,7 +55,7 @@ test('faltan programar: el interruptor muestra la fila fantasma y tocar un día 
   await expect.poll(() => page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura' && x.ambId === 'a3' && x.sc === 'c3').map(x => x.days))).toEqual([['2026-10-05']]);
   await expect(gh(page)).toHaveCount(0);
   // la píldora sigue por las terminadas / «no aplica» aún programadas de a1 y a2 (tanda 2, C-15: antes se iba con la última fantasma)
-  await expect(page.locator('#fmxp button')).toContainText('Faltan programar 0 · 2 ✓ en Matriz');
+  await expect(page.locator('#fmxp button')).toContainText('Asistente de prog. · 2 ✓ en Matriz');
   // la matriz no cambia
   expect(await page.evaluate(() => (__dbGet('mamb', 'a3').c || {}).k3)).toBeUndefined();
   noErrors(errors, 'fila fantasma');
@@ -165,10 +165,11 @@ test('auditoría 4-5-9: con búsqueda el botón queda apagado y explica; hoy se 
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => Object.values(__dbAll('acts')).filter(x => x.name === 'Pintura').length)).toBe(0);
   await page.evaluate(() => { U.q = 'pintura'; render(); });
-  await expect(page.locator('#fmxp button.off')).toHaveCount(1);
+  // con búsqueda el asistente se puede apagar y encender (la revisión de flujos se ve), pero las filas fantasma no: avisa
   await page.click('#fmore');
   await page.click('#fmxp button', { force: true });
-  await expect(page.locator('#toast')).toContainText('Quita la búsqueda');
+  await page.click('#fmxp button', { force: true });
+  await expect(page.locator('#toast')).toContainText('quítalos para verlas');
   noErrors(errors, 'botón apagado');
 });
 

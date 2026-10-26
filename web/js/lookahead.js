@@ -96,7 +96,9 @@ function buildLookShell(main){
   $('#fwin').onchange=e=>{U.win=+e.target.value;saveUI();requestRender()};
   $('#fonly').onchange=e=>{U.onlyWin=e.target.checked;saveUI();requestRender()};
   $('#fpastc').onchange=e=>{U.showPast=e.target.checked;saveUI();requestRender()};
-  $('#fmxp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(!LK_GHOK){toast(b.title);return}U.lkGh=!U.lkGh;U.lbMore=false;GHT.clear();saveUI();requestRender()};
+  $('#fmxp').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.lkGh=!U.lkGh;U.lbMore=false;GHT.clear();saveUI();requestRender();
+    /* con búsqueda o filtros se enciende igual (la revisión de flujos se ve), pero las filas fantasma no: se avisa */
+    if(U.lkGh&&!LK_GHOK)toast('Asistente encendido. Las filas que faltan programar no se ven con búsqueda o filtros de semana, día, actividades, restricciones u observaciones: quítalos para verlas.')};
   $('#fpast').onclick=e=>{if(e.target.closest('button')){U.showPast=!U.showPast;U.lbMore=false;saveUI();requestRender()}};
   $('#fdone').onclick=e=>{if(e.target.closest('button')){U.showDone=!U.showDone;U.lbMore=false;saveUI();requestRender()}};
   $('#frestr').onchange=e=>{U.onlyRestr=e.target.checked;saveUI();requestRender()};
@@ -181,7 +183,8 @@ function renderLookInner(main){
   $('#fcoll').textContent=allIds.length&&allIds.every(id=>U.collapsed.includes(id))?'Desplegar todo':'Plegar todo';moreSync();
   {const fl=U.lkV==='flujo'&&lkFlowOk();$('#gw').hidden=fl;$('#flw').hidden=!fl;$$('#fview button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fl?'flujo':'grid')));
     if(fl){gridRows=null;LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;flowRender($('#flw'),days)}else renderGrid($('#grid'),days,dset)}
-  {const fm=$('#fmxp');if(fm){const n=LK_GHN;const hv=n||LK_MXT?`<button class="dpill mxpp${U.lkGh&&LK_GHOK?' on':''}${LK_GHOK?'':' off'}" aria-pressed="${!!U.lkGh}"${LK_GHOK?'':' aria-disabled="true"'} title="${LK_GHOK?`Actividades que la Matriz da como pendientes y no tienen días de hoy en adelante: ${U.lkGh?'se ven dentro de cada ambiente (clic para ocultarlas)':'clic para verlas dentro de cada ambiente y programarlas ahí'}`:'Quita la búsqueda y los filtros de semana, día, actividades, restricciones u observaciones para ver lo que falta programar (con piso, sector y subcontratistas sí se ven)'}">${U.lkGh&&LK_GHOK?'✓ ':''}Faltan programar <b>${n}</b>${LK_MXT?` · <b>${LK_MXT}</b> ✓ en Matriz`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
+  {const fm=$('#fmxp');if(fm){const n=LK_GHN;/* «Asistente de programación» (25-10-2026, antes «Faltan programar»): encendido muestra las filas fantasma de la Matriz y la revisión de flujos; apagado, nada */
+    const hv=!(U.cliv&&U.tab==='look')?`<button class="dpill mxpp${U.lkGh?' on':''}" aria-pressed="${!!U.lkGh}" title="${U.lkGh?'Encendido: se ven las actividades que faltan programar (filas fantasma de la Matriz) y la revisión de flujos de cada ambiente. Clic para apagarlo.':'Clic para ver dentro de cada ambiente lo que falta programar según la Matriz y la revisión de flujos.'}${LK_GHOK?'':'\nCon búsqueda o filtros de semana, día, actividades, restricciones u observaciones no se ven las filas fantasma.'}">${U.lkGh?'✓ ':''}Asistente de prog.${n?` · <b>${n}</b> por programar`:''}${U.lkGh&&LK_MXT?` · <b>${LK_MXT}</b> ✓ en Matriz`:''}</button>`:'';if(fm.innerHTML!==hv)fm.innerHTML=hv}}
   {const fp=$('#fpast');const hv=LK_PAST?`<button class="dpill pastp" title="Sus días ya pasaron y no tienen nada programado desde el ${fmtD(days[0].d)}. No se borran: vuelven a verse al programarles un día.">${LK_PAST} vencida${LK_PAST>1?'s':''} oculta${LK_PAST>1?'s':''} · Ver</button>`:U.showPast?'<button class="dpill pastp">Ocultar vencidas</button>':'';if(fp.innerHTML!==hv)fp.innerHTML=hv}
   {const fd=$('#fdone');const hv=LK_DONE?`<button class="dpill pastp" title="La Matriz las tiene confirmadas como Terminado o No aplica y no tienen días de hoy en adelante. No se borran: siguen en el historial y el PPC.">${LK_DONE} terminada${LK_DONE>1?'s':''} oculta${LK_DONE>1?'s':''} · Ver</button>`:U.showDone?'<button class="dpill pastp">Ocultar terminadas</button>':'';if(fd&&fd.innerHTML!==hv)fd.innerHTML=hv}
   moreSync();
@@ -226,7 +229,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
   if(LKQT.v!==DV){LKQT.m=new WeakMap();LKQT.v=DV}
   /* (auditoría de código 08/10, L3) lo de cada día que no depende de la fila (clases, fecha, si ya pasó) se calcula una vez por dibujo */
   const DI=days.map(x2=>({pre:'d'+(isWork(x2.d)?'':' hol'),post:(x2.i===0?' wk0':'')+(x2.d===today?' tdy':'')+(x2.d===U.day?' dsel':'')+(typeof hitDayCls==='function'?hitDayCls(x2.d):''),f:fmtD(x2.d),past:x2.d<=today}));
-  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';const FSTRIP=!CV&&!(U.ver&&U.verMode==='ver')&&typeof frevStripMap==='function'?frevStripMap():null;const PERS=U.qmode==='personal'&&!CV;const H1=PERS&&scSel().length===1?scSel()[0]:'';const HIS=H1?new Map(days.map(x=>[x.d,0])):null;let HNR=0;
+  const nd=days.length;const ro=canWrite&&!PM()?'':' readonly';const roS=CV?' readonly':ro;const QM=U.qmode==='metrado';/* la tira de flujos solo con el «Asistente de programación» encendido (25-10-2026) */const FSTRIP=U.lkGh&&!CV&&!(U.ver&&U.verMode==='ver')&&typeof frevStripMap==='function'?frevStripMap():null;const PERS=U.qmode==='personal'&&!CV;const H1=PERS&&scSel().length===1?scSel()[0]:'';const HIS=H1?new Map(days.map(x=>[x.d,0])):null;let HNR=0;
   /* (auditoría de código 08/10, L2) el HTML de cada fila se arma recién cuando se pinta (LkRow): en el Lookahead grande, solo
      las filas visibles. Lo que la fila lee de afuera se fija aquí (o lo repone lkCtx al armarla después, al desplazarse). */
   const ctx=lkCtx();
