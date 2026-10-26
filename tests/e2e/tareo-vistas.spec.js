@@ -291,7 +291,9 @@ test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e imp
   expect(jw.getCell('I300').dataValidation.type).toBe('list'); // también en filas nuevas
   const aoa = XLSX.utils.sheet_to_json(wb.Sheets['Lista de partidas'], { header: 1, defval: '' });
   const fila = cod => aoa.findIndex(r => r[1] === cod);
-  expect(aoa[fila('10.10')]).toEqual(['', '10.10', 'Encofrado de escaleras', 'm2', 10, 25, 2.5, 'CD-10.10', 'Activa', 'Sí']);
+  const J0 = new ExcelJS.Workbook(); await J0.xlsx.load(buf); const jw0 = J0.getWorksheet('Lista de partidas');
+  expect(aoa[fila('10.10')]).toEqual(['', '10.10', 'Encofrado de escaleras', 'm2', 10, 25, 2.5, 'CD-10.10', 'Activa', 'Sí', 'No']);
+  expect(jw0.getCell('K5').dataValidation.formulae).toEqual(['"Sí,No"']); // BLOQUEADA con lista
   let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
   await fc.setFiles({ name: 'partidas.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: buf });
   await expect(page.locator('#tpiEq')).toHaveText('5');
@@ -299,12 +301,12 @@ test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e imp
   await page.click('#lqm [data-lqx]');
   // editar en el Excel: metrado de 10.05, HH de 2.01 vacía (no cambia), 2.02 inactiva, 10.10 cambia de nombre, se borra la fila 10.38 y se agrega 10.39
   const E = aoa.map(r => r.slice());
-  E[fila('10.05')][4] = 400; E[fila('2.01')][5] = ''; E[fila('2.02')][8] = 'Inactiva'; E[fila('10.10')][2] = 'Encofrado de escaleras y rampas';
+  E[fila('10.05')][4] = 400; E[fila('2.01')][5] = ''; E[fila('2.01')][10] = 'Sí'; E[fila('2.02')][8] = 'Inactiva'; E[fila('10.10')][2] = 'Encofrado de escaleras y rampas';
   E.splice(fila('10.38'), 1, ['', '10.39', 'Curado de losas', 'm2', 50, '', '', '', '', 'No']);
   [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#tpcImp')]);
   await fc.setFiles({ name: 'partidas2.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: xlsxBuf('Lista de partidas', E) });
   await expect(page.locator('#tpiNew')).toHaveText('1');
-  await expect(page.locator('#tpiChg')).toHaveText('3');
+  await expect(page.locator('#tpiChg')).toHaveText('4');
   await expect(page.locator('#tpiRen')).toContainText('Encofrado de escaleras → Encofrado de escaleras y rampas');
   await expect(page.locator('#tpiFuera')).toContainText('10.38');
   await expect(page.locator('#tpiOk')).toBeDisabled(); // falta confirmar el cambio de nombre
@@ -313,7 +315,7 @@ test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e imp
   await expect.poll(() => page.evaluate(() => window.__dbGet('tpc', 'p10_39'))).toMatchObject({ cod: '10.39', nom: 'Curado de losas', act: true, dct: false, grpN: 'ESTRUCTURAS' });
   const db1 = await page.evaluate(() => window.__dbAll('tpc'));
   expect(db1.p10_05).toMatchObject({ met: 400, bloq: false });
-  expect(db1.p2_01).toMatchObject({ hhp: 25 }); // la celda vacía no borró las HH
+  expect(db1.p2_01).toMatchObject({ hhp: 25, bloq: true, bloqBy: 'tcos@obra.pe' }); // la celda vacía no borró las HH; bloqueada desde el Excel
   expect(db1.p2_02.act).toBe(false);
   expect(db1.p10_10).toMatchObject({ nom: 'Encofrado de escaleras y rampas', dct: true });
   expect(db1.p10_38).toMatchObject({ act: true, nom: 'Concreto de solado' }); // la fila borrada no toca la partida
@@ -326,6 +328,7 @@ test('Partidas: costos mantiene las partidas (editar y bloquear); exportar e imp
   const db2 = await page.evaluate(() => window.__dbAll('tpc'));
   expect(db2.p10_05.met).toBe(10);
   expect(db2.p2_02.act).toBe(true);
+  expect(db2.p2_01.bloq).toBe(false); // deshacer también desbloquea
   expect(db2.p10_10.nom).toBe('Encofrado de escaleras');
   expect(Object.values(await page.evaluate(() => window.__dbAll('tpcbk')))[0].undo).toMatchObject({ by: 'tcos@obra.pe' });
   await expect(page.locator('#tpcUndo')).toBeHidden();
