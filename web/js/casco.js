@@ -39,20 +39,21 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
   /* catálogo */
   const cats=csCats();
   const exo=sel=>`<option value="">—</option>`+cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}${c.casa?' (casa)':''}</option>`).join('');
-  h+=`<div class="card"><h2>Catálogo de casco <span class="sub">Secuencia del tren: el generador usa el orden, el desfase y los días de cada partida</span></h2><div class="tscroll"><table class="t cscat"><thead><tr><th title="Orden en el tren">N.º</th><th>Partida</th><th>Grupo</th><th>Ejecutor</th><th>Und.</th><th title="Rendimiento por persona y día">Rend.</th><th title="Metrado típico por sector (se usa si el sector no tiene el suyo)">Metrado/sector</th><th title="Días desde el inicio del sector (estructura: desde el primer día del techo; albañilería: desde el inicio del piso)">Desfase</th><th title="Días que dura en cada sector">Días</th><th title="Vaciado de concreto: pide liberación de calidad">Vaciado</th><th title="Hito de entrega del sector a Arquitectura">Entrega</th>${ed?'<th></th>':''}</tr></thead><tbody>`;
-  if(!cats.length)h+=`<tr><td colspan="12" class="mu" style="padding:12px">Sin partidas todavía.</td></tr>`;
+  h+=`<div class="card"><h2>Catálogo de casco <span class="sub">Secuencia del tren: el generador usa el orden, el desfase y los días de cada partida</span></h2><div class="tscroll"><table class="t cscat"><thead><tr><th title="Orden en el tren">N.º</th><th>Partida</th><th>Grupo</th><th>Ejecutor</th><th>Und.</th><th title="Rendimiento por persona y día">Rend.</th><th title="Metrado por m² de planta: el asistente de sectorización lo multiplica por el área dibujada de cada sector">Ratio/m²</th><th title="Metrado típico por sector (se usa si el sector no tiene el suyo)">Metrado/sector</th><th title="Días desde el inicio del sector (estructura: desde el primer día del techo; albañilería: desde el inicio del piso)">Desfase</th><th title="Días que dura en cada sector">Días</th><th title="Vaciado de concreto: pide liberación de calidad">Vaciado</th><th title="Hito de entrega del sector a Arquitectura">Entrega</th>${ed?'<th></th>':''}</tr></thead><tbody>`;
+  if(!cats.length)h+=`<tr><td colspan="13" class="mu" style="padding:12px">Sin partidas todavía.</td></tr>`;
   for(const c of cats)h+=`<tr data-csc="${esc(c.id)}"><td><input class="ci csn" type="number" min="0" data-csf="tr" value="${c.tr??''}"${dis} aria-label="Orden de ${esc(c.name)}"></td><td><input class="ci" data-csf="name" value="${esc(c.name)}"${dis} aria-label="Nombre"></td>
     <td><select data-csf="grp"${dis} aria-label="Grupo">${CSG_ORD.map(g=>`<option value="${g}"${c.grp===g?' selected':''}>${CSG[g]}</option>`).join('')}</select></td>
     <td><select data-csf="sc"${dis} aria-label="Ejecutor">${exo(c.sc)}</select></td>
     <td><input class="ci csn" data-csf="und" value="${esc(c.und||'')}"${dis} aria-label="Unidad"></td>
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="rend" value="${c.rend??''}"${dis} aria-label="Rendimiento"></td>
+    <td><input class="ci csn" type="number" min="0" step="any" data-csf="rat" value="${c.rat??''}"${dis} aria-label="Ratio por m²"></td>
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="mets" value="${c.mets??''}"${dis} aria-label="Metrado por sector"></td>
     <td><input class="ci csn" type="number" min="0" max="60" data-csf="off" value="${c.off??0}"${dis} aria-label="Desfase en días"></td>
     <td><input class="ci csn" type="number" min="1" max="20" data-csf="dur" value="${c.dur??1}"${dis} aria-label="Días por sector"></td>
     <td><input type="checkbox" data-csf="vac"${c.vac?' checked':''}${dis} aria-label="Vaciado"></td>
     <td><input type="checkbox" data-csf="ent"${c.ent?' checked':''}${dis} aria-label="Entrega a Arquitectura"></td>
     ${ed?`<td><button class="ab" data-cs="catdel" data-id="${esc(c.id)}" title="Quitar del catálogo" aria-label="Quitar ${esc(c.name)}">&times;</button></td>`:''}</tr>`;
-  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':''}<span class="note">Los cambios se guardan al salir de cada casilla. Ejecutor «casa» se marca abajo.</span></div>`:''}</div>`;
+  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(c=>c.rat==null&&csRatKey(c))?'<button class="ib" data-cs="ratdef">Completar ratios por defecto</button>':''}<span class="note">Los cambios se guardan al salir de cada casilla. Ejecutor «casa» se marca abajo.</span></div>`:''}</div>`;
   /* ejecutores */
   h+=`<div class="card"><h2>Ejecutores <span class="sub">Cuadrillas de casa (con su capataz) o subcontratistas: el PPC se mide por ejecutor</span></h2><div class="pad"><div class="csexl">${cons.map(c=>`<label class="chk"><input type="checkbox" data-cs="casa" data-id="${c.id}"${c.casa?' checked':''}${dis}> <i class="csdot" style="--c:${esc(c.color)}"></i>${esc(c.name)} <span class="mu">${c.casa?'Casa':'Subcontratista'}</span></label>`).join('')||'<span class="mu">Agrégalos en Configuración › Subcontratistas.</span>'}</div>
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
@@ -67,7 +68,7 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
 
 /* ---------- catálogo: edición ---------- */
 function csCatSet(id,f,v){const c=MX.cat.get(id);if(!c)return;let val=v;
-  if(['tr','rend','mets','off','dur'].includes(f)){val=v===''?null:+v;if(val!=null&&!(val>=0)){toast('Escribe un número válido.');requestRender();return}if(f==='dur'&&val!=null&&val<1)val=1}
+  if(['tr','rend','mets','rat','off','dur'].includes(f)){val=v===''?null:+v;if(val!=null&&!(val>=0)){toast('Escribe un número válido.');requestRender();return}if(f==='dur'&&val!=null&&val<1)val=1}
   if(f==='name'){val=String(v||'').trim();if(!val){toast('La partida necesita un nombre.');requestRender();return}}
   fcol('mcat').doc(id).set({[f]:val,by:me.email,t:NOW()},{merge:true}).catch(e=>toast('No se pudo guardar: '+(e&&e.code||e)))}
 async function csCatAdd(){const n=await uiAsk({title:'Nueva partida del catálogo de casco',input:{label:'Nombre',placeholder:'Ej.: Curado de losa',required:true},ok:'Agregar'});if(!n)return;
@@ -75,7 +76,7 @@ async function csCatAdd(){const n=await uiAsk({title:'Nueva partida del catálog
   fcol('mcat').doc(id).set({ref:id,name:String(n).trim(),grp:'E',tr,off:0,dur:1,cl:'t',al:[mnk(n)],ord:tr,by:me.email,t:NOW()}).then(()=>toast('Partida agregada')).catch(e=>toast('No se pudo guardar: '+(e&&e.code||e)))}
 /** catálogo típico de casco (el de la obra de ejemplo, sin ejecutores): punto de partida para una obra nueva */
 async function csCatTip(){if(!csEd()||csCats().length)return;if(!(await uiAsk({title:'Cargar catálogo típico',text:`Se agregan ${CS_DEMO_CAT.length} partidas típicas (estructura, escalera, albañilería, tabiques, tarrajeo y entrega) con su secuencia, rendimientos y metrados de referencia. Luego asigna los ejecutores y ajusta los valores a tu obra.`,ok:'Cargar'})))return;
-  const b=db.batch(),t=NOW();CS_DEMO_CAT.forEach(([k,name,grp,,und,mets,rend,off,dur,vac,ent],i)=>b.set(fcol('mcat').doc('k-'+k),{ref:'k-'+k,name,grp,sc:'',und,mets,rend,off,dur,vac:!!vac,ent:!!ent,tr:i+1,ord:i+1,cl:'t',al:[mnk(name)],by:me.email,t},{merge:true}));
+  const b=db.batch(),t=NOW();CS_DEMO_CAT.forEach(([k,name,grp,,und,mets,rend,off,dur,vac,ent],i)=>b.set(fcol('mcat').doc('k-'+k),{ref:'k-'+k,name,grp,sc:'',und,mets,rend,rat:CS_RAT[k]??null,off,dur,vac:!!vac,ent:!!ent,tr:i+1,ord:i+1,cl:'t',al:[mnk(name)],by:me.email,t},{merge:true}));
   try{await b.commit();toast('Catálogo típico cargado')}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
 async function csCatDel(id){const c=MX.cat.get(id);if(!c)return;if(!(await uiAsk({title:'Quitar del catálogo',text:`«${c.name}» deja de usarse en el generador. Las actividades ya programadas no cambian.`,ok:'Quitar',tone:'warn'})))return;
   fcol('mcat').doc(id).set({arch:{t:NOW(),by:me.email,n:me.name||me.email}},{merge:true}).then(()=>toast('Quitada del catálogo')).catch(e=>toast('No se pudo: '+(e&&e.code||e)))}
@@ -105,7 +106,7 @@ async function csDemo(){if(!isAdmin||window.LPS_ENV!=='pruebas')return;if(csHasD
   const proj=S.meta.get('project')?{}:await csLpProject();W.push(['meta','project',{...proj,casco:true,cascoDemo:true,name:proj.name||P().name||'Obra · Casco'}]);
   CS_DEMO_CON.forEach(([id,name,color,casa,partida])=>W.push(['contractors',id,{name,color,casa,partida}]));
   const cid=k=>'k-'+k;
-  CS_DEMO_CAT.forEach(([k,name,grp,sc,und,mets,rend,off,dur,vac,ent],i)=>W.push(['mcat',cid(k),{ref:cid(k),name,grp,sc,und,mets,rend,off,dur,vac:!!vac,ent:!!ent,tr:i+1,ord:i+1,cl:'t',al:[mnk(name)],by,t}]));
+  CS_DEMO_CAT.forEach(([k,name,grp,sc,und,mets,rend,off,dur,vac,ent],i)=>W.push(['mcat',cid(k),{ref:cid(k),name,grp,sc,und,mets,rend,rat:CS_RAT[k]??null,off,dur,vac:!!vac,ent:!!ent,tr:i+1,ord:i+1,cl:'t',al:[mnk(name)],by,t}]));
   const LV=[{id:'n0',name:'Sótano',code:'SÓT',tc:'TS',pc:'PS'}];for(let n=1;n<=8;n++)LV.push({id:'n'+n,name:'Nivel '+n,code:'N'+n,tc:'T'+n,pc:'P'+n});
   const met=(s,k)=>{const c=CS_DEMO_CAT.find(x=>x[0]===k);return!c||c[5]==null?null:Math.round(c[5]*CS_DEMO_WA[s]*10)/10};
   LV.forEach((p,i)=>{W.push(['pisos',p.id,{name:p.name,code:p.code,tc:p.tc,pc:p.pc,order:i}]);
@@ -269,46 +270,95 @@ function csSecCard(){const ed=csEd(),L=pisos();const V=[...KSEC.values()].sort((
     ${V.map(v=>{const b=csBal(v);return`<tr><td><b>${esc(v.n||v.id)}</b>${v.note?`<div class="mu">${esc(v.note)}</div>`:''}</td><td>${esc(CSG[v.grp]||v.grp)}</td><td>${esc(nm(v.from))} a ${esc(nm(v.to))}</td><td>${v.k}</td><td><span class="csbal ${csBalCls(b.mx)}">±${Math.round(b.mx*100)}%</span></td>
       <td class="csrow"><button class="ib" data-cs="secv" data-id="${esc(v.id)}">${ed?'Abrir':'Ver'}</button></td></tr>`}).join('')||`<tr><td colspan="6" class="mu" style="padding:12px">Sin versiones. ${ed?'Crea la primera: define cuántos sectores y sus metrados, revisa el balance y aplícala a un rango de niveles.':''}</td></tr>`}
     </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="secnew">+ Nueva versión</button>${isAdmin?'<button class="ib" data-cs="lvnew">+ Niveles</button>':''}<span class="note">Luego dibuja cada sector sobre la lámina del nivel en Sectorización.</span></div>`:''}</div>`}
-function csSecOpen(id){const L=pisos();const v0=id?KSEC.get(id):null;const v=clone(v0)||{n:'Versión '+(KSEC.size+1),grp:'E',from:(L[0]||{}).id||'',to:(L[L.length-1]||{}).id||'',k:4,names:['S1','S2','S3','S4'],met:{}};const ed=csEd();
-  const m=document.createElement('div');m.className='lqm';m.id='cssm';document.body.appendChild(m);
+/* ratios por defecto (metrado por m² de planta; elegidos para un edificio típico de concreto armado en Lima, 26-10-2026): estructura por m²
+   de techo (planta de encofrado), albañilería por m² de piso (planta de arquitectura). Se ajustan en el catálogo. */
+const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
+const csRatKey=c=>{const k=String(c.ref||c.id||'').replace(/^k-/,'');if(CS_RAT[k]!=null)return k;const d=CS_DEMO_CAT.find(x=>mnk(x[1])===mnk(c.name));return d?d[0]:''};
+async function csRatDef(){if(!csEd())return;const L=csCats().filter(c=>c.rat==null&&csRatKey(c));if(!L.length){toast('Todas las partidas típicas ya tienen ratio.');return}
+  const b=db.batch();L.forEach(c=>b.set(fcol('mcat').doc(c.id),{rat:CS_RAT[csRatKey(c)],by:me.email,t:NOW()},{merge:true}));try{await b.commit();toast(`Ratios por defecto en ${L.length} partida(s)`)}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
+const csPolyA=P=>{let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P[i].x)*(P[j].y-P[i].y);return Math.abs(a/2)};
+const csUnflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
+const CS_SCOL=['#1D9E75','#BA7517','#7F77DD','#D4537E','#378ADD','#639922','#D85A30','#888780'];
+/** m² de cada sector dibujado (null si la lámina no tiene escala: no viene del módulo Planos) */
+function csAreas(v){const API=window.__plano;const l=API&&v.vista?API.LAM.get(v.vista):null;const mpp=l&&l.plb&&l.plb.mpp>0?l.plb.mpp:null;
+  return{mpp,a:Array.from({length:v.k},(_,i)=>{const g=(v.geo||{})[i];return g&&g.length>=6&&mpp?Math.round(csPolyA(csUnflat(g))*mpp*mpp*10)/10:null})}}
+/** metrados de las partidas con ratio: área del sector × ratio */
+function csMetFromAreas(v){const A=csAreas(v).a;if(!A.some(x=>x>0))return;v.met=v.met||{};for(const c of csCats(v.grp))if(c.rat>0){const old=v.met[c.id]||[];v.met[c.id]=A.map((a,i)=>a>0?Math.round(a*c.rat*10)/10:(old[i]??null))}}
+function csSecOpen(id){const L=pisos();const v0=id?KSEC.get(id):null;const v=clone(v0)||{n:'Versión '+(KSEC.size+1),grp:'E',from:(L[0]||{}).id||'',to:(L[L.length-1]||{}).id||'',k:4,names:['S1','S2','S3','S4'],met:{},geo:{}};const ed=csEd();
+  v.geo=v.geo||{};if(!v.ref)v.ref=v.from;const T={cur:0,tool:'',tmp:[]};
+  const m=document.createElement('div');m.className='lqm';m.id='cssm';m.innerHTML=`<div class="lqc cssec" role="dialog" aria-modal="true" aria-labelledby="csst"><h3 id="csst">Asistente de sectorización</h3><div class="csswrap"><div class="cssplan"><div class="cssmt" id="cssmt"></div><div class="cssmap" id="cssmap"></div></div><div class="cssside" id="cssside"></div></div>
+    <div class="csrow"><span class="note" style="flex:1">Dibuja cada sector sobre la lámina: el área sale con la escala del módulo Planos y las partidas con ratio calculan su metrado solas.</span><button class="ib" data-css="x">Cerrar</button>${ed?'<button class="ib" data-css="save">Guardar</button><button class="ib pri" data-css="apply">Guardar y aplicar a los niveles</button>':''}</div></div>`;
+  document.body.appendChild(m);const side=m.querySelector('#cssside'),mt=m.querySelector('#cssmt'),host=m.querySelector('#cssmap');
   const names=()=>Array.from({length:v.k},(_,i)=>(v.names&&v.names[i])||((v.grp==='A'?'A':'S')+(i+1)));
-  const draw=()=>{const cats=csCats(v.grp).filter(c=>c.und);const b=csBal({...v,names:names()});const dis=ed?'':' disabled';
+  /* ---- plano ---- */
+  const bases=()=>{const API=window.__plano;return API?API.basesOf(v.ref):[]};
+  const drawMap=()=>{const API=window.__plano;if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando el plano…</div>';if(typeof loadPlanoMod==='function')loadPlanoMod().then(()=>{if(window.__plano.ensureLam)window.__plano.ensureLam();setTimeout(redraw,300)}).catch(()=>{host.innerHTML='<div class="kemp">No se pudo cargar el plano.</div>'});return}
+    const B=bases();if(B.length&&!B.some(b=>b.id===v.vista))v.vista=(B.find(b=>b.plb)||B[0]).id;
+    const shapes=names().map((n,i)=>({id:'s'+i,kind:'a',pts:(v.geo||{})[i]||[],c:CS_SCOL[i%CS_SCOL.length],label:n,sel:i===T.cur&&!T.tool,op:.3,sop:.45}));
+    const o={pid:v.ref,vista:v.vista,shapes,canUp:false,draw:ed&&T.tool?T.tool:null,tmp:T.tool==='poly'?T.tmp:null,
+      edit:ed&&!T.tool&&(v.geo||{})[T.cur]?{pts:v.geo[T.cur]}:null,onEdit:pts=>{v.geo[T.cur]=pts;changed()},
+      onDrawn:pts=>{v.geo[T.cur]=pts;T.tool='';changed()},onPoly:pt=>{T.tmp=[...T.tmp,pt];drawMap()},
+      onPolyClose:()=>{if(T.tmp.length>=3){v.geo[T.cur]=T.tmp.flatMap(p=>[p.x,p.y])}T.tmp=[];T.tool='';changed()},
+      onPick:hit=>{if(hit&&/^s\d+$/.test(hit)){T.cur=+hit.slice(1);drawMap();drawTools()}}};
+    const r=API.ambMap(host,o);if(!r&&!host._csRetry){host._csRetry=1;setTimeout(()=>{host._csRetry=0;if(m.isConnected)drawMap()},500)}
+    const bl=B.find(b=>b.id===v.vista);if(bl&&!host._img){host._img=1;API.imgURL(bl,'f').then(()=>{if(m.isConnected)drawMap()}).catch(()=>{})}};
+  const drawTools=()=>{const B=bases();const ar=csAreas(v);const lv=L.map(p=>`<option value="${p.id}"${p.id===v.ref?' selected':''}>${esc(p.name)}</option>`).join('');
+    mt.innerHTML=`<label class="cssml">Nivel<select id="css_ref">${lv}</select></label>${B.length>1?`<label class="cssml">Lámina<select id="css_vis">${B.map(b=>`<option value="${b.id}"${b.id===v.vista?' selected':''}>${esc(b.name||b.esp||'Lámina')}</option>`).join('')}</select></label>`:''}
+      <span class="cssst">${names().map((n,i)=>`<button type="button" class="chip${i===T.cur?' on':''}" data-csst="${i}" style="--c:${CS_SCOL[i%CS_SCOL.length]}"><i class="csdot" style="--c:${CS_SCOL[i%CS_SCOL.length]}"></i>${esc(n)}${ar.a[i]!=null?` <b>${ar.a[i]} m²</b>`:(v.geo||{})[i]?' ✓':''}</button>`).join('')}</span>
+      ${ed?`<span class="seg"><button type="button" data-cstool="rect" class="${T.tool==='rect'?'on':''}" title="Arrastra un rectángulo">▭ Rectángulo</button><button type="button" data-cstool="poly" class="${T.tool==='poly'?'on':''}" title="Toca cada esquina; cierra tocando la primera, doble clic o Enter">⬠ Polígono</button></span>${(v.geo||{})[T.cur]?'<button type="button" class="ib" data-cstool="del">Borrar el dibujo</button>':''}`:''}
+      ${!B.length?'<span class="note">Este nivel no tiene lámina: agrégala en Sectorización (del módulo Planos).</span>':!ar.mpp?'<span class="note warn">Lámina sin escala: para áreas, tómala del módulo Planos.</span>':''}`};
+  /* ---- tabla ---- */
+  const drawSide=()=>{const cats=csCats(v.grp).filter(c=>c.und);const b=csBal({...v,names:names()});const ar=csAreas(v);const dis=ed?'':' disabled';
     const lv=sel=>L.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
-    m.innerHTML=`<div class="lqc cssec" role="dialog" aria-modal="true" aria-labelledby="csst"><h3 id="csst">Asistente de sectorización</h3>
-      <div class="csgf"><label>Nombre<input id="css_n" value="${esc(v.n||'')}"${dis}></label><label>Grupo<select id="css_g"${dis}>${['E','A'].map(g=>`<option value="${g}"${v.grp===g?' selected':''}>${CSG[g]}</option>`).join('')}</select></label>
+    const dA=ar.a.filter(x=>x>0),tA=dA.reduce((x,y)=>x+y,0),avA=dA.length>1?tA/dA.length:0;/* desviación entre los sectores ya dibujados */
+    side.innerHTML=`<div class="csgf"><label>Nombre<input id="css_n" value="${esc(v.n||'')}"${dis}></label><label>Grupo<select id="css_g"${dis}>${['E','A'].map(g=>`<option value="${g}"${v.grp===g?' selected':''}>${CSG[g]}</option>`).join('')}</select></label>
       <label>Desde<select id="css_from"${dis}>${lv(v.from)}</select></label><label>Hasta<select id="css_to"${dis}>${lv(v.to)}</select></label>
-      <label>Sectores<input id="css_k" type="number" min="1" max="12" value="${v.k}"${dis}></label><label>Nota<input id="css_note" value="${esc(v.note||'')}" placeholder="Ej.: juntas al tercio de la luz"${dis}></label></div>
-      <div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th>Und.</th>${names().map((n,i)=>`<th><input class="ci csn" data-cssn="${i}" value="${esc(n)}" aria-label="Nombre del sector ${i+1}"${dis}></th>`).join('')}<th title="Desviación máxima de esta partida">±</th></tr></thead><tbody>
-        ${cats.map(c=>{const r=(v.met||{})[c.id]||[];const vals=names().map((_,i)=>+r[i]||0);const av=vals.reduce((s,x)=>s+x,0)/(vals.length||1);const mx=Math.max(0,...vals.map(x=>av?Math.abs(x-av)/av:0));
-          return`<tr><td>${esc(c.name)}</td><td class="mu">${esc(c.und)}</td>${names().map((_,i)=>`<td><input class="ci csn" type="number" min="0" step="any" data-cssm="${esc(c.id)}:${i}" value="${r[i]??''}"${dis} aria-label="${esc(c.name)} en el sector ${i+1}"></td>`).join('')}<td><span class="csbal ${csBalCls(mx)}">${Math.round(mx*100)}%</span></td></tr>`}).join('')||`<tr><td colspan="${3+v.k}" class="mu">El catálogo no tiene partidas con unidad en este grupo.</td></tr>`}
+      <label>Sectores<input id="css_k" type="number" min="1" max="8" value="${v.k}"${dis}></label><label>Nota<input id="css_note" value="${esc(v.note||'')}" placeholder="Ej.: juntas al tercio de la luz"${dis}></label></div>
+      <div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th title="Metrado por m² de planta">Ratio</th>${names().map((n,i)=>`<th><input class="ci csn" data-cssn="${i}" value="${esc(n)}" aria-label="Nombre del sector ${i+1}"${dis}></th>`).join('')}<th title="Desviación máxima de esta partida">±</th></tr></thead><tbody>
+        <tr class="cssarea"><td><b>Área</b></td><td class="mu">m²</td>${ar.a.map(a=>`<td class="mono">${a!=null?`<b>${a}</b> <span class="csbal ${csBalCls(avA?(a-avA)/avA:0)}">${avA?((a-avA)/avA>=0?'+':'')+Math.round((a-avA)/avA*100)+'%':''}</span>`:'<span class="mu">—</span>'}</td>`).join('')}<td class="mono">${tA?Math.round(tA)+' m²':''}</td></tr>
+        ${cats.map(c=>{const r=(v.met||{})[c.id]||[];const vals=names().map((_,i)=>+r[i]||0);const av=vals.reduce((s,x)=>s+x,0)/(vals.length||1);const mx=Math.max(0,...vals.map(x=>av?Math.abs(x-av)/av:0));const auto=c.rat>0&&ar.a.some(a=>a>0);
+          return`<tr><td>${esc(c.name)} <span class="mu">${esc(c.und)}</span></td><td class="mono mu">${c.rat>0?c.rat:'—'}</td>${names().map((_,i)=>`<td><input class="ci csn${auto&&ar.a[i]>0?' csauto':''}" type="number" min="0" step="any" data-cssm="${esc(c.id)}:${i}" value="${r[i]??''}"${dis||(auto&&ar.a[i]>0?' readonly':'')} aria-label="${esc(c.name)} en el sector ${i+1}"></td>`).join('')}<td><span class="csbal ${csBalCls(mx)}">${Math.round(mx*100)}%</span></td></tr>`}).join('')||`<tr><td colspan="${3+v.k}" class="mu">El catálogo no tiene partidas con unidad en este grupo.</td></tr>`}
         <tr class="cssum"><td><b>Carga</b></td><td class="mu">pers·día</td>${b.hd.map((x,i)=>`<td class="mono"><b>${Math.round(x*10)/10}</b> <span class="csbal ${csBalCls(b.dev[i])}">${b.dev[i]>=0?'+':''}${Math.round(b.dev[i]*100)}%</span></td>`).join('')}<td><span class="csbal ${csBalCls(b.mx)}">${Math.round(b.mx*100)}%</span></td></tr></tbody></table></div>
-      <p class="note">La carga suma metrado ÷ rendimiento de cada partida: sectores balanceados (verde, ±10 %) permiten un tren parejo de un sector por día. Ámbar hasta ±20 %, rojo más.</p>
-      <div class="csrow"><span style="flex:1"></span><button class="ib" data-css="x">Cerrar</button>${ed?'<button class="ib" data-css="save">Guardar</button><button class="ib pri" data-css="apply">Guardar y aplicar a los niveles</button>':''}</div></div>`};
-  const read=()=>{if(!ed)return;v.n=$('#css_n').value.trim()||v.n;const g=$('#css_g').value;if(g!==v.grp){v.grp=g;v.names=null}v.from=$('#css_from').value;v.to=$('#css_to').value;v.k=Math.max(1,Math.min(12,+$('#css_k').value||1));v.note=$('#css_note').value.trim();
-    const nn=names();m.querySelectorAll('[data-cssn]').forEach(i=>{nn[+i.dataset.cssn]=i.value.trim()||nn[+i.dataset.cssn]});v.names=nn.slice(0,v.k);
-    const met={};m.querySelectorAll('[data-cssm]').forEach(i=>{const[c,k]=i.dataset.cssm.split(':');if(+k>=v.k)return;(met[c]=met[c]||[])[+k]=i.value===''?null:+i.value});v.met=met};
+      <p class="note">Carga = Σ metrado ÷ rendimiento de cada partida: lo que debe quedar parejo para un tren de un sector por día (verde ±10 %, ámbar ±20 %, rojo más). Con dibujo, las partidas con ratio se calculan del área (casillas en gris); las demás se escriben.</p>`};
+  const changed=()=>{csMetFromAreas(v);drawMap();drawTools();drawSide()};
+  const redraw=()=>{drawMap();drawTools();drawSide()};
+  const read=()=>{if(!ed)return;v.n=$('#css_n').value.trim()||v.n;const g=$('#css_g').value;if(g!==v.grp){v.grp=g;v.names=null}v.from=$('#css_from').value;v.to=$('#css_to').value;v.k=Math.max(1,Math.min(8,+$('#css_k').value||1));v.note=$('#css_note').value.trim();
+    const nn=names();m.querySelectorAll('[data-cssn]').forEach(i=>{nn[+i.dataset.cssn]=i.value.trim()||nn[+i.dataset.cssn]});v.names=nn.slice(0,v.k);if(T.cur>=v.k)T.cur=0;
+    const met={...(v.met||{})};m.querySelectorAll('[data-cssm]').forEach(i=>{const[c,k]=i.dataset.cssm.split(':');if(+k>=v.k)return;(met[c]=(met[c]||[]).slice())[+k]=i.value===''?null:+i.value});v.met=met};
+  redraw();
   /* redibujar después del evento (no dentro de un blur) y devolver el foco a la casilla en la que estaba */
-  draw();let rd=false;m.addEventListener('change',()=>{read();if(rd)return;rd=true;setTimeout(()=>{rd=false;const ae=document.activeElement;const key=ae&&m.contains(ae)?(ae.dataset.cssm?'[data-cssm="'+ae.dataset.cssm+'"]':ae.dataset.cssn?'[data-cssn="'+ae.dataset.cssn+'"]':ae.id?'#'+ae.id:''):'';
-    if(!m.isConnected)return;draw();if(key){const n=m.querySelector(key);if(n)n.focus()}},0)});
-  const close=()=>m.remove();m.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  let rd=false;side.addEventListener('change',()=>{read();if(rd)return;rd=true;setTimeout(()=>{rd=false;const ae=document.activeElement;const key=ae&&side.contains(ae)?(ae.dataset.cssm?'[data-cssm="'+ae.dataset.cssm+'"]':ae.dataset.cssn?'[data-cssn="'+ae.dataset.cssn+'"]':ae.id?'#'+ae.id:''):'';
+    if(!m.isConnected)return;csMetFromAreas(v);drawSide();drawTools();drawMap();if(key){const n=side.querySelector(key);if(n)n.focus()}},0)});
+  mt.addEventListener('change',e=>{if(e.target.id==='css_ref'){v.ref=e.target.value;v.vista='';host._img=0;host._fk='';T.tmp=[];redraw()}if(e.target.id==='css_vis'){v.vista=e.target.value;host._img=0;changed()}});
+  mt.addEventListener('click',e=>{const st=e.target.closest('[data-csst]');if(st){T.cur=+st.dataset.csst;T.tool='';T.tmp=[];drawMap();drawTools();return}
+    const tl=e.target.closest('[data-cstool]');if(!tl)return;const k=tl.dataset.cstool;if(k==='del'){delete v.geo[T.cur];changed();return}T.tool=T.tool===k?'':k;T.tmp=[];drawMap();drawTools()});
+  const close=()=>{m.remove()};m.addEventListener('keydown',e=>{if(e.key==='Escape'){if(T.tool){T.tool='';T.tmp=[];drawMap();drawTools()}else close()}
+    if(e.key==='Enter'&&T.tool==='poly'&&T.tmp.length>=3){e.preventDefault();v.geo[T.cur]=T.tmp.flatMap(p=>[p.x,p.y]);T.tmp=[];T.tool='';changed()}});
   m.addEventListener('click',async e=>{if(e.target===m){close();return}const b=e.target.closest('[data-css]');if(!b)return;const k=b.dataset.css;if(k==='x'){close();return}read();
     const L2=pisos(),i0=L2.findIndex(p=>p.id===v.from),i1=L2.findIndex(p=>p.id===v.to);if(i0<0||i1<i0){toast('El rango de niveles no es válido.');return}
-    const vid=id||uid('ks');const doc={n:v.n,grp:v.grp,from:v.from,to:v.to,k:v.k,names:v.names,met:v.met||{},note:v.note||'',by:me.email,t:NOW()};
+    const vid=id||uid('ks');const geo={};for(let i=0;i<v.k;i++)if((v.geo||{})[i])geo[i]=v.geo[i];
+    const doc={n:v.n,grp:v.grp,from:v.from,to:v.to,k:v.k,names:v.names||names(),met:v.met||{},note:v.note||'',ref:v.ref||'',vista:v.vista||'',geo,area:csAreas(v).a,by:me.email,t:NOW()};
     try{await fcol('ksec').doc(vid).set(doc)}catch(er){toast('No se pudo guardar: '+(er&&er.code||er));return}
     if(k==='save'){toast('Versión guardada');close();return}close();csSecApply({...doc,id:vid})})}
 /** aplica una versión: en cada nivel del rango deja los sectores del grupo con estos nombres y metrados. Los sectores que sobran se
     archivan solo si no tienen actividades (si tienen, se avisan y quedan: el ingeniero mueve sus actividades primero). */
-async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.from),i1=L.findIndex(p=>p.id===v.to);const ops=[];let keep=0,nw=0,mod=0;const t=NOW();
+/** lámina base del nivel donde va el dibujo de la versión: la misma lámina de referencia, o una que use el mismo plano del módulo Planos (escalada si mide distinto) */
+function csGeoTarget(v,pid){const API=window.__plano;if(!API||!v.vista||!v.geo)return null;const ref=API.LAM.get(v.vista);if(!ref)return null;if(ref.pisoId===pid)return{id:ref.id,k:1};
+  const b=API.basesOf(pid).find(x=>x.plb&&ref.plb&&x.plb.id===ref.plb.id);return b?{id:b.id,k:ref.w>0?b.w/ref.w:1}:null}
+async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.from),i1=L.findIndex(p=>p.id===v.to);const ops=[];let keep=0,nw=0,mod=0,geoN=0;const t=NOW();
+  if(v.geo&&Object.keys(v.geo).length&&typeof loadPlanoMod==='function'){try{await loadPlanoMod();if(window.__plano.ensureLam)window.__plano.ensureLam()}catch(e){}}
   const used=new Set([...S.act.values()].filter(x=>!x._del).map(x=>x.ambId));
   for(let i=i0;i<=i1;i++){const p=L[i];let sec=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp);
     if(!sec){const sid=p.id+'-'+v.grp.toLowerCase();sec={id:sid,pisoId:p.id,code:v.grp==='A'?'A':'E',name:v.grp==='A'?'Albañilería':'Estructura',grp:v.grp,order:v.grp==='A'?3:1};ops.push(op('sectors',sid,{pisoId:sec.pisoId,code:sec.code,name:sec.name,grp:sec.grp,order:sec.order}))}
     const cur=[...S.amb.values()].filter(a=>a.sectorId===sec.id).sort(byOrder);
     for(let s=0;s<v.k;s++){const met={};for(const[c,arr]of Object.entries(v.met||{}))if(arr&&arr[s]!=null)met[c]=+arr[s];
       const nmS=v.names[s]||((v.grp==='A'?'A':'S')+(s+1));const nx={sectorId:sec.id,code:nmS,name:'Sector '+nmS.replace(/^S/,''),order:s+1,met,ksec:v.id};
+      /* el dibujo del asistente pasa a la lámina base del nivel que usa el mismo plano del módulo Planos (o a la misma lámina) */
+      const tg=csGeoTarget(v,p.id);const g0=(v.geo||{})[s];if(tg&&g0){const k=tg.k;nx.geo={...((cur[s]&&cur[s].geo)||{}),[tg.id]:g0.map(x=>Math.round(x*k*10)/10)};geoN++}
       if(cur[s]){const o={...cur[s]};delete o.id;const n2={...o,...nx};if(canon(n2)!==canon(o)){ops.push(op('ambientes',cur[s].id,n2));mod++}}else{ops.push(op('ambientes',uid('am'),nx));nw++}}
     for(const a of cur.slice(v.k)){if(used.has(a.id)){keep++;continue}const o={...a};delete o.id;ops.push(op('ambientes',a.id,{...o,arch:{t,by:me.email,n:me.name||me.email}}))}}
   if(!ops.length){toast('Los niveles ya tenían esta sectorización.');return}
-  apply(ops,`Sectorización «${v.n}» aplicada`);toast(`Sectorización aplicada: ${nw} sector(es) nuevos, ${mod} actualizados${keep?` · ${keep} sobrante(s) con actividades quedan: mueve sus actividades y vuelve a aplicar`:''}`,'Deshacer',undo)}
+  apply(ops,`Sectorización «${v.n}» aplicada`);toast(`Sectorización aplicada: ${nw} sector(es) nuevos, ${mod} actualizados${geoN?` · ${geoN} con su dibujo en la lámina`:''}${keep?` · ${keep} sobrante(s) con actividades quedan: mueve sus actividades y vuelve a aplicar`:''}`,'Deshacer',undo)}
 /** agrega niveles (sótano o pisos) al final: nombre, techo y piso */
 async function csLevelsAdd(){if(!isAdmin)return;const n=await uiAsk({title:'Agregar niveles',input:{label:'¿Cuántos niveles agregar al final?',placeholder:'Ej.: 8',required:true},ok:'Agregar'});const k=Math.min(60,Math.max(0,parseInt(n,10)||0));if(!k)return;
   const L=pisos();let base=L.length;const ops=[];for(let i=0;i<k;i++){const num=base+i+(L.some(p=>/s[oó]t/i.test(p.name))?0:1);const id=uid('n');
@@ -320,7 +370,7 @@ async function csLevelsAdd(){if(!isAdmin)return;const n=await uiAsk({title:'Agre
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
-  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='catdel')csCatDel(b.dataset.id);
+  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
   else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd()});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   const f=t.dataset&&t.dataset.csf;if(f){const r=t.closest('[data-csc]');if(r&&csEd())csCatSet(r.dataset.csc,f,t.type==='checkbox'?t.checked:t.value);return}

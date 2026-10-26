@@ -4676,7 +4676,20 @@ tr.cssum td.lab{font-family:var(--f-ui);font-size:12px}
 .csn{width:72px}
 .csexl{display:flex;flex-wrap:wrap;gap:6px 18px}
 .csdot{display:inline-block;width:10px;height:10px;border-radius:5px;background:var(--c);margin-right:2px}
-.csgen,.cssec{width:min(760px,100%)}
+.csgen{width:min(760px,100%)}
+.lqc.cssec{width:min(1240px,100%);max-height:calc(100vh - 24px)}
+.csswrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;min-height:0}
+@media (max-width:900px){.csswrap{grid-template-columns:minmax(0,1fr)}}
+.cssplan{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cssmt{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.cssml{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+.cssml select{height:32px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel2);color:var(--ink);max-width:180px}
+.cssst{display:inline-flex;flex-wrap:wrap;gap:4px}
+.cssmap{position:relative;height:min(58vh,560px);border:1px solid var(--line);border-radius:var(--r-card,12px);overflow:hidden;background:var(--panel2)}
+.cssside{min-width:0;display:flex;flex-direction:column;gap:8px}
+.cssmt .note.warn{color:var(--warn)}
+tr.cssarea td{background:var(--accent-soft)}
+.csmet input.csauto{background:var(--panel2);color:var(--ink2)}
 .csgf{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px}
 .csgf label{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
 .csgf input,.csgf select{height:var(--h-ctl,34px);border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel2);padding:0 8px;min-width:0;color:var(--ink)}
