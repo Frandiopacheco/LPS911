@@ -102,7 +102,7 @@ const MXNA = [
   ['mcat', 'k2', { name: 'Entubado empotrado', sc: 'c2', cl: 't', al: ['entubado empotrado'], ord: 20 }],
   ['mamb', 'a1', { c: { k2: 'n' }, by: 'ing@obra.pe', t: 1 }],   // Matriz: «Entubado empotrado» NO APLICA en Dpto 101 (confirmado)
 ];
-async function publicar(page) { await page.locator('#mpanel [data-pub]').first().click(); await page.locator('#pop [data-do="si"]').click(); }
+async function publicar(page) { await page.locator('#mbar [data-pub]').first().click(); await page.locator('#pop [data-do="si"]').click(); }
 
 test('DAT-02 · renombrar un SC no cambia el nombre en las semanas ya congeladas (Plan semanal e Indicadores de la semana 57)', async ({ page }) => {
   /* la semana 57 se congeló con el nombre de entonces (scn, C-29); la 58 se congela ahora desde la página */

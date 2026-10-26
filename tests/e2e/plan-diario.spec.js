@@ -86,7 +86,7 @@ test('reunión: «sin interferencia» quita el achurado del cruce', async ({ pag
 test('revisión previa: «🔍 Revisar interferencias» recorre los cruces y lo revisado queda plegado y se puede reabrir', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
   await page.click('#wtoday');
-  await expect(page.locator('#mrst .mrdy')).toContainText('Listo para la reunión');
+  await expect(page.locator('#mbar #mrdyb')).toContainText('Listo'); // 26-10-2026: el estado va en la barra
   const n0 = await page.evaluate(() => { window.__plano; return document.querySelectorAll('#mcxb .mcxh').length ? +document.querySelector('#mcxb .mcxh b').textContent : 0; });
   expect(n0).toBeGreaterThan(0);
   await page.click('#mbar [data-pm="cx"]'); // oct 2026: la pestaña Cruces aparece en el modo Interferencias
@@ -121,7 +121,7 @@ test('resaltar solo al subcontratista elegido viene marcado y se mantiene al cam
 const T1 = ['acts', 's9', { ambId: 'a1', sc: 'c1', name: 'Pruebas hidráulicas', und: 'pto', days: [MANANA], order: 15 }];
 const pdz = page => page.evaluate(() => Object.values(window.__dbAll('pdz')));
 /** «Publicar plan»: lo decidido pasa al lookahead */
-async function publicar(page, sel = '#mpanel [data-pub]') { await page.locator(sel).first().click(); await page.locator('#pop [data-do="si"]').click(); }
+async function publicar(page, sel = '#mbar [data-pub]') { await page.locator(sel).first().click(); await page.locator('#pop [data-do="si"]').click(); }
 
 test('No va › restricción que no se libera: se registra y se mueve todo el tren del ambiente', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
@@ -575,7 +575,7 @@ test('publicar el plan: un borrador se descarta sin tocar el lookahead y publica
   await expect.poll(async () => (await act(page, 'e0')).days).not.toContain(MANANA);
   await page.locator('#toast button', { hasText: 'Deshacer' }).click();
   await expect.poll(async () => (await act(page, 'e0')).days).toEqual([HOY, MANANA]);
-  await expect(page.locator('#mpanel [data-pub]')).toBeVisible();
+  await expect(page.locator('#mbar [data-pub]')).toBeVisible();
   // ya publicado, el plan queda cerrado: se guarda la foto de lo comprometido y no se reprograma
   await publicar(page);
   await expect.poll(() => page.evaluate(d => Object.keys(window.__dbGet('dplan', d + '_p1')?.ids || {}).sort(), MANANA)).toEqual(['e1']); // e0 vuelve a salir: al deshacer, su reprogramación quedó como borrador y se publicó de nuevo
@@ -804,4 +804,35 @@ test('ir y volver al Plan diario varias veces: un Ctrl+Z deshace una sola vez', 
   expect(await novas()).toBe(1); // una sola vez: la otra «No va» sigue
   expect(await page.evaluate(() => window.__toasts.filter(t => /nada que deshacer/.test(t)).length)).toBe(0);
   noErrors(errors, 'Ctrl+Z tras volver al plan');
+});
+
+test('paneles plegados por defecto: columnas con el nombre, se despliegan al tocarlas y vuelven a plegarse al entrar (26-10-2026)', async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 800 });
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.evaluate(() => { window.__pfOpen = false; window.__plano.pfReset(); render(); });
+  // plegados: la izquierda es una pestaña «Plan del día», la derecha una columna con una pestaña por panel
+  await expect(page.locator('#mpanel.fold #mpan')).toContainText('Plan del día');
+  await expect(page.locator('#mrs.rail.shut .mrtab').first()).toBeVisible();
+  await expect(page.locator('#mpanel .mp-it')).toHaveCount(0);
+  // publicar y «Listo» están en la barra aunque los paneles estén plegados
+  await expect(page.locator('#mbar [data-pub]')).toContainText('Publicar plan');
+  await expect(page.locator('#mbar #mrdyb')).toContainText('Listo');
+  await page.click('#mbar #mrdyb');
+  await expect(page.locator('#pop .mrdyp')).toContainText('Listo para la reunión');
+  await page.keyboard.press('Escape');
+  // tocar la pestaña abre el panel; tocarla otra vez lo pliega
+  const t = page.locator('#mrs .mrtab').first();
+  await t.click();
+  await expect(page.locator('#mrs')).not.toHaveClass(/shut/);
+  await expect(t).toHaveClass(/on/);
+  await t.click();
+  await expect(page.locator('#mrs')).toHaveClass(/shut/);
+  await page.click('#mpan');
+  await expect(page.locator('#mpanel .mp-it').first()).toBeVisible();
+  // al salir y volver a entrar, arrancan plegados otra vez
+  await page.evaluate(() => goTab('look'));
+  await page.evaluate(() => goTab('mapa'));
+  await expect(page.locator('#mpanel.fold #mpan')).toBeVisible();
+  await expect(page.locator('#mrs')).toHaveClass(/shut/);
+  noErrors(errors, 'paneles plegados');
 });
