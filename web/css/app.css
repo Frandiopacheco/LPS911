@@ -4780,3 +4780,40 @@ html.csfs-on{overflow:hidden}
 .csszdv button{min-width:40px;justify-content:center}
 .csszcmp td,.csszcmp th{padding:5px 8px;vertical-align:top}
 @media (max-width:900px){.csszb{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,42vh)}.csszb.noside{grid-template-rows:minmax(0,1fr)}.cssz .csfside{border-left:0;border-top:1px solid var(--line)}}
+/* Casco: catálogo a todo el ancho y vista Tren (27-10-2026) */
+.wrap.wrapw{max-width:none}
+.cscat tr.csgrow td{background:var(--panel2);font-weight:700;color:var(--ink2);padding:6px 10px}
+.cscat td.csinc{white-space:nowrap}.cscat td.csinc .mu{margin-left:6px;font-size:12px}
+.csszmv{white-space:nowrap}.csszmv .ab{min-width:26px}.csszmv .ab:disabled{opacity:.3}
+.cstrb{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:12px}
+.cstrs{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,12px);padding:12px 14px;overflow-x:auto}
+.cstrhd{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:10px}
+.cstrg{margin-bottom:12px}
+.cstrrow{display:flex;align-items:center;min-height:38px;border-bottom:1px solid var(--line)}
+.cstrhdr{min-height:26px;border-bottom:1px solid var(--line)}
+.cstrlab{flex:none;width:340px;display:flex;align-items:center;gap:6px;padding-right:8px;position:sticky;left:0;background:var(--panel);z-index:1}
+.cstrn{flex:1;min-width:0;display:grid}.cstrn b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cstrn small{color:var(--muted);font-size:11.5px}
+.cstrmv{display:flex;flex-direction:column}.cstrmv .ab{min-width:24px;height:16px;line-height:14px;font-size:10px;padding:0}.cstrmv .ab:disabled{opacity:.3}
+.cstrf{border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;font-size:11.5px;padding:3px 6px;cursor:pointer}
+.cstrf.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.cstrtrk{position:relative;height:30px;flex:none}
+.cstrhdr .cstrtrk{height:20px}.cstrhdr .cstrtrk span{position:absolute;top:2px;text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
+.cstrrow:not(.cstrhdr) .cstrtrk{background-image:linear-gradient(to right,var(--line) 1px,transparent 1px);background-size:46px 100%}
+.cstrbar{position:absolute;top:4px;height:22px;border-radius:6px;background:color-mix(in srgb,var(--c) 28%,transparent);border:1.5px solid var(--c);color:var(--ink);font-size:11.5px;font-weight:600;display:flex;align-items:center;padding:0 6px;box-sizing:border-box;touch-action:none;user-select:none}
+.cstrbar.ed{cursor:grab}.cstrbar.drag{cursor:grabbing;box-shadow:var(--sh-2);z-index:2}
+.cstrbar.ov{border-style:dashed}
+.cstrrz{position:absolute;right:-2px;top:0;bottom:0;width:10px;cursor:ew-resize}
+.cstrsum{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:8px;font-size:13px}
+.cstrlob{overflow-x:auto}
+.cstrsvg{display:block}
+.cstrsvg .cstrlv{font-size:11px;fill:var(--ink2);font-family:var(--f-mono)}
+.cstrsvg .cstrtk{font-size:10.5px;fill:var(--muted)}
+.cstrsvg .cstrgl{stroke:var(--line)}
+.cstrsvg .cstrhit{stroke:var(--bad);stroke-width:2;stroke-dasharray:6 4}
+.cstrsvg .cstrhtx{font-size:11px;fill:var(--bad);font-weight:600}
+.cstrleg{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px}
+.cstrleg i{display:inline-block;width:14px;height:4px;border-radius:2px;background:var(--c);margin-right:5px;vertical-align:middle}
+@media (max-width:760px){.cstrlab{width:200px}}
+.cstrs{flex:none}
+.csszr input.ci,.csszr input[type=date]{height:32px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel2);color:var(--ink);padding:0 8px}
+.csszr input.ci.csn{width:64px}
