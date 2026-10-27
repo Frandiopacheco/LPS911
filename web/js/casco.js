@@ -37,25 +37,25 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
   if(isAdmin){h+=`<div class="csrow">${!S.meta.get('project')?`<button class="ib pri" data-cs="init">Crear Casco con la configuración de Last Planner</button>`:''}${window.LPS_ENV==='pruebas'&&empty?`<button class="ib${S.meta.get('project')?' pri':''}" data-cs="demo">Cargar obra de ejemplo</button>`:''}${window.LPS_ENV==='pruebas'&&S.meta.get('project')&&(!empty||S.con.size||KSEC.size)?`<span style="flex:1"></span><button class="ib warn" data-cs="vaciar" title="Solo en la copia de prueba: borra definitivamente niveles, sectores, actividades y lo registrado en ellos para empezar desde cero">Vaciar Casco…</button>`:''}</div>`}
   h+=`<p class="note">Cada nivel tiene tres grupos: <b>Estructura</b> (planta de encofrado del techo), <b>Frentes sueltos</b> (escalera) y <b>Albañilería</b> (planta de arquitectura del piso). Lo que divide o atraviesa ambientes va aquí por sector; el acabado de cada cara va por ambiente en Last Planner.</p></div></div>`;
   /* catálogo (27-10-2026, con el dueño): solo lo que es de la partida. Incidencia = metrado por m² de planta (kg/m², m²/m², m³/m²);
-     productividad en und/persona·día y en HH/und (jornada de Configuración › Casco). El tren (orden, entra el día, días, vaciado,
-     entrega) se arma en Sectorización › Tren. */
+     productividad en und/persona·día y en HH/und (jornada de Configuración › Casco). Desde el 27-10-2026 la incidencia se edita en
+     el asistente (Sectorización › Sectores) y el tren se arma en el Lookahead › Tren (casco-tren.js). */
   const cats=csCats(),jor=csJor();
   const exo=sel=>`<option value="">—</option>`+cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}${c.casa?' (casa)':''}</option>`).join('');
-  h+=`<div class="card"><h2>Catálogo de casco <span class="sub">Qué es cada partida, cuánto hay por m² de planta y cuánto rinde una persona; la secuencia del tren se arma en Sectorización › Tren</span></h2>
+  h+=`<div class="card"><h2>Catálogo de casco <span class="sub">Qué es cada partida, quién la hace y cuánto rinde una persona. Las incidencias por m² se editan en Sectorización › Sectores; el tren se arma en el Lookahead › Tren</span></h2>
     <div class="pad csrow"><label class="cssml">Jornada <input class="ci csn" type="number" min="1" max="14" step="0.5" data-cs="jor" value="${jor}"${isAdmin?'':' disabled'} aria-label="Horas por día"> h por día</label><span class="note">HH/und = jornada ÷ rendimiento. Escribe el que conozcas: el otro se calcula.</span></div>
-    <div class="tscroll"><table class="t cscat"><thead><tr><th>Partida</th><th>Grupo</th><th>Ejecutor</th><th>Und.</th><th title="Cuánto metrado de la partida hay por cada m² de planta (techo para estructura, piso para albañilería). Área del sector × incidencia = metrado del sector">Incidencia por m² de planta</th><th title="Lo que hace una persona en un día">Rendimiento <span class="mu">und/persona·día</span></th><th title="Horas-hombre para una unidad (jornada ÷ rendimiento)">HH/und</th>${ed?'<th></th>':''}</tr></thead><tbody>`;
-  if(!cats.length)h+=`<tr><td colspan="8" class="mu" style="padding:12px">Sin partidas todavía.</td></tr>`;
+    <div class="tscroll"><table class="t cscat"><thead><tr><th>Partida</th><th>Grupo</th><th>Ejecutor</th><th>Und.</th><th title="Vaciado de concreto: pide liberación de Calidad">Vaciado</th><th title="Hito de entrega del sector a Arquitectura">Entrega</th><th title="Lo que hace una persona en un día">Rendimiento <span class="mu">und/persona·día</span></th><th title="Horas-hombre para una unidad (jornada ÷ rendimiento)">HH/und</th>${ed?'<th></th>':''}</tr></thead><tbody>`;
+  if(!cats.length)h+=`<tr><td colspan="9" class="mu" style="padding:12px">Sin partidas todavía.</td></tr>`;
   let gPrev='';
-  for(const c of cats){if(c.grp!==gPrev){gPrev=c.grp;h+=`<tr class="csgrow"><td colspan="${ed?8:7}">${esc(CSG[c.grp]||c.grp)}</td></tr>`}
+  for(const c of cats){if(c.grp!==gPrev){gPrev=c.grp;h+=`<tr class="csgrow"><td colspan="${ed?9:8}">${esc(CSG[c.grp]||c.grp)}</td></tr>`}
     h+=`<tr data-csc="${esc(c.id)}"><td><input class="ci" data-csf="name" value="${esc(c.name)}"${dis} aria-label="Nombre"></td>
     <td><select data-csf="grp"${dis} aria-label="Grupo">${CSG_ORD.map(g=>`<option value="${g}"${c.grp===g?' selected':''}>${CSG[g]}</option>`).join('')}</select></td>
     <td><select data-csf="sc"${dis} aria-label="Ejecutor">${exo(c.sc)}</select></td>
     <td><input class="ci csn" data-csf="und" value="${esc(c.und||'')}"${dis} aria-label="Unidad"></td>
-    <td class="csinc"><input class="ci csn" type="number" min="0" step="any" data-csf="rat" value="${c.rat??''}"${dis} aria-label="Incidencia por m² de ${esc(c.name)}"><span class="mu">${esc(c.und||'und')}/m²</span></td>
+    <td><input type="checkbox" data-csf="vac"${c.vac?' checked':''}${dis} aria-label="Vaciado"></td><td><input type="checkbox" data-csf="ent"${c.ent?' checked':''}${dis} aria-label="Entrega a Arquitectura"></td>
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="rend" value="${c.rend??''}"${dis} aria-label="Rendimiento de ${esc(c.name)}"></td>
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="hh" value="${c.rend>0?Math.round(jor/c.rend*10000)/10000:''}"${dis} aria-label="HH por unidad de ${esc(c.name)}"></td>
     ${ed?`<td><button class="ab" data-cs="catdel" data-id="${esc(c.id)}" title="Quitar del catálogo" aria-label="Quitar ${esc(c.name)}">&times;</button></td>`:''}</tr>`}
-  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(csRatMiss)?'<button class="ib" data-cs="ratdef">Completar incidencias por defecto</button>':''}${cats.length&&csSeqDiff().length?`<button class="ib" data-cs="seqtip" title="Pasa las partidas de estructura a la secuencia típica de horizontales (fondo y 1.er costado de viga → acero de vigas → 2.º costado y fondo de losa → acero de losa e instalaciones → vaciado)">Actualizar a la secuencia típica</button>`:''}<button class="ib" data-cs="gotren">Armar el tren en Sectorización › Tren</button><span class="note">Los cambios se guardan al salir de cada casilla.</span></div>`:''}</div>`;
+  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':''}${cats.length&&csSeqDiff().length?`<button class="ib" data-cs="seqtip" title="Pasa las partidas de estructura a la secuencia típica de horizontales (fondo y 1.er costado de viga → acero de vigas → 2.º costado y fondo de losa → acero de losa e instalaciones → vaciado)">Actualizar a la secuencia típica</button>`:''}<button class="ib" data-cs="gotren">Armar el tren en el Lookahead</button><span class="note">Los cambios se guardan al salir de cada casilla.</span></div>`:''}</div>`;
   /* ejecutores */
   h+=`<div class="card"><h2>Ejecutores <span class="sub">Cuadrillas de casa (con su capataz) o subcontratistas: el PPC se mide por ejecutor</span></h2><div class="pad"><div class="csexl">${cons.map(c=>`<label class="chk"><input type="checkbox" data-cs="casa" data-id="${c.id}"${c.casa?' checked':''}${dis}> <i class="csdot" style="--c:${esc(c.color)}"></i>${esc(c.name)} <span class="mu">${c.casa?'Casa':'Subcontratista'}</span></label>`).join('')||'<span class="mu">Agrégalos en Configuración › Subcontratistas.</span>'}</div>
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
@@ -226,84 +226,7 @@ function csGenPlan(cfg){
       if(mt>0){nx.metrado=mt;nx.qa=true;const q={};fut.forEach(x=>q[x]=Math.round(mt/fut.length*100)/100);nx.qty=q}
       out.ops.push(op('acts',uid('a'),nx));out.add++}}
   return out}
-function csGenOpen(){if(!csEd()){toast('Para usar el generador entra a ✎ Programar.');return}if(!csHasData()){toast('Primero crea los niveles (Configuración › Casco).');return}
-  const L=pisos();const cur=L.find(p=>csAmbs(p.id,'E').some(a=>[...S.act.values()].some(x=>x.ambId===a.id&&(x.days||[]).some(d=>d>todayIso()))))||L[0];
-  const lv=sel=>L.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.tc||p.name)} · ${esc(p.name)}</option>`).join('');
-  const seq=g=>csCats(g).map(c=>`<li><b>${esc(c.name)}</b> <span class="mu">desfase ${c.off||0} · ${c.dur||1} día${(c.dur||1)>1?'s':''}${c.vac?' · vaciado':''}${c.ent?' · entrega':''}</span></li>`).join('')||'<li class="mu">Sin partidas</li>';
-  const m=document.createElement('div');m.className='lqm';m.id='csgm';m.innerHTML=`<div class="lqc csgen" role="dialog" aria-modal="true" aria-labelledby="csgt"><h3 id="csgt">Generador del tren</h3>
-    <p class="note">Arma la programación por sectores con la secuencia del catálogo. Solo programa desde mañana: lo de hoy, lo pasado y la semana congelada no cambian. Puedes deshacerlo con Deshacer.</p>
-    <div class="csgf"><label>Desde<select id="csg_from">${lv(cur.id)}</select></label><label>Hasta<select id="csg_to">${lv(L[L.length-1].id)}</select></label>
-    <label>Inicio del primer techo<input type="date" id="csg_start" min="${csTomorrow()}" value="${csTomorrow()}"></label>
-    <label>Ritmo de estructura<select id="csg_pace"><option value="1">1 sector por día</option><option value="2">1 sector cada 2 días</option></select></label>
-    <label>Techo siguiente: días tras vaciar la losa del S1<input type="number" id="csg_gap" min="0" max="10" value="1"></label>
-    <label>Albañilería del piso N tras vaciar el techo<select id="csg_alb"><option value="1">N+1</option><option value="2" selected>N+2</option><option value="3">N+3</option></select></label></div>
-    <div class="csgg">${CSG_ORD.map(g=>`<label class="chk"><input type="checkbox" id="csg_g${g}" checked> ${CSG[g]}</label>`).join('')}</div>
-    <details><summary>Secuencia (se edita en Configuración › Casco)</summary><div class="csgs">${CSG_ORD.map(g=>`<div><b>${CSG[g]}</b><ol>${seq(g)}</ol></div>`).join('')}</div></details>
-    <div class="callout" id="csg_prev" aria-live="polite"></div>
-    <div class="csrow"><span style="flex:1"></span><button class="ib" data-csg="x">Cancelar</button><button class="ib pri" data-csg="ok">Generar</button></div></div>`;
-  document.body.appendChild(m);
-  const cfg=()=>({from:$('#csg_from').value,to:$('#csg_to').value,start:$('#csg_start').value||csTomorrow(),pace:+$('#csg_pace').value,gap:+$('#csg_gap').value,albK:+$('#csg_alb').value,grp:{E:$('#csg_gE').checked,S:$('#csg_gS').checked,A:$('#csg_gA').checked}});
-  const prev=()=>{const c=cfg();if(c.start<csTomorrow()){$('#csg_prev').textContent='El inicio debe ser desde mañana.';return null}const pl=csGenPlan(c);
-    $('#csg_prev').innerHTML=pl.warn.length?esc(pl.warn.join(' ')):`<b>${pl.add}</b> actividad${pl.add===1?'':'es'} nueva${pl.add===1?'':'s'} · <b>${pl.upd}</b> con días cambiados · ${pl.same} sin cambios${pl.first?` · del ${fmtD(pl.first)} al ${fmtD(pl.last)}`:''}${pl.past?` · ${pl.past} día(s) que caían en el pasado no se programan`:''}`;return pl};
-  prev();m.addEventListener('change',prev);m.addEventListener('input',e=>{if(e.target.type==='number')prev()});
-  const close=()=>{m.remove()};m.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
-  m.addEventListener('click',e=>{if(e.target===m){close();return}const b=e.target.closest('[data-csg]');if(!b)return;if(b.dataset.csg==='x'){close();return}
-    const pl=prev();if(!pl)return;if(!pl.ops.length){toast(pl.warn[0]||'No hay nada que cambiar.');return}close();
-    if(pl.ops.length>450)csBatchActs(pl.ops).then(()=>toast(`Tren generado: ${pl.add} nuevas, ${pl.upd} cambiadas (sin Deshacer por ser más de 450 cambios)`)).catch(er=>toast('No se pudo: '+(er&&er.code||er)));
-    else{apply(pl.ops,`Generador del tren (${pl.add} nuevas, ${pl.upd} cambiadas)`);toast(`Tren generado: ${pl.add} nuevas, ${pl.upd} cambiadas`,'Deshacer',undo)}});
-  setTimeout(()=>{const f=$('#csg_from');if(f)f.focus()},30)}
-
-/* ---------- vista Tren del Lookahead ---------- */
-function csTrenRender(el,days){if(!el)return;if(!MX.ld.cat&&typeof ensureMcat==='function')ensureMcat();
-  if(!csHasData()){el.innerHTML=`<div class="empty cstrempty"><b>Casco todavía no tiene niveles.</b><br>${isAdmin?'Ve a Configuración › Casco para cargar la obra de ejemplo o crear los niveles.':'El administrador debe crearlos en Configuración › Casco.'}</div>`;return}
-  const today=todayIso(),dset=new Set(days.map(x=>x.d)),vset=new Set(visPisos().map(p=>p.id));
-  const resN={};for(const r of S.res.values())if(r.status!=='lib'&&r.actId)resN[r.actId]=(resN[r.actId]||0)+1;
-  /* filas: el catálogo por grupo y, aparte, nombres que no están en él */
-  const rows=new Map();const key=(g,id)=>g+'|'+id;
-  for(const g of CSG_ORD)for(const c of csCats(g))rows.set(key(g,c.id),{g,c,name:c.name,sc:c.sc,L:[]});
-  for(const x of S.act.values()){if(x._del)continue;const a=S.amb.get(x.ambId);if(!a)continue;const s=csSecOf(a);if(!s||!vset.has(s.pisoId))continue;if(!scOk(x.sc))continue;
-    if(!(x.days||[]).some(d=>dset.has(d)))continue;const g=s.grp||'X';const c=csCatOf(x);const k=c&&c.grp===g?key(g,c.id):key(g,'n:'+mnk(x.name));
-    if(!rows.has(k))rows.set(k,{g,c:null,name:x.name||'(sin nombre)',sc:x.sc,L:[]});rows.get(k).L.push(x)}
-  const head=()=>{let h='<thead><tr><th class="lab" rowspan="2">Partida · ejecutor</th>';const W=[];days.forEach(x=>{const w=W[W.length-1];if(w&&w.w===x.w)w.n++;else W.push({w:x.w,n:1,d:x.d})});
-    W.forEach(w=>h+=`<th class="cswk" colspan="${w.n}">Semana ${w.w} · ${fmtD(w.d)}</th>`);h+='</tr><tr>';
-    days.forEach(x=>{const nw=!isWork(x.d);h+=`<th class="d${nw?' nw':''}${x.d===today?' td':''}" title="${nw?esc(nwReason(x.d)):''}"><span>${DL[x.i]}</span><b>${x.d.slice(8)}</b></th>`});return h+'</tr></thead>'};
-  const exLab=sc=>{const c=conOf(sc);return sc?`<span class="cstag${c.casa?' casa':''}">${c.casa?'Casa':'SC'}</span>${esc(c.name)}`:'<span class="mu">Sin ejecutor</span>'};
-  const chip=(x,d)=>{const a=S.amb.get(x.ambId),s=csSecOf(a),p=S.pis.get(s&&s.pisoId),g=(s&&s.grp)||'';const c=csCatOf(x);
-    const rc=d<=today?recOf(d,x.id):null;const st=rc?rc.status:'';const lst=c&&c.vac&&typeof libState==='function'?libState(x):'';
-    const lm=lst==='lib'||lst==='libm'?'✓':lst==='pro'?'◷':lst==='obs'?'!':'';
-    const cls=c&&c.ent?'ent':'k'+(csAmbIdx(a)%4);const t=`${c&&c.ent?'◆ ':''}${esc(csPisoTag(p,g))}·${esc(a?a.code:'?')}`;
-    return `<button type="button" class="csk ${cls}${c&&c.vac?' vac':''}${st==='ok'?' ok':st==='no'?' no':st==='partial'?' pa':''}" data-csa="${esc(x.id)}" data-d="${d}" title="${esc((x.name||'')+' · '+(p?p.name:'')+' · '+(a?a.name:'')+(lst&&typeof LST!=='undefined'&&LST[lst]?' · Liberación: '+LST[lst].t:'')+(st?' · '+(st==='ok'?'Cumplido':st==='no'?'No cumplido':'Parcial'):''))}">${t}${lm?`<i class="csl">${lm}</i>`:''}${resN[x.id]?'<i class="csr" aria-label="Restricción abierta">R</i>':''}</button>`};
-  let b='';
-  for(const g of CSG_ORD.concat(['X'])){const R=[...rows.values()].filter(r=>r.g===g&&(r.L.length||(r.c&&!U.sc)));if(!R.length)continue;
-    b+=`<tr class="csgr"><td class="lab">${esc(CSG[g]||'Sin grupo')}<small>${esc(CSG_SUB[g]||'Actividades en sectores sin grupo de casco')}</small></td><td colspan="${days.length}"></td></tr>`;
-    for(const r of R){b+=`<tr><td class="lab"><span class="pn" title="${esc(r.name)}">${esc(r.name)}</span><span class="ex">${exLab(r.c?r.c.sc:r.sc)}</span></td>`;
-      for(const x of days){const L=r.L.filter(y=>(y.days||[]).includes(x.d)).sort((p,q)=>{const pa=S.amb.get(p.ambId),qa=S.amb.get(q.ambId);return((S.pis.get((csSecOf(pa)||{}).pisoId)||{}).order||0)-((S.pis.get((csSecOf(qa)||{}).pisoId)||{}).order||0)||csAmbIdx(pa)-csAmbIdx(qa)});
-        b+=`<td class="d${isWork(x.d)?'':' nw'}${x.d===today?' td':''}">${L.length?`<div class="csc">${L.map(y=>chip(y,x.d)).join('')}</div>`:''}</td>`}
-      b+='</tr>'}}
-  /* personal necesario por día (metrado ÷ rendimiento), casa y subcontratistas */
-  let pc='',ps='';for(const x of days){let a=0,s=0;for(const r of rows.values())for(const y of r.L){if(!(y.days||[]).includes(x.d))continue;const n=typeof persOf==='function'?persOf(y,x.d,persRend(y)):0;if(conOf(y.sc).casa)a+=n;else s+=n}
-    const c=`d${isWork(x.d)?'':' nw'}${x.d===today?' td':''}`;pc+=`<td class="${c}">${a||''}</td>`;ps+=`<td class="${c}">${s||''}</td>`}
-  b+=`<tr class="cssum"><td class="lab">Personal necesario · casa</td>${pc}</tr><tr class="cssum"><td class="lab">Personal necesario · SC</td>${ps}</tr>`;
-  const tools=csEd()?`<button class="ib pri" data-cs="gen">⚙ Generador del tren</button>`:'';
-  const h=`<div class="csbar">${tools}<span class="csleg"><i class="csk k0">S1</i><i class="csk k1">S2</i><i class="csk k2">S3</i><i class="csk k3">S4</i><span>Borde = vaciado (✓ liberado · ◷ programado)</span><span><i class="csr">R</i> restricción</span><span>Tachado = no cumplido</span></span></div>
-    <div class="cstw"><table class="cstr">${head()}<tbody>${b}</tbody></table></div><p class="note cstn">Toca una celda para ver su ficha${csEd()?' y correrla':''}. Vista › Grilla muestra lo mismo por nivel y sector, como el lookahead de arquitectura.</p>`;
-  if(el._h!==h){const sc=el.querySelector('.cstw');const sl=sc?sc.scrollLeft:0;el.innerHTML=h;el._h=h;const n=el.querySelector('.cstw');if(n&&sl)n.scrollLeft=sl;else if(n){const td=n.querySelector('th.td');if(td)n.scrollLeft=Math.max(0,td.offsetLeft-260)}}}
-function csChipPop(btn){const x=S.act.get(btn.dataset.csa);if(!x)return;const a=S.amb.get(x.ambId),s=csSecOf(a),p=S.pis.get(s&&s.pisoId),g=(s&&s.grp)||'';const c=csCatOf(x),con=conOf(x.sc);
-  const ds=x.days||[];const rd=persRend(x);const per=hasM(x)&&rd?Math.ceil(x.metrado/rd/Math.max(1,ds.length)):null;const lst=c&&c.vac&&typeof libState==='function'?libState(x):'';
-  const resL=[...S.res.values()].filter(r=>r.actId===x.id&&r.status!=='lib');const ed=csEd();
-  const lvl=g==='A'?`${p?p.name:''} · piso (${esc(p&&p.pc||'')})`:`${p?p.name:''} · techo (${esc(p&&p.tc||'')})`;
-  const html=`<div class="cspop"><b>${esc(x.name)}</b><dl><dt>Nivel</dt><dd>${lvl}</dd><dt>Sector</dt><dd>${esc(a?a.name:'')}</dd><dt>Días</dt><dd>${ds.map(fmtD).join(', ')||'—'}</dd><dt>Ejecutor</dt><dd>${esc(con.name)}${con.casa?' (casa)':''}</dd>
-    ${hasM(x)?`<dt>Metrado</dt><dd class="mono">${x.metrado} ${esc(x.und||'')}</dd>`:''}${rd?`<dt>Rend.</dt><dd class="mono">${rd} ${esc(x.und||'')}/persona·día</dd>`:''}${per?`<dt>Personal</dt><dd class="mono">${per} por día</dd>`:''}
-    ${c&&c.vac?`<dt>Liberación</dt><dd>${lst&&typeof LST!=='undefined'&&LST[lst]?esc(LST[lst].t):'Sin solicitar'}</dd>`:''}</dl>
-    ${resL.length?`<div class="cspr">⚠ ${resL.map(r=>esc(r.desc||r.text||r.type||'Restricción')).join(' · ')}</div>`:''}
-    ${c&&c.ent?`<p class="note">Al publicar las entregas, este sector aparece como hito de inicio en Last Planner.</p>`:''}
-    <div class="csrow">${ed?'<button class="ib" data-do="l">‹ 1 día</button><button class="ib" data-do="r">1 día ›</button>':''}<button class="ib" data-do="grid">Ver en la grilla</button></div></div>`;
-  openPop(btn,html,{l:()=>csShift(x.id,-1),r:()=>csShift(x.id,1),grid:()=>{U.lkV='grid';U.piso=s?s.pisoId:'';U.sector=s?s.id:'';saveUI();requestRender()}})}
-function csShift(id,n){const x=S.act.get(id);if(!x||!csEd())return;const t=todayIso();const ds=x.days||[];if(!ds.length)return;
-  const nd=ds.map(d=>wshift(d,n));if(!isAdmin&&(ds.some(d=>d<=t)||nd.some(d=>d<=t))){toast('Hoy y los días pasados solo los cambia el administrador.');return}
-  const nx={...x,days:[...new Set(nd)].sort()};if(x.qty){const q={};ds.forEach((d,i)=>{if(x.qty[d]!=null)q[nd[i]]=x.qty[d]});nx.qty=q}delete nx.id;
-  apply([op('acts',id,nx)],`Correr «${x.name}» ${n>0?'un día después':'un día antes'}`)}
-
+/* la vista Tren del Lookahead (programar como en Excel, «Proyectar») está en casco-tren.js */
 /* ---------- entrega por sector a Arquitectura (hitos de Last Planner) ---------- */
 const csEntActs=()=>[...S.act.values()].filter(x=>!x._del&&(x.days||[]).length&&(csCatOf(x)||{}).ent);
 const csEntCount=()=>csEntActs().length;
@@ -435,10 +358,9 @@ async function csLvDel(id){if(!csEd())return;const p=S.pis.get(id);if(!p)return;
 
 /* ---------- eventos (delegados: funcionan en Configuración y en el Lookahead) ---------- */
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
-  const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
-  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='seqtip')csSeqTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
-  else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='gotren'){U.tab='planos';U.csSzV='tren';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
+  if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='seqtip')csSeqTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
+  else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='gotren'){U.tab='look';U.lkV='tren';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}
   if(t.dataset&&t.dataset.cslv){csLvSet(t.dataset.id,t.dataset.cslv,t.value);return}
