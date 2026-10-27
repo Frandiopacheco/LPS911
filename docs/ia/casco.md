@@ -71,6 +71,12 @@ Decidido con el dueño (26-10-2026). La etapa de casco se programa distinto que 
 ## Obra de ejemplo (solo copia de prueba, administrador, Casco vacío)
 - Configuración › Casco › «Cargar obra de ejemplo» (`csDemo`): `cs_meta/project` copiado de Last Planner (semanas, calendario, horas de corte, causas), 5 ejecutores (Cuadrilla Ramos y Cuadrilla Quispe de casa; Aceros Andinos, Instalaciones Pacífico y Tabiques Lima), 18 partidas, sótano y 8 niveles (4 sectores de estructura hasta el techo 4 y 3 desde el 5; escalera; 3 sectores de albañilería por piso), 3 versiones de sectorización con metrados algo desbalanceados a propósito, y el tren desde mañana a partir del techo 3 (los techos del sótano al 2 se dan por hechos).
 
+## Vaciar Casco (solo copia de prueba, administrador; 26-10-2026, decidido con el dueño)
+- Configuración › Casco › «Vaciar Casco…» (`csVaciar`, `CS_VAC`): para empezar desde cero tras la obra de ejemplo. Pide escribir BORRAR y **borra de verdad** (no archiva) en `cs_`: niveles, sectores, actividades, semanas y wsnap, restricciones, avance y fotos, live, liberaciones, plan diario (`dplan`, `pdz`, `pzon`), láminas de Sectorización (`planos`, `laminas`, `lamimg`; los planos vinculados del módulo Planos quedan libres), versiones del asistente (`ksec`), `kcat`, hitos, no programado, índices, productividad, pull, `frev`, `pmet`, `lhidx`, `lhver`; y las entregas publicadas en Last Planner (`hitos` con `cs:true`).
+- Opcional: ejecutores (`contractors`, marcado por defecto) y catálogo (desmarcado; se **archiva** porque las reglas no dejan borrar `mcat`).
+- Se conservan siempre `cs_meta` (configuración), lo que las reglas no dejan borrar (`lhlog`, `mlog`, `mver`…), lo compartido (equipo, Planos, Tareo) y todo Last Planner. Solo corre si `DNS==='cs_'`.
+- Borra por colección (lotes de 400); si una falla, sigue con las demás y lo dice. Al terminar recarga la página (en las pruebas, `window.__e2eNoReload`).
+
 ## Pruebas
 - `tests/e2e/casco.spec.js`: obra de ejemplo en `cs_` sin tocar Last Planner, ficha y correr un día con Deshacer, generador (no programa hoy ni el pasado), asistente (balance y aplicar con 5 sectores), entregas como hitos de Last Planner, cambio de módulo con recarga y visibilidad para el editor. Para abrir Casco en una prueba: `localStorage['lps.ns']='cs'` antes de cargar (ver `casco()` en la prueba).
 - Reglas «casco: …» en `tests/rules`.

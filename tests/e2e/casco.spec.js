@@ -211,3 +211,35 @@ test('casco: Niveles sugiere y vincula el encofrado (EST) y la arquitectura (ARQ
   expect(await page.locator('[data-cs="lvsug"]').count()).toBe(0);
   expect(errors.filter(e => !/Failed to load resource/.test(e))).toEqual([]);
 });
+
+test('casco: Vaciar Casco borra niveles y todo lo de Casco, conserva configuración, catálogo y Last Planner', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  /* una entrega publicada en Last Planner también debe irse */
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await expect.poll(() => page.locator('[data-cs="lp"][data-id="n1"] option').count()).toBeGreaterThan(1);
+  await page.locator('[data-cs="lp"][data-id="n1"]').selectOption('p1');
+  await expect.poll(() => page.evaluate(() => S.pis.get('n1').lp)).toBe('p1');
+  await page.locator('[data-cs="entpub"]').click();
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('hitos')).filter(h => h.cs).length)).toBe(3);
+  const lp0 = await page.evaluate(() => ({ acts: Object.keys(window.__dbAll('acts')).length, pis: Object.keys(window.__dbAll('pisos')).length, hit: Object.values(window.__dbAll('hitos')).filter(h => !h.cs).length }));
+  await page.evaluate(() => { window.__e2eNoReload = true; });
+  /* escribir mal la palabra no borra nada */
+  page.once('dialog', d => d.accept('borra'));
+  await page.locator('[data-cs="vaciar"]').click();
+  await page.waitForTimeout(300);
+  expect(Object.keys(await page.evaluate(() => window.__dbAll('cs_pisos'))).length).toBe(9);
+  /* BORRAR + aviso final */
+  page.on('dialog', d => d.type() === 'prompt' ? d.accept('BORRAR') : d.accept());
+  await page.locator('[data-cs="vaciar"]').click();
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('cs_acts')).length), { timeout: 20000 }).toBe(0);
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('cs_contractors')).length), { timeout: 20000 }).toBe(0);
+  const r = await page.evaluate(() => ({
+    pis: Object.keys(window.__dbAll('cs_pisos')).length, sec: Object.keys(window.__dbAll('cs_sectors')).length, amb: Object.keys(window.__dbAll('cs_ambientes')).length,
+    ksec: Object.keys(window.__dbAll('cs_ksec')).length, meta: !!window.__dbAll('cs_meta').project,
+    cat: Object.values(window.__dbAll('cs_mcat')).filter(c => !c.arch).length,
+    lpActs: Object.keys(window.__dbAll('acts')).length, lpPis: Object.keys(window.__dbAll('pisos')).length,
+    hitCs: Object.values(window.__dbAll('hitos')).filter(h => h.cs).length, hitLp: Object.values(window.__dbAll('hitos')).filter(h => !h.cs).length }));
+  expect(r).toEqual({ pis: 0, sec: 0, amb: 0, ksec: 0, meta: true, cat: 18, lpActs: lp0.acts, lpPis: lp0.pis, hitCs: 0, hitLp: lp0.hit });
+  expect(errors).toEqual([]);
+});

@@ -34,7 +34,7 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
   const empty=!csHasData();
   let h=`<div class="card cscard"><h2>Módulo Casco <span class="sub">Estructura, albañilería, tabiques y tarrajeo por sectores; los acabados por ambiente siguen en Last Planner</span></h2><div class="pad">`;
   if(empty)h+=`<div class="callout">Esta obra todavía no tiene niveles en Casco.${isAdmin?' Puedes empezar con la obra de ejemplo (solo en la copia de prueba) o crear los niveles con el asistente de sectorización.':' El administrador debe crearlos.'}</div>`;
-  if(isAdmin){h+=`<div class="csrow">${!S.meta.get('project')?`<button class="ib pri" data-cs="init">Crear Casco con la configuración de Last Planner</button>`:''}${window.LPS_ENV==='pruebas'&&empty?`<button class="ib${S.meta.get('project')?' pri':''}" data-cs="demo">Cargar obra de ejemplo</button>`:''}</div>`}
+  if(isAdmin){h+=`<div class="csrow">${!S.meta.get('project')?`<button class="ib pri" data-cs="init">Crear Casco con la configuración de Last Planner</button>`:''}${window.LPS_ENV==='pruebas'&&empty?`<button class="ib${S.meta.get('project')?' pri':''}" data-cs="demo">Cargar obra de ejemplo</button>`:''}${window.LPS_ENV==='pruebas'&&S.meta.get('project')&&(!empty||S.con.size||KSEC.size)?`<span style="flex:1"></span><button class="ib warn" data-cs="vaciar" title="Solo en la copia de prueba: borra definitivamente niveles, sectores, actividades y lo registrado en ellos para empezar desde cero">Vaciar Casco…</button>`:''}</div>`}
   h+=`<p class="note">Cada nivel tiene tres grupos: <b>Estructura</b> (planta de encofrado del techo), <b>Frentes sueltos</b> (escalera) y <b>Albañilería</b> (planta de arquitectura del piso). Lo que divide o atraviesa ambientes va aquí por sector; el acabado de cada cara va por ambiente en Last Planner.</p></div></div>`;
   /* catálogo */
   const cats=csCats();
@@ -126,6 +126,38 @@ async function csDemo(){if(!isAdmin||window.LPS_ENV!=='pruebas')return;if(csHasD
   /* el tren: se arma con el generador cuando llegan los datos (catálogo y niveles) */
   CS_DEMO_GEN=true;toast('Obra de ejemplo cargada: armando el tren…');csDemoGenTry()}
 let CS_DEMO_GEN=false;
+
+/* ---------- Vaciar Casco (solo copia de prueba, administrador; 26-10-2026, decidido con el dueño) ----------
+   Para empezar Casco desde cero tras probar la obra de ejemplo: borra DE VERDAD (no archiva) los niveles y todo lo que cuelga
+   de ellos en las colecciones cs_. Conserva siempre la configuración del proyecto (cs_meta), los registros de auditoría que
+   las reglas no dejan borrar (lhlog, mlog, mver) y todo lo compartido (equipo, módulo Planos, Tareo). Opcional: ejecutores y
+   catálogo (el catálogo se archiva: las reglas no permiten borrar mcat). También borra las entregas que Casco publicó como
+   hitos en Last Planner (hitos con cs:true), que quedarían huérfanas. Pide escribir BORRAR y recarga la página al terminar. */
+const CS_VAC=['acts','ambientes','sectors','pisos','weeks','wsnap','restr','daily','fotos','live','lib','dplan','pdz','pzon','planos','laminas','lamimg','ksec','kcat','hitos','nprog','doneidx','pcrit','pav','pull','frev','pmet','lhidx','lhver'];
+async function csDelCol(col,ref,keep){const sn=await ref.get();const ids=sn.docs.filter(d=>!keep||keep(d.data())).map(d=>d.id);
+  for(let i=0;i<ids.length;i+=400){const b=db.batch();ids.slice(i,i+400).forEach(id=>b.delete(ref.doc(id)));await b.commit()}return ids.length}
+async function csVaciar(){if(!isAdmin||window.LPS_ENV!=='pruebas'||!CS()||DNS!=='cs_')return;
+  const o={con:true,cat:false};
+  const html=`<p style="margin:0 0 8px">Se borran <b>definitivamente</b> (no van a la Papelera) los niveles, sectores y actividades de Casco, y todo lo registrado en ellos: semanas congeladas, restricciones, avance, plan diario, liberaciones, láminas de Sectorización, versiones del asistente de sectorización y las entregas publicadas en Last Planner.</p>
+    <label class="chk" style="display:flex;margin:4px 0"><input type="checkbox" id="csvCon" checked> Borrar también los ejecutores (${S.con.size})</label>
+    <label class="chk" style="display:flex;margin:4px 0"><input type="checkbox" id="csvCat"> Quitar también el catálogo de casco (${csCats().length} partidas)</label>
+    <p class="mu" style="margin:8px 0 0">Se conservan la configuración de Casco (semanas, calendario, horas de corte), el equipo, el módulo Planos y todo Last Planner.</p>`;
+  const ask=uiAsk({title:'Vaciar Casco',tone:'danger',html,list:[`${S.pis.size} nivel(es)`,`${S.amb.size} sector(es)`,`${S.act.size} actividad(es)`,`${KSEC.size} versión(es) de sectorización`],
+    input:{label:'Escribe BORRAR para confirmar',required:true},ok:'Vaciar Casco',cancel:'Cancelar'});
+  const dlg=document.getElementById('uask');if(dlg)dlg.addEventListener('change',e=>{if(e.target.id==='csvCon')o.con=e.target.checked;if(e.target.id==='csvCat')o.cat=e.target.checked});
+  const v=await ask;if(v==null)return;if(String(v).trim().toUpperCase()!=='BORRAR'){toast('No se borró nada: había que escribir BORRAR.');return}
+  if(DNS!=='cs_')return;/* nunca en Last Planner */
+  toast('Vaciando Casco…');let n=0;const fail=[];
+  const cols=o.con?[...CS_VAC,'contractors']:CS_VAC;
+  for(const c of cols){try{n+=await csDelCol(c,fcol(c))}catch(e){fail.push(c)}}
+  try{n+=await csDelCol('hitos',fcolLp('hitos'),h=>h&&h.cs===true)}catch(e){fail.push('entregas en Last Planner')}
+  if(o.cat){try{const L=[...MX.cat.values()].filter(c=>!c.arch&&c.grp);const a={arch:{t:NOW(),by:me.email,n:'Vaciar Casco'}};
+    for(let i=0;i<L.length;i+=400){const b=db.batch();L.slice(i,i+400).forEach(c=>b.set(fcol('mcat').doc(c.id),a,{merge:true}));await b.commit()}}catch(e){fail.push('catálogo')}}
+  undoS.length=0;redoS.length=0;if(U.piso){U.piso='';saveUI()}
+  await uiAsk({title:fail.length?'Casco se vació en parte':'Casco vacío',tone:fail.length?'warn':'ok',cancel:false,ok:'Recargar',
+    text:`${n} registros borrados.${fail.length?' No se pudo borrar: '+fail.join(', ')+'. Puedes volver a intentarlo: lo ya borrado no se repite.':' Ya puedes crear los niveles desde cero.'}`});
+  if(window.__e2eNoReload){render();return}/* pruebas: la base falsa vive en memoria y se perdería al recargar */
+  location.reload()}
 function csDemoGenTry(n=0){if(!CS_DEMO_GEN)return;const ok=S.pis.size>=9&&csCats().length>=18&&S.amb.size>=40;
   if(!ok){if(n<60)setTimeout(()=>csDemoGenTry(n+1),500);else{CS_DEMO_GEN=false;toast('La obra de ejemplo se cargó; arma el tren con el generador del Lookahead.')}return}
   CS_DEMO_GEN=false;const plan=csGenPlan({from:'n3',to:'n8',start:csTomorrow(),pace:1,gap:1,albK:2,grp:{E:1,S:1,A:1}});
@@ -414,7 +446,7 @@ async function csLvDel(id){if(!csEd())return;const p=S.pis.get(id);if(!p)return;
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
-  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
+  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
   else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}
