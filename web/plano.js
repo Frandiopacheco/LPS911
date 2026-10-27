@@ -2211,11 +2211,14 @@ function plbMpp(r,w){if(!r||!(w>0))return null;if(r.calMpp>0&&r.W>0)return r.cal
 /** crea una lámina base del piso pid desde un plano del módulo Planos (sin diálogo; lo usa Configuración › Casco › Niveles).
     o: {rev (por defecto la vigente), name, esp, say}. La lámina queda fija en esa revisión (laminas.plb). */
 async function lamFromPlb(pid,plbId,o){o=o||{};const p=PLB.get(plbId);if(!p)throw new Error('No se encontró el plano '+plbId);const sp=plSpecOf(p,o.rev||p.rev||1);
-  const say=o.say||(()=>{});const bl=await plGet(sp.base+'/orig.pdf');const f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'});
+  const say=o.say||(()=>{});const fname=(p.cod||p.id)+'.pdf';
   const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;
   const ref={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
-  const out=await processFile(f,say,{crop:sp.crop||null});ref.mpp=plbMpp(ref,out.w);delete ref.W;
-  await saveLam({pisoId:pid,esp:o.esp||'Plano base',name:o.name||((p.cod||'')+(p.tit?' · '+p.tit:'')),base:true,T:I,aligned:true,plb:ref,order:o.order},out);return true}
+  /* primero los mosaicos del módulo Planos (rápido); si no se puede, el PDF original como antes */
+  let out=null;if(sp.W>0&&sp.H>0)try{out=await plbTiles(sp,fname,say)}catch(e){out=null}
+  if(!out){const bl=await plGet(sp.base+'/orig.pdf');out=await processFile(new File([bl],fname,{type:'application/pdf'}),say,{crop:sp.crop||null})}
+  ref.mpp=plbMpp(ref,out.w);delete ref.W;
+  await saveLam({pisoId:pid,esp:o.esp||'Plano base',name:o.name||((p.cod||'')+(p.tit?' · '+p.tit:'')),base:true,T:I,aligned:true,plb:ref,order:o.order,quiet:!!o.quiet},out);return true}
 function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(p=>p.id===opt.pid):pisos();
   const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true">
    <h3>${repl?'Reemplazar lámina: '+esc(lname(repl)):opt.mode==='base'?'Subir lámina base del piso':opt.mode==='spec'?'Subir especialidad':'Subir lámina'}</h3>
@@ -2274,13 +2277,15 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
         onSkip:async()=>{await saveLam(repl?{...repl,aligned:false,plb:plbRef}:{pisoId:pid,esp:esp||name,name,base:false,baseId:target.id,T:I,aligned:false,plb:plbRef},out,repl);toast('Lámina guardada sin alinear')}})}
     catch(err){$('#ugo',box).disabled=false;say('');toast(err.message||'No se pudo procesar el archivo.')}}}
 async function saveLam(meta,out,repl){const id=repl?repl.id:uid('lam');const rev=repl?(repl.rev||1)+1:1;M.busy='Guardando lámina…';requestRender();
-  try{const w=async(q,b64)=>{const n=Math.ceil(b64.length/CHUNK);for(let i=0;i<n;i++){M.busy=`Guardando lámina… ${q==='f'?'alta':'liviana'} ${i+1}/${n}`;requestRender();await fcol('lamimg').doc(`${id}_${rev}_${q}_${i}`).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)})}return n};
-    const nf=await w('f',out.full64),nl=await w('l',out.lite64);
+  try{/* las partes se guardan a la vez (antes, una tras otra) */
+    const w=async(q,b64)=>{const n=Math.ceil(b64.length/CHUNK);let k=0;await Promise.all(Array.from({length:n},(_,i)=>fcol('lamimg').doc(`${id}_${rev}_${q}_${i}`).set({d:b64.slice(i*CHUNK,(i+1)*CHUNK)}).then(()=>{k++;M.busy=`Guardando lámina… ${q==='f'?'alta':'liviana'} ${k}/${n}`;if(!meta.quiet)requestRender()})));return n};
+    const[nf,nl]=await Promise.all([w('f',out.full64),w('l',out.lite64)]);
     const prevRev=repl?{rev:repl.rev||1,nf:repl.nf||0,nl:repl.nl||0,w:repl.w,h:repl.h,lw:repl.lw||null,lh:repl.lh||null,fmt:repl.fmt||'',T:repl.T||I,ts:repl.ts||0,by:repl.by||''}:null;
     const doc={...(prevRev?{revs:[...(repl.revs||[]),prevRev]}:{}),pisoId:meta.pisoId,esp:meta.esp,name:meta.name||'',baseId:meta.base?null:(meta.baseId||null),base:!!meta.base,T:meta.T||I,aligned:!!meta.aligned,plb:meta.plb||null,w:out.w,h:out.h,lw:out.lw,lh:out.lh,fmt:out.fmt,nf,nl,rev,src:out.src,order:meta.order??NOW(),ts:NOW(),by:me.email,byName:me.name||me.email};if(meta.pts)doc.pts=meta.pts;
     await fcol('laminas').doc(id).set(doc);
     IMG.set(id+'|'+rev+'|f',{url:out.fullURL,promise:Promise.resolve(out.fullURL)});
-    /* la revisión anterior ya no se borra: queda en revs con sus imágenes */M.sel=id;M.piso=meta.pisoId;M.lpiso=meta.pisoId;if(U.piso&&U.piso!==meta.pisoId){U.piso=meta.pisoId;const fp=document.getElementById('fpiso');if(fp)fp.value=meta.pisoId}M.vista=meta.base?id:(meta.baseId||M.vista)}
+    /* la revisión anterior ya no se borra: queda en revs con sus imágenes */
+    if(meta.quiet)return;/* desde Configuración › Casco › Niveles: no cambia el nivel elegido ni la lámina abierta */M.sel=id;M.piso=meta.pisoId;M.lpiso=meta.pisoId;if(U.piso&&U.piso!==meta.pisoId){U.piso=meta.pisoId;const fp=document.getElementById('fpiso');if(fp)fp.value=meta.pisoId}M.vista=meta.base?id:(meta.baseId||M.vista)}
   finally{M.busy='';requestRender()}}
 
 /* ---------- conversión PDF / imagen → WebP (alta + liviana) ---------- */
@@ -2308,9 +2313,22 @@ async function processFile(f,say,o){o=o||{};let full;const isPdf=f.type==='appli
     try{pdf.destroy()}catch(e){}}
   else{say('Leyendo imagen…');const bmp=await createImageBitmap(f);const lc=mkCanvas(Math.min(1400,bmp.width),Math.round(bmp.height*Math.min(1400,bmp.width)/bmp.width));lc.getContext('2d').drawImage(bmp,0,0,lc.width,lc.height);const k=bmp.width/lc.width;const b=inkBox(lc);
     const bx={x:b.x*k,y:b.y*k,w:b.w*k,h:b.h*k};const dm=fitDims(bx.w,bx.h,FULL);full=mkCanvas(dm.w,dm.h);full.getContext('2d').drawImage(bmp,bx.x,bx.y,bx.w,bx.h,0,0,dm.w,dm.h);bmp.close&&bmp.close()}
-  say('Comprimiendo…');await tick();const fb=await encode(full,.72);const ld=fitDims(full.width,full.height,LITE);const lite=mkCanvas(ld.w,ld.h);lite.getContext('2d').drawImage(full,0,0,ld.w,ld.h);const lb=await encode(lite,.7);
-  const out={w:full.width,h:full.height,lw:ld.w,lh:ld.h,fmt:fb.type,full64:await b64(fb),lite64:await b64(lb),fullURL:URL.createObjectURL(fb),src:f.name.slice(0,80)};
-  full.width=full.height=0;say(`Listo: ${out.w} × ${out.h} px · ${Math.round(fb.size/1024)} KB (alta) + ${Math.round(lb.size/1024)} KB (liviana)`);return out}
+  return lamOut(full,f.name,say)}
+/** alta + liviana en WebP desde el lienzo ya dibujado (lo usan processFile y plbTiles) */
+async function lamOut(full,src,say){say('Comprimiendo…');await tick();const fb=await encode(full,.72);const ld=fitDims(full.width,full.height,LITE);const lite=mkCanvas(ld.w,ld.h);lite.getContext('2d').drawImage(full,0,0,ld.w,ld.h);const lb=await encode(lite,.7);
+  const out={w:full.width,h:full.height,lw:ld.w,lh:ld.h,fmt:fb.type,full64:await b64(fb),lite64:await b64(lb),fullURL:URL.createObjectURL(fb),src:String(src||'').slice(0,80)};
+  full.width=full.height=0;lite.width=lite.height=0;say(`Listo: ${out.w} × ${out.h} px · ${Math.round(fb.size/1024)} KB (alta) + ${Math.round(lb.size/1024)} KB (liviana)`);return out}
+/** lámina armada con los mosaicos que el módulo Planos ya tiene en Storage (26-10-2026): mucho más rápido que bajar el PDF original
+    y volver a dibujarlo. Toma el nivel de detalle más fino que no pase de FULL px (los mosaicos ya vienen recortados al marco) y los
+    baja de 8 en 8. Si falta un mosaico, quien llama vuelve al camino del PDF. */
+async function plbTiles(sp,name,say){const T=sp.T||1024,Z=sp.Z||1;let z=0;while(z<Z-1&&Math.ceil(Math.max(sp.W,sp.H)/2**z)>FULL)z++;
+  const lw=Math.ceil(sp.W/2**z),lh=Math.ceil(sp.H/2**z);const dm=fitDims(lw,lh,FULL);const k=dm.w/lw;const full=mkCanvas(dm.w,dm.h);const g=full.getContext('2d');g.imageSmoothingQuality='high';
+  const nx=Math.ceil(lw/T),ny=Math.ceil(lh/T),L=[];for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push([x,y]);let i=0,done=0;
+  const one=async([x,y])=>{const b=await plGet(`${sp.base}/${z}/${x}_${y}.webp`);const bm=await createImageBitmap(b);
+    /* +1 px para que no queden rayas entre mosaicos al escalar */
+    g.drawImage(bm,Math.floor(x*T*k),Math.floor(y*T*k),Math.ceil(bm.width*k)+(k<1?1:0),Math.ceil(bm.height*k)+(k<1?1:0));if(bm.close)bm.close();done++;say(`Armando la lámina… ${done} de ${L.length}`)};
+  try{await Promise.all(Array.from({length:Math.min(8,L.length)},async()=>{while(i<L.length)await one(L[i++])}))}catch(e){full.width=full.height=0;throw e}
+  return lamOut(full,name,say)}
 
 /* ---------- alineación con 2 puntos ---------- */
 function lsq(P,Q){ // similitud por mínimos cuadrados (2 a 4 pares)

@@ -75,12 +75,17 @@ test('casco: asistente de sectorización muestra el balance y aplica una versió
   await expect(page.locator('[data-cs="secv"]')).toHaveCount(3);
   if (SHOT) await page.screenshot({ path: SHOT + '/config.png', fullPage: true });
   await page.locator('[data-cs="secv"][data-id="v1"]').click();
+  await expect(page.locator('#cssm.csfs')).toBeVisible();
   await expect(page.locator('#cssm .csmet')).toBeVisible();
-  await expect(page.locator('#cssm tr.cssum .csbal').first()).toBeVisible();
+  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(4);
+  await expect(page.locator('#cssm .csfst .csbal').first()).toBeVisible();
   if (SHOT) await page.screenshot({ path: SHOT + '/asistente.png' });
   /* 5 sectores desde el sótano al techo 1: los sectores que no existen se crean */
+  await page.locator('#cssm [data-csopen="ver"] summary').click();
   await page.locator('#css_to').selectOption('n1');
-  await page.locator('#css_k').fill('5'); await page.locator('#css_k').dispatchEvent('change');
+  await page.locator('#cssm [data-css="add"]').click();
+  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(5);
+  page.once('dialog', d => d.accept());
   await page.locator('#cssm [data-css="apply"]').click();
   await expect.poll(() => page.evaluate(() => csAmbs('n1', 'E').length)).toBe(5);
   expect(await page.evaluate(() => csAmbs('n2', 'E').length)).toBe(4);
@@ -147,16 +152,17 @@ test('casco: el asistente dibuja un sector sobre la lámina, da su área con la 
   await page.locator('[data-cs="secv"][data-id="v1"]').click();
   await page.locator('#css_ref').selectOption('n3');
   await expect(page.locator('#cssmap .pvs')).toHaveCount(1, { timeout: 15000 });
-  await page.locator('[data-csst="0"]').click();
+  await page.locator('[data-csrow="0"]').click();
   await page.locator('[data-cstool="rect"]').click();
   const bx = await page.locator('#cssmap').boundingBox();
   await page.mouse.move(bx.x + 60, bx.y + 60); await page.mouse.down();
   await page.mouse.move(bx.x + 160, bx.y + 120, { steps: 5 }); await page.mouse.move(bx.x + 220, bx.y + 180, { steps: 5 }); await page.mouse.up();
-  await expect(page.locator('[data-csst="0"] b')).toContainText('m²');
-  const r = await page.evaluate(() => { const a = +document.querySelector('[data-csst="0"] b').textContent.replace(/[^\d.]/g, ''); const vl = +document.querySelector('[data-cssm="k-VL:0"]').value; return { a, vl }; });
+  await expect(page.locator('[data-csrow="0"] td:nth-child(3) b')).toHaveText(/\d/);
+  const r = await page.evaluate(() => { const a = +document.querySelector('[data-csrow="0"] td:nth-child(3) b').textContent.replace(/[^\d.]/g, ''); const vl = +document.querySelector('[data-cssm="k-VL:0"]').value; return { a, vl }; });
   expect(r.a).toBeGreaterThan(0);
   expect(r.vl).toBeCloseTo(Math.round(r.a * 0.2 * 10) / 10, 1);
   if (SHOT) await page.screenshot({ path: SHOT + '/asistente-plano.png' });
+  page.once('dialog', d => d.accept());
   await page.locator('#cssm [data-css="apply"]').click();
   await expect.poll(() => page.evaluate(() => !!(S.amb.get('n3-e1').geo || {}).lamT3)).toBe(true);
   expect(await page.evaluate(() => !!(S.amb.get('n4-e1').geo || {}).lamT4)).toBe(true);
@@ -242,4 +248,76 @@ test('casco: Vaciar Casco borra niveles y todo lo de Casco, conserva configuraci
     hitCs: Object.values(window.__dbAll('hitos')).filter(h => h.cs).length, hitLp: Object.values(window.__dbAll('hitos')).filter(h => !h.cs).length }));
   expect(r).toEqual({ pis: 0, sec: 0, amb: 0, ksec: 0, meta: true, cat: 18, lpActs: lp0.acts, lpPis: lp0.pis, hitCs: 0, hitLp: lp0.hit });
   expect(errors).toEqual([]);
+});
+
+test('casco: el asistente nuevo crea un sector por cada rectángulo trazado y muestra sus datos en el panel', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    await fcol('laminas').doc('lamT3').set({ pisoId: 'n3', base: true, esp: 'Estructura', name: 'Encofrado', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
+    U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await page.locator('[data-cs="secnew"]').click();
+  await expect(page.locator('#cssm.csfs')).toBeVisible();
+  await expect(page.locator('[data-cstool="rect"]')).toHaveClass(/on/);/* versión nueva: arranca con el rectángulo */
+  await page.locator('#css_ref').selectOption('n3');
+  await expect(page.locator('#cssmap .pvs')).toHaveCount(1, { timeout: 15000 });
+  const bx = await page.locator('#cssmap').boundingBox();
+  const rect = async (x0, y0, x1, y1) => { await page.mouse.move(bx.x + x0, bx.y + y0); await page.mouse.down(); await page.mouse.move(bx.x + (x0 + x1) / 2, bx.y + (y0 + y1) / 2, { steps: 4 }); await page.mouse.move(bx.x + x1, bx.y + y1, { steps: 4 }); await page.mouse.up(); };
+  await rect(80, 120, 260, 300);
+  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(1);
+  await rect(300, 120, 480, 300);
+  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(2);
+  await expect(page.locator('[data-csrow="1"] td:nth-child(3) b')).toHaveText(/\d/);
+  expect(await page.locator('[data-cssm="k-VL:1"]').inputValue()).not.toBe('');
+  /* el panel se pliega y vuelve */
+  await page.locator('[data-css="side"]').click();
+  await expect(page.locator('#cssside')).toBeHidden();
+  await page.locator('[data-css="side"]').click();
+  await expect(page.locator('#cssside')).toBeVisible();
+  if (SHOT) await page.screenshot({ path: SHOT + '/asistente-pantalla.png' });
+  /* quitar un sector */
+  await page.locator('[data-csdel="0"]').click();
+  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(1);
+  await page.locator('[data-css="save"]').click();
+  await expect(page.locator('#cssm')).toHaveCount(0);
+  const v = await page.evaluate(() => Object.values(window.__dbAll('cs_ksec')).find(x => x.ref === 'n3'));
+  expect(v.k).toBe(1); expect(v.geo[0].length).toBeGreaterThanOrEqual(8);
+  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
+});
+
+test('casco: «+ Agregar niveles arriba» acepta un nombre o una cantidad', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  page.once('dialog', d => d.accept('Azotea'));
+  await page.locator('[data-cs="lvnew"]').click();
+  await expect.poll(() => page.evaluate(() => pisos().at(-1).name)).toBe('Azotea');
+  expect(await page.evaluate(() => pisos().at(-1).code)).toBe('A');
+  page.once('dialog', d => d.accept('2'));
+  await page.locator('[data-cs="lvnew"]').click();
+  await expect.poll(() => page.evaluate(() => pisos().length)).toBe(12);
+  expect(await page.evaluate(() => pisos().at(-1).name)).toBe('Nivel 10');
+  expect(errors).toEqual([]);
+});
+
+test('casco: vincular arma la lámina con los mosaicos del módulo Planos (sin bajar el PDF) y no cambia el nivel elegido', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const P = (cod, disc, niv, tit) => [disc + '_' + cod, { cod, disc, niv, tit, tipo: 'Planta', rev: 1, base: 'planos/' + cod + '/r1', W: 2500, H: 1800, Z: 2, T: 1024, mm: [1200, 900], revs: [] }];
+  const extra = [P('E-03', 'EST', 'P3', 'Encofrado techo 3'), P('E-04', 'EST', 'P4', 'Encofrado techo 4')].map(([id, d]) => ['plb', id, d]);
+  const errors = await openApp(page, { as: 'admin', extra });
+  await cargarEjemplo(page);
+  await page.evaluate(() => {
+    window.__plGets = [];
+    window.plGet = async p => { window.__plGets.push(p); if (/orig\.pdf$/.test(p)) throw new Error('no debería bajar el PDF');
+      const c = new OffscreenCanvas(1024, 1024); const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 1024, 1024); g.fillStyle = '#000'; g.fillRect(10, 10, 100, 100); return c.convertToBlob({ type: 'image/png' }); };
+    U.piso = 'n1'; saveUI(); U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await expect(page.locator('[data-cs="lvsug"]')).toContainText('(2)', { timeout: 15000 });
+  await page.locator('[data-cs="lvsug"]').click();
+  await expect.poll(() => page.evaluate(() => [...window.__plano.LAM.values()].filter(l => l.plb).map(l => l.pisoId + ':' + l.w).sort().join()), { timeout: 30000 }).toBe('n3:2500,n4:2500');
+  const g = await page.evaluate(() => window.__plGets);
+  expect(g.some(p => /orig\.pdf$/.test(p))).toBe(false);
+  expect(g.filter(p => p.startsWith('planos/E-03/r1/0/')).length).toBe(6);/* nivel 0: 3 × 2 mosaicos de 1024 */
+  expect(await page.evaluate(() => U.piso)).toBe('n1');
+  await expect(page.locator('#cslamst')).toBeHidden();
+  expect(errors.filter(e => !/Failed to load resource/.test(e))).toEqual([]);
 });

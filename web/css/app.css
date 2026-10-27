@@ -4698,6 +4698,38 @@ tr.cssarea td{background:var(--accent-soft)}
 .csgf{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px}
 .csgf label{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
 .csgf input,.csgf select{height:var(--h-ctl,34px);border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel2);padding:0 8px;min-width:0;color:var(--ink)}
+/* Casco › asistente de sectorización a pantalla completa (26-10-2026): plano grande + panel de datos plegable (abajo en pantallas angostas) */
+html.csfs-on{overflow:hidden}
+.csfs{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;background:var(--bg);animation:lps-fade var(--t-fast,.12s) var(--ease,ease);outline:none}
+.csfh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);box-shadow:var(--sh-1)}
+.csft{font-size:15px;white-space:nowrap}
+.csfn{width:170px;height:var(--h-ctl,34px)}
+.csfh .seg button:disabled{opacity:.5}
+.csfh .ib.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.csfb{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) min(440px,40vw)}
+.csfb.noside{grid-template-columns:minmax(0,1fr)}.csfb.noside .csfside{display:none}
+.csfmap{position:relative;min-width:0;min-height:0;background:var(--panel2)}
+.csfs .cssmap{position:absolute;inset:0;height:auto;border:0;border-radius:0}
+.csfhint{position:absolute;left:12px;top:12px;max-width:min(520px,calc(100% - 24px));padding:8px 12px;border-radius:var(--r-ctl,8px);background:var(--panel);box-shadow:var(--sh-2);font-size:13px;color:var(--ink2,var(--ink));pointer-events:none;z-index:2}
+.csfhint .warn{color:var(--warn);font-weight:600}
+.csfside{min-width:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+.csfsec{padding:12px 14px;border-bottom:1px solid var(--line)}
+.csfsh,.csfsec>summary{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin-bottom:8px;cursor:default}
+.csfsec>summary{cursor:pointer;list-style:none;margin:0}.csfsec>summary::-webkit-details-marker{display:none}
+.csfsec>summary::before{content:'▸';color:var(--muted);transition:transform var(--t-fast,.12s)}.csfsec[open]>summary::before{transform:rotate(90deg)}
+.csfsec[open]>summary{margin-bottom:8px}
+.csfst{width:100%}.csfst td,.csfst th{padding:5px 6px;vertical-align:middle}
+.csfst tbody tr{cursor:pointer}.csfst tbody tr.on td{background:var(--accent-soft)}
+.csfst input.csn{width:64px}
+.csfs .csmet td,.csfs .csmet th{padding:4px 5px}.csfs .csmet input.csn{width:68px}.csfs .csmet td:first-child{min-width:120px}
+.csfh .cssml select{height:var(--h-ctl,34px);max-width:200px;padding:0 6px}
+.csfemp{margin:4px 0 8px}
+.csfadd{margin-top:8px}
+.csgfw{grid-column:1/-1}
+.cslamst{display:flex;align-items:center;gap:10px;margin:8px 12px}
+.csspin{width:14px;height:14px;flex:none;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:lps-spin .8s linear infinite}
+@media (max-width:900px){.csfb{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,42vh)}.csfb.noside{grid-template-rows:minmax(0,1fr)}.csfside{border-left:0;border-top:1px solid var(--line)}.csfn{width:120px}}
+@media (prefers-reduced-motion:reduce){.csspin{animation:none}}
 .csgg{display:flex;flex-wrap:wrap;gap:6px 16px}
 .csgg label.chk{display:inline-flex;align-items:center;gap:6px;font-weight:600}
 .cscat input[data-csf=name]{min-width:230px}.cscat select{max-width:200px}.cscat input.csn{width:64px}
