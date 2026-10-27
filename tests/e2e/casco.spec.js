@@ -32,38 +32,106 @@ test('casco: carga la obra de ejemplo en cs_ y arma el tren sin tocar Last Plann
   expect(errors).toEqual([]);
 });
 
-test('casco: ficha de una celda, correr un día y Deshacer', async ({ page }) => {
+test('casco: Lookahead › Tren editable como Excel: programar un día, mover y quitar celdas, copiar y pegar, ficha', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  const id = await page.evaluate(() => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length && a.days[0] > addD(t, 3) && a.name === 'Encofrado de 2.º costado de viga y fondo de losa'); return x.id; });
+  const id = await page.evaluate(() => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length === 1 && a.days[0] > addD(t, 3) && a.name === 'Encofrado de 2.º costado de viga y fondo de losa'); return x.id; });
   const d0 = await page.evaluate(i => S.act.get(i).days.slice(), id);
   await page.evaluate(i => { const x = S.act.get(i); U.week = weekOf(x.days[0]); render(); }, id);
+  await expect(page.locator('tr.ctfrh')).toHaveCount(1);
+  /* seleccionar y mover con → (un día hábil), Deshacer */
   await page.locator(`#trw [data-csa="${id}"]`).first().click();
-  await expect(page.locator('#pop .cspop')).toBeVisible();
-  if (SHOT) await page.screenshot({ path: SHOT + '/ficha.png' });
-  await page.locator('#pop button[data-do="r"]').click();
-  await expect.poll(() => page.evaluate(i => S.act.get(i).days[0], id)).not.toBe(d0[0]);
+  await expect(page.locator('#ctbar')).toContainText('1 celda');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => page.evaluate(i => S.act.get(i).days[0], id)).toBe(await page.evaluate(d => wshift(d, 1), d0[0]));
   await page.evaluate(() => undo());
   await expect.poll(() => page.evaluate(i => S.act.get(i).days.join(), id)).toBe(d0.join());
+  /* doble clic: ficha */
+  await page.locator(`#trw [data-csa="${id}"]`).first().dblclick();
+  await expect(page.locator('#pop .cspop')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => closePop());
+  /* copiar la celda y pegarla en un día vacío de la misma fila, en el nivel siguiente */
+  await page.evaluate(() => { CT.sel.clear(); });
+  await page.locator(`#trw [data-csa="${id}"]`).first().click();
+  await page.keyboard.press('Control+c');
+  const tgt = await page.evaluate(i => { const x = S.act.get(i); const tr = document.querySelector(`#trw [data-csa="${i}"]`).closest('tr'); const tds = [...tr.querySelectorAll('td.ctc')]; const td = tds.find(td => td.dataset.d > x.days[0] && isWork(td.dataset.d) && !td.querySelector('.csk')); return td.dataset.d; }, id);
+  const n0 = await page.evaluate(() => S.act.size);
+  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${tgt}"]`).click();
+  await page.locator('#pop button[data-do="paste1"]').click();
+  /* va al mismo sector del nivel siguiente (se suma a su actividad si ya existía) */
+  await expect.poll(() => page.evaluate(([i, d]) => { const x = S.act.get(i); const amb = ctMapAmb(x.ambId, 1, '_'); return [...S.act.values()].some(y => y.ambId === amb && y.name === x.name && (y.days || []).includes(d)); }, [id, tgt])).toBe(true);
+  expect(await page.evaluate(() => S.act.size)).toBeGreaterThanOrEqual(n0);
+  /* programar un sector en un día vacío (sugerencia: el siguiente sector de la fila) */
+  const free = await page.evaluate(i => { const tr = document.querySelector(`#trw [data-csa="${i}"]`).closest('tr'); const td = [...tr.querySelectorAll('td.ctc')].reverse().find(td => isWork(td.dataset.d) && !td.querySelector('.csk') && td.dataset.d > todayIso()); return td.dataset.d; }, id);
+  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${free}"]`).click();
+  await page.locator('#pop button[data-do="add"]').first().click();
+  await expect.poll(() => page.evaluate(d => [...S.act.values()].some(y => y.name === 'Encofrado de 2.º costado de viga y fondo de losa' && (y.days || []).includes(d)), free)).toBe(true);
+  /* quitar con Supr */
+  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${free}"] .csk`).first().click();
+  await page.keyboard.press('Delete');
+  await expect.poll(() => page.evaluate(d => [...S.act.values()].some(y => y.name === 'Encofrado de 2.º costado de viga y fondo de losa' && (y.days || []).includes(d)), free)).toBe(false);
+  if (SHOT) await page.screenshot({ path: SHOT + '/tren-editable.png' });
   expect(errors).toEqual([]);
 });
 
-test('casco: el generador no programa hoy ni días pasados y se puede deshacer', async ({ page }) => {
+test('casco: Tren: filas por frente: insertar, copiar y pegar debajo, ordenar y eliminar', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  const n0 = await page.evaluate(() => S.act.size);
-  /* quitar todo lo del techo 6 en adelante y volver a generarlo desde el techo 6 */
-  const plan = await page.evaluate(() => { const p = csGenPlan({ from: 'n6', to: 'n8', start: addD(todayIso(), -10), pace: 1, gap: 1, albK: 2, grp: { E: 1, S: 1, A: 1 } }); return { n: p.ops.length, past: p.ops.some(o => (o.after.days || []).some(d => d <= todayIso()) && !o.before) }; });
-  expect(plan.past).toBe(false);
   await page.evaluate(() => { U.tab = 'look'; U.lkV = 'tren'; render(); });
-  await page.locator('[data-cs="gen"]').click();
-  await expect(page.locator('#csgm')).toBeVisible();
-  await expect(page.locator('#csg_prev')).toContainText('sin cambios');
-  if (SHOT) await page.screenshot({ path: SHOT + '/generador.png' });
-  await page.locator('#csg_pace').selectOption('2');
-  await page.locator('#csgm [data-csg="ok"]').click();
-  await expect(page.locator('#csgm')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => S.act.size)).toBeGreaterThanOrEqual(n0);
+  const lab = name => page.locator(`#trw tr[data-ctr] td.ctlab:has(.pn[title="${name}"])`);
+  await lab('Acero de vigas').click();
+  await expect(page.locator('#ctbar')).toContainText('1 fila');
+  const nAV = await page.evaluate(() => [...S.act.values()].filter(y => y.name === 'Acero de vigas' && !y.arch).length);
+  await page.keyboard.press('Control+c');
+  await page.locator('#ctbar [data-ctra="paste"]').click();
+  await expect.poll(() => page.evaluate(() => [...S.act.values()].filter(y => y.name === 'Acero de vigas' && y.trw).length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => ctRows('_').filter(r => r.name === 'Acero de vigas').length)).toBe(2);
+  /* la copia queda justo debajo */
+  expect(await page.evaluate(() => { const R = ctRows('_'); const i = R.findIndex(r => r.name === 'Acero de vigas'); return R[i + 1].name; })).toBe('Acero de vigas');
+  /* insertar una fila nueva (otra partida) */
+  await lab('Acero de losa').click();
+  await page.locator('#ctbar [data-ctra="ins"]').click();
+  await page.locator('#pop button[data-do="cat"]', { hasText: 'Curado' }).count();
+  page.once('dialog', d => d.accept('Curado de losa'));
+  await page.locator('#pop button[data-do="other"]').click();
+  await expect.poll(() => page.evaluate(() => ctRows('_').some(r => r.name === 'Curado de losa'))).toBe(true);
+  expect(await page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Acero de losa') + 1].name; })).toBe('Curado de losa');
+  /* subir la fila nueva y eliminarla */
+  await lab('Curado de losa').click();
+  await page.locator('#ctbar [data-ctra="up"]').click();
+  await expect.poll(() => page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Curado de losa') + 1].name; })).toBe('Acero de losa');
+  page.once('dialog', d => d.accept());
+  await page.locator('#ctbar [data-ctra="del"]').click();
+  await expect.poll(() => page.evaluate(() => ctRows('_').some(r => r.name === 'Curado de losa'))).toBe(false);
+  expect(nAV).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('casco: Proyectar copia el tren del techo modelo a los niveles siguientes sin tocar lo programado ni el pasado', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  /* dejar programado solo el techo 4 (y lo de albañilería de pisos bajos) */
+  await page.evaluate(() => { const ops = []; for (const x of S.act.values()) { const s = csSecOf(S.amb.get(x.ambId)); if (s && ['n5', 'n6', 'n7', 'n8'].includes(s.pisoId)) ops.push(arc('acts', x.id)); } apply(ops, 'test'); U.tab = 'look'; U.lkV = 'tren'; render(); });
+  const n0 = await page.evaluate(() => S.act.size);
+  const m4 = await page.evaluate(() => [...S.act.values()].filter(x => (csSecOf(S.amb.get(x.ambId)) || {}).pisoId === 'n4').length);
+  await page.locator('[data-ctp="_"]').click();
+  await page.locator('#ctp_m').selectOption('n4');
+  await page.locator('#ctp_to').selectOption('n6');
+  await expect(page.locator('#ctp_prev')).toContainText('2 nivel');
+  if (SHOT) await page.screenshot({ path: SHOT + '/proyectar.png' });
+  await page.locator('#ctpm [data-ctp2="ok"]').click();
+  await expect.poll(() => page.evaluate(() => S.act.size)).toBeGreaterThan(n0);
+  const r = await page.evaluate(() => { const t = todayIso(); const L = [...S.act.values()].filter(x => ['n5', 'n6'].includes((csSecOf(S.amb.get(x.ambId)) || {}).pisoId)); return { n5: L.filter(x => csSecOf(S.amb.get(x.ambId)).pisoId === 'n5').length, past: L.some(x => x.days.some(d => d <= t)), n7: [...S.act.values()].filter(x => (csSecOf(S.amb.get(x.ambId)) || {}).pisoId === 'n7').length }; });
+  /* el techo 5 tiene 3 sectores (versión 2): menos actividades que el modelo de 4 sectores */
+  expect(r.n5).toBeGreaterThan(0); expect(r.n5).toBeLessThan(m4 + 1); expect(r.past).toBe(false); expect(r.n7).toBe(0);
+  /* proyectar otra vez no duplica: los sectores ya programados se respetan */
+  const n1 = await page.evaluate(() => S.act.size);
+  const again = await page.evaluate(() => ctProjPlan('_', { model: 'n4', to: 'n6', mode: 'fin' }));
+  expect(again.add).toBe(0); expect(again.skip).toBeGreaterThan(0);
+  await page.evaluate(() => undo());
+  await expect.poll(() => page.evaluate(() => S.act.size)).toBe(n0);
+  expect(n1).toBeGreaterThan(n0);
   expect(errors).toEqual([]);
 });
 
@@ -303,8 +371,8 @@ test('casco: geometría del asistente: juntas que se prolongan hasta el borde y 
 test('casco: «Completar ratios por defecto» no escribe valores vacíos (Firestore rechazaba el lote entero)', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  await page.evaluate(async () => { const b = db.batch(); for (const c of MX.cat.values()) b.set(fcol('mcat').doc(c.id), { rat: null }, { merge: true }); await b.commit(); U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  await page.locator('[data-cs="ratdef"]').first().click();
+  await page.evaluate(async () => { const b = db.batch(); for (const c of MX.cat.values()) b.set(fcol('mcat').doc(c.id), { rat: null }, { merge: true }); await b.commit(); });
+  await page.evaluate(() => csRatDef());
   await expect.poll(() => page.evaluate(() => (window.__dbGet('cs_mcat', 'k-AV') || {}).rat)).toBe(12);
   const r = await page.evaluate(() => Object.values(window.__dbAll('cs_mcat')).filter(c => 'rat' in c && c.rat === undefined).length);
   expect(r).toBe(0);
@@ -316,7 +384,8 @@ test('casco: catálogo con incidencia, rendimiento en und/día o HH/und y jornad
   const errors = await casco(page);
   await cargarEjemplo(page);
   await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  await expect(page.locator('.cscat thead')).toContainText('Incidencia por m² de planta');
+  await expect(page.locator('.cscat thead')).toContainText('Vaciado');
+  await expect(page.locator('.cscat thead')).not.toContainText('Incidencia');
   await expect(page.locator('.cscat thead')).not.toContainText('Desfase');
   const hh = page.locator('[data-csc="k-AV"] [data-csf="hh"]');
   await hh.fill('0.0425'); await hh.dispatchEvent('change');
@@ -329,7 +398,7 @@ test('casco: catálogo con incidencia, rendimiento en und/día o HH/und y jornad
   expect(errors).toEqual([]);
 });
 
-test('casco: Sectores reordena el tren y elimina alternativas; Tren arrastra bloques y dibuja la línea de balance', async ({ page }) => {
+test('casco: Sectores reordena el tren, elimina alternativas y edita la incidencia; ya no hay Tren en Sectorización', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
   await page.evaluate(async () => {
@@ -353,20 +422,12 @@ test('casco: Sectores reordena el tren y elimina alternativas; Tren arrastra blo
   await page.locator('[data-csz="altdel"]').click();
   await expect.poll(() => page.evaluate(() => !!window.__dbGet('cs_ksec', 'vb').arch)).toBe(true);
   await expect(page.locator('[data-csz="alt"] option')).toHaveCount(1);
-  /* Tren: línea de balance y arrastrar un bloque */
-  await page.locator('#csszn [data-cszv="tren"]').click();
-  await expect(page.locator('#cstrl .cstrsvg polyline').first()).toBeVisible();
-  await expect(page.locator('#cstrl .cstrsum')).toContainText('Un techo cada');
-  if (SHOT) await page.screenshot({ path: SHOT + '/tren-tipo.png', fullPage: true });
-  const bar = page.locator('[data-cstrb="k-DV"]');const b = await bar.boundingBox();
-  await page.mouse.move(b.x + 10, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(b.x + 10 + 46 * 2, b.y + b.height / 2, { steps: 6 }); await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-DV').off)).toBe(5);/* entraba el día 3 */
-  const r = await page.locator('[data-cstrb="k-AV"] .cstrrz').boundingBox();
-  await page.mouse.move(r.x + 4, r.y + r.height / 2); await page.mouse.down(); await page.mouse.move(r.x + 4 + 46, r.y + r.height / 2, { steps: 6 }); await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').dur)).toBe(2);
-  await expect(page.locator('#cstrl .cstrsum')).toContainText('dos sectores a la vez');/* acero de verticales 2 días con ritmo 1: la cuadrilla queda en dos sectores */
-  await page.locator('[data-cstrmv="k-AV"][data-d="1"]').click();
-  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').tr > window.__dbGet('cs_mcat', 'k-EV').tr)).toBe(true);
+  /* la incidencia se edita en «Por partida» del asistente */
+  await page.locator('[data-cszo="met"] summary').click();
+  const inc = page.locator('[data-cszrat="k-AV"]');
+  await inc.fill('14'); await inc.dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').rat)).toBe(14);
+  await expect(page.locator('#csszn [data-cszv="tren"]')).toHaveCount(0);
   expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
 });
 

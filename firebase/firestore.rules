@@ -91,7 +91,7 @@ service cloud.firestore {
     function noResp(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
     function edPiso(d) { return isAdmin() || (canEdit() && respOk(d.get('pisoId', ''))); }
     // wsnap/<semana>_<piso>: foto del lookahead al congelar (antes weeks.snap; auditoría de datos M1): mismas reglas que weeks
-    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg', 'kcat', 'ksec', 'kfr']; }
+    function dataCol(c) { return c in ['meta', 'pisos', 'contractors', 'sectors', 'ambientes', 'acts', 'weeks', 'wsnap', 'restr', 'planos', 'lhidx', 'lhver', 'laminas', 'lamimg', 'kcat', 'ksec', 'ktr', 'kfr']; }
 
     match /members/{mail} {
       // la lista completa (con correos) solo la ve el personal interno; cada uno siempre puede leer su propio registro
@@ -838,7 +838,7 @@ service cloud.firestore {
     }
     function noResp_cs(d) { let r = d.get('resp', []); return r == null || r.size() == 0; }
     function edPiso_cs(d) { return isAdmin_cs() || (canEdit_cs() && respOk_cs(d.get('pisoId', ''))); }
-    function dataCol_cs(c) { return c in ['cs_meta', 'cs_pisos', 'cs_contractors', 'cs_sectors', 'cs_ambientes', 'cs_acts', 'cs_weeks', 'cs_wsnap', 'cs_restr', 'cs_planos', 'cs_lhidx', 'cs_lhver', 'cs_laminas', 'cs_lamimg', 'cs_kcat', 'cs_ksec', 'cs_kfr']; }
+    function dataCol_cs(c) { return c in ['cs_meta', 'cs_pisos', 'cs_contractors', 'cs_sectors', 'cs_ambientes', 'cs_acts', 'cs_weeks', 'cs_wsnap', 'cs_restr', 'cs_planos', 'cs_lhidx', 'cs_lhver', 'cs_laminas', 'cs_lamimg', 'cs_kcat', 'cs_ksec', 'cs_ktr', 'cs_kfr']; }
     function liveActOk_cs(id) {
       let d = request.resource.data;
       let ap = /databases/$(database)/documents/cs_acts/$(d.get('actId', '-'));
