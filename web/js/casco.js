@@ -304,7 +304,7 @@ function csSecCard(){return`<div class="card"><h2>Frentes y sectorización <span
 const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
 const csRatKey=c=>{const k=String(c.ref||c.id||'').replace(/^k-/,'');if(CS_RAT[k]!=null)return k;const d=CS_DEMO_CAT.find(x=>mnk(x[1])===mnk(c.name));return d?d[0]:''};
 async function csRatDef(){if(!csEd())return;const L=csCats().filter(c=>c.rat==null&&csRatKey(c));if(!L.length){toast('Todas las partidas típicas ya tienen ratio.');return}
-  const b=db.batch();L.forEach(c=>b.set(fcol('mcat').doc(c.id),{rat:CS_RAT[csRatKey(c)],by:me.email,t:NOW()},{merge:true}));try{await b.commit();toast(`Ratios por defecto en ${L.length} partida(s)`)}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
+  const b=db.batch();L.forEach(c=>b.set(fcol('mcat').doc(c.id),{rat:CS_RAT[csRatKey(c)],by:me.email,t:NOW()},{merge:true}));try{await b.commit();L.forEach(c=>{const m=MX.cat.get(c.id);if(m)m.rat=CS_RAT[csRatKey(c)]});toast(`Ratios por defecto en ${L.length} partida(s)`);requestRender()}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
 const csPolyA=P=>{let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P[i].x)*(P[j].y-P[i].y);return Math.abs(a/2)};
 const csUnflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
 const CS_SCOL=['#1D9E75','#BA7517','#7F77DD','#D4537E','#378ADD','#639922','#D85A30','#888780'];
