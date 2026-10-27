@@ -1689,6 +1689,8 @@ test('casco: el editor edita cs_acts y cs_mcat; SC y lector no; quien no está e
   await assertSucceeds(updateDoc(doc(user(OWNER), 'cs_acts/k1'), { days: ['2099-10-02'] }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_mcat/k-AV'), { name: 'Acero de verticales', grp: 'E', tr: 1 }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_ksec/v1'), { n: 'Versión 1', grp: 'E', k: 4 }));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_kfr/fr1'), { name: 'Frente A', code: 'A', cua: { 'k-AV': 6 } }));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_kfr/fr2'), { name: 'Frente B' }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_acts/k3'), { name: 'x', sc: 'c-gabel', ambId: 'n1-e1' }));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'cs_acts/k3'), { name: 'x' }));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'cs_acts/k1')));

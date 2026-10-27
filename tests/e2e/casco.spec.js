@@ -67,31 +67,6 @@ test('casco: el generador no programa hoy ni días pasados y se puede deshacer',
   expect(errors).toEqual([]);
 });
 
-test('casco: asistente de sectorización muestra el balance y aplica una versión', async ({ page }) => {
-  const errors = await casco(page);
-  await cargarEjemplo(page);
-  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  await expect(page.locator('.cscat tbody tr')).toHaveCount(18);
-  await expect(page.locator('[data-cs="secv"]')).toHaveCount(3);
-  if (SHOT) await page.screenshot({ path: SHOT + '/config.png', fullPage: true });
-  await page.locator('[data-cs="secv"][data-id="v1"]').click();
-  await expect(page.locator('#cssm.csfs')).toBeVisible();
-  await expect(page.locator('#cssm .csmet')).toBeVisible();
-  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(4);
-  await expect(page.locator('#cssm .csfst .csbal').first()).toBeVisible();
-  if (SHOT) await page.screenshot({ path: SHOT + '/asistente.png' });
-  /* 5 sectores desde el sótano al techo 1: los sectores que no existen se crean */
-  await page.locator('#cssm [data-csopen="ver"] summary').click();
-  await page.locator('#css_to').selectOption('n1');
-  await page.locator('#cssm [data-css="add"]').click();
-  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(5);
-  page.once('dialog', d => d.accept());
-  await page.locator('#cssm [data-css="apply"]').click();
-  await expect.poll(() => page.evaluate(() => csAmbs('n1', 'E').length)).toBe(5);
-  expect(await page.evaluate(() => csAmbs('n2', 'E').length)).toBe(4);
-  expect(errors).toEqual([]);
-});
-
 test('casco: publica las entregas como hitos del piso en Last Planner', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
@@ -139,35 +114,6 @@ test('casco: todas las pestañas se dibujan sin errores con la obra de ejemplo (
   await page.evaluate(() => { U.tab = 'look'; U.lkV = 'tren'; render(); });
   if (SHOT) await page.screenshot({ path: SHOT + '/tren-oscuro.png' });
   expect(errors).toEqual([]);
-});
-
-test('casco: el asistente dibuja un sector sobre la lámina, da su área con la escala del módulo Planos y calcula metrados con los ratios', async ({ page }) => {
-  const errors = await casco(page);
-  await cargarEjemplo(page);
-  await page.evaluate(async () => {
-    const L = (id, pid) => fcol('laminas').doc(id).set({ pisoId: pid, base: true, esp: 'Estructura', name: 'Encofrado techo típico', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
-    await L('lamT3', 'n3'); await L('lamT4', 'n4');
-  });
-  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  await page.locator('[data-cs="secv"][data-id="v1"]').click();
-  await page.locator('#css_ref').selectOption('n3');
-  await expect(page.locator('#cssmap .pvs')).toHaveCount(1, { timeout: 15000 });
-  await page.locator('[data-csrow="0"]').click();
-  await page.locator('[data-cstool="rect"]').click();
-  const bx = await page.locator('#cssmap').boundingBox();
-  await page.mouse.move(bx.x + 60, bx.y + 60); await page.mouse.down();
-  await page.mouse.move(bx.x + 160, bx.y + 120, { steps: 5 }); await page.mouse.move(bx.x + 220, bx.y + 180, { steps: 5 }); await page.mouse.up();
-  await expect(page.locator('[data-csrow="0"] td:nth-child(3) b')).toHaveText(/\d/);
-  const r = await page.evaluate(() => { const a = +document.querySelector('[data-csrow="0"] td:nth-child(3) b').textContent.replace(/[^\d.]/g, ''); const vl = +document.querySelector('[data-cssm="k-VL:0"]').value; return { a, vl }; });
-  expect(r.a).toBeGreaterThan(0);
-  expect(r.vl).toBeCloseTo(Math.round(r.a * 0.2 * 10) / 10, 1);
-  if (SHOT) await page.screenshot({ path: SHOT + '/asistente-plano.png' });
-  page.once('dialog', d => d.accept());
-  await page.locator('#cssm [data-css="apply"]').click();
-  await expect.poll(() => page.evaluate(() => !!(S.amb.get('n3-e1').geo || {}).lamT3)).toBe(true);
-  expect(await page.evaluate(() => !!(S.amb.get('n4-e1').geo || {}).lamT4)).toBe(true);
-  expect(await page.evaluate(() => (S.amb.get('n3-e1').geo || {}).lamT4)).toBeUndefined();
-  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
 });
 
 test('casco: niveles en Configuración: editar códigos, agregar antes y después, reordenar y eliminar (archiva, con Deshacer)', async ({ page }) => {
@@ -250,41 +196,6 @@ test('casco: Vaciar Casco borra niveles y todo lo de Casco, conserva configuraci
   expect(errors).toEqual([]);
 });
 
-test('casco: el asistente nuevo crea un sector por cada rectángulo trazado y muestra sus datos en el panel', async ({ page }) => {
-  const errors = await casco(page);
-  await cargarEjemplo(page);
-  await page.evaluate(async () => {
-    await fcol('laminas').doc('lamT3').set({ pisoId: 'n3', base: true, esp: 'Estructura', name: 'Encofrado', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
-    U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  await page.locator('[data-cs="secnew"]').click();
-  await expect(page.locator('#cssm.csfs')).toBeVisible();
-  await expect(page.locator('[data-cstool="rect"]')).toHaveClass(/on/);/* versión nueva: arranca con el rectángulo */
-  await page.locator('#css_ref').selectOption('n3');
-  await expect(page.locator('#cssmap .pvs')).toHaveCount(1, { timeout: 15000 });
-  const bx = await page.locator('#cssmap').boundingBox();
-  const rect = async (x0, y0, x1, y1) => { await page.mouse.move(bx.x + x0, bx.y + y0); await page.mouse.down(); await page.mouse.move(bx.x + (x0 + x1) / 2, bx.y + (y0 + y1) / 2, { steps: 4 }); await page.mouse.move(bx.x + x1, bx.y + y1, { steps: 4 }); await page.mouse.up(); };
-  await rect(80, 120, 260, 300);
-  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(1);
-  await rect(300, 120, 480, 300);
-  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(2);
-  await expect(page.locator('[data-csrow="1"] td:nth-child(3) b')).toHaveText(/\d/);
-  expect(await page.locator('[data-cssm="k-VL:1"]').inputValue()).not.toBe('');
-  /* el panel se pliega y vuelve */
-  await page.locator('[data-css="side"]').click();
-  await expect(page.locator('#cssside')).toBeHidden();
-  await page.locator('[data-css="side"]').click();
-  await expect(page.locator('#cssside')).toBeVisible();
-  if (SHOT) await page.screenshot({ path: SHOT + '/asistente-pantalla.png' });
-  /* quitar un sector */
-  await page.locator('[data-csdel="0"]').click();
-  await expect(page.locator('#cssm .csfst tbody tr')).toHaveCount(1);
-  await page.locator('[data-css="save"]').click();
-  await expect(page.locator('#cssm')).toHaveCount(0);
-  const v = await page.evaluate(() => Object.values(window.__dbAll('cs_ksec')).find(x => x.ref === 'n3'));
-  expect(v.k).toBe(1); expect(v.geo[0].length).toBeGreaterThanOrEqual(8);
-  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
-});
-
 test('casco: «+ Agregar niveles arriba» acepta un nombre o una cantidad', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
@@ -321,3 +232,70 @@ test('casco: vincular arma la lámina con los mosaicos del módulo Planos (sin b
   await expect(page.locator('#cslamst')).toBeHidden();
   expect(errors.filter(e => !/Failed to load resource/.test(e))).toEqual([]);
 });
+
+/* Sectorización de Casco (casco-sz.js): frentes de trabajo y asistente con juntas, semáforo y aplicar a niveles */
+test('casco: frente con contorno y cuadrillas, alternativa con juntas, semáforo, deshacer y aplicar a los niveles', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const extra = [['plb', 'EST_E03', { cod: 'E-03', disc: 'EST', niv: 'P3', tit: 'Encofrado', tipo: 'Planta', rev: 1, base: 'planos/E-03/r1', W: 4000, H: 3000, Z: 1, mm: [1200, 900], revs: [], cal: { mpp: 0.005, rev: 1 } }]];
+  const errors = await openApp(page, { as: 'admin', extra });
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    const L = (id, pid) => fcol('laminas').doc(id).set({ pisoId: pid, base: true, esp: 'Estructuras', name: 'Encofrado', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', disc: 'EST', rev: 1, mpp: 0.0065 }, order: 1, ts: 1 });
+    await L('lamT3', 'n3'); await L('lamT4', 'n4');
+    U.tab = 'planos'; U.csSzV = 'fr'; render();
+  });
+  await page.locator('[data-csz="frnew"]').first().click();
+  await expect.poll(() => page.evaluate(() => Object.values(window.__dbAll('cs_kfr')).length)).toBe(1);
+  await expect(page.locator('#csszmap .pvs')).toHaveCount(1, { timeout: 15000 });
+  await expect(page.locator('#csszsc')).toContainText('calibrada');/* la escala sale de la calibración del plano en Planos, no de la copia de la lámina */
+  const bx = await page.locator('#csszmap').boundingBox();
+  const drag = async (x0, y0, x1, y1) => { await page.mouse.move(bx.x + x0, bx.y + y0); await page.mouse.down(); await page.mouse.move(bx.x + (x0 + x1) / 2, bx.y + (y0 + y1) / 2, { steps: 4 }); await page.mouse.move(bx.x + x1, bx.y + y1, { steps: 4 }); await page.mouse.up(); };
+  await drag(80, 80, 480, 320);
+  await expect.poll(() => page.evaluate(() => ((Object.values(window.__dbAll('cs_kfr'))[0].cE || {}).pts || []).length)).toBe(8);
+  await page.locator('[data-csfc="k-AV"]').fill('6'); await page.locator('[data-csfc="k-AV"]').dispatchEvent('change');
+  await page.locator('[data-csfr="vac"]').fill('60'); await page.locator('[data-csfr="vac"]').dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => { const f = Object.values(window.__dbAll('cs_kfr'))[0]; return f.cua['k-AV'] + '|' + f.vac; })).toBe('6|60');
+  /* Sectores: primera alternativa, dividir en 4 con cortes verticales */
+  await page.locator('#csszn [data-cszv="sec"]').click();
+  await page.locator('[data-csz="altnew"]').first().click();
+  await page.locator('[data-csz="div"]').click();
+  await page.locator('#pop [data-do="d"][data-n="4"][data-dir="v"]').click();
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
+  await expect(page.locator('#csszside .csszi li').first().locator('.csszd')).toHaveClass(/good/);/* 4 de igual área: carga pareja */
+  await expect(page.locator('#csszside .csszrec')).toContainText('sector');
+  if (SHOT) await page.screenshot({ path: SHOT + '/sectorizacion.png' });
+  /* una junta más parte el primer sector: 5; Deshacer vuelve a 4 */
+  await page.locator('[data-cszt="jun"]').click();
+  await page.mouse.click(bx.x + 120, bx.y + 150); await page.mouse.click(bx.x + 120, bx.y + 250);
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(5);
+  await expect(page.locator('#csszside .csszi li').first().locator('.csszd')).not.toHaveClass(/good/);
+  await page.locator('[data-csz="undo"]').click();
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
+  await expect.poll(() => page.evaluate(() => ((Object.values(window.__dbAll('cs_ksec')).find(v => v.fr) || {}).jun || []).length), { timeout: 5000 }).toBe(3);
+  /* aplicar: el frente único adopta los sectores de estructura de cada nivel y los nombra A1…A4 */
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-csz="apply"]').click();
+  await expect.poll(() => page.evaluate(() => csAmbs('n3', 'E').map(a => a.code).join())).toBe('A1,A2,A3,A4');
+  expect(await page.evaluate(() => csAmbs('n8', 'E').map(a => a.code).join())).toBe('A1,A2,A3,A4');
+  expect(await page.evaluate(() => !!(S.amb.get(csAmbs('n3', 'E')[0].id).geo || {}).lamT3)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!(Object.values(window.__dbAll('cs_ksec')).find(v => v.fr) || {}).ap)).toBe(true);
+  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
+});
+
+test('casco: geometría del asistente: juntas que se prolongan hasta el borde y dividir en N partes de igual área', async ({ page }) => {
+  const errors = await casco(page);
+  const r = await page.evaluate(() => {
+    const C = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 200 }, { x: 0, y: 200 }];
+    const j = csgSnap(C, [], { x: 100, y: 50 }, { x: 102, y: 150 });/* casi vertical: se endereza y llega a los bordes */
+    const P = csgPieces(C, [j]).map(p => Math.round(csPolyA(p)));
+    const J = csgDivide(C, 4, 'v');const Q = csgPieces(C, J).map(p => Math.round(csPolyA(p)));
+    const t = csgSnap(C, [j], { x: 20, y: 100 }, { x: 60, y: 100 });/* horizontal a la izquierda de la junta: termina en ella */
+    return { j, P, Q, t };
+  });
+  expect(r.j).toEqual([101, 0, 101, 200]);
+  expect(r.P.sort((a, b) => a - b)).toEqual([20200, 59800]);
+  expect(r.Q).toEqual([20000, 20000, 20000, 20000]);
+  expect(r.t).toEqual([0, 100, 101, 100]);
+  expect(errors).toEqual([]);
+});
+

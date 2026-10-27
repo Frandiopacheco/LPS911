@@ -18,12 +18,15 @@ function szTree(pid){const k=typeof DV!=='undefined'?DV:-2;if(SZT.k!==k||!SZT.m)
 function szStats(pid,vista){let n=0,k=0;for(const{ambs}of szTree(pid))for(const{a}of ambs){n++;if(vista?szGeo(a,vista):a.geo&&Object.values(a.geo).some(g=>g&&g.length>=6))k++}return{n,k}}
 function szBase(pid){const API=window.__plano;const bs=API&&API.basesOf?API.basesOf(pid):[];if(!bs.some(b=>b.id===SZ.vista))SZ.vista=(bs[0]||{}).id||'';return bs}
 
-function renderPlanos(main){if(!window.__plano||!window.__plano.ambMap)loadPlanoMod().catch(()=>{});
+function renderPlanos(main){/* Casco: Frentes y Sectores (asistente) en casco-sz.js; «Láminas» es esta vista */
+  if(CS()&&typeof csSzRender==='function'&&csSzV()!=='lam'){csSzRender(main);return}
+  if(!window.__plano||!window.__plano.ambMap)loadPlanoMod().catch(()=>{});
   const API=window.__plano&&window.__plano.ambMap?window.__plano:null;const ce=canWrite&&!(U.ver&&U.verMode==='ver');
   if(!$('#szmap',main)){SZ.tmp=[];
     main.innerHTML=`<div class="scroll"><div class="wrap szwrap"><div id="szhead"></div><div id="szpis" class="szpis"></div>
       <div class="szbody" id="szbody"><aside class="szside"><div class="szf"><input type="search" class="tin" id="szq" placeholder="Buscar ambiente o sector" aria-label="Buscar"><label class="chk"><input type="checkbox" id="szmiss"> Solo sin ubicar</label></div><div class="szlist" id="szlist"></div></aside>
       <section class="szmapw"><div class="sztool" id="sztool"></div><div class="szmapb"><div class="szmap" id="szmap"></div><div class="szleg" id="szleg"></div></div></section></div><div id="szold"></div></div></div>`;
+    if(CS()&&typeof csSzNav==='function'){$('.szwrap',main).insertAdjacentHTML('afterbegin',csSzNav());$('#csszn',main).addEventListener('click',e=>{const b=e.target.closest('[data-cszv]');if(b){U.csSzV=b.dataset.cszv;saveUI();render()}})}
     main.onclick=szClick;main.onchange=szChange;main.oninput=e=>{if(e.target.id==='szq'){SZ.q=e.target.value;szList()}}}
   const pid=U.piso;const bs=pid?szBase(pid):[];
   $('#szhead',main).innerHTML=pageHead('Sectorización',`${pid?esc(S.pis.get(pid)?.code+' · '+S.pis.get(pid)?.name):'Elige un nivel'} · ubicación de sectores y ambientes en la lámina`,

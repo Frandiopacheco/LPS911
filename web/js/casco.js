@@ -298,12 +298,7 @@ function csBal(v){const cats=csCats(v.grp).filter(c=>c.rend>0);const k=v.k||0;co
   cats.forEach(c=>{const m=(v.met||{})[c.id]||[];for(let i=0;i<k;i++)hd[i]+=(+m[i]||0)/c.rend});
   const avg=hd.reduce((s,x)=>s+x,0)/(k||1);const dev=hd.map(x=>avg?(x-avg)/avg:0);const mx=Math.max(0,...dev.map(Math.abs));return{hd,avg,dev,mx}}
 const csBalCls=x=>Math.abs(x)<=.1?'ok':Math.abs(x)<=.2?'warn':'bad';
-function csSecCard(){const ed=csEd(),L=pisos();const V=[...KSEC.values()].sort((a,b)=>CSG_ORD.indexOf(a.grp)-CSG_ORD.indexOf(b.grp)||((S.pis.get(a.from)||{}).order||0)-((S.pis.get(b.from)||{}).order||0));
-  const nm=id=>{const p=S.pis.get(id);return p?p.name:'—'};
-  return `<div class="card"><h2>Asistente de sectorización <span class="sub">Versiones por rango de niveles: cambiar desde un nivel no toca lo ya programado ni lo congelado</span></h2><div class="tscroll"><table class="t"><thead><tr><th>Versión</th><th>Grupo</th><th>Niveles</th><th>Sectores</th><th title="Mayor desviación de la carga (persona-días) de un sector respecto del promedio">Balance</th><th></th></tr></thead><tbody>
-    ${V.map(v=>{const b=csBal(v);return`<tr><td><b>${esc(v.n||v.id)}</b>${v.note?`<div class="mu">${esc(v.note)}</div>`:''}</td><td>${esc(CSG[v.grp]||v.grp)}</td><td>${esc(nm(v.from))} a ${esc(nm(v.to))}</td><td>${v.k}</td><td><span class="csbal ${csBalCls(b.mx)}">±${Math.round(b.mx*100)}%</span></td>
-      <td class="csrow"><button class="ib" data-cs="secv" data-id="${esc(v.id)}">${ed?'Abrir':'Ver'}</button></td></tr>`}).join('')||`<tr><td colspan="6" class="mu" style="padding:12px">Sin versiones. ${ed?'Crea la primera: define cuántos sectores y sus metrados, revisa el balance y aplícala a un rango de niveles.':''}</td></tr>`}
-    </tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="secnew">+ Nueva versión</button><span class="note">Luego dibuja cada sector sobre la lámina del nivel en Sectorización.</span></div>`:''}</div>`}
+function csSecCard(){return`<div class="card"><h2>Frentes y sectorización <span class="sub">Ahora están en la pestaña Sectorización</span></h2><div class="pad csrow"><span class="note" style="flex:1">Define los frentes de trabajo (con sus cuadrillas) y compara alternativas de sectorización con el semáforo del asistente.</span><button class="ib pri" data-cs="gosz">Ir a Sectorización</button></div></div>`}
 /* ratios por defecto (metrado por m² de planta; elegidos para un edificio típico de concreto armado en Lima, 26-10-2026): estructura por m²
    de techo (planta de encofrado), albañilería por m² de piso (planta de arquitectura). Se ajustan en el catálogo. */
 const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
@@ -314,112 +309,10 @@ const csPolyA=P=>{let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P
 const csUnflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
 const CS_SCOL=['#1D9E75','#BA7517','#7F77DD','#D4537E','#378ADD','#639922','#D85A30','#888780'];
 /** m² de cada sector dibujado (null si la lámina no tiene escala: no viene del módulo Planos) */
-function csAreas(v){const API=window.__plano;const l=API&&v.vista?API.LAM.get(v.vista):null;const mpp=l&&l.plb&&l.plb.mpp>0?l.plb.mpp:null;
+function csAreas(v){const API=window.__plano;const l=API&&v.vista?API.LAM.get(v.vista):null;const mpp=typeof csScale==='function'?csScale(l).mpp:(l&&l.plb&&l.plb.mpp>0?l.plb.mpp:null);
   return{mpp,a:Array.from({length:v.k},(_,i)=>{const g=(v.geo||{})[i];return g&&g.length>=6&&mpp?Math.round(csPolyA(csUnflat(g))*mpp*mpp*10)/10:null})}}
 /** metrados de las partidas con ratio: área del sector × ratio */
 function csMetFromAreas(v){const A=csAreas(v).a;if(!A.some(x=>x>0))return;v.met=v.met||{};for(const c of csCats(v.grp))if(c.rat>0){const old=v.met[c.id]||[];v.met[c.id]=A.map((a,i)=>a>0?Math.round(a*c.rat*10)/10:(old[i]??null))}}
-/* Asistente de sectorización a pantalla completa (26-10-2026, pedido del dueño): el plano ocupa casi toda la pantalla; al trazar un
-   rectángulo o polígono se crea el sector siguiente y el panel derecho (plegable; abajo en pantallas angostas) muestra al instante sus
-   datos: área, carga y metrados por partida con los ratios del catálogo. Mismo modelo de versión (cs_ksec) que antes. */
-let CS_SIDE=true;
-function csSecOpen(id){const L=pisos();const v0=id?KSEC.get(id):null;const v=clone(v0)||{n:'Versión '+(KSEC.size+1),grp:'E',from:(L[0]||{}).id||'',to:(L[L.length-1]||{}).id||'',k:0,names:[],met:{},geo:{}};const ed=csEd();
-  v.geo=v.geo||{};v.met=v.met||{};if(!v.ref)v.ref=v.from;
-  const T={cur:0,tool:ed&&!v.k?'rect':'',tmp:[],open:{met:true,ver:false}};
-  const m=document.createElement('div');m.className='csfs';m.id='cssm';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label','Asistente de sectorización');m.tabIndex=-1;
-  m.innerHTML=`<header class="csfh" id="cssmt"></header><div class="csfb${CS_SIDE?'':' noside'}"><div class="csfmap"><div class="cssmap" id="cssmap"></div><div class="csfhint" id="csshint"></div></div><aside class="csfside" id="cssside"></aside></div>`;
-  document.body.appendChild(m);document.documentElement.classList.add('csfs-on');m.focus();
-  const side=m.querySelector('#cssside'),mt=m.querySelector('#cssmt'),host=m.querySelector('#cssmap'),hint=m.querySelector('#csshint');
-  const pre=()=>v.grp==='A'?'A':'S';
-  const names=()=>Array.from({length:v.k},(_,i)=>(v.names&&v.names[i])||(pre()+(i+1)));
-  const col=i=>CS_SCOL[i%CS_SCOL.length];
-  const bases=()=>{const API=window.__plano;return API?API.basesOf(v.ref):[]};
-  /** sector al que va un dibujo nuevo: el elegido si aún no tiene dibujo, el primero sin dibujo, o uno nuevo (máx. 8) */
-  const target=()=>{if(T.cur<v.k&&!v.geo[T.cur])return T.cur;for(let i=0;i<v.k;i++)if(!v.geo[i])return i;if(v.k>=8){toast('Máximo 8 sectores por versión.');return -1}v.k++;v.names=names();return v.k-1};
-  const setGeo=pts=>{const i=target();if(i<0)return;v.geo[i]=pts;T.cur=i;changed()};
-  /* ---- plano ---- */
-  const drawMap=()=>{const API=window.__plano;if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando el plano…</div>';if(typeof loadPlanoMod==='function')loadPlanoMod().then(()=>{if(window.__plano.ensureLam)window.__plano.ensureLam();setTimeout(redraw,300)}).catch(()=>{host.innerHTML='<div class="kemp">No se pudo cargar el plano.</div>'});return}
-    const B=bases();if(B.length&&!B.some(b=>b.id===v.vista))v.vista=(B.find(b=>b.plb)||B[0]).id;
-    const shapes=names().map((n,i)=>({id:'s'+i,kind:'a',pts:v.geo[i]||[],c:col(i),label:n,sel:i===T.cur&&!T.tool,op:.3,sop:.45}));
-    const o={pid:v.ref,vista:v.vista,shapes,canUp:false,draw:ed&&T.tool?T.tool:null,tmp:T.tool==='poly'?T.tmp:null,
-      edit:ed&&!T.tool&&v.geo[T.cur]?{pts:v.geo[T.cur]}:null,onEdit:pts=>{v.geo[T.cur]=pts;changed()},
-      onDrawn:pts=>setGeo(pts),onPoly:pt=>{T.tmp=[...T.tmp,pt];drawMap();drawHint()},
-      onPolyClose:()=>{const P=T.tmp;T.tmp=[];if(P.length>=3)setGeo(P.flatMap(p=>[p.x,p.y]));else{drawMap();drawHint()}},
-      onPick:hit=>{if(hit&&/^s\d+$/.test(hit)){T.cur=+hit.slice(1);drawAll()}}};
-    const r=API.ambMap(host,o);if(!r&&!host._csRetry){host._csRetry=1;setTimeout(()=>{host._csRetry=0;if(m.isConnected)drawMap()},500)}
-    const bl=B.find(b=>b.id===v.vista);if(bl&&!host._img){host._img=1;API.imgURL(bl,'f').then(()=>{if(m.isConnected)drawMap()}).catch(()=>{})}
-    if(typeof drawHint==='function'&&hint.isConnected)drawHint()};
-  const drawHint=()=>{const B=bases(),ar=csAreas(v);let t='';
-    if(!B.length)t='Este nivel no tiene lámina: vincúlala en Configuración › Casco › Niveles (desde el módulo Planos) o elige otro nivel.';
-    else if(T.tool==='rect'){let j=T.cur<v.k&&!v.geo[T.cur]?T.cur:-1;for(let i=0;j<0&&i<v.k;i++)if(!v.geo[i])j=i;t=`Arrastra un rectángulo para el sector <b>${esc(j>=0?names()[j]:pre()+(v.k+1))}</b>. Esc para terminar.`}
-    else if(T.tool==='poly')t=T.tmp.length?`${T.tmp.length} esquina(s). Cierra tocando la primera, doble clic o Enter.`:'Toca cada esquina del sector. Esc para terminar.';
-    else if(ed&&v.geo[T.cur])t=`Arrastra las esquinas para ajustar <b>${esc(names()[T.cur]||'')}</b>, o toca otro sector.`;
-    else if(ed)t='Elige ▭ Rectángulo o ⬠ Polígono y traza un sector: aparece en la tabla de la derecha.';
-    if(B.length&&!ar.mpp)t+=' <span class="warn">Lámina sin escala: para áreas, tómala del módulo Planos.</span>';
-    /* sin lámina: el aviso va en el centro del plano (no encima del mensaje del visor) */
-    const ke=host.querySelector('.kemp');if(!B.length&&ke&&t){ke.innerHTML=t;t=''}
-    hint.innerHTML=t;hint.hidden=!t};
-  /* ---- barra superior ---- */
-  const drawTools=()=>{const B=bases();const lv=L.map(p=>`<option value="${p.id}"${p.id===v.ref?' selected':''}>${esc(p.name)}</option>`).join('');const dis=ed?'':' disabled';
-    mt.innerHTML=`<b class="csft">Sectorización</b><input class="tin csfn" id="css_n" value="${esc(v.n||'')}" aria-label="Nombre de la versión"${dis}>
-      <label class="cssml">Nivel<select id="css_ref">${lv}</select></label>${B.length>1?`<label class="cssml">Lámina<select id="css_vis">${B.map(b=>`<option value="${b.id}"${b.id===v.vista?' selected':''}>${esc(b.name||b.esp||'Lámina')}</option>`).join('')}</select></label>`:''}
-      <span class="seg" role="group" aria-label="Grupo">${['E','A'].map(g=>`<button type="button" data-csgrp="${g}" class="${v.grp===g?'on':''}"${dis} title="${esc(CSG_SUB[g])}">${g==='E'?'Estructura':'Albañilería'}</button>`).join('')}</span>
-      ${ed?`<span class="seg" role="group" aria-label="Herramienta"><button type="button" data-cstool="sel" class="${!T.tool?'on':''}" title="Elegir un sector y ajustar sus esquinas">✋ Elegir</button><button type="button" data-cstool="rect" class="${T.tool==='rect'?'on':''}" title="Arrastra un rectángulo: crea el sector siguiente">▭ Rectángulo</button><button type="button" data-cstool="poly" class="${T.tool==='poly'?'on':''}" title="Toca cada esquina; cierra tocando la primera, doble clic o Enter">⬠ Polígono</button></span>`:''}
-      <span style="flex:1"></span>
-      <button type="button" class="ib${CS_SIDE?' on':''}" data-css="side" aria-pressed="${CS_SIDE}" title="Mostrar u ocultar el panel de datos">▤ Datos</button>
-      <button type="button" class="ib" data-css="x">Cerrar</button>${ed?'<button type="button" class="ib" data-css="save">Guardar</button><button type="button" class="ib pri" data-css="apply">Aplicar a niveles</button>':''}`};
-  /* ---- panel de datos ---- */
-  const drawSide=()=>{const nn=names(),cats=csCats(v.grp).filter(c=>c.und),b=csBal({...v,names:nn}),ar=csAreas(v),dis=ed?'':' disabled';
-    const dA=ar.a.filter(x=>x>0),tA=dA.reduce((x,y)=>x+y,0),avA=dA.length>1?tA/dA.length:0;const pc=x=>(x>=0?'+':'')+Math.round(x*100)+'%';
-    const lv=sel=>L.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
-    const rows=nn.map((n,i)=>{const a=ar.a[i],dv=avA&&a?(a-avA)/avA:null;return`<tr class="${i===T.cur?'on':''}" data-csrow="${i}"><td><i class="csdot" style="--c:${col(i)}"></i></td><td><input class="ci csn" data-cssn="${i}" value="${esc(n)}" aria-label="Nombre del sector ${i+1}"${dis}></td>
-      <td class="mono">${a!=null?`<b>${a}</b>${dv!=null?` <span class="csbal ${csBalCls(dv)}">${pc(dv)}</span>`:''}`:v.geo[i]?'<span class="mu">sin escala</span>':'<span class="mu">sin dibujo</span>'}</td>
-      <td class="mono"><b>${Math.round(b.hd[i]*10)/10}</b>${v.k>1?` <span class="csbal ${csBalCls(b.dev[i])}">${pc(b.dev[i])}</span>`:''}</td>
-      <td>${ed?`<button type="button" class="ab" data-csdel="${i}" title="Quitar el sector ${esc(n)}" aria-label="Quitar ${esc(n)}">&times;</button>`:''}</td></tr>`}).join('');
-    side.innerHTML=`<div class="csfsec"><div class="csfsh"><b>Sectores</b><span class="mu">${v.k} · ${tA?Math.round(tA)+' m² dibujados':'sin áreas aún'}</span>${v.k>1?`<span class="csbal ${csBalCls(b.mx)}" title="Mayor desviación de la carga respecto del promedio">balance ±${Math.round(b.mx*100)}%</span>`:''}</div>
-        ${v.k?`<table class="t csfst"><thead><tr><th></th><th>Sector</th><th title="Área de planta del dibujo (escala del módulo Planos) y su desviación del promedio">Área m²</th><th title="Σ metrado ÷ rendimiento: lo que debe quedar parejo para el tren">Carga pers·día</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:`<p class="mu csfemp">Todavía no hay sectores. ${ed?'Traza un rectángulo sobre el plano: cada trazo crea un sector.':''}</p>`}
-        ${ed&&v.k<8?'<button type="button" class="ib csfadd" data-css="add" title="Para escribir sus metrados sin dibujarlo">+ Sector sin dibujo</button>':''}</div>
-      ${v.k?`<details class="csfsec" data-csopen="met"${T.open.met?' open':''}><summary><b>Metrados por partida</b><span class="mu">${esc(CSG[v.grp])}</span></summary>
-        <div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th title="Metrado por m² de planta (se cambia en el catálogo)">Ratio</th>${nn.map((n,i)=>`<th><i class="csdot" style="--c:${col(i)}"></i>${esc(n)}</th>`).join('')}<th title="Desviación máxima de esta partida">±</th></tr></thead><tbody>
-        ${cats.map(c=>{const r=v.met[c.id]||[];const vals=nn.map((_,i)=>+r[i]||0);const av=vals.reduce((s,x)=>s+x,0)/(vals.length||1);const mx=Math.max(0,...vals.map(x=>av?Math.abs(x-av)/av:0));const auto=c.rat>0;
-          return`<tr><td>${esc(c.name)} <span class="mu">${esc(c.und)}</span></td><td class="mono mu">${c.rat>0?c.rat:'—'}</td>${nn.map((_,i)=>{const ro=auto&&ar.a[i]>0;return`<td><input class="ci csn${ro?' csauto':''}" type="number" min="0" step="any" data-cssm="${esc(c.id)}:${i}" value="${r[i]??''}"${dis||(ro?' readonly':'')} aria-label="${esc(c.name)} en ${esc(nn[i])}"${ro?' title="Área × ratio"':''}></td>`}).join('')}<td><span class="csbal ${csBalCls(mx)}">${Math.round(mx*100)}%</span></td></tr>`}).join('')||`<tr><td colspan="${3+v.k}" class="mu">El catálogo no tiene partidas con unidad en este grupo.</td></tr>`}
-        </tbody></table></div><p class="note">En gris: área × ratio (se calculan solas al dibujar). Las demás se escriben.</p></details>`:''}
-      <details class="csfsec" data-csopen="ver"${T.open.ver?' open':''}><summary><b>Niveles donde se aplica</b><span class="mu">${esc((S.pis.get(v.from)||{}).name||'—')} a ${esc((S.pis.get(v.to)||{}).name||'—')}</span></summary>
-        <div class="csgf"><label>Desde<select id="css_from"${dis}>${lv(v.from)}</select></label><label>Hasta<select id="css_to"${dis}>${lv(v.to)}</select></label>
-        <label class="csgfw">Nota<input id="css_note" value="${esc(v.note||'')}" placeholder="Ej.: juntas al tercio de la luz"${dis}></label></div>
-        <p class="note">«Aplicar a niveles» crea o actualiza estos sectores en cada nivel del rango y pasa el dibujo a los niveles que usan el mismo plano. No toca lo ya programado ni lo congelado.</p></details>`};
-  const drawAll=()=>{drawTools();drawSide();drawMap()};
-  const changed=()=>{csMetFromAreas(v);drawAll()};
-  const redraw=drawAll;
-  const setTool=k=>{T.tool=k==='sel'?'':k;T.tmp=[];drawMap();drawTools();drawHint()};
-  redraw();
-  /* ---- eventos ---- */
-  side.addEventListener('toggle',e=>{const d=e.target.closest&&e.target.closest('[data-csopen]');if(d)T.open[d.dataset.csopen]=d.open},true);
-  side.addEventListener('click',e=>{const dl=e.target.closest('[data-csdel]');if(dl&&ed){const i=+dl.dataset.csdel;const nn=names();nn.splice(i,1);
-      const g={};for(let j=0,k=0;j<v.k;j++)if(j!==i){if(v.geo[j])g[k]=v.geo[j];k++}v.geo=g;for(const c of Object.keys(v.met)){const a=(v.met[c]||[]).slice();a.splice(i,1);v.met[c]=a}
-      v.k--;v.names=nn;if(T.cur>=v.k)T.cur=Math.max(0,v.k-1);changed();return}
-    const ad=e.target.closest('[data-css="add"]');if(ad&&ed){if(v.k<8){v.k++;v.names=names();T.cur=v.k-1;drawAll()}return}
-    const tr=e.target.closest('[data-csrow]');if(tr&&!e.target.closest('input,button')){T.cur=+tr.dataset.csrow;if(T.tool){T.tool='';T.tmp=[]}drawAll()}});
-  side.addEventListener('change',e=>{if(!ed)return;const t=e.target;
-    if(t.dataset.cssn){const nn=names();nn[+t.dataset.cssn]=t.value.trim()||nn[+t.dataset.cssn];v.names=nn;drawMap();drawSide();return}
-    if(t.dataset.cssm){const[c,k]=t.dataset.cssm.split(':');(v.met[c]=(v.met[c]||[]).slice())[+k]=t.value===''?null:+t.value;drawSide();return}
-    if(t.id==='css_from')v.from=t.value;else if(t.id==='css_to')v.to=t.value;else if(t.id==='css_note')v.note=t.value.trim();drawSide()});
-  mt.addEventListener('change',e=>{const t=e.target;if(t.id==='css_ref'){v.ref=t.value;v.vista='';host._img=0;host._fk='';T.tmp=[];drawAll()}else if(t.id==='css_vis'){v.vista=t.value;host._img=0;changed()}else if(t.id==='css_n'&&ed)v.n=t.value.trim()||v.n});
-  mt.addEventListener('click',e=>{const g=e.target.closest('[data-csgrp]');if(g&&ed){if(g.dataset.csgrp!==v.grp){v.grp=g.dataset.csgrp;v.names=null;csMetFromAreas(v);drawAll()}return}
-    const tl=e.target.closest('[data-cstool]');if(tl){setTool(tl.dataset.cstool);return}});
-  const close=()=>{m.remove();document.documentElement.classList.remove('csfs-on')};
-  m.addEventListener('keydown',e=>{if(e.key==='Escape'){if(e.target.closest&&e.target.closest('.uask'))return;e.preventDefault();if(T.tool){setTool('sel')}else close()}
-    if(e.key==='Enter'&&T.tool==='poly'&&T.tmp.length>=3){e.preventDefault();const P=T.tmp;T.tmp=[];setGeo(P.flatMap(p=>[p.x,p.y]))}});
-  m.addEventListener('click',async e=>{const b=e.target.closest('[data-css]');if(!b||b.closest('#cssside'))return;const k=b.dataset.css;
-    if(k==='x'){close();return}
-    if(k==='side'){CS_SIDE=!CS_SIDE;m.querySelector('.csfb').classList.toggle('noside',!CS_SIDE);drawTools();setTimeout(()=>{const hv=host._v;if(hv&&hv.fit)hv.fit()},60);return}
-    if(!ed)return;if(!v.k){toast('Traza al menos un sector.');return}
-    const L2=pisos(),i0=L2.findIndex(p=>p.id===v.from),i1=L2.findIndex(p=>p.id===v.to);if(i0<0||i1<i0){toast('El rango de niveles no es válido: revisa «Niveles donde se aplica».');T.open.ver=true;drawSide();return}
-    const vid=id||uid('ks');const geo={};for(let i=0;i<v.k;i++)if(v.geo[i])geo[i]=v.geo[i];
-    const doc={n:v.n,grp:v.grp,from:v.from,to:v.to,k:v.k,names:names(),met:v.met||{},note:v.note||'',ref:v.ref||'',vista:v.vista||'',geo,area:csAreas(v).a,by:me.email,t:NOW()};
-    try{await fcol('ksec').doc(vid).set(doc)}catch(er){toast('No se pudo guardar: '+(er&&er.code||er));return}
-    if(k==='save'){toast('Versión guardada');close();return}
-    if(k==='apply'){const nL=i1-i0+1;if(!(await uiAsk({title:`Aplicar «${v.n}» a ${nL} nivel(es)`,text:`De ${L2[i0].name} a ${L2[i1].name}: ${v.k} sector(es) de ${CSG[v.grp].toLowerCase()} en cada nivel.`,note:'Lo ya programado y lo congelado no cambian. Con Deshacer.',ok:'Aplicar',cancel:'Volver'})))return;
-      close();csSecApply({...doc,id:vid})}})}
 /** aplica una versión: en cada nivel del rango deja los sectores del grupo con estos nombres y metrados. Los sectores que sobran se
     archivan solo si no tienen actividades (si tienen, se avisan y quedan: el ingeniero mueve sus actividades primero). */
 /** lámina base del nivel donde va el dibujo de la versión: la misma lámina de referencia, o una que use el mismo plano del módulo Planos (escalada si mide distinto) */
@@ -428,11 +321,14 @@ function csGeoTarget(v,pid){const API=window.__plano;if(!API||!v.vista||!v.geo)r
 async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.from),i1=L.findIndex(p=>p.id===v.to);const ops=[];let keep=0,nw=0,mod=0,geoN=0;const t=NOW();
   if(v.geo&&Object.keys(v.geo).length&&typeof loadPlanoMod==='function'){try{await loadPlanoMod();if(window.__plano.ensureLam)window.__plano.ensureLam()}catch(e){}}
   const used=new Set([...S.act.values()].filter(x=>!x._del).map(x=>x.ambId));
-  for(let i=i0;i<=i1;i++){const p=L[i];let sec=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp);
-    if(!sec){const sid=p.id+'-'+v.grp.toLowerCase();sec={id:sid,pisoId:p.id,code:v.grp==='A'?'A':'E',name:v.grp==='A'?'Albañilería':'Estructura',grp:v.grp,order:v.grp==='A'?3:1};ops.push(op('sectors',sid,{pisoId:sec.pisoId,code:sec.code,name:sec.name,grp:sec.grp,order:sec.order}))}
+  /* con frente (casco-sz.js): un grupo de sectores por nivel, grupo y frente; el grupo antiguo sin frente lo adopta el único frente */
+  const one=typeof KFR==='undefined'||KFR.size<=1;
+  for(let i=i0;i<=i1;i++){const p=L[i];let sec=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp&&(s.fr||'')===(v.fr||''));
+    if(!sec&&v.fr&&one){const lg=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp&&!s.fr);if(lg){sec=lg;const o={...lg};delete o.id;ops.push(op('sectors',lg.id,{...o,fr:v.fr}))}}
+    if(!sec){const sid=p.id+'-'+v.grp.toLowerCase()+(v.fr?'-'+String(v.frc||v.fr).toLowerCase():'');const gn=v.grp==='A'?'Albañilería':'Estructura';sec={id:sid,pisoId:p.id,code:v.grp==='A'?'A':'E',name:v.fr?gn+' · '+(v.frn||v.frc):gn,grp:v.grp,order:v.grp==='A'?3:1};const d={pisoId:sec.pisoId,code:sec.code,name:sec.name,grp:sec.grp,order:sec.order};if(v.fr)d.fr=v.fr;ops.push(op('sectors',sid,d))}
     const cur=[...S.amb.values()].filter(a=>a.sectorId===sec.id).sort(byOrder);
     for(let s=0;s<v.k;s++){const met={};for(const[c,arr]of Object.entries(v.met||{}))if(arr&&arr[s]!=null)met[c]=+arr[s];
-      const nmS=v.names[s]||((v.grp==='A'?'A':'S')+(s+1));const nx={sectorId:sec.id,code:nmS,name:'Sector '+nmS.replace(/^S/,''),order:s+1,met,ksec:v.id};
+      const nmS=v.names[s]||((v.grp==='A'?'A':'S')+(s+1));const nx={sectorId:sec.id,code:nmS,name:'Sector '+(v.fr?nmS:nmS.replace(/^S/,'')),order:s+1,met,ksec:v.id};
       /* el dibujo del asistente pasa a la lámina base del nivel que usa el mismo plano del módulo Planos (o a la misma lámina) */
       const tg=csGeoTarget(v,p.id);const g0=(v.geo||{})[s];if(tg&&g0){const k=tg.k;nx.geo={...((cur[s]&&cur[s].geo)||{}),[tg.id]:g0.map(x=>Math.round(x*k*10)/10)};geoN++}
       if(cur[s]){const o={...cur[s]};delete o.id;const n2={...o,...nx};if(canon(n2)!==canon(o)){ops.push(op('ambientes',cur[s].id,n2));mod++}}else{ops.push(op('ambientes',uid('am'),nx));nw++}}
@@ -513,7 +409,7 @@ document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
   if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
-  else if(k==='entpub')csEntPublish();else if(k==='secnew')csSecOpen('');else if(k==='secv')csSecOpen(b.dataset.id);else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
+  else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}
   if(t.dataset&&t.dataset.cslv){csLvSet(t.dataset.id,t.dataset.cslv,t.value);return}
