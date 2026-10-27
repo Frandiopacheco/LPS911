@@ -52,7 +52,7 @@ function renderCfg(main){
   const tpls=(p.templates||[]).map(t=>({...t,acts:(t.acts||[]).map(a=>Array.isArray(a)?{sc:a[0],name:a[1]}:a)}));
   const conSel=(sel,ti,ai)=>`<select data-tsc="${ti}:${ai}"${dis}>${cons.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
   const cv=cfgV();
-  main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead('Configuración','Datos de la obra que usan todas las pestañas')}
+  main.innerHTML=`<div class="scroll"><div class="wrap${cv==='cas'?' wrapw':''}">${pageHead('Configuración','Datos de la obra que usan todas las pestañas')}
   ${canWrite?'':`<div class="callout">Tu rol es ${esc(ROLE[me.role]||me.role)}: puedes ver la configuración pero no cambiarla.</div>`}
   ${cfgSeg()}
   ${cv==='sc'?`  <div class="card"><h2>Subcontratistas <span class="sub">El color pinta las barras del lookahead y los reportes</span></h2><div class="tscroll"><table class="t rt"><thead><tr><th>Color</th><th>Nombre</th><th>Partida</th><th title="Una por subcontratista (si hace dos, regístralo como dos). Sale en el catálogo, el AR y los indicadores">Especialidad</th><th title="Marca «POR DEFINIR» y similares: se programa igual, pero no se le mide cumplimiento ni entra a los rankings">Sin asignar</th><th>Actividades</th><th></th></tr></thead><tbody>

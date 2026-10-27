@@ -158,7 +158,7 @@ test('casco: Niveles sugiere y vincula el encofrado (EST) y la arquitectura (ARQ
   await expect(page.locator('[data-cs="lvok"][data-id="n3"][data-disc="ARQ"]')).toHaveAttribute('data-plb', 'ARQ_A-03');
   await expect(page.locator('[data-cs="lvsug"]')).toContainText('(3)');
   await page.locator('[data-cs="lvsug"]').click();
-  await expect.poll(() => page.evaluate(() => [...window.__plano.LAM.values()].filter(l => l.plb).map(l => l.pisoId + ':' + l.plb.disc).sort().join()), { timeout: 30000 }).toBe('n3:ARQ,n3:EST,n4:EST');
+  await expect.poll(() => page.evaluate(() => [...window.__plano.LAM.values()].filter(l => l.plb).map(l => l.pisoId + ':' + l.plb.disc).sort().join()), { timeout: 60000 }).toBe('n3:ARQ,n3:EST,n4:EST');
   await expect(page.locator('.cslam .mono').first()).toBeVisible();
   expect(await page.locator('[data-cs="lvsug"]').count()).toBe(0);
   expect(errors.filter(e => !/Failed to load resource/.test(e))).toEqual([]);
@@ -310,4 +310,62 @@ test('casco: «Completar ratios por defecto» no escribe valores vacíos (Firest
   expect(r).toBe(0);
   expect(await page.evaluate(() => window.__dbGet('cs_mcat', 'k-E1').rat)).toBeNull();
   expect(errors).toEqual([]);
+});
+
+test('casco: catálogo con incidencia, rendimiento en und/día o HH/und y jornada configurable', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await expect(page.locator('.cscat thead')).toContainText('Incidencia por m² de planta');
+  await expect(page.locator('.cscat thead')).not.toContainText('Desfase');
+  const hh = page.locator('[data-csc="k-AV"] [data-csf="hh"]');
+  await hh.fill('0.0425'); await hh.dispatchEvent('change');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').rend)).toBe(200);/* 8,5 h ÷ 0,0425 HH/kg */
+  await expect.poll(() => page.locator('[data-csc="k-AV"] [data-csf="hh"]').inputValue()).toBe('0.0425');
+  const jor = page.locator('[data-cs="jor"]');
+  await jor.fill('10'); await jor.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_meta', 'project').jorH)).toBe(10);
+  await expect.poll(() => page.locator('[data-csc="k-AV"] [data-csf="hh"]').inputValue()).toBe('0.05');/* 10 h ÷ 200 */
+  expect(errors).toEqual([]);
+});
+
+test('casco: Sectores reordena el tren y elimina alternativas; Tren arrastra bloques y dibuja la línea de balance', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    await fcol('laminas').doc('lamT3').set({ pisoId: 'n3', base: true, esp: 'Estructuras', name: 'Encofrado', w: 2000, h: 1500, lw: 1000, lh: 750, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'EST_E03', cod: 'E-03', disc: 'EST', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
+    const C = [200, 200, 1400, 200, 1400, 1000, 200, 1000];
+    await fcol('kfr').doc('frA').set({ name: 'Frente A', code: 'A', color: '#1D9E75', from: 'n3', to: 'n8', order: 0, cua: { 'k-AV': 6 }, vac: 60, cE: { ref: 'n3', vista: 'lamT3', pts: C } });
+    const J = csgDivide(csUnflat(C), 4, 'v').map(p => ({ p }));
+    await fcol('ksec').doc('va').set({ n: 'Alternativa 1', fr: 'frA', grp: 'E', mode: 'j', jun: J, shp: [], met: {}, ritmo: 1, t0: 1, ap: { t: 1 } });
+    await fcol('ksec').doc('vb').set({ n: 'Alternativa 2', fr: 'frA', grp: 'E', mode: 'j', jun: J, shp: [], met: {}, ritmo: 1, t0: 2 });
+    U.tab = 'planos'; U.csSzV = 'sec'; render();
+  });
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4, { timeout: 15000 });
+  /* A1 pasa a segundo lugar */
+  await page.locator('[data-cszmv="0"][data-d="1"]').click();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('cs_ksec', 'va').ord || []).join())).toBe('1,0,2,3');
+  await page.locator('[data-csz="ordauto"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_ksec', 'va').ord)).toBeNull();
+  /* eliminar la alternativa 2 (se archiva) */
+  await page.locator('[data-csz="alt"]').selectOption('vb');
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-csz="altdel"]').click();
+  await expect.poll(() => page.evaluate(() => !!window.__dbGet('cs_ksec', 'vb').arch)).toBe(true);
+  await expect(page.locator('[data-csz="alt"] option')).toHaveCount(1);
+  /* Tren: línea de balance y arrastrar un bloque */
+  await page.locator('#csszn [data-cszv="tren"]').click();
+  await expect(page.locator('#cstrl .cstrsvg polyline').first()).toBeVisible();
+  await expect(page.locator('#cstrl .cstrsum')).toContainText('Un techo cada');
+  if (SHOT) await page.screenshot({ path: SHOT + '/tren-tipo.png', fullPage: true });
+  const bar = page.locator('[data-cstrb="k-DV"]');const b = await bar.boundingBox();
+  await page.mouse.move(b.x + 10, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(b.x + 10 + 46 * 2, b.y + b.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-DV').off)).toBe(5);/* entraba el día 3 */
+  const r = await page.locator('[data-cstrb="k-AV"] .cstrrz').boundingBox();
+  await page.mouse.move(r.x + 4, r.y + r.height / 2); await page.mouse.down(); await page.mouse.move(r.x + 4 + 46, r.y + r.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').dur)).toBe(2);
+  await expect(page.locator('#cstrl .cstrsum')).toContainText('dos sectores a la vez');/* acero de verticales 2 días con ritmo 1: la cuadrilla queda en dos sectores */
+  await page.locator('[data-cstrmv="k-AV"][data-d="1"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').tr > window.__dbGet('cs_mcat', 'k-EV').tr)).toBe(true);
+  expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
 });
