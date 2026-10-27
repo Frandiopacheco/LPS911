@@ -29,6 +29,8 @@ let mcatSub=null;
 const mxRendSig=()=>{let s='';for(const[id,c]of MX.cat)if(c&&c.rend>0)s+=id+':'+c.rend+';';return s};
 function ensureMcat(){if(mcatSub||!db)return;
   mcatSub=fcol('mcat').onSnapshot(sn=>{const rs0=mxRendSig();MX.cat.clear();sn.docs.forEach(d=>MX.cat.set(d.id,{...d.data(),id:d.id}));MX.ld.cat=true;MX.err=null;MX.v++;if(ready&&(U.tab==='mat'||U.tab==='hoy'||U.tab==='dash'))snapRender(sn);
+    /* Casco: el catálogo (ratios, rendimientos) se ve en Configuración y lo usa el asistente de Sectorización */
+    else if(ready&&CS()&&(U.tab==='cfg'||U.tab==='planos')&&!(document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)))requestRender();/* no mientras se escribe en otra casilla */
     /* rendimientos del catálogo (25-10-2026): el Lookahead en «Por personal» los usa en todas sus filas; solo se redibuja si cambió alguno */
     else if(ready&&U.tab==='look'&&U.qmode==='personal'&&mxRendSig()!==rs0){if(typeof gridRows!=='undefined')gridRows=null;requestRender()}},
     err=>{MX.err=err&&err.code||'error';MX.ld.cat=true;if(ready&&U.tab==='mat')requestRender()});

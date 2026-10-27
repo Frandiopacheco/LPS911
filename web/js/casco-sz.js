@@ -112,21 +112,24 @@ function csSzEval(v,f){const sec=csSzSectors(v,f),n=sec.length,sc=csScale(csSzLa
   let nmin=0;const why=[];for(const x of crew)if(x.have){const k=Math.ceil(x.tm/(x.have*x.c.rend*R)-1e-9);if(k>nmin)nmin=k}
   if(cap&&cTot){const k=Math.ceil(cTot/cap-1e-9);if(k>nmin)nmin=k}
   const falt=crew.filter(x=>x.have!=null&&x.need>x.have).map(x=>({c:x.c,k:x.need-x.have}));
+  /* sin metrados (el catálogo no tiene ratios ni se escribieron a mano): carga 0, nada que evaluar; se dice qué falta */
+  const noMet=n>0&&!!sc.mpp&&tot===0;const nm=noMet?'Sin metrados: faltan los ratios del catálogo':'—';
   /* semáforo */
   const st=(x,g,w)=>x==null?'na':x<=g?'good':x<=w?'warn':'bad';const I=[];
-  I.push({id:'I1',t:'Balance de carga',s:n>1&&tot?st(devMx,.1,.2):'na',v:n>1&&tot?`±${Math.round(devMx*100)} %`:'—'});
-  I.push({id:'I2',t:'Eficiencia de balance',s:eff==null||n<2?'na':eff>=.9?'good':eff>=.8?'warn':'bad',v:eff==null?'—':`${Math.round(eff*100)} %${n>1?` · ${Math.round((n*mx-tot)*10)/10} pers·día perdidos por desbalance en cada nivel`:''}`});
+  I.push({id:'I1',t:'Balance de carga',s:n>1&&tot?st(devMx,.1,.2):'na',v:n>1&&tot?`±${Math.round(devMx*100)} %`:nm});
+  I.push({id:'I2',t:'Eficiencia de balance',s:eff==null||n<2?'na':eff>=.9?'good':eff>=.8?'warn':'bad',v:eff==null?nm:`${Math.round(eff*100)} %${n>1?` · ${Math.round((n*mx-tot)*10)/10} pers·día perdidos por desbalance en cada nivel`:''}`});
   const wd=falt.length?Math.max(...falt.map(x=>x.k)):0;const hasC=crew.some(x=>x.have!=null);
-  I.push({id:'I3',t:'Cuadrilla necesaria',s:!crew.length||!hasC?'na':wd===0?'good':wd===1?'warn':'bad',v:!crew.length?'—':!hasC?'Pon las cuadrillas del frente':wd?`Faltan ${falt.reduce((a,b)=>a+b.k,0)} persona(s)`:'Alcanzan'});
-  I.push({id:'I4',t:'Concreto por vaciado',s:!cmx||!cap?'na':cmx/cap<=.9?'good':cmx/cap<=1?'warn':'bad',v:!cmx?'—':`${Math.round(cmx*10)/10} m³${cap?` de ${cap} m³/día`:' · pon la capacidad del frente'}`});
+  I.push({id:'I3',t:'Cuadrilla necesaria',s:!crew.length||!hasC?'na':wd===0?'good':wd===1?'warn':'bad',v:!crew.length?nm:!hasC?'Pon las cuadrillas del frente':wd?`Faltan ${falt.reduce((a,b)=>a+b.k,0)} persona(s)`:'Alcanzan'});
+  I.push({id:'I4',t:'Concreto por vaciado',s:!cmx||!cap?'na':cmx/cap<=.9?'good':cmx/cap<=1?'warn':'bad',v:!cmx?nm:`${Math.round(cmx*10)/10} m³${cap?` de ${cap} m³/día`:' · pon la capacidad del frente'}`});
   let s5='na',v5=fin?`Fin estimado ${typeof fmtD==='function'?fmtD(fin):fin}`:'—';if(fin&&hito){const late=hito.d>=fin?0:(typeof wdist==='function'?wdist(hito.d,fin):9);s5=late===0?'good':late<=5?'warn':'bad';v5+=` · hito ${typeof fmtD==='function'?fmtD(hito.d):hito.d}`}
   I.push({id:'I5',t:'Ciclo y fin del casco',s:s5,v:n?`Ciclo ${ciclo} día(s) por nivel · ${v5}`:'—'});
   const s6=cov==null||!n?'na':(cov>=.98&&ovl<=.02&&!jumps.length)?'good':(cov>=.95&&ovl<=.05)?'warn':'bad';
   I.push({id:'I6',t:'Cobertura y secuencia',s:s6,v:cov==null?'Sin contorno del frente':`${Math.round(cov*100)} % cubierto${ovl>.005?` · ${Math.round(ovl*100)} % traslapado`:''}${jumps.length?` · salto ${jumps[0]}`:''}`});
-  return{sec,n,A,met,cats,carga,dev,devMx,eff,idle,crew,cmx,cName,cap,ciclo,dur,fin,hito,cov,ovl,jumps,nmin,falt,I,sc,R,LV}}
+  return{noMet,sec,n,A,met,cats,carga,dev,devMx,eff,idle,crew,cmx,cName,cap,ciclo,dur,fin,hito,cov,ovl,jumps,nmin,falt,I,sc,R,LV}}
 /** recomendación en palabras */
 function csSzRec(E){if(!E.n)return'Traza el primer sector: con el contorno del frente, «Dividir en N» es lo más rápido.';
   if(!E.sc.mpp)return'Sin escala no hay áreas ni metrados: vincula la lámina desde el módulo Planos y calíbrala.';
+  if(E.noMet)return'Las partidas del catálogo no tienen ratio (metrado por m²), así que no hay metrados ni carga por sector. Completa los ratios y se calcula todo.';
   if(!E.nmin)return'Pon en Frentes las cuadrillas del frente (y su capacidad de vaciado) para recomendar el número de sectores.';
   const rt=E.R===1?'1 sector/día':`1 sector cada ${E.R} días`;let t=`${E.nmin} sector${E.nmin>1?'es':''} sostiene${E.nmin>1?'n':''} ${rt} con las cuadrillas de este frente.`;
   if(E.falt.length)t+=` Con ${E.n} te falta${E.falt.length>1||E.falt[0].k>1?'n':''} ${E.falt.map(x=>`${x.k} en ${x.c.name}`).join(', ')}.`;
@@ -223,7 +226,7 @@ function csSecDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd();const v=f?csSzCur(f):nu
   const m3=i=>{const c=E.cats.find(c=>c.vac&&/m3|m³/i.test(c.und||'')&&E.met[c.id].some(x=>x>0));return c?Math.round(E.met[c.id][i]*10)/10:'—'};
   const selI=CSZ.sel&&CSZ.sel.k==='s'?CSZ.sel.i:-1;
   const side=`<div class="csfsec"><div class="csfsh"><b>Semáforo</b><span class="mu">${E.n} sector(es) · ${E.R===1?'1 sector/día':'1 cada 2 días'}</span></div><ul class="csszi">${E.I.map(x=>`<li>${dot(x.s)}<span><b>${x.id} ${esc(x.t)}</b><small>${esc(x.v)}</small></span></li>`).join('')}</ul></div>
-    <div class="csfsec"><div class="csfsh"><b>Recomendación</b></div><p class="csszrec">${esc(csSzRec(E))}</p></div>
+    <div class="csfsec"><div class="csfsh"><b>Recomendación</b></div><p class="csszrec">${esc(csSzRec(E))}</p>${E.noMet&&ed?'<div class="csrow" style="margin-top:8px"><button type="button" class="ib pri" data-cs="ratdef">Completar ratios por defecto</button><span class="note">Luego ajústalos en Configuración › Casco.</span></div>':''}</div>
     <div class="csfsec"><div class="csfsh"><b>Sectores</b><span class="mu">${E.A.some(a=>a!=null)?Math.round(E.A.reduce((s,a)=>s+(a||0),0))+' m²':''}</span></div>
       ${E.n?`<table class="t csfst"><thead><tr><th></th><th>Sector</th><th>m²</th><th title="Σ metrado ÷ rendimiento">pers·día</th><th>±</th><th>m³</th></tr></thead><tbody>${E.sec.map((s,i)=>`<tr class="${i===selI?'on':''}" data-cszs="${i}"><td><i class="csdot" style="--c:${CS_SCOL[i%CS_SCOL.length]}"></i></td><td><b>${esc(s.n)}</b></td><td class="mono">${E.A[i]??'—'}</td><td class="mono">${Math.round(E.carga[i]*10)/10}</td><td>${E.n>1?`<span class="csbal ${csBalCls(E.dev[i])}">${pc(E.dev[i])}</span>`:''}</td><td class="mono">${m3(i)}</td></tr>`).join('')}</tbody></table>`:'<p class="mu csfemp">Sin sectores todavía.</p>'}</div>
     ${E.n?`<details class="csfsec" data-cszo="met"${CSZ.om?' open':''}><summary><b>Por partida</b><span class="mu">metrado por sector y cuadrilla</span></summary><div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th title="Metrado por m² (catálogo)">Ratio</th>${E.sec.map(s=>`<th>${esc(s.n)}</th>`).join('')}<th title="Personas necesarias para el ritmo / del frente">Cuadrilla</th></tr></thead><tbody>

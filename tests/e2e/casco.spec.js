@@ -299,3 +299,15 @@ test('casco: geometría del asistente: juntas que se prolongan hasta el borde y 
   expect(errors).toEqual([]);
 });
 
+
+test('casco: «Completar ratios por defecto» no escribe valores vacíos (Firestore rechazaba el lote entero)', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  await page.evaluate(async () => { const b = db.batch(); for (const c of MX.cat.values()) b.set(fcol('mcat').doc(c.id), { rat: null }, { merge: true }); await b.commit(); U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await page.locator('[data-cs="ratdef"]').first().click();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('cs_mcat', 'k-AV') || {}).rat)).toBe(12);
+  const r = await page.evaluate(() => Object.values(window.__dbAll('cs_mcat')).filter(c => 'rat' in c && c.rat === undefined).length);
+  expect(r).toBe(0);
+  expect(await page.evaluate(() => window.__dbGet('cs_mcat', 'k-E1').rat)).toBeNull();
+  expect(errors).toEqual([]);
+});

@@ -53,7 +53,7 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
     <td><input type="checkbox" data-csf="vac"${c.vac?' checked':''}${dis} aria-label="Vaciado"></td>
     <td><input type="checkbox" data-csf="ent"${c.ent?' checked':''}${dis} aria-label="Entrega a Arquitectura"></td>
     ${ed?`<td><button class="ab" data-cs="catdel" data-id="${esc(c.id)}" title="Quitar del catálogo" aria-label="Quitar ${esc(c.name)}">&times;</button></td>`:''}</tr>`;
-  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(c=>c.rat==null&&csRatKey(c))?'<button class="ib" data-cs="ratdef">Completar ratios por defecto</button>':''}<span class="note">Los cambios se guardan al salir de cada casilla. Ejecutor «casa» se marca abajo.</span></div>`:''}</div>`;
+  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(csRatMiss)?'<button class="ib" data-cs="ratdef">Completar ratios por defecto</button>':''}<span class="note">Los cambios se guardan al salir de cada casilla. Ejecutor «casa» se marca abajo.</span></div>`:''}</div>`;
   /* ejecutores */
   h+=`<div class="card"><h2>Ejecutores <span class="sub">Cuadrillas de casa (con su capataz) o subcontratistas: el PPC se mide por ejecutor</span></h2><div class="pad"><div class="csexl">${cons.map(c=>`<label class="chk"><input type="checkbox" data-cs="casa" data-id="${c.id}"${c.casa?' checked':''}${dis}> <i class="csdot" style="--c:${esc(c.color)}"></i>${esc(c.name)} <span class="mu">${c.casa?'Casa':'Subcontratista'}</span></label>`).join('')||'<span class="mu">Agrégalos en Configuración › Subcontratistas.</span>'}</div>
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
@@ -303,8 +303,10 @@ function csSecCard(){return`<div class="card"><h2>Frentes y sectorización <span
    de techo (planta de encofrado), albañilería por m² de piso (planta de arquitectura). Se ajustan en el catálogo. */
 const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
 const csRatKey=c=>{const k=String(c.ref||c.id||'').replace(/^k-/,'');if(CS_RAT[k]!=null)return k;const d=CS_DEMO_CAT.find(x=>mnk(x[1])===mnk(c.name));return d?d[0]:''};
-async function csRatDef(){if(!csEd())return;const L=csCats().filter(c=>c.rat==null&&csRatKey(c));if(!L.length){toast('Todas las partidas típicas ya tienen ratio.');return}
-  const b=db.batch();L.forEach(c=>b.set(fcol('mcat').doc(c.id),{rat:CS_RAT[csRatKey(c)],by:me.email,t:NOW()},{merge:true}));try{await b.commit();toast(`Ratios por defecto en ${L.length} partida(s)`)}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
+/** partida típica sin ratio que tiene uno por defecto (escalera y entrega no tienen: antes iban como undefined y Firestore rechazaba el lote entero) */
+const csRatMiss=c=>c.rat==null&&CS_RAT[csRatKey(c)]!=null;
+async function csRatDef(){if(!csEd())return;const L=csCats().filter(csRatMiss);if(!L.length){toast('Todas las partidas típicas ya tienen ratio.');return}
+  const b=db.batch();L.forEach(c=>b.set(fcol('mcat').doc(c.id),{rat:CS_RAT[csRatKey(c)],by:me.email,t:NOW()},{merge:true}));try{await b.commit();L.forEach(c=>{const m=MX.cat.get(c.id);if(m)m.rat=CS_RAT[csRatKey(c)]});/* escalera y entrega: sin ratio por defecto, se escriben a mano */toast(`Ratios por defecto en ${L.length} partida(s)`);requestRender()}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
 const csPolyA=P=>{let a=0;for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P[i].x)*(P[j].y-P[i].y);return Math.abs(a/2)};
 const csUnflat=f=>{const o=[];for(let i=0;i+1<(f||[]).length;i+=2)o.push({x:f[i],y:f[i+1]});return o};
 const CS_SCOL=['#1D9E75','#BA7517','#7F77DD','#D4537E','#378ADD','#639922','#D85A30','#888780'];
