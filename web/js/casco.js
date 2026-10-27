@@ -55,7 +55,7 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="rend" value="${c.rend??''}"${dis} aria-label="Rendimiento de ${esc(c.name)}"></td>
     <td><input class="ci csn" type="number" min="0" step="any" data-csf="hh" value="${c.rend>0?Math.round(jor/c.rend*10000)/10000:''}"${dis} aria-label="HH por unidad de ${esc(c.name)}"></td>
     ${ed?`<td><button class="ab" data-cs="catdel" data-id="${esc(c.id)}" title="Quitar del catálogo" aria-label="Quitar ${esc(c.name)}">&times;</button></td>`:''}</tr>`}
-  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(csRatMiss)?'<button class="ib" data-cs="ratdef">Completar incidencias por defecto</button>':''}<button class="ib" data-cs="gotren">Armar el tren en Sectorización › Tren</button><span class="note">Los cambios se guardan al salir de cada casilla.</span></div>`:''}</div>`;
+  h+=`</tbody></table></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="catadd">+ Partida</button>${!cats.length?'<button class="ib pri" data-cs="cattip">Cargar catálogo típico</button>':cats.some(csRatMiss)?'<button class="ib" data-cs="ratdef">Completar incidencias por defecto</button>':''}${cats.length&&csSeqDiff().length?`<button class="ib" data-cs="seqtip" title="Pasa las partidas de estructura a la secuencia típica de horizontales (fondo y 1.er costado de viga → acero de vigas → 2.º costado y fondo de losa → acero de losa e instalaciones → vaciado)">Actualizar a la secuencia típica</button>`:''}<button class="ib" data-cs="gotren">Armar el tren en Sectorización › Tren</button><span class="note">Los cambios se guardan al salir de cada casilla.</span></div>`:''}</div>`;
   /* ejecutores */
   h+=`<div class="card"><h2>Ejecutores <span class="sub">Cuadrillas de casa (con su capataz) o subcontratistas: el PPC se mide por ejecutor</span></h2><div class="pad"><div class="csexl">${cons.map(c=>`<label class="chk"><input type="checkbox" data-cs="casa" data-id="${c.id}"${c.casa?' checked':''}${dis}> <i class="csdot" style="--c:${esc(c.color)}"></i>${esc(c.name)} <span class="mu">${c.casa?'Casa':'Subcontratista'}</span></label>`).join('')||'<span class="mu">Agrégalos en Configuración › Subcontratistas.</span>'}</div>
     <p class="note">Marca las cuadrillas de casa. En Casco se programa en la reunión, sin propuestas: el capataz reporta inicio, detención y cierre desde su celular.</p></div></div>`;
@@ -82,6 +82,25 @@ async function csCatAdd(){const n=await uiAsk({title:'Nueva partida del catálog
   const id=uid('k');const tr=Math.max(0,...csCats().map(c=>+c.tr||0))+1;
   fcol('mcat').doc(id).set({ref:id,name:String(n).trim(),grp:'E',tr,off:0,dur:1,cl:'t',al:[mnk(n)],ord:tr,by:me.email,t:NOW()}).then(()=>toast('Partida agregada')).catch(e=>toast('No se pudo guardar: '+(e&&e.code||e)))}
 /** catálogo típico de casco (el de la obra de ejemplo, sin ejecutores): punto de partida para una obra nueva */
+/** diferencias del catálogo con la secuencia típica de estructura (CS_DEMO_CAT, grupo E): partidas que faltan, obsoletas (EL, AL) o con otro orden/desfase */
+const CS_OLD={EL:'Encofrado de vigas y losa',AL:'Acero de vigas y losa'};
+function csSeqDiff(){const out=[];const has=k=>MX.cat.get('k-'+k);
+  for(const k of Object.keys(CS_OLD)){const c=has(k);if(c&&!c.arch)out.push({k,kind:'old',c})}
+  CS_DEMO_CAT.filter(r=>r[2]==='E').forEach(r=>{const c=has(r[0]);const i=CS_DEMO_CAT.indexOf(r)+1;if(!c)out.push({k:r[0],kind:'add',r,i});else if(!c.arch&&((c.off??0)!==r[7]||(c.dur??1)!==r[8]||(c.tr??0)!==i))out.push({k:r[0],kind:'upd',r,i,c})});return out}
+async function csSeqTip(){if(!csEd())return;const D=csSeqDiff();if(!D.length){toast('El catálogo ya tiene la secuencia típica.');return}
+  const nm=x=>x.c?x.c.name:x.r[1];
+  if(!(await uiAsk({title:'Actualizar a la secuencia típica',text:'Horizontales: día 1 fondo y 1.er costado de viga · día 2 acero de vigas · día 3 2.º costado de viga y fondo de losa · día 4 acero de losa e instalaciones · día 5 vaciado de losa y vigas. Las actividades ya programadas no cambian: vuelve a usar el generador desde mañana.',
+    list:[...D.filter(x=>x.kind==='add').map(x=>'Se agrega: '+nm(x)),...D.filter(x=>x.kind==='old').map(x=>'Se quita del catálogo: '+nm(x)),...D.filter(x=>x.kind==='upd').map(x=>`Se ajusta orden y desfase: ${nm(x)} (desfase ${x.r[7]})`)],ok:'Actualizar'})))return;
+  const b=db.batch(),t=NOW();const ex=k=>{const o=MX.cat.get('k-'+k);return o&&!o.arch?o:null};
+  /* el ejecutor de las nuevas sale de la partida antigua equivalente (encofrado → EL, acero → AL) */
+  const scOf={EF1:(ex('EL')||{}).sc,EF2:(ex('EL')||{}).sc,AVG:(ex('AL')||{}).sc,ALO:(ex('AL')||{}).sc};
+  for(const x of D){if(x.kind==='old'){b.set(fcol('mcat').doc('k-'+x.k),{arch:{t,by:me.email,n:me.name||me.email}},{merge:true});continue}
+    const[k,name,grp,,und,mets,rend,off,dur,vac,ent]=x.r;
+    if(x.kind==='add')b.set(fcol('mcat').doc('k-'+k),{ref:'k-'+k,name,grp,sc:scOf[k]||'',und,mets,rend,rat:CS_RAT[k]??null,off,dur,vac:!!vac,ent:!!ent,tr:x.i,ord:x.i,cl:'t',al:[mnk(name)],by:me.email,t},{merge:true});
+    else b.set(fcol('mcat').doc('k-'+k),{off,dur,tr:x.i,ord:x.i,by:me.email,t},{merge:true})}
+  /* lo de albañilería y escalera conserva su lugar, después de la estructura */
+  csCats().filter(c=>c.grp!=='E').forEach((c,i)=>b.set(fcol('mcat').doc(c.id),{tr:CS_DEMO_CAT.filter(r=>r[2]==='E').length+1+i},{merge:true}));
+  try{await b.commit();toast('Secuencia típica aplicada al catálogo. Revisa los ejecutores y vuelve a generar el tren desde mañana.')}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
 async function csCatTip(){if(!csEd()||csCats().length)return;if(!(await uiAsk({title:'Cargar catálogo típico',text:`Se agregan ${CS_DEMO_CAT.length} partidas típicas (estructura, escalera, albañilería, tabiques, tarrajeo y entrega) con su secuencia, rendimientos y metrados de referencia. Luego asigna los ejecutores y ajusta los valores a tu obra.`,ok:'Cargar'})))return;
   const b=db.batch(),t=NOW();CS_DEMO_CAT.forEach(([k,name,grp,,und,mets,rend,off,dur,vac,ent],i)=>b.set(fcol('mcat').doc('k-'+k),{ref:'k-'+k,name,grp,sc:'',und,mets,rend,rat:CS_RAT[k]??null,off,dur,vac:!!vac,ent:!!ent,tr:i+1,ord:i+1,cl:'t',al:[mnk(name)],by:me.email,t},{merge:true}));
   try{await b.commit();toast('Catálogo típico cargado')}catch(e){toast('No se pudo: '+(e&&e.code||e))}}
@@ -98,8 +117,11 @@ async function csInit(){if(!isAdmin)return;if(!(await uiAsk({title:'Crear Casco'
 const CS_DEMO_CON=[['cs-ramos','Cuadrilla Ramos','#1f5f7a',true,'Encofrado y concreto'],['cs-quispe','Cuadrilla Quispe','#6a4c93',true,'Albañilería y tarrajeo'],['cs-aceros','Aceros Andinos','#b5651d',false,'Acero'],['cs-inst','Instalaciones Pacífico','#2e7d4f',false,'IIEE e IISS'],['cs-tab','Tabiques Lima','#ad1457',false,'Drywall']];
 /* [id, nombre, grupo, ejecutor, und, metrado por sector (4 sectores), rend, desfase, días, vaciado, entrega] */
 const CS_DEMO_CAT=[['AV','Acero de verticales','E','cs-aceros','kg',1450,250,0,1,0,0],['EV','Encofrado de verticales','E','cs-ramos','m²',95,14,1,1,0,0],['VV','Concreto de verticales','E','cs-ramos','m³',12,6,2,1,1,0],
-  ['DV','Desencofrado de verticales','E','cs-ramos','m²',95,45,3,1,0,0],['EL','Encofrado de vigas y losa','E','cs-ramos','m²',185,16,4,1,0,0],['AL','Acero de vigas y losa','E','cs-aceros','kg',2100,280,5,1,0,0],
-  ['IL','Instalaciones en losa','E','cs-inst','pto',40,12,6,1,0,0],['VL','Concreto de vigas y losa','E','cs-ramos','m³',28,7,7,1,1,0],
+  ['DV','Desencofrado de verticales','E','cs-ramos','m²',95,45,3,1,0,0],/* horizontales (secuencia típica indicada por el dueño, 27-10-2026): día 1 fondo y 1.er costado de viga · día 2 acero de vigas ·
+     día 3 2.º costado de viga y fondo de losa · día 4 acero de losa e instalaciones · día 5 vaciado de losa y vigas */
+  ['EF1','Encofrado de fondo y 1.er costado de viga','E','cs-ramos','m²',56,12,4,1,0,0],['AVG','Acero de vigas','E','cs-aceros','kg',1050,250,5,1,0,0],
+  ['EF2','Encofrado de 2.º costado de viga y fondo de losa','E','cs-ramos','m²',129,16,6,1,0,0],['ALO','Acero de losa','E','cs-aceros','kg',1050,300,7,1,0,0],
+  ['IL','Instalaciones en losa','E','cs-inst','pto',40,12,7,1,0,0],['VL','Concreto de losa y vigas','E','cs-ramos','m³',28,7,8,1,1,0],
   ['E1','Escalera: encofrado','S','cs-ramos','m²',22,10,0,1,0,0],['E2','Escalera: acero','S','cs-aceros','kg',420,200,1,1,0,0],['E3','Escalera: concreto','S','cs-ramos','m³',3.5,3,2,1,1,0],
   ['AS','Asentado de bloqueta','A','cs-quispe','m²',120,6,0,2,0,0],['IM','Instalaciones empotradas en muros','A','cs-inst','pto',30,10,2,1,0,0],['TD','Tabique: armado y 1.ª cara','A','cs-tab','m²',70,18,2,1,0,0],
   ['IT','Instalaciones en tabiques','A','cs-inst','pto',20,10,3,1,0,0],['SC','Tabique: 2.ª cara','A','cs-tab','m²',70,25,4,1,0,0],['TR','Tarrajeo de muros','A','cs-quispe','m²',240,9,5,2,0,0],
@@ -163,7 +185,7 @@ async function csVaciar(){if(!isAdmin||window.LPS_ENV!=='pruebas'||!CS()||DNS!==
     text:`${n} registros borrados.${fail.length?' No se pudo borrar: '+fail.join(', ')+'. Puedes volver a intentarlo: lo ya borrado no se repite.':' Ya puedes crear los niveles desde cero.'}`});
   if(window.__e2eNoReload){render();return}/* pruebas: la base falsa vive en memoria y se perdería al recargar */
   location.reload()}
-function csDemoGenTry(n=0){if(!CS_DEMO_GEN)return;const ok=S.pis.size>=9&&csCats().length>=18&&S.amb.size>=40;
+function csDemoGenTry(n=0){if(!CS_DEMO_GEN)return;const ok=S.pis.size>=9&&csCats().length>=CS_DEMO_CAT.length&&S.amb.size>=40;
   if(!ok){if(n<60)setTimeout(()=>csDemoGenTry(n+1),500);else{CS_DEMO_GEN=false;toast('La obra de ejemplo se cargó; arma el tren con el generador del Lookahead.')}return}
   CS_DEMO_GEN=false;const plan=csGenPlan({from:'n3',to:'n8',start:csTomorrow(),pace:1,gap:1,albK:2,grp:{E:1,S:1,A:1}});
   if(!plan.ops.length){toast('No había nada que programar.');return}
@@ -306,7 +328,7 @@ const csBalCls=x=>Math.abs(x)<=.1?'ok':Math.abs(x)<=.2?'warn':'bad';
 function csSecCard(){return`<div class="card"><h2>Frentes y sectorización <span class="sub">Ahora están en la pestaña Sectorización</span></h2><div class="pad csrow"><span class="note" style="flex:1">Define los frentes de trabajo (con sus cuadrillas) y compara alternativas de sectorización con el semáforo del asistente.</span><button class="ib pri" data-cs="gosz">Ir a Sectorización</button></div></div>`}
 /* ratios por defecto (metrado por m² de planta; elegidos para un edificio típico de concreto armado en Lima, 26-10-2026): estructura por m²
    de techo (planta de encofrado), albañilería por m² de piso (planta de arquitectura). Se ajustan en el catálogo. */
-const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
+const CS_RAT={AV:12,EV:0.8,VV:0.1,DV:0.8,EF1:0.35,AVG:8,EF2:0.8,ALO:8,EL:1.15,AL:16,IL:0.25,VL:0.2,AS:0.9,IM:0.2,TD:0.5,IT:0.1,SC:0.5,TR:1.8};
 const csRatKey=c=>{const k=String(c.ref||c.id||'').replace(/^k-/,'');if(CS_RAT[k]!=null)return k;const d=CS_DEMO_CAT.find(x=>mnk(x[1])===mnk(c.name));return d?d[0]:''};
 /** partida típica sin ratio que tiene uno por defecto (escalera y entrega no tienen: antes iban como undefined y Firestore rechazaba el lote entero) */
 const csRatMiss=c=>c.rat==null&&CS_RAT[csRatKey(c)]!=null;
@@ -415,7 +437,7 @@ async function csLvDel(id){if(!csEd())return;const p=S.pis.get(id);if(!p)return;
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const ch=t.closest&&t.closest('[data-csa]');if(ch&&ch.closest('#trw')){e.stopPropagation();csChipPop(ch);return}
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
-  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
+  if(k==='gen')csGenOpen();else if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='seqtip')csSeqTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
   else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='gotren'){U.tab='planos';U.csSzV='tren';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}

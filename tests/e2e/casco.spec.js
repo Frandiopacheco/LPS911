@@ -24,7 +24,7 @@ test('casco: carga la obra de ejemplo en cs_ y arma el tren sin tocar Last Plann
   const r = await page.evaluate(() => ({ cs: Object.keys(window.__dbAll('cs_acts')).length, lp: Object.keys(window.__dbAll('acts')).length, pis: Object.keys(window.__dbAll('cs_pisos')).length, cat: Object.keys(window.__dbAll('cs_mcat')).length }));
   expect(r.lp).toBe(lp0);
   expect(r.pis).toBe(9);
-  expect(r.cat).toBe(18);
+  expect(r.cat).toBe(20);
   expect(r.cs).toBeGreaterThan(200);
   await expect(page.locator('#trw table.cstr')).toBeVisible();
   await expect(page.locator('#trw .csk').first()).toBeVisible();
@@ -35,7 +35,7 @@ test('casco: carga la obra de ejemplo en cs_ y arma el tren sin tocar Last Plann
 test('casco: ficha de una celda, correr un día y Deshacer', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  const id = await page.evaluate(() => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length && a.days[0] > addD(t, 3) && a.name === 'Encofrado de vigas y losa'); return x.id; });
+  const id = await page.evaluate(() => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length && a.days[0] > addD(t, 3) && a.name === 'Encofrado de 2.º costado de viga y fondo de losa'); return x.id; });
   const d0 = await page.evaluate(i => S.act.get(i).days.slice(), id);
   await page.evaluate(i => { const x = S.act.get(i); U.week = weekOf(x.days[0]); render(); }, id);
   await page.locator(`#trw [data-csa="${id}"]`).first().click();
@@ -192,7 +192,7 @@ test('casco: Vaciar Casco borra niveles y todo lo de Casco, conserva configuraci
     cat: Object.values(window.__dbAll('cs_mcat')).filter(c => !c.arch).length,
     lpActs: Object.keys(window.__dbAll('acts')).length, lpPis: Object.keys(window.__dbAll('pisos')).length,
     hitCs: Object.values(window.__dbAll('hitos')).filter(h => h.cs).length, hitLp: Object.values(window.__dbAll('hitos')).filter(h => !h.cs).length }));
-  expect(r).toEqual({ pis: 0, sec: 0, amb: 0, ksec: 0, meta: true, cat: 18, lpActs: lp0.acts, lpPis: lp0.pis, hitCs: 0, hitLp: lp0.hit });
+  expect(r).toEqual({ pis: 0, sec: 0, amb: 0, ksec: 0, meta: true, cat: 20, lpActs: lp0.acts, lpPis: lp0.pis, hitCs: 0, hitLp: lp0.hit });
   expect(errors).toEqual([]);
 });
 
@@ -368,4 +368,31 @@ test('casco: Sectores reordena el tren y elimina alternativas; Tren arrastra blo
   await page.locator('[data-cstrmv="k-AV"][data-d="1"]').click();
   await expect.poll(() => page.evaluate(() => window.__dbGet('cs_mcat', 'k-AV').tr > window.__dbGet('cs_mcat', 'k-EV').tr)).toBe(true);
   expect(errors.filter(e => !/Failed to load resource|Falta una parte|imagen/i.test(e))).toEqual([]);
+});
+
+test('casco: «Actualizar a la secuencia típica» pasa un catálogo antiguo a la secuencia de horizontales sin tocar lo programado', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  const nAct = await page.evaluate(() => S.act.size);
+  /* catálogo antiguo: encofrado y acero de vigas y losa en una sola partida */
+  await page.evaluate(async () => {
+    const b = db.batch();
+    b.set(fcol('mcat').doc('k-EL'), { ref: 'k-EL', name: 'Encofrado de vigas y losa', grp: 'E', sc: 'cs-ramos', und: 'm²', off: 4, dur: 1, tr: 5, cl: 't', al: [] });
+    b.set(fcol('mcat').doc('k-AL'), { ref: 'k-AL', name: 'Acero de vigas y losa', grp: 'E', sc: 'cs-aceros', und: 'kg', off: 5, dur: 1, tr: 6, cl: 't', al: [] });
+    for (const k of ['EF1', 'AVG', 'EF2', 'ALO']) b.set(fcol('mcat').doc('k-' + k), { arch: { t: 1, by: 'x', n: 'x' } }, { merge: true });
+    b.set(fcol('mcat').doc('k-VL'), { off: 7 }, { merge: true });
+    await b.commit();
+  });
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  /* las archivadas a mano no se reponen solas: solo vuelven si faltan del todo */
+  await page.evaluate(async () => { for (const k of ['EF1', 'AVG', 'EF2', 'ALO']) await fcol('mcat').doc('k-' + k).delete(); });
+  await expect(page.locator('[data-cs="seqtip"]')).toBeVisible();
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-cs="seqtip"]').click();
+  await expect.poll(() => page.evaluate(() => csCats('E').map(c => c.name + ':' + c.off).join(' | '))).toBe(
+    'Acero de verticales:0 | Encofrado de verticales:1 | Concreto de verticales:2 | Desencofrado de verticales:3 | Encofrado de fondo y 1.er costado de viga:4 | Acero de vigas:5 | Encofrado de 2.º costado de viga y fondo de losa:6 | Acero de losa:7 | Instalaciones en losa:7 | Concreto de losa y vigas:8');
+  expect(await page.evaluate(() => [MX.cat.get('k-EF1').sc, MX.cat.get('k-ALO').sc].join())).toBe('cs-ramos,cs-aceros');
+  expect(await page.evaluate(() => S.act.size)).toBe(nAct);
+  await expect(page.locator('[data-cs="seqtip"]')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
