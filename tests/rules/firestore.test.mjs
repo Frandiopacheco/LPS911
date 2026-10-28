@@ -1691,6 +1691,12 @@ test('casco: el editor edita cs_acts y cs_mcat; SC y lector no; quien no está e
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_ksec/v1'), { n: 'Versión 1', grp: 'E', k: 4 }));
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_kfr/fr1'), { name: 'Frente A', code: 'A', cua: { 'k-AV': 6 } }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_kfr/fr2'), { name: 'Frente B' }));
+  /* Metrados (casco-met.js): planilla, tipos y parámetros en cs_kmet; editan admin y editores */
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_kmet/tipos'), { L: [{ id: 'kt1', cl: 'vig', cod: 'V-101' }] }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'cs_kmet/n_n1'), { rows: [{ id: 'kr1', sec: 'n1-e1', t: 'kt1', lu: '5.35' }] }));
+  await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'cs_kmet/tipos')));
+  await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_kmet/par'), { lv: 9 }));
+  await assertFails(setDoc(doc(user('lector@obra.pe'), 'cs_kmet/par'), { lv: 9 }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'cs_acts/k3'), { name: 'x', sc: 'c-gabel', ambId: 'n1-e1' }));
   await assertFails(setDoc(doc(user('lector@obra.pe'), 'cs_acts/k3'), { name: 'x' }));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'cs_acts/k1')));
