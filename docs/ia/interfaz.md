@@ -52,3 +52,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Versión guardada y sesión de Netlify (10/10/2026)
 - `sw.js` sirve la página con «lo guardado primero» (`staleWhileRevalidate`). En la copia de prueba (protegida por Netlify) una sesión vencida hacía que el servidor respondiera 401/redirección y la app seguía mostrando la versión vieja en silencio, sin aviso de «Actualizar».
 - Ahora, si la página del servidor no llega bien, el service worker avisa (`postMessage {t:'nav-bad'}`) y la app muestra «Tu sesión de Netlify… venció» con **Volver a entrar** (`?fresh=1`: esa dirección no pasa por el service worker, así aparece el login de Netlify). Abrir `/sw.js` ya no devuelve la app.
+
+
+## Formularios y ventanas: clic en el fondo (28-10-2026)
+Un clic en un fondo (elemento `position:fixed` que cubre la pantalla, como `.lqm` o la de `uiAsk`) solo vale si el puntero también bajó ahí (`base.js`, escucha en captura): seleccionar texto en un campo y soltar el mouse fuera ya no cierra la ventana.

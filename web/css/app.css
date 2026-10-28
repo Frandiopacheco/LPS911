@@ -4910,3 +4910,10 @@ td.kmcalc{background:var(--accent-soft)}
 .kmfr{display:flex;flex-wrap:wrap;gap:10px}.kmfl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink2);min-width:120px}.kmfl .ci{height:34px;border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 8px;width:140px}
 #lqm .lqc:has(.kmted){max-width:min(980px,96vw);width:min(980px,96vw)}
 @media (max-width:760px){.kmtip,.kmres{flex:1 1 100%;max-width:none}.kmbar .ib.pri{margin-left:0}}
+/* Casco: ejes, alineación y avisos sobre el plano (28-10-2026) */
+.csfhint button,.csfhint a{pointer-events:auto}
+.csfhint .cnvwarn{color:var(--warn);font-weight:600}
+.cnvtg.ref{background:var(--accent-soft);color:var(--accent)}.cnvtg.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.cnvall{display:block;overflow:auto;padding:16px}
+.cnvalc{max-width:720px;margin:0 auto;padding:14px 16px}
+.pvl.szg{font-weight:700}
