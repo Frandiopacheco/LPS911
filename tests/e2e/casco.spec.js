@@ -32,50 +32,66 @@ test('casco: carga la obra de ejemplo en cs_ y arma el tren sin tocar Last Plann
   expect(errors).toEqual([]);
 });
 
-test('casco: Lookahead › Tren editable como Excel: programar un día, mover y quitar celdas, copiar y pegar, ficha', async ({ page }) => {
+/* celda del tren por fila (nombre de la actividad que tiene ese día) y día */
+const cellSel = (name, d) => `#trw tr[data-ctr]:has(.pn[title="${name}"]) td.ctc[data-d="${d}"]`;
+
+test('casco: Lookahead › Tren tipo Excel: escribir sectores, Enter avanza, mover, borrar, copiar y pegar, ficha', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  const id = await page.evaluate(() => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length === 1 && a.days[0] > addD(t, 3) && a.name === 'Encofrado de 2.º costado de viga y fondo de losa'); return x.id; });
+  const NAME = 'Encofrado de 2.º costado de viga y fondo de losa';
+  const id = await page.evaluate(n => { const t = todayIso(); const x = [...S.act.values()].find(a => (a.days || []).length === 1 && a.days[0] > addD(t, 3) && a.name === n && ctMapAmb(a.ambId, 1, '_') && ctNextAmb(S.amb.get(a.ambId), '_')); return x.id; }, NAME);
   const d0 = await page.evaluate(i => S.act.get(i).days.slice(), id);
-  await page.evaluate(i => { const x = S.act.get(i); U.week = weekOf(x.days[0]); render(); }, id);
+  await page.evaluate(i => { const x = S.act.get(i); U.tab = 'look'; U.lkV = 'tren'; U.week = weekOf(x.days[0]); render(); }, id);
   await expect(page.locator('tr.ctfrh')).toHaveCount(1);
-  /* seleccionar y mover con → (un día hábil), Deshacer */
-  await page.locator(`#trw [data-csa="${id}"]`).first().click();
-  await expect(page.locator('#ctbar')).toContainText('1 celda');
-  await page.keyboard.press('ArrowRight');
+  /* clic en la celda: queda activa; Alt+→ la mueve un día hábil; Deshacer */
+  await page.locator(cellSel(NAME, d0[0])).click();
+  await expect(page.locator(cellSel(NAME, d0[0]))).toHaveClass(/ctact/);
+  await page.keyboard.press('Alt+ArrowRight');
   await expect.poll(() => page.evaluate(i => S.act.get(i).days[0], id)).toBe(await page.evaluate(d => wshift(d, 1), d0[0]));
   await page.evaluate(() => undo());
   await expect.poll(() => page.evaluate(i => S.act.get(i).days.join(), id)).toBe(d0.join());
-  /* doble clic: ficha */
-  await page.locator(`#trw [data-csa="${id}"]`).first().dblclick();
-  await expect(page.locator('#pop .cspop')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await page.evaluate(() => closePop());
-  /* copiar la celda y pegarla en un día vacío de la misma fila, en el nivel siguiente */
-  await page.evaluate(() => { CT.sel.clear(); });
-  await page.locator(`#trw [data-csa="${id}"]`).first().click();
-  await page.keyboard.press('Control+c');
-  const tgt = await page.evaluate(i => { const x = S.act.get(i); const tr = document.querySelector(`#trw [data-csa="${i}"]`).closest('tr'); const tds = [...tr.querySelectorAll('td.ctc')]; const td = tds.find(td => td.dataset.d > x.days[0] && isWork(td.dataset.d) && !td.querySelector('.csk')); return td.dataset.d; }, id);
-  const n0 = await page.evaluate(() => S.act.size);
-  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${tgt}"]`).click();
-  await page.locator('#pop button[data-do="paste1"]').click();
-  /* va al mismo sector del nivel siguiente (se suma a su actividad si ya existía) */
-  await expect.poll(() => page.evaluate(([i, d]) => { const x = S.act.get(i); const amb = ctMapAmb(x.ambId, 1, '_'); return [...S.act.values()].some(y => y.ambId === amb && y.name === x.name && (y.days || []).includes(d)); }, [id, tgt])).toBe(true);
-  expect(await page.evaluate(() => S.act.size)).toBeGreaterThanOrEqual(n0);
-  /* programar un sector en un día vacío (sugerencia: el siguiente sector de la fila) */
-  const free = await page.evaluate(i => { const tr = document.querySelector(`#trw [data-csa="${i}"]`).closest('tr'); const td = [...tr.querySelectorAll('td.ctc')].reverse().find(td => isWork(td.dataset.d) && !td.querySelector('.csk') && td.dataset.d > todayIso()); return td.dataset.d; }, id);
-  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${free}"]`).click();
-  await page.locator('#pop button[data-do="add"]').first().click();
-  await expect.poll(() => page.evaluate(d => [...S.act.values()].some(y => y.name === 'Encofrado de 2.º costado de viga y fondo de losa' && (y.days || []).includes(d)), free)).toBe(true);
-  /* quitar con Supr */
-  await page.locator(`#trw tr:has([data-csa="${id}"]) td.ctc[data-d="${free}"] .csk`).first().click();
+  /* escribir en un día vacío más adelante: el sector siguiente, sin nivel → toma el nivel del último chip de la fila */
+  const info = await page.evaluate(i => { const x = S.act.get(i); const a = S.amb.get(x.ambId); const nx = ctNextAmb(a, '_'); const up = ctMapAmb(x.ambId, 1, '_'); const t1 = wshift(x.days[0], 3), t2 = wshift(x.days[0], 4), t3 = wshift(x.days[0], 5);
+    return { nx: nx.id, nxCode: nx.code, up, upTag: ctTag(S.amb.get(up)).replace('·', ' '), t1, t2, t3, clr: [1, 2, 3, 4, 5].map(k => wshift(x.days[0], k)) }; }, id);
+  /* deja vacía la fila entre el día original y los de prueba (así el «último chip a la izquierda» es el original) */
+  await page.evaluate(([n, ds]) => { const ops = []; for (const y of S.act.values()) if (!y.arch && y.name === n && ds.some(d => (y.days || []).includes(d))) { const keep = y.days.filter(d => !ds.includes(d)); ops.push(keep.length ? op('acts', y.id, { ...y, days: keep }) : arc('acts', y.id)); } apply(ops, 'test'); }, [NAME, info.clr]);
+  await page.locator(cellSel(NAME, info.t1)).click();
+  await page.keyboard.type(info.nxCode);
+  await expect(page.locator('.ctsug')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(([n, a, d]) => [...S.act.values()].some(y => !y.arch && y.name === n && y.ambId === a && (y.days || []).includes(d)), [NAME, info.nx, info.t1])).toBe(true);
+  /* Enter pasa a la columna siguiente: con nivel explícito («T5 S2») va a ese nivel */
+  await expect(page.locator(cellSel(NAME, info.t2))).toHaveClass(/ctact/);
+  await page.keyboard.type(info.upTag);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(([n, a, d]) => [...S.act.values()].some(y => !y.arch && y.name === n && y.ambId === a && (y.days || []).includes(d)), [NAME, info.up, info.t2])).toBe(true);
+  /* seleccionar las dos celdas (Mayús+clic) y borrarlas con Supr */
+  await page.locator(cellSel(NAME, info.t1)).click();
+  await page.locator(cellSel(NAME, info.t2)).click({ modifiers: ['Shift'] });
+  await expect(page.locator('#ctbar')).toContainText('celdas');
   await page.keyboard.press('Delete');
-  await expect.poll(() => page.evaluate(d => [...S.act.values()].some(y => y.name === 'Encofrado de 2.º costado de viga y fondo de losa' && (y.days || []).includes(d)), free)).toBe(false);
+  await expect.poll(() => page.evaluate(([n, ds]) => [...S.act.values()].some(y => !y.arch && y.name === n && ds.some(d => (y.days || []).includes(d))), [NAME, [info.t1, info.t2]])).toBe(false);
+  /* copiar la celda original y pegarla en otro día */
+  await page.locator(cellSel(NAME, d0[0])).click();
+  await page.keyboard.press('Control+c');
+  await page.locator(cellSel(NAME, info.t3)).click();
+  await page.keyboard.press('Control+v');
+  await expect.poll(() => page.evaluate(([i, d]) => { const x = S.act.get(i); return [...S.act.values()].some(y => !y.arch && y.name === x.name && y.ambId === x.ambId && (y.days || []).includes(d)); }, [id, info.t3])).toBe(true);
+  /* doble clic: escribir; Esc cancela */
+  await page.locator(cellSel(NAME, info.t1)).dblclick();
+  await expect(page.locator('.ctedi')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.ctedi')).toHaveCount(0);
+  /* clic derecho en la celda: menú con la ficha */
+  await page.locator(cellSel(NAME, d0[0])).click({ button: 'right' });
+  await page.locator('#pop button[data-do="fi"]').first().click();
+  await expect(page.locator('#pop .cspop')).toBeVisible();
+  await page.evaluate(() => closePop());
   if (SHOT) await page.screenshot({ path: SHOT + '/tren-editable.png' });
   expect(errors).toEqual([]);
 });
 
-test('casco: Tren: filas por frente: insertar, copiar y pegar debajo, ordenar y eliminar', async ({ page }) => {
+test('casco: Tren: filas por frente: clic derecho, insertar, duplicar, copiar y pegar debajo, ordenar y eliminar', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
   await page.evaluate(() => { U.tab = 'look'; U.lkV = 'tren'; render(); });
@@ -87,20 +103,22 @@ test('casco: Tren: filas por frente: insertar, copiar y pegar debajo, ordenar y 
   await page.locator('#ctbar [data-ctra="paste"]').click();
   await expect.poll(() => page.evaluate(() => [...S.act.values()].filter(y => y.name === 'Acero de vigas' && y.trw).length)).toBeGreaterThan(0);
   expect(await page.evaluate(() => ctRows('_').filter(r => r.name === 'Acero de vigas').length)).toBe(2);
-  /* la copia queda justo debajo */
   expect(await page.evaluate(() => { const R = ctRows('_'); const i = R.findIndex(r => r.name === 'Acero de vigas'); return R[i + 1].name; })).toBe('Acero de vigas');
-  /* insertar una fila nueva (otra partida) */
-  await lab('Acero de losa').click();
-  await page.locator('#ctbar [data-ctra="ins"]').click();
-  await page.locator('#pop button[data-do="cat"]', { hasText: 'Curado' }).count();
+  /* clic derecho en el nombre: duplicar vacía */
+  await lab('Acero de losa').click({ button: 'right' });
+  await page.locator('#pop button[data-do="dupv"]').click();
+  await expect.poll(() => page.evaluate(() => ctRows('_').filter(r => r.name === 'Acero de losa').length)).toBe(2);
+  /* clic derecho: insertar fila arriba (otra partida) */
+  await lab('Instalaciones en losa').click({ button: 'right' });
+  await page.locator('#pop button[data-do="up"]').click();
   page.once('dialog', d => d.accept('Curado de losa'));
   await page.locator('#pop button[data-do="other"]').click();
   await expect.poll(() => page.evaluate(() => ctRows('_').some(r => r.name === 'Curado de losa'))).toBe(true);
-  expect(await page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Acero de losa') + 1].name; })).toBe('Curado de losa');
+  expect(await page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Curado de losa') + 1].name; })).toBe('Instalaciones en losa');
   /* subir la fila nueva y eliminarla */
   await lab('Curado de losa').click();
   await page.locator('#ctbar [data-ctra="up"]').click();
-  await expect.poll(() => page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Curado de losa') + 1].name; })).toBe('Acero de losa');
+  await expect.poll(() => page.evaluate(() => { const R = ctRows('_'); return R[R.findIndex(r => r.name === 'Curado de losa') + 2].name; })).toBe('Instalaciones en losa');
   page.once('dialog', d => d.accept());
   await page.locator('#ctbar [data-ctra="del"]').click();
   await expect.poll(() => page.evaluate(() => ctRows('_').some(r => r.name === 'Curado de losa'))).toBe(false);
@@ -108,30 +126,47 @@ test('casco: Tren: filas por frente: insertar, copiar y pegar debajo, ordenar y 
   expect(errors).toEqual([]);
 });
 
-test('casco: Proyectar copia el tren del techo modelo a los niveles siguientes sin tocar lo programado ni el pasado', async ({ page }) => {
+test('casco: Proyectar continúa la serie de cada fila (S1 en diagonal → todo el tren) y la esquina rellena en serie', async ({ page }) => {
   const errors = await casco(page);
   await cargarEjemplo(page);
-  /* dejar programado solo el techo 4 (y lo de albañilería de pisos bajos) */
-  await page.evaluate(() => { const ops = []; for (const x of S.act.values()) { const s = csSecOf(S.amb.get(x.ambId)); if (s && ['n5', 'n6', 'n7', 'n8'].includes(s.pisoId)) ops.push(arc('acts', x.id)); } apply(ops, 'test'); U.tab = 'look'; U.lkV = 'tren'; render(); });
-  const n0 = await page.evaluate(() => S.act.size);
-  const m4 = await page.evaluate(() => [...S.act.values()].filter(x => (csSecOf(S.amb.get(x.ambId)) || {}).pisoId === 'n4').length);
-  await page.locator('[data-ctp="_"]').click();
-  await page.locator('#ctp_m').selectOption('n4');
-  await page.locator('#ctp_to').selectOption('n6');
-  await expect(page.locator('#ctp_prev')).toContainText('2 nivel');
+  /* como el dueño: se archiva todo y se programa solo el S1 del techo 1 en diagonal (cada fila un día después) */
+  const sc = await page.evaluate(() => { const ops = []; for (const x of S.act.values()) if (!x.arch) ops.push(arc('acts', x.id)); apply(ops, 'test');
+    const R = ctRows('_').filter(r => ctGrpOf(r) === 'E').slice(0, 4); const s1 = ctSecs('n1', 'E', '_')[0]; const d = wshift(todayIso(), 2); const add = [];
+    R.forEach((r, i) => add.push(op('acts', uid('a'), { ambId: s1.id, name: r.name, sc: r.sc || '', und: '', days: [wshift(d, i)], order: i }))); apply(add, 'test');
+    U.tab = 'look'; U.lkV = 'tren'; U.week = weekOf(d); render();
+    const nS = p => ctSecs(p, 'E', '_').length; return { names: R.map(r => r.name), d, n1: nS('n1'), n2: nS('n2'), n3: nS('n3') }; });
+  /* la esquina ■: la fila 2 se rellena en serie 2 días a la derecha */
+  const d1 = await page.evaluate(d => wshift(d, 1), sc.d);
+  await page.locator(cellSel(sc.names[1], d1)).click();
+  const to = await page.evaluate(d => wshift(d, 2), d1);
+  const fh = await page.locator('.ctfh').boundingBox(); const tb = await page.locator(cellSel(sc.names[1], to)).boundingBox();
+  await page.mouse.move(fh.x + 4, fh.y + 4); await page.mouse.down(); await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect.poll(() => page.evaluate(([n, d]) => [...S.act.values()].filter(y => !y.arch && y.name === n).flatMap(y => y.days).sort().join(), [sc.names[1], d1])).toBe(await page.evaluate(d => [d, wshift(d, 1), wshift(d, 2)].join(), d1));
+  await page.evaluate(() => undo());
+  /* Proyectar hasta el techo 3, tren continuo (0 días entre niveles) */
+  await page.locator('[data-ctfm="_"]').click();
+  await page.locator('#pop button[data-do="pj"]').click();
+  await page.locator('#ctp_m').selectOption('n1');
+  await page.locator('#ctp_to').selectOption('n3');
+  await expect(page.locator('#ctp_prev')).toContainText('Se agregan');
   if (SHOT) await page.screenshot({ path: SHOT + '/proyectar.png' });
   await page.locator('#ctpm [data-ctp2="ok"]').click();
-  await expect.poll(() => page.evaluate(() => S.act.size)).toBeGreaterThan(n0);
-  const r = await page.evaluate(() => { const t = todayIso(); const L = [...S.act.values()].filter(x => ['n5', 'n6'].includes((csSecOf(S.amb.get(x.ambId)) || {}).pisoId)); return { n5: L.filter(x => csSecOf(S.amb.get(x.ambId)).pisoId === 'n5').length, past: L.some(x => x.days.some(d => d <= t)), n7: [...S.act.values()].filter(x => (csSecOf(S.amb.get(x.ambId)) || {}).pisoId === 'n7').length }; });
-  /* el techo 5 tiene 3 sectores (versión 2): menos actividades que el modelo de 4 sectores */
-  expect(r.n5).toBeGreaterThan(0); expect(r.n5).toBeLessThan(m4 + 1); expect(r.past).toBe(false); expect(r.n7).toBe(0);
-  /* proyectar otra vez no duplica: los sectores ya programados se respetan */
-  const n1 = await page.evaluate(() => S.act.size);
-  const again = await page.evaluate(() => ctProjPlan('_', { model: 'n4', to: 'n6', mode: 'fin' }));
-  expect(again.add).toBe(0); expect(again.skip).toBeGreaterThan(0);
+  /* cada fila: días hábiles seguidos desde su S1 hasta el último sector del techo 3 */
+  const N = sc.n1 + sc.n2 + sc.n3;
+  for (let i = 0; i < sc.names.length; i++) {
+    const exp = await page.evaluate(([d, i, N]) => { const s = wshift(d, i); const o = []; for (let k = 0; k < N; k++)o.push(wshift(s, k)); return o.join(); }, [sc.d, i, N]);
+    await expect.poll(() => page.evaluate(n => [...S.act.values()].filter(y => !y.arch && y.name === n).flatMap(y => y.days).sort().join(), sc.names[i])).toBe(exp);
+  }
+  /* el orden de sectores: el día siguiente al último sector del techo 1 es el S1 del techo 2 */
+  const t2 = await page.evaluate(([n, d, k]) => { const day = wshift(d, k); const y = [...S.act.values()].find(y => !y.arch && y.name === n && y.days.includes(day)); const s = csSecOf(S.amb.get(y.ambId)); return s.pisoId + '|' + csAmbIdx(S.amb.get(y.ambId)); }, [sc.names[0], sc.d, sc.n1]);
+  expect(t2).toBe('n2|0');
+  /* proyectar otra vez no cambia nada */
+  expect(await page.evaluate(() => ctProjPlan('_', { model: 'n1', to: 'n3', gap: 0, rep: true }).ops.length)).toBe(0);
+  /* con 2 días entre niveles se reemplaza lo de los techos 2 y 3 (y nunca hoy ni lo pasado) */
+  const pl = await page.evaluate(() => { const p = ctProjPlan('_', { model: 'n1', to: 'n3', gap: 2, rep: true }); return { rem: p.rem, add: p.add }; });
+  expect(pl.rem).toBeGreaterThan(0); expect(pl.add).toBe(pl.rem);
   await page.evaluate(() => undo());
-  await expect.poll(() => page.evaluate(() => S.act.size)).toBe(n0);
-  expect(n1).toBeGreaterThan(n0);
+  await expect.poll(() => page.evaluate(n => [...S.act.values()].filter(y => !y.arch && y.name === n).flatMap(y => y.days).length, sc.names[0])).toBe(1);
   expect(errors).toEqual([]);
 });
 
