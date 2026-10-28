@@ -62,6 +62,9 @@ const ap=(T,p)=>({x:T.a*p.x-T.b*p.y+T.e,y:T.b*p.x+T.a*p.y+T.f});
 function fromPts(P1,P2,Q1,Q2){const dx=P2.x-P1.x,dy=P2.y-P1.y,qx=Q2.x-Q1.x,qy=Q2.y-Q1.y;const den=dx*dx+dy*dy;if(den<1)return null;
   const a=(qx*dx+qy*dy)/den,b=(qy*dx-qx*dy)/den;return{a,b,e:Q1.x-(a*P1.x-b*P1.y),f:Q1.y-(b*P1.x+a*P1.y)}}
 const cssM=T=>`matrix(${T.a},${T.b},${-T.b},${T.a},${T.e},${T.f})`;
+/* semejanzas {a,b,e,f}: inversa y composición (M∘T: primero T, luego M) */
+const invT=T=>{const k2=T.a*T.a+T.b*T.b||1,a=T.a/k2,b=-T.b/k2;return{a,b,e:-(a*T.e-b*T.f),f:-(b*T.e+a*T.f)}};
+const cmpT=(M,T)=>({a:M.a*T.a-M.b*T.b,b:M.a*T.b+M.b*T.a,e:M.a*T.e-M.b*T.f+M.e,f:M.b*T.e+M.a*T.f+M.f});
 
 /* ---------- visor con zoom / desplazamiento (ratón, rueda y dos dedos) ---------- */
 function Viewer(host,opt){opt=opt||{};const v={host,z:1,x:0,y:0,layers:[],marks:[],onTap:opt.onTap||null,bounds:null};
@@ -1258,15 +1261,18 @@ function ambMap(host,o){const bs=basesOf(o.pid);
   if(!bs.length){host.innerHTML=`<div class="kemp">Este piso todavía no tiene lámina base. ${o.canUp?'Súbela con <b>Subir lámina base</b>: la misma lámina se usa en el Plan diario, Campo y Liberaciones.':'La sube el administrador.'}</div>`;host._v=null;host._fk='';return null}
   const base=bs.find(b=>b.id===o.vista)||bs[0];
   let v=host._v;if(!v||!host.contains(v.svg)){host.innerHTML='';host._fk='';v=Viewer(host,{onTap:(w,e)=>{const oo=host._o;if(!oo)return;
-      if(oo.draw)return;
+      if(oo.draw)return;w=ap(invT(oo.M||I),w);
       const el=document.elementsFromPoint(e.clientX,e.clientY).map(q=>q.closest&&q.closest('[data-z]')).find(Boolean);
       let hit=el&&el.dataset.z||'';if(!hit){const L=oo.shapes.filter(z=>z.kind==='a').concat(oo.shapes.filter(z=>z.kind==='s'));const z=L.find(z=>pip(w,unflat(z.pts)));hit=z?z.id:''}
       if(oo.onPick)oo.onPick(hit||null,w)}});host._v=v}
   host._o=o;host._base=base.id;if(!host._szev){host._szev=1;ambMapEvents(host)}
   const q=useHi()?'f':'l';const url=IMG.get(base.id+'|'+base.rev+'|'+q)?.url||null;if(!url)imgURL(base,q,{auto:true}).then(()=>{if(U.tab==='planos'||U.tab==='mat')requestRender()}).catch(()=>{});
-  v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:base.T||I,op:.85}]);
-  const fk=o.pid+'|'+base.id;if(host._fk!==fk){host._fk=fk;v.bounds=boundsOf({...base,T:base.T||I});v.fitted=0;requestAnimationFrame(()=>{v.fit();v.fitted=1})}
-  capDraw(host,o.draw==='rect'&&o.onDrawn?(pts,vista)=>o.onDrawn(pts,vista):null);
+  /* o.M (Casco › Niveles, 28-10-2026): cómo se muestra la lámina (lámina → pantalla), p. ej. enderezada en el marco de la lámina de referencia.
+     Las formas y lo que devuelven los avisos (onPick, onPoly, onDrawn, onEdit) siguen en coordenadas de la lámina. */
+  const M=o.M||I;const LT=cmpT(M,base.T||I);
+  v.set([{key:base.id+'|'+base.rev,url,w:base.w,h:base.h,T:LT,op:.85}]);
+  const fk=o.pid+'|'+base.id+'|'+[M.a,M.b,M.e,M.f].map(x=>Math.round(x*1000)).join(',');if(host._fk!==fk){host._fk=fk;v.bounds=boundsOf({...base,T:LT});v.fitted=0;requestAnimationFrame(()=>{v.fit();v.fitted=1})}
+  const Mi=invT(M);capDraw(host,o.draw==='rect'&&o.onDrawn?(pts,vista)=>o.onDrawn(M===I?pts:flat(unflat(pts).map(p=>ap(Mi,p))),vista):null);
   const ptsS=P=>P.map(p=>p.x+','+p.y).join(' ');let svg='';const labels=[];
   for(const z of o.shapes.filter(z=>z.kind==='s')){const P=unflat(z.pts);if(!P.length)continue;
     svg+=`<polygon points="${ptsS(P)}" fill="${z.c}" fill-opacity="${z.sel?.16:.05}" stroke="${z.c}" stroke-width="${z.sel?4:2.5}" stroke-dasharray="10 6" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
@@ -1279,7 +1285,12 @@ function ambMap(host,o){const bs=basesOf(o.pid);
   for(const L of o.lines||[]){const P=unflat(L.pts);if(P.length<2)continue;svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${L.sel?'#111':(L.c||'#111')}" stroke-width="${L.sel?5:3}" stroke-dasharray="12 6" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`}
   if(o.tmp&&o.tmp.length){svg+=`<polyline points="${ptsS(o.tmp)}" fill="rgba(31,95,122,.18)" stroke="#1F5F7A" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}
-  if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;v.handles=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts),o.edit.noMid):[];v.apply();return base}
+  /* o.guides = [{pts:[x1,y1,x2,y2], c, w, dash, lbl}]: líneas de referencia tenues (ejes y tercios de Casco) */
+  for(const g of o.guides||[]){const P=unflat(g.pts);if(P.length<2)continue;svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${g.c||'#7C3AED'}" stroke-width="${g.w||1.2}" stroke-opacity="${g.op??.6}"${g.dash?` stroke-dasharray="${g.dash}"`:''} vector-effect="non-scaling-stroke" pointer-events="none"/>`;if(g.lbl){const p=P[0];labels.push({id:'g:'+g.lbl,x:p.x,y:p.y,t:g.lbl,c:g.c||'#C2410C',f:'#fff',cls:'szg'})}}
+  if(M!==I){svg=`<g transform="${cssM(M)}">${svg}</g>`;labels.forEach(l=>{const p=ap(M,l);l.x=p.x;l.y=p.y})}
+  if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;host._hL=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts),o.edit.noMid):[];v.handles=hDisp(host._hL,M);v.apply();return base}
+/** puntos de ajuste llevados a la pantalla (o.M) */
+function hDisp(H,M){if(M===I||!M)return H;const r=Math.atan2(M.b,M.a)*180/Math.PI;return H.map(h=>({...h,...ap(M,h),rot:h.rot!=null?Math.round(h.rot+r):h.rot}))}
 /* puntos para ajustar la forma: las esquinas y, en el medio de cada cara, una barra que mueve la cara entera (28-10-2026, con el dueño).
    Una cara es un tramo recto de bordes seguidos (puede tener esquinas intermedias, p. ej. las de un vecino). Doble clic en un borde agrega una esquina. */
 function geoFaces(P){const n=P.length;if(n<3)return[];const col=i=>{const a=P[(i-1+n)%n],b=P[i],c=P[(i+1)%n];const L=Math.hypot(c.x-a.x,c.y-a.y)||1;return Math.abs((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x))/L<Math.max(.6,L*.004)};
@@ -1291,37 +1302,64 @@ const lineX=(p,u,q,v)=>{const den=u.x*v.y-u.y*v.x;if(Math.abs(den)<1e-6)return n
 /** formas vecinas que se mueven con la elegida (o.edit.link = [{id, pts}]): sus vértices que coinciden con el punto o están sobre la cara */
 function geoLinkOn(links,test){const out=[];for(const L of links||[]){const P=unflat(L.pts);P.forEach((q,j)=>{const t=test(q);if(t!=null)out.push({id:L.id,j,t})})}return out}
 function ambMapEvents(host){let dn=null,drag=null;const R=v=>Math.round(v*10)/10;
+  const MM=()=>(host._o&&host._o.M)||I;const W=e=>ap(invT(MM()),host._v.toWorld(e.clientX,e.clientY));const zk=()=>(host._v.z||1)*Math.hypot(MM().a,MM().b);
+  /* dibujo de polígonos y juntas: o.ortho (horizontal o vertical respecto al punto anterior; Mayúscula: libre) y o.snapLines
+     ([{pts:[x1,y1,x2,y2]}] en coordenadas de la lámina; el clic se pega a la más cercana; Alt: no se pega). Todo en pantalla. */
+  const snapPt=(e)=>{const oo=host._o;const v=host._v;const M=MM();let q=v.toWorld(e.clientX,e.clientY);let hit=null;
+    /* primero ortogonal (respecto al punto anterior), luego pegarse a la guía sin romper lo ortogonal */
+    const T=oo.tmp||[];let ov=null;if(oo.ortho&&!e.shiftKey&&T.length){const p0=ap(M,T[T.length-1]);if(Math.abs(q.x-p0.x)<Math.abs(q.y-p0.y)){q={x:p0.x,y:q.y};ov='v'}else{q={x:q.x,y:p0.y};ov='h'}}
+    if(oo.snapLines&&!e.altKey){const tol=12/(v.z||1);let bd=tol;for(const L of oo.snapLines){const P=unflat(L.pts).map(p=>ap(M,p));if(P.length<2)continue;const a=P[0],b=P[1];const vert=Math.abs(b.x-a.x)<Math.abs(b.y-a.y);
+        if((vert&&ov==='v')||(!vert&&ov==='h'))continue;const l2=(b.x-a.x)**2+(b.y-a.y)**2||1;let t=((q.x-a.x)*(b.x-a.x)+(q.y-a.y)*(b.y-a.y))/l2;if(t<-.05||t>1.05)continue;t=Math.max(0,Math.min(1,t));const pr={x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y)};const d=Math.hypot(pr.x-q.x,pr.y-q.y);
+        if(d<bd){bd=d;hit={a,b};q=ov==='v'?{x:q.x,y:pr.y}:ov==='h'?{x:pr.x,y:q.y}:pr}}}
+    return{q,hit}};
+  const prev=(e)=>{const oo=host._o;const v=host._v;let g=v.svg.querySelector('.pvprev');if(!oo||oo.draw!=='poly'||!e){if(g)g.remove();return}
+    if(!g){g=document.createElementNS('http://www.w3.org/2000/svg','g');g.setAttribute('class','pvprev');g.setAttribute('pointer-events','none')}if(g.parentNode!==v.svg)v.svg.appendChild(g);
+    const{q,hit}=snapPt(e);const T=oo.tmp||[];const M=MM();let h='';if(T.length){const p0=ap(M,T[T.length-1]);h+=`<line x1="${p0.x}" y1="${p0.y}" x2="${q.x}" y2="${q.y}" stroke="#B83A2E" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`}
+    h+=`<circle cx="${q.x}" cy="${q.y}" r="${6/(v.z||1)}" fill="none" stroke="${hit?'#7C3AED':'#737C76'}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;if(g._h!==h){g.innerHTML=h;g._h=h}};
+  host.addEventListener('pointermove',e=>{const oo=host._o;if(!drag&&oo&&oo.draw==='poly'&&e.pointerType==='mouse')prev(e)});
+  host.addEventListener('pointerleave',()=>{const g=host._v&&host._v.svg.querySelector('.pvprev');if(g)g.remove()});
   const linkP=()=>{const m=new Map();for(const L of(host._o&&host._o.edit&&host._o.edit.link)||[])m.set(L.id,unflat(L.pts));return m};
   const paint=(P,LP)=>{const v=host._v;const el=v.svg.querySelector('[data-edit]');if(el)el.setAttribute('points',P.map(p=>p.x+','+p.y).join(' '));const ln=v.svg.querySelector('[data-editl]');if(ln&&P.length>1){ln.setAttribute('x1',P[0].x);ln.setAttribute('y1',P[0].y);ln.setAttribute('x2',P[1].x);ln.setAttribute('y2',P[1].y)}
     if(LP)for(const[id,Q]of LP){const pe=v.svg.querySelector(`polygon[data-sid="${CSS.escape(String(id))}"]`);if(pe)pe.setAttribute('points',Q.map(p=>p.x+','+p.y).join(' '))}
-    v.handles=ambHandles(P,host._o&&host._o.edit&&host._o.edit.noMid);v.apply()};
+    host._hL=ambHandles(P,host._o&&host._o.edit&&host._o.edit.noMid);v.handles=hDisp(host._hL,MM());v.apply()};
   const done=(P,LP)=>{const oo=host._o;if(!oo||!oo.onEdit)return;const ch={};if(LP)for(const[id,Q]of LP)ch[id]=flat(Q);oo.onEdit(flat(P),LP&&LP.size?ch:null)};
   host.addEventListener('pointerdown',e=>{const oo=host._o;if(!oo||e.button>0)return;const h=e.target.closest&&e.target.closest('.pvh');
-    if(h&&oo.edit&&!oo.draw){e.stopPropagation();e.preventDefault();try{host.setPointerCapture(e.pointerId)}catch(_){}const P=unflat(oo.edit.pts);const hh=host._v.handles[+h.dataset.h];if(!hh)return;const links=oo.edit.link||[];const LP=linkP();const tol=Math.max(.8,2/(host._v.z||1));
+    if(h&&oo.edit&&!oo.draw){e.stopPropagation();e.preventDefault();try{host.setPointerCapture(e.pointerId)}catch(_){}const P=unflat(oo.edit.pts);const hh=(host._hL||[])[+h.dataset.h];if(!hh)return;const links=oo.edit.link||[];const LP=linkP();const tol=Math.max(.8,2/zk());
       if(hh.face){const F=hh.face,n=P.length;const A=P[F[0]],B=P[F[F.length-1]];const len=Math.hypot(B.x-A.x,B.y-A.y)||1;const u={x:(B.x-A.x)/len,y:(B.y-A.y)/len},nn={x:-u.y,y:u.x};
         const pa=P[(F[0]-1+n)%n],nb=P[(F[F.length-1]+1)%n];const onFace=q=>{const t=((q.x-A.x)*u.x+(q.y-A.y)*u.y)/len;const d=Math.abs((q.x-A.x)*nn.x+(q.y-A.y)*nn.y);return t>-.005&&t<1.005&&d<tol?Math.max(0,Math.min(1,t)):null};
-        const own=F.map(i=>({i,t:onFace(P[i])??0}));drag={k:'f',P,LP,A:{...A},B:{...B},u,nn,da:{x:A.x-pa.x,y:A.y-pa.y},db:{x:nb.x-B.x,y:nb.y-B.y},w0:host._v.toWorld(e.clientX,e.clientY),own,lk:geoLinkOn(links,onFace)};return}
+        const own=F.map(i=>({i,t:onFace(P[i])??0}));drag={k:'f',P,LP,A:{...A},B:{...B},u,nn,da:{x:A.x-pa.x,y:A.y-pa.y},db:{x:nb.x-B.x,y:nb.y-B.y},w0:W(e),own,lk:geoLinkOn(links,onFace)};return}
       const i=+h.dataset.h;const v0=P[i];drag={k:'v',i,P,LP,lk:geoLinkOn(links,q=>Math.hypot(q.x-v0.x,q.y-v0.y)<tol?1:null)};return}
     if(oo.draw==='poly')dn={x:e.clientX,y:e.clientY}},true);
-  host.addEventListener('pointermove',e=>{if(!drag)return;e.stopPropagation();const w=host._v.toWorld(e.clientX,e.clientY);
+  host.addEventListener('pointermove',e=>{if(!drag)return;e.stopPropagation();const w=W(e);
     if(drag.k==='f'){const D=drag;const d=(w.x-D.w0.x)*D.nn.x+(w.y-D.w0.y)*D.nn.y;const A1={x:D.A.x+D.nn.x*d,y:D.A.y+D.nn.y*d},B1={x:D.B.x+D.nn.x*d,y:D.B.y+D.nn.y*d};
       /* los extremos se deslizan por los bordes vecinos: la forma no se tuerce */
       const nA=lineX(A1,D.u,D.A,D.da)||A1,nB=lineX(B1,D.u,D.B,D.db)||B1;const at=t=>({x:R(nA.x+(nB.x-nA.x)*t),y:R(nA.y+(nB.y-nA.y)*t)});
       D.own.forEach(o=>{D.P[o.i]=at(o.t)});D.lk.forEach(g=>{const Q=D.LP.get(g.id);if(Q)Q[g.j]=at(g.t)});paint(D.P,D.LP);return}
     const p={x:R(w.x),y:R(w.y)};drag.P[drag.i]=p;drag.lk.forEach(g=>{const Q=drag.LP.get(g.id);if(Q)Q[g.j]={...p}});paint(drag.P,drag.LP)},true);
   const up=e=>{const oo=host._o;if(drag){e.stopPropagation();const D=drag;drag=null;if(e.type==='pointerup'&&oo)done(D.P,D.lk.length?D.LP:null);else if(oo)paint(unflat(oo.edit.pts),linkP());return}
-    if(dn&&oo&&oo.draw==='poly'&&e.type==='pointerup'){const d=Math.hypot(e.clientX-dn.x,e.clientY-dn.y);dn=null;if(d>14)return;const v=host._v;const w=v.toWorld(e.clientX,e.clientY);const T=oo.tmp||[];
+    if(dn&&oo&&oo.draw==='poly'&&e.type==='pointerup'){const d=Math.hypot(e.clientX-dn.x,e.clientY-dn.y);dn=null;if(d>14)return;const v=host._v;const w=ap(invT(MM()),snapPt(e).q);const T=(oo.tmp||[]).map(p=>ap(MM(),p));
       /* tocar la primera esquina cierra el polígono */
       if(T.length>=3){const r=host.getBoundingClientRect();const f={x:r.left+v.x+T[0].x*v.z,y:r.top+v.y+T[0].y*v.z};if(Math.hypot(e.clientX-f.x,e.clientY-f.y)<18){if(oo.onPolyClose)oo.onPolyClose();return}}
       if(oo.onPoly)oo.onPoly({x:R(w.x),y:R(w.y)})}};
   host.addEventListener('pointerup',up,true);host.addEventListener('pointercancel',up,true);
   host.addEventListener('dblclick',e=>{const oo=host._o;if(oo&&oo.draw==='poly'&&oo.onPolyClose){e.preventDefault();oo.onPolyClose();return}
     /* doble clic en un borde de la forma elegida: agrega una esquina (también en las vecinas que comparten ese borde) */
-    if(!oo||!oo.edit||oo.edit.noMid||oo.draw)return;const v=host._v;const w=v.toWorld(e.clientX,e.clientY);const P=unflat(oo.edit.pts);let best=null;
-    P.forEach((a,i)=>{const b=P[(i+1)%P.length];const L2=(b.x-a.x)**2+(b.y-a.y)**2||1;const t=((w.x-a.x)*(b.x-a.x)+(w.y-a.y)*(b.y-a.y))/L2;if(t<=.02||t>=.98)return;const q={x:R(a.x+t*(b.x-a.x)),y:R(a.y+t*(b.y-a.y))};const d=Math.hypot(q.x-w.x,q.y-w.y)*(v.z||1);if(d<14&&(!best||d<best.d))best={i,q,d}});
-    if(!best)return;e.preventDefault();e.stopPropagation();P.splice(best.i+1,0,best.q);const LP=linkP();const tol=Math.max(.8,2/(v.z||1));let ch=false;
-    for(const[,Q]of LP)for(let j=0;j<Q.length;j++){const a=Q[j],b=Q[(j+1)%Q.length];const L2=(b.x-a.x)**2+(b.y-a.y)**2||1;const t=((best.q.x-a.x)*(b.x-a.x)+(best.q.y-a.y)*(b.y-a.y))/L2;if(t<=1e-3||t>=1-1e-3)continue;const d=Math.hypot(a.x+t*(b.x-a.x)-best.q.x,a.y+t*(b.y-a.y)-best.q.y);if(d<tol){Q.splice(j+1,0,{...best.q});ch=true;break}}
-    done(P,ch?LP:null)})}
+    if(!oo||!oo.edit||oo.edit.noMid||oo.draw)return;const v=host._v;const w=W(e);const P=unflat(oo.edit.pts);let best=null;
+    P.forEach((a,i)=>{const b=P[(i+1)%P.length];const L2=(b.x-a.x)**2+(b.y-a.y)**2||1;const t=((w.x-a.x)*(b.x-a.x)+(w.y-a.y)*(b.y-a.y))/L2;if(t<=.02||t>=.98)return;const q={x:R(a.x+t*(b.x-a.x)),y:R(a.y+t*(b.y-a.y))};const d=Math.hypot(q.x-w.x,q.y-w.y)*zk();if(d<14&&(!best||d<best.d))best={i,q,d}});
+    if(!best)return;e.preventDefault();e.stopPropagation();addVert(P,best.i,best.q)});
+  /* agrega una esquina en el borde i (también en las formas vecinas que tienen ese borde) */
+  const addVert=(P,i,q)=>{P.splice(i+1,0,q);const LP=linkP();const tol=Math.max(.8,2/zk());let ch=false;
+    for(const[,Q]of LP)for(let j=0;j<Q.length;j++){const a=Q[j],b=Q[(j+1)%Q.length];const L2=(b.x-a.x)**2+(b.y-a.y)**2||1;const t=((q.x-a.x)*(b.x-a.x)+(q.y-a.y)*(b.y-a.y))/L2;if(t<=1e-3||t>=1-1e-3)continue;const d=Math.hypot(a.x+t*(b.x-a.x)-q.x,a.y+t*(b.y-a.y)-q.y);if(d<tol){Q.splice(j+1,0,{...q});ch=true;break}}
+    done(P,ch?LP:null)};
+  /* clic derecho (o mantener pulsado) en una esquina o en la barra de una cara: agregar o quitar esquinas (28-10-2026, con el dueño) */
+  host.addEventListener('contextmenu',e=>{const oo=host._o;const h=e.target.closest&&e.target.closest('.pvh');if(!h||!oo||!oo.edit||oo.edit.noMid||oo.draw)return;e.preventDefault();e.stopPropagation();
+    const hh=(host._hL||[])[+h.dataset.h];if(!hh)return;const P=unflat(oo.edit.pts);const n=P.length;const mid=(a,b)=>({x:R((a.x+b.x)/2),y:R((a.y+b.y)/2)});
+    if(hh.face){const F=hh.face;const a=P[F[0]],b=P[F[F.length-1]];const c=mid(a,b);/* el borde de la cara donde cae su centro */let k=F[0];for(let j=0;j+1<F.length;j++){const p=P[F[j]],q=P[F[j+1]];const t=((c.x-p.x)*(q.x-p.x)+(c.y-p.y)*(q.y-p.y))/(((q.x-p.x)**2+(q.y-p.y)**2)||1);if(t>=0&&t<=1){k=F[j];break}}
+      openPop(h,`<button data-do="fc">Agregar vértice en el centro de esta cara</button>`,{fc:()=>addVert(unflat(oo.edit.pts),k,c)});return}
+    const i=+h.dataset.h;if(i>=n)return;
+    openPop(h,`<button data-do="nx">Agregar vértice hacia la siguiente esquina</button><button data-do="pv">Agregar vértice hacia la anterior</button>${n>3?'<button data-do="rm">Quitar este vértice</button>':''}`,
+      {nx:()=>{const Q=unflat(oo.edit.pts);addVert(Q,i,mid(Q[i],Q[(i+1)%n]))},pv:()=>{const Q=unflat(oo.edit.pts);const j=(i-1+n)%n;addVert(Q,j,mid(Q[j],Q[i]))},
+       rm:()=>{const Q=unflat(oo.edit.pts);const v0=Q[i];Q.splice(i,1);const LP=linkP();const tol=Math.max(.8,2/zk());let ch=false;for(const[,L]of LP){const j=L.findIndex(p=>Math.hypot(p.x-v0.x,p.y-v0.y)<tol);if(j>=0&&L.length>3){L.splice(j,1);ch=true}}done(Q,ch?LP:null)}})})}
 /** acerca el mapa a una forma (al elegirla en la lista) */
 function ambFocus(host,pts){const v=host&&host._v;if(!v||!pts)return;const P=unflat(pts);if(!P.length)return;const bb=bboxOf(P);const full=v.bounds;const pad=Math.max(bb.w,bb.h)*.9+40;
   v.bounds={x:bb.x-pad,y:bb.y-pad,w:bb.w+pad*2,h:bb.h+pad*2};v.fit();v.bounds=full}

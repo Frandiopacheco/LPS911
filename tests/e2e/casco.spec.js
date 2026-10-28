@@ -556,3 +556,79 @@ test('casco: Niveles: partir y juntar sectores (lo programado se queda o pasa al
   expect((await page.locator('#csszside').boundingBox()).width).toBeGreaterThan(w0.width + 100);
   expect(errors).toEqual([]);
 });
+
+/* Niveles con ejes, tercios, alineación de láminas, sectores nuevos y eliminar (28-10-2026) */
+test('casco: Niveles: ejes y tercios (la junta se pega al tercio), alinear otra lámina, copiar sin puntos, nuevo y eliminar sector, menú de vértices', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const P = (id, cod, niv) => ['plb', id, { cod, disc: 'EST', niv, tit: 'Encofrado', tipo: 'Planta', rev: 1, base: 'planos/' + cod + '/r1', W: 4000, H: 3000, Z: 1, mm: [1200, 900], revs: [], cal: { mpp: 0.005, rev: 1 } }];
+  const errors = await openApp(page, { as: 'admin', extra: [P('EST_E03', 'E-03', 'P3'), P('EST_E05', 'E-05', 'P5')] });
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    const L = (id, pid, plb, w) => fcol('laminas').doc(id).set({ pisoId: pid, base: true, esp: 'Estructuras', name: 'Encofrado', w, h: w * 0.75, lw: w / 2, lh: w * 0.375, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: plb, cod: plb, disc: 'EST', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
+    await L('lamT3', 'n3', 'EST_E03', 2000); await L('lamT5', 'n5', 'EST_E05', 1600);
+  });
+  await expect.poll(() => page.evaluate(() => !!(window.__plano && window.__plano.LAM && window.__plano.LAM.get('lamT5')))).toBe(true);
+  const ids = await page.evaluate(() => { const A = [...S.amb.values()].filter(a => a.sectorId === 'n3-e').sort(byOrder); const ops = A.map((a, i) => { const x = 200 + i * 400; const o = { ...a, geo: { lamT3: [x, 300, x + 400, 300, x + 400, 1100, x, 1100] } }; delete o.id; return op('ambientes', a.id, o); }); apply(ops, 'test');
+    U.tab = 'planos'; U.csSzV = 'niv'; CNV.pid = 'n3'; render(); return A.map(a => a.id); });
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4, { timeout: 15000 });
+  const scr = (x, y) => page.evaluate(([x, y]) => { const h = document.getElementById('csszmap'); const v = h._v; const M = h._o.M || { a: 1, b: 0, e: 0, f: 0 }; const q = { x: M.a * x - M.b * y + M.e, y: M.b * x + M.a * y + M.f }; const r = h.getBoundingClientRect(); return { x: r.left + v.x + q.x * v.z, y: r.top + v.y + q.y * v.z }; }, [x, y]);
+  /* ＃ Ejes: un eje con dos clics (ortogonal: queda vertical) */
+  await page.locator('[data-cnvt="ejes"]').click();
+  let q = await scr(200, 250); await page.mouse.click(q.x, q.y); q = await scr(210, 1150); await page.mouse.click(q.x, q.y);
+  await expect.poll(() => page.evaluate(() => JSON.stringify(window.__plano.LAM.get('lamT3').ejes))).toBe(JSON.stringify([{ n: 'A', p: [200, 250, 200, 1150] }]));
+  /* el resto de los ejes y sus tercios */
+  await page.evaluate(() => { const l = window.__plano.LAM.get('lamT3'); csLamSet(l, { ejes: [...[200, 600, 1000, 1400, 1800].map((x, i) => ({ n: 'ABCDE'[i], p: [x, 250, x, 1150] })), { n: '1', p: [150, 300, 1850, 300] }, { n: '2', p: [150, 1100, 1850, 1100] }] }); CNV.tool = ''; csNivDraw(); });
+  expect(await page.evaluate(() => csThirds(window.__plano.LAM.get('lamT3')).length)).toBe(10);
+  /* Partir: la línea se pega al tercio C–D (x = 1133,3) */
+  await page.locator('[data-cnvt="cut"]').click();
+  q = await scr(1138, 600); await page.mouse.move(q.x, q.y); await page.mouse.click(q.x, q.y); q = await scr(1150, 900); await page.mouse.move(q.x, q.y); await page.mouse.click(q.x, q.y);
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(5);
+  const xs = await page.evaluate(i => S.amb.get(i).geo.lamT3.filter((_, k) => k % 2 === 0), ids[2]);
+  expect(xs.some(x => Math.abs(x - 1133.3) < 0.2)).toBe(true);
+  await page.evaluate(() => undo());
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
+  /* clic derecho en una esquina: agregar un vértice hacia la siguiente */
+  await page.evaluate(i => { CNV.tool = ''; CNV.sel = i; csNivDraw(); }, ids[0]);
+  await page.locator('#csszmap .pvh').first().click({ button: 'right' });
+  await page.locator('#pop button[data-do="nx"]').click();
+  await expect.poll(() => page.evaluate(i => S.amb.get(i).geo.lamT3.length, ids[0])).toBe(10);
+  /* Alinear T5 (otra lámina, escala 0,8) y copiar sin marcar puntos */
+  await page.evaluate(() => { CNV.pid = 'n5'; CNV.sel = ''; csNivDraw(); });
+  await expect(page.locator('#csszhint')).toContainText('no está alineado');
+  await page.evaluate(() => { CNV.al = { pid: 'n5', s: [{ x: 200, y: 300 }, { x: 1800, y: 1100 }], t: [{ x: 100, y: 200 }, { x: 1380, y: 840 }], str: true }; csNivDraw(); });
+  await expect(page.locator('#cnvcpf')).toContainText('0.800');
+  await page.locator('[data-cnv="alok"]').click();
+  await expect.poll(() => page.evaluate(() => { const m = csMap(window.__plano.LAM.get('lamT3'), window.__plano.LAM.get('lamT5')); return m ? [+m.a.toFixed(3), +m.e.toFixed(1), +m.f.toFixed(1)].join() : ''; })).toBe('0.8,-60,-40');
+  await page.evaluate(() => { CNV.al = null; csNivDraw(); });
+  await expect.poll(() => page.evaluate(() => !!document.getElementById('csszmap')._o.M)).toBe(true);/* T5 se ve enderezado en el marco de T3 */
+  await page.locator('[data-cnv="copy"]').first().click();
+  await expect(page.locator('#cnvcpf')).toContainText('alineados');
+  await page.locator('[data-cnv="cpok"]').click();
+  await expect.poll(() => page.evaluate(() => { const a = [...S.amb.values()].filter(a => a.sectorId === 'n5-e' && !a.arch).sort(byOrder)[0]; return a && a.geo && a.geo.lamT5 ? a.geo.lamT5.slice(0, 2).join() : ''; })).toBe('100,200');
+  /* ▭ Nuevo: un sector al final del tren */
+  const n0 = await page.evaluate(() => [...S.amb.values()].filter(a => a.sectorId === 'n5-e' && !a.arch).length);
+  await page.locator('[data-cnvt="nr"]').click();
+  const a1 = await scr(150, 1150), a2 = await scr(600, 1350);
+  await page.mouse.move(a1.x, a1.y); await page.mouse.down(); await page.mouse.move(a2.x, a2.y, { steps: 5 }); await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => [...S.amb.values()].filter(a => a.sectorId === 'n5-e' && !a.arch).length)).toBe(n0 + 1);
+  /* Eliminar en T3 un sector con días programados: pasan al anterior */
+  await page.evaluate(i => { CNV.pid = 'n3'; CNV.tool = ''; CNV.sel = i; csNivDraw(); }, ids[1]);
+  const before = await page.evaluate(([a, b]) => cnvProg(a) + cnvProg(b), [ids[0], ids[1]]);
+  page.once('dialog', d => d.accept());
+  await page.locator('[data-cnv="del"]').click();
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(3);
+  expect(await page.evaluate(i => cnvProg(i), ids[0])).toBeGreaterThanOrEqual(before - 0);
+  expect(await page.evaluate(i => cnvProg(i), ids[1])).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('formularios: seleccionar texto y soltar el mouse fuera no cierra la ventana', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin' });
+  await page.evaluate(() => lqModal('<label>Nombre<input id="zzin" value="texto para seleccionar"></label>'));
+  const b = await page.locator('#zzin').boundingBox();
+  await page.mouse.move(b.x + b.width - 4, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(5, b.y + b.height / 2, { steps: 6 }); await page.mouse.up();
+  await expect(page.locator('#lqm')).toBeVisible();
+  await page.mouse.click(5, 5);/* un clic de verdad en el fondo sí la cierra */
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

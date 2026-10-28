@@ -141,7 +141,7 @@ function csSzRec(E){if(!E.n)return'Traza el primer sector: con el contorno del f
   else t+=` Con ${E.n} alcanza.`;return t}
 
 /* ---------- vista (pestaña Sectorización en Casco) ---------- */
-const CSZ={vid:'',v:null,dirty:false,svT:0,tool:'',tmp:[],sel:null,side:true,hist:[],fr:'',fg:'E',ftool:''};
+const CSZ={vid:'',v:null,dirty:false,svT:0,tool:'',tmp:[],sel:null,side:true,hist:[],fr:'',fg:'E',ftool:'',ortho:true,ter:true};
 const csSzV=()=>['fr','niv','lam'].includes(U.csSzV)?U.csSzV:'sec';/* «Niveles» (casco-niv.js, 28-10-2026) reemplaza a «Láminas» en la barra; Láminas se abre desde Niveles *//* «Tren» pasó al Lookahead (casco-tren.js, 27-10-2026) */
 function csSzNav(){const v=csSzV();return`<div class="csszn" id="csszn"><span class="seg" role="tablist" aria-label="Sectorización">${[['fr','Frentes'],['sec','Sectores'],['niv','Niveles'],...(v==='lam'?[['lam','Láminas']]:[])].map(([k,t])=>`<button type="button" role="tab" data-cszv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${t}</button>`).join('')}</span></div>`}
 function csSzFr(){const L=csFrs();if(!L.some(f=>f.id===CSZ.fr))CSZ.fr=(L[0]||{}).id||'';return KFR.get(CSZ.fr)||null}
@@ -186,7 +186,7 @@ function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=
   csSet('csszh',`<div class="csszr">${csFrs().map(x=>`<button type="button" class="ib${x.id===CSZ.fr?' on':''}" data-cszf="${esc(x.id)}"><i class="csdot" style="--c:${esc(x.color||'#888')}"></i>${esc(x.name)}</button>`).join('')}${ed?'<button type="button" class="ib" data-csz="frnew">+ Frente</button>':''}
       <span class="seg" role="group" aria-label="Grupo">${['E','A'].map(k=>`<button type="button" data-cszg="${k}" class="${g===k?'on':''}">${k==='E'?'Estructura':'Albañilería'}</button>`).join('')}</span>
       ${f?`<label class="cssml">Nivel de referencia<select data-csz="fref"${dis}>${csFrLv(f).map(p=>`<option value="${p.id}"${p.id===ref?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>`:''}</div>
-    ${f&&ed?`<div class="csszr"><span class="mu">Contorno de ${esc(f.name)} (${g==='A'?'planta de arquitectura':'planta de encofrado'}):</span><span class="seg"><button type="button" data-cszt="rect" class="${CSZ.ftool==='rect'?'on':''}">▭ Rectángulo</button><button type="button" data-cszt="poly" class="${CSZ.ftool==='poly'?'on':''}">⬠ Polígono</button></span>${C&&C.pts?'<button type="button" class="ib" data-csz="frdelc">Borrar el contorno</button>':''}</div>`:''}`);
+    ${f&&ed?`<div class="csszr"><span class="mu">Contorno de ${esc(f.name)} (${g==='A'?'planta de arquitectura':'planta de encofrado'}):</span><span class="seg"><button type="button" data-cszt="rect" class="${CSZ.ftool==='rect'?'on':''}">▭ Rectángulo</button><button type="button" data-cszt="poly" class="${CSZ.ftool==='poly'?'on':''}">⬠ Polígono</button></span>${typeof csOrtTer==='function'?csOrtTer():''}${C&&C.pts?'<button type="button" class="ib" data-csz="frdelc">Borrar el contorno</button>':''}</div>`:''}`);
   csSet('csszsc',csScaleBadge(lam));
   /* panel: datos del frente y sus cuadrillas */
   let h='';if(!f)h=`<div class="csfsec"><p><b>Primero, los frentes de trabajo.</b> Un frente es una zona que avanza en paralelo con su propio tren y sus propias cuadrillas (una torre, un bloque separado por junta). Si la obra avanza como un solo bloque, crea un único frente.</p>${ed?'<button type="button" class="ib pri" data-csz="frnew">Crear Frente A (todo el edificio)</button>':''}</div>`;
@@ -205,7 +205,8 @@ function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=
   if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando el plano…</div>';return}
   if(!ref){host.innerHTML='<div class="kemp">Este frente no tiene niveles con lámina. Vincúlalas en Configuración › Casco › Niveles.</div>';host._v=null;host._fk='';hint.hidden=true;return}
   const shapes=csFrs().map(x=>{const c=csFrC(x,g);return c&&c.ref===ref&&c.pts?{id:'f:'+x.id,kind:'s',pts:c.pts,c:x.color||'#888',label:x.name,sel:x.id===CSZ.fr}:null}).filter(Boolean);
-  const o={pid:ref,vista:lam?lam.id:'',shapes,canUp:false,draw:ed&&f&&CSZ.ftool?CSZ.ftool:null,tmp:CSZ.ftool==='poly'?CSZ.tmp:null,
+  const gF=lam&&typeof csGuides==='function'?csGuides(csRefLam(f,g)||lam,lam,CSZ.ter!==false):{guides:[],snap:[]};
+  const o={pid:ref,vista:lam?lam.id:'',shapes,canUp:false,draw:ed&&f&&CSZ.ftool?CSZ.ftool:null,tmp:CSZ.ftool==='poly'?CSZ.tmp:null,guides:gF.guides,ortho:CSZ.ortho!==false,
     edit:ed&&f&&!CSZ.ftool&&C&&C.pts&&C.ref===ref?{pts:C.pts}:null,onEdit:pts=>csFrSet({['c'+g]:{...C,pts}}),
     onDrawn:pts=>{CSZ.ftool='';csFrSet({['c'+g]:{ref,vista:lam?lam.id:'',pts}})},onPoly:pt=>{CSZ.tmp=[...CSZ.tmp,pt];csFrDraw()},
     onPolyClose:()=>{const P=CSZ.tmp;CSZ.tmp=[];CSZ.ftool='';if(P.length>=3)csFrSet({['c'+g]:{ref,vista:lam?lam.id:'',pts:csgFlat(P)}});else csFrDraw()},
@@ -226,6 +227,7 @@ function csSecDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd();const v=f?csSzCur(f):nu
       <label class="cssml">Alternativa<select data-csz="alt">${alts.map(a=>`<option value="${esc(a.id)}"${a.id===CSZ.vid?' selected':''}>${esc(a.n||'Alternativa')}${a.ap?' · vigente':''}</option>`).join('')}${CSZ.v&&!KSEC.has(CSZ.vid)?`<option value="${esc(CSZ.vid)}" selected>${esc(CSZ.v.n)}</option>`:''}</select></label>
       ${ed?`<button type="button" class="ib" data-csz="altnew">+ Nueva</button>${v?'<button type="button" class="ib" data-csz="altdup">Duplicar</button><button type="button" class="ib" data-csz="altdel" title="Eliminar esta alternativa (se archiva)">Eliminar</button>':''}`:''}${v&&ed?`<input class="tin csfn" data-csz="altn" value="${esc(v.n||'')}" aria-label="Nombre de la alternativa">`:''}<span class="mu" id="csszsv"></span></div>
     ${v&&ed?`<div class="csszr"><span class="seg" role="group" aria-label="Herramienta"><button type="button" data-cszt="" class="${!CSZ.tool?'on':''}" title="Elegir una junta o un sector">✋ Elegir</button><button type="button" data-cszt="jun" class="${CSZ.tool==='jun'?'on':''}" title="Toca dos puntos: la junta se prolonga sola hasta el borde o hasta otra junta">╱ Junta</button><button type="button" data-cszt="rect" class="${CSZ.tool==='rect'?'on':''}">▭ Rectángulo</button><button type="button" data-cszt="poly" class="${CSZ.tool==='poly'?'on':''}">⬠ Polígono</button></span>
+      <span class="seg" role="group" aria-label="Referencias"><button type="button" data-cszt="ejes" class="${CSZ.tool==='ejes'?'on':''}" title="Traza cada eje con dos clics: salen los tercios de cada luz">＃ Ejes</button><button type="button" data-cszt="luz" class="${CSZ.tool==='luz'?'on':''}" title="Dos clics en las caras de una viga: sus tercios">⟷ Luz de viga</button></span>${typeof csOrtTer==='function'?csOrtTer():''}
       <button type="button" class="ib" data-csz="div" title="N sectores de igual área con juntas paralelas">÷ Dividir en N</button><button type="button" class="ib" data-csz="eq" title="Mueve las juntas paralelas hasta igualar la carga">⚖ Equilibrar</button><button type="button" class="ib" data-csz="rev" title="Invierte el orden del tren">⇄ Invertir orden</button><button type="button" class="ib" data-csz="ordauto" title="Vuelve al orden automático (según la dirección de las juntas)">Orden automático</button>
       <button type="button" class="ib" data-csz="del"${CSZ.sel?'':' disabled'} title="Borra la junta o el sector elegido (Supr)">Borrar</button><button type="button" class="ib" data-csz="undo"${CSZ.hist.length?'':' disabled'} title="Ctrl+Z">↶ Deshacer</button>
       <label class="cssml">Ritmo<select data-csz="ritmo"><option value="1"${(+v.ritmo||1)===1?' selected':''}>1 sector/día</option><option value="2"${+v.ritmo===2?' selected':''}>1 sector cada 2 días</option></select></label>
@@ -246,7 +248,7 @@ function csSecDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd();const v=f?csSzCur(f):nu
     ${E.n?`<details class="csfsec" data-cszo="met"${CSZ.om?' open':''}><summary><b>Por partida</b><span class="mu">metrado por sector y cuadrilla</span></summary><div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th title="Metrado de la partida por m² de planta (techo para estructura, piso para albañilería). Área × incidencia = metrado">Incidencia /m²</th>${E.sec.map(s=>`<th>${esc(s.n)}</th>`).join('')}<th title="Personas necesarias para el ritmo / del frente">Cuadrilla</th></tr></thead><tbody>
       ${E.cats.map(c=>{const cr=E.crew.find(x=>x.c.id===c.id);return`<tr><td>${esc(c.name)} <span class="mu">${esc(c.und)}</span></td><td>${ed?`<input class="ci csn" type="number" min="0" step="any" data-cszrat="${esc(c.id)}" value="${c.rat??''}" aria-label="Incidencia de ${esc(c.name)}" title="${esc(c.und||'und')} por m² de planta">`:`<span class="mono mu">${c.rat>0?c.rat:'—'}</span>`}</td>${E.sec.map((_,i)=>c.rat>0&&E.A[i]!=null?`<td class="mono mu">${E.met[c.id][i]}</td>`:`<td><input class="ci csn" type="number" min="0" step="any" data-cszm="${esc(c.id)}:${i}" value="${(((v.met||{})[c.id]||[])[i])??''}"${ed?'':' disabled'} aria-label="${esc(c.name)} en ${esc(E.sec[i].n)}"></td>`).join('')}<td class="mono${cr&&cr.have!=null&&cr.need>cr.have?' csszbad':''}">${cr?`${cr.need}${cr.have!=null?' / '+cr.have:''}`:'—'}</td></tr>`}).join('')}
       </tbody></table></div><p class="note">En gris: área × incidencia (se edita en la columna Incidencia). Las partidas sin incidencia se escriben. Cuadrilla: necesaria para el ritmo / la del frente.</p></details>`:''}`;
-  csSet('csszside',side);
+  csSet('csszside',side+(typeof csEjesSec==='function'?csEjesSec(lam,ed):''));
   csSet('csszf',`<button type="button" class="ib" data-csz="cmp"${alts.length>1?'':' disabled'} title="Compara las alternativas de este frente">Comparar alternativas</button><span style="flex:1"></span>${v.ap?'<span class="mu">Alternativa vigente (aplicada a los niveles)</span>':''}${ed?`<button type="button" class="ib pri" data-csz="apply"${E.n?'':' disabled'}>Aplicar a niveles…</button>`:''}`);
   document.getElementById('csszb').classList.toggle('noside',!CSZ.side);
   /* plano */
@@ -256,16 +258,20 @@ function csSecDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd();const v=f?csSzCur(f):nu
   const lines=v.mode==='f'?[]:(v.jun||[]).map((j,i)=>({id:'j'+i,pts:j,c:'#111',sel:CSZ.sel&&CSZ.sel.k==='j'&&CSZ.sel.i===i}));
   const J=v.jun||[],CP=C.pts?csUnflat(C.pts):null;const tl=CSZ.tool;
   const editPts=!ed||tl?null:CSZ.sel&&CSZ.sel.k==='j'&&J[CSZ.sel.i]?{pts:J[CSZ.sel.i],noMid:true}:CSZ.sel&&CSZ.sel.k==='s'&&v.mode==='f'&&(v.shp||[])[CSZ.sel.i]?{pts:v.shp[CSZ.sel.i]}:null;
-  const o={pid:C.ref,vista:C.vista,shapes,lines,canUp:false,draw:ed&&(tl==='rect'||tl==='poly'||tl==='jun')?(tl==='jun'?'poly':tl):null,tmp:tl==='poly'||tl==='jun'?CSZ.tmp:null,edit:editPts,
+  const gd=lam&&typeof csGuides==='function'?csGuides(lam,lam,CSZ.ter!==false):{guides:[],snap:[]};
+  const o={pid:C.ref,vista:C.vista,shapes,lines,canUp:false,draw:ed&&(tl==='rect'||tl==='poly'||tl==='jun'||tl==='ejes'||tl==='luz')?(tl==='rect'?'rect':'poly'):null,tmp:tl==='poly'||tl==='jun'||tl==='ejes'||tl==='luz'?CSZ.tmp:null,edit:editPts,
+    guides:gd.guides,snapLines:tl==='jun'||tl==='poly'?gd.snap:null,ortho:CSZ.ortho!==false,
     onEdit:pts=>{if(CSZ.sel.k==='j'){const P=csUnflat(pts);const j=csgSnap(CP,J,P[0],P[1],CSZ.sel.i);if(!j){toast('La junta tiene que cruzar el frente.');csSecDraw();return}const i=CSZ.sel.i;csSzEdit(x=>{x.jun=x.jun.slice();x.jun[i]=j})}else{const i=CSZ.sel.i;csSzEdit(x=>{x.shp=x.shp.slice();x.shp[i]=pts})}},
     onDrawn:pts=>csSzFree(pts),
-    onPoly:pt=>{CSZ.tmp=[...CSZ.tmp,pt];if(tl==='jun'&&CSZ.tmp.length===2){const[a,b]=CSZ.tmp;CSZ.tmp=[];if(!CP){toast('Dibuja primero el contorno del frente.');csSecDraw();return}const j=csgSnap(CP,J,a,b);if(!j){toast('Traza la junta dentro del frente.');csSecDraw();return}
+    onPoly:pt=>{CSZ.tmp=[...CSZ.tmp,pt];if((tl==='ejes'||tl==='luz')&&CSZ.tmp.length===2){const[a,b]=CSZ.tmp;CSZ.tmp=[];if(tl==='ejes')csEjeAdd(lam,lam,a,b);else csLuzAdd(lam,lam,a,b);csSecDraw();return}if(tl==='jun'&&CSZ.tmp.length===2){const[a,b]=CSZ.tmp;CSZ.tmp=[];if(!CP){toast('Dibuja primero el contorno del frente.');csSecDraw();return}const j=csgSnap(CP,J,a,b);if(!j){toast('Traza la junta dentro del frente.');csSecDraw();return}
       if(v.mode==='f'&&(v.shp||[]).length){toast('Esta alternativa tiene sectores libres: crea otra alternativa para usar juntas.');csSecDraw();return}csSzEdit(x=>{x.mode='j';x.jun=[...(x.jun||[]),j]});return}csSecDraw()},
     onPolyClose:()=>{const P=CSZ.tmp;CSZ.tmp=[];if(tl==='poly'&&P.length>=3)csSzFree(csgFlat(P));else csSecDraw()},
     onPick:(hit,w)=>{const z=host._v&&host._v.z||1;let best=-1,bd=14/z;J.forEach((j,i)=>{if(v.mode==='f')return;const d=csgDS(w,{x:j[0],y:j[1]},{x:j[2],y:j[3]});if(d<bd){bd=d;best=i}});
       if(best>=0)CSZ.sel={k:'j',i:best};else if(hit&&/^s\d+$/.test(hit))CSZ.sel={k:'s',i:+hit.slice(1)};else CSZ.sel=null;csSecDraw()}};
   API.ambMap(host,o);const bl=lam;if(bl&&host._img!==bl.id){host._img=bl.id;API.imgURL(bl,'f').then(()=>{if(document.getElementById('csszmap')===host)csSecDraw()}).catch(()=>{})}
-  let t='';if(tl==='jun')t=CSZ.tmp.length?'Toca el segundo punto de la junta.':'Toca dos puntos de la junta: se prolonga sola hasta el borde o hasta otra junta. Esc para terminar.';
+  let t='';if(tl==='jun')t=CSZ.tmp.length?'Toca el segundo punto de la junta (⊥: horizontal o vertical; Mayúscula: libre).':'Toca dos puntos de la junta (se pega a los tercios; Alt: no se pega): se prolonga sola hasta el borde o hasta otra junta. Esc para terminar.';
+  else if(tl==='ejes')t=CSZ.tmp.length?'Segundo clic: el eje queda recto.':'Traza cada eje con dos clics sobre la línea del eje del plano. Se nombran solos (A, B… verticales; 1, 2… horizontales) y dan los tercios de cada luz.';
+  else if(tl==='luz')t=CSZ.tmp.length?'Segundo clic en la otra cara de la viga.':'Para un tramo que no sigue los ejes: clic en una cara de la viga y en la otra. Salen sus dos tercios.';
   else if(tl==='rect')t='Arrastra un rectángulo: cada uno es un sector.';else if(tl==='poly')t=CSZ.tmp.length?`${CSZ.tmp.length} esquina(s). Cierra tocando la primera, doble clic o Enter.`:'Toca cada esquina del sector.';
   else if(CSZ.sel&&CSZ.sel.k==='j')t='Arrastra un extremo de la junta para moverla; Supr la borra (los sectores vecinos se unen).';
   else if(CSZ.sel&&CSZ.sel.k==='s')t=v.mode==='f'?'Arrastra las esquinas para ajustar el sector; Supr lo borra.':'Para cambiar este sector mueve o borra una de sus juntas.';
@@ -303,7 +309,7 @@ async function csSzApply(){const f=csSzFr(),v=CSZ.v;if(!f||!v||!csEd())return;co
   if(CSZ.v)CSZ.v.ap={t:NOW(),by:me.email}}
 
 /* ---- eventos ---- */
-function csSzClick(e){if(typeof csNivClick==='function'&&csNivClick(e))return;const t=e.target;const nv=t.closest('[data-cszv]');if(nv){U.csSzV=nv.dataset.cszv;saveUI();CSZ.tmp=[];render();return}
+function csSzClick(e){if(typeof csEjeEdit==='function'&&csEjeEdit(e))return;if(typeof csNivClick==='function'&&csNivClick(e))return;const t=e.target;const nv=t.closest('[data-cszv]');if(nv){U.csSzV=nv.dataset.cszv;saveUI();CSZ.tmp=[];render();return}
   const fb=t.closest('[data-cszf]');if(fb){CSZ.fr=fb.dataset.cszf;CSZ.tmp=[];CSZ.ftool='';CSZ.v=null;CSZ.vid='';csSzDraw();return}
   const gb=t.closest('[data-cszg]');if(gb){CSZ.fg=gb.dataset.cszg;CSZ.tmp=[];CSZ.v=null;CSZ.vid='';csSzDraw();return}
   const tb=t.closest('[data-cszt]');if(tb){const root=document.getElementById('cssz');const k=tb.dataset.cszt;if(root.dataset.v==='fr')CSZ.ftool=CSZ.ftool===k?'':k;else{CSZ.tool=CSZ.tool===k?'':k;CSZ.sel=null}CSZ.tmp=[];csSzDraw();return}
@@ -335,7 +341,7 @@ async function csSzAltDel(){const f=csSzFr(),v=CSZ.v;if(!f||!v||!csEd())return;
   toast('Alternativa eliminada');csSzDraw()}
 function csSzDel(){const s=CSZ.sel,v=CSZ.v;if(!s||!v)return;if(s.k==='j'){const i=s.i;CSZ.sel=null;csSzEdit(x=>{x.jun=x.jun.filter((_,k)=>k!==i)})}
   else if(v.mode==='f'){const i=s.i;CSZ.sel=null;csSzEdit(x=>{x.shp=x.shp.filter((_,k)=>k!==i)})}else toast('Para quitar este sector borra una de sus juntas.')}
-function csSzChange(e){if(typeof csNivChange==='function'&&csNivChange(e))return;const t=e.target;const ed=csEd();
+function csSzChange(e){if(typeof csEjeEdit==='function'&&csEjeEdit(e))return;if(e.target.dataset&&e.target.dataset.csz2){CSZ[e.target.dataset.csz2]=e.target.checked;csSzDraw();return}if(typeof csNivChange==='function'&&csNivChange(e))return;const t=e.target;const ed=csEd();
   if(t.dataset.csfr){const k=t.dataset.csfr;let v=t.value;if(k==='vac')v=v===''?null:+v;if(k==='gap'||k==='albK')v=Math.max(k==='albK'?1:0,Math.round(+v||0));if(k==='ini'&&!/^\d{4}-\d{2}-\d{2}$/.test(v))v=null;if(k==='code')v=String(v).trim().toUpperCase().slice(0,3)||'A';if(k==='name')v=String(v).trim()||'Frente';csFrSet({[k]:v});return}
   if(t.dataset.csfc){const f=csSzFr();if(!f)return;const cua={...(f.cua||{})};if(t.value==='')delete cua[t.dataset.csfc];else cua[t.dataset.csfc]=Math.max(0,Math.round(+t.value));csFrSet({cua});return}
   if(t.dataset.cszrat&&ed){const c=MX.cat.get(t.dataset.cszrat);const v=t.value===''?null:+t.value;if(v!=null&&!(v>=0)){toast('Escribe un número válido.');csSecDraw();return}if(c){c.rat=v;csCatSet(c.id,'rat',t.value)}csSecDraw();return}

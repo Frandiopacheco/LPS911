@@ -453,6 +453,12 @@ let SEL_T=0,PDOWN=false,dTimer=0,DRAGGING=false;/* DRAGGING: arrastre nativo en 
 let IMPORTING=false;
 const uiBusy=()=>{const a=document.activeElement;return IMPORTING||PDOWN||DRAGGING||(!!a&&a.tagName==='SELECT'&&performance.now()-SEL_T<20000)||(!!a&&a.classList&&a.classList.contains('qin'))};/* qin: cantidad del día escribiéndose dentro de la celda del lookahead */
 document.addEventListener('pointerdown',e=>{const t=e.target;if(!t||!t.closest)return;if(t.closest('select'))SEL_T=performance.now();if(t.closest('.pv'))PDOWN=true},true);
+/* 28-10-2026: seleccionar texto en un campo y soltar el mouse fuera del formulario contaba como clic en el fondo oscuro y lo cerraba
+   (el navegador manda el clic al ancestro común). Un clic en un fondo (elemento fijo que cubre la pantalla) solo vale si también empezó ahí. */
+{let DN=null;document.addEventListener('pointerdown',e=>{DN=e.target},true);
+  document.addEventListener('click',e=>{const t=e.target,d=DN;if(!d||d===t||!t||!t.contains||!t.contains(d))return;
+    let fx=false;try{const cs=getComputedStyle(t);if(cs.position==='fixed'){const r=t.getBoundingClientRect();fx=r.width>=innerWidth*.9&&r.height>=innerHeight*.9}}catch(er){}
+    if(fx){e.stopImmediatePropagation();e.preventDefault()}},true)}
 document.addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='SELECT')SEL_T=performance.now()},true);
 {const rel=()=>{if(PDOWN){PDOWN=false;setTimeout(flushDeferred,0)}};document.addEventListener('pointerup',rel,true);document.addEventListener('pointercancel',rel,true)}
 {const done=e=>{if(e.target&&e.target.tagName==='SELECT'){SEL_T=0;setTimeout(flushDeferred,0)}};document.addEventListener('change',done,true);document.addEventListener('focusout',done,true)}

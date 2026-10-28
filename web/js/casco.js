@@ -269,7 +269,9 @@ function csMetFromAreas(v){const A=csAreas(v).a;if(!A.some(x=>x>0))return;v.met=
     archivan solo si no tienen actividades (si tienen, se avisan y quedan: el ingeniero mueve sus actividades primero). */
 /** lámina base del nivel donde va el dibujo de la versión: la misma lámina de referencia, o una que use el mismo plano del módulo Planos (escalada si mide distinto) */
 function csGeoTarget(v,pid){const API=window.__plano;if(!API||!v.vista||!v.geo)return null;const ref=API.LAM.get(v.vista);if(!ref)return null;if(ref.pisoId===pid)return{id:ref.id,k:1};
-  const b=API.basesOf(pid).find(x=>x.plb&&ref.plb&&x.plb.id===ref.plb.id);return b?{id:b.id,k:ref.w>0?b.w/ref.w:1}:null}
+  const b=API.basesOf(pid).find(x=>x.plb&&ref.plb&&x.plb.id===ref.plb.id);if(b)return{id:b.id,k:ref.w>0?b.w/ref.w:1};
+  /* nivel con otra lámina alineada en Sectorización › Niveles (casco-niv.js, laminas.al): el dibujo pasa con la alineación */
+  if(typeof csMap==='function'){const l=csLamOf(pid,v.grp);const m=l&&csMap(ref,l);if(m)return{id:l.id,m}}return null}
 async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.from),i1=L.findIndex(p=>p.id===v.to);const ops=[];let keep=0,nw=0,mod=0,geoN=0;const t=NOW();
   if(v.geo&&Object.keys(v.geo).length&&typeof loadPlanoMod==='function'){try{await loadPlanoMod();if(window.__plano.ensureLam)window.__plano.ensureLam()}catch(e){}}
   const used=new Set([...S.act.values()].filter(x=>!x._del).map(x=>x.ambId));
@@ -285,7 +287,7 @@ async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.fr
     for(let s=0;s<v.k;s++){const met={};for(const[c,arr]of Object.entries(v.met||{}))if(arr&&arr[s]!=null)met[c]=+arr[s];
       const nmS=v.names[s]||((v.grp==='A'?'A':'S')+(s+1));const nx={sectorId:sec.id,code:nmS,name:'Sector '+(v.fr?nmS:nmS.replace(/^S/,'')),order:s+1,met,ksec:v.id};
       /* el dibujo del asistente pasa a la lámina base del nivel que usa el mismo plano del módulo Planos (o a la misma lámina) */
-      const tg=csGeoTarget(v,p.id);const g0=(v.geo||{})[s];if(tg&&g0){const k=tg.k;nx.geo={...((cur[s]&&cur[s].geo)||{}),[tg.id]:g0.map(x=>Math.round(x*k*10)/10)};geoN++}
+      const tg=csGeoTarget(v,p.id);const g0=(v.geo||{})[s];if(tg&&g0){const k=tg.k;nx.geo={...((cur[s]&&cur[s].geo)||{}),[tg.id]:tg.m?csMapF(tg.m,g0):g0.map(x=>Math.round(x*k*10)/10)};geoN++}
       if(cur[s]){const o={...cur[s]};delete o.id;const n2={...o,...nx};if(canon(n2)!==canon(o)){ops.push(op('ambientes',cur[s].id,n2));mod++}}else{ops.push(op('ambientes',uid('am'),nx));nw++}}
     for(const a of cur.slice(v.k)){if(used.has(a.id)){keep++;continue}const o={...a};delete o.id;ops.push(op('ambientes',a.id,{...o,arch:{t,by:me.email,n:me.name||me.email}}))}}
   if(!ops.length){toast('Los niveles ya tenían esta sectorización.');return}
