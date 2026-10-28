@@ -4805,3 +4805,27 @@ tr.ctfrh td.lab{height:auto;padding:6px 10px;display:table-cell}
 .ctpick .ctpb{width:auto!important;padding:2px 8px!important;font:600 11.5px var(--f-mono)!important;border:1px solid var(--line)!important;border-radius:6px!important;min-height:28px}
 .ctpick .ctpb.on{background:var(--accent-soft)!important;border-color:var(--accent)!important}
 .ctpickw button{width:auto!important;padding:4px 10px!important;border:1px solid var(--line)!important;border-radius:6px!important}
+
+/* Casco › Tren tipo Excel (27-10-2026): selección, editor en la celda, relleno en serie, menús */
+.cstr.cted{user-select:none;-webkit-user-select:none}
+.cstr.cted .csk{cursor:cell}
+.cstr td.ctc{position:relative}
+.cstr td.ctc.ctin{background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.cstr td.ctc.ctact{outline:2px solid var(--accent);outline-offset:-2px;z-index:1}
+.cstr td.ctc.ctfp{background:color-mix(in srgb,var(--ok) 18%,transparent)}
+.ctfh{position:absolute;right:-4px;bottom:-4px;width:10px;height:10px;background:var(--accent);border:2px solid var(--panel);cursor:crosshair;z-index:3;touch-action:none}
+.ctedi{position:fixed;z-index:160;border:2px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--ink);font:600 13px var(--f-mono);padding:0 6px;outline:none;box-sizing:border-box}
+.ctsug{position:fixed;z-index:161;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-ctl,8px);box-shadow:var(--sh-2);min-width:210px;padding:4px;display:grid}
+.ctsug button{border:0;background:none;text-align:left;padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:12px;justify-content:space-between;font-size:13px;color:var(--ink)}
+.ctsug button b{font:600 12px var(--f-mono);color:var(--accent)}
+.ctsug button.on,.ctsug button:hover{background:var(--accent-soft)}
+.ctsh{font-size:11.5px;color:var(--muted);padding:3px 8px 2px;line-height:1.4}
+.ctfrn{width:100%}
+.ctfrm{margin-left:auto;border:0;background:none;width:40px;height:32px;border-radius:6px;cursor:pointer;font-size:17px;line-height:1;color:var(--ink2)}
+.ctfrm:hover{background:var(--line2)}
+.lqc label.chk{display:flex;flex-direction:row;justify-content:flex-start;gap:8px;align-items:center;font-size:13.5px;font-weight:500;text-align:left;margin:4px 0}
+.lqc label.chk input{width:auto;height:auto;flex:none;margin:0}
+.ctpt{width:100%;border-collapse:collapse;font-size:13px}
+.ctpt th,.ctpt td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line2)}
+.ctwarn{color:var(--warn);margin:6px 0 0}
+#pop kbd{font:11px var(--f-mono);color:var(--muted);margin-left:14px;float:right}
