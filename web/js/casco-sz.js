@@ -88,7 +88,8 @@ function csSzSectors(v,f){const C=csFrC(f,v.grp);let L=[];
 function csSzLam(v,f){const C=csFrC(f,v.grp);const API=window.__plano;return C&&C.vista&&API&&API.LAM?API.LAM.get(C.vista)||null:null}
 const CSZ_ST={good:'Bien',warn:'Revisar',bad:'Mal',na:'Sin datos'};
 /** todos los indicadores de una alternativa (sección 3 del documento) */
-function csSzEval(v,f){const sec=csSzSectors(v,f),n=sec.length,sc=csScale(csSzLam(v,f)),R=+v.ritmo||1;const k2=sc.mpp?sc.mpp*sc.mpp:0;
+/* ov (Niveles, casco-niv.js): {sec, lam} = los sectores y la lámina de un nivel en vez de los de la alternativa (sin contorno: no evalúa cobertura) */
+function csSzEval(v,f,ov){const sec=ov&&ov.sec||csSzSectors(v,f),n=sec.length,sc=csScale(ov?ov.lam:csSzLam(v,f)),R=+v.ritmo||1;const k2=sc.mpp?sc.mpp*sc.mpp:0;
   const A=sec.map(s=>k2?Math.round(csPolyA(s.P)*k2*10)/10:null);
   const cats=csCats(v.grp).filter(c=>c.und);const met={};
   for(const c of cats)met[c.id]=sec.map((_,i)=>c.rat>0&&A[i]!=null?Math.round(A[i]*c.rat*10)/10:(+(((v.met||{})[c.id]||[])[i])||0));
@@ -108,7 +109,7 @@ function csSzEval(v,f){const sec=csSzSectors(v,f),n=sec.length,sc=csScale(csSzLa
   if(typeof ensureHitos==='function')ensureHitos();
   const hito=typeof HIT!=='undefined'?[...HIT.values()].filter(h=>h&&h.tipo==='fin'&&!h.arch&&h.d).sort((a,b)=>a.d.localeCompare(b.d))[0]||null:null;
   /* cobertura y secuencia */
-  const C=csFrC(f,v.grp),CP=C&&C.pts&&C.pts.length>=6?csUnflat(C.pts):null;let cov=null,ovl=0;
+  const C=csFrC(f,v.grp),CP=!ov&&C&&C.pts&&C.pts.length>=6?csUnflat(C.pts):null;let cov=null,ovl=0;
   if(CP){if(v.mode!=='f')cov=n?1:0;else{const bb=csgBB(CP);let inn=0,one=0,two=0;for(let i=0;i<50;i++)for(let j=0;j<50;j++){const q={x:bb.x+bb.w*(i+.5)/50,y:bb.y+bb.h*(j+.5)/50};if(!csgPip(CP,q))continue;inn++;const k=sec.filter(s=>csgPip(s.P,q)).length;if(k===1)one++;else if(k>1)two++}cov=inn?(one+two)/inn:0;ovl=inn?two/inn:0}}
   const tol=CP?Math.max(csgBB(CP).w,csgBB(CP).h)*0.015:8;const jumps=[];for(let i=0;i+1<n;i++)if(!csgTouch(sec[i].P,sec[i+1].P,tol))jumps.push(sec[i].n+'→'+sec[i+1].n);
   /* recomendación: el mínimo de sectores que sostiene el ritmo con las cuadrillas del frente (y la capacidad de vaciado) */
@@ -126,8 +127,8 @@ function csSzEval(v,f){const sec=csSzSectors(v,f),n=sec.length,sc=csScale(csSzLa
   I.push({id:'I4',t:'Concreto por vaciado',s:!cmx||!cap?'na':cmx/cap<=.9?'good':cmx/cap<=1?'warn':'bad',v:!cmx?nm:`${Math.round(cmx*10)/10} m³${cap?` de ${cap} m³/día`:' · pon la capacidad del frente'}`});
   let s5='na',v5=fin?`Fin estimado ${typeof fmtD==='function'?fmtD(fin):fin}`:'—';if(fin&&hito){const late=hito.d>=fin?0:(typeof wdist==='function'?wdist(hito.d,fin):9);s5=late===0?'good':late<=5?'warn':'bad';v5+=` · hito ${typeof fmtD==='function'?fmtD(hito.d):hito.d}`}
   I.push({id:'I5',t:'Ciclo y fin del casco',s:s5,v:n?`Ciclo ${ciclo} día(s) por nivel · ${v5}`:'—'});
-  const s6=cov==null||!n?'na':(cov>=.98&&ovl<=.02&&!jumps.length)?'good':(cov>=.95&&ovl<=.05)?'warn':'bad';
-  I.push({id:'I6',t:'Cobertura y secuencia',s:s6,v:cov==null?'Sin contorno del frente':`${Math.round(cov*100)} % cubierto${ovl>.005?` · ${Math.round(ovl*100)} % traslapado`:''}${jumps.length?` · salto ${jumps[0]}`:''}`});
+  const s6=ov&&n?(jumps.length?'warn':'good'):cov==null||!n?'na':(cov>=.98&&ovl<=.02&&!jumps.length)?'good':(cov>=.95&&ovl<=.05)?'warn':'bad';
+  I.push({id:'I6',t:ov?'Secuencia':'Cobertura y secuencia',s:s6,v:ov?(jumps.length?`Salto ${jumps[0]}: el sector no toca al siguiente`:'Cada sector toca al siguiente'):cov==null?'Sin contorno del frente':`${Math.round(cov*100)} % cubierto${ovl>.005?` · ${Math.round(ovl*100)} % traslapado`:''}${jumps.length?` · salto ${jumps[0]}`:''}`});
   return{noMet,sec,n,A,met,cats,carga,dev,devMx,eff,idle,crew,cmx,cName,cap,ciclo,dur,fin,hito,cov,ovl,jumps,nmin,falt,I,sc,R,LV}}
 /** recomendación en palabras */
 function csSzRec(E){if(!E.n)return'Traza el primer sector: con el contorno del frente, «Dividir en N» es lo más rápido.';
@@ -141,8 +142,8 @@ function csSzRec(E){if(!E.n)return'Traza el primer sector: con el contorno del f
 
 /* ---------- vista (pestaña Sectorización en Casco) ---------- */
 const CSZ={vid:'',v:null,dirty:false,svT:0,tool:'',tmp:[],sel:null,side:true,hist:[],fr:'',fg:'E',ftool:''};
-const csSzV=()=>['fr','lam'].includes(U.csSzV)?U.csSzV:'sec';/* «Tren» pasó al Lookahead (casco-tren.js, 27-10-2026) */
-function csSzNav(){const v=csSzV();return`<div class="csszn" id="csszn"><span class="seg" role="tablist" aria-label="Sectorización">${[['fr','Frentes'],['sec','Sectores'],['lam','Láminas']].map(([k,t])=>`<button type="button" role="tab" data-cszv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${t}</button>`).join('')}</span></div>`}
+const csSzV=()=>['fr','niv','lam'].includes(U.csSzV)?U.csSzV:'sec';/* «Niveles» (casco-niv.js, 28-10-2026) reemplaza a «Láminas» en la barra; Láminas se abre desde Niveles *//* «Tren» pasó al Lookahead (casco-tren.js, 27-10-2026) */
+function csSzNav(){const v=csSzV();return`<div class="csszn" id="csszn"><span class="seg" role="tablist" aria-label="Sectorización">${[['fr','Frentes'],['sec','Sectores'],['niv','Niveles'],...(v==='lam'?[['lam','Láminas']]:[])].map(([k,t])=>`<button type="button" role="tab" data-cszv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${t}</button>`).join('')}</span></div>`}
 function csSzFr(){const L=csFrs();if(!L.some(f=>f.id===CSZ.fr))CSZ.fr=(L[0]||{}).id||'';return KFR.get(CSZ.fr)||null}
 /** alternativas del frente y grupo, la elegida y su copia de trabajo */
 function csSzAlts(f,g){return[...KSEC.values()].filter(v=>v.fr===(f&&f.id)&&(v.grp||'E')===g).sort((a,b)=>(a.t0||a.t||0)-(b.t0||b.t||0))}
@@ -162,10 +163,20 @@ function csSzRender(main){if(typeof ensureMcat==='function')ensureMcat();csKsecE
   const API=window.__plano&&window.__plano.ambMap?window.__plano:null;if(!API){loadPlanoMod().then(()=>{if(window.__plano.ensureLam)window.__plano.ensureLam();requestRender()}).catch(()=>{})}else if(API.ensureLam)API.ensureLam();
   const view=csSzV();let root=$('#cssz',main);
   if(!root||root.dataset.v!==view){main.onclick=null;main.onchange=null;main.oninput=null;
-    main.innerHTML=`<div class="cssz" id="cssz" data-v="${view}">${csSzNav()}<div class="csszh" id="csszh"></div><div class="csszb${CSZ.side?'':' noside'}" id="csszb"><div class="csfmap"><div class="cssmap" id="csszmap"></div><div class="csfhint" id="csszhint" hidden></div><div class="csszsc" id="csszsc"></div></div><aside class="csfside" id="csszside"></aside></div><div class="csszf" id="csszf"></div></div>`;
-    root=$('#cssz',main);root.addEventListener('click',csSzClick);root.addEventListener('change',csSzChange);}
+    main.innerHTML=`<div class="cssz" id="cssz" data-v="${view}">${csSzNav()}<div class="csszh" id="csszh"></div><div class="csszb${CSZ.side?'':' noside'}" id="csszb"><div class="csfmap"><div class="cssmap" id="csszmap"></div><div class="csfhint" id="csszhint" hidden></div><div class="csszsc" id="csszsc"></div></div><div class="csgrip" id="csszgrip" role="separator" aria-orientation="vertical" aria-label="Ancho del panel de datos" tabindex="0" title="Arrastra para cambiar el ancho del panel (doble clic: ancho normal)"></div><aside class="csfside" id="csszside"></aside></div><div class="csszf" id="csszf"></div></div>`;
+    root=$('#cssz',main);root.addEventListener('click',csSzClick);root.addEventListener('change',csSzChange);csGripWire(root);}
   csSzDraw()}
-function csSzDraw(){const root=document.getElementById('cssz');if(!root)return;if(root.dataset.v==='fr')csFrDraw();else csSecDraw()}
+function csSzDraw(){const root=document.getElementById('cssz');if(!root)return;csGripApply(root);if(root.dataset.v==='fr')csFrDraw();else if(root.dataset.v==='niv'&&typeof csNivDraw==='function')csNivDraw();else csSecDraw()}
+/* panel de datos de la derecha: ancho con el tirador (se recuerda en este equipo) */
+const CS_SIDEW_K='lps.cssidew';
+function csGripApply(root){let w=0;try{w=+localStorage.getItem(CS_SIDEW_K)||0}catch(e){}const b=root.querySelector('#csszb');if(b){if(w>=280)b.style.setProperty('--csside',w+'px');else b.style.removeProperty('--csside')}}
+function csGripWire(root){const g=root.querySelector('#csszgrip'),b=root.querySelector('#csszb');if(!g||!b)return;
+  const set=w=>{const mx=Math.max(320,b.clientWidth*.7);w=Math.round(Math.max(280,Math.min(w,mx)));b.style.setProperty('--csside',w+'px');try{localStorage.setItem(CS_SIDEW_K,String(w))}catch(e){}};
+  g.addEventListener('pointerdown',e=>{if(e.button>0)return;e.preventDefault();try{g.setPointerCapture(e.pointerId)}catch(_){}g.classList.add('drag');const r=b.getBoundingClientRect();
+    const mv=ev=>set(r.right-ev.clientX-4);const up=()=>{g.classList.remove('drag');g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up)};
+    g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up)});
+  g.addEventListener('dblclick',()=>{b.style.removeProperty('--csside');try{localStorage.removeItem(CS_SIDEW_K)}catch(e){}});
+  g.addEventListener('keydown',e=>{const cur=root.querySelector('#csszside').getBoundingClientRect().width;if(e.key==='ArrowLeft'){e.preventDefault();set(cur+32)}else if(e.key==='ArrowRight'){e.preventDefault();set(cur-32)}})}
 const csSet=(id,h)=>{const el=document.getElementById(id);if(el&&el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}return el};
 function csScaleBadge(l){const s=csScale(l);if(!l)return'';
   return s.st==='cal'?`<span class="csszok">Escala calibrada en Planos ✓</span>`:s.st==='nom'?`<span class="csszwarn">Escala nominal 1/100: áreas aproximadas</span>${s.plb?` <button type="button" class="ib" data-csz="cal" data-plb="${esc(s.plb)}">Calibrar en Planos</button>`:''}`:`<span class="csszwarn">Lámina sin escala: vincúlala desde el módulo Planos</span>`}
@@ -228,10 +239,10 @@ function csSecDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd();const v=f?csSzCur(f):nu
   const dot=s=>`<i class="csszd ${s}" title="${CSZ_ST[s]}"></i>`;const pc=x=>(x>=0?'+':'')+Math.round(x*100)+' %';
   const m3=i=>{const c=E.cats.find(c=>c.vac&&/m3|m³/i.test(c.und||'')&&E.met[c.id].some(x=>x>0));return c?Math.round(E.met[c.id][i]*10)/10:'—'};
   const selI=CSZ.sel&&CSZ.sel.k==='s'?CSZ.sel.i:-1;
-  const side=`<div class="csfsec"><div class="csfsh"><b>Semáforo</b><span class="mu">${E.n} sector(es) · ${E.R===1?'1 sector/día':'1 cada 2 días'}</span></div><ul class="csszi">${E.I.map(x=>`<li>${dot(x.s)}<span><b>${x.id} ${esc(x.t)}</b><small>${esc(x.v)}</small></span></li>`).join('')}</ul></div>
+  const side=`${csSemTable(E)}
     <div class="csfsec"><div class="csfsh"><b>Recomendación</b></div><p class="csszrec">${esc(csSzRec(E))}</p>${E.noMet&&ed?'<div class="csrow" style="margin-top:8px"><button type="button" class="ib pri" data-cs="ratdef">Completar incidencias por defecto</button><span class="note">Luego ajústalas en «Por partida».</span></div>':''}</div>
     <div class="csfsec"><div class="csfsh"><b>Sectores</b><span class="mu">${E.A.some(a=>a!=null)?Math.round(E.A.reduce((s,a)=>s+(a||0),0))+' m²':''}</span></div>
-      ${E.n?`<table class="t csfst"><thead><tr><th></th><th>Sector</th><th>m²</th><th title="Σ metrado ÷ rendimiento">pers·día</th><th>±</th><th>m³</th>${ed&&E.n>1?'<th title="Orden del tren">Orden</th>':''}</tr></thead><tbody>${E.sec.map((s,i)=>`<tr class="${i===selI?'on':''}" data-cszs="${i}"><td><i class="csdot" style="--c:${CS_SCOL[i%CS_SCOL.length]}"></i></td><td><b>${esc(s.n)}</b></td><td class="mono">${E.A[i]??'—'}</td><td class="mono">${Math.round(E.carga[i]*10)/10}</td><td>${E.n>1?`<span class="csbal ${csBalCls(E.dev[i])}">${pc(E.dev[i])}</span>`:''}</td><td class="mono">${m3(i)}</td>${ed&&E.n>1?`<td class="csszmv"><button type="button" class="ab" data-cszmv="${i}" data-d="-1"${i?'':' disabled'} title="Antes en el tren" aria-label="Subir ${esc(s.n)}">▲</button><button type="button" class="ab" data-cszmv="${i}" data-d="1"${i<E.n-1?'':' disabled'} title="Después en el tren" aria-label="Bajar ${esc(s.n)}">▼</button></td>`:''}</tr>`).join('')}</tbody></table>`:'<p class="mu csfemp">Sin sectores todavía.</p>'}</div>
+      ${E.n?`<table class="t csfst cstab"><thead><tr><th></th><th>Sector</th><th class="n">m²</th><th class="n" title="Σ metrado ÷ rendimiento">Pers·día</th><th class="n">Balance</th><th class="n">m³</th>${ed&&E.n>1?'<th class="c" title="Orden del tren">Orden</th>':''}</tr></thead><tbody>${E.sec.map((s,i)=>`<tr class="${i===selI?'on':''}" data-cszs="${i}"><td><i class="csdot" style="--c:${CS_SCOL[i%CS_SCOL.length]}"></i></td><td><b>${esc(s.n)}</b></td><td class="n">${E.A[i]!=null?(+E.A[i]).toFixed(1):'—'}</td><td class="n">${(Math.round(E.carga[i]*10)/10).toFixed(1)}</td><td class="n">${E.n>1?`<span class="csbal ${csBalCls(E.dev[i])}">${pc(E.dev[i])}</span>`:''}</td><td class="n">${m3(i)}</td>${ed&&E.n>1?`<td class="csszmv c"><button type="button" class="ab" data-cszmv="${i}" data-d="-1"${i?'':' disabled'} title="Antes en el tren" aria-label="Subir ${esc(s.n)}">▲</button><button type="button" class="ab" data-cszmv="${i}" data-d="1"${i<E.n-1?'':' disabled'} title="Después en el tren" aria-label="Bajar ${esc(s.n)}">▼</button></td>`:''}</tr>`).join('')}</tbody></table>`:'<p class="mu csfemp">Sin sectores todavía.</p>'}</div>
     ${E.n?`<details class="csfsec" data-cszo="met"${CSZ.om?' open':''}><summary><b>Por partida</b><span class="mu">metrado por sector y cuadrilla</span></summary><div class="tscroll"><table class="t csmet"><thead><tr><th>Partida</th><th title="Metrado de la partida por m² de planta (techo para estructura, piso para albañilería). Área × incidencia = metrado">Incidencia /m²</th>${E.sec.map(s=>`<th>${esc(s.n)}</th>`).join('')}<th title="Personas necesarias para el ritmo / del frente">Cuadrilla</th></tr></thead><tbody>
       ${E.cats.map(c=>{const cr=E.crew.find(x=>x.c.id===c.id);return`<tr><td>${esc(c.name)} <span class="mu">${esc(c.und)}</span></td><td>${ed?`<input class="ci csn" type="number" min="0" step="any" data-cszrat="${esc(c.id)}" value="${c.rat??''}" aria-label="Incidencia de ${esc(c.name)}" title="${esc(c.und||'und')} por m² de planta">`:`<span class="mono mu">${c.rat>0?c.rat:'—'}</span>`}</td>${E.sec.map((_,i)=>c.rat>0&&E.A[i]!=null?`<td class="mono mu">${E.met[c.id][i]}</td>`:`<td><input class="ci csn" type="number" min="0" step="any" data-cszm="${esc(c.id)}:${i}" value="${(((v.met||{})[c.id]||[])[i])??''}"${ed?'':' disabled'} aria-label="${esc(c.name)} en ${esc(E.sec[i].n)}"></td>`).join('')}<td class="mono${cr&&cr.have!=null&&cr.need>cr.have?' csszbad':''}">${cr?`${cr.need}${cr.have!=null?' / '+cr.have:''}`:'—'}</td></tr>`}).join('')}
       </tbody></table></div><p class="note">En gris: área × incidencia (se edita en la columna Incidencia). Las partidas sin incidencia se escriben. Cuadrilla: necesaria para el ritmo / la del frente.</p></details>`:''}`;
@@ -281,15 +292,18 @@ async function csSzApply(){const f=csSzFr(),v=CSZ.v;if(!f||!v||!csEd())return;co
     text:`De ${LV[0].name} a ${LV[LV.length-1].name}: ${E.n} sector(es) de ${CSG[v.grp].toLowerCase()} (${E.sec.map(s=>s.n).join(', ')}).${bad.length?`\nOjo: en rojo ${bad.map(x=>x.t.toLowerCase()).join(', ')}.`:''}`,
     list:['Juntas en el tercio central de la luz, lejos de columnas y placas','Coordinadas con el proyectista estructural','Acceso para la bomba y la descarga de material en cada sector'],
     note:'Lo ya programado y lo congelado no cambian. Con Deshacer.',ok:'Aplicar',cancel:'Volver'});if(!ok)return;
+  /* niveles ajustados a mano en Niveles (casco-niv.js): reemplazarlos o saltarlos */
+  const hand=LV.filter(p=>{const s=[...S.sec.values()].find(x=>x.pisoId===p.id&&x.grp===v.grp&&ctFrOfSec(x)===f.id);return s&&s.hand});
+  let skip=[];if(hand.length){const rep=await uiAsk({title:`${hand.length} nivel(es) ajustados a mano`,text:`${hand.map(p=>p.name).join(', ')} tiene${hand.length>1?'n':''} sectores ajustados a mano en Niveles.`,list:['Reemplazarlos: quedan como la alternativa (se pierden los ajustes de esos niveles).','Saltarlos: se aplica a los demás niveles y esos quedan como están.'],ok:'Reemplazarlos',cancel:'Saltarlos',tone:'warn'});if(!rep)skip=hand.map(p=>p.id)}
   const C=csFrC(f,v.grp);const met={};for(const c of E.cats)met[c.id]=E.met[c.id];const geo={};E.sec.forEach((s,i)=>{geo[i]=csgFlat(s.P)});
   if(CSZ.dirty)csSzSave(true);
-  await csSecApply({id:CSZ.vid,n:v.n,grp:v.grp,from:LV[0].id,to:LV[LV.length-1].id,k:E.n,names:E.sec.map(s=>s.n),met,geo,vista:C.vista,fr:f.id,frc:f.code||'',frn:f.name});
+  await csSecApply({id:CSZ.vid,n:v.n,grp:v.grp,from:LV[0].id,to:LV[LV.length-1].id,k:E.n,names:E.sec.map(s=>s.n),met,geo,vista:C.vista,fr:f.id,frc:f.code||'',frn:f.name,skip});
   /* vigente: esta alternativa (las otras del frente y grupo dejan de serlo) */
   const b=db.batch();for(const a of csSzAlts(f,v.grp))if(a.ap&&a.id!==CSZ.vid)b.set(fcol('ksec').doc(a.id),{ap:null},{merge:true});b.set(fcol('ksec').doc(CSZ.vid),{ap:{t:NOW(),by:me.email}},{merge:true});b.commit().catch(()=>{});
   if(CSZ.v)CSZ.v.ap={t:NOW(),by:me.email}}
 
 /* ---- eventos ---- */
-function csSzClick(e){const t=e.target;const nv=t.closest('[data-cszv]');if(nv){U.csSzV=nv.dataset.cszv;saveUI();CSZ.tmp=[];render();return}
+function csSzClick(e){if(typeof csNivClick==='function'&&csNivClick(e))return;const t=e.target;const nv=t.closest('[data-cszv]');if(nv){U.csSzV=nv.dataset.cszv;saveUI();CSZ.tmp=[];render();return}
   const fb=t.closest('[data-cszf]');if(fb){CSZ.fr=fb.dataset.cszf;CSZ.tmp=[];CSZ.ftool='';CSZ.v=null;CSZ.vid='';csSzDraw();return}
   const gb=t.closest('[data-cszg]');if(gb){CSZ.fg=gb.dataset.cszg;CSZ.tmp=[];CSZ.v=null;CSZ.vid='';csSzDraw();return}
   const tb=t.closest('[data-cszt]');if(tb){const root=document.getElementById('cssz');const k=tb.dataset.cszt;if(root.dataset.v==='fr')CSZ.ftool=CSZ.ftool===k?'':k;else{CSZ.tool=CSZ.tool===k?'':k;CSZ.sel=null}CSZ.tmp=[];csSzDraw();return}
@@ -311,7 +325,7 @@ function csSzClick(e){const t=e.target;const nv=t.closest('[data-cszv]');if(nv){
   else if(k==='altdel')csSzAltDel();
   else if(k==='del')csSzDel();
   else if(k==='undo')csSzUndo();
-  else if(k==='side'){CSZ.side=!CSZ.side;csSecDraw();setTimeout(()=>{const h=document.getElementById('csszmap');if(h&&h._v&&h._v.fit)h._v.fit()},60)}
+  else if(k==='side'){CSZ.side=!CSZ.side;csSzDraw();setTimeout(()=>{const h=document.getElementById('csszmap');if(h&&h._v&&h._v.fit)h._v.fit()},60)}
   else if(k==='cmp')csSzCompare();
   else if(k==='apply')csSzApply()}
 async function csSzAltDel(){const f=csSzFr(),v=CSZ.v;if(!f||!v||!csEd())return;
@@ -321,7 +335,7 @@ async function csSzAltDel(){const f=csSzFr(),v=CSZ.v;if(!f||!v||!csEd())return;
   toast('Alternativa eliminada');csSzDraw()}
 function csSzDel(){const s=CSZ.sel,v=CSZ.v;if(!s||!v)return;if(s.k==='j'){const i=s.i;CSZ.sel=null;csSzEdit(x=>{x.jun=x.jun.filter((_,k)=>k!==i)})}
   else if(v.mode==='f'){const i=s.i;CSZ.sel=null;csSzEdit(x=>{x.shp=x.shp.filter((_,k)=>k!==i)})}else toast('Para quitar este sector borra una de sus juntas.')}
-function csSzChange(e){const t=e.target;const ed=csEd();
+function csSzChange(e){if(typeof csNivChange==='function'&&csNivChange(e))return;const t=e.target;const ed=csEd();
   if(t.dataset.csfr){const k=t.dataset.csfr;let v=t.value;if(k==='vac')v=v===''?null:+v;if(k==='gap'||k==='albK')v=Math.max(k==='albK'?1:0,Math.round(+v||0));if(k==='ini'&&!/^\d{4}-\d{2}-\d{2}$/.test(v))v=null;if(k==='code')v=String(v).trim().toUpperCase().slice(0,3)||'A';if(k==='name')v=String(v).trim()||'Frente';csFrSet({[k]:v});return}
   if(t.dataset.csfc){const f=csSzFr();if(!f)return;const cua={...(f.cua||{})};if(t.value==='')delete cua[t.dataset.csfc];else cua[t.dataset.csfc]=Math.max(0,Math.round(+t.value));csFrSet({cua});return}
   if(t.dataset.cszrat&&ed){const c=MX.cat.get(t.dataset.cszrat);const v=t.value===''?null:+t.value;if(v!=null&&!(v>=0)){toast('Escribe un número válido.');csSecDraw();return}if(c){c.rat=v;csCatSet(c.id,'rat',t.value)}csSecDraw();return}
@@ -341,5 +355,5 @@ document.addEventListener('keydown',e=>{if(U.tab!=='planos'||!CS()||!document.ge
   if(e.key==='Enter'&&CSZ.tmp.length>=3){e.preventDefault();const host=document.getElementById('csszmap');if(host&&host._o&&host._o.onPolyClose)host._o.onPolyClose();return}
   if(typing||fr)return;
   if((e.key==='Delete'||e.key==='Backspace')&&CSZ.sel){e.preventDefault();csSzDel();return}
-  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'&&CSZ.hist.length){e.preventDefault();e.stopPropagation();csSzUndo()}},true);
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'&&CSZ.hist.length&&document.getElementById('cssz').dataset.v==='sec'){e.preventDefault();e.stopPropagation();csSzUndo()}},true);
 

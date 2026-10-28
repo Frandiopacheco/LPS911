@@ -364,14 +364,14 @@ test('casco: frente con contorno y cuadrillas, alternativa con juntas, semáforo
   await page.locator('[data-csz="div"]').click();
   await page.locator('#pop [data-do="d"][data-n="4"][data-dir="v"]').click();
   await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
-  await expect(page.locator('#csszside .csszi li').first().locator('.csszd')).toHaveClass(/good/);/* 4 de igual área: carga pareja */
+  await expect(page.locator('#csszside .cssem tbody tr').first().locator('.csszd')).toHaveClass(/good/);/* 4 de igual área: carga pareja */
   await expect(page.locator('#csszside .csszrec')).toContainText('sector');
   if (SHOT) await page.screenshot({ path: SHOT + '/sectorizacion.png' });
   /* una junta más parte el primer sector: 5; Deshacer vuelve a 4 */
   await page.locator('[data-cszt="jun"]').click();
   await page.mouse.click(bx.x + 120, bx.y + 150); await page.mouse.click(bx.x + 120, bx.y + 250);
   await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(5);
-  await expect(page.locator('#csszside .csszi li').first().locator('.csszd')).not.toHaveClass(/good/);
+  await expect(page.locator('#csszside .cssem tbody tr').first().locator('.csszd')).not.toHaveClass(/good/);
   await page.locator('[data-csz="undo"]').click();
   await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
   await expect.poll(() => page.evaluate(() => ((Object.values(window.__dbAll('cs_ksec')).find(v => v.fr) || {}).jun || []).length), { timeout: 5000 }).toBe(3);
@@ -490,5 +490,69 @@ test('casco: «Actualizar a la secuencia típica» pasa un catálogo antiguo a l
   expect(await page.evaluate(() => [MX.cat.get('k-EF1').sc, MX.cat.get('k-ALO').sc].join())).toBe('cs-ramos,cs-aceros');
   expect(await page.evaluate(() => S.act.size)).toBe(nAct);
   await expect(page.locator('[data-cs="seqtip"]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+/* Sectorización › Niveles (casco-niv.js): partir, juntar, mover una cara con el vecino y copiar a un nivel con otra lámina */
+test('casco: Niveles: partir y juntar sectores (lo programado se queda o pasa al vecino), mover una cara y copiar a otra lámina con dos puntos', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const P = (id, cod, niv, mpp) => ['plb', id, { cod, disc: 'EST', niv, tit: 'Encofrado', tipo: 'Planta', rev: 1, base: 'planos/' + cod + '/r1', W: 4000, H: 3000, Z: 1, mm: [1200, 900], revs: [], cal: { mpp, rev: 1 } }];
+  const errors = await openApp(page, { as: 'admin', extra: [P('EST_E03', 'E-03', 'P3', 0.005), P('EST_E05', 'E-05', 'P5', 0.005)] });
+  await cargarEjemplo(page);
+  await page.evaluate(async () => {
+    const L = (id, pid, plb, w) => fcol('laminas').doc(id).set({ pisoId: pid, base: true, esp: 'Estructuras', name: 'Encofrado', w, h: w * 0.75, lw: w / 2, lh: w * 0.375, fmt: 'image/webp', nf: 0, nl: 0, rev: 1, T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: plb, cod: plb, disc: 'EST', rev: 1, mpp: 0.01 }, order: 1, ts: 1 });
+    await L('lamT3', 'n3', 'EST_E03', 2000); await L('lamT5', 'n5', 'EST_E05', 1600);
+  });
+  await expect.poll(() => page.evaluate(() => !!(window.__plano && window.__plano.LAM && window.__plano.LAM.get('lamT3')))).toBe(true);
+  /* T3: cuatro franjas verticales de 400 × 800 px */
+  const ids = await page.evaluate(() => { const A = [...S.amb.values()].filter(a => a.sectorId === 'n3-e').sort(byOrder); const ops = A.map((a, i) => { const x = 200 + i * 400; return op('ambientes', a.id, { ...a, id: undefined, geo: { lamT3: [x, 300, x + 400, 300, x + 400, 1100, x, 1100] } }); }); ops.forEach(o => delete o.after.id); apply(ops, 'test');
+    U.tab = 'planos'; U.csSzV = 'niv'; CNV.pid = 'n3'; render(); return A.map(a => a.id); });
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4, { timeout: 15000 });
+  const progOf = id => page.evaluate(i => cnvProg(i) + [...S.act.values()].filter(x => !x.arch && x.ambId === i).length, id);
+  const p2 = await progOf(ids[1]);
+  /* Partir S2 con una línea horizontal (herramienta y dos toques sobre el plano) */
+  const scr = (x, y) => page.evaluate(([x, y]) => { const h = document.getElementById('csszmap'); const v = h._v; const r = h.getBoundingClientRect(); return { x: r.left + v.x + x * v.z, y: r.top + v.y + y * v.z }; }, [x, y]);
+  await page.locator('[data-cnvt="cut"]').click();
+  let q = await scr(620, 700); await page.mouse.click(q.x, q.y); q = await scr(780, 700); await page.mouse.click(q.x, q.y);
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(5);
+  const r1 = await page.evaluate(() => { const A = [...S.amb.values()].filter(a => a.sectorId === 'n3-e' && !a.arch).sort(byOrder); return { codes: A.map(a => a.code).join(), hand: !!S.sec.get('n3-e').hand, newProg: cnvProg(A[2].id), id2: A[1].id, id3: A[2].id, a2: csPolyA(csUnflat(A[1].geo.lamT3)), a3: csPolyA(csUnflat(A[2].geo.lamT3)) }; });
+  expect(r1.codes).toBe('S1,S2,S3,S4,S5'); expect(r1.hand).toBe(true); expect(r1.id2).toBe(ids[1]); expect(r1.newProg).toBe(0);
+  expect(Math.round(r1.a2 + r1.a3)).toBe(320000);
+  expect(await progOf(ids[1])).toBe(p2);/* el original conserva su programación */
+  /* Juntar S4 y S5: los días programados de S5 desde mañana pasan a S4 */
+  const fut5 = await page.evaluate(i => cnvProg(i), ids[3]);
+  page.once('dialog', d => d.accept());
+  await page.evaluate(([a, b]) => cnvJoin(cnvCtx(), a, b), [ids[2], ids[3]]);
+  await expect(page.locator('#csszside .csfst tbody tr')).toHaveCount(4);
+  const r2 = await page.evaluate(([k, g]) => ({ codes: [...S.amb.values()].filter(a => a.sectorId === 'n3-e' && !a.arch && !a.fus).sort(byOrder).map(a => a.code).join(), gone: cnvProg(g), area: Math.round(csPolyA(csUnflat(S.amb.get(k).geo.lamT3))) }), [ids[2], ids[3]]);
+  expect(r2.codes).toBe('S1,S2,S3,S4'); expect(r2.gone).toBe(0); expect(r2.area).toBe(640000);
+  expect(await page.evaluate(i => cnvProg(i), ids[2])).toBeGreaterThanOrEqual(fut5);
+  /* Ajustar: mover la cara derecha de S1 100 px; el vecino S2 se ajusta con él */
+  await page.evaluate(i => { CNV.tool = ''; CNV.sel = i; csNivDraw(); }, ids[0]);
+  const hi = await page.evaluate(() => { const v = document.getElementById('csszmap')._v; return v.handles.findIndex(h => h.face && Math.abs(h.x - 600) < 1); });
+  expect(hi).toBeGreaterThanOrEqual(0);
+  const hb = await page.locator(`#csszmap .pvh[data-h="${hi}"]`).boundingBox();
+  q = await scr(700, 700);
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2); await page.mouse.down(); await page.mouse.move(q.x, q.y, { steps: 6 }); await page.mouse.up();
+  const ar = i => page.evaluate(i => Math.round(csPolyA(csUnflat(S.amb.get(i).geo.lamT3))), i);
+  await expect.poll(() => ar(ids[0])).toBeGreaterThan(385000);/* ~100 px más ancho (según el zoom de la pantalla) */
+  /* S2 y S3 (las dos mitades del S2 partido) comparten esa cara: se achican lo mismo que crece S1 */
+  expect((await ar(ids[0])) + (await ar(r1.id2)) + (await ar(r1.id3))).toBe(640000);
+  expect(await ar(r1.id2)).toBeLessThan(160000);
+  /* Copiar a T5 (otra lámina, escala 0,8): dos puntos en cada plano */
+  await page.evaluate(() => { CNV.pid = 'n5'; CNV.sel = ''; csNivDraw(); });
+  await page.locator('[data-cnv="copy"]').first().click();
+  await expect(page.locator('#cnvcp')).toBeVisible();
+  await page.evaluate(() => { CNV.cp.src = 'n3'; CNV.cp.s = [{ x: 200, y: 300 }, { x: 1800, y: 1100 }]; CNV.cp.t = [{ x: 100, y: 200 }, { x: 1380, y: 840 }]; cnvCpDraw(); });
+  await expect(page.locator('#cnvcpf')).toContainText('0.800');
+  await page.locator('[data-cnv="cpok"]').click();
+  await expect.poll(() => page.evaluate(() => [...S.amb.values()].filter(a => a.sectorId === 'n5-e' && !a.arch).sort(byOrder).filter(a => a.geo && a.geo.lamT5).length)).toBe(4);
+  const g5 = await page.evaluate(() => [...S.amb.values()].filter(a => a.sectorId === 'n5-e' && !a.arch).sort(byOrder)[0].geo.lamT5.slice(0, 2));
+  expect(g5).toEqual([100, 200]);
+  /* el panel de datos se ensancha con el tirador */
+  const w0 = await page.locator('#csszside').boundingBox();
+  const gb = await page.locator('#csszgrip').boundingBox();
+  await page.mouse.move(gb.x + 3, gb.y + 100); await page.mouse.down(); await page.mouse.move(gb.x - 150, gb.y + 100, { steps: 5 }); await page.mouse.up();
+  expect((await page.locator('#csszside').boundingBox()).width).toBeGreaterThan(w0.width + 100);
   expect(errors).toEqual([]);
 });
