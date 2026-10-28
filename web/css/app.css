@@ -4829,3 +4829,44 @@ tr.ctfrh td.lab{height:auto;padding:6px 10px;display:table-cell}
 .ctpt th,.ctpt td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line2)}
 .ctwarn{color:var(--warn);margin:6px 0 0}
 #pop kbd{font:11px var(--f-mono);color:var(--muted);margin-left:14px;float:right}
+
+/* Editor de formas (plano.js ambHandles): barra en el medio de cada cara para moverla entera (28-10-2026) */
+.pvh.mid.face{width:26px;height:9px;margin:-5px 0 0 -13px;border-radius:4px;border:2px solid #fff;background:#1565c0;opacity:.95;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.pvh.mid.face.fv{cursor:ew-resize}.pvh.mid.face.fh{cursor:ns-resize}
+
+/* Casco › Sectorización: panel de datos con tirador y tablas (28-10-2026) */
+.csszb{grid-template-columns:minmax(0,1fr) 8px var(--csside,min(460px,40vw))}
+.csszb.noside{grid-template-columns:minmax(0,1fr)}.csszb.noside .csgrip{display:none}
+.csgrip{cursor:col-resize;background:var(--panel2);border-left:1px solid var(--line);display:grid;place-items:center;touch-action:none;min-width:0}
+.csgrip::before{content:"";width:0;height:36px;border-left:2px dotted var(--muted)}
+.csgrip:hover,.csgrip.drag,.csgrip:focus-visible{background:var(--accent-soft);outline:none}
+.csszb .csfside{border-left:0}
+table.cstab{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.cstab th{font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:1}
+.cstab td{padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:middle}
+.cstab tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--panel2) 60%,transparent)}
+.cstab tbody tr:hover td{background:var(--accent-soft)}
+.cstab tbody tr.on td{background:var(--accent-soft);box-shadow:inset 0 1px 0 var(--accent),inset 0 -1px 0 var(--accent)}
+.cstab .n{text-align:right;font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+.cstab .c{text-align:center;width:1%}
+.cstab tfoot td{font-weight:700;border-top:2px solid var(--line);border-bottom:0;background:var(--panel)}
+.cstab .csbal{white-space:nowrap}
+.cssem td:nth-child(2){color:var(--ink2)}
+/* Casco › Sectorización › Niveles (casco-niv.js) */
+.cnvlvs{display:flex;flex-wrap:wrap;gap:6px}
+.cnvlv{border:1px solid var(--line);background:var(--panel);border-radius:var(--r-ctl,8px);padding:3px 10px;cursor:pointer;text-align:left;min-height:40px;color:var(--ink)}
+.cnvlv b{font:600 13px var(--f-mono)}.cnvlv small{display:block;font-size:11px;color:var(--muted)}
+.cnvlv.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.cnvtg{font-size:10.5px;border-radius:4px;padding:0 4px;margin-left:5px;font-weight:600}
+.cnvtg.hand{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--ink)}.cnvtg.none{background:var(--line2);color:var(--muted)}
+.cnvsh{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink2)}
+.cnvcp{position:absolute;inset:0;z-index:5;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--panel2)}
+.cnvcph,.cnvcpf{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 10px;background:var(--panel);font-size:13px}
+.cnvcph{border-bottom:1px solid var(--line)}.cnvcpf{border-top:1px solid var(--line)}
+.cnvcpb{display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.cnvcpm{position:relative;min-width:0;min-height:0;border-right:1px solid var(--line)}
+.cnvcpm .cssmap{position:absolute;inset:0}
+.cnvcpl{position:absolute;left:8px;top:8px;z-index:3;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12.5px;font-weight:600}
+.cnvst{display:inline-flex;gap:6px;align-items:center;color:var(--muted)}.cnvst b{width:20px;height:20px;border-radius:10px;display:inline-grid;place-items:center;background:var(--line2);font-size:12px}
+.cnvst.on{color:var(--ink);font-weight:600}.cnvst.on b{background:var(--accent);color:var(--accent-ink)}.cnvst.done b{background:var(--ok);color:#fff}
+@media (max-width:900px){.csszb{grid-template-columns:minmax(0,1fr)}.csgrip{display:none}.cnvcpb{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}

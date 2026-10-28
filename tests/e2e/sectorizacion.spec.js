@@ -38,13 +38,16 @@ test('ubicar ambientes por nivel con rectángulo y polígono, y deshacer', async
   // tocar una forma la selecciona; sus esquinas se arrastran para ajustarla
   const c = await enPantalla(page, '#szmap', 200, 200); await page.mouse.click(c.x, c.y);
   await expect(page.locator('#szlist .szamb.on')).toContainText('Dpto 101');
-  await expect(page.locator('#szmap .pvh')).toHaveCount(8); // 4 esquinas + 4 para agregar
+  await expect(page.locator('#szmap .pvh')).toHaveCount(8); // 4 esquinas + 4 barras (una por cara)
   const h = await enPantalla(page, '#szmap', 300, 300), h2 = await enPantalla(page, '#szmap', 340, 360);
   await page.mouse.move(h.x, h.y); await page.mouse.down(); await page.mouse.move((h.x + h2.x) / 2, (h.y + h2.y) / 2); await page.mouse.move(h2.x, h2.y); await page.mouse.up();
   await expect.poll(async () => (await geo(page, 'ambientes', 'a1')).L1.slice(4, 6).map(Math.round)).toEqual([340, 360]);
-  // agregar una esquina desde el punto medio de un lado
+  // la barra del medio de una cara mueve la cara entera (sus dos esquinas), sin agregar esquinas (28-10-2026)
   const m = await enPantalla(page, '#szmap', 200, 100), m2 = await enPantalla(page, '#szmap', 200, 60);
-  await page.mouse.move(m.x, m.y); await page.mouse.down(); await page.mouse.move(m2.x, m2.y); await page.mouse.up();
+  await page.mouse.move(m.x, m.y); await page.mouse.down(); await page.mouse.move(m2.x, m2.y, { steps: 4 }); await page.mouse.up();
+  await expect.poll(async () => { const g = (await geo(page, 'ambientes', 'a1')).L1; return [g.length, Math.round(g[1]), Math.round(g[3])]; }).toEqual([8, 60, 60]);
+  // doble clic en un borde agrega una esquina
+  const e1 = await enPantalla(page, '#szmap', 100, 200); await page.mouse.dblclick(e1.x, e1.y);
   await expect.poll(async () => (await geo(page, 'ambientes', 'a1')).L1.length).toBe(10);
   // deshacer
   await page.click('#bundo');

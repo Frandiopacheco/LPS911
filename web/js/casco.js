@@ -275,10 +275,13 @@ async function csSecApply(v){const L=pisos();const i0=L.findIndex(p=>p.id===v.fr
   const used=new Set([...S.act.values()].filter(x=>!x._del).map(x=>x.ambId));
   /* con frente (casco-sz.js): un grupo de sectores por nivel, grupo y frente; el grupo antiguo sin frente lo adopta el único frente */
   const one=typeof KFR==='undefined'||KFR.size<=1;
-  for(let i=i0;i<=i1;i++){const p=L[i];let sec=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp&&(s.fr||'')===(v.fr||''));
+  const skip=new Set(v.skip||[]);
+  for(let i=i0;i<=i1;i++){const p=L[i];if(skip.has(p.id))continue;let sec=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp&&(s.fr||'')===(v.fr||''));
     if(!sec&&v.fr&&one){const lg=[...S.sec.values()].find(s=>s.pisoId===p.id&&s.grp===v.grp&&!s.fr);if(lg){sec=lg;const o={...lg};delete o.id;ops.push(op('sectors',lg.id,{...o,fr:v.fr}))}}
     if(!sec){const sid=p.id+'-'+v.grp.toLowerCase()+(v.fr?'-'+String(v.frc||v.fr).toLowerCase():'');const gn=v.grp==='A'?'Albañilería':'Estructura';sec={id:sid,pisoId:p.id,code:v.grp==='A'?'A':'E',name:v.fr?gn+' · '+(v.frn||v.frc):gn,grp:v.grp,order:v.grp==='A'?3:1};const d={pisoId:sec.pisoId,code:sec.code,name:sec.name,grp:sec.grp,order:sec.order};if(v.fr)d.fr=v.fr;ops.push(op('sectors',sid,d))}
-    const cur=[...S.amb.values()].filter(a=>a.sectorId===sec.id).sort(byOrder);
+    /* reemplaza lo ajustado a mano en Niveles: el grupo deja de estar «ajustado» */
+    if(sec.hand&&S.sec.has(sec.id)&&!ops.some(o=>o.id===sec.id)){const o={...sec};delete o.id;delete o.hand;ops.push(op('sectors',sec.id,o))}
+    const cur=[...S.amb.values()].filter(a=>a.sectorId===sec.id&&!a.fus).sort(byOrder);
     for(let s=0;s<v.k;s++){const met={};for(const[c,arr]of Object.entries(v.met||{}))if(arr&&arr[s]!=null)met[c]=+arr[s];
       const nmS=v.names[s]||((v.grp==='A'?'A':'S')+(s+1));const nx={sectorId:sec.id,code:nmS,name:'Sector '+(v.fr?nmS:nmS.replace(/^S/,'')),order:s+1,met,ksec:v.id};
       /* el dibujo del asistente pasa a la lámina base del nivel que usa el mismo plano del módulo Planos (o a la misma lámina) */

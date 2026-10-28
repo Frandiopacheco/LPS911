@@ -31,7 +31,7 @@ function ctRowsSave(fid,rows){return fcol('ktr').doc(fid).set({rows:rows.map(r=>
 /** bloques del tren: los frentes con niveles o actividades, y «Obra»/«Sin frente» si hay actividades fuera de un frente */
 function ctBlocks(){const F=csFrs().map(f=>f.id);const used=new Set(ctLive().map(ctFrOfAct));const out=F.slice();if(used.has('_')||!F.length)out.push('_');return out}
 /** sectores de un nivel para un grupo dentro del frente, en orden */
-function ctSecs(pid,g,fid){const out=[];for(const s of S.sec.values()){if(s.pisoId!==pid||(g&&s.grp!==g)||ctFrOfSec(s)!==fid)continue;for(const a of S.amb.values())if(a.sectorId===s.id)out.push(a)}return out.sort((a,b)=>{const sa=S.sec.get(a.sectorId),sb=S.sec.get(b.sectorId);return(sa.order||0)-(sb.order||0)||byOrder(a,b)})}
+function ctSecs(pid,g,fid){const out=[];for(const s of S.sec.values()){if(s.pisoId!==pid||(g&&s.grp!==g)||ctFrOfSec(s)!==fid)continue;for(const a of S.amb.values())if(a.sectorId===s.id&&!a.fus)out.push(a)}return out.sort((a,b)=>{const sa=S.sec.get(a.sectorId),sb=S.sec.get(b.sectorId);return(sa.order||0)-(sb.order||0)||byOrder(a,b)})}
 const ctLevels=fid=>{const f=KFR.get(fid);return f?csFrLv(f):pisos()};
 const ctGrpOf=r=>{const c=r&&r.cat?MX.cat.get(r.cat):null;return c&&c.grp?c.grp:''};
 const ctTag=a=>{const s=csSecOf(a),p=S.pis.get(s&&s.pisoId);return`${csPisoTag(p,(s&&s.grp)||'')}·${a?a.code:'?'}`};
