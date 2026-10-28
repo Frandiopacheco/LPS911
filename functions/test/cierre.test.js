@@ -168,6 +168,44 @@ test('cierre de las 20:00: publica los borradores, rechaza las propuestas sin re
   assert.strictEqual(r.P.length, 1);
 });
 
+test('cierre de las 20:00: un «no va» del SC con fecha propuesta se acepta (se reprograma a su fecha); sin fecha se rechaza', async () => {
+  const P5 = { kind: 'dprop', date: D, pisoId: 'p1', sc: 'c2', actId: 'x5', ambId: 'a2', k: 'mat', desc: 'falta pintura', to: '2026-10-09', st: 'pend', ts: 5,
+    ca: { c: 'MAT', cnc: 'Materiales', imp: false, rsc: '', rt: 'Materiales' }, mot: 'Materiales: falta pintura' };
+  const { db, ctx } = world({ 'pdz/dp_2026-10-06_x5': P5 });
+  ctx.props = [{ ...P5, id: 'dp_2026-10-06_x5' }];
+  const now = Date.UTC(2026, 9, 6, 1);
+  const r = await closePlanPiso(db, ctx, D, now);
+  const g = p => db.st.get(p);
+  // x5 pasa del 06 al 09 (3 días hábiles), con su cantidad
+  assert.deepStrictEqual(g('acts/x5').days, ['2026-10-09']);
+  assert.deepStrictEqual(g('acts/x5').qty, { '2026-10-09': 3 });
+  assert.strictEqual(g('acts/x5').rpl[D].to, '2026-10-09');
+  // borrador creado y publicado, con la causa del SC y su restricción
+  const nv = g('pdz/pzs_dp_2026-10-06_x5');
+  assert.strictEqual(nv.kind, 'nova'); assert.strictEqual(nv.draft, false); assert.strictEqual(nv.repTo, '2026-10-09'); assert.strictEqual(nv.prop, 'dp_2026-10-06_x5');
+  assert.strictEqual(nv.c, 'MAT'); assert.strictEqual(nv.pub, 'pub_2026-10-06_p1');
+  const rs = g('restr/res-pzs_dp_2026-10-06_x5');
+  assert.strictEqual(rs.ccode, 'MAT'); assert.strictEqual(rs.need, '2026-10-09'); assert.strictEqual(rs.type, 'Materiales');
+  // la propuesta queda aceptada por el servidor
+  const dp = g('pdz/dp_2026-10-06_x5');
+  assert.strictEqual(dp.st, 'ok'); assert.strictEqual(dp.decBy, 'servidor'); assert.match(dp.dec, /fecha del SC/);
+  assert.deepStrictEqual(r.PA, ['dp_2026-10-06_x5']); assert.deepStrictEqual(r.P, []);
+  // la foto ya no la tiene ese día
+  assert.deepStrictEqual(g('dplan/2026-10-06_p1').ids, { x4: null });
+});
+
+test('cierre de las 20:00: fecha propuesta inválida (no hábil, anterior o culminado) → se rechaza como antes', async () => {
+  for (const ex of [{ to: '2026-10-11' }, { to: D }, { to: '2026-10-05' }, { k: 'fin', to: '2026-10-09' }]) {
+    const P5 = { kind: 'dprop', date: D, pisoId: 'p1', sc: 'c2', actId: 'x5', k: 'per', st: 'pend', ...ex };
+    const { db, ctx } = world({ 'pdz/dp_2026-10-06_x5': P5 });
+    ctx.props = [{ ...P5, id: 'dp_2026-10-06_x5' }];
+    await closePlanPiso(db, ctx, D, Date.now());
+    assert.strictEqual(db.st.get('pdz/dp_2026-10-06_x5').st, 'rej', JSON.stringify(ex));
+    assert.deepStrictEqual(db.st.get('acts/x5').days, [D]);
+    assert.strictEqual(db.st.has('pdz/pzs_dp_2026-10-06_x5'), false);
+  }
+});
+
 test('cierre de las 20:00: un plan ya publicado o reabierto no se toca', async () => {
   for (const cur of [{ date: D, pisoId: 'p1', ids: { x1: 5 } }, { date: D, pisoId: 'p1', reo: { why: 'corrección' } }]) {
     const { db, ctx } = world({ 'dplan/2026-10-06_p1': cur });

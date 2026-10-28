@@ -169,6 +169,13 @@ test('el subcontratista solo propone: queda en espera y no cambia el lookahead',
   await page.locator('#pop [data-nk="mat"]').click();
   await expect(page.locator('#pop [data-nv="nolib"]')).toHaveCount(0); // eso lo decide el ingeniero
   await page.fill('#nvd', 'Material de otra partida en el ambiente');
+  // propone la fecha: por defecto el día hábil siguiente; elige el segundo
+  const [d1, d2, nextWk] = await page.evaluate(d => { let m = addD(monOf(d), 7); while (!isWork(m)) m = addD(m, 1); return [wshift(d, 1), wshift(d, 2), m]; }, MANANA);
+  await expect(page.locator(`#pop .nvd [data-to="${d1}"]`)).toHaveClass(/on/);
+  // otra semana: avisa que sale del compromiso semanal
+  await page.locator('#nvdt').fill(nextWk); await page.locator('#nvdt').dispatchEvent('change');
+  await expect(page.locator('#pop .nvwk')).toContainText('sale del compromiso semanal');
+  await page.locator(`#pop .nvd [data-to="${d2}"]`).click();
   await page.locator('#pop [data-nv="prop"]').click();
   await expect(row(page, 's9')).toHaveClass(/wait/);
   // en su plano ya no aparece (así reparte sus cuadrillas solo en lo que va)
@@ -176,12 +183,26 @@ test('el subcontratista solo propone: queda en espera y no cambia el lookahead',
   await expect(row(page, 's9').locator('.dzp')).toContainText('lo decide el ingeniero');
   await expect(page.locator('#mpdb')).toContainText('Tus propuestas');
   const p = (await pdz(page)).filter(z => z.kind === 'dprop');
-  expect(p.map(z => [z.actId, z.k, z.st, z.sc])).toEqual([['s9', 'mat', 'pend', 'c1']]);
+  expect(p.map(z => [z.actId, z.k, z.st, z.sc, z.to, z.ca && z.ca.c])).toEqual([['s9', 'mat', 'pend', 'c1', d2, 'MAT']]);
   expect((await act(page, 's9')).days).toEqual([MANANA]);
   // vuelve a «Va»: se retira la propuesta
   await row(page, 's9').locator('[data-dv^="va"]').click();
   await expect.poll(async () => (await pdz(page)).filter(z => z.kind === 'dprop').length).toBe(0);
   noErrors(errors, 'sc propone');
+});
+
+test('el ingeniero acepta en un toque la fecha que propuso el SC', async ({ page }) => {
+  const to = '2026-10-05'; // lunes de la semana siguiente: sale del compromiso semanal
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, ['pdz', `dp_${MANANA}_s9`, { date: MANANA, pisoId: 'p1', sc: 'c1', kind: 'dprop', actId: 's9', ambId: 'a1', k: 'per', desc: '', to, st: 'pend', by: 'sc@obra.pe', byName: 'Sandra', ts: 1 }]] });
+  await expect(page.locator('#mpdb .mpdi')).toContainText('propone el');
+  await expect(page.locator('#mpdb .mpdi')).toContainText('fuera de la semana');
+  await page.locator('#mpdb [data-dpa]').click();
+  await expect(page.locator('#pop .nvsug')).toContainText('sale del compromiso semanal');
+  await page.locator('#pop [data-nv="acc"]').click();
+  await publicar(page);
+  await expect.poll(async () => (await act(page, 's9')).days).toEqual([to]);
+  await expect.poll(async () => (await pdz(page)).find(z => z.kind === 'dprop').st).toBe('ok');
+  noErrors(errors, 'aceptar fecha del SC');
 });
 
 test('en la reunión el ingeniero acepta o rechaza lo propuesto', async ({ page }) => {

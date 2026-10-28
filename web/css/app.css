@@ -1469,6 +1469,9 @@ body.cqout .cqghost{background:var(--bad);text-decoration:line-through}
 .pop{z-index:155}
 .zcq{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel2)}.zcq b{flex:1 1 100%;font-size:12.5px}.zcq .chip{cursor:pointer;font:inherit;font-size:12.5px}
 .nvkeep{grid-template-columns:1fr}.pop .nvkeep button{border-color:var(--ok)}
+/* revisión de un «no va» del SC con fecha propuesta: aceptar (principal) | va igual */
+.nvkeep:has(button+button){grid-template-columns:1fr 1fr}.pop .nvkeep button.pri{border-color:var(--accent)}
+.nvsug{padding-bottom:2px}.nvwk{padding-top:2px}
 .cxvt{display:block;margin:6px 12px 0}
 /* reunión: arriba lo que cambió en el plan, luego por decidir, las interferencias y al final los equipos */
 .mapa.meeting .mrs .mchb{order:1}.mapa.meeting .mrs .mpdb{order:2}.mapa.meeting .mrs .mcxb{order:3}.mapa.meeting .mrs .mfzb{order:4}

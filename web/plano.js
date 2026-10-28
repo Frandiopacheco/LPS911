@@ -1487,7 +1487,12 @@ const dpPend=aid=>{const p=dpOf(aid);return p&&p.st==='pend'?p:null};
 /* deciden en el plan diario: el administrador; un ingeniero de producción en los pisos a su cargo (si el piso no tiene responsable, cualquiera) */
 const dzEng=()=>{if(typeof canWrite==='undefined'||!canWrite)return false;if(typeof isPisoResp!=='function')return true;return isPisoResp(M.piso)};
 const DPK={res:'Restricción',per:'Sin personal',fin:'Culminado'};
-const dpText=p=>p.k==='fin'?'Culminado':`No va · ${nvcOf(p.k)?nvLbl(p.k)+(p.k==='fre'&&p.pred?' ('+conOf(p.pred).name+')':''):DPK[p.k]||'Restricción'}${p.desc?': '+p.desc:''}`;
+const dpText=p=>p.k==='fin'?'Culminado':`No va · ${nvcOf(p.k)?nvLbl(p.k)+(p.k==='fre'&&p.pred?' ('+conOf(p.pred).name+')':''):DPK[p.k]||'Restricción'}${p.desc?': '+p.desc:''}${dpToOk(p)?` · propone el ${dvLbl(p.to)}${nvOutWk(p.date,p.to)?' ⚠ fuera de la semana':''}`:''}`;
+/** ¿la fecha queda en otra semana que el día? (sale del compromiso semanal) */
+const nvOutWk=(d,to)=>!!(d&&to)&&(typeof weekOf==='function'?weekOf(to)!==weekOf(d):monOf(to)!==monOf(d));
+/** fecha propuesta por el SC válida: posterior al día del plan y hábil */
+const dpToOk=p=>!!(p&&p.k!=='fin'&&p.to&&p.to>(p.date||M.date)&&isWork(p.to));
+const nvWkTxt=to=>`El ${dvLbl(to)} queda fuera de esta semana: la actividad sale del compromiso semanal (si estaba en el plan semanal, contará como no cumplida).`;
 const dvLbl=d=>`${DOWN_[(pd(d).getUTCDay()+6)%7].toLowerCase()} ${fmtD(d)}`;
 function dvHtml(x,can){const p=dpOf(x.id);const pe=p&&p.st==='pend'?p:null;const av=avOf(x.id);const eng=dzEng();const st=pe?(pe.k==='fin'?'fin':'no'):'va';const sc=myRole()==='sc';
   let h=can?`<span class="dzseg" role="group" aria-label="¿Va?"><button class="dzv va${st==='va'?' on':''}" data-dv="va|${x.id}" title="Va según el lookahead">✓ Va</button><button class="dzv no${st==='no'?' on':''}" data-dv="no|${x.id}" title="No va: por restricción o por falta de personal">✗ No va</button><button class="dzv fin${st==='fin'?' on':''}" data-dv="fin|${x.id}" title="Ya terminó: se liberan los días que le quedan">✔ Culminado</button></span>`:'';
@@ -1584,7 +1589,7 @@ function pubAsk(btn){if(!dzEng()){toast('Publica el plan el responsable del piso
   const pend=dpPendAll();try{computeCross()}catch(e){}const cx=CROSS.list.length;const adm=typeof isAdmin!=='undefined'&&isAdmin;
   /* para publicar hay que revisar todas las propuestas del SC; solo el administrador puede aceptarlas o rechazarlas todas de una vez */
   if(pend.length){const nf=pend.filter(p=>p.k==='fin').length;
-    openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pend.length} propuesta${pend.length>1?'s':''} del SC por revisar.</b> Para publicar el plan hay que revisarlas todas (Revisar en «Por decidir»).${adm?`<br>Como administrador puedes decidirlas todas de una vez: aceptar = ${pend.length-nf?`los «no va» pasan al día hábil siguiente (solo esa actividad)`:''}${pend.length-nf&&nf?' y ':''}${nf?'las culminadas se dan por culminadas':''}; rechazar = van según lo programado.`:''}</div>
+    openPop(btn,`<div class="ph">Antes de publicar el ${dvLbl(M.date)}</div><div class="ptx"><b class="bad">Quedan ${pend.length} propuesta${pend.length>1?'s':''} del SC por revisar.</b> Para publicar el plan hay que revisarlas todas (Revisar en «Por decidir»). Si nadie las revisa, en el cierre automático se aceptan los «no va» con la fecha que propuso el SC.${adm?`<br>Como administrador puedes decidirlas todas de una vez: aceptar = ${pend.length-nf?`los «no va» pasan a la fecha que propuso el SC (o al día hábil siguiente; solo esa actividad)`:''}${pend.length-nf&&nf?' y ':''}${nf?'las culminadas se dan por culminadas':''}; rechazar = van según lo programado.`:''}</div>
       <button data-do="ver" class="pri">Ir a revisar</button>${adm?`<button data-do="acc">✓ Aceptar todas (${pend.length})</button><button data-do="rej">✗ Rechazar todas (${pend.length})</button>`:''}<button data-do="no">Cerrar</button>`,
       {ver:()=>{M.pdOpen=true;requestRender()},acc:()=>dpAll(true),rej:()=>dpAll(false),no:()=>{}});return}
   /* C-17: compromisos del día que entran con restricciones abiertas o liberación crítica pendiente (sin lo que no va) */
@@ -1604,7 +1609,7 @@ async function dpAll(acc){if(DPALL||typeof isAdmin==='undefined'||!isAdmin)retur
     if(!acc){if(await dpReject(p,true))ok++;else no++;continue}
     if(p.k==='fin'){if(await dvFin(x,p,true))ok++;else no++;continue}
     if(!pubDraft()){no++;continue}
-    const st={k:p.k==='res'?'ot':(p.k||'ot'),desc:p.desc||'',prop:p,to:wshift(M.date,1),tren:false,pred:p.pred||predOf(x),pc:false,who:''};
+    const st={k:p.k==='res'?'ot':(p.k||'ot'),desc:p.desc||'',prop:p,to:dpToOk(p)?p.to:wshift(M.date,1),tren:false,pred:p.pred||predOf(x),pc:false,who:''};
     if(!await dpTake(p,dpDec('ok','Reprogramada al '+st.to))){no++;continue}nvDraftAdd(x,st,[],1);ok++}}
   finally{DPALL=false}
   toast(`${ok} propuesta${ok!==1?'s':''} ${acc?'aceptada':'rechazada'}${ok!==1?'s':''}${no?` · ${no} no se pudo (cambió o ya estaba decidida): revísala${no>1?'s':''}`:''}`);requestRender()}
@@ -1751,7 +1756,7 @@ async function dvFin(x,prop,quiet){if(typeof canDaily==='undefined'||!canDaily){
 /** propuesta del subcontratista para el día (una por actividad: la nueva reemplaza a la anterior) */
 function dpPropose(x,k,desc,ex){const id=dpId(M.date,x.id);const g=[];const was=PD.get(id);if(was&&was.st==='ok'){toast('El ingeniero ya decidió esta actividad: habla con él para cambiarlo.');return}
   g.push(addDoc(id,{date:M.date,pisoId:M.piso,sc:x.sc,kind:'dprop',actId:x.id,ambId:x.ambId,k,desc:desc||'',...(ex||{}),st:'pend',by:me.email,byName:me.name||me.email,ts:NOW()}));rec(g.filter(Boolean));
-  toast(`Propuesta: ${k==='fin'?'culminado':'no va'} · el ingeniero la decide en la reunión`);requestRender()}
+  toast(`Propuesta: ${k==='fin'?'culminado':'no va'+(ex&&ex.to?' · al '+dvLbl(ex.to):'')} · el ingeniero la decide en la reunión`);requestRender()}
 function dpDone(p,txt){const z=PD.get(p.id);if(!z)return;updDoc(p.id,{st:'ok',dec:txt,decBy:me.email,decN:me.name||me.email,decT:NOW()})}
 /** decidir una propuesta del SC: en una transacción, solo si sigue pendiente y es la misma que se revisó. Si el SC la cambió
     mientras tanto (otra hora o motivo), o si otro ingeniero ya la decidió, no se escribe nada y se avisa. */
@@ -1818,11 +1823,12 @@ async function nvProgDef(x){try{const P_=typeof PROP!=='undefined'?PROP.get(x.sc
     return R.length?(own(R[0].swhy)?'sc':'obra'):'sc'}catch(e){return'sc'}}
 /** «No va»: causa → detalle (y quién responde) → ¿se libera a primera hora? → reprogramar. El subcontratista solo propone. */
 function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está cerrado (${lockWhy(M.date,M.piso)}): no se saca a nadie del día. ${M.date>todayIso()?'Para corregirlo, deshaz la publicación.':'Ordénalas o deja que trabajen a la vez; lo que no se haga se registra en el cumplimiento.'}`);return}const eng=dzEng();const today=M.date<=todayIso();const k0=o.k||'';
-  const st={k:k0==='res'&&o.prop?'':k0,desc:o.desc||'',prop:o.prop||null,to:wshift(M.date,1),tren:false,pred:(o.prop&&o.prop.pred)||predOf(x),pc:false,who:'',whoAuto:''};
+  const st={k:k0==='res'&&o.prop?'':k0,desc:o.desc||'',prop:o.prop||null,to:dpToOk(o.prop)?o.prop.to:wshift(M.date,1),tren:false,pred:(o.prop&&o.prop.pred)||predOf(x),pc:false,who:'',whoAuto:''};
   if(k0==='res'&&o.prop)st.k='ot';
-  const head=`<div class="ph">${st.prop?'Revisar':'No va'} · ${esc(short(x.name,38))}</div><div class="ptx">${esc(conOf(x.sc).name)} · ${dvLbl(M.date)}${st.prop?` · ${esc(st.prop.byName||conOf(x.sc).name)} propone que no va`:''}</div>${st.prop&&eng?`<div class="nvgo nvkeep"><button data-nv="keep"><b>✓ No, va igual</b><small>se mantiene lo programado</small></button></div><div class="nvl">o acepta que no va:</div>`:''}`;
+  const head=`<div class="ph">${st.prop?'Revisar':'No va'} · ${esc(short(x.name,38))}</div><div class="ptx">${esc(conOf(x.sc).name)} · ${dvLbl(M.date)}${st.prop?` · ${esc(st.prop.byName||conOf(x.sc).name)} propone que no va`:''}</div>${st.prop&&eng?(dpToOk(st.prop)&&!today?`<div class="ptx nvsug">Propone reprogramarla al <b>${dvLbl(st.prop.to)}</b>.${nvOutWk(M.date,st.prop.to)?`<br><b class="bad">⚠ ${nvWkTxt(st.prop.to)}</b>`:''}</div><div class="nvgo nvkeep"><button data-nv="acc" class="pri"><b>✓ Aceptar · al ${dvLbl(st.prop.to)}</b><small>solo esta, con la causa del SC</small></button><button data-nv="keep"><b>✗ No, va igual</b><small>se mantiene lo programado</small></button></div><div class="nvl">o decide otra fecha u otra causa:</div>`
+    :`<div class="nvgo nvkeep"><button data-nv="keep"><b>✓ No, va igual</b><small>se mantiene lo programado</small></button></div><div class="nvl">o acepta que no va:</div>`):''}`;
   const show=h=>{openPop(btn,`<div class="nvbox">${head}${h}</div>`,{});pop.onclick=click;pop.oninput=e=>{if(e.target.id==='nvd'){st.desc=e.target.value}};
-    pop.onchange=e=>{const t=e.target;if(t.id==='nvdt'&&t.value){const v=t.value;if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}if(v<=M.date){toast('Elige una fecha posterior.');return}st.to=v;step('rep')}
+    pop.onchange=e=>{const t=e.target;if(t.id==='nvdt'&&t.value){const v=t.value;if(!isWork(v)){toast(nwReason(v)+': elige un día laborable.');return}if(v<=M.date){toast('Elige una fecha posterior.');return}st.to=v;step(st.s==='det'?'det':'rep')}
       if(t.id==='nvpred'){st.pred=t.value;if(!st.pred)st.pc=false;step('det')}if(t.id==='nvpc'){st.pc=t.checked}};
     pop.onkeydown=e=>{if(e.key==='Enter'&&e.target.id==='nvd'){e.preventDefault();const b=pop.querySelector('.nvbox .pri');if(b)b.click()}};const i=pop.querySelector('#nvd');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}};
   const motHtml=()=>`<div class="nvl">¿Qué lo impide?</div><div class="nvmot nvc">${nvcList().map(c=>`<button data-nk="${c.k}" class="${st.k===c.k?'on':''}" title="${esc(c.s)}"><b>${c.t}</b></button>`).join('')}</div>`;
@@ -1833,7 +1839,9 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
       ${eng&&st.pred?`<label class="chk nvpc"><input type="checkbox" id="nvpc"${st.pc?' checked':''}> Contar también en el PPC de ${esc(conOf(st.pred).name)}</label>`:''}`:''}
     ${st.k==='prg'&&eng?`<div class="nvl">¿Quién se equivocó?</div><div class="nvgo"><button data-who="obra" class="${st.who==='obra'?'on':''}"><b>Lo programó mal obra</b><small>PROG · no imputable al SC</small></button><button data-who="sc" class="${st.who==='sc'?'on':''}"><b>El SC lo aceptó y no pudo</b><small>SC · imputable</small></button></div>${st.whoAuto?`<div class="ptx nvhint">${st.whoAuto==='obra'?'Sugerido: el SC había pedido cambiar esta actividad y no se le aceptó.':'Sugerido: el SC no propuso cambios a esta actividad.'}</div>`:''}`:''}
     ${eng?`<div class="nvl">¿Se libera el ${dvLbl(M.date)} a primera hora?</div><div class="nvgo"><button data-nv="lib"><b>Sí · va</b><small>queda como aviso y restricción por liberar</small></button><button data-nv="nolib" class="pri"><b>No · se reprograma</b><small>y queda registrada</small></button></div>`
-      :`<div class="nvgo xgo"><button data-nv="prop" class="pri"><b>Proponer «no va»</b><small>lo decide el ingeniero en la reunión</small></button></div>`}`};
+      :`${scDateHtml()}<div class="nvgo xgo"><button data-nv="prop" class="pri"><b>Proponer «no va» · al ${dvLbl(st.to)}</b><small>el ingeniero la confirma; si no la revisa, al cerrar el plan se acepta tu fecha</small></button></div>`}`};
+  /* el SC propone a qué fecha se reprograma (aviso si sale de la semana: queda fuera del compromiso semanal) */
+  const scDateHtml=()=>{const opts=[1,2,3].map(n=>wshift(M.date,n));return`<div class="nvl">¿Para qué fecha propones reprogramarla?</div><div class="nvd">${opts.map(d=>`<button data-to="${d}" class="${st.to===d?'on':''}">${dvLbl(d)}</button>`).join('')}<input type="date" id="nvdt" min="${addD(M.date,1)}" value="${opts.includes(st.to)?'':st.to}" aria-label="Otra fecha" title="Otra fecha"></div>${nvOutWk(M.date,st.to)?`<div class="ptx nvwk"><b class="bad">⚠ ${nvWkTxt(st.to)}</b></div>`:''}`};
   const repHtml=()=>{const T=trenOf(x);const opts=[1,2,3].map(n=>wshift(M.date,n));const n=Math.max(1,wdist(M.date,st.to));const am=S.amb.get(x.ambId);
     const moved=[x,...(st.tren?T:[])];const late=am&&am.hito?moved.filter(y=>(y.days||[]).some(d=>d>=M.date&&wshift(d,n)>am.hito)):[];
     return`${tagHtml()}${st.desc&&st.k!=='int'?`<div class="ptx" style="padding-top:0">${esc(st.desc)} · se registra en Restricciones</div>`:st.k==='int'?`<div class="ptx" style="padding-top:0">${esc(st.desc||'Interferencia con otra partida')}</div>`:''}
@@ -1847,17 +1855,23 @@ function noVa(btn,x,o){if(dayLk()){toast(`El plan del ${dvLbl(M.date)} ya está 
   const ok=()=>{const d=(st.desc||'').trim();if(st.k==='fre'&&!st.pred){toast('Elige la partida que no entregó el frente.');return false}if(st.k==='prg'&&eng&&!st.who){toast('Elige quién se equivocó.');return false}
     if(!d&&st.k!=='per'&&st.k!=='fre'&&st.k!=='prg'){toast('Escribe qué falta.');return false}st.desc=d;return true};
   function click(e){const b=e.target.closest('button');if(!b||b.disabled)return;
-    if(b.dataset.to){st.to=b.dataset.to;step('rep');return}
+    if(b.dataset.to){st.to=b.dataset.to;step(st.s==='det'?'det':'rep');return}
     if(b.dataset.tr!=null){st.tren=b.dataset.tr==='1';step('rep');return}
     if(b.dataset.nk){st.k=b.dataset.nk;if(st.k!=='prg'){st.who='';st.whoAuto=''}step('det');progDef();return}
     if(b.dataset.who){st.who=b.dataset.who;step('det');return}
     const v=b.dataset.nv;if(!v)return;
     if(v==='keep'){closePop();dpReject(st.prop);return}
     if(v==='chg'){step('mot');return}
-    if(v==='prop'){if(!ok())return;closePop();dpPropose(x,st.k,st.desc,st.k==='fre'?{pred:st.pred}:null);return}
+    if(v==='prop'){if(!ok())return;const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}
+      if(!(st.to>M.date)||!isWork(st.to)){toast('Elige una fecha posterior y laborable.');return}
+      const A=nvAttr(x,st);closePop();dpPropose(x,st.k,st.desc,{...(st.k==='fre'?{pred:st.pred}:{}),to:st.to,ca:{c:A.c,cnc:A.cnc,imp:A.imp,rsc:A.rsc,rt:A.rt||''},mot:nvMot(st)});return}
+    if(v==='acc'){accSc();return}
     if(v==='lib'){if(!ok())return;closePop();if(st.prop){dpTake(st.prop,dpDec('ok','Va: se libera a primera hora')).then(r=>{if(r)libGo()});return}libGo();return}
     if(v==='nolib'){if(!ok())return;if(today){closePop();dvResToday(btn,x,st,st.prop);return}step('rep');return}
     if(v==='go'){const dt=($('#nvdt')||{}).value;if(dt&&dt!==st.to){if(!isWork(dt)){toast(nwReason(dt)+': elige un día laborable.');return}st.to=dt}const n=wdist(M.date,st.to);if(n<1){toast('Elige una fecha posterior.');return}closePop();doRep();return}}
+  async function accSc(){const p=st.prop;if(!dpToOk(p))return;st.to=p.to;st.tren=false;if(!st.k)st.k=p.k==='res'?'ot':(p.k||'ot');
+    if(st.k==='fre'&&!st.pred){toast('Elige la partida que no entregó el frente.');step('det');return}
+    if(st.k==='prg'&&!st.who){st.who=st.whoAuto||await nvProgDef(x)}closePop();doRep()}
   function libGo(){
       /* va con aviso: la restricción queda registrada por liberar ese día a primera hora (se mide igual) */
       const R=nvRestr(x,st,M.date);apply([op('restr',R.rid,R.doc)],'');
