@@ -287,7 +287,7 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
   const done = doneMap({ doneidx: [...didx.values()], daily: daily.docs.map(x => x.data()), lives: lives.docs.map(x => x.data()), acts });
   const zs = pdzDay.docs.map(x => ({ ...x.data(), id: x.id }));
   const vivos = [...pisos.values()].filter(p => !p.arch && (!plan.only || plan.only.has(p.id)));
-  let k = 0, np = 0, nr = 0; const cerr = new Set(cerr0);
+  let k = 0, np = 0, nr = 0, na = 0; const cerr = new Set(cerr0);
   const R = await runFloors(vivos.map(p => p.id), async pid => {
     const p = pisos.get(pid);
     const drafts = zs.filter(z => ((z.kind === 'nova' && z.draft) || (z.kind === 'padd' && z.draft && z.st === 'ok')) && z.pisoId === pid);
@@ -297,13 +297,13 @@ exports.cerrarPlan = onSchedule({ schedule: '*/15 * * * *', timeZone: 'America/L
     if (res.skip) { if (res.has) cerr.add(pid); return; }
     if (Object.keys(res.ids).length) { k++; cerr.add(pid); } else cerr.delete(pid); // sin nada que comprometer: no se vuelve a mirar
     if (res.R) { np += res.R.novas.length; if (res.R.log.length) logger.warn(`Plan del ${d} piso ${pid}: ${res.R.log.join(' · ')}`); if (res.R.skipped.length) logger.info(`Plan del ${d} piso ${pid}: ya no estaban ese día: ${res.R.skipped.join(', ')}`); }
-    nr += res.P.length;
+    nr += res.P.length; na += (res.PA || []).length;
   }, (pid, e) => logger.error(`Plan del ${d} piso ${pid}: no se pudo cerrar`, e));
   /* «otra vez» (TMP-3): la constancia sigue como hecha, con los pisos que ya tienen foto */
   const rec = plan.again ? { ...prev, cerr: [...cerr], again: (+prev.again || 0) + 1, fail: R.fail.length ? R.fail : (prev.fail || []) }
     : { ...retryRecord(prev, plan, { at: new Date(now).toISOString(), d, hh: planCutHH(project) }, R.done, R.fail, { k, np, nr }), cerr: [...cerr] };
   await cref.set(rec);
-  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s)${plan.only ? ` (reintento ${rec.tries})` : ''}`);
+  logger.info(`Plan del ${d}: ${k} piso(s) cerrado(s) automáticamente · ${np} borrador(es) publicado(s) · ${nr} propuesta(s) del SC rechazada(s) · ${na} con fecha del SC aceptada(s)${plan.only ? ` (reintento ${rec.tries})` : ''}`);
   if (R.fail.length) logger.error(`Plan del ${d}: ${R.fail.length} piso(s) sin cerrar (${R.fail.join(', ')}); ${rec.tries >= RETRY_MAX ? 'se agotaron los reintentos: publícalo a mano en el Plan diario' : 'se reintentan en 15 minutos'}`);
 });
 
