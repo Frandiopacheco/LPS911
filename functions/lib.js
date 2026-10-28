@@ -542,6 +542,18 @@ function draftDates(drafts, acts, project, date) {
 }
 /* Propuestas del SC (pdz kind:'dprop') sin revisar del día y piso: a la hora de cierre se rechazan («va lo programado») */
 const DPROP_REJ = now => ({ st: 'rej', dec: 'Cierre automático: va según lo programado', decBy: 'servidor', decN: 'Cierre automático', decT: now });
+/* «No va» del SC con fecha propuesta (dprop.to, oct 2026): si nadie la revisó, al cierre automático se acepta la fecha del SC.
+   Se arma un borrador de reprogramación igual al de la página (solo esa actividad, con la causa que puso el SC: dprop.ca) */
+const DPROP_OK = (now, to) => ({ st: 'ok', dec: 'Cierre automático: se aceptó la fecha del SC (' + to + ')', decBy: 'servidor', decN: 'Cierre automático', decT: now });
+function propDraft(project, p, date, now = Date.now()) {
+  if (!p || p.kind !== 'dprop' || p.st !== 'pend' || p.k === 'fin' || !p.actId || !p.to || typeof p.to !== 'string') return null;
+  if (!(p.to > date) || !isWork(project, p.to)) return null;
+  const ca = p.ca || {}; const mot = p.mot || p.desc || 'No va (propuesta del SC)';
+  return { id: 'pzs_' + p.id, kind: 'nova', draft: true, date, pisoId: p.pisoId, sc: p.sc || '', actId: p.actId, ambId: p.ambId || '', motivo: mot, k: p.k === 'res' ? 'ot' : (p.k || 'ot'),
+    ...(ca.c ? { c: ca.c, cnc: ca.cnc || '', imp: ca.imp !== false, rsc: ca.rsc || '', pc: false, rt: ca.rt || '' } : {}),
+    repTo: p.to, tren: 0, ids: [p.actId], shift: wdist(project, date, p.to), rdesc: p.desc || mot, pred: p.k === 'fre' ? (p.pred || '') : '', prop: p.id,
+    by: 'servidor', byName: 'Cierre automático', ts: now, auto: true };
+}
 const pendProps = (docs, date, pisoId) => docs.filter(z => z && (z.kind === 'dprop' || (z.kind === 'padd' && z.draft)) && z.st === 'pend' && z.date === date && z.pisoId === pisoId);
 
 /* Cierre automático de un piso, en una transacción (db = Firestore de admin): si el plan del día ya tiene foto (ids) o fue
@@ -557,12 +569,14 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     const ps = await tx.get(pref);
     const D = [];
     for (const z of drafts) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists) D.push({ ...s.data(), id: z.id }); }
+    /* propuestas del SC aún pendientes: un «no va» con fecha propuesta se acepta (borrador nuevo, PS); el resto se rechaza */
+    const P = [], PS = new Map();
+    for (const z of props) { const s = await tx.get(col('pdz').doc(z.id)); if (!(s.exists && (s.data() || {}).st === 'pend')) continue; P.push(z.id);
+      const nd = propDraft(project, { ...s.data(), id: z.id }, d, now); if (nd && !D.some(x => x.prop === z.id)) { PS.set(nd.id, nd); D.push(nd); } }
     const A = new Map();
     for (const id of new Set(D.flatMap(z => z.ids || [z.actId]).filter(Boolean))) { const s = await tx.get(col('acts').doc(id)); if (s.exists) A.set(id, { ...s.data(), id }); }
     const DP = new Map();
     for (const dd of draftDates(D, A, project, d)) { const s = await tx.get(col('dplan').doc(dd + '_' + pid)); if (s.exists) DP.set(dd + '_' + pid, s.data()); }
-    const P = [];
-    for (const z of props) { const s = await tx.get(col('pdz').doc(z.id)); if (s.exists && (s.data() || {}).st === 'pend') P.push(z.id); }
     let R = D.length ? publishDrafts({ drafts: D, acts: A, dplans: DP, contractors, project, pub: ps.exists ? ps.data() : null }, d, pid, now) : null;
     /* auditoría 09/10: una restricción res-<borrador> que ya existe y está liberada (deshacer publicación y volver a publicar)
        no se reescribe como pendiente */
@@ -574,7 +588,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     if (nW + P.length + 2 > 480) {
       if (logger) logger.error(`Plan del ${d} piso ${pid}: ${nW + P.length + 1} escrituras pasan el límite; no se publica ni se cierra`);
       const P1 = P.slice(0, 480); for (const id of P1) tx.update(col('pdz').doc(id), DPROP_REJ(now));
-      return { R: null, P: P1, ids: {}, overflow: true };
+      return { R: null, P: P1, PA: [], ids: {}, overflow: true };
     }
     const Acts = new Map(acts);
     if (R) for (const [id, u] of Object.entries(R.acts)) Acts.set(id, { ...(Acts.get(id) || {}), ...(A.get(id) || {}), ...u, id });
@@ -584,7 +598,7 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
     if (R) {
       for (const [id, u] of Object.entries(R.acts)) tx.update(col('acts').doc(id), u);
       for (const r of R.restrs) tx.set(col('restr').doc(r.id), r.doc);
-      for (const o of R.novas) tx.update(col('pdz').doc(o.id), o.patch);
+      for (const o of R.novas) { const nd = PS.get(o.id); if (nd) { const { id: _i, ...doc } = nd; tx.set(col('pdz').doc(o.id), { ...doc, ...o.patch }); } else tx.update(col('pdz').doc(o.id), o.patch); }
       for (const na of R.newActs || []) tx.set(col('acts').doc(na.id), na.doc);
       for (const o of R.padds || []) {
         tx.update(col('pdz').doc(o.id), o.patch);
@@ -598,13 +612,16 @@ async function closePlanPiso(db, { project = {}, pisos, sectors, ambientes, acts
         return { id, nm: b.name || '', amb: '', sc: b.sc || '', k: 'mod', b: { days: b.days || [], qty: b.qty || {} }, a: { days: u.days || [], qty: u.qty || {} } }; }).slice(0, 150);
       if (items.length) tx.set(col('lhlog').doc(now + '_srv' + pid), { t: now, d, by: 'servidor', n: 'Cierre automático', label: `Plan del ${d} publicado en el cierre automático`, tab: 'mapa', items });
     }
-    const P2 = P;
+    /* aceptadas: las que publicaron su borrador; las demás (sin fecha, culminado, o que ya no se pudieron mover) se rechazan */
+    const okP = new Map(); if (R) for (const o of R.novas) { const nd = PS.get(o.id); if (nd) okP.set(nd.prop, nd.repTo); }
+    const P2 = P.filter(id => !okP.has(id)), PA = P.filter(id => okP.has(id));
+    for (const id of PA) tx.update(col('pdz').doc(id), DPROP_OK(now, okP.get(id)));
     for (const id of P2) tx.update(col('pdz').doc(id), DPROP_REJ(now));
     const pub = !!(R && R.pub);
     /* C-17: compromisos del día que entran con restricciones abiertas o liberación crítica pendiente (sin aviso en el servidor) */
     const restrIn = restr || libs ? restrInOf(Object.keys(ids), { restr: restr || [], libs: libs || [], acts: Acts }) : {};
     if (Object.keys(ids).length) tx.set(dref, { ...(c0 || {}), date: d, pisoId: pid, ids, who, at: now, by: 'servidor', byName: 'Cierre automático', auto: true, ...(pub ? { pub: PID } : {}), ...(Object.keys(restrIn).length ? { restrIn } : {}) });
-    return { R, P: P2, ids };
+    return { R, P: P2, PA, ids };
   });
 }
 
@@ -845,5 +862,5 @@ module.exports = {
   pushHorario, nuevoDetenido, avisoNo, avisoDestinos, avisoTexto, limaHM,
   CNC_SIN_CONF, closeCutHH, closeCutTs, cncSinCierre, sinCierre, ...TPUB, CTA_DOM, ctaDni, ctaMail, ctaEsMail, ctaClaveOk, ctaClave, ctaPuede, ctaNombre, ctaPedido, ctaMigrables,
    planCutHH, planCutDue, pd, addD, fmtD, limaToday, weekOf, lastSundayNoon, buildVersion, closesToAccept, acceptCloses, propCutTs, frzCutTs, weeksToFreeze, REFRZ_MS, weeksToRefreeze, refreezeDoc, doneMap, buildFreeze, restrInOf, advOfProps, critLibMap, weekDays, isWork, nextWork, buildDayPlan,
-  wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, pendProps, closePlanPiso,
+  wshift, wdist, shiftDays, rplDay, restrTypeFor, changedDays, publishDrafts, draftDates, DPROP_REJ, DPROP_OK, propDraft, pendProps, closePlanPiso,
   RETRY_MAX, retryPlan, runFloors, retryRecord, WSNAP_PAGE, wsnapPlan, cliCutTs, cliForW, cliCompose, buildCliVersion, cliDue };
