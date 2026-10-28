@@ -149,6 +149,18 @@ Tocar un corte, elevación, detalle o cualquier referencia de una lámina y abri
 - **Pendiente (etapa 2):** ir al corte exacto sin que alguien fije la zona (anclas por título `CORTE x-x`); vínculos en la vista de láminas anteriores (hoy se ven en todas las revisiones, con las mismas coordenadas).
 
 
+## Búsqueda en el texto de las láminas (`web/js/planos-texto.js`, oct 2026, pedido del dueño)
+
+Buscar lo escrito **dentro** de las láminas (un detalle, un código de equipo, un ambiente), no solo en el nombre. Proyecto y ETO. Decidido con el dueño: interruptor **«Nombre / Contenido»** (no se mezclan los resultados).
+
+- **Índice** (`plTxBuild`): al cargar (`plProcess`, también al girar) se leen los textos de la página con `getTextContent()` y su caja en la hoja mostrada (recorte incluido; enteros 0–10000 = `PLTX_K`; lo que cae fuera del marco no entra). Junta trozos seguidos de una misma línea (mismo ángulo y altura: «DET.» + «4»). Va en Storage junto a los mosaicos: `<base>/tx.json.gz` (gzip con `CompressionStream`; si no hay, `tx.json`), formato `{v:1, T:[[texto,x0,y0,x1,y1],…]}`. En el documento solo `tx:{v,n,z}`; `n:0` = **sin texto buscable** (letras SHX exportadas como líneas, PDF escaneado). **No va en Firestore**: la lista de planos sigue igual de liviana. Si falla, la lámina se carga igual sin `tx`. Storage acepta `application/json` y `application/gzip` (`storage.rules`, planos y etos).
+- **Láminas cargadas antes:** biblioteca en modo Contenido › «N láminas aún no están indexadas · 🔤 Indexar texto» (`plTxIndexAll`, 2 a la vez): baja `orig.pdf` con `plGet(path,{noStore:true})` (no llena la caché del equipo), arma el índice, lo sube y pone `tx` en una transacción que no escribe si entre tanto cambió `base`. Proyecto: quien edita planos (admin, editores, OT); ETO: admin (`plEdOf`).
+- **Buscar** (`plTxSearch`): compara en «compacto» (`plTxC`: sin tildes, mayúsculas, solo letras y números): «v101» encuentra «V-101», «det 4» encuentra «DET. 4». Mínimo 2 caracteres, espera 250 ms al escribir. Baja los índices de las láminas de la lista (respeta los demás filtros) 6 a la vez; quedan en la caché `lps-planos` (rutas inmutables) y en memoria los últimos `PLTX_KEEP` (120) ya armados (`plTxParse`: dos cadenas largas + inicios + cajas en `Int32Array`; buscar es un `indexOf`). `PLS.key` evita repetir la búsqueda en cada redibujo. Estado bajo el buscador (`#pltxst`): avance, sin indexar, sin texto buscable, errores.
+- **Biblioteca:** `PLF.qm` ('' | 'tx', se recuerda en `lps911.plf`); `plFiltered(true)` = la lista sin el buscador; cada tarjeta muestra lo encontrado (`.pltxs`). **Panel ☰ Planos** del visor: el mismo interruptor (`PLV.pf.qm`, en `lps911.plvf`); solo proyecto, como el panel.
+- **Visor:** abrir desde un resultado pone `PLV.hq`; `plTxAttach()` (en `plvDraw`) carga el índice, guarda `PLV.hits={L,i}` (en px del plano) y pone la barra `.pltxb` «🔍 … 1 de N ‹ › ✕». El resaltado va por el gancho **`V.hl`** de `plTiles` (encima de mosaicos y capa nítida, debajo de Marcar y Medir). `plTxGo(d)` acerca la coincidencia con el texto a ~30 px de alto. ‹ › de la cabecera recorren solo las láminas con resultado y cada una resalta lo suyo. Solo en la revisión vigente (el índice es de esa revisión). ✕ quita la búsqueda.
+- **Sin conexión:** `plPaths` incluye el índice (buscar en obra sin internet).
+- Prueba: `planos.spec.js` › «buscar en el contenido: …».
+
 ## Plano al lado del lookahead (oct 2026, pedido del dueño)
 
 Para ver el plano mientras se edita el lookahead sin salir de él. Se eligió acoplarlo en vez de una ventana flotante encima: no tapa la grilla y no la vuelve a armar (solo cambia el ancho de `<main>`).

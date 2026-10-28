@@ -1,6 +1,6 @@
 rules_version = '2';
 // Reglas de Firebase Storage — LPS 911. Solo el módulo Planos (docs/ia/planos.md) guarda archivos aquí:
-// planos/<id>/r<rev>/… (miniatura, mosaicos de alta definición y el PDF original).
+// planos/<id>/r<rev>/… (miniatura, mosaicos de alta definición, el PDF original y el índice de texto tx.json[.gz]).
 // Los permisos siguen a la colección "members" de Firestore, como firebase/firestore.rules:
 // lee el equipo de Last Planner (no capataces ni roles de solo tareo); suben el administrador, los editores y Oficina Técnica; borra solo el administrador.
 service firebase.storage {
@@ -20,7 +20,7 @@ service firebase.storage {
       allow read: if isOwner() || (isMember() && !(role() in ['capataz', 'tcap', 'tasis', 'tcos']) && (role() != 'sc' || sc in scsSt()));
       allow create, update: if (isOwner() || (verified() && isMember() && role() == 'admin'))
         && request.resource.size < 80 * 1024 * 1024
-        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
+        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf|application/json|application/gzip');
       allow delete: if isOwner() || (verified() && isMember() && role() == 'admin');
     }
     match /planos/{rest=**} {
@@ -28,7 +28,7 @@ service firebase.storage {
       // create y update (reintentar una subida a medias)
       allow create, update: if (isOwner() || (verified() && isMember() && (role() in ['admin', 'editor'] || isOT())))
         && request.resource.size < 80 * 1024 * 1024
-        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf');
+        && request.resource.contentType.matches('image/webp|image/jpeg|image/png|application/pdf|application/json|application/gzip');
       // eliminar un plano con todos sus archivos: solo el administrador
       allow delete: if isOwner() || (verified() && isMember() && role() == 'admin');
     }
