@@ -4998,3 +4998,30 @@ button.kvband{cursor:pointer}.kvband.on{box-shadow:inset 0 0 0 2px var(--accent)
 .kvdia{padding:2px 9px;border-radius:12px;background:var(--panel2);font-size:12.5px}
 @media (pointer:coarse){.kvf .ci{height:40px}.kvf .seg button{height:40px}}
 @media (max-width:760px){.kvas{flex:1 1 100%}}
+/* ---------- Comentarios del planner en el Lookahead (js/comentarios.js, oct 2026) ---------- */
+/* esquina de la actividad con comentarios abiertos (como el triángulo de Excel, a la izquierda para no chocar con las chapitas) */
+td.act .lkcm{position:absolute;left:0;top:0;width:14px;height:14px;padding:0;border:0;border-radius:0;background:linear-gradient(135deg,var(--accent) 0 50%,transparent 50%);cursor:pointer;z-index:2}
+td.act .lkcm::before{content:"";position:absolute;inset:-4px -8px -8px -4px}
+td.act.lkcflash,td.amb.lkcflash{box-shadow:inset 0 0 0 2px var(--accent)}
+.ghchip.lkcch{border-color:var(--accent);color:var(--accent)}
+.lkcp b{font-variant-numeric:tabular-nums;margin-left:3px;font-size:12px}
+.lkcp.on{color:var(--accent);border-color:var(--accent)}
+.lkcw{width:min(400px,86vw)}
+.lkcl{display:flex;flex-direction:column;gap:6px;max-height:min(50vh,380px);overflow:auto;padding:0 2px}
+.lkct{border:1px solid var(--line);border-radius:var(--r-card);padding:8px 10px;display:flex;flex-direction:column;gap:4px;background:var(--panel)}
+.lkct.done{opacity:.75}
+.lkctg{display:flex;align-items:center;gap:8px}.lkctg b{flex:1;min-width:0;font-size:12.5px}
+.pop .lkctg .lkcgo,.pop .lkcact .ib,.pop .lkcrep .ib{width:auto;flex:none}
+.lkcm1{display:flex;gap:8px;align-items:baseline;font-size:12px}.lkcwho{font-weight:600}.lkcdt{color:var(--muted)}
+.lkctx{font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.lkcr{margin-left:10px;padding-left:8px;border-left:2px solid var(--line)}
+.lkcst{font-size:12px;color:var(--ok)}
+.lkcrep{display:flex;gap:6px;align-items:flex-start}.lkcrep textarea{flex:1;min-width:0;resize:vertical;min-height:var(--h-ctl)}
+.lkcact{display:flex;gap:6px;justify-content:flex-end}.lkcact:empty{display:none}
+.lkcdn{margin:6px 2px}.lkcdn summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:4px 0}
+.lkcnew{display:flex;flex-direction:column;gap:6px;padding:8px 2px 2px;border-top:1px solid var(--line);margin-top:6px}
+.lkcnl{font-size:12.5px;font-weight:600}.lkcnew textarea{width:100%;resize:vertical}
+.lkcdl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}.lkcdl .tin{color:var(--ink)}
+.pop .lkcnew .ib.pri{align-self:flex-end;width:auto}
+.lkcnote{font-size:11.5px}
+@media (max-width:760px){td.act .lkcm{width:16px;height:16px}.pop .lkcact .ib,.pop .lkcrep .ib{min-height:40px}}
