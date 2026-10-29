@@ -26,8 +26,8 @@ const PL_DTOK={ARQ:'ARQ',EST:'EST',ES:'EST',AFC:'IS',DES:'IS',AGDES:'IS',IS:'IS'
 const PL_TIPOS=['Planta','Corte','Elevación','Detalle','Esquema','Ubicación','Otro'];
 
 const PLB=new Map();let plbReady=false,plbUn=null;
-const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false,src:'',sc:''},store.get('plf',{}));PLF.q='';
-const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src:PLF.src,sc:PLF.sc});
+const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false,src:'',sc:'',qm:''},store.get('plf',{}));PLF.q='';
+const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src:PLF.src,sc:PLF.sc,qm:PLF.qm});
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
@@ -64,11 +64,11 @@ async function plPut(path,blob,type){let last=null;
     catch(e){if(e.fatal)throw e;last=e}await plWait(800*(i+1)*(i+1))}
   throw last||new Error('No se pudo subir el archivo')}
 const PLC_NAME='lps-planos';
-async function plGet(path){const key=location.origin+'/__plan/'+path;let c=null;
+async function plGet(path,opt){const key=location.origin+'/__plan/'+path;let c=null;
   try{c=await caches.open(PLC_NAME);const hit=await c.match(key);if(hit)return await hit.blob()}catch(e){c=null}
   const r=await fetch(plApi()+'/o/'+encodeURIComponent(path)+'?alt=media',{headers:{Authorization:'Firebase '+await plTok()}});
   if(!r.ok)throw new Error(r.status===403||r.status===401?'Sin permiso para ver este plano.':r.status===404?'Archivo no encontrado en Storage.':'Storage respondió '+r.status);
-  const b=await r.blob();if(c)try{await c.put(key,new Response(b,{headers:{'Content-Type':b.type||'application/octet-stream'}}))}catch(e){}return b}
+  const b=await r.blob();if(c&&!(opt&&opt.noStore))try{await c.put(key,new Response(b,{headers:{'Content-Type':b.type||'application/octet-stream'}}))}catch(e){}return b}
 /* miniaturas: una URL por archivo, reutilizada mientras dure la sesión */
 const PLTH=new Map();
 function plThumb(path){let e=PLTH.get(path);if(!e){e=plGet(path).then(b=>URL.createObjectURL(b));PLTH.set(path,e);e.catch(()=>PLTH.delete(path))}return e}
@@ -214,6 +214,8 @@ async function plProcess(it,say){
   const v1=pg.getViewport({scale:1});
   /* recorte al marco: lo de fuera (texto «FORMATO…», objetos invisibles) no entra; el área queda a la misma resolución (es vectorial) */
   let crop=it.cropAt||null;if(!crop&&it.crop!==false){say('Buscando el marco de la lámina…');try{crop=await plFrame(pg)}catch(e){crop=null}}
+  /* índice del texto de la lámina para «Buscar en el contenido» (planos-texto.js); si falla, la lámina se carga igual sin índice */
+  let txo=null;try{txo=await plTxBuild(pg,crop)}catch(e){console.error('índice de texto',e)}
   it.cropped=!!crop;const cx0=crop?crop.x0:0,cy0=crop?crop.y0:0,cwp=crop?crop.x1-crop.x0:v1.width,chp=crop?crop.y1-crop.y0:v1.height;
   const lp=Math.max(cwp,chp);const px=Math.min(PL_MAXPX,Math.round(lp/72*PL_DPI));const sc=px/lp;const vp=pg.getViewport({scale:sc});
   const W=Math.floor(cwp*sc),H=Math.floor(chp*sc);let Z=1;while(Math.max(W,H)/2**(Z-1)>PL_T)Z++;
@@ -251,6 +253,7 @@ async function plProcess(it,say){
     if(s&&s.width)g.drawImage(s,0,0,tw,th);await room();send(`${base}/th.webp`,await plBlob(c,0.8),'image/webp');c.width=c.height=0}
   if(L)L.width=L.height=0;if(thumbSrc)thumbSrc.width=thumbSrc.height=0;
   say('Subiendo el PDF original…');await room();send(`${base}/orig.pdf`,new Blob([buf],{type:'application/pdf'}),'application/pdf');
+  let txm=null;if(txo){const t=await plTxBlob(txo);await room();send(`${base}/${plTxName(t.z)}`,t.b,t.type);txm=plTxMeta(txo,t.z)}
   while(pend.size)await Promise.race(pend);if(fail)throw fail;try{pdf.destroy()}catch(e){}
   /* girar una lámina ya cargada (plRotate): misma revisión, carpeta nueva; los vínculos de la lámina y sus propuestas se giran en la
      MISMA transacción (si alguien vinculaba a la vez no se pierde); la calibración vale igual (misma resolución). La carpeta anterior no se borra. */
@@ -259,14 +262,14 @@ async function plProcess(it,say){
       if(d.base!==old.base)throw new Error('Alguien cargó otra versión de esta lámina mientras tanto: vuelve a intentarlo.');
       const self=l=>{const r=plRotRect(l,q);return r.to===id?{...r,v:plRotV(r.v,q)}:r};
       res={base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,
-        giro:{q:(g0+q)%4,t:NOW(),by:me.email,byN:me.name||me.email}};
+        giro:{q:(g0+q)%4,t:NOW(),by:me.email,byN:me.name||me.email}};if(txm)res.tx=txm;else res.tx=firebase.firestore.FieldValue.delete();
       if(Array.isArray(d.lk))res.lk=d.lk.map(self);if(Array.isArray(d.lkp))res.lkp=d.lkp.map(self);tx.update(ref,res)});
     Object.assign(old,res);return{id,rev,keep:true,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
   const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||''}:null;
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
-    by:me.email,byN:me.name||me.email,ts:NOW()};
+    by:me.email,byN:me.name||me.email,ts:NOW()};if(txm)doc.tx=txm;
   /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
   if(old&&!fresh&&!eto&&Array.isArray(old.lk)&&old.lk.length)doc.lk=plLkCarry(old,crop,v1);
   if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
@@ -287,29 +290,34 @@ function plLkCarry(old,crop,v1){const L=old.lk.map(l=>({...l}));
 /* ---------- Biblioteca ---------- */
 const etoOn=()=>PLF.src==='eto';
 const etoScName=sc=>conOf(sc).name;
-function plFiltered(){const q=plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
+function plFiltered(noQ){const q=noQ?'':plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
   if(etoOn())return [...PLB.values()].filter(p=>p.eto&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.sc||p.sc===PLF.sc)&&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))
       &&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,etoScName(p.sc)].join(' ')).includes(w))))
     .sort((a,b)=>etoScName(a.sc).localeCompare(etoScName(b.sc),'es')||plCodCmp(a,b)||String(a.tit).localeCompare(String(b.tit),'es',{numeric:true}));
   return [...PLB.values()].filter(p=>!p.eto).filter(p=>(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
     &&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
     .sort((a,b)=>PL_DISC.findIndex(d=>d[0]===a.disc)-PL_DISC.findIndex(d=>d[0]===b.disc)||plCodCmp(a,b))}
-function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'');
+function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn()?'t':'');
   if(main.dataset.built!==bk){main.dataset.built=bk;
     const seg=`<div class="seg plsrc" role="tablist" aria-label="Origen de los planos"><button type="button" data-src=""${eo?'':' class="on"'} aria-selected="${!eo}">Proyecto</button><button type="button" data-src="eto"${eo?' class="on"':''} aria-selected="${eo}">ETO de subcontratistas</button></div>`;
     main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',eo?(me.role==='sc'?'Los ETO (planos de taller) aprobados de tu partida.':'ETO (planos de taller) aprobados de los subcontratistas, ordenados por SC.'):`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,(eo?plAdm():plaEd())?'<button class="ib pri" id="plgocar">'+(eo?'Cargar ETO…':'Cargar planos…')+'</button>':'')}
-      ${seg}<div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="Buscar: código, título, archivo…" autocomplete="off" aria-label="Buscar planos">
+      ${seg}<div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="${plTxOn()?'Buscar dentro de las láminas: DET. 4, V-101, bombas…':'Buscar: código, título, archivo…'}" autocomplete="off" aria-label="Buscar planos">
+        <div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm=""${plTxOn()?'':' class="on"'} aria-selected="${!plTxOn()}" title="Buscar por código, título o nombre del archivo">Nombre</button><button type="button" data-qm="tx"${plTxOn()?' class="on"':''} aria-selected="${plTxOn()}" title="Buscar el texto escrito dentro de las láminas">Contenido</button></div>
         ${eo?'<select class="tin" id="plfs" aria-label="Subcontratista"></select>':''}<select class="tin" id="plfp" aria-label="Piso"></select>${eo?'':'<select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>'}
         ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<span class="plcnt" id="plcnt"></span></div>
-      <div id="pllist"></div></div></div>`;
-    $('#plq',main).oninput=e=>{PLF.q=e.target.value;plList(main)};
+      ${plTxOn()?'<div class="pltxst" id="pltxst"></div>':''}<div id="pllist"></div></div></div>`;
+    $('#plq',main).value=PLF.q||'';let qt=0;$('#plq',main).oninput=e=>{PLF.q=e.target.value;clearTimeout(qt);if(plTxOn())qt=setTimeout(()=>plList(main),PLTX_WAIT);else plList(main)};
+    $('.plqm',main).onclick=e=>{const b=e.target.closest('[data-qm]');if(!b||b.dataset.qm===PLF.qm)return;PLF.qm=b.dataset.qm;plfSave();main.dataset.built='';renderPBib(main);const i=$('#plq',main);if(i&&!plTablet())i.focus()};
+    const tst=$('#pltxst',main);if(tst)tst.onclick=e=>{const b=e.target.closest('[data-tx="idx"]');if(!b)return;
+      plTxIndexAll(plFiltered(true),m=>{const st=$('#pltxst',main);if(m&&st)shx(st,`<span>${esc(m)}</span>`);else plList(main)})};
     const ch=(sel,k)=>{const el=$(sel,main);if(el)el.onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');ch('#plfs','sc');
     $('.plsrc',main).onclick=e=>{const b=e.target.closest('[data-src]');if(!b||b.dataset.src===PLF.src)return;PLF.src=b.dataset.src;plfSave();renderPBib(main)};
     const fa=$('#plfa',main);if(fa)fa.onchange=e=>{PLF.arch=e.target.checked;plList(main)};
     const gc=$('#plgocar',main);if(gc)gc.onclick=()=>{PQ.eto=eo;goTab('pcar')};
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
-    $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(b)plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
+    $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(!b)return;
+      if(b.dataset.tq)plOpen(b.dataset.pl,plTxIds(plFiltered(true)),{hq:PLF.q});else plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
   const opt=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
@@ -318,12 +326,13 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'');
     shx($('#plfs',main),(scs.length>1||!scs.length?opt('','Todos los SC',PLF.sc):'')+scs.map(c=>opt(c,etoScName(c),PLF.sc)).join(''))}
   else{shx($('#plfd',main),opt('','Todas las especialidades',PLF.disc)+ds.map(d=>opt(d[0],d[1],PLF.disc)).join(''));
   shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''))}
-  plList(main)}
+  plList(main);plTxPreload()}
 function plList(main){const host=$('#pllist',main);if(!host)return;
   if(!plbReady){shx(host,'<div class="loading"><b>Cargando planos…</b></div>');return}
   const L=plFiltered();stx($('#plcnt',main),L.length===1?'1 plano':L.length+' planos');
   if(etoOn()&&!etoAct().length&&!PLF.arch){shx(host,`<div class="callout"><b>Aún no hay ETO cargados${me.role==='sc'?' de tu partida':''}.</b> ${plAdm()?'Usa <b>Cargar ETO…</b> para subir los PDF aprobados de cada subcontratista.':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   if(!PLB.size){shx(host,`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
+  if(plTxOn()){if(PLTXQ.run)return;plTxList(main,host,plFiltered(true));return}
   if(!L.length){shx(host,'<p class="note">Ningún plano coincide con los filtros.</p>');return}
   const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
@@ -443,7 +452,8 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     if(sharp){const dr=o=>{const q=shRect(o);if(q.r>0.5&&q.r<2)g.drawImage(o.c,q.x,q.y,q.w,q.h)};const a=Math.min(1,(now-sharp.t0)/PL_SH_FADE);
       if(a<1){fading=true;if(shPrev){g.globalAlpha=1;dr(shPrev)}}else if(shPrev){shFree(shPrev);shPrev=null}
       g.globalAlpha=a;dr(sharp)}
-    g.globalAlpha=1;if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
+    g.globalAlpha=1;if(V.hl){g.setTransform(dpr,0,0,dpr,0,0);try{V.hl(g,V)}catch(err){console.error('resaltar',err)}g.globalAlpha=1}
+    if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
   const coarse=Math.max(0,spec.Z-2);
   V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
     const zd=Math.max(0,Math.min(spec.Z-1,Math.floor(Math.log2(1/(tgt*dprL)))));const now=performance.now();
@@ -545,7 +555,7 @@ const plBmClose=bm=>{try{if(bm&&bm.close)bm.close()}catch(e){}};
 let PLV=null;
 function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=opt||{};
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
-  PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,dock:false,piso0:opt.piso,
+  PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
     pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
   box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
     if(e.target.closest('input,select,textarea'))return;
@@ -580,10 +590,10 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();plDockSplitAdd();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();plTxAttach();plDockSplitAdd();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
-    const g=e.target.closest('[data-pg]');if(g){PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
-    const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo});plvPanel();return}
+    const g=e.target.closest('[data-pg]');if(g){if(PLV.pf.qm==='tx'){PLV.hq=PLV.pf.q;PLV.list=plTxIds(plvRes(true))}else PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
+    const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm||''});plvPanel();return}
     const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
@@ -646,17 +656,21 @@ function plFloorStep(p,d){if(!p.pisoId)return null;const ps=pisos().map(x=>x.id)
 function plJump(id,keep){const q=PLB.get(id);if(!q||!PLV)return;PLV.view=keep&&PLV.tv?PLV.tv.getView():null;
   /* con los saltos de «mismo punto» y ▲▼ el filtro de piso del panel sigue al plano */if(keep&&PLV.pf.piso&&PLV.pf.piso!=='-'&&q.pisoId)PLV.pf.piso=q.pisoId;PLV.id=id;PLV.rev=q.rev||1;PLV.back=[];
   if(!PLV.list.includes(id))PLV.list=[...PLV.list,id];plvDraw()}
-function plvRes(){const f=PLV.pf,w=plUp(f.q).trim().split(/\s+/).filter(Boolean);
+function plvRes(noQ){const f=PLV.pf,w=noQ?[]:plUp(f.q).trim().split(/\s+/).filter(Boolean);
   return plAct().filter(p=>(!f.piso||(f.piso==='-'?!p.pisoId:p.pisoId===f.piso))&&(!f.disc||p.disc===f.disc)&&(!f.tipo||p.tipo===f.tipo)
     &&(!w.length||w.every(x=>plUp([p.cod,p.tit,p.fname,PL_DN[p.disc]].join(' ')).includes(x)))).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const mb=PLV.box.querySelector('.plvmenu');if(mb){mb.classList.toggle('on',PLV.panel);mb.setAttribute('aria-expanded',PLV.panel)}
   if(!PLV.panel){if(el)el.remove();return}
   const body=PLV.box.querySelector('.plvb');
   if(!el){el=document.createElement('div');el.className='plvp';el.innerHTML=`<div class="plvph"><b>Planos</b><button class="ib" data-pv="pclose" aria-label="Cerrar el panel">✕</button></div>
-      <input class="tin" type="search" placeholder="Buscar: IS07, bombas, cortes…" aria-label="Buscar planos" autocomplete="off"><div class="plvpf"></div><div class="plvpl"></div>`;
-    PLV.box.appendChild(el);const inp=el.querySelector('input');inp.value=PLV.pf.q||'';inp.oninput=()=>{PLV.pf.q=inp.value;plvPanelList(el)};
+      <input class="tin" type="search" placeholder="Buscar: IS07, bombas, cortes…" aria-label="Buscar planos" autocomplete="off">
+      <div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm="">Nombre</button><button type="button" data-qm="tx">Contenido</button></div><div class="plvpf"></div><div class="pltxst"></div><div class="plvpl"></div>`;
+    PLV.box.appendChild(el);const inp=el.querySelector('input');inp.value=PLV.pf.q||'';let qt=0;inp.oninput=()=>{PLV.pf.q=inp.value;clearTimeout(qt);if(PLV.pf.qm==='tx')qt=setTimeout(()=>{if(PLV)plvPanelList(el)},PLTX_WAIT);else plvPanelList(el)};
+    el.querySelector('.plqm').onclick=e=>{const b=e.target.closest('[data-qm]');if(!b)return;e.stopPropagation();PLV.pf.qm=b.dataset.qm;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm});plvPanel()};
     if(!plTablet())setTimeout(()=>inp.focus(),0)}
-  el.style.top=(body?body.offsetTop:56)+'px';
+  el.style.top=(body?body.offsetTop:56)+'px';const tm=PLV.pf.qm==='tx';
+  el.querySelectorAll('.plqm [data-qm]').forEach(b=>{const on=(b.dataset.qm==='tx')===tm;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
+  el.querySelector('input').placeholder=tm?'Buscar dentro: DET. 4, V-101…':'Buscar: IS07, bombas, cortes…';
   const f=PLV.pf,act=plAct();const inP=act.filter(p=>!f.piso||(f.piso==='-'?!p.pisoId:p.pisoId===f.piso));
   const chip=(k,v,l,t)=>`<button type="button" class="plchip${f[k]===v?' on':''}" data-pf="${k}:${esc(v)}"${t?` title="${esc(t)}"`:''}>${esc(l)}</button>`;
   const ps=pisos().filter(x=>act.some(p=>p.pisoId===x.id));const gen=act.some(p=>!p.pisoId);
@@ -666,7 +680,8 @@ function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const m
     <div class="plvps"><span>Especialidad</span>${chip('disc','','Todas')}${ds.map(d=>chip('disc',d[0],d[0],d[1])).join('')}</div>
     <div class="plvps"><span>Tipo</span>${chip('tipo','','Todos')}${ts.map(t=>chip('tipo',t,t)).join('')}</div>`;
   plvPanelList(el)}
-function plvPanelList(el){const L=plvRes();const host=el.querySelector('.plvpl');
+function plvPanelList(el){const st=el.querySelector('.pltxst');if(PLV.pf.qm==='tx'){plTxPanelList(el,plvRes(true));return}if(st)shx(st,'');
+  const L=plvRes();const host=el.querySelector('.plvpl');
   const h=L.length?L.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}<small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></span></button>`).join('')
     :'<p class="note">Ningún plano con esos filtros.</p>';
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host);const on=host.querySelector('.plvpr.on');if(on)on.scrollIntoView({block:'nearest'})}}
@@ -928,7 +943,7 @@ const plOffPut=()=>store.set('ploff',PLOFF);
 const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)&&(!o.base||o.base===p.base)?'ok':'old'};   /* «Empezar en Rev. 1» repite el número: se compara también la carpeta */
 const plOffTag=p=>{if(!plTablet())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
 const plMB=p=>p.sz?p.sz/1048576:7;
-function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.base+'/orig.pdf'];   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
+function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.base+'/orig.pdf'];if(p.tx&&p.tx.n)L.push(plTxPath(p));   /* índice de texto: buscar sin conexión */   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
 /** borra de la caché de este equipo todo lo de una lámina (todas sus carpetas) */
 async function plCacheDrop(id){try{const c=await caches.open(PLC_NAME);const a=location.origin+'/__plan/planos/'+id+'/',b=location.origin+'/__plan/planos/'+id+'.';
   for(const r of await c.keys())if(r.url.startsWith(a)||r.url.startsWith(b))await c.delete(r)}catch(e){}}

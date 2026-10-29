@@ -135,7 +135,8 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   expect(d.W).toBeGreaterThan(4900); expect(d.Z).toBe(4);
   const files = await page.evaluate(() => [...window.__ST.keys()]);
   const exp = []; for (let z = 0; z < d.Z; z++) { const k = 2 ** z, nx = Math.ceil(Math.ceil(d.W / k) / 1024), ny = Math.ceil(Math.ceil(d.H / k) / 1024); for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) exp.push(`${d.base}/${z}/${x}_${y}.webp`); }
-  expect(files.sort()).toEqual([...exp, d.base + '/th.webp', d.base + '/orig.pdf'].sort());
+  expect(d.tx).toMatchObject({ v: 1, z: 1 }); expect(d.tx.n).toBeGreaterThan(0); // índice de texto (Buscar en el contenido)
+  expect(files.sort()).toEqual([...exp, d.base + '/th.webp', d.base + '/orig.pdf', d.base + '/tx.json.gz'].sort());
   // biblioteca → visor
   await page.click('#tabs [data-tab="pbib"]');
   await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toContainText('PLANTA PRIMER PISO');
@@ -165,6 +166,74 @@ test('carga: el PDF se procesa en mosaicos, se registra y se ve en el visor; otr
   // el mismo archivo otra vez: «ya está cargado» y no se procesa
   await page.setInputFiles('#plfile', { name: name.replace('.pdf', ' REV.pdf'), mimeType: 'application/pdf', buffer: pdf });
   noErrors(errors, 'carga');
+});
+
+test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, resaltado en la lámina e indexar lo ya cargado', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await preparar(page);
+  await page.evaluate(memStorage);
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  const d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  // el índice tiene el texto con su caja en la hoja (0–10000): «CUARTO DE BOMBAS» está a x = 60 pt de 1191, y = 400 pt desde abajo de 842
+  const T = await page.evaluate(async () => { const p = PLB.get('ARQ_AG03'); const ix = await plTxIx(p); return [...Array(ix.n).keys()].map(i => [plTxStr(ix, i), ...ix.B.slice(i * 4, i * 4 + 4)]); });
+  const cb = T.find(t => t[0] === 'CUARTO DE BOMBAS');
+  expect(cb).toBeTruthy();
+  expect(Math.abs(cb[1] - 60 / 1191 * 1e4)).toBeLessThan(40);
+  expect(cb[4]).toBeGreaterThan((842 - 400) / 842 * 1e4 - 40); expect(cb[2]).toBeLessThan((842 - 400) / 842 * 1e4);
+  expect(d.tx.n).toBe(T.length);
+  // biblioteca: «Nombre» no lo encuentra; «Contenido» sí, sin tildes ni signos
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.fill('#plq', 'bombas');
+  await expect(page.locator('#pllist')).toContainText('Ningún plano coincide');
+  await page.click('.plqm [data-qm="tx"]');
+  await expect(page.locator('.plqm [data-qm="tx"]')).toHaveClass(/on/);
+  await expect(page.locator('#plq')).toHaveValue('bombas');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"] .pltxs')).toContainText('CUARTO DE BOMBAS');
+  await expect(page.locator('#pltxst')).toContainText('1 lámina tiene');
+  await page.fill('#plq', 'cuarto-de bombás');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
+  await page.fill('#plq', 'ascensor');
+  await expect(page.locator('#pllist')).toContainText('Ninguna lámina tiene ese texto');
+  // el índice queda en memoria: las búsquedas siguientes no vuelven a leerlo (ni de la caché)
+  await page.evaluate(() => { window.__GETS.length = 0; });
+  await page.fill('#plq', 'arquitectura');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"] .pltxs')).toContainText('ARQUITECTURA');
+  expect(await page.evaluate(() => window.__GETS.filter(p => /tx\.json/.test(p)).length)).toBe(0);
+  // abrir desde la búsqueda: la barra de coincidencias y el resaltado sobre el texto
+  await page.fill('#plq', 'bombas');
+  await page.click('.plc[data-pl="ARQ_AG03"]');
+  await expect(page.locator('#plv .pltxb')).toContainText('1 de 1');
+  const h = await page.evaluate(() => ({ L: PLV.hits.L, W: PLV.tv.W, hl: !!PLV.tv.hl }));
+  expect(h.hl).toBe(true); expect(h.L[0].s).toBe('CUARTO DE BOMBAS'); expect(h.L[0].x0 / h.W).toBeCloseTo(60 / 1191, 2);
+  await expect.poll(() => page.evaluate(() => PLV.tv.getView().k)).toBeGreaterThan(2); // acercó a la coincidencia
+  await page.click('#plv .pltxb [data-tx="hx"]');
+  await expect(page.locator('#plv .pltxb')).toHaveCount(0);
+  expect(await page.evaluate(() => PLV.hq)).toBeNull();
+  // panel ☰ Planos del visor: también con «Contenido»
+  await page.click('#plv [data-pv="menu"]');
+  await page.click('#plv .plvp .plqm [data-qm="tx"]');
+  await page.fill('#plv .plvp input', 'arquitectura');
+  await expect(page.locator('#plv .plvp .plvpr[data-pg="ARQ_AG03"] .pltxs')).toContainText('ARQUITECTURA');
+  await page.click('#plv .plvp .plvpr[data-pg="ARQ_AG03"]');
+  await expect(page.locator('#plv .pltxb')).toContainText('1 de 1');
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await expect(page.locator('#plv')).toHaveCount(0);
+  // una lámina cargada antes (sin índice): no entra en la búsqueda; «Indexar texto» lo arma desde su PDF original
+  await page.evaluate(async () => { await fcol('plb').doc('ARQ_AG03').update({ tx: firebase.firestore.FieldValue.delete() }); PLS.key = ''; window.__ST.delete(PLB.get('ARQ_AG03').base + '/tx.json.gz'); GX.m.clear(); GX.ver++; });
+  await expect.poll(() => page.evaluate(() => !PLB.get('ARQ_AG03').tx)).toBe(true);
+  await page.evaluate(() => render());
+  await expect(page.locator('#pltxst')).toContainText('1 lámina aún no está indexada');
+  await page.click('#pltxst [data-tx="idx"]');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"] .pltxs')).toContainText('CUARTO DE BOMBAS', { timeout: 30_000 });
+  const d2 = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
+  expect(d2.tx).toEqual(d.tx);
+  noErrors(errors, 'contenido');
 });
 
 test.describe('sin conexión (tablet)', () => {
