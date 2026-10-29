@@ -6,25 +6,26 @@
    casco-met-calc.js. «Aplicar a los sectores» escribe el metrado en cada sector (ambientes.met[partida], mo[partida]='c').
    Detalle en docs/ia/casco.md «Metrados». */
 
-const KM={par:null,tipos:[],lv:new Map(),ok:false};
+const KM={par:null,tipos:[],lv:new Map(),vg:new Map(),ok:false};
 const KMQ=new Set(),KMT={};const KMH=[];
 const MET={sel:null,tsel:null};
 let kmSub=null;
 const kmF=(v,d)=>(+v||0).toLocaleString('es-PE',{minimumFractionDigits:d,maximumFractionDigits:d});
 const kmP=()=>kmPar(KM.par);
-const kmV=()=>['calc','ratio','par'].includes(U.kmV)?U.kmV:'calc';
+const kmV=()=>['calc','vig','ratio','par'].includes(U.kmV)?U.kmV:'calc';
 
 function kmEnsure(){if(kmSub||!db||!CS())return;
   kmSub=fcol('kmet').onSnapshot(sn=>{sn.docs.forEach(d=>{const id=d.id;if(KMQ.has(id))return;const v=d.data()||{};
-      if(id==='par')KM.par=v;else if(id==='tipos')KM.tipos=Array.isArray(v.L)?v.L:[];else if(id.startsWith('n_'))KM.lv.set(id.slice(2),Array.isArray(v.rows)?v.rows:[])});
+      if(id==='par')KM.par=v;else if(id==='tipos')KM.tipos=Array.isArray(v.L)?v.L:[];else if(id.startsWith('n_'))KM.lv.set(id.slice(2),Array.isArray(v.rows)?v.rows:[]);else if(id.startsWith('v_'))KM.vg.set(id.slice(2),Array.isArray(v.L)?v.L:[])});
     KM.ok=true;if(U.tab==='met')requestRender()},()=>{KM.ok=true});
-  unsubs.push(()=>{if(kmSub)kmSub();kmSub=null;KM.par=null;KM.tipos=[];KM.lv.clear();KM.ok=false})}
+  unsubs.push(()=>{if(kmSub)kmSub();kmSub=null;KM.par=null;KM.tipos=[];KM.lv.clear();KM.vg.clear();KM.ok=false})}
 
 /** guarda un documento de kmet (500 ms después del último cambio); lo local manda mientras espera */
-function kmPut(id,data,label){const prev=id==='par'?KM.par:id==='tipos'?{L:KM.tipos}:{rows:KM.lv.get(id.slice(2))||[]};
+const kmDocOf=id=>id==='par'?KM.par:id==='tipos'?{L:KM.tipos}:id.startsWith('v_')?{L:KM.vg.get(id.slice(2))||[]}:{rows:KM.lv.get(id.slice(2))||[]};
+function kmPut(id,data,label){const prev=kmDocOf(id);
   KMH.push({id,prev:JSON.stringify(prev||{}),label});if(KMH.length>80)KMH.shift();kmSetLocal(id,data);kmSave(id)}
-function kmSetLocal(id,data){if(id==='par')KM.par=data;else if(id==='tipos')KM.tipos=data.L||[];else KM.lv.set(id.slice(2),data.rows||[])}
-function kmSave(id){KMQ.add(id);clearTimeout(KMT[id]);KMT[id]=setTimeout(()=>{const data=id==='par'?KM.par:id==='tipos'?{L:KM.tipos}:{rows:KM.lv.get(id.slice(2))||[]};
+function kmSetLocal(id,data){if(id==='par')KM.par=data;else if(id==='tipos')KM.tipos=data.L||[];else if(id.startsWith('v_'))KM.vg.set(id.slice(2),data.L||[]);else KM.lv.set(id.slice(2),data.rows||[])}
+function kmSave(id){KMQ.add(id);clearTimeout(KMT[id]);KMT[id]=setTimeout(()=>{const data=kmDocOf(id);
   fcol('kmet').doc(id).set(JSON.parse(JSON.stringify({...data,t:NOW(),by:me.email}))).then(()=>KMQ.delete(id)).catch(e=>{KMQ.delete(id);toast('No se pudo guardar el metrado: '+(e&&e.code||e))})},500)}
 function kmUndo(){const h=KMH.pop();if(!h){toast('No hay nada que deshacer en Metrados.');return}kmSetLocal(h.id,JSON.parse(h.prev));kmSave(h.id);requestRender();toast('Deshecho: '+(h.label||'último cambio'))}
 
@@ -81,17 +82,17 @@ function renderMet(main){if(!CS()){main.innerHTML='<div class="scroll"><div clas
   kmEnsure();if(typeof ensureMcat==='function')ensureMcat();if(typeof ensurePlanos==='function')try{ensurePlanos()}catch(e){}
   const API=window.__plano;if(!API||!API.basesOf){if(typeof loadPlanoMod==='function')loadPlanoMod().then(()=>{if(window.__plano&&window.__plano.ensureLam)window.__plano.ensureLam();requestRender()}).catch(()=>{})}
   /* conservar foco y desplazamiento al redibujar */
-  const ae=document.activeElement,fk=ae&&main.contains(ae)&&ae.dataset&&(ae.dataset.kk||null);const sc=main.querySelector('.scroll'),st=sc?sc.scrollTop:0;const pb=main.querySelector('.kmpbox'),pst=pb?pb.scrollTop:0;
+  const ae=document.activeElement,fk=ae&&main.contains(ae)&&ae.dataset&&(ae.dataset.kk||null);{const e0=main.querySelector('.kvsc');KV.sx=e0?e0.scrollLeft:null}const sc=main.querySelector('.scroll'),st=sc?sc.scrollTop:0;const pb=main.querySelector('.kmpbox'),pst=pb?pb.scrollTop:0;
   const v=kmV(),ed=csEd();const p=U.piso?S.pis.get(U.piso):null;
-  const seg=`<div class="seg kmseg" role="group" aria-label="Vista de metrados">${[['calc','Calculado'],['ratio','Por ratio'],['par','Parámetros']].map(([k,l])=>`<button type="button" data-kmv="${k}" class="${v===k?'on':''}" aria-pressed="${v===k}">${l}</button>`).join('')}</div>`;
+  const seg=`<div class="seg kmseg" role="group" aria-label="Vista de metrados">${[['calc','Elementos'],['vig','Vigas'],['ratio','Por ratio'],['par','Parámetros']].map(([k,l])=>`<button type="button" data-kmv="${k}" class="${v===k?'on':''}" aria-pressed="${v===k}">${l}</button>`).join('')}</div>`;
   const acts=`${seg}${ed?`<button type="button" class="ib" data-km="undo" title="Deshacer el último cambio de Metrados"${KMH.length?'':' disabled'}>↶ Deshacer</button>`:''}`;
   let body='';
   if(v==='par')body=kmParHtml(ed);
   else if(!p)body=`<div class="card"><div class="pad"><p>Elige el nivel que vas a metrar.</p><div class="kmlv">${pisos().map(x=>`<button type="button" class="ib" data-kmpiso="${esc(x.id)}">${esc(csPisoTag(x,'E')||x.name)}</button>`).join('')}</div></div></div>`;
-  else body=v==='ratio'?kmRatioHtml(p):kmCalcHtml(p,ed);
+  else body=v==='ratio'?kmRatioHtml(p):v==='vig'?kvHtml(p,ed):kmCalcHtml(p,ed);
   main.innerHTML=`<div class="scroll"><div class="wrap wrapw km">${pageHead('Metrados',p&&v!=='par'?`${esc(p.name||'')} · ${esc(csPisoTag(p,'E'))}`:'Casco',acts)}${body}</div></div>`;
-  main.onclick=kmClick;main.onchange=kmChange;main.oninput=null;
-  const sc2=main.querySelector('.scroll');if(sc2)sc2.scrollTop=st;const pb2=main.querySelector('.kmpbox');if(pb2)pb2.scrollTop=pst;
+  main.onclick=kmClick;main.onchange=kmChange;main.oninput=null;main.onpointerdown=v==='vig'?kvDown:null;
+  const sc2=main.querySelector('.scroll');if(sc2)sc2.scrollTop=st;const pb2=main.querySelector('.kmpbox');if(pb2)pb2.scrollTop=pst;const ev=main.querySelector('.kvsc');if(ev&&KV.sx!=null)ev.scrollLeft=KV.sx;
   if(fk){const el=main.querySelector(`[data-kk="${CSS.escape(fk)}"]`);if(el){el.focus();try{if(el.select&&el.type==='text')el.select()}catch(e){}}}}
 
 function kmCalcHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const rows=kmRows(p.id);const R=kmLevel(rows,KM.tipos,P,C);const dis=ed?'':' disabled';
@@ -129,7 +130,7 @@ function kmCalcHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const rows=kmRows(p.
     <tbody>${tr||`<tr><td colspan="10" class="mu" style="padding:12px">${KM.tipos.length?'Agrega filas: cada una es un elemento (o varios iguales) con su sector y sus luces.':'Primero crea los tipos de elemento a la izquierda.'}</td></tr>`}</tbody>
     <tfoot><tr><td colspan="6">Total ${fsec?esc((C.secs.find(a=>a.id===fsec)||{}).code||''):'del nivel'}${R.err?` · <span class="kmw">${R.err} fila${R.err>1?'s':''} con avisos</span>`:''}</td><td class="n">${kmF(tc,2)}</td><td class="n">${kmF(te,1)}</td><td class="n">${kmF(tk,0)}</td><td></td></tr></tfoot></table></div>${desp}</section>`;
   return`<div class="kmbar">${ed?`<button type="button" class="ib" data-km="xls">Exportar Excel</button><button type="button" class="ib" data-km="imp">Importar planilla</button><button type="button" class="ib" data-km="copy">Copiar al nivel siguiente</button><button type="button" class="ib pri" data-km="apply">Aplicar a los sectores</button>`:`<button type="button" class="ib" data-km="xls">Exportar Excel</button>`}</div>
-    <div class="kmg">${tipos}${pla}${kmResHtml(p,C,R,P)}</div>`}
+    <div class="kmg">${tipos}${pla}${kmResHtml(p,C,kvMerge(R,p.id,P,C),P)}</div>`}
 
 function kmResHtml(p,C,R,P){const outs=KM_OUT.filter(o=>C.secs.some(a=>(R.sec[a.id]||{})[o[0]]>0));const secs=C.secs.filter(a=>R.sec[a.id]);
   const steel=['av','avg','alo'];const ratAc=steel.reduce((s,k)=>{const c=kmCat(P,k);return s+(c&&c.rat>0?+c.rat:0)},0);
@@ -155,8 +156,8 @@ function kmParHtml(ed){const P=kmP();const dis=ed?'':' disabled';const inp=(path
   return`<div class="kmbar">${ed?'<button type="button" class="ib" data-km="pxls">Exportar Excel</button><button type="button" class="ib" data-km="pimp">Importar Excel</button><button type="button" class="ib" data-km="pdef">Restablecer valores típicos</button>':''}</div>
   ${helpBox('Copia aquí la tabla del plano','<p>Los valores que vienen son típicos de ejemplo. Reemplázalos por los del cuadro de especificaciones de tus planos (longitudes de traslape, ganchos estándar, recubrimientos). Puedes exportar a Excel, editar allá e importar.</p><p><b>Gancho 90°</b> es lo que el gancho estándar suma a la barra; <b>gancho 135°</b> es lo que suma cada gancho de estribo.</p>',!KM.par)}
   <div class="kmgp"><div class="card"><h2>Generales</h2><div class="tscroll"><table class="t kmt"><tbody>${gen.map(([k,l,u])=>`<tr><td>${esc(l)}</td><td>${inp(k,get(k),l)}</td><td class="mu">${u}</td></tr>`).join('')}</tbody></table></div></div>
-  <div class="card kmwide"><h2>Por diámetro <span class="sub">longitudes en metros</span></h2><div class="tscroll"><table class="t kmt"><thead><tr><th>Ø</th><th class="n">Peso kg/m</th><th class="n">Traslape</th><th class="n">Gancho 90°</th><th class="n">Gancho 135° (estribo)</th></tr></thead><tbody>
-    ${KM_DIA.map(([k,l])=>{const d=P.dia[k];return`<tr><td><b>${esc(l)}</b></td><td>${inp(`dia.${k}.kg`,d.kg,'Peso '+l)}</td><td>${inp(`dia.${k}.lt`,d.lt,'Traslape '+l)}</td><td>${inp(`dia.${k}.g90`,d.g90,'Gancho 90° '+l)}</td><td>${inp(`dia.${k}.g135`,d.g135,'Gancho 135° '+l)}</td></tr>`}).join('')}</tbody></table></div></div>
+  <div class="card kmwide"><h2>Por diámetro <span class="sub">longitudes en metros</span></h2><div class="tscroll"><table class="t kmt"><thead><tr><th>Ø</th><th class="n">Peso kg/m</th><th class="n" title="Barras inferiores (y todas en Elementos)">Traslape inferior</th><th class="n" title="Barras superiores de vigas (vista Vigas)">Traslape superior</th><th class="n">Gancho 90°</th><th class="n">Gancho 135° (estribo)</th></tr></thead><tbody>
+    ${KM_DIA.map(([k,l])=>{const d=P.dia[k];return`<tr><td><b>${esc(l)}</b></td><td>${inp(`dia.${k}.kg`,d.kg,'Peso '+l)}</td><td>${inp(`dia.${k}.lt`,d.lt,'Traslape inferior '+l)}</td><td>${inp(`dia.${k}.lts`,d.lts,'Traslape superior '+l)}</td><td>${inp(`dia.${k}.g90`,d.g90,'Gancho 90° '+l)}</td><td>${inp(`dia.${k}.g135`,d.g135,'Gancho 135° '+l)}</td></tr>`}).join('')}</tbody></table></div></div>
   <div class="card"><h2>Rangos de cuantía <span class="sub">kg/m³; fuera de rango se marca para revisar</span></h2><div class="tscroll"><table class="t kmt"><thead><tr><th>Clase</th><th class="n">Mínimo</th><th class="n">Máximo</th></tr></thead><tbody>
     ${Object.keys(P.rg).map(k=>`<tr><td>${esc(KM_CL[k])}</td><td>${inp(`rg.${k}.0`,P.rg[k][0],'Mínimo '+KM_CL[k])}</td><td>${inp(`rg.${k}.1`,P.rg[k][1],'Máximo '+KM_CL[k])}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card"><h2>Partidas del tren <span class="sub">a qué partida del catálogo va cada cantidad</span></h2><div class="tscroll"><table class="t kmt"><tbody>
@@ -203,7 +204,7 @@ async function kmTedClick(e){const b=e.target.closest('button');if(!b||!csEd())r
 
 /* ---------- eventos de la pestaña ---------- */
 function kmRowsSet(pid,rows,label){kmPut('n_'+pid,{rows},label)}
-async function kmClick(e){const b=e.target.closest('button,[data-krow]');if(!b)return;const ed=csEd();const pid=U.piso;
+async function kmClick(e){if(kmV()==='vig'&&kvClick(e))return;const b=e.target.closest('button,[data-krow]');if(!b)return;const ed=csEd();const pid=U.piso;
   if(b.dataset.kmv){U.kmV=b.dataset.kmv;saveUI();requestRender();return}
   if(b.dataset.kmpiso){U.piso=b.dataset.kmpiso;saveUI();requestRender();return}
   if(b.dataset.kmsec!=null){U.kmSec=b.dataset.kmsec;saveUI();requestRender();return}
@@ -225,24 +226,25 @@ async function kmClick(e){const b=e.target.closest('button,[data-krow]');if(!b)r
   if(k==='pxls'){kmParXls();return}
   if(k==='pimp'){kmParImp();return}
   if(k==='pdef'){if(await uiAsk({title:'¿Restablecer los valores típicos?',text:'Se reemplaza toda la tabla de parámetros por los valores de ejemplo. Puedes deshacerlo.',ok:'Restablecer',tone:'warn'})){kmPut('par',{...kmParDef(),map:(KM.par||{}).map||{}},'Parámetros típicos');requestRender()}return}}
-function kmChange(e){const el=e.target;if(!csEd())return;
+function kmChange(e){const el=e.target;if(!csEd())return;if(el.dataset.kv){kvChange(el);return}
   if(el.dataset.kp){const P=JSON.parse(JSON.stringify(kmP()));const path=el.dataset.kp.split('.');let o=P;for(let i=0;i<path.length-1;i++)o=o[path[i]];const last=path[path.length-1];
     if(path[0]==='map')o[last]=el.value||null;else{const v=kmNum(el.value);if(v==null||!Number.isFinite(v)||v<0){toast('Escribe un número válido.');requestRender();return}o[last]=v}
     kmPut('par',P,'Parámetros');requestRender();return}
   if(el.dataset.kr){const pid=U.piso;const rows=kmRows(pid).map(r=>r.id===el.dataset.kr?{...r,[el.dataset.kf]:el.value.trim()}:r);MET.sel=el.dataset.kr;kmRowsSet(pid,rows,'Planilla');requestRender()}}
 
 /** escribe en cada sector del nivel el metrado calculado de cada partida (marca el origen «calculado») */
-async function kmApply(pid){const P=kmP();const C=kmCtx(pid);const R=kmLevel(kmRows(pid),KM.tipos,P,C);const ops=[],lst=[],miss=new Set();let nUpd=0;
+async function kmApply(pid){const P=kmP();const C=kmCtx(pid);const R=kvMerge(kmLevel(kmRows(pid),KM.tipos,P,C),pid,P,C);const ops=[],lst=[],miss=new Set();let nUpd=0;
   for(const a of C.secs){const x=R.sec[a.id];if(!x)continue;const met={...(a.met||{})},mo={...(a.mo||{})};let ch=0;
     for(const[k,v]of Object.entries(x)){if(!(v>0))continue;const o=KM_OUT.find(y=>y[0]===k);const c=kmCat(P,k);if(!c){miss.add(o[1]);continue}const val=Math.round(v*(o[2]==='kg'?1:100))/(o[2]==='kg'?1:100);
       if(met[c.id]!==val||mo[c.id]!=='c'){met[c.id]=val;mo[c.id]='c';ch++}}
     if(ch){ops.push(op('ambientes',a.id,{...cnvStrip(a),met,mo}));lst.push(`${a.code||a.name}: ${ch} partida${ch>1?'s':''}`);nUpd+=ch}}
+  if(R.vmiss&&R.vmiss.length&&!(await uiAsk({title:'Hay vigas con sectores que no existen en este nivel',text:'Sus kg en esos sectores no se aplican.',list:R.vmiss,ok:'Aplicar igual',tone:'warn'})))return;
   if(R.err&&!(await uiAsk({title:`Hay ${R.err} fila${R.err>1?'s':''} con avisos`,text:'Esas filas pueden quedar incompletas. ¿Aplicar igual?',ok:'Aplicar igual',tone:'warn'})))return;
   if(!ops.length){toast(miss.size?'Falta elegir las partidas en Parámetros › Partidas del tren.':'Los sectores ya tienen estos metrados.');return}
   if(!(await uiAsk({title:'¿Aplicar el metrado calculado a los sectores?',text:'Cada sector guarda estas cantidades en sus partidas; las actividades nuevas del tren las toman de ahí.',list:lst,note:miss.size?'Sin partida en el catálogo (no se aplican): '+[...miss].join(', '):'',ok:'Aplicar',tone:'info'})))return;
   apply(ops,'Metrado calculado aplicado a los sectores');toast(`Metrado aplicado: ${nUpd} partida${nUpd>1?'s':''} en ${ops.length} sector${ops.length>1?'es':''}`)}
 /** copia la planilla al nivel siguiente (mismos códigos de sector) */
-async function kmCopyNext(pid){const L=pisos();const i=L.findIndex(p=>p.id===pid);const nx=L[i+1];if(!nx){toast('No hay un nivel siguiente.');return}const rows=kmRows(pid);if(!rows.length){toast('La planilla de este nivel está vacía.');return}
+async function kmCopyNext(pid){const L=pisos();const i=L.findIndex(p=>p.id===pid);const nx=L[i+1];if(!nx){toast('No hay un nivel siguiente.');return}if(kmV()==='vig'){kvCopyNext(pid,nx);return}const rows=kmRows(pid);if(!rows.length){toast('La planilla de este nivel está vacía.');return}
   const A=kmCtx(pid),B=kmCtx(nx.id);const codeOf=id=>{const a=A.secs.find(x=>x.id===id);return a?String(a.code||'').toUpperCase():''};let lost=0;
   const out=rows.map(r=>{const id=B.secByCode(codeOf(r.sec));if(!id)lost++;return{...r,id:uid('kr'),sec:id||r.sec}});const has=kmRows(nx.id).length;
   if(!(await uiAsk({title:`¿Copiar ${rows.length} filas a ${csPisoTag(nx,'E')||nx.name}?`,text:has?`Ese nivel ya tiene ${has} filas: se reemplazan.`:'Se copian con los mismos sectores (por código).',note:lost?`${lost} fila(s) con un sector que no existe allá: revísalas.`:'',ok:'Copiar',tone:has?'warn':'info'})))return;
@@ -252,14 +254,16 @@ async function kmCopyNext(pid){const L=pisos();const i=L.findIndex(p=>p.id===pid
 const kmXHead={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F5F7A'}},alignment:{vertical:'center',wrapText:true}};
 function kmSheet(X,aoa,widths){const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=widths.map(w=>({wch:w}));const R=X.utils.decode_range(ws['!ref']);for(let c=R.s.c;c<=R.e.c;c++){const a=X.utils.encode_cell({r:0,c});if(ws[a])ws[a].s=kmXHead}ws['!views']=[{state:'frozen',ySplit:1}];return ws}
 async function kmParXls(){try{await loadXlsx();const X=window.XLSX;const P=kmP();const wb=X.utils.book_new();
-  X.utils.book_append_sheet(wb,kmSheet(X,[['Diámetro','Peso kg/m','Traslape m','Gancho 90° m','Gancho 135° estribo m'],...KM_DIA.map(([k,l])=>[l,P.dia[k].kg,P.dia[k].lt,P.dia[k].g90,P.dia[k].g135])],[12,12,12,14,20]),'Diámetros');
+  X.utils.book_append_sheet(wb,kmSheet(X,[['Diámetro','Peso kg/m','Traslape inferior m','Traslape superior m','Gancho 90° m','Gancho 135° estribo m'],...KM_DIA.map(([k,l])=>[l,P.dia[k].kg,P.dia[k].lt,P.dia[k].lts,P.dia[k].g90,P.dia[k].g135])],[12,12,16,16,14,20]),'Diámetros');
   X.utils.book_append_sheet(wb,kmSheet(X,[['Parámetro','Valor'],...KM_PGEN.map(([k,l])=>[l,KM_PGET(P,k)]),...Object.keys(P.rg).flatMap(k=>[[`Cuantía mínima · ${KM_CL[k]} (kg/m³)`,P.rg[k][0]],[`Cuantía máxima · ${KM_CL[k]} (kg/m³)`,P.rg[k][1]]])],[44,12]),'Generales');
   const buf=X.write(wb,{type:'array',bookType:'xlsx'});saveBlob('Parametros_metrado_casco.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel de parámetros generado')}catch(err){toast(err&&err.message||'No se pudo generar el Excel.')}}
 const KM_PGEN=[['lv','Longitud comercial de la varilla (m)'],['vsp','Viguetas del aligerado a cada (m)'],['lad.b','Ladrillo de techo: ancho (m)'],['lad.l','Ladrillo de techo: largo (m)'],['rec.vig','Recubrimiento de vigas (m)'],['rec.col','Recubrimiento de columnas (m)'],['rec.pla','Recubrimiento de placas (m)'],['rec.los','Recubrimiento de losas (m)']];
 const KM_PGET=(P,k)=>k.split('.').reduce((o,x)=>o&&o[x],P);
 async function kmParImp(){const f=await tPickFile('.xlsx,.xls');if(!f)return;try{const wb=await tReadBook(f);const P=JSON.parse(JSON.stringify(kmP()));const fold=s=>tFold(s).replace(/[^A-Z0-9/ ]/g,'').replace(/\s+/g,' ').trim();let n=0;const bad=[];
-  const sd=wb.SheetNames.find(s=>fold(s).startsWith('DIAMETRO'));if(sd){const rows=tRows(wb.Sheets[sd]);for(const r of rows.slice(1)){const d=kmDia(r[0]);if(!d){if(String(r[0]||'').trim())bad.push(String(r[0]));continue}
-      [['kg',1],['lt',2],['g90',3],['g135',4]].forEach(([k,c])=>{const v=kmNum(r[c]);if(v>0&&v!==P.dia[d][k]){P.dia[d][k]=v;n++}})}}
+  const sd=wb.SheetNames.find(s=>fold(s).startsWith('DIAMETRO'));if(sd){const rows=tRows(wb.Sheets[sd]);const H=(rows[0]||[]).map(fold);const hc=(...w)=>H.findIndex(h=>w.some(x=>h.startsWith(x)));
+    const cols=[['kg',hc('PESO')],['lt',hc('TRASLAPE INF','TRASLAPE M','TRASLAPE')],['lts',hc('TRASLAPE SUP')],['g90',hc('GANCHO 90')],['g135',hc('GANCHO 135')]].filter(x=>x[1]>0);
+    for(const r of rows.slice(1)){const d=kmDia(r[0]);if(!d){if(String(r[0]||'').trim())bad.push(String(r[0]));continue}
+      cols.forEach(([k,c])=>{const v=kmNum(r[c]);if(v>0&&v!==P.dia[d][k]){P.dia[d][k]=v;n++}})}}
   const sg=wb.SheetNames.find(s=>fold(s).startsWith('GENERAL'));if(sg){const rows=tRows(wb.Sheets[sg]);const lab=new Map(KM_PGEN.map(([k,l])=>[fold(l),k]));
     for(const r of rows.slice(1)){const L=fold(r[0]);const v=kmNum(r[1]);if(!(v>=0))continue;const k=lab.get(L);if(k){const path=k.split('.');let o=P;for(let i=0;i<path.length-1;i++)o=o[path[i]];if(o[path[path.length-1]]!==v){o[path[path.length-1]]=v;n++}continue}
       const m=/^CUANTIA (MINIMA|MAXIMA) (.+?) KG/.exec(L);if(m){const cl=Object.keys(KM_CL).find(c=>fold(KM_CL[c])===m[2].trim());if(cl&&P.rg[cl]){const j=m[1]==='MINIMA'?0:1;if(P.rg[cl][j]!==v){P.rg[cl][j]=v;n++}}}}}
@@ -276,6 +280,7 @@ async function kmXls(pid){try{await loadXlsx();const X=window.XLSX;const P=kmP()
   const secs=C.secs.filter(a=>R.sec[a.id]);X.utils.book_append_sheet(wb,kmSheet(X,[['Partida','Und.',...secs.map(a=>a.code||a.name),'Total'],...KM_OUT.filter(o=>secs.some(a=>(R.sec[a.id]||{})[o[0]]>0)).map(o=>{const c=kmCat(P,o[0]);const v=secs.map(a=>r2((R.sec[a.id]||{})[o[0]]||0));return[c?c.name:o[1],o[2],...v,r2(v.reduce((s,x)=>s+x,0))]})],[44,8,...secs.map(()=>10),12]),'Resumen');
   X.utils.book_append_sheet(wb,kmSheet(X,[['Diámetro','kg'],...KM_DIA.filter(([k])=>R.dia[k]>0).map(([k,l])=>[l,Math.round(R.dia[k])])],[12,12]),'Por diámetro');
   X.utils.book_append_sheet(wb,kmSheet(X,[['Código','Clase','Descripción'],...KM.tipos.map(T=>[T.cod,KM_CL[T.cl],kmDesc(T)])],[12,20,60]),'Tipos');
+  kvXlsSheet(X,wb,pid,P,C);
   const buf=X.write(wb,{type:'array',bookType:'xlsx'});saveBlob(`Metrado_${tag||'nivel'}.xlsx`,new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel del metrado generado')}catch(err){toast(err&&err.message||'No se pudo generar el Excel.')}}
 async function kmImp(pid){const f=await tPickFile('.xlsx,.xls');if(!f)return;try{const wb=await tReadBook(f);const sh=await tSheetOf(wb,'Planilla');if(!sh)return;const rows=tRows(wb.Sheets[sh]);
   const hi=rows.findIndex(r=>r.some(c=>tFold(c)==='SECTOR')&&r.some(c=>tFold(c)==='TIPO'));if(hi<0){toast('No encontré los encabezados «Sector» y «Tipo». Exporta primero para ver el formato.');return}
