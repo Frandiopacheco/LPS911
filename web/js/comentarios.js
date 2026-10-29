@@ -46,16 +46,17 @@ const lkcCanResolve=c=>!!me&&(isAdmin||c.by===lkcMe()||(me.role==='editor'&&type
 const lkcCanArch=c=>!!me&&(isAdmin||c.by===lkcMe());
 /* ---- ventanas ---- */
 let LKC_ANCH=null;
+/* cada comentario es un pósit (nota amarilla): autor, nota, respuestas y una línea para responder; ✓ y 🗄 en la esquina */
 function lkcThreadHtml(c,withTarget){const done=c.st==='done';
-  return`<div class="lkct${done?' done':''}">${withTarget?`<div class="lkctg"><b>${esc(lkcLabel(c))}</b>${c.k!=='piso'?`<button class="lkcgo" data-do="go_${esc(c.id)}" title="Llevar la grilla a la fila">Ver</button>`:''}</div>`:''}
-    <div class="lkcm1"><span class="lkcwho">${esc(c.bn||c.by||'')}</span><span class="lkcdt">${lkcWhen(c.t)}${c.d?' · día '+fmtD(c.d):''}</span></div>
+  const tools=`${lkcCanResolve(c)?`<button class="lkci${done?'':' ok'}" data-do="st_${esc(c.id)}" title="${done?'Reabrir':'Marcar resuelto'}" aria-label="${done?'Reabrir':'Resolver'}">${done?'↺':'✓'}</button>`:''}${lkcCanArch(c)?`<button class="lkci" data-do="ar_${esc(c.id)}" title="Archivar (no se borra)" aria-label="Archivar">🗄</button>`:''}`;
+  return`<div class="lkct${done?' done':''}">${withTarget?`<div class="lkctg">${c.k!=='piso'?`<button class="lkcgo" data-do="go_${esc(c.id)}" title="Llevar la grilla a la fila">${esc(lkcLabel(c))} ›</button>`:`<span>${esc(lkcLabel(c))}</span>`}</div>`:''}
+    <div class="lkcm1"><span class="lkcwho">${esc(c.bn||c.by||'')}</span><span class="lkcdt">${lkcWhen(c.t)}${c.d?' · día '+fmtD(c.d):''}</span><span class="lkctools">${tools}</span></div>
     <div class="lkctx">${esc(c.txt)}</div>
-    ${(c.r||[]).map(r=>`<div class="lkcr"><div class="lkcm1"><span class="lkcwho">${esc(r.n||r.by||'')}</span><span class="lkcdt">${lkcWhen(r.t)}</span></div><div class="lkctx">${esc(r.txt)}</div></div>`).join('')}
-    ${done?`<div class="lkcst">✓ Resuelto${c.rs?' por '+esc(c.rs.n||c.rs.by||'')+' · '+lkcWhen(c.rs.t):''}</div>`:''}
-    ${!done?`<div class="lkcrep"><textarea class="tin" id="lkcr_${esc(c.id)}" rows="1" maxlength="500" placeholder="Responder…" aria-label="Responder"></textarea><button class="ib" data-do="rep_${esc(c.id)}">Enviar</button></div>`:''}
-    <div class="lkcact">${lkcCanResolve(c)?`<button class="ib${done?'':' pri'}" data-do="st_${esc(c.id)}">${done?'Reabrir':'✓ Resolver'}</button>`:''}${lkcCanArch(c)?`<button class="ib" data-do="ar_${esc(c.id)}">Archivar</button>`:''}</div></div>`}
-function lkcFormHtml(lbl,day){return`<div class="lkcnew"><div class="lkcnl">Nuevo comentario${lbl?' · '+esc(lbl):''}</div><textarea class="tin" id="lkcn" rows="3" maxlength="1000" placeholder="p. ej. Esta actividad termina después del hito de la sala; revisar si se puede adelantar."></textarea>
-    <label class="lkcdl">Día de referencia (opcional)<input class="tin" type="date" id="lkcd" value="${esc(day||'')}"></label><button class="ib pri" data-do="add">💬 Comentar</button></div>`}
+    ${(c.r||[]).map(r=>`<div class="lkcr"><span class="lkcwho">${esc(r.n||r.by||'')}</span> <span class="lkcdt">${lkcWhen(r.t)}</span><div class="lkctx">${esc(r.txt)}</div></div>`).join('')}
+    ${done?`<div class="lkcst">✓ Resuelto${c.rs?' · '+esc(c.rs.n||c.rs.by||''):''}</div>`:`<div class="lkcrep"><textarea id="lkcr_${esc(c.id)}" rows="1" maxlength="500" placeholder="Responder…" aria-label="Responder"></textarea><button class="lkci" data-do="rep_${esc(c.id)}" title="Enviar respuesta (Enter)" aria-label="Enviar">➤</button></div>`}</div>`}
+/* pósit en blanco para la nota nueva */
+function lkcFormHtml(lbl,day){return`<div class="lkcnew"><textarea id="lkcn" rows="2" maxlength="1000" placeholder="Escribe una nota${lbl?' '+esc(lbl):''}…" aria-label="Nueva nota"></textarea>
+    <div class="lkcnb"><label class="lkcdl" title="Día de referencia (opcional)"><input type="date" id="lkcd" value="${esc(day||'')}" aria-label="Día de referencia (opcional)"></label><button class="lkcadd" data-do="add">Pegar nota</button></div></div>`}
 /** abre la ventana: key = 'act:id' | 'amb:id' (hilos de esa fila + nuevo) o 'all' (lista del piso + comentario general) */
 function lkcOpen(anchor,key){if(!lkcSee()){toast('Los comentarios del lookahead los ven el administrador, los ingenieros y Control de proyecto.');return}
   ensureLkc();LKC_ANCH=anchor;const all=key==='all';let k='',ref='';if(!all){[k,ref]=key.split(':');if(!lkcTarget(k,ref)){toast('Esa fila ya no está en el lookahead.');return}}
@@ -64,13 +65,14 @@ function lkcOpen(anchor,key){if(!lkcSee()){toast('Los comentarios del lookahead 
   const H={};L.forEach(c=>{H['rep_'+c.id]=()=>lkcReply(c.id,key);H['st_'+c.id]=()=>lkcSetSt(c.id,key);H['ar_'+c.id]=()=>lkcArch(c.id,key);H['go_'+c.id]=()=>lkcGo(c)});
   const pid=U.piso||'';const genOk=all&&pid&&S.pis.has(pid);
   H.add=()=>lkcAdd(all?'piso':k,all?pid:ref,key);
-  const head=all?`Comentarios${pid?' · '+esc(S.pis.get(pid)?.code||''):''}`:`Comentarios · ${esc(lkcTarget(k,ref).an)}`;
-  openPop(anchor,`<div class="lkcw"><div class="ph">${head}</div>
-    ${op.length?`<div class="lkcl">${op.map(c=>lkcThreadHtml(c,all)).join('')}</div>`:`<div class="ptx">${all?'No hay comentarios abiertos'+(pid?' en este piso':'')+'.':'Sin comentarios abiertos.'}</div>`}
-    ${dn.length?`<details class="lkcdn"><summary>Resueltos (${dn.length})</summary><div class="lkcl">${dn.map(c=>lkcThreadHtml(c,all)).join('')}</div></details>`:''}
-    ${all?(genOk?lkcFormHtml('general del piso',''):'<div class="ptx">Para comentar una fila usa su menú ⋯ (o la esquina marcada). Para un comentario general, elige un piso arriba.</div>'):lkcFormHtml('',U.day||'')}
-    <div class="ptx lkcnote">Solo lo ven el administrador, los ingenieros y Control de proyecto. Resuelve el autor, el administrador o el ingeniero responsable del piso.</div></div>`,H);
-  if(!all&&!op.length)setTimeout(()=>{const n=$('#lkcn');if(n)n.focus()},0)}
+  const head=all?`💬 Notas${pid?' · '+esc(S.pis.get(pid)?.code||''):''}`:`💬 ${esc(lkcTarget(k,ref).an)}`;
+  openPop(anchor,`<div class="lkcw"><div class="lkch" title="Solo lo ven el administrador, los ingenieros y Control de proyecto. Resuelve el autor, el administrador o el ingeniero responsable del piso.">${head}</div>
+    ${op.length?`<div class="lkcl">${op.map(c=>lkcThreadHtml(c,all)).join('')}</div>`:''}
+    ${all?(genOk?lkcFormHtml('general del piso',''):`<div class="lkcemp">${op.length?'':'No hay notas abiertas. '}Para comentar una fila usa su menú ⋯ (o la esquina marcada); para una nota general, elige un piso arriba.</div>`):lkcFormHtml('',U.day||'')}
+    ${dn.length?`<details class="lkcdn"><summary>Resueltos (${dn.length})</summary><div class="lkcl">${dn.map(c=>lkcThreadHtml(c,all)).join('')}</div></details>`:''}</div>`,H);
+  /* Enter envía (Mayús+Enter: salto de línea) */
+  pop.querySelectorAll('.lkcw textarea').forEach(t=>t.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();const b=t.id==='lkcn'?pop.querySelector('[data-do="add"]'):t.parentNode.querySelector('button[data-do]');if(b)b.click()}}));
+  setTimeout(()=>{const n=$('#lkcn');if(n&&(!all||!op.length))n.focus()},0)}
 const lkcReopen=key=>setTimeout(()=>{const a=LKC_ANCH&&LKC_ANCH.isConnected?LKC_ANCH:($(`[data-lkc="${key}"]`)||$('#fcom .lkcp'));if(a)lkcOpen(a,key)},60);
 function lkcErr(e){toast('No se pudo guardar el comentario: '+(e&&e.code==='permission-denied'?'no tienes permiso (o faltan publicar las reglas nuevas)':(e&&(e.code||e.message))||'error'))}
 function lkcAdd(k,ref,key){const txt=(($('#lkcn')||{}).value||'').trim().slice(0,1000);const d=(($('#lkcd')||{}).value||'').trim();
