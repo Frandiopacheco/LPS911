@@ -8,12 +8,15 @@
      arma el índice en esta PC y lo sube. Proyecto: admin, editores y OT; ETO: admin (los mismos permisos de Storage que al cargar).
    - Buscar: interruptor «Nombre / Contenido» en la biblioteca (proyecto y ETO) y en el panel ☰ Planos del visor. Sin tildes ni
      mayúsculas y sin signos ni espacios («v101» encuentra «V-101», «det 4» encuentra «DET. 4»). Los índices se bajan a medida que
-     se busca (6 a la vez) y quedan en la caché `lps-planos` (las rutas nunca cambian); en memoria, los últimos PLTX_KEEP.
+     se busca (6 a la vez) y quedan en la caché `lps-planos` (las rutas nunca cambian).
+   - Rapidez (oct 2026, pedido del dueño: «demora ligeramente»): todos los índices quedan armados en memoria (`GX`) y se juntan
+     en UNA cadena (`plTxCat`): cada búsqueda es un solo `indexOf` sobre todas las láminas. Se precargan en segundo plano al abrir
+     el módulo Planos (`plTxPreload`), así al pulsar «Contenido» ya están; el buscador espera 100 ms al escribir.
    - Visor: al abrir una lámina desde la búsqueda por contenido, las coincidencias se resaltan (gancho `V.hl` de plTiles) y la barra
      «🔍 … 1 de N ‹ ›» acerca a cada una. Solo en la revisión vigente (el índice es de esa revisión).
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
-const PLTX_V=1,PLTX_K=1e4,PLTX_KEEP=120,PLTX_PAR=6;
+const PLTX_V=1,PLTX_K=1e4,PLTX_PAR=6,PLTX_WAIT=100;
 /** texto compacto para comparar: sin tildes, mayúsculas, solo letras y números */
 const plTxC=s=>plUp(s).replace(/[^A-Z0-9]/g,'');
 
@@ -50,16 +53,11 @@ const plTxPath=p=>p&&p.tx&&p.base?p.base+'/'+plTxName(p.tx.z):'';
 /** lo que se guarda en el documento de la lámina */
 const plTxMeta=(o,z)=>({v:PLTX_V,n:o.T.length,z:z?1:0});
 
-/* ---------- lectura (caché en memoria de los últimos PLTX_KEEP) ---------- */
-const PLTX=new Map();
-function plTxGet(p){const k=plTxPath(p);if(!k||!p.tx.n)return Promise.resolve(null);
-  let e=PLTX.get(k);if(e){PLTX.delete(k);PLTX.set(k,e);return e}
-  e=(async()=>{const b=await plGet(k);
-    const txt=p.tx.z?await new Response(b.stream().pipeThrough(new DecompressionStream('gzip'))).text():await b.text();
-    return plTxParse(JSON.parse(txt))})();
-  PLTX.set(k,e);e.catch(()=>{if(PLTX.get(k)===e)PLTX.delete(k)});
-  while(PLTX.size>PLTX_KEEP)PLTX.delete(PLTX.keys().next().value);
-  return e}
+/* ---------- lectura ---------- */
+/** baja y arma el índice de una lámina (sin caché en memoria: eso lo hace GX) */
+async function plTxGet(p){const k=plTxPath(p);if(!k||!p.tx.n)return null;const b=await plGet(k);
+  const txt=p.tx.z?await new Response(b.stream().pipeThrough(new DecompressionStream('gzip'))).text():await b.text();
+  return plTxParse(JSON.parse(txt))}
 /** arma el índice en memoria: dos cadenas largas (original y compacta, un texto por línea) con sus inicios y las cajas */
 function plTxParse(o){const T=(o&&o.T)||[],n=T.length;const oR=new Int32Array(n+1),oC=new Int32Array(n+1),B=new Int32Array(n*4);const R=[],C=[];let r=0,c=0;
   T.forEach((t,i)=>{const s=String(t[0]),k=plTxC(s);oR[i]=r;oC[i]=c;R.push(s);C.push(k);r+=s.length+1;c+=k.length+1;B[i*4]=t[1];B[i*4+1]=t[2];B[i*4+2]=t[3];B[i*4+3]=t[4]});
@@ -71,26 +69,55 @@ function plTxFind(ix,qc){const out=[];if(!ix||!qc)return out;let pos=0;
   return out}
 const plTxStr=(ix,i)=>ix.R.slice(ix.oR[i],ix.oR[i+1]-1);
 
+/* ---------- todos los índices en memoria (GX) ---------- */
+/* m: id → índice armado (con k = ruta del índice: si la lámina cambia de revisión, la ruta cambia y se vuelve a bajar);
+   ld: ruta → promesa en curso; err: rutas que fallaron (no se reintentan solas hasta recargar o indexar); ver: sube con cada cambio */
+const GX={m:new Map(),ld:new Map(),err:new Set(),ver:0,cat:null,catVer:-1};
+let gxRun=0;const gxQ=[];
+const gxSlot=()=>gxRun<PLTX_PAR?(gxRun++,Promise.resolve()):new Promise(r=>gxQ.push(r));
+const gxFree=()=>{const n=gxQ.shift();if(n)n();else gxRun--};
+/** el índice de la lámina si ya está en memoria y es el de su revisión vigente */
+function plTxReady(p){const e=GX.m.get(p.id);return e&&e.k===plTxPath(p)?e:null}
+/** pide el índice de una lámina (máx. PLTX_PAR a la vez); devuelve la promesa en curso o null si no hace falta */
+function plTxLoad(p){const k=plTxPath(p);if(!k||!p.tx.n||plTxReady(p)||GX.err.has(k))return GX.ld.get(k)||null;if(GX.ld.has(k))return GX.ld.get(k);
+  const pr=(async()=>{await gxSlot();try{const ix=await plTxGet(p);if(ix){ix.k=k;ix.id=p.id;GX.m.set(p.id,ix);GX.ver++}}
+    catch(e){GX.err.add(k);console.error('índice de texto',p.id,e)}finally{gxFree();GX.ld.delete(k);plTxPing()}})();
+  GX.ld.set(k,pr);return pr}
+/** el índice de una lámina, esperando a que llegue (visor) */
+async function plTxIx(p){const r=plTxReady(p);if(r)return r;await plTxLoad(p);const e=plTxReady(p);if(!e)throw new Error('No se pudo leer el índice de texto');return e}
+/** precarga en segundo plano los índices de todas las láminas visibles (al abrir el módulo Planos) */
+let gxPre=0;
+function plTxPreload(){if(gxPre||!plbReady)return;gxPre=setTimeout(()=>{gxPre=0;for(const p of PLB.values())if(!p.arch&&p.tx&&p.tx.n>0)plTxLoad(p)},300)}
+/** todas las láminas en una sola cadena compacta (separadas por \u0002), con el inicio de cada una */
+function plTxCat(){if(GX.cat&&GX.catVer===GX.ver)return GX.cat;const E=[...GX.m.values()],st=new Int32Array(E.length+1);let n=0;
+  E.forEach((e,i)=>{st[i]=n;n+=e.C.length+1});st[E.length]=n;GX.cat={S:E.map(e=>e.C).join('\u0002'),st,E};GX.catVer=GX.ver;return GX.cat}
+/** busca qc en las láminas de ids (Set): id → {n, s:[hasta 3 textos distintos]} */
+function plTxRun(qc,ids){const out=new Map();if(qc.length<2)return out;const{S,st,E}=plTxCat();const bs=(A,x,hi)=>{let lo=0;while(lo<hi){const md=(lo+hi+1)>>1;if(A[md]<=x)lo=md;else hi=md-1}return lo};
+  let pos=0;while((pos=S.indexOf(qc,pos))>=0){const pi=bs(st,pos,E.length-1),e=E[pi],loc=pos-st[pi];
+    if(!ids.has(e.id)){pos=st[pi+1];continue}   /* lámina fuera de los filtros: salta a la siguiente */
+    const k=bs(e.oC,loc,e.n-1);let r=out.get(e.id);if(!r){r={n:0,s:[]};out.set(e.id,r)}r.n++;
+    if(r.s.length<3){const t=plTxStr(e,k);if(!r.s.includes(t))r.s.push(t)}
+    pos=st[pi]+e.oC[k+1]}
+  return out}
+
 /* ---------- búsqueda en varias láminas ---------- */
-const PLS={seq:0,key:'',res:new Map(),st:null,done:true};
-/** busca q en las láminas L (en paralelo, PLTX_PAR a la vez); onUp() se llama a medida que llegan resultados y al terminar */
-function plTxSearch(L,q,onUp){const qc=plTxC(q);const key=qc+'|'+L.map(p=>p.id+':'+(p.tx?p.base+p.tx.n:'-')).join(',');
-  if(key===PLS.key){onUp();return}
-  const my=++PLS.seq;PLS.key=key;PLS.res=new Map();PLS.done=false;
-  const todo=L.filter(p=>p.tx&&p.tx.n>0);PLS.st={tot:todo.length,done:0,no:L.filter(p=>!p.tx).length,sin:L.filter(p=>p.tx&&!p.tx.n).length,err:0,q:qc};
-  if(qc.length<2||!todo.length){PLS.done=true;onUp();return}
-  let i=0,last=0;const tick=f=>{const t=performance.now();if(f||t-last>160){last=t;onUp()}};
-  const work=async()=>{while(i<todo.length&&my===PLS.seq){const p=todo[i++];
-    try{const ix=await plTxGet(p);if(my!==PLS.seq)return;const h=plTxFind(ix,qc);
-      if(h.length){const sn=[...new Set(h.map(k=>plTxStr(ix,k)))];PLS.res.set(p.id,{n:h.length,s:sn.slice(0,3)})}}
-    catch(e){PLS.st.err++;console.error('índice de texto',p.id,e)}
-    PLS.st.done++;tick(false)}};
-  Promise.all(Array.from({length:PLTX_PAR},work)).then(()=>{if(my===PLS.seq){PLS.done=true;tick(true)}})}
+const PLS={key:'',res:new Map(),st:null,done:true,again:null};
+/* cuando llegan índices nuevos, la búsqueda abierta se repite (máx. una vez cada 150 ms) */
+let gxPing=0;function plTxPing(){if(gxPing||!PLS.again)return;gxPing=setTimeout(()=>{gxPing=0;if(PLS.again)PLS.again()},150)}
+/** busca q en el texto de las láminas L con lo que ya está en memoria (al instante) y pide lo que falta; onUp() redibuja */
+function plTxSearch(L,q,onUp){const qc=plTxC(q);PLS.again=()=>plTxSearch(L,q,onUp);
+  const todo=L.filter(p=>p.tx&&p.tx.n>0);todo.forEach(plTxLoad);
+  const ready=todo.filter(plTxReady),err=todo.filter(p=>GX.err.has(plTxPath(p))).length;
+  PLS.st={tot:todo.length,done:ready.length,no:L.filter(p=>!p.tx).length,sin:L.filter(p=>p.tx&&!p.tx.n).length,err,q:qc};
+  PLS.done=ready.length+err>=todo.length;if(PLS.done)PLS.again=null;
+  const key=qc+'|'+GX.ver+'|'+L.map(p=>p.id).join(',');
+  if(key!==PLS.key){PLS.key=key;PLS.res=plTxRun(qc,new Set(ready.map(p=>p.id)))}
+  onUp()}
 /** línea de estado y avisos bajo el buscador */
 function plTxStatus(L,canIdx){const st=PLS.st;if(!st)return'';const q=PLS.st.q;const nRes=PLS.res.size;
   const a=[];
   if(q.length<2)a.push('<span>Escribe al menos 2 letras o números para buscar dentro de las láminas.</span>');
-  else if(!PLS.done)a.push(`<span>Buscando dentro de las láminas… ${st.done} de ${st.tot}</span>`);
+  else if(!PLS.done)a.push(`<span>${nRes?`<b>${nRes}</b> hasta ahora · `:''}Preparando las láminas… ${st.done} de ${st.tot}</span>`);
   else a.push(`<span>${nRes?`<b>${nRes}</b> ${nRes===1?'lámina tiene':'láminas tienen'} ese texto.`:'Ninguna lámina tiene ese texto.'}</span>`);
   if(st.no)a.push(`<span class="pltxw">${st.no} ${st.no===1?'lámina aún no está indexada':'láminas aún no están indexadas'} (no entran en la búsqueda).${canIdx?' <button type="button" class="ib" data-tx="idx">🔤 Indexar texto</button>':''}</span>`);
   if(st.sin)a.push(`<span class="pltxm" title="El PDF no trae el texto como texto (letras SHX exportadas como líneas o un plano escaneado). Reexportándolas con el texto como texto, entran en la búsqueda.">${st.sin} sin texto buscable</span>`);
@@ -111,7 +138,7 @@ function plTxList(main,host,L){const q=PLF.q||'';const canIdx=L.some(p=>!p.tx&&p
         <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span>${plTxSnip(PLS.res.get(p.id))}</span></button>`).join('')}</div>`).join('')
       :PLS.done?'<p class="note">Ninguna lámina tiene ese texto con estos filtros.</p>':'';
     if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}};
-  plTxSearch(L,q,draw)}
+  plTxPreload();plTxSearch(L,q,draw)}
 /** ids de las láminas con resultado, en el orden de la lista */
 const plTxIds=L=>L.filter(p=>PLS.res.has(p.id)).map(p=>p.id);
 
@@ -126,7 +153,7 @@ async function plTxIndexAll(L,onUp){L=L.filter(p=>!p.tx&&plEdOf(p));if(!L.length
     await Promise.all([work(),work()])}
   finally{PLTXQ.run=false}
   toast(`Texto indexado: ${ok} ${ok===1?'lámina':'láminas'}${sin?`, ${sin} sin texto buscable`:''}${err?`, ${err} con error (vuelve a intentarlo)`:''} (${Math.round((performance.now()-t0)/1000)} s).`);
-  PLS.key='';onUp&&onUp('')}
+  GX.err.clear();PLS.key='';onUp&&onUp('')}
 /** una lámina: índice desde su orig.pdf; devuelve cuántos textos tiene */
 async function plTxIndexOne(p){const base=p.base;const b=await plGet(base+'/orig.pdf',{noStore:true});
   const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await b.arrayBuffer())}).promise;
@@ -146,7 +173,7 @@ function plTxPanelList(el,L){const host=el.querySelector('.plvpl');const q=PLV.p
     const h=R.length?R.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}${plTxSnip(PLS.res.get(p.id))}</span></button>`).join('')
       :PLS.done?'<p class="note">Ninguna lámina tiene ese texto con esos filtros.</p>':'';
     if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host);const on=host.querySelector('.plvpr.on');if(on)on.scrollIntoView({block:'nearest'})}};
-  plTxSearch(L,q,draw)}
+  plTxPreload();plTxSearch(L,q,draw)}
 
 /* ---------- visor: resaltar las coincidencias y saltar entre ellas ---------- */
 /** se llama al dibujar el visor (plvDraw): con una búsqueda activa (PLV.hq) carga el índice de la lámina y pone la barra */
@@ -162,7 +189,7 @@ function plTxAttach(){if(!PLV||!PLV.tv)return;const V=PLV.tv,p=PLB.get(PLV.id),s
     if(a==='hx'){PLV.hq=null;PLV.hits=null;bar.remove();tv.hl=null;tv.tick();return}
     if(a==='hn')plTxGo(1);else if(a==='hp')plTxGo(-1)};
   show();if(!sp.cur||!p.tx||!p.tx.n)return;
-  plTxGet(p).then(ix=>{if(!PLV||PLV.tv!==tv||PLV.id!==id)return;
+  plTxIx(p).then(ix=>{if(!PLV||PLV.tv!==tv||PLV.id!==id)return;
     const L=plTxFind(ix,qc).map(k=>({s:plTxStr(ix,k),x0:ix.B[k*4]/PLTX_K*sp.W,y0:ix.B[k*4+1]/PLTX_K*sp.H,x1:ix.B[k*4+2]/PLTX_K*sp.W,y1:ix.B[k*4+3]/PLTX_K*sp.H}))
       .sort((a,b)=>a.y0-b.y0||a.x0-b.x0);
     PLV.hits={L,i:0};tv.hl=plTxPaint;show();PLV.hitShow=show;
