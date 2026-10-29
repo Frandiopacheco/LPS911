@@ -18,6 +18,7 @@ Léela antes de tocar el código. Sirve para cualquier IA (Claude, Copilot, Code
    Tampoco la sección `CASCO` de `firebase/firestore.rules`: la genera `node scripts/reglas-casco.mjs` (córrelo después de cambiar las reglas; `check.mjs` falla si quedó desactualizada).
 4. Cambios de reglas (`firebase/firestore.rules`): agrega o ajusta pruebas en `tests/rules/firestore.test.mjs`.
 5. Mensajes de commit en español, explicando *qué cambia para el usuario*.
+6. **El módulo Casco todavía NO va a producción** (decisión del dueño, vigente hasta que él diga lo contrario). Se sigue desarrollando y probando en `main`, pero **nunca hagas el pase completo `main → produccion`**: a la obra solo pasan, una por una y con su aprobación, las correcciones que no son de Casco (ver «Casco en prueba» abajo).
 
 ## Estructura
 
@@ -149,14 +150,22 @@ Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que ca
 - Solo con aprobación explícita del dueño: *pull request* `main → produccion` y unir con *merge* (no squash). En `produccion` no se repiten las pruebas de la interfaz (ya pasaron en `main`): corre «Revisar» → instalar → publicar (~5 min).
 - Si `gh pr create` falla por GraphQL, usa la API REST: `gh api repos/Frandiopacheco/LPS911/pulls` (POST) y `.../pulls/N/merge` (PUT).
 
-## Casco en prueba: correcciones a producción una por una (desde el 26-10-2026, decidido con el dueño)
+## Casco en prueba: correcciones a producción una por una (desde el 26-10-2026, decidido con el dueño; reconfirmado el 28-10-2026)
 
-`main` tiene el módulo Casco (#466) y las láminas desde el módulo Planos (#467), que **todavía no van a la obra**. Mientras el dueño no lo apruebe:
+`main` tiene el módulo Casco (#466 y lo que siguió: metrados, niveles, vigas…) y las láminas desde el módulo Planos (#467), que **todavía no van a la obra**. El dueño sigue trabajando en Casco y lo prueba en la copia de prueba; mientras tanto prueba otras cosas (Last Planner, Tareo, Planos) y pasa **solo esas** a producción cuando las aprueba. Mientras el dueño no apruebe Casco:
 - **No se hace el pase completo `main → produccion`** (arrastraría Casco).
 - Una corrección de Last Planner, Tareo o Planos sigue el flujo normal hacia `main` (PR con `auto-unir`) y el dueño la **prueba en la copia de prueba**.
 - Cuando el dueño la apruebe para la obra: rama nueva **desde `produccion`** (`git fetch origin produccion && git checkout -b fix-… origin/produccion`), `git cherry-pick` del commit que se unió a `main` (resolver conflictos sin traer nada de Casco), PR **a `produccion`** y unir con *merge* cuando pase «Revisar». Nunca se escribe directo en `produccion`.
 - Si la corrección toca reglas: en `produccion` no existe la sección CASCO ni `scripts/reglas-casco.mjs`; no los agregues allí.
 - Cuando el dueño apruebe Casco, se borra esta sección y vuelve el pase normal.
+
+## Trabajar desde Claude Code (nube, escritorio o celular)
+
+El proyecto se trabaja también desde Claude Code (claude.ai/code, app de Claude › Code, app de escritorio). Este archivo y `docs/ia/` se leen solos al entrar; no hace falta el historial del chat.
+- **Entorno de nube:** el script de instalación del entorno es `scripts/entorno-nube.sh` (Java + Firebase CLI con el emulador de Firestore + Chromium de Playwright, misma versión que `tests/e2e`). En la configuración del entorno, en «Setup script», va `curl -fsSL https://raw.githubusercontent.com/Frandiopacheco/LPS911/main/scripts/entorno-nube.sh | bash`. Si al subir de versión Playwright cambias `tests/e2e/package.json`, cambia también `PW_VER` en el script.
+- Con el entorno listo, en la sesión: `cd tests/e2e && npm install` y `cd tests/rules && npm install`; las reglas se pueden probar en local con el comando de «Cómo probar».
+- Si el entorno no tiene alguna herramienta (el script avisa con ⚠), sigue igual: la batería completa corre en GitHub en el PR.
+- Flujo de GitHub, «Modo rápido» y la regla 6 (Casco no va a producción) valen igual en cualquier superficie.
 
 ## Modo rápido (por defecto, decidido con el dueño, oct 2026)
 
