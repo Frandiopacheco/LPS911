@@ -9,7 +9,9 @@ const C1 = ['lkcom', 'k1', { k: 'act', ref: 'i1', piso: 'p1', an: 'A-1 · Redes 
 test('Comentarios: Control de proyecto comenta una actividad desde el ⋯', async ({ page }) => {
   const errors = await openApp(page, { as: 'ot', tab: 'look', extra: [CP] });
   await expect.poll(() => page.evaluate(() => isPlanArea() && lkcOn() && !canWrite)).toBe(true);
-  await page.locator('#grid [data-actmenu="i1"]').click();
+  // su ⋯ solo abre los comentarios (no es el menú de la actividad)
+  await expect(page.locator('#grid [data-actmenu]')).toHaveCount(0);
+  await page.locator('#grid tr[data-a="i1"] button.rb[data-lkc="act:i1"]').click();
   await expect(page.locator('#pop .lkcnew')).toBeVisible();
   await page.fill('#lkcn', 'Esta fila termina después del hito de la sala');
   await page.locator('#pop [data-do="add"]').click();
@@ -17,6 +19,7 @@ test('Comentarios: Control de proyecto comenta una actividad desde el ⋯', asyn
   const c = Object.values(await page.evaluate(() => window.__dbAll('lkcom')))[0];
   expect(c).toMatchObject({ k: 'act', ref: 'i1', piso: 'p1', by: 'ot@obra.pe', st: 'open', r: [], txt: 'Esta fila termina después del hito de la sala' });
   await expect(page.locator('#grid td.act .lkcm[data-lkc="act:i1"]')).toBeVisible();
+  // los ingenieros comentan desde el ⋯ al programar (menú «Coordinar»)
   await expect(page.locator('#fcom .lkcp b')).toHaveText('1');
   // no edita el lookahead: la actividad sigue igual
   expect(await page.evaluate(() => window.__dbGet('acts', 'i1').name)).toBe('Redes empotradas');
@@ -27,6 +30,10 @@ test('Comentarios: el ingeniero responde y resuelve desde la esquina marcada', a
   const errors = await openApp(page, { as: 'editor', tab: 'look', extra: [CP, C1] });
   const mark = page.locator('#grid td.act .lkcm[data-lkc="act:i1"]');
   await expect(mark).toBeVisible();
+  // al programar, el ⋯ de la actividad tiene «Coordinar · 💬 Comentarios»
+  await page.locator('#grid [data-actmenu="i1"]').click();
+  await expect(page.locator('#pop [data-do="com"]')).toContainText('1 abierto');
+  await page.keyboard.press('Escape');
   await mark.click();
   await expect(page.locator('#pop .lkct')).toContainText('Termina después del hito');
   await page.fill('#lkcr_k1', 'Lo adelanto un día');
