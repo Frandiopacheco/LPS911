@@ -111,3 +111,34 @@ test('casco: vigas: modo ficha (tablet): tocar un vano abre su ficha y cambia la
   await expect(page.locator('.kvficha')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('casco: vigas: una viga que cruza dos frentes agrupa los sectores por frente y el traslape de la junta va al frente que va primero', async ({ page }) => {
+  const errors = await casco(page);
+  await cargarEjemplo(page);
+  // dos frentes en un nivel: los dos primeros sectores en «Norte» (va 2.º), los demás en «Sur» (va 1.º)
+  const r = await page.evaluate(() => {
+    const p = pisos().find(x => kmSecs(x.id).length >= 4); const secs = kmSecs(p.id); const s0 = csSecOf(secs[0]);
+    KFR.clear(); KFR.set('fN', { id: 'fN', name: 'Frente Norte', code: 'N', order: 2, color: '#cc3333' }); KFR.set('fS', { id: 'fS', name: 'Frente Sur', code: 'S', order: 1, color: '#3333cc' });
+    S.sec.set(s0.id, { ...s0, fr: 'fN' }); S.sec.set('secSur', { ...s0, id: 'secSur', fr: 'fS' });
+    secs.slice(2).forEach(a => S.amb.set(a.id, { ...a, sectorId: 'secSur' }));
+    const c1 = secs[1].code, c2 = secs[2].code;
+    const V = { ...kvNueva(kmCtx(p.id), 'VT'), ejes: [{ n: 'A', w: '0.30', d: '5' }, { n: 'B', w: '0.30', d: '5' }, { n: 'C', w: '0.30', d: '' }], tramos: [{ est: '1@.05, r@.20' }, { est: '1@.05, r@.20' }],
+      corr: [{ p: 'sup', s: '2Ø5/8', de: 'A', a: 'C' }, { p: 'inf', s: '2Ø5/8', de: 'A', a: 'C' }], bas: [], jun: [{ ref: 'B', dx: '0' }], sec: [c1, c2] };
+    const ext = () => { const C = kmCtx(p.id); const R = kvCalc(V, kmP(), kvRank(C)); return { first: kvFrJ(C, R, 0).first, e1: R.S[c1].ext, e2: R.S[c2].ext, nFr: C.nFr, fr1: C.frOf(c1).name, fr2: C.frOf(c2).name }; };
+    const a = ext(); KFR.get('fS').order = 3; const b = ext(); KFR.get('fS').order = 1;
+    KM.vg.set(p.id, [{ ...V, id: 'vt1' }]); MET.vid = 'vt1'; U.piso = p.id; U.tab = 'met'; U.kmV = 'vig'; U.kvMode = 'dib'; U.kmVt = 'res'; render();
+    return { a, b, c1, c2 };
+  });
+  expect(r.a.nFr).toBe(2);
+  expect([r.a.fr1, r.a.fr2]).toEqual(['Frente Norte', 'Frente Sur']);
+  // Sur va primero: el traslape de la junta va a su sector; si Norte pasa adelante, cambia de lado
+  expect(r.a.first).toBe(r.c2); expect(r.a.e2).toBeGreaterThan(r.a.e1);
+  expect(r.b.first).toBe(r.c1); expect(r.b.e1).toBeGreaterThan(r.b.e2);
+  // en pantalla: selector agrupado por frente, junta de frente marcada, subtotal por frente y columna Frente en el Resumen
+  await expect(page.locator('.kvband select').first().locator('optgroup')).toHaveCount(2);
+  await expect(page.locator('.kvjl.fr')).toHaveCount(1);
+  await expect(page.locator('.kvniv li.kvfr')).toHaveCount(2);
+  await expect(page.locator('.kvtabs thead')).toContainText('Frente');
+  await expect(page.locator('.kvtabs')).toContainText('Junta entre frentes');
+  expect(errors).toEqual([]);
+});

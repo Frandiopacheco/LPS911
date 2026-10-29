@@ -30,10 +30,16 @@ function kmSave(id){KMQ.add(id);clearTimeout(KMT[id]);KMT[id]=setTimeout(()=>{co
 function kmUndo(){const h=KMH.pop();if(!h){toast('No hay nada que deshacer en Metrados.');return}kmSetLocal(h.id,JSON.parse(h.prev));kmSave(h.id);requestRender();toast('Deshecho: '+(h.label||'último cambio'))}
 
 /* ---------- nivel, sectores y partidas ---------- */
-function kmSecs(pid){const out=[];for(const s of S.sec.values()){if(s.pisoId!==pid)continue;for(const a of S.amb.values())if(a.sectorId===s.id&&!a.fus)out.push({a,grp:s.grp||'E'})}
-  return out.sort((x,y)=>CSG_ORD.indexOf(x.grp)-CSG_ORD.indexOf(y.grp)||byOrder(x.a,y.a)).map(o=>o.a)}
+/* frente de trabajo del sector (sectors.fr, casco-sz.js); sin frente: null */
+const kmFrOf=a=>{const s=csSecOf(a);return s&&s.fr?KFR.get(s.fr)||null:null};
+/** sectores del nivel en orden de vaciado: grupo, frente (el orden de Sectorización: entre dos frentes el traslape va al primero; decidido con el dueño, 29-10-2026) y sector */
+function kmSecs(pid){const fo=new Map(csFrs().map((f,i)=>[f.id,i]));const out=[];
+  for(const s of S.sec.values()){if(s.pisoId!==pid)continue;const f=s.fr&&fo.has(s.fr)?fo.get(s.fr):-1;for(const a of S.amb.values())if(a.sectorId===s.id&&!a.fus)out.push({a,grp:s.grp||'E',f})}
+  return out.sort((x,y)=>CSG_ORD.indexOf(x.grp)-CSG_ORD.indexOf(y.grp)||x.f-y.f||byOrder(x.a,y.a)).map(o=>o.a)}
 function kmCtx(pid){const secs=kmSecs(pid);const byCode=new Map(secs.map(a=>[String(a.code||'').toUpperCase(),a.id]));const ord=new Map(secs.map((a,i)=>[a.id,i]));
-  return{secs,secByCode:c=>byCode.get(String(c).toUpperCase())||null,secOrd:s=>ord.has(s)?ord.get(s):999}}
+  const fr=new Map(secs.map(a=>[a.id,kmFrOf(a)]));const secByCode=c=>byCode.get(String(c).toUpperCase())||null;
+  /* frOf(código) → frente del sector (o null); nFr: frentes distintos con sectores en este nivel */
+  return{secs,secByCode,secOrd:s=>ord.has(s)?ord.get(s):999,frOf:c=>{const id=secByCode(c);return id?fr.get(id)||null:null},nFr:new Set([...fr.values()].filter(Boolean).map(f=>f.id)).size}}
 const kmSecCol=(secs,id)=>{const i=secs.findIndex(a=>a.id===id);return i<0?'var(--muted)':CS_SCOL[i%CS_SCOL.length]};
 const kmRows=pid=>KM.lv.get(pid)||[];
 const kmTipo=id=>KM.tipos.find(t=>t.id===id)||null;

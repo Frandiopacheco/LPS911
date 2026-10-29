@@ -71,6 +71,14 @@ function kvCalc(V,P,rank){const G=kvGeo(V);const J=kvJoints(V,G);const rec=kvN(V
   for(const s of names)if(!S[s])S[s]={corr:0,bas:0,est:0,ext:0,conc:0,ef1:0,ef2:0};for(const s of Object.keys(S)){const o=S[s];o.kg=o.corr+o.bas+o.est+o.ext}
   return{G,J,names,S,dia,warn,nEst,Le,items,vanos,bars,hn,per,ed,ED}}
 const kvRank=C=>code=>{const id=C.secByCode(code);return id?C.secOrd(id):999};
+/* frentes (29-10-2026): una viga puede cruzar de un frente a otro; con dos o más frentes en el nivel el selector agrupa los sectores por frente */
+function kvSecOpts(C,sel0){const o=a=>`<option${a.code===sel0?' selected':''}>${esc(a.code||'')}</option>`;let h='';
+  if(C.nFr>1){const g=new Map();for(const a of C.secs){const f=C.frOf(a.code);const k=f?f.id:'';if(!g.has(k))g.set(k,{f,L:[]});g.get(k).L.push(a)}
+    for(const{f,L}of g.values())h+=`<optgroup label="${esc(f?f.name:'Sin frente')}">${L.map(o).join('')}</optgroup>`}else h=C.secs.map(o).join('');
+  return h+(C.secByCode(sel0)?'':`<option selected>${esc(sel0)}</option>`)}
+const kvFrName=(C,n)=>{const f=C.nFr>1?C.frOf(n):null;return f?f.name:''};
+/** junta k de la viga entre sectores de frentes distintos → {a, b, first (sector que se lleva el traslape)}; si no, null */
+function kvFrJ(C,R,k){const L=R.names[k],Rn=R.names[k+1];const a=C.frOf(L),b=C.frOf(Rn);if(!a||!b||a.id===b.id)return null;const rk=kvRank(C);return{a,b,first:rk(L)<=rk(Rn)?L:Rn}}
 /** suma las vigas del nivel al resultado de Elementos (R.sec por id de sector, claves de KM_OUT) */
 function kvMerge(R,pid,P,C){const L=kvVigas(pid);if(!L.length)return R;const sec={};for(const[k,v]of Object.entries(R.sec||{}))sec[k]={...v};const vmiss=[];
   for(const V of L){const r=kvCalc(V,P,kvRank(C));const ve=kvRep(V.rep);for(const n of r.names){const o=r.S[n];if(!o)continue;const id=C.secByCode(n);
@@ -162,7 +170,11 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
   const nivel={};const lst=L.map(w=>{const r=kvCalc(w,P,kvRank(C));const ve=kvRep(w.rep);let kg=0;for(const n of r.names){const v=((r.S[n]||{}).kg||0)*ve;kg+=v;nivel[n]=(nivel[n]||0)+v}
     return`<button type="button" class="kvli${V&&w.id===V.id?' on':''}" data-kva="pick" data-id="${esc(w.id)}"><span><b>${esc(w.cod||'Viga')}</b>${ve>1?` <i>×${ve}</i>`:''}</span><span class="mono">${kmF(kg,0)} kg</span><small>${esc(w.b)}×${esc(w.h)}</small></button>`}).join('');
   const colOf=code=>{const id=C.secByCode(code);return id?kmSecCol(C.secs,id):'var(--muted)'};
-  const nivelH=Object.keys(nivel).sort((a,b)=>kvRank(C)(a)-kvRank(C)(b)).map(n=>`<li><b style="color:${colOf(n)}">${esc(n)}</b><span class="mono">${kmF(nivel[n],0)} kg</span></li>`).join('');
+  /* por sector y, con dos o más frentes, con el subtotal de cada frente (el orden de vaciado ya los deja juntos) */
+  const nk=Object.keys(nivel).sort((a,b)=>kvRank(C)(a)-kvRank(C)(b));const fid=n=>(C.frOf(n)||{}).id||'';let nivelH='',fPrev=null;
+  for(const n of nk){if(C.nFr>1&&fid(n)!==fPrev){fPrev=fid(n);const f=C.frOf(n);const t=nk.filter(m=>fid(m)===fPrev).reduce((s,m)=>s+nivel[m],0);
+      nivelH+=`<li class="kvfr"><span><i class="csdot" style="--c:${esc((f&&f.color)||'#888')}"></i> ${esc(f?f.name:'Sin frente')}</span><span class="mono">${kmF(t,0)} kg</span></li>`}
+    nivelH+=`<li><b style="color:${colOf(n)}">${esc(n)}</b><span class="mono">${kmF(nivel[n],0)} kg</span></li>`}
   const nEl=kmRows(p.id).filter(r=>(kmTipo(r.t)||{}).cl==='vig').length;
   if(!V)return`${bar}<div class="card"><div class="pad"><p>Este nivel aún no tiene vigas. Cada viga se arma como en la elevación del plano: ejes, barras corridas, bastones, estribos y juntas de sector.</p>${ed?'<button type="button" class="ib pri" data-kva="new">+ Primera viga</button>':''}</div></div>`;
   const R=kvCalc(V,P,kvRank(C));const G=R.G;const ve=kvRep(V.rep);
@@ -183,15 +195,15 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
   const sel=MET.vsel||{};const isS=(k,i)=>sel.k===k&&sel.i===i;let h='';const I=(f,v,st,lab,ex)=>`<input class="ci${ex||''}" style="${st}" data-kv="${f}" data-kk="kv|${f}" value="${esc(v??'')}" aria-label="${esc(lab)}" title="${esc(lab)}"${dis}>`;
   const bnd=[G.x0,...R.J.map(j=>j.x),G.x1];
   /* juntas y ejes (detrás) */
-  R.J.forEach(j=>{h+=`<div class="kvjl" data-kvjl="${j.i}" style="left:${px(j.x)}px;height:${H}px"></div>`});
+  const jfr=R.J.map((_,k)=>kvFrJ(C,R,k));const jtip=k=>{const z=jfr[k];return z?` title="${esc(`Junta entre frentes: ${z.a.name} | ${z.b.name}. El traslape va a ${z.first} (su frente va primero en Sectorización).`)}"`:''};
+  R.J.forEach((j,k)=>{h+=`<div class="kvjl${jfr[k]?' fr':''}" data-kvjl="${j.i}" style="left:${px(j.x)}px;height:${H}px"></div>`});
   G.E.forEach(e=>{h+=`<div class="kvax" style="left:${px(e.x)}px;top:${yAx}px;height:${H-yAx}px"></div>`});
   /* bandas de sector */
-  const opts=sel0=>C.secs.map(a=>`<option${a.code===sel0?' selected':''}>${esc(a.code||'')}</option>`).join('')+(C.secByCode(sel0)?'':`<option selected>${esc(sel0)}</option>`);
-  R.names.forEach((n,k)=>{const l=px(bnd[k]),w=Math.max(2,px(bnd[k+1])-l);const c=colOf(n);const kg=kmF(((R.S[n]||{}).kg||0)*ve,0);
-    const narrow=w<96;h+=fi?`<button type="button" class="kvband${isS('band',k)?' on':''}" data-kvs="band:${k}" title="${esc(n)} · ${kg} kg" style="left:${l}px;width:${w}px;--kc:${c}">${w<40?'':esc(n)+(narrow?'':` · ${kg} kg`)}</button>`
-      :`<div class="kvband" title="${esc(n)} · ${kg} kg" style="left:${l}px;width:${w}px;--kc:${c}">${w<56?'':`<select class="ci" data-kv="sc:${k}" data-kk="kv|sc:${k}" aria-label="Sector"${dis}>${opts(n)}</select>${narrow?'':` ${kg} kg`}${C.secByCode(n)?'':' <span class="kmw">no existe</span>'}`}</div>`});
-  R.J.forEach(j=>{const v=V.jun[j.i];const lab=`${v.ref} ${kvN(v.dx)>=0?'+':'−'}${kmF(Math.abs(kvN(v.dx)),2)}`;
-    h+=`<div class="kvjc${isS('jun',j.i)?' on':''}" data-kvjc="${j.i}" style="left:${px(j.x)}px;top:${yJ}px">${ed?`<span class="kvgrip" data-kvj="${j.i}" title="Arrastra para mover la junta">⇔</span>`:''}${fi||!ed?`<button type="button" data-kvs="jun:${j.i}" data-kvjt="${j.i}">${esc(lab)}</button>`:`${I(`jr:${j.i}`,v.ref,'width:30px;text-align:center','Eje de referencia')}${I(`jd:${j.i}`,v.dx,'width:52px','Distancia al eje (m)',' num')}<button type="button" class="kx" data-kva="delJun" data-i="${j.i}" aria-label="Quitar junta">×</button>`}</div>`});
+  R.names.forEach((n,k)=>{const l=px(bnd[k]),w=Math.max(2,px(bnd[k+1])-l);const c=colOf(n);const kg=kmF(((R.S[n]||{}).kg||0)*ve,0);const fn=kvFrName(C,n);const tip=esc(n+(fn?' · '+fn:'')+' · '+kg+' kg');
+    const narrow=w<96;h+=fi?`<button type="button" class="kvband${isS('band',k)?' on':''}" data-kvs="band:${k}" title="${tip}" style="left:${l}px;width:${w}px;--kc:${c}">${w<40?'':esc(n)+(narrow?'':` · ${kg} kg`)}</button>`
+      :`<div class="kvband" title="${tip}" style="left:${l}px;width:${w}px;--kc:${c}">${w<56?'':`<select class="ci" data-kv="sc:${k}" data-kk="kv|sc:${k}" aria-label="Sector"${dis}>${kvSecOpts(C,n)}</select>${narrow?'':` ${kg} kg`}${C.secByCode(n)?'':' <span class="kmw">no existe</span>'}`}</div>`});
+  R.J.forEach((j,k)=>{const v=V.jun[j.i];const lab=`${v.ref} ${kvN(v.dx)>=0?'+':'−'}${kmF(Math.abs(kvN(v.dx)),2)}`;
+    h+=`<div class="kvjc${isS('jun',j.i)?' on':''}${jfr[k]?' fr':''}" data-kvjc="${j.i}" style="left:${px(j.x)}px;top:${yJ}px"${jtip(k)}>${ed?`<span class="kvgrip" data-kvj="${j.i}" title="Arrastra para mover la junta">⇔</span>`:''}${fi||!ed?`<button type="button" data-kvs="jun:${j.i}" data-kvjt="${j.i}">${esc(lab)}</button>`:`${I(`jr:${j.i}`,v.ref,'width:30px;text-align:center','Eje de referencia')}${I(`jd:${j.i}`,v.dx,'width:52px','Distancia al eje (m)',' num')}<button type="button" class="kx" data-kva="delJun" data-i="${j.i}" aria-label="Quitar junta">×</button>`}</div>`});
   G.E.forEach((e,i)=>{h+=fi||!ed?`<button type="button" class="kvbub${isS('apoyo',i)?' on':''}" data-kvs="apoyo:${i}" style="left:${px(e.x)}px;top:${yAx}px">${esc(e.n)}</button>`:`<input class="ci kvbub" data-kv="en:${i}" data-kk="kv|en:${i}" value="${esc(e.n)}" aria-label="Nombre del eje" style="left:${px(e.x)}px;top:${yAx}px"${dis}>`});
   /* corridos */
   const lane=(o,k,y0,isInf)=>{const c=o.c,i=o.i;const ia=G.E.findIndex(e=>e.n===c.de),ib=G.E.findIndex(e=>e.n===c.a);const ok=ia>=0&&ib>ia;const a=ok?px(G.E[ia].x):px(G.x0),b=ok?px(G.E[ib].x):px(G.x1);const sp=kmSpec(c.s);
@@ -243,8 +255,8 @@ function kvFichaHtml(V,G,ed){const s=MET.vsel;const dis=ed?'':' disabled';const 
     if(j>=0){const x=V.bas[j];b+=I(`bs:${j}`,x.s,'120px','Bastón superior')+(s.i!==0?I(`bi:${j}`,x.i,'90px','Izq. desde la cara (m)',' num'):'')+(s.i!==last?I(`bd:${j}`,x.d,'90px','Der. desde la cara (m)',' num'):'')+((s.i===0||s.i===last)?'<span class="mu">en el extremo se ancla con gancho</span>':'')+btn('delBas','Quitar bastón',j,'danger')}
     else b+=btn('addBas','+ Bastón en este apoyo',s.i)}
   else if(s.k==='corr'&&V.corr[s.i]){const c=V.corr[s.i];t='Barras corridas';b=`<span class="kvf">Posición<span class="seg"><button type="button" class="${c.p==='sup'?'on':''}" data-kva="pSup" data-i="${s.i}"${dis}>Superior</button><button type="button" class="${c.p!=='sup'?'on':''}" data-kva="pInf" data-i="${s.i}"${dis}>Inferior</button></span></span>`+I(`cs:${s.i}`,c.s,'150px','Barras')+I(`cde:${s.i}`,c.de,'70px','Desde el eje')+I(`ca:${s.i}`,c.a,'70px','Hasta el eje')+btn('delCorr','Quitar',s.i,'danger')}
-  else if(s.k==='jun'&&V.jun[s.i]){const j=V.jun[s.i];t='Junta de sector';b=I(`jr:${s.i}`,j.ref,'70px','Desde el eje')+I(`jd:${s.i}`,j.dx,'110px','Distancia (m, + derecha · − izquierda)',' num')+btn('delJun','Quitar junta',s.i,'danger')}
-  else if(s.k==='band'&&V.sec[s.i]!=null){const C=kmCtx(U.piso);t='Sector';b=`<label class="kvf">Sector del nivel<select class="ci" data-kv="sc:${s.i}" data-kk="kv|sc:${s.i}"${dis}>${C.secs.map(a=>`<option${a.code===V.sec[s.i]?' selected':''}>${esc(a.code||'')}</option>`).join('')}</select></label>`}
+  else if(s.k==='jun'&&V.jun[s.i]){const j=V.jun[s.i];const C=kmCtx(U.piso),R=kvCalc(V,kmP(),kvRank(C));const z=kvFrJ(C,R,R.J.findIndex(x=>x.i===s.i));t=z?`Junta entre frentes · el traslape va a ${z.first}`:'Junta de sector';b=I(`jr:${s.i}`,j.ref,'70px','Desde el eje')+I(`jd:${s.i}`,j.dx,'110px','Distancia (m, + derecha · − izquierda)',' num')+btn('delJun','Quitar junta',s.i,'danger')}
+  else if(s.k==='band'&&V.sec[s.i]!=null){const C=kmCtx(U.piso);t='Sector';b=`<label class="kvf">Sector del nivel<select class="ci" data-kv="sc:${s.i}" data-kk="kv|sc:${s.i}"${dis}>${kvSecOpts(C,V.sec[s.i])}</select></label>`}
   else return'';
   return`<section class="card kvficha"><div class="kmh"><b>${esc(t)}</b><span style="flex:1"></span><button type="button" class="ib" data-kva="close">Listo</button></div><div class="kvdat">${b}</div></section>`}
 
@@ -271,10 +283,14 @@ function kvSecHtml(V,R,G){if(G.E.length<2)return'';const nCut=2*G.E.length-1;con
 function kvTabsHtml(V,R,ve,C){const t=['res','ace','enc','con'].includes(U.kmVt)?U.kmVt:'res';const N=R.names;const col=n=>{const id=C.secByCode(n);return id?kmSecCol(C.secs,id):'var(--muted)'};
   const tabs=[['res','Resumen'],['ace','Acero'],['enc','Encofrado'],['con','Concreto']].map(([k,l])=>`<button type="button" class="${t===k?'on':''}" data-kva="tab" data-t="${k}" aria-pressed="${t===k}">${l}</button>`).join('');
   const sum=k=>N.reduce((a,n)=>a+((R.S[n]||{})[k]||0),0)*ve;const hs=N.map(n=>`<th class="n" style="color:${col(n)}">${esc(n)}</th>`).join('');let body='';
+  /* con dos o más frentes en el nivel: columna Frente y aviso de las juntas entre frentes (el traslape va al frente que va primero) */
+  const fc=C.nFr>1;const frj=R.J.map((_,k)=>kvFrJ(C,R,k)).filter(Boolean);
+  const frN=frj.length?`<p class="kvnote mu">${frj.map(z=>`Junta entre frentes ${esc(z.a.name)} | ${esc(z.b.name)}: el traslape de las barras corridas va a ${esc(z.first)}, porque su frente va primero en Sectorización.`).join('<br>')}</p>`:'';
   if(t==='res'){const tk=sum('kg'),tc=sum('conc');
-    body=`<div class="tscroll"><table class="t kmt"><thead><tr><th>Sector</th><th class="n">Acero kg</th><th class="n">Concreto m³</th><th class="n">Encofrado m²</th><th class="n">Cuantía kg/m³</th></tr></thead><tbody>
-      ${N.map(n=>{const o=R.S[n]||{};return`<tr><td><b style="color:${col(n)}">${esc(n)}</b></td><td class="n"><b>${kmF(o.kg*ve,0)}</b></td><td class="n">${kmF(o.conc*ve,2)}</td><td class="n">${kmF((o.ef1+o.ef2)*ve,1)}</td><td class="n">${o.conc>0?kmF(o.kg/o.conc,0):'—'}</td></tr>`}).join('')}</tbody>
-      <tfoot><tr><td>Total</td><td class="n">${kmF(tk,0)}</td><td class="n">${kmF(tc,2)}</td><td class="n">${kmF(sum('ef1')+sum('ef2'),1)}</td><td class="n">${tc>0?kmF(tk/tc,0):'—'}</td></tr></tfoot></table></div>
+    body=`<div class="tscroll"><table class="t kmt"><thead><tr><th>Sector</th>${fc?'<th>Frente</th>':''}<th class="n">Acero kg</th><th class="n">Concreto m³</th><th class="n">Encofrado m²</th><th class="n">Cuantía kg/m³</th></tr></thead><tbody>
+      ${N.map(n=>{const o=R.S[n]||{};return`<tr><td><b style="color:${col(n)}">${esc(n)}</b></td>${fc?`<td>${esc(kvFrName(C,n)||'—')}</td>`:''}<td class="n"><b>${kmF(o.kg*ve,0)}</b></td><td class="n">${kmF(o.conc*ve,2)}</td><td class="n">${kmF((o.ef1+o.ef2)*ve,1)}</td><td class="n">${o.conc>0?kmF(o.kg/o.conc,0):'—'}</td></tr>`}).join('')}</tbody>
+      <tfoot><tr><td${fc?' colspan="2"':''}>Total</td><td class="n">${kmF(tk,0)}</td><td class="n">${kmF(tc,2)}</td><td class="n">${kmF(sum('ef1')+sum('ef2'),1)}</td><td class="n">${tc>0?kmF(tk/tc,0):'—'}</td></tr></tfoot></table></div>
+      ${frN}
       <div class="kvnote"><span class="mu">Acero: corridos ${kmF(sum('corr'),0)} · bastones ${kmF(sum('bas'),0)} · estribos ${kmF(sum('est'),0)} · ganchos y traslapes ${kmF(sum('ext'),0)} kg${tk?` (${kmF(sum('ext')/tk*100,1)} %)`:''}</span><span style="flex:1"></span>
       ${KM_DIA.filter(([k])=>R.dia[k]>0).map(([k,l])=>`<span class="kvdia"><b class="${kvDC(k)}">Ø${esc(l)}</b> <span class="mono">${kmF(R.dia[k]*ve,0)} kg</span></span>`).join('')}</div>`}
   if(t==='ace')body=`<div class="tscroll"><table class="t kmt"><thead><tr><th>Elemento</th><th class="n">Cant.</th><th class="n">Ø</th><th class="n">Long. por barra m</th><th class="n">kg</th><th class="n" title="Ganchos, traslapes en juntas y empalmes incluidos">ganchos y trasl.</th>${hs}</tr></thead><tbody>
