@@ -181,7 +181,7 @@ test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, r
   await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
   const d = await page.evaluate(() => window.__dbGet('plb', 'ARQ_AG03'));
   // el índice tiene el texto con su caja en la hoja (0–10000): «CUARTO DE BOMBAS» está a x = 60 pt de 1191, y = 400 pt desde abajo de 842
-  const T = await page.evaluate(async () => { const p = PLB.get('ARQ_AG03'); const ix = await plTxGet(p); return [...Array(ix.n).keys()].map(i => [plTxStr(ix, i), ...ix.B.slice(i * 4, i * 4 + 4)]); });
+  const T = await page.evaluate(async () => { const p = PLB.get('ARQ_AG03'); const ix = await plTxIx(p); return [...Array(ix.n).keys()].map(i => [plTxStr(ix, i), ...ix.B.slice(i * 4, i * 4 + 4)]); });
   const cb = T.find(t => t[0] === 'CUARTO DE BOMBAS');
   expect(cb).toBeTruthy();
   expect(Math.abs(cb[1] - 60 / 1191 * 1e4)).toBeLessThan(40);
@@ -200,6 +200,11 @@ test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, r
   await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
   await page.fill('#plq', 'ascensor');
   await expect(page.locator('#pllist')).toContainText('Ninguna lámina tiene ese texto');
+  // el índice queda en memoria: las búsquedas siguientes no vuelven a leerlo (ni de la caché)
+  await page.evaluate(() => { window.__GETS.length = 0; });
+  await page.fill('#plq', 'arquitectura');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"] .pltxs')).toContainText('ARQUITECTURA');
+  expect(await page.evaluate(() => window.__GETS.filter(p => /tx\.json/.test(p)).length)).toBe(0);
   // abrir desde la búsqueda: la barra de coincidencias y el resaltado sobre el texto
   await page.fill('#plq', 'bombas');
   await page.click('.plc[data-pl="ARQ_AG03"]');
@@ -220,7 +225,7 @@ test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, r
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await expect(page.locator('#plv')).toHaveCount(0);
   // una lámina cargada antes (sin índice): no entra en la búsqueda; «Indexar texto» lo arma desde su PDF original
-  await page.evaluate(async () => { await fcol('plb').doc('ARQ_AG03').update({ tx: firebase.firestore.FieldValue.delete() }); PLS.key = ''; window.__ST.delete(PLB.get('ARQ_AG03').base + '/tx.json.gz'); PLTX.clear(); });
+  await page.evaluate(async () => { await fcol('plb').doc('ARQ_AG03').update({ tx: firebase.firestore.FieldValue.delete() }); PLS.key = ''; window.__ST.delete(PLB.get('ARQ_AG03').base + '/tx.json.gz'); GX.m.clear(); GX.ver++; });
   await expect.poll(() => page.evaluate(() => !PLB.get('ARQ_AG03').tx)).toBe(true);
   await page.evaluate(() => render());
   await expect(page.locator('#pltxst')).toContainText('1 lámina aún no está indexada');

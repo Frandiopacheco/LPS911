@@ -306,7 +306,7 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
         ${eo?'<select class="tin" id="plfs" aria-label="Subcontratista"></select>':''}<select class="tin" id="plfp" aria-label="Piso"></select>${eo?'':'<select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>'}
         ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<span class="plcnt" id="plcnt"></span></div>
       ${plTxOn()?'<div class="pltxst" id="pltxst"></div>':''}<div id="pllist"></div></div></div>`;
-    $('#plq',main).value=PLF.q||'';let qt=0;$('#plq',main).oninput=e=>{PLF.q=e.target.value;clearTimeout(qt);if(plTxOn())qt=setTimeout(()=>plList(main),250);else plList(main)};
+    $('#plq',main).value=PLF.q||'';let qt=0;$('#plq',main).oninput=e=>{PLF.q=e.target.value;clearTimeout(qt);if(plTxOn())qt=setTimeout(()=>plList(main),PLTX_WAIT);else plList(main)};
     $('.plqm',main).onclick=e=>{const b=e.target.closest('[data-qm]');if(!b||b.dataset.qm===PLF.qm)return;PLF.qm=b.dataset.qm;plfSave();main.dataset.built='';renderPBib(main);const i=$('#plq',main);if(i&&!plTablet())i.focus()};
     const tst=$('#pltxst',main);if(tst)tst.onclick=e=>{const b=e.target.closest('[data-tx="idx"]');if(!b)return;
       plTxIndexAll(plFiltered(true),m=>{const st=$('#pltxst',main);if(m&&st)shx(st,`<span>${esc(m)}</span>`);else plList(main)})};
@@ -326,7 +326,7 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
     shx($('#plfs',main),(scs.length>1||!scs.length?opt('','Todos los SC',PLF.sc):'')+scs.map(c=>opt(c,etoScName(c),PLF.sc)).join(''))}
   else{shx($('#plfd',main),opt('','Todas las especialidades',PLF.disc)+ds.map(d=>opt(d[0],d[1],PLF.disc)).join(''));
   shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''))}
-  plList(main)}
+  plList(main);plTxPreload()}
 function plList(main){const host=$('#pllist',main);if(!host)return;
   if(!plbReady){shx(host,'<div class="loading"><b>Cargando planos…</b></div>');return}
   const L=plFiltered();stx($('#plcnt',main),L.length===1?'1 plano':L.length+' planos');
@@ -669,7 +669,7 @@ function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const m
   if(!el){el=document.createElement('div');el.className='plvp';el.innerHTML=`<div class="plvph"><b>Planos</b><button class="ib" data-pv="pclose" aria-label="Cerrar el panel">✕</button></div>
       <input class="tin" type="search" placeholder="Buscar: IS07, bombas, cortes…" aria-label="Buscar planos" autocomplete="off">
       <div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm="">Nombre</button><button type="button" data-qm="tx">Contenido</button></div><div class="plvpf"></div><div class="pltxst"></div><div class="plvpl"></div>`;
-    PLV.box.appendChild(el);const inp=el.querySelector('input');inp.value=PLV.pf.q||'';let qt=0;inp.oninput=()=>{PLV.pf.q=inp.value;clearTimeout(qt);if(PLV.pf.qm==='tx')qt=setTimeout(()=>{if(PLV)plvPanelList(el)},250);else plvPanelList(el)};
+    PLV.box.appendChild(el);const inp=el.querySelector('input');inp.value=PLV.pf.q||'';let qt=0;inp.oninput=()=>{PLV.pf.q=inp.value;clearTimeout(qt);if(PLV.pf.qm==='tx')qt=setTimeout(()=>{if(PLV)plvPanelList(el)},PLTX_WAIT);else plvPanelList(el)};
     el.querySelector('.plqm').onclick=e=>{const b=e.target.closest('[data-qm]');if(!b)return;e.stopPropagation();PLV.pf.qm=b.dataset.qm;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm});plvPanel()};
     if(!plTablet())setTimeout(()=>inp.focus(),0)}
   el.style.top=(body?body.offsetTop:56)+'px';const tm=PLV.pf.qm==='tx';
