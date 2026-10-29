@@ -210,7 +210,7 @@ const GHT=new Set(); /* ambientes plegados a mano con el chip (solo con el botó
 /* caché: se rehace solo si cambian los datos (MX.v, DV, DONEV), el día, los pisos a la vista, el filtro de SC o el rol (auditoría 10/10) */
 const LKGHC={k:'',v:null};
 function lkGhosts(){if(typeof mxPendList!=='function')return null;
-  const k=[MX.v,DV,DONEV,todayIso(),visPisos().map(p=>p.id).join(','),U.sc||'',me?me.role:'',PM()?1:0,U.va?JSON.stringify(U.va):''].join('|');if(LKGHC.k===k)return LKGHC.v;
+  const k=[MX.v,DV,DONEV,todayIso(),visPisos().map(p=>p.id).join(','),U.sc||'',U.grp||'',me?me.role:'',PM()?1:0,U.va?JSON.stringify(U.va):''].join('|');if(LKGHC.k===k)return LKGHC.v;
   const L=mxPendList();let m=null;
   if(L.length){m=new Map();for(const r of L){if(!m.has(r.a.id))m.set(r.a.id,[]);
     const rows=r.o.acts.filter(id=>{const x=S.act.get(id);return x&&!x._del});

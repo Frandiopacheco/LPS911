@@ -569,7 +569,7 @@ function lkHlPaint(){const g=$('#grid');const on=!!LK_HL.id&&performance.now()<L
   if(g)g.querySelectorAll('tr.rhl').forEach(t=>{if(!on||t.dataset.a!==LK_HL.id)t.classList.remove('rhl')});
   if(!on){LK_HL.id='';return}const tr=g&&g.querySelector(`tr[data-a="${CSS.escape(LK_HL.id)}"]`);if(tr)tr.classList.add('rhl')}
 function lkHighlight(aid,ms){ms=ms||3000;LK_HL.id=aid;LK_HL.until=performance.now()+ms;lkHlPaint();clearTimeout(LK_HL.t);LK_HL.t=setTimeout(lkHlPaint,ms+30)}
-function gotoAct(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}const a=S.amb.get(x.ambId);const pid=pisoOfAct(aid);
+function gotoAct(aid){const x=S.act.get(aid);if(!x){toast('La actividad ya no está en el lookahead.');return}lkOgReveal(x);const a=S.amb.get(x.ambId);const pid=pisoOfAct(aid);
   if(U.piso&&U.piso!==pid){U.piso=pid;U.pisoAll=false}if(a)U.collapsed=(U.collapsed||[]).filter(c=>c!==a.sectorId&&c!==pid);if(U.sector&&a&&U.sector!==a.sectorId)U.sector='';U.tab='look';saveUI();render();
   /* una actividad vencida (sus días ya pasaron, p. ej. la de la semana pasada que no se ejecutó) se muestra igual, solo esa */
   const past=(x.days||[]).length&&!(x.days||[]).some(d=>d>=todayIso());LK_SHOW.clear();LK_SHOW.add(aid);

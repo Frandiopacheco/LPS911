@@ -59,25 +59,26 @@ async function espMigrate(){if(!canWrite)return;const M={...espMap()};const firs
 /* ---- tarjeta de Configuración ---- */
 function espCard(){const L=espList();const arch=espList(true).filter(e=>e.arch&&!e.fus);const use={};for(const c of S.con.values()){const id=espIsId(c.esp)?espId(c.esp):'';if(id)(use[id]=use[id]||[]).push(c)}
   const legacy=[...new Set(espLegacyTexts())];const noEsp=[...S.con.values()].filter(c=>!c.esp).length;const ro=canWrite?'':' readonly';
-  return`<div class="card" id="espcard"><h2>Especialidades <span class="sub">Una sola lista para la obra: subcontratistas, catálogo, AR y láminas del Plan diario. Al renombrar, cambia en todo el sistema.</span></h2>
+  return`<div class="card" id="espcard"><h2>Especialidades <span class="sub">Una sola lista para la obra: subcontratistas, catálogo, AR y láminas del Plan diario. Al renombrar, cambia en todo el sistema. El grupo sirve para ver un grupo a la vez en el Lookahead, la Matriz y el Tablero.</span></h2>
    ${legacy.length||(!L.length&&canWrite)?`<div class="callout">${legacy.length?`Hay ${legacy.length} especialidad(es) escrita(s) a mano que todavía no están en la lista: <b>${legacy.map(esc).join(', ')}</b>.`:'La lista está vacía.'}${canWrite?' <button class="ib pri" id="espmig">Registrar en la lista…</button>':''}</div>`:''}
-   <div class="tscroll"><table class="t rt"><thead><tr><th>Especialidad</th><th>Subcontratistas</th><th></th></tr></thead><tbody>
+   <div class="tscroll"><table class="t rt"><thead><tr><th>Especialidad</th><th>Grupo</th><th>Subcontratistas</th><th></th></tr></thead><tbody>
    ${L.map(e=>{const u=use[e.id]||[];return`<tr><td data-l="Especialidad"><input class="ci" data-esn="${esc(e.id)}" value="${esc(e.n)}" aria-label="Nombre de la especialidad"${ro}></td>
-     <td data-l="Subcontratistas">${u.length?u.map(c=>`<span class="mxsw" style="--c:${esc(c.color)}"></span>${esc(c.name)}`).join(' · '):'<span class="mu">Ninguno</span>'}</td>
-     <td>${canWrite?`<button class="ab" data-esm="${esc(e.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="3" class="note">Sin especialidades todavía.</td></tr>'}
+     <td data-l="Grupo">${egrpSel(e)}</td><td data-l="Subcontratistas">${u.length?u.map(c=>`<span class="mxsw" style="--c:${esc(c.color)}"></span>${esc(c.name)}`).join(' · '):'<span class="mu">Ninguno</span>'}</td>
+     <td>${canWrite?`<button class="ab" data-esm="${esc(e.id)}" aria-label="Más acciones" title="Fusionar, archivar">⋮</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="4" class="note">Sin especialidades todavía.</td></tr>'}
    </tbody></table></div>
-   <div class="pad">${canWrite?'<button class="ib" id="espadd">+ Especialidad</button> ':''}${noEsp?`<span class="note">${noEsp} subcontratista(s) sin especialidad.</span>`:''}
+   <div class="pad">${canWrite?'<button class="ib" id="espadd">+ Especialidad</button> <button class="ib" id="egrpb" title="Renombrar, ordenar, agregar o archivar grupos (sirven para ver un grupo a la vez en el Lookahead, la Matriz y el Tablero)">Grupos…</button> ':''}${noEsp?`<span class="note">${noEsp} subcontratista(s) sin especialidad.</span>`:''}
    ${arch.length?`<p class="note">Archivadas: ${arch.map(e=>`${esc(e.n)}${canWrite?` <button class="lnkb" data-esres="${esc(e.id)}">restaurar</button>`:''}`).join(' · ')}</p>`:''}</div></div>`}
 /** aviso por SC: en el catálogo antiguo sus actividades tienen varias especialidades → conviene separarlo en dos SC */
 function espScHint(c,tally){const t=Object.entries((tally||{})[c.id]||{});if(t.length<2)return'';t.sort((a,b)=>b[1]-a[1]);
   return`<small class="note" style="display:block" title="Para que los indicadores salgan por especialidad, registra un subcontratista por cada una (p. ej. «ICR-ACI» e «ICR-DACI») y pasa sus actividades en el Catálogo">⚠ En el catálogo: ${t.map(([k,n])=>`${esc(k)} (${n})`).join(', ')}</small>`}
 function espWire(main){const box=$('#espcard',main);if(!box)return;
-  box.onchange=e=>{const t=e.target;if(!canWrite||!t.dataset.esn)return;const id=t.dataset.esn;const v=t.value.replace(/\s+/g,' ').trim();const o=espMap()[id];if(!o)return;
+  box.onchange=e=>{const t=e.target;if(canWrite&&t.dataset.esg){egrpPick(t);return}if(!canWrite||!t.dataset.esn)return;const id=t.dataset.esn;const v=t.value.replace(/\s+/g,' ').trim();const o=espMap()[id];if(!o)return;
     if(!v){t.value=o.n;return}if(v===o.n)return;const ex=espFind(v);if(ex&&ex.id!==id&&!ex.fus){toast(`Ya existe «${ex.n}». Si son la misma, usa ⋮ › Fusionar.`);t.value=o.n;return}
     espSave({...espMap(),[id]:{...o,n:v}},`Especialidad: «${o.n}» → «${v}» (se ve así en todo el sistema)`)};
   box.onclick=async e=>{if(!canWrite)return;const b=e.target.closest('button');if(!b)return;
     if(b.id==='espmig'){espMigrate();return}
     if(b.id==='espadd'){espNew();return}
+    if(b.id==='egrpb'){egrpDlg();return}
     if(b.dataset.esres){const M={...espMap()};const o={...M[b.dataset.esres]};delete o.arch;M[b.dataset.esres]=o;espSave(M,`«${o.n}» restaurada`);return}
     if(b.dataset.esm){const id=b.dataset.esm;const o=espMap()[id];if(!o)return;const used=[...S.con.values()].filter(c=>espId(c.esp)===id);
       openPop(b,`<div class="ph">${esc(o.n)}</div><button data-do="fus">Fusionar con otra…</button>${used.length?`<div class="ptx">Para archivarla, primero cambia la especialidad de ${used.length} subcontratista(s) o fusiónala.</div>`:'<button data-do="arc" class="danger">Archivar</button>'}`,

@@ -561,7 +561,7 @@ function revHiddenWhy(L){const V=RVVIS||new Set();const why={};const add=k=>{why
     const sc=S.sec.get(a.sectorId);if(!sc||!P_.has(pisoOfAmb(x.ambId))){add('su sector o piso fue eliminado o archivado');continue}
     if(U.piso&&pisoOfAmb(x.ambId)!==U.piso){add('están en otro piso');continue}
     if(U.sector&&a.sectorId!==U.sector){add('están en otro sector');continue}
-    if(!scOk(x.sc)){add('el filtro de subcontratista las oculta');continue}
+    if(!scOk(x.sc)){add(grpOk(x.sc)?'el filtro de subcontratista las oculta':'el grupo de especialidades elegido las oculta');continue}
     if(U.q.trim()||U.acts.length||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF){add('otros filtros de la vista las ocultan');continue}
     add('su sector o ambiente está plegado')}
   return Object.entries(why).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${n} porque ${k}`)}
