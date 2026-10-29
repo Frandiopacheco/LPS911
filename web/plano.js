@@ -1287,6 +1287,8 @@ function ambMap(host,o){const bs=basesOf(o.pid);
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}
   /* o.guides = [{pts:[x1,y1,x2,y2], c, w, dash, lbl}]: líneas de referencia tenues (ejes y tercios de Casco) */
   for(const g of o.guides||[]){const P=unflat(g.pts);if(P.length<2)continue;svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${g.c||'#7C3AED'}" stroke-width="${g.w||1.2}" stroke-opacity="${g.op??.6}"${g.dash?` stroke-dasharray="${g.dash}"`:''} vector-effect="non-scaling-stroke" pointer-events="none"/>`;if(g.lbl){const p=P[0];labels.push({id:'g:'+g.lbl,x:p.x,y:p.y,t:g.lbl,c:g.c||'#C2410C',f:'#fff',cls:'szg'})}}
+  /* o.dots = [{x,y,c,r}]: puntos sobre el plano (Casco › juntas de viga en el tercio central, casco-met-plano.js); r en unidades de la lámina */
+  const rD=Math.max(base.w||0,base.h||0)/170||6;for(const d of o.dots||[])svg+=`<circle cx="${d.x}" cy="${d.y}" r="${d.r||rD}" fill="${d.c||'#111'}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
   if(M!==I){svg=`<g transform="${cssM(M)}">${svg}</g>`;labels.forEach(l=>{const p=ap(M,l);l.x=p.x;l.y=p.y})}
   if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;host._hL=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts),o.edit.noMid):[];v.handles=hDisp(host._hL,M);v.apply();return base}
 /** puntos de ajuste llevados a la pantalla (o.M) */

@@ -99,7 +99,7 @@ function csEjeEdit(e){const t=e.target;const ref=csRefLam(csSzFr(),CSZ.fg);if(!r
 const csOrtTer=()=>`<label class="chk cnvsh" title="Las líneas quedan horizontales o verticales (Mayúscula: libre)"><input type="checkbox" data-csz2="ortho"${CSZ.ortho!==false?' checked':''}> ⊥ Ortogonal</label><label class="chk cnvsh" title="Ejes y tercios de las luces; el clic se pega a los tercios (Alt: no se pega)"><input type="checkbox" data-csz2="ter"${CSZ.ter!==false?' checked':''}> Tercios</label>`;
 
 /* ---------- dibujo ---------- */
-function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;const ed=csEd();const ref=csRefLam(f,g);const isRef=!!(ref&&lam&&ref.id===lam.id);const mp=csMap(ref,lam);
+function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;if(CNV.tool==='viga'&&KVP.pid!==CNV.pid)Object.assign(KVP,{pid:CNV.pid,step:'a',a:null,ax:null,faces:[],vid:null});const ed=csEd();const ref=csRefLam(f,g);const isRef=!!(ref&&lam&&ref.id===lam.id);const mp=csMap(ref,lam);
   const lvChip=q=>{const s=cnvSec(q.id,g,fid);const A=cnvAmbs(s);const l=csLamOf(q.id,g);const nd=A.filter(a=>cnvGeo(a,l)).length;const al=!l?'':ref&&l.id===ref.id?'<span class="cnvtg ref">referencia</span>':csMap(ref,l)?'':'<span class="cnvtg none">sin alinear</span>';
     return`<button type="button" class="cnvlv${q.id===CNV.pid?' on':''}" data-cnvp="${esc(q.id)}"><b>${esc(cnvTag(q,g))}</b> ${esc(q.name)}${al}${s&&s.hand?'<span class="cnvtg hand">ajustado a mano</span>':''}${!l?'<span class="cnvtg none">sin lámina</span>':A.length&&!nd?'<span class="cnvtg none">sin dibujo</span>':''}<small>${A.length?`${A.length} sector${A.length>1?'es':''}${nd&&nd<A.length?` · ${nd} dibujados`:''}`:'sin sectores'}</small></button>`};
   const T=(k,ico,t,tip)=>`<button type="button" data-cnvt="${k}" class="${CNV.tool===k?'on':''}" title="${tip}">${ico} ${t}</button>`;
@@ -107,7 +107,7 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;const ed=csE
       <span class="seg" role="group" aria-label="Grupo">${['E','A'].map(k=>`<button type="button" data-cszg="${k}" class="${g===k?'on':''}">${k==='E'?'Estructura':'Albañilería'}</button>`).join('')}</span>
       <span class="cnvlvs" role="group" aria-label="Nivel">${LV.map(lvChip).join('')}</span></div>
     ${ed&&lam?`<div class="csszr"><span class="seg" role="group" aria-label="Herramienta">${T('','✋','Ajustar','Elige un sector y arrastra sus esquinas o sus caras; clic derecho en una esquina: agregar o quitar vértices')}${T('nr','▭','Nuevo','Dibuja un sector nuevo con un rectángulo')}${T('np','⬠','Nuevo','Dibuja un sector nuevo con un polígono')}${T('rd','↻','Redibujar','Vuelve a dibujar el sector elegido (polígono)')}${T('cut','✂','Partir','Traza una línea que cruce un sector')}${T('join','⊕','Juntar','Toca dos sectores vecinos')}${T('div','÷','Contorno y dividir','Dibuja el contorno del nivel y pártelo en N sectores de igual área')}</span>
-      <span class="seg" role="group" aria-label="Referencias">${T('ejes','＃','Ejes','Traza cada eje con dos clics')}${T('luz','⟷','Luz de viga','Dos clics en las caras de una viga: sus tercios')}</span>
+      <span class="seg" role="group" aria-label="Referencias">${T('ejes','＃','Ejes','Traza cada eje con dos clics')}${T('luz','⟷','Luz de viga','Dos clics en las caras de una viga: sus tercios')}${g==='E'?T('viga','═','Viga','Traza una viga por ejes y marca sus apoyos: sale su plantilla en Metrados › Vigas'):''}</span>
       ${csOrtTer()}<label class="chk cnvsh"><input type="checkbox" data-cnv="shared"${CNV.shared?' checked':''}> Mover juntas las esquinas compartidas</label>
       <button type="button" class="ib" data-cnv="del"${CNV.sel?'':' disabled'} title="Eliminar el sector elegido">Eliminar sector</button>
       <button type="button" class="ib" data-cnv="copy" title="Copia los sectores de otro nivel">⧉ Copiar de otro nivel…</button><button type="button" class="ib" data-cnv="al" title="Alinea las láminas de los niveles con la referencia">⌖ Alinear niveles…</button>
@@ -126,7 +126,7 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;const ed=csE
       ${ambs.map((a,j)=>{const i=idx.get(a.id);const has=i!=null;return`<tr class="${a.id===CNV.sel?'on':''}" data-cnvs="${esc(a.id)}"><td><i class="csdot" style="--c:${CS_SCOL[j%CS_SCOL.length]}"></i></td><td><b>${esc(a.code)}</b>${has?'':' <span class="mu">sin dibujo</span>'}</td>
         <td class="n">${has&&E.A[i]!=null?E.A[i].toFixed(1):'—'}</td><td class="n">${has?(Math.round(E.carga[i]*10)/10).toFixed(1):'—'}</td><td class="n">${has&&E.n>1?`<span class="csbal ${csBalCls(E.dev[i])}">${pc(E.dev[i])}</span>`:''}</td><td class="n">${has&&m3c?(Math.round(E.met[m3c.id][i]*10)/10).toFixed(1):'—'}</td><td class="n">${prog.get(a.id)||'—'}</td></tr>`}).join('')}</tbody>
       ${E?`<tfoot><tr><td></td><td>Total</td><td class="n">${sc.mpp?tot('A').toFixed(1):'—'}</td><td class="n">${tot('carga').toFixed(1)}</td><td></td><td class="n">${m3c?(Math.round(E.met[m3c.id].reduce((s,x)=>s+(x||0),0)*10)/10).toFixed(1):'—'}</td><td class="n">${[...prog.values()].reduce((s,x)=>s+x,0)}</td></tr></tfoot>`:''}</table>`:'<p class="mu csfemp">Este nivel no tiene sectores de este frente: dibújalos con «▭ Nuevo» o «÷ Contorno y dividir», aplica una alternativa en Sectores o cópialos de otro nivel.</p>'}</div>
-    ${E?csSemTable(E):''}${csEjesSec(ref,ed)}
+    ${E?csSemTable(E):''}${csEjesSec(ref,ed)}${g==='E'?kvpTable(p.id,ed):''}
     <div class="csfsec"><p class="note"><b>Solo cambia ${esc(cnvTag(p,g))}.</b> Lo programado se queda en su sector; al partir, el sector nuevo queda sin programar (prográmalo en Lookahead › Tren). Si vuelves a aplicar la alternativa, te preguntará si reemplaza los niveles ajustados a mano.</p></div>`;
   csSet('csszside',side);csSet('csszf','');document.getElementById('csszb').classList.toggle('noside',!CSZ.side);
   /* plano */
@@ -139,10 +139,12 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;const ed=csE
   const link=CNV.shared?ambs.filter(a=>a!==sel&&cnvGeo(a,lam)).map(a=>({id:a.id,pts:cnvGeo(a,lam)})):[];
   const poly=['cut','np','rd','div','ejes','luz'].includes(tl);const draw=!ed?null:tl==='nr'?'rect':poly?'poly':null;
   const M=csDispM(ref,lam);
-  const o={pid:CNV.pid,vista:lam.id,shapes,canUp:false,draw,tmp:poly?CNV.tmp:null,M:M||undefined,guides:gd.guides,snapLines:(tl==='cut'||tl==='div'||tl==='np'||tl==='rd')?gd.snap:null,ortho:CSZ.ortho!==false,
+  /* vigas desde el plano (casco-met-plano.js): las vinculadas con su tercio central y sus juntas; el trazado en curso */
+  const vo=g==='E'?kvpOverlay(p.id):{guides:[],dots:[]};const vt=tl==='viga'?kvpDrawO():{guides:[],dots:[],snap:[]};
+  const o={pid:CNV.pid,vista:lam.id,shapes,canUp:false,draw:tl==='viga'&&ed?'poly':draw,tmp:poly?CNV.tmp:null,M:M||undefined,guides:[...gd.guides,...vo.guides,...vt.guides],dots:[...vo.dots,...vt.dots],snapLines:(tl==='cut'||tl==='div'||tl==='np'||tl==='rd')?gd.snap:tl==='viga'?vt.snap:null,ortho:tl==='viga'?false:CSZ.ortho!==false,
     edit:ed&&!tl&&selG?{pts:selG,link}:null,onEdit:(pts,ch)=>cnvGeoSave(C,sel,pts,ch),
     onDrawn:pts=>{if(tl==='nr'){CNV.tool='';cnvNew(C,pts)}},
-    onPoly:pt=>{CNV.tmp=[...CNV.tmp,pt];const two=CNV.tmp.length===2;if(two&&(tl==='cut'||tl==='ejes'||tl==='luz')){const[a,b]=CNV.tmp;CNV.tmp=[];if(tl==='cut')cnvCut(C,a,b);else if(tl==='ejes'){csEjeAdd(ref,lam,a,b);csNivDraw()}else{csLuzAdd(ref,lam,a,b);csNivDraw()}return}csNivDraw()},
+    onPoly:pt=>{if(tl==='viga'){kvpClick(pt);return}CNV.tmp=[...CNV.tmp,pt];const two=CNV.tmp.length===2;if(two&&(tl==='cut'||tl==='ejes'||tl==='luz')){const[a,b]=CNV.tmp;CNV.tmp=[];if(tl==='cut')cnvCut(C,a,b);else if(tl==='ejes'){csEjeAdd(ref,lam,a,b);csNivDraw()}else{csLuzAdd(ref,lam,a,b);csNivDraw()}return}csNivDraw()},
     onPolyClose:()=>{const P=CNV.tmp;CNV.tmp=[];if(P.length<3||!['np','rd','div'].includes(tl)){csNivDraw();return}const pts=csgFlat(P);if(tl==='np'){CNV.tool='';cnvNew(C,pts)}else if(tl==='rd'){CNV.tool='';if(sel)cnvGeoSave(C,sel,pts,null);else csNivDraw()}else cnvDivPop(C,P,M)},
     onPick:hit=>{if(tl==='join'){if(!hit)return;if(!CNV.pend||CNV.pend===hit){CNV.pend=CNV.pend===hit?'':hit;csNivDraw();return}const a=CNV.pend;CNV.pend='';cnvJoin(C,a,hit);return}
       if(tl)return;CNV.sel=hit||'';csNivDraw()}};
@@ -153,13 +155,14 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;const ed=csE
   else if(tl==='nr')t='Arrastra un rectángulo: será un sector nuevo al final del tren.';
   else if(tl==='np'||tl==='rd'||tl==='div')t=(CNV.tmp.length?`${CNV.tmp.length} esquina(s). Cierra tocando la primera, doble clic o Enter.`:tl==='div'?'Dibuja el contorno del nivel (polígono); luego eliges en cuántos sectores partirlo.':tl==='rd'?(sel?`Dibuja de nuevo ${sel.code} (polígono). Lo programado se queda.`:'Primero elige un sector.'):'Toca cada esquina del sector nuevo.')+' ⊥ ortogonal: Mayúscula para un lado libre.';
   else if(tl==='ejes')t=need?'Alinea primero este nivel con la referencia.':CNV.tmp.length?'Segundo clic: el eje queda recto.':'Traza cada eje con dos clics sobre la línea del eje del plano. Se nombran solos (A, B… y 1, 2…).';
+  else if(tl==='viga')t=need?'Alinea primero este nivel con la referencia.':kvpHint();
   else if(tl==='luz')t=need?'Alinea primero este nivel con la referencia.':CNV.tmp.length?'Segundo clic en la otra cara de la viga.':'Clic en una cara de la viga y en la otra: salen sus dos tercios.';
   else if(!ambs.length)t=ed?'Este nivel no tiene sectores de este frente: «▭ Nuevo», «÷ Contorno y dividir» o «⧉ Copiar de otro nivel…».':'';
   else if(!drawn.length)t=ed?'Los sectores de este nivel no tienen dibujo en esta lámina: elige uno y «↻ Redibujar», o «⧉ Copiar de otro nivel…».':'';
   else if(sel&&!selG)t=`${sel.code} no tiene dibujo: «↻ Redibujar» para dibujarlo.`;
   else if(sel)t='Esquinas: muévelas una por una. Barra del medio de una cara: mueve toda la cara. Clic derecho en una esquina: agregar o quitar vértices.';
   else if(ed)t='Toca un sector para ajustarlo.';
-  hint.innerHTML=(need&&!CNV.cp&&!CNV.al?`<span class="cnvwarn">⚠ Este nivel usa otra lámina y no está alineado con la referencia (${esc(cnvTag(S.pis.get(ref.pisoId),g))}).</span> ${ed?'<button type="button" class="ib pri" data-cnv="alnow">Alinear ahora</button><br>':''}`:'')+esc(t);hint.hidden=!t&&!need;cnvCpDraw();cnvAlDraw()}
+  hint.innerHTML=(tl==='viga'&&!need?kvpBar():'')+(need&&!CNV.cp&&!CNV.al?`<span class="cnvwarn">⚠ Este nivel usa otra lámina y no está alineado con la referencia (${esc(cnvTag(S.pis.get(ref.pisoId),g))}).</span> ${ed?'<button type="button" class="ib pri" data-cnv="alnow">Alinear ahora</button><br>':''}`:'')+esc(t);hint.hidden=!t&&!need;cnvCpDraw();cnvAlDraw();if(g==='E'){kmEnsure();kvSyncSoon(p.id)}}
 /** semáforo como tabla (Indicador · Valor · estado), compartido con el asistente */
 function csSemTable(E){return`<div class="csfsec"><div class="csfsh"><b>Semáforo</b><span class="mu">${E.n} sector(es) · ${E.R===1?'1 sector/día':'1 cada 2 días'}</span></div>
   <table class="t cstab cssem"><thead><tr><th>Indicador</th><th>Valor</th><th class="c" aria-label="Estado"></th></tr></thead><tbody>${E.I.map(x=>`<tr><td><b>${x.id}</b> ${esc(x.t)}</td><td>${esc(x.v)}</td><td class="c"><i class="csszd ${x.s}" title="${CSZ_ST[x.s]}"></i></td></tr>`).join('')}</tbody></table></div>`}
@@ -258,8 +261,9 @@ function cnvCpDo(){const K=CNV.cp;const C=cnvCtx();if(!K||!csEd())return;const g
 
 /* ---------- eventos (los llama csSzClick / csSzChange de casco-sz.js) ---------- */
 function csNivClick(e){const root=document.getElementById('cssz');if(!root||root.dataset.v!=='niv')return false;const t=e.target;
-  const pb=t.closest('[data-cnvp]');if(pb){CNV.pid=pb.dataset.cnvp;CNV.sel='';CNV.tmp=[];CNV.pend='';if(CNV.cp){CNV.cp.t=[];if(CNV.cp.src===CNV.pid)CNV.cp=null}csNivDraw();return true}
-  const tb=t.closest('[data-cnvt]');if(tb){CNV.tool=tb.dataset.cnvt;CNV.tmp=[];CNV.pend='';if(CNV.tool)CNV.sel='';csNivDraw();return true}
+  if(kvpOnClick(e))return true;
+  const pb=t.closest('[data-cnvp]');if(pb){if(KVP.step)kvpStop();CNV.pid=pb.dataset.cnvp;CNV.sel='';CNV.tmp=[];CNV.pend='';if(CNV.cp){CNV.cp.t=[];if(CNV.cp.src===CNV.pid)CNV.cp=null}csNivDraw();return true}
+  const tb=t.closest('[data-cnvt]');if(tb){if(tb.dataset.cnvt==='viga'){if(CNV.tool==='viga')kvpStop();else kvpStart(CNV.pid);CNV.sel='';csNivDraw();return true}if(KVP.step)kvpStop();CNV.tool=tb.dataset.cnvt;CNV.tmp=[];CNV.pend='';if(CNV.tool)CNV.sel='';csNivDraw();return true}
   const sr=t.closest('[data-cnvs]');if(sr){CNV.sel=sr.dataset.cnvs;CNV.tool='';const a=S.amb.get(CNV.sel);const C=cnvCtx();const g0=cnvGeo(a,C.lam);csNivDraw();if(g0&&window.__plano&&window.__plano.ambFocus)window.__plano.ambFocus(document.getElementById('csszmap'),g0);return true}
   const b=t.closest('[data-cnv]');if(!b||b.tagName==='SELECT'||b.tagName==='INPUT')return false;const k=b.dataset.cnv;
   if(k==='copy')cnvCpOpen();else if(k==='cpx'){CNV.cp=null;csNivDraw()}else if(k==='cpreset'){CNV.cp.s=[];CNV.cp.t=[];cnvCpDraw()}else if(k==='cpok')cnvCpDo();
@@ -272,6 +276,7 @@ function csNivChange(e){const root=document.getElementById('cssz');if(!root||roo
   if(k==='cpsrc'&&CNV.cp){CNV.cp={src:t.value,s:[],t:[]};cnvCpDraw();return true}return false}
 document.addEventListener('keydown',e=>{if(U.tab!=='planos'||!CS())return;const root=document.getElementById('cssz');if(!root||root.dataset.v!=='niv')return;if(document.querySelector('.uask'))return;
   if(e.key==='Enter'&&CNV.tmp.length>=3){e.preventDefault();const h=document.getElementById('csszmap');if(h&&h._o&&h._o.onPolyClose)h._o.onPolyClose();return}
+  if(e.key==='Escape'&&KVP.step){kvpOnClick({target:{closest:()=>({dataset:{kvp:'cancel'}})}});return}
   if(e.key==='Escape'&&(CNV.tool||CNV.tmp.length||CNV.pend||CNV.sel||CNV.cp||CNV.al)){if(CNV.al)CNV.al=null;else if(CNV.cp)CNV.cp=null;else if(CNV.tmp.length)CNV.tmp=[];else{CNV.tool='';CNV.pend='';CNV.sel=''}csNivDraw()}
   if((e.key==='Delete'||e.key==='Backspace')&&CNV.sel&&!CNV.tool&&!/^(INPUT|SELECT|TEXTAREA)$/.test((e.target||{}).tagName||'')){e.preventDefault();cnvDel()}});
 

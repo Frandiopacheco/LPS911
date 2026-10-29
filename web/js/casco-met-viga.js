@@ -22,9 +22,10 @@ function kvEjesTxt(E){const d=E.slice(0,-1).map(e=>kvN(e.d));const out=[];for(le
 function kvEstPos(x0,L,D){if(!(L>0)||!D||D.err)return[];const half=L/2;const out=[];let x=0,stop=false;for(const z of D.z){for(let i=0;i<z.n;i++){if(x+z.s>half+1e-9){stop=true;break}x+=z.s;out.push(x)}if(stop)break}
   const gap=L-2*x;const mid=[];if(D.r&&gap>D.r+1e-9){const k=Math.ceil(gap/D.r-1e-9)-1;for(let i=1;i<=k;i++)mid.push(x+gap*i/(k+1))}
   const all=[...out.map(v=>x0+v),...mid.map(v=>x0+v),...out.map(v=>x0+L-v)];if(out.length&&gap<1e-9)all.pop();return all}
-function kvGeo(V){let x=0;const E=(V.ejes||[]).map(e=>{const o={n:e.n,w:kvN(e.w),x};x+=kvN(e.d);return o});
-  const T=[];for(let i=0;i<E.length-1;i++){const a=E[i].x+E[i].w/2,b=E[i+1].x-E[i+1].w/2;T.push({i,a,b,L:Math.max(0,b-a),est:((V.tramos||[])[i]||{}).est||''})}
-  return{E,T,x0:E.length?E[0].x-E[0].w/2:0,x1:E.length?E[E.length-1].x+E[E.length-1].w/2:0}}
+/* apoyo: x = eje, o = excentricidad (centro del apoyo − eje, al trazar sobre el plano), l y r = sus caras */
+function kvGeo(V){let x=0;const E=(V.ejes||[]).map(e=>{const w=kvN(e.w),c=x+kvN(e.o);const o={n:e.n,w,x,o:kvN(e.o),l:c-w/2,r:c+w/2};x+=kvN(e.d);return o});
+  const T=[];for(let i=0;i<E.length-1;i++){const a=E[i].r,b=E[i+1].l;T.push({i,a,b,L:Math.max(0,b-a),est:((V.tramos||[])[i]||{}).est||''})}
+  return{E,T,x0:E.length?E[0].l:0,x1:E.length?E[E.length-1].r:0}}
 function kvJoints(V,G){const J=[];(V.jun||[]).forEach((j,i)=>{const e=G.E.find(e=>e.n===j.ref);if(e){const x=e.x+kvN(j.dx);if(x>G.x0+0.05&&x<G.x1-0.05)J.push({x,i})}});J.sort((a,b)=>a.x-b.x);return J}
 /** estribo: medidas automáticas desde la sección (doble estribo: cada uno ~60 % del ancho) o las escritas */
 function kvEstDims(V){const b=kvN(V.b),h=kvN(V.h),rec=kvN(V.rec)||0.04,per=Math.max(1,Math.round(kvN(V.estN)||1));const r=v=>Math.round(v*100)/100;
@@ -46,7 +47,7 @@ function kvCalc(V,P,rank){const G=kvGeo(V);const J=kvJoints(V,G);const rec=kvN(V
     if(!bs||bs.err||ia<0||ib<0||ia>=ib){warn.push(bs&&bs.err?`Corrido: ${bs.err}`:`Corrido «${c.s||'?'}» de ${c.de||'?'} a ${c.a||'?'}: revisa barras y ejes`);continue}
     for(const b of bs){const D=P.dia[b.d],kg=D.kg,lp=c.p==='sup'?D.lts:D.lt,hk=D.g90;const ea=G.E[ia],eb=G.E[ib];
       /* extremo de la viga: hasta la cara exterior menos recubrimiento, con gancho; eje interior: pasa el apoyo y ancla un traslape */
-      const s0=ia===0?G.x0+rec:ea.x-ea.w/2-lp,s1=ib===last?G.x1-rec:eb.x+eb.w/2+lp;bars.push({p:c.p,n:b.n,d:b.d,a:s0,b:s1,bas:false});
+      const s0=ia===0?G.x0+rec:ea.l-lp,s1=ib===last?G.x1-rec:eb.r+lp;bars.push({p:c.p,n:b.n,d:b.d,a:s0,b:s1,bas:false});
       item(c.p==='sup'?'Corrido superior':'Corrido inferior',`${c.de}–${c.a}`,b.n,b.d);
       split(s0,s1,(s,l)=>{add(s,'corr',b.n*l*kg);addD(b.d,b.n*l*kg)});
       const v1=b.n*hk*kg;if(ia===0){add(secAt(s0+0.01),'ext',v1);addD(b.d,v1)}if(ib===last){add(secAt(s1-0.01),'ext',v1);addD(b.d,v1)}
@@ -57,7 +58,7 @@ function kvCalc(V,P,rank){const G=kvGeo(V);const J=kvJoints(V,G);const rec=kvN(V
       for(let i=0;i<segs.length-1;i++){const Lt=segs[i+1]-segs[i]+(i===0&&ia===0?hk:0)+(i===segs.length-2&&ib===last?hk:0)+(i<segs.length-2?lp:0);
         const ex=Lt>lmax&&lmax>lp?Math.ceil((Lt-lmax)/(lmax-lp)-1e-9):0;if(ex){const s=secAt((segs[i]+segs[i+1])/2);add(s,'ext',b.n*ex*lp*kg);addD(b.d,b.n*ex*lp*kg)}}}}
   for(const t of V.bas||[]){const bs=kmSpec(t.s);const k=G.E.findIndex(e=>e.n===t.ap);if(!bs||bs.err||k<0){warn.push(bs&&bs.err?`Bastón: ${bs.err}`:`Bastón en ${t.ap||'?'}: revisa barras y eje`);continue}const e=G.E[k];
-    for(const b of bs){const D=P.dia[b.d],kg=D.kg,hk=D.g90;const a=k===0?G.x0+rec:e.x-e.w/2-kvN(t.i),z=k===last?G.x1-rec:e.x+e.w/2+kvN(t.d);bars.push({p:t.p||'sup',n:b.n,d:b.d,a,b:z,bas:true});
+    for(const b of bs){const D=P.dia[b.d],kg=D.kg,hk=D.g90;const a=k===0?G.x0+rec:e.l-kvN(t.i),z=k===last?G.x1-rec:e.r+kvN(t.d);bars.push({p:t.p||'sup',n:b.n,d:b.d,a,b:z,bas:true});
       item('Bastón superior',`apoyo ${e.n}`,b.n,b.d);split(a,z,(s,l)=>{add(s,'bas',b.n*l*kg);addD(b.d,b.n*l*kg)});
       const hooks=(k===0?1:0)+(k===last?1:0);if(hooks){const v=b.n*hooks*hk*kg;add(secAt(e.x),'ext',v);addD(b.d,v)}}}
   const ed=V.estD||'3/8';const ED=kvEstDims(V);const Le=2*(ED.a+ED.b)+2*(P.dia[ed]?P.dia[ed].g135:0.13);const kgE=(P.dia[ed]||{kg:0.56}).kg;const per=ED.per;let nEst=0;
@@ -90,6 +91,11 @@ function kvNueva(C,n){const s=(C.secs.find(a=>(csSecOf(a)||{}).grp==='E')||C.sec
   return{id:uid('kv'),cod:'V-'+n,b:'0.30',h:'0.60',losa:'0.20',rec:'0.04',lmax:'',ejes:[{n:'A',w:'0.30',d:'5.00'},{n:'B',w:'0.30',d:'5.00'},{n:'C',w:'0.30',d:''}],tramos:[{est:KV_EST1},{est:KV_EST1}],
     estN:'1',estD:'3/8',ea:'',eb:'',adic:'0',corr:[{p:'sup',s:'2Ø5/8',de:'A',a:'C'},{p:'inf',s:'2Ø5/8',de:'A',a:'C'}],bas:[],jun:[],sec:[s],rep:''}}
 function kvSel(pid){const L=kvVigas(pid);if(!L.some(v=>v.id===MET.vid))MET.vid=L[0]?L[0].id:null;return L.find(v=>v.id===MET.vid)||null}
+/* vigas vinculadas al plano (casco-met-plano.js): ejes, distancias, juntas y sectores salen de Sectorización; el resto se escribe aquí */
+const KV_PLK=['ejes','en','ed','jr','jd','sc'];
+function kvPlLock(){const V=kvSel(U.piso);if(!V||!V.pl)return false;toast('Esta viga está vinculada al plano: sus ejes, juntas y sectores salen de Sectorización. Muévelos allí o desvincúlala.','Desvincular',()=>kvSet(W=>{delete W.pl},'Desvincular viga del plano'));requestRender();return true}
+function kvPlHtml(V,ed){if(!V.pl)return'';return`<div class="callout kvpl"><span>🔗 <b>Vinculada al plano</b> · eje ${esc(V.pl.eje)}, de ${esc(V.pl.e0)} a ${esc(V.pl.e1)}. Ejes, distancias, juntas y sectores salen de Sectorización y se actualizan solos; los apoyos y el armado se escriben aquí.</span>${ed?'<span class="kvplb"><button type="button" class="ib" data-kva="replano">Retrazar</button><button type="button" class="ib" data-kva="unlink">Desvincular</button></span>':''}</div>`}
+function kvAvisoHtml(pid){const A=MET.kvAviso;if(!A||A.pid!==pid)return'';return`<div class="callout warnc kvav"><div><b>La sectorización cambió:</b> las vigas vinculadas se actualizaron solas.<ul>${A.ch.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div><span class="kvplb"><button type="button" class="ib" data-kva="avisou" title="Deshace la actualización y desvincula estas vigas">Dejar como estaban</button><button type="button" class="ib" data-kva="aviso">Entendido</button></span></div>`}
 /** cambia la viga elegida (copia, aplica fn y guarda con Deshacer) */
 function kvSet(fn,label){const pid=U.piso;const L=JSON.parse(JSON.stringify(kvVigas(pid)));const V=L.find(v=>v.id===MET.vid);if(!V)return;if(fn(V)===false)return;kmPut('v_'+pid,{L},label||'Viga '+(V.cod||''));requestRender()}
 function kvRenAxis(V,i,v){v=String(v).trim().toUpperCase();if(!v)return false;if(V.ejes.some((e,k)=>k!==i&&e.n===v)){toast(`Ya hay un eje ${v} en esta viga.`);requestRender();return false}
@@ -106,6 +112,7 @@ function kvApplyEjes(V,t){const D=kvParseEjes(t);if(!D){toast('Escribe las dista
   V.corr.forEach(c=>{if(!names.has(c.de))c.de=E[0].n;if(!names.has(c.a)||c.a===oldLast)c.a=lastN});V.bas=V.bas.filter(b=>names.has(b.ap));V.jun=V.jun.filter(j=>names.has(j.ref))}
 /** cambios de los campos (data-kv="campo" o "campo:índice") */
 function kvChange(el){const f=el.dataset.kv;const[k,ix]=f.split(':');const i=+ix;const v=el.value;
+  if(KV_PLK.includes(k)&&kvPlLock())return;
   const simple=['cod','b','h','losa','rec','ea','eb','estN','adic','rep'];
   kvSet(V=>{if(simple.includes(k)){V[k]=String(v).trim();return}
     if(k==='ejes')return kvApplyEjes(V,v);
@@ -124,6 +131,11 @@ function kvClick(e){const b=e.target.closest('[data-kva],[data-kvs]');if(!b)retu
   if(a==='cutv'){MET.cut=2*i+1;requestRender();return true}if(a==='cuta'){MET.cut=2*i;requestRender();return true}
   if(a==='close'){MET.vsel=null;requestRender();return true}
   if(!csEd())return true;const C=kmCtx(pid);
+  if(a==='plano'||a==='replano'){const V0=a==='replano'?kvSel(pid):null;U.tab='planos';U.csSzV='niv';CSZ.fg='E';CNV.pid=pid;CNV.sel='';kvpStart(pid,V0&&V0.id,true);saveUI();render();return true}
+  if(a==='unlink'){kvSet(V=>{delete V.pl},'Desvincular viga del plano');toast('La viga ya no sigue a la sectorización: sus ejes, juntas y sectores se escriben a mano.');return true}
+  if(a==='aviso'){MET.kvAviso=null;requestRender();return true}
+  if(a==='avisou'){kvAvisoUndo();return true}
+  if(['addJun','delJun','addVano','insVano','delVano'].includes(a)&&kvPlLock())return true;
   if(a==='new'){const L=kvVigas(pid).slice();const V=kvNueva(C,L.length+1);L.push(V);MET.vid=V.id;MET.vsel=null;MET.cut=1;kmPut('v_'+pid,{L},'Nueva viga');requestRender();return true}
   if(a==='dup'){const V0=kvSel(pid);if(!V0)return true;const L=kvVigas(pid).slice();const V=JSON.parse(JSON.stringify(V0));V.id=uid('kv');V.cod=(V.cod||'Viga')+' (copia)';V.rep='';L.splice(L.indexOf(V0)+1,0,V);MET.vid=V.id;kmPut('v_'+pid,{L},'Duplicar viga');requestRender();return true}
   if(a==='del'){const V0=kvSel(pid);if(!V0)return true;kmPut('v_'+pid,{L:kvVigas(pid).filter(v=>v.id!==V0.id)},'Eliminar viga '+(V0.cod||''));MET.vid=null;requestRender();toast(`Viga ${V0.cod||''} eliminada`,'Deshacer',kmUndo);return true}
@@ -135,13 +147,13 @@ function kvClick(e){const b=e.target.closest('[data-kva],[data-kvs]');if(!b)retu
     case'pSup':V.corr[i].p='sup';break;case'pInf':V.corr[i].p='inf';break;
     case'addBas':V.bas.push({ap:V.ejes[i].n,p:'sup',s:'2Ø5/8',i:'1.50',d:'1.50'});break;
     case'delBas':V.bas.splice(i,1);break;
-    case'addJun':{const G=kvGeo(V);if(!G.T.length)return false;const J=kvJoints(V,G);const free=G.T.filter(t=>!J.some(j=>j.x>=t.a-0.01&&j.x<=t.b+0.01));const t=(free.length?free:G.T).reduce((x,y)=>y.L>x.L?y:x);const e=G.E[t.i];V.jun.push({ref:e.n,dx:(e.w/2+t.L/2).toFixed(2)});V.sec.push(nextCode(V));break}
+    case'addJun':{const G=kvGeo(V);if(!G.T.length)return false;const J=kvJoints(V,G);const free=G.T.filter(t=>!J.some(j=>j.x>=t.a-0.01&&j.x<=t.b+0.01));const t=(free.length?free:G.T).reduce((x,y)=>y.L>x.L?y:x);const e=G.E[t.i];V.jun.push({ref:e.n,dx:(e.r-e.x+t.L/2).toFixed(2)});V.sec.push(nextCode(V));break}
     case'delJun':{const G=kvGeo(V);const J=kvJoints(V,G);const k=J.findIndex(x=>x.i===i);V.jun.splice(i,1);if(V.sec.length>1)V.sec.splice(Math.max(1,k+1),1);MET.vsel=null;break}
     case'addVano':kvInsSpan(V,V.ejes.length-1);break;case'insVano':kvInsSpan(V,i);break;case'delVano':return kvDelSpan(V,i);
     case'd38':V.estD='3/8';break;case'd12':V.estD='1/2';break;case'lm':V.lmax=b.dataset.v;break;case'autoE':V.ea='';V.eb='';break;
     default:return false}},'Viga');return true}
 /** arrastrar una junta: se mueve en pantalla y al soltar se guarda (eje a la izquierda + distancia) */
-function kvDown(e){const h=e.target.closest('[data-kvj]');if(!h||!csEd())return;const box=h.closest('[data-kvel]');if(!box||!KV.map)return;e.preventDefault();const i=+h.dataset.kvj;
+function kvDown(e){const h=e.target.closest('[data-kvj]');if(!h||!csEd())return;if(kvPlLock()){e.preventDefault();return}const box=h.closest('[data-kvel]');if(!box||!KV.map)return;e.preventDefault();const i=+h.dataset.kvj;
   const V=kvSel(U.piso);if(!V)return;const G=kvGeo(V);KV.drag={i,box,G,x:null};try{h.setPointerCapture(e.pointerId)}catch(_){}
   const mv=ev=>{const d=KV.drag;if(!d)return;const r=d.box.getBoundingClientRect();let m=KV.map.inv(ev.clientX-r.left);m=Math.max(d.G.x0+0.1,Math.min(d.G.x1-0.1,m));d.x=Math.round(m*20)/20;
     const px=Math.round(KV.map.px(d.x));d.box.querySelectorAll(`[data-kvjl="${i}"],[data-kvjc="${i}"]`).forEach(n=>{n.style.left=px+'px'});
@@ -160,13 +172,13 @@ function kvXlsSheet(X,wb,pid,P,C){const L=kvVigas(pid);if(!L.length)return;const
 /* ---------- dibujo ---------- */
 /** posición en pantalla: a escala, cada vano con un ancho mínimo para poder escribir en él */
 function kvLayout(G,W0,minSpan){const L=Math.max(1,G.x1-G.x0);const sx=Math.max(20,(W0-150)/L);const segs=[];
-  G.E.forEach((e,i)=>{segs.push([e.x-e.w/2,e.x+e.w/2,Math.max(e.w*sx,18)]);if(i<G.T.length){const t=G.T[i];segs.push([t.a,t.b,Math.max(t.L*sx,minSpan)])}});
+  G.E.forEach((e,i)=>{segs.push([e.l,e.r,Math.max(e.w*sx,18)]);if(i<G.T.length){const t=G.T[i];segs.push([t.a,t.b,Math.max(t.L*sx,minSpan)])}});
   let p=64;const sp=segs.map(s=>{const o={m0:s[0],m1:s[1],p0:p,p1:p+s[2]};p+=s[2];return o});
   const px=x=>{if(x<=sp[0].m0)return sp[0].p0-(sp[0].m0-x)*sx;for(const s of sp)if(x<=s.m1+1e-9)return s.m1>s.m0?s.p0+(x-s.m0)/(s.m1-s.m0)*(s.p1-s.p0):s.p0;const l=sp[sp.length-1];return l.p1+(x-l.m1)*sx};
   const inv=q=>{if(q<=sp[0].p0)return sp[0].m0-(sp[0].p0-q)/sx;for(const s of sp)if(q<=s.p1)return s.m0+(q-s.p0)/Math.max(1,s.p1-s.p0)*(s.m1-s.m0);const l=sp[sp.length-1];return l.m1+(q-l.p1)/sx};
   return{px,inv,W:Math.round(p+90)}}
 function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);const V=kvSel(p.id);const fi=kvFicha();const dis=ed?'':' disabled';
-  const bar=`<div class="kmbar">${ed?`<button type="button" class="ib" data-kva="new">+ Viga</button>`:''}<button type="button" class="ib" data-km="xls">Exportar Excel</button>${ed?`<button type="button" class="ib" data-km="copy">Copiar vigas al nivel siguiente</button><button type="button" class="ib pri" data-km="apply">Aplicar a los sectores</button>`:''}</div>`;
+  const bar=`<div class="kmbar">${ed?`<button type="button" class="ib" data-kva="new">+ Viga</button><button type="button" class="ib" data-kva="plano" title="Dos toques en los cruces de ejes y las caras de cada apoyo: la viga sale sola, vinculada a la sectorización">✎ Trazar en el plano</button>`:''}<button type="button" class="ib" data-km="xls">Exportar Excel</button>${ed?`<button type="button" class="ib" data-km="copy">Copiar vigas al nivel siguiente</button><button type="button" class="ib pri" data-km="apply">Aplicar a los sectores</button>`:''}</div>`;
   const nivel={};const lst=L.map(w=>{const r=kvCalc(w,P,kvRank(C));const ve=kvRep(w.rep);let kg=0;for(const n of r.names){const v=((r.S[n]||{}).kg||0)*ve;kg+=v;nivel[n]=(nivel[n]||0)+v}
     return`<button type="button" class="kvli${V&&w.id===V.id?' on':''}" data-kva="pick" data-id="${esc(w.id)}"><span><b>${esc(w.cod||'Viga')}</b>${ve>1?` <i>×${ve}</i>`:''}</span><span class="mono">${kmF(kg,0)} kg</span><small>${esc(w.b)}×${esc(w.h)}</small></button>`}).join('');
   const colOf=code=>{const id=C.secByCode(code);return id?kmSecCol(C.secs,id):'var(--muted)'};
@@ -176,14 +188,16 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
       nivelH+=`<li class="kvfr"><span><i class="csdot" style="--c:${esc((f&&f.color)||'#888')}"></i> ${esc(f?f.name:'Sin frente')}</span><span class="mono">${kmF(t,0)} kg</span></li>`}
     nivelH+=`<li><b style="color:${colOf(n)}">${esc(n)}</b><span class="mono">${kmF(nivel[n],0)} kg</span></li>`}
   const nEl=kmRows(p.id).filter(r=>(kmTipo(r.t)||{}).cl==='vig').length;
-  if(!V)return`${bar}<div class="card"><div class="pad"><p>Este nivel aún no tiene vigas. Cada viga se arma como en la elevación del plano: ejes, barras corridas, bastones, estribos y juntas de sector.</p>${ed?'<button type="button" class="ib pri" data-kva="new">+ Primera viga</button>':''}</div></div>`;
+  if(!V)return`${bar}<div class="card"><div class="pad"><p>Este nivel aún no tiene vigas. Cada viga se arma como en la elevación del plano: ejes, barras corridas, bastones, estribos y juntas de sector. También puedes trazarla sobre el plano de sectorización: dos toques en los cruces de ejes y las caras de cada apoyo.</p>${ed?'<button type="button" class="ib pri" data-kva="plano">✎ Trazar en el plano</button> <button type="button" class="ib" data-kva="new">+ Primera viga</button>':''}</div></div>`;
   const R=kvCalc(V,P,kvRank(C));const G=R.G;const ve=kvRep(V.rep);
+  /* vinculada al plano: ejes, distancias, juntas y sectores no se escriben aquí (eg = se puede editar la geometría) */
+  const eg=ed&&!V.pl;
   const aside=`<aside class="kvas"><section class="card"><div class="kmh"><b>Vigas</b><span class="mu">del nivel</span></div><div class="kvl">${lst}</div>${ed?`<div class="kmadd"><button type="button" class="ib" data-kva="new">+ Viga</button><button type="button" class="ib" data-kva="dup">Duplicar</button><button type="button" class="ib" data-kva="del">Eliminar</button></div>`:''}</section>
     ${kvSecHtml(V,R,G)}<section class="card"><div class="kmh"><b>Nivel</b><span class="mu">acero de vigas por sector</span></div><ul class="kvniv">${nivelH}</ul>${nEl?`<p class="kmw pad" style="margin:0">Elementos también tiene ${nEl} fila${nEl>1?'s':''} de vigas en este nivel: al aplicar se suman las dos.</p>`:''}</section></aside>`;
   const F2=(k,l,w,ph)=>`<label class="kvf">${l}<input class="ci${k==='cod'||k==='rep'?'':' num'}" style="width:${w}px" data-kv="${k}" data-kk="kv|${k}" value="${esc(V[k]??'')}"${ph?` placeholder="${esc(ph)}"`:''}${dis}></label>`;
   const ED=R.ED;const segB=(a,on,l,extra)=>`<button type="button" class="${on?'on':''}" data-kva="${a}"${extra||''}${dis}>${l}</button>`;
   const datos=`<section class="card"><div class="kvdat">${F2('cod','Viga',90)}<label class="kvf">Sección b × h (m)<span class="kvrow"><input class="ci num" style="width:56px" data-kv="b" data-kk="kv|b" value="${esc(V.b)}" aria-label="Ancho b"${dis}> × <input class="ci num" style="width:56px" data-kv="h" data-kk="kv|h" value="${esc(V.h)}" aria-label="Peralte h"${dis}></span></label>
-    ${F2('losa','Losa',56)}${F2('rec','Recub.',56)}<label class="kvf">Ejes: distancias entre ejes<input class="ci mono" style="width:220px" data-kv="ejes" data-kk="kv|ejes" value="${esc(kvEjesTxt(V.ejes))}" title="p. ej. 4 + 8.25×3 + 4 (Enter)"${dis}></label>
+    ${F2('losa','Losa',56)}${F2('rec','Recub.',56)}<label class="kvf">Ejes: distancias entre ejes<input class="ci mono" style="width:220px" data-kv="ejes" data-kk="kv|ejes" value="${esc(kvEjesTxt(V.ejes))}" title="p. ej. 4 + 8.25×3 + 4 (Enter)"${eg?'':' disabled'}></label>
     ${F2('rep','Se repite en ejes',120,'9, 10, 11')}<span class="mu kvve">${ve>1?`× ${ve} vigas iguales`:'una sola viga'}</span><span class="kvbr"></span>
     <span class="kvf">Estribo Ø<span class="seg">${segB('d38',V.estD!=='1/2','3/8"')}${segB('d12',V.estD==='1/2','1/2"')}</span></span>
     <label class="kvf">Estribo a × b (m) · vacío = auto<span class="kvrow"><input class="ci num" style="width:56px" data-kv="ea" data-kk="kv|ea" value="${esc(V.ea||'')}" placeholder="${kmF(ED.aA,2)}" aria-label="Estribo a"${dis}> × <input class="ci num" style="width:56px" data-kv="eb" data-kk="kv|eb" value="${esc(V.eb||'')}" placeholder="${kmF(ED.bA,2)}" aria-label="Estribo b"${dis}></span></label>
@@ -201,10 +215,10 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
   /* bandas de sector */
   R.names.forEach((n,k)=>{const l=px(bnd[k]),w=Math.max(2,px(bnd[k+1])-l);const c=colOf(n);const kg=kmF(((R.S[n]||{}).kg||0)*ve,0);const fn=kvFrName(C,n);const tip=esc(n+(fn?' · '+fn:'')+' · '+kg+' kg');
     const narrow=w<96;h+=fi?`<button type="button" class="kvband${isS('band',k)?' on':''}" data-kvs="band:${k}" title="${tip}" style="left:${l}px;width:${w}px;--kc:${c}">${w<40?'':esc(n)+(narrow?'':` · ${kg} kg`)}</button>`
-      :`<div class="kvband" title="${tip}" style="left:${l}px;width:${w}px;--kc:${c}">${w<56?'':`<select class="ci" data-kv="sc:${k}" data-kk="kv|sc:${k}" aria-label="Sector"${dis}>${kvSecOpts(C,n)}</select>${narrow?'':` ${kg} kg`}${C.secByCode(n)?'':' <span class="kmw">no existe</span>'}`}</div>`});
+      :`<div class="kvband" title="${tip}" style="left:${l}px;width:${w}px;--kc:${c}">${w<56?'':`<select class="ci" data-kv="sc:${k}" data-kk="kv|sc:${k}" aria-label="Sector"${eg?'':' disabled'}>${kvSecOpts(C,n)}</select>${narrow?'':` ${kg} kg`}${C.secByCode(n)?'':' <span class="kmw">no existe</span>'}`}</div>`});
   R.J.forEach((j,k)=>{const v=V.jun[j.i];const lab=`${v.ref} ${kvN(v.dx)>=0?'+':'−'}${kmF(Math.abs(kvN(v.dx)),2)}`;
-    h+=`<div class="kvjc${isS('jun',j.i)?' on':''}${jfr[k]?' fr':''}" data-kvjc="${j.i}" style="left:${px(j.x)}px;top:${yJ}px"${jtip(k)}>${ed?`<span class="kvgrip" data-kvj="${j.i}" title="Arrastra para mover la junta">⇔</span>`:''}${fi||!ed?`<button type="button" data-kvs="jun:${j.i}" data-kvjt="${j.i}">${esc(lab)}</button>`:`${I(`jr:${j.i}`,v.ref,'width:30px;text-align:center','Eje de referencia')}${I(`jd:${j.i}`,v.dx,'width:52px','Distancia al eje (m)',' num')}<button type="button" class="kx" data-kva="delJun" data-i="${j.i}" aria-label="Quitar junta">×</button>`}</div>`});
-  G.E.forEach((e,i)=>{h+=fi||!ed?`<button type="button" class="kvbub${isS('apoyo',i)?' on':''}" data-kvs="apoyo:${i}" style="left:${px(e.x)}px;top:${yAx}px">${esc(e.n)}</button>`:`<input class="ci kvbub" data-kv="en:${i}" data-kk="kv|en:${i}" value="${esc(e.n)}" aria-label="Nombre del eje" style="left:${px(e.x)}px;top:${yAx}px"${dis}>`});
+    h+=`<div class="kvjc${isS('jun',j.i)?' on':''}${jfr[k]?' fr':''}" data-kvjc="${j.i}" style="left:${px(j.x)}px;top:${yJ}px"${jtip(k)}>${eg?`<span class="kvgrip" data-kvj="${j.i}" title="Arrastra para mover la junta">⇔</span>`:''}${fi||!eg?`<button type="button" data-kvs="jun:${j.i}" data-kvjt="${j.i}">${esc(lab)}</button>`:`${I(`jr:${j.i}`,v.ref,'width:30px;text-align:center','Eje de referencia')}${I(`jd:${j.i}`,v.dx,'width:52px','Distancia al eje (m)',' num')}<button type="button" class="kx" data-kva="delJun" data-i="${j.i}" aria-label="Quitar junta">×</button>`}</div>`});
+  G.E.forEach((e,i)=>{h+=fi||!eg?`<button type="button" class="kvbub${isS('apoyo',i)?' on':''}" data-kvs="apoyo:${i}" style="left:${px(e.x)}px;top:${yAx}px">${esc(e.n)}</button>`:`<input class="ci kvbub" data-kv="en:${i}" data-kk="kv|en:${i}" value="${esc(e.n)}" aria-label="Nombre del eje" style="left:${px(e.x)}px;top:${yAx}px"${dis}>`});
   /* corridos */
   const lane=(o,k,y0,isInf)=>{const c=o.c,i=o.i;const ia=G.E.findIndex(e=>e.n===c.de),ib=G.E.findIndex(e=>e.n===c.a);const ok=ia>=0&&ib>ia;const a=ok?px(G.E[ia].x):px(G.x0),b=ok?px(G.E[ib].x):px(G.x1);const sp=kmSpec(c.s);
     const d=sp&&!sp.err&&sp.length?sp[sp.length-1].d:'';const cls=ok&&sp&&!sp.err?kvDC(d):'bad';const y=y0+k*LH;const cw=fi?150:200;const cl=Math.max(60,Math.round((a+b)/2-cw/2));
@@ -216,7 +230,7 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
   /* bastones */
   const last=G.E.length-1;h+=`<span class="kvgl" style="top:${yBas}px">Bast.</span>`;
   G.E.forEach((e,k)=>{const j=V.bas.findIndex(b=>b.ap===e.n);if(j<0){if(ed)h+=`<button type="button" class="kvplus" data-kva="addBas" data-i="${k}" title="Agregar bastón en este apoyo" aria-label="Agregar bastón" style="left:${px(e.x)-13}px;top:${yBas+12}px">+</button>`;return}
-    const b=V.bas[j];const a=k===0?G.x0+kvN(V.rec):e.x-e.w/2-kvN(b.i),z=k===last?G.x1-kvN(V.rec):e.x+e.w/2+kvN(b.d);const l=px(a),r=px(z);const sp=kmSpec(b.s);const cls=sp&&!sp.err&&sp.length?kvDC(sp[sp.length-1].d):'bad';
+    const b=V.bas[j];const a=k===0?G.x0+kvN(V.rec):e.l-kvN(b.i),z=k===last?G.x1-kvN(V.rec):e.r+kvN(b.d);const l=px(a),r=px(z);const sp=kmSpec(b.s);const cls=sp&&!sp.err&&sp.length?kvDC(sp[sp.length-1].d):'bad';
     h+=`<div class="kvbar ${cls}" style="left:${l}px;width:${Math.max(4,r-l)}px;top:${yBas+38}px"></div>`;
     if(fi||!ed)h+=`<button type="button" class="kvtag ${cls}${isS('apoyo',k)?' on':''}" data-kvs="apoyo:${k}" style="left:${px(e.x)}px;top:${yBas}px;transform:translateX(-50%)">${esc(b.s)}  ${k===0?'⌐':kmF(kvN(b.i),2)}|${k===last?'¬':kmF(kvN(b.d),2)}</button>`;
     else{h+=`<div class="kvchip ${cls}" style="left:${px(e.x)-38}px;top:${yBas}px;width:76px">${I(`bs:${j}`,b.s,'width:48px;font-weight:600','Barras del bastón')}<button type="button" class="kx" data-kva="delBas" data-i="${j}" aria-label="Quitar bastón">×</button></div>`;
@@ -227,25 +241,27 @@ function kvHtml(p,ed){const P=kmP();const C=kmCtx(p.id);const L=kvVigas(p.id);co
   G.T.forEach((t,i)=>{h+=`<button type="button" class="kvspan${isS('vano',i)?' on':''}" ${fi?`data-kvs="vano:${i}"`:`data-kva="cutv" data-i="${i}"`} aria-label="Vano ${esc(G.E[i].n)}–${esc(G.E[i+1].n)}" style="left:${px(t.a)}px;width:${px(t.b)-px(t.a)}px;top:${yBeam}px;height:${BH}px"></button>`;
     for(const x of kvEstPos(t.a,t.L,kmDist(t.est)))h+=`<i class="kvtk" style="left:${px(x)}px;top:${yBeam+6}px;height:${BH-26}px"></i>`});
   if(kvN(V.adic)>0)G.E.forEach(e=>{h+=`<i class="kvtk ad" style="left:${px(e.x)}px;top:${yBeam+6}px;height:${BH-26}px"></i>`});
-  G.E.forEach((e,i)=>{h+=`<button type="button" class="kvsup${isS('apoyo',i)?' on':''}" ${fi?`data-kvs="apoyo:${i}"`:`data-kva="cuta" data-i="${i}"`} aria-label="Apoyo ${esc(e.n)}" style="left:${px(e.x-e.w/2)}px;width:${Math.max(8,px(e.x+e.w/2)-px(e.x-e.w/2))}px;top:${yBeam-10}px;height:${BH+20}px"></button>`});
+  G.E.forEach((e,i)=>{h+=`<button type="button" class="kvsup${isS('apoyo',i)?' on':''}" ${fi?`data-kvs="apoyo:${i}"`:`data-kva="cuta" data-i="${i}"`} aria-label="Apoyo ${esc(e.n)}" style="left:${px(e.l)}px;width:${Math.max(8,px(e.r)-px(e.l))}px;top:${yBeam-10}px;height:${BH+20}px"></button>`});
   G.T.forEach(t=>{h+=`<span class="kvluz" style="left:${px((t.a+t.b)/2)}px;top:${yBeam+BH-19}px">luz ${kmF(t.L,2)}</span>`});
   /* corte */
   const nCut=2*G.E.length-1;const ci=Math.min(Math.max(0,MET.cut??1),nCut-1);const cx=ci%2===0?G.E[ci/2].x:(G.T[(ci-1)/2].a+G.T[(ci-1)/2].b)/2;
   h+=`<div class="kvcut" style="left:${px(cx)}px;top:${yBeam-6}px;height:${BH+12}px"></div><span class="kvcutl" style="left:${px(cx)}px;top:${yBeam+3}px">corte</span>`;
-  if(ed)h+=`<button type="button" class="ib" data-kva="addVano" style="position:absolute;left:${M.W-70}px;top:${yBeam+14}px">+ Vano</button>`;
+  if(eg)h+=`<button type="button" class="ib" data-kva="addVano" style="position:absolute;left:${M.W-70}px;top:${yBeam+14}px">+ Vano</button>`;
   /* distancias, anchos y estribos */
   h+=`<span class="kvgl" style="top:${yU}px">e–e</span><span class="kvgl" style="top:${yEs}px">Estr.</span>`;
   G.T.forEach((t,i)=>{const c=px((t.a+t.b)/2),l=px(t.a),w=px(t.b)-l;
     if(fi||!ed){h+=`<button type="button" class="kvtx" data-kvs="vano:${i}" style="left:${c}px;top:${yU}px;transform:translateX(-50%)">↔ ${esc(V.ejes[i].d)}</button><button type="button" class="kvtx kves" data-kvs="vano:${i}" style="left:${l}px;width:${w}px;top:${yEs}px">${esc(t.est)}</button>`;return}
-    h+=`<div class="kvee" style="left:${c}px;top:${yU}px">${I(`ed:${i}`,V.ejes[i].d,'width:62px','Distancia entre ejes (m)',' num')}<button type="button" class="kx" data-kva="insVano" data-i="${i}" title="Insertar un vano igual después" aria-label="Insertar vano">+</button>${G.T.length>1?`<button type="button" class="kx" data-kva="delVano" data-i="${i}" title="Quitar este vano" aria-label="Quitar vano">×</button>`:''}</div>`;
+    if(!eg)h+=`<span class="kvtx" style="left:${c}px;top:${yU}px;transform:translateX(-50%)">↔ ${esc(V.ejes[i].d)}</span>`;
+    else h+=`<div class="kvee" style="left:${c}px;top:${yU}px">${I(`ed:${i}`,V.ejes[i].d,'width:62px','Distancia entre ejes (m)',' num')}<button type="button" class="kx" data-kva="insVano" data-i="${i}" title="Insertar un vano igual después" aria-label="Insertar vano">+</button>${G.T.length>1?`<button type="button" class="kx" data-kva="delVano" data-i="${i}" title="Quitar este vano" aria-label="Quitar vano">×</button>`:''}</div>`;
     h+=I(`es:${i}`,t.est,`position:absolute;left:${l+3}px;width:${w-6}px;top:${yEs}px`,'Estribos del vano (desde cada extremo)',' mono kvesi')});
   if(!fi&&ed)G.E.forEach((e,i)=>{h+=I(`ew:${i}`,V.ejes[i].w,`position:absolute;width:44px;left:${px(e.x)-22}px;top:${yU}px`,'Ancho del apoyo (m)',' num')});
   /* corridos inferiores */
   h+=`<span class="kvgl" style="top:${yI+10}px">Inf.</span>`+(ed?`<button type="button" class="kvplus" data-kva="addInf" title="Agregar barras corridas inferiores" aria-label="Agregar corrido inferior" style="left:30px;top:${yI+24}px">+</button>`:'');
   inf.forEach((o,k)=>lane(o,k,yI,true));
-  const elev=`<section class="card"><div class="kmh"><b>${esc(V.cod||'Viga')}</b><span class="mu">${fi?'toca un elemento para editarlo':'escribe directo sobre el dibujo'}${ed?' · arrastra ⇔ para mover una junta':''}</span><span style="flex:1"></span>${ed?'<button type="button" class="ib" data-kva="addJun">+ Junta de sector</button>':''}</div>
+  const elev=`<section class="card"><div class="kmh"><b>${esc(V.cod||'Viga')}</b><span class="mu">${fi?'toca un elemento para editarlo':'escribe directo sobre el dibujo'}${eg?' · arrastra ⇔ para mover una junta':V.pl?' · las juntas se mueven en Sectorización':''}</span><span style="flex:1"></span>${eg?'<button type="button" class="ib" data-kva="addJun">+ Junta de sector</button>':''}</div>
     <div class="kvsc"><div class="kvel${fi?' fi':''}" data-kvel="1" style="width:${M.W}px;height:${H}px">${h}</div></div>${R.warn.length?`<div class="callout warnc kvwarn">${R.warn.map(esc).join('<br>')}</div>`:''}</section>`;
-  return`${bar}<div class="kvg">${aside}<div class="kvmain">${datos}${elev}${fi&&MET.vsel?kvFichaHtml(V,G,ed):''}${kvTabsHtml(V,R,ve,C)}</div></div>`}
+  if(ed)kvSyncSoon(p.id);
+  return`${bar}${kvAvisoHtml(p.id)}<div class="kvg">${aside}<div class="kvmain">${datos}${kvPlHtml(V,ed)}${elev}${fi&&MET.vsel?kvFichaHtml(V,G,ed):''}${kvTabsHtml(V,R,ve,C)}</div></div>`}
 
 /** ficha del elemento tocado (modo tablet) */
 function kvFichaHtml(V,G,ed){const s=MET.vsel;const dis=ed?'':' disabled';const I=(f,v,w,lab,ex)=>`<label class="kvf">${esc(lab)}<input class="ci${ex||''}" style="width:${w}" data-kv="${f}" data-kk="kv|${f}" value="${esc(v??'')}"${dis}></label>`;

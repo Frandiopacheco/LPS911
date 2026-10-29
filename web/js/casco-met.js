@@ -17,7 +17,7 @@ const kmV=()=>['calc','vig','ratio','par'].includes(U.kmV)?U.kmV:'calc';
 function kmEnsure(){if(kmSub||!db||!CS())return;
   kmSub=fcol('kmet').onSnapshot(sn=>{sn.docs.forEach(d=>{const id=d.id;if(KMQ.has(id))return;const v=d.data()||{};
       if(id==='par')KM.par=v;else if(id==='tipos')KM.tipos=Array.isArray(v.L)?v.L:[];else if(id.startsWith('n_'))KM.lv.set(id.slice(2),Array.isArray(v.rows)?v.rows:[]);else if(id.startsWith('v_'))KM.vg.set(id.slice(2),Array.isArray(v.L)?v.L:[])});
-    KM.ok=true;if(U.tab==='met')requestRender()},()=>{KM.ok=true});
+    KM.ok=true;if(U.tab==='met'||U.tab==='planos')requestRender()},()=>{KM.ok=true});
   unsubs.push(()=>{if(kmSub)kmSub();kmSub=null;KM.par=null;KM.tipos=[];KM.lv.clear();KM.vg.clear();KM.ok=false})}
 
 /** guarda un documento de kmet (500 ms después del último cambio); lo local manda mientras espera */
@@ -239,7 +239,7 @@ function kmChange(e){const el=e.target;if(!csEd())return;if(el.dataset.kv){kvCha
   if(el.dataset.kr){const pid=U.piso;const rows=kmRows(pid).map(r=>r.id===el.dataset.kr?{...r,[el.dataset.kf]:el.value.trim()}:r);MET.sel=el.dataset.kr;kmRowsSet(pid,rows,'Planilla');requestRender()}}
 
 /** escribe en cada sector del nivel el metrado calculado de cada partida (marca el origen «calculado») */
-async function kmApply(pid){const P=kmP();const C=kmCtx(pid);const R=kvMerge(kmLevel(kmRows(pid),KM.tipos,P,C),pid,P,C);const ops=[],lst=[],miss=new Set();let nUpd=0;
+async function kmApply(pid){kvSync(pid,true);const P=kmP();const C=kmCtx(pid);const R=kvMerge(kmLevel(kmRows(pid),KM.tipos,P,C),pid,P,C);const ops=[],lst=[],miss=new Set();let nUpd=0;
   for(const a of C.secs){const x=R.sec[a.id];if(!x)continue;const met={...(a.met||{})},mo={...(a.mo||{})};let ch=0;
     for(const[k,v]of Object.entries(x)){if(!(v>0))continue;const o=KM_OUT.find(y=>y[0]===k);const c=kmCat(P,k);if(!c){miss.add(o[1]);continue}const val=Math.round(v*(o[2]==='kg'?1:100))/(o[2]==='kg'?1:100);
       if(met[c.id]!==val||mo[c.id]!=='c'){met[c.id]=val;mo[c.id]='c';ch++}}
