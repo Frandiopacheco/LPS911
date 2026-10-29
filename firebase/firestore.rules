@@ -333,6 +333,24 @@ service cloud.firestore {
         && request.resource.data.d is string && request.resource.data.n is string;
       allow delete: if isAdmin();
     }
+    // Comentarios del planner en el Lookahead (oct 2026, js/comentarios.js): conversación interna entre Control de proyecto
+    // (isPlan), los editores y el administrador; nadie más los lee. Se crean abiertos y sin respuestas, a nombre propio; al
+    // actualizar no cambian el destino ni el autor, solo el autor corrige su texto y las respuestas solo se agregan.
+    // Eliminar = archivar (arch); borrar, solo el administrador.
+    match /lkcom/{id} {
+      allow read: if lpsMember() && (canEdit() || isPlan());
+      allow create: if lpsMember() && (canEdit() || isPlan()) && request.resource.data.k in ['act', 'amb', 'piso']
+        && request.resource.data.ref is string && request.resource.data.piso is string
+        && request.resource.data.txt is string && request.resource.data.txt.size() > 0 && request.resource.data.txt.size() <= 1000
+        && request.resource.data.by == mid() && request.resource.data.st == 'open'
+        && request.resource.data.r is list && request.resource.data.r.size() == 0;
+      allow update: if lpsMember() && (canEdit() || isPlan()) && request.resource.data.st in ['open', 'done']
+        && request.resource.data.txt is string && request.resource.data.txt.size() > 0 && request.resource.data.txt.size() <= 1000
+        && request.resource.data.r is list && request.resource.data.r.size() >= resource.data.r.size() && request.resource.data.r.size() <= 60
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['k', 'ref', 'piso', 'by', 't'])
+        && (resource.data.by == mid() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['txt']));
+      allow delete: if isAdmin();
+    }
     // Revisión de flujos por ambiente (oct 2026, js/flujos.js): la ven todos los de LPS; la escriben el SC (de su partida) y los
     // ingenieros (admin, editor, campo). No se borra (borrar, solo el administrador).
     match /frev/{id} {
@@ -1000,6 +1018,20 @@ service cloud.firestore {
       allow read: if lpsMember_cs();
       allow create, update: if (canEdit_cs() || isPlan_cs()) && request.resource.data.tipo in ['ini', 'fin']
         && request.resource.data.d is string && request.resource.data.n is string;
+      allow delete: if isAdmin_cs();
+    }
+    match /cs_lkcom/{id} {
+      allow read: if lpsMember_cs() && (canEdit_cs() || isPlan_cs());
+      allow create: if lpsMember_cs() && (canEdit_cs() || isPlan_cs()) && request.resource.data.k in ['act', 'amb', 'piso']
+        && request.resource.data.ref is string && request.resource.data.piso is string
+        && request.resource.data.txt is string && request.resource.data.txt.size() > 0 && request.resource.data.txt.size() <= 1000
+        && request.resource.data.by == mid_cs() && request.resource.data.st == 'open'
+        && request.resource.data.r is list && request.resource.data.r.size() == 0;
+      allow update: if lpsMember_cs() && (canEdit_cs() || isPlan_cs()) && request.resource.data.st in ['open', 'done']
+        && request.resource.data.txt is string && request.resource.data.txt.size() > 0 && request.resource.data.txt.size() <= 1000
+        && request.resource.data.r is list && request.resource.data.r.size() >= resource.data.r.size() && request.resource.data.r.size() <= 60
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['k', 'ref', 'piso', 'by', 't'])
+        && (resource.data.by == mid_cs() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['txt']));
       allow delete: if isAdmin_cs();
     }
     match /cs_frev/{id} {

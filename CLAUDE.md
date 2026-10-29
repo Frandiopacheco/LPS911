@@ -59,7 +59,7 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS` y `FIREBASE_SA_PRODUCCION` (instalan r
 - `campo`: ingeniero de campo; registro diario.
 - `sc`: subcontratista; propone en el lookahead, solo su partida. Inicia/detiene sus actividades en "En obra" y, como el capataz, **marca el cierre del día** (antes de la hora de corte, `live.close`; cuenta al instante, el ingeniero puede corregirlo hasta el Cierre del ingeniero), crea restricciones de su partida y solicita liberaciones.
 - `capataz`: celular, solo su partida, reportes en vivo.
-- `area`: área de apoyo (OT, Calidad…): ve todo y resuelve las restricciones de su área. Si el área contiene "Calidad", además programa/libera, marca crítica/supervisión y edita los inspectores (`isCal()`, `canLibCfg()`). Si el área contiene "Planificación" (el planner), crea y edita los **hitos** (`isPlanArea()`, reglas `isPlan()`, `docs/ia/lookahead.md` «Hitos»); no edita el lookahead.
+- `area`: área de apoyo (OT, Calidad…): ve todo y resuelve las restricciones de su área. Si el área contiene "Calidad", además programa/libera, marca crítica/supervisión y edita los inspectores (`isCal()`, `canLibCfg()`). Si el área contiene "Planificación" (el planner), crea y edita los **hitos** (`isPlanArea()`, reglas `isPlan()`, `docs/ia/lookahead.md` «Hitos») y deja **comentarios** en el lookahead (`js/comentarios.js`, «Comentarios del planner»); no edita el lookahead.
 - `veedor`: recorre la obra y registra el trabajo no programado (Campo › Plano); el resto solo lo consulta.
 - `planner`: rol del plan maestro, **retirado (oct 2026)**: quien lo tenga entra como `lector`.
 - `lector`: solo lectura.

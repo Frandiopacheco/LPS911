@@ -160,7 +160,7 @@ let CS_DEMO_GEN=false;
    las reglas no dejan borrar (lhlog, mlog, mver) y todo lo compartido (equipo, módulo Planos, Tareo). Opcional: ejecutores y
    catálogo (el catálogo se archiva: las reglas no permiten borrar mcat). También borra las entregas que Casco publicó como
    hitos en Last Planner (hitos con cs:true), que quedarían huérfanas. Pide escribir BORRAR y recarga la página al terminar. */
-const CS_VAC=['acts','ambientes','sectors','pisos','weeks','wsnap','restr','daily','fotos','live','lib','dplan','pdz','pzon','planos','laminas','lamimg','ksec','kcat','hitos','nprog','doneidx','pcrit','pav','pull','frev','pmet','lhidx','lhver'];
+const CS_VAC=['acts','ambientes','sectors','pisos','weeks','wsnap','restr','daily','fotos','live','lib','dplan','pdz','pzon','planos','laminas','lamimg','ksec','kcat','hitos','nprog','doneidx','pcrit','pav','pull','frev','pmet','lhidx','lhver','lkcom'];
 async function csDelCol(col,ref,keep){const sn=await ref.get();const ids=sn.docs.filter(d=>!keep||keep(d.data())).map(d=>d.id);
   for(let i=0;i<ids.length;i+=400){const b=db.batch();ids.slice(i,i+400).forEach(id=>b.delete(ref.doc(id)));await b.commit()}return ids.length}
 async function csVaciar(){if(!isAdmin||window.LPS_ENV!=='pruebas'||!CS()||DNS!=='cs_')return;
