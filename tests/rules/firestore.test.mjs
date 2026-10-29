@@ -1670,6 +1670,41 @@ test('hitos: admin, editores y Planificación los gestionan; el resto solo los v
   await assertFails(setDoc(doc(user('plan@obra.pe'), 'acts/x-plan'), { name: 'x', ambId: 'a1', sc: 'c1', days: [] }));
 });
 
+// Comentarios del planner en el Lookahead (oct 2026): conversación interna de Control de proyecto, editores y administrador
+test('lkcom: Control de proyecto, editores y admin comentan; nadie más los lee ni escribe', async () => {
+  const C = (by) => ({ k: 'act', ref: 'x1', piso: 'p1', an: 'A-1 · Pintura', d: '', txt: 'Termina después del hito', by, bn: by, t: 1, st: 'open', r: [] });
+  await assertSucceeds(setDoc(doc(user('cproy@obra.pe'), 'lkcom/c1'), C('cproy@obra.pe')));
+  await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lkcom/c2'), C('editor@obra.pe')));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'lkcom/c3'), C(OWNER)));
+  // a nombre de otro, ya resuelto, con respuestas o con destino inválido: no
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'lkcom/m1'), C('cproy@obra.pe')));
+  await assertFails(setDoc(doc(user('cproy@obra.pe'), 'lkcom/m2'), { ...C('cproy@obra.pe'), st: 'done' }));
+  await assertFails(setDoc(doc(user('cproy@obra.pe'), 'lkcom/m3'), { ...C('cproy@obra.pe'), k: 'otro' }));
+  await assertFails(setDoc(doc(user('cproy@obra.pe'), 'lkcom/m4'), { ...C('cproy@obra.pe'), txt: '' }));
+  // los demás roles no crean ni leen
+  for (const who of ['campo@obra.pe', 'sc@obra.pe', 'lector@obra.pe', 'ot@obra.pe', 'calidad@obra.pe', 'tcos@obra.pe']) {
+    await assertFails(setDoc(doc(user(who), 'lkcom/x-' + who.replace(/\W/g, '')), C(who)));
+    await assertFails(getDoc(doc(user(who), 'lkcom/c1')));
+  }
+  for (const who of [OWNER, 'editor@obra.pe', 'plan@obra.pe', 'cproy@obra.pe']) await assertSucceeds(getDoc(doc(user(who), 'lkcom/c1')));
+  // responder, resolver y reabrir
+  const R1 = [{ by: 'editor@obra.pe', n: 'Editor', txt: 'Lo adelanto un día', t: 2 }];
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { r: R1 }));
+  await assertSucceeds(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { st: 'done', rs: { by: 'editor@obra.pe', n: 'Editor', t: 3 } }));
+  await assertSucceeds(updateDoc(doc(user('cproy@obra.pe'), 'lkcom/c1'), { st: 'open', rs: null }));
+  // no se quitan respuestas, no cambia el destino ni el autor, y solo el autor corrige su texto
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { r: [] }));
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { ref: 'x2' }));
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { by: 'editor@obra.pe' }));
+  await assertFails(updateDoc(doc(user('editor@obra.pe'), 'lkcom/c1'), { txt: 'Otro texto' }));
+  await assertSucceeds(updateDoc(doc(user('cproy@obra.pe'), 'lkcom/c1'), { txt: 'Termina después del hito de la sala' }));
+  await assertFails(updateDoc(doc(user('sc@obra.pe'), 'lkcom/c1'), { st: 'done' }));
+  // archivar sí; borrar, solo el administrador
+  await assertSucceeds(updateDoc(doc(user('cproy@obra.pe'), 'lkcom/c1'), { arch: { t: 4, by: 'cproy@obra.pe', n: 'CP' } }));
+  await assertFails(deleteDoc(doc(user('cproy@obra.pe'), 'lkcom/c2')));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'lkcom/c3')));
+});
+
 // Revisión de flujos por ambiente (oct 2026): la escriben el SC (de su partida) y los ingenieros; todos la ven
 test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se borra', async () => {
   const R = sc => ({ n: 59, amb: 'a1', sc, pid: 'p1', f: { mat: 'ok' }, st: 'ok', by: 'x', t: 1 });
