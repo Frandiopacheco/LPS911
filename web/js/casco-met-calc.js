@@ -19,14 +19,14 @@ const KM_OUT=[['av','Acero de verticales','kg','AV'],['ev','Encofrado de vertica
   ['alo','Acero de losa','kg','ALO'],['vl','Concreto de losa y vigas','m³','VL'],['as','Asentado de muros','m²','AS']];
 const KM_STEEL={col:'av',pla:'av',vig:'avg',ali:'alo',mac:'alo'};
 
-function kmParDef(){const dia={};for(const[k,,kg]of KM_DIA){const v=KM_DIA_DEF[k];dia[k]={kg,lt:v[0],g90:v[1],g135:v[2]}}
+function kmParDef(){const dia={};for(const[k,,kg]of KM_DIA){const v=KM_DIA_DEF[k];dia[k]={kg,lt:v[0],lts:Math.ceil(v[0]*1.3*20-1e-9)/20,g90:v[1],g135:v[2]}}
   return{lv:9,vsp:0.40,lad:{b:0.30,l:0.30},rec:{vig:0.04,col:0.04,pla:0.04,los:0.02},dia,
     rg:{vig:[80,180],col:[100,260],pla:[40,130],ali:[30,80],mac:[40,120]},map:{}}}
 /** parámetros guardados completados con los típicos (lo que falta o no es número válido toma el típico) */
 function kmPar(saved){const D=kmParDef(),s=saved||{};const num=(v,d)=>Number.isFinite(+v)&&+v>0?+v:d;
   const P={lv:num(s.lv,D.lv),vsp:num(s.vsp,D.vsp),lad:{b:num(s.lad&&s.lad.b,D.lad.b),l:num(s.lad&&s.lad.l,D.lad.l)},rec:{},dia:{},rg:{},map:Object.assign({},s.map||{})};
   for(const k of Object.keys(D.rec))P.rec[k]=Number.isFinite(+(s.rec||{})[k])&&+(s.rec||{})[k]>=0?+(s.rec||{})[k]:D.rec[k];
-  for(const k of Object.keys(D.dia)){const a=(s.dia||{})[k]||{},d=D.dia[k];P.dia[k]={kg:num(a.kg,d.kg),lt:num(a.lt,d.lt),g90:num(a.g90,d.g90),g135:num(a.g135,d.g135)}}
+  for(const k of Object.keys(D.dia)){const a=(s.dia||{})[k]||{},d=D.dia[k];P.dia[k]={kg:num(a.kg,d.kg),lt:num(a.lt,d.lt),lts:num(a.lts,d.lts),g90:num(a.g90,d.g90),g135:num(a.g135,d.g135)}}
   for(const k of Object.keys(D.rg)){const a=(s.rg||{})[k]||[];P.rg[k]=[num(a[0],D.rg[k][0]),num(a[1],D.rg[k][1])]}
   return P}
 
