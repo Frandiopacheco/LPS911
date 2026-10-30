@@ -56,13 +56,16 @@ function ambMoveTo(ids,to){if(!canAmbMove())return 0;const a=S.amb.get(to);if(!a
   apply(L.map(x=>op('acts',x.id,{...x,ambId:to,order:(base+=10)})),`${L.length} actividad${L.length>1?'es':''} pasada${L.length>1?'s':''} al ambiente ${a.code}`);
   if(SELA.size)selClear();return L.length}
 function selBar(){let b=$('#mvbar');const on=SELA.size&&U.tab==='look'&&ready;
-  if(!on){if(b)b.remove();return}
+  if(!on){if(b)b.remove();document.body.style.removeProperty('--mvbar-h');return}
   for(const id of[...SELA])if(!S.act.has(id))SELA.delete(id);
   if(!b){b=document.createElement('div');b.id='mvbar';b.className='mvbar';b.setAttribute('role','toolbar');b.setAttribute('aria-label','Mover en bloque');document.body.appendChild(b);
+    // el aviso de «Deshacer» (.toast) se pone encima de la barra, no sobre ella
+    if(window.ResizeObserver)new ResizeObserver(()=>{if(b.isConnected)document.body.style.setProperty('--mvbar-h',b.offsetHeight+'px')}).observe(b);
     b.onclick=e=>{const k=e.target.closest('[data-sb]');if(!k)return;const v=k.dataset.sb;const L=[...SELA];
       if(v==='clr')selClear();else if(v==='amb')ambMoveDialog(k,L);else if(v==='more')blockMoveDialog(k,L,'la selección');else shiftActs(L,+v,todayIso(),'Selección')}}
   const n=SELA.size;const h=`<b>${n} actividad${n>1?'es':''}</b><button class="ib" data-sb="-1" title="Adelantar 1 día hábil (Alt+←)">← 1 día</button><button class="ib" data-sb="1" title="Atrasar 1 día hábil (Alt+→)">1 día →</button><button class="ib" data-sb="more">Mover…</button>${canAmbMove()?'<button class="ib" data-sb="amb">Cambiar de ambiente…</button>':''}<button class="ib" data-sb="clr">Quitar selección</button><span class="mvh">Toca ⋮ en otras filas para sumarlas</span>`;
-  if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}}
+  if(b.dataset.h!==h){b.innerHTML=h;b.dataset.h=h}
+  document.body.style.setProperty('--mvbar-h',b.offsetHeight+'px')}
 document.addEventListener('keydown',e=>{if(!SELA.size||U.tab!=='look')return;const inField=e.target.closest&&e.target.closest('input,textarea,select');if(inField)return;
   if(e.key==='Escape'){selClear();return}
   if(e.altKey&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){e.preventDefault();shiftActs([...SELA],e.key==='ArrowRight'?1:-1,todayIso(),'Selección')}});

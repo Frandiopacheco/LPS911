@@ -32,6 +32,12 @@ test('elegir filas con Ctrl+clic y moverlas juntas desde la barra', async ({ pag
   await page.click('#mvbar [data-sb="1"]');
   await expect.poll(() => dias(page, 'e0')).toEqual(await esperado(page, a, 1));
   await expect.poll(() => dias(page, 't1')).toEqual(await esperado(page, b, 1));
+  // el aviso de «Deshacer» queda encima de la barra, sin taparla
+  await expect(page.locator('#toast')).toBeVisible();
+  await expect.poll(async () => {
+    const t = await page.locator('#toast').boundingBox(), m = await page.locator('#mvbar').boundingBox();
+    return t && m && t.y + t.height <= m.y;
+  }).toBe(true);
   await page.keyboard.press('Escape');
   await expect(page.locator('#mvbar')).toHaveCount(0);
   noErrors(errors, 'mover filas');
