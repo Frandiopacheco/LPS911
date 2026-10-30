@@ -116,6 +116,14 @@ const jorHoyOk=()=>!!me&&canWrite&&me.role!=='sc';
 function jorHoySec(){if(!jorHoyOk())return'';if(!JORH)JORH={d:todayIso(),tab:jorTab0(todayIso())};const V=jorView(JORH,canDaily);
   return`<section class="card jorhoy" id="hoyjor"><h2>📊 Estado de la jornada <span class="sub">${JORH.tab==='det'?'lo que los SC reportaron como «Detenido»':'quién ya cerró el día (corte '+cutT()+')'} · ${pisoLabel()}</span></h2>
     <div class="pad">${V.html}<div class="jor-bt">${V.share.replace(/kbig pri/,'ib pri').replace(/kbig ghost/,'ib')}</div></div></section>`}
+/* Hoy (30-10-2026, pedido del dueño): las detenciones son lo primero que se ve. Arriba de todo, lo que SIGUE detenido ahora
+   (SC, actividad, dónde, motivo y detalle, desde cuándo); tocar una abre su ficha. «Ver todas» baja a Estado de la jornada › Detenciones. */
+function jorHoyTop(){if(!jorHoyOk()||!LIVE_OK)return'';const d=todayIso();const D=jorDet(d);const A=D.L.filter(o=>o.st==='stop').sort((p,q)=>(q.t||0)-(p.t||0));const nr=D.L.filter(o=>o.st==='res').length;
+  const more=D.L.length?`<button class="ib" data-jor="hdet">Ver todas las detenciones de hoy (${D.L.length})</button>`:'';
+  if(!A.length)return`<section class="card hoydet ok" id="hoydet"><div class="hdok"><b>✓ Ninguna actividad detenida ahora</b><span>${nr?`${nr} reanudada${nr===1?'':'s'} hoy`:'Nadie reportó detenciones hoy'} · ${pisoLabel()}</span>${more}</div></section>`;
+  return`<section class="card hoydet" id="hoydet"><h2>⏸ Detenidas ahora <b class="hdn">${A.length}</b> <span class="sub">${pisoLabel()}${nr?` · ${nr} reanudada${nr===1?'':'s'} hoy`:''}</span></h2>
+    <div class="hdl">${A.map(o=>{const c=conOf(o.sc);return`<div class="jdt-i hdi" data-jdt="${esc(o.x.id)}" role="button" tabindex="0" style="--c:${c.color}"><span class="jdt-h">${o.t?hhmm(o.t):'—'}</span><div class="jdt-w"><div class="jdt-a">${esc(o.x.name)}</div><div class="jdt-p"><i class="hdc"></i>${esc(c.name)} · ${jdtWhere(o)}</div><div class="jdt-m">${jdtWhy(o)}</div></div><span class="jdt-s jdt-stop">${o.t?agoTxt(o.t):'Detenida'}</span></div>`}).join('')}</div>
+    ${more?`<div class="pad hdb">${more}</div>`:''}</section>`}
 const FICHA_SEL='#ksheet,#dpsheet';
 /* tocar una detención: en el Tablero su resumen; en Campo y Hoy su ficha. Desde la hoja, la hoja se aparta mientras
    la ficha está abierta y vuelve (actualizada) al cerrarla: así se revisan una tras otra sin perder la lista */
@@ -188,13 +196,14 @@ async function jorShare(d,mode,f){f=f==='det'?'det':'cer';let blob=null;try{blob
     try{if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Imagen copiada: pégala en WhatsApp (Ctrl+V)');return}}catch(err){}}
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Imagen descargada: adjúntala en WhatsApp')}
 document.addEventListener('click',e=>{const t=e.target;if(!t.closest)return;
-  const ln=t.closest('#jsheet [data-jdt],#hoyjor [data-jdt]');if(ln){const inS=!!ln.closest('#jsheet');jdtOpen(ln.dataset.jdt,inS?null:JORH&&JORH.d,inS);return}
+  const ln=t.closest('#jsheet [data-jdt],#hoyjor [data-jdt],#hoydet [data-jdt]');if(ln){const inS=!!ln.closest('#jsheet');jdtOpen(ln.dataset.jdt,inS?null:JORH&&JORH.d,inS);return}
   const b=t.closest('[data-jor]');if(!b)return;const k=b.dataset.jor;
   if(k==='open'){jorOpen();return}
+  if(k==='hdet'){if(!JORH)JORH={d:todayIso(),tab:'det'};JORH.d=todayIso();JORH.tab='det';requestRender();setTimeout(()=>{const s=$('#hoyjor');if(s)s.scrollIntoView({behavior:'smooth',block:'start'})},60);return}
   if(k==='opendet'){document.querySelectorAll('#dpsheet').forEach(o=>o.remove());JOR={d:todayIso(),tab:'det'};jorDraw();return}if(k==='ref'){jorDraw();return}
   const inH=!!b.closest('#hoyjor'),st=inH?JORH:JOR;const redraw=()=>{if(inH)requestRender();else jorDraw()};
   if(k==='tab'){if(st){st.tab=b.dataset.jt==='cer'?'cer':'det';redraw()}return}
   if(k==='day'){if(st&&jorShift(st,+b.dataset.jdd))redraw();return}
   if(k==='mot'){JOR_MOT=b.dataset.jm||'';if(b.closest('#ipr')){if(typeof iprDraw==='function')iprDraw()}else{if(JOR)jorDraw();if(U.tab==='hoy')requestRender()}return}
   if(k==='share'||k==='dl')jorShare(b.dataset.jd||todayIso(),k,b.dataset.jf)});
-document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.closest&&e.target.closest('#jsheet [data-jdt],#hoyjor [data-jdt]')){e.preventDefault();e.target.closest('[data-jdt]').click()}});
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.closest&&e.target.closest('#jsheet [data-jdt],#hoyjor [data-jdt],#hoydet [data-jdt]')){e.preventDefault();e.target.closest('[data-jdt]').click()}});

@@ -3819,6 +3819,20 @@ table.mx .mxplus:hover{background:var(--accent);border-color:var(--accent);color
 .jor-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;margin:4px 0 2px}.jor-top .jor-tabs{margin:0}
 .jor-nav{display:inline-flex;align-items:center;gap:6px}.jor-nav b{min-width:9.5em;text-align:center;font-variant-numeric:tabular-nums}.jor-nav .ib:disabled{opacity:.4}
 .jorhoy{margin-top:18px}.jorhoy .jor-bt{margin-top:4px}
+/* Hoy › Detenidas ahora (30-10-2026): arriba de todo, con borde rojo; sin detenciones, una línea verde */
+.hoydet{margin-bottom:14px;border-color:var(--bad);border-left:4px solid var(--bad)}
+.hoydet h2 .hdn{background:var(--bad);color:#fff;border-radius:999px;padding:0 .55em;font-size:.85em;margin-left:.2em}
+.hoydet .hdl .jdt-i{cursor:pointer}.hoydet .hdl .jdt-i:first-child{border-top:0}
+.hoydet .hdl .jdt-i:hover{background:var(--panel2)}
+.hoydet .hdc{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:.4em;vertical-align:baseline}
+.hoydet .hdb{padding-top:6px}
+.hoydet.ok{border-color:var(--ok);border-left-color:var(--ok)}
+.hdok{display:flex;flex-wrap:wrap;align-items:center;gap:.3em 1em;padding:10px 14px}.hdok b{color:var(--ok)}.hdok span{color:var(--muted);font-size:.92em}.hdok .ib{margin-left:auto}
+/* ficha de la actividad (aviso de detención): la detención en su propio recuadro */
+.dpdet{margin:8px 0;padding:8px 12px;border:1px solid var(--bad);border-left-width:4px;border-radius:var(--r-card,10px);background:var(--bad-soft)}
+.dpdh{font-weight:700;color:var(--bad);margin-bottom:2px}.dpdh span{font-weight:500;color:var(--ink2)}
+.dpdet .dpr{display:grid;grid-template-columns:6em minmax(0,1fr);gap:.6em;text-align:left;border:0;padding:3px 0}.dpdet .dpr b{text-align:left;font-weight:600}
+.kst.ld{color:var(--muted);font-style:italic}
 .jor-tabs{align-self:flex-start;margin:4px 0 2px}.jor-tabs button{height:34px;padding:0 14px;font-weight:600}
 .jdt{display:flex;flex-direction:column;gap:14px}
 .jdt-ks{display:flex;flex-wrap:wrap;gap:8px 26px;padding:10px 14px;background:var(--panel2);border:1px solid var(--line2);border-radius:var(--r-card,10px)}

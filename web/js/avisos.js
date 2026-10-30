@@ -89,6 +89,8 @@ function pushGo(aid,d){if(!aid)return;let n=0;
   const go=()=>{if(!ready||!me){if(++n<100)setTimeout(go,300);return}
     if(!S.act.get(aid)){toast('Esa actividad ya no está en el lookahead.');return}
     if(typeof goMod==='function'&&U.mod!=='lps')goMod('lps');
+    /* abierta desde el aviso, la app aún no pidió los reportes en vivo del día: la ficha se completa sola cuando llegan */
+    if(typeof ensureDaily==='function')ensureDaily(d||todayIso());
     setTimeout(()=>{if(typeof dashPop==='function')dashPop(aid,d||todayIso(),'<div class="kbtns"><button class="kbig ghost" data-jor="opendet">📊 Ver todas las detenciones de hoy</button></div>')},150)};
   go()}
 {const q=new URLSearchParams(location.search);const aid=q.get('det');if(aid){const d=q.get('d')||'';try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}pushGo(aid,/^\d{4}-\d\d-\d\d$/.test(d)?d:'')}}

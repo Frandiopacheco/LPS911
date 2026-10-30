@@ -113,6 +113,6 @@ function renderHoy(main){const d=todayIso();const C=hoyCards();const n=C.reduce(
   /* se redibuja con cada dato que llega: conservar dónde estaba el scroll (la sección de la jornada es larga) */
   const sc0=main.querySelector('.hoyg')?main.querySelector('.scroll'):null;const top=sc0?sc0.scrollTop:0;
   main.innerHTML=`<div class="scroll"><div class="wrap">${pageHead(`${hi}, ${(me.name||'').split(' ')[0]||''}`.replace(/, $/,''),`${DOW_L[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)} · ${pisoLabel()} · ${n?`${n} cosa${n===1?'':'s'} por atender`:'todo al día'}`)}
-    <div class="hoyg">${C.map(hoyCard).join('')}</div>${typeof jorHoySec==='function'?jorHoySec():''}</div></div>`;
+    ${typeof jorHoyTop==='function'?jorHoyTop():''}<div class="hoyg">${C.map(hoyCard).join('')}</div>${typeof jorHoySec==='function'?jorHoySec():''}</div></div>`;
   if(top){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=top}
   main.onclick=e=>{const b=e.target.closest('[data-hgo]');if(!b)return;if(b.closest('[data-hoy="np"]')){CU.view='plan';saveCU()}if(b.closest('[data-hoy="mcat"]'))U.mxV='cat';if(b.closest('[data-hoy="peval"]')&&HOYEVW)U.week=HOYEVW;if(b.closest('[data-hoy="pdesc"]')&&HOYDW){U.week=HOYDW;if(U.piso&&U.piso!==HOYDP&&S.pis.has(HOYDP)){U.piso=HOYDP;U.sector='';saveUI()}}if(b.closest('[data-hoy="frev"]'))setTimeout(()=>{if(typeof frevOpen==='function')frevOpen()},60);if(b.closest('[data-hoy="mlog"]')){U.mxV='mat';setTimeout(()=>{if(typeof mxLogDlg==='function')mxLogDlg()},50)}goTab(b.dataset.hgo)}}

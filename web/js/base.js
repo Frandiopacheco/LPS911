@@ -548,6 +548,8 @@ async function startSession(u,fdb){
   setStatus();updUndo();
 }
 const DAY=new Map(),FOTO=new Map(),DONE=new Map(),LIVE=new Map();let liveSub=null,liveFrom=null,liveErr=null;
+/* ya llegó la primera foto de los reportes en vivo (la ficha del aviso de detención no dice «sin novedad» antes de tiempo) */
+let LIVE_OK=false;
 let DONEV=0; /* sube cada vez que se recalcula DONE (para cachés) */
 function doneRebuild(){if(typeof withInt==='function'&&S.act&&S.act._cli)return withInt(doneRebuild0);return doneRebuild0()}
 function doneRebuild0(){DONEV++;DONE.clear();const R=typeof REOP!=='undefined'?REOP:new Map();const add=(id,d)=>{const z=R.get(id);if(z&&d<=z)return;const c=DONE.get(id);if(!c||d<c)DONE.set(id,d)};
@@ -563,13 +565,13 @@ function recClr(d,aid){const doc=DAY.get(dayId(d,pisoOfAct(aid)));const r=doc&&d
 function liveOwn(lv){const x=lv&&((typeof actInt==='function'?actInt():S.act).get(lv.actId)||ARCH.act.get(lv.actId));if(!x)return false;const p=pisoOfAmb(x.ambId);if(lv.pisoId&&p&&p!==lv.pisoId)return false;
   const ls=lv.sc||'';if((x.sc||'')===ls)return true;if(!ls||!lv.date)return false;
   const dp=dplanOf(lv.date,lv.pisoId||p);const w=dp&&dp.who&&dp.who[lv.actId];if(w)return(w.sc||'')===ls;return lv.date<todayIso()}let daySub=null,dayFrom=null,dayErr=null;
-function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;
+function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role==='capataz'?-2:-7);const f=from<lim?lim:from;if(liveFrom&&f>=liveFrom)return;if(liveSub)liveSub();liveFrom=f;LIVE_OK=false;
   /* cada inicio/pausa del capataz llega aquí: en el Lookahead solo se redibuja si cambió algo que muestra (los cierres, liveSig) */
   /* includeMetadataChanges: «⏳ sin enviar» (_pend, En obra) se quita cuando el servidor confirma. Una foto que solo cambia eso
      no vuelve a leer los datos ni recalcula las terminadas (C4): solo actualiza _pend de ese documento */
   let first=true;
   liveSub=fcol('live').where('date','>=',f).onSnapshot({includeMetadataChanges:true},sn=>{let data=true;
-      if(first){first=false;LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,liveDoc(d)))}
+      if(first){first=false;LIVE.clear();sn.docs.forEach(d=>LIVE.set(d.id,liveDoc(d)));LIVE_OK=true}
       else{const all=sn.docChanges({includeMetadataChanges:true});if(!all.length&&!liveErr){snapOk('live');return}
         const dch=new Set(sn.docChanges().map(c=>c.doc.id));data=dch.size>0;
         for(const c of all){const id=c.doc.id;if(c.type==='removed'){LIVE.delete(id);data=true;continue}
@@ -582,7 +584,7 @@ function ensureLive(from){if(!db)return;const lim=addD(todayIso(),me&&me.role===
 let LIVE_SIG=null;
 function liveSig(){let s='';for(const[id,lv]of LIVE){const c=lv.close;if(c)s+=id+'|'+(lv.sc||'')+'|'+(lv.pisoId||'')+'|'+(lv.actId||'')+'|'+(lv.photos||[]).length+'|'+JSON.stringify(c)+'\n'}return s}
 const liveDoc=d=>({...d.data(),id:d.id,_pend:!!(d.metadata&&d.metadata.hasPendingWrites)});
-function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null}
+function stopLive(){if(liveSub)liveSub();liveSub=null;liveFrom=null;LIVE.clear();LIVE_SIG=null;LIVE_OK=false}
 let dayP=Promise.resolve();
 /* Ventana viva + rangos antiguos (auditoría C8/P8, oct 2026): daily y dplan se escuchan en vivo como mucho desde hace DAYWIN
    días; lo anterior que pida una pantalla (volver semanas atrás) se lee UNA vez con get(), desde el lunes de esa semana hasta
@@ -876,6 +878,7 @@ function render(){
   if(st!=null&&!main.__own){const sc=main.querySelector('.scroll');if(sc)sc.scrollTop=st}/* __own: la vista repone su posición (Plan semanal) */
   if(fk){const el=main.querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(el){el.focus({preventScroll:true});el.dataset.o=el.value;try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
   RLAST=performance.now();RCOST[U.tab]=RLAST-rt0;
+  if(typeof dashPopRefresh==='function')dashPopRefresh();
 }
 
 
