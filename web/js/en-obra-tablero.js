@@ -421,19 +421,31 @@ function dashScMenu(btn){const L=dashScIds();
 function dashRe(){const h=$('#dplan');if(h)h._fk='';render()}
 /* ficha del ambiente en el Tablero: solo información (nada se registra desde aquí) */
 /* foot: botones al pie (el aviso de detención agrega «Ver todas las detenciones») */
-function dashPop(aid,d,foot){const x=S.act.get(aid);if(!x)return;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
+/* la ficha abierta se vuelve a armar con cada dato que llega (render → dashPopRefresh): antes era una foto del momento y,
+   abierta desde el aviso de detención antes de que llegaran los reportes en vivo, decía «En curso · sin novedad» */
+let DPOP=null;
+function dashPopRefresh(){const lb=$('#dpsheet');if(!lb||!DPOP){if(!lb)DPOP=null;return}const h=dashPopHtml(DPOP.aid,DPOP.d,DPOP.foot);if(h==null){lb.remove();DPOP=null;return}
+  if(lb.dataset.h===h)return;const sc=lb.querySelector('.ksc');const top=sc?sc.scrollTop:0;lb.innerHTML=h;lb.dataset.h=h;const sc2=lb.querySelector('.ksc');if(sc2)sc2.scrollTop=top}
+const agoTxt=t=>{const m=Math.max(0,Math.round((NOW()-t)/60000));return m<1?'recién':m<60?`hace ${m} min`:`hace ${Math.floor(m/60)} h${m%60?' '+(m%60)+' min':''}`};
+/* la detención en un recuadro propio: motivo, detalle, desde cuándo, quién la reportó (lo que el aviso no alcanza a mostrar) */
+function dashDetHtml(d,aid,s,lv){if(s.k!=='stop')return'';const e=lastStop(d,aid);const raw=String(lv&&lv.mot||e&&e.m||'');const i=raw.indexOf(' — ');
+  const mot=i<0?raw:raw.slice(0,i),note=i<0?String(e&&e.x||''):raw.slice(i+3).trim();const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
+  return`<div class="dpdet"><div class="dpdh">⏸ Detenida${e?' desde las '+hhmm(e.t):''}${e&&d===todayIso()?` <span>· ${agoTxt(e.t)}</span>`:''}</div>${row('Motivo',esc(mot||'Sin motivo'))}${row('Detalle',esc(note))}${row('Reportó',esc(e&&e.n||''))}${stopLate(d,aid)?'<div class="dpr"><span></span><b>Reportado al cierre</b></div>':''}</div>`}
+function dashPop(aid,d,foot){const h=dashPopHtml(aid,d,foot);if(h==null)return;DPOP={aid,d,foot};
+  /* una sola ficha: un toque puede llegar dos veces (toque + clic) y quedaban dos fichas encimadas que había que cerrar dos veces */
+  document.querySelectorAll('#dpsheet').forEach(o=>o.remove());
+  const lb=document.createElement('div');lb.className='ksheet';lb.id='dpsheet';lb.innerHTML=h;lb.dataset.h=h;const t0=NOW();
+  lb.onclick=e=>{{const im=e.target.closest('.kphs img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:')&&typeof lightbox==='function')lightbox(im.src);return}}if(e.target===lb&&NOW()-t0<400)return;if(e.target===lb||e.target.closest('[data-kx]')){lb.remove();DPOP=null}};document.body.appendChild(lb)}
+function dashPopHtml(aid,d,foot){const x=S.act.get(aid);if(!x)return null;const a=S.amb.get(x.ambId);const s=kState(d,aid);const rs=restrPend(aid);const lv=liveOf(d,aid);
   const wk=weekDays(weekOf(d));const dd=(x.days||[]).filter(z=>wk.includes(z)).sort();const rc=recOf(d,aid);const lib=typeof libOf==='function'?libOf(aid):null;
   const others=[...S.act.values()].filter(y=>y.ambId===x.ambId&&y.id!==aid&&schedOrSnap(y,d));
   const row=(k,v)=>v?`<div class="dpr"><span>${k}</span><b>${v}</b></div>`:'';
   const h=`<div class="ksc"><div class="ksh"><i class="kn" style="--k:${KST[s.k].c}">${(window.__plano?.nums(pisoOfAct(aid)).get(aid))||'·'}</i><div><b>${esc(x.name)}</b><span>${esc(a?a.code+' · '+a.name:'')} · ${esc(S.pis.get(pisoOfAct(aid))?.name||'')}</span><span>${esc(conOf(x.sc).name)}</span></div><button class="kx" data-kx aria-label="Cerrar">×</button></div>
-    <div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${liveLine(d,aid)}${actPhotos(d,aid)}
-    <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
+    ${!LIVE_OK&&!s.conf?'<div class="kst ld">Cargando lo reportado en campo…</div>':`<div class="kst" style="--k:${KST[s.k].c}">${esc(kText(d,aid))}</div>${dashDetHtml(d,aid,s,lv)}${liveLine(d,aid)}`}${actPhotos(d,aid)}
+    <div class="dpinfo">${row('Días esta semana',dd.map(z=>fmtD(z)).join(', '))}${row('Metrado hoy',x.qty&&x.qty[d]!=null?esc(String(x.qty[d]))+' '+esc(x.und||''):'')}${row('Comentario de cierre',esc(rc&&rc.note||lv&&lv.close&&lv.close.note||''))}${row('Liberación de calidad',lib?esc(({sol:'Solicitada',pro:'Programada',obs:'Observada',lev:'Levantada',lib:'Liberada'})[lib.st]||lib.st):'')}${row('Reportó',esc(s.k!=='stop'&&lv&&lv.log&&lv.log.length?(lv.log[lv.log.length-1].n||'')+' · '+hhmm(lv.log[lv.log.length-1].t):''))}</div>
     ${rs.map(r=>`<div class="rsk">⚠ Restricción pendiente · ${esc(rTxt(r))}</div>`).join('')}
     ${others.length?`<div class="ksl">También hoy en este ambiente</div>${others.map(y=>{const k=kState(d,y.id).k;return`<div class="dpo" style="--k:${KST[k].c}"><i></i>${esc(y.name)} · <span class="mu">${esc(conOf(y.sc).name)} · ${KST[k].t}</span></div>`}).join('')}`:''}${foot||''}</div>`;
-  /* una sola ficha: un toque puede llegar dos veces (toque + clic) y quedaban dos fichas encimadas que había que cerrar dos veces */
-  document.querySelectorAll('#dpsheet').forEach(o=>o.remove());
-  const lb=document.createElement('div');lb.className='ksheet';lb.id='dpsheet';lb.innerHTML=h;const t0=NOW();
-  lb.onclick=e=>{{const im=e.target.closest('.kphs img[data-ph]');if(im){if(im.src&&im.src.startsWith('data:')&&typeof lightbox==='function')lightbox(im.src);return}}if(e.target===lb&&NOW()-t0<400)return;if(e.target===lb||e.target.closest('[data-kx]'))lb.remove()};document.body.appendChild(lb)}
+  return h}
 function dashClick(e){const t=e.target;let b;
   if(t.closest('#dtv')){DB_.tv=!DB_.tv;try{if(DB_.tv)document.documentElement.requestFullscreen().catch(()=>{});else if(document.fullscreenElement)document.exitFullscreen()}catch(err){}const m=$('#main');m.dataset.built='';render();return}
   if((b=t.closest('[data-dpm]'))){DB_.scM=b.dataset.dpm;render();return}
