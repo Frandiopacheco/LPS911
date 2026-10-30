@@ -46,3 +46,37 @@ test('Avisos: hoja con estado del equipo, pisos del administrador y ficha al toc
   await expect(page.locator('#jsheet .jor-tabs button.on')).toHaveText('Detenciones');
   noErrors(errors, 'avisos');
 });
+
+// 30-10-2026 (dueño): abierta desde el aviso, la ficha decía «En curso · sin novedad» porque se armaba antes de que llegaran los
+// reportes en vivo y no se actualizaba. Ahora espera («Cargando…»), se completa sola y muestra la detención en su recuadro.
+// Además, en Hoy las detenciones activas van arriba de todo.
+test('aviso de detención: la ficha se completa al llegar el reporte y Hoy muestra arriba lo detenido', async ({ page }) => {
+  const T = Date.parse(HOY + 'T09:00:00-05:00');
+  const STOP = ['live', `${HOY}_e0`, { date: HOY, pisoId: 'p1', actId: 'e0', sc: 'c2', st: 'stop', mot: 'Falta de material — no llegó el cemento', t0: T - 3600e3,
+    log: [{ s: 'run', t: T - 3600e3, by: 'cap', n: 'Pedro Capataz' }, { s: 'stop', m: 'Falta de material', x: 'no llegó el cemento', t: T, by: 'cap', n: 'Pedro Capataz' }] }];
+  const errors = await openApp(page, { tab: 'hoy', extra: [STOP] });
+  // Hoy: «Detenidas ahora» arriba de las tarjetas, con motivo y detalle
+  const top = page.locator('#hoydet');
+  await expect(top).toBeVisible();
+  await expect(top.locator('.hdn')).toHaveText('1');
+  await expect(top).toContainText('Falta de material');
+  await expect(top).toContainText('no llegó el cemento');
+  expect(await page.evaluate(() => { const a = document.querySelector('#hoydet'), b = document.querySelector('.hoyg'); return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); })).toBe(true);
+  // el aviso se toca antes de que lleguen los reportes en vivo
+  await page.evaluate(d => { window.__keep = new Map(LIVE); LIVE.clear(); LIVE_OK = false; pushGo('e0', d); }, HOY);
+  const pop = page.locator('#dpsheet');
+  await expect(pop.locator('.kst.ld')).toBeVisible();
+  await expect(pop).not.toContainText('sin novedad');
+  await page.evaluate(() => { window.__keep.forEach((v, k) => LIVE.set(k, v)); LIVE_OK = true; requestRender(); });
+  await expect(pop.locator('.dpdet')).toBeVisible();
+  await expect(pop.locator('.dpdet')).toContainText('Falta de material');
+  await expect(pop.locator('.dpdet')).toContainText('no llegó el cemento');
+  await expect(pop.locator('.dpdet')).toContainText('Pedro Capataz');
+  await expect(pop.locator('.kst')).toContainText('Detenido');
+  await pop.locator('[data-kx]').click();
+  await expect(pop).toHaveCount(0);
+  // «Ver todas» baja a Estado de la jornada › Detenciones
+  await top.locator('[data-jor="hdet"]').click();
+  await expect(page.locator('#hoyjor .jor-tabs button.on')).toHaveText('Detenciones');
+  noErrors(errors, 'aviso detención');
+});
