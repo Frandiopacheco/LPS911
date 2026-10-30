@@ -857,3 +857,31 @@ test('paneles plegados por defecto: columnas con el nombre, se despliegan al toc
   await expect(page.locator('#mrs')).toHaveClass(/shut/);
   noErrors(errors, 'paneles plegados');
 });
+
+test('modo reunión: pantalla dividida con el plan del día y la Semana también en Cumplimiento', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+  await page.evaluate(() => { window.__pfOpen = false; window.__plano.pfReset(); requestRender(); }); // como al entrar: paneles plegados
+  await page.click('#mmeetb');
+  await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
+  // el plan del día queda como franja al costado; «◫ Dividir» lo abre al lado del plano
+  await expect(page.locator('#mpanel')).toBeVisible();
+  await expect(page.locator('#mpanel #mpan')).toBeVisible();
+  await page.click('#mmbar [data-msplit]');
+  await expect(page.locator('#mpanel .mp-h')).toContainText('Plan del día');
+  await expect(page.locator('#mmbar [data-msplit]')).toHaveAttribute('aria-pressed', 'true');
+  // la Semana se abre a la derecha en Cumplimiento, sin tapar la ficha del día
+  const tab = page.locator('#mrst [data-rtab="msemb"]');
+  await expect(tab).toBeVisible();
+  await expect(page.locator('#mrst [data-rtab="mpdb"], #mrst [data-rtab="mchb"]')).toHaveCount(0);
+  await tab.click();
+  await expect(page.locator('#msemb')).toBeVisible();
+  await expect(page.locator('#mcard')).toBeVisible();
+  const [c, r] = await Promise.all([page.locator('#mcard').boundingBox(), page.locator('#mrs').boundingBox()]);
+  expect(c.x + c.width).toBeLessThanOrEqual(r.x);
+  // en «Plan e interferencias» sigue igual; volver a tocar «◫ Dividir» pliega el panel
+  await page.click('#mmbar [data-mmode="plan"]');
+  await expect(page.locator('#mrst [data-rtab="msemb"]')).toBeVisible();
+  await page.click('#mmbar [data-msplit]');
+  await expect(page.locator('#mpanel #mpan')).toBeVisible();
+  noErrors(errors, 'reunión dividida');
+});
