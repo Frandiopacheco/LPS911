@@ -286,7 +286,7 @@ function moreSync(){const bm=$('#bmore'),b=$('#fmore');if(!bm||!b)return;bm.hidd
   /* Control ▾: punto si se está viendo una versión o los cambios frente al congelado */
   {const d=$('#fdn');if(d)d.hidden=!(U.ver||U.changes)}
   {const fv=$('#fver'),fh=$('#fvh');if(fh&&fv)fh.hidden=fv.hidden&&(($('#fvsave')||{}).hidden!==false)}
-  {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc)}
+  {const c=$('#fclr');if(c)c.hidden=!(nf||U.q||U.sector||U.sc||U.grp)}
   {const no=$('#fshn');if(no)no.hidden=!!(($('#fpast')||{}).innerHTML||($('#fdone')||{}).innerHTML)}
   const fl=$('#fleg');if(fl)fl.checked=!U.legOff;const lg=$('#legend');if(lg)lg.classList.toggle('legoff',!!U.legOff);
   const bd=$('#bdots'),db=$('#fdots');if(bd&&db){bd.hidden=!U.lbDots;db.setAttribute('aria-expanded',U.lbDots?'true':'false');db.classList.toggle('on',!!U.lbDots)}
