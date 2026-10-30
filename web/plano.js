@@ -739,13 +739,15 @@ function cuLine(o,n){const v=o.ok+o.partial+o.no;return `${o.ok} de ${n} cumplid
 function meetMode(m,keepDay){M.mmode=m;zcClose();M.colorBy=m==='cu'?'cu':'sc';if(m==='plan'){M.cxOpen=true;M.chOpen=true}
   if(!keepDay){const d=m==='cu'?todayIso():wshift(todayIso(),1);if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;if(M.date!==d){M.date=d;M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(d);ensurePlan()}}
   requestRender();setTimeout(()=>meetGo(M.meetSc),120)}
+/* la reunión vuelve a encuadrar la partida elegida cuando un panel lateral se abre o se pliega (el plano cambia de tamaño) */
+function meetRefit(){if(M.meet)setTimeout(()=>{if(M.meet)meetGo(M.meetSc)},200)}
 function meetExit(){M.meet=false;M.meetSc='';zcClose();if(M.cb0!=null){M.colorBy=M.cb0;M.cb0=null}try{if(document.fullscreenElement)document.exitFullscreen()}catch(err){}requestRender()}
 function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;document.body.classList.toggle('pl-meet',!!M.meet);$('.mapa')?.classList.toggle('meeting',!!M.meet);
   if(!M.meet){bar.hidden=true;card.hidden=true;const st=$('#mstage');if(st)st.style.top='';const rs=$('#mrs');if(rs)rs.style.top='';return}
   const scs=meetScs();if(M.meetSc){const k=M.meetSc.split(',').filter(c=>scs.includes(c)).join(',');if(k!==M.meetSc)M.meetSc=k}const SEL=M.meetSc?M.meetSc.split(','):[];const i=scs.indexOf(SEL[0]);const pl=M.mmode==='plan';
   const bh=`<button class="ib" id="mmx" title="Salir del modo reunión (Esc)">✕ Salir</button><span class="mseg mmode" role="group" aria-label="Qué se revisa"><button data-mmode="cu" class="${pl?'':'on'}" title="Lo que se hizo: cumplimiento registrado en Campo (C)">✓ Cumplimiento</button><button data-mmode="plan" class="${pl?'on':''}" title="Lo que viene: va / no va, cruces entre partidas y equipos (P)">📋 Plan e interferencias</button></span>${basesOf(M.piso).length>1?`<select id="mmvis" aria-label="Plano base">${basesOf(M.piso).map(b=>`<option value="${b.id}"${b.id===M.vista?' selected':''}>${esc(lname(b))}</option>`).join('')}</select>`:''}<span class="mmd"><select id="mmpiso" aria-label="Piso">${pisos().map(p=>`<option value="${p.id}"${p.id===M.piso?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select><span class="mmday"><button class="ib" data-mdd="-1" title="Día anterior" aria-label="Día anterior">&#8249;</button><b>${DOWN_[(pd(M.date).getUTCDay()+6)%7]} ${fmtD(M.date)}</b><button class="ib" data-mdd="1" title="Día siguiente" aria-label="Día siguiente">&#8250;</button>${M.date!==todayIso()?'<button class="ib" data-mdd="0">Hoy</button>':''}</span></span>
     <span class="mmnav"><button class="ib" data-mm="-1" title="Anterior (←)">‹</button><button class="mmall${M.meetSc?'':' on'}" data-msc="">Todos</button>${scs.map(c=>`<button class="mmsc${SEL.includes(c)?' on':''}" data-msc="${c}" title="Clic: solo esta partida · Ctrl+clic: sumar o quitar" style="--c:${conOf(c).color}"><i></i>${esc(conOf(c).name)}</button>`).join('')}<button class="ib" data-mm="1" title="Siguiente (→)">›</button></span>
-    ${pl&&M.date>todayIso()&&dzEng()?(pubOf()&&!draftsOf().length?`<span class="pubok">✓ Publicado</span>`:`<button class="ib pri" data-pub="1" title="Aplicar el plan a todos: lookahead, Campo y En obra">📣 Publicar plan${draftsOf().length?` · ${draftsOf().length}`:''}</button>`):''}<button class="ib mtog${M.szShow?' on':''}" data-msz aria-pressed="${!!M.szShow}" title="Ver los sectores y ambientes de Sectorización sobre el plano">▦ Sectorización</button>${pl&&CROSS.list.length?`<button class="ib mtog${cxHid()?'':' on'}" data-cxv aria-pressed="${!cxHid()}" title="Mostrar u ocultar el achurado de los cruces entre partidas">▨ Achurado · ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</button>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>${M.tool!=='pan'?`<span class="mmdraw">✏️ Dibuja la zona${M.pend&&M.pend.actId&&S.act.get(M.pend.actId)?' de «'+esc(short(S.act.get(M.pend.actId).name,28))+'»':''} <button class="ib" id="mcancel">Cancelar</button></span>`:''}`;
+    ${pl&&M.date>todayIso()&&dzEng()?(pubOf()&&!draftsOf().length?`<span class="pubok">✓ Publicado</span>`:`<button class="ib pri" data-pub="1" title="Aplicar el plan a todos: lookahead, Campo y En obra">📣 Publicar plan${draftsOf().length?` · ${draftsOf().length}`:''}</button>`):''}${innerWidth>=900?`<button class="ib mtog${PFOLD.l?'':' on'}" data-msplit aria-pressed="${!PFOLD.l}" title="Pantalla dividida: el plan del día al lado del plano">◫ Dividir</button>`:''}<button class="ib mtog${M.szShow?' on':''}" data-msz aria-pressed="${!!M.szShow}" title="Ver los sectores y ambientes de Sectorización sobre el plano">▦ Sectorización</button>${pl&&CROSS.list.length?`<button class="ib mtog${cxHid()?'':' on'}" data-cxv aria-pressed="${!cxHid()}" title="Mostrar u ocultar el achurado de los cruces entre partidas">▨ Achurado · ${CROSS.list.length} cruce${CROSS.list.length>1?'s':''}</button>`:''}<button class="ib mexp" title="Descargar como imagen lo que se está mostrando">Imagen</button><button class="ib" id="mmfs" title="Pantalla completa">⤢</button>${M.tool!=='pan'?`<span class="mmdraw">✏️ Dibuja la zona${M.pend&&M.pend.actId&&S.act.get(M.pend.actId)?' de «'+esc(short(S.act.get(M.pend.actId).name,28))+'»':''} <button class="ib" id="mcancel">Cancelar</button></span>`:''}`;
   if(bar.dataset.h!==bh){bar.innerHTML=bh;bar.dataset.h=bh}bar.hidden=false;
   let ch='';const NBM=nbMap();
   /* «Cumplimiento»: lo que se hizo el día (registrado en Campo) · «Plan»: la ficha se oculta y a la derecha quedan Por decidir, Equipos, Cruces y Cambios */
@@ -762,7 +764,7 @@ function renderMeet(){const bar=$('#mmbar'),card=$('#mcard');if(!bar)return;docu
         return`<div class="mcs">Incumplimientos (${B.length}) · por causa</div>`+[...G.entries()].sort((a,b)=>a[0]==='Sin registro'?1:b[0]==='Sin registro'?-1:b[1].length-a[1].length).map(([k,L])=>`<div class="mcg">${esc(k)} <b>${L.length}</b></div><ol class="mcl">${L.map(({r,rc})=>`<li class="cu-${rc?rc.status:'none'}" data-mact="${r.x.id}" tabindex="0">${nbHtml(NBM,r.x.id)}<span class="mono">${esc(r.a?r.a.code:'')}</span><div><b>${esc(r.x.name)}</b><small>${esc(r.a?r.a.name+' · ':'')}${esc(conOf(r.x.sc).name)}${rc&&impOf(rc)===false?' · no imputable':''}${rc&&rc.note?' · “'+esc(short(rc.note,50))+'”':''}</small></div></li>`).join('')}</ol>`).join('')})()}
       <div class="note" style="padding:6px 2px">Solo se revisan los incumplimientos. Toca uno para ver o corregir lo registrado. Luego pasa a <b>📋 Plan e interferencias</b>.</div>`}
   if(!pl){if(card.dataset.h!==ch){card.innerHTML=ch;card.dataset.h=ch}card.hidden=false}
-  const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';const rs=$('#mrs');if(rs)rs.style.top=pl&&innerWidth>899?(bhh+10)+'px':'';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
+  const bhh=bar.offsetHeight;const st=$('#mstage');if(st)st.style.top=bhh+'px';const rs=$('#mrs');if(rs)rs.style.top=innerWidth>899?(bhh+10)+'px':'';if(innerWidth>900)card.style.top=(bhh+10)+'px';else card.style.top=''}
 function meetClick(e){const t=e.target;let b;
   if(t.closest('#mmeetb')){M.meet=true;M.meetSc='';M.selId=null;M.tmp=null;M.pend=null;M.tool='pan';M.cb0=M.colorBy;meetMode('cu');return true}
   if(legClick(e))return true;
@@ -771,6 +773,7 @@ function meetClick(e){const t=e.target;let b;
   if(t.closest('#mmx')){meetExit();return true}
   if((b=t.closest('[data-mmode]'))){if(b.dataset.mmode!==M.mmode)meetMode(b.dataset.mmode);return true}
   if(t.closest('[data-msz]')){M.szShow=!M.szShow;requestRender();return true}
+  if(t.closest('[data-msplit]')){PFOLD.l=!PFOLD.l;requestRender();meetRefit();return true}
   if(t.closest('#mmfs')){try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>toast('Tu navegador no permite pantalla completa aquí.'))}catch(err){toast('Tu navegador no permite pantalla completa aquí.')}return true}
   if((b=t.closest('[data-msc]'))){const c=b.dataset.msc;if((e.ctrlKey||e.metaKey)&&c){const L=M.meetSc?M.meetSc.split(','):[];meetGo((L.includes(c)?L.filter(x=>x!==c):[...L,c]).join(','))}else meetGo(c);return true}
   if((b=t.closest('[data-mm]'))){meetStep(+b.dataset.mm);return true}
@@ -976,7 +979,7 @@ const DOCK0=[['mpdb','Por decidir'],['mcxb','Cruces'],['mchb','Cambios'],['msemb
 /* Cruces solo mientras se revisan: modo Interferencias, la reunión (Plan) o el subcontratista (que no tiene modos) */
 const cxDock=()=>!pmEng()||pmode()==='cx'||(!!M.meet&&M.mmode==='plan')||!!M.rvx;
 let DOCK=DOCK0;
-function dockRender(){const rs=$('#mrs'),wrap=rs&&rs.parentElement;if(!rs)return;const lg=$('#mleg');if(lg)lg.hidden=true;DOCK=DOCK0.filter(([id])=>id!=='mcxb'||cxDock());{const cx=$('#mcxb');if(cx&&!cxDock())cx.hidden=true}
+function dockRender(){const rs=$('#mrs'),wrap=rs&&rs.parentElement;if(!rs)return;const lg=$('#mleg');if(lg)lg.hidden=true;DOCK=DOCK0.filter(([id])=>(id!=='mcxb'||cxDock())&&(!M.meet||M.mmode==='plan'||id==='msemb'));{const cx=$('#mcxb');if(cx&&!cxDock())cx.hidden=true}
   /* Equipos: franja acoplada debajo del plano (no flota) */
   {const fz=$('#mfzb'),mb=rs.closest('.mbody');if(fz&&mb){let fb=$('#mfzbar');if(!fb){fb=document.createElement('div');fb.id='mfzbar';fb.className='mfzbar';mb.after(fb)}if(fz.parentElement!==fb)fb.appendChild(fz);fb.hidden=fz.hidden||!!M.meet&&M.mmode!=='plan'}}
   let tb=$('#mrst');if(!tb){tb=document.createElement('div');tb.id='mrst';tb.className='mrst';rs.prepend(tb)}
@@ -992,9 +995,9 @@ function dockRender(){const rs=$('#mrs'),wrap=rs&&rs.parentElement;if(!rs)return
   /* PC y tablet: una columna con una pestaña vertical por panel y su contador; tocar abre ese panel, tocar la abierta lo pliega */
   if(!ph){const h=av.length?`<div class="mrail" role="tablist" aria-label="Paneles">${av.map(([id,t])=>{const n=cnt(id);const on=id===M.rst&&!shut;return`<button role="tab" data-rtab="${id}" class="mrtab${on?' on':''}${id==='mcxb'&&n&&n!=='0'?' bad':''}" aria-selected="${on}" title="${on?'Plegar':'Abrir'} ${t}"><span class="mrtt">${t}</span>${n&&n!=='0'?`<b>${esc(n)}</b>`:''}</button>`}).join('')}</div>`:'';
     if(tb.dataset.h!==h){tb.innerHTML=h;tb.dataset.h=h}
-    DOCK.forEach(([id])=>{const el=$('#'+id);if(el)el.classList.toggle('on',id===M.rst&&!shut)});
+    DOCK0.forEach(([id])=>{const el=$('#'+id);if(el)el.classList.toggle('on',id===M.rst&&!shut)});
     const has=!!av.length;rs.classList.toggle('shut',shut);rs.classList.add('rail');rs.hidden=!has;
-    const mp=rs.closest('.mapa');if(mp){mp.classList.toggle('docked',has&&!shut&&!(M.meet&&M.mmode!=='plan'));mp.classList.toggle('dockmin',has&&shut)}return}
+    const mp=rs.closest('.mapa');if(mp){mp.classList.toggle('docked',has&&!shut);mp.classList.toggle('dockmin',has&&shut)}return}
   rs.classList.remove('rail');
   const h=!av.length&&!rdy?'':shut&&!ph?`<button class="mstrip" data-rsx="1" title="Abrir el panel" aria-label="Abrir el panel"><span class="mstrip-a">‹</span><span class="mstrip-t">${av.map(([id,t])=>{const n=cnt(id);return t+(n?' '+n:'')}).join(' · ')||'Listo para la reunión'}</span></button>`:av.length||rdy?`${rdy}<div class="mrstb" role="tablist">${av.map(([id,t])=>{const n=cnt(id);return`<button role="tab" data-rtab="${id}" class="${id===M.rst&&!shut?'on':''}${id==='mcxb'&&n&&n!=='0'?' bad':''}" aria-selected="${id===M.rst&&!shut}">${t}${n?` <b>${esc(n)}</b>`:''}</button>`}).join('')}<button class="mrsx" data-rsx="1" title="${shut?'Mostrar el panel':'Ocultar el panel (más plano a la vista)'}" aria-label="${shut?'Mostrar el panel':'Ocultar el panel'}">${shut?(ph?'▴':'‹'):(ph?'▾':'›')}</button></div>`:'';
   if(tb.dataset.h!==h){tb.innerHTML=h;tb.dataset.h=h}
@@ -1449,7 +1452,7 @@ function renderPlan(main,cur,base){
   {const sn=npSeenHtml('mp-it');if(sn)h+=`<div class="mp-sec">Visto en obra · no programado</div>${sn}`}
   if(sc&&notes.length)h+=`<div class="mp-sec">Notas y dibujos</div><div class="note">${notes.length} en el plano. Selecciónalos con ✋ para moverlos o borrarlos.</div>`;
   const lf=!PHONE()&&PFOLD.l;if(lf)h=`<button class="mstrip" id="mpan" title="Abrir el plan del día" aria-label="Abrir el plan del día"><span class="mstrip-a">›</span><span class="mstrip-t">Plan del día · ${L.length}</span></button>`;
-  const pn=$('#mpanel');if(pn.dataset.h!==h){pn.innerHTML=h;pn.dataset.h=h}pn.classList.toggle('fold',lf);pn.hidden=PHONE()?!M.panel||!!M.meet:!!M.meet;
+  const pn=$('#mpanel');if(pn.dataset.h!==h){pn.innerHTML=h;pn.dataset.h=h}pn.classList.toggle('fold',lf);pn.hidden=PHONE()?!M.panel||!!M.meet:!!M.meet&&innerWidth<900;
   const tb=$('#mtools');const aligned=curAligned(cur,base);const sel=M.selId&&zget(M.selId);
   const th=`${TOOLS.map(([k,i,n,t])=>`<button class="mt${M.tool===k?' on':''}${k==='borrar'?' er':''}" data-tool="${k}" title="${t}" aria-label="${t}"${k!=='pan'&&(!canD||(!aligned&&k!=='borrar'))?' disabled':''}><span>${i}</span><small>${n}</small></button>`).join('')}<span class="mtsep"></span><button class="mt" id="mundo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${HIST.length?'':' disabled'}><span>↶</span><small>Deshacer</small></button><button class="mt" id="mredo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${REDO.length?'':' disabled'}><span>↷</span><small>Rehacer</small></button>`;
   if(tb.dataset.h!==th){tb.innerHTML=th;tb.dataset.h=th}tb.hidden=!base||!!M.meet;
@@ -2196,7 +2199,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if((b=g('[data-dz]'))){const[k,id]=b.dataset.dz.split('|');const x=S.act.get(id);if(!x||!dzCan(x))return true;if(k==='man')dzMove(b,x);else if(k==='fin')dzFin(x);else if(k==='res')dzRes(b,x);return true}
   if(t.id==='dzadd'){dzAdd(t);return true}
   if((b=g('[data-goszamb]'))){if(typeof szGoAmb==='function')szGoAmb(b.dataset.goszamb);return true}
-  if(t.closest('#mpan')||t.id==='mpx'){if(PHONE()){M.panel=!M.panel}else PFOLD.l=!PFOLD.l;requestRender();return true}
+  if(t.closest('#mpan')||t.id==='mpx'){if(PHONE()){M.panel=!M.panel}else PFOLD.l=!PFOLD.l;requestRender();meetRefit();return true}
   if((b=g('[data-mdd]'))){zcClose();const v=+b.dataset.mdd;if(typeof AUTO_OFF!=='undefined')AUTO_OFF=true;M.date=v===0?todayIso():addD(M.date,v);if(pd(M.date).getUTCDay()===0)M.date=addD(M.date,v||1);M.selId=null;M.tmp=null;M.pend=null;if(typeof daySet==='function')daySet(M.date);ensurePlan();requestRender();return true}
   if((b=g('[data-tool]'))){M.tool=b.dataset.tool;M.tmp=null;if(M.tool==='pan')M.pend=M.pend;requestRender();return true}
   if(t.id==='mdel'){delSel();return true}
@@ -2234,8 +2237,8 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if((b=g('[data-parej]'))){if(!dzEng())return true;const o=updDoc(b.dataset.parej,{st:'rej',draft:false,decBy:me.email,decN:me.name||me.email,decT:NOW()},{st:'pend',draft:true});if(o){rec([o]);requestRender();toast('Propuesta rechazada')}return true}
   if((b=g('[data-padel]'))){const z=PD.get(b.dataset.padel);if(!z||!(dzEng()||z.by===(me&&me.email)))return true;const o=[...paZones(z.id).map(q=>remDoc(q.id)),remDoc(z.id)].filter(Boolean);if(o.length){rec(o);requestRender();toast('Quitado del plan','Deshacer',undo)}return true}
   if((b=g('[data-padraw]'))){paddDraw(b.dataset.padraw);return true}
-  if((b=g('[data-rtab]'))){const id=b.dataset.rtab;if(innerWidth<900){if(M.rst===id&&M.rsPh)M.rsPh=false;else M.rsPh=true}else if(!PFOLD.r&&M.rst===id&&M.rstMan)PFOLD.r=true;else PFOLD.r=false;M.rst=id;M.rstMan=true;requestRender();return true}
-  if((b=g('[data-rsx]'))){if(innerWidth<900)M.rsPh=!M.rsPh;else PFOLD.r=!PFOLD.r;requestRender();return true}
+  if((b=g('[data-rtab]'))){const id=b.dataset.rtab;if(innerWidth<900){if(M.rst===id&&M.rsPh)M.rsPh=false;else M.rsPh=true}else if(!PFOLD.r&&M.rst===id&&M.rstMan)PFOLD.r=true;else PFOLD.r=false;M.rst=id;M.rstMan=true;requestRender();meetRefit();return true}
+  if((b=g('[data-rsx]'))){if(innerWidth<900)M.rsPh=!M.rsPh;else PFOLD.r=!PFOLD.r;requestRender();meetRefit();return true}
   if((b=g('[data-cxrtog]'))){M.cxrOpen=!M.cxrOpen;requestRender();return true}
   if((b=g('[data-rvx]'))){const k=b.dataset.rvx;if(k==='stop')rvxStop();else if(k==='go')rvxNext(0);else rvxGo(0);return true}
   if((b=g('[data-xreo]'))){if(!dzEng())return true;const o=remDoc(b.dataset.xreo);if(o){rec([o]);CROSS.key='';requestRender();toast('El cruce vuelve a quedar pendiente','Deshacer',undo)}return true}

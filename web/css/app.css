@@ -1352,7 +1352,7 @@ td.act .lqbadge.sh{right:26px}
 /* Plan diario: cruces «dos partidas en el mismo lugar» en un recuadro a la derecha del plano */
 .mrs{position:absolute;right:10px;top:10px;z-index:21;width:330px;max-height:calc(100% - 20px);display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .mrs>*{pointer-events:auto}
-.mcard:not([hidden])~.mrs{display:none}
+.mcard:not([hidden])~.mrs:not(.rail){display:none}
 .mcxb,.mpdb,.mfzb,.mchb,.msemb{max-height:45%;min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.14);overflow:hidden}
 .mcxb[hidden],.mpdb[hidden],.mfzb[hidden],.mchb[hidden],.mcqb[hidden]{display:none}
 .mcxb .mcxh{display:flex;align-items:center;gap:6px;width:100%;border:0;background:var(--bad-soft);color:var(--bad);font:600 12.5px var(--f-ui);padding:8px 12px;cursor:pointer;text-align:left;min-height:40px}
@@ -4620,6 +4620,9 @@ body:has(#tcRoot) .toast button{pointer-events:auto}
   .mpanel.fold{width:38px;padding:0;background:var(--panel2)}
 }
 @media (min-width:900px) and (max-width:1279px){.mrs.dock.rail{width:338px!important}.mapa.docked .mwrap>.mstage{right:338px}.mapa.docked .mcqb{right:348px}}
+/* Reunión › Cumplimiento (30-10-2026): la ficha va a la izquierda de la columna derecha (Semana) */
+@media (min-width:901px){.mapa.meeting.docked .mcard{right:386px}.mapa.meeting.dockmin .mcard{right:48px}}
+@media (min-width:901px) and (max-width:1279px){.mapa.meeting.docked .mcard{right:348px}}
 .mrail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
 .mrtab{writing-mode:vertical-rl;display:flex;align-items:center;gap:6px;width:28px;padding:12px 0;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--panel);color:var(--ink2);font:600 12.5px var(--f-ui);cursor:pointer;white-space:nowrap}
 .mrtab:hover{border-color:var(--accent);color:var(--accent)}
