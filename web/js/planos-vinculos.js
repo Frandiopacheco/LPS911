@@ -43,7 +43,7 @@ function plkHit(cx,cy,list){const v=PLV.tv,r=v.cv.getBoundingClientRect(),px=cx-
 /* ---------- enganche al visor ---------- */
 /** deja el visor con lo que toca según el estado (Medir manda mientras está activo) */
 function plkSync(){if(!PLV||!PLV.tv)return;const v=PLV.tv;
-  if(PLM.on){v.onLink=null;return}
+  if(PLM.on||PLD.on){v.onLink=null;return}                /* Medir o Marcar mandan mientras están activos */
   const E=PLK.edit&&!PLK.pick;
   v.over=plkDraw;                                   /* sin vínculos visibles solo dibuja el que está bajo el cursor */
   v.onLink=!E&&!PLK.pick?plkLinkTap:null;             /* ocultos o no, un toque sobre la marca los sigue */
@@ -87,7 +87,7 @@ function plkEsc(){if(!PLV)return false;
   return false}
 
 /* ---------- editar ---------- */
-function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();
+function plkEdit(on){if(!PLV||!PLV.tv)return;if(on&&PLM.on)plmToggle();if(on&&PLD.on)pldToggle(false);
   PLK.edit=!!on;if(on){const p=PLB.get(PLV.id);if(p)plkTexts(plSpecOf(p,PLV.rev)).catch(()=>{})}if(!on){PLK.psel=null;PLK.sel=null;PLK.a=null;PLK.live=null;PLK.drag=null;PLK.dup=null}
   const b=PLV.box.querySelector('[data-pv="lk"]');if(b)b.classList.toggle('on',PLK.edit);plkSync();plkBar()}
 /* en tablet, tras el toque llega un «clic» de compatibilidad ~300 ms después, en el mismo punto: si allí acaba de aparecer la

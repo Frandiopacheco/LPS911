@@ -453,6 +453,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(a<1){fading=true;if(shPrev){g.globalAlpha=1;dr(shPrev)}}else if(shPrev){shFree(shPrev);shPrev=null}
       g.globalAlpha=a;dr(sharp)}
     g.globalAlpha=1;if(V.hl){g.setTransform(dpr,0,0,dpr,0,0);try{V.hl(g,V)}catch(err){console.error('resaltar',err)}g.globalAlpha=1}
+    if(V.marks){g.setTransform(dpr,0,0,dpr,0,0);try{V.marks(g,V)}catch(err){console.error('marcar',err)}g.globalAlpha=1;g.globalCompositeOperation='source-over'}
     if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
   const coarse=Math.max(0,spec.Z-2);
   V.tiles_=()=>{const dprL=window.devicePixelRatio||1;const tgt=anim?anim.s:V.s;
@@ -490,7 +491,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null;
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null,mpt=null;
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
@@ -498,14 +499,16 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     V.zoomAt(Math.exp(-d*0.0022),cx,cy)},{passive:false});
   /* dedos «fantasma»: si la tablet no avisó que un dedo se levantó (salió por el borde, el sistema tomó el gesto…), el visor
      contaba un dedo de más y el siguiente pellizco no hacía zoom. Un toque nuevo (isPrimary) limpia lo que quedó colgado. */
-  host.addEventListener('pointerdown',e=>{if(mdrag!=null)return;
+  host.addEventListener('pointerdown',e=>{
+    /* marcar (planos-marcar.js): si llega un segundo dedo mientras se dibuja, el trazo se descarta y empieza el pellizco */
+    if(mdrag!=null){if(e.pointerType!=='touch'||!V.onCancel||!mpt)return;V.onCancel();const id=mdrag;mdrag=null;P.clear();afterPinch=false;P.set(id,{x:mpt.x,y:mpt.y})}else
     /* medir: tocar un punto ya puesto lo arrastra (sin mover el plano) */
-    if(V.onDown&&e.isPrimary&&V.onDown(e.clientX,e.clientY)){mdrag=e.pointerId;try{host.setPointerCapture(e.pointerId)}catch(err){}return}
+    if(V.onDown&&e.isPrimary&&V.onDown(e.clientX,e.clientY,e)){mdrag=e.pointerId;mpt={x:e.clientX,y:e.clientY};try{host.setPointerCapture(e.pointerId)}catch(err){}return}
     if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
     try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
     if(P.size>=2){afterPinch=false;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
     if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
-  host.addEventListener('pointermove',e=>{if(mdrag===e.pointerId){if(V.onDrag)V.onDrag(e.clientX,e.clientY);return}const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
+  host.addEventListener('pointermove',e=>{if(mdrag===e.pointerId){mpt={x:e.clientX,y:e.clientY};if(V.onDrag)V.onDrag(e.clientX,e.clientY,e);return}const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
       const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
       if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
@@ -557,12 +560,12 @@ function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
     pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
-  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
-    if(e.target.closest('input,select,textarea'))return;
+  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(pldEsc()){}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
+    if(e.target.closest('input,select,textarea,[contenteditable]'))return;
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
     else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
-function plClose(silent){if(!PLV)return;plmReset();plkReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
+function plClose(silent){if(!PLV)return;plmReset();plkReset();pldReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,crop:p.crop||null,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1};
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev}:plSpecOf(p,0)}
@@ -579,6 +582,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
     <button class="ib${PLM.on?' on':''}" data-pv="med" title="Medir distancias y áreas sobre el plano">📏 Medir</button>
+    ${pldHdrBtn()}
     ${p.eto?'':plkHdrBtn(p)}
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
     ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
@@ -590,7 +594,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();plTxAttach();plDockSplitAdd();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();pldAttach();plTxAttach();plDockSplitAdd();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
     const g=e.target.closest('[data-pg]');if(g){if(PLV.pf.qm==='tx'){PLV.hq=PLV.pf.q;PLV.list=plTxIds(plvRes(true))}else PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
     const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm||''});plvPanel();return}
@@ -598,7 +602,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
     else if(a==='dock')plDockSet(!PLV.dock);
-    else if(a==='med')plmToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 /* ---------- Plano del piso al lado del lookahead (oct 2026, pedido del dueño) ----------
    «▦ Plano» en la barra del Lookahead abre este mismo visor acoplado a la derecha: el lookahead se angosta y sigue editable
