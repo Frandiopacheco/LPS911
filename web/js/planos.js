@@ -558,7 +558,7 @@ const plBmClose=bm=>{try{if(bm&&bm.close)bm.close()}catch(e){}};
 let PLV=null;
 function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=opt||{};
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
-  PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
+  PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,tab:opt.tab||'look',hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
     pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
   box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(pldEsc()){}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
     if(e.target.closest('input,select,textarea,[contenteditable]'))return;
@@ -587,7 +587,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     <button class="ib" data-pv="pdf" title="Descargar el PDF original">PDF</button>
     ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plEdOf(p)?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
-    ${PLV.canDock&&!isMob()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado del lookahead'}">${PLV.dock?'⛶':'◧'}</button>`:''}
+    ${PLV.canDock&&!isMob()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':PLV.tab==='mapa'?'Volver al lado del plan diario':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado'}">${PLV.dock?'⛶':'◧'}</button>`:''}
     <button class="ib" data-pv="x" aria-label="Cerrar">✕</button></div>
     ${sp.cur&&(sib.length>1||up||dn)?`<div class="plvq">${sib.length>1?`<span class="plvql" title="Abre otra especialidad del mismo piso en la misma zona y con el mismo zoom">Mismo punto</span>${sib.map(q=>`<button type="button" class="plchip${q.id===p.id?' on':''}" data-pj="${esc(q.id)}" title="${esc(q.cod+' · '+(q.tit||''))}"><b>${esc(q.disc)}</b> ${esc(q.cod)}</button>`).join('')}`:''}
       <span class="plvsp"></span>${dn?`<button type="button" class="plchip" data-pj="${esc(dn.id)}" title="Piso de abajo, misma zona: ${esc(dn.cod+' · '+(dn.tit||''))}">▼ ${pc(dn.pisoId)}</button>`:''}${up?`<button type="button" class="plchip" data-pj="${esc(up.id)}" title="Piso de arriba, misma zona: ${esc(up.cod+' · '+(up.tit||''))}">▲ ${pc(up.pisoId)}</button>`:''}</div>`:''}
@@ -628,23 +628,27 @@ function plDockSplit(sp){sp.addEventListener('pointerdown',e=>{if(e.button!==0)r
   const mv=ev=>{x=lim(ev.clientX);g.style.left=x+'px'};
   const up=()=>{sp.removeEventListener('pointermove',mv);sp.removeEventListener('pointerup',up);sp.removeEventListener('pointercancel',up);g.remove();store.set('lkdw',Math.round((innerWidth-x)/innerWidth*1000)/1000);plDockPlace()};
   sp.addEventListener('pointermove',mv);sp.addEventListener('pointerup',up);sp.addEventListener('pointercancel',up)})}
-function lkPlanoBtn(){const b=$('#fplano');if(b)b.classList.toggle('on',!!(PLV&&PLV.canDock))}
+function lkPlanoBtn(){const b=$('#fplano');if(b)b.classList.toggle('on',!!(PLV&&PLV.canDock));
+  /* Plan diario › Reunión: redibuja el botón «◫ Planos» y vuelve a encuadrar (el plano del día cambió de ancho) */
+  if(U.tab==='mapa'&&window.__plano){requestRender();if(window.__plano.meetRefit)window.__plano.meetRefit()}}
 /** láminas del piso ordenadas (especialidad, código) */
 function plFloorList(piso){return plAct().filter(q=>piso?q.pisoId===piso:true).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 /** la lámina a mostrar para un piso: con ref, la misma especialidad y tipo (título más parecido); si no, planta de arquitectura */
 function plPickFor(piso,ref){const L=plFloorList(piso).filter(q=>piso?true:!q.pisoId);if(!L.length)return null;
   if(ref){const c=L.filter(q=>q.disc===ref.disc&&q.tipo===ref.tipo);if(c.length){c.sort((a,b)=>plSim(b,ref)-plSim(a,ref)||plCodCmp(a,b));return c[0]}}
   return L.find(q=>q.tipo==='Planta'&&q.disc==='ARQ')||L.find(q=>q.tipo==='Planta')||L[0]}
-function lkPlano(){if(!canPla())return;if(PLV&&PLV.canDock){plClose();return}
-  plSub();if(!plbReady){toast('Cargando la lista de planos…');let n=0;const w=()=>{if(U.tab!=='look')return;if(plbReady)lkPlano();else if(++n<40)setTimeout(w,250);else toast('No se pudo leer la lista de planos. Revisa la conexión.')};setTimeout(w,250);return}
+function lkPlano(){if(!canPla())return;if(PLV&&PLV.canDock){plClose();return}plDockOpen(U.piso||'','look')}
+/** abre el visor acoplado a la derecha de la pestaña `tab` (Lookahead o Plan diario › Reunión) con el plano del piso */
+function plDockOpen(piso,tab){if(!canPla())return;
+  plSub();if(!plbReady){toast('Cargando la lista de planos…');let n=0;const w=()=>{if(U.tab!==tab)return;if(plbReady)plDockOpen(piso,tab);else if(++n<40)setTimeout(w,250);else toast('No se pudo leer la lista de planos. Revisa la conexión.')};setTimeout(w,250);return}
   if(!plAct().length){toast('Aún no hay planos cargados (se cargan en el módulo Planos).');return}
-  const piso=U.piso||'';const p=piso?plPickFor(piso,null):null;
-  if(p){plOpen(p.id,plFloorList(piso).map(q=>q.id),{dock:true,piso});return}
+  const p=piso?plPickFor(piso,null):null;
+  if(p){plOpen(p.id,plFloorList(piso).map(q=>q.id),{dock:true,piso,tab});return}
   /* sin piso elegido o el piso aún no tiene planos: se abre con el panel de búsqueda para elegir */
-  const any=plFloorList('')[0];plOpen(any.id,plFloorList('').map(q=>q.id),{dock:true,piso});PLV.panel=true;if(piso)PLV.pf.piso=piso;plvPanel();
+  const any=plFloorList('')[0];plOpen(any.id,plFloorList('').map(q=>q.id),{dock:true,piso,tab});PLV.panel=true;if(piso)PLV.pf.piso=piso;plvPanel();
   if(piso)toast(`${(S.pis.get(piso)||{}).name||'Este piso'} aún no tiene planos cargados: elige otro en «☰ Planos».`)}
-/** el lookahead cambió de piso: el plano acoplado salta al mismo tipo de lámina del piso nuevo */
-function plDockFollow(){if(!PLV||!PLV.canDock||PLV.piso0===(U.piso||''))return;PLV.piso0=U.piso||'';if(!PLV.piso0)return;
+/** el lookahead (o la reunión del plan diario, con su piso) cambió de piso: el plano acoplado salta al mismo tipo de lámina del piso nuevo */
+function plDockFollow(piso){piso=piso==null?(U.piso||''):piso;if(!PLV||!PLV.canDock||PLV.piso0===piso)return;PLV.piso0=piso;if(!PLV.piso0)return;
   const q=plPickFor(PLV.piso0,PLB.get(PLV.id));if(!q||q.id===PLV.id)return;PLV.list=plFloorList(PLV.piso0).map(x=>x.id);PLV.pf.piso=PLV.piso0;plJump(q.id,true)}
 /* ---------- Panel «☰ Planos» dentro del visor y saltos entre láminas ---------- */
 const PL_NOISE=/^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|SOTANO|AZOTEA|PISO|NIVEL|PLANTA|DEL|LOS|LAS|CON|PARA)$/;

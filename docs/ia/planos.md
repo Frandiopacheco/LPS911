@@ -184,7 +184,8 @@ Para ver el plano mientras se edita el lookahead sin salir de él. Se eligió ac
 - `PLV.canDock` (abierto desde el lookahead) y `PLV.dock` (acoplado ahora). `plDockSet(on)`: clase `.plv.dock` (no modal, `z-index:58` para que los menús del lookahead queden encima), `body.lkdock`, variables `--lkdt` (alto de la barra superior, `plDockPlace`, también al entrar/salir de ⛶ del lookahead y al cambiar el tamaño de la ventana) y `--lkdw` (ancho). Botón ⛶/◧ en la cabecera del visor (`data-pv="dock"`) alterna acoplado ↔ pantalla completa.
 - **Ancho:** borde `.plvsplit` (lo repone `plDockSplitAdd` en cada `plvDraw`); al arrastrar solo se mueve una guía (`.plvghost`) y el ancho se aplica al soltar (redimensionar la grilla en cada movimiento sería lento con miles de filas). Se guarda la fracción en `store` `lkdw` (por defecto 0,5; mín. 320 px para el plano y 420 para el lookahead).
 - **Sigue al piso:** `plDockFollow()` (desde `renderLook`): si cambia `U.piso`, salta a la lámina de la misma especialidad y tipo del piso nuevo (`plPickFor(piso, actual)`, título más parecido) conservando zona y zoom (`plJump(id, true)`).
-- Se cierra al salir de la pestaña Lookahead (`render` en base.js). En celular no se acopla.
+- Se cierra al salir de la pestaña desde la que se abrió (`PLV.tab`, `render` en base.js). En celular no se acopla.
+- **También en Plan diario › Reunión** (30-10-2026): `plDockOpen(piso, tab)` es la parte común; `lkPlano()` la llama con `U.piso` y `'look'`, la reunión con `M.piso` y `'mapa'` (botón «◫ Planos», ver `plan-diario.md`). `plDockFollow(piso)` recibe el piso (sin él, `U.piso`).
 - Prueba: `lookahead-metrado.spec.js` › «plano del piso al lado del lookahead…».
 
 ## ETO de subcontratistas (oct 2026, decidido con el dueño)

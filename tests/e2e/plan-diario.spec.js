@@ -858,18 +858,31 @@ test('paneles plegados por defecto: columnas con el nombre, se despliegan al toc
   noErrors(errors, 'paneles plegados');
 });
 
-test('modo reunión: pantalla dividida con el plan del día y la Semana también en Cumplimiento', async ({ page }) => {
-  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB] });
+const PLB = (id, piso, disc, cod) => ['plb', id, { cod, disc, tipo: 'Planta', pisoId: piso, tit: 'PLANTA ' + cod, rev: 1, base: 'planos/' + id + '/r1', W: 2048, H: 1536, Z: 2, T: 1024, mm: [1200, 900] }];
+test('modo reunión: pantalla dividida con los planos a la derecha y la Semana también en Cumplimiento', async ({ page }) => {
+  await page.addInitScript(() => { window.plGet = async () => { throw new Error('sin archivo en la prueba'); }; });
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, PLB('IS_IS01', 'p1', 'IS', 'IS01'), PLB('ARQ_A01', 'p1', 'ARQ', 'A01'), PLB('ARQ_A02', 'p2', 'ARQ', 'A02')] });
   await page.evaluate(() => { window.__pfOpen = false; window.__plano.pfReset(); requestRender(); }); // como al entrar: paneles plegados
   await page.click('#mmeetb');
   await expect(page.locator('#mmbar [data-mmode="cu"]')).toHaveClass(/on/);
-  // el plan del día queda como franja al costado; «◫ Dividir» lo abre al lado del plano
-  await expect(page.locator('#mpanel')).toBeVisible();
-  await expect(page.locator('#mpanel #mpan')).toBeVisible();
+  await expect(page.locator('#mpanel')).toBeHidden(); // el panel del plan del día no aparece en la reunión
+  // «◫ Planos»: el plan del día a la izquierda y el plano del módulo Planos (planta de arquitectura del piso) a la derecha
+  const w0 = (await page.locator('#mstage').boundingBox()).width;
   await page.click('#mmbar [data-msplit]');
-  await expect(page.locator('#mpanel .mp-h')).toContainText('Plan del día');
+  await expect(page.locator('.plv.dock')).toBeVisible();
+  expect(await page.evaluate(() => PLV.id)).toBe('ARQ_A01');
   await expect(page.locator('#mmbar [data-msplit]')).toHaveAttribute('aria-pressed', 'true');
-  // la Semana se abre a la derecha en Cumplimiento, sin tapar la ficha del día
+  await expect.poll(async () => (await page.locator('#mstage').boundingBox()).width).toBeLessThan(w0 * 0.7);
+  const [st, pv] = await Promise.all([page.locator('#mstage').boundingBox(), page.locator('.plv.dock').boundingBox()]);
+  expect(st.x + st.width).toBeLessThanOrEqual(pv.x + 1);
+  // las flechas en el visor cambian de lámina, no de partida en la reunión
+  await page.locator('.plv [data-pv="next"]').click();
+  expect(await page.evaluate(() => window.__plano.M.meetSc)).toBe('');
+  // cambiar de piso en la reunión: el visor salta a la misma especialidad del piso nuevo
+  await page.locator('#mmpiso').selectOption('p2');
+  await expect.poll(() => page.evaluate(() => PLV && PLV.id)).toBe('ARQ_A02');
+  await page.locator('#mmpiso').selectOption('p1');
+  // la Semana se abre a la derecha del plano del día en Cumplimiento, sin tapar la ficha del día
   const tab = page.locator('#mrst [data-rtab="msemb"]');
   await expect(tab).toBeVisible();
   await expect(page.locator('#mrst [data-rtab="mpdb"], #mrst [data-rtab="mchb"]')).toHaveCount(0);
@@ -878,10 +891,13 @@ test('modo reunión: pantalla dividida con el plan del día y la Semana también
   await expect(page.locator('#mcard')).toBeVisible();
   const [c, r] = await Promise.all([page.locator('#mcard').boundingBox(), page.locator('#mrs').boundingBox()]);
   expect(c.x + c.width).toBeLessThanOrEqual(r.x);
-  // en «Plan e interferencias» sigue igual; volver a tocar «◫ Dividir» pliega el panel
-  await page.click('#mmbar [data-mmode="plan"]');
-  await expect(page.locator('#mrst [data-rtab="msemb"]')).toBeVisible();
+  // volver a tocar «◫ Planos» lo cierra; salir de la reunión también
   await page.click('#mmbar [data-msplit]');
-  await expect(page.locator('#mpanel #mpan')).toBeVisible();
-  noErrors(errors, 'reunión dividida');
+  await expect(page.locator('.plv')).toHaveCount(0);
+  await expect(page.locator('body')).not.toHaveClass(/lkdock/);
+  await page.click('#mmbar [data-msplit]');
+  await expect(page.locator('.plv.dock')).toBeVisible();
+  await page.click('#mmx');
+  await expect(page.locator('.plv')).toHaveCount(0);
+  noErrors(errors, 'reunión con planos');
 });
