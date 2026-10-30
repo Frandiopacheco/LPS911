@@ -25,7 +25,7 @@ function renderMxAct(main,head){const cells=mxCells();const ed=mxEd();const L=mx
   const multi=visPisos().length>1;
   /* filtro (pedido del dueño): subcontratistas (el mismo menú de la Matriz) y buscador de actividades; chips agrupados por SC */
   const scs=[...new Set(L.map(c=>c.sc))];
-  const sel=`<div class="mxaflt">${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
+  const sel=`<div class="mxaflt">${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):esc(grpLabel(mxScIds(),mxSel()))||mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
      <input type="search" class="tin" id="mxaq" placeholder="Buscar actividad${SCK()?'':' o subcontratista'}" aria-label="Buscar actividad" value="${esc(MXA.q||'')}"><span class="note" id="mxaqn"></span></div>
     <div class="mxachips">${scs.map(sc=>`<div class="mxacg" data-mxacg>${scs.length>1?`<span class="mxacgl"><span class="mxsw" style="--c:${esc(conOf(sc).color)}"></span>${esc(conOf(sc).name)}</span>`:''}${L.filter(c=>c.sc===sc).map(c=>`<button class="chip${c.id===U.mxAct?' on':''}" data-mxac="${esc(c.id)}" data-mxan="${esc(mnk(c.name+' '+conOf(c.sc).name))}" style="--c:${esc(conOf(c.sc).color)}">${esc(c.name)}</button>`).join('')}</div>`).join('')}</div>`;
   let h=`<div class="scroll"><div class="wrap mxwrap mxrw">${mxHd(head,mxViewSeg())}

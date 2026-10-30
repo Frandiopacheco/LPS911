@@ -3382,6 +3382,21 @@ table.mx td.mc.s-c,.mxleg .mc.s-c{font-size:16px;line-height:1}table.mx.mxz0 td.
 .dpill.mxpp.on{background:var(--warn);color:var(--panel)}
 #grid tr.gh .ghb.ghq{color:var(--accent);background:var(--accent-soft)}
 .dpill.mxpp.off{opacity:.55;border-style:dashed;cursor:help}
+/* ===== Grupos de especialidades en el Lookahead (grupos.js, 29-10-2026): fila resumen de los otros grupos ===== */
+.lkgrp button{white-space:nowrap}
+#grid tr.lkog>td{background-color:var(--panel2)}
+#grid tr.lkog td.s4{display:table-cell}
+#grid .lkogb{border:0;background:none;font:600 11px var(--f-ui);color:var(--ink2);cursor:pointer;padding:0 6px;height:100%;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#grid .lkogb:hover,#grid tr.lkog .lkoga:hover{color:var(--accent)}
+#grid tr.lkog .lkoga{font-size:11px;font-style:italic;color:var(--muted);padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;cursor:pointer}
+#grid td.d.ogo::after{content:"";position:absolute;inset:8px -1px;background:color-mix(in srgb,var(--ink) 16%,var(--panel2))}
+#grid td.d.ogo.og2::after{background:color-mix(in srgb,var(--ink) 30%,var(--panel2))}
+#grid td.d.ogo.og3::after{background:color-mix(in srgb,var(--ink) 44%,var(--panel2))}
+#grid td.d.ogo.rs::after{left:3px;border-top-left-radius:4px;border-bottom-left-radius:4px}
+#grid td.d.ogo.re::after{right:3px;border-top-right-radius:4px;border-bottom-right-radius:4px}
+#grid td.d.ogo .ogn{position:relative;z-index:1;display:block;text-align:center;font:700 9.5px var(--f-ui);color:var(--panel)}
+#grid tr.ogx td.s0{box-shadow:inset 3px 0 0 var(--line)}
+.grpm small{color:var(--muted)}
 
 /* ===== Matriz › Plano (oct 2026) ===== */
 .mxplf{margin:8px 0}

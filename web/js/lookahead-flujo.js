@@ -37,7 +37,7 @@ function flowRender(el,days){
   /* encabezado: semanas y días */
   const wk=[];for(const x of days){const l=wk[wk.length-1];if(l&&l.w===x.w)l.n++;else wk.push({w:x.w,n:1,d0:x.d})}
   const sub=sel.length?2:1;
-  let h=`<div class="flhint">${sel.length?`Flujo de ${sel.length===1?esc(conOf(sel[0]).name):sel.length+' subcontratistas'}`:'Todos los subcontratistas juntos · elige uno en la leyenda (Ctrl+clic para varios) para ver su flujo'} · más oscuro = más ambientes ese día · toca un día para verlo en la grilla</div>
+  let h=`<div class="flhint">${sel.length?`Flujo de ${sel.length===1?esc(conOf(sel[0]).name):sel.length+' subcontratistas'}`:grpOn()?`Todo ${esc(egrpN(U.grp))} junto · elige`:'Todos los subcontratistas juntos · elige uno en la leyenda (Ctrl+clic para varios) para ver su flujo'} · más oscuro = más ambientes ese día · toca un día para verlo en la grilla</div>
   <table class="flt${sel.length?' fl2':''}" style="--nd:${nd}"><colgroup><col class="flc0">${sel.length?'<col class="flc1">':''}${days.map(()=>'<col>').join('')}</colgroup><thead><tr><th class="flx" colspan="${sub}" rowspan="2">${U.piso?'Piso y sectores':'Piso'}${sel.length?' · Subcontratista':''}</th>${wk.map(w=>`<th class="flwk" colspan="${w.n}">Sem ${w.w} <small>${fmtD(w.d0)}</small></th>`).join('')}</tr>
   <tr>${days.map(x=>`<th class="fldh${x.d===today?' tdy':''}${isWork(x.d)?'':' hol'}${x.i===0?' wk0':''}" title="${esc(fmtD(x.d))}${isWork(x.d)?'':' · '+esc(nwReason(x.d)||'no laborable')}"><b>${DL[x.i]}</b><span>${x.d.slice(8)}</span></th>`).join('')}</tr></thead><tbody>`;
   for(const r of rows){lanes.forEach((ln,li)=>{const k=r.k+'|'+ln,v=cells.get(k),m=mx.get(r.k[0]+'|'+ln)||1;const c=ln?conOf(ln).color:'var(--accent)';
@@ -47,7 +47,7 @@ function flowRender(el,days){
     for(let i=0;i<nd;i++){const x=days[i],q=v&&v[i];const cls=`fd${x.d===today?' tdy':''}${isWork(x.d)?'':' hol'}${x.i===0?' wk0':''}`;
       if(!q){h+=`<td class="${cls}"></td>`;continue}
       const pv=v[i-1],nx=v[i+1];const n=q.amb.size;const a=(.28+.72*Math.min(1,n/m)).toFixed(2);
-      const tip=`${ln?conOf(ln).name:'Todos los SC'} · ${r.lab} · ${fmtD(x.d)}\n${n} ambiente${n>1?'s':''}, ${q.acts.length} actividad${q.acts.length>1?'es':''}\n${q.t.join('\n')}${q.acts.length>q.t.length?'\n…':''}`;
+      const tip=`${ln?conOf(ln).name:grpOn()?egrpN(U.grp):'Todos los SC'} · ${r.lab} · ${fmtD(x.d)}\n${n} ambiente${n>1?'s':''}, ${q.acts.length} actividad${q.acts.length>1?'es':''}\n${q.t.join('\n')}${q.acts.length>q.t.length?'\n…':''}`;
       h+=`<td class="${cls} on${pv?'':' rs'}${nx?'':' re'}" data-k="${k}" data-i="${i}" title="${esc(tip)}"><i style="--c:${c};--a:${a}"></i></td>`}
     h+='</tr>'})}
   el.innerHTML=h+'</tbody></table>';

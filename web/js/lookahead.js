@@ -16,7 +16,8 @@ function visTree(){return tree().filter(t=>!U.piso||t.p.id===U.piso)}
 const an=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
 /* filtro de subcontratistas: U.sc guarda uno o varios ids separados por coma (Ctrl+clic en la leyenda suma o quita) */
 const scSel=()=>U.sc?U.sc.split(',').filter(Boolean):[];
-const scOk=sc=>!U.sc||scSel().includes(sc);
+/* con un grupo de especialidades elegido (grupos.js), solo los SC de ese grupo */
+const scOk=sc=>grpOk(sc)&&(!U.sc||scSel().includes(sc));
 function actNames(){ // actividades distintas visibles (respeta piso, sector y SC)
   const m=new Map();for(const{secs}of visTree())for(const{s,ambs}of secs){if(U.sector&&U.sector!==s.id)continue;for(const{acts}of ambs)for(const x of acts){if(!scOk(x.sc))continue;const k=an(x.name);if(!k)continue;const e=m.get(k)||{k,name:String(x.name).trim(),n:0};e.n++;m.set(k,e)}}
   for(const k of U.acts)if(!m.has(k))m.set(k,{k,name:k,n:0});
@@ -42,7 +43,7 @@ function buildLookShell(main){
   gridRows=null;gridHead='';
   main.innerHTML=`<div class="view">
   <div class="bar lkbar">
-    <span class="lkz lkz1"><input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar"><select id="fsec" aria-label="Sector"></select><span id="fday"></span><button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button></span>
+    <span class="lkz lkz1"><input type="search" id="fq" placeholder="Buscar ambiente, actividad o SC (varios: separa con coma)" aria-label="Buscar"><select id="fsec" aria-label="Sector"></select><span id="fgrp"></span><span id="fday"></span><button class="ib fclr" id="fclr" hidden title="Quitar búsqueda, sector, subcontratistas y filtros">✕ Quitar filtros</button></span>
     <button class="ib" id="fmore" aria-expanded="false" aria-haspopup="true" title="Grilla o flujo, semanas visibles, lo oculto, filtros y plegar">Vista <span class="fmn" id="fmn" hidden></span> ▾</button>
     <span class="lkz lkprog" id="lkprog" hidden aria-label="Herramientas para programar"></span>
     <span class="sp" style="flex:1"></span>
@@ -89,9 +90,10 @@ function buildLookShell(main){
   $('#fdots').onclick=()=>{U.lbDots=!U.lbDots;U.lbMore=false;moreSync()};
   $('#bdots').addEventListener('click',e=>{if(e.target.closest('button')){U.lbDots=false;moreSync()}});
   lkPopWire();
-  $('#fclr').onclick=()=>{clearTimeout(lkQTimer);lkQTimer=0;U.q='';U.sector='';U.sc='';U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
+  $('#fclr').onclick=()=>{clearTimeout(lkQTimer);lkQTimer=0;U.q='';U.sector='';U.sc='';U.grp='';LKOGX.clear();U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.changes=false;U.acts=[];const q=$('#fq');if(q)q.value='';gridRows=null;saveUI();requestRender();moreSync();toast('Filtros quitados')};
   $('#fleg').onchange=e=>{U.legOff=!e.target.checked;saveUI();moreSync()};moreSync();
   $('#fsec').onchange=e=>{U.sector=e.target.value;saveUI();requestRender()};
+  $('#fgrp').onclick=e=>{const b=e.target.closest('[data-grp]');if(b)lkGrpSet(b.dataset.grp)};
   $('#fact').onclick=e=>{if(!pop.hidden&&popFor===e.currentTarget){closePop();return}actPop(e.currentTarget)};
   $('#fmode').onclick=e=>{const b=e.target.closest('button');if(!b)return;U.qmode=b.dataset.m;saveUI();closeQEditor(true);requestRender();if(U.qmode==='metrado')requestAnimationFrame(()=>requestAnimationFrame(lkQModeTip))};
   $('#fwin').onchange=e=>{U.win=+e.target.value;saveUI();requestRender()};
@@ -141,13 +143,13 @@ function renderLookMob(main){ensureDaily(addD(weekStart(U.week),-7));
   for(const{p,secs:ss}of vt)for(const{s,ambs}of ss){if(U.sector&&U.sector!==s.id)continue;for(const{a,acts}of ambs){
     for(const x of acts){if(U.acts.length&&!U.acts.includes(an(x.name)))continue;if(scOk(x.sc))for(const dd of x.days||[])if(dd in cntD)cntD[dd]++;if((x.days||[]).includes(d))scIn.add(x.sc)}
     const L=acts.filter(x=>schedOn(x,d)&&scOk(x.sc)&&(!U.acts.length||U.acts.includes(an(x.name))));if(L.length){groups.push({p,s,a,L});n+=L.length}}}
-  const cons=[...S.con.values()].filter(c=>scIn.has(c.id)||scSel().includes(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  const cons=[...S.con.values()].filter(c=>(scIn.has(c.id)||scSel().includes(c.id))&&grpOk(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
   let h=`<div class="scroll lmob"><div class="lmd">${wd.map((x,i)=>`<button data-lmd="${x}" class="${x===d?'on':''}${x===today?' td':''}" aria-label="${DOWN[i]} ${fmtD(x)}"><span>${DL[i]}</span><b>${x.slice(8)}</b><small>${cntD[x]||''}</small></button>`).join('')}</div>
-   <div class="lmf"><select id="lmsec" aria-label="Sector"><option value="">Todos los sectores</option>${secs.map(({p,s})=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${U.piso?'':esc(p.code)+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select>
+   <div class="lmf">${(()=>{const G=grpPresent([...S.con.keys()]);const cur=egrpOk(U.grp);return G.length>1||cur?`<select id="lmgrp" aria-label="Grupo de especialidades"><option value="">Todos los grupos</option>${G.map(g=>`<option value="${esc(g.id)}"${cur===g.id?' selected':''}>${esc(g.n)}</option>`).join('')}</select>`:''})()}<select id="lmsec" aria-label="Sector"><option value="">Todos los sectores</option>${secs.map(({p,s})=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${U.piso?'':esc(p.code)+' · '}${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select>
    <select id="lmsc" aria-label="Subcontratista"><option value="">Todos los SC</option>${scSel().length>1?`<option value="${esc(U.sc)}" selected>${scSel().length} SC elegidos</option>`:''}${cons.map(c=>`<option value="${c.id}"${U.sc===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
    <select id="lmact" aria-label="Actividad"><option value="">Todas las actividades</option>${actNames().map(e=>`<option value="${esc(e.k)}"${U.acts.length===1&&U.acts[0]===e.k?' selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
    <div class="lmh"><b>${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}</b> · ${n} actividad${n===1?'':'es'} programada${n===1?'':'s'}${U.piso?'':' · todos los pisos'}</div>`;
-  if(!n)h+=`<div class="empty">No hay actividades programadas este día${U.sc||U.sector?' con estos filtros':''}.</div>`;
+  if(!n)h+=`<div class="empty">No hay actividades programadas este día${U.sc||U.sector||grpOn()?' con estos filtros':''}.</div>`;
   for(const{p,a,L}of groups){h+=`<div class="camb"><span class="mono">${U.piso?'':esc(p.code)+' · '}${esc(a.code)}</span>${esc(a.name)}</div>`;
     for(const x of L){const c=conOf(x.sc);const rc=d<=today?recOf(d,x.id):null;const q=hasM(x)?(x.qty||{})[d]:null;const ds=new Set(x.days||[]);
       h+=`<article class="lmc" data-a="${x.id}" style="--c:${c.color}"><div class="t"><b>${esc(x.name||'(sin nombre)')}</b>${rc?(()=>{const so=ST[rc.status]||ST.no;return`<span class="stt ${so.c}">${so.i} ${so.t}</span>`})():''}</div>
@@ -159,7 +161,7 @@ function renderLookMob(main){ensureDaily(addD(weekStart(U.week),-7));
   main.onclick=e=>{const t=e.target;const db_=t.closest('[data-lmd]');if(db_){U.lmDay=db_.dataset.lmd;lmKeep=false;render();return}
     if(t.id==='lmfull'){U.lookFull=true;main.dataset.built='';render();return}
     const art=t.closest('article[data-a]');if(art){const rc=recOf(U.lmDay,art.dataset.a);if(rc&&U.lmDay<=todayIso())recPop(art,art.dataset.a,U.lmDay)}};
-  main.onchange=e=>{if(e.target.id==='lmsec'){U.sector=e.target.value;lmKeep=false;saveUI();render()}if(e.target.id==='lmsc'){U.sc=e.target.value;lmKeep=false;saveUI();render()}if(e.target.id==='lmact'){U.acts=e.target.value?[e.target.value]:[];lmKeep=false;saveUI();render()}}}
+  main.onchange=e=>{if(e.target.id==='lmgrp'){U.grp=e.target.value;U.sc='';lmKeep=false;saveUI();render()}if(e.target.id==='lmsec'){U.sector=e.target.value;lmKeep=false;saveUI();render()}if(e.target.id==='lmsc'){U.sc=e.target.value;lmKeep=false;saveUI();render()}if(e.target.id==='lmact'){U.acts=e.target.value?[e.target.value]:[];lmKeep=false;saveUI();render()}}}
 function renderLookInner(main){
   const vset=new Set(visPisos().map(p=>p.id));const pOrd=id=>(S.pis.get(id)||{}).order||0;
   const secs=[...S.sec.values()].filter(s=>vset.has(pisoOfSecObj(s))).sort((a,b)=>pOrd(pisoOfSecObj(a))-pOrd(pisoOfSecObj(b))||byOrder(a,b));
@@ -178,7 +180,8 @@ function renderLookInner(main){
   /* (auditoría de código 08/10, L5) los días de «Solo semana N» se calculan una vez, no por día de cada actividad */
   const cnt={};{const wkS=U.wkF?new Set(weekDays(U.wkF)):null;for(const a of S.act.values()){const ad=Array.isArray(a.days)?a.days:[];if(vset.has(pisoOfAmb(a.ambId))&&(U.day?ad.includes(U.day):wkS?ad.some(d=>wkS.has(d)):ad.some(d=>dset.has(d))))cnt[a.sc]=(cnt[a.sc]||0)+1}}
   const present=new Set();for(const a of S.act.values()){const am=S.amb.get(a.ambId);if(!am||!vset.has(pisoOfAmb(a.ambId)))continue;if(U.sector&&am.sectorId!==U.sector)continue;present.add(a.sc)}
-  const sl=scSel();const cons=[...S.con.values()].filter(c=>present.has(c.id)||sl.includes(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  {const fg=$('#fgrp');const hg=lkGrpHtml(present);if(fg.dataset.h!==hg){fg.innerHTML=hg;fg.dataset.h=hg}}
+  const sl=scSel();const cons=[...S.con.values()].filter(c=>(present.has(c.id)||sl.includes(c.id))&&grpOk(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
   const lg=cons.map(c=>`<button class="chip${sl.includes(c.id)?' on':''}${sl.length&&!sl.includes(c.id)?' dim':''}" data-id="${c.id}" style="--c:${c.color}" title="${esc((c.partida?c.partida+' · ':'')+'Clic: solo este · Ctrl+clic: sumar o quitar varios')}"><i></i>${esc(c.name)}${cnt[c.id]?` <b>${cnt[c.id]}</b>`:''}</button>`).join('');
   const lge=$('#legend');if(lge.dataset.h!==lg){lge.innerHTML=lg;lge.dataset.h=lg}
   const allIds=[...visPisos().map(p=>p.id),...secs.map(s=>s.id)];
@@ -223,7 +226,9 @@ function qAutoFill(x){const pid=pisoOfAct(x.id);const t=todayIso();const ds=[...
 function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const hideDone=!U.showDone&&!(U.ver&&U.verMode==='ver')&&typeof mxDoneSt==='function';const w0=days.length?days[0].d:'';const hidePast=!U.showPast&&!!w0&&!(U.ver&&U.verMode==='ver');
   const CV=!!(U.cliv&&U.tab==='look');const CI=CV?CLI_INT:null;const LATE=null;
   const today=todayIso();const pr=pendRestr();const bases=CV?null:pmBases()||(U.ver&&U.verMode==='cmp'&&VERD.get(U.ver)?.ready?verBases(VERD.get(U.ver)):U.changes?baselines():null);const RV=!CV&&revOn();RVVIS=RV?new Set():null;const RVF=RV&&!U.revCtx;const PPV=RV||CV?null:propOverlay();const pmM=PM()?new Set(myScsI()):null;
-  const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
+  const q=U.q.trim().toLowerCase();if(U.day&&!dset.has(U.day))U.day='';if(U.wkF&&(U.wkF<U.week||U.wkF>=U.week+U.win))U.wkF=0;const wkSet=U.wkF?new Set(weekDays(U.wkF)):null;const aset=U.acts.length?new Set(U.acts):null;const qs=q?q.split(/[,;]/).map(t=>t.trim()).filter(Boolean):[];const filt=!!((revOn()&&!U.revCtx)||q||aset||U.sc||grpOn()||U.onlyWin||U.onlyRestr||U.onlyObs||U.day||U.wkF);
+  /* grupo de especialidades (grupos.js): las filas de los otros grupos van a una fila resumen por ambiente */
+  const GRP=!CV&&!RV&&grpOn();
   const conOpts=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
   /* (auditoría de código 08/10, L6) días que no son una lista (dato dañado) se leen como «sin días» en vez de romper la grilla */
   const DY=x=>Array.isArray(x.days)?x.days:[];
@@ -251,7 +256,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
       if(U.sector&&U.sector!==s.id)continue;
       const list=[];let nAct=0;
       for(const{a,acts}of ambs){
-        let nPast=0,nDone=0;
+        let nPast=0,nDone=0;const OG=[];
         const vis=acts.filter(x=>{
           if(RVF&&!x._rv)return false;
           const xd=DY(x);
@@ -259,7 +264,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           if(hidePast&&!kp&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&xd.length&&!xd.some(d=>d>=w0)){nPast++;return false}
           /* terminada y confirmada en la Matriz: el ambiente queda limpio para programar («Ver terminadas» las muestra) */
           if(hideDone&&!kp&&!x._rv&&!SELA.has(x.id)&&!LK_SHOW.has(x.id)&&mxDoneSt(x)==='ok'){nDone++;return false}
-          if(!scOk(x.sc))return false;
+          let og=false;if(!scOk(x.sc)){if(!GRP||grpOk(x.sc))return false;og=true}
           if(U.onlyWin&&!kp&&!xd.some(d=>dset.has(d)))return false;
           if(U.onlyRestr&&!pr.get(x.id))return false;
           if(U.onlyObs&&!x.obs)return false;
@@ -267,6 +272,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           if(wkSet&&!kp&&!xd.some(d=>wkSet.has(d)))return false;
           if(aset&&!aset.has(an(x.name)))return false;
           if(qs.length){let t=LKQT.m.get(x);if(t===undefined){t=(x.name+' '+a.name+' '+a.code+' '+conOf(x.sc).name).toLowerCase();LKQT.m.set(x,t)}if(!qs.some(w=>t.includes(w)))return false}
+          if(og){OG.push(x);return false}
           return true});
         if(HIS)for(const x of vis){if(x.sc!==H1)continue;const rd=persRend(x);if(hasM(x)&&!rd&&(x.days||[]).some(d=>HIS.has(d)))HNR++;for(const d of x.days||[])if(HIS.has(d))HIS.set(d,HIS.get(d)+persOf(x,d,rd))}
         LK_PAST+=nPast;LK_DONE+=nDone;
@@ -278,7 +284,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
         const TI=CV||typeof lkTrInv!=='function'?null:lkTrInv(a.id,acts);const nI=TI?vis.reduce((s,x)=>s+(TI.has(x.id)?1:0),0):0;
         const gAll=GH&&(!U.sector||U.sector===s.id)?(GH.get(a.id)||[]).filter(g=>!g.rows.some(id=>vis.some(x=>x.id===id))):[];LK_GHN+=gAll.length;const gVis=ghOk?gAll:[];const gh=gVis.length&&U.lkGh&&!GHT.has(a.id)?gVis:[];
         if(!vis.length&&!gh.length&&(filt||acts.length>nPast+nDone))continue;
-        nAct+=vis.length;list.push({a,vis,acts,gh,gN:U.lkGh?gVis.length:0,nT,nTn,TI,nI});
+        nAct+=vis.length;list.push({a,vis,acts,gh,gN:U.lkGh?gVis.length:0,nT,nTn,TI,nI,OGI:GRP?lkOgItems(a.id,OG):[]});
       }
       if(filt&&!list.length)continue;
       blocks.push({s,list,nAmb:list.length,nAct});pAmb+=list.length;pAct+=nAct;
@@ -292,15 +298,16 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
       const coll=U.collapsed.includes(s.id);
       rows.push(new LkRow('s:'+s.id,()=>`<tr class="sec" data-sec-row="${s.id}"><td class="secc" colspan="5"><div class="secin"><button class="tg${coll?' cl':''}" data-tg="${s.id}" aria-label="Plegar sector">&#9662;</button><span class="sc-code">${esc(s.code)}</span><input class="ci" data-sec="${s.id}" data-f="name" value="${esc(s.name)}" aria-label="Nombre del sector"${roS}><span class="meta">${nAmb} amb. · ${nAct} act.</span>${CI?cliBufBtn('s',s.id):''}${canWrite&&!CV?`<button class="ib" data-addamb="${s.id}">+ Ambiente</button><button class="ab" data-secmenu="${s.id}" aria-label="Opciones del sector" title="Opciones del sector">&#8943;</button>`:''}</div></td><td colspan="${6+nd}"></td></tr>`));
       if(coll)continue;
-      for(const{a,vis,acts,gh,gN,nT,nTn,TI,nI}of list){
+      for(const{a,vis,acts,gh,gN,nT,nTn,TI,nI,OGI}of list){
         /* n.º de cada actividad en su ambiente: se calcula al armar la primera fila del ambiente que se pinta */
         let nIx0=null;const nIx={get:id=>{if(!nIx0){nIx0=new Map();acts.forEach((y,k)=>nIx0.set(y.id,k+1))}return nIx0.get(id)}};
-        const rs=Math.max(1,vis.length+gh.length);
+        const rs=Math.max(1,vis.length+gh.length+OGI.length);
         const ambCells=()=>`<td class="s1 amb" rowspan="${rs}"><input class="ci" data-amb="${a.id}" data-f="code" value="${esc(a.code)}" aria-label="Ítem"${roS}></td><td class="s2 amb" rowspan="${rs}"><div class="ambbox"><textarea class="ci an" rows="1" data-amb="${a.id}" data-f="name" aria-label="Ambiente"${roS}>${esc(a.name)}</textarea>${canWrite?`<button class="ab" data-ambmenu="${a.id}" aria-label="Opciones del ambiente">&#8943;</button>`:LKCP?`<button class="ab" data-lkc="amb:${a.id}" aria-label="Comentarios del ambiente" title="Comentarios">&#8943;</button>`:''}${(canWrite&&!ro)||PM()?`<button class="ab adda" data-addact="${a.id}" aria-label="Agregar actividad a este ambiente" title="Agregar actividad a este ambiente">+</button>`:''}${CI?cliBufBtn('a',a.id):''}</div>${gN?`<button class="ghchip${gh.length?' on':''}" data-ghamb="${a.id}" title="${gh.length?'Ocultar':'Ver'} lo que la Matriz da como pendiente y falta programar en este ambiente">${gh.length?'−':'+'}${gN} por programar</button>`:''}${nT?`<button class="ghchip mxtc" data-mxtamb="${a.id}" title="La Matriz las da como ${nTn===nT?'«No aplica»':nTn?'terminadas o «No aplica»':'terminadas'}, pero siguen programadas desde mañana (días rayados). Clic: ver cuáles">${nTn===0?nT+' ✓':nTn===nT?nT+' no aplica':(nT-nTn)+' ✓ · '+nTn+' no aplica'} en Matriz</button>`:''}${FSTRIP&&FSTRIP.has(a.id)?fstripHtml(FSTRIP.get(a.id),a.id):''}${nI?`<span class="ghchip tinvc" title="${esc(vis.filter(x=>TI.has(x.id)).map(x=>x.name+': '+lkTrInvTip(TI.get(x.id))).join('\n'))}">⚠ ${nI} fuera de secuencia</span>`:''}${LKCO?lkcAmbChip(a):''}${a.hito?`<span class="hbadge" title="Hito ${esc(a.hitoLabel||'')}: ${fmtD(a.hito)}">&#9873; ${esc(a.hitoLabel||'Hito')} ${fmtS(a.hito)}</span>`:''}</td>`;
         if(!vis.length&&!gh.length){shown++;rows.push(new LkRow('a:'+a.id,()=>`<tr class="ar first"><td class="s0"></td>${ambCells()}<td class="s3"></td><td class="s4">${canWrite?`<button class="ib" data-addact="${a.id}" style="margin-left:6px;height:24px;font-size:12px">+ Actividad</button>`:''}</td><td colspan="${6+nd}"></td></tr>`));continue}
         /* las fantasmas se ubican según el tren de trabajo (matriz-tren.js); las filas reales no cambian de orden */
-        const MS=gh.length&&typeof lkGhMerge==='function'?lkGhMerge(vis,gh):vis.map(x=>({x})).concat(gh.map(g=>({g})));
+        const MS=(gh.length&&typeof lkGhMerge==='function'?lkGhMerge(vis,gh):vis.map(x=>({x})).concat(gh.map(g=>({g})))).concat(OGI);
         MS.forEach((it,i)=>{
+          if(it.o){shown++;const f0=i===0;rows.push(new LkRow('x:o'+a.id+'_'+it.o.g+(f0?':'+a.id+':'+rs:''),()=>lkOgRow(a,it.o,f0,f0?ambCells():'',days,DI,nd)));return}
           if(it.g){const g=it.g;shown++;const f0=i===0;rows.push(new LkRow('x:g'+a.id+'_'+g.c.id+(f0?':'+a.id+':'+rs:''),()=>lkGhostRow(a,g,f0,f0?ambCells():'',days,DI,nd)));return}
           const x=it.x;
           shown++;if(RVVIS&&x._rv)RVVIS.add(x.id);
@@ -311,7 +318,7 @@ function renderGrid(tbl,days,dset){LK_PAST=0;LK_DONE=0;LK_GHN=0;LK_MXT=0;const h
           const c=conOf(x.sc);const st=actStats(x);const ds=new Set(DY(x));const ci=CI&&CI.get(x.id);const cis=ci&&ci!==x?new Set(ci.days||[]):null;const lt=LATE&&LATE.get(x.id);
           const sd=snap?new Set(snap[x.id]||[]):null;const isNew=snap&&!(x.id in snap);
           const roA=x._rv?' readonly':canWrite&&(!pmM||pmM.has(x.sc))?'':' readonly';const pv=PPV&&PPV.get(x.id);const rvC=x._rv?revConflicts(x):null;const rvSel=REVSEL&&REVSEL.id===x.id;const rvP=rvSel&&REVSEL.k&&x._rv&&!x._rv.del?new Set((x.days||[]).map(d=>wshift(d,REVSEL.k))):null;
-          let h=`<tr class="ar${i===0?' first':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):LKCP&&!x._rv?`<button class="rb" data-lkc="act:${x.id}" aria-label="Comentarios de la actividad" title="Comentarios">&#8942;</button>`:''}${CV?cliRowMark(x.id):''}</div></td>`;
+          let h=`<tr class="ar${i===0?' first':''}${it.og?' ogx':''}${LKROW===x.id?' rsel':''}${SELA.has(x.id)?' asel':''}${x._del?' pdel':''}${pv?' prow':''}${pmM?(pmM.has(x.sc)?' pmown':' pmro'):''}${x._rv?' rvrow'+(x._rv.del?' rvdel':'')+(x._rv.isNew?' rvnew':'')+(rvSel?' rvsel':''):RV?' rvctx':''}" data-a="${x.id}" style="--c:${c.color};--qc:${lum(c.color)>.55?'#1b1b1b':'#fff'}"><td class="s0"><div class="s0in"><span class="anum${canWrite&&!roA&&!x._rv&&!PM()?' dg':''}" title="${canWrite&&!roA&&!x._rv&&!PM()?'Actividad n.º '+nIx.get(x.id)+' del ambiente · arrástrala para cambiar el orden':'Actividad n.º '+nIx.get(x.id)+' del ambiente'}">${nIx.get(x.id)||''}</span>${canWrite&&!roA?`<button class="rb" data-actmenu="${x.id}" aria-label="Opciones de la actividad">&#8942;</button>`:CI?cliBufBtn('x',x.id,x):LKCP&&!x._rv?`<button class="rb" data-lkc="act:${x.id}" aria-label="Comentarios de la actividad" title="Comentarios">&#8942;</button>`:''}${CV?cliRowMark(x.id):''}</div></td>`;
           if(i===0)h+=ambCells();
           h+=`<td class="s3 sc" style="--c:${c.color}"><select class="ci" data-a="${x.id}" data-f="sc" data-lz="1" aria-label="Subcontratista"${canWrite&&!roA?'':' disabled'}><option value="${x.sc}" selected>${esc(c.name)}</option></select></td>`;
           /* (auditoría de código 08/10, L1) liberación, catálogo y alertas de la Matriz: una vez por fila (antes, 2 a 4 veces cada uno) */
@@ -583,7 +590,7 @@ let LKHK=null;
 function lkHov(e){if(!(typeof mxPC==='function'&&mxPC()))return;const c=e.target&&e.target.closest?e.target.closest('td.d,th.dh'):null;const d=c?(c.dataset.d||c.dataset.dh||''):'';if(LKHK===d)return;LKHK=d;
   let st=document.getElementById('lkhovst');if(!st){st=document.createElement('style');st.id='lkhovst';document.head.appendChild(st)}
   st.textContent=d?`#grid td.d[data-d="${d}"]{box-shadow:inset 0 0 0 999px var(--lkhov)}#grid th.dh[data-dh="${d}"]{box-shadow:inset 0 0 0 999px var(--lkhov)}`:''}
-function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventListener('pointerleave',()=>{LKHK=null;const st=document.getElementById('lkhovst');if(st)st.textContent=''});
+function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);lkOgWire(tbl);tbl.addEventListener('pointerleave',()=>{LKHK=null;const st=document.getElementById('lkhovst');if(st)st.textContent=''});
   const lz=e=>{const t=e.target;if(t&&t.tagName==='SELECT'&&t.dataset.lz)scFill(t)};tbl.addEventListener('mousedown',lz,true);tbl.addEventListener('touchstart',lz,{capture:true,passive:true});tbl.addEventListener('focusin',lz,true);
   tbl.addEventListener('focusin',e=>{const t=e.target;if(t.classList.contains('ci'))t.dataset.o=t.value;if(t.tagName==='INPUT'&&t.dataset.a&&t.dataset.f==='name'&&!t.readOnly)actSuggest(t);const a=t.dataset&&t.dataset.a||null;if(a!==myAct){myAct=a;sendPresence()}});
   tbl.addEventListener('focusout',e=>{const t=e.target;if(t.classList.contains('ci')){commitField(t);delete t.dataset.o;setTimeout(()=>{if(!tbl.contains(document.activeElement)&&myAct){myAct=null;sendPresence()}flushDeferred()},0)}});
@@ -615,7 +622,7 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
     else if(b.dataset.addpiso)addPiso();
     else if(b.dataset.pisomenu)pisoMenu(b,b.dataset.pisomenu);
     else if(b.dataset.secmenu)secMenu(b,b.dataset.secmenu);
-    else if(b.dataset.clearf){U.q='';U.sc='';U.acts=[];U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.day='';U.wkF=0;$('#fq').value='';saveUI();requestRender()}
+    else if(b.dataset.clearf){U.q='';U.sc='';U.grp='';LKOGX.clear();U.acts=[];U.onlyWin=false;U.onlyRestr=false;U.onlyObs=false;U.day='';U.wkF=0;$('#fq').value='';saveUI();requestRender()}
     else if(b.dataset.gotoRestr){U.tab='restr';U.rfilter='pend';U.rAct=b.dataset.gotoRestr;render()}
   });
   /* C-21 (tanda 2): clic derecho en la cabecera de un día (en tablet, mantenerla presionada) → menú del calendario (admin y editores) */
@@ -642,7 +649,7 @@ function wireGrid(tbl){tbl.addEventListener('pointerover',lkHov);tbl.addEventLis
   });
   tbl.addEventListener('pointerdown',e=>{
     const dm=e.target.closest('.dm');if(dm){e.preventDefault();e.stopPropagation();const td0=dm.closest('td.d');recPop(dm,td0.parentElement.dataset.a,td0.dataset.d);return}
-    const td=e.target.closest('td.d');if(td&&td.parentElement.dataset.gh)return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'Es una versión emitida al cliente (solo lectura). Elige «Actual (editable)» para editar.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
+    const td=e.target.closest('td.d');if(td&&(td.parentElement.dataset.gh||td.parentElement.dataset.og))return;if(!td||!canWrite)return;if(lkLockOn())return;if(verRO()){if(!tap)toast(U.cliv?'Es una versión emitida al cliente (solo lectura). Elige «Actual (editable)» para editar.':'Estás viendo una versión guardada (solo lectura). Elige “Lookahead actual” para editar.');return}
     /* «Por personal» solo muestra las personas que hacen falta según lo programado (25-10-2026, decidido con el dueño: no duplicar funciones);
        los días y cantidades se programan en «Por días» o «Por metrado» */
     if(U.qmode==='personal'){if(!lkPersTipT||NOW()-lkPersTipT>4000){lkPersTipT=NOW();toast('«Por personal» solo muestra las personas por día según lo programado. Para programar usa «Por días» o «Por metrado».')}return}

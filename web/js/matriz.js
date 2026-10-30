@@ -175,7 +175,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
      if(unm.length){const n=unm.reduce((s,u)=>s+u.ids.length,0);A.push(`<button class="mxal" id="mxmap" title="${unm.length} nombres del lookahead que no están en el catálogo: no salen en la matriz"><b>${n}</b> ${n===1?'fila':'filas'} sin actividad del catálogo</button>`)}
      return A.length?`<div class="mxals"><span class="mxalt">Por revisar</span>${A.join('')}</div>`:''})()}
    <div class="fbar mxbar0">
-    ${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
+    ${SCK()?'':`<button class="ib mxscdd${mxSel().length?' on':''}" id="mxscdd" aria-haspopup="menu" title="Clic: solo ese SC · Ctrl+clic: sumar o quitar">Subcontratistas: <b>${mxSel().length?(mxSel().length===1?esc(conOf(mxSel()[0]).name):esc(grpLabel(mxScIds(),mxSel()))||mxSel().length+' elegidos'):'Todos'}</b> ▾</button>`}
     <span class="seg" role="group" aria-label="Actividades"><button data-mxall="0" class="${U.mxAll?'':'on'}" title="Solo las que se repiten por ambiente">Típicas</button><button data-mxall="1" class="${U.mxAll?'on':''}" title="Incluye entregables puntuales de un solo ambiente">Todas</button></span>
     <label class="mxord" title="Por programación: primero los SC con trabajo programado en estos ambientes de hoy a 3 semanas"><span class="fgl">Orden</span><select id="mxord" aria-label="Orden de las columnas"><option value="prog"${U.mxOrd==='az'?'':' selected'}>Por programación</option><option value="az"${U.mxOrd==='az'?' selected':''}>Alfabético</option></select></label>
     <span class="fgl">Comparar con</span><select id="mxcmp" aria-label="Comparar con una foto"><option value="">—</option>${vers.map(v=>`<option value="${esc(v.id)}"${MX.cmp===v.id?' selected':''}>${esc(fmtD(v.d))}${v.n?' · '+esc(v.n):''}</option>`).join('')}</select>
@@ -293,9 +293,11 @@ function mxFsSet(on){on=!!on&&U.tab==='mat';document.body.classList.toggle('mxfs
 document.addEventListener('fullscreenchange',()=>{if(document.body.classList.contains('mxfs')&&!document.fullscreenElement)mxFsSet(false);else setTimeout(mxFit,60)});
 function mxGoCol(i){const b=$('#mxbox'),t=$('#mxt');if(!b||!t)return;const th=t.querySelector(`th[data-mxcol="${i}"]`);if(!th)return;
   const fix=[...t.querySelectorAll('thead .mxh0,thead th.mxtp,thead th.mxpc')].reduce((w,e)=>w+(e.offsetParent?e.offsetWidth:0),0);b.scrollTo({left:Math.max(0,th.offsetLeft-fix),behavior:'smooth'})}
-function mxScMenu(btn){const scs=[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))].map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));const L=mxSel();
-  openPop(btn,`<div class="ph">Subcontratistas</div><div class="ptx mu">Clic: solo ese · Ctrl+clic: sumar o quitar</div><div class="mxscl"><button data-mxsk=""${L.length?'':' class="on"'}>Todos</button>${scs.map(s=>`<button data-mxsk="${esc(s.id)}"${L.includes(s.id)?' class="on"':''} style="--c:${esc(conOf(s.id).color)}"><i></i>${esc(s.n)}${L.includes(s.id)?' ✓':''}</button>`).join('')}</div>`,{});
-  const P_=$('#pop');if(P_)P_.onclick=e=>{const b=e.target.closest('[data-mxsk]');if(!b)return;const id=b.dataset.mxsk;let L=mxSel();
+const mxScIds=()=>[...new Set([...MX.cat.values()].filter(c=>!c.arch).map(c=>c.sc))];
+function mxScMenu(btn){const scs=mxScIds().map(id=>({id,n:conOf(id).name})).sort((a,b)=>a.n.localeCompare(b.n));const L=mxSel();
+  openPop(btn,`<div class="ph">Subcontratistas</div><div class="ptx mu">Clic: solo ese · Ctrl+clic: sumar o quitar</div>${grpMenuHtml('data-mxsg',scs.map(s=>s.id),L)}<div class="mxscl"><button data-mxsk=""${L.length?'':' class="on"'}>Todos</button>${scs.map(s=>`<button data-mxsk="${esc(s.id)}"${L.includes(s.id)?' class="on"':''} style="--c:${esc(conOf(s.id).color)}"><i></i>${esc(s.n)}${L.includes(s.id)?' ✓':''}</button>`).join('')}</div>`,{});
+  const P_=$('#pop');if(P_)P_.onclick=e=>{const gb=e.target.closest('[data-mxsg]');if(gb){U.mxSc=gb.classList.contains('on')?[]:grpScs(gb.dataset.mxsg,scs.map(s=>s.id));saveUI();MX.sel.clear();closePop();render();return}
+    const b=e.target.closest('[data-mxsk]');if(!b)return;const id=b.dataset.mxsk;let L=mxSel();
     L=!id?[]:(e.ctrlKey||e.metaKey||e.shiftKey)?(L.includes(id)?L.filter(x=>x!==id):[...L,id]):(L.length===1&&L[0]===id?[]:[id]);U.mxSc=L;saveUI();MX.sel.clear();
     if(!(e.ctrlKey||e.metaKey||e.shiftKey))closePop();render();if(e.ctrlKey||e.metaKey||e.shiftKey){const nb=$('#mxscdd');if(nb)mxScMenu(nb)}}}
 function mxWire(main){mxWireV(main);
@@ -510,7 +512,7 @@ function mxHov(e){if(!mxPC())return;if(e.clientX!=null)MX.hp={x:e.clientX,y:e.cl
 
 /* «↗ Lookahead» en todo lo que se revisa del catálogo (19/10, pedido del dueño): abre el Lookahead con la búsqueda puesta (varios
    nombres separados por coma), sin filtros de sector, SC ni actividades; en un piso si se sabe, si no en todos */
-function mxLookGo(q,piso){U.q=q;U.sector='';U.sc='';U.acts=[];U.day='';U.wkF=0;U.piso=piso&&S.pis.has(piso)?piso:'';gridRows=null;saveUI();goTab('look');
+function mxLookGo(q,piso){U.q=q;U.sector='';U.sc='';U.grp='';U.acts=[];U.day='';U.wkF=0;U.piso=piso&&S.pis.has(piso)?piso:'';gridRows=null;saveUI();goTab('look');
   setTimeout(()=>{const f=$('#fq');if(f&&f.value!==U.q){f.value=U.q;gridRows=null;requestRender()}},0);toast(`Lookahead: buscando «${q.length>60?q.slice(0,60)+'…':q}»`)}
 /** nombres con que aparece una actividad del catálogo en el lookahead (su nombre y las variantes de sus filas), para buscarla */
 function mxLkTerms(catId){const c=MX.cat.get(catId);const N=new Map();if(c)N.set(c.name.toLowerCase().trim(),c.name);
