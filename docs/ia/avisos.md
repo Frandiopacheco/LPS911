@@ -24,6 +24,17 @@ Oct 2026, pedido del dueño. Archivos: `web/js/avisos.js`, `web/sw.js` (eventos 
   el aviso solo informa; reanudar o verificar el cumplimiento se hace en Campo. `pushGo` llega por `?det=<act>&d=<fecha>` o
   por mensaje del service worker `{t:'det'}` si la app ya está abierta.
 
+- **La ficha se completa sola (30-10-2026, reporte del dueño):** abierta desde el aviso con la app recién lanzada, se armaba antes de
+  que llegaran los reportes en vivo (`live`) y no se actualizaba: decía «En curso · sin novedad» aunque estuviera detenida. Ahora
+  `pushGo` pide `ensureDaily(d)`, la ficha muestra «Cargando lo reportado en campo…» mientras `LIVE_OK` (base.js: primera foto de
+  `live` recibida) es falso, y `render()` llama a `dashPopRefresh()` (en-obra-tablero.js: `DPOP` guarda la ficha abierta; se vuelve a
+  armar con `dashPopHtml` si cambió). Con la actividad detenida, `dashDetHtml` agrega el recuadro `.dpdet`: desde qué hora y hace
+  cuánto (`agoTxt`), motivo, detalle y quién la reportó.
+- **Hoy › «⏸ Detenidas ahora»** (`jorHoyTop`, jornada.js; admin y editores, `jorHoyOk`): arriba de todas las tarjetas, lo que **sigue
+  detenido** (`jorDet` con `st==='stop'`), lo más reciente primero, con SC, dónde, motivo y detalle y «hace X min»; tocar abre su
+  ficha (`#hoydet [data-jdt]` → `jdtOpen`). Sin detenciones, una línea verde. «Ver todas las detenciones de hoy» (`data-jor="hdet"`)
+  pone Estado de la jornada en Detenciones y baja hasta ella. Prueba: `avisos.spec.js` «aviso de detención: la ficha se completa…».
+
 ## Datos y reglas
 
 - `push/<sha256 del token>`: `{em, tok, dev, t}`, un documento por equipo. Lo crea y borra solo su dueño (admin/editor).
