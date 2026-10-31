@@ -25,10 +25,7 @@ function csLamOf(pid,grp){const API=window.__plano;if(!pid||!API||!API.basesOf)r
 /** metros por píxel de una lámina: la calibración de Planos de esa revisión (se lee siempre del plano, no la copia al vincular);
     sin calibrar, la escala nominal 1/100 del formato (st 'nom', áreas aproximadas); sin plano del módulo Planos, nada */
 function csScale(l){if(!l)return{mpp:null,st:'none'};const r=l.plb;
-  /* DXF de la planta (casco-dxf.js): la escala exacta del dibujo; otra lámina del mismo plano y revisión, en proporción a su ancho */
-  if(typeof dxfOf==='function'){const d=dxfOf(l);if(d)return{mpp:dxfMpp(d),st:'dxf',plb:r?r.id:''};const API=window.__plano;
-    if(r&&l.w>0&&API&&API.LAM)for(const o of API.LAM.values())if(o!==l&&o.w>0&&o.plb&&o.plb.id===r.id&&o.plb.rev===r.rev){const d2=dxfOf(o);if(d2)return{mpp:dxfMpp(d2)*o.w/l.w,st:'dxf',plb:r.id}}}
-  if(r&&typeof PLB!=='undefined'){const p=PLB.get(r.id);if(p&&p.cal&&p.cal.mpp>0&&p.cal.rev===r.rev&&l.w>0&&typeof plSpecOf==='function'){const sp=plSpecOf(p,r.rev);if(sp&&sp.W>0)return{mpp:p.cal.mpp*sp.W/l.w,st:'cal',plb:r.id}}}
+  if(r&&typeof PLB!=='undefined'){const p=PLB.get(r.id);if(p&&p.cal&&p.cal.mpp>0&&p.cal.rev===r.rev&&l.w>0&&typeof plSpecOf==='function'){const sp=plSpecOf(p,r.rev);if(sp&&sp.W>0)return{mpp:p.cal.mpp*sp.W/l.w,st:p.cal.dxf?'dxf':'cal',plb:r.id}}}
   if(r&&r.calMpp>0&&r.mpp>0)return{mpp:r.mpp,st:'cal',plb:r.id};
   if(r&&r.mpp>0)return{mpp:r.mpp,st:'nom',plb:r.id};
   return{mpp:null,st:'none',plb:r?r.id:''}}

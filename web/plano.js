@@ -2307,7 +2307,7 @@ async function lamFromPlb(pid,plbId,o){o=o||{};const p=PLB.get(plbId);if(!p)thro
   const ref={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
   /* primero los mosaicos del módulo Planos (rápido); si no se puede, el PDF original como antes */
   let out=null;if(sp.W>0&&sp.H>0)try{out=await plbTiles(sp,fname,say)}catch(e){out=null}
-  if(!out){const bl=await plGet(sp.base+'/orig.pdf');out=await processFile(new File([bl],fname,{type:'application/pdf'}),say,{crop:sp.crop||null})}
+  if(!out){if(sp.dxf)throw new Error('No se pudieron leer los mosaicos del plano.');const bl=await plGet(sp.base+'/orig.pdf');out=await processFile(new File([bl],fname,{type:'application/pdf'}),say,{crop:sp.crop||null})}
   ref.mpp=plbMpp(ref,out.w);delete ref.W;
   await saveLam({pisoId:pid,esp:o.esp||'Plano base',name:o.name||((p.cod||'')+(p.tit?' · '+p.tit:'')),base:true,T:I,aligned:true,plb:ref,order:o.order,quiet:!!o.quiet},out);return true}
 function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(p=>p.id===opt.pid):pisos();
@@ -2347,9 +2347,10 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     $('#uplbn',box).textContent=`${p.cal&&p.cal.rev===(p.rev||1)?'Calibrado en Planos: las áreas usan su escala.':'Sin calibrar en Planos: las áreas usan la escala nominal 1/100.'} La lámina queda fija en la revisión elegida hasta que la cambies.`}
   if(src){src.value=repl&&!repl.plb?'file':'plb';src.onchange=plbSync;plbSel.onchange=revSync;if(typeof plSub==='function')plSub();plbSync()}
   $('#ucancel',box).onclick=close;
-  $('#ugo',box).onclick=async()=>{let f=null,plbRef=null,crop=null;
+  $('#ugo',box).onclick=async()=>{let f=null,plbRef=null,crop=null,tilesSp=null;
     if(src&&src.value==='plb'){const p=PLB.get(plbSel.value);if(!p){toast('Elige el plano.');return}const sp=plSpecOf(p,+revSel.value);$('#ugo',box).disabled=true;$('#uprog',box).textContent='Descargando el plano del módulo Planos…';
-      try{const bl=await plGet(sp.base+'/orig.pdf');f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'})}catch(err){$('#ugo',box).disabled=false;$('#uprog',box).textContent='';toast('No se pudo descargar el plano: '+(err.message||err));return}
+      /* plano en DXF (planos-dxf.js): no hay PDF; la lámina sale de sus mosaicos */
+      if(sp.dxf)tilesSp=sp;else try{const bl=await plGet(sp.base+'/orig.pdf');f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'})}catch(err){$('#ugo',box).disabled=false;$('#uprog',box).textContent='';toast('No se pudo descargar el plano: '+(err.message||err));return}
       crop=sp.crop||null;const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;
       plbRef={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
       if(!repl&&!$('#uname',box).value.trim()&&!$('#uesp',box).value)$('#uname',box).value=(p.cod||'')+(p.tit?' · '+p.tit:'');$('#ugo',box).disabled=false}
@@ -2359,7 +2360,7 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     const B=basesOf(pid);const newBase=!repl&&(!B.length||$('#utipo',box).value==='base');const target=repl?baseOfL(repl):(newBase?null:LAM.get($('#ubase',box).value)||B[0]);
     const prog=$('#uprog',box);const say=t=>{prog.textContent=t};$('#ugo',box).disabled=true;
     if(opt.mode==='spec'&&newBase){toast('La lámina base se sube en Sectorización.');return}
-    try{const out=await processFile(f,say,{crop});if(plbRef){plbRef.mpp=plbMpp(plbRef,out.w);delete plbRef.W}close();
+    try{const out=tilesSp?await plbTiles(tilesSp,(plbRef.cod||'plano')+'.dxf',say):await processFile(f,say,{crop});if(plbRef){plbRef.mpp=plbMpp(plbRef,out.w);delete plbRef.W}close();
       if(newBase){await saveLam({pisoId:pid,esp:esp||'Plano base',name,base:true,T:I,aligned:true,plb:plbRef},out);toast(opt.mode==='base'?'Lámina base guardada. Ahora ubica sus sectores y ambientes.':'Plano base guardado');M.piso=pid;if(opt.onBase)opt.onBase(M.vista);requestRender();return}
       const ref=repl&&repl.base?repl:target;M.busy='Cargando la referencia para alinear…';requestRender();const refURL=await imgURL(ref,'f');M.busy='';requestRender();
       const nm=name||EN(esp);

@@ -55,9 +55,11 @@ const csAlOk=l=>l&&l.al&&(l.al.rev==null||l.al.rev===l.rev);
 function csMap(ref,lam){if(!ref||!lam)return null;if(ref.id===lam.id)return csI;
   if(ref.plb&&lam.plb&&ref.plb.id===lam.plb.id&&ref.w>0){const k=lam.w/ref.w;return{a:k,b:0,e:0,f:0}}
   if(csAlOk(lam)&&lam.al.ref===ref.id)return lam.al;if(csAlOk(ref)&&ref.al.ref===lam.id)return csInvT(ref.al);
-  if(csAlOk(lam)&&csAlOk(ref)&&lam.al.ref===ref.al.ref)return csCmpT(lam.al,csInvT(ref.al));return null}
+  if(csAlOk(lam)&&csAlOk(ref)&&lam.al.ref===ref.al.ref)return csCmpT(lam.al,csInvT(ref.al));
+  /* las dos láminas vienen de un DXF de Planos: por los cruces de ejes del mismo nombre (casco-dxf.js) */
+  return typeof csDxfAl==='function'?csDxfAl(ref,lam):null}
 /** tercios de las luces: entre cada par de ejes paralelos (en las coordenadas de la referencia) y de las luces sueltas */
-function csThirds(ref){const E=(ref&&ref.ejes||[]).filter(e=>Array.isArray(e.p)&&e.p.length===4);const out=[];if(!E.length&&!(ref&&ref.luces||[]).length)return out;
+function csThirds(ref){const E=csEjesOf(ref);const out=[];if(!E.length&&!(ref&&ref.luces||[]).length)return out;
   const isV=e=>Math.abs(e.p[2]-e.p[0])<Math.abs(e.p[3]-e.p[1]);const V=E.filter(isV).map(e=>({e,c:(e.p[0]+e.p[2])/2})).sort((a,b)=>a.c-b.c),H=E.filter(e=>!isV(e)).map(e=>({e,c:(e.p[1]+e.p[3])/2})).sort((a,b)=>a.c-b.c);
   const ys=E.flatMap(e=>[e.p[1],e.p[3]]),xs=E.flatMap(e=>[e.p[0],e.p[2]]);const y0=Math.min(...ys),y1=Math.max(...ys),x0=Math.min(...xs),x1=Math.max(...xs);
   for(let i=0;i+1<V.length;i++){const a=V[i].c,b=V[i+1].c;[1,2].forEach(k=>{const c=a+(b-a)*k/3;out.push({pts:[c,y0,c,y1],lbl:`${k}/3 ${V[i].e.n}–${V[i+1].e.n}`})})}
@@ -68,7 +70,7 @@ function csThirds(ref){const E=(ref&&ref.ejes||[]).filter(e=>Array.isArray(e.p)&
 /** guías para dibujar en una lámina: ejes (naranja, con nombre) y tercios (morado, tenues) llevados de la referencia; y las líneas para pegarse */
 function csGuides(ref,lam,show){return csGuidesM(ref,csMap(ref,lam),show)}
 function csGuidesM(ref,m,show){if(!m||!ref)return{guides:[],snap:[]};const T=csThirds(ref).map(t=>({...t,pts:csMapF(m,t.pts)}));
-  const E=(ref.ejes||[]).filter(e=>Array.isArray(e.p)&&e.p.length===4).map(e=>({pts:csMapF(m,e.p),c:'#C2410C',w:1.6,dash:'14 4 3 4',op:.85,lbl:e.n}));
+  const E=csEjesOf(ref).map(e=>({pts:csMapF(m,e.p),c:'#C2410C',w:1.6,dash:'14 4 3 4',op:.85,lbl:e.n}));
   const L=(ref.luces||[]).filter(l=>Array.isArray(l.p)&&l.p.length===4).map(l=>({pts:csMapF(m,l.p),c:'#7C3AED',w:2,op:.8}));
   return{guides:show?E.concat(L,T.map(t=>({pts:t.pts,c:'#7C3AED',w:1.2,dash:'5 4',op:.55}))):E,snap:show?T:[]}}
 /** cómo se muestra una lámina: en el marco de la referencia (enderezada y a su escala) cuando se sabe cómo */
@@ -83,15 +85,15 @@ function csEjeAdd(ref,lam,a,b){const m=csMap(ref,lam);if(!m){toast('Alinea prime
 function csLuzAdd(ref,lam,a,b){const m=csMap(ref,lam);if(!m){toast('Alinea primero este nivel con la referencia.');return}const mi=csInvT(m);const A=csAp(mi,a),B=csAp(mi,b);
   csLamSet(ref,{luces:[...(ref.luces||[]),{p:[A,B].flatMap(q=>[Math.round(q.x*10)/10,Math.round(q.y*10)/10])}]});toast('Luz de viga: sus dos tercios ya están en el plano')}
 /** sección «Ejes» del panel (Sectores y Niveles) */
-function csEjesSec(ref,ed){if(!ref)return'';const E=(ref.ejes||[]).filter(e=>Array.isArray(e.p)&&e.p.length===4);const sc=csScale(ref);const isV=e=>Math.abs(e.p[2]-e.p[0])<Math.abs(e.p[3]-e.p[1]);
+function csEjesSec(ref,ed){if(!ref)return'';const E=csEjesOf(ref);const dx=csEjesDx(ref);if(dx)ed=false;   /* los del DXF no se editan aquí */const sc=csScale(ref);const isV=e=>Math.abs(e.p[2]-e.p[0])<Math.abs(e.p[3]-e.p[1]);
   const pos=e=>isV(e)?(e.p[0]+e.p[2])/2:(e.p[1]+e.p[3])/2;const V=E.filter(isV).sort((a,b)=>pos(a)-pos(b)),H=E.filter(e=>!isV(e)).sort((a,b)=>pos(a)-pos(b));
   const span=A=>sc.mpp?A.slice(1).map((x,i)=>`${esc(A[i].n)}–${esc(x.n)} ${((pos(x)-pos(A[i]))*sc.mpp).toFixed(2)} m`).join(' · '):'';const nT=csThirds(ref).length;
   return`<details class="csfsec"${CSZ.oe?' open':''} data-cszo="ejes"><summary><b>Ejes y tercios</b><span class="mu">${E.length} eje(s) · ${nT} tercio(s)</span></summary>
     ${E.length?`<table class="t cstab"><thead><tr><th>Eje</th><th>Dirección</th>${sc.mpp?'<th class="n">Desde el primero</th>':''}${ed?'<th></th>':''}</tr></thead><tbody>${[...V,...H].map(e=>{const i=(ref.ejes||[]).indexOf(e);const L=isV(e)?V:H;return`<tr><td>${ed?`<input class="ci csn" data-csen="${i}" value="${esc(e.n)}" maxlength="4" aria-label="Nombre del eje">`:`<b>${esc(e.n)}</b>`}</td><td>${isV(e)?'Vertical':'Horizontal'}</td>${sc.mpp?`<td class="n">${((pos(e)-pos(L[0]))*sc.mpp).toFixed(2)} m</td>`:''}${ed?`<td class="c"><button type="button" class="ab" data-csex="${i}" aria-label="Quitar el eje ${esc(e.n)}">✕</button></td>`:''}</tr>`}).join('')}</tbody></table>
-      <p class="note">${dxfOf(ref)?'Vienen del DXF de la planta. ':''}${V.length>1?'Luces verticales: '+span(V):''}${H.length>1?'<br>Luces horizontales: '+span(H):''}</p>`:'<p class="mu">Sin ejes. Trázalos una vez con «＃ Ejes» sobre la lámina de referencia: sirven para todos los niveles alineados y dan los tercios de cada luz.</p>'}
+      <p class="note">${dx?'Vienen del DXF de la planta (Planos). ':''}${V.length>1?'Luces verticales: '+span(V):''}${H.length>1?'<br>Luces horizontales: '+span(H):''}</p>`:'<p class="mu">Sin ejes. Trázalos una vez con «＃ Ejes» sobre la lámina de referencia: sirven para todos los niveles alineados y dan los tercios de cada luz.</p>'}
     ${(ref.luces||[]).length?`<p class="note">${ref.luces.length} luz(ces) de viga suelta(s). ${ed?'<button type="button" class="ib" data-csz="luz0">Quitar luces sueltas</button>':''}</p>`:''}</details>`}
 document.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.cszo==='ejes')CSZ.oe=d.open},true);
-function csEjeEdit(e){const t=e.target;const ref=csRefLam(csSzFr(),CSZ.fg);if(!ref||!csEd())return false;
+function csEjeEdit(e){const t=e.target;const ref=csRefLam(csSzFr(),CSZ.fg);if(!ref||!csEd()||csEjesDx(ref))return false;
   if(t.dataset&&t.dataset.csen!=null&&e.type==='change'){const E=(ref.ejes||[]).slice();const i=+t.dataset.csen;if(E[i]){E[i]={...E[i],n:String(t.value).trim().toUpperCase().slice(0,4)||E[i].n};csLamSet(ref,{ejes:E});csSzDraw()}return true}
   const x=t.closest&&t.closest('[data-csex]');if(x&&e.type==='click'){const E=(ref.ejes||[]).slice();E.splice(+x.dataset.csex,1);csLamSet(ref,{ejes:E});csSzDraw();return true}
   const lz=t.closest&&t.closest('[data-csz="luz0"]');if(lz&&e.type==='click'){csLamSet(ref,{luces:[]});csSzDraw();return true}return false}
@@ -107,8 +109,8 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;if(CNV.tool=
       <span class="seg" role="group" aria-label="Grupo">${['E','A'].map(k=>`<button type="button" data-cszg="${k}" class="${g===k?'on':''}">${k==='E'?'Estructura':'Albañilería'}</button>`).join('')}</span>
       <span class="cnvlvs" role="group" aria-label="Nivel">${LV.map(lvChip).join('')}</span></div>
     ${ed&&lam?`<div class="csszr"><span class="seg" role="group" aria-label="Herramienta">${T('','✋','Ajustar','Elige un sector y arrastra sus esquinas o sus caras; clic derecho en una esquina: agregar o quitar vértices')}${T('nr','▭','Nuevo','Dibuja un sector nuevo con un rectángulo')}${T('np','⬠','Nuevo','Dibuja un sector nuevo con un polígono')}${T('rd','↻','Redibujar','Vuelve a dibujar el sector elegido (polígono)')}${T('cut','✂','Partir','Traza una línea que cruce un sector')}${T('join','⊕','Juntar','Toca dos sectores vecinos')}${T('div','÷','Contorno y dividir','Dibuja el contorno del nivel y pártelo en N sectores de igual área')}</span>
-      <span class="seg" role="group" aria-label="Referencias">${T('ejes','＃','Ejes','Traza cada eje con dos clics')}${T('luz','⟷','Luz de viga','Dos clics en las caras de una viga: sus tercios')}${g==='E'?T('viga','═','Viga','Traza una viga por ejes y marca sus apoyos: sale su plantilla en Metrados › Vigas'):''}</span>
-      ${csOrtTer()}${dxfOf(ref)?`<label class="chk cnvsh" title="Columnas y caras de vigas del DXF encima de la lámina; el clic se pega a ellas (Alt: no se pega)"><input type="checkbox" data-csz2="dxf"${CSZ.dxf!==false?' checked':''}> DXF</label>`:''}<label class="chk cnvsh"><input type="checkbox" data-cnv="shared"${CNV.shared?' checked':''}> Mover juntas las esquinas compartidas</label>
+      <span class="seg" role="group" aria-label="Referencias">${csEjesDx(ref)?'':T('ejes','＃','Ejes','Traza cada eje con dos clics')}${T('luz','⟷','Luz de viga','Dos clics en las caras de una viga: sus tercios')}${g==='E'?T('viga','═','Viga','Traza una viga por ejes y marca sus apoyos: sale su plantilla en Metrados › Vigas'):''}</span>
+      ${csOrtTer()}${csDxf(lam)?`<label class="chk cnvsh" title="Columnas y caras de vigas del DXF encima de la lámina; el clic se pega a ellas (Alt: no se pega)"><input type="checkbox" data-csz2="dxf"${CSZ.dxf!==false?' checked':''}> DXF</label>`:''}<label class="chk cnvsh"><input type="checkbox" data-cnv="shared"${CNV.shared?' checked':''}> Mover juntas las esquinas compartidas</label>
       <button type="button" class="ib" data-cnv="del"${CNV.sel?'':' disabled'} title="Eliminar el sector elegido">Eliminar sector</button>
       <button type="button" class="ib" data-cnv="copy" title="Copia los sectores de otro nivel">⧉ Copiar de otro nivel…</button><button type="button" class="ib" data-cnv="al" title="Alinea las láminas de los niveles con la referencia">⌖ Alinear niveles…</button>
       <button type="button" class="ib" data-cszv="lam" title="Láminas del nivel: subir o cambiar la lámina, ubicar ambientes">Láminas del nivel</button>
@@ -126,7 +128,7 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;if(CNV.tool=
       ${ambs.map((a,j)=>{const i=idx.get(a.id);const has=i!=null;return`<tr class="${a.id===CNV.sel?'on':''}" data-cnvs="${esc(a.id)}"><td><i class="csdot" style="--c:${CS_SCOL[j%CS_SCOL.length]}"></i></td><td><b>${esc(a.code)}</b>${has?'':' <span class="mu">sin dibujo</span>'}</td>
         <td class="n">${has&&E.A[i]!=null?E.A[i].toFixed(1):'—'}</td><td class="n">${has?(Math.round(E.carga[i]*10)/10).toFixed(1):'—'}</td><td class="n">${has&&E.n>1?`<span class="csbal ${csBalCls(E.dev[i])}">${pc(E.dev[i])}</span>`:''}</td><td class="n">${has&&m3c?(Math.round(E.met[m3c.id][i]*10)/10).toFixed(1):'—'}</td><td class="n">${prog.get(a.id)||'—'}</td></tr>`}).join('')}</tbody>
       ${E?`<tfoot><tr><td></td><td>Total</td><td class="n">${sc.mpp?tot('A').toFixed(1):'—'}</td><td class="n">${tot('carga').toFixed(1)}</td><td></td><td class="n">${m3c?(Math.round(E.met[m3c.id].reduce((s,x)=>s+(x||0),0)*10)/10).toFixed(1):'—'}</td><td class="n">${[...prog.values()].reduce((s,x)=>s+x,0)}</td></tr></tfoot>`:''}</table>`:'<p class="mu csfemp">Este nivel no tiene sectores de este frente: dibújalos con «▭ Nuevo» o «÷ Contorno y dividir», aplica una alternativa en Sectores o cópialos de otro nivel.</p>'}</div>
-    ${E?csSemTable(E):''}${dxfSec(ref,ed)}${csEjesSec(ref,ed)}${g==='E'?kvpTable(p.id,ed):''}
+    ${E?csSemTable(E):''}${csDxfSec(lam)}${csEjesSec(ref,ed)}${g==='E'?kvpTable(p.id,ed):''}
     <div class="csfsec"><p class="note"><b>Solo cambia ${esc(cnvTag(p,g))}.</b> Lo programado se queda en su sector; al partir, el sector nuevo queda sin programar (prográmalo en Lookahead › Tren). Si vuelves a aplicar la alternativa, te preguntará si reemplaza los niveles ajustados a mano.</p></div>`;
   csSet('csszside',side);csSet('csszf','');document.getElementById('csszb').classList.toggle('noside',!CSZ.side);
   /* plano */
@@ -141,13 +143,13 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;if(CNV.tool=
   const M=csDispM(ref,lam);
   /* vigas desde el plano (casco-met-plano.js): las vinculadas con su tercio central y sus juntas; el trazado en curso */
   const vo=g==='E'?kvpOverlay(p.id):{guides:[],dots:[]};const vt=tl==='viga'?kvpDrawO():{guides:[],dots:[],snap:[]};
-  /* plano vectorial (casco-dxf.js): columnas y caras encima de la lámina; al dibujar contornos y luces el clic se pega a ellas */
-  const dg=CSZ.dxf!==false?dxfGeo(ref,mp):null;const dsn=dg&&['np','rd','div','luz'].includes(tl);
-  const o={pid:CNV.pid,vista:lam.id,shapes,canUp:false,draw:(tl==='viga'||tl==='dxfal')&&ed?'poly':draw,tmp:poly?CNV.tmp:null,M:M||undefined,guides:[...gd.guides,...vo.guides,...vt.guides],dots:[...vo.dots,...vt.dots],paths:dg?dg.paths:null,
-    snapLines:(tl==='cut'||tl==='div'||tl==='np'||tl==='rd')?gd.snap.concat(dsn?dg.segs:[]):tl==='viga'?vt.snap:tl==='luz'&&dg?dg.segs:null,snapPts:dsn&&tl!=='luz'?dg.pts:null,ortho:tl==='viga'||tl==='dxfal'?false:CSZ.ortho!==false,
+  /* plano vectorial (DXF de Planos, casco-dxf.js): columnas y caras encima de la lámina; al dibujar contornos y luces el clic se pega a ellas */
+  const dg=CSZ.dxf!==false?csDxfDraw(lam):null;const dsn=dg&&['np','rd','div','luz'].includes(tl);
+  const o={pid:CNV.pid,vista:lam.id,shapes,canUp:false,draw:tl==='viga'&&ed?'poly':draw,tmp:poly?CNV.tmp:null,M:M||undefined,guides:[...gd.guides,...vo.guides,...vt.guides],dots:[...vo.dots,...vt.dots],paths:dg?dg.paths:null,
+    snapLines:(tl==='cut'||tl==='div'||tl==='np'||tl==='rd')?gd.snap.concat(dsn?dg.segs:[]):tl==='viga'?vt.snap:tl==='luz'&&dg?dg.segs:null,snapPts:dsn&&tl!=='luz'?dg.pts:null,ortho:tl==='viga'?false:CSZ.ortho!==false,
     edit:ed&&!tl&&selG?{pts:selG,link}:null,onEdit:(pts,ch)=>cnvGeoSave(C,sel,pts,ch),
     onDrawn:pts=>{if(tl==='nr'){CNV.tool='';cnvNew(C,pts)}},
-    onPoly:pt=>{if(tl==='viga'){kvpClick(pt);return}if(tl==='dxfal'){dxfAlClick(pt);return}CNV.tmp=[...CNV.tmp,pt];const two=CNV.tmp.length===2;if(two&&(tl==='cut'||tl==='ejes'||tl==='luz')){const[a,b]=CNV.tmp;CNV.tmp=[];if(tl==='cut')cnvCut(C,a,b);else if(tl==='ejes'){csEjeAdd(ref,lam,a,b);csNivDraw()}else{csLuzAdd(ref,lam,a,b);csNivDraw()}return}csNivDraw()},
+    onPoly:pt=>{if(tl==='viga'){kvpClick(pt);return}CNV.tmp=[...CNV.tmp,pt];const two=CNV.tmp.length===2;if(two&&(tl==='cut'||tl==='ejes'||tl==='luz')){const[a,b]=CNV.tmp;CNV.tmp=[];if(tl==='cut')cnvCut(C,a,b);else if(tl==='ejes'){csEjeAdd(ref,lam,a,b);csNivDraw()}else{csLuzAdd(ref,lam,a,b);csNivDraw()}return}csNivDraw()},
     onPolyClose:()=>{const P=CNV.tmp;CNV.tmp=[];if(P.length<3||!['np','rd','div'].includes(tl)){csNivDraw();return}const pts=csgFlat(P);if(tl==='np'){CNV.tool='';cnvNew(C,pts)}else if(tl==='rd'){CNV.tool='';if(sel)cnvGeoSave(C,sel,pts,null);else csNivDraw()}else cnvDivPop(C,P,M)},
     onPick:hit=>{if(tl==='join'){if(!hit)return;if(!CNV.pend||CNV.pend===hit){CNV.pend=CNV.pend===hit?'':hit;csNivDraw();return}const a=CNV.pend;CNV.pend='';cnvJoin(C,a,hit);return}
       if(tl)return;CNV.sel=hit||'';csNivDraw()}};
@@ -159,7 +161,6 @@ function csNivDraw(){const C=cnvCtx(),{f,g,fid,LV,p,sec,lam,ambs}=C;if(CNV.tool=
   else if(tl==='np'||tl==='rd'||tl==='div')t=(CNV.tmp.length?`${CNV.tmp.length} esquina(s). Cierra tocando la primera, doble clic o Enter.`:tl==='div'?'Dibuja el contorno del nivel (polígono); luego eliges en cuántos sectores partirlo.':tl==='rd'?(sel?`Dibuja de nuevo ${sel.code} (polígono). Lo programado se queda.`:'Primero elige un sector.'):'Toca cada esquina del sector nuevo.')+' ⊥ ortogonal: Mayúscula para un lado libre.';
   else if(tl==='ejes')t=need?'Alinea primero este nivel con la referencia.':CNV.tmp.length?'Segundo clic: el eje queda recto.':'Traza cada eje con dos clics sobre la línea del eje del plano. Se nombran solos (A, B… y 1, 2…).';
   else if(tl==='viga')t=need?'Alinea primero este nivel con la referencia.':kvpHint();
-  else if(tl==='dxfal')t=dxfAlHint();
   else if(tl==='luz')t=need?'Alinea primero este nivel con la referencia.':CNV.tmp.length?'Segundo clic en la otra cara de la viga.':'Clic en una cara de la viga y en la otra: salen sus dos tercios.';
   else if(!ambs.length)t=ed?'Este nivel no tiene sectores de este frente: «▭ Nuevo», «÷ Contorno y dividir» o «⧉ Copiar de otro nivel…».':'';
   else if(!drawn.length)t=ed?'Los sectores de este nivel no tienen dibujo en esta lámina: elige uno y «↻ Redibujar», o «⧉ Copiar de otro nivel…».':'';
@@ -265,7 +266,7 @@ function cnvCpDo(){const K=CNV.cp;const C=cnvCtx();if(!K||!csEd())return;const g
 
 /* ---------- eventos (los llama csSzClick / csSzChange de casco-sz.js) ---------- */
 function csNivClick(e){const root=document.getElementById('cssz');if(!root||root.dataset.v!=='niv')return false;const t=e.target;
-  if(kvpOnClick(e)||dxfOnClick(e))return true;
+  if(kvpOnClick(e)||csDxfClick(e))return true;
   const pb=t.closest('[data-cnvp]');if(pb){if(KVP.step)kvpStop();CNV.pid=pb.dataset.cnvp;CNV.sel='';CNV.tmp=[];CNV.pend='';if(CNV.cp){CNV.cp.t=[];if(CNV.cp.src===CNV.pid)CNV.cp=null}csNivDraw();return true}
   const tb=t.closest('[data-cnvt]');if(tb){if(tb.dataset.cnvt==='viga'){if(CNV.tool==='viga')kvpStop();else kvpStart(CNV.pid);CNV.sel='';csNivDraw();return true}if(KVP.step)kvpStop();CNV.tool=tb.dataset.cnvt;CNV.tmp=[];CNV.pend='';if(CNV.tool)CNV.sel='';csNivDraw();return true}
   const sr=t.closest('[data-cnvs]');if(sr){CNV.sel=sr.dataset.cnvs;CNV.tool='';const a=S.amb.get(CNV.sel);const C=cnvCtx();const g0=cnvGeo(a,C.lam);csNivDraw();if(g0&&window.__plano&&window.__plano.ambFocus)window.__plano.ambFocus(document.getElementById('csszmap'),g0);return true}
@@ -340,11 +341,11 @@ function cnvAlDraw(){const box0=document.getElementById('cnvcp');const K=CNV.al;
   const stp=(n,t,on,done)=>`<span class="cnvst${on?' on':''}${done?' done':''}"><b>${done?'✓':n}</b>${t}</span>`;
   csSet('cnvcph',`<b>Alinear ${esc(cnvTag(pt,g))} con la referencia ${esc(cnvTag(pr,g))}</b><button type="button" class="ib" data-cnv="allist">Todos los niveles</button><span style="flex:1"></span>${stp(1,'1 o 2 puntos en la referencia',ns===nt&&!T,ns>0)}${stp(2,'los mismos en '+esc(cnvTag(pt,g)),ns>nt,!!T)}${stp(3,'revisar y guardar',!!T,false)}`);
   csSet('cnvcpls',`Referencia · ${esc(cnvTag(pr,g))}`);csSet('cnvcplt',`${esc(cnvTag(pt,g))}${T&&K.str?' · enderezado':''}`);
-  csSet('cnvcpf',`${!T?`<span>${ns===nt?`En la referencia toca un punto fácil de reconocer, de preferencia un <b>cruce de ejes</b>${(ref.ejes||[]).length?' (se pega a los cruces de los ejes trazados)':''}: ${ns?'el segundo':'el primero'}. Con 2 puntos se ajusta posición, escala y giro; con 1, solo la posición.`:`Toca <b>el mismo punto</b> en ${esc(cnvTag(pt,g))}.`} <span class="mu">Rueda o pellizco para acercar; arrastra para mover la lámina.</span></span>`
+  csSet('cnvcpf',`${!T?`<span>${ns===nt?`En la referencia toca un punto fácil de reconocer, de preferencia un <b>cruce de ejes</b>${csEjesOf(ref).length?' (se pega a los cruces de los ejes)':''}: ${ns?'el segundo':'el primero'}. Con 2 puntos se ajusta posición, escala y giro; con 1, solo la posición.`:`Toca <b>el mismo punto</b> en ${esc(cnvTag(pt,g))}.`} <span class="mu">Rueda o pellizco para acercar; arrastra para mover la lámina.</span></span>`
       :`<span>${T.n===1?'1 punto: escala por la calibración, sin giro':`Escala <b>${k.toFixed(3)}</b> · giro <b>${(Math.atan2(T.b,T.a)*180/Math.PI).toFixed(1)}°</b>`}</span>${okK==null?'':okK?'<span class="csszok">✓ coincide con la calibración</span>':`<span class="csszwarn">⚠ la calibración daría ${exp.toFixed(3)}: revisa los puntos</span>`}<label class="chk cnvsh"><input type="checkbox" data-cnv="alstr"${K.str?' checked':''}> Ver enderezado</label><span class="mu">${K.str?'Así se verá: derecho, a la escala y en el sitio de la referencia. Los ejes deben caer sobre los del plano.':'Arrastra los puntos para afinar.'}</span>`}
     <span style="flex:1"></span><button type="button" class="ib" data-cnv="alreset">Empezar de nuevo</button><button type="button" class="ib" data-cnv="alx">Cancelar</button><button type="button" class="ib pri" data-cnv="alok"${T?'':' disabled'}>Guardar alineación</button>`);
   if(!API||!API.ambMap)return;const hA=document.getElementById('cnvA'),hB=document.getElementById('cnvB');const gr=csGuides(ref,ref,false).guides;
-  const cross=()=>{const E=(ref.ejes||[]).filter(e=>Array.isArray(e.p)&&e.p.length===4);const isV=e=>Math.abs(e.p[2]-e.p[0])<Math.abs(e.p[3]-e.p[1]);const out=[];
+  const cross=()=>{const E=csEjesOf(ref);const isV=e=>Math.abs(e.p[2]-e.p[0])<Math.abs(e.p[3]-e.p[1]);const out=[];
     for(const v of E.filter(isV))for(const h of E.filter(e=>!isV(e))){const a={x:v.p[0],y:v.p[1]},b={x:v.p[2],y:v.p[3]},c={x:h.p[0],y:h.p[1]},d={x:h.p[2],y:h.p[3]};const t=csgSegT(a,b,c,d);if(t!=null)out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t})}return out};
   const snapX=w=>{const z=hA._v&&hA._v.z||1;let best=null,bd=14/z;for(const c of cross()){const d=Math.hypot(c.x-w.x,c.y-w.y);if(d<bd){bd=d;best=c}}return best?{x:Math.round(best.x*10)/10,y:Math.round(best.y*10)/10}:{x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10}};
   const mk=P=>P.length?{tmp:P,edit:{pts:csgFlat(P),noMid:true}}:{};
