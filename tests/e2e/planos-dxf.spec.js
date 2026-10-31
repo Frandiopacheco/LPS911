@@ -159,6 +159,19 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   await expect(panel).toContainText('✓ Listo');
   await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
   expect(await page.evaluate(() => plMalla() && plMalla().id)).toBe('EST_E03');
+  /* ya listo, el contorno se puede seguir editando (avisa que vuelve a «Por alistar»): agregar un hueco */
+  await expect(panel.locator('[data-pal="hueco"]')).toBeVisible();
+  page.once('dialog', dl => dl.accept());
+  await panel.locator('[data-pal="hueco"]').click();
+  await page.evaluate(() => { const v = PLV.tv; PLM.L.area = [{ x: v.W * .4, y: v.H * .4 }, { x: v.W * .5, y: v.H * .4 }, { x: v.W * .5, y: v.H * .5 }, { x: v.W * .4, y: v.H * .5 }]; plmBar(); });
+  await page.locator('.plmbar [data-pm="ctnok"]').click();
+  await expect.poll(() => page.evaluate(() => (PLB.get('EST_E03').ctn.H || []).length)).toBe(1);
+  const ct = await page.evaluate(() => { const p = PLB.get('EST_E03'); return { a: p.ctn.a, ok: !!p.ok, bruto: palArea(p.ctn.P) * p.dxf.mpp ** 2, h: palArea(p.ctn.H[0].p) * p.dxf.mpp ** 2 }; });
+  expect(ct.ok).toBe(false); /* volvió a «Por alistar» */
+  expect(ct.a).toBeCloseTo(ct.bruto - ct.h, 1); /* el hueco se resta */
+  await expect(panel.locator('.palit').filter({ hasText: 'Contorno' })).toContainText('menos 1 hueco(s)');
+  await panel.locator('[data-pal="hdel:0"]').click();
+  await expect.poll(() => page.evaluate(() => (PLB.get('EST_E03').ctn.H || []).length)).toBe(0);
   /* cambiar las capas lo devuelve a «Por alistar» */
   await page.evaluate(async () => { const p = PLB.get('EST_E03'); await plCol(p).doc(p.id).update({ ok: firebase.firestore.FieldValue.delete() }); });
   await expect.poll(() => page.evaluate(() => plAlPend(PLB.get('EST_E03')))).toBe(true);
