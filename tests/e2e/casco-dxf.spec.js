@@ -64,6 +64,9 @@ test('casco DXF: la lámina de un plano DXF da los ejes, la escala exacta, colum
   const V = await page.evaluate(() => kvVigas('n3').find(v => v.pl));
   expect(V.ejes.map(e => [e.n, e.w, e.d])).toEqual([['A', '0.50', '4.00'], ['B', '0.40', '4.00'], ['C', '0.40', '4.00'], ['D', '0.40', '4.00'], ['E', '0.40', '']]);
   expect(V.ejes[0].o).toBe('0.2');
+  /* Casco usa los ejes con las correcciones de Alistar (plb.fix) */
+  await page.evaluate(() => fcol('plb').doc('EST_E03').update({ fix: { rev: 1, L: [{ id: 'f1', k: 'ejRen', n: 'A', a: 'A1' }] } }));
+  await expect.poll(() => page.evaluate(() => csEjesOf(csRefLam(csSzFr(), 'E')).map(e => e.n).join(','))).toBe('A1,B,C,D,E,1,2,3');
   /* un plano DXF sin alistar no se usa: ni ejes ni columnas ni escala ni alineación, y no se puede vincular */
   await page.evaluate(() => fcol('plb').doc('EST_E04').update({ ok: firebase.firestore.FieldValue.delete() }));
   await expect.poll(() => page.evaluate(() => !!PLB.get('EST_E04').ok)).toBe(false);

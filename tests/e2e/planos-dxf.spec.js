@@ -164,3 +164,73 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   await expect.poll(() => page.evaluate(() => plAlPend(PLB.get('EST_E03')))).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('alistar › correcciones: enderezar un eje girado, nombrar o descartar líneas, quitar columnas y deshacer (puras)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoF(dxfGeoOf(S)) && dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G))); const mpp = S.mpp;
+    const p = { id: 'EST_E03', cod: 'E03', disc: 'EST', tipo: 'Planta', pisoId: 'P3', rev: 1, mm: S.mm, dxf: { k: S.k, mpp, lay, src: S.src } };
+    const chk = fix => { const C = dxfCheck({ p, G, lay, mpp, malla: null, ctn: null, fix: { rev: 1, L: fix } }); return { C, by: Object.fromEntries(C.it.map(x => [x.id, x])) }; };
+    const c0 = chk([]); const O = palEndOpts(c0.C.R, 'E', mpp);
+    const opt = Object.fromEntries(O.O.map(o => [o.k, Math.round(o.d * 1000) / 1000]));
+    const b = O.O.find(o => o.k === 'b');
+    const lin = c0.C.R.S[0];
+    const col = c0.C.R.col.map(q => q.p).sort((a, c) => a[0] - c[0]);
+    const cen = q => { let x = 0, y = 0; for (let i = 0; i < q.length; i += 2) { x += q[i]; y += q[i + 1]; } return { x: x / (q.length / 2), y: y / (q.length / 2) }; };
+    const fix = [{ k: 'ejSet', n: 'E', p: b.p }, { k: 'linIgn', p: lin.p }, { k: 'colDel', ...cen(col[0]) }, { k: 'colDelSz', w: 0.4, h: 0.4 }, { k: 'ejRen', n: 'A', a: 'A1' }];
+    const c1 = chk(fix); const c2 = chk(fix.slice(0, 2)); const c3 = chk([{ k: 'ejAdd', n: 'X', p: lin.p, lin: 1 }]);
+    const eE = c1.C.R.ej.find(e => e.n === 'E'), eD = c1.C.R.ej.find(e => e.n === 'D');
+    return { e0: c0.by.ejes.st, msg0: c0.by.ejes.msg, btn: c0.by.ejes.btn, sin0: c0.C.R.cnt.ejSin, opt, e1: c1.by.ejes.st, recto: eE.p[0] === eE.p[2], dE: Math.round((eE.p[0] - eD.p[0]) * mpp * 1000) / 1000,
+      sin1: c1.C.R.cnt.ejSin, col1: c1.C.R.col.length, names: c1.C.R.ej.map(e => e.n).sort().join(','), e2: c2.by.ejes.st, x3: c3.C.R.ej.some(e => e.n === 'X'), sin3: c3.C.R.cnt.ejSin, txt: palFixTxt({ k: 'ejSet', n: 'E', how: 'enderezado como está abajo' }) };
+  }, dxfDemo({ girado: true }));
+  expect(r.e0).toBe('err'); expect(r.msg0).toContain('Ejes girados: E'); expect(r.btn).toEqual([{ a: 'end:E', t: 'Enderezar E' }]);
+  expect(r.sin0).toBe(1);
+  expect(r.opt).toEqual({ a: 3.9, b: 4, m: 3.95 }); /* distancias al eje vecino D según dónde quede recto */
+  expect(r.recto).toBe(true); expect(r.dE).toBe(4);
+  expect(r.e1).not.toBe('err'); expect(r.e2).not.toBe('err');
+  expect(r.sin1).toBe(0); /* la línea sin nombre se descartó */
+  expect(r.col1).toBe(0); /* la columna A quitada y las cuatro de 0.40×0.40 descartadas: no queda ninguna */
+  expect(r.names).toBe('1,2,3,A1,B,C,D,E');
+  expect(r.x3).toBe(true); expect(r.sin3).toBe(0); /* nombrar la línea como eje */
+  expect(r.txt).toBe('Eje E enderezado como está abajo');
+  expect(errors).toEqual([]);
+});
+
+test('alistar › correcciones en el visor: enderezar el eje girado, descartar la línea tocándola y deshacer', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo({ girado: true })) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(async () => { await fcol('plb').doc('EST_E03').update({ pisoId: [...S.pis.values()][0].id }); });
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel.locator('.palit.err')).toContainText(['Ejes girados: E']);
+  /* enderezar: «Como está abajo» (a 4.000 m del eje D) */
+  await panel.locator('[data-pal="end:E"]').click();
+  await expect(page.locator('#lqm')).toContainText('Enderezar el eje E');
+  await page.locator('#lqm input[name="palend"][value="b"]').check();
+  await expect.poll(() => page.evaluate(() => !!PAL.prev)).toBe(true); /* vista previa en el plano */
+  await page.locator('#lqm [data-palend="ok"]').click();
+  await expect.poll(() => page.evaluate(() => ((PLB.get('EST_E03').fix || {}).L || []).length)).toBe(1);
+  await expect(panel.locator('.palfx')).toContainText('Correcciones (1)');
+  await expect(panel.locator('.palfx')).toContainText('Eje E enderezado como está abajo (a 4.000 m del eje D)');
+  await expect(panel.locator('.palit').filter({ hasText: 'Ejes' }).first()).not.toHaveClass(/err/);
+  /* tocar la línea sin nombre en el plano → «No es un eje» */
+  await page.evaluate(() => { const l = PAL.C.R.S[0]; const v = PLV.tv, r = v.cv.getBoundingClientRect(), q = v.toScreen((l.p[0] + l.p[2]) / 2, (l.p[1] + l.p[3]) / 2); palTap(r.left + q.x, r.top + q.y); });
+  await expect(panel.locator('.palsel')).toContainText('sin nombre');
+  await panel.locator('[data-pal="sel:ign"]').click();
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E03').fix.L.length)).toBe(2);
+  expect(await page.evaluate(() => PAL.C.R.cnt.ejSin)).toBe(0);
+  /* deshacer la última */
+  await panel.locator('.palfx summary').click();
+  await panel.locator('[data-pal^="fxdel:"]').last().click();
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E03').fix.L.length)).toBe(1);
+  expect(await page.evaluate(() => PLB.get('EST_E03').fix.L[0])).toMatchObject({ k: 'ejSet', n: 'E' });
+  expect(errors).toEqual([]);
+});

@@ -9,8 +9,8 @@
 /** geometría DXF de una lámina de Casco, en coordenadas de esa lámina: {ej, col, ln, tx, cnt, p (plano), sp (revisión), mpp} o null (sin DXF o aún cargando) */
 const CSDX=new Map();
 function csDxf(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev))return null;   /* solo alistado */
-  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const key=[sp.base,JSON.stringify(lay),mpp,l.w].join('|');const c=CSDX.get(l.id);if(c&&c.key===key)return c.v;
-  const R=dxfRoles(G,lay,mpp);const f=l.w/sp.W;const S=A=>A.map(v=>Math.round(v*f*10)/10);
+  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const fx=sp.fix||null;const key=[sp.base,JSON.stringify(lay),mpp,l.w,fx?fx.L.length+':'+((fx.L[fx.L.length-1]||{}).id||''):''].join('|');const c=CSDX.get(l.id);if(c&&c.key===key)return c.v;
+  const R=dxfRolesFix(G,lay,mpp,fx);const f=l.w/sp.W;   /* con las correcciones de Alistar */const S=A=>A.map(v=>Math.round(v*f*10)/10);
   const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
   CSDX.set(l.id,{key,v});return v}
 /** ejes de la lámina de referencia: los del DXF si tiene; si no, los trazados con «＃ Ejes» */

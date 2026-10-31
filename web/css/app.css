@@ -4945,6 +4945,8 @@ td.kmcalc{background:var(--accent-soft)}
 @media (min-width:1100px){.kmgp .kmwide{grid-column:span 2}}
 .kmted{display:flex;flex-wrap:wrap;gap:16px;padding:12px 14px;max-width:960px}.kmtedl{flex:999 1 520px;min-width:0}.kmtedr{flex:1 1 220px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;font-size:13px}
 .kmted h4{margin:14px 0 6px;font-size:13px}.kmted .t .ci{width:100%;box-sizing:border-box}.kmted .t .ci.kmsm{width:60px}.kmted .ib{margin-top:6px}
+/* con el visor de Planos abierto (z 300), las ventanas (◇ Capas, Enderezar) van encima; uiAsk sigue más arriba (450) */
+body:has(#plv) #lqm{z-index:400}
 /* Planos › Alistar plano (planos-alistar.js): insignia, aviso de la biblioteca y panel del visor; colores por variables (modo oscuro incluido) */
 .plalt{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px}
 .plalt.ok{background:var(--ok-soft);color:var(--ok)}.plalt.pend{background:var(--warn-soft);color:var(--warn)}
@@ -4959,6 +4961,10 @@ td.kmcalc{background:var(--accent-soft)}
 .palit.ok,.palit.conf{border-left-color:var(--ok)}.palit.warn{border-left-color:var(--warn)}.palit.err{border-left-color:var(--bad)}
 .paltop{display:flex;gap:6px;align-items:center}.palic{width:18px;text-align:center;font-weight:700}.palit.ok .palic,.palit.conf .palic{color:var(--ok)}.palit.warn .palic{color:var(--warn)}.palit.err .palic{color:var(--bad)}
 .palac{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.palac .paln{flex:1;min-width:140px}
+.palsel{border:2px solid var(--warn);background:var(--warn-soft);border-radius:var(--r-ctl);padding:8px 10px;font-size:13px}.palsel .paltop>b{flex:1}
+.paltop .palgo{margin-left:auto;font-size:12px}.palhint{margin:0}
+.palopt{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.palfx{border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 10px;font-size:13px}.palfx ol{margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}.palfx li{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}.palfx li small{flex-basis:100%}.palfx li .ab{margin-left:auto}
 @media (max-width:760px){.palac .ib,.palac .chk{min-height:40px}}
 /* Planos › capas del DXF (planos-dxf.js) */
 .dxff{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.dxff .kmfl .ci{width:220px;max-width:100%}
