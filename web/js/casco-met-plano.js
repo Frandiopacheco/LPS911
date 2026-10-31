@@ -16,7 +16,7 @@ const kvpIsV=p=>Math.abs(p[2]-p[0])<Math.abs(p[3]-p[1]);
 /** intersección de dos rectas (cada una [x1,y1,x2,y2]) o null si son paralelas */
 function kvpX(p,q){const d1={x:p[2]-p[0],y:p[3]-p[1]},d2={x:q[2]-q[0],y:q[3]-q[1]};const den=d1.x*d2.y-d1.y*d2.x;if(Math.abs(den)<1e-9)return null;
   const t=((q[0]-p[0])*d2.y-(q[1]-p[1])*d2.x)/den;return{x:p[0]+d1.x*t,y:p[1]+d1.y*t}}
-const kvpEjes=ref=>(ref&&ref.ejes||[]).filter(e=>Array.isArray(e.p)&&e.p.length===4&&e.n);
+const kvpEjes=ref=>csEjesOf(ref).filter(e=>e.n);
 /** cruces de los ejes (en la referencia): {v, h (nombres), x, y} */
 function kvpCross(E){const V=E.filter(e=>kvpIsV(e.p)),H=E.filter(e=>!kvpIsV(e.p));const out=[];for(const v of V)for(const h of H){const q=kvpX(v.p,h.p);if(q)out.push({v:v.n,h:h.n,x:q.x,y:q.y})}return out}
 /** recta de la viga: origen en el cruce con e0, dirección hacia e1; toS(punto) → metros desde e0; at(metros) → punto */
@@ -141,7 +141,7 @@ function kvpFinish(){const pid=KVP.pid,X=kvpCtx(pid);const A=KVP.ax;if(!X||!A)re
 /** guías del trazado en curso (coordenadas de la lámina del nivel) */
 function kvpDrawO(){const X=kvpCtx(KVP.pid);if(!X||!KVP.step)return{guides:[],dots:[],snap:[]};const m=X.m;const g=[],d=[];
   /* al tocar las caras de un apoyo no se pega a los ejes (la cara está al lado del eje); con DXF se pega a las caras de columnas y vigas que cruzan la viga */
-  const snap=KVP.step==='ap'?(CSZ.dxf!==false?dxfAcross(dxfGeo(X.ref,m),(u=>{const q={x:m.a*u.x-m.b*u.y,y:m.b*u.x+m.a*u.y};const k=Math.hypot(q.x,q.y)||1;return{x:q.x/k,y:q.y/k}})(KVP.ax.ln.u)):[]):X.E.map(e=>({pts:csMapF(m,e.p)}));
+  const snap=KVP.step==='ap'?(CSZ.dxf!==false?csDxfAcross(csDxfDraw(X.lam),(u=>{const q={x:m.a*u.x-m.b*u.y,y:m.b*u.x+m.a*u.y};const k=Math.hypot(q.x,q.y)||1;return{x:q.x/k,y:q.y/k}})(KVP.ax.ln.u)):[]):X.E.map(e=>({pts:csMapF(m,e.p)}));
   if(KVP.a){const q=csAp(m,KVP.a);d.push({x:q.x,y:q.y,c:'#1F5F7A'})}
   if(KVP.ax){const A=KVP.ax;const S=A.S;const last=S[S.length-1];g.push({pts:csMapF(m,csgFlat([A.ln.at(0),A.ln.at(last.s)])),c:'#1F5F7A',w:4,op:.5});
     const nx=-A.ln.u.y,ny=A.ln.u.x;const h=.45/X.mpp;const tick=(s,c,w)=>{const p=A.ln.at(s);g.push({pts:csMapF(m,csgFlat([{x:p.x-nx*h,y:p.y-ny*h},{x:p.x+nx*h,y:p.y+ny*h}])),c,w:w||3,op:.95})};

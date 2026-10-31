@@ -144,7 +144,7 @@ const plTxIds=L=>L.filter(p=>PLS.res.has(p.id)).map(p=>p.id);
 
 /* ---------- indexar las láminas ya cargadas ---------- */
 const PLTXQ={run:false,stop:false};
-async function plTxIndexAll(L,onUp){L=L.filter(p=>!p.tx&&plEdOf(p));if(!L.length||PLTXQ.run)return;
+async function plTxIndexAll(L,onUp){L=L.filter(p=>!p.tx&&!p.dxf&&plEdOf(p));if(!L.length||PLTXQ.run)return;
   if(!await uiAsk({title:'Indexar el texto de las láminas',text:`Se leerá el texto de ${L.length} ${L.length===1?'lámina':'láminas'} en esta PC: se baja cada PDF original (no se guarda en el equipo) y se sube su índice. Unos segundos por lámina; deja esta pestaña abierta.`,ok:'Indexar',tone:'info'}))return;
   PLTXQ.run=true;PLTXQ.stop=false;let ok=0,sin=0,err=0,i=0;const t0=performance.now();
   const say=()=>onUp&&onUp(`Indexando ${ok+sin+err} de ${L.length}…`);say();

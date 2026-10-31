@@ -102,6 +102,7 @@ const PLK_MM=6,PLK_SNAP_MM=6;
 function plkPxMm(p,sp){sp=sp||p;const cr=sp&&sp.crop,wpt=cr?cr.x1-cr.x0:0;if(wpt>0&&sp.W)return sp.W/(wpt/72*25.4);if(p&&p.mm&&p.mm[0]&&sp.W)return sp.W/p.mm[0];return 300/25.4}
 const PLKTX=new Map();   /* base de la revisión → promesa de los textos cortos del PDF [{x,y,h,n}] en px del plano */
 function plkTexts(sp){let e=PLKTX.get(sp.base);if(e)return e;
+  if(sp.dxf){e=plGeoTexts(sp);PLKTX.set(sp.base,e);return e}   /* DXF: sus textos (planos-dxf.js) */
   e=(async()=>{const pg=await plPdfPage(sp.base),tc=await pg.getTextContent(),vp=pg.getViewport({scale:1}),cr=sp.crop,S0=sp.W/(cr?cr.x1-cr.x0:vp.width),ox=cr?cr.x0:0,oy=cr?cr.y0:0,out=[];
     for(const it of tc.items){const s=(it.str||'').trim();if(!s||s.length>8)continue;const[a,b,c,d,x,y]=it.transform,la=Math.hypot(a,b)||1,lc=Math.hypot(c,d)||1;
       const w=it.width||0,ux=x+a/la*w/2+c/lc*lc*0.35,uy=y+b/la*w/2+d/lc*lc*0.35,q=vp.convertToViewportPoint(ux,uy);

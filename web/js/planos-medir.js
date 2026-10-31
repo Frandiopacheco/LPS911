@@ -32,10 +32,16 @@ function plmReset(){PLM.on=false;PLM.L=plmNew();PLM.drag=-1;plmBarOff();if(PLV&&
 function plmUnhook(v){v.over=v.onTap=v.onDown=v.onDrag=v.onUp=null;v.host.classList.remove('medir','sobre');v.host.removeEventListener('pointermove',plmHover);v.tick()}
 function plmHook(v){v.over=plmDraw;v.onTap=plmTap;v.onDown=plmDown;v.onDrag=plmMove;v.onUp=plmUp;v.host.classList.add('medir');v.host.addEventListener('pointermove',plmHover);v.tick()}
 /* el cursor es una cruz fina (CSS .plvc.medir) y pasa a «mover» cuando está sobre un punto que se puede arrastrar */
-function plmHover(e){if(e.pointerType!=='mouse'||!PLV||!PLV.tv)return;PLV.tv.host.classList.toggle('sobre',plmNear(e.clientX,e.clientY)>=0)}
+function plmHover(e){if(e.pointerType!=='mouse'||!PLV||!PLV.tv)return;PLV.tv.host.classList.toggle('sobre',plmNear(e.clientX,e.clientY)>=0);
+  /* lámina DXF: muestra dónde se pegaría el punto */
+  const g=plmGeo();if(g){const w=PLV.tv.toWorld(e.clientX,e.clientY),q=plmSnap(w);const hv=q!==w?q:null;if(JSON.stringify(hv)!==JSON.stringify(PLM.hv)){PLM.hv=hv;PLV.tv.tick()}}}
+/** geometría de la lámina DXF abierta (planos-dxf.js) o null */
+function plmGeo(){if(!PLV)return null;const p=PLB.get(PLV.id);if(!p)return null;const sp=plSpecOf(p,PLV.rev);if(!sp.dxf)return null;const e=GEO.get(sp.base);if(e&&e.g)return e.g;if(!e)plGeoGet(sp).catch(()=>{});return null}
+/** se pega a la esquina o línea del DXF más cercana (12 px de pantalla); Alt o sin DXF: tal cual */
+function plmSnap(w,alt){const G=plmGeo();if(!G||alt)return w;const v=PLV.tv,a=v.toScreen(0,0),b=v.toScreen(1,0);const k=Math.hypot(b.x-a.x,b.y-a.y)||1;const q=plGeoSnap(G,w,12/k);return q?{x:q.x,y:q.y}:w}
 
 /* el visor se arma de nuevo al cambiar de lámina o de revisión: las marcas son de una lámina, se limpian */
-function plmAttach(){PLM.L=plmNew();PLM.drag=-1;
+function plmAttach(){PLM.L=plmNew();PLM.drag=-1;PLM.hv=null;plmGeo();
   if(!PLM.on){plmBarOff();return}
   if(!plmMpp())PLM.tool='cal';else if(PLM.tool==='cal')PLM.tool='dist';
   plmHook(PLV.tv);plmBar()}
@@ -47,7 +53,7 @@ function plmToggle(){if(!PLV||!PLV.tv)return;PLM.on=!PLM.on;
   PLM.L=plmNew();PLM.tool=plmMpp()?'dist':'cal';plmHook(PLV.tv);plmBar()}
 
 /* ---------- toques ---------- */
-function plmTap(cx,cy){const v=PLV.tv,w=v.toWorld(cx,cy),L=plmList();
+function plmTap(cx,cy){const v=PLV.tv,w=plmSnap(v.toWorld(cx,cy)),L=plmList();
   if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;                     /* fuera de la hoja */
   if((PLM.tool==='dist'||PLM.tool==='cal')&&L.length>=2)L.length=0; /* una medida de dos puntos: el tercer toque empieza otra */
   L.push(w);v.tick();plmBar()}
@@ -55,11 +61,13 @@ function plmNear(cx,cy){const L=plmList(),v=PLV.tv,r=v.cv.getBoundingClientRect(
   L.forEach((q,i)=>{const s=v.toScreen(q.x,q.y),d=Math.hypot(r.left+s.x-cx,r.top+s.y-cy);if(d<bd){bd=d;best=i}});return best}
 function plmDown(cx,cy){const best=plmNear(cx,cy);if(best<0)return false;PLM.drag=best;PLM.mx=cx;PLM.my=cy;PLV.tv.tick();return true}
 function plmMove(cx,cy){const L=plmList(),v=PLV.tv;if(PLM.drag<0||!L[PLM.drag])return;
-  const w=v.toWorld(cx,cy);L[PLM.drag]={x:Math.max(0,Math.min(v.W,w.x)),y:Math.max(0,Math.min(v.H,w.y))};PLM.mx=cx;PLM.my=cy;v.tick();plmVal()}
+  const w=plmSnap(v.toWorld(cx,cy));L[PLM.drag]={x:Math.max(0,Math.min(v.W,w.x)),y:Math.max(0,Math.min(v.H,w.y))};PLM.mx=cx;PLM.my=cy;v.tick();plmVal()}
 function plmUp(){PLM.drag=-1;if(PLV&&PLV.tv)PLV.tv.tick()}
 
 /* ---------- dibujo (dentro del lienzo del visor) ---------- */
-function plmDraw(g,v){const L=plmList();if(!L.length)return;const m=plmMpp(),area=PLM.tool==='area',cal=PLM.tool==='cal';
+function plmDraw(g,v){const L=plmList();
+  if(PLM.hv){const s=v.toScreen(PLM.hv.x,PLM.hv.y);g.lineWidth=2;g.strokeStyle='#7C3AED';g.beginPath();g.arc(s.x,s.y,7,0,2*Math.PI);g.stroke()}
+  if(!L.length)return;const m=plmMpp(),area=PLM.tool==='area',cal=PLM.tool==='cal';
   const S=L.map(q=>v.toScreen(q.x,q.y));
   const stroke=(w,c)=>{g.lineWidth=w;g.strokeStyle=c;g.lineJoin='round';g.lineCap='round';g.beginPath();S.forEach((s,i)=>i?g.lineTo(s.x,s.y):g.moveTo(s.x,s.y));if(area&&S.length>2)g.closePath();g.stroke()};
   if(area&&S.length>2){g.beginPath();S.forEach((s,i)=>i?g.lineTo(s.x,s.y):g.moveTo(s.x,s.y));g.closePath();g.fillStyle='rgba(214,51,108,.16)';g.fill()}
@@ -89,6 +97,7 @@ function plmBar(){if(!PLV||!PLM.on)return;let el=PLV.box.querySelector('.plmbar'
       else if(a==='clear'){plmList().length=0;PLV.tv.tick();plmBar()}
       else if(a==='off')plmToggle();
       else if(a==='calok')plmCalSave();
+      else if(a==='ctnok')palCtnSave();   /* Alistar plano: el área trazada es el contorno de la planta */
       else if(PLM_TOOLS.some(t=>t[0]===a)){if(a!==PLM.tool){PLM.tool=a;PLV.tv.tick();plmBar()}}};
     el.onkeydown=e=>{if(e.key==='Enter'&&e.target.id==='plmL'){e.preventDefault();plmCalSave()}e.stopPropagation()}}
   const m=plmMpp(),p=PLB.get(PLV.id);
@@ -97,7 +106,7 @@ function plmBar(){if(!PLV||!PLM.on)return;let el=PLV.box.querySelector('.plmbar'
   el.innerHTML=`<div class="plmt">${PLM_TOOLS.map(([k,n])=>`<button type="button" class="ib${PLM.tool===k?' on':''}" data-pm="${k}"${k!=='cal'&&!m?' disabled':''}>${n}</button>`).join('')}</div>
     <div class="plmv" id="plmv" aria-live="polite"></div>
     ${PLM.tool==='cal'?`<div class="plmc"><input class="tin" id="plmL" inputmode="decimal" placeholder="Medida real en metros (ej. 3.60)" aria-label="Medida real en metros"><button type="button" class="ib pri" data-pm="calok">Calibrar</button></div>`:''}
-    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto">↶ Deshacer</button><button type="button" class="ib" data-pm="clear">Limpiar</button><span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
+    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto">↶ Deshacer</button><button type="button" class="ib" data-pm="clear">Limpiar</button>${palCtnBar()}<span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
     <small class="plms">${est}${sp&&!sp.cur?' · revisión anterior':''}</small>`;
   plmVal();
   /* al rehacer la barra el botón tocado desaparece y el foco se pierde: sin foco en el visor, Esc y las flechas no responden */
