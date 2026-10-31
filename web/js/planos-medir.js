@@ -47,7 +47,7 @@ function plmAttach(){PLM.L=plmNew();PLM.drag=-1;PLM.hv=null;plmGeo();
   plmHook(PLV.tv);plmBar()}
 function plmToggle(){if(!PLV||!PLV.tv)return;PLM.on=!PLM.on;
   const b=PLV.box.querySelector('[data-pv="med"]');if(b)b.classList.toggle('on',PLM.on);
-  if(!PLM.on){PLM.L=plmNew();PLM.drag=-1;plmBarOff();plmUnhook(PLV.tv);plkSync();return}  /* al salir de medir vuelve la capa de vínculos */
+  if(!PLM.on){PLM.L=plmNew();PLM.drag=-1;plmBarOff();plmUnhook(PLV.tv);plkSync();if(typeof palSync==='function')palSync();return}  /* al salir de medir vuelve la capa de vínculos (y los toques de Alistar) */
   if(PLK.edit)plkEdit(false);                                                              /* Medir y Vincular no conviven */
   if(PLD.on)pldToggle(false);                                                              /* ni Medir y Marcar */
   PLM.L=plmNew();PLM.tool=plmMpp()?'dist':'cal';plmHook(PLV.tv);plmBar()}

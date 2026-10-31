@@ -148,19 +148,19 @@ function dxfGuess(Ls){const by=(A,k)=>A.slice().sort((a,b)=>b[k]-a[k])[0];
   const tx=by(Ls.filter(x=>x.s>0),'s');return{ej:ej?ej.n:'',col:col?col.n:'',mur:mur?mur.n:'',amb:amb?amb.n:'',vig,tx:tx?tx.n:''}}
 /** ejes de la capa: cada línea con el nombre de su burbuja (círculo con un texto adentro; si no hay, el texto en la prolongación de la línea).
     Líneas del mismo nombre en la misma recta se juntan. En las unidades de F. */
-function dxfEjes(F,lay){const Ls=[],C=[],T=[];if(!lay)return{E:[],sin:0,dup:[]};for(const e of F){if(e.l!==lay)continue;if(e.k==='l')Ls.push(e.p);else if(e.k==='p'&&e.P.length===4)Ls.push(e.P.slice());else if(e.k==='c')C.push(e);else if(e.k==='t')T.push(e)}
+function dxfEjes(F,lay){const Ls=[],C=[],T=[],S=[];if(!lay)return{E:[],sin:0,dup:[],S};for(const e of F){if(e.l!==lay)continue;if(e.k==='l')Ls.push(e.p);else if(e.k==='p'&&e.P.length===4)Ls.push(e.P.slice());else if(e.k==='c')C.push(e);else if(e.k==='t')T.push(e)}
   const nm=s=>String(s).trim().toUpperCase().replace(/\s+/g,'').slice(0,4);
   const B=C.map(c=>{let b=null,bd=c.r*1.25;for(const t of T){const d=Math.hypot(t.x-c.x,t.y-c.y);if(d<bd&&nm(t.t)){bd=d;b=t}}return b?{x:c.x,y:c.y,r:c.r,n:nm(b.t)}:null}).filter(Boolean);
   const out=new Map(),dup=new Set();let sin=0;
   for(const p of Ls){const L=Math.hypot(p[2]-p[0],p[3]-p[1]);if(!(L>0))continue;const ux=(p[2]-p[0])/L,uy=(p[3]-p[1])/L;let n='',bd=Infinity;
     for(const c of B){const dx=c.x-p[0],dy=c.y-p[1];const t=dx*ux+dy*uy,d=Math.abs(dx*uy-dy*ux);if(d>c.r*.6||t<-8*c.r||t>L+8*c.r||(t>L*.2+c.r&&t<L*.8-c.r))continue;const end=Math.min(Math.abs(t),Math.abs(t-L));if(end<bd){bd=end;n=c.n}}
     if(!n)for(const x of T){const h=x.h||1;const dx=x.x-p[0],dy=x.y-p[1];const t=dx*ux+dy*uy,d=Math.abs(dx*uy-dy*ux);if(d>h*1.2||!(t<0||t>L)||Math.min(Math.abs(t),Math.abs(t-L))>h*6||!nm(x.t)||nm(x.t).length>3)continue;const end=Math.min(Math.abs(t),Math.abs(t-L));if(end<bd){bd=end;n=nm(x.t)}}
-    if(!n){sin++;continue}
+    if(!n){sin++;S.push({p:p.slice()});continue}
     const o=out.get(n);if(!o){out.set(n,p.slice());continue}
     const OL=Math.hypot(o[2]-o[0],o[3]-o[1])||1,ox=(o[2]-o[0])/OL,oy=(o[3]-o[1])/OL;const off=q=>Math.abs((q[0]-o[0])*oy-(q[1]-o[1])*ox);
-    if(off([p[0],p[1]])>L*.01+1e-6||off([p[2],p[3]])>L*.01+1e-6){dup.add(n);continue}const s=[0,OL,(p[0]-o[0])*ox+(p[1]-o[1])*oy,(p[2]-o[0])*ox+(p[3]-o[1])*oy];const a=Math.min(...s),b=Math.max(...s);
+    if(off([p[0],p[1]])>L*.01+1e-6||off([p[2],p[3]])>L*.01+1e-6){dup.add(n);S.push({p:p.slice(),dup:n});continue}const s=[0,OL,(p[0]-o[0])*ox+(p[1]-o[1])*oy,(p[2]-o[0])*ox+(p[3]-o[1])*oy];const a=Math.min(...s),b=Math.max(...s);
     out.set(n,[o[0]+ox*a,o[1]+oy*a,o[0]+ox*b,o[1]+oy*b])}
-  return{E:[...out].map(([n,p])=>({n,p})),sin,dup:[...dup]}}
+  return{E:[...out].map(([n,p])=>({n,p})),sin,dup:[...dup],S}}   /* S: líneas de la capa sin nombre o con un nombre repetido (para corregirlas en Alistar) */
 /** metros por unidad por la separación típica entre ejes paralelos (2–12 m): 1, 0.01 o 0.001; 0 si no hay ejes paralelos */
 function dxfUnitK(E){const isV=p=>Math.abs(p[2]-p[0])<Math.abs(p[3]-p[1]);const gaps=[];
   for(const v of[true,false]){const c=E.filter(e=>isV(e.p)===v).map(e=>v?(e.p[0]+e.p[2])/2:(e.p[1]+e.p[3])/2).sort((a,b)=>a-b);for(let i=1;i<c.length;i++)if(c[i]-c[i-1]>1e-9)gaps.push(c[i]-c[i-1])}
@@ -253,7 +253,7 @@ function dxfGeoF(G){const F=[];for(const o of G.L){const l=o.n;for(let i=0;i+3<o
   for(let i=0;i+2<o.c.length;i+=3)F.push({k:'c',l,x:o.c[i],y:o.c[i+1],r:o.c[i+2]});for(const t of o.t)F.push({k:'t',l,t:t[0],x:t[1],y:t[2],h:t[3],r:t[4]})}return F}
 /** por función (px del nivel de detalle): ejes con nombre, columnas (cerradas, ≥ 0,30 m), caras (líneas de las capas de trazo y de columnas abiertas), rótulos.
     Solo dentro de los ejes + 1,5 m si hay ejes (los detalles quedan fuera); si no, todo. */
-function dxfRoles(G,lay,mpp){const F=dxfGeoF(G);const{E,sin,dup}=dxfEjes(F,lay.ej);const cnt={ej:E.length,ejSin:sin,dup:dup||[],col:0,chico:0,ln:0,tx:0};
+function dxfRoles(G,lay,mpp){const F=dxfGeoF(G);const{E,sin,dup,S}=dxfEjes(F,lay.ej);const cnt={ej:E.length,ejSin:sin,dup:dup||[],col:0,chico:0,ln:0,tx:0};
   let inR=()=>true;if(E.length){const xs=E.flatMap(e=>[e.p[0],e.p[2]]),ys=E.flatMap(e=>[e.p[1],e.p[3]]);const mg=1.5/mpp;const x0=Math.min(...xs)-mg,x1=Math.max(...xs)+mg,y0=Math.min(...ys)-mg,y1=Math.max(...ys)+mg;inR=(x,y)=>x>=x0&&x<=x1&&y>=y0&&y<=y1}
   const col=[],ln=[],seen=new Set();const seg=(a,b,c,d)=>{if(Math.hypot(c-a,d-b)*mpp<0.01)return;const k=a<c||(a===c&&b<=d)?[a,b,c,d].join(','):[c,d,a,b].join(',');if(seen.has(k))return;seen.add(k);ln.push(a,b,c,d)};
   const vig=new Set(lay.vig||[]);
@@ -266,7 +266,34 @@ function dxfRoles(G,lay,mpp){const F=dxfGeoF(G);const{E,sin,dup}=dxfEjes(F,lay.e
     if(vig.has(e.l)){if(e.k==='l'){if(inR((e.p[0]+e.p[2])/2,(e.p[1]+e.p[3])/2))seg(...e.p)}
       else if(e.k==='p'){const A=e.P,n=A.length;for(let i=0;i+3<n;i+=2)if(inR((A[i]+A[i+2])/2,(A[i+1]+A[i+3])/2))seg(A[i],A[i+1],A[i+2],A[i+3]);if(e.c&&n>=6&&inR((A[0]+A[n-2])/2,(A[1]+A[n-1])/2))seg(A[n-2],A[n-1],A[0],A[1])}}}
   const tx=lay.tx?F.filter(e=>e.l===lay.tx&&e.k==='t'&&inR(e.x,e.y)&&(DXF_SEC.test(e.t)||DXF_NAME.test(e.t))).slice(0,3000).map(e=>({t:e.t,x:e.x,y:e.y,r:e.r})):[];
-  cnt.col=col.length;cnt.ln=ln.length/4;cnt.tx=tx.length;return{ej:E,col,ln,tx,cnt}}
+  /* ambientes (ARQ): polilíneas cerradas de su capa, con el nombre del texto de adentro más cercano al centro */
+  const T=F.filter(e=>e.k==='t');const amb=lay.amb?F.filter(e=>e.l===lay.amb&&e.k==='p'&&e.c&&e.P.length>=6).map(q=>{const c=dxfCen(q.P);const nm=T.filter(t=>dxfPip(q.P,t.x,t.y)).sort((a,b)=>Math.hypot(a.x-c.x,a.y-c.y)-Math.hypot(b.x-c.x,b.y-c.y))[0];return{p:q.P,n:nm?nm.t:''}}):[];
+  cnt.col=col.length;cnt.ln=ln.length/4;cnt.tx=tx.length;cnt.amb=amb.length;return{ej:E,col,ln,tx,amb,S,cnt}}
+const dxfCen=P=>{let x=0,y=0;const n=P.length/2;for(let i=0;i<P.length;i+=2){x+=P[i];y+=P[i+1]}return{x:x/n,y:y/n}};
+function dxfPip(P,x,y){let c=false;for(let i=0,n=P.length/2,j=n-1;i<n;j=i++){const xi=P[2*i],yi=P[2*i+1],xj=P[2*j],yj=P[2*j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
+const dxfSz=(P,mpp)=>{const xs=P.filter((v,i)=>!(i%2)),ys=P.filter((v,i)=>i%2);const w=Math.round((Math.max(...xs)-Math.min(...xs))*mpp*100)/100,h=Math.round((Math.max(...ys)-Math.min(...ys))*mpp*100)/100;return[Math.min(w,h),Math.max(w,h)]};
+/** lo leído del DXF con las correcciones de Alistar encima (`plb.fix.L`, en orden; el DXF original no se toca). Tipos:
+    ejRen {n,a} renombrar · ejDel {n} quitar · ejSet {n,p} recta nueva (enderezar, mover) · ejAdd {n,p} agregar (también nombrar una línea sin nombre) ·
+    linIgn {p} la línea no es eje · colDel {x,y} no es columna · colDelSz {w,h} ninguna de ese tamaño · colAdd {p} · txDel {x,y} · ambRen {x,y,a} · ambDel {x,y} · ambAdd {p,a} */
+function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Array.isArray(fix.L)?fix.L:[];if(!L.length)return R;
+  let E=R.ej.map(e=>({...e})),col=R.col.slice(),tx=R.tx.slice(),amb=R.amb.map(a=>({...a}));const near=(p,q,t)=>Math.abs(p[0]-q[0])<t&&Math.abs(p[1]-q[1])<t&&Math.abs(p[2]-q[2])<t&&Math.abs(p[3]-q[3])<t||Math.abs(p[0]-q[2])<t&&Math.abs(p[1]-q[3])<t&&Math.abs(p[2]-q[0])<t&&Math.abs(p[3]-q[1])<t;
+  const done=[];const tol=0.05/mpp;
+  for(const f of L){switch(f.k){
+    case'ejRen':E.forEach(e=>{if(e.n===f.n)e.n=f.a});break;
+    case'ejDel':E=E.filter(e=>e.n!==f.n);break;
+    case'ejSet':E=E.map(e=>e.n===f.n?{...e,p:f.p.slice()}:e);break;
+    case'ejAdd':E=E.filter(e=>e.n!==f.n);E.push({n:f.n,p:f.p.slice()});done.push(f.p);break;
+    case'linIgn':done.push(f.p);break;
+    case'colDel':col=col.filter(q=>!dxfPip(q.p,f.x,f.y));break;
+    case'colDelSz':col=col.filter(q=>{const z=dxfSz(q.p,mpp);return!(Math.abs(z[0]-f.w)<0.006&&Math.abs(z[1]-f.h)<0.006)});break;
+    case'colAdd':col.push({p:f.p.slice(),add:1});break;
+    case'txDel':tx=tx.filter(t=>Math.hypot(t.x-f.x,t.y-f.y)>tol);break;
+    case'ambRen':amb.forEach(a=>{if(dxfPip(a.p,f.x,f.y))a.n=f.a});break;
+    case'ambDel':amb=amb.filter(a=>!dxfPip(a.p,f.x,f.y));break;
+    case'ambAdd':amb.push({p:f.p.slice(),n:f.a||'',add:1});break}}
+  /* las líneas sin nombre o repetidas que ya se nombraron o se descartaron dejan de avisar */
+  const S=R.S.filter(l=>!done.some(q=>near(l.p,q,1)));const cnt={...R.cnt,ej:E.length,ejSin:S.filter(l=>!l.dup).length,dup:[...new Set(S.filter(l=>l.dup).map(l=>l.dup))],col:col.length,tx:tx.length,amb:amb.length};
+  return{...R,ej:E,col,tx,amb,S,cnt}}
 /** punto más cercano para pegarse (px del plano): vértice o cruce a menos de tol; si no, la proyección sobre una línea a menos de tol */
 function plGeoSnap(G,w,tol){if(!G)return null;let bp=null,bd=tol;const pt=(x,y)=>{const d=Math.hypot(x-w.x,y-w.y);if(d<bd){bd=d;bp={x,y,k:'pt'}}};
   const ln=[];for(const o of G.L){for(let i=0;i+3<o.l.length;i+=4){const a=o.l;if(Math.min(a[i],a[i+2])>w.x+tol||Math.max(a[i],a[i+2])<w.x-tol||Math.min(a[i+1],a[i+3])>w.y+tol||Math.max(a[i+1],a[i+3])<w.y-tol)continue;pt(a[i],a[i+1]);pt(a[i+2],a[i+3]);ln.push([a[i],a[i+1],a[i+2],a[i+3]])}
