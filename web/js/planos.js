@@ -341,13 +341,16 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
   shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''))}
   plList(main);plTxPreload()}
 function plList(main){const host=$('#pllist',main);if(!host)return;
-  if(!plbReady){shx(host,'<div class="loading"><b>Cargando planos…</b></div>');return}
-  const L=plFiltered();stx($('#plcnt',main),L.length===1?'1 plano':L.length+' planos');
-  if(etoOn()&&!etoAct().length&&!PLF.arch){shx(host,`<div class="callout"><b>Aún no hay ETO cargados${me.role==='sc'?' de tu partida':''}.</b> ${plAdm()?'Usa <b>Cargar ETO…</b> para subir los PDF aprobados de cada subcontratista.':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
-  if(!PLB.size){shx(host,`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
-  if(plTxOn()){if(PLTXQ.run)return;plTxList(main,host,plFiltered(true));return}
+  /* los avisos de abajo se ponen sin pasar por dataset.h: se borra, o al volver a la misma lista no se redibujaba («Ningún plano…» quedaba) */
+  const say=h=>{shx(host,h);host.dataset.h=''};
+  if(!plbReady){say('<div class="loading"><b>Cargando planos…</b></div>');return}
+  const tq=plTxOn(),L=tq?plFiltered(true):plFiltered();stx($('#plcnt',main),L.length===1?'1 plano':L.length+' planos');
+  if(etoOn()&&!etoAct().length&&!PLF.arch){say(`<div class="callout"><b>Aún no hay ETO cargados${me.role==='sc'?' de tu partida':''}.</b> ${plAdm()?'Usa <b>Cargar ETO…</b> para subir los PDF aprobados de cada subcontratista.':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
+  if(!PLB.size){say(`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
+  /* Contenido: con 2 caracteres o más, los resultados; sin texto, la lista de siempre con los filtros (antes quedaba en blanco) */
+  if(tq){if(plTxC(PLF.q||'').length>=2){plTxList(main,host,L);return}plTxIdle(main,L)}
   const nal=etoOn()?0:[...PLB.values()].filter(plAlPend).length;const alb=nal||PLF.al?`<div class="callout plalc"><b>${nal} planta(s) DXF por alistar.</b> Hasta alistarlas no se pueden usar en Sectorización, Plan diario ni Metrados. <button type="button" class="ib${PLF.al?' on':''}" data-plal="1">${PLF.al?'Ver todos':'Ver solo las por alistar'}</button></div>`:'';
-  if(!L.length){shx(host,alb+'<p class="note">Ningún plano coincide con los filtros.</p>');return}
+  if(!L.length){say(alb+'<p class="note">Ningún plano coincide con los filtros.</p>');return}
   const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
@@ -707,8 +710,9 @@ function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const m
     <div class="plvps"><span>Especialidad</span>${chip('disc','','Todas')}${ds.map(d=>chip('disc',d[0],d[0],d[1])).join('')}</div>
     <div class="plvps"><span>Tipo</span>${chip('tipo','','Todos')}${ts.map(t=>chip('tipo',t,t)).join('')}</div>`;
   plvPanelList(el)}
-function plvPanelList(el){const st=el.querySelector('.pltxst');if(PLV.pf.qm==='tx'){plTxPanelList(el,plvRes(true));return}if(st)shx(st,'');
-  const L=plvRes();const host=el.querySelector('.plvpl');
+function plvPanelList(el){const st=el.querySelector('.pltxst'),tq=PLV.pf.qm==='tx';
+  if(tq&&plTxC(PLV.pf.q||'').length>=2){plTxPanelList(el,plvRes(true));return}if(st)shx(st,tq?'<span>Escribe al menos 2 letras o números para buscar dentro de las láminas.</span>':'');
+  const L=plvRes(tq);const host=el.querySelector('.plvpl');
   const h=L.length?L.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}<small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></span></button>`).join('')
     :'<p class="note">Ningún plano con esos filtros.</p>';
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host);const on=host.querySelector('.plvpr.on');if(on)on.scrollIntoView({block:'nearest'})}}

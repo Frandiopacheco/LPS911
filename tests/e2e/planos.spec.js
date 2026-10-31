@@ -200,6 +200,15 @@ test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, r
   await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
   await page.fill('#plq', 'ascensor');
   await expect(page.locator('#pllist')).toContainText('Ninguna lámina tiene ese texto');
+  // «Contenido» sin texto: la lista de siempre con los filtros (antes quedaba en blanco y parecía que no había planos)
+  await page.fill('#plq', '');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
+  await expect(page.locator('#pltxst')).toContainText('Escribe al menos 2');
+  const otroTipo = await page.evaluate(() => PL_TIPOS.find(t => t !== PLB.get('ARQ_AG03').tipo));
+  await page.selectOption('#plft', otroTipo);
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toHaveCount(0);
+  await page.selectOption('#plft', '');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
   // el índice queda en memoria: las búsquedas siguientes no vuelven a leerlo (ni de la caché)
   await page.evaluate(() => { window.__GETS.length = 0; });
   await page.fill('#plq', 'arquitectura');
