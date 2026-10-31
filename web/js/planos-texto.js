@@ -129,7 +129,7 @@ const plTxSnip=r=>r?`<small class="pltxs">${r.n>1?`<b>${r.n}×</b> `:''}${r.s.ma
 const plTxOn=()=>PLF.qm==='tx';
 /** la lista de la biblioteca en modo Contenido (L: las láminas de los demás filtros, sin el buscador) */
 function plTxList(main,host,L){const q=PLF.q||'';const canIdx=L.some(p=>!p.tx&&plEdOf(p));
-  const draw=()=>{if(!host.isConnected)return;const st=$('#pltxst',main);if(st)shx(st,plTxStatus(L,canIdx));
+  const draw=()=>{if(!host.isConnected)return;const st=$('#pltxst',main);if(st&&!PLTXQ.run)shx(st,plTxStatus(L,canIdx));
     const R=L.filter(p=>PLS.res.has(p.id));stx($('#plcnt',main),plTxC(q).length<2?L.length+' planos':R.length===1?'1 plano':R.length+' planos');
     if(plTxC(q).length<2){shx(host,'');host.dataset.h='';return}
     const g=new Map();R.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
@@ -139,6 +139,9 @@ function plTxList(main,host,L){const q=PLF.q||'';const canIdx=L.some(p=>!p.tx&&p
       :PLS.done?'<p class="note">Ninguna lámina tiene ese texto con estos filtros.</p>':'';
     if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}};
   plTxPreload();plTxSearch(L,q,draw)}
+/** modo Contenido sin texto todavía: la lista normal la dibuja plList; aquí solo el estado (sin indexar, sin texto buscable…) */
+function plTxIdle(main,L){const canIdx=L.some(p=>!p.tx&&plEdOf(p)),host=$('#pllist',main);
+  plTxPreload();plTxSearch(L,'',()=>{const st=$('#pltxst',main);if(host&&host.isConnected&&st&&!PLTXQ.run)shx(st,plTxStatus(L,canIdx))})}
 /** ids de las láminas con resultado, en el orden de la lista */
 const plTxIds=L=>L.filter(p=>PLS.res.has(p.id)).map(p=>p.id);
 
