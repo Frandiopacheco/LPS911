@@ -113,7 +113,9 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
       [...L.map(([k2,n])=>`${n} × ${k2} m`),noc?`${noc} cruce(s) de ejes sin columna`:'','Toca una figura en el plano para quitarla («No es columna» o «ninguna de este tamaño»).'].filter(Boolean),['lay','colAdd'],off)}
   /* 7. contorno de la planta */
   const cand=palCtnGuess(G,R);
-  if(c.ctn&&c.ctn.P&&c.ctn.P.length>=6){const a=palArea(c.ctn.P)*mpp*mpp;add('ctn','Contorno de la planta','ok',`Área ${pal2(a)} m² · perímetro ${pal2(palPerim(c.ctn.P)*mpp)} m. Es el área que usan la sectorización y los metrados por ratio.`,[],['ctn'])}
+  if(c.ctn&&c.ctn.P&&c.ctn.P.length>=6){const H=palHoles(c.ctn);const ab=palArea(c.ctn.P)*mpp*mpp,ah=H.reduce((t,h)=>t+palArea(h.p),0)*mpp*mpp;
+    add('ctn','Contorno de la planta','ok',`Área ${pal2(ab-ah)} m²${H.length?` (${pal2(ab)} m² menos ${H.length} hueco(s) de ${pal2(ah)} m²)`:''} · perímetro ${pal2(palPerim(c.ctn.P)*mpp)} m. Es el área que usan la sectorización y los metrados por ratio. Las escaleras exteriores no van: se metran aparte.`,
+      H.map((h,ix)=>`Hueco ${ix+1}: ${pal2(palArea(h.p)*mpp*mpp)} m²`),['ctn','hueco'],[],H.map((h,ix)=>({a:'hdel:'+ix,t:`Quitar hueco ${ix+1}`})))}
   else add('ctn','Contorno de la planta','err',`Traza el contorno de la planta (${est?'borde de losa':'perímetro'}): da el área que usan la sectorización y los metrados por ratio.${cand?` Hay uno propuesto de ${pal2(palArea(cand)*mpp*mpp)} m².`:''}`,[],cand?['ctn','ctnauto']:['ctn']);
   /* 8. rótulos */
   if(est){const u=[...new Set(R.tx.map(t=>t.t.replace(/\s+/g,'')))].slice(0,6);add('tx','Rótulos de vigas','warn',R.tx.length?`${R.tx.length} rótulos de sección (${u.join(', ')}${u.length>=6?'…':''}): darán la sección de cada tramo en Metrados.`:'Sin rótulos de sección: las secciones de las vigas se escribirán a mano en Metrados.',[],['lay'])}
@@ -132,6 +134,8 @@ function palState(it,chk){chk=chk||{};const L=it.map(x=>({...x,ef:x.st==='warn'?
 const palP=()=>PLV&&PLB.get(PLV.id);
 const palAlc=p=>p&&p.alc&&p.alc.rev===(p.rev||1)?p.alc:{rev:(p&&p.rev)||1,chk:{}};
 const palCtn=p=>p&&p.ctn&&p.ctn.rev===(p.rev||1)?p.ctn:null;
+/** huecos del contorno (escaleras interiores, ductos, tragaluces): se restan del área */
+const palHoles=ct=>ct&&Array.isArray(ct.H)?ct.H.filter(h=>h&&Array.isArray(h.p)&&h.p.length>=6):[];
 const palFix=p=>p&&p.fix&&p.fix.rev===(p.rev||1)?p.fix:{rev:(p&&p.rev)||1,L:[]};
 function palToggle(on){PAL.on=on==null?!PAL.on:!!on;if(!PAL.on){palReset();return}palAttach()}
 function palReset(){PAL.on=false;PAL.C=null;PAL.ctn=false;PAL.trace='';PAL.sel=null;PAL.prev=null;if(PLV){const el=PLV.box.querySelector('.plalp');if(el)el.remove();if(PLV.tv){PLV.tv.al=null;if(PLV.tv.onTap===palTap)PLV.tv.onTap=null;PLV.tv.tick()}const b=PLV.box.querySelector('[data-pv="alis"]');if(b)b.classList.remove('on')}}
@@ -147,7 +151,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   let G=GEO.get(sp.base);if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(sp.base)}
   const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
   const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
-  const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
+  const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
   shx(el,`<div class="plalh"><b>Alistar ${esc(p.cod)} · Rev. ${p.rev||1}</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div>
     <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${p.ok.malla?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
     ${palSelHtml(p,ed&&!ok)}
@@ -155,7 +159,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
     ${ed&&!ok?'<p class="note palhint">Toca un eje, una columna, una línea marcada o un ambiente en el plano para corregirlo.</p>':''}
     <ol class="plall">${S.L.map(x=>`<li class="palit ${x.ef}"><div class="paltop"><span class="palic" aria-hidden="true">${ico[x.ef]}</span><b>${esc(x.t)}</b>${x.pts.length?`<button type="button" class="ab palgo" data-pal="go:${x.id}" title="Ver en el plano">◎ Ver</button>`:''}</div><p>${esc(x.msg)}</p>
       ${x.det.length?`<details><summary>Detalle</summary><ul>${x.det.map(d=>`<li>${esc(d)}</li>`).join('')}</ul></details>`:''}
-      ${ed&&!ok&&(x.act.length||x.btn.length||x.st==='warn')?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
+      ${ed&&(!ok||x.id==='ctn')&&(x.act.length||x.btn.length||x.st==='warn')?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
       ${!ed&&A.chk[x.id]&&A.chk[x.id].n?`<p class="mu">Nota: ${esc(A.chk[x.id].n)}</p>`:''}</li>`).join('')}</ol>
     ${FX.length?`<details class="palfx"${PAL.fxo?' open':''}><summary><b>Correcciones (${FX.length})</b> <span class="mu">hechas en el sistema; el DXF no cambia</span></summary><ol>${FX.map(f=>`<li><span>${esc(palFixTxt(f,p.dxf.mpp))}</span><small class="mu">${esc(f.byN||f.by||'')} · ${esc(fmtD(ldt(f.t)))}${f.nota?' · '+esc(f.nota):''}</small>${ed&&!ok?`<button type="button" class="ab" data-pal="fxdel:${esc(f.id)}" title="Deshacer esta corrección">↶</button>`:''}</li>`).join('')}</ol></details>`:''}
     ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&M.id!==p.id?'<button type="button" class="ib" data-pal="malla">Usar como malla de ejes</button>':''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
@@ -181,7 +185,8 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   if(k==='selx'){PAL.sel=null;PAL.prev=null;palRender();return}
   if(!plAlEd(p))return;
   if(k==='edit')plEdit(p,b);else if(k==='lay')plDxfLay(p);
-  else if(k==='ctn'||k==='colAdd'||k==='ambAdd'||k==='ejAdd')palTraceStart(k);
+  else if(k==='ctn'||k==='hueco'||k==='colAdd'||k==='ambAdd'||k==='ejAdd'){if((k==='ctn'||k==='hueco')&&!await palOkEdit(p))return;palTraceStart(k)}
+  else if(k.startsWith('hdel:')){if(!await palOkEdit(p))return;const ct=palCtn(p);if(!ct)return;const H=palHoles(ct).filter((h,i)=>i!==+k.slice(5));await palCtnPut(p,ct.P,H,'Hueco quitado.')}
   else if(k==='ctnauto'){const C=PAL.C;if(C&&C.cand)await palCtnPut(p,C.cand)}
   else if(k==='ok')await palOk(p);
   else if(k.startsWith('end:'))palEnd(p,k.slice(4),'end');
@@ -189,6 +194,8 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k.startsWith('sel:'))await palSelAct(p,k.slice(4));
   else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(p.ok&&p.ok.malla?' Este plano fija la malla de ejes: el próximo que se aliste será la nueva malla.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
   else if(k==='malla')await palMallaSet(p)}
+/** editar el contorno de un plano ya listo lo devuelve a «Por alistar»: se avisa antes */
+async function palOkEdit(p){if(!plUsable(p))return true;return uiAsk({title:'¿Editar el contorno?',tone:'warn',text:'El plano ya está listo: al cambiar el contorno vuelve a «Por alistar» y hay que marcarlo listo de nuevo. Lo que ya lo usa sigue igual.',ok:'Editar'})}
 async function palChange(e){const t=e.target;const p=palP();if(!p||!plAlEd(p))return;const A=palAlc(p);const chk={...A.chk};
   if(t.dataset.palc){const id=t.dataset.palc;if(t.checked)chk[id]={n:(chk[id]&&chk[id].n)||'',t:NOW(),by:me.email};else delete chk[id]}
   else if(t.dataset.paln){const id=t.dataset.paln;if(!chk[id]){toast('Marca «Revisado» para guardar la nota.');return}chk[id]={...chk[id],n:t.value.trim().slice(0,300)}}else return;
@@ -260,9 +267,10 @@ function palEnd(p,n,mode){const C=PAL.C;if(!C)return;const mpp=p.dxf.mpp;const X
   draw()}
 
 /* ---------- trazar con Medir: contorno, columna, ambiente o eje ---------- */
-const PAL_TR={ctn:['area','Usar como contorno'],colAdd:['area','Usar como columna'],ambAdd:['area','Usar como ambiente'],ejAdd:['dist','Usar como eje']};
+const PAL_TR={ctn:['area','Usar como contorno'],hueco:['area','Usar como hueco'],colAdd:['area','Usar como columna'],ambAdd:['area','Usar como ambiente'],ejAdd:['dist','Usar como eje']};
 function palTraceStart(k){const p=palP();PAL.trace=k;PAL.ctn=k==='ctn';PAL.sel=null;if(PLV.tv.onTap===palTap)PLV.tv.onTap=null;if(!PLM.on)plmToggle();const[tool]=PAL_TR[k];PLM.tool=tool;
   const ct=k==='ctn'&&palCtn(p);PLM.L[tool]=ct?csUnflatPal(ct.P):[];PLV.tv.tick();plmBar();
+  if(k==='hueco'){toast('Toca cada esquina del hueco (escalera interior, ducto, tragaluz) y luego «Usar como hueco».');return}
   toast(k==='ctn'?(ct?'Arrastra las esquinas para ajustar el contorno y toca «Usar como contorno».':'Toca cada esquina del contorno (se pega al dibujo) y luego «Usar como contorno».'):k==='ejAdd'?'Toca los dos extremos del eje (se pega al dibujo) y luego «Usar como eje».':'Toca cada esquina (se pega al dibujo) y luego «'+PAL_TR[k][1]+'».')}
 const csUnflatPal=P=>{const o=[];for(let i=0;i+1<P.length;i+=2)o.push({x:P[i],y:P[i+1]});return o};
 /** barra de Medir: el botón para usar lo trazado */
@@ -270,14 +278,16 @@ const palCtnBar=()=>{if(!PAL.on||!PAL.trace)return'';const[tool,t]=PAL_TR[PAL.tr
 async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;const k=PAL.trace;const[tool]=PAL_TR[k];const L=PLM.L[tool];const P=L.flatMap(q=>[Math.round(q.x*100)/100,Math.round(q.y*100)/100]);
   if(tool==='area'&&L.length<3){toast('Necesita al menos 3 esquinas.');return}if(tool==='dist'&&L.length<2){toast('Toca los dos extremos del eje.');return}
   PAL.trace='';PAL.ctn=false;plmToggle();const mpp=p.dxf.mpp;
-  if(k==='ctn')await palCtnPut(p,P);
+  if(k==='ctn'){const ct=palCtn(p);await palCtnPut(p,P,palHoles(ct))}
+  else if(k==='hueco'){const ct=palCtn(p);if(!ct){toast('Primero traza el contorno.');return}await palCtnPut(p,ct.P,[...palHoles(ct),{p:P}],'Hueco agregado: su área se resta del contorno.')}
   else if(k==='colAdd'){const z=dxfSz(P,mpp);await palFixAdd(p,{k:'colAdd',p:P,sz:`${pal2(z[0])}×${pal2(z[1])}`},'Columna agregada')}
   else if(k==='ambAdd'){const n=await uiAsk({title:'Nombre del ambiente',input:{label:'Nombre',required:false,value:''},ok:'Guardar'});if(n==null)return;await palFixAdd(p,{k:'ambAdd',p:P,a:String(n||'').trim().slice(0,60)},'Ambiente agregado')}
   else if(k==='ejAdd'){const names=new Set(PAL.C.R.ej.map(e=>e.n));const n=await uiAsk({title:'Nombre del eje nuevo',input:{label:'Nombre',required:true,value:''},ok:'Guardar'});const u=String(n||'').trim().toUpperCase().slice(0,4);if(!u)return;if(names.has(u)){toast(`Ya hay un eje ${u}.`);return}
     /* recto: horizontal o vertical según su dirección */const v=Math.abs(P[2]-P[0])<Math.abs(P[3]-P[1]);const q=v?[(P[0]+P[2])/2,P[1],(P[0]+P[2])/2,P[3]]:[P[0],(P[1]+P[3])/2,P[2],(P[1]+P[3])/2];
     await palFixAdd(p,{k:'ejAdd',n:u,p:q},`Eje ${u} agregado`)}}
 /** guarda el contorno (px del nivel de detalle) */
-async function palCtnPut(p,P){const mpp=p.dxf.mpp;const Q=P.map(v=>Math.round(v*10)/10);const o={ctn:{rev:p.rev||1,P:Q,a:Math.round(palArea(Q)*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,'Contorno guardado.')}
+async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
+  const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
 async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;
   const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev:p.rev||1,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija};if(fija){ok.ej=C.mine;ok.mpp=p.dxf.mpp}
   await palSet(p,{ok},fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
@@ -287,7 +297,8 @@ async function palMallaSet(p){if(me.role!=='admin'||!p.ok)return;const M=plMalla
   if(M)await palSet(M,{'ok.malla':false,'ok.ej':firebase.firestore.FieldValue.delete()});await palSet(p,{'ok.malla':true,'ok.ej':C.mine,'ok.mpp':p.dxf.mpp},`${p.cod} es ahora la malla de ejes del proyecto.`)}
 /** dibujo encima del plano (gancho V.al de plTiles) */
 function palDraw(g,V){const C=PAL.C;const p=palP();if(!C||!p)return;const R=C.R,s=V.toScreen.bind(V),sh=PAL.show;const lt=(P,cl)=>{g.beginPath();for(let i=0;i+1<P.length;i+=2){const q=s(P[i],P[i+1]);i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y)}if(cl)g.closePath()};
-  if(sh.ctn&&!(PAL.trace==='ctn'&&PLM.on)){const ct=palCtn(p);if(ct){lt(ct.P,true);g.fillStyle='rgba(31,95,122,.10)';g.fill();g.lineWidth=3;g.strokeStyle='#1F5F7A';g.stroke()}else if(C.cand){lt(C.cand,true);g.setLineDash([8,6]);g.lineWidth=2;g.strokeStyle='#1F5F7A';g.stroke();g.setLineDash([])}}
+  if(sh.ctn&&!(PAL.trace==='ctn'&&PLM.on)){const ct=palCtn(p);if(ct){lt(ct.P,true);g.fillStyle='rgba(31,95,122,.10)';g.fill();g.lineWidth=3;g.strokeStyle='#1F5F7A';g.stroke();
+      for(const h of palHoles(ct)){lt(h.p,true);g.fillStyle='rgba(184,58,46,.12)';g.fill();g.setLineDash([6,4]);g.lineWidth=2;g.strokeStyle='#B83A2E';g.stroke();g.setLineDash([])}}else if(C.cand){lt(C.cand,true);g.setLineDash([8,6]);g.lineWidth=2;g.strokeStyle='#1F5F7A';g.stroke();g.setLineDash([])}}
   if(sh.amb)for(const a of R.amb||[]){lt(a.p,true);g.fillStyle='rgba(46,125,79,.16)';g.fill();g.lineWidth=1.5;g.strokeStyle='#2E7D4F';g.stroke()}
   if(sh.col)for(const q of R.col){lt(q.p,true);g.fillStyle=q.add?'rgba(46,125,79,.35)':'rgba(51,65,85,.35)';g.fill();g.lineWidth=1.5;g.strokeStyle='#334155';g.stroke()}
   if(sh.vig){g.beginPath();for(let i=0;i+3<R.ln.length;i+=4){const a=s(R.ln[i],R.ln[i+1]),b=s(R.ln[i+2],R.ln[i+3]);g.moveTo(a.x,a.y);g.lineTo(b.x,b.y)}g.lineWidth=1.5;g.strokeStyle='#0E7490';g.stroke()}
