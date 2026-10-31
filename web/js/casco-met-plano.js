@@ -140,8 +140,8 @@ function kvpFinish(){const pid=KVP.pid,X=kvpCtx(pid);const A=KVP.ax;if(!X||!A)re
   if(back){U.tab='met';U.kmV='vig';saveUI();render();toast(msg)}else{csNivDraw();toast(msg,'Ir a Metrados',()=>{U.tab='met';U.kmV='vig';U.piso=pid;saveUI();render()})}}
 /** guías del trazado en curso (coordenadas de la lámina del nivel) */
 function kvpDrawO(){const X=kvpCtx(KVP.pid);if(!X||!KVP.step)return{guides:[],dots:[],snap:[]};const m=X.m;const g=[],d=[];
-  /* al tocar las caras de un apoyo no se pega a los ejes (la cara está al lado del eje) */
-  const snap=KVP.step==='ap'?[]:X.E.map(e=>({pts:csMapF(m,e.p)}));
+  /* al tocar las caras de un apoyo no se pega a los ejes (la cara está al lado del eje); con DXF se pega a las caras de columnas y vigas que cruzan la viga */
+  const snap=KVP.step==='ap'?(CSZ.dxf!==false?dxfAcross(dxfGeo(X.ref,m),(u=>{const q={x:m.a*u.x-m.b*u.y,y:m.b*u.x+m.a*u.y};const k=Math.hypot(q.x,q.y)||1;return{x:q.x/k,y:q.y/k}})(KVP.ax.ln.u)):[]):X.E.map(e=>({pts:csMapF(m,e.p)}));
   if(KVP.a){const q=csAp(m,KVP.a);d.push({x:q.x,y:q.y,c:'#1F5F7A'})}
   if(KVP.ax){const A=KVP.ax;const S=A.S;const last=S[S.length-1];g.push({pts:csMapF(m,csgFlat([A.ln.at(0),A.ln.at(last.s)])),c:'#1F5F7A',w:4,op:.5});
     const nx=-A.ln.u.y,ny=A.ln.u.x;const h=.45/X.mpp;const tick=(s,c,w)=>{const p=A.ln.at(s);g.push({pts:csMapF(m,csgFlat([{x:p.x-nx*h,y:p.y-ny*h},{x:p.x+nx*h,y:p.y+ny*h}])),c,w:w||3,op:.95})};

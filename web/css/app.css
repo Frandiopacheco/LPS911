@@ -4945,6 +4945,10 @@ td.kmcalc{background:var(--accent-soft)}
 @media (min-width:1100px){.kmgp .kmwide{grid-column:span 2}}
 .kmted{display:flex;flex-wrap:wrap;gap:16px;padding:12px 14px;max-width:960px}.kmtedl{flex:999 1 520px;min-width:0}.kmtedr{flex:1 1 220px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;font-size:13px}
 .kmted h4{margin:14px 0 6px;font-size:13px}.kmted .t .ci{width:100%;box-sizing:border-box}.kmted .t .ci.kmsm{width:60px}.kmted .ib{margin-top:6px}
+/* Casco › plano vectorial (DXF): diálogo de capas */
+.dxff{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.dxff .kmfl .ci{width:220px;max-width:100%}
+.dxfl{display:flex;flex-direction:column;gap:2px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 8px;margin:4px 0 10px;font-size:13px}
+.lqc .callout.warn{border-color:var(--warn);background:var(--warn-soft)}
 .kmfr{display:flex;flex-wrap:wrap;gap:10px}.kmfl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink2);min-width:120px}.kmfl .ci{height:34px;border:1px solid var(--line);border-radius:var(--r-ctl);padding:0 8px;width:140px}
 #lqm .lqc:has(.kmted){max-width:min(980px,96vw);width:min(980px,96vw)}
 @media (max-width:760px){.kmtip,.kmres{flex:1 1 100%;max-width:none}.kmbar .ib.pri{margin-left:0}}
