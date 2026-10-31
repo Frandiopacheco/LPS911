@@ -25,6 +25,9 @@ function csLamOf(pid,grp){const API=window.__plano;if(!pid||!API||!API.basesOf)r
 /** metros por píxel de una lámina: la calibración de Planos de esa revisión (se lee siempre del plano, no la copia al vincular);
     sin calibrar, la escala nominal 1/100 del formato (st 'nom', áreas aproximadas); sin plano del módulo Planos, nada */
 function csScale(l){if(!l)return{mpp:null,st:'none'};const r=l.plb;
+  /* DXF de la planta (casco-dxf.js): la escala exacta del dibujo; otra lámina del mismo plano y revisión, en proporción a su ancho */
+  if(typeof dxfOf==='function'){const d=dxfOf(l);if(d)return{mpp:dxfMpp(d),st:'dxf',plb:r?r.id:''};const API=window.__plano;
+    if(r&&l.w>0&&API&&API.LAM)for(const o of API.LAM.values())if(o!==l&&o.w>0&&o.plb&&o.plb.id===r.id&&o.plb.rev===r.rev){const d2=dxfOf(o);if(d2)return{mpp:dxfMpp(d2)*o.w/l.w,st:'dxf',plb:r.id}}}
   if(r&&typeof PLB!=='undefined'){const p=PLB.get(r.id);if(p&&p.cal&&p.cal.mpp>0&&p.cal.rev===r.rev&&l.w>0&&typeof plSpecOf==='function'){const sp=plSpecOf(p,r.rev);if(sp&&sp.W>0)return{mpp:p.cal.mpp*sp.W/l.w,st:'cal',plb:r.id}}}
   if(r&&r.calMpp>0&&r.mpp>0)return{mpp:r.mpp,st:'cal',plb:r.id};
   if(r&&r.mpp>0)return{mpp:r.mpp,st:'nom',plb:r.id};
@@ -179,7 +182,7 @@ function csGripWire(root){const g=root.querySelector('#csszgrip'),b=root.querySe
   g.addEventListener('keydown',e=>{const cur=root.querySelector('#csszside').getBoundingClientRect().width;if(e.key==='ArrowLeft'){e.preventDefault();set(cur+32)}else if(e.key==='ArrowRight'){e.preventDefault();set(cur-32)}})}
 const csSet=(id,h)=>{const el=document.getElementById(id);if(el&&el.dataset.h!==h){el.innerHTML=h;el.dataset.h=h}return el};
 function csScaleBadge(l){const s=csScale(l);if(!l)return'';
-  return s.st==='cal'?`<span class="csszok">Escala calibrada en Planos ✓</span>`:s.st==='nom'?`<span class="csszwarn">Escala nominal 1/100: áreas aproximadas</span>${s.plb?` <button type="button" class="ib" data-csz="cal" data-plb="${esc(s.plb)}">Calibrar en Planos</button>`:''}`:`<span class="csszwarn">Lámina sin escala: vincúlala desde el módulo Planos</span>`}
+  return s.st==='dxf'?`<span class="csszok">Escala exacta del DXF ✓</span>`:s.st==='cal'?`<span class="csszok">Escala calibrada en Planos ✓</span>`:s.st==='nom'?`<span class="csszwarn">Escala nominal 1/100: áreas aproximadas</span>${s.plb?` <button type="button" class="ib" data-csz="cal" data-plb="${esc(s.plb)}">Calibrar en Planos</button>`:''}`:`<span class="csszwarn">Lámina sin escala: vincúlala desde el módulo Planos</span>`}
 
 /* ---- vista Frentes ---- */
 function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=pisos();const C=csFrC(f,g);const ref=(C&&C.ref)||(f&&(csFrLv(f).find(p=>csLamOf(p.id,g))||{}).id)||'';const lam=C&&C.vista?(window.__plano&&window.__plano.LAM.get(C.vista))||csLamOf(ref,g):csLamOf(ref,g);

@@ -1288,6 +1288,8 @@ function ambMap(host,o){const bs=basesOf(o.pid);
     const ce=centroid(P),bb=bboxOf(P);labels.push({id:z.id,x:ce.x,y:ce.y,t:z.label,area:bb.w*bb.h,c:z.sel?'#111':z.c,f:'#fff',cls:'sza'+(z.sel?' sel':'')})}
   /* líneas (juntas de Casco, casco-sz.js): o.lines = [{id,pts:[x1,y1,x2,y2],c,sel}] */
   for(const L of o.lines||[]){const P=unflat(L.pts);if(P.length<2)continue;svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${L.sel?'#111':(L.c||'#111')}" stroke-width="${L.sel?5:3}" stroke-dasharray="12 6" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"/>`}
+  /* o.paths = [{d, c, w, op, fill, fop}]: dibujo vectorial encima de la lámina (Casco › plano DXF, casco-dxf.js), en coordenadas de la lámina */
+  for(const g of o.paths||[])if(g.d)svg+=`<path d="${g.d}" fill="${g.fill||'none'}" fill-opacity="${g.fop??.3}" stroke="${g.c||'#0E7490'}" stroke-width="${g.w||1}" stroke-opacity="${g.op??.9}" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
   if(o.tmp&&o.tmp.length){svg+=`<polyline points="${ptsS(o.tmp)}" fill="rgba(31,95,122,.18)" stroke="#1F5F7A" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}
   /* o.guides = [{pts:[x1,y1,x2,y2], c, w, dash, lbl}]: líneas de referencia tenues (ejes y tercios de Casco) */
@@ -1313,6 +1315,8 @@ function ambMapEvents(host){let dn=null,drag=null;const R=v=>Math.round(v*10)/10
   /* dibujo de polígonos y juntas: o.ortho (horizontal o vertical respecto al punto anterior; Mayúscula: libre) y o.snapLines
      ([{pts:[x1,y1,x2,y2]}] en coordenadas de la lámina; el clic se pega a la más cercana; Alt: no se pega). Todo en pantalla. */
   const snapPt=(e)=>{const oo=host._o;const v=host._v;const M=MM();let q=v.toWorld(e.clientX,e.clientY);let hit=null;
+    /* o.snapPts ([{x,y}] en la lámina: esquinas de columnas y cruces del DXF): un punto cercano gana a todo lo demás */
+    if(oo.snapPts&&!e.altKey){const tol=10/(v.z||1);let bd=tol,bp=null;for(const p of oo.snapPts){const s=ap(M,p);const d=Math.hypot(s.x-q.x,s.y-q.y);if(d<bd){bd=d;bp=s}}if(bp)return{q:bp,hit:{pt:1}}}
     /* primero ortogonal (respecto al punto anterior), luego pegarse a la guía sin romper lo ortogonal */
     const T=oo.tmp||[];let ov=null;if(oo.ortho&&!e.shiftKey&&T.length){const p0=ap(M,T[T.length-1]);if(Math.abs(q.x-p0.x)<Math.abs(q.y-p0.y)){q={x:p0.x,y:q.y};ov='v'}else{q={x:q.x,y:p0.y};ov='h'}}
     if(oo.snapLines&&!e.altKey){const tol=12/(v.z||1);let bd=tol;for(const L of oo.snapLines){const P=unflat(L.pts).map(p=>ap(M,p));if(P.length<2)continue;const a=P[0],b=P[1];const vert=Math.abs(b.x-a.x)<Math.abs(b.y-a.y);
