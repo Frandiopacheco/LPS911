@@ -4945,6 +4945,21 @@ td.kmcalc{background:var(--accent-soft)}
 @media (min-width:1100px){.kmgp .kmwide{grid-column:span 2}}
 .kmted{display:flex;flex-wrap:wrap;gap:16px;padding:12px 14px;max-width:960px}.kmtedl{flex:999 1 520px;min-width:0}.kmtedr{flex:1 1 220px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;font-size:13px}
 .kmted h4{margin:14px 0 6px;font-size:13px}.kmted .t .ci{width:100%;box-sizing:border-box}.kmted .t .ci.kmsm{width:60px}.kmted .ib{margin-top:6px}
+/* Planos › Alistar plano (planos-alistar.js): insignia, aviso de la biblioteca y panel del visor; colores por variables (modo oscuro incluido) */
+.plalt{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px}
+.plalt.ok{background:var(--ok-soft);color:var(--ok)}.plalt.pend{background:var(--warn-soft);color:var(--warn)}
+.plalc{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;border-color:var(--warn);background:var(--warn-soft)}
+.ib.plalb{border-color:var(--warn);color:var(--warn)}.ib.plalb.ok{border-color:var(--ok);color:var(--ok)}
+.plalp{position:absolute;right:0;top:56px;bottom:0;width:min(400px,94vw);z-index:21;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--sh-2);animation:lps-fade var(--t,.2s) var(--ease,ease)}
+.plalh{display:flex;align-items:center;gap:8px}.plalh>b{flex:1;font-size:16px}
+.plals{padding:8px 10px;border-radius:var(--r-ctl);border:1px solid var(--line);font-size:13px}.plals.ok{background:var(--ok-soft);border-color:var(--ok)}.plals.warn{background:var(--warn-soft);border-color:var(--warn)}.plals.err{background:var(--bad-soft);border-color:var(--bad)}
+.plalv{display:flex;flex-wrap:wrap;gap:4px}
+.plall{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.palit{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:var(--r-ctl);padding:8px 10px;font-size:13px}.palit p{margin:4px 0}.palit ul{margin:4px 0;padding-left:18px}
+.palit.ok,.palit.conf{border-left-color:var(--ok)}.palit.warn{border-left-color:var(--warn)}.palit.err{border-left-color:var(--bad)}
+.paltop{display:flex;gap:6px;align-items:center}.palic{width:18px;text-align:center;font-weight:700}.palit.ok .palic,.palit.conf .palic{color:var(--ok)}.palit.warn .palic{color:var(--warn)}.palit.err .palic{color:var(--bad)}
+.palac{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.palac .paln{flex:1;min-width:140px}
+@media (max-width:760px){.palac .ib,.palac .chk{min-height:40px}}
 /* Planos › capas del DXF (planos-dxf.js) */
 .dxff{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.dxff .kmfl .ci{width:220px;max-width:100%}
 .dxfl{display:flex;flex-direction:column;gap:2px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 8px;margin:4px 0 10px;font-size:13px}

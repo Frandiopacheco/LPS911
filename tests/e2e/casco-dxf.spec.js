@@ -18,7 +18,7 @@ async function preparar(page) {
     for (const [id, cod, pid, k] of [['EST_E03', 'E03', 'n3', 2], ['EST_E04', 'E04', 'n4', 4]]) {
       const base = `planos/${id}.t/r1`; const z = await dxfGz(JSON.stringify(G), 'application/json'); window.__ST.set(base + '/geo.json.gz', z.b);
       await fcol('plb').doc(id).set({ cod, disc: 'EST', rev: 1, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', tit: 'Encofrado', revs: [],
-        dxf: { v: 1, src: S.src, k: S.k, how: S.how, mpp: S.mpp, lay, gz: 1, oz: 0 }, cal: { mpp: S.mpp, rev: 1, dxf: 1 } });
+        dxf: { v: 1, src: S.src, k: S.k, how: S.how, mpp: S.mpp, lay, gz: 1, oz: 0 }, cal: { mpp: S.mpp, rev: 1, dxf: 1 }, ok: { rev: 1, t: 1, by: 'ot@obra', malla: false } }); /* alistados */
       await fcol('laminas').doc('lam' + cod).set({ pisoId: pid, base: true, esp: 'Estructuras', name: 'Encofrado', w: Math.round(S.W / k), h: Math.round(S.H / k), lw: 500, lh: 400, fmt: 'image/webp', nf: 0, nl: 0, rev: 1,
         T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id, cod, disc: 'EST', rev: 1, mpp: S.mpp * k }, order: 1, ts: 1 });
     }
@@ -36,7 +36,7 @@ test('casco DXF: la lámina de un plano DXF da los ejes, la escala exacta, colum
     const ab = (E.find(e => e.n === 'B').p[0] - E.find(e => e.n === 'A').p[0]) * sc.mpp; const T = csMap(ref, l4); const d = csDxf(ref);
     return { ref: ref.id, st: sc.st, ab, T, col: d.cnt.col, chico: d.cnt.chico, ln: d.cnt.ln }; });
   expect(r.ref).toBe('lamE03');
-  expect(r.st).toBe('dxf'); expect(r.ab).toBeCloseTo(4, 3);
+  expect(r.st).toBe('dxf'); expect(r.ab).toBeCloseTo(4, 2); /* coordenadas de la lámina redondeadas a 0,1 px */
   expect(r.col).toBe(5); expect(r.chico).toBe(1); expect(r.ln).toBeGreaterThan(2);
   /* el techo 4 (otro plano DXF, lámina a la mitad de tamaño) queda alineado solo por los cruces de los ejes */
   expect(r.T).toMatchObject({ dxf: 1, n: 15 }); expect(r.T.a).toBeCloseTo(0.5, 2); expect(r.T.b).toBeCloseTo(0, 3);
@@ -64,5 +64,12 @@ test('casco DXF: la lámina de un plano DXF da los ejes, la escala exacta, colum
   const V = await page.evaluate(() => kvVigas('n3').find(v => v.pl));
   expect(V.ejes.map(e => [e.n, e.w, e.d])).toEqual([['A', '0.50', '4.00'], ['B', '0.40', '4.00'], ['C', '0.40', '4.00'], ['D', '0.40', '4.00'], ['E', '0.40', '']]);
   expect(V.ejes[0].o).toBe('0.2');
+  /* un plano DXF sin alistar no se usa: ni ejes ni columnas ni escala ni alineación, y no se puede vincular */
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ ok: firebase.firestore.FieldValue.delete() }));
+  await expect.poll(() => page.evaluate(() => !!PLB.get('EST_E04').ok)).toBe(false);
+  const s = await page.evaluate(async () => { const l4 = window.__plano.LAM.get('lamE04'); let err = '';
+    try { await window.__plano.lamFromPlb('n5', 'EST_E04', { quiet: true }); } catch (e) { err = e.message; }
+    return { d: csDxf(l4), T: csMap(csRefLam(csSzFr(), 'E'), l4), st: csScale(l4).st, err }; });
+  expect(s.d).toBeNull(); expect(s.T).toBeNull(); expect(s.st).not.toBe('dxf'); expect(s.err).toContain('por alistar');
   expect(errors).toEqual([]);
 });

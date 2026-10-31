@@ -85,3 +85,82 @@ test('planos DXF: se carga como lámina (mosaicos, escala exacta, DXF y geometr�
   expect(L[1]).not.toEqual(L[0]);
   expect(errors).toEqual([]);
 });
+
+test('alistar: la verificación del DXF (escala por cotas, ejes, malla, contorno) y el semáforo', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(([m, cm]) => {
+    const mk = t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
+      return { S, G, lay, p: { id: 'EST_E03', cod: 'E03', disc: 'EST', tipo: 'Planta', pisoId: 'P3', rev: 1, mm: S.mm, dxf: { k: S.k, mpp: S.mpp, lay, src: S.src, crop: S.crop, far: S.far } } }; };
+    const A = mk(m), B = mk(cm);
+    const chk = (X, o) => { const C = dxfCheck({ p: X.p, G: X.G, lay: X.lay, mpp: X.S.mpp, malla: null, ctn: null, ...o }); return { C, by: Object.fromEntries(C.it.map(x => [x.id, x])) }; };
+    const c1 = chk(A);
+    const W = A.S.W, H = A.S.H, rect = [W * .05, H * .05, W * .95, H * .05, W * .95, H * .95, W * .05, H * .95];
+    const allConf = Object.fromEntries(c1.C.it.filter(x => x.st === 'warn').map(x => [x.id, { n: '' }]));
+    const c2 = chk(A, { ctn: { P: rect } });
+    const shift = c1.C.mine.map(e => e.n === 'C' ? { ...e, p: [e.p[0] + 0.05, e.p[1], e.p[2] + 0.05, e.p[3]] } : e);
+    const cM = chk(A, { malla: { id: 'EST_X', cod: 'E99', ok: { ej: shift } } }), cMok = chk(A, { malla: { id: 'EST_X', cod: 'E99', ok: { ej: c1.C.mine } } });
+    const cU = chk({ ...B, p: { ...B.p, dxf: { ...B.p.dxf, k: 1 } } }); /* el dibujo está en cm pero dice metros */
+    const cP = chk({ ...A, p: { ...A.p, pisoId: '' } });
+    const st = c => Object.fromEntries(c.C.it.map(x => [x.id, x.st]));
+    return { s1: st(c1), esc: c1.by.escala.msg, ejes: c1.by.ejes.msg, col: c1.by.col.msg, ready1: palState(c1.C.it, {}).ready, ready2: palState(c2.C.it, allConf).ready, s2: st(c2),
+      malla: cM.by.malla, mallaOk: cMok.by.malla, unid: cU.by.escala, piso: cP.by.datos, mine: c1.C.mine.length };
+  }, [dxfDemo(), dxfDemo({ k: 100 })]);
+  expect(r.s1).toEqual({ datos: 'warn', escala: 'warn', ejes: 'warn', malla: 'warn', capas: 'warn', col: 'warn', ctn: 'err', tx: 'warn', enc: 'warn' });
+  expect(r.esc).toContain('4 de 5 cotas coinciden'); expect(r.esc).toContain('1 cota(s) con el texto escrito a mano no coinciden');
+  expect(r.ejes).toContain('1 cota(s) entre ejes no coinciden'); expect(r.ejes).toContain('4 cota(s) entre ejes coinciden');
+  expect(r.col).toContain('5 columnas'); expect(r.col).toContain('4 de 0.40×0.40');
+  expect(r.ready1).toBe(false);
+  expect(r.s2.ctn).toBe('ok'); expect(r.ready2).toBe(true); /* con contorno y todo lo ⚠ confirmado */
+  expect(r.malla.st).toBe('err'); expect(r.malla.msg).toContain('corridos más de 2 cm'); expect(r.malla.det.every(t => /^C-\d corrido/.test(t))).toBe(true); expect(r.malla.det.length).toBe(3); /* solo los cruces del eje C */
+  expect(r.mallaOk.st).toBe('ok');
+  expect(r.unid.st).toBe('err'); expect(r.unid.msg).toContain('unidades parecen equivocadas');
+  expect(r.piso.st).toBe('err'); expect(r.piso.msg).toContain('Falta el nivel');
+  expect(r.mine).toBe(8);
+  expect(errors).toEqual([]);
+});
+
+test('alistar: una planta DXF recién cargada no se puede vincular; se verifica en el visor y al marcarla lista fija la malla de ejes', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  const pid = await page.evaluate(async () => { const pid = [...S.pis.values()][0].id; await fcol('plb').doc('EST_E03').update({ pisoId: pid }); return pid; });
+  /* sin alistar: no se puede vincular (plano.js se carga aparte) */
+  await page.evaluate(() => window.__plano ? 0 : new Promise((ok, ko) => { const s = document.createElement('script'); s.src = PLANO_SRC; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }));
+  const err = await page.evaluate(async pid => { try { await window.__plano.lamFromPlb(pid, 'EST_E03', { quiet: true }); return ''; } catch (e) { return e.message; } }, pid);
+  expect(err).toContain('por alistar');
+  await page.click('#tabs [data-tab="pbib"]');
+  await expect(page.locator('.plc[data-pl="EST_E03"] .plalt')).toHaveText('Por alistar');
+  await expect(page.locator('.plalc')).toContainText('1 planta(s) DXF por alistar');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel).toContainText('Alistar E03 · Rev. 1');
+  await expect(panel.locator('[data-pal="ok"]')).toBeDisabled();
+  await expect(panel.locator('.palit.err')).toHaveCount(1); /* el contorno */
+  /* confirmar lo ⚠ (cada cambio se guarda y el panel se rehace) */
+  for (let i = 0; i < 12; i++) { const c = panel.locator('input[data-palc]:not(:checked)').first(); if (!(await c.count())) break; const id = await c.getAttribute('data-palc'); await c.click();
+    await expect.poll(() => page.evaluate(id => !!(((PLB.get('EST_E03').alc || {}).chk || {})[id]), id)).toBe(true); }
+  /* contorno trazado con Medir › Área y «Usar como contorno» */
+  await panel.locator('[data-pal="ctn"]').click();
+  await page.evaluate(() => { const v = PLV.tv; PLM.L.area = [{ x: v.W * .1, y: v.H * .1 }, { x: v.W * .9, y: v.H * .1 }, { x: v.W * .9, y: v.H * .9 }, { x: v.W * .1, y: v.H * .9 }]; plmBar(); });
+  await page.locator('.plmbar [data-pm="ctnok"]').click();
+  await expect.poll(() => page.evaluate(() => (PLB.get('EST_E03').ctn || {}).a > 0)).toBe(true);
+  await expect(panel.locator('[data-pal="ok"]')).toBeEnabled();
+  await panel.locator('[data-pal="ok"]').click();
+  await expect.poll(() => page.evaluate(() => !!PLB.get('EST_E03').ok)).toBe(true);
+  const d = await page.evaluate(() => window.__dbGet('plb', 'EST_E03'));
+  expect(d.ok).toMatchObject({ rev: 1, malla: true }); expect(d.ok.by).toBeTruthy(); expect(d.ok.ej.map(e => e.n)).toEqual(['A', 'B', 'C', 'D', 'E', '1', '2', '3']);
+  expect(Object.keys(d.ok.chk).sort()).toEqual(['capas', 'col', 'datos', 'ejes', 'enc', 'escala', 'malla', 'tx']);
+  await expect(panel).toContainText('✓ Listo');
+  await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
+  expect(await page.evaluate(() => plMalla() && plMalla().id)).toBe('EST_E03');
+  /* cambiar las capas lo devuelve a «Por alistar» */
+  await page.evaluate(async () => { const p = PLB.get('EST_E03'); await plCol(p).doc(p.id).update({ ok: firebase.firestore.FieldValue.delete() }); });
+  await expect.poll(() => page.evaluate(() => plAlPend(PLB.get('EST_E03')))).toBe(true);
+  expect(errors).toEqual([]);
+});

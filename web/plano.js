@@ -2302,6 +2302,8 @@ function plbMpp(r,w){if(!r||!(w>0))return null;if(r.calMpp>0&&r.W>0)return r.cal
 /** crea una lámina base del piso pid desde un plano del módulo Planos (sin diálogo; lo usa Configuración › Casco › Niveles).
     o: {rev (por defecto la vigente), name, esp, say}. La lámina queda fija en esa revisión (laminas.plb). */
 async function lamFromPlb(pid,plbId,o){o=o||{};const p=PLB.get(plbId);if(!p)throw new Error('No se encontró el plano '+plbId);const sp=plSpecOf(p,o.rev||p.rev||1);
+  /* una planta DXF se usa recién cuando su revisión está alistada (planos-alistar.js) */
+  if(sp.dxf&&typeof plRevOk==='function'&&!plRevOk(p,sp.rev))throw new Error(`El plano ${p.cod} está por alistar: alístalo en Planos antes de usarlo.`);
   const say=o.say||(()=>{});const fname=(p.cod||p.id)+'.pdf';
   const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;
   const ref={id:p.id,cod:p.cod||'',disc:p.disc||'',tit:(p.tit||'').slice(0,80),rev:sp.rev,W:sp.W,mm:mm||null,calMpp:cal?cal.mpp:null};
@@ -2339,16 +2341,16 @@ function uploadDialog(btn,repl,opt){opt=opt||{};const ps=opt.pid?pisos().filter(
     if(typeof plbReady!=='undefined'&&!plbReady){plbSel.innerHTML='<option value="">Cargando planos…</option>';setTimeout(()=>{if(box.isConnected)plbSync()},400);return}
     const pid=repl?repl.pisoId:$('#upiso',box).value;const cur=plbSel.value||(repl&&repl.plb?repl.plb.id:'');
     const L=[...PLB.values()].filter(x=>!x.eto&&!x.arch).sort((a,b)=>String(a.disc).localeCompare(b.disc)||String(a.cod).localeCompare(b.cod,'es',{numeric:true}));
-    const mine=L.filter(x=>x.pisoId===pid),oth=L.filter(x=>x.pisoId!==pid);const o=x=>`<option value="${esc(x.id)}"${x.id===cur?' selected':''}>${esc(x.cod||x.id)} · ${esc(x.tit||'')} (Rev. ${x.rev||1})</option>`;
+    const mine=L.filter(x=>x.pisoId===pid),oth=L.filter(x=>x.pisoId!==pid);const o=x=>{const no=typeof plAlPend==='function'&&plAlPend(x);return`<option value="${esc(x.id)}"${x.id===cur&&!no?' selected':''}${no?' disabled':''}>${esc(x.cod||x.id)} · ${esc(x.tit||'')} (Rev. ${x.rev||1})${no?' · por alistar en Planos':''}</option>`};
     plbSel.innerHTML=L.length?(mine.length?`<optgroup label="De este piso">${mine.map(o).join('')}</optgroup>`:'')+(oth.length?`<optgroup label="${mine.length?'Otros':'Todos los planos'}">${oth.map(o).join('')}</optgroup>`:''):'<option value="">El módulo Planos no tiene planos todavía: elige «Archivo de la computadora»</option>';
     revSync()}
   function revSync(){const p=PLB.get(plbSel.value);if(!p){revSel.innerHTML='';$('#uplbn',box).textContent='';return}
-    const R=[p.rev||1,...(p.revs||[]).map(r=>r.rev).reverse()];revSel.innerHTML=R.map((r,i)=>`<option value="${r}">Rev. ${r}${i===0?' (vigente)':''}</option>`).join('');
+    const R=[p.rev||1,...(p.revs||[]).map(r=>r.rev).reverse()];const okR=r=>typeof plRevOk!=='function'||plRevOk(p,r);revSel.innerHTML=R.map((r,i)=>`<option value="${r}"${okR(r)?'':' disabled'}>Rev. ${r}${i===0?' (vigente)':''}${okR(r)?'':' · por alistar'}</option>`).join('');
     $('#uplbn',box).textContent=`${p.cal&&p.cal.rev===(p.rev||1)?'Calibrado en Planos: las áreas usan su escala.':'Sin calibrar en Planos: las áreas usan la escala nominal 1/100.'} La lámina queda fija en la revisión elegida hasta que la cambies.`}
   if(src){src.value=repl&&!repl.plb?'file':'plb';src.onchange=plbSync;plbSel.onchange=revSync;if(typeof plSub==='function')plSub();plbSync()}
   $('#ucancel',box).onclick=close;
   $('#ugo',box).onclick=async()=>{let f=null,plbRef=null,crop=null,tilesSp=null;
-    if(src&&src.value==='plb'){const p=PLB.get(plbSel.value);if(!p){toast('Elige el plano.');return}const sp=plSpecOf(p,+revSel.value);$('#ugo',box).disabled=true;$('#uprog',box).textContent='Descargando el plano del módulo Planos…';
+    if(src&&src.value==='plb'){const p=PLB.get(plbSel.value);if(!p){toast('Elige el plano.');return}const sp=plSpecOf(p,+revSel.value);if(sp.dxf&&typeof plRevOk==='function'&&!plRevOk(p,sp.rev)){toast(`El plano ${p.cod} está por alistar: alístalo en Planos antes de usarlo.`);return}$('#ugo',box).disabled=true;$('#uprog',box).textContent='Descargando el plano del módulo Planos…';
       /* plano en DXF (planos-dxf.js): no hay PDF; la lámina sale de sus mosaicos */
       if(sp.dxf)tilesSp=sp;else try{const bl=await plGet(sp.base+'/orig.pdf');f=new File([bl],(p.cod||p.id)+'.pdf',{type:'application/pdf'})}catch(err){$('#ugo',box).disabled=false;$('#uprog',box).textContent='';toast('No se pudo descargar el plano: '+(err.message||err));return}
       crop=sp.crop||null;const mm=sp.cur?p.mm:((p.revs||[]).find(r=>r.rev===sp.rev)||{}).mm;const cal=p.cal&&p.cal.rev===sp.rev&&p.cal.mpp>0?p.cal:null;

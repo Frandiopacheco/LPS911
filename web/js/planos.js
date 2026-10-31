@@ -31,7 +31,7 @@ const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
-  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas'))requestRender()},
+  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS()))requestRender();if(typeof palSync==='function')palSync()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
   open();etoSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;PLB.clear();plbReady=false})}
 /* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
@@ -277,7 +277,7 @@ async function plProcess(it,say){const t0=performance.now();
       if(Array.isArray(d.lk))res.lk=d.lk.map(self);if(Array.isArray(d.lkp))res.lkp=d.lkp.map(self);tx.update(ref,res)});
     Object.assign(old,res);return{id,rev,keep:true,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
-  const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||'',...(old.dxf?{dxf:old.dxf}:{})}:null;
+  const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||'',...(old.dxf?{dxf:old.dxf}:{}),...(old.ok&&old.ok.rev===(old.rev||1)?{ok:old.ok}:{})}:null;
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};if(txm)doc.tx=txm;
@@ -307,7 +307,7 @@ function plFiltered(noQ){const q=noQ?'':plUp(PLF.q).trim();const words=q?q.split
   if(etoOn())return [...PLB.values()].filter(p=>p.eto&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.sc||p.sc===PLF.sc)&&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))
       &&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,etoScName(p.sc)].join(' ')).includes(w))))
     .sort((a,b)=>etoScName(a.sc).localeCompare(etoScName(b.sc),'es')||plCodCmp(a,b)||String(a.tit).localeCompare(String(b.tit),'es',{numeric:true}));
-  return [...PLB.values()].filter(p=>!p.eto).filter(p=>(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
+  return [...PLB.values()].filter(p=>!p.eto).filter(p=>(!PLF.al||plAlPend(p))&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
     &&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
     .sort((a,b)=>PL_DISC.findIndex(d=>d[0]===a.disc)-PL_DISC.findIndex(d=>d[0]===b.disc)||plCodCmp(a,b))}
 function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn()?'t':'');
@@ -329,7 +329,7 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
     const gc=$('#plgocar',main);if(gc)gc.onclick=()=>{PQ.eto=eo;goTab('pcar')};
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
-    $('#pllist',main).onclick=e=>{const b=e.target.closest('[data-pl]');if(!b)return;
+    $('#pllist',main).onclick=e=>{if(e.target.closest('[data-plal]')){PLF.al=!PLF.al;requestRender();return}const b=e.target.closest('[data-pl]');if(!b)return;
       if(b.dataset.tq)plOpen(b.dataset.pl,plTxIds(plFiltered(true)),{hq:PLF.q});else plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
@@ -346,12 +346,13 @@ function plList(main){const host=$('#pllist',main);if(!host)return;
   if(etoOn()&&!etoAct().length&&!PLF.arch){shx(host,`<div class="callout"><b>Aún no hay ETO cargados${me.role==='sc'?' de tu partida':''}.</b> ${plAdm()?'Usa <b>Cargar ETO…</b> para subir los PDF aprobados de cada subcontratista.':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   if(!PLB.size){shx(host,`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   if(plTxOn()){if(PLTXQ.run)return;plTxList(main,host,plFiltered(true));return}
-  if(!L.length){shx(host,'<p class="note">Ningún plano coincide con los filtros.</p>');return}
+  const nal=etoOn()?0:[...PLB.values()].filter(plAlPend).length;const alb=nal||PLF.al?`<div class="callout plalc"><b>${nal} planta(s) DXF por alistar.</b> Hasta alistarlas no se pueden usar en Sectorización, Plan diario ni Metrados. <button type="button" class="ib${PLF.al?' on':''}" data-plal="1">${PLF.al?'Ver todos':'Ver solo las por alistar'}</button></div>`:'';
+  if(!L.length){shx(host,alb+'<p class="note">Ningún plano coincide con los filtros.</p>');return}
   const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
-      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}</small></span></button>`).join('')}</div>`).join('');
-  if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}}
+      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}${plAlTag(p)}</small></span></button>`).join('')}</div>`).join('');
+  const hh=alb+h;if(host.dataset.h!==hh){host.innerHTML=hh;host.dataset.h=hh;plThumbs(host)}}
 function plThumbs(host){if(host._io)host._io.disconnect();
   const load=img=>{const p=img.dataset.th;if(!p||img.dataset.ld)return;img.dataset.ld='1';plThumb(p).then(u=>{img.src=u;img.classList.add('ok')},()=>{img.dataset.ld='';img.closest('.plth').classList.add('err')})};
   if(!('IntersectionObserver' in window)){$$('img[data-th]',host).forEach(load);return}
@@ -467,6 +468,8 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(a<1){fading=true;if(shPrev){g.globalAlpha=1;dr(shPrev)}}else if(shPrev){shFree(shPrev);shPrev=null}
       g.globalAlpha=a;dr(sharp)}
     g.globalAlpha=1;if(V.hl){g.setTransform(dpr,0,0,dpr,0,0);try{V.hl(g,V)}catch(err){console.error('resaltar',err)}g.globalAlpha=1}
+    /* Alistar plano (planos-alistar.js): capas del DXF por función encima */
+    if(V.al){g.setTransform(dpr,0,0,dpr,0,0);try{V.al(g,V)}catch(err){console.error('alistar',err)}g.globalAlpha=1;g.setLineDash([])}
     if(V.marks){g.setTransform(dpr,0,0,dpr,0,0);try{V.marks(g,V)}catch(err){console.error('marcar',err)}g.globalAlpha=1;g.globalCompositeOperation='source-over'}
     if(V.over){g.setTransform(dpr,0,0,dpr,0,0);try{V.over(g,V)}catch(err){console.error('medir',err)}g.globalAlpha=1}return fading};
   const coarse=Math.max(0,spec.Z-2);
@@ -579,7 +582,7 @@ function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
     else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
-function plClose(silent){if(!PLV)return;plmReset();plkReset();pldReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
+function plClose(silent){if(!PLV)return;plmReset();plkReset();pldReset();palReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,crop:p.crop||null,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1,dxf:p.dxf||null};
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev,dxf:r.dxf||null}:plSpecOf(p,0)}
@@ -595,6 +598,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     <span class="plvsp"></span>
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
     <button class="ib" data-pv="zout" aria-label="Alejar">−</button><button class="ib" data-pv="fit" title="Ver la lámina entera (0)">Ajustar</button><button class="ib" data-pv="zin" aria-label="Acercar">+</button>
+    ${sp.dxf&&sp.cur&&!p.eto?`<button class="ib plalb${PAL.on?' on':''}${plUsable(p)?' ok':''}" data-pv="alis" title="Verificar la planta DXF antes de usarla en Sectorización, Plan diario y Metrados">${plUsable(p)?'✓ Listo':'⚠ Alistar'}</button>`:''}
     <button class="ib${PLM.on?' on':''}" data-pv="med" title="Medir distancias y áreas sobre el plano">📏 Medir</button>
     ${pldHdrBtn()}
     ${p.eto?'':plkHdrBtn(p)}
@@ -609,7 +613,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();pldAttach();plTxAttach();plDockSplitAdd();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();pldAttach();plTxAttach();palAttach();plDockSplitAdd();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
     const g=e.target.closest('[data-pg]');if(g){if(PLV.pf.qm==='tx'){PLV.hq=PLV.pf.q;PLV.list=plTxIds(plvRes(true))}else PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
     const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm||''});plvPanel();return}
@@ -617,7 +621,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
     else if(a==='dock')plDockSet(!PLV.dock);
-    else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='dxl')plDxfLay(p);else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='dxl')plDxfLay(p);else if(a==='alis')palToggle();else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 /* ---------- Plano del piso al lado del lookahead (oct 2026, pedido del dueño) ----------
    «▦ Plano» en la barra del Lookahead abre este mismo visor acoplado a la derecha: el lookahead se angosta y sigue editable

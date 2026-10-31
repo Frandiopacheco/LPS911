@@ -97,6 +97,7 @@ function plmBar(){if(!PLV||!PLM.on)return;let el=PLV.box.querySelector('.plmbar'
       else if(a==='clear'){plmList().length=0;PLV.tv.tick();plmBar()}
       else if(a==='off')plmToggle();
       else if(a==='calok')plmCalSave();
+      else if(a==='ctnok')palCtnSave();   /* Alistar plano: el área trazada es el contorno de la planta */
       else if(PLM_TOOLS.some(t=>t[0]===a)){if(a!==PLM.tool){PLM.tool=a;PLV.tv.tick();plmBar()}}};
     el.onkeydown=e=>{if(e.key==='Enter'&&e.target.id==='plmL'){e.preventDefault();plmCalSave()}e.stopPropagation()}}
   const m=plmMpp(),p=PLB.get(PLV.id);
@@ -105,7 +106,7 @@ function plmBar(){if(!PLV||!PLM.on)return;let el=PLV.box.querySelector('.plmbar'
   el.innerHTML=`<div class="plmt">${PLM_TOOLS.map(([k,n])=>`<button type="button" class="ib${PLM.tool===k?' on':''}" data-pm="${k}"${k!=='cal'&&!m?' disabled':''}>${n}</button>`).join('')}</div>
     <div class="plmv" id="plmv" aria-live="polite"></div>
     ${PLM.tool==='cal'?`<div class="plmc"><input class="tin" id="plmL" inputmode="decimal" placeholder="Medida real en metros (ej. 3.60)" aria-label="Medida real en metros"><button type="button" class="ib pri" data-pm="calok">Calibrar</button></div>`:''}
-    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto">↶ Deshacer</button><button type="button" class="ib" data-pm="clear">Limpiar</button><span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
+    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto">↶ Deshacer</button><button type="button" class="ib" data-pm="clear">Limpiar</button>${palCtnBar()}<span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
     <small class="plms">${est}${sp&&!sp.cur?' · revisión anterior':''}</small>`;
   plmVal();
   /* al rehacer la barra el botón tocado desaparece y el foco se pierde: sin foco en el visor, Esc y las flechas no responden */

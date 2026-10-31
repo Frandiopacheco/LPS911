@@ -14,13 +14,17 @@ export function dxfDemo({ k = 1, layout = false } = {}) {
   const circ = (l, x, y, r) => ent('CIRCLE', l, () => { P(10, n(x)); P(20, n(y)); P(40, n(r)); });
   P(0, 'SECTION'); P(2, 'HEADER'); P(9, '$ACADVER'); P(1, 'AC1032'); P(9, '$INSUNITS'); P(70, 1); P(0, 'ENDSEC');
   P(0, 'SECTION'); P(2, 'TABLES'); P(0, 'TABLE'); P(2, 'LAYER');
-  for (const [nm, c] of [['0', 7], ['EST-EJES', 1], ['EST-COLUMNAS', 7], ['EST-TRAZO', 7], ['EST-TEXTOS', 7], ['EST-ACHURADO', 8], ['APAGADA', -7]]) { P(0, 'LAYER'); P(2, nm); P(70, 0); P(62, c); P(6, nm === 'EST-EJES' ? 'CENTER' : 'Continuous'); }
+  for (const [nm, c] of [['0', 7], ['EST-EJES', 1], ['EST-COLUMNAS', 7], ['EST-TRAZO', 7], ['EST-TEXTOS', 7], ['EST-ACHURADO', 8], ['EST-COTAS', 7], ['APAGADA', -7]]) { P(0, 'LAYER'); P(2, nm); P(70, 0); P(62, c); P(6, nm === 'EST-EJES' ? 'CENTER' : 'Continuous'); }
   P(0, 'ENDTAB'); P(0, 'ENDSEC');
   const b = x => x - 1;
   P(0, 'SECTION'); P(2, 'BLOCKS'); P(0, 'BLOCK'); P(8, '0'); P(2, 'EJES'); P(70, 0); P(10, 0); P(20, 0);
   [['A', 2], ['B', 6], ['C', 10], ['D', 14], ['E', 18]].forEach(([nm, x]) => { line('0', b(x), b(8.5), b(x), b(17.5)); circ('0', b(x), b(18), 0.4); text('0', nm, b(x), b(18)); });
   [['1', 17], ['2', 13], ['3', 9]].forEach(([nm, y]) => { line('0', b(1.5), b(y), b(18.5), b(y)); circ('0', b(1), b(y), 0.4); text('0', nm, b(1), b(y)); });
-  P(0, 'ENDBLK'); P(8, '0'); P(0, 'ENDSEC');
+  P(0, 'ENDBLK'); P(8, '0');
+  /* cotas: el bloque de cada una con su texto (lo que se ve en el plano) */
+  const COTAS = [[2, 18.6, 6, 18.6, '4.00'], [6, 18.6, 10, 18.6, '4.00'], [10, 18.6, 14, 18.6, '4.00'], [14, 18.6, 18, 18.6, '4.00'], [19.5, 17, 19.5, 13, '4.10', true]];
+  COTAS.forEach(([x1, y1, x2, y2, t], i) => { P(0, 'BLOCK'); P(8, '0'); P(2, '*D' + i); P(70, 1); P(10, 0); P(20, 0); line('0', x1, y1, x2, y2); ent('MTEXT', '0', () => { P(10, n((x1 + x2) / 2)); P(20, n((y1 + y2) / 2 + 0.2)); P(40, n(0.2)); P(71, 5); P(1, t); }); P(0, 'ENDBLK'); P(8, '0'); });
+  P(0, 'ENDSEC');
   P(0, 'SECTION'); P(2, 'ENTITIES');
   ent('INSERT', 'EST-EJES', () => { P(2, 'EJES'); P(10, n(1)); P(20, n(1)); });
   rect('EST-COLUMNAS', 1.95, 12.8, 2.45, 13.2);
@@ -33,6 +37,8 @@ export function dxfDemo({ k = 1, layout = false } = {}) {
   ent('HATCH', 'EST-ACHURADO', () => { P(2, 'SOLID'); P(70, 1); P(91, 1); P(92, 2); P(72, 0); P(73, 1); P(93, 4); for (const [x, y] of [[9.8, 12.8], [10.2, 12.8], [10.2, 13.2], [9.8, 13.2]]) { P(10, n(x)); P(20, n(y)); } P(97, 0); P(75, 0); P(76, 1); P(98, 0); });
   poly('EST-TRAZO', [[6, 15], [8, 15]], false, [1]); /* semicírculo de (6,15) a (8,15) */
   line('APAGADA', 0, 0, 30, 30); /* capa apagada: no se dibuja */
+  /* cotas A–B … D–E (4.00) y 1–2 con el texto escrito a mano «4.10» (el dibujo mide 4.00) */
+  COTAS.forEach(([x1, y1, x2, y2, t, mano], i) => ent('DIMENSION', 'EST-COTAS', () => { P(2, '*D' + i); P(10, n(x1)); P(20, n(y1)); P(11, n((x1 + x2) / 2)); P(21, n((y1 + y2) / 2)); P(70, 32); if (mano) P(1, t); P(13, n(x1)); P(23, n(y1)); P(14, n(x2)); P(24, n(y2)); P(42, n(Math.hypot(x2 - x1, y2 - y1))); }));
   rect('EST-COLUMNAS', 900, 900, 900.5, 900.5); /* lejos de todo: fuera de la lámina */
   if (layout) {
     /* presentación A3 (mm): marco, rótulo y una ventana al modelo a 1/100 centrada en (10, 13) */

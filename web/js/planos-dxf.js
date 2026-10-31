@@ -45,8 +45,8 @@ function dxfParse(txt){if(/^AutoCAD Binary DXF/.test(txt.slice(0,22)))throw new 
     switch(c){case 8:cur.l=v.trim();break;case 67:cur.ps=+v===1;break;case 62:cur.col=+v;break;case 6:cur.lt=v.trim();break;case 370:cur.lw=+v;break;case 290:cur.c290=+v;break;
       case 10:if(t==='LWPOLYLINE'){cur.P.push(+v,0);cur.B.push(0)}else cur.x=+v;break;
       case 20:if(t==='LWPOLYLINE')cur.P[cur.P.length-1]=+v;else cur.y=+v;break;
-      case 11:cur.x2=+v;break;case 21:cur.y2=+v;break;case 12:cur.x3=+v;break;case 22:cur.y3=+v;break;case 13:cur.x4=+v;break;case 23:cur.y4=+v;break;
-      case 40:cur.r=+v;break;case 41:cur.sx=+v;break;case 42:if(t==='LWPOLYLINE')cur.B[cur.B.length-1]=+v;else if(t==='VERTEX')cur.b=+v;else cur.sy=+v;break;
+      case 11:cur.x2=+v;break;case 21:cur.y2=+v;break;case 12:cur.x3=+v;break;case 22:cur.y3=+v;break;case 13:cur.x4=+v;break;case 23:cur.y4=+v;break;case 14:cur.x5=+v;break;case 24:cur.y5=+v;break;
+      case 40:cur.r=+v;break;case 41:cur.sx=+v;break;case 42:if(t==='LWPOLYLINE')cur.B[cur.B.length-1]=+v;else if(t==='VERTEX')cur.b=+v;else if(t==='DIMENSION')cur.m=+v;else cur.sy=+v;break;
       case 44:cur.c44=+v;break;case 45:cur.c45=+v;break;case 50:cur.a=+v;break;case 51:cur.a1=+v;break;
       case 68:cur.c68=+v;break;case 69:cur.c69=+v;break;case 70:cur.fl=+v;break;case 66:cur.af=+v===1;break;
       case 71:cur.at=+v;break;case 72:cur.h72=+v;break;case 73:cur.v73=+v;break;case 74:cur.v74=+v;break;
@@ -115,14 +115,16 @@ function dxfFlat(D,ents,M0){const out=[];const LY=D.layers;const ap=(M,x,y)=>[M[
       case'SOLID':{const P=tr(M,mir,[e.x||0,e.y||0,e.x2||0,e.y2||0,e.x4??e.x3??0,e.y4??e.y3??0,e.x3||0,e.y3||0]);out.push({k:'f',...st,l,R:[P],so:true});break}
       case'HATCH':{const H=dxfHatch(e.raw);if(H.loops.length)out.push({k:'f',...st,l,R:H.loops.map(P=>tr(M,mir,P)),so:H.solid,pat:H.pat});break}
       case'TEXT':case'MTEXT':case'ATTRIB':txt(e,M,mir,st,l);break;
-      case'DIMENSION':{const B=D.blocks.get(e.n);if(B&&d<8)walk(B.ents,M,l,st,d+1);break}
+      case'DIMENSION':{const B=D.blocks.get(e.n);if(B&&d<8)walk(B.ents,M,l,st,d+1);
+        /* la cota en sí (para verificar la escala, planos-alistar.js): medida real, texto escrito a mano y el que muestra, puntos medidos */
+        if(e.m>0&&e.x4!=null&&e.x5!=null&&((e.fl||0)&7)<2){const tb=B&&B.ents.find(q=>q.t==='MTEXT'||q.t==='TEXT');out.push({k:'d',...st,l,m:e.m,s:e.s&&!e.s.includes('<>')?dxfTxt(e.s):'',sh:tb?dxfTxt(tb.s):'',p:[...ap(M,e.x4,e.y4),...ap(M,e.x5,e.y5)],sc:Math.hypot(M[0],M[1])})}break}
       case'INSERT':{const B=D.blocks.get(e.n);if(!B||d>8)break;const sx=e.sx||1,sy=e.sy||sx,r=(e.a||0)*Math.PI/180,co=Math.cos(r),si=Math.sin(r);const nc=Math.max(1,Math.min(50,e.fl||1)),nr=Math.max(1,Math.min(50,e.at||1));
         for(let rr=0;rr<nr;rr++)for(let cc=0;cc<nc;cc++){const ox=cc*(e.c44||0),oy=rr*(e.c45||0);let T=[co*sx,si*sx,-si*sy,co*sy,0,0];T[4]=(e.x||0)+co*ox-si*oy-(T[0]*B.x+T[2]*B.y);T[5]=(e.y||0)+si*ox+co*oy-(T[1]*B.x+T[3]*B.y);if(mir)T=mul([-1,0,0,1,0,0],T);
           walk(B.ents,mul(M,T),l,st,d+1)}
         for(const a of e.att||[])walk([a],M,l,st,d+1);break}}}};
   walk(ents,M0||[1,0,0,1,0,0],'',{ci:7,lt:'',lw:null},0);return out}
 /** caja de una entidad plana (para extensiones) */
-function dxfBox(e){if(e.k==='l')return[Math.min(e.p[0],e.p[2]),Math.min(e.p[1],e.p[3]),Math.max(e.p[0],e.p[2]),Math.max(e.p[1],e.p[3])];
+function dxfBox(e){if(e.k==='l'||e.k==='d')return[Math.min(e.p[0],e.p[2]),Math.min(e.p[1],e.p[3]),Math.max(e.p[0],e.p[2]),Math.max(e.p[1],e.p[3])];
   if(e.k==='c')return[e.x-e.r,e.y-e.r,e.x+e.r,e.y+e.r];
   if(e.k==='t'){const L=e.L||[e.t||''];const w=e.h*0.62*Math.max(1,...L.map(s=>s.length))/2,h=e.h*(1+(L.length-1)*1.6)/2;const a=(e.r||0)*Math.PI/180,c=Math.abs(Math.cos(a)),si=Math.abs(Math.sin(a));const X=w*c+h*si,Y=w*si+h*c;return[e.x-X,e.y-Y,e.x+X,e.y+Y]}
   const A=e.k==='f'?e.R.flat():e.P;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(let i=0;i+1<A.length;i+=2){if(A[i]<x0)x0=A[i];if(A[i]>x1)x1=A[i];if(A[i+1]<y0)y0=A[i+1];if(A[i+1]>y1)y1=A[i+1]}return[x0,y0,x1,y1]}
@@ -146,19 +148,19 @@ function dxfGuess(Ls){const by=(A,k)=>A.slice().sort((a,b)=>b[k]-a[k])[0];
   const tx=by(Ls.filter(x=>x.s>0),'s');return{ej:ej?ej.n:'',col:col?col.n:'',mur:mur?mur.n:'',amb:amb?amb.n:'',vig,tx:tx?tx.n:''}}
 /** ejes de la capa: cada línea con el nombre de su burbuja (círculo con un texto adentro; si no hay, el texto en la prolongación de la línea).
     Líneas del mismo nombre en la misma recta se juntan. En las unidades de F. */
-function dxfEjes(F,lay){const Ls=[],C=[],T=[];if(!lay)return{E:[],sin:0};for(const e of F){if(e.l!==lay)continue;if(e.k==='l')Ls.push(e.p);else if(e.k==='p'&&e.P.length===4)Ls.push(e.P.slice());else if(e.k==='c')C.push(e);else if(e.k==='t')T.push(e)}
+function dxfEjes(F,lay){const Ls=[],C=[],T=[];if(!lay)return{E:[],sin:0,dup:[]};for(const e of F){if(e.l!==lay)continue;if(e.k==='l')Ls.push(e.p);else if(e.k==='p'&&e.P.length===4)Ls.push(e.P.slice());else if(e.k==='c')C.push(e);else if(e.k==='t')T.push(e)}
   const nm=s=>String(s).trim().toUpperCase().replace(/\s+/g,'').slice(0,4);
   const B=C.map(c=>{let b=null,bd=c.r*1.25;for(const t of T){const d=Math.hypot(t.x-c.x,t.y-c.y);if(d<bd&&nm(t.t)){bd=d;b=t}}return b?{x:c.x,y:c.y,r:c.r,n:nm(b.t)}:null}).filter(Boolean);
-  const out=new Map();let sin=0;
+  const out=new Map(),dup=new Set();let sin=0;
   for(const p of Ls){const L=Math.hypot(p[2]-p[0],p[3]-p[1]);if(!(L>0))continue;const ux=(p[2]-p[0])/L,uy=(p[3]-p[1])/L;let n='',bd=Infinity;
     for(const c of B){const dx=c.x-p[0],dy=c.y-p[1];const t=dx*ux+dy*uy,d=Math.abs(dx*uy-dy*ux);if(d>c.r*.6||t<-8*c.r||t>L+8*c.r||(t>L*.2+c.r&&t<L*.8-c.r))continue;const end=Math.min(Math.abs(t),Math.abs(t-L));if(end<bd){bd=end;n=c.n}}
     if(!n)for(const x of T){const h=x.h||1;const dx=x.x-p[0],dy=x.y-p[1];const t=dx*ux+dy*uy,d=Math.abs(dx*uy-dy*ux);if(d>h*1.2||!(t<0||t>L)||Math.min(Math.abs(t),Math.abs(t-L))>h*6||!nm(x.t)||nm(x.t).length>3)continue;const end=Math.min(Math.abs(t),Math.abs(t-L));if(end<bd){bd=end;n=nm(x.t)}}
     if(!n){sin++;continue}
     const o=out.get(n);if(!o){out.set(n,p.slice());continue}
     const OL=Math.hypot(o[2]-o[0],o[3]-o[1])||1,ox=(o[2]-o[0])/OL,oy=(o[3]-o[1])/OL;const off=q=>Math.abs((q[0]-o[0])*oy-(q[1]-o[1])*ox);
-    if(off([p[0],p[1]])>L*.01+1e-6||off([p[2],p[3]])>L*.01+1e-6)continue;const s=[0,OL,(p[0]-o[0])*ox+(p[1]-o[1])*oy,(p[2]-o[0])*ox+(p[3]-o[1])*oy];const a=Math.min(...s),b=Math.max(...s);
+    if(off([p[0],p[1]])>L*.01+1e-6||off([p[2],p[3]])>L*.01+1e-6){dup.add(n);continue}const s=[0,OL,(p[0]-o[0])*ox+(p[1]-o[1])*oy,(p[2]-o[0])*ox+(p[3]-o[1])*oy];const a=Math.min(...s),b=Math.max(...s);
     out.set(n,[o[0]+ox*a,o[1]+oy*a,o[0]+ox*b,o[1]+oy*b])}
-  return{E:[...out].map(([n,p])=>({n,p})),sin}}
+  return{E:[...out].map(([n,p])=>({n,p})),sin,dup:[...dup]}}
 /** metros por unidad por la separación típica entre ejes paralelos (2–12 m): 1, 0.01 o 0.001; 0 si no hay ejes paralelos */
 function dxfUnitK(E){const isV=p=>Math.abs(p[2]-p[0])<Math.abs(p[3]-p[1]);const gaps=[];
   for(const v of[true,false]){const c=E.filter(e=>isV(e.p)===v).map(e=>v?(e.p[0]+e.p[2])/2:(e.p[1]+e.p[3])/2).sort((a,b)=>a-b);for(let i=1;i<c.length;i++)if(c[i]-c[i-1]>1e-9)gaps.push(c[i]-c[i-1])}
@@ -195,7 +197,7 @@ function dxfSheet(D,o){o=o||{};const Fm=dxfFlat(D,D.ents);
   return{src:'modelo',P:keep,vps:[],box,ppu,W,H,mm:[Math.round(W/(300/25.4)),Math.round(H/(300/25.4))],k:U.k,how:U.how,mpp:U.k/ppu,pmm:0.1*ppu/U.k,far:X.far,crop:!!fr}}
 /** pasa la hoja a píxeles del nivel de detalle (y hacia abajo) */
 function dxfToPx(S){const[x0,,,y1]=S.box,k=S.ppu;const X=x=>(x-x0)*k,Y=y=>(y1-y)*k;const A=P=>{const o=new Array(P.length);for(let i=0;i+1<P.length;i+=2){o[i]=X(P[i]);o[i+1]=Y(P[i+1])}return o};
-  for(const e of S.P){if(e.k==='l')e.p=A(e.p);else if(e.k==='p')e.P=A(e.P);else if(e.k==='f')e.R=e.R.map(A);else{e.x=X(e.x);e.y=Y(e.y);if(e.r!=null&&e.k==='c')e.r*=k;if(e.k==='t')e.h*=k}}
+  for(const e of S.P){if(e.k==='l'||e.k==='d')e.p=A(e.p);else if(e.k==='p')e.P=A(e.P);else if(e.k==='f')e.R=e.R.map(A);else{e.x=X(e.x);e.y=Y(e.y);if(e.r!=null&&e.k==='c')e.r*=k;if(e.k==='t')e.h*=k}}
   S.vps=S.vps.map(R=>({...R,px:[X(R.x0),Y(R.y1),X(R.x1),Y(R.y0)]}));S.px=true;return S}
 const DXF_GRAY={8:'#808080',9:'#c0c0c0',250:'#333',251:'#505050',252:'#696969',253:'#828282',254:'#bebebe',255:'#fff'};
 /** dibuja la hoja (ya en px) en g desde la fila oy: rellenos, luego líneas (por estilo) y textos; cada ventana recortada a su marco */
@@ -206,18 +208,19 @@ function dxfPaint(g,S,oy,sc){sc=sc||1;g.save();g.setTransform(sc,0,0,sc,0,-oy*sc
   for(const G of groups.slice(1).concat(groups.slice(0,1))){const P=S.P.filter(e=>e.v===G.v);if(!P.length)continue;g.save();if(G.clip){const c=G.clip;g.beginPath();g.rect(c[0],c[1],c[2]-c[0],c[3]-c[1]);g.clip()}
     for(const e of P){if(e.k!=='f')continue;const b=e._b||(e._b=dxfBox(e));if(!inV(b))continue;g.beginPath();for(const R of e.R){g.moveTo(R[0],R[1]);for(let i=2;i<R.length;i+=2)g.lineTo(R[i],R[i+1]);g.closePath()}
       g.fillStyle=e.so?(DXF_GRAY[e.ci]||'#555'):'rgba(0,0,0,.13)';g.fill('evenodd')}
-    const by=new Map();for(const e of P){if(e.k==='f'||e.k==='t')continue;const b=e._b||(e._b=dxfBox(e));if(!inV(b))continue;const key=[lw(e).toFixed(1),DXF_GRAY[e.ci]||'#000',e.lt].join('|');let pa=by.get(key);if(!pa){pa={p:new Path2D(),e};by.set(key,pa)}
+    const by=new Map();for(const e of P){if(e.k==='f'||e.k==='t'||e.k==='d')continue;const b=e._b||(e._b=dxfBox(e));if(!inV(b))continue;const key=[lw(e).toFixed(1),DXF_GRAY[e.ci]||'#000',e.lt].join('|');let pa=by.get(key);if(!pa){pa={p:new Path2D(),e};by.set(key,pa)}
       if(e.k==='l'){pa.p.moveTo(e.p[0],e.p[1]);pa.p.lineTo(e.p[2],e.p[3])}else if(e.k==='p'){pa.p.moveTo(e.P[0],e.P[1]);for(let i=2;i<e.P.length;i+=2)pa.p.lineTo(e.P[i],e.P[i+1]);if(e.c)pa.p.closePath()}else if(e.k==='c'){pa.p.moveTo(e.x+e.r,e.y);pa.p.arc(e.x,e.y,e.r,0,2*Math.PI)}}
     for(const[key,pa]of by){const[w,c]=key.split('|');g.lineWidth=+w;g.strokeStyle=c;g.setLineDash(dash(pa.e)||[]);g.stroke(pa.p)}g.setLineDash([]);
     for(const e of P){if(e.k!=='t'||e.h<1.5)continue;const b=e._b||(e._b=dxfBox(e));if(!inV(b))continue;g.save();g.translate(e.x,e.y);g.rotate(-e.r*Math.PI/180);g.fillStyle=DXF_GRAY[e.ci]||'#000';g.font=`${e.h.toFixed(1)}px Arial,Helvetica,sans-serif`;g.textAlign='center';g.textBaseline='middle';
       const n=e.L.length;e.L.forEach((s,i)=>g.fillText(s,0,(i-(n-1)/2)*e.h*1.6));g.restore()}
     g.restore()}
   g.restore()}
-/** geometría por capa para Medir y Casco (px del nivel de detalle): {v, W, H, mpp, k, src, L:[{n, l:[x1,y1,x2,y2,…], p:[[cerrada, x,y,…]], c:[x,y,r,…], t:[[texto,x,y,h,r]]}]} */
-function dxfGeoOf(S){const r=v=>Math.round(v*10)/10;const L=new Map();const lay=n=>{let o=L.get(n);if(!o)L.set(n,o={n,l:[],p:[],c:[],t:[]});return o};const main=S.vps.length?S.vps.indexOf(S.vps.reduce((a,b)=>(b.x1-b.x0)*(b.y1-b.y0)>(a.x1-a.x0)*(a.y1-a.y0)?b:a)):-1;
+/** geometría por capa para Medir y Casco (px del nivel de detalle): {v, W, H, mpp, k, src, L:[{n, l:[x1,y1,x2,y2,…], p:[[cerrada, x,y,…]], c:[x,y,r,…], t:[[texto,x,y,h,r]],
+    d:[[medida (unidades del dibujo), texto escrito a mano, texto que muestra, x1,y1,x2,y2]] (cotas lineales, v2)}]} */
+function dxfGeoOf(S){const r=v=>Math.round(v*100)/100;   /* 0,01 px (~0,1 mm a 1/100): las distancias entre ejes salen al milímetro */const L=new Map();const lay=n=>{let o=L.get(n);if(!o)L.set(n,o={n,l:[],p:[],c:[],t:[],d:[]});return o};const main=S.vps.length?S.vps.indexOf(S.vps.reduce((a,b)=>(b.x1-b.x0)*(b.y1-b.y0)>(a.x1-a.x0)*(a.y1-a.y0)?b:a)):-1;
   for(const e of S.P){if(main>=0&&e.v!==undefined&&e.v!==main)continue;const o=lay(e.l);
-    if(e.k==='l')o.l.push(...e.p.map(r));else if(e.k==='p')o.p.push([e.c?1:0,...e.P.map(r)]);else if(e.k==='c')o.c.push(r(e.x),r(e.y),r(e.r));else if(e.k==='f'){for(const R of e.R)o.p.push([1,...R.map(r)])}else if(e.k==='t')o.t.push([e.t,r(e.x),r(e.y),r(e.h),e.r])}
-  return{v:1,W:S.W,H:S.H,mpp:S.mpp,k:S.k,src:S.src,L:[...L.values()]}}
+    if(e.k==='l')o.l.push(...e.p.map(r));else if(e.k==='p')o.p.push([e.c?1:0,...e.P.map(r)]);else if(e.k==='c')o.c.push(r(e.x),r(e.y),r(e.r));else if(e.k==='f'){for(const R of e.R)o.p.push([1,...R.map(r)])}else if(e.k==='t')o.t.push([e.t,r(e.x),r(e.y),r(e.h),e.r]);else if(e.k==='d')o.d.push([Math.round(e.m*e.sc*1e4)/1e4,e.s,e.sh,...e.p.map(r)])}
+  return{v:2,W:S.W,H:S.H,mpp:S.mpp,k:S.k,src:S.src,L:[...L.values()]}}
 /** índice de texto (planos-texto.js) desde los textos del DXF */
 function dxfTxIdx(S){const T=[];for(const e of S.P){if(e.k!=='t')continue;const s=e.t.replace(/\s+/g,' ').trim();if(!s||!plTxC(s))continue;const w=e.h*0.62*Math.max(...e.L.map(x=>x.length)),h=e.h*(1+(e.L.length-1)*1.6);
     const a=-e.r*Math.PI/180,c=Math.cos(a),si=Math.sin(a);const xs=[],ys=[];for(const[u,v]of[[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2]]){xs.push(e.x+u*c-v*si);ys.push(e.y+u*si+v*c)}
@@ -233,7 +236,7 @@ async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.fil
   const G=dxfGeoOf(S);const Fg=dxfGeoF(G);const lay=dxfGuess(dxfLayers(Fg));
   const geo=await dxfGz(JSON.stringify(G),'application/json');const orig=await dxfGz(txt,'application/dxf');
   let txo=null;try{txo=dxfTxIdx(S)}catch(e){console.error('índice de texto DXF',e)}
-  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,lay,gz:geo.z,oz:orig.z,far:S.far,n:S.P.length};
+  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,lay,gz:geo.z,oz:orig.z,far:S.far,crop:!!S.crop,n:S.P.length};
   return{W:S.W,H:S.H,mm:S.mm,mpp:S.mpp,crop:S.crop,draw:(g,oy)=>dxfPaint(g,S,oy),txo,orig,geo,meta,S}}
 /** vista previa de una fila de la carga (lado mayor PLP_PX) */
 async function plDxfPrev(it){if(it._pv)return it._pv;const D=dxfParse(await it.file.text());const S=dxfToPx(dxfSheet(D,{crop:store.get('plcrop',true)!==false}));const sc=Math.min(1,PLP_PX/Math.max(S.W,S.H));
@@ -250,7 +253,7 @@ function dxfGeoF(G){const F=[];for(const o of G.L){const l=o.n;for(let i=0;i+3<o
   for(let i=0;i+2<o.c.length;i+=3)F.push({k:'c',l,x:o.c[i],y:o.c[i+1],r:o.c[i+2]});for(const t of o.t)F.push({k:'t',l,t:t[0],x:t[1],y:t[2],h:t[3],r:t[4]})}return F}
 /** por función (px del nivel de detalle): ejes con nombre, columnas (cerradas, ≥ 0,30 m), caras (líneas de las capas de trazo y de columnas abiertas), rótulos.
     Solo dentro de los ejes + 1,5 m si hay ejes (los detalles quedan fuera); si no, todo. */
-function dxfRoles(G,lay,mpp){const F=dxfGeoF(G);const{E,sin}=dxfEjes(F,lay.ej);const cnt={ej:E.length,ejSin:sin,col:0,chico:0,ln:0,tx:0};
+function dxfRoles(G,lay,mpp){const F=dxfGeoF(G);const{E,sin,dup}=dxfEjes(F,lay.ej);const cnt={ej:E.length,ejSin:sin,dup:dup||[],col:0,chico:0,ln:0,tx:0};
   let inR=()=>true;if(E.length){const xs=E.flatMap(e=>[e.p[0],e.p[2]]),ys=E.flatMap(e=>[e.p[1],e.p[3]]);const mg=1.5/mpp;const x0=Math.min(...xs)-mg,x1=Math.max(...xs)+mg,y0=Math.min(...ys)-mg,y1=Math.max(...ys)+mg;inR=(x,y)=>x>=x0&&x<=x1&&y>=y0&&y<=y1}
   const col=[],ln=[],seen=new Set();const seg=(a,b,c,d)=>{if(Math.hypot(c-a,d-b)*mpp<0.01)return;const k=a<c||(a===c&&b<=d)?[a,b,c,d].join(','):[c,d,a,b].join(',');if(seen.has(k))return;seen.add(k);ln.push(a,b,c,d)};
   const vig=new Set(lay.vig||[]);
@@ -288,6 +291,8 @@ async function plDxfLay(p){if(!p||!p.dxf||!plEdOf(p))return;const sp=plSpecOf(p,
       <div class="lqbtns"><button type="button" class="ib" data-lqx>Cancelar</button><button type="button" class="ib pri" data-dxa="ok">Guardar</button></div>`,
       async e=>{const b=e.target.closest('[data-dxa]');if(!b)return;const mpp=(p.dxf.mpp||0)*k/(p.dxf.k||1);const up={'dxf.lay':lay,'dxf.k':k,'dxf.mpp':mpp,'dxf.how':k===p.dxf.k?p.dxf.how:'a mano'};
         if(k!==p.dxf.k)up.cal={mpp,rev:p.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()};
-        try{await plCol(p).doc(p.id).update(up);lqClose();toast('Capas del DXF guardadas.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err))}},
+        /* cambiar capas o unidades de un plano ya alistado lo devuelve a «Por alistar» (planos-alistar.js) */
+        const was=typeof plUsable==='function'&&plUsable(p);if(was)up.ok=firebase.firestore.FieldValue.delete();
+        try{await plCol(p).doc(p.id).update(up);lqClose();toast(was?'Capas guardadas. El plano volvió a «Por alistar»: revísalo de nuevo.':'Capas del DXF guardadas.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err))}},
       e=>{const t=e.target;if(t.dataset.dxl){if(t.dataset.dxl==='k')k=+t.value;else lay={...lay,[t.dataset.dxl]:t.value}}else if(t.dataset.dxv!=null){const v=new Set(lay.vig||[]);if(t.checked)v.add(t.dataset.dxv);else v.delete(t.dataset.dxv);lay={...lay,vig:[...v]}}else return;draw()})};
   draw()}

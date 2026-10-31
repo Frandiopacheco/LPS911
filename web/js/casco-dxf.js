@@ -8,7 +8,7 @@
 
 /** geometría DXF de una lámina de Casco, en coordenadas de esa lámina: {ej, col, ln, tx, cnt, p (plano), sp (revisión), mpp} o null (sin DXF o aún cargando) */
 const CSDX=new Map();
-function csDxf(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0))return null;
+function csDxf(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev))return null;   /* solo alistado */
   const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const key=[sp.base,JSON.stringify(lay),mpp,l.w].join('|');const c=CSDX.get(l.id);if(c&&c.key===key)return c.v;
   const R=dxfRoles(G,lay,mpp);const f=l.w/sp.W;const S=A=>A.map(v=>Math.round(v*f*10)/10);
   const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
@@ -37,6 +37,7 @@ function csDxfAcross(G,u){if(!G)return[];return G.segs.filter(s=>{const p=s.pts;
 /** panel de Niveles: de dónde vienen ejes y escala, y el aviso para usar DXF */
 function csDxfSec(lam){if(!lam||!lam.plb)return'';const p=typeof PLB!=='undefined'&&PLB.get(lam.plb.id);const sp=p&&plSpecOf(p,lam.plb.rev);
   if(!sp||!sp.dxf)return`<div class="csfsec"><div class="csfsh"><b>Plano vectorial (DXF)</b><span class="mu">la lámina es PDF</span></div><p class="mu csfemp">Si cargas esta planta en DXF en el módulo Planos (nueva revisión del mismo plano), salen solos los ejes con su nombre y la escala exacta, y las columnas y caras de vigas quedan encima para pegarse al trazar.</p></div>`;
+  if(!plRevOk(p,sp.rev))return`<div class="csfsec"><div class="csfsh"><b>Plano vectorial (DXF)</b><span class="mu">${esc(p.cod)} rev. ${sp.rev} · por alistar</span></div><p class="mu csfemp">El plano todavía no está alistado en Planos: sus ejes, columnas y escala no se usan hasta que el administrador u Oficina Técnica lo verifiquen.</p></div>`;
   const d=csDxf(lam);if(!d)return`<div class="csfsec"><div class="csfsh"><b>Plano vectorial (DXF)</b><span class="mu">${esc(p.cod)} · cargando la geometría…</span></div></div>`;const c=d.cnt;
   return`<div class="csfsec"><div class="csfsh"><b>Plano vectorial (DXF)</b><span class="mu">${esc(p.cod)} rev. ${sp.rev}</span></div>
     <p class="note">${c.ej} ejes${c.ej?` (${esc(d.ej.map(e=>e.n).join(', '))})`:''} · ${c.col} columnas · ${c.ln} caras de vigas · ${c.tx} rótulos. Escala exacta del DXF.${c.chico?` Se ignoran ${c.chico} figura(s) menores de ${DXF_MIN_COL.toFixed(2)} m.`:''}${!c.ej?' <b>Sin ejes:</b> revisa en Planos qué capa son los ejes.':''}</p>
