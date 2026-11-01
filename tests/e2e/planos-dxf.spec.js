@@ -252,3 +252,47 @@ test('alistar › correcciones en el visor: enderezar el eje girado, descartar l
   expect(await page.evaluate(() => PLB.get('EST_E03').fix.L[0])).toMatchObject({ k: 'ejSet', n: 'E' });
   expect(errors).toEqual([]);
 });
+
+test('alistar › tocar un trazo muestra su capa y le cambia la función; el DXF siguiente toma las capas revisadas', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel).toContainText('Alistar E03');
+  /* tocar una cara de viga (EST-TRAZO, entre columnas): su capa, cuántos trazos tiene y para qué se usa */
+  const tapAt = (x, y) => page.evaluate(([x, y]) => { const v = PLV.tv, r = v.cv.getBoundingClientRect(), q = v.toScreen(x, y); palTap(r.left + q.x, r.top + q.y); }, [x, y]);
+  const cara = await page.evaluate(() => { const o = PAL.G.L.find(o => o.n === 'EST-TRAZO'); const a = o.l; const t = 0.27; return { x: a[0] + t * (a[2] - a[0]), y: a[1] + t * (a[3] - a[1]) }; });
+  await tapAt(cara.x, cara.y);
+  await expect(panel.locator('.palsel')).toContainText('Capa «EST-TRAZO»');
+  await expect(panel.locator('.palsel')).toContainText('se usa como caras de vigas');
+  await panel.locator('[data-pal="sel:lv0"]').click();
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E03').dxf.lay.vig.length)).toBe(0);
+  await expect(panel.locator('.palsel')).toContainText('no se usa para nada');
+  await panel.locator('[data-pal="sel:lv1"]').click();
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E03').dxf.lay.vig.join(','))).toBe('EST-TRAZO');
+  expect(await page.evaluate(() => !!PLB.get('EST_E03').dxf.layH)).toBe(true); /* capas revisadas a mano */
+  /* un texto cualquiera: su capa */
+  const nota = await page.evaluate(() => { const o = PAL.G.L.find(o => o.n === 'EST-TEXTOS'); const t = o.t.find(t => /3\/8/.test(t[0])); return { x: t[1], y: t[2] }; });
+  await tapAt(nota.x, nota.y);
+  await expect(panel.locator('.palsel')).toContainText('Capa «EST-TEXTOS»');
+  await expect(panel.locator('.palsel')).toContainText('rótulos');
+  /* las capas revisadas de E03 se usan en el siguiente DXF de la misma especialidad (aunque la sugerencia por nombre diga otra cosa) */
+  await page.evaluate(() => plDxfLaySet(PLB.get('EST_E03'), { 'dxf.lay': { ...PLB.get('EST_E03').dxf.lay, col: 'EST-ACHURADO', vig: ['EST-COLUMNAS'] } }, 'ok'));
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E03').dxf.lay.col)).toBe('EST-ACHURADO');
+  await page.evaluate(() => plClose(true));
+  await page.evaluate(() => { U.tab = 'pcar'; render(); });
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E04_ENCOFRADO CUARTO PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst1')).toContainText('Listo', { timeout: 90_000 });
+  const d = await page.evaluate(() => { const p = [...PLB.values()].find(p => p.id !== 'EST_E03'); return p ? { ...p.dxf, id: p.id, cod: p.cod, disc: p.disc } : null; });
+  expect(d.layFrom).toBe('E03'); expect(d.lay.col).toBe('EST-ACHURADO'); expect(d.lay.vig).toEqual(['EST-COLUMNAS']); expect(d.lay.ej).toBe('EST-EJES');
+  expect(errors).toEqual([]);
+});

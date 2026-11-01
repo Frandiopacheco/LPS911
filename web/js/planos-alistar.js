@@ -105,7 +105,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   {const r=[['ej','Ejes'],['col','Columnas'],['vig','Caras de vigas'],['tx','Rótulos'],['mur','Muros'],['amb','Ambientes']].filter(([x])=>est?!['mur','amb'].includes(x):arq?['ej','mur','amb'].includes(x):true);
     /* cuántas líneas trae cada capa elegida: así se nota si la de caras es la equivocada (p. ej. solo las bandas de contracción) */
     const nL=new Map(dxfLayers(dxfGeoF(G)).map(x=>[x.n,x.l+x.p+x.c+x.t]));const lb=n=>n?`${n} (${nL.get(n)||0})`:'—';const pocas=est&&R.cnt.ln<20;
-    add('capas','Capas por función',lay.ej?'warn':'err',lay.ej?`Confirma que cada función está en su capa (se ve encima del plano en su color). Caras de vigas: ${R.cnt.ln} líneas.${pocas?' Son muy pocas: revisa en «◇ Capas» que esté marcada la capa del trazo de las vigas.':''}`:'Falta elegir la capa de los ejes.',
+    add('capas','Capas por función',lay.ej?'warn':'err',lay.ej?`Confirma que cada función está en su capa (se ve encima del plano en su color). Caras de vigas: ${R.cnt.ln} líneas.${p.dxf&&p.dxf.layFrom?` Al cargarlo se tomaron las capas de ${p.dxf.layFrom}.`:''} Toca un trazo en el plano para ver su capa.${pocas?' Son muy pocas: revisa en «◇ Capas» que esté marcada la capa del trazo de las vigas.':''}`:'Falta elegir la capa de los ejes.',
       r.map(([x,t])=>`${t}: ${x==='vig'?((lay.vig||[]).map(lb).join(', ')||'—'):lb(lay[x])}`),['lay'])}
   /* 6. columnas */
   if(est){const X=palCross(E);const by=new Map();const off=[];
@@ -152,6 +152,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   if(!el){el=document.createElement('div');el.className='plalp';el.setAttribute('role','region');el.setAttribute('aria-label','Alistar plano');PLV.box.appendChild(el);el.onclick=palClick;el.onchange=palChange;el.addEventListener('keydown',e=>e.stopPropagation())}
   {const body=PLV.box.querySelector('.plvb');el.style.top=(body?body.offsetTop:56)+'px'}
   let G=GEO.get(sp.base);if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(sp.base)}
+  PAL.G=G.g;if(PAL.LG!==G.g){PAL.LG=G.g;PAL.Ls=dxfLayers(dxfGeoF(G.g))}if(PAL.sel&&PAL.sel.k==='raw'&&!G.g.L.includes(PAL.sel.o))PAL.sel=null;
   const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
   const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
   const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
@@ -159,7 +160,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
     <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${p.ok.malla?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
     ${palSelHtml(p,ed)}
     <div class="plalv" role="group" aria-label="Ver encima del plano">${PAL_SHOW.filter(([k])=>p.disc==='ARQ'?!['col','vig','tx'].includes(k):k!=='amb').map(([k,t])=>`<button type="button" class="plchip${PAL.show[k]?' on':''}" data-pal="show:${k}">${t}</button>`).join('')}</div>
-    ${ed?'<p class="note palhint">Toca un eje, una columna, una línea marcada o un ambiente en el plano para corregirlo.</p>':''}
+    ${ed?'<p class="note palhint">Toca cualquier trazo o texto del plano: ves de qué capa es (se resalta toda la capa) y le cambias la función; un eje, una columna o un ambiente se corrigen igual.</p>':''}
     <ol class="plall">${S.L.map(x=>`<li class="palit ${x.ef}"><div class="paltop"><span class="palic" aria-hidden="true">${ico[x.ef]}</span><b>${esc(x.t)}</b>${x.pts.length?`<button type="button" class="ab palgo" data-pal="go:${x.id}" title="Ver en el plano">◎ Ver</button>`:''}</div><p>${esc(x.msg)}</p>
       ${x.det.length?`<details><summary>Detalle</summary><ul>${x.det.map(d=>`<li>${esc(d)}</li>`).join('')}</ul></details>`:''}
       ${ed&&(x.act.length||x.btn.length||(x.st==='warn'&&!ok))?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'&&!ok?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
@@ -214,9 +215,12 @@ function palPick(C,w,tol){const R=C.R;const dl=(p)=>{const dx=p[2]-p[0],dy=p[3]-
   let best=null,bd=tol;const try_=(o,d)=>{if(d<bd){bd=d;best=o}};
   (R.S||[]).forEach(l=>try_({k:'lin',p:l.p,dup:l.dup||''},dl(l.p)*0.8));
   R.ej.forEach(e=>try_({k:'ej',n:e.n,p:e.p},dl(e.p)));
-  if(best)return best;
+  /* cualquier otro trazo o texto, con su capa (como en AutoCAD): gana si está más cerca que el eje (la cara de una viga sobre el eje) */
+  const lay=(palP()||{dxf:{}}).dxf.lay||{};const r=PAL.G&&dxfRawPick(PAL.G,w,tol);const raw=r&&{...r,k:'raw',rk:r.k};
+  if(best)return raw&&r.l!==lay.ej&&r.d<bd*0.6?raw:best;
   for(const t of R.tx)if(Math.hypot(t.x-w.x,t.y-w.y)<tol)return{k:'tx',t:t.t,x:t.x,y:t.y};
-  for(const q of R.col)if(palPip(q.p,w.x,w.y))return{k:'col',p:q.p,x:w.x,y:w.y};
+  for(const q of R.col)if(palPip(q.p,w.x,w.y))return{k:'col',p:q.p,x:w.x,y:w.y,add:!!q.add};
+  if(raw)return raw;
   for(const a of R.amb||[])if(palPip(a.p,w.x,w.y))return{k:'amb',p:a.p,n:a.n,x:w.x,y:w.y};
   return null}
 function palTap(cx,cy){const p=palP();if(!PAL.on||!p||!PAL.C||PLM.on)return;const v=PLV.tv;const w=v.toWorld(cx,cy);const a=v.toScreen(0,0),b=v.toScreen(1,0);const k=Math.hypot(b.x-a.x,b.y-a.y)||1;
@@ -229,7 +233,15 @@ function palSelHtml(p,ed){const s=PAL.sel;if(!s)return'';const mpp=p.dxf.mpp;let
   else if(s.k==='col'){const z=dxfSz(s.p,mpp);t=`Columna ${pal2(z[0])}×${pal2(z[1])} m`;B=[['cdel','No es columna'],['csz',`Ninguna de ${pal2(z[0])}×${pal2(z[1])}`]]}
   else if(s.k==='tx'){t=`Rótulo «${s.t}»`;B=[['tdel','Quitar']]}
   else if(s.k==='amb'){t=`Ambiente «${s.n||'sin nombre'}» · ${pal2(palArea(s.p)*mpp*mpp)} m²`;B=[['aren','Renombrar'],['adel','Quitar']]}
-  return`<div class="palsel"><div class="paltop"><b>${esc(t)}</b><button type="button" class="ab" data-pal="selx" aria-label="Quitar la selección">✕</button></div>${ed?`<div class="palac">${B.map(([a,l])=>`<button type="button" class="ib" data-pal="sel:${a}">${esc(l)}</button>`).join('')}</div>`:''}</div>`}
+  const lay=p.dxf.lay||{};let sub='';
+  if(s.k==='raw'){const L=(PAL.Ls||[]).find(x=>x.n===s.l)||{l:0,p:0,c:0,t:0,cl:0,s:0};const fn=dxfLayFn(lay,s.l);const arq=p.disc==='ARQ';
+    const what={l:'Línea',p:s.cl?'Polilínea cerrada':'Polilínea',c:'Círculo',t:`Texto «${(s.t||'').slice(0,40)}»`,d:`Cota ${s.t||''}`}[s.rk]||'Trazo';
+    t=`Capa «${s.l}»`;sub=`${what} · la capa tiene ${L.l+L.p+L.c+L.t} trazos (resaltados) · ${fn.length?'se usa como '+fn.map(k=>DXF_FN[k]).join(' y '):'no se usa para nada'}`;
+    B=[!arq&&(L.l+L.p)?(fn.includes('vig')?['lv0','No es caras']:['lv1','Usar como caras']):null,!arq&&L.cl&&lay.col!==s.l?['lcol','Es la capa de columnas']:null,
+      L.l&&lay.ej!==s.l?['lej','Es la capa de ejes']:null,!arq&&L.s&&lay.tx!==s.l?['ltx','Es la capa de rótulos']:null,
+      arq&&(L.l+L.p)&&lay.mur!==s.l?['lmur','Es la capa de muros']:null,arq&&L.cl&&lay.amb!==s.l?['lamb','Es la capa de ambientes']:null,fn.length?['l0','No usar esta capa']:null].filter(Boolean)}
+  else if(s.k==='ej')sub=`Capa «${lay.ej||'—'}»`;else if(s.k==='lin')sub=`Capa «${lay.ej||'—'}»`;else if(s.k==='col')sub=s.add?'Agregada en el sistema':`Capa «${lay.col||'—'}»`;else if(s.k==='tx')sub=`Capa «${lay.tx||'—'}»`;else if(s.k==='amb')sub=`Capa «${lay.amb||'—'}»`;
+  return`<div class="palsel"><div class="paltop"><b>${esc(t)}</b><button type="button" class="ab" data-pal="selx" aria-label="Quitar la selección">✕</button></div>${sub?`<p class="mu">${esc(sub)}</p>`:''}${ed?`<div class="palac">${B.map(([a,l])=>`<button type="button" class="ib" data-pal="sel:${a}">${esc(l)}</button>`).join('')}</div>`:''}</div>`}
 async function palSelAct(p,a){const s=PAL.sel;if(!s)return;const mpp=p.dxf.mpp;const names=new Set(PAL.C.R.ej.map(e=>e.n));
   const askName=async(t,v)=>{const n=await uiAsk({title:t,input:{label:'Nombre del eje',required:true,value:v||''},ok:'Guardar'});if(!n)return'';const u=String(n).trim().toUpperCase().slice(0,4);if(names.has(u)&&u!==v){toast(`Ya hay un eje ${u}.`);return''}return u};
   if(a==='end')return palEnd(p,s.n,'end');if(a==='mov')return palEnd(p,s.n,'mov');
@@ -241,7 +253,14 @@ async function palSelAct(p,a){const s=PAL.sel;if(!s)return;const mpp=p.dxf.mpp;c
   if(a==='csz'){const z=dxfSz(s.p,mpp);await palFixAdd(p,{k:'colDelSz',w:z[0],h:z[1]},`Columnas de ${pal2(z[0])}×${pal2(z[1])} quitadas`);return}
   if(a==='tdel'){await palFixAdd(p,{k:'txDel',x:s.x,y:s.y,t:s.t},'Rótulo quitado');return}
   if(a==='aren'){const n=await uiAsk({title:'Renombrar el ambiente',input:{label:'Nombre',required:true,value:s.n||''},ok:'Guardar'});if(n)await palFixAdd(p,{k:'ambRen',x:s.x,y:s.y,a:String(n).trim().slice(0,60)},'Ambiente renombrado');return}
-  if(a==='adel'){await palFixAdd(p,{k:'ambDel',x:s.x,y:s.y,n:s.n||''},'Ambiente quitado');return}}
+  if(a==='adel'){await palFixAdd(p,{k:'ambDel',x:s.x,y:s.y,n:s.n||''},'Ambiente quitado');return}
+  /* función de la capa del trazo tocado: se guarda en las capas del plano (como «◇ Capas») */
+  if(s.k==='raw'&&a[0]==='l'){const lay={...(p.dxf.lay||{})};const n=s.l;const one={lcol:'col',lej:'ej',ltx:'tx',lmur:'mur',lamb:'amb'}[a];let msg;
+    if(a==='lv1'){lay.vig=[...new Set([...(lay.vig||[]),n])];msg=`«${n}» se usa como caras de vigas.`}
+    else if(a==='lv0'){lay.vig=(lay.vig||[]).filter(x=>x!==n);msg=`«${n}» ya no se usa como caras de vigas.`}
+    else if(one){const ant=lay[one];lay[one]=n;msg=`«${n}» es ahora la capa de ${DXF_FN[one]}${ant&&ant!==n?` (antes «${ant}»)`:''}.`}
+    else if(a==='l0'){for(const k of['ej','col','mur','amb','tx'])if(lay[k]===n)lay[k]='';lay.vig=(lay.vig||[]).filter(x=>x!==n);msg=`«${n}» ya no se usa.`}else return;
+    await plDxfLaySet(p,{'dxf.lay':lay},msg)}}
 
 /* ---------- enderezar y mover ejes ---------- */
 /** opciones para dejar el eje n recto (o moverlo): arriba/abajo (o izquierda/derecha), al medio, o a una distancia del eje vecino */
@@ -313,7 +332,13 @@ function palDraw(g,V){const C=PAL.C;const p=palP();if(!C||!p)return;const R=C.R,
   if(sh.tx){g.fillStyle='#7C3AED';for(const t of R.tx){const q=s(t.x,t.y);g.beginPath();g.arc(q.x,q.y,3,0,2*Math.PI);g.fill()}}
   if(sh.iss){g.lineWidth=2.5;g.strokeStyle='#B83A2E';for(const x of C.it)for(const q0 of x.pts){const q=s(q0.x,q0.y);g.beginPath();g.arc(q.x,q.y,14,0,2*Math.PI);g.stroke()}}
   /* lo elegido y la vista previa de enderezar/mover */
-  const S=PAL.sel;if(S){g.lineWidth=5;g.strokeStyle='rgba(234,179,8,.9)';g.setLineDash([]);if(S.k==='ej'||S.k==='lin'){lt(S.p,false);g.stroke()}else if(S.p&&S.p.length>4){lt(S.p,true);g.stroke()}else if(S.k==='tx'){const q=s(S.x,S.y);g.beginPath();g.arc(q.x,q.y,10,0,2*Math.PI);g.stroke()}}
+  const S=PAL.sel;if(S&&S.k==='raw'){const o=S.o;const a0=s(0,0),a1=s(1,0);const z=Math.hypot(a1.x-a0.x,a1.y-a0.y)||1;g.setLineDash([]);g.lineWidth=2.5;g.strokeStyle='rgba(234,179,8,.85)';g.beginPath();
+    for(let i=0;i+3<o.l.length;i+=4){const a=s(o.l[i],o.l[i+1]),b=s(o.l[i+2],o.l[i+3]);g.moveTo(a.x,a.y);g.lineTo(b.x,b.y)}
+    for(const q of o.p){for(let i=1;i+1<q.length;i+=2){const a=s(q[i],q[i+1]);i===1?g.moveTo(a.x,a.y):g.lineTo(a.x,a.y)}if(q[0]&&q.length>3){const a=s(q[1],q[2]);g.lineTo(a.x,a.y)}}
+    for(let i=0;i+2<o.c.length;i+=3){const a=s(o.c[i],o.c[i+1]);const r=o.c[i+2]*z;g.moveTo(a.x+r,a.y);g.arc(a.x,a.y,r,0,2*Math.PI)}g.stroke();
+    g.fillStyle='rgba(234,179,8,.85)';for(const t of o.t){const a=s(t[1],t[2]);g.fillRect(a.x-3,a.y-3,6,6)}
+    g.lineWidth=5;g.strokeStyle='#EA580C';if(S.p){lt(S.p,S.rk==='p'&&S.cl);g.stroke()}else if(S.rk==='c'){const a=s(S.x,S.y);g.beginPath();g.arc(a.x,a.y,S.r*z,0,2*Math.PI);g.stroke()}else{const a=s(S.x,S.y);g.beginPath();g.arc(a.x,a.y,12,0,2*Math.PI);g.stroke()}}
+  else if(S){g.lineWidth=5;g.strokeStyle='rgba(234,179,8,.9)';g.setLineDash([]);if(S.k==='ej'||S.k==='lin'){lt(S.p,false);g.stroke()}else if(S.p&&S.p.length>4){lt(S.p,true);g.stroke()}else if(S.k==='tx'){const q=s(S.x,S.y);g.beginPath();g.arc(q.x,q.y,10,0,2*Math.PI);g.stroke()}}
   if(PAL.prev){g.lineWidth=3;g.strokeStyle='#EA580C';g.setLineDash([]);lt(PAL.prev,false);g.stroke()}}
 /* la verificación se rehace cuando cambia el plano (capas, contorno, confirmaciones, correcciones) */
 function palSync(){if(PAL.on&&PLV&&PLV.id===PAL.id)palRender()}
