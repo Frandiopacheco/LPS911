@@ -125,6 +125,17 @@ Las plantas se pueden cargar **en DXF en vez de PDF** (solo DXF, sin PDF: el due
 - Medido con la E-19 real (encofrado 1.er piso, 11,8 MB): ~11 s en total, 1100 × 700 mm recortada al marco, 12 993 × 8 268 px, 5 niveles, geometría 76 KB y DXF 0,7 MB comprimidos; 25 ejes, 82 columnas, 872 caras y 146 rótulos.
 - Pruebas: `planos-dxf.spec.js` (lector en modelo, en cm y en presentación; carga completa con archivos y escala; Medir se pega) con el DXF de `dxf-demo.js`.
 
+## Niveles del edificio (01-11-2026, decidido con el dueño: «una sola lista»)
+
+Antes había tres listas de niveles que no se conocían (pisos de Last Planner, niveles de Casco y el nivel de cada plano = piso de Last Planner + un código adivinado del nombre): un plano de un nivel que solo existe en Casco (cimentación, piso técnico) no se podía alistar, y Casco buscaba sus planos comparando textos. Ahora (`planos.js`, «Niveles del edificio»):
+- **La lista es la de Configuración › Casco › Niveles** (`cs_pisos`; en Last Planner se lee con `plnvSub` → `PLNV`, en Casco son `S.pis`). `plBld()` = esos niveles; `plLvOn()` = la obra tiene Casco. **Sin Casco (producción) todo sigue con los pisos de Last Planner** (`cs_pisos` no se puede leer allí: lista vacía).
+- `plLvList()`: los niveles del edificio y, al final («Solo en Last Planner»), los pisos de Last Planner que ningún nivel usa. Todos los selectores (carga, ⋯ datos del plano, filtros, panel del visor, ▲▼ entre pisos) la usan (`plLvOpts`, `plLvLbl()` = «Nivel»).
+- **El plano guarda** `nv` (nivel del edificio) y `pisoId` = el piso de Last Planner de ese nivel (`plLvDoc`). `plLvOf(p)`: `nv`; si es de antes, por el código leído del nombre (`niv` → `plNivKeyCode`, comparado con `plNivKey` de cada nivel: P1, S1, AZ, PT, CIM) o por su piso de Last Planner (columna «Piso en Last Planner»); si no, «Sin nivel».
+- Lo que llega de Last Planner con un piso suyo (lookahead, sesión pull, reunión: `plFloorList`, `plPickFor`, `plOpen({piso})`) se traduce con `plLvIn`. `plLvName`/`plLvCode` para mostrar.
+- **Alistar** pide el nivel del plano (`plLvOf`), no el piso de Last Planner.
+- `plNivKey({name, code})` también sugiere el piso de Last Planner de cada nivel en Casco (`csLpSug`).
+- Prueba: `casco.spec.js` › «niveles del edificio…».
+
 ## Alistar plano (`web/js/planos-alistar.js`, 31-10-2026, decidido con el dueño)
 
 Flujo: niveles → cargar planos (plantas EST y ARQ en DXF) → **alistar** → recién después Sectorización, frentes, Plan diario y Metrados. **Una planta DXF no se usa ni se vincula hasta que su revisión está «Lista»** (`plb.ok`). Marcan «Listo» **el administrador y Oficina Técnica** (`plAlEd`; no los editores).

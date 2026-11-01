@@ -58,8 +58,8 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   const recto=e=>Math.min(Math.abs(e.p[2]-e.p[0]),Math.abs(e.p[3]-e.p[1]))/(Math.hypot(e.p[2]-e.p[0],e.p[3]-e.p[1])||1)<1e-3;
   const ctlOf=A=>{for(let i=1;i<A.length;i++)if(recto(A[i-1])&&recto(A[i]))return`${A[i-1].n}–${A[i].n} = ${pal3((pos(A[i])-pos(A[i-1]))*mpp)} m`;return''};const ctl=ctlOf(V)||ctlOf(H);
   /* 1. datos */
-  {const bad=[];if(!est&&!arq)bad.push('La especialidad debe ser Estructuras o Arquitectura (solo esas plantas van en DXF).');if(!p.pisoId)bad.push('Falta el nivel del plano.');if(!/planta/i.test(p.tipo||''))bad.push('El tipo debe ser «Planta».');
-    const pis=typeof plPisoName==='function'?plPisoName(p.pisoId):p.pisoId;
+  {const bad=[];if(!est&&!arq)bad.push('La especialidad debe ser Estructuras o Arquitectura (solo esas plantas van en DXF).');if(!plLvOf(p))bad.push('Falta el nivel del plano: elígelo en ⋯ (datos del plano).');if(!/planta/i.test(p.tipo||''))bad.push('El tipo debe ser «Planta».');
+    const pis=plLvName(plLvOf(p));
     add('datos','Datos del plano',bad.length?'err':'warn',bad.length?bad.join(' '):`${p.cod} · ${PL_DN[p.disc]||p.disc} · ${p.tipo} · ${pis} · Rev. ${p.rev||1}. Confirma que es el plano y el nivel correctos${est?' (un encofrado es el techo de su nivel)':''}.`,[],['edit'])}
   /* 2. escala por las cotas */
   const D=G.L.flatMap(o=>(o.d||[]).map(d=>({m:d[0],s:d[1],sh:d[2],P:d.slice(3)})));const FAC=[1,100,1000],cnt=[0,0,0];const num=[],mal=[];
