@@ -159,6 +159,11 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   await expect(panel).toContainText('✓ Listo');
   await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
   expect(await page.evaluate(() => plMalla() && plMalla().id)).toBe('EST_E03');
+  /* ya listo, todo se puede seguir corrigiendo: acciones visibles y al tocar un eje salen sus correcciones */
+  await expect(panel.locator('[data-pal="ejAdd"]')).toBeVisible();
+  await page.evaluate(() => { const e = PAL.C.R.ej[0]; const v = PLV.tv, r = v.cv.getBoundingClientRect(), q = v.toScreen((e.p[0] + e.p[2]) / 2, (e.p[1] + e.p[3]) / 2); palTap(r.left + q.x, r.top + q.y); });
+  await expect(panel.locator('.palsel [data-pal="sel:ren"]')).toBeVisible();
+  await panel.locator('[data-pal="selx"]').click();
   /* ya listo, el contorno se puede seguir editando (avisa que vuelve a «Por alistar»): agregar un hueco */
   await expect(panel.locator('[data-pal="hueco"]')).toBeVisible();
   page.once('dialog', dl => dl.accept());

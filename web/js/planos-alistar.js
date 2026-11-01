@@ -103,7 +103,10 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
         far.slice(0,12).map(r=>`${r.n} corrido ${(r.d*100).toFixed(1)} cm`),[],far.map(r=>({x:r.x,y:r.y})))}}
   /* 5. capas por función */
   {const r=[['ej','Ejes'],['col','Columnas'],['vig','Caras de vigas'],['tx','Rótulos'],['mur','Muros'],['amb','Ambientes']].filter(([x])=>est?!['mur','amb'].includes(x):arq?['ej','mur','amb'].includes(x):true);
-    add('capas','Capas por función',lay.ej?'warn':'err',lay.ej?'Confirma que cada función está en su capa (se ve encima del plano en su color).':'Falta elegir la capa de los ejes.',r.map(([x,t])=>`${t}: ${x==='vig'?((lay.vig||[]).join(', ')||'—'):(lay[x]||'—')}`),['lay'])}
+    /* cuántas líneas trae cada capa elegida: así se nota si la de caras es la equivocada (p. ej. solo las bandas de contracción) */
+    const nL=new Map(dxfLayers(dxfGeoF(G)).map(x=>[x.n,x.l+x.p+x.c+x.t]));const lb=n=>n?`${n} (${nL.get(n)||0})`:'—';const pocas=est&&R.cnt.ln<20;
+    add('capas','Capas por función',lay.ej?'warn':'err',lay.ej?`Confirma que cada función está en su capa (se ve encima del plano en su color). Caras de vigas: ${R.cnt.ln} líneas.${pocas?' Son muy pocas: revisa en «◇ Capas» que esté marcada la capa del trazo de las vigas.':''}`:'Falta elegir la capa de los ejes.',
+      r.map(([x,t])=>`${t}: ${x==='vig'?((lay.vig||[]).map(lb).join(', ')||'—'):lb(lay[x])}`),['lay'])}
   /* 6. columnas */
   if(est){const X=palCross(E);const by=new Map();const off=[];
     for(const q of R.col){const P=q.p;const xs=P.filter((v,i)=>!(i%2)),ys=P.filter((v,i)=>i%2);const w=(Math.max(...xs)-Math.min(...xs))*mpp,h=(Math.max(...ys)-Math.min(...ys))*mpp;const key=`${pal2(Math.min(w,h))}×${pal2(Math.max(w,h))}`;by.set(key,(by.get(key)||0)+1);
@@ -154,14 +157,14 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
   shx(el,`<div class="plalh"><b>Alistar ${esc(p.cod)} · Rev. ${p.rev||1}</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div>
     <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${p.ok.malla?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
-    ${palSelHtml(p,ed&&!ok)}
+    ${palSelHtml(p,ed)}
     <div class="plalv" role="group" aria-label="Ver encima del plano">${PAL_SHOW.filter(([k])=>p.disc==='ARQ'?!['col','vig','tx'].includes(k):k!=='amb').map(([k,t])=>`<button type="button" class="plchip${PAL.show[k]?' on':''}" data-pal="show:${k}">${t}</button>`).join('')}</div>
-    ${ed&&!ok?'<p class="note palhint">Toca un eje, una columna, una línea marcada o un ambiente en el plano para corregirlo.</p>':''}
+    ${ed?'<p class="note palhint">Toca un eje, una columna, una línea marcada o un ambiente en el plano para corregirlo.</p>':''}
     <ol class="plall">${S.L.map(x=>`<li class="palit ${x.ef}"><div class="paltop"><span class="palic" aria-hidden="true">${ico[x.ef]}</span><b>${esc(x.t)}</b>${x.pts.length?`<button type="button" class="ab palgo" data-pal="go:${x.id}" title="Ver en el plano">◎ Ver</button>`:''}</div><p>${esc(x.msg)}</p>
       ${x.det.length?`<details><summary>Detalle</summary><ul>${x.det.map(d=>`<li>${esc(d)}</li>`).join('')}</ul></details>`:''}
-      ${ed&&(!ok||x.id==='ctn')&&(x.act.length||x.btn.length||x.st==='warn')?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
+      ${ed&&(x.act.length||x.btn.length||(x.st==='warn'&&!ok))?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'&&!ok?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
       ${!ed&&A.chk[x.id]&&A.chk[x.id].n?`<p class="mu">Nota: ${esc(A.chk[x.id].n)}</p>`:''}</li>`).join('')}</ol>
-    ${FX.length?`<details class="palfx"${PAL.fxo?' open':''}><summary><b>Correcciones (${FX.length})</b> <span class="mu">hechas en el sistema; el DXF no cambia</span></summary><ol>${FX.map(f=>`<li><span>${esc(palFixTxt(f,p.dxf.mpp))}</span><small class="mu">${esc(f.byN||f.by||'')} · ${esc(fmtD(ldt(f.t)))}${f.nota?' · '+esc(f.nota):''}</small>${ed&&!ok?`<button type="button" class="ab" data-pal="fxdel:${esc(f.id)}" title="Deshacer esta corrección">↶</button>`:''}</li>`).join('')}</ol></details>`:''}
+    ${FX.length?`<details class="palfx"${PAL.fxo?' open':''}><summary><b>Correcciones (${FX.length})</b> <span class="mu">hechas en el sistema; el DXF no cambia</span></summary><ol>${FX.map(f=>`<li><span>${esc(palFixTxt(f,p.dxf.mpp))}</span><small class="mu">${esc(f.byN||f.by||'')} · ${esc(fmtD(ldt(f.t)))}${f.nota?' · '+esc(f.nota):''}</small>${ed?`<button type="button" class="ab" data-pal="fxdel:${esc(f.id)}" title="Deshacer esta corrección">↶</button>`:''}</li>`).join('')}</ol></details>`:''}
     ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&M.id!==p.id?'<button type="button" class="ib" data-pal="malla">Usar como malla de ejes</button>':''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
     <p class="note">Hasta que esté listo, este plano no se puede vincular a Sectorización, Plan diario ni Metrados.</p>`);
   const fxd=el.querySelector('.palfx');if(fxd)fxd.addEventListener('toggle',()=>{PAL.fxo=fxd.open});
@@ -184,9 +187,11 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   if(k.startsWith('go:')){const it=PAL.C&&PAL.C.it.find(x=>x.id===k.slice(3));if(it&&it.pts.length){PAL.goi=((PAL.goi||0)+1)%it.pts.length;const q=it.pts[PAL.goi];palGo(q.x,q.y)}return}
   if(k==='selx'){PAL.sel=null;PAL.prev=null;palRender();return}
   if(!plAlEd(p))return;
+  /* con el plano ya listo todo se puede seguir corrigiendo: se avisa una vez y vuelve a «Por alistar» */
+  if(plUsable(p)&&!['undo','malla','edit'].includes(k)&&!await palOkEdit(p))return;
   if(k==='edit')plEdit(p,b);else if(k==='lay')plDxfLay(p);
-  else if(k==='ctn'||k==='hueco'||k==='colAdd'||k==='ambAdd'||k==='ejAdd'){if((k==='ctn'||k==='hueco')&&!await palOkEdit(p))return;palTraceStart(k)}
-  else if(k.startsWith('hdel:')){if(!await palOkEdit(p))return;const ct=palCtn(p);if(!ct)return;const H=palHoles(ct).filter((h,i)=>i!==+k.slice(5));await palCtnPut(p,ct.P,H,'Hueco quitado.')}
+  else if(k==='ctn'||k==='hueco'||k==='colAdd'||k==='ambAdd'||k==='ejAdd')palTraceStart(k);
+  else if(k.startsWith('hdel:')){const ct=palCtn(p);if(!ct)return;const H=palHoles(ct).filter((h,i)=>i!==+k.slice(5));await palCtnPut(p,ct.P,H,'Hueco quitado.')}
   else if(k==='ctnauto'){const C=PAL.C;if(C&&C.cand)await palCtnPut(p,C.cand)}
   else if(k==='ok')await palOk(p);
   else if(k.startsWith('end:'))palEnd(p,k.slice(4),'end');
@@ -195,7 +200,7 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(p.ok&&p.ok.malla?' Este plano fija la malla de ejes: el próximo que se aliste será la nueva malla.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
   else if(k==='malla')await palMallaSet(p)}
 /** editar el contorno de un plano ya listo lo devuelve a «Por alistar»: se avisa antes */
-async function palOkEdit(p){if(!plUsable(p))return true;return uiAsk({title:'¿Editar el contorno?',tone:'warn',text:'El plano ya está listo: al cambiar el contorno vuelve a «Por alistar» y hay que marcarlo listo de nuevo. Lo que ya lo usa sigue igual.',ok:'Editar'})}
+async function palOkEdit(p){if(!plUsable(p))return true;return uiAsk({title:'¿Corregir un plano ya listo?',tone:'warn',text:'Al corregir algo vuelve a «Por alistar» y hay que marcarlo listo de nuevo. Lo que ya lo usa sigue igual hasta entonces.',ok:'Corregir'})}
 async function palChange(e){const t=e.target;const p=palP();if(!p||!plAlEd(p))return;const A=palAlc(p);const chk={...A.chk};
   if(t.dataset.palc){const id=t.dataset.palc;if(t.checked)chk[id]={n:(chk[id]&&chk[id].n)||'',t:NOW(),by:me.email};else delete chk[id]}
   else if(t.dataset.paln){const id=t.dataset.paln;if(!chk[id]){toast('Marca «Revisado» para guardar la nota.');return}chk[id]={...chk[id],n:t.value.trim().slice(0,300)}}else return;
