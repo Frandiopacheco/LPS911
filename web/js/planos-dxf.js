@@ -144,7 +144,9 @@ function dxfGuess(Ls){const by=(A,k)=>A.slice().sort((a,b)=>b[k]-a[k])[0];
   const col=by(Ls.filter(x=>/COLUM|PLACA|COLUMN/i.test(x.n)&&!/TEXT|NOMB|ACHUR/i.test(x.n)),'p');
   const mur=by(Ls.filter(x=>/MURO|WALL|TABIQ|ALBA/i.test(x.n)&&!/TEXT|COTA|ACHUR/i.test(x.n)),'l');
   const amb=by(Ls.filter(x=>/AMBIENT|AREA|ÁREA|ROOM|ESPACIO/i.test(x.n)&&x.cl>0),'cl');
-  const vig=Ls.filter(x=>/TRAZO|VIGA|BEAM|CONTORNO/i.test(x.n)&&!/VIGUETA|TEXT|COTA|ACERO/i.test(x.n)&&(x.l+x.p)).map(x=>x.n);
+  /* caras: capas de trazo con líneas de verdad; una capa con muy pocas (p. ej. «A-TRAZO» con las 2 bandas de contracción de la E-19) no entra */
+  const vc=Ls.filter(x=>/TRAZO|VIGA|BEAM|CONTORNO/i.test(x.n)&&!/VIGUETA|TEXT|COTA|ACERO/i.test(x.n)&&(x.l+x.p));const vmx=Math.max(0,...vc.map(x=>x.l+x.p));
+  const vig=vc.filter(x=>x.l+x.p>=vmx*0.05).map(x=>x.n);
   const tx=by(Ls.filter(x=>x.s>0),'s');return{ej:ej?ej.n:'',col:col?col.n:'',mur:mur?mur.n:'',amb:amb?amb.n:'',vig,tx:tx?tx.n:''}}
 /** ejes de la capa: cada línea con el nombre de su burbuja (círculo con un texto adentro; si no hay, el texto en la prolongación de la línea).
     Líneas del mismo nombre en la misma recta se juntan. En las unidades de F. */
