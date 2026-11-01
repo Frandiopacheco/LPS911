@@ -235,10 +235,12 @@ async function dxfUnGz(b){if(window.DecompressionStream)try{return await new Res
 /** {W, H, mm, mpp, draw(g, oy), txo, orig, geo, meta}: todo lo que plProcess necesita de un DXF */
 async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.file.text();const D=dxfParse(txt);say('Armando la lámina…');const S=dxfToPx(dxfSheet(D,{crop:it.crop!==false}));
   if(!S.P.length)throw new Error('El DXF no tiene dibujo visible (capas apagadas o vacío).');if(!(S.W>0&&S.H>0))throw new Error('No se pudo medir el dibujo del DXF.');
-  const G=dxfGeoOf(S);const Fg=dxfGeoF(G);const lay=dxfGuess(dxfLayers(Fg));
+  const G=dxfGeoOf(S);const Fg=dxfGeoF(G);const Ls=dxfLayers(Fg);let lay=dxfGuess(Ls);
+  /* capas del proyecto: las de la última lámina ya revisada de la misma especialidad (el mismo proyectista repite sus nombres de capa) */
+  const mem=dxfLayMem(it.m&&it.m.disc,Ls,lay,it.id);if(mem)lay=mem.lay;
   const geo=await dxfGz(JSON.stringify(G),'application/json');const orig=await dxfGz(txt,'application/dxf');
   let txo=null;try{txo=dxfTxIdx(S)}catch(e){console.error('índice de texto DXF',e)}
-  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,lay,gz:geo.z,oz:orig.z,far:S.far,crop:!!S.crop,n:S.P.length};
+  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,lay,...(mem?{layFrom:mem.from}:{}),gz:geo.z,oz:orig.z,far:S.far,crop:!!S.crop,n:S.P.length};
   return{W:S.W,H:S.H,mm:S.mm,mpp:S.mpp,crop:S.crop,draw:(g,oy)=>dxfPaint(g,S,oy),txo,orig,geo,meta,S}}
 /** vista previa de una fila de la carga (lado mayor PLP_PX) */
 async function plDxfPrev(it){if(it._pv)return it._pv;const D=dxfParse(await it.file.text());const S=dxfToPx(dxfSheet(D,{crop:store.get('plcrop',true)!==false}));const sc=Math.min(1,PLP_PX/Math.max(S.W,S.H));
@@ -303,6 +305,30 @@ function plGeoSnap(G,w,tol){if(!G)return null;let bp=null,bd=tol;const pt=(x,y)=
     for(let i=0;i+2<o.c.length;i+=3)pt(o.c[i],o.c[i+1])}
   if(bp)return bp;bd=tol;for(const s of ln){const dx=s[2]-s[0],dy=s[3]-s[1],l2=dx*dx+dy*dy;if(!l2)continue;const t=Math.max(0,Math.min(1,((w.x-s[0])*dx+(w.y-s[1])*dy)/l2));const x=s[0]+t*dx,y=s[1]+t*dy;const d=Math.hypot(x-w.x,y-w.y);if(d<bd){bd=d;bp={x,y,k:'ln'}}}
   return bp}
+/** el trazo del DXF más cercano al toque, de cualquier capa (como mirar la capa en AutoCAD): {l (capa), o (la capa en G), k (l/p/c/t/d), p, cl, t} o null */
+function dxfRawPick(G,w,tol){if(!G)return null;let best=null,bd=tol;
+  const sd=(a,b,c,d)=>{const dx=c-a,dy=d-b,l2=dx*dx+dy*dy;const t=l2?Math.max(0,Math.min(1,((w.x-a)*dx+(w.y-b)*dy)/l2)):0;return Math.hypot(a+t*dx-w.x,b+t*dy-w.y)};
+  for(const o of G.L){const A=o.l;for(let i=0;i+3<A.length;i+=4){if(Math.min(A[i],A[i+2])>w.x+bd||Math.max(A[i],A[i+2])<w.x-bd||Math.min(A[i+1],A[i+3])>w.y+bd||Math.max(A[i+1],A[i+3])<w.y-bd)continue;const d=sd(A[i],A[i+1],A[i+2],A[i+3]);if(d<bd){bd=d;best={o,k:'l',p:A.slice(i,i+4)}}}
+    for(const q of o.p){const P=q.slice(1),n=P.length;const m=q[0]&&n>=6?n:n-2;for(let i=0;i<m;i+=2){const j=(i+2)%n;const d=sd(P[i],P[i+1],P[j],P[j+1]);if(d<bd){bd=d;best={o,k:'p',p:P,cl:!!q[0]}}}}
+    for(let i=0;i+2<o.c.length;i+=3){const d=Math.abs(Math.hypot(o.c[i]-w.x,o.c[i+1]-w.y)-o.c[i+2]);if(d<bd){bd=d;best={o,k:'c',x:o.c[i],y:o.c[i+1],r:o.c[i+2]}}}
+    for(const t of o.t){const a=-(t[4]||0)*Math.PI/180,c=Math.cos(a),si=Math.sin(a);const dx=w.x-t[1],dy=w.y-t[2];const u=dx*c+dy*si,v=-dx*si+dy*c;
+      const d=Math.max(0,Math.abs(u)-t[3]*0.31*String(t[0]).length,Math.abs(v)-t[3]*0.6);if(d<bd){bd=d;best={o,k:'t',x:t[1],y:t[2],t:String(t[0])}}}
+    for(const q of o.d||[]){const P=q.slice(3);for(let i=0;i+3<P.length;i+=4){const d=sd(P[i],P[i+1],P[i+2],P[i+3]);if(d<bd){bd=d;best={o,k:'d',p:P.slice(i,i+4),t:String(q[0])}}}}}
+  return best?{...best,l:best.o.n,d:bd}:null}
+/** funciones que tiene la capa n en lay */
+const DXF_FN={ej:'ejes',col:'columnas',vig:'caras de vigas',tx:'rótulos',mur:'muros',amb:'ambientes'};
+function dxfLayFn(lay,n){lay=lay||{};const o=['ej','col','mur','amb','tx'].filter(k=>lay[k]===n);if((lay.vig||[]).includes(n))o.push('vig');return o}
+/** capas recordadas del proyecto para un DXF nuevo: las de la lámina más reciente de la misma especialidad ya alistada (o con sus capas
+    revisadas a mano en «◇ Capas»), si sus nombres están en este DXF. {lay, from (código)} o null */
+function dxfLayMem(disc,Ls,lay,skip){if(typeof PLB==='undefined'||!disc)return null;const names=new Set(Ls.map(x=>x.n));let best=null,bt=-1;
+  for(const p of PLB.values()){if(p.arch||p.eto||!p.dxf||!p.dxf.lay||p.id===skip||p.disc!==disc)continue;
+    const t=p.ok&&p.ok.rev===(p.rev||1)?1e15+(p.ok.t||0):p.dxf.layH?(p.dxf.layH.t||0):-1;if(t<0)continue;const L=p.dxf.lay;
+    if(!(['ej','col','mur','amb','tx'].some(k=>L[k]&&names.has(L[k]))||(L.vig||[]).some(n=>names.has(n))))continue;if(t>bt){bt=t;best=p}}
+  if(!best)return null;const L=best.dxf.lay;const o={...lay};for(const k of['ej','col','mur','amb','tx'])if(L[k]&&names.has(L[k]))o[k]=L[k];
+  const v=(L.vig||[]).filter(n=>names.has(n));if(v.length)o.vig=v;return{lay:o,from:best.cod}}
+/** guardar las capas (u otros campos de dxf) a mano: quedan como capas revisadas del proyecto; un plano ya alistado vuelve a «Por alistar» */
+async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plUsable(p);up={...up,'dxf.layH':{by:me.email,t:NOW()}};if(was)up.ok=firebase.firestore.FieldValue.delete();
+  try{await plCol(p).doc(p.id).update(up);toast(was?`${msg} El plano volvió a «Por alistar»: revísalo de nuevo.`:msg);return true}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err));return false}}
 /** textos cortos de una revisión DXF para los vínculos (planos-vinculos.js) */
 async function plGeoTexts(sp){const G=await plGeoGet(sp);if(!G)return[];const out=[];for(const o of G.L)for(const t of o.t){const s=String(t[0]).trim();if(s&&s.length<=8)out.push({x:t[1],y:t[2],h:t[3],n:s.length})}return out}
 
@@ -311,7 +337,8 @@ async function plDxfLay(p){if(!p||!p.dxf||!plEdOf(p))return;const sp=plSpecOf(p,
   const Ls=dxfLayers(dxfGeoF(G));let lay={...(p.dxf.lay||{})},k=p.dxf.k||1;
   const draw=()=>{const R=dxfRoles(G,lay,(p.dxf.mpp||1)*k/(p.dxf.k||1));const c=R.cnt;const o=(sel,f)=>`<option value="">— ninguna —</option>${Ls.filter(f||(()=>true)).map(x=>`<option value="${esc(x.n)}"${x.n===sel?' selected':''}>${esc(x.n)}</option>`).join('')}`;
     lqModal(`<div class="lqtop"><b>Capas del DXF · ${esc(p.cod)}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
-      <p class="mu">Qué capa es cada cosa. Vienen sugeridas por su nombre y su contenido; todas son opcionales. Lo usan Casco (ejes, columnas, caras de vigas) y lo que venga después.</p>
+      <p class="mu">Qué capa es cada cosa. ${p.dxf.layFrom?`Al cargarlo se tomaron las de <b>${esc(p.dxf.layFrom)}</b> (misma especialidad, ya revisada) y el resto por su nombre y contenido`:'Vienen sugeridas por su nombre y su contenido'}; todas son opcionales. Lo usan Casco (ejes, columnas, caras de vigas) y lo que venga después.</p>
+      <p class="note">Para saber de qué capa es un trazo, abre «Alistar» y tócalo en el plano: se resalta toda su capa y ahí mismo le cambias la función.</p>
       <div class="dxff">${DXF_ROLES.map(([r,t])=>`<label class="kmfl">${t}<select class="ci" data-dxl="${r}">${o(lay[r],r==='tx'?(x=>x.t):null)}</select></label>`).join('')}
         <label class="kmfl">Unidades del dibujo<select class="ci" data-dxl="k">${[[1,'metros'],[0.01,'centímetros'],[0.001,'milímetros']].map(([v,t])=>`<option value="${v}"${v===k?' selected':''}>${t}</option>`).join('')}</select></label></div>
       <div class="kmfl">Caras de vigas (líneas de trazo)</div><div class="dxfl">${Ls.filter(x=>x.l+x.p).sort((a,b)=>(lay.vig||[]).includes(b.n)-(lay.vig||[]).includes(a.n)).map(x=>`<label class="chk"><input type="checkbox" data-dxv="${esc(x.n)}"${(lay.vig||[]).includes(x.n)?' checked':''}> ${esc(x.n)} <span class="mu">${x.l+x.p}</span></label>`).join('')}</div>
@@ -321,7 +348,6 @@ async function plDxfLay(p){if(!p||!p.dxf||!plEdOf(p))return;const sp=plSpecOf(p,
       async e=>{const b=e.target.closest('[data-dxa]');if(!b)return;const mpp=(p.dxf.mpp||0)*k/(p.dxf.k||1);const up={'dxf.lay':lay,'dxf.k':k,'dxf.mpp':mpp,'dxf.how':k===p.dxf.k?p.dxf.how:'a mano'};
         if(k!==p.dxf.k)up.cal={mpp,rev:p.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()};
         /* cambiar capas o unidades de un plano ya alistado lo devuelve a «Por alistar» (planos-alistar.js) */
-        const was=typeof plUsable==='function'&&plUsable(p);if(was)up.ok=firebase.firestore.FieldValue.delete();
-        try{await plCol(p).doc(p.id).update(up);lqClose();toast(was?'Capas guardadas. El plano volvió a «Por alistar»: revísalo de nuevo.':'Capas del DXF guardadas.')}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err))}},
+        if(await plDxfLaySet(p,up,'Capas del DXF guardadas.'))lqClose()},
       e=>{const t=e.target;if(t.dataset.dxl){if(t.dataset.dxl==='k')k=+t.value;else lay={...lay,[t.dataset.dxl]:t.value}}else if(t.dataset.dxv!=null){const v=new Set(lay.vig||[]);if(t.checked)v.add(t.dataset.dxv);else v.delete(t.dataset.dxv);lay={...lay,vig:[...v]}}else return;draw()})};
   draw()}
