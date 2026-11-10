@@ -95,7 +95,9 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |
 | `docs/ia/auditoria-externa.md` | Preparar un encargo para otra IA (Argon/Gemini 4, ChatGPT): paquete `scripts/paquete-auditoria.mjs`, pedido para pegar, revisión por video, vínculos de planos. |
 
-Al terminar un cambio, actualiza **el archivo del tema** (no este), salvo que cambie algo general.
+**Fuente única del proyecto (decidido con el dueño, 10-11-2026):** `CLAUDE.md` y `docs/ia/` son el único lugar donde vive el contexto de LPS 911; no se usa la memoria de la cuenta de Claude. Si algo de afuera (memoria, chat, informe) contradice al repo, **manda el repo** salvo que el dueño diga lo contrario.
+- Cada cambio o decisión se anota en **el archivo del tema** (no en este, salvo que sea algo general) **en el mismo commit** que lo implementa.
+- Una decisión tomada solo conversando, sin código, también se anota (en su tema, o en `pendientes.md` si queda por hacer), en un commit de solo documentación. El dueño no actualiza archivos de contexto a mano.
 
 ## Patrones generales del código (`web/js/`)
 
