@@ -4,6 +4,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 ## Qué es (oct 2026, decidido con el dueño tras probar una maqueta)
 - Pestaña `pull` «Sesión pull» (en «Más»), solo **admin y editores** (`pulEd()`; `tabAllowed`). Planificación hacia atrás en la reunión: el tablero se proyecta desde una **laptop** y se puede entregar una **tablet** (misma sesión, «Pantalla completa») a un SC para que mueva o jale pósits. Ambos editan a la vez.
+- Origen: se empezó por las **salas de operadores del P2**. Ahí la pauta la marcan los hitos contractuales y la llegada de equipos importados (UMA y video wall, con la misma fecha para las tres salas); una sala grande se puede trabajar en dos zonas sin que una amarre a la otra.
+- **Sin «partir pósit»** (decidido con el dueño): para dos frentes se duplica o se crea otro pósit y se renombra. El tablero debe ser lo más simple posible.
 - Es un **borrador**: al crearse solo LEE el lookahead (copia `base`); no escribe en `acts` hasta «Revisar y aplicar».
 - Una sesión = un piso y varios ambientes (chips arriba, uno a la vez). Los pósits son las actividades de esos ambientes con días **desde mañana** que no están terminadas (`DONE`). Franjas por SC (orden `PU_SEQ`, el tren de acabados).
 

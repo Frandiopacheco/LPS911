@@ -56,3 +56,6 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 ## Formularios y ventanas: clic en el fondo (28-10-2026)
 Un clic en un fondo (elemento `position:fixed` que cubre la pantalla, como `.lqm` o la de `uiAsk`) solo vale si el puntero también bajó ahí (`base.js`, escucha en captura): seleccionar texto en un campo y soltar el mouse fuera ya no cierra la ventana.
+
+## Principio: pocas opciones a la vista, ordenadas por momento (dueño, 25-10-2026)
+- Demasiadas opciones repartidas por la pantalla «marean». Las herramientas se agrupan por el **momento** en que se usan (consultar, programar, revisar propuestas) y solo aparecen en ese momento; lo que manda en la pantalla es el contenido (grilla o plano). Ya se aplicó en el Lookahead (barra por momentos, menús ⋯) y en el Plan diario (paneles plegados); toda pantalla nueva sigue el mismo criterio.

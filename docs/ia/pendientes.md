@@ -15,12 +15,20 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Liberaciones: zonas como polígono (hoy rectángulo).
 - Auditoría Matriz 08/10: los clientes con la versión anterior en caché no pueden guardar cambios del SC en la matriz hasta recargar (las reglas ahora exigen `l`). Los cambios de SC anteriores a esta versión no tienen `m.ok`: su «Terminado» queda «✓?» en el Lookahead hasta que un ingeniero lo confirme. Restablecer una foto (`mxFotoRestore`) sigue reemplazando lo marcado después (es la intención; solo el administrador).
 
-## Para una próxima obra: módulo de casco (decidido con el dueño, oct 2026)
+## Módulo de casco: ya existe (ver `casco.md`)
 
-- No se implementa en esta obra (ya está en acabados). Se retoma cuando haya casco que programar.
-- **Dos módulos independientes**, en pantallas distintas, cada uno con su propio lookahead, PPC, AR, etc.; no necesitan compartir la información: el actual (por ambiente, acabados) y uno **por partida/actividad** para casco.
-- Formato elegido para el de casco (lienzo «Lookahead por partida — 3 propuestas», opción C): una fila por partida (agrupadas p. ej. Verticales / Horizontales), una **barra por partida dividida en tramos por sector**, **color = sector** (el mismo en todas las filas, para ver el tren S1→S4), el SC como punto junto al nombre, y un interruptor «Solo sector / Sector + metrado» que muestra la cantidad de cada tramo.
-- Antes de construirlo, definir: qué comparte con el módulo actual (Equipo, Restricciones, Plan diario, Campo) y cómo se pasa de casco a acabados en una misma obra.
+- Se planteó para una próxima obra (esta ya está en acabados); desde el 26-10-2026 se desarrolla en `main` como módulo **Casco** con datos de ejemplo y **no va a producción** hasta que el dueño lo apruebe (regla 6 de `CLAUDE.md`). La vista principal es el tren (partidas en filas, sector en la celda).
+
+## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
+
+- **Valor ganado:** módulo aparte en una etapa siguiente, vinculando el catálogo de actividades con el catálogo de costos. No mezclarlo con el Last Planner (programar, liberar restricciones y medir la confiabilidad).
+- **Avance del SC contra el lookahead** en la presentación del plan diario: gráfico de cuánto avanzó un SC en un piso frente a lo programado, eligiendo la ventana (semana, 3, 4 o 6 semanas, fin de proyecto).
+- **Agenda de la reunión diaria** con tiempo por bloque.
+- **Interruptor por partida / por ambiente** en el lookahead (lo único que le gustó del plan maestro retirado).
+- **Matriz › Gráfico:** marcar estados desde el plano (segunda etapa; hoy solo se ve).
+- **Celular del SC:** los borradores de sus propuestas se ven como oficiales; se dejó para después.
+- **Modelo 3D:** sigue en beta (`planos.md`); la meta final es conectarlo al Last Planner.
+- Evaluar una app nativa (iPhone/Android) solo si los avisos push de la web no bastan (`avisos.md`).
 
 ## Auditoría con datos reales (09/10/2026, respaldo de la obra)
 Corregido en el PR «Auditoría con datos reales»:
