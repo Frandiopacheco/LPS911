@@ -56,6 +56,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Bloquear siempre a mano:** con la ventana abierta y **sin pendientes**, el panel derecho muestra la pestaña plegada «🔒 Bloquear propuestas» (antes no aparecía en ningún lado: la barra superior se había quitado). En la revisión también está al pie del panel.
 - Pruebas: `propuestas-editar.spec.js` (otra fecha con vista previa; bloquear sin pendientes), `propuestas-tardias.spec.js`.
 
+## Panel de revisión y tono (decidido con el dueño, oct 2026)
+- El panel de propuestas va a la **derecha, flotante sobre la grilla** (`.rvpanel`, no acoplado), plegable, y solo aparece si hay propuestas pendientes; la antigua barra superior «Propuestas de subcontratistas / abiertas / cerradas» vive en ese panel, con «Bloquear propuestas» como acción principal.
+- Si el SC y el ingeniero cambian lo mismo, **siempre manda el ingeniero**. La revisión **no debe volverse un chat**: mensajes de aprobación solo para lo esencial (p. ej. editar días ya pasados); el SC no necesita ver el motivo del rechazo.
+
 ## Motivo obligatorio del SC (P9, oct 2026, decidido con el dueño)
 - El lookahead sigue siendo el mandato (el ingeniero programa y decide); lo nuevo es el **porqué** del SC. `propNeedsWhy(it, off)` → `'atrasa'` (empieza después), `'alarga'` (termina después o más días) o `'quita'` (retira o deja sin días); adelantar, acortar o agregar no lo piden.
 - `sendProp` junta los elementos sin enviar que lo necesitan y sin `why` y abre `pwhyAsk` (ventana `#pwhy`: un `<select>` por fila con grupos Causa propia / Causa de obra y «Para todas»; sin motivo no envía). `sendPropNow(W)` guarda `items.<id>.why = {k, g:'p'|'o', t}` (`PWHY`: per, equ, ren = propia; fre, mat, res, dis = obra). Editar un borrador conserva `why` (también en `sentV`).
