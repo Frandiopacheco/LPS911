@@ -320,3 +320,25 @@ test('planos DXF: recorta al marco aunque haya objetos sueltos lejos o el marco 
   expect(r[3].crop).toBe(false);   /* sin marco: la lámina entera */
   expect(errors).toEqual([]);
 });
+
+/* 11-11-2026: tras corregir el recorte, el mismo archivo ya cargado se puede volver a procesar como revisión nueva («Cargar de nuevo») */
+test('cargar planos: el mismo archivo ya cargado se vuelve a procesar como revisión nueva con «Cargar de nuevo»', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  const file = { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) };
+  await page.setInputFiles('#plfile', file);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.evaluate(() => { PQ.items.length = 0; plqDraw(true); });
+  await page.setInputFiles('#plfile', file);
+  await expect(page.locator('#plst0')).toContainText('Ya está cargado (mismo archivo)');
+  await page.click('#plst0 [data-re="0"]');
+  await expect(page.locator('#plst0')).toContainText('Se vuelve a procesar como nueva revisión');
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await expect.poll(() => page.evaluate(() => window.__dbGet('plb', 'EST_E03').rev)).toBe(2);
+  expect(errors).toEqual([]);
+});

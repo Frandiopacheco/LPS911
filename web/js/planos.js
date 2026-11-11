@@ -879,7 +879,7 @@ function renderPCar(main){plSub();if(PQ.eto&&!plAdm())PQ.eto=false;if(!plaEd()){
     $('#plqtab',main).addEventListener('change',e=>{const el=e.target.closest('[data-f]');if(!el)return;const it=PQ.items[+el.closest('[data-i]').dataset.i];if(!it||it.st==='run'||it.st==='ok')return;
       it.m[el.dataset.f]=el.value.trim();if(el.dataset.f==='cod')it.m.cod=it.m.cod.toUpperCase().replace(/\s+/g,'');plqCheck();plqDraw(true)});
     $('#plqtab',main).addEventListener('click',e=>{const v=e.target.closest('[data-vw]');if(v){plqPrev(+v.dataset.vw);return}
-      const ro=e.target.closest('[data-rot]');if(ro){plqRot(+ro.dataset.rot,1);return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
+      const ro=e.target.closest('[data-rot]');if(ro){plqRot(+ro.dataset.rot,1);return}const re=e.target.closest('[data-re]');if(re){const it=PQ.items[+re.dataset.re];if(it&&it.st==='skip'){it.re=true;plqCheck();plqDraw(true)}return}const b=e.target.closest('[data-rm]');if(!b)return;const i=+b.dataset.rm;if(PQ.items[i]&&PQ.items[i].st!=='run'){PQ.items.splice(i,1);plqCheck();plqDraw(true)}})}
   plqDraw(false);if(!eo)plkpSecUpd()}
 /* PDF de varias hojas (oct 2026, pedido del dueño): un ETO se divide en una lámina por hoja (código «M02-1», «M02-2»…, título
    «· hoja k de n»); cada hoja se extrae a su propio PDF al procesar (plOnePage). En los planos del proyecto (una lámina por archivo)
@@ -900,8 +900,8 @@ function plqCheck(){const seen=new Map();
     if(m.eto){if(!m.sc){it.st='bad';it.msg='Falta el subcontratista';return}}
     else if(!m.cod||!m.disc){it.st='bad';it.msg=!m.cod?'Falta el código de lámina':'Falta la especialidad';return}
     const id=plIdOf({...m,fname:plItKey(it)});const old=PLB.get(id);
-    if(!it.q&&old&&!old.arch&&old.fname===plItName(it)&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
-    it.st='pend';it.msg=old?`Nueva revisión (vigente: rev. ${old.rev||1})`:'Nuevo';
+    if(!it.q&&!it.re&&old&&!old.arch&&old.fname===plItName(it)&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
+    it.st='pend';it.msg=old?(it.re?`Se vuelve a procesar como nueva revisión (vigente: rev. ${old.rev||1})`:`Nueva revisión (vigente: rev. ${old.rev||1})`):'Nuevo';
     if(seen.has(id))it.warn=`Mismo código que la fila ${seen.get(id)+1}: se cargará como la revisión siguiente.`;else seen.set(id,i);
     if(!m.eto&&it.pdfPgs>1)it.warn=(it.warn?it.warn+' ':'')+`El PDF tiene ${it.pdfPgs} hojas: solo se carga la primera (exporta una lámina por archivo).`;
     if(!m.eto&&!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+(plLvOn()?'Planta sin nivel: elige el nivel.':'Planta sin piso: elige el piso si corresponde.')})}
@@ -929,13 +929,13 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
     if(m.eto)return`<tr data-i="${i}" class="${ST[it.st]||''}">${fn(it)}
       <td><select class="tin" data-f="sc"${dis}>${csel(m.sc)}</select></td><td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
-      <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
+      <td class="plst" id="plst${i}">${esc(it.msg)}${it.st==='skip'?` <button class="ib" data-re="${i}" title="Vuelve a procesar el mismo archivo como una revisión nueva (por ejemplo, para recortarlo al marco)">Cargar de nuevo</button>`:''}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
       <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${rb(it,i,lock)}${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`;
     return`<tr data-i="${i}" class="${ST[it.st]||''}">${fn(it)}
       <td><input class="tin mono" data-f="cod" value="${esc(m.cod)}" size="7"${dis}></td><td><select class="tin" data-f="disc"${dis}>${dsel(m.disc)}</select></td>
       <td><select class="tin" data-f="pisoId"${dis}>${psel(m.pisoId)}</select></td><td><select class="tin" data-f="tipo"${dis}>${tsel(m.tipo)}</select></td>
       <td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
-      <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
+      <td class="plst" id="plst${i}">${esc(it.msg)}${it.st==='skip'?` <button class="ib" data-re="${i}" title="Vuelve a procesar el mismo archivo como una revisión nueva (por ejemplo, para recortarlo al marco)">Cargar de nuevo</button>`:''}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
       <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${rb(it,i,lock)}${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
   const hd=eo?`<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>${plLvLbl()}</th><th>Título</th><th>Estado</th><th></th>`:`<th>Archivo</th><th>Código</th><th>Especialidad</th><th>${plLvLbl()}</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>`;
   shx(tab,`<div class="pltw"><table class="plt"><thead><tr>${hd}</tr></thead><tbody>${rows}</tbody></table></div>`)}
