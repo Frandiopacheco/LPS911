@@ -270,6 +270,76 @@ test.describe('sin conexión (tablet)', () => {
   });
 });
 
+test.describe('celular: modo lectura', () => {
+  test.use({ viewport: { width: 412, height: 880 }, hasTouch: true, isMobile: true });
+  test('el plano ocupa la pantalla; un toque oculta las barras; doble toque alterna; Medir abajo; ⋯; Atrás cierra; lista compacta y recientes', async ({ page }) => {
+    test.setTimeout(150_000);
+    const errors = await openApp(page, { as: 'admin', editar: false });
+    await preparar(page);
+    await page.evaluate(memStorage);
+    await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+    await page.setInputFiles('#plfile', [
+      { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() },
+      { name: '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS06_PLANTA PRIMER PISO - REDES DE AGUA FRIA.pdf', mimeType: 'application/pdf', buffer: pdfDemo() },
+    ]);
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+    await page.evaluate(() => { U.tab = 'pbib'; render(); });
+    // biblioteca: lista compacta, sin «Cargar planos…» ni «Eliminar…»; «sin conexión» también en el celular
+    await expect(page.locator('#pllist')).toHaveClass(/pllst/);
+    await expect(page.locator('#plgocar')).toBeHidden();
+    await expect(page.locator('#pldel')).toBeHidden();
+    await expect(page.locator('#ploff')).toBeVisible();
+    await page.click('.plc[data-pl="ARQ_AG03"]');
+    await expect(page.locator('#plv')).toHaveClass(/mob/);
+    // una sola barra arriba: sin Vínculos, sin − + ni PDF (van en ⋯); el plano mide toda la pantalla y la lámina queda bajo la barra
+    for (const a of ['lk', 'zin', 'zout', 'pdf', 'mark']) await expect(page.locator(`#plv .plvh [data-pv="${a}"]`), a).toHaveCount(0);
+    await expect(page.locator('#plv .plvbot [data-pv="med"]')).toBeVisible();
+    await expect(page.locator('#plv .plvbot .plvq [data-pj]')).toHaveCount(2);
+    await page.waitForTimeout(300);
+    const g = await page.evaluate(() => ({ body: document.querySelector('#plv .plvb').offsetHeight, head: document.querySelector('#plv .plvh').offsetHeight, y: PLV.tv.y, f: PLV.tv.fit, s: PLV.tv.s }));
+    expect(g.body).toBe(880);
+    expect(g.y).toBeGreaterThanOrEqual(g.head);
+    const c = await page.locator('#plv .plvc').boundingBox(), cx = c.x + c.width / 2, cy = c.y + c.height / 2;
+    // un toque oculta las barras y otro las devuelve
+    await page.touchscreen.tap(cx, cy); await expect(page.locator('#plv')).toHaveClass(/hid/, { timeout: 2_000 });
+    await page.touchscreen.tap(cx, cy); await expect(page.locator('#plv')).not.toHaveClass(/hid/, { timeout: 2_000 });
+    // doble toque: acerca; otro doble toque: vuelve a la lámina entera (y no oculta las barras)
+    await page.waitForTimeout(400);
+    const dbl = async () => { await page.evaluate(({ cx, cy }) => { const h = document.querySelector('.plvc');
+      const ev = (t, id) => h.dispatchEvent(new PointerEvent(t, { pointerId: id, clientX: cx, clientY: cy, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      ev('pointerdown', 70); ev('pointerup', 70); return new Promise(r => setTimeout(() => { ev('pointerdown', 71); ev('pointerup', 71); r(); }, 80)); }, { cx, cy }); await page.waitForTimeout(900); };
+    await dbl(); expect(await page.evaluate(() => PLV.tv.s / PLV.tv.fit)).toBeGreaterThan(1.8);
+    await dbl(); expect(await page.evaluate(() => PLV.tv.s / PLV.tv.fit)).toBeCloseTo(1, 2);
+    await expect(page.locator('#plv')).not.toHaveClass(/hid/);
+    // zoom con un dedo: doble toque y deslizar hacia abajo acerca
+    const z = await page.evaluate(async ({ cx, cy }) => { const h = document.querySelector('.plvc'), raf = () => new Promise(r => requestAnimationFrame(r));
+      const ev = (t, id, y) => h.dispatchEvent(new PointerEvent(t, { pointerId: id, clientX: cx, clientY: y, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      const s0 = PLV.tv.s; ev('pointerdown', 80, cy); ev('pointerup', 80, cy); await new Promise(r => setTimeout(r, 80));
+      ev('pointerdown', 81, cy); for (let i = 1; i <= 8; i++) { ev('pointermove', 81, cy + i * 12); await raf(); } ev('pointerup', 81, cy + 96);
+      return PLV.tv.s / s0; }, { cx, cy });
+    expect(z).toBeGreaterThan(2);
+    // Medir: la tira de abajo cede su lugar a la barra de Medir
+    await page.locator('#plv [data-pv="med"]').tap();
+    await expect(page.locator('#plv .plmbar')).toBeVisible();
+    await expect(page.locator('#plv .plvbot')).toBeHidden();
+    await page.locator('#plv .plmbar [data-pm="off"]').tap();
+    await expect(page.locator('#plv .plvbot')).toBeVisible();
+    // ⋯: hoja con lo demás; Atrás la cierra primero y luego cierra el visor
+    await page.locator('#plv [data-pv="more"]').tap();
+    await expect(page.locator('#plv .plvsh [data-sh="pdf"]')).toBeVisible();
+    await expect(page.locator('#plv .plvsh [data-sh="off"]')).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('#plv .plvsh')).toHaveCount(0);
+    await expect(page.locator('#plv')).toHaveCount(1);
+    await page.goBack();
+    await expect(page.locator('#plv')).toHaveCount(0);
+    // recientes arriba de la lista
+    await expect(page.locator('#pllist .plrec [data-pl="ARQ_AG03"]')).toBeVisible();
+    noErrors(errors, 'celular');
+  });
+});
+
 test('ETO: el admin carga el plano de taller de un SC (colección y carpeta aparte) y se ve agrupado por SC', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
