@@ -29,6 +29,11 @@ const store={get(k,d){try{const v=localStorage.getItem('lps911.'+k);return v==nu
 /* ---------- estado ---------- */
 let FDB=null;/* todas las rutas de datos pasan por aquí (preparación multiempresa: luego será obras/<id>/<colección>) */
 const fcol=n=>(db||FDB).collection(n);
+/* Planos (11-11-2026): el módulo Planos de main se pasó solo, sin Casco ni zonas generales. Estas tres funciones las usa planos.js
+   y en main son de Casco (CS, fcolLp) y de las zonas generales (isZG): aquí dicen «no hay Casco» y «no hay zonas generales» */
+const CS=()=>false;
+const fcolLp=n=>(db||FDB).collection(n);
+const isZG=p=>!!(p&&p.zg);
 const PLANO_SRC='plano.js?v=33';
 const ARCH={pis:new Map(),sec:new Map(),amb:new Map(),act:new Map(),res:new Map(),con:new Map()};
 const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'amb',acts:'act',weeks:'wk',restr:'res'};
@@ -63,7 +68,7 @@ const tarEdit=()=>!!me&&(me.role==='admin'||TASIS());
 /* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner (no el capataz de un SC,
    que solo usa «En obra»); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar','p3d'];
-const canPla=()=>canLps()&&me.role!=='capataz';
+const canPla=()=>canLps();   /* también el capataz de un SC (11-11-2026, pedido del dueño): consulta; los ETO, solo de su partida */
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());

@@ -220,12 +220,12 @@ function pldBar(){if(!PLV||!PLD.on)return;let el=PLV.box.querySelector('.pldbar'
   const hint=T==='txt'?(PLD.ed?'Escribe · Enter pone · Mayús+Enter otra línea · Esc cancela.':'Toca donde va el texto y escribe; toca un texto puesto para corregirlo.')
     :T==='del'?'Toca o pasa sobre una marca para quitarla.'
     :pldTouch()?'Un dedo dibuja · dos dedos mueven y acercan.':'Arrastra para dibujar · Espacio + arrastrar mueve el plano · rueda: acercar.';
-  el.innerHTML=`<div class="plmt">${PLD_TOOLS.map(([k,i,nm])=>`<button type="button" class="ib${T===k?' on':''}" data-pd="${k}" title="${nm}" aria-pressed="${T===k}"><span aria-hidden="true">${i}</span> ${nm}</button>`).join('')}</div>
+  el.innerHTML=`<div class="plmt">${PLD_TOOLS.map(([k,i,nm])=>`<button type="button" class="ib${T===k?' on':''}" data-pd="${k}" title="${nm}" aria-label="${nm}" aria-pressed="${T===k}"><span aria-hidden="true">${i}</span><span class="pltl"> ${nm}</span></button>`).join('')}</div>
     <div class="plmx">${T==='del'?'':`<span class="pldcs" role="group" aria-label="Color">${PLD_COLS.map(([c,nm])=>`<button type="button" class="pldsw${c===col?' on':''}" data-pd="c:${c}" style="--sw:${c}" title="${nm}" aria-label="${nm}" aria-pressed="${c===col}"></button>`).join('')}</span>`}
-      <button type="button" class="ib" data-pd="undo" title="Deshacer (Ctrl+Z)"${H.length?'':' disabled'}>↶ Deshacer</button><button type="button" class="ib" data-pd="clear"${n?'':' disabled'}>Limpiar</button>
+      <button type="button" class="ib" data-pd="undo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${H.length?'':' disabled'}>↶<span class="pltl"> Deshacer</span></button><button type="button" class="ib" data-pd="clear" aria-label="Limpiar"${n?'':' disabled'}><span class="plti" aria-hidden="true">🗑</span><span class="pltl">Limpiar</span></button>
       <span class="plvsp"></span>
-      <button type="button" class="ib pri" data-pd="share" title="${pldTouch()?'Compartir la imagen (WhatsApp…)':'Copiar la imagen para pegarla en WhatsApp (Ctrl+V)'}">📷 ${pldTouch()?'Compartir':'Copiar imagen'}</button><button type="button" class="ib" data-pd="dl" title="Descargar la imagen" aria-label="Descargar la imagen">⤓</button>
-      <button type="button" class="ib" data-pd="off" title="Salir de marcar (Esc); las marcas siguen visibles">✓ Listo</button></div>
+      <button type="button" class="ib pri" data-pd="share" title="${pldTouch()?'Compartir la imagen (WhatsApp…)':'Copiar la imagen para pegarla en WhatsApp (Ctrl+V)'}">📷<span class="pltl"> ${pldTouch()?'Compartir':'Copiar imagen'}</span></button><button type="button" class="ib" data-pd="dl" title="Descargar la imagen" aria-label="Descargar la imagen">⤓</button>
+      <button type="button" class="ib" data-pd="off" title="Salir de marcar (Esc); las marcas siguen visibles" aria-label="Listo">✓<span class="pltl"> Listo</span></button></div>
     <small class="plms">${hint} ${n?`${n} marca${n>1?'s':''} en esta lámina${o?` · marcas en ${o} lámina${o>1?'s':''} más`:''}. `:''}No se guardan: se borran al cerrar el visor.</small>`;
   if(!PLD.ed&&(!document.activeElement||document.activeElement===document.body))PLV.box.focus()}
 

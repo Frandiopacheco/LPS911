@@ -44,6 +44,8 @@ function plkHit(cx,cy,list){const v=PLV.tv,r=v.cv.getBoundingClientRect(),px=cx-
 /** deja el visor con lo que toca según el estado (Medir manda mientras está activo) */
 function plkSync(){if(!PLV||!PLV.tv)return;const v=PLV.tv;
   if(PLM.on||PLD.on){v.onLink=null;return}                /* Medir o Marcar mandan mientras están activos */
+  /* celular: sin vínculos (decidido con el dueño, nov 2026: quedan para tablet y PC). Un toque sobre el plano muestra u oculta las barras */
+  if(PLV.mob){if(PLK.edit){PLK.edit=false;plkBar()}v.onLink=null;if(v.over===plkDraw)v.over=null;v.onTap=v.onDown=v.onDrag=v.onUp=null;v.host.classList.remove('vinc');v.tick();return}
   const E=PLK.edit&&!PLK.pick;
   v.over=plkDraw;                                   /* sin vínculos visibles solo dibuja el que está bajo el cursor */
   v.onLink=!E&&!PLK.pick?plkLinkTap:null;             /* ocultos o no, un toque sobre la marca los sigue */
@@ -102,6 +104,7 @@ const PLK_MM=6,PLK_SNAP_MM=6;
 function plkPxMm(p,sp){sp=sp||p;const cr=sp&&sp.crop,wpt=cr?cr.x1-cr.x0:0;if(wpt>0&&sp.W)return sp.W/(wpt/72*25.4);if(p&&p.mm&&p.mm[0]&&sp.W)return sp.W/p.mm[0];return 300/25.4}
 const PLKTX=new Map();   /* base de la revisión → promesa de los textos cortos del PDF [{x,y,h,n}] en px del plano */
 function plkTexts(sp){let e=PLKTX.get(sp.base);if(e)return e;
+  if(sp.dxf){e=plGeoTexts(sp);PLKTX.set(sp.base,e);return e}   /* DXF: sus textos (planos-dxf.js) */
   e=(async()=>{const pg=await plPdfPage(sp.base),tc=await pg.getTextContent(),vp=pg.getViewport({scale:1}),cr=sp.crop,S0=sp.W/(cr?cr.x1-cr.x0:vp.width),ox=cr?cr.x0:0,oy=cr?cr.y0:0,out=[];
     for(const it of tc.items){const s=(it.str||'').trim();if(!s||s.length>8)continue;const[a,b,c,d,x,y]=it.transform,la=Math.hypot(a,b)||1,lc=Math.hypot(c,d)||1;
       const w=it.width||0,ux=x+a/la*w/2+c/lc*lc*0.35,uy=y+b/la*w/2+d/lc*lc*0.35,q=vp.convertToViewportPoint(ux,uy);
@@ -166,8 +169,8 @@ function plkChDraw(){if(!PLV||!PLK.ch)return;let el=PLV.box.querySelector('.plkc
     const L=plAct().filter(p=>!w.length||w.every(x=>plUp([p.cod,p.tit,p.fname,PL_DN[p.disc]].join(' ')).includes(x))).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b));
     /* arriba, las láminas a las que ya lleva esta misma lámina (la otra flecha del corte suele ir al mismo destino) */
     const used=w.length?[]:[...new Set(plkLinks(PLB.get(PLK.ch.originId)).map(l=>l.to))].map(id=>PLB.get(id)).filter(p=>p&&!p.arch);
-    const row=p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></button>`;
-    host.innerHTML=(used.length?`<div class="plkg">Ya vinculadas desde esta lámina</div>${used.map(row).join('')}<div class="plkg">Todas</div>`:'')+(L.length?L.slice(0,80).map(p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></button>`).join('')+(L.length>80?'<p class="note">Hay más: escribe para acotar.</p>':''):'<p class="note">Ninguna lámina con esa búsqueda.</p>')};
+    const row=p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plLvName(plLvOf(p))||'General'].join(' · '))}</small></button>`;
+    host.innerHTML=(used.length?`<div class="plkg">Ya vinculadas desde esta lámina</div>${used.map(row).join('')}<div class="plkg">Todas</div>`:'')+(L.length?L.slice(0,80).map(p=>`<button type="button" class="plkr${p.id===PLK.ch.d.to?' on':''}" role="option" data-kc="${esc(p.id)}"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plLvName(plLvOf(p))||'General'].join(' · '))}</small></button>`).join('')+(L.length>80?'<p class="note">Hay más: escribe para acotar.</p>':''):'<p class="note">Ninguna lámina con esa búsqueda.</p>')};
   list();q.oninput=list;
   el.onclick=e=>{const b=e.target.closest('[data-kc]');if(!b)return;e.stopPropagation();if(plkGhost(e))return;const k=b.dataset.kc;
     if(k==='x'){plkChClose();return}

@@ -129,7 +129,7 @@ const plTxSnip=r=>r?`<small class="pltxs">${r.n>1?`<b>${r.n}×</b> `:''}${r.s.ma
 const plTxOn=()=>PLF.qm==='tx';
 /** la lista de la biblioteca en modo Contenido (L: las láminas de los demás filtros, sin el buscador) */
 function plTxList(main,host,L){const q=PLF.q||'';const canIdx=L.some(p=>!p.tx&&plEdOf(p));
-  const draw=()=>{if(!host.isConnected)return;const st=$('#pltxst',main);if(st)shx(st,plTxStatus(L,canIdx));
+  const draw=()=>{if(!host.isConnected)return;const st=$('#pltxst',main);if(st&&!PLTXQ.run)shx(st,plTxStatus(L,canIdx));
     const R=L.filter(p=>PLS.res.has(p.id));stx($('#plcnt',main),plTxC(q).length<2?L.length+' planos':R.length===1?'1 plano':R.length+' planos');
     if(plTxC(q).length<2){shx(host,'');host.dataset.h='';return}
     const g=new Map();R.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
@@ -139,12 +139,15 @@ function plTxList(main,host,L){const q=PLF.q||'';const canIdx=L.some(p=>!p.tx&&p
       :PLS.done?'<p class="note">Ninguna lámina tiene ese texto con estos filtros.</p>':'';
     if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host)}};
   plTxPreload();plTxSearch(L,q,draw)}
+/** modo Contenido sin texto todavía: la lista normal la dibuja plList; aquí solo el estado (sin indexar, sin texto buscable…) */
+function plTxIdle(main,L){const canIdx=L.some(p=>!p.tx&&plEdOf(p)),host=$('#pllist',main);
+  plTxPreload();plTxSearch(L,'',()=>{const st=$('#pltxst',main);if(host&&host.isConnected&&st&&!PLTXQ.run)shx(st,plTxStatus(L,canIdx))})}
 /** ids de las láminas con resultado, en el orden de la lista */
 const plTxIds=L=>L.filter(p=>PLS.res.has(p.id)).map(p=>p.id);
 
 /* ---------- indexar las láminas ya cargadas ---------- */
 const PLTXQ={run:false,stop:false};
-async function plTxIndexAll(L,onUp){L=L.filter(p=>!p.tx&&plEdOf(p));if(!L.length||PLTXQ.run)return;
+async function plTxIndexAll(L,onUp){L=L.filter(p=>!p.tx&&!p.dxf&&plEdOf(p));if(!L.length||PLTXQ.run)return;
   if(!await uiAsk({title:'Indexar el texto de las láminas',text:`Se leerá el texto de ${L.length} ${L.length===1?'lámina':'láminas'} en esta PC: se baja cada PDF original (no se guarda en el equipo) y se sube su índice. Unos segundos por lámina; deja esta pestaña abierta.`,ok:'Indexar',tone:'info'}))return;
   PLTXQ.run=true;PLTXQ.stop=false;let ok=0,sin=0,err=0,i=0;const t0=performance.now();
   const say=()=>onUp&&onUp(`Indexando ${ok+sin+err} de ${L.length}…`);say();
@@ -180,7 +183,7 @@ function plTxPanelList(el,L){const host=el.querySelector('.plvpl');const q=PLV.p
 function plTxAttach(){if(!PLV||!PLV.tv)return;const V=PLV.tv,p=PLB.get(PLV.id),sp=p&&plSpecOf(p,PLV.rev);PLV.hits=null;
   const old=PLV.box.querySelector('.pltxb');if(old)old.remove();
   if(!PLV.hq||!p)return;const qc=plTxC(PLV.hq);if(qc.length<2)return;
-  const bar=document.createElement('div');bar.className='pltxb';const body=PLV.box.querySelector('.plvb');bar.style.top=((body?body.offsetTop:56)+8)+'px';PLV.box.appendChild(bar);
+  const bar=document.createElement('div');bar.className='pltxb';bar.style.top=(plvTop()+8)+'px';PLV.box.appendChild(bar);
   const id=PLV.id,tv=V;
   const show=()=>{if(!PLV||PLV.tv!==tv)return;const H=PLV.hits;
     bar.innerHTML=`<span class="pltxq">🔍 «${esc(PLV.hq)}»</span>${!sp.cur?'<span>Solo en la revisión vigente</span>':!p.tx?'<span>Lámina sin indexar</span>':!p.tx.n?'<span>Sin texto buscable</span>':!H?'<span>Buscando…</span>':!H.L.length?'<span>No está en esta lámina</span>'
