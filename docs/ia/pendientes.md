@@ -19,7 +19,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - Se planteó para una próxima obra (esta ya está en acabados); desde el 26-10-2026 se desarrolla en `main` como módulo **Casco** con datos de ejemplo y **no va a producción** hasta que el dueño lo apruebe (regla 6 de `CLAUDE.md`). La vista principal es el tren (partidas en filas, sector en la celda).
 
-## Ambientes desde el plano alistado (idea aprobada en principio con el dueño, 11-11-2026; por hacer)
+## Ambientes desde el plano alistado (aprobado con el dueño, 11-11-2026; primera parte hecha: `plan-diario.md` «Ambientes desde el plano»)
+
+**Hecho:** traer los ambientes en Sectorización (nuevos, por ubicación, por nombre) y «Agrupar en este sector». **Falta:** avisar los cambios cuando llega una revisión nueva del plano (vínculo `pl` por posición calibrada con `plb.ok.fit`), usar los m² de cada ambiente en los metrados del lookahead, sugerir el tipo de ambiente por el nombre.
+
 
 Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorización; lo correcto es al revés: **nacen del plano**. Proceso del dueño: niveles → cargar planos → frentes → sectorización → tren → lookahead → metrados → histograma de personal → balanceo de cuadrillas.
 - **Dónde:** en **Sectorización**, por piso: «Traer ambientes del plano» (planta ARQ alistada; sus ambientes ya salen de `dxfRolesFix` + `plb.fix` con nombre y polígono). Tabla en tres grupos: nuevos (se crean en `ambientes` con su forma en `geo`), coinciden (se vinculan y toman la forma del plano, sin dibujar), solo en el lookahead (se quedan; nunca se borran solos). Los nombres se corrigen en la tabla y después en el lookahead sin perder el vínculo.
