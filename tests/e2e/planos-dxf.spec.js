@@ -296,3 +296,27 @@ test('alistar › tocar un trazo muestra su capa y le cambia la función; el DXF
   expect(d.layFrom).toBe('E03'); expect(d.lay.col).toBe('EST-ACHURADO'); expect(d.lay.vig).toEqual(['EST-COLUMNAS']); expect(d.lay.ej).toBe('EST-EJES');
   expect(errors).toEqual([]);
 });
+
+/* 11-11-2026: el recorte al marco fallaba si algo suelto lejos agrandaba el dibujo (el marco quedaba < 50 %) o si el marco eran 4 líneas
+   sueltas o una polilínea abierta que vuelve al inicio: la lámina salía chica en una esquina. */
+test('planos DXF: recorta al marco aunque haya objetos sueltos lejos o el marco sea de 4 líneas o una polilínea abierta', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const mk = (frame) => {
+    const o = []; const P = (c, v) => o.push(String(c), String(v));
+    const line = (x1, y1, x2, y2, l = 'X') => { P(0, 'LINE'); P(8, l); P(10, x1); P(20, y1); P(11, x2); P(21, y2); };
+    const poly = (pts, cl) => { P(0, 'LWPOLYLINE'); P(8, 'MARCO'); P(90, pts.length); P(70, cl ? 1 : 0); pts.forEach(([x, y]) => { P(10, x); P(20, y); }); };
+    const text = (s, x, y) => { P(0, 'TEXT'); P(8, 'X'); P(10, x); P(20, y); P(40, 3); P(1, s); };
+    P(0, 'SECTION'); P(2, 'HEADER'); P(9, '$INSUNITS'); P(70, 4); P(0, 'ENDSEC'); P(0, 'SECTION'); P(2, 'ENTITIES');
+    const R = [[0, 0], [420, 0], [420, 297], [0, 297]];
+    if (frame === 'cerrada') poly(R, true);
+    if (frame === 'abierta') poly([...R, [0, 0]], false);
+    if (frame === 'lineas') { line(0, 0, 420, 0, 'MARCO'); line(420, 0, 420, 297, 'MARCO'); line(420, 297, 0, 297, 'MARCO'); line(0, 297, 0, 0, 'MARCO'); }
+    for (let i = 0; i < 40; i++) { line(20 + i * 9, 30, 20 + i * 9, 260); text('T' + i, 25 + i * 9, 20); }   /* el dibujo */
+    text('SUELTO', 760, -250); line(700, -260, 780, -260);   /* lejos, pero no tanto como para quedar fuera */
+    P(0, 'ENDSEC'); P(0, 'EOF'); return o.join('\n');
+  };
+  const r = await page.evaluate(T => T.map(t => { const S = dxfSheet(dxfParse(t)); return { crop: S.crop, box: S.box.map(v => Math.round(v)) }; }), ['cerrada', 'abierta', 'lineas', 'sin'].map(mk));
+  for (const x of r.slice(0, 3)) expect(x).toEqual({ crop: true, box: [0, 0, 420, 297] });
+  expect(r[3].crop).toBe(false);   /* sin marco: la lámina entera */
+  expect(errors).toEqual([]);
+});

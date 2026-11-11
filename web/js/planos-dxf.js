@@ -171,10 +171,28 @@ function dxfUnitK(E){const isV=p=>Math.abs(p[2]-p[0])<Math.abs(p[3]-p[1]);const 
 function dxfUnits(D,Fm,box){const map=dxfGuess(dxfLayers(Fm));if(map.ej){const k=dxfUnitK(dxfEjes(Fm,map.ej).E);if(k)return{k,how:'ejes'}}
   const u={4:0.001,5:0.01,6:1}[D.ins];if(u)return{k:u,how:'unidades'};const S=Math.max(box[2]-box[0],box[3]-box[1]);return{k:S<2000?1:S<20000?0.01:0.001,how:'tamaño'}}
 
-/** marco de la lámina: el rectángulo cerrado más grande (polilínea de 4 lados horizontales y verticales) que ocupa ≥ 50 % del dibujo; o null */
-function dxfFrame(F,box){const A=(box[2]-box[0])*(box[3]-box[1]);let best=null,ba=A*0.5;
-  for(const e of F){if(e.k!=='p'||!e.c||e.P.length!==8)continue;const P=e.P;let ok=true;for(let i=0;i<4&&ok;i++){const j=(i+1)%4,dx=Math.abs(P[2*j]-P[2*i]),dy=Math.abs(P[2*j+1]-P[2*i+1]);ok=Math.min(dx,dy)<=Math.max(dx,dy)*0.002}
-    if(!ok)continue;const b=dxfBox(e),a=(b[2]-b[0])*(b[3]-b[1]);if(a>ba){ba=a;best=b}}return best}
+/** marco de la lámina, o null. Candidatos: polilíneas de 4 lados horizontales y verticales (cerradas, o abiertas de 5 puntos que vuelven
+    al inicio) y rectángulos armados con 4 líneas sueltas (marcos «explotados»). Manda el rectángulo más grande que ocupa ≥ 50 % del dibujo;
+    si ninguno (11-11-2026: un objeto suelto lejos agrandaba el dibujo y la lámina salía chica en una esquina), el que contiene ≥ 90 % de
+    lo dibujado (entre los que contienen casi lo mismo, el más grande: el borde de la hoja y no el margen interior). */
+function dxfFrame(F,box){const A=(box[2]-box[0])*(box[3]-box[1]);const R=[];const ax=(dx,dy)=>Math.min(dx,dy)<=Math.max(dx,dy)*0.002;
+  for(const e of F){if(e.k!=='p')continue;let P=e.P,c=e.c;
+    if(P.length===10&&Math.hypot(P[8]-P[0],P[9]-P[1])<=Math.hypot(P[2]-P[0],P[3]-P[1])*0.002){P=P.slice(0,8);c=true}
+    if(!c||P.length!==8)continue;let ok=true;for(let i=0;i<4&&ok;i++){const j=(i+1)%4;ok=ax(Math.abs(P[2*j]-P[2*i]),Math.abs(P[2*j+1]-P[2*i+1]))}
+    if(ok)R.push(dxfBox({k:'p',P}))}
+  /* 4 líneas: dos horizontales y dos verticales largas que se tocan en las esquinas */
+  const span=Math.max(box[2]-box[0],box[3]-box[1]),H=[],V=[];
+  for(const e of F){if(e.k!=='l')continue;const p=e.p,dx=Math.abs(p[2]-p[0]),dy=Math.abs(p[3]-p[1]);if(Math.max(dx,dy)<span*0.2||!ax(dx,dy))continue;
+    if(dx>dy)H.push([Math.min(p[0],p[2]),Math.max(p[0],p[2]),(p[1]+p[3])/2]);else V.push([Math.min(p[1],p[3]),Math.max(p[1],p[3]),(p[0]+p[2])/2])}
+  const lg=(L,k)=>L.sort((a,b)=>(b[1]-b[0])-(a[1]-a[0])).slice(0,k);lg(H,40);lg(V,40);
+  for(let a=0;a<H.length;a++)for(let b=a+1;b<H.length;b++){const h0=H[a][2]<H[b][2]?H[a]:H[b],h1=h0===H[a]?H[b]:H[a];const t=Math.max(h0[1]-h0[0],h1[2]-h0[2])*0.005;
+    if(h1[2]-h0[2]<span*0.1||Math.abs(h0[0]-h1[0])>t||Math.abs(h0[1]-h1[1])>t)continue;const x0=(h0[0]+h1[0])/2,x1=(h0[1]+h1[1])/2;
+    const has=x=>V.some(v=>Math.abs(v[2]-x)<=t&&Math.abs(v[0]-h0[2])<=t&&Math.abs(v[1]-h1[2])<=t);if(has(x0)&&has(x1))R.push([x0,h0[2],x1,h1[2]])}
+  if(!R.length)return null;
+  let best=null,ba=A*0.5;for(const b of R){const a=(b[2]-b[0])*(b[3]-b[1]);if(a>ba){ba=a;best=b}}if(best)return best;
+  const C=F.map(e=>{const b=dxfBox(e);return[(b[0]+b[2])/2,(b[1]+b[3])/2]});const n=b=>C.reduce((s,c)=>s+(c[0]>=b[0]&&c[0]<=b[2]&&c[1]>=b[1]&&c[1]<=b[3]?1:0),0);
+  const S=R.map(b=>({b,n:n(b),a:(b[2]-b[0])*(b[3]-b[1])})).filter(o=>o.n>=F.length*0.9);if(!S.length)return null;const mx=Math.max(...S.map(o=>o.n));
+  return S.filter(o=>o.n>=mx*0.98).sort((p,q)=>q.a-p.a)[0].b}
 /** recorta la lista al marco: queda lo que lo toca; la caja es el marco */
 function dxfCrop(P,fr){return P.filter(e=>{const b=dxfBox(e);return!(b[2]<fr[0]||b[0]>fr[2]||b[3]<fr[1]||b[1]>fr[3])})}
 /* ---------- la lámina: modelo o presentación ---------- */
