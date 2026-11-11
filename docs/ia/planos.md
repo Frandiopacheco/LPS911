@@ -128,6 +128,8 @@ Las plantas se pueden cargar **en DXF en vez de PDF** (solo DXF, sin PDF: el due
 - Pruebas: `planos-dxf.spec.js` (lector en modelo, en cm y en presentación; carga completa con archivos y escala; Medir se pega) con el DXF de `dxf-demo.js`.
 
 ## Niveles del edificio (01-11-2026, decidido con el dueño: «una sola lista»)
+- **Zonas generales** (11-11-2026): en los selectores de nivel de Planos (`plLvOpts`) van en su grupo «Zonas generales» (las de Casco y las de Last Planner que ninguna zona de Casco usa) y al final de `plLvList`: un plano de elevaciones va en «Fachadas», una planta general en «Exteriores». Ver `datos.md` (`pisos.zg`).
+
 
 Antes había tres listas de niveles que no se conocían (pisos de Last Planner, niveles de Casco y el nivel de cada plano = piso de Last Planner + un código adivinado del nombre): un plano de un nivel que solo existe en Casco (cimentación, piso técnico) no se podía alistar, y Casco buscaba sus planos comparando textos. Ahora (`planos.js`, «Niveles del edificio»):
 - **La lista es la de Configuración › Casco › Niveles** (`cs_pisos`; en Last Planner se lee con `plnvSub` → `PLNV`, en Casco son `S.pis`). `plBld()` = esos niveles; `plLvOn()` = la obra tiene Casco. **Sin Casco (producción) todo sigue con los pisos de Last Planner** (`cs_pisos` no se puede leer allí: lista vacía).

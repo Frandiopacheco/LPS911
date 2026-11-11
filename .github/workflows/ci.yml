@@ -207,6 +207,12 @@ jobs:
             firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force 2>&1 | tee deploy.log
             rc=${PIPESTATUS[0]}
             [ $rc -eq 0 ] && break
+            # 409 «Release …/cloud.firestore already exists» con «already up to date»: las reglas ya están instaladas tal cual
+            # (Google rechaza reactivarlas; se repitió 3 de 3 el 11-11-2026). Se sigue solo con las tareas del servidor.
+            if grep -q "releases/cloud.firestore already exists" deploy.log && grep -q "already up to date" deploy.log && [ "${ONLY#firestore:rules,}" != "$ONLY" ]; then
+              echo "::notice::Las reglas de Firestore ya estaban instaladas (Google respondió 409 al reactivarlas): se instalan solo las tareas del servidor."
+              ONLY="${ONLY#firestore:rules,}"; continue
+            fi
             grep -qE "HTTP Error: (409|429|500|502|503|504)|currently unavailable|ECONNRESET|ETIMEDOUT|socket hang up" deploy.log || break
             [ $intento -lt 3 ] && { echo "::warning::Firebase respondió con un error pasajero (intento $intento de 3); se reintenta en $((intento*30)) s."; sleep $((intento*30)); }
           done

@@ -32,7 +32,7 @@ const csTomorrow=()=>csNextWork(addD(todayIso(),1));
 let CS_LP=null;/* pisos de Last Planner (para el vínculo de la entrega); se leen una vez */
 function csLpPisos(){if(CS_LP||!db)return CS_LP||[];CS_LP=[];fcolLp('pisos').get().then(sn=>{CS_LP=sn.docs.map(d=>({...d.data(),id:d.id})).filter(p=>!p.arch).sort(byOrder);if(U.tab==='cfg')requestRender()}).catch(()=>{});return CS_LP}
 function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure();if(typeof plSub==='function')plSub();if(typeof loadPlanoMod==='function'&&!(window.__plano&&window.__plano.LAM))loadPlanoMod().then(()=>{window.__plano.ensureLam&&window.__plano.ensureLam();setTimeout(()=>{if(U.tab==='cfg')requestRender()},600)}).catch(()=>{});
-  const ed=csEd(),dis=ed?'':' disabled',P_=pisos();
+  const ed=csEd(),dis=ed?'':' disabled',P_=niveles(),ZG_=pisos().filter(isZG);
   const cons=[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const empty=!csHasData();
   let h=`<div class="card cscard"><h2>Módulo Casco <span class="sub">Estructura, albañilería, tabiques y tarrajeo por sectores; los acabados por ambiente siguen en Last Planner</span></h2><div class="pad">`;
@@ -69,7 +69,11 @@ function csCfgCard(){if(typeof ensureMcat==='function')ensureMcat();csKsecEnsure
       return`<tr><td>${fi('name','140px','Nombre')}</td><td class="cslvc">${fi('code','64px','Código')} <small class="mu mono" title="En el tren: techo · piso">${esc(csTcOf(p))} · ${esc(csPcOf(p))}</small></td><td>${nE} de estructura${nA?` · ${nA} de albañilería`:''}</td>${csLvLamTd(p,'EST',ed)}${csLvLamTd(p,'ARQ',ed)}
       ${csLpTd(p,LP,ed,dis)}
       ${ed?`<td class="csrow cslva"><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="-1" title="Subir en la lista"${i?'':' disabled'} aria-label="Subir ${esc(p.name)}">▲</button><button class="ab" data-cs="lvmv" data-id="${p.id}" data-d="1" title="Bajar en la lista"${i<P_.length-1?'':' disabled'} aria-label="Bajar ${esc(p.name)}">▼</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="0" title="Agregar un nivel antes (debajo: p. ej. otro sótano)">+↑</button><button class="ab" data-cs="lvadd" data-id="${p.id}" data-d="1" title="Agregar un nivel después (encima: p. ej. azotea)">+↓</button><button class="ab" data-cs="lvdel" data-id="${p.id}" title="Eliminar (se archiva; con Deshacer)" aria-label="Eliminar ${esc(p.name)}">&times;</button></td>`:''}</tr>`}).join('')||`<tr><td colspan="${ed?7:6}" class="mu" style="padding:12px">Sin niveles.</td></tr>`}
-    </tbody></table></div><div class="callout cslamst" id="cslamst"${CS_LAMST?'':' hidden'}><i class="csspin" aria-hidden="true"></i><span>${esc(CS_LAMST)}</span></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="lvnew">+ Agregar niveles arriba</button>${(()=>{const n=csLvSugAll().filter(o=>!csLamQueued(o.p.id,o.d)).length;return P_.length&&n?`<button class="ib pri" data-cs="lvsug">Vincular sugeridos (${n})</button>`:''})()}${P_.length?'<button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button>':''}${P_.length?`<span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span>`:''}</div>`:''}<p class="note pad" style="margin-top:0">El orden va de abajo hacia arriba (sótanos primero). Los códigos se guardan al salir de la casilla.</p></div>`;
+    ${ZG_.length?`<tr class="cslvzg"><th colspan="${ed?7:6}">Zonas generales <span class="sub">No son niveles: zonas para programar (exteriores, cerco, muros de contención…). Sus trabajos van como frentes sueltos y entregan a su zona de Last Planner</span></th></tr>`+ZG_.map(p=>{const nS=csAmbs(p.id,'S').length;const fi=(f,w,l)=>`<input class="ci" data-cslv="${f}" data-id="${p.id}" value="${esc(p[f]||'')}" style="width:${w}"${dis} aria-label="${l} de ${esc(p.name)}">`;
+      return`<tr class="cslvz"><td>${fi('name','140px','Nombre')}</td><td class="cslvc">${fi('code','64px','Código')}</td><td>${nS} frente(s) suelto(s)</td>${csLvLamTd(p,'EST',ed)}${csLvLamTd(p,'ARQ',ed)}
+      ${csLpTd(p,LP,ed,dis)}
+      ${ed?`<td class="csrow cslva"><button class="ab" data-cs="lvdel" data-id="${p.id}" title="Eliminar (se archiva; con Deshacer)" aria-label="Eliminar ${esc(p.name)}">&times;</button></td>`:''}</tr>`}).join(''):''}
+    </tbody></table></div><div class="callout cslamst" id="cslamst"${CS_LAMST?'':' hidden'}><i class="csspin" aria-hidden="true"></i><span>${esc(CS_LAMST)}</span></div>${ed?`<div class="pad csrow"><button class="ib" data-cs="lvnew">+ Agregar niveles arriba</button><button class="ib" data-cs="zgnew" title="Exteriores, cerco, muros de contención…: no es un nivel, es una zona para programar sus trabajos de estructura como frentes sueltos">+ Zona general</button>${(()=>{const n=csLvSugAll().filter(o=>!csLamQueued(o.p.id,o.d)).length;return P_.length&&n?`<button class="ib pri" data-cs="lvsug">Vincular sugeridos (${n})</button>`:''})()}${P_.length?'<button class="ib" data-cs="entpub">◆ Publicar entregas en Last Planner</button>':''}${P_.length?`<span class="note">${csEntCount()} entrega(s) programadas en el Lookahead de Casco.</span>`:''}</div>`:''}<p class="note pad" style="margin-top:0">El orden va de abajo hacia arriba (sótanos primero). Los códigos se guardan al salir de la casilla.</p></div>`;
   h+=csSecCard();
   return h}
 
@@ -200,7 +204,7 @@ async function csBatchActs(ops){for(let i=0;i<ops.length;i+=400){const b=db.batc
     gap (días tras vaciar la losa del S1 para empezar el techo siguiente), albK (la albañilería del piso N empieza al vaciar el techo N+albK), grp}.
     Solo programa desde mañana: lo de hoy y lo pasado no se toca (en una fila con historial se conservan sus días pasados). */
 function csGenPlan(cfg){
-  const L=pisos(),ix=id=>L.findIndex(p=>p.id===id),a0=ix(cfg.from),a1=ix(cfg.to);
+  const L=niveles(),ix=id=>L.findIndex(p=>p.id===id),a0=ix(cfg.from),a1=ix(cfg.to);
   const out={ops:[],add:0,upd:0,same:0,past:0,warn:[],first:null,last:null};
   if(a0<0||a1<a0){out.warn.push('Elige un rango de niveles válido.');return out}
   const E=csCats('E'),A=csCats('A'),SS=csCats('S');if(!E.length){out.warn.push('El catálogo de casco no tiene partidas de estructura.');return out}
@@ -311,9 +315,13 @@ function csLvSugAll(){const out=[];for(const p of pisos())for(const d of['EST','
    sugerencia por el nombre (Piso 1 ↔ Primer piso, plNivKey) y aviso si el elegido no coincide con el nombre del nivel ---------- */
 const csLpOk=p=>p&&p.lp&&p.lp!=='-'?p.lp:'';
 const csLpUsed=id=>new Set(pisos().filter(x=>x.id!==id).map(csLpOk).filter(Boolean));
-function csLpSug(p,LP){if(p.lp||typeof plNivKey!=='function')return null;const k=plNivKey(p);if(!k)return null;const u=csLpUsed(p.id);const m=LP.filter(l=>!u.has(l.id)&&plNivKey(l)===k);return m.length===1?m[0]:null}
-function csLpTd(p,LP,ed,dis){const u=csLpUsed(p.id),cur=csLpOk(p),lp=LP.find(l=>l.id===cur),sg=csLpSug(p,LP);
-  const kp=typeof plNivKey==='function'?plNivKey(p):'',kl=lp&&typeof plNivKey==='function'?plNivKey(lp):'';const warn=!!(lp&&kp&&kl&&kp!==kl);
+/** pisos de Last Planner que se ofrecen a un nivel (los que no son zona general) o a una zona general de Casco (solo las zonas generales) */
+const csLpFor=(p,LP)=>LP.filter(l=>isZG(l)===isZG(p));
+function csLpSug(p,LP){if(p.lp||typeof plNivKey!=='function')return null;const u=csLpUsed(p.id);LP=csLpFor(p,LP).filter(l=>!u.has(l.id));
+  if(isZG(p)){const n=x=>plUp(x.name).replace(/[^A-Z0-9]/g,'');const k=n(p);const m=LP.filter(l=>k&&(n(l)===k||n(l).slice(0,5)===k.slice(0,5)||plUp(l.code)===plUp(p.code)));return m.length===1?m[0]:null}
+  const k=plNivKey(p);if(!k)return null;const m=LP.filter(l=>plNivKey(l)===k);return m.length===1?m[0]:null}
+function csLpTd(p,LP,ed,dis){const u=csLpUsed(p.id),cur=csLpOk(p),lp=LP.find(l=>l.id===cur),sg=csLpSug(p,LP);LP=csLpFor(p,LP).concat(lp&&isZG(lp)!==isZG(p)?[lp]:[]);
+  const kp=typeof plNivKey==='function'&&!isZG(p)?plNivKey(p):'',kl=lp&&typeof plNivKey==='function'&&!isZG(lp)?plNivKey(lp):'';const warn=!!(lp&&kp&&kl&&kp!==kl);
   const o=(v,l,on)=>`<option value="${esc(v)}"${on?' selected':''}>${esc(l)}</option>`;
   return`<td class="cslp"><select data-cs="lp" data-id="${p.id}"${dis} aria-label="Piso de Last Planner de ${esc(p.name)}">${o('',sg?'Sugerido: '+(sg.name||sg.code):'Elegir…',!p.lp)}${o('-','No tiene',p.lp==='-')}${LP.filter(l=>!u.has(l.id)).map(l=>o(l.id,l.name||l.code,l.id===cur)).join('')}${cur&&!lp&&LP.length?o(cur,'(piso archivado)',true):''}</select>${sg&&ed?` <button class="ab" data-cs="lpok" data-id="${p.id}" data-lp="${esc(sg.id)}" title="Vincular con ${esc(sg.name||sg.code)}">✓</button>`:''}${warn?` <span class="csbal warn" title="«${esc(lp.name||lp.code)}» no parece corresponder a «${esc(p.name)}»: revisa que sea el piso correcto">⚠ ¿Es este?</span>`:''}</td>`}
 function csLpSet(id,v){if(!csEd())return;const p=S.pis.get(id);if(!p)return;v=v||null;if((p.lp||null)===v)return;
@@ -352,7 +360,7 @@ const csLvOps=(L)=>L.map((p,i)=>{const o={...p};delete o.id;return(p.order===i)?
 function csLvNew(name,code,tc,pc){const id=uid('n');return{id,ops:[op('pisos',id,{name,code,tc,pc,order:0}),op('sectors',id+'-f',{pisoId:id,code:'F',name:'Frentes sueltos',grp:'S',order:2}),op('ambientes',id+'-esc',{sectorId:id+'-f',code:'ESC',name:'Escalera',order:1})]}}
 async function csLevelsAdd(){if(!csEd())return;
   const n=await uiAsk({title:'Agregar niveles arriba',text:'Escribe el nombre de un nivel (p. ej. Azotea) o cuántos niveles agregar (p. ej. 3: se numeran solos).',input:{label:'Nombre o cantidad',placeholder:'Ej.: Azotea  ·  o  3',required:true},ok:'Agregar'});if(n==null)return;
-  const t=String(n).trim();const L=pisos();const NL=L.slice();const ops=[];let k=0,lab='';
+  const t=String(n).trim();const L=niveles();const NL=L.slice();const ops=[];let k=0,lab='';
   if(/^\d+$/.test(t)){k=Math.min(60,+t);if(!k){toast('Escribe un número mayor que 0 o el nombre del nivel.');return}
     /* siguen al último nivel numerado: «Piso 3» (P3, TP3) → «Piso 4» (P4, TP4); «Nivel 8» (N8, T8) → «Nivel 9» (N9, T9) */
     const ref=L.filter(p=>/\d+$/.test(String(p.code||''))).pop();let num=ref?+String(ref.code).match(/(\d+)$/)[1]:0;
@@ -360,6 +368,17 @@ async function csLevelsAdd(){if(!csEd())return;
     for(let i=0;i<k;i++){num++;const code=cp+num;const nv=csLvNew(np+num,code,...csLvTags(ref,code));ops.push(...nv.ops);NL.push({id:nv.id,order:-1})}lab=`${k} nivel(es) agregados`}
   else{if(!t)return;const ab=csLvAbbr(t);const nv=csLvNew(t,ab,'T'+ab,'P'+ab);ops.push(...nv.ops);NL.push({id:nv.id,order:-1});k=1;lab=`Nivel «${t}» agregado`}
   const ord=csLvOrd(ops,NL);apply([...ops,...ord],lab);toast(`${lab}: aplícales una versión de sectorización`,'Deshacer',undo)}
+/** zona general de Casco (11-11-2026, decidido con el dueño): Exteriores, cerco, muros de contención… No es un nivel: no entra en la
+    secuencia del tren (Proyectar, rellenar en serie, «nivel siguiente», generador). Sus trabajos de estructura van como frentes sueltos
+    (grupo S) y su entrega va a la zona general de Last Planner que se elija en «Piso en Last Planner». */
+async function csZgNew(){if(!csEd())return;
+  const nm=await uiAsk({title:'Agregar una zona general',text:'Una zona que no es un nivel del edificio (p. ej. Exteriores). Sus trabajos de estructura se programan como frentes sueltos.',input:{label:'Nombre',placeholder:'Ej.: Exteriores',required:true},ok:'Siguiente'});if(!nm)return;
+  const name=String(nm).trim();if(!name)return;
+  const fr=await uiAsk({title:`Frentes de ${name}`,text:'Escribe sus frentes separados por comas. Puedes agregar más después en el Lookahead (menú del sector).',input:{label:'Frentes',placeholder:'Ej.: Cerco perimétrico, Muro de contención, Cisterna'},ok:'Agregar'});if(fr==null)return;
+  const id=uid('z'),code=csLvAbbr(name),fs=String(fr).split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
+  const ops=[op('pisos',id,{name,code,zg:true,order:pisos().length}),op('sectors',id+'-f',{pisoId:id,code:'F',name:'Frentes sueltos',grp:'S',order:2})];
+  fs.forEach((x,i)=>{const ab=x.split(/\s+/).filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,4)||'F';ops.push(op('ambientes',id+'-f'+(i+1),{sectorId:id+'-f',code:ab+(fs.slice(0,i).some(y=>y.split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4)===ab)?i+1:''),name:x,order:i+1}))});
+  apply(ops,`Zona general «${name}» agregada`);toast(`Zona general «${name}» agregada (código ${code}): elige su zona de Last Planner en la tabla`,'Deshacer',undo)}
 /** código corto desde el nombre (Sótano 2 → S2, Azotea → A); si ya existe, se le suma un número */
 /** techo y piso de un código nuevo, como los lleva el nivel de referencia (T + código, o T + número si así estaban) */
 function csLvTags(ref,code){const d=(String(code).match(/(\d+)$/)||[])[1],rd=ref&&(String(ref.code||'').match(/(\d+)$/)||[])[1];
@@ -368,12 +387,12 @@ function csLvAbbr(nm){if(/^azotea$/i.test(String(nm).trim()))return'AZ';let ab=S
   const used=new Set(pisos().map(p=>String(p.code||'').toUpperCase()));let c=ab,i=2;while(used.has(c))c=ab+(i++);return c}
 /** los pisos nuevos de ops reciben su orden en la lista NL; los existentes que cambian de lugar, un op aparte */
 function csLvOrd(ops,NL){const out=[];NL.forEach((p,i)=>{const o=ops.find(x=>x.col==='pisos'&&x.id===p.id&&!x.before);if(o){o.after.order=i;return}if(p.order!==i){const c={...p};delete c.id;out.push(op('pisos',p.id,{...c,order:i}))}});return out}
-async function csLvAdd(id,after){if(!csEd())return;const L=pisos();const i=L.findIndex(p=>p.id===id);if(i<0)return;const ref=L[i];
+async function csLvAdd(id,after){if(!csEd())return;const L=niveles();const i=L.findIndex(p=>p.id===id);if(i<0)return;const ref=L[i];
   const n=await uiAsk({title:`Agregar un nivel ${after?'después de':'antes de'} ${ref.name}`,text:after?'Queda encima (p. ej. la azotea).':'Queda debajo (p. ej. otro sótano).',input:{label:'Nombre',placeholder:after?'Ej.: Azotea':'Ej.: Sótano 2',required:true},ok:'Agregar'});if(!n)return;
   const nm=String(n).trim();if(!nm)return;const ab=csLvAbbr(nm);
   const nv=csLvNew(nm,ab,'T'+ab,'P'+ab);const NL=L.slice();NL.splice(after?i+1:i,0,{id:nv.id});
   apply([...nv.ops,...csLvOrd(nv.ops,NL)],`Nivel «${nm}» agregado`);toast(`Nivel «${nm}» agregado (código ${ab}): puedes cambiarlo en la tabla`,'Deshacer',undo)}
-function csLvMove(id,d){if(!csEd())return;const L=pisos();const i=L.findIndex(p=>p.id===id),j=i+d;if(i<0||j<0||j>=L.length)return;const NL=L.slice();[NL[i],NL[j]]=[NL[j],NL[i]];
+function csLvMove(id,d){if(!csEd())return;const L=niveles();const i=L.findIndex(p=>p.id===id),j=i+d;if(i<0||j<0||j>=L.length)return;const NL=L.slice();[NL[i],NL[j]]=[NL[j],NL[i]];
   const ops=csLvOps(NL);if(ops.length)apply(ops,`${L[i].name}: ${d<0?'sube':'baja'} en la lista`)}
 function csLvSet(id,f,v){if(!csEd())return;const p=S.pis.get(id);if(!p)return;v=String(v||'').trim();if(!v&&f!=='pc'&&f!=='tc'){toast('No puede quedar vacío.');requestRender();return}if((p[f]||'')===v)return;
   if(f==='code'&&pisos().some(x=>x.id!==id&&String(x.code||'').toUpperCase()===v.toUpperCase())){toast(`Ya hay un nivel con el código ${v}.`);requestRender();return}
@@ -388,7 +407,7 @@ async function csLvDel(id){if(!csEd())return;const p=S.pis.get(id);if(!p)return;
 document.addEventListener('click',e=>{if(!CS())return;const t=e.target;
   const b=t.closest&&t.closest('[data-cs]');if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;const k=b.dataset.cs;
   if(k==='init')csInit();else if(k==='demo')csDemo();else if(k==='vaciar')csVaciar();else if(k==='catadd')csCatAdd();else if(k==='cattip')csCatTip();else if(k==='seqtip')csSeqTip();else if(k==='ratdef')csRatDef();else if(k==='catdel')csCatDel(b.dataset.id);
-  else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='gotren'){U.tab='look';U.lkV='tren';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lpok')csLpSet(b.dataset.id,b.dataset.lp);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
+  else if(k==='entpub')csEntPublish();else if(k==='gosz'){U.tab='planos';U.csSzV='fr';saveUI();render()}else if(k==='gotren'){U.tab='look';U.lkV='tren';saveUI();render()}else if(k==='lvnew')csLevelsAdd();else if(k==='zgnew')csZgNew();else if(k==='lvadd')csLvAdd(b.dataset.id,b.dataset.d==='1');else if(k==='lvmv')csLvMove(b.dataset.id,+b.dataset.d);else if(k==='lvdel')csLvDel(b.dataset.id);else if(k==='lpok')csLpSet(b.dataset.id,b.dataset.lp);else if(k==='lvok')csLvLink([{pid:b.dataset.id,disc:b.dataset.disc,plb:b.dataset.plb}]);else if(k==='lvsug')csLvLink(csLvSugAll().map(o=>({pid:o.p.id,disc:o.d,plb:o.x.id})))});
 document.addEventListener('change',e=>{if(!CS())return;const t=e.target;
   if(t.dataset&&t.dataset.cs==='lvlam'){if(t.value)csLvLink([{pid:t.dataset.id,disc:t.dataset.disc,plb:t.value}]);return}
   if(t.dataset&&t.dataset.cslv){csLvSet(t.dataset.id,t.dataset.cslv,t.value);return}

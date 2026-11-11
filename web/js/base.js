@@ -45,7 +45,16 @@ const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';if(CS()&&!U.lkV)U.lkV='tren';if(CS()&&U.mod==='lps')U.mod='cas';if(!CS()&&U.mod==='cas')U.mod='lps';
 const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'?U.mod:LPM(),pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'||U.lkV==='tren'?U.lkV:'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,grp:U.grp||'',pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv,csSzV:U.csSzV||'',kmV:U.kmV||'',kmSec:U.kmSec||'',kmVt:U.kmVt||'',kvMode:U.kvMode||''});
-const pisos=()=>[...S.pis.values()].sort(byOrder);
+/* Zona general (`pisos.zg`, 11-11-2026, decidido con el dueño): Fachadas, Exteriores… no son niveles del edificio sino zonas para programar.
+   Siguen siendo «pisos» (lookahead, PPC, restricciones, plan diario igual), pero van siempre al final de las listas, aparte de los niveles,
+   y no cuentan como nivel en Casco ni en «Niveles del edificio». */
+const isZG=p=>!!(p&&p.zg);
+const pisos=()=>[...S.pis.values()].sort((a,b)=>(isZG(a)-isZG(b))||byOrder(a,b));
+/** solo los niveles (sin las zonas generales): la secuencia de abajo hacia arriba */
+const niveles=()=>pisos().filter(p=>!isZG(p));
+/** opciones de piso para un selector: los niveles y, aparte, las zonas generales */
+function pisoOptsZG(ps,sel){const o=p=>`<option value="${p.id}"${sel===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`;const Z=ps.filter(isZG);
+  return ps.filter(p=>!isZG(p)).map(o).join('')+(Z.length?`<optgroup label="Zonas generales">${Z.map(o).join('')}</optgroup>`:'')}
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
 const pisoOfAmb=id=>{const a=S.amb.get(id)||ARCH.amb.get(id);return a?pisoOfSecObj(S.sec.get(a.sectorId)||ARCH.sec.get(a.sectorId)):''};
@@ -829,7 +838,7 @@ function renderTop(){
   const wd=weekDays(U.week);if(typeof dateMode!=='function'||dateMode()==='week'){stx('#wnum','Semana '+U.week);stx('#wdates',fmtD(wd[0])+' – '+fmtD(wd[5]))}
   $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
   const ps=pisos();if(U.piso&&!S.pis.has(U.piso))U.piso='';
-  shx('#fpiso','<option value="">'+(CS()?'Todos los niveles':'Todos los pisos')+'</option>'+ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join(''));
+  shx('#fpiso','<option value="">'+(CS()?'Todos los niveles':'Todos los pisos')+'</option>'+pisoOptsZG(ps,U.piso));
   const pr=restrInScope().filter(rOpenC).length;const rc=$('#rcount');rc.hidden=!pr;stx(rc,String(pr));
   {const lc=$('#lqcount');if(lc){const vs=new Set(visPisos().map(p=>p.id));/* Calidad: lo que debe programar; el SC: sus observadas por levantar */const n=isCal()?[...LIB.values()].filter(l=>(l.st==='sol'||l.st==='lev')&&vs.has(l.pisoId)).length:SCK()?[...LIB.values()].filter(l=>l.st==='obs'&&vs.has(l.pisoId)&&myScsI().includes(l.sc)).length:0;lc.hidden=!n;stx(lc,String(n))}}
   $('#wtoday').disabled=U.week===curWeek();

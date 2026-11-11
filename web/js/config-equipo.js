@@ -14,7 +14,7 @@ function shrinkImage(file){return new Promise((ok,ko)=>{const img=new Image();co
 /* imágenes de sectorización antiguas (colección planos): se conservan en una sección plegada de Sectorización */
 function planosOldCard(){ensurePlanos();const list=[...PLAN.values()].filter(p=>!p.arch&&(!U.piso||!p.pisoId||p.pisoId===U.piso)).sort((a,b)=>(a.order||0)-(b.order||0));
   if(planosLoaded&&!list.length&&!canWrite)return'';
-  const popt=sel=>'<option value="">Todos los pisos</option>'+pisos().map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('');
+  const popt=sel=>'<option value="">Todos los pisos</option>'+pisoOptsZG(pisos(),sel);
   let h=`<details class="card szold"${SZ.old?' open':''}><summary class="hd">Imágenes de sectorización anteriores <span class="sub">${list.length} · ya no se usan para ubicar; quedan como referencia</span></summary><div class="pad">
    ${canWrite?'<label class="ib">+ Subir imagen<input type="file" id="pup" accept="image/*" multiple hidden></label> <span class="note" id="pmsg">Para ubicar ambientes usa la lámina del piso (arriba).</span>':''}`;
   if(!planosLoaded)h+='<div class="empty">Cargando…</div>';

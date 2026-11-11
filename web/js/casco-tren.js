@@ -15,9 +15,11 @@ function csKtrEnsure(){if(ktrSub||!db||!CS())return;ktrSub=fcol('ktr').onSnapsho
 const CT={cur:null,a:null,rows:new Set(),rfr:'',clip:null,rclip:null,days:[],drag:null,ed:null};
 const ctEd=()=>typeof csEd==='function'&&csEd()&&(typeof LKED==='undefined'||!!LKED);
 /** frente de un grupo de sectores: sectors.fr; sin frente asignado, el único frente o «la obra» ('_') */
-function ctFrOfSec(s){if(!s)return'_';if(s.fr&&KFR.has(s.fr))return s.fr;const F=csFrs();return F.length===1?F[0].id:'_'}
+function ctFrOfSec(s){if(!s)return'_';if(isZG(S.pis.get(s.pisoId)))return'z:'+s.pisoId;if(s.fr&&KFR.has(s.fr))return s.fr;const F=csFrs();return F.length===1?F[0].id:'_'}
+/* zona general (11-11-2026): su propio bloque en el tren ('z:' + id), con sus frentes sueltos; no es un nivel de ningún frente */
+const ctZG=fid=>String(fid).startsWith('z:')?S.pis.get(fid.slice(2))||null:null;
 const ctFrOfAct=x=>ctFrOfSec(csSecOf(S.amb.get(x.ambId)));
-const ctFrName=fid=>fid==='_'?(csFrs().length?'Sin frente':'Obra'):((KFR.get(fid)||{}).name||'Frente');
+const ctFrName=fid=>ctZG(fid)?ctZG(fid).name:fid==='_'?(csFrs().length?'Sin frente':'Obra'):((KFR.get(fid)||{}).name||'Frente');
 const ctFrColor=fid=>fid==='_'?'#888780':((KFR.get(fid)||{}).color||'#888780');
 /** clave de fila de una actividad */
 function ctKey(x){if(x.trw)return x.trw;const c=csCatOf(x);return c?'c:'+c.id:'n:'+mnk(x.name)+'|'+(x.sc||'')}
@@ -29,19 +31,22 @@ function ctRows(fid){const st=KTR.get(fid);let R=st&&Array.isArray(st.rows)?st.r
   return R.concat([...extra.values()].sort((a,b)=>a._tr-b._tr||a.name.localeCompare(b.name)).map(r=>{delete r._tr;return r}))}
 function ctRowsSave(fid,rows){return fcol('ktr').doc(fid).set({rows:rows.map(r=>({k:r.k,name:r.name||'',sc:r.sc||'',cat:r.cat||null})),by:me.email,t:NOW()}).catch(e=>toast('No se pudo guardar las filas: '+(e&&e.code||e)))}
 /** bloques del tren: los frentes con niveles o actividades, y «Obra»/«Sin frente» si hay actividades fuera de un frente */
-function ctBlocks(){const F=csFrs().map(f=>f.id);const used=new Set(ctLive().map(ctFrOfAct));const out=F.slice();if(used.has('_')||!F.length)out.push('_');return out}
+function ctBlocks(){const F=csFrs().map(f=>f.id);const used=new Set(ctLive().map(ctFrOfAct));const out=F.slice();if(used.has('_')||!F.length)out.push('_');
+  for(const z of pisos().filter(isZG))if(used.has('z:'+z.id)||csAmbs(z.id,'S').length)out.push('z:'+z.id);return out}
 /** sectores de un nivel para un grupo dentro del frente, en orden */
 function ctSecs(pid,g,fid){const out=[];for(const s of S.sec.values()){if(s.pisoId!==pid||(g&&s.grp!==g)||ctFrOfSec(s)!==fid)continue;for(const a of S.amb.values())if(a.sectorId===s.id&&!a.fus)out.push(a)}return out.sort((a,b)=>{const sa=S.sec.get(a.sectorId),sb=S.sec.get(b.sectorId);return(sa.order||0)-(sb.order||0)||byOrder(a,b)})}
-const ctLevels=fid=>{const f=KFR.get(fid);return f?csFrLv(f):pisos()};
+const ctLevels=fid=>{const z=ctZG(fid);if(z)return[z];const f=KFR.get(fid);return f?csFrLv(f):niveles()};
+/** la secuencia de niveles del frente, sin zonas generales (11-11-2026): una zona no es «el nivel siguiente» de nadie */
+const ctSeq=fid=>ctLevels(fid).filter(p=>!isZG(p));
 const ctGrpOf=r=>{const c=r&&r.cat?MX.cat.get(r.cat):null;return c&&c.grp?c.grp:''};
 const ctTag=a=>{const s=csSecOf(a),p=S.pis.get(s&&s.pisoId);return`${csPisoTag(p,(s&&s.grp)||'')}·${a?a.code:'?'}`};
 const ctLock=d=>d<=todayIso()&&!isAdmin;
 const ctLvIdx=(fid,a)=>{const s=csSecOf(a);return s?ctLevels(fid).findIndex(p=>p.id===s.pisoId):-1};
 /** sector siguiente en la serie: el siguiente del nivel (mismo grupo) o el primero del nivel siguiente que tenga sectores de ese grupo */
 function ctNextAmb(a,fid){const s=csSecOf(a);if(!s)return null;const T=ctSecs(s.pisoId,s.grp,fid);const i=T.findIndex(z=>z.id===a.id);if(i>=0&&T[i+1])return T[i+1];
-  const L=ctLevels(fid);const j=L.findIndex(p=>p.id===s.pisoId);for(let k=j+1;k<L.length;k++){const T2=ctSecs(L[k].id,s.grp,fid);if(T2.length)return T2[0]}return null}
+  if(isZG(S.pis.get(s.pisoId)))return null;const L=ctSeq(fid);const j=L.findIndex(p=>p.id===s.pisoId);for(let k=j+1;k<L.length;k++){const T2=ctSecs(L[k].id,s.grp,fid);if(T2.length)return T2[0]}return null}
 /** sector equivalente de otro nivel o frente (mismo grupo y mismo número de orden) */
-function ctMapAmb(ambId,dLv,fid){const a=S.amb.get(ambId),s=csSecOf(a);if(!a||!s)return null;const L=pisos();const i=L.findIndex(p=>p.id===s.pisoId)+dLv;if(i<0||i>=L.length)return null;
+function ctMapAmb(ambId,dLv,fid){const a=S.amb.get(ambId),s=csSecOf(a);if(!a||!s)return null;const L=isZG(S.pis.get(s.pisoId))?[S.pis.get(s.pisoId)]:niveles();const i=L.findIndex(p=>p.id===s.pisoId)+dLv;if(i<0||i>=L.length)return null;
   if(!dLv&&ctFrOfSec(s)===fid)return ambId;const T=ctSecs(L[i].id,s.grp,fid);return T[csAmbIdx(a)]?T[csAmbIdx(a)].id:null}
 
 /* ---------- conjunto de trabajo: todos los cambios de una acción van en un solo apply (un Deshacer) ---------- */
@@ -264,7 +269,7 @@ function ctFrMenu(btn,fid){openPop(btn,`<div class="ph">${esc(ctFrName(fid))}</d
 
 /* ---------- Proyectar: cada fila continúa su serie desde el nivel modelo hasta el nivel elegido ---------- */
 /** cfg {model, to, gap (días hábiles entre niveles), rep (reemplazar lo programado desde mañana en los niveles siguientes)} */
-function ctProjPlan(fid,cfg){const LV=ctLevels(fid);const m=LV.findIndex(p=>p.id===cfg.model),to=LV.findIndex(p=>p.id===cfg.to);const out={ops:[],add:0,rem:0,past:0,rows:0,per:[],cruce:0,warn:''};
+function ctProjPlan(fid,cfg){const LV=ctSeq(fid);const m=LV.findIndex(p=>p.id===cfg.model),to=LV.findIndex(p=>p.id===cfg.to);const out={ops:[],add:0,rem:0,past:0,rows:0,per:[],cruce:0,warn:''};
   if(m<0||to<=m){out.warn='Elige un nivel destino por encima del modelo.';return out}
   const ws=ctWS();const R=ctRows(fid);const t=todayIso();const gap=Math.max(0,+cfg.gap||0);const per=LV.map(p=>({id:p.id,tag:csTcOf(p)||p.name,had:0,nw:0,rem:0}));
   for(const row of R){const L=wsRow(ws,fid,row.k);const inM=L.filter(y=>ctLvIdx(fid,S.amb.get(y.ambId))===m&&(y.days||[]).length);if(!inM.length)continue;out.rows++;
@@ -283,7 +288,7 @@ function ctProjPlan(fid,cfg){const LV=ctLevels(fid);const m=LV.findIndex(p=>p.id
   if(vacRows.length){const first=new Map();for(const row of R)for(const y of wsRow(ws,fid,row.k)){if(!y.days.length)continue;const a=S.amb.get(y.ambId),s=csSecOf(a);const key=ctLvIdx(fid,a)+'|'+(s&&s.grp)+'|'+csAmbIdx(a);const d=y.days[0];if(!first.has(key)||d<first.get(key))first.set(key,d)}
     for(const row of vacRows)for(const y of wsRow(ws,fid,row.k)){if(!y.days.length)continue;const a=S.amb.get(y.ambId),s=csSecOf(a);const li=ctLvIdx(fid,a);if(li<m||li>=to)continue;const nx=first.get((li+1)+'|'+(s&&s.grp)+'|'+csAmbIdx(a));if(nx&&nx<=y.days[y.days.length-1]&&nx>t)out.cruce++}}
   out.ops=wsOps(ws);out.per=per.filter((p,i)=>i>=m&&i<=to&&(p.had||p.nw||p.rem));return out}
-function ctProjOpen(fid){if(!ctEd()){toast('Para proyectar entra a ✎ Programar.');return}const LV=ctLevels(fid);
+function ctProjOpen(fid){if(!ctEd()){toast('Para proyectar entra a ✎ Programar.');return}const LV=ctSeq(fid);
   const withActs=new Set(ctLive().filter(y=>ctFrOfAct(y)===fid&&(y.days||[]).length).map(y=>(csSecOf(S.amb.get(y.ambId))||{}).pisoId));
   const model=(LV.find(p=>withActs.has(p.id))||LV[0]||{}).id;if(!model){toast('Este frente no tiene niveles.');return}
   const lv=sel=>LV.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(csTcOf(p))} · ${esc(p.name)}${withActs.has(p.id)?' ●':''}</option>`).join('');

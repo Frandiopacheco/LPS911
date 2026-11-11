@@ -78,9 +78,9 @@ function plNivKey(o){if(!o)return'';const N=plUp(o.name),C=plUp(o.code).replace(
   return i>=0?'P'+(i+1):''}
 const plNivKeyCode=c=>{const t=plUp(c);if(!t)return'';const m=t.match(/^([PS])0*(\d{1,2})$/);return m?m[1]+(+m[2]):t==='CI'?'CIM':/^AZ/.test(t)?'AZ':t};
 /** pisos de Last Planner que ningún nivel del edificio usa (siguen en la lista, al final) */
-function plLpOnly(){const B=plBld();const u=new Set(B.map(plLpOf).filter(Boolean));return plLpPis().filter(p=>!u.has(p.id)).map(p=>({id:p.id,code:p.code,name:p.name,lpOnly:true}))}
+function plLpOnly(){const B=plBld();const u=new Set(B.map(plLpOf).filter(Boolean));return plLpPis().filter(p=>!u.has(p.id)).map(p=>({id:p.id,code:p.code,name:p.name,lpOnly:true,zg:!!p.zg}))}
 /** la lista de niveles que ofrece Planos */
-const plLvList=()=>plLvOn()?[...plBld(),...plLpOnly()]:pisos();
+const plLvList=()=>{const L=plLvOn()?[...plBld(),...plLpOnly()]:pisos();return[...L.filter(p=>!isZG(p)),...L.filter(isZG)]};
 const plLvLbl=()=>plLvOn()?'Nivel':'Piso';
 /** nivel de un plano (id de la lista de plLvList, '' = general) */
 function plLvOf(p){if(!p)return'';if(!plLvOn())return p.pisoId||'';const B=plBld();
@@ -96,8 +96,10 @@ const plLvCode=id=>{const p=id&&plLvList().find(x=>x.id===id);return p?p.code||'
 function plLvDoc(v){v=v||'';if(!plLvOn())return{pisoId:v};const lv=plBld().find(x=>x.id===v);return lv?{nv:v,pisoId:plLpOf(lv)}:{nv:'',pisoId:v}}
 /** opciones de un selector de nivel (los de Last Planner sin nivel del edificio, aparte) */
 function plLvOpts(sel,short){const o=p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>${esc(short?p.code:p.code+' · '+p.name)}</option>`;
-  if(!plLvOn())return pisos().map(o).join('');const X=plLpOnly();
-  return plBld().map(o).join('')+(X.length?`<optgroup label="Solo en Last Planner">${X.map(o).join('')}</optgroup>`:'')}
+  if(!plLvOn())return pisos().filter(p=>!isZG(p)).map(o).join('')+plZgGrp(pisos().filter(isZG),o);const X=plLpOnly();
+  /* zonas generales (Fachadas, Exteriores…; 11-11-2026) aparte: las de Casco y las de Last Planner que ninguna zona de Casco usa */
+  return plBld().filter(p=>!isZG(p)).map(o).join('')+plZgGrp([...plBld().filter(isZG),...X.filter(isZG)],o)+(X.some(p=>!isZG(p))?`<optgroup label="Solo en Last Planner">${X.filter(p=>!isZG(p)).map(o).join('')}</optgroup>`:'')}
+const plZgGrp=(Z,o)=>Z.length?`<optgroup label="Zonas generales">${Z.map(o).join('')}</optgroup>`:'';
 
 /* ---------- Storage (API REST con el token de la sesión; las reglas son firebase/storage.rules) ---------- */
 const plApi=()=>{const b=window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.storageBucket;if(!b)throw new Error('Falta storageBucket en la configuración de Firebase.');return 'https://firebasestorage.googleapis.com/v0/b/'+b}

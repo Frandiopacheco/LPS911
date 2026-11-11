@@ -987,12 +987,16 @@ function pisoMenu(btn,pid){const p=S.pis.get(pid);if(!p)return;const others=piso
   const cnt=o=>[...S.sec.values()].filter(s=>pisoOfSecObj(s)===o.id).length;
   openPop(btn,`<div class="ph">${esc(p.code)} · ${esc(p.name)}</div><button data-do="sec">+ Sector</button>
    ${others.length?'<hr><div class="ph">Copiar estructura desde…</div>'+others.map(o=>`<button data-do="copy" data-src="${o.id}">${esc(o.code)} · ${esc(o.name)}<kbd>${cnt(o)} sect.</kbd></button>`).join(''):''}
-   <hr><button data-do="mvd">Mover todo el piso en días…</button><hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button><hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
+   <hr><button data-do="mvd">Mover todo el piso en días…</button><hr><button data-do="code">Cambiar código del piso</button><button data-do="up">Subir</button><button data-do="dn">Bajar</button>${CS()?'':`<button data-do="zg" title="${isZG(p)?'Vuelve a ser un nivel del edificio':'Fachadas, Exteriores…: no es un nivel del edificio, es una zona para programar. Va al final de las listas y sigue contando en el PPC'}">${isZG(p)?'Es un nivel del edificio (quitar «Zona general»)':'Marcar como zona general'}</button>`}<hr><button data-do="del" class="danger">Eliminar piso y todo su contenido</button>`,
   {buf:()=>setTimeout(()=>bufDialog(btn,'p',pid,'el piso '+p.code),0),mvd:()=>setTimeout(()=>blockMoveDialog(btn,actsOfPiso(pid).map(x=>x.id),'el piso '+p.code),0),sec:()=>addSector(pid),copy:d=>copyPisoStructure(d.src,pid),
    code:()=>{const inp=document.querySelector(`#grid .ci[data-piso="${pid}"]`);toast('Escribe el nuevo código en el nombre así: “P2 · Segundo piso” y pulsa Enter.');if(inp){inp.value=p.code+' · '+p.name;inp.focus();inp.dataset.codeedit='1'}},
-   up:()=>movePiso(p,-1),dn:()=>movePiso(p,1),
+   up:()=>movePiso(p,-1),dn:()=>movePiso(p,1),zg:()=>pisoZG(p),
    del:()=>{const ops=[];for(const s of [...S.sec.values()].filter(s=>pisoOfSecObj(s)===pid)){for(const a of siblings('ambientes','sectorId',s.id)){for(const x of siblings('acts','ambId',a.id))ops.push(arc('acts',x.id));ops.push(arc('ambientes',a.id))}ops.push(arc('sectors',s.id))}ops.push(arc('pisos',pid));apply(ops,`Piso ${p.code} eliminado`)}})}
-function movePiso(p,dir){const l=pisos();const i=l.findIndex(x=>x.id===p.id);const j=i+dir;if(j<0||j>=l.length)return;const y=l[j];let oa=y.order,ob=p.order;if(oa===ob)ob=oa+dir;apply([op('pisos',p.id,{...p,order:oa}),op('pisos',y.id,{...y,order:ob})])}
+/** zona general ↔ nivel (11-11-2026): solo cambia dónde aparece en las listas; lo programado, el PPC y lo demás no cambian */
+function pisoZG(p){const z=!isZG(p);const o={...p};delete o.id;if(z)o.zg=true;else delete o.zg;
+  apply([op('pisos',p.id,o)],`${p.code}: ${z?'zona general':'nivel del edificio'}`);toast(z?`${p.name} es ahora una zona general: va al final de las listas, aparte de los niveles`:`${p.name} vuelve a ser un nivel del edificio`,'Deshacer',undo)}
+/* sube o baja entre los de su tipo (niveles con niveles, zonas generales con zonas) */
+function movePiso(p,dir){const l=pisos().filter(x=>isZG(x)===isZG(p));const i=l.findIndex(x=>x.id===p.id);const j=i+dir;if(j<0||j>=l.length)return;const y=l[j];let oa=y.order,ob=p.order;if(oa===ob)ob=oa+dir;apply([op('pisos',p.id,{...p,order:oa}),op('pisos',y.id,{...y,order:ob})])}
 function secMenu(btn,sid){const s=S.sec.get(sid);if(!s)return;const pid=pisoOfSecObj(s);const others=pisos().filter(o=>o.id!==pid);
   openPop(btn,`<div class="ph">Sector ${esc(s.code)}</div><button data-do="amb">+ Ambiente…</button><button data-do="dup">Duplicar sector (sin días)</button>
    ${others.length?'<hr><div class="ph">Copiar este sector a…</div>'+others.map(o=>`<button data-do="to" data-dst="${o.id}">${esc(o.code)} · ${esc(o.name)}</button>`).join(''):''}
@@ -1003,7 +1007,7 @@ function secMenu(btn,sid){const s=S.sec.get(sid);if(!s)return;const pid=pisoOfSe
    code:()=>{const inp=document.querySelector(`#grid .ci[data-sec="${sid}"]`);toast('Escribe “CÓDIGO · Nombre”, por ejemplo “S2 · Sector 2”, y pulsa Enter.');if(inp){inp.value=s.code+' · '+s.name;inp.focus();inp.dataset.codeedit='1'}},
    up:()=>moveItem('sectors','pisoId',{...s,pisoId:pid},-1),dn:()=>moveItem('sectors','pisoId',{...s,pisoId:pid},1),
    del:()=>{const ops=[];for(const a of siblings('ambientes','sectorId',sid)){for(const x of siblings('acts','ambId',a.id))ops.push(arc('acts',x.id));ops.push(arc('ambientes',a.id))}ops.push(arc('sectors',sid));apply(ops,`Sector ${s.code} eliminado`)}})}
-function addPiso(){const ps=pisos();const last=ps[ps.length-1];const n=ps.length+1;const id=uid('piso');
+function addPiso(){const ps=niveles();const last=ps[ps.length-1];const n=ps.length+1;const id=uid('piso');
   apply([op('pisos',id,{id,code:'P'+n,name:'Piso '+n,order:last?last.order+10:10})],'Piso creado');focusLater(`#grid .ci[data-piso="${id}"]`)}
 /* tocar el n.º de ítem resalta la fila (para seguirla con la vista al recorrer las semanas); otra vez la suelta */
 let LKROW=null;
