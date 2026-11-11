@@ -44,6 +44,8 @@ function plkHit(cx,cy,list){const v=PLV.tv,r=v.cv.getBoundingClientRect(),px=cx-
 /** deja el visor con lo que toca según el estado (Medir manda mientras está activo) */
 function plkSync(){if(!PLV||!PLV.tv)return;const v=PLV.tv;
   if(PLM.on||PLD.on){v.onLink=null;return}                /* Medir o Marcar mandan mientras están activos */
+  /* celular: sin vínculos (decidido con el dueño, nov 2026: quedan para tablet y PC). Un toque sobre el plano muestra u oculta las barras */
+  if(PLV.mob){if(PLK.edit){PLK.edit=false;plkBar()}v.onLink=null;if(v.over===plkDraw)v.over=null;v.onTap=v.onDown=v.onDrag=v.onUp=null;v.host.classList.remove('vinc');v.tick();return}
   const E=PLK.edit&&!PLK.pick;
   v.over=plkDraw;                                   /* sin vínculos visibles solo dibuja el que está bajo el cursor */
   v.onLink=!E&&!PLK.pick?plkLinkTap:null;             /* ocultos o no, un toque sobre la marca los sigue */

@@ -106,7 +106,7 @@ function plmBar(){if(!PLV||!PLM.on)return;let el=PLV.box.querySelector('.plmbar'
   el.innerHTML=`<div class="plmt">${PLM_TOOLS.map(([k,n])=>`<button type="button" class="ib${PLM.tool===k?' on':''}" data-pm="${k}"${k!=='cal'&&!m?' disabled':''}>${n}</button>`).join('')}</div>
     <div class="plmv" id="plmv" aria-live="polite"></div>
     ${PLM.tool==='cal'?`<div class="plmc"><input class="tin" id="plmL" inputmode="decimal" placeholder="Medida real en metros (ej. 3.60)" aria-label="Medida real en metros"><button type="button" class="ib pri" data-pm="calok">Calibrar</button></div>`:''}
-    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto">↶ Deshacer</button><button type="button" class="ib" data-pm="clear">Limpiar</button>${palCtnBar()}<span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
+    <div class="plmx"><button type="button" class="ib" data-pm="undo" title="Quitar el último punto" aria-label="Deshacer">↶<span class="pltl"> Deshacer</span></button><button type="button" class="ib" data-pm="clear" aria-label="Limpiar"><span class="plti" aria-hidden="true">🗑</span><span class="pltl">Limpiar</span></button>${palCtnBar()}<span class="plvsp"></span><button type="button" class="ib" data-pm="off" title="Salir de medir (Esc)">✓ Listo</button></div>
     <small class="plms">${est}${sp&&!sp.cur?' · revisión anterior':''}</small>`;
   plmVal();
   /* al rehacer la barra el botón tocado desaparece y el foco se pierde: sin foco en el visor, Esc y las flechas no responden */

@@ -183,7 +183,7 @@ function plTxPanelList(el,L){const host=el.querySelector('.plvpl');const q=PLV.p
 function plTxAttach(){if(!PLV||!PLV.tv)return;const V=PLV.tv,p=PLB.get(PLV.id),sp=p&&plSpecOf(p,PLV.rev);PLV.hits=null;
   const old=PLV.box.querySelector('.pltxb');if(old)old.remove();
   if(!PLV.hq||!p)return;const qc=plTxC(PLV.hq);if(qc.length<2)return;
-  const bar=document.createElement('div');bar.className='pltxb';const body=PLV.box.querySelector('.plvb');bar.style.top=((body?body.offsetTop:56)+8)+'px';PLV.box.appendChild(bar);
+  const bar=document.createElement('div');bar.className='pltxb';bar.style.top=(plvTop()+8)+'px';PLV.box.appendChild(bar);
   const id=PLV.id,tv=V;
   const show=()=>{if(!PLV||PLV.tv!==tv)return;const H=PLV.hits;
     bar.innerHTML=`<span class="pltxq">🔍 «${esc(PLV.hq)}»</span>${!sp.cur?'<span>Solo en la revisión vigente</span>':!p.tx?'<span>Lámina sin indexar</span>':!p.tx.n?'<span>Sin texto buscable</span>':!H?'<span>Buscando…</span>':!H.L.length?'<span>No está en esta lámina</span>'

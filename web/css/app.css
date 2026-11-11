@@ -5119,3 +5119,113 @@ td.act.lkcflash,td.amb.lkcflash{box-shadow:inset 0 0 0 2px var(--accent)}
 /* Sectorización › Traer ambientes del plano (sz-plano.js, 11-11-2026) */
 .szplw{max-height:52vh;overflow:auto;margin:8px 0}.szplt td,.szplt th{padding:4px 6px;vertical-align:middle}.szplt .tin{min-width:120px}
 .szplnew{font-weight:600;color:var(--accent)}.szplsec{max-width:320px}.szplsolo{margin-top:6px}
+/* ---------- Planos en el celular (planos.js «modo lectura», nov 2026): el plano ocupa toda la pantalla y las barras flotan encima ---------- */
+.plti{display:none}
+.plv:not(.mob) .plvh{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-top:max(8px,env(safe-area-inset-top))}
+.plv:not(.mob):not(.dock) .plvf{padding-bottom:calc(4px + env(safe-area-inset-bottom))}
+.plv.mob .pltl{display:none}.plv.mob .plti{display:inline}
+.plv.mob .plvb{position:absolute;inset:0}
+.plv.mob .plvh,.plv.mob .plvbot{position:absolute;left:0;right:0;z-index:12;transition:transform var(--t,.2s) var(--ease,ease),opacity var(--t,.2s) var(--ease,ease)}
+.plv.mob .plvh{top:0;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);padding:max(6px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) 6px max(8px,env(safe-area-inset-left));background:var(--panel);background:color-mix(in srgb,var(--panel) 92%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:var(--sh-1)}
+.plv.mob .plvh .ib{min-width:42px;height:42px;padding:0 8px;flex:none}
+.plv.mob .plvt{flex:1 1 0;min-width:0;max-width:none;text-align:left;background:none;border:0;padding:2px 4px;color:inherit;font:inherit;border-radius:var(--r-ctl,8px)}
+.plv.mob button.plvt{cursor:pointer}
+.plv.mob button.plvt:active{background:var(--panel2)}
+.plv.mob .plvmenu.on{background:none;border-color:transparent;color:inherit}
+.plv.mob .plvt b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plv.mob .plvt .plvdd{font-style:normal;font-size:11px;color:var(--muted)}
+.plv.mob .plvt>span{font-size:13px}
+.plv.mob .plvold{flex-basis:100%;margin:2px calc(-1 * max(8px,env(safe-area-inset-right))) -6px calc(-1 * max(8px,env(safe-area-inset-left)));padding:4px 12px;font-size:12px;border-bottom:0}
+.plv.mob .plvbot{bottom:0;display:flex;align-items:flex-end;gap:8px;padding:0 max(8px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));pointer-events:none}
+.plv.mob .plvbot>*{pointer-events:auto}
+.plv.mob .plvbot>.plvsp{pointer-events:none}
+.plv.mob .plvbot .plvq{flex:0 1 auto;min-width:0;border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;background:var(--panel);background:color-mix(in srgb,var(--panel) 92%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:var(--sh-2);scrollbar-width:none}
+.plv.mob .plvbot .plvq::-webkit-scrollbar{display:none}
+.plv.mob .plvbot .plvql{display:none}
+.plv.mob .plvbot .plvq .plvsp{flex:0 0 2px}
+.plv.mob .plvbot .plchip{min-height:40px;padding:0 12px}
+.plv.mob .plvmed{flex:none;margin-left:auto;height:50px;min-width:50px;padding:0 16px;border-radius:999px;background:var(--panel);box-shadow:var(--sh-2);font-weight:600}
+.plv.mob .plvmed.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plv.mob.hid .plvh{transform:translateY(-105%);opacity:0;pointer-events:none}
+.plv.mob.hid .plvbot{transform:translateY(105%);opacity:0}
+.plv.mob.hid .plvbot>*,.plv.mob.hid .plvh *{pointer-events:none}
+.plv.mob:has(.plmbar) .plvbot,.plv.mob:has(.pldbar) .plvbot,.plv.mob:has(.plvp) .plvbot{display:none}
+/* Medir y Marcar: hoja baja y compacta pegada abajo (antes tapaban la mitad del plano) */
+.plv.mob .plmbar,.plv.mob .pldbar{left:0;right:0;bottom:0;transform:none;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;border-width:1px 0 0;border-radius:var(--r-sheet,16px) var(--r-sheet,16px) 0 0;padding:8px max(8px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+.plv.mob .plmbar .plmt,.plv.mob .pldbar .plmt{flex:1 0 100%;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none}
+.plv.mob .plmbar .plmt .ib{flex:1 0 auto;padding-inline:6px}
+.plv.mob .pldbar .plmt .ib{flex:1 0 42px;padding-inline:4px}
+.plv.mob .plmbar .plmv{flex:1 1 0;min-width:0;font-size:13px;line-height:1.25}
+.plv.mob .plmbar .plmx{flex:none;gap:4px;flex-wrap:nowrap}
+.plv.mob .plmbar .plmx .plvsp{display:none}
+.plv.mob .plmbar .plmc{flex:1 0 100%;flex-wrap:nowrap}
+.plv.mob .plmbar .plmc .tin{min-width:0;height:42px;font-size:16px}
+.plv.mob .plmbar .plms{flex-basis:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plv.mob .pldbar .plmx{flex:1 0 100%;gap:4px}
+.plv.mob .pldbar .plms{display:none}
+.plv.mob .plmbar .ib,.plv.mob .pldbar .ib{min-height:42px;min-width:42px}
+/* ☰ buscar otro plano: pantalla completa; los filtros en filas que se deslizan */
+.plv.mob .plvp{top:0!important;right:0;bottom:0;left:0;width:auto;z-index:40;border:0;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.plv.mob .plvph .ib{min-width:42px;height:42px}
+.plv.mob .plvp>.tin{height:44px;font-size:16px}
+.plv.mob .plvps{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.plv.mob .plvps>span{flex:none;align-self:center;min-width:84px}
+.plv.mob .plvps .plchip{min-height:40px}
+/* hoja «⋯» */
+.plvsh .ksc{gap:12px;padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+.plvsh .ksh b{font-size:15px}
+.plvsh .ksh .ib{min-width:42px;height:42px}
+.plshg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.plshg .ib{min-height:50px;justify-content:flex-start;text-align:left;white-space:normal;line-height:1.2}
+.plshg .ib small{color:var(--muted);font-size:11px;margin-left:auto;padding-left:4px}
+.plshg .ib.on{border-color:var(--ok);color:var(--ok)}
+.plshr{display:flex;align-items:center;gap:8px;font-size:13px}.plshr .tin{flex:1;height:42px}
+.plshf{font-size:11.5px;color:var(--muted);line-height:1.35}
+@media (orientation:landscape) and (max-height:500px){
+  .plv.mob .plvh{padding-top:max(4px,env(safe-area-inset-top));padding-bottom:4px}
+  .plv.mob .plvt small{display:none}
+  .plv.mob .plvt{flex-direction:row;align-items:baseline;gap:8px}
+  .plv.mob .plvt>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plv.mob .plvmed{height:44px}
+  .plv.mob .plmbar .plmt{flex:0 1 auto}.plv.mob .plmbar .plms{display:none}
+  .plshg{grid-template-columns:repeat(3,1fr)}
+  .plvsh .ksc{max-height:94vh}}
+/* biblioteca: lista compacta (por defecto en el celular), recientes y filtros en una fila que se desliza */
+.plfx{display:contents}
+.plvw{white-space:nowrap}
+.plrec{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 4px;padding:2px 0}
+.plrec>span{font:700 10.5px var(--f-ui);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);flex:none;margin-right:2px}
+.pllst .plgrid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px}
+.pllst .plc{flex-direction:row;align-items:stretch}
+.pllst .plth{flex:none;width:88px;aspect-ratio:auto;min-height:66px;border-bottom:0;border-right:1px solid var(--line2)}
+.pllst .plci{justify-content:center;padding:6px 10px;gap:1px}
+.pllst .plci b{font-size:15px}
+.pllst .plci span{-webkit-line-clamp:1;font-size:13px}
+.pllst .plg{margin:12px 0 6px}
+@media (max-width:760px){.pllst .plgrid{grid-template-columns:1fr}}
+.plw.mob .phd .pht>span,.plw.mob #plgocar,.plw.mob .plchk,.plw.mob #pldel{display:none}
+.plw.mob .plsrc{display:flex;margin:0}.plw.mob .plsrc button{flex:1;min-height:40px}
+.plw.mob .plbar{position:sticky;top:-10px;z-index:5;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:6px;margin:0 -10px;padding:8px 10px 6px;background:var(--bg)}
+.plw.mob .plq{flex:none;height:44px;font-size:16px;width:100%;min-width:0}
+.plw.mob .plfx{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;align-items:center}
+.plw.mob .plfx::-webkit-scrollbar{display:none}
+.plw.mob .plfx>*{flex:none}
+.plw.mob .plfx .tin{height:40px;max-width:210px}
+.plw.mob .plfx .ib,.plw.mob .plqm button{min-height:40px}
+.plw.mob .plcnt{margin:0;width:auto}
+.plw.mob .plrec .plchip{min-height:38px}
+.plv.mob .plmbar .plmc{order:5}.plv.mob .plmbar .plms{order:6}
+.plv.mob .pldbar [data-pd="dl"]{display:none}
+.plv.mob .pldsw{width:34px;height:34px}
+.plw.mob{gap:8px}
+.plw.mob .phd{display:none}
+@media (orientation:landscape) and (max-height:500px){
+  .plv.mob .plvp{display:grid;grid-template-columns:minmax(280px,42%) 1fr;grid-template-rows:auto auto auto 1fr;column-gap:14px;align-content:start}
+  .plv.mob .plvp>*{grid-column:1;min-width:0}
+  .plv.mob .plvp>.plvpl{grid-column:2;grid-row:1 / span 5;min-height:0;max-height:100%}
+  .plv.mob .plvp>.plvpf{overflow:auto;min-height:0}
+  .plw.mob .plsrc button{min-height:36px}
+  .plw.mob .plbar{flex-direction:row;align-items:center}
+  .plw.mob .plq{flex:0 0 38%;height:40px}
+  .plw.mob .plfx{flex:1 1 0;min-width:0}
+  .plw.mob .plcnt{display:none}}
