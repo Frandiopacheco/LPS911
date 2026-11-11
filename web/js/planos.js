@@ -10,6 +10,7 @@
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
 
 const PL_T=1024;              /* lado del mosaico (px) */
+const PL_HOLD=380;   /* ms con el dedo quieto para «mantener presionado» (Medir) */
 const PL_DPI=300;             /* resolución objetivo en el tamaño real de la hoja */
 const PL_MAXPX=16000;         /* lado mayor máximo del nivel de detalle */
 const PL_Q=0.82;              /* calidad WebP */
@@ -284,6 +285,7 @@ async function plRaster(W,H,Z,base,draw,Q,say){
   if(L)L.width=L.height=0;if(thumbSrc)thumbSrc.width=thumbSrc.height=0;
 }
 async function plProcess(it,say){const t0=performance.now();
+  if(it.att){const P=PLB.get(it.att);if(!P)throw new Error('El plano en PDF ya no está.');const r=await plDxfAttach(it,P,say);return{...r,secs:Math.round((performance.now()-t0)/1000)}}
   /* DXF (planos-dxf.js): se dibuja desde su geometría; escala exacta, sin recorte ni rótulo */
   const dx=it.dxf?await plDxfPrep(it,say):null;if(dx){it.rot={cod:'',disc:''};if(it.m.eto)throw new Error('Los ETO se cargan en PDF.')}
   let buf=null,pdf=null,pg=null;if(!dx){await plPdfJs();
@@ -345,6 +347,9 @@ async function plProcess(it,say){const t0=performance.now();
   if(old&&!fresh&&!eto&&Array.isArray(old.lk)&&old.lk.length)doc.lk=dx||old.dxf?old.lk.map(l=>({...l})):plLkCarry(old,crop,v1);
   if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
   await fcol(eto?'eto':'plb').doc(id).set(doc);
+  /* PDF del mismo código que un plano solo DXF: el DXF pasa a ser los datos de esta revisión (si era otra ficha, se archiva) */
+  if(it.join&&!dx){const D=PLB.get(it.join);if(D){const dsp=D.id===id?plSpecOf({...D,revs:doc.revs},prev&&prev.rev):plSpecOf(D);const P={...doc,id};
+    try{say('Uniendo con el DXF…');await plDxfJoin(D.id===id?{...D,...(prev||{}),revs:doc.revs}:D,dsp,P,D.id!==id)}catch(e){console.error('unir DXF',e);it.joinErr=e.message}}}
   return{id,rev,fresh,secs:Math.round((performance.now()-t0)/1000),files:total,crop:dx?!!dx.crop:!!crop,mm,dxf:dx?dx.meta:null}}
 /** vínculos de la revisión anterior en coordenadas de la nueva: van normalizados a la hoja o al recorte de cada una. Si cambió el
    recorte (p. ej. la anterior era hoja completa y la nueva viene recortada al marco), se pasan por puntos del PDF; solo si las hojas
@@ -486,7 +491,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     /* zona a dibujar en pantalla (css px): la pantalla más el margen; recortada a la hoja para no gastar en el blanco de fuera */
     let ox=-m*w,oy=-m*h,ex=w+m*w,ey=h+m*h;ox=Math.max(ox,x);oy=Math.max(oy,y);ex=Math.min(ex,x+spec.W*s);ey=Math.min(ey,y+spec.H*s);
     if(ex-ox<2||ey-oy<2)return;const rw=ex-ox,rh=ey-oy;
-    if(spec.dxf){shOff=true;return}   /* DXF: sin PDF; quedan los mosaicos */
+    if(!plHasPdf(spec)){shOff=true;return}   /* solo DXF: sin PDF; quedan los mosaicos (con PDF + DXF, la nitidez es del PDF) */
     let pg;try{pg=await plPdfPage(spec.base)}catch(e){shOff=true;console.warn('nitidez: sin PDF original',e&&e.message);return}   /* sin PDF (sin conexión): quedan los mosaicos */
     if(V.dead||key!==shKey||shTask)return;
     const c=document.createElement('canvas');c.width=Math.ceil(rw*k);c.height=Math.ceil(rh*k);const cg=c.getContext('2d');
@@ -576,7 +581,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null,mpt=null,qz=null,oneT=0;
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null,mpt=null,qz=null,oneT=0,holdT=0;
   /* toque simple (V.onSingle, celular: mostrar u ocultar las barras): espera a que no llegue el segundo toque del doble toque */
   const oneStop=()=>{clearTimeout(oneT);oneT=0};
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
@@ -597,7 +602,10 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
     try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
     if(P.size>=2){afterPinch=false;qz=null;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[];if(V.onPinch)V.onPinch()}
-    if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
+    if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}
+    /* mantener el dedo quieto (medir, 11-11-2026, pedido del dueño): V.onHold pone un punto bajo el dedo con la lupa y lo deja arrastrar (se pega al DXF) */
+    clearTimeout(holdT);holdT=0;if(P.size===1&&V.onHold&&e.pointerType==='touch'){const id=e.pointerId,x=e.clientX,y=e.clientY;
+      holdT=setTimeout(()=>{holdT=0;if(!tap||P.size!==1||!P.has(id)||qz)return;if(V.onHold(x,y)){mdrag=id;mpt={x,y};P.clear();tap=null;lastTap=null;host.classList.remove('drag');try{navigator.vibrate&&navigator.vibrate(12)}catch(err){}}},PL_HOLD)}});
   host.addEventListener('pointermove',e=>{if(mdrag===e.pointerId){mpt={x:e.clientX,y:e.clientY};if(V.onDrag)V.onDrag(e.clientX,e.clientY,e);return}const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
       const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
@@ -610,7 +618,7 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     /* el dedo que queda al terminar un pellizco (casi nunca se levantan los dos a la vez) no arrastra ni corta la inercia del zoom, como en Dalux */
     if(afterPinch){p.x=e.clientX;p.y=e.clientY;return}
     const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}
+  const end=e=>{clearTimeout(holdT);holdT=0;if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}
     if(qz&&qz.moved&&P.has(e.pointerId)){qz=null;tap=null;lastTap=null;P.delete(e.pointerId);if(!P.size)host.classList.remove('drag');vel=[];V.tick();return}qz=null;
     const was=P.size===1&&!pinch&&!afterPinch;
     /* en modo medir un toque corto pone un punto (y no hay doble toque de zoom) */
@@ -725,7 +733,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${pldHdrBtn()}
     ${p.eto?'':plkHdrBtn(p)}
     ${sp.dxf&&sp.cur&&plEdOf(p)?'<button class="ib" data-pv="dxl" title="Qué capa del DXF es cada cosa (ejes, columnas…) y sus unidades">◇ Capas</button>':''}
-    <button class="ib" data-pv="pdf" title="${sp.dxf?'Descargar el DXF original':'Descargar el PDF original'}">${sp.dxf?'DXF':'PDF'}</button>
+    <button class="ib" data-pv="pdf" title="${plHasPdf(sp)?'Descargar el PDF original':'Descargar el DXF original'}">${plHasPdf(sp)?'PDF':'DXF'}</button>${sp.dxf&&plHasPdf(sp)?'<button class="ib" data-pv="dxfdl" title="Descargar el DXF (datos de este plano)">DXF</button>':''}
     ${plOffOk()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en ${plDevN()} para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plEdOf(p)?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
     ${PLV.canDock&&!plPhone()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':PLV.tab==='mapa'?'Volver al lado del plan diario':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado'}">${PLV.dock?'⛶':'◧'}</button>`:''}
@@ -745,7 +753,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
     else if(a==='dock')plDockSet(!PLV.dock);else if(a==='more')plvMore();
-    else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='dxl')plDxfLay(p);else if(a==='alis')palToggle();else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
+    else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='dxfdl')plPdf(p,sp,b,'dxf');else if(a==='dxl')plDxfLay(p);else if(a==='alis')palToggle();else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
 /** celular: hoja «⋯» con lo que no cabe arriba (ver la lámina entera, Marcar, sin conexión, PDF, revisión, datos del plano) */
 function plvMore(){if(!PLV)return;const p=PLB.get(PLV.id);if(!p)return;const sp=plSpecOf(p,PLV.rev),anchor=PLV.box.querySelector('[data-pv="more"]');
@@ -758,7 +766,7 @@ function plvMore(){if(!PLV)return;const p=PLB.get(PLV.id);if(!p)return;const sp=
       <button type="button" class="ib" data-sh="fit">⤢ Ver la lámina entera</button>
       <button type="button" class="ib" data-sh="mark">✏️ Marcar y compartir${n?` <small class="pldn">${n}</small>`:''}</button>
       ${plOffOk()&&sp.cur?`<button type="button" class="ib${st==='ok'?' on':''}" data-sh="off">${st==='ok'?'✓ Guardado sin conexión':st==='old'?'⟳ Actualizar sin conexión':'⤓ Guardar sin conexión'} <small>~${Math.round(plMB(p))} MB</small></button>`:''}
-      <button type="button" class="ib" data-sh="pdf">⤓ Descargar ${sp.dxf?'DXF':'PDF'}</button>
+      <button type="button" class="ib" data-sh="pdf">⤓ Descargar ${plHasPdf(sp)?'PDF':'DXF'}</button>${sp.dxf&&plHasPdf(sp)?'<button type="button" class="ib" data-sh="dxfdl">⤓ Descargar DXF</button>':''}
       ${plEdOf(p)?'<button type="button" class="ib" data-sh="edit">✎ Datos del plano</button>':''}
     </div>
     ${revs.length>1?`<label class="plshr">Revisión <select class="tin" data-sh="rev">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select></label>`:''}
@@ -768,7 +776,7 @@ function plvMore(){if(!PLV)return;const p=PLB.get(PLV.id);if(!p)return;const sp=
   const close=()=>{el.remove();PLV.box.focus()};
   el.onclick=e=>{if(e.target===el){close();return}const b=e.target.closest('[data-sh]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.sh;close();
     if(a==='fit')PLV.tv.fitView(true);else if(a==='mark')pldToggle(true);else if(a==='off')plOffOne(p,anchor);
-    else if(a==='pdf'){toast('Descargando…');plPdf(p,sp,document.createElement('button'))}else if(a==='edit')plEdit(p,anchor)};
+    else if(a==='pdf'){toast('Descargando…');plPdf(p,sp,document.createElement('button'))}else if(a==='dxfdl'){toast('Descargando…');plPdf(p,sp,document.createElement('button'),'dxf')}else if(a==='edit')plEdit(p,anchor)};
   const rs=el.querySelector('select[data-sh="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;close();plvDraw()};
   const f=el.querySelector('[data-sh="fit"]');if(f)f.focus({preventScroll:true})}
 /* ---------- Plano del piso al lado del lookahead (oct 2026, pedido del dueño) ----------
@@ -861,8 +869,8 @@ function plvPanelList(el){const st=el.querySelector('.pltxst'),tq=PLV.pf.qm==='t
   const h=L.length?L.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}<small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plLvName(plLvOf(p))||'General'].join(' · '))}</small></span></button>`).join('')
     :'<p class="note">Ningún plano con esos filtros.</p>';
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host);const on=host.querySelector('.plvpr.on');if(on)on.scrollIntoView({block:'nearest'})}}
-async function plPdf(p,sp,btn){btn.disabled=true;const t=btn.textContent;btn.textContent='Descargando…';
-  if(sp.dxf){try{if(!sp.dxf.oz)throw new Error('esta revisión no guardó el DXF');const b=new Blob([await dxfUnGz(await plGet(sp.base+'/orig.dxf.gz'))],{type:'application/dxf'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=(sp.fname||p.cod)+'.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
+async function plPdf(p,sp,btn,kind){btn.disabled=true;const t=btn.textContent;btn.textContent='Descargando…';
+  if(sp.dxf&&(kind==='dxf'||!plHasPdf(sp))){try{if(!sp.dxf.oz)throw new Error('esta revisión no guardó el DXF');const b=new Blob([await dxfUnGz(await plGet(sp.base+'/orig.dxf.gz'))],{type:'application/dxf'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=(sp.fname||p.cod)+'.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
     catch(e){toast('No se pudo descargar el DXF: '+e.message)}finally{btn.disabled=false;btn.textContent=t}return}
   try{const b=await plGet(sp.base+'/orig.pdf');const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=(sp.fname||p.cod)+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
   catch(e){toast('No se pudo descargar el PDF: '+e.message)}finally{btn.disabled=false;btn.textContent=t}}
@@ -873,12 +881,13 @@ function plEdit(p,btn){
     ${p.eto?'':`<label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>`}
     <p class="note">${p.eto?'El subcontratista y el código identifican el ETO (las revisiones se reconocen por ellos); no se cambian aquí.':'El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.'}</p>
     ${p.arch?'':`<div class="plea plrot"><span>Girar la lámina</span><button class="ib" data-do="rl" title="Girar 90° a la izquierda">⟲ Izquierda</button><button class="ib" data-do="rr" title="Girar 90° a la derecha">⟳ Derecha</button></div>`}
+    ${!p.arch&&!p.eto&&p.dxf&&!p.dxf.sobre&&plEdOf(p)?'<div class="plea"><button class="ib" data-do="join" title="Si este plano también está cargado en PDF (otra ficha): el PDF queda como lo que se ve y este DXF como sus datos">Unir con su PDF…</button></div>':''}
     <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
     {sv:async()=>{const d={tit:$('#pleT').value.trim(),...plLvDoc($('#pleP').value)};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
        try{await plCol(p).doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
      ua:async()=>{try{await plCol(p).doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
-     del:()=>plDelete([p]),rl:()=>plRotate(p,3),rr:()=>plRotate(p,1)})}
+     del:()=>plDelete([p]),rl:()=>plRotate(p,3),rr:()=>plRotate(p,1),join:()=>plDxfJoinAsk(p)})}
 
 /* ---------- Girar una lámina ya cargada (oct 2026, pedido del dueño) ----------
    Se baja su orig.pdf, se gira con pdf-lib y se vuelve a procesar EN ESTA PC (mosaicos en una carpeta nueva; la anterior no se borra).
@@ -997,6 +1006,11 @@ function plqCheck(){const seen=new Map();
     else if(!m.cod||!m.disc){it.st='bad';it.msg=!m.cod?'Falta el código de lámina':'Falta la especialidad';return}
     const id=plIdOf({...m,fname:plItKey(it)});const old=PLB.get(id);
     if(!it.q&&!it.re&&old&&!old.arch&&old.fname===plItName(it)&&old.fsize===it.file.size){it.st='skip';it.msg='Ya está cargado (mismo archivo)';return}
+    /* PDF + DXF en una sola ficha (planos-dxf.js «Plano con PDF y DXF»): el DXF se agrega al PDF del mismo código; un PDF toma como datos el DXF que ya estaba */
+    it.att='';it.join='';
+    if(!m.eto&&!it.re){const tw=old&&!old.arch?old:plTwinOf(m.disc,m.cod,id);
+      if(it.dxf&&tw&&plHasPdf(plSpecOf(tw))){it.att=tw.id;it.st='pend';it.msg=tw.dxf?`Reemplaza los datos (DXF) del PDF ${tw.cod} Rev. ${tw.rev||1}: se vuelve a alistar`:`Se agrega como datos (DXF) del PDF ${tw.cod} Rev. ${tw.rev||1}: se sigue viendo el PDF`;return}
+      if(!it.dxf&&tw&&tw.dxf&&!tw.dxf.sobre){it.join=tw.id;it.st='pend';it.msg=tw.id===id?`Nueva revisión en PDF de ${tw.cod}: su DXF pasa como datos`:`Se une con ${tw.cod} (DXF): el PDF es lo que se ve y el DXF sus datos`;return}}
     it.st='pend';it.msg=old?(it.re?`Se vuelve a procesar como nueva revisión (vigente: rev. ${old.rev||1})`:`Nueva revisión (vigente: rev. ${old.rev||1})`):'Nuevo';
     if(seen.has(id))it.warn=`Mismo código que la fila ${seen.get(id)+1}: se cargará como la revisión siguiente.`;else seen.set(id,i);
     if(!m.eto&&it.pdfPgs>1)it.warn=(it.warn?it.warn+' ':'')+`El PDF tiene ${it.pdfPgs} hojas: solo se carga la primera (exporta una lámina por archivo).`;
@@ -1115,7 +1129,7 @@ async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='
   const title0=document.title;const tot=PQ.items.filter(x=>x.st==='pend').length;let n=0;
   plqDraw(true);
   try{for(;;){if(PQ.stop)break;const i=PQ.items.findIndex(x=>x.st==='pend');if(i<0)break;const it=PQ.items[i];it.st='run';it.msg='Empezando…';n++;document.title=`(${n}/${tot}) Cargando planos · LPS 911`;plqDraw(true);
-      try{it.crop=store.get('plcrop',true)!==false;it.fresh=!!PQ.fresh;const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev}${r.fresh?' (reemplazó a la de prueba)':''} · ${r.dxf?`DXF (${r.dxf.src}${r.crop?`, recortado al marco ${r.mm[0]} × ${r.mm[1]} mm`:''}) · escala exacta: 1 m = ${Math.round(1/r.dxf.mpp)} px${r.dxf.far?` · ${r.dxf.far} objeto(s) lejanos fuera`:''}`:r.crop?`recortado al marco (${r.mm[0]} × ${r.mm[1]} mm)`:(it.crop===false?'hoja completa':'sin marco claro: hoja completa')} · ${r.files} archivos · ${r.secs} s`;PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
+      try{it.crop=store.get('plcrop',true)!==false;it.fresh=!!PQ.fresh;const r=await plProcess(it,t=>plRowSay(i,t));it.st='ok';it.msg=`✓ Listo · rev. ${r.rev}${r.fresh?' (reemplazó a la de prueba)':''} · ${r.dxf?`DXF (${r.dxf.src}${r.crop?`, recortado al marco ${r.mm[0]} × ${r.mm[1]} mm`:''}) · escala exacta: 1 m = ${Math.round(1/r.dxf.mpp)} px${r.dxf.far?` · ${r.dxf.far} objeto(s) lejanos fuera`:''}`:r.crop?`recortado al marco (${r.mm[0]} × ${r.mm[1]} mm)`:(it.crop===false?'hoja completa':'sin marco claro: hoja completa')} · ${r.files} archivos · ${r.secs} s`;if(r.att)it.msg=`✓ Listo · el DXF quedó como datos del PDF (Rev. ${r.rev}) · escala exacta: 1 m = ${Math.round(1/r.dxf.mpp)} px · por alistar`;if(it.joinErr)it.msg+=` · ⚠ No se pudo unir con el DXF: ${it.joinErr}`;else if(it.join)it.msg+=' · el DXF quedó como sus datos';PQ.secs.push(r.secs);if(PQ.secs.length>8)PQ.secs.shift()}
       catch(e){console.error('plano',it.file.name,e);it.st='err';it.msg='✕ '+(e.message||'Error al procesar');if(e.fatal){PQ.stop=true;toast(e.message)}}
       plqCheck();plqDraw(true)}}
   finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
@@ -1133,7 +1147,7 @@ const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)&&(!o.base|
 const plOffOk=()=>plTouch();
 const plOffTag=p=>{if(!plOffOk())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
 const plMB=p=>p.sz?p.sz/1048576:7;
-function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.dxf?p.base+'/'+plGeoName(p.dxf):p.base+'/orig.pdf'];   /* DXF: su geometría (Medir se pega sin conexión) */if(p.tx&&p.tx.n)L.push(plTxPath(p));   /* índice de texto: buscar sin conexión */   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
+function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',...(p.dxf?[p.base+'/'+plGeoName(p.dxf)]:[]),...(plHasPdf(p)?[p.base+'/orig.pdf']:[])];   /* DXF: su geometría (Medir se pega sin conexión) */if(p.tx&&p.tx.n)L.push(plTxPath(p));   /* índice de texto: buscar sin conexión */   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
 /** borra de la caché de este equipo todo lo de una lámina (todas sus carpetas) */
 async function plCacheDrop(id){try{const c=await caches.open(PLC_NAME);const a=location.origin+'/__plan/planos/'+id+'/',b=location.origin+'/__plan/planos/'+id+'.';
   for(const r of await c.keys())if(r.url.startsWith(a)||r.url.startsWith(b))await c.delete(r)}catch(e){}}

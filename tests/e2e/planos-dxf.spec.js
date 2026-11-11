@@ -83,6 +83,19 @@ test('planos DXF: se carga como lámina (mosaicos, escala exacta, DXF y geometr�
     return plmList().map(q => ({ x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 })); }, pt);
   expect(L[0]).toEqual({ x: Math.round(pt.x * 10) / 10, y: Math.round(pt.y * 10) / 10 });
   expect(L[1]).not.toEqual(L[0]);
+  /* con el dedo (11-11-2026): mantener presionado lejos de la esquina pone un punto con la lupa; al deslizar cerca se pega y queda al soltar */
+  const pe = (t, x, y) => page.evaluate(([t, x, y]) => PLV.tv.host.dispatchEvent(new PointerEvent(t, { pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true })), [t, x, y]);
+  const sc = await page.evaluate(({ x, y }) => { const v = PLV.tv, r = v.cv.getBoundingClientRect(), s = v.toScreen(x, y); return { x: r.left + s.x, y: r.top + s.y }; }, pt);
+  await pe('pointerdown', sc.x - 30, sc.y - 30);
+  await page.waitForTimeout(550);
+  expect(await page.evaluate(() => [PLM.drag, plmList().length])).toEqual([0, 1]);   /* el tercer punto empieza otra medida; ya se arrastra */
+  await pe('pointermove', sc.x + 4, sc.y + 3);
+  await pe('pointerup', sc.x + 4, sc.y + 3);
+  const H = await page.evaluate(() => [PLM.drag, plmList().map(q => ({ x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 }))]);
+  expect(H[0]).toBe(-1); expect(H[1]).toEqual([L[0]]);
+  /* un toque corto (sin mantener) sigue poniendo el punto donde se toca */
+  await pe('pointerdown', sc.x - 90, sc.y - 70); await pe('pointerup', sc.x - 90, sc.y - 70);
+  expect(await page.evaluate(() => plmList().length)).toBe(2);
   expect(errors).toEqual([]);
 });
 
@@ -390,5 +403,51 @@ test('alistar › arquitectura: se calibra con los ejes de estructura, el contor
   expect(r.esc.st).toBe('err'); expect(r.esc.msg).toContain('La escala no coincide');
   expect(r.nada.st).toBe('err'); expect(r.nada.msg).toContain('al menos 2 cruces');
   expect(r.esp.st).toBe('err'); expect(r.esp.msg).toContain('Alista primero una planta de estructuras'); expect(r.espEjes).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+/* 11-11-2026 (decidido con el dueño): una sola ficha por plano. El PDF es lo que se ve; el DXF, su capa de datos. Un DXF con el mismo código
+   (E03 = E-03) se agrega al PDF ya cargado en vez de crear otra ficha; las fichas duplicadas de antes se unen con «Unir con su PDF…». */
+test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fichas duplicadas se unen', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  const lay = dxfDemo({ layout: true });
+  /* el PDF ya cargado (E-03, recortado al marco, misma proporción A3 al doble de píxeles que el DXF) y otro PDF E-04 */
+  const dims = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const pdf = (id, cod) => fcol('plb').doc(id).set({ cod, disc: 'EST', rev: 1, base: `planos/${id}.p/r1`, W: S.W * 2, H: S.H * 2, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', tit: 'Encofrado', revs: [], crop: { x0: 10, y0: 10, x1: 400, y1: 280 }, fname: cod + '.pdf', fsize: 1 });
+    await pdf('EST_E-03', 'E-03'); await pdf('EST_E-04', 'E-04'); return { W: S.W, H: S.H, mpp: S.mpp, crop: S.crop }; }, lay);
+  expect(dims.crop).toBe(true);   /* el marco de la presentación son 4 líneas sueltas */
+  expect(await page.evaluate(() => [plCodK('E-03'), plCodK('E03'), plCodK('e 3'), plCodK('AG-03')])).toEqual(['E3', 'E3', 'E3', 'AG3']);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(lay) });
+  await expect(page.locator('#plst0')).toContainText('Se agrega como datos (DXF) del PDF E-03');
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('el DXF quedó como datos del PDF', { timeout: 90_000 });
+  const r = await page.evaluate(async () => { const p = window.__dbGet('plb', 'EST_E-03'); const G = await plGeoGet(plSpecOf(PLB.get('EST_E-03')));
+    return { nuevo: !!window.__dbGet('plb', 'EST_E03'), sobre: p.dxf && p.dxf.sobre, mpp: p.dxf.mpp, cal: p.cal, rev: p.rev, W: G.W, hasPdf: plHasPdf(plSpecOf(PLB.get('EST_E-03'))), orig: window.__ST.has(p.base + '/orig.dxf.gz') }; });
+  expect(r.nuevo).toBe(false);   /* no se creó otra ficha */
+  expect(r.sobre).toBe('pdf'); expect(r.rev).toBe(1); expect(r.hasPdf).toBe(true); expect(r.orig).toBe(true);
+  expect(r.mpp).toBeCloseTo(dims.mpp / 2, 9);   /* la escala exacta llevada a los píxeles del PDF */
+  expect(r.cal).toMatchObject({ dxf: 1, rev: 1 }); expect(r.cal.mpp).toBeCloseTo(dims.mpp / 2, 9);   /* Medir no pide calibrar */
+  expect(r.W).toBe(dims.W * 2);
+  /* ficha duplicada de antes: un plano solo DXF (E04) se une con su PDF (E-04) */
+  const j = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
+    const base = 'planos/EST_E04.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('EST_E04').set({ cod: 'E04', disc: 'EST', rev: 1, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', revs: [], dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: dxfGuess(dxfLayers(dxfGeoF(G))), gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 1, dxf: 1 },
+      fix: { rev: 1, L: [{ id: 'f1', k: 'colAdd', p: [10, 10, 20, 10, 20, 20, 10, 20] }] }, ok: { rev: 1, t: 1, by: 'x', malla: true, ej: [], mpp: S.mpp } });
+    await new Promise(r => setTimeout(r, 50));
+    const D = PLB.get('EST_E04'), P = PLB.get('EST_E-04'); const tw = plTwinOf('EST', 'E04', 'EST_E04');
+    await plDxfJoin(D, plSpecOf(D), P, true); await new Promise(r => setTimeout(r, 50));
+    const p = window.__dbGet('plb', 'EST_E-04'), d = window.__dbGet('plb', 'EST_E04');
+    return { tw: tw && tw.id, sobre: p.dxf.sobre, fix: p.fix.L[0].p, ok: p.ok, arch: !!d.arch, unido: d.arch && d.arch.unido, mpp: p.dxf.mpp, mpp0: S.mpp }; }, lay);
+  expect(j.tw).toBe('EST_E-04'); expect(j.sobre).toBe('pdf');
+  expect(j.fix).toEqual([20, 20, 40, 20, 40, 40, 20, 40]);   /* las correcciones de Alistar se llevan al PDF */
+  expect(j.ok).toMatchObject({ rev: 1, malla: true }); expect(j.ok.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  expect(j.arch).toBe(true); expect(j.unido).toBe('EST_E-04');
+  expect(j.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  /* un DXF que no calza con el PDF (otra proporción) no se une */
+  const bad = await page.evaluate(() => { try { plDxfFit({ cod: 'X', W: 1000, H: 1000, crop: {} }, 400, 300, true); return ''; } catch (e) { return e.message; } });
+  expect(bad).toContain('no tienen la misma proporción');
   expect(errors).toEqual([]);
 });

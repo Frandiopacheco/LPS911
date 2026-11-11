@@ -157,6 +157,20 @@ Antes había tres listas de niveles que no se conocían (pisos de Last Planner, 
 - `plNivKey({name, code})` también sugiere el piso de Last Planner de cada nivel en Casco (`csLpSug`).
 - Prueba: `casco.spec.js` › «niveles del edificio…».
 
+## Plano con PDF y DXF: una sola ficha (`planos-dxf.js` «Plano con PDF y DXF», 11-11-2026, decidido con el dueño)
+
+El dueño vio la misma planta dos veces y borrosa: el PDF quedaba como **E-01** y el DXF como **E01** (el código no se comparaba normalizado: dos fichas), y el DXF en el modelo se dibujaba a 150 ppp si el plano era 1/50. Decisión: **el PDF es lo que se ve** (calidad de impresión, capa nítida) y **el DXF es su capa de datos** (escala exacta sin calibrar, ejes, columnas, caras, ambientes, pegarse al medir y trazar, Alistar).
+- **Código normalizado** `plCodK` (sin signos ni espacios, sin ceros a la izquierda: E-01 = E01 = «e 1»); `plTwinOf(disc, cod, id)` busca la ficha gemela.
+- **Carga** (`plqCheck`): un DXF cuyo gemelo tiene PDF → «Se agrega como datos (DXF) del PDF …» (`it.att` → `plDxfAttach`: no hace revisión nueva; borra `ok`/`fix`/`alc`/`ctn` de esa revisión: se vuelve a alistar). Un PDF cuyo gemelo es solo DXF → `it.join`: tras guardar el PDF, `plDxfJoin` le pasa los datos del DXF (si era otra ficha, la archiva con `arch.unido`).
+- **Fichas duplicadas de antes:** ✎ Datos del plano › «Unir con su PDF…» (solo en fichas solo DXF; elige el PDF, el gemelo primero) → `plDxfJoinAsk` → `plDxfJoin`. Lo ya vinculado a la ficha DXF sigue funcionando (queda archivada, no borrada).
+- **Cómo calzan:** los dos recortados al marco (si no, error claro) y con la misma proporción (±1,5 %, `plDxfFit`); factor `f = W_pdf / W_dxf`. La geometría se guarda **ya llevada a los píxeles del PDF** (`dxfGeoScale`: coordenadas y alturas de texto × f; las medidas reales de las cotas no cambian), igual que las correcciones de Alistar (`plFixScale`), el contorno (`plCtnScale`) y `ok.mpp`. `plb.dxf.sobre = 'pdf'`, `dxf.mpp = mpp_dxf / f`, `cal = {mpp, dxf:1}` (Medir no pide calibrar). Así Alistar, Medir, Casco y Sectorización no cambian.
+- `plHasPdf(sp)`: con PDF (solo PDF o PDF + DXF). La capa nítida usa el PDF; «PDF» y «DXF» se descargan aparte; sin conexión se guardan los dos; girar sigue bloqueado si hay DXF.
+- **DXF sin PDF:** resolución a 300 ppp en la hoja a su escala real (`ppu = DXF_PXM·k·100/esc`, `dxfEscala` por los textos) y grosor de líneas por la misma escala.
+- Prueba: `planos-dxf.spec.js` › «PDF + DXF…».
+
+## Medir: mantener el dedo (11-11-2026, pedido del dueño)
+Con el dedo, el primer toque era incierto. Ahora, **dejar el dedo quieto ~0,4 s** (`PL_HOLD`, gancho genérico `V.onHold` del visor) pone el punto bajo el dedo con la **lupa 3×** encima (`plmHold`), y al deslizar se **pega** a esquinas y líneas del DXF (`plmSnap`, 12 px de pantalla); al soltar queda. Un toque corto sigue poniendo el punto donde se toca; tocar un punto ya puesto lo arrastra. Vibra un instante si el equipo lo permite. Prueba: `planos-dxf.spec.js` › «se carga como lámina…».
+
 ## Alistar plano (`web/js/planos-alistar.js`, 31-10-2026, decidido con el dueño)
 
 Flujo: niveles → cargar planos (plantas EST y ARQ en DXF) → **alistar** → recién después Sectorización, frentes, Plan diario y Metrados. **Una planta DXF no se usa ni se vincula hasta que su revisión está «Lista»** (`plb.ok`). Marcan «Listo» **el administrador y Oficina Técnica** (`plAlEd`; no los editores).

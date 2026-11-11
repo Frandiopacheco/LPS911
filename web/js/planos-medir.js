@@ -29,8 +29,8 @@ function plmMpp(){if(!PLV)return null;const p=PLB.get(PLV.id);if(!p)return null;
   if(sp.cur&&p.cal&&p.cal.rev===(p.rev||1)&&p.cal.mpp>0)return{mpp:p.cal.mpp,src:'oficial',cal:p.cal};
   const l=PLM.loc.get(sp.base);return l?{mpp:l.mpp,src:'local'}:null}
 function plmReset(){PLM.on=false;PLM.L=plmNew();PLM.drag=-1;plmBarOff();if(PLV&&PLV.tv)plmUnhook(PLV.tv)}
-function plmUnhook(v){v.over=v.onTap=v.onDown=v.onDrag=v.onUp=null;v.host.classList.remove('medir','sobre');v.host.removeEventListener('pointermove',plmHover);v.tick()}
-function plmHook(v){v.over=plmDraw;v.onTap=plmTap;v.onDown=plmDown;v.onDrag=plmMove;v.onUp=plmUp;v.host.classList.add('medir');v.host.addEventListener('pointermove',plmHover);v.tick()}
+function plmUnhook(v){v.over=v.onTap=v.onDown=v.onDrag=v.onUp=v.onHold=null;v.host.classList.remove('medir','sobre');v.host.removeEventListener('pointermove',plmHover);v.tick()}
+function plmHook(v){v.over=plmDraw;v.onTap=plmTap;v.onDown=plmDown;v.onDrag=plmMove;v.onUp=plmUp;v.onHold=plmHold;v.host.classList.add('medir');v.host.addEventListener('pointermove',plmHover);v.tick()}
 /* el cursor es una cruz fina (CSS .plvc.medir) y pasa a «mover» cuando está sobre un punto que se puede arrastrar */
 function plmHover(e){if(e.pointerType!=='mouse'||!PLV||!PLV.tv)return;PLV.tv.host.classList.toggle('sobre',plmNear(e.clientX,e.clientY)>=0);
   /* lámina DXF: muestra dónde se pegaría el punto */
@@ -57,6 +57,9 @@ function plmTap(cx,cy){const v=PLV.tv,w=plmSnap(v.toWorld(cx,cy)),L=plmList();
   if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return;                     /* fuera de la hoja */
   if((PLM.tool==='dist'||PLM.tool==='cal')&&L.length>=2)L.length=0; /* una medida de dos puntos: el tercer toque empieza otra */
   L.push(w);v.tick();plmBar()}
+/** mantener el dedo: el punto nuevo nace bajo el dedo con la lupa encima; al deslizar se pega a esquinas y líneas del DXF y queda al soltar */
+function plmHold(cx,cy){const v=PLV.tv,w=plmSnap(v.toWorld(cx,cy)),L=plmList();if(w.x<0||w.y<0||w.x>v.W||w.y>v.H)return false;
+  if((PLM.tool==='dist'||PLM.tool==='cal')&&L.length>=2)L.length=0;L.push(w);PLM.drag=L.length-1;PLM.mx=cx;PLM.my=cy;v.tick();plmBar();return true}
 function plmNear(cx,cy){const L=plmList(),v=PLV.tv,r=v.cv.getBoundingClientRect();let best=-1,bd=PLM_HIT;
   L.forEach((q,i)=>{const s=v.toScreen(q.x,q.y),d=Math.hypot(r.left+s.x-cx,r.top+s.y-cy);if(d<bd){bd=d;best=i}});return best}
 function plmDown(cx,cy){const best=plmNear(cx,cy);if(best<0)return false;PLM.drag=best;PLM.mx=cx;PLM.my=cy;PLV.tv.tick();return true}
