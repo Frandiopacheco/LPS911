@@ -20,6 +20,12 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - Se planteó para una próxima obra (esta ya está en acabados); desde el 26-10-2026 se desarrolla en `main` como módulo **Casco** con datos de ejemplo y **no va a producción** hasta que el dueño lo apruebe (regla 6 de `CLAUDE.md`). La vista principal es el tren (partidas en filas, sector en la celda).
 
+## Candidatos a producción (11-11-2026; solo con aprobación del dueño, uno por uno, por cherry-pick: `CLAUDE.md` «Casco en prueba»)
+
+- **Publicación que reintenta y no se corta por el 409 de las reglas** (`.github/workflows/ci.yml`, #522 y parte de #523): sin riesgo para la app.
+- **Zonas generales, solo la parte de Last Planner** (`base.js` `isZG`/`niveles`/`pisoOptsZG`, menú del piso en `lookahead.js`, selectores): va en #523 junto con su parte de Casco y de Planos; hay que separarla. Útil ya para FA · Fachadas y EX · Exteriores de la obra.
+- **No van todavía:** Planos con DXF y Alistar (la obra no los tiene), «Traer ambientes del plano» (depende de `casco-dxf.js`) y todo Casco.
+
 ## Ambientes desde el plano alistado (aprobado con el dueño, 11-11-2026; primera parte hecha: `plan-diario.md` «Ambientes desde el plano»)
 
 **Hecho:** traer los ambientes en Sectorización (nuevos, por ubicación, por nombre) y «Agrupar en este sector». **Falta:** avisar los cambios cuando llega una revisión nueva del plano (vínculo `pl` por posición calibrada con `plb.ok.fit`), usar los m² de cada ambiente en los metrados del lookahead, sugerir el tipo de ambiente por el nombre.

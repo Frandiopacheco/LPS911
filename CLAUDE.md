@@ -163,6 +163,15 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 - Si la corrección toca reglas: en `produccion` no existe la sección CASCO ni `scripts/reglas-casco.mjs`; no los agregues allí.
 - Cuando el dueño apruebe Casco, se borra esta sección y vuelve el pase normal.
 
+## Obra en curso y proyecto nuevo (decidido con el dueño, 11-11-2026)
+
+Mucho de lo que se hace ahora (Casco, Planos con DXF y Alistar, ambientes desde el plano) piensa en un **proyecto nuevo que empieza de cero**, pero hay una **obra en curso** usando Last Planner en `produccion`. Lo nuevo no debe afectar su uso:
+- **Aditivo y opcional:** una función nueva no cambia lo que ya existe hasta que alguien la usa (p. ej. zonas generales: nada cambia hasta marcar un piso; «Traer ambientes del plano»: solo aparece con una planta DXF alistada). Datos nuevos = campos nuevos opcionales; nunca reinterpretar los existentes ni borrar.
+- **Sin migraciones a escondidas:** lo ya cargado (láminas, planos, ambientes, PPC) queda como está; si algo nuevo necesita rehacerse, lo hace el usuario a propósito (p. ej. «Cargar de nuevo» un DXF).
+- **Reglas:** si un campo nuevo lo exigen o lo restringen las reglas, revisar que la obra en curso siga escribiendo igual.
+- **Dependencias:** lo que podría pasar a la obra no debe depender de archivos de Casco (`casco*.js`), porque Casco no va a producción. Ej.: `sz-plano.js` usa `csDxf` de `casco-dxf.js`: antes de pasarlo habría que mover esa función a `planos-dxf.js`.
+- **Qué de lo hecho sirve hoy a la obra** (para pasar con su aprobación, por cherry-pick): ver `docs/ia/pendientes.md` «Candidatos a producción».
+
 ## Trabajar desde Claude Code (nube, escritorio o celular)
 
 El proyecto se trabaja también desde Claude Code (claude.ai/code, app de Claude › Code, app de escritorio). Este archivo y `docs/ia/` se leen solos al entrar; no hace falta el historial del chat.
