@@ -200,8 +200,16 @@ jobs:
           ONLY="firestore:rules,functions"
           if [ "$TARGET" = "produccion" ]; then ONLY="$ONLY,database"; fi
           set +e
-          firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force 2>&1 | tee deploy.log
-          rc=${PIPESTATUS[0]}
+          # Google a veces responde con un error pasajero (nov 2026: 503 «service is currently unavailable» al revisar
+          # las reglas y 409 «Release … already exists» al instalarlas sin cambios). Esos se reintentan hasta 3 veces;
+          # cualquier otro error (reglas mal escritas, permisos, facturación) corta al primer intento.
+          for intento in 1 2 3; do
+            firebase deploy --only "$ONLY" --project "$TARGET" --non-interactive --force 2>&1 | tee deploy.log
+            rc=${PIPESTATUS[0]}
+            [ $rc -eq 0 ] && break
+            grep -qE "HTTP Error: (409|429|500|502|503|504)|currently unavailable|ECONNRESET|ETIMEDOUT|socket hang up" deploy.log || break
+            [ $intento -lt 3 ] && { echo "::warning::Firebase respondió con un error pasajero (intento $intento de 3); se reintenta en $((intento*30)) s."; sleep $((intento*30)); }
+          done
           if [ $rc -ne 0 ]; then
             # deja el motivo visible como anotación (se lee sin descargar el registro completo)
             grep -vE "^(i|✔) " deploy.log | grep -iE "error|denied|permission|billing|not found|failed|must|could not" | sed 's/\x1b\[[0-9;]*m//g' | tail -8 | while IFS= read -r l; do echo "::error::$l"; done
@@ -260,8 +268,14 @@ jobs:
           TARGET=${{ github.ref_name == 'produccion' && 'produccion' || 'pruebas' }}
           P=$(python3 -c "import json;print(json.load(open('.firebaserc'))['projects']['$TARGET'])")
           set +e
-          firebase deploy --only hosting --project "$TARGET" --non-interactive --message "$TARGET ${GITHUB_SHA::7}" 2>&1 | tee host.log
-          rc=${PIPESTATUS[0]}
+          # mismo reintento que «Instalar»: solo ante errores pasajeros de Google
+          for intento in 1 2 3; do
+            firebase deploy --only hosting --project "$TARGET" --non-interactive --message "$TARGET ${GITHUB_SHA::7}" 2>&1 | tee host.log
+            rc=${PIPESTATUS[0]}
+            [ $rc -eq 0 ] && break
+            grep -qE "HTTP Error: (409|429|500|502|503|504)|currently unavailable|ECONNRESET|ETIMEDOUT|socket hang up" host.log || break
+            [ $intento -lt 3 ] && { echo "::warning::Firebase Hosting respondió con un error pasajero (intento $intento de 3); se reintenta en $((intento*30)) s."; sleep $((intento*30)); }
+          done
           if [ $rc -ne 0 ]; then
             grep -iE "error|denied|permission|not found|failed|must|could not" host.log | sed 's/\x1b\[[0-9;]*m//g' | tail -8 | while IFS= read -r l; do echo "::error::$l"; done
             exit $rc
