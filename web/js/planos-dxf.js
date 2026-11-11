@@ -389,20 +389,29 @@ const plCodK=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/([
 /** el plano de la misma especialidad y el mismo código (comparado sin signos ni ceros), distinto de `id` */
 function plTwinOf(disc,cod,id){const k=plCodK(cod);if(!k||typeof PLB==='undefined')return null;return[...PLB.values()].find(p=>!p.arch&&!p.eto&&p.id!==id&&p.disc===disc&&plCodK(p.cod)===k)||null}
 /** la geometría del DXF llevada a otra lámina (factor f): coordenadas y alturas de texto por f; las medidas reales de las cotas no cambian */
-function dxfGeoScale(G,f){const s=v=>Math.round(v*f*100)/100;return{...G,W:Math.round(G.W*f),H:Math.round(G.H*f),mpp:G.mpp/f,
-  L:G.L.map(o=>({...o,l:o.l.map(s),p:o.p.map(q=>[q[0],...q.slice(1).map(s)]),c:o.c.map(s),t:o.t.map(t=>[t[0],s(t[1]),s(t[2]),s(t[3]),t[4]]),d:(o.d||[]).map(d=>[d[0],d[1],d[2],...d.slice(3).map(s)])}))}}
+function dxfGeoScale(G,f,ox,oy,W,H){ox=ox||0;oy=oy||0;const s=v=>Math.round(v*f*100)/100,X=v=>Math.round((v*f+ox)*100)/100,Y=v=>Math.round((v*f+oy)*100)/100,xy=(A,i0)=>A.map((v,i)=>i<i0?v:((i-i0)%2?Y(v):X(v)));
+  return{...G,W:W||Math.round(G.W*f),H:H||Math.round(G.H*f),mpp:G.mpp/f,
+  L:G.L.map(o=>({...o,l:xy(o.l,0),p:o.p.map(q=>xy(q,1)),c:o.c.map((v,i)=>i%3===0?X(v):i%3===1?Y(v):s(v)),t:o.t.map(t=>[t[0],X(t[1]),Y(t[2]),s(t[3]),t[4]]),d:(o.d||[]).map(d=>xy(d,3))}))}}
 /** correcciones de Alistar y contorno llevados por el mismo factor */
-function plFixScale(fix,f){if(!fix||!Array.isArray(fix.L))return fix;const s=v=>typeof v==='number'?Math.round(v*f*100)/100:v;
-  return{...fix,L:fix.L.map(x=>{const y={...x};if(Array.isArray(y.p))y.p=y.p.map(s);for(const k of['x','y'])if(typeof y[k]==='number')y[k]=s(y[k]);return y})}}
-function plCtnScale(c,f){if(!c||!Array.isArray(c.P))return c;const s=v=>Math.round(v*f*10)/10;return{...c,P:c.P.map(s),H:(c.H||[]).map(h=>({p:h.p.map(s)}))}}
+function plFixScale(fix,f,ox,oy){if(!fix||!Array.isArray(fix.L))return fix;const o=[ox||0,oy||0];const s=(v,i)=>typeof v==='number'?Math.round((v*f+o[i%2])*100)/100:v;
+  return{...fix,L:fix.L.map(x=>{const y={...x};if(Array.isArray(y.p))y.p=y.p.map(s);if(typeof y.x==='number')y.x=s(y.x,0);if(typeof y.y==='number')y.y=s(y.y,1);return y})}}
+function plCtnScale(c,f,ox,oy){if(!c||!Array.isArray(c.P))return c;const o=[ox||0,oy||0];const s=(v,i)=>Math.round((v*f+o[i%2])*10)/10;return{...c,P:c.P.map(s),H:(c.H||[]).map(h=>({p:h.p.map(s)}))}}
+/** cómo se lleva el DXF (recortado a su marco) a los píxeles del PDF: {f, ox, oy}. PDF recortado al marco: solo escala. PDF de hoja
+    completa (cargado sin «Recortar al marco», 11-11-2026): se busca el marco en el PDF original y el DXF se calza ahí. */
+async function plDxfMap(P,W,H,dxfCrop){if(P.crop)return{f:plDxfFit(P,W,H,dxfCrop),ox:0,oy:0};
+  if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
+  await plPdfJs();let pdf=null;try{const b=await plGet(P.base+'/orig.pdf');pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await b.arrayBuffer())}).promise;const pg=await pdf.getPage(1);
+    const v1=pg.getViewport({scale:1});const fr=await plFrame(pg);if(!fr)throw new Error(`No se encontró el marco de la hoja en el PDF ${P.cod||''}: vuelve a cargarlo con «Recortar al marco».`);
+    const fw=fr.x1-fr.x0,fh=fr.y1-fr.y0,ra=fh/fw,rb=H/W;if(Math.abs(ra-rb)/ra>0.015)throw new Error(`El marco del PDF y el del DXF no tienen la misma proporción (${(1/rb).toFixed(3)} y ${(1/ra).toFixed(3)}): ¿es la misma lámina?`);
+    const sc=P.W/v1.width;return{f:fw*sc/W,ox:fr.x0*sc,oy:fr.y0*sc}}finally{if(pdf)try{pdf.destroy()}catch(e){}}}
 /** factor DXF → PDF; error si no calzan (los dos deben ir recortados al marco y con la misma proporción) */
 function plDxfFit(pdf,W,H,dxfCrop){if(!pdf.crop)throw new Error(`El PDF ${pdf.cod||''} no está recortado al marco: vuelve a cargarlo con «Recortar al marco» para que el DXF calce con él.`);
   if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
   const a=pdf.H/pdf.W,b=H/W;if(Math.abs(a-b)/a>0.015)throw new Error(`El DXF y el PDF no tienen la misma proporción (${(1/b).toFixed(3)} y ${(1/a).toFixed(3)}): ¿es la misma lámina y los dos están recortados al marco?`);
   return pdf.W/W}
 /** carga: el DXF se agrega como datos de la revisión vigente de un plano en PDF (no hace revisión nueva; la imagen sigue siendo el PDF) */
-async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);const f=plDxfFit(P,dx.W,dx.H,dx.crop);
-  say('Calzando el DXF con el PDF…');const G=dxfGeoScale(JSON.parse(await dxfUnGz(dx.geo.b)),f);const gz=await dxfGz(JSON.stringify(G),'application/json');
+async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);say('Calzando el DXF con el PDF…');const{f,ox,oy}=await plDxfMap(P,dx.W,dx.H,dx.crop);
+  const G=dxfGeoScale(JSON.parse(await dxfUnGz(dx.geo.b)),f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');
   say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
   const D=firebase.firestore.FieldValue.delete();const mpp=dx.meta.mpp/f;
   await plCol(P).doc(P.id).update({dxf:{...dx.meta,mpp,gz:gz.z,sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D});
@@ -410,12 +419,12 @@ async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);const f=pl
 /** une un plano solo DXF (o la revisión DXF anterior) con un plano en PDF: la geometría, las capas, las correcciones de Alistar, el contorno y
     el «Listo» pasan a la revisión vigente del PDF; la ficha DXF (si es otra) se archiva. Lo ya vinculado a la ficha DXF sigue funcionando. */
 async function plDxfJoin(Dp,dsp,P,arch){if(!dsp||!dsp.dxf)throw new Error('Ese plano no tiene DXF.');if(P.dxf)throw new Error(`${P.cod} ya tiene su DXF.`);
-  const f=plDxfFit(P,dsp.W,dsp.H,dsp.dxf.crop!==false);const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');
-  const G=dxfGeoScale(G0,f);const gz=await dxfGz(JSON.stringify(G),'application/json');await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
+  const{f,ox,oy}=await plDxfMap(P,dsp.W,dsp.H,dsp.dxf.crop!==false);const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');
+  const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
   if(dsp.dxf.oz){try{await plPut(`${P.base}/orig.dxf.gz`,await plGet(dsp.base+'/orig.dxf.gz'),'application/gzip')}catch(e){console.warn('DXF original',e)}}
   const rv=dsp.rev,rp=P.rev||1,mpp=dsp.dxf.mpp/f;const u={dxf:{...dsp.dxf,mpp,gz:gz.z,sobre:'pdf',dfname:dsp.fname||'',dts:NOW(),dby:me.email,de:Dp.id},cal:{mpp,rev:rp,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
   const src=dsp.cur?Dp:((Dp.revs||[]).find(r=>r.rev===rv)||{});
-  if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f),rev:rp};
+  if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f,ox,oy),rev:rp};
   if(Dp.alc&&Dp.alc.rev===rv&&dsp.cur)u.alc={...Dp.alc,rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
   await plCol(P).doc(P.id).update(u);
   if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id}});
@@ -423,6 +432,7 @@ async function plDxfJoin(Dp,dsp,P,arch){if(!dsp||!dsp.dxf)throw new Error('Ese p
 /** ✎ Datos del plano › «Unir con su PDF…» (plano solo DXF) */
 async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc,Dp.cod,Dp.id);
   const C=[...PLB.values()].filter(p=>!p.arch&&!p.eto&&p.id!==Dp.id&&p.disc===Dp.disc&&!p.dxf).sort((a,b)=>(b===tw)-(a===tw)||String(a.cod).localeCompare(String(b.cod)));
+  {const own=plJoinPend().find(x=>x.D.id===Dp.id&&x.r);if(own&&!tw){plJoinRun(Dp.id);return}}
   if(!C.length){toast(`No hay planos en PDF de ${PL_DN[Dp.disc]||Dp.disc} para unir.`);return}
   lqModal(`<div class="lqtop"><b>Unir ${esc(Dp.cod)} (DXF) con su PDF</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
     <p class="note">El PDF queda como lo que se ve y el DXF como su capa de datos (escala exacta sin calibrar, ejes, ambientes, Alistar). Esta ficha DXF se archiva (se recupera desde «Archivados»); lo ya vinculado a ella sigue funcionando.</p>
@@ -430,3 +440,22 @@ async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc
     <p class="lqmsg bad" id="pljm"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="pljok">Unir</button></div>`,
     async e=>{if(e.target.id!=='pljok')return;const P=PLB.get($('#pljs').value);if(!P)return;e.target.disabled=true;$('#pljm').textContent='Uniendo…';
       try{await plDxfJoin(Dp,dsp,P,true);lqClose();plClose();toast(`${Dp.cod} quedó como los datos del PDF ${P.cod}${plRevOk(Dp,dsp.rev)?'':' (por alistar)'}`)}catch(err){e.target.disabled=false;$('#pljm').textContent='No se pudo unir: '+err.message}})}
+/** planos con el PDF y el DXF por separado (para el aviso de la biblioteca): ficha solo DXF con su gemela en PDF, o con el PDF en una
+    revisión anterior de la misma ficha (p. ej. AG03: se cargó el PDF y después el DXF con el mismo código) */
+function plJoinPend(){if(typeof PLB==='undefined')return[];const out=[];
+  for(const D of PLB.values()){if(D.arch||D.eto||!D.dxf||D.dxf.sobre)continue;const tw=plTwinOf(D.disc,D.cod,D.id);
+    if(tw&&!tw.dxf){out.push({D,P:tw});continue}const r=(D.revs||[]).slice().reverse().find(x=>!x.dxf&&x.base);if(r)out.push({D,r:r.rev})}
+  return out.sort((a,b)=>String(a.D.cod).localeCompare(String(b.D.cod)))}
+/** misma ficha: revisión nueva con la imagen del PDF de la revisión `rv` y los datos del DXF vigente (nada se borra: todo queda en el historial) */
+async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);if(!r)throw new Error(`La Rev. ${rv} no es un PDF.`);const dsp=plSpecOf(D);const rc=D.rev||1;
+  await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false);   /* comprueba antes de escribir nada */
+  const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
+  const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
+  await plCol(D).doc(D.id).update({...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X});
+  await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false);return rc+1}
+/** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
+function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';
+  return`<div class="callout pljc"><b>${J.length} plano(s) tienen el PDF y el DXF por separado.</b> Únelos para ver el PDF y usar el DXF como sus datos (escala exacta, Alistar, ambientes). <span class="pljcb">${J.map(x=>`<button type="button" class="ib" data-pljoin="${esc(x.D.id)}">Unir ${esc(x.D.cod)}${x.P?` con ${esc(x.P.cod)}`:` (PDF de la Rev. ${x.r})`}</button>`).join('')}</span></div>`}
+async function plJoinRun(id){const x=plJoinPend().find(o=>o.D.id===id);if(!x)return;const D=x.D;
+  if(!await uiAsk({title:`¿Unir ${D.cod}${x.P?` con ${x.P.cod}`:` con su PDF (Rev. ${x.r})`}?`,text:x.P?`Queda una sola ficha (${x.P.cod}): se ve el PDF y el DXF pasa a ser sus datos. La ficha ${D.cod} se archiva (se recupera desde «Archivados»).`:`Se crea la Rev. ${(D.rev||1)+1} con la imagen del PDF de la Rev. ${x.r} y los datos del DXF vigente. Las revisiones anteriores quedan en el historial.`,ok:'Unir',tone:'info'}))return;
+  toast('Uniendo…');try{if(x.P)await plDxfJoin(D,plSpecOf(D),x.P,true);else await plJoinOwn(D,x.r);toast(`${D.cod}: listo, una sola ficha con el PDF y sus datos DXF`)}catch(e){toast('No se pudo unir: '+e.message)}}

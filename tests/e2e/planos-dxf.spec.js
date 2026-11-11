@@ -3,6 +3,9 @@
 import { test, expect } from '@playwright/test';
 import { openApp } from './helpers.js';
 import { dxfDemo } from './dxf-demo.js';
+import fs from 'node:fs';
+import path from 'node:path';
+const NM = path.join(path.dirname(new URL(import.meta.url).pathname), 'node_modules', 'pdfjs-dist', 'build');
 
 const memStorage = () => {
   window.__ST = new Map(); window.__GETS = [];
@@ -446,8 +449,52 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   expect(j.ok).toMatchObject({ rev: 1, malla: true }); expect(j.ok.mpp).toBeCloseTo(j.mpp0 / 2, 9);
   expect(j.arch).toBe(true); expect(j.unido).toBe('EST_E-04');
   expect(j.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  /* misma ficha (como la AG03): el PDF en la Rev. 1 y el DXF en la Rev. 2 → aviso en la biblioteca y «Unir» crea la Rev. 3 con la imagen del PDF y los datos del DXF */
+  await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
+    const base = 'planos/ARQ_AG03.d/r2'; window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('ARQ_AG03').set({ cod: 'AG03', disc: 'ARQ', rev: 2, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', fname: 'AG03.dxf',
+      revs: [{ rev: 1, base: 'planos/ARQ_AG03.p/r1', W: S.W * 2, H: S.H * 2, Z: 4, mm: [420, 297], crop: { x0: 1, y0: 1, x1: 2, y1: 2 }, fname: 'AG03.pdf', ts: 1, byN: 'x' }],
+      dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 2, dxf: 1 } }); }, lay);
+  await expect.poll(() => page.evaluate(() => plJoinPend().map(x => x.D.id + ':' + (x.P ? x.P.id : 'r' + x.r)).join())).toBe('ARQ_AG03:r1');
+  await page.click('#tabs [data-tab="pbib"]');
+  await expect(page.locator('.pljc [data-pljoin="ARQ_AG03"]')).toContainText('Unir AG03 (PDF de la Rev. 1)');
+  page.once('dialog', d => d.accept());
+  await page.click('.pljc [data-pljoin="ARQ_AG03"]');
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('plb', 'ARQ_AG03') || {}).rev)).toBe(3);
+  const o = await page.evaluate(() => { const p = window.__dbGet('plb', 'ARQ_AG03'); return { base: p.base, sobre: p.dxf && p.dxf.sobre, revs: p.revs.map(r => r.rev + (r.dxf ? 'D' : 'P')), pend: plJoinPend().length }; });
+  expect(o).toEqual({ base: 'planos/ARQ_AG03.p/r1', sobre: 'pdf', revs: ['1P', '2D'], pend: 0 });
+  await expect(page.locator('.pljc')).toHaveCount(0);
   /* un DXF que no calza con el PDF (otra proporción) no se une */
   const bad = await page.evaluate(() => { try { plDxfFit({ cod: 'X', W: 1000, H: 1000, crop: {} }, 400, 300, true); return ''; } catch (e) { return e.message; } });
   expect(bad).toContain('no tienen la misma proporción');
+  expect(errors).toEqual([]);
+});
+
+/* 11-11-2026: el PDF se había cargado sin recortar al marco (hoja completa). En vez de pedir volver a cargarlo, se busca el marco en el PDF
+   original y el DXF se calza ahí (escala + desplazamiento). */
+test('PDF + DXF: con un PDF de hoja completa (sin recortar) el DXF se calza en su marco', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => { const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1]; return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) }); });
+  await page.evaluate(memStorage);
+  /* hoja 1191 × 842 pt con el marco de 1111 × 785,6 pt (proporción A3) a 40 pt de la izquierda y 28,4 pt de arriba */
+  const W = 1191, H = 842, c = '2 w 40 28 1111 785.6 re S', pdf = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length ${c.length} >>\nstream\n${c}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
+  const r = await page.evaluate(async ([t, pdf]) => {
+    window.__ST.set('planos/EST_E-05.p/r1/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
+    await fcol('plb').doc('EST_E-05').set({ cod: 'E-05', disc: 'EST', rev: 1, base: 'planos/EST_E-05.p/r1', W: 2382, H: 1684, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', revs: [], crop: null, fname: 'E-05.pdf' });
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
+    const base = 'planos/EST_E05.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('EST_E05').set({ cod: 'E05', disc: 'EST', rev: 1, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', revs: [], dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 1, dxf: 1 } });
+    goMod('pla'); for (let i = 0; i < 50 && !(PLB.get('EST_E05') && PLB.get('EST_E-05')); i++) await new Promise(r => setTimeout(r, 100));
+    await plDxfJoin(PLB.get('EST_E05'), plSpecOf(PLB.get('EST_E05')), PLB.get('EST_E-05'), true);
+    const p = window.__dbGet('plb', 'EST_E-05'); const G2 = JSON.parse(await dxfUnGz(window.__ST.get(p.base + '/geo.json.gz')));
+    const a = G.L.find(o => o.l.length), b = G2.L.find(o => o.n === a.n);
+    return { Wd: S.W, mppd: S.mpp, mpp: p.dxf.mpp, sobre: p.dxf.sobre, W2: G2.W, x0: a.l[0], y0: a.l[1], x1: b.l[0], y1: b.l[1] };
+  }, [dxfDemo({ layout: true }), pdf]);
+  const f = 1111 * 2 / r.Wd;   /* el marco del PDF a 2 px por punto */
+  expect(r.sobre).toBe('pdf'); expect(r.W2).toBe(2382);
+  expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 2);
+  expect(Math.abs(r.x1 - (r.x0 * f + 80))).toBeLessThan(4);      /* 40 pt × 2 */
+  expect(Math.abs(r.y1 - (r.y0 * f + 56.8))).toBeLessThan(4);    /* 28,4 pt × 2 */
   expect(errors).toEqual([]);
 });

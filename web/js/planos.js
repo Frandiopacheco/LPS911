@@ -393,7 +393,7 @@ function renderPBib(main){plSub();const eo=etoOn(),mob=plPhone(),bk='pbib'+(eo?'
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
     $('#plvw',main).onclick=()=>{PLF.vw=plListMode()?'g':'l';plfSave();plList(main)};
-    $('#pllist',main).onclick=e=>{if(e.target.closest('[data-plal]')){PLF.al=!PLF.al;requestRender();return}const b=e.target.closest('[data-pl]');if(!b)return;
+    $('#pllist',main).onclick=e=>{if(e.target.closest('[data-plal]')){PLF.al=!PLF.al;requestRender();return}{const j=e.target.closest('[data-pljoin]');if(j){plJoinRun(j.dataset.pljoin);return}}const b=e.target.closest('[data-pl]');if(!b)return;
       if(b.dataset.tq)plOpen(b.dataset.pl,plTxIds(plFiltered(true)),{hq:PLF.q});else{const ids=plFiltered().map(p=>p.id);plOpen(b.dataset.pl,ids.includes(b.dataset.pl)?ids:[b.dataset.pl])}}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
@@ -414,7 +414,7 @@ function plList(main){const host=$('#pllist',main);if(!host)return;
   if(!PLB.size){say(`<div class="callout"><b>Aún no hay planos cargados.</b> ${plaEd()?'Usa <b>Cargar planos…</b> para subir los PDF del proyecto (puedes arrastrar muchos a la vez).':'Cuando el administrador los cargue, aparecerán aquí.'}</div>`);return}
   /* Contenido: con 2 caracteres o más, los resultados; sin texto, la lista de siempre con los filtros (antes quedaba en blanco) */
   if(tq){if(plTxC(PLF.q||'').length>=2){plTxList(main,host,L);return}plTxIdle(main,L)}
-  const nal=etoOn()?0:[...PLB.values()].filter(plAlPend).length;const alb=nal||PLF.al?`<div class="callout plalc"><b>${nal} planta(s) DXF por alistar.</b> Hasta alistarlas no se pueden usar en Sectorización, Plan diario ni Metrados. <button type="button" class="ib${PLF.al?' on':''}" data-plal="1">${PLF.al?'Ver todos':'Ver solo las por alistar'}</button></div>`:'';
+  const nal=etoOn()?0:[...PLB.values()].filter(plAlPend).length;const alb=(etoOn()?'':plJoinCallout())+(nal||PLF.al?`<div class="callout plalc"><b>${nal} planta(s) DXF por alistar.</b> Hasta alistarlas no se pueden usar en Sectorización, Plan diario ni Metrados. <button type="button" class="ib${PLF.al?' on':''}" data-plal="1">${PLF.al?'Ver todos':'Ver solo las por alistar'}</button></div>`:'');
   if(!L.length){say(alb+'<p class="note">Ningún plano coincide con los filtros.</p>');return}
   const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
