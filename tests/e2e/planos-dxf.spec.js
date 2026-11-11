@@ -460,7 +460,7 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   await expect(page.locator('.pljc [data-pljoin="ARQ_AG03"]')).toContainText('Unir AG03 (PDF de la Rev. 1)');
   page.once('dialog', d => d.accept());
   await page.click('.pljc [data-pljoin="ARQ_AG03"]');
-  await expect.poll(() => page.evaluate(() => (window.__dbGet('plb', 'ARQ_AG03') || {}).rev)).toBe(3);
+  await expect.poll(() => page.evaluate(() => { const p = window.__dbGet('plb', 'ARQ_AG03') || {}; return p.rev + ':' + (p.dxf && p.dxf.sobre); })).toBe('3:pdf');   /* la unión escribe en dos pasos */
   const o = await page.evaluate(() => { const p = window.__dbGet('plb', 'ARQ_AG03'); return { base: p.base, sobre: p.dxf && p.dxf.sobre, revs: p.revs.map(r => r.rev + (r.dxf ? 'D' : 'P')), pend: plJoinPend().length }; });
   expect(o).toEqual({ base: 'planos/ARQ_AG03.p/r1', sobre: 'pdf', revs: ['1P', '2D'], pend: 0 });
   await expect(page.locator('.pljc')).toHaveCount(0);
@@ -494,6 +494,34 @@ test('PDF + DXF: con un PDF de hoja completa (sin recortar) el DXF se calza en s
   const f = 1111 * 2 / r.Wd;   /* el marco del PDF a 2 px por punto */
   expect(r.sobre).toBe('pdf'); expect(r.W2).toBe(2382);
   expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 2);
+  expect(Math.abs(r.x1 - (r.x0 * f + 80))).toBeLessThan(4);      /* 40 pt × 2 */
+  expect(Math.abs(r.y1 - (r.y0 * f + 56.8))).toBeLessThan(4);    /* 28,4 pt × 2 */
+  expect(errors).toEqual([]);
+});
+
+test('PDF + DXF: PDF sin marco reconocible: el DXF se calza en el borde de lo dibujado', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => { const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1]; return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) }); });
+  await page.evaluate(memStorage);
+  /* hoja 1191 × 842 pt con el marco de 1111 × 785,6 pt (proporción A3) a 40 pt de la izquierda y 28,4 pt de arriba */
+  const W = 1191, H = 842, c = '0.5 w 40 28 m 1151 813.6 l S 40 813.6 m 1151 28 l S', pdf = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length ${c.length} >>\nstream\n${c}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
+  const r = await page.evaluate(async ([t, pdf]) => {
+    window.__ST.set('planos/EST_E-06.p/r1/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
+    await fcol('plb').doc('EST_E-06').set({ cod: 'E-06', disc: 'EST', rev: 1, base: 'planos/EST_E-06.p/r1', W: 2382, H: 1684, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', revs: [], crop: null, fname: 'E-06.pdf' });
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
+    const base = 'planos/EST_E06.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('EST_E06').set({ cod: 'E06', disc: 'EST', rev: 1, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', revs: [], dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 1, dxf: 1 } });
+    goMod('pla'); for (let i = 0; i < 50 && !(PLB.get('EST_E06') && PLB.get('EST_E-06')); i++) await new Promise(r => setTimeout(r, 100));
+    await plDxfJoin(PLB.get('EST_E06'), plSpecOf(PLB.get('EST_E06')), PLB.get('EST_E-06'), true);
+    const p = window.__dbGet('plb', 'EST_E-06'); const G2 = JSON.parse(await dxfUnGz(window.__ST.get(p.base + '/geo.json.gz')));
+    const a = G.L.find(o => o.l.length), b = G2.L.find(o => o.n === a.n);
+    return { Wd: S.W, mppd: S.mpp, mpp: p.dxf.mpp, sobre: p.dxf.sobre, W2: G2.W, x0: a.l[0], y0: a.l[1], x1: b.l[0], y1: b.l[1] };
+  }, [dxfDemo({ layout: true }), pdf]);
+  const f = 1111 * 2 / r.Wd;   /* el marco del PDF a 2 px por punto */
+  expect(r.sobre).toBe('pdf'); expect(r.W2).toBe(2382);
+  expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 2);
+  expect(await page.evaluate(async () => !!(await plFrame(await (await window.pdfjsLib.getDocument({ data: new Uint8Array(await window.__ST.get('planos/EST_E-06.p/r1/orig.pdf').arrayBuffer()) }).promise).getPage(1))))).toBe(false);   /* sin rectángulo: plFrame no lo encuentra */
   expect(Math.abs(r.x1 - (r.x0 * f + 80))).toBeLessThan(4);      /* 40 pt × 2 */
   expect(Math.abs(r.y1 - (r.y0 * f + 56.8))).toBeLessThan(4);    /* 28,4 pt × 2 */
   expect(errors).toEqual([]);
