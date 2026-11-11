@@ -19,6 +19,15 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - Se planteó para una próxima obra (esta ya está en acabados); desde el 26-10-2026 se desarrolla en `main` como módulo **Casco** con datos de ejemplo y **no va a producción** hasta que el dueño lo apruebe (regla 6 de `CLAUDE.md`). La vista principal es el tren (partidas en filas, sector en la celda).
 
+## Ambientes desde el plano alistado (idea aprobada en principio con el dueño, 11-11-2026; por hacer)
+
+Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorización; lo correcto es al revés: **nacen del plano**. Proceso del dueño: niveles → cargar planos → frentes → sectorización → tren → lookahead → metrados → histograma de personal → balanceo de cuadrillas.
+- **Dónde:** en **Sectorización**, por piso: «Traer ambientes del plano» (planta ARQ alistada; sus ambientes ya salen de `dxfRolesFix` + `plb.fix` con nombre y polígono). Tabla en tres grupos: nuevos (se crean en `ambientes` con su forma en `geo`), coinciden (se vinculan y toman la forma del plano, sin dibujar), solo en el lookahead (se quedan; nunca se borran solos). Los nombres se corrigen en la tabla y después en el lookahead sin perder el vínculo.
+- **Sectores de las dos maneras, sincronizadas** (decisión del dueño): dibujar el sector sobre el plano (los ambientes cuyo centro cae adentro pasan a ese sector) o elegir el sector de cada ambiente en la tabla. Las dos cambian el mismo dato (`ambientes.sectorId`); la forma del sector se calcula del contorno de sus ambientes (no se guarda aparte), así nunca se contradicen.
+- **Sin otra lista:** los ambientes siguen siendo los de Last Planner (`ambientes`); el plano es la fuente. Vínculo por **posición** calibrada con la malla de ejes (`plb.ok.fit`), no por nombre: con una revisión nueva del plano se muestran los cambios (área distinta, nuevos, ya no están) y el usuario decide; lo programado no se toca.
+- **Área de cada ambiente** (m² del polígono): para metrar pisos, contrazócalos y pintura y alimentar el histograma de personal.
+- Después: sugerir el tipo de ambiente por el nombre («SH…» → baño) para la Matriz.
+
 ## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
 
 - **Valor ganado:** módulo aparte en una etapa siguiente, vinculando el catálogo de actividades con el catálogo de costos. No mezclarlo con el Last Planner (programar, liberar restricciones y medir la confiabilidad).
