@@ -2,6 +2,8 @@
 
 Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca el módulo Planos.
 
+> **En la obra (`produccion`, 11-11-2026, aprobado por el dueño):** pasó el módulo Planos solo, sin Casco (PR #539). No están allí: los niveles y la vista de Casco, las láminas del plan diario desde Planos (`lamFromPlb`), «Traer ambientes del plano» ni las zonas generales; ver `pendientes.md` «Candidatos a producción».
+
 ## Qué es
 
 Un **módulo aparte** (como el Tareo): el selector de la barra superior cambia entre «Last Planner», «Tareo» y «Planos». Reúne los ~300 planos del proyecto (PDF exportados desde AutoCAD) para que todo el equipo los consulte rápido, en alta definición, con filtros por piso, especialidad y tipo. Decidido con el dueño (oct 2026):
