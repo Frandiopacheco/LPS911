@@ -78,8 +78,8 @@ test('admin: módulo Planos en el selector, sin los controles de Last Planner', 
   noErrors(errors, 'admin');
 });
 
-test('quién ve el módulo: lector, SC y Calidad solo consultan; Oficina Técnica carga; capataz y tareo no lo ven', async ({ page }) => {
-  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['calidad', true, false], ['ot', true, true], ['editor', true, true], ['tcap', false, false]]) {
+test('quién ve el módulo: lector, SC, capataz y Calidad solo consultan; Oficina Técnica carga; el tareo no lo ve', async ({ page }) => {
+  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['capataz', true, false], ['calidad', true, false], ['ot', true, true], ['editor', true, true], ['tcap', false, false]]) {
     const errors = await openApp(page, { as, editar: false });
     const st = await page.evaluate(() => ({ ve: canPla(), carga: plaEd(), mods: MODS().map(m => m[0]) }));
     expect(st.ve, as).toBe(ve); expect(st.carga, as).toBe(carga);
@@ -91,6 +91,18 @@ test('quién ve el módulo: lector, SC y Calidad solo consultan; Oficina Técnic
     } else expect(st.mods).not.toContain('pla');
     noErrors(errors, as);
   }
+});
+
+/* 11-11-2026 (pedido del dueño): el capataz consulta los planos desde su pantalla del celular y vuelve con «Más» */
+test('capataz en el celular: «📐 Planos» abre el módulo y «Más › Last Planner» lo regresa a su pantalla', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'capataz', editar: false });
+  await page.locator('[data-kpla]').click();
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'pbib');
+  await page.locator('#bnav').getByText('Más').click();
+  await page.locator('#msheet [data-mod="lps"], #msheet :text("Last Planner")').first().click();
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'cap');
+  noErrors(errors, 'capataz');
 });
 
 test('lector de nombres: código, especialidad, piso y tipo según la nomenclatura del proyecto', async ({ page }) => {

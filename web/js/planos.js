@@ -52,7 +52,7 @@ let etoUn=null;
 function etoSub(){if(etoUn)return;
   const put=L=>{for(const k of [...PLB.keys()])if(PLB.get(k).eto)PLB.delete(k);L.forEach(d=>PLB.set(d.id,{...d,eto:true}));if(U.mod==='pla')requestRender()};
   const fail=err=>{console.error('eto',err);etoUn=null};
-  if(me.role==='sc')etoUn=scSubs('eto',null,null,L=>put(L),fail);
+  if(me.role==='sc'||me.role==='capataz')etoUn=scSubs('eto',null,null,L=>put(L),fail);
   else etoUn=fcol('eto').onSnapshot(sn=>put(sn.docs.map(d=>({...d.data(),id:d.id}))),fail)}
 const plCol=p=>fcol(p&&p.eto?'eto':'plb');
 const plEdOf=p=>p&&p.eto?plAdm():plaEd();
