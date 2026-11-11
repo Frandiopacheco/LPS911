@@ -180,6 +180,12 @@ El proyecto se trabaja también desde Claude Code (claude.ai/code, app de Claude
 - Si el entorno no tiene alguna herramienta (el script avisa con ⚠), sigue igual: la batería completa corre en GitHub en el PR.
 - Flujo de GitHub, «Modo rápido» y la regla 6 (Casco no va a producción) valen igual en cualquier superficie.
 
+## Modelo, esfuerzo y subagentes (decidido con el dueño, 11-11-2026)
+
+El dueño trabaja con un modelo principal fijo; cada pedido se clasifica al empezar (básica / compleja) y las complejas pasan por el subagente `asesor` al inicio y al final. Las búsquedas y verificaciones van al `buscador` (es el «subagente de modelo económico» de las auditorías). Las instrucciones son genéricas y están en `.claude/modelos.md` (subagentes en `.claude/agents/`):
+
+@.claude/modelos.md
+
 ## Modo rápido (por defecto, decidido con el dueño, oct 2026)
 
 El dueño prioriza ver los cambios pronto en la copia de prueba. Salvo que pida lo contrario o el cambio sea delicado:
@@ -198,7 +204,7 @@ El dueño encarga auditorías por tema a otra IA y trae el informe (cómo se pre
 
 1. **Una conversación nueva por informe.** Todo lo necesario está en este archivo y en `docs/ia/`; no hace falta el historial.
 2. **Comprobar la versión:** el informe dice qué commit auditó. Si no es el de `main`, revisa con `git diff <commit> main -- <archivos citados>` si las líneas siguen valiendo.
-3. **No repetir lo ya probado:** lo que el informe marca como **reproducido en Chromium** (con su evidencia) se da por confirmado y pasa directo a corregir. Lo que es solo lectura de código se contrasta leyendo **solo las líneas citadas** (si son muchas, con un subagente de modelo económico). Lo de gravedad baja lleva un veredicto de una línea.
+3. **No repetir lo ya probado:** lo que el informe marca como **reproducido en Chromium** (con su evidencia) se da por confirmado y pasa directo a corregir. Lo que es solo lectura de código se contrasta leyendo **solo las líneas citadas** (si son muchas, con el subagente `buscador`). Lo de gravedad baja lleva un veredicto de una línea.
 4. **Opinión antes de tocar nada:** tabla corta por n.º (confirmado / en parte / no, y si cambia la gravedad), puntos que repiten pendientes ya conocidos y decisiones que necesita el dueño. **Solo se implementa lo que él aprueba.**
 5. **Una sola rama y un solo *pull request* por informe** (salvo que algo sea riesgoso y convenga separarlo). Cada punto de lógica delicada lleva su prueba de regresión. En local solo corren los archivos de prueba tocados; la batería completa la corre GitHub en el PR (ver «Modo rápido»).
 6. Al terminar: actualizar el archivo del tema en `docs/ia/` (patrones nuevos) y `docs/ia/pendientes.md` y entregar un resumen corto. `produccion` nunca se toca sin aprobación.
