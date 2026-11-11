@@ -17,7 +17,7 @@ const csFrs=()=>[...KFR.values()].sort((a,b)=>(a.order??0)-(b.order??0)||String(
 const CS_FRCOL=['#1D9E75','#378ADD','#D85A30','#7F77DD','#BA7517','#D4537E'];
 const csFrC=(f,g)=>f?(g==='A'?f.cA:f.cE)||null:null;
 /** niveles que abarca el frente (en orden) */
-function csFrLv(f){const L=pisos();if(!f)return[];const i0=Math.max(0,L.findIndex(p=>p.id===f.from)),i1=L.findIndex(p=>p.id===f.to);return L.slice(i0,(i1<0?L.length-1:i1)+1)}
+function csFrLv(f){const L=niveles();if(!f)return[];const i0=Math.max(0,L.findIndex(p=>p.id===f.from)),i1=L.findIndex(p=>p.id===f.to);return L.slice(i0,(i1<0?L.length-1:i1)+1)}
 
 /* ---------- escala: la calibración vigente del módulo Planos ---------- */
 /** lámina base del nivel para el grupo (estructura: el plano EST; albañilería: el ARQ) */
@@ -182,7 +182,7 @@ function csScaleBadge(l){const s=csScale(l);if(!l)return'';
   return s.st==='dxf'?`<span class="csszok">Escala exacta del DXF ✓</span>`:s.st==='cal'?`<span class="csszok">Escala calibrada en Planos ✓</span>`:s.st==='nom'?`<span class="csszwarn">Escala nominal 1/100: áreas aproximadas</span>${s.plb?` <button type="button" class="ib" data-csz="cal" data-plb="${esc(s.plb)}">Calibrar en Planos</button>`:''}`:`<span class="csszwarn">Lámina sin escala: vincúlala desde el módulo Planos</span>`}
 
 /* ---- vista Frentes ---- */
-function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=pisos();const C=csFrC(f,g);const ref=(C&&C.ref)||(f&&(csFrLv(f).find(p=>csLamOf(p.id,g))||{}).id)||'';const lam=C&&C.vista?(window.__plano&&window.__plano.LAM.get(C.vista))||csLamOf(ref,g):csLamOf(ref,g);
+function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=niveles();const C=csFrC(f,g);const ref=(C&&C.ref)||(f&&(csFrLv(f).find(p=>csLamOf(p.id,g))||{}).id)||'';const lam=C&&C.vista?(window.__plano&&window.__plano.LAM.get(C.vista))||csLamOf(ref,g):csLamOf(ref,g);
   csSet('csszh',`<div class="csszr">${csFrs().map(x=>`<button type="button" class="ib${x.id===CSZ.fr?' on':''}" data-cszf="${esc(x.id)}"><i class="csdot" style="--c:${esc(x.color||'#888')}"></i>${esc(x.name)}</button>`).join('')}${ed?'<button type="button" class="ib" data-csz="frnew">+ Frente</button>':''}
       <span class="seg" role="group" aria-label="Grupo">${['E','A'].map(k=>`<button type="button" data-cszg="${k}" class="${g===k?'on':''}">${k==='E'?'Estructura':'Albañilería'}</button>`).join('')}</span>
       ${f?`<label class="cssml">Nivel de referencia<select data-csz="fref"${dis}>${csFrLv(f).map(p=>`<option value="${p.id}"${p.id===ref?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>`:''}</div>
@@ -215,7 +215,7 @@ function csFrDraw(){const f=csSzFr(),g=CSZ.fg,ed=csEd(),dis=ed?'':' disabled',L=
   const t=!f?'':CSZ.ftool==='rect'?'Arrastra un rectángulo que cubra el frente.':CSZ.ftool==='poly'?(CSZ.tmp.length?`${CSZ.tmp.length} esquina(s). Cierra tocando la primera, doble clic o Enter.`:'Toca cada esquina del contorno del frente.'):!(C&&C.pts)?'Dibuja el contorno del frente: ▭ Rectángulo o ⬠ Polígono.':ed?'Arrastra las esquinas para ajustar el contorno.':'';
   hint.innerHTML=t;hint.hidden=!t}
 function csFrSet(o){const f=csSzFr();if(!f||!csEd())return;const nf={...f,...o};KFR.set(f.id,nf);const d={...o};fcol('kfr').doc(f.id).set(d,{merge:true}).catch(e=>toast('No se pudo guardar: '+(e&&e.code||e)));csSzDraw()}
-async function csFrNew(){if(!csEd())return;const L=csFrs(),P=pisos();const used=new Set(L.map(f=>String(f.code||'').toUpperCase()));let c='A';for(const ch of'ABCDEFGHIJ')if(!used.has(ch)){c=ch;break}
+async function csFrNew(){if(!csEd())return;const L=csFrs(),P=niveles();const used=new Set(L.map(f=>String(f.code||'').toUpperCase()));let c='A';for(const ch of'ABCDEFGHIJ')if(!used.has(ch)){c=ch;break}
   const id=uid('fr');const d={name:'Frente '+c,code:c,color:CS_FRCOL[L.length%CS_FRCOL.length],from:(P[0]||{}).id||'',to:(P[P.length-1]||{}).id||'',order:L.length,cua:{},by:me.email,t:NOW()};
   try{await fcol('kfr').doc(id).set(d)}catch(e){toast('No se pudo crear: '+(e&&e.code||e));return}KFR.set(id,{...d,id});CSZ.fr=id;CSZ.ftool='rect';csSzDraw();toast(`${d.name} creado: dibuja su contorno sobre la planta`)}
 

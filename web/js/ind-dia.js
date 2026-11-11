@@ -64,7 +64,7 @@ function iprdDraw(o){
   const bar=`<header class="iprbar">
     <div class="iprt"><b>Cumplimiento del día</b><small>${DOWN[(pd(d).getUTCDay()+6)%7]} ${fmtD(d)}${d===today?' · hoy':''} · ${pisoLabel()}</small></div>
     <span class="iprg"><button class="ib" data-ip="dp" aria-label="Día anterior">‹</button><button class="ib" data-ip="dt">Hoy</button><button class="ib" data-ip="dn" aria-label="Día siguiente">›</button></span>
-    <select class="tin" id="iprpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisos().map(p=>`<option value="${esc(p.id)}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>
+    <select class="tin" id="iprpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(pisos(),U.piso)}</select>
     <span class="seg iprpg">${IPRD_PG.map((t,i)=>`<button data-ip="pg" data-pg="${i}" class="${IPR.pg===i?'on':''}">${t}</button>`).join('')}</span>
     ${ixdToggle(true)}
     <span class="fsp"></span>

@@ -67,7 +67,7 @@ function iprDraw(){const o=$('#ipr');if(!IPR||!o)return;if(U.tab!=='ind'){iprSto
   const bar=`<header class="iprbar">
     <div class="iprt"><b>Indicadores semanales</b><small>Semana ${n} · ${fmtD(wd[0])} – ${fmtD(wd[5])} · ${pisoLabel()}</small></div>
     <span class="iprg"><button class="ib" data-ip="wp" aria-label="Semana anterior">‹</button><button class="ib" data-ip="wt">Actual</button><button class="ib" data-ip="wn" aria-label="Semana siguiente">›</button></span>
-    <select class="tin" id="iprpiso" aria-label="Piso"><option value="">Todos los pisos</option>${ps.map(p=>`<option value="${esc(p.id)}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>
+    <select class="tin" id="iprpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
     <span class="seg iprpg">${IPR_PG.map((t,i)=>`<button data-ip="pg" data-pg="${i}" class="${IPR.pg===i?'on':''}">${t}</button>`).join('')}</span>
     <span class="fsp"></span>
     <span class="iprg"><button class="ib" data-ip="z-" aria-label="Letra más pequeña">A−</button><button class="ib" data-ip="z+" aria-label="Letra más grande">A+</button></span>

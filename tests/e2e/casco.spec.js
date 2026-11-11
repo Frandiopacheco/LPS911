@@ -678,3 +678,58 @@ test('formularios: seleccionar texto y soltar el mouse fuera no cierra la ventan
   await expect(page.locator('#lqm')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+/* Zonas generales (11-11-2026, decidido con el dueño): Fachadas, Exteriores… no son niveles. Siguen siendo pisos (PPC igual) pero van al final,
+   aparte de los niveles; en Casco su estructura va como frentes sueltos y nunca es «el nivel siguiente» del tren. */
+test('zonas generales: en Last Planner van aparte en el selector; en Casco no entran en la secuencia de niveles', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const errors = await openApp(page, { as: 'admin', extra: [['pisos', 'pz', { code: 'EX', name: 'Exteriores', order: 0, zg: true }], ['pisos', 'pf', { code: 'FA', name: 'Fachadas', order: 1.5 }]] });
+  await cargarEjemplo(page);
+  const nv = await page.evaluate(() => niveles().map(p => p.id));
+  /* nueva zona general de Casco con sus frentes */
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  const ans = ['Exteriores', 'Cerco perimétrico, Muro de contención'];
+  page.on('dialog', d => d.accept(ans.shift()));
+  await page.locator('[data-cs="zgnew"]').click();
+  await expect.poll(() => page.evaluate(() => pisos().filter(isZG).length)).toBe(1);
+  const z = await page.evaluate(() => { const z = pisos().filter(isZG)[0]; return { id: z.id, last: pisos().at(-1).id === z.id, fr: csAmbs(z.id, 'S').map(a => a.name).join(), niv: niveles().map(p => p.id) }; });
+  expect(z.last).toBe(true);
+  expect(z.fr).toBe('Cerco perimétrico,Muro de contención');
+  expect(z.niv).toEqual(nv);/* los niveles no cambian */
+  /* la zona de Casco solo ofrece zonas generales de Last Planner (y sugiere la del mismo nombre); los niveles no las ofrecen */
+  await expect.poll(() => page.locator(`[data-cs="lp"][data-id="${z.id}"] option[value="pz"]`).count()).toBe(1);
+  await expect(page.locator(`[data-cs="lp"][data-id="${z.id}"] option[value="p1"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-cs="lpok"][data-id="${z.id}"]`)).toHaveAttribute('data-lp', 'pz');
+  await expect(page.locator('[data-cs="lp"][data-id="n1"] option[value="pz"]')).toHaveCount(0);
+  await expect(page.locator('tr.cslvzg')).toContainText('Zonas generales');
+  /* tren: la zona tiene su bloque; el sector siguiente del último nivel no salta a la zona, ni la zona tiene «nivel siguiente» */
+  const t = await page.evaluate(zid => {
+    const top = niveles().at(-1).id; const last = [...S.amb.values()].filter(a => { const s = csSecOf(a); return s && s.pisoId === top && s.grp === 'S'; }).pop();
+    const za = csAmbs(zid, 'S')[0];
+    return { blk: ctBlocks().includes('z:' + zid), next: last ? ctNextAmb(last, ctFrOfAct({ ambId: last.id })) : null, zNext: ctNextAmb(csAmbs(zid, 'S').at(-1), 'z:' + zid), map: ctMapAmb(za.id, 1, 'z:' + zid), seq: ctSeq('z:' + zid).length, lv: ctLevels('z:' + zid).map(p => p.id) };
+  }, z.id);
+  expect(t.blk).toBe(true);
+  expect(t.next).toBeNull();
+  expect(t.zNext).toBeNull();
+  expect(t.map).toBeNull();
+  expect(t.seq).toBe(0);
+  expect(t.lv).toEqual([z.id]);
+  /* Planos: las zonas en su propio grupo */
+  const opts = await page.evaluate(() => plLvOpts(''));
+  expect(opts).toContain('<optgroup label="Zonas generales">');
+  expect(await page.evaluate(() => plLvList().at(-1).zg)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('zonas generales: Last Planner marca un piso como zona general y el selector la pone aparte, al final', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin' });
+  await page.evaluate(() => pisoZG(S.pis.get('p1')));
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('pisos', 'p1') || {}).zg)).toBe(true);
+  expect(await page.evaluate(() => [pisos().at(-1).id, niveles().some(p => p.id === 'p1')])).toEqual(['p1', false]);
+  await expect(page.locator('#fpiso optgroup[label="Zonas generales"] option[value="p1"]')).toHaveCount(1);
+  /* vuelve a ser nivel */
+  await page.evaluate(() => pisoZG(S.pis.get('p1')));
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('pisos', 'p1') || {}).zg)).toBeUndefined();
+  await expect(page.locator('#fpiso optgroup')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

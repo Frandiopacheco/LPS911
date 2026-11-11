@@ -38,7 +38,7 @@ function presBar(){if(!LKP)return;let b=$('#presbar');
     ${U.day||U.wkF?'<button class="ib on" data-pb="fx" title="Quitar el filtro de semana o día">Quitar filtro ✕</button>':''}`;
   const h=`<b class="pbt">${esc(P().name||'Lookahead')}<small>Lookahead · semanas ${U.week}–${U.week+U.win-1} · ${fmtD(wd0)} – ${fmtD(wd1)}</small></b>
     <span class="pbg"><button class="ib" data-pb="wp" aria-label="Semana anterior">‹</button><button class="ib" data-pb="wt"${U.week===curWeek()?' disabled':''}>Hoy</button><button class="ib" data-pb="wn" aria-label="Semana siguiente">›</button></span>
-    <select class="tin" id="pbpiso" aria-label="Piso"><option value="">Todos los pisos</option>${ps.map(p=>`<option value="${p.id}"${U.piso===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}</select>
+    <select class="tin" id="pbpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
     <select class="tin" id="pbsec" aria-label="Sector"><option value="">Todos los sectores</option>${secs.map(s=>`<option value="${s.id}"${U.sector===s.id?' selected':''}>${esc(s.code)} · ${esc(s.name)}</option>`).join('')}</select>
     ${fsel}
     <span class="seg">${[3,6].map(w=>`<button data-w="${w}" class="${U.win===w?'on':''}">${w} sem</button>`).join('')}</span>
