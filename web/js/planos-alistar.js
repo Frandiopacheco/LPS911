@@ -13,6 +13,7 @@
      o descartar líneas sin nombre, quitar o agregar columnas, rótulos y ambientes. Se toca el objeto en el plano y salen sus acciones. */
 
 const PAL_TOL=0.02;   /* m: diferencia máxima con la malla de ejes */
+const PAL_TOL_ARQ=0.05,PAL_SC_ARQ=0.005;   /* arquitectura: se calibra con la malla de estructura (11-11-2026), con más holgura */
 const PAL={on:false,id:'',show:{ej:true,col:true,vig:true,tx:false,amb:true,ctn:true,iss:true},C:null,ctn:false,trace:'',sel:null,prev:null};
 const PAL_SHOW=[['ej','Ejes'],['col','Columnas'],['vig','Caras'],['tx','Rótulos'],['amb','Ambientes'],['ctn','Contorno'],['iss','Avisos']];
 
@@ -70,8 +71,12 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     add('escala','Escala y unidades',ml.length?'warn':'ok',`${cnt[b]} de ${num.length} cotas coinciden con el dibujo: la escala y las unidades (${un}) están bien.${ml.length?` ${ml.length} cota(s) con el texto escrito a mano no coinciden con lo dibujado: revísalas.`:''}`,
       [`Medida de control: ${ctl}.`,...ml.slice(0,12).map(x=>`Cota escrita «${x.d.s}», el dibujo mide ${pal2(x.v*fb)}`)],[],ml.map(x=>({x:(x.d.P[0]+x.d.P[2])/2,y:(x.d.P[1]+x.d.P[3])/2})))}
   else add('escala','Escala y unidades','err',`Solo ${cnt[b]} de ${num.length} cotas coinciden con el dibujo: las unidades parecen equivocadas. Revísalas en «◇ Capas» (hoy: ${un}).`,[`Medida de control: ${ctl}.`],['lay']);
+  /* Arquitectura (11-11-2026, decidido con el dueño): se calibra con los ejes de estructura (la malla del proyecto) y usa esos ejes.
+     Sus propios ejes solo sirven para calzar (≥ 2 cruces con el mismo nombre): no se revisan girados, saltos ni nombres. Si todavía no hay
+     malla pero el proyecto tiene plantas de estructuras en DXF, primero se alista una de ellas. */
+  const M=c.malla,arqM=arq&&M&&M.id!==p.id,arqEsp=arq&&!M&&c.estDxf;
   /* 3. ejes */
-  {let st='ok';const msg=[],pts=[];const up=s=>{if(s==='err'||st==='ok')st=s};
+  if(!arqM&&!arqEsp){let st='ok';const msg=[],pts=[];const up=s=>{if(s==='err'||st==='ok')st=s};
     if(!V.length||!H.length){up('err');msg.push(!E.length?'No se encontraron ejes con nombre: revisa la capa de ejes en «◇ Capas».':`Faltan ejes ${!V.length?'verticales':'horizontales'}.`)}
     if(R.cnt.dup.length){up('err');msg.push(`Nombre repetido en ejes distintos: ${R.cnt.dup.join(', ')}. Toca la línea marcada y ponle otro nombre o descártala.`)}
     if(R.cnt.ejSin){up('warn');msg.push(`${R.cnt.ejSin} línea(s) de la capa de ejes sin nombre: tócalas para nombrarlas o descartarlas.`)}
@@ -90,8 +95,21 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     if(badC.length){up('warn');msg.push(`${badC.length} cota(s) entre ejes no coinciden con la distancia entre los ejes.`)}
     add('ejes','Ejes',st,(msg.length?msg.join(' '):`${E.length} ejes completos y bien nombrados`)+(okC?` · ${okC} cota(s) entre ejes coinciden.`:'.'),[`Verticales: ${V.map(e=>e.n).join(', ')||'—'}`,`Horizontales: ${H.map(e=>e.n).join(', ')||'—'}`,V.length>1?'Luces: '+span(V).join(' · '):'',H.length>1?'Luces: '+span(H).join(' · '):'',...badC.slice(0,12)].filter(Boolean),['lay','ejAdd'],pts,endz)}
   /* 4. malla de ejes del proyecto */
-  const mine=E.map(e=>({n:e.n,p:e.p.map(v=>Math.round(v*mpp*1e4)/1e4)}));const M=c.malla;
-  if(M&&M.id===p.id)add('malla','Malla de ejes del proyecto','ok','Este plano fija la malla de ejes del proyecto: los demás planos se comparan con él.');
+  const mine=E.map(e=>({n:e.n,p:e.p.map(v=>Math.round(v*mpp*1e4)/1e4)}));let fit=null,ejM=null;
+  if(arqEsp)add('malla','Ejes de la estructura','err','Alista primero una planta de estructuras: la arquitectura se calibra con sus ejes.');
+  else if(arqM){const A=new Map(palCross(M.ok.ej).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
+    if(P.length<2)add('malla','Ejes de la estructura','err',`Para calzar con los ejes de estructura (${M.cod}) hacen falta al menos 2 cruces con el mismo nombre${E.length?`; este plano tiene ${palCross(mine).length} cruce(s), ${P.length} en común`:''}. Toca una línea de eje en el plano y elige «Nombrar como eje», o agrégalo con «+ Agregar eje».`,[],['ejAdd']);
+    else{/* los cruces que no calzan (un eje mal dibujado o girado en la arquitectura) se dejan fuera uno a uno, mientras queden ≥ 3 y más de la mitad */
+      let I=P.map((x,i)=>i),T=palFit(P,Q),out=[];const resOf=(T,ix)=>ix.map(i=>{const q=palAp(T,P[i]);return{i,n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:P[i].x/mpp,y:P[i].y/mpp}}).sort((a,b)=>b.d-a.d);
+      for(;;){const r0=T&&resOf(T,I)[0];if(!r0||r0.d<=PAL_TOL_ARQ||I.length<=3||(I.length-1)*2<=P.length)break;out.push(r0);I=I.filter(i=>i!==r0.i);T=palFit(I.map(i=>P[i]),I.map(i=>Q[i]))}
+      const sk=Math.hypot(T.a,T.b);const res=resOf(T,I);const far=res.filter(r=>r.d>PAL_TOL_ARQ);const sc=Math.abs(sk-1)>PAL_SC_ARQ;fit=T;
+      /* los ejes de la estructura llevados a este plano (px): son los que se dibujan y se usan */
+      const k2=T.a*T.a+T.b*T.b,inv=q=>{const x=q.x-T.e,y=q.y-T.f;return{x:(T.a*x+T.b*y)/k2/mpp,y:(-T.b*x+T.a*y)/k2/mpp}};
+      ejM=M.ok.ej.map(e=>{const a=inv({x:e.p[0],y:e.p[1]}),b=inv({x:e.p[2],y:e.p[3]});return{n:e.n,p:[a.x,a.y,b.x,b.y]}});
+      const ign=out.length?` Se dejaron fuera ${out.length} cruce(s) que no calzan (${out.slice(0,6).map(r=>`${r.n} a ${(r.d*100).toFixed(1)} cm`).join(', ')}): ese eje está corrido o girado en este plano; confirma que el resto calza.`:'';
+      add('malla','Ejes de la estructura',far.length||sc?'err':out.length?'warn':'ok',sc?`La escala no coincide con la estructura (${M.cod}): ${((sk-1)*100).toFixed(2)} %. Revisa las unidades en «◇ Capas».`:far.length?`${far.length} cruce(s) a más de ${PAL_TOL_ARQ*100} cm de la estructura (${M.cod}): revisa los nombres de esos ejes.`:
+        `Calibrado con los ejes de estructura (${M.cod}): ${P.length} cruces, diferencia máxima ${(res[0].d*100).toFixed(1)} cm. Se dibujan y se usan los ejes de la estructura.${ign}`,[...far,...out].slice(0,12).map(r=>`${r.n} a ${(r.d*100).toFixed(1)} cm`),[],[...far,...out].map(r=>({x:r.x,y:r.y})))}}
+  else if(M&&M.id===p.id)add('malla','Malla de ejes del proyecto','ok','Este plano fija la malla de ejes del proyecto: los demás planos se comparan con él.');
   else if(!M)add('malla','Malla de ejes del proyecto',E.length?'warn':'err',E.length?`Todavía no hay malla de ejes del proyecto: al marcar este plano como listo, sus ${E.length} ejes serán la malla con la que se comparan los demás niveles y la arquitectura.`:'Sin ejes no puede fijar la malla.');
   else{const ME=M.ok.ej;const nm=new Set(mine.map(e=>e.n)),nM=new Set(ME.map(e=>e.n));const falta=[...nM].filter(n=>!nm.has(n)),sobra=[...nm].filter(n=>!nM.has(n));
     const A=new Map(palCross(ME).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
@@ -119,17 +137,18 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   if(c.ctn&&c.ctn.P&&c.ctn.P.length>=6){const H=palHoles(c.ctn);const ab=palArea(c.ctn.P)*mpp*mpp,ah=H.reduce((t,h)=>t+palArea(h.p),0)*mpp*mpp;
     add('ctn','Contorno de la planta','ok',`Área ${pal2(ab-ah)} m²${H.length?` (${pal2(ab)} m² menos ${H.length} hueco(s) de ${pal2(ah)} m²)`:''} · perímetro ${pal2(palPerim(c.ctn.P)*mpp)} m. Es el área que usan la sectorización y los metrados por ratio. Las escaleras exteriores no van: se metran aparte.`,
       H.map((h,ix)=>`Hueco ${ix+1}: ${pal2(palArea(h.p)*mpp*mpp)} m²`),['ctn','hueco'],[],H.map((h,ix)=>({a:'hdel:'+ix,t:`Quitar hueco ${ix+1}`})))}
+  else if(arq)add('ctn','Contorno de la planta','ok',`Opcional en arquitectura: el área para la sectorización y los metrados la da la planta de estructuras.${cand?` Hay uno propuesto de ${pal2(palArea(cand)*mpp*mpp)} m².`:''}`,[],cand?['ctn','ctnauto']:['ctn']);
   else add('ctn','Contorno de la planta','err',`Traza el contorno de la planta (${est?'borde de losa':'perímetro'}): da el área que usan la sectorización y los metrados por ratio.${cand?` Hay uno propuesto de ${pal2(palArea(cand)*mpp*mpp)} m².`:''}`,[],cand?['ctn','ctnauto']:['ctn']);
   /* 8. rótulos */
   if(est){const u=[...new Set(R.tx.map(t=>t.t.replace(/\s+/g,'')))].slice(0,6);add('tx','Rótulos de vigas','warn',R.tx.length?`${R.tx.length} rótulos de sección (${u.join(', ')}${u.length>=6?'…':''}): darán la sección de cada tramo en Metrados.`:'Sin rótulos de sección: las secciones de las vigas se escribirán a mano en Metrados.',[],['lay'])}
   /* 9. ambientes */
   if(arq){const A=R.amb;let sinN=0,sum=0;const pts=[];const det=[];
-    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}else if(det.length<20)det.push(`${q.n} · ${pal2(a)} m²`)}
+    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}else if(det.length<60)det.push(`${q.n} · ${pal2(a)} m²`)}
     const ca=c.ctn&&c.ctn.P?palArea(c.ctn.P)*mpp*mpp:0;
-    add('amb','Ambientes','warn',A.length?`${A.length} ambientes, ${pal2(sum)} m² en total${ca?` (${Math.round(sum/ca*100)} % del contorno)`:''}.${sinN?` ${sinN} sin nombre.`:''}`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts)}
+    add('amb','Ambientes','warn',A.length?`Se identificaron ${A.length} ambientes (${pal2(sum)} m²${ca?`, ${Math.round(sum/ca*100)} % del contorno`:''}).${sinN?` ${sinN} sin nombre.`:''} Revisa que estén bien: toca uno en el plano para renombrarlo o quitarlo, y agrega los que falten.`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts)}
   /* 10. encuadre */
   {const d=p.dxf||{};add('enc','Encuadre de la lámina','warn',`Lámina de ${(p.mm||[0,0]).join(' × ')} mm desde el ${d.src||'modelo'}${d.crop?', recortada al marco':''}${d.far?`; ${d.far} objeto(s) lejanos quedaron fuera`:''}. Confirma que se ve completa y que no falta nada importante. Si falta algo, vuelve a cargar el DXF como nueva revisión con «Recortar al marco» desmarcado.`)}
-  return{it,R,mine,cand}}
+  return{it,R,mine,cand,fit,ejM}}
 /** estado efectivo con lo confirmado: cada ítem con ef 'ok'|'conf'|'warn'|'err'; listo si no queda ⚠ ni ✕ */
 function palState(it,chk){chk=chk||{};const L=it.map(x=>({...x,ef:x.st==='warn'?(chk[x.id]?'conf':'warn'):x.st}));return{L,ready:L.every(x=>x.ef==='ok'||x.ef==='conf')}}
 
@@ -153,7 +172,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   {const body=PLV.box.querySelector('.plvb');el.style.top=(body?body.offsetTop:56)+'px'}
   let G=GEO.get(sp.base);if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(sp.base)}
   PAL.G=G.g;if(PAL.LG!==G.g){PAL.LG=G.g;PAL.Ls=dxfLayers(dxfGeoF(G.g))}if(PAL.sel&&PAL.sel.k==='raw'&&!G.g.L.includes(PAL.sel.o))PAL.sel=null;
-  const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
+  const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),estDxf:[...PLB.values()].some(x=>!x.arch&&x.disc==='EST'&&x.dxf),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
   const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
   const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
   shx(el,`<div class="plalh"><b>Alistar ${esc(p.cod)} · Rev. ${p.rev||1}</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div>
@@ -313,7 +332,7 @@ async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;
 async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
   const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
 async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;
-  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev:p.rev||1,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija};if(fija){ok.ej=C.mine;ok.mpp=p.dxf.mpp}
+  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev:p.rev||1,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija,...(C.fit&&M?{fit:{...C.fit,de:M.id}}:{})};if(fija){ok.ej=C.mine;ok.mpp=p.dxf.mpp}
   await palSet(p,{ok},fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
 /** el administrador cambia qué plano fija la malla de ejes */
 async function palMallaSet(p){if(me.role!=='admin'||!p.ok)return;const M=plMalla();const C=PAL.C;if(!C)return;
@@ -328,7 +347,7 @@ function palDraw(g,V){const C=PAL.C;const p=palP();if(!C||!p)return;const R=C.R,
   if(sh.vig){g.beginPath();for(let i=0;i+3<R.ln.length;i+=4){const a=s(R.ln[i],R.ln[i+1]),b=s(R.ln[i+2],R.ln[i+3]);g.moveTo(a.x,a.y);g.lineTo(b.x,b.y)}g.lineWidth=1.5;g.strokeStyle='#0E7490';g.stroke()}
   if(sh.ej){g.lineWidth=2;g.strokeStyle='#B83A2E';g.setLineDash([6,5]);for(const l of R.S||[]){lt(l.p,false);g.stroke()}
     g.setLineDash([14,4,3,4]);g.lineWidth=1.6;g.strokeStyle='#C2410C';g.font='600 12px system-ui,sans-serif';g.textAlign='center';g.textBaseline='middle';
-    for(const e of R.ej){lt(e.p,false);g.stroke();const q=s(e.p[0],e.p[1]);g.setLineDash([]);g.fillStyle='#C2410C';g.beginPath();g.arc(q.x,q.y,10,0,2*Math.PI);g.fill();g.fillStyle='#fff';g.fillText(e.n,q.x,q.y);g.setLineDash([14,4,3,4])}g.setLineDash([])}
+    for(const e of C.ejM||R.ej){lt(e.p,false);g.stroke();const q=s(e.p[0],e.p[1]);g.setLineDash([]);g.fillStyle='#C2410C';g.beginPath();g.arc(q.x,q.y,10,0,2*Math.PI);g.fill();g.fillStyle='#fff';g.fillText(e.n,q.x,q.y);g.setLineDash([14,4,3,4])}g.setLineDash([])}
   if(sh.tx){g.fillStyle='#7C3AED';for(const t of R.tx){const q=s(t.x,t.y);g.beginPath();g.arc(q.x,q.y,3,0,2*Math.PI);g.fill()}}
   if(sh.iss){g.lineWidth=2.5;g.strokeStyle='#B83A2E';for(const x of C.it)for(const q0 of x.pts){const q=s(q0.x,q0.y);g.beginPath();g.arc(q.x,q.y,14,0,2*Math.PI);g.stroke()}}
   /* lo elegido y la vista previa de enderezar/mover */
