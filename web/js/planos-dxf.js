@@ -401,8 +401,11 @@ function plCtnScale(c,f,ox,oy){if(!c||!Array.isArray(c.P))return c;const o=[ox||
 async function plDxfMap(P,W,H,dxfCrop){if(P.crop)return{f:plDxfFit(P,W,H,dxfCrop),ox:0,oy:0};
   if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
   await plPdfJs();let pdf=null;try{const b=await plGet(P.base+'/orig.pdf');pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await b.arrayBuffer())}).promise;const pg=await pdf.getPage(1);
-    const v1=pg.getViewport({scale:1});const fr=await plFrame(pg);if(!fr)throw new Error(`No se encontró el marco de la hoja en el PDF ${P.cod||''}: vuelve a cargarlo con «Recortar al marco».`);
-    const fw=fr.x1-fr.x0,fh=fr.y1-fr.y0,ra=fh/fw,rb=H/W;if(Math.abs(ra-rb)/ra>0.015)throw new Error(`El marco del PDF y el del DXF no tienen la misma proporción (${(1/rb).toFixed(3)} y ${(1/ra).toFixed(3)}): ¿es la misma lámina?`);
+    const v1=pg.getViewport({scale:1});const rb=H/W,okA=r=>r&&Math.abs((r.y1-r.y0)/(r.x1-r.x0)-rb)/rb<=0.015;
+    /* el marco que encuentra la carga (plFrame); si no hay o no calza, el borde de todo lo dibujado (suele ser el marco: 11-11-2026, E-15) */
+    let fr=null;try{fr=await plFrame(pg)}catch(e){fr=null}if(!okA(fr)){const ink=await plInkBox(pg);if(okA(ink))fr=ink;else{const r=fr||ink;
+      throw new Error(r?`El marco del PDF ${P.cod||''} y el del DXF no tienen la misma proporción (${((r.x1-r.x0)/(r.y1-r.y0)).toFixed(3)} y ${(1/rb).toFixed(3)}): ¿es la misma lámina y el mismo formato?`:`No se encontró el marco de la hoja en el PDF ${P.cod||''}.`)}}
+    const fw=fr.x1-fr.x0;
     const sc=P.W/v1.width;return{f:fw*sc/W,ox:fr.x0*sc,oy:fr.y0*sc}}finally{if(pdf)try{pdf.destroy()}catch(e){}}}
 /** factor DXF → PDF; error si no calzan (los dos deben ir recortados al marco y con la misma proporción) */
 function plDxfFit(pdf,W,H,dxfCrop){if(!pdf.crop)throw new Error(`El PDF ${pdf.cod||''} no está recortado al marco: vuelve a cargarlo con «Recortar al marco» para que el DXF calce con él.`);
@@ -459,3 +462,10 @@ function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.lengt
 async function plJoinRun(id){const x=plJoinPend().find(o=>o.D.id===id);if(!x)return;const D=x.D;
   if(!await uiAsk({title:`¿Unir ${D.cod}${x.P?` con ${x.P.cod}`:` con su PDF (Rev. ${x.r})`}?`,text:x.P?`Queda una sola ficha (${x.P.cod}): se ve el PDF y el DXF pasa a ser sus datos. La ficha ${D.cod} se archiva (se recupera desde «Archivados»).`:`Se crea la Rev. ${(D.rev||1)+1} con la imagen del PDF de la Rev. ${x.r} y los datos del DXF vigente. Las revisiones anteriores quedan en el historial.`,ok:'Unir',tone:'info'}))return;
   toast('Uniendo…');try{if(x.P)await plDxfJoin(D,plSpecOf(D),x.P,true);else await plJoinOwn(D,x.r);toast(`${D.cod}: listo, una sola ficha con el PDF y sus datos DXF`)}catch(e){toast('No se pudo unir: '+e.message)}}
+/** borde de todo lo dibujado en la hoja del PDF (en puntos, coordenadas de la vista a escala 1): filas y columnas con algo de tinta */
+async function plInkBox(pg){const v1=pg.getViewport({scale:1}),a=2400/Math.max(v1.width,v1.height),vp=pg.getViewport({scale:a});
+  const w=Math.floor(vp.width),h=Math.floor(vp.height),c=plCanvas(w,h),g=c.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,w,h);
+  await pg.render({canvasContext:g,viewport:vp}).promise;const d=g.getImageData(0,0,w,h).data;c.width=c.height=0;
+  const R=new Uint32Array(h),C=new Uint32Array(w);for(let y=0,j=0;y<h;y++)for(let x=0;x<w;x++,j+=4)if(d[j]*0.3+d[j+1]*0.59+d[j+2]*0.11<200){R[y]++;C[x]++}
+  const mn=Math.max(2,Math.round(Math.min(w,h)*0.002));let y0=0,y1=h-1,x0=0,x1=w-1;while(y0<h&&R[y0]<mn)y0++;while(y1>y0&&R[y1]<mn)y1--;while(x0<w&&C[x0]<mn)x0++;while(x1>x0&&C[x1]<mn)x1--;
+  if(x1-x0<w*0.3||y1-y0<h*0.3)return null;return{x0:x0/a,y0:y0/a,x1:(x1+1)/a,y1:(y1+1)/a}}
