@@ -10,6 +10,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - Auditoría 02e575c: las reglas de `fotos` exigen el autor, pero aún no comprueban que la foto pertenezca a un registro (daily, live, restricción, liberación, no programado) que esa persona pueda escribir. La **revisión formal** de un compromiso ya cerrado (versión, motivo y autor más allá de reabrir) sigue pendiente, igual que la de la semana congelada. El piso de un reporte en vivo solo se comprueba si el sector de la actividad tiene `pisoId`.
 
 - Auditoría del ciclo diario (oct 2026), quedó para después: las reglas aún no exigen ser responsable del piso para escribir `acts` (las actividades no guardan su piso; es el pendiente 10); al detener una actividad en En obra no se ofrece crear la restricción (N09 de ChatGPT); bajas: la marca ↷ más reciente se usa sin límite de antigüedad (`rplFor`), un día reabierto (`reo`) no se vuelve a cerrar solo y el redibujo en cascada con muchos reportes en vivo (medir antes). Con varios usuarios, una ventanita abierta (Revisar) a veces se cierra cuando llegan datos de otros (lo anota `auditoria-ciclo`).
+- Planos (11-11-2026): en una captura del dueño (iPhone, ETO de subcontratistas) el contador decía «0 planos» con 7 láminas de A&M a la vista. No se pudo reproducir en el entorno de pruebas; si vuelve a pasar, anotar cómo se llegó (pestaña, filtros, si venía de Contenido). Quedan para después en el celular: «girar vista» para quien tiene bloqueada la rotación y bajar la memoria del visor en Android de gama media (hoy hasta `PL_CAP` 56 mosaicos ≈ 220 MB, igual que en PC; medir en un equipo real antes de tocarlo).
 - Tanda B: avisos al celular (FCM), Lookahead que dibuje solo las filas visibles.
 - Tanda C: proyecto nuevo guiado, ayuda táctil, fotos a Cloud Storage, App Check.
 - Liberaciones: zonas como polígono (hoy rectángulo).
@@ -18,6 +19,12 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Módulo de casco: ya existe (ver `casco.md`)
 
 - Se planteó para una próxima obra (esta ya está en acabados); desde el 26-10-2026 se desarrolla en `main` como módulo **Casco** con datos de ejemplo y **no va a producción** hasta que el dueño lo apruebe (regla 6 de `CLAUDE.md`). La vista principal es el tren (partidas en filas, sector en la celda).
+
+## Candidatos a producción (11-11-2026; solo con aprobación del dueño, uno por uno, por cherry-pick: `CLAUDE.md` «Casco en prueba»)
+
+- **Publicación que reintenta y no se corta por el 409 de las reglas** (`.github/workflows/ci.yml`, #522 y parte de #523): sin riesgo para la app.
+- **Zonas generales, solo la parte de Last Planner** (`base.js` `isZG`/`niveles`/`pisoOptsZG`, menú del piso en `lookahead.js`, selectores): va en #523 junto con su parte de Casco y de Planos; hay que separarla. Útil ya para FA · Fachadas y EX · Exteriores de la obra.
+- **No van todavía:** Planos con DXF y Alistar (la obra no los tiene), «Traer ambientes del plano» (depende de `casco-dxf.js`) y todo Casco.
 
 ## Ambientes desde el plano alistado (aprobado con el dueño, 11-11-2026; primera parte hecha: `plan-diario.md` «Ambientes desde el plano»)
 

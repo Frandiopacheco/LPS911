@@ -26,8 +26,17 @@ const PL_DTOK={ARQ:'ARQ',EST:'EST',ES:'EST',AFC:'IS',DES:'IS',AGDES:'IS',IS:'IS'
 const PL_TIPOS=['Planta','Corte','Elevación','Detalle','Esquema','Ubicación','Otro'];
 
 const PLB=new Map();let plbReady=false,plbUn=null;
-const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false,src:'',sc:'',qm:''},store.get('plf',{}));PLF.q='';
-const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src:PLF.src,sc:PLF.sc,qm:PLF.qm});
+const PLF=Object.assign({q:'',piso:'',disc:'',tipo:'',arch:false,src:'',sc:'',qm:'',vw:''},store.get('plf',{}));PLF.q='';
+const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src:PLF.src,sc:PLF.sc,qm:PLF.qm,vw:PLF.vw});
+/* biblioteca: lista compacta (por defecto en el celular) o cuadrícula de miniaturas (por defecto en PC y tablet); se recuerda en el equipo */
+const plListMode=()=>PLF.vw==='g'?false:PLF.vw==='l'?true:plPhone();
+/* recientes: las últimas láminas abiertas en este equipo (arriba de la lista) */
+const PLREC=(()=>{const a=store.get('plrec',[]);return Array.isArray(a)?a.slice(0,8):[]})();
+function plRecent(id){if(!id)return;const i=PLREC.indexOf(id);if(i===0)return;if(i>0)PLREC.splice(i,1);PLREC.unshift(id);PLREC.length=Math.min(PLREC.length,8);store.set('plrec',PLREC)}
+/* íconos de la barra inferior del celular (antes salían «•••» en las pestañas de Planos) */
+Object.assign(BNI,{pbib:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 11h7v8.5M10.5 11V4.5M14 14.5h6.5"/>'),
+  pcar:SVG('<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14.5v4A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-4"/>'),
+  p3d:SVG('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/>')});
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
@@ -359,17 +368,17 @@ function plFiltered(noQ){const q=noQ?'':plUp(PLF.q).trim();const words=q?q.split
   return [...PLB.values()].filter(p=>!p.eto).filter(p=>(!PLF.al||plAlPend(p))&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
     &&(!PLF.piso||(PLF.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(PLF.piso)))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
     .sort((a,b)=>PL_DISC.findIndex(d=>d[0]===a.disc)-PL_DISC.findIndex(d=>d[0]===b.disc)||plCodCmp(a,b))}
-function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn()?'t':'');
+function renderPBib(main){plSub();const eo=etoOn(),mob=plPhone(),bk='pbib'+(eo?'e':'')+(plTxOn()?'t':'')+(mob?'m':'');
   if(main.dataset.built!==bk){main.dataset.built=bk;
     const seg=`<div class="seg plsrc" role="tablist" aria-label="Origen de los planos"><button type="button" data-src=""${eo?'':' class="on"'} aria-selected="${!eo}">Proyecto</button><button type="button" data-src="eto"${eo?' class="on"':''} aria-selected="${eo}">ETO de subcontratistas</button></div>`;
-    main.innerHTML=`<div class="scroll"><div class="wrap plw">${pageHead('Planos',eo?(me.role==='sc'?'Los ETO (planos de taller) aprobados de tu partida.':'ETO (planos de taller) aprobados de los subcontratistas, ordenados por SC.'):`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,(eo?plAdm():plaEd())?'<button class="ib pri" id="plgocar">'+(eo?'Cargar ETO…':'Cargar planos…')+'</button>':'')}
+    main.innerHTML=`<div class="scroll"><div class="wrap plw${mob?' mob':''}">${pageHead('Planos',eo?(me.role==='sc'?'Los ETO (planos de taller) aprobados de tu partida.':'ETO (planos de taller) aprobados de los subcontratistas, ordenados por SC.'):`Todos los planos vigentes del proyecto. Toca uno para verlo en alta definición.`,(eo?plAdm():plaEd())?'<button class="ib pri" id="plgocar">'+(eo?'Cargar ETO…':'Cargar planos…')+'</button>':'')}
       ${seg}<div class="plbar"><input class="tin plq" id="plq" type="search" placeholder="${plTxOn()?'Buscar dentro de las láminas: DET. 4, V-101, bombas…':'Buscar: código, título, archivo…'}" autocomplete="off" aria-label="Buscar planos">
-        <div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm=""${plTxOn()?'':' class="on"'} aria-selected="${!plTxOn()}" title="Buscar por código, título o nombre del archivo">Nombre</button><button type="button" data-qm="tx"${plTxOn()?' class="on"':''} aria-selected="${plTxOn()}" title="Buscar el texto escrito dentro de las láminas">Contenido</button></div>
+        <div class="plfx"><div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm=""${plTxOn()?'':' class="on"'} aria-selected="${!plTxOn()}" title="Buscar por código, título o nombre del archivo">Nombre</button><button type="button" data-qm="tx"${plTxOn()?' class="on"':''} aria-selected="${plTxOn()}" title="Buscar el texto escrito dentro de las láminas">Contenido</button></div>
         ${eo?'<select class="tin" id="plfs" aria-label="Subcontratista"></select>':''}<select class="tin" id="plfp" aria-label="Piso"></select>${eo?'':'<select class="tin" id="plfd" aria-label="Especialidad"></select><select class="tin" id="plft" aria-label="Tipo"></select>'}
-        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plTablet()?'<button class="ib" id="ploff" title="Guardar planos en esta tablet para verlos sin internet">⤓ Sin conexión</button>':''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<span class="plcnt" id="plcnt"></span></div>
+        ${plaEd()?'<label class="plchk"><input type="checkbox" id="plfa"> Archivados</label>':''}${plOffOk()?`<button class="ib" id="ploff" title="Guardar planos en ${plDevN()} para verlos sin internet">⤓ Sin conexión</button>`:''}${plAdm()?'<button class="ib bad" id="pldel" title="Eliminar de verdad los planos que muestra la lista (con sus archivos). Solo el administrador.">🗑 Eliminar…</button>':''}<button class="ib plvw" id="plvw" type="button"></button></div><span class="plcnt" id="plcnt"></span></div>
       ${plTxOn()?'<div class="pltxst" id="pltxst"></div>':''}<div id="pllist"></div></div></div>`;
     $('#plq',main).value=PLF.q||'';let qt=0;$('#plq',main).oninput=e=>{PLF.q=e.target.value;clearTimeout(qt);if(plTxOn())qt=setTimeout(()=>plList(main),PLTX_WAIT);else plList(main)};
-    $('.plqm',main).onclick=e=>{const b=e.target.closest('[data-qm]');if(!b||b.dataset.qm===PLF.qm)return;PLF.qm=b.dataset.qm;plfSave();main.dataset.built='';renderPBib(main);const i=$('#plq',main);if(i&&!plTablet())i.focus()};
+    $('.plqm',main).onclick=e=>{const b=e.target.closest('[data-qm]');if(!b||b.dataset.qm===PLF.qm)return;PLF.qm=b.dataset.qm;plfSave();main.dataset.built='';renderPBib(main);const i=$('#plq',main);if(i&&!plTouch())i.focus()};
     const tst=$('#pltxst',main);if(tst)tst.onclick=e=>{const b=e.target.closest('[data-tx="idx"]');if(!b)return;
       plTxIndexAll(plFiltered(true),m=>{const st=$('#pltxst',main);if(m&&st)shx(st,`<span>${esc(m)}</span>`);else plList(main)})};
     const ch=(sel,k)=>{const el=$(sel,main);if(el)el.onchange=e=>{PLF[k]=e.target.value;plfSave();plList(main)}};ch('#plfp','piso');ch('#plfd','disc');ch('#plft','tipo');ch('#plfs','sc');
@@ -378,8 +387,9 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
     const gc=$('#plgocar',main);if(gc)gc.onclick=()=>{PQ.eto=eo;goTab('pcar')};
     const ob=$('#ploff',main);if(ob)ob.onclick=()=>plOffMenu(ob);
     const db=$('#pldel',main);if(db)db.onclick=()=>plDelete(plFiltered());
+    $('#plvw',main).onclick=()=>{PLF.vw=plListMode()?'g':'l';plfSave();plList(main)};
     $('#pllist',main).onclick=e=>{if(e.target.closest('[data-plal]')){PLF.al=!PLF.al;requestRender();return}const b=e.target.closest('[data-pl]');if(!b)return;
-      if(b.dataset.tq)plOpen(b.dataset.pl,plTxIds(plFiltered(true)),{hq:PLF.q});else plOpen(b.dataset.pl,plFiltered().map(p=>p.id))}}
+      if(b.dataset.tq)plOpen(b.dataset.pl,plTxIds(plFiltered(true)),{hq:PLF.q});else{const ids=plFiltered().map(p=>p.id);plOpen(b.dataset.pl,ids.includes(b.dataset.pl)?ids:[b.dataset.pl])}}}
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
   const opt=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
@@ -390,6 +400,7 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
   shx($('#plft',main),opt('','Todos los tipos',PLF.tipo)+PL_TIPOS.map(t=>opt(t,t,PLF.tipo)).join(''))}
   plList(main);plTxPreload()}
 function plList(main){const host=$('#pllist',main);if(!host)return;
+  const lm=plListMode();host.classList.toggle('pllst',lm);const vb=$('#plvw',main);if(vb){stx(vb,lm?'▦ Cuadrícula':'☰ Lista');vb.title=lm?'Ver con miniaturas grandes':'Ver en lista compacta'}
   /* los avisos de abajo se ponen sin pasar por dataset.h: se borra, o al volver a la misma lista no se redibujaba («Ningún plano…» quedaba) */
   const say=h=>{shx(host,h);host.dataset.h=''};
   if(!plbReady){say('<div class="loading"><b>Cargando planos…</b></div>');return}
@@ -404,7 +415,9 @@ function plList(main){const host=$('#pllist',main);if(!host)return;
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
       <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plLvName(plLvOf(p))||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}${plAlTag(p)}</small></span></button>`).join('')}</div>`).join('');
-  const hh=alb+h;if(host.dataset.h!==hh){host.innerHTML=hh;host.dataset.h=hh;plThumbs(host)}}
+  const rc=PLF.q||PLF.al?[]:PLREC.map(id=>PLB.get(id)).filter(p=>p&&!p.arch&&!!p.eto===etoOn()).slice(0,6);
+  const rec=rc.length?`<div class="plrec"><span>Recientes</span>${rc.map(p=>`<button type="button" class="plchip" data-pl="${esc(p.id)}" title="${esc(p.cod+' · '+(p.tit||''))}">${p.eto?'':`<b>${esc(p.disc)}</b> `}${esc(p.cod)}</button>`).join('')}</div>`:'';
+  const hh=alb+rec+h;if(host.dataset.h!==hh){host.innerHTML=hh;host.dataset.h=hh;plThumbs(host)}}
 function plThumbs(host){if(host._io)host._io.disconnect();
   const load=img=>{const p=img.dataset.th;if(!p||img.dataset.ld)return;img.dataset.ld='1';plThumb(p).then(u=>{img.src=u;img.classList.add('ok')},()=>{img.dataset.ld='';img.closest('.plth').classList.add('err')})};
   if(!('IntersectionObserver' in window)){$$('img[data-th]',host).forEach(load);return}
@@ -492,7 +505,10 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       cg.globalCompositeOperation='source-over'}
     /* la capa anterior queda debajo hasta que la nueva termina de aparecer: lo que ya estaba nítido no pasa por borroso */
     shFree(shPrev);shPrev=sharp;sharp={c,s,x,y,ox,oy,w:rw,h:rh,key,t0:performance.now(),ms:Math.round(performance.now()-t0)};V.tick()};
-  V.fitView=(animate)=>{resize();zfling=null;const[w,h]=size();V.fit=Math.min(w/spec.W,h/spec.H)*0.97;const s=V.fit,x=(w-spec.W*s)/2,y=(h-spec.H*s)/2;
+  /* celular: las barras flotan sobre el plano; «ver la lámina entera» deja libre lo que tapan (spec.inset → {t,b} en px) */
+  const ins=()=>{try{const o=spec.inset&&spec.inset();return o?{t:o.t||0,b:o.b||0}:{t:0,b:0}}catch(e){return{t:0,b:0}}};
+  const fitOf=(w,h)=>{const i=ins();return Math.min(w/spec.W,Math.max(40,h-i.t-i.b)/spec.H)*0.97};
+  V.fitView=(animate)=>{resize();zfling=null;const[w,h]=size();const i=ins();V.fit=fitOf(w,h);const s=V.fit,x=(w-spec.W*s)/2,y=i.t+(Math.max(40,h-i.t-i.b)-spec.H*s)/2;
     if(animate){V.animTo(s,x,y)}else{anim=null;fling=null;V.s=s;V.x=x;V.y=y;V.tiles_();V.tick()}};
   V.zoomAt=(k,cx,cy)=>{const s0=anim?anim.s:V.s,x0=anim?anim.x:V.x,y0=anim?anim.y:V.y;const ts=clampS(s0*k),r=ts/s0;V.animTo(ts,cx-(cx-x0)*r,cy-(cy-y0)*r)};
   V.animTo=(s,x,y)=>{fling=null;zfling=null;anim={s,x,y};V.tick()};
@@ -560,7 +576,9 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.evict=()=>{const L=[...V.tiles.entries()].filter(([k,e])=>e.bm&&e.z!==coarse&&!V.need.has(k));let n=[...V.tiles.values()].filter(e=>e.bm).length;
     L.sort((a,b)=>a[1].used-b[1].used);for(const[k,e]of L){if(n<=PL_CAP)break;plBmClose(e.bm);V.tiles.delete(k);n--}};
   /* gestos: rueda (touchpad: dos dedos desplaza, pellizco acerca), arrastre con inercia, pellizco con dos dedos y doble toque */
-  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null,mpt=null;
+  const P=new Map();let pinch=null,vel=[],zvel=[],tap=null,lastTap=null,afterPinch=false,mdrag=null,mpt=null,qz=null,oneT=0;
+  /* toque simple (V.onSingle, celular: mostrar u ocultar las barras): espera a que no llegue el segundo toque del doble toque */
+  const oneStop=()=>{clearTimeout(oneT);oneT=0};
   host.addEventListener('wheel',e=>{e.preventDefault();const r=host.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;
     const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
     if(e.ctrlKey){anim=null;fling=null;const ns=clampS(V.s*Math.exp(-d*0.01));const k=ns/V.s;V.x=cx-(cx-V.x)*k;V.y=cy-(cy-V.y)*k;V.s=ns;V.tick();return}
@@ -573,9 +591,12 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
     if(mdrag!=null){if(e.pointerType!=='touch'||!V.onCancel||!mpt)return;V.onCancel();const id=mdrag;mdrag=null;P.clear();afterPinch=false;P.set(id,{x:mpt.x,y:mpt.y})}else
     /* medir: tocar un punto ya puesto lo arrastra (sin mover el plano) */
     if(V.onDown&&e.isPrimary&&V.onDown(e.clientX,e.clientY,e)){mdrag=e.pointerId;mpt={x:e.clientX,y:e.clientY};try{host.setPointerCapture(e.pointerId)}catch(err){}return}
+    oneStop();
+    /* zoom con un dedo (como en Google Maps): tocar dos veces y, sin soltar el segundo toque, deslizar hacia abajo acerca y hacia arriba aleja */
+    if(e.pointerType==='touch'&&e.isPrimary&&lastTap&&performance.now()-lastTap.t<300&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<30){const r=host.getBoundingClientRect();qz={y0:e.clientY,s0:V.s,cx:lastTap.x-r.left,cy:lastTap.y-r.top,moved:false}}else qz=null;
     if(e.isPrimary||(e.pointerType==='touch'&&P.size>=2)){P.clear();afterPinch=false}pinch=null;
     try{host.setPointerCapture(e.pointerId)}catch(err){}P.set(e.pointerId,{x:e.clientX,y:e.clientY});host.classList.add('drag');anim=null;fling=null;zfling=null;vel=[];
-    if(P.size>=2){afterPinch=false;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[]}
+    if(P.size>=2){afterPinch=false;qz=null;const[a,b]=[...P.values()].slice(-2);pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};zvel=[];if(V.onPinch)V.onPinch()}
     if(P.size===1)tap={t:performance.now(),x:e.clientX,y:e.clientY,ok:true};else{tap=null;lastTap=null;anim=null}});
   host.addEventListener('pointermove',e=>{if(mdrag===e.pointerId){mpt={x:e.clientX,y:e.clientY};if(V.onDrag)V.onDrag(e.clientX,e.clientY,e);return}const p=P.get(e.pointerId);if(!p)return;const r=host.getBoundingClientRect();
     if(P.size>=2&&pinch){p.x=e.clientX;p.y=e.clientY;const[a,b]=[...P.values()].slice(-2);const d=Math.hypot(a.x-b.x,a.y-b.y);
@@ -583,17 +604,24 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
       if(pinch.d>0){const ns=clampS(V.s*d/pinch.d),k=ns/V.s,cx=mx-r.left,cy=my-r.top;V.x=cx-(cx-V.x)*k+(mx-pinch.cx);V.y=cy-(cy-V.y)*k+(my-pinch.cy);
         const t=performance.now();zvel.push({t,lk:Math.log(d/pinch.d),dx:mx-pinch.cx,dy:my-pinch.cy,cx,cy});while(zvel.length&&t-zvel[0].t>60)zvel.shift();V.s=ns}
       pinch.d=d;pinch.cx=mx;pinch.cy=my;V.tick();return}
+    if(qz&&P.size===1){const dy=e.clientY-qz.y0;if(Math.abs(dy)>8)qz.moved=true;
+      if(qz.moved){const ns=clampS(qz.s0*Math.exp(dy*0.012)),k=ns/V.s;V.x=qz.cx-(qz.cx-V.x)*k;V.y=qz.cy-(qz.cy-V.y)*k;V.s=ns;tap=null;V.tick()}
+      p.x=e.clientX;p.y=e.clientY;return}
     /* el dedo que queda al terminar un pellizco (casi nunca se levantan los dos a la vez) no arrastra ni corta la inercia del zoom, como en Dalux */
     if(afterPinch){p.x=e.clientX;p.y=e.clientY;return}
     const dx=e.clientX-p.x,dy=e.clientY-p.y;if(zfling&&Math.hypot(dx,dy)>2)zfling=null;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;V.x+=dx;V.y+=dy;p.x=e.clientX;p.y=e.clientY;const t=performance.now();vel.push({t,dx,dy});while(vel.length&&t-vel[0].t>90)vel.shift();V.tick()});
-  const end=e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}const was=P.size===1&&!pinch&&!afterPinch;
+  const end=e=>{if(mdrag===e.pointerId){mdrag=null;if(V.onUp)V.onUp();return}
+    if(qz&&qz.moved&&P.has(e.pointerId)){qz=null;tap=null;lastTap=null;P.delete(e.pointerId);if(!P.size)host.classList.remove('drag');vel=[];V.tick();return}qz=null;
+    const was=P.size===1&&!pinch&&!afterPinch;
     /* en modo medir un toque corto pone un punto (y no hay doble toque de zoom) */
     if(was&&tap&&V.onTap&&performance.now()-tap.t<400){V.onTap(tap.x,tap.y);lastTap=null}else
     /* vínculos (planos-vinculos.js): un toque corto sobre una zona vinculada la abre; fuera de las zonas sigue el doble toque de zoom */
     if(was&&tap&&V.onLink&&performance.now()-tap.t<400&&V.onLink(tap.x,tap.y)){lastTap=null}else
     /* doble toque = dos toques cortos, quietos y cercanos en menos de 0,3 s */
     if(was&&tap&&performance.now()-tap.t<250){const now=performance.now();
-      if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){const r=host.getBoundingClientRect();V.zoomAt(2,tap.x-r.left,tap.y-r.top);lastTap=null}else lastTap={t:now,x:tap.x,y:tap.y}}
+      /* alterna: desde la vista general acerca; ya acercado, vuelve a la lámina entera */
+      if(lastTap&&now-lastTap.t<300&&Math.hypot(tap.x-lastTap.x,tap.y-lastTap.y)<40){oneStop();const r=host.getBoundingClientRect();if((anim?anim.s:V.s)>V.fit*1.6)V.fitView(true);else V.zoomAt(2.5,tap.x-r.left,tap.y-r.top);lastTap=null}
+      else{lastTap={t:now,x:tap.x,y:tap.y};if(V.onSingle){const t0=lastTap;oneT=setTimeout(()=>{oneT=0;if(lastTap===t0&&!P.size&&!V.dead)V.onSingle()},310)}}}
     tap=null;const wasPinch=P.size>=2&&!!pinch;P.delete(e.pointerId);if(P.size<2){if(pinch&&P.size)afterPinch=true;pinch=null}if(!P.size)afterPinch=false;
     if(wasPinch&&zvel.length>1){const t=performance.now(),last=zvel[zvel.length-1];const dt=Math.max(16,t-zvel[0].t);
       const v=zvel.reduce((a,z)=>a+z.lk,0)/dt,vx=zvel.reduce((a,z)=>a+z.dx,0)/dt,vy=zvel.reduce((a,z)=>a+z.dy,0)/dt;
@@ -613,39 +641,81 @@ function plTiles(host,spec){/* spec: {base,W,H,Z,T,view?} — devuelve el visor 
   V.toScreen=(wx,wy)=>({x:V.x+wx*V.s,y:V.y+wy*V.s});
   V.cv=cv;V.host=host;V.getDpr=()=>dpr;V.W=spec.W;V.H=spec.H;
   V.getView=()=>({nx:(cw/2-V.x)/V.s/spec.W,ny:(ch/2-V.y)/V.s/spec.H,k:V.s/V.fit});
-  V.setView=v=>{resize();V.fit=Math.min(cw/spec.W,ch/spec.H)*0.97;V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
+  V.setView=v=>{resize();V.fit=fitOf(cw,ch);V.s=clampS(V.fit*v.k);V.x=cw/2-v.nx*spec.W*V.s;V.y=ch/2-v.ny*spec.H*V.s;anim=null;fling=null;zfling=null;V.tiles_();V.tick()};
   V.dbg=()=>({zfling,afterPinch,pointers:P.size,pinch:!!pinch});
   V.loaded=()=>[...V.tiles.values()].filter(e=>e.bm).length;
   V.sharp=()=>sharp?{s:sharp.s,x:sharp.x,y:sharp.y,ms:sharp.ms,w:sharp.c.width,h:sharp.c.height,rect:shRect(sharp),n:sharp.t0}:null;   /* pruebas */
   V.sharpBusy=()=>!!(shTimer||shTask);
-  V.destroy=()=>{V.dead=true;shStop();shDrop();ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
+  V.destroy=()=>{V.dead=true;oneStop();shStop();shDrop();ro.disconnect();if(V.raf)cancelAnimationFrame(V.raf);for(const e of V.tiles.values())plBmClose(e.bm);V.tiles.clear();cv.width=cv.height=0;host.innerHTML=''};
   requestAnimationFrame(()=>{V.fitView();if(spec.view)V.setView(spec.view)});return V}
 /* decodifica fuera del hilo principal (createImageBitmap); si el navegador no lo tiene, con <img>.decode() */
 async function plBitmap(blob){if(window.createImageBitmap)return createImageBitmap(blob);
   const u=URL.createObjectURL(blob);const im=new Image();im.src=u;try{await im.decode()}finally{setTimeout(()=>URL.revokeObjectURL(u),0)}return im}
 const plBmClose=bm=>{try{if(bm&&bm.close)bm.close()}catch(e){}};
 let PLV=null;
-function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=opt||{};
+/* ---------- Celular: modo lectura (nov 2026, pedido del dueño: «priorizar siempre la pantalla para leer los planos») ----------
+   En el celular (vertical u horizontal) el plano ocupa toda la pantalla y las barras flotan encima: arriba una sola fila (cerrar, ‹ título ›, ⋯);
+   abajo «Mismo punto», ▲▼ de piso y 📏 Medir, al alcance del pulgar. Lo demás (Marcar, PDF, revisión, sin conexión, datos) va en la hoja «⋯».
+   Un toque sobre el plano oculta o muestra las barras; al pellizcar se ocultan solas. Vínculos queda para tablet y PC (decidido con el dueño).
+   Atrás (Android) cierra lo último abierto y luego el visor; la pantalla no se apaga mientras el visor está abierto. */
+const plTouch=()=>{try{return matchMedia('(pointer:coarse)').matches}catch(e){return false}};
+const plPhone=()=>{try{return isMob()||(plTouch()&&Math.min(screen.width,screen.height)<600)}catch(e){return isMob()}};
+const plDevN=()=>plTablet()?'esta tablet':plPhone()?'este celular':'este equipo';
+let plHist=false,plHistSkip=false;
+function plHistPush(){if(plHist||!plTouch())return;try{history.pushState(Object.assign({},history.state,{plv:1}),'');plHist=true}catch(e){}}
+function plHistDrop(){if(!plHist)return;plHist=false;try{if(history.state&&history.state.plv){plHistSkip=true;history.back()}}catch(e){}}
+addEventListener('popstate',()=>{if(plHistSkip){plHistSkip=false;return}if(!plHist)return;plHist=false;if(!PLV)return;
+  if(plvEsc()){plHistPush();return}plClose(false,true)});
+let plWl=null;
+async function plWake(on){try{if(!on){const w=plWl;plWl=null;if(w)await w.release();return}
+  if(plWl||!plTouch()||!navigator.wakeLock||document.visibilityState!=='visible')return;plWl=await navigator.wakeLock.request('screen');plWl.addEventListener('release',()=>{plWl=null})}catch(e){plWl=null}}
+document.addEventListener('visibilitychange',()=>{if(PLV&&document.visibilityState==='visible')plWake(true)});
+/** Esc / Atrás: cierra lo último que se abrió (hoja ⋯, panel, texto o trazo de Marcar, Vincular, Medir); false si no había nada */
+function plvEsc(){if(!PLV)return false;const sh=PLV.box.querySelector('.plvsh');if(sh){sh.remove();PLV.box.focus();return true}
+  if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus();return true}
+  if(pldEsc()||plkEsc())return true;if(PLM.on){plmToggle();return true}return false}
+function plvBars(show){if(!PLV||!PLV.mob)return;PLV.hid=!show;PLV.box.classList.toggle('hid',!show);
+  if(!show&&!store.get('plvhint',0)){store.set('plvhint',1);toast('Toca el plano para volver a ver los botones.')}}
+/** alto que tapan las barras flotantes del celular (para «ver la lámina entera» sin que queden debajo) */
+function plvInset(){if(!PLV||!PLV.mob)return{t:0,b:0};const h=PLV.box.querySelector('.plvh'),b=PLV.box.querySelector('.plvbot');
+  /* horizontal: la lámina deja libres los costados, donde quedan «Mismo punto» y Medir; solo se descuenta la barra de arriba */
+  return{t:h?h.offsetHeight:0,b:b&&innerHeight>=innerWidth?b.offsetHeight:0}}
+/** dónde empieza el plano en pantalla (para poner encima la barra de búsqueda y el panel) */
+const plvTop=()=>{if(!PLV)return 56;if(PLV.mob){const h=PLV.box.querySelector('.plvh');return h?h.offsetHeight:0}const b=PLV.box.querySelector('.plvb');return b?b.offsetTop:56};
+function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true,false,true);opt=opt||{};
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,tab:opt.tab||'look',hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
-    pf:{piso:plLvOf(p),disc:'',tipo:'',q:'',...store.get('plvf',{}),...(plLvOf(p)?{piso:plLvOf(p)}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
-  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(pldEsc()){}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
+    pf:{piso:plLvOf(p),disc:'',tipo:'',q:'',...store.get('plvf',{}),...(plLvOf(p)?{piso:plLvOf(p)}:{})}};document.body.appendChild(box);if(opt.dock&&!plPhone())plDockSet(true,true);plvDraw();box.focus();if(!PLV.dock)plHistPush();plWake(true);
+  box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(!plvEsc())plClose();return}
     if(e.target.closest('input,select,textarea,[contenteditable]'))return;
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
     else if(e.key==='+'||e.key==='='){plvZoom(1.5)}else if(e.key==='-'){plvZoom(1/1.5)}else if(e.key==='0'){PLV.tv&&PLV.tv.fitView(true)}})}
 function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc');PLV.tv.zoomAt(k,c.clientWidth/2,c.clientHeight/2)}
-function plClose(silent){if(!PLV)return;plmReset();plkReset();pldReset();palReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
+function plClose(silent,fromPop,keepHist){if(!PLV)return;if(!fromPop&&!keepHist)plHistDrop();if(!keepHist)plWake(false);plmReset();plkReset();pldReset();palReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(U.tab==='pbib'&&!keepHist)requestRender();   /* «Recientes» de la biblioteca */if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,crop:p.crop||null,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1,dxf:p.dxf||null,fix:p.fix&&p.fix.rev===(p.rev||1)?p.fix:null};
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev,dxf:r.dxf||null,fix:r.fix||null}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
   const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()];
   const sib=p.eto?[]:plSameSpot(p),up=p.eto?null:plFloorStep(p,1),dn=p.eto?null:plFloorStep(p,-1);const pc=q=>esc(plLvCode(plLvOf(q)));
-  PLV.box.innerHTML=`<div class="plvh">
+  const mob=plPhone();PLV.mob=mob;PLV.box.classList.toggle('mob',mob);PLV.box.classList.toggle('hid',mob&&!!PLV.hid);plRecent(PLV.id);
+  const meta=esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plLvName(plLvOf(p))||p.niv||'General']).filter(Boolean).join(' · '))+(n>1?` · ${i+1} de ${n}`:'');
+  const chips=sp.cur&&(sib.length>1||up||dn)?`${sib.length>1?`<span class="plvql" title="Abre otra especialidad del mismo piso en la misma zona y con el mismo zoom">Mismo punto</span>${sib.map(q=>`<button type="button" class="plchip${q.id===p.id?' on':''}" data-pj="${esc(q.id)}" title="${esc(q.cod+' · '+(q.tit||''))}"><b>${esc(q.disc)}</b> ${esc(q.cod)}</button>`).join('')}`:''}
+      <span class="plvsp"></span>${dn?`<button type="button" class="plchip" data-pj="${esc(dn.id)}" title="Piso de abajo, misma zona: ${esc(dn.cod+' · '+(dn.tit||''))}" aria-label="Piso de abajo: ${esc(dn.cod)}">▼ ${pc(dn)}</button>`:''}${up?`<button type="button" class="plchip" data-pj="${esc(up.id)}" title="Piso de arriba, misma zona: ${esc(up.cod+' · '+(up.tit||''))}" aria-label="Piso de arriba: ${esc(up.cod)}">▲ ${pc(up)}</button>`:''}`:'';
+  const old=sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`;
+  if(mob)PLV.box.innerHTML=`<div class="plvh">
+    <button class="ib" data-pv="x" aria-label="Cerrar">✕</button>
+    <button class="ib" data-pv="prev" aria-label="Plano anterior"${n<2?' disabled':''}>‹</button>
+    ${p.eto?`<div class="plvt">`:`<button type="button" class="plvt plvmenu" data-pv="menu" aria-expanded="${PLV.panel}" aria-label="Buscar otro plano">`}<b class="mono">${esc(p.cod)}${p.eto?'':' <i class="plvdd" aria-hidden="true">▾</i>'}</b><span>${esc(p.tit||'')}</span><small>${meta}</small>${p.eto?'</div>':'</button>'}
+    <button class="ib" data-pv="next" aria-label="Plano siguiente"${n<2?' disabled':''}>›</button>
+    <button class="ib" data-pv="more" aria-label="Más opciones del plano" aria-haspopup="dialog">⋯</button>${old}</div>
+    <div class="plvb"></div>
+    <div class="plvbot">${chips?`<div class="plvq">${chips}</div>`:'<span class="plvsp"></span>'}<button class="ib plvmed${PLM.on?' on':''}" data-pv="med" aria-label="Medir distancias y áreas">📏<span> Medir</span></button></div>`;
+  else PLV.box.innerHTML=`<div class="plvh">
     ${p.eto?'':`<button class="ib plvmenu${PLV.panel?' on':''}" data-pv="menu" aria-expanded="${PLV.panel}" title="Buscar y filtrar planos sin salir">☰ Planos</button>`}
     ${plkBackBtn()}
     <button class="ib" data-pv="prev" aria-label="Plano anterior"${n<2?' disabled':''}>‹</button>
-    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plLvName(plLvOf(p))||p.niv||'General']).filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
+    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${meta}</small></div>
     <button class="ib" data-pv="next" aria-label="Plano siguiente"${n<2?' disabled':''}>›</button>
     <span class="plvsp"></span>
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
@@ -656,25 +726,51 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${p.eto?'':plkHdrBtn(p)}
     ${sp.dxf&&sp.cur&&plEdOf(p)?'<button class="ib" data-pv="dxl" title="Qué capa del DXF es cada cosa (ejes, columnas…) y sus unidades">◇ Capas</button>':''}
     <button class="ib" data-pv="pdf" title="${sp.dxf?'Descargar el DXF original':'Descargar el PDF original'}">${sp.dxf?'DXF':'PDF'}</button>
-    ${plTablet()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en la tablet para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
+    ${plOffOk()&&sp.cur?`<button class="ib${plOffSt(p)==='ok'?' on':''}" data-pv="off" title="Guardar este plano completo en ${plDevN()} para verlo sin internet">${plOffSt(p)==='ok'?'✓ Sin conexión':plOffSt(p)==='old'?'⟳ Actualizar':'⤓ Sin conexión'}</button>`:''}
     ${plEdOf(p)?`<button class="ib" data-pv="edit" title="Corregir los datos o archivar">⋯</button>`:''}
-    ${PLV.canDock&&!isMob()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':PLV.tab==='mapa'?'Volver al lado del plan diario':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado'}">${PLV.dock?'⛶':'◧'}</button>`:''}
+    ${PLV.canDock&&!plPhone()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':PLV.tab==='mapa'?'Volver al lado del plan diario':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado'}">${PLV.dock?'⛶':'◧'}</button>`:''}
     <button class="ib" data-pv="x" aria-label="Cerrar">✕</button></div>
-    ${sp.cur&&(sib.length>1||up||dn)?`<div class="plvq">${sib.length>1?`<span class="plvql" title="Abre otra especialidad del mismo piso en la misma zona y con el mismo zoom">Mismo punto</span>${sib.map(q=>`<button type="button" class="plchip${q.id===p.id?' on':''}" data-pj="${esc(q.id)}" title="${esc(q.cod+' · '+(q.tit||''))}"><b>${esc(q.disc)}</b> ${esc(q.cod)}</button>`).join('')}`:''}
-      <span class="plvsp"></span>${dn?`<button type="button" class="plchip" data-pj="${esc(dn.id)}" title="Piso de abajo, misma zona: ${esc(dn.cod+' · '+(dn.tit||''))}">▼ ${pc(dn)}</button>`:''}${up?`<button type="button" class="plchip" data-pj="${esc(up.id)}" title="Piso de arriba, misma zona: ${esc(up.cod+' · '+(up.tit||''))}">▲ ${pc(up)}</button>`:''}</div>`:''}
-    ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
+    ${chips?`<div class="plvq">${chips}</div>`:''}
+    ${old}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
-  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view});PLV.view=null;if(PLV.panel)plvPanel();plmAttach();plkAttach();pldAttach();plTxAttach();palAttach();plDockSplitAdd();
+  if(PLV.tv)PLV.tv.destroy();PLV.tv=plTiles(PLV.box.querySelector('.plvb'),{...sp,view:PLV.view,inset:mob?plvInset:null});PLV.view=null;
+  if(mob){PLV.tv.onSingle=()=>{if(!PLV||PLM.on||PLD.on||PLV.panel||PLV.box.querySelector('.plvsh'))return;plvBars(!!PLV.hid)};
+    PLV.tv.onPinch=()=>{if(PLV&&!PLV.hid&&!PLM.on&&!PLD.on&&!PLV.panel)plvBars(false)}}
+  if(PLV.panel)plvPanel();plmAttach();plkAttach();pldAttach();plTxAttach();palAttach();plDockSplitAdd();
   PLV.box.onclick=async e=>{const j=e.target.closest('[data-pj]');if(j){plJump(j.dataset.pj,true);return}
-    const g=e.target.closest('[data-pg]');if(g){if(PLV.pf.qm==='tx'){PLV.hq=PLV.pf.q;PLV.list=plTxIds(plvRes(true))}else PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900){PLV.panel=false;plvPanel()}return}
+    const g=e.target.closest('[data-pg]');if(g){if(PLV.pf.qm==='tx'){PLV.hq=PLV.pf.q;PLV.list=plTxIds(plvRes(true))}else PLV.list=plvRes().map(x=>x.id);plJump(g.dataset.pg,false);if(window.innerWidth<900||PLV.mob){PLV.panel=false;plvPanel()}return}
     const f=e.target.closest('[data-pf]');if(f){const[k,v]=f.dataset.pf.split(':');PLV.pf[k]=v;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm||''});plvPanel();return}
     const b=e.target.closest('[data-pv]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.pv;
     if(a==='menu'){PLV.panel=!PLV.panel;plvPanel();return}if(a==='pclose'){PLV.panel=false;plvPanel();return}
     if(a==='x')plClose();else if(a==='prev')plStep(-1);else if(a==='next')plStep(1);else if(a==='fit')PLV.tv.fitView(true);else if(a==='zin')plvZoom(1.5);else if(a==='zout')plvZoom(1/1.5);
-    else if(a==='dock')plDockSet(!PLV.dock);
+    else if(a==='dock')plDockSet(!PLV.dock);else if(a==='more')plvMore();
     else if(a==='med')plmToggle();else if(a==='mark')pldToggle();else if(a==='lk')plkBtn();else if(a==='back')plkBack();else if(a==='pdf')plPdf(p,sp,b);else if(a==='dxl')plDxfLay(p);else if(a==='alis')palToggle();else if(a==='off')plOffOne(p,b);else if(a==='edit')plEdit(p,b)};
   const rs=PLV.box.querySelector('select[data-pv="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;plvDraw()}}
+/** celular: hoja «⋯» con lo que no cabe arriba (ver la lámina entera, Marcar, sin conexión, PDF, revisión, datos del plano) */
+function plvMore(){if(!PLV)return;const p=PLB.get(PLV.id);if(!p)return;const sp=plSpecOf(p,PLV.rev),anchor=PLV.box.querySelector('[data-pv="more"]');
+  const old=PLV.box.querySelector('.plvsh');if(old){old.remove();return}
+  const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()],st=plOffSt(p),n=pldN();
+  const el=document.createElement('div');el.className='ksheet plvsh';
+  el.innerHTML=`<div class="ksc" role="dialog" aria-modal="true" aria-label="Opciones del plano">
+    <div class="ksh"><div><b><span class="mono">${esc(p.cod)}</span> · ${esc(p.tit||'')}</b><span>${esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plLvName(plLvOf(p))||p.niv||'General']).filter(Boolean).join(' · '))}</span></div><button class="ib" data-sh="x" aria-label="Cerrar">✕</button></div>
+    <div class="plshg">
+      <button type="button" class="ib" data-sh="fit">⤢ Ver la lámina entera</button>
+      <button type="button" class="ib" data-sh="mark">✏️ Marcar y compartir${n?` <small class="pldn">${n}</small>`:''}</button>
+      ${plOffOk()&&sp.cur?`<button type="button" class="ib${st==='ok'?' on':''}" data-sh="off">${st==='ok'?'✓ Guardado sin conexión':st==='old'?'⟳ Actualizar sin conexión':'⤓ Guardar sin conexión'} <small>~${Math.round(plMB(p))} MB</small></button>`:''}
+      <button type="button" class="ib" data-sh="pdf">⤓ Descargar ${sp.dxf?'DXF':'PDF'}</button>
+      ${plEdOf(p)?'<button type="button" class="ib" data-sh="edit">✎ Datos del plano</button>':''}
+    </div>
+    ${revs.length>1?`<label class="plshr">Revisión <select class="tin" data-sh="rev">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select></label>`:''}
+    <small class="plshf">Rev. ${sp.rev} · ${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</small>
+    <small class="plshf">Toca el plano para ocultar o mostrar los botones · doble toque: acercar o ver todo · doble toque y deslizar: zoom con un dedo.</small></div>`;
+  PLV.box.appendChild(el);
+  const close=()=>{el.remove();PLV.box.focus()};
+  el.onclick=e=>{if(e.target===el){close();return}const b=e.target.closest('[data-sh]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.sh;close();
+    if(a==='fit')PLV.tv.fitView(true);else if(a==='mark')pldToggle(true);else if(a==='off')plOffOne(p,anchor);
+    else if(a==='pdf'){toast('Descargando…');plPdf(p,sp,document.createElement('button'))}else if(a==='edit')plEdit(p,anchor)};
+  const rs=el.querySelector('select[data-sh="rev"]');if(rs)rs.onchange=e=>{PLV.rev=+e.target.value;close();plvDraw()};
+  const f=el.querySelector('[data-sh="fit"]');if(f)f.focus({preventScroll:true})}
 /* ---------- Plano del piso al lado del lookahead (oct 2026, pedido del dueño) ----------
    «▦ Plano» en la barra del Lookahead abre este mismo visor acoplado a la derecha: el lookahead se angosta y sigue editable
    a la izquierda (pantalla dividida); ⛶ lo agranda a pantalla completa y ◧ lo devuelve al lado. Abre el plano del piso que
@@ -690,7 +786,7 @@ function plDockBody(on){document.body.classList.toggle('lkdock',on);if(on){plDoc
    (o hasta Metrado/Saldo en modo metrado) para que no queden escondidos detrás de las columnas de la izquierda */
 function plDockScroll(){const gw=$('#gw');if(!gw)return;const t=gw.querySelector(U.qmode==='metrado'?'#grid tr.ar td.cM':'#grid tr.ar td.d');const s4=gw.querySelector('#grid tr.ar td.s4');if(!t||!s4)return;
   const x=Math.max(0,t.offsetLeft-s4.offsetWidth);if(gw.scrollLeft<x)gw.scrollLeft=x}
-function plDockSet(on,silent){if(!PLV||!PLV.canDock)return;on=!!on&&!isMob();PLV.dock=on;const box=PLV.box;box.classList.toggle('dock',on);box.setAttribute('aria-modal',on?'false':'true');plDockBody(on);
+function plDockSet(on,silent){if(!PLV||!PLV.canDock)return;on=!!on&&!plPhone();PLV.dock=on;const box=PLV.box;box.classList.toggle('dock',on);box.setAttribute('aria-modal',on?'false':'true');plDockBody(on);
   if(!silent)plvDraw();lkPlanoBtn()}
 /* el borde para cambiar el ancho (plvDraw rehace el contenido del visor, así que lo vuelve a poner) */
 function plDockSplitAdd(){if(!PLV||!PLV.dock||PLV.box.querySelector('.plvsplit'))return;const sp=document.createElement('div');sp.className='plvsplit';sp.title='Arrastra para cambiar el ancho';PLV.box.appendChild(sp);plDockSplit(sp)}
@@ -746,8 +842,8 @@ function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const m
       <div class="seg plqm" role="tablist" aria-label="Buscar en"><button type="button" data-qm="">Nombre</button><button type="button" data-qm="tx">Contenido</button></div><div class="plvpf"></div><div class="pltxst"></div><div class="plvpl"></div>`;
     PLV.box.appendChild(el);const inp=el.querySelector('input');inp.value=PLV.pf.q||'';let qt=0;inp.oninput=()=>{PLV.pf.q=inp.value;clearTimeout(qt);if(PLV.pf.qm==='tx')qt=setTimeout(()=>{if(PLV)plvPanelList(el)},PLTX_WAIT);else plvPanelList(el)};
     el.querySelector('.plqm').onclick=e=>{const b=e.target.closest('[data-qm]');if(!b)return;e.stopPropagation();PLV.pf.qm=b.dataset.qm;store.set('plvf',{disc:PLV.pf.disc,tipo:PLV.pf.tipo,qm:PLV.pf.qm});plvPanel()};
-    if(!plTablet())setTimeout(()=>inp.focus(),0)}
-  el.style.top=(body?body.offsetTop:56)+'px';const tm=PLV.pf.qm==='tx';
+    if(!plTouch())setTimeout(()=>inp.focus(),0)}
+  el.style.top=plvTop()+'px';const tm=PLV.pf.qm==='tx';
   el.querySelectorAll('.plqm [data-qm]').forEach(b=>{const on=(b.dataset.qm==='tx')===tm;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
   el.querySelector('input').placeholder=tm?'Buscar dentro: DET. 4, V-101…':'Buscar: IS07, bombas, cortes…';
   const f=PLV.pf,act=plAct();const inP=act.filter(p=>!f.piso||(f.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(f.piso)));
@@ -803,7 +899,7 @@ async function plRotate(p,q){if(!plEdOf(p)||plRotBusy)return;if(p.dxf){toast('Un
     /* vínculos de OTRAS láminas que abren una zona de esta: la zona también gira */
     if(!p.eto){say('ajustando los vínculos que llegan a esta lámina…');const fx=L=>(L||[]).map(l=>l&&l.to===p.id&&l.v?{...l,v:plRotV(l.v,q)}:l);
       for(const o of plAct())if(o.id!==p.id&&[...(o.lk||[]),...(o.lkp||[])].some(l=>l&&l.to===p.id&&l.v)){try{await plkpSave(o.id,(lk,lkp)=>({lk:fx(lk),lkp:fx(lkp)}))}catch(e){console.error('girar: vínculos de',o.id,e)}}}
-    toast(`Lámina girada (${r.secs} s).${PLOFF[p.id]?' En esta tablet, vuelve a guardarla sin conexión (⟳ Actualizar).':''}`);if(PLV&&PLV.id===p.id){PLV.view=null;plvDraw()}}
+    toast(`Lámina girada (${r.secs} s).${PLOFF[p.id]?' En '+plDevN()+', vuelve a guardarla sin conexión (⟳ Actualizar).':''}`);if(PLV&&PLV.id===p.id){PLV.view=null;plvDraw()}}
   catch(e){console.error('girar',p.id,e);toast('No se pudo girar: '+(e.message||e))}
   finally{plRotBusy=false;bar.remove()}}
 
@@ -1025,7 +1121,7 @@ async function plRun(){if(PQ.run)return;plqCheck();if(!PQ.items.some(x=>x.st==='
   finally{PQ.run=false;document.title=title0;document.removeEventListener('visibilitychange',onVis);window.removeEventListener('beforeunload',plUnload);try{if(wl)wl.release()}catch(e){}plqDraw(true);
     const ok=PQ.items.filter(x=>x.st==='ok').length;if(ok)toast(`Carga terminada: ${ok} plano(s) listos en la biblioteca.`)}}
 
-/* ---------- Sin conexión (solo tablet, decidido con el dueño oct 2026) ----------
+/* ---------- Sin conexión (tablet desde oct 2026; también celular desde nov 2026, decidido con el dueño) ----------
    Baja todos los mosaicos de los planos elegidos a la caché del equipo (la misma de plGet, que siempre mira primero ahí:
    sin internet se ven completos). Lo guardado se anota por equipo en localStorage `lps911.ploff` {id:{rev,base,t,mb}};
    si el plano tiene una revisión nueva, la tarjeta dice «actualizar» y al guardarla se borra la revisión anterior. */
@@ -1033,7 +1129,9 @@ const plTablet=()=>{try{return matchMedia('(pointer:coarse)').matches&&Math.min(
 const PLOFF=Object.assign({},store.get('ploff',{}));
 const plOffPut=()=>store.set('ploff',PLOFF);
 const plOffSt=p=>{const o=PLOFF[p.id];return !o?'':o.rev===(p.rev||1)&&(!o.base||o.base===p.base)?'ok':'old'};   /* «Empezar en Rev. 1» repite el número: se compara también la carpeta */
-const plOffTag=p=>{if(!plTablet())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
+/* «sin conexión»: tablet y celular (desde nov 2026; antes solo tablet). En PC no hace falta */
+const plOffOk=()=>plTouch();
+const plOffTag=p=>{if(!plOffOk())return'';const st=plOffSt(p);return st==='ok'?' · <b class="ploffok">✓ sin conexión</b>':st==='old'?' · <b class="plwarn">⟳ actualizar</b>':''};
 const plMB=p=>p.sz?p.sz/1048576:7;
 function plPaths(p){const T=p.T||PL_T,L=[p.base+'/th.webp',p.dxf?p.base+'/'+plGeoName(p.dxf):p.base+'/orig.pdf'];   /* DXF: su geometría (Medir se pega sin conexión) */if(p.tx&&p.tx.n)L.push(plTxPath(p));   /* índice de texto: buscar sin conexión */   /* el PDF original: capa nítida sin conexión */for(let z=0;z<p.Z;z++){const k=2**z,nx=Math.ceil(Math.ceil(p.W/k)/T),ny=Math.ceil(Math.ceil(p.H/k)/T);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push(`${p.base}/${z}/${x}_${y}.webp`)}return L}
 /** borra de la caché de este equipo todo lo de una lámina (todas sus carpetas) */
@@ -1045,11 +1143,11 @@ function plOffBar(t,pct){let b=$('#ploffbar');if(t==null){if(b)b.remove();return
   if(!b){b=document.createElement('div');b.id='ploffbar';b.className='swupd ploffbar';b.innerHTML='<span></span><i><em></em></i><button type="button" class="ib">Detener</button>';b.querySelector('button').onclick=()=>{PLOQ.stop=true};document.body.appendChild(b)}
   b.querySelector('span').textContent=t;b.querySelector('em').style.width=Math.round(pct*100)+'%'}
 async function plOffSave(list){if(PLOQ.run){toast('Ya se están guardando planos.');return}
-  list=list.filter(p=>p&&!p.arch&&plOffSt(p)!=='ok');if(!list.length){toast('Esos planos ya están guardados en esta tablet.');return}
+  list=list.filter(p=>p&&!p.arch&&plOffSt(p)!=='ok');if(!list.length){toast(`Esos planos ya están guardados en ${plDevN()}.`);return}
   if(navigator.onLine===false){toast('Necesitas internet para guardarlos.');return}
   const need=list.reduce((a,p)=>a+plMB(p),0);
   try{if(navigator.storage&&navigator.storage.persist)await navigator.storage.persist();const e=navigator.storage&&navigator.storage.estimate&&await navigator.storage.estimate();
-    if(e&&e.quota&&(e.quota-e.usage)/1048576<need*1.2){toast(`No hay espacio suficiente en la tablet (se necesitan ~${Math.round(need)} MB).`);return}}catch(e){}
+    if(e&&e.quota&&(e.quota-e.usage)/1048576<need*1.2){toast(`No hay espacio suficiente en ${plDevN()} (se necesitan ~${Math.round(need)} MB).`);return}}catch(e){}
   PLOQ.run=true;PLOQ.stop=false;let ok=0,err=0;const tasks=list.map(p=>({p,paths:plPaths(p)}));const tot=tasks.reduce((a,t)=>a+t.paths.length,0);let done=0;
   try{for(const[i,t]of tasks.entries()){if(PLOQ.stop)break;const p=t.p;let fail=false;const q=[...t.paths];
       const worker=async()=>{while(q.length&&!PLOQ.stop){const path=q.shift();try{await plGet(path)}catch(e){fail=true}done++;plOffBar(`Guardando para sin conexión: plano ${i+1} de ${tasks.length} (${p.cod})`,done/tot)}};
@@ -1057,16 +1155,16 @@ async function plOffSave(list){if(PLOQ.run){toast('Ya se están guardando planos
       if(PLOQ.stop)break;if(fail){err++;continue}
       const old=PLOFF[p.id];if(old&&old.base!==p.base)plOffDrop(old.base);PLOFF[p.id]={rev:p.rev||1,base:p.base,t:NOW(),mb:+plMB(p).toFixed(1)};plOffPut();ok++}}
   finally{PLOQ.run=false;plOffBar(null);requestRender();if(PLV)plvDraw();
-    toast(PLOQ.stop?`Detenido: ${ok} plano(s) guardados.`:err?`${ok} guardados; ${err} no se pudieron bajar (revisa la conexión y vuelve a intentar).`:`Listo: ${ok} plano(s) disponibles sin conexión en esta tablet.`)}}
+    toast(PLOQ.stop?`Detenido: ${ok} plano(s) guardados.`:err?`${ok} guardados; ${err} no se pudieron bajar (revisa la conexión y vuelve a intentar).`:`Listo: ${ok} plano(s) disponibles sin conexión en ${plDevN()}.`)}}
 async function plOffRemove(ids){for(const id of ids){const o=PLOFF[id];if(!o)continue;await plOffDrop(o.base);delete PLOFF[id]}plOffPut();requestRender();if(PLV)plvDraw()}
 function plOffOne(p,btn){const st=plOffSt(p);
-  if(st==='ok'){openPop(btn,`<div class="ph">Guardado en esta tablet</div><div class="ptx">${esc(p.cod)} se ve completo sin internet (~${Math.round(plMB(p))} MB).</div><button data-do="rm">Quitar de esta tablet</button>`,{rm:()=>plOffRemove([p.id]).then(()=>toast('Quitado de esta tablet'))});return}
+  if(st==='ok'){openPop(btn,`<div class="ph">Guardado en ${plDevN()}</div><div class="ptx">${esc(p.cod)} se ve completo sin internet (~${Math.round(plMB(p))} MB).</div><button data-do="rm">Quitar de ${plDevN()}</button>`,{rm:()=>plOffRemove([p.id]).then(()=>toast(`Quitado de ${plDevN()}`))});return}
   plOffSave([p])}
 function plOffMenu(btn){const L=plFiltered(),act=plAct();const pend=L.filter(p=>plOffSt(p)!=='ok'),upd=act.filter(p=>plOffSt(p)==='old');
   const saved=Object.keys(PLOFF).filter(id=>PLB.has(id));const mb=saved.reduce((a,id)=>a+(PLOFF[id].mb||7),0);const need=pend.reduce((a,p)=>a+plMB(p),0);
-  openPop(btn,`<div class="ph">Ver sin conexión (esta tablet)</div><div class="ptx">Guarda los planos completos en la tablet para verlos sin internet en obra. Usa los filtros (piso, especialidad) para elegir cuáles. Guardados ahora: <b>${saved.length}</b> (~${Math.round(mb)} MB).</div>
+  openPop(btn,`<div class="ph">Ver sin conexión (${plDevN()})</div><div class="ptx">Guarda los planos completos en ${plDevN()} para verlos sin internet en obra. Usa los filtros (piso, especialidad) para elegir cuáles${plPhone()?': en el celular conviene guardar solo el piso donde trabajas':''}. Guardados ahora: <b>${saved.length}</b> (~${Math.round(mb)} MB).</div>
     ${pend.length?`<button data-do="sv">⤓ Guardar los ${pend.length} plano${pend.length===1?'':'s'} de la lista (~${Math.round(need)} MB)</button>`:'<div class="ptx">✓ Todos los planos de la lista ya están guardados.</div>'}
     ${upd.length?`<button data-do="up">⟳ Actualizar ${upd.length} con revisión nueva</button>`:''}
-    ${saved.length?`<button data-do="rl">Quitar de la tablet los de esta lista</button><button data-do="ra">Quitar todos de esta tablet</button>`:''}`,
-    {sv:()=>plOffSave(pend),up:()=>plOffSave(upd),rl:()=>plOffRemove(L.map(p=>p.id)).then(()=>toast('Quitados de esta tablet')),
-     ra:async()=>{if(await uiAsk({title:'¿Quitar todos los planos de esta tablet?',text:'Se podrán volver a guardar cuando haya internet.',ok:'Quitar',tone:'warn'})){await plOffRemove(Object.keys(PLOFF));toast('Planos quitados de esta tablet')}}})}
+    ${saved.length?`<button data-do="rl">Quitar de ${plDevN()} los de esta lista</button><button data-do="ra">Quitar todos de ${plDevN()}</button>`:''}`,
+    {sv:()=>plOffSave(pend),up:()=>plOffSave(upd),rl:()=>plOffRemove(L.map(p=>p.id)).then(()=>toast(`Quitados de ${plDevN()}`)),
+     ra:async()=>{if(await uiAsk({title:`¿Quitar todos los planos de ${plDevN()}?`,text:'Se podrán volver a guardar cuando haya internet.',ok:'Quitar',tone:'warn'})){await plOffRemove(Object.keys(PLOFF));toast(`Planos quitados de ${plDevN()}`)}}})}
