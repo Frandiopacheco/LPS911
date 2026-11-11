@@ -5229,3 +5229,5 @@ td.act.lkcflash,td.amb.lkcflash{box-shadow:inset 0 0 0 2px var(--accent)}
   .plw.mob .plq{flex:0 0 38%;height:40px}
   .plw.mob .plfx{flex:1 1 0;min-width:0}
   .plw.mob .plcnt{display:none}}
+/* Planos › aviso de fichas con el PDF y el DXF por separado (11-11-2026) */
+.pljc .pljcb{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}

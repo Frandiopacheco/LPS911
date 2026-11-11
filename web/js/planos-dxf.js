@@ -423,6 +423,7 @@ async function plDxfJoin(Dp,dsp,P,arch){if(!dsp||!dsp.dxf)throw new Error('Ese p
 /** ✎ Datos del plano › «Unir con su PDF…» (plano solo DXF) */
 async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc,Dp.cod,Dp.id);
   const C=[...PLB.values()].filter(p=>!p.arch&&!p.eto&&p.id!==Dp.id&&p.disc===Dp.disc&&!p.dxf).sort((a,b)=>(b===tw)-(a===tw)||String(a.cod).localeCompare(String(b.cod)));
+  {const own=plJoinPend().find(x=>x.D.id===Dp.id&&x.r);if(own&&!tw){plJoinRun(Dp.id);return}}
   if(!C.length){toast(`No hay planos en PDF de ${PL_DN[Dp.disc]||Dp.disc} para unir.`);return}
   lqModal(`<div class="lqtop"><b>Unir ${esc(Dp.cod)} (DXF) con su PDF</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
     <p class="note">El PDF queda como lo que se ve y el DXF como su capa de datos (escala exacta sin calibrar, ejes, ambientes, Alistar). Esta ficha DXF se archiva (se recupera desde «Archivados»); lo ya vinculado a ella sigue funcionando.</p>
@@ -430,3 +431,22 @@ async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc
     <p class="lqmsg bad" id="pljm"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="pljok">Unir</button></div>`,
     async e=>{if(e.target.id!=='pljok')return;const P=PLB.get($('#pljs').value);if(!P)return;e.target.disabled=true;$('#pljm').textContent='Uniendo…';
       try{await plDxfJoin(Dp,dsp,P,true);lqClose();plClose();toast(`${Dp.cod} quedó como los datos del PDF ${P.cod}${plRevOk(Dp,dsp.rev)?'':' (por alistar)'}`)}catch(err){e.target.disabled=false;$('#pljm').textContent='No se pudo unir: '+err.message}})}
+/** planos con el PDF y el DXF por separado (para el aviso de la biblioteca): ficha solo DXF con su gemela en PDF, o con el PDF en una
+    revisión anterior de la misma ficha (p. ej. AG03: se cargó el PDF y después el DXF con el mismo código) */
+function plJoinPend(){if(typeof PLB==='undefined')return[];const out=[];
+  for(const D of PLB.values()){if(D.arch||D.eto||!D.dxf||D.dxf.sobre)continue;const tw=plTwinOf(D.disc,D.cod,D.id);
+    if(tw&&!tw.dxf){out.push({D,P:tw});continue}const r=(D.revs||[]).slice().reverse().find(x=>!x.dxf&&x.base);if(r)out.push({D,r:r.rev})}
+  return out.sort((a,b)=>String(a.D.cod).localeCompare(String(b.D.cod)))}
+/** misma ficha: revisión nueva con la imagen del PDF de la revisión `rv` y los datos del DXF vigente (nada se borra: todo queda en el historial) */
+async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);if(!r)throw new Error(`La Rev. ${rv} no es un PDF.`);const dsp=plSpecOf(D);const rc=D.rev||1;
+  plDxfFit({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false);   /* comprueba antes de escribir nada */
+  const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
+  const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
+  await plCol(D).doc(D.id).update({...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X});
+  await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false);return rc+1}
+/** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
+function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';
+  return`<div class="callout pljc"><b>${J.length} plano(s) tienen el PDF y el DXF por separado.</b> Únelos para ver el PDF y usar el DXF como sus datos (escala exacta, Alistar, ambientes). <span class="pljcb">${J.map(x=>`<button type="button" class="ib" data-pljoin="${esc(x.D.id)}">Unir ${esc(x.D.cod)}${x.P?` con ${esc(x.P.cod)}`:` (PDF de la Rev. ${x.r})`}</button>`).join('')}</span></div>`}
+async function plJoinRun(id){const x=plJoinPend().find(o=>o.D.id===id);if(!x)return;const D=x.D;
+  if(!await uiAsk({title:`¿Unir ${D.cod}${x.P?` con ${x.P.cod}`:` con su PDF (Rev. ${x.r})`}?`,text:x.P?`Queda una sola ficha (${x.P.cod}): se ve el PDF y el DXF pasa a ser sus datos. La ficha ${D.cod} se archiva (se recupera desde «Archivados»).`:`Se crea la Rev. ${(D.rev||1)+1} con la imagen del PDF de la Rev. ${x.r} y los datos del DXF vigente. Las revisiones anteriores quedan en el historial.`,ok:'Unir',tone:'info'}))return;
+  toast('Uniendo…');try{if(x.P)await plDxfJoin(D,plSpecOf(D),x.P,true);else await plJoinOwn(D,x.r);toast(`${D.cod}: listo, una sola ficha con el PDF y sus datos DXF`)}catch(e){toast('No se pudo unir: '+e.message)}}

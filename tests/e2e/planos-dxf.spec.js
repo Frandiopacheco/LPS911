@@ -446,6 +446,21 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   expect(j.ok).toMatchObject({ rev: 1, malla: true }); expect(j.ok.mpp).toBeCloseTo(j.mpp0 / 2, 9);
   expect(j.arch).toBe(true); expect(j.unido).toBe('EST_E-04');
   expect(j.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  /* misma ficha (como la AG03): el PDF en la Rev. 1 y el DXF en la Rev. 2 → aviso en la biblioteca y «Unir» crea la Rev. 3 con la imagen del PDF y los datos del DXF */
+  await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
+    const base = 'planos/ARQ_AG03.d/r2'; window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('ARQ_AG03').set({ cod: 'AG03', disc: 'ARQ', rev: 2, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', fname: 'AG03.dxf',
+      revs: [{ rev: 1, base: 'planos/ARQ_AG03.p/r1', W: S.W * 2, H: S.H * 2, Z: 4, mm: [420, 297], crop: { x0: 1, y0: 1, x1: 2, y1: 2 }, fname: 'AG03.pdf', ts: 1, byN: 'x' }],
+      dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 2, dxf: 1 } }); }, lay);
+  await expect.poll(() => page.evaluate(() => plJoinPend().map(x => x.D.id + ':' + (x.P ? x.P.id : 'r' + x.r)).join())).toBe('ARQ_AG03:r1');
+  await page.click('#tabs [data-tab="pbib"]');
+  await expect(page.locator('.pljc [data-pljoin="ARQ_AG03"]')).toContainText('Unir AG03 (PDF de la Rev. 1)');
+  page.once('dialog', d => d.accept());
+  await page.click('.pljc [data-pljoin="ARQ_AG03"]');
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('plb', 'ARQ_AG03') || {}).rev)).toBe(3);
+  const o = await page.evaluate(() => { const p = window.__dbGet('plb', 'ARQ_AG03'); return { base: p.base, sobre: p.dxf && p.dxf.sobre, revs: p.revs.map(r => r.rev + (r.dxf ? 'D' : 'P')), pend: plJoinPend().length }; });
+  expect(o).toEqual({ base: 'planos/ARQ_AG03.p/r1', sobre: 'pdf', revs: ['1P', '2D'], pend: 0 });
+  await expect(page.locator('.pljc')).toHaveCount(0);
   /* un DXF que no calza con el PDF (otra proporción) no se une */
   const bad = await page.evaluate(() => { try { plDxfFit({ cod: 'X', W: 1000, H: 1000, crop: {} }, 400, 300, true); return ''; } catch (e) { return e.message; } });
   expect(bad).toContain('no tienen la misma proporción');
