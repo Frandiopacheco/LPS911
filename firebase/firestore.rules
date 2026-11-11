@@ -509,8 +509,8 @@ service cloud.firestore {
       allow write: if (isAdmin() || tarEd()) && id in ['main', 'pla'] && (id != 'pla' || plaOk());
     }
     // Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto (los archivos van en Firebase Storage, planos/…).
-    // Lee el equipo de Last Planner salvo el capataz de un SC; cargan y editan el administrador y los editores. Nadie borra: se archiva.
-    function plaRead() { return lpsMember() && role() != 'capataz'; }
+    // Lee el equipo de Last Planner, también el capataz de un SC (11-11-2026, pedido del dueño); cargan y editan el administrador y los editores. Nadie borra: se archiva.
+    function plaRead() { return lpsMember(); }
     // Oficina Técnica (área «OT» u «Oficina Técnica») también carga planos: maneja las revisiones (decidido con el dueño, oct 2026)
     function isOT() { return isArea() && areaOf().lower().trim().matches('o\\.? ?t\\.?|oficina t[eé]cnica.*'); }
     function plbOk() {
@@ -524,7 +524,7 @@ service cloud.firestore {
       // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
       allow delete: if isAdmin();
     }
-    // ETO: planos de taller aprobados de los subcontratistas (docs/ia/planos.md › ETO). El SC solo lee los de su partida;
+    // ETO: planos de taller aprobados de los subcontratistas (docs/ia/planos.md › ETO). El SC y su capataz solo leen los de su partida;
     // el resto del equipo que ve Planos, todos. Carga, edita y borra solo el administrador.
     function etoOk() {
       let d = request.resource.data;
@@ -532,7 +532,7 @@ service cloud.firestore {
         && d.base is string && d.base.matches('etos/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
     }
     match /eto/{id} {
-      allow read: if plaRead() && (role() != 'sc' || resource.data.sc in scsOf());
+      allow read: if plaRead() && (!(role() in ['sc', 'capataz']) || resource.data.sc in scsOf());
       allow create, update: if isAdmin() && etoOk();
       allow delete: if isAdmin();
     }
@@ -1129,7 +1129,7 @@ service cloud.firestore {
         && numIn_cs(d, 'aeEdad', 0, 30) && numIn_cs(d, 'leyes', 0, 300)
         && (!('soles' in d) || d.soles in ['cos', 'ofi']);
     }
-    function plaRead_cs() { return lpsMember_cs() && role_cs() != 'capataz'; }
+    function plaRead_cs() { return lpsMember_cs(); }
     function isOT_cs() { return isArea_cs() && areaOf_cs().lower().trim().matches('o\\.? ?t\\.?|oficina t[eé]cnica.*'); }
     function plbOk_cs() {
       let d = request.resource.data;

@@ -1350,11 +1350,12 @@ test('plan semanal: la evaluación del cliente (cres) solo la marca el admin; el
 
 // ── Módulo Planos (docs/ia/planos.md) ──
 const PLB = (x) => ({ cod: 'AG03', disc: 'ARQ', rev: 1, base: 'planos/ARQ_AG03/r1', W: 14175, H: 10630, Z: 5, tit: 'PLANTA PRIMER PISO', ...x });
-test('planos: el equipo de LPS lee; capataz y roles de tareo no', async () => {
+test('planos: el equipo de LPS lee, también el capataz de un SC (11-11-2026); los roles de tareo no', async () => {
   await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'plb/ARQ_AG03'), PLB()); });
-  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER)])
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), user('sc@obra.pe'), user('ot@obra.pe'), user('campo@obra.pe'), user(OWNER), cap('cap1')])
     await assertSucceeds(getDoc(doc(db, 'plb/ARQ_AG03')));
-  for (const db of [cap('cap1'), user('tasis@obra.pe'), user('tcos@obra.pe'), unverified('editor@obra.pe')])
+  await assertFails(setDoc(doc(cap('cap1'), 'plb/ARQ_AG05'), PLB({ cod: 'AG05', base: 'planos/ARQ_AG05/r1' })));   /* solo consulta */
+  for (const db of [user('tasis@obra.pe'), user('tcos@obra.pe'), unverified('editor@obra.pe')])
     await assertFails(getDoc(doc(db, 'plb/ARQ_AG03')));
 });
 test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; solo el administrador borra', async () => {
@@ -1403,7 +1404,14 @@ test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () 
   const sc = user('sc@obra.pe');
   await assertFails(getDoc(doc(sc, 'eto/ETO_c-otro_A1')));
   await assertFails(getDocs(collection(sc, 'eto')));
-  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'eto/ETO_c-gabel_M02')));
+  /* el capataz del SC (11-11-2026): igual que su SC, solo los de su partida */
+  const cp = cap('cap1');
+  await assertSucceeds(getDoc(doc(cp, 'eto/ETO_c-gabel_M02')));
+  await assertSucceeds(getDocs(query(collection(cp, 'eto'), where('sc', '==', 'c-gabel'))));
+  await assertFails(getDoc(doc(cp, 'eto/ETO_c-otro_A1')));
+  await assertFails(getDocs(collection(cp, 'eto')));
+  await assertFails(getDoc(doc(user('tasis@obra.pe'), 'eto/ETO_c-gabel_M02')));
+  await assertFails(setDoc(doc(cp, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
   for (const db of [user('editor@obra.pe'), user('ot@obra.pe'), sc, user('lector@obra.pe')]) {
     await assertFails(setDoc(doc(db, 'eto/ETO_c-gabel_M03'), ETO({ cod: 'M03' })));
     await assertFails(updateDoc(doc(db, 'eto/ETO_c-gabel_M02'), { tit: 'otro' }));
@@ -1421,10 +1429,10 @@ test('ETO: el SC no ve los de otro SC; solo el administrador escribe', async () 
 test('modelo 3D: lee el equipo de LPS; cargan admin, editores y OT; forma mínima', async () => {
   const D = x => ({ disc: 'ARQ', rev: 1, path: 'modelos/ARQ/r1.frag', ...x });
   for (const db of [user('editor@obra.pe'), user(OWNER), user('ot@obra.pe')]) await assertSucceeds(setDoc(doc(db, 'p3d/ARQ'), D()));
-  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('campo@obra.pe')]) {
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('campo@obra.pe'), cap('cap1')]) {
     await assertSucceeds(getDoc(doc(db, 'p3d/ARQ'))); await assertFails(setDoc(doc(db, 'p3d/ARQ'), D({ rev: 2, path: 'modelos/ARQ/r2.frag' })));
   }
-  for (const db of [cap('cap1'), user('tasis@obra.pe')]) await assertFails(getDoc(doc(db, 'p3d/ARQ')));
+  await assertFails(getDoc(doc(user('tasis@obra.pe'), 'p3d/ARQ')));
   const ed = user('editor@obra.pe');
   await assertFails(setDoc(doc(ed, 'p3d/EST'), D()));                                  // id distinto de disc
   await assertFails(setDoc(doc(ed, 'p3d/ARQ'), D({ path: 'planos/x/r1/th.webp' })));
