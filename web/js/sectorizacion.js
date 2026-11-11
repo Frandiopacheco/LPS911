@@ -21,6 +21,7 @@ function szBase(pid){const API=window.__plano;const bs=API&&API.basesOf?API.base
 function renderPlanos(main){/* Casco: Frentes y Sectores (asistente) en casco-sz.js; «Láminas» es esta vista */
   if(CS()&&typeof csSzRender==='function'&&csSzV()!=='lam'){csSzRender(main);return}
   if(!window.__plano||!window.__plano.ambMap)loadPlanoMod().catch(()=>{});
+  if(!CS()&&canWrite&&typeof plSub==='function')plSub();   /* planos del proyecto: para «Traer ambientes del plano» */
   const API=window.__plano&&window.__plano.ambMap?window.__plano:null;const ce=canWrite&&!(U.ver&&U.verMode==='ver');
   if(!$('#szmap',main)){SZ.tmp=[];
     main.innerHTML=`<div class="scroll"><div class="wrap szwrap"><div id="szhead"></div><div id="szpis" class="szpis"></div>
@@ -30,7 +31,7 @@ function renderPlanos(main){/* Casco: Frentes y Sectores (asistente) en casco-sz
     main.onclick=szClick;main.onchange=szChange;main.oninput=e=>{if(e.target.id==='szq'){SZ.q=e.target.value;szList()}}}
   const pid=U.piso;const bs=pid?szBase(pid):[];
   $('#szhead',main).innerHTML=pageHead('Sectorización',`${pid?esc(S.pis.get(pid)?.code+' · '+S.pis.get(pid)?.name):'Elige un nivel'} · ubicación de sectores y ambientes en la lámina`,
-    `${isAdmin&&pid?`<button class="ib${bs.length?'':' pri'}" id="szup" title="La lámina base del piso (arquitectura). Las especialidades se suben en el Plan diario sobre esta base.">${bs.length?'Otra lámina base…':'Subir lámina base…'}</button>`:''}${ce&&pid&&bs.length?'<button class="ib" id="szsug" title="Usa las zonas que ya se dibujaron en el Plan diario para proponer la forma de los ambientes que faltan">Proponer desde el Plan diario</button><button class="ib" id="szcopy" title="Para pisos típicos: copia las formas de otro piso cuando los códigos de los ambientes coinciden">Copiar de otro piso…</button>':''}<button class="ib" id="szlam">Láminas del piso (Plan diario)</button>`)
+    `${isAdmin&&pid?`<button class="ib${bs.length?'':' pri'}" id="szup" title="La lámina base del piso (arquitectura). Las especialidades se suben en el Plan diario sobre esta base.">${bs.length?'Otra lámina base…':'Subir lámina base…'}</button>`:''}${ce&&pid&&bs.length&&!CS()?'<button class="ib pri" id="szpl" title="Crea los ambientes de la planta de arquitectura alistada en Planos, con su forma ya dibujada, o ubica los que ya están en el lookahead">Traer ambientes del plano</button>':''}${ce&&pid&&bs.length?'<button class="ib" id="szsug" title="Usa las zonas que ya se dibujaron en el Plan diario para proponer la forma de los ambientes que faltan">Proponer desde el Plan diario</button><button class="ib" id="szcopy" title="Para pisos típicos: copia las formas de otro piso cuando los códigos de los ambientes coinciden">Copiar de otro piso…</button>':''}<button class="ib" id="szlam">Láminas del piso (Plan diario)</button>`)
     +helpBox('¿Para qué sirve y cómo se ubica un ambiente?',`<p>Aquí se dibuja dónde está cada <b>sector</b> y cada <b>ambiente</b> del lookahead sobre la <b>misma lámina del Plan diario</b>. Con eso, al tocar el plano en el recorrido de Campo el ambiente sale solo, y más adelante el Plan diario podrá ubicar las actividades sin dibujarlas cada día.</p>
 <p>Elige el nivel arriba. En la lista, toca <b>Ubicar</b> en un ambiente y arrastra un rectángulo sobre la lámina (o usa <b>Polígono</b> y toca cada esquina). Con «pasar al siguiente» marcado, la lista avanza sola al próximo ambiente sin ubicar. Todo se deshace con <b>Ctrl+Z</b>.</p>`);
   /* niveles: chips con el avance de cada piso (eligen el mismo piso de arriba) */
@@ -60,8 +61,8 @@ function szList(){const el=$('#szlist');if(!el)return;const pid=U.piso,v=SZ.vist
 function szName(sel){if(!sel)return'';const o=sel.lv==='a'?S.amb.get(sel.id):S.sec.get(sel.id);return o?(sel.lv==='a'?'ambiente ':'sector ')+o.code+' · '+o.name:''}
 function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,SZ.vista);let h='';
   if(bs.length>1)h+=`<span class="seg">${bs.map(b=>`<button data-szv="${b.id}" class="${b.id===SZ.vista?'on':''}">${esc(b.name||espN(b.esp)||'Lámina')}</button>`).join('')}</span>`;
-  if(SZ.draw&&SZ.sel){h+=`<span class="szdr"><b>${SZ.draw==='poly'?'Toca cada esquina de':'Arrastra un rectángulo sobre'} ${esc(szName(SZ.sel))}</b>${SZ.draw==='poly'?'<span class="mu">· para cerrar, toca la primera esquina, doble clic o Enter</span>':''}${SZ.draw==='poly'?`<button class="ib pri" data-sza="fin"${SZ.tmp.length<3?' disabled':''}>Terminar (${SZ.tmp.length})</button><button class="ib" data-sza="undo"${SZ.tmp.length?'':' disabled'}>Quitar último punto</button><button class="ib" data-sza="rect">▭ Rectángulo</button>`:'<button class="ib" data-sza="poly">⬠ Polígono</button>'}<button class="ib" data-sza="cancel">Cancelar</button></span>`}
-  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· solo se muestra este sector</span> <button class="ib" data-szall>Ver todos</button></span>`;
+  if(SZ.draw&&SZ.sel){h+=`<span class="szdr"><b>${SZ.lasso?`Dibuja el contorno de ${esc(szName(SZ.sel))}: los ambientes que queden adentro pasan a este sector`:`${SZ.draw==='poly'?'Toca cada esquina de':'Arrastra un rectángulo sobre'} ${esc(szName(SZ.sel))}`}</b>${SZ.draw==='poly'?'<span class="mu">· para cerrar, toca la primera esquina, doble clic o Enter</span>':''}${SZ.draw==='poly'?`<button class="ib pri" data-sza="fin"${SZ.tmp.length<3?' disabled':''}>Terminar (${SZ.tmp.length})</button><button class="ib" data-sza="undo"${SZ.tmp.length?'':' disabled'}>Quitar último punto</button><button class="ib" data-sza="rect">▭ Rectángulo</button>`:'<button class="ib" data-sza="poly">⬠ Polígono</button>'}<button class="ib" data-sza="cancel">Cancelar</button></span>`}
+  else if(SZ.sel&&SZ.sel.lv==='s')h+=`<span class="szdr">${esc(szName(SZ.sel))} <span class="mu">· solo se muestra este sector</span> <button class="ib" data-szall>Ver todos</button>${canWrite&&!CS()?'<button class="ib" data-sza="lasso" title="Dibuja un contorno sobre la lámina: los ambientes que queden adentro pasan a este sector">⬚ Agrupar en este sector</button>':''}</span>`;
   else if(SZ.sel){const g=szGeo(S.amb.get(SZ.sel.id),SZ.vista);h+=`<span class="szdr"><b>${esc(szName(SZ.sel))}</b>${canWrite?(g?' <span class="mu">· arrastra las esquinas para ajustar; los puntos chicos agregan una esquina</span> <button class="ib" data-sza="rect">▭ Redibujar</button><button class="ib" data-sza="poly">⬠ Polígono</button>':` <button class="ib pri" data-sza="rect">▭ Ubicar con rectángulo</button><button class="ib" data-sza="poly">⬠ Polígono</button>`):''}</span>`}
   else h+=`<span class="mu">${canWrite?'Elige un ambiente de la lista y toca «Ubicar», o toca una forma de la lámina para seleccionarla.':'Toca una forma de la lámina para ver qué ambiente es.'}</span>`;
   h+=`<span class="fsp"></span>${canWrite?`<label class="chk" title="Al terminar un ambiente, la lista pasa al siguiente sin ubicar"><input type="checkbox" id="szcont"${SZ.cont?' checked':''}> pasar al siguiente</label>`:''}<span class="szpr"><b>${st.k}</b>/${st.n} ambientes ubicados</span>`;
@@ -70,7 +71,7 @@ function szTool(bs){const el=$('#sztool');if(!el)return;const st=szStats(U.piso,
 /* ---------- mapa ---------- */
 function szShapes(){const pid=U.piso,v=SZ.vista;const out=[];const sel=SZ.sel;
   szTree(pid).forEach(({s,ambs},i)=>{const c=SZ_PAL[i%SZ_PAL.length];
-    if(sel&&sel.lv==='s'&&sel.id!==s.id)return;for(const{a}of ambs){const g=szGeo(a,v);if(g)out.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,c,sel:!!(sel&&sel.lv==='a'&&sel.id===a.id),dim:!!(sel&&sel.lv==='s'&&sel.id!==s.id)})}});
+    if(sel&&sel.lv==='s'&&sel.id!==s.id&&!SZ.lasso)return;for(const{a}of ambs){const g=szGeo(a,v);if(g)out.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,c,sel:!!(sel&&sel.lv==='a'&&sel.id===a.id),dim:!!(sel&&sel.lv==='s'&&sel.id!==s.id)})}});
   return out}
 function szMap(){const host=$('#szmap');const API=window.__plano;if(!host)return;if(!API||!API.ambMap){host.innerHTML='<div class="kemp">Cargando láminas…</div>';return}
   const sa=SZ.sel&&SZ.sel.lv==='a'?S.amb.get(SZ.sel.id):null;const eg=canWrite&&!SZ.draw&&sa&&szGeo(sa,SZ.vista);
@@ -88,7 +89,8 @@ function szLeg(){const el=$('#szleg');if(!el)return;const v=SZ.vista;const sel=S
 
 function szPolyClose(){if(SZ.draw!=='poly')return;const P=SZ.tmp.filter((p,i,a)=>!i||Math.hypot(p.x-a[i-1].x,p.y-a[i-1].y)>=1);if(P.length<3){toast('Marca al menos 3 esquinas.');return}SZ.tmp=[];szSave(P.flatMap(p=>[p.x,p.y]),SZ.vista)}
 /* ---------- guardar ---------- */
-function szSave(pts,vista){const sel=SZ.sel;if(!sel||!canWrite)return;const o=sel.lv==='a'?S.amb.get(sel.id):S.sec.get(sel.id);if(!o)return;
+function szSave(pts,vista){const sel=SZ.sel;if(!sel||!canWrite)return;
+  if(SZ.lasso&&sel.lv==='s'){SZ.lasso=false;SZ.draw=null;SZ.tmp=[];szRefresh();szplLasso(sel.id,pts,vista);return}   /* «Agrupar en este sector» (sz-plano.js) */const o=sel.lv==='a'?S.amb.get(sel.id):S.sec.get(sel.id);if(!o)return;
   apply([op(szCol(sel.lv),o.id,{...o,geo:{...(o.geo||{}),[vista]:pts}})],`${sel.lv==='a'?'Ambiente':'Sector'} ${o.code} ubicado en la lámina`);
   SZ.draw=null;SZ.tmp=[];
   if(sel.lv==='a'&&SZ.cont){const nx=szNext(sel.id);if(nx){SZ.sel={lv:'a',id:nx};SZ.draw='rect'}else{SZ.sel=null;toast('✓ Todos los ambientes de este nivel están ubicados')}}
@@ -124,6 +126,7 @@ function szClick(e){const t=e.target;let b;
   if((b=t.closest('[data-szp]'))){U.piso=b.dataset.szp;U.pisoAll=false;saveUI();SZ.sel=null;SZ.draw=null;SZ.tmp=[];render();return}
   if(t.id==='szlam'){if(U.piso&&window.__plano&&window.__plano.M){window.__plano.M.piso=U.piso}goTab('mapa');return}
   if(t.id==='szsug'){szSuggest();return}
+  if(t.id==='szpl'){szplOpen();return}
   if(t.id==='szup'){const API=window.__plano;if(!API||!API.lamUpload){toast('Cargando el módulo de láminas…');return}API.lamUpload(t,null,{mode:'base',pid:U.piso,onBase:v=>{if(v)SZ.vista=v}});return}
   if(t.id==='szcopy'){szCopyMenu(t);return}
   if((b=t.closest('[data-szv]'))){SZ.vista=b.dataset.szv;SZ.draw=null;SZ.tmp=[];szRefresh();return}
@@ -131,7 +134,7 @@ function szClick(e){const t=e.target;let b;
   if((b=t.closest('[data-szx]'))){const[lv,id]=b.dataset.szx.split(':');szClear(lv,id);return}
   if((b=t.closest('[data-szd]'))){const[lv,id]=b.dataset.szd.split(':');SZ.sel={lv,id};SZ.draw='rect';SZ.tmp=[];szRefresh();return}
   if((b=t.closest('[data-sza]'))){const k=b.dataset.sza;
-    if(k==='rect'||k==='poly'){SZ.draw=k;SZ.tmp=[]}else if(k==='cancel'){SZ.draw=null;SZ.tmp=[]}else if(k==='undo')SZ.tmp.pop();
+    if(k==='rect'||k==='poly'){SZ.draw=k;SZ.tmp=[]}else if(k==='lasso'){SZ.lasso=true;SZ.draw='poly';SZ.tmp=[]}else if(k==='cancel'){SZ.draw=null;SZ.tmp=[];SZ.lasso=false}else if(k==='undo')SZ.tmp.pop();
     else if(k==='fin'){szPolyClose();return}
     szRefresh();return}
   if((b=t.closest('[data-szi]'))){const[lv,id]=b.dataset.szi.split(':');if(lv==='s'&&SZ.sel&&SZ.sel.lv==='s'&&SZ.sel.id===id){SZ.sel=null;szRefresh();const v=$('#szmap')._v;if(v&&v.bounds){v.fit()}return}SZ.sel={lv,id};if(SZ.draw&&!(SZ.sel.lv===lv&&SZ.sel.id===id))SZ.draw=null;szRefresh();

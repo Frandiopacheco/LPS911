@@ -5116,3 +5116,6 @@ td.act.lkcflash,td.amb.lkcflash{box-shadow:inset 0 0 0 2px var(--accent)}
 .kvpc{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);background:var(--panel)}
 .kvpc.cur{border-color:var(--accent);color:var(--accent);font-weight:700}.kvpc.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
 .kvpok{color:var(--ok);font-weight:600;white-space:nowrap}.kvpbad{color:var(--bad);font-weight:600;white-space:nowrap}
+/* Sectorización › Traer ambientes del plano (sz-plano.js, 11-11-2026) */
+.szplw{max-height:52vh;overflow:auto;margin:8px 0}.szplt td,.szplt th{padding:4px 6px;vertical-align:middle}.szplt .tin{min-width:120px}
+.szplnew{font-weight:600;color:var(--accent)}.szplsec{max-width:320px}.szplsolo{margin-top:6px}
