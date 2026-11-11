@@ -214,7 +214,14 @@ function dxfSheet(D,o){o=o||{};const Fm=dxfFlat(D,D.ents);
     return{src:'presentación',P:[...P,...paper],vps,box,ppu,W,H,mm:[Math.round((box[2]-box[0])*mmk),Math.round((box[3]-box[1])*mmk)],k:U.k,how:U.how,mpp:U.k/(main.s*ppu),pmm:ppu/mmk,far:X.far,crop:!!fr}}
   const X=dxfExt(Fm);let box=X.box,keep=X.keep;const U=dxfUnits(D,keep,box);const fr=o.crop!==false&&dxfFrame(keep,box);if(fr){keep=dxfCrop(keep,fr);box=fr.slice()}const span=Math.max(box[2]-box[0],box[3]-box[1])||1;let ppu=DXF_PXM*U.k;
   if(span*ppu>PL_MAXPX)ppu=PL_MAXPX/span;if(span*ppu<3000)ppu=3000/span;const W=Math.ceil((box[2]-box[0])*ppu),H=Math.ceil((box[3]-box[1])*ppu);
-  return{src:'modelo',P:keep,vps:[],box,ppu,W,H,mm:[Math.round(W/(300/25.4)),Math.round(H/(300/25.4))],k:U.k,how:U.how,mpp:U.k/ppu,pmm:0.1*ppu/U.k,far:X.far,crop:!!fr}}
+  const esc=dxfEscala(keep,U.k);
+  return{src:'modelo',P:keep,vps:[],box,ppu,W,H,mm:[Math.round(W/(300/25.4)),Math.round(H/(300/25.4))],k:U.k,how:U.how,mpp:U.k/ppu,pmm:esc*ppu/(1000*U.k),esc,far:X.far,crop:!!fr}}
+/** escala de impresión de un plano dibujado en el modelo (1/esc), para el grosor de las líneas y los trazos (pmm = px por mm de papel).
+    11-11-2026: se suponía siempre 1/100 y una planta de arquitectura a 1/50 salía con las líneas el doble de gruesas. Se deduce de la
+    altura de los textos: en el papel miden ~2,5 mm (mediana de al menos 8 textos); sin textos suficientes, 1/100. */
+const DXF_ESC=[10,20,25,50,75,100,125,150,200,250,500];
+function dxfEscala(F,k){const h=F.filter(e=>e.k==='t'&&e.h>0).map(e=>e.h*k*1000).sort((a,b)=>a-b);if(h.length<8)return 100;
+  const s=h[h.length>>1]/2.5;return DXF_ESC.reduce((b,x)=>Math.abs(Math.log(x/s))<Math.abs(Math.log(b/s))?x:b,100)}
 /** pasa la hoja a píxeles del nivel de detalle (y hacia abajo) */
 function dxfToPx(S){const[x0,,,y1]=S.box,k=S.ppu;const X=x=>(x-x0)*k,Y=y=>(y1-y)*k;const A=P=>{const o=new Array(P.length);for(let i=0;i+1<P.length;i+=2){o[i]=X(P[i]);o[i+1]=Y(P[i+1])}return o};
   for(const e of S.P){if(e.k==='l'||e.k==='d')e.p=A(e.p);else if(e.k==='p')e.P=A(e.P);else if(e.k==='f')e.R=e.R.map(A);else{e.x=X(e.x);e.y=Y(e.y);if(e.r!=null&&e.k==='c')e.r*=k;if(e.k==='t')e.h*=k}}
@@ -258,7 +265,7 @@ async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.fil
   const mem=dxfLayMem(it.m&&it.m.disc,Ls,lay,it.id);if(mem)lay=mem.lay;
   const geo=await dxfGz(JSON.stringify(G),'application/json');const orig=await dxfGz(txt,'application/dxf');
   let txo=null;try{txo=dxfTxIdx(S)}catch(e){console.error('índice de texto DXF',e)}
-  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,lay,...(mem?{layFrom:mem.from}:{}),gz:geo.z,oz:orig.z,far:S.far,crop:!!S.crop,n:S.P.length};
+  const meta={v:1,src:S.src,k:S.k,how:S.how,mpp:S.mpp,...(S.esc?{esc:S.esc}:{}),lay,...(mem?{layFrom:mem.from}:{}),gz:geo.z,oz:orig.z,far:S.far,crop:!!S.crop,n:S.P.length};
   return{W:S.W,H:S.H,mm:S.mm,mpp:S.mpp,crop:S.crop,draw:(g,oy)=>dxfPaint(g,S,oy),txo,orig,geo,meta,S}}
 /** vista previa de una fila de la carga (lado mayor PLP_PX) */
 async function plDxfPrev(it){if(it._pv)return it._pv;const D=dxfParse(await it.file.text());const S=dxfToPx(dxfSheet(D,{crop:store.get('plcrop',true)!==false}));const sc=Math.min(1,PLP_PX/Math.max(S.W,S.H));

@@ -342,3 +342,19 @@ test('cargar planos: el mismo archivo ya cargado se vuelve a procesar como revis
   await expect.poll(() => page.evaluate(() => window.__dbGet('plb', 'EST_E03').rev)).toBe(2);
   expect(errors).toEqual([]);
 });
+
+/* 11-11-2026: el grosor de las líneas de un plano en el modelo sigue su escala de impresión (por la altura de los textos), no siempre 1/100 */
+test('planos DXF: el grosor de las líneas sale de la escala del plano (textos de ~2,5 mm en el papel)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const mk = (h) => {
+    const o = []; const P = (c, v) => o.push(String(c), String(v));
+    P(0, 'SECTION'); P(2, 'HEADER'); P(9, '$INSUNITS'); P(70, 6); P(0, 'ENDSEC'); P(0, 'SECTION'); P(2, 'ENTITIES');
+    for (let i = 0; i < 12; i++) { P(0, 'LINE'); P(8, 'X'); P(370, 50); P(10, i * 2); P(20, 0); P(11, i * 2); P(21, 20); P(0, 'TEXT'); P(8, 'X'); P(10, i * 2); P(20, 21); P(40, h); P(1, 'T' + i); }
+    P(0, 'ENDSEC'); P(0, 'EOF'); return o.join('\n');
+  };
+  const r = await page.evaluate(T => T.map(t => { const S = dxfSheet(dxfParse(t)); return { esc: S.esc, w: 0.5 * S.pmm / S.ppu }; }), [mk(0.125), mk(0.25), mk(0.05)]);
+  expect(r.map(x => x.esc)).toEqual([50, 100, 20]);
+  /* una línea de 0,50 mm en el papel mide en el modelo 0,025 m a 1/50, 0,05 m a 1/100 y 0,01 m a 1/20 */
+  expect(r[0].w).toBeCloseTo(0.025, 4); expect(r[1].w).toBeCloseTo(0.05, 4); expect(r[2].w).toBeCloseTo(0.01, 4);
+  expect(errors).toEqual([]);
+});
