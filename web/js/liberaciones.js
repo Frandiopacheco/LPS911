@@ -60,7 +60,9 @@ let LQ_RET=null;
 function lqModal(html,onClick,onChange){let el=$('#lqm');const c0=el&&el.querySelector('.lqc');if(!el){LQ_RET=document.activeElement;el=document.createElement('div');el.id='lqm';el.className='lqm';document.body.appendChild(el)}
   if(c0){const st=c0.scrollTop,ae=document.activeElement,aid=ae&&c0.contains(ae)&&ae.id;c0.innerHTML=html;c0.scrollTop=st;if(aid){const f=document.getElementById(aid);if(f)f.focus()}}
   else el.innerHTML=`<div class="lqc" role="dialog" aria-modal="true">${html}</div>`;el.onclick=e=>{if(e.target===el||e.target.closest('[data-lqx]')){lqClose();return}onClick&&onClick(e)};el.onchange=e=>onChange&&onChange(e);
-  if(!c0)setTimeout(()=>{const f=el.querySelector('input,select,textarea');if(f)f.focus()},40)}
+  /* 11-11-2026: el foco inicial no se roba si ya se está escribiendo en la ventana (antes saltaba al primer campo a los 40 ms y lo
+     escrito caía en el DNI: el alta de Tareo fallaba o la edición no guardaba el cambio) */
+  if(!c0)setTimeout(()=>{if(!el.isConnected)return;const a=document.activeElement;if(a&&a!==el&&el.contains(a))return;const f=el.querySelector('input,select,textarea');if(f)f.focus()},40)}
 function lqClose(){const el=$('#lqm');if(el)el.remove();const r=LQ_RET;LQ_RET=null;if(el&&r&&U.mod==='tar'&&r.isConnected&&typeof r.focus==='function')try{r.focus()}catch(e){}}
 function lqHead(x,l){const a=S.amb.get(x.ambId);const p=S.pis.get((l&&l.pisoId)||pisoOfAct(x.id)||pisoOfAmb(x.ambId));const sc=a&&S.sec.get(a.sectorId);
   return`<div class="lqh"><b>${esc(x.name||'(sin nombre)')}</b><span>${esc([p&&p.code,sc&&sc.code,a&&(a.code+' · '+a.name)].filter(Boolean).join(' · '))} · ${esc(conOf(x.sc).name)}</span>
