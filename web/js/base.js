@@ -78,10 +78,10 @@ const TASIS=()=>!!me&&(me.role==='tasis'||(me.role==='campo'&&me.tasis===true));
 const canTar=()=>!!me&&(TAR_ONLY()||TASIS()||me.role==='admin'||(me.role==='editor'&&me.tpub===true));
 const canLps=()=>!!me&&!TAR_ONLY();
 const tarEdit=()=>!!me&&(me.role==='admin'||TASIS());
-/* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner (no el capataz de un SC,
-   que solo usa «En obra»); cargan y editan los planos el administrador, los editores y Oficina Técnica */
+/* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner, también el capataz de un SC
+   (11-11-2026, pedido del dueño: consulta los planos en obra; los ETO solo de su partida); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar','p3d'];
-const canPla=()=>canLps()&&me.role!=='capataz';
+const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());

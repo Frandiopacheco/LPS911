@@ -24,7 +24,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 
 - **Publicación que reintenta y no se corta por el 409 de las reglas** (`.github/workflows/ci.yml`, #522 y parte de #523): sin riesgo para la app.
 - **Zonas generales, solo la parte de Last Planner** (`base.js` `isZG`/`niveles`/`pisoOptsZG`, menú del piso en `lookahead.js`, selectores): va en #523 junto con su parte de Casco y de Planos; hay que separarla. Útil ya para FA · Fachadas y EX · Exteriores de la obra.
-- **No van todavía:** Planos con DXF y Alistar (la obra no los tiene), «Traer ambientes del plano» (depende de `casco-dxf.js`) y todo Casco.
+- **Módulo Planos completo, sin Casco (aprobado por el dueño, 11-11-2026):** PR [#539](https://github.com/Frandiopacheco/LPS911/pull/539) a `produccion`: `planos*.js` de `main` (DXF, Alistar, PDF + DXF, calce por el dibujo, Medir, celular) y el capataz en Planos. En `produccion`, `base.js` define `CS=()=>false`, `fcolLp` e `isZG` (aquí son de Casco y de las zonas generales): **al pasar Casco o las zonas generales, quitarlas allí** (chocan con las de `main`). Los cambios de Planos que se hagan después en `main` pasan igual, por cherry-pick, mientras no dependan de Casco.
+- **No van todavía:** «Traer ambientes del plano» (depende de `casco-dxf.js`), las láminas del plan diario desde Planos (#467) y todo Casco.
 
 ## Ambientes desde el plano alistado (aprobado con el dueño, 11-11-2026; primera parte hecha: `plan-diario.md` «Ambientes desde el plano»)
 

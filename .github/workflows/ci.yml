@@ -107,7 +107,10 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
       - name: Instalar Playwright y Chromium
         working-directory: tests/e2e
-        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+        # si apt de Ubuntu no responde (11-11-2026: el espejo de Azure sin DNS), Chromium sin las dependencias del sistema: el runner ya trae casi todas
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium || { echo "::warning::apt de Ubuntu no respondió; Chromium sin dependencias del sistema"; npx playwright install chromium; }
       - name: Recorrer la app con cada rol, en PC y celular
         working-directory: tests/e2e
         env: { CI: '1' }
@@ -132,7 +135,10 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: tests/e2e/package-lock.json }
       - name: Instalar Playwright y Chromium
         working-directory: tests/e2e
-        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+        # si apt de Ubuntu no responde (11-11-2026: el espejo de Azure sin DNS), Chromium sin las dependencias del sistema: el runner ya trae casi todas
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium || { echo "::warning::apt de Ubuntu no respondió; Chromium sin dependencias del sistema"; npx playwright install chromium; }
       - name: Ciclo diario
         working-directory: tests/e2e
         env: { CI: '1', CICLO: '1' }
