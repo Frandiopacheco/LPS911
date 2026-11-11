@@ -57,5 +57,10 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Formularios y ventanas: clic en el fondo (28-10-2026)
 Un clic en un fondo (elemento `position:fixed` que cubre la pantalla, como `.lqm` o la de `uiAsk`) solo vale si el puntero también bajó ahí (`base.js`, escucha en captura): seleccionar texto en un campo y soltar el mouse fuera ya no cierra la ventana.
 
+## Clics y escritura que no se pierden con los datos que llegan (11-11-2026)
+- **Botón apretado:** mientras el puntero está abajo (`pointerdown` → `pointerup`/`pointercancel`), `uiBusy()` es verdadero (`PRESS`, tope 1,5 s) y el dibujo que pidan los datos que llegan (`requestRender`) espera; al soltar se dibuja. Antes, si la vista se redibujaba entre el `pointerdown` y el `click`, el botón se reemplazaba y el clic se perdía (Tareo › Personal: «+ Obrero» o una casilla no respondían; la prueba `tareo-vistas.spec.js` fallaba a veces en GitHub).
+- **Foco inicial de `lqModal`:** a los 40 ms pone el foco en el primer campo **solo si** el foco no está ya dentro de la ventana. Antes lo robaba a mitad de la escritura y el texto caía en el DNI (alta rechazada o edición sin el cambio).
+- Si una acción cambia el estado que pinta una tabla (p. ej. vaciar la selección), redibuja esa parte **en el acto** (`tPerDraw()`), no solo con `requestRender()`: durante un cuadro la pantalla mostraba lo anterior (casillas marcadas).
+
 ## Principio: pocas opciones a la vista, ordenadas por momento (dueño, 25-10-2026)
 - Demasiadas opciones repartidas por la pantalla «marean». Las herramientas se agrupan por el **momento** en que se usan (consultar, programar, revisar propuestas) y solo aparecen en ese momento; lo que manda en la pantalla es el contenido (grilla o plano). Ya se aplicó en el Lookahead (barra por momentos, menús ⋯) y en el Plan diario (paneles plegados); toda pantalla nueva sigue el mismo criterio.
