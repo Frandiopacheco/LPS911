@@ -36,7 +36,7 @@ Decidido con el dueño (26-10-2026). La etapa de casco se programa distinto que 
 - **Ejecutor** = `contractors` con `casa:true` para las cuadrillas de casa (Configuración › Casco › Ejecutores). El PPC se mide por ejecutor como por SC.
 
 ## Secuencia típica de estructura (decidida por el dueño, 27-10-2026)
-Verticales: acero (desfase 0) → encofrado (1) → concreto (2) → desencofrado (3). Horizontales, un día cada una: **fondo y 1.er costado de viga** (4) → **acero de vigas** (5) → **2.º costado de viga y fondo de losa** (6) → **acero de losa** e **instalaciones en losa** (7, el mismo día) → **vaciado de losa y vigas** (8). Es la que trae `CS_DEMO_CAT` (obra de ejemplo y «Cargar catálogo típico») y **es editable**: orden (N.º), desfase y días por partida en Configuración › Casco › Catálogo. «Actualizar a la secuencia típica» (`csSeqTip`, aparece solo si hay diferencias, `csSeqDiff`) pasa un catálogo antiguo: agrega las partidas que faltan (`k-EF1`, `k-AVG`, `k-EF2`, `k-ALO`, con el ejecutor de la partida antigua equivalente), archiva las antiguas «Encofrado de vigas y losa» (`k-EL`) y «Acero de vigas y losa» (`k-AL`) y ajusta orden y desfase de las típicas. Lo programado no cambia (se regenera el tren desde mañana).
+Verticales: acero (desfase 0) → encofrado (1) → concreto (2) → desencofrado (3). Horizontales, un día cada una: **fondo y 1.er costado de viga** (4) → **acero de vigas** (5) → **2.º costado de viga y fondo de losa** (6) → **acero de losa** e **instalaciones en losa** (7, el mismo día) → **vaciado de losa y vigas** (8). Es la que trae `CS_DEMO_CAT` (obra de ejemplo y «Cargar catálogo típico») y **es editable**: el tren se arma y ajusta en Lookahead › Tren (el catálogo ya no muestra orden, desfase ni días; `tr`/`off`/`dur` quedan en `mcat` como valores típicos del generador). «Actualizar a la secuencia típica» (`csSeqTip`, aparece solo si hay diferencias, `csSeqDiff`) pasa un catálogo antiguo: agrega las partidas que faltan (`k-EF1`, `k-AVG`, `k-EF2`, `k-ALO`, con el ejecutor de la partida antigua equivalente), archiva las antiguas «Encofrado de vigas y losa» (`k-EL`) y «Acero de vigas y losa» (`k-AL`) y ajusta orden y desfase de las típicas. Lo programado no cambia (se regenera el tren desde mañana).
 
 ## Lookahead › Vista › Tren (`casco-tren.js`, 27-10-2026, decidido con el dueño)
 **Principio (dueño):** el sistema propone y el ingeniero decide. El tren se arma y se edita aquí como en el Excel; solo se restringe lo que protege la medición (hoy y lo pasado solo el administrador; nada se borra, se archiva).
@@ -105,7 +105,7 @@ Reemplaza a «Láminas» en la barra de Casco (Láminas se abre con «Láminas d
 
 ## Catálogo de casco (Configuración › Casco, 27-10-2026, con el dueño)
 - **Desde el 27-10-2026 la incidencia por m² ya no se edita en el catálogo**: se edita en Sectorización › Sectores › «Por partida» (columna Incidencia, `data-cszrat`, guarda `mcat.rat`). En el catálogo quedan nombre, grupo, ejecutor, unidad, Vaciado, Entrega y rendimiento.
-- Solo lo que es de la partida: nombre, grupo, ejecutor, unidad, **incidencia por m² de planta** (`rat`: kg/m², m²/m², m³/m²; área × incidencia = metrado) y **productividad** en und/persona·día (`rend`) y en HH/und (calculada con la **jornada** `cs_meta/project.jorH`, por defecto 8,5 h, solo admin; `csJor`). Se quitaron «Metrado/sector» (`mets` queda en datos como respaldo del generador) y las columnas del tren (ahora en Sectorización › Tren). La tabla usa todo el ancho (`.wrap.wrapw`).
+- Solo lo que es de la partida: nombre, grupo, ejecutor, unidad, **incidencia por m² de planta** (`rat`: kg/m², m²/m², m³/m²; área × incidencia = metrado) y **productividad** en und/persona·día (`rend`) y en HH/und (calculada con la **jornada** `cs_meta/project.jorH`, por defecto 8,5 h, solo admin; `csJor`). Se quitaron «Metrado/sector» (`mets` queda en datos como respaldo del generador) y las columnas del tren (el tren se arma en el Lookahead; la vista Tren de Sectorización se retiró). La tabla usa todo el ancho (`.wrap.wrapw`).
 - «Completar incidencias por defecto» solo toca partidas con valor en `CS_RAT` (`csRatMiss`): mandar `undefined` hacía que Firestore rechazara el lote entero.
 
 ## Obra de ejemplo (solo copia de prueba, administrador, Casco vacío)
@@ -121,7 +121,15 @@ Reemplaza a «Láminas» en la barra de Casco (Láminas se abre con «Láminas d
 - `tests/e2e/casco.spec.js`: obra de ejemplo en `cs_` sin tocar Last Planner, ficha y correr un día con Deshacer, generador (no programa hoy ni el pasado), asistente (balance y aplicar con 5 sectores), entregas como hitos de Last Planner, cambio de módulo con recarga y visibilidad para el editor. Para abrir Casco en una prueba: `localStorage['lps.ns']='cs'` antes de cargar (ver `casco()` en la prueba).
 - Reglas «casco: …» en `tests/rules`.
 
+## Contexto y terminología del dueño
+- **Rendimiento** = lo que hace una persona por día (p. ej. 14 m²/persona·día). **Ratio** = HH por unidad (HH/m², HH/kg). Lo que se multiplica por el área de planta (kg/m², m³/m²) es la **incidencia**, no un ratio. Algunos textos y la vista «Por ratio» de Metrados aún dicen «ratio» con el sentido de incidencia: al tocarlos, usar «incidencia».
+- Ejecutores típicos: encofrado y concreto los hace **casa**; el acero un SC o casa; las instalaciones, un SC. Es común que casa intervenga una partida subcontratada (p. ej. acero) en ciertos frentes o sectores. En casco el capataz pesa más que en acabados (por eso una reunión única, sin propuestas de los SC).
+- En casco la sectorización suele cambiar durante la ejecución; por eso se edita sobre la lámina sin rehacer todo el proceso.
+- El metrado lo hace el propio dueño (o el ingeniero), con los planos en PDF y DWG.
+- **Acero de vigas:** pieza máxima de **12 m con acero dimensionado** y **9 m si se habilita en obra** (`lmax`); ganchos, anclajes y estribos adicionales en nudos, siempre los del plano. Meta del metrado nivel C: **±5 % por sector** frente a la lista del proveedor de acero dimensionado. Idea: imitar el método de despiece de ese proveedor para obras que no lo tengan; el despiece constructivo final (para los capataces) queda para después.
+
 ## Pendiente / ideas
+- Varios ejecutores por partida (hoy cada fila del tren tiene uno).
 - Textos de la interfaz que aún dicen «piso» o «ambiente» en Casco (solo el selector principal dice «niveles»).
 - Propuestas del SC por partida, si algún proyecto las pide (hoy no se ofrecen en Casco).
 - Calcular metrados por sector desde el plano o el modelo (hoy se escriben en el asistente).

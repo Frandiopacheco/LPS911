@@ -4,6 +4,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca el mó
 
 ## Qué es
 
+> **Principio del dueño: «a prueba de tontos».** Las HH que cargan los capataces nunca se pierden por una importación, una edición ni una partida borrada del Excel: de ellas depende el pago al trabajador. Toda función nueva del Tareo debe cumplirlo.
+
 Un **módulo aparte** de LPS 911 (no una pestaña más): el selector de la barra superior cambia entre «Last Planner» y «Tareo»; cada módulo tiene sus propias pestañas. Reemplaza el Excel del asistente de tareo y el correo a costos. Propuesta y flujograma acordados con el dueño (oct 2026):
 
 - Solo personal obrero **del consorcio** (los SC llevan su propio tareo).
@@ -233,6 +235,8 @@ Código en `web/js/tareo-rev.js` (después de `tareo-cap.js`); `renderTDia` sigu
 
 ## Pendientes
 
+- Horas extra del sábado: hoy se calculan por obrero sobre su total del día; el dueño quiere que más adelante se pueda elegir «por total del día» o «por reloj» en la configuración.
+- Idea descartada (oct 2026): detectar a los obreros desde la foto del formato (DNI y nombre) para que el asistente solo verifique. Se mantiene el flujo del capataz en el celular. En el papel, el capataz escribe las HH por partida en columnas con una leyenda de partidas.
 - ~~Formato del Excel de costos~~: hecho en F3 (ver «Implementación de F3 — pantallas»).
 - Jornada oficial (asumida arriba, editable en `tcfg`).
 
@@ -287,7 +291,7 @@ Hallazgos 1, 2, 3, 11 y 13 del informe (`tareo.js`; pruebas en `tests/e2e/tareo-
   - Horas de un bloque = duración − intersección del bloque con `[refIni, refIni + ref]` (`tBlqMin`). **Partir un bloque en cualquier minuto no cambia el total** (12:15–12:45 en L–V = 0 h).
   - `trab` = suma de los bloques del obrero (se suma en minutos y se redondea al final); `ext` = max(0, trab − horas de jornada del día) con horas de jornada = fin − ini − ref (`tJorH`).
   - Sábado (`ref` 0): **no se descuenta nada**, ni pasadas las 13:00: 07:30–17:00 = 9,5 h trabajadas y 4 extra. Se eliminó la regla anterior.
-  - **Horario sugerido en no laborables (25-10-2026):** `tcfg.sugNoLab = {ini, fin}` (por defecto 07:30–13:00; Configuración › «Horario sugerido en domingo o feriado», con «= X h, todas extra» en vivo, `tSugTxt`). En el celular, `tcJor` en no laborable devuelve ese horario como `j` y `full = tHoras(fecha, ini, fin)` (descuenta `refNoLab`): «Toda la jornada», «El resto» y los atajos lo proponen. Antes era la jornada de ese día de semana o la del lunes (8,5 h). Solo sugerencia: no cambia el cálculo (todo es extra).
+  - **Horario sugerido en no laborables (25-10-2026):** en la obra, un domingo trabajado suele ser solo hasta la 1 pm (salvo rara excepción); el domingo sigue siendo no laborable. `tcfg.sugNoLab = {ini, fin}` (por defecto 07:30–13:00; Configuración › «Horario sugerido en domingo o feriado», con «= X h, todas extra» en vivo, `tSugTxt`). En el celular, `tcJor` en no laborable devuelve ese horario como `j` y `full = tHoras(fecha, ini, fin)` (descuenta `refNoLab`): «Toda la jornada», «El resto» y los atajos lo proponen. Antes era la jornada de ese día de semana o la del lunes (8,5 h). Solo sugerencia: no cambia el cálculo (todo es extra).
   - Domingo o feriado: sin jornada, todo es extra; refrigerio de no laborables configurable en `tcfg.refNoLab = {ref, refIni}` (por defecto 60 min desde 12:00; un número se toma como minutos desde `refIni`; `ref` 0 = no se descuenta).
   - `tDia(fecha, cfg?)` → `{nl, j, rw:[ini,fin] en minutos | null, jh}`: la regla del día para `tHoras`, `tBlqH`, `tCalc`, `tValida`, `tNoLab`. Firmas compatibles: `tBlqH(fecha, ini, fin, cfg?)`, `tHoras(fecha, ini, fin, cfg?)`, `tNoLab(fecha, cfg?)` (el `cfg` es opcional).
 - **Feriados propios (2).** `tcfg.fer` = lista de fechas `YYYY-MM-DD`; `tcfg.ferN = {fecha: nombre}` (opcional; al quitar un feriado su nombre se queda en `ferN`, sin efecto). `tNoLab` usa **solo** eso + jornada nula del día de semana; ya **no** usa `nwReason` ni el calendario de Last Planner (los roles del tareo no cargan `meta/project`). Configuración › «Feriados del tareo»: agregar (fecha + nombre), quitar (con `uiAsk`) y «Copiar feriados de Last Planner» (solo si el admin tiene `S.meta project.cal.hol`; agrega los que faltan con su nombre). Se guardan al momento (`set merge` de `fer`/`ferN`); la jornada se guarda con «Guardar configuración».
