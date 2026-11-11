@@ -702,7 +702,7 @@ function tEditarSel(){const ids=[...TU.sel].filter(id=>S.tper.has(id));if(!ids.l
      /* cese: solo a quien no tiene un cese anterior a esa fecha y no ingresó después */
      const ces=new Map(),noCes=[];if(cf)for(const id of ids){const p=S.tper.get(id);if(p.ces&&p.ces<=cf||p.ing&&cf<p.ing){noCes.push(tName(p));continue}ces.set(id,tCeseData(p,cf,cm))}
      if(cf&&!ces.size)return $('#tacMsg').textContent='Ninguno de los elegidos puede cesar en esa fecha (ya cesó antes o ingresó después).';
-     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{...d,...(ces.get(id)||{}),...st},{merge:true}]));lqClose();TU.sel.clear();
+     try{await tBatch(ids.map(id=>[fcol(TCOLS.tper).doc(id),{...d,...(ces.get(id)||{}),...st},{merge:true}]));lqClose();TU.sel.clear();tPerDraw();/* al momento: si no, las casillas seguían marcadas hasta el siguiente dibujo (11-11-2026) */
        const what=[d.cap!=null?(d.cap?'capataz '+tCapName(d.cap):'sin capataz'):'',d.cua?'cuadrilla '+d.cua:'',d.pue?'puesto '+d.pue:'',cat!==NO?'categoría '+TCAT[cat]:'',ces.size?`cese el ${tFmt(cf)} (${ces.size})`:''].filter(Boolean).join(', ');
        if(noCes.length)toast(`Sin cese (ya cesó antes o ingresó después): ${noCes.slice(0,5).join(' · ')}${noCes.length>5?` y ${noCes.length-5} más`:''}.`);
        toast(`${ids.length} ${ids.length===1?'obrero actualizado':'obreros actualizados'}: ${what}.`);requestRender()}catch(err){$('#tacMsg').textContent='No se pudo guardar: '+(err.code||err.message)}})}

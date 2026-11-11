@@ -460,7 +460,7 @@ function isDirtyFocus(){const a=document.activeElement;return a&&a.classList&&a.
 let SEL_T=0,PDOWN=false,dTimer=0,DRAGGING=false;/* DRAGGING: arrastre nativo en curso (Liberaciones › Bandeja) */
 /* IMPORTING: mientras se carga un archivo de datos no se redibuja (cada lote recalculaba toda la pantalla); al terminar, un solo dibujo */
 let IMPORTING=false;
-const uiBusy=()=>{const a=document.activeElement;return IMPORTING||PDOWN||DRAGGING||(!!a&&a.tagName==='SELECT'&&performance.now()-SEL_T<20000)||(!!a&&a.classList&&a.classList.contains('qin'))};/* qin: cantidad del día escribiéndose dentro de la celda del lookahead */
+const uiBusy=()=>{const a=document.activeElement;return IMPORTING||PDOWN||DRAGGING||(PRESS&&performance.now()-PRESS_T<1500)||(!!a&&a.tagName==='SELECT'&&performance.now()-SEL_T<20000)||(!!a&&a.classList&&a.classList.contains('qin'))};/* qin: cantidad del día escribiéndose dentro de la celda del lookahead */
 document.addEventListener('pointerdown',e=>{const t=e.target;if(!t||!t.closest)return;if(t.closest('select'))SEL_T=performance.now();if(t.closest('.pv'))PDOWN=true},true);
 /* 28-10-2026: seleccionar texto en un campo y soltar el mouse fuera del formulario contaba como clic en el fondo oscuro y lo cerraba
    (el navegador manda el clic al ancestro común). Un clic en un fondo (elemento fijo que cubre la pantalla) solo vale si también empezó ahí. */
@@ -469,7 +469,11 @@ document.addEventListener('pointerdown',e=>{const t=e.target;if(!t||!t.closest)r
     let fx=false;try{const cs=getComputedStyle(t);if(cs.position==='fixed'){const r=t.getBoundingClientRect();fx=r.width>=innerWidth*.9&&r.height>=innerHeight*.9}}catch(er){}
     if(fx){e.stopImmediatePropagation();e.preventDefault()}},true)}
 document.addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='SELECT')SEL_T=performance.now()},true);
-{const rel=()=>{if(PDOWN){PDOWN=false;setTimeout(flushDeferred,0)}};document.addEventListener('pointerup',rel,true);document.addEventListener('pointercancel',rel,true)}
+/* 11-11-2026: mientras se aprieta un botón o una casilla, el dibujo que pidan los datos que llegan espera a que se suelte: si la vista
+   se redibujaba entre el pointerdown y el click, el botón se reemplazaba y el clic se perdía («+ Obrero» o la casilla de Personal no
+   respondían). Tope de 1,5 s por si el pointerup no llega (toque largo). */
+let PRESS=false,PRESS_T=0;document.addEventListener('pointerdown',e=>{if(e.button)return;PRESS=true;PRESS_T=performance.now()},true);
+{const rel=()=>{const p=PDOWN||PRESS;PDOWN=false;if(p)setTimeout(()=>{PRESS=false;flushDeferred()},0)};document.addEventListener('pointerup',rel,true);document.addEventListener('pointercancel',rel,true)}
 {const done=e=>{if(e.target&&e.target.tagName==='SELECT'){SEL_T=0;setTimeout(flushDeferred,0)}};document.addEventListener('change',done,true);document.addEventListener('focusout',done,true)}
 function requestRender(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=false;if(paint||isDirtyFocus()||uiBusy()){deferred=true;if(!dTimer)dTimer=setTimeout(()=>{dTimer=0;flushDeferred()},700);return}render()})}
 /* auditoría 09/10 (datos reales): lo que llega de otros usuarios (snapshots) redibuja con requestRemoteRender. En las vistas
