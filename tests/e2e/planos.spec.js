@@ -78,8 +78,8 @@ test('admin: módulo Planos en el selector, sin los controles de Last Planner', 
   noErrors(errors, 'admin');
 });
 
-test('quién ve el módulo: lector, SC y Calidad solo consultan; Oficina Técnica carga; capataz y tareo no lo ven', async ({ page }) => {
-  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['calidad', true, false], ['ot', true, true], ['editor', true, true], ['tcap', false, false]]) {
+test('quién ve el módulo: lector, SC, capataz y Calidad solo consultan; Oficina Técnica carga; el tareo no lo ve', async ({ page }) => {
+  for (const [as, ve, carga] of [['lector', true, false], ['sc', true, false], ['capataz', true, false], ['calidad', true, false], ['ot', true, true], ['editor', true, true], ['tcap', false, false]]) {
     const errors = await openApp(page, { as, editar: false });
     const st = await page.evaluate(() => ({ ve: canPla(), carga: plaEd(), mods: MODS().map(m => m[0]) }));
     expect(st.ve, as).toBe(ve); expect(st.carga, as).toBe(carga);
@@ -91,6 +91,18 @@ test('quién ve el módulo: lector, SC y Calidad solo consultan; Oficina Técnic
     } else expect(st.mods).not.toContain('pla');
     noErrors(errors, as);
   }
+});
+
+/* 11-11-2026 (pedido del dueño): el capataz consulta los planos desde su pantalla del celular y vuelve con «Más» */
+test('capataz en el celular: «📐 Planos» abre el módulo y «Más › Last Planner» lo regresa a su pantalla', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = await openApp(page, { as: 'capataz', editar: false });
+  await page.locator('[data-kpla]').click();
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'pbib');
+  await page.locator('#bnav').getByText('Más').click();
+  await page.locator('#msheet [data-mod="lps"], #msheet :text("Last Planner")').first().click();
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'cap');
+  noErrors(errors, 'capataz');
 });
 
 test('lector de nombres: código, especialidad, piso y tipo según la nomenclatura del proyecto', async ({ page }) => {
@@ -200,6 +212,15 @@ test('buscar en el contenido: índice al cargar, interruptor Nombre/Contenido, r
   await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
   await page.fill('#plq', 'ascensor');
   await expect(page.locator('#pllist')).toContainText('Ninguna lámina tiene ese texto');
+  // «Contenido» sin texto: la lista de siempre con los filtros (antes quedaba en blanco y parecía que no había planos)
+  await page.fill('#plq', '');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
+  await expect(page.locator('#pltxst')).toContainText('Escribe al menos 2');
+  const otroTipo = await page.evaluate(() => PL_TIPOS.find(t => t !== PLB.get('ARQ_AG03').tipo));
+  await page.selectOption('#plft', otroTipo);
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toHaveCount(0);
+  await page.selectOption('#plft', '');
+  await expect(page.locator('.plc[data-pl="ARQ_AG03"]')).toBeVisible();
   // el índice queda en memoria: las búsquedas siguientes no vuelven a leerlo (ni de la caché)
   await page.evaluate(() => { window.__GETS.length = 0; });
   await page.fill('#plq', 'arquitectura');
@@ -258,6 +279,76 @@ test.describe('sin conexión (tablet)', () => {
     expect(r.got.sort()).toEqual(r.all.sort());
     expect(r.off).toMatchObject({ rev: 1, base: d.base });
     noErrors(errors, 'tablet');
+  });
+});
+
+test.describe('celular: modo lectura', () => {
+  test.use({ viewport: { width: 412, height: 880 }, hasTouch: true, isMobile: true });
+  test('el plano ocupa la pantalla; un toque oculta las barras; doble toque alterna; Medir abajo; ⋯; Atrás cierra; lista compacta y recientes', async ({ page }) => {
+    test.setTimeout(150_000);
+    const errors = await openApp(page, { as: 'admin', editar: false });
+    await preparar(page);
+    await page.evaluate(memStorage);
+    await page.evaluate(() => { goMod('pla'); U.tab = 'pcar'; render(); });
+    await page.setInputFiles('#plfile', [
+      { name: '2459243-PTSA-XXX-P01-P2D-ARQ-E05-AG03_PLANTA PRIMER PISO.pdf', mimeType: 'application/pdf', buffer: pdfDemo() },
+      { name: '2459243-PTSA-XXX-ZZZ-P2D-AFC-E05-IS06_PLANTA PRIMER PISO - REDES DE AGUA FRIA.pdf', mimeType: 'application/pdf', buffer: pdfDemo() },
+    ]);
+    await page.click('#plqbar [data-q="go"]');
+    await expect(page.locator('#plqtab tr.ok')).toHaveCount(2, { timeout: 120_000 });
+    await page.evaluate(() => { U.tab = 'pbib'; render(); });
+    // biblioteca: lista compacta, sin «Cargar planos…» ni «Eliminar…»; «sin conexión» también en el celular
+    await expect(page.locator('#pllist')).toHaveClass(/pllst/);
+    await expect(page.locator('#plgocar')).toBeHidden();
+    await expect(page.locator('#pldel')).toBeHidden();
+    await expect(page.locator('#ploff')).toBeVisible();
+    await page.click('.plc[data-pl="ARQ_AG03"]');
+    await expect(page.locator('#plv')).toHaveClass(/mob/);
+    // una sola barra arriba: sin Vínculos, sin − + ni PDF (van en ⋯); el plano mide toda la pantalla y la lámina queda bajo la barra
+    for (const a of ['lk', 'zin', 'zout', 'pdf', 'mark']) await expect(page.locator(`#plv .plvh [data-pv="${a}"]`), a).toHaveCount(0);
+    await expect(page.locator('#plv .plvbot [data-pv="med"]')).toBeVisible();
+    await expect(page.locator('#plv .plvbot .plvq [data-pj]')).toHaveCount(2);
+    await page.waitForTimeout(300);
+    const g = await page.evaluate(() => ({ body: document.querySelector('#plv .plvb').offsetHeight, head: document.querySelector('#plv .plvh').offsetHeight, y: PLV.tv.y, f: PLV.tv.fit, s: PLV.tv.s }));
+    expect(g.body).toBe(880);
+    expect(g.y).toBeGreaterThanOrEqual(g.head);
+    const c = await page.locator('#plv .plvc').boundingBox(), cx = c.x + c.width / 2, cy = c.y + c.height / 2;
+    // un toque oculta las barras y otro las devuelve
+    await page.touchscreen.tap(cx, cy); await expect(page.locator('#plv')).toHaveClass(/hid/, { timeout: 2_000 });
+    await page.touchscreen.tap(cx, cy); await expect(page.locator('#plv')).not.toHaveClass(/hid/, { timeout: 2_000 });
+    // doble toque: acerca; otro doble toque: vuelve a la lámina entera (y no oculta las barras)
+    await page.waitForTimeout(400);
+    const dbl = async () => { await page.evaluate(({ cx, cy }) => { const h = document.querySelector('.plvc');
+      const ev = (t, id) => h.dispatchEvent(new PointerEvent(t, { pointerId: id, clientX: cx, clientY: cy, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      ev('pointerdown', 70); ev('pointerup', 70); return new Promise(r => setTimeout(() => { ev('pointerdown', 71); ev('pointerup', 71); r(); }, 80)); }, { cx, cy }); await page.waitForTimeout(900); };
+    await dbl(); expect(await page.evaluate(() => PLV.tv.s / PLV.tv.fit)).toBeGreaterThan(1.8);
+    await dbl(); expect(await page.evaluate(() => PLV.tv.s / PLV.tv.fit)).toBeCloseTo(1, 2);
+    await expect(page.locator('#plv')).not.toHaveClass(/hid/);
+    // zoom con un dedo: doble toque y deslizar hacia abajo acerca
+    const z = await page.evaluate(async ({ cx, cy }) => { const h = document.querySelector('.plvc'), raf = () => new Promise(r => requestAnimationFrame(r));
+      const ev = (t, id, y) => h.dispatchEvent(new PointerEvent(t, { pointerId: id, clientX: cx, clientY: y, pointerType: 'touch', isPrimary: true, bubbles: true }));
+      const s0 = PLV.tv.s; ev('pointerdown', 80, cy); ev('pointerup', 80, cy); await new Promise(r => setTimeout(r, 80));
+      ev('pointerdown', 81, cy); for (let i = 1; i <= 8; i++) { ev('pointermove', 81, cy + i * 12); await raf(); } ev('pointerup', 81, cy + 96);
+      return PLV.tv.s / s0; }, { cx, cy });
+    expect(z).toBeGreaterThan(2);
+    // Medir: la tira de abajo cede su lugar a la barra de Medir
+    await page.locator('#plv [data-pv="med"]').tap();
+    await expect(page.locator('#plv .plmbar')).toBeVisible();
+    await expect(page.locator('#plv .plvbot')).toBeHidden();
+    await page.locator('#plv .plmbar [data-pm="off"]').tap();
+    await expect(page.locator('#plv .plvbot')).toBeVisible();
+    // ⋯: hoja con lo demás; Atrás la cierra primero y luego cierra el visor
+    await page.locator('#plv [data-pv="more"]').tap();
+    await expect(page.locator('#plv .plvsh [data-sh="pdf"]')).toBeVisible();
+    await expect(page.locator('#plv .plvsh [data-sh="off"]')).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('#plv .plvsh')).toHaveCount(0);
+    await expect(page.locator('#plv')).toHaveCount(1);
+    await page.goBack();
+    await expect(page.locator('#plv')).toHaveCount(0);
+    // recientes arriba de la lista
+    await expect(page.locator('#pllist .plrec [data-pl="ARQ_AG03"]')).toBeVisible();
+    noErrors(errors, 'celular');
   });
 });
 
