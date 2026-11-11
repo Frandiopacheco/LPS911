@@ -33,7 +33,7 @@ const plfSave=()=>store.set('plf',{piso:PLF.piso,disc:PLF.disc,tipo:PLF.tipo,src
 function plSub(){if(plbUn||!me||!canPla())return;
   const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS()))requestRender();if(typeof palSync==='function')palSync()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
-  open();etoSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;PLB.clear();plbReady=false})}
+  open();etoSub();plnvSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;if(plnvUn)plnvUn();plnvUn=null;PLNV=null;PLB.clear();plbReady=false})}
 /* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
    Colección aparte `eto` (no `plb`) y carpeta de Storage `etos/<sc>/…`: el SC solo puede leer los de su partida (reglas), el resto
    del equipo ve todos; carga y edita solo el administrador; solo aprobados. Formatos muy diversos: sin lectura de nomenclatura ni
@@ -52,6 +52,52 @@ const etoAct=()=>[...PLB.values()].filter(p=>p.eto&&!p.arch);
 const plUp=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
 const plCodCmp=(a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true});
 const plPisoName=id=>{const p=id&&(S.pis.get(id)||ARCH.pis.get(id));return p?`${p.code} · ${p.name}`:''};
+
+/* ---------- Niveles del edificio (01-11-2026, decidido con el dueño: «una sola lista») ----------
+   Si la obra tiene Casco, la lista de niveles es la de Configuración › Casco › Niveles (`cs_pisos`): Planos ubica cada plano en un
+   nivel del edificio (`plb.nv`) y guarda además el piso de Last Planner de ese nivel (`pisoId`, columna «Piso en Last Planner»).
+   Lo que llega de Last Planner con un piso suyo (lookahead, sesión pull, reunión) se traduce por esa columna (`plLvIn`). Los pisos de
+   Last Planner que ningún nivel usa siguen en la lista al final. Sin Casco (producción) todo sigue con los pisos de Last Planner.
+   Planos cargados antes sin `nv`: se ubican por el código leído del nombre (`niv`) o por su piso de Last Planner (`plLvOf`). */
+let PLNV=null,plnvUn=null;   /* en Last Planner: los niveles de Casco (en Casco son S.pis) */
+function plnvSub(){if(CS()||plnvUn||!db)return;
+  plnvUn=fcolLp('cs_pisos').onSnapshot(sn=>{PLNV=sn.docs.map(d=>({...d.data(),id:d.id})).filter(p=>!p.arch).sort(byOrder);if(U.mod==='pla')requestRender()},
+    ()=>{PLNV=[];plnvUn=null})}
+const plBld=()=>CS()?pisos():(PLNV||[]);
+const plLvOn=()=>plBld().length>0;
+const plLpOf=lv=>lv&&lv.lp&&lv.lp!=='-'?lv.lp:'';
+/** pisos de Last Planner (en Casco se leen aparte) */
+const plLpPis=()=>CS()?(typeof csLpPisos==='function'?csLpPisos():[]):pisos();
+/** clave de un nivel por su nombre o código: P1, S1, AZ, PT, CIM (sirve para comparar Casco, Last Planner y el nombre del archivo) */
+function plNivKey(o){if(!o)return'';const N=plUp(o.name),C=plUp(o.code).replace(/\s+/g,'');
+  if(/CIMENTACI/.test(N)||/^CIM?$/.test(C))return'CIM';if(/TECNIC/.test(N)||C==='PT')return'PT';if(/AZOTEA/.test(N)||/^AZ/.test(C))return'AZ';
+  const d=(N.match(/(\d+)/)||C.match(/(\d+)$/)||[])[1];
+  if(/S[O]TANO/.test(N)||/^(S|SOT|SS)\d*$/.test(C))return'S'+(d?+d:1);
+  if(d!=null&&(/PISO|NIVEL/.test(N)||/^[PN]0*\d+$/.test(C)))return'P'+(+d);
+  const ord=['PRIMER','SEGUNDO','TERCER','CUARTO','QUINTO','SEXTO','SEPTIMO','OCTAVO','NOVENO','DECIMO'];const i=ord.findIndex(w=>new RegExp('\\b'+w).test(N));
+  return i>=0?'P'+(i+1):''}
+const plNivKeyCode=c=>{const t=plUp(c);if(!t)return'';const m=t.match(/^([PS])0*(\d{1,2})$/);return m?m[1]+(+m[2]):t==='CI'?'CIM':/^AZ/.test(t)?'AZ':t};
+/** pisos de Last Planner que ningún nivel del edificio usa (siguen en la lista, al final) */
+function plLpOnly(){const B=plBld();const u=new Set(B.map(plLpOf).filter(Boolean));return plLpPis().filter(p=>!u.has(p.id)).map(p=>({id:p.id,code:p.code,name:p.name,lpOnly:true}))}
+/** la lista de niveles que ofrece Planos */
+const plLvList=()=>plLvOn()?[...plBld(),...plLpOnly()]:pisos();
+const plLvLbl=()=>plLvOn()?'Nivel':'Piso';
+/** nivel de un plano (id de la lista de plLvList, '' = general) */
+function plLvOf(p){if(!p)return'';if(!plLvOn())return p.pisoId||'';const B=plBld();
+  if(p.nv!=null){if(B.some(x=>x.id===p.nv))return p.nv;return p.pisoId&&plLpOnly().some(x=>x.id===p.pisoId)?p.pisoId:''}   /* ya elegido en Planos: se respeta («General» o solo Last Planner también) */
+  const k=plNivKeyCode(p.niv);if(k){const m=B.filter(x=>plNivKey(x)===k);if(m.length===1)return m[0].id}
+  if(p.pisoId){const m=B.filter(x=>plLpOf(x)===p.pisoId);if(m.length===1)return m[0].id;if(plLpOnly().some(x=>x.id===p.pisoId))return p.pisoId}
+  return''}
+/** un piso que llega de afuera (Last Planner o Casco) → id de la lista */
+function plLvIn(id){if(!id||id==='-'||!plLvOn())return id;const B=plBld();if(B.some(x=>x.id===id))return id;const m=B.find(x=>plLpOf(x)===id);return m?m.id:id}
+function plLvName(id){if(!id)return'';const p=plLvList().find(x=>x.id===id);return p?`${p.code} · ${p.name}`:plPisoName(id)}
+const plLvCode=id=>{const p=id&&plLvList().find(x=>x.id===id);return p?p.code||'':''};
+/** valor elegido en un selector de nivel → campos del plano */
+function plLvDoc(v){v=v||'';if(!plLvOn())return{pisoId:v};const lv=plBld().find(x=>x.id===v);return lv?{nv:v,pisoId:plLpOf(lv)}:{nv:'',pisoId:v}}
+/** opciones de un selector de nivel (los de Last Planner sin nivel del edificio, aparte) */
+function plLvOpts(sel,short){const o=p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>${esc(short?p.code:p.code+' · '+p.name)}</option>`;
+  if(!plLvOn())return pisos().map(o).join('');const X=plLpOnly();
+  return plBld().map(o).join('')+(X.length?`<optgroup label="Solo en Last Planner">${X.map(o).join('')}</optgroup>`:'')}
 
 /* ---------- Storage (API REST con el token de la sesión; las reglas son firebase/storage.rules) ---------- */
 const plApi=()=>{const b=window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.storageBucket;if(!b)throw new Error('Falta storageBucket en la configuración de Firebase.');return 'https://firebasestorage.googleapis.com/v0/b/'+b}
@@ -89,7 +135,8 @@ function plNivOf(tok,tit){const t=plUp(tok),T=plUp(tit);let m;
   if(/PISO\s+TECNICO/.test(T))return{niv:'PT',cand:['P0','PT']};
   if(/CIMENTACI/.test(T))return{niv:'CIM',cand:['CIM','CI']};
   return{niv:'',cand:[]}}
-function plPisoOf(cand){if(!cand.length)return'';const ps=[...S.pis.values()];for(const c of cand){const p=ps.find(x=>plUp(x.code)===c);if(p)return p.id}return''}
+function plPisoOf(cand,niv){if(plLvOn()){const k=plNivKeyCode(niv);if(k){const m=plBld().filter(x=>plNivKey(x)===k);if(m.length===1)return m[0].id}}
+  if(!cand.length)return'';const ps=plLvList();for(const c of cand){const p=ps.find(x=>plUp(x.code)===c);if(p)return p.id}return''}
 function plTipoOf(tit){const T=plUp(tit);
   if(/CORTE|SECCI/.test(T))return'Corte';if(/ELEVACI|FACHADA/.test(T))return'Elevación';if(/ESQUEMA|ISOMETR|DIAGRAMA|MONTANTE/.test(T))return'Esquema';
   if(/DETALLE/.test(T)&&!/PLANTA/.test(T))return'Detalle';if(/PLANTA|NIVEL|PISO|TABIQUE|CIELO|DISTRIBUCI|REDES|AZOTEA|TECHO/.test(T))return'Planta';
@@ -109,7 +156,7 @@ function plParse(fname){
   if(cod&&!PL_CODRE.test(cod)){extra.unshift(cod);cod=''}
   let tit=[...extra,tail].filter(Boolean).join(' - ').replace(/_/g,' ').replace(/\s+\d{1,2}\.\d{1,2}\.\d{2,4}$/,'').replace(/\s+RAPM\s+\d{6}$/i,'').replace(/\s{2,}/g,' ').trim();
   const disc=PL_DTOK[dTok]||plDiscOfCod(cod)||'';const nv=plNivOf(nTok,tit);
-  return{cod:cod.replace('-',''),disc,niv:nv.niv,pisoId:plPisoOf(nv.cand),tipo:plTipoOf(tit),tit,eta}}
+  return{cod:cod.replace('-',''),disc,niv:nv.niv,pisoId:plPisoOf(nv.cand,nv.niv),tipo:plTipoOf(tit),tit,eta}}
 const plLkN=p=>Array.isArray(p.lk)?p.lk.filter(l=>l&&!l.arch).length:0;
 const plIdOf=m=>(m.eto?'ETO_'+(m.sc||'X')+'_'+(m.cod||('S'+plHash(m.fname||''))):(m.disc||'X')+'_'+(m.cod||('S'+plHash(m.fname||'')))).replace(/[^A-Za-z0-9_.-]/g,'');
 function plHash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(36)}
@@ -278,7 +325,7 @@ async function plProcess(it,say){const t0=performance.now();
     Object.assign(old,res);return{id,rev,keep:true,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
   const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||'',...(old.dxf?{dxf:old.dxf}:{}),...(old.ok&&old.ok.rev===(old.rev||1)?{ok:old.ok}:{}),...(old.fix&&old.fix.rev===(old.rev||1)?{fix:old.fix}:{})}:null;
-  const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',pisoId:m.pisoId||'',tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
+  const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',...plLvDoc(m.pisoId),tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};if(txm)doc.tx=txm;
   /* DXF: la escala sale del dibujo (calibración de esta revisión) */
@@ -304,11 +351,11 @@ function plLkCarry(old,crop,v1){const L=old.lk.map(l=>({...l}));
 const etoOn=()=>PLF.src==='eto';
 const etoScName=sc=>conOf(sc).name;
 function plFiltered(noQ){const q=noQ?'':plUp(PLF.q).trim();const words=q?q.split(/\s+/):[];
-  if(etoOn())return [...PLB.values()].filter(p=>p.eto&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.sc||p.sc===PLF.sc)&&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))
+  if(etoOn())return [...PLB.values()].filter(p=>p.eto&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.sc||p.sc===PLF.sc)&&(!PLF.piso||(PLF.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(PLF.piso)))
       &&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,etoScName(p.sc)].join(' ')).includes(w))))
     .sort((a,b)=>etoScName(a.sc).localeCompare(etoScName(b.sc),'es')||plCodCmp(a,b)||String(a.tit).localeCompare(String(b.tit),'es',{numeric:true}));
   return [...PLB.values()].filter(p=>!p.eto).filter(p=>(!PLF.al||plAlPend(p))&&(PLF.arch?!!p.arch:!p.arch)&&(!PLF.disc||p.disc===PLF.disc)&&(!PLF.tipo||p.tipo===PLF.tipo)
-    &&(!PLF.piso||(PLF.piso==='-'?!p.pisoId:p.pisoId===PLF.piso))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
+    &&(!PLF.piso||(PLF.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(PLF.piso)))&&(!words.length||words.every(w=>plUp([p.cod,p.tit,p.fname,p.niv,PL_DN[p.disc]].join(' ')).includes(w))))
     .sort((a,b)=>PL_DISC.findIndex(d=>d[0]===a.disc)-PL_DISC.findIndex(d=>d[0]===b.disc)||plCodCmp(a,b))}
 function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn()?'t':'');
   if(main.dataset.built!==bk){main.dataset.built=bk;
@@ -334,7 +381,7 @@ function renderPBib(main){plSub();const eo=etoOn(),bk='pbib'+(eo?'e':'')+(plTxOn
   /* opciones de los filtros (cambian con los pisos y con los planos cargados) */
   const act=plAct();const ds=PL_DISC.filter(d=>act.some(p=>p.disc===d[0])||PLF.disc===d[0]);
   const opt=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
-  shx($('#plfp',main),opt('','Todos los pisos',PLF.piso)+pisos().map(p=>opt(p.id,p.code+' · '+p.name,PLF.piso)).join('')+opt('-','Generales (sin piso)',PLF.piso));
+  shx($('#plfp',main),opt('',plLvOn()?'Todos los niveles':'Todos los pisos',PLF.piso)+plLvList().map(p=>opt(p.id,p.code+' · '+p.name,plLvIn(PLF.piso))).join('')+opt('-',plLvOn()?'Generales (sin nivel)':'Generales (sin piso)',PLF.piso));
   if(eo){const scs=[...new Set(etoAct().map(p=>p.sc))].sort((a,b)=>etoScName(a).localeCompare(etoScName(b),'es'));if(PLF.sc&&!scs.includes(PLF.sc))scs.push(PLF.sc);
     shx($('#plfs',main),(scs.length>1||!scs.length?opt('','Todos los SC',PLF.sc):'')+scs.map(c=>opt(c,etoScName(c),PLF.sc)).join(''))}
   else{shx($('#plfd',main),opt('','Todas las especialidades',PLF.disc)+ds.map(d=>opt(d[0],d[1],PLF.disc)).join(''));
@@ -354,7 +401,7 @@ function plList(main){const host=$('#pllist',main);if(!host)return;
   const g=new Map();L.forEach(p=>{const k=p.eto?p.sc:p.disc;if(!g.has(k))g.set(k,[]);g.get(k).push(p)});
   const h=[...g].map(([d,ps])=>`<h3 class="plg">${ps[0].eto?`<i class="etosw" style="background:${esc(conOf(d).color||'#9AA0A6')}"></i>${esc(etoScName(d))}`:esc(PL_DN[d]||d)} <span>${ps.length}</span></h3><div class="plgrid">${ps.map(p=>`<button type="button" class="plc" data-pl="${esc(p.id)}" title="${esc(p.fname||'')}">
       <span class="plth"><img data-th="${esc(p.base+'/th.webp')}" alt="" loading="lazy"></span>
-      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plPisoName(p.pisoId)||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}${plAlTag(p)}</small></span></button>`).join('')}</div>`).join('');
+      <span class="plci"><b class="mono">${esc(p.cod)}</b><span>${esc(p.tit||'Sin título')}</span><small>${esc([p.eto?'':p.tipo,plLvName(plLvOf(p))||(p.niv?p.niv:'General'),'R'+(p.rev||1)].filter(Boolean).join(' · '))}${plOffTag(p)}${plAlTag(p)}</small></span></button>`).join('')}</div>`).join('');
   const hh=alb+h;if(host.dataset.h!==hh){host.innerHTML=hh;host.dataset.h=hh;plThumbs(host)}}
 function plThumbs(host){if(host._io)host._io.disconnect();
   const load=img=>{const p=img.dataset.th;if(!p||img.dataset.ld)return;img.dataset.ld='1';plThumb(p).then(u=>{img.src=u;img.classList.add('ok')},()=>{img.dataset.ld='';img.closest('.plth').classList.add('err')})};
@@ -579,7 +626,7 @@ let PLV=null;
 function plOpen(id,list,opt){const p=PLB.get(id);if(!p)return;plClose(true);opt=opt||{};
   const box=document.createElement('div');box.className='plv';box.id='plv';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.tabIndex=-1;
   PLV={id,list:list&&list.length?list:[id],box,rev:p.rev||1,tv:null,ret:document.activeElement,panel:false,view:null,canDock:!!opt.dock,tab:opt.tab||'look',hq:opt.hq||null,hits:null,dock:false,piso0:opt.piso,
-    pf:{piso:p.pisoId||'',disc:'',tipo:'',q:'',...store.get('plvf',{}),...(p.pisoId?{piso:p.pisoId}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
+    pf:{piso:plLvOf(p),disc:'',tipo:'',q:'',...store.get('plvf',{}),...(plLvOf(p)?{piso:plLvOf(p)}:{})}};document.body.appendChild(box);if(opt.dock&&!isMob())plDockSet(true,true);plvDraw();box.focus();
   box.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(PLV.panel){PLV.panel=false;plvPanel();PLV.box.focus()}else if(pldEsc()){}else if(plkEsc()){}else if(PLM.on){plmToggle()}else plClose();return}
     if(e.target.closest('input,select,textarea,[contenteditable]'))return;
     if(e.key==='ArrowRight'){plStep(1)}else if(e.key==='ArrowLeft'){plStep(-1)}
@@ -591,12 +638,12 @@ function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.
   const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev,dxf:r.dxf||null,fix:r.fix||null}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
   const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()];
-  const sib=p.eto?[]:plSameSpot(p),up=p.eto?null:plFloorStep(p,1),dn=p.eto?null:plFloorStep(p,-1);const pc=id=>esc((S.pis.get(id)||ARCH.pis.get(id)||{}).code||'');
+  const sib=p.eto?[]:plSameSpot(p),up=p.eto?null:plFloorStep(p,1),dn=p.eto?null:plFloorStep(p,-1);const pc=q=>esc(plLvCode(plLvOf(q)));
   PLV.box.innerHTML=`<div class="plvh">
     ${p.eto?'':`<button class="ib plvmenu${PLV.panel?' on':''}" data-pv="menu" aria-expanded="${PLV.panel}" title="Buscar y filtrar planos sin salir">☰ Planos</button>`}
     ${plkBackBtn()}
     <button class="ib" data-pv="prev" aria-label="Plano anterior"${n<2?' disabled':''}>‹</button>
-    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plPisoName(p.pisoId)||p.niv||'General']).filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
+    <div class="plvt"><b class="mono">${esc(p.cod)}</b> <span>${esc(p.tit||'')}</span><small>${esc((p.eto?['ETO · '+etoScName(p.sc)]:[PL_DN[p.disc]||p.disc,p.tipo]).concat([plLvName(plLvOf(p))||p.niv||'General']).filter(Boolean).join(' · '))}${n>1?` · ${i+1} de ${n}`:''}</small></div>
     <button class="ib" data-pv="next" aria-label="Plano siguiente"${n<2?' disabled':''}>›</button>
     <span class="plvsp"></span>
     ${revs.length>1?`<select class="tin" data-pv="rev" aria-label="Revisión">${revs.map(r=>`<option value="${r.rev}"${r.rev===sp.rev?' selected':''}>Rev. ${r.rev}${r.cur?' (vigente)':''}</option>`).join('')}</select>`:`<span class="plvr">Rev. ${sp.rev}</span>`}
@@ -612,7 +659,7 @@ function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSp
     ${PLV.canDock&&!isMob()?`<button class="ib" data-pv="dock" title="${PLV.dock?'Agrandar a pantalla completa':PLV.tab==='mapa'?'Volver al lado del plan diario':'Volver al lado del lookahead'}" aria-label="${PLV.dock?'Pantalla completa':'Al lado'}">${PLV.dock?'⛶':'◧'}</button>`:''}
     <button class="ib" data-pv="x" aria-label="Cerrar">✕</button></div>
     ${sp.cur&&(sib.length>1||up||dn)?`<div class="plvq">${sib.length>1?`<span class="plvql" title="Abre otra especialidad del mismo piso en la misma zona y con el mismo zoom">Mismo punto</span>${sib.map(q=>`<button type="button" class="plchip${q.id===p.id?' on':''}" data-pj="${esc(q.id)}" title="${esc(q.cod+' · '+(q.tit||''))}"><b>${esc(q.disc)}</b> ${esc(q.cod)}</button>`).join('')}`:''}
-      <span class="plvsp"></span>${dn?`<button type="button" class="plchip" data-pj="${esc(dn.id)}" title="Piso de abajo, misma zona: ${esc(dn.cod+' · '+(dn.tit||''))}">▼ ${pc(dn.pisoId)}</button>`:''}${up?`<button type="button" class="plchip" data-pj="${esc(up.id)}" title="Piso de arriba, misma zona: ${esc(up.cod+' · '+(up.tit||''))}">▲ ${pc(up.pisoId)}</button>`:''}</div>`:''}
+      <span class="plvsp"></span>${dn?`<button type="button" class="plchip" data-pj="${esc(dn.id)}" title="Piso de abajo, misma zona: ${esc(dn.cod+' · '+(dn.tit||''))}">▼ ${pc(dn)}</button>`:''}${up?`<button type="button" class="plchip" data-pj="${esc(up.id)}" title="Piso de arriba, misma zona: ${esc(up.cod+' · '+(up.tit||''))}">▲ ${pc(up)}</button>`:''}</div>`:''}
     ${sp.cur?'':`<div class="plvold">Estás viendo la <b>revisión ${sp.rev}</b>, que ya no es la vigente (vigente: rev. ${p.rev||1}).</div>`}
     <div class="plvb"></div>
     <div class="plvf">${esc(sp.fname||'')}${sp.ts?' · cargado '+esc(ldt(sp.ts))+(sp.byN?' por '+esc(sp.byN):''):''}${p.rot&&p.rot.cod&&!p.rot.ok?` · <b class="plwarn">El rótulo dice ${esc(p.rot.cod)}</b>`:''}</div>`;
@@ -654,9 +701,9 @@ function lkPlanoBtn(){const b=$('#fplano');if(b)b.classList.toggle('on',!!(PLV&&
   /* Plan diario › Reunión: redibuja el botón «◫ Planos» y vuelve a encuadrar (el plano del día cambió de ancho) */
   if(U.tab==='mapa'&&window.__plano){requestRender();if(window.__plano.meetRefit)window.__plano.meetRefit()}}
 /** láminas del piso ordenadas (especialidad, código) */
-function plFloorList(piso){return plAct().filter(q=>piso?q.pisoId===piso:true).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
+function plFloorList(piso){piso=plLvIn(piso);return plAct().filter(q=>piso?plLvOf(q)===piso:true).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 /** la lámina a mostrar para un piso: con ref, la misma especialidad y tipo (título más parecido); si no, planta de arquitectura */
-function plPickFor(piso,ref){const L=plFloorList(piso).filter(q=>piso?true:!q.pisoId);if(!L.length)return null;
+function plPickFor(piso,ref){const L=plFloorList(piso).filter(q=>piso?true:!plLvOf(q));if(!L.length)return null;
   if(ref){const c=L.filter(q=>q.disc===ref.disc&&q.tipo===ref.tipo);if(c.length){c.sort((a,b)=>plSim(b,ref)-plSim(a,ref)||plCodCmp(a,b));return c[0]}}
   return L.find(q=>q.tipo==='Planta'&&q.disc==='ARQ')||L.find(q=>q.tipo==='Planta')||L[0]}
 function lkPlano(){if(!canPla())return;if(PLV&&PLV.canDock){plClose();return}plDockOpen(U.piso||'','look')}
@@ -678,16 +725,16 @@ const plWords=t=>new Set(plUp(t).replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(
 function plSim(a,b){const A=plWords(a.tit),B=plWords(b.tit);let n=0;A.forEach(w=>{if(B.has(w))n++});return n}
 const plDiscIx=d=>{const i=PL_DISC.findIndex(x=>x[0]===d);return i<0?99:i};
 /** láminas del mismo piso y tipo (una por especialidad y por código): para cambiar de especialidad en la misma zona */
-function plSameSpot(p){if(!p.pisoId)return[];return plAct().filter(q=>q.pisoId===p.pisoId&&q.tipo===p.tipo).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
+function plSameSpot(p){const v=plLvOf(p);if(!v)return[];return plAct().filter(q=>plLvOf(q)===v&&q.tipo===p.tipo).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 /** misma especialidad y tipo en el piso de arriba (d=1) o de abajo (d=-1), con el título más parecido (agua ↔ agua, desagüe ↔ desagüe) */
-function plFloorStep(p,d){if(!p.pisoId)return null;const ps=pisos().map(x=>x.id);const i=ps.indexOf(p.pisoId);if(i<0)return null;
-  for(let k=i+d;k>=0&&k<ps.length;k+=d){const c=plAct().filter(q=>q.pisoId===ps[k]&&q.disc===p.disc&&q.tipo===p.tipo);if(c.length){c.sort((a,b)=>plSim(b,p)-plSim(a,p)||plCodCmp(a,b));return c[0]}}return null}
+function plFloorStep(p,d){const v=plLvOf(p);if(!v)return null;const ps=plLvList().map(x=>x.id);const i=ps.indexOf(v);if(i<0)return null;
+  for(let k=i+d;k>=0&&k<ps.length;k+=d){const c=plAct().filter(q=>plLvOf(q)===ps[k]&&q.disc===p.disc&&q.tipo===p.tipo);if(c.length){c.sort((a,b)=>plSim(b,p)-plSim(a,p)||plCodCmp(a,b));return c[0]}}return null}
 /** cambia de lámina sin salir; keep: conserva la zona y el zoom (las láminas de un piso tienen el mismo formato y encuadre) */
 function plJump(id,keep){const q=PLB.get(id);if(!q||!PLV)return;PLV.view=keep&&PLV.tv?PLV.tv.getView():null;
-  /* con los saltos de «mismo punto» y ▲▼ el filtro de piso del panel sigue al plano */if(keep&&PLV.pf.piso&&PLV.pf.piso!=='-'&&q.pisoId)PLV.pf.piso=q.pisoId;PLV.id=id;PLV.rev=q.rev||1;PLV.back=[];
+  /* con los saltos de «mismo punto» y ▲▼ el filtro de piso del panel sigue al plano */if(keep&&PLV.pf.piso&&PLV.pf.piso!=='-'&&plLvOf(q))PLV.pf.piso=plLvOf(q);PLV.id=id;PLV.rev=q.rev||1;PLV.back=[];
   if(!PLV.list.includes(id))PLV.list=[...PLV.list,id];plvDraw()}
 function plvRes(noQ){const f=PLV.pf,w=noQ?[]:plUp(f.q).trim().split(/\s+/).filter(Boolean);
-  return plAct().filter(p=>(!f.piso||(f.piso==='-'?!p.pisoId:p.pisoId===f.piso))&&(!f.disc||p.disc===f.disc)&&(!f.tipo||p.tipo===f.tipo)
+  return plAct().filter(p=>(!f.piso||(f.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(f.piso)))&&(!f.disc||p.disc===f.disc)&&(!f.tipo||p.tipo===f.tipo)
     &&(!w.length||w.every(x=>plUp([p.cod,p.tit,p.fname,PL_DN[p.disc]].join(' ')).includes(x)))).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const mb=PLV.box.querySelector('.plvmenu');if(mb){mb.classList.toggle('on',PLV.panel);mb.setAttribute('aria-expanded',PLV.panel)}
   if(!PLV.panel){if(el)el.remove();return}
@@ -701,19 +748,19 @@ function plvPanel(){if(!PLV)return;let el=PLV.box.querySelector('.plvp');const m
   el.style.top=(body?body.offsetTop:56)+'px';const tm=PLV.pf.qm==='tx';
   el.querySelectorAll('.plqm [data-qm]').forEach(b=>{const on=(b.dataset.qm==='tx')===tm;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
   el.querySelector('input').placeholder=tm?'Buscar dentro: DET. 4, V-101…':'Buscar: IS07, bombas, cortes…';
-  const f=PLV.pf,act=plAct();const inP=act.filter(p=>!f.piso||(f.piso==='-'?!p.pisoId:p.pisoId===f.piso));
+  const f=PLV.pf,act=plAct();const inP=act.filter(p=>!f.piso||(f.piso==='-'?!plLvOf(p):plLvOf(p)===plLvIn(f.piso)));
   const chip=(k,v,l,t)=>`<button type="button" class="plchip${f[k]===v?' on':''}" data-pf="${k}:${esc(v)}"${t?` title="${esc(t)}"`:''}>${esc(l)}</button>`;
-  const ps=pisos().filter(x=>act.some(p=>p.pisoId===x.id));const gen=act.some(p=>!p.pisoId);
+  const ps=plLvList().filter(x=>act.some(p=>plLvOf(p)===x.id));const gen=act.some(p=>!plLvOf(p));
   const ds=PL_DISC.filter(d=>inP.some(p=>p.disc===d[0]));const ts=PL_TIPOS.filter(t=>inP.some(p=>p.tipo===t&&(!f.disc||p.disc===f.disc)));
   if(f.disc&&!ds.some(d=>d[0]===f.disc))f.disc='';
-  el.querySelector('.plvpf').innerHTML=`<div class="plvps"><span>Piso</span>${chip('piso','','Todos')}${ps.map(x=>chip('piso',x.id,x.code,x.name)).join('')}${gen?chip('piso','-','Gen.','Generales (sin piso)'):''}</div>
+  el.querySelector('.plvpf').innerHTML=`<div class="plvps"><span>${plLvLbl()}</span>${chip('piso','','Todos')}${ps.map(x=>chip('piso',x.id,x.code,x.name)).join('')}${gen?chip('piso','-','Gen.','Generales (sin piso)'):''}</div>
     <div class="plvps"><span>Especialidad</span>${chip('disc','','Todas')}${ds.map(d=>chip('disc',d[0],d[0],d[1])).join('')}</div>
     <div class="plvps"><span>Tipo</span>${chip('tipo','','Todos')}${ts.map(t=>chip('tipo',t,t)).join('')}</div>`;
   plvPanelList(el)}
 function plvPanelList(el){const st=el.querySelector('.pltxst'),tq=PLV.pf.qm==='tx';
   if(tq&&plTxC(PLV.pf.q||'').length>=2){plTxPanelList(el,plvRes(true));return}if(st)shx(st,tq?'<span>Escribe al menos 2 letras o números para buscar dentro de las láminas.</span>':'');
   const L=plvRes(tq);const host=el.querySelector('.plvpl');
-  const h=L.length?L.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}<small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plPisoName(p.pisoId)||'General'].join(' · '))}</small></span></button>`).join('')
+  const h=L.length?L.map(p=>`<button type="button" class="plvpr${p.id===PLV.id?' on':''}" data-pg="${esc(p.id)}"><span class="plvpt"><img data-th="${esc(p.base+'/th.webp')}" alt=""></span><span class="plvpi"><b class="mono">${esc(p.cod)}</b> ${esc(p.tit||'')}<small>${esc([PL_DN[p.disc]||p.disc,p.tipo,plLvName(plLvOf(p))||'General'].join(' · '))}</small></span></button>`).join('')
     :'<p class="note">Ningún plano con esos filtros.</p>';
   if(host.dataset.h!==h){host.innerHTML=h;host.dataset.h=h;plThumbs(host);const on=host.querySelector('.plvpr.on');if(on)on.scrollIntoView({block:'nearest'})}}
 async function plPdf(p,sp,btn){btn.disabled=true;const t=btn.textContent;btn.textContent='Descargando…';
@@ -724,12 +771,12 @@ async function plPdf(p,sp,btn){btn.disabled=true;const t=btn.textContent;btn.tex
 function plEdit(p,btn){
   openPop(btn,`<div class="ph">${esc(p.cod)} · datos del plano</div><div class="plef">
     <label>Título<input class="tin" id="pleT" value="${esc(p.tit||'')}" maxlength="160"></label>
-    <label>Piso<select class="tin" id="pleP"><option value="">General (sin piso)</option>${pisos().map(x=>`<option value="${x.id}"${x.id===p.pisoId?' selected':''}>${esc(x.code+' · '+x.name)}</option>`).join('')}</select></label>
+    <label>${plLvLbl()}<select class="tin" id="pleP"><option value="">General (sin ${plLvLbl().toLowerCase()})</option>${plLvOpts(plLvOf(p))}</select></label>
     ${p.eto?'':`<label>Tipo<select class="tin" id="pleK">${PL_TIPOS.map(t=>`<option${t===p.tipo?' selected':''}>${t}</option>`).join('')}</select></label>`}
     <p class="note">${p.eto?'El subcontratista y el código identifican el ETO (las revisiones se reconocen por ellos); no se cambian aquí.':'El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.'}</p>
     ${p.arch?'':`<div class="plea plrot"><span>Girar la lámina</span><button class="ib" data-do="rl" title="Girar 90° a la izquierda">⟲ Izquierda</button><button class="ib" data-do="rr" title="Girar 90° a la derecha">⟳ Derecha</button></div>`}
     <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
-    {sv:async()=>{const d={tit:$('#pleT').value.trim(),pisoId:$('#pleP').value};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
+    {sv:async()=>{const d={tit:$('#pleT').value.trim(),...plLvDoc($('#pleP').value)};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
        try{await plCol(p).doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
      ua:async()=>{try{await plCol(p).doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
@@ -749,7 +796,7 @@ async function plRotate(p,q){if(!plEdOf(p)||plRotBusy)return;if(p.dxf){toast('Un
   try{say('bajando el PDF…');const blob=await plGet(p.base+'/orig.pdf');await plPdfJs();
     let cropAt=null;if(p.crop){const d=await window.pdfjsLib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;const v=(await d.getPage(1)).getViewport({scale:1});try{d.destroy()}catch(e){}cropAt=plRotCrop(p.crop,v.width,v.height,q)}
     const it={id:p.id,keep:true,q,pg:1,pgs:1,crop:!!p.crop,cropAt,file:new File([blob],(p.fname||p.cod||'lamina')+'.pdf',{type:'application/pdf'}),
-      m:{eto:!!p.eto,sc:p.sc||'',cod:p.cod||'',disc:p.disc||'',niv:p.niv||'',pisoId:p.pisoId||'',tipo:p.tipo||'Otro',tit:p.tit||'',eta:p.eta||''}};
+      m:{eto:!!p.eto,sc:p.sc||'',cod:p.cod||'',disc:p.disc||'',niv:p.niv||'',pisoId:plLvOf(p),tipo:p.tipo||'Otro',tit:p.tit||'',eta:p.eta||''}};
     const r=await plProcess(it,say);
     /* vínculos de OTRAS láminas que abren una zona de esta: la zona también gira */
     if(!p.eto){say('ajustando los vínculos que llegan a esta lámina…');const fx=L=>(L||[]).map(l=>l&&l.to===p.id&&l.v?{...l,v:plRotV(l.v,q)}:l);
@@ -803,7 +850,7 @@ const PQ={items:[],run:false,stop:false,t0:0,done:0,secs:[]};
 /** ETO: del nombre solo se intenta sacar el piso (N3, P03, PISO 3), un código corto al final (M02) y un título legible; todo se corrige en la tabla */
 function etoParse(fname){const n=fname.replace(/\.pdf$/i,'').replace(/-Model$/i,'');const toks=n.split(/[_\s]+|\s-\s/).filter(Boolean);
   let pisoId='';const pm=plUp(n).match(/(?:^|[^A-Z0-9])(?:N|P|PISO|NIVEL)\s*0?(\d{1,2})(?![0-9])/);
-  if(pm){const k=+pm[1];const p=pisos().find(x=>{const c=plUp(x.code).match(/(\d+)$/);return c&&+c[1]===k&&!/^S/.test(plUp(x.code))});if(p)pisoId=p.id}
+  if(pm){const k=+pm[1];const p=plLvOn()?plBld().find(x=>plNivKey(x)==='P'+k):pisos().find(x=>{const c=plUp(x.code).match(/(\d+)$/);return c&&+c[1]===k&&!/^S/.test(plUp(x.code))});if(p)pisoId=p.id}
   let cod='';for(let i=toks.length-1;i>=0;i--){const t=plUp(toks[i]).replace(/[^A-Z0-9-]/g,'');if(/^[A-Z]{1,3}-?\d{1,3}[A-Z]?$/.test(t)&&!/^(N|P)\d{1,2}$/.test(t)){cod=t;break}}
   const tit=toks.filter(t=>!/^\d[\d-]*$/.test(t)&&plUp(t)!==cod&&!/^ETO\d*$/i.test(t)&&!/^(N|P)\d{1,2}$/i.test(t)&&t!=='-').join(' ').replace(/\s+-\s*$/,'').trim();
   return{eto:true,sc:PQ.sc||'',cod,pisoId,tit:tit||n}}
@@ -855,7 +902,7 @@ function plqCheck(){const seen=new Map();
     it.st='pend';it.msg=old?`Nueva revisión (vigente: rev. ${old.rev||1})`:'Nuevo';
     if(seen.has(id))it.warn=`Mismo código que la fila ${seen.get(id)+1}: se cargará como la revisión siguiente.`;else seen.set(id,i);
     if(!m.eto&&it.pdfPgs>1)it.warn=(it.warn?it.warn+' ':'')+`El PDF tiene ${it.pdfPgs} hojas: solo se carga la primera (exporta una lámina por archivo).`;
-    if(!m.eto&&!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+'Planta sin piso: elige el piso si corresponde.'})}
+    if(!m.eto&&!m.pisoId&&m.tipo==='Planta')it.warn=(it.warn?it.warn+' ':'')+(plLvOn()?'Planta sin nivel: elige el nivel.':'Planta sin piso: elige el piso si corresponde.')})}
 let plqT=0;
 function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)return;
   const I=PQ.items,cnt=k=>I.filter(x=>x.st===k).length;const pend=cnt('pend'),ok=cnt('ok'),err=cnt('err'),bad=cnt('bad'),skip=cnt('skip');
@@ -868,7 +915,7 @@ function plqDraw(force){const bar=$('#plqbar'),tab=$('#plqtab');if(!bar||!tab)re
 function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
   if(!I.length){shx(tab,'');return}
   const dsel=v=>`<option value="">—</option>`+PL_DISC.map(d=>`<option value="${d[0]}"${d[0]===v?' selected':''}>${esc(d[1])}</option>`).join('');
-  const psel=v=>`<option value="">General</option>`+pisos().map(p=>`<option value="${p.id}"${p.id===v?' selected':''}>${esc(p.code)}</option>`).join('');
+  const psel=v=>`<option value="">General</option>`+plLvOpts(v,true);
   const tsel=v=>PL_TIPOS.map(t=>`<option${t===v?' selected':''}>${t}</option>`).join('');
   const ST={pend:'',run:'run',ok:'ok',err:'err',bad:'bad',skip:'skip'};
   const csel=v=>`<option value="">—</option>`+[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>`<option value="${esc(c.id)}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');
@@ -888,7 +935,7 @@ function plqTable(tab){const I=PQ.items;tab.dataset.n=String(I.length);
       <td><input class="tin" data-f="tit" value="${esc(m.tit)}"${dis}></td>
       <td class="plst" id="plst${i}">${esc(it.msg)}${it.warn?`<small class="plwarn">${esc(it.warn)}</small>`:''}</td>
       <td class="plra"><button class="ib" data-vw="${i}" aria-label="Ver la lámina" title="Ver la lámina para completar los datos">👁</button>${rb(it,i,lock)}${lock?'':`<button class="ib" data-rm="${i}" aria-label="Quitar de la lista" title="Quitar">✕</button>`}</td></tr>`}).join('');
-  const hd=eo?'<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>Piso</th><th>Título</th><th>Estado</th><th></th>':'<th>Archivo</th><th>Código</th><th>Especialidad</th><th>Piso</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>';
+  const hd=eo?`<th>Archivo</th><th>Subcontratista</th><th>Código</th><th>${plLvLbl()}</th><th>Título</th><th>Estado</th><th></th>`:`<th>Archivo</th><th>Código</th><th>Especialidad</th><th>${plLvLbl()}</th><th>Tipo</th><th>Título</th><th>Estado</th><th></th>`;
   shx(tab,`<div class="pltw"><table class="plt"><thead><tr>${hd}</tr></thead><tbody>${rows}</tbody></table></div>`)}
 /* ---------- Vista previa en la carga (oct 2026, pedido del dueño) ----------
    👁 en cada fila: la lámina se dibuja desde el PDF en esta PC (sin subir nada) con zoom y desplazamiento, y al lado los datos de
@@ -925,7 +972,7 @@ function plqSync(){plqCheck();plqDraw(true);const t=PQ.items[PLP.i];if(t&&PLP.bo
 const plqPrevSub=t=>`Fila ${PLP.i+1} de ${PQ.items.length} · ${t.msg||''}${t.warn?' · '+t.warn:''}`;
 function plqPrevForm(it){const m=it.m,dis=it.st==='run'||it.st==='ok'?' disabled':'';
   const o=(v,l,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(l)}</option>`;
-  const piso=`<label>Piso<select class="tin" data-f="pisoId"${dis}>${o('','General (sin piso)',m.pisoId)}${pisos().map(p=>o(p.id,p.code+' · '+p.name,m.pisoId)).join('')}</select></label>`;
+  const piso=`<label>${plLvLbl()}<select class="tin" data-f="pisoId"${dis}>${o('',`General (sin ${plLvLbl().toLowerCase()})`,m.pisoId)}${plLvOpts(m.pisoId)}</select></label>`;
   const cod=`<label>Código<input class="tin mono" data-f="cod" value="${esc(m.cod||'')}"${dis}></label>`,tit=`<label>Título<textarea class="tin" data-f="tit" rows="3"${dis}>${esc(m.tit||'')}</textarea></label>`;
   if(m.eto)return`<label>Subcontratista<select class="tin" data-f="sc"${dis}>${o('','—',m.sc)}${[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>o(c.id,c.name,m.sc)).join('')}</select></label>${cod}${piso}${tit}`;
   return`${cod}<label>Especialidad<select class="tin" data-f="disc"${dis}>${o('','—',m.disc)}${PL_DISC.map(d=>o(d[0],d[1],m.disc)).join('')}</select></label>${piso}<label>Tipo<select class="tin" data-f="tipo"${dis}>${PL_TIPOS.map(t=>o(t,t,m.tipo)).join('')}</select></label>${tit}`}

@@ -266,7 +266,7 @@ function ctFrMenu(btn,fid){openPop(btn,`<div class="ph">${esc(ctFrName(fid))}</d
 /** cfg {model, to, gap (días hábiles entre niveles), rep (reemplazar lo programado desde mañana en los niveles siguientes)} */
 function ctProjPlan(fid,cfg){const LV=ctLevels(fid);const m=LV.findIndex(p=>p.id===cfg.model),to=LV.findIndex(p=>p.id===cfg.to);const out={ops:[],add:0,rem:0,past:0,rows:0,per:[],cruce:0,warn:''};
   if(m<0||to<=m){out.warn='Elige un nivel destino por encima del modelo.';return out}
-  const ws=ctWS();const R=ctRows(fid);const t=todayIso();const gap=Math.max(0,+cfg.gap||0);const per=LV.map(p=>({id:p.id,tag:p.tc||p.code||p.name,had:0,nw:0,rem:0}));
+  const ws=ctWS();const R=ctRows(fid);const t=todayIso();const gap=Math.max(0,+cfg.gap||0);const per=LV.map(p=>({id:p.id,tag:csTcOf(p)||p.name,had:0,nw:0,rem:0}));
   for(const row of R){const L=wsRow(ws,fid,row.k);const inM=L.filter(y=>ctLvIdx(fid,S.amb.get(y.ambId))===m&&(y.days||[]).length);if(!inM.length)continue;out.rows++;
     /* último sector del modelo en la fila y cuántos días dura */
     let lastD='',last=null;for(const y of inM){const d=y.days[y.days.length-1];const a=S.amb.get(y.ambId);if(d>lastD||(d===lastD&&csAmbIdx(a)>csAmbIdx(last))){lastD=d;last=a}}
@@ -286,7 +286,7 @@ function ctProjPlan(fid,cfg){const LV=ctLevels(fid);const m=LV.findIndex(p=>p.id
 function ctProjOpen(fid){if(!ctEd()){toast('Para proyectar entra a ✎ Programar.');return}const LV=ctLevels(fid);
   const withActs=new Set(ctLive().filter(y=>ctFrOfAct(y)===fid&&(y.days||[]).length).map(y=>(csSecOf(S.amb.get(y.ambId))||{}).pisoId));
   const model=(LV.find(p=>withActs.has(p.id))||LV[0]||{}).id;if(!model){toast('Este frente no tiene niveles.');return}
-  const lv=sel=>LV.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.tc||p.code||'')} · ${esc(p.name)}${withActs.has(p.id)?' ●':''}</option>`).join('');
+  const lv=sel=>LV.map(p=>`<option value="${p.id}"${p.id===sel?' selected':''}>${esc(csTcOf(p))} · ${esc(p.name)}${withActs.has(p.id)?' ●':''}</option>`).join('');
   const m=document.createElement('div');m.className='lqm';m.id='ctpm';m.innerHTML=`<div class="lqc csgen" role="dialog" aria-modal="true" aria-labelledby="ctpt"><h3 id="ctpt">Proyectar el tren · ${esc(ctFrName(fid))}</h3>
     <p class="note">Cada fila continúa su serie desde el último sector que tiene en el nivel modelo: el sector siguiente, y al terminar los sectores, el nivel siguiente. Cada sector dura lo mismo que en la fila (si pusiste S1 dos días, todos duran dos). Hoy y lo pasado no se tocan; se deshace con un solo Deshacer.</p>
     <div class="csgf"><label>Nivel modelo<select id="ctp_m">${lv(model)}</select></label><label>Proyectar hasta<select id="ctp_to">${lv((LV[LV.length-1]||{}).id)}</select></label>

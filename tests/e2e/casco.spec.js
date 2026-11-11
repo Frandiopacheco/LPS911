@@ -223,9 +223,13 @@ test('casco: niveles en Configuración: editar códigos, agregar antes y despué
   const errors = await casco(page);
   await cargarEjemplo(page);
   await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
-  const t3 = page.locator('[data-cslv="tc"][data-id="n3"]');
-  await t3.fill('T-3'); await t3.blur();
-  await expect.poll(() => page.evaluate(() => S.pis.get('n3').tc)).toBe('T-3');
+  /* el código arrastra el techo y el piso (ya no se escriben aparte) */
+  const c3 = page.locator('[data-cslv="code"][data-id="n3"]');
+  await c3.fill('N33'); await c3.blur();
+  await expect.poll(() => page.evaluate(() => S.pis.get('n3').tc + ' ' + S.pis.get('n3').pc)).toBe('T33 P33');
+  await page.evaluate(() => undo());
+  await expect.poll(() => page.evaluate(() => S.pis.get('n3').code)).toBe('N3');
+  expect(await page.locator('[data-cslv="tc"]').count()).toBe(0);
   page.once('dialog', d => d.accept('Sótano 2'));
   await page.locator('[data-cs="lvadd"][data-id="n0"][data-d="0"]').click();
   await expect.poll(() => page.evaluate(() => pisos()[0].name)).toBe('Sótano 2');
@@ -247,6 +251,48 @@ test('casco: niveles en Configuración: editar códigos, agregar antes y despué
   expect(errors).toEqual([]);
 });
 
+
+test('casco: niveles del edificio: una sola lista para Planos y Last Planner (sugerencia, «No tiene», sin repetir, aviso)', async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
+  const P = (cod, disc, x) => ['plb', disc + '_' + cod, { cod, disc, tit: 'Planta', tipo: 'Planta', rev: 1, base: 'planos/' + cod + '/r1', W: 4000, H: 3000, Z: 1, revs: [], ...x }];
+  const errors = await openApp(page, { as: 'admin', extra: [P('E-01', 'EST', { niv: 'CIM' }), P('A-01', 'ARQ', { pisoId: 'p1' }), P('E-09', 'EST', { niv: '' })] });
+  await cargarEjemplo(page);
+  /* clave de un nivel por su nombre o código */
+  expect(await page.evaluate(() => [{ name: 'Primer piso', code: 'P1' }, { name: 'Sótano', code: 'S' }, { name: 'Piso técnico', code: 'PT' }, { name: 'Azotea' }, { name: 'Cimentación', code: 'C' }, { name: 'Nivel 3', code: 'N3' }, { name: 'Piso 2', code: 'P2' }].map(plNivKey).join())).toBe('P1,S1,PT,AZ,CIM,P3,P2');
+  /* techo y piso de un código nuevo, como los lleva el nivel de referencia */
+  expect(await page.evaluate(() => [csLvTags({ code: 'P1', tc: 'TP1', pc: 'PP1' }, 'P7'), csLvTags({ code: 'N3', tc: 'T3', pc: 'P3' }, 'N9')].map(x => x.join(' ')).join())).toBe('TP7 PP7,T9 P9');
+  await page.evaluate(() => { U.tab = 'cfg'; U.cfgV = 'cas'; render(); });
+  await expect.poll(() => page.locator('[data-cs="lp"][data-id="n1"] option').count()).toBeGreaterThan(2);
+  /* sugerencia por el nombre: Nivel 1 ↔ Primer piso */
+  await expect(page.locator('[data-cs="lpok"][data-id="n1"]')).toHaveAttribute('data-lp', 'p1');
+  /* un piso mal elegido: aviso, y ya no se ofrece en otro nivel */
+  await page.locator('[data-cs="lp"][data-id="n2"]').selectOption('p1');
+  await expect.poll(() => page.evaluate(() => S.pis.get('n2').lp)).toBe('p1');
+  await expect(page.locator('tr:has([data-cs="lp"][data-id="n2"]) .csbal.warn')).toBeVisible();
+  await expect(page.locator('[data-cs="lp"][data-id="n1"] option[value="p1"]')).toHaveCount(0);
+  expect(await page.evaluate(() => plLvOf(PLB.get('ARQ_A-01')))).toBe('n2');/* plano de antes: se ubica por su piso de Last Planner */
+  expect(await page.evaluate(() => { csLpSet('n3', 'p1'); return S.pis.get('n3').lp || ''; })).toBe('');/* nunca dos niveles con el mismo piso */
+  /* «No tiene» es distinto de «falta elegir» */
+  await page.locator('[data-cs="lp"][data-id="n0"]').selectOption('-');
+  await expect.poll(() => page.evaluate(() => S.pis.get('n0').lp)).toBe('-');
+  /* se corrige: el plano sigue al nivel */
+  await page.locator('[data-cs="lp"][data-id="n2"]').selectOption('p2');
+  await page.locator('[data-cs="lpok"][data-id="n1"]').click();
+  await expect.poll(() => page.evaluate(() => S.pis.get('n1').lp)).toBe('p1');
+  await expect(page.locator('.cslp .csbal.warn')).toHaveCount(0);
+  expect(await page.evaluate(() => plLvOf(PLB.get('ARQ_A-01')))).toBe('n1');
+  await expect(page.locator('[data-cs="lvok"][data-id="n1"][data-disc="ARQ"]')).toHaveAttribute('data-plb', 'ARQ_A-01');
+  /* en Planos se elige el nivel del edificio: guarda el nivel y el piso de Last Planner de ese nivel; un nivel sin Last Planner, solo el nivel */
+  expect(await page.evaluate(() => plLvList().map(x => x.id).slice(0, 3).join())).toBe('n0,n1,n2');
+  expect(await page.evaluate(() => [plLvDoc('n1'), plLvDoc('n0')])).toEqual([{ nv: 'n1', pisoId: 'p1' }, { nv: 'n0', pisoId: '' }]);
+  await page.evaluate(() => plCol(PLB.get('EST_E-09')).doc('EST_E-09').update(plLvDoc('n0')));
+  await expect.poll(() => page.evaluate(() => plLvOf(PLB.get('EST_E-09')))).toBe('n0');
+  expect(await page.evaluate(() => plLvOf(PLB.get('EST_E-01')))).toBe('');/* sin cimentación en la lista: sin nivel */
+  /* «General» se respeta: no vuelve a adivinarse por el código del nombre */
+  await page.evaluate(() => plCol(PLB.get('ARQ_A-01')).doc('ARQ_A-01').update({ niv: 'P1', ...plLvDoc('') }));
+  await expect.poll(() => page.evaluate(() => plLvOf(PLB.get('ARQ_A-01')))).toBe('');
+  expect(errors).toEqual([]);
+});
 
 test('casco: Niveles sugiere y vincula el encofrado (EST) y la arquitectura (ARQ) de cada nivel desde el módulo Planos', async ({ page }) => {
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e.ns')) { localStorage.setItem('lps.ns', 'cs'); sessionStorage.setItem('e2e.ns', '1'); } } catch (e) {} });
@@ -306,7 +352,7 @@ test('casco: «+ Agregar niveles arriba» acepta un nombre o una cantidad', asyn
   page.once('dialog', d => d.accept('Azotea'));
   await page.locator('[data-cs="lvnew"]').click();
   await expect.poll(() => page.evaluate(() => pisos().at(-1).name)).toBe('Azotea');
-  expect(await page.evaluate(() => pisos().at(-1).code)).toBe('A');
+  expect(await page.evaluate(() => pisos().at(-1).code)).toBe('AZ');
   page.once('dialog', d => d.accept('2'));
   await page.locator('[data-cs="lvnew"]').click();
   await expect.poll(() => page.evaluate(() => pisos().length)).toBe(12);
