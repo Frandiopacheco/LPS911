@@ -358,3 +358,37 @@ test('planos DXF: el grosor de las líneas sale de la escala del plano (textos d
   expect(r[0].w).toBeCloseTo(0.025, 4); expect(r[1].w).toBeCloseTo(0.05, 4); expect(r[2].w).toBeCloseTo(0.01, 4);
   expect(errors).toEqual([]);
 });
+
+/* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
+   identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
+test('alistar › arquitectura: se calibra con los ejes de estructura, el contorno es opcional y los ejes girados no bloquean', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(([m, gir]) => {
+    const mk = (t, disc) => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
+      return { S, G, lay, p: { id: disc + '_X', cod: disc === 'ARQ' ? 'A03' : 'E03', disc, tipo: 'Planta', pisoId: 'P3', rev: 1, mm: S.mm, dxf: { k: S.k, mpp: S.mpp, lay, src: S.src, crop: S.crop, far: S.far } } }; };
+    const E = mk(m, 'EST'), A = mk(gir, 'ARQ');
+    const chk = (X, o) => { const C = dxfCheck({ p: X.p, G: X.G, lay: X.lay, mpp: X.S.mpp, malla: null, ctn: null, ...o }); return { C, by: Object.fromEntries(C.it.map(x => [x.id, x])) }; };
+    const mineE = chk(E).C.mine;
+    /* la malla de estructura corrida 3 cm: dentro de la holgura de arquitectura (5 cm) */
+    const M = { id: 'EST_X', cod: 'E03', ok: { ej: mineE.map(e => ({ ...e, p: [e.p[0] + 0.03, e.p[1], e.p[2] + 0.03, e.p[3]] })) } };
+    const ok = chk(A, { malla: M }), recta = chk(mk(m, 'ARQ'), { malla: M });
+    const lejos = chk(A, { malla: { ...M, ok: { ej: mineE.map(e => e.n === 'C' ? { ...e, p: [e.p[0] + 0.2, e.p[1], e.p[2] + 0.2, e.p[3]] } : e) } } });
+    const nada = chk(A, { malla: { ...M, ok: { ej: mineE.map(e => ({ ...e, n: 'Z' + e.n })) } } });
+    const esp = chk(A, { estDxf: true });
+    const esc = chk(mk(m, 'ARQ'), { malla: { ...M, ok: { ej: mineE.map(e => ({ ...e, p: e.p.map(v => v * 1.02) })) } } });
+    const ejE = ok.C.ejM.find(e => e.n === 'E'), mpp = A.S.mpp;
+    return { ids: ok.C.it.map(x => x.id), malla: ok.by.malla, recta: recta.by.malla, ctn: ok.by.ctn.st, amb: ok.by.amb.msg, fit: !!ok.C.fit, nEjM: ok.C.ejM.length,
+      recto: Math.abs(ejE.p[0] - ejE.p[2]) * mpp, lejos: lejos.by.malla, esc: esc.by.malla, nada: nada.by.malla, esp: esp.by.malla, espEjes: !!esp.by.ejes };
+  }, [dxfDemo(), dxfDemo({ girado: true })]);
+  expect(r.ids).not.toContain('ejes');   /* sin el ítem de sus propios ejes (el eje E girado no bloquea) */
+  expect(r.malla.st).toBe('warn'); expect(r.malla.msg).toContain('Calibrado con los ejes de estructura'); expect(r.malla.msg).toContain('Se dejaron fuera 1 cruce(s)'); expect(r.malla.msg).toContain('E-1');
+  expect(r.recta.st).toBe('ok');   /* la arquitectura sin el eje girado calza entera */
+  expect(r.fit).toBe(true); expect(r.nEjM).toBe(8);
+  expect(r.recto).toBeLessThan(0.001);   /* se dibuja el eje E recto de la estructura, no el girado del plano */
+  expect(r.ctn).toBe('ok');   /* contorno opcional */
+  expect(r.lejos.st).toBe('warn'); expect(r.lejos.msg).toMatch(/Se dejaron fuera \d cruce\(s\)/); expect(r.lejos.det.some(t => t.startsWith('C-'))).toBe(true);   /* el eje C corrido 20 cm se deja fuera y se avisa */
+  expect(r.esc.st).toBe('err'); expect(r.esc.msg).toContain('La escala no coincide');
+  expect(r.nada.st).toBe('err'); expect(r.nada.msg).toContain('al menos 2 cruces');
+  expect(r.esp.st).toBe('err'); expect(r.esp.msg).toContain('Alista primero una planta de estructuras'); expect(r.espEjes).toBe(false);
+  expect(errors).toEqual([]);
+});
