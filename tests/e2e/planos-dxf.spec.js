@@ -7,6 +7,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 const NM = path.join(path.dirname(new URL(import.meta.url).pathname), 'node_modules', 'pdfjs-dist', 'build');
 
+/* PDF de una hoja (pw × ph pt) con el dibujo de la geometría G del DXF (px de su hoja) llevado a s pt por px desde (ox, oy) pt y lo
+   que agregue `extra` (operadores PDF): para probar el calce por contenido */
+const pdfOf = (G, pw, ph, s, ox, oy, extra = '') => {
+  const X = v => (v * s + ox).toFixed(2), Y = v => (ph - (v * s + oy)).toFixed(2); const o = ['0.4 w'];
+  for (const L of G.L) {
+    for (let i = 0; i + 3 < L.l.length; i += 4) o.push(`${X(L.l[i])} ${Y(L.l[i + 1])} m ${X(L.l[i + 2])} ${Y(L.l[i + 3])} l S`);
+    for (const q of L.p) { let t = `${X(q[1])} ${Y(q[2])} m`; for (let i = 3; i + 1 < q.length; i += 2) t += ` ${X(q[i])} ${Y(q[i + 1])} l`; o.push(t + (q[0] ? ' h S' : ' S')); }
+    for (let i = 0; i + 2 < L.c.length; i += 3) { const x = +X(L.c[i]), y = +Y(L.c[i + 1]), r = L.c[i + 2] * s, k = 0.5523 * r, f = v => v.toFixed(2);
+      o.push(`${f(x + r)} ${f(y)} m ${f(x + r)} ${f(y + k)} ${f(x + k)} ${f(y + r)} ${f(x)} ${f(y + r)} c ${f(x - k)} ${f(y + r)} ${f(x - r)} ${f(y + k)} ${f(x - r)} ${f(y)} c ${f(x - r)} ${f(y - k)} ${f(x - k)} ${f(y - r)} ${f(x)} ${f(y - r)} c ${f(x + k)} ${f(y - r)} ${f(x + r)} ${f(y - k)} ${f(x + r)} ${f(y)} c S`); }
+  }
+  const c = o.join('\n') + '\n' + extra;
+  return `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length ${c.length} >>\nstream\n${c}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
+};
+const pdfRoute = page => page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => { const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1]; return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) }); });
+
 const memStorage = () => {
   window.__ST = new Map(); window.__GETS = [];
   window.plPut = async (p, blob) => { window.__ST.set(p, blob); };
@@ -360,7 +375,7 @@ test('cargar planos: el mismo archivo ya cargado se vuelve a procesar como revis
 });
 
 /* 11-11-2026: el grosor de las líneas de un plano en el modelo sigue su escala de impresión (por la altura de los textos), no siempre 1/100 */
-test('planos DXF: el grosor de las líneas sale de la escala del plano (textos de ~2,5 mm en el papel)', async ({ page }) => {
+test('planos DXF: el grosor de las líneas sale de la escala del plano (textos de ~2 mm en el papel; sin marco)', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const mk = (h) => {
     const o = []; const P = (c, v) => o.push(String(c), String(v));
@@ -368,7 +383,7 @@ test('planos DXF: el grosor de las líneas sale de la escala del plano (textos d
     for (let i = 0; i < 12; i++) { P(0, 'LINE'); P(8, 'X'); P(370, 50); P(10, i * 2); P(20, 0); P(11, i * 2); P(21, 20); P(0, 'TEXT'); P(8, 'X'); P(10, i * 2); P(20, 21); P(40, h); P(1, 'T' + i); }
     P(0, 'ENDSEC'); P(0, 'EOF'); return o.join('\n');
   };
-  const r = await page.evaluate(T => T.map(t => { const S = dxfSheet(dxfParse(t)); return { esc: S.esc, w: 0.5 * S.pmm / S.ppu }; }), [mk(0.125), mk(0.25), mk(0.05)]);
+  const r = await page.evaluate(T => T.map(t => { const S = dxfSheet(dxfParse(t)); return { esc: S.esc, w: 0.5 * S.pmm / S.ppu }; }), [mk(0.1), mk(0.2), mk(0.04)]);
   expect(r.map(x => x.esc)).toEqual([50, 100, 20]);
   /* una línea de 0,50 mm en el papel mide en el modelo 0,025 m a 1/50, 0,05 m a 1/100 y 0,01 m a 1/20 */
   expect(r[0].w).toBeCloseTo(0.025, 4); expect(r[1].w).toBeCloseTo(0.05, 4); expect(r[2].w).toBeCloseTo(0.01, 4);
@@ -412,10 +427,15 @@ test('alistar › arquitectura: se calibra con los ejes de estructura, el contor
 /* 11-11-2026 (decidido con el dueño): una sola ficha por plano. El PDF es lo que se ve; el DXF, su capa de datos. Un DXF con el mismo código
    (E03 = E-03) se agrega al PDF ya cargado en vez de crear otra ficha; las fichas duplicadas de antes se unen con «Unir con su PDF…». */
 test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fichas duplicadas se unen', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
+  await pdfRoute(page);
   await page.evaluate(memStorage);
   const lay = dxfDemo({ layout: true });
+  /* el PDF original de cada ficha: hoja de 420 × 297 pt con el dibujo del DXF en el recorte (10, 10)–(400, 280) */
+  const G0 = await page.evaluate(t => dxfGeoOf(dxfToPx(dxfSheet(dxfParse(t)))), lay);
+  const pdf0 = pdfOf(G0, 420, 297, 390 / G0.W, 10, 10);
+  await page.evaluate(pdf => { for (const b of ['EST_E-03.p', 'EST_E-04.p', 'ARQ_AG03.p']) window.__ST.set(`planos/${b}/r1/orig.pdf`, new Blob([pdf], { type: 'application/pdf' })); }, pdf0);
   /* el PDF ya cargado (E-03, recortado al marco, misma proporción A3 al doble de píxeles que el DXF) y otro PDF E-04 */
   const dims = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const pdf = (id, cod) => fcol('plb').doc(id).set({ cod, disc: 'EST', rev: 1, base: `planos/${id}.p/r1`, W: S.W * 2, H: S.H * 2, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', tit: 'Encofrado', revs: [], crop: { x0: 10, y0: 10, x1: 400, y1: 280 }, fname: cod + '.pdf', fsize: 1 });
     await pdf('EST_E-03', 'E-03'); await pdf('EST_E-04', 'E-04'); return { W: S.W, H: S.H, mpp: S.mpp, crop: S.crop }; }, lay);
@@ -431,8 +451,8 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
     return { nuevo: !!window.__dbGet('plb', 'EST_E03'), sobre: p.dxf && p.dxf.sobre, mpp: p.dxf.mpp, cal: p.cal, rev: p.rev, W: G.W, hasPdf: plHasPdf(plSpecOf(PLB.get('EST_E-03'))), orig: window.__ST.has(p.base + '/orig.dxf.gz') }; });
   expect(r.nuevo).toBe(false);   /* no se creó otra ficha */
   expect(r.sobre).toBe('pdf'); expect(r.rev).toBe(1); expect(r.hasPdf).toBe(true); expect(r.orig).toBe(true);
-  expect(r.mpp).toBeCloseTo(dims.mpp / 2, 9);   /* la escala exacta llevada a los píxeles del PDF */
-  expect(r.cal).toMatchObject({ dxf: 1, rev: 1 }); expect(r.cal.mpp).toBeCloseTo(dims.mpp / 2, 9);   /* Medir no pide calibrar */
+  expect(r.mpp / (dims.mpp / 2)).toBeCloseTo(1, 2);   /* la escala exacta llevada a los píxeles del PDF */
+  expect(r.cal).toMatchObject({ dxf: 1, rev: 1 }); expect(r.cal.mpp / (dims.mpp / 2)).toBeCloseTo(1, 2);   /* Medir no pide calibrar */
   expect(r.W).toBe(dims.W * 2);
   /* ficha duplicada de antes: un plano solo DXF (E04) se une con su PDF (E-04) */
   const j = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
@@ -445,15 +465,15 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
     const p = window.__dbGet('plb', 'EST_E-04'), d = window.__dbGet('plb', 'EST_E04');
     return { tw: tw && tw.id, sobre: p.dxf.sobre, fix: p.fix.L[0].p, ok: p.ok, arch: !!d.arch, unido: d.arch && d.arch.unido, mpp: p.dxf.mpp, mpp0: S.mpp }; }, lay);
   expect(j.tw).toBe('EST_E-04'); expect(j.sobre).toBe('pdf');
-  expect(j.fix).toEqual([20, 20, 40, 20, 40, 40, 20, 40]);   /* las correcciones de Alistar se llevan al PDF */
-  expect(j.ok).toMatchObject({ rev: 1, malla: true }); expect(j.ok.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  j.fix.forEach((v, i) => expect(Math.abs(v - [20, 20, 40, 20, 40, 40, 20, 40][i])).toBeLessThan(3));   /* las correcciones de Alistar se llevan al PDF (3 px = 0,03 mm aquí) */
+  expect(j.ok).toMatchObject({ rev: 1, malla: true }); expect(j.ok.mpp / (j.mpp0 / 2)).toBeCloseTo(1, 2);
   expect(j.arch).toBe(true); expect(j.unido).toBe('EST_E-04');
-  expect(j.mpp).toBeCloseTo(j.mpp0 / 2, 9);
+  expect(j.mpp / (j.mpp0 / 2)).toBeCloseTo(1, 2);
   /* misma ficha (como la AG03): el PDF en la Rev. 1 y el DXF en la Rev. 2 → aviso en la biblioteca y «Unir» crea la Rev. 3 con la imagen del PDF y los datos del DXF */
   await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
     const base = 'planos/ARQ_AG03.d/r2'; window.__ST.set(base + '/geo.json.gz', z.b);
     await fcol('plb').doc('ARQ_AG03').set({ cod: 'AG03', disc: 'ARQ', rev: 2, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', fname: 'AG03.dxf',
-      revs: [{ rev: 1, base: 'planos/ARQ_AG03.p/r1', W: S.W * 2, H: S.H * 2, Z: 4, mm: [420, 297], crop: { x0: 1, y0: 1, x1: 2, y1: 2 }, fname: 'AG03.pdf', ts: 1, byN: 'x' }],
+      revs: [{ rev: 1, base: 'planos/ARQ_AG03.p/r1', W: S.W * 2, H: S.H * 2, Z: 4, mm: [420, 297], crop: { x0: 10, y0: 10, x1: 400, y1: 280 }, fname: 'AG03.pdf', ts: 1, byN: 'x' }],
       dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 2, dxf: 1 } }); }, lay);
   await expect.poll(() => page.evaluate(() => plJoinPend().map(x => x.D.id + ':' + (x.P ? x.P.id : 'r' + x.r)).join())).toBe('ARQ_AG03:r1');
   await page.click('#tabs [data-tab="pbib"]');
@@ -464,21 +484,24 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   const o = await page.evaluate(() => { const p = window.__dbGet('plb', 'ARQ_AG03'); return { base: p.base, sobre: p.dxf && p.dxf.sobre, revs: p.revs.map(r => r.rev + (r.dxf ? 'D' : 'P')), pend: plJoinPend().length }; });
   expect(o).toEqual({ base: 'planos/ARQ_AG03.p/r1', sobre: 'pdf', revs: ['1P', '2D'], pend: 0 });
   await expect(page.locator('.pljc')).toHaveCount(0);
-  /* un DXF que no calza con el PDF (otra proporción) no se une */
-  const bad = await page.evaluate(() => { try { plDxfFit({ cod: 'X', W: 1000, H: 1000, crop: {} }, 400, 300, true); return ''; } catch (e) { return e.message; } });
-  expect(bad).toContain('no tienen la misma proporción');
+  /* un DXF que no calza con el PDF (otra lámina) no se une */
+  const bad = await page.evaluate(async ([pdf, G]) => { window.__ST.set('planos/X.p/r1/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
+    try { await plDxfMap({ cod: 'X', base: 'planos/X.p/r1', W: 2000, H: 1414, crop: null }, G.W, G.H, true, G); return ''; } catch (e) { return e.message; } },
+  [pdfOf({ L: [{ l: [0, 0, 3000, 2000, 3000, 0, 0, 2000, 100, 500, 2900, 600], p: [], c: [] }] }, 420, 297, 0.1, 5, 5), G0]);
+  expect(bad).toContain('no calza con el PDF');
   expect(errors).toEqual([]);
 });
 
-/* 11-11-2026: el PDF se había cargado sin recortar al marco (hoja completa). En vez de pedir volver a cargarlo, se busca el marco en el PDF
-   original y el DXF se calza ahí (escala + desplazamiento). */
-test('PDF + DXF: con un PDF de hoja completa (sin recortar) el DXF se calza en su marco', async ({ page }) => {
+/* 11-11-2026 (planos reales del dueño: la E-15 sin marco en el PDF, la AG03 con el dibujo ~1 mm corrido de su marco): el DXF se calza
+   por su dibujo, no por el marco. PDF de hoja completa (sin recortar) con un marco y el dibujo corrido 2 pt dentro de él. */
+test('PDF + DXF: el DXF se calza por su dibujo aunque el marco del PDF no coincida', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
-  await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => { const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1]; return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) }); });
+  await pdfRoute(page);
   await page.evaluate(memStorage);
-  /* hoja 1191 × 842 pt con el marco de 1111 × 785,6 pt (proporción A3) a 40 pt de la izquierda y 28,4 pt de arriba */
-  const W = 1191, H = 842, c = '2 w 40 28 1111 785.6 re S', pdf = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length ${c.length} >>\nstream\n${c}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
+  const lay = dxfDemo({ layout: true });
+  const G0 = await page.evaluate(t => dxfGeoOf(dxfToPx(dxfSheet(dxfParse(t)))), lay);
+  const pdf = pdfOf(G0, 1191, 842, 1111 / G0.W, 42, 30, '2 w 40 28 1111 785.6 re S');
   const r = await page.evaluate(async ([t, pdf]) => {
     window.__ST.set('planos/EST_E-05.p/r1/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
     await fcol('plb').doc('EST_E-05').set({ cod: 'E-05', disc: 'EST', rev: 1, base: 'planos/EST_E-05.p/r1', W: 2382, H: 1684, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', revs: [], crop: null, fname: 'E-05.pdf' });
@@ -489,40 +512,43 @@ test('PDF + DXF: con un PDF de hoja completa (sin recortar) el DXF se calza en s
     await plDxfJoin(PLB.get('EST_E05'), plSpecOf(PLB.get('EST_E05')), PLB.get('EST_E-05'), true);
     const p = window.__dbGet('plb', 'EST_E-05'); const G2 = JSON.parse(await dxfUnGz(window.__ST.get(p.base + '/geo.json.gz')));
     const a = G.L.find(o => o.l.length), b = G2.L.find(o => o.n === a.n);
-    return { Wd: S.W, mppd: S.mpp, mpp: p.dxf.mpp, sobre: p.dxf.sobre, W2: G2.W, x0: a.l[0], y0: a.l[1], x1: b.l[0], y1: b.l[1] };
-  }, [dxfDemo({ layout: true }), pdf]);
-  const f = 1111 * 2 / r.Wd;   /* el marco del PDF a 2 px por punto */
+    return { Wd: S.W, mppd: S.mpp, mpp: p.dxf.mpp, sobre: p.dxf.sobre, map: p.dxf.map, W2: G2.W, x0: a.l[0], y0: a.l[1], x1: b.l[0], y1: b.l[1] };
+  }, [lay, pdf]);
+  const f = 1111 * 2 / r.Wd;   /* 2 px por punto */
   expect(r.sobre).toBe('pdf'); expect(r.W2).toBe(2382);
-  expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 2);
-  expect(Math.abs(r.x1 - (r.x0 * f + 80))).toBeLessThan(4);      /* 40 pt × 2 */
-  expect(Math.abs(r.y1 - (r.y0 * f + 56.8))).toBeLessThan(4);    /* 28,4 pt × 2 */
+  expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 3);
+  expect(Math.abs(r.x1 - (r.x0 * f + 84))).toBeLessThan(1.5);   /* 42 pt × 2 (el marco está en 40) */
+  expect(Math.abs(r.y1 - (r.y0 * f + 60))).toBeLessThan(1.5);   /* 30 pt × 2 */
+  expect(r.map.med).toBeLessThan(0.2);   /* calidad guardada: mediana en mm de papel */
   expect(errors).toEqual([]);
 });
 
-test('PDF + DXF: PDF sin marco reconocible: el DXF se calza en el borde de lo dibujado', async ({ page }) => {
+/* «Recalcular el calce» (✎ Datos del plano): un plano unido antes, con el DXF 3 mm corrido, se vuelve a calzar; las correcciones de
+   Alistar y el contorno se mueven con él y la geometría se guarda con otro nombre (los equipos guardan los archivos por su ruta). */
+test('PDF + DXF: «Recalcular el calce» corrige un DXF ya unido que quedó corrido', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = await openApp(page, { as: 'admin', editar: false });
-  await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[^/]+\/build\/(pdf(\.worker)?\.min\.js)/, r => { const f = r.request().url().match(/(pdf(\.worker)?\.min\.js)/)[1]; return r.fulfill({ status: 200, contentType: 'text/javascript', body: fs.readFileSync(path.join(NM, f)) }); });
+  await pdfRoute(page);
   await page.evaluate(memStorage);
-  /* hoja 1191 × 842 pt con el marco de 1111 × 785,6 pt (proporción A3) a 40 pt de la izquierda y 28,4 pt de arriba */
-  const W = 1191, H = 842, c = '0.5 w 40 28 m 1151 813.6 l S 40 813.6 m 1151 28 l S', pdf = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length ${c.length} >>\nstream\n${c}\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
-  const r = await page.evaluate(async ([t, pdf]) => {
-    window.__ST.set('planos/EST_E-06.p/r1/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
-    await fcol('plb').doc('EST_E-06').set({ cod: 'E-06', disc: 'EST', rev: 1, base: 'planos/EST_E-06.p/r1', W: 2382, H: 1684, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', revs: [], crop: null, fname: 'E-06.pdf' });
-    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
-    const base = 'planos/EST_E06.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
-    await fcol('plb').doc('EST_E06').set({ cod: 'E06', disc: 'EST', rev: 1, base, W: S.W, H: S.H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', revs: [], dxf: { v: 1, src: S.src, k: S.k, mpp: S.mpp, lay: {}, gz: 1, oz: 0, crop: true }, cal: { mpp: S.mpp, rev: 1, dxf: 1 } });
-    goMod('pla'); for (let i = 0; i < 50 && !(PLB.get('EST_E06') && PLB.get('EST_E-06')); i++) await new Promise(r => setTimeout(r, 100));
-    await plDxfJoin(PLB.get('EST_E06'), plSpecOf(PLB.get('EST_E06')), PLB.get('EST_E-06'), true);
-    const p = window.__dbGet('plb', 'EST_E-06'); const G2 = JSON.parse(await dxfUnGz(window.__ST.get(p.base + '/geo.json.gz')));
-    const a = G.L.find(o => o.l.length), b = G2.L.find(o => o.n === a.n);
-    return { Wd: S.W, mppd: S.mpp, mpp: p.dxf.mpp, sobre: p.dxf.sobre, W2: G2.W, x0: a.l[0], y0: a.l[1], x1: b.l[0], y1: b.l[1] };
-  }, [dxfDemo({ layout: true }), pdf]);
-  const f = 1111 * 2 / r.Wd;   /* el marco del PDF a 2 px por punto */
-  expect(r.sobre).toBe('pdf'); expect(r.W2).toBe(2382);
-  expect(r.mpp / (r.mppd / f)).toBeCloseTo(1, 2);
-  expect(await page.evaluate(async () => !!(await plFrame(await (await window.pdfjsLib.getDocument({ data: new Uint8Array(await window.__ST.get('planos/EST_E-06.p/r1/orig.pdf').arrayBuffer()) }).promise).getPage(1))))).toBe(false);   /* sin rectángulo: plFrame no lo encuentra */
-  expect(Math.abs(r.x1 - (r.x0 * f + 80))).toBeLessThan(4);      /* 40 pt × 2 */
-  expect(Math.abs(r.y1 - (r.y0 * f + 56.8))).toBeLessThan(4);    /* 28,4 pt × 2 */
+  const lay = dxfDemo({ layout: true });
+  const G0 = await page.evaluate(t => dxfGeoOf(dxfToPx(dxfSheet(dxfParse(t)))), lay);
+  const s = 1111 / G0.W, pdf = pdfOf(G0, 1191, 842, s, 40, 28);
+  const r = await page.evaluate(async ([G0, pdf, s]) => {
+    const base = 'planos/EST_E-06.p/r1'; window.__ST.set(base + '/orig.pdf', new Blob([pdf], { type: 'application/pdf' }));
+    /* unido antes con 8,5 pt (3 mm) de error: px de los mosaicos = 2 por pt */
+    const f = 2 * s, G = dxfGeoScale(G0, f, 97, 73, 2382, 1684); window.__ST.set(base + '/geo.json.gz', (await dxfGz(JSON.stringify(G), 'application/json')).b);
+    const mpp = G0.mpp / f;
+    await fcol('plb').doc('EST_E-06').set({ cod: 'E-06', disc: 'EST', rev: 1, base, W: 2382, H: 1684, Z: 3, T: 1024, mm: [420, 297], tipo: 'Planta', revs: [], crop: null, fname: 'E-06.pdf',
+      dxf: { v: 1, src: 'presentación', k: 1, mpp, lay: {}, gz: 1, oz: 0, crop: true, sobre: 'pdf' }, cal: { mpp, rev: 1, dxf: 1 }, fix: { rev: 1, L: [{ id: 'f1', k: 'colAdd', p: [197, 173, 297, 173] }] } });
+    goMod('pla'); for (let i = 0; i < 50 && !PLB.get('EST_E-06'); i++) await new Promise(r => setTimeout(r, 100));
+    const M = await plDxfRecalce(PLB.get('EST_E-06'));
+    const p = window.__dbGet('plb', 'EST_E-06'); const G2 = JSON.parse(await dxfUnGz(window.__ST.get(p.base + '/' + plGeoName(p.dxf))));
+    const a = G0.L.find(o => o.l.length), b = G2.L.find(o => o.n === a.n);
+    return { M, gv: p.dxf.gv, x: b.l[0] - (a.l[0] * f + 80), y: b.l[1] - (a.l[1] * f + 56), fix: p.fix.L[0].p, mpp: p.dxf.mpp / mpp, cal: p.cal.mpp / mpp };
+  }, [G0, pdf, s]);
+  expect(r.gv).toBeTruthy();
+  expect(Math.abs(r.x)).toBeLessThan(1.5); expect(Math.abs(r.y)).toBeLessThan(1.5);   /* quedó en (40, 28) pt × 2 */
+  r.fix.forEach((v, i) => expect(Math.abs(v - [180, 156, 280, 156][i])).toBeLessThan(1.5));   /* la corrección se movió con el DXF (−17 px) */
+  expect(r.mpp).toBeCloseTo(1, 3); expect(r.cal).toBeCloseTo(1, 3);
   expect(errors).toEqual([]);
 });

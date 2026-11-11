@@ -38,7 +38,7 @@ function dxfParse(txt){if(/^AutoCAD Binary DXF/.test(txt.slice(0,22)))throw new 
     if(c===0){fin();if(v==='EOF')break;cur={t:v};if(v==='LWPOLYLINE'||v==='POLYLINE'){cur.P=[];cur.B=[]}if(v==='INSERT')cur.att=[];if(DXF_RAW.has(v))cur.raw=[];continue}
     if(!cur)continue;const t=cur.t;
     if(t==='SECTION'){if(c===2)sec=v.trim();continue}
-    if(sec==='HEADER'){if(c===9)hv=v.trim();else if(hv==='$INSUNITS'&&c===70)out.ins=+v;else if(hv==='$ACADVER'&&c===1)out.ver=v.trim();continue}
+    if(sec==='HEADER'){if(c===9)hv=v.trim();else if(hv==='$INSUNITS'&&c===70)out.ins=+v;else if(hv==='$LWDISPLAY'&&c===290)out.lwd=+v;else if(hv==='$ACADVER'&&c===1)out.ver=v.trim();continue}
     if(cur.stop)continue;if(c===101){cur.stop=true;continue}   /* «Embedded Object» de MTEXT (AutoCAD 2018): repite 10/11/40 y pisaría los verdaderos */
     if(c>=1000||c===100||c===102||c===5||c===330||c===360)continue;
     if(cur.raw)cur.raw.push([c,v]);
@@ -211,16 +211,23 @@ function dxfSheet(D,o){o=o||{};const Fm=dxfFlat(D,D.ents);
     const span=Math.max(box[2]-box[0],box[3]-box[1]);const inch=span<100;let ppu=inch?300:300/25.4;if(span*ppu>PL_MAXPX)ppu=PL_MAXPX/span;
     const main=vps.reduce((a,b)=>(b.x1-b.x0)*(b.y1-b.y0)>(a.x1-a.x0)*(a.y1-a.y0)?b:a);const U=dxfUnits(D,Fm,dxfExt(Fm).box);
     const W=Math.ceil((box[2]-box[0])*ppu),H=Math.ceil((box[3]-box[1])*ppu);const mmk=inch?25.4:1;
-    return{src:'presentación',P:[...P,...paper],vps,box,ppu,W,H,mm:[Math.round((box[2]-box[0])*mmk),Math.round((box[3]-box[1])*mmk)],k:U.k,how:U.how,mpp:U.k/(main.s*ppu),pmm:ppu/mmk,far:X.far,crop:!!fr}}
-  const X=dxfExt(Fm);let box=X.box,keep=X.keep;const U=dxfUnits(D,keep,box);const fr=o.crop!==false&&dxfFrame(keep,box);if(fr){keep=dxfCrop(keep,fr);box=fr.slice()}const span=Math.max(box[2]-box[0],box[3]-box[1])||1;const esc=dxfEscala(keep,U.k);let ppu=DXF_PXM*U.k*100/esc;   /* 300 ppp en la hoja a su escala real (11-11-2026: a 1/50 salía a 150 ppp, borroso) */
+    return{src:'presentación',P:[...P,...paper],vps,box,ppu,W,H,mm:[Math.round((box[2]-box[0])*mmk),Math.round((box[3]-box[1])*mmk)],k:U.k,how:U.how,mpp:U.k/(main.s*ppu),pmm:ppu/mmk,lwd:D.lwd,far:X.far,crop:!!fr}}
+  const X=dxfExt(Fm);let box=X.box,keep=X.keep;const U=dxfUnits(D,keep,box);const fr=o.crop!==false&&dxfFrame(keep,box);if(fr){keep=dxfCrop(keep,fr);box=fr.slice()}const span=Math.max(box[2]-box[0],box[3]-box[1])||1;const esc=dxfEscala(keep,U.k,fr?[(box[2]-box[0])*U.k*1000,(box[3]-box[1])*U.k*1000]:null,o.hojas);let ppu=DXF_PXM*U.k*100/esc;   /* 300 ppp en la hoja a su escala real (11-11-2026: a 1/50 salía a 150 ppp, borroso) */
   if(span*ppu>PL_MAXPX)ppu=PL_MAXPX/span;if(span*ppu<3000)ppu=3000/span;const W=Math.ceil((box[2]-box[0])*ppu),H=Math.ceil((box[3]-box[1])*ppu);
-  return{src:'modelo',P:keep,vps:[],box,ppu,W,H,mm:[Math.round(W/(300/25.4)),Math.round(H/(300/25.4))],k:U.k,how:U.how,mpp:U.k/ppu,pmm:esc*ppu/(1000*U.k),esc,far:X.far,crop:!!fr}}
+  return{src:'modelo',P:keep,vps:[],box,ppu,W,H,mm:[Math.round(W/(300/25.4)),Math.round(H/(300/25.4))],k:U.k,how:U.how,mpp:U.k/ppu,pmm:esc*ppu/(1000*U.k),esc,lwd:D.lwd,far:X.far,crop:!!fr}}
 /** escala de impresión de un plano dibujado en el modelo (1/esc), para el grosor de las líneas y los trazos (pmm = px por mm de papel).
     11-11-2026: se suponía siempre 1/100 y una planta de arquitectura a 1/50 salía con las líneas el doble de gruesas. Se deduce de la
     altura de los textos: en el papel miden ~2,5 mm (mediana de al menos 8 textos); sin textos suficientes, 1/100. */
 const DXF_ESC=[10,20,25,50,75,100,125,150,200,250,500];
-function dxfEscala(F,k){const h=F.filter(e=>e.k==='t'&&e.h>0).map(e=>e.h*k*1000).sort((a,b)=>a-b);if(h.length<8)return 100;
-  const s=h[h.length>>1]/2.5;return DXF_ESC.reduce((b,x)=>Math.abs(Math.log(x/s))<Math.abs(Math.log(b/s))?x:b,100)}
+/* hojas: las ISO (A0–A4) más los formatos de los PDF del proyecto (p. ej. 1100 × 700 y 1200 × 900) */
+const DXF_HOJAS=[[1189,841],[841,594],[594,420],[420,297],[297,210]];
+/** escala 1/esc. 11-11-2026, con los planos reales del dueño: los textos miden 2 mm en el papel (no 2,5) y daban 1/75 en planos a 1/100.
+    Primero manda el marco: la escala con la que el marco (en mm reales, frameMm) mide lo mismo que una hoja conocida (±1 %); si no hay
+    marco o no calza ninguna hoja, los textos (mediana de ≥ 8, ~2 mm en el papel); sin textos, 1/100. */
+function dxfEscala(F,k,frameMm,hojas){const H=[...DXF_HOJAS,...(hojas||[])];
+  if(frameMm){const ok=DXF_ESC.filter(x=>{const w=frameMm[0]/x,h=frameMm[1]/x;return H.some(([a,b])=>Math.abs(w-a)/a<0.01&&Math.abs(h-b)/b<0.01||Math.abs(w-b)/b<0.01&&Math.abs(h-a)/a<0.01)});if(ok.length)return ok.includes(100)?100:ok[0]}
+  const h=F.filter(e=>e.k==='t'&&e.h>0).map(e=>e.h*k*1000).sort((a,b)=>a-b);if(h.length<8)return 100;
+  const s=h[h.length>>1]/2;return DXF_ESC.reduce((b,x)=>Math.abs(Math.log(x/s))<Math.abs(Math.log(b/s))?x:b,100)}
 /** pasa la hoja a píxeles del nivel de detalle (y hacia abajo) */
 function dxfToPx(S){const[x0,,,y1]=S.box,k=S.ppu;const X=x=>(x-x0)*k,Y=y=>(y1-y)*k;const A=P=>{const o=new Array(P.length);for(let i=0;i+1<P.length;i+=2){o[i]=X(P[i]);o[i+1]=Y(P[i+1])}return o};
   for(const e of S.P){if(e.k==='l'||e.k==='d')e.p=A(e.p);else if(e.k==='p')e.P=A(e.P);else if(e.k==='f')e.R=e.R.map(A);else{e.x=X(e.x);e.y=Y(e.y);if(e.r!=null&&e.k==='c')e.r*=k;if(e.k==='t')e.h*=k}}
@@ -228,7 +235,9 @@ function dxfToPx(S){const[x0,,,y1]=S.box,k=S.ppu;const X=x=>(x-x0)*k,Y=y=>(y1-y)
 const DXF_GRAY={8:'#808080',9:'#c0c0c0',250:'#333',251:'#505050',252:'#696969',253:'#828282',254:'#bebebe',255:'#fff'};
 /** dibuja la hoja (ya en px) en g desde la fila oy: rellenos, luego líneas (por estilo) y textos; cada ventana recortada a su marco */
 function dxfPaint(g,S,oy,sc){sc=sc||1;g.save();g.setTransform(sc,0,0,sc,0,-oy*sc);g.lineCap='round';g.lineJoin='round';const pm=S.pmm;
-  const lw=e=>Math.max(1,(e.lw||18)/100*pm);const dash=e=>e.lt==='h'?[2*pm,1*pm]:e.lt==='c'?[6*pm,1*pm,1*pm,1*pm]:e.lt==='d'?[0.3*pm,1*pm]:null;
+  /* $LWDISPLAY = 0 (el proyectista no muestra grosores, como en la pantalla de AutoCAD): todo fino, 0,13 mm. 11-11-2026: la AG03 tiene
+     A-MUROS a 0,60 mm y en su PDF los muros salen finos (los imprime con su estilo de impresión, que no viene en el DXF) */
+  const lw=S.lwd===0?()=>Math.max(1,0.13*pm):e=>Math.max(1,(e.lw||18)/100*pm);const dash=e=>e.lt==='h'?[2*pm,1*pm]:e.lt==='c'?[6*pm,1*pm,1*pm,1*pm]:e.lt==='d'?[0.3*pm,1*pm]:null;
   const groups=[{clip:null,v:undefined}].concat(S.vps.map((R,i)=>({clip:R.px,v:i})));const y0=oy,y1=oy+g.canvas.height/sc;
   const inV=b=>!(b[3]<y0||b[1]>y1);
   for(const G of groups.slice(1).concat(groups.slice(0,1))){const P=S.P.filter(e=>e.v===G.v);if(!P.length)continue;g.save();if(G.clip){const c=G.clip;g.beginPath();g.rect(c[0],c[1],c[2]-c[0],c[3]-c[1]);g.clip()}
@@ -257,7 +266,9 @@ async function dxfUnGz(b){if(window.DecompressionStream)try{return await new Res
 
 /* ---------- carga en Planos (la llama plProcess) ---------- */
 /** {W, H, mm, mpp, draw(g, oy), txo, orig, geo, meta}: todo lo que plProcess necesita de un DXF */
-async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.file.text();const D=dxfParse(txt);say('Armando la lámina…');const S=dxfToPx(dxfSheet(D,{crop:it.crop!==false}));
+/** formatos de hoja de los PDF del proyecto (mm), para deducir la escala de un DXF por su marco */
+const plHojas=()=>typeof PLB==='undefined'?[]:[...new Set([...PLB.values()].filter(p=>!p.arch&&!p.eto&&p.mm&&p.mm[0]>0&&plHasPdf(p)).map(p=>p.mm.join('x')))].map(s=>s.split('x').map(Number));
+async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.file.text();const D=dxfParse(txt);say('Armando la lámina…');const S=dxfToPx(dxfSheet(D,{crop:it.crop!==false,hojas:plHojas()}));
   if(!S.P.length)throw new Error('El DXF no tiene dibujo visible (capas apagadas o vacío).');if(!(S.W>0&&S.H>0))throw new Error('No se pudo medir el dibujo del DXF.');
   const G=dxfGeoOf(S);const Fg=dxfGeoF(G);const Ls=dxfLayers(Fg);let lay=dxfGuess(Ls);
   /* capas del proyecto: las de la última lámina ya revisada de la misma especialidad (el mismo proyectista repite sus nombres de capa) */
@@ -269,13 +280,15 @@ async function plDxfPrep(it,say){say('Leyendo el DXF…');const txt=await it.fil
 /** vista previa de una fila de la carga (lado mayor PLP_PX) */
 async function plDxfPrev(it){if(it._pv)return it._pv;const D=dxfParse(await it.file.text());const S=dxfToPx(dxfSheet(D,{crop:store.get('plcrop',true)!==false}));const sc=Math.min(1,PLP_PX/Math.max(S.W,S.H));
   const c=plCanvas(Math.max(1,Math.floor(S.W*sc)),Math.max(1,Math.floor(S.H*sc)));const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);dxfPaint(g,S,0,sc);it._pv=c;return c}
-const plGeoName=d=>d&&d.gz===0?'geo.json':'geo.json.gz';
+/* `gv`: versión de la geometría cuando se rehace en el mismo lugar (Recalcular el calce): nombre nuevo, porque los equipos guardan los archivos por su ruta */
+const plGeoName=d=>`geo${d&&d.gv?'.'+d.gv:''}.json${d&&d.gz===0?'':'.gz'}`;
 /** la geometría de una revisión DXF (caché en memoria; sin conexión, de la caché del equipo) */
 const GEO=new Map();
-function plGeoGet(sp){if(!sp||!sp.dxf)return Promise.resolve(null);const k=sp.base;let e=GEO.get(k);if(e)return e.pr;
+const plGeoKey=sp=>sp.base+'/'+plGeoName(sp.dxf);
+function plGeoGet(sp){if(!sp||!sp.dxf)return Promise.resolve(null);const k=plGeoKey(sp);let e=GEO.get(k);if(e)return e.pr;
   e={g:null};e.pr=(async()=>{const b=await plGet(sp.base+'/'+plGeoName(sp.dxf));const G=JSON.parse(sp.dxf.gz===0?await b.text():await dxfUnGz(b));e.g=G;return G})();e.pr.catch(()=>{});GEO.set(k,e);return e.pr}
 /** ya cargada (o null; si no, la pide y redibuja al llegar) */
-function plGeoNow(sp){if(!sp||!sp.dxf)return null;const e=GEO.get(sp.base);if(e&&e.g)return e.g;if(!e)plGeoGet(sp).then(()=>requestRender()).catch(()=>{});return null}
+function plGeoNow(sp){if(!sp||!sp.dxf)return null;const e=GEO.get(plGeoKey(sp));if(e&&e.g)return e.g;if(!e)plGeoGet(sp).then(()=>requestRender()).catch(()=>{});return null}
 /** geometría → entidades planas (para buscar capas y ejes con las mismas funciones) */
 function dxfGeoF(G){const F=[];for(const o of G.L){const l=o.n;for(let i=0;i+3<o.l.length;i+=4)F.push({k:'l',l,p:o.l.slice(i,i+4)});for(const p of o.p)F.push({k:'p',l,c:!!p[0],P:p.slice(1)});
   for(let i=0;i+2<o.c.length;i+=3)F.push({k:'c',l,x:o.c[i],y:o.c[i+1],r:o.c[i+2]});for(const t of o.t)F.push({k:'t',l,t:t[0],x:t[1],y:t[2],h:t[3],r:t[4]})}return F}
@@ -396,36 +409,81 @@ function dxfGeoScale(G,f,ox,oy,W,H){ox=ox||0;oy=oy||0;const s=v=>Math.round(v*f*
 function plFixScale(fix,f,ox,oy){if(!fix||!Array.isArray(fix.L))return fix;const o=[ox||0,oy||0];const s=(v,i)=>typeof v==='number'?Math.round((v*f+o[i%2])*100)/100:v;
   return{...fix,L:fix.L.map(x=>{const y={...x};if(Array.isArray(y.p))y.p=y.p.map(s);if(typeof y.x==='number')y.x=s(y.x,0);if(typeof y.y==='number')y.y=s(y.y,1);return y})}}
 function plCtnScale(c,f,ox,oy){if(!c||!Array.isArray(c.P))return c;const o=[ox||0,oy||0];const s=(v,i)=>Math.round((v*f+o[i%2])*10)/10;return{...c,P:c.P.map(s),H:(c.H||[]).map(h=>({p:h.p.map(s)}))}}
-/** cómo se lleva el DXF (recortado a su marco) a los píxeles del PDF: {f, ox, oy}. PDF recortado al marco: solo escala. PDF de hoja
-    completa (cargado sin «Recortar al marco», 11-11-2026): se busca el marco en el PDF original y el DXF se calza ahí. */
-async function plDxfMap(P,W,H,dxfCrop){if(P.crop)return{f:plDxfFit(P,W,H,dxfCrop),ox:0,oy:0};
-  if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
+/** puntos del dibujo del DXF (px de su hoja) para calzarlo: a lo largo de líneas, polilíneas, rellenos y círculos cada `st` px;
+    hasta N repartidos al azar (siempre los mismos: semilla fija). Los textos no (la letra del PDF no es la del DXF). */
+function plDxfPts(G,st,N){const o=[];const seg=(x1,y1,x2,y2)=>{const n=Math.max(1,Math.floor(Math.hypot(x2-x1,y2-y1)/st));for(let i=0;i<=n;i++){const t=i/n;o.push(x1+(x2-x1)*t,y1+(y2-y1)*t)}};
+  for(const L of G.L){for(let i=0;i+3<L.l.length;i+=4)seg(L.l[i],L.l[i+1],L.l[i+2],L.l[i+3]);
+    for(const q of L.p){for(let i=1;i+3<q.length;i+=2)seg(q[i],q[i+1],q[i+2],q[i+3]);if(q[0]&&q.length>4)seg(q[q.length-2],q[q.length-1],q[1],q[2])}
+    for(let i=0;i+2<L.c.length;i+=3){const x=L.c[i],y=L.c[i+1],r=L.c[i+2],n=Math.min(64,Math.max(8,Math.ceil(2*Math.PI*r/st)));for(let k=0;k<n;k++){const a=2*Math.PI*k/n;o.push(x+r*Math.cos(a),y+r*Math.sin(a))}}}
+  const m=o.length>>1;if(m<=N)return o;let z=12345;const R=[];for(let i=0;i<N;i++){z=(z*1103515245+12345)&0x7fffffff;const j=(z%m)*2;R.push(o[j],o[j+1])}return R}
+/** distancia (px) de cada píxel a la tinta más cercana: transformada de chaflán 3-4 en dos pasadas */
+function plDxfDT(ink,w,h){const D=new Float32Array(w*h),B=1e9;for(let i=0;i<D.length;i++)D[i]=ink[i]?0:B;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;let d=D[i];if(!d)continue;if(x>0)d=Math.min(d,D[i-1]+3);if(y>0){d=Math.min(d,D[i-w]+3);if(x>0)d=Math.min(d,D[i-w-1]+4);if(x<w-1)d=Math.min(d,D[i-w+1]+4)}D[i]=d}
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){const i=y*w+x;let d=D[i];if(!d)continue;if(x<w-1)d=Math.min(d,D[i+1]+3);if(y<h-1){d=Math.min(d,D[i+w]+3);if(x<w-1)d=Math.min(d,D[i+w+1]+4);if(x>0)d=Math.min(d,D[i+w-1]+4)}D[i]=d}
+  for(let i=0;i<D.length;i++)D[i]/=3;return D}
+/** calce por contenido (11-11-2026, analizado con los planos reales del dueño: el marco solo no basta; la E-15 no tiene marco en el PDF y
+    en la AG03 el marco quedaba 1 mm corrido). Se dibuja la tinta del PDF, y para cada candidato (la hoja entera, el marco que encuentra
+    plFrame, el borde de lo dibujado) se ajustan escala y desplazamiento hasta que las líneas del DXF caigan sobre las del PDF (descenso
+    por coordenadas sobre la distancia a la tinta más cercana). Gana el de menor distancia. Devuelve la transformación del DXF (px de su
+    hoja) a px del dibujo del PDF y la calidad en mm de papel: {s, tx, ty, med, en1}. Función pura (se prueba con imágenes sintéticas). */
+function plDxfFitInk(DT,w,h,a,pts,cands){const n=pts.length>>1;
+  const at=(x,y)=>{x-=0.5;y-=0.5;   /* el píxel i cubre [i, i+1): su centro está en i + 0,5 */if(!(x>=0&&y>=0&&x<w-1&&y<h-1))return 1e9;const i=x|0,j=y|0,fx=x-i,fy=y-j,k=j*w+i;return(DT[k]*(1-fx)+DT[k+1]*fx)*(1-fy)+(DT[k+w]*(1-fx)+DT[k+w+1]*fx)*fy};
+  const cost=(t,cap)=>{let c=0;for(let i=0;i<pts.length;i+=2)c+=Math.min(cap,at(pts[i]*t[0]+t[1],pts[i+1]*t[0]+t[2]));return c/n};
+  const refine=(t,cap,d0,stop)=>{t=t.slice();let best=cost(t,cap),d=d0,ds=d0/Math.max(w,h);
+    for(let it=0;it<400&&d>=stop;it++){let imp=false;for(const[k,st]of[[0,ds*t[0]],[1,d],[2,d]])for(const sg of[1,-1]){const u=t.slice();u[k]+=sg*st;const c=cost(u,cap);if(c<best-1e-9){best=c;t=u;imp=true;break}}
+      if(!imp){d/=2;ds/=2}}return{t,c:best}};
+  let win=null;for(const t0 of cands){let r=refine(t0,8*a,2*a,0.25*a);r=refine(r.t,2*a,0.5*a,0.02*a);if(!win||r.c<win.c)win=r}
+  if(!win)return null;const t=win.t;const ds=[];for(let i=0;i<pts.length;i+=2)ds.push(at(pts[i]*t[0]+t[1],pts[i+1]*t[0]+t[2])/a);ds.sort((x,y)=>x-y);
+  return{s:t[0],tx:t[1],ty:t[2],med:ds[ds.length>>1],en1:ds.filter(v=>v<=1).length/ds.length}}
+/** cómo se lleva el DXF (px de su hoja, recortada al marco) a los píxeles del PDF (mosaicos): {f, ox, oy, esc}. Se dibuja el PDF original
+    y se calza por contenido (plDxfFitInk). Si no calza (otra lámina u otra versión), error con lo medido. */
+async function plDxfMap(P,W,H,dxfCrop,G0,ident){if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
   await plPdfJs();let pdf=null;try{const b=await plGet(P.base+'/orig.pdf');pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await b.arrayBuffer())}).promise;const pg=await pdf.getPage(1);
-    const v1=pg.getViewport({scale:1});const rb=H/W,okA=r=>r&&Math.abs((r.y1-r.y0)/(r.x1-r.x0)-rb)/rb<=0.015;
-    /* el marco que encuentra la carga (plFrame); si no hay o no calza, el borde de todo lo dibujado (suele ser el marco: 11-11-2026, E-15) */
-    let fr=null;try{fr=await plFrame(pg)}catch(e){fr=null}if(!okA(fr)){const ink=await plInkBox(pg);if(okA(ink))fr=ink;else{const r=fr||ink;
-      throw new Error(r?`El marco del PDF ${P.cod||''} y el del DXF no tienen la misma proporción (${((r.x1-r.x0)/(r.y1-r.y0)).toFixed(3)} y ${(1/rb).toFixed(3)}): ¿es la misma lámina y el mismo formato?`:`No se encontró el marco de la hoja en el PDF ${P.cod||''}.`)}}
-    const fw=fr.x1-fr.x0;
-    const sc=P.W/v1.width;return{f:fw*sc/W,ox:fr.x0*sc,oy:fr.y0*sc}}finally{if(pdf)try{pdf.destroy()}catch(e){}}}
-/** factor DXF → PDF; error si no calzan (los dos deben ir recortados al marco y con la misma proporción) */
-function plDxfFit(pdf,W,H,dxfCrop){if(!pdf.crop)throw new Error(`El PDF ${pdf.cod||''} no está recortado al marco: vuelve a cargarlo con «Recortar al marco» para que el DXF calce con él.`);
-  if(!dxfCrop)throw new Error('El DXF no encontró el marco de la hoja: no se puede calzar con el PDF.');
-  const a=pdf.H/pdf.W,b=H/W;if(Math.abs(a-b)/a>0.015)throw new Error(`El DXF y el PDF no tienen la misma proporción (${(1/b).toFixed(3)} y ${(1/a).toFixed(3)}): ¿es la misma lámina y los dos están recortados al marco?`);
-  return pdf.W/W}
+    const v1=pg.getViewport({scale:1}),mmW=v1.width*25.4/72,mmH=v1.height*25.4/72;
+    /* tinta del PDF a ≤ 3 px/mm y ≤ 12 Mpx (celular) */
+    const a=Math.min(3,Math.sqrt(12e6/(mmW*mmH))),k=a*25.4/72,vp=pg.getViewport({scale:k}),w=Math.floor(vp.width),h=Math.floor(vp.height);
+    const c=plCanvas(w,h),g=c.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,w,h);await pg.render({canvasContext:g,viewport:vp}).promise;
+    const d=g.getImageData(0,0,w,h).data;c.width=c.height=0;const ink=new Uint8Array(w*h);for(let i=0,j=0;i<ink.length;i++,j+=4)ink[i]=Math.min(d[j],d[j+1],d[j+2])<200?1:0;
+    const DT=plDxfDT(ink,w,h);
+    /* candidatos (en puntos del PDF): la hoja, el marco, el borde de lo dibujado y, si la lámina se recortó al cargarla, ese recorte */
+    const B=[{x0:0,y0:0,x1:v1.width,y1:v1.height}];if(P.crop)B.push(P.crop);try{const f=await plFrame(pg);if(f)B.push(f)}catch(e){}try{const f=await plInkBox(pg);if(f)B.push(f)}catch(e){}
+    const cands=B.map(r=>{const bw=(r.x1-r.x0)*k,bh=(r.y1-r.y0)*k,s=Math.min(bw/W,bh/H);return[s,r.x0*k+(bw-W*s)/2,r.y0*k+(bh-H*s)/2]});
+    const c0=P.crop||{x0:0,y0:0,x1:v1.width,y1:v1.height},m=P.W/(c0.x1-c0.x0)/k;
+    if(ident)cands.unshift([1/m,c0.x0*k,c0.y0*k]);   /* recalcular: la geometría ya está en px de los mosaicos; se parte de donde quedó */
+    const G=G0||{L:[]};const pts=plDxfPts(G,W/1500,6000);if(pts.length<200)throw new Error('El DXF tiene muy poco dibujo para calzarlo con el PDF.');
+    const q=plDxfFitInk(DT,w,h,a,pts,cands);
+    if(!q||q.med>0.5||q.en1<0.6)throw new Error(`El DXF no calza con el PDF ${P.cod||''}: sus líneas quedan a ${q?q.med.toFixed(1):'?'} mm de las del PDF (${q?Math.round(q.en1*100):0} % a menos de 1 mm). ¿Es la misma lámina y la misma revisión?`);
+    /* px del dibujo del PDF → px de los mosaicos (con recorte: el origen es la esquina del recorte) */
+    const esc=dxfEscOf(W*q.s/a,G0);
+    return{f:q.s*m,ox:q.tx*m-c0.x0*k*m,oy:q.ty*m-c0.y0*k*m,med:Math.round(q.med*100)/100,en1:Math.round(q.en1*100)/100,...(esc?{esc}:{})}}finally{if(pdf)try{pdf.destroy()}catch(e){}}}
+/** ✎ Datos del plano › «Recalcular el calce» (plano con PDF y DXF unido antes del calce por contenido, 11-11-2026): se vuelve a calzar la
+    geometría guardada sobre el PDF y se corrigen con la misma transformación las correcciones de Alistar, el contorno y la escala. */
+async function plDxfRecalce(P){const sp=plSpecOf(P);if(!sp.dxf||!sp.dxf.sobre)throw new Error('Este plano no tiene PDF y DXF unidos.');
+  const G0=await plGeoGet(sp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');const M=await plDxfMap(P,P.W,P.H,true,G0,true);const{f,ox,oy}=M;
+  const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');const gv=NOW().toString(36);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
+  const rv=P.rev||1,mpp=P.dxf.mpp/f;const u={dxf:{...P.dxf,...plMapMeta(M),mpp,gz:gz.z,gv},cal:{...(P.cal||{}),mpp,rev:rv,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
+  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv&&P.ok.mpp)u.ok={...P.ok,mpp:P.ok.mpp/f};
+  await plCol(P).doc(P.id).update(u);return M}
+async function plDxfRecalceRun(P){toast('Calzando el DXF con el PDF…');try{const M=await plDxfRecalce(P);requestRender();
+    toast(`${P.cod}: calce corregido (${Math.abs(M.f-1)<1e-4&&Math.hypot(M.ox,M.oy)<1?'ya estaba bien':`se movió ${(Math.hypot(M.ox,M.oy)*P.dxf.mpp/(M.f||1)*1000/((M.esc||100))).toFixed(1)} mm en el papel`}; líneas a ${M.med} mm de las del PDF)`)}catch(e){toast('No se pudo recalcular: '+e.message)}}
+/** lo que queda guardado del calce: la calidad (mm de papel) y la escala exacta */
+const plMapMeta=M=>({map:{med:M.med,en1:M.en1},...(M.esc?{esc:M.esc}:{})});
+/** escala exacta (1/esc) de un DXF ya calzado: ancho de su hoja en metros reales / ancho en el papel del PDF (mm); si cae a ±2 % de una normal */
+function dxfEscOf(mmPapel,G){if(!G||!G.mpp||!G.W||!(mmPapel>0))return 0;const e=G.W*G.mpp*1000/mmPapel;const x=DXF_ESC.find(v=>Math.abs(v-e)/v<0.02);return x||0}
 /** carga: el DXF se agrega como datos de la revisión vigente de un plano en PDF (no hace revisión nueva; la imagen sigue siendo el PDF) */
-async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);say('Calzando el DXF con el PDF…');const{f,ox,oy}=await plDxfMap(P,dx.W,dx.H,dx.crop);
-  const G=dxfGeoScale(JSON.parse(await dxfUnGz(dx.geo.b)),f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');
+async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);say('Calzando el DXF con el PDF…');const G0=JSON.parse(await dxfUnGz(dx.geo.b));const M=await plDxfMap(P,dx.W,dx.H,dx.crop,G0);const{f,ox,oy}=M;
+  const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');
   say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
   const D=firebase.firestore.FieldValue.delete();const mpp=dx.meta.mpp/f;
-  await plCol(P).doc(P.id).update({dxf:{...dx.meta,mpp,gz:gz.z,sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D});
+  await plCol(P).doc(P.id).update({dxf:{...dx.meta,...plMapMeta(M),mpp,gz:gz.z,sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D});
   return{id:P.id,rev:P.rev||1,att:true,mm:P.mm,crop:true,dxf:{...dx.meta,mpp}}}
 /** une un plano solo DXF (o la revisión DXF anterior) con un plano en PDF: la geometría, las capas, las correcciones de Alistar, el contorno y
     el «Listo» pasan a la revisión vigente del PDF; la ficha DXF (si es otra) se archiva. Lo ya vinculado a la ficha DXF sigue funcionando. */
-async function plDxfJoin(Dp,dsp,P,arch){if(!dsp||!dsp.dxf)throw new Error('Ese plano no tiene DXF.');if(P.dxf)throw new Error(`${P.cod} ya tiene su DXF.`);
-  const{f,ox,oy}=await plDxfMap(P,dsp.W,dsp.H,dsp.dxf.crop!==false);const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');
+async function plDxfJoin(Dp,dsp,P,arch,M){if(!dsp||!dsp.dxf)throw new Error('Ese plano no tiene DXF.');if(P.dxf)throw new Error(`${P.cod} ya tiene su DXF.`);
+  const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');M=M||await plDxfMap(P,dsp.W,dsp.H,dsp.dxf.crop!==false,G0);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
   if(dsp.dxf.oz){try{await plPut(`${P.base}/orig.dxf.gz`,await plGet(dsp.base+'/orig.dxf.gz'),'application/gzip')}catch(e){console.warn('DXF original',e)}}
-  const rv=dsp.rev,rp=P.rev||1,mpp=dsp.dxf.mpp/f;const u={dxf:{...dsp.dxf,mpp,gz:gz.z,sobre:'pdf',dfname:dsp.fname||'',dts:NOW(),dby:me.email,de:Dp.id},cal:{mpp,rev:rp,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
+  const rv=dsp.rev,rp=P.rev||1,mpp=dsp.dxf.mpp/f;const u={dxf:{...dsp.dxf,...plMapMeta(M),mpp,gz:gz.z,gv:0,sobre:'pdf',dfname:dsp.fname||'',dts:NOW(),dby:me.email,de:Dp.id},cal:{mpp,rev:rp,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
   const src=dsp.cur?Dp:((Dp.revs||[]).find(r=>r.rev===rv)||{});
   if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f,ox,oy),rev:rp};
   if(Dp.alc&&Dp.alc.rev===rv&&dsp.cur)u.alc={...Dp.alc,rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
@@ -451,11 +509,12 @@ function plJoinPend(){if(typeof PLB==='undefined')return[];const out=[];
   return out.sort((a,b)=>String(a.D.cod).localeCompare(String(b.D.cod)))}
 /** misma ficha: revisión nueva con la imagen del PDF de la revisión `rv` y los datos del DXF vigente (nada se borra: todo queda en el historial) */
 async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);if(!r)throw new Error(`La Rev. ${rv} no es un PDF.`);const dsp=plSpecOf(D);const rc=D.rev||1;
-  await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false);   /* comprueba antes de escribir nada */
+  const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');
+  const M=await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false,G0);   /* comprueba antes de escribir nada */
   const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
   const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
   await plCol(D).doc(D.id).update({...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X});
-  await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false);return rc+1}
+  await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false,M);return rc+1}
 /** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
 function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';
   return`<div class="callout pljc"><b>${J.length} plano(s) tienen el PDF y el DXF por separado.</b> Únelos para ver el PDF y usar el DXF como sus datos (escala exacta, Alistar, ambientes). <span class="pljcb">${J.map(x=>`<button type="button" class="ib" data-pljoin="${esc(x.D.id)}">Unir ${esc(x.D.cod)}${x.P?` con ${esc(x.P.cod)}`:` (PDF de la Rev. ${x.r})`}</button>`).join('')}</span></div>`}

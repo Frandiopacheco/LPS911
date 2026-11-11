@@ -36,7 +36,7 @@ function plmHover(e){if(e.pointerType!=='mouse'||!PLV||!PLV.tv)return;PLV.tv.hos
   /* lámina DXF: muestra dónde se pegaría el punto */
   const g=plmGeo();if(g){const w=PLV.tv.toWorld(e.clientX,e.clientY),q=plmSnap(w);const hv=q!==w?q:null;if(JSON.stringify(hv)!==JSON.stringify(PLM.hv)){PLM.hv=hv;PLV.tv.tick()}}}
 /** geometría de la lámina DXF abierta (planos-dxf.js) o null */
-function plmGeo(){if(!PLV)return null;const p=PLB.get(PLV.id);if(!p)return null;const sp=plSpecOf(p,PLV.rev);if(!sp.dxf)return null;const e=GEO.get(sp.base);if(e&&e.g)return e.g;if(!e)plGeoGet(sp).catch(()=>{});return null}
+function plmGeo(){if(!PLV)return null;const p=PLB.get(PLV.id);if(!p)return null;const sp=plSpecOf(p,PLV.rev);if(!sp.dxf)return null;const e=GEO.get(plGeoKey(sp));if(e&&e.g)return e.g;if(!e)plGeoGet(sp).catch(()=>{});return null}
 /** se pega a la esquina o línea del DXF más cercana (12 px de pantalla); Alt o sin DXF: tal cual */
 function plmSnap(w,alt){const G=plmGeo();if(!G||alt)return w;const v=PLV.tv,a=v.toScreen(0,0),b=v.toScreen(1,0);const k=Math.hypot(b.x-a.x,b.y-a.y)||1;const q=plGeoSnap(G,w,12/k);return q?{x:q.x,y:q.y}:w}
 

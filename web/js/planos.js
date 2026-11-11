@@ -882,12 +882,13 @@ function plEdit(p,btn){
     <p class="note">${p.eto?'El subcontratista y el código identifican el ETO (las revisiones se reconocen por ellos); no se cambian aquí.':'El código y la especialidad identifican la lámina (las revisiones se reconocen por ellos); no se cambian aquí.'}</p>
     ${p.arch?'':`<div class="plea plrot"><span>Girar la lámina</span><button class="ib" data-do="rl" title="Girar 90° a la izquierda">⟲ Izquierda</button><button class="ib" data-do="rr" title="Girar 90° a la derecha">⟳ Derecha</button></div>`}
     ${!p.arch&&!p.eto&&p.dxf&&!p.dxf.sobre&&plEdOf(p)?'<div class="plea"><button class="ib" data-do="join" title="Si este plano también está cargado en PDF (otra ficha): el PDF queda como lo que se ve y este DXF como sus datos">Unir con su PDF…</button></div>':''}
+    ${!p.arch&&!p.eto&&p.dxf&&p.dxf.sobre&&plEdOf(p)?'<div class="plea"><button class="ib" data-do="recal" title="Vuelve a calzar el DXF sobre el PDF por su dibujo (si Medir no se pega bien a las líneas del PDF)">Recalcular el calce</button></div>':''}
     <div class="plea"><button class="ib pri" data-do="sv">Guardar</button>${p.arch?'<button class="ib" data-do="ua">Recuperar</button>':'<button class="ib" data-do="ar">Archivar</button>'}${plAdm()?'<button class="ib bad" data-do="del" title="Borrar de verdad la lámina y todos sus archivos (solo el administrador)">Eliminar…</button>':''}</div></div>`,
     {sv:async()=>{const d={tit:$('#pleT').value.trim(),...plLvDoc($('#pleP').value)};if(!p.eto)d.tipo=$('#pleK').value;try{await plCol(p).doc(p.id).update(d);toast('Datos del plano guardados')}catch(e){toast('No se pudo guardar: '+(e.code||e.message))}},
      ar:async()=>{if(!await uiAsk({title:'¿Archivar este plano?',text:`${p.cod} · ${p.tit||''} deja de verse en la biblioteca. Se puede recuperar desde «Archivados».`,ok:'Archivar',tone:'warn'}))return;
        try{await plCol(p).doc(p.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});plClose();toast('Plano archivado')}catch(e){toast('No se pudo archivar: '+(e.code||e.message))}},
      ua:async()=>{try{await plCol(p).doc(p.id).update({arch:firebase.firestore.FieldValue.delete()});toast('Plano recuperado')}catch(e){toast('No se pudo recuperar: '+(e.code||e.message))}},
-     del:()=>plDelete([p]),rl:()=>plRotate(p,3),rr:()=>plRotate(p,1),join:()=>plDxfJoinAsk(p)})}
+     del:()=>plDelete([p]),rl:()=>plRotate(p,3),rr:()=>plRotate(p,1),join:()=>plDxfJoinAsk(p),recal:()=>plDxfRecalceRun(p)})}
 
 /* ---------- Girar una lámina ya cargada (oct 2026, pedido del dueño) ----------
    Se baja su orig.pdf, se gira con pdf-lib y se vuelve a procesar EN ESTA PC (mosaicos en una carpeta nueva; la anterior no se borra).
