@@ -59,6 +59,11 @@ test('Capas: plantas del piso por especialidad, encima de la base; la alineació
   /* hoja de 800 px de ancho llevada a los 1000 de la base */
   expect(await page.locator('#mstage img[data-k^="pdc|"]').evaluate(im => im.style.transform)).toContain('1.25');
 
+  /* «Solo la capa»: sin la arquitectura debajo, y de vuelta */
+  await page.locator('[data-pdc="solo"]').click();
+  await expect(page.locator('#mstage img')).toHaveCount(1);
+  await page.locator('[data-pdc="solo"]').click();
+  await expect(page.locator('#mstage img')).toHaveCount(2);
   /* otro plano con la misma hoja: toma esa alineación y pide confirmar */
   await page.locator('[data-pdc="open"]').click();
   await page.locator('.pdci[data-pdcp="IE_IE03"]').click();
