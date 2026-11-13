@@ -158,7 +158,7 @@ function renderMapa(main){mdotsWire();ensureLam();/* C-11: el tren del catálogo
   const pk=M.piso+'|'+(base?base.id+base.rev:'');if(M.vpiso!==pk){M.vpiso=pk;M.view.fitted=0;requestAnimationFrame(()=>{if(M.view){M.view.fit();M.view.fitted=1}})}
   const VL=layers.map(x=>({key:x.key+'|'+x.l.rev,url:IMG.get(x.l.id+'|'+x.l.rev+'|'+(useHi()?'f':'l'))?.url||null,w:x.w,h:x.h,T:x.T,op:x.op,blend:x.blend}));
   /* capa de otra especialidad tomada del módulo Planos (js/pd-capas.js): solo se ve, encima de la base */
-  if(base&&cur&&cur.base&&typeof pdcLayer==='function'){const cl=pdcLayer(M.piso,base);if(cl)VL.push(cl)}
+  if(base&&cur&&cur.base&&typeof pdcLayer==='function'){const cl=pdcLayer(M.piso,base);if(cl){/* «Solo la capa»: sin la arquitectura debajo (las zonas siguen en su sitio) */if(cl.solo)VL.length=0;VL.push(cl)}}
   M.view.set(VL);M.view.apply();
   renderPlan(main,cur,base);
   layers.forEach(x=>{const k=x.l.id+'|'+x.l.rev+'|'+(useHi()?'f':'l');if(!IMG.get(k)?.url)imgURL(x.l,null,{auto:true}).then(imgRetry).catch(err=>{if(err&&err.lpsFirst!==false)toast('No se pudo cargar la lámina: '+(err.code||err.message)+'. Se reintenta solo.')})});
