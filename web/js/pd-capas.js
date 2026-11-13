@@ -76,7 +76,8 @@ const pdcT=(p,base)=>{const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===
 /** capa para el visor del Plan diario: {key,url,w,h,T,op,blend} o null (sin capa, sin alinear o todavía cargando) */
 function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const Tn=pdcT(p,base);if(!Tn)return null;
   const e=PDC.img.get(pdcKey(plSpecOf(p)));if(!e||!e.url){pdcLoad(p);return null}
-  return{key:'pdc|'+pdcKey(plSpecOf(p)),url:e.url,w:e.w,h:e.h,T:{a:Tn[0]/e.w,b:Tn[1]/e.w,e:Tn[2],f:Tn[3]},op:PDC.op,blend:PDC.solo?'normal':'multiply',solo:PDC.solo}}
+  if(!PDD.det)pdcDetSoon(400);   /* recién encendida o tras redibujar: ver si ya hace falta el detalle */
+  return{key:'pdc|'+pdcKey(plSpecOf(p)),url:e.url,w:e.w,h:e.h,T:{a:Tn[0]/e.w,b:Tn[1]/e.w,e:Tn[2],f:Tn[3]},op:PDC.op,blend:PDC.solo?'normal':'multiply',solo:PDC.solo,det:pdcDetLayer(p,base)}}
 /** botón «Capas ▾» y la capa encendida, para la barra del Plan diario */
 function pdcBar(piso,base){if(!base||typeof canPla!=='function'||!canPla())return'';const p=pdcCur(piso,base);
   return`<button class="ib pdcb${p?' on':''}" data-pdc="open" title="Ver encima de la arquitectura otra especialidad de este piso (del módulo Planos)">Capas ▾</button>`
@@ -149,4 +150,50 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   else if(k==='aln')pdcAlign(p,base)});
 document.addEventListener('input',e=>{if(e.target.id!=='pdcop')return;PDC.op=+e.target.value;
   /* sin redibujar la barra (se soltaría el control mientras se arrastra) */
-  document.querySelectorAll('#mstage img').forEach(im=>{if((im.dataset.k||'').startsWith('pdc|'))im.style.opacity=PDC.op})});
+  document.querySelectorAll('#mstage img').forEach(im=>{if(/^pdcd?\|/.test(im.dataset.k||''))im.style.opacity=PDC.op})});
+
+/* ---------- nitidez al acercarse (13-11-2026) ----------
+   La imagen de la capa tiene un tope (3000 px en celular y tablet, 4000 en PC) para no agotar la memoria; con mucho zoom se veía
+   borrosa. Al terminar de mover o acercar, si la pantalla pide más detalle que esa imagen, se arma un recorte solo de lo que se
+   ve con los mosaicos finos de Planos (hasta 16) y se pone encima. Al alejarse se quita. Nada se guarda. */
+const PDD={det:null,t:0,seq:0,tiles:new Map()};
+const PDD_MAX=16;
+function pdcDetLayer(p,base){const d=PDD.det;if(!d||d.pid!==p.id||d.bid!==base.id||d.base!==plSpecOf(p).base)return null;
+  return{key:d.key,url:d.url,w:d.w,h:d.h,T:d.T,op:PDC.op,blend:PDC.solo?'normal':'multiply'}}
+function pdcDetClear(){const d=PDD.det;PDD.det=null;PDD.seq++;if(!d)return;document.querySelectorAll('#mstage img').forEach(im=>{if(im.dataset.k===d.key)im.remove()});URL.revokeObjectURL(d.url)}
+async function pdcTile(path){let b=PDD.tiles.get(path);if(b){PDD.tiles.delete(path);PDD.tiles.set(path,b);return b}
+  b=await plGet(path,{noStore:true});PDD.tiles.set(path,b);while(PDD.tiles.size>48)PDD.tiles.delete(PDD.tiles.keys().next().value);return b}
+async function pdcDetail(){const PL=window.__plano;if(!PL||U.tab!=='mapa'||!PDC.id)return;const M=PL.M,v=M.view;if(!v||!v.host||!v.host.isConnected)return;
+  const base=PL.basesOf(M.piso).find(x=>x.id===M.vista)||PL.basesOf(M.piso)[0],p=pdcCur(M.piso,base);if(!p)return;const Tn=pdcT(p,base);if(!Tn)return;
+  const sp=plSpecOf(p),e=PDC.img.get(pdcKey(sp));if(!e||!e.url)return;
+  const dpr=Math.min(window.devicePixelRatio||1,3),k=Math.hypot(Tn[0],Tn[1]);   /* k: ancho de la hoja en coordenadas de la base */
+  /* píxeles de pantalla por cada píxel de la imagen armada: hasta 1,25 se ve bien */
+  if(v.z*dpr*k/e.w<=1.25){if(PDD.det)pdcDetClear();return}
+  const r=v.host.getBoundingClientRect();if(!r.width||!r.height)return;
+  /* lo visible, en unidades de la hoja (ancho = 1) */
+  const inv=q=>{const dx=q.x-Tn[2],dy=q.y-Tn[3],n=k*k;return{x:(Tn[0]*dx+Tn[1]*dy)/n,y:(Tn[0]*dy-Tn[1]*dx)/n}};
+  const C=[[r.left,r.top],[r.right,r.top],[r.left,r.bottom],[r.right,r.bottom]].map(c=>inv(v.toWorld(c[0],c[1])));
+  const hh=sp.H/sp.W,u0=Math.max(0,Math.min(...C.map(c=>c.x))),u1=Math.min(1,Math.max(...C.map(c=>c.x))),v0=Math.max(0,Math.min(...C.map(c=>c.y))),v1=Math.min(hh,Math.max(...C.map(c=>c.y)));
+  if(!(u1>u0&&v1>v0)){if(PDD.det)pdcDetClear();return}
+  const TS=sp.T||1024,Z=sp.Z||1;let z=Math.max(0,Math.min(Z-1,Math.floor(Math.log2(sp.W/(v.z*dpr*k)))));let R=null;
+  for(;z<Z;z++){const s=sp.W/2**z;const x0=Math.floor(u0*s/TS),x1=Math.floor(Math.min(u1*s,Math.ceil(s)-1)/TS),y0=Math.floor(v0*s/TS),y1=Math.floor(Math.min(v1*s,Math.ceil(sp.H/2**z)-1)/TS);
+    if((x1-x0+1)*(y1-y0+1)<=PDD_MAX){R={x0,x1,y0,y1,s};break}}
+  /* si ni el nivel más grueso entra, o ese nivel no mejora la imagen armada, no hay nada que ganar */
+  if(!R||R.s<=e.w*1.15){if(PDD.det)pdcDetClear();return}
+  const key=`pdcd|${sp.base}|${z}|${R.x0}_${R.y0}_${R.x1}_${R.y1}`;if(PDD.det&&PDD.det.key===key)return;
+  const seq=++PDD.seq,cv=document.createElement('canvas');cv.width=Math.min((R.x1-R.x0+1)*TS,Math.ceil(R.s)-R.x0*TS);cv.height=Math.min((R.y1-R.y0+1)*TS,Math.ceil(sp.H/2**z)-R.y0*TS);
+  const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,cv.width,cv.height);const L=[];for(let y=R.y0;y<=R.y1;y++)for(let x=R.x0;x<=R.x1;x++)L.push([x,y]);
+  let blob=null;
+  try{await Promise.all(L.map(async([x,y])=>{const bm=await createImageBitmap(await pdcTile(`${sp.base}/${z}/${x}_${y}.webp`));if(seq===PDD.seq)g.drawImage(bm,(x-R.x0)*TS,(y-R.y0)*TS);if(bm.close)bm.close()}));
+    if(seq===PDD.seq)blob=await new Promise(ok=>cv.toBlob(ok,'image/webp',.85))}
+  catch(err){blob=null}
+  const w=cv.width,h=cv.height;cv.width=cv.height=0;if(!blob||seq!==PDD.seq)return;   /* sin conexión o ya se movió: queda la imagen general */
+  const ox=R.x0*TS,oy=R.y0*TS,a=Tn[0]/R.s,b=Tn[1]/R.s,old=PDD.det;
+  PDD.det={key,pid:p.id,bid:base.id,base:sp.base,url:URL.createObjectURL(blob),w,h,T:{a,b,e:Tn[2]+a*ox-b*oy,f:Tn[3]+b*ox+a*oy}};
+  /* se pone directo en el visor (sin redibujar todo el Plan diario); los dibujos siguientes lo conservan por su clave */
+  const W=v.host.querySelector('.pvw'),svg=W&&W.querySelector('svg.pvs'),d=PDD.det;
+  if(W&&svg){const im=document.createElement('img');im.dataset.k=d.key;im.draggable=false;im.alt='';im.src=d.url;im.style.width=w+'px';im.style.height=h+'px';
+    im.style.transform=`matrix(${d.T.a},${d.T.b},${-d.T.b},${d.T.a},${d.T.e},${d.T.f})`;im.style.opacity=PDC.op;im.style.zIndex=9;im.style.mixBlendMode=PDC.solo?'normal':'multiply';W.insertBefore(im,svg)}
+  if(old){document.querySelectorAll('#mstage img').forEach(im=>{if(im.dataset.k===old.key)im.remove()});URL.revokeObjectURL(old.url)}}
+const pdcDetSoon=ms=>{clearTimeout(PDD.t);PDD.t=setTimeout(()=>{pdcDetail().catch(()=>{})},ms)};
+['pointerup','pointercancel','wheel'].forEach(t=>document.addEventListener(t,e=>{if(PDC.id&&e.target&&e.target.closest&&e.target.closest('#mstage'))pdcDetSoon(t==='wheel'?450:350)},{capture:true,passive:true}));

@@ -107,3 +107,28 @@ test('Capas: quien no alinea ve las ya alineadas y no puede confirmar ni guardar
   expect((await page.evaluate(() => window.__dbGet('plb', 'IE_IE03'))).pd).toBeUndefined();
   noErrors(errors);
 });
+
+test('Capas: al acercarse se arma el detalle nítido de lo que se ve con los mosaicos finos; al alejarse se quita', async ({ page }) => {
+  const errors = await abrir(page, 'admin');
+  await page.evaluate(b64 => {
+    const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    window.plGet = async p => { window.__GETS.push(p); return new Blob([u8], { type: 'image/png' }); };
+    /* hoja grande con 3 niveles de detalle: la imagen general se arma con el nivel 1 (4000 px) */
+    return db.collection('plb').doc('IS_IS03').update({ W: 8000, H: 4800, Z: 3 });
+  }, B64);
+  await page.locator('[data-pdc="open"]').click();
+  await page.locator('.pdci[data-pdcp="IS_IS03"]').click();
+  await expect(page.locator('#mstage img[data-k^="pdc|"]')).toHaveCount(1, { timeout: 15000 });
+  expect(await page.evaluate(() => window.__GETS.every(p => /\/r1\/1\//.test(p)))).toBe(true);
+  /* muy cerca: recorte con el nivel 0, solo de lo visible */
+  await page.evaluate(async () => { const v = window.__plano.M.view; v.z = 7; v.x = -300; v.y = -200; v.apply(); window.__GETS.length = 0; await pdcDetail(); });
+  await expect(page.locator('#mstage img[data-k^="pdcd|"]')).toHaveCount(1);
+  const g = await page.evaluate(() => window.__GETS);
+  expect(g.length).toBeGreaterThan(0); expect(g.length).toBeLessThanOrEqual(16); expect(g.every(p => /\/r1\/0\//.test(p))).toBe(true);
+  /* un redibujo lo conserva; al alejarse se quita */
+  await page.evaluate(() => render());
+  await expect(page.locator('#mstage img[data-k^="pdcd|"]')).toHaveCount(1);
+  await page.evaluate(async () => { const v = window.__plano.M.view; v.z = 0.5; v.apply(); await pdcDetail(); });
+  await expect(page.locator('#mstage img[data-k^="pdcd|"]')).toHaveCount(0);
+  noErrors(errors);
+});
