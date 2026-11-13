@@ -72,13 +72,19 @@ test('Capas: plantas del piso por especialidad, encima de la base; la alineació
   await expect(page.locator('#mnote')).not.toContainText('¿Coincide');
 
   /* quitar la capa; nada de la obra cambió: mismas láminas, la antigua sigue sin archivar */
+  /* en la Reunión la capa sigue encendida y el botón «Capas» está en su barra */
+  await page.locator('#mmeetb').click();
+  await expect(page.locator('#mstage img[data-k^="pdc|"]')).toHaveCount(1);
+  await expect(page.locator('[data-pdc="open"]:visible')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#mmeetb')).toBeVisible();
   /* el plano cambia de revisión en Planos: la capa se sigue viendo, pero pide revisar; un clic la deja al día */
   await page.evaluate(() => db.collection('plb').doc('IE_IE03').update({ rev: 2 }));
   await expect(page.locator('#mnote')).toContainText('revisa que siga coincidiendo');
   await page.locator('[data-pdc="ok"]').click();
   await expect.poll(() => page.evaluate(() => window.__dbGet('plb', 'IE_IE03').pd.L1.rev)).toBe(2);
   await expect(page.locator('#mnote')).not.toContainText('revisa que siga');
-  await page.locator('[data-pdc="off"]').click();
+  await page.locator('[data-pdc="off"]:visible').click();
   await expect(page.locator('#mstage img[data-k^="pdc|"]')).toHaveCount(0);
   const lam = await page.evaluate(() => window.__dbAll('laminas'));
   expect(Object.keys(lam).sort()).toEqual(['L1', 'L2']); expect(lam.L2.arch).toBeUndefined(); expect(lam.L1.T).toBeUndefined();
