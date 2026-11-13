@@ -14,7 +14,7 @@
      con puntos (`alignDialog` de plano.js).
    No depende de Casco. Enganches en plano.js: `pdcBar`, `pdcNote`, `pdcLayer`.
    ===================================================================== */
-const PDC={id:'',key:'',tmp:null,op:.85,all:false,img:new Map(),busy:'',err:'',errId:''};
+const PDC={id:'',key:'',tmp:null,solo:false,op:.85,all:false,img:new Map(),busy:'',err:'',errId:''};
 const PDC_I={a:1,b:0,e:0,f:0};
 /** quién guarda la alineación de una capa */
 const pdcCan=()=>!!me&&(me.role==='admin'||isOTArea());
@@ -76,12 +76,12 @@ const pdcT=(p,base)=>{const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===
 /** capa para el visor del Plan diario: {key,url,w,h,T,op,blend} o null (sin capa, sin alinear o todavía cargando) */
 function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const Tn=pdcT(p,base);if(!Tn)return null;
   const e=PDC.img.get(pdcKey(plSpecOf(p)));if(!e||!e.url){pdcLoad(p);return null}
-  return{key:'pdc|'+pdcKey(plSpecOf(p)),url:e.url,w:e.w,h:e.h,T:{a:Tn[0]/e.w,b:Tn[1]/e.w,e:Tn[2],f:Tn[3]},op:PDC.op,blend:'multiply'}}
+  return{key:'pdc|'+pdcKey(plSpecOf(p)),url:e.url,w:e.w,h:e.h,T:{a:Tn[0]/e.w,b:Tn[1]/e.w,e:Tn[2],f:Tn[3]},op:PDC.op,blend:PDC.solo?'normal':'multiply',solo:PDC.solo}}
 /** botón «Capas ▾» y la capa encendida, para la barra del Plan diario */
 function pdcBar(piso,base){if(!base||typeof canPla!=='function'||!canPla())return'';const p=pdcCur(piso,base);
   return`<button class="ib pdcb${p?' on':''}" data-pdc="open" title="Ver encima de la arquitectura otra especialidad de este piso (del módulo Planos)">Capas ▾</button>`
     +(p?`<span class="mchip on pdcc" title="${esc(pdcName(p))} · Rev. ${p.rev||1}"><b>${esc(p.disc||'')}</b> <span>${esc(pdcName(p))}</span><button data-pdc="off" aria-label="Quitar la capa" title="Quitar la capa">✕</button></span>
-      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa">${pdcCan()?'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
+      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa"><button class="ib${PDC.solo?' on':''}" data-pdc="solo" aria-pressed="${PDC.solo}" title="Ver solo esta capa, sin la arquitectura debajo">Solo la capa</button>${pdcCan()?'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
 /** avisos de la capa (cargando, error, alineación por confirmar) */
 function pdcNote(piso,base){const p=pdcCur(piso,base);if(!p)return'';const nm=`<b>${esc(p.cod||'La capa')}</b>`;
   if(PDC.err&&PDC.errId===p.id)return`<div class="callout warnc">No se pudo cargar ${nm}: ${esc(PDC.err)} <button class="ib" data-pdc="retry">Reintentar</button></div>`;
@@ -143,6 +143,7 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   if(k==='open'){pdcOpen(M.piso,base);return}
   if(!p)return;
   if(k==='off'){PDC.id='';PDC.tmp=null;requestRender()}
+  else if(k==='solo'){PDC.solo=!PDC.solo;requestRender()}
   else if(k==='retry'){PDC.err='';PDC.errId='';requestRender()}
   else if(k==='ok')pdcConfirm(p,base);
   else if(k==='aln')pdcAlign(p,base)});
