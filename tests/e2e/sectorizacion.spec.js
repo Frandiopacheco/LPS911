@@ -83,7 +83,7 @@ test('en el recorrido, el ambiente sale de su forma en la lámina', async ({ pag
   noErrors(errors, 'recorrido');
 });
 
-test('la lámina base se sube en Sectorización; el Plan diario solo sube especialidades', async ({ page }) => {
+test('la lámina base se sube en Sectorización, no en el Plan diario', async ({ page }) => {
   const errors = await openApp(page, { tab: 'planos' });
   await page.locator('[data-szp="p1"]').click();
   await expect(page.locator('#szmap')).toContainText('todavía no tiene lámina base');

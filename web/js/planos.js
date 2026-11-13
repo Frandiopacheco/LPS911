@@ -346,6 +346,8 @@ async function plProcess(it,say){const t0=performance.now();
   /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
   if(old&&!fresh&&!eto&&Array.isArray(old.lk)&&old.lk.length)doc.lk=dx||old.dxf?old.lk.map(l=>({...l})):plLkCarry(old,crop,v1);
   if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
+  /* la alineación con el Plan diario (js/pd-capas.js) pasa a la nueva revisión */
+  if(old&&!fresh&&!eto&&old.pd)doc.pd=old.pd;
   await fcol(eto?'eto':'plb').doc(id).set(doc);
   /* PDF del mismo código que un plano solo DXF: el DXF pasa a ser los datos de esta revisión (si era otra ficha, se archiva) */
   if(it.join&&!dx){const D=PLB.get(it.join);if(D){const dsp=D.id===id?plSpecOf({...D,revs:doc.revs},prev&&prev.rev):plSpecOf(D);const P={...doc,id};
