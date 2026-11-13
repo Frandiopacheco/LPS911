@@ -41,7 +41,7 @@ Object.assign(BNI,{pbib:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
-  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS()))requestRender();if(typeof palSync==='function')palSync()},
+  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS())||(U.tab==='mapa'&&typeof PDC!=='undefined'&&PDC.id))requestRender();if(typeof palSync==='function')palSync()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
   open();etoSub();plnvSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;if(plnvUn)plnvUn();plnvUn=null;PLNV=null;PLB.clear();plbReady=false})}
 /* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
@@ -929,7 +929,7 @@ async function plStDel(path){const r=await fetch(plApi()+'/o/'+encodeURIComponen
 /** láminas del Plan diario y de Sectorización (Last Planner y Casco) que usan estos planos (plb.id) y no están archivadas */
 async function plUsos(ids){const want=new Set(ids),out=[];
   for(const[col,mod]of[['laminas','Last Planner'],['cs_laminas','Casco']]){let sn;try{sn=await(db||FDB).collection(col).get()}catch(e){continue}
-    sn.docs.forEach(d=>{const l=d.data()||{};if(!l.arch&&l.plb&&want.has(l.plb.id))out.push({plb:l.plb.id,mod,nm:l.name||l.esp||'',pisoId:l.pisoId,base:!!l.base})})}
+    sn.docs.forEach(d=>{const l=d.data()||{};/* solo las láminas base: las especialidades cargadas a mano ya no se muestran (pd-capas.js) y tienen su propia imagen */if(!l.arch&&l.base&&l.plb&&want.has(l.plb.id))out.push({plb:l.plb.id,mod,nm:l.name||l.esp||'',pisoId:l.pisoId,base:!!l.base})})}
   return out}
 async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean);if(!list.length){toast('No hay planos en la lista.');return}
   /* un plano que usa una lámina del Plan diario o de Sectorización no se elimina (decidido con el dueño, oct 2026): primero se desvincula */

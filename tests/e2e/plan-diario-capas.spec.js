@@ -72,6 +72,12 @@ test('Capas: plantas del piso por especialidad, encima de la base; la alineació
   await expect(page.locator('#mnote')).not.toContainText('¿Coincide');
 
   /* quitar la capa; nada de la obra cambió: mismas láminas, la antigua sigue sin archivar */
+  /* el plano cambia de revisión en Planos: la capa se sigue viendo, pero pide revisar; un clic la deja al día */
+  await page.evaluate(() => db.collection('plb').doc('IE_IE03').update({ rev: 2 }));
+  await expect(page.locator('#mnote')).toContainText('revisa que siga coincidiendo');
+  await page.locator('[data-pdc="ok"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('plb', 'IE_IE03').pd.L1.rev)).toBe(2);
+  await expect(page.locator('#mnote')).not.toContainText('revisa que siga');
   await page.locator('[data-pdc="off"]').click();
   await expect(page.locator('#mstage img[data-k^="pdc|"]')).toHaveCount(0);
   const lam = await page.evaluate(() => window.__dbAll('laminas'));

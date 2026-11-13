@@ -23,12 +23,14 @@ const pdcAr=sp=>sp&&sp.W>0&&sp.H>0?sp.W/sp.H:0;
 const pdcSameAr=(a,b)=>!!a&&!!b&&Math.abs(a/b-1)<.004;
 /** una planta DXF solo se usa cuando su revisión está «Lista» (planos-alistar.js) */
 const pdcReady=p=>typeof plRevOk!=='function'||plRevOk(p);
+const pdcGiro=p=>(p&&p.giro&&p.giro.q)||0;
 const pdcName=p=>p?(p.cod||'')+(p.tit?' · '+p.tit:''):'';
 /** plantas del piso en el módulo Planos (all: también cortes, detalles…) */
 function pdcList(piso,all){const lv=plLvIn(piso);return plAct().filter(p=>plLvOf(p)===lv&&(all||p.tipo==='Planta')).sort((a,b)=>plDiscIx(a.disc)-plDiscIx(b.disc)||plCodCmp(a,b))}
 /** alineación guardada de un plano con una lámina base; chk: la hoja cambió desde que se alineó */
 function pdcAl(p,base){const e=p&&base&&p.pd&&p.pd[base.id];if(!e||!Array.isArray(e.T)||e.T.length!==4||e.T.some(v=>typeof v!=='number'||!isFinite(v)))return null;
-  const ar=pdcAr(plSpecOf(p));return{T:e.T,pts:e.pts||null,chk:!!(e.ar&&ar&&!pdcSameAr(e.ar,ar)),e}}
+  /* revisar: otra revisión (puede venir con otro recorte), otra proporción de hoja o la lámina girada después de alinear */
+  const ar=pdcAr(plSpecOf(p));return{T:e.T,pts:e.pts||null,chk:(e.rev||1)!==(p.rev||1)||!!(e.ar&&ar&&!pdcSameAr(e.ar,ar))||(e.g||0)!==pdcGiro(p),e}}
 /** alineación probable: la de otro plano del mismo piso con la misma hoja, o la de la base si vino del módulo Planos */
 function pdcGuess(p,base){const ar=pdcAr(plSpecOf(p));if(!ar)return null;
   const same=q=>pdcSameAr(pdcAr(plSpecOf(q)),ar)&&(!Array.isArray(p.mm)||!Array.isArray(q.mm)||(Math.abs(p.mm[0]-q.mm[0])<2&&Math.abs(p.mm[1]-q.mm[1])<2));
@@ -36,7 +38,7 @@ function pdcGuess(p,base){const ar=pdcAr(plSpecOf(p));if(!ar)return null;
     .sort((a,b)=>((b.disc===p.disc)-(a.disc===p.disc))||((b.pd[base.id].ts||0)-(a.pd[base.id].ts||0)));
   if(C.length)return{T:pdcAl(C[0],base).T,from:C[0]};
   const q=base.plb&&base.plb.id&&PLB.get(base.plb.id);
-  if(q&&base.w>0&&(q.id===p.id||same(q))){const t=base.T||PDC_I;return{T:[t.a*base.w,t.b*base.w,t.e,t.f],from:q}}
+  if(q&&base.w>0&&(q.id===p.id?(base.plb.rev||1)===(p.rev||1):same(q))){const t=base.T||PDC_I;return{T:[t.a*base.w,t.b*base.w,t.e,t.f],from:q}}
   return null}
 
 /* ---------- imagen de la capa ---------- */
@@ -50,12 +52,13 @@ function pdcImg(p){const sp=plSpecOf(p),k0=pdcKey(sp);let e=PDC.img.get(k0);if(e
   e.pr=(async()=>{const d=pdcDims(sp),ck=location.origin+'/__plan/'+sp.base+'/pd'+d.mx+'.webp';let c=null,blob=null;
     try{c=await caches.open(PLC_NAME);const hit=await c.match(ck);if(hit)blob=await hit.blob()}catch(err){c=null}
     if(!blob){const T=sp.T||1024,cv=document.createElement('canvas');cv.width=d.w;cv.height=d.h;const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,d.w,d.h);g.imageSmoothingQuality='high';
-      const nx=Math.ceil(d.lw/T),ny=Math.ceil(d.lh/T),L=[];for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push([x,y]);let i=0;
-      const one=async([x,y])=>{const b=await plGet(`${sp.base}/${d.z}/${x}_${y}.webp`,{noStore:true});const bm=await createImageBitmap(b);
+      const nx=Math.ceil(d.lw/T),ny=Math.ceil(d.lh/T),L=[];for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)L.push([x,y]);let i=0,stop=false;
+      const one=async([x,y])=>{const b=await plGet(`${sp.base}/${d.z}/${x}_${y}.webp`,{noStore:true});const bm=await createImageBitmap(b);if(stop){if(bm.close)bm.close();return}
         g.drawImage(bm,Math.floor(x*T*d.k),Math.floor(y*T*d.k),Math.ceil(bm.width*d.k)+(d.k<1?1:0),Math.ceil(bm.height*d.k)+(d.k<1?1:0));if(bm.close)bm.close()};
-      try{await Promise.all(Array.from({length:Math.min(6,L.length)},async()=>{while(i<L.length)await one(L[i++])}));
+      try{await Promise.all(Array.from({length:Math.min(6,L.length)},async()=>{while(i<L.length&&!stop)await one(L[i++])}));
         blob=await new Promise((ok,ko)=>cv.toBlob(b=>b?ok(b):ko(new Error('No se pudo armar la imagen')),'image/webp',.8))}
-      finally{cv.width=cv.height=0}
+      catch(err){stop=true;throw err}
+      finally{stop=true;cv.width=cv.height=0}
       if(c)try{await c.put(ck,new Response(blob,{headers:{'Content-Type':'image/webp'}}))}catch(err){}}
     e.url=URL.createObjectURL(blob);e.w=d.w;e.h=d.h;
     /* en memoria solo las dos últimas capas (cada una ocupa memoria de video) */
@@ -84,12 +87,12 @@ function pdcNote(piso,base){const p=pdcCur(piso,base);if(!p)return'';const nm=`<
   if(PDC.err&&PDC.errId===p.id)return`<div class="callout warnc">No se pudo cargar ${nm}: ${esc(PDC.err)} <button class="ib" data-pdc="retry">Reintentar</button></div>`;
   const a=pdcAl(p,base);let h='';
   if(!a&&PDC.tmp&&PDC.tmp.id===p.id)h=`<div class="callout warnc">${nm} usa la alineación de <b>${esc(PDC.tmp.from||'otro plano')}</b> (misma hoja). ${pdcCan()?'¿Coincide con la arquitectura? <button class="ib pri" data-pdc="ok">Sí, coincide</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':'Aún sin confirmar: si no coincide, avisa a Oficina Técnica.'}</div>`;
-  else if(a&&a.chk)h=`<div class="callout warnc">La hoja de ${nm} cambió con la Rev. ${p.rev||1}: revisa que siga coincidiendo con la arquitectura. ${pdcCan()?'<button class="ib pri" data-pdc="ok">Sigue coincidiendo</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':''}</div>`;
+  else if(a&&a.chk)h=`<div class="callout warnc">${nm} cambió en el módulo Planos (Rev. ${p.rev||1}): revisa que siga coincidiendo con la arquitectura. ${pdcCan()?'<button class="ib pri" data-pdc="ok">Sigue coincidiendo</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':''}</div>`;
   if(PDC.busy===p.id)h+=`<div class="callout">Cargando la capa ${nm}…</div>`;
   return h}
 
 /* ---------- guardar la alineación ---------- */
-async function pdcSave(p,base,T,pts){const sp=plSpecOf(p);const v={T:T.map(x=>+(+x).toFixed(4)),ar:+pdcAr(sp).toFixed(5),rev:p.rev||1,by:me.email,n:me.name||me.email,ts:NOW()};if(pts)v.pts=pts;
+async function pdcSave(p,base,T,pts){const sp=plSpecOf(p);const v={T:T.map(x=>+(+x).toFixed(4)),ar:+pdcAr(sp).toFixed(5),rev:p.rev||1,g:pdcGiro(p),by:me.email,n:me.name||me.email,ts:NOW()};if(pts)v.pts=pts;
   await fcol('plb').doc(p.id).update({['pd.'+base.id]:v})}
 async function pdcConfirm(p,base){const T=pdcT(p,base);if(!T||!pdcCan())return;const a=pdcAl(p,base);
   try{await pdcSave(p,base,T,a?a.pts:null);if(PDC.tmp&&PDC.tmp.id===p.id)PDC.tmp=null;toast('Alineación guardada: la capa queda lista para todos')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}requestRender()}
@@ -129,7 +132,7 @@ function pdcOpen(piso,base,n){if(!base||!canPla())return;plSub();
     <div class="pdct"><input class="tin" id="pdcq" type="search" placeholder="Buscar por código o título" aria-label="Buscar plano"><label class="chk"><input type="checkbox" id="pdcall"${PDC.all?' checked':''}> También cortes y detalles</label>${cur?'<button class="ib" data-pdcp="">Quitar la capa</button>':''}</div>
     <div class="pdcl">${body}</div>`,
     e=>{const b=e.target.closest('[data-pdcp]');if(!b)return;if(!b.dataset.pdcp){PDC.id='';PDC.tmp=null;lqClose();requestRender();return}pdcPick(b.dataset.pdcp,piso,base)},
-    e=>{if(e.target.id==='pdcall'){PDC.all=e.target.checked;pdcOpen(piso,base)}});
+    e=>{if(e.target.id==='pdcall'){PDC.all=e.target.checked;const q=($('#pdcq')||{}).value||'';pdcOpen(piso,base);const i=$('#pdcq');if(i&&q){i.value=q;i.dispatchEvent(new Event('input',{bubbles:true}))}}});
   const el=$('#lqm');if(el)el.oninput=e=>{if(e.target.id!=='pdcq')return;const q=e.target.value.trim().toLowerCase();
     $$('.pdci',el).forEach(b=>{b.hidden=!!q&&!b.dataset.s.includes(q)});$$('[data-g]',el).forEach(g=>{g.hidden=![...g.querySelectorAll('.pdci')].some(b=>!b.hidden)})}}
 

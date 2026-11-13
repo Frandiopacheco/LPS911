@@ -2283,7 +2283,8 @@ function lamMenu(btn,l){const base=baseOfL(l);const specs=lamsOf(l.pisoId).filte
    ren:()=>renameDialog(btn,l),
    mkbase:()=>setTimeout(()=>openPop(btn,`<div class="ph">Convertir “${esc(lname(l))}” en plano base</div><div class="ptx">Pasará a ser una vista propia del piso (por ejemplo, otra fachada), con su propio plan del día. Deja de superponerse sobre ${esc(lname(base))}.</div><button data-do="yes">Sí, convertir en plano base</button><button data-do="no">Cancelar</button>`,
      {no:()=>{},yes:async()=>{try{await fcol('laminas').doc(l.id).update({base:true,baseId:null,T:I,aligned:true});M.vista=l.id;M.sel=l.id;toast('Ahora es un plano base propio')}catch(err){toast('No se pudo cambiar: '+(err.code||err.message))}}}),0),
-   del:async()=>{if(l.base&&specs.length){toast(`Es un plano base con ${specs.length} especialidad(es) encima: primero elimínalas, conviértelas en plano base o reemplaza este por una nueva revisión.`);return}
+   del:async()=>{/* 13-11-2026: las especialidades cargadas a mano ya no se ven (pd-capas.js): no impiden archivar la base */
+
      setTimeout(()=>openPop(btn,`<div class="ph">¿Eliminar la lámina “${esc(lname(l))}”?</div><div class="ptx">Deja de verse en este piso para todos. Se guarda archivada: se recupera en «Vista ▾ › Láminas archivadas».${l.base&&basesOf(l.pisoId).length>1?' Lo dibujado sobre esta vista dejará de mostrarse.':''}</div><button data-do="yes" class="danger">Sí, archivar lámina</button><button data-do="no">Cancelar</button>`,{no:()=>{},
        yes:async()=>{try{await fcol('laminas').doc(l.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email}});toast('Lámina archivada','Deshacer',()=>lamRestore(l.id))}catch(err){toast('No se pudo archivar: '+(err.code||err.message))}}}),0)}})}
 function renameDialog(btn,l){const box=document.createElement('div');box.className='mdlg';box.innerHTML=`<div class="mdlgc" role="dialog" aria-modal="true"><h3>Nombre de la lámina</h3>
