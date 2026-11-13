@@ -41,7 +41,7 @@ Object.assign(BNI,{pbib:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.
 
 /* ---------- datos ---------- */
 function plSub(){if(plbUn||!me||!canPla())return;
-  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS()))requestRender();if(typeof palSync==='function')palSync()},
+  const open=()=>{plbUn=fcol('plb').onSnapshot(sn=>{PLB.clear();sn.docs.forEach(d=>PLB.set(d.id,{...d.data(),id:d.id}));plbReady=true;if(U.mod==='pla'||(U.tab==='cfg'&&U.cfgV==='cas')||(U.tab==='planos'&&CS())||(U.tab==='mapa'&&typeof PDC!=='undefined'&&PDC.id))requestRender();if(typeof palSync==='function')palSync()},
     err=>{plbUn=null;plbReady=true;console.error('plb',err);toast('No se pudo leer la lista de planos: '+(err.code||err.message));setTimeout(()=>{if(me&&canPla())open()},8000)})};
   open();etoSub();plnvSub();unsubs.push(()=>{if(plbUn)plbUn();plbUn=null;if(etoUn)etoUn();etoUn=null;if(plnvUn)plnvUn();plnvUn=null;PLNV=null;PLB.clear();plbReady=false})}
 /* ---------- ETO: planos de taller de los subcontratistas (oct 2026, decidido con el dueño) ----------
@@ -346,6 +346,8 @@ async function plProcess(it,say){const t0=performance.now();
   /* los vínculos pasan a la nueva revisión (antes se perdían); con «Empezar en Rev. 1» no */
   if(old&&!fresh&&!eto&&Array.isArray(old.lk)&&old.lk.length)doc.lk=dx||old.dxf?old.lk.map(l=>({...l})):plLkCarry(old,crop,v1);
   if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
+  /* la alineación con el Plan diario (js/pd-capas.js) pasa a la nueva revisión */
+  if(old&&!fresh&&!eto&&old.pd)doc.pd=old.pd;
   await fcol(eto?'eto':'plb').doc(id).set(doc);
   /* PDF del mismo código que un plano solo DXF: el DXF pasa a ser los datos de esta revisión (si era otra ficha, se archiva) */
   if(it.join&&!dx){const D=PLB.get(it.join);if(D){const dsp=D.id===id?plSpecOf({...D,revs:doc.revs},prev&&prev.rev):plSpecOf(D);const P={...doc,id};
@@ -927,7 +929,7 @@ async function plStDel(path){const r=await fetch(plApi()+'/o/'+encodeURIComponen
 /** láminas del Plan diario y de Sectorización (Last Planner y Casco) que usan estos planos (plb.id) y no están archivadas */
 async function plUsos(ids){const want=new Set(ids),out=[];
   for(const[col,mod]of[['laminas','Last Planner'],['cs_laminas','Casco']]){let sn;try{sn=await(db||FDB).collection(col).get()}catch(e){continue}
-    sn.docs.forEach(d=>{const l=d.data()||{};if(!l.arch&&l.plb&&want.has(l.plb.id))out.push({plb:l.plb.id,mod,nm:l.name||l.esp||'',pisoId:l.pisoId,base:!!l.base})})}
+    sn.docs.forEach(d=>{const l=d.data()||{};/* solo las láminas base: las especialidades cargadas a mano ya no se muestran (pd-capas.js) y tienen su propia imagen */if(!l.arch&&l.base&&l.plb&&want.has(l.plb.id))out.push({plb:l.plb.id,mod,nm:l.name||l.esp||'',pisoId:l.pisoId,base:!!l.base})})}
   return out}
 async function plDelete(list){if(!plAdm())return;list=(list||[]).filter(Boolean);if(!list.length){toast('No hay planos en la lista.');return}
   /* un plano que usa una lámina del Plan diario o de Sectorización no se elimina (decidido con el dueño, oct 2026): primero se desvincula */
