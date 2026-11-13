@@ -1250,11 +1250,13 @@ test('revisiones: los vínculos pasan a la nueva revisión (y se recolocan si ah
   expect(d.rev).toBe(1); expect(d.crop).toBeNull();
   // un vínculo en el centro del marco (coordenadas de la hoja completa)
   const cx = (box[0] + box[2]) / 2 / 3402, cy = (box[1] + box[3]) / 2 / 2551;
-  await page.evaluate(([cx, cy]) => fcol('plb').doc('ARQ_AG03').update({ lk: [{ id: 'k1', x0: cx - 0.01, y0: cy - 0.01, x1: cx + 0.01, y1: cy + 0.01, to: 'ARQ_AG03', v: null, t: 'A' }] }), [cx, cy]);
+  await page.evaluate(([cx, cy]) => fcol('plb').doc('ARQ_AG03').update({ pd: { L1: { T: [1000, 0, 0, 0], ar: 1.33, rev: 1 } }, lk: [{ id: 'k1', x0: cx - 0.01, y0: cy - 0.01, x1: cx + 0.01, y1: cy + 0.01, to: 'ARQ_AG03', v: null, t: 'A' }] }), [cx, cy]);
   // rev. 2 recortada al marco: el vínculo pasa y queda otra vez en el centro (ahora del recorte)
   await page.evaluate(() => store.set('plcrop', true)); await page.evaluate(() => render());
   d = await cargar(hoja, ' R2');
   expect(d.rev).toBe(2); expect(d.crop).not.toBeNull(); expect(d.revs.length).toBe(1);
+  // la alineación con el Plan diario (capas) también pasa a la revisión nueva
+  expect(d.pd.L1.T).toEqual([1000, 0, 0, 0]);
   expect(d.lk.length).toBe(1);
   expect((d.lk[0].x0 + d.lk[0].x1) / 2).toBeCloseTo(0.5, 2); expect((d.lk[0].y0 + d.lk[0].y1) / 2).toBeCloseTo(0.5, 2);
   // rev. 3 igual de recortada: el vínculo pasa sin cambios
