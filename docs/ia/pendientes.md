@@ -40,3 +40,5 @@ Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan l
 - `lhprop/{sc}` acumula claves `id:null` de cada decisión; vigilar el límite de 1 MB en obras largas.
 - Dos usuarios SC de la misma partida comparten `lhprop/{sc}`: «Enviar» de uno envía también los borradores del otro (¿por diseño?).
 - Duda del informe externo: confirmar que al entrar a la revisión se limpie la selección en bloque (`SELA`, mover.js).
+
+- **Capas del Plan diario desde Planos: pasaron a la obra el 16-11-2026** (aprobado por el dueño; #541, #542 y #543 por cherry-pick). Las especialidades cargadas a mano dejaron de verse (siguen en `laminas`): admin u OT alinean en la obra las capas que se usan en la reunión.
