@@ -463,6 +463,15 @@ test('etapa 2: cada plano listo a la malla de ejes; Casco y la capa del Plan dia
     out.cs = !!(typeof csMap === 'function' && csMap(l1, l2) && csMap(l1, l2).malla);
     out.vieja = plLamT({ ...l1, plb: { id: 'EST_M', rev: 2 } }, l2);   /* lámina en otra revisión: no */
     const A = pdcAuto(P2, { ...l1, T: { a: 1, b: 0, e: 0, f: 0 } }); out.pd = { e: +A[2].toFixed(3), a: +A[0].toFixed(3), exp: +(1000 / mpp / S.W).toFixed(3) };
+    /* «Recalcular el calce» movió la geometría 10 px: la alineación guardada y la del plano de la malla se corren igual (la malla no se toca) */
+    const s3 = plOkShift(P3, P3.ok, 10, 0, mpp); out.sh3 = +(s3.fit.e - (2 - 10 * mpp)).toFixed(6);
+    const sm = plOkShift(M1, M1.ok, 10, 0, mpp); PLB.set('EST_M', { ...M1, ok: sm }); const Tm = plPxMalla(PLB.get('EST_M'));
+    out.shm = { de: sm.fit.de, e: +(Tm.e + 10 * mpp).toFixed(6) };
+    /* alineación antigua sin dr ni dt: vale solo si el plano se marcó listo después de fijar la malla */
+    out.old = [plFitOk({ a: 1, b: 0, e: 0, f: 0, de: 'EST_M' }, { id: 'EST_M', rev: 1, t: 5 }, { ok: { t: 9 } }), plFitOk({ a: 1, b: 0, e: 0, f: 0, de: 'EST_M' }, { id: 'EST_M', rev: 1, t: 5 }, { ok: { t: 2 } }),
+      plFitOk({ a: 1, b: 0, e: 0, f: 0, de: 'EST_M', dt: 4 }, { id: 'EST_M', rev: 1, t: 5 }, { ok: { t: 9 } })];
+    /* la lista de capas no trae geometrías: sin ok.fit no sabe todavía */
+    out.sinGeo = plPxMalla(P2, { sinGeo: 1 }) === null && !!plPxMalla(P3, { sinGeo: 1 });
     PLB.clear(); for (const [i, d] of keep) PLB.set(i, d);
     return out;
   }, dxfDemo());
@@ -474,6 +483,8 @@ test('etapa 2: cada plano listo a la malla de ejes; Casco y la capa del Plan dia
   expect(r.l12.x).toBeCloseTo(r.l12.exp, 2); expect(r.l12.k).toBeCloseTo(0.5, 4);
   expect(r.cs).toBe(true); expect(r.vieja).toBeNull();
   expect(r.pd.a).toBe(1000); expect(r.pd.e).toBeCloseTo(r.pd.exp, 2);
+  expect(r.sh3).toBe(0); expect(r.shm).toEqual({ de: 'EST_M', e: 0 });
+  expect(r.old).toEqual([true, false, false]); expect(r.sinGeo).toBe(true);
   expect(errors).toEqual([]);
 });
 

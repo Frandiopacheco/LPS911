@@ -14,7 +14,7 @@
      con puntos (`alignDialog` de plano.js).
    No depende de Casco. Enganches en plano.js: `pdcBar`, `pdcNote`, `pdcLayer`.
    ===================================================================== */
-const PDC={id:'',key:'',tmp:null,solo:false,op:.85,all:false,img:new Map(),busy:'',err:'',errId:''};
+const PDC={pick:0,id:'',key:'',tmp:null,solo:false,op:.85,all:false,img:new Map(),busy:'',err:'',errId:''};
 const PDC_I={a:1,b:0,e:0,f:0};
 /** quién guarda la alineación de una capa */
 const pdcCan=()=>!!me&&(me.role==='admin'||isOTArea());
@@ -43,9 +43,14 @@ function pdcGuess(p,base){const ar=pdcAr(plSpecOf(p));if(!ar)return null;
 
 /** alineación por la malla de ejes (17-11-2026, docs/ia/planos.md «Planta digitalizada»): si la capa y la lámina base vienen de planos DXF
     listos, se calcula sola y siempre al día con sus revisiones; no se guarda ni se marcan puntos. [a,b,e,f] de la hoja (ancho 1) a la base */
-function pdcAuto(p,base){if(!p||!base||!base.plb||!(base.w>0)||typeof plPxMalla!=='function'||pdcGiro(p))return null;
-  const B=plLamMalla(base),Sp=plPxMalla(p),W=plSpecOf(p).W;if(!B||!Sp||!(W>0))return null;
+function pdcAuto(p,base,o){if(!p||!base||!base.plb||!(base.w>0)||typeof plPxMalla!=='function'||pdcGiro(p))return null;
+  const B=plLamMalla(base,o);if(!B)return null;const Sp=plPxMalla(p,o),W=plSpecOf(p).W;if(!Sp||!(W>0))return null;
   const t=base.T||PDC_I;const F=simCmp(t,simCmp(simInv(B),simCmp(Sp,{a:W,b:0,e:0,f:0})));return simOk(F)?[F.a,F.b,F.e,F.f]:null}
+
+/** alineación hecha a mano con puntos y vigente: gana a la automática (la obra pudo corregirla a propósito) */
+const pdcMan=(p,base)=>{const a=pdcAl(p,base);return a&&!a.chk&&a.pts?a:null};
+/** la capa se está alineando sola por los ejes */
+const pdcAutoOn=(p,base,o)=>!pdcMan(p,base)&&!!pdcAuto(p,base,o);
 
 /* ---------- imagen de la capa ---------- */
 function pdcDims(sp){const mx=pdcMax(),Z=sp.Z||1;let z=0;while(z<Z-1&&Math.ceil(Math.max(sp.W,sp.H)/2**z)>mx)z++;
@@ -78,7 +83,7 @@ function pdcLoad(p){if(PDC.busy===p.id||(PDC.err&&PDC.errId===p.id))return;PDC.b
 /** el plano encendido en este piso (la capa se apaga al cambiar de piso o de lámina base) */
 function pdcCur(piso,base){if(!base||typeof PLB==='undefined')return null;const k=piso+'|'+base.id;if(PDC.key!==k){PDC.key=k;PDC.id='';PDC.tmp=null;PDC.err='';PDC.errId=''}
   if(!PDC.id)return null;const p=PLB.get(PDC.id);if(!p||p.arch){if(plbReady){PDC.id='';PDC.tmp=null}return null}return p}
-const pdcT=(p,base)=>{const m=pdcAuto(p,base);if(m)return m;const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===p.id?PDC.tmp.T:null)};
+const pdcT=(p,base)=>{const h=pdcMan(p,base);if(h)return h.T;const m=pdcAuto(p,base);if(m)return m;const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===p.id?PDC.tmp.T:null)};
 /** capa para el visor del Plan diario: {key,url,w,h,T,op,blend} o null (sin capa, sin alinear o todavía cargando) */
 function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const Tn=pdcT(p,base);if(!Tn)return null;
   const e=PDC.img.get(pdcKey(plSpecOf(p)));if(!e||!e.url){pdcLoad(p);return null}
@@ -88,12 +93,12 @@ function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const T
 function pdcBar(piso,base){if(!base||typeof canPla!=='function'||!canPla())return'';const p=pdcCur(piso,base);
   return`<button class="ib pdcb${p?' on':''}" data-pdc="open" title="Ver encima de la arquitectura otra especialidad de este piso (del módulo Planos)">Capas ▾</button>`
     +(p?`<span class="mchip on pdcc" title="${esc(pdcName(p))} · Rev. ${p.rev||1}"><b>${esc(p.disc||'')}</b> <span>${esc(pdcName(p))}</span><button data-pdc="off" aria-label="Quitar la capa" title="Quitar la capa">✕</button></span>
-      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa"><button class="ib${PDC.solo?' on':''}" data-pdc="solo" aria-pressed="${PDC.solo}" title="Ver solo esta capa, sin la arquitectura debajo">Solo la capa</button>${pdcAuto(p,base)?'<span class="mu pdcm" title="La capa y la base vienen de planos DXF listos: se alinean solas por la malla de ejes del proyecto">⌗ por ejes</span>':pdcCan()?'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
+      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa"><button class="ib${PDC.solo?' on':''}" data-pdc="solo" aria-pressed="${PDC.solo}" title="Ver solo esta capa, sin la arquitectura debajo">Solo la capa</button>${pdcAutoOn(p,base)?'<span class="mu pdcm" title="La capa y la base vienen de planos DXF listos: se alinean solas por la malla de ejes del proyecto">⌗ por ejes</span>':''}${pdcCan()?(pdcMan(p,base)&&pdcAuto(p,base)?'<button class="ib" data-pdc="ejes" title="Quitar la alineación a mano y alinear por la malla de ejes">Alinear por ejes</button>':'')+'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
 /** avisos de la capa (cargando, error, alineación por confirmar) */
 function pdcNote(piso,base){const p=pdcCur(piso,base);if(!p)return'';const nm=`<b>${esc(p.cod||'La capa')}</b>`;
   if(PDC.err&&PDC.errId===p.id)return`<div class="callout warnc">No se pudo cargar ${nm}: ${esc(PDC.err)} <button class="ib" data-pdc="retry">Reintentar</button></div>`;
   const a=pdcAl(p,base);let h='';
-  if(pdcAuto(p,base)){}   /* alineada por la malla de ejes: nada que confirmar */
+  if(pdcMan(p,base)||pdcAuto(p,base)){}   /* alineada a mano o por la malla de ejes: nada que confirmar */
   else if(!a&&PDC.tmp&&PDC.tmp.id===p.id)h=`<div class="callout warnc">${nm} usa la alineación de <b>${esc(PDC.tmp.from||'otro plano')}</b> (misma hoja). ${pdcCan()?'¿Coincide con la arquitectura? <button class="ib pri" data-pdc="ok">Sí, coincide</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':'Aún sin confirmar: si no coincide, avisa a Oficina Técnica.'}</div>`;
   else if(a&&a.chk)h=`<div class="callout warnc">${nm} cambió en el módulo Planos (Rev. ${p.rev||1}): revisa que siga coincidiendo con la arquitectura. ${pdcCan()?'<button class="ib pri" data-pdc="ok">Sigue coincidiendo</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':''}</div>`;
   if(PDC.busy===p.id)h+=`<div class="callout">Cargando la capa ${nm}…</div>`;
@@ -119,8 +124,10 @@ async function pdcPick(id,piso,base){const p=PLB.get(id);if(!p||!base)return;
   if(!pdcReady(p)){toast('Esta planta DXF aún no está lista: se alista en el módulo Planos.');return}
   PDC.key=piso+'|'+base.id;PDC.err='';PDC.errId='';
   /* planos DXF listos: se alinean solos por la malla de ejes (si falta su geometría, se trae primero) */
-  const q=base.plb&&PLB.get(base.plb.id);if(p.dxf&&q&&q.dxf&&typeof plPxMallaPrep==='function'&&!pdcAuto(p,base))await plPxMallaPrep([p,q]);
-  if(pdcAuto(p,base)){PDC.id=id;PDC.tmp=null;pdcRecent(id);lqClose();requestRender();return}
+  const q=base.plb&&PLB.get(base.plb.id);const k=PDC.key,n=++PDC.pick;
+  if(p.dxf&&q&&q.dxf&&typeof plPxMallaPrep==='function'&&!pdcAuto(p,base)){toast('Preparando la capa…');await plPxMallaPrep([p,q]);
+    if(n!==PDC.pick||PDC.key!==k)return}   /* mientras cargaba se eligió otra capa o se cambió de piso o de base */
+  if(pdcMan(p,base)||pdcAuto(p,base)){PDC.id=id;PDC.tmp=null;pdcRecent(id);lqClose();requestRender();return}
   if(pdcAl(p,base)){PDC.id=id;PDC.tmp=null;pdcRecent(id);lqClose();requestRender();return}
   const g=pdcGuess(p,base);
   if(g){PDC.id=id;PDC.tmp={id,T:g.T,from:g.from?g.from.cod:''};pdcRecent(id);lqClose();requestRender();return}
@@ -131,7 +138,7 @@ function pdcRecent(id){const a=store.get('pdcrec',[]);const L=[id,...(Array.isAr
 function pdcOpen(piso,base,n){if(!base||!canPla())return;plSub();
   if(!plbReady){if(!n)toast('Cargando la lista de planos…');if((n||0)<40)setTimeout(()=>{if(U.tab==='mapa')pdcOpen(piso,base,(n||0)+1)},250);else toast('No se pudo leer la lista de planos. Revisa la conexión.');return}
   const L=pdcList(piso,PDC.all),cur=pdcCur(piso,base),pn=(S.pis.get(piso)||{}).name||'';
-  const st=p=>!pdcReady(p)?['por alistar','']:pdcAuto(p,base)?['por ejes','ok']:(()=>{const a=pdcAl(p,base);return a?(a.chk?['revisar','warn']:['alineada','ok']):pdcGuess(p,base)?['por confirmar','']:['por alinear','']})();
+  const st=p=>!pdcReady(p)?['por alistar','']:pdcAutoOn(p,base,{sinGeo:1})?['por ejes','ok']:(()=>{const a=pdcAl(p,base);return a?(a.chk?['revisar','warn']:['alineada','ok']):pdcGuess(p,base)?['por confirmar','']:['por alinear','']})();
   const row=p=>{const[t,c]=st(p);return`<button class="pdci${cur&&cur.id===p.id?' on':''}" data-pdcp="${esc(p.id)}" data-s="${esc((p.cod+' '+(p.tit||'')+' '+(PL_DN[p.disc]||p.disc||'')).toLowerCase())}"${pdcReady(p)?'':' disabled'}><b>${esc(p.cod||'')}</b><span>${esc(p.tit||p.tipo||'')}</span><i class="lqt ${c}">${t}</i></button>`};
   const rec=(store.get('pdcrec',[])||[]).map(id=>L.find(p=>p.id===id)).filter(Boolean).slice(0,4);
   const G=new Map();L.forEach(p=>{if(!G.has(p.disc))G.set(p.disc,[]);G.get(p.disc).push(p)});
@@ -157,7 +164,11 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   else if(k==='solo'){PDC.solo=!PDC.solo;requestRender()}
   else if(k==='retry'){PDC.err='';PDC.errId='';requestRender()}
   else if(k==='ok')pdcConfirm(p,base);
-  else if(k==='aln')pdcAlign(p,base)});
+  else if(k==='aln')pdcAlign(p,base);
+  else if(k==='ejes')pdcEjes(p,base)});
+/** quitar la alineación a mano para que la capa se alinee por la malla de ejes */
+async function pdcEjes(p,base){if(!pdcCan()||!await uiAsk({title:'¿Alinear por los ejes?',text:`Se quita la alineación hecha a mano de ${p.cod||'esta capa'} con esta base; desde ahora se alinea sola por la malla de ejes del proyecto.`,ok:'Alinear por ejes'}))return;
+  try{await fcol('plb').doc(p.id).update({['pd.'+base.id]:firebase.firestore.FieldValue.delete()});toast('La capa se alinea por los ejes')}catch(err){toast('No se pudo guardar: '+(err.code||err.message))}requestRender()}
 document.addEventListener('input',e=>{if(e.target.id!=='pdcop')return;PDC.op=+e.target.value;
   /* sin redibujar la barra (se soltaría el control mientras se arrastra) */
   document.querySelectorAll('#mstage img').forEach(im=>{if(/^pdcd?\|/.test(im.dataset.k||''))im.style.opacity=PDC.op})});
@@ -169,6 +180,8 @@ document.addEventListener('input',e=>{if(e.target.id!=='pdcop')return;PDC.op=+e.
 const PDD={det:null,t:0,seq:0,tiles:new Map()};
 const PDD_MAX=16;
 function pdcDetLayer(p,base){const d=PDD.det;if(!d||d.pid!==p.id||d.bid!==base.id||d.base!==plSpecOf(p).base)return null;
+  /* la alineación cambió desde que se armó el detalle (p. ej. pasó a la de los ejes): se rehace */
+  if(d.tn){const Tn=pdcT(p,base);if(!Tn||Tn.join()!==d.tn){pdcDetClear();pdcDetSoon(200);return null}}
   return{key:d.key,url:d.url,w:d.w,h:d.h,T:d.T,op:PDC.op,blend:PDC.solo?'normal':'multiply'}}
 function pdcDetClear(){const d=PDD.det;PDD.det=null;PDD.seq++;if(!d)return;document.querySelectorAll('#mstage img').forEach(im=>{if(im.dataset.k===d.key)im.remove()});URL.revokeObjectURL(d.url)}
 async function pdcTile(path){let b=PDD.tiles.get(path);if(b){PDD.tiles.delete(path);PDD.tiles.set(path,b);return b}
@@ -199,7 +212,7 @@ async function pdcDetail(){const PL=window.__plano;if(!PL||U.tab!=='mapa'||!PDC.
   catch(err){blob=null}
   const w=cv.width,h=cv.height;cv.width=cv.height=0;if(!blob||seq!==PDD.seq)return;   /* sin conexión o ya se movió: queda la imagen general */
   const ox=R.x0*TS,oy=R.y0*TS,a=Tn[0]/R.s,b=Tn[1]/R.s,old=PDD.det;
-  PDD.det={key,pid:p.id,bid:base.id,base:sp.base,url:URL.createObjectURL(blob),w,h,T:{a,b,e:Tn[2]+a*ox-b*oy,f:Tn[3]+b*ox+a*oy}};
+  PDD.det={key,tn:Tn.join(),pid:p.id,bid:base.id,base:sp.base,url:URL.createObjectURL(blob),w,h,T:{a,b,e:Tn[2]+a*ox-b*oy,f:Tn[3]+b*ox+a*oy}};
   /* se pone directo en el visor (sin redibujar todo el Plan diario); los dibujos siguientes lo conservan por su clave */
   const W=v.host.querySelector('.pvw'),svg=W&&W.querySelector('svg.pvs'),d=PDD.det;
   if(W&&svg){const im=document.createElement('img');im.dataset.k=d.key;im.draggable=false;im.alt='';im.src=d.url;im.style.width=w+'px';im.style.height=h+'px';

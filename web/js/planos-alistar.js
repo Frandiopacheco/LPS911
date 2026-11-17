@@ -189,7 +189,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     /* contra su propia revisión anterior una diferencia no bloquea (puede ser justo lo que cambió): se confirma y el administrador decide si actualiza la malla */
     if(m.st==='err'){m.st='warn';m.msg=`Los ejes cambiaron respecto a la malla (Rev. ${M.rev} de este mismo plano): ${m.msg} Confírmalo si el cambio es correcto.`}
     m.msg+=` La malla del proyecto sigue siendo la de la Rev. ${M.rev}${M.base&&p.base&&M.base!==p.base&&M.rev===(p.rev||1)?' anterior':''}: solo el administrador la actualiza con esta revisión (después de marcarla lista).`}}
-  return{it,R,mine,cand,fit,ejM}}
+  return{it,R,mine,cand,fit,ejM,M}}
 /** estado efectivo con lo confirmado: cada ítem con ef 'ok'|'conf'|'warn'|'err'; listo si no queda ⚠ ni ✕ */
 function palState(it,chk){chk=chk||{};const L=it.map(x=>({...x,ef:x.st==='warn'?(chk[x.id]?'conf':'warn'):x.st}));return{L,ready:L.every(x=>x.ef==='ok'||x.ef==='conf')}}
 
@@ -383,7 +383,7 @@ async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;
 async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
   const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
 async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;const rev=p.rev||1;
-  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&M?{fit:{a:C.fit.a,b:C.fit.b,e:C.fit.e,f:C.fit.f,de:M.id,dr:M.rev}}:{})};
+  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&C.M?{fit:{a:C.fit.a,b:C.fit.b,e:C.fit.e,f:C.fit.f,de:C.M.id,dr:C.M.rev,dt:C.M.t||0}}:{})};
   const o={ok};if(fija)o.malla=palMallaDoc(p,C);
   await palSet(p,o,fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
 /** el administrador cambia qué plano fija la malla de ejes */

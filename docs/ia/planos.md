@@ -242,7 +242,16 @@ La mayoría de los planos sigue en **PDF**, como hasta ahora. Algunas plantas se
    - **`plLamMalla(l)`:** de una lámina vinculada (`l.plb`, `l.w`, solo la revisión vigente) a la malla.
    - **`plLamT(ref, lam) = B⁻¹ ∘ A`:** de una lámina a otra.
    - Helpers de semejanza: `simAp`, `simInv`, `simCmp`, `simOk`.
-   - **Plan diario › Capas** (`pdcAuto`): si la capa y la lámina base vienen de planos DXF listos, la capa se alinea sola, siempre al día con sus revisiones. No se guarda en `plb.pd`, no se marcan puntos, y la barra muestra «⌗ por ejes» en vez de «Alinear». Gana a la alineación guardada; si los ejes están mal, se corrigen en Alistar. `pdcPick` trae antes la geometría si hace falta (`plPxMallaPrep`).
+   - **Plan diario › Capas** (`pdcAuto`): si la capa y la lámina base vienen de planos DXF listos, la capa se alinea sola, siempre al día con sus revisiones. No se guarda en `plb.pd`, no se marcan puntos, y la barra muestra «⌗ por ejes».
+     - **Una alineación hecha a mano con puntos y vigente** (`pdcMan`: `pd[base].pts`, sin `chk`) **gana** a la automática, porque la obra pudo corregirla a propósito. «Alinear por ejes» (`pdcEjes`) la quita. «Alinear» sigue disponible.
+     - `pdcPick` trae antes la geometría si hace falta (`plPxMallaPrep`, con aviso «Preparando la capa…»). Si mientras tanto se elige otra capa o se cambia de piso, descarta el resultado (`PDC.pick`).
+     - La lista «Capas» no trae geometrías (`{sinGeo:1}`).
+     - El detalle nítido se rehace si cambia la alineación (`PDD.det.tn`).
+   - **Calidad y vigencia:**
+     - El cálculo de respaldo solo se acepta si el punto «malla» de Alistar no está en ✕.
+     - `plFitOk`: `ok.fit` vale si es de esa malla (`de`) y de esa fijación (`dt` = `M.t`). Las antiguas sin `dt`, si el plano se marcó listo después de fijar la malla. `palOk` toma la malla de la verificación (`C.M`).
+     - `plLamMalla` exige que la lámina tenga la proporción de la hoja (no armada antes de girar o recortar).
+   - **«Recalcular el calce» y unir con el PDF** mueven la geometría (px' = f·px + o): `plOkShift` corre `ok.fit` igual. En el plano de la malla se guarda la traslación como `ok.fit` y `plPxMalla` la mira antes del atajo, así la malla (los ejes en metros) no se toca.
    - **Casco** (`csMap`): usa `plLamT` antes del calce propio por ejes (`csDxfAl`, que queda de respaldo).
    - Prueba: `planos-dxf.spec.js` «etapa 2: …».
 3. Ambientes con id estable y en metros. La revisión nueva se concilia pasando las correcciones por posición y mostrando la lista de diferencias.

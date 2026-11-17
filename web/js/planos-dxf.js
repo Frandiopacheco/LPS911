@@ -389,16 +389,29 @@ const PLPXM=new Map();
 /** px de la revisión vigente del plano p → metros de la malla, o null (sin malla, no está listo, girado o aún cargando la geometría).
     El plano de la malla: solo la escala. Los demás: la semejanza que calculó Alistar al marcarlo listo (`ok.fit`, de la malla `de`/`dr`)
     o, si no la guardó (listos antes del 17-11-2026), la misma verificación de Alistar sobre su geometría. */
-function plPxMalla(p){if(!p||p.eto||!p.dxf||!(p.dxf.mpp>0)||typeof plMalla!=='function'||!plUsable(p)||((p.giro&&p.giro.q)||0))return null;
-  const M=plMalla();if(!M)return null;const mpp=p.dxf.mpp,S={a:mpp,b:0,e:0,f:0};if(palEsMalla(M,p))return S;
-  const ft=p.ok&&p.ok.fit;if(simOk(ft)&&ft.de===M.id&&(ft.dr==null||ft.dr===M.rev))return simCmp(ft,S);
+function plPxMalla(p,o){if(!p||p.eto||!p.dxf||!(p.dxf.mpp>0)||typeof plMalla!=='function'||!plUsable(p)||((p.giro&&p.giro.q)||0))return null;
+  const M=plMalla();if(!M)return null;const mpp=p.dxf.mpp,S={a:mpp,b:0,e:0,f:0};
+  const ft=p.ok&&p.ok.fit;if(plFitOk(ft,M,p))return simCmp(ft,S);   /* antes que el atajo de la malla: tras «Recalcular el calce» la malla queda corrida */
+  if(palEsMalla(M,p))return S;
+  if(o&&o.sinGeo)return null;   /* listas: sin traer geometrías ni verificar */
   const sp=plSpecOf(p);const G=plGeoNow(sp);if(!G)return null;const fx=palFix(p);
   const key=[plGeoKey(sp),JSON.stringify(p.dxf.lay||{}),mpp,fx.L.length,(fx.L[fx.L.length-1]||{}).id||'',M.id,M.rev,M.t].join('|');const c=PLPXM.get(p.id);if(c&&c.key===key)return c.T;
-  let T=null;try{const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp,malla:M,ctn:null,fix:fx});if(simOk(C.fit))T=simCmp(C.fit,S)}catch(e){console.warn('plPxMalla',e)}
+  /* solo si calza: con la malla en ✕ (escala distinta, cruces lejos) no se alinea solo y queda la alineación a mano */
+  let T=null;try{const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp,malla:M,ctn:null,fix:fx});const mi=C.it.find(x=>x.id==='malla');if(simOk(C.fit)&&mi&&mi.st!=='err')T=simCmp(C.fit,S)}catch(e){console.warn('plPxMalla',e)}
   PLPXM.set(p.id,{key,T});return T}
+/** la alineación guardada `ok.fit` vale para la malla M: de esa malla (`de`) y de esa fijación (`dt` = M.t); las antiguas sin `dt`,
+    si no son de otra revisión de la malla y el plano se marcó listo después de fijarla */
+function plFitOk(ft,M,p){if(!simOk(ft)||!M||ft.de!==M.id)return false;if(ft.dt!=null)return ft.dt===M.t;return(ft.dr==null||ft.dr===M.rev)&&((p&&p.ok&&p.ok.t)||0)>=(M.t||0)}
+/** tras mover la geometría de un plano (px' = f·px + o, mpp' = mpp/f: «Recalcular el calce», unir con el PDF) el marco en metros se corre
+    d = o·mpp': su alineación con la malla se corrige igual; si es el plano de la malla, se guarda esa traslación (la malla no se toca) */
+function plOkShift(p,ok,ox,oy,mpp){if(!ok)return ok;const dx=(ox||0)*mpp,dy=(oy||0)*mpp;if(!dx&&!dy)return ok;const ft=ok.fit;
+  if(simOk(ft))return{...ok,fit:{...ft,e:ft.e-(ft.a*dx-ft.b*dy),f:ft.f-(ft.b*dx+ft.a*dy)}};
+  const M=typeof plMalla==='function'&&plMalla();if(M&&palEsMalla(M,p))return{...ok,fit:{a:1,b:0,e:-dx,f:-dy,de:M.id,dr:M.rev,dt:M.t}};return ok}
 /** coordenadas de una lámina vinculada a un plano (`l.plb {id, rev}`, ancho `l.w`) → metros de la malla; solo con la revisión vigente */
-function plLamMalla(l){if(!l||!l.plb||!(l.w>0)||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p||(l.plb.rev||1)!==(p.rev||1))return null;
-  const sp=plSpecOf(p);if(!(sp.W>0))return null;const S=plPxMalla(p);return S?simCmp(S,{a:sp.W/l.w,b:0,e:0,f:0}):null}
+function plLamMalla(l,o){if(!l||!l.plb||!(l.w>0)||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p||(l.plb.rev||1)!==(p.rev||1))return null;
+  const sp=plSpecOf(p);if(!(sp.W>0&&sp.H>0))return null;
+  /* la lámina tiene que ser la hoja entera (misma proporción): una armada antes de girar o recortar el plano no */
+  if(l.h>0&&Math.abs((l.w/l.h)/(sp.W/sp.H)-1)>0.004)return null;const S=plPxMalla(p,o);return S?simCmp(S,{a:sp.W/l.w,b:0,e:0,f:0}):null}
 /** de la lámina ref a la lámina lam por la malla (semejanza en coordenadas de lámina) o null */
 function plLamT(ref,lam){const A=plLamMalla(ref),B=plLamMalla(lam);return A&&B?{...simCmp(simInv(B),A),malla:1}:null}
 /** carga la geometría de los planos que la necesitan para plPxMalla (listos antes de guardar `ok.fit`) */
@@ -499,7 +512,7 @@ async function plDxfRecalce(P){const sp=plSpecOf(P);if(!sp.dxf||!sp.dxf.sobre)th
   const G0=await plGeoGet(sp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');const M=await plDxfMap(P,P.W,P.H,true,G0,true);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');const gv=NOW().toString(36);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
   const rv=P.rev||1,mpp=P.dxf.mpp/f;const u={dxf:{...P.dxf,...plMapMeta(M),mpp,gz:gz.z,gv},cal:{...(P.cal||{}),mpp,rev:rv,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
-  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv&&P.ok.mpp)u.ok={...P.ok,mpp:P.ok.mpp/f};
+  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv){const ok={...P.ok};if(ok.mpp)ok.mpp=ok.mpp/f;u.ok=plOkShift(P,ok,ox,oy,mpp)}
   await plCol(P).doc(P.id).update(u);return M}
 async function plDxfRecalceRun(P){toast('Calzando el DXF con el PDF…');try{const M=await plDxfRecalce(P);requestRender();
     toast(`${P.cod}: calce corregido (${Math.abs(M.f-1)<1e-4&&Math.hypot(M.ox,M.oy)<1?'ya estaba bien':`se movió ${(Math.hypot(M.ox,M.oy)*P.dxf.mpp/(M.f||1)*1000/((M.esc||100))).toFixed(1)} mm en el papel`}; líneas a ${M.med} mm de las del PDF)`)}catch(e){toast('No se pudo recalcular: '+e.message)}}
@@ -528,7 +541,11 @@ async function plDxfJoin(Dp,dsp,P,arch,M){if(!dsp||!dsp.dxf)throw new Error('Ese
      al administrador cambiarlos, y el corrimiento del calce (milímetros) lo absorbe la comparación por semejanza (palFit). La copia de la
      ficha DXF archivada se queda (borrarla también es solo del administrador); gana esta por ser la última (mt). */
   const ml=typeof plMallaOf==='function'&&plMallaOf(Dp);const mlOwn=ml&&ml.rev===rv;
-  if(mlOwn){const{legacy,...m}=ml;u.malla={...m,rev:rp,base:P.base||'',mt:NOW()};if(u.ok)u.ok.malla=true}
+  const dx=(ox||0)*mpp,dy=(oy||0)*mpp;
+  if(mlOwn){const{legacy,...m}=ml;const mt=NOW();u.malla={...m,rev:rp,base:P.base||'',mt};
+    /* los ejes de la malla quedan en el marco del DXF: la alineación del plano de la malla es esa traslación (plPxMalla la mira antes que el atajo) */
+    if(u.ok){u.ok.malla=true;u.ok.fit={a:1,b:0,e:-dx,f:-dy,de:P.id,dr:rp,dt:mt}}}
+  else if(u.ok&&simOk(u.ok.fit)){const ft=u.ok.fit;u.ok.fit={...ft,e:ft.e-(ft.a*dx-ft.b*dy),f:ft.f-(ft.b*dx+ft.a*dy)}}
   await plCol(P).doc(P.id).update(u);
   if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id},...(mlOwn&&Dp.ok&&Dp.ok.malla?{'ok.malla':false}:{})});
   return u}
