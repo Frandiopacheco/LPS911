@@ -188,16 +188,79 @@ Flujo: niveles → cargar planos (plantas EST y ARQ en DXF) → **alistar** → 
   - **Huecos del contorno** (1-11-2026, pedido del dueño): escaleras interiores, ductos y tragaluces se trazan con «+ Agregar hueco» (Medir › Área, «Usar como hueco») y se restan: `ctn {…, H:[{p}], a (neta)}` (`palHoles`). «Quitar hueco N». Las escaleras exteriores no van en el contorno (se metran aparte). **El contorno se puede editar con el plano ya «Listo»** (ajustar, agregar o quitar huecos): avisa (`palOkEdit`) y el plano vuelve a «Por alistar».
   - **Con el plano ya «Listo» todo se puede seguir corrigiendo** (1-11-2026, pedido del dueño): acciones, tocar en el plano y deshacer correcciones siguen visibles; la primera acción avisa (`palOkEdit`) y el plano vuelve a «Por alistar». Las casillas «Revisado» solo se ven mientras está por alistar.
   - **Caras de vigas:** son las líneas de la capa del trazo (bordes de las vigas): sirven para pegarse al marcar las caras de los apoyos y para la fase 2 (vigas automáticas). `dxfGuess` descarta capas de trazo con menos del 5 % de las líneas de la mayor (en la E-19 «A-TRAZO» son solo las 2 bandas de contracción). El ítem «Capas por función» muestra cuántas líneas trae cada capa elegida y avisa si las caras son muy pocas.
+  - **Lista de ambientes editable (17-11-2026, pedido del dueño):** en el ítem Ambientes (ARQ), «Lista de ambientes (N)» muestra cada uno con su área y ◎ Ver (lo elige en el plano), ✎ Renombrar y ✕ Quitar: las mismas correcciones `ambRen`/`ambDel` que tocándolo en el plano (quedan en «Correcciones» y se deshacen ahí). Cada fila lleva un punto interior (`palInPt`) que no cae dentro de otro ambiente más chico; y `ambRen`/`ambDel` (`dxfAmbAt`) y el toque en el plano actúan solo sobre el ambiente **más chico** que contiene el punto (antes un SH metido en una sala renombraba o quitaba los dos). Es el único lugar donde se corrigen los ambientes **del plano**; en Sectorización «Traer ambientes del plano» los toma ya corregidos y ahí el nombre se puede ajustar otra vez al crearlos en la obra (`plan-diario.md`).
   - **Tocar un trazo = ver su capa (01-11-2026, idea del dueño: como mirar la capa en AutoCAD):** con el panel abierto, tocar cualquier línea, polilínea, círculo, texto o cota elige el trazo más cercano de cualquier capa (`dxfRawPick(G, w, tol)` → `{l, o, k, p, d}`; selección `PAL.sel.k='raw'`), resalta en amarillo **toda su capa** y muestra cuántos trazos tiene y para qué se usa (`dxfLayFn`, `DXF_FN`). Ahí mismo: «Usar como caras» / «No es caras», «Es la capa de columnas/ejes/rótulos» (ARQ: muros, ambientes) y «No usar esta capa»; se guarda en `dxf.lay` con `plDxfLaySet` (como «◇ Capas»). El trazo gana al eje si está claramente más cerca (la cara de una viga sobre el eje). Ejes, columnas, rótulos y ambientes elegidos también muestran su capa.
   - **Capas recordadas del proyecto:** el mismo proyectista repite sus nombres de capa. Al cargar un DXF (`plDxfPrep`), `dxfLayMem(disc, capas, sugeridas)` toma las capas de la lámina más reciente de la **misma especialidad** ya alistada (o con capas guardadas a mano: `dxf.layH {by, t}`, lo pone `plDxfLaySet`) para cada función cuyo nombre exista en el DXF nuevo; las caras recordadas reemplazan a las sugeridas. Queda `dxf.layFrom` (código) y se avisa en «◇ Capas» y en «Capas por función». Sin colección nueva: se lee de `plb`.
   - Las ventanas (◇ Capas, Enderezar) van encima del visor (`body:has(#plv) #lqm`, z 400).
   - Encuadre: no se rearma la lámina desde aquí; si falta algo, se vuelve a cargar el DXF como nueva revisión con «Recortar al marco» desmarcado.
 - **Arquitectura (11-11-2026, decidido con el dueño: práctico, sin volverse complejo):** la planta ARQ **se calibra con los ejes de estructura** (la malla del proyecto) y usa esos ejes. En `dxfCheck`, con malla de otro plano (`arqM`): no hay ítem «Ejes» propio (sus girados, saltos o nombres no bloquean); el ítem «Ejes de la estructura» ajusta una semejanza con los cruces del mismo nombre (≥ 2; holgura `PAL_TOL_ARQ` 5 cm y escala `PAL_SC_ARQ` 0,5 %), deja fuera uno a uno los cruces que no calzan mientras queden ≥ 3 y más de la mitad (⚠ con la lista: ese eje está corrido o girado en el plano) y devuelve `C.fit` y `C.ejM` (los ejes de la malla llevados al plano: son los que se dibujan). «Listo» guarda `ok.fit {a,b,e,f,de}` (plano → malla, en m). Sin malla pero con plantas EST en DXF en el proyecto (`estDxf`): ✕ «Alista primero una planta de estructuras». Sin ninguna planta EST: como antes (la arquitectura puede fijar la malla). **Contorno opcional** en arquitectura (✓; el área la da la planta de estructuras). **Ambientes:** no se comparan con el lookahead (el proceso es niveles → planos → frentes → sectorización → tren → lookahead); el dueño revisa la identificación automática (lista con nombre y área, tocar para renombrar o quitar, + Agregar ambiente) y la confirma. Pendiente: total de metros de muros (para después). Prueba: `planos-dxf.spec.js` › «alistar › arquitectura…».
-- **Malla de ejes del proyecto** (decisión del dueño: una para todo): la fija el primer plano alistado (`ok.malla:true`, `ok.ej` en metros, `ok.mpp`; `plMalla()`); los demás niveles y la arquitectura se comparan por los cruces del mismo nombre con una semejanza por mínimos cuadrados (`palFit`): ✕ si algún cruce queda a más de 2 cm (`PAL_TOL`) o la escala difiere > 0,2 %; ⚠ si faltan o sobran ejes. El administrador puede cambiar qué plano es la malla («Usar como malla de ejes»).
-- **Estado:** `plb.ok {rev, t, by, byN, chk, sum, malla, ej?, mpp?}`. Una revisión nueva vuelve a «Por alistar» (el documento se reescribe); la anterior lleva su `ok` en `revs[]` y lo ya vinculado sigue en su revisión. «Volver a revisar» borra `ok`; cambiar capas o unidades en «◇ Capas» también. `plRevOk(p, rev)` / `plUsable(p)`.
+- **Malla de ejes del proyecto** (decisión del dueño: una para todo): la fija el primer plano alistado (`plMalla()`; ver abajo dónde se guarda); los demás niveles y la arquitectura se comparan por los cruces del mismo nombre con una semejanza por mínimos cuadrados (`palFit`): ✕ si algún cruce queda a más de 2 cm (`PAL_TOL`) o la escala difiere > 0,2 %; ⚠ si faltan o sobran ejes. El administrador puede cambiar qué plano es la malla («Usar como malla de ejes»).
+  - **Malla protegida (17-11-2026, etapa 1 de «Planta digitalizada»):**
+    - **Dónde vive:** en **`plb.malla {ej (m), rev, t, mt, by, byN}`**, separada de `ok`. `ok.malla` solo indica que esa revisión la fijó; `ok.ej` ya no se escribe.
+    - **Por qué no se pierde:** `plb.malla` pasa a la revisión nueva (`plProcess`, también con «Empezar en Rev. 1»). Sobrevive a «Volver a revisar», a las correcciones de un plano listo, al cambio de capas y a la unión con el PDF.
+    - **Lectura (`plMalla()`):** devuelve `{id, cod, ej, rev, vieja, t}`.
+      - Prioridad: primero `plb.malla`, aunque el plano esté archivado. Si no hay, las antiguas: `ok.malla` + `ok.ej` de la revisión vigente y, si el plano ya pasó a otra revisión, esa revisión en `revs[]`.
+      - `vieja` = la malla salió de una revisión anterior de su plano.
+    - **Mallas antiguas:** `plMallaKeep(p, o)` las pasa a `plb.malla` en la misma escritura que borra o reemplaza `ok`. Se usa en `palSet`, `plDxfLaySet`, `plJoinOwn` y la revisión nueva, así una malla antigua se convierte sola la primera vez que se toca su plano, sin migración aparte.
+    - **Revisión nueva del plano de la malla:** se compara con la malla anterior (`palEsMalla(M, p)` es falso) y el ítem lo avisa. Una diferencia contra **su propia** revisión anterior no bloquea: el ✕ pasa a ⚠ para confirmar, porque puede ser justo lo que cambió. Contra otro plano sigue bloqueando. Después de marcarla lista, el administrador la actualiza con «Actualizar la malla con la Rev. N» (`palMallaSet`). Nunca cambia sola.
+    - **«Empezar en Rev. 1»:** `plb.malla.base` guarda la carpeta del dibujo. Si el número de revisión se repite con otro dibujo, la malla queda `vieja` y el dibujo nuevo no la fija sin compararse.
+    - **Mallas antiguas en planos archivados o solo en `revs`:** siguen contando (`plMallaOf`). `plMallaKeep` también las pasa cuando se vacía `revs`.
+    - **Unir el DXF con su PDF** (`plDxfJoin`, `plJoinOwn`): si la malla salió de esa revisión del DXF, pasa a la revisión del PDF (rev, base y `mt` nuevos, con los mismos ejes: el corrimiento del calce, de milímetros, lo absorbe `palFit`). La copia de la ficha DXF archivada se queda, y gana la del PDF por ser la última.
+    - **Reglas** (`plbMallaOk`, decidido con el dueño el 17-11-2026): una vez fijada, los ejes de `plb.malla` solo los cambia o borra el administrador. Editores y Oficina Técnica pueden agregarla (primer plano alistado, conversión de una malla antigua) y llevarla a otra revisión (rev, base) con los mismos ejes. Una versión vieja de la app que suba una revisión sin arrastrarla recibe un error en vez de borrarla. Prueba: `tests/rules/firestore.test.mjs` «planos: la malla de ejes…».
+- **Estado:** `plb.ok {rev, t, by, byN, chk, sum, malla, fit?}` (`ej`/`mpp` solo en las mallas antiguas). Una revisión nueva vuelve a «Por alistar» (el documento se reescribe); la anterior lleva su `ok` en `revs[]` y lo ya vinculado sigue en su revisión. «Volver a revisar» borra `ok`; cambiar capas o unidades en «◇ Capas» también. `plRevOk(p, rev)` / `plUsable(p)`.
 - **Puerta:** `lamFromPlb` (plano.js) rechaza una revisión DXF sin alistar; «Subir lámina» › desde Planos y Configuración › Casco › Niveles la muestran deshabilitada («por alistar») y la sugerencia solo toma planos listos; Casco no usa sus ejes, columnas, escala ni alineación (`csDxf`, `csScale`).
 - Con la E-19 real: escala ✓ (324 de 324 cotas), ejes ⚠ (1 y 14 inclinados 0,52° y 0,50°; 44 cotas entre ejes coinciden), 82 columnas (66 de 0.60×0.60, 13 fuera de un cruce), 146 rótulos, contorno por trazar.
 - Pruebas: `planos-dxf.spec.js` › «alistar: …» (verificación pura con cotas, malla corrida, unidades equivocadas y sin nivel; y el flujo completo en el visor hasta fijar la malla) y «alistar › correcciones: …» (puras y en el visor con `dxfDemo({girado:true})`: eje E girado 0,64° y una línea de ejes sin nombre). `casco-dxf.spec.js` comprueba que Casco usa los ejes corregidos.
+
+## Planta digitalizada: la base de todo (17-11-2026, decidido con el dueño; por hacer)
+
+La mayoría de los planos sigue en **PDF**, como hasta ahora. Algunas plantas se **digitalizan al máximo** (PDF + DXF, Alistar), porque sobre ellas se apoya todo lo demás: Sectorización, frentes, Plan diario, Campo y Metrados. Esto se resuelve **antes de seguir con lo demás**.
+
+**Decisiones del dueño:**
+- **Qué plantas se digitalizan: las elige el usuario.** Por defecto, una planta típica de EST y una de ARQ, **incluidas cimentación y azotea**. Las demás quedan solo en PDF.
+- **Revisión nueva de una planta ya alistada:** las correcciones de Alistar y los vínculos (Sectorización, lookahead) **pasan solos por posición** y la app muestra las diferencias (ambientes nuevos, eliminados o con otra área) para decidir uno por uno. Hoy se pierden `ok`, `fix` y `ctn` y hay que rehacerlos.
+- **Proyectista:** no se le exige un estándar de DXF. **Oficina Técnica corrige en Alistar** lo que venga mal. Por eso pesa más sacar los ambientes de los muros cuando no vienen como áreas cerradas (etapa 4).
+- **Malla de ejes:** **solo el admin la cambia, y a propósito.** Nunca cambia sola: si su plano recibe una revisión nueva, se avisa y se sigue usando la malla anterior hasta que el admin confirme. Hoy `plMalla()` exige `ok.rev === rev`, así que el proyecto se queda sin malla y el siguiente plano que se aliste la fija sin aviso.
+
+**Diagnóstico (asesor, 17-11-2026):**
+- Cada consumidor rehace los roles del DXF por su cuenta: `csDxf` en `casco-dxf.js` lo usan `sz-plano`, `casco-niv` y `casco-met-plano`.
+- Las formas se guardan en píxeles de cada lámina (`ambientes.geo[lamId]`).
+- Hay tres alineaciones entre planos: `ok.fit` (se guarda pero nadie lo lee), `csDxfAl` (calce por ejes) y `plb.pd[lam].T` (puntos a mano en las capas del Plan diario).
+- Los ambientes del plano no tienen id: `ambRen` y `ambDel` funcionan por un punto en píxeles.
+- Muros, vanos y puertas no se extraen: `dxfFlat` explota los bloques.
+- `fix`, `ctn` y `revs[]` crecen dentro del documento `plb`, que tiene el límite de 1 MB.
+
+**Enfoque elegido: «planta del nivel» en metros de la malla.** Una capa única por nivel con lo ya verificado: ejes, columnas, contorno, ambientes con id estable y, más adelante, muros y vanos. Va en metros de la malla, usando `ok.fit` y `ok.mpp`. Cada lámina (EST, ARQ o capa) solo guarda su transformación a la malla. Es aditivo: `ambientes.geo` se mantiene y se puede derivar.
+
+**Etapas:**
+1. Endurecer lo que hay:
+   - ✓ malla protegida (decisión de arriba; ver «Malla protegida» en Alistar);
+   - ✓ `csDxf` pasó a `planos-dxf.js` como **`plDxfLam(l)`** (`casco-dxf.js` deja `csDxf` como alias), así `sz-plano.js` ya no depende de Casco;
+   - `fix` y `revs` fuera del documento `plb`: **pasa a la etapa 3** (17-11-2026). En la etapa 3 las correcciones se guardan en metros y con id para pasar de una revisión a otra; sacarlas ahora sería una migración de datos que habría que repetir entonces. Mientras tanto, Alistar avisa cuando la ficha supera 600 KB (`palKB`, `PAL_KB`).
+2. ✓ (17-11-2026) Una sola transformación de cada plano listo a la malla, usada en todas partes (`planos-dxf.js`):
+   - **`plPxMalla(p)`:** px de la revisión vigente → metros de la malla. Para el plano de la malla es solo la escala. Para los demás, la semejanza que Alistar guarda al marcarlo listo (`ok.fit {a,b,e,f,de,dr}`, ahora también en EST; antes solo ARQ). Si falta o es de otra malla, se calcula con la misma verificación (`dxfCheck` sobre su geometría, en caché). Da null si el plano no está listo, está girado (`giro`) o su geometría aún carga.
+   - **`plLamMalla(l)`:** de una lámina vinculada (`l.plb`, `l.w`, solo la revisión vigente) a la malla.
+   - **`plLamT(ref, lam) = B⁻¹ ∘ A`:** de una lámina a otra.
+   - Helpers de semejanza: `simAp`, `simInv`, `simCmp`, `simOk`.
+   - **Plan diario › Capas** (`pdcAuto`): si la capa y la lámina base vienen de planos DXF listos, la capa se alinea sola, siempre al día con sus revisiones. No se guarda en `plb.pd`, no se marcan puntos, y la barra muestra «⌗ por ejes».
+     - **Una alineación hecha a mano con puntos y vigente** (`pdcMan`: `pd[base].pts`, sin `chk`) **gana** a la automática, porque la obra pudo corregirla a propósito. «Alinear por ejes» (`pdcEjes`) la quita. «Alinear» sigue disponible.
+     - `pdcPick` trae antes la geometría si hace falta (`plPxMallaPrep`, con aviso «Preparando la capa…»). Si mientras tanto se elige otra capa o se cambia de piso, descarta el resultado (`PDC.pick`).
+     - La lista «Capas» no trae geometrías (`{sinGeo:1}`).
+     - El detalle nítido se rehace si cambia la alineación (`PDD.det.tn`).
+   - **Calidad y vigencia:**
+     - El cálculo de respaldo solo se acepta si el punto «malla» de Alistar no está en ✕.
+     - `plFitOk`: `ok.fit` vale si es de esa malla (`de`) y de esa fijación (`dt` = `M.t`). Las antiguas sin `dt`, si el plano se marcó listo después de fijar la malla. `palOk` toma la malla de la verificación (`C.M`).
+     - `plLamMalla` exige que la lámina tenga la proporción de la hoja (no armada antes de girar o recortar).
+   - **«Recalcular el calce» y unir con el PDF** mueven la geometría (px' = f·px + o): `plOkShift` corre `ok.fit` igual. En el plano de la malla se guarda la traslación como `ok.fit` y `plPxMalla` la mira antes del atajo, así la malla (los ejes en metros) no se toca.
+   - **Casco** (`csMap`): usa `plLamT` antes del calce propio por ejes (`csDxfAl`, que queda de respaldo).
+   - Prueba: `planos-dxf.spec.js` «etapa 2: …».
+3. Ambientes con id estable y en metros. La revisión nueva se concilia pasando las correcciones por posición y mostrando la lista de diferencias.
+4. Muros y vanos (metros lineales, puertas), y ambientes armados desde los muros.
+5. Sectores, frentes y metrados sobre esa base.
+
+**Por decidir:**
+- si lo ya programado (lookahead, Matriz) se ata al ambiente del plano o sigue con un vínculo;
+- si esto pasa también a la obra en curso o queda para el proyecto nuevo.
 
 ## Medir (`web/js/planos-medir.js`, oct 2026)
 

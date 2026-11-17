@@ -518,9 +518,17 @@ service cloud.firestore {
       return d.cod is string && d.cod.size() > 0 && d.cod.size() <= 40 && d.disc is string && d.rev is int && d.rev >= 1
         && d.base is string && d.base.matches('planos/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
     }
+    // malla de ejes del proyecto (`malla`, docs/ia/planos.md «Malla protegida», 17-11-2026, decidido con el dueño): una vez fijada,
+    // sus ejes solo los cambia o borra el administrador; los demás pueden agregarla (primer plano alistado, malla antigua que se convierte)
+    // y llevarla a otra revisión (rev, base) sin tocar los ejes.
+    function plbMallaOk() {
+      return isAdmin() || !('malla' in resource.data)
+        || (request.resource.data.get('malla', null) is map && request.resource.data.malla.get('ej', null) == resource.data.malla.get('ej', null));
+    }
     match /plb/{id} {
       allow read: if plaRead();
-      allow create, update: if (canEdit() || isOT()) && plbOk();
+      allow create: if (canEdit() || isOT()) && plbOk();
+      allow update: if (canEdit() || isOT()) && plbOk() && plbMallaOk();
       // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
       allow delete: if isAdmin();
     }
@@ -1135,6 +1143,10 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.cod is string && d.cod.size() > 0 && d.cod.size() <= 40 && d.disc is string && d.rev is int && d.rev >= 1
         && d.base is string && d.base.matches('planos/[A-Za-z0-9_.-]+/r[0-9]+') && d.W is int && d.H is int && d.Z is int;
+    }
+    function plbMallaOk_cs() {
+      return isAdmin_cs() || !('malla' in resource.data)
+        || (request.resource.data.get('malla', null) is map && request.resource.data.malla.get('ej', null) == resource.data.malla.get('ej', null));
     }
     function etoOk_cs() {
       let d = request.resource.data;

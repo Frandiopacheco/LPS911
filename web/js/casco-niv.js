@@ -56,7 +56,9 @@ function csMap(ref,lam){if(!ref||!lam)return null;if(ref.id===lam.id)return csI;
   if(ref.plb&&lam.plb&&ref.plb.id===lam.plb.id&&ref.w>0){const k=lam.w/ref.w;return{a:k,b:0,e:0,f:0}}
   if(csAlOk(lam)&&lam.al.ref===ref.id)return lam.al;if(csAlOk(ref)&&ref.al.ref===lam.id)return csInvT(ref.al);
   if(csAlOk(lam)&&csAlOk(ref)&&lam.al.ref===ref.al.ref)return csCmpT(lam.al,csInvT(ref.al));
-  /* las dos láminas vienen de un DXF de Planos: por los cruces de ejes del mismo nombre (casco-dxf.js) */
+  /* las dos láminas vienen de planos DXF listos: por la malla de ejes del proyecto (planos-dxf.js plLamT, la misma alineación que usa el
+     Plan diario); si no, por los cruces de ejes del mismo nombre entre las dos (casco-dxf.js) */
+  const Tm=typeof plLamT==='function'?plLamT(ref,lam):null;if(Tm)return Tm;
   return typeof csDxfAl==='function'?csDxfAl(ref,lam):null}
 /** tercios de las luces: entre cada par de ejes paralelos (en las coordenadas de la referencia) y de las luces sueltas */
 function csThirds(ref){const E=csEjesOf(ref);const out=[];if(!E.length&&!(ref&&ref.luces||[]).length)return out;

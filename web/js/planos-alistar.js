@@ -25,8 +25,34 @@ function plRevOk(p,rev){if(!p)return false;rev=rev||p.rev||1;if(rev===(p.rev||1)
   const r=(p.revs||[]).find(x=>x.rev===rev);if(!r)return false;return!r.dxf||!!(r.ok&&r.ok.rev===rev)}
 const plUsable=p=>plRevOk(p,(p&&p.rev)||1);
 const plAlPend=p=>!!p&&!!p.dxf&&!p.eto&&!p.arch&&!plUsable(p);
-/** el plano que fija la malla de ejes del proyecto (o null) */
-function plMalla(){if(typeof PLB==='undefined')return null;for(const p of PLB.values())if(!p.arch&&p.ok&&p.ok.malla&&p.ok.rev===(p.rev||1)&&Array.isArray(p.ok.ej))return p;return null}
+/** la malla de ejes del proyecto: {id, cod, ej (m), rev (revisión del plano de donde salió), vieja (su plano ya va en otra revisión), t} o null.
+    Desde el 17-11-2026 (decidido con el dueño) vive en `plb.malla` y no en `ok`: pasa a las revisiones nuevas del plano y sobrevive a
+    «Volver a revisar», así nunca cambia sola; solo el administrador la cambia («Usar como malla» / «Actualizar la malla»).
+    Mallas antiguas: `ok.malla` + `ok.ej` de la revisión vigente o, si el plano ya pasó a otra revisión, de esa revisión en `revs`. */
+function plMalla(){if(typeof PLB==='undefined')return null;const C=[];
+  for(const p of PLB.values()){const m=plMallaOf(p);if(m)C.push({id:p.id,cod:p.cod,ej:m.ej,rev:m.rev,base:m.base||'',t:m.mt||m.t||0,legacy:m.legacy,
+    /* vieja: salió de otra revisión de su plano, o de otro dibujo con el mismo número («Empezar en Rev. 1») */
+    vieja:m.rev!==(p.rev||1)||!!(m.base&&p.base&&m.base!==p.base)})}
+  /* gana la nueva sobre la antigua y, entre iguales, la última fijada */
+  C.sort((a,b)=>a.legacy-b.legacy||b.t-a.t);return C[0]||null}
+/** la malla que guarda el plano p: `plb.malla` (legacy 0) o, antigua, `ok` de la revisión vigente (1) o de una anterior en `revs` (2); null si no tiene.
+    Los planos archivados también cuentan: archivar no cambia la malla. */
+function plMallaOf(p){if(!p||p.eto)return null;const ok=e=>Array.isArray(e)&&e.length>0;
+  if(p.malla&&ok(p.malla.ej))return{...p.malla,rev:p.malla.rev||1,legacy:0};
+  if(p.ok&&p.ok.malla&&ok(p.ok.ej)&&(p.ok.rev||1)===(p.rev||1))return{ej:p.ok.ej,rev:p.rev||1,base:p.base||'',t:p.ok.t||0,by:p.ok.by||'',byN:p.ok.byN||'',legacy:1};
+  const r=(p.revs||[]).slice().reverse().find(x=>x.ok&&x.ok.malla&&ok(x.ok.ej));
+  return r?{ej:r.ok.ej,rev:r.ok.rev||r.rev||1,base:r.base||'',t:r.ok.t||0,by:r.ok.by||'',byN:r.ok.byN||'',legacy:2}:null}
+/** malla antigua (en `ok` o en `revs`) pasada a `plb.malla` en la misma escritura, antes de que algo borre o reemplace `ok` o `revs`
+    (corregir un plano listo, cambiar capas, «Volver a revisar», unir con el PDF, revisión nueva, «Empezar en Rev. 1»): así no se pierde.
+    Devuelve o (o una copia con `malla`). */
+function plMallaKeep(p,o){if(!p||p.malla||!o||o.malla||!('ok' in o||'revs' in o||'malla' in o))return o;const m=plMallaOf(p);if(!m)return o;
+  const{legacy,...doc}=m;return{...o,malla:{...doc,mt:m.t}}}
+/** tamaño aproximado de la ficha del plano (Firestore admite 1 MB por documento); aviso desde PAL_KB */
+const PAL_KB=600;const palKB=p=>{try{return Math.round(new Blob([JSON.stringify(p)]).size/1024)}catch(e){return 0}};
+/** ejes de la malla (acepta también {ok:{ej}}) */
+const palMej=M=>M?(M.ej||(M.ok&&M.ok.ej)||[]):[];
+/** el plano p (en su revisión vigente) es el que fija la malla */
+const palEsMalla=(M,p)=>!!M&&!!p&&M.id===p.id&&!M.vieja&&(M.rev||1)===(p.rev||1)&&!(M.base&&p.base&&M.base!==p.base);
 const plAlTag=p=>!p||!p.dxf||p.eto?'':plUsable(p)?' <span class="plalt ok">✓ Listo</span>':' <span class="plalt pend">Por alistar</span>';
 
 /* ---------- verificación (pura) ---------- */
@@ -43,6 +69,13 @@ const palAp=(T,p)=>({x:T.a*p.x-T.b*p.y+T.e,y:T.b*p.x+T.a*p.y+T.f});
 function palArea(P){let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=P[2*i]*P[2*j+1]-P[2*j]*P[2*i+1]}return Math.abs(s)/2}
 function palPerim(P){let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=Math.hypot(P[2*j]-P[2*i],P[2*j+1]-P[2*i+1])}return s}
 function palPip(P,x,y){let c=false;for(let i=0,n=P.length/2,j=n-1;i<n;j=i++){const xi=P[2*i],yi=P[2*i+1],xj=P[2*j],yj=P[2*j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
+/** un punto dentro del polígono P que no caiga dentro de otro ambiente más chico (p. ej. un SH metido en una sala): así renombrar o quitar desde la lista toca solo ese ambiente */
+function palInPt(P,all){const aP=palArea(P);const sm=(all||[]).filter(o=>o.p!==P&&palArea(o.p)<aP);const free=(x,y)=>palPip(P,x,y)&&!sm.some(o=>palPip(o.p,x,y));
+  const c=dxfCen(P);if(free(c.x,c.y))return c;const ys=P.filter((v,i)=>i%2);const y0=Math.min(...ys),y1=Math.max(...ys);
+  for(let k=1;k<20;k++){const y=y0+(y1-y0)*(k%2?0.5+Math.ceil(k/2)/20:0.5-k/40);const X=[];
+    for(let i=0,n=P.length/2,j=n-1;i<n;j=i++){const yi=P[2*i+1],yj=P[2*j+1];if((yi>y)!==(yj>y))X.push(P[2*i]+(y-yi)*(P[2*j]-P[2*i])/(yj-yi))}
+    X.sort((a,b)=>a-b);for(let i=0;i+1<X.length;i+=2)for(const t of[0.5,0.25,0.75]){const x=X[i]+(X[i+1]-X[i])*t;if(free(x,y))return{x,y}}}
+  return null}
 const pal2=v=>(Math.round(v*100)/100).toFixed(2);
 const pal3=v=>(Math.round(v*1000)/1000).toFixed(3);
 /** distancia (px) del punto a la recta de un eje */
@@ -74,7 +107,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   /* Arquitectura (11-11-2026, decidido con el dueño): se calibra con los ejes de estructura (la malla del proyecto) y usa esos ejes.
      Sus propios ejes solo sirven para calzar (≥ 2 cruces con el mismo nombre): no se revisan girados, saltos ni nombres. Si todavía no hay
      malla pero el proyecto tiene plantas de estructuras en DXF, primero se alista una de ellas. */
-  const M=c.malla,arqM=arq&&M&&M.id!==p.id,arqEsp=arq&&!M&&c.estDxf;
+  const M=c.malla,arqM=arq&&M&&!palEsMalla(M,p),arqEsp=arq&&!M&&c.estDxf;
   /* 3. ejes */
   if(!arqM&&!arqEsp){let st='ok';const msg=[],pts=[];const up=s=>{if(s==='err'||st==='ok')st=s};
     if(!V.length||!H.length){up('err');msg.push(!E.length?'No se encontraron ejes con nombre: revisa la capa de ejes en «◇ Capas».':`Faltan ejes ${!V.length?'verticales':'horizontales'}.`)}
@@ -97,7 +130,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   /* 4. malla de ejes del proyecto */
   const mine=E.map(e=>({n:e.n,p:e.p.map(v=>Math.round(v*mpp*1e4)/1e4)}));let fit=null,ejM=null;
   if(arqEsp)add('malla','Ejes de la estructura','err','Alista primero una planta de estructuras: la arquitectura se calibra con sus ejes.');
-  else if(arqM){const A=new Map(palCross(M.ok.ej).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
+  else if(arqM){const A=new Map(palCross(palMej(M)).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
     if(P.length<2)add('malla','Ejes de la estructura','err',`Para calzar con los ejes de estructura (${M.cod}) hacen falta al menos 2 cruces con el mismo nombre${E.length?`; este plano tiene ${palCross(mine).length} cruce(s), ${P.length} en común`:''}. Toca una línea de eje en el plano y elige «Nombrar como eje», o agrégalo con «+ Agregar eje».`,[],['ejAdd']);
     else{/* los cruces que no calzan (un eje mal dibujado o girado en la arquitectura) se dejan fuera uno a uno, mientras queden ≥ 3 y más de la mitad */
       let I=P.map((x,i)=>i),T=palFit(P,Q),out=[];const resOf=(T,ix)=>ix.map(i=>{const q=palAp(T,P[i]);return{i,n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:P[i].x/mpp,y:P[i].y/mpp}}).sort((a,b)=>b.d-a.d);
@@ -105,16 +138,16 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
       const sk=Math.hypot(T.a,T.b);const res=resOf(T,I);const far=res.filter(r=>r.d>PAL_TOL_ARQ);const sc=Math.abs(sk-1)>PAL_SC_ARQ;fit=T;
       /* los ejes de la estructura llevados a este plano (px): son los que se dibujan y se usan */
       const k2=T.a*T.a+T.b*T.b,inv=q=>{const x=q.x-T.e,y=q.y-T.f;return{x:(T.a*x+T.b*y)/k2/mpp,y:(-T.b*x+T.a*y)/k2/mpp}};
-      ejM=M.ok.ej.map(e=>{const a=inv({x:e.p[0],y:e.p[1]}),b=inv({x:e.p[2],y:e.p[3]});return{n:e.n,p:[a.x,a.y,b.x,b.y]}});
+      ejM=palMej(M).map(e=>{const a=inv({x:e.p[0],y:e.p[1]}),b=inv({x:e.p[2],y:e.p[3]});return{n:e.n,p:[a.x,a.y,b.x,b.y]}});
       const ign=out.length?` Se dejaron fuera ${out.length} cruce(s) que no calzan (${out.slice(0,6).map(r=>`${r.n} a ${(r.d*100).toFixed(1)} cm`).join(', ')}): ese eje está corrido o girado en este plano; confirma que el resto calza.`:'';
       add('malla','Ejes de la estructura',far.length||sc?'err':out.length?'warn':'ok',sc?`La escala no coincide con la estructura (${M.cod}): ${((sk-1)*100).toFixed(2)} %. Revisa las unidades en «◇ Capas».`:far.length?`${far.length} cruce(s) a más de ${PAL_TOL_ARQ*100} cm de la estructura (${M.cod}): revisa los nombres de esos ejes.`:
         `Calibrado con los ejes de estructura (${M.cod}): ${P.length} cruces, diferencia máxima ${(res[0].d*100).toFixed(1)} cm. Se dibujan y se usan los ejes de la estructura.${ign}`,[...far,...out].slice(0,12).map(r=>`${r.n} a ${(r.d*100).toFixed(1)} cm`),[],[...far,...out].map(r=>({x:r.x,y:r.y})))}}
-  else if(M&&M.id===p.id)add('malla','Malla de ejes del proyecto','ok','Este plano fija la malla de ejes del proyecto: los demás planos se comparan con él.');
+  else if(palEsMalla(M,p))add('malla','Malla de ejes del proyecto','ok','Este plano fija la malla de ejes del proyecto: los demás planos se comparan con él.');
   else if(!M)add('malla','Malla de ejes del proyecto',E.length?'warn':'err',E.length?`Todavía no hay malla de ejes del proyecto: al marcar este plano como listo, sus ${E.length} ejes serán la malla con la que se comparan los demás niveles y la arquitectura.`:'Sin ejes no puede fijar la malla.');
-  else{const ME=M.ok.ej;const nm=new Set(mine.map(e=>e.n)),nM=new Set(ME.map(e=>e.n));const falta=[...nM].filter(n=>!nm.has(n)),sobra=[...nm].filter(n=>!nM.has(n));
+  else{const ME=palMej(M);const nm=new Set(mine.map(e=>e.n)),nM=new Set(ME.map(e=>e.n));const falta=[...nM].filter(n=>!nm.has(n)),sobra=[...nm].filter(n=>!nM.has(n));
     const A=new Map(palCross(ME).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
     if(P.length<2)add('malla','Malla de ejes del proyecto','err',`No comparte ejes con la malla del proyecto (${M.cod}): revisa los nombres de los ejes.`);
-    else{const T=palFit(P,Q);const sk=Math.hypot(T.a,T.b);const res=P.map((x,i)=>{const q=palAp(T,x);return{n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:x.x/mpp,y:x.y/mpp}}).sort((a,b)=>b.d-a.d);
+    else{const T=palFit(P,Q);fit=T;const sk=Math.hypot(T.a,T.b);const res=P.map((x,i)=>{const q=palAp(T,x);return{n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:x.x/mpp,y:x.y/mpp}}).sort((a,b)=>b.d-a.d);
       const far=res.filter(r=>r.d>PAL_TOL);const sc=Math.abs(sk-1)>0.002;const st=far.length||sc?'err':falta.length||sobra.length?'warn':'ok';
       add('malla','Malla de ejes del proyecto',st,sc?`La escala no coincide con la malla (${M.cod}): ${((sk-1)*100).toFixed(2)} %.`:far.length?`${far.length} cruce(s) de ejes corridos más de ${PAL_TOL*100} cm respecto a la malla (${M.cod}).`:
         `Coincide con la malla (${M.cod}): ${P.length} cruces, diferencia máxima ${(res[0].d*100).toFixed(1)} cm.${falta.length?` Faltan ejes de la malla: ${falta.join(', ')}.`:''}${sobra.length?` Ejes que la malla no tiene: ${sobra.join(', ')}.`:''}`,
@@ -142,13 +175,21 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   /* 8. rótulos */
   if(est){const u=[...new Set(R.tx.map(t=>t.t.replace(/\s+/g,'')))].slice(0,6);add('tx','Rótulos de vigas','warn',R.tx.length?`${R.tx.length} rótulos de sección (${u.join(', ')}${u.length>=6?'…':''}): darán la sección de cada tramo en Metrados.`:'Sin rótulos de sección: las secciones de las vigas se escribirán a mano en Metrados.',[],['lay'])}
   /* 9. ambientes */
-  if(arq){const A=R.amb;let sinN=0,sum=0;const pts=[];const det=[];
-    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}else if(det.length<60)det.push(`${q.n} · ${pal2(a)} m²`)}
+  if(arq){const A=R.amb;let sinN=0,sum=0;const pts=[];const det=[];const rows=[];
+    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}
+      /* la lista se puede corregir: cada fila lleva un punto que cae solo dentro de su ambiente (no en uno más chico metido adentro) */
+      const ip=palInPt(q.p,A);if(ip)rows.push({n:q.n||'',a,x:ip.x,y:ip.y,add:!!q.add});else if(q.n&&det.length<60)det.push(`${q.n} · ${pal2(a)} m²`)}
+    rows.sort((u,v)=>!u.n-!v.n||u.n.localeCompare(v.n,'es'));
     const ca=c.ctn&&c.ctn.P?palArea(c.ctn.P)*mpp*mpp:0;
-    add('amb','Ambientes','warn',A.length?`Se identificaron ${A.length} ambientes (${pal2(sum)} m²${ca?`, ${Math.round(sum/ca*100)} % del contorno`:''}).${sinN?` ${sinN} sin nombre.`:''} Revisa que estén bien: toca uno en el plano para renombrarlo o quitarlo, y agrega los que falten.`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts)}
+    add('amb','Ambientes','warn',A.length?`Se identificaron ${A.length} ambientes (${pal2(sum)} m²${ca?`, ${Math.round(sum/ca*100)} % del contorno`:''}).${sinN?` ${sinN} sin nombre.`:''} Revisa que estén bien: corrígelos en la lista (o tocándolos en el plano) y agrega los que falten.`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts);it[it.length-1].amb=rows}
   /* 10. encuadre */
   {const d=p.dxf||{};add('enc','Encuadre de la lámina','warn',`Lámina de ${(p.mm||[0,0]).join(' × ')} mm desde el ${d.src||'modelo'}${d.crop?', recortada al marco':''}${d.far?`; ${d.far} objeto(s) lejanos quedaron fuera`:''}. Confirma que se ve completa y que no falta nada importante. Si falta algo, vuelve a cargar el DXF como nueva revisión con «Recortar al marco» desmarcado.`)}
-  return{it,R,mine,cand,fit,ejM}}
+  /* la malla salió de una revisión anterior de este mismo plano: se compara con ella y no cambia sola */
+  if(M&&M.id===p.id&&!palEsMalla(M,p)){const m=it.find(x=>x.id==='malla');if(m){
+    /* contra su propia revisión anterior una diferencia no bloquea (puede ser justo lo que cambió): se confirma y el administrador decide si actualiza la malla */
+    if(m.st==='err'){m.st='warn';m.msg=`Los ejes cambiaron respecto a la malla (Rev. ${M.rev} de este mismo plano): ${m.msg} Confírmalo si el cambio es correcto.`}
+    m.msg+=` La malla del proyecto sigue siendo la de la Rev. ${M.rev}${M.base&&p.base&&M.base!==p.base&&M.rev===(p.rev||1)?' anterior':''}: solo el administrador la actualiza con esta revisión (después de marcarla lista).`}}
+  return{it,R,mine,cand,fit,ejM,M}}
 /** estado efectivo con lo confirmado: cada ítem con ef 'ok'|'conf'|'warn'|'err'; listo si no queda ⚠ ni ✕ */
 function palState(it,chk){chk=chk||{};const L=it.map(x=>({...x,ef:x.st==='warn'?(chk[x.id]?'conf':'warn'):x.st}));return{L,ready:L.every(x=>x.ef==='ok'||x.ef==='conf')}}
 
@@ -173,21 +214,24 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   let G=GEO.get(plGeoKey(sp));if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(sp.base)}
   PAL.G=G.g;if(PAL.LG!==G.g){PAL.LG=G.g;PAL.Ls=dxfLayers(dxfGeoF(G.g))}if(PAL.sel&&PAL.sel.k==='raw'&&!G.g.L.includes(PAL.sel.o))PAL.sel=null;
   const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),estDxf:[...PLB.values()].some(x=>!x.arch&&x.disc==='EST'&&x.dxf),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
-  const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
+  const kb=palKB(p);const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
   const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
   shx(el,`<div class="plalh"><b>Alistar ${esc(p.cod)} · Rev. ${p.rev||1}</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div>
-    <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${p.ok.malla?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
+    <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${palEsMalla(M,p)?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
     ${palSelHtml(p,ed)}
     <div class="plalv" role="group" aria-label="Ver encima del plano">${PAL_SHOW.filter(([k])=>p.disc==='ARQ'?!['col','vig','tx'].includes(k):k!=='amb').map(([k,t])=>`<button type="button" class="plchip${PAL.show[k]?' on':''}" data-pal="show:${k}">${t}</button>`).join('')}</div>
     ${ed?'<p class="note palhint">Toca cualquier trazo o texto del plano: ves de qué capa es (se resalta toda la capa) y le cambias la función; un eje, una columna o un ambiente se corrigen igual.</p>':''}
     <ol class="plall">${S.L.map(x=>`<li class="palit ${x.ef}"><div class="paltop"><span class="palic" aria-hidden="true">${ico[x.ef]}</span><b>${esc(x.t)}</b>${x.pts.length?`<button type="button" class="ab palgo" data-pal="go:${x.id}" title="Ver en el plano">◎ Ver</button>`:''}</div><p>${esc(x.msg)}</p>
+      ${x.amb&&x.amb.length?`<details class="palamb"${PAL.ambo?' open':''}><summary>Lista de ambientes (${x.amb.length})</summary><ul>${x.amb.map((r,i)=>`<li><span class="${r.n?'':'mu'}">${esc(r.n||'sin nombre')}</span><small class="mu">${pal2(r.a)} m²${r.add?' · agregado':''}</small><button type="button" class="ab" data-pal="amb:go:${i}" title="Ver en el plano" aria-label="Ver ${esc(r.n||'sin nombre')} en el plano">◎</button>${ed?`<button type="button" class="ab" data-pal="amb:ren:${i}" title="Renombrar" aria-label="Renombrar ${esc(r.n||'sin nombre')}">✎</button><button type="button" class="ab" data-pal="amb:del:${i}" title="Quitar" aria-label="Quitar ${esc(r.n||'sin nombre')}">✕</button>`:''}</li>`).join('')}</ul></details>`:''}
       ${x.det.length?`<details><summary>Detalle</summary><ul>${x.det.map(d=>`<li>${esc(d)}</li>`).join('')}</ul></details>`:''}
       ${ed&&(x.act.length||x.btn.length||(x.st==='warn'&&!ok))?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'&&!ok?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
       ${!ed&&A.chk[x.id]&&A.chk[x.id].n?`<p class="mu">Nota: ${esc(A.chk[x.id].n)}</p>`:''}</li>`).join('')}</ol>
     ${FX.length?`<details class="palfx"${PAL.fxo?' open':''}><summary><b>Correcciones (${FX.length})</b> <span class="mu">hechas en el sistema; el DXF no cambia</span></summary><ol>${FX.map(f=>`<li><span>${esc(palFixTxt(f,p.dxf.mpp))}</span><small class="mu">${esc(f.byN||f.by||'')} · ${esc(fmtD(ldt(f.t)))}${f.nota?' · '+esc(f.nota):''}</small>${ed?`<button type="button" class="ab" data-pal="fxdel:${esc(f.id)}" title="Deshacer esta corrección">↶</button>`:''}</li>`).join('')}</ol></details>`:''}
-    ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&M.id!==p.id?'<button type="button" class="ib" data-pal="malla">Usar como malla de ejes</button>':''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
-    <p class="note">Hasta que esté listo, este plano no se puede vincular a Sectorización, Plan diario ni Metrados.</p>`);
+    ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&!palEsMalla(M,p)?`<button type="button" class="ib" data-pal="malla">${M.id===p.id?`Actualizar la malla con la Rev. ${p.rev||1}`:'Usar como malla de ejes'}</button>`:''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
+    <p class="note">Hasta que esté listo, este plano no se puede vincular a Sectorización, Plan diario ni Metrados.</p>
+    ${kb>PAL_KB?`<p class="note palkb">La ficha de este plano ya ocupa ${kb} KB de 1024 (las correcciones de todas sus revisiones). Si llega al límite no se podrá guardar más: avísale al administrador.</p>`:''}`);
   const fxd=el.querySelector('.palfx');if(fxd)fxd.addEventListener('toggle',()=>{PAL.fxo=fxd.open});
+  const amd=el.querySelector('.palamb');if(amd)amd.addEventListener('toggle',()=>{PAL.ambo=amd.open});
   const bt=PLV.box.querySelector('[data-pv="alis"]');if(bt){bt.textContent=ok?'✓ Listo':'⚠ Alistar';bt.classList.toggle('ok',ok)}
   palHook();PLV.tv.tick()}
 /** texto de una corrección para el registro */
@@ -196,7 +240,7 @@ function palFixTxt(f,mpp){const m=v=>pal2(v);switch(f.k){
   case'ejSet':return f.how?`Eje ${f.n} ${f.how}`:`Eje ${f.n} movido`;case'ejAdd':return f.lin?`Línea sin nombre nombrada como eje ${f.n}`:`Eje ${f.n} agregado`;
   case'linIgn':return'Línea de la capa de ejes descartada (no es eje)';case'colDel':return`Columna quitada${f.sz?` (${f.sz} m)`:''}`;case'colDelSz':return`Columnas de ${m(f.w)}×${m(f.h)} m quitadas (no son columnas)`;
   case'colAdd':return`Columna agregada${f.sz?` (${f.sz} m)`:''}`;case'txDel':return`Rótulo «${f.t||''}» quitado`;case'ambRen':return`Ambiente renombrado a «${f.a}»`;case'ambDel':return`Ambiente «${f.n||''}» quitado`;case'ambAdd':return`Ambiente «${f.a||''}» agregado`}return f.k}
-async function palSet(p,o,msg){try{await plCol(p).doc(p.id).update(o);if(msg)toast(msg)}catch(e){toast('No se pudo guardar: '+(e.code||e.message||e))}}
+async function palSet(p,o,msg){try{await plCol(p).doc(p.id).update(plMallaKeep(p,o));if(msg)toast(msg)}catch(e){toast('No se pudo guardar: '+(e.code||e.message||e))}}
 /** agrega una corrección (con quién y cuándo); si el plano estaba listo vuelve a «Por alistar» */
 async function palFixAdd(p,f,msg){const F=palFix(p);const L=[...F.L,{...f,id:uid('fx'),by:me.email,byN:me.name||me.email,t:NOW()}];const o={fix:{rev:p.rev||1,L}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();
   PAL.sel=null;PAL.prev=null;await palSet(p,o,msg)}
@@ -206,6 +250,10 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   if(k.startsWith('show:')){const s=k.slice(5);PAL.show[s]=!PAL.show[s];palRender();return}
   if(k.startsWith('go:')){const it=PAL.C&&PAL.C.it.find(x=>x.id===k.slice(3));if(it&&it.pts.length){PAL.goi=((PAL.goi||0)+1)%it.pts.length;const q=it.pts[PAL.goi];palGo(q.x,q.y)}return}
   if(k==='selx'){PAL.sel=null;PAL.prev=null;palRender();return}
+  /* lista de ambientes: ◎ los elige en el plano (como tocarlos); ✎ y ✕ son las mismas correcciones que desde el plano */
+  const ambR=k.startsWith('amb:')&&(()=>{const it=PAL.C&&PAL.C.it.find(x=>x.id==='amb');return it&&it.amb&&it.amb[+k.split(':')[2]]})();
+  if(k.startsWith('amb:')&&!ambR)return;
+  if(k.startsWith('amb:go:')){const q=dxfAmbAt(PAL.C.R.amb,ambR.x,ambR.y);PAL.sel=q?{k:'amb',p:q.p,n:q.n,x:ambR.x,y:ambR.y}:null;PAL.prev=null;palGo(ambR.x,ambR.y);palRender();return}
   if(!plAlEd(p))return;
   /* con el plano ya listo todo se puede seguir corrigiendo: se avisa una vez y vuelve a «Por alistar» */
   if(plUsable(p)&&!['undo','malla','edit'].includes(k)&&!await palOkEdit(p))return;
@@ -217,7 +265,9 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k.startsWith('end:'))palEnd(p,k.slice(4),'end');
   else if(k.startsWith('fxdel:'))await palFixDel(p,k.slice(6));
   else if(k.startsWith('sel:'))await palSelAct(p,k.slice(4));
-  else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(p.ok&&p.ok.malla?' Este plano fija la malla de ejes: el próximo que se aliste será la nueva malla.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
+  else if(k.startsWith('amb:ren:')){const n=await uiAsk({title:'Renombrar el ambiente',input:{label:'Nombre',required:true,value:ambR.n},ok:'Guardar'});if(n&&String(n).trim()!==ambR.n)await palFixAdd(p,{k:'ambRen',x:ambR.x,y:ambR.y,a:String(n).trim().slice(0,60)},'Ambiente renombrado')}
+  else if(k.startsWith('amb:del:')){if(!await uiAsk({title:`¿Quitar el ambiente «${ambR.n||'sin nombre'}»?`,text:'Deja de contarse como ambiente de esta planta. Se puede deshacer en «Correcciones».',ok:'Quitar',tone:'warn'}))return;await palFixAdd(p,{k:'ambDel',x:ambR.x,y:ambR.y,n:ambR.n},'Ambiente quitado')}
+  else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(palEsMalla(plMalla(),p)?' Este plano fija la malla de ejes: la malla se mantiene igual.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
   else if(k==='malla')await palMallaSet(p)}
 /** editar el contorno de un plano ya listo lo devuelve a «Por alistar»: se avisa antes */
 async function palOkEdit(p){if(!plUsable(p))return true;return uiAsk({title:'¿Corregir un plano ya listo?',tone:'warn',text:'Al corregir algo vuelve a «Por alistar» y hay que marcarlo listo de nuevo. Lo que ya lo usa sigue igual hasta entonces.',ok:'Corregir'})}
@@ -240,7 +290,8 @@ function palPick(C,w,tol){const R=C.R;const dl=(p)=>{const dx=p[2]-p[0],dy=p[3]-
   for(const t of R.tx)if(Math.hypot(t.x-w.x,t.y-w.y)<tol)return{k:'tx',t:t.t,x:t.x,y:t.y};
   for(const q of R.col)if(palPip(q.p,w.x,w.y))return{k:'col',p:q.p,x:w.x,y:w.y,add:!!q.add};
   if(raw)return raw;
-  for(const a of R.amb||[])if(palPip(a.p,w.x,w.y))return{k:'amb',p:a.p,n:a.n,x:w.x,y:w.y};
+  /* ambientes uno dentro de otro (un SH en una sala): gana el más chico */
+  const am=(R.amb||[]).filter(a=>palPip(a.p,w.x,w.y)).sort((a,b)=>palArea(a.p)-palArea(b.p))[0];if(am)return{k:'amb',p:am.p,n:am.n,x:w.x,y:w.y};
   return null}
 function palTap(cx,cy){const p=palP();if(!PAL.on||!p||!PAL.C||PLM.on)return;const v=PLV.tv;const w=v.toWorld(cx,cy);const a=v.toScreen(0,0),b=v.toScreen(1,0);const k=Math.hypot(b.x-a.x,b.y-a.y)||1;
   PAL.sel=palPick(PAL.C,w,14/k);PAL.prev=null;palRender()}
@@ -331,13 +382,19 @@ async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;
 /** guarda el contorno (px del nivel de detalle) */
 async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
   const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
-async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;
-  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev:p.rev||1,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija,...(C.fit&&M?{fit:{...C.fit,de:M.id}}:{})};if(fija){ok.ej=C.mine;ok.mpp=p.dxf.mpp}
-  await palSet(p,{ok},fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
+async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;const rev=p.rev||1;
+  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&C.M?{fit:{a:C.fit.a,b:C.fit.b,e:C.fit.e,f:C.fit.f,de:C.M.id,dr:C.M.rev,dt:C.M.t||0}}:{})};
+  const o={ok};if(fija)o.malla=palMallaDoc(p,C);
+  await palSet(p,o,fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
 /** el administrador cambia qué plano fija la malla de ejes */
-async function palMallaSet(p){if(me.role!=='admin'||!p.ok)return;const M=plMalla();const C=PAL.C;if(!C)return;
-  if(!await uiAsk({title:`¿Usar ${p.cod} como malla de ejes del proyecto?`,tone:'warn',text:`Reemplaza a ${M?M.cod:'la actual'}. Los demás planos se compararán con los ejes de ${p.cod}; los ya alistados no cambian.`,ok:'Usar como malla'}))return;
-  if(M)await palSet(M,{'ok.malla':false,'ok.ej':firebase.firestore.FieldValue.delete()});await palSet(p,{'ok.malla':true,'ok.ej':C.mine,'ok.mpp':p.dxf.mpp},`${p.cod} es ahora la malla de ejes del proyecto.`)}
+/** la malla guardada en el plano: ejes en metros de esta revisión, con quién y cuándo */
+const palMallaDoc=(p,C)=>({ej:C.mine,rev:p.rev||1,base:p.base||'',t:NOW(),mt:NOW(),by:me.email,byN:me.name||me.email});
+async function palMallaSet(p){if(me.role!=='admin'||!plUsable(p))return;const M=plMalla();const C=PAL.C;if(!C||palEsMalla(M,p))return;const mismo=!!M&&M.id===p.id;
+  if(!await uiAsk(mismo?{title:`¿Actualizar la malla con la Rev. ${p.rev||1} de ${p.cod}?`,tone:'warn',text:`La malla del proyecto sale hoy de la Rev. ${M.rev}. Los demás planos se compararán con los ejes de esta revisión; los ya alistados no cambian.`,ok:'Actualizar la malla'}
+    :{title:`¿Usar ${p.cod} como malla de ejes del proyecto?`,tone:'warn',text:`Reemplaza a ${M?M.cod:'la actual'}. Los demás planos se compararán con los ejes de ${p.cod}; los ya alistados no cambian.`,ok:'Usar como malla'}))return;
+  const X=firebase.firestore.FieldValue.delete();
+  if(M&&!mismo){const q=PLB.get(M.id);if(q){const o={};if(q.malla)o.malla=X;if(q.ok&&q.ok.malla){o['ok.malla']=false;if(q.ok.ej)o['ok.ej']=X}if(Object.keys(o).length)await palSet(q,o)}}
+  await palSet(p,{malla:palMallaDoc(p,C),'ok.malla':true},`${p.cod} es ahora la malla de ejes del proyecto.`)}
 /** dibujo encima del plano (gancho V.al de plTiles) */
 function palDraw(g,V){const C=PAL.C;const p=palP();if(!C||!p)return;const R=C.R,s=V.toScreen.bind(V),sh=PAL.show;const lt=(P,cl)=>{g.beginPath();for(let i=0;i+1<P.length;i+=2){const q=s(P[i],P[i+1]);i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y)}if(cl)g.closePath()};
   if(sh.ctn&&!(PAL.trace==='ctn'&&PLM.on)){const ct=palCtn(p);if(ct){lt(ct.P,true);g.fillStyle='rgba(31,95,122,.10)';g.fill();g.lineWidth=3;g.strokeStyle='#1F5F7A';g.stroke();

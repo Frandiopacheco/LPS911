@@ -26,7 +26,7 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Zonas generales, solo la parte de Last Planner** (`base.js` `isZG`/`niveles`/`pisoOptsZG`, menú del piso en `lookahead.js`, selectores): va en #523 junto con su parte de Casco y de Planos; hay que separarla. Útil ya para FA · Fachadas y EX · Exteriores de la obra.
 - **Módulo Planos completo, sin Casco (aprobado por el dueño, 11-11-2026):** PR [#539](https://github.com/Frandiopacheco/LPS911/pull/539) a `produccion`: `planos*.js` de `main` (DXF, Alistar, PDF + DXF, calce por el dibujo, Medir, celular) y el capataz en Planos. En `produccion`, `base.js` define `CS=()=>false`, `fcolLp` e `isZG` (aquí son de Casco y de las zonas generales): **al pasar Casco o las zonas generales, quitarlas allí** (chocan con las de `main`). Los cambios de Planos que se hagan después en `main` pasan igual, por cherry-pick, mientras no dependan de Casco.
 - **Capas del Plan diario desde Planos** (`js/pd-capas.js`, 13-11-2026): pensado para la obra y sin Casco, pero el `plano.js` de `produccion` no tiene nada de `plb`: los enganches (`pdcBar`, `pdcNote`, `pdcLayer`, exportar `alignDialog`, filtro de especialidades) se adaptan a mano; el archivo nuevo y el `pd` de `planos.js` pasan tal cual. Al pasar, las especialidades cargadas a mano dejan de verse: antes hay que alinear en la obra las capas que se usan en la reunión.
-- **No van todavía:** «Traer ambientes del plano» (depende de `casco-dxf.js`), las láminas del plan diario desde Planos (#467) y todo Casco.
+- **No van todavía:** «Traer ambientes del plano» (ya no depende de Casco desde el 17-11-2026: `plDxfLam` en `planos-dxf.js`; falta la aprobación del dueño), las láminas del plan diario desde Planos (#467) y todo Casco.
 
 ## Ambientes desde el plano alistado (aprobado con el dueño, 11-11-2026; primera parte hecha: `plan-diario.md` «Ambientes desde el plano»)
 
@@ -39,6 +39,9 @@ Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorizaci�
 - **Sin otra lista:** los ambientes siguen siendo los de Last Planner (`ambientes`); el plano es la fuente. Vínculo por **posición** calibrada con la malla de ejes (`plb.ok.fit`), no por nombre: con una revisión nueva del plano se muestran los cambios (área distinta, nuevos, ya no están) y el usuario decide; lo programado no se toca.
 - **Área de cada ambiente** (m² del polígono): para metrar pisos, contrazócalos y pintura y alimentar el histograma de personal.
 - Después: sugerir el tipo de ambiente por el nombre («SH…» → baño) para la Matriz.
+
+## Planta digitalizada (17-11-2026, decidido con el dueño; va antes que lo demás)
+Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Etapa 1 hecha el 17-11-2026: malla protegida y `plDxfLam` fuera de Casco. Sacar `fix` y `revs` de la ficha pasó a la etapa 3. Etapa 2 hecha el mismo día (`plPxMalla`, `plLamT`; la capa del Plan diario y Casco se alinean solos por la malla). Lo siguiente es la etapa 3: ambientes con id estable en metros y revisiones conciliadas, con `fix`/`revs` fuera de la ficha.
 
 ## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
 

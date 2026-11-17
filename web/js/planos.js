@@ -348,6 +348,8 @@ async function plProcess(it,say){const t0=performance.now();
   if(eto){doc.sc=m.sc;doc.disc='ETO';doc.tipo='ETO';doc.cod=m.cod||'';delete doc.niv;delete doc.eta;delete doc.rot}
   /* la alineación con el Plan diario (js/pd-capas.js) pasa a la nueva revisión */
   if(old&&!fresh&&!eto&&old.pd)doc.pd=old.pd;
+  /* la malla de ejes del proyecto se queda en el plano aunque llegue otra revisión: solo el administrador la cambia (planos-alistar.js plMalla) */
+  if(old&&!eto){const ml=old.malla||(typeof plMallaKeep==='function'&&plMallaKeep(old,{ok:null,revs:null}).malla);if(ml)doc.malla=ml}
   await fcol(eto?'eto':'plb').doc(id).set(doc);
   /* PDF del mismo código que un plano solo DXF: el DXF pasa a ser los datos de esta revisión (si era otra ficha, se archiva) */
   if(it.join&&!dx){const D=PLB.get(it.join);if(D){const dsp=D.id===id?plSpecOf({...D,revs:doc.revs},prev&&prev.rev):plSpecOf(D);const P={...doc,id};

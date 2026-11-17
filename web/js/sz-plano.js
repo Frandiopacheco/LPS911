@@ -21,7 +21,7 @@ function szplSrc(pid){const API=window.__plano;const bs=API&&API.basesOf?API.bas
   if(typeof plSub==='function')plSub();const p=typeof PLB!=='undefined'&&PLB.get(lam.plb.id);if(!p)return{err:'Cargando los planos del proyecto… vuelve a intentarlo en unos segundos.'};
   const sp=plSpecOf(p,lam.plb.rev);if(!sp.dxf)return{err:`La lámina base (${p.cod}) es un PDF: los ambientes solo se leen de una planta en DXF.`};
   if(!plRevOk(p,sp.rev))return{err:`Alista primero ${p.cod} en Planos (visor › ⚠ Alistar): ahí se revisan los ambientes que se van a traer.`};
-  const d=csDxf(lam);if(!d)return{err:'Cargando la geometría del plano… vuelve a intentarlo en unos segundos.'};
+  const d=plDxfLam(lam);if(!d)return{err:'Cargando la geometría del plano… vuelve a intentarlo en unos segundos.'};
   if(!d.amb||!d.amb.length)return{err:`${p.cod} no tiene ambientes identificados: revísalos en Planos › Alistar (capa de ambientes o «+ Agregar ambiente»).`};
   return{lam,p,sp,d}}
 /** filas de la tabla: cada ambiente del plano con su ambiente del lookahead (por ubicación o por nombre) o nuevo; y los que solo están en el lookahead */

@@ -316,6 +316,8 @@ const dxfSz=(P,mpp)=>{const xs=P.filter((v,i)=>!(i%2)),ys=P.filter((v,i)=>i%2);c
 /** lo leído del DXF con las correcciones de Alistar encima (`plb.fix.L`, en orden; el DXF original no se toca). Tipos:
     ejRen {n,a} renombrar · ejDel {n} quitar · ejSet {n,p} recta nueva (enderezar, mover) · ejAdd {n,p} agregar (también nombrar una línea sin nombre) ·
     linIgn {p} la línea no es eje · colDel {x,y} no es columna · colDelSz {w,h} ninguna de ese tamaño · colAdd {p} · txDel {x,y} · ambRen {x,y,a} · ambDel {x,y} · ambAdd {p,a} */
+const dxfAreaP=P=>{let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=P[2*i]*P[2*j+1]-P[2*j]*P[2*i+1]}return Math.abs(s)/2};
+const dxfAmbAt=(amb,x,y)=>amb.filter(a=>dxfPip(a.p,x,y)).sort((a,b)=>dxfAreaP(a.p)-dxfAreaP(b.p))[0]||null;
 function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Array.isArray(fix.L)?fix.L:[];if(!L.length)return R;
   let E=R.ej.map(e=>({...e})),col=R.col.slice(),tx=R.tx.slice(),amb=R.amb.map(a=>({...a}));const near=(p,q,t)=>Math.abs(p[0]-q[0])<t&&Math.abs(p[1]-q[1])<t&&Math.abs(p[2]-q[2])<t&&Math.abs(p[3]-q[3])<t||Math.abs(p[0]-q[2])<t&&Math.abs(p[1]-q[3])<t&&Math.abs(p[2]-q[0])<t&&Math.abs(p[3]-q[1])<t;
   const done=[];const tol=0.05/mpp;
@@ -329,8 +331,9 @@ function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Arr
     case'colDelSz':col=col.filter(q=>{const z=dxfSz(q.p,mpp);return!(Math.abs(z[0]-f.w)<0.006&&Math.abs(z[1]-f.h)<0.006)});break;
     case'colAdd':col.push({p:f.p.slice(),add:1});break;
     case'txDel':tx=tx.filter(t=>Math.hypot(t.x-f.x,t.y-f.y)>tol);break;
-    case'ambRen':amb.forEach(a=>{if(dxfPip(a.p,f.x,f.y))a.n=f.a});break;
-    case'ambDel':amb=amb.filter(a=>!dxfPip(a.p,f.x,f.y));break;
+    /* renombrar o quitar toca solo el ambiente más chico que contiene el punto (un SH metido en una sala no arrastra a la sala) */
+    case'ambRen':{const a=dxfAmbAt(amb,f.x,f.y);if(a)a.n=f.a;break}
+    case'ambDel':{const a=dxfAmbAt(amb,f.x,f.y);if(a)amb=amb.filter(o=>o!==a);break}
     case'ambAdd':amb.push({p:f.p.slice(),n:f.a||'',add:1});break}}
   /* las líneas sin nombre o repetidas que ya se nombraron o se descartaron dejan de avisar */
   const S=R.S.filter(l=>!done.some(q=>near(l.p,q,1)));const cnt={...R.cnt,ej:E.length,ejSin:S.filter(l=>!l.dup).length,dup:[...new Set(S.filter(l=>l.dup).map(l=>l.dup))],col:col.length,tx:tx.length,amb:amb.length};
@@ -364,8 +367,55 @@ function dxfLayMem(disc,Ls,lay,skip){if(typeof PLB==='undefined'||!disc)return n
   if(!best)return null;const L=best.dxf.lay;const o={...lay};for(const k of['ej','col','mur','amb','tx'])if(L[k]&&names.has(L[k]))o[k]=L[k];
   const v=(L.vig||[]).filter(n=>names.has(n));if(v.length)o.vig=v;return{lay:o,from:best.cod}}
 /** guardar las capas (u otros campos de dxf) a mano: quedan como capas revisadas del proyecto; un plano ya alistado vuelve a «Por alistar» */
-async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plUsable(p);up={...up,'dxf.layH':{by:me.email,t:NOW()}};if(was)up.ok=firebase.firestore.FieldValue.delete();
+async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plUsable(p);up={...up,'dxf.layH':{by:me.email,t:NOW()}};if(was)up.ok=firebase.firestore.FieldValue.delete();if(typeof plMallaKeep==='function')up=plMallaKeep(p,up);
   try{await plCol(p).doc(p.id).update(up);toast(was?`${msg} El plano volvió a «Por alistar»: revísalo de nuevo.`:msg);return true}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err));return false}}
+/* ---------- geometría de una lámina vinculada a un plano DXF alistado (17-11-2026: salió de casco-dxf.js para que no dependa de Casco) ---------- */
+/** geometría DXF de la lámina l (Casco o Last Planner, con `l.plb {id, rev}` y `l.w`), en coordenadas de esa lámina, con las correcciones de Alistar: {ej, col, ln, tx, cnt, p (plano), sp (revisión), mpp} o null (sin DXF o aún cargando) */
+const PLDXL=new Map();
+function plDxfLam(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev))return null;   /* solo alistado */
+  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const fx=sp.fix||null;const key=[plGeoKey(sp),JSON.stringify(lay),mpp,l.w,fx?fx.L.length+':'+((fx.L[fx.L.length-1]||{}).id||''):''].join('|');const c=PLDXL.get(l.id);if(c&&c.key===key)return c.v;
+  const R=dxfRolesFix(G,lay,mpp,fx);const f=l.w/sp.W;   /* con las correcciones de Alistar */const S=A=>A.map(v=>Math.round(v*f*10)/10);
+  const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),amb:(R.amb||[]).map(a=>({n:a.n,p:S(a.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
+  PLDXL.set(l.id,{key,v});return v}
+/* ---------- de cada plano listo a la malla de ejes del proyecto (17-11-2026, etapa 2 de «Planta digitalizada», docs/ia/planos.md) ----------
+   Una sola alineación por plano: px de su revisión vigente → metros de la malla. La usan la capa del Plan diario (pd-capas.js) y Casco
+   (csMap) para alinear dos planos sin marcar puntos: B⁻¹ ∘ A. Semejanzas {a,b,e,f}: x' = a·x − b·y + e, y' = b·x + a·y + f. */
+const simAp=(T,q)=>({x:T.a*q.x-T.b*q.y+T.e,y:T.b*q.x+T.a*q.y+T.f});
+const simInv=T=>{const k2=T.a*T.a+T.b*T.b||1,a=T.a/k2,b=-T.b/k2;return{a,b,e:-(a*T.e-b*T.f),f:-(b*T.e+a*T.f)}};
+/** M ∘ T (primero T) */
+const simCmp=(M,T)=>({a:M.a*T.a-M.b*T.b,b:M.a*T.b+M.b*T.a,e:M.a*T.e-M.b*T.f+M.e,f:M.b*T.e+M.a*T.f+M.f});
+const simOk=T=>!!T&&['a','b','e','f'].every(k=>typeof T[k]==='number'&&isFinite(T[k]))&&T.a*T.a+T.b*T.b>0;
+const PLPXM=new Map();
+/** px de la revisión vigente del plano p → metros de la malla, o null (sin malla, no está listo, girado o aún cargando la geometría).
+    El plano de la malla: solo la escala. Los demás: la semejanza que calculó Alistar al marcarlo listo (`ok.fit`, de la malla `de`/`dr`)
+    o, si no la guardó (listos antes del 17-11-2026), la misma verificación de Alistar sobre su geometría. */
+function plPxMalla(p,o){if(!p||p.eto||!p.dxf||!(p.dxf.mpp>0)||typeof plMalla!=='function'||!plUsable(p)||((p.giro&&p.giro.q)||0))return null;
+  const M=plMalla();if(!M)return null;const mpp=p.dxf.mpp,S={a:mpp,b:0,e:0,f:0};
+  const ft=p.ok&&p.ok.fit;if(plFitOk(ft,M,p))return simCmp(ft,S);   /* antes que el atajo de la malla: tras «Recalcular el calce» la malla queda corrida */
+  if(palEsMalla(M,p))return S;
+  if(o&&o.sinGeo)return null;   /* listas: sin traer geometrías ni verificar */
+  const sp=plSpecOf(p);const G=plGeoNow(sp);if(!G)return null;const fx=palFix(p);
+  const key=[plGeoKey(sp),JSON.stringify(p.dxf.lay||{}),mpp,fx.L.length,(fx.L[fx.L.length-1]||{}).id||'',M.id,M.rev,M.t].join('|');const c=PLPXM.get(p.id);if(c&&c.key===key)return c.T;
+  /* solo si calza: con la malla en ✕ (escala distinta, cruces lejos) no se alinea solo y queda la alineación a mano */
+  let T=null;try{const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp,malla:M,ctn:null,fix:fx});const mi=C.it.find(x=>x.id==='malla');if(simOk(C.fit)&&mi&&mi.st!=='err')T=simCmp(C.fit,S)}catch(e){console.warn('plPxMalla',e)}
+  PLPXM.set(p.id,{key,T});return T}
+/** la alineación guardada `ok.fit` vale para la malla M: de esa malla (`de`) y de esa fijación (`dt` = M.t); las antiguas sin `dt`,
+    si no son de otra revisión de la malla y el plano se marcó listo después de fijarla */
+function plFitOk(ft,M,p){if(!simOk(ft)||!M||ft.de!==M.id)return false;if(ft.dt!=null)return ft.dt===M.t;return(ft.dr==null||ft.dr===M.rev)&&((p&&p.ok&&p.ok.t)||0)>=(M.t||0)}
+/** tras mover la geometría de un plano (px' = f·px + o, mpp' = mpp/f: «Recalcular el calce», unir con el PDF) el marco en metros se corre
+    d = o·mpp': su alineación con la malla se corrige igual; si es el plano de la malla, se guarda esa traslación (la malla no se toca) */
+function plOkShift(p,ok,ox,oy,mpp){if(!ok)return ok;const dx=(ox||0)*mpp,dy=(oy||0)*mpp;if(!dx&&!dy)return ok;const ft=ok.fit;
+  if(simOk(ft))return{...ok,fit:{...ft,e:ft.e-(ft.a*dx-ft.b*dy),f:ft.f-(ft.b*dx+ft.a*dy)}};
+  const M=typeof plMalla==='function'&&plMalla();if(M&&palEsMalla(M,p))return{...ok,fit:{a:1,b:0,e:-dx,f:-dy,de:M.id,dr:M.rev,dt:M.t}};return ok}
+/** coordenadas de una lámina vinculada a un plano (`l.plb {id, rev}`, ancho `l.w`) → metros de la malla; solo con la revisión vigente */
+function plLamMalla(l,o){if(!l||!l.plb||!(l.w>0)||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p||(l.plb.rev||1)!==(p.rev||1))return null;
+  const sp=plSpecOf(p);if(!(sp.W>0&&sp.H>0))return null;
+  /* la lámina tiene que ser la hoja entera (misma proporción): una armada antes de girar o recortar el plano no */
+  if(l.h>0&&Math.abs((l.w/l.h)/(sp.W/sp.H)-1)>0.004)return null;const S=plPxMalla(p,o);return S?simCmp(S,{a:sp.W/l.w,b:0,e:0,f:0}):null}
+/** de la lámina ref a la lámina lam por la malla (semejanza en coordenadas de lámina) o null */
+function plLamT(ref,lam){const A=plLamMalla(ref),B=plLamMalla(lam);return A&&B?{...simCmp(simInv(B),A),malla:1}:null}
+/** carga la geometría de los planos que la necesitan para plPxMalla (listos antes de guardar `ok.fit`) */
+function plPxMallaPrep(L){return Promise.all(L.filter(p=>p&&p.dxf).map(p=>{const sp=plSpecOf(p);return plGeoNow(sp)?null:plGeoGet(sp).catch(()=>null)}))}
 /** textos cortos de una revisión DXF para los vínculos (planos-vinculos.js) */
 async function plGeoTexts(sp){const G=await plGeoGet(sp);if(!G)return[];const out=[];for(const o of G.L)for(const t of o.t){const s=String(t[0]).trim();if(s&&s.length<=8)out.push({x:t[1],y:t[2],h:t[3],n:s.length})}return out}
 
@@ -462,7 +512,7 @@ async function plDxfRecalce(P){const sp=plSpecOf(P);if(!sp.dxf||!sp.dxf.sobre)th
   const G0=await plGeoGet(sp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');const M=await plDxfMap(P,P.W,P.H,true,G0,true);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');const gv=NOW().toString(36);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
   const rv=P.rev||1,mpp=P.dxf.mpp/f;const u={dxf:{...P.dxf,...plMapMeta(M),mpp,gz:gz.z,gv},cal:{...(P.cal||{}),mpp,rev:rv,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
-  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv&&P.ok.mpp)u.ok={...P.ok,mpp:P.ok.mpp/f};
+  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv){const ok={...P.ok};if(ok.mpp)ok.mpp=ok.mpp/f;u.ok=plOkShift(P,ok,ox,oy,mpp)}
   await plCol(P).doc(P.id).update(u);return M}
 async function plDxfRecalceRun(P){toast('Calzando el DXF con el PDF…');try{const M=await plDxfRecalce(P);requestRender();
     toast(`${P.cod}: calce corregido (${Math.abs(M.f-1)<1e-4&&Math.hypot(M.ox,M.oy)<1?'ya estaba bien':`se movió ${(Math.hypot(M.ox,M.oy)*P.dxf.mpp/(M.f||1)*1000/((M.esc||100))).toFixed(1)} mm en el papel`}; líneas a ${M.med} mm de las del PDF)`)}catch(e){toast('No se pudo recalcular: '+e.message)}}
@@ -487,8 +537,17 @@ async function plDxfJoin(Dp,dsp,P,arch,M){if(!dsp||!dsp.dxf)throw new Error('Ese
   const src=dsp.cur?Dp:((Dp.revs||[]).find(r=>r.rev===rv)||{});
   if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f,ox,oy),rev:rp};
   if(Dp.alc&&Dp.alc.rev===rv&&dsp.cur)u.alc={...Dp.alc,rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
+  /* la malla de ejes del proyecto (si salió de este DXF) pasa con él a la revisión del PDF. Los ejes (m) no se tocan: las reglas solo dejan
+     al administrador cambiarlos, y el corrimiento del calce (milímetros) lo absorbe la comparación por semejanza (palFit). La copia de la
+     ficha DXF archivada se queda (borrarla también es solo del administrador); gana esta por ser la última (mt). */
+  const ml=typeof plMallaOf==='function'&&plMallaOf(Dp);const mlOwn=ml&&ml.rev===rv;
+  const dx=(ox||0)*mpp,dy=(oy||0)*mpp;
+  if(mlOwn){const{legacy,...m}=ml;const mt=NOW();u.malla={...m,rev:rp,base:P.base||'',mt};
+    /* los ejes de la malla quedan en el marco del DXF: la alineación del plano de la malla es esa traslación (plPxMalla la mira antes que el atajo) */
+    if(u.ok){u.ok.malla=true;u.ok.fit={a:1,b:0,e:-dx,f:-dy,de:P.id,dr:rp,dt:mt}}}
+  else if(u.ok&&simOk(u.ok.fit)){const ft=u.ok.fit;u.ok.fit={...ft,e:ft.e-(ft.a*dx-ft.b*dy),f:ft.f-(ft.b*dx+ft.a*dy)}}
   await plCol(P).doc(P.id).update(u);
-  if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id}});
+  if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id},...(mlOwn&&Dp.ok&&Dp.ok.malla?{'ok.malla':false}:{})});
   return u}
 /** ✎ Datos del plano › «Unir con su PDF…» (plano solo DXF) */
 async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc,Dp.cod,Dp.id);
@@ -513,7 +572,7 @@ async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);
   const M=await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false,G0);   /* comprueba antes de escribir nada */
   const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
   const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
-  await plCol(D).doc(D.id).update({...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X});
+  await plCol(D).doc(D.id).update(plMallaKeep(D,{...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X}));
   await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false,M);return rc+1}
 /** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
 function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';

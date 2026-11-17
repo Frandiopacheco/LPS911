@@ -4965,6 +4965,8 @@ body:has(#plv) #lqm{z-index:400}
 .palac{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}.palac .paln{flex:1;min-width:140px}
 .palsel{border:2px solid var(--warn);background:var(--warn-soft);border-radius:var(--r-ctl);padding:8px 10px;font-size:13px}.palsel .paltop>b{flex:1}
 .paltop .palgo{margin-left:auto;font-size:12px}.palhint{margin:0}
+.palamb ul{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}.palamb li{display:flex;align-items:center;gap:6px;padding:2px 0;border-bottom:1px solid var(--line)}.palamb li>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.palamb li .ab{min-width:30px}
+@media (max-width:760px){.palamb li .ab{min-width:40px;min-height:40px}}
 .palopt{display:flex;flex-direction:column;gap:6px;margin:8px 0}
 .palfx{border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 10px;font-size:13px}.palfx ol{margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}.palfx li{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}.palfx li small{flex-basis:100%}.palfx li .ab{margin-left:auto}
 @media (max-width:760px){.palac .ib,.palac .chk{min-height:40px}}
