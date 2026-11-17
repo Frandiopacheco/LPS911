@@ -724,26 +724,35 @@ function trFalta(dni){const p=S.tper.get(dni);const f=TD.f;if(!p||!trFaltaOk(f,p
    El celular solo ofrece hoy, ayer y anteayer. Para un día anterior sin tareo, la oficina (admin o asistente: las reglas no dejan
    crear tareos al jefe de producción) crea el tareo vacío como «Reabierto» con un motivo; al capataz le aparece en «⚠ Por corregir»,
    lo llena (su cuadrilla entra sola al abrirlo) y lo envía como cualquier reabierto (regla tReab: sin límite de fecha).
-   Nunca pisa un tareo que ya existe (transacción: si existe, no escribe). */
+   Nunca pisa un tareo que ya existe (transacción: si existe, no escribe).
+   Borrador sin enviar (17-11-2026, caso real: 4 capataces empezaron el del sábado y no lo enviaron): pasa a «Reabierto»
+   conservando todo lo que llenó (solo cambia st y agrega reab/hab/hist); el capataz lo termina desde «Por corregir». */
+/** el tareo del capataz ese día, si es un borrador que se puede habilitar (null si no hay tareo) */
+const toHabDoc=(f,c)=>TD.docs.get(f+'_'+c)||null;
+const toHabBor=t=>!!t&&!t.arch&&(t.st||'bor')==='bor';
 const toHabOk=()=>!!me&&(isAdmin||TASIS());
 /** ¿el día ya salió del celular del capataz? (hoy, ayer y anteayer los abre él mismo) */
 const toHabDia=f=>!!f&&f<addD(todayIso(),-2);
-async function toHabilitar(caps,f){caps=[...new Set(caps)].filter(c=>c&&!TD.docs.has(f+'_'+c));if(!toHabOk()||!toHabDia(f))return;
+async function toHabilitar(caps,f){caps=[...new Set(caps)].filter(c=>{const t=c&&toHabDoc(f,c);return c&&(!t||toHabBor(t))});if(!toHabOk()||!toHabDia(f))return;
   if(!caps.length){toast('Ese capataz ya tiene un tareo de este día (quizá archivado): no se crea otro.');return}
-  const nm=caps.map(c=>tCapName(c)||c);const pub=[...TD.docs.values()].some(t=>!t.arch&&t.st==='pub');
+  const nB=caps.filter(c=>toHabDoc(f,c)).length,nN=caps.length-nB;const nm=caps.map(c=>(tCapName(c)||c)+(toHabDoc(f,c)?' (borrador)':''));const pub=[...TD.docs.values()].some(t=>!t.arch&&t.st==='pub');
   const mot=await uiAsk({title:caps.length===1?'¿Habilitar el tareo al capataz?':`¿Habilitar el tareo a ${caps.length} capataces?`,
-    text:`Se crea el tareo del ${toDia(f)} vacío y reabierto. ${caps.length===1?'Al capataz le aparece':'A cada capataz le aparece'} en su celular en «⚠ Por corregir» con el motivo que escribas, lo llena y lo envía. Mientras no lo envíe y lo revises, ese día no se puede publicar ni rectificar.${pub?' Este día ya está publicado: cuando lo revises habrá que rectificar la publicación.':''}`,
+    text:`${nN?`Se crea el tareo del ${toDia(f)} vacío y reabierto${nB?' (a quien no lo tiene)':''}. `:''}${nB?`${nB===1?'El borrador sin enviar pasa':'Los borradores sin enviar pasan'} a reabierto con todo lo que ya llenaron. `:''}${caps.length===1?'Al capataz le aparece':'A cada capataz le aparece'} en su celular en «⚠ Por corregir» con el motivo que escribas, lo llena y lo envía. Mientras no lo envíe y lo revises, ese día no se puede publicar ni rectificar.${pub?' Este día ya está publicado: cuando lo revises habrá que rectificar la publicación.':''}`,
     list:caps.length>1?nm:undefined,input:{label:'Motivo (lo ve el capataz)',required:true},ok:'Habilitar',tone:'info'});
   const m=typeof mot==='string'?mot.trim():'';if(!m)return;
   const r={t:NOW(),by:me.email||me.id||'',mot:m};let ok=0,ya=0;const errs=[];
   for(const cap of caps){const id=f+'_'+cap;const ref=fcol('tareo').doc(id);
     const doc={date:f,cap,capN:tCapName(cap)||'',st:'reab',modo:'hrs',pcs:[],rows:{},foto:[],reab:r,hab:r,hist:[{...r,a:'reab',cam:'Tareo habilitado por la oficina (día atrasado).'}],
       by:r.by,ts:r.t};/* sin cfg: la jornada se congela cuando el capataz lo envía */
-    try{const hecho=await(db||FDB).runTransaction(async tx=>{const s=await tx.get(ref);if(s.exists)return false;tx.set(ref,doc);return true});
-      if(hecho){ok++;if(TD.f===f)TD.docs.set(id,{...doc,id})}else ya++}
+    try{let loc=null;const hecho=await(db||FDB).runTransaction(async tx=>{const s=await tx.get(ref);loc=null;
+        if(!s.exists){tx.set(ref,doc);loc=doc;return true}
+        const cur=s.data()||{};if(!toHabBor(cur))return false;/* solo un borrador sin enviar; nunca toca lo demás */
+        const up={st:'reab',reab:r,hab:r,hist:trAU({...r,a:'reab',cam:'Borrador sin enviar habilitado por la oficina (día atrasado).'}),by:r.by,ts:r.t};
+        tx.update(ref,up);loc={...cur,st:'reab',reab:r,hab:r,hist:[...(Array.isArray(cur.hist)?cur.hist:[]),{...r,a:'reab'}],by:r.by,ts:r.t};return true});
+      if(hecho){ok++;if(TD.f===f&&loc)TD.docs.set(id,{...loc,id})}else ya++}
     catch(err){errs.push(`${tCapName(cap)||cap}: ${(err&&(err.code||err.message))||err}`)}}
   if(errs.length)toast('No se pudo habilitar: '+errs.join('; '));
-  else toast(`${ok===1?'Tareo habilitado':`${ok} tareos habilitados`}${ya?` (${ya} ya ${ya===1?'tenía':'tenían'} tareo)`:''}: ${ok===1?'el capataz ya puede llenarlo':'los capataces ya pueden llenarlos'} desde su celular.`);
+  else toast(`${ok===1?'Tareo habilitado':`${ok} tareos habilitados`}${ya?` (${ya} ya ${ya===1?'tenía su tareo enviado':'tenían su tareo enviado'})`:''}: ${ok===1?'el capataz ya puede llenarlo':'los capataces ya pueden llenarlos'} desde su celular.`);
   requestRender()}
 /* «Tareos del día» (avisos, tablero y «Sin tareo»): en tareo.js (rediseño oct 2026: toAvisos, toSinHtml) */
 /* ---------- conflicto: un obrero en dos tareos del día → «Quitar de este tareo» (tasis/admin, con motivo) ---------- */
