@@ -1375,6 +1375,25 @@ test('planos: cargan administrador, editores y Oficina Técnica; forma mínima; 
   await assertFails(setDoc(doc(ed, 'plb/x4'), PLB({ W: '100' })));
 });
 
+test('planos: la malla de ejes ya fijada solo la cambia o borra el administrador; los demás la agregan y la llevan a otra revisión (17-11-2026)', async () => {
+  const EJ = [{ n: 'A', p: [0, 0, 0, 10] }, { n: '1', p: [0, 0, 10, 0] }];
+  const M = (x) => ({ ej: EJ, rev: 1, base: 'planos/EST_E19/r1', t: 1, mt: 1, by: 'ot@obra.pe', ...x });
+  const E19 = (x) => PLB({ cod: 'E19', disc: 'EST', base: 'planos/EST_E19/r1', ...x });
+  for (const db of [user('editor@obra.pe'), user('ot@obra.pe')]) {
+    await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'plb/EST_E19'), E19()); });
+    await assertSucceeds(updateDoc(doc(db, 'plb/EST_E19'), { malla: M(), ok: { rev: 1, malla: true } }));   /* primer plano alistado: la fija */
+    await assertSucceeds(updateDoc(doc(db, 'plb/EST_E19'), { ok: deleteField() }));                       /* «Volver a revisar» no la toca */
+    await assertSucceeds(setDoc(doc(db, 'plb/EST_E19'), E19({ rev: 2, base: 'planos/EST_E19/r2', malla: M() })));   /* revisión nueva: la arrastra */
+    await assertSucceeds(updateDoc(doc(db, 'plb/EST_E19'), { malla: M({ rev: 3, base: 'planos/EST_E19/r3', mt: 5 }) }));   /* unir con el PDF: otra revisión, mismos ejes */
+    await assertFails(updateDoc(doc(db, 'plb/EST_E19'), { malla: M({ ej: [{ n: 'A', p: [1, 0, 1, 10] }] }) }));   /* cambiar los ejes */
+    await assertFails(updateDoc(doc(db, 'plb/EST_E19'), { malla: deleteField() }));                       /* borrarla */
+    await assertFails(setDoc(doc(db, 'plb/EST_E19'), E19({ rev: 4, base: 'planos/EST_E19/r4' })));       /* una versión vieja de la app que no la arrastra */
+  }
+  const adm = user(OWNER);
+  await assertSucceeds(updateDoc(doc(adm, 'plb/EST_E19'), { malla: M({ ej: [{ n: 'A', p: [1, 0, 1, 10] }], rev: 4 }) }));   /* «Actualizar la malla» */
+  await assertSucceeds(updateDoc(doc(adm, 'plb/EST_E19'), { malla: deleteField() }));                    /* «Usar como malla» otro plano */
+});
+
 // ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
 const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
 test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {
