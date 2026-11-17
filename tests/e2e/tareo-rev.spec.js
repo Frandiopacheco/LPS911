@@ -637,7 +637,7 @@ test('auditoría 21-10: la fila agregada guarda en el historial lo que trae; Ent
 
 test('Habilitar tareo atrasado (17-11-2026): crea el tareo reabierto vacío y no pisa uno existente', async ({ page }) => {
   const dAdd = (s, n) => { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-  const D = dAdd(HOY, -4), D2 = dAdd(HOY, -2);
+  const D = dAdd(HOY, -3), D2 = dAdd(HOY, -2); // HOY es jueves: D lunes (laborable), D2 martes
   const B = D + '_tcap2@obra.pe';
   const extra = [...SOLO, ['tareo', B, { date: D, cap: 'tcap2@obra.pe', capN: 'Bruno Segundo', st: 'bor', modo: 'hrs', pcs: [], rows: { 44444444: row('DELTA') }, foto: [], hist: [], by: 'tcap2@obra.pe', ts: 1 }]];
   const errors = await openApp(page, { as: 'tasis', editar: false, extra });
