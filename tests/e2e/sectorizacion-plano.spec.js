@@ -59,3 +59,41 @@ test('sectorización: trae los ambientes de la planta alistada (nuevos, por nomb
   expect(await page.evaluate(() => (Object.values(window.__dbAll('ambientes')).find(a => a.name === 'COCINA 1') || {}).sectorId)).not.toBe('s1');
   expect(errors).toEqual([]);
 });
+
+/* 17-11-2026, etapa 3 de «Planta digitalizada»: los ambientes del plano tienen id estable; se emparejan primero por ese id y se marca
+   el que ya no está en el plano (sin archivarlo) */
+test('sectorización: empareja por el id del ambiente del plano y marca el que ya no está', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin' });
+  await page.evaluate(async txt => {
+    window.__ST = new Map(); window.plPut = async (p, b) => { window.__ST.set(p, b); }; window.plGet = async p => { const b = window.__ST.get(p); if (!b) throw new Error('404 ' + p); return b; };
+    const S = dxfToPx(dxfSheet(dxfParse(txt))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
+    const W = S.W, H = S.H, rect = (x0, y0, x1, y1) => [x0 * W, y0 * H, x1 * W, y0 * H, x1 * W, y1 * H, x0 * W, y1 * H];
+    const R = { 'DPTO 101': rect(.05, .05, .25, .25), 'BAÑO': rect(.30, .05, .45, .25) };
+    const fix = { rev: 1, L: Object.entries(R).map(([a, p], i) => ({ id: 'f' + i, k: 'ambAdd', p, a })) };
+    const cen = P => ({ x: (P[0] + P[2]) / 2, y: (P[1] + P[5]) / 2 });
+    const amb = { rev: 1, t: 1, L: [{ id: 'pa-101', n: 'DPTO 101', a: 1, ...cen(R['DPTO 101']) }, { id: 'pa-bano', n: 'BAÑO', a: 1, ...cen(R['BAÑO']) }] };
+    const base = 'planos/ARQ_A03.t/r1'; const z = await dxfGz(JSON.stringify(G), 'application/json'); window.__ST.set(base + '/geo.json.gz', z.b);
+    await fcol('plb').doc('ARQ_A03').set({ cod: 'A03', disc: 'ARQ', rev: 1, base, W, H, Z: 3, T: 1024, mm: S.mm, tipo: 'Planta', tit: 'Planta primer piso', revs: [], pisoId: 'p1',
+      dxf: { v: 1, src: S.src, k: S.k, how: S.how, mpp: S.mpp, lay, gz: 1, oz: 0 }, cal: { mpp: S.mpp, rev: 1, dxf: 1 }, fix, amb, ok: { rev: 1, t: 1, by: 'ot@obra', malla: false } });
+    await fcol('laminas').doc('lamA03').set({ pisoId: 'p1', base: true, esp: 'Arquitectura', name: 'Planta', w: Math.round(W / 2), h: Math.round(H / 2), lw: 500, lh: 400, fmt: 'image/webp', nf: 0, nl: 0, rev: 1,
+      T: { a: 1, b: 0, e: 0, f: 0 }, aligned: true, plb: { id: 'ARQ_A03', cod: 'A03', disc: 'ARQ', rev: 1, mpp: S.mpp * 2 }, order: 1, ts: 1 });
+    /* «Dpto 102» vino del BAÑO del plano (otro nombre, sin forma en esta lámina) y «Dpto 101» de un ambiente que ya no está */
+    await fcol('ambientes').doc('a2').update({ pl: { plb: 'ARQ_A03', rev: 1, amb: 'pa-bano' } });
+    await fcol('ambientes').doc('a1').update({ name: 'Depósito', pl: { plb: 'ARQ_A03', rev: 1, amb: 'pa-viejo' } });
+  }, dxfDemo());
+  await page.evaluate(() => { U.piso = 'p1'; U.pisoAll = false; goTab('planos'); });
+  await expect.poll(() => page.evaluate(() => !!(window.__plano && window.__plano.LAM && window.__plano.LAM.get('lamA03') && PLB.get('ARQ_A03')))).toBe(true);
+  await page.evaluate(() => { SZ.vista = 'lamA03'; render(); });
+  await expect.poll(async () => { if (!(await page.locator('#lqm').count())) await page.click('#szpl'); return page.locator('#lqm .szplt tbody tr').count(); }, { timeout: 15000 }).toBe(2);
+  const rows = page.locator('#lqm .szplt tbody tr');
+  await expect(rows.nth(1)).toContainText('Dpto 102'); await expect(rows.nth(1)).toContainText('el mismo del plano');
+  await expect(rows.nth(0)).toContainText('Nuevo');
+  await expect(page.locator('#lqm .szplsolo')).toContainText('ya no está en el plano');
+  await page.click('#szplok');
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  const r = await page.evaluate(() => ({ a2: window.__dbGet('ambientes', 'a2').pl, a1: window.__dbGet('ambientes', 'a1'), nuevo: Object.values(window.__dbAll('ambientes')).find(a => a.pl && a.pl.amb === 'pa-101') }));
+  expect(r.a2).toEqual({ plb: 'ARQ_A03', rev: 1, amb: 'pa-bano' });
+  expect(r.a1.arch).toBeUndefined(); expect(r.a1.pl.amb).toBe('pa-viejo');   /* no se toca */
+  expect(r.nuevo && r.nuevo.name).toBe('DPTO 101');
+  expect(errors).toEqual([]);
+});

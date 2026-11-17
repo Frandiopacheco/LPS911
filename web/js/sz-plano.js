@@ -7,7 +7,9 @@
    - Sectores de las dos maneras, sincronizadas: el sector de cada ambiente nuevo se elige en la tabla, o con «Agrupar en este sector» se
      dibuja un contorno sobre la lámina y los ambientes que quedan adentro pasan a ese sector. Las dos cambian el mismo dato
      (`ambientes.sectorId`); la forma de un sector en esta vista ya es la de sus ambientes.
-   - Los ambientes siguen siendo los de Last Planner (`ambientes`): sin otra lista. Cada uno traído guarda `pl {plb, rev}` (de qué plano vino).
+   - Los ambientes siguen siendo los de Last Planner (`ambientes`): sin otra lista. Cada uno traído guarda `pl {plb, rev, amb}` (de qué plano
+     vino y, desde el 17-11-2026, el id estable del ambiente del plano: planos-rev.js). Se emparejan primero por ese id, después por
+     ubicación y por nombre; con una revisión nueva se marcan los que cambiaron de área o ya no están (nunca se archiva nada solo).
    Solo en Last Planner (en Casco los «ambientes» son sectores de obra). Escribe con apply(): todo se deshace con Ctrl+Z. */
 
 const szplKey=s=>fold(s).replace(/[^a-z0-9]/g,'');
@@ -26,36 +28,41 @@ function szplSrc(pid){const API=window.__plano;const bs=API&&API.basesOf?API.bas
   return{lam,p,sp,d}}
 /** filas de la tabla: cada ambiente del plano con su ambiente del lookahead (por ubicación o por nombre) o nuevo; y los que solo están en el lookahead */
 function szplRows(pid,src){const v=src.lam.id,mpp=src.d.mpp||0;const L=szTree(pid).flatMap(({s,ambs})=>ambs.map(({a})=>({a,s})));const used=new Set();
-  const rows=src.d.amb.map((q,i)=>{const c=szplCen(q.p);return{i,n:String(q.n||'').trim(),p:q.p,c,m2:szplArea(q.p)*mpp*mpp}});
+  const rows=src.d.amb.map((q,i)=>{const c=szplCen(q.p);return{i,id:q.id||'',n:String(q.n||'').trim(),p:q.p,c,m2:szplArea(q.p)*mpp*mpp}});
+  for(const r of rows){if(!r.id)continue;const hit=L.find(o=>!used.has(o.a.id)&&o.a.pl&&o.a.pl.plb===src.p.id&&o.a.pl.amb===r.id);if(hit){r.a=hit.a;r.by='id';used.add(hit.a.id)}}
   for(const r of rows){const hit=L.find(o=>!used.has(o.a.id)&&szGeo(o.a,v)&&szplPip(szGeo(o.a,v),r.c.x,r.c.y));if(hit){r.a=hit.a;r.by='pos';used.add(hit.a.id)}}
   for(const r of rows){if(r.a||!r.n)continue;const k=szplKey(r.n);const hit=L.find(o=>!used.has(o.a.id)&&szplKey(o.a.name)===k);if(hit){r.a=hit.a;r.by='nom';used.add(hit.a.id)}}
+  /* cambió de área en el plano (umbral del dueño: 3 % o 0,5 m²) */
+  for(const r of rows){const g=r.a&&r.a.pl&&r.a.pl.plb===src.p.id&&szGeo(r.a,v);if(g&&mpp){const a0=szplArea(g)*mpp*mpp;if(Math.abs(r.m2-a0)>=Math.max(0.03*a0,0.5))r.dif=a0}}
   return{rows,solo:L.filter(o=>!used.has(o.a.id))}}
+/** el ambiente del lookahead vino de este plano con un id que ya no está en la revisión vigente */
+const szplGone=(a,src)=>!!(src.d.amb.some(q=>q.id)&&a.pl&&a.pl.plb===src.p.id&&a.pl.amb&&!src.d.amb.some(q=>q.id===a.pl.amb));
 function szplOpen(){const pid=U.piso;if(!pid||!canWrite||CS())return;const src=szplSrc(pid);if(src.err){toast(src.err);return}
   const{rows,solo}=szplRows(pid,src);const secs=szTree(pid).map(o=>o.s);const v=src.lam.id;
   const so=(sel,blank)=>`${blank?`<option value="">${blank}</option>`:''}${secs.map(s=>`<option value="${s.id}"${s.id===sel?' selected':''}>${esc(s.code)} · ${esc(s.name)}</option>`).join('')}`;
   const nN=rows.filter(r=>!r.a).length,nC=rows.length-nN;
-  const tr=r=>{const has=r.a&&szGeo(r.a,v);return`<tr data-r="${r.i}"><td><input type="checkbox" data-szplc="${r.i}"${!r.a||!has?' checked':''} aria-label="Traer ${esc(r.n||'ambiente')}"></td>
+  const tr=r=>{const has=r.a&&szGeo(r.a,v);return`<tr data-r="${r.i}"><td><input type="checkbox" data-szplc="${r.i}"${!r.a||!has||r.dif!=null?' checked':''} aria-label="Traer ${esc(r.n||'ambiente')}"></td>
     <td>${r.a?esc(r.n||'(sin nombre)'):`<input class="tin" data-szpln="${r.i}" value="${esc((r.n||'').toUpperCase())}" placeholder="Nombre" aria-label="Nombre del ambiente">`}</td><td class="n">${r.m2?r.m2.toFixed(2):'—'}</td>
-    <td>${r.a?`<b>${esc(r.a.code)}</b> · ${esc(r.a.name)} <span class="mu">${r.by==='pos'?'(misma ubicación)':'(mismo nombre)'}${has?' · ya ubicado: marca para tomar la forma del plano':''}</span>`:'<span class="szplnew">Nuevo</span>'}</td>
+    <td>${r.a?`<b>${esc(r.a.code)}</b> · ${esc(r.a.name)} <span class="mu">${r.by==='id'?'(el mismo del plano)':r.by==='pos'?'(misma ubicación)':'(mismo nombre)'}${r.dif!=null?` · <b class="szpldif">cambió de área en el plano (antes ${r.dif.toFixed(2)} m²)</b>`:''}${has?' · ya ubicado: marca para tomar la forma del plano':''}</span>`:'<span class="szplnew">Nuevo</span>'}</td>
     <td>${r.a?esc((S.sec.get(r.a.sectorId)||{}).code||''):`<select class="tin" data-szpls="${r.i}" aria-label="Sector"><option value="">El de arriba</option>${so('')}</select>`}</td></tr>`};
   lqModal(`<div class="lqtop"><b>Traer ambientes del plano · ${esc(S.pis.get(pid).code)} · ${esc(src.p.cod)} Rev. ${src.sp.rev}</b><button class="kx" data-lqx aria-label="Cerrar">&times;</button></div>
     <p class="note">${rows.length} ambiente(s) en el plano: <b>${nN} nuevo(s)</b> se crean con su forma ya dibujada y <b>${nC} coinciden</b> con el lookahead (por ubicación o por nombre) y toman la forma del plano. ${solo.length?`${solo.length} ambiente(s) del lookahead no están en el plano: no se tocan.`:''} Se deshace con Ctrl+Z.</p>
     ${nN?`<label class="lqlab szplsec">Sector para los nuevos<select class="tin" id="szplsec">${so(secs[0]&&secs[0].id)}<option value="__new">+ Sector nuevo</option></select></label>`:''}
     <div class="szplw"><table class="t szplt"><thead><tr><th><input type="checkbox" id="szplall" checked aria-label="Todos"></th><th>Ambiente del plano</th><th class="n">m²</th><th>En el lookahead</th><th>Sector</th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table></div>
-    ${solo.length?`<details class="szplsolo"><summary>Solo en el lookahead (${solo.length})</summary><p class="mu">${solo.map(o=>`${esc(o.a.code)} · ${esc(o.a.name)}`).join(' · ')}</p></details>`:''}
+    ${solo.length?`<details class="szplsolo"><summary>Solo en el lookahead (${solo.length})</summary><p class="mu">${solo.map(o=>`${esc(o.a.code)} · ${esc(o.a.name)}${szplGone(o.a,src)?` <b class="szpldif">(ya no está en el plano, Rev. ${src.sp.rev}: revísalo; no se archiva solo)</b>`:''}`).join(' · ')}</p></details>`:''}
     <p class="lqmsg bad" id="szplmsg"></p><div class="lqbtns"><button class="ib" data-lqx>Cancelar</button><button class="ib pri" id="szplok">Traer</button></div>`,
     e=>{if(e.target.id==='szplall'){document.querySelectorAll('#lqm [data-szplc]').forEach(x=>{x.checked=e.target.checked});return}
       if(e.target.id==='szplok')szplApply(pid,src,rows)});}
 function szplApply(pid,src,rows){const v=src.lam.id;const q=s=>document.querySelector('#lqm '+s);const ops=[];let nN=0,nC=0;
   const top=q('#szplsec')?q('#szplsec').value:'';let topId=top;
   if(top==='__new'){const ss=siblings('sectors','pisoId',pid);const n=ss.length+1,last=ss[ss.length-1];topId=uid('sec');ops.push(op('sectors',topId,{id:topId,pisoId:pid,code:'S'+n,name:'Sector '+n,order:last?last.order+10:10}))}
-  const cnt=new Map();const pl={plb:src.p.id,rev:src.sp.rev};
+  const cnt=new Map();const plOf=r=>({plb:src.p.id,rev:src.sp.rev,...(r.id?{amb:r.id}:{})});
   for(const r of rows){const c=q(`[data-szplc="${r.i}"]`);if(!c||!c.checked)continue;
-    if(r.a){ops.push(op('ambientes',r.a.id,{...r.a,geo:{...(r.a.geo||{}),[v]:r.p},pl}));nC++;continue}
+    if(r.a){ops.push(op('ambientes',r.a.id,{...r.a,geo:{...(r.a.geo||{}),[v]:r.p},pl:plOf(r)}));nC++;continue}
     const sid=(q(`[data-szpls="${r.i}"]`)||{}).value||topId;if(!sid){q('#szplmsg').textContent='Elige el sector de los ambientes nuevos (o crea uno).';return}
     const name=String((q(`[data-szpln="${r.i}"]`)||{}).value||'').trim().toUpperCase()||'AMBIENTE';
     const sib=S.sec.has(sid)?siblings('ambientes','sectorId',sid):[];const k=(cnt.get(sid)||0)+1;cnt.set(sid,k);const sc=S.sec.get(sid)||{code:'S'+(siblings('sectors','pisoId',pid).length+1)};
-    const id=uid('amb');const last=sib[sib.length-1];ops.push(op('ambientes',id,{id,sectorId:sid,code:`${sc.code}-${sib.length+k}`,name,order:(last?last.order:0)+10*k,geo:{[v]:r.p},pl}));nN++}
+    const id=uid('amb');const last=sib[sib.length-1];ops.push(op('ambientes',id,{id,sectorId:sid,code:`${sc.code}-${sib.length+k}`,name,order:(last?last.order:0)+10*k,geo:{[v]:r.p},pl:plOf(r)}));nN++}
   if(!ops.length){q('#szplmsg').textContent='Marca al menos un ambiente.';return}
   lqClose();apply(ops,`Ambientes del plano: ${nN} nuevo(s), ${nC} ubicado(s)`);toast(`${nN} ambiente(s) nuevo(s) y ${nC} ubicado(s) desde ${src.p.cod}`,'Deshacer',undo)}
 /** «Agrupar en este sector»: los ambientes ubicados cuyo centro cae dentro del contorno dibujado pasan al sector elegido */

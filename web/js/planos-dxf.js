@@ -372,10 +372,10 @@ async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plU
 /* ---------- geometría de una lámina vinculada a un plano DXF alistado (17-11-2026: salió de casco-dxf.js para que no dependa de Casco) ---------- */
 /** geometría DXF de la lámina l (Casco o Last Planner, con `l.plb {id, rev}` y `l.w`), en coordenadas de esa lámina, con las correcciones de Alistar: {ej, col, ln, tx, cnt, p (plano), sp (revisión), mpp} o null (sin DXF o aún cargando) */
 const PLDXL=new Map();
-function plDxfLam(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev))return null;   /* solo alistado */
-  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const fx=sp.fix||null;const key=[plGeoKey(sp),JSON.stringify(lay),mpp,l.w,fx?fx.L.length+':'+((fx.L[fx.L.length-1]||{}).id||''):''].join('|');const c=PLDXL.get(l.id);if(c&&c.key===key)return c.v;
+function plDxfLam(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev)||sp.hl)return null;   /* solo alistado (y con su historial leído) */
+  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const fx=sp.fix||null;const key=[plGeoKey(sp),JSON.stringify(lay),mpp,l.w,fx?fx.L.length+':'+((fx.L[fx.L.length-1]||{}).id||''):'',p.amb?p.amb.rev+':'+(p.amb.t||0):''].join('|');const c=PLDXL.get(l.id);if(c&&c.key===key)return c.v;
   const R=dxfRolesFix(G,lay,mpp,fx);const f=l.w/sp.W;   /* con las correcciones de Alistar */const S=A=>A.map(v=>Math.round(v*f*10)/10);
-  const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),amb:(R.amb||[]).map(a=>({n:a.n,p:S(a.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
+  const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),amb:(()=>{const I=typeof plAmbIds==='function'?plAmbIds(p,sp,R.amb||[]):null;return(R.amb||[]).map(a=>({n:a.n,p:S(a.p),...(I&&I.get(a)?{id:I.get(a)}:{})}))})(),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
   PLDXL.set(l.id,{key,v});return v}
 /* ---------- de cada plano listo a la malla de ejes del proyecto (17-11-2026, etapa 2 de «Planta digitalizada», docs/ia/planos.md) ----------
    Una sola alineación por plano: px de su revisión vigente → metros de la malla. La usan la capa del Plan diario (pd-capas.js) y Casco
@@ -512,7 +512,7 @@ async function plDxfRecalce(P){const sp=plSpecOf(P);if(!sp.dxf||!sp.dxf.sobre)th
   const G0=await plGeoGet(sp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');const M=await plDxfMap(P,P.W,P.H,true,G0,true);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');const gv=NOW().toString(36);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
   const rv=P.rev||1,mpp=P.dxf.mpp/f;const u={dxf:{...P.dxf,...plMapMeta(M),mpp,gz:gz.z,gv},cal:{...(P.cal||{}),mpp,rev:rv,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
-  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};if(P.ok&&P.ok.rev===rv){const ok={...P.ok};if(ok.mpp)ok.mpp=ok.mpp/f;u.ok=plOkShift(P,ok,ox,oy,mpp)}
+  if(P.fix&&P.fix.rev===rv)u.fix={...plFixScale(P.fix,f,ox,oy),rev:rv};if(P.ctn&&P.ctn.rev===rv)u.ctn={...plCtnScale(P.ctn,f,ox,oy),rev:rv};for(const k of['amb','amd'])if(P[k]&&P[k].rev===rv)u[k]=plAmbScale(P[k],f,ox,oy);if(P.ok&&P.ok.rev===rv){const ok={...P.ok};if(ok.mpp)ok.mpp=ok.mpp/f;u.ok=plOkShift(P,ok,ox,oy,mpp)}
   await plCol(P).doc(P.id).update(u);return M}
 async function plDxfRecalceRun(P){toast('Calzando el DXF con el PDF…');try{const M=await plDxfRecalce(P);requestRender();
     toast(`${P.cod}: calce corregido (${Math.abs(M.f-1)<1e-4&&Math.hypot(M.ox,M.oy)<1?'ya estaba bien':`se movió ${(Math.hypot(M.ox,M.oy)*P.dxf.mpp/(M.f||1)*1000/((M.esc||100))).toFixed(1)} mm en el papel`}; líneas a ${M.med} mm de las del PDF)`)}catch(e){toast('No se pudo recalcular: '+e.message)}}
@@ -523,9 +523,16 @@ function dxfEscOf(mmPapel,G){if(!G||!G.mpp||!G.W||!(mmPapel>0))return 0;const e=
 /** carga: el DXF se agrega como datos de la revisión vigente de un plano en PDF (no hace revisión nueva; la imagen sigue siendo el PDF) */
 async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);say('Calzando el DXF con el PDF…');const G0=JSON.parse(await dxfUnGz(dx.geo.b));const M=await plDxfMap(P,dx.W,dx.H,dx.crop,G0);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');
-  say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
+  /* otro DXF para la misma revisión: archivo de geometría con otro nombre (gv), así ningún equipo sigue usando el anterior de su caché */
+  const gv=P.dxf?NOW().toString(36):0;
+  say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
   const D=firebase.firestore.FieldValue.delete();const mpp=dx.meta.mpp/f;
-  await plCol(P).doc(P.id).update({dxf:{...dx.meta,...plMapMeta(M),mpp,gz:gz.z,sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D});
+  /* otro DXF en la misma revisión: lo de Alistar del anterior se copia al historial (antes se perdía) y pasa al nuevo con las mismas
+     coordenadas (el PDF es el mismo); una revisión nueva del PDF toma lo de la última revisión con correcciones, por los ejes (planos-rev.js) */
+  /* `dxfH` enlaza la copia: si el traspaso falla, Alistar ofrece reintentarlo (planos-rev.js palCarryHtml) */
+  const same=plHistOf(P);const B=db.batch();const hid=same?plHistPut(B,P,'dxf'):'';
+  B.update(plCol(P).doc(P.id),plMallaKeep(P,{dxf:{...dx.meta,...plMapMeta(M),mpp,gz:gz.z,...(gv?{gv}:{}),sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D,amb:D,amd:D,dxfH:hid?{h:hid,rev:P.rev||1}:D}));await B.commit();
+  try{const r=await palCarry(P.id,same?{same}:null);const t=palCarryMsg(P.cod,r);if(t){it.carry=t;toast(t)}}catch(e){console.warn('pasar correcciones',e)}
   return{id:P.id,rev:P.rev||1,att:true,mm:P.mm,crop:true,dxf:{...dx.meta,mpp}}}
 /** une un plano solo DXF (o la revisión DXF anterior) con un plano en PDF: la geometría, las capas, las correcciones de Alistar, el contorno y
     el «Listo» pasan a la revisión vigente del PDF; la ficha DXF (si es otra) se archiva. Lo ya vinculado a la ficha DXF sigue funcionando. */
@@ -534,9 +541,9 @@ async function plDxfJoin(Dp,dsp,P,arch,M){if(!dsp||!dsp.dxf)throw new Error('Ese
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
   if(dsp.dxf.oz){try{await plPut(`${P.base}/orig.dxf.gz`,await plGet(dsp.base+'/orig.dxf.gz'),'application/gzip')}catch(e){console.warn('DXF original',e)}}
   const rv=dsp.rev,rp=P.rev||1,mpp=dsp.dxf.mpp/f;const u={dxf:{...dsp.dxf,...plMapMeta(M),mpp,gz:gz.z,gv:0,sobre:'pdf',dfname:dsp.fname||'',dts:NOW(),dby:me.email,de:Dp.id},cal:{mpp,rev:rp,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()}};
-  const src=dsp.cur?Dp:((Dp.revs||[]).find(r=>r.rev===rv)||{});
-  if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f,ox,oy),rev:rp};
-  if(Dp.alc&&Dp.alc.rev===rv&&dsp.cur)u.alc={...Dp.alc,rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
+  const sr=dsp.cur?null:((Dp.revs||[]).find(r=>r.rev===rv)||{});const src=dsp.cur?Dp:{...sr,...((await plRevData(sr))||{})};
+  if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(src.ctn&&src.ctn.rev===rv)u.ctn={...plCtnScale(src.ctn,f,ox,oy),rev:rp};
+  if(src.alc&&src.alc.rev===rv)u.alc={...src.alc,rev:rp};for(const k of['amb','amd'])if(src[k]&&src[k].rev===rv)u[k]={...plAmbScale(src[k],f,ox,oy),rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
   /* la malla de ejes del proyecto (si salió de este DXF) pasa con él a la revisión del PDF. Los ejes (m) no se tocan: las reglas solo dejan
      al administrador cambiarlos, y el corrimiento del calce (milímetros) lo absorbe la comparación por semejanza (palFit). La copia de la
      ficha DXF archivada se queda (borrarla también es solo del administrador); gana esta por ser la última (mt). */
@@ -570,9 +577,10 @@ function plJoinPend(){if(typeof PLB==='undefined')return[];const out=[];
 async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);if(!r)throw new Error(`La Rev. ${rv} no es un PDF.`);const dsp=plSpecOf(D);const rc=D.rev||1;
   const G0=await plGeoGet(dsp);if(!G0)throw new Error('No se pudo leer la geometría del DXF.');
   const M=await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false,G0);   /* comprueba antes de escribir nada */
-  const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
+  const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{})};
+  const B=db.batch();const hid=plHistPut(B,D,'join');if(hid){cur.h=hid;if(cur.ok)cur.ok=plHistOk(cur.ok,hid)}
   const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
-  await plCol(D).doc(D.id).update(plMallaKeep(D,{...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X}));
+  B.update(plCol(D).doc(D.id),plMallaKeep(D,{...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,amb:X,amd:X,tx:X}));await B.commit();
   await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false,M);return rc+1}
 /** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
 function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';
