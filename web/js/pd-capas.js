@@ -41,6 +41,12 @@ function pdcGuess(p,base){const ar=pdcAr(plSpecOf(p));if(!ar)return null;
   if(q&&base.w>0&&(q.id===p.id?(base.plb.rev||1)===(p.rev||1):same(q))){const t=base.T||PDC_I;return{T:[t.a*base.w,t.b*base.w,t.e,t.f],from:q}}
   return null}
 
+/** alineación por la malla de ejes (17-11-2026, docs/ia/planos.md «Planta digitalizada»): si la capa y la lámina base vienen de planos DXF
+    listos, se calcula sola y siempre al día con sus revisiones; no se guarda ni se marcan puntos. [a,b,e,f] de la hoja (ancho 1) a la base */
+function pdcAuto(p,base){if(!p||!base||!base.plb||!(base.w>0)||typeof plPxMalla!=='function'||pdcGiro(p))return null;
+  const B=plLamMalla(base),Sp=plPxMalla(p),W=plSpecOf(p).W;if(!B||!Sp||!(W>0))return null;
+  const t=base.T||PDC_I;const F=simCmp(t,simCmp(simInv(B),simCmp(Sp,{a:W,b:0,e:0,f:0})));return simOk(F)?[F.a,F.b,F.e,F.f]:null}
+
 /* ---------- imagen de la capa ---------- */
 function pdcDims(sp){const mx=pdcMax(),Z=sp.Z||1;let z=0;while(z<Z-1&&Math.ceil(Math.max(sp.W,sp.H)/2**z)>mx)z++;
   const lw=Math.ceil(sp.W/2**z),lh=Math.ceil(sp.H/2**z),k=Math.min(1,mx/Math.max(lw,lh));return{z,lw,lh,k,w:Math.max(1,Math.round(lw*k)),h:Math.max(1,Math.round(lh*k)),mx}}
@@ -72,7 +78,7 @@ function pdcLoad(p){if(PDC.busy===p.id||(PDC.err&&PDC.errId===p.id))return;PDC.b
 /** el plano encendido en este piso (la capa se apaga al cambiar de piso o de lámina base) */
 function pdcCur(piso,base){if(!base||typeof PLB==='undefined')return null;const k=piso+'|'+base.id;if(PDC.key!==k){PDC.key=k;PDC.id='';PDC.tmp=null;PDC.err='';PDC.errId=''}
   if(!PDC.id)return null;const p=PLB.get(PDC.id);if(!p||p.arch){if(plbReady){PDC.id='';PDC.tmp=null}return null}return p}
-const pdcT=(p,base)=>{const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===p.id?PDC.tmp.T:null)};
+const pdcT=(p,base)=>{const m=pdcAuto(p,base);if(m)return m;const a=pdcAl(p,base);return a?a.T:(PDC.tmp&&PDC.tmp.id===p.id?PDC.tmp.T:null)};
 /** capa para el visor del Plan diario: {key,url,w,h,T,op,blend} o null (sin capa, sin alinear o todavía cargando) */
 function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const Tn=pdcT(p,base);if(!Tn)return null;
   const e=PDC.img.get(pdcKey(plSpecOf(p)));if(!e||!e.url){pdcLoad(p);return null}
@@ -82,12 +88,13 @@ function pdcLayer(piso,base){const p=pdcCur(piso,base);if(!p)return null;const T
 function pdcBar(piso,base){if(!base||typeof canPla!=='function'||!canPla())return'';const p=pdcCur(piso,base);
   return`<button class="ib pdcb${p?' on':''}" data-pdc="open" title="Ver encima de la arquitectura otra especialidad de este piso (del módulo Planos)">Capas ▾</button>`
     +(p?`<span class="mchip on pdcc" title="${esc(pdcName(p))} · Rev. ${p.rev||1}"><b>${esc(p.disc||'')}</b> <span>${esc(pdcName(p))}</span><button data-pdc="off" aria-label="Quitar la capa" title="Quitar la capa">✕</button></span>
-      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa"><button class="ib${PDC.solo?' on':''}" data-pdc="solo" aria-pressed="${PDC.solo}" title="Ver solo esta capa, sin la arquitectura debajo">Solo la capa</button>${pdcCan()?'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
+      <input type="range" id="pdcop" min="0.15" max="1" step="0.05" value="${PDC.op}" aria-label="Opacidad de la capa" title="Opacidad de la capa"><button class="ib${PDC.solo?' on':''}" data-pdc="solo" aria-pressed="${PDC.solo}" title="Ver solo esta capa, sin la arquitectura debajo">Solo la capa</button>${pdcAuto(p,base)?'<span class="mu pdcm" title="La capa y la base vienen de planos DXF listos: se alinean solas por la malla de ejes del proyecto">⌗ por ejes</span>':pdcCan()?'<button class="ib" data-pdc="aln" title="Alinear esta capa con la arquitectura marcando puntos">Alinear</button>':''}`:'')}
 /** avisos de la capa (cargando, error, alineación por confirmar) */
 function pdcNote(piso,base){const p=pdcCur(piso,base);if(!p)return'';const nm=`<b>${esc(p.cod||'La capa')}</b>`;
   if(PDC.err&&PDC.errId===p.id)return`<div class="callout warnc">No se pudo cargar ${nm}: ${esc(PDC.err)} <button class="ib" data-pdc="retry">Reintentar</button></div>`;
   const a=pdcAl(p,base);let h='';
-  if(!a&&PDC.tmp&&PDC.tmp.id===p.id)h=`<div class="callout warnc">${nm} usa la alineación de <b>${esc(PDC.tmp.from||'otro plano')}</b> (misma hoja). ${pdcCan()?'¿Coincide con la arquitectura? <button class="ib pri" data-pdc="ok">Sí, coincide</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':'Aún sin confirmar: si no coincide, avisa a Oficina Técnica.'}</div>`;
+  if(pdcAuto(p,base)){}   /* alineada por la malla de ejes: nada que confirmar */
+  else if(!a&&PDC.tmp&&PDC.tmp.id===p.id)h=`<div class="callout warnc">${nm} usa la alineación de <b>${esc(PDC.tmp.from||'otro plano')}</b> (misma hoja). ${pdcCan()?'¿Coincide con la arquitectura? <button class="ib pri" data-pdc="ok">Sí, coincide</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':'Aún sin confirmar: si no coincide, avisa a Oficina Técnica.'}</div>`;
   else if(a&&a.chk)h=`<div class="callout warnc">${nm} cambió en el módulo Planos (Rev. ${p.rev||1}): revisa que siga coincidiendo con la arquitectura. ${pdcCan()?'<button class="ib pri" data-pdc="ok">Sigue coincidiendo</button> <button class="ib" data-pdc="aln">Alinear con puntos</button>':''}</div>`;
   if(PDC.busy===p.id)h+=`<div class="callout">Cargando la capa ${nm}…</div>`;
   return h}
@@ -108,9 +115,12 @@ async function pdcAlign(p,base){if(!pdcCan()){toast('La alinean el administrador
       if(PDC.tmp&&PDC.tmp.id===p.id)PDC.tmp=null;PDC.id=p.id;toast('Capa alineada');requestRender()}})}
 
 /* ---------- elegir una capa ---------- */
-function pdcPick(id,piso,base){const p=PLB.get(id);if(!p||!base)return;
+async function pdcPick(id,piso,base){const p=PLB.get(id);if(!p||!base)return;
   if(!pdcReady(p)){toast('Esta planta DXF aún no está lista: se alista en el módulo Planos.');return}
   PDC.key=piso+'|'+base.id;PDC.err='';PDC.errId='';
+  /* planos DXF listos: se alinean solos por la malla de ejes (si falta su geometría, se trae primero) */
+  const q=base.plb&&PLB.get(base.plb.id);if(p.dxf&&q&&q.dxf&&typeof plPxMallaPrep==='function'&&!pdcAuto(p,base))await plPxMallaPrep([p,q]);
+  if(pdcAuto(p,base)){PDC.id=id;PDC.tmp=null;pdcRecent(id);lqClose();requestRender();return}
   if(pdcAl(p,base)){PDC.id=id;PDC.tmp=null;pdcRecent(id);lqClose();requestRender();return}
   const g=pdcGuess(p,base);
   if(g){PDC.id=id;PDC.tmp={id,T:g.T,from:g.from?g.from.cod:''};pdcRecent(id);lqClose();requestRender();return}
@@ -121,7 +131,7 @@ function pdcRecent(id){const a=store.get('pdcrec',[]);const L=[id,...(Array.isAr
 function pdcOpen(piso,base,n){if(!base||!canPla())return;plSub();
   if(!plbReady){if(!n)toast('Cargando la lista de planos…');if((n||0)<40)setTimeout(()=>{if(U.tab==='mapa')pdcOpen(piso,base,(n||0)+1)},250);else toast('No se pudo leer la lista de planos. Revisa la conexión.');return}
   const L=pdcList(piso,PDC.all),cur=pdcCur(piso,base),pn=(S.pis.get(piso)||{}).name||'';
-  const st=p=>!pdcReady(p)?['por alistar','']:(()=>{const a=pdcAl(p,base);return a?(a.chk?['revisar','warn']:['alineada','ok']):pdcGuess(p,base)?['por confirmar','']:['por alinear','']})();
+  const st=p=>!pdcReady(p)?['por alistar','']:pdcAuto(p,base)?['por ejes','ok']:(()=>{const a=pdcAl(p,base);return a?(a.chk?['revisar','warn']:['alineada','ok']):pdcGuess(p,base)?['por confirmar','']:['por alinear','']})();
   const row=p=>{const[t,c]=st(p);return`<button class="pdci${cur&&cur.id===p.id?' on':''}" data-pdcp="${esc(p.id)}" data-s="${esc((p.cod+' '+(p.tit||'')+' '+(PL_DN[p.disc]||p.disc||'')).toLowerCase())}"${pdcReady(p)?'':' disabled'}><b>${esc(p.cod||'')}</b><span>${esc(p.tit||p.tipo||'')}</span><i class="lqt ${c}">${t}</i></button>`};
   const rec=(store.get('pdcrec',[])||[]).map(id=>L.find(p=>p.id===id)).filter(Boolean).slice(0,4);
   const G=new Map();L.forEach(p=>{if(!G.has(p.disc))G.set(p.disc,[]);G.get(p.disc).push(p)});

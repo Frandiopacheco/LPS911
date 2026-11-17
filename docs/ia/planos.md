@@ -237,7 +237,14 @@ La mayoría de los planos sigue en **PDF**, como hasta ahora. Algunas plantas se
    - ✓ malla protegida (decisión de arriba; ver «Malla protegida» en Alistar);
    - ✓ `csDxf` pasó a `planos-dxf.js` como **`plDxfLam(l)`** (`casco-dxf.js` deja `csDxf` como alias), así `sz-plano.js` ya no depende de Casco;
    - `fix` y `revs` fuera del documento `plb`: **pasa a la etapa 3** (17-11-2026). En la etapa 3 las correcciones se guardan en metros y con id para pasar de una revisión a otra; sacarlas ahora sería una migración de datos que habría que repetir entonces. Mientras tanto, Alistar avisa cuando la ficha supera 600 KB (`palKB`, `PAL_KB`).
-2. Una sola transformación de cada plano listo a la malla, usada en todas partes: la capa del Plan diario se alinea sola y se reemplaza `csDxfAl`.
+2. ✓ (17-11-2026) Una sola transformación de cada plano listo a la malla, usada en todas partes (`planos-dxf.js`):
+   - **`plPxMalla(p)`:** px de la revisión vigente → metros de la malla. Para el plano de la malla es solo la escala. Para los demás, la semejanza que Alistar guarda al marcarlo listo (`ok.fit {a,b,e,f,de,dr}`, ahora también en EST; antes solo ARQ). Si falta o es de otra malla, se calcula con la misma verificación (`dxfCheck` sobre su geometría, en caché). Da null si el plano no está listo, está girado (`giro`) o su geometría aún carga.
+   - **`plLamMalla(l)`:** de una lámina vinculada (`l.plb`, `l.w`, solo la revisión vigente) a la malla.
+   - **`plLamT(ref, lam) = B⁻¹ ∘ A`:** de una lámina a otra.
+   - Helpers de semejanza: `simAp`, `simInv`, `simCmp`, `simOk`.
+   - **Plan diario › Capas** (`pdcAuto`): si la capa y la lámina base vienen de planos DXF listos, la capa se alinea sola, siempre al día con sus revisiones. No se guarda en `plb.pd`, no se marcan puntos, y la barra muestra «⌗ por ejes» en vez de «Alinear». Gana a la alineación guardada; si los ejes están mal, se corrigen en Alistar. `pdcPick` trae antes la geometría si hace falta (`plPxMallaPrep`).
+   - **Casco** (`csMap`): usa `plLamT` antes del calce propio por ejes (`csDxfAl`, que queda de respaldo).
+   - Prueba: `planos-dxf.spec.js` «etapa 2: …».
 3. Ambientes con id estable y en metros. La revisión nueva se concilia pasando las correcciones por posición y mostrando la lista de diferencias.
 4. Muros y vanos (metros lineales, puertas), y ambientes armados desde los muros.
 5. Sectores, frentes y metrados sobre esa base.

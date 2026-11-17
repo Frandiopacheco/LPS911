@@ -377,6 +377,32 @@ function plDxfLam(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p
   const R=dxfRolesFix(G,lay,mpp,fx);const f=l.w/sp.W;   /* con las correcciones de Alistar */const S=A=>A.map(v=>Math.round(v*f*10)/10);
   const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),amb:(R.amb||[]).map(a=>({n:a.n,p:S(a.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
   PLDXL.set(l.id,{key,v});return v}
+/* ---------- de cada plano listo a la malla de ejes del proyecto (17-11-2026, etapa 2 de «Planta digitalizada», docs/ia/planos.md) ----------
+   Una sola alineación por plano: px de su revisión vigente → metros de la malla. La usan la capa del Plan diario (pd-capas.js) y Casco
+   (csMap) para alinear dos planos sin marcar puntos: B⁻¹ ∘ A. Semejanzas {a,b,e,f}: x' = a·x − b·y + e, y' = b·x + a·y + f. */
+const simAp=(T,q)=>({x:T.a*q.x-T.b*q.y+T.e,y:T.b*q.x+T.a*q.y+T.f});
+const simInv=T=>{const k2=T.a*T.a+T.b*T.b||1,a=T.a/k2,b=-T.b/k2;return{a,b,e:-(a*T.e-b*T.f),f:-(b*T.e+a*T.f)}};
+/** M ∘ T (primero T) */
+const simCmp=(M,T)=>({a:M.a*T.a-M.b*T.b,b:M.a*T.b+M.b*T.a,e:M.a*T.e-M.b*T.f+M.e,f:M.b*T.e+M.a*T.f+M.f});
+const simOk=T=>!!T&&['a','b','e','f'].every(k=>typeof T[k]==='number'&&isFinite(T[k]))&&T.a*T.a+T.b*T.b>0;
+const PLPXM=new Map();
+/** px de la revisión vigente del plano p → metros de la malla, o null (sin malla, no está listo, girado o aún cargando la geometría).
+    El plano de la malla: solo la escala. Los demás: la semejanza que calculó Alistar al marcarlo listo (`ok.fit`, de la malla `de`/`dr`)
+    o, si no la guardó (listos antes del 17-11-2026), la misma verificación de Alistar sobre su geometría. */
+function plPxMalla(p){if(!p||p.eto||!p.dxf||!(p.dxf.mpp>0)||typeof plMalla!=='function'||!plUsable(p)||((p.giro&&p.giro.q)||0))return null;
+  const M=plMalla();if(!M)return null;const mpp=p.dxf.mpp,S={a:mpp,b:0,e:0,f:0};if(palEsMalla(M,p))return S;
+  const ft=p.ok&&p.ok.fit;if(simOk(ft)&&ft.de===M.id&&(ft.dr==null||ft.dr===M.rev))return simCmp(ft,S);
+  const sp=plSpecOf(p);const G=plGeoNow(sp);if(!G)return null;const fx=palFix(p);
+  const key=[plGeoKey(sp),JSON.stringify(p.dxf.lay||{}),mpp,fx.L.length,(fx.L[fx.L.length-1]||{}).id||'',M.id,M.rev,M.t].join('|');const c=PLPXM.get(p.id);if(c&&c.key===key)return c.T;
+  let T=null;try{const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp,malla:M,ctn:null,fix:fx});if(simOk(C.fit))T=simCmp(C.fit,S)}catch(e){console.warn('plPxMalla',e)}
+  PLPXM.set(p.id,{key,T});return T}
+/** coordenadas de una lámina vinculada a un plano (`l.plb {id, rev}`, ancho `l.w`) → metros de la malla; solo con la revisión vigente */
+function plLamMalla(l){if(!l||!l.plb||!(l.w>0)||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p||(l.plb.rev||1)!==(p.rev||1))return null;
+  const sp=plSpecOf(p);if(!(sp.W>0))return null;const S=plPxMalla(p);return S?simCmp(S,{a:sp.W/l.w,b:0,e:0,f:0}):null}
+/** de la lámina ref a la lámina lam por la malla (semejanza en coordenadas de lámina) o null */
+function plLamT(ref,lam){const A=plLamMalla(ref),B=plLamMalla(lam);return A&&B?{...simCmp(simInv(B),A),malla:1}:null}
+/** carga la geometría de los planos que la necesitan para plPxMalla (listos antes de guardar `ok.fit`) */
+function plPxMallaPrep(L){return Promise.all(L.filter(p=>p&&p.dxf).map(p=>{const sp=plSpecOf(p);return plGeoNow(sp)?null:plGeoGet(sp).catch(()=>null)}))}
 /** textos cortos de una revisión DXF para los vínculos (planos-vinculos.js) */
 async function plGeoTexts(sp){const G=await plGeoGet(sp);if(!G)return[];const out=[];for(const o of G.L)for(const t of o.t){const s=String(t[0]).trim();if(s&&s.length<=8)out.push({x:t[1],y:t[2],h:t[3],n:s.length})}return out}
 

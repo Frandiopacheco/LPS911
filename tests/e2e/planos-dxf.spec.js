@@ -444,6 +444,39 @@ test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en r
 
 /* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
    identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
+test('etapa 2: cada plano listo a la malla de ejes; Casco y la capa del Plan diario se alinean solos por ella (puras)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G))); const mpp = S.mpp;
+    const mk = (id, x) => ({ id, cod: id, disc: 'EST', tipo: 'Planta', rev: 1, base: 'planos/' + id + '/r1', W: S.W, H: S.H, Z: 3, mm: S.mm, dxf: { k: S.k, mpp, lay, src: S.src }, ok: { rev: 1, t: 1 }, ...x });
+    const mine = dxfCheck({ p: mk('EST_M'), G, lay, mpp, malla: null, ctn: null }).mine;
+    /* la malla tiene los ejes 1 m a la derecha de los de este dibujo: el otro plano (mismo dibujo) queda 1 m corrido respecto a ella */
+    const M1 = mk('EST_M', { malla: { ej: mine.map(e => ({ ...e, p: [e.p[0] + 1, e.p[1], e.p[2] + 1, e.p[3]] })), rev: 1, base: 'planos/EST_M/r1', t: 1 } });
+    const P2 = mk('EST_2'), P3 = mk('EST_3', { ok: { rev: 1, t: 1, fit: { a: 1, b: 0, e: 2, f: 0, de: 'EST_M', dr: 1 } } }), P4 = mk('EST_4', { ok: { rev: 1, t: 1, fit: { a: 1, b: 0, e: 2, f: 0, de: 'OTRA', dr: 1 } } });
+    const keep = new Map(PLB); PLB.clear(); for (const p of [M1, P2, P3, P4]) PLB.set(p.id, p);
+    for (const p of [M1, P2, P3, P4]) GEO.set(plGeoKey(plSpecOf(p)), { g: G });
+    const o = q => { const T = plPxMalla(q); return T && { e: +T.e.toFixed(4), f: +T.f.toFixed(4), k: +(Math.hypot(T.a, T.b) / mpp).toFixed(5) }; };
+    const out = { m: o(M1), p2: o(P2), p3: o(P3), p4: o(P4), gir: plPxMalla({ ...P2, giro: { q: 1 } }), noOk: plPxMalla({ ...P2, ok: null }) };
+    /* lámina contra lámina (Casco: csMap) y la capa del Plan diario sobre una base: 1 m = 1/mpp px del plano */
+    const l1 = { id: 'l1', plb: { id: 'EST_M', rev: 1 }, w: 1000 }, l2 = { id: 'l2', plb: { id: 'EST_2', rev: 1 }, w: 500 };
+    const T12 = plLamT(l1, l2); const q = simAp(T12, { x: 0, y: 0 }); out.l12 = { x: +q.x.toFixed(3), k: +Math.hypot(T12.a, T12.b).toFixed(5), exp: +(-500 / mpp / S.W).toFixed(3) };
+    out.cs = !!(typeof csMap === 'function' && csMap(l1, l2) && csMap(l1, l2).malla);
+    out.vieja = plLamT({ ...l1, plb: { id: 'EST_M', rev: 2 } }, l2);   /* lámina en otra revisión: no */
+    const A = pdcAuto(P2, { ...l1, T: { a: 1, b: 0, e: 0, f: 0 } }); out.pd = { e: +A[2].toFixed(3), a: +A[0].toFixed(3), exp: +(1000 / mpp / S.W).toFixed(3) };
+    PLB.clear(); for (const [i, d] of keep) PLB.set(i, d);
+    return out;
+  }, dxfDemo());
+  expect(r.m).toEqual({ e: 0, f: 0, k: 1 });         /* el plano de la malla: solo la escala */
+  expect(r.p2.e).toBeCloseTo(1, 3); expect(r.p2.f).toBeCloseTo(0, 3); expect(r.p2.k).toBeCloseTo(1, 4);   /* calculada con su geometría (listo sin ok.fit) */
+  expect(r.p3.e).toBe(2);                             /* la guardada por Alistar al marcarlo listo */
+  expect(r.p4.e).toBeCloseTo(1, 3);                   /* guardada contra otra malla: se recalcula */
+  expect(r.gir).toBeNull(); expect(r.noOk).toBeNull();
+  expect(r.l12.x).toBeCloseTo(r.l12.exp, 2); expect(r.l12.k).toBeCloseTo(0.5, 4);
+  expect(r.cs).toBe(true); expect(r.vieja).toBeNull();
+  expect(r.pd.a).toBe(1000); expect(r.pd.e).toBeCloseTo(r.pd.exp, 2);
+  expect(errors).toEqual([]);
+});
+
 test('alistar › lista de ambientes: cada fila se corrige sola aunque un ambiente esté dentro de otro (puras)', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const r = await page.evaluate(t => {

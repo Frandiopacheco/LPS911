@@ -147,7 +147,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   else{const ME=palMej(M);const nm=new Set(mine.map(e=>e.n)),nM=new Set(ME.map(e=>e.n));const falta=[...nM].filter(n=>!nm.has(n)),sobra=[...nm].filter(n=>!nM.has(n));
     const A=new Map(palCross(ME).map(x=>[x.v+'|'+x.h,x]));const P=[],Q=[],nmX=[];for(const x of palCross(mine)){const y=A.get(x.v+'|'+x.h);if(y){P.push(x);Q.push(y);nmX.push(x.v+'-'+x.h)}}
     if(P.length<2)add('malla','Malla de ejes del proyecto','err',`No comparte ejes con la malla del proyecto (${M.cod}): revisa los nombres de los ejes.`);
-    else{const T=palFit(P,Q);const sk=Math.hypot(T.a,T.b);const res=P.map((x,i)=>{const q=palAp(T,x);return{n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:x.x/mpp,y:x.y/mpp}}).sort((a,b)=>b.d-a.d);
+    else{const T=palFit(P,Q);fit=T;const sk=Math.hypot(T.a,T.b);const res=P.map((x,i)=>{const q=palAp(T,x);return{n:nmX[i],d:Math.hypot(q.x-Q[i].x,q.y-Q[i].y),x:x.x/mpp,y:x.y/mpp}}).sort((a,b)=>b.d-a.d);
       const far=res.filter(r=>r.d>PAL_TOL);const sc=Math.abs(sk-1)>0.002;const st=far.length||sc?'err':falta.length||sobra.length?'warn':'ok';
       add('malla','Malla de ejes del proyecto',st,sc?`La escala no coincide con la malla (${M.cod}): ${((sk-1)*100).toFixed(2)} %.`:far.length?`${far.length} cruce(s) de ejes corridos más de ${PAL_TOL*100} cm respecto a la malla (${M.cod}).`:
         `Coincide con la malla (${M.cod}): ${P.length} cruces, diferencia máxima ${(res[0].d*100).toFixed(1)} cm.${falta.length?` Faltan ejes de la malla: ${falta.join(', ')}.`:''}${sobra.length?` Ejes que la malla no tiene: ${sobra.join(', ')}.`:''}`,
@@ -383,7 +383,7 @@ async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;
 async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
   const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
 async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;const rev=p.rev||1;
-  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&M?{fit:{...C.fit,de:M.id}}:{})};
+  const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&M?{fit:{a:C.fit.a,b:C.fit.b,e:C.fit.e,f:C.fit.f,de:M.id,dr:M.rev}}:{})};
   const o={ok};if(fija)o.malla=palMallaDoc(p,C);
   await palSet(p,o,fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
 /** el administrador cambia qué plano fija la malla de ejes */

@@ -41,7 +41,7 @@ Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorizaci�
 - Después: sugerir el tipo de ambiente por el nombre («SH…» → baño) para la Matriz.
 
 ## Planta digitalizada (17-11-2026, decidido con el dueño; va antes que lo demás)
-Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Etapa 1 hecha el 17-11-2026: malla protegida y `plDxfLam` fuera de Casco. Sacar `fix` y `revs` de la ficha pasó a la etapa 3. Lo siguiente es la etapa 2: una sola transformación de cada plano a la malla.
+Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Etapa 1 hecha el 17-11-2026: malla protegida y `plDxfLam` fuera de Casco. Sacar `fix` y `revs` de la ficha pasó a la etapa 3. Etapa 2 hecha el mismo día (`plPxMalla`, `plLamT`; la capa del Plan diario y Casco se alinean solos por la malla). Lo siguiente es la etapa 3: ambientes con id estable en metros y revisiones conciliadas, con `fix`/`revs` fuera de la ficha.
 
 ## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
 
