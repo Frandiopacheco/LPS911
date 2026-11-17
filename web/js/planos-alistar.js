@@ -49,8 +49,8 @@ function plMallaKeep(p,o){if(!p||p.malla||!o||o.malla||!('ok' in o||'revs' in o|
   const{legacy,...doc}=m;return{...o,malla:{...doc,mt:m.t}}}
 /** tamaño aproximado de la ficha del plano (Firestore admite 1 MB por documento); aviso desde PAL_KB */
 const PAL_KB=600;
-/* huella del documento del plano (una vez por versión: el snapshot trae objetos nuevos solo cuando algo cambia): sirve para el tamaño y para
-   no rehacer el panel de Alistar cuando cambia otro plano (17-11-2026, Alistar rápido) */
+/* huella del documento del plano (JSON, una vez por objeto: el snapshot de `plb` rehace todos los objetos, así que se recalcula en cada
+   snapshot y se compara como texto): da el tamaño y evita rehacer el panel de Alistar cuando cambia otro plano (17-11-2026, Alistar rápido) */
 const PALSIG=new WeakMap();const palSig=p=>{if(!p)return'';let s=PALSIG.get(p);if(s==null){try{s=JSON.stringify(p)}catch(e){s=''}PALSIG.set(p,s)}return s};
 const palKB=p=>Math.round(palSig(p).length/1024);
 /** ejes de la malla (acepta también {ok:{ej}}) */
@@ -161,7 +161,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     /* cuántas líneas trae cada capa elegida: así se nota si la de caras es la equivocada (p. ej. solo las bandas de contracción) */
     const nL=new Map(dxfLayers(dxfGeoF(G)).map(x=>[x.n,x.l+x.p+x.c+x.t]));const lb=n=>n?`${n} (${nL.get(n)||0})`:'—';const pocas=est&&R.cnt.ln<20;
     /* ✓ si la geometría confirma las capas: hay ejes y, en estructuras, columnas y caras de vigas suficientes */
-    const capOk=lay.ej&&E.length&&(!est||(R.col.length&&!pocas));
+    const capOk=lay.ej&&E.length&&(!est||((lay.vig||[]).length&&R.col.length&&!pocas));
     add('capas','Capas por función',!lay.ej?'err':capOk?'ok':'warn',lay.ej?`Confirma que cada función está en su capa (se ve encima del plano en su color). Caras de vigas: ${R.cnt.ln} líneas.${p.dxf&&p.dxf.layFrom?` Al cargarlo se tomaron las capas de ${p.dxf.layFrom}.`:''} Toca un trazo en el plano para ver su capa.${pocas?' Son muy pocas: revisa en «◇ Capas» que esté marcada la capa del trazo de las vigas.':''}`:'Falta elegir la capa de los ejes.',
       r.map(([x,t])=>`${t}: ${x==='vig'?((lay.vig||[]).map(lb).join(', ')||'—'):lb(lay[x])}`),['lay'])}
   /* 6. columnas */
@@ -170,7 +170,7 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
       const cx=xs.reduce((s,v)=>s+v,0)/xs.length,cy=ys.reduce((s,v)=>s+v,0)/ys.length;if(X.length&&!X.some(x=>Math.hypot(x.x-cx,x.y-cy)*mpp<1))off.push({x:cx,y:cy})}
     const L=[...by].sort((a,b)=>b[1]-a[1]);const noc=X.filter(x=>!R.col.some(q=>palPip(q.p,x.x,x.y))).length;
     /* ✓ solo si la geometría lo confirma (decisión del dueño, 17-11-2026): todas en un cruce de ejes y a lo más 3 tamaños */
-    add('col','Columnas',R.col.length&&!off.length&&L.length<=3?'ok':'warn',R.col.length?`${R.col.length} columnas: ${L.slice(0,4).map(([k2,n])=>`${n} de ${k2}`).join(', ')}${L.length>4?'…':''}.${off.length?` ${off.length} fuera de un cruce de ejes.`:''}${R.cnt.chico?` Se ignoran ${R.cnt.chico} figura(s) menores de ${DXF_MIN_COL.toFixed(2)} m.`:''}`:'No se encontraron columnas: revisa la capa en «◇ Capas».',
+    add('col','Columnas',R.col.length&&X.length&&!off.length&&L.length<=3&&noc<=X.length*0.3?'ok':'warn',R.col.length?`${R.col.length} columnas: ${L.slice(0,4).map(([k2,n])=>`${n} de ${k2}`).join(', ')}${L.length>4?'…':''}.${off.length?` ${off.length} fuera de un cruce de ejes.`:''}${R.cnt.chico?` Se ignoran ${R.cnt.chico} figura(s) menores de ${DXF_MIN_COL.toFixed(2)} m.`:''}`:'No se encontraron columnas: revisa la capa en «◇ Capas».',
       [...L.map(([k2,n])=>`${n} × ${k2} m`),noc?`${noc} cruce(s) de ejes sin columna`:'','Toca una figura en el plano para quitarla («No es columna» o «ninguna de este tamaño»).'].filter(Boolean),['lay','colAdd'],off)}
   /* 7. contorno de la planta */
   const cand=palCtnGuess(G,R);
@@ -212,9 +212,11 @@ function palReset(){PAL.on=false;PAL.C=null;PAL.ctn=false;PAL.trace='';PAL.sel=n
 /** verificación del plano en caché: solo se rehace si cambió algo que la afecta (geometría, datos del DXF, correcciones, contorno, malla,
     datos del plano). Antes se rehacía con cada toque y con cada cambio de cualquier plano. */
 const PALCK=new Map();
-function palCheck(p,G){const M=plMalla();const estDxf=[...PLB.values()].some(x=>!x.arch&&x.disc==='EST'&&x.dxf);const fx=palFix(p),ct=palCtn(p);
-  const key=[plGeoKey(plSpecOf(p)),JSON.stringify(p.dxf||{}),p.disc,p.tipo,p.cod,p.nv||'',p.pisoId||'',p.niv||'',p.rev||1,p.base||'',fx.L.length,(fx.L[fx.L.length-1]||{}).id||'',ct?JSON.stringify(ct):'',
-    M?[M.id,M.rev,M.t||0,M.mt||0,!!M.vieja,M.base||''].join(':'):'',estDxf].join('|');
+/** lo que la verificación lee fuera del documento del plano: nivel resuelto (niveles del edificio), malla y si hay estructuras en DXF */
+function palCtx(p){const M=plMalla();const estDxf=[...PLB.values()].some(x=>!x.arch&&x.disc==='EST'&&x.dxf);const lv=plLvOf(p);
+  return{M,estDxf,key:[lv,lv?plLvName(lv):'',M?[M.id,M.rev,M.t||0,M.mt||0,!!M.vieja,M.base||''].join(':'):'',estDxf].join('|')}}
+function palCheck(p,G){const X=palCtx(p);const M=X.M,estDxf=X.estDxf;const fx=palFix(p),ct=palCtn(p);
+  const key=[plGeoKey(plSpecOf(p)),JSON.stringify(p.dxf||{}),p.disc,p.tipo,p.cod,p.rev||1,p.base||'',fx.L.map(f=>f.id).join(','),ct?JSON.stringify(ct):'',X.key].join('|');
   const c=PALCK.get(p.id);if(c&&c.key===key&&c.G===G)return c.C;
   const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:M,estDxf,ctn:ct,fix:fx});PALCK.set(p.id,{key,G,C});return C}
 /** al abrir o cambiar de lámina en el visor */
@@ -226,7 +228,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   /* en la caja del visor (no dentro del lienzo: ahí los toques mueven el plano), a la altura del plano, como el panel ☰ Planos */
   if(!el){el=document.createElement('div');el.className='plalp';el.setAttribute('role','region');el.setAttribute('aria-label','Alistar plano');PLV.box.appendChild(el);el.onclick=palClick;el.onchange=palChange;el.addEventListener('keydown',e=>e.stopPropagation())}
   {const body=PLV.box.querySelector('.plvb');el.style.top=(body?body.offsetTop:56)+'px'}
-  let G=GEO.get(plGeoKey(sp));if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(plGeoKey(sp));if(!G||!G.g)return}   /* antes buscaba por sp.base y quedaba en «Cargando…» hasta el siguiente cambio de la base */
+  let G=GEO.get(plGeoKey(sp));if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||!palP()||palP().id!==p.id)return;G=GEO.get(plGeoKey(sp));if(!G||!G.g)return}   /* antes buscaba por sp.base y quedaba en «Cargando…» hasta el siguiente cambio de la base */
   PAL.G=G.g;if(PAL.LG!==G.g){PAL.LG=G.g;PAL.Ls=dxfLayers(dxfGeoF(G.g))}if(PAL.sel&&PAL.sel.k==='raw'&&!G.g.L.includes(PAL.sel.o))PAL.sel=null;
   const C0=palCheck(p,G.g);const C={...C0,it:C0.it.slice()};PAL.C=C;PAL.dif=null;if(p.disc==='ARQ'||palAmbOf(p))palAmbItem(p,C,plAlEd(p));const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
   const kb=palKB(p);const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
@@ -291,7 +293,9 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(palEsMalla(plMalla(),p)?' Este plano fija la malla de ejes: la malla se mantiene igual.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
   else if(k==='malla')await palMallaSet(p)}
 /** los ⚠ que se confirman juntos con «Revisé lo demás»: todos menos los datos del plano y el contorno (decisión del dueño, 17-11-2026) */
-function palRest(p,S){S=S||(PAL.C?palState(PAL.C.it,palAlc(p).chk):null);if(!S)return[];return S.L.filter(x=>x.ef==='warn'&&!['datos','ctn'].includes(x.id))}
+function palRest(p,S){S=S||(PAL.C?palState(PAL.C.it,palAlc(p).chk):null);if(!S)return[];return S.L.filter(x=>x.ef==='warn'&&!PAL_UNO.includes(x.id))}
+/** se confirman uno por uno: datos y contorno (dueño); malla (fija la del proyecto o tiene ejes corridos) y escala (pocas cotas) por prudencia */
+const PAL_UNO=['datos','ctn','malla','escala'];
 /** el siguiente plano por alistar (por nivel y código), sin contar el abierto */
 function palNextOf(p){const L=[...PLB.values()].filter(x=>plAlPend(x)&&plAlEd(x));if(!L.length)return null;const lv=plLvList().map(o=>o.id||o);
   const ix=x=>{const i=lv.indexOf(plLvOf(x));return i<0?999:i};L.sort((a,b)=>ix(a)-ix(b)||String(a.disc).localeCompare(String(b.disc))||String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
@@ -410,7 +414,9 @@ async function palCtnSave(){const p=palP();if(!p||!plAlEd(p)||!PAL.trace)return;
 /** guarda el contorno (px del nivel de detalle) */
 async function palCtnPut(p,P,H,msg){const mpp=p.dxf.mpp;const r=v=>Math.round(v*10)/10;const Q=P.map(r);const HH=(H||[]).map(h=>({p:h.p.map(r)}));const a=palArea(Q)-HH.reduce((t,h)=>t+palArea(h.p),0);
   const o={ctn:{rev:p.rev||1,P:Q,H:HH,a:Math.round(a*mpp*mpp*100)/100,t:NOW(),by:me.email}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();await palSet(p,o,msg||'Contorno guardado.')}
-async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;const rev=p.rev||1;
+async function palOk(p){if(!PAL.C||!PAL.G)return;
+  /* se verifica de nuevo justo antes de guardar: el panel pudo quedar con una verificación vieja */
+  const C0=palCheck(p,PAL.G);const C={...C0,it:C0.it.slice()};if(p.disc==='ARQ'||palAmbOf(p))palAmbItem(p,C,plAlEd(p));PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);if(!S.ready){toast('Faltan puntos por resolver o confirmar.');return}const M=plMalla();const fija=!M;const rev=p.rev||1;
   const sum={ej:C.R.cnt.ej,col:C.R.cnt.col,ln:C.R.cnt.ln,tx:C.R.cnt.tx,fix:palFix(p).L.length};const ok={rev,t:NOW(),by:me.email,byN:me.name||me.email,chk:A.chk,sum,malla:fija||palEsMalla(M,p),...(C.fit&&C.M?{fit:{a:C.fit.a,b:C.fit.b,e:C.fit.e,f:C.fit.f,de:C.M.id,dr:C.M.rev,dt:C.M.t||0}}:{})};
   const o={ok};if(fija)o.malla=palMallaDoc(p,C);
   /* ambientes con id estable (planos-rev.js): los que siguen conservan su id */
@@ -449,4 +455,4 @@ function palDraw(g,V){const C=PAL.C;const p=palP();if(!C||!p)return;const R=C.R,
 /* la verificación se rehace cuando cambia el plano (capas, contorno, confirmaciones, correcciones) */
 /** al llegar cambios de la base: solo se rehace el panel si cambió este plano o la malla (force: al salir de Medir) */
 function palSync(force){if(!(PAL.on&&PLV&&PLV.id===PAL.id))return;if(!force&&palSyncSig()===PAL.sig)return;palRender()}
-const palSyncSig=()=>{const p=palP(),M=plMalla();return palSig(p)+'|'+(M?[M.id,M.rev,M.t||0].join(':'):'')};
+const palSyncSig=()=>{const p=palP();if(!p)return'';return palSig(p)+'|'+palCtx(p).key+'|'+((palNextOf(p)||{}).id||'')};

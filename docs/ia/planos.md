@@ -223,11 +223,11 @@ El dueño pidió una interfaz menos básica, pensada para varios pisos y tipos d
 
 **Etapas (un PR cada una):**
 1. ✓ (17-11-2026) **Alistar rápido y con menos clics:**
-   - `palCheck`: la verificación (`dxfCheck`) en caché por plano (`PALCK`, clave: geometría, `dxf`, datos del plano, correcciones, contorno, malla, si hay estructuras en DXF); el panel usa una copia de la lista de ítems (`palAmbItem` agrega el suyo).
-   - `palSync` solo rehace el panel si cambió el documento de ese plano o la malla (`palSig`: huella JSON por versión del documento, `WeakMap`; también da el tamaño `palKB`). Medir llama `palSync(true)` al salir.
+   - `palCheck`: la verificación (`dxfCheck`) en caché por plano (`PALCK`, clave: geometría, `dxf`, datos del plano, ids de las correcciones, contorno y el contexto `palCtx`: nivel resuelto con su nombre, malla y si hay estructuras en DXF); el panel usa una copia de la lista de ítems (`palAmbItem` agrega el suyo). **«Marcar como listo» vuelve a verificar** justo antes de guardar (`palOk`), así nunca usa una verificación vieja.
+   - `palSync` solo rehace el panel si cambió el documento de ese plano, su contexto (`palCtx`) o el siguiente por alistar (`palSig`: huella JSON del documento, una por objeto; el snapshot de `plb` rehace los objetos, así que se compara como texto; también da el tamaño `palKB`). Medir llama `palSync(true)` al salir.
    - Los chips «Ver encima» solo redibujan el plano (`PLV.tv.tick()`).
-   - **✓ solos:** columnas (todas en un cruce de ejes y ≤ 3 tamaños), rótulos (si hay), encuadre (sin objetos lejanos fuera), capas (hay ejes y, en estructuras, columnas y caras suficientes).
-   - **«Revisé lo demás (n)»** (`palRest`, `chkall`): marca los ⚠ restantes en `alc.chk` con `lote:1`, menos `datos` y `ctn`.
+   - **✓ solos:** columnas (todas en un cruce de ejes, ≤ 3 tamaños y a lo más 30 % de cruces sin columna), rótulos (si hay), encuadre (sin objetos lejanos fuera; no detecta un recorte a un marco equivocado), capas (hay ejes y, en estructuras, capa de caras elegida, columnas y caras suficientes).
+   - **«Revisé lo demás (n)»** (`palRest`, `chkall`): marca los ⚠ restantes en `alc.chk` con `lote:1`. Uno por uno (`PAL_UNO`): datos y contorno (dueño) y, por prudencia, malla (fija la del proyecto o tiene ejes corridos) y escala (pocas cotas).
    - **«Siguiente: <código> ›»** (`palNextOf`, `palNext`): el próximo plano por alistar (por nivel, especialidad y código) sin cerrar el visor ni Alistar.
    - Corregido: al terminar de bajar la geometría, Alistar la buscaba con la clave equivocada (`sp.base` en vez de `plGeoKey`) y quedaba en «Cargando…» hasta el siguiente cambio de la base.
    - Prueba: `planos-dxf.spec.js` «alistar rápido…».

@@ -136,8 +136,8 @@ test('alistar: la verificación del DXF (escala por cotas, ejes, malla, contorno
     return { s1: st(c1), esc: c1.by.escala.msg, ejes: c1.by.ejes.msg, col: c1.by.col.msg, ready1: palState(c1.C.it, {}).ready, ready2: palState(c2.C.it, allConf).ready, s2: st(c2),
       malla: cM.by.malla, mallaOk: cMok.by.malla, unid: cU.by.escala, piso: cP.by.datos, mine: c1.C.mine.length };
   }, [dxfDemo(), dxfDemo({ k: 100 })]);
-  /* columnas en los cruces con 2 tamaños, capas confirmadas por la geometría y rótulos: ✓ solos (17-11-2026); el encuadre sigue ⚠ (hay un objeto lejano fuera) */
-  expect(r.s1).toEqual({ datos: 'warn', escala: 'warn', ejes: 'warn', malla: 'warn', capas: 'ok', col: 'ok', ctn: 'err', tx: 'ok', enc: 'warn' });
+  /* capas confirmadas por la geometría y rótulos: ✓ solos (17-11-2026); columnas ⚠ (solo en el eje 2: muchos cruces sin columna) y encuadre ⚠ (hay un objeto lejano fuera) */
+  expect(r.s1).toEqual({ datos: 'warn', escala: 'warn', ejes: 'warn', malla: 'warn', capas: 'ok', col: 'warn', ctn: 'err', tx: 'ok', enc: 'warn' });
   expect(r.esc).toContain('4 de 5 cotas coinciden'); expect(r.esc).toContain('1 cota(s) con el texto escrito a mano no coinciden');
   expect(r.ejes).toContain('1 cota(s) entre ejes no coinciden'); expect(r.ejes).toContain('4 cota(s) entre ejes coinciden');
   expect(r.col).toContain('5 columnas'); expect(r.col).toContain('4 de 0.40×0.40');
@@ -189,7 +189,7 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   expect(d.ok).toMatchObject({ rev: 1, malla: true }); expect(d.ok.by).toBeTruthy();
   /* la malla vive en plb.malla (17-11-2026), no en ok: sobrevive a «Volver a revisar» y a las revisiones nuevas */
   expect(d.malla).toMatchObject({ rev: 1 }); expect(d.malla.ej.map(e => e.n)).toEqual(['A', 'B', 'C', 'D', 'E', '1', '2', '3']); expect(d.ok.ej).toBeUndefined();
-  expect(Object.keys(d.ok.chk).sort()).toEqual(['datos', 'ejes', 'enc', 'escala', 'malla']);   /* capas, columnas y rótulos quedaron ✓ solos */
+  expect(Object.keys(d.ok.chk).sort()).toEqual(['col', 'datos', 'ejes', 'enc', 'escala', 'malla']);   /* capas y rótulos quedaron ✓ solos */
   await expect(panel).toContainText('✓ Listo');
   await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
   expect(await page.evaluate(() => plMalla() && plMalla().id)).toBe('EST_E03');
@@ -815,9 +815,21 @@ test('alistar rápido: sin recalcular en cada toque, «Revisé lo demás» y «S
   /* «Revisé lo demás»: todo lo ⚠ menos datos y contorno */
   await expect(panel.locator('[data-pal="chkall"]')).toBeVisible();
   await panel.locator('[data-pal="chkall"]').click();
-  await expect.poll(() => page.evaluate(() => Object.keys((PLB.get('EST_E03').alc || {}).chk || {}).sort().join())).toBe('ejes,enc,escala,malla');
+  /* malla y escala (y datos y contorno) se confirman uno por uno */
+  await expect.poll(() => page.evaluate(() => Object.keys((PLB.get('EST_E03').alc || {}).chk || {}).sort().join())).toBe('col,ejes,enc');
   expect(await page.evaluate(() => window.__nChk)).toBe(0);   /* guardar los revisados no cambia la verificación */
   await expect(panel.locator('[data-pal="chkall"]')).toHaveCount(0);
+  /* lo que sí cambia la verificación la rehace: sin la capa de rótulos, «Rótulos» pasa a ⚠ */
+  await page.evaluate(() => { const p = PLB.get('EST_E03'); return fcol('plb').doc('EST_E03').update({ 'dxf.lay': { ...p.dxf.lay, tx: '' } }); });
+  await expect.poll(() => page.evaluate(() => window.__nChk)).toBeGreaterThan(0);
+  await expect(panel.locator('.palit.warn', { hasText: 'Rótulos' })).toBeVisible();
+  /* otro plano deja de estar por alistar (archivado): el botón «Siguiente» se actualiza solo, sin volver a verificar este plano */
+  const n0 = await page.evaluate(() => window.__nChk);
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ arch: { t: 1, by: 'x', n: 'x' } }));
+  await expect(panel.locator('[data-pal="next"]')).toHaveCount(0);
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ arch: firebase.firestore.FieldValue.delete() }));
+  await expect(panel.locator('[data-pal="next"]')).toContainText('Siguiente: E04');
+  expect(await page.evaluate(() => window.__nChk)).toBe(n0);
   /* siguiente por alistar */
   await panel.locator('[data-pal="next"]').click();
   await expect(panel).toContainText('Alistar E04');
