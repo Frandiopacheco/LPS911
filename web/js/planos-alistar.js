@@ -30,24 +30,29 @@ const plAlPend=p=>!!p&&!!p.dxf&&!p.eto&&!p.arch&&!plUsable(p);
     «Volver a revisar», así nunca cambia sola; solo el administrador la cambia («Usar como malla» / «Actualizar la malla»).
     Mallas antiguas: `ok.malla` + `ok.ej` de la revisión vigente o, si el plano ya pasó a otra revisión, de esa revisión en `revs`. */
 function plMalla(){if(typeof PLB==='undefined')return null;const C=[];
-  const mk=(p,m,legacy)=>({id:p.id,cod:p.cod,ej:m.ej,rev:m.rev||1,vieja:(m.rev||1)!==(p.rev||1),t:m.mt||m.t||0,legacy});
-  for(const p of PLB.values()){if(p.eto)continue;
-    if(p.malla&&Array.isArray(p.malla.ej)&&p.malla.ej.length){C.push(mk(p,p.malla,0));continue}
-    if(p.arch)continue;
-    if(p.ok&&p.ok.malla&&p.ok.rev===(p.rev||1)&&Array.isArray(p.ok.ej)){C.push(mk(p,p.ok,1));continue}
-    const r=(p.revs||[]).slice().reverse().find(x=>x.ok&&x.ok.malla&&Array.isArray(x.ok.ej));if(r)C.push(mk(p,{...r.ok,rev:r.ok.rev||r.rev},2))}
+  for(const p of PLB.values()){const m=plMallaOf(p);if(m)C.push({id:p.id,cod:p.cod,ej:m.ej,rev:m.rev,base:m.base||'',t:m.mt||m.t||0,legacy:m.legacy,
+    /* vieja: salió de otra revisión de su plano, o de otro dibujo con el mismo número («Empezar en Rev. 1») */
+    vieja:m.rev!==(p.rev||1)||!!(m.base&&p.base&&m.base!==p.base)})}
   /* gana la nueva sobre la antigua y, entre iguales, la última fijada */
   C.sort((a,b)=>a.legacy-b.legacy||b.t-a.t);return C[0]||null}
-/** malla antigua (en `ok`) pasada a `plb.malla` en la misma escritura, antes de que algo borre o reemplace `ok` (corregir un plano listo,
-    cambiar capas, «Volver a revisar», unir con el PDF, revisión nueva): así no se pierde. Devuelve o (o una copia con `malla`). */
-function plMallaKeep(p,o){if(!p||p.malla||!p.ok||!p.ok.malla||!Array.isArray(p.ok.ej)||!p.ok.ej.length||!o||!('ok' in o||'malla' in o)||o.malla)return o;
-  const k=p.ok;return{...o,malla:{ej:k.ej,rev:k.rev||p.rev||1,t:k.t||0,mt:k.t||0,by:k.by||'',byN:k.byN||''}}}
+/** la malla que guarda el plano p: `plb.malla` (legacy 0) o, antigua, `ok` de la revisión vigente (1) o de una anterior en `revs` (2); null si no tiene.
+    Los planos archivados también cuentan: archivar no cambia la malla. */
+function plMallaOf(p){if(!p||p.eto)return null;const ok=e=>Array.isArray(e)&&e.length>0;
+  if(p.malla&&ok(p.malla.ej))return{...p.malla,rev:p.malla.rev||1,legacy:0};
+  if(p.ok&&p.ok.malla&&ok(p.ok.ej)&&(p.ok.rev||1)===(p.rev||1))return{ej:p.ok.ej,rev:p.rev||1,base:p.base||'',t:p.ok.t||0,by:p.ok.by||'',byN:p.ok.byN||'',legacy:1};
+  const r=(p.revs||[]).slice().reverse().find(x=>x.ok&&x.ok.malla&&ok(x.ok.ej));
+  return r?{ej:r.ok.ej,rev:r.ok.rev||r.rev||1,base:r.base||'',t:r.ok.t||0,by:r.ok.by||'',byN:r.ok.byN||'',legacy:2}:null}
+/** malla antigua (en `ok` o en `revs`) pasada a `plb.malla` en la misma escritura, antes de que algo borre o reemplace `ok` o `revs`
+    (corregir un plano listo, cambiar capas, «Volver a revisar», unir con el PDF, revisión nueva, «Empezar en Rev. 1»): así no se pierde.
+    Devuelve o (o una copia con `malla`). */
+function plMallaKeep(p,o){if(!p||p.malla||!o||o.malla||!('ok' in o||'revs' in o||'malla' in o))return o;const m=plMallaOf(p);if(!m)return o;
+  const{legacy,...doc}=m;return{...o,malla:{...doc,mt:m.t}}}
 /** tamaño aproximado de la ficha del plano (Firestore admite 1 MB por documento); aviso desde PAL_KB */
 const PAL_KB=600;const palKB=p=>{try{return Math.round(new Blob([JSON.stringify(p)]).size/1024)}catch(e){return 0}};
 /** ejes de la malla (acepta también {ok:{ej}}) */
 const palMej=M=>M?(M.ej||(M.ok&&M.ok.ej)||[]):[];
 /** el plano p (en su revisión vigente) es el que fija la malla */
-const palEsMalla=(M,p)=>!!M&&!!p&&M.id===p.id&&!M.vieja&&(M.rev||1)===(p.rev||1);
+const palEsMalla=(M,p)=>!!M&&!!p&&M.id===p.id&&!M.vieja&&(M.rev||1)===(p.rev||1)&&!(M.base&&p.base&&M.base!==p.base);
 const plAlTag=p=>!p||!p.dxf||p.eto?'':plUsable(p)?' <span class="plalt ok">✓ Listo</span>':' <span class="plalt pend">Por alistar</span>';
 
 /* ---------- verificación (pura) ---------- */
@@ -180,7 +185,10 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   /* 10. encuadre */
   {const d=p.dxf||{};add('enc','Encuadre de la lámina','warn',`Lámina de ${(p.mm||[0,0]).join(' × ')} mm desde el ${d.src||'modelo'}${d.crop?', recortada al marco':''}${d.far?`; ${d.far} objeto(s) lejanos quedaron fuera`:''}. Confirma que se ve completa y que no falta nada importante. Si falta algo, vuelve a cargar el DXF como nueva revisión con «Recortar al marco» desmarcado.`)}
   /* la malla salió de una revisión anterior de este mismo plano: se compara con ella y no cambia sola */
-  if(M&&M.id===p.id&&!palEsMalla(M,p)){const m=it.find(x=>x.id==='malla');if(m)m.msg+=` La malla del proyecto sigue siendo la de la Rev. ${M.rev} de este plano: solo el administrador la actualiza con esta revisión (después de marcarla lista).`}
+  if(M&&M.id===p.id&&!palEsMalla(M,p)){const m=it.find(x=>x.id==='malla');if(m){
+    /* contra su propia revisión anterior una diferencia no bloquea (puede ser justo lo que cambió): se confirma y el administrador decide si actualiza la malla */
+    if(m.st==='err'){m.st='warn';m.msg=`Los ejes cambiaron respecto a la malla (Rev. ${M.rev} de este mismo plano): ${m.msg} Confírmalo si el cambio es correcto.`}
+    m.msg+=` La malla del proyecto sigue siendo la de la Rev. ${M.rev}${M.base&&p.base&&M.base!==p.base&&M.rev===(p.rev||1)?' anterior':''}: solo el administrador la actualiza con esta revisión (después de marcarla lista).`}}
   return{it,R,mine,cand,fit,ejM}}
 /** estado efectivo con lo confirmado: cada ítem con ef 'ok'|'conf'|'warn'|'err'; listo si no queda ⚠ ni ✕ */
 function palState(it,chk){chk=chk||{};const L=it.map(x=>({...x,ef:x.st==='warn'?(chk[x.id]?'conf':'warn'):x.st}));return{L,ready:L.every(x=>x.ef==='ok'||x.ef==='conf')}}
@@ -206,7 +214,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
   let G=GEO.get(plGeoKey(sp));if(!G||!G.g){shx(el,'<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="mu">Cargando la geometría del DXF…</p>');try{await plGeoGet(sp)}catch(e){shx(el,`<div class="plalh"><b>Alistar plano</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div><p class="note">No se pudo leer la geometría: ${esc(e.message||e)}</p>`);return}if(!PAL.on||palP()!==p)return;G=GEO.get(sp.base)}
   PAL.G=G.g;if(PAL.LG!==G.g){PAL.LG=G.g;PAL.Ls=dxfLayers(dxfGeoF(G.g))}if(PAL.sel&&PAL.sel.k==='raw'&&!G.g.L.includes(PAL.sel.o))PAL.sel=null;
   const C=dxfCheck({p,G:G.g,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:plMalla(),estDxf:[...PLB.values()].some(x=>!x.arch&&x.disc==='EST'&&x.dxf),ctn:palCtn(p),fix:palFix(p)});PAL.C=C;const A=palAlc(p);const S=palState(C.it,A.chk);const ed=plAlEd(p);const ok=plUsable(p);const M=plMalla();const FX=palFix(p).L;
-  const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
+  const kb=palKB(p);const ico={ok:'✓',conf:'☑',warn:'⚠',err:'✕'};const nE=S.L.filter(x=>x.ef==='err').length,nW=S.L.filter(x=>x.ef==='warn').length;
   const actB={edit:'Corregir datos',lay:'◇ Capas…',ctn:palCtn(p)?'Ajustar contorno':'Trazar contorno',hueco:'+ Agregar hueco',ctnauto:'Usar el propuesto',ejAdd:'+ Agregar eje',colAdd:'+ Agregar columna',ambAdd:'+ Agregar ambiente'};
   shx(el,`<div class="plalh"><b>Alistar ${esc(p.cod)} · Rev. ${p.rev||1}</b><button class="ib" data-pal="x" aria-label="Cerrar">✕</button></div>
     <div class="plals ${ok?'ok':nE?'err':'warn'}">${ok?`<b>✓ Listo</b> · ${esc(p.ok.byN||p.ok.by||'')} · ${esc(fmtD(ldt(p.ok.t)))}${palEsMalla(M,p)?' · fija la malla de ejes':''}`:nE?`<b>${nE} punto(s) por resolver</b>${nW?` y ${nW} por confirmar`:''}`:nW?`<b>${nW} punto(s) por confirmar</b>`:'<b>Todo revisado</b>: ya puedes marcarlo como listo'}</div>
@@ -221,7 +229,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
     ${FX.length?`<details class="palfx"${PAL.fxo?' open':''}><summary><b>Correcciones (${FX.length})</b> <span class="mu">hechas en el sistema; el DXF no cambia</span></summary><ol>${FX.map(f=>`<li><span>${esc(palFixTxt(f,p.dxf.mpp))}</span><small class="mu">${esc(f.byN||f.by||'')} · ${esc(fmtD(ldt(f.t)))}${f.nota?' · '+esc(f.nota):''}</small>${ed?`<button type="button" class="ab" data-pal="fxdel:${esc(f.id)}" title="Deshacer esta corrección">↶</button>`:''}</li>`).join('')}</ol></details>`:''}
     ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&!palEsMalla(M,p)?`<button type="button" class="ib" data-pal="malla">${M.id===p.id?`Actualizar la malla con la Rev. ${p.rev||1}`:'Usar como malla de ejes'}</button>`:''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
     <p class="note">Hasta que esté listo, este plano no se puede vincular a Sectorización, Plan diario ni Metrados.</p>
-    ${palKB(p)>PAL_KB?`<p class="note palkb">La ficha de este plano ya ocupa ${palKB(p)} KB de 1024 (las correcciones de todas sus revisiones). Si llega al límite no se podrá guardar más: avísale al administrador.</p>`:''}`);
+    ${kb>PAL_KB?`<p class="note palkb">La ficha de este plano ya ocupa ${kb} KB de 1024 (las correcciones de todas sus revisiones). Si llega al límite no se podrá guardar más: avísale al administrador.</p>`:''}`);
   const fxd=el.querySelector('.palfx');if(fxd)fxd.addEventListener('toggle',()=>{PAL.fxo=fxd.open});
   const amd=el.querySelector('.palamb');if(amd)amd.addEventListener('toggle',()=>{PAL.ambo=amd.open});
   const bt=PLV.box.querySelector('[data-pv="alis"]');if(bt){bt.textContent=ok?'✓ Listo':'⚠ Alistar';bt.classList.toggle('ok',ok)}
@@ -380,7 +388,7 @@ async function palOk(p){const C=PAL.C;if(!C)return;const A=palAlc(p);const S=pal
   await palSet(p,o,fija?`${p.cod} listo: sus ${C.mine.length} ejes son la malla del proyecto.`:`${p.cod} listo: ya se puede vincular.`)}
 /** el administrador cambia qué plano fija la malla de ejes */
 /** la malla guardada en el plano: ejes en metros de esta revisión, con quién y cuándo */
-const palMallaDoc=(p,C)=>({ej:C.mine,rev:p.rev||1,t:NOW(),mt:NOW(),by:me.email,byN:me.name||me.email});
+const palMallaDoc=(p,C)=>({ej:C.mine,rev:p.rev||1,base:p.base||'',t:NOW(),mt:NOW(),by:me.email,byN:me.name||me.email});
 async function palMallaSet(p){if(me.role!=='admin'||!plUsable(p))return;const M=plMalla();const C=PAL.C;if(!C||palEsMalla(M,p))return;const mismo=!!M&&M.id===p.id;
   if(!await uiAsk(mismo?{title:`¿Actualizar la malla con la Rev. ${p.rev||1} de ${p.cod}?`,tone:'warn',text:`La malla del proyecto sale hoy de la Rev. ${M.rev}. Los demás planos se compararán con los ejes de esta revisión; los ya alistados no cambian.`,ok:'Actualizar la malla'}
     :{title:`¿Usar ${p.cod} como malla de ejes del proyecto?`,tone:'warn',text:`Reemplaza a ${M?M.cod:'la actual'}. Los demás planos se compararán con los ejes de ${p.cod}; los ya alistados no cambian.`,ok:'Usar como malla'}))return;

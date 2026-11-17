@@ -398,8 +398,6 @@ test('planos DXF: el grosor de las líneas sale de la escala del plano (textos d
   expect(errors).toEqual([]);
 });
 
-/* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
-   identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
 test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en revs, revisión nueva del mismo plano)', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const r = await page.evaluate(t => {
@@ -411,6 +409,10 @@ test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en r
     const out = { a: run([A]), b: run([B]), c: run([A, B, C]), arch: run([{ ...C, arch: { t: 1 } }]), none: run([{ id: 'X4', cod: 'E04', rev: 1, ok: { rev: 1, malla: false } }]) };
     const k = plMallaKeep(A, { ok: 'borrar' }); out.keep = k.malla && { n: k.malla.ej.length, rev: k.malla.rev }; out.keepNo = 'malla' in plMallaKeep(C, { ok: 'borrar' });
     out.es = [palEsMalla({ id: 'X3', rev: 3, vieja: true }, C), palEsMalla({ id: 'X3', rev: 4, vieja: false }, C)];
+    /* «Empezar en Rev. 1»: otro dibujo con el mismo número de revisión no es la malla */
+    out.fresh = run([{ id: 'X5', cod: 'E05', rev: 1, base: 'planos/X5/r1b', malla: { ej, rev: 1, base: 'planos/X5/r1a', t: 1 } }]);
+    const kr = plMallaKeep(B, { ok: null, revs: null }); out.keepRevs = kr.malla && kr.malla.rev;   /* antigua solo en revs: no se pierde al vaciar revs */
+    out.archOld = run([{ ...A, arch: { t: 1 } }]);   /* antigua en un plano archivado: sigue siendo la malla */
     /* la Rev. 2 de la planta que fijó la malla en su Rev. 1: se compara con la malla y lo avisa */
     const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
     const p = { id: 'EST_X', cod: 'E03', disc: 'EST', tipo: 'Planta', pisoId: 'P3', rev: 2, mm: S.mm, dxf: { k: S.k, mpp: S.mpp, lay, src: S.src } };
@@ -418,6 +420,10 @@ test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en r
     const C2 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'EST_X', cod: 'E03', ej: mine, rev: 1, vieja: true }, ctn: null });
     const C1 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'EST_X', cod: 'E03', ej: mine, rev: 2, vieja: false }, ctn: null });
     out.m2 = C2.it.find(x => x.id === 'malla'); out.m1 = C1.it.find(x => x.id === 'malla');
+    /* la Rev. 2 movió el eje C 20 cm: contra su propia revisión anterior no bloquea, se confirma */
+    const C3 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'EST_X', cod: 'E03', ej: mine.map(e => e.n === 'C' ? { ...e, p: [e.p[0] + 0.2, e.p[1], e.p[2] + 0.2, e.p[3]] } : e), rev: 1, vieja: true }, ctn: null });
+    const C4 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'OTRO', cod: 'E01', ej: mine.map(e => e.n === 'C' ? { ...e, p: [e.p[0] + 0.2, e.p[1], e.p[2] + 0.2, e.p[3]] } : e), rev: 1, vieja: false }, ctn: null });
+    out.m3 = C3.it.find(x => x.id === 'malla'); out.m4 = C4.it.find(x => x.id === 'malla');
     PLB.clear(); for (const [i, d] of keep) PLB.set(i, d);
     return out;
   }, dxfDemo());
@@ -430,9 +436,14 @@ test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en r
   expect(r.es).toEqual([false, true]);
   expect(r.m2.st).toBe('ok'); expect(r.m2.msg).toContain('Coincide con la malla'); expect(r.m2.msg).toContain('sigue siendo la de la Rev. 1');
   expect(r.m1.msg).toContain('Este plano fija la malla');
+  expect(r.fresh.vieja).toBe(true); expect(r.keepRevs).toBe(2); expect(r.archOld.id).toBe('X1');
+  expect(r.m3.st).toBe('warn'); expect(r.m3.msg).toContain('Los ejes cambiaron respecto a la malla');
+  expect(r.m4.st).toBe('err');   /* contra otro plano sí bloquea, como siempre */
   expect(errors).toEqual([]);
 });
 
+/* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
+   identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
 test('alistar › lista de ambientes: cada fila se corrige sola aunque un ambiente esté dentro de otro (puras)', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const r = await page.evaluate(t => {

@@ -498,8 +498,11 @@ async function plDxfJoin(Dp,dsp,P,arch,M){if(!dsp||!dsp.dxf)throw new Error('Ese
   const src=dsp.cur?Dp:((Dp.revs||[]).find(r=>r.rev===rv)||{});
   if(src.fix&&src.fix.rev===rv)u.fix={...plFixScale(src.fix,f,ox,oy),rev:rp};if(Dp.ctn&&Dp.ctn.rev===rv&&dsp.cur)u.ctn={...plCtnScale(Dp.ctn,f,ox,oy),rev:rp};
   if(Dp.alc&&Dp.alc.rev===rv&&dsp.cur)u.alc={...Dp.alc,rev:rp};if(src.ok&&src.ok.rev===rv)u.ok={...src.ok,rev:rp,...(src.ok.mpp?{mpp:src.ok.mpp/f}:{})};
+  /* la malla de ejes del proyecto (si salió de este DXF) pasa con él a la revisión del PDF, con los ejes llevados igual que la geometría */
+  const ml=typeof plMallaOf==='function'&&plMallaOf(Dp);const mlOwn=ml&&ml.rev===rv;
+  if(mlOwn){const{legacy,...m}=ml;const dx=(ox||0)*mpp,dy=(oy||0)*mpp;u.malla={...m,rev:rp,base:P.base||'',ej:m.ej.map(e=>({...e,p:e.p.map((v,i)=>Math.round((v+(i%2?dy:dx))*10000)/10000)})),mt:m.mt||m.t||0};if(u.ok)u.ok.malla=true}
   await plCol(P).doc(P.id).update(u);
-  if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id}});
+  if(arch&&Dp.id!==P.id)await plCol(Dp).doc(Dp.id).update({arch:{t:NOW(),by:me.email,n:me.name||me.email,unido:P.id},...(mlOwn&&Dp.malla?{malla:firebase.firestore.FieldValue.delete()}:{}),...(mlOwn&&Dp.ok&&Dp.ok.malla?{'ok.malla':false}:{})});
   return u}
 /** ✎ Datos del plano › «Unir con su PDF…» (plano solo DXF) */
 async function plDxfJoinAsk(Dp){const dsp=plSpecOf(Dp);const tw=plTwinOf(Dp.disc,Dp.cod,Dp.id);
